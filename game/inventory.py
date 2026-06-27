@@ -268,9 +268,17 @@ def build_loot_drops_reference(*, conn=None, user_id: Optional[int] = None) -> L
     return rows
 
 
-def build_inventory_state(user_id: int, *, conn) -> Dict[str, Any]:
+def build_inventory_state(user_id: int, *, conn, locale: str | None = None) -> Dict[str, Any]:
     from .inventory_use import enrich_inventory_item_row
     from .planet_evolution.repository import get_context_planet
+
+    if locale is None:
+        try:
+            from game.i18n import get_player_locale
+
+            locale = get_player_locale(int(user_id), conn=conn)
+        except Exception:
+            locale = "de"
 
     items = list_player_inventory(user_id, conn=conn)
     planet = get_context_planet(user_id, conn=conn)
@@ -295,7 +303,17 @@ def build_inventory_state(user_id: int, *, conn) -> Dict[str, Any]:
         "craft_recipes": _craft_recipes_reference(),
         "all": items,
         "planet_name": str(planet.get("name") or ""),
+        "active_boosters": _build_active_boosters_state(int(user_id), conn=conn, locale=locale),
     }
+
+
+def _build_active_boosters_state(user_id: int, *, conn, locale: str | None = None) -> Dict[str, Any]:
+    try:
+        from .inventory_boosters import build_inventory_boosters_state
+
+        return build_inventory_boosters_state(int(user_id), conn=conn, locale=locale)
+    except Exception:
+        return {"ready": False, "active": [], "active_effects": []}
 
 
 def _craft_recipes_reference() -> List[Dict[str, Any]]:
@@ -400,7 +418,23 @@ def grant_inventory_item(
                 now,
             ),
         )
+    try:
+        from game.collector_exchange import record_lifetime_acquired
+
+        record_lifetime_acquired(int(user_id), key, amt, conn=conn)
+    except Exception:
+        pass
     return True
+
+
+def inventory_amount(user_id: int, item_key: str, *, conn) -> int:
+    """Public read helper for account-scoped inventory amounts."""
+    return _inventory_amount(user_id, item_key, conn=conn)
+
+
+def consume_inventory_item(user_id: int, item_key: str, amount: int, *, conn) -> bool:
+    """Debit account inventory (returns False when insufficient)."""
+    return _debit_inventory_item(user_id, item_key, amount, conn=conn)
 
 
 def _debit_inventory_item(user_id: int, item_key: str, amount: int, *, conn) -> bool:
@@ -440,7 +474,7 @@ def _roll_single_reward(
     entries = inventory_loot.sanitize_loot_pool([e for e in pool if int(e.get("weight") or 0) > 0])
     if not entries:
         return {"reward_type": "item", "reward_key": "fragment_dna_common", "amount": 0}
-    weights = [int(e["weight"]) for e in entries]
+    weights = inventory_loot.weighted_roll_weights(entries, loot_context=loot_context)
     pick = rng.choices(entries, weights=weights, k=1)[0]
     if loot_context:
         amount = inventory_loot.resolve_loot_entry_amount(

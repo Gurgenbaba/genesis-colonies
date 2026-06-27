@@ -103,16 +103,19 @@ Details: [PRODUCTION_FORMULA_SYSTEM.md](PRODUCTION_FORMULA_SYSTEM.md).
 
 ## Trader Hub (`/trader-hub`)
 
-Seite mit zwei Panels (Partials):
+Seite mit Panels (Partials):
 
 | Panel | Modul | API |
 |-------|-------|-----|
 | Unified Resource Trader | `game/exchange.py` | `POST /api/exchange` |
 | Schrottplatz | `game/scrapyard.py` | `POST /api/trader/scrapyard` |
+| Collector Exchange | `game/collector_exchange.py` | `POST /api/collector-exchange/redeem` |
 
-Scope: **context planet** für Salden; Tageslimit **pro Spieler**.
+Scope: **context planet** für Ressourcen-Salden und schiffsgebundene Belohnungen; Tageslimit **pro Spieler** (nur Resource Trader). Collector Exchange ist **account-weit** (Inventar).
 
-Poll liefert `exchange`, `scrapyard` in `/api/game-state`.
+Poll liefert `exchange`, `scrapyard` in `/api/game-state`; geplant: `collector_exchange`, `collector_prestige`.
+
+Design: [COLLECTOR_EXCHANGE.md](COLLECTOR_EXCHANGE.md) (EPIC-18).
 
 ---
 

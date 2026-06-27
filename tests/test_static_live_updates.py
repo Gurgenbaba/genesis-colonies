@@ -335,6 +335,26 @@ def test_main_js_patches_resource_bar_energy_warning():
     assert "patchHudCapacityBars(metal, crystal, fuelCells" in hud_section
 
 
+def test_main_js_patches_boost_hud_from_game_state():
+    src = _read("static/main.js")
+    assert "function patchShellHudBoosters(data)" in src
+    assert "function bootstrapHeaderBoostersFromDom()" in src
+    assert "function patchInventoryActiveBoosters(inventory)" in src
+    assert '"/api/inventory/use"' in src
+    hud_section = src.split("function patchShellHudFromState(data, opts)")[1].split("GC.patchShellHudFromState = patchShellHudFromState")[0]
+    assert "patchShellHudBoosters(data)" in hud_section
+    boost_section = src.split("function patchShellHudBoosters(data)")[1].split("function patchShellHudFromState(data, opts)")[0]
+    assert "data-res-boost" in boost_section
+    assert "active_effects" in boost_section
+    assert "_BOOST_DOMAIN_RES_KEYS" in src
+    assert "bootstrapHeaderBoostersFromDom()" in src
+    base = _read("templates/base.html")
+    assert 'data-res-boost="metal"' in base
+    assert "hud-res-footer" in base
+    assert "gc-header-boosters-state" in base
+    assert 'data-gc-boost-hud' not in base
+
+
 def test_main_js_gc802_planet_switch_state_sync():
     src = _read("static/main.js")
     assert "syncScopedPlanetIds" in src

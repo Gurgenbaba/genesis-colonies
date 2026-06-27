@@ -135,6 +135,14 @@ def _effect_message(effect: Effect) -> Dict[str, Any]:
                 "output_key": str(effect.get("output_key") or ""),
             },
         }
+    if kind == "active_boost":
+        return {
+            "message_key": "inv_effect_active_boost",
+            "message_params": {
+                "effect_key": str(effect.get("effect_key") or ""),
+                "hours": max(1, int(round(int(effect.get("duration_seconds") or 0) / 3600))),
+            },
+        }
     return {"message_key": "inv_effect_generic", "message_params": {}}
 
 
@@ -737,6 +745,17 @@ def _apply_single_use(
     if kind == "blueprint":
         full_spec = dict(ITEM_CATALOG.get(item_key) or {})
         return _apply_blueprint_unlock(user_id, item_key, full_spec, conn=conn)
+    if kind in (
+        "research_pct_boost",
+        "energy_pct_boost",
+        "fleet_speed_pct_boost",
+        "expedition_loot_pct_boost",
+        "container_luck_boost",
+        "production_pct_boost",
+    ):
+        from .inventory_boosters import activate_inventory_booster
+
+        return activate_inventory_booster(user_id, item_key, conn=conn)
     return None
 
 
@@ -758,6 +777,11 @@ def use_inventory_item(
     key = str(item_key or "").strip()
     if not is_known_item_key(key):
         return False, "invalid_item", None
+
+    from game.inventory_classification import item_is_locked_planned
+
+    if item_is_locked_planned(key):
+        return False, "item_locked_planned", None
     if not item_is_usable(key):
         return False, "item_not_usable", None
 
@@ -946,22 +970,31 @@ def enrich_inventory_item_row(
     out = dict(row)
     key = str(out.get("item_key") or "")
     owned = int(out.get("amount") or 0)
-    from .inventory_catalog import (
+    from game.inventory_classification import classify_inventory_item
+    from game.inventory_catalog import (
         ITEM_CATALOG,
         craft_recipes_for_material,
         resolve_item_use_role,
     )
 
-    role = resolve_item_use_role(key)
+    classification = classify_inventory_item(key)
+    out.update(classification)
+    role = classification.get("use_role") or resolve_item_use_role(key)
     if role:
         out["use_role"] = role
-    out["collectible"] = item_is_collectible(key)
+    out["collectible"] = bool(classification.get("collectible"))
     out["craft_material"] = item_is_craft_material(key)
     out["exchange_material"] = item_is_exchange_material(key)
-    out["usable"] = item_is_usable(key)
-    use_kind = resolve_item_use_kind(key)
+    out["trade_material"] = bool(classification.get("trade_material"))
+    out["locked_planned"] = bool(classification.get("locked_planned"))
+    out["instant_use"] = bool(classification.get("instant_use"))
+    out["duration_effect"] = bool(classification.get("duration_effect"))
+    out["usable"] = bool(classification.get("usable"))
+    use_kind = classification.get("use_kind") or resolve_item_use_kind(key)
     if use_kind:
         out["use_kind"] = use_kind
+    if classification.get("use_hint_key"):
+        out["use_hint_key"] = str(classification["use_hint_key"])
 
     spec = ITEM_CATALOG.get(key) or {}
     if spec.get("exchange_endgame"):

@@ -186,7 +186,10 @@
                 </span>
               </div>
               <span class="hud-res-warn" data-hud-res-warn="metal" hidden aria-live="polite"></span>
-              <span class="res-rate metal" data-res-rate="metal" aria-hidden="true" style="visibility:hidden"></span>
+              <span class="hud-res-footer">
+                <span class="res-rate metal" data-res-rate="metal" aria-hidden="true" style="visibility:hidden"></span>
+                <span class="res-boost-chip gc-mono" data-res-boost="metal" hidden></span>
+              </span>
             </div>
 
             {% set crystal_have = (player.crystal if player is defined else 0)|int %}
@@ -205,7 +208,10 @@
                 </span>
               </div>
               <span class="hud-res-warn" data-hud-res-warn="crystal" hidden aria-live="polite"></span>
-              <span class="res-rate crystal" data-res-rate="crystal" aria-hidden="true" style="visibility:hidden"></span>
+              <span class="hud-res-footer">
+                <span class="res-rate crystal" data-res-rate="crystal" aria-hidden="true" style="visibility:hidden"></span>
+                <span class="res-boost-chip gc-mono" data-res-boost="crystal" hidden></span>
+              </span>
             </div>
 
             {% set fc_have = (player.fuel_cells if player is defined and player.fuel_cells is defined else 0) | int %}
@@ -224,7 +230,10 @@
                 </span>
               </div>
               <span class="hud-res-warn" data-hud-res-warn="fuel_cells" hidden aria-live="polite"></span>
-              <span class="res-rate fuel_cells" data-res-rate="fuel_cells" aria-hidden="true" style="visibility:hidden"></span>
+              <span class="hud-res-footer">
+                <span class="res-rate fuel_cells" data-res-rate="fuel_cells" aria-hidden="true" style="visibility:hidden"></span>
+                <span class="res-boost-chip gc-mono" data-res-boost="fuel_cells" hidden></span>
+              </span>
             </div>
 
             {% set pl_current = (HEADER_PLANETS|length) if HEADER_PLANETS is defined and HEADER_PLANETS else 1 %}
@@ -248,10 +257,16 @@
                   </span>
                 </span>
               </div>
-              <span class="res-rate energy" data-res-rate="energy" aria-hidden="true" style="visibility:hidden"></span>
+              <span class="hud-res-footer">
+                <span class="res-rate energy" data-res-rate="energy" aria-hidden="true" style="visibility:hidden"></span>
+                <span class="res-boost-chip gc-mono" data-res-boost="energy" hidden></span>
+              </span>
             </div>
 
           </div>
+          {% if HEADER_ACTIVE_BOOSTERS is defined and HEADER_ACTIVE_BOOSTERS.active_effects %}
+          <script type="application/json" id="gc-header-boosters-state">{{ HEADER_ACTIVE_BOOSTERS | tojson }}</script>
+          {% endif %}
           <div id="global-fleet-drawer-root"
                class="gc-fleet-hud-root gc-fleet-drawer-root"
                data-global-fleet-drawer

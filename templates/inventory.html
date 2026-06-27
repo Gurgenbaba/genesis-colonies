@@ -41,6 +41,31 @@
 
   <div id="gc-loot-modal-root" class="gc-loot-modal-root" aria-hidden="true"></div>
 
+  <section class="gc-panel inventory-panel inventory-active-boosters-panel"
+           id="inventory-active-boosters-panel"
+           data-inventory-active-boosters
+           {% if not inv_data.active_boosters is defined or not inv_data.active_boosters.active_effects %}hidden{% endif %}>
+    <div class="gc-panel-header">
+      <span class="gc-panel-title">{{ T("inv_active_boosters_title", "Aktive Booster") }}</span>
+      <span class="gc-panel-subtitle">{{ T("inv_active_boosters_subtitle", "Laufende Dauer-Effekte") }}</span>
+    </div>
+    <ul class="inventory-active-boosters-list" data-inventory-active-boosters-list>
+      {% for effect in (inv_data.active_boosters.active_effects if inv_data.active_boosters is defined else []) %}
+      <li class="inventory-active-booster-row"
+          data-boost-key="{{ effect.key }}"
+          data-remaining-seconds="{{ effect.remaining_seconds|int }}">
+        <span class="inventory-active-booster-label">{{ effect.label }}</span>
+        <span class="inventory-active-booster-effect">{{ effect.effect_summary }}</span>
+        <span class="inventory-active-booster-domain">{{ T("inv_boost_domain_" ~ effect.affected_domain, effect.affected_domain) }}</span>
+        <span class="inventory-active-booster-time gc-mono" data-boost-remaining>{{ effect.remaining_seconds|int }}s</span>
+        {% if effect.note %}
+        <span class="inventory-active-booster-note">{{ effect.note }}</span>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+
   <section class="gc-panel inventory-panel inventory-rewards-panel-wrap" id="inventory-rewards-panel" hidden aria-live="polite">
     <div class="gc-panel-header">
       <span class="gc-panel-title">{{ T("inv_rewards_title", "Erhaltene Belohnungen") }}</span>
@@ -167,6 +192,13 @@
           {% endif %}
           {% if item.exchange_endgame is defined and item.exchange_endgame %}
           <span class="inventory-endgame-hint">{{ T("inv_dna_core_epic_hint", "Endgame-Material — später nutzbar") }}</span>
+          {% endif %}
+          {% if item.locked_planned is defined and item.locked_planned %}
+          <span class="inventory-locked-hint">{{ T("inv_hint_locked_planned", "Bald verfügbar") }}</span>
+          {% elif item.use_hint_key is defined and item.use_hint_key and not (item.usable is defined and item.usable) %}
+          <span class="inventory-use-hint">{{ T(item.use_hint_key, item.use_hint_key) }}</span>
+          {% elif item.trade_material is defined and item.trade_material and not (item.usable is defined and item.usable) %}
+          <span class="inventory-trade-hint">{{ T("inv_hint_collector_trade", "Im Sammler-Markt tauschbar") }}</span>
           {% endif %}
         </div>
         <span class="inventory-rarity-badge inventory-rarity-badge--{{ item.rarity }}">

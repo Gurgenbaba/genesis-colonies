@@ -93,6 +93,52 @@ ITEM_CATALOG: Dict[str, Dict[str, Any]] = {
     "booster_research_15": {"item_type": "booster", "category": "booster", "rarity": "uncommon", "name_key": "inv_booster_research_15m", "icon": "📡"},
     "booster_research_30": {"item_type": "booster", "category": "booster", "rarity": "rare", "name_key": "inv_booster_research_1h", "icon": "📡"},
     "booster_research_60": {"item_type": "booster", "category": "booster", "rarity": "epic", "name_key": "inv_booster_research_6h", "icon": "📡"},
+    "booster_research_30m": {"item_type": "booster", "category": "booster", "rarity": "common", "name_key": "inv_booster_research_30m", "icon": "📡"},
+    "booster_research_pct_2_24h": {
+        "item_type": "booster",
+        "category": "booster",
+        "rarity": "uncommon",
+        "name_key": "inv_booster_research_pct_2_24h",
+        "icon": "📡",
+        "use_kind": "research_pct_boost",
+        "use_effect": {"pct": 2, "hours": 24},
+    },
+    "booster_fleet_speed_25_24h": {
+        "item_type": "booster",
+        "category": "booster",
+        "rarity": "epic",
+        "name_key": "inv_booster_fleet_speed_25_24h",
+        "icon": "🚀",
+        "use_kind": "fleet_speed_pct_boost",
+        "use_effect": {"pct": 25, "hours": 24},
+    },
+    "booster_expedition_loot_25_24h": {
+        "item_type": "booster",
+        "category": "booster",
+        "rarity": "rare",
+        "name_key": "inv_booster_expedition_loot_25_24h",
+        "icon": "🗺️",
+        "use_kind": "expedition_loot_pct_boost",
+        "use_effect": {"pct": 25, "hours": 24},
+    },
+    "booster_container_luck_24h": {
+        "item_type": "booster",
+        "category": "booster",
+        "rarity": "rare",
+        "name_key": "inv_booster_container_luck_24h",
+        "icon": "🎁",
+        "use_kind": "container_luck_boost",
+        "use_effect": {"hours": 24},
+    },
+    "booster_energy_surge_24h": {
+        "item_type": "booster",
+        "category": "booster",
+        "rarity": "rare",
+        "name_key": "inv_booster_energy_surge_24h",
+        "icon": "🔋",
+        "use_kind": "energy_pct_boost",
+        "use_effect": {"pct": 10, "hours": 24},
+    },
     # --- Fragments & collectibles ---
     "fragment_dna_common": {"item_type": "fragment", "category": "planet_evolution", "rarity": "common", "name_key": "inv_fragment_dna_common", "icon": "🧬"},
     "fragment_dna_rare": {"item_type": "fragment", "category": "planet_evolution", "rarity": "rare", "name_key": "inv_fragment_dna_rare", "icon": "🧬"},
@@ -105,6 +151,15 @@ ITEM_CATALOG: Dict[str, Dict[str, Any]] = {
     "fragment_wreck_reactor": {"item_type": "fragment", "category": "expedition", "rarity": "uncommon", "name_key": "inv_fragment_wreck_reactor", "icon": "🔩"},
     "fragment_wreck_hull": {"item_type": "fragment", "category": "expedition", "rarity": "uncommon", "name_key": "inv_fragment_wreck_hull", "icon": "🛡️"},
     # --- Planet evolution consumables (inventory; effect later) ---
+    "evo_planet_xp_250": {
+        "item_type": "consumable",
+        "category": "planet_evolution",
+        "rarity": "common",
+        "name_key": "inv_evo_planet_xp_250",
+        "icon": "🪐",
+        "use_kind": "planet_xp",
+        "use_effect": {"xp": 250},
+    },
     "evo_planet_xp_500": {
         "item_type": "consumable",
         "category": "planet_evolution",
@@ -177,7 +232,7 @@ ITEM_CATALOG: Dict[str, Dict[str, Any]] = {
         "rarity": "uncommon",
         "name_key": "inv_booster_production_25",
         "icon": "⚡",
-        "use_kind": "production_grant",
+        "use_kind": "production_pct_boost",
         "use_effect": {"pct": 25, "hours": 1},
     },
     "booster_production_50": {
@@ -186,7 +241,7 @@ ITEM_CATALOG: Dict[str, Dict[str, Any]] = {
         "rarity": "rare",
         "name_key": "inv_booster_production_50",
         "icon": "⚡",
-        "use_kind": "production_grant",
+        "use_kind": "production_pct_boost",
         "use_effect": {"pct": 50, "hours": 1},
     },
     "booster_production_100": {
@@ -195,7 +250,7 @@ ITEM_CATALOG: Dict[str, Dict[str, Any]] = {
         "rarity": "epic",
         "name_key": "inv_booster_production_100",
         "icon": "⚡",
-        "use_kind": "production_grant",
+        "use_kind": "production_pct_boost",
         "use_effect": {"pct": 100, "hours": 1},
     },
     "booster_energy_50": {
@@ -204,14 +259,66 @@ ITEM_CATALOG: Dict[str, Dict[str, Any]] = {
         "rarity": "rare",
         "name_key": "inv_booster_energy_50",
         "icon": "🔋",
-        "use_kind": "planet_xp",
-        "use_effect": {"xp": 1_000},
+        "use_kind": "energy_pct_boost",
+        "use_effect": {"pct": 50, "hours": 1},
     },
     # --- Fleet modules (inventory; effect later) ---
     "fleet_nav_chip": {"item_type": "module", "category": "fleet", "rarity": "rare", "name_key": "inv_fleet_nav_chip", "icon": "🧭"},
     "fleet_hyperdrive_module": {"item_type": "module", "category": "fleet", "rarity": "epic", "name_key": "inv_fleet_hyperdrive_module", "icon": "🚀"},
     "fleet_fuel_optimizer": {"item_type": "module", "category": "fleet", "rarity": "rare", "name_key": "inv_fleet_fuel_optimizer", "icon": "⛽"},
     "fleet_computer": {"item_type": "module", "category": "fleet", "rarity": "uncommon", "name_key": "inv_fleet_computer", "icon": "🖥️"},
+    "utility_repair_drone": {
+        "item_type": "consumable",
+        "category": "fleet",
+        "rarity": "uncommon",
+        "name_key": "inv_utility_repair_drone",
+        "icon": "🤖",
+        "use_kind": "repair_drone",
+    },
+    "utility_fleet_instant_recall": {
+        "item_type": "consumable",
+        "category": "fleet",
+        "rarity": "legendary",
+        "name_key": "inv_utility_fleet_instant_recall",
+        "icon": "↩️",
+        "use_kind": "fleet_recall",
+    },
+    "utility_alien_scanner": {
+        "item_type": "consumable",
+        "category": "expedition",
+        "rarity": "epic",
+        "name_key": "inv_utility_alien_scanner",
+        "icon": "👽",
+        "use_kind": "scanner",
+        "use_effect": {"scanner_type": "alien", "days": 7},
+    },
+    "utility_pirate_scanner": {
+        "item_type": "consumable",
+        "category": "expedition",
+        "rarity": "epic",
+        "name_key": "inv_utility_pirate_scanner",
+        "icon": "🏴‍☠️",
+        "use_kind": "scanner",
+        "use_effect": {"scanner_type": "pirate", "days": 7},
+    },
+    "utility_anomaly_scanner": {
+        "item_type": "consumable",
+        "category": "expedition",
+        "rarity": "epic",
+        "name_key": "inv_utility_anomaly_scanner",
+        "icon": "🛰️",
+        "use_kind": "scanner",
+        "use_effect": {"scanner_type": "anomaly", "days": 7},
+    },
+    "utility_fleet_queue_plus_1": {
+        "item_type": "consumable",
+        "category": "fleet",
+        "rarity": "rare",
+        "name_key": "inv_utility_fleet_queue_plus_1",
+        "icon": "➕",
+        "use_kind": "fleet_slot_temp",
+        "use_effect": {"hours": 24},
+    },
     # --- Expedition / mythic ---
     "expo_alien_relic": {"item_type": "special", "category": "expedition", "rarity": "epic", "name_key": "inv_expo_alien_relic", "icon": "🏺"},
     "expo_star_chart": {"item_type": "special", "category": "expedition", "rarity": "rare", "name_key": "inv_expo_star_chart", "icon": "🗺️"},
@@ -282,6 +389,7 @@ BOOSTER_TIME_SECONDS: Dict[str, int] = {
     "booster_build_6h": 6 * 60 * 60,
     "booster_build_24h": 24 * 60 * 60,
     "booster_research_5m": 5 * 60,
+    "booster_research_30m": 30 * 60,
     "booster_research_15m": 15 * 60,
     "booster_research_1h": 60 * 60,
     "booster_research_6h": 6 * 60 * 60,
@@ -465,7 +573,9 @@ def resolve_item_use_kind(item_key: str) -> Optional[str]:
 
 
 def item_is_usable(item_key: str) -> bool:
-    return resolve_item_use_role(item_key) == "usable"
+    from game.inventory_classification import classify_inventory_item
+
+    return bool(classify_inventory_item(item_key).get("usable"))
 
 
 def item_is_collectible(item_key: str) -> bool:

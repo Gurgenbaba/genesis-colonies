@@ -1,0 +1,211 @@
+{# GC-966 — Collector Exchange (Sammler-Markt) within Trader Hub #}
+
+{% set ce = collector_exchange if collector_exchange is defined and collector_exchange else {'ready': false, 'specialists': []} %}
+
+{% set ce_ready = ce.ready is defined and ce.ready %}
+
+{% set specialists = ce.specialists if ce.specialists is defined else [] %}
+
+{% set first_spec = specialists[0] if specialists else none %}
+
+{% set first_spec_key = first_spec.specialist_key if first_spec else '' %}
+
+{% set collector_spec_i18n = {
+
+  'xenobiologist': 'collector_specialist_xenobiologist',
+
+  'scrapmaster': 'collector_specialist_scrapmaster',
+
+  'energy_engineer': 'collector_specialist_energy_engineer',
+
+  'hyper_technician': 'collector_specialist_hypertech',
+
+} %}
+
+
+
+{% macro collector_item_name(item_key) -%}
+
+{{ T('inventory_item_' ~ item_key ~ '_name', T('inv_' ~ item_key, item_key)) }}
+
+{%- endmacro %}
+
+
+
+{% macro collector_offer_title(offer) -%}
+
+{{ T('collector_offer_' ~ offer.offer_key ~ '_title', T(offer.name_key, offer.offer_key)) }}
+
+{%- endmacro %}
+
+
+
+{% macro collector_offer_reward_line(offer) -%}
+
+{{ T('collector_offer_' ~ offer.offer_key ~ '_reward', collector_item_name(offer.reward_preview[0].reward_key) if offer.reward_preview else '') }}
+
+{%- endmacro %}
+
+
+
+{% macro collector_offer_card(offer) %}
+
+<article class="collector-offer-card{% if offer.can_redeem %} is-redeemable{% elif not offer.rewards_ready|default(true) %} is-locked{% elif (offer.progress_pct|default(0)|int) <= 0 %} is-dim{% endif %}"
+
+         data-offer-key="{{ offer.offer_key }}"
+
+         data-collector-offer="{{ offer.offer_key }}">
+
+  <div class="collector-offer-main">
+
+    <div class="collector-offer-headline">
+
+      <h3 class="collector-offer-title">{{ collector_offer_title(offer) }}</h3>
+
+      <p class="collector-offer-reward-line hint">{{ collector_offer_reward_line(offer) }}</p>
+
+    </div>
+
+    <div class="collector-offer-metrics">
+
+      <span class="collector-offer-owned gc-mono">
+
+        <span data-collector-owned="{{ offer.offer_key }}">{{ offer.owned|fmt_int }}</span>
+
+        /
+
+        <span data-collector-required="{{ offer.offer_key }}">{{ offer.input_amount|fmt_int }}</span>
+
+      </span>
+
+      <div class="gc-card-queue-bar collector-offer-progress" role="progressbar"
+
+           aria-valuemin="0" aria-valuemax="100"
+
+           aria-valuenow="{{ offer.progress_pct|default(0)|int }}"
+
+           aria-label="{{ collector_offer_title(offer) }}"
+
+           data-collector-progress-bar="{{ offer.offer_key }}">
+
+        <div class="gc-card-queue-bar-fill gc-progress-smooth"
+
+             style="width: {{ offer.progress_pct|default(0)|int }}%;"
+
+             data-collector-progress-fill="{{ offer.offer_key }}"></div>
+
+      </div>
+
+      <button type="button"
+              class="gc-btn gc-btn-primary gc-btn-sm collector-redeem-btn"
+              data-collector-redeem="{{ offer.offer_key }}"
+              {% if not offer.rewards_ready|default(true) %}disabled{% elif not offer.can_redeem %}disabled{% endif %}>
+        {% if not offer.rewards_ready|default(true) %}
+        {{ T('collector_offer_locked_planned', 'Bald verfügbar') }}
+        {% elif offer.can_redeem %}
+        {{ T('collector_redeem_button', 'Einlösen') }}
+        {% else %}
+        {{ T('collector_missing_fragments', 'Fehlende Fragmente') }}
+        {% endif %}
+      </button>
+
+    </div>
+
+  </div>
+
+  <details class="collector-offer-details">
+
+    <summary class="collector-offer-details-toggle">{{ T('collector_offer_details', 'Details') }}</summary>
+
+    <p class="collector-offer-desc hint">{{ T('collector_offer_' ~ offer.offer_key ~ '_desc', '') }}</p>
+
+    <p class="collector-offer-input hint">
+
+      {{ collector_item_name(offer.input_key) }}
+
+    </p>
+
+  </details>
+
+</article>
+
+{% endmacro %}
+
+
+
+<section class="gc-collector-panel trader-hub-subpanel trader-hub-collector-panel" id="gc-collector-exchange-panel"
+
+         data-collector-ready="{{ '1' if ce_ready else '0' }}"
+
+         data-collector-active-specialist="{{ first_spec_key }}"
+
+         aria-label="{{ T('collector_exchange_title', 'Sammler-Markt') }}">
+
+  <div class="gc-panel-header trader-hub-collector-header">
+
+    <div class="gc-panel-head-left">
+
+      <span class="gc-panel-title">{{ T('collector_exchange_title', 'Sammler-Markt') }}</span>
+
+      <span class="gc-panel-subtitle hint">{{ T('collector_exchange_subtitle', 'Collectibles gegen Booster und seltene Belohnungen eintauschen') }}</span>
+
+    </div>
+
+  </div>
+
+
+
+  {% if not ce_ready %}
+
+  <p class="trader-hub-collector-unavailable hint">{{ T('collector_exchange_unavailable', 'Sammler-Markt ist derzeit nicht verfügbar.') }}</p>
+
+  {% else %}
+
+  <script type="application/json" id="gc-collector-exchange-state">{{ ce | tojson }}</script>
+
+  <nav class="collector-specialist-tabs" role="tablist" aria-label="{{ T('collector_exchange_title', 'Sammler-Markt') }}" data-collector-tabs>
+
+    {% for spec in specialists %}
+
+    <button type="button"
+
+            class="collector-specialist-tab{% if spec.specialist_key == first_spec_key %} is-active{% endif %}"
+
+            role="tab"
+
+            data-collector-specialist-tab="{{ spec.specialist_key }}"
+
+            aria-selected="{{ 'true' if spec.specialist_key == first_spec_key else 'false' }}">
+
+      <span class="collector-specialist-tab-icon" aria-hidden="true">{{ spec.icon }}</span>
+
+      <span class="collector-specialist-tab-label">{{ T(collector_spec_i18n.get(spec.specialist_key, spec.name_key), spec.name_key) }}</span>
+
+    </button>
+
+    {% endfor %}
+
+  </nav>
+
+
+
+  <div class="collector-offers-grid" data-collector-offers-grid>
+
+    {% if first_spec %}
+
+      {% for offer in first_spec.offers %}
+
+        {{ collector_offer_card(offer) }}
+
+      {% endfor %}
+
+    {% endif %}
+
+  </div>
+
+  <p class="collector-exchange-error gc-form-error" data-collector-error hidden></p>
+
+  {% endif %}
+
+</section>
+

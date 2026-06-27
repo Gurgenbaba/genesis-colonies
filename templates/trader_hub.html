@@ -13,7 +13,7 @@
       <div class="gc-panel-header trader-hub-window-header">
         <div class="gc-panel-head-left">
           <span class="gc-panel-title" id="trader-hub-window-title">{{ T("trader_hub_title", "Trader Hub") }}</span>
-          <span class="gc-panel-subtitle hint">{{ T("trader_hub_subtitle", "Ressourcen tauschen · Schiffe recyceln") }}</span>
+          <span class="gc-panel-subtitle hint">{{ T("trader_hub_subtitle", "Ressourcen tauschen · Schiffe recyceln · Collectibles eintauschen") }}</span>
         </div>
         <div class="gc-panel-head-right trader-hub-status-chips">
           {% if CODEX_PRIMARY %}
@@ -58,6 +58,10 @@
       {% include "partials/exchange_panel.html" %}
       {% include "partials/scrapyard_panel.html" %}
     </div>
+
+    <hr class="trader-hub-divider gc-prog-divider">
+
+    {% include "partials/collector_exchange_panel.html" %}
   </div>
 </div>
 {% endblock %}

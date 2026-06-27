@@ -185,11 +185,50 @@ def resolve_loot_entry_amount(
 
 
 def build_loot_roll_context(user_id: int, container_key: str, *, conn) -> Dict[str, Any]:
+    from game.inventory_boosters import get_container_luck_multiplier
+
+    luck_mult = get_container_luck_multiplier(int(user_id), conn=conn)
     return {
         "user_id": int(user_id),
         "container_key": str(container_key),
         "conn": conn,
+        "container_luck_mult": luck_mult,
     }
+
+
+def weighted_roll_weights(
+    entries: List[LootEntry],
+    *,
+    loot_context: Optional[Dict[str, Any]] = None,
+) -> List[int]:
+    """Roll weights; rare entries get boosted when container luck is active."""
+    luck_mult = 1.0
+    if loot_context:
+        luck_mult = max(1.0, float(loot_context.get("container_luck_mult") or 1.0))
+    weights: List[int] = []
+    for entry in entries:
+        base = int(entry.get("weight") or 0)
+        if luck_mult <= 1.0:
+            weights.append(base)
+            continue
+        rkey = str(entry.get("reward_key") or "")
+        rtype = str(entry.get("reward_type") or "")
+        boost = False
+        if rtype == "item" and rkey.startswith("container_"):
+            boost = True
+        elif rtype == "booster" and any(token in rkey for token in ("24h", "1h", "6h")):
+            boost = True
+        else:
+            try:
+                from game.inventory_catalog import item_catalog_entry
+
+                spec = item_catalog_entry(rkey)
+                rarity = str(spec.get("rarity") or "common")
+                boost = rarity in ("rare", "epic", "legendary")
+            except Exception:
+                boost = False
+        weights.append(int(base * luck_mult) if boost else base)
+    return weights
 
 
 def scaled_loot_amount_label(

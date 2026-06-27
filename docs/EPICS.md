@@ -23,6 +23,7 @@ Status: v1.5.9.2 (2026-06-24)
 | EPIC-15 | Imperium & Expansion (Genesis 2.0) | 📋 | [IMPERIUM_VISION.md](IMPERIUM_VISION.md) |
 | EPIC-17 | Imperial Directives (High Command) | 📋 | [IMPERIAL_DIRECTIVES.md](IMPERIAL_DIRECTIVES.md) |
 | EPIC-16 | Genesis Knowledge Base (Knowledge Pipeline) | 📋 | [GC-950_KNOWLEDGE_PIPELINE.md](GC-950_KNOWLEDGE_PIPELINE.md) |
+| EPIC-18 | Collector Exchange (Sammler-Markt) | 📋 | [COLLECTOR_EXCHANGE.md](COLLECTOR_EXCHANGE.md) |
 
 ---
 
@@ -116,3 +117,19 @@ Details: [IMPERIAL_DIRECTIVES.md](IMPERIAL_DIRECTIVES.md)
 Supersedes: GC-630 (klassisches Tutorial). Technical Data (Ebene 3) bleibt `game/technical_data.py` — nicht in Pipeline.
 
 Details: [GC-950_KNOWLEDGE_PIPELINE.md](GC-950_KNOWLEDGE_PIPELINE.md)
+
+**EPIC-18 Collector Exchange** → nicht als Ganzes implementieren:
+
+| Ticket | Fokus |
+|--------|-------|
+| GC-965A | Schema + `collector_catalog.py` + Offer-Definitionen |
+| GC-965B | `collector_exchange.py` — redeem, stats, game-state |
+| GC-966A | Trader Hub Tab + Xenobiologe-Panel |
+| GC-966B | Schrottmeister + Wrackrekonstruktion |
+| GC-966C | Energieingenieur + Hypertechniker |
+| GC-967 | Inventar-Hints + Progress deep-links |
+| GC-968 | Neue Booster/Utility-Items + EffectResolver |
+| GC-969 | Prestige — Milestones, Titles, Profile |
+| GC-969B | Loot-Reveal Toast + Codex Player Block |
+
+Details: [COLLECTOR_EXCHANGE.md](COLLECTOR_EXCHANGE.md)

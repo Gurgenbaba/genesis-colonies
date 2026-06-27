@@ -14,6 +14,7 @@ Epics beschreiben nur das Ziel. **Niemals direkt implementieren.**
 | EPIC-02 | Fleet System | [FLEET_SYSTEM.md](FLEET_SYSTEM.md) |
 | EPIC-03 | Galaxy System | [GALAXY_SYSTEM.md](GALAXY_SYSTEM.md) |
 | EPIC-04 | Economy & Trader Hub | [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) |
+| EPIC-18 | Collector Exchange (Sammler-Markt) | [COLLECTOR_EXCHANGE.md](COLLECTOR_EXCHANGE.md) |
 | EPIC-05 | Planet Evolution | [PLANET_EVOLUTION.md](PLANET_EVOLUTION.md) |
 | EPIC-06 | Buildings | [BUILDINGS_SYSTEM.md](BUILDINGS_SYSTEM.md) |
 | EPIC-07 | Research (Account-Tech) | [RESEARCH_SYSTEM.md](RESEARCH_SYSTEM.md) |
@@ -38,6 +39,7 @@ Vor jeder Änderung die relevanten Docs lesen:
 | [ROADMAP.md](ROADMAP.md) | Status, Phasen, Schulden |
 | [PLANET_SCOPE.md](PLANET_SCOPE.md) | Aktiver Planet, Switch, Scope |
 | [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) | Ressourcen, Exchange, Fuel |
+| [COLLECTOR_EXCHANGE.md](COLLECTOR_EXCHANGE.md) | Sammler-Markt, Collectibles, Prestige |
 | [BALANCE_ANCHORS.md](BALANCE_ANCHORS.md) | Ankerkurven, Universe-Defaults (Code-generiert) |
 | [GC-850_RUNTIME_DOC_AUDIT.md](GC-850_RUNTIME_DOC_AUDIT.md) | Runtime ↔ Doc Audit (GC-850) |
 | GC-851 doc sync guards | `tests/test_gc851_docs_version_sync.py` — VERSION, migrations, pytest count |

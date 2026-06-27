@@ -4261,6 +4261,12 @@ def _handle_expedition_holding_end(movement: Dict[str, Any], *, conn, now: float
         from .galactic_directives.mechanics import get_directive_flags_for_galaxy
 
         directive_flags = get_directive_flags_for_galaxy(origin_galaxy, conn=conn)
+    try:
+        from .inventory_boosters import get_expedition_booster_flags
+
+        directive_flags = {**directive_flags, **get_expedition_booster_flags(player_id, conn=conn)}
+    except Exception:
+        pass
     from .empire_page import get_empire_production_aggregate
 
     empire_prod = get_empire_production_aggregate(player_id, conn=conn)

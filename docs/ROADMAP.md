@@ -96,6 +96,8 @@ Docs: [PLANET_SCOPE.md](PLANET_SCOPE.md), [PLANET_EVOLUTION.md](PLANET_EVOLUTION
 | **Werft** — Schiffsbau, Queue, fuel_cells | ✅ | `orbital_shipyard` |
 | **Flotte** — Send, Tick, Missionen | ✅ | Attack combat active |
 | **Trader Hub** — Unified Exchange, Scrapyard | ✅ | GC-402 [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) |
+| **Lootbox Meta-only Rebalance** | ✅ | GC-864 — keine Economy-Inflation aus Containern |
+| **Collector Exchange** — Sammler-Markt, 4 Spezialisten, Prestige | 🔄 | EPIC-18 · GC-965A/B ✅ · GC-966A/B ✅ UI · GC-967 Inventar-Hints 📋 |
 | **Auktionshaus** — Lootbox-Auktionen (keine Eventboxen) | ✅ | GC-550 [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) |
 | **Vote Center** — TopG Postback + 12h Belohnung | ✅ | GC-551 [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) |
 | **Vote Center** — Multi-Provider (TopG, GameToor) | ✅ | GC-552 [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) |

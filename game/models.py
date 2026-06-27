@@ -687,11 +687,33 @@ def touch_player_online(player_id: int) -> None:
         conn.close()
 
 
+ONLINE_WINDOW_SEC = 5 * 60
+
+
+def get_online_player_count(
+    *,
+    conn: sqlite3.Connection | None = None,
+    now: int | None = None,
+) -> int:
+    """Count players with ``last_seen`` within the canonical online window (HUD + landing)."""
+    own_conn = False
+    if conn is None:
+        conn = db()
+        own_conn = True
+    ts = int(now if now is not None else _now_ts())
+    cutoff = ts - ONLINE_WINDOW_SEC
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) AS c FROM players WHERE last_seen >= ?", (cutoff,))
+    count = int(cur.fetchone()["c"])
+    if own_conn:
+        conn.close()
+    return count
+
+
 def get_player_stats() -> dict:
     now = _now_ts()
     day_ago = now - 24 * 3600
     week_ago = now - 7 * 24 * 3600
-    five_min_ago = now - 5 * 60
 
     conn = db()
     cur = conn.cursor()
@@ -705,8 +727,7 @@ def get_player_stats() -> dict:
     cur.execute("SELECT COUNT(*) AS c FROM players WHERE last_seen >= ?", (week_ago,))
     active_7d = int(cur.fetchone()["c"])
 
-    cur.execute("SELECT COUNT(*) AS c FROM players WHERE last_seen >= ?", (five_min_ago,))
-    online_now = int(cur.fetchone()["c"])
+    online_now = get_online_player_count(conn=conn, now=now)
 
     conn.close()
 

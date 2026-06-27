@@ -2088,6 +2088,7 @@
     initMotdBanner();
     initWhatsNew();
     bootstrapScoreStateFromDom();
+    bootstrapHeaderBoostersFromDom();
     bindFormattedNumberInputs(document.getElementById("main-content") || document);
 
     const skipFreshServerHtml = skipHydrate || shouldSkipInitGameStateAfterSsr(page, opts);
@@ -2124,6 +2125,7 @@
         if (skipInitFetch) {
           console.debug("[GC] initPage skip game-state (SSR fresh)", page, opts && opts.pjax ? "pjax" : "");
           bootstrapResourceLiveFromDom();
+          bootstrapHeaderBoostersFromDom();
           _bootstrapPageQueueCompactLiveFromDom();
           if (typeof GC.refreshGameState === "function") {
             void GC.refreshGameState("page_init");
@@ -9112,6 +9114,7 @@
     const projected = projectLiveResourceAmounts(getApproxServerNow());
     if (!projected) return;
     patchShellHudLiveResources(projected.metal, projected.crystal, projected.fuelCells);
+    tickBoostHudCountdown();
   }
 
   function _resourceTickerIntervalMs() {
@@ -10452,6 +10455,115 @@
   }
   GC.syncFleetSlotsBadgeFromState = syncFleetSlotsBadgeFromState;
 
+  const _boostHudState = {
+    effects: [],
+    syncedAt: 0,
+  };
+
+  const _BOOST_DOMAIN_RES_KEYS = {
+    production: ["metal", "crystal", "fuel_cells"],
+    energy: ["energy"],
+  };
+
+  function _boostHudRemainingSeconds(baseRemaining) {
+    const base = Math.max(0, Math.floor(Number(baseRemaining) || 0));
+    const elapsed = Math.max(0, getApproxServerNow() - (_boostHudState.syncedAt || 0));
+    return Math.max(0, base - elapsed);
+  }
+
+  function _normalizeBoostEffects(rawEffects) {
+    if (!Array.isArray(rawEffects)) return [];
+    return rawEffects.map((e) => ({
+      key: String(e.key || e.effect_key || ""),
+      affected_domain: String(e.affected_domain || "general"),
+      effect_summary: String(e.effect_summary || ""),
+      remaining_seconds: Math.max(0, Math.floor(Number(e.remaining_seconds) || 0)),
+    }));
+  }
+
+  function _resolveBoostEffectsFromState(data) {
+    const fromData = data?.active_boosters?.active_effects;
+    if (Array.isArray(fromData) && fromData.length) {
+      return _normalizeBoostEffects(fromData);
+    }
+    const fromLast = GC.lastState?.active_boosters?.active_effects;
+    if (Array.isArray(fromLast) && fromLast.length) {
+      return _normalizeBoostEffects(fromLast);
+    }
+    return _boostHudState.effects;
+  }
+
+  function _boostEffectForResKey(resKey, effects) {
+    const key = String(resKey || "");
+    for (const [domain, keys] of Object.entries(_BOOST_DOMAIN_RES_KEYS)) {
+      if (!keys.includes(key)) continue;
+      const match = effects.find((e) => e.affected_domain === domain);
+      if (match) return match;
+    }
+    return null;
+  }
+
+  function _formatResBoostChip(effect) {
+    if (!effect) return "";
+    const rem = _boostHudRemainingSeconds(effect.remaining_seconds);
+    if (rem <= 0) return "";
+    const summary = String(effect.effect_summary || "").trim();
+    return summary ? `${summary} · ${formatDuration(rem)}` : formatDuration(rem);
+  }
+
+  function patchShellHudBoosters(data) {
+    const incoming = _resolveBoostEffectsFromState(data);
+    const serverEffects = data?.active_boosters?.active_effects;
+
+    if (Array.isArray(serverEffects) && serverEffects.length) {
+      _boostHudState.effects = incoming;
+      _boostHudState.syncedAt = getApproxServerNow();
+    } else if (Array.isArray(serverEffects) && serverEffects.length === 0) {
+      _boostHudState.effects = [];
+    } else if (incoming.length) {
+      _boostHudState.effects = incoming;
+    }
+
+    const stillActive = _boostHudState.effects.filter(
+      (item) => _boostHudRemainingSeconds(item.remaining_seconds) > 0
+    );
+    if (stillActive.length !== _boostHudState.effects.length) {
+      _boostHudState.effects = stillActive;
+    }
+
+    const bar = document.getElementById("resource-bar");
+    if (!bar) return;
+    ["metal", "crystal", "fuel_cells", "energy"].forEach((resKey) => {
+      const chip = bar.querySelector(`[data-res-boost="${resKey}"]`);
+      if (!chip) return;
+      const effect = _boostEffectForResKey(resKey, _boostHudState.effects);
+      const text = _formatResBoostChip(effect);
+      if (!text) {
+        chip.hidden = true;
+        chip.textContent = "";
+        return;
+      }
+      chip.hidden = false;
+      _setIfChanged(chip, text);
+    });
+  }
+
+  function bootstrapHeaderBoostersFromDom() {
+    const el = document.getElementById("gc-header-boosters-state");
+    if (!el) return;
+    try {
+      const parsed = JSON.parse(el.textContent || "null");
+      if (parsed && Array.isArray(parsed.active_effects) && parsed.active_effects.length) {
+        patchShellHudBoosters({ active_boosters: parsed });
+      }
+    } catch (_) {}
+  }
+
+  function tickBoostHudCountdown() {
+    if (!_boostHudState.effects.length) return;
+    patchShellHudBoosters(GC.lastState || { active_boosters: { active_effects: _boostHudState.effects } });
+  }
+
   function patchShellHudFromState(data, opts) {
     if (!data || data.ok === false) return;
     const forceResourceBar = Boolean(opts && opts.forceResourceBar);
@@ -10573,6 +10685,8 @@
         animate: forceResourceBar,
       });
     }
+
+    patchShellHudBoosters(data);
 
     patchHeaderPlanetLimitFromState(data, forceResourceBar);
 
@@ -10784,6 +10898,7 @@
     "active_fleets",
     "fleet_slots",
     "account_safety",
+    "active_boosters",
     "player_id",
     "energy_efficiency_pct",
     "energy_ratio",
@@ -11200,6 +11315,7 @@
       if (shouldPatchGameStateModule("trader", { forcePanel })) {
         if (data.exchange) patchExchangePanel(data.exchange);
         if (data.scrapyard) patchScrapyardPanel(data.scrapyard);
+        if (data.collector_exchange) patchCollectorExchangePanel(data.collector_exchange);
         if (data.auction_house) patchAuctionHousePanel(data.auction_house);
       }
 
@@ -11803,6 +11919,7 @@
       insufficient_materials: t("inv_error_insufficient_materials", "Nicht genug Material im Inventar."),
       invalid_recipe: t("inv_error_invalid_recipe", "Unbekanntes Rezept."),
       item_not_usable: t("inv_error_item_not_usable", "Dieses Item kann nicht benutzt werden."),
+      item_locked_planned: t("inv_hint_locked_planned", "Bald verfügbar"),
       invalid_item: t("inv_error_invalid_item", "Unbekanntes Item."),
       inventory_unavailable: t("inv_unavailable", "Inventar ist derzeit nicht verfügbar."),
       inventory_action_failed: t("inv_error_action_failed", "Inventar-Aktion ist fehlgeschlagen."),
@@ -11968,6 +12085,14 @@
     const endgameHint = item.exchange_endgame
       ? `<span class="inventory-endgame-hint">${escapeHtml(t("inv_dna_core_epic_hint", "Endgame-Material — später nutzbar"))}</span>`
       : "";
+    let roleHint = "";
+    if (item.locked_planned) {
+      roleHint = `<span class="inventory-locked-hint">${escapeHtml(t("inv_hint_locked_planned", "Bald verfügbar"))}</span>`;
+    } else if (item.use_hint_key && !item.usable) {
+      roleHint = `<span class="inventory-use-hint">${escapeHtml(t(item.use_hint_key, item.use_hint_key))}</span>`;
+    } else if (item.trade_material && !item.usable) {
+      roleHint = `<span class="inventory-trade-hint">${escapeHtml(t("inv_hint_collector_trade", "Im Sammler-Markt tauschbar"))}</span>`;
+    }
     const collectibleBadge = item.collectible
       ? `<span class="inventory-collectible-badge">${escapeHtml(t("inv_collectible_badge", "Sammlerstück"))}</span>`
       : "";
@@ -11988,7 +12113,31 @@
           `<button type="button" class="gc-btn gc-btn-secondary gc-btn-xs inventory-exchange-btn" data-inventory-exchange="${escapeHtml(ep.recipe_key)}">${escapeHtml(t("inv_upgrade_btn", "Upgrade"))}</button>`
       )
       .join("");
-    return `<span class="inventory-item-icon" aria-hidden="true">${item.icon || "📦"}</span><div class="inventory-item-body"><span class="inventory-item-name">${escapeHtml(name)}</span>${craftProgress}${exchangeProgress}${endgameHint}</div><span class="inventory-rarity-badge inventory-rarity-badge--${escapeHtml(rarity)}">${escapeHtml(t(`inv_rarity_${rarity}`, rarity))}</span>${collectibleBadge}<span class="inventory-item-amount gc-mono" data-inventory-item-amount="${escapeHtml(item.item_key)}">×${formatNumber(amount)}</span>${useBtn}${craftBtns}${exchangeBtns}`;
+    return `<span class="inventory-item-icon" aria-hidden="true">${item.icon || "📦"}</span><div class="inventory-item-body"><span class="inventory-item-name">${escapeHtml(name)}</span>${craftProgress}${exchangeProgress}${endgameHint}${roleHint}</div><span class="inventory-rarity-badge inventory-rarity-badge--${escapeHtml(rarity)}">${escapeHtml(t(`inv_rarity_${rarity}`, rarity))}</span>${collectibleBadge}<span class="inventory-item-amount gc-mono" data-inventory-item-amount="${escapeHtml(item.item_key)}">×${formatNumber(amount)}</span>${useBtn}${craftBtns}${exchangeBtns}`;
+  }
+
+  function patchInventoryActiveBoosters(inventory) {
+    const panel = document.querySelector("[data-inventory-active-boosters]");
+    const list = document.querySelector("[data-inventory-active-boosters-list]");
+    if (!panel || !list) return;
+    const effects = (inventory && inventory.active_boosters && inventory.active_boosters.active_effects) || [];
+    if (!effects.length) {
+      panel.hidden = true;
+      list.innerHTML = "";
+      return;
+    }
+    panel.hidden = false;
+    list.innerHTML = effects
+      .map((effect) => {
+        const rem = Math.max(0, Math.floor(Number(effect.remaining_seconds) || 0));
+        const domainKey = `inv_boost_domain_${effect.affected_domain || "general"}`;
+        const domain = t(domainKey, effect.affected_domain || "general");
+        const note = effect.note
+          ? `<span class="inventory-active-booster-note">${escapeHtml(effect.note)}</span>`
+          : "";
+        return `<li class="inventory-active-booster-row" data-boost-key="${escapeHtml(effect.key || "")}" data-remaining-seconds="${rem}"><span class="inventory-active-booster-label">${escapeHtml(effect.label || "")}</span><span class="inventory-active-booster-effect">${escapeHtml(effect.effect_summary || "")}</span><span class="inventory-active-booster-domain">${escapeHtml(domain)}</span><span class="inventory-active-booster-time gc-mono" data-boost-remaining>${escapeHtml(formatDuration(rem))}</span>${note}</li>`;
+      })
+      .join("");
   }
 
   let _lootModalState = null;
@@ -12547,6 +12696,8 @@
       empty.textContent = t("inv_no_items", "Noch keine Items.");
       itemList.appendChild(empty);
     }
+
+    patchInventoryActiveBoosters(inv);
   }
 
   let _inventoryLastState = null;
@@ -12564,7 +12715,7 @@
         if (!itemKey) return;
         void runInventoryAction(
           useBtn,
-          "/api/inventory/use-item",
+          "/api/inventory/use",
           {
             item_key: itemKey,
             amount: 1,
@@ -14262,6 +14413,7 @@
   function initTraderHub() {
     initExchangePanel();
     initScrapyardPanel();
+    initCollectorExchangePanel();
   }
 
   function parseFleetPageData(page) {
@@ -18651,6 +18803,254 @@
     bindFormattedNumberInputs(list);
   }
 
+  const COLLECTOR_SPEC_I18N = {
+    xenobiologist: "collector_specialist_xenobiologist",
+    scrapmaster: "collector_specialist_scrapmaster",
+    energy_engineer: "collector_specialist_energy_engineer",
+    hyper_technician: "collector_specialist_hypertech",
+  };
+
+  let collectorExchangeCache = null;
+  let activeCollectorSpecialistKey = null;
+
+  function readCollectorExchangeStateFromDom() {
+    const el = document.getElementById("gc-collector-exchange-state");
+    if (!el) return null;
+    try {
+      return JSON.parse(el.textContent || "");
+    } catch (_err) {
+      return null;
+    }
+  }
+
+  function writeCollectorExchangeStateToDom(collectorExchange) {
+    const el = document.getElementById("gc-collector-exchange-state");
+    if (el && collectorExchange) el.textContent = JSON.stringify(collectorExchange);
+  }
+
+  function collectorItemLabel(itemKey) {
+    const key = String(itemKey || "");
+    return t(`inventory_item_${key}_name`, t(`inv_${key}`, key));
+  }
+
+  function collectorOfferTitle(offer) {
+    const offerKey = String(offer?.offer_key || "");
+    return t(`collector_offer_${offerKey}_title`, t(String(offer?.name_key || ""), offerKey));
+  }
+
+  function collectorOfferDesc(offer) {
+    const offerKey = String(offer?.offer_key || "");
+    return t(`collector_offer_${offerKey}_desc`, "");
+  }
+
+  function collectorRewardPreviewLabel(rewardPreview) {
+    const rows = Array.isArray(rewardPreview) ? rewardPreview : [];
+    if (!rows.length) return "";
+    return rows
+      .map((rw) => {
+        const amount = parseInt(rw.amount, 10) || 0;
+        const rtype = String(rw.reward_type || "");
+        const rkey = String(rw.reward_key || "");
+        let label = "";
+        if (rtype === "ship" || rtype === "ship_weighted") {
+          label = t(`fleet_ship_${rkey}`, rkey);
+        } else {
+          label = collectorItemLabel(rkey);
+        }
+        return amount > 1 ? `${label} ×${formatNumber(amount)}` : label;
+      })
+      .join(" · ");
+  }
+
+  function collectorOfferRewardLine(offer) {
+    const offerKey = String(offer?.offer_key || "");
+    const fallback = collectorRewardPreviewLabel(offer?.reward_preview);
+    return t(`collector_offer_${offerKey}_reward`, fallback);
+  }
+
+  function sortCollectorOffers(offers) {
+    return [...(offers || [])].sort((a, b) => {
+      const aRedeem = !!a?.can_redeem;
+      const bRedeem = !!b?.can_redeem;
+      if (aRedeem !== bRedeem) return aRedeem ? -1 : 1;
+      const aProgress = parseInt(a?.progress_pct, 10) || 0;
+      const bProgress = parseInt(b?.progress_pct, 10) || 0;
+      if (aProgress !== bProgress) return bProgress - aProgress;
+      const aSort = parseInt(a?.sort, 10) || 0;
+      const bSort = parseInt(b?.sort, 10) || 0;
+      if (aSort !== bSort) return aSort - bSort;
+      return String(a?.offer_key || "").localeCompare(String(b?.offer_key || ""));
+    });
+  }
+
+  function renderCollectorOfferCard(offer) {
+    const key = String(offer.offer_key || "");
+    const owned = parseInt(offer.owned, 10) || 0;
+    const required = parseInt(offer.input_amount, 10) || 0;
+    const progress = parseInt(offer.progress_pct, 10) || 0;
+    const canRedeem = !!offer.can_redeem;
+    const rewardsReady = offer.rewards_ready !== false;
+    const inputKey = String(offer.input_key || "");
+    const title = collectorOfferTitle(offer);
+    const rewardLine = collectorOfferRewardLine(offer);
+    const desc = collectorOfferDesc(offer);
+    const inputLabel = collectorItemLabel(inputKey);
+    const cardClass = !rewardsReady
+      ? " is-locked"
+      : canRedeem
+        ? " is-redeemable"
+        : progress <= 0
+          ? " is-dim"
+          : "";
+    const btnLabel = !rewardsReady
+      ? t("collector_offer_locked_planned", "Coming soon")
+      : canRedeem
+        ? t("collector_redeem_button", "Redeem")
+        : t("collector_missing_fragments", "Missing fragments");
+    return `<article class="collector-offer-card${cardClass}" data-offer-key="${escapeHtml(key)}" data-collector-offer="${escapeHtml(key)}">
+      <div class="collector-offer-main">
+        <div class="collector-offer-headline">
+          <h3 class="collector-offer-title">${escapeHtml(title)}</h3>
+          <p class="collector-offer-reward-line hint">${escapeHtml(rewardLine)}</p>
+        </div>
+        <div class="collector-offer-metrics">
+          <span class="collector-offer-owned gc-mono">
+            <span data-collector-owned="${escapeHtml(key)}">${escapeHtml(formatNumber(owned))}</span>
+            /
+            <span data-collector-required="${escapeHtml(key)}">${escapeHtml(formatNumber(required))}</span>
+          </span>
+          <div class="gc-card-queue-bar collector-offer-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}" aria-label="${escapeHtml(title)}" data-collector-progress-bar="${escapeHtml(key)}">
+            <div class="gc-card-queue-bar-fill gc-progress-smooth" style="width: ${progress}%;" data-collector-progress-fill="${escapeHtml(key)}"></div>
+          </div>
+          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm collector-redeem-btn" data-collector-redeem="${escapeHtml(key)}"${canRedeem && rewardsReady ? "" : " disabled"}>${escapeHtml(btnLabel)}</button>
+        </div>
+      </div>
+      <details class="collector-offer-details">
+        <summary class="collector-offer-details-toggle">${escapeHtml(t("collector_offer_details", "Details"))}</summary>
+        <p class="collector-offer-desc hint">${escapeHtml(desc)}</p>
+        <p class="collector-offer-input hint">${escapeHtml(inputLabel)}</p>
+      </details>
+    </article>`;
+  }
+
+  function renderCollectorOffersGrid(collectorExchange, specialistKey) {
+    const specialists = Array.isArray(collectorExchange?.specialists) ? collectorExchange.specialists : [];
+    const spec = specialists.find((row) => String(row?.specialist_key || "") === String(specialistKey || ""));
+    const offers = sortCollectorOffers(spec?.offers || []);
+    return offers.map((offer) => renderCollectorOfferCard(offer)).join("");
+  }
+
+  function activateCollectorSpecialistTab(panel, specialistKey) {
+    if (!panel || !specialistKey) return;
+    activeCollectorSpecialistKey = specialistKey;
+    panel.dataset.collectorActiveSpecialist = specialistKey;
+    const tabs = panel.querySelectorAll("[data-collector-specialist-tab]");
+    tabs.forEach((tab) => {
+      const active = tab.getAttribute("data-collector-specialist-tab") === specialistKey;
+      tab.classList.toggle("is-active", active);
+      tab.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    const grid = panel.querySelector("[data-collector-offers-grid]");
+    if (grid && collectorExchangeCache) {
+      grid.innerHTML = renderCollectorOffersGrid(collectorExchangeCache, specialistKey);
+    }
+  }
+
+  function patchCollectorExchangePanel(collectorExchange) {
+    const panel = document.getElementById("gc-collector-exchange-panel");
+    if (!panel || !collectorExchange) return;
+    panel.dataset.collectorReady = collectorExchange.ready ? "1" : "0";
+    if (!collectorExchange.ready) return;
+
+    collectorExchangeCache = collectorExchange;
+    writeCollectorExchangeStateToDom(collectorExchange);
+
+    const specialists = Array.isArray(collectorExchange.specialists) ? collectorExchange.specialists : [];
+    const fallbackKey = specialists[0]?.specialist_key || "";
+    const activeKey =
+      activeCollectorSpecialistKey ||
+      panel.dataset.collectorActiveSpecialist ||
+      panel.querySelector("[data-collector-specialist-tab].is-active")?.getAttribute("data-collector-specialist-tab") ||
+      fallbackKey;
+    activateCollectorSpecialistTab(panel, activeKey || fallbackKey);
+  }
+
+  function initCollectorExchangePanel() {
+    const panel = document.getElementById("gc-collector-exchange-panel");
+    if (!panel || panel.dataset.collectorReady !== "1") return;
+    if (panel.dataset.collectorBound === "1") return;
+    panel.dataset.collectorBound = "1";
+
+    collectorExchangeCache = readCollectorExchangeStateFromDom();
+    activeCollectorSpecialistKey =
+      panel.dataset.collectorActiveSpecialist ||
+      panel.querySelector("[data-collector-specialist-tab].is-active")?.getAttribute("data-collector-specialist-tab") ||
+      collectorExchangeCache?.specialists?.[0]?.specialist_key ||
+      null;
+
+    const tt = (key, fallback) => t(key, fallback);
+    const errorEl = panel.querySelector("[data-collector-error]");
+    const reasonText = (reason) =>
+      tt(`collector_error_${reason}`, tt("collector_error_generic", "Exchange failed."));
+
+    panel.addEventListener("click", (e) => {
+      const tab = e.target.closest("[data-collector-specialist-tab]");
+      if (tab) {
+        activateCollectorSpecialistTab(panel, tab.getAttribute("data-collector-specialist-tab") || "");
+        return;
+      }
+      const redeemBtn = e.target.closest("[data-collector-redeem]");
+      if (!redeemBtn || redeemBtn.disabled) return;
+      e.preventDefault();
+      const offerKey = redeemBtn.getAttribute("data-collector-redeem") || "";
+      if (!offerKey) return;
+
+      redeemBtn.disabled = true;
+      if (errorEl) {
+        errorEl.hidden = true;
+        errorEl.textContent = "";
+      }
+
+      GC.fetchGameAction("/api/collector-exchange/redeem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+        body: JSON.stringify({
+          offer_key: offerKey,
+          request_id: `collector-${offerKey}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        }),
+      })
+        .then((res) => {
+          if (res?.ok) {
+            applyActionState(res, "collector_redeem");
+            showNotify(tt("collector_redeem_success", "Collectibles exchanged."), "success");
+          } else {
+            applyActionState(res, "collector_redeem_error");
+            if (errorEl) {
+              errorEl.textContent = reasonText(res?.reason);
+              errorEl.hidden = false;
+            }
+          }
+        })
+        .catch(() => {
+          if (errorEl) {
+            errorEl.textContent = reasonText("generic");
+            errorEl.hidden = false;
+          }
+        })
+        .finally(() => {
+          redeemBtn.disabled = false;
+        });
+    });
+
+    GC.registerCleanup(() => {
+      delete panel.dataset.collectorBound;
+      collectorExchangeCache = null;
+      activeCollectorSpecialistKey = null;
+    });
+  }
+
+  GC.renderCollectorExchangePanel = patchCollectorExchangePanel;
+
   function initResearch() {
     initBuildingTechnicalData();
     GC.startProgressTicker();
@@ -20028,6 +20428,7 @@
           });
           syncScopedPlanetIds(planetId);
           bootstrapResourceLiveFromDom();
+          bootstrapHeaderBoostersFromDom();
           _bootstrapPageQueueCompactLiveFromDom();
           const fleetPage = document.getElementById("fleet-page");
           if (

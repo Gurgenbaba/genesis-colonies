@@ -452,6 +452,38 @@ class EffectResolver:
             sources.append(self._source_entry("solar_output_factor", label, factor, pos))
         return out
 
+    def _apply_inventory_booster_mods(
+        self,
+        values: Dict[str, float],
+        sources: List[Dict[str, Any]],
+    ) -> Dict[str, float]:
+        """GC-968A — timed pct boosters from inventory use."""
+        if self.player_id is None or self._conn is None:
+            return values
+        try:
+            from ..inventory_boosters import (
+                EFFECT_RESOLVER_BOOSTER_KEYS,
+                boosters_schema_ready,
+                get_active_booster_multipliers,
+            )
+        except Exception:
+            return values
+        if not boosters_schema_ready(self._conn):
+            return values
+        mults = get_active_booster_multipliers(int(self.player_id), conn=self._conn)
+        if not mults:
+            return values
+        out = dict(values)
+        for key, mult in mults.items():
+            if key not in EFFECT_RESOLVER_BOOSTER_KEYS:
+                continue
+            factor = float(mult)
+            if factor <= 1.0:
+                continue
+            out[key] = float(out.get(key, 1.0)) * factor
+            sources.append(self._source_entry(key, f"inventory_booster:{key}", factor, 0))
+        return out
+
     def get_modifiers(self) -> Dict[str, float]:
         if self._mods is not None:
             return self._mods
@@ -663,6 +695,45 @@ class EffectResolver:
         fuel_efficiency_factor = gd_state["fuel_efficiency_factor"]
         shipyard_time_speed = gd_state["shipyard_time_speed"]
         defense_time_speed = gd_state["defense_time_speed"]
+
+        if self.player_id is not None and self._conn is not None:
+            ib_state = self._apply_inventory_booster_mods(
+                {
+                    "mine_energy_factor": mine_energy_factor,
+                    "metal_prod_factor": metal_prod_factor,
+                    "crystal_prod_factor": crystal_prod_factor,
+                    "fuel_prod_factor": fuel_prod_factor,
+                    "storage_factor": storage_factor,
+                    "build_time_speed": build_time_speed,
+                    "research_time_speed": research_time_speed,
+                    "solar_output_factor": solar_output_factor,
+                    "weapon_bonus": weapon_bonus,
+                    "armor_bonus": armor_bonus,
+                    "shield_bonus": shield_bonus,
+                    "fleet_speed_multiplier": fleet_speed_multiplier,
+                    "cargo_multiplier": cargo_multiplier,
+                    "fuel_efficiency_factor": fuel_efficiency_factor,
+                    "shipyard_time_speed": shipyard_time_speed,
+                    "defense_time_speed": defense_time_speed,
+                },
+                sources,
+            )
+            mine_energy_factor = ib_state["mine_energy_factor"]
+            metal_prod_factor = ib_state["metal_prod_factor"]
+            crystal_prod_factor = ib_state["crystal_prod_factor"]
+            fuel_prod_factor = ib_state["fuel_prod_factor"]
+            storage_factor = ib_state["storage_factor"]
+            build_time_speed = ib_state["build_time_speed"]
+            research_time_speed = ib_state["research_time_speed"]
+            solar_output_factor = ib_state["solar_output_factor"]
+            weapon_bonus = ib_state["weapon_bonus"]
+            armor_bonus = ib_state["armor_bonus"]
+            shield_bonus = ib_state["shield_bonus"]
+            fleet_speed_multiplier = ib_state["fleet_speed_multiplier"]
+            cargo_multiplier = ib_state["cargo_multiplier"]
+            fuel_efficiency_factor = ib_state["fuel_efficiency_factor"]
+            shipyard_time_speed = ib_state["shipyard_time_speed"]
+            defense_time_speed = ib_state["defense_time_speed"]
 
         self._mods = {
             "mine_energy_factor": float(mine_energy_factor),

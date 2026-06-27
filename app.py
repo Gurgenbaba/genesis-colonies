@@ -349,6 +349,12 @@ def _is_lightweight_layout_request() -> bool:
     return _is_simple_layout_request() or _is_pjax_request()
 
 
+def _is_landing_request() -> bool:
+    from flask import request
+
+    return str(request.endpoint or "") == "landing"
+
+
 @app.context_processor
 def inject_globals():
     auth_user = None
@@ -409,9 +415,9 @@ def inject_globals():
     except Exception:
         pass
 
-    # stats (safe) — global counts not needed on login/register
+    # stats (safe) — skip on auth pages; landing still shows universe online/total
     try:
-        if not simple_layout:
+        if _is_landing_request() or not simple_layout:
             player_stats = get_player_stats() or {}
     except Exception:
         player_stats = {}
@@ -572,6 +578,23 @@ def inject_globals():
     except Exception:
         pass
 
+    header_active_boosters: dict[str, Any] = {"ready": False, "active": [], "active_effects": []}
+    try:
+        if auth_user and auth_user.get("id") and not simple_layout:
+            from game.inventory_boosters import build_inventory_boosters_state
+
+            _boost_conn = db()
+            try:
+                header_active_boosters = build_inventory_boosters_state(
+                    int(auth_user["id"]),
+                    conn=_boost_conn,
+                    locale=active_locale,
+                )
+            finally:
+                _boost_conn.close()
+    except Exception:
+        pass
+
     return dict(
         T=T,
         T_DATA=get_locale_dict(active_locale),
@@ -605,6 +628,7 @@ def inject_globals():
         HEADER_PLANETS=header_planets,
         HEADER_ACTIVE_PLANET=header_active_planet,
         HEADER_PLANET_LIMIT=header_planet_limit,
+        HEADER_ACTIVE_BOOSTERS=header_active_boosters,
         SIDEBAR_NAV=sidebar_nav,
         SIDEBAR_NAV_CLIENT=client_sidebar_nav_config(),
         ADMINISTRATION_MODULES=sorted(ADMINISTRATION_MODULES),
@@ -1235,6 +1259,13 @@ def trader_hub_view():
                 conn=conn,
             )
         scrapyard = scrapyard_status(uid, pid, conn=conn)
+        from game.collector_exchange import build_collector_exchange_payload, collector_schema_ready
+
+        collector_exchange = (
+            build_collector_exchange_payload(uid, conn=conn)
+            if collector_schema_ready(conn)
+            else {"ready": False, "specialists": []}
+        )
     finally:
         conn.close()
 
@@ -1244,6 +1275,7 @@ def trader_hub_view():
         storage_caps=ctx["storage_caps"],
         exchange=exchange,
         scrapyard=scrapyard,
+        collector_exchange=collector_exchange,
     )
 
 
@@ -2225,6 +2257,7 @@ def api_inventory_open_container():
     )
 
 
+@app.route("/api/inventory/use", methods=["POST"])
 @app.route("/api/inventory/use-item", methods=["POST"])
 @require_login
 def api_inventory_use_item():
@@ -5585,6 +5618,16 @@ def _payload_from_live_context(
             "deletion_seconds_remaining": 0,
         }
 
+    try:
+        from game.inventory_boosters import build_inventory_boosters_state
+
+        player_locale = get_player_locale(user_id, conn=conn)
+        payload["active_boosters"] = build_inventory_boosters_state(
+            user_id, conn=conn, locale=player_locale
+        )
+    except Exception:
+        payload["active_boosters"] = {"ready": False, "active": [], "active_effects": []}
+
     if include_panel:
         try:
             from game.live_state import global_queue_hud_for_game_state
@@ -5653,6 +5696,14 @@ def _payload_from_live_context(
 
             pid_tr = int(planet["id"])
             payload["scrapyard"] = scrapyard_status(user_id, pid_tr, conn=conn)
+        except Exception:
+            pass
+
+        try:
+            from game.collector_exchange import build_collector_exchange_payload, collector_schema_ready
+
+            if collector_schema_ready(conn):
+                payload["collector_exchange"] = build_collector_exchange_payload(user_id, conn=conn)
         except Exception:
             pass
 
@@ -6063,6 +6114,71 @@ def api_scrapyard_recycle():
         job=result if ok else None,
         finish_source="api_scrapyard",
     )
+
+
+@app.route("/api/collector-exchange/redeem", methods=["POST"])
+@require_login
+def api_collector_exchange_redeem():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    offer_key = str(data.get("offer_key") or "").strip()
+    request_id = _extract_request_id(data)
+
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    from game.collector_exchange import collector_schema_ready, redeem_collector_offer
+    from game.inventory import run_inventory_mutation
+    from game.planet_evolution.repository import get_context_planet
+
+    conn = db()
+    try:
+        if not collector_schema_ready(conn):
+            state, _ = _build_game_state_payload(include_panel=True, finish_source="api_collector_exchange")
+            return jsonify({"ok": False, "reason": "collector_exchange_unavailable", "state": state}), 503
+        planet = get_context_planet(user_id, conn=conn)
+        planet_id = int(planet["id"])
+    finally:
+        conn.close()
+
+    try:
+        ok, reason, result = run_inventory_mutation(
+            lambda conn: redeem_collector_offer(
+                user_id,
+                offer_key,
+                conn=conn,
+                request_id=request_id,
+                planet_id=planet_id,
+                player_id=user_id,
+            )
+        )
+    except Exception:
+        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_collector_exchange")
+        return jsonify({"ok": False, "reason": "collector_redeem_failed", "state": state}), 500
+
+    state, _ = _build_game_state_payload(include_panel=True, finish_source="api_collector_exchange")
+    resp: Dict[str, Any] = {
+        "ok": bool(ok),
+        "reason": reason,
+        "state": state,
+    }
+    if ok and result is not None:
+        resp["job"] = result
+    elif not ok and result is not None:
+        resp["payload"] = result
+
+    if request_id and ok:
+        save_idempotent_action(user_id, request_id, resp)
+
+    status = 200 if ok else 400
+    if reason in ("collector_exchange_unavailable", "inventory_unavailable"):
+        status = 503
+    return jsonify(resp), status
 
 
 @app.route("/api/trader/fuel-exchange", methods=["POST"])

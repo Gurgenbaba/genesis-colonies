@@ -4734,6 +4734,164 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   line-height: 1.4;
 }
 
+/* GC-966 — Collector Exchange (Sammler-Markt) in Trader Hub */
+.trader-hub-collector-panel{
+  margin-top: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.trader-hub-collector-header{
+  margin-bottom: 8px;
+}
+.collector-specialist-tabs{
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  margin-bottom: 10px;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  padding-bottom: 2px;
+}
+.collector-specialist-tab{
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border: 1px solid rgba(70, 229, 255, 0.22);
+  border-radius: var(--gc-radius-sm);
+  background: rgba(6, 14, 32, 0.85);
+  color: rgba(214, 235, 245, 0.88);
+  font-size: 0.74rem;
+  line-height: 1.2;
+  cursor: pointer;
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+.collector-specialist-tab.is-active{
+  border-color: rgba(70, 229, 255, 0.55);
+  background: rgba(12, 32, 58, 0.95);
+  color: var(--gc-neon-cyan);
+  box-shadow: 0 0 12px rgba(70, 229, 255, 0.12);
+}
+.collector-specialist-tab-icon{
+  font-size: 0.95rem;
+  line-height: 1;
+}
+.collector-specialist-tab-label{
+  white-space: nowrap;
+}
+.collector-offers-grid{
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+.collector-offer-card{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 9px;
+  border: 1px solid rgba(70, 229, 255, 0.18);
+  border-radius: var(--gc-radius-sm);
+  background: rgba(4, 10, 24, 0.72);
+  min-width: 0;
+}
+.collector-offer-card.is-redeemable{
+  border-color: rgba(70, 229, 255, 0.42);
+  background: rgba(8, 22, 42, 0.88);
+}
+.collector-offer-card.is-dim{
+  opacity: 0.52;
+}
+.collector-offer-card.is-locked{
+  opacity: 0.62;
+  border-style: dashed;
+}
+.collector-offer-main{
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.collector-offer-headline{
+  min-width: 0;
+}
+.collector-offer-title{
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.2;
+  color: var(--gc-text);
+}
+.collector-offer-reward-line{
+  margin: 2px 0 0;
+  font-size: 0.7rem;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.collector-offer-metrics{
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.collector-offer-owned{
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+.collector-offer-progress{
+  height: 6px;
+  min-width: 0;
+}
+.collector-offer-details{
+  font-size: 0.68rem;
+}
+.collector-offer-details-toggle{
+  cursor: pointer;
+  color: rgba(214, 235, 245, 0.72);
+  list-style: none;
+}
+.collector-offer-details-toggle::-webkit-details-marker{
+  display: none;
+}
+.collector-offer-desc,
+.collector-offer-input{
+  margin: 4px 0 0;
+  font-size: 0.68rem;
+  line-height: 1.3;
+}
+.collector-redeem-btn{
+  white-space: nowrap;
+  padding-inline: 8px;
+}
+.collector-redeem-btn:disabled{
+  opacity: 0.5;
+}
+.trader-hub-collector-unavailable{
+  margin: 0;
+  padding: 12px 10px;
+}
+.collector-exchange-error{
+  margin-top: 8px;
+}
+
+@media (max-width: 640px){
+  .collector-offers-grid{
+    grid-template-columns: 1fr;
+  }
+  .collector-offer-metrics{
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .collector-redeem-btn{
+    width: 100%;
+  }
+}
+
 .trader-hub-daily-formula,
 .trader-hub-daily-empire{
   margin: 0;
@@ -18464,6 +18622,85 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 }
 
 /* GC-654 / compact fleet HUD under resource bar (OGameX-style text rows) */
+.gc-boost-hud{
+  width: 100%;
+  border-top: 1px solid rgba(120, 200, 120, 0.14);
+  background: rgba(4, 12, 8, 0.55);
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: rgba(180, 230, 190, 0.88);
+}
+.gc-boost-hud[hidden]{
+  display: none !important;
+}
+.gc-boost-hud__toggle{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.5rem;
+  width: 100%;
+  margin: 0;
+  padding: 3px 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.gc-boost-hud__title{
+  font-weight: 600;
+  color: rgba(140, 220, 160, 0.95);
+  flex-shrink: 0;
+}
+.gc-boost-hud__summary{
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gc-boost-hud__details{
+  padding: 0 10px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.gc-boost-hud__details[hidden]{
+  display: none !important;
+}
+.gc-boost-hud__row{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.45rem;
+  align-items: baseline;
+}
+.gc-boost-hud__row-time{
+  color: rgba(160, 210, 170, 0.85);
+}
+.gc-boost-hud__note{
+  flex-basis: 100%;
+  font-size: 0.68rem;
+  color: rgba(160, 190, 170, 0.72);
+}
+@media (max-width: 720px){
+  .gc-boost-hud__summary{
+    white-space: normal;
+  }
+  .gc-boost-hud__toggle{
+    cursor: pointer;
+  }
+}
+@media (min-width: 721px){
+  .gc-boost-hud__details{
+    display: none !important;
+  }
+  .gc-boost-hud__toggle{
+    cursor: default;
+    pointer-events: none;
+  }
+}
+
 .gc-fleet-hud-root,
 .gc-fleet-drawer-root{
   width: 100%;
@@ -19663,6 +19900,32 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 
 .gc-header-cmd .res-rate[aria-hidden="true"]{
   display: block;
+}
+
+.gc-header-cmd .hud-res-footer{
+  display: flex;
+  align-items: baseline;
+  flex-wrap: nowrap;
+  gap: 6px;
+  min-width: 0;
+  order: 3;
+}
+
+.gc-header-cmd .res-boost-chip{
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(92, 255, 168, 0.92);
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gc-header-cmd .res-boost-chip[hidden]{
+  display: none;
 }
 
 .gc-header-cmd .hud-res-body{
@@ -26982,6 +27245,61 @@ a.gc-galaxy-coord-link:focus-visible {
 .inventory-rarity-badge--rare { color: #5eb0ff; background: rgba(94, 176, 255, 0.14); }
 .inventory-rarity-badge--epic { color: #c77dff; background: rgba(199, 125, 255, 0.14); }
 .inventory-rarity-badge--legendary { color: #ffb84d; background: rgba(255, 184, 77, 0.16); }
+
+.inventory-active-boosters-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.inventory-active-boosters-panel[hidden] {
+  display: none !important;
+}
+.inventory-active-booster-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(40, 90, 60, 0.14);
+  border: 1px solid rgba(120, 200, 140, 0.18);
+  font-size: 0.88rem;
+}
+.inventory-active-booster-label {
+  font-weight: 600;
+  color: rgba(170, 230, 185, 0.95);
+}
+.inventory-active-booster-effect {
+  color: rgba(190, 240, 200, 0.9);
+}
+.inventory-active-booster-domain {
+  font-size: 0.78rem;
+  color: rgba(150, 190, 165, 0.85);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.inventory-active-booster-time {
+  margin-left: auto;
+  color: rgba(160, 210, 175, 0.9);
+}
+.inventory-active-booster-note {
+  flex-basis: 100%;
+  font-size: 0.78rem;
+  color: rgba(150, 180, 165, 0.8);
+}
+.inventory-trade-hint,
+.inventory-locked-hint,
+.inventory-use-hint {
+  flex-basis: 100%;
+  font-size: 0.78rem;
+  color: rgba(160, 190, 210, 0.85);
+}
+.inventory-locked-hint {
+  color: rgba(200, 170, 120, 0.9);
+}
 
 .inventory-item-list {
   list-style: none;
