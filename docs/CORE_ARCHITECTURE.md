@@ -280,6 +280,8 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | `expansion_phase` Resolver (derived) | `game/planet_evolution/expansion_phase.py` | [EXPANSION_PROTOCOL.md](EXPANSION_PROTOCOL.md) |
 | `expansion_phase` / Establishment | `game/planet_evolution/expansion_phase.py` | [EXPANSION_PROTOCOL.md](EXPANSION_PROTOCOL.md) |
 | Expansion Sites / Gates | `game/planet_evolution/expansion_gates.py` | [EXPANSION_PROTOCOL.md](EXPANSION_PROTOCOL.md) |
+| Expansion Protocol (dual-gate, outpost, establishment) | `game/planet_evolution/expansion_protocol.py` | [EXPANSION_PROTOCOL.md](EXPANSION_PROTOCOL.md) |
+| Expansion Phase (derived) | `game/planet_evolution/expansion_phase.py` | [EXPANSION_PROTOCOL.md](EXPANSION_PROTOCOL.md) |
 | Planet Evolution | `game/planet_evolution/` | [PLANET_EVOLUTION.md](PLANET_EVOLUTION.md) |
 | Galactic Directives | `game/galactic_directives/` | [GALACTIC_DIRECTIVES.md](GALACTIC_DIRECTIVES.md) |
 | Imperial Directives (player High Command) | `game/directives/` | [IMPERIAL_DIRECTIVES.md](IMPERIAL_DIRECTIVES.md) |

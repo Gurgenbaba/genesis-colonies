@@ -117,7 +117,7 @@ _BASE_ALLOWED_MISSIONS: Dict[str, Set[str]] = {
     "own_planet": {"transport", "collect", "deploy", "spy"},
     "ally_planet": {"transport", "spy"},
     "foreign_planet": {"spy", "attack"},
-    "empty_slot": {"colonize"},
+    "empty_slot": set(),
     "strategic_world": {"colonize"},
     "expedition_slot": {"expedition"},
     "world_colony": {"transport", "collect", "deploy", "spy"},
@@ -163,6 +163,7 @@ _MISSION_BLOCK_REASONS: Dict[str, Dict[str, str]] = {
         "hold": "mission_blocked_empty_slot",
         "collect": "mission_blocked_empty_slot",
         "expedition": "mission_blocked_not_expedition_slot",
+        "colonize": "colonize_requires_expansion_site",
     },
     "expedition_slot": {
         "transport": "mission_blocked_expedition_slot",
@@ -882,37 +883,48 @@ def _colonize_fleet_target(
     world_key: str | None,
     conn,
 ) -> Tuple[bool, str, Tuple[int, int, int], Dict[str, Any]]:
-    """Resolve colonize target for classic empty slot or strategic world."""
+    """Resolve colonize target — expansion sites only (GC-932). Requires world_key."""
     from .planet_evolution.world_colonization import check_colony_limit_available
 
     wk = str(world_key or "").strip() or None
-    if wk:
-        from .planet_evolution.world_colonization import validate_world_colonize_target
-        from .galaxy import assign_free_coordinates
+    if not wk:
+        target_info = resolve_fleet_target(
+            int(player_id),
+            int(target_galaxy),
+            int(target_system),
+            int(target_position),
+            conn=conn,
+        )
+        return (
+            False,
+            "colonize_requires_expansion_site",
+            (int(target_galaxy), int(target_system), int(target_position)),
+            target_info,
+        )
 
-        ok_w, w_reason, target_info = validate_world_colonize_target(wk, conn=conn)
-        if not ok_w:
-            return False, w_reason, (0, 0, 0), target_info
-        ok_limit, limit_reason = check_colony_limit_available(int(player_id), conn=conn)
-        if not ok_limit:
-            return False, limit_reason, (0, 0, 0), target_info
-        g, s, p = assign_free_coordinates(conn)
-        return True, "", (int(g), int(s), int(p)), target_info
+    from .planet_evolution.world_colonization import validate_world_colonize_target
+    from .galaxy import assign_free_coordinates
 
-    ok_target, t_reason, target_info = evaluate_fleet_mission_target(
+    ok_w, w_reason, target_info = validate_world_colonize_target(wk, conn=conn)
+    if not ok_w:
+        return False, w_reason, (0, 0, 0), target_info
+    parsed_type = None
+    try:
+        from .planet_evolution.world_colonization import parse_world_key
+
+        parsed_type = str(parse_world_key(wk).get("world_type") or "")
+    except Exception:
+        parsed_type = None
+    ok_limit, limit_reason = check_colony_limit_available(
         int(player_id),
-        "colonize",
-        int(target_galaxy),
-        int(target_system),
-        int(target_position),
         conn=conn,
+        world_key=wk,
+        world_type=parsed_type or None,
     )
-    if not ok_target:
-        return False, t_reason, (0, 0, 0), target_info
-    ok_limit, limit_reason = check_colony_limit_available(int(player_id), conn=conn)
     if not ok_limit:
         return False, limit_reason, (0, 0, 0), target_info
-    return True, "", (int(target_galaxy), int(target_system), int(target_position)), target_info
+    g, s, p = assign_free_coordinates(conn)
+    return True, "", (int(g), int(s), int(p)), target_info
 
 
 def _expedition_fleet_target(
@@ -4097,15 +4109,17 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
             galaxy=tg,
             system=ts,
             position=tp,
+            world_key=world_key or None,
             world_binding=world_binding,
+            source="player",
             conn=conn,
         )
         if not ok_col:
             if world_key:
                 release_world_claim(world_key, conn=conn, player_id=player_id)
             fail_reason = reason
-            if fail_reason in ("max_colonies", "colony_limit_reached"):
-                fail_reason = "max_colonies_reached"
+            if fail_reason in ("max_colonies", "colony_limit_reached", "max_colonies_reached"):
+                fail_reason = "expansion_admin_ceiling_reached"
             if world_key:
                 if _notify_world_colonize(success=False, fail_reason=fail_reason):
                     return True

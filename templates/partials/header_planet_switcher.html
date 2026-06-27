@@ -2,7 +2,11 @@
 {% set hp_active = HEADER_ACTIVE_PLANET if HEADER_ACTIVE_PLANET is defined else none %}
 {% set hp_pl_current = (hp_planets|length) if hp_planets else 1 %}
 {% set hp_gs_pl = (GAME_SETTINGS if GAME_SETTINGS is defined and GAME_SETTINGS else {}) %}
-{% set hp_pl_max = (hp_gs_pl.max_colonies_per_player|default(9))|int %}
+{% set hp_pl = HEADER_PLANET_LIMIT if HEADER_PLANET_LIMIT is defined and HEADER_PLANET_LIMIT else none %}
+{% set hp_pl_owned = (hp_pl.owned_worlds|default(hp_pl_current))|int if hp_pl else hp_pl_current %}
+{% if not (hp_pl and hp_pl.max is none) %}
+{% set hp_pl_max = ((hp_pl.max if hp_pl else none) or (hp_gs_pl.max_colonies_per_player|default(9)))|int %}
+{% endif %}
 {% if hp_active %}
 {% set hp_multi = (hp_planets|length > 1) %}
 {% set hp_identity_key = hp_active.identity_title_key or hp_active.empire_subtitle_key or hp_active.empire_role_label_key %}
@@ -26,7 +30,7 @@
         <span class="gc-planet-switcher-icon" data-planet-switcher-icon aria-hidden="true">{{ hp_active.empire_role_icon }}</span>
         {% endif %}
         <span class="gc-planet-switcher-name" data-planet-switcher-name>{{ hp_active.name }}</span>
-        <span class="gc-planet-switcher-limit gc-mono" data-planet-limit-value title="{{ T('header_planet_limit', 'Planeten') }}">{{ hp_pl_current|fmt_int }}/{{ hp_pl_max|fmt_int }}</span>
+        <span class="gc-planet-switcher-limit gc-mono" data-planet-limit-value title="{{ T('header_planet_limit', 'Planeten') }}">{% if hp_pl and hp_pl.max is none %}{{ hp_pl_owned|fmt_int }}{% else %}{{ hp_pl_owned|fmt_int }}/{{ hp_pl_max|fmt_int }}{% endif %}</span>
       </span>
       {% if hp_active.coordinates_formatted %}
       <span class="gc-planet-switcher-coord gc-mono" data-planet-switcher-coord>{{ galaxy_coord_link(hp_active.coordinates_formatted) }}</span>

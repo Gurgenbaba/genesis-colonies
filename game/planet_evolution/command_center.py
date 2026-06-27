@@ -1088,13 +1088,20 @@ def _build_strategic_primary_action(
     if node.get("is_colonizable"):
         from .world_colonization import check_colony_limit_available
 
-        ok_limit, limit_reason = check_colony_limit_available(int(player_id), conn=conn)
+        wk = str(node.get("world_key") or "").strip()
+        wt = str(node.get("world_type") or "").strip()
+        ok_limit, limit_reason = check_colony_limit_available(
+            int(player_id),
+            conn=conn,
+            world_key=wk or None,
+            world_type=wt or None,
+        )
         return {
             "action_key": "colonize",
             "label_key": "strategic_world_btn_colonize",
             "world_key": wk,
             "enabled": ok_limit,
-            "blocked_reason_key": str(limit_reason or "fleet_error_max_colonies_reached") if not ok_limit else "",
+            "blocked_reason_key": str(limit_reason or "expansion_gate_homeworld_level") if not ok_limit else "",
         }
     return none
 
@@ -1107,12 +1114,19 @@ def _build_strategic_hints(
 ) -> List[Dict[str, Any]]:
     hints: List[Dict[str, Any]] = []
     if node.get("is_colonizable") and not node.get("is_claimed"):
-        from game.logic import get_planet_limit_block
+        from .expansion_protocol import build_expansion_launch_checklist
 
-        limit = get_planet_limit_block(int(player_id), conn=conn)
-        hints.append({"label_key": "strategic_world_colony_limit", "vars": dict(limit)})
-        if int(limit.get("current", 0)) >= int(limit.get("max", 1)):
-            hints.append({"label_key": "fleet_error_max_colonies_reached"})
+        wk = str(node.get("world_key") or "").strip()
+        wt = str(node.get("world_type") or "").strip()
+        checklist = build_expansion_launch_checklist(
+            int(player_id),
+            conn=conn,
+            world_key=wk or None,
+            world_type=wt or None,
+        )
+        hints.append({"label_key": "expansion_protocol_checklist_title", "checklist": checklist})
+        if not checklist.get("can_launch") and checklist.get("blocked_reason_key"):
+            hints.append({"label_key": str(checklist.get("blocked_reason_key") or "")})
     if (
         not node.get("is_colonizable")
         and not node.get("is_claimed")
@@ -1262,7 +1276,26 @@ def build_strategic_world_command_center(
         "mission_actions": _build_strategic_world_mission_actions(node, int(player_id), conn=conn),
         "hints": _build_strategic_hints(node, int(player_id), conn=conn),
         "expansion_phase": _strategic_world_expansion_phase(wk, int(player_id), conn=conn),
+        "expansion_checklist": _strategic_world_expansion_checklist(node, int(player_id), conn=conn),
     }
+
+
+def _strategic_world_expansion_checklist(
+    node: Mapping[str, Any],
+    player_id: int,
+    *,
+    conn: sqlite3.Connection,
+) -> Dict[str, Any]:
+    from .expansion_protocol import build_expansion_launch_checklist
+
+    wk = str(node.get("world_key") or "").strip()
+    wt = str(node.get("world_type") or "").strip()
+    return build_expansion_launch_checklist(
+        int(player_id),
+        conn=conn,
+        world_key=wk or None,
+        world_type=wt or None,
+    )
 
 
 def _strategic_world_expansion_phase(
@@ -1550,6 +1583,7 @@ def attach_command_centers_to_nodes(
             site_key = str(node.get("site_key") or "").strip()
             if site_key:
                 from .expansion_phase import compact_expansion_phase_payload, resolve_expansion_phase
+                from .expansion_protocol import build_expansion_launch_checklist
 
                 node["expansion_phase"] = compact_expansion_phase_payload(
                     resolve_expansion_phase(
@@ -1557,6 +1591,11 @@ def attach_command_centers_to_nodes(
                         world_key=site_key,
                         conn=conn,
                     )
+                )
+                node["expansion_checklist"] = build_expansion_launch_checklist(
+                    int(player_id),
+                    conn=conn,
+                    site_key=site_key,
                 )
         elif kind in _FOREIGN_NODE_KINDS:
             cc = build_foreign_colony_command_center(node, int(player_id), conn=conn)

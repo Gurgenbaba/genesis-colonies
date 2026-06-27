@@ -709,7 +709,7 @@ def list_system(
                 "is_ally_planet": False,
                 "is_active_planet": False,
                 "is_highlighted": is_highlighted,
-                "colony_target": True,
+                "colony_target": False,
             }
             _attach_debris_to_slot(
                 slot,

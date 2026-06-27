@@ -659,26 +659,32 @@ def check_planet_cap_available(
     player_id: int,
     *,
     conn,
+    world_key: str | None = None,
+    world_type: str | None = None,
+    site_key: str | None = None,
 ) -> tuple[bool, str]:
-    """Return whether the player may own another planet."""
-    from .models import get_planets_by_player
+    """Return whether the player may found another expansion world (GC-922)."""
+    from .planet_evolution.expansion_protocol import can_found_expansion_world
 
-    uid = int(player_id)
-    current = len(get_planets_by_player(uid, conn=conn))
-    if current >= get_max_planets_per_player(conn=conn):
-        return False, "max_colonies_reached"
-    return True, ""
+    return can_found_expansion_world(
+        int(player_id),
+        conn=conn,
+        world_key=world_key,
+        world_type=world_type,
+        site_key=site_key,
+    )
 
 
 def get_planet_limit_block(
     player_id: int,
     *,
     conn=None,
-) -> Dict[str, int]:
+) -> Dict[str, Any]:
     """
-    Kolonie-/Planetenlimit für /api/game-state (current = owned planets, max = game_settings).
+    Expansion gate summary for /api/game-state and empire page (no slot counter).
     """
-    from .models import db as _db, get_planets_by_player
+    from .models import db as _db
+    from .planet_evolution.expansion_protocol import get_expansion_limit_block
 
     uid = int(player_id)
     own_conn = conn is None
@@ -686,9 +692,7 @@ def get_planet_limit_block(
         conn = _db()
 
     try:
-        current = len(get_planets_by_player(uid, conn=conn))
-        max_val = get_max_planets_per_player(conn=conn)
-        return {"current": int(current), "max": int(max_val)}
+        return get_expansion_limit_block(uid, conn=conn)
     finally:
         if own_conn and conn is not None:
             conn.close()

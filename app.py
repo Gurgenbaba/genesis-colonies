@@ -418,6 +418,7 @@ def inject_globals():
 
     header_planets: list[dict[str, Any]] = []
     header_active_planet: dict[str, Any] | None = None
+    header_planet_limit: dict[str, Any] | None = None
     try:
         user_id = session.get("user_id")
         if user_id is not None:
@@ -430,9 +431,16 @@ def inject_globals():
                     break
             if header_active_planet is None and header_planets:
                 header_active_planet = header_planets[0]
+            try:
+                from game.logic import get_planet_limit_block
+
+                header_planet_limit = get_planet_limit_block(int(user_id))
+            except Exception:
+                header_planet_limit = None
     except Exception:
         header_planets = []
         header_active_planet = None
+        header_planet_limit = None
 
     current_planet_landscape_url = None
     current_planet_landscape_webp_url = None
@@ -524,6 +532,7 @@ def inject_globals():
 
         HEADER_PLANETS=header_planets,
         HEADER_ACTIVE_PLANET=header_active_planet,
+        HEADER_PLANET_LIMIT=header_planet_limit,
         SIDEBAR_NAV=sidebar_nav,
         SIDEBAR_NAV_CLIENT=client_sidebar_nav_config(),
         ADMINISTRATION_MODULES=sorted(ADMINISTRATION_MODULES),

@@ -198,6 +198,9 @@ def build_expansion_unlock_block(
     *,
     conn: sqlite3.Connection,
     viewing_homeworld: bool = True,
+    site_key: str | None = None,
+    world_key: str | None = None,
+    world_type: str | None = None,
 ) -> Dict[str, Any]:
     level = get_homeworld_level(int(player_id), conn=conn)
     sites = list_expansion_sites_for_player(player_id, conn=conn)
@@ -212,15 +215,71 @@ def build_expansion_unlock_block(
         for site in sites
         if site.get("is_newly_discovered")
     ]
+    from .expansion_protocol import (
+        build_expansion_launch_checklist,
+        get_expansion_limit_block,
+        interstellar_expansion_level,
+    )
+
+    limit = get_expansion_limit_block(int(player_id), conn=conn)
+    checklist = build_expansion_launch_checklist(
+        int(player_id),
+        conn=conn,
+        site_key=site_key,
+        world_key=world_key,
+        world_type=world_type,
+    )
+    target_count = count_reachable_colonize_targets(int(player_id), conn=conn)
+    can_launch = bool(checklist.get("can_launch"))
     return {
         "visible": True,
         "homeworld_level": level,
+        "expansion_tech_level": interstellar_expansion_level(int(player_id), conn=conn),
         "on_homeworld": bool(viewing_homeworld),
         "show_genesis_ark_hint": bool(not viewing_homeworld and next_unlock),
         "next_unlock": next_unlock,
         "newly_discovered": newly_discovered,
         "sites": sites,
+        "expansion_limit": limit,
+        "launch_checklist": checklist,
+        "colonize_cta": {
+            "visible": bool(viewing_homeworld),
+            "enabled": can_launch,
+            "href": "/galaxy?view=command_map&action=colonize",
+            "has_targets": target_count > 0,
+            "target_count": int(target_count),
+        },
     }
+
+
+def count_reachable_colonize_targets(
+    player_id: int,
+    *,
+    conn: sqlite3.Connection,
+) -> int:
+    """Colonizable, unclaimed world_field nodes passing per-world expansion gates (GC-931)."""
+    from .command_map import build_command_map_payload
+    from .expansion_protocol import evaluate_expansion_gates
+
+    uid = int(player_id)
+    payload = build_command_map_payload(uid, conn=conn)
+    count = 0
+    for node in payload.get("nodes") or []:
+        if str(node.get("node_kind") or "") != "world_field":
+            continue
+        if not node.get("is_colonizable") or node.get("is_claimed"):
+            continue
+        wk = str(node.get("world_key") or "").strip()
+        wt = str(node.get("world_type") or "").strip()
+        ok, _, _ = evaluate_expansion_gates(
+            uid,
+            conn=conn,
+            world_key=wk or None,
+            world_type=wt or None,
+        )
+        if ok:
+            count += 1
+    return count
 
 
 def build_expansion_summary(player_id: int, *, conn: sqlite3.Connection) -> Dict[str, Any]:

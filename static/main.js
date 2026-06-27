@@ -9094,32 +9094,43 @@
   function patchHeaderPlanetLimitFromState(data, force) {
     const block = data && data.planet_limit;
     const planets = data && data.planets;
-    let current = Number(block && block.current);
-    if (!Number.isFinite(current) && Array.isArray(planets)) {
-      current = planets.length;
+    let owned = Number(block && block.owned_worlds);
+    if (!Number.isFinite(owned) && Array.isArray(planets)) {
+      owned = planets.length;
     }
-    if (!Number.isFinite(current) || current < 0) {
+    if (!Number.isFinite(owned) && Number.isFinite(Number(block && block.current))) {
+      owned = Number(block.current) + 1;
+    }
+    if (!Number.isFinite(owned) || owned < 0) {
       if (!force) return;
-      current = 0;
+      owned = 0;
     }
-    let max = Number(block && block.max);
-    if (!Number.isFinite(max) || max < 1) {
-      max = 9;
+    owned = Math.floor(owned);
+    const maxRaw = block && block.max;
+    const hasLegacyMax = Number.isFinite(Number(maxRaw)) && Number(maxRaw) >= 1;
+    const max = hasLegacyMax ? Math.floor(Number(maxRaw)) : null;
+    const displayText = hasLegacyMax ? `${fmtNumber(owned)} / ${fmtNumber(max)}` : fmtNumber(owned);
+    let title = tf("header_planet_limit", "Planets");
+    if (block && block.gate_reason && block.can_expand === false) {
+      title = `${title} — ${tf(block.gate_reason, block.gate_reason)}`;
+    } else if (block && block.can_expand) {
+      title = `${title} — ${tf(
+        "expansion_checklist_ready",
+        "Your empire is ready — choose a world on the Command Map."
+      )}`;
     }
-    current = Math.floor(current);
-    max = Math.floor(max);
     if (
       !force
-      && _last.planetLimitCurrent === current
-      && _last.planetLimitMax === max
+      && _last.planetLimitCurrent === owned
+      && _last.planetLimitMax === (hasLegacyMax ? max : null)
     ) {
       return;
     }
-    _last.planetLimitCurrent = current;
-    _last.planetLimitMax = max;
-    const text = `${fmtNumber(current)} / ${fmtNumber(max)}`;
+    _last.planetLimitCurrent = owned;
+    _last.planetLimitMax = hasLegacyMax ? max : null;
     document.querySelectorAll("[data-planet-limit-value]").forEach((el) => {
-      _setIfChanged(el, text);
+      _setIfChanged(el, displayText);
+      if (title) el.setAttribute("title", title);
     });
   }
   GC.patchHeaderPlanetLimitFromState = patchHeaderPlanetLimitFromState;
@@ -20042,8 +20053,26 @@
       if (section && section.tagName === "DETAILS") section.open = true;
     };
 
-    const focusPeTarget = (root, { action, target, highlight, techKey }) => {
+    const focusPeTarget = (root, { action, target, highlight, techKey, href }) => {
       const actionType = action || "focus_section";
+      const navHref = String(href || "").trim();
+      if (actionType === "navigate") {
+        if (navHref && typeof GC.navigateTo === "function") {
+          GC.navigateTo(navHref, { push: true });
+          return;
+        }
+        const routes = {
+          research: "/research",
+          fleet: "/fleet",
+          galaxy: "/galaxy",
+          command_map: "/galaxy?view=command_map&action=colonize",
+        };
+        const routeHref = routes[String(target || "").trim()];
+        if (routeHref && typeof GC.navigateTo === "function") {
+          GC.navigateTo(routeHref, { push: true });
+          return;
+        }
+      }
       const sectionId = scrollTargets[target] || `pe-section-${target}`;
       const needsTab = actionType === "focus_tab" || Boolean(tabPanels[target]);
       if (needsTab && tabPanels[target]) {
@@ -20079,7 +20108,18 @@
           target: actionBtn.dataset.ctaTarget,
           highlight: actionBtn.dataset.ctaHighlight,
           techKey: actionBtn.dataset.techKey,
+          href: actionBtn.dataset.ctaHref,
         });
+        return;
+      }
+
+      const colonizeWorldBtn = e.target.closest(".pe-colonize-world-btn");
+      if (colonizeWorldBtn && root.contains(colonizeWorldBtn)) {
+        const colonizeHref = String(colonizeWorldBtn.dataset.ctaHref || "").trim()
+          || "/galaxy?view=command_map&action=colonize";
+        if (typeof GC.navigateTo === "function") {
+          GC.navigateTo(colonizeHref, { push: true });
+        }
         return;
       }
 
@@ -21183,6 +21223,70 @@
     });
   }
 
+  function readExpansionLimitBlock() {
+    return GC.lastState?.planet_limit && typeof GC.lastState.planet_limit === "object"
+      ? GC.lastState.planet_limit
+      : {};
+  }
+
+  function expansionChecklistFromCc(cc) {
+    const payload = cc && typeof cc === "object" ? cc : {};
+    if (payload.expansion_checklist && typeof payload.expansion_checklist === "object") {
+      return payload.expansion_checklist;
+    }
+    const hints = Array.isArray(payload.hints) ? payload.hints : [];
+    for (const row of hints) {
+      if (row && row.checklist && typeof row.checklist === "object") return row.checklist;
+    }
+    return null;
+  }
+
+  function renderExpansionChecklistHtml(checklist) {
+    if (!checklist || !Array.isArray(checklist.items) || !checklist.items.length) return "";
+    const items = checklist.items.map((item) => {
+      if (!item || typeof item !== "object") return "";
+      const met = Boolean(item.met);
+      const progress =
+        item.current !== undefined && item.required !== undefined
+          ? `<span class="gc-mono hint">(${item.current}/${item.required})</span>`
+          : "";
+      return `<li class="pe-expansion-checklist-item${met ? " pe-expansion-checklist-item--met" : ""}">
+        <span class="pe-expansion-checklist-mark">${met ? "✓" : "○"}</span>
+        <span>${tf(item.label_key, item.key || item.label_key || "")}</span>${progress}
+      </li>`;
+    }).join("");
+    let footer = "";
+    if (checklist.can_launch) {
+      footer = `<p class="hint gc-expansion-checklist-ready">${tf(
+        "expansion_checklist_ready",
+        "Dein Imperium ist bereit — wähle eine Welt auf der Command Map."
+      )}</p>`;
+    } else if (checklist.blocked_reason_key) {
+      footer = `<p class="hint gc-expansion-checklist-blocked">${tf(
+        checklist.blocked_reason_key,
+        checklist.blocked_reason_key
+      )}</p>`;
+    }
+    return `<section class="gc-expansion-checklist">
+      <h4 class="gc-expansion-checklist-title">${tf(
+        "expansion_protocol_checklist_title",
+        "Expansion vorbereiten"
+      )}</h4>
+      <ul class="pe-expansion-checklist gc-expansion-checklist-list">${items}</ul>${footer}
+    </section>`;
+  }
+
+  function colonizeLaunchAllowed(checklist) {
+    if (checklist && typeof checklist === "object") return Boolean(checklist.can_launch);
+    const block = readExpansionLimitBlock();
+    if (typeof block.can_expand === "boolean") return block.can_expand;
+    let current = Number(block.current);
+    let max = Number(block.max);
+    if (!Number.isFinite(current)) current = 0;
+    if (!Number.isFinite(max) || max < 1) return true;
+    return current < max;
+  }
+
   function setCommandMapSidePanelState(panel, emptyPanel, detailPanel, mode) {
     if (!panel) return;
     const showDetail = mode === "detail";
@@ -21276,12 +21380,7 @@
     }
 
     function readPlanetLimitBlock() {
-      const block = GC.lastState?.planet_limit || {};
-      let current = Number(block.current);
-      let max = Number(block.max);
-      if (!Number.isFinite(current)) current = 0;
-      if (!Number.isFinite(max) || max < 1) max = 9;
-      return { current: Math.floor(current), max: Math.floor(max) };
+      return readExpansionLimitBlock();
     }
 
     function clearSelection() {
@@ -21633,8 +21732,19 @@
       selectedWorldKey = String(ds.strategicWorldKey || "").trim();
       selectedWorldName = String(ds.strategicName || "").trim();
 
-      const limit = readPlanetLimitBlock();
-      const atLimit = limit.current >= limit.max;
+      let worldFieldChecklist = null;
+      if (selectedWorldKey) {
+        const source = graph?.querySelector(`[data-world-field-source="${selectedWorldKey}"]`);
+        if (source) {
+          try {
+            const cc = JSON.parse(
+              source.getAttribute("data-command-center") || source.dataset.commandCenter || "{}"
+            );
+            worldFieldChecklist = expansionChecklistFromCc(cc);
+          } catch (_) {}
+        }
+      }
+      const canLaunchColonize = colonizeLaunchAllowed(worldFieldChecklist);
 
       if (strategicClaimedHint) strategicClaimedHint.hidden = !claimed;
       if (strategicNoncolonizableHint) {
@@ -21658,9 +21768,19 @@
       }
 
       if (colonizeLimit) {
-        if (colonizable && !claimed) {
+        if (colonizable && !claimed && worldFieldChecklist) {
           colonizeLimit.hidden = false;
-          colonizeLimit.textContent = formatInspectorHint("strategic_world_colony_limit", limit);
+          if (worldFieldChecklist.can_launch) {
+            colonizeLimit.textContent = tf(
+              "expansion_checklist_ready",
+              "Dein Imperium ist bereit — wähle eine Welt auf der Command Map."
+            );
+          } else {
+            const blockedKey = String(worldFieldChecklist.blocked_reason_key || "").trim();
+            colonizeLimit.textContent = blockedKey
+              ? tf(blockedKey, blockedKey)
+              : tf("expansion_protocol_checklist_title", "Expansion vorbereiten");
+          }
         } else {
           colonizeLimit.hidden = true;
           colonizeLimit.textContent = "";
@@ -21669,16 +21789,16 @@
 
       if (colonizeBtn) {
         colonizeBtn.hidden = !colonizable || claimed;
-        colonizeBtn.disabled = atLimit;
+        colonizeBtn.disabled = !canLaunchColonize;
       }
 
       if (colonizeBlocked) {
-        if (colonizable && !claimed && atLimit) {
+        if (colonizable && !claimed && !canLaunchColonize) {
           colonizeBlocked.hidden = false;
-          colonizeBlocked.textContent =
-            GC.t?.("fleet_error_max_colonies_reached", "Maximum number of planets reached.")
-              || GC.t?.("fleet_error_colony_limit_reached", "Colony limit reached.")
-              || "Maximum number of planets reached.";
+          const blockedKey = String(worldFieldChecklist?.blocked_reason_key || readPlanetLimitBlock().gate_reason || "").trim();
+          colonizeBlocked.textContent = blockedKey
+            ? tf(blockedKey, blockedKey)
+            : (GC.t?.("fleet_error_colony_limit_reached", "Colony limit reached.") || "Colony limit reached.");
         } else {
           colonizeBlocked.hidden = true;
           colonizeBlocked.textContent = "";
@@ -22533,7 +22653,7 @@
         return;
       }
       if (appendMissionActions(cc)) return;
-      if (!actionKey || actionKey === "none" || action.enabled === false) return;
+      if (!actionKey || actionKey === "none") return;
       const cta = document.createElement("button");
       cta.type = "button";
       cta.className = "gc-btn gc-btn-primary gc-world-inspector-cta";
@@ -22565,6 +22685,13 @@
         }
       });
       actionsEl.appendChild(cta);
+      const blockedKey = String(action.blocked_reason_key || "").trim();
+      if (action.enabled === false && blockedKey) {
+        const hint = document.createElement("p");
+        hint.className = "hint gc-world-inspector-colonize-blocked";
+        hint.textContent = tf(blockedKey, blockedKey);
+        actionsEl.appendChild(hint);
+      }
     }
 
     function worldInspectorDebrisHtml(debris) {
@@ -22670,6 +22797,7 @@
             ${!statusText && statusKey ? `<div class="gc-world-inspector-stat"><dt>${tf("world_inspector_status", "Status")}</dt><dd>${tf(statusKey, statusKey)}</dd></div>` : ""}
           </dl>
           ${promiseText ? `<blockquote class="gc-world-inspector-flavor">${promiseText}</blockquote>` : ""}
+          ${renderExpansionChecklistHtml(expansionChecklistFromCc(cc))}
         </div>`;
       appendPrimaryAction(cc, btn);
     }
@@ -23139,6 +23267,13 @@
       if (progressSection) progressSection.hidden = true;
       renderCcDetailList(cc);
       renderCcPrimaryAndHints(cc);
+      if (newsEl) {
+        const checklistHtml = renderExpansionChecklistHtml(expansionChecklistFromCc(cc));
+        if (checklistHtml) {
+          newsEl.className = "gc-command-center-expansion-panel";
+          newsEl.innerHTML = checklistHtml;
+        }
+      }
     }
 
     function navigateForeignFleetAction(action) {
@@ -24270,6 +24405,48 @@
     return `${url.pathname}${url.search}`;
   }
 
+  function initCommandMapColonizeMode() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("action") !== "colonize") return;
+
+    const graph = document.querySelector("[data-command-map-graph]");
+    const panel = document.querySelector(".galaxy-command-map-panel");
+    if (!graph || !panel) return;
+
+    graph.classList.add("galaxy-command-map-graph--colonize-mode");
+    const targets = graph.querySelectorAll(
+      '[data-world-field-inspect][data-strategic-colonizable="1"][data-strategic-claimed="0"]'
+    );
+    targets.forEach((node) => node.classList.add("galaxy-command-map-node--colonize-target"));
+
+    const banner = panel.querySelector("[data-command-map-discovery-banner]");
+    if (banner) {
+      banner.hidden = false;
+      banner.classList.add("galaxy-command-map-colonize-banner");
+      if (!targets.length) {
+        banner.innerHTML = `<strong>${tf(
+          "galaxy_command_map_colonize_empty",
+          "Keine erreichbare Expansion Site verfügbar. Entwickle die Genesis Ark oder erforsche Interstellar Expansion weiter."
+        )}</strong>`;
+      } else {
+        banner.innerHTML = `<strong>${tf(
+          "galaxy_command_map_colonize_banner",
+          "Wähle eine markierte Welt für deine Seed Ark."
+        )}</strong>`;
+      }
+    }
+
+    GC.registerCleanup(() => {
+      graph.classList.remove("galaxy-command-map-graph--colonize-mode");
+      targets.forEach((node) => node.classList.remove("galaxy-command-map-node--colonize-target"));
+      if (banner) {
+        banner.hidden = true;
+        banner.classList.remove("galaxy-command-map-colonize-banner");
+        banner.innerHTML = "";
+      }
+    });
+  }
+
   function initGalaxyDebrisUx() {
     const page = document.querySelector(".galaxy-page");
     if (!page) return;
@@ -24330,6 +24507,7 @@
     initCommandMapLocationActions();
     initFirstDiscoveryMoment();
     initCommandMapSiteInspector();
+    initCommandMapColonizeMode();
     initGalaxyDebrisUx();
     prefetchGalaxyAdjacent();
   }

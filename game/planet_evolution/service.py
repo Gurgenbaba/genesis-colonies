@@ -581,6 +581,9 @@ def start_ascension(
     return _start_ascension_impl(planet_id, ascension_key, conn=conn)
 
 
+_LEGACY_COLONIZE_SOURCES = frozenset({"admin", "test", "repair"})
+
+
 def colonize_planet(
     player_id: int,
     *,
@@ -588,7 +591,10 @@ def colonize_planet(
     galaxy: int = 1,
     system: Optional[int] = None,
     position: Optional[int] = None,
+    world_key: Optional[str] = None,
     world_binding: Optional[Dict[str, Any]] = None,
+    allow_legacy_coordinates: bool = False,
+    source: str = "player",
     conn: Optional[sqlite3.Connection] = None,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     own = conn is None
@@ -598,13 +604,50 @@ def colonize_planet(
         if not evolution_schema_ready(conn):
             return False, "schema_missing", None
 
-        begin_write_transaction(conn)
-        from game.logic import check_planet_cap_available
+        binding = dict(world_binding) if world_binding else None
+        wk = str(world_key or (binding or {}).get("world_key") or "").strip()
+        if wk and binding is None:
+            binding = {"world_key": wk}
+        elif wk and binding is not None and not str(binding.get("world_key") or "").strip():
+            binding["world_key"] = wk
 
-        ok_cap, cap_reason = check_planet_cap_available(int(player_id), conn=conn)
-        if not ok_cap:
-            rollback(conn)
-            return False, cap_reason, None
+        src = str(source or "player").strip().lower() or "player"
+        has_expansion_binding = bool(wk) or bool(
+            binding
+            and str(binding.get("world_key") or "").strip()
+        )
+        if not has_expansion_binding:
+            if not allow_legacy_coordinates and src not in _LEGACY_COLONIZE_SOURCES:
+                return False, "colonize_requires_expansion_site", None
+
+        legacy_coordinate_path = not has_expansion_binding and (
+            allow_legacy_coordinates or src in _LEGACY_COLONIZE_SOURCES
+        )
+
+        begin_write_transaction(conn)
+        if legacy_coordinate_path:
+            from game.logic import get_max_planets_per_player
+            from game.models import get_planets_by_player
+
+            total = len(get_planets_by_player(int(player_id), conn=conn) or [])
+            ceiling = get_max_planets_per_player(conn=conn)
+            if total >= ceiling:
+                rollback(conn)
+                return False, "expansion_admin_ceiling_reached", None
+        else:
+            from game.logic import check_planet_cap_available
+
+            cap_world_key = str(binding.get("world_key") or "") if binding else None
+            cap_world_type = str(binding.get("planet_role") or "") if binding else None
+            ok_cap, cap_reason = check_planet_cap_available(
+                int(player_id),
+                conn=conn,
+                world_key=cap_world_key or None,
+                world_type=cap_world_type or None,
+            )
+            if not ok_cap:
+                rollback(conn)
+                return False, cap_reason, None
 
         cur = conn.cursor()
         from game.galaxy import (
@@ -614,7 +657,6 @@ def colonize_planet(
         )
         from .dna import generate_planet_dna
 
-        binding = dict(world_binding) if world_binding else None
         if binding:
             from .world_colonization import world_colonization_schema_ready
 
@@ -639,8 +681,9 @@ def colonize_planet(
                 INSERT INTO planets (
                     player_id, name, is_homeworld, metal, crystal, last_update,
                     galaxy, system, position, planet_class, dna_seed, created_at, last_evolution_tick,
-                    world_key, world_x, world_y, sector_x, sector_y, planet_role, origin_world_key
-                ) VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                    world_key, world_x, world_y, sector_x, sector_y, planet_role, origin_world_key,
+                    planet_level, planet_xp, dna_reveal_tier
+                ) VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0);
                 """,
                 (
                     int(player_id),

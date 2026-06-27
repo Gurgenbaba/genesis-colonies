@@ -68,11 +68,12 @@
   </a>
     {% endif %}
   {% else %}
-  <a href="{{ base }}&mission=colonize"
-     class="galaxy-fleet-action galaxy-fleet-action--colonize"
-     title="{{ T('fleet_mission_colonize') }}">
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 2L4 7v10l8 5 8-5V7l-8-5zm0 2.2l5.5 3.4v6.8L12 18.4 6.5 14.4V7.6L12 4.2zM11 9h2v6h-2V9zm0 8h2v2h-2v-2z"/></svg>
-    <span class="galaxy-fleet-action-label">{{ T('fleet_mission_colonize') }}</span>
-  </a>
+  <div class="galaxy-fleet-expansion-hint">
+    <p class="hint">{{ T('galaxy_expansion_via_command_map', 'Kolonisierung läuft über die Command Map.') }}</p>
+    <a href="{{ url_for('galaxy_view', view='command_map', action='colonize') }}"
+       class="gc-btn gc-btn-sm gc-btn-outline galaxy-fleet-expansion-cta">
+      {{ T('galaxy_show_expansion_sites', 'Expansion Sites anzeigen') }}
+    </a>
+  </div>
   {% endif %}
 </div>

@@ -395,6 +395,16 @@ def finish_planet_build_jobs(
                 player_id,
                 planet_id,
             )
+        try:
+            from .planet_evolution.expansion_protocol import sync_establishment_state
+
+            sync_establishment_state(int(planet_id), conn=conn)
+        except Exception:
+            logger.exception(
+                "expansion establishment sync failed player=%s planet=%s",
+                player_id,
+                planet_id,
+            )
 
     return completed
 

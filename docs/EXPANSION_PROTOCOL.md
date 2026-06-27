@@ -1,7 +1,7 @@
 # Expansion Protocol — Design-Charta
 
 > **Epic:** EPIC-15 Imperium & Expansion  
-> **Status:** 📋 Design-Charta (noch nicht implementiert)  
+> **Status:** ✅ Implementiert (GC-920–GC-929)  
 > **Stand:** 2026-06-27  
 > **Vision:** [IMPERIUM_VISION.md](IMPERIUM_VISION.md) · **Technik heute:** [GC-582_DYNAMIC_COLONIZATION.md](GC-582_DYNAMIC_COLONIZATION.md) · [PLANET_EVOLUTION.md](PLANET_EVOLUTION.md)
 
@@ -388,6 +388,7 @@ Payload-Erweiterung auf `build_expansion_unlock_block()` — kein neues Backend-
 
 | Konzept | Owner | Status |
 |---------|-------|--------|
+| **Spieler-Hub Kolonisierung** | `dashboard.py`, `planet_evolution.html` (Genesis Ark + Outpost) | ✅ GC-926 |
 | Expansion Sites + Level-Gates | `expansion_gates.py` | ✅ |
 | World Claims | `world_colonization.py` | ✅ Phase 1 |
 | Strategic World Types | `strategic_worlds.py` | ✅ Präsentation |
@@ -395,10 +396,14 @@ Payload-Erweiterung auf `build_expansion_unlock_block()` — kein neues Backend-
 | Fleet Seed Ark | `fleet.py` | ✅ Transport-Step |
 | `expansion_phase` Resolver | `game/planet_evolution/expansion_phase.py` | ✅ GC-920 |
 | Establishment-Meilensteine (MVP-Proxy) | `expansion_phase.py` (`get_establishment_milestones`) | ✅ GC-920 |
-| Outpost-Mechanics-Flags | `mechanics.py` | ❌ GC-923 |
-| Interstellar Expansion Tech | `research` definitions | ❌ GC-921 |
-| DNA Reveal Gate | `bootstrap.py`, `dna.py` | ❌ GC-928 |
-| Welten-Copy / Entwicklungsstufe | `locales/*` | ❌ GC-929 |
+| Outpost-Mechanics-Flags | `mechanics.py`, `expansion_protocol.py` | ✅ GC-923 |
+| Interstellar Expansion Tech | `research.py` | ✅ GC-921 |
+| DNA Reveal Gate | `expansion_protocol.py`, `queue_engine.py` | ✅ GC-928 |
+| Welten-Copy / Entwicklungsstufe | `locales/*` | ✅ GC-929 |
+| Dual-Gate / admin ceiling | `expansion_protocol.py`, `logic.py` | ✅ GC-922/927 |
+| Entwicklungsstufe 0 Outposts | `service.py` | ✅ GC-924 |
+| Welttyp-Startbedingungen | `expansion_protocol.py`, `mechanics.py` | ✅ GC-925 |
+| Command Map Checklist | `expansion_gates.py`, `command_center.py` | ✅ GC-926 |
 
 Kein `colonize_v2`, kein `expansion_authority`, kein zweites Fleet-System.
 

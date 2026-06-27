@@ -339,8 +339,8 @@ def test_api_game_state_poll_is_diet_gc747(game_client):
     assert isinstance(body.get("planets"), list)
     assert len(body["planets"]) >= 1
     pl = body.get("planet_limit") or {}
-    assert pl.get("current") >= 1
-    assert pl.get("max") >= 1
+    assert pl.get("owned_worlds", pl.get("current", 0)) >= 1
+    assert pl.get("max") is None or pl.get("max") >= 1
     assert "player_stats" not in body
     assert "building_queue" not in body
     assert "research_queue" not in body

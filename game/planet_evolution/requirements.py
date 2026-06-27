@@ -43,7 +43,7 @@ def check_requirements(
 
     if "planet_level_min" in req:
         need = int(req["planet_level_min"])
-        if int(planet.get("planet_level") or 1) < need:
+        if int(planet.get("planet_level") if planet.get("planet_level") is not None else 0) < need:
             missing.append(f"planet_level>={need}")
 
     if "specialization_tier_min" in req:

@@ -184,6 +184,19 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
         "cost_factor": 1.75,
         "requirements": {"buildings": {"research_lab": 2}, "research": {"energy_tech": 1}},
     },
+    "interstellar_expansion": {
+        "label": "Interstellar Expansion",
+        "label_key": "research_interstellar_expansion",
+        "description": "Erweitert die Reichweite deines Imperiums — neue Regionen und Welttypen.",
+        "description_key": "desc_research_interstellar_expansion",
+        "category": "expansion",
+        "icon": "hyperraum-navigation.png",
+        "base_cost_m": 2500,
+        "base_cost_c": 1500,
+        "base_time": 1680,
+        "cost_factor": 1.85,
+        "requirements": {"buildings": {"research_lab": 4}, "research": {"navigation_tech": 3}},
+    },
 }
 
 # Account-wide parallel fleet movements (GC-537) — tiers by navigation_tech level.
@@ -250,7 +263,7 @@ RESEARCH_TAB_GROUPS: Dict[str, List[str]] = {
     "energy": ["energy"],
     "production": ["metal", "drones"],
     "construction": ["construction", "storage"],
-    "fleet": ["navigation", "engine", "propulsion"],
+    "fleet": ["navigation", "engine", "propulsion", "expansion"],
     "military": ["weapon", "armor", "shield"],
 }
 
@@ -435,6 +448,18 @@ def get_research_effect_preview(tech_key: str, current_level: int, next_level: i
             effect_current=_fuel_reduction_pct(cur),
             effect_next=_fuel_reduction_pct(nxt),
             effect_metric_key="research_effect_fuel_use",
+        )
+    if tech_key == "interstellar_expansion":
+        from .planet_evolution.expansion_protocol import (
+            INTERSTELLAR_EXPANSION_MAX_LEVEL,
+            interstellar_expansion_reach_label,
+        )
+
+        return _research_effect_snapshot(
+            effect_kind="level",
+            effect_current=cur,
+            effect_next=min(nxt, INTERSTELLAR_EXPANSION_MAX_LEVEL),
+            effect_metric_key=interstellar_expansion_reach_label(cur),
         )
 
     return _research_effect_snapshot(

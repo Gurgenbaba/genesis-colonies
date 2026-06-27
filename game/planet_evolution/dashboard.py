@@ -76,8 +76,11 @@ def _planet_status(
 
 
 def _trait_cards(dna: Dict[str, Any], reveal: int) -> List[Dict[str, Any]]:
+    """Trait cards for PE — DNA hidden until establishment (reveal tier 0)."""
+    if int(reveal or 0) <= 0:
+        return []
     cards: List[Dict[str, Any]] = []
-    for key in all_trait_keys(dna, reveal_tier=max(reveal, 1)):
+    for key in all_trait_keys(dna, reveal_tier=int(reveal)):
         tdef = get_trait(key) or {}
         rarity = str(tdef.get("rarity") or "common")
         effects = tdef.get("effects") or {}
@@ -468,6 +471,8 @@ def _next_action(
     research_ux: Dict[str, Any],
     warnings: List[Dict[str, Any]],
     mechanics: Dict[str, Any],
+    establishment: Optional[Dict[str, Any]] = None,
+    expansion_unlock: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     def _cta(
         *,
@@ -502,6 +507,72 @@ def _next_action(
             cta_highlight="pe-event-decision",
             event_label_key=active_event.get("label_key"),
         )
+
+    if establishment and establishment.get("visible") and not establishment.get("complete"):
+        unmet = [
+            m
+            for m in (establishment.get("milestones") or [])
+            if not m.get("met") and m.get("required", True)
+        ]
+        first = unmet[0] if unmet else None
+        return _cta(
+            priority="establishment",
+            title_key="pe_action_establishment_title",
+            body_key="pe_action_establishment_body",
+            cta_label_key="pe_action_establishment_cta",
+            cta_target="establishment",
+            cta_action="focus_section",
+            cta_highlight="pe-section-establishment",
+            milestone_label_key=str(first.get("label_key") or "") if first else "",
+            met_count=int(establishment.get("met_count") or 0),
+            required_count=int(establishment.get("required_count") or 0),
+        )
+
+    if bool(planet.get("is_homeworld")) and expansion_unlock:
+        checklist = expansion_unlock.get("launch_checklist") or {}
+        items = {str(i.get("key") or ""): i for i in (checklist.get("items") or [])}
+        if items.get("interstellar_expansion") and not items["interstellar_expansion"].get("met"):
+            return _cta(
+                priority="expansion_research",
+                title_key="pe_action_expansion_research_title",
+                body_key="pe_action_expansion_research_body",
+                cta_label_key="pe_action_expansion_research_cta",
+                cta_target="research",
+                cta_action="navigate",
+                cta_highlight="research",
+                tech_key="interstellar_expansion",
+            )
+        if items.get("genesis_ark_level") and not items["genesis_ark_level"].get("met"):
+            return _cta(
+                priority="expansion_progression",
+                title_key="pe_action_expansion_progress_title",
+                body_key="pe_action_expansion_progress_body",
+                cta_label_key="pe_action_expansion_progress_cta",
+                cta_target="progression",
+                cta_action="focus_section",
+                cta_highlight="pe-section-expansion-gate",
+            )
+        if checklist.get("can_launch"):
+            return _cta(
+                priority="expansion_ready",
+                title_key="pe_colonize_new_world_cta",
+                body_key="pe_colonize_new_world_hint",
+                cta_label_key="pe_colonize_new_world_cta",
+                cta_target="command_map",
+                cta_action="navigate",
+                cta_href="/galaxy?view=command_map&action=colonize",
+                cta_highlight="pe-section-expansion-gate",
+            )
+        if items.get("seed_ark") and not items["seed_ark"].get("met"):
+            return _cta(
+                priority="expansion_seed_ark",
+                title_key="pe_action_expansion_seed_ark_title",
+                body_key="pe_action_expansion_seed_ark_body",
+                cta_label_key="pe_action_expansion_seed_ark_cta",
+                cta_target="fleet",
+                cta_action="navigate",
+                cta_highlight="fleet",
+            )
 
     if planet.get("failure_state"):
         return _cta(
@@ -799,7 +870,8 @@ def build_dashboard_extras(
     conn: sqlite3.Connection,
 ) -> Dict[str, Any]:
     reveal = int(planet.get("dna_reveal_tier") or 0)
-    level = int(planet.get("planet_level") or 1)
+    raw_level = planet.get("planet_level")
+    level = int(raw_level) if raw_level is not None else 1
     xp = int(planet.get("planet_xp") or 0)
     next_threshold = xp_threshold_for_level(level + 1) if level < MAX_PLANET_LEVEL else xp
     prev_threshold = xp_threshold_for_level(level)
@@ -809,7 +881,57 @@ def build_dashboard_extras(
 
     eligible = list(eligible_specializations or [])
     research_ux = _research_ux(research, level, planet_id=planet_id, planet=planet, conn=conn)
+
+    expansion_unlock: Dict[str, Any] = {"visible": False}
+    establishment: Dict[str, Any] = {"visible": False}
+    expansion_lifecycle: Dict[str, Any] = {}
+    player_id = int(planet.get("player_id") or 0)
+    is_homeworld = bool(planet.get("is_homeworld"))
+    if player_id:
+        expansion_unlock = build_expansion_unlock_block(
+            player_id,
+            conn=conn,
+            viewing_homeworld=is_homeworld,
+        )
+        if not is_homeworld:
+            from .expansion_phase import resolve_expansion_phase
+
+            resolved = resolve_expansion_phase(
+                player_id=player_id,
+                planet_id=int(planet_id),
+                conn=conn,
+            )
+            expansion_lifecycle = {
+                "phase": str(resolved.get("phase") or ""),
+                "phase_label_key": str(resolved.get("phase_label_key") or ""),
+                "is_outpost": bool(resolved.get("is_outpost")),
+                "is_colony": bool(resolved.get("is_colony")),
+            }
+            if bool(resolved.get("is_outpost")):
+                milestones = list(resolved.get("requirements") or [])
+                required = [m for m in milestones if m.get("required", True)]
+                met = sum(1 for m in required if m.get("met"))
+                establishment = {
+                    "visible": True,
+                    "phase_label_key": str(resolved.get("phase_label_key") or ""),
+                    "milestones": milestones,
+                    "complete": bool(resolved.get("is_colony")),
+                    "met_count": int(met),
+                    "required_count": len(required),
+                }
+
     warnings = _warnings(planet, culture, mechanics, active_event)
+    if establishment.get("visible") and not establishment.get("complete"):
+        warnings.insert(
+            0,
+            {
+                "key": "establishment",
+                "label_key": "pe_warn_establishment",
+                "body_key": "pe_warn_establishment_body",
+                "severity": "warn",
+                "action_target": "establishment",
+            },
+        )
     status = _planet_status(planet, culture, warnings)
     economy = _economy_flow(planet_id, mechanics, conn)
 
@@ -820,14 +942,9 @@ def build_dashboard_extras(
     )
     open_events = int(cur.fetchone()["c"])
 
-    expansion_unlock: Dict[str, Any] = {"visible": False}
-    player_id = int(planet.get("player_id") or 0)
-    if player_id:
-        expansion_unlock = build_expansion_unlock_block(
-            player_id,
-            conn=conn,
-            viewing_homeworld=bool(planet.get("is_homeworld")),
-        )
+    dna_hidden = int(reveal or 0) <= 0 and not is_homeworld and bool(
+        str(planet.get("world_key") or planet.get("origin_world_key") or "").strip()
+    )
 
     return {
         "header": {
@@ -837,11 +954,22 @@ def build_dashboard_extras(
             "xp_remaining": max(0, xp_span - xp_in_level),
             "stability": float(culture.get("stability") or 0),
             "loyalty": float(culture.get("loyalty") or 0),
-            "is_homeworld": bool(planet.get("is_homeworld")),
-            "rarity": rarity,
-            "rarity_label_key": f"pe_rarity_{rarity}",
+            "is_homeworld": is_homeworld,
+            "is_outpost": bool(establishment.get("visible")),
+            "dna_hidden": bool(dna_hidden),
+            "rarity": rarity if not dna_hidden else "unknown",
+            "rarity_label_key": f"pe_rarity_{rarity}" if not dna_hidden else "pe_dna_unknown",
             "status": status,
-            "planet_class_label_key": planet_class_label_key(planet.get("planet_class") or "terrestrial"),
+            "planet_class_label_key": (
+                planet_class_label_key(planet.get("planet_class") or "terrestrial")
+                if not dna_hidden
+                else "pe_world_class_unknown"
+            ),
+            "level_label_key": (
+                "pe_development_stage_outpost"
+                if bool(establishment.get("visible"))
+                else "pe_development_stage"
+            ),
         },
         "location": _planet_location_display(planet),
         "planet_score": compute_single_planet_score(planet_id, conn=conn),
@@ -868,6 +996,8 @@ def build_dashboard_extras(
             research_ux=research_ux,
             warnings=warnings,
             mechanics=mechanics,
+            establishment=establishment,
+            expansion_unlock=expansion_unlock,
         ),
         "policies_active": _policy_rows(planet_id, conn),
         "policy_ux": _policy_ux(planet_id, planet=planet, culture=culture, conn=conn),
@@ -883,4 +1013,7 @@ def build_dashboard_extras(
             planet_score=compute_single_planet_score(planet_id, conn=conn),
         ),
         "expansion_unlock": expansion_unlock,
+        "establishment": establishment,
+        "expansion_lifecycle": expansion_lifecycle,
+        "dna_reveal_tier": int(reveal),
     }

@@ -228,7 +228,7 @@
               <h3 class="galaxy-slot-planet-name">{{ T("galaxy_empty_slot") }}</h3>
               <span class="galaxy-slot-coord gc-mono">{{ galaxy_coord_link(slot.coordinates_formatted) }}</span>
             </header>
-            <p class="galaxy-slot-empty-hint">{{ T("galaxy_colony_target_hint") }}</p>
+            <p class="galaxy-slot-empty-hint">{{ T("galaxy_classic_coords_hint", "Klassische Koordinaten dienen für Flotten, Scouting und PvP — neue Welten werden über Expansion Sites erschlossen.") }}</p>
             {% if slot.has_debris %}
             {% include "partials/galaxy_debris_block.html" %}
             {% endif %}
@@ -245,7 +245,7 @@
           {% elif slot.occupied %}
             <span class="gs-pill gs-pill-occupied">{{ T("galaxy_occupied") }}</span>
           {% else %}
-            <span class="gs-pill gs-pill-colonizable">{{ T("galaxy_colonizable") }}</span>
+            <span class="gs-pill gs-pill-empty">{{ T("galaxy_slot_empty", "Leer") }}</span>
           {% endif %}
         </div>
       </article>

@@ -1964,6 +1964,18 @@ def queue_build_for_planet(
                 }
                 break
 
+            from game.planet_evolution.expansion_protocol import is_building_allowed_in_outpost
+
+            outpost_ok, outpost_reason = is_building_allowed_in_outpost(
+                int(planet_id),
+                building_type,
+                conn=conn,
+            )
+            if not outpost_ok:
+                last_reason = str(outpost_reason or "outpost_building_restricted")
+                last_fail = {"building_type": building_type, "outpost": True}
+                break
+
             if not has_building_requirements(buildings, research_levels, building_type):
                 last_reason = "requirements"
                 last_fail = {

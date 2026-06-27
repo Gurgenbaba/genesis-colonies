@@ -3,9 +3,7 @@ Research lab requirement resolution (empire-wide lab level vs active planet).
 
 Run: python -m pytest tests/test_research_requirements.py -v
 """
-
 from __future__ import annotations
-
 import importlib
 import json
 import os
@@ -14,79 +12,50 @@ import subprocess
 import sys
 import uuid
 from pathlib import Path
-
 import pytest
-
 import game.db as dbmod
 import game.models as models
 from game.logic import refresh_player_live_state
 from game.models import create_user, get_homeworld, init_db, save_planet_buildings
 from game.planet_evolution.repository import set_active_planet_id
 from game.planet_evolution.service import colonize_planet, set_active_planet
-from game.research import (
-    fleet_slots_for_navigation_level,
-    get_player_research_lab_level,
-    get_research_status,
-    next_navigation_fleet_slot_unlock,
-    queue_research,
-)
-
+from game.research import fleet_slots_for_navigation_level, get_player_research_lab_level, get_research_status, next_navigation_fleet_slot_unlock, queue_research
 ROOT = Path(__file__).resolve().parent.parent
-MIGRATE_SCRIPT = ROOT / "migrate.py"
-
+MIGRATE_SCRIPT = ROOT / 'migrate.py'
 
 @pytest.fixture()
 def research_db(tmp_path, monkeypatch):
-    db_file = tmp_path / "research_requirements.db"
-    monkeypatch.setenv("GC_DB_PATH", str(db_file))
-    monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
-    monkeypatch.setenv("SECRET_KEY", "test-secret-key-not-default-value-32chars")
-    monkeypatch.setattr(dbmod, "DB_PATH", db_file)
-    monkeypatch.setattr(models, "DB_PATH", db_file)
-
+    db_file = tmp_path / 'research_requirements.db'
+    monkeypatch.setenv('GC_DB_PATH', str(db_file))
+    monkeypatch.setenv('GC_SKIP_MIGRATION_CHECK', '1')
+    monkeypatch.setenv('SECRET_KEY', 'test-secret-key-not-default-value-32chars')
+    monkeypatch.setattr(dbmod, 'DB_PATH', db_file)
+    monkeypatch.setattr(models, 'DB_PATH', db_file)
     env = os.environ.copy()
-    env["GC_DB_PATH"] = str(db_file)
-    result = subprocess.run(
-        [sys.executable, str(MIGRATE_SCRIPT)],
-        cwd=str(ROOT),
-        capture_output=True,
-        text=True,
-        env=env,
-    )
+    env['GC_DB_PATH'] = str(db_file)
+    result = subprocess.run([sys.executable, str(MIGRATE_SCRIPT)], cwd=str(ROOT), capture_output=True, text=True, env=env)
     assert result.returncode == 0, result.stderr or result.stdout
     init_db()
-
     from game.bootstrap import bootstrap_application
-
     bootstrap_application(skip_migration_check=True)
     yield db_file
 
-
 def _create_player() -> tuple[int, str]:
-    uname = f"reslab_{uuid.uuid4().hex[:8]}"
-    ok, err, user = create_user(uname, "test-pass-123")
+    uname = f'reslab_{uuid.uuid4().hex[:8]}'
+    ok, err, user = create_user(uname, 'test-pass-123')
     assert ok and user, err
-    return int(user["id"]), uname
-
+    return (int(user['id']), uname)
 
 def _second_planet(player_id: int) -> int:
-    ok, reason, extra = colonize_planet(
-        player_id,
-        name=f"Colony_{uuid.uuid4().hex[:4]}",
-        galaxy=1,
-        system=300,
-        position=2,
-    )
+    ok, reason, extra = colonize_planet(player_id, name=f'Colony_{uuid.uuid4().hex[:4]}', galaxy=1, system=300, position=2, allow_legacy_coordinates=True, source='test')
     assert ok, reason
-    return int(extra["planet_id"])
-
+    return int(extra['planet_id'])
 
 def _tech(status: dict, key: str) -> dict:
-    for tech in status.get("techs") or []:
-        if tech.get("key") == key:
+    for tech in status.get('techs') or []:
+        if tech.get('key') == key:
             return tech
-    raise AssertionError(f"tech {key} not found")
-
+    raise AssertionError(f'tech {key} not found')
 
 def test_navigation_fleet_slot_tiers(research_db):
     assert fleet_slots_for_navigation_level(0) == 3
@@ -98,192 +67,130 @@ def test_navigation_fleet_slot_tiers(research_db):
     assert fleet_slots_for_navigation_level(13) == 8
     assert fleet_slots_for_navigation_level(16) == 9
     assert fleet_slots_for_navigation_level(100) == 37
-    assert next_navigation_fleet_slot_unlock(2) == {
-        "research_key": "navigation_tech",
-        "level": 3,
-        "slots": 4,
-    }
-    assert next_navigation_fleet_slot_unlock(10) == {
-        "research_key": "navigation_tech",
-        "level": 13,
-        "slots": 8,
-    }
-    assert next_navigation_fleet_slot_unlock(13) == {
-        "research_key": "navigation_tech",
-        "level": 16,
-        "slots": 9,
-    }
-
+    assert next_navigation_fleet_slot_unlock(2) == {'research_key': 'navigation_tech', 'level': 3, 'slots': 4}
+    assert next_navigation_fleet_slot_unlock(10) == {'research_key': 'navigation_tech', 'level': 13, 'slots': 8}
+    assert next_navigation_fleet_slot_unlock(13) == {'research_key': 'navigation_tech', 'level': 16, 'slots': 9}
 
 def test_player_with_lab_on_homeworld_unlocks_tech_on_active_colony(research_db):
     player_id, _ = _create_player()
-    hw_id = int(get_homeworld(player_id=player_id)["id"])
+    hw_id = int(get_homeworld(player_id=player_id)['id'])
     colony_id = _second_planet(player_id)
-
-    save_planet_buildings(hw_id, {"research_lab": 1, "metal_mine": 1, "solar_plant": 1})
-    save_planet_buildings(colony_id, {"metal_mine": 1, "solar_plant": 1})
-
+    save_planet_buildings(hw_id, {'research_lab': 1, 'metal_mine': 1, 'solar_plant': 1})
+    save_planet_buildings(colony_id, {'metal_mine': 1, 'solar_plant': 1})
     set_active_planet(player_id, colony_id)
-
     _, buildings, _, _, _, _ = refresh_player_live_state(player_id)
-    assert int(buildings.get("research_lab", 0) or 0) == 0
+    assert int(buildings.get('research_lab', 0) or 0) == 0
     assert get_player_research_lab_level(player_id) == 1
-
     status = get_research_status(player_id, buildings=buildings, skip_finish=True)
-    assert status["lab_level"] == 1
-    assert _tech(status, "energy_tech")["requirements_met"] is True
-
+    assert status['lab_level'] == 1
+    assert _tech(status, 'energy_tech')['requirements_met'] is True
 
 def test_player_without_lab_anywhere_keeps_tech_locked(research_db):
     player_id, _ = _create_player()
-    hw_id = int(get_homeworld(player_id=player_id)["id"])
-    save_planet_buildings(hw_id, {"metal_mine": 1, "solar_plant": 1})
-
+    hw_id = int(get_homeworld(player_id=player_id)['id'])
+    save_planet_buildings(hw_id, {'metal_mine': 1, 'solar_plant': 1})
     status = get_research_status(player_id, skip_finish=True)
-    assert status["lab_level"] == 0
-    assert _tech(status, "energy_tech")["requirements_met"] is False
-
+    assert status['lab_level'] == 0
+    assert _tech(status, 'energy_tech')['requirements_met'] is False
 
 def test_research_page_renders_empire_lab_level_chip(research_db, monkeypatch):
     import app as app_module
-
-    monkeypatch.setattr(dbmod, "DB_PATH", research_db)
-    monkeypatch.setattr(models, "DB_PATH", research_db)
+    monkeypatch.setattr(dbmod, 'DB_PATH', research_db)
+    monkeypatch.setattr(models, 'DB_PATH', research_db)
     importlib.reload(app_module)
-
     player_id, uname = _create_player()
-    hw_id = int(get_homeworld(player_id=player_id)["id"])
+    hw_id = int(get_homeworld(player_id=player_id)['id'])
     colony_id = _second_planet(player_id)
-
-    save_planet_buildings(hw_id, {"research_lab": 2, "metal_mine": 1, "solar_plant": 1})
-    save_planet_buildings(colony_id, {"metal_mine": 1, "solar_plant": 1})
+    save_planet_buildings(hw_id, {'research_lab': 2, 'metal_mine': 1, 'solar_plant': 1})
+    save_planet_buildings(colony_id, {'metal_mine': 1, 'solar_plant': 1})
     set_active_planet(player_id, colony_id)
-
     conn = dbmod.db()
-    conn.execute(
-        "UPDATE planets SET metal = 50000, crystal = 50000 WHERE id = ?;",
-        (colony_id,),
-    )
+    conn.execute('UPDATE planets SET metal = 50000, crystal = 50000 WHERE id = ?;', (colony_id,))
     conn.commit()
     conn.close()
-
     client = app_module.app.test_client()
-    client.post("/login", data={"username": uname, "password": "test-pass-123"})
-    html = client.get("/research").get_data(as_text=True)
-
-    assert re.search(r'class="lab-level-highlight">\s*2\s*<', html)
-    assert "research_start/energy_tech" in html
-
+    client.post('/login', data={'username': uname, 'password': 'test-pass-123'})
+    html = client.get('/research').get_data(as_text=True)
+    assert re.search('class="lab-level-highlight">\\s*2\\s*<', html)
+    assert 'research_start/energy_tech' in html
 
 def test_requirement_tooltip_uses_research_lab_building_key(research_db):
     player_id, _ = _create_player()
-    hw_id = int(get_homeworld(player_id=player_id)["id"])
-    save_planet_buildings(hw_id, {"research_lab": 0, "metal_mine": 1, "solar_plant": 1})
-
+    hw_id = int(get_homeworld(player_id=player_id)['id'])
+    save_planet_buildings(hw_id, {'research_lab': 0, 'metal_mine': 1, 'solar_plant': 1})
     status = get_research_status(player_id, skip_finish=True)
-    items = _tech(status, "energy_tech")["requirements_items"]
+    items = _tech(status, 'energy_tech')['requirements_items']
     assert len(items) == 1
-    assert items[0]["kind"] == "building"
-    assert items[0]["key"] == "research_lab"
-    assert items[0]["met"] is False
-
-    save_planet_buildings(hw_id, {"research_lab": 1, "metal_mine": 1, "solar_plant": 1})
+    assert items[0]['kind'] == 'building'
+    assert items[0]['key'] == 'research_lab'
+    assert items[0]['met'] is False
+    save_planet_buildings(hw_id, {'research_lab': 1, 'metal_mine': 1, 'solar_plant': 1})
     status_ok = get_research_status(player_id, skip_finish=True)
-    items_ok = _tech(status_ok, "energy_tech")["requirements_items"]
-    assert items_ok[0]["have"] == 1
-    assert items_ok[0]["met"] is True
-
-    de = json.loads((ROOT / "locales" / "de.json").read_text(encoding="utf-8"))
-    assert de["building_research_lab"] == "Forschungslabor"
-    assert de["building_academy"] == "Genesis-Akademie"
-
+    items_ok = _tech(status_ok, 'energy_tech')['requirements_items']
+    assert items_ok[0]['have'] == 1
+    assert items_ok[0]['met'] is True
+    de = json.loads((ROOT / 'locales' / 'de.json').read_text(encoding='utf-8'))
+    assert de['building_research_lab'] == 'Forschungslabor'
+    assert de['building_academy'] == 'Genesis-Akademie'
 
 def test_queue_research_uses_empire_lab_not_homeworld_only(research_db):
     player_id, _ = _create_player()
     hw = get_homeworld(player_id=player_id)
     colony_id = _second_planet(player_id)
-
-    save_planet_buildings(int(hw["id"]), {"metal_mine": 1, "solar_plant": 1})
-    save_planet_buildings(colony_id, {"research_lab": 1, "metal_mine": 1, "solar_plant": 1})
-
+    save_planet_buildings(int(hw['id']), {'metal_mine': 1, 'solar_plant': 1})
+    save_planet_buildings(colony_id, {'research_lab': 1, 'metal_mine': 1, 'solar_plant': 1})
     conn = dbmod.db()
-    conn.execute(
-        "UPDATE planets SET metal = 50000, crystal = 50000 WHERE player_id = ?;",
-        (player_id,),
-    )
+    conn.execute('UPDATE planets SET metal = 50000, crystal = 50000 WHERE player_id = ?;', (player_id,))
     conn.commit()
     conn.close()
-
     player = models.load_player(player_id)
-    ok, reason, _ = queue_research(player, "energy_tech")
+    ok, reason, _ = queue_research(player, 'energy_tech')
     assert ok, reason
-
 
 def test_queue_research_charges_active_planet_not_homeworld(research_db):
     """Resources shown in HUD (active colony) must be the ones spent for research."""
     player_id, _ = _create_player()
     hw = get_homeworld(player_id=player_id)
-    hw_id = int(hw["id"])
+    hw_id = int(hw['id'])
     colony_id = _second_planet(player_id)
-
-    save_planet_buildings(hw_id, {"research_lab": 1, "metal_mine": 1, "solar_plant": 1})
-    save_planet_buildings(colony_id, {"metal_mine": 1, "solar_plant": 1})
-
+    save_planet_buildings(hw_id, {'research_lab': 1, 'metal_mine': 1, 'solar_plant': 1})
+    save_planet_buildings(colony_id, {'metal_mine': 1, 'solar_plant': 1})
     conn = dbmod.db()
-    conn.execute(
-        "UPDATE planets SET metal = 50, crystal = 50 WHERE id = ?;",
-        (hw_id,),
-    )
-    conn.execute(
-        "UPDATE planets SET metal = 50000, crystal = 50000 WHERE id = ?;",
-        (colony_id,),
-    )
+    conn.execute('UPDATE planets SET metal = 50, crystal = 50 WHERE id = ?;', (hw_id,))
+    conn.execute('UPDATE planets SET metal = 50000, crystal = 50000 WHERE id = ?;', (colony_id,))
     set_active_planet_id(player_id, colony_id, conn)
     conn.commit()
     conn.close()
-
     player = models.load_player(player_id)
-    ok, reason, _ = queue_research(player, "energy_tech")
+    ok, reason, _ = queue_research(player, 'energy_tech')
     assert ok, reason
-
     conn = dbmod.db()
-    hw_metal = float(
-        conn.execute("SELECT metal FROM planets WHERE id = ?;", (hw_id,)).fetchone()["metal"]
-    )
-    col_metal = float(
-        conn.execute("SELECT metal FROM planets WHERE id = ?;", (colony_id,)).fetchone()["metal"]
-    )
+    hw_metal = float(conn.execute('SELECT metal FROM planets WHERE id = ?;', (hw_id,)).fetchone()['metal'])
+    col_metal = float(conn.execute('SELECT metal FROM planets WHERE id = ?;', (colony_id,)).fetchone()['metal'])
     conn.close()
-
     assert hw_metal == 50.0
     assert col_metal < 50000.0
 
-
 def test_research_status_can_afford_uses_active_planet(research_db):
     player_id, _ = _create_player()
-    hw_id = int(get_homeworld(player_id=player_id)["id"])
+    hw_id = int(get_homeworld(player_id=player_id)['id'])
     colony_id = _second_planet(player_id)
-
-    save_planet_buildings(hw_id, {"research_lab": 1, "metal_mine": 1, "solar_plant": 1})
-    save_planet_buildings(colony_id, {"metal_mine": 1, "solar_plant": 1})
-
+    save_planet_buildings(hw_id, {'research_lab': 1, 'metal_mine': 1, 'solar_plant': 1})
+    save_planet_buildings(colony_id, {'metal_mine': 1, 'solar_plant': 1})
     conn = dbmod.db()
-    conn.execute("UPDATE planets SET metal = 50, crystal = 50 WHERE id = ?;", (hw_id,))
-    conn.execute("UPDATE planets SET metal = 50000, crystal = 50000 WHERE id = ?;", (colony_id,))
+    conn.execute('UPDATE planets SET metal = 50, crystal = 50 WHERE id = ?;', (hw_id,))
+    conn.execute('UPDATE planets SET metal = 50000, crystal = 50000 WHERE id = ?;', (colony_id,))
     set_active_planet_id(player_id, colony_id, conn)
     conn.commit()
     conn.close()
-
     _, buildings, _, _, _, _ = refresh_player_live_state(player_id)
     status = get_research_status(player_id, buildings=buildings, skip_finish=True)
-    assert _tech(status, "energy_tech")["can_afford"] is True
-
+    assert _tech(status, 'energy_tech')['can_afford'] is True
     conn = dbmod.db()
-    conn.execute("UPDATE planets SET metal = 10, crystal = 10 WHERE id = ?;", (colony_id,))
+    conn.execute('UPDATE planets SET metal = 10, crystal = 10 WHERE id = ?;', (colony_id,))
     set_active_planet_id(player_id, colony_id, conn)
     conn.commit()
     conn.close()
-
     _, buildings, _, _, _, _ = refresh_player_live_state(player_id)
     status_poor = get_research_status(player_id, buildings=buildings, skip_finish=True)
-    assert _tech(status_poor, "energy_tech")["can_afford"] is False
+    assert _tech(status_poor, 'energy_tech')['can_afford'] is False

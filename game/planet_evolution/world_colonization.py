@@ -149,13 +149,26 @@ def check_colony_limit_available(
     player_id: int,
     *,
     conn: sqlite3.Connection,
+    world_key: str | None = None,
+    world_type: str | None = None,
 ) -> Tuple[bool, str]:
-    """Return whether the player may found another colony."""
+    """Return whether the player may found another expansion world."""
     if not evolution_schema_ready(conn):
         return False, "schema_missing"
     from game.logic import check_planet_cap_available
 
-    return check_planet_cap_available(int(player_id), conn=conn)
+    parsed_type = world_type
+    if not parsed_type and world_key:
+        try:
+            parsed_type = str(parse_world_key(str(world_key)).get("world_type") or "")
+        except WorldKeyError:
+            parsed_type = None
+    return check_planet_cap_available(
+        int(player_id),
+        conn=conn,
+        world_key=world_key,
+        world_type=parsed_type or None,
+    )
 
 
 def evolution_schema_ready(conn: sqlite3.Connection) -> bool:
@@ -232,12 +245,16 @@ def build_world_colonize_preview(
         ok_target = False
         reason = reason or "invalid_world_key"
 
-    ok_limit, limit_reason = check_colony_limit_available(int(player_id), conn=conn)
+    ok_limit, limit_reason = check_colony_limit_available(
+        int(player_id),
+        conn=conn,
+        world_key=wk,
+    )
     block_reason = ""
     if not ok_target:
         block_reason = reason or "invalid_world_key"
     elif not ok_limit:
-        block_reason = limit_reason or "max_colonies_reached"
+        block_reason = limit_reason or "expansion_gate_homeworld_level"
 
     return {
         "world_key": wk,

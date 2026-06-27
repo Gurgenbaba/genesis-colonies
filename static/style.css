@@ -4879,6 +4879,20 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   margin-top: 0;
   justify-content: flex-end;
 }
+.galaxy-fleet-expansion-hint{
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  max-width: 14rem;
+}
+.galaxy-fleet-expansion-hint .hint{
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+.galaxy-fleet-expansion-cta{
+  align-self: flex-start;
+}
 .gc-ship-detail-icon{
   width: 72px;
   height: 72px;
@@ -12608,6 +12622,11 @@ body.gc-techtree-media-zoom-open{
   border-color: rgba(35, 242, 166, 0.5);
   background: rgba(0, 22, 16, 0.55);
   color: rgba(180, 255, 220, 0.95);
+}
+.gs-pill-empty{
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(200, 210, 220, 0.85);
 }
 .gs-pill-debris{
   border-color: rgba(255, 186, 72, 0.55);
@@ -21311,6 +21330,142 @@ body.gc-combat-report-open { overflow: hidden; }
 .planet-evolution-page .pe-planet-spec {
   font-size: 0.78rem;
   opacity: 0.75;
+}
+.planet-evolution-page .pe-expansion-gate,
+.planet-evolution-page .pe-establishment {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+.planet-evolution-page .pe-expansion-gate--discovered {
+  border-color: rgba(70, 229, 255, 0.35);
+  box-shadow: 0 0 0 1px rgba(70, 229, 255, 0.12);
+}
+.planet-evolution-page .pe-expansion-gate--locked {
+  opacity: 0.92;
+}
+.planet-evolution-page .pe-expansion-gate-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+.planet-evolution-page .pe-expansion-gate-level {
+  font-size: 0.82rem;
+  opacity: 0.85;
+}
+.planet-evolution-page .pe-expansion-gate-hint {
+  margin: 0;
+}
+.planet-evolution-page .pe-expansion-gate-body {
+  padding: 0.75rem 0.85rem;
+  border-radius: var(--gc-radius-sm, 6px);
+  border: 1px solid var(--gc-panel-border);
+  background: rgba(255, 255, 255, 0.03);
+}
+.planet-evolution-page .pe-expansion-gate-body--new {
+  border-color: rgba(70, 229, 255, 0.28);
+  background: rgba(70, 229, 255, 0.05);
+}
+.planet-evolution-page .pe-expansion-gate-body--locked {
+  border-style: dashed;
+  opacity: 0.88;
+}
+.planet-evolution-page .pe-expansion-gate-body--checklist {
+  border-color: rgba(120, 200, 255, 0.22);
+}
+.planet-evolution-page .pe-expansion-gate-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 0.35rem;
+}
+.planet-evolution-page .pe-expansion-gate-badge--new {
+  color: rgba(120, 230, 255, 0.95);
+}
+.planet-evolution-page .pe-expansion-gate-badge--locked {
+  font-size: 1rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.planet-evolution-page .pe-expansion-gate-site {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.planet-evolution-page .pe-expansion-gate-req {
+  margin: 0.25rem 0 0;
+  font-size: 0.88rem;
+  opacity: 0.9;
+}
+.pe-expansion-checklist,
+.gc-expansion-checklist-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+.pe-expansion-checklist-item,
+.gc-expansion-checklist-list .pe-expansion-checklist-item {
+  display: grid;
+  grid-template-columns: 1.25rem 1fr auto;
+  gap: 0.35rem 0.5rem;
+  align-items: baseline;
+  font-size: 0.88rem;
+  opacity: 0.82;
+}
+.pe-expansion-checklist-item--met,
+.gc-expansion-checklist-list .pe-expansion-checklist-item--met {
+  opacity: 1;
+  color: rgba(160, 240, 200, 0.95);
+}
+.pe-expansion-checklist-mark {
+  font-weight: 700;
+  text-align: center;
+}
+.gc-expansion-checklist {
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--gc-panel-border);
+}
+.gc-expansion-checklist-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+.gc-world-inspector-colonize-blocked {
+  margin: 0.35rem 0 0;
+  width: 100%;
+  text-align: center;
+}
+.pe-expansion-colonize-cta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--gc-panel-border);
+}
+.galaxy-command-map-colonize-banner {
+  border-color: rgba(70, 229, 255, 0.35);
+  background: rgba(70, 229, 255, 0.08);
+}
+.galaxy-command-map-graph--colonize-mode .galaxy-command-map-node--colonize-target {
+  outline: 2px solid rgba(70, 229, 255, 0.65);
+  outline-offset: 2px;
+  z-index: 2;
+  animation: pe-highlight-pulse 2.4s ease-out infinite;
+}
+.galaxy-command-map-graph--colonize-mode .galaxy-command-map-node--world-field:not(.galaxy-command-map-node--colonize-target) {
+  opacity: 0.42;
 }
 .planet-evolution-page .pe-main-grid {
   gap: 1rem;
