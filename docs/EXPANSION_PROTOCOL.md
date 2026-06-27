@@ -393,8 +393,9 @@ Payload-Erweiterung auf `build_expansion_unlock_block()` — kein neues Backend-
 | Strategic World Types | `strategic_worlds.py` | ✅ Präsentation |
 | Map-Inspector | `command_center.py`, `command_map.py` | ✅ erweiterbar |
 | Fleet Seed Ark | `fleet.py` | ✅ Transport-Step |
-| `expansion_phase` / `colony_maturity` | `planets` Migration + `mechanics.py` | ❌ GC-920 |
-| Etablierungs-Meilensteine | neues Establishment-Modul | ❌ GC-923 |
+| `expansion_phase` Resolver | `game/planet_evolution/expansion_phase.py` | ✅ GC-920 |
+| Establishment-Meilensteine (MVP-Proxy) | `expansion_phase.py` (`get_establishment_milestones`) | ✅ GC-920 |
+| Outpost-Mechanics-Flags | `mechanics.py` | ❌ GC-923 |
 | Interstellar Expansion Tech | `research` definitions | ❌ GC-921 |
 | DNA Reveal Gate | `bootstrap.py`, `dna.py` | ❌ GC-928 |
 | Welten-Copy / Entwicklungsstufe | `locales/*` | ❌ GC-929 |

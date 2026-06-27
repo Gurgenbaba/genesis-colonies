@@ -986,6 +986,13 @@ def build_colony_command_center(
     from game.world_inspector import attach_debris_to_inspector_payload
 
     attach_debris_to_inspector_payload(payload, conn=conn, planet_id=pid)
+    wk = str(planet.get("world_key") or "").strip()
+    if wk or not is_homeworld:
+        from .expansion_phase import compact_expansion_phase_payload, resolve_expansion_phase
+
+        payload["expansion_phase"] = compact_expansion_phase_payload(
+            resolve_expansion_phase(player_id=uid, planet_id=pid, world_key=wk or None, conn=conn)
+        )
     return payload
 
 
@@ -1254,7 +1261,21 @@ def build_strategic_world_command_center(
         "primary_action": _build_strategic_primary_action(node, int(player_id), conn=conn),
         "mission_actions": _build_strategic_world_mission_actions(node, int(player_id), conn=conn),
         "hints": _build_strategic_hints(node, int(player_id), conn=conn),
+        "expansion_phase": _strategic_world_expansion_phase(wk, int(player_id), conn=conn),
     }
+
+
+def _strategic_world_expansion_phase(
+    world_key: str,
+    player_id: int,
+    *,
+    conn: sqlite3.Connection,
+) -> Dict[str, Any]:
+    from .expansion_phase import compact_expansion_phase_payload, resolve_expansion_phase
+
+    return compact_expansion_phase_payload(
+        resolve_expansion_phase(player_id=int(player_id), world_key=str(world_key), conn=conn)
+    )
 
 
 _FOREIGN_CC_FORBIDDEN_KEYS = frozenset(
@@ -1525,6 +1546,18 @@ def attach_command_centers_to_nodes(
             cc = build_strategic_world_command_center(node, int(player_id), conn=conn)
             if cc:
                 node["command_center"] = cc
+        elif kind == "expansion_site":
+            site_key = str(node.get("site_key") or "").strip()
+            if site_key:
+                from .expansion_phase import compact_expansion_phase_payload, resolve_expansion_phase
+
+                node["expansion_phase"] = compact_expansion_phase_payload(
+                    resolve_expansion_phase(
+                        player_id=int(player_id),
+                        world_key=site_key,
+                        conn=conn,
+                    )
+                )
         elif kind in _FOREIGN_NODE_KINDS:
             cc = build_foreign_colony_command_center(node, int(player_id), conn=conn)
             if cc:
