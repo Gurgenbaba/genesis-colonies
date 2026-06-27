@@ -142,7 +142,7 @@ def test_technical_data_orbital_shipyard_production(tech_db):
     current_row = next(r for r in data["levels"] if r["is_current"])
     assert current_row["level"] == 2
     assert current_row["effect_kind"] == "yard_production"
-    assert current_row["yard_batch_capacity"] == 9
+    assert current_row["yard_batch_capacity"] == 11
     assert current_row["parallel_light"] >= current_row["parallel_heavy"] >= 1
     assert data["table_layout"] == "yard"
 
@@ -166,7 +166,7 @@ def test_technical_data_defense_factory_unlock(tech_db):
     assert current_row["effect_value"] == 2
     sec = current_row.get("secondary_effect") or {}
     assert sec.get("effect_kind") == "yard_reference"
-    assert sec.get("effect_value") == 3
+    assert sec.get("effect_value") == 6
 
 
 def test_technical_data_api_route(tech_db, monkeypatch):

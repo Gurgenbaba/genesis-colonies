@@ -28,7 +28,7 @@ def test_build_defense_detail_card_with_requirements():
     assert card is not None
     assert card.get("requirements_items")
     prod = card.get("production") or {}
-    assert prod.get("yard_batch_capacity", 0) > prod.get("effective_batch_capacity", 0)
+    assert prod.get("yard_batch_capacity", 0) == prod.get("effective_batch_capacity", 0)
 
 
 def test_build_defense_detail_card_unknown():

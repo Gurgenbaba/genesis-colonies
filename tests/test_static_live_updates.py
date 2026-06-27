@@ -1003,14 +1003,12 @@ def test_main_js_gc632_production_stat_chips():
 
 
 def test_main_js_gc633_weighted_capacity_and_queue_clear():
-    """GC-633: per-unit effective_batch_capacity; hard clear when queue empty."""
+    """GC-633: yard batch capacity on cards; hard clear when queue empty."""
     src = _read("static/main.js")
-    assert "ship.effective_batch_capacity" in src.split("function applyShipyardShipCard")[1].split("function applyShipyardState")[0]
-    assert "unit.effective_batch_capacity" in src.split("function applyDefenseUnitCard")[1].split("async function refreshDefenseState")[0]
     assert "function clearAllProductionCardQueues(page)" in src
     shipyard_py = _read("game/shipyard.py")
     assert "def unit_batch_capacity(" in shipyard_py
-    assert "def unit_production_weight(" in shipyard_py
+    assert "def orbital_production_batch_capacity(" in shipyard_py
     defense_py = _read("game/defense.py")
     assert "_batch_capacity_for_defense" in defense_py
     assert "orbital_production_batch_capacity(shipyard_level)" not in defense_py.split("def progressive_units_to_deliver")[1].split("def list_defense_queue_rows")[0]

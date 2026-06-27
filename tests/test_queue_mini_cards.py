@@ -358,20 +358,20 @@ def test_mini_queue_includes_batch_size():
 
 
 def test_shipyard_batch_duration_at_yard_capacity():
-    """Yard L1 parallel slots (3^level) drive ceil(amount/cap) cycle count."""
+    """Yard parallel slots per cycle drive ceil(amount/cap) cycle count."""
     from game.shipyard import orbital_production_batch_capacity, production_job_duration_seconds
 
     cap = orbital_production_batch_capacity(1)
     unit = 100
-    assert cap == 3
-    assert production_job_duration_seconds(unit_seconds=unit, amount=3, batch_capacity=cap) == unit
-    assert production_job_duration_seconds(unit_seconds=unit, amount=4, batch_capacity=cap) == unit * 2
+    assert cap == 6
+    assert production_job_duration_seconds(unit_seconds=unit, amount=6, batch_capacity=cap) == unit
+    assert production_job_duration_seconds(unit_seconds=unit, amount=7, batch_capacity=cap) == unit * 2
 
 
-def test_shipyard_level2_batch_capacity_nine():
+def test_shipyard_level2_batch_capacity():
     from game.shipyard import orbital_production_batch_capacity
 
-    assert orbital_production_batch_capacity(2) == 9
+    assert orbital_production_batch_capacity(2) == 11
 
 
 def test_main_js_exposes_render_mini_queue_strip():

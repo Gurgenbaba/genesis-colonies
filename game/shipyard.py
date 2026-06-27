@@ -45,12 +45,14 @@ def shipyard_level_for_planet(planet_id: int, *, conn=None) -> int:
 
 
 def orbital_production_batch_capacity(shipyard_level: int) -> int:
-    """Parallel units delivered per production cycle (3^level; L1=3, L2=9, …)."""
+    """Parallel units built per production cycle (damped curve; not exponential)."""
     lvl = max(1, int(shipyard_level or 1))
-    return int(3**lvl)
+    return max(1, int(math.floor(1 + lvl * 4 + lvl**1.35)))
 
 
-PRODUCTION_WEIGHT_SECONDS_DIVISOR = 5
+def shipyard_batch_capacity(shipyard_level: int) -> int:
+    """Alias for yard parallel slots per build cycle."""
+    return orbital_production_batch_capacity(shipyard_level)
 
 
 def base_unit_seconds_for_ship(ship_key: str) -> int:
@@ -59,25 +61,10 @@ def base_unit_seconds_for_ship(ship_key: str) -> int:
     return max(1, int(spec.get("build_seconds") or 1))
 
 
-def unit_production_weight(base_unit_seconds: int) -> int:
-    """Heavier/slower units consume more of the yard's parallel capacity."""
-    base = max(1, int(base_unit_seconds))
-    return max(1, int(math.ceil(base / PRODUCTION_WEIGHT_SECONDS_DIVISOR)))
-
-
-def effective_unit_batch_capacity(base_capacity: int, base_unit_seconds: int) -> int:
-    """Per-unit parallel delivery count for one production cycle."""
-    base = max(1, int(base_capacity))
-    weight = unit_production_weight(base_unit_seconds)
-    return max(1, base // weight)
-
-
-def unit_batch_capacity(shipyard_level: int, base_unit_seconds: int) -> int:
-    """Effective parallel units per cycle for a unit type at this yard level."""
-    return effective_unit_batch_capacity(
-        orbital_production_batch_capacity(shipyard_level),
-        base_unit_seconds,
-    )
+def unit_batch_capacity(shipyard_level: int, base_unit_seconds: int | None = None) -> int:
+    """Parallel units per build cycle (same for all ship types at this yard level)."""
+    _ = base_unit_seconds  # legacy callers pass ship base seconds; capacity is yard-only
+    return orbital_production_batch_capacity(shipyard_level)
 
 
 PRODUCTION_TECH_EXAMPLE_BASE_SECONDS: Dict[str, int] = {
@@ -108,26 +95,29 @@ def production_metrics_at_yard(
     base = max(1, int(base_unit_seconds))
     unit = max(1, int(effective_unit_seconds if effective_unit_seconds is not None else base))
     yard_cap = orbital_production_batch_capacity(lvl)
-    eff_cap = unit_batch_capacity(lvl, base)
     reduction = (
         int(round((1 - BUILD_TIME_LEVEL_FACTOR ** (lvl - 1)) * 100)) if lvl > 1 else 0
     )
     samples: Dict[str, int] = {}
+    cycle_samples: Dict[str, int] = {}
     for amt in (1, 10, 100, 1000):
+        cycles = (amt + yard_cap - 1) // yard_cap
+        cycle_samples[str(amt)] = cycles
         samples[str(amt)] = production_job_duration_seconds(
-            unit_seconds=unit, amount=amt, batch_capacity=eff_cap
+            unit_seconds=unit, amount=amt, batch_capacity=yard_cap
         )
     parallel_examples: Dict[str, int] = {
-        tag: unit_batch_capacity(lvl, sec)
-        for tag, sec in PRODUCTION_TECH_EXAMPLE_BASE_SECONDS.items()
+        tag: yard_cap for tag in PRODUCTION_TECH_EXAMPLE_BASE_SECONDS
     }
     return {
         "cycle_seconds": unit,
         "base_unit_seconds": base,
         "yard_batch_capacity": yard_cap,
-        "effective_batch_capacity": eff_cap,
+        "effective_batch_capacity": yard_cap,
+        "batch_capacity": yard_cap,
         "build_time_reduction_percent": reduction,
         "order_duration_samples": samples,
+        "order_cycle_samples": cycle_samples,
         "parallel_examples": parallel_examples,
     }
 
@@ -157,8 +147,14 @@ def production_infer_total_units(
     unit = max(1, int(unit_seconds))
     cap = max(1, int(batch_capacity))
     batches = max(1, int(scheduled_duration) // unit)
-    inferred_total = batches * cap - (cap - 1)
-    return max(rem, inferred_total)
+    max_for_duration = batches * cap
+    min_for_duration = (batches - 1) * cap + 1
+    candidate = (batches - 1) * cap + rem
+    if min_for_duration <= candidate <= max_for_duration:
+        return candidate
+    if rem <= max_for_duration:
+        return rem
+    return max_for_duration
 
 
 def production_units_elapsed(

@@ -273,7 +273,7 @@ def test_api_shipyard_get_and_build(shipyard_db, monkeypatch):
     assert err['error'] == 'shipyard_level_too_low'
 
 def test_progressive_shipyard_delivery(shipyard_db):
-    """Multi-ship orders deliver in orbital-shipyard batches (L1 capacity = 3)."""
+    """Multi-ship orders deliver in orbital-shipyard batches (L1 capacity = 6)."""
     from game.fleet import get_planet_ships
     from game.shipyard import build_ship, unit_batch_capacity, base_unit_seconds_for_ship, unit_build_seconds
     from game.shipyard_queue import finish_due_shipyard_jobs_for_planet, list_shipyard_queue_rows, queue_count, shipyard_queue_for_client
@@ -312,7 +312,7 @@ def test_progressive_shipyard_delivery(shipyard_db):
     assert len(rows) == 1
     assert int(rows[0]['amount']) == qty - cap
     finish_due_shipyard_jobs_for_planet(conn, pid, uid, now=started + 2 * unit + 0.01)
-    assert get_planet_ships(pid, conn=conn).get('mule_courier', 0) == cap * 2
+    assert get_planet_ships(pid, conn=conn).get('mule_courier', 0) == qty
     finish_due_shipyard_jobs_for_planet(conn, pid, uid, now=finish + 1)
     assert get_planet_ships(pid, conn=conn).get('mule_courier', 0) == qty
     assert queue_count(pid, conn=conn) == 0
@@ -345,7 +345,7 @@ def test_progressive_ships_available_for_fleet_preview(shipyard_db, monkeypatch)
     assert rv.status_code == 200
     data = rv.get_json()
     assert data['ok'] is True
-    assert data['data']['ships'].get('mule_courier', 0) == 1
+    assert data['data']['ships'].get('mule_courier', 0) == 3
     assert data['data']['has_ships'] is True
 
 def test_shipyard_queue_client_includes_countdown_at(shipyard_db):
@@ -370,16 +370,77 @@ def test_shipyard_queue_client_includes_countdown_at(shipyard_db):
     assert head.get('next_countdown_at') >= 0
     conn.close()
 
-def test_weighted_unit_batch_capacity_differs_by_ship(shipyard_db):
-    """GC-633: faster/cheaper ships get higher effective parallel capacity."""
-    from game.shipyard import base_unit_seconds_for_ship, orbital_production_batch_capacity, unit_batch_capacity
+def test_production_job_duration_batching_capacity_one():
+    """Capacity 1: 10 ships × 30s = 300s."""
+    from game.shipyard import production_job_duration_seconds
+
+    assert production_job_duration_seconds(unit_seconds=30, amount=10, batch_capacity=1) == 300
+
+
+def test_production_job_duration_batching_capacity_nine():
+    """Capacity 9: parallel batches of 9 per 30s cycle."""
+    from game.shipyard import production_job_duration_seconds
+
+    unit = 30
+    cap = 9
+    assert production_job_duration_seconds(unit_seconds=unit, amount=9, batch_capacity=cap) == 30
+    assert production_job_duration_seconds(unit_seconds=unit, amount=10, batch_capacity=cap) == 60
+    assert production_job_duration_seconds(unit_seconds=unit, amount=18, batch_capacity=cap) == 60
+    assert production_job_duration_seconds(unit_seconds=unit, amount=19, batch_capacity=cap) == 90
+
+
+def test_orbital_production_batch_capacity_curve():
+    from game.shipyard import orbital_production_batch_capacity
+
+    assert orbital_production_batch_capacity(1) == 6
+    assert orbital_production_batch_capacity(2) == 11
+    assert orbital_production_batch_capacity(5) == 29
+    assert orbital_production_batch_capacity(10) == 63
+    assert orbital_production_batch_capacity(20) == 138
+    assert orbital_production_batch_capacity(30) == 219
+    assert orbital_production_batch_capacity(50) == 397
+
+
+def test_production_infer_total_units_with_batch_capacity():
+    from game.shipyard import production_infer_total_units
+
+    unit = 30
+    cap = 9
+    duration = 60  # 2 cycles
+    assert production_infer_total_units(
+        remaining=10, scheduled_duration=duration, unit_seconds=unit, batch_capacity=cap
+    ) == 10
+    assert production_infer_total_units(
+        remaining=1, scheduled_duration=duration, unit_seconds=unit, batch_capacity=cap
+    ) == 10
+    assert production_infer_total_units(
+        remaining=4, scheduled_duration=duration, unit_seconds=unit, batch_capacity=cap
+    ) == 13
+
+
+def test_million_units_not_instant_at_high_yard():
+    from game.shipyard import orbital_production_batch_capacity, production_job_duration_seconds
+
+    cap = orbital_production_batch_capacity(50)
+    unit = 30
+    total = production_job_duration_seconds(unit_seconds=unit, amount=1_000_000, batch_capacity=cap)
+    assert total > 3600
+    assert cap < 500
+
+
+def test_unit_batch_capacity_same_for_all_ships():
+    """Parallel capacity is yard-level only — no per-ship weight."""
+    from game.shipyard import (
+        base_unit_seconds_for_ship,
+        orbital_production_batch_capacity,
+        unit_batch_capacity,
+    )
+
     lvl = 5
     base = orbital_production_batch_capacity(lvl)
-    fast = unit_batch_capacity(lvl, base_unit_seconds_for_ship('veil_probe'))
-    slow = unit_batch_capacity(lvl, base_unit_seconds_for_ship('atlas_hauler'))
-    assert fast > slow
-    assert slow >= 1
-    assert fast <= base
+    fast = unit_batch_capacity(lvl, base_unit_seconds_for_ship("veil_probe"))
+    slow = unit_batch_capacity(lvl, base_unit_seconds_for_ship("atlas_hauler"))
+    assert fast == slow == base
 
 def test_shipyard_job_force_completes_at_finish_at(shipyard_db):
     """GC-633: jobs past finish_at deliver remaining units and leave the queue."""

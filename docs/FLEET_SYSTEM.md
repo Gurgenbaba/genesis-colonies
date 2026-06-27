@@ -67,13 +67,12 @@ Ergebnis: `max(1, …)` Sekunden — Funktionen `unit_build_seconds()` / `_effec
 
 | Konzept | Formel / Owner |
 |---------|----------------|
-| Yard-Kapazität pro Zyklus | `3^yard_level` Einheiten-Slots (`orbital_production_batch_capacity`) |
-| Gewicht pro Schiffstyp | `ceil(build_seconds / 5)` (`unit_production_weight`) |
-| Effektive Batch-Größe | `max(1, yard_capacity // weight)` |
-| Auftragsdauer | `ceil(amount / batch_capacity) × unit_seconds` (`production_job_duration_seconds`) |
+| Yard-Kapazität pro Zyklus | `max(1, floor(1 + level×4 + level^1.35))` — z. B. L1=6, L2=11, L5=29, L10=63, L50≈397 |
+| Einheiten pro Zyklus | = Yard-Kapazität (alle Schiffstypen gleich; kein Gewicht) |
+| Auftragsdauer | `ceil(amount / capacity) × unit_seconds` (`production_job_duration_seconds`) |
 
-Beispiel Speed ×1, Werft L1, `mule_courier` (`build_seconds = 120`):  
-`unit_seconds = 120`, effektive Batch-Größe = 1 (Gewicht `ceil(120/5) = 24` > Yard-Kapazität 3) → Auftrag über 10 Schiffe = `10 × 120 = 1200 s`.
+Beispiel Speed ×1, Werft L1 (Kapazität 6), `mule_courier` (`build_seconds = 120`):  
+`unit_seconds = 120` → Auftrag über 10 Schiffe = `ceil(10/6) × 120 = 240 s`.
 
 Kosten: `fleet_defs.build_cost` — **kein** Level-Multiplier (metal/crystal/fuel_cells direkt aus Def).
 

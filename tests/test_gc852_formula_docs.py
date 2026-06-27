@@ -76,8 +76,8 @@ class TestGc852ShipyardFormula:
         base = base_unit_seconds_for_ship("mule_courier")
         unit = unit_build_seconds("mule_courier", 1)
         cap = unit_batch_capacity(1, base)
-        assert cap == 1
-        assert production_job_duration_seconds(unit_seconds=unit, amount=10, batch_capacity=cap) == unit * 10
+        assert cap == 6
+        assert production_job_duration_seconds(unit_seconds=unit, amount=10, batch_capacity=cap) == unit * 2
 
 
 class TestGc852PlanetTechFormula:

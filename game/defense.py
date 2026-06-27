@@ -116,9 +116,10 @@ def base_unit_seconds_for_defense(defense_key: str) -> int:
 
 
 def _batch_capacity_for_defense(defense_key: str, shipyard_level: int) -> int:
-    from .shipyard import unit_batch_capacity
+    from .shipyard import orbital_production_batch_capacity
 
-    return unit_batch_capacity(shipyard_level, base_unit_seconds_for_defense(defense_key))
+    _ = defense_key
+    return orbital_production_batch_capacity(shipyard_level)
 
 
 def _production_shipyard_level(planet_id: int, *, conn) -> int:

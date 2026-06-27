@@ -17557,7 +17557,7 @@
       if (capEl) {
         capEl.textContent = tt(
           "shipyard_parallel_capacity",
-          "Parallel production: %(capacity)s units per cycle"
+          "Capacity per build cycle: %(capacity)s ships"
         ).replace("%(capacity)s", fmtNumber(data.production_batch_capacity));
       }
     }
@@ -17935,7 +17935,7 @@
       if (capEl) {
         capEl.textContent = tt(
           "defense_production_capacity",
-          "Production via orbital shipyard capacity: %(capacity)s per cycle"
+          "Production via orbital shipyard capacity: %(capacity)s ships per cycle"
         ).replace("%(capacity)s", fmtNumber(data.production_batch_capacity));
       }
     }

@@ -58,9 +58,10 @@ def _unit_build_seconds(
 
 
 def _batch_capacity_for_ship(ship_key: str, shipyard_level: int) -> int:
-    from .shipyard import base_unit_seconds_for_ship, unit_batch_capacity
+    from .shipyard import orbital_production_batch_capacity
 
-    return unit_batch_capacity(shipyard_level, base_unit_seconds_for_ship(ship_key))
+    _ = ship_key
+    return orbital_production_batch_capacity(shipyard_level)
 
 
 def _job_duration_seconds(
