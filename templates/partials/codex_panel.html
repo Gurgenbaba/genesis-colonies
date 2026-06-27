@@ -1,0 +1,50 @@
+<aside class="gc-special-window gc-special-window-codex" data-special-window="codex" hidden>
+  <header class="gc-special-head">
+    <span class="gc-special-title">{{ T('codex_title', 'Genesis Codex') }}</span>
+    <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-special-window-close="codex" aria-label="{{ T('close', 'Schließen') }}">✕</button>
+  </header>
+  <div class="gc-special-window-content gc-codex-root" data-codex-root>
+    <p class="gc-special-intro gc-codex-intro">{{ T('codex_intro', 'Wissen über dein Imperium — freigeschaltet, wenn es relevant wird.') }}</p>
+
+    <div class="gc-codex-list" data-codex-list>
+      {% for band in CODEX_PANEL.bands %}
+      <section class="gc-codex-band" data-codex-band="{{ band.band }}">
+        <h3 class="gc-codex-band-title">
+          {% if band.band != '—' %}
+            {{ T(band.label_key, 'Band ' ~ band.band) }}
+          {% else %}
+            {{ T('codex_related_title', 'Weitere Themen') }}
+          {% endif %}
+        </h3>
+        <ul class="gc-codex-band-list">
+          {% for art in band.articles %}
+          <li class="gc-codex-band-item{% if not art.unlocked %} is-locked{% endif %}" data-codex-id="{{ art.codex_id }}">
+            {% if art.unlocked %}
+            <button type="button" class="gc-codex-article-link" data-codex-article-open="{{ art.codex_id }}">
+              <span class="gc-codex-article-title">{{ T(art.title_key) }}</span>
+              {% if art.estimated_read %}
+              <span class="gc-codex-article-read gc-mono">{{ art.estimated_read }}</span>
+              {% endif %}
+            </button>
+            {% else %}
+            <button type="button" class="gc-codex-article-link gc-codex-article-link--locked" data-codex-article-open="{{ art.codex_id }}">
+              <span class="gc-codex-article-title">{{ T(art.title_key) }}</span>
+              <span class="gc-codex-locked-label">{{ T('codex_locked', 'Gesperrt') }}</span>
+              {% if art.teaser_key %}
+              <span class="gc-codex-teaser hint">{{ T(art.teaser_key) }}</span>
+              {% endif %}
+            </button>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+      </section>
+      {% endfor %}
+    </div>
+
+    <article class="gc-codex-article-view" data-codex-article-view hidden aria-hidden="true">
+      <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs gc-codex-back" data-codex-back>{{ T('back', 'Zurück') }}</button>
+      <div class="gc-codex-article-body" data-codex-article-body></div>
+    </article>
+  </div>
+</aside>

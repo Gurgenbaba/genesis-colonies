@@ -39,9 +39,15 @@
   {% endif %}
 
   <header class="defense-headline section-header">
-    <h2 class="section-title">{{ T("defense_title") }}</h2>
+    <div class="section-header-row">
+      <h2 class="section-title">{{ T("defense_title") }}</h2>
+      {% if CODEX_PRIMARY %}
+      {% include "partials/codex_context_btn.html" %}
+      {% endif %}
+    </div>
     <p class="section-hint hint">{{ T("defense_hint") }}</p>
   </header>
+  {% include "partials/codex_page_surfaces.html" %}
 
   {% if df.ready is defined and df.ready == false %}
   <section class="gc-panel defense-panel">

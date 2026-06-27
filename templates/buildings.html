@@ -216,12 +216,18 @@
 <div class="gc-page buildings-wrapper" data-buildings-page data-active-building-tab="{{ active_tab }}" data-planet-id="{{ (active_planet_id if active_planet_id is defined else (HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET else 0))|int }}">
 
   <header class="buildings-headline section-header">
-    <h2 class="section-title">{{ T("buildings_title") }}</h2>
+    <div class="section-header-row">
+      <h2 class="section-title">{{ T("buildings_title") }}</h2>
+      {% if CODEX_PRIMARY %}
+      {% include "partials/codex_context_btn.html" %}
+      {% endif %}
+    </div>
 
     <p class="section-hint hint">
       {{ T("buildings_hint") }}
     </p>
   </header>
+  {% include "partials/codex_page_surfaces.html" %}
 
   <div class="buildings-shell gc-panel">
 

@@ -331,3 +331,81 @@ python -m pytest tests/test_defense_detail_modal.py tests/test_ranking.py tests/
 - [EFFECTS.md](EFFECTS.md) — Tech-Effekte (combat modifiers active)
 - [ROADMAP.md](ROADMAP.md) — Phase 4 / EPIC-08
 - [ARCHITECTURE.md](ARCHITECTURE.md) — Modul-Übersicht
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: defense
+band: III
+difficulty: intermediate
+estimated_read: 4 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+routes:
+  - defense_view
+related_codex:
+  - combat
+  - fleet
+  - buildings
+  - research
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: building
+  building: defense_factory
+teaser_key: codex_unlock_defense_teaser
+---
+```
+
+## Quick Help
+
+Planetare **Verteidigung** schützt die aktive Welt: stationäre Geschütze und Barrieren aus der Verteidigungsfabrik — nicht Flotten im Orbit.
+
+## Summary
+
+Defense verwaltet **stationäre Einheiten pro Kolonie**: Bau über die Verteidigungsfabrik und Defense-Queue, Bestand am Planeten. Live-UI unter `/defense`. Bei **Angriff** kämpfen Hangar-Schiffe und stationäre Verteidigung gemeinsam. Empire-weiter **Defense Score** fürs Ranking.
+
+## Why
+
+Flotten allein reichen nicht — Kolonien brauchen lokale Abwehr. Defense trennt **stationär** (Planet) von **mobil** (Fleet) und speist direkt in Combat und Spy-Intel (ab höherer Spionage-Stufe).
+
+## How it works
+
+- Baue **Verteidigungsfabrik** auf der zu schützenden Welt.
+- Öffne **Defense** — Einheiten bauen (Queue wie Werft), Requirements aus Gebäuden und Account-Forschung.
+- Einheiten: Türme und Barrieren (z. B. Sentinel, Plasma, Flak, Orbital Shield) — Freischaltung über Fabrik-Stufe und Techs.
+- Bestand ist **planetengebunden** — wie `planet_ships`.
+- Planetwechsel im Header wechselt die Defense-Ansicht.
+- Kampfwerte in Defense-Detail / Technische Daten — nicht Codex.
+
+## Related Systems
+
+- combat
+- fleet
+- buildings
+- research
+- planet_scope
+
+## Commander Tips
+
+- Outposts und Mining-Kolonien nicht ohne Defense im PvP-Raum lassen.
+- `shield_tech` und `weapon_tech` stärken auch Verteidigung in Combat.
+- Defense-Queue parallel zur Werft auf derselben Welt planen.
+
+## FAQ
+
+**Defense vs. Flotte am Planeten?**
+Defense = stationär am Planeten. Hangar-Schiffe sind mobil und fliegen mit — beide kämpfen bei Angriff.
+
+**Warum kann ich nichts bauen?**
+Fehlende Fabrik-Stufe, Research oder Ressourcen auf der aktiven Welt.
+
+## Discord Summary
+
+**Verteidigung — stationär pro Welt**
+
+Verteidigungsfabrik + Queue + Bestand pro Kolonie. Kämpft bei Angriff mit Hangar. Defense Score im Ranking. Planet Scope beachten.

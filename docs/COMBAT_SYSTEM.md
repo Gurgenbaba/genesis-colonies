@@ -120,3 +120,82 @@ python -m pytest tests/test_ranking.py::test_combat_destruction_increases_rankin
 - [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md) — defense stock, spy intel
 - [EFFECTS.md](EFFECTS.md) — combat tech modifiers
 - [GALAXY_SYSTEM.md](GALAXY_SYSTEM.md) — debris display
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: combat
+band: III
+difficulty: intermediate
+estimated_read: 4 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+routes:
+  - fleet_view
+related_codex:
+  - fleet
+  - defense
+  - research
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: player_flag
+  flag: first_fleet_sent
+teaser_key: codex_unlock_combat_teaser
+---
+```
+
+## Quick Help
+
+Kampf entsteht, wenn eine **Angriff**-Flotte an einer verteidigten Welt ankommt: Flotte vs. Hangar und planetare Verteidigung — Berichte für beide Seiten.
+
+## Summary
+
+Combat ist **rundenbasiert** (bis zu sechs Runden): Angreifer-Flotte gegen Verteidiger-Hangar plus **stationäre Verteidigung** am Ziel-Planeten. Ergebnis: Verluste, Trümmerfeld, optional Plunder für den Sieger, Kampfberichte in Nachrichten. Forschung (`weapon_tech`, `armor_tech`, `shield_tech`) modifiziert Kampfwerte.
+
+## Why
+
+PvP und Risiko auf Kolonien brauchen klare, serverseitige Resolution — kein Client-Math. Kampf koppelt Fleet, Defense, Research und Ranking (militärischer Score).
+
+## How it works
+
+- Sende **attack**-Mission von der Fleet-Seite gegen fremde oder eigene Testziele (PvP-Regeln beachten).
+- Wähle Ziel per Quick-Target, Koordinaten oder Galaxie-Link — Server berechnet Flugzeit und Brennzellen.
+- Bei Ankunft: Simulation → Verluste auf Flotte, `planet_ships`, `planet_defense`.
+- **Sieger Angreifer:** Plunder bis Frachtraum der zurückkehrenden Flotte; Gutschrift bei Rückkehr (nicht sofort am Ziel).
+- **Trümmerfeld** am Zielkoordinaten — sichtbar in Galaxie-Systemansicht; `recycle`-Mission kann bergen.
+- Beide Spieler erhalten **Kampfberichte** (strukturierte Inbox) mit Runden, Verlusten und Ergebnis.
+- **Verteidigung** (stationär) und **Hangar-Schiffe** kämpfen gemeinsam — nur Hangar reicht nicht.
+- Kampf-Techs (`weapon_tech`, `armor_tech`, `shield_tech`) modifizieren Werte imperiumsweit.
+- Kampfformeln und Einzelwerte: nicht im Codex — Schiff/Defense-Detail und Technische Daten.
+
+## Related Systems
+
+- fleet
+- defense
+- research
+- galaxy
+
+## Commander Tips
+
+- Kampf-Techs vor dem ersten Angriff — sie wirken auf die gesamte Flotte bzw. Verteidigung.
+- Verteidigung am Planeten zählt mit — nicht nur Schiffe im Hangar.
+- Plunder ist begrenzt durch Rückkehr-Cargo, nicht durch unendlichen Raub.
+
+## FAQ
+
+**Wann sehe ich den Kampf-Guide?**
+Nach der ersten gesendeten Flotte (Unlock) — oder sobald Angriff relevant wird.
+
+**Sofortiger Sieg ohne Runden?**
+Wenn eine Seite keine Kampfeinheiten hat — technisch 0 Runden.
+
+## Discord Summary
+
+**Kampf — Angriff-Flotte vs. Planet**
+
+Rundenbasierter Resolver, max. 6 Runden. Verluste, Trümmer, Plunder für Sieger. Berichte an beide Seiten. Research-Modifikatoren. Trümmer in Galaxie sichtbar.

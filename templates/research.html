@@ -315,12 +315,16 @@
         🔬 {{ T("research_lab_level") }}:
         <span class="lab-level-highlight">{{ lab_level|fmt_int }}</span>
       </span>
+      {% if CODEX_PRIMARY %}
+      {% include "partials/codex_context_btn.html" %}
+      {% endif %}
     </div>
 
     <p class="section-hint hint">
       {{ T("research_hint_intro") }}
     </p>
   </header>
+  {% include "partials/codex_page_surfaces.html" %}
 
   <section class="gc-panel research-shell">
 

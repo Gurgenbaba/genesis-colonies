@@ -722,6 +722,19 @@
     })();
   </script>
 
+  <script id="gc-codex-client" type="application/json">{{ CODEX_CLIENT | default({'articles': {}}) | tojson }}</script>
+  <script>
+    (function () {
+      try {
+        const el = document.getElementById('gc-codex-client');
+        window.GC_CODEX_CLIENT = el ? JSON.parse(el.textContent) : { articles: {} };
+      } catch (e) {
+        console.error('GC_CODEX_CLIENT parse error', e);
+        window.GC_CODEX_CLIENT = { articles: {} };
+      }
+    })();
+  </script>
+
   <script src="{{ url_for('static', filename='main.js') }}?v={{ GC_ASSET_VERSION }}"></script>
   {% if not SIMPLE_LAYOUT and AUTH_USER and AUTH_USER.id %}
   <script src="{{ url_for('static', filename='js/chat.js') }}?v={{ GC_ASSET_VERSION }}"></script>

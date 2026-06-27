@@ -288,6 +288,9 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | Galactic Diplomacy | `game/galactic_diplomacy/` | [GALACTIC_DIPLOMACY.md](GALACTIC_DIPLOMACY.md) |
 | Referrals | `game/referrals.py` | GC-703 |
 | Ranking scores / ranks (batch) | `game/ranking_worker.py` → `game/ranking.py` | `POST /api/internal/cron/ranking` (HTTP cron on web service); local: `scripts/run_ranking_worker.py` |
+| Genesis Codex (loader, unlocks) | `game/codex.py` | [GC-950_KNOWLEDGE_PIPELINE.md](GC-950_KNOWLEDGE_PIPELINE.md) |
+| Knowledge generator (Player Blocks → catalog/locales) | `scripts/generate_knowledge.py` | [GC-950_KNOWLEDGE_PIPELINE.md](GC-950_KNOWLEDGE_PIPELINE.md) |
+| Codex UI surfaces | `templates/partials/codex_*.html`, `special_panel.html` | [GC-950_KNOWLEDGE_PIPELINE.md](GC-950_KNOWLEDGE_PIPELINE.md) |
 
 **Ticket-Check:** Domäne identifizieren → nur Owner-Modul (+ Routes/`app.py`) ändern → kein zweites Modul für dieselbe Wahrheit.
 

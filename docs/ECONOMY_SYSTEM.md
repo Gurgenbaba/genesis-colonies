@@ -307,3 +307,150 @@ Schiffsbau zieht metal, crystal **und fuel_cells** ab (siehe [FLEET_SYSTEM.md](F
 ```bash
 python -m pytest tests/test_effects.py tests/test_exchange.py tests/test_fuel_exchange.py tests/test_scrapyard.py tests/test_fuel_cells_resource_bar.py tests/test_trader_hub.py tests/test_auction_house.py tests/test_vote_rewards.py -v
 ```
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: resources
+band: I
+difficulty: beginner
+estimated_read: 3 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+routes:
+  - overview
+  - buildings_view
+related_codex:
+  - buildings
+  - research
+  - trader
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: always
+---
+```
+
+## Quick Help
+
+Ferronit, Crytite und Brennzellen treiben dein Imperium — plus **Energie**, die deine Produktion skaliert. Alles planetengebunden, mit Lager-Caps pro Welt.
+
+## Summary
+
+Die Economy dreht um vier sichtbare Ressourcen: **Ferronit** (Primärerz), **Crytite** (Kristallerz), **Brennzellen** (Schiffstreibstoff) und **Energie** (kein Lager — Verhältnis Erzeugung zu Verbrauch). Produktion tickt serverseitig; volle Depots stoppen Zuwachs.
+
+## Why
+
+Ressourcen sind der Druck im Alltag — aber in Genesis Colonies nicht das alleinige Ziel. Sie **befeuern** Bau, Forschung, Flotten und Expansion. Energie und Lager sind die häufigsten Engpässe, nicht „nur mehr Minen“.
+
+## How it works
+
+- **Ferronit / Crytite:** Minen auf der aktiven Welt; Galaxie-Slot und Klima modifizieren Produktion.
+- **Brennzellen:** Brennzellen-Produktion; Lager nur mit **Brennzellen-Depot** (nach entsprechender Infrastruktur).
+- **Energie:** Solarkraftwerk liefert; Minen verbrauchen — bei Mangel drosselt `energy_ratio` alle Produktion.
+- **Storage:** Basis-Cap ohne Depot; `metal_storage`, `crystal_storage`, `fuel_storage` erhöhen Limits; `storage_tech` und Terraformer multiplizieren.
+- Trader Hub und Schrottplatz können **über Cap** gutschreiben — Overflow bleibt erhalten.
+- Zahlen und ROI: **Technische Daten** bei Gebäuden — nicht hier.
+
+## Related Systems
+
+- buildings
+- research
+- trader
+- fleet
+
+## Commander Tips
+
+- Erst Energie stabilisieren, dann Output pushen.
+- Speicher vor großen Offline-Phasen prüfen.
+- Brennzellen ohne Depot produzieren nicht angesammelt — Depot planen.
+
+## FAQ
+
+**Warum produziere ich nichts mehr?**
+Volles Lager oder Energie unter 100 % effektive Leistung.
+
+**Deuterium?**
+Genesis nutzt **Brennzellen** — kein Deuterium.
+
+## Discord Summary
+
+**Ressourcen — Ferronit, Crytite, Brennzellen, Energie**
+
+Planetengebunden, mit Lager-Caps. Energie skaliert Minen-Output. Ferronit/Crytite für Bau und Forschung; Brennzellen für Flotten. Trader kann über Cap gutschreiben.
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: trader
+band: III
+difficulty: intermediate
+estimated_read: 3 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+routes:
+  - trader_hub_view
+related_codex:
+  - resources
+  - buildings
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: route_visit
+  route: trader_hub_view
+teaser_key: codex_unlock_trader_teaser
+---
+```
+
+## Quick Help
+
+Der **Trader Hub** tauscht Ressourcen und verwertet Überschuss — Unified Resource Trader und Schrottplatz, pro Spieler Tageslimit, Salden der **aktiven Welt**.
+
+## Summary
+
+Unter `/trader-hub` findest du den **Unified Resource Trader** (Ressourcen tauschen) und den **Schrottplatz** (Recycling). Beide nutzen den Kontext-Planeten für Salden; das **Tageslimit** ist account-weit.
+
+## Why
+
+Nicht jede Welt produziert alles optimal — der Hub gleicht Ferronit/Crytite/Brennzellen aus, ohne neue Mechanik zu erfinden. Schrottplatz verwertet Überhang, wenn Lager oder Produktion unbalanced sind.
+
+## How it works
+
+- Navigiere zum **Trader Hub** (Wirtschaft in der Sidebar) — Route `/trader-hub`.
+- Salden und Limits beziehen sich auf die **aktive Welt**; das **Tageslimit** gilt pro Commander account-weit.
+- **Unified Resource Trader:** Tausch zwischen Ferronit, Crytite und Brennzellen — Raten und Restlimit zeigt die UI live.
+- **Schrottplatz:** Recycling-Panel für definierte Überschuss-Ressourcen, wenn Lager voll oder Produktion unausgewogen.
+- Tageslimit basiert auf Empire-Produktion (Formel in der UI) — kein Client-Rechnen.
+- Weitere Wirtschafts-Surfaces (**Auktionshaus**, **Inventar**) sind separate Routen — nicht im Trader-Panel vermischt.
+- Tausch und Recycling ziehen Ressourcen vom Kontext-Planeten ab; Gutschrift ebenfalls dort (Overflow-Regeln wie bei Produktion).
+- Limits und aktuelle Raten zeigt die UI — keine Client-Berechnung.
+
+## Related Systems
+
+- resources
+- buildings
+- fleet
+
+## Commander Tips
+
+- Hub nutzen, wenn ein Rohstoff staut und ein anderer fehlt — nicht nur Minen stapeln.
+- Tageslimit im Kopf behalten; große Umbauten vorher mit Lager planen.
+
+## FAQ
+
+**Warum kann ich nicht unbegrenzt tauschen?**
+Tageslimit pro Commander — Anti-Exploit und Wirtschafts-Rhythmus.
+
+## Discord Summary
+
+**Trader Hub — Tausch und Schrottplatz**
+
+`/trader-hub`: Unified Resource Trader + Schrottplatz. Salden der aktiven Welt, Tageslimit pro Spieler. Ausgleich zwischen Ferronit, Crytite und Brennzellen.

@@ -143,3 +143,81 @@ Siehe [EFFECTS.md](EFFECTS.md).
 ```bash
 python -m pytest tests/test_race_conditions.py tests/test_game_state_live.py tests/test_effects.py tests/test_gc821_economy_rebalance.py tests/test_gc831_queue_refund.py -v -k "build"
 ```
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: buildings
+band: I
+difficulty: beginner
+estimated_read: 4 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+  - commander_tips
+routes:
+  - buildings_view
+related_codex:
+  - resources
+  - research
+  - fleet
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: always
+---
+```
+
+## Quick Help
+
+Gebäude sind der Motor unterhalb deiner Planet Evolution: Ferronit-Minen, Crytite-Extraktoren, Energie, Lager und später Werft und Verteidigung — alles pro **aktiver Welt**.
+
+## Summary
+
+Das Gebäude-System verwaltet **Infrastruktur pro Welt**: Stufen pro Gebäude, sequenzielle **Bau-Queue**, Kosten in Ferronit und Crytite vom aktiven Planeten. Tabs gliedern Ressourcen, Forschung, Militär und Imperiums-Infrastruktur.
+
+## Why
+
+Ohne Gebäude keine Produktion, keine Forschungslabore, keine Werft. In Genesis Colonies sind Gebäude nicht der End-Fortschritt — sie **befähigen** Planet Evolution, Expansion und Flotten. Energie und Lager verhindern, dass Produktion stillsteht.
+
+## How it works
+
+- Öffne **Gebäude** auf der aktiven Welt; Upgrades starten Jobs in der Bau-Queue.
+- **Ressourcen-Tab:** Ferronit-Mine, Crytite-Extraktor, Solarkraftwerk, Brennzellen-Produktion, Depots.
+- **Forschung-Tab:** Forschungslabor und Akademie — Voraussetzung für Account-Forschung.
+- **Militär-Tab:** Orbitalwerft (Schiffsbau), Verteidigungsfabrik, Radar.
+- **Infrastruktur:** Kommandozentrale, Schildgenerator, Terraformer, Nexus-Gebäude für Endgame-Caps.
+- Viele Gebäude haben **Requirements** — Reihenfolge beachten (z. B. Werft nach Kommandozentrale).
+- Technische Daten (ROI, Stufen) über den **Technische Daten**-Button — nicht im Codex.
+
+## Related Systems
+
+- resources
+- research
+- fleet
+- defense
+- planet_evolution
+
+## Commander Tips
+
+- Energie im Plus halten, bevor du Minen massiv hochziehst.
+- Speicher früh ausbauen — volles Lager stoppt Produktion.
+- Kurze Bauzeiten als Lückenfüller vor Offline-Phasen; lange Jobs für Abwesenheit.
+- Queue-Limit beachten — plan die gesamte Queue, nicht nur den ersten Slot.
+
+## FAQ
+
+**Warum sinkt meine Produktion?**
+Meist Energiemangel oder volles Ferronit-/Crytite-Lager.
+
+**Wo baue ich die Werft?**
+Orbitalwerft auf der Welt, von der du Flotten senden willst — planetengebunden.
+
+## Discord Summary
+
+**Gebäude — Infrastruktur pro Welt**
+
+Gebäude produzieren Ressourcen, schalten Forschung und Werft frei und laufen über die Bau-Queue der **aktiven Welt**. Motor für Evolution und Expansion — nicht der Haupt-Fortschrittsbalken allein. ROI und Formeln: Technische Daten im UI.

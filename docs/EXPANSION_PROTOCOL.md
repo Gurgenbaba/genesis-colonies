@@ -501,3 +501,107 @@ Dieser Satz ist der Prüfstein für jede künftige Entscheidung zu Expansion, Ko
 - [GC-582_DYNAMIC_COLONIZATION.md](GC-582_DYNAMIC_COLONIZATION.md) — World Claims
 - [FLEET_SYSTEM.md](FLEET_SYSTEM.md) — Seed Ark Transport
 - [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) — GC-000 Regeln 15–17
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: expansion
+band: II
+difficulty: beginner
+estimated_read: 5 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+  - commander_tips
+  - discord
+routes:
+  - empire_view
+  - galaxy_view
+related_codex:
+  - planet_evolution
+  - fleet
+  - galaxy
+  - genesis_ark
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: homeworld_level
+  value: 5
+  site_key: frontier_ix
+teaser_key: codex_unlock_expansion_teaser
+---
+```
+
+## Quick Help
+
+Expansion ist kein Planet-Slot-Freischalten. **Welten entstehen** — von der Expansion Site über Seed Ark und Frontier Outpost bis zur vollwertigen Kolonie.
+
+## Summary
+
+Das **Expansion Protocol** beschreibt, wie unbekannter Raum Teil deines Imperiums wird: **Expansion Sites** auf der Command Map, Claims, Seed-Ark-Transport, **Frontier Outpost**, Meilenstein-Etablierung, dann **Kolonie** und optional **Strategic World**. Eine **Kolonie** im Spielersinn existiert erst nach abgeschlossener Etablierung — davor ist es ein Outpost, keine „halbe Kolonie“.
+
+## Why
+
+Genesis Colonies vermeidet Tabellenverwaltung („9/9 Planeten“). Expansion ist narrativ und mechanisch ein **Prozess**: du verwandelst Orte mit Versprechen und Risiko in Charakter-Welten mit eigener DNA — nicht sofort volle Kopien der Genesis Ark.
+
+## How it works
+
+**Lifecycle (Spieler-sichtbar):**
+
+1. **Expansion Site** — auf Command Map sichtbar, noch nicht beansprucht.
+2. **Claimed Site** — für dich reserviert, Vorbereitung läuft.
+3. **Seed Ark en route** — Flotte transportiert Seed Ark.
+4. **Frontier Outpost** — erste Produktion, stark eingeschränkt; **noch keine Kolonie**.
+5. **Kolonie** — alle Etablierungs-Meilensteine erfüllt; volle Spielbarkeit, DNA enthüllt.
+6. **Strategic World** — Planet Evolution abgeschlossen, Spezialisierung gewählt.
+
+**Etablierung (Outpost → Kolonie)** — alle vier Meilensteine, kein fester Warte-Timer allein:
+
+- Habitat errichtet
+- Energie stabil
+- Kommunikationszentrum
+- Erste Bevölkerung
+
+**Gates (erste Expansion):** Genesis Ark **Entwicklungsstufe 5** und Account-Tech **Interstellar Expansion** Stufe 1 — gelesen von der Ark, nicht vom Outpost.
+
+**Genesis Ark** bleibt unersetzlich: Account-Forschung, Expansion Protocol Launch, Directives — nicht auf Kolonien verlagert.
+
+**Praktischer Ablauf (erste Expansion):**
+
+1. Ark auf **Entwicklungsstufe 5** + **Interstellar Expansion** Stufe 1.
+2. **Command Map** (`/galaxy`, Weltkarte) — Expansion Site (z. B. Frontier IX) sichtbar.
+3. Site **claimen**, **Seed Ark** auf der Ark/Werft bereitstellen.
+4. **Fleet** → Kolonisieren-Mission mit Seed Ark zur Site senden.
+5. **Frontier Outpost** entsteht — Etablierungs-Checkliste auf Outpost und Command Map abarbeiten.
+6. Nach allen Meilensteinen: volle **Kolonie** mit DNA und voller Spieltiefe.
+
+## Related Systems
+
+- planet_evolution
+- fleet
+- galaxy
+- genesis_ark
+- planet_scope
+
+## Commander Tips
+
+- „Neue Welt“ ≠ sofort Kolonie — Outpost-Etablierung aktiv spielen.
+- Checkliste auf Outpost und Command Map beachten.
+- Expansion Sites erscheinen mit Ark-Entwicklungsstufe — Evolution vor Slot-Denken.
+
+## FAQ
+
+**Warum ist meine neue Welt noch keine Kolonie?**
+Die Seed Ark gründet zuerst einen **Frontier Outpost**. Erst wenn Habitat, Energie, Kommunikation und Bevölkerung stehen, wird es eine Kolonie.
+
+**Planet-Slots?**
+Kein OGame-Slot-Limit in der Copy — Reichweite und Gates des Imperiums.
+
+## Discord Summary
+
+**Expansion Protocol — Welten entstehen**
+
+Lifecycle: Site → Claim → Seed Ark → Outpost → Kolonie → Strategic World. Outpost ist keine Kolonie. Etablierung über vier Meilensteine. Gates an Ark-Entwicklungsstufe + Interstellar Expansion. Ark bleibt Hauptsitz.

@@ -500,6 +500,35 @@ def inject_globals():
     except Exception:
         auth_discord_linked = False
 
+    codex_panel: dict[str, Any] = {"bands": []}
+    codex_quick_help: dict[str, str] | None = None
+    codex_commander_tip: dict[str, str] | None = None
+    codex_primary: str | None = None
+    codex_client: dict[str, Any] = {"articles": {}}
+    try:
+        if not simple_layout and auth_user and auth_user.get("id"):
+            from flask import request
+
+            from game.codex import build_codex_template_context
+
+            _codex_conn = db()
+            try:
+                _codex_ctx = build_codex_template_context(
+                    int(auth_user["id"]),
+                    str(request.endpoint or ""),
+                    conn=_codex_conn,
+                )
+                codex_panel = _codex_ctx["CODEX_PANEL"]
+                codex_quick_help = _codex_ctx["CODEX_QUICK_HELP"]
+                codex_commander_tip = _codex_ctx["CODEX_COMMANDER_TIP"]
+                codex_primary = _codex_ctx["CODEX_PRIMARY"]
+                codex_client = _codex_ctx["CODEX_CLIENT"]
+                _codex_conn.commit()
+            finally:
+                _codex_conn.close()
+    except Exception:
+        pass
+
     return dict(
         T=T,
         T_DATA=get_locale_dict(active_locale),
@@ -551,6 +580,12 @@ def inject_globals():
         DISCORD_OAUTH_ENABLED=discord_oauth_enabled,
         DISCORD_INVITE_URL=discord_invite_url,
         AUTH_DISCORD_LINKED=auth_discord_linked,
+
+        CODEX_PANEL=codex_panel,
+        CODEX_QUICK_HELP=codex_quick_help,
+        CODEX_COMMANDER_TIP=codex_commander_tip,
+        CODEX_PRIMARY=codex_primary,
+        CODEX_CLIENT=codex_client,
     )
 
 
@@ -5599,6 +5634,13 @@ def _payload_from_live_context(
             payload["planet_teaser"] = {"visible": False}
         except Exception:
             payload["planet_teaser"] = {"visible": False}
+
+    try:
+        from game.codex import codex_for_game_state
+
+        payload["codex"] = codex_for_game_state(user_id, conn=conn)
+    except Exception:
+        payload["codex"] = {}
 
     if own_conn and conn is not None:
         conn.close()

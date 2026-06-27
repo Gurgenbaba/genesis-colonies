@@ -16,6 +16,9 @@
           <span class="gc-panel-subtitle hint">{{ T("trader_hub_subtitle", "Ressourcen tauschen · Schiffe recyceln") }}</span>
         </div>
         <div class="gc-panel-head-right trader-hub-status-chips">
+          {% if CODEX_PRIMARY %}
+          {% include "partials/codex_context_btn.html" %}
+          {% endif %}
           {% if active_planet and active_planet.name %}
           <span class="gc-panel-tag trader-hub-status-chip" title="{{ T('header_planet_label', 'Planet') }}">
             {{ active_planet.name }}
@@ -47,6 +50,7 @@
         </div>
       </div>
     </section>
+    {% include "partials/codex_page_surfaces.html" %}
 
     <hr class="trader-hub-divider gc-prog-divider">
 

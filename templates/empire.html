@@ -14,9 +14,13 @@
   <header class="section-header empire-header">
     <div class="section-header-row">
       <h1 class="section-title">{{ T("empire_title", "Empire") }}</h1>
+      {% if CODEX_PRIMARY %}
+      {% include "partials/codex_context_btn.html" %}
+      {% endif %}
     </div>
     <p class="section-hint hint">{{ T("empire_hint", "Gesamtübersicht deines Imperiums.") }}</p>
   </header>
+  {% include "partials/codex_page_surfaces.html" %}
 
   <section class="gc-panel empire-summary" aria-label="{{ T('empire_summary_label', 'Empire-Übersicht') }}">
     <dl class="overview-meta-grid empire-meta-grid">

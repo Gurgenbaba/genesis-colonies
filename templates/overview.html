@@ -43,11 +43,20 @@
       <h1 class="section-title">
         {{ T("overview_command_title", "Kommandostand") }}
       </h1>
+      {% if CODEX_PRIMARY %}
+      {% include "partials/codex_context_btn.html" %}
+      {% endif %}
     </div>
     <p class="section-hint hint">
       {{ T("overview_command_hint", "Planet-Status und laufende Aktionen auf einen Blick.") }}
     </p>
   </header>
+  {% include "partials/codex_page_surfaces.html" %}
+  {% if CODEX_COMMANDER_TIP %}
+  <div class="gc-codex-commander-tip-mobile">
+    {% include "partials/codex_commander_tip.html" %}
+  </div>
+  {% endif %}
 
   <section class="gc-panel overview-hero overview-hero--themed gc-planet-hero gc-planet-theme--{{ hero_theme_key }} gc-planet-theme-group--{{ hero_theme_group }} overview-hero--effect-{{ hero_effect }}"
            id="overview-planet-hero"

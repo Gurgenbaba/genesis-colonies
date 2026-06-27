@@ -327,3 +327,78 @@ Planet Evolution ist das zentrale Fortschrittssystem. Die Command Map ist seine 
 - [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) — GC-000, Regeln 15–17
 - [ROADMAP.md](ROADMAP.md) — Phase 9
 - [EPICS.md](EPICS.md) — EPIC-15
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: genesis_ark
+band: I
+difficulty: beginner
+estimated_read: 3 min
+surfaces:
+  - quick_help
+  - codex
+  - commander_tips
+routes:
+  - overview
+related_codex:
+  - planet_evolution
+  - expansion
+  - buildings
+  - research
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: always
+---
+```
+
+## Quick Help
+
+Die Genesis Ark ist dein Hauptsitz — das Herz deines Imperiums. Hier entwickelst du dein Sternenreich; Gebäude, Forschung und Planet Evolution starten von dieser Welt.
+
+## Summary
+
+Jeder Commander besitzt eine **Genesis Ark** als wichtigste Welt des Imperiums. Sie ist nicht „nur ein Planet“ — sie ist der Sitz deiner Regierung, deiner Account-Forschung, deiner Werft und deiner Planet Evolution. Neue Welten erweitern dein Reich; keine von ihnen ersetzt die Ark.
+
+## Why
+
+Genesis Colonies ist kein Spiel über das Verwalten vieler gleichwertiger Planet-Slots. Es ist ein Spiel über die **Entwicklung eines Sternenreichs**. Die Genesis Ark bleibt der feste Mittelpunkt: Expansion, Kolonien und Spezialisierungen wachsen um sie herum. Die Entwicklungsstufe der Ark entscheidet mit, welche Regionen und Expansion Sites du erreichen kannst.
+
+## How it works
+
+- Nach der Registrierung landest du auf der **Overview** — dein Imperium im Überblick.
+- Die Genesis Ark ist deine **Homeworld** — dein fester Hauptsitz im Imperium.
+- Auf der Ark baust du zuerst **Produktion** (Ferronit, Crytite, Energie), startest **Account-Forschung** und später die **Orbitalwerft**.
+- **Planet Evolution** auf der Ark schaltet neue Regionen und Expansion Sites frei — nicht einzelne Gebäudelevel als Hauptfortschritt.
+- **Imperial Directives**, Diplomatie und Ascension bleiben an der Ark bzw. am Imperium — nicht an Außenposten.
+
+## Related Systems
+
+- planet_evolution
+- expansion
+- buildings
+- research
+- galaxy
+
+## Commander Tips
+
+- Denke in Imperium, nicht in „Mine 17 → 18“ — die Ark-Entwicklungsstufe öffnet neue Möglichkeiten.
+- Account-Forschung und Imperiums-Entscheidungen gehören zur Ark; Planet-Tech gehört zu einzelnen Welten.
+- Die Command Map visualisiert dein wachsendes Reich — die Ark bleibt der Hub.
+
+## FAQ
+
+**Was ist mein erstes Ziel?**
+Stabile Produktion auf der Genesis Ark, laufende Bau- und Forschungsqueues — und verstehen, dass Planet Evolution der langfristige Fortschritt ist.
+
+**Kann eine Kolonie die Genesis Ark ersetzen?**
+Nein. Strategic Worlds sind reife Expansion-Welten, kein zweiter Hauptsitz.
+
+## Discord Summary
+
+**Genesis Ark — Hauptsitz deines Imperiums**
+
+Die Genesis Ark ist der feste Mittelpunkt jedes Sternenreichs: Regierung, Account-Forschung, Werft und Planet Evolution. Expansion erweitert das Reich um neue Welten — nicht um austauschbare Slots. Entwicklungsstufe der Ark schaltet Regionen frei. Keine Kolonie ersetzt die Ark.

@@ -1,0 +1,8 @@
+{% if CODEX_QUICK_HELP %}
+<div class="gc-codex-quick-help" data-codex-quick-help data-codex-id="{{ CODEX_QUICK_HELP.codex_id }}">
+  <p class="gc-codex-quick-help-text">{{ T(CODEX_QUICK_HELP.text_key) }}</p>
+  <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs gc-codex-learn-more" data-codex-open="{{ CODEX_QUICK_HELP.codex_id }}">
+    {{ T('codex_learn_more', 'Mehr erfahren') }}
+  </button>
+</div>
+{% endif %}

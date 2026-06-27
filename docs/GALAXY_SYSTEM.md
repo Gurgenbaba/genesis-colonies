@@ -127,3 +127,77 @@ Siehe [PLANET_SCOPE.md](PLANET_SCOPE.md).
 ```bash
 python -m pytest tests/test_galaxy.py tests/test_planet_visuals.py -v
 ```
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: galaxy
+band: II
+difficulty: beginner
+estimated_read: 4 min
+surfaces:
+  - quick_help
+  - codex
+routes:
+  - galaxy_view
+  - empire_view
+related_codex:
+  - expansion
+  - fleet
+  - planet_evolution
+  - genesis_ark
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: always
+---
+```
+
+## Quick Help
+
+Die **Galaxie** zeigt dein Reich im Raum: **Weltkarte** (Command Map) mit Imperium, Orten und Expansion — plus klassische **Systemansicht** für Slots und Flotten-Prefill.
+
+## Summary
+
+Koordinaten `[G:S:P]` bleiben intern; Spieler sehen benannte **Orte**, **Regionen** und **Einfluss**. Route `/galaxy` bietet zwei Tabs: **Weltkarte** (`view=command_map`) als strategische Hauptansicht und **klassische Systemansicht** (`view=system`) mit 15 belegbaren Slots plus Expeditions-Slot.
+
+## Why
+
+Galaxie ist nicht nur Koordinatenbrowser — sie verbindet **Entdeckung, Expansion und Flotten**. Die Weltkarte macht Imperiumswachstum sichtbar; die Systemansicht bleibt Legacy-Fallback und Fleet-Brücke.
+
+## How it works
+
+- **Weltkarte:** Genesis Ark als Hub, Kolonien mit Rollen, Expansion Sites, Strategic Worlds, Chokepoints, Einflussgebiet — Aktionen abhängig von Entwicklungsstufe und Gates.
+- **Systemansicht:** 15 Planetenpositionen pro System; leere Slots → Kolonisierung per Flotte; Position 16 = Expeditions-Slot (synthetisch).
+- Navigation merkt den letzten Tab; Koordinaten folgen oft dem **aktiven Planeten**.
+- Flotten-Prefill von Galaxie: Mission-Links mit Zielkoordinaten oder `world_key`.
+- **`/empire`** ist **keine** Command Map — Wirtschafts-/Produktionsmatrix (nicht mit Weltkarte verwechseln).
+
+## Related Systems
+
+- expansion
+- fleet
+- planet_evolution
+- planet_scope
+
+## Commander Tips
+
+- Expansion planen auf der **Weltkarte**, nicht nur in der Slot-Liste.
+- Aktiver Planet markiert den Slot in der Systemansicht.
+- Expeditions-Slot ist kein normaler Kolonie-Planet.
+
+## FAQ
+
+**Weltkarte vs. Systemansicht?**
+Weltkarte = Imperium und Orte. Systemansicht = klassische Slot-Karte — beide unter `/galaxy`.
+
+**Wo ist die Command Map?**
+Default-Tab **Weltkarte** auf `/galaxy` — nicht auf `/empire`.
+
+## Discord Summary
+
+**Galaxie — Weltkarte und Systemansicht**
+
+`/galaxy`: Weltkarte (Command Map, Imperium, Expansion) + klassische Systemansicht (Slots, Expedition). Koordinaten intern. `/empire` = Wirtschaft, nicht Karte.

@@ -1,0 +1,593 @@
+{
+  "articles": {
+    "buildings": {
+      "codex_id": "buildings",
+      "band": "I",
+      "difficulty": "beginner",
+      "estimated_read": "4 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips"
+      ],
+      "routes": [
+        "buildings_view"
+      ],
+      "related_codex": [
+        "resources",
+        "research",
+        "fleet"
+      ],
+      "unlock": {
+        "type": "always"
+      },
+      "teaser_key": "",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "BUILDINGS_SYSTEM.md",
+      "faq_count": 2,
+      "tip_count": 4
+    },
+    "combat": {
+      "codex_id": "combat",
+      "band": "III",
+      "difficulty": "intermediate",
+      "estimated_read": "4 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq"
+      ],
+      "routes": [
+        "fleet_view"
+      ],
+      "related_codex": [
+        "fleet",
+        "defense",
+        "research"
+      ],
+      "unlock": {
+        "type": "player_flag",
+        "flag": "first_fleet_sent"
+      },
+      "teaser_key": "codex_unlock_combat_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "COMBAT_SYSTEM.md",
+      "faq_count": 2,
+      "tip_count": 3
+    },
+    "defense": {
+      "codex_id": "defense",
+      "band": "III",
+      "difficulty": "intermediate",
+      "estimated_read": "4 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq"
+      ],
+      "routes": [
+        "defense_view"
+      ],
+      "related_codex": [
+        "combat",
+        "fleet",
+        "buildings",
+        "research"
+      ],
+      "unlock": {
+        "type": "building",
+        "building": "defense_factory"
+      },
+      "teaser_key": "codex_unlock_defense_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "DEFENSE_SYSTEM.md",
+      "faq_count": 2,
+      "tip_count": 3
+    },
+    "resources": {
+      "codex_id": "resources",
+      "band": "I",
+      "difficulty": "beginner",
+      "estimated_read": "3 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq"
+      ],
+      "routes": [
+        "overview",
+        "buildings_view"
+      ],
+      "related_codex": [
+        "buildings",
+        "research",
+        "trader"
+      ],
+      "unlock": {
+        "type": "always"
+      },
+      "teaser_key": "",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "ECONOMY_SYSTEM.md",
+      "faq_count": 2,
+      "tip_count": 3
+    },
+    "trader": {
+      "codex_id": "trader",
+      "band": "III",
+      "difficulty": "intermediate",
+      "estimated_read": "3 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq"
+      ],
+      "routes": [
+        "trader_hub_view"
+      ],
+      "related_codex": [
+        "resources",
+        "buildings"
+      ],
+      "unlock": {
+        "type": "route_visit",
+        "route": "trader_hub_view"
+      },
+      "teaser_key": "codex_unlock_trader_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "ECONOMY_SYSTEM.md",
+      "faq_count": 1,
+      "tip_count": 2
+    },
+    "expansion": {
+      "codex_id": "expansion",
+      "band": "II",
+      "difficulty": "beginner",
+      "estimated_read": "5 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips",
+        "discord"
+      ],
+      "routes": [
+        "empire_view",
+        "galaxy_view"
+      ],
+      "related_codex": [
+        "planet_evolution",
+        "fleet",
+        "galaxy",
+        "genesis_ark"
+      ],
+      "unlock": {
+        "type": "homeworld_level",
+        "value": 5,
+        "site_key": "frontier_ix"
+      },
+      "teaser_key": "codex_unlock_expansion_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "EXPANSION_PROTOCOL.md",
+      "faq_count": 2,
+      "tip_count": 3
+    },
+    "fleet": {
+      "codex_id": "fleet",
+      "band": "II",
+      "difficulty": "beginner",
+      "estimated_read": "5 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips"
+      ],
+      "routes": [
+        "fleet_view",
+        "shipyard_view"
+      ],
+      "related_codex": [
+        "galaxy",
+        "expansion",
+        "combat",
+        "resources"
+      ],
+      "unlock": {
+        "type": "building",
+        "building": "orbital_shipyard"
+      },
+      "teaser_key": "codex_unlock_fleet_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "FLEET_SYSTEM.md",
+      "faq_count": 2,
+      "tip_count": 3
+    },
+    "galaxy": {
+      "codex_id": "galaxy",
+      "band": "II",
+      "difficulty": "beginner",
+      "estimated_read": "4 min",
+      "surfaces": [
+        "quick_help",
+        "codex"
+      ],
+      "routes": [
+        "galaxy_view",
+        "empire_view"
+      ],
+      "related_codex": [
+        "expansion",
+        "fleet",
+        "planet_evolution",
+        "genesis_ark"
+      ],
+      "unlock": {
+        "type": "always"
+      },
+      "teaser_key": "",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "GALAXY_SYSTEM.md",
+      "faq_count": 2,
+      "tip_count": 3
+    },
+    "genesis_ark": {
+      "codex_id": "genesis_ark",
+      "band": "I",
+      "difficulty": "beginner",
+      "estimated_read": "3 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "commander_tips"
+      ],
+      "routes": [
+        "overview"
+      ],
+      "related_codex": [
+        "planet_evolution",
+        "expansion",
+        "buildings",
+        "research"
+      ],
+      "unlock": {
+        "type": "always"
+      },
+      "teaser_key": "",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "IMPERIUM_VISION.md",
+      "faq_count": 2,
+      "tip_count": 3
+    },
+    "planet_evolution": {
+      "codex_id": "planet_evolution",
+      "band": "II",
+      "difficulty": "beginner",
+      "estimated_read": "5 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips",
+        "discord"
+      ],
+      "routes": [
+        "planet_evolution_view"
+      ],
+      "related_codex": [
+        "genesis_ark",
+        "expansion",
+        "planet_scope"
+      ],
+      "unlock": {
+        "type": "always"
+      },
+      "teaser_key": "",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "PLANET_EVOLUTION.md",
+      "faq_count": 2,
+      "tip_count": 3
+    },
+    "ascension": {
+      "codex_id": "ascension",
+      "band": "IV",
+      "difficulty": "advanced",
+      "estimated_read": "3 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq"
+      ],
+      "routes": [
+        "planet_evolution_view"
+      ],
+      "related_codex": [
+        "planet_evolution",
+        "genesis_ark"
+      ],
+      "unlock": {
+        "type": "homeworld_level",
+        "value": 15
+      },
+      "teaser_key": "codex_unlock_ascension_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "PLANET_EVOLUTION.md",
+      "faq_count": 1,
+      "tip_count": 2
+    },
+    "planet_scope": {
+      "codex_id": "planet_scope",
+      "band": "II",
+      "difficulty": "beginner",
+      "estimated_read": "2 min",
+      "surfaces": [
+        "quick_help",
+        "faq"
+      ],
+      "routes": [
+        "overview",
+        "buildings_view",
+        "fleet_view"
+      ],
+      "related_codex": [
+        "genesis_ark",
+        "planet_evolution"
+      ],
+      "unlock": {
+        "type": "always"
+      },
+      "teaser_key": "",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "PLANET_SCOPE.md",
+      "faq_count": 2,
+      "tip_count": 3
+    },
+    "research": {
+      "codex_id": "research",
+      "band": "I",
+      "difficulty": "beginner",
+      "estimated_read": "4 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips"
+      ],
+      "routes": [
+        "research_view"
+      ],
+      "related_codex": [
+        "buildings",
+        "fleet",
+        "planet_evolution"
+      ],
+      "unlock": {
+        "type": "always"
+      },
+      "teaser_key": "",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "RESEARCH_SYSTEM.md",
+      "faq_count": 2,
+      "tip_count": 3
+    }
+  },
+  "routes": {
+    "buildings_view": [
+      "buildings",
+      "resources",
+      "planet_scope"
+    ],
+    "fleet_view": [
+      "combat",
+      "fleet",
+      "planet_scope"
+    ],
+    "defense_view": [
+      "defense"
+    ],
+    "overview": [
+      "resources",
+      "genesis_ark",
+      "planet_scope"
+    ],
+    "trader_hub_view": [
+      "trader"
+    ],
+    "empire_view": [
+      "expansion",
+      "galaxy"
+    ],
+    "galaxy_view": [
+      "expansion",
+      "galaxy"
+    ],
+    "shipyard_view": [
+      "fleet"
+    ],
+    "planet_evolution_view": [
+      "planet_evolution",
+      "ascension"
+    ],
+    "research_view": [
+      "research"
+    ]
+  },
+  "bands": {
+    "I": [
+      "buildings",
+      "genesis_ark",
+      "research",
+      "resources"
+    ],
+    "III": [
+      "combat",
+      "defense",
+      "trader"
+    ],
+    "II": [
+      "expansion",
+      "fleet",
+      "galaxy",
+      "planet_evolution",
+      "planet_scope"
+    ],
+    "IV": [
+      "ascension"
+    ]
+  },
+  "commander_tips_pool": [
+    {
+      "codex_id": "buildings",
+      "text": "Energie im Plus halten, bevor du Minen massiv hochziehst."
+    },
+    {
+      "codex_id": "buildings",
+      "text": "Speicher früh ausbauen — volles Lager stoppt Produktion."
+    },
+    {
+      "codex_id": "buildings",
+      "text": "Kurze Bauzeiten als Lückenfüller vor Offline-Phasen; lange Jobs für Abwesenheit."
+    },
+    {
+      "codex_id": "buildings",
+      "text": "Queue-Limit beachten — plan die gesamte Queue, nicht nur den ersten Slot."
+    },
+    {
+      "codex_id": "combat",
+      "text": "Kampf-Techs vor dem ersten Angriff — sie wirken auf die gesamte Flotte bzw. Verteidigung."
+    },
+    {
+      "codex_id": "combat",
+      "text": "Verteidigung am Planeten zählt mit — nicht nur Schiffe im Hangar."
+    },
+    {
+      "codex_id": "combat",
+      "text": "Plunder ist begrenzt durch Rückkehr-Cargo, nicht durch unendlichen Raub."
+    },
+    {
+      "codex_id": "defense",
+      "text": "Outposts und Mining-Kolonien nicht ohne Defense im PvP-Raum lassen."
+    },
+    {
+      "codex_id": "defense",
+      "text": "`shield_tech` und `weapon_tech` stärken auch Verteidigung in Combat."
+    },
+    {
+      "codex_id": "defense",
+      "text": "Defense-Queue parallel zur Werft auf derselben Welt planen."
+    },
+    {
+      "codex_id": "resources",
+      "text": "Erst Energie stabilisieren, dann Output pushen."
+    },
+    {
+      "codex_id": "resources",
+      "text": "Speicher vor großen Offline-Phasen prüfen."
+    },
+    {
+      "codex_id": "resources",
+      "text": "Brennzellen ohne Depot produzieren nicht angesammelt — Depot planen."
+    },
+    {
+      "codex_id": "trader",
+      "text": "Hub nutzen, wenn ein Rohstoff staut und ein anderer fehlt — nicht nur Minen stapeln."
+    },
+    {
+      "codex_id": "trader",
+      "text": "Tageslimit im Kopf behalten; große Umbauten vorher mit Lager planen."
+    },
+    {
+      "codex_id": "expansion",
+      "text": "„Neue Welt“ ≠ sofort Kolonie — Outpost-Etablierung aktiv spielen."
+    },
+    {
+      "codex_id": "expansion",
+      "text": "Checkliste auf Outpost und Command Map beachten."
+    },
+    {
+      "codex_id": "expansion",
+      "text": "Expansion Sites erscheinen mit Ark-Entwicklungsstufe — Evolution vor Slot-Denken."
+    },
+    {
+      "codex_id": "fleet",
+      "text": "Flotten-Abgang immer mit aktivem Planet abstimmen — Schiffe liegen planetengebunden."
+    },
+    {
+      "codex_id": "fleet",
+      "text": "Navigation-Tech für mehr parallele Flotten priorisieren."
+    },
+    {
+      "codex_id": "fleet",
+      "text": "Expedition: Expo-Hüllen für Funde; Frachter für Bergungskapazität — Rollen beachten."
+    },
+    {
+      "codex_id": "galaxy",
+      "text": "Expansion planen auf der **Weltkarte**, nicht nur in der Slot-Liste."
+    },
+    {
+      "codex_id": "galaxy",
+      "text": "Aktiver Planet markiert den Slot in der Systemansicht."
+    },
+    {
+      "codex_id": "galaxy",
+      "text": "Expeditions-Slot ist kein normaler Kolonie-Planet."
+    },
+    {
+      "codex_id": "genesis_ark",
+      "text": "Denke in Imperium, nicht in „Mine 17 → 18“ — die Ark-Entwicklungsstufe öffnet neue Möglichkeiten."
+    },
+    {
+      "codex_id": "genesis_ark",
+      "text": "Account-Forschung und Imperiums-Entscheidungen gehören zur Ark; Planet-Tech gehört zu einzelnen Welten."
+    },
+    {
+      "codex_id": "genesis_ark",
+      "text": "Die Command Map visualisiert dein wachsendes Reich — die Ark bleibt der Hub."
+    },
+    {
+      "codex_id": "planet_evolution",
+      "text": "Entwicklungsstufe der Ark vor blindem Minen-Push — sie öffnet die Command Map."
+    },
+    {
+      "codex_id": "planet_evolution",
+      "text": "Spezialisierung ist dauerhaft; vor der Wahl im Codex und in der UI nachlesen."
+    },
+    {
+      "codex_id": "planet_evolution",
+      "text": "Planet-Tech und Account-Forschung nicht verwechseln."
+    },
+    {
+      "codex_id": "ascension",
+      "text": "Ascension erst planen, wenn Kern-Evolution und Imperium stabil stehen."
+    },
+    {
+      "codex_id": "ascension",
+      "text": "Queue-Zeit mit anderen Planet-Jobs koordinieren."
+    },
+    {
+      "codex_id": "planet_scope",
+      "text": "Vor dem Upgrade prüfen: auf welcher Welt bist du aktiv?"
+    },
+    {
+      "codex_id": "planet_scope",
+      "text": "Account-Forschung zahlst du von der aktiven Welt — plane Ressourcen dort."
+    },
+    {
+      "codex_id": "planet_scope",
+      "text": "Inaktive Kolonien bauen im Hintergrund weiter; Scope betrifft nur die UI-Kontext-Anzeige."
+    },
+    {
+      "codex_id": "research",
+      "text": "Forschung sollte selten stillstehen — wie Bau-Queue parallel halten."
+    },
+    {
+      "codex_id": "research",
+      "text": "Labor auf mindestens einer Welt hoch halten — empire-wide max zählt für Unlocks."
+    },
+    {
+      "codex_id": "research",
+      "text": "Tech-Tree-Seite zeigt Abhängigkeiten; priorisiere Engpass-Techs vor Output-Push."
+    }
+  ]
+}

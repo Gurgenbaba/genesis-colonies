@@ -150,9 +150,15 @@
   {% set weaknesses = traits | selectattr('polarity', 'equalto', 'negative') | list %}
 
   <header class="gc-page-header pe-page-header section-header">
-    <h2 class="section-title">{{ T("pe_title", "Planet-Entwicklung") }}</h2>
+    <div class="section-header-row">
+      <h2 class="section-title">{{ T("pe_title", "Planet-Entwicklung") }}</h2>
+      {% if CODEX_PRIMARY %}
+      {% include "partials/codex_context_btn.html" %}
+      {% endif %}
+    </div>
     <p class="section-hint hint">{{ T("pe_hint", "Forme die Identität, Wirtschaft und Zukunft deiner Kolonie.") }}</p>
   </header>
+  {% include "partials/codex_page_surfaces.html" %}
 
   {% if ps.ok %}
 

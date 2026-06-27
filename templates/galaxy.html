@@ -18,7 +18,12 @@
      {% if nav.has_next and not is_command_map %}data-next-url="{{ url_for('galaxy_view', view='system', galaxy=nav.galaxy, system=nav.next_system) }}"{% endif %}>
 
   <header class="galaxy-page-head section-header">
-    <h2 class="section-title">{{ T("nav_galaxy") }}</h2>
+    <div class="section-header-row">
+      <h2 class="section-title">{{ T("nav_galaxy") }}</h2>
+      {% if CODEX_PRIMARY %}
+      {% include "partials/codex_context_btn.html" %}
+      {% endif %}
+    </div>
     <p class="section-hint hint">
       {% if is_command_map %}
       {{ T("galaxy_command_map_subtitle", "Imperiumsübersicht deiner Kolonien.") }}
@@ -27,6 +32,7 @@
       {% endif %}
     </p>
   </header>
+  {% include "partials/codex_page_surfaces.html" %}
 
   <nav class="galaxy-view-tabs" aria-label="{{ T('galaxy_view_tabs_label', 'Galaxie-Ansicht') }}">
     <a href="{{ url_for('galaxy_view', view='command_map') }}"

@@ -71,9 +71,9 @@
                 role="menuitem">{{ T('community_menu_events', 'Events') }}</button>
       </div>
     </div>
-    <button type="button" class="gc-special-bar-btn" data-special-open-window="wiki" aria-label="{{ T('wiki_title', 'Wiki') }}" title="{{ T('wiki_title', 'Wiki') }}">
+    <button type="button" class="gc-special-bar-btn" data-special-open-window="codex" aria-label="{{ T('codex_title', 'Genesis Codex') }}" title="{{ T('codex_title', 'Genesis Codex') }}">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h8v14H4V5zm10 0h6v14h-6V5zm-8 2v10h4V7H6zm10 0v10h2V7h-2z"/></svg>
-      <span>WIKI</span>
+      <span>{{ T('codex_short', 'Codex') }}</span>
     </button>
     <button type="button" class="gc-special-bar-btn" data-special-open-window="support" aria-label="{{ T('support', 'Support') }}" title="{{ T('support', 'Support') }}">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0-9 9h3a6 6 0 1 1 6 6v3a9 9 0 0 0 0-18zm-1 6h2v6h-2V9zm0 8h2v2h-2v-2z"/></svg>
@@ -89,155 +89,7 @@
     </button>
   </nav>
 
-  <aside class="gc-special-window gc-special-window-wiki" data-special-window="wiki" hidden>
-    <header class="gc-special-head">
-      <span class="gc-special-title">{{ T('wiki_title', 'Ingame Wiki') }}</span>
-      <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-special-window-close="wiki" aria-label="{{ T('close', 'Schließen') }}">✕</button>
-    </header>
-    <div class="gc-special-window-content">
-      <p class="gc-special-intro">Willkommen im Ingame-Wiki. Hier findest du alle Kernsysteme von Genesis Colonies in einer kompakten, praxisnahen Uebersicht.</p>
-
-      <details class="gc-special-card" open>
-        <summary>Schnellstart in 10 Minuten</summary>
-        <p>1) Upgrade zuerst Metall- und Krytit-Minen. 2) Energie immer im Plus halten. 3) Speicher frueh ausbauen, damit Produktion nicht capped. 4) Bau- und Forschungsqueue dauerhaft aktiv halten. 5) Taeglich Ranking und Planet Evolution checken.</p>
-      </details>
-
-      <details class="gc-special-card">
-        <summary>Ressourcen und Energie</summary>
-        <p>Metall und Krytit sind deine Hauptwaehrungen fuer Gebaeude, Forschung und spaeter militaerische Expansion. Energie ist ein Multiplikator fuer alles: Bei Energiemangel sinkt die effektive Leistung deiner Produktionsgebaeude. Faustregel: erst Energie stabilisieren, dann Produktion hochziehen.</p>
-      </details>
-
-      <details class="gc-special-card">
-        <summary>Gebaeude: Prioritaeten</summary>
-        <p>Fruehspiel: Minen + Energie + Speicher im Dreiklang. Midgame: Forschung und spezialisierte Produktionspfade staerken. Lategame: gezielte Optimierung je nach Strategie (Wirtschaft, Forschung, Score-Push). Vermeide einseitigen Ausbau, der in Energie- oder Speicherengpaessen endet.</p>
-      </details>
-
-      <details class="gc-special-card">
-        <summary>Forschung: Effizient planen</summary>
-        <p>Forschung sollte nie stillstehen. Priorisiere Technologien, die direkte Engpaesse loesen (Produktionsbooster, Energieeffizienz, Bau-/Forschungszeit). Plane Ketten: Eine teure Forschung lohnt sich besonders, wenn du die Folgeforschungen bereits vorbereitest.</p>
-      </details>
-
-      <details class="gc-special-card">
-        <summary>Bau- und Forschungsqueue</summary>
-        <p>Optimales Spiel bedeutet hohe Queue-Uptime. Nutze kurze Bauzeiten als Lueckenfueller, bevor du offline gehst. Starte laengere Jobs, wenn du laenger abwesend bist. Ziel: moeglichst keine Leerlaufzeit in Bau und Forschung.</p>
-      </details>
-
-      <details class="gc-special-card">
-        <summary>Planet Evolution</summary>
-        <p>Planet Evolution bewertet nicht nur Rohleistung, sondern auch Identitaet und Entwicklungspfad deines Planeten. Achte auf Trigger, Spezialisierungen und situative Entscheidungen. Ein stabiler Planet mit klarer Ausrichtung erzielt konstant bessere Punktwerte.</p>
-      </details>
-
-      <details class="gc-special-card">
-        <summary>Ranking und Score verstehen</summary>
-        <p>Score entsteht durch strukturellen Fortschritt: Gebaeudelevel, Forschungstiefe und Systementwicklung. Kurzfristige Peaks sind gut, aber nachhaltiges Wachstum gewinnt ueber die Saison. Vergleiche dich regelmaessig mit aehnlichen Spielern statt nur mit der Spitze.</p>
-      </details>
-
-      <details class="gc-special-card">
-        <summary>Allianz und Kommunikation</summary>
-        <p>Nutze den Tchat aktiv: Informationsvorsprung ist ein echter Vorteil. In Allianzen helfen abgestimmte Ausbauphasen, Wissenstransfer und koordinierte Entscheidungen. Klare Kommunikation spart Ressourcen und vermeidet Fehlentwicklungen.</p>
-      </details>
-
-      <details class="gc-special-card">
-        <summary>Typische Fehler vermeiden</summary>
-        <p>Hauefige Fehler: Energie ignorieren, Speicher zu spaet upgraden, Forschung pausieren lassen, nur einen Rohstoff pushen, Queue nicht planen. Wenn dein Fortschritt stockt, liegt es fast immer an einem Engpass in genau diesen Punkten.</p>
-      </details>
-
-      <details class="gc-special-card">
-        <summary>FAQ</summary>
-        <p><strong>Warum sinkt meine Produktion?</strong> Meist Energiemangel oder volles Lager.<br><strong>Was zuerst upgraden?</strong> Erst Engpass-Systeme, dann Output-Systeme.<br><strong>Wann Forschung priorisieren?</strong> Sobald Produktionsbasis stabil steht.<br><strong>Warum stagniert mein Score?</strong> Zu viel Leerlauf in Queue oder unausgewogene Infrastruktur.</p>
-      </details>
-
-      <details class="gc-special-card">
-        <summary>Glossar</summary>
-        <p><strong>Queue-Uptime:</strong> Anteil der Zeit mit aktivem Bau/Forschungsauftrag.<br><strong>Engpass:</strong> System, das dein Wachstum limitiert (oft Energie/Lager).<br><strong>Spezialisierung:</strong> Langfristige Ausrichtung deines Planeten.<br><strong>Efficiency Window:</strong> Zeitraum, in dem Upgrades den groessten Nutzen bringen.</p>
-      </details>
-
-      <details class="gc-special-card">
-        <summary>Nerd-Wiki: Formelblatt (live relevant)</summary>
-        <p>
-          <strong>Energie:</strong><br>
-          <code>E_total = int(20 * solar^1.4 * solar_output_factor)</code><br>
-          <code>E_used = int((10 * metal^1.25 + 6 * crystal^1.25) * mine_energy_factor)</code><br>
-          <code>ratio = 1.0 wenn E_total >= E_used, sonst E_total / E_used</code>
-        </p>
-        <p>
-          <strong>Produktion pro Sekunde:</strong><br>
-          <code>metal_rate = 0.04 * metal_mine^1.4 * metal_prod_factor</code><br>
-          <code>crystal_rate = 0.03 * crystal_mine^1.35 * crystal_prod_factor</code>
-        </p>
-        <p>
-          <strong>Produktion pro Stunde:</strong><br>
-          <code>metal_h = int(metal_rate * ratio * 3600 * production_speed)</code><br>
-          <code>crystal_h = int(crystal_rate * ratio * 3600 * production_speed)</code>
-        </p>
-      </details>
-
-      <details class="gc-special-card">
-        <summary>Nerd-Wiki: Lager, Caps, Overflow</summary>
-        <p>
-          <code>BASE_STORAGE = 100000</code>, <code>STORAGE_GROW = 1.8</code><br>
-          <code>cap_metal = BASE_STORAGE * 1.8^(metal_storage-1)</code><br>
-          <code>cap_crystal = BASE_STORAGE * 1.8^(crystal_storage-1)</code><br>
-          Danach Multiplikation mit <code>storage_factor</code> (Storage-Tech) und <code>terraformer_factor = 1 + 0.05 * terraformer</code>.
-        </p>
-        <p>
-          Produktionszuwachs capped am Lagerlimit. Bereits vorhandener Overflow (z. B. Rewards) wird nicht abgeschnitten.
-        </p>
-      </details>
-
-      <details class="gc-special-card">
-        <summary>Nerd-Wiki: Build-/Research-Kosten und Zeiten</summary>
-        <p>
-          <strong>Gebaeude-Kosten:</strong> <code>cost = base_cost * cost_factor^(target_level-1)</code><br>
-          <strong>Build-Zeit roh:</strong> <code>t_build_raw = base_time * build_time_factor^(target_level-1)</code><br>
-          <strong>Build-Zeit effektiv:</strong> <code>t_build = t_build_raw / (build_time_speed * build_speed)</code>
-        </p>
-        <p>
-          <strong>Research-Kosten:</strong> <code>cost = base_cost * cost_factor^(target_level-1)</code><br>
-          <strong>Research-Zeit roh:</strong> <code>t_res_raw = base_time * cost_factor^(target_level-1)</code><br>
-          <strong>Research-Zeit effektiv:</strong><br>
-          <code>t_res = t_res_raw / (build_speed * research_speed * lab_bonus * research_time_speed)</code><br>
-          <code>lab_bonus = 1 + max(0, research_lab-1) * 0.10</code>
-        </p>
-      </details>
-
-      <details class="gc-special-card">
-        <summary>Nerd-Wiki: Multiplikatoren (pro Level)</summary>
-        <p>
-          <strong>energy_tech:</strong> <code>mine_energy_factor = max(0, 1 - 0.05 * lvl)</code> (Anzeige: linear %, unbegrenzt)<br>
-          <strong>mining_tech:</strong> <code>metal +10%</code>, <code>crystal +4%</code><br>
-          <strong>drone_tech:</strong> <code>metal +3%</code> und <code>crystal +3%</code><br>
-          <strong>storage_tech:</strong> <code>storage +25%</code><br>
-          <strong>buildtime_tech:</strong> Dauerfaktor <code>max(0, 1 - 0.03*lvl)</code>, Speed = <code>1 / Dauerfaktor</code> (Mindestzeit 1s)<br>
-          <strong>academy:</strong> <code>research_time_speed +5%</code> pro Level<br>
-          <strong>nanofactory:</strong> <code>build_time_speed +3%</code> pro Level<br>
-          <strong>geothermal_nexus:</strong> <code>solar_output +3%</code> pro Level
-        </p>
-      </details>
-
-      <details class="gc-special-card">
-        <summary>Nerd-Wiki: Queue-Mechanik und Limits</summary>
-        <p>
-          Standardmaessig: <code>build_queue_limit = 3</code>, <code>research_queue_limit = 3</code> (adminseitig ueber Settings aenderbar).
-        </p>
-        <p>
-          Jobs starten sequentiell: <code>start = max(now, last_finish)</code>, <code>finish = start + duration</code>.<br>
-          Gleiches Tech/Gebaeude mehrfach in Queue: Target-Level berechnet sich inklusive bereits geplanter gleichen Eintraege.
-        </p>
-      </details>
-
-      <details class="gc-special-card">
-        <summary>Nerd-Wiki: Harte Grenzen</summary>
-        <p>
-          <strong>Default Max Building Level:</strong> <code>50</code><br>
-          Fuer <code>metal_mine</code>, <code>crystal_mine</code>, <code>solar_plant</code> gilt zusaetzlich:<br>
-          <code>max = 50 + planet_core_nexus + 2 * geothermal_nexus</code><br>
-          Fuer <code>metal_storage</code> und <code>crystal_storage</code>:<br>
-          <code>max = 50 + 2 * geothermal_nexus</code>
-        </p>
-      </details>
-    </div>
-  </aside>
+  {% include "partials/codex_panel.html" %}
 
   <aside class="gc-special-window" data-special-window="support" hidden>
     <header class="gc-special-head">

@@ -60,6 +60,15 @@
   </section>
   {% else %}
 
+  <header class="fleet-page-head section-header">
+    <div class="section-header-row">
+      <h2 class="section-title">{{ T("fleet_title") }}</h2>
+      {% if CODEX_PRIMARY %}
+      {% include "partials/codex_context_btn.html" %}
+      {% endif %}
+    </div>
+  </header>
+
   <nav class="fleet-mode-tabs" role="tablist" aria-label="{{ T('fleet_title') }}">
     <a href="{{ url_for('fleet_view') }}"
        class="fleet-mode-tab{% if fleet_mode == 'send' %} active{% endif %}"
@@ -77,6 +86,7 @@
        role="tab"
        aria-selected="{{ 'true' if fleet_mode == 'distribute' else 'false' }}">{{ T("fleet_logistics_distribute") }}</a>
   </nav>
+  {% include "partials/codex_page_surfaces.html" %}
 
   <div class="fleet-mission-locks-banner" data-fleet-mission-locks-banner hidden aria-live="polite"></div>
 

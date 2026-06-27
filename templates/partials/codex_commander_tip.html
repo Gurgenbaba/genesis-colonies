@@ -1,0 +1,12 @@
+{% if CODEX_COMMANDER_TIP %}
+<aside class="gc-codex-commander-tip gc-panel gc-panel--compact" data-codex-commander-tip aria-label="{{ T('codex_commander_tip_title', 'Commander-Tipp') }}">
+  <header class="gc-codex-commander-tip-head">
+    <span class="gc-codex-commander-tip-label">{{ T('codex_commander_tip_title', 'Commander-Tipp') }}</span>
+    <span class="gc-codex-commander-tip-badge">{{ T('codex_commander_tip_new', 'Neu') }}</span>
+  </header>
+  <p class="gc-codex-commander-tip-text">{{ T(CODEX_COMMANDER_TIP.text_key) }}</p>
+  <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs gc-codex-learn-more" data-codex-open="{{ CODEX_COMMANDER_TIP.codex_id }}">
+    {{ T('codex_learn_more', 'Mehr erfahren') }}
+  </button>
+</aside>
+{% endif %}

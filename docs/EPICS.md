@@ -22,6 +22,7 @@ Status: v1.5.9.2 (2026-06-24)
 | EPIC-14 | Megabunker UX Feedback Polish | 📋 | [GC-557_MEGABUNKER_UX_FEEDBACK_POLISH.md](GC-557_MEGABUNKER_UX_FEEDBACK_POLISH.md) |
 | EPIC-15 | Imperium & Expansion (Genesis 2.0) | 📋 | [IMPERIUM_VISION.md](IMPERIUM_VISION.md) |
 | EPIC-17 | Imperial Directives (High Command) | 📋 | [IMPERIAL_DIRECTIVES.md](IMPERIAL_DIRECTIVES.md) |
+| EPIC-16 | Genesis Knowledge Base (Knowledge Pipeline) | 📋 | [GC-950_KNOWLEDGE_PIPELINE.md](GC-950_KNOWLEDGE_PIPELINE.md) |
 
 ---
 
@@ -98,3 +99,20 @@ Details: [IMPERIUM_VISION.md](IMPERIUM_VISION.md) · [EXPANSION_PROTOCOL.md](EXP
 | GC-914B | Page UI + i18n (8 Locales) |
 
 Details: [IMPERIAL_DIRECTIVES.md](IMPERIAL_DIRECTIVES.md)
+
+**EPIC-16 Genesis Knowledge Base** → nicht als Ganzes implementieren:
+
+| Ticket | Fokus |
+|--------|-------|
+| GC-950 | Charta — Informationsarchitektur ([Spec](GC-950_KNOWLEDGE_PIPELINE.md)) |
+| GC-950A1 | Landkarte des Wissens — [GC-950A1](GC-950A1_INFORMATION_ARCHITECTURE.md) (kein Inhalt) |
+| GC-950A2 | Player Article Blocks — 12 P1 Master-Docs (DE) |
+| GC-950B | Knowledge Generator + CI (`scripts/generate_knowledge.py`) |
+| GC-950C | Codex UI — Wiki → Codex, Bands I–V |
+| GC-950D | Quick Help + Context FAQ (`?`-Panel) |
+| GC-950E | Commander Tips — täglicher Tip aus Pool |
+| GC-950F | Discord / Export Markdown |
+
+Supersedes: GC-630 (klassisches Tutorial). Technical Data (Ebene 3) bleibt `game/technical_data.py` — nicht in Pipeline.
+
+Details: [GC-950_KNOWLEDGE_PIPELINE.md](GC-950_KNOWLEDGE_PIPELINE.md)

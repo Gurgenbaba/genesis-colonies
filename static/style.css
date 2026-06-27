@@ -17220,6 +17220,198 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   padding: 12px;
 }
 
+.gc-codex-intro{
+  margin-bottom: 12px;
+}
+
+.gc-codex-band + .gc-codex-band{
+  margin-top: 14px;
+}
+
+.gc-codex-band-title{
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gc-primary);
+  margin: 0 0 8px;
+  font-weight: 800;
+}
+
+.gc-codex-band-list{
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.gc-codex-article-link{
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(120, 190, 255, 0.18);
+  background: rgba(9, 18, 36, 0.72);
+  color: var(--gc-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.gc-codex-article-link:hover{
+  border-color: rgba(70, 229, 255, 0.45);
+  color: var(--gc-primary);
+}
+
+.gc-codex-article-locked{
+  padding: 8px 10px;
+  border: 1px dashed rgba(120, 190, 255, 0.16);
+  background: rgba(6, 12, 24, 0.55);
+}
+
+.gc-codex-locked-label{
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--gc-text-soft);
+}
+
+.gc-codex-teaser{
+  margin: 6px 0 0;
+  font-size: 0.78rem;
+}
+
+.gc-codex-article-read{
+  font-size: 0.68rem;
+  color: var(--gc-text-soft);
+}
+
+.gc-codex-article-view{
+  margin-top: 8px;
+}
+
+.gc-codex-article-view:not(.is-open){
+  display: none;
+}
+
+.gc-codex-article-link--locked{
+  border-style: dashed;
+  opacity: 0.92;
+}
+
+.gc-codex-empty{
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.gc-codex-unlock-label{
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+}
+
+.gc-codex-article-heading{
+  margin: 0 0 10px;
+  font-size: 1rem;
+  color: var(--gc-primary);
+}
+
+.gc-codex-section{
+  margin-bottom: 12px;
+}
+
+.gc-codex-section-title{
+  margin: 0 0 6px;
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--gc-text-soft);
+}
+
+.gc-codex-faq dt{
+  font-weight: 700;
+  margin-top: 8px;
+}
+
+.gc-codex-faq dd{
+  margin: 4px 0 0;
+  color: var(--gc-text-soft);
+}
+
+.gc-codex-related{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.gc-codex-quick-help{
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(70, 229, 255, 0.18);
+  background: rgba(8, 18, 36, 0.55);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.gc-codex-quick-help-text{
+  flex: 1 1 220px;
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.gc-codex-context-btn{
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0 8px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.gc-codex-commander-tip{
+  margin-bottom: 10px;
+}
+
+.gc-codex-commander-tip-head{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.gc-codex-commander-tip-label{
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-weight: 800;
+  color: var(--gc-primary);
+}
+
+.gc-codex-commander-tip-badge{
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #ffb347;
+}
+
+.gc-codex-commander-tip-text{
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+}
+
+.gc-codex-commander-tip-mobile{
+  display: none;
+}
+
+@media (max-width: 991px){
+  .gc-codex-commander-tip-mobile{
+    display: block;
+    margin-bottom: 12px;
+  }
+}
+
 .gc-special-head{
   display: flex;
   align-items: center;

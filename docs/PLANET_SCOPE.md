@@ -144,3 +144,76 @@ python -m pytest tests/test_planet_instancing.py tests/test_header_planet_switch
 - Separate Ressourcenmodelle pro UI-Seite
 
 **Erlaubt:** Explizites `planet_id` in APIs wenn Ownership geprüft (`resolve_owned_planet_id`).
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: planet_scope
+band: II
+difficulty: beginner
+estimated_read: 2 min
+surfaces:
+  - quick_help
+  - faq
+routes:
+  - overview
+  - buildings_view
+  - fleet_view
+related_codex:
+  - genesis_ark
+  - planet_evolution
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: always
+---
+```
+
+## Quick Help
+
+Genesis Colonies spielt sich pro **aktiver Welt**. Der Planet-Switcher im Header legt fest, welche Kolonie Gebäude, Ressourcen und Werft zeigt — Account-Forschung bleibt imperiumsweit.
+
+## Summary
+
+**Planet Scope** ist der Kontext, in dem du spielst: eine **aktive Welt**, von der Ressourcen-Anzeige, Bau-Queue, Werft, Trader Hub und Flotten-Abgang defaulten. Dein **Imperium** umfasst alle Welten — aber Aktionen auf Planeten-Gebäude passieren immer auf der gewählten Welt.
+
+## Why
+
+Multi-Kolonie ohne Scope würde verwirren: Welche Mine produziert gerade? Wo baut die Werft? Scope trennt **imperiumsweite** Systeme (Account-Forschung, alle Flottenbewegungen) von **weltgebundenen** (Gebäude, Ressourcen-Tick, Shipyard).
+
+## How it works
+
+- **Planet Switcher** im Header: bei mehreren Welten Dropdown; bei einer Welt deaktiviert.
+- Wechsel → API setzt active planet → Seite aktualisiert Ressourcen, Queues und Labels.
+- **Homeworld** = Genesis Ark; bei ungültigem Kontext Fallback auf Homeworld.
+- **Planet Evolution** zeigt immer die **aktive** Welt — kein zweiter Switcher auf der Seite.
+- Kolonisierung und Flotten nutzen explizite Ziele; Logistics sammelt zwischen **eigenen** Welten.
+
+## Related Systems
+
+- genesis_ark
+- planet_evolution
+- fleet
+- buildings
+
+## Commander Tips
+
+- Vor dem Upgrade prüfen: auf welcher Welt bist du aktiv?
+- Account-Forschung zahlst du von der aktiven Welt — plane Ressourcen dort.
+- Inaktive Kolonien bauen im Hintergrund weiter; Scope betrifft nur die UI-Kontext-Anzeige.
+
+## FAQ
+
+**Warum ändern sich meine Ressourcen nach dem Wechsel?**
+Jede Welt hat eigene Lager und Produktion. Der Switcher wechselt den Kontext, nicht dein gesamtes Imperium.
+
+**Kann ich eine Nicht-Homeworld löschen?**
+Ja — aktive Nicht-Homeworld kann gelöscht werden; active springt auf die Genesis Ark.
+
+## Discord Summary
+
+**Planet Scope — aktive Welt vs. Imperium**
+
+Spielaktionen auf Gebäude, Ressourcen und Werft laufen über die **aktive Welt** (Header-Switcher). Account-Forschung und Flottenübersicht sind imperiumsweit. Homeworld = Genesis Ark. Planet Evolution zeigt die aktive Welt.

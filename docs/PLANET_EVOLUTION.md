@@ -255,3 +255,153 @@ python -m pytest tests/test_planet_evolution.py tests/test_planet_evolution_dash
 - [GALAXY_SYSTEM.md](GALAXY_SYSTEM.md)
 - [FLEET_SYSTEM.md](FLEET_SYSTEM.md)
 - [ARCHITECTURE.md](ARCHITECTURE.md)
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: planet_evolution
+band: II
+difficulty: beginner
+estimated_read: 5 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+  - commander_tips
+  - discord
+routes:
+  - planet_evolution_view
+related_codex:
+  - genesis_ark
+  - expansion
+  - planet_scope
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: always
+---
+```
+
+## Quick Help
+
+Planet Evolution ist das Herz deines Imperiums. Entwickle Welten durch DNA, Entwicklungsstufe und Spezialisierung — und schalte damit neue Regionen frei.
+
+## Summary
+
+**Planet Evolution** ist die **pro-Welt-Progression**: DNA und Traits, Entwicklungsstufe/XP, Planet-Klasse, Planet-Tech (≠ Account-Forschung), Spezialisierung, Policies, Events, Discoveries und Trade Routes. Auf der **Genesis Ark** ist Evolution der zentrale Langzeit-Fortschritt; auf Kolonien formt sie den **Charakter** jeder Welt.
+
+## Why
+
+Genesis Colonies unterscheidet sich durch **Identität pro Welt** — nicht nur Gebäudelevel. Evolution entscheidet, welche Regionen erreichbar sind, welche Spezialisierungen möglich werden und wie Welten ins Imperium passen. Gebäude und Account-Forschung sind der Motor **unterhalb** dieser Schicht.
+
+## How it works
+
+- Öffne **Planet Evolution** für die **aktive Welt** (Header-Switcher).
+- **DNA & Traits** prägen Forschung, Events und Spezialisierungsoptionen.
+- **Entwicklungsstufe** der Genesis Ark schaltet Expansion Sites frei (siehe Expansion).
+- Ab höherer Entwicklung: **Spezialisierung** (dauerhafte planetare Ausrichtung), **Policies**, narrative **Events** mit Entscheidungen.
+- **Planet-Tech** — Forschung nur für diese Welt, eigene Queue.
+- **Trade Routes** verbinden Kolonien sichtbar mit dem Imperium.
+- **Ascension** — separater Langzeit-Pfad (siehe Ascension-Artikel).
+- Queues für Planet-Tech und Ascension erscheinen in den jeweiligen Cards.
+
+## Related Systems
+
+- genesis_ark
+- expansion
+- planet_scope
+- research
+- fleet
+
+## Commander Tips
+
+- Entwicklungsstufe der Ark vor blindem Minen-Push — sie öffnet die Command Map.
+- Spezialisierung ist dauerhaft; vor der Wahl im Codex und in der UI nachlesen.
+- Planet-Tech und Account-Forschung nicht verwechseln.
+
+## FAQ
+
+**Warum unterscheidet sich meine Welt von der Ark?**
+Jede Welt hat eigene DNA, Traits und optional eigene Spezialisierung.
+
+**Was ist Planet-Tech?**
+Weltgebundene Forschung in Planet Evolution — nicht der Account-Tech-Tree.
+
+## Discord Summary
+
+**Planet Evolution — Identität und Fortschritt pro Welt**
+
+DNA, Entwicklungsstufe, Spezialisierung, Events, Planet-Tech. Zentrum auf der Genesis Ark; Kolonien werden Charakter-Welten. Schaltet Regionen und Expansion frei. ≠ Account-Forschung.
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: ascension
+band: IV
+difficulty: advanced
+estimated_read: 3 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+routes:
+  - planet_evolution_view
+related_codex:
+  - planet_evolution
+  - genesis_ark
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: homeworld_level
+  value: 15
+teaser_key: codex_unlock_ascension_teaser
+---
+```
+
+## Quick Help
+
+**Ascension** ist Langzeit-Fortschritt auf der Genesis Ark — eine Queue, die über Planet Evolution das Endgame des Imperiums vorbereitet.
+
+## Summary
+
+Ascension ist ein **Langzeit-Queue-System** auf der Genesis Ark: Schritte in Planet Evolution, Fortschritt über die Ascension-Queue — nicht ein schneller Button-Fortschritt.
+
+## Why
+
+Ascension bündelt Endgame-Entscheidungen am **Imperiums-Hauptsitz** — konsistent mit der Regel, dass die Ark nicht durch Kolonien ersetzt wird. Es ergänzt Spezialisierung und Strategic Worlds um einen imperiumsweiten Horizont.
+
+## How it works
+
+- Erreichbar über **Planet Evolution** auf der Genesis Ark, wenn Freischaltung (Entwicklungsstufe 15) aktiv ist.
+- Ascension-Jobs laufen in der **Ascension-Queue** — eigene Card neben Planet-Tech, sequenziell wie andere Queues.
+- Schritte sind **Langzeit-Investitionen**: Kosten und Dauer in der UI; Zahlen nur serverseitig, nicht im Codex.
+- Erfordert vorbereitete Planet Evolution (Spezialisierung, Policies, stabile Ark) — kein Early-Game-System.
+- Ascension ergänzt **Strategic Worlds** und Imperiums-Directives — kein Ersatz für Kolonie-Ausbau.
+- Queue-Zeit mit Planet-Tech und Baujobs der Ark koordinieren; nur eine Ascension-Queue parallel zum Planet-Tech-Pfad.
+- Details pro Stufe: Planet Evolution UI und Queue-Cards — nicht in diesem Codex-Artikel.
+
+## Related Systems
+
+- planet_evolution
+- genesis_ark
+- strategic_worlds
+
+## Commander Tips
+
+- Ascension erst planen, wenn Kern-Evolution und Imperium stabil stehen.
+- Queue-Zeit mit anderen Planet-Jobs koordinieren.
+
+## FAQ
+
+**Kann jede Kolonie Ascension starten?**
+Fokus und Design: Genesis Ark als Hauptsitz — prüfe Freischaltung in der UI der aktiven Welt.
+
+## Discord Summary
+
+**Ascension — Langzeit auf der Genesis Ark**
+
+Queue-basierter Endgame-Pfad in Planet Evolution. Imperiums-Horizont am Hauptsitz, nicht auf Outposts.

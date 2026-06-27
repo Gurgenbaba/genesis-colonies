@@ -11173,6 +11173,10 @@
         GC.scheduleLogisticsRefreshFromState();
       }
 
+      if (data.codex && typeof GC.applyCodexFromState === "function") {
+        GC.applyCodexFromState(data.codex);
+      }
+
       return hasActiveBuild || hasActiveResearchNow || lastHadActiveShipyard;
   }
 
@@ -26735,6 +26739,285 @@
   }
   GC.openSpecialWindow = openSpecialWindow;
 
+  // =========================
+  // Genesis Codex (GC-950)
+  // =========================
+  function codexEscapeHtml(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function codexMdLite(value) {
+    let s = codexEscapeHtml(value);
+    s = s.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    s = s.replace(/\n/g, "<br>");
+    return s;
+  }
+
+  function codexArticlesConfig() {
+    const cfg = window.GC_CODEX_CLIENT || {};
+    return cfg.articles || {};
+  }
+
+  function codexShowList(root) {
+    if (!root) return;
+    const list = root.querySelector("[data-codex-list]");
+    const articleView = root.querySelector("[data-codex-article-view]");
+    if (list) list.hidden = false;
+    if (articleView) {
+      articleView.hidden = true;
+      articleView.classList.remove("is-open");
+      articleView.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  function codexShowArticleView(root, list, articleView) {
+    if (list) list.hidden = true;
+    if (!articleView) return;
+    articleView.hidden = false;
+    articleView.classList.add("is-open");
+    articleView.removeAttribute("aria-hidden");
+  }
+
+  function codexSectionHasContent(section) {
+    if (!section || typeof section !== "object") return false;
+    if (section.body && String(section.body).trim()) return true;
+    const items = Array.isArray(section.items) ? section.items : [];
+    return items.some((item) => item && String(item.q || "").trim());
+  }
+
+  function codexRenderSectionsHtml(article, articles) {
+    const sections = Array.isArray(article.sections) ? article.sections : [];
+    let html = "";
+
+    sections.forEach((section) => {
+      if (!codexSectionHasContent(section)) return;
+      const title = section.title || "";
+      html += `<section class="gc-codex-section"><h4 class="gc-codex-section-title">${codexEscapeHtml(title)}</h4>`;
+      if (Array.isArray(section.items) && section.items.length) {
+        html += "<dl class=\"gc-codex-faq\">";
+        section.items.forEach((item) => {
+          html += `<dt>${codexEscapeHtml(item.q || "")}</dt><dd>${codexMdLite(item.a || "")}</dd>`;
+        });
+        html += "</dl>";
+      } else {
+        html += `<p>${codexMdLite(section.body || "")}</p>`;
+      }
+      html += "</section>";
+    });
+
+    const related = Array.isArray(article.related) ? article.related : [];
+    if (related.length) {
+      html += `<section class="gc-codex-section"><h4 class="gc-codex-section-title">${codexEscapeHtml(t("codex_related_title", "Related systems"))}</h4><div class="gc-codex-related">`;
+      related.forEach((rid) => {
+        const relArticle = articles[rid] || {};
+        const relTitle = relArticle.title || t(relArticle.title_key || `codex_${rid}_title`, rid);
+        html += `<button type="button" class="gc-btn gc-btn-ghost gc-btn-xs gc-codex-related-link" data-codex-article-open="${codexEscapeHtml(rid)}">${codexEscapeHtml(relTitle)}</button>`;
+      });
+      html += "</div></section>";
+    }
+
+    return html;
+  }
+
+  function codexRenderLegacyKeysHtml(article, articles) {
+    let html = "";
+    if (article.summary_key) {
+      const body = t(article.summary_key);
+      if (body && body !== article.summary_key) {
+        html += `<section class="gc-codex-section"><h4 class="gc-codex-section-title">${codexEscapeHtml(t("codex_section_summary", "Summary"))}</h4><p>${codexMdLite(body)}</p></section>`;
+      }
+    }
+    if (article.why_key) {
+      const body = t(article.why_key);
+      if (body && body !== article.why_key) {
+        html += `<section class="gc-codex-section"><h4 class="gc-codex-section-title">${codexEscapeHtml(t("codex_section_why", "Why it matters"))}</h4><p>${codexMdLite(body)}</p></section>`;
+      }
+    }
+    if (article.how_it_works_key) {
+      const body = t(article.how_it_works_key);
+      if (body && body !== article.how_it_works_key) {
+        html += `<section class="gc-codex-section"><h4 class="gc-codex-section-title">${codexEscapeHtml(t("codex_section_how", "How it works"))}</h4><p>${codexMdLite(body)}</p></section>`;
+      }
+    }
+    const faq = Array.isArray(article.faq) ? article.faq : [];
+    if (faq.length) {
+      html += `<section class="gc-codex-section"><h4 class="gc-codex-section-title">${codexEscapeHtml(t("codex_faq_title", "FAQ"))}</h4><dl class="gc-codex-faq">`;
+      faq.forEach((item) => {
+        html += `<dt>${codexEscapeHtml(t(item.q_key))}</dt><dd>${codexMdLite(t(item.a_key))}</dd>`;
+      });
+      html += "</dl></section>";
+    }
+    const related = Array.isArray(article.related) ? article.related : [];
+    if (related.length) {
+      html += `<section class="gc-codex-section"><h4 class="gc-codex-section-title">${codexEscapeHtml(t("codex_related_title", "Related systems"))}</h4><div class="gc-codex-related">`;
+      related.forEach((rid) => {
+        const relCfg = articles[rid] || {};
+        const relTitle = relCfg.title || t(relCfg.title_key || `codex_${rid}_title`, rid);
+        html += `<button type="button" class="gc-btn gc-btn-ghost gc-btn-xs gc-codex-related-link" data-codex-article-open="${codexEscapeHtml(rid)}">${codexEscapeHtml(relTitle)}</button>`;
+      });
+      html += "</div></section>";
+    }
+    return html;
+  }
+
+  function codexRenderArticle(codexId) {
+    const root = document.querySelector("[data-codex-root]");
+    if (!root) return;
+    const articles = codexArticlesConfig();
+    const article = articles[codexId];
+    const articleView = root.querySelector("[data-codex-article-view]");
+    const articleBody = root.querySelector("[data-codex-article-body]");
+    const list = root.querySelector("[data-codex-list]");
+    if (!articleView || !articleBody) return;
+
+    if (!article) {
+      articleBody.innerHTML = `<p class="gc-codex-empty hint">${codexEscapeHtml(t("codex_article_unavailable", "Dieser Codex-Eintrag ist noch nicht verfügbar."))}</p>`;
+      codexShowArticleView(root, list, articleView);
+      return;
+    }
+
+    const title = article.title || t(article.title_key, codexId);
+    let html = `<h3 class="gc-codex-article-heading">${codexEscapeHtml(title)}</h3>`;
+    const locked = Boolean(article.locked);
+
+    if (locked) {
+      html += `<p class="gc-codex-locked-notice">${codexEscapeHtml(t("codex_locked", "Locked"))}</p>`;
+      const preview = article.preview || "";
+      if (preview) {
+        html += `<section class="gc-codex-section"><h4 class="gc-codex-section-title">${codexEscapeHtml(t("codex_locked_preview_title", "Kurzüberblick"))}</h4><p>${codexMdLite(preview)}</p></section>`;
+      }
+      const teaser = article.teaser || "";
+      if (teaser) {
+        html += `<p class="gc-codex-teaser">${codexMdLite(teaser)}</p>`;
+      }
+      const unlockLabel = article.unlock_label || "";
+      if (unlockLabel && unlockLabel !== teaser) {
+        html += `<p class="gc-codex-unlock-label hint">${codexMdLite(unlockLabel)}</p>`;
+      }
+    } else {
+      const sectionHtml = codexRenderSectionsHtml(article, articles);
+      html += sectionHtml || codexRenderLegacyKeysHtml(article, articles);
+    }
+
+    const hasBody = html.replace(/<h3[\s\S]*?<\/h3>/, "").trim().length > 0;
+    if (!hasBody) {
+      html += `<p class="gc-codex-empty hint">${codexEscapeHtml(t("codex_article_unavailable", "Dieser Codex-Eintrag ist noch nicht verfügbar."))}</p>`;
+    }
+
+    articleBody.innerHTML = html;
+    articleBody.querySelectorAll("[data-codex-article-open]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-codex-article-open") || "";
+        if (id) codexRenderArticle(id);
+      });
+    });
+
+    codexShowArticleView(root, list, articleView);
+  }
+
+  function openCodexArticle(codexId) {
+    const id = String(codexId || "").trim();
+    if (!id) return;
+    codexRenderArticle(id);
+  }
+
+  function openCodex(codexId) {
+    openSpecialWindow("codex");
+    window.requestAnimationFrame(() => openCodexArticle(codexId));
+  }
+
+  function applyCodexFromState(codexState) {
+    if (!codexState || typeof codexState !== "object") return;
+    GC.codexState = codexState;
+    GC.codexUnlockedIds = Array.isArray(codexState.unlocked_ids) ? codexState.unlocked_ids : [];
+
+    if (codexState.articles && typeof codexState.articles === "object") {
+      window.GC_CODEX_CLIENT = { articles: codexState.articles };
+    }
+
+    const root = document.querySelector("[data-codex-root]");
+    if (root && GC.codexUnlockedIds.length) {
+      root.querySelectorAll(".gc-codex-band-item.is-locked[data-codex-id]").forEach((item) => {
+        const id = item.getAttribute("data-codex-id") || "";
+        if (!id || !GC.codexUnlockedIds.includes(id)) return;
+        const btn = item.querySelector("[data-codex-article-open]");
+        if (btn) {
+          item.classList.remove("is-locked");
+          btn.classList.remove("gc-codex-article-link--locked");
+          const lockedLabel = item.querySelector(".gc-codex-locked-label");
+          if (lockedLabel) lockedLabel.remove();
+          const teaser = item.querySelector(".gc-codex-teaser");
+          if (teaser) teaser.remove();
+          return;
+        }
+        const readEl = item.querySelector(".gc-codex-article-read");
+        const readText = readEl ? readEl.textContent : "";
+        const titleEl = item.querySelector(".gc-codex-article-title");
+        const title = titleEl ? titleEl.textContent : t(`codex_${id}_title`, id);
+        item.classList.remove("is-locked");
+        item.innerHTML = `<button type="button" class="gc-codex-article-link" data-codex-article-open="${codexEscapeHtml(id)}"><span class="gc-codex-article-title">${codexEscapeHtml(title)}</span>${readText ? `<span class="gc-codex-article-read gc-mono">${codexEscapeHtml(readText)}</span>` : ""}</button>`;
+        const newBtn = item.querySelector("[data-codex-article-open]");
+        if (newBtn) {
+          newBtn.addEventListener("click", () => codexRenderArticle(id));
+        }
+      });
+    }
+
+    const tip = codexState.commander_tip;
+    document.querySelectorAll("[data-codex-commander-tip]").forEach((tipRoot) => {
+      if (tip && tip.text_key) {
+        const textEl = tipRoot.querySelector(".gc-codex-commander-tip-text");
+        const learnBtn = tipRoot.querySelector("[data-codex-open]");
+        if (textEl) textEl.textContent = t(tip.text_key);
+        if (learnBtn && tip.codex_id) learnBtn.setAttribute("data-codex-open", tip.codex_id);
+        tipRoot.hidden = false;
+      } else {
+        tipRoot.hidden = true;
+      }
+    });
+  }
+
+  function initCodex() {
+    const root = document.querySelector("[data-codex-root]");
+    if (!root || root.dataset.bound === "1") return;
+    root.dataset.bound = "1";
+
+    const backBtn = root.querySelector("[data-codex-back]");
+    if (backBtn) {
+      backBtn.addEventListener("click", () => codexShowList(root));
+    }
+
+    root.querySelectorAll("[data-codex-article-open]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-codex-article-open") || "";
+        if (id) codexRenderArticle(id);
+      });
+    });
+
+    if (!document.documentElement.dataset.codexClickBound) {
+      document.documentElement.dataset.codexClickBound = "1";
+      document.addEventListener("click", (e) => {
+        const openBtn = e.target.closest("[data-codex-open], [data-codex-context-open]");
+        if (!openBtn) return;
+        const id = openBtn.getAttribute("data-codex-open") || openBtn.getAttribute("data-codex-context-open");
+        if (!id) return;
+        e.preventDefault();
+        openCodex(id);
+      });
+    }
+
+    if (GC.codexState) applyCodexFromState(GC.codexState);
+  }
+
+  GC.openCodex = openCodex;
+  GC.openCodexArticle = openCodexArticle;
+  GC.applyCodexFromState = applyCodexFromState;
+  GC.registerCleanup(() => codexShowList(document.querySelector("[data-codex-root]")));
+
   function initCommunityHub() {
     const hub = document.querySelector("[data-community-hub]");
     if (!hub || hub.dataset.bound === "1") return;
@@ -28207,6 +28490,7 @@
     syncPerfBodyClasses();
     initMobileNav();
     initSpecialPanel();
+    initCodex();
     initCommunityHub();
     initSupportModule();
     initStickyResourceBar();

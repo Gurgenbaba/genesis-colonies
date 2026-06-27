@@ -149,3 +149,80 @@ Tech-Tree Visualisierung: `/techtree` (`game/techtree.py`).
 ```bash
 python -m pytest tests/test_research_requirements.py tests/test_gc825_research_time_rebalance.py tests/test_effects.py tests/test_game_state_live.py tests/test_gc831_queue_refund.py -v
 ```
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: research
+band: I
+difficulty: beginner
+estimated_read: 4 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+  - commander_tips
+routes:
+  - research_view
+related_codex:
+  - buildings
+  - fleet
+  - planet_evolution
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: always
+---
+```
+
+## Quick Help
+
+Account-Forschung verbessert dein **gesamtes Imperium** — Energieeffizienz, Produktion, Flottengeschwindigkeit und Kampfwerte. Kosten zahlst du von der **aktiven Welt**.
+
+## Summary
+
+**Account-Forschung** ist **spielerweit**: ein Tech-Tree mit Queue, Labor-Level über alle Kolonien als Freischalt-Gate, Zahlung in Ferronit/Crytite vom Kontext-Planeten. Sie ist **nicht** Planet Evolution / Planet-Tech — das ist pro Welt ein separates System.
+
+## Why
+
+Forschung löst Engpässe imperiumsweit: mehr Lager, schnellere Bauzeiten, effizientere Minen, mehr Flottenslots, stärkere Waffen. Sie verbindet Economy, Fleet und Combat ohne jeden Planet einzeln zu forcieren.
+
+## How it works
+
+- **Forschungslabor** (mind. Stufe 1 empire-wide max) schaltet Techs frei.
+- Starte Forschung auf der Research-Seite; Queue läuft sequenziell (Standard-Limit 2, Bonus bei hohem Labor).
+- Techs haben **Voraussetzungen** — Kette planen (Energie vor Antrieb, Extraktion vor Navigation).
+- Wichtige Linien: Extraktion, Lager, Bauzeit, Navigation (Flottenslots), Kampf-Technologien.
+- **Interstellar Expansion** (Account-Tech) gehört zur Expansion — Gates für neue Welten (siehe Expansion Protocol).
+- Planet-Tech auf `/planet-evolution` ist **Welt-Forschung**, nicht dieses System.
+
+## Related Systems
+
+- buildings
+- fleet
+- combat
+- defense
+- expansion
+- planet_evolution
+
+## Commander Tips
+
+- Forschung sollte selten stillstehen — wie Bau-Queue parallel halten.
+- Labor auf mindestens einer Welt hoch halten — empire-wide max zählt für Unlocks.
+- Tech-Tree-Seite zeigt Abhängigkeiten; priorisiere Engpass-Techs vor Output-Push.
+
+## FAQ
+
+**Warum kann ich eine Tech nicht starten?**
+Fehlendes Labor-Level, fehlende Vor-Tech oder nicht genug Ferronit/Crytite auf der aktiven Welt.
+
+**Unterschied Planet-Tech vs. Account-Forschung?**
+Account = Imperium. Planet-Tech = nur die gewählte Welt in Planet Evolution.
+
+## Discord Summary
+
+**Account-Forschung — imperiumsweite Technologie**
+
+Ein Tech-Tree für alle Welten: Produktion, Energie, Bauzeit, Navigation, Kampf. Kosten vom aktiven Planeten, Levels account-weit. ≠ Planet-Tech in Planet Evolution. Labor empire-wide max entscheidet Freischaltungen.

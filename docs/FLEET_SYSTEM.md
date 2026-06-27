@@ -344,3 +344,86 @@ Inbox expedition reports: `static/js/messages.js` → `renderExpeditionReport()`
 ```bash
 python -m pytest tests/test_fleet.py tests/test_shipyard.py tests/test_galaxy.py tests/test_combat.py -v
 ```
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: fleet
+band: II
+difficulty: beginner
+estimated_read: 5 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+  - commander_tips
+routes:
+  - fleet_view
+  - shipyard_view
+related_codex:
+  - galaxy
+  - expansion
+  - combat
+  - resources
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: building
+  building: orbital_shipyard
+teaser_key: codex_unlock_fleet_teaser
+---
+```
+
+## Quick Help
+
+Flotten verbinden deine Welten: Transport, Kolonisierung mit Seed Ark, Expeditionen, Angriff und Logistik — Schiffe vom **Abgang-Planeten**, Slots über Navigation-Tech.
+
+## Summary
+
+Das Fleet-System verwaltet **Schiffe pro Welt**, **Flottenbewegungen** imperiumsweit und Missionen bei Ankunft. Schiffsbau läuft über die **Orbitalwerft** und Werft-Queue. Flottenslots sind account-weit durch **Navigation-Tech** erweiterbar.
+
+## Why
+
+Ohne Flotten keine Expansion (Seed Ark), keine Ressourcen-Logistik zwischen Kolonien, keine Expeditionen und kein PvP. Flotten sind die **operative Hand** des Imperiums — Ziele sind **Orte** (world_key) und klassische Koordinaten als Adapter.
+
+## How it works
+
+- Baue Schiffe in der **Orbitalwerft** auf der gewünschten Abgang-Welt.
+- **Fleet-Seite:** Schiffe auswählen, Mission, Ziel (Kolonie, Welt auf der Karte oder Koordinaten).
+- **Missionen (Auszug):** Transport, Logistik, Stationieren, Spionage, Angriff, Halten, Expedition, Kolonisierung, Recycler.
+- **Kolonisierung:** Kolonisierungs-Mission mit Seed Ark in der Flotte → Outpost-Phase (Expansion Protocol).
+- **Expedition:** Event-Engine bei Ankunft — Berichte in Nachrichten; Expo-Schiffe tragen Loot-Rolle.
+- **Logistics** (`/logistics`): Sammeln/Verteilen zwischen eigenen Welten über Hub.
+- Flugzeit und Brennzellen: Server-Preview — UI zeigt nur Serverdaten.
+- Technische Schiffswerte: Schiff-Detail / Technische Daten — nicht Codex.
+
+## Related Systems
+
+- galaxy
+- expansion
+- combat
+- defense
+- resources
+- buildings
+
+## Commander Tips
+
+- Flotten-Abgang immer mit aktivem Planet abstimmen — Schiffe liegen planetengebunden.
+- Navigation-Tech für mehr parallele Flotten priorisieren.
+- Expedition: Expo-Hüllen für Funde; Frachter für Bergungskapazität — Rollen beachten.
+
+## FAQ
+
+**Warum kann ich keine Flotte senden?**
+Keine Schiffe, kein Slot frei, ungültiges Ziel oder fehlende Mission-Voraussetzung (z. B. Seed Ark für Kolonisierung).
+
+**Wo sind alle meine Flotten?**
+Overview und Fleet zeigen **alle** Bewegungen — nicht nur die der aktiven Welt.
+
+## Discord Summary
+
+**Flotte — Missionen und Imperium-Operationen**
+
+Schiffe pro Welt, Bewegungen imperiumsweit. Orbitalwerft nötig. Missionen: Transport, Kolonisierung, Expedition, Angriff, Logistik. Ziele: Welten und Koordinaten. Navigation-Tech = mehr Slots.
