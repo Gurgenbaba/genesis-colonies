@@ -3676,6 +3676,7 @@ def test_incoming_attack_alert_counts_enemy_attack(fleet_db):
     alerts = build_fleet_incoming_attack_alerts(defender_id, conn=conn)
     assert alerts['has_incoming_attack'] is True
     assert alerts['incoming_attack_count'] == 1
+    assert alerts['alert_key'].startswith('m:')
     assert int(alerts['next_attack_arrival']) > int(time.time())
     conn.close()
 
@@ -3717,6 +3718,7 @@ def test_incoming_attack_alert_multiple_and_earliest_arrival(fleet_db):
     alerts = build_fleet_incoming_attack_alerts(defender_id, conn=conn, now=now)
     assert alerts['incoming_attack_count'] == 2
     assert int(alerts['next_attack_arrival']) == int(now + 1800)
+    assert alerts['alert_key'].count(',') == 1
     conn.close()
 
 def test_attack_limit_allows_five_attacks_on_same_target(fleet_db):

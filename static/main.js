@@ -1395,14 +1395,89 @@
       if (typeof syncHeaderVacationBanner === "function") {
         syncHeaderVacationBanner({});
       }
-      _incomingAttackNotifyKey = null;
-      _incomingAttackNotifyPrimed = false;
       _lastMessagesUnreadPoll = null;
       console.debug("[GC] client state reset (account switch)", _sessionPlayerId, "->", pid, reason || "");
     }
     if (pid > 0) _sessionPlayerId = pid;
   }
   GC.resetClientStateForAccountChange = resetClientStateForAccountChange;
+
+  const GC_NOTIFY_SOUND_LS_ATTACK = "gc_last_attack_alert_sound_key";
+  const GC_NOTIFY_SOUND_LS_MESSAGE = "gc_last_message_sound_key";
+  const GC_NOTIFY_SOUND_BASE_VOLUME = 0.65;
+
+  function normalizeNotifySoundMode(mode) {
+    const value = String(mode || "normal").trim().toLowerCase();
+    return value === "off" || value === "quiet" || value === "normal" ? value : "normal";
+  }
+
+  function applyNotifySoundSettings(partial) {
+    if (!partial || typeof partial !== "object") return;
+    GC.settings = GC.settings || {};
+    if (partial.notify_attack_sound !== undefined) {
+      GC.settings.notify_attack_sound = normalizeNotifySoundMode(partial.notify_attack_sound);
+    }
+    if (partial.notify_message_sound !== undefined) {
+      GC.settings.notify_message_sound = normalizeNotifySoundMode(partial.notify_message_sound);
+    }
+  }
+
+  function notifySoundVolumeForKind(kind) {
+    applyNotifySoundSettings(GC.settings || {});
+    const mode = kind === "attack"
+      ? normalizeNotifySoundMode(GC.settings?.notify_attack_sound)
+      : normalizeNotifySoundMode(GC.settings?.notify_message_sound);
+    if (mode === "off") return 0;
+    const scale = mode === "quiet" ? 0.5 : 1.0;
+    return GC_NOTIFY_SOUND_BASE_VOLUME * scale;
+  }
+
+  function _notifySoundStorageKey(base) {
+    const pid = readDomPlayerId();
+    return pid > 0 ? `${base}:${pid}` : base;
+  }
+
+  function resolveAttackAlertSoundKey(alerts) {
+    const data = alerts && typeof alerts === "object" ? alerts : {};
+    const key = String(data.alert_key || "").trim();
+    if (key) return key;
+    const attacks = Array.isArray(data.incoming_attacks) ? data.incoming_attacks : [];
+    if (attacks.length > 0) {
+      const ids = attacks
+        .map((entry) => Math.floor(Number(entry?.movement_id) || 0))
+        .filter((id) => id > 0)
+        .sort((a, b) => a - b);
+      if (ids.length > 0) return `m:${ids.join(",")}`;
+    }
+    const count = Math.max(0, Math.floor(Number(data.incoming_attack_count) || 0));
+    const arrival = Math.floor(Number(data.next_attack_arrival) || 0);
+    if (count > 0 && arrival > 0) return `legacy:${count}:${arrival}`;
+    return "";
+  }
+
+  function resolveMessageNotifySoundKey(data) {
+    const id = Math.floor(Number(data?.latest_message_id) || 0);
+    return id > 0 ? `m:${id}` : "";
+  }
+
+  function shouldPlayNotifySoundForKey(storageKey, alertKey) {
+    const key = String(alertKey || "").trim();
+    if (!key || !storageKey) return false;
+    try {
+      const stored = localStorage.getItem(storageKey);
+      if (stored === key) return false;
+      localStorage.setItem(storageKey, key);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  GC.normalizeNotifySoundMode = normalizeNotifySoundMode;
+  GC.applyNotifySoundSettings = applyNotifySoundSettings;
+  GC.resolveAttackAlertSoundKey = resolveAttackAlertSoundKey;
+  GC.resolveMessageNotifySoundKey = resolveMessageNotifySoundKey;
+  GC.shouldPlayNotifySoundForKey = shouldPlayNotifySoundForKey;
 
   (function applyClientRuntimeConfig() {
     const cfg = typeof window !== "undefined" ? window.GC_CLIENT_CONFIG : null;
@@ -1412,6 +1487,10 @@
     if (Number(cfg.poll_idle_ms) > 0) pol.intervalIdle = Number(cfg.poll_idle_ms);
     if (Number(cfg.poll_hidden_ms) > 0) pol.intervalHidden = Number(cfg.poll_hidden_ms);
     if (Number(cfg.shipyard_poll_ms) > 0) GC.shipyardPollMs = Number(cfg.shipyard_poll_ms);
+    GC.settings = {
+      notify_attack_sound: normalizeNotifySoundMode(cfg.notify_attack_sound),
+      notify_message_sound: normalizeNotifySoundMode(cfg.notify_message_sound),
+    };
   })();
 
   function gcEscHtml(text) {
@@ -9223,15 +9302,15 @@
       unreadCount: hudUnread,
       previousUnread: prevUnread,
       unreadIncreased,
-      soundEnabled: window.GC?.settings?.sound !== false,
+      latestMessageId: data.latest_message_id,
+      messageSoundKey: resolveMessageNotifySoundKey(data),
+      notifyMessageSound: GC.settings?.notify_message_sound,
       audioUnlocked: _notifyAudioUnlocked,
     });
 
     _lastMessagesUnreadPoll = hudUnread;
 
-    if (unreadIncreased) {
-      playNewMessageNotifySound();
-    }
+    _maybePlayMessageNotifySound(data);
 
     if (
       unreadIncreased
@@ -10007,48 +10086,38 @@
     }
   }
 
-  let _incomingAttackNotifyKey = null;
-  let _incomingAttackNotifyPrimed = false;
-
-  function _incomingAttackNotifySignature(alerts) {
-    const count = Math.max(0, Math.floor(Number(alerts?.incoming_attack_count) || 0));
-    const arrival = Math.floor(Number(alerts?.next_attack_arrival) || 0);
-    return `${count}:${arrival}`;
+  function _maybePlayMessageNotifySound(data) {
+    const payload = data && typeof data === "object" ? data : {};
+    const alertKey = resolveMessageNotifySoundKey(payload);
+    if (!alertKey) return;
+    if (!shouldPlayNotifySoundForKey(_notifySoundStorageKey(GC_NOTIFY_SOUND_LS_MESSAGE), alertKey)) {
+      return;
+    }
+    playNewMessageNotifySound();
   }
 
   function _maybePlayIncomingAttackNotify(alerts) {
     const data = alerts && typeof alerts === "object" ? alerts : {};
     const attackCount = Math.max(0, Math.floor(Number(data.incoming_attack_count) || 0));
     const active = _fleetIncomingAttackActive(data);
+    const alertKey = resolveAttackAlertSoundKey(data);
 
     console.debug("[GC] notify check", {
       kind: "attack",
       attackCount,
       hasIncomingAttack: data.has_incoming_attack === true,
       nextAttackArrival: data.next_attack_arrival,
+      alertKey,
       active,
-      signature: _incomingAttackNotifySignature(data),
-      previousSignature: _incomingAttackNotifyKey,
-      primed: _incomingAttackNotifyPrimed,
-      soundEnabled: window.GC?.settings?.sound !== false,
+      notifyAttackSound: GC.settings?.notify_attack_sound,
       audioUnlocked: _notifyAudioUnlocked,
     });
 
-    if (!active) {
-      _incomingAttackNotifyKey = null;
-      _incomingAttackNotifyPrimed = false;
+    if (!active || !alertKey) return;
+    if (!shouldPlayNotifySoundForKey(_notifySoundStorageKey(GC_NOTIFY_SOUND_LS_ATTACK), alertKey)) {
       return;
     }
-    const signature = _incomingAttackNotifySignature(data);
-    if (!_incomingAttackNotifyPrimed) {
-      _incomingAttackNotifyPrimed = true;
-      _incomingAttackNotifyKey = signature;
-      return;
-    }
-    if (signature !== _incomingAttackNotifyKey) {
-      _incomingAttackNotifyKey = signature;
-      playIncomingAttackNotifySound();
-    }
+    playIncomingAttackNotifySound();
   }
 
   function syncFleetAttackAlert(alerts) {
@@ -11940,7 +12009,7 @@
     Object.entries(GC_NOTIFY_SOUNDS).forEach(([key, src]) => {
       const audio = new Audio(src);
       audio.preload = "auto";
-      audio.volume = 0.65;
+      audio.volume = GC_NOTIFY_SOUND_BASE_VOLUME;
       _notifyAudio[key] = audio;
     });
 
@@ -11980,7 +12049,8 @@
   GC.initNotificationSounds = initNotificationSounds;
 
   function playNotificationSound(kind) {
-    if (window.GC?.settings?.sound === false) return;
+    const volume = notifySoundVolumeForKind(kind);
+    if (volume <= 0) return;
     initNotificationSounds();
 
     const audio = _notifyAudio[kind];
@@ -11990,6 +12060,7 @@
       audio.pause();
       audio.currentTime = 0;
       audio.muted = false;
+      audio.volume = volume;
 
       const promise = audio.play();
       if (promise && typeof promise.catch === "function") {
@@ -12004,7 +12075,6 @@
   GC.playNotificationSound = playNotificationSound;
 
   function playLootboxOpenSound() {
-    if (window.GC?.settings?.sound === false) return;
     try {
       const audio = new Audio("/static/sounds/lootboxes/lootbox_sound.mp3");
       audio.volume = 0.2;

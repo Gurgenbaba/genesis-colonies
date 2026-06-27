@@ -14,7 +14,9 @@
      data-vacation-active="{{ '1' if safety.get('vacation_active') else '0' }}"
      data-deletion-pending="{{ '1' if safety.get('deletion_pending') else '0' }}"
      data-deletion-due="{{ safety.get('deletion_due_at') or '' }}"
-     data-vacation-locked-until="{{ safety.get('vacation_locked_until') or '' }}">
+     data-vacation-locked-until="{{ safety.get('vacation_locked_until') or '' }}"
+     data-notify-attack-sound="{{ od.get('notify_attack_sound', 'normal')|e }}"
+     data-notify-message-sound="{{ od.get('notify_message_sound', 'normal')|e }}">
 
   <header class="section-header gc-options-header">
     <h1 class="section-title">{{ T("options_title") }}</h1>
@@ -55,6 +57,47 @@
             <p class="gc-options-form-hint" role="status" aria-live="polite" hidden></p>
           </div>
         </form>
+
+        <div class="gc-options-form gc-options-notify-form">
+          <div class="gc-options-form-head">
+            <span class="gc-options-form-kicker">{{ T("options_notify_title") }}</span>
+          </div>
+          <p class="gc-options-notify-lead hint">{{ T("options_notify_subtitle") }}</p>
+
+          <div class="gc-options-notify-block" id="options-notify-sounds">
+            <div class="gc-options-notify-row">
+              <span class="gc-options-label">{{ T("options_notify_attack_title") }}</span>
+              <div class="gc-options-sound-toggle" role="group" aria-label="{{ T('options_notify_attack_title') }}">
+                {% for mode in ['off', 'quiet', 'normal'] %}
+                <button type="button"
+                        class="gc-btn gc-btn-sm gc-options-sound-btn{% if od.get('notify_attack_sound', 'normal') == mode %} is-active{% endif %}"
+                        data-notify-sound="attack"
+                        data-notify-mode="{{ mode }}"
+                        aria-pressed="{{ 'true' if od.get('notify_attack_sound', 'normal') == mode else 'false' }}">
+                  {{ T("options_notify_sound_" ~ mode) }}
+                </button>
+                {% endfor %}
+              </div>
+            </div>
+
+            <div class="gc-options-notify-row">
+              <span class="gc-options-label">{{ T("options_notify_message_title") }}</span>
+              <div class="gc-options-sound-toggle" role="group" aria-label="{{ T('options_notify_message_title') }}">
+                {% for mode in ['off', 'quiet', 'normal'] %}
+                <button type="button"
+                        class="gc-btn gc-btn-sm gc-options-sound-btn{% if od.get('notify_message_sound', 'normal') == mode %} is-active{% endif %}"
+                        data-notify-sound="message"
+                        data-notify-mode="{{ mode }}"
+                        aria-pressed="{{ 'true' if od.get('notify_message_sound', 'normal') == mode else 'false' }}">
+                  {{ T("options_notify_sound_" ~ mode) }}
+                </button>
+                {% endfor %}
+              </div>
+            </div>
+
+            <p class="gc-options-form-hint gc-options-notify-hint" id="options-notify-hint" role="status" aria-live="polite" hidden></p>
+          </div>
+        </div>
 
       </div>
     </section>

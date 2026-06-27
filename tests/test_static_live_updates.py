@@ -1091,7 +1091,10 @@ def test_main_js_gc_fleet_incoming_attack_alert_row():
     assert "_maybePlayIncomingAttackNotify" not in alert_fn
     patch_shell = src.split("function patchShellHudFromState(data, opts)")[1].split("GC.patchShellHudFromState = patchShellHudFromState")[0]
     assert "_maybePlayIncomingAttackNotify(data.fleet_alerts)" in patch_shell
-    assert "_incomingAttackNotifyPrimed" in src
+    assert "shouldPlayNotifySoundForKey" in src
+    assert "resolveAttackAlertSoundKey" in src
+    assert "GC_NOTIFY_SOUND_LS_ATTACK" in src
+    assert "_incomingAttackNotifyPrimed" not in src
 
 
 def test_notify_sound_assets_and_main_js_wiring():
@@ -1108,18 +1111,22 @@ def test_notify_sound_assets_and_main_js_wiring():
     assert "initNotificationSounds();" in src.split("function initShellOnce()")[1].split("document.addEventListener(\"click\"")[0]
     assert "playNotificationSound(\"attack\")" in src.split("function playIncomingAttackNotifySound()")[1].split("function playNewMessageNotifySound()")[0]
     assert "playNotificationSound(\"message\")" in src.split("function playNewMessageNotifySound()")[1].split("function lootTileAmountLabel")[0]
-    assert "window.GC?.settings?.sound === false" in src.split("function playNotificationSound(kind)")[1].split("GC.playNotificationSound = playNotificationSound")[0]
+    assert "notifySoundVolumeForKind(kind)" in src.split("function playNotificationSound(kind)")[1].split("GC.playNotificationSound = playNotificationSound")[0]
     assert "incoming_attack_count" in fleet_py
     assert "has_incoming_attack" in fleet_py
     assert "next_attack_arrival" in fleet_py
+    assert "alert_key" in fleet_py
     unread_fn = src.split("function _processUnreadMessagesPoll(data, reason, opts)")[1].split("function updateNavBadges")[0]
     assert "data.unread_messages_count" in unread_fn
     assert "coercePollUnreadForHud" in unread_fn
-    assert "playNewMessageNotifySound();" in unread_fn
+    assert "_maybePlayMessageNotifySound(data)" in unread_fn
+    assert "latest_message_id" in unread_fn
     assert "_processUnreadMessagesPoll(data, reason" in src
     attack_fn = src.split("function _maybePlayIncomingAttackNotify(alerts)")[1].split("function syncFleetAttackAlert(alerts)")[0]
     assert "incoming_attack_count" in attack_fn
     assert "has_incoming_attack" in attack_fn
+    assert "resolveAttackAlertSoundKey" in attack_fn
+    assert "shouldPlayNotifySoundForKey" in attack_fn
     assert "playIncomingAttackNotifySound();" in attack_fn
     patch_shell = src.split("function patchShellHudFromState(data, opts)")[1].split("GC.patchShellHudFromState = patchShellHudFromState")[0]
     assert "_maybePlayIncomingAttackNotify(data.fleet_alerts)" in patch_shell

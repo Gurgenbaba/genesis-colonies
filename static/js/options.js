@@ -213,6 +213,89 @@
     });
   }
 
+  function readNotifySoundMode(page, kind) {
+    if (!page) return "normal";
+    const attr = kind === "attack" ? "data-notify-attack-sound" : "data-notify-message-sound";
+    const raw = String(page.getAttribute(attr) || "normal").trim().toLowerCase();
+    return raw === "off" || raw === "quiet" || raw === "normal" ? raw : "normal";
+  }
+
+  function setNotifySoundToggleUi(kind, mode) {
+    document.querySelectorAll(`[data-notify-sound="${kind}"]`).forEach((btn) => {
+      const active = String(btn.getAttribute("data-notify-mode") || "") === mode;
+      btn.classList.toggle("is-active", active);
+      btn.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+  }
+
+  function bindNotifySoundToggles() {
+    const block = document.getElementById("options-notify-sounds");
+    const page = document.getElementById("options-page");
+    const hint = document.getElementById("options-notify-hint");
+    if (!block || !page || block.dataset.gcBound === "1") return;
+    block.dataset.gcBound = "1";
+
+    block.querySelectorAll("[data-notify-sound]").forEach((btn) => {
+      if (btn.dataset.gcBound === "1") return;
+      btn.dataset.gcBound = "1";
+      btn.addEventListener("click", async () => {
+        const kind = String(btn.getAttribute("data-notify-sound") || "");
+        const mode = String(btn.getAttribute("data-notify-mode") || "normal");
+        if (kind !== "attack" && kind !== "message") return;
+        if (readNotifySoundMode(page, kind) === mode) return;
+
+        block.querySelectorAll(`[data-notify-sound="${kind}"]`).forEach((el) => {
+          el.disabled = true;
+        });
+        if (hint) {
+          hint.hidden = true;
+          hint.textContent = "";
+          hint.classList.remove("gc-options-hint-error", "gc-options-hint-success");
+        }
+
+        const payload =
+          kind === "attack"
+            ? { notify_attack_sound: mode }
+            : { notify_message_sound: mode };
+
+        try {
+          const data = await postOptionsJson("/api/options/notify-sounds", payload);
+          if (!data || data.ok !== true) {
+            if (hint) {
+              hint.textContent = msgKey(data && data.error);
+              hint.hidden = false;
+              hint.classList.add("gc-options-hint-error");
+            }
+            return;
+          }
+          const saved = data.data || {};
+          if (saved.notify_attack_sound) {
+            page.setAttribute("data-notify-attack-sound", saved.notify_attack_sound);
+            setNotifySoundToggleUi("attack", saved.notify_attack_sound);
+          }
+          if (saved.notify_message_sound) {
+            page.setAttribute("data-notify-message-sound", saved.notify_message_sound);
+            setNotifySoundToggleUi("message", saved.notify_message_sound);
+          }
+          if (typeof GC.applyNotifySoundSettings === "function") {
+            GC.applyNotifySoundSettings(saved);
+          }
+          if (hint) {
+            hint.textContent = msgKey("options_saved");
+            hint.hidden = false;
+            hint.classList.add("gc-options-hint-success");
+          }
+        } catch (err) {
+          if (err && err.name === "AuthError") return;
+        } finally {
+          block.querySelectorAll("[data-notify-sound]").forEach((el) => {
+            el.disabled = false;
+          });
+        }
+      });
+    });
+  }
+
   async function handleOptionsFormSubmit(form, ev) {
     if (typeof GC.runOptionsFormSave === "function") {
       return GC.runOptionsFormSave(form, ev);
@@ -291,6 +374,19 @@
       form.dataset.gcOptionsBound = "1";
     });
 
+    const notifyBlock = document.getElementById("options-notify-sounds");
+    if (notifyBlock) {
+      delete notifyBlock.dataset.gcBound;
+      notifyBlock.querySelectorAll("[data-notify-sound]").forEach((btn) => {
+        delete btn.dataset.gcBound;
+      });
+    }
+
+    bindNotifySoundToggles();
+    if (page) {
+      setNotifySoundToggleUi("attack", readNotifySoundMode(page, "attack"));
+      setNotifySoundToggleUi("message", readNotifySoundMode(page, "message"));
+    }
     bindResendVerification();
     bindDiscordUnlink();
     const safetyFromPage = readOptionsSafetyFromPage(page);

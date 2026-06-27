@@ -25099,6 +25099,52 @@ a.gc-galaxy-coord-link:focus-visible {
   padding-top: 2px;
 }
 
+.gc-options-notify-block {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.gc-options-notify-form .gc-options-notify-lead {
+  margin: 0 0 10px;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: var(--gc-text-muted, rgba(180, 210, 230, 0.72));
+}
+
+.gc-options-notify-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 12px;
+  align-items: center;
+}
+
+.gc-options-sound-toggle {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.gc-options-sound-btn.is-active {
+  border-color: var(--gc-primary-2);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--gc-primary-2) 45%, transparent);
+}
+
+.gc-options-notify-hint {
+  margin-top: 2px;
+}
+
+@media (max-width: 720px) {
+  .gc-options-notify-row {
+    grid-template-columns: 1fr;
+  }
+
+  .gc-options-sound-toggle {
+    justify-content: flex-start;
+  }
+}
+
 .gc-options-form-head {
   margin-bottom: 6px;
 }

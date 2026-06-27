@@ -477,6 +477,7 @@ def inject_globals():
         current_planet_landscape_webp_url = None
 
     from game.config import get_client_runtime_config, is_command_map_dev_mode
+    from game.options import get_notify_sound_settings
     from game.planet_evolution.sidebar_nav import (
         ADMINISTRATION_MODULES,
         client_sidebar_nav_config,
@@ -561,13 +562,23 @@ def inject_globals():
     except Exception:
         pass
 
+    client_runtime_config = get_client_runtime_config()
+    try:
+        if auth_user and auth_user.get("id"):
+            client_runtime_config = {
+                **client_runtime_config,
+                **get_notify_sound_settings(int(auth_user["id"])),
+            }
+    except Exception:
+        pass
+
     return dict(
         T=T,
         T_DATA=get_locale_dict(active_locale),
         GC_LOCALE=active_locale,
         SUPPORTED_LANGUAGES=SUPPORTED_LANGUAGES,
         GC_ASSET_VERSION=GC_ASSET_VERSION,
-        GC_CLIENT_CONFIG=get_client_runtime_config(),
+        GC_CLIENT_CONFIG=client_runtime_config,
         player_name_link=player_name_link,
         CURRENT_PLAYER_ID=_current_player_id(),
 
@@ -4754,6 +4765,23 @@ def api_locale():
     return resp
 
 
+@app.route("/api/options/notify-sounds", methods=["POST"])
+@require_login_api
+def api_options_notify_sounds():
+    pid = session.get("user_id")
+    if not pid:
+        return _options_api_response(False, "not_logged_in", None, 401)
+    payload = request.get_json(silent=True) or {}
+    ok, err, data = options_logic.update_notify_sounds(
+        int(pid),
+        notify_attack_sound=payload.get("notify_attack_sound"),
+        notify_message_sound=payload.get("notify_message_sound"),
+    )
+    if not ok:
+        return _options_api_response(False, err, data, 400)
+    return _options_api_response(True, err, data)
+
+
 @app.route("/api/options/locale", methods=["POST"])
 @require_login_api
 def api_options_locale():
@@ -5455,8 +5483,15 @@ def _payload_from_live_context(
             conn=conn,
             prepare=not lightweight,
         )
+        latest_message_id = messages_logic.latest_inbox_message_id(
+            user_id,
+            conn=conn,
+            prepare=not lightweight,
+        )
+        payload["latest_message_id"] = int(latest_message_id) if latest_message_id else None
     except Exception:
         payload["unread_messages_count"] = 0
+        payload["latest_message_id"] = None
 
     try:
         from game.live_state import nav_badges_for_game_state
@@ -5502,6 +5537,8 @@ def _payload_from_live_context(
                 "incoming_attack_count": 0,
                 "next_attack_arrival": None,
                 "has_incoming_attack": False,
+                "alert_key": "",
+                "incoming_attacks": [],
             }
         else:
             payload["active_fleets"] = {
@@ -5515,6 +5552,8 @@ def _payload_from_live_context(
                 "incoming_attack_count": 0,
                 "next_attack_arrival": None,
                 "has_incoming_attack": False,
+                "alert_key": "",
+                "incoming_attacks": [],
             }
     except Exception:
         payload["active_fleets"] = {
@@ -5528,6 +5567,8 @@ def _payload_from_live_context(
             "incoming_attack_count": 0,
             "next_attack_arrival": None,
             "has_incoming_attack": False,
+            "alert_key": "",
+            "incoming_attacks": [],
         }
 
     try:

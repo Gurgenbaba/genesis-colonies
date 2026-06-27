@@ -40,6 +40,10 @@ SENSITIVE_RATE_WINDOW_SEC = 60.0
 SENSITIVE_RATE_MAX = 5
 _SENSITIVE_BUCKETS: Dict[str, Dict[int, list]] = {"email": {}, "password": {}}
 
+NOTIFY_SOUND_MODES = frozenset({"off", "quiet", "normal"})
+DEFAULT_NOTIFY_ATTACK_SOUND = "normal"
+DEFAULT_NOTIFY_MESSAGE_SOUND = "normal"
+
 _NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _\-.]{1,39}$")
 _EMAIL_RE = re.compile(
     r"^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
@@ -83,6 +87,14 @@ def ensure_account_options_schema(conn=None) -> None:
         cols = {row[1] for row in cur.execute("PRAGMA table_info(users);").fetchall()}
         if "email" not in cols:
             cur.execute("ALTER TABLE users ADD COLUMN email TEXT;")
+        if "notify_attack_sound" not in cols:
+            cur.execute(
+                "ALTER TABLE users ADD COLUMN notify_attack_sound TEXT NOT NULL DEFAULT 'normal';"
+            )
+        if "notify_message_sound" not in cols:
+            cur.execute(
+                "ALTER TABLE users ADD COLUMN notify_message_sound TEXT NOT NULL DEFAULT 'normal';"
+            )
         cur.execute(
             """
             CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower
@@ -141,6 +153,111 @@ def validate_email(value: Any) -> Tuple[bool, str, str]:
     if len(s) > EMAIL_MAX or not _EMAIL_RE.match(s):
         return False, "options_error_invalid_email", ""
     return True, "", s
+
+
+def normalize_notify_sound_mode(value: Any, *, default: str = DEFAULT_NOTIFY_ATTACK_SOUND) -> str:
+    mode = str(value or default).strip().lower()
+    return mode if mode in NOTIFY_SOUND_MODES else default
+
+
+def get_notify_sound_settings(player_id: int, *, conn=None) -> Dict[str, str]:
+    pid = int(player_id or 0)
+    if pid <= 0:
+        return {
+            "notify_attack_sound": DEFAULT_NOTIFY_ATTACK_SOUND,
+            "notify_message_sound": DEFAULT_NOTIFY_MESSAGE_SOUND,
+        }
+    own = conn is None
+    c = conn or db()
+    try:
+        ensure_account_options_schema(c)
+        row = c.execute(
+            """
+            SELECT notify_attack_sound, notify_message_sound
+            FROM users WHERE id = ? LIMIT 1;
+            """,
+            (pid,),
+        ).fetchone()
+        if not row:
+            return {
+                "notify_attack_sound": DEFAULT_NOTIFY_ATTACK_SOUND,
+                "notify_message_sound": DEFAULT_NOTIFY_MESSAGE_SOUND,
+            }
+        return {
+            "notify_attack_sound": normalize_notify_sound_mode(
+                row["notify_attack_sound"],
+                default=DEFAULT_NOTIFY_ATTACK_SOUND,
+            ),
+            "notify_message_sound": normalize_notify_sound_mode(
+                row["notify_message_sound"],
+                default=DEFAULT_NOTIFY_MESSAGE_SOUND,
+            ),
+        }
+    finally:
+        if own:
+            c.close()
+
+
+def update_notify_sounds(
+    player_id: int,
+    *,
+    notify_attack_sound: Optional[str] = None,
+    notify_message_sound: Optional[str] = None,
+    conn=None,
+) -> Tuple[bool, str, Dict[str, Any]]:
+    pid = int(player_id or 0)
+    if pid <= 0:
+        return False, "not_logged_in", {}
+
+    attack_mode = (
+        normalize_notify_sound_mode(notify_attack_sound, default=DEFAULT_NOTIFY_ATTACK_SOUND)
+        if notify_attack_sound is not None
+        else None
+    )
+    message_mode = (
+        normalize_notify_sound_mode(notify_message_sound, default=DEFAULT_NOTIFY_MESSAGE_SOUND)
+        if notify_message_sound is not None
+        else None
+    )
+    if attack_mode is None and message_mode is None:
+        return False, "options_error_invalid_notify_sound", {}
+
+    own = conn is None
+    c = conn or db()
+    try:
+        ensure_account_options_schema(c)
+        current = get_notify_sound_settings(pid, conn=c)
+        next_attack = attack_mode if attack_mode is not None else current["notify_attack_sound"]
+        next_message = message_mode if message_mode is not None else current["notify_message_sound"]
+        if (
+            next_attack == current["notify_attack_sound"]
+            and next_message == current["notify_message_sound"]
+        ):
+            return True, "options_saved", dict(current)
+
+        begin_write_transaction(c)
+        c.execute(
+            """
+            UPDATE users
+            SET notify_attack_sound = ?, notify_message_sound = ?
+            WHERE id = ?;
+            """,
+            (next_attack, next_message, pid),
+        )
+        if own:
+            commit(c)
+        payload = {
+            "notify_attack_sound": next_attack,
+            "notify_message_sound": next_message,
+        }
+        return True, "options_saved", payload
+    except Exception:
+        if own:
+            rollback(c)
+        return False, "options_error_invalid_notify_sound", {}
+    finally:
+        if own:
+            c.close()
 
 
 def validate_new_password(password: Any, confirm: Any) -> Tuple[bool, str]:
@@ -741,6 +858,7 @@ def get_options_snapshot(player_id: int, conn=None) -> Dict[str, Any]:
             "homeworld_id": int(planet["id"]) if planet and planet.get("id") else None,
             "homeworld_name": str(planet.get("name") or "") if planet else "",
             "account_safety": get_account_safety_state(int(player_id), conn=c),
+            **get_notify_sound_settings(int(player_id), conn=c),
         }
     finally:
         if own:

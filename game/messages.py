@@ -1118,6 +1118,36 @@ def delete_message(player_id: int, message_id: int) -> dict[str, Any]:
         conn.close()
 
 
+def latest_inbox_message_id(player_id: int, *, conn=None, prepare: bool = True) -> int | None:
+    own_conn = conn is None
+    if own_conn:
+        conn = db()
+    try:
+        if not _table_ready(conn):
+            return None
+        if prepare:
+            _prepare_inbox(conn, int(player_id))
+        cur = conn.cursor()
+        cur.execute(
+            f"""
+            SELECT id
+            FROM player_messages
+            WHERE {_inbox_visibility_clause(archived=False)}
+            ORDER BY id DESC
+            LIMIT 1;
+            """,
+            (int(player_id),),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        mid = int(row["id"] or 0)
+        return mid if mid > 0 else None
+    finally:
+        if own_conn:
+            conn.close()
+
+
 def unread_count(player_id: int, *, conn=None, prepare: bool = True) -> int:
     own_conn = conn is None
     if own_conn:

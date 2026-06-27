@@ -2045,6 +2045,8 @@ def build_fleet_incoming_attack_alerts(
         "incoming_attack_count": 0,
         "next_attack_arrival": None,
         "has_incoming_attack": False,
+        "alert_key": "",
+        "incoming_attacks": [],
     }
     if not fleet_schema_ready(conn):
         return dict(empty)
@@ -2057,37 +2059,59 @@ def build_fleet_incoming_attack_alerts(
     cur = conn.cursor()
     cur.execute(
         """
-        SELECT COUNT(*) AS attack_count, MIN(fm.arrival_at) AS next_arrival
+        SELECT fm.id AS movement_id,
+               fm.player_id AS attacker_id,
+               fm.target_planet_id,
+               fm.arrival_at
         FROM fleet_movements fm
         INNER JOIN planets tp ON tp.id = fm.target_planet_id
         WHERE tp.player_id = ?
           AND fm.player_id != ?
           AND fm.mission_type = 'attack'
           AND fm.status = 'outbound'
-          AND fm.arrival_at > ?;
+          AND fm.arrival_at > ?
+        ORDER BY fm.arrival_at ASC, fm.id ASC;
         """,
         (pid, pid, ts),
     )
-    row = cur.fetchone()
-    if not row:
+    rows = cur.fetchall()
+    if not rows:
         return dict(empty)
 
-    count = int(row["attack_count"] or 0)
+    count = len(rows)
     if count <= 0:
         return dict(empty)
 
-    next_arrival = row["next_arrival"]
+    movement_ids = sorted(int(row["movement_id"]) for row in rows)
+    alert_key = "m:" + ",".join(str(mid) for mid in movement_ids)
+
     next_attack_arrival: Optional[int] = None
-    if next_arrival is not None:
+    try:
+        next_attack_arrival = int(float(rows[0]["arrival_at"]))
+    except (TypeError, ValueError):
+        next_attack_arrival = None
+
+    incoming_attacks: List[Dict[str, Any]] = []
+    for row in rows:
         try:
-            next_attack_arrival = int(float(next_arrival))
+            arrival_at = int(float(row["arrival_at"]))
         except (TypeError, ValueError):
-            next_attack_arrival = None
+            arrival_at = None
+        incoming_attacks.append(
+            {
+                "movement_id": int(row["movement_id"]),
+                "attacker_id": int(row["attacker_id"]),
+                "target_planet_id": int(row["target_planet_id"]),
+                "arrival_at": arrival_at,
+            }
+        )
 
     return {
         "incoming_attack_count": count,
         "next_attack_arrival": next_attack_arrival,
         "has_incoming_attack": True,
+        "alert_key": alert_key,
+        "incoming_attacks": incoming_attacks,
     }
 
 
