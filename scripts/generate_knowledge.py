@@ -417,7 +417,7 @@ def _codex_article_keys(en: dict[str, str]) -> list[str]:
     return sorted(k for k in en if k.startswith("codex_") and k not in CODEX_UI_KEYS)
 
 
-def translate_codex_articles(*, batch_size: int = 25) -> dict[str, int]:
+def translate_codex_articles(*, batch_size: int = 20) -> dict[str, int]:
     """Translate codex article body keys from EN into fr/es/pl/pt/ru/tr."""
     from scripts.gc900_translate_locales import translate_batch
 
@@ -431,9 +431,12 @@ def translate_codex_articles(*, batch_size: int = 25) -> dict[str, int]:
         path = LOCALES / f"{loc}.json"
         with open(path, encoding="utf-8") as fh:
             target = json.load(fh)
+        for k, v in en.items():
+            if k not in target:
+                target[k] = v
         changed = 0
         todo = [k for k in keys if k in en]
-        print(f"codex translate {loc}: {len(todo)} keys")
+        print(f"codex translate {loc}: {len(todo)} keys", flush=True)
         for i in range(0, len(todo), batch_size):
             chunk = todo[i : i + batch_size]
             src_texts = [en[k] for k in chunk]
@@ -442,21 +445,42 @@ def translate_codex_articles(*, batch_size: int = 25) -> dict[str, int]:
                 source="en",
                 target=CODEX_TRANSLATE_LANG[loc],
             )
+            if len(translated) != len(chunk):
+                raise RuntimeError(f"{loc} batch size mismatch: {len(translated)} != {len(chunk)}")
             for key, new_val in zip(chunk, translated):
-                if new_val and new_val != target.get(key):
+                if not new_val:
+                    continue
+                if target.get(key) != new_val:
                     target[key] = new_val
                     changed += 1
-            print(f"  {loc} batch {i // batch_size + 1}/{(len(todo) + batch_size - 1) // batch_size}")
+            print(
+                f"  {loc} batch {i // batch_size + 1}/{(len(todo) + batch_size - 1) // batch_size}",
+                flush=True,
+            )
         with open(path, "w", encoding="utf-8") as fh:
             json.dump(target, fh, ensure_ascii=False, indent=2)
             fh.write("\n")
         stats[loc] = changed
-        print(f"  {loc}: {changed} updates")
+        print(f"  {loc}: {changed} updates", flush=True)
     return stats
 
 
 def main() -> int:
     sys.path.insert(0, str(ROOT))
+    translate_only = "--translate-only" in sys.argv
+    skip_translate = "--no-translate" in sys.argv
+    if translate_only and skip_translate:
+        print("ERROR: --translate-only and --no-translate are mutually exclusive")
+        return 1
+
+    if translate_only:
+        patch_total = _apply_locale_core_patches()
+        translate_stats = translate_codex_articles()
+        print(f"GC-950B: codex article translation only, {patch_total} core patches")
+        if translate_stats:
+            print("Codex article translations:", translate_stats)
+        return 0
+
     from game.knowledge_parser import (
         build_catalog,
         build_locale_map,
@@ -496,13 +520,13 @@ def main() -> int:
         elif loc == "en":
             merged = {**ui, **en_keys}
         else:
-            # Article body from EN; UI translated
-            merged = {**ui, **en_keys}
+            # Article bodies: keep locale file + translate_codex_articles(); only sync UI chrome here.
+            merged = ui
         total += _merge_locale_file(loc, merged)
 
     patch_total = _apply_locale_core_patches()
     translate_stats: dict[str, int] = {}
-    if "--no-translate" not in sys.argv:
+    if not skip_translate:
         translate_stats = translate_codex_articles()
 
     print(

@@ -30,14 +30,17 @@ SECTION_HEADER = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 
 def _parse_faq_block(text: str) -> List[Dict[str, str]]:
     items: List[Dict[str, str]] = []
-    parts = re.split(r"\n(?=\*\*)", text.strip())
-    for part in parts:
-        chunk = part.strip()
+    for chunk in re.split(r"\n\s*\n", text.strip()):
+        chunk = chunk.strip()
         if not chunk:
             continue
-        m = re.match(r"\*\*(.+?)\*\*\s*\n?(.*)", chunk, re.DOTALL)
-        if m:
-            items.append({"q": m.group(1).strip(), "a": m.group(2).strip()})
+        lines = chunk.split("\n", 1)
+        q_line = lines[0].strip()
+        m = re.match(r"\*\*(.+?)\*\*\s*$", q_line)
+        if not m:
+            continue
+        answer = lines[1].strip() if len(lines) > 1 else ""
+        items.append({"q": m.group(1).strip(), "a": answer})
     return items
 
 
