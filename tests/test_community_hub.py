@@ -31,6 +31,19 @@ def test_main_js_init_community_hub():
     assert "function initCommunityHub()" in src
     assert "initCommunityHub();" in src
     assert "GC.openSpecialWindow = openSpecialWindow" in src
+    assert "GC.closeSpecialWindows = closeSpecialWindows" in src
+    assert "btn.click()" not in src.split("function openSpecialWindow")[1].split("function initCodex")[0]
+
+
+def test_bottom_utility_bar_special_window_targets():
+    html = _read("templates/partials/bottom_utility_bar.html")
+    for target in ("support", "my-tickets", "imprint", "rules", "codex", "chat"):
+        assert f'data-special-open-window="{target}"' in html
+    panel = _read("templates/partials/special_panel.html")
+    codex = _read("templates/partials/codex_panel.html")
+    for target in ("support", "my-tickets", "imprint", "rules", "changelog", "events"):
+        assert f'data-special-window="{target}"' in panel
+    assert 'data-special-window="codex"' in codex
 
 
 def test_community_hub_locale_keys():

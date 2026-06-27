@@ -19687,12 +19687,13 @@
       const btn = e.target.closest(".gc-bottom-utility-bar [data-special-open-window]");
       if (!btn) return;
       e.preventDefault();
+      e.stopPropagation();
       const target = btn.dataset.specialOpenWindow || "";
       if (!target) return;
       if (typeof GC.openSpecialWindow === "function") {
         GC.openSpecialWindow(target);
       }
-    });
+    }, true);
 
     initSidebarRightDrawer();
 
@@ -26643,101 +26644,100 @@
   // =========================
   // Special panel (Wiki/Support)
   // =========================
+  function closeSpecialWindows() {
+    const root = document.querySelector("[data-special-root]");
+    if (!root) return;
+    root.querySelectorAll("[data-special-window]").forEach((win) => {
+      win.hidden = true;
+    });
+    root.classList.remove("is-open");
+    root.querySelectorAll(".gc-special-bar [data-special-open-window]").forEach((btn) => {
+      btn.classList.remove("is-active");
+    });
+    const codexRoot = document.querySelector("[data-codex-root]");
+    if (codexRoot && typeof codexShowList === "function") codexShowList(codexRoot);
+  }
+
+  function openSpecialWindow(target) {
+    const root = document.querySelector("[data-special-root]");
+    const key = String(target || "").trim();
+    if (!root || !key) return;
+
+    const windows = root.querySelectorAll("[data-special-window]");
+    const barButtons = root.querySelectorAll(".gc-special-bar [data-special-open-window]");
+
+    const setActiveBarButton = (activeTarget) => {
+      barButtons.forEach((btn) => {
+        const isActive = (btn.dataset.specialOpenWindow || "") === activeTarget;
+        btn.classList.toggle("is-active", isActive);
+      });
+    };
+
+    if (key === "chat") {
+      windows.forEach((win) => {
+        win.hidden = true;
+      });
+      root.classList.remove("is-open");
+      setActiveBarButton("chat");
+      if (typeof GC.openTChat === "function") {
+        void Promise.resolve(GC.openTChat()).catch((err) => {
+          console.error("[GC] openTChat failed", err);
+        });
+      } else if (typeof GC.initChat === "function") {
+        void Promise.resolve(GC.initChat()).catch((err) => {
+          console.error("[GC] initChat failed", err);
+        });
+      }
+      return;
+    }
+
+    if (key === "codex") {
+      const codexRoot = document.querySelector("[data-codex-root]");
+      if (codexRoot && typeof codexShowList === "function") codexShowList(codexRoot);
+    }
+
+    let found = false;
+    windows.forEach((win) => {
+      const active = (win.dataset.specialWindow || "") === key;
+      win.hidden = !active;
+      if (active) found = true;
+    });
+    if (!found) {
+      console.warn("[GC] unknown special window:", key);
+      return;
+    }
+
+    root.classList.add("is-open");
+    setActiveBarButton(key);
+  }
+
+  GC.openSpecialWindow = openSpecialWindow;
+  GC.closeSpecialWindows = closeSpecialWindows;
+
   function initSpecialPanel() {
     const root = document.querySelector("[data-special-root]");
     if (!root || root.dataset.bound === "1") return;
     root.dataset.bound = "1";
 
-    const openButtons = root.querySelectorAll("[data-special-open-window]");
-    const closeButtons = root.querySelectorAll("[data-special-window-close]");
-    const windows = root.querySelectorAll("[data-special-window]");
-    const barButtons = root.querySelectorAll(".gc-special-bar [data-special-open-window]");
-
-    const setActiveBarButton = (target) => {
-      barButtons.forEach((btn) => {
-        const isActive = (btn.dataset.specialOpenWindow || "") === target;
-        btn.classList.toggle("is-active", isActive);
-      });
-    };
-
-    const closeAllWindows = () => {
-      windows.forEach((win) => {
-        win.hidden = true;
-      });
-      root.classList.remove("is-open");
-      setActiveBarButton("");
-    };
-
-    const openWindow = (target) => {
-      if (!target) return;
-
-      if (target === "chat") {
-        windows.forEach((win) => {
-          win.hidden = true;
-        });
-        root.classList.remove("is-open");
-        setActiveBarButton("chat");
-        if (typeof GC.openTChat === "function") {
-          void Promise.resolve(GC.openTChat()).catch((err) => {
-            console.error("[GC] openTChat failed", err);
-          });
-        } else if (typeof GC.initChat === "function") {
-          void Promise.resolve(GC.initChat()).catch((err) => {
-            console.error("[GC] initChat failed", err);
-          });
-        }
-        return;
-      }
-
-      let found = false;
-      windows.forEach((win) => {
-        const active = (win.dataset.specialWindow || "") === target;
-        win.hidden = !active;
-        if (active) found = true;
-      });
-      if (!found) return;
-      root.classList.add("is-open");
-      setActiveBarButton(target);
-    };
-
-    openButtons.forEach((btn) => {
-      btn.addEventListener("click", () => {
+    root.querySelectorAll("[data-special-open-window]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
         const target = btn.dataset.specialOpenWindow || "";
-        openWindow(target);
+        if (target) openSpecialWindow(target);
       });
     });
 
-    closeButtons.forEach((btn) => {
-      btn.addEventListener("click", () => closeAllWindows());
+    root.querySelectorAll("[data-special-window-close]").forEach((btn) => {
+      btn.addEventListener("click", () => closeSpecialWindows());
     });
 
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") closeAllWindows();
-    });
-  }
-
-  function openSpecialWindow(target) {
-    const root = document.querySelector("[data-special-root]");
-    if (!root || !target) return;
-    const btn = root.querySelector(`[data-special-open-window="${target}"]`);
-    if (btn) {
-      btn.click();
-      return;
+    if (!document.documentElement.dataset.specialPanelEscapeBound) {
+      document.documentElement.dataset.specialPanelEscapeBound = "1";
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closeSpecialWindows();
+      });
     }
-
-    const windows = root.querySelectorAll("[data-special-window]");
-    const barButtons = root.querySelectorAll(".gc-special-bar [data-special-open-window]");
-    let found = false;
-    windows.forEach((win) => {
-      const active = (win.dataset.specialWindow || "") === target;
-      win.hidden = !active;
-      if (active) found = true;
-    });
-    if (!found) return;
-    root.classList.add("is-open");
-    barButtons.forEach((b) => b.classList.remove("is-active"));
   }
-  GC.openSpecialWindow = openSpecialWindow;
 
   // =========================
   // Genesis Codex (GC-950)
@@ -28478,6 +28478,7 @@
     bindFleetOnce();
     initHeaderPlanetSwitcher();
     initLanguageSwitcher();
+    initSpecialPanel();
     initRoleBasedSidebar();
     initGcPopoversOnce();
     initCardRequirementsHoverOnce();
@@ -28489,7 +28490,6 @@
     bootstrapPlanetLandscapeFromBoot();
     syncPerfBodyClasses();
     initMobileNav();
-    initSpecialPanel();
     initCodex();
     initCommunityHub();
     initSupportModule();

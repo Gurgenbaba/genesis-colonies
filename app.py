@@ -546,7 +546,14 @@ def inject_globals():
     except Exception:
         pass
 
-    rules_panel_ctx: dict[str, Any] = {"RULES_PANEL_SECTIONS": (), "RULES_PANEL_INTRO_KEY": "rules_panel_intro"}
+    rules_panel_ctx: dict[str, Any] = {
+        "RULES_PANEL_SECTIONS": (),
+        "RULES_PANEL_FAQ": (),
+        "RULES_PANEL_INTRO_KEY": "rules_panel_intro",
+        "RULES_PANEL_FAQ_TITLE_KEY": "rules_panel_faq_title",
+        "RULES_PANEL_VERSION_KEY": "rules_panel_version",
+        "RULES_PANEL_SUPPORT_CTA_KEY": "rules_panel_support_cta",
+    }
     try:
         from game.game_rules_panel import rules_panel_template_context
 

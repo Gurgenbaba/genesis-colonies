@@ -134,6 +134,11 @@ def test_main_js_persists_sidebar_state_in_local_storage():
     assert "GC.restoreLeftmenuState(window.location.href)" in init_page
     assert "syncLayoutShellMode" not in init_page
     assert "initBottomUtilityBar" in src
+    init_shell = src.split("function initShellOnce", 1)[1].split("function initPage", 1)[0]
+    assert "initSpecialPanel();" in init_shell
+    assert init_shell.index("initSpecialPanel();") < init_shell.index("initRoleBasedSidebar();")
+    open_special = src.split("function openSpecialWindow", 1)[1].split("GC.openSpecialWindow = openSpecialWindow", 1)[0]
+    assert "btn.click()" not in open_special
     route_ctx = src.split("function resolveLeftmenuRouteContext", 1)[1].split("function resolveNavSectionExpanded", 1)[0]
     assert 'path.endsWith("/buildings")' in route_ctx
     assert 'search.get("tab")' in route_ctx

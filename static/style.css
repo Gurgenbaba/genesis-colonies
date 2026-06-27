@@ -1415,7 +1415,7 @@ body.gc-body-ingame.gc-has-planet-landscape button.gc-nav-link.gc-nav-submenu-to
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: calc(var(--gc-z-sticky, 200) - 1);
+  z-index: calc(var(--gc-z-sticky, 200) + 1);
   height: var(--gc-bottom-util-h, 36px);
   border-top: 1px solid rgba(70, 229, 255, 0.22);
   background:
@@ -1526,6 +1526,11 @@ body.gc-body-ingame.gc-has-planet-landscape button.gc-nav-link.gc-nav-submenu-to
   align-items: center;
   gap: 10px;
   flex: 0 0 auto;
+  pointer-events: none;
+}
+
+.gc-bottom-util-end > *{
+  pointer-events: auto;
 }
 
 .gc-bottom-util-link--meta-nav{
@@ -1572,6 +1577,10 @@ body.gc-body-ingame.gc-has-planet-landscape button.gc-nav-link.gc-nav-submenu-to
 @media (min-width: 769px){
   .gc-body-ingame .gc-app-shell{
     padding-bottom: calc(var(--gc-bottom-util-h, 36px) + var(--gc-safe-bottom, 0px));
+  }
+
+  .gc-bottom-util-inner{
+    padding-right: 200px;
   }
 
   .gc-special-root > .gc-special-bar{
@@ -17218,6 +17227,10 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   background: linear-gradient(180deg, rgba(8, 16, 34, 0.98), rgba(5, 11, 24, 0.98));
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.52);
   padding: 12px;
+}
+
+.gc-special-window[hidden]{
+  display: none !important;
 }
 
 .gc-codex-intro{
