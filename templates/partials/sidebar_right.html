@@ -13,8 +13,6 @@
      data-nav-full="{{ '1' if _sn.full_nav else '0' }}"
      data-nav-placement="right">
 
-  {% include "partials/codex_commander_tip.html" %}
-
   <div class="gc-nav-section gc-nav-section--standalone"
        data-nav-section="messages"
        {% if not sidebar_section_visible(_sn, 'messages') %}hidden{% endif %}>

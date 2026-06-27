@@ -76,6 +76,16 @@ def test_options_page_requires_login(app_client):
     assert res.status_code in (302, 303)
     assert '/login' in (res.headers.get('Location') or '')
 
+def test_options_page_compact_tabs_contract(app_client):
+    pid, uname, _ = _create_player()
+    _login(app_client, uname)
+    html = app_client.get('/options').get_data(as_text=True)
+    assert 'data-options-tab-panel="notify"' in html
+    assert 'data-options-tab-panel="security"' in html
+    options_js = open(ROOT / 'static' / 'js' / 'options.js', encoding='utf-8').read()
+    assert 'initOptionsTabs' in options_js
+    assert 'gc_options_active_tab' in options_js
+
 def test_options_page_logged_in(app_client):
     pid, uname, _ = _create_player()
     _login(app_client, uname)
@@ -83,6 +93,9 @@ def test_options_page_logged_in(app_client):
     assert res.status_code == 200
     body = res.get_data(as_text=True)
     assert 'options-page' in body or 'Optionen' in body or 'Options' in body
+    assert 'gc-options-control-module' in body
+    assert 'data-options-tab-panel="profile"' in body
+    assert 'data-options-tab-btn="account"' in body
     assert 'id="options-form-player-name"' in body
     assert 'type="submit"' in body
     assert 'js/options.js' in body
@@ -295,7 +308,9 @@ def test_options_page_account_safety_card(app_client):
     res = app_client.get('/options')
     assert res.status_code == 200
     html = res.get_data(as_text=True)
+    assert 'gc-options-control-module' in html
     assert 'options-account-safety' in html
+    assert 'data-options-tab-panel="vacation"' in html
     assert 'options-safety-vacation' in html
     assert 'options-safety-deletion' in html
     assert 'options-safety-reset' in html

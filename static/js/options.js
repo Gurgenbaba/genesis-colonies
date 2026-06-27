@@ -361,11 +361,72 @@
     });
   }
 
+  const OPTIONS_TAB_LS_KEY = "gc_options_active_tab";
+  const OPTIONS_TABS = ["profile", "account", "notify", "vacation", "security"];
+
+  function initOptionsTabs() {
+    const module = document.querySelector(".gc-options-control-module");
+    if (!module || module.dataset.gcTabsBound === "1") return;
+    module.dataset.gcTabsBound = "1";
+
+    const tabBtns = module.querySelectorAll("[data-options-tab-btn]");
+    const panels = module.querySelectorAll("[data-options-tab-panel]");
+    if (!tabBtns.length || !panels.length) return;
+
+    function activateTab(name) {
+      const tab = OPTIONS_TABS.includes(name) ? name : "profile";
+      tabBtns.forEach((btn) => {
+        const on = btn.getAttribute("data-options-tab-btn") === tab;
+        btn.classList.toggle("is-active", on);
+        btn.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      panels.forEach((panel) => {
+        const on = panel.getAttribute("data-options-tab-panel") === tab;
+        panel.classList.toggle("is-active", on);
+        panel.hidden = !on;
+      });
+      try {
+        localStorage.setItem(OPTIONS_TAB_LS_KEY, tab);
+      } catch (_err) {
+        /* ignore storage errors */
+      }
+    }
+
+    let initial = "profile";
+    try {
+      const saved = localStorage.getItem(OPTIONS_TAB_LS_KEY);
+      if (saved && OPTIONS_TABS.includes(saved)) initial = saved;
+    } catch (_err) {
+      /* ignore storage errors */
+    }
+    activateTab(initial);
+
+    tabBtns.forEach((btn) => {
+      if (btn.dataset.gcTabBound === "1") return;
+      btn.dataset.gcTabBound = "1";
+      btn.addEventListener("click", () => {
+        const tab = btn.getAttribute("data-options-tab-btn");
+        if (tab) activateTab(tab);
+      });
+    });
+
+    if (typeof GC.registerCleanup === "function") {
+      GC.registerCleanup(() => {
+        delete module.dataset.gcTabsBound;
+        tabBtns.forEach((btn) => {
+          delete btn.dataset.gcTabBound;
+        });
+      });
+    }
+  }
+
   function initOptionsPage() {
     if (!document.getElementById("options-page")) return;
 
     const page = document.getElementById("options-page");
     if (page) delete page.dataset.gcSafetyBound;
+
+    initOptionsTabs();
 
     document.querySelectorAll("form.gc-options-form").forEach((form) => {
       delete form.dataset.gcOptionsBound;

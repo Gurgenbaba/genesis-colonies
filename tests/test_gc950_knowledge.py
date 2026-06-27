@@ -296,3 +296,41 @@ def test_codex_route_visit_recorded_on_buildings(gc950_db, monkeypatch):
         assert row is not None
     finally:
         conn.close()
+
+
+def test_sidebar_right_excludes_commander_tip():
+    sidebar = (ROOT / "templates/partials/sidebar_right.html").read_text(encoding="utf-8")
+    assert "codex_commander_tip" not in sidebar
+    assert "data-codex-commander-tip" not in sidebar
+
+
+def test_overview_page_may_render_commander_tip():
+    overview = (ROOT / "templates/overview.html").read_text(encoding="utf-8")
+    assert "partials/codex_commander_tip.html" in overview
+    assert "gc-codex-commander-tip-mobile" in overview
+
+
+def test_game_state_codex_ok_without_sidebar_commander_tip(gc950_db, monkeypatch):
+    client = _app_client(monkeypatch)
+    uid, _ = _create_player()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+    html = client.get("/buildings").get_data(as_text=True)
+    sidebar_right = html.split('id="gc-sidebar-nav-right"', 1)[1].split("</nav>", 1)[0]
+    assert "data-codex-commander-tip" not in sidebar_right
+    payload = client.get("/api/game-state").get_json()
+    assert payload.get("ok") is True
+    codex = payload.get("codex") or {}
+    assert codex.get("articles")
+    tip = codex.get("commander_tip")
+    if tip:
+        assert tip.get("text_key")
+
+
+def test_apply_codex_commander_tip_noop_contract():
+    src = (ROOT / "static/main.js").read_text(encoding="utf-8")
+    tip_fn = src.split("function applyCommanderTipFromState")[1].split("function initCodex")[0]
+    assert 'querySelectorAll("[data-codex-commander-tip]")' in tip_fn
+    assert "if (!tipRoots.length) return" in tip_fn
+    apply_fn = src.split("function applyCodexFromState")[1].split("function applyCommanderTipFromState")[0]
+    assert "applyCommanderTipFromState(codexState.commander_tip)" in apply_fn

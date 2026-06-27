@@ -27037,8 +27037,14 @@
       });
     }
 
-    const tip = codexState.commander_tip;
-    document.querySelectorAll("[data-codex-commander-tip]").forEach((tipRoot) => {
+    applyCommanderTipFromState(codexState.commander_tip);
+  }
+
+  function applyCommanderTipFromState(tip) {
+    const tipRoots = document.querySelectorAll("[data-codex-commander-tip]");
+    if (!tipRoots.length) return;
+    tipRoots.forEach((tipRoot) => {
+      if (!tipRoot) return;
       if (tip && tip.text_key) {
         const textEl = tipRoot.querySelector(".gc-codex-commander-tip-text");
         const learnBtn = tipRoot.querySelector("[data-codex-open]");

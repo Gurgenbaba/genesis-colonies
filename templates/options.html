@@ -18,429 +18,496 @@
      data-notify-attack-sound="{{ od.get('notify_attack_sound', 'normal')|e }}"
      data-notify-message-sound="{{ od.get('notify_message_sound', 'normal')|e }}">
 
-  <header class="section-header gc-options-header">
-    <h1 class="section-title">{{ T("options_title") }}</h1>
-    <p class="section-hint hint">{{ T("options_subtitle") }}</p>
-  </header>
+  <section class="gc-options-control-module" aria-labelledby="options-control-title">
 
-  <div class="gc-options-grid">
-
-    <section class="gc-panel gc-options-panel gc-panel-accent" aria-labelledby="options-profile-title">
-      <div class="gc-panel-header gc-options-panel-head">
-        <div class="gc-panel-head-left">
-          <span class="gc-panel-title" id="options-profile-title">{{ T("options_profile_title") }}</span>
-          <span class="gc-panel-subtitle">{{ T("options_profile_subtitle") }}</span>
-        </div>
-        <span class="gc-panel-tag">{{ T("options_tag_profile") }}</span>
+    <header class="gc-options-module-header">
+      <div class="gc-options-module-head-text">
+        <h1 class="gc-options-module-title" id="options-control-title">{{ T("options_control_title") }}</h1>
+        <p class="gc-options-module-nav-hint">{{ T("options_control_nav_hint") }}</p>
       </div>
-      <div class="gc-panel-body gc-options-panel-body">
+    </header>
 
-        <form class="gc-options-form" id="options-form-player-name" method="post" action="#" novalidate>
-          <div class="gc-options-form-head">
-            <span class="gc-options-form-kicker">{{ T("options_player_name") }}</span>
-          </div>
-          <div class="gc-options-field-row">
-            <label class="gc-options-field">
-              <span class="gc-options-label">{{ T("options_player_name_current") }}</span>
-              <output class="gc-options-current" id="options-current-player-name">{{ od.get('player_name') or T('options_not_set') }}</output>
-            </label>
-            <label class="gc-options-field">
-              <span class="gc-options-label">{{ T("options_player_name") }}</span>
-              <input type="text" class="gc-input gc-options-input" name="player_name" maxlength="40" required
-                     autocomplete="nickname"
-                     placeholder="{{ T('options_placeholder_player_name') }}"
-                     value="{{ od.get('player_name', '') }}">
-            </label>
-          </div>
-          <div class="gc-options-form-actions">
-            <button type="submit" class="gc-btn gc-btn-primary gc-options-save">{{ T("options_save") }}</button>
-            <p class="gc-options-form-hint" role="status" aria-live="polite" hidden></p>
-          </div>
-        </form>
+    <div class="gc-options-module-shell">
+      <nav class="gc-options-tab-rail" role="tablist" aria-label="{{ T('options_control_title') }}">
+        <button type="button"
+                class="gc-options-tab-btn is-active"
+                role="tab"
+                id="options-tab-btn-profile"
+                data-options-tab-btn="profile"
+                aria-controls="options-tab-panel-profile"
+                aria-selected="true">
+          {{ T("options_tab_profile") }}
+        </button>
+        <button type="button"
+                class="gc-options-tab-btn"
+                role="tab"
+                id="options-tab-btn-account"
+                data-options-tab-btn="account"
+                aria-controls="options-tab-panel-account"
+                aria-selected="false">
+          {{ T("options_tab_account") }}
+        </button>
+        <button type="button"
+                class="gc-options-tab-btn"
+                role="tab"
+                id="options-tab-btn-notify"
+                data-options-tab-btn="notify"
+                aria-controls="options-tab-panel-notify"
+                aria-selected="false">
+          {{ T("options_tab_notify") }}
+        </button>
+        <button type="button"
+                class="gc-options-tab-btn"
+                role="tab"
+                id="options-tab-btn-vacation"
+                data-options-tab-btn="vacation"
+                aria-controls="options-tab-panel-vacation"
+                aria-selected="false">
+          {{ T("options_tab_vacation") }}
+        </button>
+        <button type="button"
+                class="gc-options-tab-btn"
+                role="tab"
+                id="options-tab-btn-security"
+                data-options-tab-btn="security"
+                aria-controls="options-tab-panel-security"
+                aria-selected="false">
+          {{ T("options_tab_security") }}
+        </button>
+      </nav>
 
-        <div class="gc-options-form gc-options-notify-form">
-          <div class="gc-options-form-head">
-            <span class="gc-options-form-kicker">{{ T("options_notify_title") }}</span>
-          </div>
-          <p class="gc-options-notify-lead hint">{{ T("options_notify_subtitle") }}</p>
+      <div class="gc-options-tab-content">
 
-          <div class="gc-options-notify-block" id="options-notify-sounds">
-            <div class="gc-options-notify-row">
-              <span class="gc-options-label">{{ T("options_notify_attack_title") }}</span>
-              <div class="gc-options-sound-toggle" role="group" aria-label="{{ T('options_notify_attack_title') }}">
-                {% for mode in ['off', 'quiet', 'normal'] %}
-                <button type="button"
-                        class="gc-btn gc-btn-sm gc-options-sound-btn{% if od.get('notify_attack_sound', 'normal') == mode %} is-active{% endif %}"
-                        data-notify-sound="attack"
-                        data-notify-mode="{{ mode }}"
-                        aria-pressed="{{ 'true' if od.get('notify_attack_sound', 'normal') == mode else 'false' }}">
-                  {{ T("options_notify_sound_" ~ mode) }}
-                </button>
-                {% endfor %}
-              </div>
-            </div>
-
-            <div class="gc-options-notify-row">
-              <span class="gc-options-label">{{ T("options_notify_message_title") }}</span>
-              <div class="gc-options-sound-toggle" role="group" aria-label="{{ T('options_notify_message_title') }}">
-                {% for mode in ['off', 'quiet', 'normal'] %}
-                <button type="button"
-                        class="gc-btn gc-btn-sm gc-options-sound-btn{% if od.get('notify_message_sound', 'normal') == mode %} is-active{% endif %}"
-                        data-notify-sound="message"
-                        data-notify-mode="{{ mode }}"
-                        aria-pressed="{{ 'true' if od.get('notify_message_sound', 'normal') == mode else 'false' }}">
-                  {{ T("options_notify_sound_" ~ mode) }}
-                </button>
-                {% endfor %}
-              </div>
-            </div>
-
-            <p class="gc-options-form-hint gc-options-notify-hint" id="options-notify-hint" role="status" aria-live="polite" hidden></p>
+        <div class="gc-options-tab-panel is-active"
+             id="options-tab-panel-profile"
+             data-options-tab-panel="profile"
+             role="tabpanel"
+             aria-labelledby="options-tab-btn-profile">
+          <div class="gc-options-card-grid gc-options-card-grid--single">
+            <article class="gc-options-card">
+              <header class="gc-options-card-head">
+                <span class="gc-options-card-title">{{ T("options_profile_title") }}</span>
+                <span class="gc-options-card-sub">{{ T("options_profile_subtitle") }}</span>
+              </header>
+              <form class="gc-options-form" id="options-form-player-name" method="post" action="#" novalidate>
+                <div class="gc-options-field-row">
+                  <label class="gc-options-field">
+                    <span class="gc-options-label">{{ T("options_player_name_current") }}</span>
+                    <output class="gc-options-current" id="options-current-player-name">{{ od.get('player_name') or T('options_not_set') }}</output>
+                  </label>
+                  <label class="gc-options-field">
+                    <span class="gc-options-label">{{ T("options_player_name") }}</span>
+                    <input type="text" class="gc-input gc-options-input" name="player_name" maxlength="40" required
+                           autocomplete="nickname"
+                           placeholder="{{ T('options_placeholder_player_name') }}"
+                           value="{{ od.get('player_name', '') }}">
+                  </label>
+                </div>
+                <div class="gc-options-form-actions">
+                  <button type="submit" class="gc-btn gc-btn-primary gc-options-save">{{ T("options_save") }}</button>
+                  <p class="gc-options-form-hint" role="status" aria-live="polite" hidden></p>
+                </div>
+              </form>
+            </article>
           </div>
         </div>
 
-      </div>
-    </section>
-
-    <section class="gc-panel gc-options-panel gc-panel-accent" aria-labelledby="options-account-title">
-      <div class="gc-panel-header gc-options-panel-head">
-        <div class="gc-panel-head-left">
-          <span class="gc-panel-title" id="options-account-title">{{ T("options_account_title") }}</span>
-          <span class="gc-panel-subtitle">{{ T("options_account_subtitle") }}</span>
-        </div>
-        <span class="gc-panel-tag">{{ T("options_tag_account") }}</span>
-      </div>
-      <div class="gc-panel-body gc-options-panel-body">
-
-        <form class="gc-options-form" id="options-form-email" method="post" action="#" novalidate>
-          <div class="gc-options-form-head">
-            <span class="gc-options-form-kicker">{{ T("options_email") }}</span>
-          </div>
-          {% if od.get('email') %}
-          <div class="gc-options-verify-row" id="options-email-verify-row"
-               data-verified="{{ '1' if od.get('email_verified') else '0' }}">
-            {% if od.get('email_verified') %}
-              <span class="gc-options-verify-badge gc-options-verify-badge-ok" id="options-email-verify-badge">
-                <span class="gc-options-verify-icon" aria-hidden="true">✓</span>
-                {{ T("options_email_verified") }}
-              </span>
-            {% else %}
-              <span class="gc-options-verify-badge gc-options-verify-badge-warn" id="options-email-verify-badge">
-                <span class="gc-options-verify-icon" aria-hidden="true">⚠</span>
-                {{ T("options_email_unverified") }}
-              </span>
-              <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" id="options-resend-verify">
-                {{ T("options_resend_verification") }}
-              </button>
-              <p class="gc-options-resend-hint" id="options-resend-hint" role="status" aria-live="polite" hidden></p>
-            {% endif %}
-          </div>
-          {% endif %}
-          <div class="gc-options-field-row">
-            <label class="gc-options-field">
-              <span class="gc-options-label">{{ T("options_email_current") }}</span>
-              <output class="gc-options-current gc-options-current-mono" id="options-current-email">{{ od.get('email') or T('options_not_set') }}</output>
-            </label>
-            <label class="gc-options-field">
-              <span class="gc-options-label">{{ T("options_email") }}</span>
-              <input type="email" class="gc-input gc-options-input" name="email" maxlength="254" required
-                     autocomplete="email"
-                     placeholder="{{ T('options_placeholder_email') }}"
-                     value="{{ od.get('email', '') }}">
-            </label>
-          </div>
-          <div class="gc-options-form-actions">
-            <button type="submit" class="gc-btn gc-btn-primary gc-options-save">{{ T("options_save") }}</button>
-            <p class="gc-options-form-hint" role="status" aria-live="polite" hidden></p>
-          </div>
-        </form>
-
-        <form class="gc-options-form gc-options-form-password" id="options-form-password" method="post" action="#" novalidate>
-          <input type="text"
-                 class="visually-hidden"
-                 name="username"
-                 autocomplete="username"
-                 tabindex="-1"
-                 aria-hidden="true"
-                 value="{{ od.get('username', '')|e }}"
-                 readonly>
-          <div class="gc-options-form-head">
-            <span class="gc-options-form-kicker">{{ T("options_password") }}</span>
-          </div>
-          <div class="gc-options-field-row gc-options-field-row-password">
-            <label class="gc-options-field">
-              <span class="gc-options-label">{{ T("options_current_password") }}</span>
-              <input type="password" class="gc-input gc-options-input" name="current_password" required
-                     autocomplete="current-password"
-                     placeholder="{{ T('options_placeholder_password_current') }}">
-            </label>
-            <label class="gc-options-field">
-              <span class="gc-options-label">{{ T("options_new_password") }}</span>
-              <input type="password" class="gc-input gc-options-input" name="new_password" required
-                     autocomplete="new-password" minlength="4"
-                     placeholder="{{ T('options_placeholder_password_new') }}">
-            </label>
-            <label class="gc-options-field">
-              <span class="gc-options-label">{{ T("options_confirm_password") }}</span>
-              <input type="password" class="gc-input gc-options-input" name="confirm_password" required
-                     autocomplete="new-password" minlength="4"
-                     placeholder="{{ T('options_placeholder_password_confirm') }}">
-            </label>
-          </div>
-          <div class="gc-options-form-actions">
-            <button type="submit" class="gc-btn gc-btn-primary gc-options-save">{{ T("options_save") }}</button>
-            <p class="gc-options-form-hint" role="status" aria-live="polite" hidden></p>
-          </div>
-        </form>
-
-        {% if DISCORD_OAUTH_ENABLED %}
-        <div class="gc-options-discord"
-             id="options-discord-block"
-             data-discord-linked="{{ '1' if od.get('discord_linked') else '0' }}"
-             data-can-unlink="{{ '1' if od.get('discord_can_unlink') else '0' }}"
-             data-unlink-needs-password="{{ '1' if od.get('discord_unlink_requires_password') else '0' }}">
-          <div class="gc-options-form-head">
-            <span class="gc-options-form-kicker">{{ T("options_discord_title") if T("options_discord_title") != "options_discord_title" else "Discord" }}</span>
-          </div>
-
-          {% if od.get('discord_linked') %}
-            <div class="gc-options-discord-connected">
-              {% if od.get('discord_avatar_url') %}
-                <img src="{{ od.get('discord_avatar_url') }}"
-                     alt=""
-                     class="gc-options-discord-avatar"
-                     width="48"
-                     height="48"
-                     loading="lazy"
-                     decoding="async">
-              {% endif %}
-              <div class="gc-options-discord-meta">
-                <span class="gc-options-discord-status">
-                  <span class="gc-options-discord-status-dot" aria-hidden="true"></span>
-                  {{ T("options_discord_connected") if T("options_discord_connected") != "options_discord_connected" else "Verbunden als" }}
-                </span>
-                <strong class="gc-options-discord-name">{{ od.get('discord_username') or T('options_not_set') }}</strong>
-                {% if od.get('discord_id') %}
-                  <span class="gc-options-discord-id gc-mono">ID: {{ od.get('discord_id') }}</span>
+        <div class="gc-options-tab-panel"
+             id="options-tab-panel-account"
+             data-options-tab-panel="account"
+             role="tabpanel"
+             aria-labelledby="options-tab-btn-account"
+             hidden>
+          <div class="gc-options-card-grid">
+            <article class="gc-options-card">
+              <header class="gc-options-card-head">
+                <span class="gc-options-card-title">{{ T("options_email") }}</span>
+              </header>
+              <form class="gc-options-form" id="options-form-email" method="post" action="#" novalidate>
+                {% if od.get('email') %}
+                <div class="gc-options-verify-row" id="options-email-verify-row"
+                     data-verified="{{ '1' if od.get('email_verified') else '0' }}">
+                  {% if od.get('email_verified') %}
+                    <span class="gc-options-verify-badge gc-options-verify-badge-ok" id="options-email-verify-badge">
+                      <span class="gc-options-verify-icon" aria-hidden="true">✓</span>
+                      {{ T("options_email_verified") }}
+                    </span>
+                  {% else %}
+                    <span class="gc-options-verify-badge gc-options-verify-badge-warn" id="options-email-verify-badge">
+                      <span class="gc-options-verify-icon" aria-hidden="true">⚠</span>
+                      {{ T("options_email_unverified") }}
+                    </span>
+                    <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" id="options-resend-verify">
+                      {{ T("options_resend_verification") }}
+                    </button>
+                    <p class="gc-options-resend-hint" id="options-resend-hint" role="status" aria-live="polite" hidden></p>
+                  {% endif %}
+                </div>
                 {% endif %}
-              </div>
-            </div>
+                <div class="gc-options-field-row">
+                  <label class="gc-options-field">
+                    <span class="gc-options-label">{{ T("options_email_current") }}</span>
+                    <output class="gc-options-current gc-options-current-mono" id="options-current-email">{{ od.get('email') or T('options_not_set') }}</output>
+                  </label>
+                  <label class="gc-options-field">
+                    <span class="gc-options-label">{{ T("options_email") }}</span>
+                    <input type="email" class="gc-input gc-options-input" name="email" maxlength="254" required
+                           autocomplete="email"
+                           placeholder="{{ T('options_placeholder_email') }}"
+                           value="{{ od.get('email', '') }}">
+                  </label>
+                </div>
+                <div class="gc-options-form-actions">
+                  <button type="submit" class="gc-btn gc-btn-primary gc-options-save">{{ T("options_save") }}</button>
+                  <p class="gc-options-form-hint" role="status" aria-live="polite" hidden></p>
+                </div>
+              </form>
+            </article>
 
-            <div class="gc-options-discord-actions">
-              {% if od.get('discord_can_unlink') or od.get('discord_unlink_requires_password') %}
-                {% if od.get('discord_unlink_requires_password') %}
-                  <label class="gc-options-field gc-options-discord-unlink-password">
+            <article class="gc-options-card">
+              <header class="gc-options-card-head">
+                <span class="gc-options-card-title">{{ T("options_password") }}</span>
+              </header>
+              <form class="gc-options-form gc-options-form-password" id="options-form-password" method="post" action="#" novalidate>
+                <input type="text"
+                       class="visually-hidden"
+                       name="username"
+                       autocomplete="username"
+                       tabindex="-1"
+                       aria-hidden="true"
+                       value="{{ od.get('username', '')|e }}"
+                       readonly>
+                <div class="gc-options-field-row gc-options-field-row-password">
+                  <label class="gc-options-field">
                     <span class="gc-options-label">{{ T("options_current_password") }}</span>
-                    <input type="password"
-                           class="gc-input gc-options-input"
-                           id="options-discord-unlink-password"
+                    <input type="password" class="gc-input gc-options-input" name="current_password" required
                            autocomplete="current-password"
                            placeholder="{{ T('options_placeholder_password_current') }}">
                   </label>
+                  <label class="gc-options-field">
+                    <span class="gc-options-label">{{ T("options_new_password") }}</span>
+                    <input type="password" class="gc-input gc-options-input" name="new_password" required
+                           autocomplete="new-password" minlength="4"
+                           placeholder="{{ T('options_placeholder_password_new') }}">
+                  </label>
+                  <label class="gc-options-field">
+                    <span class="gc-options-label">{{ T("options_confirm_password") }}</span>
+                    <input type="password" class="gc-input gc-options-input" name="confirm_password" required
+                           autocomplete="new-password" minlength="4"
+                           placeholder="{{ T('options_placeholder_password_confirm') }}">
+                  </label>
+                </div>
+                <div class="gc-options-form-actions">
+                  <button type="submit" class="gc-btn gc-btn-primary gc-options-save">{{ T("options_save") }}</button>
+                  <p class="gc-options-form-hint" role="status" aria-live="polite" hidden></p>
+                </div>
+              </form>
+            </article>
+
+            {% if DISCORD_OAUTH_ENABLED %}
+            <article class="gc-options-card gc-options-card--wide">
+              <header class="gc-options-card-head">
+                <span class="gc-options-card-title">{{ T("options_discord_title") if T("options_discord_title") != "options_discord_title" else "Discord" }}</span>
+              </header>
+              <div class="gc-options-discord"
+                   id="options-discord-block"
+                   data-discord-linked="{{ '1' if od.get('discord_linked') else '0' }}"
+                   data-can-unlink="{{ '1' if od.get('discord_can_unlink') else '0' }}"
+                   data-unlink-needs-password="{{ '1' if od.get('discord_unlink_requires_password') else '0' }}">
+                {% if od.get('discord_linked') %}
+                  <div class="gc-options-discord-connected">
+                    {% if od.get('discord_avatar_url') %}
+                      <img src="{{ od.get('discord_avatar_url') }}"
+                           alt=""
+                           class="gc-options-discord-avatar"
+                           width="48"
+                           height="48"
+                           loading="lazy"
+                           decoding="async">
+                    {% endif %}
+                    <div class="gc-options-discord-meta">
+                      <span class="gc-options-discord-status">
+                        <span class="gc-options-discord-status-dot" aria-hidden="true"></span>
+                        {{ T("options_discord_connected") if T("options_discord_connected") != "options_discord_connected" else "Verbunden als" }}
+                      </span>
+                      <strong class="gc-options-discord-name">{{ od.get('discord_username') or T('options_not_set') }}</strong>
+                      {% if od.get('discord_id') %}
+                        <span class="gc-options-discord-id gc-mono">ID: {{ od.get('discord_id') }}</span>
+                      {% endif %}
+                    </div>
+                  </div>
+                  <div class="gc-options-discord-actions">
+                    {% if od.get('discord_can_unlink') or od.get('discord_unlink_requires_password') %}
+                      {% if od.get('discord_unlink_requires_password') %}
+                        <label class="gc-options-field gc-options-discord-unlink-password">
+                          <span class="gc-options-label">{{ T("options_current_password") }}</span>
+                          <input type="password"
+                                 class="gc-input gc-options-input"
+                                 id="options-discord-unlink-password"
+                                 autocomplete="current-password"
+                                 placeholder="{{ T('options_placeholder_password_current') }}">
+                        </label>
+                      {% endif %}
+                      <button type="button"
+                              class="gc-btn gc-btn-outline gc-options-discord-unlink"
+                              id="options-discord-unlink-btn">
+                        {{ T("options_discord_unlink") if T("options_discord_unlink") != "options_discord_unlink" else "Verbindung trennen" }}
+                      </button>
+                      <p class="gc-options-form-hint gc-options-discord-hint" id="options-discord-hint" role="status" aria-live="polite" hidden></p>
+                    {% else %}
+                      <p class="gc-options-discord-locked">
+                        {{ T("options_discord_unlink_locked") if T("options_discord_unlink_locked") != "options_discord_unlink_locked" else "Setze zuerst E-Mail oder Passwort, bevor du Discord trennst." }}
+                      </p>
+                    {% endif %}
+                  </div>
+                {% else %}
+                  <p class="gc-options-discord-lead">
+                    {{ T("options_discord_lead") if T("options_discord_lead") != "options_discord_lead" else "Verbinde Discord für schnelleren Login und Community-Features." }}
+                  </p>
+                  <a href="{{ url_for('auth_discord_link_start') }}"
+                     class="gc-btn gc-btn-lg auth-btn-discord auth-btn-discord--primary gc-options-discord-link"
+                     data-no-pjax>
+                    {{ T("options_discord_link") if T("options_discord_link") != "options_discord_link" else "Discord verbinden" }}
+                  </a>
                 {% endif %}
-                <button type="button"
-                        class="gc-btn gc-btn-outline gc-options-discord-unlink"
-                        id="options-discord-unlink-btn">
-                  {{ T("options_discord_unlink") if T("options_discord_unlink") != "options_discord_unlink" else "Verbindung trennen" }}
-                </button>
-                <p class="gc-options-form-hint gc-options-discord-hint" id="options-discord-hint" role="status" aria-live="polite" hidden></p>
-              {% else %}
-                <p class="gc-options-discord-locked">
-                  {{ T("options_discord_unlink_locked") if T("options_discord_unlink_locked") != "options_discord_unlink_locked" else "Setze zuerst E-Mail oder Passwort, bevor du Discord trennst." }}
-                </p>
-              {% endif %}
-            </div>
-          {% else %}
-            <p class="gc-options-discord-lead">
-              {{ T("options_discord_lead") if T("options_discord_lead") != "options_discord_lead" else "Verbinde Discord für schnelleren Login und Community-Features." }}
-            </p>
-            <a href="{{ url_for('auth_discord_link_start') }}"
-               class="gc-btn gc-btn-lg auth-btn-discord auth-btn-discord--primary gc-options-discord-link"
-               data-no-pjax>
-              {{ T("options_discord_link") if T("options_discord_link") != "options_discord_link" else "Discord verbinden" }}
-            </a>
-          {% endif %}
-        </div>
-        {% endif %}
-
-      </div>
-    </section>
-
-  </div>
-
-  <section class="gc-panel gc-options-panel gc-options-account-safety" aria-labelledby="options-account-safety-title">
-    <div class="gc-panel-header gc-options-panel-head">
-      <div class="gc-panel-head-left">
-        <span class="gc-panel-title" id="options-account-safety-title">{{ T("options_account_safety_title") }}</span>
-        <span class="gc-panel-subtitle">{{ T("options_account_safety_subtitle") }}</span>
-      </div>
-      <span class="gc-panel-tag">{{ T("options_tag_safety") }}</span>
-    </div>
-    <div class="gc-panel-body gc-options-panel-body gc-options-safety-body">
-
-      <p class="gc-options-safety-rules-link">
-        <button type="button"
-                class="gc-btn gc-btn-ghost gc-btn-sm"
-                data-special-open-window="rules">
-          {{ T("options_game_rules_link", "Spielregeln") }}
-        </button>
-      </p>
-
-      {% set blocker_details = safety.get('blocker_details') or {} %}
-      {% set has_blockers = safety.get('blockers') %}
-      <div class="gc-options-safety-blockers-wrap"
-           id="options-safety-blockers-wrap"
-           {% if not has_blockers %}hidden{% endif %}>
-        <p class="gc-options-safety-blockers-title">{{ T("options_safety_blockers_title") }}</p>
-        <ul class="gc-options-safety-blockers" id="options-safety-blockers" role="list">
-          {% if blocker_details.get('fleet_movements', 0) > 0 %}
-            <li><a href="/fleet" data-pjax-link>{{ T("options_blocker_fleet_movements", count=blocker_details.get('fleet_movements')) }}</a></li>
-          {% endif %}
-          {% if blocker_details.get('auction_bids', 0) > 0 %}
-            <li><a href="/auction-house" data-pjax-link>{{ T("options_blocker_auction_bids", count=blocker_details.get('auction_bids')) }}</a></li>
-          {% endif %}
-          {% if blocker_details.get('build_queue', 0) > 0 %}
-            <li><a href="/buildings" data-pjax-link>{{ T("options_blocker_build_queue", count=blocker_details.get('build_queue')) }}</a></li>
-          {% endif %}
-          {% if blocker_details.get('research_queue', 0) > 0 %}
-            <li><a href="/research" data-pjax-link>{{ T("options_blocker_research_queue", count=blocker_details.get('research_queue')) }}</a></li>
-          {% endif %}
-          {% if blocker_details.get('shipyard_queue', 0) > 0 %}
-            <li><a href="/shipyard" data-pjax-link>{{ T("options_blocker_shipyard_queue", count=blocker_details.get('shipyard_queue')) }}</a></li>
-          {% endif %}
-          {% if blocker_details.get('defense_queue', 0) > 0 %}
-            <li><a href="/defense" data-pjax-link>{{ T("options_blocker_defense_queue", count=blocker_details.get('defense_queue')) }}</a></li>
-          {% endif %}
-          {% if blocker_details.get('planet_evolution_queue', 0) > 0 %}
-            <li><a href="/planet-evolution" data-pjax-link>{{ T("options_blocker_planet_evolution_queue", count=blocker_details.get('planet_evolution_queue')) }}</a></li>
-          {% endif %}
-        </ul>
-      </div>
-
-      <div class="gc-options-safety-block" id="options-safety-vacation">
-        <div class="gc-options-form-head">
-          <span class="gc-options-form-kicker">{{ T("options_vacation_title") }}</span>
-        </div>
-        <p class="gc-options-safety-lead">{{ T("options_vacation_lead") }}</p>
-        <p class="gc-options-safety-status" id="options-vacation-status" role="status">
-          {% if safety.get('vacation_active') %}
-            {{ T("options_vacation_status_active") }}
-          {% else %}
-            {{ T("options_vacation_status_inactive") }}
-          {% endif %}
-        </p>
-        <p class="gc-options-safety-timer gc-mono"
-           id="options-vacation-timer"
-           data-until="{{ safety.get('vacation_locked_until') or '' }}"
-           role="status"
-           {% if not safety.get('vacation_active') or safety.get('vacation_can_disable') %}hidden{% endif %}></p>
-        <div class="gc-options-safety-actions">
-          {% if safety.get('vacation_active') %}
-            <button type="button"
-                    class="gc-btn gc-btn-outline gc-options-safety-btn"
-                    id="options-vacation-disable-btn"
-                    data-action="vacation_disable"
-                    {% if not safety.get('vacation_can_disable') %}disabled{% endif %}>
-              {{ T("options_vacation_disable") }}
-            </button>
-          {% else %}
-            <button type="button"
-                    class="gc-btn gc-btn-outline gc-options-safety-btn"
-                    id="options-vacation-enable-btn"
-                    data-action="vacation_enable">
-              {{ T("options_vacation_enable") }}
-            </button>
-          {% endif %}
-        </div>
-        <button type="button"
-                class="gc-btn gc-btn-ghost gc-options-safety-btn gc-options-vacation-repair-btn"
-                id="options-vacation-repair-btn"
-                data-action="vacation_repair"
-                hidden>
-          {{ T("options_vacation_repair") }}
-        </button>
-        <p class="gc-options-safety-lead gc-options-vacation-repair-lead"
-           id="options-vacation-repair-lead"
-           hidden>{{ T("options_vacation_repair_lead") }}</p>
-        <p class="gc-options-form-hint gc-options-safety-hint" id="options-vacation-hint" role="status" aria-live="polite" hidden></p>
-      </div>
-
-      <div class="gc-options-safety-block" id="options-safety-deletion">
-        <div class="gc-options-form-head">
-          <span class="gc-options-form-kicker">{{ T("options_deletion_title") }}</span>
-        </div>
-        <p class="gc-options-safety-lead">{{ T("options_deletion_lead") }}</p>
-        <p class="gc-options-safety-status" id="options-deletion-status" role="status">
-          {% if safety.get('deletion_pending') %}
-            {{ T("options_deletion_status_pending") }}
-          {% else %}
-            {{ T("options_deletion_status_none") }}
-          {% endif %}
-        </p>
-        <p class="gc-options-safety-timer gc-mono"
-           id="options-deletion-timer"
-           data-until="{{ safety.get('deletion_due_at') or '' }}"
-           role="status"
-           {% if not safety.get('deletion_pending') %}hidden{% endif %}></p>
-        <div class="gc-options-safety-actions">
-          {% if safety.get('deletion_pending') %}
-            <button type="button"
-                    class="gc-btn gc-btn-outline gc-options-safety-btn"
-                    id="options-deletion-cancel-btn"
-                    data-action="deletion_cancel">
-              {{ T("options_deletion_cancel") }}
-            </button>
-          {% else %}
-            <button type="button"
-                    class="gc-btn gc-btn-danger gc-options-safety-btn"
-                    id="options-deletion-request-btn"
-                    data-action="deletion_request">
-              {{ T("options_deletion_request") }}
-            </button>
-          {% endif %}
-        </div>
-        <p class="gc-options-form-hint gc-options-safety-hint" id="options-deletion-hint" role="status" aria-live="polite" hidden></p>
-      </div>
-
-      <div class="gc-options-safety-block" id="options-safety-reset">
-        <div class="gc-options-form-head">
-          <span class="gc-options-form-kicker">{{ T("options_reset_title") }}</span>
-        </div>
-        <p class="gc-options-safety-lead">{{ T("options_reset_lead") }}</p>
-        <label class="gc-options-field gc-options-safety-password">
-          <span class="gc-options-label">{{ T("options_current_password") }}</span>
-          <input type="password"
-                 class="gc-input gc-options-input"
-                 id="options-reset-password"
-                 autocomplete="current-password"
-                 placeholder="{{ T('options_placeholder_password_current') }}">
-        </label>
-        <div class="gc-options-safety-actions">
-          <button type="button"
-                  class="gc-btn gc-btn-danger gc-options-safety-btn"
-                  id="options-reset-request-btn"
-                  data-action="account_reset">
-            {{ T("options_reset_request") }}
-          </button>
-        </div>
-        <p class="gc-options-form-hint gc-options-safety-hint" id="options-reset-hint" role="status" aria-live="polite" hidden></p>
-      </div>
-
-      <div class="gc-options-security-card" role="note">
-        <div class="gc-options-security-head">
-          <span class="gc-options-security-icon" aria-hidden="true">⛨</span>
-          <div class="gc-options-security-head-text">
-            <span class="gc-options-security-title">{{ T("options_security_title") }}</span>
-            <p class="gc-options-security-lead">{{ T("options_security_hint") }}</p>
+              </div>
+            </article>
+            {% endif %}
           </div>
         </div>
-        <ul class="gc-options-security-list">
-          <li>{{ T("options_security_item_confirm") }}</li>
-          <li>{{ T("options_security_item_password") }}</li>
-          <li>{{ T("options_security_item_audit") }}</li>
-        </ul>
-      </div>
 
+        <div class="gc-options-tab-panel"
+             id="options-tab-panel-notify"
+             data-options-tab-panel="notify"
+             role="tabpanel"
+             aria-labelledby="options-tab-btn-notify"
+             hidden>
+          <article class="gc-options-card gc-options-notify-card">
+            <header class="gc-options-card-head">
+              <span class="gc-options-card-title">{{ T("options_notify_title") }}</span>
+              <span class="gc-options-card-sub">{{ T("options_notify_subtitle") }}</span>
+            </header>
+            <div class="gc-options-notify-grid" id="options-notify-sounds">
+              <div class="gc-options-notify-row">
+                <span class="gc-options-label">{{ T("options_notify_attack_title") }}</span>
+                <div class="gc-options-sound-toggle" role="group" aria-label="{{ T('options_notify_attack_title') }}">
+                  {% for mode in ['off', 'quiet', 'normal'] %}
+                  <button type="button"
+                          class="gc-btn gc-btn-sm gc-options-sound-btn{% if od.get('notify_attack_sound', 'normal') == mode %} is-active{% endif %}"
+                          data-notify-sound="attack"
+                          data-notify-mode="{{ mode }}"
+                          aria-pressed="{{ 'true' if od.get('notify_attack_sound', 'normal') == mode else 'false' }}">
+                    {{ T("options_notify_sound_" ~ mode) }}
+                  </button>
+                  {% endfor %}
+                </div>
+              </div>
+              <div class="gc-options-notify-row">
+                <span class="gc-options-label">{{ T("options_notify_message_title") }}</span>
+                <div class="gc-options-sound-toggle" role="group" aria-label="{{ T('options_notify_message_title') }}">
+                  {% for mode in ['off', 'quiet', 'normal'] %}
+                  <button type="button"
+                          class="gc-btn gc-btn-sm gc-options-sound-btn{% if od.get('notify_message_sound', 'normal') == mode %} is-active{% endif %}"
+                          data-notify-sound="message"
+                          data-notify-mode="{{ mode }}"
+                          aria-pressed="{{ 'true' if od.get('notify_message_sound', 'normal') == mode else 'false' }}">
+                    {{ T("options_notify_sound_" ~ mode) }}
+                  </button>
+                  {% endfor %}
+                </div>
+              </div>
+              <p class="gc-options-form-hint gc-options-notify-hint" id="options-notify-hint" role="status" aria-live="polite" hidden></p>
+            </div>
+          </article>
+        </div>
+
+        <div class="gc-options-tab-panel gc-options-account-safety"
+             id="options-tab-panel-vacation"
+             data-options-tab-panel="vacation"
+             role="tabpanel"
+             aria-labelledby="options-tab-btn-vacation"
+             hidden>
+          <div class="gc-options-danger-zone" id="options-account-safety">
+            <header class="gc-options-danger-head">
+              <span class="gc-options-danger-title">{{ T("options_account_safety_title") }}</span>
+              <span class="gc-options-danger-sub">{{ T("options_account_safety_subtitle") }}</span>
+            </header>
+
+            <p class="gc-options-safety-rules-link">
+              <button type="button"
+                      class="gc-btn gc-btn-ghost gc-btn-sm"
+                      data-special-open-window="rules">
+                {{ T("options_game_rules_link", "Spielregeln") }}
+              </button>
+            </p>
+
+            {% set blocker_details = safety.get('blocker_details') or {} %}
+            {% set has_blockers = safety.get('blockers') %}
+            <div class="gc-options-safety-blockers-wrap"
+                 id="options-safety-blockers-wrap"
+                 {% if not has_blockers %}hidden{% endif %}>
+              <p class="gc-options-safety-blockers-title">{{ T("options_safety_blockers_title") }}</p>
+              <ul class="gc-options-safety-blockers" id="options-safety-blockers" role="list">
+                {% if blocker_details.get('fleet_movements', 0) > 0 %}
+                  <li><a href="/fleet" data-pjax-link>{{ T("options_blocker_fleet_movements", count=blocker_details.get('fleet_movements')) }}</a></li>
+                {% endif %}
+                {% if blocker_details.get('auction_bids', 0) > 0 %}
+                  <li><a href="/auction-house" data-pjax-link>{{ T("options_blocker_auction_bids", count=blocker_details.get('auction_bids')) }}</a></li>
+                {% endif %}
+                {% if blocker_details.get('build_queue', 0) > 0 %}
+                  <li><a href="/buildings" data-pjax-link>{{ T("options_blocker_build_queue", count=blocker_details.get('build_queue')) }}</a></li>
+                {% endif %}
+                {% if blocker_details.get('research_queue', 0) > 0 %}
+                  <li><a href="/research" data-pjax-link>{{ T("options_blocker_research_queue", count=blocker_details.get('research_queue')) }}</a></li>
+                {% endif %}
+                {% if blocker_details.get('shipyard_queue', 0) > 0 %}
+                  <li><a href="/shipyard" data-pjax-link>{{ T("options_blocker_shipyard_queue", count=blocker_details.get('shipyard_queue')) }}</a></li>
+                {% endif %}
+                {% if blocker_details.get('defense_queue', 0) > 0 %}
+                  <li><a href="/defense" data-pjax-link>{{ T("options_blocker_defense_queue", count=blocker_details.get('defense_queue')) }}</a></li>
+                {% endif %}
+                {% if blocker_details.get('planet_evolution_queue', 0) > 0 %}
+                  <li><a href="/planet-evolution" data-pjax-link>{{ T("options_blocker_planet_evolution_queue", count=blocker_details.get('planet_evolution_queue')) }}</a></li>
+                {% endif %}
+              </ul>
+            </div>
+
+            <div class="gc-options-safety-grid">
+              <div class="gc-options-safety-block" id="options-safety-vacation">
+                <div class="gc-options-form-head">
+                  <span class="gc-options-form-kicker">{{ T("options_vacation_title") }}</span>
+                </div>
+                <p class="gc-options-safety-lead">{{ T("options_vacation_lead") }}</p>
+                <p class="gc-options-safety-status" id="options-vacation-status" role="status">
+                  {% if safety.get('vacation_active') %}
+                    {{ T("options_vacation_status_active") }}
+                  {% else %}
+                    {{ T("options_vacation_status_inactive") }}
+                  {% endif %}
+                </p>
+                <p class="gc-options-safety-timer gc-mono"
+                   id="options-vacation-timer"
+                   data-until="{{ safety.get('vacation_locked_until') or '' }}"
+                   role="status"
+                   {% if not safety.get('vacation_active') or safety.get('vacation_can_disable') %}hidden{% endif %}></p>
+                <div class="gc-options-safety-actions">
+                  {% if safety.get('vacation_active') %}
+                    <button type="button"
+                            class="gc-btn gc-btn-outline gc-options-safety-btn"
+                            id="options-vacation-disable-btn"
+                            data-action="vacation_disable"
+                            {% if not safety.get('vacation_can_disable') %}disabled{% endif %}>
+                      {{ T("options_vacation_disable") }}
+                    </button>
+                  {% else %}
+                    <button type="button"
+                            class="gc-btn gc-btn-outline gc-options-safety-btn"
+                            id="options-vacation-enable-btn"
+                            data-action="vacation_enable">
+                      {{ T("options_vacation_enable") }}
+                    </button>
+                  {% endif %}
+                </div>
+                <button type="button"
+                        class="gc-btn gc-btn-ghost gc-options-safety-btn gc-options-vacation-repair-btn"
+                        id="options-vacation-repair-btn"
+                        data-action="vacation_repair"
+                        hidden>
+                  {{ T("options_vacation_repair") }}
+                </button>
+                <p class="gc-options-safety-lead gc-options-vacation-repair-lead"
+                   id="options-vacation-repair-lead"
+                   hidden>{{ T("options_vacation_repair_lead") }}</p>
+                <p class="gc-options-form-hint gc-options-safety-hint" id="options-vacation-hint" role="status" aria-live="polite" hidden></p>
+              </div>
+
+              <div class="gc-options-safety-block" id="options-safety-deletion">
+                <div class="gc-options-form-head">
+                  <span class="gc-options-form-kicker">{{ T("options_deletion_title") }}</span>
+                </div>
+                <p class="gc-options-safety-lead">{{ T("options_deletion_lead") }}</p>
+                <p class="gc-options-safety-status" id="options-deletion-status" role="status">
+                  {% if safety.get('deletion_pending') %}
+                    {{ T("options_deletion_status_pending") }}
+                  {% else %}
+                    {{ T("options_deletion_status_none") }}
+                  {% endif %}
+                </p>
+                <p class="gc-options-safety-timer gc-mono"
+                   id="options-deletion-timer"
+                   data-until="{{ safety.get('deletion_due_at') or '' }}"
+                   role="status"
+                   {% if not safety.get('deletion_pending') %}hidden{% endif %}></p>
+                <div class="gc-options-safety-actions">
+                  {% if safety.get('deletion_pending') %}
+                    <button type="button"
+                            class="gc-btn gc-btn-outline gc-options-safety-btn"
+                            id="options-deletion-cancel-btn"
+                            data-action="deletion_cancel">
+                      {{ T("options_deletion_cancel") }}
+                    </button>
+                  {% else %}
+                    <button type="button"
+                            class="gc-btn gc-btn-danger gc-options-safety-btn"
+                            id="options-deletion-request-btn"
+                            data-action="deletion_request">
+                      {{ T("options_deletion_request") }}
+                    </button>
+                  {% endif %}
+                </div>
+                <p class="gc-options-form-hint gc-options-safety-hint" id="options-deletion-hint" role="status" aria-live="polite" hidden></p>
+              </div>
+
+              <div class="gc-options-safety-block gc-options-safety-block--reset" id="options-safety-reset">
+                <div class="gc-options-form-head">
+                  <span class="gc-options-form-kicker">{{ T("options_reset_title") }}</span>
+                </div>
+                <p class="gc-options-safety-lead">{{ T("options_reset_lead") }}</p>
+                <label class="gc-options-field gc-options-safety-password">
+                  <span class="gc-options-label">{{ T("options_current_password") }}</span>
+                  <input type="password"
+                         class="gc-input gc-options-input"
+                         id="options-reset-password"
+                         autocomplete="current-password"
+                         placeholder="{{ T('options_placeholder_password_current') }}">
+                </label>
+                <div class="gc-options-safety-actions">
+                  <button type="button"
+                          class="gc-btn gc-btn-danger gc-options-safety-btn"
+                          id="options-reset-request-btn"
+                          data-action="account_reset">
+                    {{ T("options_reset_request") }}
+                  </button>
+                </div>
+                <p class="gc-options-form-hint gc-options-safety-hint" id="options-reset-hint" role="status" aria-live="polite" hidden></p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="gc-options-tab-panel"
+             id="options-tab-panel-security"
+             data-options-tab-panel="security"
+             role="tabpanel"
+             aria-labelledby="options-tab-btn-security"
+             hidden>
+          <div class="gc-options-security-card" role="note">
+            <div class="gc-options-security-head">
+              <span class="gc-options-security-icon" aria-hidden="true">⛨</span>
+              <div class="gc-options-security-head-text">
+                <span class="gc-options-security-title">{{ T("options_security_title") }}</span>
+                <p class="gc-options-security-lead">{{ T("options_security_hint") }}</p>
+              </div>
+            </div>
+            <ul class="gc-options-security-list">
+              <li>{{ T("options_security_item_confirm") }}</li>
+              <li>{{ T("options_security_item_password") }}</li>
+              <li>{{ T("options_security_item_audit") }}</li>
+            </ul>
+          </div>
+        </div>
+
+      </div>
     </div>
   </section>
 
