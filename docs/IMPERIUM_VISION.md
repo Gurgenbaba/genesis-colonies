@@ -12,6 +12,16 @@ Referenz-Mockup (Richtung, **keine** 1:1-UI-Vorlage): Command Map / Empire Scree
 
 ## Kernthese
 
+> **Expansion ist kein Freischalten eines Planetenslots. Expansion ist der Prozess, unbekannten Raum in einen Teil des eigenen Imperiums zu verwandeln.**
+
+> **Planeten werden nicht freigeschaltet. Sie entstehen.**
+
+**Leitfrage für Design-Entscheidungen:** *Fühlt sich das nach Tabellenverwaltung an — oder danach, dass ein Sternenreich wächst?*
+
+Vollständige Design-Charta: **[EXPANSION_PROTOCOL.md](EXPANSION_PROTOCOL.md)** (EPIC-15 Phase 2).
+
+> **In Genesis Colonies expandiert der Spieler nicht, um mehr Planeten zu besitzen. Er expandiert, um sein Imperium um neue Möglichkeiten zu erweitern.**
+
 **Planet Evolution ist nicht ein weiteres Feature. Planet Evolution ist das Spiel.**
 
 Gebäude, Ressourcen, Forschung und Werft bleiben — sie sind der **Motor unterhalb** der Evolution, nicht der Hauptfortschritt.
@@ -236,7 +246,7 @@ Nicht: `Metallmine 38`.
 | Bestehende Systeme löschen | Galaxy, Fleet, Buildings bleiben |
 | Koordinaten entfernen | `[G:S:P]` bleibt internes Modell |
 | Planet Scope brechen | `active_planet_id` / `get_context_planet()` |
-| Fleet-System ersetzen | Kolonisierung über Fleet bleibt |
+| Fleet-System ersetzen | Seed-Ark-Transport bleibt; Etablierung wird eigenes Gameplay ([EXPANSION_PROTOCOL.md](EXPANSION_PROTOCOL.md)) |
 | Parallel-Architekturen (GC-000 Regel 15) | Kein zweites Galaxy/Fleet/Evolution-System |
 | Frontend-Mechanik-Math (GC-000 Regel 16) | Server authority, EffectResolver |
 

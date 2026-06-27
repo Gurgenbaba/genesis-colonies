@@ -80,8 +80,9 @@ Details: [GC-557_MEGABUNKER_UX_FEEDBACK_POLISH.md](GC-557_MEGABUNKER_UX_FEEDBACK
 | GC-571 | Shared World Presence ([Spec](GC-571_SHARED_WORLD_PRESENCE.md)) 📋 |
 | GC-569 | superseded by GC-571 | — |
 | GC-568 | Territorial Warfare |
+| GC-920–929 | Expansion Protocol — [Design-Charta](EXPANSION_PROTOCOL.md) 📋 (Doku only; Implementierung referenziert Charta-Abschnitte) |
 
-Details: [IMPERIUM_VISION.md](IMPERIUM_VISION.md) · [ROADMAP.md](ROADMAP.md) Phase 9
+Details: [IMPERIUM_VISION.md](IMPERIUM_VISION.md) · [EXPANSION_PROTOCOL.md](EXPANSION_PROTOCOL.md) · [ROADMAP.md](ROADMAP.md) Phase 9
 
 **EPIC-17 Imperial Directives** → nicht als Ganzes implementieren:
 
