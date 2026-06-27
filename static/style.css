@@ -17489,6 +17489,62 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   line-height: 1.42;
 }
 
+.gc-rules-panel-body{
+  margin-top: 8px;
+  color: var(--gc-text-soft);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.gc-rules-panel-body p{
+  margin: 0 0 8px;
+}
+
+.gc-rules-panel-body p:last-child{
+  margin-bottom: 0;
+}
+
+.gc-rules-panel-body strong{
+  color: var(--gc-text);
+}
+
+.gc-rules-panel-faq{
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(120, 190, 255, 0.12);
+}
+
+.gc-rules-panel-faq-title{
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+  color: var(--gc-primary-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.gc-rules-panel-faq-item summary{
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.gc-rules-panel-footer{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(120, 190, 255, 0.12);
+}
+
+.gc-rules-panel-version{
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--gc-text-muted, var(--gc-text-soft));
+  opacity: 0.85;
+}
+
 .gc-support-form{
   display: grid;
   gap: 8px;

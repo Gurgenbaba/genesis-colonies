@@ -87,6 +87,27 @@ def _extract_codex_client_json(html: str) -> dict:
 def test_player_articles_parsed_from_master_docs():
     articles = load_player_articles_from_docs()
     assert len(articles) >= 13
+    ids = {str((a.get("meta") or {}).get("codex_id")) for a in articles}
+    assert "game_rules" not in ids
+
+
+def test_rules_panel_locale_keys_present():
+    from game.game_rules_panel import all_rules_panel_locale_keys
+    from game.i18n import SUPPORTED_LOCALES
+
+    expected = set(all_rules_panel_locale_keys())
+    for loc in sorted(SUPPORTED_LOCALES):
+        path = ROOT / "locales" / f"{loc}.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        assert data.get("rules_panel_intro"), loc
+        assert data.get("rules_panel_push_title"), loc
+        assert data.get("rules_panel_community_title"), loc
+        assert data.get("rules_panel_faq_0_q"), loc
+        assert data.get("rules_panel_version"), loc
+        missing = expected - set(data.keys())
+        assert not missing, f"missing in {loc}: {sorted(missing)[:8]}"
+        stale = [k for k in data if k.startswith("codex_game_rules_")]
+        assert not stale, f"stale codex keys in {loc}: {stale[:3]}"
 
 
 def test_generated_catalog_matches_parser_count():
@@ -237,6 +258,27 @@ def test_game_state_includes_codex(gc950_db, monkeypatch):
     assert articles
     assert articles["buildings"]["title"]
     assert articles["buildings"]["summary"]
+
+
+def test_options_renders_game_rules_panel_link(gc950_db, monkeypatch):
+    client = _app_client(monkeypatch)
+    uid, _ = _create_player()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+    html = client.get("/options").get_data(as_text=True)
+    assert 'data-special-open-window="rules"' in html
+    assert 'data-codex-open="game_rules"' not in html
+
+
+def test_special_panel_rules_uses_i18n_sections():
+    html = (ROOT / "templates/partials/special_panel.html").read_text(encoding="utf-8")
+    assert "RULES_PANEL_SECTIONS" in html
+    assert "RULES_PANEL_FAQ" in html
+    assert "rules_panel_push_title" not in html  # uses dynamic keys
+    assert "section.title_key" in html
+    assert "gc-rules-panel-faq" in html
+    assert 'data-special-open-window="support"' in html
+    assert "Fairness steht ueber allem" not in html
 
 
 def test_codex_route_visit_recorded_on_buildings(gc950_db, monkeypatch):

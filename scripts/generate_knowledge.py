@@ -306,6 +306,68 @@ CODEX_UI: dict[str, dict[str, str]] = {
     },
 }
 
+# Shared locale keys outside codex generator (navigation, research aliases).
+LOCALE_CORE_PATCHES: dict[str, dict[str, str]] = {
+    "back": {
+        "de": "Zurück",
+        "en": "Back",
+        "fr": "Retour",
+        "es": "Volver",
+        "pl": "Wstecz",
+        "tr": "Geri",
+        "ru": "Назад",
+        "pt": "Voltar",
+    },
+    "interstellar_expansion": {
+        "de": "Interstellar Expansion",
+        "en": "Interstellar Expansion",
+        "fr": "Expansion interstellaire",
+        "es": "Expansión interestelar",
+        "pl": "Ekspansja międzygwiezdna",
+        "tr": "Yıldızlararası Genişleme",
+        "ru": "Межзвёздная экспансия",
+        "pt": "Expansão interestelar",
+    },
+    "options_game_rules_link": {
+        "de": "Spielregeln",
+        "en": "Game rules",
+        "fr": "Règles du jeu",
+        "es": "Reglas del juego",
+        "pl": "Zasady gry",
+        "tr": "Oyun kuralları",
+        "ru": "Правила игры",
+        "pt": "Regras do jogo",
+    },
+}
+
+# Legacy building keys still referenced in templates — alias to building_* in DE.
+DE_BUILDING_ALIASES: dict[str, str] = {
+    "academy": "building_academy",
+    "barracks": "building_barracks",
+    "command_center": "building_command_center",
+    "crystal_mine": "building_crystal_mine",
+    "crystal_storage": "building_crystal_storage",
+    "defense_factory": "building_defense_factory",
+    "geothermal_nexus": "building_geothermal_nexus",
+    "metal_mine": "building_metal_mine",
+    "metal_storage": "building_metal_storage",
+    "nanofactory": "building_nanofactory",
+    "planet_core_nexus": "building_planet_core_nexus",
+    "radar_array": "building_radar_array",
+    "shield_generator": "building_shield_generator",
+    "solar_plant": "building_solar_plant",
+    "terraformer": "building_terraformer",
+    "login_hint": "Melde dich an und übernimm die Kontrolle über deine Kolonie im Genesis-Cluster.",
+    "login_password": "Passwort",
+    "login_username": "Benutzername",
+    "register_btn": "Registrieren",
+    "register_hint": "Starte eine neue Kolonie im Genesis-Cluster.",
+}
+
+CODEX_UI_KEYS = frozenset(CODEX_UI.keys())
+CODEX_ARTICLE_LOCALES = ("fr", "es", "pl", "tr", "ru", "pt")
+CODEX_TRANSLATE_LANG = {"fr": "fr", "es": "es", "pl": "pl", "tr": "tr", "ru": "ru", "pt": "pt"}
+
 
 def _merge_locale_file(locale: str, updates: dict[str, str]) -> int:
     path = LOCALES / f"{locale}.json"
@@ -327,6 +389,70 @@ def _merge_locale_file(locale: str, updates: dict[str, str]) -> int:
         json.dump(data, fh, ensure_ascii=False, indent=2)
         fh.write("\n")
     return changed
+
+
+def _apply_locale_core_patches() -> int:
+    changed = 0
+    for key, per_locale in LOCALE_CORE_PATCHES.items():
+        for loc, value in per_locale.items():
+            changed += _merge_locale_file(loc, {key: value})
+    de_data: dict[str, str] = {}
+    de_path = LOCALES / "de.json"
+    if de_path.exists():
+        with open(de_path, encoding="utf-8") as fh:
+            de_data = json.load(fh)
+    de_updates: dict[str, str] = {}
+    for alias, source in DE_BUILDING_ALIASES.items():
+        if alias in de_data:
+            continue
+        if source in de_data:
+            de_updates[alias] = de_data[source]
+        elif source in LOCALE_CORE_PATCHES:
+            de_updates[alias] = LOCALE_CORE_PATCHES[source]["de"]
+    changed += _merge_locale_file("de", de_updates)
+    return changed
+
+
+def _codex_article_keys(en: dict[str, str]) -> list[str]:
+    return sorted(k for k in en if k.startswith("codex_") and k not in CODEX_UI_KEYS)
+
+
+def translate_codex_articles(*, batch_size: int = 25) -> dict[str, int]:
+    """Translate codex article body keys from EN into fr/es/pl/pt/ru/tr."""
+    from scripts.gc900_translate_locales import translate_batch
+
+    en_path = LOCALES / "en.json"
+    with open(en_path, encoding="utf-8") as fh:
+        en = json.load(fh)
+    keys = _codex_article_keys(en)
+    stats: dict[str, int] = {}
+
+    for loc in CODEX_ARTICLE_LOCALES:
+        path = LOCALES / f"{loc}.json"
+        with open(path, encoding="utf-8") as fh:
+            target = json.load(fh)
+        changed = 0
+        todo = [k for k in keys if k in en]
+        print(f"codex translate {loc}: {len(todo)} keys")
+        for i in range(0, len(todo), batch_size):
+            chunk = todo[i : i + batch_size]
+            src_texts = [en[k] for k in chunk]
+            translated = translate_batch(
+                src_texts,
+                source="en",
+                target=CODEX_TRANSLATE_LANG[loc],
+            )
+            for key, new_val in zip(chunk, translated):
+                if new_val and new_val != target.get(key):
+                    target[key] = new_val
+                    changed += 1
+            print(f"  {loc} batch {i // batch_size + 1}/{(len(todo) + batch_size - 1) // batch_size}")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(target, fh, ensure_ascii=False, indent=2)
+            fh.write("\n")
+        stats[loc] = changed
+        print(f"  {loc}: {changed} updates")
+    return stats
 
 
 def main() -> int:
@@ -354,7 +480,7 @@ def main() -> int:
         json.dump(catalog, fh, ensure_ascii=False, indent=2)
         fh.write("\n")
 
-  # Discord exports
+    # Discord exports
     for article in articles:
         codex_id = str((article.get("meta") or {}).get("codex_id") or "")
         discord = (article.get("sections") or {}).get("discord_summary")
@@ -374,7 +500,17 @@ def main() -> int:
             merged = {**ui, **en_keys}
         total += _merge_locale_file(loc, merged)
 
-    print(f"GC-950B: {len(catalog['articles'])} articles, catalog.json written, ~{total} locale updates")
+    patch_total = _apply_locale_core_patches()
+    translate_stats: dict[str, int] = {}
+    if "--no-translate" not in sys.argv:
+        translate_stats = translate_codex_articles()
+
+    print(
+        f"GC-950B: {len(catalog['articles'])} articles, catalog.json written, "
+        f"~{total} codex merges, {patch_total} core patches"
+    )
+    if translate_stats:
+        print("Codex article translations:", translate_stats)
     return 0
 
 

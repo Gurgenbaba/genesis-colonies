@@ -221,35 +221,33 @@
       <span class="gc-special-title">{{ T('rules', 'Regeln') }}</span>
       <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-special-window-close="rules" aria-label="{{ T('close', 'Schließen') }}">✕</button>
     </header>
-    <div class="gc-special-window-content">
-      <details class="gc-special-card" open>
-        <summary>1) Fairness steht ueber allem</summary>
-        <p>Genesis Colonies ist absichtlich frei gestaltet: fast alles ist erlaubt, solange es fair bleibt. Kein absichtliches Ausnutzen von Fehlern gegen andere Spieler, kein zielgerichtetes Sabotieren des Spielflusses und kein Verhalten, das den fairen Wettbewerb zerstoert.</p>
+    <div class="gc-special-window-content gc-rules-panel">
+      <p class="gc-special-intro">{{ T(RULES_PANEL_INTRO_KEY, '') }}</p>
+      {% for section in RULES_PANEL_SECTIONS %}
+      <details class="gc-special-card gc-rules-panel-section"{% if section.open %} open{% endif %}>
+        <summary>{{ T(section.title_key, section.id) }}</summary>
+        <div class="gc-rules-panel-body">{{ T(section.body_key, '') | rules_md }}</div>
       </details>
-      <details class="gc-special-card">
-        <summary>2) Spielstil: frei und kreativ</summary>
-        <p>Diplomatie, Bluff, aggressive Expansion, wirtschaftlicher Fokus, Meta-Strategien und unkonventionelle Taktiken sind ausdruecklich gewollt. Du darfst hart spielen, aber nicht unfair.</p>
-      </details>
-      <details class="gc-special-card">
-        <summary>3) Grenzen bei Exploits und Automatisierung</summary>
-        <p>Tools, Scripts oder Mechaniken, die dir einen unnatuerlichen, nicht vorgesehenen Vorteil verschaffen, sind nicht im Sinne des Spiels. Wenn du eine Luecke findest, melde sie bitte ueber Support statt sie systematisch auszunutzen.</p>
-      </details>
-      <details class="gc-special-card">
-        <summary>4) Kommunikation und Umgangston</summary>
-        <p>Trash Talk ist okay, Respektlosigkeit nicht. Keine diskriminierenden Inhalte, kein massiver Spam, keine persoenlichen Angriffe. Konkurrenz ja, Entgleisung nein.</p>
-      </details>
-      <details class="gc-special-card">
-        <summary>5) Multiaccounting und Umgehung</summary>
-        <p>Mehrere Accounts zur Umgehung von Limits, Push-Mechaniken oder Ranking-Manipulation widersprechen dem Fairness-Grundsatz und sind nicht erlaubt.</p>
-      </details>
-      <details class="gc-special-card">
-        <summary>6) Moderationsprinzip</summary>
-        <p>Im Zweifel entscheidet das Team nach dem Grundsatz: Was schuetzt fairen Wettbewerb und eine gesunde Spielumgebung? Eingriffe erfolgen so leicht wie moeglich, aber so klar wie noetig.</p>
-      </details>
-      <details class="gc-special-card">
-        <summary>Kurzfassung</summary>
-        <p>Fast alles erlaubt. Fairness zuerst. Spiel hart, spiel clever, spiel sauber.</p>
-      </details>
+      {% endfor %}
+
+      <section class="gc-rules-panel-faq" aria-labelledby="gc-rules-faq-title">
+        <h3 class="gc-rules-panel-faq-title" id="gc-rules-faq-title">{{ T(RULES_PANEL_FAQ_TITLE_KEY, 'FAQ') }}</h3>
+        {% for item in RULES_PANEL_FAQ %}
+        <details class="gc-special-card gc-rules-panel-faq-item">
+          <summary>{{ T(item.q_key, '') }}</summary>
+          <div class="gc-rules-panel-body">{{ T(item.a_key, '') | rules_md }}</div>
+        </details>
+        {% endfor %}
+      </section>
+
+      <footer class="gc-rules-panel-footer">
+        <p class="gc-rules-panel-version gc-mono">{{ T(RULES_PANEL_VERSION_KEY, '') }}</p>
+        <button type="button"
+                class="gc-btn gc-btn-outline gc-btn-sm"
+                data-special-open-window="support">
+          {{ T(RULES_PANEL_SUPPORT_CTA_KEY, 'Support') }}
+        </button>
+      </footer>
     </div>
   </aside>
 </div>

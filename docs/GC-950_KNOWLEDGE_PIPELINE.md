@@ -17,6 +17,7 @@ Dieses Dokument ist **keine Feature-Liste** und **kein Codex-Inhalt**. Es defini
 
 | Kanonische Quelle (heute) | Domäne |
 |---------------------------|--------|
+| [GAME_RULES.md](GAME_RULES.md) | Spielregeln (Master-Doc; UI: Rules Panel, nicht Codex) |
 | `EffectResolver` | Gameplay-Effekte |
 | `game/technical_data.py` | Zahlen, ROI, Stufen (Ebene 3) |
 | [GENESIS_TERMINOLOGY.md](GENESIS_TERMINOLOGY.md) | Begriffe (Ferronit, Crytite, …) |

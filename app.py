@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import random
+import re
 import sqlite3
 import sys
 import time
@@ -205,6 +206,22 @@ def webp_static_filter(url: str) -> str:
     if ext.lower() not in ("png", "jpg", "jpeg"):
         return text
     return f"{base}.webp"
+
+
+@app.template_filter("rules_md")
+def rules_md_filter(text: str) -> Markup:
+    """Minimal markdown for rules panel bodies (**bold**, paragraphs)."""
+    raw = str(text or "").strip()
+    if not raw:
+        return Markup("")
+    parts = [p.strip() for p in raw.split("\n\n") if p.strip()]
+    html_parts: list[str] = []
+    for part in parts:
+        s = escape(part)
+        s = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)
+        s = s.replace("\n", "<br>")
+        html_parts.append(f"<p>{s}</p>")
+    return Markup("".join(html_parts))
 
 
 @app.template_global()
@@ -529,6 +546,14 @@ def inject_globals():
     except Exception:
         pass
 
+    rules_panel_ctx: dict[str, Any] = {"RULES_PANEL_SECTIONS": (), "RULES_PANEL_INTRO_KEY": "rules_panel_intro"}
+    try:
+        from game.game_rules_panel import rules_panel_template_context
+
+        rules_panel_ctx = rules_panel_template_context()
+    except Exception:
+        pass
+
     return dict(
         T=T,
         T_DATA=get_locale_dict(active_locale),
@@ -586,6 +611,8 @@ def inject_globals():
         CODEX_COMMANDER_TIP=codex_commander_tip,
         CODEX_PRIMARY=codex_primary,
         CODEX_CLIENT=codex_client,
+
+        **rules_panel_ctx,
     )
 
 

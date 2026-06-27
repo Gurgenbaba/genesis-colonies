@@ -235,6 +235,14 @@
     </div>
     <div class="gc-panel-body gc-options-panel-body gc-options-safety-body">
 
+      <p class="gc-options-safety-rules-link">
+        <button type="button"
+                class="gc-btn gc-btn-ghost gc-btn-sm"
+                data-special-open-window="rules">
+          {{ T("options_game_rules_link", "Spielregeln") }}
+        </button>
+      </p>
+
       {% set blocker_details = safety.get('blocker_details') or {} %}
       {% set has_blockers = safety.get('blockers') %}
       <div class="gc-options-safety-blockers-wrap"

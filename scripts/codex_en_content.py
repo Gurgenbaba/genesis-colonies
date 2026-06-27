@@ -122,6 +122,7 @@ CODEX_EN_SECTIONS: dict[str, dict[str, object]] = {
             "Stabilize energy before pushing mine levels.",
             "Expand storage early — full depots cap production.",
             "Use short builds as fillers before going offline; long jobs for absence.",
+            "Mind the queue limit — plan the full queue, not only the first slot.",
         ],
         "faq": [
             {

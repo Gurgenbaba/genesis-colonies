@@ -167,10 +167,15 @@ def build_catalog(articles: List[Dict[str, Any]]) -> Dict[str, Any]:
     return catalog
 
 
-def locale_keys_for_article(codex_id: str, sections: Dict[str, Any]) -> Dict[str, str]:
+def locale_keys_for_article(
+    codex_id: str,
+    sections: Dict[str, Any],
+    meta: Optional[Dict[str, Any]] = None,
+) -> Dict[str, str]:
     prefix = f"codex_{codex_id}"
+    title = str((meta or {}).get("title") or "").strip()
     keys: Dict[str, str] = {
-        f"{prefix}_title": codex_id.replace("_", " ").title(),
+        f"{prefix}_title": title or codex_id.replace("_", " ").title(),
     }
     if sections.get("quick_help"):
         keys[f"{prefix}_quick_help"] = str(sections["quick_help"])
@@ -196,5 +201,11 @@ def build_locale_map(articles: List[Dict[str, Any]]) -> Dict[str, str]:
         codex_id = str((article.get("meta") or {}).get("codex_id") or "")
         if not codex_id:
             continue
-        merged.update(locale_keys_for_article(codex_id, article.get("sections") or {}))
+        merged.update(
+            locale_keys_for_article(
+                codex_id,
+                article.get("sections") or {},
+                article.get("meta"),
+            )
+        )
     return merged

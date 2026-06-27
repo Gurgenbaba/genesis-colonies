@@ -46,6 +46,7 @@ Vor jeder Änderung die relevanten Docs lesen:
 | [RESEARCH_SYSTEM.md](RESEARCH_SYSTEM.md) | Account-Forschung |
 | [FLEET_SYSTEM.md](FLEET_SYSTEM.md) | Flotten, Schiffe, Missionen |
 | [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) | Kampf-Resolver, Loot, Debris, Reports |
+| [GAME_RULES.md](GAME_RULES.md) | Spielregeln, Fair Play, PvP-Policy, Support (Appendix = Code-Ist-Stand) |
 | [GALAXY_SYSTEM.md](GALAXY_SYSTEM.md) | Koordinaten, Systemansicht |
 | [PLANET_EVOLUTION.md](PLANET_EVOLUTION.md) | DNA, Planet-Tech, Events |
 | [IMPERIUM_VISION.md](IMPERIUM_VISION.md) | Genesis 2.0 — Empire Screen, Command Map, EPIC-15 |
