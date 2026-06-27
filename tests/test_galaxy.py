@@ -373,8 +373,9 @@ def _foreign_planet_in_system(galaxy: int, system: int, *, avoid_position: int |
         (int(galaxy), int(system), int(free_pos), int(planet["id"])),
     )
     conn.commit()
+    cur.execute("SELECT * FROM planets WHERE id = ?;", (int(planet["id"]),))
+    coords = get_planet_coordinates(dict(cur.fetchone()))
     conn.close()
-    coords = get_planet_coordinates(planet)
     return uid, int(planet["id"]), coords
 
 
@@ -490,6 +491,38 @@ def test_fleet_url_prefill_contract_in_main_js(galaxy_db):
     assert "openWorldInspectorFromNode" in js
     assert "mergeWorldFieldPayload" in js
     assert "/api/worlds/colonize-preview" in js
+    sync_expo = js.split("const syncExpeditionMissionTarget = (page) => {", 1)[1].split(
+        "const setColonizeRowVisible = (page, mission) => {", 1
+    )[0]
+    assert 'missionSel.value = "expedition"' not in sync_expo
+    assert "const preserveMission = !locked" in js
+
+
+def test_fleet_url_with_coords_only_does_not_lock_mission(galaxy_db, monkeypatch):
+    import importlib
+
+    import app as app_module
+    from game.db import commit, db
+    from game.fleet import EXPEDITION_POSITION, add_planet_ships
+    from game.models import get_homeworld
+
+    monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
+    importlib.reload(app_module)
+    client, uid = _galaxy_client(monkeypatch)
+    planet = get_homeworld(player_id=uid)
+    conn = db()
+    try:
+        add_planet_ships(int(planet["id"]), uid, {"mule_courier": 1}, conn=conn)
+        commit(conn)
+    finally:
+        conn.close()
+    resp = client.get(
+        f"/fleet?target_galaxy=1&target_system=42&target_position={EXPEDITION_POSITION}"
+    )
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert 'data-fleet-mission' in body
+    assert "mission=expedition" not in resp.request.path
 
 
 def test_api_galaxy_system(galaxy_db, monkeypatch):

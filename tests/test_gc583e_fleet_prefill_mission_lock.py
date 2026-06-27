@@ -47,7 +47,7 @@ def test_gc583e_sync_allowlist_respects_prefill_lock():
     assert "delete page.dataset.fleetUrlMission" not in body
     assert "opt.value === urlMission" in body
     assert "isFleetUrlPrefillLocked(page)" in body
-    assert "!locked && allowed.size > 0" in body
+    assert "!locked && !preserveMission && allowed.size > 0" in body
 
 
 def test_gc583e_preview_enforces_lock_before_and_after_allowlist():

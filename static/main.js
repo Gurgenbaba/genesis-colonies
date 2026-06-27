@@ -14826,19 +14826,6 @@
       if (sendPanel) sendPanel.classList.toggle("is-expedition-mode", mission === "expedition" || isExpoSlot);
       if (previewHud) previewHud.classList.toggle("is-expedition", mission === "expedition" && isExpoSlot);
 
-      const urlMission = page.dataset.fleetUrlMission || "";
-      if (
-        isExpoSlot &&
-        missionSel &&
-        missionSel.value !== "expedition" &&
-        !urlMission
-      ) {
-        missionSel.value = "expedition";
-        const colonizeRow = page.querySelector("[data-fleet-colonize-row]");
-        if (colonizeRow) colonizeRow.hidden = true;
-        if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(missionSel);
-      }
-
       const expoBtn = page.querySelector("[data-fleet-expedition-shortcut]");
       if (expoBtn) {
         const eg = parseInt(expoBtn.getAttribute("data-galaxy") || "0", 10);
@@ -14870,6 +14857,9 @@
         if (missionSel?.value === "expedition" && !isExpoSlot) {
           hint.textContent = formatMissionHint("fleet_expedition_coords_hint_required", { position: expPos });
           hint.hidden = false;
+        } else if (isExpoSlot && missionSel?.value !== "expedition") {
+          hint.textContent = formatMissionHint("fleet_expedition_hint_select_mission");
+          hint.hidden = false;
         } else {
           hint.textContent = "";
           hint.hidden = true;
@@ -14890,6 +14880,7 @@
       const rt = getFleetRuntime(page);
       const urlMission = String(page.dataset.fleetUrlMission || refreshFleetUrlMissionLock(page) || "").trim().toLowerCase();
       const locked = isFleetUrlPrefillLocked(page);
+      const preserveMission = !locked;
       const prevValue = sel.value;
       const allowed = new Set(target.allowed_missions || []);
       if (!rt.missionOptionLabels) {
@@ -14903,7 +14894,10 @@
         : Object.keys(rt.missionOptionLabels);
       sel.innerHTML = "";
       allMissions.forEach((missionKey) => {
-        const show = allowed.size === 0 || allowed.has(missionKey) || (urlMission && missionKey === urlMission);
+        const show = preserveMission
+          || allowed.size === 0
+          || allowed.has(missionKey)
+          || (urlMission && missionKey === urlMission);
         if (!show) return;
         const opt = document.createElement("option");
         opt.value = missionKey;
@@ -14922,7 +14916,7 @@
       }
       if (urlMission && Array.from(sel.options).some((opt) => opt.value === urlMission)) {
         sel.value = urlMission;
-      } else if (!locked && allowed.size > 0 && !allowed.has(prevValue)) {
+      } else if (!locked && !preserveMission && allowed.size > 0 && !allowed.has(prevValue)) {
         const first = Array.from(sel.options)[0];
         if (first) sel.value = first.value;
       } else if (prevValue && Array.from(sel.options).some((opt) => opt.value === prevValue)) {
@@ -15010,13 +15004,7 @@
     };
 
     const shouldShowExpeditionHours = (page, mission) => {
-      if (mission === "expedition") return true;
-      const form = getForm(page);
-      if (!form) return false;
-      const rt = getFleetRuntime(page);
-      const expPos = parseInt(rt.data.expedition_position || "16", 10);
-      const pos = parseInt(form.querySelector('[name="target_position"]')?.value || "0", 10);
-      return pos === expPos;
+      return mission === "expedition";
     };
 
     const updateFleetFormMode = (page) => {
