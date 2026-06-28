@@ -174,25 +174,44 @@
     {% set pe_expansion_summary = (establishment.met_count or 0)|int ~ '/' ~ (establishment.required_count or 0)|int %}
     {% set pe_expansion_pending = (establishment.met_count or 0)|int < (establishment.required_count or 0)|int %}
   {% endif %}
+  {% set pe_prod_label = '' %}
+  {% if econ.exports %}
+    {% set pe_prod_label = T(econ.exports[0].label_key, econ.exports[0].resource_key) %}
+  {% elif econ.chains %}
+    {% set pe_prod_label = T(econ.chains[0].label_key, econ.chains[0].chain_key) %}
+  {% else %}
+    {% for trait in traits %}
+      {% for fx in trait.effect_lines or [] %}
+        {% if fx.kind == 'affinity' and not pe_prod_label %}
+          {% set pe_prod_label = '+' ~ fx.value ~ '% ' ~ T(fx.affinity_label_key, fx.affinity_key) %}
+        {% endif %}
+      {% endfor %}
+    {% endfor %}
+  {% endif %}
 
   <div class="pe-journey">
 
     {# ── 1. HERO MONOLITH ── #}
     <section class="pe-hero-monolith gc-panel" aria-label="{{ T('pe_hero_aria', 'Planet-Übersicht') }}">
       <div class="pe-hero-monolith-glow" aria-hidden="true"></div>
-      <div class="pe-hero-monolith-grid">
+      <div class="pe-hero-monolith-body">
         <div class="pe-hero-visual-col">
           {% if pe_expansion_visible %}
           <button type="button"
-                  class="pe-hero-visual pe-expansion-toggle{% if pe_expansion_pending %} pe-hero-visual--pending{% endif %}"
-                  id="pe-expansion-toggle"
+                  class="pe-hero-visual pe-expansion-drawer-toggle{% if pe_expansion_pending %} pe-hero-visual--pending{% endif %}"
+                  id="pe-expansion-planet-toggle"
                   aria-expanded="false"
                   aria-controls="pe-expansion-drawer"
                   aria-label="{{ T('pe_expansion_planet_aria', 'Expansionsdetails anzeigen') }}">
             <span class="pe-hero-visual-frame" aria-hidden="true"></span>
             <span class="pe-hero-visual-planet" aria-hidden="true"></span>
           </button>
-          <span class="pe-hero-expansion-hint hint">{{ T('pe_expansion_planet_hint', 'Klicke den Planeten für Expansionsdetails') }}</span>
+          <button type="button"
+                  class="pe-hero-planet-hint pe-expansion-drawer-toggle hint"
+                  aria-expanded="false"
+                  aria-controls="pe-expansion-drawer">
+            {{ T('pe_expansion_visual_hint', 'Expansionsdetails') }}
+          </button>
           {% else %}
           <div class="pe-hero-visual" aria-hidden="true">
             <div class="pe-hero-visual-frame"></div>
@@ -200,7 +219,8 @@
           </div>
           {% endif %}
         </div>
-        <div class="pe-hero-monolith-main">
+
+        <div class="pe-hero-content-col">
           <div class="pe-hero-monolith-head">
             <div>
               <p class="pe-hero-kicker">{{ T("pe_title", "Planet-Entwicklung") }}</p>
@@ -215,23 +235,63 @@
           <div class="pe-hero-chip-row">
             {% if hdr.is_homeworld %}<span class="pe-badge pe-badge-home">{{ T("pe_homeworld", "Heimatwelt") }}</span>{% endif %}
             <span class="pe-badge pe-badge-status pe-badge-status-{{ status.key or 'stable' }}">{{ T(status.label_key, "Stabil") }}</span>
+            {% if ps.active_event %}<span class="pe-badge pe-badge-event">{{ T("pe_event_urgent", "Dringend") }}</span>{% endif %}
             {% if not hdr.dna_hidden %}<span class="pe-badge pe-badge-rarity">{{ T(hdr.rarity_label_key, "Planet-DNA") }}</span>{% endif %}
             {% if ps.specialization.key %}<span class="pe-badge pe-badge-spec">{{ T('spec_' ~ ps.specialization.key, ps.specialization.key) }}</span>{% endif %}
           </div>
-          <div class="pe-hero-stat-strip">
-            <div class="pe-hero-stat">
-              <span class="pe-hero-stat-label">{{ T("pe_development_stage", "Entwicklungsstufe") }}</span>
-              <span class="pe-hero-stat-value gc-mono">{{ ps.level }}/{{ prog.max_level or 30 }}</span>
+
+          <div class="pe-hero-mid-row">
+            <div class="pe-hero-stat-strip">
+              <div class="pe-hero-stat">
+                <span class="pe-hero-stat-label">{{ T("pe_development_stage", "Entwicklungsstufe") }}</span>
+                <span class="pe-hero-stat-value gc-mono">{{ ps.level }}/{{ prog.max_level or 30 }}</span>
+              </div>
+              <div class="pe-hero-stat">
+                <span class="pe-hero-stat-label">{{ T("pe_planet_score", "Planetenwert") }}</span>
+                <span class="pe-hero-stat-value pe-hero-stat-value--score">{{ dash.planet_score or 0 }}</span>
+              </div>
+              <div class="pe-hero-stat">
+                <span class="pe-hero-stat-label">{{ T(hdr.planet_class_label_key or "pe_class_terrestrial", "Felsplanet") }}</span>
+                <span class="pe-hero-stat-value gc-mono pe-hero-stat-value--loc">{{ dash.location.display if dash.location.display is defined else '—' }}</span>
+              </div>
             </div>
-            <div class="pe-hero-stat">
-              <span class="pe-hero-stat-label">{{ T("pe_planet_score", "Planetenwert") }}</span>
-              <span class="pe-hero-stat-value pe-hero-stat-value--score">{{ dash.planet_score or 0 }}</span>
-            </div>
-            <div class="pe-hero-stat">
-              <span class="pe-hero-stat-label">{{ T(hdr.planet_class_label_key or "pe_class_terrestrial", "Felsplanet") }}</span>
-              <span class="pe-hero-stat-value gc-mono">{{ dash.location.display if dash.location.display is defined else '' }}</span>
+            <div class="pe-hero-bonuses-inline" aria-label="{{ T('pe_hero_bonuses_aria', 'Planetenboni') }}">
+              <div class="pe-hero-bonus-row" id="pe-section-traits">
+                <span class="pe-hero-bonus-label">{{ T("pe_planet_focus_title", "Fokus") }}:</span>
+                <span class="pe-hero-focus-chips">
+                  {% if affinities %}
+                    {% for key, val in affinities|dictsort(by='value', reverse=true) %}
+                    {% if loop.index <= 5 and val|int > 0 %}
+                    <span class="pe-hero-focus-chip" title="{{ T('pe_affinity_' ~ key, key) }}">{{ affinity_icons.get(key, '🌍') }} +{{ val|int }}%</span>
+                    {% endif %}
+                    {% endfor %}
+                  {% elif hdr.dna_hidden %}
+                    <span class="pe-hero-meta-muted hint">{{ T("pe_dna_masked_body", "Die DNA dieser Welt ist noch unbekannt.") }}</span>
+                  {% else %}
+                    <span class="pe-hero-meta-muted hint">{{ T("pe_focus_pending", "Noch kein Fokus") }}</span>
+                  {% endif %}
+                </span>
+                {% if spec_detail.spec_key %}
+                <span class="pe-hero-spec gc-mono">{{ T(spec_detail.label_key, spec_detail.spec_key) }}</span>
+                {% elif ps.level >= 8 %}
+                <span class="pe-spec-picker-inline" id="pe-spec-picker" data-planet-id="{{ ps.planet_id }}">
+                  {% for spec in spec_options if spec.eligible %}
+                  <button type="button" class="gc-btn gc-btn-secondary gc-btn-sm pe-spec-btn" data-spec-key="{{ spec.spec_key }}">{{ T(spec.label_key, spec.spec_key) }}</button>
+                  {% endfor %}
+                </span>
+                {% endif %}
+              </div>
+              <div class="pe-hero-bonus-row" id="pe-section-economy">
+                <span class="pe-hero-bonus-label">{{ T("pe_economy_short", "Produktion") }}:</span>
+                {% if pe_prod_label %}
+                <span class="pe-hero-prod-badge">{{ pe_prod_label }}</span>
+                {% else %}
+                <span class="pe-hero-meta-muted hint">{{ T("pe_production_pending", "Boni erscheinen mit steigender Evolution.") }}</span>
+                {% endif %}
+              </div>
             </div>
           </div>
+
           <div class="pe-hero-xp-block">
             <div class="pe-xp-labels build-progress-label">
               <span>{{ T("pe_xp_to_level", "Entwicklung bis Stufe") }} {{ prog.next_level or (ps.level + 1) }}</span>
@@ -257,14 +317,7 @@
             {% endfor %}
           </div>
           {% endif %}
-          {% if pe_expansion_visible %}
-          <button type="button" class="pe-hero-expansion-badge pe-expansion-toggle"
-                  aria-expanded="false" aria-controls="pe-expansion-drawer">
-            <span class="pe-hero-expansion-badge-label">{{ T("pe_expansion_gate_title", "Imperiums-Expansion") }}</span>
-            {% if pe_expansion_summary %}<span class="pe-hero-expansion-badge-meta gc-mono">{{ pe_expansion_summary }}</span>{% endif %}
-            <span class="pe-hero-expansion-badge-chevron" aria-hidden="true">▾</span>
-          </button>
-          {% endif %}
+          <div class="pe-focus-traits" id="pe-section-specialization" hidden aria-hidden="true"></div>
         </div>
       </div>
     </section>
@@ -390,6 +443,41 @@
           {% if prog.milestones %}
           <p class="pe-goal-unlock gc-mono">{{ T("pe_at_level", "Ab Stufe") }} {{ prog.milestones[0].level }} · {{ T(prog.milestones[0].label_key, "Neue Möglichkeit") }}</p>
           {% endif %}
+          <div class="pe-goal-events" id="pe-section-events">
+            {% if ps.active_event %}
+            <div class="pe-goal-event-active" id="pe-event-decision">
+              <span class="pe-goal-event-chip pe-goal-event-chip--urgent">{{ T("pe_event_urgent", "Dringend") }} · {{ T(ps.active_event.label_key, ps.active_event.event_key) }}</span>
+              <div class="pe-event-actions pe-goal-event-actions" id="pe-event-choices" data-event-id="{{ ps.active_event.id }}" data-planet-id="{{ ps.planet_id }}">
+                {% for c in ps.active_event.choices or [] %}
+                <button type="button" class="gc-btn gc-btn-primary gc-btn-sm pe-event-choice-btn" data-choice-key="{{ c.key }}">{{ T('pe_event_choice_' ~ c.key, c.key) }}</button>
+                {% endfor %}
+              </div>
+            </div>
+            {% else %}
+            <span class="pe-goal-event-chip">{{ T("pe_events_status_stable", "Ereignisse: Stabil") }}</span>
+            {% endif %}
+          </div>
+          {% if history_items %}
+          <details class="pe-goal-chronicle" id="pe-section-history">
+            <summary>{{ T("pe_chronicle_toggle", "Chronik anzeigen") }}</summary>
+            <ol class="pe-timeline pe-timeline--compact">
+              {% for item in history_items[:2] %}
+              <li class="pe-timeline-item">
+                <span class="pe-timeline-dot" aria-hidden="true"></span>
+                <span class="pe-timeline-text">{{ T(item.title_key, item.event_type) }}</span>
+              </li>
+              {% endfor %}
+              {% if history_items|length > 2 %}
+              {% for item in history_items[2:] %}
+              <li class="pe-timeline-item">
+                <span class="pe-timeline-dot" aria-hidden="true"></span>
+                <span class="pe-timeline-text">{{ T(item.title_key, item.event_type) }}</span>
+              </li>
+              {% endfor %}
+              {% endif %}
+            </ol>
+          </details>
+          {% endif %}
         </div>
         <button type="button" class="gc-btn gc-btn-primary pe-action-btn pe-next-cta pe-goal-cta"
                 data-cta-action="{{ action.cta_action or 'focus_section' }}"
@@ -400,121 +488,6 @@
           {{ T(action.cta_label_key, "Weiter") }}
         </button>
       </section>
-    </div>
-
-    {# ── 4–8. Kompakte Infoleisten ── #}
-    <div class="pe-compact-footer">
-      <div class="pe-compact-strip{% if ps.active_event %} pe-compact-strip--urgent{% endif %}" id="pe-section-events">
-        <span class="pe-compact-label">{{ T("pe_tab_events", "Ereignisse") }}</span>
-        <div class="pe-compact-body">
-          {% if ps.active_event %}
-          <div class="pe-compact-event" id="pe-event-decision">
-            <span class="pe-compact-urgent-tag">{{ T("pe_event_urgent", "Dringend") }}</span>
-            <span class="pe-compact-event-name">{{ T(ps.active_event.label_key, ps.active_event.event_key) }}</span>
-            <div class="pe-event-actions pe-compact-event-actions" id="pe-event-choices" data-event-id="{{ ps.active_event.id }}" data-planet-id="{{ ps.planet_id }}">
-              {% for c in ps.active_event.choices or [] %}
-              <button type="button" class="gc-btn gc-btn-primary gc-btn-sm pe-event-choice-btn" data-choice-key="{{ c.key }}">{{ T('pe_event_choice_' ~ c.key, c.key) }}</button>
-              {% endfor %}
-            </div>
-          </div>
-          {% elif dash.events_feed %}
-          <span class="pe-compact-inline">{{ T(dash.events_feed[0].label_key, dash.events_feed[0].event_key) }} · {{ T(dash.events_feed[0].state_label_key, dash.events_feed[0].state) }}</span>
-          {% else %}
-          <span class="pe-compact-inline pe-compact-inline--muted">{{ T("pe_events_compact_stable", "Stabil · Keine aktiven Events") }}</span>
-          {% endif %}
-        </div>
-      </div>
-
-      <div class="pe-compact-strip" id="pe-section-traits">
-        <span class="pe-compact-label">{{ T("pe_planet_focus_title", "Planetenfokus") }}</span>
-        <div class="pe-compact-body pe-compact-body--wrap">
-          {% if affinities %}
-            {% for key, val in affinities|dictsort(by='value', reverse=true) %}
-            {% if loop.index <= 5 and val|int > 0 %}
-            <span class="pe-focus-chip-inline" title="{{ T('pe_affinity_' ~ key, key) }}">
-              <span aria-hidden="true">{{ affinity_icons.get(key, '🌍') }}</span>
-              <span class="gc-mono">+{{ val|int }}%</span>
-            </span>
-            {% endif %}
-            {% endfor %}
-          {% elif hdr.dna_hidden %}
-          <span class="pe-compact-inline pe-compact-inline--muted">{{ T("pe_dna_masked_body", "Die DNA dieser Welt ist noch unbekannt.") }}</span>
-          {% else %}
-          <span class="pe-compact-inline pe-compact-inline--muted">{{ T("pe_focus_pending", "Noch kein Fokus") }}</span>
-          {% endif %}
-          {% if spec_detail.spec_key %}
-          <span class="pe-compact-spec gc-mono">{{ T(spec_detail.label_key, spec_detail.spec_key) }}</span>
-          {% elif ps.level >= 8 %}
-          <span class="pe-spec-picker-inline" id="pe-spec-picker" data-planet-id="{{ ps.planet_id }}">
-            {% for spec in spec_options if spec.eligible %}
-            <button type="button" class="gc-btn gc-btn-secondary gc-btn-sm pe-spec-btn" data-spec-key="{{ spec.spec_key }}">{{ T(spec.label_key, spec.spec_key) }}</button>
-            {% endfor %}
-          </span>
-          {% endif %}
-        </div>
-        <div class="pe-focus-traits" id="pe-section-specialization" hidden aria-hidden="true"></div>
-      </div>
-
-      <div class="pe-compact-strip" id="pe-section-economy">
-        <span class="pe-compact-label">{{ T("pe_economy_short", "Produktion") }}</span>
-        <div class="pe-compact-body pe-compact-body--wrap">
-          {% set pe_prod_shown = namespace(n=0) %}
-          {% for trait in traits %}
-            {% for fx in trait.effect_lines or [] %}
-              {% if fx.kind == 'affinity' and pe_prod_shown.n < 4 %}
-                {% set pe_prod_shown.n = pe_prod_shown.n + 1 %}
-                <span class="pe-prod-chip pe-prod-chip--inline">+{{ fx.value }}% {{ T(fx.affinity_label_key, fx.affinity_key) }}</span>
-              {% endif %}
-            {% endfor %}
-          {% endfor %}
-          {% for ex in econ.exports or [] %}
-            {% if pe_prod_shown.n < 4 %}
-              {% set pe_prod_shown.n = pe_prod_shown.n + 1 %}
-              <span class="pe-prod-chip pe-prod-chip--inline pe-prod-chip--export">{{ T(ex.label_key, ex.resource_key) }}</span>
-            {% endif %}
-          {% endfor %}
-          {% for c in econ.chains or [] %}
-            {% if pe_prod_shown.n < 4 %}
-              {% set pe_prod_shown.n = pe_prod_shown.n + 1 %}
-              <span class="pe-prod-chip pe-prod-chip--inline pe-prod-chip--chain">{{ T(c.label_key, c.chain_key) }}</span>
-            {% endif %}
-          {% endfor %}
-          {% if pe_prod_shown.n == 0 %}
-          <span class="pe-compact-inline pe-compact-inline--muted">{{ T("pe_production_pending", "Boni erscheinen mit steigender Evolution.") }}</span>
-          {% endif %}
-        </div>
-      </div>
-
-      <div class="pe-compact-strip" id="pe-section-history">
-        <span class="pe-compact-label">{{ T("pe_tab_history", "Chronik") }}</span>
-        <div class="pe-compact-body">
-          {% if history_items %}
-          <ol class="pe-timeline pe-timeline--compact">
-            {% for item in history_items[:2] %}
-            <li class="pe-timeline-item">
-              <span class="pe-timeline-dot" aria-hidden="true"></span>
-              <span class="pe-timeline-text">{{ T(item.title_key, item.event_type) }}</span>
-            </li>
-            {% endfor %}
-          </ol>
-          {% if history_items|length > 2 %}
-          <details class="pe-chronicle-more">
-            <summary>{{ T("pe_chronicle_show_more", "Mehr anzeigen") }} (+{{ (history_items|length - 2)|int }})</summary>
-            <ol class="pe-timeline pe-timeline--compact">
-              {% for item in history_items[2:] %}
-              <li class="pe-timeline-item">
-                <span class="pe-timeline-dot" aria-hidden="true"></span>
-                <span class="pe-timeline-text">{{ T(item.title_key, item.event_type) }}</span>
-              </li>
-              {% endfor %}
-            </ol>
-          </details>
-          {% endif %}
-          {% else %}
-          <span class="pe-compact-inline pe-compact-inline--muted">{{ T("pe_no_history", "Die Geschichte beginnt mit deinen Entscheidungen.") }}</span>
-          {% endif %}
-        </div>
-      </div>
     </div>
 
     {% if ps.level >= 5 %}

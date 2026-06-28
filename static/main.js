@@ -20784,7 +20784,7 @@
       const isOpen = Boolean(open);
       drawer.hidden = !isOpen;
       drawer.classList.toggle("is-open", isOpen);
-      document.querySelectorAll(".pe-expansion-toggle").forEach((el) => {
+      document.querySelectorAll(".pe-expansion-drawer-toggle").forEach((el) => {
         el.setAttribute("aria-expanded", isOpen ? "true" : "false");
         el.classList.toggle("is-open", isOpen);
       });
@@ -20802,6 +20802,9 @@
       if (section && section.tagName === "DETAILS") section.open = true;
       if (sectionId === "pe-section-expansion-gate" || sectionId === "pe-section-establishment") {
         openPeExpansionDrawer(true);
+      }
+      if (sectionId === "pe-section-history" && section && section.tagName === "DETAILS") {
+        section.open = true;
       }
     };
 
@@ -20875,7 +20878,7 @@
         return;
       }
 
-      const expansionToggle = e.target.closest(".pe-expansion-toggle");
+      const expansionToggle = e.target.closest(".pe-expansion-drawer-toggle");
       if (expansionToggle && root.contains(expansionToggle)) {
         e.preventDefault();
         togglePeExpansionDrawer();
@@ -21314,6 +21317,19 @@
         }
       });
     });
+    if (typeof GC.registerCleanup === "function") {
+      GC.registerCleanup(() => {
+        const drawer = document.getElementById("pe-expansion-drawer");
+        if (drawer) {
+          drawer.hidden = true;
+          drawer.classList.remove("is-open");
+        }
+        document.querySelectorAll(".pe-expansion-drawer-toggle").forEach((el) => {
+          el.setAttribute("aria-expanded", "false");
+          el.classList.remove("is-open");
+        });
+      });
+    }
   }
 
   // =========================
