@@ -365,28 +365,126 @@
       return `${s} %`;
     }
 
-    function renderUnitLossTable(el, rows, side) {
-      if (!el) return;
-      if (!rows || !rows.length) {
-        el.innerHTML = `<li class="gc-battle-lab-unit-empty">${tr("combat_simulator_no_losses", "Keine")}</li>`;
-        return;
+    const RESOURCE_ICON = {
+      metal: "/static/img/res/Ferronit.webp",
+      crystal: "/static/img/res/Crytite.webp",
+      fuel_cells: "/static/img/res/Brennzellen.webp",
+    };
+
+    const WHY_CHIP_META = {
+      combat_values_why_more_attack: { icon: "⚔", labelKey: "battle_lab_why_chip_attack" },
+      combat_values_why_defender_no_tank: { icon: "⚔", labelKey: "battle_lab_why_chip_soft_def" },
+      combat_values_why_defender_tougher: { icon: "🛡", labelKey: "battle_lab_why_chip_tough" },
+      combat_values_why_defender_low_attack: { icon: "⚔", labelKey: "battle_lab_why_chip_low_atk" },
+      combat_values_why_cargo_role: { icon: "🚛", labelKey: "battle_lab_why_chip_cargo" },
+      combat_values_why_shield_hull_order: { icon: "🛡", labelKey: "battle_lab_why_chip_shield" },
+      combat_values_why_rapid_fire: { icon: "⚡", labelKey: "battle_lab_why_chip_rapid" },
+    };
+
+    function resourceIconHtml(resKey) {
+      const src = RESOURCE_ICON[resKey] || "";
+      if (!src) return "";
+      return `<img class="gbl-res-icon" src="${src}" alt="" width="22" height="22" loading="lazy">`;
+    }
+
+    function unitIconUrl(unitKey, unitType) {
+      const folder = unitType === "defense" ? "defense" : "ships";
+      return `/static/img/${folder}/${unitKey}.png`;
+    }
+
+    function unitIconHtml(unitKey, unitType) {
+      const src = unitIconUrl(unitKey, unitType);
+      const fallback = unitType === "defense"
+        ? "/static/img/defense/sentinel_turret.png"
+        : "/static/img/ships/seed_ark.png";
+      return `<img class="gbl-unit-icon" src="${src}" alt="" width="28" height="28" loading="lazy" onerror="this.onerror=null;this.src='${fallback}'">`;
+    }
+
+    function renderResourceStripHtml(values, keys) {
+      return keys
+        .map((key) => {
+          const val = Number(values[key === "fuel_cells" ? "fuel_cells" : key] ?? values[key] ?? 0);
+          const resKey = key === "fuel" ? "fuel_cells" : key;
+          return `<div class="gbl-res-cell"><span class="gbl-res-cell-icon">${resourceIconHtml(resKey)}</span><span class="gbl-res-cell-val">${fmt(val)}</span></div>`;
+        })
+        .join("");
+    }
+
+    function renderLossChipsHtml(rows) {
+      const lost = (rows || []).filter((row) => Number(row.quantity) > 0);
+      if (!lost.length) {
+        return `<span class="gbl-unit-empty">${tr("battle_lab_bar_none", "Keine")}</span>`;
       }
-      el.innerHTML = rows
+      return lost
         .map((row) => {
           const name = unitLabel(row.name_key, row.unit_key);
-          const qty = fmt(row.quantity ?? 0);
-          const severity = row.severity || "none";
-          const icon = side === "attacker"
-            ? (Number(row.quantity) <= 0 ? "✓" : "✕")
-            : (Number(row.quantity) <= 0 ? "·" : "✕");
-          const iconClass = side === "attacker"
-            ? (Number(row.quantity) <= 0 ? "is-good" : "is-bad")
-            : (Number(row.quantity) <= 0 ? "is-neutral" : "is-good");
-          return `<li class="gc-battle-lab-unit-row gc-battle-lab-sev--${severity}">
-            <span class="gc-battle-lab-unit-icon ${iconClass}" aria-hidden="true">${icon}</span>
-            <span class="gc-battle-lab-unit-name">${name}</span>
-            <span class="gc-battle-lab-unit-qty">${qty}</span>
-          </li>`;
+          return `<span class="gbl-unit-chip" title="${escapeHtml(name)}">${unitIconHtml(row.unit_key, row.unit_type || "ship")}<span class="gbl-unit-chip-qty">×${fmt(row.quantity)}</span></span>`;
+        })
+        .join("");
+    }
+
+    function signalDot(status) {
+      if (status === "good") return "🟢";
+      if (status === "bad") return "🔴";
+      return "🟡";
+    }
+
+    function buildAnalysisSignals(headline, narrative) {
+      const analysis = narrative.analysis || [];
+      const net = Number(headline.expected_profit ?? 0);
+      const pct = Number(headline.attacker_win_pct ?? 0);
+      const hasShield = analysis.some((row) => row.key === "battle_lab_bullet_shield_wall");
+      const cargoWarn = analysis.some(
+        (row) => row.key === "battle_lab_bullet_loot_partial" || row.key === "battle_lab_bullet_no_cargo"
+      );
+      return [
+        {
+          label: tr("battle_lab_signal_profit", "Profit"),
+          status: net > 0 ? "good" : net < 0 ? "bad" : "warn",
+        },
+        {
+          label: tr("battle_lab_signal_win", "Sieg"),
+          status: pct >= 70 ? "good" : pct >= 40 ? "warn" : "bad",
+        },
+        {
+          label: tr("battle_lab_signal_shield", "Schildwall"),
+          status: hasShield ? "warn" : "good",
+        },
+        {
+          label: tr("battle_lab_signal_cargo", "Cargo"),
+          status: cargoWarn ? "warn" : "good",
+        },
+      ];
+    }
+
+    function renderAnalysisSignals(el, headline, narrative) {
+      if (!el) return;
+      el.innerHTML = buildAnalysisSignals(headline, narrative)
+        .map(
+          (sig) =>
+            `<span class="gbl-signal-chip gbl-signal-chip--${sig.status}"><span class="gbl-signal-dot" aria-hidden="true">${signalDot(sig.status)}</span><span>${sig.label}</span></span>`
+        )
+        .join("");
+    }
+
+    function renderAdviceChips(el, items) {
+      if (!el) return;
+      el.innerHTML = (items || [])
+        .map((item) => {
+          const tip = renderNarrativeLine(item);
+          return `<span class="gbl-advice-chip" title="${escapeHtml(tip)}">💡 ${tip}</span>`;
+        })
+        .join("");
+    }
+
+    function renderWhyChips(el, whyItems) {
+      if (!el) return;
+      el.innerHTML = (whyItems || [])
+        .map((item) => {
+          const meta = WHY_CHIP_META[item.key] || { icon: "•", labelKey: item.key };
+          const short = tr(meta.labelKey, meta.labelKey);
+          const tip = renderNarrativeLine(item);
+          return `<span class="gbl-why-chip" title="${escapeHtml(tip)}"><span class="gbl-why-chip-ico" aria-hidden="true">${meta.icon}</span><span>${short}</span></span>`;
         })
         .join("");
     }
@@ -401,38 +499,6 @@
       return tr(item.key, item.key, params);
     }
 
-    function renderAnalysisList(el, items) {
-      if (!el) return;
-      if (!items || !items.length) {
-        el.innerHTML = "";
-        return;
-      }
-      el.innerHTML = items
-        .map((item) => {
-          const icon = item.icon === "check" ? "✓" : "•";
-          const tone = item.tone || "neutral";
-          return `<li class="gc-battle-lab-analysis-item gc-battle-lab-analysis--${tone}">
-            <span class="gc-battle-lab-analysis-icon" aria-hidden="true">${icon}</span>
-            <span>${renderNarrativeLine(item)}</span>
-          </li>`;
-        })
-        .join("");
-    }
-
-    function renderAdviceList(el, items) {
-      if (!el) return;
-      el.innerHTML = (items || [])
-        .map((item) => `<li class="gc-battle-lab-advice-item">${renderNarrativeLine(item)}</li>`)
-        .join("");
-    }
-
-    function fmtStatPair(base, effective) {
-      const b = Number(base) || 0;
-      const e = Number(effective) || 0;
-      if (b === e) return fmt(e);
-      return `${fmt(b)} → ${fmt(e)}`;
-    }
-
     function escapeHtml(value) {
       return String(value)
         .replace(/&/g, "&amp;")
@@ -445,18 +511,41 @@
     }
 
     function renderLossTile(chip, tone, icon) {
-      let text = tr("battle_lab_bar_none", "Keine");
-      let titleAttr = "";
       if (chip && chip.mode === "single") {
-        text = `${fmt(chip.quantity)} ${unitLabel(chip.name_key, chip.unit_key)}`;
-      } else if (chip && chip.mode === "multi") {
+        const name = unitLabel(chip.name_key, chip.unit_key);
+        return `<div class="gbl-result-tile gbl-result-tile--${tone}"><span class="gbl-result-tile-ico" aria-hidden="true">${icon}</span><span class="gbl-result-tile-visual">${unitIconHtml(chip.unit_key, chip.unit_type || "ship")}<span class="gbl-result-tile-qty">×${fmt(chip.quantity)}</span></span></div>`;
+      }
+      if (chip && chip.mode === "multi") {
         const tip = (chip.units || [])
           .map((unit) => `${fmt(unit.quantity)} ${unitLabel(unit.name_key, unit.unit_key)}`)
           .join(" · ");
-        titleAttr = ` title="${escapeHtml(tip)}"`;
-        text = tr("battle_lab_bar_multi_types", "%(count)s Einheitentypen", { count: chip.count });
+        const icons = (chip.units || [])
+          .slice(0, 3)
+          .map((unit) => unitIconHtml(unit.unit_key, unit.unit_type || "ship"))
+          .join("");
+        return `<div class="gbl-result-tile gbl-result-tile--${tone}" title="${escapeHtml(tip)}"><span class="gbl-result-tile-ico" aria-hidden="true">${icon}</span><span class="gbl-result-tile-visual gbl-result-tile-visual--multi">${icons}<span class="gbl-result-tile-qty">${tr("battle_lab_bar_multi_types", "%(count)s Einheitentypen", { count: chip.count })}</span></span></div>`;
       }
-      return `<div class="gbl-result-tile gbl-result-tile--${tone}"${titleAttr}><span class="gbl-result-tile-ico" aria-hidden="true">${icon}</span><span class="gbl-result-tile-val">${text}</span></div>`;
+      return `<div class="gbl-result-tile gbl-result-tile--${tone}"><span class="gbl-result-tile-ico" aria-hidden="true">${icon}</span><span class="gbl-result-tile-val">${tr("battle_lab_bar_none", "Keine")}</span></div>`;
+    }
+
+    function renderLootTile(loot) {
+      if (!loot || loot.mode !== "values") {
+        return `<div class="gbl-result-tile gbl-result-tile--loot"><span class="gbl-result-tile-ico" aria-hidden="true">💰</span><span class="gbl-result-tile-val">${tr("battle_lab_bar_none", "Keine")}</span></div>`;
+      }
+      const icons = [
+        resourceIconHtml("metal"),
+        resourceIconHtml("crystal"),
+        resourceIconHtml("fuel_cells"),
+      ].join("");
+      return `<div class="gbl-result-tile gbl-result-tile--loot"><span class="gbl-result-tile-ico" aria-hidden="true">💰</span><span class="gbl-result-tile-visual gbl-result-tile-visual--res">${icons}</span><span class="gbl-result-tile-val gbl-result-tile-val--compact">${fmtCompact(loot.metal)} / ${fmtCompact(loot.crystal)} / ${fmtCompact(loot.fuel)}</span></div>`;
+    }
+
+    function renderDebrisTile(debris) {
+      if (!debris || debris.mode !== "values") {
+        return `<div class="gbl-result-tile gbl-result-tile--debris"><span class="gbl-result-tile-ico" aria-hidden="true">✦</span><span class="gbl-result-tile-val">${tr("battle_lab_bar_none", "Keine")}</span></div>`;
+      }
+      const icons = [resourceIconHtml("metal"), resourceIconHtml("crystal")].join("");
+      return `<div class="gbl-result-tile gbl-result-tile--debris"><span class="gbl-result-tile-ico" aria-hidden="true">✦</span><span class="gbl-result-tile-visual gbl-result-tile-visual--res">${icons}</span><span class="gbl-result-tile-val gbl-result-tile-val--compact">${fmtCompact(debris.metal)} / ${fmtCompact(debris.crystal)}</span></div>`;
     }
 
     function renderResultBar(banner, headline, compact) {
@@ -509,8 +598,8 @@
       tilesEl.innerHTML = [
         renderLossTile(own, "own", "🛡"),
         renderLossTile(enemy, "enemy", "☠"),
-        `<div class="gbl-result-tile gbl-result-tile--loot"><span class="gbl-result-tile-ico" aria-hidden="true">💰</span><span class="gbl-result-tile-val">${lootText}</span></div>`,
-        `<div class="gbl-result-tile gbl-result-tile--debris"><span class="gbl-result-tile-ico" aria-hidden="true">✦</span><span class="gbl-result-tile-val">${debrisText}</span></div>`,
+        renderLootTile(loot),
+        renderDebrisTile(debris),
         `<div class="gbl-result-tile gbl-result-tile--net gbl-result-tile--${netTone}"><span class="gbl-result-tile-ico" aria-hidden="true">${netIcon}</span><span class="gbl-result-tile-val">${netText}</span></div>`,
       ].join("");
 
@@ -530,45 +619,16 @@
     }
 
     function renderCombatValueCard(row) {
-      const name = unitLabel(row.name_key, row.name_key);
-      const count = fmt(row.count ?? 0);
+      const name = unitLabel(row.name_key, row.unit_key);
+      const atk = fmt(row.attack_effective ?? row.attack_base ?? 0);
+      const sh = fmt(row.shield_effective ?? row.shield_base ?? 0);
+      const hull = fmt(row.hull_effective ?? row.hull_base ?? 0);
       const zeroClass = Number(row.count) <= 0 ? " is-zero" : "";
-      const atkLine = tr(
-        "combat_values_stat_attack",
-        "Angriff: %(val)s pro Einheit · Gesamt %(total)s",
-        {
-          val: fmtStatPair(row.attack_base, row.attack_effective),
-          total: fmt(row.total_attack ?? 0),
-        }
-      );
-      const shLine = tr(
-        "combat_values_stat_shield",
-        "Schild: %(val)s",
-        { val: fmtStatPair(row.shield_base, row.shield_effective) }
-      );
-      const hullLine = tr(
-        "combat_values_stat_hull",
-        "Hülle: %(val)s",
-        { val: fmtStatPair(row.hull_base, row.hull_effective) }
-      );
-      const roleLabel = tr(row.role_label_key || "combat_values_role_utility", row.role || "");
-      const hint = tr(row.role_hint_key || "combat_values_hint_combat", "");
-      const rf = (row.rapid_fire || [])
-        .map((t) =>
-          tr("combat_values_rapid_fire_against", "Rapid Fire: stark gegen %(unit)s (×%(mult)s)", {
-            unit: unitLabel(t.name_key, t.name_key),
-            mult: fmt(t.multiplier ?? 2),
-          })
-        )
-        .join("");
-      return `<article class="gc-battle-lab-combat-card${zeroClass}">
-        <header class="gc-battle-lab-combat-card-head"><strong>${name}</strong><span>${count}</span></header>
-        <p class="gc-battle-lab-combat-stat">${atkLine}</p>
-        <p class="gc-battle-lab-combat-stat">${shLine}</p>
-        <p class="gc-battle-lab-combat-stat">${hullLine}</p>
-        <p class="gc-battle-lab-combat-role">${roleLabel}</p>
-        <p class="gc-battle-lab-combat-hint">${hint}</p>
-        ${rf ? `<p class="gc-battle-lab-combat-rf">${rf}</p>` : ""}
+      return `<article class="gbl-stat-card${zeroClass}">
+        <div class="gbl-stat-card-head">${unitIconHtml(row.unit_key, row.unit_type || "ship")}<span>${name}</span></div>
+        <div class="gbl-stat-row"><span class="gbl-stat-ico" aria-hidden="true">⚔</span><span>${atk}</span></div>
+        <div class="gbl-stat-row"><span class="gbl-stat-ico" aria-hidden="true">🛡</span><span>${sh}</span></div>
+        <div class="gbl-stat-row"><span class="gbl-stat-ico" aria-hidden="true">❤</span><span>${hull}</span></div>
       </article>`;
     }
 
@@ -589,18 +649,12 @@
           : combatValues[side] || [];
         const visible = showAllCombatValues ? rows : rows.filter((r) => Number(r.count) > 0);
         if (!visible.length) {
-          el.innerHTML = `<p class="gc-battle-lab-combat-empty">${tr("combat_simulator_no_losses", "Keine")}</p>`;
+          el.innerHTML = `<p class="gbl-stat-empty">${tr("battle_lab_bar_none", "Keine")}</p>`;
           return;
         }
         el.innerHTML = visible.map((row) => renderCombatValueCard(row)).join("");
       });
-      const whyEl = section.querySelector("[data-sim-combat-why]");
-      if (whyEl) {
-        const why = combatValues.why || [];
-        whyEl.innerHTML = why
-          .map((item) => `<li>${renderNarrativeLine(item)}</li>`)
-          .join("");
-      }
+      renderWhyChips(section.querySelector("[data-sim-combat-why]"), combatValues.why || []);
       const toggleBtn = section.querySelector("[data-sim-combat-values-toggle]");
       if (toggleBtn) {
         toggleBtn.textContent = showAllCombatValues
@@ -709,75 +763,34 @@
       renderResultBar(banner, headline, narrative.compact_summary);
       syncResultDetailsVisibility();
 
-      renderUnitLossTable(resultsEl.querySelector("[data-sim-atk-loss-table]"), narrative.attacker_losses, "attacker");
-      renderUnitLossTable(resultsEl.querySelector("[data-sim-def-loss-table]"), narrative.defender_losses, "defender");
+      const atkChips = resultsEl.querySelector("[data-sim-atk-loss-chips]");
+      const defChips = resultsEl.querySelector("[data-sim-def-loss-chips]");
+      if (atkChips) atkChips.innerHTML = renderLossChipsHtml(narrative.attacker_losses);
+      if (defChips) defChips.innerHTML = renderLossChipsHtml(narrative.defender_losses);
 
-      const atkLossValEl = resultsEl.querySelector("[data-sim-atk-loss-value]");
-      const defLossValEl = resultsEl.querySelector("[data-sim-def-loss-value]");
-      if (atkLossValEl) atkLossValEl.textContent = fmt(narrative.attacker_loss_value ?? headline.attacker_loss_value ?? 0);
-      if (defLossValEl) defLossValEl.textContent = fmt(narrative.defender_loss_value ?? 0);
+      const lootStrip = resultsEl.querySelector("[data-sim-loot-strip]");
+      if (lootStrip) lootStrip.innerHTML = renderResourceStripHtml(headline.loot || {}, ["metal", "crystal", "fuel_cells"]);
+      const debrisStrip = resultsEl.querySelector("[data-sim-debris-strip]");
+      if (debrisStrip) debrisStrip.innerHTML = renderResourceStripHtml(headline.debris || {}, ["metal", "crystal"]);
 
-      const loot = headline.loot || {};
-      const debris = headline.debris || {};
-      const setText = (sel, val) => {
-        const el = resultsEl.querySelector(sel);
-        if (el) el.textContent = fmt(val || 0);
-      };
-      setText("[data-sim-loot-metal]", loot.metal);
-      setText("[data-sim-loot-crystal]", loot.crystal);
-      setText("[data-sim-loot-fuel]", loot.fuel_cells);
-      setText("[data-sim-debris-metal]", debris.metal);
-      setText("[data-sim-debris-crystal]", debris.crystal);
-
-      const cargoRow = resultsEl.querySelector("[data-sim-cargo-row]");
-      const cargoPctEl = resultsEl.querySelector("[data-sim-cargo-pct]");
+      const cargoChip = resultsEl.querySelector("[data-sim-cargo-chip]");
       const cargoPct = headline.cargo_fill_pct;
-      if (cargoRow && cargoPctEl) {
+      if (cargoChip) {
         if (cargoPct != null && cargoPct >= 0) {
-          cargoRow.hidden = false;
-          cargoPctEl.textContent = fmtPct(cargoPct);
+          cargoChip.hidden = false;
+          cargoChip.innerHTML = `<span class="gbl-signal-dot" aria-hidden="true">🚛</span><span>${tr("battle_lab_cargo_load", "Cargo-Auslastung")}: ${fmtPct(cargoPct)}</span>`;
         } else {
-          cargoRow.hidden = true;
+          cargoChip.hidden = true;
         }
       }
 
-      const meterBlock = resultsEl.querySelector("[data-sim-meter]");
-      const meterFill = resultsEl.querySelector("[data-sim-meter-fill]");
-      const meterLabel = resultsEl.querySelector("[data-sim-meter-label]");
-      const meterNet = resultsEl.querySelector("[data-sim-meter-net]");
-      if (meterBlock && meterFill && meterLabel) {
-        const score = Math.max(0, Math.min(100, Number(meter.score) || 0));
-        meterBlock.hidden = false;
-        meterBlock.className = `gc-battle-lab-meter-block gc-battle-lab-meter--${meter.tone || "neutral"}`;
-        meterFill.style.width = `${score}%`;
-        meterLabel.textContent = tr(meter.label_key || "battle_lab_meter_good", meter.label_key || "");
-        if (meterNet) {
-          const net = Number(meter.net_value ?? headline.expected_profit ?? 0);
-          if (net > 0) {
-            meterNet.textContent = tr("battle_lab_expected_gain", "Erwarteter Gewinn: +%(n)s", { n: fmt(net) });
-            meterNet.hidden = false;
-          } else if (net < 0) {
-            meterNet.textContent = tr("battle_lab_expected_loss", "Du verlierst wahrscheinlich mehr als du gewinnst.");
-            meterNet.hidden = false;
-          } else {
-            meterNet.hidden = true;
-          }
-        }
-      }
-
-      renderAnalysisList(resultsEl.querySelector("[data-sim-analysis]"), narrative.analysis);
+      renderAnalysisSignals(resultsEl.querySelector("[data-sim-analysis-signals]"), headline, narrative);
 
       const advice = narrative.advice || [];
       const adviceBlock = resultsEl.querySelector("[data-sim-advice-block]");
-      const adviceEl = resultsEl.querySelector("[data-sim-advice]");
-      if (adviceBlock && adviceEl) {
-        if (advice.length) {
-          adviceBlock.hidden = false;
-          renderAdviceList(adviceEl, advice);
-        } else {
-          adviceBlock.hidden = true;
-          adviceEl.innerHTML = "";
-        }
+      if (adviceBlock) {
+        adviceBlock.hidden = !advice.length;
+        renderAdviceChips(resultsEl.querySelector("[data-sim-advice-chips]"), advice);
       }
 
       renderCombatValues(display.combat_values);

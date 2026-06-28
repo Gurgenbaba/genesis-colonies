@@ -376,9 +376,10 @@ def test_combat_simulator_route_renders(sim_db, monkeypatch):
     assert "data-sim-result-banner" in player_html
     assert "data-sim-details-toggle" in player_html
     assert 'data-sim-details hidden' in player_html or 'data-sim-details" hidden' in player_html
-    assert "data-sim-atk-loss-table" in player_html
-    assert "data-sim-analysis" in player_html
-    assert "data-sim-meter" in player_html
+    assert "data-sim-atk-loss-chips" in player_html
+    assert "data-sim-analysis-signals" in player_html
+    assert "gbl-dashboard" in player_html
+    assert "gbl-resource-strip" in player_html
     assert "data-sim-combat-values" in player_html
     assert "Kampfwerte verstehen" in player_html
     assert "data-qty-add" not in player_html
@@ -872,11 +873,13 @@ def test_player_view_details_sections_inside_collapsed_panel(sim_db, monkeypatch
     assert details_start >= 0
     details_chunk = player_html[details_start : details_start + 6000]
     for marker in (
-        "data-sim-atk-loss-table",
-        "data-sim-def-loss-table",
-        "data-sim-analysis",
-        "data-sim-meter",
+        "data-sim-atk-loss-chips",
+        "data-sim-def-loss-chips",
+        "data-sim-loot-strip",
+        "data-sim-debris-strip",
+        "data-sim-analysis-signals",
         "data-sim-combat-values",
+        "gbl-stat-cards",
     ):
         assert marker in details_chunk
 
@@ -891,6 +894,10 @@ def test_js_details_collapsed_by_default_and_toggle():
     assert "data-sim-result-tiles" in js
     assert "gbl-result-tile" in js
     assert "renderLossTile" in js
+    assert "renderAnalysisSignals" in js
+    assert "renderResourceStripHtml" in js
+    assert "renderLossChipsHtml" in js
+    assert "renderWhyChips" in js
     assert "fmtCompact" in js
     assert "battle_lab_bar_details" in js
 
@@ -903,3 +910,16 @@ def test_css_result_bar_compact():
     assert "border-radius: 0" in chunk
     assert "48px" in chunk
     assert "grid-template-columns: repeat(5" in chunk
+
+
+def test_css_dashboard_visual():
+    css = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+    for cls in (
+        ".gbl-dashboard",
+        ".gbl-resource-strip",
+        ".gbl-unit-chips",
+        ".gbl-signal-row",
+        ".gbl-stat-card",
+        ".gbl-why-chips",
+    ):
+        assert cls in css

@@ -67,82 +67,54 @@
         </div>
       </div>
 
-      <div class="gc-battle-lab-details" data-sim-details hidden>
-      <section class="gc-battle-lab-block">
-        <h3 class="gc-battle-lab-block-title">{{ T("battle_lab_your_losses", "Deine Verluste") }}</h3>
-        <ul class="gc-battle-lab-unit-table" data-sim-atk-loss-table></ul>
-        <p class="gc-battle-lab-total">
-          <span>{{ T("battle_lab_total_value", "Gesamtwert") }}:</span>
-          <strong data-sim-atk-loss-value>—</strong>
-          <span class="gc-battle-lab-resource-tag">{{ T("resource_metal", "Ferronit") }}</span>
-        </p>
-      </section>
+      <div class="gc-battle-lab-details gbl-dashboard" data-sim-details hidden>
+      <div class="gbl-dash-grid">
+        <section class="gbl-dash-panel gbl-dash-losses">
+          <h3 class="gbl-dash-title">{{ T("battle_lab_your_losses", "Deine Verluste") }}</h3>
+          <div class="gbl-unit-chips" data-sim-atk-loss-chips></div>
+          <h3 class="gbl-dash-title gbl-dash-title--sub">{{ T("battle_lab_enemy_short", "Gegner") }}</h3>
+          <div class="gbl-unit-chips" data-sim-def-loss-chips></div>
+        </section>
 
-      <section class="gc-battle-lab-block">
-        <h3 class="gc-battle-lab-block-title">{{ T("battle_lab_enemy_losses", "Gegnerische Verluste") }}</h3>
-        <ul class="gc-battle-lab-unit-table" data-sim-def-loss-table></ul>
-        <p class="gc-battle-lab-total">
-          <span>{{ T("battle_lab_total_value", "Gesamtwert") }}:</span>
-          <strong data-sim-def-loss-value>—</strong>
-          <span class="gc-battle-lab-resource-tag">{{ T("resource_metal", "Ferronit") }}</span>
-        </p>
-      </section>
+        <section class="gbl-dash-panel">
+          <h3 class="gbl-dash-title">{{ T("battle_lab_spoils", "Beute") }}</h3>
+          <div class="gbl-resource-strip" data-sim-loot-strip></div>
+          <div class="gbl-signal-chip gbl-signal-chip--neutral" data-sim-cargo-chip hidden></div>
+        </section>
 
-      <section class="gc-battle-lab-block">
-        <h3 class="gc-battle-lab-block-title">{{ T("battle_lab_spoils", "Beute") }}</h3>
-        <dl class="gc-battle-lab-resource-list">
-          <div><dt>{{ T("resource_metal", "Ferronit") }}</dt><dd data-sim-loot-metal>—</dd></div>
-          <div><dt>{{ T("resource_crystal", "Crytite") }}</dt><dd data-sim-loot-crystal>—</dd></div>
-          <div><dt>{{ T("resource_fuel_cells", "Brennzellen") }}</dt><dd data-sim-loot-fuel>—</dd></div>
-          <div data-sim-cargo-row hidden><dt>{{ T("battle_lab_cargo_load", "Cargo-Auslastung") }}</dt><dd data-sim-cargo-pct>—</dd></div>
-        </dl>
-      </section>
+        <section class="gbl-dash-panel">
+          <h3 class="gbl-dash-title">{{ T("battle_lab_debris", "Trümmerfeld") }}</h3>
+          <div class="gbl-resource-strip" data-sim-debris-strip></div>
+        </section>
 
-      <section class="gc-battle-lab-block">
-        <h3 class="gc-battle-lab-block-title">{{ T("battle_lab_debris", "Trümmerfeld") }}</h3>
-        <dl class="gc-battle-lab-resource-list">
-          <div><dt>{{ T("resource_metal", "Ferronit") }}</dt><dd data-sim-debris-metal>—</dd></div>
-          <div><dt>{{ T("resource_crystal", "Crytite") }}</dt><dd data-sim-debris-crystal>—</dd></div>
-        </dl>
-      </section>
+        <section class="gbl-dash-panel gbl-dash-signals">
+          <h3 class="gbl-dash-title">{{ T("battle_lab_signal_attack", "Angriff") }}</h3>
+          <div class="gbl-signal-row" data-sim-analysis-signals></div>
+        </section>
 
-      <section class="gc-battle-lab-meter-block" data-sim-meter hidden>
-        <h3 class="gc-battle-lab-block-title">{{ T("battle_lab_outcome", "Kampfergebnis") }}</h3>
-        <div class="gc-battle-lab-meter-track" aria-hidden="true"><span class="gc-battle-lab-meter-fill" data-sim-meter-fill></span></div>
-        <p class="gc-battle-lab-meter-label" data-sim-meter-label></p>
-        <p class="gc-battle-lab-meter-net" data-sim-meter-net hidden></p>
-      </section>
+        <section class="gbl-dash-panel" data-sim-advice-block hidden>
+          <h3 class="gbl-dash-title">{{ T("battle_lab_advisor", "Strategischer Rat") }}</h3>
+          <div class="gbl-advice-chips" data-sim-advice-chips></div>
+        </section>
 
-      <section class="gc-battle-lab-block">
-        <h3 class="gc-battle-lab-block-title">{{ T("battle_lab_analysis", "Kampfanalyse") }}</h3>
-        <ul class="gc-battle-lab-analysis" data-sim-analysis></ul>
-      </section>
-
-      <section class="gc-battle-lab-block" data-sim-advice-block hidden>
-        <h3 class="gc-battle-lab-block-title">{{ T("battle_lab_advisor", "Strategischer Rat") }}</h3>
-        <ul class="gc-battle-lab-advice" data-sim-advice></ul>
-      </section>
-
-      <section class="gc-battle-lab-block gc-battle-lab-combat-values" data-sim-combat-values>
-        <div class="gc-battle-lab-combat-values-head">
-          <h3 class="gc-battle-lab-block-title">{{ T("combat_values_title", "Kampfwerte verstehen") }}</h3>
-          <button type="button" class="gc-btn gc-btn-xs gc-btn-ghost" data-sim-combat-values-toggle>{{ T("combat_values_show_all", "Alle Werte anzeigen") }}</button>
-        </div>
-        <div class="gc-battle-lab-combat-values-cols">
-          <div class="gc-battle-lab-combat-col" data-sim-combat-col="attacker">
-            <h4 class="gc-battle-lab-combat-col-title">{{ T("combat_simulator_attacker", "Angreifer") }}</h4>
-            <div class="gc-battle-lab-combat-cards" data-sim-combat-cards="attacker"></div>
+        <section class="gbl-dash-panel gbl-dash-combat" data-sim-combat-values>
+          <div class="gbl-dash-combat-head">
+            <h3 class="gbl-dash-title">{{ T("combat_values_title", "Kampfwerte verstehen") }}</h3>
+            <button type="button" class="gc-btn gc-btn-xs gc-btn-ghost" data-sim-combat-values-toggle>{{ T("combat_values_show_all", "Alle Werte anzeigen") }}</button>
           </div>
-          <div class="gc-battle-lab-combat-col" data-sim-combat-col="defender">
-            <h4 class="gc-battle-lab-combat-col-title">{{ T("combat_simulator_defender", "Verteidiger") }}</h4>
-            <div class="gc-battle-lab-combat-cards" data-sim-combat-cards="defender"></div>
+          <div class="gbl-stat-grid">
+            <div class="gbl-stat-col" data-sim-combat-col="attacker">
+              <h4 class="gbl-stat-side">{{ T("combat_simulator_attacker", "Angreifer") }}</h4>
+              <div class="gbl-stat-cards" data-sim-combat-cards="attacker"></div>
+            </div>
+            <div class="gbl-stat-col" data-sim-combat-col="defender">
+              <h4 class="gbl-stat-side">{{ T("combat_simulator_defender", "Verteidiger") }}</h4>
+              <div class="gbl-stat-cards" data-sim-combat-cards="defender"></div>
+            </div>
           </div>
-        </div>
-        <div class="gc-battle-lab-combat-why">
-          <h4 class="gc-battle-lab-combat-why-title">{{ T("combat_values_why_title", "Warum?") }}</h4>
-          <ul class="gc-battle-lab-combat-why-list" data-sim-combat-why></ul>
-        </div>
-      </section>
+          <div class="gbl-why-chips" data-sim-combat-why></div>
+        </section>
+      </div>
       </div>
     </section>
 
