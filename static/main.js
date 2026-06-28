@@ -20778,9 +20778,31 @@
       window.setTimeout(() => el.classList.remove("pe-highlight-pulse"), 2600);
     };
 
+    const openPeExpansionDrawer = (open) => {
+      const drawer = document.getElementById("pe-expansion-drawer");
+      if (!drawer) return false;
+      const isOpen = Boolean(open);
+      drawer.hidden = !isOpen;
+      drawer.classList.toggle("is-open", isOpen);
+      document.querySelectorAll(".pe-expansion-toggle").forEach((el) => {
+        el.setAttribute("aria-expanded", isOpen ? "true" : "false");
+        el.classList.toggle("is-open", isOpen);
+      });
+      return true;
+    };
+
+    const togglePeExpansionDrawer = () => {
+      const drawer = document.getElementById("pe-expansion-drawer");
+      if (!drawer) return;
+      openPeExpansionDrawer(drawer.hidden);
+    };
+
     const openPeSection = (sectionId) => {
       const section = document.getElementById(sectionId);
       if (section && section.tagName === "DETAILS") section.open = true;
+      if (sectionId === "pe-section-expansion-gate" || sectionId === "pe-section-establishment") {
+        openPeExpansionDrawer(true);
+      }
     };
 
     const focusPeTarget = (root, { action, target, highlight, techKey, href }) => {
@@ -20850,6 +20872,13 @@
         if (typeof GC.navigateTo === "function") {
           GC.navigateTo(colonizeHref, { push: true });
         }
+        return;
+      }
+
+      const expansionToggle = e.target.closest(".pe-expansion-toggle");
+      if (expansionToggle && root.contains(expansionToggle)) {
+        e.preventDefault();
+        togglePeExpansionDrawer();
         return;
       }
 

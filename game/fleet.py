@@ -3633,6 +3633,19 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
                 "imperial_directives recycle progress failed movement_id=%s",
                 movement_id,
             )
+        try:
+            from .activity_xp import SOURCE_RECYCLE, grant_fleet_activity_xp
+
+            grant_fleet_activity_xp(
+                player_id,
+                int(movement["origin_planet_id"]),
+                SOURCE_RECYCLE,
+                movement_id,
+                conn=conn,
+                now=float(now),
+            )
+        except Exception:
+            logger.exception("activity_xp recycle grant failed movement_id=%s", movement_id)
         return True
 
     if mission == "transport":
@@ -3924,6 +3937,19 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
             locale=sender_locale,
             conn=conn,
         )
+        try:
+            from .activity_xp import SOURCE_SPY, grant_fleet_activity_xp
+
+            grant_fleet_activity_xp(
+                player_id,
+                int(movement["origin_planet_id"]),
+                SOURCE_SPY,
+                movement_id,
+                conn=conn,
+                now=float(now),
+            )
+        except Exception:
+            logger.exception("activity_xp spy grant failed movement_id=%s", movement_id)
         return True
 
     if mission == "attack":
@@ -4174,6 +4200,21 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
         if world_key and extra:
             complete_world_claim(world_key, player_id, int(extra["planet_id"]), conn=conn)
 
+        try:
+            from .activity_xp import SOURCE_COLONIZE, grant_fleet_activity_xp
+
+            new_pid = int(extra["planet_id"]) if extra and extra.get("planet_id") else int(movement["origin_planet_id"])
+            grant_fleet_activity_xp(
+                player_id,
+                new_pid,
+                SOURCE_COLONIZE,
+                movement_id,
+                conn=conn,
+                now=float(now),
+            )
+        except Exception:
+            logger.exception("activity_xp colonize grant failed movement_id=%s", movement_id)
+
         ark_used = min(1, int(return_ships.get("seed_ark") or 0))
         if ark_used:
             return_ships["seed_ark"] = int(return_ships.get("seed_ark") or 0) - ark_used
@@ -4379,6 +4420,19 @@ def _handle_expedition_holding_end(movement: Dict[str, Any], *, conn, now: float
             "imperial_directives expedition progress failed movement_id=%s",
             movement_id,
         )
+    try:
+        from .activity_xp import SOURCE_EXPEDITION, grant_fleet_activity_xp
+
+        grant_fleet_activity_xp(
+            player_id,
+            int(movement["origin_planet_id"]),
+            SOURCE_EXPEDITION,
+            movement_id,
+            conn=conn,
+            now=float(now),
+        )
+    except Exception:
+        logger.exception("activity_xp expedition grant failed movement_id=%s", movement_id)
     return True
 
 

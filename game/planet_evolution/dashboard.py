@@ -28,6 +28,7 @@ from .repository import (
     get_special_resources,
     get_trade_routes,
 )
+from ..activity_xp import get_activity_xp_dashboard
 from .scoring import compute_single_planet_score
 from .ux_copy import (
     category_label_key,
@@ -1016,4 +1017,9 @@ def build_dashboard_extras(
         "establishment": establishment,
         "expansion_lifecycle": expansion_lifecycle,
         "dna_reveal_tier": int(reveal),
+        "activity_xp": get_activity_xp_dashboard(
+            int(player_id),
+            int(planet_id),
+            conn=conn,
+        ) if player_id else {"visible": False},
     }

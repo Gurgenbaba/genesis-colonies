@@ -378,6 +378,24 @@ def finish_planet_build_jobs(
                 "source_event_id": f"build_finish:{job_id}",
             }
         )
+        try:
+            from .activity_xp import SOURCE_BUILDING_FINISH, grant_queue_job_activity_xp
+
+            grant_queue_job_activity_xp(
+                int(player_id),
+                int(planet_id),
+                SOURCE_BUILDING_FINISH,
+                job_id,
+                conn=conn,
+                now=float(now),
+            )
+        except Exception:
+            logger.exception(
+                "activity_xp building grant failed player=%s planet=%s job=%s",
+                player_id,
+                planet_id,
+                job_id,
+            )
 
     if build_completions:
         try:
@@ -491,6 +509,21 @@ def finish_player_research_jobs(
                 "source_event_id": f"research_finish:{job_id}",
             }
         )
+        try:
+            from .activity_xp import grant_account_research_activity_xp
+
+            grant_account_research_activity_xp(
+                int(user_id),
+                job_id,
+                conn=conn,
+                now=float(now),
+            )
+        except Exception:
+            logger.exception(
+                "activity_xp account research grant failed player=%s job=%s",
+                user_id,
+                job_id,
+            )
 
     if research_completions:
         try:

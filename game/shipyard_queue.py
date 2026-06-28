@@ -502,6 +502,25 @@ def _finish_due_shipyard_jobs_impl(
         remaining_amt = max(0, int(head.get("amount") or 0))
         if remaining_amt <= 0:
             cur.execute("DELETE FROM shipyard_queue WHERE id = ?;", (int(head["id"]),))
+            try:
+                from .activity_xp import SOURCE_SHIPYARD_FINISH, grant_queue_job_activity_xp
+
+                grant_queue_job_activity_xp(
+                    int(player_id),
+                    int(planet_id),
+                    SOURCE_SHIPYARD_FINISH,
+                    int(head["id"]),
+                    conn=conn,
+                    now=ts,
+                )
+            except Exception:
+                import logging
+
+                logging.getLogger(__name__).exception(
+                    "activity_xp shipyard grant failed player=%s job=%s",
+                    player_id,
+                    head["id"],
+                )
             completed_jobs += 1
             rows = list_shipyard_queue_rows(planet_id, conn=conn)
             continue
@@ -540,6 +559,25 @@ def _finish_due_shipyard_jobs_impl(
         remaining = max(0, int(head["amount"] or 0) - to_deliver)
         if remaining <= 0:
             cur.execute("DELETE FROM shipyard_queue WHERE id = ?;", (int(head["id"]),))
+            try:
+                from .activity_xp import SOURCE_SHIPYARD_FINISH, grant_queue_job_activity_xp
+
+                grant_queue_job_activity_xp(
+                    int(player_id),
+                    int(planet_id),
+                    SOURCE_SHIPYARD_FINISH,
+                    int(head["id"]),
+                    conn=conn,
+                    now=ts,
+                )
+            except Exception:
+                import logging
+
+                logging.getLogger(__name__).exception(
+                    "activity_xp shipyard grant failed player=%s job=%s",
+                    player_id,
+                    head["id"],
+                )
             completed_jobs += 1
             rows = list_shipyard_queue_rows(planet_id, conn=conn)
             continue
