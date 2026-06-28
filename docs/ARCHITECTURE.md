@@ -243,6 +243,8 @@ Authorization: Bearer $GC_INTERNAL_CRON_TOKEN
 
 Optional `?force=1` bypasses the 10-minute interval guard. Local manual runs: `scripts/run_ranking_worker.py` (deprecated on Railway SQLite).
 
+**Vote re-engagement (30 min, inactive players):** `game/vote_reengagement.run_vote_reengagement()` — piggybacks on the same ranking HTTP cron (30-minute interval guard; no separate scheduler required). Env: `GC_VOTE_REENGAGEMENT_BATCH` (default 12), `GC_VOTE_REENGAGEMENT_ENABLED=0` to disable. Optional dedicated: `POST /api/internal/cron/vote-reengagement` (same bearer token).
+
 
 ---
 

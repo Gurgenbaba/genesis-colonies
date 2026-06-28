@@ -204,11 +204,13 @@ class EffectResolver:
         planet_position: Optional[int] = None,
         galaxy_id: Optional[int] = None,
         conn=None,
+        skip_inventory_boosters: bool = False,
     ) -> None:
         self.buildings = {k: _bld(buildings, k) for k in buildings}
         self.research = dict(research or {})
         self.player_id = int(player_id) if player_id is not None else None
         self.planet_id = int(planet_id) if planet_id is not None else None
+        self._skip_inventory_boosters = bool(skip_inventory_boosters)
         if planet_position is not None:
             try:
                 pos = int(planet_position)
@@ -230,7 +232,13 @@ class EffectResolver:
         self._sources: List[Dict[str, Any]] = []
 
     @classmethod
-    def for_player(cls, player_id: int, conn=None) -> EffectResolver:
+    def for_player(
+        cls,
+        player_id: int,
+        conn=None,
+        *,
+        skip_inventory_boosters: bool = False,
+    ) -> EffectResolver:
         planet = get_context_planet(player_id=int(player_id), conn=conn)
         buildings = get_planet_buildings(int(planet["id"]), conn=conn)
         research = get_research_levels(int(player_id), conn=conn)
@@ -251,6 +259,7 @@ class EffectResolver:
             planet_position=planet_position,
             galaxy_id=galaxy_id,
             conn=conn,
+            skip_inventory_boosters=skip_inventory_boosters,
         )
 
     def _settings_dict(self) -> Dict[str, Any]:
@@ -458,6 +467,8 @@ class EffectResolver:
         sources: List[Dict[str, Any]],
     ) -> Dict[str, float]:
         """GC-968A — timed pct boosters from inventory use."""
+        if getattr(self, "_skip_inventory_boosters", False):
+            return values
         if self.player_id is None or self._conn is None:
             return values
         try:

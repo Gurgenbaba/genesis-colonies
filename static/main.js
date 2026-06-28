@@ -1160,6 +1160,10 @@
   let _lastAppliedServerTime = 0;
   let _lastAppliedStateVersion = 0;
   let _fleetRefreshSeq = 0;
+  let _gameStateFetchSeq = 0;
+  let _gameStateFetchAppliedSeq = 0;
+  let _fleetHudStickyPayload = null;
+  let _fleetHudLastAppliedVersion = 0;
 
   function extractStateVersion(data) {
     if (!data || typeof data !== "object") return 0;
@@ -1194,6 +1198,13 @@
     GC.lastAppliedStateVersion = _lastAppliedStateVersion;
     const stInt = Math.floor(v);
     if (stInt) _lastAppliedServerTime = Math.max(_lastAppliedServerTime, stInt);
+  }
+
+  function markGameStateFetchApplied(opts) {
+    const fetchSeq = Number((opts && opts._fetchSeq) || 0);
+    if (fetchSeq > 0) {
+      _gameStateFetchAppliedSeq = Math.max(_gameStateFetchAppliedSeq, fetchSeq);
+    }
   }
 
   function dismissProgressionTooltipsOnStatePatch() {
@@ -1389,6 +1400,9 @@
     if (pid > 0 && _sessionPlayerId > 0 && pid !== _sessionPlayerId) {
       GC.lastState = null;
       _clientStateGen += 1;
+      _fleetHudStickyPayload = null;
+      _fleetHudLastAppliedVersion = 0;
+      _gameStateFetchAppliedSeq = 0;
       if (typeof syncFleetVacationNotice === "function") {
         syncFleetVacationNotice({});
       }
@@ -9426,6 +9440,81 @@
     };
   }
 
+  function isActiveFleetsPayloadMissing(raw) {
+    if (raw === null || raw === undefined) return true;
+    if (typeof raw !== "object") return true;
+    if (Array.isArray(raw)) return false;
+    return !Array.isArray(raw.items);
+  }
+
+  function isExplicitEmptyActiveFleets(raw) {
+    if (isActiveFleetsPayloadMissing(raw)) return false;
+    const payload = normalizeActiveFleetsPayload(raw);
+    return payload.count === 0 && payload.items.length === 0;
+  }
+
+  function isAuthoritativeFleetHudReason(reason, opts) {
+    const r = String(reason || "");
+    if (opts && (opts.authoritativeFleetHud || opts.forceApply || opts.allowResourceRegression)) return true;
+    if (isAuthoritativeGameStateReason(r, opts)) return true;
+    return (
+      r === "poll"
+      || r === "page_init"
+      || r === "tab_visible"
+      || r === "pjax_nav"
+      || r === "fleet_countdown_expired"
+      || r === "fleet_drawer_boot"
+      || r === "page_hydrate"
+      || isMutationStatePatchReason(r)
+    );
+  }
+
+  function resolveFleetHudPayload(raw, opts) {
+    const reason = String((opts && opts.reason) || "");
+    const stateVersion = Number(
+      (opts && opts.stateVersion) || extractStateVersion(opts && opts.stateContext)
+    );
+    const authoritative = isAuthoritativeFleetHudReason(reason, opts);
+
+    if (isActiveFleetsPayloadMissing(raw)) {
+      return _fleetHudStickyPayload;
+    }
+
+    const normalized = normalizeActiveFleetsPayload(raw);
+    const hasFleets = normalized.count > 0 || normalized.items.length > 0;
+
+    if (hasFleets) {
+      _fleetHudStickyPayload = normalized;
+      if (stateVersion > 0) {
+        _fleetHudLastAppliedVersion = Math.max(_fleetHudLastAppliedVersion, stateVersion);
+      }
+      return { payload: normalized, explicitEmpty: false, authoritative };
+    }
+
+    if (!authoritative) {
+      return _fleetHudStickyPayload
+        ? { payload: _fleetHudStickyPayload, explicitEmpty: false, authoritative: false }
+        : { payload: normalized, explicitEmpty: false, authoritative: false };
+    }
+
+    if (
+      stateVersion > 0
+      && _fleetHudLastAppliedVersion > 0
+      && stateVersion < _fleetHudLastAppliedVersion - 0.001
+    ) {
+      return _fleetHudStickyPayload
+        ? { payload: _fleetHudStickyPayload, explicitEmpty: false, authoritative: false }
+        : { payload: normalized, explicitEmpty: false, authoritative: false };
+    }
+
+    _fleetHudStickyPayload = normalized;
+    if (stateVersion > 0) {
+      _fleetHudLastAppliedVersion = Math.max(_fleetHudLastAppliedVersion, stateVersion);
+    }
+    return { payload: normalized, explicitEmpty: true, authoritative: true };
+  }
+  GC.resolveFleetHudPayload = resolveFleetHudPayload;
+
   function normalizeActiveFleetsPayload(raw) {
     if (!raw) {
       return { count: 0, visible_limit: 5, next_remaining_seconds: 0, items: [] };
@@ -9749,18 +9838,22 @@
     syncFleetDrawerRowAction(row, mv);
   }
 
-  function syncFleetDrawerList(listEl, visibleItems) {
+  function syncFleetDrawerList(listEl, visibleItems, opts) {
     if (!listEl) return;
     const items = Array.isArray(visibleItems) ? visibleItems : [];
     const wantedIds = new Set(items.map((mv) => String(mv.movement_id || mv.id || "")).filter(Boolean));
+    const allowRemove = !opts || opts.authoritative !== false;
 
-    listEl.querySelectorAll("[data-fleet-drawer-row]").forEach((row) => {
-      if (row.hasAttribute("data-fleet-alert")) return;
-      const id = String(row.dataset.movementId || "");
-      if (id && !wantedIds.has(id)) row.remove();
-    });
+    if (allowRemove) {
+      listEl.querySelectorAll("[data-fleet-drawer-row]").forEach((row) => {
+        if (row.hasAttribute("data-fleet-alert")) return;
+        const id = String(row.dataset.movementId || "");
+        if (id && !wantedIds.has(id)) row.remove();
+      });
+    }
 
-    items.forEach((mv) => {
+    const alertOffset = listEl.querySelector("[data-fleet-alert]") ? 1 : 0;
+    items.forEach((mv, index) => {
       const id = String(mv.movement_id || mv.id || "");
       if (!id) return;
       let row = listEl.querySelector(`[data-fleet-drawer-row][data-movement-id="${id}"]`);
@@ -9769,10 +9862,14 @@
         row = listEl.querySelector(`[data-fleet-drawer-row][data-movement-id="${id}"]`);
       } else if (!row) {
         row = createFleetDrawerRow(mv);
+        listEl.appendChild(row);
       } else {
         patchFleetDrawerRow(row, mv);
+        const targetBefore = listEl.children[index + alertOffset] || null;
+        if (row !== targetBefore) {
+          listEl.insertBefore(row, targetBefore);
+        }
       }
-      listEl.appendChild(row);
     });
 
     updateFleetDrawerRowTimers(getTimerServerNow());
@@ -10001,10 +10098,17 @@
     return data.has_incoming_attack === true || count > 0 || attacks.length > 0;
   }
 
-  function _syncFleetHudShellVisibility(root, fleetCount, alerts) {
+  function _syncFleetHudShellVisibility(root, fleetCount, alerts, opts) {
     if (!root) return;
     const hasAlert = _fleetIncomingAttackActive(alerts);
-    const showHud = fleetCount > 0 || hasAlert;
+    const listEl = root.querySelector("[data-fleet-drawer-list]");
+    const hasExistingRows = listEl
+      && !!listEl.querySelector("[data-fleet-drawer-row][data-movement-id]");
+    const explicitEmpty = Boolean(opts && opts.explicitEmpty);
+    let showHud = fleetCount > 0 || hasAlert;
+    if (!showHud && hasExistingRows && !explicitEmpty) {
+      showHud = true;
+    }
     const emptyEl = root.querySelector("[data-fleet-drawer-empty]");
     const panel = root.querySelector("[data-fleet-drawer-panel]");
     if (emptyEl) emptyEl.hidden = showHud;
@@ -10136,7 +10240,7 @@
         alertRow.remove();
       }
       const fleetCount = normalizeActiveFleetsPayload(GC.lastState?.active_fleets).count;
-      _syncFleetHudShellVisibility(root, fleetCount, data);
+      _syncFleetHudShellVisibility(root, fleetCount, data, { explicitEmpty: isExplicitEmptyActiveFleets(GC.lastState?.active_fleets) });
       return;
     }
 
@@ -10176,15 +10280,23 @@
     }
 
     const fleetCount = normalizeActiveFleetsPayload(GC.lastState?.active_fleets).count;
-    _syncFleetHudShellVisibility(root, fleetCount, data);
+    _syncFleetHudShellVisibility(root, fleetCount, data, { explicitEmpty: isExplicitEmptyActiveFleets(GC.lastState?.active_fleets) });
     updateFleetAttackAlertCountdown(getTimerServerNow());
     GC.startProgressTicker();
   }
   GC.syncFleetAttackAlert = syncFleetAttackAlert;
 
-  function renderGlobalFleetHud(fleetsRaw) {
+  function renderGlobalFleetHud(fleetsRaw, opts) {
     const root = document.getElementById("global-fleet-drawer-root") || document.querySelector("[data-global-fleet-drawer]");
-    const payload = normalizeActiveFleetsPayload(fleetsRaw);
+    const resolved = resolveFleetHudPayload(fleetsRaw, {
+      ...(opts || {}),
+      stateContext: (opts && opts.stateContext) || fleetsRaw,
+    });
+    const payload = resolved && resolved.payload;
+    if (!payload) {
+      GC.startProgressTicker();
+      return;
+    }
     const list = payload.items;
     const count = payload.count;
 
@@ -10201,7 +10313,9 @@
     const visibleLimit = Math.max(1, Number(payload.visible_limit) || 5);
 
     const hasIncomingAttack = _fleetIncomingAttackActive(GC.lastState?.fleet_alerts);
-    _syncFleetHudShellVisibility(root, count, GC.lastState?.fleet_alerts);
+    _syncFleetHudShellVisibility(root, count, GC.lastState?.fleet_alerts, {
+      explicitEmpty: Boolean(resolved.explicitEmpty),
+    });
     if (count > 0) notifyFleetDrawerLayoutChange();
 
     const listEl = root.querySelector("[data-fleet-drawer-list]");
@@ -10217,7 +10331,9 @@
         _clearMovementCountdownExpiryState();
         listEl.dataset.fleetDrawerCount = String(count);
       }
-      syncFleetDrawerList(listEl, visibleItems);
+      syncFleetDrawerList(listEl, visibleItems, {
+        authoritative: resolved.authoritative !== false,
+      });
 
       if (moreBtn) {
         if (count > visibleLimit) {
@@ -10478,6 +10594,9 @@
       affected_domain: String(e.affected_domain || "general"),
       effect_summary: String(e.effect_summary || ""),
       remaining_seconds: Math.max(0, Math.floor(Number(e.remaining_seconds) || 0)),
+      resource_impacts: (e.resource_impacts && typeof e.resource_impacts === "object")
+        ? e.resource_impacts
+        : {},
     }));
   }
 
@@ -10503,12 +10622,16 @@
     return null;
   }
 
-  function _formatResBoostChip(effect) {
+  function _formatResBoostChip(effect, resKey) {
     if (!effect) return "";
     const rem = _boostHudRemainingSeconds(effect.remaining_seconds);
     if (rem <= 0) return "";
     const summary = String(effect.effect_summary || "").trim();
-    return summary ? `${summary} · ${formatDuration(rem)}` : formatDuration(rem);
+    const impact = effect.resource_impacts?.[resKey]?.impact_summary
+      ? String(effect.resource_impacts[resKey].impact_summary).trim()
+      : "";
+    const head = [summary, impact].filter(Boolean).join(" ");
+    return head ? `${head} · ${formatDuration(rem)}` : formatDuration(rem);
   }
 
   function patchShellHudBoosters(data) {
@@ -10537,7 +10660,7 @@
       const chip = bar.querySelector(`[data-res-boost="${resKey}"]`);
       if (!chip) return;
       const effect = _boostEffectForResKey(resKey, _boostHudState.effects);
-      const text = _formatResBoostChip(effect);
+      const text = _formatResBoostChip(effect, resKey);
       if (!text) {
         chip.hidden = true;
         chip.textContent = "";
@@ -10742,7 +10865,19 @@
     }
 
     if (data.active_fleets !== undefined) {
-      renderGlobalFleetHud(data.active_fleets);
+      const fleetResolved = resolveFleetHudPayload(data.active_fleets, {
+        reason: (opts && opts.reason) || "",
+        stateVersion: extractStateVersion(data),
+        stateContext: data,
+        mergePartial: Boolean(opts && opts.mergePartial),
+      });
+      if (fleetResolved && fleetResolved.payload) {
+        renderGlobalFleetHud(data.active_fleets, {
+          reason: (opts && opts.reason) || "",
+          stateVersion: extractStateVersion(data),
+          stateContext: data,
+        });
+      }
     }
 
     if (data.fleet_alerts !== undefined) {
@@ -10933,7 +11068,20 @@
     }
     const merged = { ...GC.lastState };
     _HUD_LAST_STATE_KEYS.forEach((key) => {
-      if (key in next && next[key] !== undefined) merged[key] = next[key];
+      if (!(key in next) || next[key] === undefined) return;
+      if (key === "active_fleets") {
+        const incoming = next.active_fleets;
+        if (isActiveFleetsPayloadMissing(incoming)) return;
+        if (isExplicitEmptyActiveFleets(incoming)) {
+          const current = merged.active_fleets;
+          if (current && normalizeActiveFleetsPayload(current).count > 0) {
+            const incV = extractStateVersion(next);
+            const curV = extractStateVersion(merged);
+            if (incV > 0 && curV > 0 && incV < curV - 0.001) return;
+          }
+        }
+      }
+      merged[key] = next[key];
     });
     if (next.research && typeof next.research === "object") {
       merged.research = { ...(merged.research || {}), ...next.research };
@@ -11000,6 +11148,8 @@
 
   function applyHudOnlyGameState(data, reason, opts) {
     if (shouldRejectStaleGameState(data, reason, opts)) return false;
+    const fetchSeq = Number((opts && opts._fetchSeq) || 0);
+    if (fetchSeq > 0 && fetchSeq < _gameStateFetchAppliedSeq) return false;
     markGameStateVersionApplied(data);
 
     const forceResourceBar = Boolean(opts && (opts.forceResourceBar || opts.planetSwitch));
@@ -11024,6 +11174,7 @@
       forceResourceBar,
       skipMessagesUnread,
       allowResourceRegression: Boolean(opts && opts.allowResourceRegression),
+      reason,
     });
     _processUnreadMessagesPoll(data, reason, opts);
 
@@ -11044,6 +11195,7 @@
 
     const anyActive = syncHudQueueLiveStatesFromPoll(data);
     patchHudLastState(data, reason);
+    markGameStateFetchApplied(opts);
     GC.startProgressTicker();
     syncPerfBodyClasses();
     return anyActive;
@@ -11054,6 +11206,8 @@
   function applyGameStateData(data, _reason, opts) {
       if (!data || data.ok === false) return false;
       const reason = String(_reason || "");
+      const fetchSeq = Number((opts && opts._fetchSeq) || 0);
+      if (fetchSeq > 0 && fetchSeq < _gameStateFetchAppliedSeq) return false;
       resetClientStateForAccountChange(
         data.player_id || readDomPlayerId(),
         reason || "game_state"
@@ -11156,6 +11310,7 @@
         forceResourceBar,
         skipMessagesUnread,
         allowResourceRegression: Boolean(opts && opts.allowResourceRegression),
+        reason,
       });
       _processUnreadMessagesPoll(data, reason, { skipMessagesUnread });
 
@@ -11179,6 +11334,7 @@
 
       if (skipScopedPanels) {
         commitGameStateCache(data, reason, opts);
+        markGameStateFetchApplied(opts);
         return false;
       }
 
@@ -11362,6 +11518,7 @@
         GC.applyCodexFromState(data.codex);
       }
 
+      markGameStateFetchApplied(opts);
       return hasActiveBuild || hasActiveResearchNow || lastHadActiveShipyard;
   }
 
@@ -11479,6 +11636,7 @@
     const ctrl = new AbortController();
     p.abort = ctrl;
     const stateGenAtStart = _clientStateGen;
+    const fetchSeq = ++_gameStateFetchSeq;
 
     let resolveFlight;
     const flight = new Promise((resolve) => {
@@ -11505,7 +11663,12 @@
           return null;
         }
 
-        const anyActive = applyGameStateData(data, reason, { hudOnly });
+        if (fetchSeq < _gameStateFetchAppliedSeq) {
+          resolveFlight(null);
+          return null;
+        }
+
+        const anyActive = applyGameStateData(data, reason, { hudOnly, _fetchSeq: fetchSeq });
         const wantPolling = anyActive || lastHadActiveJob || lastHadActiveResearch;
         if (reason === "poll") {
           const pol = GC.polling;

@@ -4,6 +4,9 @@ Internal HTTP cron handlers — run inside the web process (same SQLite volume).
 Railway SQLite deployments must not use a separate worker service; external schedulers
 call POST /api/internal/cron/ranking with GC_INTERNAL_CRON_TOKEN.
 
+Vote re-engagement piggybacks on the same ranking cron (30-minute interval guard).
+Optional dedicated endpoint: POST /api/internal/cron/vote-reengagement.
+
 Admin manual trigger: POST /api/admin/ranking/recompute (@require_admin_api, force=1).
 """
 
@@ -126,6 +129,77 @@ def parse_force_flag(request: Request) -> bool:
     return False
 
 
+def execute_vote_reengagement(
+    *,
+    force: bool,
+    source: str,
+) -> Dict[str, Any]:
+    """Canonical vote re-engagement batch — shared by HTTP cron and ranking piggyback."""
+    from game.db import begin_write_transaction, commit, db, rollback
+    from game.vote_reengagement import run_vote_reengagement
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        payload = run_vote_reengagement(conn=conn, force=force, persist=True, source=source)
+        if payload.get("ok") and not payload.get("skipped_interval"):
+            commit(conn)
+        else:
+            rollback(conn)
+        return payload
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+
+def log_vote_reengagement_result(
+    payload: Dict[str, Any],
+    *,
+    log_prefix: str,
+    source_label: str,
+) -> None:
+    if payload.get("skipped_disabled"):
+        _recompute_log(log_prefix, f"source={source_label} skipped_disabled=true")
+    elif payload.get("skipped_interval"):
+        _recompute_log(
+            log_prefix,
+            f"source={source_label} skipped_interval=true "
+            f"next_run_in_sec={payload.get('next_run_in_sec', 0)} "
+            f"duration_ms={payload.get('duration_ms', 0)}",
+        )
+    elif payload.get("ok"):
+        _recompute_log(
+            log_prefix,
+            f"source={source_label} created={payload.get('created', 0)} "
+            f"slot={payload.get('slot', 0)} duration_ms={payload.get('duration_ms', 0)}",
+        )
+    else:
+        _recompute_log(
+            log_prefix,
+            f"source={source_label} ok=false "
+            f"duration_ms={payload.get('duration_ms', 0)} "
+            f"errors={payload.get('errors', [])}",
+        )
+
+
+def _maybe_run_vote_reengagement(*, force: bool, source: str) -> Dict[str, Any]:
+    """Run vote re-engagement when due; never raises — ranking cron stays resilient."""
+    try:
+        payload = execute_vote_reengagement(force=force, source=source)
+        log_vote_reengagement_result(
+            payload,
+            log_prefix="vote-reengagement-http-cron",
+            source_label=source,
+        )
+        return payload
+    except Exception as exc:
+        logger.exception("vote reengagement piggyback failed")
+        _recompute_log("vote-reengagement-http-cron", f"source={source} error={exc}")
+        return {"ok": False, "error": str(exc)}
+
+
 def handle_internal_cron_ranking(request: Request) -> Tuple[Dict[str, Any], int]:
     """
     Recompute ranking scores + ranks on the active web-service database.
@@ -148,6 +222,10 @@ def handle_internal_cron_ranking(request: Request) -> Tuple[Dict[str, Any], int]
         return {"ok": False, "error": str(exc)}, 500
 
     log_ranking_recompute_result(payload, log_prefix="ranking-http-cron", source_label="http")
+
+    vote_payload = _maybe_run_vote_reengagement(force=False, source="http_cron")
+    payload["vote_reengagement"] = vote_payload
+
     status = 200 if payload["ok"] else 500
     return payload, status
 
@@ -174,46 +252,32 @@ def handle_internal_cron_vote_reengagement(request: Request) -> Tuple[Dict[str, 
         logger.info("vote-reengagement-http-cron unauthorized")
         return {"ok": False, "error": auth_err or "unauthorized"}, 401
 
-    from game.db import begin_write_transaction, commit, db, rollback
-    from game.vote_reengagement import run_vote_reengagement
-
     force = parse_force_flag(request)
-    conn = db()
+    _recompute_log(
+        "vote-reengagement-http-cron",
+        f"request_received force={str(force).lower()}",
+    )
     try:
-        begin_write_transaction(conn)
-        payload = run_vote_reengagement(conn=conn, force=force, source="http_cron")
-        if payload.get("ok"):
-            commit(conn)
-        else:
-            rollback(conn)
+        payload = execute_vote_reengagement(force=force, source="http_cron")
     except Exception as exc:
-        rollback(conn)
         logger.exception("internal cron vote reengagement failed")
+        _recompute_log("vote-reengagement-http-cron", f"error={exc}")
         return {"ok": False, "error": str(exc)}, 500
-    finally:
-        conn.close()
 
+    log_vote_reengagement_result(
+        payload,
+        log_prefix="vote-reengagement-http-cron",
+        source_label="http",
+    )
     status = 200 if payload.get("ok") else 500
     return payload, status
 
 
 def handle_admin_vote_reengagement_run(*, force: bool = True) -> Tuple[Dict[str, Any], int]:
-    from game.db import begin_write_transaction, commit, db, rollback
-    from game.vote_reengagement import run_vote_reengagement
-
-    conn = db()
     try:
-        begin_write_transaction(conn)
-        payload = run_vote_reengagement(conn=conn, force=force, source="admin")
-        if payload.get("ok"):
-            commit(conn)
-        else:
-            rollback(conn)
+        payload = execute_vote_reengagement(force=force, source="admin")
     except Exception as exc:
-        rollback(conn)
         logger.exception("admin vote reengagement run failed")
         return {"ok": False, "error": str(exc)}, 500
-    finally:
-        conn.close()
     status = 200 if payload.get("ok") else 500
     return payload, status

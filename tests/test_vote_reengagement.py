@@ -13,6 +13,8 @@ from game.models import create_user, ensure_player_and_homeworld, init_db
 from game.ranking import RANKING_INACTIVE_AFTER_SEC
 from game.vote_reengagement import (
     REENGAGEMENT_SLOTS_PER_DAY,
+    VOTE_REENGAGEMENT_INTERVAL_SEC,
+    VOTE_REENGAGEMENT_WORKER_KEY,
     build_admin_vote_stats,
     player_in_reengagement_slot,
     run_vote_reengagement,
@@ -176,4 +178,61 @@ def test_admin_vote_stats_and_player_search(reengagement_db):
     assert inactive_player["activity"] == "inactive"
     assert inactive_player["reengagement_votes"] >= 1
     assert len(inactive_player["providers"]) >= 4
+    conn.close()
+
+
+def test_reengagement_interval_guard_skips_within_window(reengagement_db):
+    import json
+
+    from game.runtime_state import set_runtime_value
+
+    conn = db()
+    set_runtime_value(
+        VOTE_REENGAGEMENT_WORKER_KEY,
+        json.dumps(
+            {
+                "at": int(time.time()),
+                "source": "test",
+                "ok": True,
+                "created": 1,
+                "duration_ms": 5,
+                "errors": [],
+            }
+        ),
+        conn=conn,
+    )
+    conn.commit()
+    result = run_vote_reengagement(conn=conn, force=False, persist=False)
+    assert result["ok"] is True
+    assert result["skipped_interval"] is True
+    assert int(result.get("next_run_in_sec") or 0) > 0
+    assert int(result.get("next_run_in_sec") or 0) <= VOTE_REENGAGEMENT_INTERVAL_SEC
+    conn.close()
+
+
+def test_reengagement_force_bypasses_interval_guard(reengagement_db):
+    import json
+
+    from game.runtime_state import set_runtime_value
+
+    conn = db()
+    now = int(time.time())
+    inactive_uid = _player(conn, last_seen=now - RANKING_INACTIVE_AFTER_SEC - 3600)
+    set_runtime_value(
+        VOTE_REENGAGEMENT_WORKER_KEY,
+        json.dumps({"at": now, "source": "test", "ok": True, "created": 1, "duration_ms": 5, "errors": []}),
+        conn=conn,
+    )
+    conn.commit()
+    result = run_vote_reengagement(conn=conn, now=now, force=True, persist=False, batch_size=20)
+    assert result["skipped_interval"] is False
+    conn.close()
+
+
+def test_reengagement_disabled_is_noop(reengagement_db, monkeypatch):
+    monkeypatch.setenv("GC_VOTE_REENGAGEMENT_ENABLED", "0")
+    conn = db()
+    result = run_vote_reengagement(conn=conn, force=False, persist=False)
+    assert result["ok"] is True
+    assert result.get("skipped_disabled") is True
     conn.close()

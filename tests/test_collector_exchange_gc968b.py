@@ -276,6 +276,13 @@ def test_build_time_booster_still_queue_shift(gc968b_db):
 def test_hud_builder_groups_production_factors(gc968b_db):
     conn = db()
     uid = _uid(conn)
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+    conn.close()
+
+    save_planet_buildings(pid, {"metal_mine": 8, "crystal_mine": 6, "solar_plant": 10})
+
+    conn = db()
     begin_write_transaction(conn)
     activate_inventory_booster(uid, "booster_production_25", conn=conn)
     commit(conn)
@@ -284,4 +291,7 @@ def test_hud_builder_groups_production_factors(gc968b_db):
     prod_rows = [e for e in effects if e.get("affected_domain") == "production"]
     assert len(prod_rows) == 1
     assert prod_rows[0].get("key") == "production"
+    impacts = prod_rows[0].get("resource_impacts") or {}
+    assert int((impacts.get("metal") or {}).get("delta_per_hour") or 0) > 0
+    assert (impacts.get("metal") or {}).get("impact_summary")
     conn.close()

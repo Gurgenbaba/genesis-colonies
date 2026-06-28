@@ -15,4 +15,7 @@ restartPolicyType = "on_failure"
 #   POST /api/internal/cron/ranking
 #   Authorization: Bearer $GC_INTERNAL_CRON_TOKEN
 #   Schedule: external HTTP cron every 10 min (e.g. cron-job.org, UptimeRobot).
+# Vote re-engagement piggybacks on the same call (30 min interval guard, no extra cron).
+#   GC_VOTE_REENGAGEMENT_BATCH=12 (default), GC_VOTE_REENGAGEMENT_ENABLED=0 to disable.
+# Optional dedicated endpoint: POST /api/internal/cron/vote-reengagement (same token).
 # Do NOT run scripts/run_ranking_worker.py as a separate Railway service on SQLite.

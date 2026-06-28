@@ -345,6 +345,7 @@ def test_main_js_patches_boost_hud_from_game_state():
     assert "patchShellHudBoosters(data)" in hud_section
     boost_section = src.split("function patchShellHudBoosters(data)")[1].split("function patchShellHudFromState(data, opts)")[0]
     assert "data-res-boost" in boost_section
+    assert "resource_impacts" in src.split("function _normalizeBoostEffects")[1][:800]
     assert "active_effects" in boost_section
     assert "_BOOST_DOMAIN_RES_KEYS" in src
     assert "bootstrapHeaderBoostersFromDom()" in src
@@ -1053,7 +1054,7 @@ def test_main_js_gc630_shipyard_game_state_panel_patch():
 def test_main_js_gc640_global_fleet_hud():
     """GC-654: global fleet drawer under resource bar via game-state poll."""
     src = _read("static/main.js")
-    assert "function renderGlobalFleetHud(fleetsRaw)" in src
+    assert "function renderGlobalFleetHud(fleetsRaw, opts)" in src
     assert "GC.renderGlobalFleetHud = renderGlobalFleetHud" in src
     assert "function initGlobalFleetDrawer()" in src
     assert "GC.initGlobalFleetDrawer = initGlobalFleetDrawer" in src
@@ -1065,7 +1066,7 @@ def test_main_js_gc640_global_fleet_hud():
     assert "is-show-all" in src
     assert "/api/fleet/recall" in src
     hud = src.split("function patchShellHudFromState(data, opts)")[1].split("GC.patchShellHudFromState = patchShellHudFromState")[0]
-    assert "renderGlobalFleetHud(data.active_fleets)" in hud
+    assert "resolveFleetHudPayload(data.active_fleets" in hud
     assert "updateFleetNavBadge(count)" in src
     base = _read("templates/base.html")
     assert "global-fleet-drawer-root" in base
@@ -1211,6 +1212,41 @@ def test_main_js_gc654b_fleet_drawer_visual_polish():
     assert "data-fleet-drawer-tooltip" in base
     assert "_movement_progress_pct" in fleet_py
     assert "ships_breakdown" in fleet_py
+
+
+def test_main_js_fleet_hud_sticky_live_state():
+    """Fleet header must not flash empty between valid poll/action states (GC-FLEET-HUD-STABLE)."""
+    src = _read("static/main.js")
+    assert "function resolveFleetHudPayload(raw, opts)" in src
+    assert "GC.resolveFleetHudPayload = resolveFleetHudPayload" in src
+    assert "function isActiveFleetsPayloadMissing(raw)" in src
+    assert "function isExplicitEmptyActiveFleets(raw)" in src
+    assert "_fleetHudStickyPayload" in src
+    assert "_gameStateFetchSeq" in src
+    assert "_gameStateFetchAppliedSeq" in src
+    assert "markGameStateFetchApplied" in src
+    assert "_fetchSeq: fetchSeq" in src
+
+    render_fn = src.split("function renderGlobalFleetHud(fleetsRaw, opts)")[1].split("function syncFleetVacationNotice")[0]
+    assert "resolveFleetHudPayload(fleetsRaw" in render_fn
+    assert "syncFleetDrawerList(listEl, visibleItems, {" in render_fn
+    assert "innerHTML" not in render_fn
+
+    sync_list = src.split("function syncFleetDrawerList(listEl, visibleItems, opts)")[1].split("function patchFleetDrawerRowFlight")[0]
+    assert "allowRemove" in sync_list
+    assert "insertBefore(row, targetBefore)" in sync_list
+    assert "listEl.innerHTML" not in sync_list
+
+    shell_vis = src.split("function _syncFleetHudShellVisibility(root, fleetCount, alerts, opts)")[1].split("function createFleetAttackAlertRow")[0]
+    assert "hasExistingRows" in shell_vis
+    assert "explicitEmpty" in shell_vis
+
+    patch_hud = src.split("function patchShellHudFromState(data, opts)")[1].split("GC.patchShellHudFromState = patchShellHudFromState")[0]
+    assert "resolveFleetHudPayload(data.active_fleets" in patch_hud
+
+    patch_last = src.split("function patchHudLastState(data, reason)")[1].split("function commitGameStateCache")[0]
+    assert 'key === "active_fleets"' in patch_last
+    assert "isExplicitEmptyActiveFleets(incoming)" in patch_last
 
 
 def test_main_js_gc640b_fleet_page_visual_redesign():

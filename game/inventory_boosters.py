@@ -37,6 +37,12 @@ EFFECT_RESOLVER_BOOSTER_KEYS = frozenset(
 
 PRODUCTION_EFFECT_KEYS = frozenset({"metal_prod_factor", "crystal_prod_factor", "fuel_prod_factor"})
 
+HUD_RESOURCE_PROD_KEYS: Dict[str, str] = {
+    "metal": "metal_mine",
+    "crystal": "crystal_mine",
+    "fuel_cells": "fuel_cell_plant",
+}
+
 # GC-968B audit — booster reward classification for docs/tests.
 BOOSTER_AUDIT: Dict[str, str] = {
     # Timed pct — EffectResolver / domain owner
@@ -413,7 +419,113 @@ def build_active_effects_for_hud(
             )
         )
     out.sort(key=lambda r: (str(r.get("affected_domain") or ""), str(r.get("key") or "")))
-    return out
+    return enrich_active_effects_with_resource_impacts(
+        user_id,
+        conn=conn,
+        locale=locale,
+        effects=out,
+    )
+
+
+def _format_hourly_delta_summary(amount: int, *, locale: Optional[str]) -> str:
+    from game.i18n import fmt_int, tr
+
+    return tr(
+        "boost_hud_hourly_delta",
+        "(+{amount}/h)",
+        locale=locale,
+        amount=fmt_int(max(0, int(amount))),
+    )
+
+
+def _format_energy_delta_summary(amount: int, *, locale: Optional[str]) -> str:
+    from game.i18n import fmt_int, tr
+
+    return tr(
+        "boost_hud_energy_delta",
+        "(+{amount})",
+        locale=locale,
+        amount=fmt_int(max(0, int(amount))),
+    )
+
+
+def _active_planet_production_snapshot(
+    user_id: int,
+    *,
+    conn,
+    skip_inventory_boosters: bool = False,
+) -> Tuple[Dict[str, int], int, int]:
+    from game.effects.effect_resolver import EffectResolver
+
+    resolver = EffectResolver.for_player(
+        int(user_id),
+        conn=conn,
+        skip_inventory_boosters=skip_inventory_boosters,
+    )
+    total, used = resolver.compute_energy()
+    ratio = EffectResolver.energy_ratio(total, used)
+    prod = resolver.get_building_production_per_hour(ratio)
+    return prod, int(total), int(used)
+
+
+def enrich_active_effects_with_resource_impacts(
+    user_id: int,
+    *,
+    conn,
+    locale: Optional[str],
+    effects: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Attach server-resolved hourly/total deltas for HUD resource chips (GC-969)."""
+    if not effects:
+        return effects
+
+    domains = {str(e.get("affected_domain") or "") for e in effects}
+    if "production" not in domains and "energy" not in domains:
+        return effects
+
+    try:
+        prod_boost, total_boost, _used_boost = _active_planet_production_snapshot(
+            user_id, conn=conn, skip_inventory_boosters=False
+        )
+        prod_base, total_base, _used_base = _active_planet_production_snapshot(
+            user_id, conn=conn, skip_inventory_boosters=True
+        )
+    except Exception:
+        return effects
+
+    prod_deltas = {
+        res_key: max(
+            0,
+            int(prod_boost.get(build_key, 0) or 0) - int(prod_base.get(build_key, 0) or 0),
+        )
+        for res_key, build_key in HUD_RESOURCE_PROD_KEYS.items()
+    }
+    energy_delta = max(0, int(total_boost) - int(total_base))
+
+    enriched: List[Dict[str, Any]] = []
+    for effect in effects:
+        row = dict(effect)
+        domain = str(row.get("affected_domain") or "")
+        impacts: Dict[str, Dict[str, Any]] = {}
+
+        if domain == "production":
+            for res_key, delta in prod_deltas.items():
+                if delta <= 0:
+                    continue
+                impacts[res_key] = {
+                    "delta_per_hour": int(delta),
+                    "impact_summary": _format_hourly_delta_summary(delta, locale=locale),
+                }
+        elif domain == "energy" and energy_delta > 0:
+            impacts["energy"] = {
+                "delta_total": int(energy_delta),
+                "impact_summary": _format_energy_delta_summary(energy_delta, locale=locale),
+            }
+
+        if impacts:
+            row["resource_impacts"] = impacts
+        enriched.append(row)
+    return enriched
 
 
 def build_inventory_boosters_state(

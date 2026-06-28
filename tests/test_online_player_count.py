@@ -21,6 +21,7 @@ from game.models import (
     ensure_player_and_homeworld,
     get_online_player_count,
     get_player_stats,
+    get_registered_player_count,
     init_db,
 )
 
@@ -111,6 +112,14 @@ def test_get_player_stats_online_matches_helper(online_db):
     stats = get_player_stats()
     assert stats["online_now"] == get_online_player_count(now=now)
     assert stats["online_now"] == 1
+    assert stats["total_players"] == get_registered_player_count()
+
+
+def test_registered_player_count(online_db):
+    before = get_registered_player_count()
+    _create_player("alpha")
+    _create_player("beta")
+    assert get_registered_player_count() == before + 2
 
 
 def test_landing_renders_server_online_count(app_client, online_db):
@@ -119,14 +128,23 @@ def test_landing_renders_server_online_count(app_client, online_db):
     stale_pid = _create_player("landing_stale")
     _set_last_seen(online_pid, now)
     _set_last_seen(stale_pid, now - ONLINE_WINDOW_SEC - 60)
+    expected_registered = get_registered_player_count()
 
     resp = app_client.get("/")
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
 
-    match = re.search(
-        r'landing-stat-tile-online[\s\S]*?landing-stat-online[\s\S]*?(\d+)',
+    online_match = re.search(
+        r'data-landing-online-value[\s\S]*?(\d+)',
         html,
     )
-    assert match, "landing online tile missing from HTML"
-    assert int(match.group(1)) == 1
+    assert online_match, "landing online value missing from HTML"
+    assert int(online_match.group(1)) == 1
+
+    registered_match = re.search(
+        r'data-landing-registered-value>(\d+)',
+        html,
+    )
+    assert registered_match, "landing registered value missing from HTML"
+    assert int(registered_match.group(1)) == expected_registered
+    assert "landing-metric-grid" in html

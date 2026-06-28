@@ -99,7 +99,7 @@ def get_secret_key() -> str:
 
 
 def get_internal_cron_token() -> str:
-    """Bearer token for POST /api/internal/cron/ranking (Railway HTTP cron)."""
+    """Bearer token for POST /api/internal/cron/* (ranking + vote re-engagement)."""
     return _env_str("GC_INTERNAL_CRON_TOKEN")
 
 

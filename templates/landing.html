@@ -58,16 +58,18 @@
 {% set speed_fleet_peace = (gs.get('fleet_speed_peaceful', 1.0) if gs else 1.0)|float %}
 {% set fleet_speeds_equal = (speed_fleet_war == speed_fleet_hold and speed_fleet_hold == speed_fleet_peace) %}
 {% set online_now = (ps.get('online_now', 0) if ps else 0) %}
-{% set total_players = (ps.get('total_players', 0) if ps else 0) %}
+{% set registered_players = (ps.get('total_players', 0) if ps else 0) %}
 
 {% set lbl_universe = T("landing_label_universe") %}
 {% if lbl_universe == "landing_label_universe" %}{% set lbl_universe = "Universum" %}{% endif %}
 {% set lbl_galaxies = T("landing_label_galaxies") %}
 {% if lbl_galaxies == "landing_label_galaxies" %}{% set lbl_galaxies = "Galaxien" %}{% endif %}
-{% set lbl_players = T("landing_meta_players") %}
-{% if lbl_players == "landing_meta_players" %}{% set lbl_players = "Commander" %}{% endif %}
-{% set lbl_online = T("header_online") %}
-{% if lbl_online == "header_online" %}{% set lbl_online = "Online" %}{% endif %}
+{% set lbl_network = T("landing_network_heading") %}
+{% if lbl_network == "landing_network_heading" %}{% set lbl_network = "Galaktisches Netzwerk" %}{% endif %}
+{% set lbl_online_commanders = T("landing_network_online_label") %}
+{% if lbl_online_commanders == "landing_network_online_label" %}{% set lbl_online_commanders = "Kommandanten online" %}{% endif %}
+{% set lbl_registered_commanders = T("landing_network_registered_label") %}
+{% if lbl_registered_commanders == "landing_network_registered_label" %}{% set lbl_registered_commanders = "registrierte Kommandanten" %}{% endif %}
 {% set lbl_speeds = T("landing_speeds_heading") %}
 {% if lbl_speeds == "landing_speeds_heading" %}{% set lbl_speeds = "Universum-Geschwindigkeiten" %}{% endif %}
 {% set lbl_prod = T("admin_label_production_speed") %}
@@ -181,26 +183,50 @@
       <h2 class="landing-universe-name" id="landing-universe-heading">{{ universe_name }}</h2>
     </header>
 
-    <div class="landing-stat-tiles">
-      <div class="landing-stat-tile">
-        <span class="landing-stat-tile-value gc-mono">{{ galaxy_val | fmt_int }}</span>
-        <span class="landing-stat-tile-label">{{ lbl_galaxies }}</span>
-      </div>
-      <div class="landing-stat-tile">
-        <span class="landing-stat-tile-value gc-mono">{{ total_players | fmt_int }}</span>
-        <span class="landing-stat-tile-label">{{ lbl_players }}</span>
-      </div>
-      <div class="landing-stat-tile landing-stat-tile-online">
-        <span class="landing-stat-tile-value gc-mono landing-stat-online">
-          <span class="landing-meta-dot" aria-hidden="true"></span>
-          {{ online_now | fmt_int }}
+    <div class="landing-telemetry" aria-labelledby="landing-network-heading">
+      <div class="landing-telemetry-head">
+        <span class="landing-telemetry-scan" aria-hidden="true"></span>
+        <h3 class="landing-telemetry-title" id="landing-network-heading">{{ lbl_network }}</h3>
+        <span class="landing-telemetry-live" aria-hidden="true">
+          <span class="landing-meta-dot"></span>
+          LIVE
         </span>
-        <span class="landing-stat-tile-label">{{ lbl_online }}</span>
+      </div>
+
+      <div class="landing-metric-grid">
+        <article class="landing-metric-card landing-metric-card-galaxy">
+          <span class="landing-metric-icon" aria-hidden="true">🌌</span>
+          <div class="landing-metric-body">
+            <span class="landing-metric-value gc-mono">{{ galaxy_val | fmt_int }}</span>
+            <span class="landing-metric-label">{{ lbl_galaxies }}</span>
+          </div>
+        </article>
+
+        <article class="landing-metric-card landing-metric-card-online">
+          <span class="landing-metric-icon landing-metric-icon-live" aria-hidden="true">
+            <span class="landing-meta-dot"></span>
+          </span>
+          <div class="landing-metric-body">
+            <span class="landing-metric-value gc-mono landing-stat-online" data-landing-online-value>{{ online_now | fmt_int }}</span>
+            <span class="landing-metric-label">{{ lbl_online_commanders }}</span>
+          </div>
+        </article>
+
+        <article class="landing-metric-card landing-metric-card-registered">
+          <span class="landing-metric-icon" aria-hidden="true">👤</span>
+          <div class="landing-metric-body">
+            <span class="landing-metric-value gc-mono" data-landing-registered-value>{{ registered_players | fmt_int }}</span>
+            <span class="landing-metric-label">{{ lbl_registered_commanders }}</span>
+          </div>
+        </article>
       </div>
     </div>
 
-    <div class="landing-speed-section">
-      <h3 class="landing-speed-heading">{{ lbl_speeds }}</h3>
+    <div class="landing-speed-section landing-speed-strip">
+      <div class="landing-speed-strip-head">
+        <h3 class="landing-speed-heading">{{ lbl_speeds }}</h3>
+        <span class="landing-speed-strip-tag">{{ universe_name }}</span>
+      </div>
       <div class="landing-speed-grid">
         <div class="landing-speed-tile">
           <span class="landing-speed-val gc-mono">×{{ "%.1f"|format(speed_prod) }}</span>

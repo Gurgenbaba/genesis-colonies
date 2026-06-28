@@ -8,12 +8,14 @@ spread across the day so votes never arrive in a single burst.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import time
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .db import table_exists
+from .runtime_state import get_runtime_value, set_runtime_value
 from .ranking import RANKING_INACTIVE_AFTER_SEC, is_player_inactive
 from .vote_rewards import (
     VOTE_CHANNEL_PLAYER,
@@ -37,6 +39,59 @@ _PROVIDER_HASH = 1597334677
 
 REENGAGEMENT_BATCH_ENV = "GC_VOTE_REENGAGEMENT_BATCH"
 REENGAGEMENT_ENABLED_ENV = "GC_VOTE_REENGAGEMENT_ENABLED"
+
+VOTE_REENGAGEMENT_WORKER_KEY = "vote_reengagement_worker_last"
+VOTE_REENGAGEMENT_INTERVAL_SEC = 1800  # 30 minutes — piggybacks on ranking HTTP cron
+
+
+def _load_last_run_record(conn=None) -> Optional[Dict[str, Any]]:
+    raw = get_runtime_value(VOTE_REENGAGEMENT_WORKER_KEY, conn=conn)
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def seconds_until_vote_reengagement_allowed(
+    *,
+    now: Optional[float] = None,
+    conn=None,
+) -> float:
+    """Seconds until the next vote re-engagement run is allowed (0 = ready)."""
+    data = _load_last_run_record(conn=conn)
+    if not data:
+        return 0.0
+    if not data.get("ok"):
+        return 0.0
+    try:
+        last_at = float(data.get("at") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    if last_at <= 0:
+        return 0.0
+    now_f = float(now if now is not None else time.time())
+    remaining = (last_at + VOTE_REENGAGEMENT_INTERVAL_SEC) - now_f
+    return max(0.0, remaining)
+
+
+def record_vote_reengagement_result(result: Dict[str, Any], *, source: str, conn=None) -> None:
+    payload = {
+        "at": int(time.time()),
+        "source": str(source or "cron"),
+        "ok": bool(result.get("ok", True)),
+        "created": int(result.get("created") or 0),
+        "duration_ms": int(result.get("duration_ms") or 0),
+        "errors": list(result.get("errors") or []),
+        "skipped_interval": bool(result.get("skipped_interval")),
+    }
+    set_runtime_value(
+        VOTE_REENGAGEMENT_WORKER_KEY,
+        json.dumps(payload, ensure_ascii=False),
+        conn=conn,
+    )
 
 
 def vote_reengagement_enabled() -> bool:
@@ -119,10 +174,15 @@ def run_vote_reengagement(
     now: Optional[int] = None,
     batch_size: Optional[int] = None,
     force: bool = False,
+    persist: bool = True,
     source: str = "cron",
 ) -> Dict[str, Any]:
     """
     Process one batch of staggered votes for inactive players.
+
+    When force=False, skips if the last successful run was within
+    VOTE_REENGAGEMENT_INTERVAL_SEC (30 min). Intended to piggyback on the
+    ranking HTTP cron (every 10 min) without a separate scheduler.
 
     Returns summary dict suitable for cron logs and admin manual runs.
     """
@@ -136,6 +196,7 @@ def run_vote_reengagement(
         "skipped_not_ready": 0,
         "skipped_wrong_slot": 0,
         "skipped_no_provider": 0,
+        "skipped_interval": False,
         "errors": [],
         "slot": _current_slot(ts),
         "batch_size": int(limit),
@@ -143,10 +204,23 @@ def run_vote_reengagement(
     }
 
     if not vote_reengagement_enabled():
-        result["ok"] = False
-        result["errors"].append("disabled")
+        result["ok"] = True
+        result["skipped_disabled"] = True
         result["duration_ms"] = int((time.time() - started) * 1000)
         return result
+
+    if not force:
+        wait = seconds_until_vote_reengagement_allowed(now=ts, conn=conn)
+        if wait > 0:
+            result["skipped_interval"] = True
+            result["next_run_in_sec"] = int(wait)
+            result["duration_ms"] = int((time.time() - started) * 1000)
+            logger.info(
+                "vote reengagement skip guard_recent wait_sec=%s source=%s",
+                int(wait),
+                source,
+            )
+            return result
 
     if not vote_system_ready(conn):
         result["ok"] = False
@@ -192,6 +266,8 @@ def run_vote_reengagement(
             result["skipped_not_ready"] += 1
 
     result["duration_ms"] = int((time.time() - started) * 1000)
+    if persist and result.get("ok") and not result.get("skipped_interval"):
+        record_vote_reengagement_result(result, source=source, conn=conn)
     logger.info(
         "vote reengagement source=%s created=%s slot=%s skipped_slot=%s skipped_no_provider=%s duration_ms=%s",
         source,

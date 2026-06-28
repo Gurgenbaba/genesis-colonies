@@ -710,6 +710,20 @@ def get_online_player_count(
     return count
 
 
+def get_registered_player_count(*, conn: sqlite3.Connection | None = None) -> int:
+    """Count all registered commanders (players table rows)."""
+    own_conn = False
+    if conn is None:
+        conn = db()
+        own_conn = True
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) AS c FROM players")
+    count = int(cur.fetchone()["c"])
+    if own_conn:
+        conn.close()
+    return count
+
+
 def get_player_stats() -> dict:
     now = _now_ts()
     day_ago = now - 24 * 3600
@@ -718,8 +732,7 @@ def get_player_stats() -> dict:
     conn = db()
     cur = conn.cursor()
 
-    cur.execute("SELECT COUNT(*) AS c FROM players")
-    total_players = int(cur.fetchone()["c"])
+    total_players = get_registered_player_count(conn=conn)
 
     cur.execute("SELECT COUNT(*) AS c FROM players WHERE last_seen >= ?", (day_ago,))
     active_24h = int(cur.fetchone()["c"])
