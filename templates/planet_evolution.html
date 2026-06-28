@@ -69,6 +69,34 @@
   {% endif %}
 {%- endmacro %}
 
+{% macro pe_history_type_icon(event_type) -%}
+  {%- set et = event_type|default('') -%}
+  {%- if et == 'level_up' -%}⬆
+  {%- elif et == 'planet_research_complete' -%}🔬
+  {%- elif et == 'discovery' -%}🔭
+  {%- elif et in ('event_spawn', 'event_outcome') -%}⚡
+  {%- elif et in ('specialization_pick', 'specialization_tier_up') -%}🏛
+  {%- elif et in ('ascension_started', 'ascension_complete') -%}✦
+  {%- elif et in ('failure', 'failure_recovered') -%}⚠
+  {%- elif et == 'locked_choice' -%}◆
+  {%- else -%}•
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro pe_history_type_label(event_type) -%}
+  {%- set et = event_type|default('') -%}
+  {%- if et == 'level_up' -%}{{ T('pe_history_type_level_up', 'Stufe') }}
+  {%- elif et == 'planet_research_complete' -%}{{ T('pe_history_type_research', 'Forschung') }}
+  {%- elif et == 'discovery' -%}{{ T('pe_history_type_discovery', 'Entdeckung') }}
+  {%- elif et in ('event_spawn', 'event_outcome') -%}{{ T('pe_history_type_event', 'Ereignis') }}
+  {%- elif et in ('specialization_pick', 'specialization_tier_up') -%}{{ T('pe_history_type_spec', 'Spezialisierung') }}
+  {%- elif et in ('ascension_started', 'ascension_complete') -%}{{ T('pe_history_type_ascension', 'Ascension') }}
+  {%- elif et in ('failure', 'failure_recovered') -%}{{ T('pe_history_type_crisis', 'Krise') }}
+  {%- elif et == 'locked_choice' -%}{{ T('pe_history_type_decision', 'Entscheidung') }}
+  {%- else -%}{{ T('pe_history_type_entry', 'Eintrag') }}
+  {%- endif -%}
+{%- endmacro %}
+
 {% macro pe_card_queue_block(qj) %}
   {% if qj is defined and qj %}
   <div class="gc-card-queue-block gc-card-queue-block--{{ qj.owner_type|default('planet_research') }} gc-card-queue-block--{{ qj.status }}"
@@ -297,7 +325,19 @@
                    level=(ps.level or 1), remaining=(prog.xp_remaining or 0), next=(prog.next_level or (ps.level + 1))) }}
               </p>
             </div>
-            {% if CODEX_PRIMARY %}{% include "partials/codex_context_btn.html" %}{% endif %}
+            <div class="pe-hero-head-actions">
+              {% if history_items %}
+              <button type="button"
+                      class="gc-btn gc-btn-ghost gc-btn-sm pe-hero-chronicle-btn"
+                      id="pe-section-history"
+                      aria-haspopup="dialog"
+                      aria-controls="pe-chronicle-modal"
+                      aria-expanded="false">
+                {{ T('pe_chronicle_open', 'Chronik') }}
+              </button>
+              {% endif %}
+              {% if CODEX_PRIMARY %}{% include "partials/codex_context_btn.html" %}{% endif %}
+            </div>
           </div>
           <div class="pe-hero-chip-row">
             {% if hdr.is_homeworld %}<span class="pe-badge pe-badge-home">{{ T("pe_homeworld", "Heimatwelt") }}</span>{% endif %}
@@ -502,7 +542,6 @@
       </section>
 
       <section class="pe-zone pe-zone--goal gc-panel" id="pe-section-action">
-        <div class="pe-goal-glow" aria-hidden="true"></div>
         <header class="pe-zone-head pe-zone-head--goal">
           <h3 class="pe-zone-title">{{ T("pe_card_next_step", "Nächster Evolutionsschritt") }}</h3>
           <span class="pe-next-priority pe-next-priority-{{ action.priority or 'explore' }}">{{ T("pe_next_step", "Dein nächster Schritt") }}</span>
@@ -531,42 +570,6 @@
             <span class="pe-goal-event-chip">{{ T("pe_events_status_stable", "Ereignisse: Stabil") }}</span>
             {% endif %}
           </div>
-          {% if history_items %}
-          <div class="pe-goal-chronicle" id="pe-section-history">
-            <div class="pe-goal-chronicle-row">
-              <button type="button"
-                      class="pe-goal-chronicle-chip pe-goal-chronicle-toggle"
-                      aria-expanded="false"
-                      aria-controls="pe-chronicle-popover-layer">
-                {{ T('pe_chronicle_toggle_count', 'Chronik: %(count)s Einträge', count=(history_items|length)|int) }}
-              </button>
-              {% set pe_chronicle_extra = (history_items|length)|int - 1 %}
-              {% if pe_chronicle_extra > 0 %}
-              <button type="button"
-                      class="pe-goal-chronicle-more-chip pe-goal-chronicle-toggle"
-                      aria-expanded="false"
-                      aria-controls="pe-chronicle-popover-layer">
-                {{ T('pe_chronicle_more_count', '+%(count)s weitere', count=pe_chronicle_extra) }}
-              </button>
-              {% endif %}
-            </div>
-            <p class="pe-goal-chronicle-last-line">
-              <span class="pe-goal-chronicle-last-label">{{ T('pe_chronicle_last', 'Letzte') }}:</span>
-              <span class="pe-goal-chronicle-last-text">{{ pe_history_item_label(history_items[0]) }}</span>
-            </p>
-          </div>
-          <div id="pe-chronicle-popover-source" class="pe-chronicle-popover-source" hidden>
-            <p class="pe-chronicle-popover-title">{{ T('pe_chronicle_heading', 'Chronik') }}</p>
-            <ol class="pe-chronicle-timeline pe-chronicle-timeline--popover" aria-label="{{ T('pe_chronicle_heading', 'Chronik') }}">
-              {% for item in history_items %}
-              <li class="pe-chronicle-timeline-item{% if item.event_type in ['level_up', 'discovery', 'ascension_complete', 'planet_research_complete'] %} pe-chronicle-timeline-item--highlight{% endif %}">
-                <span class="pe-chronicle-timeline-marker" aria-hidden="true"></span>
-                <span class="pe-chronicle-timeline-text">{{ pe_history_item_label(item) }}</span>
-              </li>
-              {% endfor %}
-            </ol>
-          </div>
-          {% endif %}
         </div>
         <button type="button" class="gc-btn gc-btn-primary pe-action-btn pe-next-cta pe-goal-cta"
                 data-cta-action="{{ action.cta_action or 'focus_section' }}"
@@ -638,6 +641,47 @@
         {% endif %}
       </div>
     </details>
+    {% endif %}
+
+    {% if history_items %}
+    <div id="pe-chronicle-modal"
+         class="gc-player-card-modal pe-chronicle-modal"
+         hidden
+         aria-hidden="true">
+      <div class="gc-player-card-overlay" data-pe-chronicle-close tabindex="-1"></div>
+      <div class="gc-player-card-dialog pe-chronicle-dialog"
+           role="dialog"
+           aria-modal="true"
+           aria-labelledby="pe-chronicle-modal-title">
+        <header class="gc-player-card-head">
+          <h2 id="pe-chronicle-modal-title" class="gc-player-card-head-title">
+            {{ T('pe_chronicle_modal_title', 'Planetare Chronik') }}
+          </h2>
+          <button type="button"
+                  class="gc-btn gc-btn-ghost gc-btn-xs gc-player-card-close"
+                  data-pe-chronicle-close
+                  aria-label="{{ T('close', 'Schließen') }}">×</button>
+        </header>
+        <div class="gc-player-card-body pe-chronicle-modal-body">
+          <ol class="pe-chronicle-timeline" aria-label="{{ T('pe_chronicle_modal_title', 'Planetare Chronik') }}">
+            {% for item in history_items %}
+            <li class="pe-chronicle-timeline-item{% if item.event_type in ['level_up', 'discovery', 'ascension_complete', 'planet_research_complete'] %} pe-chronicle-timeline-item--highlight{% endif %}">
+              <span class="pe-chronicle-timeline-icon" aria-hidden="true">{{ pe_history_type_icon(item.event_type) }}</span>
+              <div class="pe-chronicle-timeline-content">
+                <div class="pe-chronicle-timeline-meta">
+                  <span class="pe-chronicle-timeline-type">{{ pe_history_type_label(item.event_type) }}</span>
+                  <time class="pe-chronicle-timeline-date gc-mono"
+                        datetime="{{ item.created_at|default(0)|int }}"
+                        data-ts="{{ item.created_at|default(0)|int }}">—</time>
+                </div>
+                <p class="pe-chronicle-timeline-text">{{ pe_history_item_label(item) }}</p>
+              </div>
+            </li>
+            {% endfor %}
+          </ol>
+        </div>
+      </div>
+    </div>
     {% endif %}
 
   </div>

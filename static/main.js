@@ -20846,71 +20846,63 @@
       openPeExpansionDrawer(drawer.hidden);
     };
 
-    let peChroniclePopover = null;
-    let peChronicleActiveTrigger = null;
+    let peChronicleModalOpen = false;
+    let peChronicleLastFocus = null;
 
-    const setPeChronicleExpanded = (expanded) => {
-      document.querySelectorAll(".pe-goal-chronicle-toggle").forEach((el) => {
-        el.setAttribute("aria-expanded", expanded ? "true" : "false");
+    const formatPeChronicleTs = (ts) => {
+      const n = Number(ts || 0);
+      if (!n) return "—";
+      try {
+        return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(n * 1000));
+      } catch (_) {
+        return "—";
+      }
+    };
+
+    const hydratePeChronicleDates = (rootEl) => {
+      rootEl?.querySelectorAll(".pe-chronicle-timeline-date[data-ts]").forEach((el) => {
+        el.textContent = formatPeChronicleTs(el.dataset.ts);
       });
     };
 
-    const closePeChroniclePopover = () => {
-      if (peChroniclePopover) {
-        peChroniclePopover.remove();
-        peChroniclePopover = null;
+    const closePeChronicleModal = () => {
+      const modal = document.getElementById("pe-chronicle-modal");
+      if (!modal || modal.hidden) return;
+      modal.hidden = true;
+      modal.setAttribute("aria-hidden", "true");
+      modal.classList.remove("is-open");
+      document.body.classList.remove("gc-player-card-open");
+      document.querySelectorAll(".pe-hero-chronicle-btn").forEach((btn) => {
+        btn.setAttribute("aria-expanded", "false");
+      });
+      peChronicleModalOpen = false;
+      if (peChronicleLastFocus && typeof peChronicleLastFocus.focus === "function") {
+        peChronicleLastFocus.focus();
       }
-      peChronicleActiveTrigger = null;
-      setPeChronicleExpanded(false);
+      peChronicleLastFocus = null;
     };
 
-    const positionPeChroniclePopover = (pop, trigger) => {
-      const margin = 8;
-      pop.style.visibility = "hidden";
-      pop.style.display = "block";
-      const rect = trigger.getBoundingClientRect();
-      const popRect = pop.getBoundingClientRect();
-      let left = rect.left + rect.width / 2 - popRect.width / 2;
-      left = Math.max(margin, Math.min(left, window.innerWidth - popRect.width - margin));
-      let top = rect.bottom + margin;
-      if (top + popRect.height > window.innerHeight - margin) {
-        top = Math.max(margin, rect.top - popRect.height - margin);
-      }
-      pop.style.left = `${left}px`;
-      pop.style.top = `${top}px`;
-      pop.style.visibility = "visible";
+    const openPeChronicleModal = (trigger) => {
+      const modal = document.getElementById("pe-chronicle-modal");
+      if (!modal) return;
+      peChronicleLastFocus = trigger || document.activeElement;
+      hydratePeChronicleDates(modal);
+      modal.hidden = false;
+      modal.setAttribute("aria-hidden", "false");
+      modal.classList.add("is-open");
+      document.body.classList.add("gc-player-card-open");
+      document.querySelectorAll(".pe-hero-chronicle-btn").forEach((btn) => {
+        btn.setAttribute("aria-expanded", "true");
+      });
+      peChronicleModalOpen = true;
+      modal.querySelector("[data-pe-chronicle-close].gc-player-card-close")?.focus();
     };
 
-    const openPeChroniclePopover = (trigger) => {
-      const root = document.querySelector(".planet-evolution-page");
-      if (!root || !trigger || !root.contains(trigger)) return;
-      const source = document.getElementById("pe-chronicle-popover-source");
-      if (!source) return;
-      if (peChronicleActiveTrigger === trigger && peChroniclePopover) {
-        closePeChroniclePopover();
-        return;
-      }
-      closePeChroniclePopover();
-
-      const pop = document.createElement("div");
-      pop.id = "pe-chronicle-popover-layer";
-      pop.className = "pe-chronicle-popover gc-popover-layer";
-      pop.setAttribute("role", "dialog");
-      pop.innerHTML = source.innerHTML;
-      document.body.appendChild(pop);
-      positionPeChroniclePopover(pop, trigger);
-
-      peChroniclePopover = pop;
-      peChronicleActiveTrigger = trigger;
-      setPeChronicleExpanded(true);
-    };
-
-    GC.closePeChroniclePopover = closePeChroniclePopover;
+    GC.closePeChronicleModal = closePeChronicleModal;
 
     const openPeSection = (sectionId) => {
       if (sectionId === "pe-section-history") {
-        const toggle = document.querySelector(".pe-goal-chronicle-toggle");
-        if (toggle) openPeChroniclePopover(toggle);
+        openPeChronicleModal(document.getElementById("pe-section-history"));
         return;
       }
       const section = document.getElementById(sectionId);
@@ -20997,18 +20989,18 @@
         return;
       }
 
-      const chronicleToggle = e.target.closest(".pe-goal-chronicle-toggle");
-      if (chronicleToggle && root.contains(chronicleToggle)) {
+      const chronicleBtn = e.target.closest(".pe-hero-chronicle-btn");
+      if (chronicleBtn && root.contains(chronicleBtn)) {
         e.preventDefault();
-        e.stopPropagation();
-        openPeChroniclePopover(chronicleToggle);
+        openPeChronicleModal(chronicleBtn);
         return;
       }
 
-      if (peChroniclePopover
-        && !e.target.closest("#pe-chronicle-popover-layer")
-        && !e.target.closest(".pe-goal-chronicle-toggle")) {
-        closePeChroniclePopover();
+      const chronicleClose = e.target.closest("[data-pe-chronicle-close]");
+      if (chronicleClose && document.getElementById("pe-chronicle-modal")?.contains(chronicleClose)) {
+        e.preventDefault();
+        closePeChronicleModal();
+        return;
       }
 
       const scrollBtn = e.target.closest(".pe-scroll-btn");
@@ -21139,11 +21131,9 @@
     });
 
     document.addEventListener("keydown", (e) => {
-      if (e.key !== "Escape" || !peChroniclePopover) return;
-      closePeChroniclePopover();
+      if (e.key !== "Escape" || !peChronicleModalOpen) return;
+      closePeChronicleModal();
     });
-    window.addEventListener("resize", closePeChroniclePopover);
-    window.addEventListener("scroll", closePeChroniclePopover, true);
   }
 
   function normalizePopoverTriggers(root = document) {
@@ -21461,7 +21451,7 @@
           el.setAttribute("aria-expanded", "false");
           el.classList.remove("is-open");
         });
-        if (typeof GC.closePeChroniclePopover === "function") GC.closePeChroniclePopover();
+        if (typeof GC.closePeChronicleModal === "function") GC.closePeChronicleModal();
       });
     }
   }
