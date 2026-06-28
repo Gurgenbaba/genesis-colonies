@@ -66,18 +66,19 @@ Historisches GC-601 Audit: [GC-601B_DOCUMENTATION_CONSISTENCY_SYNC.md](GC-601B_D
 
 ---
 
-## GC-700 Readiness (Combat — vorbereiten, nicht implementieren)
+## GC-700 Readiness (Combat)
 
 ### Vorhanden
 
 - **Resolver:** `game/combat.py` — `simulate_battle()`, loot (`apply_combat_loot`), debris (`spawn_combat_debris_at_planet`), reports (`publish_attack_combat_report`)
+- **Simulator (GC-700A):** `game/combat_simulator.py` — `/combat-simulator`, `POST /api/combat-simulator/run` (Monte-Carlo, no DB)
 - **Modelle:** `game/combat_models.py` — Stats für Schiffe + Defense, Rapid Fire
 - **Integration:** `game/fleet.py` — Attack-Arrival: simulate → losses → debris → ranking → loot → inbox
 - **Defense-Anbindung:** `planet_defense` in `simulate_battle` / `split_defender_losses`
 - **Effects:** `EffectResolver` Waffen/Schild/Panzer-Boni
 - **Spy/Intel:** Tier-5 Defense in `spy.py`
-- **Tests:** `tests/test_combat.py` (36), Fleet-Spy/Attack in `test_fleet.py`
-- **Docs:** [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) aktuell (GC-500–510)
+- **Tests:** `tests/test_combat.py` (36+), `tests/test_combat_simulator.py`, Fleet-Spy/Attack in `test_fleet.py`
+- **Docs:** [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) aktuell (GC-500–510, GC-700A)
 
 ### Fehlt / GC-700 sinnvoller Scope
 
@@ -86,25 +87,24 @@ Historisches GC-601 Audit: [GC-601B_DOCUMENTATION_CONSISTENCY_SYNC.md](GC-601B_D
 | Recycler / Debris-Harvest-Mission | — | ✅ GC-800A/B (`recycle` mission) |
 | Fleet Logistics Collect | — | ✅ GC-900B: `batch_type` + N× `mission=collect` |
 | Fleet Logistics Distribute | — | ✅ GC-900D/E |
-| Combat-Balancing / neue Missionen | P2 | Kein Resolver-Neubau nötig |
+| Combat-Balancing / neue Missionen | P2 | Simulator ✅ — keine Resolver-Duplikate |
 | PvP-Randfälle / Report-UX | P2 | Messages UI vorhanden |
-| Dedizierte Combat-Admin-Tools | P3 | Admin hat Queue-Tools |
+| Dedizierte Combat-Admin-Tools | P3 | Simulator Admin-Modus (Monte-Carlo, Effizienz-Tabelle) |
 
 ### Risiken
 
-- Doppel-Implementierung von `simulate_battle` oder parallele Fleet-State-Queues
-- Frontend-Kampf-Math (verboten GC-000)
+- Doppel-Implementierung von `simulate_battle` oder parallele Fleet-State-Queues — **Simulator nutzt nur `simulate_battle`**
+- Frontend-Kampf-Math (verboten GC-000) — **Simulator POST liefert Ergebnis; UI rechnet nicht**
 - Attack-Tick Idempotenz bei Retries (`fleet.py` markiert `failed` — dokumentiert in COMBAT_SYSTEM)
 
-### Empfohlener Scope für GC-700
+### Empfohlener Scope für GC-700 (Rest)
 
 **Nicht:** Combat-Engine von Null.
 
 **Ja (Beispiele, je nach Product-Priorität):**
 
-1. **Gap-Audit-Ticket:** Recycler (GC-800) vs. Combat-Polish trennen
-2. **Combat v2 nur wenn:** neue Missionstypen, Resolver-Regeländerungen, oder Report-Format v3 — jeweils max. 3–5 Dateien, Tests in `test_combat.py`
-3. **Vor GC-700:** GC-900B/C Collect, dann GC-900D/E Distribute — Roadmap-Blocker (GC-800 Recycler ✅)
+1. Report-UX / PvP-Randfälle (kein Resolver-Neubau)
+2. Combat v2 nur wenn: neue Missionstypen oder Resolver-Regeländerungen — max. 3–5 Dateien, Tests in `test_combat.py`
 
 ---
 
@@ -118,7 +118,7 @@ Historisches GC-601 Audit: [GC-601B_DOCUMENTATION_CONSISTENCY_SYNC.md](GC-601B_D
 | GC-600 Defense Phase 1 validation | ✅ |
 | GC-601 Project Inventory | ✅ |
 | **GC-806 Navigation Shell** (804–806D: dual sidebar, bottom dock, docs) | ✅ CLOSED |
-| GC-700 Combat | 📋 Readiness oben — kein Greenfield |
+| GC-700 Combat | ✅ GC-700A Simulator — siehe [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) |
 | GC-800 Recycler | ✅ — [GC-800_RECYCLER.md](GC-800_RECYCLER.md); GC-800C UX optional |
 | GC-900A Logistics spec | ✅ — [GC-900_LOGISTICS.md](GC-900_LOGISTICS.md) |
 | GC-900B Collect backend (Option A, no migration) | ✅ |

@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% set sim = combat_simulator if combat_simulator is defined and combat_simulator else {'ready': false} %}
+{% set catalog = sim.catalog if sim.catalog is defined else {'ships': [], 'defenses': []} %}
+{% set routes = sim.route_labels if sim.route_labels is defined else {} %}
+{% set _ship_placeholder = url_for('static', filename='img/ships/seed_ark.png') %}
+{% set _def_placeholder = url_for('static', filename='img/defense/sentinel_turret.png') %}
+
+<div class="gc-page combat-simulator-page" id="combat-simulator-page"
+     data-ready="{{ '1' if sim.ready else '0' }}"
+     data-is-admin="{{ '1' if sim.is_admin else '0' }}"
+     data-default-iterations="{{ sim.default_iterations|default(50) }}"
+     {% if sim.spy_report_id %}data-spy-report-id="{{ sim.spy_report_id }}"{% endif %}>
+
+  {% if sim.ready %}
+  <script type="application/json" id="combat-simulator-state">{{ sim | tojson }}</script>
+  {% endif %}
+
+  <div class="gc-combat-sim-window">
+    <header class="gc-combat-sim-window-head">
+      <div class="gc-combat-sim-window-head-main">
+        <div class="gc-combat-sim-window-title-row">
+          <h2 class="gc-combat-sim-window-title">{{ T("combat_simulator_forecast", "Genesis Battle Lab") }}</h2>
+          <a href="{{ url_for('fleet_view') }}" class="gc-btn gc-btn-xs gc-btn-ghost">{{ T("nav_fleet") }}</a>
+        </div>
+        <p class="gc-combat-sim-route" data-sim-route-subheader>
+          {% if routes.attacker %}
+          <span class="gc-combat-sim-route-part">
+            <span class="gc-combat-sim-route-role">{{ T("combat_simulator_attacker", "Angreifer") }}:</span>
+            <span data-sim-attacker-route>{{ routes.attacker }}</span>
+          </span>
+          <span class="gc-combat-sim-route-arrow" aria-hidden="true">→</span>
+          {% endif %}
+          <span class="gc-combat-sim-route-part">
+            <span class="gc-combat-sim-route-role">{{ T("combat_simulator_defender", "Verteidiger") }}:</span>
+            <span data-sim-defender-route>{% if routes.defender %}{{ routes.defender }}{% elif routes.from_spy %}{{ T("combat_simulator_manual_target", "manuell") }}{% else %}{{ T("combat_simulator_manual_target", "manuell") }}{% endif %}</span>
+          </span>
+        </p>
+        {% if routes.from_spy %}
+        <p class="gc-combat-sim-spy-source hint" data-sim-spy-source>
+          {{ T("combat_simulator_spy_source", "Ziel aus Spionagebericht") }}
+        </p>
+        {% else %}
+        <p class="gc-combat-sim-spy-source hint" data-sim-spy-source hidden></p>
+        {% endif %}
+        {% if sim.spy_import_error %}
+        <p class="gc-combat-sim-import-error hint">{{ T("combat_simulator_spy_import_failed", "Import fehlgeschlagen") }} ({{ sim.spy_import_error }})</p>
+        {% endif %}
+        <p class="gc-combat-sim-attacker-meta hint" data-sim-attacker-meta hidden></p>
+      </div>
+      <button type="button" class="gc-btn gc-btn-primary gc-combat-sim-run-head" data-sim-run>{{ T("combat_simulator_run_start", "Simulation starten") }}</button>
+    </header>
+
+    <section class="gc-battle-lab-report gc-combat-sim-results" id="combat-sim-results" hidden aria-live="polite">
+      <div class="gbl-result" data-sim-result hidden>
+        <header class="gbl-result-header">
+          <p class="gbl-result-banner" data-sim-result-banner hidden></p>
+          <p class="gbl-result-pct" data-sim-result-pct hidden></p>
+        </header>
+        <div class="gbl-result-bar" data-sim-result-tiles role="group"></div>
+        <div class="gbl-result-details-wrap">
+          <button type="button" class="gbl-result-details-btn" data-sim-details-toggle hidden aria-expanded="false">
+            {{ T("battle_lab_bar_details", "Details") }}
+            <span class="gbl-result-details-chevron" aria-hidden="true">▼</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="gc-battle-lab-details" data-sim-details hidden>
+      <section class="gc-battle-lab-block">
+        <h3 class="gc-battle-lab-block-title">{{ T("battle_lab_your_losses", "Deine Verluste") }}</h3>
+        <ul class="gc-battle-lab-unit-table" data-sim-atk-loss-table></ul>
+        <p class="gc-battle-lab-total">
+          <span>{{ T("battle_lab_total_value", "Gesamtwert") }}:</span>
+          <strong data-sim-atk-loss-value>—</strong>
+          <span class="gc-battle-lab-resource-tag">{{ T("resource_metal", "Ferronit") }}</span>
+        </p>
+      </section>
+
+      <section class="gc-battle-lab-block">
+        <h3 class="gc-battle-lab-block-title">{{ T("battle_lab_enemy_losses", "Gegnerische Verluste") }}</h3>
+        <ul class="gc-battle-lab-unit-table" data-sim-def-loss-table></ul>
+        <p class="gc-battle-lab-total">
+          <span>{{ T("battle_lab_total_value", "Gesamtwert") }}:</span>
+          <strong data-sim-def-loss-value>—</strong>
+          <span class="gc-battle-lab-resource-tag">{{ T("resource_metal", "Ferronit") }}</span>
+        </p>
+      </section>
+
+      <section class="gc-battle-lab-block">
+        <h3 class="gc-battle-lab-block-title">{{ T("battle_lab_spoils", "Beute") }}</h3>
+        <dl class="gc-battle-lab-resource-list">
+          <div><dt>{{ T("resource_metal", "Ferronit") }}</dt><dd data-sim-loot-metal>—</dd></div>
+          <div><dt>{{ T("resource_crystal", "Crytite") }}</dt><dd data-sim-loot-crystal>—</dd></div>
+          <div><dt>{{ T("resource_fuel_cells", "Brennzellen") }}</dt><dd data-sim-loot-fuel>—</dd></div>
+          <div data-sim-cargo-row hidden><dt>{{ T("battle_lab_cargo_load", "Cargo-Auslastung") }}</dt><dd data-sim-cargo-pct>—</dd></div>
+        </dl>
+      </section>
+
+      <section class="gc-battle-lab-block">
+        <h3 class="gc-battle-lab-block-title">{{ T("battle_lab_debris", "Trümmerfeld") }}</h3>
+        <dl class="gc-battle-lab-resource-list">
+          <div><dt>{{ T("resource_metal", "Ferronit") }}</dt><dd data-sim-debris-metal>—</dd></div>
+          <div><dt>{{ T("resource_crystal", "Crytite") }}</dt><dd data-sim-debris-crystal>—</dd></div>
+        </dl>
+      </section>
+
+      <section class="gc-battle-lab-meter-block" data-sim-meter hidden>
+        <h3 class="gc-battle-lab-block-title">{{ T("battle_lab_outcome", "Kampfergebnis") }}</h3>
+        <div class="gc-battle-lab-meter-track" aria-hidden="true"><span class="gc-battle-lab-meter-fill" data-sim-meter-fill></span></div>
+        <p class="gc-battle-lab-meter-label" data-sim-meter-label></p>
+        <p class="gc-battle-lab-meter-net" data-sim-meter-net hidden></p>
+      </section>
+
+      <section class="gc-battle-lab-block">
+        <h3 class="gc-battle-lab-block-title">{{ T("battle_lab_analysis", "Kampfanalyse") }}</h3>
+        <ul class="gc-battle-lab-analysis" data-sim-analysis></ul>
+      </section>
+
+      <section class="gc-battle-lab-block" data-sim-advice-block hidden>
+        <h3 class="gc-battle-lab-block-title">{{ T("battle_lab_advisor", "Strategischer Rat") }}</h3>
+        <ul class="gc-battle-lab-advice" data-sim-advice></ul>
+      </section>
+
+      <section class="gc-battle-lab-block gc-battle-lab-combat-values" data-sim-combat-values>
+        <div class="gc-battle-lab-combat-values-head">
+          <h3 class="gc-battle-lab-block-title">{{ T("combat_values_title", "Kampfwerte verstehen") }}</h3>
+          <button type="button" class="gc-btn gc-btn-xs gc-btn-ghost" data-sim-combat-values-toggle>{{ T("combat_values_show_all", "Alle Werte anzeigen") }}</button>
+        </div>
+        <div class="gc-battle-lab-combat-values-cols">
+          <div class="gc-battle-lab-combat-col" data-sim-combat-col="attacker">
+            <h4 class="gc-battle-lab-combat-col-title">{{ T("combat_simulator_attacker", "Angreifer") }}</h4>
+            <div class="gc-battle-lab-combat-cards" data-sim-combat-cards="attacker"></div>
+          </div>
+          <div class="gc-battle-lab-combat-col" data-sim-combat-col="defender">
+            <h4 class="gc-battle-lab-combat-col-title">{{ T("combat_simulator_defender", "Verteidiger") }}</h4>
+            <div class="gc-battle-lab-combat-cards" data-sim-combat-cards="defender"></div>
+          </div>
+        </div>
+        <div class="gc-battle-lab-combat-why">
+          <h4 class="gc-battle-lab-combat-why-title">{{ T("combat_values_why_title", "Warum?") }}</h4>
+          <ul class="gc-battle-lab-combat-why-list" data-sim-combat-why></ul>
+        </div>
+      </section>
+      </div>
+    </section>
+
+    <div class="gc-combat-sim-setup">
+      <div class="gc-combat-sim-setup-bar">
+        {% if sim.is_admin %}
+        <label class="gc-combat-sim-setup-field">
+          <span>{{ T("combat_simulator_iterations", "Simulationen") }}</span>
+          <input type="number" class="gc-input gc-input-sm gc-combat-sim-input" data-sim-iterations min="1" max="500"
+                 value="{{ sim.default_iterations|default(50) }}">
+        </label>
+        {% endif %}
+        <label class="gc-combat-sim-check">
+          <input type="checkbox" data-sim-calculate-loot checked>
+          <span>{{ T("combat_simulator_loot_preview", "Loot-Vorschau") }}</span>
+        </label>
+        <button type="button" class="gc-btn gc-btn-xs gc-combat-sim-run-mobile" data-sim-run>{{ T("combat_simulator_run_start", "Simulation starten") }}</button>
+      </div>
+
+      <div class="gc-combat-sim-sides">
+        {% for side, side_label in [('attacker', T('combat_simulator_attacker', 'Angreifer')), ('defender', T('combat_simulator_defender', 'Verteidiger'))] %}
+        <div class="gc-combat-sim-side combat-sim-side" data-sim-side="{{ side }}">
+          <div class="gc-combat-sim-side-head">
+            <h3 class="gc-combat-sim-side-title">{{ side_label }}</h3>
+            {% if side == 'attacker' %}
+            <div class="gc-combat-sim-side-actions">
+              <button type="button" class="gc-btn gc-btn-xs" data-sim-reload-fleet>{{ T("combat_simulator_reload_fleet", "Eigene Flotte übernehmen") }}</button>
+            </div>
+            {% else %}
+            <span class="gc-combat-sim-unscanned hint" data-sim-defender-unscanned hidden></span>
+            {% endif %}
+          </div>
+
+          {% if side == 'attacker' %}
+          <p class="gc-combat-sim-side-meta hint" data-sim-autofill-research>{{ T("combat_simulator_research_account", "Forschung: Account-Technologien übernommen") }}</p>
+          {% endif %}
+
+          <nav class="gc-combat-sim-tabs combat-sim-tabs" role="tablist">
+            <button type="button" class="gc-combat-sim-tab combat-sim-tab active" data-sim-tab="ships">{{ T("combat_simulator_tab_ships", "Schiffe") }}</button>
+            {% if side == 'defender' %}
+            <button type="button" class="gc-combat-sim-tab combat-sim-tab" data-sim-tab="defense">{{ T("combat_simulator_tab_defense", "Verteidigung") }}</button>
+            {% endif %}
+            <button type="button" class="gc-combat-sim-tab combat-sim-tab" data-sim-tab="research">{{ T("combat_simulator_tab_research", "Forschung") }}</button>
+            {% if side == 'defender' %}
+            <button type="button" class="gc-combat-sim-tab combat-sim-tab" data-sim-tab="resources">{{ T("combat_simulator_tab_resources", "Ressourcen") }}</button>
+            {% endif %}
+          </nav>
+
+          <div class="gc-combat-sim-unit-toolbar" data-sim-unit-toolbar>
+            <button type="button" class="gc-btn gc-btn-xs" data-sim-show-all-units>{{ T("combat_simulator_show_all_units", "Alle Einheiten anzeigen") }}</button>
+          </div>
+
+          <div class="combat-sim-tab-panels">
+            <div class="combat-sim-tab-panel active" data-sim-panel="ships">
+              <div class="gc-combat-sim-unit-grid" data-sim-unit-list="ships">
+                {% for unit in catalog.ships %}
+                {% set _icon_png = url_for('static', filename='img/ships/' ~ unit.key ~ '.png') %}
+                <div class="gc-combat-sim-unit-row combat-sim-unit-row{% if side == 'attacker' %} gc-combat-sim-unit-row--attacker{% endif %}" data-unit-key="{{ unit.key }}"
+                     data-unit-name-key="{{ unit.name_key }}">
+                  <img src="{{ _icon_png }}" alt="" class="gc-combat-sim-unit-icon" width="28" height="28" loading="lazy"
+                       onerror="this.onerror=null;this.src='{{ _ship_placeholder }}';">
+                  <span class="gc-combat-sim-unit-name combat-sim-unit-name">{{ T(unit.name_key, unit.key) }}</span>
+                  <input type="text" inputmode="numeric" class="gc-input gc-input-sm gc-combat-sim-qty combat-sim-qty" value="0" data-unit-input="{{ unit.key }}">
+                  {% if side == 'attacker' %}
+                  <button type="button" class="gc-btn gc-btn-xs gc-btn-ghost gc-combat-sim-qty-max" data-qty-max>{{ T("combat_simulator_max", "Max") }}</button>
+                  {% endif %}
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+            {% if side == 'defender' %}
+            <div class="combat-sim-tab-panel" data-sim-panel="defense" hidden>
+              <div class="gc-combat-sim-unit-grid" data-sim-unit-list="defense">
+                {% for unit in catalog.defenses %}
+                {% set _def_png = url_for('static', filename='img/defense/' ~ unit.key ~ '.png') %}
+                <div class="gc-combat-sim-unit-row combat-sim-unit-row" data-unit-key="{{ unit.key }}"
+                     data-unit-name-key="{{ unit.name_key }}">
+                  <img src="{{ _def_png }}" alt="" class="gc-combat-sim-unit-icon" width="28" height="28" loading="lazy"
+                       onerror="this.onerror=null;this.src='{{ _def_placeholder }}';">
+                  <span class="gc-combat-sim-unit-name combat-sim-unit-name">{{ T(unit.name_key, unit.key) }}</span>
+                  <input type="text" inputmode="numeric" class="gc-input gc-input-sm gc-combat-sim-qty combat-sim-qty" value="0" data-unit-input="{{ unit.key }}">
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+            {% endif %}
+            <div class="combat-sim-tab-panel" data-sim-panel="research" hidden>
+              <div class="gc-combat-sim-tech-row">
+                <label><span>{{ T("tech_weapon_tech", "Waffentechnik") }}</span><input type="number" class="gc-input gc-input-sm gc-combat-sim-input" data-tech="weapon_tech" min="0" max="999" value="0"></label>
+                <label><span>{{ T("tech_armor_tech", "Panzerung") }}</span><input type="number" class="gc-input gc-input-sm gc-combat-sim-input" data-tech="armor_tech" min="0" max="999" value="0"></label>
+                <label><span>{{ T("tech_shield_tech", "Schildtechnik") }}</span><input type="number" class="gc-input gc-input-sm gc-combat-sim-input" data-tech="shield_tech" min="0" max="999" value="0"></label>
+              </div>
+            </div>
+            {% if side == 'defender' %}
+            <div class="combat-sim-tab-panel" data-sim-panel="resources" hidden>
+              <div class="gc-combat-sim-tech-row">
+                <label><span>{{ T("resource_metal", "Ferronit") }}</span><input type="text" inputmode="numeric" class="gc-input gc-input-sm gc-combat-sim-input" data-resource="metal" value="0" data-field-known="1"></label>
+                <label><span>{{ T("resource_crystal", "Crytite") }}</span><input type="text" inputmode="numeric" class="gc-input gc-input-sm gc-combat-sim-input" data-resource="crystal" value="0" data-field-known="1"></label>
+                <label><span>{{ T("resource_fuel_cells", "Brennzellen") }}</span><input type="text" inputmode="numeric" class="gc-input gc-input-sm gc-combat-sim-input" data-resource="fuel_cells" value="0" data-field-known="1"></label>
+              </div>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <details class="gc-combat-sim-spy-switch" data-sim-spy-switch>
+      <summary>{{ T("combat_simulator_change_spy_report", "Bericht wechseln") }}</summary>
+      <div class="gc-combat-sim-spy-switch-body">
+        <select class="gc-input gc-input-sm gc-combat-sim-input" data-sim-spy-report-select data-gc-hud-select>
+          <option value="">{{ T("combat_simulator_spy_report_pick", "Bericht wählen…") }}</option>
+        </select>
+        <button type="button" class="gc-btn gc-btn-xs" data-sim-import-spy>{{ T("combat_simulator_import_spy", "Laden") }}</button>
+      </div>
+      <p class="gc-combat-sim-spy-status hint" data-sim-spy-status hidden aria-live="polite"></p>
+    </details>
+
+    {% if sim.is_admin %}
+    <details class="gc-combat-sim-admin-panel" data-sim-admin-panel id="combat-sim-details">
+      <summary>{{ T("combat_simulator_admin_analysis", "Admin-Analyse") }}</summary>
+      <p class="gc-combat-sim-admin-hint hint">{{ T("combat_simulator_admin_analysis_hint", "Zeigt technische Durchschnittswerte über viele Simulationen zur Balance-Prüfung. Für normale Spieler nicht relevant.") }}</p>
+      <div class="gc-combat-sim-detail-block">
+        <h4>{{ T("combat_simulator_averages", "Durchschnitt") }}</h4>
+        <p class="hint" data-sim-iterations-label hidden></p>
+        <div class="gc-combat-sim-loss-grid">
+          <ul class="combat-sim-loss-list" data-sim-loss-attacker></ul>
+          <ul class="combat-sim-loss-list" data-sim-loss-defender-ships></ul>
+          <ul class="combat-sim-loss-list" data-sim-loss-defender-defense></ul>
+        </div>
+      </div>
+      <div class="gc-combat-sim-detail-block">
+        <h4>{{ T("combat_simulator_sample_battle", "Beispielkampf") }}</h4>
+        <p class="hint" data-sim-sample-winner hidden></p>
+        <ol class="combat-sim-timeline" data-sim-timeline></ol>
+      </div>
+      <div class="combat-sim-admin-actions">
+        <button type="button" class="gc-btn gc-btn-xs" data-sim-copy="raw">{{ T("combat_simulator_copy_raw", "Rohdaten kopieren") }}</button>
+        <button type="button" class="gc-btn gc-btn-xs" data-sim-copy="csv">{{ T("combat_simulator_copy_csv", "CSV kopieren") }}</button>
+      </div>
+      <pre class="combat-sim-details-pre" data-sim-details-pre hidden></pre>
+      <pre class="combat-sim-details-pre" data-sim-sample-pre hidden></pre>
+      {% if sim.unit_efficiency %}
+      <div class="combat-sim-efficiency-scroll">
+        <table class="combat-sim-efficiency-table">
+          <thead>
+            <tr>
+              <th>{{ T("combat_simulator_unit", "Einheit") }}</th>
+              <th>{{ T("combat_simulator_damage", "Angriff") }}</th>
+              <th>{{ T("combat_simulator_hull", "Hülle") }}</th>
+              <th>{{ T("combat_simulator_cost", "Kosten") }}</th>
+              <th>D/C</th>
+              <th>H/C</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in sim.unit_efficiency %}
+            <tr>
+              <td>{{ row.key }}</td>
+              <td>{{ row.attack|fmt_int }}</td>
+              <td>{{ row.hull|fmt_int }}</td>
+              <td>{{ row.cost|fmt_int }}</td>
+              <td>{{ row.damage_per_cost }}</td>
+              <td>{{ row.hull_per_cost }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </details>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

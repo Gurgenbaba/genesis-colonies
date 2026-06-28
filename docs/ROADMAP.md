@@ -107,7 +107,9 @@ Docs: [PLANET_SCOPE.md](PLANET_SCOPE.md), [PLANET_EVOLUTION.md](PLANET_EVOLUTION
 | **Vote Center** — GameToor IVN Auto-Rewards | ✅ | GC-556 [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) |
 | **Verteidigung** — Türme, Schilder, Queue, Ranking | ✅ | [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md) |
 | **Kampf-Auflösung** — Resolver, Reports, Loot, Debris, Ranking | ✅ | [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md); `test_combat.py` |
-| **GC-700** — Combat polish / gaps (kein Resolver-Neubau) | 📋 | Siehe [PROJECT_INVENTORY.md](PROJECT_INVENTORY.md) § GC-700 Readiness |
+| **GC-700A** — Combat simulator (`/combat-simulator`, Monte-Carlo) | ✅ | [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) § GC-700A |
+| **GC-700B** — Smart import (auto-fill + spy reports) | ✅ | [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) § GC-700A |
+| **GC-700** — Combat polish / gaps (kein Resolver-Neubau) | 📋 | Report-UX, PvP-Randfälle — siehe [PROJECT_INVENTORY.md](PROJECT_INVENTORY.md) |
 | Fleet Logistics (collect/distribute) | ✅ | GC-526–531: Bulk API, `/logistics` UI, Reports (`report_phase`) — [FLEET_SYSTEM.md](FLEET_SYSTEM.md) |
 | Recycler-Mission | ✅ | GC-800A Backend + GC-800B UI; GC-800C UX optional |
 | Espionage (beyond probe report) | ✅ | GC-401 tiered intel + inbox UI |

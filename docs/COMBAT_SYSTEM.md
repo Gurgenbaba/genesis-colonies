@@ -2,7 +2,7 @@
 
 Round-based fleet vs. planet defense battles. Pure simulation in `game/combat.py`; attack arrival orchestration in `game/fleet.py`.
 
-**Status:** ✅ Active (GC-500–GC-510)
+**Status:** ✅ Active (GC-500–GC-510, GC-700A simulator)
 
 ---
 
@@ -12,6 +12,7 @@ Round-based fleet vs. planet defense battles. Pure simulation in `game/combat.py
 |--------|------|
 | `game/combat_models.py` | Unit stats registry, `CombatStack`, `stacks_from_counts()`, validation |
 | `game/combat.py` | `simulate_battle()`, loot, debris, combat reports |
+| `game/combat_simulator.py` | **GC-700A** — player/admin battle simulator (wraps `simulate_battle` only; no DB writes) |
 | `game/fleet.py` | Attack arrival → simulate, apply losses, loot, debris, ranking, return |
 | `game/fleet_defs.py` / `game/defense_defs.py` | Raw combat values + rapid fire |
 | `game/effects/effect_resolver.py` | `weapon_tech`, `armor_tech`, `shield_tech` → side modifiers |
@@ -41,6 +42,33 @@ Research modifiers (per side, additive on explicit overrides):
 Pass `attacker_player_id` / `defender_player_id` (and optional planet ids) to load bonuses via `EffectResolver`.
 
 Deterministic RNG: `battle_rng_for_movement(movement_id)` in fleet tick.
+
+---
+
+## Combat simulator (GC-700A)
+
+Player/admin tool at `/combat-simulator` — **same resolver**, no persistence.
+
+| Endpoint | Role |
+|----------|------|
+| `GET /combat-simulator` | UI — manual inputs, own-fleet preset only |
+| `POST /api/combat-simulator/run` | Single or Monte-Carlo run (`iterations` 1–500) |
+| `GET /api/combat-simulator/defaults` | Attacker auto-fill: context planet ships + account research |
+| `GET /api/combat-simulator/spy-reports` | Own recent espionage inbox reports (list only) |
+| `POST /api/combat-simulator/import-spy-report` | Parse owned spy message metadata → defender payload |
+
+`game/combat_simulator.py`:
+
+- `build_simulation_input()` — sanitize unit maps, tech overrides, resources
+- `build_combat_simulator_defaults()` — context planet via `get_context_planet()`, research via `get_research_levels()`
+- `list_combat_simulator_spy_reports()` / `import_spy_report_for_simulator()` — inbox metadata only, no live target queries
+- `parse_spy_report_metadata_for_defender()` — partial intel (`intel_tiers`), unscanned fields marked
+- `run_combat_simulation()` / `run_monte_carlo_simulation()` — call `simulate_battle()` only
+- `summarize_simulation_results()` — win rates, average losses/debris/loot, sample report
+- Loot preview uses `calculate_plunder_pool()` + `load_resources_up_to_cargo()` (no planet debit)
+- Admin balancing mode: default 300 iterations, unit efficiency table, CSV/JSON copy
+
+Forbidden: duplicate combat math in JS; DB writes; fleet movements; inbox messages.
 
 ---
 
@@ -108,6 +136,7 @@ After combat: `record_combat_outcome()` updates `score_destroyed_raw`; `compute_
 
 ```bash
 python -m pytest tests/test_combat.py -v
+python -m pytest tests/test_combat_simulator.py -v
 python -m pytest tests/test_fleet.py -k "attack or combat or debris or loot" -v
 python -m pytest tests/test_ranking.py::test_combat_destruction_increases_ranking_scores -v
 ```

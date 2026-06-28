@@ -1929,6 +1929,45 @@ def defense_view():
     return resp
 
 
+@app.route("/combat-simulator")
+@require_login
+def combat_simulator_view():
+    ctx = _load_page_live_context(finish_source="combat_simulator")
+    if ctx is None:
+        return redirect(url_for("login"))
+
+    from game.combat_simulator import build_combat_simulator_page_context
+
+    user_id = int(ctx["player_view"]["id"])
+    is_admin = bool(int(ctx["player_view"].get("is_admin") or 0))
+    spy_report_id = None
+    try:
+        raw_spy = request.args.get("spy_report_id")
+        if raw_spy is not None and str(raw_spy).strip():
+            spy_report_id = int(raw_spy)
+    except (TypeError, ValueError):
+        spy_report_id = None
+    conn = db()
+    try:
+        sim_ctx = build_combat_simulator_page_context(
+            user_id,
+            conn=conn,
+            is_admin=is_admin,
+            spy_report_id=spy_report_id,
+        )
+    finally:
+        conn.close()
+
+    return render_template(
+        "combat_simulator.html",
+        player=ctx["player_view"],
+        energy_total=ctx["energy_total"],
+        energy_used=ctx["energy_used"],
+        storage_caps=ctx["storage_caps"],
+        combat_simulator=sim_ctx,
+    )
+
+
 @app.route("/logistics")
 @require_login
 def logistics_view():
@@ -7183,6 +7222,116 @@ def api_defense_cancel():
     if request_id and isinstance(response_obj, dict):
         save_idempotent_action(user_id, request_id, response_obj)
     return resp
+
+
+@app.route("/api/combat-simulator/run", methods=["POST"])
+@require_login
+def api_combat_simulator_run():
+    from game.auth import get_current_user
+    from game.combat_simulator import handle_combat_simulator_run
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    user = get_current_user()
+    is_admin = bool(user and int(user.get("is_admin") or 0))
+    result = handle_combat_simulator_run(data, user_id, is_admin=is_admin)
+    status = 200 if result.get("ok") else 400
+    return jsonify(result), status
+
+
+@app.route("/api/combat-simulator/defaults", methods=["GET"])
+@require_login
+def api_combat_simulator_defaults():
+    from game.combat_simulator import build_combat_simulator_defaults
+    from game.planet_evolution.repository import get_context_planet
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+
+    conn = db()
+    try:
+        planet = get_context_planet(user_id, conn=conn)
+        if not planet:
+            return jsonify({"ok": False, "error": "planet_not_found"}), 400
+        spy_report_id = None
+        try:
+            raw_spy = request.args.get("spy_report_id")
+            if raw_spy is not None and str(raw_spy).strip():
+                spy_report_id = int(raw_spy)
+        except (TypeError, ValueError):
+            spy_report_id = None
+        from game.combat_simulator import build_combat_simulator_page_context
+
+        if spy_report_id:
+            page_ctx = build_combat_simulator_page_context(
+                user_id, conn=conn, spy_report_id=spy_report_id
+            )
+            if page_ctx.get("spy_import_error"):
+                return jsonify({"ok": False, "error": page_ctx["spy_import_error"]}), 400
+            defaults = page_ctx.get("defaults") or {}
+            presets = page_ctx.get("presets") or {}
+            return jsonify(
+                {
+                    "ok": True,
+                    "defaults": defaults,
+                    "presets": presets,
+                    "imported_spy": page_ctx.get("imported_spy"),
+                    "spy_report_id": page_ctx.get("spy_report_id"),
+                    "route_labels": page_ctx.get("route_labels"),
+                }
+            )
+        defaults = build_combat_simulator_defaults(user_id, conn=conn)
+        return jsonify({"ok": True, "defaults": defaults})
+    finally:
+        conn.close()
+
+
+@app.route("/api/combat-simulator/spy-reports", methods=["GET"])
+@require_login
+def api_combat_simulator_spy_reports():
+    from game.combat_simulator import list_combat_simulator_spy_reports
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+
+    conn = db()
+    try:
+        payload = list_combat_simulator_spy_reports(user_id, conn=conn)
+        return jsonify({"ok": True, **payload})
+    finally:
+        conn.close()
+
+
+@app.route("/api/combat-simulator/import-spy-report", methods=["POST"])
+@require_login
+def api_combat_simulator_import_spy_report():
+    from game.combat_simulator import import_spy_report_for_simulator
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    try:
+        message_id = int(data.get("message_id") or 0)
+    except (TypeError, ValueError):
+        message_id = 0
+    if message_id <= 0:
+        return jsonify({"ok": False, "error": "invalid_message_id"}), 400
+
+    conn = db()
+    try:
+        imported, err = import_spy_report_for_simulator(user_id, message_id, conn=conn)
+        if err or imported is None:
+            return jsonify({"ok": False, "error": err or "import_failed"}), 400
+        return jsonify({"ok": True, "import": imported})
+    finally:
+        conn.close()
 
 
 @app.route("/api/shipyard/build", methods=["POST"])

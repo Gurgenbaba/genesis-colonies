@@ -379,17 +379,26 @@ def test_calculate_debris_from_ship_losses():
         calculate_combat_debris,
         calculate_debris_from_losses,
     )
+    from game.defense_defs import get_defense
+    from game.fleet_defs import get_ship
+
+    falcon_cost = (get_ship("falcon_interceptor") or {}).get("build_cost") or {}
+    sentinel_cost = (get_defense("sentinel_turret") or {}).get("build_cost") or {}
+    falcon_metal = int(falcon_cost.get("metal") or 0)
+    falcon_crystal = int(falcon_cost.get("crystal") or 0)
+    sentinel_metal = int(sentinel_cost.get("metal") or 0)
+    sentinel_crystal = int(sentinel_cost.get("crystal") or 0)
 
     metal, crystal = calculate_debris_from_losses({"falcon_interceptor": 2})
-    assert metal == int(3000 * 2 * DEBRIS_METAL_FRACTION)
-    assert crystal == int(1000 * 2 * DEBRIS_CRYSTAL_FRACTION)
+    assert metal == int(falcon_metal * 2 * DEBRIS_METAL_FRACTION)
+    assert crystal == int(falcon_crystal * 2 * DEBRIS_CRYSTAL_FRACTION)
 
     m2, c2 = calculate_combat_debris(
         {"falcon_interceptor": 1},
         {"sentinel_turret": 3},
     )
-    assert m2 == int(3000 * DEBRIS_METAL_FRACTION) + int(200 * 3 * DEBRIS_METAL_FRACTION)
-    assert c2 == int(1000 * DEBRIS_CRYSTAL_FRACTION) + int(100 * 3 * DEBRIS_CRYSTAL_FRACTION)
+    assert m2 == int(falcon_metal * DEBRIS_METAL_FRACTION) + int(sentinel_metal * 3 * DEBRIS_METAL_FRACTION)
+    assert c2 == int(falcon_crystal * DEBRIS_CRYSTAL_FRACTION) + int(sentinel_crystal * 3 * DEBRIS_CRYSTAL_FRACTION)
 
 
 def test_build_combat_report_includes_debris_metadata():

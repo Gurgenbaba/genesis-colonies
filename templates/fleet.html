@@ -63,6 +63,7 @@
   <header class="fleet-page-head section-header">
     <div class="section-header-row">
       <h2 class="section-title">{{ T("fleet_title") }}</h2>
+      <a href="{{ url_for('combat_simulator_view') }}" class="gc-btn gc-btn-sm gc-btn-ghost">{{ T("combat_simulator_title", "Kampfsimulator") }}</a>
       {% if CODEX_PRIMARY %}
       {% include "partials/codex_context_btn.html" %}
       {% endif %}

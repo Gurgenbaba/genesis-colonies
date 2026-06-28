@@ -125,6 +125,14 @@ def test_messages_js_format_time_always_includes_date():
     assert "GC.formatLocaleDateTime = formatLocaleDateTime" in main
 
 
+def test_messages_js_spy_battle_lab_button():
+    src = _read("static/js/messages.js")
+    assert "function combatSimulatorSpyHref(messageId)" in src
+    assert "spy_report_battle_lab_btn" in src
+    assert "data-spy-action=\"simulate\"" in src
+    assert "/combat-simulator?spy_report_id=" in src
+
+
 def test_messages_js_spy_report_and_category_label():
     src = _read("static/js/messages.js")
     assert "function categoryLabel(cat)" in src

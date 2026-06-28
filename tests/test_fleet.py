@@ -15,6 +15,23 @@ from game.messages import get_message, list_messages
 from game.models import create_user, ensure_player_and_homeworld, get_planets_by_player, get_research_levels, init_db
 from game.planet_evolution.service import colonize_planet
 
+_username_seq = 0
+
+
+def _policy_safe_username(prefix: str = "flot") -> str:
+    """GC-735 — random hex suffixes can contain blocked tokens (e.g. 1488)."""
+    from game.name_policy import validate_player_name
+
+    global _username_seq
+    for _ in range(128):
+        _username_seq += 1
+        candidate = f"{prefix}{_username_seq:06d}"
+        ok, _ = validate_player_name(candidate)
+        if ok:
+            return candidate
+    raise AssertionError("could not allocate policy-safe username")
+
+
 @pytest.fixture
 def fleet_db(tmp_path, monkeypatch):
     db_path = tmp_path / 'fleet_test.db'
@@ -31,7 +48,7 @@ def _player(conn=None):
     own = conn is None
     if own:
         conn = db()
-    ok, err, user = create_user(f'fleet_user_{uuid.uuid4().hex[:10]}', 'test-pass-123')
+    ok, err, user = create_user(_policy_safe_username("flot"), 'test-pass-123')
     assert ok, err
     uid = int(user['id'])
     ensure_player_and_homeworld(uid, player_name='Admiral', conn=conn)
@@ -111,7 +128,7 @@ def _second_colony(uid: int, conn=None):
 
 def _foreign_planet_standalone():
     """Create a second player in an isolated DB session (avoids SQLite lock with test conn)."""
-    ok, err, user = create_user(f'foreign_{uuid.uuid4().hex[:10]}', 'test-pass-123')
+    ok, err, user = create_user(_policy_safe_username("frgn"), 'test-pass-123')
     assert ok, err
     uid = int(user['id'])
     conn = db()
@@ -125,8 +142,8 @@ def _foreign_planet_standalone():
     return (uid, pid, coords)
 
 def _allied_players_standalone():
-    ok1, err1, u1 = create_user(f'ally_a_{uuid.uuid4().hex[:8]}', 'test-pass-123')
-    ok2, err2, u2 = create_user(f'ally_b_{uuid.uuid4().hex[:8]}', 'test-pass-123')
+    ok1, err1, u1 = create_user(_policy_safe_username("allya"), 'test-pass-123')
+    ok2, err2, u2 = create_user(_policy_safe_username("allyb"), 'test-pass-123')
     assert ok1, err1
     assert ok2, err2
     uid1 = int(u1['id'])
@@ -2831,7 +2848,7 @@ def test_api_fleet_send_persists_movement(fleet_db, monkeypatch):
     app_module.app.config['TESTING'] = True
     app_module.app.config['WTF_CSRF_ENABLED'] = False
     conn = db()
-    uname = f'api_fleet_{uuid.uuid4().hex[:8]}'
+    uname = _policy_safe_username("apif")
     ok, _, user = create_user(uname, 'test-pass-123')
     assert ok
     uid = int(user['id'])
@@ -2906,7 +2923,7 @@ def test_galaxy_fleet_links_have_query_params(fleet_db, monkeypatch):
     import app as app_module
     monkeypatch.setenv('GC_SKIP_MIGRATION_CHECK', '1')
     importlib.reload(app_module)
-    uname = f'gal_fleet_{uuid.uuid4().hex[:8]}'
+    uname = _policy_safe_username("galf")
     ok, _, user = create_user(uname, 'test-pass-123')
     assert ok
     client = app_module.app.test_client()

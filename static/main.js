@@ -1822,6 +1822,7 @@
     if (path.endsWith("/options")) return "options";
     if (path.endsWith("/galaxy")) return "galaxy";
     if (path.endsWith("/techtree")) return "techtree";
+    if (path.endsWith("/combat-simulator")) return "combat_simulator";
     if (path.endsWith("/admin")) return "admin";
     return "other";
   };
@@ -25160,7 +25161,7 @@
       } else {
         banner.innerHTML = `<strong>${tf(
           "galaxy_command_map_colonize_banner",
-          "Wähle eine markierte Welt für deine Seed Ark."
+          "Wähle eine markierte Welt für deine Genesis Ark."
         )}</strong>`;
       }
     }
@@ -26151,6 +26152,14 @@
   }
 
   GC.modules.techtree = initTechtree;
+
+  function initCombatSimulator() {
+    if (typeof GC.initCombatSimulatorPage === "function") {
+      GC.initCombatSimulatorPage();
+    }
+  }
+
+  GC.modules.combat_simulator = initCombatSimulator;
 
   GC.modules.options = function initOptionsModule() {
     if (typeof GC.initOptionsPage === "function") {

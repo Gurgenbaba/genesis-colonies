@@ -272,6 +272,12 @@
     return `/fleet?mission=recycle&target_galaxy=${c.galaxy}&target_system=${c.system}&target_position=${c.position}`;
   }
 
+  function combatSimulatorSpyHref(messageId) {
+    const id = Number(messageId);
+    if (!Number.isFinite(id) || id <= 0) return "";
+    return `/combat-simulator?spy_report_id=${id}`;
+  }
+
   function navigateFleetAttack(coords) {
     const href = fleetAttackHrefFromCoords(coords);
     if (!href) return;
@@ -285,7 +291,15 @@
   function renderSpyReportActionBar(meta, messageId) {
     const coords = meta?.target_coords;
     const attackHref = fleetAttackHrefFromCoords(coords);
+    const simHref = combatSimulatorSpyHref(messageId);
     const parts = [];
+    if (simHref) {
+      parts.push(
+        `<a href="${esc(simHref)}" class="gc-btn gc-btn-primary gc-btn-sm" data-spy-action="simulate" data-gc-nav>${esc(
+          t("spy_report_battle_lab_btn", "Im Battle Lab simulieren")
+        )}</a>`
+      );
+    }
     if (attackHref) {
       parts.push(
         `<a href="${esc(attackHref)}" class="gc-btn gc-btn-danger gc-btn-sm" data-spy-action="attack">${esc(
@@ -2303,6 +2317,19 @@
         return;
       }
 
+      const spySimulate = e.target.closest('[data-spy-action="simulate"]');
+      if (spySimulate) {
+        e.preventDefault();
+        e.stopPropagation();
+        const href = spySimulate.getAttribute("href");
+        if (href && typeof GC.navigateTo === "function") {
+          GC.navigateTo(href);
+        } else if (href) {
+          window.location.href = href;
+        }
+        return;
+      }
+
       const spySimBtn = e.target.closest('[data-spy-action="dev_sim"]');
       if (spySimBtn) {
         e.preventDefault();
@@ -2900,6 +2927,16 @@
         dom.detailActions.appendChild(mkBtn(t(openKey, openFallback), "open_inbox_report", "primary"));
         if (rendered.reportKind === "spy") {
           const meta = msg.metadata || {};
+          const simHref = combatSimulatorSpyHref(msg.id);
+          if (simHref) {
+            const sim = document.createElement("a");
+            sim.href = simHref;
+            sim.className = "gc-btn gc-btn-primary gc-btn-sm";
+            sim.dataset.spyAction = "simulate";
+            sim.dataset.gcNav = "1";
+            sim.textContent = t("spy_report_battle_lab_btn", "Im Battle Lab simulieren");
+            dom.detailActions.appendChild(sim);
+          }
           const attackHref = fleetAttackHrefFromCoords(meta.target_coords);
           if (attackHref) {
             const atk = document.createElement("a");
