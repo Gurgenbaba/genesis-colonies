@@ -386,28 +386,36 @@ def expedition_ship_fleet_value(ship_key: str) -> int:
     return sum(int(costs.get(resource) or 0) for resource in VALID_RESOURCE_KEYS)
 
 
+def expedition_ship_expo_loot_unit(ship_key: str) -> float:
+    """Per expedition hull: build_cost sum ** EXPEDITION_LOOT_EXPONENT (sublinear per hull)."""
+    raw = expedition_ship_fleet_value(ship_key)
+    if raw <= 0:
+        return 0.0
+    return math.pow(raw, EXPEDITION_LOOT_EXPONENT)
+
+
 def calculate_expo_value(ships: Mapping[str, int]) -> int:
-    """Expedition-hull count × build-cost value; combat/cargo escorts do not count."""
+    """Σ count × (per_hull_build_cost ** EXPEDITION_LOOT_EXPONENT); escorts/cargo excluded."""
     from .fleet_defs import canonical_ship_key
 
-    total = 0
+    total = 0.0
     for key, qty in ships.items():
         amount = int(qty or 0)
         if amount <= 0:
             continue
         canon = canonical_ship_key(str(key))
-        per_hull = expedition_ship_fleet_value(canon)
-        if per_hull <= 0:
+        per_hull_expo = expedition_ship_expo_loot_unit(canon)
+        if per_hull_expo <= 0:
             continue
-        total += amount * per_hull
-    return max(0, total)
+        total += amount * per_hull_expo
+    return max(0, int(total))
 
 
 def calculate_base_expedition_loot(expo_value: int) -> float:
-    """Reference base loot before random/event factors: expo_value ** EXPEDITION_LOOT_EXPONENT."""
+    """Reference base loot before random/event factors (expo_value already per-hull exponent sum)."""
     if expo_value <= 0:
         return 0.0
-    return math.pow(max(0, int(expo_value)), EXPEDITION_LOOT_EXPONENT)
+    return float(max(0, int(expo_value)))
 
 
 def _expo_value_for_outcome(
@@ -421,7 +429,7 @@ def _expo_value_for_outcome(
     hulls = max(0, int(expedition_ship_count))
     if hulls <= 0:
         return 0
-    return hulls * expedition_ship_fleet_value("solar_skiff")
+    return int(hulls * expedition_ship_expo_loot_unit("solar_skiff"))
 
 
 def calculate_expedition_combat_value(ships: Mapping[str, int]) -> int:

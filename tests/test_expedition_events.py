@@ -29,6 +29,7 @@ from game.expedition_events import (
 
 _ODYSSEY_KEY = "solar_skiff"
 _ODYSSEY_FLEET_VALUE = expedition_ship_fleet_value(_ODYSSEY_KEY)
+_ODYSSEY_EXPO_UNIT = math.pow(_ODYSSEY_FLEET_VALUE, EXPEDITION_LOOT_EXPONENT)
 _SMALL_FLEET = {_ODYSSEY_KEY: 1}
 _MEDIUM_FLEET = {_ODYSSEY_KEY: 100}
 _LARGE_EXPO_FLEET = {_ODYSSEY_KEY: 1000}
@@ -62,29 +63,40 @@ def test_calculate_fleet_value_uses_ship_scores():
 
 
 def test_expo_value_uses_only_expedition_hulls():
-    assert calculate_expo_value(_SMALL_FLEET) == _ODYSSEY_FLEET_VALUE
-    assert calculate_expo_value(_ESCORT_FLEET) == 10 * _ODYSSEY_FLEET_VALUE
+    assert calculate_expo_value(_SMALL_FLEET) == int(_ODYSSEY_EXPO_UNIT)
+    assert calculate_expo_value({_ODYSSEY_KEY: 10}) == int(10 * _ODYSSEY_EXPO_UNIT)
+    assert calculate_expo_value({_ODYSSEY_KEY: 100}) == int(100 * _ODYSSEY_EXPO_UNIT)
+    assert calculate_expo_value(_ESCORT_FLEET) == int(10 * _ODYSSEY_EXPO_UNIT)
     assert calculate_expo_value({"falcon_interceptor": 1000, "atlas_hauler": 500}) == 0
 
 
 def test_canonical_base_loot_reference_values():
-    """Community reference table without random/event factors."""
+    """Community reference table without random/event factors (exponent per hull, linear in count)."""
     assert _ODYSSEY_FLEET_VALUE == 8750
-    assert calculate_base_expedition_loot(100 * _ODYSSEY_FLEET_VALUE) == pytest.approx(18_978, rel=0.01)
-    assert calculate_base_expedition_loot(200 * _ODYSSEY_FLEET_VALUE) == pytest.approx(31_260, rel=0.01)
-    assert calculate_base_expedition_loot(500 * _ODYSSEY_FLEET_VALUE) == pytest.approx(60_465, rel=0.01)
-    assert calculate_base_expedition_loot(1000 * _ODYSSEY_FLEET_VALUE) == pytest.approx(99_597, rel=0.01)
-    assert calculate_base_expedition_loot(10000 * _ODYSSEY_FLEET_VALUE) == pytest.approx(522_692, rel=0.01)
+    assert calculate_base_expedition_loot(calculate_expo_value({_ODYSSEY_KEY: 1})) == pytest.approx(
+        _ODYSSEY_EXPO_UNIT, rel=0.01
+    )
+    assert calculate_base_expedition_loot(calculate_expo_value({_ODYSSEY_KEY: 10})) == pytest.approx(
+        10 * _ODYSSEY_EXPO_UNIT, rel=0.01
+    )
+    assert calculate_base_expedition_loot(calculate_expo_value({_ODYSSEY_KEY: 100})) == pytest.approx(
+        100 * _ODYSSEY_EXPO_UNIT, rel=0.01
+    )
+    assert calculate_base_expedition_loot(calculate_expo_value({_ODYSSEY_KEY: 1000})) == pytest.approx(
+        1000 * _ODYSSEY_EXPO_UNIT, rel=0.01
+    )
+    assert calculate_base_expedition_loot(calculate_expo_value({_ODYSSEY_KEY: 10000})) == pytest.approx(
+        10000 * _ODYSSEY_EXPO_UNIT, rel=0.01
+    )
 
 
-def test_sublinear_odyssey_scaling():
-    one = calculate_base_expedition_loot(1 * _ODYSSEY_FLEET_VALUE)
-    ten = calculate_base_expedition_loot(10 * _ODYSSEY_FLEET_VALUE)
-    hundred = calculate_base_expedition_loot(100 * _ODYSSEY_FLEET_VALUE)
-    thousand = calculate_base_expedition_loot(1000 * _ODYSSEY_FLEET_VALUE)
-    assert ten > one
-    assert ten < one * 10
-    assert thousand < hundred * 10
+def test_odyssey_loot_linear_in_hull_count_sublinear_per_hull():
+    one = calculate_base_expedition_loot(calculate_expo_value({_ODYSSEY_KEY: 1}))
+    ten = calculate_base_expedition_loot(calculate_expo_value({_ODYSSEY_KEY: 10}))
+    hundred = calculate_base_expedition_loot(calculate_expo_value({_ODYSSEY_KEY: 100}))
+    assert ten == pytest.approx(one * 10, rel=0.001)
+    assert hundred == pytest.approx(one * 100, rel=0.001)
+    assert one < _ODYSSEY_FLEET_VALUE
 
 
 def test_combat_and_cargo_ships_do_not_increase_expo_value():
@@ -236,9 +248,9 @@ def test_event_multiplier_changes_loot_magnitude():
 
 
 def test_fleet_scaling_formula_reference():
-    expo_value = 100 * _ODYSSEY_FLEET_VALUE
-    base_loot = math.pow(expo_value, EXPEDITION_LOOT_EXPONENT)
-    assert base_loot == pytest.approx(18_978, rel=0.01)
+    expo_value = calculate_expo_value({_ODYSSEY_KEY: 100})
+    base_loot = calculate_base_expedition_loot(expo_value)
+    assert base_loot == pytest.approx(100 * _ODYSSEY_EXPO_UNIT, rel=0.01)
     assert EXPEDITION_RANDOM_FACTOR_RANGE == (0.66, 1.5)
 
 

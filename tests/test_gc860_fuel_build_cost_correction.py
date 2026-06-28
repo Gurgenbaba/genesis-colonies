@@ -6,7 +6,11 @@ import pytest
 
 from game.defense import max_build_amount_for_planet
 from game.defense_defs import ACTIVE_DEFENSE_KEYS, DEFENSES, unit_build_cost
-from game.expedition_events import calculate_base_expedition_loot, expedition_ship_fleet_value
+from game.expedition_events import (
+    calculate_base_expedition_loot,
+    calculate_expo_value,
+    expedition_ship_fleet_value,
+)
 from game.fleet_defs import ACTIVE_SHIP_KEYS, SHIPS, get_ship
 from game.queue_refund import refund_from_stored_costs
 from game.ship_detail import build_ship_detail_card
@@ -24,9 +28,9 @@ UNCHANGED_EARLY_SHIP_COSTS = {
 }
 
 ODYSSEY_EXPO_BASE_LOOT = {
-    100: 18_978,
-    1_000: 99_597,
-    10_000: 522_692,
+    100: 68_904,
+    1_000: 689_042,
+    10_000: 6_890_422,
 }
 
 HIGH_TIER_SHIP_FUEL = {
@@ -65,7 +69,7 @@ def test_odyssey_expo_value_without_fuel_component():
 
 @pytest.mark.parametrize("hull_count,expected_loot", list(ODYSSEY_EXPO_BASE_LOOT.items()))
 def test_odyssey_expo_base_loot_frozen(hull_count: int, expected_loot: int):
-    expo_value = hull_count * ODYSSEY_EXPO_VALUE
+    expo_value = calculate_expo_value({"solar_skiff": hull_count})
     assert calculate_base_expedition_loot(expo_value) == pytest.approx(expected_loot, rel=0.01)
 
 

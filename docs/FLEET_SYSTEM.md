@@ -169,8 +169,9 @@ Nur Schiffe mit `role: expedition` zählen (Phase 1: **Odyssey** = `solar_skiff`
 
 ```text
 per_hull_value = Summe(build_cost)   # metal + crystal + fuel_cells aus fleet_defs
-expo_value     = Σ (expo_hull_count × per_hull_value)
-base_loot      = expo_value ** 0.72
+per_hull_expo  = per_hull_value ** 0.72
+expo_value     = Σ (expo_hull_count × per_hull_expo)
+base_loot      = expo_value
 final_loot     = min(base_loot × random_factor × profile_mult × event_factor, cargo_capacity)
 ```
 
@@ -181,7 +182,7 @@ final_loot     = min(base_loot × random_factor × profile_mult × event_factor,
 | `event_factor` | Default `1.0` | Vorbereitet für globale Events (`directive_flags.expedition_event_factor`) |
 | `cargo_capacity` | `calculate_expedition_loot_cap(ships)` | Summe `cargo` von Expo-Hüllen + Frachtern (`role: cargo`) |
 
-Referenzwerte (Odyssey, ohne Random/Event): 100 ≈ 18 978 · 200 ≈ 31 260 · 500 ≈ 60 465 · 1 000 ≈ 99 597 · 10 000 ≈ 522 692 Loot-Ressourcen gesamt (vor Split auf metal/crystal/fuel_cells).
+Referenzwerte (Odyssey, ohne Random/Event; Exponent pro Hülle, linear in Anzahl): 1 ≈ 689 · 10 ≈ 6 890 · 100 ≈ 68 904 · 1 000 ≈ 689 042 · 10 000 ≈ 6 890 422 Loot-Ressourcen gesamt (vor Split auf metal/crystal/fuel_cells).
 
 Weitere Expo-Schiffe (z. B. `eclipse_runner`) werden automatisch über `role: expedition` + `build_cost` in `expo_value` einbezogen.
 
