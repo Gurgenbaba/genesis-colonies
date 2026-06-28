@@ -37,9 +37,10 @@ QUEUE_PAGES = {
     },
     "planet_evolution": {
         "template": "templates/planet_evolution.html",
-        "compact_ids": ["pe-planet-tech-queue-compact", "pe-ascension-queue-compact"],
+        "queue_list_ids": ["pe-planet-tech-queue-list", "pe-ascension-queue-list"],
         "card_attrs": ["data-planet-tech-card", "data-ascension-card"],
         "card_queue": "pe_card_queue_block",
+        "skip_compact": True,
     },
     "defense": {
         "template": "templates/defense.html",
@@ -84,6 +85,11 @@ def test_all_queue_pages_have_compact_status():
     assert "data-page-queue-compact-body" in macro
     for page, cfg in QUEUE_PAGES.items():
         html = _read(cfg["template"])
+        if cfg.get("queue_list_ids"):
+            for list_id in cfg["queue_list_ids"]:
+                assert list_id in html, f"{page}: missing queue list #{list_id}"
+            assert "gc-card-queue-list" in html, f"{page}: missing gc-card-queue-list"
+            continue
         compact_ids = cfg.get("compact_ids") or ([cfg["compact_id"]] if cfg.get("compact_id") else [])
         if cfg.get("skip_compact") or not compact_ids:
             assert "render_page_queue_compact" in html, f"{page}: missing render_page_queue_compact"
@@ -214,8 +220,8 @@ def test_style_unified_queue_compact_and_reduced_motion():
 
 def test_style_card_queue_mobile_safe():
     css = _read("static/style.css")
-    idx = css.find("\n.gc-card-queue-block{")
-    assert idx >= 0, "standalone .gc-card-queue-block rule missing"
+    idx = css.find("\n.gc-card-queue-block:not(.gc-bld-hero-queue){")
+    assert idx >= 0, "compact .gc-card-queue-block rule missing"
     block = css[idx : idx + 500]
     assert "max-width: 100%" in block
     assert "min-width: 0" in block
@@ -229,6 +235,8 @@ def test_queue_engine_unchanged():
 def test_planet_evolution_merges_queue_cards_into_visible_list():
     html = _read("templates/planet_evolution.html")
     assert "pe_visible_tech_cards" in html
+    assert "rdx.recommended" in html
+    assert "pe-planet-tech-queue-list" in html
     assert "rdx.queue_cards" in html
     assert "pe-research-queue-cards" not in html
 

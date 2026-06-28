@@ -136,11 +136,13 @@ def test_planet_evolution_template_card_queue_markers():
     assert "data-tech-key" in html
     assert "data-ascension-card" in html
     assert "data-ascension-key" in html
-    assert "pe-planet-tech-queue-compact" in html
+    assert "pe-planet-tech-queue-list" in html
     assert "pe-planet-tech-queue-compact-count" in html
-    assert "pe-ascension-queue-compact" in html
+    assert "pe-planet-tech-queue-compact-label" in html
+    assert "pe-ascension-queue-list" in html
+    assert "pe-ascension-queue-compact-label" in html
     assert "gc-card-queue-block" in html
-    assert "gc-queue-compact" in html
+    assert "gc-card-queue-list" in html
     assert 'id="pe-research-queue"' not in html
     assert "pe-research-queue-cards" not in html
     assert "pe_research_job(" not in html

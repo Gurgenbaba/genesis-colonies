@@ -7099,7 +7099,11 @@
     }
 
     const slot = cardEl.querySelector(".gc-bld-card-queue-slot");
-    if (slot) {
+    const isQueueListHost =
+      cardEl.classList.contains("gc-card-queue-list") || cardEl.dataset.peQueueList !== undefined;
+    if (isQueueListHost) {
+      cardEl.appendChild(block);
+    } else if (slot) {
       slot.appendChild(block);
     } else {
       const anchor = cardEl.querySelector(".gc-bld-card-meta, .gc-prog-main");
@@ -7107,7 +7111,9 @@
       else cardEl.appendChild(block);
     }
 
-    syncCardQueueOwnerClassesFromBlocks(cardEl, domain);
+    if (!isQueueListHost) {
+      syncCardQueueOwnerClassesFromBlocks(cardEl, domain);
+    }
     return block;
   };
 
@@ -8001,56 +8007,99 @@
     );
   }
 
+  function _collectPeQueueJobsFromOwnerMap(rdx) {
+    const byOwner = resolveCardJobsByOwner(rdx) || {};
+    const jobs = [];
+    Object.values(byOwner).forEach((rows) => {
+      if (!Array.isArray(rows)) return;
+      rows.forEach((job) => {
+        if (job && typeof job === "object") jobs.push(job);
+      });
+    });
+    jobs.sort((a, b) => {
+      const pa = Math.floor(Number(a.queue_position || 0));
+      const pb = Math.floor(Number(b.queue_position || 0));
+      if (pa !== pb) return pa - pb;
+      return Math.floor(Number(a.job_id || 0)) - Math.floor(Number(b.job_id || 0));
+    });
+    return jobs;
+  }
+
+  function _renderPeQueueList(listEl, rdx) {
+    if (!listEl) return;
+    const jobs = _collectPeQueueJobsFromOwnerMap(rdx);
+    const activeIds = new Set(
+      jobs.map((job) => String(Math.floor(Number(job.job_id || 0)))).filter((id) => id !== "0")
+    );
+    listEl.querySelectorAll("[data-gc-card-queue]").forEach((block) => {
+      const blockId = block.dataset.jobId || "";
+      if (!activeIds.has(blockId)) block.remove();
+    });
+    if (!jobs.length) {
+      listEl.hidden = true;
+      return;
+    }
+    listEl.hidden = false;
+    jobs.forEach((job) => {
+      const jobId = Math.floor(Number(job.job_id || 0));
+      const sig = cardQueueJobSignature(job);
+      let block =
+        jobId > 0 ? listEl.querySelector(`[data-gc-card-queue][data-job-id="${jobId}"]`) : null;
+      if (block && canPatchCardQueueInPlace(block, job)) {
+        block.dataset.queueSig = sig;
+        if (String(block.dataset.queueZeroFiredFor || "").split(":")[0] !== String(jobId)) {
+          delete block.dataset.queueZeroFiredFor;
+        }
+        patchCardQueueBlockInPlace(block, listEl, job);
+        return;
+      }
+      if (block) block.remove();
+      GC.renderCardQueueBlock(listEl, job);
+    });
+  }
+
   function patchPePlanetTechCardQueues(rdx) {
     const page = document.querySelector(".planet-evolution-page");
     if (!page) return;
-    patchCardQueuesFromOwnerMap(
-      page,
-      resolveCardJobsByOwner(rdx),
-      (root) => root.querySelectorAll("[data-planet-tech-card]"),
-      (card) => card.getAttribute("data-tech-key") || "",
-      (root, techKey) => root.querySelector(`[data-tech-key="${techKey}"][data-planet-tech-card]`)
-    );
+    _renderPeQueueList(document.getElementById("pe-planet-tech-queue-list"), rdx);
+    page.querySelectorAll("[data-planet-tech-card] [data-gc-card-queue]").forEach((block) => block.remove());
   }
 
   function patchPeAscensionCardQueues(asc) {
     const page = document.querySelector(".planet-evolution-page");
     if (!page) return;
-    patchCardQueuesFromOwnerMap(
-      page,
-      resolveCardJobsByOwner(asc),
-      (root) => root.querySelectorAll("[data-ascension-card]"),
-      (card) => card.getAttribute("data-ascension-key") || "",
-      (root, ascKey) => root.querySelector(`[data-ascension-key="${ascKey}"][data-ascension-card]`)
-    );
+    _renderPeQueueList(document.getElementById("pe-ascension-queue-list"), asc);
+    page.querySelectorAll("[data-ascension-card] [data-gc-card-queue]").forEach((block) => block.remove());
   }
 
   function applyPeResearchCardQueueJobs(cards) {
-    if (!Array.isArray(cards)) return;
-    const page = document.querySelector(".planet-evolution-page");
-    if (!page) return;
-    cards.forEach((tech) => {
-      const card = page.querySelector(`[data-tech-key="${tech.tech_key}"][data-planet-tech-card]`);
-      if (!card) return;
-      if (tech.queue_job) GC.renderCardQueueBlock(card, tech.queue_job);
-      else GC.clearCardQueueBlock(card);
-    });
+    const listEl = document.getElementById("pe-planet-tech-queue-list");
+    if (!listEl) return;
+    listEl.querySelectorAll("[data-gc-card-queue]").forEach((block) => block.remove());
+    const queued = (cards || []).filter((row) => row && row.queue_job);
+    if (!queued.length) {
+      listEl.hidden = true;
+      return;
+    }
+    listEl.hidden = false;
+    queued.forEach((row) => GC.renderCardQueueBlock(listEl, row.queue_job));
   }
 
   function applyPeAscensionCardQueueJobs(cards) {
-    if (!Array.isArray(cards)) return;
-    const page = document.querySelector(".planet-evolution-page");
-    if (!page) return;
-    cards.forEach((row) => {
-      const card = page.querySelector(`[data-ascension-key="${row.ascension_key}"][data-ascension-card]`);
-      if (!card) return;
-      if (row.queue_job) GC.renderCardQueueBlock(card, row.queue_job);
-      else GC.clearCardQueueBlock(card);
-    });
+    const listEl = document.getElementById("pe-ascension-queue-list");
+    if (!listEl) return;
+    listEl.querySelectorAll("[data-gc-card-queue]").forEach((block) => block.remove());
+    const queued = (cards || []).filter((row) => row && row.queue_job);
+    if (!queued.length) {
+      listEl.hidden = true;
+      return;
+    }
+    listEl.hidden = false;
+    queued.forEach((row) => GC.renderCardQueueBlock(listEl, row.queue_job));
   }
 
   function renderPePlanetTechQueue(rdx) {
-    if (!document.getElementById("pe-planet-tech-queue-compact")) return;
+    if (!document.getElementById("pe-planet-tech-queue-compact-count")) return;
     const data = rdx || { queue_count: 0, card_jobs_by_owner: {}, queue_limit: 2 };
     const count = data.queue_count ?? 0;
     const limit = data.queue_limit ?? 2;
@@ -8063,11 +8112,11 @@
     _lastPePlanetTechQueueSignature = sig;
     _updatePePlanetTechQueueCompact(count, limit);
     patchPePlanetTechCardQueues(data);
-    applyPeResearchCardQueueJobs([...(data.queue_cards || []), ...(data.recommended || [])]);
+    applyPeResearchCardQueueJobs(data.queue_cards || []);
   }
 
   function renderPeAscensionQueue(asc) {
-    if (!document.getElementById("pe-ascension-queue-compact")) return;
+    if (!document.getElementById("pe-ascension-queue-compact-label")) return;
     const data = asc || { summary: { count: 0 }, card_jobs_by_owner: {}, ascensions: [] };
     const count = data.summary?.count ?? data.queue?.length ?? 0;
     const sig = _peAscensionQueueSignature(data);
@@ -20797,14 +20846,77 @@
       openPeExpansionDrawer(drawer.hidden);
     };
 
+    let peChroniclePopover = null;
+    let peChronicleActiveTrigger = null;
+
+    const setPeChronicleExpanded = (expanded) => {
+      document.querySelectorAll(".pe-goal-chronicle-toggle").forEach((el) => {
+        el.setAttribute("aria-expanded", expanded ? "true" : "false");
+      });
+    };
+
+    const closePeChroniclePopover = () => {
+      if (peChroniclePopover) {
+        peChroniclePopover.remove();
+        peChroniclePopover = null;
+      }
+      peChronicleActiveTrigger = null;
+      setPeChronicleExpanded(false);
+    };
+
+    const positionPeChroniclePopover = (pop, trigger) => {
+      const margin = 8;
+      pop.style.visibility = "hidden";
+      pop.style.display = "block";
+      const rect = trigger.getBoundingClientRect();
+      const popRect = pop.getBoundingClientRect();
+      let left = rect.left + rect.width / 2 - popRect.width / 2;
+      left = Math.max(margin, Math.min(left, window.innerWidth - popRect.width - margin));
+      let top = rect.bottom + margin;
+      if (top + popRect.height > window.innerHeight - margin) {
+        top = Math.max(margin, rect.top - popRect.height - margin);
+      }
+      pop.style.left = `${left}px`;
+      pop.style.top = `${top}px`;
+      pop.style.visibility = "visible";
+    };
+
+    const openPeChroniclePopover = (trigger) => {
+      const root = document.querySelector(".planet-evolution-page");
+      if (!root || !trigger || !root.contains(trigger)) return;
+      const source = document.getElementById("pe-chronicle-popover-source");
+      if (!source) return;
+      if (peChronicleActiveTrigger === trigger && peChroniclePopover) {
+        closePeChroniclePopover();
+        return;
+      }
+      closePeChroniclePopover();
+
+      const pop = document.createElement("div");
+      pop.id = "pe-chronicle-popover-layer";
+      pop.className = "pe-chronicle-popover gc-popover-layer";
+      pop.setAttribute("role", "dialog");
+      pop.innerHTML = source.innerHTML;
+      document.body.appendChild(pop);
+      positionPeChroniclePopover(pop, trigger);
+
+      peChroniclePopover = pop;
+      peChronicleActiveTrigger = trigger;
+      setPeChronicleExpanded(true);
+    };
+
+    GC.closePeChroniclePopover = closePeChroniclePopover;
+
     const openPeSection = (sectionId) => {
+      if (sectionId === "pe-section-history") {
+        const toggle = document.querySelector(".pe-goal-chronicle-toggle");
+        if (toggle) openPeChroniclePopover(toggle);
+        return;
+      }
       const section = document.getElementById(sectionId);
       if (section && section.tagName === "DETAILS") section.open = true;
       if (sectionId === "pe-section-expansion-gate" || sectionId === "pe-section-establishment") {
         openPeExpansionDrawer(true);
-      }
-      if (sectionId === "pe-section-history" && section && section.tagName === "DETAILS") {
-        section.open = true;
       }
     };
 
@@ -20883,6 +20995,20 @@
         e.preventDefault();
         togglePeExpansionDrawer();
         return;
+      }
+
+      const chronicleToggle = e.target.closest(".pe-goal-chronicle-toggle");
+      if (chronicleToggle && root.contains(chronicleToggle)) {
+        e.preventDefault();
+        e.stopPropagation();
+        openPeChroniclePopover(chronicleToggle);
+        return;
+      }
+
+      if (peChroniclePopover
+        && !e.target.closest("#pe-chronicle-popover-layer")
+        && !e.target.closest(".pe-goal-chronicle-toggle")) {
+        closePeChroniclePopover();
       }
 
       const scrollBtn = e.target.closest(".pe-scroll-btn");
@@ -21011,6 +21137,13 @@
       }
 
     });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape" || !peChroniclePopover) return;
+      closePeChroniclePopover();
+    });
+    window.addEventListener("resize", closePeChroniclePopover);
+    window.addEventListener("scroll", closePeChroniclePopover, true);
   }
 
   function normalizePopoverTriggers(root = document) {
@@ -21328,6 +21461,7 @@
           el.setAttribute("aria-expanded", "false");
           el.classList.remove("is-open");
         });
+        if (typeof GC.closePeChroniclePopover === "function") GC.closePeChroniclePopover();
       });
     }
   }

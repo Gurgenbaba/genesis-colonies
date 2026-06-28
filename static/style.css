@@ -8810,14 +8810,14 @@ a.gc-bld-head-action-btn--go:focus-visible{
 
 .gc-bld-card-queue-zone{
   flex-shrink: 0;
-  min-height: 76px;
+  min-height: 0;
   margin-top: auto;
-  padding: 2px 0 8px;
+  padding: 2px 0 4px;
   box-sizing: border-box;
 }
 
 .gc-bld-card-queue-slot{
-  min-height: 72px;
+  min-height: 0;
   padding: 0 9px;
   box-sizing: border-box;
 }
@@ -9001,25 +9001,39 @@ a.gc-bld-head-action-btn--go:focus-visible{
   white-space: nowrap;
 }
 
-/* GC-QUEUE-MINI-CARDS — one row, up to 5 jobs, readable cards, no horizontal scroll */
+/* GC-QUEUE-MINI-CARDS — compact horizontal jobs, vertical scroll when needed */
 .gc-mini-queue-host{
   display: block;
   padding: 4px 10px 6px;
   min-width: 0;
   max-width: 100%;
+  max-height: 220px;
   overflow-x: clip;
+  overflow-y: auto;
+  box-sizing: border-box;
   border-bottom: 1px solid rgba(70, 229, 255, 0.06);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(70, 229, 255, 0.28) transparent;
+}
+
+.gc-mini-queue-host::-webkit-scrollbar{
+  width: 5px;
+}
+
+.gc-mini-queue-host::-webkit-scrollbar-thumb{
+  border-radius: 999px;
+  background: rgba(70, 229, 255, 0.28);
 }
 
 .gc-mini-queue-strip{
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   flex-wrap: nowrap;
   align-items: stretch;
-  gap: 6px;
+  gap: 4px;
   width: 100%;
   min-width: 0;
-  min-height: 44px;
+  min-height: 0;
   overflow-x: clip;
 }
 
@@ -9047,27 +9061,28 @@ a.gc-bld-head-action-btn--go:focus-visible{
 .gc-mini-queue-card{
   position: relative;
   display: grid;
-  grid-template-columns: clamp(30px, 7vw, 40px) minmax(0, 1fr) auto;
+  grid-template-columns: 28px minmax(0, 1fr) auto auto;
   grid-template-rows: auto auto;
   align-items: center;
-  gap: 3px 8px;
-  flex: 1 1 0%;
-  width: 0;
+  gap: 2px 6px;
+  flex: 0 0 auto;
+  width: 100%;
   min-width: 0;
-  max-width: none;
-  padding: 5px 6px;
+  max-width: 100%;
+  padding: 4px 5px;
   border: 1px solid rgba(70, 229, 255, 0.18);
-  border-radius: 2px;
+  border-radius: var(--gc-radius-xs);
   background: linear-gradient(135deg, rgba(8, 16, 36, 0.92), rgba(6, 12, 28, 0.88));
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2) inset;
+  box-sizing: border-box;
 }
 
 .gc-mini-queue-card__image{
   grid-column: 1;
   grid-row: 1;
   align-self: center;
-  width: clamp(30px, 7vw, 40px);
-  height: clamp(30px, 7vw, 40px);
+  width: 28px;
+  height: 28px;
   object-fit: contain;
   object-position: center;
   border-radius: 3px;
@@ -9095,7 +9110,7 @@ a.gc-bld-head-action-btn--go:focus-visible{
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: clamp(0.58rem, 1.55vw, 0.68rem);
+  font-size: 0.68rem;
   font-weight: 600;
   color: var(--gc-text);
   line-height: 1.15;
@@ -9173,7 +9188,7 @@ a.gc-bld-head-action-btn--go:focus-visible{
 }
 
 .gc-mini-queue-card__timer{
-  font-size: clamp(0.56rem, 1.45vw, 0.64rem);
+  font-size: 0.66rem;
   color: var(--gc-primary-2);
   white-space: nowrap;
   line-height: 1.1;
@@ -9219,8 +9234,8 @@ a.gc-bld-head-action-btn--go:focus-visible{
 .gc-mini-queue-card__progress{
   grid-column: 1 / -1;
   grid-row: 2;
-  height: 2px;
-  margin-top: 2px;
+  height: 3px;
+  margin-top: 1px;
   background: rgba(70, 229, 255, 0.08);
   border-radius: 1px;
   overflow: hidden;
@@ -9253,17 +9268,47 @@ a.gc-bld-head-action-btn--go:focus-visible{
   border-color: rgba(127, 255, 217, 0.32);
 }
 
-.gc-card-queue-block{
+.gc-card-queue-list{
   display: flex;
   flex-direction: column;
   gap: 4px;
-  margin: 6px 0 4px;
-  padding: 8px 10px;
-  border: 1px solid rgba(70, 229, 255, 0.18);
-  border-radius: 0;
-  background:
-    linear-gradient(135deg, rgba(8, 16, 36, 0.92), rgba(6, 12, 28, 0.88));
-  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+  min-width: 0;
+  max-width: 100%;
+  max-height: 220px;
+  margin-bottom: 0.45rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(70, 229, 255, 0.28) transparent;
+}
+
+.gc-card-queue-list::-webkit-scrollbar{
+  width: 5px;
+}
+
+.gc-card-queue-list::-webkit-scrollbar-thumb{
+  border-radius: 999px;
+  background: rgba(70, 229, 255, 0.28);
+}
+
+.gc-card-queue-list[hidden]{
+  display: none !important;
+}
+
+.gc-card-queue-block:not(.gc-bld-hero-queue){
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto auto auto;
+  gap: 1px 6px;
+  align-items: center;
+  margin: 0;
+  padding: 5px 7px;
+  border: 1px solid rgba(70, 229, 255, 0.16);
+  border-radius: var(--gc-radius-xs);
+  background: linear-gradient(135deg, rgba(8, 16, 36, 0.92), rgba(6, 12, 28, 0.88));
+  clip-path: none;
+  box-sizing: border-box;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
@@ -9292,12 +9337,15 @@ a.gc-bld-head-action-btn--go:focus-visible{
 .gc-card-queue-head{
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
 }
 
 .gc-card-queue-glyph{
-  width: 14px;
-  height: 14px;
+  width: 10px;
+  height: 10px;
   flex-shrink: 0;
   border: 1px solid rgba(127, 255, 217, 0.45);
   background: rgba(70, 229, 255, 0.08);
@@ -9316,31 +9364,63 @@ a.gc-bld-head-action-btn--go:focus-visible{
 }
 
 .gc-card-queue-status{
-  font-size: 0.68rem;
+  font-size: 0.58rem;
   font-weight: 800;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--gc-primary-2);
+  white-space: nowrap;
 }
 
-.gc-card-queue-level{
-  font-size: 0.76rem;
+.gc-card-queue-target,
+.gc-card-queue-quantity{
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--gc-text);
+}
+
+.gc-card-queue-level,
+.gc-card-queue-phase{
+  grid-column: 1 / 3;
+  grid-row: 2;
+  font-size: 0.64rem;
   color: var(--gc-text-dim);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gc-card-queue-block:not(.gc-bld-hero-queue):not(:has(.gc-card-queue-target)):not(:has(.gc-card-queue-quantity)) .gc-card-queue-level,
+.gc-card-queue-block:not(.gc-bld-hero-queue):not(:has(.gc-card-queue-target)):not(:has(.gc-card-queue-quantity)) .gc-card-queue-phase{
+  grid-column: 2;
+  grid-row: 1;
 }
 
 .gc-card-queue-timer{
-  font-size: 0.88rem;
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+  font-size: 0.72rem;
   font-weight: 700;
   color: var(--gc-text);
   min-width: 0;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
 .gc-card-queue-bar{
   position: relative;
-  height: 6px;
-  margin-top: 2px;
-  border: 1px solid rgba(120, 190, 255, 0.16);
+  grid-column: 1 / -1;
+  grid-row: 3;
+  height: 3px;
+  margin-top: 1px;
+  border: 1px solid rgba(120, 190, 255, 0.12);
   background: rgba(4, 10, 22, 0.85);
   overflow: hidden;
 }
@@ -9371,8 +9451,14 @@ a.gc-bld-head-action-btn--go:focus-visible{
 }
 
 .gc-card-queue-cancel{
-  align-self: flex-start;
-  margin-top: 2px;
+  grid-column: 4;
+  grid-row: 1;
+  align-self: center;
+  justify-self: end;
+  max-width: 100%;
+  padding: 0.12rem 0.35rem;
+  font-size: 0.62rem;
+  line-height: 1.1;
 }
 
 /* GC-536C — research card queue accents */
@@ -9638,8 +9724,51 @@ a.gc-bld-head-action-btn--go:focus-visible{
 }
 
 .gc-card-queue-phase{
-  font-size: 0.76rem;
+  font-size: 0.64rem;
   color: var(--gc-text-dim);
+}
+
+@media (max-width: 720px){
+  .gc-card-queue-block:not(.gc-bld-hero-queue){
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto auto auto auto;
+  }
+
+  .gc-card-queue-timer{
+    grid-column: 2 / -1;
+    grid-row: 2;
+    justify-self: start;
+  }
+
+  .gc-card-queue-level,
+  .gc-card-queue-phase{
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+
+  .gc-card-queue-block:not(.gc-bld-hero-queue):not(:has(.gc-card-queue-target)):not(:has(.gc-card-queue-quantity)) .gc-card-queue-level,
+  .gc-card-queue-block:not(.gc-bld-hero-queue):not(:has(.gc-card-queue-target)):not(:has(.gc-card-queue-quantity)) .gc-card-queue-phase{
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .gc-card-queue-cancel{
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .gc-card-queue-bar{
+    grid-row: 4;
+  }
+
+  .gc-mini-queue-card{
+    grid-template-columns: 24px minmax(0, 1fr) auto auto;
+  }
+
+  .gc-mini-queue-card__image{
+    width: 24px;
+    height: 24px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce){
@@ -23575,10 +23704,22 @@ body.gc-combat-report-open { overflow: hidden; }
 }
 .planet-evolution-page .pe-zone-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.85rem;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+.planet-evolution-page .pe-zone-head-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  min-width: 0;
+}
+.planet-evolution-page .pe-zone-subline {
+  margin: 0;
+  font-size: 0.68rem;
+  line-height: 1.35;
+  color: var(--gc-text-dim);
 }
 .planet-evolution-page .pe-zone-title {
   margin: 0;
@@ -24219,44 +24360,39 @@ button.pe-hero-planet-hint:focus-visible {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(14rem, 0.85fr);
   gap: 0.65rem;
-  align-items: stretch;
+  align-items: start;
   min-width: 0;
 }
 .planet-evolution-page .pe-zone--tech,
 .planet-evolution-page .pe-zone--goal {
   padding: 0.65rem 0.75rem;
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+}
+.planet-evolution-page .pe-zone--tech {
   display: flex;
   flex-direction: column;
 }
+.planet-evolution-page .pe-zone--goal {
+  display: block;
+  align-self: start;
+  position: relative;
+}
 .planet-evolution-page .pe-zone--tech .pe-zone-head,
 .planet-evolution-page .pe-zone--goal .pe-zone-head {
-  margin-bottom: 0.45rem;
+  margin-bottom: 0.35rem;
 }
 .planet-evolution-page .pe-zone--tech {
   min-height: 0;
-}
-.planet-evolution-page .pe-tech-queue-banner {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-bottom: 0.45rem;
-  padding: 0.3rem 0.45rem;
-  border-radius: var(--gc-radius-sm);
-  border: 1px solid rgba(180, 140, 255, 0.25);
-  background: rgba(180, 140, 255, 0.08);
-  font-size: 0.82rem;
+  overflow: hidden;
 }
 .planet-evolution-page .pe-tech-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.45rem;
-  max-height: min(15rem, 34vh);
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding-right: 0.2rem;
-  flex: 1 1 auto;
-  min-height: 0;
-  scroll-padding: 0.35rem;
+  grid-template-columns: 1fr;
+  gap: 0.35rem;
+  min-width: 0;
+  max-width: 100%;
 }
 .planet-evolution-page .pe-tech-card {
   position: relative;
@@ -24319,9 +24455,23 @@ button.pe-hero-planet-hint:focus-visible {
 }
 .planet-evolution-page .pe-tech-card-action .gc-btn {
   width: 100%;
+  max-width: 100%;
   padding-top: 0.28rem;
   padding-bottom: 0.28rem;
   font-size: 0.74rem;
+}
+.planet-evolution-page .pe-research-later {
+  margin-top: 0.35rem;
+  font-size: 0.72rem;
+}
+.planet-evolution-page .pe-research-later > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 0.2rem 0;
+  color: var(--gc-text-dim);
+}
+.planet-evolution-page .pe-research-later > summary::-webkit-details-marker {
+  display: none;
 }
 
 /* Featured next goal */
@@ -24345,8 +24495,8 @@ button.pe-hero-planet-hint:focus-visible {
 }
 .planet-evolution-page .pe-goal-body {
   position: relative;
-  margin-bottom: 0.55rem;
-  flex: 1 1 auto;
+  margin-bottom: 0.3rem;
+  min-width: 0;
 }
 .planet-evolution-page .pe-goal-kicker {
   margin: 0 0 0.25rem;
@@ -24366,7 +24516,8 @@ button.pe-hero-planet-hint:focus-visible {
 }
 .planet-evolution-page .pe-goal-cta {
   width: 100%;
-  margin-top: auto;
+  max-width: 100%;
+  margin-top: 0.3rem;
   font-size: 0.82rem;
   box-shadow: 0 0 14px rgba(255, 196, 86, 0.16);
 }
@@ -24402,19 +24553,172 @@ button.pe-hero-planet-hint:focus-visible {
   min-width: 4.5rem;
 }
 .planet-evolution-page .pe-goal-chronicle {
-  margin-top: 0.35rem;
-  font-size: 0.68rem;
+  margin-top: 0.28rem;
+  min-width: 0;
 }
-.planet-evolution-page .pe-goal-chronicle > summary {
+.planet-evolution-page .pe-goal-chronicle-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.28rem;
+  min-width: 0;
+}
+.planet-evolution-page .pe-goal-chronicle-chip,
+.planet-evolution-page .pe-goal-chronicle-more-chip {
+  appearance: none;
+  border: 1px solid rgba(120, 190, 255, 0.16);
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--gc-text-dim);
   cursor: pointer;
+  font: inherit;
+  line-height: 1.2;
+  max-width: 100%;
+}
+.planet-evolution-page .pe-goal-chronicle-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.12rem 0.38rem;
+  border-radius: var(--gc-radius-pill);
+  font-size: 0.64rem;
+  font-weight: 600;
+}
+.planet-evolution-page .pe-goal-chronicle-more-chip {
+  padding: 0.1rem 0.32rem;
+  border-radius: var(--gc-radius-pill);
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: var(--gc-primary-2);
+  border-color: rgba(70, 229, 255, 0.22);
+  background: rgba(70, 229, 255, 0.08);
+}
+.planet-evolution-page .pe-goal-chronicle-chip:hover,
+.planet-evolution-page .pe-goal-chronicle-chip:focus-visible,
+.planet-evolution-page .pe-goal-chronicle-more-chip:hover,
+.planet-evolution-page .pe-goal-chronicle-more-chip:focus-visible {
+  border-color: rgba(70, 229, 255, 0.35);
+  color: var(--gc-text-soft);
+}
+.planet-evolution-page .pe-goal-chronicle-chip[aria-expanded="true"],
+.planet-evolution-page .pe-goal-chronicle-more-chip[aria-expanded="true"] {
+  border-color: rgba(255, 196, 86, 0.4);
+  color: rgba(255, 230, 180, 0.92);
+  background: rgba(255, 196, 86, 0.1);
+}
+.planet-evolution-page .pe-goal-chronicle-last-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.28rem;
+  margin: 0.22rem 0 0;
+  min-width: 0;
+  font-size: 0.66rem;
+  line-height: 1.35;
+  color: var(--gc-text-soft);
+}
+.planet-evolution-page .pe-goal-chronicle-last-label {
+  flex: 0 0 auto;
+  color: var(--gc-text-dim);
+  white-space: nowrap;
+}
+.planet-evolution-page .pe-goal-chronicle-last-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pe-chronicle-popover.gc-popover-layer {
+  position: fixed;
+  z-index: var(--gc-z-popover, 12050);
+  box-sizing: border-box;
+  max-width: min(320px, calc(100vw - 16px));
+  max-height: min(280px, calc(100vh - 24px));
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid rgba(120, 190, 255, 0.22);
+  border-radius: var(--gc-radius-sm);
+  background: rgba(8, 16, 32, 0.98);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(70, 229, 255, 0.22) transparent;
+}
+.pe-chronicle-popover .pe-chronicle-popover-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gc-text-dim);
+}
+.pe-chronicle-popover .pe-chronicle-timeline-text {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+.planet-evolution-page .pe-chronicle-timeline {
   list-style: none;
-  opacity: 0.78;
+  margin: 0;
+  padding: 0 0 0 0.55rem;
+  min-width: 0;
 }
-.planet-evolution-page .pe-goal-chronicle > summary::-webkit-details-marker {
-  display: none;
+.planet-evolution-page .pe-chronicle-timeline-item {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  padding: 0.12rem 0 0.12rem 0.5rem;
+  min-width: 0;
 }
-.planet-evolution-page .pe-goal-chronicle .pe-timeline {
-  margin-top: 0.35rem;
+.planet-evolution-page .pe-chronicle-timeline-item:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 0.15rem;
+  top: 0.72rem;
+  bottom: -0.02rem;
+  width: 1px;
+  background: rgba(70, 229, 255, 0.18);
+}
+.planet-evolution-page .pe-chronicle-timeline-marker {
+  position: absolute;
+  left: 0;
+  top: 0.38rem;
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: 50%;
+  border: 1px solid rgba(70, 229, 255, 0.35);
+  background: rgba(8, 18, 32, 0.95);
+  box-shadow: none;
+}
+.planet-evolution-page .pe-chronicle-timeline-marker::after {
+  content: "✓";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.42rem;
+  line-height: 1;
+  color: rgba(127, 255, 217, 0.75);
+}
+.planet-evolution-page .pe-chronicle-timeline-item--highlight .pe-chronicle-timeline-marker {
+  border-color: rgba(255, 196, 86, 0.45);
+}
+.planet-evolution-page .pe-chronicle-timeline-item--highlight .pe-chronicle-timeline-marker::after {
+  color: rgba(255, 216, 140, 0.9);
+}
+.planet-evolution-page .pe-chronicle-timeline-item--highlight .pe-chronicle-timeline-text {
+  color: rgba(255, 230, 180, 0.92);
+}
+.planet-evolution-page .pe-chronicle-timeline-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.68rem;
+  line-height: 1.35;
+  color: var(--gc-text-soft);
 }
 
 /* Legacy compact footer — removed from template */
@@ -24527,18 +24831,6 @@ button.pe-hero-planet-hint:focus-visible {
 }
 .planet-evolution-page .pe-timeline--compact .pe-timeline-text {
   font-size: 0.72rem;
-}
-.planet-evolution-page .pe-chronicle-more {
-  margin-top: 0.2rem;
-}
-.planet-evolution-page .pe-chronicle-more > summary {
-  cursor: pointer;
-  font-size: 0.68rem;
-  opacity: 0.78;
-  list-style: none;
-}
-.planet-evolution-page .pe-chronicle-more > summary::-webkit-details-marker {
-  display: none;
 }
 .planet-evolution-page .pe-compact-details {
   padding: 0.35rem 0.55rem;

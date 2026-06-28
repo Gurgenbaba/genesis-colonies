@@ -2,6 +2,73 @@
 {% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_prog_identity with context %}
 {% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
 
+{% macro pe_history_item_label(item) -%}
+  {% set tk = item.title_key|default('') %}
+  {% set et = item.event_type|default('') %}
+  {% set payload = item.payload if item.payload is defined and item.payload else {} %}
+  {% set localized_title = T(tk, '') if tk else '' %}
+  {% if localized_title and localized_title != tk %}
+    {{- localized_title -}}
+  {% elif et == 'locked_choice' %}
+    {{- T('pe_history_locked_choice', 'Entscheidung festgelegt') -}}
+  {% elif et == 'planet_research_complete' %}
+    {% set tech_key = payload.tech_key|default('') if payload.tech_key is defined else '' %}
+    {% set tech_name = localized_title or (T('pe_' ~ tech_key, '') if tech_key else '') %}
+    {%- if tech_name -%}
+      {{- T('pe_history_research_done', '%(name)s erforscht', name=tech_name) -}}
+    {%- else -%}
+      {{- T('pe_history_research_done_generic', 'Planet-Tech abgeschlossen') -}}
+    {%- endif -%}
+  {% elif et == 'level_up' %}
+    {% set lvl = payload.level|default(0)|int %}
+    {%- if lvl > 0 -%}
+      {{- T('pe_history_level_up', 'Entwicklungsstufe %(level)s erreicht', level=lvl) -}}
+    {%- else -%}
+      {{- T('pe_history_level_up_generic', 'Stufe gestiegen') -}}
+    {%- endif -%}
+  {% elif et == 'discovery' %}
+    {% set disc_name = localized_title or (T('pe_' ~ payload.discovery_key|default(''), '') if payload.discovery_key is defined else '') %}
+    {%- if disc_name -%}
+      {{- T('pe_history_discovery', '%(name)s entdeckt', name=disc_name) -}}
+    {%- else -%}
+      {{- T('pe_history_discovery_generic', 'Entdeckung gemacht') -}}
+    {%- endif -%}
+  {% elif et in ('event_spawn', 'event_outcome') %}
+    {%- if localized_title -%}
+      {{- localized_title -}}
+    {%- else -%}
+      {{- T('pe_history_event', 'Planet-Ereignis') -}}
+    {%- endif -%}
+  {% elif et == 'specialization_pick' %}
+    {% set spec_name = localized_title or T('spec_' ~ tk[5:], '') if tk.startswith('spec_') else localized_title %}
+    {%- if spec_name -%}
+      {{- T('pe_history_spec_pick', 'Spezialisierung: %(name)s', name=spec_name) -}}
+    {%- else -%}
+      {{- T('pe_history_spec_pick_generic', 'Spezialisierung gewählt') -}}
+    {%- endif -%}
+  {% elif et == 'specialization_tier_up' %}
+    {{- T('pe_history_spec_tier', 'Spezialisierung verbessert') -}}
+  {% elif et == 'ascension_started' %}
+    {%- if localized_title -%}
+      {{- T('pe_history_ascension_started', '%(name)s gestartet', name=localized_title) -}}
+    {%- else -%}
+      {{- T('pe_history_ascension_started_generic', 'Ascension gestartet') -}}
+    {%- endif -%}
+  {% elif et == 'ascension_complete' %}
+    {%- if localized_title -%}
+      {{- T('pe_history_ascension_complete', '%(name)s vollendet', name=localized_title) -}}
+    {%- else -%}
+      {{- T('pe_history_ascension_complete_generic', 'Ascension abgeschlossen') -}}
+    {%- endif -%}
+  {% elif et == 'failure' %}
+    {{- T('pe_history_failure', 'Krise aufgetreten') -}}
+  {% elif et == 'failure_recovered' %}
+    {{- T('pe_history_failure_recovered', 'Krise überwunden') -}}
+  {% else %}
+    {{- T('pe_history_entry', 'Planet-Eintrag') -}}
+  {% endif %}
+{%- endmacro %}
+
 {% macro pe_card_queue_block(qj) %}
   {% if qj is defined and qj %}
   <div class="gc-card-queue-block gc-card-queue-block--{{ qj.owner_type|default('planet_research') }} gc-card-queue-block--{{ qj.status }}"
@@ -158,7 +225,7 @@
     'trade': '⚓', 'ecology': '🌍', 'governance': '🏛', 'ancient': '🏺', 'experimental': '🧪'
   } %}
   {% set affinities = ps.dna_summary.affinities if ps.dna_summary is defined and ps.dna_summary.affinities is defined else {} %}
-  {% set pe_visible_tech_cards = (rdx.queue_cards or []) + (rdx.recommended or []) %}
+  {% set pe_visible_tech_cards = rdx.recommended or [] %}
   {% set pe_expansion_visible = exp_unlock.visible or establishment.visible %}
   {% set pe_expansion_pending = false %}
   {% set pe_expansion_summary = '' %}
@@ -387,23 +454,30 @@
     <div class="pe-core-row">
       <section class="pe-zone pe-zone--tech gc-panel" id="pe-section-research">
         <header class="pe-zone-head">
-          <h3 class="pe-zone-title">{{ T("pe_planet_research", "Planet-Forschung") }}</h3>
+          <div class="pe-zone-head-main">
+            <h3 class="pe-zone-title">{{ T("pe_planet_research", "Planet-Forschung") }}</h3>
+            <p class="pe-zone-subline" id="pe-planet-tech-queue-compact-label" aria-live="polite">
+              {% if rdx.queue_count %}{{ T('pe_planet_tech_queue_compact_active', '%(count)s Planet-Tech-Aufträge', count=(rdx.queue_count|int)) }}
+              {% else %}{{ T('pe_planet_tech_queue_compact_idle', 'Keine Planet-Tech-Aufträge') }}{% endif %}
+            </p>
+          </div>
           <span class="pe-zone-meta gc-mono" id="pe-planet-tech-queue-compact-count">{{ rdx.queue_count or 0 }}/{{ rdx.queue_limit or 2 }}</span>
         </header>
-        <div id="pe-planet-tech-queue-compact" class="pe-tech-queue-banner gc-queue-compact" aria-live="polite">
-          <span class="pe-queue-compact-icon" aria-hidden="true">🧬</span>
-          <span id="pe-planet-tech-queue-compact-label">
-            {% if rdx.queue_count %}{{ T('pe_planet_tech_queue_compact_active', '%(count)s Planet-Tech-Aufträge', count=(rdx.queue_count|int)) }}
-            {% else %}{{ T('pe_planet_tech_queue_compact_idle', 'Keine Planet-Tech-Aufträge') }}{% endif %}
-          </span>
+        <div id="pe-planet-tech-queue-list"
+             class="gc-card-queue-list"
+             data-pe-queue-list="planet_research"
+             aria-live="polite"
+             {% if not rdx.queue_cards %}hidden{% endif %}>
+          {% for tech in rdx.queue_cards or [] %}
+            {{ pe_card_queue_block(tech.queue_job if tech.queue_job is defined else none) }}
+          {% endfor %}
         </div>
         {% if pe_visible_tech_cards %}
         <div class="pe-tech-grid" role="list">
           {% for tech in pe_visible_tech_cards %}
-          <article class="pe-tech-card gc-planet-tech-card{% if tech.queue_job is defined and tech.queue_job %} gc-planet-tech-card--in-queue{% if tech.queue_job.status == 'active' %} gc-planet-tech-card--queue-active{% endif %}{% endif %}{% if not tech.can_afford %} pe-tech-card--locked{% endif %}"
+          <article class="pe-tech-card gc-planet-tech-card{% if not tech.can_afford %} pe-tech-card--locked{% endif %}"
                    id="pe-research-card-{{ tech.tech_key }}"
                    data-planet-tech-card data-tech-key="{{ tech.tech_key }}" role="listitem">
-            {{ pe_card_queue_block(tech.queue_job if tech.queue_job is defined else none) }}
             <div class="pe-tech-card-body">
               <img class="pe-tech-card-icon" src="{{ url_for('static', filename='img/research/' ~ (tech.icon or 'metallveredelung.png')) }}" alt="" loading="lazy" onerror="this.hidden=true;this.nextElementSibling.hidden=false;">
               <span class="pe-tech-card-fallback" hidden aria-hidden="true">{{ tech.icon_fallback or '🧬' }}</span>
@@ -458,25 +532,40 @@
             {% endif %}
           </div>
           {% if history_items %}
-          <details class="pe-goal-chronicle" id="pe-section-history">
-            <summary>{{ T("pe_chronicle_toggle", "Chronik anzeigen") }}</summary>
-            <ol class="pe-timeline pe-timeline--compact">
-              {% for item in history_items[:2] %}
-              <li class="pe-timeline-item">
-                <span class="pe-timeline-dot" aria-hidden="true"></span>
-                <span class="pe-timeline-text">{{ T(item.title_key, item.event_type) }}</span>
-              </li>
-              {% endfor %}
-              {% if history_items|length > 2 %}
-              {% for item in history_items[2:] %}
-              <li class="pe-timeline-item">
-                <span class="pe-timeline-dot" aria-hidden="true"></span>
-                <span class="pe-timeline-text">{{ T(item.title_key, item.event_type) }}</span>
-              </li>
-              {% endfor %}
+          <div class="pe-goal-chronicle" id="pe-section-history">
+            <div class="pe-goal-chronicle-row">
+              <button type="button"
+                      class="pe-goal-chronicle-chip pe-goal-chronicle-toggle"
+                      aria-expanded="false"
+                      aria-controls="pe-chronicle-popover-layer">
+                {{ T('pe_chronicle_toggle_count', 'Chronik: %(count)s Einträge', count=(history_items|length)|int) }}
+              </button>
+              {% set pe_chronicle_extra = (history_items|length)|int - 1 %}
+              {% if pe_chronicle_extra > 0 %}
+              <button type="button"
+                      class="pe-goal-chronicle-more-chip pe-goal-chronicle-toggle"
+                      aria-expanded="false"
+                      aria-controls="pe-chronicle-popover-layer">
+                {{ T('pe_chronicle_more_count', '+%(count)s weitere', count=pe_chronicle_extra) }}
+              </button>
               {% endif %}
+            </div>
+            <p class="pe-goal-chronicle-last-line">
+              <span class="pe-goal-chronicle-last-label">{{ T('pe_chronicle_last', 'Letzte') }}:</span>
+              <span class="pe-goal-chronicle-last-text">{{ pe_history_item_label(history_items[0]) }}</span>
+            </p>
+          </div>
+          <div id="pe-chronicle-popover-source" class="pe-chronicle-popover-source" hidden>
+            <p class="pe-chronicle-popover-title">{{ T('pe_chronicle_heading', 'Chronik') }}</p>
+            <ol class="pe-chronicle-timeline pe-chronicle-timeline--popover" aria-label="{{ T('pe_chronicle_heading', 'Chronik') }}">
+              {% for item in history_items %}
+              <li class="pe-chronicle-timeline-item{% if item.event_type in ['level_up', 'discovery', 'ascension_complete', 'planet_research_complete'] %} pe-chronicle-timeline-item--highlight{% endif %}">
+                <span class="pe-chronicle-timeline-marker" aria-hidden="true"></span>
+                <span class="pe-chronicle-timeline-text">{{ pe_history_item_label(item) }}</span>
+              </li>
+              {% endfor %}
             </ol>
-          </details>
+          </div>
           {% endif %}
         </div>
         <button type="button" class="gc-btn gc-btn-primary pe-action-btn pe-next-cta pe-goal-cta"
@@ -523,19 +612,25 @@
         <span class="pe-zone-meta gc-mono">{{ asc.summary.count if asc.summary else 0 }}/{{ asc.summary.limit if asc.summary else 1 }}</span>
       </summary>
       <div class="pe-zone-body">
-        <div id="pe-ascension-queue-compact" class="pe-tech-queue-banner gc-queue-compact" aria-live="polite">
-          <span class="pe-queue-compact-icon" aria-hidden="true">🌌</span>
-          <span id="pe-ascension-queue-compact-label">
-            {% if asc.summary and asc.summary.count %}{{ T('pe_ascension_queue_compact_active', '%(count)s Ascension-Aufträge', count=(asc.summary.count|int)) }}
-            {% else %}{{ T('pe_ascension_queue_compact_idle', 'Keine Ascension-Aufträge') }}{% endif %}
-          </span>
+        <p class="pe-zone-subline" id="pe-ascension-queue-compact-label" aria-live="polite">
+          {% if asc.summary and asc.summary.count %}{{ T('pe_ascension_queue_compact_active', '%(count)s Ascension-Aufträge', count=(asc.summary.count|int)) }}
+          {% else %}{{ T('pe_ascension_queue_compact_idle', 'Keine Ascension-Aufträge') }}{% endif %}
+        </p>
+        {% set asc_queue_cards = asc.ascensions | selectattr('queue_job') | list if asc.ascensions else [] %}
+        <div id="pe-ascension-queue-list"
+             class="gc-card-queue-list"
+             data-pe-queue-list="ascension"
+             aria-live="polite"
+             {% if not asc_queue_cards %}hidden{% endif %}>
+          {% for card in asc_queue_cards %}
+            {{ pe_card_queue_block(card.queue_job) }}
+          {% endfor %}
         </div>
         {% if asc.ascensions %}
         <div class="pe-ascension-grid pe-ascension-grid--compact" role="list">
           {% for card in asc.ascensions %}
           <article class="gc-ascension-card gc-prog-card{% if card.queue_job %} gc-ascension-card--in-queue{% endif %}{% if card.completed %} is-completed{% endif %}"
                    data-ascension-card data-ascension-key="{{ card.ascension_key }}" role="listitem">
-            {{ pe_card_queue_block(card.queue_job if card.queue_job is defined else none) }}
             <h4 class="gc-ascension-card-title">{{ T(card.label_key, card.ascension_key) }}</h4>
           </article>
           {% endfor %}
