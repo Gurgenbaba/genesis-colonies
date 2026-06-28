@@ -1220,12 +1220,20 @@ def test_main_js_fleet_hud_sticky_live_state():
     assert "function resolveFleetHudPayload(raw, opts)" in src
     assert "GC.resolveFleetHudPayload = resolveFleetHudPayload" in src
     assert "function isActiveFleetsPayloadMissing(raw)" in src
-    assert "function isExplicitEmptyActiveFleets(raw)" in src
+    assert "function isFleetHudConfirmedEmpty(raw)" in src
+    assert "function mergeFleetMovementIntoHud(mv, opts)" in src
+    assert "function preserveFleetHudAcrossNavigation()" in src
+    assert "function patchFleetHudFromActionPayload(json, reason)" in src
+    assert "function canClearFleetHudToEmpty(raw, opts, stateVersion)" in src
     assert "_fleetHudStickyPayload" in src
+    assert "_fleetHudActionVersion" in src
     assert "_gameStateFetchSeq" in src
     assert "_gameStateFetchAppliedSeq" in src
     assert "markGameStateFetchApplied" in src
     assert "_fetchSeq: fetchSeq" in src
+    assert "preserveFleetHudAcrossNavigation()" in src.split("GC.navigateTo = async function navigateTo")[1].split("function initPjax")[0]
+    assert "patchFleetHudFromActionPayload(json, reasonStr)" in src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]
+    assert "mergeFleetMovementIntoHud(payload.fleet" in src
 
     render_fn = src.split("function renderGlobalFleetHud(fleetsRaw, opts)")[1].split("function syncFleetVacationNotice")[0]
     assert "resolveFleetHudPayload(fleetsRaw" in render_fn
@@ -1246,7 +1254,11 @@ def test_main_js_fleet_hud_sticky_live_state():
 
     patch_last = src.split("function patchHudLastState(data, reason)")[1].split("function commitGameStateCache")[0]
     assert 'key === "active_fleets"' in patch_last
-    assert "isExplicitEmptyActiveFleets(incoming)" in patch_last
+    assert "isFleetHudConfirmedEmpty(incoming)" in patch_last
+
+    fleet_py = _read("game/fleet.py")
+    assert "fleets_confirmed_empty" in fleet_py
+    assert "active_fleet_count" in fleet_py
 
 
 def test_main_js_gc640b_fleet_page_visual_redesign():

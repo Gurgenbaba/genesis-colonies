@@ -3433,6 +3433,20 @@ def test_recall_fleet_movement_outbound(fleet_db):
     assert item['movement_id'] == fleet_id
     assert item['can_recall'] is False
     assert item['status'] == 'returning'
+    assert payload.get('fleets_confirmed_empty') is False
+    assert payload.get('active_fleet_count') == 1
+    conn.close()
+
+
+def test_build_active_fleets_payload_confirmed_empty_flags(fleet_db):
+    from game.fleet import build_active_fleets_payload
+
+    conn = db()
+    uid = _player(conn=conn)
+    empty = build_active_fleets_payload(uid, conn=conn)
+    assert empty['count'] == 0
+    assert empty['active_fleet_count'] == 0
+    assert empty['fleets_confirmed_empty'] is True
     conn.close()
 
 def test_recall_fleet_movement_before_overdue_arrival_tick(fleet_db):

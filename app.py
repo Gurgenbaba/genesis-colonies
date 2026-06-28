@@ -5644,6 +5644,8 @@ def _payload_from_live_context(
         if fleet_hud is not None:
             payload["active_fleets"] = fleet_hud.get("active_fleets") or {
                 "count": 0,
+                "active_fleet_count": 0,
+                "fleets_confirmed_empty": True,
                 "visible_limit": 5,
                 "next_remaining_seconds": 0,
                 "items": [],
@@ -5657,12 +5659,6 @@ def _payload_from_live_context(
                 "incoming_attacks": [],
             }
         else:
-            payload["active_fleets"] = {
-                "count": 0,
-                "visible_limit": 5,
-                "next_remaining_seconds": 0,
-                "items": [],
-            }
             payload["fleet_slots"] = {"active": 0, "max": 0, "free": 0}
             payload["fleet_alerts"] = {
                 "incoming_attack_count": 0,
@@ -5672,12 +5668,6 @@ def _payload_from_live_context(
                 "incoming_attacks": [],
             }
     except Exception:
-        payload["active_fleets"] = {
-            "count": 0,
-            "visible_limit": 5,
-            "next_remaining_seconds": 0,
-            "items": [],
-        }
         payload["fleet_slots"] = {"active": 0, "max": 0, "free": 0}
         payload["fleet_alerts"] = {
             "incoming_attack_count": 0,

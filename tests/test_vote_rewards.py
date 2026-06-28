@@ -145,7 +145,8 @@ def _login_client(vote_db, monkeypatch):
     conn.close()
 
     client = app_module.app.test_client()
-    client.post("/login", data={"username": uname, "password": "test-pass-123"})
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
     return client, uid, app_module
 
 

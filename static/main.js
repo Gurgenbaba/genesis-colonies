@@ -1164,6 +1164,7 @@
   let _gameStateFetchAppliedSeq = 0;
   let _fleetHudStickyPayload = null;
   let _fleetHudLastAppliedVersion = 0;
+  let _fleetHudActionVersion = 0;
 
   function extractStateVersion(data) {
     if (!data || typeof data !== "object") return 0;
@@ -1224,6 +1225,8 @@
     }
 
     dismissProgressionTooltipsOnStatePatch();
+
+    patchFleetHudFromActionPayload(json, reasonStr);
 
     const isPlanetSwitch = reason === "planet_switch";
     if (isPlanetSwitch) {
@@ -1402,6 +1405,7 @@
       _clientStateGen += 1;
       _fleetHudStickyPayload = null;
       _fleetHudLastAppliedVersion = 0;
+      _fleetHudActionVersion = 0;
       _gameStateFetchAppliedSeq = 0;
       if (typeof syncFleetVacationNotice === "function") {
         syncFleetVacationNotice({});
@@ -9448,10 +9452,94 @@
   }
 
   function isExplicitEmptyActiveFleets(raw) {
-    if (isActiveFleetsPayloadMissing(raw)) return false;
-    const payload = normalizeActiveFleetsPayload(raw);
-    return payload.count === 0 && payload.items.length === 0;
+    return isFleetHudConfirmedEmpty(raw);
   }
+
+  function isFleetHudConfirmedEmpty(raw) {
+    if (isActiveFleetsPayloadMissing(raw)) return false;
+    if (raw.fleets_confirmed_empty === true) return true;
+    if (Object.prototype.hasOwnProperty.call(raw, "active_fleet_count")) {
+      return Number(raw.active_fleet_count) === 0;
+    }
+    return false;
+  }
+
+  function bumpFleetHudActionVersion(state) {
+    const version = extractStateVersion(state);
+    const bump = version > 0 ? version : getTimerServerNow();
+    _fleetHudActionVersion = Math.max(_fleetHudActionVersion, bump);
+    _fleetHudLastAppliedVersion = Math.max(_fleetHudLastAppliedVersion, bump);
+  }
+
+  function canClearFleetHudToEmpty(raw, opts, stateVersion) {
+    if (!isFleetHudConfirmedEmpty(raw)) return false;
+    if (opts && opts.allowEmptyClear) return true;
+    const version = Number(stateVersion || 0);
+    if (version > 0 && version >= _fleetHudActionVersion - 0.001) return true;
+    if (opts && opts.authoritativeFleetHud && isMutationStatePatchReason(String(opts.reason || ""))) {
+      return true;
+    }
+    return false;
+  }
+
+  function mergeFleetMovementIntoHud(mv, opts) {
+    const item = normalizeFleetDrawerItem(mv);
+    const movementId = String(item.movement_id || item.id || "");
+    if (!movementId) return;
+    const base = _fleetHudStickyPayload || normalizeActiveFleetsPayload({ items: [], count: 0 });
+    const items = [
+      item,
+      ...base.items.filter((row) => String(row.movement_id || row.id || "") !== movementId),
+    ];
+    const payload = {
+      ...base,
+      count: items.length,
+      active_fleet_count: items.length,
+      fleets_confirmed_empty: false,
+      items,
+    };
+    _fleetHudStickyPayload = payload;
+    bumpFleetHudActionVersion({ server_time: getTimerServerNow() });
+    renderGlobalFleetHud(payload, {
+      ...(opts || {}),
+      sticky: true,
+      authoritativeFleetHud: true,
+      reason: (opts && opts.reason) || "fleet_send_merge",
+    });
+  }
+  GC.mergeFleetMovementIntoHud = mergeFleetMovementIntoHud;
+
+  function preserveFleetHudAcrossNavigation() {
+    if (!_fleetHudStickyPayload || !_fleetHudStickyPayload.count) return;
+    renderGlobalFleetHud(_fleetHudStickyPayload, {
+      sticky: true,
+      reason: "pjax_preserve",
+      authoritativeFleetHud: false,
+    });
+  }
+  GC.preserveFleetHudAcrossNavigation = preserveFleetHudAcrossNavigation;
+
+  function patchFleetHudFromActionPayload(json, reason) {
+    const reasonStr = String(reason || "");
+    const state = json?.state || json?.data?.state || null;
+    const liveFleet = json?.data?.fleet || json?.fleet || null;
+    if (liveFleet) {
+      mergeFleetMovementIntoHud(liveFleet, { reason: reasonStr, allowEmptyClear: false });
+    }
+    if (state && state.active_fleets !== undefined) {
+      bumpFleetHudActionVersion(state);
+      renderGlobalFleetHud(state.active_fleets, {
+        reason: reasonStr,
+        stateVersion: extractStateVersion(state),
+        stateContext: state,
+        authoritativeFleetHud: true,
+        allowEmptyClear: isMutationStatePatchReason(reasonStr),
+      });
+    } else if (isMutationStatePatchReason(reasonStr)) {
+      bumpFleetHudActionVersion(state || { server_time: getTimerServerNow() });
+    }
+  }
+  GC.patchFleetHudFromActionPayload = patchFleetHudFromActionPayload;
 
   function isAuthoritativeFleetHudReason(reason, opts) {
     const r = String(reason || "");
@@ -9477,21 +9565,28 @@
     const authoritative = isAuthoritativeFleetHudReason(reason, opts);
 
     if (isActiveFleetsPayloadMissing(raw)) {
-      return _fleetHudStickyPayload;
+      return _fleetHudStickyPayload
+        ? { payload: _fleetHudStickyPayload, explicitEmpty: false, authoritative: false, missing: true }
+        : null;
     }
 
     const normalized = normalizeActiveFleetsPayload(raw);
     const hasFleets = normalized.count > 0 || normalized.items.length > 0;
 
     if (hasFleets) {
-      _fleetHudStickyPayload = normalized;
+      _fleetHudStickyPayload = {
+        ...normalized,
+        active_fleet_count: normalized.count,
+        fleets_confirmed_empty: false,
+      };
       if (stateVersion > 0) {
         _fleetHudLastAppliedVersion = Math.max(_fleetHudLastAppliedVersion, stateVersion);
       }
-      return { payload: normalized, explicitEmpty: false, authoritative };
+      return { payload: _fleetHudStickyPayload, explicitEmpty: false, authoritative: true };
     }
 
-    if (!authoritative) {
+    const confirmedEmpty = canClearFleetHudToEmpty(raw, opts, stateVersion);
+    if (!confirmedEmpty) {
       return _fleetHudStickyPayload
         ? { payload: _fleetHudStickyPayload, explicitEmpty: false, authoritative: false }
         : { payload: normalized, explicitEmpty: false, authoritative: false };
@@ -9501,17 +9596,22 @@
       stateVersion > 0
       && _fleetHudLastAppliedVersion > 0
       && stateVersion < _fleetHudLastAppliedVersion - 0.001
+      && stateVersion < _fleetHudActionVersion - 0.001
     ) {
       return _fleetHudStickyPayload
         ? { payload: _fleetHudStickyPayload, explicitEmpty: false, authoritative: false }
         : { payload: normalized, explicitEmpty: false, authoritative: false };
     }
 
-    _fleetHudStickyPayload = normalized;
+    _fleetHudStickyPayload = {
+      ...normalized,
+      active_fleet_count: 0,
+      fleets_confirmed_empty: true,
+    };
     if (stateVersion > 0) {
       _fleetHudLastAppliedVersion = Math.max(_fleetHudLastAppliedVersion, stateVersion);
     }
-    return { payload: normalized, explicitEmpty: true, authoritative: true };
+    return { payload: _fleetHudStickyPayload, explicitEmpty: true, authoritative: authoritative };
   }
   GC.resolveFleetHudPayload = resolveFleetHudPayload;
 
@@ -11072,12 +11172,13 @@
       if (key === "active_fleets") {
         const incoming = next.active_fleets;
         if (isActiveFleetsPayloadMissing(incoming)) return;
-        if (isExplicitEmptyActiveFleets(incoming)) {
+        if (isFleetHudConfirmedEmpty(incoming)) {
           const current = merged.active_fleets;
           if (current && normalizeActiveFleetsPayload(current).count > 0) {
             const incV = extractStateVersion(next);
             const curV = extractStateVersion(merged);
             if (incV > 0 && curV > 0 && incV < curV - 0.001) return;
+            if (incV > 0 && incV < _fleetHudActionVersion - 0.001) return;
           }
         }
       }
@@ -16514,6 +16615,7 @@
               applyLiveState(page, {
                 active_fleets: [payload.fleet, ...prev.filter((f) => f.id !== fleetId)],
               });
+              mergeFleetMovementIntoHud(payload.fleet, { reason: "fleet_send_success" });
             }
             if (res.state) {
               applyActionState(res, "fleet_send_success");
@@ -26509,6 +26611,8 @@
 
         GC.cleanupPage();
 
+        preserveFleetHudAcrossNavigation();
+
         syncLcpHeroPreloadFromPjaxDoc(doc);
 
         const main = document.getElementById("main-content");
@@ -26550,6 +26654,7 @@
           skipGameState: Boolean(opts.skipGameState),
           skipPolling: Boolean(opts.skipPolling),
         });
+        preserveFleetHudAcrossNavigation();
         if (document.querySelector(".galaxy-page")) prefetchGalaxyAdjacent();
       } catch (err) {
         if (err?.name === "AbortError") return;

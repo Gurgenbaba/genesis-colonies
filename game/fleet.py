@@ -1881,8 +1881,11 @@ def build_active_fleets_payload(
     next_remaining = 0
     if items:
         next_remaining = min(int(i.get("remaining_seconds") or 0) for i in items)
+    count = len(items)
     return {
-        "count": len(items),
+        "count": count,
+        "active_fleet_count": count,
+        "fleets_confirmed_empty": count == 0,
         "visible_limit": max(1, int(visible_limit)),
         "next_remaining_seconds": next_remaining,
         "items": items,
