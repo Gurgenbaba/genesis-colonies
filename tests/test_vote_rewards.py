@@ -29,11 +29,14 @@ from game.vote_rewards import (
     claim_all_vote_rewards,
     claim_vote_reward,
     get_provider_cooldown_status,
+    get_provider_vote_end,
     get_vote_center_state,
     handle_vote_visit,
     is_allowed_vote_reward_box,
     is_topg_postback_allowed,
     list_enabled_providers,
+    can_process_provider_vote,
+    process_provider_vote,
     record_provider_vote,
     record_topg_vote,
     resolve_vote_url,
@@ -1129,4 +1132,102 @@ def test_claim_api_endpoint(vote_db, monkeypatch):
 
     conn = db()
     assert _inventory_amount(login_uid, "container_basic", conn=conn) == 1
+    conn.close()
+
+
+def test_get_provider_vote_end_uses_stored_next_at(vote_db):
+    uid = _player()
+    conn = db()
+    now = int(time.time())
+    providers = list_enabled_providers(conn=conn)
+    topg = next(p for p in providers if p["provider_key"] == TOPG_PROVIDER)
+    custom_end = now + 7200
+    record_provider_vote(
+        TOPG_PROVIDER,
+        uid,
+        "1.2.3.4",
+        conn=conn,
+        now=now,
+        provider_next_vote_at=custom_end,
+        reward_payload=LOOTBOX_PAYLOAD,
+    )
+    assert get_provider_vote_end(uid, topg, conn=conn) == custom_end
+    cd = get_provider_cooldown_status(uid, topg, conn=conn, now=now + 3600)
+    assert cd["can_vote"] is False
+    assert cd["next_vote_at"] == custom_end
+    assert cd["cooldown_remaining_sec"] == 3600
+    conn.close()
+
+
+def test_can_process_provider_vote_respects_cooldown(vote_db):
+    uid = _player()
+    conn = db()
+    now = int(time.time())
+    providers = list_enabled_providers(conn=conn)
+    topg = next(p for p in providers if p["provider_key"] == TOPG_PROVIDER)
+    assert can_process_provider_vote(uid, topg, conn=conn, now=now) is True
+    record_topg_vote(uid, "1.2.3.4", conn=conn, now=now, reward_payload=LOOTBOX_PAYLOAD)
+    assert can_process_provider_vote(uid, topg, conn=conn, now=now + 60) is False
+    assert can_process_provider_vote(uid, topg, conn=conn, now=now + TOPG_COOLDOWN_SEC + 1) is True
+    conn.close()
+
+
+def test_process_provider_vote_creates_pending_and_blocks_cooldown(vote_db):
+    uid = _player()
+    conn = db()
+    now = int(time.time())
+    first = process_provider_vote(TOPG_PROVIDER, uid, "1.2.3.4", conn=conn, now=now)
+    assert first["success"] is True
+    assert first["created"] is True
+    assert first["already_voted"] is False
+    assert first["reward_id"] is not None
+
+    second = process_provider_vote(TOPG_PROVIDER, uid, "1.2.3.5", conn=conn, now=now + 120)
+    assert second["success"] is True
+    assert second["created"] is False
+    assert second["already_voted"] is True
+    assert second["error"] == "cooldown"
+    assert second["cooldown_remaining_sec"] > 0
+
+    row = conn.execute(
+        "SELECT provider_next_vote_at FROM vote_rewards WHERE user_id = ? LIMIT 1;",
+        (uid,),
+    ).fetchone()
+    assert int(row["provider_next_vote_at"]) == now + TOPG_COOLDOWN_SEC
+    conn.close()
+
+
+def test_process_provider_vote_after_cooldown_allows_second_reward(vote_db):
+    uid = _player()
+    conn = db()
+    now = int(time.time())
+    first = process_provider_vote(TOPG_PROVIDER, uid, "1.2.3.4", conn=conn, now=now)
+    later = now + TOPG_COOLDOWN_SEC + 1
+    second = process_provider_vote(TOPG_PROVIDER, uid, "1.2.3.5", conn=conn, now=later)
+    assert first["created"] is True
+    assert second["created"] is True
+    count = conn.execute("SELECT COUNT(*) AS c FROM vote_rewards WHERE user_id = ?;", (uid,)).fetchone()["c"]
+    assert int(count) == 2
+    conn.close()
+
+
+def test_arena_vote_end_respects_postback_reset(vote_db):
+    uid = _player()
+    conn = db()
+    now = int(time.time())
+    providers = list_enabled_providers(conn=conn)
+    arena = next(p for p in providers if p["provider_key"] == ARENA_TOP100_PROVIDER)
+    reset_at = now + 18 * 3600
+    process_provider_vote(
+        ARENA_TOP100_PROVIDER,
+        uid,
+        "1.2.3.4",
+        conn=conn,
+        now=now,
+        provider_next_vote_at=reset_at,
+    )
+    assert get_provider_vote_end(uid, arena, conn=conn) == reset_at
+    cd = get_provider_cooldown_status(uid, arena, conn=conn, now=now + 12 * 3600)
+    assert cd["can_vote"] is False
+    assert cd["cooldown_remaining_sec"] == 6 * 3600
     conn.close()

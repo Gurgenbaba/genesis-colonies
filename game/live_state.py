@@ -353,10 +353,10 @@ def nav_badges_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
     """Action hints for left-menu navigation (GC-702)."""
     from game.galactic_directives.state import count_pending_government_votes
     from game.referrals import count_claimable_referral_rewards
-    from game.vote_rewards import count_voteable_providers
+    from game.vote_rewards import count_vote_center_attention
 
     uid = int(user_id)
-    vote_count = count_voteable_providers(uid, conn=conn)
+    vote_count = count_vote_center_attention(uid, conn=conn)
     gov_count = count_pending_government_votes(uid, conn=conn)
     referral_count = count_claimable_referral_rewards(uid, conn=conn, read_only=True)
     from game.directives.service import count_claimable_directives

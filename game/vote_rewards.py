@@ -103,6 +103,10 @@ TOPG_REWARD_KEY = DEFAULT_REWARD_KEY
 TOPG_DEFAULT_BOX_KEY = DEFAULT_VOTE_BOX_KEY
 TOPG_REMOTE_HOST = "monitor.topg.org"
 
+VOTE_CHANNEL_PLAYER = "player"
+VOTE_CHANNEL_REENGAGEMENT = "reengagement"
+ALLOWED_VOTE_CHANNELS = frozenset({VOTE_CHANNEL_PLAYER, VOTE_CHANNEL_REENGAGEMENT})
+
 ALLOWED_VOTE_BOX_KEYS = frozenset({DEFAULT_VOTE_BOX_KEY})
 
 REWARD_TYPE_LABEL_KEYS: Dict[str, str] = {
@@ -121,6 +125,14 @@ def vote_reward_next_at_column_ready(conn) -> bool:
     cur = conn.cursor()
     cur.execute("PRAGMA table_info(vote_rewards);")
     return any(str(row[1]) == "provider_next_vote_at" for row in cur.fetchall())
+
+
+def vote_channel_column_ready(conn) -> bool:
+    if not vote_rewards_schema_ready(conn):
+        return False
+    cur = conn.cursor()
+    cur.execute("PRAGMA table_info(vote_rewards);")
+    return any(str(row[1]) == "vote_channel" for row in cur.fetchall())
 
 
 def vote_providers_schema_ready(conn) -> bool:
@@ -407,18 +419,83 @@ def _serialize_pending_reward(row: Any, *, conn, provider_names: Optional[Mappin
     }
 
 
-def _provider_last_vote_at(user_id: int, provider_key: str, *, conn) -> Optional[int]:
+def _provider_latest_vote_row(
+    user_id: int,
+    provider_key: str,
+    *,
+    conn,
+) -> Optional[Any]:
+    """Latest vote row for provider (any status)."""
     cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT MAX(voted_at) AS last_vote_at
-        FROM vote_rewards
-        WHERE user_id = ? AND provider = ?;
-        """,
-        (int(user_id), str(provider_key)),
-    )
-    row = cur.fetchone()
-    return int(row["last_vote_at"]) if row and row["last_vote_at"] is not None else None
+    if vote_reward_next_at_column_ready(conn):
+        cur.execute(
+            """
+            SELECT voted_at, provider_next_vote_at
+            FROM vote_rewards
+            WHERE user_id = ? AND provider = ?
+            ORDER BY voted_at DESC
+            LIMIT 1;
+            """,
+            (int(user_id), str(provider_key)),
+        )
+    else:
+        cur.execute(
+            """
+            SELECT voted_at, NULL AS provider_next_vote_at
+            FROM vote_rewards
+            WHERE user_id = ? AND provider = ?
+            ORDER BY voted_at DESC
+            LIMIT 1;
+            """,
+            (int(user_id), str(provider_key)),
+        )
+    return cur.fetchone()
+
+
+def _provider_last_vote_at(user_id: int, provider_key: str, *, conn) -> Optional[int]:
+    row = _provider_latest_vote_row(user_id, provider_key, conn=conn)
+    if not row or row["voted_at"] is None:
+        return None
+    return int(row["voted_at"])
+
+
+def get_provider_vote_end(
+    user_id: int,
+    provider: Mapping[str, Any],
+    *,
+    conn,
+) -> int:
+    """
+    Absolute unix time when the next vote is allowed on this provider.
+    Returns 0 when the player has never voted on this provider.
+    """
+    provider_key = str(provider["provider_key"])
+    cooldown_sec = int(provider.get("cooldown_sec") or VOTE_COOLDOWN_SEC)
+    row = _provider_latest_vote_row(user_id, provider_key, conn=conn)
+    if not row or row["voted_at"] is None:
+        return 0
+    next_at_raw = row["provider_next_vote_at"]
+    if next_at_raw is not None:
+        try:
+            next_at = int(next_at_raw)
+        except (TypeError, ValueError):
+            next_at = 0
+        if next_at > 0:
+            return next_at
+    return int(row["voted_at"]) + cooldown_sec
+
+
+def can_process_provider_vote(
+    user_id: int,
+    provider: Mapping[str, Any],
+    *,
+    conn,
+    now: Optional[int] = None,
+) -> bool:
+    """True when provider cooldown has expired and a new vote may be recorded."""
+    ts = int(now if now is not None else time.time())
+    vote_end = get_provider_vote_end(user_id, provider, conn=conn)
+    return vote_end <= ts
 
 
 def get_provider_cooldown_status(
@@ -432,19 +509,138 @@ def get_provider_cooldown_status(
     provider_key = str(provider["provider_key"])
     cooldown_sec = int(provider.get("cooldown_sec") or VOTE_COOLDOWN_SEC)
     last_vote_at = _provider_last_vote_at(user_id, provider_key, conn=conn)
-    can_vote = True
+    vote_end = get_provider_vote_end(user_id, provider, conn=conn)
+    can_vote = vote_end <= ts
     next_vote_at: Optional[int] = None
     cooldown_remaining_sec = 0
-    if last_vote_at is not None and (ts - last_vote_at) < cooldown_sec:
-        can_vote = False
-        next_vote_at = last_vote_at + cooldown_sec
-        cooldown_remaining_sec = max(0, next_vote_at - ts)
+    if not can_vote and vote_end > 0:
+        next_vote_at = vote_end
+        cooldown_remaining_sec = max(0, vote_end - ts)
     return {
         "can_vote": can_vote,
         "last_vote_at": last_vote_at,
         "next_vote_at": next_vote_at,
+        "vote_end": vote_end if vote_end > 0 else None,
         "cooldown_remaining_sec": cooldown_remaining_sec,
         "cooldown_sec": cooldown_sec,
+    }
+
+
+def _empty_process_vote_result(
+    *,
+    error: str = "",
+    cooldown_remaining_sec: int = 0,
+) -> Dict[str, Any]:
+    return {
+        "success": False,
+        "created": False,
+        "already_voted": False,
+        "error": error,
+        "cooldown_remaining_sec": int(cooldown_remaining_sec),
+        "reward_id": None,
+    }
+
+
+def process_provider_vote(
+    provider_key: str,
+    user_id: int,
+    vote_ip: Optional[str],
+    *,
+    conn,
+    now: Optional[float] = None,
+    reward_payload: Optional[Mapping[str, Any]] = None,
+    provider_ref_override: Optional[str] = None,
+    provider_next_vote_at: Optional[int] = None,
+    vote_channel: str = VOTE_CHANNEL_PLAYER,
+) -> Dict[str, Any]:
+    """
+    Canonical vote write path for real player accounts (postback, visit, IVN).
+
+    Cooldown and idempotency are enforced before INSERT; rewards stay pending until claim.
+    """
+    if not vote_rewards_schema_ready(conn):
+        return _empty_process_vote_result(error="unavailable")
+
+    provider = _get_provider(provider_key, conn=conn)
+    if not provider or not provider["enabled"]:
+        return _empty_process_vote_result(error="provider_disabled")
+
+    uid = int(user_id)
+    if uid <= 0 or not _user_exists(uid, conn=conn):
+        return _empty_process_vote_result(error="invalid_user")
+
+    ts = int(now if now is not None else time.time())
+    cd = get_provider_cooldown_status(uid, provider, conn=conn, now=ts)
+    if not cd["can_vote"]:
+        return {
+            "success": True,
+            "created": False,
+            "already_voted": True,
+            "error": "cooldown",
+            "cooldown_remaining_sec": int(cd["cooldown_remaining_sec"]),
+            "reward_id": None,
+        }
+
+    cooldown_sec = int(provider.get("cooldown_sec") or VOTE_COOLDOWN_SEC)
+    next_at_val: Optional[int] = None
+    if provider_next_vote_at is not None:
+        try:
+            next_at_val = int(provider_next_vote_at)
+        except (TypeError, ValueError):
+            next_at_val = None
+    if next_at_val is None or next_at_val <= ts:
+        next_at_val = ts + cooldown_sec
+
+    processed, created = record_provider_vote(
+        str(provider_key),
+        uid,
+        vote_ip,
+        conn=conn,
+        now=ts,
+        reward_payload=reward_payload,
+        provider_ref_override=provider_ref_override,
+        provider_next_vote_at=next_at_val,
+        skip_cooldown_check=True,
+        vote_channel=str(vote_channel or VOTE_CHANNEL_PLAYER),
+    )
+    if not processed:
+        return _empty_process_vote_result(error="unavailable")
+
+    reward_id: Optional[int] = None
+    if created:
+        pref = str(provider_ref_override or "").strip() or provider_ref(
+            str(provider_key), uid, ts, cooldown_sec
+        )
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id FROM vote_rewards
+            WHERE provider = ? AND user_id = ? AND provider_ref = ?
+            LIMIT 1;
+            """,
+            (str(provider_key), uid, pref),
+        )
+        row = cur.fetchone()
+        if row:
+            reward_id = int(row["id"])
+
+    if created:
+        return {
+            "success": True,
+            "created": True,
+            "already_voted": False,
+            "error": "",
+            "cooldown_remaining_sec": 0,
+            "reward_id": reward_id,
+        }
+
+    return {
+        "success": True,
+        "created": False,
+        "already_voted": True,
+        "error": "cooldown",
+        "cooldown_remaining_sec": int(cd["cooldown_remaining_sec"]),
+        "reward_id": None,
     }
 
 
@@ -495,7 +691,7 @@ def _provider_vote_stats(
 
 
 def count_voteable_providers(user_id: int, *, conn, now: Optional[int] = None) -> int:
-    """Nav-badge helper: providers the player can vote on right now (server cooldown truth)."""
+    """Providers the player can vote on right now (server-authoritative cooldown)."""
     if not vote_system_ready(conn):
         return 0
     ts = int(now if now is not None else time.time())
@@ -505,6 +701,33 @@ def count_voteable_providers(user_id: int, *, conn, now: Optional[int] = None) -
         if cd["can_vote"]:
             total += 1
     return total
+
+
+def count_pending_vote_rewards(user_id: int, *, conn) -> int:
+    """Unclaimed vote rewards waiting in the Vote Center (e.g. after postback while away)."""
+    if not vote_rewards_schema_ready(conn):
+        return 0
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT COUNT(*) AS c
+        FROM vote_rewards
+        WHERE user_id = ? AND status = 'pending';
+        """,
+        (int(user_id),),
+    )
+    return int(cur.fetchone()["c"] or 0)
+
+
+def count_vote_center_attention(user_id: int, *, conn, now: Optional[int] = None) -> int:
+    """
+    Nav-badge helper: voteable providers plus unclaimed pending rewards.
+
+    Returning inactive players see attention when cooldowns expired and/or rewards await claim.
+    """
+    return count_voteable_providers(user_id, conn=conn, now=now) + count_pending_vote_rewards(
+        user_id, conn=conn
+    )
 
 
 def get_vote_center_state(user_id: int, *, conn) -> Dict[str, Any]:
@@ -664,15 +887,15 @@ def handle_gtop100_pingback(
             continue
         uid = int(user_raw)
         vote_ip = str(entry.get("ip") or entry.get("VoterIP") or "").strip() or None
-        processed, was_created = record_provider_vote(
+        result = process_provider_vote(
             GTOP100_PROVIDER,
             uid,
             vote_ip,
             conn=conn,
         )
-        if not processed:
+        if not result["success"] and result["error"] == "unavailable":
             return False, created, "unavailable"
-        if was_created:
+        if result["created"]:
             created += 1
     return True, created, "ok"
 
@@ -750,7 +973,7 @@ def handle_arena_top100_postback(
     if reset_at is not None and reset_at > 0:
         provider_ref_override = f"{ARENA_TOP100_PROVIDER}:{uid}:{reset_at}"
 
-    processed, was_created = record_provider_vote(
+    result = process_provider_vote(
         ARENA_TOP100_PROVIDER,
         uid,
         vote_ip,
@@ -758,9 +981,9 @@ def handle_arena_top100_postback(
         provider_ref_override=provider_ref_override,
         provider_next_vote_at=reset_at,
     )
-    if not processed:
+    if not result["success"] and result["error"] == "unavailable":
         return False, 0, "unavailable"
-    return True, 1 if was_created else 0, "ok"
+    return True, 1 if result["created"] else 0, "ok"
 
 
 def get_gametoor_ivn_key() -> str:
@@ -821,15 +1044,15 @@ def handle_gametoor_ivn(
         logger.warning("gametoor ivn unknown user_id=%s", uid)
         return True, 0, "invalid_user"
 
-    processed, was_created = record_provider_vote(
+    result = process_provider_vote(
         GAMETOOR_PROVIDER,
         uid,
         vote_ip,
         conn=conn,
     )
-    if not processed:
+    if not result["success"] and result["error"] == "unavailable":
         return False, 0, "unavailable"
-    return True, 1 if was_created else 0, "ok"
+    return True, 1 if result["created"] else 0, "ok"
 
 
 def record_provider_vote(
@@ -842,6 +1065,8 @@ def record_provider_vote(
     reward_payload: Optional[Mapping[str, Any]] = None,
     provider_ref_override: Optional[str] = None,
     provider_next_vote_at: Optional[int] = None,
+    skip_cooldown_check: bool = False,
+    vote_channel: str = VOTE_CHANNEL_PLAYER,
 ) -> Tuple[bool, bool]:
     if not vote_rewards_schema_ready(conn):
         return False, False
@@ -855,8 +1080,15 @@ def record_provider_vote(
         return True, False
 
     ts = int(now if now is not None else time.time())
+    cooldown_sec = int(provider["cooldown_sec"])
+
+    if not skip_cooldown_check:
+        cd = get_provider_cooldown_status(uid, provider, conn=conn, now=ts)
+        if not cd["can_vote"]:
+            return True, False
+
     pref = str(provider_ref_override or "").strip() or provider_ref(
-        str(provider_key), uid, ts, int(provider["cooldown_sec"])
+        str(provider_key), uid, ts, cooldown_sec
     )
     rolled = _normalize_vote_reward_payload(reward_payload)
     reward_key = str(rolled["reward_key"])
@@ -869,9 +1101,38 @@ def record_provider_vote(
             next_at_val = int(provider_next_vote_at)
         except (TypeError, ValueError):
             next_at_val = None
+    if next_at_val is None or next_at_val <= ts:
+        next_at_val = ts + cooldown_sec
+
+    channel = str(vote_channel or VOTE_CHANNEL_PLAYER).strip().lower()
+    if channel not in ALLOWED_VOTE_CHANNELS:
+        channel = VOTE_CHANNEL_PLAYER
 
     cur = conn.cursor()
-    if next_at_val is not None and vote_reward_next_at_column_ready(conn):
+    if vote_channel_column_ready(conn) and vote_reward_next_at_column_ready(conn):
+        cur.execute(
+            """
+            INSERT INTO vote_rewards (
+                provider, user_id, vote_ip, provider_ref, status,
+                reward_key, reward_payload_json, voted_at, created_at,
+                provider_next_vote_at, vote_channel
+            ) VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(provider, user_id, provider_ref) DO NOTHING;
+            """,
+            (
+                str(provider_key),
+                uid,
+                ip_val,
+                pref,
+                reward_key,
+                payload_json,
+                ts,
+                ts,
+                next_at_val,
+                channel,
+            ),
+        )
+    elif vote_reward_next_at_column_ready(conn):
         cur.execute(
             """
             INSERT INTO vote_rewards (
@@ -1032,10 +1293,10 @@ def handle_provider_postback(
     if not allowed:
         return False, False, reason
     assert user_id is not None
-    processed, created = record_provider_vote(provider_key, user_id, vote_ip, conn=conn)
-    if not processed:
+    result = process_provider_vote(provider_key, user_id, vote_ip, conn=conn)
+    if not result["success"] and result["error"] == "unavailable":
         return False, False, "unavailable"
-    return True, created, "ok"
+    return True, bool(result["created"]), "ok"
 
 
 def handle_vote_visit(
@@ -1061,22 +1322,17 @@ def handle_vote_visit(
         return False, False, "invalid_user", 0
 
     ts = int(now if now is not None else time.time())
-    cd = get_provider_cooldown_status(uid, provider, conn=conn, now=ts)
-    if not cd["can_vote"]:
-        return True, False, "cooldown_active", int(cd["cooldown_remaining_sec"])
+    result = process_provider_vote(str(provider_key), uid, None, conn=conn, now=ts)
+    if not result["success"]:
+        if result["error"] == "unavailable":
+            return False, False, "unavailable", 0
+        return False, False, str(result["error"]), int(result["cooldown_remaining_sec"])
 
-    processed, created = record_provider_vote(
-        str(provider_key),
-        uid,
-        None,
-        conn=conn,
-        now=ts,
-    )
-    if not processed:
-        return False, False, "unavailable", 0
-    if created:
+    if result["created"]:
         return True, True, "reward_pending", 0
-    return True, False, "cooldown_active", int(cd["cooldown_remaining_sec"])
+    if result["already_voted"]:
+        return True, False, "cooldown_active", int(result["cooldown_remaining_sec"])
+    return True, False, "cooldown_active", 0
 
 
 def _grant_vote_payload(

@@ -165,3 +165,55 @@ def handle_admin_ranking_recompute() -> Tuple[Dict[str, Any], int]:
     log_ranking_recompute_result(payload, log_prefix="ranking-admin", source_label="admin")
     status = 200 if payload["ok"] else 500
     return payload, status
+
+
+def handle_internal_cron_vote_reengagement(request: Request) -> Tuple[Dict[str, Any], int]:
+    """Staggered vote re-engagement for inactive universe players."""
+    authorized, auth_err = verify_internal_cron_request(request)
+    if not authorized:
+        logger.info("vote-reengagement-http-cron unauthorized")
+        return {"ok": False, "error": auth_err or "unauthorized"}, 401
+
+    from game.db import begin_write_transaction, commit, db, rollback
+    from game.vote_reengagement import run_vote_reengagement
+
+    force = parse_force_flag(request)
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        payload = run_vote_reengagement(conn=conn, force=force, source="http_cron")
+        if payload.get("ok"):
+            commit(conn)
+        else:
+            rollback(conn)
+    except Exception as exc:
+        rollback(conn)
+        logger.exception("internal cron vote reengagement failed")
+        return {"ok": False, "error": str(exc)}, 500
+    finally:
+        conn.close()
+
+    status = 200 if payload.get("ok") else 500
+    return payload, status
+
+
+def handle_admin_vote_reengagement_run(*, force: bool = True) -> Tuple[Dict[str, Any], int]:
+    from game.db import begin_write_transaction, commit, db, rollback
+    from game.vote_reengagement import run_vote_reengagement
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        payload = run_vote_reengagement(conn=conn, force=force, source="admin")
+        if payload.get("ok"):
+            commit(conn)
+        else:
+            rollback(conn)
+    except Exception as exc:
+        rollback(conn)
+        logger.exception("admin vote reengagement run failed")
+        return {"ok": False, "error": str(exc)}, 500
+    finally:
+        conn.close()
+    status = 200 if payload.get("ok") else 500
+    return payload, status

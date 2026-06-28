@@ -287,6 +287,9 @@
       case "runtime":
         result = await loadAdminRuntime();
         break;
+      case "votes":
+        result = await loadAdminVotes();
+        break;
       case "balance":
         result = await loadAdminBalance();
         break;
@@ -492,6 +495,228 @@
       return { ok: false, error: errMsg };
     } finally {
       setBusy(btn, false);
+    }
+  }
+
+  function fmtCooldown(sec) {
+    const s = Math.max(0, Number(sec) || 0);
+    if (s <= 0) return t("admin_votes_ready", "Bereit");
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m`;
+    return `${m}m`;
+  }
+
+  const ADMIN_VOTE_PROVIDER_ORDER = ["topg", "gtop100", "gametoor", "arena_top100"];
+  const ADMIN_VOTE_PROVIDER_SHORT = {
+    topg: "TopG",
+    gtop100: "GT100",
+    gametoor: "GToor",
+    arena_top100: "Arena",
+  };
+
+  function fmtTsShort(ts) {
+    if (!ts) return "–";
+    try {
+      return new Date(Number(ts) * 1000).toLocaleString(undefined, {
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch (_) {
+      return String(ts);
+    }
+  }
+
+  function _providerMap(providers) {
+    const map = {};
+    (Array.isArray(providers) ? providers : []).forEach((pr) => {
+      map[String(pr.provider_key || "")] = pr;
+    });
+    return map;
+  }
+
+  function renderAdminVoteProviderCell(pr) {
+    if (!pr) {
+      return `<td class="admin-votes-pcol"><span class="admin-votes-pchip admin-votes-pchip--empty">–</span></td>`;
+    }
+    const ready = !!pr.can_vote;
+    const statusClass = ready ? "ready" : "wait";
+    const label = ready ? "✓" : fmtCooldown(pr.cooldown_remaining_sec);
+    const ch =
+      pr.last_channel === "reengagement"
+        ? t("admin_votes_channel_reengagement", "R-E")
+        : pr.last_channel === "player"
+          ? t("admin_votes_channel_player", "Spieler")
+          : "";
+    const tip = [
+      pr.display_name || pr.provider_key,
+      ready ? t("admin_votes_ready", "Bereit") : fmtCooldown(pr.cooldown_remaining_sec),
+      pr.last_vote_at
+        ? `${t("admin_votes_col_last_vote", "Letzter Vote")}: ${fmtTs(pr.last_vote_at)}`
+        : t("vote_center_never", "Noch nie"),
+      ch || "—",
+    ].join(" · ");
+    return (
+      `<td class="admin-votes-pcol" title="${esc(tip)}">` +
+      `<span class="admin-votes-pchip admin-votes-pchip--${statusClass}">${esc(label)}</span>` +
+      (ch ? `<span class="admin-votes-pchip-ch">${esc(ch)}</span>` : "") +
+      `</td>`
+    );
+  }
+
+  function renderAdminVoteStats(data) {
+    const host = qs("#admin-votes-stats-output");
+    if (!host) return;
+    if (!data || !data.ready) {
+      host.innerHTML = emptyState(t("admin_votes_unavailable", "Vote-System nicht verfügbar."));
+      return;
+    }
+    const s = data.summary || {};
+    const providers = Array.isArray(data.providers) ? data.providers : [];
+    const metricsHtml =
+      `<div class="admin-metrics-grid admin-votes-metrics-grid">` +
+      `<div class="admin-metric-card"><span class="admin-metric-label">${esc(t("admin_votes_metric_24h", "Votes 24h"))}</span><strong class="admin-metric-value gc-mono">${fmtInt(s.votes_24h)}</strong><span class="admin-metric-sub">${esc(t("admin_votes_metric_player", "Spieler"))}: ${fmtInt(s.player_votes_24h)} · ${esc(t("admin_votes_metric_reengagement", "Re-Engagement"))}: ${fmtInt(s.reengagement_votes_24h)}</span></div>` +
+      `<div class="admin-metric-card"><span class="admin-metric-label">${esc(t("admin_votes_metric_7d", "Votes 7d"))}</span><strong class="admin-metric-value gc-mono">${fmtInt(s.votes_7d)}</strong><span class="admin-metric-sub">${esc(t("admin_votes_metric_player", "Spieler"))}: ${fmtInt(s.player_votes_7d)} · ${esc(t("admin_votes_metric_reengagement", "Re-Engagement"))}: ${fmtInt(s.reengagement_votes_7d)}</span></div>` +
+      `<div class="admin-metric-card"><span class="admin-metric-label">${esc(t("admin_votes_metric_pending", "Offene Belohnungen"))}</span><strong class="admin-metric-value gc-mono">${fmtInt(s.pending_rewards)}</strong></div>` +
+      `<div class="admin-metric-card"><span class="admin-metric-label">${esc(t("admin_votes_metric_voteable_active", "Vote-bereit (aktiv)"))}</span><strong class="admin-metric-value gc-mono">${fmtInt(s.active_voteable_now)}</strong></div>` +
+      `<div class="admin-metric-card"><span class="admin-metric-label">${esc(t("admin_votes_metric_voteable_inactive", "Vote-bereit (inaktiv)"))}</span><strong class="admin-metric-value gc-mono">${fmtInt(s.inactive_voteable_now)}</strong></div>` +
+      `<div class="admin-metric-card"><span class="admin-metric-label">${esc(t("admin_votes_metric_slot", "Aktueller Slot"))}</span><strong class="admin-metric-value gc-mono">${fmtInt(data.current_slot)}<span class="admin-metric-sub">/${fmtInt(data.slots_per_day || 48)}</span></strong></div>` +
+      `</div>`;
+
+    const providerTable = providers.length
+      ? `<table class="admin-table admin-table-compact admin-votes-provider-summary"><thead><tr>` +
+        `<th>${esc(t("admin_votes_col_provider", "Provider"))}</th>` +
+        `<th>${esc(t("admin_votes_col_7d", "7d"))}</th>` +
+        `<th>${esc(t("admin_votes_col_player", "Spieler"))}</th>` +
+        `<th>${esc(t("admin_votes_col_reengagement", "R-E"))}</th>` +
+        `</tr></thead><tbody>` +
+        providers
+          .map(
+            (p) =>
+              `<tr><td>${esc(p.display_name || p.provider_key)}</td>` +
+              `<td class="gc-mono">${fmtInt(p.votes_7d)}</td>` +
+              `<td class="gc-mono">${fmtInt(p.player_votes_7d)}</td>` +
+              `<td class="gc-mono">${fmtInt(p.reengagement_votes_7d)}</td></tr>`
+          )
+          .join("") +
+        `</tbody></table>`
+      : "";
+
+    host.innerHTML =
+      `<div class="admin-votes-dashboard">` +
+      `<div class="admin-votes-dashboard-main">${metricsHtml}</div>` +
+      (providerTable ? `<div class="admin-votes-dashboard-side">${providerTable}</div>` : "") +
+      `</div>`;
+  }
+
+  function renderAdminVotePlayers(data) {
+    const host = qs("#admin-votes-players-output");
+    if (!host) return;
+    const rows = Array.isArray(data?.players) ? data.players : [];
+    if (!rows.length) {
+      host.innerHTML = emptyState(t("admin_votes_no_players", "Keine Spieler gefunden."));
+      return;
+    }
+    const activityLabel = (a) =>
+      a === "inactive"
+        ? t("admin_votes_filter_inactive", "Inaktiv")
+        : t("admin_votes_filter_active", "Aktiv");
+    const providerHead = ADMIN_VOTE_PROVIDER_ORDER.map(
+      (key) =>
+        `<th class="admin-votes-pcol-head" title="${esc(key)}">${esc(ADMIN_VOTE_PROVIDER_SHORT[key] || key)}</th>`
+    ).join("");
+    host.innerHTML =
+      `<div class="admin-votes-players-scroll">` +
+      `<table class="admin-table table-std admin-table--entity admin-votes-players-table"><thead><tr>` +
+      `<th>${esc(t("admin_votes_col_player", "Spieler"))}</th>` +
+      `<th>${esc(t("admin_votes_col_activity", "Status"))}</th>` +
+      `<th>${esc(t("admin_votes_col_last_seen", "Zuletzt"))}</th>` +
+      `<th class="gc-mono">${esc(t("admin_votes_col_votes", "Votes"))}</th>` +
+      `<th class="gc-mono">${esc(t("admin_votes_col_pending", "Offen"))}</th>` +
+      `<th class="gc-mono">${esc(t("admin_votes_col_slot", "Slot"))}</th>` +
+      providerHead +
+      `</tr></thead><tbody>` +
+      rows
+        .map((p) => {
+          const provMap = _providerMap(p.providers);
+          const providerCells = ADMIN_VOTE_PROVIDER_ORDER.map((key) =>
+            renderAdminVoteProviderCell(provMap[key])
+          ).join("");
+          return (
+            `<tr class="admin-votes-player-row" data-admin-player-id="${Number(p.user_id)}">` +
+            `<td class="admin-votes-player-cell">${playerNameLink(p.user_id, p.player_name || p.username)}<span class="admin-small-hint gc-mono">#${Number(p.user_id)}</span></td>` +
+            `<td><span class="admin-status-badge ${p.activity === "inactive" ? "admin-status-warn" : "admin-status-ok"}">${esc(activityLabel(p.activity))}</span></td>` +
+            `<td class="gc-mono admin-votes-ts">${esc(fmtTsShort(p.last_seen))}</td>` +
+            `<td class="gc-mono admin-votes-votes" title="${esc(t("admin_votes_metric_player", "Spieler"))}/${esc(t("admin_votes_metric_reengagement", "Re-Engagement"))}">${fmtInt(p.total_votes)}<span class="admin-votes-split">${fmtInt(p.player_votes)}/${fmtInt(p.reengagement_votes)}</span></td>` +
+            `<td class="gc-mono">${fmtInt(p.pending_rewards)}</td>` +
+            `<td class="gc-mono">${fmtInt(p.reengagement_slot)}</td>` +
+            providerCells +
+            `</tr>`
+          );
+        })
+        .join("") +
+      `</tbody></table></div>` +
+      `<p class="admin-small-hint admin-votes-footnote">${esc(t("admin_votes_total_hint", "Gesamt"))}: ${fmtInt(data.total || rows.length)} · ${esc(t("admin_votes_chip_hint", "Chip: Cooldown oder ✓ bereit — Hover für Details"))}</p>`;
+  }
+
+  async function loadAdminVotes() {
+    const statsHost = qs("#admin-votes-stats-output");
+    const playersHost = qs("#admin-votes-players-output");
+    if (statsHost) statsHost.innerHTML = loadingHtml();
+    if (playersHost) playersHost.innerHTML = loadingHtml();
+    const stats = await adminGet("/api/admin/votes/stats");
+    if (!stats.ok && stats.error) {
+      if (statsHost) statsHost.innerHTML = errorCard(stats);
+      return stats;
+    }
+    renderAdminVoteStats(stats);
+    return searchAdminVotesPlayers();
+  }
+
+  async function searchAdminVotesPlayers() {
+    const q = (qs("#admin-votes-search")?.value || "").trim();
+    const activity = qs("#admin-votes-activity")?.value || "all";
+    const host = qs("#admin-votes-players-output");
+    if (host) host.innerHTML = loadingHtml();
+    const data = await adminGet(
+      `/api/admin/votes/players?q=${encodeURIComponent(q)}&activity=${encodeURIComponent(activity)}&limit=50`
+    );
+    if (!data.ok) {
+      if (host) host.innerHTML = errorCard(data);
+      return data;
+    }
+    renderAdminVotePlayers(data);
+    return data;
+  }
+
+  async function runAdminVoteReengagement(triggerBtn) {
+    const resultEl = qs("#admin-votes-reengagement-result");
+    if (resultEl) resultEl.textContent = t("admin_votes_reengagement_running", "Re-Engagement-Lauf …");
+    setBusy(triggerBtn, true);
+    try {
+      const res = await adminPost("/api/admin/votes/reengagement-run", { force: true });
+      if (res.ok) {
+        const msg = t("admin_votes_reengagement_success", "Re-Engagement: {created} Votes erstellt (Slot {slot}).")
+          .replace("{created}", String(res.created ?? 0))
+          .replace("{slot}", String(res.slot ?? "–"));
+        notify(msg, "success");
+        if (resultEl) resultEl.textContent = msg;
+        await loadAdminVotes();
+      } else {
+        const errMsg = res.message || res.error || t("admin_votes_reengagement_error", "Re-Engagement fehlgeschlagen.");
+        showAlert(errMsg, "error");
+        if (resultEl) resultEl.textContent = errMsg;
+      }
+      return res;
+    } catch (err) {
+      const errMsg = err?.message || t("admin_votes_reengagement_error", "Re-Engagement fehlgeschlagen.");
+      showAlert(errMsg, "error");
+      if (resultEl) resultEl.textContent = errMsg;
+      return { ok: false, error: errMsg };
+    } finally {
+      setBusy(triggerBtn, false);
     }
   }
 
@@ -2634,6 +2859,9 @@
     if (act === "balance-preset-b") return applyBalancePresetB();
     if (act === "balance-recalculate") return recalculateAdminRankings();
     if (act === "ranking-recompute") return runAdminRankingRecompute(btn);
+    if (act === "votes-refresh") return loadAdminVotes();
+    if (act === "votes-search") return searchAdminVotesPlayers();
+    if (act === "votes-reengagement-run") return runAdminVoteReengagement(btn);
     if (act === "combat-hof-backfill") return backfillCombatHof();
     if (act === "server-save") return saveAdminServer();
     if (act === "news-publish") return publishAdminNews(true);
@@ -3107,6 +3335,10 @@
       if (e.target.id === "admin-planets-search") {
         e.preventDefault();
         await searchAdminPlanets();
+      }
+      if (e.target.id === "admin-votes-search") {
+        e.preventDefault();
+        await searchAdminVotesPlayers();
       }
       if (e.target.id === "admin-chat-search-q") {
         e.preventDefault();

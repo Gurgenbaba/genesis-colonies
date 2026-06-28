@@ -1282,3 +1282,135 @@ body.gc-has-planet-landscape .admin-shell .admin-section {
   backdrop-filter: blur(12px) saturate(1.05);
   -webkit-backdrop-filter: blur(12px) saturate(1.05);
 }
+
+/* Vote Center admin tab — compact dashboard */
+.admin-votes-dashboard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 320px);
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 960px) {
+  .admin-votes-dashboard {
+    grid-template-columns: 1fr;
+  }
+}
+
+.admin-votes-metrics-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 720px) {
+  .admin-votes-metrics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.admin-votes-dashboard-side .admin-votes-provider-summary {
+  margin: 0;
+}
+
+.admin-votes-dashboard-side .admin-votes-provider-summary th,
+.admin-votes-dashboard-side .admin-votes-provider-summary td {
+  padding: 6px 8px;
+  font-size: 0.78rem;
+}
+
+.admin-votes-players-scroll {
+  max-height: min(52vh, 520px);
+  overflow: auto;
+  border: 1px solid var(--admin-border);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.admin-votes-players-table {
+  margin: 0;
+}
+
+.admin-votes-players-table th,
+.admin-votes-players-table td {
+  padding: 6px 8px;
+  font-size: 0.8rem;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.admin-votes-players-table .admin-votes-player-cell {
+  white-space: normal;
+  min-width: 120px;
+  max-width: 160px;
+}
+
+.admin-votes-players-table .admin-votes-player-cell .admin-small-hint {
+  display: block;
+  margin-top: 2px;
+}
+
+.admin-votes-players-table .admin-votes-ts {
+  font-size: 0.74rem;
+}
+
+.admin-votes-players-table .admin-votes-votes .admin-votes-split {
+  display: block;
+  font-size: 0.68rem;
+  color: var(--gc-text-soft);
+  font-weight: 400;
+}
+
+.admin-votes-pcol-head {
+  text-align: center;
+  font-size: 0.72rem !important;
+  letter-spacing: 0.04em;
+}
+
+.admin-votes-pcol {
+  text-align: center;
+  min-width: 56px;
+}
+
+.admin-votes-pchip {
+  display: inline-block;
+  min-width: 2.4em;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.3;
+  border: 1px solid transparent;
+}
+
+.admin-votes-pchip--ready {
+  color: #9dff9d;
+  background: rgba(80, 200, 120, 0.12);
+  border-color: rgba(80, 200, 120, 0.35);
+}
+
+.admin-votes-pchip--wait {
+  color: #ffd48a;
+  background: rgba(255, 180, 80, 0.1);
+  border-color: rgba(255, 180, 80, 0.28);
+}
+
+.admin-votes-pchip--empty {
+  color: var(--gc-text-soft);
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.admin-votes-pchip-ch {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.62rem;
+  color: var(--gc-text-soft);
+  letter-spacing: 0.03em;
+}
+
+.admin-votes-footnote {
+  margin: 8px 0 0;
+}
+
+.admin-votes-player-row:hover {
+  background: rgba(70, 229, 255, 0.04);
+}

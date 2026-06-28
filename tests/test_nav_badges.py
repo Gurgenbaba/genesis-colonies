@@ -14,6 +14,7 @@ from game.galactic_directives.state import count_pending_government_votes
 from game.live_state import nav_badges_for_game_state
 from game.models import create_user, ensure_player_and_homeworld, get_planets_by_player, init_db
 from game.vote_rewards import (
+    count_vote_center_attention,
     count_voteable_providers,
     list_enabled_providers,
     record_provider_vote,
@@ -91,7 +92,7 @@ def test_vote_center_badge_active_when_providers_voteable(nav_badges_db):
     conn = db()
     try:
         assert vote_system_ready(conn)
-        expected = count_voteable_providers(uid, conn=conn)
+        expected = count_vote_center_attention(uid, conn=conn)
         assert expected >= 1
         badges = nav_badges_for_game_state(uid, conn=conn)
         assert badges["vote_center"]["active"] is True
@@ -107,7 +108,7 @@ def test_vote_center_badge_clears_after_vote(nav_badges_db):
     try:
         providers = list_enabled_providers(conn=conn)
         assert providers
-        before = count_voteable_providers(uid, conn=conn)
+        before = count_vote_center_attention(uid, conn=conn)
         assert before >= 1
         record_provider_vote(
             str(providers[0]["provider_key"]),
@@ -116,15 +117,37 @@ def test_vote_center_badge_clears_after_vote(nav_badges_db):
             conn=conn,
         )
         conn.commit()
-        after = count_voteable_providers(uid, conn=conn)
+        after = count_vote_center_attention(uid, conn=conn)
         badges = nav_badges_for_game_state(uid, conn=conn)
-        if after == 0:
-            assert badges["vote_center"]["active"] is False
-            assert badges["vote_center"]["count"] == 0
-        else:
-            assert badges["vote_center"]["active"] is True
-            assert badges["vote_center"]["count"] == after
-            assert badges["vote_center"]["count"] < before
+        assert badges["vote_center"]["active"] is True
+        assert badges["vote_center"]["count"] == after
+        assert after >= before - 1
+    finally:
+        conn.close()
+
+
+def test_vote_center_badge_pending_rewards_after_inactive_postback(nav_badges_db):
+    """Returning player: postback while away leaves pending rewards in nav badge."""
+    uid = _player()
+    conn = db()
+    try:
+        providers = list_enabled_providers(conn=conn)
+        assert providers
+        for provider in providers:
+            record_provider_vote(
+                str(provider["provider_key"]),
+                uid,
+                "127.0.0.1",
+                conn=conn,
+            )
+        conn.commit()
+        voteable = count_voteable_providers(uid, conn=conn)
+        attention = count_vote_center_attention(uid, conn=conn)
+        assert voteable == 0
+        assert attention == len(providers)
+        badges = nav_badges_for_game_state(uid, conn=conn)
+        assert badges["vote_center"]["active"] is True
+        assert badges["vote_center"]["count"] == attention
     finally:
         conn.close()
 

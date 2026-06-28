@@ -330,17 +330,36 @@ def build_overview_warnings(
 
     try:
         if conn is not None:
-            from .vote_rewards import count_voteable_providers, vote_system_ready
+            from .vote_rewards import (
+                count_pending_vote_rewards,
+                count_voteable_providers,
+                vote_system_ready,
+            )
 
-            if vote_system_ready(conn) and count_voteable_providers(int(user_id), conn=conn) > 0:
-                warnings.append(
-                    {
-                        "key": "vote_available",
-                        "severity": "info",
-                        "label_key": "overview_warning_vote_available",
-                        "href_key": "vote_center_view",
-                    }
-                )
+            uid = int(user_id)
+            if vote_system_ready(conn):
+                pending = count_pending_vote_rewards(uid, conn=conn)
+                voteable = count_voteable_providers(uid, conn=conn)
+                if pending > 0:
+                    warnings.append(
+                        {
+                            "key": "vote_rewards_pending",
+                            "severity": "info",
+                            "label_key": "overview_warning_vote_rewards_pending",
+                            "href_key": "vote_center_view",
+                            "count": pending,
+                        }
+                    )
+                elif voteable > 0:
+                    warnings.append(
+                        {
+                            "key": "vote_available",
+                            "severity": "info",
+                            "label_key": "overview_warning_vote_available",
+                            "href_key": "vote_center_view",
+                            "count": voteable,
+                        }
+                    )
     except Exception:
         pass
 

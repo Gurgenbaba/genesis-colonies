@@ -110,6 +110,7 @@
       <button type="button" class="admin-tab-btn" data-admin-tab="support" role="tab">{{ T("admin_support_title", "Support") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="messages" role="tab">{{ T("admin_messages_title", "Nachrichten") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="runtime" role="tab">{{ T("admin_runtime_title") }}</button>
+      <button type="button" class="admin-tab-btn" data-admin-tab="votes" role="tab">{{ T("admin_votes_title", "Votes") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="balance" role="tab">{{ T("admin_balance_title", "Balance") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="server" role="tab">{{ T("admin_server_title", "Server") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="diplomacy" role="tab">{{ T("admin_diplomacy_title", "Galaktische Diplomatie") }}</button>
@@ -443,6 +444,39 @@
       </section>
 
       <div id="admin-runtime-output" class="admin-panel-body"></div>
+    </section>
+
+    <section id="admin-tab-votes" class="admin-panel admin-tab-panel" data-admin-panel="votes" role="tabpanel" hidden>
+      <div class="admin-action-row">
+        <h2 class="admin-panel-title">{{ T("admin_votes_title", "Vote Center") }}</h2>
+        <div class="admin-toolbar">
+          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="votes-reengagement-run">
+            {{ T("admin_votes_reengagement_run", "Re-Engagement-Lauf") }}
+          </button>
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="votes-refresh">
+            {{ T("admin_btn_refresh", "Aktualisieren") }}
+          </button>
+        </div>
+      </div>
+      <p class="admin-tab-hint admin-small-hint">{{ T("admin_votes_hint", "Vote-Statistik für aktive und inaktive Spieler — Cooldowns, Kanäle und nächste Slots.") }}</p>
+      <div id="admin-votes-stats-output" class="admin-panel-body" aria-live="polite"></div>
+      <div class="admin-section-title">
+        <span class="admin-section-title-text">{{ T("admin_votes_players_title", "Spieler-Übersicht") }}</span>
+      </div>
+      <div class="admin-toolbar admin-action-row-wrap">
+        <input type="search" id="admin-votes-search" class="gc-input admin-search-input"
+               placeholder="{{ T('admin_votes_search_placeholder', 'Spieler suchen…') }}" autocomplete="off">
+        <select id="admin-votes-activity" class="gc-input admin-search-input" data-gc-hud-select>
+          <option value="all">{{ T("admin_votes_filter_all", "Alle") }}</option>
+          <option value="active">{{ T("admin_votes_filter_active", "Aktiv") }}</option>
+          <option value="inactive">{{ T("admin_votes_filter_inactive", "Inaktiv") }}</option>
+        </select>
+        <button type="button" class="gc-btn gc-btn-secondary gc-btn-sm" data-admin-action="votes-search">
+          {{ T("admin_btn_search", "Suchen") }}
+        </button>
+      </div>
+      <div id="admin-votes-players-output" class="admin-table-wrap" aria-live="polite"></div>
+      <div id="admin-votes-reengagement-result" class="admin-small-hint" aria-live="polite"></div>
     </section>
 
     <section id="admin-tab-balance" class="admin-panel admin-tab-panel" data-admin-panel="balance" role="tabpanel" hidden>

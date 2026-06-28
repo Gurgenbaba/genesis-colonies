@@ -731,6 +731,15 @@ def api_internal_cron_ranking():
     return jsonify(payload), status
 
 
+@app.route("/api/internal/cron/vote-reengagement", methods=["POST"])
+def api_internal_cron_vote_reengagement():
+    """Token-gated staggered vote re-engagement for inactive players."""
+    from game.internal_cron import handle_internal_cron_vote_reengagement
+
+    payload, status = handle_internal_cron_vote_reengagement(request)
+    return jsonify(payload), status
+
+
 # --------------------------------------------------------------------------
 # HELPER: Spieler-View + Ressourcen laden (conn-safe)
 # --------------------------------------------------------------------------
@@ -3900,6 +3909,80 @@ def api_admin_ranking_recompute():
     except Exception as exc:
         logger.exception("api_admin_ranking_recompute failed")
         return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@app.route("/api/admin/votes/stats", methods=["GET"])
+@require_admin_api
+def api_admin_votes_stats():
+    from game.db import db
+    from game.vote_reengagement import build_admin_vote_stats
+
+    conn = db()
+    try:
+        payload = build_admin_vote_stats(conn=conn)
+    finally:
+        conn.close()
+    return jsonify({"ok": True, **payload})
+
+
+@app.route("/api/admin/votes/players", methods=["GET"])
+@require_admin_api
+def api_admin_votes_players():
+    from game.db import db
+    from game.vote_reengagement import search_admin_vote_players
+
+    q = str(request.args.get("q") or "").strip()
+    activity = str(request.args.get("activity") or "all").strip().lower()
+    try:
+        limit = int(request.args.get("limit") or 50)
+    except (TypeError, ValueError):
+        limit = 50
+    try:
+        offset = int(request.args.get("offset") or 0)
+    except (TypeError, ValueError):
+        offset = 0
+    conn = db()
+    try:
+        payload = search_admin_vote_players(
+            conn=conn,
+            q=q,
+            activity=activity,
+            limit=limit,
+            offset=offset,
+        )
+    finally:
+        conn.close()
+    return jsonify(payload)
+
+
+@app.route("/api/admin/votes/reengagement-run", methods=["POST"])
+@require_admin_api
+def api_admin_votes_reengagement_run():
+    from game.internal_cron import handle_admin_vote_reengagement_run
+
+    admin = get_current_user()
+    admin_id = int(admin["id"]) if admin else 0
+    body = request.get_json(silent=True) or {}
+    force = bool(body.get("force") in (True, 1, "1", "true", "yes", "on"))
+    payload, status = handle_admin_vote_reengagement_run(force=force or True)
+    if admin_id and payload.get("ok"):
+        try:
+            from game.admin_audit import write_admin_audit
+
+            write_admin_audit(
+                admin_id,
+                "admin_vote_reengagement_run",
+                target_type="system",
+                payload={
+                    "created": payload.get("created"),
+                    "slot": payload.get("slot"),
+                    "force": payload.get("force"),
+                    "duration_ms": payload.get("duration_ms"),
+                },
+            )
+        except Exception:
+            logger.exception("admin vote reengagement audit failed")
+    return jsonify(payload), status
 
 
 @app.route("/api/admin/balance", methods=["GET"])
