@@ -39,7 +39,7 @@ from .scoring import compute_single_planet_score
 from .ux_copy import (
     category_label_key,
     event_state_label_key,
-    humanize_requirements,
+    humanize_requirement_lines,
     level_unlock_label_key,
     planet_class_label_key,
     planet_research_branch_label_key,
@@ -271,7 +271,7 @@ def _enrich_research_card(
         "missing_resources": missing_resources,
         "unavailable_reason_key": unavailable_reason_key,
         "requirements_met": bool(tech.get("requirements_met")),
-        "missing_human": humanize_requirements(
+        "missing_human": humanize_requirement_lines(
             tech.get("missing_requirements") or [],
             planet_level=planet_level,
         ),

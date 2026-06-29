@@ -212,7 +212,11 @@
       <span class="pe-tech-reward-chip gc-mono">{{ T('pe_tech_reward_chip', '⭐ +%(xp)s XP', xp=(tech.reward_xp|int)) }}</span>
       {% endif %}
       {% if variant == 'locked' and tech.missing_human %}
-      <p class="pe-tech-card-missing hint">{{ tech.missing_human }}</p>
+      <p class="pe-tech-card-missing hint">
+        {%- for line in tech.missing_human -%}
+        {%- if not loop.first %} · {% endif -%}{{ line }}
+        {%- endfor -%}
+      </p>
       {% endif %}
       {{ pe_tech_info_source(tech) }}
     </div>

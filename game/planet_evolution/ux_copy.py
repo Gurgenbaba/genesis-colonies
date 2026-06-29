@@ -161,6 +161,44 @@ def humanize_requirements(missing: List[str], *, planet_level: int = 1) -> List[
     return [humanize_requirement(m, planet_level=planet_level) for m in (missing or [])]
 
 
+def requirement_display_line(req: Dict[str, Any], *, locale: str | None = None) -> str:
+    """Translate a structured requirement dict into a single UI line."""
+    from game.i18n import tr
+
+    label_key = str(req.get("label_key") or "pe_req_unknown")
+    fallback = str(req.get("fallback") or label_key)
+    fmt: Dict[str, Any] = {
+        k: v for k, v in req.items() if k not in ("label_key", "fallback", "raw")
+    }
+
+    if "tech_label_key" in fmt:
+        tech_key = str(fmt.get("tech_key") or "")
+        fmt["tech_label_key"] = tr(str(fmt["tech_label_key"]), tech_key, locale=locale)
+    if "trait_label_key" in fmt:
+        trait_key = str(fmt.get("trait_key") or "")
+        fmt["trait_label_key"] = tr(str(fmt["trait_label_key"]), trait_key, locale=locale)
+    if "building" in fmt:
+        bkey = str(fmt["building"])
+        fmt["building"] = tr(f"building_{bkey}", bkey.replace("_", " "), locale=locale)
+    if label_key == "pe_req_imperial_research" and "tech_key" in fmt:
+        tk = str(fmt["tech_key"])
+        fmt["tech_key"] = tr(f"research_{tk}", tk.replace("_", " "), locale=locale)
+
+    return tr(label_key, fallback, locale=locale, **fmt)
+
+
+def humanize_requirement_lines(
+    missing: List[str],
+    *,
+    planet_level: int = 1,
+    locale: str | None = None,
+) -> List[str]:
+    return [
+        requirement_display_line(r, locale=locale)
+        for r in humanize_requirements(missing, planet_level=planet_level)
+    ]
+
+
 def level_unlock_label_key(level: int, unlock: Tuple[Any, ...]) -> str:
     return _LEVEL_UNLOCK_LABELS.get(tuple(unlock), "pe_unlock_generic")
 

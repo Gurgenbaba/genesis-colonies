@@ -11,7 +11,7 @@ from game.planet_evolution.bootstrap import backfill_all_planets_evolution, ensu
 from game.planet_evolution.dashboard import _next_action, _research_ux, _trait_cards, build_dashboard_extras
 from game.planet_evolution.definitions import get_trait, reload_definitions
 from game.planet_evolution.repository import get_planet_dna, get_planet_row
-from game.planet_evolution.ux_copy import trait_effect_lines
+from game.planet_evolution.ux_copy import humanize_requirement_lines, trait_effect_lines
 
 
 @pytest.fixture
@@ -324,3 +324,17 @@ def test_overview_planet_teaser_integration(evo_db):
     conn.close()
     assert teaser.get("visible") is True
     assert "planet_level" in teaser
+
+
+def test_humanize_requirement_lines_renders_translated_text_not_raw_dict():
+    lines = humanize_requirement_lines(
+        ["traits_any:['mantle_rich']", "planet_level>=5"],
+        planet_level=3,
+        locale="de",
+    )
+    assert len(lines) == 2
+    assert lines[0] == "Benötigt passende Planet-Eigenschaft"
+    assert lines[1] == "Planet muss Stufe 5 erreichen (aktuell: Stufe 3)"
+    for line in lines:
+        assert "label_key" not in line
+        assert "fallback" not in line
