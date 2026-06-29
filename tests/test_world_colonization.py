@@ -139,7 +139,7 @@ def test_non_colonizable_world_types_cannot_be_reserved(world_colonization_db):
     finally:
         conn.close()
 
-def test_colonize_planet_blocks_coordinate_only_player_flow(world_colonization_db):
+def test_colonize_planet_blocks_without_expansion_unlock(world_colonization_db):
     player_id = _create_player()
     from game.db import db
     conn = db()
@@ -148,8 +148,33 @@ def test_colonize_planet_blocks_coordinate_only_player_flow(world_colonization_d
             player_id, name='Blocked Colony', galaxy=1, system=220, position=3, conn=conn
         )
         assert not ok
-        assert reason == 'colonize_requires_expansion_site'
+        assert reason == 'expansion_gate_homeworld_level'
         assert extra is None
+    finally:
+        conn.close()
+
+def test_colonize_planet_classic_coords_player_flow(world_colonization_db):
+    player_id = _create_player()
+    from game.db import db
+    from game.models import get_homeworld
+    from game.planet_evolution.expansion_protocol import INTERSTELLAR_EXPANSION_TECH
+    conn = db()
+    try:
+        hw = get_homeworld(player_id, conn=conn)
+        assert hw
+        conn.execute('UPDATE planets SET planet_level = 25 WHERE id = ?;', (int(hw['id']),))
+        conn.execute(
+            'INSERT INTO research_levels (user_id, tech_key, level) VALUES (?, ?, ?) '
+            'ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;',
+            (player_id, INTERSTELLAR_EXPANSION_TECH, 6),
+        )
+        conn.commit()
+        ok, reason, extra = colonize_planet(
+            player_id, name='Classic Colony', galaxy=1, system=220, position=3, conn=conn
+        )
+        assert ok, reason
+        row = conn.execute('SELECT world_key, world_x, planet_role FROM planets WHERE id = ?;', (int(extra['planet_id']),)).fetchone()
+        assert row['world_key'] is None
     finally:
         conn.close()
 
@@ -280,13 +305,21 @@ def test_fleet_world_key_preview_does_not_break_classic_empty_slot(world_coloniz
     conn = db()
     try:
         player_id, pid, _, _, _ = _fleet_player(conn)
+        from game.planet_evolution.expansion_protocol import INTERSTELLAR_EXPANSION_TECH
+        from game.models import get_homeworld
+        hw = get_homeworld(player_id, conn=conn)
+        conn.execute('UPDATE planets SET planet_level = 25 WHERE id = ?;', (int(hw['id']),))
+        conn.execute(
+            'INSERT INTO research_levels (user_id, tech_key, level) VALUES (?, ?, ?) '
+            'ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;',
+            (player_id, INTERSTELLAR_EXPANSION_TECH, 6),
+        )
         origin = conn.execute('SELECT * FROM planets WHERE id = ?;', (pid,)).fetchone()
         conn.commit()
         target = resolve_fleet_target(player_id, 1, 499, 12, conn=conn)
         assert target['target_type'] == 'empty_slot'
-        assert target['allowed_missions'] == []
+        assert target['allowed_missions'] == ['colonize']
         preview = build_fleet_send_preview(player_id=player_id, origin_planet=dict(origin), target_galaxy=1, target_system=499, target_position=12, mission_type='colonize', ships={'seed_ark': 1}, resources={}, speed_percent=100, conn=conn)
-        assert preview['can_send'] is False
-        assert preview.get('block_reason') == 'colonize_requires_expansion_site'
+        assert preview['can_send'] is True
     finally:
         conn.close()

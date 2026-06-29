@@ -226,6 +226,6 @@ def test_galaxy_command_map_serializes_mission_actions(gc598_db, monkeypatch):
     app_module.app.config['TESTING'] = True
     with client.session_transaction() as sess:
         sess['user_id'] = user_id
-    body = client.get('/galaxy?view=command_map').get_data(as_text=True)
+    body = client.get('/galaxy?view=command_map&dev=1').get_data(as_text=True)
     assert 'data-command-center' in body
     assert 'mission=spy' in body or 'mission_actions' in body or 'fleet_mission_spy' in body

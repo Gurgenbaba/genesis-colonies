@@ -418,17 +418,16 @@ def test_galaxy_foreign_planet_fleet_shortcuts(galaxy_db, monkeypatch):
     assert "galaxy-fleet-action--attack" in body
 
 
-def test_galaxy_empty_slot_shows_command_map_cta_not_colonize(galaxy_db, monkeypatch):
+def test_galaxy_empty_slot_shows_colonize_fleet_shortcut(galaxy_db, monkeypatch):
     client, _uid = _galaxy_client(monkeypatch)
     resp = client.get("/galaxy?view=system&galaxy=1&system=499")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
-    assert "mission=colonize" not in body
-    assert "galaxy-fleet-action--colonize" not in body
-    assert "galaxy-fleet-expansion-cta" in body
-    assert "view=command_map" in body
-    assert "action=colonize" in body
-    assert "galaxy_show_expansion_sites" in body or "Expansion Sites" in body
+    assert "mission=colonize" in body
+    assert "galaxy-fleet-action--colonize" in body
+    assert "target_galaxy=1" in body
+    assert "target_system=499" in body
+    assert "galaxy-fleet-expansion-cta" not in body
 
 
 def test_galaxy_expedition_slot_shortcut(galaxy_db, monkeypatch):

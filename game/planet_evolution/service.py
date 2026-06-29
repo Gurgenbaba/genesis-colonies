@@ -626,23 +626,30 @@ def colonize_planet(
             binding
             and str(binding.get("world_key") or "").strip()
         )
+        has_explicit_classic_coords = system is not None and position is not None
         if not has_expansion_binding:
-            if not allow_legacy_coordinates and src not in _LEGACY_COLONIZE_SOURCES:
+            if (
+                not has_explicit_classic_coords
+                and not allow_legacy_coordinates
+                and src not in _LEGACY_COLONIZE_SOURCES
+            ):
                 return False, "colonize_requires_expansion_site", None
 
         legacy_coordinate_path = not has_expansion_binding and (
-            allow_legacy_coordinates or src in _LEGACY_COLONIZE_SOURCES
+            has_explicit_classic_coords
+            or allow_legacy_coordinates
+            or src in _LEGACY_COLONIZE_SOURCES
         )
 
         begin_write_transaction(conn)
-        if legacy_coordinate_path:
+        if legacy_coordinate_path and src not in _LEGACY_COLONIZE_SOURCES:
             from game.logic import check_planet_cap_available
 
             ok_cap, cap_reason = check_planet_cap_available(int(player_id), conn=conn)
             if not ok_cap:
                 rollback(conn)
                 return False, cap_reason, None
-        else:
+        elif not legacy_coordinate_path:
             from game.logic import check_planet_cap_available
 
             cap_world_key = str(binding.get("world_key") or "") if binding else None

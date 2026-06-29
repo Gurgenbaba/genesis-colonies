@@ -245,7 +245,7 @@ def build_expansion_unlock_block(
         "colonize_cta": {
             "visible": bool(viewing_homeworld),
             "enabled": can_launch,
-            "href": "/galaxy?view=command_map&action=colonize",
+            "href": "/galaxy?view=system",
             "has_targets": target_count > 0,
             "target_count": int(target_count),
         },
@@ -257,29 +257,11 @@ def count_reachable_colonize_targets(
     *,
     conn: sqlite3.Connection,
 ) -> int:
-    """Colonizable, unclaimed world_field nodes passing per-world expansion gates (GC-931)."""
-    from .command_map import build_command_map_payload
-    from .expansion_protocol import evaluate_expansion_gates
+    """Empty classic galaxy slots available for colonization (GC-593)."""
+    from game.galaxy import count_empty_galaxy_slots
 
-    uid = int(player_id)
-    payload = build_command_map_payload(uid, conn=conn)
-    count = 0
-    for node in payload.get("nodes") or []:
-        if str(node.get("node_kind") or "") != "world_field":
-            continue
-        if not node.get("is_colonizable") or node.get("is_claimed"):
-            continue
-        wk = str(node.get("world_key") or "").strip()
-        wt = str(node.get("world_type") or "").strip()
-        ok, _, _ = evaluate_expansion_gates(
-            uid,
-            conn=conn,
-            world_key=wk or None,
-            world_type=wt or None,
-        )
-        if ok:
-            count += 1
-    return count
+    _ = int(player_id)
+    return int(count_empty_galaxy_slots(conn=conn))
 
 
 def build_expansion_summary(player_id: int, *, conn: sqlite3.Connection) -> Dict[str, Any]:

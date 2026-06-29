@@ -144,7 +144,7 @@ def test_galaxy_command_map_renders_site_inspector(expansion_sites_v2_db, monkey
 
     client = app_module.app.test_client()
     client.post("/login", data={"username": uname, "password": "test-pass-123"})
-    body = client.get("/galaxy?view=command_map").get_data(as_text=True)
+    body = client.get("/galaxy?view=command_map&dev=1").get_data(as_text=True)
 
     assert "data-command-map-site-inspector" in body
     assert "data-expansion-site-inspect" in body

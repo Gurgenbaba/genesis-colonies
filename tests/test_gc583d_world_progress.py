@@ -316,7 +316,7 @@ def test_inspector_template_has_progress_section(gc583d_db, monkeypatch):
     with client.session_transaction() as sess:
         sess["user_id"] = player_id
 
-    body = client.get("/galaxy?view=command_map").get_data(as_text=True)
+    body = client.get("/galaxy?view=command_map&dev=1").get_data(as_text=True)
     assert "gc-world-inspector-modal" in body
     assert "data-world-field-inspect" in body
     assert "data-familiarity-label-key" in body

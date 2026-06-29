@@ -605,7 +605,30 @@
         <p class="pe-expansion-panel-lead hint">
           {{ T("pe_expansion_development_stage", "Genesis Ark — Entwicklungsstufe %(level)s", level=(exp_unlock.homeworld_level or 1)) }}
         </p>
-        {% if exp_unlock.newly_discovered %}
+        {% set colonize_cta = exp_unlock.colonize_cta if exp_unlock.colonize_cta is defined else {} %}
+        {% if exp_unlock.on_homeworld and exp_unlock.launch_checklist and colonize_cta.visible and colonize_cta.enabled %}
+          {% if exp_unlock.newly_discovered %}
+            {% for site in exp_unlock.newly_discovered %}
+            <p class="pe-expansion-panel-note">{{ site.role_icon or '🌌' }} {{ T(site.label_key, site.site_key) }} · {{ T("expansion_site_newly_discovered", "Neu entdeckt") }}</p>
+            {% endfor %}
+          {% endif %}
+          <p class="pe-expansion-panel-note hint">{{ T("pe_colonize_new_world_hint", "Neue Kolonien werden in der Galaxie über freie Slots gegründet.") }}</p>
+          <ol class="pe-expansion-rail pe-expansion-rail--compact">
+            {% set ns = namespace(active_set=false) %}
+            {% for item in exp_unlock.launch_checklist["items"] %}
+            {% set step_class = 'done' if item.met else ('active' if not ns.active_set else 'pending') %}
+            {% if not item.met and not ns.active_set %}{% set ns.active_set = true %}{% endif %}
+            <li class="pe-rail-step pe-rail-step--{{ step_class }}" title="{{ T(item.label_key, item.key) }}">
+              <span class="pe-rail-step-node" aria-hidden="true"></span>
+              <span class="pe-rail-step-label">{{ T(item.label_key, item.key) }}{% if item.current is defined and item.required is defined %} <span class="gc-mono">({{ item.current }}/{{ item.required }})</span>{% endif %}</span>
+            </li>
+            {% endfor %}
+          </ol>
+          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm pe-colonize-world-btn"
+                  data-cta-href="{{ colonize_cta.href or '/galaxy?view=system' }}">
+            {{ T("pe_colonize_new_world_cta", "Neue Welt kolonisieren") }}
+          </button>
+        {% elif exp_unlock.newly_discovered %}
           {% for site in exp_unlock.newly_discovered %}
           <p class="pe-expansion-panel-note">{{ site.role_icon or '🌌' }} {{ T(site.label_key, site.site_key) }} · {{ T("expansion_site_newly_discovered", "Neu entdeckt") }}</p>
           {% endfor %}
@@ -621,13 +644,6 @@
             </li>
             {% endfor %}
           </ol>
-          {% set colonize_cta = exp_unlock.colonize_cta if exp_unlock.colonize_cta is defined else {} %}
-          {% if colonize_cta.visible and colonize_cta.enabled %}
-          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm pe-colonize-world-btn"
-                  data-cta-href="{{ colonize_cta.href or '/galaxy?view=command_map&action=colonize' }}">
-            {{ T("pe_colonize_new_world_cta", "Neue Welt kolonisieren") }}
-          </button>
-          {% endif %}
         {% elif exp_unlock.next_unlock and exp_unlock.on_homeworld %}
           <ol class="pe-expansion-rail pe-expansion-rail--compact">
             <li class="pe-rail-step pe-rail-step--done"><span class="pe-rail-step-node"></span><span class="pe-rail-step-label">{{ T("pe_expansion_development_stage", "Genesis Ark — Entwicklungsstufe %(level)s", level=(exp_unlock.homeworld_level or 1)) }}</span></li>

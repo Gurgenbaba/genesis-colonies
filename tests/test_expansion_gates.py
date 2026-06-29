@@ -238,7 +238,7 @@ def test_galaxy_command_map_renders_locked_expansion_node(expansion_gates_db, mo
     client = app_module.app.test_client()
     with client.session_transaction() as sess:
         sess['user_id'] = player_id
-    body = client.get('/galaxy?view=command_map').get_data(as_text=True)
+    body = client.get('/galaxy?view=command_map&dev=1').get_data(as_text=True)
     assert 'galaxy-command-map-node--locked' in body
     assert 'galaxy-command-map-edge--expansion_locked' in body
     assert 'Frontier IX' in body or 'expansion_site_frontier_ix' in body
@@ -257,7 +257,7 @@ def test_galaxy_command_map_renders_newly_discovered_badge(expansion_gates_db, m
     client = app_module.app.test_client()
     with client.session_transaction() as sess:
         sess['user_id'] = player_id
-    body = client.get('/galaxy?view=command_map').get_data(as_text=True)
+    body = client.get('/galaxy?view=command_map&dev=1').get_data(as_text=True)
     assert 'galaxy-command-map-node--new' in body
     assert 'galaxy-command-map-node-badge--new' in body
 
@@ -276,7 +276,7 @@ def test_launch_checklist_uses_items_key_not_dict_method(expansion_gates_db):
     finally:
         conn.close()
 
-def test_colonize_cta_points_to_command_map(expansion_gates_db):
+def test_colonize_cta_points_to_galaxy_system(expansion_gates_db):
     player_id = _create_player()
     _set_homeworld_level(player_id, 5)
     from game.db import db
@@ -288,7 +288,7 @@ def test_colonize_cta_points_to_command_map(expansion_gates_db):
         block = build_expansion_unlock_block(player_id, conn=conn, viewing_homeworld=True)
         cta = block['colonize_cta']
         assert cta['visible'] is True
-        assert cta['href'] == '/galaxy?view=command_map&action=colonize'
+        assert cta['href'] == '/galaxy?view=system'
         assert isinstance(cta['has_targets'], bool)
         assert cta['target_count'] >= 0
     finally:
@@ -324,8 +324,8 @@ def test_planet_evolution_renders_colonize_cta(expansion_gates_db, monkeypatch):
     assert resp.status_code == 200, resp.get_data(as_text=True)[:500]
     body = resp.get_data(as_text=True)
     assert 'pe-colonize-world-btn' in body
-    assert 'action=colonize' in body
-    assert 'pe-expansion-checklist-item' in body
+    assert 'view=system' in body
+    assert 'pe-rail-step' in body
 
 def test_galaxy_command_map_colonize_action_hook():
     src = (ROOT / 'static' / 'main.js').read_text(encoding='utf-8')

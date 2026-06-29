@@ -144,7 +144,7 @@ def test_galaxy_command_map_renders_graph_not_list(command_map_db, monkeypatch):
     assert ok, reason
     client = app_module.app.test_client()
     client.post('/login', data={'username': uname, 'password': 'test-pass-123'})
-    body = client.get('/galaxy?view=command_map').get_data(as_text=True)
+    body = client.get('/galaxy?view=command_map&dev=1').get_data(as_text=True)
     assert 'galaxy-command-map-graph' in body
     assert 'galaxy-command-map-edges' in body
     assert 'galaxy-command-map-node--hub' in body

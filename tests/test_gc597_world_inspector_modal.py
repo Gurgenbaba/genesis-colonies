@@ -274,7 +274,7 @@ def test_gc597_galaxy_renders_fullmap_and_modal(gc597_db, monkeypatch):
 
     client.post("/login", data={"username": uname, "password": "test-pass-123"})
 
-    body = client.get("/galaxy?view=command_map").get_data(as_text=True)
+    body = client.get("/galaxy?view=command_map&dev=1").get_data(as_text=True)
 
 
 

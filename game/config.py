@@ -125,8 +125,16 @@ def get_gunicorn_workers() -> int:
 
 def is_command_map_dev_mode() -> bool:
     """When True, Command Map shows DEV PREVIEW badge and disclaimer (GC-597D)."""
-    val = os.environ.get("GC_COMMAND_MAP_DEV_MODE", "1")
+    val = os.environ.get("GC_COMMAND_MAP_DEV_MODE", "0")
     return str(val).strip().lower() in ("1", "true", "yes", "on")
+
+
+def is_command_map_accessible(*, dev_query: str | None = None) -> bool:
+    """Command Map is dev-only unless env flag or ?dev=1 (GC-593)."""
+    if is_command_map_dev_mode():
+        return True
+    dev = str(dev_query or "").strip().lower()
+    return dev in ("1", "true", "yes", "on")
 
 
 def _env_str(name: str) -> str:

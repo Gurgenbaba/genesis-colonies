@@ -1514,12 +1514,19 @@ def galaxy_view():
     from game.fleet import build_expedition_slot, _hold_mission_enabled
     from game.planet_evolution.repository import get_active_planet_id, get_context_planet
 
+    from game.config import is_command_map_accessible
+
     user_id = int(session["user_id"])
-    view = (request.args.get("view") or "command_map").strip().lower()
+    view = (request.args.get("view") or "system").strip().lower()
     if view == "imperium":
-        view = "command_map"
+        view = "system"
     if view not in ("system", "command_map"):
-        view = "command_map"
+        view = "system"
+    command_map_available = is_command_map_accessible(
+        dev_query=request.args.get("dev"),
+    )
+    if view == "command_map" and not command_map_available:
+        view = "system"
 
     galaxy = 1
     system = 1
@@ -1611,6 +1618,7 @@ def galaxy_view():
         command_map=command_map,
         galactic_directive_banner=galactic_directive_banner,
         galactic_diplomacy_banner=galactic_diplomacy_banner,
+        command_map_available=command_map_available,
     )
 
 

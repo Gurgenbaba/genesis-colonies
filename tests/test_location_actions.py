@@ -93,7 +93,7 @@ def test_command_map_colony_nodes_include_actions(location_actions_db):
     hw = next((n for n in colonies if n.get('empire_role_key') == 'homeworld'))
     assert any((a['action_key'] == 'evolution' for a in hw['actions']))
 
-def test_galaxy_default_is_world_map(location_actions_db, monkeypatch):
+def test_galaxy_default_is_system_view(location_actions_db, monkeypatch):
     import importlib
     dbmod.DB_PATH = location_actions_db
     models.DB_PATH = location_actions_db
@@ -103,12 +103,13 @@ def test_galaxy_default_is_world_map(location_actions_db, monkeypatch):
     ok, err, user = create_user(uname, 'test-pass-123')
     assert ok and user, err
     client = app_module.app.test_client()
-    client.post('/login', data={'username': uname, 'password': 'test-pass-123'})
+    with client.session_transaction() as sess:
+        sess['user_id'] = int(user['id'])
     body = client.get('/galaxy').get_data(as_text=True)
-    assert 'galaxy-view-tab--world' in body
-    assert 'data-command-map-colony-panel' in body
-    assert 'data-colony-actions-source' in body
-    assert 'location_action_mines' in body or 'Minen' in body
+    assert 'galaxy-slot-card' in body
+    assert 'galaxy-view-tab--classic' in body
+    assert 'data-command-map-graph' not in body
+    assert 'galaxy-view-tab--world' not in body
 
 def test_classic_galaxy_still_reachable(location_actions_db, monkeypatch):
     import importlib

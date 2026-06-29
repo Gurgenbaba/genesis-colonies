@@ -161,7 +161,7 @@ def test_galaxy_template_renders_strategic_world_inspector(strategic_worlds_db, 
     with client.session_transaction() as sess:
         sess["user_id"] = player_id
 
-    body = client.get("/galaxy?view=command_map").get_data(as_text=True)
+    body = client.get("/galaxy?view=command_map&dev=1").get_data(as_text=True)
     assert "gc-world-inspector-modal" in body
     assert "data-world-field-inspect" in body
     assert "data-strategic-name" in body

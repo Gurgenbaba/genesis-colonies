@@ -88,29 +88,29 @@ Die **Genesis Command Map** ist die visuelle Darstellung des Imperiums — nicht
 
 ---
 
-## Galaxy vs. Empire — strikte Trennung (aktualisiert 2026-06-12)
+## Galaxy vs. Empire — strikte Trennung (aktualisiert GC-593)
 
 | Seite | Zweck | Status |
 |-------|-------|--------|
 | **`/empire`** | Wirtschaft, Produktion, Ressourcen-Matrix | **Nicht anfassen** |
-| **`/galaxy?view=command_map`** | **Weltkarte** — Ziel: Haupt-Galaxy, rollenbasierte Orte | GC-570+ |
-| **`/galaxy?view=system`** | Klassische OGame-Systemansicht | **Legacy / Fallback** |
+| **`/galaxy`** / **`/galaxy?view=system`** | **Haupt-Galaxy** — klassische Systemansicht, Slots, Fleet-Prefill | **Spieler-Default** |
+| **`/galaxy?view=command_map`** | Weltkarte / Command Map | **Dev-Preview only** (`?dev=1` oder Env-Flag) |
 
 ```text
 Empire     = Wirtschaft = Produktion = Ressourcenübersicht
-Galaxy     = Weltkarte = Orte = Rollen = Expansion
+Galaxy     = Koordinaten [G:S:P] = Slots = Fleet = Kolonisierung
 ```
 
-**Strategische Korrektur (GC-570):** Die Command Map ist nicht mehr „Zusatz-Hub“, sondern **langfristiger Ersatz** der klassischen Galaxie-Ansicht. Koordinatenmodell `[G:S:P]` bleibt intern.
+**GC-593:** Die klassische Systemansicht ist wieder Hauptnavigation. Die Command Map bleibt im Code als Dev/Legacy-Preview; Koordinatenmodell `[G:S:P]` ist kanonisch.
 
-Siehe [GC-570_WORLD_MAP_DIRECTION.md](GC-570_WORLD_MAP_DIRECTION.md).
+Siehe [GALAXY_SYSTEM.md](GALAXY_SYSTEM.md), [GC-570_WORLD_MAP_DIRECTION.md](GC-570_WORLD_MAP_DIRECTION.md) (historisch).
 
-### Navigation (Ziel)
+### Navigation (aktuell)
 
 ```text
-/galaxy
-├─ [ Weltkarte ]           ← Default (command_map) — Imperium + Orte + Actions
-└─ [ Klassische Ansicht ]  ← Legacy (view=system) — Slots, Fleet-Prefill
+/galaxy                    ← Default: klassische Ansicht (view=system)
+├─ [ Klassische Ansicht ]  ← Slots 1–15, Expedition Pos 16, Fleet-Shortcuts
+└─ [ Weltkarte ]           ← nur Dev-Preview (command_map + dev=1)
 ```
 
 ---

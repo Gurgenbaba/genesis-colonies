@@ -2613,28 +2613,29 @@ def test_resolve_fleet_target_empty_slot(fleet_db):
     uid = _player(conn=conn)
     target = resolve_fleet_target(uid, 1, 499, 12, conn=conn)
     assert target['target_type'] == 'empty_slot'
-    assert target['allowed_missions'] == []
-    assert mission_allowed_for_target('colonize', target)[0] is False
+    assert target['allowed_missions'] == ['colonize']
+    assert mission_allowed_for_target('colonize', target)[0] is True
     assert mission_allowed_for_target('transport', target)[0] is False
     conn.close()
 
-def test_colonize_fleet_send_preview_classic_empty_slot_blocked(fleet_db):
+def test_colonize_fleet_send_preview_classic_empty_slot_ok(fleet_db):
     conn = db()
     uid = _player(conn=conn)
     pid = int(get_planets_by_player(uid, conn=conn)[0]['id'])
+    _unlock_expansion_for_colonize(conn, uid)
     _seed_ships(pid, uid, {'seed_ark': 1}, conn=conn)
     origin = conn.cursor().execute('SELECT * FROM planets WHERE id = ?;', (pid,)).fetchone()
     conn.commit()
     preview = build_fleet_send_preview(player_id=uid, origin_planet=dict(origin), target_galaxy=1, target_system=499, target_position=12, mission_type='colonize', ships={'seed_ark': 1}, resources={}, speed_percent=100, conn=conn)
-    assert preview['can_send'] is False
-    assert preview['block_reason'] == 'colonize_requires_expansion_site'
+    assert preview['can_send'] is True
+    assert preview['block_reason'] in ('', None)
     conn.close()
 
 def _colonize_preview_to_empty_slot(uid: int, pid: int, origin, conn):
     return build_fleet_send_preview(player_id=uid, origin_planet=dict(origin), target_galaxy=1, target_system=499, target_position=12, mission_type='colonize', ships={'seed_ark': 1}, resources={}, speed_percent=100, conn=conn)
 
-def test_colonize_fleet_preview_coordinate_only_always_blocked(fleet_db):
-    """GC-932 — classic slot colonize blocked regardless of colony cap."""
+def test_colonize_fleet_preview_classic_empty_slot_without_expansion_unlock_blocked(fleet_db):
+    """GC-593A — classic slot allowed only when expansion gates pass."""
     uid = _player()
     conn = db()
     pid = int(get_planets_by_player(uid, conn=conn)[0]['id'])
@@ -2643,32 +2644,60 @@ def test_colonize_fleet_preview_coordinate_only_always_blocked(fleet_db):
     conn.commit()
     preview = _colonize_preview_to_empty_slot(uid, pid, origin, conn)
     assert preview['mission_allowed'] is False
-    assert preview['block_reason'] == 'colonize_requires_expansion_site'
+    assert preview['block_reason'] == 'expansion_gate_homeworld_level'
     assert preview['can_send'] is False
     conn.close()
 
-def test_colonize_fleet_send_to_empty_slot_blocked(fleet_db):
+def test_colonize_fleet_send_to_empty_slot_ok(fleet_db):
     conn = db()
     uid = _player(conn=conn)
     pid = int(get_planets_by_player(uid, conn=conn)[0]['id'])
     cur = conn.cursor()
     _fund_planet(cur, pid, fuel_cells=50000)
+    _unlock_expansion_for_colonize(conn, uid)
     _seed_ships(pid, uid, {'seed_ark': 1, 'mule_courier': 2}, conn=conn)
     conn.commit()
     ok, reason, result = send_fleet(player_id=uid, origin_planet_id=pid, target_galaxy=1, target_system=499, target_position=12, mission_type='colonize', ships={'seed_ark': 1}, resources={'colony_name': 'New Outpost'}, conn=conn)
-    assert not ok
-    assert reason == 'colonize_requires_expansion_site'
+    assert ok, reason
+    assert result['fleet']['target_coords'] == '[1:499:12]'
     conn.close()
 
 def test_colonize_requires_ark_on_empty_slot(fleet_db):
     conn = db()
     uid = _player(conn=conn)
     pid = int(get_planets_by_player(uid, conn=conn)[0]['id'])
+    _unlock_expansion_for_colonize(conn, uid)
     _seed_ships(pid, uid, {'mule_courier': 5}, conn=conn)
     conn.commit()
     ok, reason, _ = send_fleet(player_id=uid, origin_planet_id=pid, target_galaxy=1, target_system=498, target_position=11, mission_type='colonize', ships={'mule_courier': 1}, conn=conn)
     assert not ok
-    assert reason == 'colonize_requires_expansion_site'
+    assert reason == 'colonize_requires_ark'
+    conn.close()
+
+def test_colonize_classic_arrival_creates_planet_at_coords(fleet_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]['id'])
+    cur = conn.cursor()
+    _fund_planet(cur, pid, fuel_cells=50000)
+    _unlock_expansion_for_colonize(conn, uid)
+    _seed_ships(pid, uid, {'seed_ark': 1}, conn=conn)
+    conn.commit()
+    ok, reason, result = send_fleet(player_id=uid, origin_planet_id=pid, target_galaxy=1, target_system=499, target_position=12, mission_type='colonize', ships={'seed_ark': 1}, resources={'colony_name': 'Classic Outpost'}, conn=conn)
+    assert ok, reason
+    fleet_id = result['fleet']['id']
+    before_count = len(get_planets_by_player(uid, conn=conn))
+    cur.execute('UPDATE fleet_movements SET arrival_at = ? WHERE id = ?;', (time.time() - 1, fleet_id))
+    conn.commit()
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+    cur.execute('SELECT status FROM fleet_movements WHERE id = ?;', (fleet_id,))
+    assert cur.fetchone()['status'] == 'completed'
+    assert len(get_planets_by_player(uid, conn=conn)) == before_count + 1
+    row = conn.execute('SELECT galaxy, system, position, name FROM planets WHERE player_id = ? AND system = 499 AND position = 12;', (uid,)).fetchone()
+    assert row is not None
+    assert int(row['galaxy']) == 1
+    assert row['name']
     conn.close()
 
 def test_colonize_arrival_completes_without_return(fleet_db):
@@ -2766,23 +2795,24 @@ def test_colonize_occupied_slot_blocked(fleet_db):
     uid = _player(conn=conn)
     pid = int(get_planets_by_player(uid, conn=conn)[0]['id'])
     g, s, p = _planet_coords(pid, conn=conn)
+    _unlock_expansion_for_colonize(conn, uid)
     _seed_ships(pid, uid, {'seed_ark': 1}, conn=conn)
     conn.commit()
     ok, reason, _ = send_fleet(player_id=uid, origin_planet_id=pid, target_galaxy=g, target_system=s, target_position=p, mission_type='colonize', ships={'seed_ark': 1}, conn=conn)
     assert not ok
-    assert reason == 'colonize_requires_expansion_site'
+    assert reason == 'coordinate_occupied'
     conn.close()
 
-def test_colonize_coordinate_only_prefill_blocked(fleet_db):
+def test_colonize_coordinate_only_prefill_ok_when_unlocked(fleet_db):
     conn = db()
     uid = _player(conn=conn)
     pid = int(get_planets_by_player(uid, conn=conn)[0]['id'])
+    _unlock_expansion_for_colonize(conn, uid)
     _seed_ships(pid, uid, {'seed_ark': 1}, conn=conn)
     origin = conn.cursor().execute('SELECT * FROM planets WHERE id = ?;', (pid,)).fetchone()
     conn.commit()
     preview = build_fleet_send_preview(player_id=uid, origin_planet=dict(origin), target_galaxy=1, target_system=42, target_position=7, mission_type='colonize', ships={'seed_ark': 1}, resources={}, speed_percent=100, conn=conn)
-    assert preview['can_send'] is False
-    assert preview['block_reason'] == 'colonize_requires_expansion_site'
+    assert preview['can_send'] is True
     conn.close()
 
 def test_mission_target_matrix_blocks(fleet_db):

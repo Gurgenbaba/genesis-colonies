@@ -266,7 +266,7 @@ def test_inspector_template_has_salvage_actions(gc584_db, monkeypatch):
     with client.session_transaction() as sess:
         sess["user_id"] = player_id
 
-    resp = client.get("/galaxy?view=command_map", headers={"X-Requested-With": "XMLHttpRequest"})
+    resp = client.get("/galaxy?view=command_map&dev=1", headers={"X-Requested-With": "XMLHttpRequest"})
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert "gc-world-inspector-modal" in body

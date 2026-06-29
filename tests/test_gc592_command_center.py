@@ -187,7 +187,7 @@ def test_galaxy_template_renders_command_center_shell(gc592_db, monkeypatch):
     assert ok and user, err
     client = app_module.app.test_client()
     client.post('/login', data={'username': uname, 'password': 'test-pass-123'})
-    body = client.get('/galaxy?view=command_map').get_data(as_text=True)
+    body = client.get('/galaxy?view=command_map&dev=1').get_data(as_text=True)
     assert 'galaxy-command-map-graph--fullmap' in body
     assert 'gc-world-inspector-modal' in body
     assert 'data-colony-location-inspect' in body
@@ -323,7 +323,7 @@ def test_galaxy_template_renders_world_field_command_center_source(gc592_db, mon
     assert ok and user, err
     client = app_module.app.test_client()
     client.post('/login', data={'username': uname, 'password': 'test-pass-123'})
-    body = client.get('/galaxy?view=command_map').get_data(as_text=True)
+    body = client.get('/galaxy?view=command_map&dev=1').get_data(as_text=True)
     assert 'data-world-field-source' in body
     assert 'data-world-field-inspect' in body
     assert 'data-command-center' in body
@@ -419,6 +419,6 @@ def test_galaxy_template_renders_foreign_command_center_source(gc592_db, monkeyp
     client = app_module.app.test_client()
     with client.session_transaction() as sess:
         sess['user_id'] = viewer_id
-    body = client.get('/galaxy?view=command_map').get_data(as_text=True)
+    body = client.get('/galaxy?view=command_map&dev=1').get_data(as_text=True)
     assert 'data-foreign-colony-source' in body
     assert f"foreign_world:{field['world_key']}" in body or field['world_key'] in body

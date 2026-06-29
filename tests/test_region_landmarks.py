@@ -139,7 +139,7 @@ def test_galaxy_command_map_renders_landmarks(landmarks_db, monkeypatch):
 
     client = app_module.app.test_client()
     client.post("/login", data={"username": uname, "password": "test-pass-123"})
-    body = client.get("/galaxy?view=command_map").get_data(as_text=True)
+    body = client.get("/galaxy?view=command_map&dev=1").get_data(as_text=True)
 
     assert "galaxy-command-map-node--landmark" in body
     assert "gc-world-inspector-modal" in body

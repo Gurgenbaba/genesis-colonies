@@ -21949,7 +21949,7 @@ body.gc-combat-report-open { overflow: hidden; }
 /* --- Galactic Directives banner (GC-720F) --- */
 .gc-gd-banner{
   margin-bottom: 1rem;
-  padding: 0.85rem 1rem;
+  padding: 0.65rem 0.85rem;
   border: 1px solid var(--gc-panel-border-strong);
   background: linear-gradient(
     135deg,
@@ -21957,43 +21957,83 @@ body.gc-combat-report-open { overflow: hidden; }
     rgba(4, 10, 22, 0.92) 55%
   );
 }
-.gc-gd-banner-head{
+.gc-gd-banner-toggle{
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.gc-gd-banner-toggle:focus-visible{
+  outline: 2px solid var(--gc-accent, #46e5ff);
+  outline-offset: 2px;
+}
+.gc-gd-banner-chevron{
+  width: 8px;
+  height: 8px;
+  margin-top: 0.35rem;
+  border-right: 2px solid var(--gc-neon-cyan);
+  border-bottom: 2px solid var(--gc-neon-cyan);
+  transform: rotate(45deg);
+  transition: transform .15s ease;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 4px rgba(70, 229, 255, 0.3));
+}
+.gc-gd-banner.is-collapsed .gc-gd-banner-chevron{
+  transform: rotate(-45deg);
+}
+.gc-gd-banner-toggle-copy{
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem 1rem;
+  align-items: baseline;
+  gap: 0.2rem 0.55rem;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 .gc-gd-banner-kicker{
-  margin: 0 0 0.2rem;
+  margin: 0;
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
+  flex: 0 0 auto;
 }
 .gc-gd-banner-title{
-  margin: 0 0 0.45rem;
-  font-size: 1rem;
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 700;
   color: var(--gc-accent, #46e5ff);
+  flex: 0 0 auto;
 }
 .gc-gd-banner-chips{
-  display: flex;
+  display: inline-flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
-  margin-bottom: 0.45rem;
+  gap: 0.35rem;
+  flex: 1 1 100%;
+}
+.gc-gd-banner.is-collapsed .gc-gd-banner-chips{
+  flex: 1 1 auto;
+  margin-left: 0;
 }
 .gc-gd-chip{
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  padding: 0.2rem 0.55rem;
-  border-radius: var(--gc-radius-pill);
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(70, 229, 255, 0.28);
   background: rgba(3, 8, 18, 0.65);
-  font-size: 0.78rem;
+  font-size: 0.76rem;
 }
 .gc-gd-chip-label{
   color: var(--gc-text-dim);
-  font-size: 0.68rem;
+  font-size: 0.66rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -22005,15 +22045,18 @@ body.gc-combat-report-open { overflow: hidden; }
   opacity: 0.92;
   border-style: dashed;
 }
+.gc-gd-banner-body{
+  padding: 0.55rem 0 0 1.35rem;
+}
 .gc-gd-banner-desc{
   margin: 0;
   max-width: 42rem;
   font-size: 0.84rem;
   line-height: 1.45;
 }
-.gc-gd-banner-cta{
-  flex: 0 0 auto;
-  align-self: center;
+.gc-gd-banner-desc--secondary{
+  margin-top: 0.35rem;
+  opacity: 0.9;
 }
 .gd-banner--industrial,
 .gd-chip--industrial{ border-color: rgba(255, 176, 72, 0.45); }

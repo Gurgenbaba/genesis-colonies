@@ -66,11 +66,11 @@ def _login(client) -> int:
     return int(user["id"])
 
 
-def test_command_map_dev_mode_default_enabled(monkeypatch):
+def test_command_map_dev_mode_default_disabled(monkeypatch):
     monkeypatch.delenv("GC_COMMAND_MAP_DEV_MODE", raising=False)
     from game.config import is_command_map_dev_mode
 
-    assert is_command_map_dev_mode() is True
+    assert is_command_map_dev_mode() is False
 
 
 def test_command_map_dev_mode_env_off(monkeypatch):
@@ -83,7 +83,7 @@ def test_command_map_dev_mode_env_off(monkeypatch):
 def test_galaxy_command_map_renders_dev_preview_banner(app_client, monkeypatch):
     monkeypatch.setenv("GC_COMMAND_MAP_DEV_MODE", "1")
     _login(app_client)
-    body = app_client.get("/galaxy?view=command_map").get_data(as_text=True)
+    body = app_client.get("/galaxy?view=command_map&dev=1").get_data(as_text=True)
     assert "gc-command-map-dev-banner" in body
     assert "gc-dev-preview-badge" in body
 
@@ -110,5 +110,5 @@ def test_static_contract_dev_preview():
     main = (ROOT / "static/main.js").read_text(encoding="utf-8")
     assert "logCommandMapTelemetry" in main
     assert "command_map_dev_mode" in (ROOT / "game/config.py").read_text(encoding="utf-8")
-    sidebar = (ROOT / "templates/partials/sidebar.html").read_text(encoding="utf-8")
+    sidebar = (ROOT / "templates/galaxy.html").read_text(encoding="utf-8")
     assert "gc-dev-preview-badge" in sidebar

@@ -204,7 +204,8 @@ Design Manifest: [IMPERIUM_VISION.md](IMPERIUM_VISION.md) · Epic: **EPIC-15**
 | **GC-566** | Influence Layer — Eigenreich-Territorium ([Spec](GC-566_INFLUENCE_LAYER.md)) | ✅ |
 | **GC-567** | Expansion Sites v2 — Orte mit Versprechen & Inspector ([Spec](GC-567_EXPANSION_SITES_V2.md)) | ✅ |
 | **GC-567B** | Region Landmarks ([Spec](GC-567B_REGION_LANDMARKS.md)) | ✅ |
-| **GC-570** | World Map + Role Actions ([Spec](GC-570_WORLD_MAP_DIRECTION.md)) | ✅ |
+| **GC-593** | World Map De-Scope — klassische Galaxie wieder Hauptflow; Command Map Dev-Preview only | ✅ 593A–C |
+| **GC-570** | World Map + Role Actions ([Spec](GC-570_WORLD_MAP_DIRECTION.md)) — **de-scoped** (Dev-Preview) | ✅ legacy |
 | **GC-580B** | Viewport-aware Sector Loading | ✅ |
 | **GC-580C** | Infinite Map Background Tiling | ✅ |
 | **GC-581** | Strategic Worlds (Presentation) ([Spec](GC-581_STRATEGIC_WORLDS.md)) | ✅ |
@@ -216,8 +217,8 @@ Design Manifest: [IMPERIUM_VISION.md](IMPERIUM_VISION.md) · Epic: **EPIC-15**
 | **GC-620B** | Locale Reality Sync ([Spec](GC-620B_LOCALE_REALITY_SYNC.md)) | ✅ |
 | **GC-SEC-P0** | KDF, Rate Limits, Security Headers | ✅ |
 | **GC-599A** | Foreign Empire Presence — Map glaubwürdig bewohnt ([Spec](GC-599A_FOREIGN_EMPIRE_PRESENCE.md)) | ✅ |
-| **GC-598** | Mission Actions im World Inspector | 📋 Next |
-| **GC-599** | Foreign Worlds / Enemy Nodes vollständig | 📋 |
+| **GC-598** | Mission Actions im World Inspector | 📋 paused (Dev-Preview only) |
+| **GC-599** | Foreign Worlds / Enemy Nodes vollständig | 📋 paused |
 | **GC-569** | ~~Presence Overlay~~ → siehe GC-571 | 📋 superseded |
 | **GC-568** | Territorial Warfare | 📋 |
 

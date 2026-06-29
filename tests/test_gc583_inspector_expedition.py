@@ -139,7 +139,7 @@ def test_galaxy_template_expedition_inspector_and_fleet_panel(gc583_db, monkeypa
     with client.session_transaction() as sess:
         sess["user_id"] = player_id
 
-    map_body = client.get("/galaxy?view=command_map").get_data(as_text=True)
+    map_body = client.get("/galaxy?view=command_map&dev=1").get_data(as_text=True)
     assert "galaxy-command-map-graph--fullmap" in map_body
     assert "gc-world-inspector-modal" in map_body
     assert "data-world-field-inspect" in map_body

@@ -99,22 +99,22 @@ Overview zeigt **alle** Bewegungen des Spielers (nicht nur active planet).
 
 ---
 
-## World-native targets (GC-590A)
+## World-native targets (GC-590A — Dev/Legacy)
 
-Flotten-Ziele sind **Orte**, nicht primär G:S:P-Koordinaten. Legacy-Koordinaten bleiben interner Adapter; API und Preview liefern zusätzlich `target.world_target`.
+Spieler-Hauptpfad nutzt **`target_galaxy` / `target_system` / `target_position`** (klassische Slots). `world_key` bleibt optional für Dev-Preview / Legacy (Strategic Worlds, Salvage).
 
 | Feld | Bedeutung |
 |------|-----------|
-| `target_type` | `planet`, `world_colony`, `expedition_world`, `anomaly`, `wreckage`, `enemy_colony` |
-| `target_world_key` | Kanonischer Welt-Schlüssel (`field:…`) |
-| `target_world_x` / `target_world_y` | Kartenposition |
+| `target_type` | `planet`, `world_colony`, `expedition_world`, `anomaly`, `wreckage`, `enemy_colony`, `empty_slot` |
+| `target_world_key` | Optional — Welt-Schlüssel (`field:…`) für Map/Legacy |
+| `target_world_x` / `target_world_y` | Kartenposition (Dev) |
 | `planet_role` | Strategischer Welttyp / Kolonie-Rolle |
 | `target_name_key` / `target_name` | Anzeigename (Locale oder Planet) |
-| `legacy_coords` | `{galaxy, system, position}` — intern, bis GC-590B UI coords entfernt |
+| `legacy_coords` | `{galaxy, system, position}` — **kanonisch für Spieler** |
 
 **Owner:** `game/fleet_target.py` — `parse_fleet_target_request()`, `normalize_fleet_target_request()`, `attach_world_target()`.
 
-**API-Eingabe (Priorität):** `target_planet_id` → `world_key` / `target_world_key` → `target_world_x/y` → legacy `target_galaxy/system/position`.
+**API-Eingabe (Priorität):** `target_planet_id` → `target_galaxy/system/position` (Spieler) → optional `world_key` / `target_world_key` (Dev/Legacy).
 
 **Endpoints:** `POST /api/fleet/preview`, `POST /api/fleet/send`, `GET|POST /api/fleet/resolve-target` akzeptieren world-native Felder.
 
@@ -386,7 +386,7 @@ Das Fleet-System verwaltet **Schiffe pro Welt**, **Flottenbewegungen** imperiums
 
 ## Why
 
-Ohne Flotten keine Expansion (Seed Ark), keine Ressourcen-Logistik zwischen Kolonien, keine Expeditionen und kein PvP. Flotten sind die **operative Hand** des Imperiums — Ziele sind **Orte** (world_key) und klassische Koordinaten als Adapter.
+Ohne Flotten keine Expansion (Seed Ark), keine Ressourcen-Logistik zwischen Kolonien, keine Expeditionen und kein PvP. Flotten sind die **operative Hand** des Imperiums — Spieler wählen Ziele über **klassische Koordinaten** `[G:S:P]`; `world_key` bleibt optional (Dev/Legacy).
 
 ## How it works
 

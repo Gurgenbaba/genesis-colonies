@@ -159,7 +159,7 @@ def test_galaxy_command_map_view_renders_colonies(empire_identity_db, monkeypatc
     assert ok, reason
     client = app_module.app.test_client()
     client.post('/login', data={'username': uname, 'password': 'test-pass-123'})
-    resp = client.get('/galaxy?view=command_map')
+    resp = client.get('/galaxy?view=command_map&dev=1')
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert 'galaxy-view-tab' in body

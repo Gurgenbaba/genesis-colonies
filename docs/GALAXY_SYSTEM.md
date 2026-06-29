@@ -45,24 +45,24 @@ Session-Navigation: `galaxy_view_galaxy`, `galaxy_view_system` in Flask session 
 
 Default coords wenn URL ohne `galaxy`/`system`/`q`: immer **active/context planet** (auch nach Galaxie-Browsing oder Planetenwechsel).
 
-Client: `localStorage` key `gc_galaxy_prefs_v1` merkt nur den letzten Tab (`command_map` | `system`); Sidebar-Galaxie-Link setzt `view`, Koordinaten kommen vom Server. Bei Planetenwechsel synchronisiert `/api/planets/active` die Session-Coords mit dem neuen Planeten.
+Client: `localStorage` key `gc_galaxy_prefs_v2` merkt nur `system` als View — keine Wiederherstellung der Weltkarte (GC-593B). Sidebar-Galaxie-Link setzt `view=system`, Koordinaten kommen vom Server. Bei Planetenwechsel synchronisiert `/api/planets/active` die Session-Coords mit dem neuen Planeten.
 
-Priorität: URL > localStorage view > active planet coords.
+Priorität: URL > active planet coords.
 
 ---
 
-## Routes (Zielarchitektur GC-570)
+## Routes (GC-593 — klassische Galaxie ist Hauptansicht)
 
 | Route | Methode | Rolle |
 |-------|---------|-------|
-| `/galaxy` | GET | SSR — **Ziel:** Default Weltkarte (`view=command_map`) |
-| `/galaxy?view=command_map` | GET | **Weltkarte** — Imperium, Orte, rollenbasierte Actions (GC-570) |
-| `/galaxy?view=system` | GET | **Legacy** — klassische Systemansicht (OGame-Slots) |
-| `/api/galaxy/system` | GET | JSON — `?galaxy=&system=` (Legacy/API) |
+| `/galaxy` | GET | SSR — **Default:** klassische Systemansicht (`view=system`) |
+| `/galaxy?view=system` | GET | **Hauptansicht** — 15 belegbare Slots + Expeditions-Slot (Pos 16) |
+| `/galaxy?view=command_map` | GET | **DEV/Legacy Preview** — nur mit `?dev=1` oder `GC_COMMAND_MAP_DEV_MODE=1` |
+| `/api/galaxy/system` | GET | JSON — `?galaxy=&system=` |
 
-**Zwei Ansichten, eine Route.** Tabs in `templates/galaxy.html`. Koordinatenmodell `[G:S:P]` bleibt intern für Fleet, Kolonisierung und Legacy-View.
+**Zwei Ansichten, eine Route.** Tabs in `templates/galaxy.html` (Weltkarte-Tab nur im Dev-Preview). Koordinatenmodell `[G:S:P]` bleibt kanonisch für Fleet, Kolonisierung und Systemansicht.
 
-**Weltkarte** ersetzt langfristig die klassische Ansicht als Spieler-Hauptnavigation — nicht sofort entfernen. Siehe [GC-570_WORLD_MAP_DIRECTION.md](GC-570_WORLD_MAP_DIRECTION.md).
+Die **Weltkarte** ist aus dem Spieler-Hauptflow entfernt (GC-593); Code bleibt für Dev-Preview und Backend-Contracts. Historische Spec: [GC-570_WORLD_MAP_DIRECTION.md](GC-570_WORLD_MAP_DIRECTION.md).
 
 Vision: [IMPERIUM_VISION.md](IMPERIUM_VISION.md) · GC-560: [GC-560_EMPIRE_IDENTITY_LAYER.md](GC-560_EMPIRE_IDENTITY_LAYER.md)
 

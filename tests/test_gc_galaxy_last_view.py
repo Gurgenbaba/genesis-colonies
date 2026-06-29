@@ -155,9 +155,12 @@ def test_galaxy_planet_switch_resets_session_coords(galaxy_db, monkeypatch):
 
 def test_gc_galaxy_last_view_main_js_contract():
     src = _read("static/main.js")
-    assert "gc_galaxy_prefs_v1" in src
+    assert "gc_galaxy_prefs_v2" in src
     assert "persistGalaxyViewFromPage" in src
     assert "resolveGalaxyNavHref" in src
-    assert "writeGalaxyPrefs({ view })" in src
+    assert 'writeGalaxyPrefs({ view: "system" })' in src
     assert 'link.dataset.navModule === "galaxy"' in src
-    assert "prefs.galaxy" not in src.split("resolveGalaxyNavHref")[1].split("function initGalaxyDebrisUx", 1)[0]
+    resolve_block = src.split("resolveGalaxyNavHref")[1].split("function initGalaxyDebrisUx", 1)[0]
+    assert "prefs.galaxy" not in resolve_block
+    assert 'url.searchParams.set("view", "system")' in resolve_block
+    assert "command_map" not in resolve_block

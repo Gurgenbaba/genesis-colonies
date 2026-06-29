@@ -193,7 +193,7 @@ def test_galaxy_template_renders_world_colony_marker(gc582d_db, monkeypatch):
     client = app_module.app.test_client()
     with client.session_transaction() as sess:
         sess['user_id'] = player_id
-    body = client.get('/galaxy?view=command_map').get_data(as_text=True)
+    body = client.get('/galaxy?view=command_map&dev=1').get_data(as_text=True)
     assert 'galaxy-command-map-node--world-colony' in body
     assert f'''data-world-key="{field['world_key']}"''' in body
     assert 'data-world-colony="1"' in body
@@ -220,7 +220,7 @@ def test_galaxy_template_renders_foreign_world_colony(gc582d_db, monkeypatch):
     client = app_module.app.test_client()
     with client.session_transaction() as sess:
         sess['user_id'] = viewer_id
-    body = client.get('/galaxy?view=command_map').get_data(as_text=True)
+    body = client.get('/galaxy?view=command_map&dev=1').get_data(as_text=True)
     assert 'galaxy-command-map-node--foreign-world-colony' in body
     assert 'Rival Outpost' in body
     assert 'data-foreign-world-colony-inspect' in body

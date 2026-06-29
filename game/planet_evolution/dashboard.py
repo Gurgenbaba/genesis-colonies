@@ -610,9 +610,9 @@ def _next_action(
                 title_key="pe_colonize_new_world_cta",
                 body_key="pe_colonize_new_world_hint",
                 cta_label_key="pe_colonize_new_world_cta",
-                cta_target="command_map",
+                cta_target="galaxy",
                 cta_action="navigate",
-                cta_href="/galaxy?view=command_map&action=colonize",
+                cta_href="/galaxy?view=system",
                 cta_highlight="pe-section-expansion-gate",
             )
         if items.get("seed_ark") and not items["seed_ark"].get("met"):

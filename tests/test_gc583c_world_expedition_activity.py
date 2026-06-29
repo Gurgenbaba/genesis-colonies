@@ -217,7 +217,7 @@ def test_galaxy_template_expedition_activity_fields(gc583c_db, monkeypatch):
     with client.session_transaction() as sess:
         sess["user_id"] = player_id
 
-    body = client.get("/galaxy?view=command_map").get_data(as_text=True)
+    body = client.get("/galaxy?view=command_map&dev=1").get_data(as_text=True)
     assert "gc-world-inspector-modal" in body
     assert "data-world-field-inspect" in body
     assert "data-expedition-status" in body

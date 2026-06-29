@@ -731,3 +731,22 @@ def list_system(
     if own:
         conn.close()
     return result
+
+
+def count_empty_galaxy_slots(*, conn: sqlite3.Connection) -> int:
+    """Unoccupied classic [G:S:P] slots (positions 1–15) for colonization hints."""
+    gmax = get_galaxy_max(conn)
+    total = gmax * (SYSTEM_MAX - SYSTEM_MIN + 1) * (POSITION_MAX - POSITION_MIN + 1)
+    cur = conn.execute(
+        """
+        SELECT COUNT(*) AS occupied
+        FROM planets
+        WHERE galaxy BETWEEN ? AND ?
+          AND system BETWEEN ? AND ?
+          AND position BETWEEN ? AND ?;
+        """,
+        (GALAXY_MIN, gmax, SYSTEM_MIN, SYSTEM_MAX, POSITION_MIN, POSITION_MAX),
+    )
+    row = cur.fetchone()
+    occupied = int(row["occupied"] if row else 0)
+    return max(0, int(total) - occupied)

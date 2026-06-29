@@ -117,7 +117,7 @@ _BASE_ALLOWED_MISSIONS: Dict[str, Set[str]] = {
     "own_planet": {"transport", "collect", "deploy", "spy"},
     "ally_planet": {"transport", "spy"},
     "foreign_planet": {"spy", "attack"},
-    "empty_slot": set(),
+    "empty_slot": {"colonize"},
     "strategic_world": {"colonize"},
     "expedition_slot": {"expedition"},
     "world_colony": {"transport", "collect", "deploy", "spy"},
@@ -163,7 +163,6 @@ _MISSION_BLOCK_REASONS: Dict[str, Dict[str, str]] = {
         "hold": "mission_blocked_empty_slot",
         "collect": "mission_blocked_empty_slot",
         "expedition": "mission_blocked_not_expedition_slot",
-        "colonize": "colonize_requires_expansion_site",
     },
     "expedition_slot": {
         "transport": "mission_blocked_expedition_slot",
@@ -883,24 +882,26 @@ def _colonize_fleet_target(
     world_key: str | None,
     conn,
 ) -> Tuple[bool, str, Tuple[int, int, int], Dict[str, Any]]:
-    """Resolve colonize target — expansion sites only (GC-932). Requires world_key."""
+    """Resolve colonize target — classic empty slot (G:S:P) or optional world_key (GC-593A)."""
     from .planet_evolution.world_colonization import check_colony_limit_available
 
     wk = str(world_key or "").strip() or None
     if not wk:
-        target_info = resolve_fleet_target(
+        tg, ts, tp = int(target_galaxy), int(target_system), int(target_position)
+        ok_target, t_reason, target_info = evaluate_fleet_mission_target(
             int(player_id),
-            int(target_galaxy),
-            int(target_system),
-            int(target_position),
+            "colonize",
+            tg,
+            ts,
+            tp,
             conn=conn,
         )
-        return (
-            False,
-            "colonize_requires_expansion_site",
-            (int(target_galaxy), int(target_system), int(target_position)),
-            target_info,
-        )
+        if not ok_target:
+            return False, t_reason, (tg, ts, tp), target_info
+        ok_limit, limit_reason = check_colony_limit_available(int(player_id), conn=conn)
+        if not ok_limit:
+            return False, limit_reason, (tg, ts, tp), target_info
+        return True, "", (tg, ts, tp), target_info
 
     from .planet_evolution.world_colonization import validate_world_colonize_target
     from .galaxy import assign_free_coordinates

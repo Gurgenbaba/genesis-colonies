@@ -28,14 +28,11 @@
          {% if not module_in_section(_sn, 'overview', 'command') %}hidden{% endif %}>
         {{ T("nav_overview") }}
       </a>
-      <a href="{{ url_for('galaxy_view') }}"
+      <a href="{{ url_for('galaxy_view', view='system') }}"
          data-nav-module="galaxy"
          class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'galaxy') }} {% if request.endpoint == 'galaxy_view' %}active{% endif %}"
          {% if not module_in_section(_sn, 'galaxy', 'command') %}hidden{% endif %}>
         <span class="gc-nav-link-label">{{ T("nav_galaxy") }}</span>
-        {% if COMMAND_MAP_DEV_MODE %}
-        <span class="gc-dev-preview-badge" title="{{ T('command_map_dev_preview_title') }}">{{ T("command_map_dev_badge", "DEV") }}</span>
-        {% endif %}
       </a>
       <a href="{{ url_for('planet_evolution_view') }}"
          data-nav-module="planet_evolution"

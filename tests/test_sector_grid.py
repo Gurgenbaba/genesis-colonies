@@ -199,7 +199,7 @@ def test_galaxy_template_renders_sector_layer_shell(sector_grid_db, monkeypatch)
     with client.session_transaction() as sess:
         sess["user_id"] = player_id
 
-    resp = client.get("/galaxy?view=command_map")
+    resp = client.get("/galaxy?view=command_map&dev=1")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert "galaxy-command-map-sector-layer" in body

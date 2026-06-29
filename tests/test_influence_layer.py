@@ -104,7 +104,7 @@ def test_galaxy_command_map_renders_influence_layer(influence_db, monkeypatch):
     client = app_module.app.test_client()
     app_module.app.config['TESTING'] = True
     client.post('/login', data={'username': uname, 'password': 'test-pass-123'})
-    body = client.get('/galaxy?view=command_map').get_data(as_text=True)
+    body = client.get('/galaxy?view=command_map&dev=1').get_data(as_text=True)
     assert 'galaxy-command-map-influence' in body
     assert 'galaxy-command-map-influence-blob' in body
     assert 'galaxy-command-map-sector-layer' in body
