@@ -427,7 +427,8 @@ def test_mandatory_overtime_allowed_after_industry_t5_compile(evo_db):
     conn.close()
 
 
-def test_policy_tier_blocks_high_tier_policies_after_governance_t1(evo_db):
+def test_governance_t1_does_not_block_tier2_policies(evo_db):
+    """GC-974A: policy_tier is unlock-only; governance must not cap tier-2+ policies."""
     conn = db()
     uid = _ensure_test_player(9733, conn=conn)
     pid = _prep_policy_planet(conn, uid, level=10, archetype="militarized_society")
@@ -441,12 +442,11 @@ def test_policy_tier_blocks_high_tier_policies_after_governance_t1(evo_db):
     policy_ux = _policy_ux(pid, planet=planet, culture=culture, conn=conn)
     martial = _policy_option(policy_ux, 2, "martial_law")
     assert martial is not None
-    assert martial["eligible"] is False
-    assert martial["locked_reason_key"] == "pe_policy_tier_locked"
+    assert martial["eligible"] is True
+    assert martial["locked_reason_key"] is None
 
     ok, reason = activate_policy(pid, 2, "martial_law", uid, conn=conn)
-    assert ok is False
-    assert reason == "policy_tier_locked"
+    assert ok is True, reason
 
     conn.execute(
         "UPDATE planet_culture SET archetype_key = 'scientific_collective' WHERE planet_id = ?;",

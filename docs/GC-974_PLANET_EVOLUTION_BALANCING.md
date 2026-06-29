@@ -47,7 +47,7 @@ Für jede der **18 Planet-Techs** (Seed `017`):
 | Plasma-Harness | `energy_t2_plasma_harness` | 2 | 55 | Chain `dark_plasma` | **mittel** — nur mit Trait `plasma_winds` | hoch wenn Trait | 🟡 |
 | Biomasse-Extraktion | `ecology_t1_biomass` | 1 | 40 | Chain `living_crystal` | **mittel** — keine Building-Req, früh erreichbar | mittel | 🟡 |
 | Markt-Protokolle | `trade_t2_market_protocols` | 2 | 55 | `trade_route_bonus:0.10` | **mittel** — +10 % Routen-Erlös | niedrig (Routen wenig sichtbar) | 🟡 |
-| Zivilverwaltung | `governance_t1_civil_admin` | 1 | 40 | `unlock_policy_tier:1` | **⚠️ paradox** — sperrt Tier-2-Policies | mittel (Politik-Locks) | ⚠️ |
+| Zivilverwaltung | `governance_t1_civil_admin` | 1 | 40 | `unlock_policy_tier:1` | Freischaltung Tier-1-Policies (kein Cap) | mittel | ✅ GC-974A |
 | Ruinen-Vermessung | `ancient_t1_ruins_survey` | 1 | 40 | Chain `ancient_alloy` | **mittel** — Trait `ancient_ruins` nötig | hoch wenn Trait | 🟡 |
 | Dunkle Materie | `experimental_t1_dark_matter` | 1 | 40 | `enable_experimental` + risk | **gering** — 972E deferred | niedrig | 🔴 |
 | Befestigung | `military_t2_fortification` | 2 | 55 | Chain `phase_crystal` | **mittel** — `defense_factory` ≥ 2 | mittel | 🟡 |
@@ -107,17 +107,13 @@ Linear: T1 → T2 → T3 → T5 (kein T4 im Seed).
 
 ---
 
-## ⚠️ Design-Risiko: `governance_t1_civil_admin`
+## ~~Design-Risiko~~ ✅ GC-974A: `governance_t1_civil_admin`
 
-**Compile:** `policy_tier: 1`  
-**Consumer:** `evaluate_policy_gate` — wenn `policy_tier` gesetzt, sind Policies mit **Def-Tier > cap** gesperrt.
+**Stand:** GC-974A — `policy_tier` ist **unlock-only**, kein Cap.
 
-**Tier-2-Policies** (u. a. `mandatory_overtime` von `industry_t5_overdrive`) sind **nach Zivilverwaltung blockiert**, solange kein anderer Mechanismus `policy_tier` erhöht (im Seed **keiner**).
+**Semantik:** `unlock_policy_tier: N` setzt `flags.policy_tier` (max-Merge). Tier-2+-Policies werden **nicht** durch dieses Flag gesperrt. Tier-1-Policies erfordern `policy_tier >= 1`, mit Legacy-Bypass wenn das Flag fehlt.
 
-**Ohne** Zivilverwaltung: `policy_tier` = `None` → Legacy, Tier-2-Policies erlaubt (nur Slot/Archetype/Unlock).
-
-→ **Paradox:** Tech verspricht „Policy Tier 1“, wirkt faktisch wie **Debuff** für Endgame-Policies.  
-→ **GC-974 Empfehlung:** Semantik klären (Freischaltung vs. Cap) **bevor** Boni tunen. Kandidat für kleinen Fix-Ticket (nicht Balancing, sondern Intent).
+→ Siehe [GC-974A_POLICY_TIER.md](GC-974A_POLICY_TIER.md).
 
 ---
 
@@ -131,7 +127,7 @@ Linear: T1 → T2 → T3 → T5 (kein T4 im Seed).
 | Planet-Events | ✅ Event-Pool-Tech |
 | Konversions-Queue | ❌ GC-973 |
 | Experimental-Risiko | ❌ 972E deferred |
-| `policy_tier`-Sperre | ⚠️ oft unverständlich |
+| `policy_tier`-Gate | ✅ unlock-only (GC-974A) |
 
 **UX-Fortschritt (GC-972):** XP transparent, ehrliche Popover, keine falschen Conversion-/Risiko-Versprechen.
 
@@ -141,7 +137,7 @@ Linear: T1 → T2 → T3 → T5 (kein T4 im Seed).
 
 | Prio | Ticket-Idee | Inhalt |
 |-----|-------------|--------|
-| P0 | **GC-974A** | `policy_tier`-Semantik fixen / dokumentieren |
+| P0 | **GC-974A** | `policy_tier`-Semantik fixen | ✅ Done |
 | P1 | **GC-974B** | Deep-Core-Pfad parity (Bonus-Tech oder `mantle_alloy` rate) |
 | P1 | **GC-974C** | Trade/Military/Trait-Techs — Sichtbarkeit oder Schwellen |
 | P2 | **GC-974D** | Science T3 Event-Rate / T5-Brücke |
@@ -172,7 +168,7 @@ GC-972 (Dead Hooks A–D) ✅
 
 ```text
 Implementiere GC-974A aus docs/GC-974_PLANET_EVOLUTION_BALANCING.md:
-- policy_tier Semantik klären (Freischaltung min tier vs. cap)
+- ~~policy_tier Semantik klären~~ → ✅ GC-974A
 - Tests für mandatory_overdrive mit/ohne governance_t1
 - Keine Seed-Balance-Zahlen ändern außer nötig für Intent-Fix
 ```

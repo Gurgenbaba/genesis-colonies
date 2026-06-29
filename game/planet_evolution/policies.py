@@ -35,11 +35,11 @@ def policy_explicitly_unlocked(planet_id: int, policy_key: str, conn: sqlite3.Co
     return bool(get_flag(planet_id, f"policy_unlock:{policy_key}", False, conn=conn))
 
 
-def mechanics_policy_tier_cap(planet_id: int, conn: sqlite3.Connection) -> Optional[int]:
+def mechanics_policy_tier_unlocked(planet_id: int, conn: sqlite3.Connection) -> Optional[int]:
     """
-    Max policy definition tier allowed when policy_tier is set in compiled mechanics.
+    Highest policy definition tier unlocked via compiled mechanics (unlock-only).
 
-    None when the flag is absent — no mechanics-based tier cap (legacy behavior).
+    None when the flag is absent — legacy: no mechanics-based tier gate for tier-1 policies.
     """
     raw = get_flag(planet_id, "policy_tier", None, conn=conn)
     if raw is None:
@@ -69,9 +69,11 @@ def evaluate_policy_gate(
     if allowed and str(archetype_key or "") not in [str(a) for a in allowed]:
         return False, "pe_policy_wrong_archetype"
 
-    tier_cap = mechanics_policy_tier_cap(planet_id, conn)
-    if tier_cap is not None and min_slot > tier_cap:
-        return False, "pe_policy_tier_locked"
+    policy_def_tier = int(policy_def.get("tier") or 1)
+    if policy_def_tier == 1:
+        unlocked = mechanics_policy_tier_unlocked(planet_id, conn)
+        if unlocked is not None and unlocked < 1:
+            return False, "pe_policy_tier_locked"
 
     if not policy_explicitly_unlocked(planet_id, policy_key, conn):
         return False, "pe_policy_locked_by_research"

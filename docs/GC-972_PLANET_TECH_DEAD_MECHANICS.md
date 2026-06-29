@@ -54,7 +54,7 @@
 
 **Changed Files:** `game/planet_evolution/policies.py` (neu), `service.py`, `dashboard.py`, `locales/*.json`, `tests/test_planet_evolution.py`
 
-**Ergebnis:** `mandatory_overtime` nur mit Research/Spec-Unlock; Dashboard zeigt `pe_policy_locked_by_research` / `pe_policy_tier_locked`.
+**Ergebnis:** `mandatory_overtime` nur mit Research/Spec-Unlock; Dashboard zeigt `pe_policy_locked_by_research` / `pe_policy_tier_locked`. **GC-974A:** Cap-Semantik entfernt — `policy_tier` unlock-only (siehe [GC-974A_POLICY_TIER.md](GC-974A_POLICY_TIER.md)).
 
 ---
 
