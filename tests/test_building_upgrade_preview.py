@@ -81,6 +81,8 @@ class TestUpgradeEffectPreview:
         assert sec["effect_next"] > sec["effect_current"]
         assert sec["effect_delta"] > 0
         assert sec["effect_current"] > sec["effect_delta"]
+        assert row["energy_draw"] == sec["effect_delta"]
+        assert row["energy_draw"] == sec["effect_next"] - sec["effect_current"]
 
     def test_metal_mine_delta_payload_keeps_energy_current(self, preview_db):
         planet = get_homeworld(player_id=preview_db)
@@ -96,11 +98,13 @@ class TestUpgradeEffectPreview:
         assert sec["effect_kind"] == "energy_use"
         assert sec["effect_current"] > 100
         assert sec["effect_current"] > sec["effect_delta"]
+        assert row["energy_draw"] == sec["effect_delta"]
 
     def test_solar_plant_energy_output_no_secondary(self, preview_db):
         row = _panel_row(preview_db, "solar_plant", {"solar_plant": 3})
         assert row["effect_kind"] == "energy"
         assert "secondary_effect" not in row
+        assert "energy_draw" not in row
 
     def test_fuel_cell_has_production_and_energy_secondary(self, preview_db):
         row = _panel_row(
@@ -122,6 +126,10 @@ class TestUpgradeEffectPreview:
         draw = r.building_energy_draw("metal_mine")
         assert draw == int(10 * (6 ** 1.25))
         assert "metal_mine" in BUILDING_ENERGY_CONSUMERS
+        row = _panel_row(preview_db, "metal_mine", buildings)
+        cur_draw = r.building_energy_draw("metal_mine", level=6)
+        nxt_draw = r.building_energy_draw("metal_mine", level=7)
+        assert row["energy_draw"] == nxt_draw - cur_draw
 
     def test_overview_building_rows_keys(self, preview_db):
         planet = get_homeworld(player_id=preview_db)

@@ -2459,22 +2459,6 @@
         : null;
   }
 
-  function resolveBuildingEnergyDraw(energySrc) {
-    if (!energySrc) return 0;
-    const cur = Math.floor(Number(energySrc.effect_current) || 0);
-    const delta = Math.floor(Number(energySrc.effect_delta) || 0);
-    return cur > 0 ? cur : delta;
-  }
-
-  function hasAuthoritativeEnergyDraw(b, energySrc) {
-    if (!energySrc) return false;
-    const cur = Math.floor(Number(energySrc.effect_current) || 0);
-    if (cur > 0) return true;
-    const level = Math.floor(Number(b?.level) || 0);
-    if (level <= 0) return Math.floor(Number(energySrc.effect_delta) || 0) > 0;
-    return false;
-  }
-
   function renderEnergyDrawCostChipHtml(draw) {
     const d = Math.floor(Number(draw) || 0);
     if (d <= 0) return "";
@@ -2489,10 +2473,12 @@
   }
 
   function resolveEnergyDrawForBuildingRow(b, row) {
+    const draw = Math.floor(Number(b?.energy_draw) || 0);
+    if (draw > 0) return draw;
     const energySrc = resolveBuildingEnergySource(b);
-    if (hasAuthoritativeEnergyDraw(b, energySrc)) {
-      const draw = resolveBuildingEnergyDraw(energySrc);
-      return draw > 0 ? draw : null;
+    if (energySrc) {
+      const delta = Math.floor(Number(energySrc.effect_delta) || 0);
+      if (delta > 0) return delta;
     }
     if (row?.querySelector("[data-building-energy-draw]")) return "preserve";
     return null;

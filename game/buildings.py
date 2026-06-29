@@ -696,6 +696,18 @@ def _panel_secondary_energy_effect(
     )
 
 
+def _panel_energy_draw_delta(effects: Dict[str, Any]) -> Optional[int]:
+    """Additional energy draw shown on upgrade cards (next level minus current)."""
+    sec = effects.get("secondary_effect")
+    if isinstance(sec, dict) and sec.get("effect_kind") == "energy_use":
+        delta = int(sec.get("effect_delta") or 0)
+        return delta if delta > 0 else None
+    if effects.get("effect_kind") == "energy_use":
+        delta = int(effects.get("effect_delta") or 0)
+        return delta if delta > 0 else None
+    return None
+
+
 def _panel_upgrade_effect_fields(
     building_type: str,
     buildings: Dict[str, int],
@@ -1373,6 +1385,9 @@ def _make_panel_row(
             building_type, buildings, target_level, ratio, research_levels, panel_ctx=panel_ctx
         )
     )
+    energy_draw = _panel_energy_draw_delta(row)
+    if energy_draw is not None:
+        row["energy_draw"] = energy_draw
     if building_type in ("metal_mine", "crystal_mine", "fuel_cell_plant") and target_level >= 1:
         from .economy_balance import mine_upgrade_roi_hours
 

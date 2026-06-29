@@ -111,13 +111,8 @@
 
 {% macro render_building_prog_costs(b, metal, crystal, target_level, show_target=false, fuel_cells=none) %}
   {% set ns = namespace(energy_draw=none) %}
-  {% set sec = b.secondary_effect if b.secondary_effect is defined else none %}
-  {% set energy_src = sec if sec and sec.effect_kind == 'energy_use' else (b if b.effect_kind is defined and b.effect_kind == 'energy_use' else none) %}
-  {% if energy_src %}
-    {% set cur = (energy_src.effect_current|default(0)|int) %}
-    {% set delta = (energy_src.effect_delta|default(0)|int) %}
-    {% set draw = cur if cur > 0 else delta %}
-    {% if draw > 0 %}{% set ns.energy_draw = draw %}{% endif %}
+  {% if b.energy_draw is defined and (b.energy_draw|int) > 0 %}
+    {% set ns.energy_draw = b.energy_draw|int %}
   {% endif %}
   {{ render_card_costs_block(metal, crystal, fuel_cells, true, ns.energy_draw) }}
   {% if show_target %}

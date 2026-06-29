@@ -48,7 +48,8 @@ def test_energy_draw_in_cost_stack():
 
     strip = _read("templates/partials/building_effect_strip.html")
     assert "render_building_prog_costs" in strip
-    assert "effect_current" in strip.split("render_building_prog_costs")[1].split("{% endmacro %}")[0]
+    costs_macro = strip.split("render_building_prog_costs")[1].split("{% endmacro %}")[0]
+    assert "b.energy_draw" in costs_macro
 
     bld = _read("templates/buildings.html")
     assert "render_building_prog_costs" in bld
@@ -56,7 +57,7 @@ def test_energy_draw_in_cost_stack():
 
     js = _read("static/main.js")
     energy_helpers = js.split("function resolveBuildingEnergySource")[1].split("function serializeReqHoverItems")[0]
-    assert "effect_current" in energy_helpers
+    assert "b?.energy_draw" in energy_helpers or "b.energy_draw" in energy_helpers
     assert "renderEnergyDrawCostChipHtml" in js
     assert "data-building-energy-draw" in js
     assert "patchBuildingCosts" in js
