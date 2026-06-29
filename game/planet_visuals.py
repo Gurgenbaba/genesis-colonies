@@ -272,12 +272,12 @@ _ORBIT_RING_RANGES: tuple[tuple[int, int, str], ...] = (
     (11, 15, ORBIT_RING_COLD),
 )
 
-# Reference radii (px) at 800px stage — GC-594D orbit layout
+# Reference radii (px) at 800px stage — GC-594F multi-ring layout
 ORBIT_BAND_RADIUS_REF: Dict[str, int] = {
-    ORBIT_RING_HOT: 150,
-    ORBIT_RING_TEMPERATE: 235,
-    ORBIT_RING_COLD: 320,
-    "expedition": 390,
+    ORBIT_RING_HOT: 182,
+    ORBIT_RING_TEMPERATE: 275,
+    ORBIT_RING_COLD: 365,
+    "expedition": 378,
 }
 GALAXY_RING_STAGE_REF_PX = 800
 
@@ -307,12 +307,28 @@ def temperature_band_for_position(position: Any) -> str:
     return orbit_ring_for_position(position)
 
 
+def orbit_layout_band_for_position(position: Any) -> str:
+    """Ring tier for galaxy layout (1–5 inner, 6–10 middle, 11–15 outer)."""
+    pos = _normalize_position(position)
+    if pos is None:
+        return ORBIT_RING_HOT
+    if pos <= 5:
+        return ORBIT_RING_HOT
+    if pos <= 10:
+        return ORBIT_RING_TEMPERATE
+    return ORBIT_RING_COLD
+
+
 def orbit_angle_for_position(position: Any) -> float:
-    """Single planet ring: position 1 at 12 o'clock, clockwise (-90° = top)."""
+    """Five slots per ring, 72° spacing, ring-specific start (-90° = top)."""
     pos = _normalize_position(position)
     if pos is None:
         return -90.0
-    return float((pos - 1) * (360.0 / 15.0) - 90.0)
+    if pos <= 5:
+        return float(-90.0 + (pos - 1) * 72.0)
+    if pos <= 10:
+        return float(-54.0 + (pos - 6) * 72.0)
+    return float(-126.0 + (pos - 11) * 72.0)
 
 
 def slot_galaxy_ring_presentation(
@@ -327,6 +343,7 @@ def slot_galaxy_ring_presentation(
     ident = get_planet_identity_for_position(pos)
     temp = temperature_range_for_position(pos)
     ring = orbit_ring_for_position(pos)
+    layout_band = orbit_layout_band_for_position(pos)
     if occupied:
         image_relpath = str(theme.get("herocard_relpath") or "")
         image_webp_relpath = str(theme.get("herocard_webp_relpath") or "")
@@ -341,9 +358,9 @@ def slot_galaxy_ring_presentation(
         },
         "temperature_band": ring,
         "orbit_ring": ring,
-        "orbit_layout_band": "planet",
+        "orbit_layout_band": layout_band,
         "orbit_angle_deg": orbit_angle_for_position(pos),
-        "orbit_radius_ref": orbit_band_radius_ref(ORBIT_RING_TEMPERATE),
+        "orbit_radius_ref": orbit_band_radius_ref(layout_band),
         "visual_class": str(ident["effect"]),
         "visual_effect": str(ident["effect"]),
         "planet_theme": str(ident["theme_key"]),

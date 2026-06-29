@@ -1032,13 +1032,15 @@
       document.getElementById("shipyard-page"),
       document.getElementById("defense-page"),
       document.getElementById("fleet-page"),
+      document.getElementById("galaxy-page-root"),
+      document.querySelector("[data-galaxy-ring-view]"),
       document.getElementById("logistics-page"),
       document.getElementById("trader-hub-page"),
       document.querySelector(".planet-evolution-page[data-planet-id]"),
     ];
     for (const el of roots) {
       if (!el) continue;
-      const pid = Number(el.dataset.planetId || 0);
+      const pid = Number(el.dataset.planetId || el.dataset.activePlanetId || 0);
       if (pid > 0) return pid;
     }
     return 0;
@@ -25617,18 +25619,35 @@
     if (!root) return;
 
     const stage = root.querySelector("[data-galaxy-ring-stage]");
+    const hudBody = root.querySelector("[data-galaxy-hud-body]");
     const inspector = root.querySelector("[data-galaxy-ring-inspector]");
     const titleEl = root.querySelector("[data-galaxy-ring-inspector-title]");
     const panels = Array.from(root.querySelectorAll("[data-galaxy-ring-inspector-panel]"));
     const slotBtns = Array.from(root.querySelectorAll("[data-galaxy-ring-slot]"));
 
-    const PLANET_SLOT_COUNT = 15;
-    const EXPEDITION_ANGLE_DEG = 90;
+    const ORBIT_STAGE_REF = 800;
+    const ORBIT_RADII_FALLBACK = { hot: 182, temperate: 275, cold: 365, expedition: 378 };
+    const EXPEDITION_ANGLE_DEG = -42;
+    const ORBIT_ICON_MARGIN_REF = 28;
+    const ORBIT_SPREAD_X = 1.12;
+    const ORBIT_SPREAD_Y = 1.04;
+
+    function readOrbitRadii() {
+      if (!stage) return { ...ORBIT_RADII_FALLBACK };
+      try {
+        const raw = stage.dataset.orbitRadii;
+        if (raw) return { ...ORBIT_RADII_FALLBACK, ...JSON.parse(raw) };
+      } catch (_) {}
+      return { ...ORBIT_RADII_FALLBACK };
+    }
 
     function planetAngleDeg(position) {
       const pos = Number(position);
       if (!Number.isFinite(pos) || pos < 1) return -90;
-      return (pos - 1) * (360 / PLANET_SLOT_COUNT) - 90;
+      if (pos <= 5) return -90 + (pos - 1) * 72;
+      if (pos <= 10) return -54 + (pos - 6) * 72;
+      if (pos <= 15) return -126 + (pos - 11) * 72;
+      return EXPEDITION_ANGLE_DEG;
     }
 
     function layoutGalaxyRingOrbits() {
@@ -25636,28 +25655,29 @@
       const w = stage.clientWidth;
       const h = stage.clientHeight;
       if (w < 1 || h < 1) return;
-      const size = Math.min(w, h);
-      const planetRatio = parseFloat(stage.dataset.planetRingRatio || "0.36");
-      const expeditionRatio = parseFloat(stage.dataset.expeditionRingRatio || "0.44");
-      const planetR = size * planetRatio;
-      const expeditionR = size * expeditionRatio;
-      const cx = w / 2;
-      const cy = h / 2;
+      const margin = ORBIT_ICON_MARGIN_REF * (Math.min(w, h) / ORBIT_STAGE_REF);
+      const availW = Math.max(1, w - 2 * margin);
+      const availH = Math.max(1, h - 2 * margin);
+      const scaleX = (availW / ORBIT_STAGE_REF) * ORBIT_SPREAD_X;
+      const scaleY = (availH / ORBIT_STAGE_REF) * ORBIT_SPREAD_Y;
+      const radii = readOrbitRadii();
+      const cx = margin + availW / 2;
+      const cy = margin + availH / 2;
       root.querySelectorAll("[data-galaxy-ring-slot-wrap]").forEach((wrap) => {
         const band = wrap.dataset.orbitBand || "expedition";
-        let angleDeg;
-        let r;
-        if (band === "expedition") {
-          angleDeg = EXPEDITION_ANGLE_DEG;
-          r = expeditionR;
-        } else {
+        let angleDeg = parseFloat(wrap.dataset.orbitAngle || "90");
+        if (band !== "expedition") {
           const pos = parseInt(wrap.dataset.galaxyRingSlotWrap || "1", 10);
-          angleDeg = planetAngleDeg(pos);
-          r = planetR;
+          if (Number.isFinite(pos)) angleDeg = planetAngleDeg(pos);
+        } else {
+          angleDeg = EXPEDITION_ANGLE_DEG;
         }
+        const refR = radii[band] ?? radii.expedition ?? ORBIT_RADII_FALLBACK.expedition;
         const rad = (angleDeg * Math.PI) / 180;
-        const x = cx + Math.cos(rad) * r;
-        const y = cy + Math.sin(rad) * r;
+        let x = cx + Math.cos(rad) * Number(refR) * scaleX;
+        let y = cy + Math.sin(rad) * Number(refR) * scaleY;
+        x = Math.max(margin, Math.min(w - margin, x));
+        y = Math.max(margin, Math.min(h - margin, y));
         wrap.style.left = `${(x / w) * 100}%`;
         wrap.style.top = `${(y / h) * 100}%`;
       });
@@ -25669,6 +25689,7 @@
       ringResizeObs.observe(stage);
     }
     layoutGalaxyRingOrbits();
+    requestAnimationFrame(() => layoutGalaxyRingOrbits());
     window.addEventListener("resize", layoutGalaxyRingOrbits);
 
     let activeKey = null;
@@ -25676,6 +25697,7 @@
     function closeInspector() {
       if (!inspector) return;
       inspector.hidden = true;
+      if (hudBody) hudBody.classList.remove("is-inspector-open");
       panels.forEach((p) => {
         p.hidden = true;
       });
@@ -25705,6 +25727,7 @@
       }
 
       inspector.hidden = false;
+      if (hudBody) hudBody.classList.add("is-inspector-open");
       activeKey = String(key);
     }
 
@@ -25721,14 +25744,85 @@
       openInspector(key, btn);
     }
 
-    function onDebrisClick(ev) {
-      const debrisBtn = ev.target.closest("[data-galaxy-ring-debris]");
-      if (!debrisBtn || !root.contains(debrisBtn)) return;
+    async function onDebrisRecycleClick(ev) {
+      const btn = ev.target.closest("[data-galaxy-ring-debris-recycle]");
+      if (!btn || !root.contains(btn)) return;
       ev.preventDefault();
       ev.stopPropagation();
-      const key = debrisBtn.dataset.galaxyRingDebris;
-      const slotBtn = root.querySelector(`[data-galaxy-ring-slot="${key}"]`);
-      if (slotBtn) openInspector(key, slotBtn);
+      const wrap = btn.closest("[data-galaxy-ring-debris-wrap]");
+      if (!wrap || btn.disabled) return;
+      const targetGalaxy = parseInt(wrap.dataset.targetGalaxy || "0", 10);
+      const targetSystem = parseInt(wrap.dataset.targetSystem || "0", 10);
+      const targetPosition = parseInt(wrap.dataset.targetPosition || "0", 10);
+      const recyclerSlots = parseInt(wrap.dataset.recyclerSlots || "0", 10);
+      const originPlanetId =
+        parseInt(root.dataset.activePlanetId || "0", 10) ||
+        (typeof getDomPlanetId === "function" ? getDomPlanetId() : 0);
+      if (!originPlanetId || !targetGalaxy || !targetSystem || !targetPosition) {
+        if (typeof showNotify === "function") {
+          showNotify(
+            typeof tt === "function"
+              ? tt("galaxy_debris_recycle_no_origin", "Keine aktive Kolonie für Recycler-Start.")
+              : "No active colony for recycler launch.",
+            "error"
+          );
+        }
+        return;
+      }
+      if (recyclerSlots < 1) {
+        if (typeof showNotify === "function") {
+          showNotify(
+            typeof tt === "function"
+              ? tt("galaxy_debris_recycle_empty", "Kein abbaufähiges Trümmerfeld.")
+              : "No harvestable debris.",
+            "error"
+          );
+        }
+        return;
+      }
+      btn.disabled = true;
+      try {
+        const domPlanetId =
+          typeof getDomPlanetId === "function" ? getDomPlanetId() : originPlanetId;
+        const res = await GC.fetchGameAction("/api/fleet/send", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Requested-With": "XMLHttpRequest",
+            ...(domPlanetId ? { "X-GC-Dom-Planet-Id": String(domPlanetId) } : {}),
+          },
+          body: JSON.stringify({
+            origin_planet_id: originPlanetId,
+            mission_type: "recycle",
+            target_galaxy: targetGalaxy,
+            target_system: targetSystem,
+            target_position: targetPosition,
+            ships: { harvest_reclaimer: recyclerSlots },
+            resources: {},
+            speed_percent: 100,
+          }),
+        });
+        if (res?.ok) {
+          if (typeof showNotify === "function") {
+            showNotify(
+              typeof tt === "function" ? tt("fleet_send_success", "Fleet dispatched.") : "Fleet dispatched.",
+              "success"
+            );
+          }
+          if (typeof applyActionState === "function") {
+            applyActionState(res, "fleet_send_success");
+          }
+        } else if (typeof showNotify === "function") {
+          showNotify(
+            typeof mapActionError === "function"
+              ? mapActionError(res?.reason, res?.payload || res)
+              : res?.reason || "Error",
+            "error"
+          );
+        }
+      } finally {
+        btn.disabled = false;
+      }
     }
 
     async function onOpenPlanetClick(ev) {
@@ -25768,7 +25862,7 @@
     }
 
     root.addEventListener("click", onSlotClick);
-    root.addEventListener("click", onDebrisClick);
+    root.addEventListener("click", onDebrisRecycleClick);
     root.addEventListener("click", onOpenPlanetClick);
     root.addEventListener("click", onCloseClick);
     document.addEventListener("keydown", onKeyDown);
@@ -25780,7 +25874,7 @@
 
     GC.registerCleanup(() => {
       root.removeEventListener("click", onSlotClick);
-      root.removeEventListener("click", onDebrisClick);
+      root.removeEventListener("click", onDebrisRecycleClick);
       root.removeEventListener("click", onOpenPlanetClick);
       root.removeEventListener("click", onCloseClick);
       document.removeEventListener("keydown", onKeyDown);

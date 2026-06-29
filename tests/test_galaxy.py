@@ -295,6 +295,7 @@ def test_list_system_shows_debris_field(galaxy_db):
     assert slot["debris"]["total"] == 15_400
     assert slot["debris"]["ttl_remaining_seconds"] >= 0
     assert slot["debris"]["ttl_display"]
+    assert slot["debris"]["recycler_slots_needed"] >= 1
     assert "mission=recycle" in slot["debris"]["recycle_href"]
     assert f"target_position={coords['position']}" in slot["debris"]["recycle_href"]
 
@@ -332,8 +333,11 @@ def test_galaxy_page_loads(galaxy_db, monkeypatch):
     assert "galaxy-hud-controls" in body
     assert "data-galaxy-ring-stage" in body
     assert "galaxy-ring-stage--compact" in body
-    assert 'data-orbit-band="planet"' in body or 'data-orbit-band=\"planet\"' in body
+    assert 'data-orbit-band="hot"' in body or 'data-orbit-band=\"hot\"' in body
+    assert 'data-orbit-band="temperate"' in body or 'data-orbit-band=\"temperate\"' in body
+    assert 'data-orbit-band="cold"' in body or 'data-orbit-band=\"cold\"' in body
     assert 'data-orbit-band="expedition"' in body or 'data-orbit-band=\"expedition\"' in body
+    assert "data-galaxy-hud-body" in body
     assert "galaxy-hud-search" not in body
     assert "galaxy-hud-coord-q" not in body
     assert "galaxy-hud-scan-btn" not in body
@@ -347,6 +351,14 @@ def test_galaxy_page_loads(galaxy_db, monkeypatch):
     assert "data-player-card" in body
     assert "galaxy-fleet-action" in body
     assert "galaxy-ring-orbit--hot" not in body
+    assert "img/expedition/expedition.png" in body
+    from pathlib import Path
+    ring_css = Path(__file__).resolve().parents[1].joinpath("static", "style.css").read_text(encoding="utf-8")
+    assert "galaxy-ring-debris-marker" in ring_css or "galaxy-ring-debris-marker-img" in ring_css
+    assert "img/debris/debris.jpg" in ring_css
+    assert "galaxy-ring-inspector--card" in body
+    assert "galaxy-ring-inspector--side" not in body
+    assert "galaxy-ring-inspector--dock" not in body
     assert "galaxy_slot_empty" in body or "Leer" in body or "Empty" in body
 
 
@@ -359,17 +371,19 @@ def test_list_system_slot_ring_presentation(galaxy_db):
     assert hot["orbit_ring"] == ORBIT_RING_HOT
     assert hot["temperature_band"] == ORBIT_RING_HOT
     assert hot["orbit_angle_deg"] == -90.0
-    assert hot["orbit_layout_band"] == "planet"
-    assert hot["orbit_radius_ref"] == 235
+    assert hot["orbit_layout_band"] == ORBIT_RING_HOT
+    assert hot["orbit_radius_ref"] == 182
     assert hot["visual_effect"] == "volcanic"
     assert hot["planet_image_relpath"].startswith("img/")
     temperate = by_pos[8]
     assert temperate["orbit_ring"] == ORBIT_RING_TEMPERATE
-    assert temperate["orbit_angle_deg"] == 78.0
+    assert temperate["orbit_angle_deg"] == 90.0
+    assert temperate["orbit_layout_band"] == ORBIT_RING_TEMPERATE
     assert temperate["visual_effect"] == "temperate"
     cold = by_pos[15]
     assert cold["orbit_ring"] == ORBIT_RING_COLD
-    assert cold["orbit_angle_deg"] == 246.0
+    assert cold["orbit_angle_deg"] == 162.0
+    assert cold["orbit_layout_band"] == ORBIT_RING_COLD
     assert cold["visual_effect"] == "ice"
     assert cold["planet_theme"] == "absolute-zero"
 
@@ -403,6 +417,76 @@ def test_list_system_slot_coordinates_match_position(galaxy_db):
         assert format_coordinates(*key) == format_coordinates(
             int(coords["galaxy"]), int(coords["system"]), int(coords["position"])
         )
+
+
+def test_list_system_exposes_player_status_flags(galaxy_db):
+    import time
+
+    from game.db import column_exists
+
+    viewer_id = _create_player()
+    foreign_id = _create_player()
+    conn = db()
+    try:
+        viewer_hw = next(
+            p for p in get_planets_by_player(viewer_id) if int(p.get("is_homeworld") or 0) == 1
+        )
+        foreign_hw = next(
+            p for p in get_planets_by_player(foreign_id) if int(p.get("is_homeworld") or 0) == 1
+        )
+        vcoords = get_planet_coordinates(viewer_hw)
+        g, s = int(vcoords["galaxy"]), int(vcoords["system"])
+        viewer_pos = int(vcoords["position"])
+        foreign_pos = next(
+            p for p in range(1, 16) if p != viewer_pos
+        )
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE planets SET galaxy = ?, system = ?, position = ? WHERE id = ?;",
+            (g, s, foreign_pos, int(foreign_hw["id"])),
+        )
+        cur.execute(
+            "UPDATE player_scores SET score_total = ? WHERE player_id = ?;",
+            (1000, viewer_id),
+        )
+        cur.execute(
+            "UPDATE player_scores SET score_total = ? WHERE player_id = ?;",
+            (50000, foreign_id),
+        )
+        if column_exists(conn, "players", "last_seen"):
+            cur.execute(
+                "UPDATE players SET last_seen = ? WHERE id = ?;",
+                (int(time.time()), foreign_id),
+            )
+        if column_exists(conn, "players", "vacation_mode_active"):
+            cur.execute(
+                "UPDATE players SET vacation_mode_active = 1 WHERE id = ?;",
+                (foreign_id,),
+            )
+        conn.commit()
+
+        data = list_system(g, s, conn=conn, viewer_player_id=viewer_id)
+        foreign_slot = next(
+            s for s in data["slots"] if int(s.get("player_id") or 0) == foreign_id
+        )
+        assert foreign_slot["attack_strength"] == "too_strong"
+        assert foreign_slot["inactive"] is False
+        assert foreign_slot["vacation_active"] is True
+
+        if column_exists(conn, "players", "last_seen"):
+            cur.execute(
+                "UPDATE players SET last_seen = ? WHERE id = ?;",
+                (int(time.time()) - 4 * 86400, foreign_id),
+            )
+            conn.commit()
+            data = list_system(g, s, conn=conn, viewer_player_id=viewer_id)
+            foreign_slot = next(
+                s for s in data["slots"] if int(s.get("player_id") or 0) == foreign_id
+            )
+            assert foreign_slot["inactive"] is True
+            assert foreign_slot["attack_strength"] is None
+    finally:
+        conn.close()
 
 
 def _galaxy_client(monkeypatch):
@@ -545,13 +629,19 @@ def test_fleet_page_exposes_expedition_position_dataset(galaxy_db, monkeypatch):
     assert 'data-fleet-mission' in body
 
 
-def test_orbit_angle_single_planet_ring(galaxy_db):
-    from game.planet_visuals import orbit_angle_for_position
+def test_orbit_angle_multi_ring_layout(galaxy_db):
+    from game.planet_visuals import orbit_angle_for_position, orbit_layout_band_for_position
 
+    assert orbit_layout_band_for_position(1) == "hot"
+    assert orbit_layout_band_for_position(5) == "hot"
+    assert orbit_layout_band_for_position(6) == "temperate"
+    assert orbit_layout_band_for_position(11) == "cold"
     assert orbit_angle_for_position(1) == -90.0
-    assert orbit_angle_for_position(2) == -66.0
-    assert orbit_angle_for_position(8) == 78.0
-    assert orbit_angle_for_position(15) == 246.0
+    assert orbit_angle_for_position(5) == 198.0
+    assert orbit_angle_for_position(6) == -54.0
+    assert orbit_angle_for_position(8) == 90.0
+    assert orbit_angle_for_position(11) == -126.0
+    assert orbit_angle_for_position(15) == 162.0
 
 
 def test_galaxy_ring_layout_main_js_contract(galaxy_db):
@@ -560,8 +650,9 @@ def test_galaxy_ring_layout_main_js_contract(galaxy_db):
     js = (Path(__file__).resolve().parent.parent / "static" / "main.js").read_text(encoding="utf-8")
     assert "layoutGalaxyRingOrbits" in js
     assert "planetAngleDeg" in js
+    assert "ORBIT_RADII_FALLBACK" in js
+    assert "is-inspector-open" in js
     assert "dataset.orbitBand" in js
-    assert "dataset.planetRingRatio" in js
     assert "ResizeObserver" in js
 
 
@@ -570,8 +661,10 @@ def test_galaxy_ring_compact_stage_css_contract(galaxy_db):
 
     css = (Path(__file__).resolve().parent.parent / "static" / "style.css").read_text(encoding="utf-8")
     assert ".galaxy-ring-stage--compact" in css
-    assert "aspect-ratio: 1 / 1" in css
-    assert "min(100%, 680px)" in css
+    assert "min(100%, 620px)" in css
+    assert ".galaxy-ring-inspector--card" in css
+    assert "position: absolute" in css
+    assert "grid-template-columns: minmax(520px, 1fr) minmax(280px, 300px)" not in css
 
 
 def test_fleet_url_prefill_contract_in_main_js(galaxy_db):

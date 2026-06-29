@@ -403,6 +403,63 @@ def _attach_slot_presentation(
     )
 
 
+def _player_activity_select(conn: sqlite3.Connection, *, alias: str = "pl") -> str:
+    """Optional vacation + last_seen columns for galaxy slot player flags."""
+    parts: List[str] = []
+    if column_exists(conn, "players", "vacation_mode_active"):
+        parts.append(f"COALESCE({alias}.vacation_mode_active, 0) AS vacation_mode_active")
+    else:
+        parts.append("0 AS vacation_mode_active")
+    if column_exists(conn, "players", "last_seen"):
+        parts.append(f"COALESCE({alias}.last_seen, 0) AS last_seen")
+    else:
+        parts.append("0 AS last_seen")
+    return ", ".join(parts)
+
+
+def _attach_player_status_flags(
+    slot: Dict[str, Any],
+    *,
+    viewer_player_id: Optional[int],
+    conn: sqlite3.Connection,
+) -> None:
+    """Vacation / inactive / noob-protection strength hints for galaxy presentation."""
+    if not slot.get("occupied"):
+        slot["vacation_active"] = False
+        slot["inactive"] = False
+        slot["attack_strength"] = None
+        return
+
+    from .ranking import ranking_inactive_from_last_seen
+
+    slot["vacation_active"] = bool(int(slot.pop("_vacation_mode_active", slot.get("vacation_active", 0)) or 0))
+    last_seen = int(slot.pop("_last_seen", slot.get("last_seen", 0)) or 0)
+    slot["inactive"] = ranking_inactive_from_last_seen(last_seen)
+
+    strength: Optional[str] = None
+    target_player_id = int(slot.get("player_id") or 0)
+    viewer_id = int(viewer_player_id or 0)
+    if (
+        viewer_id > 0
+        and target_player_id > 0
+        and target_player_id != viewer_id
+        and not slot.get("is_ally_planet")
+        and not slot.get("is_own_planet")
+    ):
+        from .fleet import get_noob_protection_status
+
+        info = get_noob_protection_status(viewer_id, target_player_id, conn=conn)
+        if not info.get("allowed"):
+            def_score = int(info.get("defender_score") or 0)
+            max_def = int(info.get("max_defender_score") or 0)
+            min_def = int(info.get("min_defender_score") or 0)
+            if def_score > max_def:
+                strength = "too_strong"
+            elif def_score < min_def:
+                strength = "too_weak"
+    slot["attack_strength"] = strength
+
+
 def _slot_planet_meta(
     planet_row: Dict[str, Any],
     conn: sqlite3.Connection,
@@ -658,6 +715,7 @@ def list_system(
         cur = conn.cursor()
         has_planet_class = column_exists(conn, "planets", "planet_class")
         class_col = "p.planet_class" if has_planet_class else "'terrestrial' AS planet_class"
+        player_activity = _player_activity_select(conn, alias="pl")
         cur.execute(
             f"""
             SELECT
@@ -668,7 +726,8 @@ def list_system(
                 p.position,
                 p.player_id,
                 pl.name AS commander_name,
-                {class_col}
+                {class_col},
+                {player_activity}
             FROM planets p
             INNER JOIN players pl ON pl.id = p.player_id
             WHERE p.galaxy = ?
@@ -705,6 +764,8 @@ def list_system(
                 "position": pos,
                 "occupied": True,
                 "player_id": player_id,
+                "_vacation_mode_active": int(row_dict.get("vacation_mode_active") or 0),
+                "_last_seen": int(row_dict.get("last_seen") or 0),
                 "commander_name": str(row["commander_name"] or ""),
                 "planet_id": pid,
                 "planet_name": str(row["planet_name"] or ""),
@@ -741,6 +802,11 @@ def list_system(
                 position=pos,
             )
             _attach_slot_presentation(slot, pos, planet_row={"position": pos}, occupied=True)
+            _attach_player_status_flags(
+                slot,
+                viewer_player_id=viewer_player_id,
+                conn=conn,
+            )
             slots.append(slot)
         else:
             is_highlighted = (

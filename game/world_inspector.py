@@ -85,6 +85,10 @@ def build_debris_field_payload(
         payload["coordinates"] = {"galaxy": g, "system": s, "position": p}
         payload["recycle_href"] = fleet_recycle_href(g, s, p)
 
+    from game.combat import estimate_recycler_slots_needed
+
+    payload["recycler_slots_needed"] = estimate_recycler_slots_needed(m, c)
+
     return payload
 
 

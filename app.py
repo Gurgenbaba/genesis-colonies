@@ -1602,6 +1602,8 @@ def galaxy_view():
             viewer_player_id=user_id,
         )
 
+    from game.planet_visuals import galaxy_ring_orbit_radii_payload
+
     return render_template(
         "galaxy.html",
         player=player_view,
@@ -1613,6 +1615,7 @@ def galaxy_view():
         minimap=minimap,
         viewer_player_id=user_id,
         expedition_slot=build_expedition_slot(galaxy, system) if view != "command_map" else None,
+        orbit_radii=galaxy_ring_orbit_radii_payload() if view != "command_map" else None,
         hold_mission_enabled=hold_mission_enabled,
         galaxy_view=view,
         command_map=command_map,
