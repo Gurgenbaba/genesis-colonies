@@ -312,6 +312,15 @@
         {% if opt_unlocks and opt_unlocks != opt_unlocks_key %}
         <p class="pe-choice-option-unlocks hint">{{ opt_unlocks }}</p>
         {% endif %}
+        <ul class="pe-choice-benefits hint">
+          {% for n in [1, 2, 3] %}
+          {% set benefit_key = 'pe_choice_benefit_' ~ n ~ '_' ~ opt %}
+          {% set benefit = T(benefit_key, '') %}
+          {% if benefit and benefit != benefit_key %}
+          <li>{{ benefit }}</li>
+          {% endif %}
+          {% endfor %}
+        </ul>
         <p class="pe-choice-option-irreversible hint">{{ T('pe_choice_confirm_irreversible', 'Diese Wahl kann später nicht geändert werden.') }}</p>
       </div>
       {% endfor %}

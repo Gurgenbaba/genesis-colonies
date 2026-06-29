@@ -296,7 +296,7 @@ def test_chain_output_bonus_per_chain_from_compiled_mechanics(evo_db):
 
     produced = _tick_chain_output(conn, pid)
     assert produced.get("refined_ferronit") == pytest.approx(144.0)
-    assert produced.get("mantle_alloy") == pytest.approx(60.0)
+    assert produced.get("mantle_alloy") == pytest.approx(90.0)
     conn.close()
 
 
@@ -332,6 +332,83 @@ def test_orbital_t2_compile_chain_output_bonus(evo_db):
 
     produced = _tick_chain_output(conn, pid)
     assert produced.get("refined_ferronit") == pytest.approx(138.0)
+    conn.close()
+
+
+def test_mantle_t2_deep_core_refinery_in_definitions(evo_db):
+    from game.planet_evolution.definitions import get_research_def
+
+    rdef = get_research_def("mantle_t2_deep_core_refinery")
+    assert rdef is not None
+    assert rdef.get("mechanics", {}).get("chain_output_bonus") == {"mantle_alloy": 0.15}
+
+
+def test_mantle_t2_blocked_on_orbital_mining_path(evo_db):
+    conn = db()
+    uid = _ensure_test_player(9741, conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    ensure_planet_evolution(pid, conn)
+    conn.execute("UPDATE planets SET metal = 999999, crystal = 999999 WHERE id = ?;", (pid,))
+    make_locked_choice(pid, "mining_path", "orbital_mining", uid, conn=conn)
+    conn.commit()
+
+    ok, reason, extra = queue_planet_research(
+        pid, "mantle_t2_deep_core_refinery", player_id=uid, conn=conn
+    )
+    assert ok is False
+    assert reason == "requirements"
+    assert extra and any("locked_choice:mining_path=deep_core" in m for m in extra.get("missing", []))
+    conn.close()
+
+
+def test_mantle_t2_queueable_on_deep_core_path(evo_db):
+    conn = db()
+    uid = _ensure_test_player(9742, conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    ensure_planet_evolution(pid, conn)
+    conn.execute("UPDATE planets SET metal = 999999, crystal = 999999 WHERE id = ?;", (pid,))
+    make_locked_choice(pid, "mining_path", "deep_core", uid, conn=conn)
+    conn.commit()
+
+    ok, reason, extra = queue_planet_research(
+        pid, "mantle_t2_deep_core_refinery", player_id=uid, conn=conn
+    )
+    assert ok is True, reason
+    assert extra and extra.get("job_id")
+    conn.close()
+
+
+def test_mantle_alloy_base_rate_after_974b(evo_db):
+    conn = db()
+    uid = _ensure_test_player(9743, conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    ensure_planet_evolution(pid, conn)
+    conn.execute("UPDATE planets SET metal = 999999, crystal = 999999 WHERE id = ?;", (pid,))
+    _activate_production_chain(conn, pid, "mantle_alloy")
+    ensure_special_resource_row(pid, "mantle_alloy", conn)
+    conn.commit()
+
+    produced = _tick_chain_output(conn, pid)
+    assert produced.get("mantle_alloy") == pytest.approx(90.0)
+    conn.close()
+
+
+def test_mantle_t2_compile_chain_output_bonus(evo_db):
+    conn = db()
+    uid = _ensure_test_player(9744, conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    ensure_planet_evolution(pid, conn)
+    _set_planet_research_level(conn, pid, "mantle_t2_deep_core_refinery")
+    compile_planet_mechanics(pid, conn)
+    assert get_flag(pid, "chain_output_bonus", conn=conn) == {"mantle_alloy": 0.15}
+
+    conn.execute("UPDATE planets SET metal = 999999, crystal = 999999 WHERE id = ?;", (pid,))
+    _activate_production_chain(conn, pid, "mantle_alloy")
+    ensure_special_resource_row(pid, "mantle_alloy", conn)
+    conn.commit()
+
+    produced = _tick_chain_output(conn, pid)
+    assert produced.get("mantle_alloy") == pytest.approx(103.5)
     conn.close()
 
 

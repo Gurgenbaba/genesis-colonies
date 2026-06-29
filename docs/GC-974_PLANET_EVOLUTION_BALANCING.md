@@ -37,7 +37,7 @@ Für jede der **18 Planet-Techs** (Seed `017`):
 | Industrie-Automatisierung | `industry_t1_automation` | 1 | 40 | `unlock_queue.conversion:1` | **gering** — Flag gesetzt, **kein Consumer** (GC-973) | niedrig (Copy ehrlich) | 🔴 |
 | Bergbau-Pfad | `industry_t2_mining_path` | 2 | 55 | Pfadwahl `orbital_mining` / `deep_core` | **hoch** — gate für ganzen Industry-Zweig | mittel (Choice-UI) | 🟢 |
 | Orbitalraffinerie | `industry_t3_orbital_refinery` | 3 | 70 | Chain `refined_ferronit` | **hoch** — ~120/h Spezialressource | hoch (Economy-Chip) | 🟢 |
-| Mantel-Tap | `industry_t3_mantle_tap` | 3 | 70 | Chain `mantle_alloy` | **hoch** — ~60/h Spezialressource | hoch | 🟢 |
+| Mantel-Tap | `industry_t3_mantle_tap` | 3 | 70 | Chain `mantle_alloy` (~90/h) + T2-Bonus | **hoch** — Tiefkern-Pfad | hoch | 🟢 |
 | Massengießerei | `industry_t4_mass_foundry` | 4 | 85 | `conversion_batch_bonus:1` | **gering** — nicht geparst (GC-973) | niedrig | 🔴 |
 | Industrie-Overdrive | `industry_t5_overdrive` | 5 | 100 | `enable_policy:mandatory_overtime` | **hoch** — Policy +20 % Ketten-Output | hoch (Politik) | 🟢 |
 | Feld-Labore | `science_t1_field_labs` | 1 | 40 | `planet_research_speed_flag:0.10` | **hoch** — −10 % Forschungszeit global | mittel (kürzere Queue) | 🟢 |
@@ -52,6 +52,7 @@ Für jede der **18 Planet-Techs** (Seed `017`):
 | Dunkle Materie | `experimental_t1_dark_matter` | 1 | 40 | `enable_experimental` + risk | **gering** — 972E deferred | niedrig | 🔴 |
 | Befestigung | `military_t2_fortification` | 2 | 55 | Chain `phase_crystal` | **mittel** — `defense_factory` ≥ 2 | mittel | 🟡 |
 | Zero-G-Gießerei | `orbital_t2_zero_g_foundry` | 2 | 55 | `chain_output_bonus` +15 % `refined_ferronit` | **hoch** — +15 % auf Orbital-Kette | hoch (Prod-Badge) | 🟢 |
+| Tiefkern-Raffinerie | `mantle_t2_deep_core_refinery` | 2 | 55 | `chain_output_bonus` +15 % `mantle_alloy` | **hoch** — +15 % auf Mantel-Kette | hoch (Prod-Badge) | 🟢 |
 
 ---
 
@@ -60,11 +61,11 @@ Für jede der **18 Planet-Techs** (Seed `017`):
 | Pfad | Techs | Stärke | Schwäche |
 |------|-------|--------|----------|
 | **Orbital** (`orbital_mining`) | T3 Raffinerie, `orbital_t2_zero_g_foundry`, T4 | **Zusätzlicher Output-Bonus**, eine starke Export-Ressource (`refined_ferronit`), Synergie mit `forge_world` | Nur eine Spezialisierungs-Exportlinie |
-| **Deep Core** (`deep_core`) | T3 Mantel-Tap, T4 | Alternative Ressource (`mantle_alloy`), Spec `forge_world` T2 chain | **Kein** analoger T2-Bonus-Tech |
+| **Deep Core** (`deep_core`) | T3 Mantel-Tap, `mantle_t2_deep_core_refinery`, T4 | `mantle_alloy` 90/h +15 % T2, Spec `forge_world` T2 chain | Etwas höheres Chain-Risiko (3 % Mantelbeben) |
 
-**Tendenz:** Orbital-Pfad wirkt **stärker** (mehr live Hooks pro Tech). Deep Core braucht Balancing-Liebe (eigenen Mid-Tier-Bonus oder stärkere `mantle_alloy`-Basisrate).
+**Tendenz:** Orbital-Pfad wirkt **stärker** (mehr live Hooks pro Tech). Deep Core verletzt die 3-Vorteile-Regel für Pfadentscheidungen.
 
-**Must-Pick auf Industry-Linie:** T2-Pfadwahl ist unvermeidlich; innerhalb Orbital ist **Zero-G-Gießerei** nahezu Pflicht nach Raffinerie.
+→ **Nächster Schritt:** ~~GC-974B~~ ✅ — siehe [GC-974B_DEEP_CORE_PARITY.md](GC-974B_DEEP_CORE_PARITY.md).
 
 ---
 
@@ -138,12 +139,15 @@ Linear: T1 → T2 → T3 → T5 (kein T4 im Seed).
 | Prio | Ticket-Idee | Inhalt |
 |-----|-------------|--------|
 | P0 | **GC-974A** | `policy_tier`-Semantik fixen | ✅ Done |
-| P1 | **GC-974B** | Deep-Core-Pfad parity (Bonus-Tech oder `mantle_alloy` rate) |
-| P1 | **GC-974C** | Trade/Military/Trait-Techs — Sichtbarkeit oder Schwellen |
+| **P0** | **GC-974B** | **Deep-Core-Parity** — Pfadwahl gleich attraktiv | ✅ Done |
+| P1 | **GC-975C** | Trade/Governance/Trait/Breakthrough — 🟡-Techs |
+| P1 | ~~GC-974B~~ | → siehe oben (vor 975C) |
+| P1 | ~~GC-974C~~ | Trade/Military/Trait — teils in 975C |
 | P2 | **GC-974D** | Science T3 Event-Rate / T5-Brücke |
 | P2 | **GC-974E** | Early-Tech Identity (T1 Industry vs Science vs Ecology) |
 | — | **GC-973** | Conversion — eigenes Epic, nicht in 974 mischen |
 | — | **post-972E** | Experimental-Risiko |
+| P1 | **GC-975** | Reward Pass — jede Tech mit Sofort-Effekt ([GC-975](GC-975_PLANET_EVOLUTION_REWARD_PASS.md)) |
 
 ---
 
@@ -151,8 +155,12 @@ Linear: T1 → T2 → T3 → T5 (kein T4 im Seed).
 
 ```
 GC-972 (Dead Hooks A–D) ✅
-    ├── GC-974 (Balancing & Identity) ← jetzt
-    ├── GC-973 (Conversion Queue)     ← danach, großes System
+    ├── GC-974A (Policy tier) ✅
+    ├── GC-974B (Deep-Core-Parity) ✅
+    ├── GC-975 (Reward Pass — Sofort+Langzeit pro Tech)
+    ├── GC-975C nach 974B (🟡-Techs)
+    ├── GC-975B nach 973/972E (❌-Techs, kein Interim)
+    ├── GC-973 (Conversion Queue)
     └── GC-972E (Experimental Risk) ← nach Product-OK, nicht eilen
 ```
 

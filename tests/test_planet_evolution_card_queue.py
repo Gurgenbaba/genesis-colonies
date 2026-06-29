@@ -212,6 +212,7 @@ def test_planet_evolution_context_info_template_markers():
     assert "pe_tech_info_summary_label" in html
     assert "pe-choice-banner" in html
     assert "pe-choice-option-focus" in html
+    assert "pe-choice-benefits" in html
     assert "pe-choice-confirm-modal" in html
     assert "pe-goal-benefits-btn" in html
     assert "pe-help-modal" in html
