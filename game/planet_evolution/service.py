@@ -417,10 +417,20 @@ def activate_policy(
             return False, "slot_too_low"
 
         culture = get_planet_culture(planet_id, conn=conn)
-        allowed = pdef.get("archetype_allow") or []
-        if allowed and str(culture.get("archetype_key") or "") not in [str(a) for a in allowed]:
+
+        from .policies import activation_block_reason, evaluate_policy_gate
+
+        eligible, locked_key = evaluate_policy_gate(
+            planet_id,
+            policy_key,
+            policy_def=pdef,
+            slot=int(slot),
+            archetype_key=str(culture.get("archetype_key") or ""),
+            conn=conn,
+        )
+        if not eligible:
             rollback(conn)
-            return False, "archetype_not_allowed"
+            return False, activation_block_reason(locked_key)
 
         policies = get_policies(planet_id, conn=conn)
         now = time.time()

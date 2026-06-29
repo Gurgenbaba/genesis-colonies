@@ -256,6 +256,36 @@ def planet_research_icon_fallback(tech_key: str, category: Optional[str] = None)
     return _PE_RESEARCH_BRANCH_FALLBACK.get(branch_key, "🧬")
 
 
+_PE_RESEARCH_BRANCH_LABEL_KEYS: Dict[str, str] = {
+    "INDUSTRY": "pe_research_branch_industry",
+    "SCIENCE": "pe_research_branch_science",
+    "ENERGY": "pe_research_branch_energy",
+    "ECOLOGY": "pe_research_branch_ecology",
+    "TRADE": "pe_research_branch_trade",
+    "GOVERNANCE": "pe_research_branch_governance",
+    "ANCIENT TECH": "pe_research_branch_ancient",
+    "EXPERIMENTAL": "pe_research_branch_experimental",
+    "MILITARY": "pe_research_branch_military",
+    "ORBITAL": "pe_research_branch_orbital",
+}
+
+
+def planet_research_branch_label_key(tech_key: str, category: Optional[str] = None) -> str:
+    branch_key = _planet_research_branch(tech_key, category)
+    return _PE_RESEARCH_BRANCH_LABEL_KEYS.get(branch_key, "pe_research_branch_other")
+
+
+def planet_tech_info_locale_keys(tech_key: str) -> Dict[str, str]:
+    """Locale keys for structured planet-tech info popover (summary / effect / where / note)."""
+    base = str(tech_key or "").strip()
+    return {
+        "summary_key": f"pe_tech_summary_{base}",
+        "effect_key": f"pe_tech_effect_{base}",
+        "where_key": f"pe_tech_where_{base}",
+        "note_key": f"pe_tech_note_{base}",
+    }
+
+
 def _unlock_label_key(raw: str) -> str:
     s = str(raw or "").strip()
     if s.startswith("research:"):

@@ -12,12 +12,74 @@ from ..models import get_game_settings
 from .constants import EVENT_COOLDOWN_HOURS
 from .definitions import get_event, get_events
 from .history import append_history
-from .mechanics import compile_planet_mechanics
+from .mechanics import compile_planet_mechanics, get_planet_mechanics
 from .planet_level import add_planet_xp
 from .repository import _json_dumps, _json_loads, get_active_event, get_planet_culture, get_planet_row
 
 
 EVENT_TIMEOUT_HOURS = 72
+
+# Adapter: map pe_event_definitions.pool_tags + event_key to event_pool:* flag names.
+# Canonical tags use pool:{name}; legacy events match by key prefix (e.g. smuggler_* → smuggler).
+_EVENT_POOL_TAG_PREFIX = "pool:"
+
+
+def unlocked_event_pool_names(flags: Dict[str, Any] | None) -> set[str]:
+    """Return pool names from compiled planet_mechanics.flags (event_pool:*)."""
+    pools: set[str] = set()
+    for key, val in (flags or {}).items():
+        if not str(key).startswith("event_pool:"):
+            continue
+        if val:
+            pools.add(str(key).split(":", 1)[1])
+    return pools
+
+
+def event_belongs_to_pool(event_key: str, pool_name: str, pool_tags: List[Any]) -> bool:
+    pool = str(pool_name or "").strip()
+    if not pool:
+        return False
+    tag = f"{_EVENT_POOL_TAG_PREFIX}{pool}"
+    if tag in [str(t) for t in (pool_tags or [])]:
+        return True
+    key = str(event_key or "")
+    if key == pool:
+        return True
+    if key.startswith(f"{pool}_"):
+        return True
+    return False
+
+
+def event_allowed_by_pool_tags(
+    event_key: str,
+    pool_tags: List[Any],
+    *,
+    specialization_key: str,
+    unlocked_pools: set[str],
+) -> bool:
+    """Whether an event passes spec/pool gating (unchanged when no pool_tags)."""
+    tags = list(pool_tags or [])
+    if not tags:
+        return True
+
+    spec = str(specialization_key or "")
+    spec_match = bool(
+        spec and any(str(t).endswith(spec) or t == f"spec:{spec}" for t in tags)
+    )
+    if spec_match:
+        return True
+
+    if unlocked_pools and any(
+        event_belongs_to_pool(event_key, pool, tags) for pool in unlocked_pools
+    ):
+        return True
+
+    # Legacy: planets without specialization were not filtered by pool_tags.
+    if not spec:
+        return True
+
+    return False
+
 
 # Default outcome payloads keyed by outcome id (extend via admin later).
 _OUTCOME_DEFAULTS: Dict[str, Dict[str, Any]] = {
@@ -209,6 +271,8 @@ class PlanetEventEngine:
         day_bucket = int(now // 86400)
         spec = str(planet.get("specialization_key") or "")
         culture = get_planet_culture(planet_id, conn=conn)
+        mechanics = get_planet_mechanics(planet_id, conn=conn) or {}
+        unlocked_pools = unlocked_event_pool_names(mechanics.get("flags"))
 
         candidates: List[Tuple[str, float]] = []
         for key, edef in get_events().items():
@@ -218,9 +282,13 @@ class PlanetEventEngine:
             chance = float(trigger.get("base_chance_per_day") or base_chance)
             roll = _stable_roll(planet_id, key, day_bucket)
             pool_tags = edef.get("pool_tags") or []
-            if spec and not any(str(t).endswith(spec) or t == f"spec:{spec}" for t in pool_tags):
-                if pool_tags:
-                    continue
+            if not event_allowed_by_pool_tags(
+                key,
+                pool_tags,
+                specialization_key=spec,
+                unlocked_pools=unlocked_pools,
+            ):
+                continue
             if roll < chance:
                 candidates.append((key, chance))
 

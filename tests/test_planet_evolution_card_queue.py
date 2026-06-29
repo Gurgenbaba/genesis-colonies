@@ -6,6 +6,7 @@ Run: python -m pytest tests/test_planet_evolution_card_queue.py -q
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from game.planet_evolution.ascension import _attach_queue_jobs_to_ascension_cards
@@ -173,3 +174,67 @@ def test_planet_evolution_template_sets_ps_before_use():
     assert "gc-card-queue-glyph--planet-research" in js
     assert "gc-card-queue-block[data-gc-card-queue='1']" in js
     assert "syncPlanetEvolutionResearchTicker" in js
+
+
+PE_CONTEXT_LOCALE_KEYS = (
+    "pe_tech_info_open",
+    "pe_tech_info_summary_label",
+    "pe_tech_info_effect_label",
+    "pe_tech_info_where_label",
+    "pe_tech_info_note_label",
+    "pe_reward",
+    "pe_planet_xp",
+    "pe_reward_xp",
+    "pe_next_research_reward",
+    "pe_tech_reward_chip",
+    "pe_hero_current_research_xp",
+    "pe_goal_xp_remaining",
+    "pe_goal_research_to_level",
+    "pe_tech_summary_industry_t3_orbital_refinery",
+    "pe_tech_effect_industry_t3_orbital_refinery",
+    "pe_choice_permanent_banner",
+    "pe_choice_confirm_title",
+    "pe_choice_focus_orbital_mining",
+    "pe_choice_unlocks_orbital_mining",
+    "pe_goal_benefits_btn",
+    "pe_goal_benefits_research",
+    "pe_help_modal_title",
+    "pe_research_branch_industry",
+)
+
+
+def test_planet_evolution_context_info_template_markers():
+    html = (ROOT / "templates/planet_evolution.html").read_text(encoding="utf-8")
+    js = (ROOT / "static/main.js").read_text(encoding="utf-8")
+    assert "pe-tech-info-btn" in html
+    assert "pe_tech_info_source" in html
+    assert "pe_humanize_key" in html
+    assert "pe_tech_info_summary_label" in html
+    assert "pe-choice-banner" in html
+    assert "pe-choice-option-focus" in html
+    assert "pe-choice-confirm-modal" in html
+    assert "pe-goal-benefits-btn" in html
+    assert "pe-help-modal" in html
+    assert "pe-hero-help-btn" in html
+    assert "pe-tech-reward-chip" in html
+    assert "pe_research_tech_card" in html
+    assert "pe-tech-grid--locked" in html
+    assert "pe-hero-xp-reward" in html
+    assert "pe-goal-xp-line" in html
+    assert "pe_reward" in html
+    assert "data-choice-effect" in html
+    assert "openPeChoiceConfirmModal" in js
+    assert "openPeInfoPopover" in js
+    assert "bindPeInfoPopoverSurface" in js
+    assert "onPeInfoOutsideScroll" in js
+    assert "pe-info-popover--sheet" in html or "pe-info-popover--sheet" in (ROOT / "static/style.css").read_text(encoding="utf-8")
+    assert "openPeHelpModal" in js
+
+
+def test_planet_evolution_context_locale_keys_in_all_locales():
+    locales_dir = ROOT / "locales"
+    for lang in ("de", "en", "es", "fr", "pl", "pt", "ru", "tr"):
+        data = json.loads((locales_dir / f"{lang}.json").read_text(encoding="utf-8"))
+        for key in PE_CONTEXT_LOCALE_KEYS:
+            assert key in data, f"missing {key} in {lang}.json"
+            assert data[key].strip(), f"empty {key} in {lang}.json"

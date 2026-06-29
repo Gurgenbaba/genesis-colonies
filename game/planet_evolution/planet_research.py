@@ -56,6 +56,21 @@ def compute_planet_research_cost(tech_key: str, target_level: int) -> Tuple[int,
     return int(base_m * mult), int(base_c * mult)
 
 
+def compute_planet_research_reward_xp(tech_key: str) -> Dict[str, Any]:
+    """Canonical planet-XP grant for completing one level of planet research."""
+    rdef = get_research_def(tech_key) or {}
+    tier = int(rdef.get("tier") or 1)
+    base = 25
+    tier_bonus = tier * 15
+    reward_xp = base + tier_bonus
+    return {
+        "reward_xp": int(reward_xp),
+        "reward_xp_base": int(base),
+        "reward_xp_tier_bonus": int(tier_bonus),
+        "reward_tier": int(tier),
+    }
+
+
 def compute_planet_research_time(
     planet_id: int,
     tech_key: str,
@@ -121,8 +136,8 @@ def finish_planet_research_jobs(conn: sqlite3.Connection, planet_id: int, now: f
             conn=conn,
         )
         tier = int(rdef.get("tier") or 1)
-        xp_base = 25 + tier * 15
-        add_planet_xp(planet_id, xp_base, conn, reason=f"research:{tech_key}")
+        xp_grant = compute_planet_research_reward_xp(tech_key)
+        add_planet_xp(planet_id, int(xp_grant["reward_xp"]), conn, reason=f"research:{tech_key}")
 
         compile_planet_mechanics(planet_id, conn)
 

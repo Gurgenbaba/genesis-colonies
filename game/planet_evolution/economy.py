@@ -46,7 +46,37 @@ def ensure_special_resource_row(
     )
 
 
-def _culture_chain_mult(planet_id: int, chain_key: str, conn: sqlite3.Connection) -> float:
+def _chain_output_bonus_factor(
+    planet_id: int,
+    chain_key: str,
+    output_key: str,
+    conn: sqlite3.Connection,
+) -> float:
+    """
+    Additive fractional bonus from compiled planet mechanics.
+
+    Format (canonical):
+    - dict: per chain_key or output_resource_key, e.g. {"refined_ferronit": 0.15} → +15 %
+    - scalar: applies to all chains, e.g. 0.20 → +20 % (policy mandatory_overtime)
+
+    Distinct from chain_output_mult, which is a direct multiplier (e.g. 1.4).
+    """
+    bonus = get_flag(planet_id, "chain_output_bonus", None, conn=conn)
+    if bonus is None:
+        return 1.0
+    if isinstance(bonus, dict):
+        additive = bonus.get(chain_key)
+        if additive is None:
+            additive = bonus.get(output_key)
+        if additive is None:
+            return 1.0
+        return 1.0 + float(additive)
+    if isinstance(bonus, (int, float)):
+        return 1.0 + float(bonus)
+    return 1.0
+
+
+def _culture_chain_mult(planet_id: int, chain_key: str, conn: sqlite3.Connection, *, output_key: str = "") -> float:
     from .repository import get_planet_culture
 
     culture = get_planet_culture(planet_id, conn=conn)
@@ -64,6 +94,12 @@ def _culture_chain_mult(planet_id: int, chain_key: str, conn: sqlite3.Connection
     bonus = get_flag(planet_id, "chain_output_mult", None, conn=conn)
     if bonus:
         mult *= float(bonus)
+    mult *= _chain_output_bonus_factor(
+        planet_id,
+        chain_key,
+        output_key or chain_key,
+        conn,
+    )
     return mult
 
 
@@ -214,7 +250,7 @@ def tick_special_resources(
             continue
 
         base_out = float(chain.get("base_output_per_hour") or 0)
-        mult = _culture_chain_mult(planet_id, chain_key, conn)
+        mult = _culture_chain_mult(planet_id, chain_key, conn, output_key=output_key)
         output = base_out * efficiency * mult * float(delta_hours)
         if output <= 0:
             continue

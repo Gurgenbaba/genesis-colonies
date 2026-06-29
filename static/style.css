@@ -24439,8 +24439,17 @@ button.pe-hero-planet-hint:focus-visible {
   grid-area: info;
   min-width: 0;
 }
+.planet-evolution-page .pe-tech-card-name-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.35rem;
+  min-width: 0;
+  margin-bottom: 0.2rem;
+}
 .planet-evolution-page .pe-tech-card-name {
-  margin: 0 0 0.2rem;
+  margin: 0;
+  min-width: 0;
   font-size: 0.88rem;
   font-weight: 700;
 }
@@ -24449,6 +24458,50 @@ button.pe-hero-planet-hint:focus-visible {
   font-size: 0.72rem;
   opacity: 0.78;
   line-height: 1.35;
+}
+.planet-evolution-page .pe-tech-reward-chip {
+  display: inline-block;
+  margin-top: 0.15rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  line-height: 1.3;
+  color: var(--gc-text-dim);
+  background: rgba(255, 217, 138, 0.08);
+  border: 1px solid rgba(255, 217, 138, 0.14);
+}
+.planet-evolution-page .pe-tech-card-missing {
+  margin: 0.2rem 0 0;
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+.planet-evolution-page .pe-reward-xp-line {
+  margin: 0;
+}
+.planet-evolution-page .pe-xp-formula-breakdown {
+  margin-top: 0.35rem;
+  font-size: 0.82em;
+  opacity: 0.9;
+}
+.planet-evolution-page .pe-xp-formula-label,
+.planet-evolution-page .pe-xp-formula-result {
+  margin: 0.15rem 0 0;
+}
+.planet-evolution-page .pe-xp-formula-lines {
+  margin: 0.15rem 0 0;
+  padding-left: 1rem;
+}
+.planet-evolution-page .pe-hero-xp-reward {
+  margin: 0.25rem 0 0;
+  font-size: 0.72rem;
+}
+.planet-evolution-page .pe-goal-xp-line {
+  margin: 0.25rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+.planet-evolution-page .pe-research-later .pe-tech-grid--locked {
+  margin-top: 0.45rem;
 }
 .planet-evolution-page .pe-tech-card-action {
   grid-area: action;
@@ -24555,6 +24608,196 @@ button.pe-hero-planet-hint:focus-visible {
   border-color: rgba(120, 190, 255, 0.22);
   color: var(--gc-text-soft);
   white-space: nowrap;
+}
+.planet-evolution-page .pe-hero-help-btn,
+.planet-evolution-page .pe-tech-info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.35rem;
+  width: 1.35rem;
+  height: 1.35rem;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(120, 190, 255, 0.22);
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--gc-text-dim);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+.planet-evolution-page .pe-hero-help-btn:hover,
+.planet-evolution-page .pe-hero-help-btn:focus-visible,
+.planet-evolution-page .pe-tech-info-btn:hover,
+.planet-evolution-page .pe-tech-info-btn:focus-visible,
+.planet-evolution-page .pe-info-trigger[aria-expanded="true"] {
+  border-color: rgba(70, 229, 255, 0.35);
+  color: var(--gc-text-soft);
+}
+.planet-evolution-page .pe-tech-card-name-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.35rem;
+  min-width: 0;
+  margin-bottom: 0.2rem;
+}
+.pe-info-popover.gc-popover-layer {
+  position: fixed;
+  z-index: var(--gc-z-popover, 12050);
+  box-sizing: border-box;
+  max-width: min(340px, calc(100vw - 16px));
+  max-height: min(70vh, 420px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid rgba(120, 190, 255, 0.22);
+  border-radius: var(--gc-radius-sm);
+  background: rgba(8, 16, 32, 0.98);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.pe-info-popover--sheet.gc-popover-layer {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  top: auto;
+  width: auto;
+  max-width: none;
+  margin: 0 auto;
+  border-radius: var(--gc-radius-md) var(--gc-radius-md) 0 0;
+  border-bottom: none;
+  box-shadow: 0 -10px 36px rgba(0, 0, 0, 0.5);
+}
+.pe-info-popover-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--gc-z-popover, 12050) - 1);
+  background: rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+}
+.pe-info-popover .pe-info-popover-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--gc-text-soft);
+}
+.pe-info-popover .pe-info-popover-list {
+  margin: 0;
+  display: grid;
+  gap: 0.28rem;
+}
+.pe-info-popover .pe-info-popover-list div {
+  display: grid;
+  gap: 0.08rem;
+}
+.pe-info-popover .pe-info-popover-list dt {
+  margin: 0;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gc-text-dim);
+}
+.pe-info-popover .pe-info-popover-list dd {
+  margin: 0;
+  font-size: 0.68rem;
+  line-height: 1.35;
+  color: var(--gc-text-soft);
+}
+.pe-info-popover .pe-info-popover-foot,
+.pe-info-popover .pe-info-popover-bullets {
+  margin: 0.35rem 0 0;
+  font-size: 0.64rem;
+  line-height: 1.35;
+  color: var(--gc-text-dim);
+}
+.pe-info-popover .pe-info-popover-bullets {
+  padding-left: 1rem;
+}
+.planet-evolution-page .pe-choice-banner {
+  margin: 0 0 0.35rem;
+  font-size: 0.64rem;
+  line-height: 1.35;
+  color: rgba(255, 216, 140, 0.85);
+}
+.planet-evolution-page .pe-choice-options {
+  display: grid;
+  gap: 0.35rem;
+}
+.planet-evolution-page .pe-choice-option {
+  display: grid;
+  gap: 0.12rem;
+}
+.planet-evolution-page .pe-choice-option-effect {
+  margin: 0;
+  font-size: 0.62rem;
+  line-height: 1.3;
+  padding-left: 0.1rem;
+}
+.planet-evolution-page .pe-choice-option-focus {
+  margin: 0;
+  font-size: 0.68rem;
+  line-height: 1.35;
+  padding-left: 0.1rem;
+}
+.planet-evolution-page .pe-choice-option-unlocks,
+.planet-evolution-page .pe-choice-option-irreversible {
+  margin: 0;
+  font-size: 0.62rem;
+  line-height: 1.3;
+  padding-left: 0.1rem;
+}
+.planet-evolution-page .pe-goal-benefits-btn {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  margin: 0 0 0.25rem;
+  font: inherit;
+  font-size: 0.64rem;
+  color: var(--gc-primary-2);
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+  cursor: pointer;
+}
+.planet-evolution-page .pe-goal-benefits-btn:hover,
+.planet-evolution-page .pe-goal-benefits-btn:focus-visible {
+  color: var(--gc-text-soft);
+}
+.pe-help-modal .pe-help-dialog,
+.pe-choice-confirm-modal .pe-choice-confirm-dialog {
+  width: min(420px, 100%);
+}
+.pe-help-modal .pe-help-modal-lead {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--gc-text-soft);
+}
+.pe-choice-confirm-body .pe-choice-confirm-label {
+  margin: 0 0 0.25rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--gc-text-soft);
+}
+.pe-choice-confirm-body .pe-choice-confirm-effect {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+.pe-choice-confirm-body .pe-choice-confirm-warning {
+  margin: 0 0 0.55rem;
+  font-size: 0.68rem;
+  color: rgba(255, 196, 86, 0.85);
+}
+.pe-choice-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
 }
 .planet-evolution-page .pe-hero-chronicle-btn:hover,
 .planet-evolution-page .pe-hero-chronicle-btn:focus-visible,

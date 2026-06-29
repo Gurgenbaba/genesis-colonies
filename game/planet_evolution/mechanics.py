@@ -116,6 +116,10 @@ def _parse_mechanics_json(raw: Any) -> Dict[str, Any]:
         _apply_unlock_token(u, out)
     if raw.get("enable_experimental"):
         out["flags"]["experimental_enabled"] = True
+    if raw.get("enable_event_pool"):
+        pool = str(raw["enable_event_pool"]).strip()
+        if pool:
+            out["flags"][f"event_pool:{pool}"] = True
     if raw.get("enable_policy"):
         out["flags"][f"policy_unlock:{raw['enable_policy']}"] = True
     if raw.get("unlock_policy_tier"):

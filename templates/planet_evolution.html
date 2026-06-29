@@ -97,6 +97,130 @@
   {%- endif -%}
 {%- endmacro %}
 
+{% macro pe_humanize_key(key) -%}
+  {%- set lk = key|default('')|string -%}
+  {%- if not lk -%}
+    {{- '' -}}
+  {%- else -%}
+    {%- set pe_key = 'pe_' ~ lk -%}
+    {%- set choice_key = 'pe_choice_' ~ lk -%}
+    {%- set localized_pe = T(pe_key, '') -%}
+    {%- set localized_choice = T(choice_key, '') -%}
+    {%- if localized_choice and localized_choice != choice_key -%}
+      {{- localized_choice -}}
+    {%- elif localized_pe and localized_pe != pe_key -%}
+      {{- localized_pe -}}
+    {%- else -%}
+      {{- lk|replace('_', ' ')|title -}}
+    {%- endif -%}
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro pe_tech_info_source(tech) %}
+  {% set summary_key = tech.summary_key|default('pe_tech_summary_' ~ tech.tech_key) %}
+  {% set effect_key = tech.effect_key|default('pe_tech_effect_' ~ tech.tech_key) %}
+  {% set where_key = tech.where_key|default('pe_tech_where_' ~ tech.tech_key) %}
+  {% set note_key = tech.note_key|default('pe_tech_note_' ~ tech.tech_key) %}
+  {% set summary_text = T(summary_key, '') %}
+  {% if not summary_text or summary_text == summary_key %}
+    {% set desc_key = tech.description_key or tech.unlock_key or '' %}
+    {% set summary_text = T(desc_key, T('pe_tech_info_desc_fallback', 'Schaltet planetare Entwicklung und neue Möglichkeiten frei.')) if desc_key else T('pe_tech_info_desc_fallback', 'Schaltet planetare Entwicklung und neue Möglichkeiten frei.') %}
+  {% endif %}
+  {% set effect_text = T(effect_key, '') %}
+  {% set where_text = T(where_key, '') %}
+  {% set note_text = T(note_key, '') %}
+  <div id="pe-tech-info-{{ tech.tech_key }}" class="pe-tech-info-source" hidden>
+    <p class="pe-info-popover-title">{{ T(tech.label_key, pe_humanize_key(tech.tech_key)) }}</p>
+    <dl class="pe-info-popover-list">
+      <div>
+        <dt>{{ T('pe_tech_info_summary_label', 'Kurz') }}</dt>
+        <dd>{{ summary_text }}</dd>
+      </div>
+      {% if effect_text and effect_text != effect_key %}
+      <div>
+        <dt>{{ T('pe_tech_info_effect_label', 'Effekt') }}</dt>
+        <dd>{{ effect_text }}</dd>
+      </div>
+      {% endif %}
+      {% if where_text and where_text != where_key %}
+      <div>
+        <dt>{{ T('pe_tech_info_where_label', 'Wo wirkt es?') }}</dt>
+        <dd>{{ where_text }}</dd>
+      </div>
+      {% endif %}
+      <div>
+        <dt>{{ T('pe_tech_info_status_label', 'Status') }}</dt>
+        <dd>
+          {% if (tech.current_level|default(0)|int) >= (tech.max_level|default(1)|int) %}
+            {{ T('pe_tech_info_maxed', 'Vollständig erforscht — alle Stufen abgeschlossen.') }}
+          {% elif (tech.current_level|default(0)|int) > 0 %}
+            {{ T('pe_tech_info_active', 'Stufe %(level)s aktiv — Effekte wirken auf diesem Planeten.', level=(tech.current_level|default(0)|int)) }}
+          {% else %}
+            {{ T('pe_tech_info_pending', 'Noch nicht erforscht — Effekte starten nach Abschluss.') }}
+          {% endif %}
+        </dd>
+      </div>
+      {% if note_text and note_text != note_key %}
+      <div>
+        <dt>{{ T('pe_tech_info_note_label', 'Hinweis') }}</dt>
+        <dd>{{ note_text }}</dd>
+      </div>
+      {% endif %}
+      {% if tech.reward_xp is defined and tech.reward_xp %}
+      <div>
+        <dt>{{ T('pe_reward', 'Belohnung') }}</dt>
+        <dd>
+          <p class="pe-reward-xp-line">{{ T('pe_reward_xp', '⭐ +%(xp)s %(xp_label)s', xp=(tech.reward_xp|int), xp_label=T('pe_planet_xp', 'Planet-XP')) }}</p>
+          {% if tech.reward_xp_base is defined and tech.reward_xp_tier_bonus is defined %}
+          <div class="pe-xp-formula-breakdown">
+            <p class="pe-xp-formula-label">{{ T('pe_xp_formula_calc', 'Berechnung:') }}</p>
+            <ul class="pe-xp-formula-lines">
+              <li>{{ T('pe_xp_formula_base', '%(base)s Basis', base=(tech.reward_xp_base|int)) }}</li>
+              <li>{{ T('pe_xp_formula_tier', '+%(bonus)s pro Tier', bonus=(tech.reward_xp_tier_bonus|int)) }}</li>
+            </ul>
+            <p class="pe-xp-formula-result">{{ T('pe_xp_formula_result', 'Ergebnis:') }} {{ T('pe_reward_xp', '⭐ +%(xp)s %(xp_label)s', xp=(tech.reward_xp|int), xp_label=T('pe_planet_xp', 'Planet-XP')) }}</p>
+          </div>
+          {% endif %}
+        </dd>
+      </div>
+      {% endif %}
+    </dl>
+  </div>
+{% endmacro %}
+
+{% macro pe_research_tech_card(tech, planet_id, queue_has_room, variant='') %}
+<article class="pe-tech-card gc-planet-tech-card{% if variant == 'locked' %} pe-tech-card--locked-req{% elif not tech.can_afford %} pe-tech-card--locked{% endif %}"
+         id="pe-research-card-{{ tech.tech_key }}"
+         data-planet-tech-card data-tech-key="{{ tech.tech_key }}" role="listitem">
+  <div class="pe-tech-card-body">
+    <img class="pe-tech-card-icon" src="{{ url_for('static', filename='img/research/' ~ (tech.icon or 'metallveredelung.png')) }}" alt="" loading="lazy" onerror="this.hidden=true;this.nextElementSibling.hidden=false;">
+    <span class="pe-tech-card-fallback" hidden aria-hidden="true">{{ tech.icon_fallback or '🧬' }}</span>
+    <div class="pe-tech-card-info">
+      <div class="pe-tech-card-name-row">
+        <h4 class="pe-tech-card-name">{{ T(tech.label_key, pe_humanize_key(tech.tech_key)) }}</h4>
+        <button type="button"
+                class="pe-tech-info-btn pe-info-trigger"
+                aria-label="{{ T('pe_tech_info_open', 'Tech-Info anzeigen') }}"
+                aria-expanded="false"
+                aria-controls="pe-tech-info-{{ tech.tech_key }}">?</button>
+      </div>
+      <p class="pe-tech-card-meta gc-mono">
+        {{ T("resource_metal", "Ferronit") }} {{ tech.cost_metal|int }} · {{ T("resource_crystal", "Crytite") }} {{ tech.cost_crystal|int }}
+        · {{ render_prog_duration(tech.duration_seconds) }}
+      </p>
+      {% if tech.reward_xp is defined and tech.reward_xp %}
+      <span class="pe-tech-reward-chip gc-mono">{{ T('pe_tech_reward_chip', '⭐ +%(xp)s XP', xp=(tech.reward_xp|int)) }}</span>
+      {% endif %}
+      {% if variant == 'locked' and tech.missing_human %}
+      <p class="pe-tech-card-missing hint">{{ tech.missing_human }}</p>
+      {% endif %}
+      {{ pe_tech_info_source(tech) }}
+    </div>
+    <div class="pe-tech-card-action">{{ pe_research_card_actions(tech, planet_id, queue_has_room) }}</div>
+  </div>
+</article>
+{% endmacro %}
+
 {% macro pe_card_queue_block(qj) %}
   {% if qj is defined and qj %}
   <div class="gc-card-queue-block gc-card-queue-block--{{ qj.owner_type|default('planet_research') }} gc-card-queue-block--{{ qj.status }}"
@@ -165,13 +289,33 @@
 
 {% macro pe_research_card_actions(tech, planet_id, queue_has_room) %}
 {% if tech.choice_group and not tech.choice_made and tech.choice_options %}
-  <div class="pe-research-actions">
-    {% for opt in tech.choice_options %}
-      <button type="button" class="gc-btn gc-btn-primary pe-choice-btn"
-              data-planet-id="{{ planet_id }}"
-              data-choice-group="{{ tech.choice_group }}"
-              data-choice-key="{{ opt }}">{{ T('pe_choice_' ~ opt, opt) }}</button>
-    {% endfor %}
+  <div class="pe-research-actions pe-research-actions--choice">
+    <p class="pe-choice-banner">{{ T('pe_choice_permanent_banner', 'Dauerhafte Pfadentscheidung — wähle den Schwerpunkt dieses Planeten.') }}</p>
+    <div class="pe-choice-options">
+      {% for opt in tech.choice_options %}
+      {% set opt_label = T('pe_choice_' ~ opt, pe_humanize_key(opt)) %}
+      {% set opt_focus_key = 'pe_choice_focus_' ~ opt %}
+      {% set opt_unlocks_key = 'pe_choice_unlocks_' ~ opt %}
+      {% set opt_focus = T(opt_focus_key, '') %}
+      {% set opt_unlocks = T(opt_unlocks_key, '') %}
+      {% set opt_effect_key = 'pe_choice_effect_' ~ opt %}
+      {% set opt_effect = T(opt_effect_key, T('pe_choice_effect_generic', 'Schaltet einen alternativen Entwicklungszweig frei.')) %}
+      {% set opt_detail = opt_focus if opt_focus and opt_focus != opt_focus_key else opt_effect %}
+      <div class="pe-choice-option">
+        <button type="button" class="gc-btn gc-btn-primary pe-choice-btn"
+                data-planet-id="{{ planet_id }}"
+                data-choice-group="{{ tech.choice_group }}"
+                data-choice-key="{{ opt }}"
+                data-choice-label="{{ opt_label }}"
+                data-choice-effect="{{ opt_detail }}{% if opt_unlocks and opt_unlocks != opt_unlocks_key %} — {{ opt_unlocks }}{% endif %}">{{ opt_label }}</button>
+        <p class="pe-choice-option-focus">{{ opt_detail }}</p>
+        {% if opt_unlocks and opt_unlocks != opt_unlocks_key %}
+        <p class="pe-choice-option-unlocks hint">{{ opt_unlocks }}</p>
+        {% endif %}
+        <p class="pe-choice-option-irreversible hint">{{ T('pe_choice_confirm_irreversible', 'Diese Wahl kann später nicht geändert werden.') }}</p>
+      </div>
+      {% endfor %}
+    </div>
   </div>
 {% elif tech.can_start and queue_has_room %}
   <button type="button" class="gc-btn gc-btn-primary pe-research-btn"
@@ -326,6 +470,13 @@
               </p>
             </div>
             <div class="pe-hero-head-actions">
+              <button type="button"
+                      class="gc-btn gc-btn-ghost gc-btn-sm pe-hero-help-btn"
+                      id="pe-hero-help"
+                      aria-haspopup="dialog"
+                      aria-controls="pe-help-modal"
+                      aria-expanded="false"
+                      aria-label="{{ T('pe_help_open', 'Was ist Planet Evolution?') }}">?</button>
               {% if history_items %}
               <button type="button"
                       class="gc-btn gc-btn-ghost gc-btn-sm pe-hero-chronicle-btn"
@@ -407,6 +558,9 @@
             <div class="build-bar build-bar-large pe-xp-bar pe-xp-bar--hero">
               <div class="build-bar-fill gc-progress-smooth pe-xp-bar-fill" style="width: {{ prog.xp_pct or 0 }}%;"></div>
             </div>
+            {% if prog.current_research_reward_xp %}
+            <p class="pe-hero-xp-reward hint gc-mono">{{ T('pe_hero_current_research_xp', 'Aktuelle Forschung: +%(xp)s XP', xp=(prog.current_research_reward_xp|int)) }}</p>
+            {% endif %}
           </div>
           {% set axp = dash.activity_xp if dash.activity_xp is defined else {} %}
           {% if axp.visible %}
@@ -515,29 +669,21 @@
         {% if pe_visible_tech_cards %}
         <div class="pe-tech-grid" role="list">
           {% for tech in pe_visible_tech_cards %}
-          <article class="pe-tech-card gc-planet-tech-card{% if not tech.can_afford %} pe-tech-card--locked{% endif %}"
-                   id="pe-research-card-{{ tech.tech_key }}"
-                   data-planet-tech-card data-tech-key="{{ tech.tech_key }}" role="listitem">
-            <div class="pe-tech-card-body">
-              <img class="pe-tech-card-icon" src="{{ url_for('static', filename='img/research/' ~ (tech.icon or 'metallveredelung.png')) }}" alt="" loading="lazy" onerror="this.hidden=true;this.nextElementSibling.hidden=false;">
-              <span class="pe-tech-card-fallback" hidden aria-hidden="true">{{ tech.icon_fallback or '🧬' }}</span>
-              <div class="pe-tech-card-info">
-                <h4 class="pe-tech-card-name">{{ T(tech.label_key, tech.tech_key) }}</h4>
-                <p class="pe-tech-card-meta gc-mono">
-                  {{ T("resource_metal", "Ferronit") }} {{ tech.cost_metal|int }} · {{ T("resource_crystal", "Crytite") }} {{ tech.cost_crystal|int }}
-                  · {{ render_prog_duration(tech.duration_seconds) }}
-                </p>
-              </div>
-              <div class="pe-tech-card-action">{{ pe_research_card_actions(tech, ps.planet_id, rdx.queue_has_room) }}</div>
-            </div>
-          </article>
+          {{ pe_research_tech_card(tech, ps.planet_id, rdx.queue_has_room) }}
           {% endfor %}
         </div>
         {% else %}
         <p class="pe-zone-empty">{{ T("pe_research_empty", "Keine Forschung verfügbar — baue deinen Planeten weiter aus.") }}</p>
         {% endif %}
         {% if rdx.locked %}
-        <details class="pe-research-later"><summary>{{ T("pe_research_later", "Später verfügbar") }} ({{ rdx.locked|length }})</summary></details>
+        <details class="pe-research-later">
+          <summary>{{ T("pe_research_later", "Später verfügbar") }} ({{ rdx.locked|length }})</summary>
+          <div class="pe-tech-grid pe-tech-grid--locked" role="list">
+            {% for tech in rdx.locked %}
+            {{ pe_research_tech_card(tech, ps.planet_id, rdx.queue_has_room, variant='locked') }}
+            {% endfor %}
+          </div>
+        </details>
         {% endif %}
       </section>
 
@@ -553,8 +699,33 @@
             {% elif action.tech_label_key and action.priority in ['research', 'research_running'] %}{{ T(action.tech_label_key, "") }}
             {% else %}{{ T(action.body_key, "Nutze die Zeit, um deinen Planeten weiterzuentwickeln.") }}{% endif %}
           </p>
+          <button type="button"
+                  class="pe-goal-benefits-btn pe-info-trigger"
+                  aria-expanded="false"
+                  aria-controls="pe-goal-benefits-source">{{ T('pe_goal_benefits_btn', 'Was bringt mir das?') }}</button>
+          <div id="pe-goal-benefits-source" class="pe-goal-benefits-source" hidden>
+            <p class="pe-info-popover-title">{{ T('pe_goal_benefits_title', 'Was bringt Planet Evolution?') }}</p>
+            <ul class="pe-info-popover-bullets">
+              <li>{{ T('pe_goal_benefits_research', 'Planet-Techs sind die Hauptquelle für Planet-XP.') }}</li>
+              <li>{{ T('pe_goal_benefits_level', 'Mehr Planet-Level schalten Eigenschaften, Spezialisierungen und Policies frei.') }}</li>
+              <li>{{ T('pe_goal_benefits_traits', 'Neue Planet-Eigenschaften werden sichtbar und wirksam.') }}</li>
+              <li>{{ T('pe_goal_benefits_expansion', 'Expansion und Imperiums-Boni bauen auf dieser Progression auf.') }}</li>
+              <li>{{ T('pe_goal_benefits_activity', 'Expeditionen, Events und Discoveries geben Zusatz-XP.') }}</li>
+            </ul>
+          </div>
           {% if prog.milestones %}
           <p class="pe-goal-unlock gc-mono">{{ T("pe_at_level", "Ab Stufe") }} {{ prog.milestones[0].level }} · {{ T(prog.milestones[0].label_key, "Neue Möglichkeit") }}</p>
+          {% endif %}
+          {% if prog.xp_remaining and prog.next_level %}
+          <p class="pe-goal-xp-line gc-mono">{{ T('pe_goal_xp_remaining', 'Noch %(remaining)s XP bis Stufe %(level)s', remaining=(prog.xp_remaining|int), level=(prog.next_level|int)) }}</p>
+          {% endif %}
+          {% set goal_reward_xp = action.reward_xp if action.reward_xp is defined and action.reward_xp else (prog.next_research_reward_xp if prog.next_research_reward_xp is defined else none) %}
+          {% if goal_reward_xp %}
+          <p class="pe-goal-xp-line">{{ T('pe_next_research_reward', 'Nächste Forschung bringt:') }} {{ T('pe_reward_xp', '⭐ +%(xp)s %(xp_label)s', xp=(goal_reward_xp|int), xp_label=T('pe_planet_xp', 'Planet-XP')) }}</p>
+          {% endif %}
+          {% set goal_research_count = action.researches_to_level_up if action.researches_to_level_up is defined and action.researches_to_level_up else (prog.researches_to_level_up if prog.researches_to_level_up is defined else none) %}
+          {% if goal_research_count %}
+          <p class="pe-goal-xp-line hint">{{ T('pe_goal_research_to_level', 'Noch %(count)s Forschungen bis Level-Up.', count=(goal_research_count|int)) }}</p>
           {% endif %}
           <div class="pe-goal-events" id="pe-section-events">
             {% if ps.active_event %}
@@ -683,6 +854,64 @@
       </div>
     </div>
     {% endif %}
+
+    <div id="pe-help-modal"
+         class="gc-player-card-modal pe-help-modal"
+         hidden
+         aria-hidden="true">
+      <div class="gc-player-card-overlay" data-pe-help-close tabindex="-1"></div>
+      <div class="gc-player-card-dialog pe-help-dialog"
+           role="dialog"
+           aria-modal="true"
+           aria-labelledby="pe-help-modal-title">
+        <header class="gc-player-card-head">
+          <h2 id="pe-help-modal-title" class="gc-player-card-head-title">
+            {{ T('pe_help_modal_title', 'Was ist Planet Evolution?') }}
+          </h2>
+          <button type="button"
+                  class="gc-btn gc-btn-ghost gc-btn-xs gc-player-card-close"
+                  data-pe-help-close
+                  aria-label="{{ T('close', 'Schließen') }}">×</button>
+        </header>
+        <div class="gc-player-card-body pe-help-modal-body">
+          <p class="pe-help-modal-lead">{{ T('pe_help_modal_body', 'Planet Evolution entwickelt diese Welt langfristig. Planet-Techs, Events, Discoveries und Aktivität geben Evolution-Punkte. Höhere Stufen machen Eigenschaften sichtbar, schalten Spezialisierungen frei und treiben Expansion voran.') }}</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="pe-choice-confirm-modal"
+         class="gc-player-card-modal pe-choice-confirm-modal"
+         hidden
+         aria-hidden="true">
+      <div class="gc-player-card-overlay" data-pe-choice-confirm-cancel tabindex="-1"></div>
+      <div class="gc-player-card-dialog pe-choice-confirm-dialog"
+           role="dialog"
+           aria-modal="true"
+           aria-labelledby="pe-choice-confirm-title">
+        <header class="gc-player-card-head">
+          <h2 id="pe-choice-confirm-title" class="gc-player-card-head-title">
+            {{ T('pe_choice_confirm_title', 'Pfadentscheidung bestätigen') }}
+          </h2>
+          <button type="button"
+                  class="gc-btn gc-btn-ghost gc-btn-xs gc-player-card-close"
+                  data-pe-choice-confirm-cancel
+                  aria-label="{{ T('close', 'Schließen') }}">×</button>
+        </header>
+        <div class="gc-player-card-body pe-choice-confirm-body">
+          <p class="pe-choice-confirm-label" id="pe-choice-confirm-label"></p>
+          <p class="pe-choice-confirm-effect hint" id="pe-choice-confirm-effect"></p>
+          <p class="pe-choice-confirm-warning">{{ T('pe_choice_confirm_irreversible', 'Diese Wahl kann später nicht geändert werden.') }}</p>
+          <div class="pe-choice-confirm-actions">
+            <button type="button" class="gc-btn gc-btn-primary" id="pe-choice-confirm-submit">
+              {{ T('pe_choice_confirm_choose', 'Dauerhaft wählen') }}
+            </button>
+            <button type="button" class="gc-btn gc-btn-secondary" data-pe-choice-confirm-cancel>
+              {{ T('pe_choice_confirm_cancel', 'Abbrechen') }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
 
   </div>
 

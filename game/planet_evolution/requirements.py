@@ -64,6 +64,21 @@ def check_requirements(
         if int(planet_research.get(str(r_key), 0) or 0) < int(need_lvl):
             missing.append(f"planet_research:{r_key}>={need_lvl}")
 
+    pr_any = req.get("planet_research_any")
+    if pr_any is not None:
+        if isinstance(pr_any, list):
+            min_lvl = int(req.get("planet_research_any_min", 1))
+            if not any(int(planet_research.get(str(r_key), 0) or 0) >= min_lvl for r_key in pr_any):
+                missing.append(f"planet_research_any:{pr_any}>={min_lvl}")
+        elif isinstance(pr_any, dict):
+            if not any(
+                int(planet_research.get(str(r_key), 0) or 0) >= int(need_lvl)
+                for r_key, need_lvl in pr_any.items()
+            ):
+                missing.append(f"planet_research_any:{list(pr_any.keys())}")
+        else:
+            missing.append("planet_research_any:invalid")
+
     for r_key, need_lvl in (_as_dict(req.get("imperial_research"))).items():
         if int(imperial.get(str(r_key), 0) or 0) < int(need_lvl):
             missing.append(f"imperial_research:{r_key}>={need_lvl}")

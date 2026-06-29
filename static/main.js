@@ -20900,6 +20900,225 @@
 
     GC.closePeChronicleModal = closePeChronicleModal;
 
+    let peInfoPopover = null;
+    let peInfoActiveTrigger = null;
+    let peInfoBackdrop = null;
+
+    const peInfoIsMobile = () => window.matchMedia("(max-width: 640px)").matches;
+
+    const setPeInfoExpanded = (expanded) => {
+      if (peInfoActiveTrigger) {
+        peInfoActiveTrigger.setAttribute("aria-expanded", expanded ? "true" : "false");
+      }
+    };
+
+    const bindPeInfoPopoverSurface = (pop) => {
+      const stopInside = (e) => e.stopPropagation();
+      pop.addEventListener("click", stopInside);
+      pop.addEventListener("mousedown", stopInside);
+      pop.addEventListener("wheel", stopInside, { passive: true });
+      pop.addEventListener("touchstart", stopInside, { passive: true });
+    };
+
+    const closePeInfoPopover = () => {
+      if (peInfoBackdrop) {
+        peInfoBackdrop.remove();
+        peInfoBackdrop = null;
+      }
+      if (peInfoPopover) {
+        peInfoPopover.remove();
+        peInfoPopover = null;
+      }
+      setPeInfoExpanded(false);
+      peInfoActiveTrigger = null;
+    };
+
+    const positionPeInfoPopover = (pop, trigger) => {
+      const margin = 8;
+      pop.style.visibility = "hidden";
+      pop.style.display = "block";
+      const rect = trigger.getBoundingClientRect();
+      const popRect = pop.getBoundingClientRect();
+      let left = rect.left + rect.width / 2 - popRect.width / 2;
+      left = Math.max(margin, Math.min(left, window.innerWidth - popRect.width - margin));
+      let top = rect.bottom + margin;
+      if (top + popRect.height > window.innerHeight - margin) {
+        top = Math.max(margin, rect.top - popRect.height - margin);
+      }
+      pop.style.left = `${left}px`;
+      pop.style.top = `${top}px`;
+      pop.style.right = "";
+      pop.style.bottom = "";
+      pop.style.visibility = "visible";
+    };
+
+    const openPeInfoPopover = (trigger) => {
+      const page = document.querySelector(".planet-evolution-page");
+      if (!page || !trigger || !page.contains(trigger)) return;
+      const sourceId = trigger.getAttribute("aria-controls");
+      const source = sourceId ? document.getElementById(sourceId) : null;
+      if (!source) return;
+      if (peInfoActiveTrigger === trigger && peInfoPopover) {
+        closePeInfoPopover();
+        return;
+      }
+      closePeInfoPopover();
+      const mobile = peInfoIsMobile();
+      if (mobile) {
+        peInfoBackdrop = document.createElement("div");
+        peInfoBackdrop.className = "pe-info-popover-backdrop";
+        peInfoBackdrop.addEventListener("click", (e) => {
+          e.stopPropagation();
+          closePeInfoPopover();
+        });
+        document.body.appendChild(peInfoBackdrop);
+      }
+      const pop = document.createElement("div");
+      pop.className = "pe-info-popover gc-popover-layer";
+      if (mobile) pop.classList.add("pe-info-popover--sheet");
+      pop.setAttribute("role", "dialog");
+      pop.setAttribute("aria-modal", mobile ? "true" : "false");
+      pop.setAttribute("tabindex", "-1");
+      pop.innerHTML = source.innerHTML;
+      bindPeInfoPopoverSurface(pop);
+      document.body.appendChild(pop);
+      if (!mobile) positionPeInfoPopover(pop, trigger);
+      peInfoPopover = pop;
+      peInfoActiveTrigger = trigger;
+      trigger.setAttribute("aria-expanded", "true");
+      pop.focus({ preventScroll: true });
+    };
+
+    const onPeInfoOutsideScroll = (e) => {
+      if (!peInfoPopover) return;
+      const target = e.target;
+      if (target instanceof Node && peInfoPopover.contains(target)) return;
+      if (peInfoActiveTrigger instanceof Node && peInfoActiveTrigger.contains(target)) return;
+      closePeInfoPopover();
+    };
+
+    const onPeInfoResize = () => {
+      if (!peInfoPopover || !peInfoActiveTrigger) return;
+      const mobile = peInfoIsMobile();
+      if (mobile) {
+        if (!peInfoBackdrop) {
+          peInfoBackdrop = document.createElement("div");
+          peInfoBackdrop.className = "pe-info-popover-backdrop";
+          peInfoBackdrop.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            closePeInfoPopover();
+          });
+          document.body.appendChild(peInfoBackdrop);
+        }
+        peInfoPopover.classList.add("pe-info-popover--sheet");
+        peInfoPopover.setAttribute("aria-modal", "true");
+        peInfoPopover.style.left = "";
+        peInfoPopover.style.top = "";
+      } else {
+        if (peInfoBackdrop) {
+          peInfoBackdrop.remove();
+          peInfoBackdrop = null;
+        }
+        peInfoPopover.classList.remove("pe-info-popover--sheet");
+        peInfoPopover.setAttribute("aria-modal", "false");
+        positionPeInfoPopover(peInfoPopover, peInfoActiveTrigger);
+      }
+    };
+
+    GC.closePeInfoPopover = closePeInfoPopover;
+
+    let peHelpModalOpen = false;
+    let peHelpLastFocus = null;
+
+    const closePeHelpModal = () => {
+      const modal = document.getElementById("pe-help-modal");
+      if (!modal || modal.hidden) return;
+      modal.hidden = true;
+      modal.setAttribute("aria-hidden", "true");
+      modal.classList.remove("is-open");
+      document.body.classList.remove("gc-player-card-open");
+      document.querySelectorAll(".pe-hero-help-btn").forEach((btn) => {
+        btn.setAttribute("aria-expanded", "false");
+      });
+      peHelpModalOpen = false;
+      if (peHelpLastFocus && typeof peHelpLastFocus.focus === "function") peHelpLastFocus.focus();
+      peHelpLastFocus = null;
+    };
+
+    const openPeHelpModal = (trigger) => {
+      const modal = document.getElementById("pe-help-modal");
+      if (!modal) return;
+      closePeInfoPopover();
+      peHelpLastFocus = trigger || document.activeElement;
+      modal.hidden = false;
+      modal.setAttribute("aria-hidden", "false");
+      modal.classList.add("is-open");
+      document.body.classList.add("gc-player-card-open");
+      document.querySelectorAll(".pe-hero-help-btn").forEach((btn) => {
+        btn.setAttribute("aria-expanded", "true");
+      });
+      peHelpModalOpen = true;
+      modal.querySelector("[data-pe-help-close].gc-player-card-close")?.focus();
+    };
+
+    GC.closePeHelpModal = closePeHelpModal;
+
+    let pePendingChoiceBtn = null;
+
+    const closePeChoiceConfirmModal = () => {
+      const modal = document.getElementById("pe-choice-confirm-modal");
+      if (!modal || modal.hidden) return;
+      modal.hidden = true;
+      modal.setAttribute("aria-hidden", "true");
+      modal.classList.remove("is-open");
+      document.body.classList.remove("gc-player-card-open");
+      pePendingChoiceBtn = null;
+    };
+
+    const openPeChoiceConfirmModal = (choiceBtn) => {
+      const modal = document.getElementById("pe-choice-confirm-modal");
+      if (!modal || !choiceBtn) return;
+      closePeInfoPopover();
+      pePendingChoiceBtn = choiceBtn;
+      const labelEl = modal.querySelector("#pe-choice-confirm-label");
+      const effectEl = modal.querySelector("#pe-choice-confirm-effect");
+      if (labelEl) labelEl.textContent = String(choiceBtn.dataset.choiceLabel || "").trim();
+      if (effectEl) effectEl.textContent = String(choiceBtn.dataset.choiceEffect || "").trim();
+      modal.hidden = false;
+      modal.setAttribute("aria-hidden", "false");
+      modal.classList.add("is-open");
+      document.body.classList.add("gc-player-card-open");
+      modal.querySelector("#pe-choice-confirm-submit")?.focus();
+    };
+
+    GC.closePeChoiceConfirmModal = closePeChoiceConfirmModal;
+
+    const submitPeChoiceConfirm = async () => {
+      const choiceBtn = pePendingChoiceBtn;
+      if (!choiceBtn) return;
+      const submitBtn = document.getElementById("pe-choice-confirm-submit");
+      if (submitBtn) submitBtn.disabled = true;
+      choiceBtn.disabled = true;
+      const planetId = parseInt(choiceBtn.dataset.planetId || "0", 10);
+      let res;
+      try {
+        res = await postAction(`/api/planets/${planetId}/research/choose`, {
+          choice_group: choiceBtn.dataset.choiceGroup,
+          choice_key: choiceBtn.dataset.choiceKey,
+        });
+        if (res?.ok) {
+          closePeChoiceConfirmModal();
+          await GC.reloadCurrentPage();
+        } else {
+          choiceBtn.disabled = false;
+          alert(reasonText(res?.reason));
+        }
+      } finally {
+        if (submitBtn) submitBtn.disabled = false;
+        if (!res?.ok) closePeChoiceConfirmModal();
+      }
+    };
+
     const openPeSection = (sectionId) => {
       if (sectionId === "pe-section-history") {
         openPeChronicleModal(document.getElementById("pe-section-history"));
@@ -20996,6 +21215,49 @@
         return;
       }
 
+      const helpBtn = e.target.closest(".pe-hero-help-btn");
+      if (helpBtn && root.contains(helpBtn)) {
+        e.preventDefault();
+        openPeHelpModal(helpBtn);
+        return;
+      }
+
+      const helpClose = e.target.closest("[data-pe-help-close]");
+      if (helpClose && document.getElementById("pe-help-modal")?.contains(helpClose)) {
+        e.preventDefault();
+        closePeHelpModal();
+        return;
+      }
+
+      const infoTrigger = e.target.closest(".pe-info-trigger");
+      if (infoTrigger && root.contains(infoTrigger)) {
+        e.preventDefault();
+        e.stopPropagation();
+        openPeInfoPopover(infoTrigger);
+        return;
+      }
+
+      if (peInfoPopover
+        && !e.target.closest(".pe-info-popover")
+        && !e.target.closest(".pe-info-trigger")
+        && !e.target.closest(".pe-info-popover-backdrop")) {
+        closePeInfoPopover();
+      }
+
+      const choiceConfirmSubmit = e.target.closest("#pe-choice-confirm-submit");
+      if (choiceConfirmSubmit) {
+        e.preventDefault();
+        await submitPeChoiceConfirm();
+        return;
+      }
+
+      const choiceConfirmCancel = e.target.closest("[data-pe-choice-confirm-cancel]");
+      if (choiceConfirmCancel) {
+        e.preventDefault();
+        closePeChoiceConfirmModal();
+        return;
+      }
+
       const chronicleClose = e.target.closest("[data-pe-chronicle-close]");
       if (chronicleClose && document.getElementById("pe-chronicle-modal")?.contains(chronicleClose)) {
         e.preventDefault();
@@ -21048,18 +21310,8 @@
 
       const choiceBtn = e.target.closest(".pe-choice-btn");
       if (choiceBtn && root.contains(choiceBtn)) {
-        if (!confirm(tt("pe_confirm_choice", "Diese Wahl ist permanent."))) return;
-        choiceBtn.disabled = true;
-        const planetId = parseInt(choiceBtn.dataset.planetId || "0", 10);
-        const res = await postAction(`/api/planets/${planetId}/research/choose`, {
-          choice_group: choiceBtn.dataset.choiceGroup,
-          choice_key: choiceBtn.dataset.choiceKey,
-        });
-        if (res?.ok) await GC.reloadCurrentPage();
-        else {
-          choiceBtn.disabled = false;
-          alert(reasonText(res?.reason));
-        }
+        e.preventDefault();
+        openPeChoiceConfirmModal(choiceBtn);
         return;
       }
 
@@ -21131,9 +21383,15 @@
     });
 
     document.addEventListener("keydown", (e) => {
-      if (e.key !== "Escape" || !peChronicleModalOpen) return;
-      closePeChronicleModal();
+      if (e.key !== "Escape") return;
+      if (peChronicleModalOpen) closePeChronicleModal();
+      else if (peHelpModalOpen) closePeHelpModal();
+      else if (document.getElementById("pe-choice-confirm-modal") && !document.getElementById("pe-choice-confirm-modal").hidden) {
+        closePeChoiceConfirmModal();
+      } else if (peInfoPopover) closePeInfoPopover();
     });
+    window.addEventListener("resize", onPeInfoResize);
+    window.addEventListener("scroll", onPeInfoOutsideScroll, true);
   }
 
   function normalizePopoverTriggers(root = document) {
@@ -21452,6 +21710,9 @@
           el.classList.remove("is-open");
         });
         if (typeof GC.closePeChronicleModal === "function") GC.closePeChronicleModal();
+        if (typeof GC.closePeHelpModal === "function") GC.closePeHelpModal();
+        if (typeof GC.closePeChoiceConfirmModal === "function") GC.closePeChoiceConfirmModal();
+        if (typeof GC.closePeInfoPopover === "function") GC.closePeInfoPopover();
       });
     }
   }

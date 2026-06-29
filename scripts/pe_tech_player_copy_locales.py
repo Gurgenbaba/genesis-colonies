@@ -1,0 +1,218 @@
+#!/usr/bin/env python3
+"""Inject planet-tech player-facing info locale keys (run once after copy updates)."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+LOCALES = ROOT / "locales"
+LANGS = ("de", "en", "es", "fr", "pl", "pt", "ru", "tr")
+
+# Shared UI labels
+UI = {
+    "de": {
+        "pe_tech_info_summary_label": "Kurz",
+        "pe_tech_info_effect_label": "Effekt",
+        "pe_tech_info_where_label": "Wo wirkt es?",
+        "pe_tech_info_status_label": "Status",
+        "pe_tech_info_note_label": "Hinweis",
+    },
+    "en": {
+        "pe_tech_info_summary_label": "Summary",
+        "pe_tech_info_effect_label": "Effect",
+        "pe_tech_info_where_label": "Where does it apply?",
+        "pe_tech_info_status_label": "Status",
+        "pe_tech_info_note_label": "Note",
+    },
+}
+
+TECH_COPY = {
+    "de": {
+        "pe_tech_summary_industry_t1_automation": "Legt die industrielle Basis für Umbauten auf diesem Planeten.",
+        "pe_tech_effect_industry_t1_automation": "Bereitet ein Konversions-System vor (zusätzliche Warteschlange für Ressourcen-Umwandlung).",
+        "pe_tech_where_industry_t1_automation": "Planet Evolution → Industrie; später in Konversions-Warteschlange sichtbar.",
+        "pe_tech_note_industry_t1_automation": "Konversions-Engine noch in Arbeit — aktuell vor allem Fortschritt und Planet-XP.",
+        "pe_tech_summary_industry_t2_mining_path": "Du wählst dauerhaft, ob dieser Planet orbital oder im Tiefkern fördert.",
+        "pe_tech_effect_industry_t2_mining_path": "Bestimmt, welche Industry-Techs der Stufe 3 und 4 du später erforschen kannst.",
+        "pe_tech_where_industry_t2_mining_path": "Entscheidung direkt auf dieser Tech-Karte — wirkt auf den ganzen Industry-Zweig.",
+        "pe_tech_note_industry_t2_mining_path": "Irreversibel: nur ein Extraktionspfad pro Planet.",
+        "pe_tech_summary_industry_t3_orbital_refinery": "Schaltet Ferronit-Veredelung als Spezialressource frei.",
+        "pe_tech_effect_industry_t3_orbital_refinery": "Startet eine Produktionskette: Metall und Kristall werden zu Ferronit-Veredelung verarbeitet.",
+        "pe_tech_where_industry_t3_orbital_refinery": "Spezialressourcen auf diesem Planeten; Exporte und spätere Industry-Upgrades.",
+        "pe_tech_note_industry_t3_orbital_refinery": "Sofort nach Abschluss aktiv (Kette läuft im Planet-Tick).",
+        "pe_tech_summary_industry_t3_mantle_tap": "Schaltet Mantel-Legierung als Spezialressource frei.",
+        "pe_tech_effect_industry_t3_mantle_tap": "Produktionskette erzeugt Mantel-Legierung aus tiefer Förderung.",
+        "pe_tech_where_industry_t3_mantle_tap": "Spezialressourcen-Panel; relevant für Handelsrouten und Spezialisierungen.",
+        "pe_tech_note_industry_t3_mantle_tap": "Sofort nach Abschluss aktiv.",
+        "pe_tech_summary_industry_t4_mass_foundry": "Vergrößert geplante Konversions-Lose für Massenverarbeitung.",
+        "pe_tech_effect_industry_t4_mass_foundry": "Bereitet größere Konversions-Batches vor, sobald das Conversion-System live ist.",
+        "pe_tech_where_industry_t4_mass_foundry": "Industrie-System (Konversion) — folgt in einem späteren Update.",
+        "pe_tech_note_industry_t4_mass_foundry": "Mechanik noch nicht vollständig angebunden — aktuell Tech-Baum-Freischaltung und XP.",
+        "pe_tech_summary_industry_t5_overdrive": "Endgame-Industrie mit hohem Output und Risiko.",
+        "pe_tech_effect_industry_t5_overdrive": "Schaltet die Planet-Policy „Pflichtüberstunden“ frei (+20 % Ketten-Output, Stabilitätsrisiko).",
+        "pe_tech_where_industry_t5_overdrive": "Politik-Tab (ab Planet-Stufe 5) → aktive Policy auf diesem Planeten.",
+        "pe_tech_note_industry_t5_overdrive": "Policy nur mit passender Kultur und freigeschaltetem Tech nutzbar.",
+        "pe_tech_summary_science_t1_field_labs": "Beschleunigt alle weiteren Planet-Forschungen auf diesem Planeten.",
+        "pe_tech_effect_science_t1_field_labs": "+10 % Forschungsgeschwindigkeit für Planet-Techs.",
+        "pe_tech_where_science_t1_field_labs": "Jede weitere Planet-Tech-Queue auf diesem Planeten.",
+        "pe_tech_summary_science_t2_quantum_mapping": "Schaltet Quanten-Daten als Spezialressource frei.",
+        "pe_tech_effect_science_t2_quantum_mapping": "Produktionskette erzeugt Quanten-Daten aus Kristall.",
+        "pe_tech_where_science_t2_quantum_mapping": "Spezialressourcen; Importe für Science-Spezialisierungen.",
+        "pe_tech_note_science_t2_quantum_mapping": "Sofort nach Abschluss aktiv.",
+        "pe_tech_summary_science_t3_breakthrough_lab": "Öffnet den Planeten für Durchbruchs-Ereignisse.",
+        "pe_tech_effect_science_t3_breakthrough_lab": "Bereitet spezielle Wissenschafts-Events (Durchbruch) vor.",
+        "pe_tech_where_science_t3_breakthrough_lab": "Planet-Events — erscheinen im Ereignis-Tab, wenn die Engine rollt.",
+        "pe_tech_note_science_t3_breakthrough_lab": "Event-Anbindung wird ausgebaut; Freischaltung im Tech-Baum gilt bereits.",
+        "pe_tech_summary_science_t5_experimental_gate": "Tor zu riskanter Hochtechnologie auf diesem Planeten.",
+        "pe_tech_effect_science_t5_experimental_gate": "Bereitet experimentelle Forschungslinien mit Fehlschlag-Risiko vor.",
+        "pe_tech_where_science_t5_experimental_gate": "Planet Evolution → experimentelle Techs und spätere Endgame-Systeme.",
+        "pe_tech_note_science_t5_experimental_gate": "Risiko-Mechanik noch nicht vollständig aktiv — aktuell Freischaltung und XP.",
+        "pe_tech_summary_energy_t2_plasma_harness": "Nutzt Plasma-Stürme des Planeten für Energie-Spezialressourcen.",
+        "pe_tech_effect_energy_t2_plasma_harness": "Produktionskette erzeugt Dunkles Plasma (benötigt Planet-Eigenschaft Plasma-Stürme).",
+        "pe_tech_where_energy_t2_plasma_harness": "Spezialressourcen; Energy-Spezialisierungen und Exporte.",
+        "pe_tech_note_energy_t2_plasma_harness": "Nur mit passender Planet-DNA erforschbar.",
+        "pe_tech_summary_ecology_t1_biomass": "Gewinnt organische Stoffe aus der Planetenoberfläche.",
+        "pe_tech_effect_ecology_t1_biomass": "Produktionskette erzeugt Lebende Kristalle.",
+        "pe_tech_where_ecology_t1_biomass": "Spezialressourcen; Ökologie- und Crystal-Spezialisierungen.",
+        "pe_tech_note_ecology_t1_biomass": "Sofort nach Abschluss aktiv.",
+        "pe_tech_summary_trade_t2_market_protocols": "Verbessert den interplanetaren Handel von diesem Planeten.",
+        "pe_tech_effect_trade_t2_market_protocols": "+10 % Menge auf aktiven Handelsrouten (ausgehend von diesem Planeten).",
+        "pe_tech_where_trade_t2_market_protocols": "Handelsrouten zwischen deinen Kolonien.",
+        "pe_tech_note_trade_t2_market_protocols": "Sofort nach Abschluss aktiv.",
+        "pe_tech_summary_governance_t1_civil_admin": "Ermöglicht grundlegende Planet-Politiken.",
+        "pe_tech_effect_governance_t1_civil_admin": "Schaltet Policy-Tier 1 frei (z. B. Forschungsmandat, Geschlossene Grenzen).",
+        "pe_tech_where_governance_t1_civil_admin": "Politik-Tab ab Planet-Stufe 5.",
+        "pe_tech_note_governance_t1_civil_admin": "Policies wirken nur mit passender Kultur-Archetyp.",
+        "pe_tech_summary_ancient_t1_ruins_survey": "Erschließt antike Ruinen als Rohstoffquelle.",
+        "pe_tech_effect_ancient_t1_ruins_survey": "Produktionskette erzeugt Antike Legierung (benötigt Ruinen-Eigenschaft).",
+        "pe_tech_where_ancient_t1_ruins_survey": "Spezialressourcen; Ancient-Tech und Discoveries.",
+        "pe_tech_note_ancient_t1_ruins_survey": "Nur mit passender Planet-DNA erforschbar.",
+        "pe_tech_summary_experimental_t1_dark_matter": "Riskante Forschung an dunkler Materie.",
+        "pe_tech_effect_experimental_t1_dark_matter": "Bereitet experimentelle Projekte mit Fehlschlag-Risiko vor.",
+        "pe_tech_where_experimental_t1_dark_matter": "Planet Evolution → experimentelle Linie (Trait Dunkle-Materie-Rückstände).",
+        "pe_tech_note_experimental_t1_dark_matter": "Risiko-Mechanik noch nicht vollständig aktiv.",
+        "pe_tech_summary_military_t2_fortification": "Stärkt die planetare Verteidigungsindustrie.",
+        "pe_tech_effect_military_t2_fortification": "Produktionskette erzeugt Phasen-Kristalle für Militär-Spezialisierungen.",
+        "pe_tech_where_military_t2_fortification": "Spezialressourcen; Verteidigung und Military-Specs.",
+        "pe_tech_note_military_t2_fortification": "Sofort nach Abschluss aktiv.",
+        "pe_tech_summary_orbital_t2_zero_g_foundry": "Verfeinert die orbitale Ferronit-Kette.",
+        "pe_tech_effect_orbital_t2_zero_g_foundry": "+15 % Output der Ferronit-Veredelungs-Kette.",
+        "pe_tech_where_orbital_t2_zero_g_foundry": "Spezialressourcen-Produktion (nur Orbital-Pfad).",
+        "pe_tech_note_orbital_t2_zero_g_foundry": "Sofort nach Abschluss aktiv; setzt Orbital-Pfad voraus.",
+        "pe_choice_focus_orbital_mining": "Fokus auf kontrollierte Orbital-Förderung und Zero-G-Verarbeitung.",
+        "pe_choice_unlocks_orbital_mining": "Schaltet Orbital-Raffinerie und Zero-G-Gießerei frei — sicherere Industrie-Ketten.",
+        "pe_choice_focus_deep_core": "Fokus auf aggressive Tiefenförderung und Mantel-Extraktion.",
+        "pe_choice_unlocks_deep_core": "Schaltet Mantel-Tapping frei — rohere Ressourcen, riskantere Industrie-Ketten.",
+        "pe_choice_effect_orbital_mining": "Orbitaler Pfad: stabilere Förderung, bessere Veredelung im Orbit.",
+        "pe_choice_effect_deep_core": "Tiefkern-Pfad: mehr Rohertrag aus dem Planeteninneren.",
+        "pe_goal_benefits_research": "Planet-Techs sind die Hauptquelle für Planet-XP.",
+        "pe_goal_benefits_level": "Mehr Planet-Level schalten Eigenschaften, Spezialisierungen, Policies und Expansion frei.",
+        "pe_goal_benefits_expansion": "Expansion und spätere Imperiums-Boni bauen auf dieser Progression auf.",
+        "pe_goal_benefits_activity": "Expeditionen, Events und Discoveries geben Zusatz-XP.",
+    },
+    "en": {
+        "pe_tech_summary_industry_t1_automation": "Lays the industrial foundation for upgrades on this planet.",
+        "pe_tech_effect_industry_t1_automation": "Prepares a conversion system (extra queue slot for resource conversion).",
+        "pe_tech_where_industry_t1_automation": "Planet Evolution → Industry; later visible in the conversion queue.",
+        "pe_tech_note_industry_t1_automation": "Conversion engine still in progress — currently mainly progress and planet XP.",
+        "pe_tech_summary_industry_t2_mining_path": "You permanently choose orbital or deep-core extraction for this planet.",
+        "pe_tech_effect_industry_t2_mining_path": "Determines which tier-3 and tier-4 industry techs you can research later.",
+        "pe_tech_where_industry_t2_mining_path": "Decision on this tech card — affects the whole industry branch.",
+        "pe_tech_note_industry_t2_mining_path": "Irreversible: one extraction path per planet.",
+        "pe_tech_summary_industry_t3_orbital_refinery": "Unlocks refined ferronite as a special resource.",
+        "pe_tech_effect_industry_t3_orbital_refinery": "Starts a production chain: metal and crystal become refined ferronite.",
+        "pe_tech_where_industry_t3_orbital_refinery": "Special resources on this planet; exports and later industry upgrades.",
+        "pe_tech_note_industry_t3_orbital_refinery": "Active immediately after completion (chain runs on planet tick).",
+        "pe_tech_summary_industry_t3_mantle_tap": "Unlocks mantle alloy as a special resource.",
+        "pe_tech_effect_industry_t3_mantle_tap": "Production chain creates mantle alloy from deep extraction.",
+        "pe_tech_where_industry_t3_mantle_tap": "Special resources panel; trade routes and specializations.",
+        "pe_tech_note_industry_t3_mantle_tap": "Active immediately after completion.",
+        "pe_tech_summary_industry_t4_mass_foundry": "Prepares larger conversion batches for mass processing.",
+        "pe_tech_effect_industry_t4_mass_foundry": "Prepares bigger conversion batches once the conversion system is live.",
+        "pe_tech_where_industry_t4_mass_foundry": "Industry system (conversion) — coming in a later update.",
+        "pe_tech_note_industry_t4_mass_foundry": "Mechanic not fully wired yet — currently tech-tree unlock and XP.",
+        "pe_tech_summary_industry_t5_overdrive": "Endgame industry with high output and risk.",
+        "pe_tech_effect_industry_t5_overdrive": "Unlocks the Mandatory Overtime planet policy (+20% chain output, stability risk).",
+        "pe_tech_where_industry_t5_overdrive": "Politics tab (from planet level 5) → active policy on this planet.",
+        "pe_tech_note_industry_t5_overdrive": "Policy only usable with matching culture and this tech unlocked.",
+        "pe_tech_summary_science_t1_field_labs": "Speeds up all further planet research on this world.",
+        "pe_tech_effect_science_t1_field_labs": "+10% research speed for planet techs.",
+        "pe_tech_where_science_t1_field_labs": "Every planet tech queue on this planet.",
+        "pe_tech_summary_science_t2_quantum_mapping": "Unlocks quantum data as a special resource.",
+        "pe_tech_effect_science_t2_quantum_mapping": "Production chain creates quantum data from crystal.",
+        "pe_tech_where_science_t2_quantum_mapping": "Special resources; imports for science specializations.",
+        "pe_tech_note_science_t2_quantum_mapping": "Active immediately after completion.",
+        "pe_tech_summary_science_t3_breakthrough_lab": "Opens this planet to breakthrough events.",
+        "pe_tech_effect_science_t3_breakthrough_lab": "Prepares special science breakthrough events.",
+        "pe_tech_where_science_t3_breakthrough_lab": "Planet events — appear in the events tab when the engine rolls them.",
+        "pe_tech_note_science_t3_breakthrough_lab": "Event wiring still expanding; tech unlock applies now.",
+        "pe_tech_summary_science_t5_experimental_gate": "Gateway to risky high technology on this planet.",
+        "pe_tech_effect_science_t5_experimental_gate": "Prepares experimental research lines with failure risk.",
+        "pe_tech_where_science_t5_experimental_gate": "Planet Evolution → experimental techs and later endgame systems.",
+        "pe_tech_note_science_t5_experimental_gate": "Risk mechanic not fully active yet — currently unlock and XP.",
+        "pe_tech_summary_energy_t2_plasma_harness": "Uses the planet's plasma winds for energy special resources.",
+        "pe_tech_effect_energy_t2_plasma_harness": "Production chain creates dark plasma (requires Plasma Winds trait).",
+        "pe_tech_where_energy_t2_plasma_harness": "Special resources; energy specializations and exports.",
+        "pe_tech_note_energy_t2_plasma_harness": "Only researchable with matching planet DNA.",
+        "pe_tech_summary_ecology_t1_biomass": "Harvests organic matter from the planet surface.",
+        "pe_tech_effect_ecology_t1_biomass": "Production chain creates living crystals.",
+        "pe_tech_where_ecology_t1_biomass": "Special resources; ecology and crystal specializations.",
+        "pe_tech_note_ecology_t1_biomass": "Active immediately after completion.",
+        "pe_tech_summary_trade_t2_market_protocols": "Improves interplanetary trade from this planet.",
+        "pe_tech_effect_trade_t2_market_protocols": "+10% amount on active trade routes (outbound from this planet).",
+        "pe_tech_where_trade_t2_market_protocols": "Trade routes between your colonies.",
+        "pe_tech_note_trade_t2_market_protocols": "Active immediately after completion.",
+        "pe_tech_summary_governance_t1_civil_admin": "Enables basic planet policies.",
+        "pe_tech_effect_governance_t1_civil_admin": "Unlocks policy tier 1 (e.g. Research Mandate, Closed Borders).",
+        "pe_tech_where_governance_t1_civil_admin": "Politics tab from planet level 5.",
+        "pe_tech_note_governance_t1_civil_admin": "Policies only work with a matching culture archetype.",
+        "pe_tech_summary_ancient_t1_ruins_survey": "Taps ancient ruins as a resource source.",
+        "pe_tech_effect_ancient_t1_ruins_survey": "Production chain creates ancient alloy (requires Ancient Ruins trait).",
+        "pe_tech_where_ancient_t1_ruins_survey": "Special resources; ancient tech and discoveries.",
+        "pe_tech_note_ancient_t1_ruins_survey": "Only researchable with matching planet DNA.",
+        "pe_tech_summary_experimental_t1_dark_matter": "Risky research into dark matter.",
+        "pe_tech_effect_experimental_t1_dark_matter": "Prepares experimental projects with failure risk.",
+        "pe_tech_where_experimental_t1_dark_matter": "Planet Evolution → experimental line (Dark Matter Residue trait).",
+        "pe_tech_note_experimental_t1_dark_matter": "Risk mechanic not fully active yet.",
+        "pe_tech_summary_military_t2_fortification": "Strengthens planetary defense industry.",
+        "pe_tech_effect_military_t2_fortification": "Production chain creates phase crystals for military specs.",
+        "pe_tech_where_military_t2_fortification": "Special resources; defense and military specializations.",
+        "pe_tech_note_military_t2_fortification": "Active immediately after completion.",
+        "pe_tech_summary_orbital_t2_zero_g_foundry": "Refines the orbital ferronite chain.",
+        "pe_tech_effect_orbital_t2_zero_g_foundry": "+15% output on the refined ferronite production chain.",
+        "pe_tech_where_orbital_t2_zero_g_foundry": "Special resource production (orbital path only).",
+        "pe_tech_note_orbital_t2_zero_g_foundry": "Active after completion; requires orbital path.",
+        "pe_choice_focus_orbital_mining": "Focus on controlled orbital extraction and zero-G processing.",
+        "pe_choice_unlocks_orbital_mining": "Unlocks Orbital Refinery and Zero-G Foundry — safer industry chains.",
+        "pe_choice_focus_deep_core": "Focus on aggressive deep extraction and mantle tapping.",
+        "pe_choice_unlocks_deep_core": "Unlocks Mantle Tap — rawer resources, riskier industry chains.",
+        "pe_choice_effect_orbital_mining": "Orbital path: steadier extraction, better orbital refining.",
+        "pe_choice_effect_deep_core": "Deep core path: more raw yield from the planet interior.",
+        "pe_goal_benefits_research": "Planet techs are the main source of planet XP.",
+        "pe_goal_benefits_level": "Higher planet level unlocks traits, specializations, policies, and expansion.",
+        "pe_goal_benefits_expansion": "Expansion and later empire bonuses build on this progression.",
+        "pe_goal_benefits_activity": "Expeditions, events, and discoveries grant bonus XP.",
+    },
+}
+
+
+def main() -> None:
+    for lang in LANGS:
+        path = LOCALES / f"{lang}.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if lang in UI:
+            data.update(UI[lang])
+        elif "en" in UI:
+            data.update(UI["en"])
+        if lang in TECH_COPY:
+            data.update(TECH_COPY[lang])
+        elif "en" in TECH_COPY:
+            data.update(TECH_COPY["en"])
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"updated {path.name}")
+
+
+if __name__ == "__main__":
+    main()

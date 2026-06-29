@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import sqlite3
 import time
 from typing import Any, Dict, List, Mapping, Optional
@@ -10,12 +11,17 @@ from ..models import get_planet_buildings
 from .constants import LEVEL_UNLOCKS, MAX_PLANET_LEVEL, SPECIALIZATION_UNLOCK_LEVEL, IDENTITY_TEASER_MIN_LEVEL
 from .expansion_gates import build_expansion_unlock_block
 from .definitions import get_event, get_policy, get_policies as get_policy_definitions, get_research_def, get_trait
+from .policies import evaluate_policy_gate
 from .specialization import list_specialization_options
 from .dna import all_trait_keys
 from .history import get_history
 from .planet_level import xp_threshold_for_level
 from .ascension import get_ascension_status
-from .planet_research import compute_planet_research_cost, compute_planet_research_time
+from .planet_research import (
+    compute_planet_research_cost,
+    compute_planet_research_reward_xp,
+    compute_planet_research_time,
+)
 from .repository import (
     get_discoveries,
     get_legacy_tags,
@@ -36,10 +42,12 @@ from .ux_copy import (
     humanize_requirements,
     level_unlock_label_key,
     planet_class_label_key,
+    planet_research_branch_label_key,
     planet_research_icon,
     planet_research_icon_fallback,
     polarity_label_key,
     trait_effect_lines,
+    planet_tech_info_locale_keys,
 )
 
 
@@ -241,12 +249,18 @@ def _enrich_research_card(
     else:
         can_start = True
 
+    xp_reward = compute_planet_research_reward_xp(tech_key)
+
     return {
         "tech_key": tech_key,
         "icon": planet_research_icon(tech_key, cfg.get("category")),
         "icon_fallback": planet_research_icon_fallback(tech_key, cfg.get("category")),
         "label_key": tech.get("label_key") or tech_key,
         "unlock_key": tech.get("description_key") or cfg.get("description_key"),
+        "description_key": str(tech.get("description_key") or cfg.get("description_key") or ""),
+        "branch_label_key": planet_research_branch_label_key(tech_key, cfg.get("category")),
+        "current_level": current,
+        "max_level": max_level,
         "tier": tech.get("tier"),
         "target_level": target,
         "cost_metal": int(cost_m),
@@ -264,6 +278,8 @@ def _enrich_research_card(
         "choice_group": tech.get("choice_group"),
         "choice_options": tech.get("choice_options"),
         "choice_made": tech.get("choice_made"),
+        **planet_tech_info_locale_keys(tech_key),
+        **xp_reward,
     }
 
 
@@ -320,6 +336,7 @@ def _research_ux(
                 "start_at": start,
                 "finish_at": finish,
                 "total_seconds": int(span),
+                **compute_planet_research_reward_xp(tech_key),
             }
         )
 
@@ -370,6 +387,39 @@ def _research_ux(
         "queue_has_room": queue_has_room,
         "card_jobs_by_owner": card_jobs_by_owner,
     }
+
+
+def _research_xp_display_hints(
+    research_ux: Dict[str, Any],
+    xp_remaining: int,
+) -> Dict[str, Any]:
+    """Planet-XP reward hints for hero and goal cards (server-side only)."""
+    hints: Dict[str, Any] = {}
+    active = research_ux.get("active") or []
+    if active:
+        tech_key = str(active[0].get("tech_key") or "")
+        if tech_key:
+            xp = compute_planet_research_reward_xp(tech_key)
+            hints["current_research_reward_xp"] = int(xp["reward_xp"])
+            hints["current_research_tech_key"] = tech_key
+            hints["current_research_label_key"] = active[0].get("label_key")
+        return hints
+
+    rec = research_ux.get("recommended") or []
+    if not rec:
+        return hints
+
+    first = rec[0]
+    reward = int(first.get("reward_xp") or 0)
+    if reward <= 0:
+        return hints
+
+    hints["next_research_reward_xp"] = reward
+    hints["next_research_tech_key"] = first.get("tech_key")
+    hints["next_research_label_key"] = first.get("label_key")
+    if xp_remaining > 0:
+        hints["researches_to_level_up"] = int(math.ceil(xp_remaining / reward))
+    return hints
 
 
 def _ascension_ux(planet_id: int, *, conn: sqlite3.Connection) -> Dict[str, Any]:
@@ -474,6 +524,7 @@ def _next_action(
     mechanics: Dict[str, Any],
     establishment: Optional[Dict[str, Any]] = None,
     expansion_unlock: Optional[Dict[str, Any]] = None,
+    xp_remaining: int = 0,
 ) -> Dict[str, Any]:
     def _cta(
         *,
@@ -613,6 +664,17 @@ def _next_action(
     if rec and research_ux.get("queue_has_room"):
         first = rec[0]
         tech_key = str(first.get("tech_key") or "")
+        reward_xp = int(first.get("reward_xp") or 0)
+        extra: Dict[str, Any] = {
+            "tech_key": tech_key,
+            "tech_label_key": first.get("label_key"),
+        }
+        if reward_xp > 0:
+            extra["reward_xp"] = reward_xp
+            if xp_remaining > 0:
+                extra["researches_to_level_up"] = int(math.ceil(xp_remaining / reward_xp))
+        if xp_remaining > 0:
+            extra["xp_remaining"] = int(xp_remaining)
         return _cta(
             priority="research",
             title_key="pe_action_research_title",
@@ -621,13 +683,23 @@ def _next_action(
             cta_target="research",
             cta_action="focus_tab",
             cta_highlight=f"pe-research-card-{tech_key}" if tech_key else "pe-section-research",
-            tech_key=tech_key,
-            tech_label_key=first.get("label_key"),
+            **extra,
         )
 
     if research_ux.get("active"):
         job = research_ux["active"][0]
         tech_key = str(job.get("tech_key") or "")
+        reward_xp = int(job.get("reward_xp") or 0)
+        extra = {
+            "tech_label_key": job.get("label_key"),
+            "progress_pct": job.get("progress_pct"),
+        }
+        if reward_xp > 0:
+            extra["reward_xp"] = reward_xp
+        if xp_remaining > 0:
+            extra["xp_remaining"] = int(xp_remaining)
+            if reward_xp > 0:
+                extra["researches_to_level_up"] = int(math.ceil(xp_remaining / reward_xp))
         return _cta(
             priority="research_running",
             title_key="pe_action_research_running_title",
@@ -636,8 +708,8 @@ def _next_action(
             cta_target="research",
             cta_action="focus_tab",
             cta_highlight="pe-planet-research-active",
-            tech_label_key=job.get("label_key"),
-            progress_pct=job.get("progress_pct"),
+            tech_key=tech_key,
+            **extra,
         )
 
     deficits = mechanics.get("import_deficits") or []
@@ -753,11 +825,14 @@ def _policy_ux(
             min_slot = int(pdef.get("tier") or 1)
             if min_slot > slot:
                 continue
-            allowed = pdef.get("archetype_allow") or []
-            eligible = not allowed or archetype in [str(a) for a in allowed]
-            locked_reason_key = None
-            if not eligible:
-                locked_reason_key = "pe_policy_wrong_archetype"
+            eligible, locked_reason_key = evaluate_policy_gate(
+                planet_id,
+                policy_key,
+                policy_def=pdef,
+                slot=slot,
+                archetype_key=archetype,
+                conn=conn,
+            )
             options.append(
                 {
                     "policy_key": policy_key,
@@ -882,6 +957,8 @@ def build_dashboard_extras(
 
     eligible = list(eligible_specializations or [])
     research_ux = _research_ux(research, level, planet_id=planet_id, planet=planet, conn=conn)
+    xp_remaining = max(0, xp_span - xp_in_level)
+    xp_hints = _research_xp_display_hints(research_ux, xp_remaining)
 
     expansion_unlock: Dict[str, Any] = {"visible": False}
     establishment: Dict[str, Any] = {"visible": False}
@@ -981,9 +1058,10 @@ def build_dashboard_extras(
             "xp_in_level": xp_in_level,
             "xp_span": xp_span,
             "xp_pct": _pct(xp_in_level, xp_span),
-            "xp_remaining": max(0, xp_span - xp_in_level),
+            "xp_remaining": xp_remaining,
             "next_level": level + 1 if level < MAX_PLANET_LEVEL else None,
             "milestones": _progression_milestones(level),
+            **xp_hints,
         },
         "economy": economy,
         "research_ux": research_ux,
@@ -999,6 +1077,7 @@ def build_dashboard_extras(
             mechanics=mechanics,
             establishment=establishment,
             expansion_unlock=expansion_unlock,
+            xp_remaining=xp_remaining,
         ),
         "policies_active": _policy_rows(planet_id, conn),
         "policy_ux": _policy_ux(planet_id, planet=planet, culture=culture, conn=conn),
