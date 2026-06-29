@@ -1,0 +1,48 @@
+---
+description: Genesis Colonies industrial sci-fi UI — angular panels, no pill/mobile-app look
+alwaysApply: true
+---
+
+# Genesis Colonies — UI Design Language
+
+Genesis Colonies uses a **sharp, industrial sci-fi** visual language (military / technical / colony-industrial).
+
+## Forbidden
+
+- Large `border-radius` on panels, cards, modals, popovers, tooltips
+- Modern **pill** buttons or chip styling (`border-radius: 999px`, fully rounded badges)
+- Strongly rounded cards or bubble / mobile-app aesthetics
+- Soft, consumer-SaaS rounding as default for new components
+
+## Required
+
+- Rectangular panels with clear edges
+- Thin, technical borders
+- Subtle chamfered or square corners only
+- Sci-fi / military / industrial tone
+
+## Radius guidelines
+
+| Element | Radius |
+|---------|--------|
+| Panels / cards | 0–4px (prefer **0–2px**) |
+| Buttons | max **2–4px** |
+| Chips / badges | angular — use `--gc-radius-sm` (2px), not pills |
+| Modals / popovers / tooltips | same as panels |
+
+Use existing tokens in `static/style.css`:
+
+- `--gc-radius-xs` (0px) through `--gc-radius-lg` (4px)
+- `--gc-radius-pill` is **2px** in this project — not a true pill; do not use `999px` for new UI
+
+**Exception:** `border-radius: 50%` only for intentional circles (avatars, status dots, orbital markers).
+
+## When building or reviewing UI
+
+1. Prefer `var(--gc-radius-sm)` or `0` over literal `6px+` or `999px`.
+2. On PE / expansion / command-map work, audit new classes for accidental rounding.
+3. Match surrounding `gc-btn`, `gc-panel`, and HUD patterns — do not introduce a softer sub-style.
+
+## Known PE outliers (align when touching those files)
+
+- `.pe-tech-reward-chip` — currently `999px`; should become `--gc-radius-sm` in a focused UI pass.

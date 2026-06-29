@@ -140,6 +140,7 @@ Linear: T1 → T2 → T3 → T5 (kein T4 im Seed).
 |-----|-------------|--------|
 | P0 | **GC-974A** | `policy_tier`-Semantik fixen | ✅ Done |
 | **P0** | **GC-974B** | **Deep-Core-Parity** — Pfadwahl gleich attraktiv | ✅ Done |
+| — | **GC-976** | Expansion Progression — HW-Level → Kolonie-Slots | 📋 Spec |
 | P1 | **GC-975C** | Trade/Governance/Trait/Breakthrough — 🟡-Techs |
 | P1 | ~~GC-974B~~ | → siehe oben (vor 975C) |
 | P1 | ~~GC-974C~~ | Trade/Military/Trait — teils in 975C |

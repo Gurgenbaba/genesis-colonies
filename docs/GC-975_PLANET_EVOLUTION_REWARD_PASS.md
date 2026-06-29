@@ -197,7 +197,7 @@ Orbital-Zweig hat **mehr Sofort-Rewards** pro Tech als Tiefkern:
 1. GC-974B  Deep-Core-Parity     ← NÄCHSTES Implementierungs-Ticket
 2. GC-975C  🟡-Techs (Handel, Governance, Trait, Breakthrough, Discovery-UX)
 3. GC-975B  ❌-Techs nur mit GC-973 / GC-972E — KEINE Interim-Boni
-4. GC-975E  Planet-Cap ↔ Homeworld-Level (optional, separates Produkt-Ticket)
+4. **GC-976** — Planet-Cap ↔ Homeworld-Level (**nächste Priorität** — siehe [GC-976_EXPANSION_PROGRESSION.md](GC-976_EXPANSION_PROGRESSION.md))
 ```
 
 ```
@@ -207,7 +207,7 @@ GC-975 (Epic, kein Big-Bang)
 ├── 974B — Deep-Core-Parity ✅
 ├── 975C — Stärke 🟡-Techs (Mining path Choice-UX, Governance, Breakthrough, Trade)
 ├── 975B — Fix ❌-Techs via GC-973 / GC-972E (kein Interim-Flicken)
-└── 975E — Planet-Cap ↔ Homeworld-Level (Produkt — separates Ticket)
+└── GC-976 — Expansion Progression (Homeworld-Level → Kolonie-Slots) ← **vor 975C**
 ```
 
 **Leitplanke:** Kein Reward-Pass-Batch ohne grüne Tests pro Tech-Änderung. Seed-Änderungen in `migrations/NNN_*.sql`, nicht nur `017` editieren.
