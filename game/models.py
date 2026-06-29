@@ -644,6 +644,7 @@ def create_user(username: str, password: str, is_admin: int = 0, email: str | No
             player_id=user_id,
             player_name=uname,
             is_admin=is_admin,
+            homeworld_placement="random",
             conn=conn,
         )
 
@@ -757,6 +758,8 @@ def ensure_player_and_homeworld(
     player_name: Optional[str] = None,
     is_admin: int = 0,
     conn: sqlite3.Connection | None = None,
+    *,
+    homeworld_placement: str = "sequential",
 ) -> None:
     own_conn = False
     if conn is None:
@@ -805,66 +808,81 @@ def ensure_player_and_homeworld(
             from game.galaxy import assign_free_coordinates
             from game.planet_evolution.dna import _stable_seed, planet_class_for_coordinates
 
-            galaxy, system, position = assign_free_coordinates(conn)
-            planet_class = planet_class_for_coordinates(
-                galaxy=int(galaxy),
-                system=system,
-                position=position,
-                is_homeworld=True,
-            )
-            try:
-                settings = get_game_settings()
-                salt = settings.get("planet_evolution_server_salt", "genesis_colonies_v1")
-            except Exception:
-                salt = "genesis_colonies_v1"
-            dna_seed = _stable_seed(galaxy, system or 0, position or 0, salt)
-            has_class_col = column_exists(conn, "planets", "planet_class")
-            has_seed_col = column_exists(conn, "planets", "dna_seed")
-            if has_class_col and has_seed_col:
-                cur.execute(
-                    """
-                    INSERT INTO planets (
-                        player_id, name, is_homeworld, metal, crystal, fuel_cells, last_update,
-                        galaxy, system, position, planet_class, dna_seed
-                    )
-                    VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-                    """,
-                    (
-                        int(player_id),
-                        "Genesis Ark",
-                        start_metal,
-                        start_crystal,
-                        start_fuel_cells,
-                        now,
-                        int(galaxy),
-                        int(system),
-                        int(position),
-                        planet_class,
-                        int(dna_seed),
-                    ),
+            placement = str(homeworld_placement or "sequential").strip().lower()
+            coord_strategy = "random" if placement == "random" else "sequential"
+            pid = None
+            for _attempt in range(5):
+                galaxy, system, position = assign_free_coordinates(
+                    conn,
+                    strategy=coord_strategy,
                 )
-            else:
-                cur.execute(
-                    """
-                    INSERT INTO planets (
-                        player_id, name, is_homeworld, metal, crystal, fuel_cells, last_update,
-                        galaxy, system, position
-                    )
-                    VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?);
-                    """,
-                    (
-                        int(player_id),
-                        "Genesis Ark",
-                        start_metal,
-                        start_crystal,
-                        start_fuel_cells,
-                        now,
-                        int(galaxy),
-                        int(system),
-                        int(position),
-                    ),
+                planet_class = planet_class_for_coordinates(
+                    galaxy=int(galaxy),
+                    system=system,
+                    position=position,
+                    is_homeworld=True,
                 )
-            pid = cur.lastrowid
+                try:
+                    settings = get_game_settings()
+                    salt = settings.get("planet_evolution_server_salt", "genesis_colonies_v1")
+                except Exception:
+                    salt = "genesis_colonies_v1"
+                dna_seed = _stable_seed(galaxy, system or 0, position or 0, salt)
+                has_class_col = column_exists(conn, "planets", "planet_class")
+                has_seed_col = column_exists(conn, "planets", "dna_seed")
+                try:
+                    if has_class_col and has_seed_col:
+                        cur.execute(
+                            """
+                            INSERT INTO planets (
+                                player_id, name, is_homeworld, metal, crystal, fuel_cells, last_update,
+                                galaxy, system, position, planet_class, dna_seed
+                            )
+                            VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                            """,
+                            (
+                                int(player_id),
+                                "Genesis Ark",
+                                start_metal,
+                                start_crystal,
+                                start_fuel_cells,
+                                now,
+                                int(galaxy),
+                                int(system),
+                                int(position),
+                                planet_class,
+                                int(dna_seed),
+                            ),
+                        )
+                    else:
+                        cur.execute(
+                            """
+                            INSERT INTO planets (
+                                player_id, name, is_homeworld, metal, crystal, fuel_cells, last_update,
+                                galaxy, system, position
+                            )
+                            VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?);
+                            """,
+                            (
+                                int(player_id),
+                                "Genesis Ark",
+                                start_metal,
+                                start_crystal,
+                                start_fuel_cells,
+                                now,
+                                int(galaxy),
+                                int(system),
+                                int(position),
+                            ),
+                        )
+                    pid = cur.lastrowid
+                    break
+                except sqlite3.IntegrityError:
+                    if _attempt >= 4:
+                        raise
+                    continue
+            if pid is None:
+                raise RuntimeError("homeworld_insert_failed")
 
             cur.execute("INSERT INTO planet_buildings (planet_id) VALUES (?);", (int(pid),))
 

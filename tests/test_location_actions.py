@@ -106,7 +106,8 @@ def test_galaxy_default_is_system_view(location_actions_db, monkeypatch):
     with client.session_transaction() as sess:
         sess['user_id'] = int(user['id'])
     body = client.get('/galaxy').get_data(as_text=True)
-    assert 'galaxy-slot-card' in body
+    assert 'galaxy-hud-module' in body or 'data-galaxy-ring-view' in body
+    assert 'galaxy-system-range' not in body
     assert 'galaxy-view-tabs' not in body
     assert 'galaxy-view-tab--classic' not in body
     assert 'data-command-map-graph' not in body
@@ -122,9 +123,11 @@ def test_classic_galaxy_still_reachable(location_actions_db, monkeypatch):
     ok, err, user = create_user(uname, 'test-pass-123')
     assert ok and user, err
     client = app_module.app.test_client()
-    client.post('/login', data={'username': uname, 'password': 'test-pass-123'})
+    with client.session_transaction() as sess:
+        sess['user_id'] = int(user['id'])
     body = client.get('/galaxy?view=system').get_data(as_text=True)
-    assert 'galaxy-slot-card' in body
+    assert 'galaxy-hud-module' in body or 'data-galaxy-ring-view' in body
+    assert 'galaxy-system-range' not in body
     assert 'galaxy-view-tabs' not in body
     assert 'galaxy-view-tab--classic' not in body
     assert 'data-command-map-graph' not in body

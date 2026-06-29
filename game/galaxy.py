@@ -9,6 +9,7 @@ Universe layout (v1):
 
 from __future__ import annotations
 
+import random
 import re
 import sqlite3
 from typing import Any, Dict, List, Mapping, Optional, Set, Tuple
@@ -22,6 +23,7 @@ POSITION_MIN = 1
 POSITION_MAX = 15
 EXPEDITION_SLOT_POSITION = 16
 MINIMAP_RADIUS = 4
+HOMEWORLD_RANDOM_ATTEMPTS = 300
 
 _COORD_QUERY_RE = re.compile(
     r"^\s*\[?\s*(\d+)\s*:\s*(\d+)\s*(?::\s*(\d+)\s*)?\]?\s*$"
@@ -222,6 +224,20 @@ def _load_occupied(
     return occupied
 
 
+def _sequential_free_slot(
+    occupied: Set[Tuple[int, int, int]],
+    galaxy_min: int,
+    galaxy_max: int,
+) -> Optional[Tuple[int, int, int]]:
+    for g in range(int(galaxy_min), int(galaxy_max) + 1):
+        for system in range(SYSTEM_MIN, SYSTEM_MAX + 1):
+            for position in range(POSITION_MIN, POSITION_MAX + 1):
+                key = (g, system, position)
+                if key not in occupied:
+                    return key
+    return None
+
+
 def coordinate_is_available(
     conn: sqlite3.Connection,
     galaxy: int,
@@ -256,23 +272,46 @@ def assign_free_coordinates(
     *,
     galaxy: int = GALAXY_MIN,
     exclude_planet_id: Optional[int] = None,
+    strategy: str = "sequential",
 ) -> Tuple[int, int, int]:
     """
-    Find the next free slot in scan order (system asc, position asc).
+    Find a free planet slot (positions 1–15 only).
+
+    ``strategy="sequential"`` — scan order (galaxy asc, system asc, position asc)
+    within the requested galaxy. Used for colonization and repair.
+
+    ``strategy="random"`` — random slot across galaxies 1..galaxy_count, then
+    sequential fallback. Used for new-player homeworld bootstrap only.
     Must be called inside a write transaction when assigning to avoid races.
     """
-    g = int(galaxy)
     gmax = get_galaxy_max(conn)
+    occupied = _load_occupied(conn, exclude_planet_id=exclude_planet_id)
+
+    if strategy == "random":
+        found = None
+        for _ in range(HOMEWORLD_RANDOM_ATTEMPTS):
+            g = random.randint(GALAXY_MIN, gmax)
+            system = random.randint(SYSTEM_MIN, SYSTEM_MAX)
+            position = random.randint(POSITION_MIN, POSITION_MAX)
+            key = (g, system, position)
+            if key not in occupied:
+                found = key
+                break
+        if found is None:
+            found = _sequential_free_slot(occupied, GALAXY_MIN, gmax)
+        if found is None:
+            raise GalaxyCoordinateError("no free galaxy coordinates remaining")
+        validate_coordinates(found[0], found[1], found[2], galaxy_max=gmax, conn=conn)
+        return found
+
+    g = int(galaxy)
     if g < GALAXY_MIN or g > gmax:
         raise GalaxyCoordinateError(f"galaxy out of range: {g}")
 
-    occupied = _load_occupied(conn, exclude_planet_id=exclude_planet_id)
-    for system in range(SYSTEM_MIN, SYSTEM_MAX + 1):
-        for position in range(POSITION_MIN, POSITION_MAX + 1):
-            key = (g, system, position)
-            if key not in occupied:
-                return key
-    raise GalaxyCoordinateError("no free galaxy coordinates remaining")
+    found = _sequential_free_slot(occupied, g, g)
+    if found is None:
+        raise GalaxyCoordinateError("no free galaxy coordinates remaining")
+    return found
 
 
 def repair_missing_coordinates(conn: Optional[sqlite3.Connection] = None) -> int:
@@ -344,6 +383,24 @@ def repair_missing_coordinates(conn: Optional[sqlite3.Connection] = None) -> int
         conn.commit()
         conn.close()
     return updated
+
+
+def _attach_slot_presentation(
+    slot: Dict[str, Any],
+    position: int,
+    *,
+    planet_row: Optional[Dict[str, Any]] = None,
+    occupied: bool = False,
+) -> None:
+    from .planet_visuals import slot_galaxy_ring_presentation
+
+    slot.update(
+        slot_galaxy_ring_presentation(
+            position,
+            planet_row=planet_row,
+            occupied=occupied,
+        )
+    )
 
 
 def _slot_planet_meta(
@@ -683,6 +740,7 @@ def list_system(
                 system=int(system),
                 position=pos,
             )
+            _attach_slot_presentation(slot, pos, planet_row={"position": pos}, occupied=True)
             slots.append(slot)
         else:
             is_highlighted = (
@@ -718,6 +776,7 @@ def list_system(
                 system=int(system),
                 position=pos,
             )
+            _attach_slot_presentation(slot, pos, occupied=False)
             slots.append(slot)
 
     result = {

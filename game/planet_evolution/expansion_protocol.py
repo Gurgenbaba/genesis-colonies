@@ -81,12 +81,13 @@ OUTPOST_ALLOWED_BUILDINGS = frozenset(
     {
         "metal_mine",
         "crystal_mine",
-        "fuel_cell_factory",
+        "fuel_cell_plant",
         "solar_plant",
-        "storage_depot",
+        "metal_storage",
+        "crystal_storage",
+        "fuel_storage",
         "command_center",
         "radar_array",
-        "fuel_depot",
     }
 )
 

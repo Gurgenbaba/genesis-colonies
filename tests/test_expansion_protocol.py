@@ -248,3 +248,96 @@ def test_evaluate_gates_meta(expansion_protocol_db):
         assert meta['required_expansion_tech'] == 1
     finally:
         conn.close()
+
+
+def test_outpost_allows_canonical_resource_buildings(expansion_protocol_db):
+    from game.buildings import queue_build_for_planet
+    from game.models import get_planet_buildings, save_planet_buildings
+    from game.planet_evolution.expansion_protocol import is_building_allowed_in_outpost
+
+    uid = _player()
+    conn = db()
+    try:
+        _unlock_first_expansion(conn, uid)
+        binding = _colonizable_binding()
+        ok, reason, extra = colonize_planet(
+            uid,
+            name='Frontier Outpost',
+            galaxy=1,
+            system=302,
+            position=3,
+            world_binding=binding,
+            conn=conn,
+        )
+        assert ok, reason
+        pid = int(extra['planet_id'])
+        assert is_outpost_planet(pid, conn=conn)
+
+        for building_type in ('metal_storage', 'fuel_cell_plant'):
+            allowed, allow_reason = is_building_allowed_in_outpost(
+                pid, building_type, conn=conn
+            )
+            assert allowed, allow_reason
+
+        save_planet_buildings(pid, {'metal_mine': 4})
+        conn.execute(
+            'UPDATE planets SET metal = 500000, crystal = 500000 WHERE id = ?;',
+            (pid,),
+        )
+        conn.commit()
+        planet = dict(conn.execute('SELECT * FROM planets WHERE id = ?;', (pid,)).fetchone())
+        buildings = get_planet_buildings(pid, conn=conn)
+        ok_build, build_reason, payload = queue_build_for_planet(
+            planet,
+            buildings,
+            'metal_storage',
+            user_id=uid,
+        )
+        assert ok_build, (build_reason, payload)
+        assert int(payload.get('job_id') or 0) > 0
+    finally:
+        conn.close()
+
+
+def test_outpost_blocks_research_lab_with_clear_reason(expansion_protocol_db):
+    from game.buildings import queue_build_for_planet
+    from game.models import get_planet_buildings, save_planet_buildings
+    from game.planet_evolution.expansion_protocol import is_building_allowed_in_outpost
+
+    uid = _player()
+    conn = db()
+    try:
+        _unlock_first_expansion(conn, uid)
+        binding = _colonizable_binding()
+        ok, reason, extra = colonize_planet(
+            uid,
+            name='Frontier Lab',
+            galaxy=1,
+            system=303,
+            position=4,
+            world_binding=binding,
+            conn=conn,
+        )
+        assert ok, reason
+        pid = int(extra['planet_id'])
+        save_planet_buildings(pid, {'metal_mine': 1, 'solar_plant': 1})
+        conn.execute(
+            'UPDATE planets SET metal = 500000, crystal = 500000 WHERE id = ?;',
+            (pid,),
+        )
+        conn.commit()
+        planet = dict(conn.execute('SELECT * FROM planets WHERE id = ?;', (pid,)).fetchone())
+        buildings = get_planet_buildings(pid, conn=conn)
+
+        allowed, _ = is_building_allowed_in_outpost(pid, 'research_lab', conn=conn)
+        assert not allowed
+        ok_build, build_reason, _ = queue_build_for_planet(
+            planet,
+            buildings,
+            'research_lab',
+            user_id=uid,
+        )
+        assert not ok_build
+        assert build_reason == 'outpost_building_restricted'
+    finally:
+        conn.close()

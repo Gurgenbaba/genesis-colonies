@@ -493,6 +493,8 @@ def queue_build(
             return False, "queue_full", payload
         if reason == "requirements":
             return False, "requirements", payload
+        if reason in ("outpost_building_restricted", "outpost_building_slots_full"):
+            return False, reason, payload
         if reason == "invalid":
             if isinstance(payload, dict) and payload.get("max_level") is not None:
                 return False, "max_level_reached", payload

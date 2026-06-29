@@ -1,0 +1,233 @@
+{# GC-594 — Classic galaxy ring view (canonical system presentation) #}
+{% set nav = galaxy_nav if galaxy_nav is defined else {} %}
+{% set sys = system_data if system_data is defined else {'slots': []} %}
+{% set slots = sys.slots if sys.slots is defined else [] %}
+{% set exp_slot = expedition_slot if expedition_slot is defined else none %}
+
+<div class="galaxy-ring-view" data-galaxy-ring-view>
+  <section class="galaxy-hud-module" data-galaxy-hud-module>
+    <header class="galaxy-hud-header" aria-label="{{ T('galaxy_nav_label') }}">
+      <span class="galaxy-hud-title">{{ T("nav_galaxy", "Galaxie") }}</span>
+      <div class="galaxy-hud-controls">
+        <div class="galaxy-hud-group">
+          <span class="galaxy-hud-label">{{ T("galaxy_label_galaxy") }}</span>
+          <div class="galaxy-hud-stepper">
+            {% if nav.multi_galaxy and nav.has_prev_galaxy %}
+            <a href="{{ url_for('galaxy_view', view='system', galaxy=nav.prev_galaxy, system=nav.system) }}"
+               class="galaxy-hud-arrow"
+               title="{{ T('galaxy_prev_galaxy') }}"
+               aria-label="{{ T('galaxy_prev_galaxy') }}">&lsaquo;</a>
+            {% else %}
+            <span class="galaxy-hud-arrow is-disabled" aria-hidden="true">&lsaquo;</span>
+            {% endif %}
+            <span class="galaxy-hud-value galaxy-hud-value--fixed gc-mono">{{ nav.galaxy or 1 }}</span>
+            {% if nav.multi_galaxy and nav.has_next_galaxy %}
+            <a href="{{ url_for('galaxy_view', view='system', galaxy=nav.next_galaxy, system=nav.system) }}"
+               class="galaxy-hud-arrow"
+               title="{{ T('galaxy_next_galaxy') }}"
+               aria-label="{{ T('galaxy_next_galaxy') }}">&rsaquo;</a>
+            {% else %}
+            <span class="galaxy-hud-arrow is-disabled" aria-hidden="true">&rsaquo;</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="galaxy-hud-group">
+          <span class="galaxy-hud-label">{{ T("galaxy_label_system") }}</span>
+          <div class="galaxy-hud-stepper">
+            {% if nav.has_prev %}
+            <a href="{{ url_for('galaxy_view', view='system', galaxy=nav.galaxy, system=nav.prev_system) }}"
+               class="galaxy-hud-arrow"
+               title="{{ T('galaxy_prev_system') }}"
+               aria-label="{{ T('galaxy_prev_system') }}">&lsaquo;</a>
+            {% else %}
+            <span class="galaxy-hud-arrow is-disabled" aria-hidden="true">&lsaquo;</span>
+            {% endif %}
+            <span class="galaxy-hud-value galaxy-hud-value--fixed gc-mono">{{ nav.system or 1 }}</span>
+            {% if nav.has_next %}
+            <a href="{{ url_for('galaxy_view', view='system', galaxy=nav.galaxy, system=nav.next_system) }}"
+               class="galaxy-hud-arrow"
+               title="{{ T('galaxy_next_system') }}"
+               aria-label="{{ T('galaxy_next_system') }}">&rsaquo;</a>
+            {% else %}
+            <span class="galaxy-hud-arrow is-disabled" aria-hidden="true">&rsaquo;</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="galaxy-ring-stage-wrap" data-galaxy-ring-stage-wrap>
+      <div class="galaxy-ring-stage galaxy-ring-stage--compact"
+           data-galaxy-ring-stage
+           data-planet-slot-count="15"
+           data-planet-ring-ratio="0.36"
+           data-expedition-ring-ratio="0.44"
+           role="img"
+           aria-label="{{ T('galaxy_ring_view_aria', 'Sternsystem-Scan') }}">
+        <div class="galaxy-ring-stage-bg" aria-hidden="true"></div>
+        <div class="galaxy-ring-stage-vignette" aria-hidden="true"></div>
+
+        <div class="galaxy-ring-star" aria-hidden="true">
+          <span class="galaxy-ring-star-core"></span>
+          <span class="galaxy-ring-star-glow"></span>
+        </div>
+
+        {% for slot in slots %}
+        {% set angle = slot.orbit_angle_deg if slot.orbit_angle_deg is defined else ((slot.position - 1) * 24 - 90) %}
+        {% set img_rel = slot.planet_image_relpath if slot.planet_image_relpath is defined else '' %}
+        {% set img_webp = slot.planet_image_webp_relpath if slot.planet_image_webp_relpath is defined else '' %}
+        {% set effect = slot.visual_effect if slot.visual_effect is defined else (slot.planet_class or 'temperate') %}
+        <div class="galaxy-ring-slot-wrap"
+             data-galaxy-ring-slot-wrap="{{ slot.position }}"
+             data-orbit-band="planet"
+             data-orbit-angle="{{ angle }}">
+          <button type="button"
+                  class="galaxy-ring-slot
+                    {% if slot.occupied %}is-occupied{% else %}is-empty{% endif %}
+                    {% if slot.is_own_planet %}is-own{% elif slot.is_ally_planet %}is-ally{% elif slot.occupied %}is-foreign{% endif %}
+                    {% if slot.is_active_planet %}is-active-planet{% endif %}
+                    {% if slot.is_highlighted %}is-highlighted{% endif %}
+                    {% if slot.has_debris %}has-debris{% endif %}"
+                  id="galaxy-ring-slot-{{ slot.position }}"
+                  data-galaxy-ring-slot="{{ slot.position }}"
+                  data-slot-title="{% if slot.occupied %}{{ slot.planet_name }}{% else %}{{ T('galaxy_empty_slot') }}{% endif %}"
+                  aria-label="{{ T('galaxy_slot_position', 'Pos') }} {{ slot.position }}{% if slot.occupied %}: {{ slot.planet_name }}{% else %}: {{ T('galaxy_empty_slot') }}{% endif %}"
+                  aria-controls="galaxy-ring-inspector-{{ slot.position }}"
+                  aria-expanded="false">
+            <span class="galaxy-ring-slot-pos gc-mono">{{ slot.position }}</span>
+            <span class="galaxy-ring-slot-body
+                  galaxy-ring-slot-body--{{ effect }}
+                  {% if slot.occupied %}has-planet-image{% else %}is-climate-preview{% endif %}"
+                  {% if img_rel %}
+                  style="--gr-planet-image: url('{{ url_for('static', filename=img_rel) }}');{% if img_webp %} --gr-planet-image-webp: url('{{ url_for('static', filename=img_webp) }}');{% endif %}"
+                  {% endif %}
+                  title="{% if slot.occupied %}{{ T(slot.planet_class_label_key, slot.planet_class) }}{% else %}{{ slot.temperature_display }}{% endif %}"></span>
+          </button>
+          {% if slot.has_debris %}
+          <button type="button"
+                  class="galaxy-ring-debris-btn"
+                  data-galaxy-ring-debris="{{ slot.position }}"
+                  title="{{ T('galaxy_debris_field', 'Trümmerfeld') }}"
+                  aria-label="{{ T('galaxy_debris_field', 'Trümmerfeld') }} {{ slot.position }}">
+            <span aria-hidden="true">☄</span>
+          </button>
+          {% endif %}
+        </div>
+        {% endfor %}
+
+        {% if exp_slot %}
+        <div class="galaxy-ring-slot-wrap"
+             data-galaxy-ring-slot-wrap="expedition"
+             data-orbit-band="expedition"
+             data-orbit-angle="90">
+          <button type="button"
+                  class="galaxy-ring-slot galaxy-ring-slot--expedition is-expedition is-empty"
+                  id="galaxy-slot-expedition"
+                  data-galaxy-ring-slot="expedition"
+                  data-slot-title="{{ T('galaxy_expedition_slot_title') }}"
+                  aria-label="{{ T('galaxy_expedition_slot_title') }}"
+                  aria-controls="galaxy-ring-inspector-expedition"
+                  aria-expanded="false">
+            <span class="galaxy-ring-slot-pos gc-mono">{{ exp_slot.position }}</span>
+            <span class="galaxy-ring-slot-body galaxy-ring-slot-body--expedition"></span>
+          </button>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <aside class="galaxy-ring-inspector galaxy-ring-inspector--dock"
+           id="galaxy-ring-inspector"
+           data-galaxy-ring-inspector
+           hidden
+           aria-label="{{ T('galaxy_ring_inspector_aria', 'Slot-Inspektor') }}">
+      <header class="galaxy-ring-inspector-head">
+        <h3 class="galaxy-ring-inspector-title" data-galaxy-ring-inspector-title></h3>
+        <button type="button"
+                class="gc-btn gc-btn-ghost gc-btn-xs galaxy-ring-inspector-close"
+                data-galaxy-ring-inspector-close
+                aria-label="{{ T('galaxy_ring_inspector_close', 'Schließen') }}">×</button>
+      </header>
+      <div class="galaxy-ring-inspector-body" data-galaxy-ring-inspector-body>
+        {% for slot in slots %}
+        <div class="galaxy-ring-inspector-panel"
+             id="galaxy-ring-inspector-{{ slot.position }}"
+             data-galaxy-ring-inspector-panel="{{ slot.position }}"
+             hidden>
+          <div class="galaxy-ring-inspector-coord gc-mono">
+            {{ galaxy_coord_link(slot.coordinates_formatted) }}
+          </div>
+          {% if slot.occupied %}
+          <div class="galaxy-ring-inspector-meta">
+            <div class="galaxy-ring-inspector-commander">
+              <span class="galaxy-ring-inspector-label">{{ T("overview_label_commander", "Commander") }}</span>
+              {{ player_name_link(slot.player_id, slot.commander_name, extra_class='galaxy-slot-commander-link') }}
+            </div>
+            <div class="galaxy-slot-stats">
+              <span class="galaxy-stat galaxy-stat-class">{{ T(slot.planet_class_label_key, slot.planet_class) }}</span>
+              <span class="galaxy-stat galaxy-stat-score gc-mono gc-num-compact" title="{{ (slot.planet_score or 0)|fmt_int }}">{{ T('galaxy_score_short') }} {{ (slot.planet_score or 0)|fmt_int_compact }}</span>
+              <span class="galaxy-stat galaxy-stat-temp gc-mono">{{ slot.temperature_display }}</span>
+              {% if slot.orbit_ring is defined %}
+              <span class="galaxy-stat galaxy-stat-ring">{{ T('galaxy_ring_zone_' ~ slot.orbit_ring, slot.orbit_ring) }}</span>
+              {% endif %}
+            </div>
+          </div>
+          {% else %}
+          <p class="galaxy-slot-empty-hint">{{ T("galaxy_classic_coords_hint") }}</p>
+          <p class="galaxy-ring-climate-hint gc-mono hint">{{ slot.temperature_display }}</p>
+          {% endif %}
+          {% if slot.has_debris %}
+          {% include "partials/galaxy_debris_block.html" %}
+          {% endif %}
+          <div class="galaxy-ring-inspector-actions">
+            {% if slot.is_own_planet %}
+            <button type="button"
+                    class="gc-btn gc-btn-primary gc-btn-sm galaxy-ring-open-planet"
+                    data-galaxy-ring-open="{{ slot.planet_id }}">
+              {{ T("world_inspector_open_colony", "Kolonie öffnen") }}
+            </button>
+            {% elif slot.occupied and not slot.is_own_planet %}
+            <button type="button"
+                    class="gc-btn gc-btn-outline gc-btn-sm"
+                    data-messages-compose
+                    data-recipient-name="{{ slot.commander_name }}">
+              {{ T("playercard_message_btn", "Nachricht") }}
+            </button>
+            {% endif %}
+            {% include "partials/galaxy_fleet_actions.html" %}
+          </div>
+        </div>
+        {% endfor %}
+
+        {% if exp_slot %}
+        {% set slot = exp_slot %}
+        <div class="galaxy-ring-inspector-panel"
+             id="galaxy-ring-inspector-expedition"
+             data-galaxy-ring-inspector-panel="expedition"
+             hidden>
+          <div class="galaxy-ring-inspector-coord gc-mono">
+            {{ galaxy_coord_link(slot.coordinates_formatted) }}
+          </div>
+          <p class="galaxy-slot-empty-hint">{{ T("galaxy_expedition_slot_hint") }}</p>
+          <div class="galaxy-ring-inspector-actions">
+            {% include "partials/galaxy_fleet_actions.html" %}
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </aside>
+
+    <footer class="galaxy-legend galaxy-ring-legend">
+      <span class="galaxy-legend-title">{{ T("galaxy_legend_title") }}:</span>
+      <div class="galaxy-legend-items">
+        <span class="gl-item"><span class="galaxy-ring-legend-swatch galaxy-ring-legend-swatch--own"></span>{{ T("galaxy_legend_your_planet") }}</span>
+        <span class="gl-item"><span class="galaxy-ring-legend-swatch galaxy-ring-legend-swatch--ally"></span>{{ T("galaxy_legend_ally") }}</span>
+        <span class="gl-item"><span class="galaxy-ring-legend-swatch galaxy-ring-legend-swatch--foreign"></span>{{ T("galaxy_legend_occupied") }}</span>
+        <span class="gl-item"><span class="galaxy-ring-legend-swatch galaxy-ring-legend-swatch--empty"></span>{{ T("galaxy_legend_colonizable") }}</span>
+        <span class="gl-item"><span class="gs-pill gs-pill-debris"></span>{{ T("galaxy_legend_debris") }}</span>
+        <span class="gl-item"><span class="galaxy-ring-legend-swatch galaxy-ring-legend-swatch--expedition"></span>{{ T("galaxy_expedition_slot_badge") }}</span>
+      </div>
+    </footer>
+  </section>
+</div>

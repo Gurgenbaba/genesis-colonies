@@ -2268,6 +2268,14 @@
       queue_full: t("msg_build_queue_full", "Bau-Warteschlange voll."),
       research_queue_full: t("research_msg_queue_full", "Forschungs-Warteschlange voll."),
       requirements: t("msg_build_requirements", "Voraussetzungen nicht erfüllt."),
+      outpost_building_restricted: t(
+        "outpost_building_restricted",
+        "Im Außenposten noch nicht verfügbar — schließe zuerst die Etablierung ab."
+      ),
+      outpost_building_slots_full: t(
+        "outpost_building_slots_full",
+        "Außenposten-Slots voll — etabliere die Welt weiter."
+      ),
       no_research_lab: t("research_msg_no_lab", "Forschungslabor erforderlich."),
       unknown_tech: t("research_msg_unknown", "Unbekannte Forschung."),
       not_found: t("msg_job_not_found", "Auftrag nicht gefunden."),
@@ -25604,6 +25612,189 @@
     });
   }
 
+  function initGalaxyRingView() {
+    const root = document.querySelector("[data-galaxy-ring-view]");
+    if (!root) return;
+
+    const stage = root.querySelector("[data-galaxy-ring-stage]");
+    const inspector = root.querySelector("[data-galaxy-ring-inspector]");
+    const titleEl = root.querySelector("[data-galaxy-ring-inspector-title]");
+    const panels = Array.from(root.querySelectorAll("[data-galaxy-ring-inspector-panel]"));
+    const slotBtns = Array.from(root.querySelectorAll("[data-galaxy-ring-slot]"));
+
+    const PLANET_SLOT_COUNT = 15;
+    const EXPEDITION_ANGLE_DEG = 90;
+
+    function planetAngleDeg(position) {
+      const pos = Number(position);
+      if (!Number.isFinite(pos) || pos < 1) return -90;
+      return (pos - 1) * (360 / PLANET_SLOT_COUNT) - 90;
+    }
+
+    function layoutGalaxyRingOrbits() {
+      if (!stage) return;
+      const w = stage.clientWidth;
+      const h = stage.clientHeight;
+      if (w < 1 || h < 1) return;
+      const size = Math.min(w, h);
+      const planetRatio = parseFloat(stage.dataset.planetRingRatio || "0.36");
+      const expeditionRatio = parseFloat(stage.dataset.expeditionRingRatio || "0.44");
+      const planetR = size * planetRatio;
+      const expeditionR = size * expeditionRatio;
+      const cx = w / 2;
+      const cy = h / 2;
+      root.querySelectorAll("[data-galaxy-ring-slot-wrap]").forEach((wrap) => {
+        const band = wrap.dataset.orbitBand || "expedition";
+        let angleDeg;
+        let r;
+        if (band === "expedition") {
+          angleDeg = EXPEDITION_ANGLE_DEG;
+          r = expeditionR;
+        } else {
+          const pos = parseInt(wrap.dataset.galaxyRingSlotWrap || "1", 10);
+          angleDeg = planetAngleDeg(pos);
+          r = planetR;
+        }
+        const rad = (angleDeg * Math.PI) / 180;
+        const x = cx + Math.cos(rad) * r;
+        const y = cy + Math.sin(rad) * r;
+        wrap.style.left = `${(x / w) * 100}%`;
+        wrap.style.top = `${(y / h) * 100}%`;
+      });
+    }
+
+    let ringResizeObs = null;
+    if (stage && typeof ResizeObserver !== "undefined") {
+      ringResizeObs = new ResizeObserver(() => layoutGalaxyRingOrbits());
+      ringResizeObs.observe(stage);
+    }
+    layoutGalaxyRingOrbits();
+    window.addEventListener("resize", layoutGalaxyRingOrbits);
+
+    let activeKey = null;
+
+    function closeInspector() {
+      if (!inspector) return;
+      inspector.hidden = true;
+      panels.forEach((p) => {
+        p.hidden = true;
+      });
+      slotBtns.forEach((btn) => {
+        btn.classList.remove("is-selected");
+        btn.setAttribute("aria-expanded", "false");
+      });
+      activeKey = null;
+    }
+
+    function openInspector(key, sourceBtn) {
+      if (!inspector || !key) return;
+      const panel = root.querySelector(`[data-galaxy-ring-inspector-panel="${key}"]`);
+      if (!panel) return;
+
+      panels.forEach((p) => {
+        p.hidden = p !== panel;
+      });
+      slotBtns.forEach((btn) => {
+        const on = btn === sourceBtn;
+        btn.classList.toggle("is-selected", on);
+        btn.setAttribute("aria-expanded", on ? "true" : "false");
+      });
+
+      if (titleEl && sourceBtn) {
+        titleEl.textContent = sourceBtn.dataset.slotTitle || "";
+      }
+
+      inspector.hidden = false;
+      activeKey = String(key);
+    }
+
+    function onSlotClick(ev) {
+      const btn = ev.target.closest("[data-galaxy-ring-slot]");
+      if (!btn || !root.contains(btn)) return;
+      ev.preventDefault();
+      const key = btn.dataset.galaxyRingSlot;
+      if (!key) return;
+      if (activeKey === key && inspector && !inspector.hidden) {
+        closeInspector();
+        return;
+      }
+      openInspector(key, btn);
+    }
+
+    function onDebrisClick(ev) {
+      const debrisBtn = ev.target.closest("[data-galaxy-ring-debris]");
+      if (!debrisBtn || !root.contains(debrisBtn)) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      const key = debrisBtn.dataset.galaxyRingDebris;
+      const slotBtn = root.querySelector(`[data-galaxy-ring-slot="${key}"]`);
+      if (slotBtn) openInspector(key, slotBtn);
+    }
+
+    async function onOpenPlanetClick(ev) {
+      const btn = ev.target.closest("[data-galaxy-ring-open]");
+      if (!btn || !root.contains(btn)) return;
+      ev.preventDefault();
+      const planetId = parseInt(btn.dataset.galaxyRingOpen || "0", 10);
+      if (!planetId) return;
+      btn.disabled = true;
+      try {
+        const res = await GC.fetchGameAction("/api/planets/active", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+          body: JSON.stringify({ planet_id: planetId }),
+        });
+        if (res?.ok) {
+          applyActionState(res, "planet_switch");
+          if (typeof GC.navigateTo === "function") {
+            GC.navigateTo("/overview", { push: true });
+          }
+        }
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function onCloseClick(ev) {
+      if (!ev.target.closest("[data-galaxy-ring-inspector-close]")) return;
+      ev.preventDefault();
+      closeInspector();
+    }
+
+    function onKeyDown(ev) {
+      if (ev.key === "Escape" && inspector && !inspector.hidden) {
+        closeInspector();
+      }
+    }
+
+    root.addEventListener("click", onSlotClick);
+    root.addEventListener("click", onDebrisClick);
+    root.addEventListener("click", onOpenPlanetClick);
+    root.addEventListener("click", onCloseClick);
+    document.addEventListener("keydown", onKeyDown);
+
+    const highlighted = root.querySelector(".galaxy-ring-slot.is-highlighted");
+    if (highlighted) {
+      openInspector(highlighted.dataset.galaxyRingSlot, highlighted);
+    }
+
+    GC.registerCleanup(() => {
+      root.removeEventListener("click", onSlotClick);
+      root.removeEventListener("click", onDebrisClick);
+      root.removeEventListener("click", onOpenPlanetClick);
+      root.removeEventListener("click", onCloseClick);
+      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("resize", layoutGalaxyRingOrbits);
+      if (ringResizeObs) {
+        try {
+          ringResizeObs.disconnect();
+        } catch (_) {}
+        ringResizeObs = null;
+      }
+      closeInspector();
+    });
+  }
+
   function initGalaxyDebrisUx() {
     const page = document.querySelector(".galaxy-page");
     if (!page) return;
@@ -25710,6 +25901,7 @@
     initCommandMapSiteInspector();
     initCommandMapColonizeMode();
     initGalaxyDebrisUx();
+    initGalaxyRingView();
     initGalacticDirectiveBanner();
     prefetchGalaxyAdjacent();
   }

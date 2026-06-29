@@ -10,10 +10,14 @@ import pytest
 import game.db as dbmod
 import game.models as models
 from game.galaxy import (
+    GALAXY_MIN,
+    POSITION_MAX,
+    SYSTEM_MAX,
     assign_free_coordinates,
     build_galaxy_nav,
     build_minimap_range,
     format_coordinates,
+    get_galaxy_max,
     get_planet_coordinates,
     list_system,
     parse_coordinate_query,
@@ -53,9 +57,27 @@ def test_new_player_gets_coordinates(galaxy_db):
     assert len(planets) >= 1
     hw = next(p for p in planets if int(p.get("is_homeworld") or 0) == 1)
     coords = get_planet_coordinates(hw)
-    assert coords["galaxy"] == 1
-    assert 1 <= coords["system"] <= 499
-    assert 1 <= coords["position"] <= 15
+    gmax = get_galaxy_max()
+    assert GALAXY_MIN <= coords["galaxy"] <= gmax
+    assert 1 <= coords["system"] <= SYSTEM_MAX
+    assert 1 <= coords["position"] <= POSITION_MAX
+    assert coords["position"] != 16
+
+
+def test_new_homeworlds_are_not_sequential_cluster(galaxy_db):
+    """Random bootstrap must not place every new player in [1:1:2], [1:1:3], …"""
+    coords = []
+    for _ in range(10):
+        uid = _create_player()
+        hw = next(p for p in get_planets_by_player(uid) if int(p.get("is_homeworld") or 0) == 1)
+        coords.append(
+            (int(hw["galaxy"]), int(hw["system"]), int(hw["position"]))
+        )
+    sequential_cluster = all(
+        g == coords[0][0] and s == coords[0][1] and p == idx + 2
+        for idx, (g, s, p) in enumerate(coords)
+    )
+    assert not sequential_cluster
 
 
 def test_coordinates_are_unique(galaxy_db):
@@ -304,14 +326,63 @@ def test_galaxy_page_loads(galaxy_db, monkeypatch):
     resp = client.get("/galaxy?view=system")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
-    assert "galaxy-slot-card" in body
-    assert "galaxy-nav-bar" in body
-    assert "galaxy-nav-jump" in body
-    assert "galaxy-system-range" in body
-    assert "galaxy-range-current" in body or "[" in body
+    assert "galaxy-ring-view" in body or "data-galaxy-ring-view" in body
+    assert "galaxy-hud-module" in body
+    assert "galaxy-hud-header" in body
+    assert "galaxy-hud-controls" in body
+    assert "data-galaxy-ring-stage" in body
+    assert "galaxy-ring-stage--compact" in body
+    assert 'data-orbit-band="planet"' in body or 'data-orbit-band=\"planet\"' in body
+    assert 'data-orbit-band="expedition"' in body or 'data-orbit-band=\"expedition\"' in body
+    assert "galaxy-hud-search" not in body
+    assert "galaxy-hud-coord-q" not in body
+    assert "galaxy-hud-scan-btn" not in body
+    assert "galaxy-system-range" not in body
+    assert "galaxy-nav-bar" not in body
+    assert "galaxy-nav-step" not in body
+    assert "data-galaxy-ring-compact" not in body
+    assert "galaxy-ring-compact-toggle" not in body
+    assert "galaxy-table" not in body.lower()
+    assert body.count("galaxy-hud-group") == 2
     assert "data-player-card" in body
     assert "galaxy-fleet-action" in body
+    assert "galaxy-ring-orbit--hot" not in body
     assert "galaxy_slot_empty" in body or "Leer" in body or "Empty" in body
+
+
+def test_list_system_slot_ring_presentation(galaxy_db):
+    from game.planet_visuals import ORBIT_RING_COLD, ORBIT_RING_HOT, ORBIT_RING_TEMPERATE
+
+    data = list_system(1, 1)
+    by_pos = {int(s["position"]): s for s in data["slots"]}
+    hot = by_pos[1]
+    assert hot["orbit_ring"] == ORBIT_RING_HOT
+    assert hot["temperature_band"] == ORBIT_RING_HOT
+    assert hot["orbit_angle_deg"] == -90.0
+    assert hot["orbit_layout_band"] == "planet"
+    assert hot["orbit_radius_ref"] == 235
+    assert hot["visual_effect"] == "volcanic"
+    assert hot["planet_image_relpath"].startswith("img/")
+    temperate = by_pos[8]
+    assert temperate["orbit_ring"] == ORBIT_RING_TEMPERATE
+    assert temperate["orbit_angle_deg"] == 78.0
+    assert temperate["visual_effect"] == "temperate"
+    cold = by_pos[15]
+    assert cold["orbit_ring"] == ORBIT_RING_COLD
+    assert cold["orbit_angle_deg"] == 246.0
+    assert cold["visual_effect"] == "ice"
+    assert cold["planet_theme"] == "absolute-zero"
+
+
+def test_list_system_occupied_slot_uses_herocard_image(galaxy_db):
+    uid = _create_player()
+    planet = get_planets_by_player(uid)[0]
+    coords = get_planet_coordinates(planet)
+    data = list_system(coords["galaxy"], coords["system"], viewer_player_id=uid)
+    slot = next(s for s in data["slots"] if s["occupied"])
+    assert slot["planet_image_relpath"].startswith("img/herocards/")
+    assert slot["herocard_relpath"] == slot["planet_image_relpath"]
+    assert slot["landscape_relpath"].startswith("img/landscapes/")
 
 
 def test_list_system_slot_coordinates_match_position(galaxy_db):
@@ -474,6 +545,35 @@ def test_fleet_page_exposes_expedition_position_dataset(galaxy_db, monkeypatch):
     assert 'data-fleet-mission' in body
 
 
+def test_orbit_angle_single_planet_ring(galaxy_db):
+    from game.planet_visuals import orbit_angle_for_position
+
+    assert orbit_angle_for_position(1) == -90.0
+    assert orbit_angle_for_position(2) == -66.0
+    assert orbit_angle_for_position(8) == 78.0
+    assert orbit_angle_for_position(15) == 246.0
+
+
+def test_galaxy_ring_layout_main_js_contract(galaxy_db):
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parent.parent / "static" / "main.js").read_text(encoding="utf-8")
+    assert "layoutGalaxyRingOrbits" in js
+    assert "planetAngleDeg" in js
+    assert "dataset.orbitBand" in js
+    assert "dataset.planetRingRatio" in js
+    assert "ResizeObserver" in js
+
+
+def test_galaxy_ring_compact_stage_css_contract(galaxy_db):
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parent.parent / "static" / "style.css").read_text(encoding="utf-8")
+    assert ".galaxy-ring-stage--compact" in css
+    assert "aspect-ratio: 1 / 1" in css
+    assert "min(100%, 680px)" in css
+
+
 def test_fleet_url_prefill_contract_in_main_js(galaxy_db):
     from pathlib import Path
 
@@ -571,6 +671,54 @@ def test_assign_free_coordinates_never_duplicates(galaxy_db):
         )
         b = assign_free_coordinates(conn)
         assert a != b
+        conn.rollback()
+    finally:
+        conn.close()
+
+
+def test_assign_free_coordinates_random_skips_occupied(galaxy_db, monkeypatch):
+    conn = db()
+    try:
+        conn.execute("BEGIN IMMEDIATE;")
+        occupied_triplet = iter([1, 1, 1, 3, 88, 12])
+
+        def _fake_randint(lo: int, hi: int) -> int:
+            return next(occupied_triplet)
+
+        monkeypatch.setattr("game.galaxy.random.randint", _fake_randint)
+        result = assign_free_coordinates(conn, strategy="random")
+        assert result == (3, 88, 12)
+        assert 1 <= result[2] <= POSITION_MAX
+        conn.rollback()
+    finally:
+        conn.close()
+
+
+def test_assign_free_coordinates_random_fallback_to_sequential(galaxy_db, monkeypatch):
+    conn = db()
+    try:
+        conn.execute("BEGIN IMMEDIATE;")
+        monkeypatch.setattr("game.galaxy.HOMEWORLD_RANDOM_ATTEMPTS", 2)
+        always_occupied = iter([1, 1, 1, 1, 1, 1])
+
+        def _fake_randint(lo: int, hi: int) -> int:
+            return next(always_occupied)
+
+        monkeypatch.setattr("game.galaxy.random.randint", _fake_randint)
+        result = assign_free_coordinates(conn, strategy="random")
+        assert result != (1, 1, 1)
+        assert 1 <= result[2] <= POSITION_MAX
+        conn.rollback()
+    finally:
+        conn.close()
+
+
+def test_assign_free_coordinates_sequential_unchanged_for_colonization(galaxy_db):
+    conn = db()
+    try:
+        conn.execute("BEGIN IMMEDIATE;")
+        first = assign_free_coordinates(conn, galaxy=1, strategy="sequential")
+        assert first == (1, 1, 2)
         conn.rollback()
     finally:
         conn.close()
