@@ -72,7 +72,7 @@ def test_planet_limit_block_reports_expansion_state(cap_db):
         assert block['current'] == 0
         assert block['owned_worlds'] == 1
         assert block['admin_ceiling'] == 2
-        assert block['max'] is None
+        assert block['max'] == 1
     finally:
         conn.close()
 

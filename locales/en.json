@@ -1682,6 +1682,7 @@
   "exchange_title": "Resource Exchange",
   "exchange_you_receive": "You receive approx.",
   "expansion_admin_ceiling_reached": "Server ceiling reached — contact support if you have legacy worlds.",
+  "expansion_slot_cap_reached": "Colony limit reached — raise Genesis Ark development level to unlock more worlds.",
   "expansion_checklist_genesis_ark_level": "Genesis Ark development stage",
   "expansion_checklist_interstellar_tech": "Interstellar Expansion",
   "expansion_checklist_launch": "Launch expansion",

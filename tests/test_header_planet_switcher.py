@@ -244,12 +244,14 @@ def test_game_state_includes_planet_limit(switcher_db, monkeypatch):
     assert gs.get('ok') is True
     pl = gs.get('planet_limit') or {}
     assert pl.get('owned_worlds') == 1
-    assert pl.get('max') is None
+    assert pl.get('max') == 1
+    assert pl.get('effective_max_worlds') == 1
     colony_id = _second_planet(player_id)
     gs2 = client.get('/api/game-state').get_json()
     pl2 = gs2.get('planet_limit') or {}
     assert pl2.get('owned_worlds') == 2
-    assert pl2.get('max') is None
+    assert pl2.get('max') == 2
+    assert pl2.get('effective_max_worlds') == 2
     assert colony_id > 0
 
 def test_base_template_shows_planet_limit_panel():

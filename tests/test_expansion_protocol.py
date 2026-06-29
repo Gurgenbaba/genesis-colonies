@@ -6,7 +6,15 @@ from game.admin_balance import save_balance_settings
 from game.db import db
 from game.logic import check_planet_cap_available, get_planet_limit_block
 from game.models import create_user, ensure_player_and_homeworld, get_homeworld, get_planets_by_player, init_db
-from game.planet_evolution.expansion_protocol import INTERSTELLAR_EXPANSION_TECH, build_expansion_launch_checklist, evaluate_expansion_gates, is_outpost_planet, sync_establishment_state
+from game.planet_evolution.expansion_protocol import (
+    INTERSTELLAR_EXPANSION_TECH,
+    build_expansion_launch_checklist,
+    effective_max_worlds_for_homeworld_level,
+    evaluate_expansion_gates,
+    expansion_slots_unlocked,
+    is_outpost_planet,
+    sync_establishment_state,
+)
 from game.planet_evolution.service import colonize_planet
 from game.planet_evolution.world_colonization import build_world_key, parse_world_key, sector_coords
 from game.planet_evolution.strategic_worlds import strategic_world_type_for_coords
@@ -170,15 +178,62 @@ def _set_cap(value: int) -> None:
     settings, err = save_balance_settings({'max_colonies_per_player': int(value)})
     assert err is None, err
 
-def test_limit_block_uses_gate_not_slot_counter(expansion_protocol_db):
+def test_limit_block_uses_hw_cap_not_admin_default(expansion_protocol_db):
     uid = _player()
     conn = db()
     try:
         block = get_planet_limit_block(uid, conn=conn)
         assert block['current'] == 0
-        assert block['max'] is None
+        assert block['max'] == 1
+        assert block['effective_max_worlds'] == 1
+        assert block['expansion_slots_unlocked'] == 0
         assert 'homeworld_level' in block
         assert 'expansion_tech_level' in block
+    finally:
+        conn.close()
+
+def test_expansion_slots_unlocked_matrix():
+    assert expansion_slots_unlocked(1) == 0
+    assert expansion_slots_unlocked(4) == 0
+    assert expansion_slots_unlocked(5) == 1
+    assert expansion_slots_unlocked(9) == 1
+    assert expansion_slots_unlocked(10) == 2
+    assert effective_max_worlds_for_homeworld_level(10) == 3
+
+def test_hw_slot_cap_grandfathering(expansion_protocol_db):
+    uid = _player()
+    conn = db()
+    try:
+        hw = get_homeworld(uid, conn=conn)
+        conn.execute('UPDATE planets SET planet_level = 25 WHERE id = ?;', (int(hw['id']),))
+        conn.execute(
+            '\n        INSERT INTO research_levels (user_id, tech_key, level)\n        VALUES (?, ?, ?)\n        ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;\n        ',
+            (int(uid), INTERSTELLAR_EXPANSION_TECH, 6),
+        )
+        conn.commit()
+        for i in range(2):
+            ok, reason, _ = colonize_planet(
+                uid,
+                name=f'Col_{i}',
+                galaxy=1,
+                system=410 + i,
+                position=1 + i,
+                conn=conn,
+                allow_legacy_coordinates=True,
+                source='test',
+            )
+            assert ok, reason
+        assert len(get_planets_by_player(uid, conn=conn)) == 3
+        conn.execute('UPDATE planets SET planet_level = 5 WHERE id = ?;', (int(hw['id']),))
+        conn.commit()
+        ok_cap, reason_cap = check_planet_cap_available(uid, conn=conn)
+        assert not ok_cap
+        assert reason_cap == 'expansion_slot_cap_reached'
+        assert len(get_planets_by_player(uid, conn=conn)) == 3
+        block = get_planet_limit_block(uid, conn=conn)
+        assert block['owned_worlds'] == 3
+        assert block['effective_max_worlds'] == 2
+        assert block['max'] == 2
     finally:
         conn.close()
 

@@ -636,14 +636,12 @@ def colonize_planet(
 
         begin_write_transaction(conn)
         if legacy_coordinate_path:
-            from game.logic import get_max_planets_per_player
-            from game.models import get_planets_by_player
+            from game.logic import check_planet_cap_available
 
-            total = len(get_planets_by_player(int(player_id), conn=conn) or [])
-            ceiling = get_max_planets_per_player(conn=conn)
-            if total >= ceiling:
+            ok_cap, cap_reason = check_planet_cap_available(int(player_id), conn=conn)
+            if not ok_cap:
                 rollback(conn)
-                return False, "expansion_admin_ceiling_reached", None
+                return False, cap_reason, None
         else:
             from game.logic import check_planet_cap_available
 

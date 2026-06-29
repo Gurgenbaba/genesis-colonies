@@ -119,6 +119,54 @@ def count_expansion_worlds(player_id: int, *, conn: sqlite3.Connection) -> int:
     return sum(1 for p in planets if not bool(p.get("is_homeworld")))
 
 
+def expansion_slots_unlocked(homeworld_level: int) -> int:
+    """Colony slots (excluding homeworld) unlocked at this Genesis Ark level (GC-976A)."""
+    hw = max(0, int(homeworld_level or 0))
+    unlocked = 0
+    for gate in EXPANSION_SLOT_GATES:
+        if hw >= int(gate["homeworld_level"]):
+            unlocked = int(gate["expansion_index"])
+    return unlocked
+
+
+def effective_max_worlds_for_homeworld_level(homeworld_level: int) -> int:
+    """Total owned worlds allowed (homeworld + colonies) from HW progression."""
+    return 1 + expansion_slots_unlocked(homeworld_level)
+
+
+def next_expansion_slot_homeworld_level(expansion_colonies: int) -> int:
+    """HW level required to unlock the next colony after expansion_colonies."""
+    next_index = max(1, int(expansion_colonies) + 1)
+    return int(_slot_gate_for_next_expansion(next_index)["homeworld_level"])
+
+
+def expansion_gameplay_cap(player_id: int, *, conn: sqlite3.Connection) -> Dict[str, int]:
+    """HW-derived colony cap merged with admin safety ceiling (GC-976A)."""
+    from game.logic import get_max_planets_per_player
+
+    uid = int(player_id)
+    hw_level = get_homeworld_level(uid, conn=conn)
+    slots = expansion_slots_unlocked(hw_level)
+    effective = effective_max_worlds_for_homeworld_level(hw_level)
+    admin = int(get_max_planets_per_player(conn=conn))
+    return {
+        "homeworld_level": int(hw_level),
+        "expansion_slots_unlocked": int(slots),
+        "effective_max_worlds": int(effective),
+        "admin_ceiling": admin,
+        "gameplay_cap": min(effective, admin),
+    }
+
+
+def _expansion_slot_cap_reached(expansion_colonies: int, slots_unlocked: int) -> bool:
+    """True when no further colonies are allowed at the current HW slot unlock tier."""
+    colonies = max(0, int(expansion_colonies))
+    slots = max(0, int(slots_unlocked))
+    if slots <= 0:
+        return colonies > 0
+    return colonies >= slots
+
+
 def _slot_gate_for_next_expansion(next_index: int) -> Dict[str, int]:
     idx = max(1, int(next_index))
     for gate in EXPANSION_SLOT_GATES:
@@ -237,10 +285,14 @@ def can_found_expansion_world(
     world_type: str | None = None,
     site_key: str | None = None,
 ) -> Tuple[bool, str]:
-    """Gate matrix + admin safety ceiling (grandfathering — never deletes worlds)."""
-    from game.logic import get_max_planets_per_player
-
+    """Gate matrix + HW progression cap + admin safety ceiling (grandfathering)."""
     uid = int(player_id)
+    cap = expansion_gameplay_cap(uid, conn=conn)
+    expansion_count = count_expansion_worlds(uid, conn=conn)
+    slots_unlocked = int(cap["expansion_slots_unlocked"])
+    if _expansion_slot_cap_reached(expansion_count, slots_unlocked):
+        return False, "expansion_slot_cap_reached"
+
     ok, reason, _meta = evaluate_expansion_gates(
         uid,
         conn=conn,
@@ -252,8 +304,7 @@ def can_found_expansion_world(
         return False, reason
 
     total = len(get_planets_by_player(uid, conn=conn) or [])
-    ceiling = get_max_planets_per_player(conn=conn)
-    if total >= ceiling:
+    if total >= int(cap["admin_ceiling"]):
         return False, "expansion_admin_ceiling_reached"
     return True, ""
 
@@ -263,32 +314,43 @@ def get_expansion_limit_block(
     *,
     conn: sqlite3.Connection,
 ) -> Dict[str, Any]:
-    """Expansion-focused limit block for game-state / empire (no slot counter)."""
-    from game.logic import get_max_planets_per_player
-
+    """Expansion-focused limit block for game-state / empire."""
     uid = int(player_id)
     planets = get_planets_by_player(uid, conn=conn) or []
     expansion_count = sum(1 for p in planets if not bool(p.get("is_homeworld")))
     total = len(planets)
-    ceiling = get_max_planets_per_player(conn=conn)
-    hw_level = get_homeworld_level(uid, conn=conn)
+    cap = expansion_gameplay_cap(uid, conn=conn)
+    hw_level = int(cap["homeworld_level"])
+    slots_unlocked = int(cap["expansion_slots_unlocked"])
+    effective = int(cap["effective_max_worlds"])
+    admin = int(cap["admin_ceiling"])
+    gameplay_cap = int(cap["gameplay_cap"])
     tech_level = interstellar_expansion_level(uid, conn=conn)
     next_index = expansion_count + 1
     req = _gate_requirements(next_expansion_index=next_index)
     ok, reason, _meta = evaluate_expansion_gates(uid, conn=conn)
+    under_cap = total < gameplay_cap
+    next_unlock_level = (
+        next_expansion_slot_homeworld_level(expansion_count)
+        if expansion_count >= slots_unlocked
+        else None
+    )
 
     return {
         "current": int(expansion_count),
         "owned_worlds": int(total),
-        "admin_ceiling": int(ceiling),
-        "at_admin_ceiling": bool(total >= ceiling),
-        "homeworld_level": int(hw_level),
+        "admin_ceiling": admin,
+        "at_admin_ceiling": bool(total >= admin),
+        "expansion_slots_unlocked": slots_unlocked,
+        "effective_max_worlds": effective,
+        "homeworld_level": hw_level,
         "expansion_tech_level": int(tech_level),
         "required_homeworld_level": int(req["homeworld_level"]),
         "required_expansion_tech": int(req["expansion_tech"]),
-        "can_expand": bool(ok and total < ceiling),
+        "next_unlock_homeworld_level": next_unlock_level,
+        "can_expand": bool(ok and under_cap),
         "gate_reason": str(reason or ""),
-        "max": None,
+        "max": int(gameplay_cap),
     }
 
 
@@ -347,13 +409,21 @@ def build_expansion_launch_checklist(
         },
     ]
 
-    from game.logic import get_max_planets_per_player
+    from game.logic import check_planet_cap_available
 
     total = len(get_planets_by_player(uid, conn=conn) or [])
-    under_ceiling = total < get_max_planets_per_player(conn=conn)
-    can_launch = bool(ok_gates and seed_ready and under_ceiling)
-    if not under_ceiling:
-        gate_reason = gate_reason or "expansion_admin_ceiling_reached"
+    cap = expansion_gameplay_cap(uid, conn=conn)
+    gameplay_cap = int(cap["gameplay_cap"])
+    under_cap = total < gameplay_cap
+    can_launch = bool(ok_gates and seed_ready and under_cap)
+    if not under_cap:
+        if _expansion_slot_cap_reached(
+            count_expansion_worlds(uid, conn=conn),
+            int(cap["expansion_slots_unlocked"]),
+        ):
+            gate_reason = gate_reason or "expansion_slot_cap_reached"
+        else:
+            gate_reason = gate_reason or "expansion_admin_ceiling_reached"
 
     items.append(
         {
