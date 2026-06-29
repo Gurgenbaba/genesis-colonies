@@ -35,25 +35,18 @@
   </header>
   {% include "partials/codex_page_surfaces.html" %}
 
+  {% if cmd_map_available and is_command_map %}
   <nav class="galaxy-view-tabs" aria-label="{{ T('galaxy_view_tabs_label', 'Galaxie-Ansicht') }}">
     <a href="{{ url_for('galaxy_view', view='system', galaxy=nav.galaxy or 1, system=nav.system or 1) }}"
-       class="gc-nav-link galaxy-view-tab galaxy-view-tab--classic{% if not is_command_map %} is-active{% endif %}"
-       {% if not is_command_map %}aria-current="page"{% endif %}>
-      <span class="galaxy-view-tab-label">{{ T("galaxy_view_classic", "Klassische Ansicht") }}</span>
+       class="gc-nav-link galaxy-view-tab galaxy-view-tab--classic">
+      <span class="galaxy-view-tab-label">{{ T("nav_galaxy", "Galaxie") }}</span>
     </a>
-    {% if cmd_map_available %}
-    {% if COMMAND_MAP_DEV_MODE %}
-    <a href="{{ url_for('galaxy_view', view='command_map') }}"
-    {% else %}
-    <a href="{{ url_for('galaxy_view', view='command_map', dev=1) }}"
-    {% endif %}
-       class="gc-nav-link galaxy-view-tab galaxy-view-tab--world{% if is_command_map %} is-active{% endif %}"
-       {% if is_command_map %}aria-current="page"{% endif %}>
+    <span class="galaxy-view-tab galaxy-view-tab--world is-active" aria-current="page">
       <span class="galaxy-view-tab-label">{{ T("galaxy_view_world_map", "Weltkarte") }}</span>
       <span class="gc-dev-preview-badge" title="{{ T('command_map_dev_preview_title') }}">{{ T("command_map_dev_badge", "DEV") }}</span>
-    </a>
-    {% endif %}
+    </span>
   </nav>
+  {% endif %}
 
   {% include "partials/galactic_directive_banner.html" %}
   {% include "partials/galactic_diplomacy_banner.html" %}

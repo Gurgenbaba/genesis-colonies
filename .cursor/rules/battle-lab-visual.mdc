@@ -1,0 +1,46 @@
+---
+description: Genesis Battle Lab — visual dashboard UX, not text reports
+globs:
+  - templates/combat_simulator.html
+  - static/js/combat_simulator.js
+  - static/style.css
+  - game/combat_simulator.py
+  - tests/test_combat_simulator.py
+---
+
+# Genesis Battle Lab — Visual First
+
+> **Genesis Battle Lab ist ein visuelles Werkzeug, kein Bericht.**
+
+## Principle
+
+Prefer symbols, resource images, ship icons, status chips, and compact numbers over text lists and paragraphs. Long text is secondary only (tooltips, collapsed admin, i18n keys for hover).
+
+**Goal:** A player grasps a simulation result in **2–3 seconds** without reading prose.
+
+## Required patterns
+
+- **Loot / debris:** single horizontal strip with resource icons + values (`gbl-resource-strip`), not `<dl>` lists.
+- **Losses:** unit icon chips with quantity (`gbl-unit-chips`), not name/value tables.
+- **Combat values:** per-unit stat cards with ⚔ 🛡 ❤ icons (`gbl-stat-card`), not label:value rows.
+- **Analysis:** traffic-light signal chips (`gbl-signal-row`), not bullet lists.
+- **Why / advice:** short chips with hover title for full explanation (`gbl-why-chip`, `gbl-advice-chip`).
+- **Result header:** compact tile bar (icons + numbers), details collapsed by default.
+
+## Forbidden in player-facing Battle Lab UI
+
+- Resource name + number vertical lists in the details panel
+- Unit loss tables with ship names as primary display
+- Long narrative paragraphs as the default view
+- Analysis as `<ul>` bullet text without visual signals
+
+## When adding new result data
+
+1. Add a compact visual representation first (icon, chip, ampel, tile).
+2. Put explanatory text in `title` / tooltip or admin-only sections.
+3. Add i18n keys in **all** `locales/` files (`de`, `en`, `es`, `fr`, `pl`, `pt`, `ru`, `tr`).
+4. Extend `tests/test_combat_simulator.py` for new `data-sim-*` markers and render helpers.
+
+## Server authority
+
+Display numbers come from `game/combat_simulator.py` payloads. Frontend formats and renders only — no combat math in JS.

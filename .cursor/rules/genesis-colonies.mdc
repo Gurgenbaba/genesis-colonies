@@ -1,0 +1,78 @@
+---
+description: Genesis Colonies ticket workflow — GC-000 architecture enforcement
+alwaysApply: true
+---
+
+# Genesis Colonies — Agent Rules
+
+> Genesis Colonies bevorzugt **Konsistenz über Komfort** — erweitere kanonische Systeme, führe keine Parallel-Systeme ein.
+
+## Before any task
+
+1. Read `docs/WORKFLOW.md` and **`docs/CORE_ARCHITECTURE.md`** (GC-000, Regeln 15–17).
+2. Read the relevant master doc(s) for the ticket domain.
+3. Work only the ticket scope (max 3–5 files). No full-project analysis.
+4. Respect architecture: PJAX shell, planet scope (`get_context_planet`), single queue engine, canonical systems.
+
+## Master docs (single source of truth)
+
+- `docs/CORE_ARCHITECTURE.md` — **mandatory** GC-000 rules
+- `docs/AJAX_PJAX_CONTRACT.md` — PJAX, `applyActionState`, no reload
+- `docs/QUEUE_STATE_RULES.md` — finish before mutate, reschedule after cancel
+- `docs/ARCHITECTURE.md` — overview
+- `docs/PLANET_SCOPE.md` — active planet
+- `docs/PLANET_EVOLUTION.md`, `docs/ECONOMY_SYSTEM.md`, `docs/BUILDINGS_SYSTEM.md`, `docs/RESEARCH_SYSTEM.md`
+- `docs/FLEET_SYSTEM.md`, `docs/GALAXY_SYSTEM.md`, `docs/EFFECTS.md`, `docs/STATE_AJAX.md`, `docs/ROADMAP.md`
+
+## Forbidden (GC-000)
+
+- "Analyze the entire project" / scan all files without ticket scope
+- `location.reload()` / `location.href =` for in-game navigation (use `GC.navigateTo`, `GC.reloadCurrentPage`)
+- Frontend math for game mechanics (resources, queues, flight time, combat)
+- Module-owned game-state polling (only `/api/game-state`)
+- Session-based planet scope; homeworld hardcoding in features
+- **Parallel systems** (Regel 15): `shipyard`+`orbital_shipyard`, `fleet_state`+`fleet_movements`, `planet_session`+`active_planet_id`, `combat_v1`+`combat_v2` — only migration+alias, never two live systems
+- **Duplicate math** (Regel 16): no frontend production/fleet/combat/queue formulas — use `EffectResolver`, `fleet_calc`, `queue_engine`
+- **Wrong owner** (Regel 17): new logic must land in the Owner module from CORE_ARCHITECTURE §17, not a new parallel file
+- Queue mutations without `finish_due_work_once` first
+- POST actions without `{ ok, state }` + `applyActionState()` on client
+- Unrequested refactors outside the ticket
+- Implementing an Epic directly — split into GC-XXX tickets
+
+## Required patterns
+
+- Server authority; UI displays server data only
+- Actions: `GC.fetchGameAction` → `applyActionState(res, reason)`
+- PJAX: `GC.cleanupPage()` / `GC.registerCleanup()` on module init
+- Planet-bound logic: `get_context_planet()`
+- New queue types: follow `docs/QUEUE_STATE_RULES.md` (incl. reschedule after cancel)
+- Replacing a system: migration → alias/adapter → remove old; document owner in `CORE_ARCHITECTURE.md` §17 if new domain
+
+## After completing a ticket
+
+Output only:
+
+- Root Cause
+- Changed Files
+- Tests
+- Ergebnis
+
+Update master docs if architecture changed.
+
+## Code conventions
+
+- Logic in `game/`, thin routes in `app.py`
+- Schema changes → new `migrations/NNN_*.sql`
+- Idempotent APIs: `request_id` / `X-Request-Id`
+- Frontend: extend `GC` namespace in `static/main.js`; cleanup on PJAX
+- **Locales:** neue i18n-Keys immer in **allen** Dateien unter `locales/` nachziehen: `de`, `en`, `es`, `fr`, `pl`, `pt`, `ru`, `tr` — nicht nur de/en
+
+## UI overlays (dropdowns, menus, popovers)
+
+Bei jeder neuen UI-Komponente mit Dropdown, Tooltip, Modal, Popover oder Menü prüfen:
+
+- `overflow` auf Panel-/Card-Ancestors (`.gc-panel`, `.admin-section`, scroll containers)
+- `z-index` via Tokens (`--gc-z-dropdown`, `--gc-z-popover`, …)
+- Mobile Viewport-Höhe / Flip above trigger
+- PJAX: `GC.initHudSelects()` nach Render, `GC.cleanupPage()` schließt offene Layer
+- HUD-Selects nutzen `data-gc-hud-select` + portaled `.gc-popover-layer` — keine nativen `<select>` in overflow:hidden Panels ohne dieses Pattern

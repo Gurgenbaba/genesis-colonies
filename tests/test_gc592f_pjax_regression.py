@@ -47,8 +47,9 @@ def test_command_center_primary_and_colony_open_use_navigate_to():
 
 def test_galaxy_view_tabs_marked_for_pjax():
     tpl = _read("templates/galaxy.html")
-    assert 'class="gc-nav-link galaxy-view-tab galaxy-view-tab--world' in tpl
     assert 'class="gc-nav-link galaxy-view-tab galaxy-view-tab--classic' in tpl
+    assert "galaxy-view-tab--world is-active" in tpl
+    assert "galaxy_view_classic" not in tpl
 
 
 def test_fleet_internal_links_marked_for_pjax():

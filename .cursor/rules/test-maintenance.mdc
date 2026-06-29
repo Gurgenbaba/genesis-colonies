@@ -1,0 +1,69 @@
+---
+description: Test maintenance — classify failures before changing code or tests
+alwaysApply: true
+---
+
+# Test Philosophy
+
+A failing test is evidence, not the problem itself.
+
+Before modifying either product code or tests, classify the failure.
+
+## Case 1 — Product regression
+
+The test still describes the intended behavior.
+
+Action:
+- Fix the production code.
+- Do not weaken the test.
+
+Examples:
+- Wrong calculation
+- Broken API response
+- Missing UI element
+- Queue logic regression
+- Gameplay bug
+
+## Case 2 — Test regression
+
+The product intentionally evolved and the test no longer reflects reality.
+
+Examples:
+- Login/session architecture changed
+- Fixtures became obsolete
+- Route renamed intentionally
+- New initialization flow
+- UI structure intentionally redesigned
+
+Action:
+- Update the fixture or test.
+- Preserve the original requirement.
+- Keep assertions as strict as before.
+
+## Forbidden
+
+Never make a test green by:
+
+- removing assertions
+- replacing assertions with weaker ones
+- using `assert True`
+- adding `pytest.skip`
+- changing expected behaviour without an approved design decision
+- ignoring failures
+
+## Required
+
+When updating a failing test, always explain:
+
+1. Why the old test became invalid.
+2. Which requirement is still being verified.
+3. Why the updated test proves the same behaviour.
+
+## Genesis Colonies Rules
+
+- Session tests use `session_transaction()` where appropriate.
+- Commit database changes before HTTP requests when required.
+- Prefer realistic fixtures over mocking gameplay.
+- Keep tests close to real player behaviour.
+- Never introduce duplicate tests for the same canonical feature.
+- A green test suite must mean the product actually works, not merely that the tests were made easier.
