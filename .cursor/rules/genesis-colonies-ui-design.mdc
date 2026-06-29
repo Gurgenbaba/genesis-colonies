@@ -46,3 +46,23 @@ Use existing tokens in `static/style.css`:
 ## Known PE outliers (align when touching those files)
 
 - `.pe-tech-reward-chip` — currently `999px`; should become `--gc-radius-sm` in a focused UI pass.
+
+## Global shared components — no accidental layout regressions
+
+Existing **global UI components must not unintentionally change layout** during feature work.
+
+Especially protected:
+
+- Queue cards (`.gc-card-queue-*`, `.gc-mini-queue-*`)
+- Header / planet switcher
+- Resource bar
+- Fleet header
+- Sidebar navigation
+- Card system (`.gc-building-card`, `.gc-research-card`, `.gc-panel`, …)
+
+When editing shared CSS (`.gc-*`, `.card-*`, `.queue-*`, `.header-*`):
+
+1. **Grep** which templates/pages still use the class.
+2. Check whether the change affects **all** consumers (Buildings, Research, Shipyard, Defense, Planet Evolution, …).
+3. Prefer **scoped** selectors (page prefix, component modifier) over changing a global rule.
+4. Add or extend a **CSS contract test** in `tests/test_queue_card_global_ux.py` or similar when layout behavior is canonical.
