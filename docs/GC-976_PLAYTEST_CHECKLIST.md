@@ -25,6 +25,8 @@ Planet-Tech → Sofortbonus + XP → Homeworld-Level → Kolonieslot → Imperiu
 
 Playtest-Ergebnisse trennen daher **Produkt-These** von **bekannten UX-Lücken**.
 
+**Ergebnisse dokumentieren in:** [GC-976_PLAYTEST_RESULTS_ALPHA1.md](GC-976_PLAYTEST_RESULTS_ALPHA1.md) (nach Session ausfüllen).
+
 ---
 
 ## 2. Setup

@@ -66,3 +66,16 @@ When editing shared CSS (`.gc-*`, `.card-*`, `.queue-*`, `.header-*`):
 2. Check whether the change affects **all** consumers (Buildings, Research, Shipyard, Defense, Planet Evolution, …).
 3. Prefer **scoped** selectors (page prefix, component modifier) over changing a global rule.
 4. Add or extend a **CSS contract test** in `tests/test_queue_card_global_ux.py` or similar when layout behavior is canonical.
+
+### Completion report (required when global CSS changed)
+
+If a ticket touches **global** classes (`.gc-*`, `.queue-*`, `.header-*`, `.card-*`), the implementation summary must list which pages were **visually or contract-checked**:
+
+- [ ] Buildings
+- [ ] Research
+- [ ] Shipyard
+- [ ] Defense
+- [ ] Planet Evolution
+- [ ] Overview
+
+Unchecked pages must be called out explicitly. Takes minutes; prevents regressions like the horizontal queue card layout break.
