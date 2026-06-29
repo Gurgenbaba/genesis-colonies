@@ -9001,15 +9001,14 @@ a.gc-bld-head-action-btn--go:focus-visible{
   white-space: nowrap;
 }
 
-/* GC-QUEUE-MINI-CARDS — compact horizontal jobs, vertical scroll when needed */
+/* GC-QUEUE-MINI-CARDS — compact horizontal jobs in one row */
 .gc-mini-queue-host{
   display: block;
   padding: 4px 10px 6px;
   min-width: 0;
   max-width: 100%;
-  max-height: 220px;
-  overflow-x: clip;
-  overflow-y: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
   box-sizing: border-box;
   border-bottom: 1px solid rgba(70, 229, 255, 0.06);
   scrollbar-width: thin;
@@ -9017,24 +9016,24 @@ a.gc-bld-head-action-btn--go:focus-visible{
 }
 
 .gc-mini-queue-host::-webkit-scrollbar{
-  width: 5px;
+  height: 5px;
 }
 
 .gc-mini-queue-host::-webkit-scrollbar-thumb{
-  border-radius: 999px;
+  border-radius: var(--gc-radius-xs);
   background: rgba(70, 229, 255, 0.28);
 }
 
 .gc-mini-queue-strip{
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   flex-wrap: nowrap;
   align-items: stretch;
-  gap: 4px;
+  gap: 6px;
   width: 100%;
   min-width: 0;
   min-height: 0;
-  overflow-x: clip;
+  overflow: hidden;
 }
 
 .gc-mini-queue-empty{
@@ -9065,10 +9064,9 @@ a.gc-bld-head-action-btn--go:focus-visible{
   grid-template-rows: auto auto;
   align-items: center;
   gap: 2px 6px;
-  flex: 0 0 auto;
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
+  flex: 1 1 0;
+  min-width: 120px;
+  max-width: none;
   padding: 4px 5px;
   border: 1px solid rgba(70, 229, 255, 0.18);
   border-radius: var(--gc-radius-xs);
@@ -9270,25 +9268,32 @@ a.gc-bld-head-action-btn--go:focus-visible{
 
 .gc-card-queue-list{
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 6px;
   min-width: 0;
   max-width: 100%;
-  max-height: 220px;
   margin-bottom: 0.45rem;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
   box-sizing: border-box;
   scrollbar-width: thin;
   scrollbar-color: rgba(70, 229, 255, 0.28) transparent;
 }
 
+.gc-card-queue-list > .gc-card-queue-block:not(.gc-bld-hero-queue){
+  flex: 1 1 0;
+  min-width: 120px;
+  max-width: none;
+}
+
 .gc-card-queue-list::-webkit-scrollbar{
-  width: 5px;
+  height: 5px;
 }
 
 .gc-card-queue-list::-webkit-scrollbar-thumb{
-  border-radius: 999px;
+  border-radius: var(--gc-radius-xs);
   background: rgba(70, 229, 255, 0.28);
 }
 
@@ -9322,11 +9327,11 @@ a.gc-bld-head-action-btn--go:focus-visible{
 @keyframes gc-card-queue-advance{
   from{
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateX(-8px);
   }
   to{
     opacity: 1;
-    transform: translateY(0);
+    transform: translateX(0);
   }
 }
 
@@ -9729,6 +9734,24 @@ a.gc-bld-head-action-btn--go:focus-visible{
 }
 
 @media (max-width: 720px){
+  .gc-card-queue-list,
+  .gc-mini-queue-strip{
+    flex-wrap: wrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .gc-mini-queue-host{
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .gc-card-queue-list > .gc-card-queue-block:not(.gc-bld-hero-queue),
+  .gc-mini-queue-card{
+    flex: 1 1 calc(50% - 6px);
+    min-width: min(120px, 100%);
+  }
+
   .gc-card-queue-block:not(.gc-bld-hero-queue){
     grid-template-columns: auto minmax(0, 1fr) auto;
     grid-template-rows: auto auto auto auto;

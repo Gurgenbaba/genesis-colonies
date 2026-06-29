@@ -227,6 +227,37 @@ def test_style_card_queue_mobile_safe():
     assert "min-width: 0" in block
 
 
+def test_queue_containers_use_horizontal_flex_row():
+    """Regression: queue job cards must sit in one horizontal row on desktop, not a vertical list."""
+    css = _read("static/style.css")
+
+    list_idx = css.find("\n.gc-card-queue-list{")
+    assert list_idx >= 0, "missing .gc-card-queue-list rule"
+    list_block = css[list_idx : list_idx + 420]
+    assert "display: flex" in list_block
+    assert "flex-direction: row" in list_block
+    assert "flex-direction: column" not in list_block
+
+    child_idx = css.find("\n.gc-card-queue-list > .gc-card-queue-block:not(.gc-bld-hero-queue){")
+    assert child_idx >= 0, "missing horizontal queue card flex child rule"
+    child_block = css[child_idx : child_idx + 220]
+    assert "flex: 1 1 0" in child_block
+    assert "min-width: 120px" in child_block
+
+    strip_idx = css.find("\n.gc-mini-queue-strip{")
+    assert strip_idx >= 0, "missing .gc-mini-queue-strip rule"
+    strip_block = css[strip_idx : strip_idx + 320]
+    assert "display: flex" in strip_block
+    assert "flex-direction: row" in strip_block
+    assert "flex-direction: column" not in strip_block
+
+    card_idx = css.find("\n.gc-mini-queue-card{")
+    assert card_idx >= 0, "missing .gc-mini-queue-card rule"
+    card_block = css[card_idx : card_idx + 420]
+    assert "flex: 1 1 0" in card_block
+    assert "min-width: 120px" in card_block
+
+
 def test_queue_engine_unchanged():
     text = _read("game/queue_engine.py")
     assert "queue_card" not in text
