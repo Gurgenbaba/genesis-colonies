@@ -13086,18 +13086,138 @@ body.gc-techtree-media-zoom-open{
   inset: 0;
   z-index: 0;
   overflow: hidden;
-  background:
-    radial-gradient(ellipse 55% 45% at 72% 28%, rgba(200, 90, 40, 0.14), transparent 70%),
-    radial-gradient(ellipse 50% 40% at 18% 72%, rgba(50, 110, 220, 0.12), transparent 68%),
-    radial-gradient(ellipse 80% 60% at 50% 50%, rgba(20, 40, 80, 0.35), rgba(2, 6, 14, 0.95) 85%),
-    #030810;
+  background-color: #020610;
+  background-image:
+    radial-gradient(ellipse 55% 42% at 50% 50%, rgba(255, 110, 30, 0.22), transparent 58%),
+    radial-gradient(ellipse 48% 36% at 76% 24%, rgba(70, 229, 255, 0.2), transparent 72%),
+    radial-gradient(ellipse 44% 40% at 14% 70%, rgba(150, 90, 255, 0.18), transparent 74%),
+    radial-gradient(ellipse 38% 30% at 88% 82%, rgba(255, 150, 70, 0.12), transparent 70%),
+    radial-gradient(ellipse 36% 28% at 20% 16%, rgba(127, 255, 217, 0.1), transparent 68%),
+    linear-gradient(145deg, rgba(6, 16, 36, 0.55) 0%, transparent 42%, rgba(2, 6, 14, 0.65) 100%),
+    var(--gc-galaxy-map-tile-fallback, url("img/map.png"));
+  background-image:
+    radial-gradient(ellipse 55% 42% at 50% 50%, rgba(255, 110, 30, 0.22), transparent 58%),
+    radial-gradient(ellipse 48% 36% at 76% 24%, rgba(70, 229, 255, 0.2), transparent 72%),
+    radial-gradient(ellipse 44% 40% at 14% 70%, rgba(150, 90, 255, 0.18), transparent 74%),
+    radial-gradient(ellipse 38% 30% at 88% 82%, rgba(255, 150, 70, 0.12), transparent 70%),
+    radial-gradient(ellipse 36% 28% at 20% 16%, rgba(127, 255, 217, 0.1), transparent 68%),
+    linear-gradient(145deg, rgba(6, 16, 36, 0.55) 0%, transparent 42%, rgba(2, 6, 14, 0.65) 100%),
+    var(--gc-galaxy-map-tile, image-set(url("img/map.webp") type("image/webp"), url("img/map.png") type("image/png")));
+  background-size:
+    auto,
+    auto,
+    auto,
+    auto,
+    auto,
+    auto,
+    480px 270px;
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, repeat;
+  background-position: center, center, center, center, center, center, center;
   pointer-events: none;
+}
+.galaxy-ring-stage-bg::before{
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.34;
+  background-image: var(--gc-galaxy-map-tile-fallback, url("img/map.png"));
+  background-image: var(--gc-galaxy-map-tile, image-set(url("img/map.webp") type("image/webp"), url("img/map.png") type("image/png")));
+  background-repeat: repeat;
+  background-size: 640px 360px;
+  background-position: 120px 80px;
+  mix-blend-mode: screen;
+}
+.galaxy-ring-stage-bg::after{
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.55;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent 0,
+      transparent 47px,
+      rgba(70, 229, 255, 0.028) 47px,
+      rgba(70, 229, 255, 0.028) 48px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 47px,
+      rgba(70, 229, 255, 0.022) 47px,
+      rgba(70, 229, 255, 0.022) 48px
+    ),
+    radial-gradient(ellipse at center, transparent 36%, rgba(2, 6, 14, 0.35) 100%);
+}
+.galaxy-ring-stage-depth{
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 50%, rgba(255, 80, 20, 0.08), transparent 62%),
+    radial-gradient(ellipse 42% 32% at 68% 38%, rgba(70, 229, 255, 0.14), transparent 70%),
+    radial-gradient(ellipse 38% 34% at 28% 58%, rgba(180, 100, 255, 0.12), transparent 72%),
+    radial-gradient(ellipse 28% 22% at 82% 18%, rgba(255, 196, 0, 0.07), transparent 68%);
+  mix-blend-mode: screen;
+  opacity: 0.92;
+}
+.galaxy-ring-stage-depth::before{
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.85;
+  background-image:
+    radial-gradient(1.2px 1.2px at 8% 12%, rgba(255, 255, 255, 0.95), transparent),
+    radial-gradient(1px 1px at 15% 38%, rgba(200, 230, 255, 0.75), transparent),
+    radial-gradient(1.4px 1.4px at 22% 68%, rgba(255, 255, 255, 0.9), transparent),
+    radial-gradient(1px 1px at 31% 22%, rgba(180, 220, 255, 0.7), transparent),
+    radial-gradient(1.6px 1.6px at 38% 84%, rgba(255, 248, 220, 0.85), transparent),
+    radial-gradient(1px 1px at 44% 46%, rgba(255, 255, 255, 0.65), transparent),
+    radial-gradient(1.2px 1.2px at 52% 14%, rgba(220, 240, 255, 0.8), transparent),
+    radial-gradient(1px 1px at 58% 72%, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(1.8px 1.8px at 64% 32%, rgba(255, 240, 200, 0.9), transparent),
+    radial-gradient(1px 1px at 71% 58%, rgba(200, 230, 255, 0.65), transparent),
+    radial-gradient(1.2px 1.2px at 78% 18%, rgba(255, 255, 255, 0.8), transparent),
+    radial-gradient(1px 1px at 84% 78%, rgba(255, 255, 255, 0.6), transparent),
+    radial-gradient(1.5px 1.5px at 91% 42%, rgba(255, 248, 220, 0.85), transparent),
+    radial-gradient(1px 1px at 12% 88%, rgba(200, 230, 255, 0.55), transparent),
+    radial-gradient(1px 1px at 26% 52%, rgba(255, 255, 255, 0.5), transparent),
+    radial-gradient(1.3px 1.3px at 48% 62%, rgba(255, 255, 255, 0.75), transparent),
+    radial-gradient(1px 1px at 62% 88%, rgba(180, 220, 255, 0.6), transparent),
+    radial-gradient(1px 1px at 88% 8%, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(2px 2px at 18% 28%, rgba(255, 220, 160, 0.55), transparent),
+    radial-gradient(2px 2px at 72% 66%, rgba(255, 200, 140, 0.5), transparent),
+    radial-gradient(1px 1px at 6% 54%, rgba(255, 255, 255, 0.45), transparent),
+    radial-gradient(1px 1px at 36% 8%, rgba(255, 255, 255, 0.55), transparent),
+    radial-gradient(1px 1px at 54% 92%, rgba(200, 230, 255, 0.5), transparent),
+    radial-gradient(1px 1px at 94% 62%, rgba(255, 255, 255, 0.5), transparent);
+}
+.galaxy-ring-stage-depth::after{
+  content: "";
+  position: absolute;
+  inset: -8%;
+  pointer-events: none;
+  opacity: 0.42;
+  background:
+  radial-gradient(ellipse 55% 40% at 74% 28%, rgba(255, 120, 40, 0.16), transparent 70%),
+  radial-gradient(ellipse 50% 38% at 18% 72%, rgba(60, 140, 255, 0.14), transparent 68%);
+  filter: blur(18px);
 }
 .galaxy-ring-stage-vignette{
   position: absolute;
   inset: 0;
-  z-index: 1;
-  background: radial-gradient(ellipse at center, transparent 42%, rgba(0, 0, 0, 0.55) 100%);
+  z-index: 2;
+  background:
+    radial-gradient(ellipse at center, transparent 34%, rgba(0, 0, 0, 0.48) 78%, rgba(0, 0, 0, 0.72) 100%),
+    linear-gradient(180deg, rgba(70, 229, 255, 0.04) 0%, transparent 18%, transparent 82%, rgba(70, 229, 255, 0.05) 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(70, 229, 255, 0.12),
+    inset 0 0 48px rgba(70, 229, 255, 0.06);
   pointer-events: none;
 }
 .galaxy-ring-star{
@@ -13257,20 +13377,24 @@ body.gc-techtree-media-zoom-open{
 .galaxy-ring-slot-status{
   position: absolute;
   left: 50%;
-  bottom: -2px;
+  bottom: auto;
+  top: calc(100% + 2px);
   transform: translateX(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-wrap: wrap;
-  gap: 2px;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 1px;
   z-index: 3;
-  max-width: calc(100% + 18px);
+  max-width: calc(100% + 22px);
   pointer-events: none;
 }
 .galaxy-ring-slot-status--inspector{
   position: static;
   transform: none;
+  flex-direction: row;
+  flex-wrap: wrap;
   justify-content: flex-start;
   margin: 0 0 8px;
   max-width: none;
@@ -13289,6 +13413,37 @@ body.gc-techtree-media-zoom-open{
   line-height: 1.1;
   white-space: nowrap;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.28);
+}
+/* Planet overlay chips — opaque panel + saturated text for nebula readability */
+.galaxy-ring-slot-status:not(.galaxy-ring-slot-status--inspector) .galaxy-ring-status-chip{
+  font-size: 0.5rem;
+  padding: 1px 5px;
+  letter-spacing: 0.06em;
+  background: rgba(2, 8, 18, 0.96);
+  box-shadow:
+    0 1px 5px rgba(0, 0, 0, 0.72),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.45);
+  text-shadow: 0 0 6px currentColor;
+}
+.galaxy-ring-slot-status:not(.galaxy-ring-slot-status--inspector) .galaxy-ring-status-chip--vacation{
+  color: #ffc44a;
+  border-color: rgba(255, 176, 48, 0.85);
+  background: rgba(32, 16, 2, 0.97);
+}
+.galaxy-ring-slot-status:not(.galaxy-ring-slot-status--inspector) .galaxy-ring-status-chip--inactive{
+  color: #5ce8ff;
+  border-color: rgba(70, 229, 255, 0.75);
+  background: rgba(2, 12, 24, 0.97);
+}
+.galaxy-ring-slot-status:not(.galaxy-ring-slot-status--inspector) .galaxy-ring-status-chip--strong{
+  color: #ff7a58;
+  border-color: rgba(255, 100, 64, 0.85);
+  background: rgba(28, 6, 4, 0.97);
+}
+.galaxy-ring-slot-status:not(.galaxy-ring-slot-status--inspector) .galaxy-ring-status-chip--weak{
+  color: #8ec8ff;
+  border-color: rgba(120, 190, 255, 0.8);
+  background: rgba(4, 10, 28, 0.97);
 }
 .galaxy-ring-slot-status--inspector .galaxy-ring-status-chip{
   font-size: 0.58rem;
@@ -13324,16 +13479,47 @@ body.gc-techtree-media-zoom-open{
 }
 .galaxy-ring-slot-pos{
   position: absolute;
-  top: -16px;
   left: 50%;
+  bottom: 3px;
+  top: auto;
   transform: translateX(-50%);
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: rgba(220, 240, 255, 0.92);
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.2em;
+  padding: 0 3px;
+  font-size: clamp(0.48rem, 2.6vw, 0.58rem);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: 0.03em;
+  color: #eefaff;
+  background: rgba(2, 8, 18, 0.92);
+  border: 1px solid rgba(70, 229, 255, 0.58);
+  border-radius: 0;
+  box-shadow:
+    0 1px 5px rgba(0, 0, 0, 0.82),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.4);
+  text-shadow: 0 0 6px rgba(70, 229, 255, 0.4);
   pointer-events: none;
-  line-height: 1;
   white-space: nowrap;
+}
+.galaxy-ring-slot--expedition .galaxy-ring-slot-pos{
+  color: #f2eaff;
+  border-color: rgba(180, 130, 255, 0.62);
+  text-shadow: 0 0 6px rgba(160, 100, 255, 0.45);
+}
+.galaxy-ring-slot-body::before{
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 42%;
+  z-index: 1;
+  border-radius: 0 0 50% 50%;
+  background: linear-gradient(180deg, transparent 0%, rgba(2, 6, 14, 0.72) 100%);
+  pointer-events: none;
 }
 .galaxy-ring-slot-body{
   display: block;
@@ -13362,6 +13548,7 @@ body.gc-techtree-media-zoom-open{
   position: absolute;
   inset: 0;
   border-radius: 50%;
+  z-index: 2;
   background: radial-gradient(circle at 32% 28%, transparent 35%, rgba(0, 0, 0, 0.45) 100%);
   pointer-events: none;
 }
@@ -13470,7 +13657,7 @@ body.gc-techtree-media-zoom-open{
   width: 100%;
   height: 100%;
   border-radius: 50%;
-  background-image: url("img/debris/debris.jpg");
+  background-image: var(--gc-galaxy-debris-img, url("img/debris/debris.jpg"));
   background-size: cover;
   background-position: center;
 }
@@ -13536,7 +13723,7 @@ body.gc-techtree-media-zoom-open{
   height: 14px;
   border-radius: 50%;
   border: 1px solid rgba(255, 186, 72, 0.55);
-  background: url("img/debris/debris.jpg") center/cover no-repeat;
+  background: var(--gc-galaxy-debris-img, url("img/debris/debris.jpg")) center/cover no-repeat;
   vertical-align: middle;
 }
 .galaxy-ring-inspector{

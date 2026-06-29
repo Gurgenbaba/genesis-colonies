@@ -6,7 +6,8 @@
 
 <div class="galaxy-ring-view"
      data-galaxy-ring-view
-     data-active-planet-id="{{ (HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET is defined and HEADER_ACTIVE_PLANET else (active_planet_id if active_planet_id is defined else 0))|int }}">
+     data-active-planet-id="{{ (HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET is defined and HEADER_ACTIVE_PLANET else (active_planet_id if active_planet_id is defined else 0))|int }}"
+     style="--gc-galaxy-map-tile: url('{{ url_for('static', filename='img/map.webp', v=GC_ASSET_VERSION) }}'); --gc-galaxy-map-tile-fallback: url('{{ url_for('static', filename='img/map.png', v=GC_ASSET_VERSION) }}'); --gc-galaxy-debris-img: url('{{ url_for('static', filename='img/debris/debris.jpg', v=GC_ASSET_VERSION) }}');">
   <section class="galaxy-hud-module" data-galaxy-hud-module>
     <header class="galaxy-hud-header" aria-label="{{ T('galaxy_nav_label') }}">
       <span class="galaxy-hud-title">{{ T("nav_galaxy", "Galaxie") }}</span>
@@ -63,6 +64,7 @@
       <div class="galaxy-ring-stage-col">
         <div class="galaxy-ring-stage-wrap" data-galaxy-ring-stage-wrap>
           <div class="galaxy-ring-stage-bg" aria-hidden="true"></div>
+          <div class="galaxy-ring-stage-depth" aria-hidden="true"></div>
           <div class="galaxy-ring-stage-vignette" aria-hidden="true"></div>
           <div class="galaxy-ring-stage galaxy-ring-stage--compact"
                data-galaxy-ring-stage
@@ -80,7 +82,7 @@
 
             {% for slot in slots %}
             {% set layout_band = slot.orbit_layout_band if slot.orbit_layout_band is defined else ('hot' if slot.position <= 5 else ('temperate' if slot.position <= 10 else 'cold')) %}
-            {% set angle = slot.orbit_angle_deg if slot.orbit_angle_deg is defined else (-90 + (slot.position - 1) * 72 if slot.position <= 5 else (-54 + (slot.position - 6) * 72 if slot.position <= 10 else -126 + (slot.position - 11) * 72)) %}
+            {% set angle = slot.orbit_angle_deg if slot.orbit_angle_deg is defined else (-90 + (slot.position - 1) * 72 if slot.position <= 5 else (-54 + (slot.position - 6) * 72 if slot.position <= 10 else -108 + (slot.position - 11) * 72)) %}
             {% set img_rel = slot.planet_image_relpath if slot.planet_image_relpath is defined else '' %}
             {% set img_webp = slot.planet_image_webp_relpath if slot.planet_image_webp_relpath is defined else '' %}
             {% set effect = slot.visual_effect if slot.visual_effect is defined else (slot.planet_class or 'temperate') %}
@@ -101,14 +103,15 @@
                       aria-label="{{ T('galaxy_slot_position', 'Pos') }} {{ slot.position }}{% if slot.occupied %}: {{ slot.planet_name }}{% else %}: {{ T('galaxy_empty_slot') }}{% endif %}"
                       aria-controls="galaxy-ring-inspector-{{ slot.position }}"
                       aria-expanded="false">
-                <span class="galaxy-ring-slot-pos gc-mono">{{ slot.position }}</span>
                 <span class="galaxy-ring-slot-body
                       galaxy-ring-slot-body--{{ effect }}
                       {% if slot.occupied %}has-planet-image{% else %}is-climate-preview{% endif %}"
                       {% if img_rel %}
-                      style="--gr-planet-image: url('{{ url_for('static', filename=img_rel) }}');{% if img_webp %} --gr-planet-image-webp: url('{{ url_for('static', filename=img_webp) }}');{% endif %}"
+                      style="--gr-planet-image: url('{{ url_for('static', filename=img_rel, v=GC_ASSET_VERSION) }}');{% if img_webp %} --gr-planet-image-webp: url('{{ url_for('static', filename=img_webp, v=GC_ASSET_VERSION) }}');{% endif %}"
                       {% endif %}
-                      title="{% if slot.occupied %}{{ T(slot.planet_class_label_key, slot.planet_class) }}{% else %}{{ slot.temperature_display }}{% endif %}"></span>
+                      title="{% if slot.occupied %}{{ T(slot.planet_class_label_key, slot.planet_class) }}{% else %}{{ slot.temperature_display }}{% endif %}">
+                  <span class="galaxy-ring-slot-pos gc-mono" aria-hidden="true">{{ slot.position }}</span>
+                </span>
                 {% include "partials/galaxy_slot_status_badges.html" %}
               </button>
               {% include "partials/galaxy_ring_debris_marker.html" %}
@@ -119,18 +122,20 @@
             <div class="galaxy-ring-slot-wrap"
                  data-galaxy-ring-slot-wrap="expedition"
                  data-orbit-band="expedition"
-                 data-orbit-angle="-42">
+                 data-orbit-angle="-148">
               <button type="button"
                       class="galaxy-ring-slot galaxy-ring-slot--expedition is-expedition is-empty"
                       id="galaxy-slot-expedition"
                       data-galaxy-ring-slot="expedition"
+                      data-galaxy-ring-fleet-href="{{ url_for('fleet_view') }}?target_galaxy={{ nav.galaxy or 1 }}&target_system={{ nav.system or 1 }}&target_position={{ exp_slot.position }}&mission=expedition"
                       data-slot-title="{{ T('galaxy_expedition_slot_title') }}"
                       aria-label="{{ T('galaxy_expedition_slot_title') }}"
                       aria-controls="galaxy-ring-inspector-expedition"
                       aria-expanded="false">
-                <span class="galaxy-ring-slot-pos gc-mono">{{ exp_slot.position }}</span>
                 <span class="galaxy-ring-slot-body galaxy-ring-slot-body--expedition has-planet-image"
-                      style="--gr-planet-image: url('{{ url_for('static', filename='img/expedition/expedition.png') }}');"></span>
+                      style="--gr-planet-image: url('{{ url_for('static', filename='img/expedition/expedition.png', v=GC_ASSET_VERSION) }}');">
+                  <span class="galaxy-ring-slot-pos gc-mono" aria-hidden="true">{{ exp_slot.position }}</span>
+                </span>
               </button>
             </div>
             {% endif %}

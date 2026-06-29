@@ -21728,41 +21728,175 @@
   }
 
   // =========================
-  // Galaxy page — prefetch adjacent systems (PJAX)
+  // Galaxy page — PJAX cache + image warm pool (GC-594 perf)
   // =========================
   const _galaxyPrefetchUrls = new Set();
+  const _galaxyPjaxCache = new Map();
+  const _galaxyImageWarmSet = new Set();
+  const GALAXY_PJAX_CACHE_MAX = 32;
+  const GALAXY_PJAX_CACHE_TTL_MS = 5 * 60 * 1000;
+  const GALAXY_IMAGE_WARM_MAX = 320;
 
   function getGalaxyPageRoot() {
     return document.getElementById("galaxy-page-root") || document.querySelector(".galaxy-page");
   }
 
-  function prefetchGalaxyHref(href) {
-    if (!href || _galaxyPrefetchUrls.has(href)) return;
-    if (_galaxyPrefetchUrls.size >= 48) return;
+  function isGalaxySystemPjaxUrl(url) {
     try {
-      const url = new URL(href, window.location.origin);
-      if (url.origin !== window.location.origin) return;
-      if (!url.pathname.endsWith("/galaxy")) return;
+      const u = new URL(url, window.location.origin);
+      const path = u.pathname.replace(/\/$/, "") || "/";
+      if (path !== "/galaxy") return false;
+      const view = (u.searchParams.get("view") || "system").toLowerCase();
+      return view === "system";
     } catch (_) {
-      return;
+      return false;
     }
+  }
+
+  function getGalaxyPjaxCached(url) {
+    const key = normalizePjaxUrl(url);
+    const entry = _galaxyPjaxCache.get(key);
+    if (!entry) return null;
+    if (Date.now() - entry.ts > GALAXY_PJAX_CACHE_TTL_MS) {
+      _galaxyPjaxCache.delete(key);
+      return null;
+    }
+    return entry;
+  }
+
+  function setGalaxyPjaxCache(url, payload) {
+    const key = normalizePjaxUrl(url);
+    if (_galaxyPjaxCache.has(key)) _galaxyPjaxCache.delete(key);
+    _galaxyPjaxCache.set(key, { ...payload, ts: Date.now() });
+    while (_galaxyPjaxCache.size > GALAXY_PJAX_CACHE_MAX) {
+      const oldest = _galaxyPjaxCache.keys().next().value;
+      if (oldest === undefined) break;
+      _galaxyPjaxCache.delete(oldest);
+    }
+  }
+
+  function invalidateGalaxyPjaxCache() {
+    _galaxyPjaxCache.clear();
+  }
+
+  function parseCssUrlVar(styleText, varName) {
+    const re = new RegExp(`${varName}\\s*:\\s*url\\(['"]?([^'")]+)`);
+    const m = String(styleText || "").match(re);
+    return m ? m[1].trim() : "";
+  }
+
+  function collectGalaxyImageUrls(scope) {
+    const root = scope?.querySelector ? scope : document;
+    const urls = new Set();
+    const galaxyRoot = root.querySelector?.("[data-galaxy-ring-view]") || root;
+    const scanRoot = galaxyRoot.querySelector ? galaxyRoot : root;
+    scanRoot.querySelectorAll?.("[style*='--gr-planet-image']").forEach((el) => {
+      const style = el.getAttribute("style") || "";
+      const webp = parseCssUrlVar(style, "--gr-planet-image-webp");
+      const fallback = parseCssUrlVar(style, "--gr-planet-image");
+      if (webp) urls.add(webp);
+      else if (fallback) urls.add(fallback);
+    });
+    scanRoot.querySelectorAll?.("img[src]").forEach((img) => {
+      const src = String(img.getAttribute("src") || img.src || "").trim();
+      if (src && /\/static\/img\//i.test(src)) urls.add(src);
+    });
+    const ringView =
+      scanRoot.matches?.("[data-galaxy-ring-view]")
+        ? scanRoot
+        : scanRoot.querySelector?.("[data-galaxy-ring-view]") || scanRoot.closest?.("[data-galaxy-ring-view]");
+    if (ringView) {
+      const style = ringView.getAttribute("style") || "";
+      const mapTile = parseCssUrlVar(style, "--gc-galaxy-map-tile") || getComputedStyle(ringView).getPropertyValue("--gc-galaxy-map-tile");
+      const mapFallback =
+        parseCssUrlVar(style, "--gc-galaxy-map-tile-fallback")
+        || getComputedStyle(ringView).getPropertyValue("--gc-galaxy-map-tile-fallback");
+      const debrisImg =
+        parseCssUrlVar(style, "--gc-galaxy-debris-img")
+        || getComputedStyle(ringView).getPropertyValue("--gc-galaxy-debris-img");
+      [mapTile, mapFallback, debrisImg].forEach((raw) => {
+        const href = String(raw || "").trim().replace(/^url\(['"]?|['"]?\)$/g, "");
+        if (href) urls.add(href);
+      });
+    }
+    return urls;
+  }
+
+  function warmGalaxyRingImages(scope) {
+    collectGalaxyImageUrls(scope).forEach((href) => {
+      if (!href || _galaxyImageWarmSet.has(href)) return;
+      if (_galaxyImageWarmSet.size >= GALAXY_IMAGE_WARM_MAX) return;
+      _galaxyImageWarmSet.add(href);
+      const img = new Image();
+      img.decoding = "async";
+      img.src = href;
+    });
+  }
+
+  function cacheGalaxyPjaxFromDoc(url, doc) {
+    if (!doc || !isGalaxySystemPjaxUrl(url)) return;
+    const newMain = doc.getElementById("main-content");
+    if (!newMain) return;
+    const body = doc.body;
+    setGalaxyPjaxCache(url, {
+      mainHtml: newMain.innerHTML,
+      title: doc.title || "",
+      serverTime: body?.dataset?.serverTime || "",
+      endpoint: body?.dataset?.endpoint || "",
+      landscape: body?.style?.getPropertyValue("--planet-landscape") || "",
+      landscapeWebp: body?.style?.getPropertyValue("--planet-landscape-webp") || "",
+    });
+    warmGalaxyRingImages(newMain);
+  }
+
+  async function fetchGalaxyPjaxIntoCache(href) {
+    if (!href || !isGalaxySystemPjaxUrl(href)) return;
+    if (getGalaxyPjaxCached(href)) return;
+    if (_galaxyPrefetchUrls.has(href)) return;
+    if (_galaxyPrefetchUrls.size >= 48) return;
     _galaxyPrefetchUrls.add(href);
-    const link = document.createElement("link");
-    link.rel = "prefetch";
-    link.as = "document";
-    link.href = href;
-    document.head.appendChild(link);
+    try {
+      const res = await fetch(href, {
+        credentials: "same-origin",
+        cache: "default",
+        headers: {
+          "X-PJAX": "true",
+          "X-Requested-With": "XMLHttpRequest",
+          Accept: "text/html",
+        },
+      });
+      if (!res.ok) return;
+      const html = await res.text();
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      cacheGalaxyPjaxFromDoc(href, doc);
+    } catch (_) {
+      _galaxyPrefetchUrls.delete(href);
+    }
+  }
+
+  function prefetchGalaxyHref(href) {
+    if (!href) return;
+    const run = () => fetchGalaxyPjaxIntoCache(href);
+    if (typeof requestIdleCallback === "function") {
+      requestIdleCallback(run, { timeout: 1800 });
+    } else {
+      setTimeout(run, 0);
+    }
   }
 
   function prefetchGalaxyAdjacent() {
     const page = getGalaxyPageRoot();
     if (!page) return;
+    warmGalaxyRingImages(page);
     if (page.dataset.prevUrl) prefetchGalaxyHref(page.dataset.prevUrl);
     if (page.dataset.nextUrl) prefetchGalaxyHref(page.dataset.nextUrl);
-    page.querySelectorAll(".galaxy-nav-step[href], .galaxy-range-item[href]").forEach((a) => {
+    page.querySelectorAll(".galaxy-hud-arrow[href], .galaxy-nav-step[href], .galaxy-range-item[href]").forEach((a) => {
       prefetchGalaxyHref(a.href);
     });
   }
+
+  GC.invalidateGalaxyPjaxCache = invalidateGalaxyPjaxCache;
+  GC.warmGalaxyRingImages = warmGalaxyRingImages;
 
   function bindGalaxyCommandMapSwitchOnce() {
     if (GC._galaxyCommandMapSwitchBound) return;
@@ -25626,8 +25760,8 @@
     const slotBtns = Array.from(root.querySelectorAll("[data-galaxy-ring-slot]"));
 
     const ORBIT_STAGE_REF = 800;
-    const ORBIT_RADII_FALLBACK = { hot: 182, temperate: 275, cold: 365, expedition: 378 };
-    const EXPEDITION_ANGLE_DEG = -42;
+    const ORBIT_RADII_FALLBACK = { hot: 182, temperate: 275, cold: 365, expedition: 392 };
+    const EXPEDITION_ANGLE_DEG = -148;
     const ORBIT_ICON_MARGIN_REF = 28;
     const ORBIT_SPREAD_X = 1.12;
     const ORBIT_SPREAD_Y = 1.04;
@@ -25646,7 +25780,7 @@
       if (!Number.isFinite(pos) || pos < 1) return -90;
       if (pos <= 5) return -90 + (pos - 1) * 72;
       if (pos <= 10) return -54 + (pos - 6) * 72;
-      if (pos <= 15) return -126 + (pos - 11) * 72;
+      if (pos <= 15) return -108 + (pos - 11) * 72;
       return EXPEDITION_ANGLE_DEG;
     }
 
@@ -25691,6 +25825,7 @@
     layoutGalaxyRingOrbits();
     requestAnimationFrame(() => layoutGalaxyRingOrbits());
     window.addEventListener("resize", layoutGalaxyRingOrbits);
+    if (typeof warmGalaxyRingImages === "function") warmGalaxyRingImages(root);
 
     let activeKey = null;
 
@@ -25737,6 +25872,13 @@
       ev.preventDefault();
       const key = btn.dataset.galaxyRingSlot;
       if (!key) return;
+      if (key === "expedition") {
+        const fleetHref = btn.dataset.galaxyRingFleetHref;
+        if (fleetHref && typeof GC.navigateTo === "function") {
+          GC.navigateTo(fleetHref, { push: true });
+          return;
+        }
+      }
       if (activeKey === key && inspector && !inspector.hidden) {
         closeInspector();
         return;
@@ -27336,6 +27478,65 @@
   GC.syncLcpHeroPreload = syncLcpHeroPreload;
   GC.syncLcpHeroPreloadFromPjaxDoc = syncLcpHeroPreloadFromPjaxDoc;
 
+  async function applyPjaxPayload(url, payload, doc, opts = {}) {
+    const push = opts.push !== false;
+    GC.cleanupPage();
+    preserveFleetHudAcrossNavigation();
+    if (doc) syncLcpHeroPreloadFromPjaxDoc(doc);
+    const main = document.getElementById("main-content");
+    if (!main) throw new Error("main-content missing");
+    main.innerHTML = payload.mainHtml;
+    if (payload.title) document.title = payload.title;
+    if (payload.serverTime) {
+      document.body.dataset.serverTime = payload.serverTime;
+      resyncServerTimeFromDom(true);
+    }
+    if (payload.endpoint !== undefined) {
+      document.body.dataset.endpoint = payload.endpoint || "";
+    }
+    const landscape = payload.landscape;
+    const landscapeWebp = payload.landscapeWebp;
+    if (landscape && String(landscape).trim()) {
+      document.body.classList.add("gc-has-planet-landscape");
+      document.body.style.setProperty("--planet-landscape", String(landscape).trim());
+      if (landscapeWebp && String(landscapeWebp).trim()) {
+        document.body.style.setProperty("--planet-landscape-webp", String(landscapeWebp).trim());
+      } else {
+        document.body.style.removeProperty("--planet-landscape-webp");
+      }
+    } else {
+      document.body.classList.remove("gc-has-planet-landscape");
+      document.body.style.removeProperty("--planet-landscape");
+      document.body.style.removeProperty("--planet-landscape-webp");
+    }
+    if (typeof GC.syncSidebarSticky === "function") GC.syncSidebarSticky();
+    if (push) history.pushState({ gcPjax: true }, "", url);
+    invalidateLeftmenuRouteContextCache();
+    await GC.initPage({
+      force: true,
+      pjax: true,
+      skipHydrate: opts.skipHydrate !== false,
+      skipGameState: Boolean(opts.skipGameState),
+      skipPolling: Boolean(opts.skipPolling),
+    });
+    preserveFleetHudAcrossNavigation();
+    if (document.querySelector(".galaxy-page")) prefetchGalaxyAdjacent();
+  }
+
+  function pjaxPayloadFromDoc(doc) {
+    const newMain = doc.getElementById("main-content");
+    if (!newMain) return null;
+    const body = doc.body;
+    return {
+      mainHtml: newMain.innerHTML,
+      title: doc.title || "",
+      serverTime: body?.dataset?.serverTime || "",
+      endpoint: body?.dataset?.endpoint || "",
+      landscape: body?.style?.getPropertyValue("--planet-landscape") || "",
+      landscapeWebp: body?.style?.getPropertyValue("--planet-landscape-webp") || "",
+    };
+  }
+
   GC.navigateTo = async function navigateTo(url, opts = {}) {
     const push = opts.push !== false;
     const target = normalizePjaxUrl(url);
@@ -27360,9 +27561,15 @@
       const ctrl = new AbortController();
       GC._pjaxAbort = ctrl;
       try {
+        const cached = !opts.force && isGalaxySystemPjaxUrl(target) ? getGalaxyPjaxCached(target) : null;
+        if (cached) {
+          await applyPjaxPayload(url, cached, null, { ...opts, push });
+          return;
+        }
+
         const res = await fetch(url, {
           credentials: "same-origin",
-          cache: "no-store",
+          cache: isGalaxySystemPjaxUrl(target) ? "default" : "no-store",
           signal: ctrl.signal,
           headers: {
             "X-PJAX": "true",
@@ -27373,56 +27580,10 @@
         if (!res.ok) throw new Error(`PJAX ${res.status}`);
         const html = await res.text();
         const doc = new DOMParser().parseFromString(html, "text/html");
-        const newMain = doc.getElementById("main-content");
-        if (!newMain) throw new Error("main-content missing");
-
-        GC.cleanupPage();
-
-        preserveFleetHudAcrossNavigation();
-
-        syncLcpHeroPreloadFromPjaxDoc(doc);
-
-        const main = document.getElementById("main-content");
-        main.innerHTML = newMain.innerHTML;
-        if (doc.title) document.title = doc.title;
-
-        const fetchedBody = doc.body;
-        if (fetchedBody?.dataset?.serverTime) {
-          document.body.dataset.serverTime = fetchedBody.dataset.serverTime;
-          resyncServerTimeFromDom(true);
-        }
-        if (fetchedBody?.dataset && fetchedBody.dataset.endpoint !== undefined) {
-          document.body.dataset.endpoint = fetchedBody.dataset.endpoint || "";
-        }
-        const landscape = fetchedBody?.style?.getPropertyValue("--planet-landscape");
-        const landscapeWebp = fetchedBody?.style?.getPropertyValue("--planet-landscape-webp");
-        if (landscape && landscape.trim()) {
-          document.body.classList.add("gc-has-planet-landscape");
-          document.body.style.setProperty("--planet-landscape", landscape.trim());
-          if (landscapeWebp && landscapeWebp.trim()) {
-            document.body.style.setProperty("--planet-landscape-webp", landscapeWebp.trim());
-          } else {
-            document.body.style.removeProperty("--planet-landscape-webp");
-          }
-        } else {
-          document.body.classList.remove("gc-has-planet-landscape");
-          document.body.style.removeProperty("--planet-landscape");
-          document.body.style.removeProperty("--planet-landscape-webp");
-        }
-
-        if (typeof GC.syncSidebarSticky === "function") GC.syncSidebarSticky();
-        if (push) history.pushState({ gcPjax: true }, "", url);
-        invalidateLeftmenuRouteContextCache();
-
-        await GC.initPage({
-          force: true,
-          pjax: true,
-          skipHydrate: opts.skipHydrate !== false,
-          skipGameState: Boolean(opts.skipGameState),
-          skipPolling: Boolean(opts.skipPolling),
-        });
-        preserveFleetHudAcrossNavigation();
-        if (document.querySelector(".galaxy-page")) prefetchGalaxyAdjacent();
+        const payload = pjaxPayloadFromDoc(doc);
+        if (!payload) throw new Error("main-content missing");
+        if (isGalaxySystemPjaxUrl(target)) cacheGalaxyPjaxFromDoc(url, doc);
+        await applyPjaxPayload(url, payload, doc, { ...opts, push });
       } catch (err) {
         if (err?.name === "AbortError") return;
         console.error("[GC] PJAX navigation failed:", err);

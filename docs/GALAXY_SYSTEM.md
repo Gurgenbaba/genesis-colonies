@@ -96,7 +96,8 @@ Details: [FLEET_SYSTEM.md](FLEET_SYSTEM.md).
 
 - Module: `GC.modules.galaxy` → `initGalaxy()`
 - **Kein Live-Slot-Refresh** — SSR + PJAX navigation
-- `prefetchGalaxyAdjacent()` — `<link rel=prefetch>` für prev/next/minimap
+- `prefetchGalaxyAdjacent()` — lädt prev/next per **PJAX-Memory-Cache** + `warmGalaxyRingImages()` (Idle-Prefetch)
+- Planet-/Map-/Debris-Assets mit `?v={{ GC_ASSET_VERSION }}` → Browser **immutable** 1y Cache
 - `/api/galaxy/system` wird aktuell **nicht** vom Client für Live-Updates genutzt
 
 Navigation: GET `/galaxy?galaxy=N&system=M` (PJAX shell swap).

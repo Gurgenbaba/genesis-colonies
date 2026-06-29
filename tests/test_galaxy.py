@@ -382,7 +382,7 @@ def test_list_system_slot_ring_presentation(galaxy_db):
     assert temperate["visual_effect"] == "temperate"
     cold = by_pos[15]
     assert cold["orbit_ring"] == ORBIT_RING_COLD
-    assert cold["orbit_angle_deg"] == 162.0
+    assert cold["orbit_angle_deg"] == 180.0
     assert cold["orbit_layout_band"] == ORBIT_RING_COLD
     assert cold["visual_effect"] == "ice"
     assert cold["planet_theme"] == "absolute-zero"
@@ -597,6 +597,7 @@ def test_galaxy_expedition_slot_shortcut(galaxy_db, monkeypatch):
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert "galaxy-slot-expedition" in body or "is-expedition" in body
+    assert "data-galaxy-ring-fleet-href" in body
     assert f"target_position={EXPEDITION_POSITION}" in body
     assert "mission=expedition" in body
     assert "galaxy-fleet-action--expedition" in body
@@ -640,8 +641,9 @@ def test_orbit_angle_multi_ring_layout(galaxy_db):
     assert orbit_angle_for_position(5) == 198.0
     assert orbit_angle_for_position(6) == -54.0
     assert orbit_angle_for_position(8) == 90.0
-    assert orbit_angle_for_position(11) == -126.0
-    assert orbit_angle_for_position(15) == 162.0
+    assert orbit_angle_for_position(11) == -108.0
+    assert orbit_angle_for_position(14) == 108.0
+    assert orbit_angle_for_position(15) == 180.0
 
 
 def test_galaxy_ring_layout_main_js_contract(galaxy_db):

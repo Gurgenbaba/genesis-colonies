@@ -277,7 +277,7 @@ ORBIT_BAND_RADIUS_REF: Dict[str, int] = {
     ORBIT_RING_HOT: 182,
     ORBIT_RING_TEMPERATE: 275,
     ORBIT_RING_COLD: 365,
-    "expedition": 378,
+    "expedition": 392,
 }
 GALAXY_RING_STAGE_REF_PX = 800
 
@@ -319,6 +319,9 @@ def orbit_layout_band_for_position(position: Any) -> str:
     return ORBIT_RING_COLD
 
 
+ORBIT_COLD_ANGLE_START = -108.0  # +18° vs legacy -126 — stagger outer ring from temperate
+
+
 def orbit_angle_for_position(position: Any) -> float:
     """Five slots per ring, 72° spacing, ring-specific start (-90° = top)."""
     pos = _normalize_position(position)
@@ -328,7 +331,7 @@ def orbit_angle_for_position(position: Any) -> float:
         return float(-90.0 + (pos - 1) * 72.0)
     if pos <= 10:
         return float(-54.0 + (pos - 6) * 72.0)
-    return float(-126.0 + (pos - 11) * 72.0)
+    return float(ORBIT_COLD_ANGLE_START + (pos - 11) * 72.0)
 
 
 def slot_galaxy_ring_presentation(

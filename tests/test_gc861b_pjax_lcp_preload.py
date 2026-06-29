@@ -20,11 +20,11 @@ def _read(rel: str) -> str:
 
 
 def test_gc861b_main_js_pjax_preload_before_swap():
-    nav = _read("static/main.js").split("GC.navigateTo = async function navigateTo", 1)[1]
-    nav = nav.split("function initPjax", 1)[0]
+    nav = _read("static/main.js").split("async function applyPjaxPayload(url, payload, doc, opts = {})", 1)[1]
+    nav = nav.split("GC.navigateTo = async function navigateTo", 1)[0]
     assert "syncLcpHeroPreloadFromPjaxDoc(doc)" in nav
-    assert "main.innerHTML = newMain.innerHTML" in nav
-    assert nav.index("syncLcpHeroPreloadFromPjaxDoc(doc)") < nav.index("main.innerHTML = newMain.innerHTML")
+    assert "main.innerHTML = payload.mainHtml" in nav
+    assert nav.index("syncLcpHeroPreloadFromPjaxDoc(doc)") < nav.index("main.innerHTML = payload.mainHtml")
 
 
 def test_gc861b_main_js_lcp_preload_contract():
@@ -40,23 +40,25 @@ def test_gc861b_main_js_lcp_preload_contract():
 
 
 @pytest.mark.parametrize(
-    "path,expect_cached",
+    "path,expect_cached,expect_immutable",
     [
-        ("/static/img/buildings/metal_mine.webp", True),
-        ("/static/img/herocards/herocard_08.png", True),
-        ("/static/main.js", False),
-        ("/static/style.css", False),
+        ("/static/img/buildings/metal_mine.webp", True, False),
+        ("/static/img/herocards/herocard_08.png", True, False),
+        ("/static/main.js", False, False),
+        ("/static/style.css", False, False),
     ],
 )
-def test_gc861b_static_image_cache_headers(path, expect_cached):
+def test_gc861b_static_image_cache_headers(path, expect_cached, expect_immutable):
     client = app.test_client()
     resp = client.get(path)
     assert resp.status_code == 200
     cache = resp.headers.get("Cache-Control", "")
     if expect_cached:
         assert cache == f"public, max-age={GC_STATIC_IMAGE_CACHE_MAX_AGE}"
+        assert "immutable" not in cache
     else:
         assert f"max-age={GC_STATIC_IMAGE_CACHE_MAX_AGE}" not in cache
+        assert "immutable" not in cache
 
 
 def test_gc861b_html_routes_not_image_cached():

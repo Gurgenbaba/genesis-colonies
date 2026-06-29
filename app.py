@@ -134,12 +134,15 @@ def _is_static_image_path(path: str) -> bool:
 
 
 def apply_static_image_cache_headers(response: Response) -> Response:
-    """Set Cache-Control on raster files under /static/ (no query-version bust yet)."""
+    """Set Cache-Control on raster files under /static/ (versioned URLs may be immutable)."""
     if response.status_code not in (200, 304):
         return response
     if not _is_static_image_path(request.path or ""):
         return response
-    response.headers["Cache-Control"] = f"public, max-age={GC_STATIC_IMAGE_CACHE_MAX_AGE}"
+    if request.args.get("v"):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    else:
+        response.headers["Cache-Control"] = f"public, max-age={GC_STATIC_IMAGE_CACHE_MAX_AGE}"
     return response
 
 
