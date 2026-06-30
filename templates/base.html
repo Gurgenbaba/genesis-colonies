@@ -19,7 +19,7 @@
 {% set SIMPLE_LAYOUT = request.endpoint in ['landing', 'login', 'register', 'forgot_password', 'reset_password', 'verify_email'] %}
 {% set _fleet_mode = request.args.get('mode', 'send')|lower %}
 {% set _fleet_logistics_active = request.endpoint == 'fleet_view' and _fleet_mode in ('collect', 'distribute') %}
-{% set WIP_ENDPOINTS = ['alliance_view'] %}
+{% set WIP_ENDPOINTS = [] %}
 {% set _motd_enabled = (motd_enabled if motd_enabled is defined else False) %}
 {% set _motd_text = (motd_text if motd_text is defined else "") %}
 {% set _motd_banner = motd_banner if motd_banner is defined else none %}

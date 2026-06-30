@@ -14168,6 +14168,700 @@
     if (state) patchReferralsDom(state);
   }
 
+  function parseAlliancePageState() {
+    const el = document.getElementById("alliance-page-state");
+    if (!el) return null;
+    try {
+      return JSON.parse(el.textContent || "{}");
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function allianceErrorMessage(res, fallback) {
+    const key = String(res?.error || res?.reason || "").trim();
+    if (key === "already_in_alliance") {
+      return t("alliance_err_already_member", "Du bist bereits in einer Allianz.");
+    }
+    if (key === "alliance_full") return t("alliance_err_full", "Allianz ist voll.");
+    if (key === "alliance_not_found") return t("alliance_err_not_found", "Allianz nicht gefunden.");
+    if (key === "invalid_alliance") return t("alliance_err_invalid", "Tag oder Name ungültig.");
+    if (key === "recruitment_application_only") {
+      return t("alliance_err_application_only", "Diese Allianz nimmt nur Bewerbungen an.");
+    }
+    if (key === "recruitment_closed") {
+      return t("alliance_err_recruitment_closed", "Diese Allianz ist geschlossen.");
+    }
+    if (key === "application_message_required") {
+      return t("alliance_err_message_required", "Bitte eine Bewerbungsnachricht eingeben.");
+    }
+    if (key === "pending_application_exists") {
+      return t("alliance_err_pending_exists", "Du hast bereits eine offene Bewerbung.");
+    }
+    if (key === "application_not_found") {
+      return t("alliance_err_application_not_found", "Bewerbung nicht gefunden.");
+    }
+    if (key === "alliance_logo_missing") {
+      return t("alliance_logo_missing", "Bitte eine Bilddatei waehlen.");
+    }
+    if (key === "alliance_logo_too_large") {
+      return t("alliance_logo_too_large", "Datei ist zu gross (max. 2 MB).");
+    }
+    if (key === "alliance_logo_invalid_type") {
+      return t("alliance_logo_invalid_type", "Ungueltiges Bildformat.");
+    }
+    if (key === "alliance_logo_rate_limited") {
+      return t("alliance_logo_rate_limited", "Bitte kurz warten und erneut versuchen.");
+    }
+    return key || fallback || t("alliance_action_failed", "Aktion fehlgeschlagen.");
+  }
+
+  function patchAllianceDom(state) {
+    if (!state || !state.in_alliance) return;
+    const page = document.getElementById("alliance-page");
+    if (!page) return;
+    const fmt = typeof GC.fmtIntFull === "function" ? GC.fmtIntFull : (n) => String(n ?? 0);
+    ["metal", "crystal", "fuel_cells"].forEach((res) => {
+      const val = Number(state.pool?.[res] ?? 0);
+      const cap = Number(state.pool_cap?.[res] ?? 0);
+      const valEl = page.querySelector(`[data-pool-val="${res}"]`);
+      const capEl = page.querySelector(`[data-pool-cap="${res}"]`);
+      const fillEl = page.querySelector(`[data-pool-fill="${res}"]`);
+      if (valEl) valEl.textContent = fmt(val);
+      if (capEl) capEl.textContent = fmt(cap);
+      if (fillEl) {
+        const pct = cap > 0 ? Math.min(100, (val / cap) * 100) : 0;
+        fillEl.style.width = `${pct}%`;
+      }
+    });
+    const summary = page.querySelector("[data-alliance-summary]");
+    if (summary && state.alliance_level != null) {
+      const lvl = summary.querySelector("[data-alliance-level], .alliance-level-badge");
+      if (lvl) lvl.textContent = "L" + state.alliance_level;
+    }
+    if (state.show_logo && state.logo_url_client && state.alliance_id != null) {
+      const aid = String(state.alliance_id);
+      const frame = page.querySelector(`[data-alliance-logo-frame="${aid}"]`);
+      if (frame) {
+        let img = frame.querySelector("[data-alliance-logo-img]");
+        const ph = frame.querySelector("[data-alliance-logo-ph]");
+        if (!img) {
+          img = document.createElement("img");
+          img.className = "alliance-hub-logo";
+          img.dataset.allianceLogoImg = aid;
+          img.loading = "lazy";
+          frame.appendChild(img);
+        }
+        img.src = state.logo_url_client;
+        img.alt = String(state.name || "");
+        img.hidden = false;
+        if (ph) ph.remove();
+      }
+    }
+    if (state.active_project) {
+      const panel = page.querySelector("[data-alliance-active-project]");
+      if (panel) {
+        panel.dataset.finishAt = String(state.active_project.finish_at || "");
+        updateAllianceProjectProgress(panel);
+      }
+    } else {
+      const panel = page.querySelector("[data-alliance-active-project]");
+      if (panel) panel.remove();
+    }
+  }
+
+  function updateAllianceProjectProgress(panel) {
+    if (!panel) return;
+    const finishAt = Number(panel.dataset.finishAt || 0);
+    const startGuess = finishAt - 3600;
+    const now = GC.getServerNow ? GC.getServerNow() : Date.now() / 1000;
+    const fill = panel.querySelector("[data-project-fill]");
+    const eta = panel.querySelector("[data-project-eta]");
+    if (!finishAt || finishAt <= now) {
+      if (fill) fill.style.width = "100%";
+      if (eta) eta.textContent = "";
+      return;
+    }
+    const total = Math.max(1, finishAt - startGuess);
+    const pct = Math.min(100, Math.max(0, ((now - startGuess) / total) * 100));
+    if (fill) fill.style.width = pct.toFixed(1) + "%";
+    if (eta) eta.textContent = GC.formatCountdown ? GC.formatCountdown(finishAt - now) : String(Math.ceil(finishAt - now)) + "s";
+  }
+
+  let _allianceActionInFlight = false;
+
+  async function allianceReloadHub(reason) {
+    const cleanUrl = "/alliance";
+    if (typeof GC.navigateTo === "function") {
+      await GC.navigateTo(cleanUrl, { push: false, force: true });
+    } else if (typeof GC.reloadCurrentPage === "function") {
+      await GC.reloadCurrentPage({ force: true });
+    }
+    if (window.history?.replaceState) {
+      window.history.replaceState(null, "", cleanUrl);
+    }
+    void reason;
+  }
+
+  async function allianceAction(url, body, reason) {
+    if (_allianceActionInFlight) return { ok: false, error: "in_flight" };
+    _allianceActionInFlight = true;
+    const page = document.getElementById("alliance-page");
+    const busyBtns = page
+      ? [...page.querySelectorAll("[data-alliance-submit], [data-donate-btn], [data-alliance-leave]")]
+      : [];
+    busyBtns.forEach((btn) => {
+      btn.disabled = true;
+    });
+    try {
+      const res = await GC.fetchGameAction(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body || {}),
+      });
+      if (res?.state) applyActionState(res, reason || "alliance");
+      if (res?.alliance) {
+        const stateEl = document.getElementById("alliance-page-state");
+        if (stateEl) stateEl.textContent = JSON.stringify(res.alliance);
+        patchAllianceDom(res.alliance);
+      }
+      return res;
+    } finally {
+      _allianceActionInFlight = false;
+      busyBtns.forEach((btn) => {
+        btn.disabled = false;
+      });
+    }
+  }
+
+  async function allianceHandleCreate(form) {
+    const fd = new FormData(form);
+    const out = await allianceAction(
+      "/api/alliance/create",
+      {
+        tag: String(fd.get("tag") || "").trim(),
+        name: String(fd.get("name") || "").trim(),
+        description: String(fd.get("description") || "").trim(),
+      },
+      "alliance_create"
+    );
+    if (out?.ok && out?.alliance?.in_alliance) {
+      await allianceReloadHub("alliance_create");
+      showNotify(t("alliance_create_success", "Allianz gegründet."), "success");
+      return;
+    }
+    showNotify(allianceErrorMessage(out, "Gründung fehlgeschlagen"), "error");
+  }
+
+  async function allianceHandleJoin(form) {
+    const fd = new FormData(form);
+    const out = await allianceAction(
+      "/api/alliance/join",
+      { tag: String(fd.get("tag") || "").trim() },
+      "alliance_join"
+    );
+    if (out?.ok && out?.alliance?.in_alliance) {
+      await allianceReloadHub("alliance_join");
+      showNotify(t("alliance_join_success", "Allianz beigetreten."), "success");
+      return;
+    }
+    showNotify(allianceErrorMessage(out, "Beitritt fehlgeschlagen"), "error");
+  }
+
+  function allianceIsAllianceForm(form) {
+    if (!form || form.tagName !== "FORM") return false;
+    return Boolean(
+      form.matches(
+        "[data-alliance-create-form], [data-alliance-join-form], [data-alliance-desc-form], [data-alliance-diplomacy-form]"
+      )
+    );
+  }
+
+  function allianceBlockNativeSubmit(ev) {
+    const form = ev.target;
+    if (!allianceIsAllianceForm(form)) return;
+    const page = document.getElementById("alliance-page");
+    if (!page || !page.contains(form)) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+  }
+
+  function allianceRoleLabel(role) {
+    const r = String(role || "member").toLowerCase();
+    if (r === "leader" || r === "owner") return t("alliance_role_leader", "Leader");
+    if (r === "officer") return t("alliance_role_officer", "Offizier");
+    return t("alliance_role_member", "Mitglied");
+  }
+
+  function allianceRecruitBadgeHtml(mode) {
+    if (mode === "open") {
+      return `<span class="alliance-hub-recruit-badge alliance-hub-recruit-badge--open">${escapeHtml(t("alliance_recruit_open", "Offen"))}</span>`;
+    }
+    if (mode === "application_only") {
+      return `<span class="alliance-hub-recruit-badge alliance-hub-recruit-badge--application">${escapeHtml(t("alliance_recruit_application_only", "Bewerbung"))}</span>`;
+    }
+    return `<span class="alliance-hub-recruit-badge alliance-hub-recruit-badge--closed">${escapeHtml(t("alliance_recruit_closed", "Geschlossen"))}</span>`;
+  }
+
+  function allianceLogoHtml(profile, sizeClass) {
+    const aid = profile.id;
+    const sz = sizeClass || "lg";
+    if (profile.show_logo && profile.logo_url_client) {
+      return `<span class="alliance-hub-logo-frame alliance-hub-logo-frame--${sz}" data-alliance-logo-frame="${aid}"><img class="alliance-hub-logo" data-alliance-logo-img="${aid}" src="${escapeHtml(profile.logo_url_client)}" alt=""></span>`;
+    }
+    const ph = escapeHtml(String(profile.tag || "?").slice(0, 2));
+    return `<span class="alliance-hub-logo-frame alliance-hub-logo-frame--${sz}"><span class="alliance-hub-logo-ph">${ph}</span></span>`;
+  }
+
+  let _allianceDetailAid = 0;
+  let _allianceProfileFetch = null;
+
+  function setAllianceBrowseActive(aid) {
+    const page = document.getElementById("alliance-page");
+    if (!page) return;
+    page.querySelectorAll("[data-alliance-browse-open]").forEach((btn) => {
+      const on = parseInt(btn.dataset.allianceBrowseOpen || "0", 10) === aid;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+  }
+
+  function renderAllianceDetailPanel(profile, guestState) {
+    const page = document.getElementById("alliance-page");
+    const panel = page?.querySelector("[data-alliance-detail]");
+    if (!panel || !profile) return;
+    const fmt = typeof GC.fmtIntFull === "function" ? GC.fmtIntFull : (n) => String(n ?? 0);
+    const xp = Number(profile.alliance_xp || 0);
+    const nextXp = Number(profile.alliance_xp_next || 0);
+    const xpPct = nextXp > 0 ? Math.min(100, (xp / nextXp) * 100) : 100;
+    const pending = guestState?.has_pending_application === true;
+    const desc = String(profile.description || "").trim();
+    const members = Array.isArray(profile.members) ? profile.members : [];
+    const bonusChips = Array.isArray(profile.bonus_chips) ? profile.bonus_chips : [];
+
+    let actions = "";
+    if (!pending) {
+      if (profile.allows_applications) {
+        actions += `
+          <div class="alliance-hub-detail-apply">
+            <label class="alliance-hub-field">
+              <span>${escapeHtml(t("alliance_apply_btn", "Bewerben"))}</span>
+              <textarea class="gc-input alliance-hub-apply-message"
+                        data-alliance-detail-message
+                        maxlength="256"
+                        rows="3"
+                        placeholder="${escapeHtml(t("alliance_apply_message_placeholder", "Kurze Nachricht an die Allianz"))}"
+                        required></textarea>
+            </label>
+            <button type="button" class="gc-btn gc-btn-primary" data-alliance-detail-apply="${profile.id}">${escapeHtml(t("alliance_apply_send_btn", "Bewerbung senden"))}</button>
+          </div>`;
+      } else if (profile.allows_direct_join) {
+        actions += `<button type="button" class="gc-btn gc-btn-secondary" data-alliance-detail-join="${escapeHtml(profile.tag || "")}">${escapeHtml(t("alliance_join_btn", "Beitreten"))}</button>`;
+      } else {
+        actions += `<p class="alliance-hub-detail-closed">${escapeHtml(t("alliance_detail_recruitment_closed", "Diese Allianz nimmt derzeit keine neuen Mitglieder auf."))}</p>`;
+      }
+    } else {
+      actions += `<p class="alliance-hub-detail-pending">${escapeHtml(t("alliance_detail_pending_hint", "Du hast bereits eine offene Bewerbung."))}</p>`;
+    }
+
+    const memberRows = members
+      .map((m) => {
+        const pts = fmt(Number(m.donation_points || 0));
+        return `<li class="alliance-hub-detail-member">
+          <span class="alliance-hub-detail-member-name">${escapeHtml(m.player_name || "?")}</span>
+          <span class="alliance-hub-detail-member-role">${escapeHtml(allianceRoleLabel(m.role))}</span>
+          <span class="alliance-hub-detail-member-pts gc-mono" title="${escapeHtml(t("alliance_member_points", "Spendenpunkte"))}">${pts}</span>
+        </li>`;
+      })
+      .join("");
+
+    const bonusHtml = bonusChips.length
+      ? `<ul class="alliance-hub-bonus-grid alliance-hub-detail-bonus">${bonusChips
+          .map(
+            (b) =>
+              `<li class="alliance-hub-bonus-tile"><span class="alliance-hub-bonus-pct gc-mono">+${escapeHtml(String(b.bonus_pct ?? b.pct ?? 0))}%</span><span class="alliance-hub-bonus-name">${escapeHtml(b.label || b.label_key || b.tech_key || "")}</span></li>`
+          )
+          .join("")}</ul>`
+      : "";
+
+    panel.hidden = false;
+    panel.innerHTML = `
+      <header class="alliance-hub-detail-head">
+        ${allianceLogoHtml(profile, "lg")}
+        <div class="alliance-hub-detail-identity">
+          <span class="alliance-hub-tag">[${escapeHtml(profile.tag || "")}]</span>
+          <h3 class="alliance-hub-name">${escapeHtml(profile.name || "")}</h3>
+          <div class="alliance-hub-chip-row">
+            <span class="alliance-hub-chip alliance-hub-chip--level gc-mono">L${profile.alliance_level || 1}</span>
+            <span class="alliance-hub-chip alliance-hub-chip--members gc-mono">${profile.member_count || 0}/${profile.member_limit || 0}</span>
+            ${allianceRecruitBadgeHtml(profile.recruitment_mode)}
+          </div>
+        </div>
+      </header>
+      ${desc ? `<p class="alliance-hub-detail-desc">${escapeHtml(desc)}</p>` : ""}
+      <div class="alliance-hub-xp">
+        <div class="alliance-hub-xp-head">
+          <span class="alliance-hub-xp-label">${escapeHtml(t("alliance_xp_label", "Allianz-XP"))}</span>
+          <span class="alliance-hub-xp-val gc-mono">${fmt(xp)} / ${fmt(nextXp)}</span>
+        </div>
+        <div class="alliance-hub-xp-bar-wrap">
+          <div class="alliance-hub-xp-bar" style="width:${xpPct}%"></div>
+        </div>
+      </div>
+      ${bonusHtml}
+      <section class="alliance-hub-detail-members">
+        <header class="alliance-hub-section-head">
+          <span class="alliance-hub-section-title">${escapeHtml(t("alliance_tab_members", "Mitglieder"))}</span>
+          <span class="alliance-hub-section-sub">${escapeHtml(t("alliance_detail_members_sub", "Mit Spendenpunkten"))}</span>
+        </header>
+        <ul class="alliance-hub-detail-member-list">${memberRows || `<li class="alliance-hub-empty">${escapeHtml(t("alliance_detail_no_members", "Keine Mitglieder."))}</li>`}</ul>
+      </section>
+      <footer class="alliance-hub-detail-actions">${actions}</footer>`;
+  }
+
+  async function openAllianceBrowseDetail(aid) {
+    const page = document.getElementById("alliance-page");
+    const panel = page?.querySelector("[data-alliance-detail]");
+    if (!page || !panel || !aid) return;
+    _allianceDetailAid = aid;
+    setAllianceBrowseActive(aid);
+    panel.hidden = false;
+    panel.innerHTML = `<p class="alliance-hub-detail-loading">${escapeHtml(t("alliance_detail_loading", "Profil wird geladen…"))}</p>`;
+    if (_allianceProfileFetch) _allianceProfileFetch.abort?.();
+    const ctrl = new AbortController();
+    _allianceProfileFetch = ctrl;
+    try {
+      const res = await fetch(`/api/alliance/profile/${aid}`, {
+        credentials: "same-origin",
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+        signal: ctrl.signal,
+      });
+      const out = await res.json();
+      if (_allianceDetailAid !== aid) return;
+      if (!out?.ok || !out.profile) {
+        panel.innerHTML = `<p class="alliance-hub-detail-error">${escapeHtml(allianceErrorMessage(out, t("alliance_action_failed", "Aktion fehlgeschlagen.")))}</p>`;
+        return;
+      }
+      if (out.alliance) {
+        const stateEl = document.getElementById("alliance-page-state");
+        if (stateEl) stateEl.textContent = JSON.stringify(out.alliance);
+      }
+      renderAllianceDetailPanel(out.profile, out.alliance || parseAlliancePageState());
+    } catch (err) {
+      if (err?.name === "AbortError") return;
+      panel.innerHTML = `<p class="alliance-hub-detail-error">${escapeHtml(t("alliance_action_failed", "Aktion fehlgeschlagen."))}</p>`;
+    } finally {
+      if (_allianceProfileFetch === ctrl) _allianceProfileFetch = null;
+    }
+  }
+
+  let _allianceBound = false;
+  function bindAllianceOnce() {
+    if (_allianceBound) return;
+    _allianceBound = true;
+
+    document.addEventListener("submit", allianceBlockNativeSubmit, true);
+
+    document.addEventListener("change", async (ev) => {
+      const logoInput = ev.target.closest("[data-alliance-logo-upload]");
+      if (!logoInput?.files?.[0]) return;
+      const page = document.getElementById("alliance-page");
+      if (!page || !page.contains(logoInput)) return;
+      const file = logoInput.files[0];
+      const fd = new FormData();
+      fd.append("logo", file);
+      if (_allianceActionInFlight) return;
+      _allianceActionInFlight = true;
+      try {
+        const res = await fetch("/api/alliance/logo", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "X-Requested-With": "XMLHttpRequest" },
+          body: fd,
+        });
+        const out = await res.json();
+        if (out?.state) applyActionState(out, "alliance_logo_upload");
+        if (out?.alliance) {
+          const stateEl = document.getElementById("alliance-page-state");
+          if (stateEl) stateEl.textContent = JSON.stringify(out.alliance);
+          patchAllianceDom(out.alliance);
+        }
+        if (!out?.ok) {
+          showNotify(allianceErrorMessage(out, "Logo-Upload fehlgeschlagen"), "error");
+        } else {
+          showNotify(t("alliance_logo_upload_ok", "Logo gespeichert."), "success");
+        }
+      } catch (_) {
+        showNotify(t("alliance_logo_upload_fail", "Logo-Upload fehlgeschlagen."), "error");
+      } finally {
+        _allianceActionInFlight = false;
+        logoInput.value = "";
+      }
+    });
+
+    document.addEventListener("click", async (ev) => {
+      const page = document.getElementById("alliance-page");
+      if (!page || !page.contains(ev.target)) return;
+
+      const submitBtn = ev.target.closest("[data-alliance-submit]");
+      if (submitBtn) {
+        ev.preventDefault();
+        const form = submitBtn.closest("form");
+        if (!form) return;
+        const action = String(submitBtn.dataset.allianceSubmit || form.dataset.allianceAction || "");
+        if (action === "create") {
+          await allianceHandleCreate(form);
+          return;
+        }
+        if (action === "join") {
+          await allianceHandleJoin(form);
+          return;
+        }
+        if (action === "description") {
+          const fd = new FormData(form);
+          const out = await allianceAction(
+            "/api/alliance/description",
+            { description: String(fd.get("description") || "") },
+            "alliance_description"
+          );
+          if (out?.ok) showNotify(t("alliance_saved", "Gespeichert."), "success");
+          else showNotify(allianceErrorMessage(out, "Speichern fehlgeschlagen"), "error");
+          return;
+        }
+        if (action === "diplomacy") {
+          const fd = new FormData(form);
+          const out = await allianceAction(
+            "/api/alliance/diplomacy/send",
+            {
+              tag: String(fd.get("tag") || "").trim(),
+              request_type: String(fd.get("request_type") || ""),
+            },
+            "alliance_diplomacy"
+          );
+          if (out?.ok) await allianceReloadHub("alliance_diplomacy");
+          else showNotify(allianceErrorMessage(out, "Diplomatie fehlgeschlagen"), "error");
+          return;
+        }
+      }
+
+      const donateBtn = ev.target.closest("[data-donate-btn]");
+      if (donateBtn) {
+        ev.preventDefault();
+        const res = donateBtn.dataset.donateBtn;
+        const input = page.querySelector(`[data-donate-amount="${res}"]`);
+        const amount = parseInt(input?.value || "0", 10);
+        if (!amount) return;
+        const out = await allianceAction(
+          "/api/alliance/donate",
+          { resource: res, amount },
+          "alliance_donate"
+        );
+        if (!out?.ok) showNotify(allianceErrorMessage(out, "Spende fehlgeschlagen"), "error");
+        return;
+      }
+
+      const startBtn = ev.target.closest("[data-start-project]");
+      if (startBtn) {
+        ev.preventDefault();
+        const parts = String(startBtn.dataset.startProject || "").split(":");
+        if (parts.length !== 2) return;
+        const out = await allianceAction(
+          "/api/alliance/project/start",
+          { kind: parts[0], key: parts[1] },
+          "alliance_project_start"
+        );
+        if (out?.ok) await allianceReloadHub("alliance_project_start");
+        else showNotify(allianceErrorMessage(out, "Projektstart fehlgeschlagen"), "error");
+        return;
+      }
+
+      const leaveBtn = ev.target.closest("[data-alliance-leave]");
+      if (leaveBtn) {
+        ev.preventDefault();
+        const out = await allianceAction("/api/alliance/leave", {}, "alliance_leave");
+        if (out?.ok) await allianceReloadHub("alliance_leave");
+        else showNotify(allianceErrorMessage(out, "Verlassen fehlgeschlagen"), "error");
+        return;
+      }
+
+      const browseOpen = ev.target.closest("[data-alliance-browse-open]");
+      if (browseOpen) {
+        ev.preventDefault();
+        const aid = parseInt(browseOpen.dataset.allianceBrowseOpen || "0", 10);
+        if (!aid) return;
+        await openAllianceBrowseDetail(aid);
+        return;
+      }
+
+      const detailApply = ev.target.closest("[data-alliance-detail-apply]");
+      if (detailApply) {
+        ev.preventDefault();
+        const aid = parseInt(detailApply.dataset.allianceDetailApply || "0", 10);
+        if (!aid) return;
+        const ta = page.querySelector("[data-alliance-detail-message]");
+        const message = String(ta?.value || "").trim();
+        if (!message) {
+          showNotify(t("alliance_err_message_required", "Bitte eine Bewerbungsnachricht eingeben."), "error");
+          return;
+        }
+        const out = await allianceAction(
+          "/api/alliance/apply",
+          { alliance_id: aid, message },
+          "alliance_apply"
+        );
+        if (!out?.ok) {
+          showNotify(allianceErrorMessage(out, "Bewerbung fehlgeschlagen"), "error");
+          return;
+        }
+        showNotify(t("alliance_apply_sent", "Bewerbung gesendet."), "success");
+        await allianceReloadHub("alliance_apply");
+        return;
+      }
+
+      const detailJoin = ev.target.closest("[data-alliance-detail-join]");
+      if (detailJoin) {
+        ev.preventDefault();
+        const tag = String(detailJoin.dataset.allianceDetailJoin || "").trim();
+        if (!tag) return;
+        const out = await allianceAction("/api/alliance/join", { tag }, "alliance_join");
+        if (out?.ok && out?.alliance?.in_alliance) {
+          await allianceReloadHub("alliance_join");
+          showNotify(t("alliance_join_success", "Allianz beigetreten."), "success");
+        } else {
+          showNotify(allianceErrorMessage(out, "Beitritt fehlgeschlagen"), "error");
+        }
+        return;
+      }
+
+      const withdrawBtn = ev.target.closest("[data-alliance-withdraw]");
+      if (withdrawBtn) {
+        ev.preventDefault();
+        const out = await allianceAction(
+          "/api/alliance/application/withdraw",
+          {},
+          "alliance_withdraw"
+        );
+        if (!out?.ok) {
+          showNotify(allianceErrorMessage(out, "Zurückziehen fehlgeschlagen"), "error");
+          return;
+        }
+        showNotify(t("alliance_withdraw_ok", "Bewerbung zurückgezogen."), "success");
+        await allianceReloadHub("alliance_withdraw");
+        return;
+      }
+
+      const applyBtn = ev.target.closest("[data-alliance-apply]");
+      if (applyBtn) {
+        ev.preventDefault();
+        const aid = parseInt(applyBtn.dataset.allianceApply || "0", 10);
+        if (!aid) return;
+        const out = await allianceAction("/api/alliance/apply", { alliance_id: aid }, "alliance_apply");
+        if (!out?.ok) showNotify(allianceErrorMessage(out, "Bewerbung fehlgeschlagen"), "error");
+        else {
+          showNotify(t("alliance_apply_sent", "Bewerbung gesendet."), "success");
+          await allianceReloadHub("alliance_apply");
+        }
+        return;
+      }
+
+      const appAccept = ev.target.closest("[data-app-accept]");
+      if (appAccept) {
+        ev.preventDefault();
+        const id = parseInt(appAccept.dataset.appAccept || "0", 10);
+        await allianceAction(
+          "/api/alliance/application/respond",
+          { application_id: id, accept: true },
+          "alliance_application"
+        );
+        await allianceReloadHub("alliance_application");
+        return;
+      }
+      const appDecline = ev.target.closest("[data-app-decline]");
+      if (appDecline) {
+        ev.preventDefault();
+        const id = parseInt(appDecline.dataset.appDecline || "0", 10);
+        await allianceAction(
+          "/api/alliance/application/respond",
+          { application_id: id, accept: false },
+          "alliance_application"
+        );
+        await allianceReloadHub("alliance_application");
+        return;
+      }
+
+      const dipAccept = ev.target.closest("[data-dip-accept]");
+      if (dipAccept) {
+        ev.preventDefault();
+        const id = parseInt(dipAccept.dataset.dipAccept || "0", 10);
+        await allianceAction(
+          "/api/alliance/diplomacy/respond",
+          { request_id: id, accept: true },
+          "alliance_diplomacy_respond"
+        );
+        await allianceReloadHub("alliance_diplomacy_respond");
+        return;
+      }
+      const dipDecline = ev.target.closest("[data-dip-decline]");
+      if (dipDecline) {
+        ev.preventDefault();
+        const id = parseInt(dipDecline.dataset.dipDecline || "0", 10);
+        await allianceAction(
+          "/api/alliance/diplomacy/respond",
+          { request_id: id, accept: false },
+          "alliance_diplomacy_respond"
+        );
+        await allianceReloadHub("alliance_diplomacy_respond");
+        return;
+      }
+
+      const tab = ev.target.closest("[data-alliance-tab]");
+      if (tab) {
+        const key = tab.dataset.allianceTab;
+        page.querySelectorAll(".alliance-hub-tab, .alliance-tab").forEach((t) =>
+          t.classList.toggle("is-active", t === tab)
+        );
+        page.querySelectorAll("[data-alliance-panel]").forEach((p) => {
+          const show = p.dataset.alliancePanel === key;
+          p.hidden = !show;
+          p.classList.toggle("is-active", show);
+        });
+      }
+    });
+  }
+
+  function initAlliance() {
+    bindAllianceOnce();
+    const page = document.getElementById("alliance-page");
+    if (!page || page.dataset.ready !== "1") return;
+    if (window.history?.replaceState && window.location.search) {
+      window.history.replaceState(null, "", "/alliance");
+    }
+    const state = parseAlliancePageState();
+    if (state) patchAllianceDom(state);
+    const firstBrowse = page.querySelector("[data-alliance-browse-open]");
+    if (firstBrowse && page.querySelector("[data-alliance-guest]")) {
+      const aid = parseInt(firstBrowse.dataset.allianceBrowseOpen || "0", 10);
+      if (aid) openAllianceBrowseDetail(aid);
+    }
+    GC.registerCleanup(() => {
+      if (_allianceProfileFetch) {
+        _allianceProfileFetch.abort?.();
+        _allianceProfileFetch = null;
+      }
+      _allianceDetailAid = 0;
+    });
+    const proj = page.querySelector("[data-alliance-active-project]");
+    if (proj) {
+      updateAllianceProjectProgress(proj);
+      const tick = () => {
+        if (!document.getElementById("alliance-page")) return;
+        updateAllianceProjectProgress(proj);
+      };
+      const id = setInterval(tick, 1000);
+      GC.registerCleanup(() => clearInterval(id));
+    }
+  }
+
   function debugDirectiveDomMutation(label) {
     if (!_imperialDirectivesDebugEnabled()) return;
     const page = document.getElementById("imperial-directives-page");
@@ -26776,6 +27470,8 @@
   GC.modules.auction_house = initAuctionHouse;
   GC.modules.vote_center = initVoteCenter;
   GC.modules.referrals = initReferrals;
+  GC.modules.alliance = initAlliance;
+  bindAllianceOnce();
   GC.modules.imperial_directives = initImperialDirectives;
   GC.modules.galactic_politics = initGalacticPolitics;
   GC.modules.trader_hub = initTraderHub;

@@ -402,6 +402,54 @@ class EffectResolver:
             sources.append(self._source_entry(gdp_key, label, float(raw), 0))
         return out
 
+    def _apply_alliance_mods(
+        self,
+        values: Dict[str, float],
+        sources: List[Dict[str, Any]],
+    ) -> Dict[str, float]:
+        """Alliance technology bonuses for members only (EPIC-09)."""
+        try:
+            from ..alliance import alliance_hub_schema_ready, get_alliance_effect_modifiers
+
+            if not alliance_hub_schema_ready(self._conn):
+                return values
+            amods = get_alliance_effect_modifiers(int(self.player_id), conn=self._conn)
+        except Exception as exc:
+            if EFFECT_DEBUG:
+                logger.warning("alliance_modifiers_failed player=%s err=%s", self.player_id, exc)
+            return values
+
+        out = dict(values)
+        rs = float(amods.get("research_time_speed") or 1.0)
+        if rs != 1.0:
+            out["research_time_speed"] = float(out.get("research_time_speed", 1.0)) * rs
+            sources.append(self._source_entry("research_time_speed", "alliance:research_network", rs, 0))
+
+        for prod_key in ("metal_prod_factor", "crystal_prod_factor", "fuel_prod_factor"):
+            pf = float(amods.get(prod_key) or 1.0)
+            if pf != 1.0:
+                out[prod_key] = float(out.get(prod_key, 1.0)) * pf
+        if float(amods.get("metal_prod_factor") or 1.0) != 1.0:
+            sources.append(
+                self._source_entry(
+                    "prod_factor",
+                    "alliance:industrial_logistics",
+                    float(amods.get("metal_prod_factor") or 1.0),
+                    0,
+                )
+            )
+
+        ab = float(amods.get("armor_bonus") or 0.0)
+        sb = float(amods.get("shield_bonus") or 0.0)
+        if ab > 0:
+            out["armor_bonus"] = float(out.get("armor_bonus", 0.0)) + ab
+            sources.append(self._source_entry("armor_bonus", "alliance:defensive_protocols", ab, 0))
+        if sb > 0:
+            out["shield_bonus"] = float(out.get("shield_bonus", 0.0)) + sb
+            sources.append(self._source_entry("shield_bonus", "alliance:defensive_protocols", sb, 0))
+
+        return out
+
     def _apply_galactic_directive_modifiers(
         self,
         *,
@@ -745,6 +793,25 @@ class EffectResolver:
             fuel_efficiency_factor = ib_state["fuel_efficiency_factor"]
             shipyard_time_speed = ib_state["shipyard_time_speed"]
             defense_time_speed = ib_state["defense_time_speed"]
+
+        if self.player_id is not None and self._conn is not None:
+            alliance_state = self._apply_alliance_mods(
+                {
+                    "research_time_speed": research_time_speed,
+                    "metal_prod_factor": metal_prod_factor,
+                    "crystal_prod_factor": crystal_prod_factor,
+                    "fuel_prod_factor": fuel_prod_factor,
+                    "armor_bonus": armor_bonus,
+                    "shield_bonus": shield_bonus,
+                },
+                sources,
+            )
+            research_time_speed = alliance_state["research_time_speed"]
+            metal_prod_factor = alliance_state["metal_prod_factor"]
+            crystal_prod_factor = alliance_state["crystal_prod_factor"]
+            fuel_prod_factor = alliance_state["fuel_prod_factor"]
+            armor_bonus = alliance_state["armor_bonus"]
+            shield_bonus = alliance_state["shield_bonus"]
 
         self._mods = {
             "mine_energy_factor": float(mine_energy_factor),

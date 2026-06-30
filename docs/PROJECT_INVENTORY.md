@@ -21,7 +21,7 @@ Audit-Methode: Module in `game/`, Routen in `app.py`, UI in `templates/` + `stat
 | **Logistics** | Collect ✅ / Distribute ✅ | `/logistics` (Collect + Distribute) | `…/collect`, `…/distribute` + `state` | `test_fleet_logistics.py` | ✅ | `auto_cargo` optional (Phase 2) |
 | **Messages** | `messages.py` | `/messages`, `messages.js` | `/api/messages/*` | `test_messages.py` | ✅ | ⚠️ `href`-Fallback (GC-512C) |
 | **Chat** | `chat.py` | Shell + `chat.js` | `/api/chat/*` (eigenes Poll) | `test_chat.py`, `test_chat_init` | ✅ | Ausnahme GC-000 dokumentiert |
-| **Alliance** | `alliance.py` (minimal) | `/alliance` Platzhalter | — | — | 🔄 | Gründung, Rechte, Diplomatie |
+| **Alliance** | `alliance.py`, `alliance_catalog.py` | `/alliance`, `GC.modules.alliance` | `/api/alliance/*` + `state` | `test_alliance.py` | ✅ | Diplomatie Combat-Hooks später |
 | **Planet Evolution** | `planet_evolution/` | `/planet-evolution` | `/api/planets/<id>/*` + `state` | `test_planet_evolution*.py` | ✅ | ⚠️ Client `reloadCurrentPage` (GC-512A) |
 | **Ranking** | `ranking.py`, `scoring.py` | `/ranking` | `GET /api/ranking` | `test_ranking.py` | ✅ | — |
 | **Admin** | `admin.py`, `admin_api.py` | `/admin`, `admin.js` | `/api/admin/*` | `test_admin_*` | ✅ | ⚠️ Legacy Forms parallel |

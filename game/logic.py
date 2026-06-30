@@ -256,6 +256,14 @@ def refresh_player_live_state(
             update_scores=True,
             recalc_ranks=bool(recalc_ranks),
         )
+        try:
+            from .alliance import finish_due_alliance_projects, get_player_alliance
+
+            membership = get_player_alliance(uid, conn=conn)
+            if membership:
+                finish_due_alliance_projects(conn=conn, alliance_id=int(membership["alliance_id"]))
+        except Exception:
+            pass
         finish_ms = (time.perf_counter() - finish_t0) * 1000.0
         if perf is not None:
             perf.add_finish_ms(finish_ms)

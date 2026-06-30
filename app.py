@@ -2065,30 +2065,447 @@ def fleet_view():
 @app.route("/alliance")
 @require_login
 def alliance_view():
-    player_view, _, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
-    if player_view is None:
+    ctx = _load_page_live_context(finish_source="alliance")
+    if ctx is None:
         return redirect(url_for("login"))
 
-    alliance_members = []
+    from game.alliance import get_alliance_state
+
+    alliance_state = {"ready": False}
+    conn = db()
     try:
-        for row in get_ranking_rows(limit=8, offset=0):
-            alliance_members.append(
-                {
-                    "player_id": row["player_id"],
-                    "nickname": row["nickname"],
-                }
-            )
-    except Exception:
-        alliance_members = []
+        alliance_state = get_alliance_state(int(session["user_id"]), conn=conn)
+    finally:
+        conn.close()
 
     return render_template(
         "alliance.html",
-        player=player_view,
-        energy_total=energy_total,
-        energy_used=energy_used,
-        storage_caps=storage_caps,
-        alliance_members=alliance_members,
+        player=ctx["player_view"],
+        energy_total=ctx.get("energy_total"),
+        energy_used=ctx.get("energy_used"),
+        storage_caps=ctx["storage_caps"],
+        alliance_state=alliance_state,
     )
+
+
+def _alliance_action_json(user_id: int, alliance_state: Dict[str, Any], finish_source: str):
+    state, _ = _build_game_state_payload(include_panel=True, finish_source=finish_source)
+    return jsonify({"ok": True, "state": state, "alliance": alliance_state})
+
+
+def _alliance_error_json(
+    user_id: int,
+    error: str,
+    finish_source: str,
+    *,
+    status: int = 400,
+):
+    from game.alliance import get_alliance_state
+
+    conn = db()
+    try:
+        alliance_state = get_alliance_state(user_id, conn=conn)
+    finally:
+        conn.close()
+    state, _ = _build_game_state_payload(include_panel=True, finish_source=finish_source)
+    err = str(error or "alliance_action_failed")
+    return (
+        jsonify(
+            {
+                "ok": False,
+                "error": err,
+                "reason": err,
+                "state": state,
+                "alliance": alliance_state,
+            }
+        ),
+        status,
+    )
+
+
+@app.route("/api/alliance/state", methods=["GET"])
+@require_login
+def api_alliance_state():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+    from game.alliance import get_alliance_state
+
+    conn = db()
+    try:
+        alliance_state = get_alliance_state(user_id, conn=conn)
+    finally:
+        conn.close()
+    return jsonify({"ok": True, "alliance": alliance_state})
+
+
+@app.route("/api/alliance/profile/<int:alliance_id>", methods=["GET"])
+@require_login
+def api_alliance_profile(alliance_id: int):
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+    from game.alliance import get_alliance_public_profile, get_alliance_state
+
+    conn = db()
+    try:
+        profile = get_alliance_public_profile(alliance_id, conn=conn)
+        alliance_state = get_alliance_state(user_id, conn=conn)
+    except ValueError as exc:
+        return _alliance_error_json(user_id, str(exc), "api_alliance_profile")
+    except Exception:
+        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_profile", status=500)
+    finally:
+        conn.close()
+    return jsonify({"ok": True, "profile": profile, "alliance": alliance_state})
+
+
+@app.route("/api/alliance/create", methods=["POST"])
+@require_login
+def api_alliance_create():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+    data = request.get_json(silent=True) or {}
+    from game.alliance import create_alliance, get_alliance_state
+    from game.db import commit
+
+    conn = db()
+    try:
+        create_alliance(
+            str(data.get("tag") or ""),
+            str(data.get("name") or ""),
+            user_id,
+            description=str(data.get("description") or ""),
+            conn=conn,
+        )
+        commit(conn)
+        alliance_state = get_alliance_state(user_id, conn=conn)
+    except ValueError as exc:
+        return _alliance_error_json(user_id, str(exc), "api_alliance_create")
+    except Exception:
+        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_create", status=500)
+    finally:
+        conn.close()
+    return _alliance_action_json(user_id, alliance_state, "api_alliance_create")
+
+
+@app.route("/api/alliance/join", methods=["POST"])
+@require_login
+def api_alliance_join():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+    data = request.get_json(silent=True) or {}
+    from game.alliance import get_alliance_state, join_alliance_by_tag
+    from game.db import commit
+
+    conn = db()
+    try:
+        join_alliance_by_tag(user_id, str(data.get("tag") or ""), conn=conn)
+        commit(conn)
+        alliance_state = get_alliance_state(user_id, conn=conn)
+    except ValueError as exc:
+        return _alliance_error_json(user_id, str(exc), "api_alliance_join")
+    except Exception:
+        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_join", status=500)
+    finally:
+        conn.close()
+    return _alliance_action_json(user_id, alliance_state, "api_alliance_join")
+
+
+@app.route("/api/alliance/apply", methods=["POST"])
+@require_login
+def api_alliance_apply():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+    data = request.get_json(silent=True) or {}
+    from game.alliance import apply_to_alliance, get_alliance_state
+
+    conn = db()
+    try:
+        apply_to_alliance(
+            user_id,
+            int(data.get("alliance_id") or 0),
+            message=str(data.get("message") or ""),
+            conn=conn,
+        )
+        alliance_state = get_alliance_state(user_id, conn=conn)
+    except ValueError as exc:
+        return _alliance_error_json(user_id, str(exc), "api_alliance_apply")
+    except Exception:
+        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_apply", status=500)
+    finally:
+        conn.close()
+    return _alliance_action_json(user_id, alliance_state, "api_alliance_apply")
+
+
+@app.route("/api/alliance/application/withdraw", methods=["POST"])
+@require_login
+def api_alliance_application_withdraw():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+    from game.alliance import get_alliance_state, withdraw_application
+
+    conn = db()
+    try:
+        withdraw_application(user_id, conn=conn)
+        alliance_state = get_alliance_state(user_id, conn=conn)
+    except ValueError as exc:
+        return _alliance_error_json(user_id, str(exc), "api_alliance_application_withdraw")
+    except Exception:
+        return _alliance_error_json(
+            user_id, "alliance_action_failed", "api_alliance_application_withdraw", status=500
+        )
+    finally:
+        conn.close()
+    return _alliance_action_json(user_id, alliance_state, "api_alliance_application_withdraw")
+
+
+@app.route("/api/alliance/leave", methods=["POST"])
+@require_login
+def api_alliance_leave():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+    from game.alliance import get_alliance_state, leave_alliance
+
+    conn = db()
+    try:
+        leave_alliance(user_id, conn=conn)
+        alliance_state = get_alliance_state(user_id, conn=conn)
+    except ValueError as exc:
+        return jsonify({"ok": False, "reason": str(exc)}), 400
+    except Exception:
+        return jsonify({"ok": False, "reason": "alliance_action_failed"}), 500
+    finally:
+        conn.close()
+    return _alliance_action_json(user_id, alliance_state, "api_alliance_leave")
+
+
+@app.route("/api/alliance/description", methods=["POST"])
+@require_login
+def api_alliance_description():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+    data = request.get_json(silent=True) or {}
+    from game.alliance import get_alliance_state, update_alliance_description
+
+    conn = db()
+    try:
+        update_alliance_description(user_id, str(data.get("description") or ""), conn=conn)
+        alliance_state = get_alliance_state(user_id, conn=conn)
+    except ValueError as exc:
+        return jsonify({"ok": False, "reason": str(exc)}), 400
+    except Exception:
+        return jsonify({"ok": False, "reason": "alliance_action_failed"}), 500
+    finally:
+        conn.close()
+    return _alliance_action_json(user_id, alliance_state, "api_alliance_description")
+
+
+@app.route("/api/alliance/donate", methods=["POST"])
+@require_login
+def api_alliance_donate():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+    data = request.get_json(silent=True) or {}
+    from game.alliance import donate_to_alliance, get_alliance_state
+
+    conn = db()
+    try:
+        donate_to_alliance(
+            user_id,
+            str(data.get("resource") or ""),
+            int(data.get("amount") or 0),
+            conn=conn,
+        )
+        alliance_state = get_alliance_state(user_id, conn=conn)
+    except ValueError as exc:
+        return _alliance_error_json(user_id, str(exc), "api_alliance_donate")
+    except Exception:
+        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_donate", status=500)
+    finally:
+        conn.close()
+    return _alliance_action_json(user_id, alliance_state, "api_alliance_donate")
+
+
+@app.route("/api/alliance-logo/<int:alliance_id>")
+def api_alliance_logo(alliance_id: int):
+    from game.alliance import can_serve_alliance_logo, get_alliance_logo_row
+
+    if not can_serve_alliance_logo(alliance_id):
+        abort(404)
+
+    row = None
+    conn = db()
+    try:
+        row = get_alliance_logo_row(alliance_id, conn=conn)
+    finally:
+        conn.close()
+    if not row:
+        abort(404)
+
+    blob = row.get("image_blob")
+    if not blob:
+        abort(404)
+
+    updated_at = int(row.get("updated_at") or 0)
+    mime = str(row.get("mime_type") or "image/webp").split(";")[0].strip().lower()
+    if mime not in ("image/png", "image/jpeg", "image/webp"):
+        mime = "image/webp"
+
+    etag = f'W/"al-{int(alliance_id)}-{updated_at}"'
+    if request.headers.get("If-None-Match") == etag:
+        return Response(status=304, headers={"ETag": etag, "Cache-Control": "private, max-age=3600"})
+
+    resp = Response(blob, mimetype=mime)
+    resp.headers["ETag"] = etag
+    resp.headers["Cache-Control"] = "private, max-age=3600"
+    if updated_at > 0:
+        resp.headers["Last-Modified"] = time.strftime(
+            "%a, %d %b %Y %H:%M:%S GMT",
+            time.gmtime(updated_at),
+        )
+    return resp
+
+
+@app.route("/api/alliance/logo", methods=["POST"])
+@require_login
+def api_alliance_logo_upload():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+    file_storage = request.files.get("logo")
+    from game.alliance import get_alliance_state, upload_alliance_logo
+
+    conn = db()
+    try:
+        upload_alliance_logo(user_id, file_storage, conn=conn)
+        alliance_state = get_alliance_state(user_id, conn=conn)
+    except ValueError as exc:
+        return _alliance_error_json(user_id, str(exc), "api_alliance_logo_upload")
+    except Exception:
+        return _alliance_error_json(
+            user_id, "alliance_action_failed", "api_alliance_logo_upload", status=500
+        )
+    finally:
+        conn.close()
+    return _alliance_action_json(user_id, alliance_state, "api_alliance_logo_upload")
+
+
+@app.route("/api/alliance/project/start", methods=["POST"])
+@require_login
+def api_alliance_project_start():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+    data = request.get_json(silent=True) or {}
+    from game.alliance import get_alliance_state, start_alliance_project
+
+    conn = db()
+    try:
+        start_alliance_project(
+            user_id,
+            str(data.get("kind") or ""),
+            str(data.get("key") or ""),
+            conn=conn,
+        )
+        alliance_state = get_alliance_state(user_id, conn=conn)
+    except ValueError as exc:
+        return jsonify({"ok": False, "reason": str(exc)}), 400
+    except Exception:
+        return jsonify({"ok": False, "reason": "alliance_action_failed"}), 500
+    finally:
+        conn.close()
+    return _alliance_action_json(user_id, alliance_state, "api_alliance_project_start")
+
+
+@app.route("/api/alliance/application/respond", methods=["POST"])
+@require_login
+def api_alliance_application_respond():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+    data = request.get_json(silent=True) or {}
+    from game.alliance import get_alliance_state, respond_application
+
+    conn = db()
+    try:
+        respond_application(
+            user_id,
+            int(data.get("application_id") or 0),
+            accept=bool(data.get("accept")),
+            conn=conn,
+        )
+        alliance_state = get_alliance_state(user_id, conn=conn)
+    except ValueError as exc:
+        return _alliance_error_json(user_id, str(exc), "api_alliance_application_respond")
+    except Exception:
+        return _alliance_error_json(
+            user_id, "alliance_action_failed", "api_alliance_application_respond", status=500
+        )
+    finally:
+        conn.close()
+    return _alliance_action_json(user_id, alliance_state, "api_alliance_application_respond")
+
+
+@app.route("/api/alliance/diplomacy/send", methods=["POST"])
+@require_login
+def api_alliance_diplomacy_send():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+    data = request.get_json(silent=True) or {}
+    from game.alliance import get_alliance_state, send_diplomacy_request
+
+    conn = db()
+    try:
+        send_diplomacy_request(
+            user_id,
+            str(data.get("tag") or ""),
+            str(data.get("request_type") or ""),
+            conn=conn,
+        )
+        alliance_state = get_alliance_state(user_id, conn=conn)
+    except ValueError as exc:
+        return jsonify({"ok": False, "reason": str(exc)}), 400
+    except Exception:
+        return jsonify({"ok": False, "reason": "alliance_action_failed"}), 500
+    finally:
+        conn.close()
+    return _alliance_action_json(user_id, alliance_state, "api_alliance_diplomacy_send")
+
+
+@app.route("/api/alliance/diplomacy/respond", methods=["POST"])
+@require_login
+def api_alliance_diplomacy_respond():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+    data = request.get_json(silent=True) or {}
+    from game.alliance import get_alliance_state, respond_diplomacy_request
+
+    conn = db()
+    try:
+        respond_diplomacy_request(
+            user_id,
+            int(data.get("request_id") or 0),
+            accept=bool(data.get("accept")),
+            conn=conn,
+        )
+        alliance_state = get_alliance_state(user_id, conn=conn)
+    except ValueError as exc:
+        return jsonify({"ok": False, "reason": str(exc)}), 400
+    except Exception:
+        return jsonify({"ok": False, "reason": "alliance_action_failed"}), 500
+    finally:
+        conn.close()
+    return _alliance_action_json(user_id, alliance_state, "api_alliance_diplomacy_respond")
 
 
 def _render_placeholder_module(module_key: str):

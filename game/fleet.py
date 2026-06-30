@@ -4312,6 +4312,16 @@ def _handle_expedition_holding_end(movement: Dict[str, Any], *, conn, now: float
         directive_flags = {**directive_flags, **get_expedition_booster_flags(player_id, conn=conn)}
     except Exception:
         pass
+    try:
+        from .alliance import get_alliance_expedition_loot_multiplier
+
+        alliance_mult = float(get_alliance_expedition_loot_multiplier(player_id, conn=conn))
+        if alliance_mult > 1.0:
+            directive_flags["expedition_loot_mult"] = float(
+                directive_flags.get("expedition_loot_mult") or 1.0
+            ) * alliance_mult
+    except Exception:
+        pass
     from .empire_page import get_empire_production_aggregate
 
     empire_prod = get_empire_production_aggregate(player_id, conn=conn)

@@ -135,8 +135,8 @@ GC-803 ✅ → GC-900A–900E / GC-526–531 Logistics ✅ → GC-806 Navigation
 | **Messages** — Inbox, Send | ✅ | Flotten-/System-Mails |
 | **Chat** — Rooms, DM, Alliance room | ✅ | Rate limit in-process |
 | Chat Admin (mute, ban, delete) | ✅ | |
-| **Allianz** — Hub UI | 🔄 | `alliance.py` minimal; `/alliance` teils UI |
-| Allianz Gründung / Rechte / Diplomatie | 📋 | |
+| **Allianz** — Hub UI (EPIC-09 MVP) | ✅ | GC-AL-001…006: Pool, Projekte, Tech, Diplomatie MVP |
+| Allianz Combat-/Fleet-Diplomatie-Hooks | 📋 | Hold/Transport auf Bündnis |
 | **Ranking** — Live API | ✅ | |
 | Marketplace (Spieler-Handel) | 💡 | |
 

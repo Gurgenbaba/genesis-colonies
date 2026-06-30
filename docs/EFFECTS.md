@@ -67,6 +67,16 @@ After buildings/research/planet mechanics and **galactic directives**, `EffectRe
 
 Owner: `game/galactic_diplomacy/` · [GALACTIC_DIPLOMACY.md](GALACTIC_DIPLOMACY.md)
 
+### Alliance technologies (EPIC-09)
+
+After inventory boosters, `EffectResolver` applies alliance tech modifiers via `get_alliance_effect_modifiers(player_id)` — **members only**.
+
+**Merge order:** Research/Buildings → Galactic Directives → Galactic Diplomacy → Inventory Boosters → **Alliance**.
+
+**Keys:** `research_time_speed`, production factors, `armor_bonus`, `shield_bonus`. Expedition loot uses `expedition_loot_mult` in `fleet.py` directive flags (not ER keys).
+
+Owner: `game/alliance.py` · [ALLIANCE_SYSTEM.md](ALLIANCE_SYSTEM.md)
+
 Use labels like **“prepared / not active”** in admin copy when showing `scan_range` and other deferred flags.
 
 ## Offline queue finish → derived state

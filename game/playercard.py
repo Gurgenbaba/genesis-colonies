@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 from .db import begin_write_transaction, commit, db, rollback, table_exists
+from . import image_assets
 from .models import (
     get_homeworld,
     load_player,
@@ -508,30 +509,11 @@ def validate_avatar_url(url: Any, *, player_id: Optional[int] = None) -> Tuple[b
 
 
 def _process_avatar_image(src: Image.Image) -> Image.Image:
-    im = ImageOps.exif_transpose(src)
-    if im.mode in ("RGBA", "LA") or (im.mode == "P" and "transparency" in im.info):
-        im = im.convert("RGBA")
-    else:
-        im = im.convert("RGB")
-    w, h = im.size
-    side = min(w, h)
-    left = (w - side) // 2
-    top = (h - side) // 2
-    im = im.crop((left, top, left + side, top + side))
-    return im.resize((AVATAR_OUTPUT_SIZE, AVATAR_OUTPUT_SIZE), Image.Resampling.LANCZOS)
+    return image_assets.process_square_image(src, size=AVATAR_OUTPUT_SIZE)
 
 
 def _avatar_webp_bytes(im: Image.Image) -> bytes:
-    buf = io.BytesIO()
-    has_alpha = im.mode in ("RGBA", "LA") or "A" in im.getbands()
-    if has_alpha:
-        im.save(buf, "WEBP", quality=AVATAR_WEBP_QUALITY, method=6, lossless=False)
-    else:
-        im.convert("RGB").save(buf, "WEBP", quality=AVATAR_WEBP_QUALITY, method=6)
-    data = buf.getvalue()
-    if len(data) < AVATAR_MIN_FILE_BYTES:
-        raise ValueError("avatar_output_too_small")
-    return data
+    return image_assets.webp_bytes_from_image(im)
 
 
 def _save_avatar_webp(im: Image.Image, dest: Path) -> None:
@@ -540,58 +522,36 @@ def _save_avatar_webp(im: Image.Image, dest: Path) -> None:
 
 
 def _read_upload_bytes(file_storage: Any) -> Tuple[Optional[bytes], str]:
-    if file_storage is None:
-        return None, "playercard_avatar_missing"
-    raw = file_storage.read()
-    if not raw:
-        return None, "playercard_avatar_missing"
-    if len(raw) > AVATAR_UPLOAD_MAX_BYTES:
-        return None, "playercard_avatar_too_large"
+    raw, err = image_assets.read_upload_bytes(file_storage)
+    if raw is None:
+        return None, {
+            "image_upload_missing": "playercard_avatar_missing",
+            "image_upload_too_large": "playercard_avatar_too_large",
+        }.get(err, err)
     return raw, ""
 
 
 def _validate_upload_image(file_storage: Any, raw: bytes) -> Tuple[bool, str]:
-    """Accept declared MIME or sniff PNG/JPEG/WebP (e.g. application/octet-stream on mobile)."""
-    mime = str(getattr(file_storage, "mimetype", "") or "").split(";")[0].strip().lower()
-    if mime in _ALLOWED_AVATAR_MIME:
-        return True, mime
-    try:
-        with Image.open(io.BytesIO(raw)) as src:
-            fmt = str(src.format or "").upper()
-    except Exception:
+    ok, _mime = image_assets.validate_upload_image(file_storage, raw)
+    if not ok:
         return False, "playercard_avatar_invalid_type"
-    sniffed = {
-        "PNG": "image/png",
-        "JPEG": "image/jpeg",
-        "JPG": "image/jpeg",
-        "WEBP": "image/webp",
-    }.get(fmt)
-    if sniffed:
-        return True, sniffed
-    return False, "playercard_avatar_invalid_type"
+    return True, _mime
 
 
 def _avatar_blob_from_upload(file_storage: Any) -> Tuple[Optional[bytes], str]:
     raw, err = _read_upload_bytes(file_storage)
     if raw is None:
         return None, err
-
-    ok_mime, mime_err = _validate_upload_image(file_storage, raw)
+    ok_mime, _mime_err = _validate_upload_image(file_storage, raw)
     if not ok_mime:
-        return None, mime_err
-
-    try:
-        with Image.open(io.BytesIO(raw)) as src:
-            fmt = str(src.format or "").upper()
-            if fmt in ("GIF", "SVG", "MPO"):
-                return None, "playercard_avatar_invalid_type"
-            im = _process_avatar_image(src)
-        return _avatar_webp_bytes(im), ""
-    except UnidentifiedImageError:
         return None, "playercard_avatar_invalid_type"
-    except Exception:
-        logger.exception("avatar image decode failed")
-        return None, "playercard_avatar_invalid_type"
+    blob, blob_err = image_assets.blob_from_raw(raw, size=AVATAR_OUTPUT_SIZE)
+    if blob is None:
+        reason = {
+            "image_upload_invalid_type": "playercard_avatar_invalid_type",
+        }.get(blob_err, "playercard_avatar_invalid_type")
+        return None, reason
+    return blob, ""
 
 
 def process_avatar_upload(player_id: int, file_storage: Any) -> Tuple[bool, str]:
@@ -1018,6 +978,21 @@ def _build_public_card_payload(
     )
     rank = ranking.get("rank")
     total_players = ranking.get("total_players")
+    alliance_label = ""
+    alliance_info = None
+    try:
+        from .alliance import get_player_alliance, get_player_alliance_diplomacy_label
+
+        alliance_label = get_player_alliance_diplomacy_label(tid, conn=conn)
+        ally = get_player_alliance(tid, conn=conn)
+        if ally:
+            alliance_info = {
+                "tag": str(ally.get("tag") or ""),
+                "name": str(ally.get("name") or ""),
+                "role": str(ally.get("role") or ""),
+            }
+    except Exception:
+        pass
     payload: Dict[str, Any] = {
         "player_id": tid,
         "commander_name": escape(names["commander_name"]),
@@ -1033,8 +1008,8 @@ def _build_public_card_payload(
         "is_private": False,
         "is_self": is_self,
         "can_edit": is_self,
-        "alliance": None,
-        "alliance_label": "",
+        "alliance": alliance_info,
+        "alliance_label": alliance_label,
         "rank": int(rank) if rank is not None and int(rank) >= 1 else None,
         "total_players": int(total_players) if total_players else None,
         "score_total": int(ranking.get("score_total", 0) or 0),
