@@ -274,13 +274,13 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | Shared world presence (Dev-Preview map layout) | `game/planet_evolution/world_map.py` | [GC-571_SHARED_WORLD_PRESENCE.md](GC-571_SHARED_WORLD_PRESENCE.md) |
 | Sector grid geography (Command Map chunks) | `game/planet_evolution/sector_grid.py` | GC-580A; viewport chunks via `GET /api/command-map/sectors` (GC-580B) |
 | Strategic worlds (free field presentation) | `game/planet_evolution/strategic_worlds.py` | [GC-581_STRATEGIC_WORLDS.md](GC-581_STRATEGIC_WORLDS.md) |
-| World colonization (`world_key` — Dev/Legacy) | `game/planet_evolution/world_colonization.py` | [GC-582_DYNAMIC_COLONIZATION.md](GC-582_DYNAMIC_COLONIZATION.md) |
+| World colonization (`world_key` — Dev/Legacy) | `game/planet_evolution/world_colonization.py` | [GC-582_DYNAMIC_COLONIZATION.md](GC-582_DYNAMIC_COLONIZATION.md) — **kein Blocker** für Galaxy-Gameplay (Regel 18) |
 | Location role actions (Map → Routes) | `game/planet_evolution/location_actions.py` | [GC-570_WORLD_MAP_DIRECTION.md](GC-570_WORLD_MAP_DIRECTION.md) |
 | Command Center panel (own colony snapshot) | `game/planet_evolution/command_center.py` | [GC-592_COMMAND_CENTER_PANEL.md](GC-592_COMMAND_CENTER_PANEL.md) |
 | `expansion_phase` Resolver (derived) | `game/planet_evolution/expansion_phase.py` | [EXPANSION_PROTOCOL.md](EXPANSION_PROTOCOL.md) |
 | `expansion_phase` / Establishment | `game/planet_evolution/expansion_phase.py` | [EXPANSION_PROTOCOL.md](EXPANSION_PROTOCOL.md) |
 | Expansion Sites / Gates | `game/planet_evolution/expansion_gates.py` | [EXPANSION_PROTOCOL.md](EXPANSION_PROTOCOL.md) |
-| Expansion Protocol (dual-gate, outpost, establishment) | `game/planet_evolution/expansion_protocol.py` | [EXPANSION_PROTOCOL.md](EXPANSION_PROTOCOL.md) |
+| Expansion Protocol (dual-gate, outpost, establishment) | `game/planet_evolution/expansion_protocol.py` | [EXPANSION_PROTOCOL.md](EXPANSION_PROTOCOL.md) — `can_found_colony()` für Galaxy; Gates/Outpost **Legacy** (Regel 18) |
 | Expansion Phase (derived) | `game/planet_evolution/expansion_phase.py` | [EXPANSION_PROTOCOL.md](EXPANSION_PROTOCOL.md) |
 | Planet Evolution | `game/planet_evolution/` | [PLANET_EVOLUTION.md](PLANET_EVOLUTION.md) |
 | Galactic Directives | `game/galactic_directives/` | [GALACTIC_DIRECTIVES.md](GALACTIC_DIRECTIVES.md) |
@@ -298,6 +298,42 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | Alliance Hub (identity, pool, projects, diplomacy) | `game/alliance.py`, `game/alliance_catalog.py` | [ALLIANCE_SYSTEM.md](ALLIANCE_SYSTEM.md) |
 
 **Ticket-Check:** Domäne identifizieren → nur Owner-Modul (+ Routes/`app.py`) ändern → kein zweites Modul für dieselbe Wahrheit.
+
+---
+
+## 18. Galaxy-First Gameplay (GC-976)
+
+**Verbindliche Regel:** Die klassische **Galaxy** (Koordinaten, Fleet, Buildings) ist der aktive Hauptspielpfad. World Map, Outpost, Frontier und Expansion-Site-Code sind **Legacy/Experiment** und dürfen **keine aktive Gameplay-Action blockieren**.
+
+| Kanonisch (normales Gameplay) | Legacy / Dev-Preview (darf nicht sperren) |
+|-------------------------------|-------------------------------------------|
+| `game/galaxy.py` — Systemansicht, leere Slots | `game/planet_evolution/command_map.py` — Command Map |
+| `game/fleet.py` — Kolonisierung per Koordinaten / Fleet | `game/planet_evolution/world_colonization.py` — `world_key`-Binding |
+| `game/buildings.py` — Bau-Queue ohne Outpost-Gates | `expansion_protocol.is_building_allowed_in_outpost()` — **nicht** im Build-Flow |
+| `can_found_colony()` / `check_planet_cap_available()` | `can_found_expansion_world()` / `evaluate_expansion_gates()` — nur Map/Inspector |
+
+### Gebäudebau
+
+- **Verboten:** Normale Gebäude über `world_key`, `outpost`, `expansion_site`, `frontier_state` oder Establishment-Flags sperren.
+- **Owner:** `game/buildings.py` → `queue_build_for_planet()` — keine Aufrufe von Outpost-/World-Map-Gates.
+- **Verbotene Block-Reasons im Build-Flow:** `outpost_*`, `frontier_*` (sowie jede Expansion-Site-Gate-Reason).
+
+### Kolonisierung (Galaxy / Fleet)
+
+- **Kolonie-Slots** kommen aus **Planet Evolution** (Genesis-Ark-Stufe / `expansion_slots_unlocked`), **ohne** World-Map-Gates.
+- **Effective limit:** `min(admin_cap, evolution_cap)` — Implementierung: `can_found_colony()` in `expansion_protocol.py`, delegiert via `check_planet_cap_available()` in `game/logic.py`.
+- **Admin-Cap** (`max_colonies_per_player`) ist nur **Hard-Cap** → Reason `colony_limit_reached`.
+- **Fehlender Evolution-Slot** → Reason `planet_evolution_colony_slot_required`.
+- **Verboten im Galaxy-/Fleet-Colonize-Flow:** `colonize_requires_expansion_site`, `outpost_*`, `expansion_gate_*`, `expansion_slot_cap_reached`, `expansion_admin_ceiling_reached`, `frontier_*`.
+- Legacy-Args (`world_key`, `world_type`, `site_key`) an `check_planet_cap_available()` werden **ignoriert** — Galaxy-Kolonisierung prüft nur Evolution + Admin.
+
+### Wartung / Backfill
+
+- `scripts/backfill_planet_evolution_legacy.py` — fehlende EVO-Rows auf Alt-Planeten (Maintenance, kein Gameplay-Gate).
+
+Details: [PLANET_EVOLUTION.md](PLANET_EVOLUTION.md) — Abschnitt *Galaxy-First Gameplay*.
+
+Regression: `tests/test_galaxy_gameplay_contract.py`, `tests/test_expansion_protocol.py`.
 
 ---
 

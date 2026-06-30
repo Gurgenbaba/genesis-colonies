@@ -170,8 +170,32 @@ Untergrenze: `1.0` s (technischer Safety-Floor, kein 30s-Balance-Cap — GC-622B
 
 - Neue Planet-Row + `ensure_planet_evolution()`
 - Koordinaten via [GALAXY_SYSTEM.md](GALAXY_SYSTEM.md)
-- Limit: `game_settings.max_colonies_per_player` (Default 9)
 - Start-Ressourcen: 500 metal, 250 crystal
+
+### Galaxy-First Gameplay (GC-976)
+
+**Verbindliche Regel** (auch [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) Regel 18):
+
+| Thema | Verhalten |
+|-------|-----------|
+| Hauptpfad | Galaxy + Fleet + Buildings — normales Spiel |
+| World Map / Outpost / Frontier | Legacy/Experiment — **darf keine Action blockieren** |
+| Gebäudebau | Kein Gate über `world_key`, Outpost, Expansion Site oder `frontier_state` |
+| Kolonie-Slots | Planet Evolution (`expansion_slots_unlocked` / Genesis-Ark-Stufe) — **ohne** World-Map-Gates |
+| Effective limit | `min(admin_cap, evolution_cap)` via `can_found_colony()` |
+| Admin-Cap | `max_colonies_per_player` — nur Hard-Cap (`colony_limit_reached`) |
+| Evolution-Slot fehlt | `planet_evolution_colony_slot_required` |
+| Verbotene Reasons (Galaxy/Build) | `outpost_*`, `colonize_requires_expansion_site`, `expansion_gate_*`, `expansion_slot_cap_reached`, `expansion_admin_ceiling_reached`, `frontier_*` |
+
+**Implementierung:**
+
+```text
+check_planet_cap_available()  →  can_found_colony()
+queue_build_for_planet()      →  keine Outpost-/World-Map-Prüfung
+colonize_planet()             →  check_planet_cap_available() (klassischer Pfad)
+```
+
+Schema-Fallback ohne EVO-Migration: `evolution_max = 1` (nur Homeworld).
 
 ### Legacy Planet Evolution Backfill
 
@@ -182,7 +206,7 @@ python scripts/backfill_planet_evolution_legacy.py --dry-run
 python scripts/backfill_planet_evolution_legacy.py
 ```
 
-**Gameplay (GC-976+):** World-Map-/Outpost-Gates blockieren **kein** normales Bauen. Kolonie-Limit = `min(admin_cap, evolution_cap)` — Slots über Genesis-Ark-Stufe (`expansion_slots_unlocked`), Admin-Cap als Hard-Cap.
+Backfill ist **Maintenance**, kein Gameplay-Gate.
 
 ---
 
@@ -253,6 +277,10 @@ Ohne Schema: `get_context_planet()` fällt auf Homeworld-only-Verhalten zurück.
 ---
 
 ## Tests
+
+```bash
+python -m pytest tests/test_galaxy_gameplay_contract.py tests/test_expansion_protocol.py tests/test_planet_cap_hard.py tests/test_world_colonization.py -v
+```
 
 ```bash
 python -m pytest tests/test_planet_evolution.py tests/test_planet_evolution_dashboard.py tests/test_planet_instancing.py -v
