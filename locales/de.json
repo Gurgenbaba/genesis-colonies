@@ -1691,6 +1691,8 @@
   "expansion_gate_homeworld_level": "Deine Genesis Ark hat noch nicht die nötige Entwicklungsstufe für diese Expansion.",
   "expansion_gate_interstellar_tech": "Interstellar Expansion ist für diese Region noch nicht hoch genug.",
   "expansion_gate_world_type": "Dieser Welttyp liegt außerhalb der Reichweite deines Imperiums.",
+  "planet_evolution_colony_slot_required": "Weitere Kolonie-Slots werden über die Planet Evolution deiner Genesis Ark freigeschaltet.",
+  "fleet_error_planet_evolution_colony_slot_required": "Weitere Kolonie-Slots werden über die Planet Evolution deiner Genesis Ark freigeschaltet.",
   "expansion_milestone_communication": "Kommunikationszentrum",
   "expansion_milestone_energy": "Energie stabil",
   "expansion_milestone_first_population": "Erste Bevölkerung",

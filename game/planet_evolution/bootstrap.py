@@ -50,6 +50,9 @@ def ensure_planet_evolution(planet_id: int, conn: sqlite3.Connection) -> Dict[st
 
     reload_definitions(conn)
     if not planet_evolution_needs_bootstrap(planet_id, conn):
+        from .expansion_protocol import bootstrap_legacy_establishment
+
+        bootstrap_legacy_establishment(planet_id, conn=conn)
         return {"ready": True, "planet_id": int(planet_id), "dna_created": False}
 
     began = False
@@ -115,6 +118,9 @@ def ensure_planet_evolution(planet_id: int, conn: sqlite3.Connection) -> Dict[st
             )
 
         compile_planet_mechanics(planet_id, conn)
+        from .expansion_protocol import bootstrap_legacy_establishment
+
+        bootstrap_legacy_establishment(planet_id, conn=conn)
         if began:
             commit(conn)
         return {"ready": True, "planet_id": int(planet_id), "dna_created": created}

@@ -1690,6 +1690,8 @@
   "expansion_gate_homeworld_level": "Twoja Arka Genesis nie osiągnęła jeszcze wymaganego etapu rozwoju dla tej ekspansji.",
   "expansion_gate_interstellar_tech": "Ekspansja międzygwiezdna jest zbyt niska dla tego regionu.",
   "expansion_gate_world_type": "Ten typ świata jest poza zasięgiem twojego imperium.",
+  "planet_evolution_colony_slot_required": "Kolejne sloty kolonii odblokowujesz przez ewolucję planety na Genesis Ark.",
+  "fleet_error_planet_evolution_colony_slot_required": "Kolejne sloty kolonii odblokowujesz przez ewolucję planety na Genesis Ark.",
   "expansion_milestone_communication": "Centrum łączności",
   "expansion_milestone_energy": "Stabilna energia",
   "expansion_milestone_first_population": "Pierwsza populacja",

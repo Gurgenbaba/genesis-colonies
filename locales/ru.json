@@ -1690,6 +1690,8 @@
   "expansion_gate_homeworld_level": "Вашему Ковчегу Genesis ещё не хватает ступени развития для этой экспансии.",
   "expansion_gate_interstellar_tech": "Межзвёздная экспансия недостаточна для этого региона.",
   "expansion_gate_world_type": "Этот тип мира вне досягаемости вашей империи.",
+  "planet_evolution_colony_slot_required": "Новые слоты колоний открываются через эволюцию планеты у Genesis Ark.",
+  "fleet_error_planet_evolution_colony_slot_required": "Новые слоты колоний открываются через эволюцию планеты у Genesis Ark.",
   "expansion_milestone_communication": "Коммуникационный центр",
   "expansion_milestone_energy": "Стабильная энергия",
   "expansion_milestone_first_population": "Первое население",

@@ -173,6 +173,17 @@ Untergrenze: `1.0` s (technischer Safety-Floor, kein 30s-Balance-Cap — GC-622B
 - Limit: `game_settings.max_colonies_per_player` (Default 9)
 - Start-Ressourcen: 500 metal, 250 crystal
 
+### Legacy Planet Evolution Backfill
+
+Optional maintenance script for missing `planet_dna` / `planet_mechanics` rows on older planets:
+
+```bash
+python scripts/backfill_planet_evolution_legacy.py --dry-run
+python scripts/backfill_planet_evolution_legacy.py
+```
+
+**Gameplay (GC-976+):** World-Map-/Outpost-Gates blockieren **kein** normales Bauen. Kolonie-Limit = `min(admin_cap, evolution_cap)` — Slots über Genesis-Ark-Stufe (`expansion_slots_unlocked`), Admin-Cap als Hard-Cap.
+
 ---
 
 ## Routes

@@ -254,7 +254,7 @@ def build_world_colonize_preview(
     if not ok_target:
         block_reason = reason or "invalid_world_key"
     elif not ok_limit:
-        block_reason = limit_reason or "expansion_gate_homeworld_level"
+        block_reason = limit_reason or "planet_evolution_colony_slot_required"
 
     return {
         "world_key": wk,

@@ -119,6 +119,7 @@ def _second_colony(uid: int, conn=None):
     own = conn is None
     if own:
         conn = db()
+    _unlock_expansion_for_colonize(conn, uid)
     ok, reason, extra = colonize_planet(uid, name='Colony Two', galaxy=1, system=300, position=5, conn=conn, allow_legacy_coordinates=True, source='test')
     assert ok, reason
     if own:
@@ -237,13 +238,17 @@ def test_admin_fleet_speed_peaceful_applied_in_preview(fleet_db, monkeypatch):
     cur.execute('SELECT * FROM planets WHERE id = ?;', (pid,))
     origin = dict(cur.fetchone())
     conn.commit()
+    conn.close()
     save_game_settings({'fleet_speed_peaceful': 1.0})
+    conn = db()
     slow = preview_fleet_flight(origin_planet=origin, target_galaxy=g, target_system=s, target_position=EXPEDITION_POSITION, ships={'solar_skiff': 1}, resources={}, speed_percent=100, player_id=uid, mission_type='expedition', conn=conn)
+    conn.close()
     save_game_settings({'fleet_speed_peaceful': 10.0})
+    conn = db()
     fast = preview_fleet_flight(origin_planet=origin, target_galaxy=g, target_system=s, target_position=EXPEDITION_POSITION, ships={'solar_skiff': 1}, resources={}, speed_percent=100, player_id=uid, mission_type='expedition', conn=conn)
     assert int(fast['flight_seconds']) < int(slow['flight_seconds'])
-    save_game_settings({'fleet_speed_peaceful': 1.0})
     conn.close()
+    save_game_settings({'fleet_speed_peaceful': 1.0})
 
 def test_expedition_holding_duration_from_hours(fleet_db):
     conn = db()
@@ -2096,6 +2101,7 @@ def test_distribute_validates_ownership(fleet_db):
     assert reason == 'planet_not_owned'
 
 def _extra_colonies(uid: int, conn, positions: list[int]) -> list[int]:
+    _unlock_expansion_for_colonize(conn, uid)
     ids: list[int] = []
     for pos in positions:
         ok, reason, extra = colonize_planet(uid, name=f'Colony {pos}', galaxy=1, system=300, position=int(pos), conn=conn, allow_legacy_coordinates=True, source='test')
@@ -2634,8 +2640,8 @@ def test_colonize_fleet_send_preview_classic_empty_slot_ok(fleet_db):
 def _colonize_preview_to_empty_slot(uid: int, pid: int, origin, conn):
     return build_fleet_send_preview(player_id=uid, origin_planet=dict(origin), target_galaxy=1, target_system=499, target_position=12, mission_type='colonize', ships={'seed_ark': 1}, resources={}, speed_percent=100, conn=conn)
 
-def test_colonize_fleet_preview_classic_empty_slot_without_expansion_unlock_blocked(fleet_db):
-    """GC-593A — classic slot allowed only when expansion gates pass."""
+def test_colonize_fleet_preview_classic_empty_slot_blocked_without_evolution_slot(fleet_db):
+    """Classic galaxy colonize requires a free Planet Evolution colony slot."""
     uid = _player()
     conn = db()
     pid = int(get_planets_by_player(uid, conn=conn)[0]['id'])
@@ -2644,8 +2650,23 @@ def test_colonize_fleet_preview_classic_empty_slot_without_expansion_unlock_bloc
     conn.commit()
     preview = _colonize_preview_to_empty_slot(uid, pid, origin, conn)
     assert preview['mission_allowed'] is False
-    assert preview['block_reason'] == 'expansion_gate_homeworld_level'
+    assert preview['block_reason'] == 'planet_evolution_colony_slot_required'
     assert preview['can_send'] is False
+    conn.close()
+
+
+def test_colonize_fleet_preview_classic_empty_slot_allowed_with_evolution_slot(fleet_db):
+    uid = _player()
+    conn = db()
+    pid = int(get_planets_by_player(uid, conn=conn)[0]['id'])
+    _unlock_expansion_for_colonize(conn, uid)
+    _seed_ships(pid, uid, {'seed_ark': 1}, conn=conn)
+    origin = conn.cursor().execute('SELECT * FROM planets WHERE id = ?;', (pid,)).fetchone()
+    conn.commit()
+    preview = _colonize_preview_to_empty_slot(uid, pid, origin, conn)
+    assert preview['mission_allowed'] is True
+    assert preview['block_reason'] in (None, '')
+    assert preview['can_send'] is True
     conn.close()
 
 def test_colonize_fleet_send_to_empty_slot_ok(fleet_db):
@@ -2957,7 +2978,8 @@ def test_galaxy_fleet_links_have_query_params(fleet_db, monkeypatch):
     ok, _, user = create_user(uname, 'test-pass-123')
     assert ok
     client = app_module.app.test_client()
-    client.post('/login', data={'username': uname, 'password': 'test-pass-123'})
+    with client.session_transaction() as sess:
+        sess['user_id'] = int(user['id'])
     resp = client.get('/galaxy?view=system')
     body = resp.get_data(as_text=True)
     assert 'target_galaxy=' in body
@@ -3366,7 +3388,7 @@ def test_quick_target_template_sets_coord_inputs():
     coords_strip_idx = tpl.index('data-fleet-coords-strip')
     coords_line_idx = tpl.index('fleet-coords-line')
     expo_idx = tpl.index('data-fleet-expedition-shortcut')
-    mission_idx = tpl.index('data-fleet-mission')
+    mission_idx = tpl.index('id="fleet-mission"')
     assert coords_line_idx < coords_strip_idx < expo_idx < mission_idx
     assert 'fleet-expedition-shortcut-coords' not in tpl
     assert 'fleet-preview-hud' in tpl

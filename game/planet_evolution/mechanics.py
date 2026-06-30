@@ -196,10 +196,6 @@ def compile_planet_mechanics(planet_id: int, conn: sqlite3.Connection) -> Dict[s
         adef = get_ascension(str(planet["ascension_key"])) or {}
         _merge_mechanics_bundle(_parse_mechanics_json(adef.get("permanent_mechanics") or {}), compiled)
 
-    from .expansion_protocol import apply_outpost_mechanics_flags
-
-    apply_outpost_mechanics_flags(planet_id, compiled, conn=conn)
-
     save_planet_mechanics(planet_id, compiled, conn)
     _sync_production_chains(planet_id, compiled, conn)
     _sync_import_demands(planet_id, spec_key, spec_tier, conn)

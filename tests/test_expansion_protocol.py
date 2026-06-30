@@ -69,17 +69,17 @@ def _colonizable_binding():
                 return {'world_key': world_key, 'world_x': float(wx), 'world_y': float(wy), 'sector_x': int(sx), 'sector_y': int(sy), 'planet_role': parsed['planet_role'], 'origin_world_key': world_key}
     raise AssertionError('no colonizable coords')
 
-def test_expansion_blocked_without_gates(expansion_protocol_db):
+def test_colony_cap_blocked_until_evolution_slot_unlocked(expansion_protocol_db):
     uid = _player()
     conn = db()
     try:
         ok, reason = check_planet_cap_available(uid, conn=conn)
         assert not ok
-        assert reason == 'expansion_gate_homeworld_level'
+        assert reason == 'planet_evolution_colony_slot_required'
     finally:
         conn.close()
 
-def test_expansion_allowed_with_dual_gate(expansion_protocol_db):
+def test_colony_cap_available_after_evolution_slot_unlock(expansion_protocol_db):
     uid = _player()
     conn = db()
     try:
@@ -89,7 +89,7 @@ def test_expansion_allowed_with_dual_gate(expansion_protocol_db):
     finally:
         conn.close()
 
-def test_interstellar_tech_gate_blocks_when_hw_ready(expansion_protocol_db):
+def test_hw_level_unlocks_colony_slot_without_interstellar_tech(expansion_protocol_db):
     uid = _player()
     conn = db()
     try:
@@ -97,8 +97,22 @@ def test_interstellar_tech_gate_blocks_when_hw_ready(expansion_protocol_db):
         conn.execute('UPDATE planets SET planet_level = 5 WHERE id = ?;', (int(hw['id']),))
         conn.commit()
         ok, reason = check_planet_cap_available(uid, conn=conn)
+        assert ok, reason
+    finally:
+        conn.close()
+
+def test_high_research_without_hw_level_does_not_unlock_colony_slot(expansion_protocol_db):
+    uid = _player()
+    conn = db()
+    try:
+        conn.execute(
+            "\n            INSERT INTO research_levels (user_id, tech_key, level) VALUES (?, 'navigation_tech', 12)\n            ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;\n            ",
+            (int(uid),),
+        )
+        conn.commit()
+        ok, reason = check_planet_cap_available(uid, conn=conn)
         assert not ok
-        assert reason == 'expansion_gate_interstellar_tech'
+        assert reason == 'planet_evolution_colony_slot_required'
     finally:
         conn.close()
 
@@ -167,7 +181,7 @@ def test_admin_ceiling_grandfathering(expansion_protocol_db):
         _set_cap(1)
         ok_cap, reason_cap = check_planet_cap_available(uid, conn=conn)
         assert not ok_cap
-        assert reason_cap == 'expansion_admin_ceiling_reached'
+        assert reason_cap == 'colony_limit_reached'
         assert len(get_planets_by_player(uid, conn=conn)) == 2
         block = get_planet_limit_block(uid, conn=conn)
         assert block['at_admin_ceiling']
@@ -200,10 +214,11 @@ def test_expansion_slots_unlocked_matrix():
     assert expansion_slots_unlocked(10) == 2
     assert effective_max_worlds_for_homeworld_level(10) == 3
 
-def test_hw_slot_cap_grandfathering(expansion_protocol_db):
+def test_admin_cap_blocks_new_colonies_not_existing(expansion_protocol_db):
     uid = _player()
     conn = db()
     try:
+        _unlock_first_expansion(conn, uid)
         hw = get_homeworld(uid, conn=conn)
         conn.execute('UPDATE planets SET planet_level = 25 WHERE id = ?;', (int(hw['id']),))
         conn.execute(
@@ -211,6 +226,7 @@ def test_hw_slot_cap_grandfathering(expansion_protocol_db):
             (int(uid), INTERSTELLAR_EXPANSION_TECH, 6),
         )
         conn.commit()
+        _set_cap(3)
         for i in range(2):
             ok, reason, _ = colonize_planet(
                 uid,
@@ -224,16 +240,10 @@ def test_hw_slot_cap_grandfathering(expansion_protocol_db):
             )
             assert ok, reason
         assert len(get_planets_by_player(uid, conn=conn)) == 3
-        conn.execute('UPDATE planets SET planet_level = 5 WHERE id = ?;', (int(hw['id']),))
-        conn.commit()
         ok_cap, reason_cap = check_planet_cap_available(uid, conn=conn)
         assert not ok_cap
-        assert reason_cap == 'expansion_slot_cap_reached'
+        assert reason_cap == 'colony_limit_reached'
         assert len(get_planets_by_player(uid, conn=conn)) == 3
-        block = get_planet_limit_block(uid, conn=conn)
-        assert block['owned_worlds'] == 3
-        assert block['effective_max_worlds'] == 2
-        assert block['max'] == 2
     finally:
         conn.close()
 
@@ -250,10 +260,9 @@ def test_evaluate_gates_meta(expansion_protocol_db):
         conn.close()
 
 
-def test_outpost_allows_canonical_resource_buildings(expansion_protocol_db):
+def test_world_key_colony_builds_all_infrastructure(expansion_protocol_db):
     from game.buildings import queue_build_for_planet
     from game.models import get_planet_buildings, save_planet_buildings
-    from game.planet_evolution.expansion_protocol import is_building_allowed_in_outpost
 
     uid = _player()
     conn = db()
@@ -262,7 +271,7 @@ def test_outpost_allows_canonical_resource_buildings(expansion_protocol_db):
         binding = _colonizable_binding()
         ok, reason, extra = colonize_planet(
             uid,
-            name='Frontier Outpost',
+            name='Frontier Colony',
             galaxy=1,
             system=302,
             position=3,
@@ -271,15 +280,17 @@ def test_outpost_allows_canonical_resource_buildings(expansion_protocol_db):
         )
         assert ok, reason
         pid = int(extra['planet_id'])
-        assert is_outpost_planet(pid, conn=conn)
 
-        for building_type in ('metal_storage', 'fuel_cell_plant'):
-            allowed, allow_reason = is_building_allowed_in_outpost(
-                pid, building_type, conn=conn
-            )
-            assert allowed, allow_reason
-
-        save_planet_buildings(pid, {'metal_mine': 4})
+        save_planet_buildings(
+            pid,
+            {
+                'metal_mine': 4,
+                'crystal_mine': 2,
+                'solar_plant': 1,
+                'command_center': 2,
+                'orbital_shipyard': 2,
+            },
+        )
         conn.execute(
             'UPDATE planets SET metal = 500000, crystal = 500000 WHERE id = ?;',
             (pid,),
@@ -287,57 +298,89 @@ def test_outpost_allows_canonical_resource_buildings(expansion_protocol_db):
         conn.commit()
         planet = dict(conn.execute('SELECT * FROM planets WHERE id = ?;', (pid,)).fetchone())
         buildings = get_planet_buildings(pid, conn=conn)
-        ok_build, build_reason, payload = queue_build_for_planet(
-            planet,
-            buildings,
-            'metal_storage',
-            user_id=uid,
-        )
-        assert ok_build, (build_reason, payload)
-        assert int(payload.get('job_id') or 0) > 0
+
+        for building_type in ('metal_storage', 'research_lab', 'orbital_shipyard', 'defense_factory'):
+            ok_build, build_reason, payload = queue_build_for_planet(
+                planet,
+                buildings,
+                building_type,
+                user_id=uid,
+            )
+            assert build_reason not in (
+                'outpost_building_restricted',
+                'outpost_building_slots_full',
+            ), (building_type, build_reason, payload)
+            assert ok_build, (building_type, build_reason, payload)
+            assert int(payload.get('job_id') or 0) > 0
     finally:
         conn.close()
 
 
-def test_outpost_blocks_research_lab_with_clear_reason(expansion_protocol_db):
+def test_legacy_colony_without_evo_data_can_build_infrastructure(expansion_protocol_db):
+    """Pre-EVO colonies (no world_key / missing EVO rows) must never hit outpost gates."""
     from game.buildings import queue_build_for_planet
     from game.models import get_planet_buildings, save_planet_buildings
-    from game.planet_evolution.expansion_protocol import is_building_allowed_in_outpost
 
     uid = _player()
     conn = db()
     try:
         _unlock_first_expansion(conn, uid)
-        binding = _colonizable_binding()
         ok, reason, extra = colonize_planet(
             uid,
-            name='Frontier Lab',
-            galaxy=1,
-            system=303,
-            position=4,
-            world_binding=binding,
+            name='Pre EVO Colony',
             conn=conn,
+            allow_legacy_coordinates=True,
+            source='test',
         )
         assert ok, reason
         pid = int(extra['planet_id'])
-        save_planet_buildings(pid, {'metal_mine': 1, 'solar_plant': 1})
+
+        conn.execute('DELETE FROM planet_dna WHERE planet_id = ?;', (pid,))
+        conn.execute('DELETE FROM planet_culture WHERE planet_id = ?;', (pid,))
+        conn.execute('DELETE FROM planet_mechanics WHERE planet_id = ?;', (pid,))
+        conn.execute(
+            """
+            UPDATE planets
+            SET dna_seed = 0, planet_level = 3, dna_reveal_tier = 1, last_evolution_tick = 0
+            WHERE id = ?;
+            """,
+            (pid,),
+        )
+        conn.commit()
+
+        row = conn.execute('SELECT world_key FROM planets WHERE id = ?;', (pid,)).fetchone()
+        assert not row['world_key']
+
+        save_planet_buildings(
+            pid,
+            {
+                'metal_mine': 4,
+                'crystal_mine': 2,
+                'solar_plant': 1,
+                'command_center': 2,
+            },
+        )
         conn.execute(
             'UPDATE planets SET metal = 500000, crystal = 500000 WHERE id = ?;',
             (pid,),
         )
         conn.commit()
+
         planet = dict(conn.execute('SELECT * FROM planets WHERE id = ?;', (pid,)).fetchone())
         buildings = get_planet_buildings(pid, conn=conn)
 
-        allowed, _ = is_building_allowed_in_outpost(pid, 'research_lab', conn=conn)
-        assert not allowed
-        ok_build, build_reason, _ = queue_build_for_planet(
-            planet,
-            buildings,
-            'research_lab',
-            user_id=uid,
-        )
-        assert not ok_build
-        assert build_reason == 'outpost_building_restricted'
+        for btype in ('metal_storage', 'research_lab', 'orbital_shipyard'):
+            ok_build, build_reason, payload = queue_build_for_planet(
+                planet,
+                buildings,
+                btype,
+                user_id=uid,
+            )
+            assert ok_build, (btype, build_reason, payload)
+            assert build_reason not in (
+                'outpost_building_restricted',
+                'outpost_building_slots_full',
+            )
+            assert int(payload.get('job_id') or 0) > 0
     finally:
         conn.close()

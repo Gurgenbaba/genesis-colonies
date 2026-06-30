@@ -621,48 +621,18 @@ def colonize_planet(
         elif wk and binding is not None and not str(binding.get("world_key") or "").strip():
             binding["world_key"] = wk
 
-        src = str(source or "player").strip().lower() or "player"
         has_expansion_binding = bool(wk) or bool(
             binding
             and str(binding.get("world_key") or "").strip()
         )
-        has_explicit_classic_coords = system is not None and position is not None
-        if not has_expansion_binding:
-            if (
-                not has_explicit_classic_coords
-                and not allow_legacy_coordinates
-                and src not in _LEGACY_COLONIZE_SOURCES
-            ):
-                return False, "colonize_requires_expansion_site", None
-
-        legacy_coordinate_path = not has_expansion_binding and (
-            has_explicit_classic_coords
-            or allow_legacy_coordinates
-            or src in _LEGACY_COLONIZE_SOURCES
-        )
 
         begin_write_transaction(conn)
-        if legacy_coordinate_path and src not in _LEGACY_COLONIZE_SOURCES:
-            from game.logic import check_planet_cap_available
+        from game.logic import check_planet_cap_available
 
-            ok_cap, cap_reason = check_planet_cap_available(int(player_id), conn=conn)
-            if not ok_cap:
-                rollback(conn)
-                return False, cap_reason, None
-        elif not legacy_coordinate_path:
-            from game.logic import check_planet_cap_available
-
-            cap_world_key = str(binding.get("world_key") or "") if binding else None
-            cap_world_type = str(binding.get("planet_role") or "") if binding else None
-            ok_cap, cap_reason = check_planet_cap_available(
-                int(player_id),
-                conn=conn,
-                world_key=cap_world_key or None,
-                world_type=cap_world_type or None,
-            )
-            if not ok_cap:
-                rollback(conn)
-                return False, cap_reason, None
+        ok_cap, cap_reason = check_planet_cap_available(int(player_id), conn=conn)
+        if not ok_cap:
+            rollback(conn)
+            return False, cap_reason, None
 
         cur = conn.cursor()
         from game.galaxy import (

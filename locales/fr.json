@@ -1690,6 +1690,8 @@
   "expansion_gate_homeworld_level": "Votre Arche Genesis n'a pas encore atteint le stade de développement requis pour cette expansion.",
   "expansion_gate_interstellar_tech": "Expansion interstellaire insuffisante pour cette région.",
   "expansion_gate_world_type": "Ce type de monde est hors de portée de votre empire.",
+  "planet_evolution_colony_slot_required": "D'autres emplacements de colonie se débloquent via l'évolution planétaire de votre Arche Genesis.",
+  "fleet_error_planet_evolution_colony_slot_required": "D'autres emplacements de colonie se débloquent via l'évolution planétaire de votre Arche Genesis.",
   "expansion_milestone_communication": "Centre de communication",
   "expansion_milestone_energy": "Énergie stable",
   "expansion_milestone_first_population": "Première population",

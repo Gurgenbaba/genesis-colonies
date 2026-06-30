@@ -90,12 +90,12 @@ def test_colonize_allowed_below_ceiling_blocked_at_ceiling(cap_db):
         assert block['admin_ceiling'] == 2
         ok2, reason2, _ = colonize_planet(uid, name='Colony Beta', galaxy=1, system=121, position=4, conn=conn, allow_legacy_coordinates=True, source='test')
         assert not ok2
-        assert reason2 == 'expansion_admin_ceiling_reached'
+        assert reason2 == 'colony_limit_reached'
         assert len(get_planets_by_player(uid, conn=conn)) == 2
     finally:
         conn.close()
 
-def test_high_research_does_not_bypass_expansion_gates(cap_db):
+def test_high_research_without_hw_level_does_not_unlock_colony_slot(cap_db):
     uid = _player()
     _set_cap(9)
     conn = db()
@@ -106,7 +106,7 @@ def test_high_research_does_not_bypass_expansion_gates(cap_db):
         conn.commit()
         ok, reason = check_planet_cap_available(uid, conn=conn)
         assert not ok
-        assert reason == 'expansion_gate_homeworld_level'
+        assert reason == 'planet_evolution_colony_slot_required'
     finally:
         conn.close()
 
@@ -122,7 +122,7 @@ def test_player_over_ceiling_not_deleted_but_blocked(cap_db):
         _set_cap(2)
         ok_cap, reason_cap = check_planet_cap_available(uid, conn=conn)
         assert not ok_cap
-        assert reason_cap == 'expansion_admin_ceiling_reached'
+        assert reason_cap == 'colony_limit_reached'
         block = get_planet_limit_block(uid, conn=conn)
         assert block['owned_worlds'] == 3
         assert block['admin_ceiling'] == 2
@@ -130,7 +130,7 @@ def test_player_over_ceiling_not_deleted_but_blocked(cap_db):
         assert len(get_planets_by_player(uid, conn=conn)) == 3
         ok_new, reason_new, _ = colonize_planet(uid, name='Should Fail', galaxy=1, system=250, position=5, conn=conn, allow_legacy_coordinates=True, source='test')
         assert not ok_new
-        assert reason_new == 'expansion_admin_ceiling_reached'
+        assert reason_new == 'colony_limit_reached'
         assert len(get_planets_by_player(uid, conn=conn)) == 3
     finally:
         conn.close()

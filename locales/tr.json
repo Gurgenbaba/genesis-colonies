@@ -1690,6 +1690,8 @@
   "expansion_gate_homeworld_level": "Genesis Ark'ınız bu genişleme için gerekli gelişim aşamasına ulaşmadı.",
   "expansion_gate_interstellar_tech": "Yıldızlararası Genişleme bu bölge için henüz yeterli değil.",
   "expansion_gate_world_type": "Bu dünya türü imparatorluğunuzun erişiminin ötesinde.",
+  "planet_evolution_colony_slot_required": "Ek koloni slotları Genesis Ark'ınızın gezegen evrimiyle açılır.",
+  "fleet_error_planet_evolution_colony_slot_required": "Ek koloni slotları Genesis Ark'ınızın gezegen evrimiyle açılır.",
   "expansion_milestone_communication": "İletişim merkezi",
   "expansion_milestone_energy": "Kararlı enerji",
   "expansion_milestone_first_population": "İlk nüfus",

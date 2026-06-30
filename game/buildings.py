@@ -1919,6 +1919,15 @@ def queue_build_for_planet(
             + int(engine_result["finished"]["research"])
         ) > 0
 
+        try:
+            from game.planet_evolution.repository import evolution_schema_ready
+            from game.planet_evolution.bootstrap import ensure_planet_evolution
+
+            if evolution_schema_ready(conn):
+                ensure_planet_evolution(planet_id, conn)
+        except Exception:
+            pass
+
         recalculate_build_queue_finish_times(
             planet_id, user_id, conn=conn, now=now
         )
@@ -1977,18 +1986,6 @@ def queue_build_for_planet(
                     "max_level": max_level,
                     "target_level": target_level,
                 }
-                break
-
-            from game.planet_evolution.expansion_protocol import is_building_allowed_in_outpost
-
-            outpost_ok, outpost_reason = is_building_allowed_in_outpost(
-                int(planet_id),
-                building_type,
-                conn=conn,
-            )
-            if not outpost_ok:
-                last_reason = str(outpost_reason or "outpost_building_restricted")
-                last_fail = {"building_type": building_type, "outpost": True}
                 break
 
             if not has_building_requirements(buildings, research_levels, building_type):

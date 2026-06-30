@@ -501,8 +501,6 @@ def queue_build(
             return False, "queue_full", payload
         if reason == "requirements":
             return False, "requirements", payload
-        if reason in ("outpost_building_restricted", "outpost_building_slots_full"):
-            return False, reason, payload
         if reason == "invalid":
             if isinstance(payload, dict) and payload.get("max_level") is not None:
                 return False, "max_level_reached", payload
@@ -649,9 +647,6 @@ DEFAULT_MAX_COLONIES_PER_PLAYER = 9
 def get_max_planets_per_player(*, conn=None) -> int:
     """
     Hard admin cap for owned planets (homeworld + colonies).
-
-    Deferred: future colony limit increases will come from Planet Evolution /
-    Expansion Gates, not account research.
     """
     from .models import get_game_settings
 
@@ -673,16 +668,11 @@ def check_planet_cap_available(
     world_type: str | None = None,
     site_key: str | None = None,
 ) -> tuple[bool, str]:
-    """Return whether the player may found another expansion world (GC-922)."""
-    from .planet_evolution.expansion_protocol import can_found_expansion_world
+    """Return whether the player may found another colony (evolution slots + admin hard cap)."""
+    _ = (world_key, world_type, site_key)  # legacy world-map args ignored for galaxy gameplay
+    from .planet_evolution.expansion_protocol import can_found_colony
 
-    return can_found_expansion_world(
-        int(player_id),
-        conn=conn,
-        world_key=world_key,
-        world_type=world_type,
-        site_key=site_key,
-    )
+    return can_found_colony(int(player_id), conn=conn)
 
 
 def get_planet_limit_block(

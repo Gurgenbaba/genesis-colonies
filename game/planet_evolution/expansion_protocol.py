@@ -278,6 +278,35 @@ def evaluate_expansion_gates(
     return True, "", meta
 
 
+def can_found_colony(
+    player_id: int,
+    *,
+    conn: sqlite3.Connection,
+) -> Tuple[bool, str]:
+    """Galaxy colonize cap — min(admin ceiling, HW evolution slots). No world-map/outpost gates."""
+    from game.logic import get_max_planets_per_player
+    from .repository import evolution_schema_ready
+
+    uid = int(player_id)
+    planets = get_planets_by_player(uid, conn=conn) or []
+    total = len(planets)
+    admin = int(get_max_planets_per_player(conn=conn))
+
+    if total >= admin:
+        return False, "colony_limit_reached"
+
+    if evolution_schema_ready(conn):
+        cap = expansion_gameplay_cap(uid, conn=conn)
+        evolution_max = int(cap["effective_max_worlds"])
+    else:
+        evolution_max = 1
+
+    if total >= evolution_max:
+        return False, "planet_evolution_colony_slot_required"
+
+    return True, ""
+
+
 def can_found_expansion_world(
     player_id: int,
     *,
@@ -446,12 +475,80 @@ def build_expansion_launch_checklist(
     }
 
 
+def is_legacy_full_colony(
+    planet_id: int,
+    *,
+    planet: Mapping[str, Any] | None = None,
+    conn: sqlite3.Connection,
+) -> bool:
+    """Colonies that predate frontier-outpost gates — must stay fully playable (GC-976 legacy)."""
+    pid = int(planet_id)
+    row = planet if planet is not None else (get_planet_row(pid, conn=conn) or {})
+    if int(row.get("is_homeworld") or 0) == 1:
+        return True
+    if int(row.get("planet_level") or 0) >= 1:
+        return True
+    if int(row.get("dna_reveal_tier") or 0) >= 1:
+        return True
+
+    try:
+        buildings = get_planet_buildings(pid, conn=conn) or {}
+    except Exception:
+        buildings = {}
+
+    for btype in OUTPOST_DISABLED_BUILDINGS:
+        if int(buildings.get(btype) or 0) >= 1:
+            return True
+
+    distinct_slots = sum(1 for level in buildings.values() if int(level or 0) > 0)
+    if distinct_slots > OUTPOST_MAX_BUILDING_SLOTS:
+        return True
+    return False
+
+
+def bootstrap_legacy_establishment(planet_id: int, *, conn: sqlite3.Connection) -> bool:
+    """Promote pre-outpost colonies that already matured before establishment milestones existed."""
+    pid = int(planet_id)
+    planet = get_planet_row(pid, conn=conn) or {}
+    if int(planet.get("is_homeworld") or 0) == 1:
+        return False
+
+    wk = str(planet.get("world_key") or planet.get("origin_world_key") or "").strip()
+    if not wk:
+        return False
+    if not is_legacy_full_colony(pid, planet=planet, conn=conn):
+        return False
+    if is_establishment_complete(pid, conn=conn):
+        return False
+
+    changed = False
+    if int(planet.get("dna_reveal_tier") or 0) < 1:
+        conn.execute(
+            "UPDATE planets SET dna_reveal_tier = 1 WHERE id = ? AND dna_reveal_tier < 1;",
+            (pid,),
+        )
+        changed = True
+    if int(planet.get("planet_level") or 0) < 1:
+        conn.execute(
+            "UPDATE planets SET planet_level = 1 WHERE id = ? AND planet_level < 1;",
+            (pid,),
+        )
+        changed = True
+
+    from .mechanics import compile_planet_mechanics
+
+    compile_planet_mechanics(pid, conn)
+    return changed
+
+
 def is_outpost_planet(planet_id: int, *, conn: sqlite3.Connection) -> bool:
     planet = get_planet_row(int(planet_id), conn=conn) or {}
-    if bool(planet.get("is_homeworld")):
+    if int(planet.get("is_homeworld") or 0) == 1:
         return False
     wk = str(planet.get("world_key") or planet.get("origin_world_key") or "").strip()
     if not wk:
+        return False
+    if is_legacy_full_colony(int(planet_id), planet=planet, conn=conn):
         return False
     return not is_establishment_complete(int(planet_id), conn=conn)
 

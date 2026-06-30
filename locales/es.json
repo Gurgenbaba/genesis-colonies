@@ -1690,6 +1690,8 @@
   "expansion_gate_homeworld_level": "Tu Arca Génesis aún no alcanza la etapa de desarrollo necesaria para esta expansión.",
   "expansion_gate_interstellar_tech": "Expansión interestelar aún no es suficiente para esta región.",
   "expansion_gate_world_type": "Este tipo de mundo está fuera del alcance de tu imperio.",
+  "planet_evolution_colony_slot_required": "Más ranuras de colonia se desbloquean con la evolución planetaria de tu Arca Génesis.",
+  "fleet_error_planet_evolution_colony_slot_required": "Más ranuras de colonia se desbloquean con la evolución planetaria de tu Arca Génesis.",
   "expansion_milestone_communication": "Centro de comunicaciones",
   "expansion_milestone_energy": "Energía estable",
   "expansion_milestone_first_population": "Primera población",
