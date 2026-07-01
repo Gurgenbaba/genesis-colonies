@@ -16,7 +16,8 @@
      data-deletion-due="{{ safety.get('deletion_due_at') or '' }}"
      data-vacation-locked-until="{{ safety.get('vacation_locked_until') or '' }}"
      data-notify-attack-sound="{{ od.get('notify_attack_sound', 'normal')|e }}"
-     data-notify-message-sound="{{ od.get('notify_message_sound', 'normal')|e }}">
+     data-notify-message-sound="{{ od.get('notify_message_sound', 'normal')|e }}"
+     data-default-spy-probes="{{ od.get('default_spy_probes', 5)|int }}">
 
   <section class="gc-options-control-module" aria-labelledby="options-control-title">
 
@@ -55,6 +56,15 @@
                 aria-controls="options-tab-panel-notify"
                 aria-selected="false">
           {{ T("options_tab_notify") }}
+        </button>
+        <button type="button"
+                class="gc-options-tab-btn"
+                role="tab"
+                id="options-tab-btn-galaxy"
+                data-options-tab-btn="galaxy"
+                aria-controls="options-tab-panel-galaxy"
+                aria-selected="false">
+          {{ T("options_tab_galaxy") }}
         </button>
         <button type="button"
                 class="gc-options-tab-btn"
@@ -317,6 +327,44 @@
                 </div>
               </div>
               <p class="gc-options-form-hint gc-options-notify-hint" id="options-notify-hint" role="status" aria-live="polite" hidden></p>
+            </div>
+          </article>
+        </div>
+
+        <div class="gc-options-tab-panel"
+             id="options-tab-panel-galaxy"
+             data-options-tab-panel="galaxy"
+             role="tabpanel"
+             aria-labelledby="options-tab-btn-galaxy"
+             hidden>
+          <article class="gc-options-card gc-options-galaxy-card">
+            <header class="gc-options-card-head">
+              <span class="gc-options-card-title">{{ T("options_galaxy_title") }}</span>
+              <span class="gc-options-card-sub">{{ T("options_galaxy_subtitle") }}</span>
+            </header>
+            <div class="gc-options-galaxy-grid" id="options-galaxy-settings">
+              <div class="gc-options-galaxy-field">
+                <label class="gc-options-label" for="options-spy-probes-input">{{ T("options_galaxy_spy_probes_label") }}</label>
+                <p class="gc-options-form-hint gc-options-galaxy-field-help">{{ T("options_galaxy_spy_probes_help") }}</p>
+                <div class="gc-options-galaxy-field-row">
+                  <input type="number"
+                         id="options-spy-probes-input"
+                         class="gc-input gc-options-galaxy-spy-input"
+                         data-spy-probes-input
+                         min="1"
+                         max="9999"
+                         step="1"
+                         value="{{ od.get('default_spy_probes', 5)|int }}"
+                         inputmode="numeric"
+                         aria-describedby="options-spy-probes-hint">
+                  <button type="button"
+                          class="gc-btn gc-btn-secondary gc-btn-sm"
+                          data-spy-probes-save>
+                    {{ T("options_galaxy_spy_probes_save") }}
+                  </button>
+                </div>
+              </div>
+              <p class="gc-options-form-hint gc-options-galaxy-hint" id="options-spy-probes-hint" role="status" aria-live="polite" hidden></p>
             </div>
           </article>
         </div>

@@ -569,6 +569,10 @@ def test_galaxy_foreign_planet_fleet_shortcuts(galaxy_db, monkeypatch):
     assert f"target_position={fp}" in body
     assert "mission=spy" in body
     assert "mission=attack" in body
+    assert "data-galaxy-quick-spy" in body
+    assert f'data-target-galaxy="{g}"' in body
+    assert f'data-target-system="{s}"' in body
+    assert f'data-target-position="{fp}"' in body
     assert "galaxy-fleet-action--spy" in body
     assert "galaxy-fleet-action--attack" in body
 

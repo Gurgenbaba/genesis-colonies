@@ -379,6 +379,42 @@ def get_planet_ships(planet_id: int, *, conn=None) -> Dict[str, int]:
             conn.close()
 
 
+def resolve_galaxy_quick_spy_ships(
+    player_id: int,
+    origin_planet_id: int,
+    *,
+    conn=None,
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """GC-977A — min(configured probes, available veil_probe) for Galaxy quick spy."""
+    from .options import get_spy_probe_settings
+
+    pid = int(player_id or 0)
+    origin_id = int(origin_planet_id or 0)
+    if pid <= 0 or origin_id <= 0:
+        return False, "origin_not_found", None
+
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        configured = int(get_spy_probe_settings(pid, conn=conn)["default_spy_probes"])
+        available = int(get_planet_ships(origin_id, conn=conn).get("veil_probe", 0))
+        sent = min(configured, available)
+        meta = {
+            "configured_count": configured,
+            "available_count": available,
+            "sent_count": sent,
+            "reduced": sent < configured,
+        }
+        if sent <= 0:
+            return False, "no_spy_probes_available", meta
+        meta["ships"] = {"veil_probe": sent}
+        return True, "", meta
+    finally:
+        if own and conn is not None:
+            conn.close()
+
+
 def get_player_owned_ship_counts(player_id: int, *, conn=None) -> Dict[str, int]:
     """All hulls owned by a player: planet hangars plus active fleet movements."""
     own = conn is None

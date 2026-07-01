@@ -1442,6 +1442,32 @@
     }
   }
 
+  const DEFAULT_SPY_PROBES = 5;
+
+  function normalizeSpyProbeCount(value) {
+    const n = parseInt(value, 10);
+    if (!Number.isFinite(n) || n < 1) return DEFAULT_SPY_PROBES;
+    return Math.min(9999, n);
+  }
+
+  function applySpyProbeSettings(partial) {
+    if (!partial || typeof partial !== "object") return;
+    GC.settings = GC.settings || {};
+    if (partial.default_spy_probes !== undefined) {
+      GC.settings.default_spy_probes = normalizeSpyProbeCount(partial.default_spy_probes);
+    }
+  }
+
+  function resolveDefaultSpyProbes() {
+    applySpyProbeSettings(GC.settings || {});
+    const page = document.getElementById("options-page");
+    if (page) {
+      const fromPage = parseInt(page.getAttribute("data-default-spy-probes") || "0", 10);
+      if (Number.isFinite(fromPage) && fromPage > 0) return fromPage;
+    }
+    return normalizeSpyProbeCount(GC.settings?.default_spy_probes);
+  }
+
   function notifySoundVolumeForKind(kind) {
     applyNotifySoundSettings(GC.settings || {});
     const mode = kind === "attack"
@@ -1495,6 +1521,8 @@
 
   GC.normalizeNotifySoundMode = normalizeNotifySoundMode;
   GC.applyNotifySoundSettings = applyNotifySoundSettings;
+  GC.applySpyProbeSettings = applySpyProbeSettings;
+  GC.resolveDefaultSpyProbes = resolveDefaultSpyProbes;
   GC.resolveAttackAlertSoundKey = resolveAttackAlertSoundKey;
   GC.resolveMessageNotifySoundKey = resolveMessageNotifySoundKey;
   GC.shouldPlayNotifySoundForKey = shouldPlayNotifySoundForKey;
@@ -1510,6 +1538,7 @@
     GC.settings = {
       notify_attack_sound: normalizeNotifySoundMode(cfg.notify_attack_sound),
       notify_message_sound: normalizeNotifySoundMode(cfg.notify_message_sound),
+      default_spy_probes: normalizeSpyProbeCount(cfg.default_spy_probes),
     };
   })();
 
@@ -26566,6 +26595,120 @@
       openInspector(key, btn);
     }
 
+    async function onQuickSpyClick(ev) {
+      const btn = ev.target.closest("[data-galaxy-quick-spy]");
+      if (!btn || !root.contains(btn)) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (btn.disabled || btn.dataset.submitting === "1") return;
+      const targetGalaxy = parseInt(btn.dataset.targetGalaxy || "0", 10);
+      const targetSystem = parseInt(btn.dataset.targetSystem || "0", 10);
+      const targetPosition = parseInt(btn.dataset.targetPosition || "0", 10);
+      const originPlanetId =
+        parseInt(root.dataset.activePlanetId || "0", 10) ||
+        (typeof getDomPlanetId === "function" ? getDomPlanetId() : 0);
+      const coords = `[${targetGalaxy}:${targetSystem}:${targetPosition}]`;
+      if (!originPlanetId || !targetGalaxy || !targetSystem || !targetPosition) {
+        if (typeof showNotify === "function") {
+          showNotify(
+            typeof tt === "function"
+              ? tt("galaxy_quick_spy_no_origin", "No active colony to launch probes from.")
+              : "No active colony to launch probes from.",
+            "error"
+          );
+        }
+        return;
+      }
+      btn.disabled = true;
+      btn.dataset.submitting = "1";
+      try {
+        const domPlanetId =
+          typeof getDomPlanetId === "function" ? getDomPlanetId() : originPlanetId;
+        const requestId =
+          typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+            ? crypto.randomUUID()
+            : `galaxy-spy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const res = await GC.fetchGameAction("/api/fleet/send", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Requested-With": "XMLHttpRequest",
+            ...(domPlanetId ? { "X-GC-Dom-Planet-Id": String(domPlanetId) } : {}),
+          },
+          body: JSON.stringify({
+            origin_planet_id: originPlanetId,
+            mission_type: "spy",
+            galaxy_quick_spy: true,
+            target_galaxy: targetGalaxy,
+            target_system: targetSystem,
+            target_position: targetPosition,
+            resources: {},
+            speed_percent: 100,
+            request_id: requestId,
+          }),
+        });
+        if (res?.ok) {
+          if (typeof showNotify === "function") {
+            const payload = (res.data && typeof res.data === "object") ? res.data : res;
+            const spyMeta = payload.galaxy_quick_spy || {};
+            const sentCount = parseInt(spyMeta.sent_count, 10) || 0;
+            const availableCount = parseInt(spyMeta.available_count, 10);
+            const reduced = Boolean(spyMeta.reduced) && sentCount > 0;
+            let tpl;
+            if (reduced && Number.isFinite(availableCount)) {
+              tpl = typeof tt === "function"
+                ? tt(
+                    "galaxy_quick_spy_success_partial",
+                    "Only %(available)s Phantom Probes available — %(count)s sent to %(coords)s."
+                  )
+                : "Only %(available)s Phantom Probes available — %(count)s sent to %(coords)s.";
+              showNotify(
+                tpl
+                  .replace("%(available)s", String(availableCount))
+                  .replace("%(count)s", String(sentCount))
+                  .replace("%(coords)s", coords),
+                "success"
+              );
+            } else {
+              tpl = typeof tt === "function"
+                ? tt(
+                    "galaxy_quick_spy_success",
+                    "%(count)s Phantom Probes sent to %(coords)s."
+                  )
+                : "%(count)s Phantom Probes sent to %(coords)s.";
+              showNotify(
+                tpl.replace("%(count)s", String(sentCount)).replace("%(coords)s", coords),
+                "success"
+              );
+            }
+          }
+          if (typeof applyActionState === "function") {
+            applyActionState(res, "fleet_send_success");
+          }
+        } else if (typeof showNotify === "function") {
+          const reason = res?.error || res?.reason || "generic";
+          let msg;
+          if (reason === "no_spy_probes_available" || reason === "not_enough_ships") {
+            msg = typeof tt === "function"
+              ? tt("galaxy_quick_spy_no_probes", "No Phantom Probes available.")
+              : "No Phantom Probes available.";
+          } else if (reason === "fleet_slots_full") {
+            msg = typeof tt === "function"
+              ? tt("fleet_error_fleet_slots_full", "No free fleet slots.")
+              : "No free fleet slots.";
+          } else if (typeof tt === "function") {
+            msg = tt(`fleet_error_${reason}`, tt("fleet_error_generic", "Fleet action failed."));
+          } else {
+            msg = reason;
+          }
+          showNotify(msg, "error");
+        }
+      } finally {
+        btn.disabled = false;
+        delete btn.dataset.submitting;
+      }
+    }
+
     async function onDebrisRecycleClick(ev) {
       const btn = ev.target.closest("[data-galaxy-ring-debris-recycle]");
       if (!btn || !root.contains(btn)) return;
@@ -26684,6 +26827,7 @@
     }
 
     root.addEventListener("click", onSlotClick);
+    root.addEventListener("click", onQuickSpyClick);
     root.addEventListener("click", onDebrisRecycleClick);
     root.addEventListener("click", onOpenPlanetClick);
     root.addEventListener("click", onCloseClick);
@@ -26696,6 +26840,7 @@
 
     GC.registerCleanup(() => {
       root.removeEventListener("click", onSlotClick);
+      root.removeEventListener("click", onQuickSpyClick);
       root.removeEventListener("click", onDebrisRecycleClick);
       root.removeEventListener("click", onOpenPlanetClick);
       root.removeEventListener("click", onCloseClick);

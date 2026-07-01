@@ -296,6 +296,96 @@
     });
   }
 
+  function readSpyProbeCount(page) {
+    if (!page) return 5;
+    const raw = parseInt(page.getAttribute("data-default-spy-probes") || "5", 10);
+    return Number.isFinite(raw) && raw > 0 ? raw : 5;
+  }
+
+  function setSpyProbeInputUi(count) {
+    const n = Math.max(1, parseInt(count, 10) || 5);
+    const input = document.querySelector("[data-spy-probes-input]");
+    if (input) input.value = String(n);
+  }
+
+  async function saveSpyProbeCount(page, count, hint) {
+    const block = document.getElementById("options-galaxy-settings");
+    if (!page || !block) return;
+    const saveBtn = block.querySelector("[data-spy-probes-save]");
+    const input = block.querySelector("[data-spy-probes-input]");
+    if (saveBtn) saveBtn.disabled = true;
+    if (input) input.disabled = true;
+    if (hint) {
+      hint.hidden = true;
+      hint.textContent = "";
+      hint.classList.remove("gc-options-hint-error", "gc-options-hint-success");
+    }
+    try {
+      const data = await postOptionsJson("/api/options/spy-probes", {
+        default_spy_probes: count,
+      });
+      if (!data || data.ok !== true) {
+        if (hint) {
+          hint.textContent = msgKey(data && data.error);
+          hint.hidden = false;
+          hint.classList.add("gc-options-hint-error");
+        }
+        return;
+      }
+      const saved = data.data || {};
+      const next = parseInt(saved.default_spy_probes, 10) || count;
+      page.setAttribute("data-default-spy-probes", String(next));
+      setSpyProbeInputUi(next);
+      if (typeof GC.applySpyProbeSettings === "function") {
+        GC.applySpyProbeSettings(saved);
+      }
+      if (hint) {
+        hint.textContent = msgKey("options_saved");
+        hint.hidden = false;
+        hint.classList.add("gc-options-hint-success");
+      }
+    } catch (err) {
+      if (err && err.name === "AuthError") return;
+    } finally {
+      if (saveBtn) saveBtn.disabled = false;
+      if (input) input.disabled = false;
+    }
+  }
+
+  function bindSpyProbeControls() {
+    const block = document.getElementById("options-galaxy-settings");
+    const page = document.getElementById("options-page");
+    const hint = document.getElementById("options-spy-probes-hint");
+    if (!block || !page || block.dataset.gcBound === "1") return;
+    block.dataset.gcBound = "1";
+
+    const saveBtn = block.querySelector("[data-spy-probes-save]");
+    const input = block.querySelector("[data-spy-probes-input]");
+    if (saveBtn && input && saveBtn.dataset.gcBound !== "1") {
+      saveBtn.dataset.gcBound = "1";
+      const submit = async () => {
+        const count = parseInt(input.value || "0", 10);
+        if (!Number.isFinite(count) || count < 1) {
+          if (hint) {
+            hint.textContent = msgKey("options_error_invalid_spy_probes");
+            hint.hidden = false;
+            hint.classList.add("gc-options-hint-error");
+          }
+          return;
+        }
+        if (readSpyProbeCount(page) === count) return;
+        await saveSpyProbeCount(page, count, hint);
+      };
+      saveBtn.addEventListener("click", submit);
+      input.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter") {
+          ev.preventDefault();
+          submit();
+        }
+      });
+    }
+  }
+
   async function handleOptionsFormSubmit(form, ev) {
     if (typeof GC.runOptionsFormSave === "function") {
       return GC.runOptionsFormSave(form, ev);
@@ -362,7 +452,7 @@
   }
 
   const OPTIONS_TAB_LS_KEY = "gc_options_active_tab";
-  const OPTIONS_TABS = ["profile", "account", "notify", "vacation", "security"];
+  const OPTIONS_TABS = ["profile", "account", "notify", "galaxy", "vacation", "security"];
 
   function initOptionsTabs() {
     const module = document.querySelector(".gc-options-control-module");
@@ -444,9 +534,17 @@
     }
 
     bindNotifySoundToggles();
+    const spyBlock = document.getElementById("options-galaxy-settings");
+    if (spyBlock) {
+      delete spyBlock.dataset.gcBound;
+      const saveBtn = spyBlock.querySelector("[data-spy-probes-save]");
+      if (saveBtn) delete saveBtn.dataset.gcBound;
+    }
+    bindSpyProbeControls();
     if (page) {
       setNotifySoundToggleUi("attack", readNotifySoundMode(page, "attack"));
       setNotifySoundToggleUi("message", readNotifySoundMode(page, "message"));
+      setSpyProbeInputUi(readSpyProbeCount(page));
     }
     bindResendVerification();
     bindDiscordUnlink();

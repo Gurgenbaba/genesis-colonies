@@ -81,10 +81,12 @@ def test_options_page_compact_tabs_contract(app_client):
     _login(app_client, uname)
     html = app_client.get('/options').get_data(as_text=True)
     assert 'data-options-tab-panel="notify"' in html
+    assert 'data-options-tab-panel="galaxy"' in html
     assert 'data-options-tab-panel="security"' in html
     options_js = open(ROOT / 'static' / 'js' / 'options.js', encoding='utf-8').read()
     assert 'initOptionsTabs' in options_js
     assert 'gc_options_active_tab' in options_js
+    assert '"galaxy"' in options_js.split('OPTIONS_TABS')[1].split('];')[0]
 
 def test_options_page_logged_in(app_client):
     pid, uname, _ = _create_player()

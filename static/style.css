@@ -28690,6 +28690,42 @@ a.gc-galaxy-coord-link:focus-visible {
   max-width: 640px;
 }
 
+.gc-options-galaxy-card {
+  max-width: 640px;
+}
+
+.gc-options-galaxy-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.gc-options-galaxy-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gc-options-galaxy-field-help {
+  margin: 0;
+}
+
+.gc-options-galaxy-field-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.gc-options-galaxy-spy-input {
+  width: 6rem;
+  min-width: 5rem;
+}
+
+.gc-options-galaxy-hint {
+  margin: 0;
+}
+
 .gc-options-notify-grid {
   display: flex;
   flex-direction: column;

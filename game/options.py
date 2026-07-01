@@ -44,6 +44,11 @@ NOTIFY_SOUND_MODES = frozenset({"off", "quiet", "normal"})
 DEFAULT_NOTIFY_ATTACK_SOUND = "normal"
 DEFAULT_NOTIFY_MESSAGE_SOUND = "normal"
 
+DEFAULT_SPY_PROBES = 5
+MIN_SPY_PROBES = 1
+MAX_SPY_PROBES = 9999
+SPY_PROBE_QUICK_VALUES = (1, 3, 5, 10, 25)
+
 _NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _\-.]{1,39}$")
 _EMAIL_RE = re.compile(
     r"^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
@@ -94,6 +99,10 @@ def ensure_account_options_schema(conn=None) -> None:
         if "notify_message_sound" not in cols:
             cur.execute(
                 "ALTER TABLE users ADD COLUMN notify_message_sound TEXT NOT NULL DEFAULT 'normal';"
+            )
+        if "default_spy_probes" not in cols:
+            cur.execute(
+                "ALTER TABLE users ADD COLUMN default_spy_probes INTEGER NOT NULL DEFAULT 5;"
             )
         cur.execute(
             """
@@ -158,6 +167,18 @@ def validate_email(value: Any) -> Tuple[bool, str, str]:
 def normalize_notify_sound_mode(value: Any, *, default: str = DEFAULT_NOTIFY_ATTACK_SOUND) -> str:
     mode = str(value or default).strip().lower()
     return mode if mode in NOTIFY_SOUND_MODES else default
+
+
+def normalize_spy_probe_count(value: Any, *, default: int = DEFAULT_SPY_PROBES) -> int:
+    try:
+        count = int(value)
+    except (TypeError, ValueError):
+        return default
+    if count < MIN_SPY_PROBES:
+        return MIN_SPY_PROBES
+    if count > MAX_SPY_PROBES:
+        return MAX_SPY_PROBES
+    return count
 
 
 def get_notify_sound_settings(player_id: int, *, conn=None) -> Dict[str, str]:
@@ -859,7 +880,67 @@ def get_options_snapshot(player_id: int, conn=None) -> Dict[str, Any]:
             "homeworld_name": str(planet.get("name") or "") if planet else "",
             "account_safety": get_account_safety_state(int(player_id), conn=c),
             **get_notify_sound_settings(int(player_id), conn=c),
+            **get_spy_probe_settings(int(player_id), conn=c),
         }
+    finally:
+        if own:
+            c.close()
+
+
+def get_spy_probe_settings(player_id: int, *, conn=None) -> Dict[str, int]:
+    pid = int(player_id or 0)
+    if pid <= 0:
+        return {"default_spy_probes": DEFAULT_SPY_PROBES}
+    own = conn is None
+    c = conn or db()
+    try:
+        ensure_account_options_schema(c)
+        row = c.execute(
+            "SELECT default_spy_probes FROM users WHERE id = ? LIMIT 1;",
+            (pid,),
+        ).fetchone()
+        if not row:
+            return {"default_spy_probes": DEFAULT_SPY_PROBES}
+        return {
+            "default_spy_probes": normalize_spy_probe_count(
+                row["default_spy_probes"],
+                default=DEFAULT_SPY_PROBES,
+            ),
+        }
+    finally:
+        if own:
+            c.close()
+
+
+def update_spy_probe_settings(
+    player_id: int,
+    *,
+    default_spy_probes: Any,
+    conn=None,
+) -> Tuple[bool, str, Dict[str, int]]:
+    pid = int(player_id or 0)
+    if pid <= 0:
+        return False, "not_logged_in", {}
+    count = normalize_spy_probe_count(default_spy_probes)
+    own = conn is None
+    c = conn or db()
+    try:
+        ensure_account_options_schema(c)
+        current = get_spy_probe_settings(pid, conn=c)
+        if count == current["default_spy_probes"]:
+            return True, "options_saved", dict(current)
+        begin_write_transaction(c)
+        c.execute(
+            "UPDATE users SET default_spy_probes = ? WHERE id = ?;",
+            (count, pid),
+        )
+        if own:
+            commit(c)
+        return True, "options_saved", {"default_spy_probes": count}
+    except Exception:
+        if own:
+            rollback(c)
+        return False, "options_error_invalid_spy_probes", {}
     finally:
         if own:
             c.close()

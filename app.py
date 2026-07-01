@@ -486,7 +486,7 @@ def inject_globals():
         current_planet_landscape_webp_url = None
 
     from game.config import get_client_runtime_config, is_command_map_dev_mode
-    from game.options import get_notify_sound_settings
+    from game.options import get_notify_sound_settings, get_spy_probe_settings
     from game.planet_evolution.sidebar_nav import (
         ADMINISTRATION_MODULES,
         client_sidebar_nav_config,
@@ -577,6 +577,7 @@ def inject_globals():
             client_runtime_config = {
                 **client_runtime_config,
                 **get_notify_sound_settings(int(auth_user["id"])),
+                **get_spy_probe_settings(int(auth_user["id"])),
             }
     except Exception:
         pass
@@ -5368,6 +5369,22 @@ def api_options_notify_sounds():
     return _options_api_response(True, err, data)
 
 
+@app.route("/api/options/spy-probes", methods=["POST"])
+@require_login_api
+def api_options_spy_probes():
+    pid = session.get("user_id")
+    if not pid:
+        return _options_api_response(False, "not_logged_in", None, 401)
+    payload = request.get_json(silent=True) or {}
+    ok, err, data = options_logic.update_spy_probe_settings(
+        int(pid),
+        default_spy_probes=payload.get("default_spy_probes"),
+    )
+    if not ok:
+        return _options_api_response(False, err, data, 400)
+    return _options_api_response(True, err, data)
+
+
 @app.route("/api/options/locale", methods=["POST"])
 @require_login_api
 def api_options_locale():
@@ -6993,9 +7010,15 @@ def api_fleet_send():
         return jsonify(body), 503
 
     data = request.get_json(silent=True) or {}
-    ships = normalize_ships(data.get("ships") or {})
-    if not ships and data.get("ships"):
-        return jsonify(fleet_err("unknown_ship")), 400
+    galaxy_quick_spy = bool(data.get("galaxy_quick_spy"))
+    mission_raw = str(data.get("mission_type") or "").strip().lower()
+    if galaxy_quick_spy and mission_raw != "spy":
+        return jsonify(fleet_err("invalid_mission")), 400
+    ships = {}
+    if not galaxy_quick_spy:
+        ships = normalize_ships(data.get("ships") or {})
+        if not ships and data.get("ships"):
+            return jsonify(fleet_err("unknown_ship")), 400
     try:
         speed_percent = int(data.get("speed_percent") or 100)
     except (TypeError, ValueError):
@@ -7011,14 +7034,26 @@ def api_fleet_send():
             dom_planet_id=dom_planet_id,
         )
         target_req = parse_fleet_target_request(data)
-        return send_fleet(
+        send_ships = ships
+        quick_spy_meta = None
+        if galaxy_quick_spy:
+            from game.fleet import resolve_galaxy_quick_spy_ships
+
+            ok_spy, spy_reason, spy_ctx = resolve_galaxy_quick_spy_ships(
+                user_id, int(origin_id), conn=conn
+            )
+            if not ok_spy:
+                return False, spy_reason, spy_ctx
+            send_ships = spy_ctx.get("ships") or {}
+            quick_spy_meta = spy_ctx
+        ok, reason, result = send_fleet(
             player_id=user_id,
             origin_planet_id=origin_id,
             target_galaxy=int(data.get("target_galaxy") or 0),
             target_system=int(data.get("target_system") or 0),
             target_position=int(data.get("target_position") or 0),
             mission_type=str(data.get("mission_type") or ""),
-            ships=ships,
+            ships=send_ships,
             resources=data.get("resources") or {},
             speed_percent=speed_percent,
             preset_id=int(data["preset_id"]) if data.get("preset_id") else None,
@@ -7032,6 +7067,11 @@ def api_fleet_send():
             expedition_hours=int(data["expedition_hours"]) if data.get("expedition_hours") not in (None, "") else None,
             conn=conn,
         )
+        if ok and result and quick_spy_meta:
+            merged = dict(result)
+            merged["galaxy_quick_spy"] = quick_spy_meta
+            return True, reason, merged
+        return ok, reason, result
 
     ok, reason, result = _fleet_write_transaction(_send)
 
@@ -7044,6 +7084,8 @@ def api_fleet_send():
             "active_slots": result.get("active_slots"),
             "fuel_cost": result.get("fuel_cost"),
         }
+        if result.get("galaxy_quick_spy"):
+            live["galaxy_quick_spy"] = result["galaxy_quick_spy"]
         body = fleet_ok(live, message_key="fleet_send_success")
         body["state"] = state
         return jsonify(body)
