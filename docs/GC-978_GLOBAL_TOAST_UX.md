@@ -43,11 +43,11 @@ Toasts/Notifys sind **immer sichtbar**, unabhängig von Scroll-Position und PJAX
 
 ## Akzeptanzkriterien
 
-- [ ] `base.html` enthält `#gc-toast-stack` (oder äquivalent) außerhalb `#main-content`
-- [ ] Galaxy Quick Spy, Fleet-Send, Options-Save zeigen Toast global sichtbar bei Scroll unten
-- [ ] Mehrere Toasts stapeln sich ohne Layout-Shift im Mainframe
-- [ ] Mobile: Toasts nicht hinter Bottom-Nav versteckt
-- [ ] Contract-Tests: Container in base, `showNotify` nutzt Stack
+- [x] `base.html` enthält `#gc-toast-stack` außerhalb `#main-content`
+- [x] Mehrere Toasts stapeln sich ohne Layout-Shift im Mainframe
+- [x] Mobile: Toasts über Bottom-Nav positioniert
+- [x] Contract-Tests: Container in base, `showNotify` nutzt Stack
+- [ ] Manuell: Galaxy Quick Spy / Fleet-Send bei Scroll unten sichtbar
 - [ ] Keine Regression PJAX / `applyActionState`
 
 ---

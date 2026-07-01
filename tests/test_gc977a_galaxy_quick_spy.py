@@ -235,9 +235,9 @@ def test_api_fleet_galaxy_quick_spy_no_probes(galaxy_db, monkeypatch):
 def test_main_js_galaxy_quick_spy_contract(galaxy_db):
     from pathlib import Path
 
-    js = Path("static/main.js").read_text(encoding="utf-8")
+    js = Path("static/js/galaxy-quick-action.js").read_text(encoding="utf-8")
     assert "data-galaxy-quick-spy" in js
-    assert "onQuickSpyClick" in js
+    assert "handleSpyClick" in js
     assert "galaxy_quick_spy: true" in js
     assert "galaxy_quick_spy_success_partial" in js
     assert "galaxy_quick_spy_no_probes" in js

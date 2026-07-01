@@ -7011,11 +7011,16 @@ def api_fleet_send():
 
     data = request.get_json(silent=True) or {}
     galaxy_quick_spy = bool(data.get("galaxy_quick_spy"))
+    galaxy_quick_attack = bool(data.get("galaxy_quick_attack"))
+    if galaxy_quick_spy and galaxy_quick_attack:
+        return jsonify(fleet_err("invalid_request")), 400
     mission_raw = str(data.get("mission_type") or "").strip().lower()
     if galaxy_quick_spy and mission_raw != "spy":
         return jsonify(fleet_err("invalid_mission")), 400
+    if galaxy_quick_attack and mission_raw != "attack":
+        return jsonify(fleet_err("invalid_mission")), 400
     ships = {}
-    if not galaxy_quick_spy:
+    if not galaxy_quick_spy and not galaxy_quick_attack:
         ships = normalize_ships(data.get("ships") or {})
         if not ships and data.get("ships"):
             return jsonify(fleet_err("unknown_ship")), 400
@@ -7035,8 +7040,26 @@ def api_fleet_send():
         )
         target_req = parse_fleet_target_request(data)
         send_ships = ships
+        send_resources = data.get("resources") or {}
+        send_speed = speed_percent
+        preset_id_send = int(data["preset_id"]) if data.get("preset_id") else None
         quick_spy_meta = None
-        if galaxy_quick_spy:
+        quick_attack_meta = None
+        if galaxy_quick_attack:
+            from game.fleet import resolve_galaxy_quick_attack
+
+            preset_id_raw = int(data.get("preset_id") or 0)
+            ok_atk, atk_reason, atk_ctx = resolve_galaxy_quick_attack(
+                user_id, preset_id_raw, conn=conn
+            )
+            if not ok_atk:
+                return False, atk_reason, atk_ctx
+            send_ships = atk_ctx.get("ships") or {}
+            send_resources = atk_ctx.get("resources") or {}
+            send_speed = int(atk_ctx.get("speed_percent") or 100)
+            preset_id_send = int(atk_ctx.get("preset_id") or preset_id_raw)
+            quick_attack_meta = atk_ctx
+        elif galaxy_quick_spy:
             from game.fleet import resolve_galaxy_quick_spy_ships
 
             ok_spy, spy_reason, spy_ctx = resolve_galaxy_quick_spy_ships(
@@ -7054,9 +7077,9 @@ def api_fleet_send():
             target_position=int(data.get("target_position") or 0),
             mission_type=str(data.get("mission_type") or ""),
             ships=send_ships,
-            resources=data.get("resources") or {},
-            speed_percent=speed_percent,
-            preset_id=int(data["preset_id"]) if data.get("preset_id") else None,
+            resources=send_resources,
+            speed_percent=send_speed,
+            preset_id=preset_id_send,
             batch_id=int(data["batch_id"]) if data.get("batch_id") else None,
             colony_name=str(data.get("colony_name") or "").strip() or None,
             world_key=target_req.get("world_key"),
@@ -7070,6 +7093,10 @@ def api_fleet_send():
         if ok and result and quick_spy_meta:
             merged = dict(result)
             merged["galaxy_quick_spy"] = quick_spy_meta
+            return True, reason, merged
+        if ok and result and quick_attack_meta:
+            merged = dict(result)
+            merged["galaxy_quick_attack"] = quick_attack_meta
             return True, reason, merged
         return ok, reason, result
 
@@ -7086,6 +7113,8 @@ def api_fleet_send():
         }
         if result.get("galaxy_quick_spy"):
             live["galaxy_quick_spy"] = result["galaxy_quick_spy"]
+        if result.get("galaxy_quick_attack"):
+            live["galaxy_quick_attack"] = result["galaxy_quick_attack"]
         body = fleet_ok(live, message_key="fleet_send_success")
         body["state"] = state
         return jsonify(body)
@@ -7138,7 +7167,7 @@ def api_fleet_recall():
 @app.route("/api/fleet/presets", methods=["GET"])
 @require_login
 def api_fleet_presets_list():
-    from game.fleet import fleet_schema_ready, list_presets
+    from game.fleet import filter_galaxy_attack_presets, fleet_schema_ready, list_presets
     from game.fleet_api import fleet_err, fleet_ok
 
     user_id = int(session.get("user_id") or 0)
@@ -7146,7 +7175,10 @@ def api_fleet_presets_list():
         return jsonify(fleet_err("not_logged_in")), 401
     if not fleet_schema_ready(db()):
         return jsonify(fleet_err("fleet_unavailable")), 503
-    return jsonify(fleet_ok({"presets": list_presets(user_id)}, message_key="fleet_presets_ok"))
+    presets = list_presets(user_id)
+    if request.args.get("galaxy_attack") in ("1", "true", "yes"):
+        presets = filter_galaxy_attack_presets(presets)
+    return jsonify(fleet_ok({"presets": presets}, message_key="fleet_presets_ok"))
 
 
 @app.route("/api/fleet/presets", methods=["POST"])

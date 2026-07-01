@@ -570,11 +570,13 @@ def test_galaxy_foreign_planet_fleet_shortcuts(galaxy_db, monkeypatch):
     assert "mission=spy" in body
     assert "mission=attack" in body
     assert "data-galaxy-quick-spy" in body
+    assert "data-galaxy-quick-attack" in body
     assert f'data-target-galaxy="{g}"' in body
     assert f'data-target-system="{s}"' in body
     assert f'data-target-position="{fp}"' in body
     assert "galaxy-fleet-action--spy" in body
     assert "galaxy-fleet-action--attack" in body
+    assert "galaxy-fleet-action--quick-attack" in body
 
 
 def test_galaxy_empty_slot_shows_colonize_fleet_shortcut(galaxy_db, monkeypatch):

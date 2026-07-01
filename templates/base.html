@@ -307,6 +307,34 @@
     </div>
   </header>
 
+  <!-- GC-978 — Global toast stack (shell layer, outside #main-content) -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+  <div id="gc-toast-stack"
+       class="gc-toast-stack{% if not messages %} is-empty{% endif %}"
+       role="region"
+       aria-live="polite"
+       aria-label="{{ T('toast_stack_label', 'Benachrichtigungen') }}">
+    {% if messages %}
+      {% for category, message in messages %}
+      <div class="gc-toast gc-toast-{{ category }}"
+           data-gc-toast
+           data-gc-toast-autohide="1"
+           role="status">
+        <div class="gc-toast-accent" aria-hidden="true"></div>
+        <div class="gc-toast-content">
+          <div class="gc-toast-title">{{ T('toast_title_' ~ category, category|capitalize) }}</div>
+          <div class="gc-toast-body">{{ message }}</div>
+        </div>
+        <button type="button"
+                class="gc-toast-dismiss"
+                data-gc-toast-dismiss
+                aria-label="{{ T('toast_dismiss', 'Schließen') }}">×</button>
+      </div>
+      {% endfor %}
+    {% endif %}
+  </div>
+  {% endwith %}
+
   <!-- ====================== LAYOUT ====================== -->
   <div class="gc-layout{% if not SIMPLE_LAYOUT %} gc-layout--dual{% endif %}">
 
@@ -315,19 +343,6 @@
     {% endif %}
 
     <main class="gc-main" id="main-content" role="main" tabindex="-1">
-
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          <div class="gc-flash-container" id="gc-flash-stack" role="status" aria-live="polite">
-            {% for category, message in messages %}
-              <div class="gc-flash gc-flash-{{ category }}">
-                <span class="gc-flash-dot" aria-hidden="true"></span>
-                <span class="gc-flash-text">{{ message }}</span>
-              </div>
-            {% endfor %}
-          </div>
-        {% endif %}
-      {% endwith %}
 
       {% if not SIMPLE_LAYOUT and request.endpoint in WIP_ENDPOINTS %}
         <div class="gc-wip-banner" role="status" aria-live="polite">
@@ -752,6 +767,7 @@
 
   <script src="{{ url_for('static', filename='main.js') }}?v={{ GC_ASSET_VERSION }}"></script>
   {% if not SIMPLE_LAYOUT and AUTH_USER and AUTH_USER.id %}
+  <script src="{{ url_for('static', filename='js/galaxy-quick-action.js') }}?v={{ GC_ASSET_VERSION }}"></script>
   <script src="{{ url_for('static', filename='js/combat_simulator.js') }}?v={{ GC_ASSET_VERSION }}"></script>
   <script src="{{ url_for('static', filename='js/chat.js') }}?v={{ GC_ASSET_VERSION }}"></script>
   <script src="{{ url_for('static', filename='js/messages.js') }}?v={{ GC_ASSET_VERSION }}"></script>

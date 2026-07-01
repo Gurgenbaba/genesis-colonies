@@ -415,6 +415,75 @@ def resolve_galaxy_quick_spy_ships(
             conn.close()
 
 
+def is_galaxy_attack_preset(preset: Mapping[str, Any] | None) -> bool:
+    """GC-977B — preset eligible for Galaxy quick attack (raid/farm or explicit attack)."""
+    if not preset:
+        return False
+    pt = str(preset.get("preset_type") or "").strip().lower()
+    mt = str(preset.get("mission_type") or "").strip().lower()
+    if pt in ("raid", "farm"):
+        return True
+    return mt == "attack"
+
+
+def filter_galaxy_attack_presets(
+    presets: Sequence[Mapping[str, Any]] | None,
+) -> List[Dict[str, Any]]:
+    """GC-977B — attack-eligible presets with at least one ship."""
+    out: List[Dict[str, Any]] = []
+    for preset in presets or []:
+        if not is_galaxy_attack_preset(preset):
+            continue
+        ships = preset.get("ships") or {}
+        if not isinstance(ships, dict) or not any(int(v or 0) > 0 for v in ships.values()):
+            continue
+        out.append(dict(preset))
+    return out
+
+
+def resolve_galaxy_quick_attack(
+    player_id: int,
+    preset_id: int,
+    *,
+    conn=None,
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """GC-977B — ships/speed from owned attack preset for Galaxy quick attack."""
+    pid = int(player_id or 0)
+    pr_id = int(preset_id or 0)
+    if pid <= 0:
+        return False, "not_logged_in", None
+    if pr_id <= 0:
+        return False, "preset_not_found", None
+
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        preset = get_preset(pr_id, pid, conn=conn)
+        if not preset:
+            return False, "preset_not_found", None
+        if not is_galaxy_attack_preset(preset):
+            return False, "invalid_preset_type", None
+        ships = normalize_ships(preset.get("ships") or {})
+        if not ships:
+            return False, "preset_no_ships", None
+        pct = int(preset.get("speed_percent") or 100)
+        if pct < 10 or pct > 100:
+            pct = 100
+        meta = {
+            "preset_id": pr_id,
+            "preset_name": str(preset.get("name") or ""),
+            "preset_type": str(preset.get("preset_type") or ""),
+            "ships": ships,
+            "resources": {},
+            "speed_percent": pct,
+        }
+        return True, "", meta
+    finally:
+        if own and conn is not None:
+            conn.close()
+
+
 def get_player_owned_ship_counts(player_id: int, *, conn=None) -> Dict[str, int]:
     """All hulls owned by a player: planet hangars plus active fleet movements."""
     own = conn is None

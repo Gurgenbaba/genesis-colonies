@@ -2253,35 +2253,155 @@
     return formatCountdownRemain(seconds);
   }
 
-  function showNotify(message, category = "info") {
-    const text = String(message || "").trim();
-    if (!text) return;
+  const GC_TOAST_MAX_VISIBLE = 5;
+  const GC_TOAST_AUTODISMISS_MS = 4000;
+  const GC_TOAST_FADE_MS = 350;
+  const _toastDismissTimers = [];
 
-    let box = document.getElementById("messages");
-    if (!box) {
-      box = document.createElement("div");
-      box.id = "messages";
-      box.className = "gc-flash-container";
-      box.setAttribute("role", "status");
-      box.setAttribute("aria-live", "polite");
-      const main = document.getElementById("main-content") || document.body;
-      main.prepend(box);
-    }
-
-    const item = document.createElement("div");
-    item.className = `gc-flash gc-flash-${category}`;
-    item.innerHTML =
-      `<span class="gc-flash-dot" aria-hidden="true"></span>` +
-      `<span class="gc-flash-text">${text.replace(/</g, "&lt;")}</span>`;
-    box.appendChild(item);
-
-    GC.setSafeTimeout(() => {
-      item.style.transition = "opacity 0.35s ease";
-      item.style.opacity = "0";
-      GC.setSafeTimeout(() => item.remove(), 400);
-    }, 4200);
+  function toastSetTimeout(fn, ms) {
+    const id = setTimeout(() => {
+      const idx = _toastDismissTimers.indexOf(id);
+      if (idx >= 0) _toastDismissTimers.splice(idx, 1);
+      fn();
+    }, ms);
+    _toastDismissTimers.push(id);
+    return id;
   }
+
+  function normalizeToastCategory(category) {
+    const raw = String(category || "info").trim().toLowerCase();
+    if (raw === "danger") return "error";
+    if (raw === "warn") return "warning";
+    return ["success", "error", "warning", "info"].includes(raw) ? raw : "info";
+  }
+
+  function toastTitleForCategory(category) {
+    const titles = {
+      success: t("toast_title_success", "Erfolg"),
+      error: t("toast_title_error", "Fehler"),
+      warning: t("toast_title_warning", "Hinweis"),
+      info: t("toast_title_info", "Information"),
+    };
+    return titles[category] || titles.info;
+  }
+
+  function getToastStack() {
+    let stack = document.getElementById("gc-toast-stack");
+    if (!stack) {
+      stack = document.createElement("div");
+      stack.id = "gc-toast-stack";
+      stack.className = "gc-toast-stack is-empty";
+      stack.setAttribute("role", "region");
+      stack.setAttribute("aria-live", "polite");
+      stack.setAttribute("aria-label", t("toast_stack_label", "Benachrichtigungen"));
+      const shell = document.querySelector(".gc-app-shell") || document.body;
+      const layout = shell.querySelector(".gc-layout");
+      if (layout) shell.insertBefore(stack, layout);
+      else shell.appendChild(stack);
+    }
+    return stack;
+  }
+
+  function syncToastStackEmptyState(stack) {
+    if (!stack) return;
+    const hasToasts = stack.querySelector("[data-gc-toast]");
+    stack.classList.toggle("is-empty", !hasToasts);
+  }
+
+  function dismissToast(toastEl) {
+    if (!toastEl || toastEl.dataset.gcToastClosing === "1") return;
+    toastEl.dataset.gcToastClosing = "1";
+    toastEl.classList.add("is-leaving");
+    toastSetTimeout(() => {
+      toastEl.remove();
+      syncToastStackEmptyState(getToastStack());
+    }, GC_TOAST_FADE_MS);
+  }
+
+  function trimToastStack(stack) {
+    const toasts = Array.from(stack.querySelectorAll("[data-gc-toast]"));
+    while (toasts.length > GC_TOAST_MAX_VISIBLE) {
+      const oldest = toasts.shift();
+      if (oldest) dismissToast(oldest);
+    }
+  }
+
+  function bindToastDismiss(btn) {
+    if (!btn || btn.dataset.gcToastBound === "1") return;
+    btn.dataset.gcToastBound = "1";
+    btn.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const toast = btn.closest("[data-gc-toast]");
+      if (toast) dismissToast(toast);
+    });
+  }
+
+  function scheduleToastAutohide(toastEl) {
+    if (!toastEl || toastEl.dataset.gcToastAutohide !== "1") return;
+    toastSetTimeout(() => dismissToast(toastEl), GC_TOAST_AUTODISMISS_MS);
+  }
+
+  function showToast(message, category = "info", opts = {}) {
+    const body = String(message || "").trim();
+    if (!body) return null;
+    const type = normalizeToastCategory(category);
+    const title = String((opts && opts.title) || toastTitleForCategory(type)).trim();
+    const stack = getToastStack();
+    stack.classList.remove("is-empty");
+
+    const toast = document.createElement("div");
+    toast.className = `gc-toast gc-toast-${type}`;
+    toast.setAttribute("data-gc-toast", "");
+    toast.setAttribute("data-gc-toast-autohide", "1");
+    toast.setAttribute("role", "status");
+
+    const accent = document.createElement("div");
+    accent.className = "gc-toast-accent";
+    accent.setAttribute("aria-hidden", "true");
+
+    const content = document.createElement("div");
+    content.className = "gc-toast-content";
+
+    const titleEl = document.createElement("div");
+    titleEl.className = "gc-toast-title";
+    titleEl.textContent = title;
+
+    const bodyEl = document.createElement("div");
+    bodyEl.className = "gc-toast-body";
+    bodyEl.textContent = body;
+
+    content.appendChild(titleEl);
+    content.appendChild(bodyEl);
+
+    const dismissBtn = document.createElement("button");
+    dismissBtn.type = "button";
+    dismissBtn.className = "gc-toast-dismiss";
+    dismissBtn.setAttribute("data-gc-toast-dismiss", "");
+    dismissBtn.setAttribute("aria-label", t("toast_dismiss", "Schließen"));
+    dismissBtn.textContent = "×";
+
+    toast.appendChild(accent);
+    toast.appendChild(content);
+    toast.appendChild(dismissBtn);
+
+    stack.prepend(toast);
+    bindToastDismiss(dismissBtn);
+    trimToastStack(stack);
+    scheduleToastAutohide(toast);
+    return toast;
+  }
+
+  function showNotify(message, category = "info") {
+    return showToast(message, category);
+  }
+
+  GC.showToast = showToast;
   GC.showNotify = showNotify;
+  GC.dismissToast = dismissToast;
+  GC.applyActionState = applyActionState;
+  GC.mapActionError = mapActionError;
+  GC.getDomPlanetId = getDomPlanetId;
 
   function mapActionError(reason, payload) {
     if (reason === "not_enough_resources" && payload) {
@@ -26595,199 +26715,11 @@
       openInspector(key, btn);
     }
 
-    async function onQuickSpyClick(ev) {
-      const btn = ev.target.closest("[data-galaxy-quick-spy]");
-      if (!btn || !root.contains(btn)) return;
-      ev.preventDefault();
-      ev.stopPropagation();
-      if (btn.disabled || btn.dataset.submitting === "1") return;
-      const targetGalaxy = parseInt(btn.dataset.targetGalaxy || "0", 10);
-      const targetSystem = parseInt(btn.dataset.targetSystem || "0", 10);
-      const targetPosition = parseInt(btn.dataset.targetPosition || "0", 10);
-      const originPlanetId =
-        parseInt(root.dataset.activePlanetId || "0", 10) ||
-        (typeof getDomPlanetId === "function" ? getDomPlanetId() : 0);
-      const coords = `[${targetGalaxy}:${targetSystem}:${targetPosition}]`;
-      if (!originPlanetId || !targetGalaxy || !targetSystem || !targetPosition) {
-        if (typeof showNotify === "function") {
-          showNotify(
-            typeof tt === "function"
-              ? tt("galaxy_quick_spy_no_origin", "No active colony to launch probes from.")
-              : "No active colony to launch probes from.",
-            "error"
-          );
-        }
-        return;
-      }
-      btn.disabled = true;
-      btn.dataset.submitting = "1";
-      try {
-        const domPlanetId =
-          typeof getDomPlanetId === "function" ? getDomPlanetId() : originPlanetId;
-        const requestId =
-          typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-            ? crypto.randomUUID()
-            : `galaxy-spy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        const res = await GC.fetchGameAction("/api/fleet/send", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Requested-With": "XMLHttpRequest",
-            ...(domPlanetId ? { "X-GC-Dom-Planet-Id": String(domPlanetId) } : {}),
-          },
-          body: JSON.stringify({
-            origin_planet_id: originPlanetId,
-            mission_type: "spy",
-            galaxy_quick_spy: true,
-            target_galaxy: targetGalaxy,
-            target_system: targetSystem,
-            target_position: targetPosition,
-            resources: {},
-            speed_percent: 100,
-            request_id: requestId,
-          }),
-        });
-        if (res?.ok) {
-          if (typeof showNotify === "function") {
-            const payload = (res.data && typeof res.data === "object") ? res.data : res;
-            const spyMeta = payload.galaxy_quick_spy || {};
-            const sentCount = parseInt(spyMeta.sent_count, 10) || 0;
-            const availableCount = parseInt(spyMeta.available_count, 10);
-            const reduced = Boolean(spyMeta.reduced) && sentCount > 0;
-            let tpl;
-            if (reduced && Number.isFinite(availableCount)) {
-              tpl = typeof tt === "function"
-                ? tt(
-                    "galaxy_quick_spy_success_partial",
-                    "Only %(available)s Phantom Probes available — %(count)s sent to %(coords)s."
-                  )
-                : "Only %(available)s Phantom Probes available — %(count)s sent to %(coords)s.";
-              showNotify(
-                tpl
-                  .replace("%(available)s", String(availableCount))
-                  .replace("%(count)s", String(sentCount))
-                  .replace("%(coords)s", coords),
-                "success"
-              );
-            } else {
-              tpl = typeof tt === "function"
-                ? tt(
-                    "galaxy_quick_spy_success",
-                    "%(count)s Phantom Probes sent to %(coords)s."
-                  )
-                : "%(count)s Phantom Probes sent to %(coords)s.";
-              showNotify(
-                tpl.replace("%(count)s", String(sentCount)).replace("%(coords)s", coords),
-                "success"
-              );
-            }
-          }
-          if (typeof applyActionState === "function") {
-            applyActionState(res, "fleet_send_success");
-          }
-        } else if (typeof showNotify === "function") {
-          const reason = res?.error || res?.reason || "generic";
-          let msg;
-          if (reason === "no_spy_probes_available" || reason === "not_enough_ships") {
-            msg = typeof tt === "function"
-              ? tt("galaxy_quick_spy_no_probes", "No Phantom Probes available.")
-              : "No Phantom Probes available.";
-          } else if (reason === "fleet_slots_full") {
-            msg = typeof tt === "function"
-              ? tt("fleet_error_fleet_slots_full", "No free fleet slots.")
-              : "No free fleet slots.";
-          } else if (typeof tt === "function") {
-            msg = tt(`fleet_error_${reason}`, tt("fleet_error_generic", "Fleet action failed."));
-          } else {
-            msg = reason;
-          }
-          showNotify(msg, "error");
-        }
-      } finally {
-        btn.disabled = false;
-        delete btn.dataset.submitting;
-      }
-    }
-
-    async function onDebrisRecycleClick(ev) {
-      const btn = ev.target.closest("[data-galaxy-ring-debris-recycle]");
-      if (!btn || !root.contains(btn)) return;
-      ev.preventDefault();
-      ev.stopPropagation();
-      const wrap = btn.closest("[data-galaxy-ring-debris-wrap]");
-      if (!wrap || btn.disabled) return;
-      const targetGalaxy = parseInt(wrap.dataset.targetGalaxy || "0", 10);
-      const targetSystem = parseInt(wrap.dataset.targetSystem || "0", 10);
-      const targetPosition = parseInt(wrap.dataset.targetPosition || "0", 10);
-      const recyclerSlots = parseInt(wrap.dataset.recyclerSlots || "0", 10);
-      const originPlanetId =
-        parseInt(root.dataset.activePlanetId || "0", 10) ||
-        (typeof getDomPlanetId === "function" ? getDomPlanetId() : 0);
-      if (!originPlanetId || !targetGalaxy || !targetSystem || !targetPosition) {
-        if (typeof showNotify === "function") {
-          showNotify(
-            typeof tt === "function"
-              ? tt("galaxy_debris_recycle_no_origin", "Keine aktive Kolonie für Recycler-Start.")
-              : "No active colony for recycler launch.",
-            "error"
-          );
-        }
-        return;
-      }
-      if (recyclerSlots < 1) {
-        if (typeof showNotify === "function") {
-          showNotify(
-            typeof tt === "function"
-              ? tt("galaxy_debris_recycle_empty", "Kein abbaufähiges Trümmerfeld.")
-              : "No harvestable debris.",
-            "error"
-          );
-        }
-        return;
-      }
-      btn.disabled = true;
-      try {
-        const domPlanetId =
-          typeof getDomPlanetId === "function" ? getDomPlanetId() : originPlanetId;
-        const res = await GC.fetchGameAction("/api/fleet/send", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Requested-With": "XMLHttpRequest",
-            ...(domPlanetId ? { "X-GC-Dom-Planet-Id": String(domPlanetId) } : {}),
-          },
-          body: JSON.stringify({
-            origin_planet_id: originPlanetId,
-            mission_type: "recycle",
-            target_galaxy: targetGalaxy,
-            target_system: targetSystem,
-            target_position: targetPosition,
-            ships: { harvest_reclaimer: recyclerSlots },
-            resources: {},
-            speed_percent: 100,
-          }),
-        });
-        if (res?.ok) {
-          if (typeof showNotify === "function") {
-            showNotify(
-              typeof tt === "function" ? tt("fleet_send_success", "Fleet dispatched.") : "Fleet dispatched.",
-              "success"
-            );
-          }
-          if (typeof applyActionState === "function") {
-            applyActionState(res, "fleet_send_success");
-          }
-        } else if (typeof showNotify === "function") {
-          showNotify(
-            typeof mapActionError === "function"
-              ? mapActionError(res?.reason, res?.payload || res)
-              : res?.reason || "Error",
-            "error"
-          );
-        }
-      } finally {
-        btn.disabled = false;
-      }
+    const galaxyQuickAction =
+      typeof GC !== "undefined" && GC.GalaxyQuickAction ? GC.GalaxyQuickAction : null;
+    let unbindGalaxyQuickActions = null;
+    if (galaxyQuickAction) {
+      unbindGalaxyQuickActions = galaxyQuickAction.bindRingView(root);
     }
 
     async function onOpenPlanetClick(ev) {
@@ -26821,14 +26753,16 @@
     }
 
     function onKeyDown(ev) {
+      if (ev.key === "Escape" && galaxyQuickAction?._attackMenu) {
+        galaxyQuickAction.handleEscape();
+        return;
+      }
       if (ev.key === "Escape" && inspector && !inspector.hidden) {
         closeInspector();
       }
     }
 
     root.addEventListener("click", onSlotClick);
-    root.addEventListener("click", onQuickSpyClick);
-    root.addEventListener("click", onDebrisRecycleClick);
     root.addEventListener("click", onOpenPlanetClick);
     root.addEventListener("click", onCloseClick);
     document.addEventListener("keydown", onKeyDown);
@@ -26840,8 +26774,7 @@
 
     GC.registerCleanup(() => {
       root.removeEventListener("click", onSlotClick);
-      root.removeEventListener("click", onQuickSpyClick);
-      root.removeEventListener("click", onDebrisRecycleClick);
+      if (typeof unbindGalaxyQuickActions === "function") unbindGalaxyQuickActions();
       root.removeEventListener("click", onOpenPlanetClick);
       root.removeEventListener("click", onCloseClick);
       document.removeEventListener("keydown", onKeyDown);
@@ -28875,16 +28808,20 @@
   }
 
   // =========================
-  // Flash autohide
+  // Global toast stack (GC-978)
   // =========================
+  function initToastStack() {
+    const stack = document.getElementById("gc-toast-stack");
+    if (!stack) return;
+    stack.querySelectorAll("[data-gc-toast-dismiss]").forEach(bindToastDismiss);
+    stack.querySelectorAll("[data-gc-toast]").forEach((toast) => {
+      scheduleToastAutohide(toast);
+    });
+    syncToastStackEmptyState(stack);
+  }
+
   function initFlashAutohide() {
-    GC.setSafeTimeout(() => {
-      const box = document.getElementById("messages");
-      if (!box) return;
-      box.style.transition = "opacity 0.4s ease";
-      box.style.opacity = "0";
-      GC.setSafeTimeout(() => box.remove(), 450);
-    }, 4000);
+    initToastStack();
   }
 
   function initMotdBanner() {

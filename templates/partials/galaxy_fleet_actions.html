@@ -70,6 +70,19 @@
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M2 20 22 4l-2 16-8-4-8 4z"/></svg>
     <span class="galaxy-fleet-action-label">{{ T('fleet_mission_attack') }}</span>
   </a>
+  <button type="button"
+     class="galaxy-fleet-action galaxy-fleet-action--quick-attack"
+     data-galaxy-quick-attack
+     data-target-galaxy="{{ g }}"
+     data-target-system="{{ s }}"
+     data-target-position="{{ p }}"
+     data-fleet-href="{{ base }}&mission=attack"
+     title="{{ T('galaxy_quick_attack_label') }}"
+     aria-haspopup="menu"
+     aria-expanded="false">
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg>
+    <span class="galaxy-fleet-action-label">{{ T('galaxy_quick_attack_label') }}</span>
+  </button>
     {% endif %}
   {% else %}
   <a href="{{ base }}&mission=colonize"
