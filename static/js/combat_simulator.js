@@ -995,5 +995,5 @@
   }
 
   window.GC = window.GC || {};
-  GC.initCombatSimulatorPage = initCombatSimulatorPage;
+  window.GC.initCombatSimulatorPage = initCombatSimulatorPage;
 })();

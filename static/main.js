@@ -286,7 +286,6 @@
   function initFormattedNumberInputDelegation() {
     if (_numInputDelegationBound) return;
     _numInputDelegationBound = true;
-    initMilitaryUnitCostPreviewDelegation();
     document.addEventListener("input", (e) => {
       if (!isFormattedNumberInput(e.target)) return;
       formatNumberInputOnInput(e.target);
@@ -31418,6 +31417,7 @@
     initMaxQueueHoverOnce();
     initVisibilityPolling();
     initNotificationSounds();
+    initMilitaryUnitCostPreviewDelegation();
     initMotionPreferenceListener();
     initSimplePageAmbience();
     bootstrapPlanetLandscapeFromBoot();

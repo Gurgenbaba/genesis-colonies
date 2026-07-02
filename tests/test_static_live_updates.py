@@ -101,7 +101,7 @@ def test_main_js_messages_inbox_reload_only_on_unread_increase():
     assert "unreadIncreased" in unread_section
     assert "function playNewMessageNotifySound()" in src
     assert "playNotificationSound(\"message\")" in src
-    assert "playNewMessageNotifySound();" in unread_section
+    assert "_maybePlayMessageNotifySound(data)" in unread_section
     tabs_section = src.split("function bindBuildingTabsOnce")[1].split("function initBuildings")[0]
     assert '#messages-tabs' in tabs_section
 

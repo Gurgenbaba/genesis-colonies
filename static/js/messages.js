@@ -2155,6 +2155,7 @@
     const registerCleanup = GC.registerPageCleanup || GC.registerCleanup;
     if (typeof registerCleanup === "function") {
       registerCleanup(() => {
+        if (!document.getElementById("messages-page")) return;
         msgDebug("[messages] cleanup (leave page)");
         resetMessagesPageState();
       }, { persistent: true });
