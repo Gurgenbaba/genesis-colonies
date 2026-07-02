@@ -191,6 +191,7 @@
   ].join(",");
 
   let _numInputDelegationBound = false;
+  let _militaryCostPreviewBound = false;
 
   function isFormattedNumberInput(el) {
     return !!(el && el.matches && el.matches(GC_NUM_INPUT_SELECTOR));
@@ -285,6 +286,7 @@
   function initFormattedNumberInputDelegation() {
     if (_numInputDelegationBound) return;
     _numInputDelegationBound = true;
+    initMilitaryUnitCostPreviewDelegation();
     document.addEventListener("input", (e) => {
       if (!isFormattedNumberInput(e.target)) return;
       formatNumberInputOnInput(e.target);
@@ -18930,6 +18932,37 @@
   }
 
   function renderShipCostStackHtml(ship, resources) {
+    return renderUnitCostStackHtml(ship, resources, 1);
+  }
+
+  function resolveUnitCardPreviewQty(qtyInp) {
+    if (!qtyInp) return 1;
+    const raw = String(qtyInp.value ?? "").trim();
+    if (!raw) return 1;
+    const n = readNumberInput(qtyInp);
+    return n > 0 ? n : 1;
+  }
+
+  function storeUnitCardUnitCosts(costWrap, unitCosts) {
+    if (!costWrap || !unitCosts) return;
+    costWrap.dataset.unitCostMetal = String(Math.max(0, Math.floor(Number(unitCosts.cost_metal) || 0)));
+    costWrap.dataset.unitCostCrystal = String(Math.max(0, Math.floor(Number(unitCosts.cost_crystal) || 0)));
+    costWrap.dataset.unitCostFuel = String(Math.max(0, Math.floor(Number(unitCosts.cost_fuel_cells) || 0)));
+  }
+
+  function readUnitCardUnitCosts(costWrap) {
+    if (!costWrap) {
+      return { cost_metal: 0, cost_crystal: 0, cost_fuel_cells: 0 };
+    }
+    return {
+      cost_metal: parseIntNumber(costWrap.dataset.unitCostMetal || "0"),
+      cost_crystal: parseIntNumber(costWrap.dataset.unitCostCrystal || "0"),
+      cost_fuel_cells: parseIntNumber(costWrap.dataset.unitCostFuel || "0"),
+    };
+  }
+
+  function renderUnitCostStackHtml(unitCosts, resources, amount) {
+    const qty = Math.max(1, Math.floor(Number(amount) || 0));
     const specs = [
       ["metal", "cost_metal"],
       ["crystal", "cost_crystal"],
@@ -18937,13 +18970,43 @@
     ];
     return specs
       .map(([resKey, costKey]) => {
-        const need = Number(ship[costKey]) || 0;
+        const unit = Number(unitCosts[costKey]) || 0;
+        const need = unit * qty;
         if (need <= 0) return "";
         const have = Number(resources[resKey]) || 0;
         return renderResourceCostChipHtml(resKey, need, have < need);
       })
       .filter(Boolean)
       .join("");
+  }
+
+  function militaryPageResources(_page) {
+    return GC.lastState?.resources || {};
+  }
+
+  function syncUnitCardCostPreview(card, resources) {
+    if (!card) return;
+    const costWrap = card.querySelector("[data-shipyard-cost],[data-defense-cost]");
+    const stack = costWrap?.querySelector(".gc-cost-stack");
+    if (!costWrap || !stack) return;
+    const unitCosts = readUnitCardUnitCosts(costWrap);
+    const qtyInp = card.querySelector("[data-shipyard-qty],[data-defense-qty]");
+    const amount = resolveUnitCardPreviewQty(qtyInp);
+    const html = renderUnitCostStackHtml(unitCosts, resources || {}, amount);
+    if (html && stack.innerHTML.trim() !== html.trim()) stack.innerHTML = html;
+  }
+
+  function initMilitaryUnitCostPreviewDelegation() {
+    if (_militaryCostPreviewBound) return;
+    _militaryCostPreviewBound = true;
+    document.addEventListener("input", (e) => {
+      const inp = e.target;
+      if (!inp?.matches?.("[data-shipyard-qty],[data-defense-qty]")) return;
+      const card = inp.closest("[data-ship-card],[data-defense-card]");
+      if (!card) return;
+      const page = card.closest("#shipyard-page,#defense-page");
+      syncUnitCardCostPreview(card, militaryPageResources(page));
+    });
   }
 
   function renderUnitBuildTimeFooterHtml(sec, tt) {
@@ -19101,11 +19164,9 @@
     card.classList.toggle("gc-prog-unaffordable", unlocked && !ship.can_build && ship.block_reason !== "queue_full");
     card.classList.toggle("gc-prog-affordable", unlocked && ship.can_build);
 
-    const costEl = card.querySelector("[data-shipyard-cost] .gc-cost-stack");
-    if (costEl) {
-      const html = renderShipCostStackHtml(ship, resources);
-      if (html && costEl.innerHTML.trim() !== html.trim()) costEl.innerHTML = html;
-    }
+    const costWrap = card.querySelector("[data-shipyard-cost]");
+    storeUnitCardUnitCosts(costWrap, ship);
+    syncUnitCardCostPreview(card, resources);
 
     card.querySelector("[data-shipyard-blockers]")?.remove();
 
@@ -19257,6 +19318,8 @@
         if (qtyInp && maxQty > 0) {
           qtyInp.dataset.inputMax = String(maxQty);
           setNumberInputValue(qtyInp, maxQty);
+          const card = maxBtn.closest("[data-ship-card]");
+          if (card) syncUnitCardCostPreview(card, militaryPageResources(page));
         }
         return;
       }
@@ -19598,18 +19661,13 @@
     card.classList.toggle("gc-prog-unaffordable", !unit.can_build && unit.block_reason !== "queue_full");
     card.classList.toggle("gc-prog-affordable", !!unit.can_build);
 
-    const costEl = card.querySelector("[data-defense-cost] .gc-cost-stack");
-    if (costEl) {
-      const html = renderShipCostStackHtml(
-        {
-          cost_metal: unit.cost_metal,
-          cost_crystal: unit.cost_crystal,
-          cost_fuel_cells: unit.cost_fuel_cells,
-        },
-        resources
-      );
-      if (html && costEl.innerHTML.trim() !== html.trim()) costEl.innerHTML = html;
-    }
+    const costWrap = card.querySelector("[data-defense-cost]");
+    storeUnitCardUnitCosts(costWrap, {
+      cost_metal: unit.cost_metal,
+      cost_crystal: unit.cost_crystal,
+      cost_fuel_cells: unit.cost_fuel_cells,
+    });
+    syncUnitCardCostPreview(card, resources);
 
     card.querySelector("[data-defense-blockers]")?.remove();
 
@@ -19726,6 +19784,8 @@
         if (qtyInp && maxQty > 0) {
           qtyInp.dataset.inputMax = String(maxQty);
           setNumberInputValue(qtyInp, maxQty);
+          const card = maxBtn.closest("[data-defense-card]");
+          if (card) syncUnitCardCostPreview(card, militaryPageResources(page));
         }
         return;
       }
