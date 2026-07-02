@@ -35,12 +35,12 @@ Siehe [LICENSE](../LICENSE) und [README](../README.md).
 
 Arbeit erfolgt als **Tickets** (GC-XXX), nicht als Epic-Direct-Implementierung.
 
-1. Vor der Arbeit: [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) + relevante Master-Docs ([ARCHITECTURE.md](ARCHITECTURE.md) + System-Doc)
+1. Vor der Arbeit: [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) + relevante Master-Docs ([ARCHITECTURE.md](ARCHITECTURE.md) + System-Doc); vor Beta-/Freeze-Themen zusätzlich [BETA_GATE.md](BETA_GATE.md)
 2. Ticket definiert: Problem, betroffene Dateien (max. 3–5), Akzeptanzkriterien
 3. Nur Ticket-Scope bearbeiten — kein Projekt-Vollscan, kein ungefragtes Refactoring
 4. Architektur-Änderungen → Master-Doc mit aktualisieren
 
-**Master-Docs:** [WORKFLOW.md](WORKFLOW.md), [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md), [AJAX_PJAX_CONTRACT.md](AJAX_PJAX_CONTRACT.md), [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md), `PLANET_SCOPE`, `PLANET_EVOLUTION`, `ECONOMY_SYSTEM`, `BUILDINGS_SYSTEM`, `RESEARCH_SYSTEM`, `FLEET_SYSTEM`, `GALAXY_SYSTEM`, `ROADMAP`.
+**Master-Docs:** [WORKFLOW.md](WORKFLOW.md), [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md), [BETA_GATE.md](BETA_GATE.md), [AJAX_PJAX_CONTRACT.md](AJAX_PJAX_CONTRACT.md), [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md), `PLANET_SCOPE`, `PLANET_EVOLUTION`, `ECONOMY_SYSTEM`, `BUILDINGS_SYSTEM`, `RESEARCH_SYSTEM`, `FLEET_SYSTEM`, `GALAXY_SYSTEM`, `ROADMAP`.
 
 ---
 
@@ -51,6 +51,25 @@ Arbeit erfolgt als **Tickets** (GC-XXX), nicht als Epic-Direct-Implementierung.
 3. Kleine, fokussierte PRs bevorzugen (ein Feature / ein Fix pro PR)
 4. Vor PR: Tests laufen lassen (siehe unten)
 5. Beschreibung: **Was**, **Warum**, **Wie getestet**
+
+---
+
+## Production & CI
+
+**Production** läuft über **Railway** (`www.genesis-colonies.de`). GitHub Pages wird **nicht** für Production genutzt.
+
+| Check | Bedeutung |
+|-------|-----------|
+| `hospitable-abundance - genesis-colonies` | **Railway Deploy** — maßgeblich für Production |
+| `pages build and deployment` / `deploy` | **GitHub Pages** — nicht Production; kann ignoriert werden |
+
+**GitHub Pages deaktivieren (empfohlen):** Repo → **Settings → Pages → Build and deployment → Source: None**. Damit entfällt der automatische `pages-build-deployment`-Workflow und rote Deploy-Checks ohne Production-Impact.
+
+**Branch Protection:** Falls `deploy` oder `pages build and deployment` als Required Check gesetzt ist → entfernen. Required bleiben nur Checks, die Production betreffen (z. B. Railway).
+
+**Bekannter Fehlerfall (2026-07):** Commit `088eb12` — GitHub Actions zeigte `deploy` failure (`Timeout reached, aborting!` nach ~10 Minuten im Pages-Deploy-Job). **Railway deploy war erfolgreich** (combined commit status: success). Ursache: GitHub Pages Infrastruktur-Timeout, kein App-/Migrations-/Railway-Problem.
+
+Cron/Background auf Railway (gleiche SQLite-Volume wie Web): `POST /api/internal/cron/ranking` mit `GC_INTERNAL_CRON_TOKEN` — siehe [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 
@@ -243,6 +262,7 @@ Für UI/UX-Änderungen zusätzlich [ALPHA_TESTPLAN.md](ALPHA_TESTPLAN.md) — mi
 - **Spielbalance** (Kosten, Zeiten): mit Projektleitung abstimmen
 - **Breaking API-Changes:** Version bump in `VERSION` + README-Hinweis
 - **Große Refactors:** vorher Issue/Discussion — kleine inkrementelle PRs bevorzugt
+- **Ab `v1.0.0-beta.1`:** Core Architecture Freeze aus [BETA_GATE.md](BETA_GATE.md) beachten; architekturrelevante Ausnahmen brauchen ein eigenes Exception-Ticket
 
 ---
 
@@ -250,6 +270,7 @@ Für UI/UX-Änderungen zusätzlich [ALPHA_TESTPLAN.md](ALPHA_TESTPLAN.md) — mi
 
 - [README](../README.md)
 - [ARCHITECTURE.md](ARCHITECTURE.md)
+- [BETA_GATE.md](BETA_GATE.md)
 - [SECURITY.md](SECURITY.md)
 - [ROADMAP.md](ROADMAP.md)
 - [ALPHA_TESTPLAN.md](ALPHA_TESTPLAN.md)
