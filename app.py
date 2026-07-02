@@ -744,6 +744,15 @@ def api_internal_cron_vote_reengagement():
     return jsonify(payload), status
 
 
+@app.route("/api/internal/cron/fleet-tick", methods=["POST"])
+def api_internal_cron_fleet_tick():
+    """Token-gated global fleet tick — same DB as web (Railway SQLite cron)."""
+    from game.internal_cron import handle_internal_cron_fleet_tick
+
+    payload, status = handle_internal_cron_fleet_tick(request)
+    return jsonify(payload), status
+
+
 # --------------------------------------------------------------------------
 # HELPER: Spieler-View + Ressourcen laden (conn-safe)
 # --------------------------------------------------------------------------
@@ -787,6 +796,12 @@ def _load_page_live_context(
     if own_conn:
         conn = db()
     src = str(finish_source or "page_load")
+    try:
+        from game.fleet_worker import maybe_run_global_fleet_tick
+
+        maybe_run_global_fleet_tick(force=False, source=src)
+    except Exception:
+        logger.exception("global fleet tick safety net failed source=%s", src)
     use_poll_live_path = src == "game_state" or _is_pjax_request()
     try:
         try:

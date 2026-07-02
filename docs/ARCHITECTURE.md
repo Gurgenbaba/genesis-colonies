@@ -17,6 +17,7 @@ Technische Architektur-Dokumentation (Stand: **v1.5.9.2**, Reality-Sync **2026-0
 | [EFFECTS.md](EFFECTS.md) | EffectResolver, Formeln |
 | [STATE_AJAX.md](STATE_AJAX.md) | Live-Polling, PJAX |
 | [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) | GC-000 — verbindliche Kernregeln |
+| [BETA_GATE.md](BETA_GATE.md) | Alpha-Exit, Core Architecture Freeze, Beta-Governance |
 | [AJAX_PJAX_CONTRACT.md](AJAX_PJAX_CONTRACT.md) | Navigation, Actions, Lifecycle |
 | [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md) | Queue Finish / Cancel / Reschedule |
 | [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md) | Planet Defense, Queue, Ranking |
@@ -25,6 +26,8 @@ Technische Architektur-Dokumentation (Stand: **v1.5.9.2**, Reality-Sync **2026-0
 | [BALANCE_ANCHORS.md](BALANCE_ANCHORS.md) | Economy-Ankerkurven (Code-generiert) |
 
 **Golden Rule:** Genesis Colonies bevorzugt **Konsistenz über Komfort** — keine parallelen Systeme, keine Duplicate-Math, keine Reload-Navigation. Siehe [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) (Regeln 15–17).
+
+**Beta Governance:** Der Übergang zu `v1.0.0-beta.1` und der anschließende Core Architecture Freeze sind in [BETA_GATE.md](BETA_GATE.md) verbindlich geregelt.
 
 ---
 
@@ -224,7 +227,7 @@ Zentraler Due-Finisher für:
 | Account research | pro Spieler |
 | Planet research / ascension | pro Planet (Evolution) |
 | Shipyard | pro Planet |
-| Fleet tick | pro Spieler (`process_fleet_tick`) |
+| Fleet tick | global (`game/fleet_worker.py` → `process_fleet_tick(player_id=None)`); per-player on live refresh |
 
 Request-Dedup via Flask `g` + `live_state.coerce_skip_finish()`.
 
@@ -244,6 +247,8 @@ Authorization: Bearer $GC_INTERNAL_CRON_TOKEN
 Optional `?force=1` bypasses the 10-minute interval guard. Local manual runs: `scripts/run_ranking_worker.py` (deprecated on Railway SQLite).
 
 **Vote re-engagement (30 min, inactive players):** `game/vote_reengagement.run_vote_reengagement()` — piggybacks on the same ranking HTTP cron (30-minute interval guard; no separate scheduler required). Env: `GC_VOTE_REENGAGEMENT_BATCH` (default 12), `GC_VOTE_REENGAGEMENT_ENABLED=0` to disable. Optional dedicated: `POST /api/internal/cron/vote-reengagement` (same bearer token).
+
+**Fleet tick (global, ~60 s idle guard):** `game/fleet_worker.run_fleet_worker()` — processes due `fleet_movements` for **all** players while offline. Piggybacks on ranking HTTP cron; dedicated: `POST /api/internal/cron/fleet-tick` (same bearer token). Live requests also run a throttled global safety net in `_load_page_live_context`. Env: `GC_FLEET_WORKER_INTERVAL_SEC` (default 60).
 
 
 ---
@@ -265,7 +270,7 @@ Vollständige Tabelle: **[PROJECT_INVENTORY.md](PROJECT_INVENTORY.md)** — hier
 | Empire / Command Map | `/empire`, `/api/command-map/*` | `planet_evolution/command_map.py` | ✅ |
 | Planet Evolution | `/planet-evolution` | `planet_evolution/` | ✅ |
 | Inventory / Auction / Vote | `/inventory`, `/auction-house`, `/vote-center` | respective modules | ✅ |
-| Alliance | `/alliance` | `alliance.py` | 🔄 Backend minimal |
+| Alliance | `/alliance` | `alliance.py` | ✅ MVP (Combat-/Fleet-Diplomatie-Hooks später) |
 
 ---
 
@@ -375,6 +380,7 @@ python -m pytest -q
 ## Verwandte Dokumente
 
 - [ROADMAP.md](ROADMAP.md) — Phasen & Meilensteine
+- [BETA_GATE.md](BETA_GATE.md) — Alpha-Exit und Core Architecture Freeze
 - [README](../README.md) — Quick Start
 - [LICENSE](../LICENSE) — Proprietär, kein Self-Hosting
 - [SECURITY.md](SECURITY.md) — Threat Model

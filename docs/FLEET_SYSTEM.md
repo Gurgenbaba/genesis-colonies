@@ -262,17 +262,20 @@ Planet-Scope: Hub = aktiver Kontext-Planet (`get_context_planet`) bzw. explizit 
 
 ## Tick
 
-`process_fleet_tick(player_id)`:
+`process_fleet_tick(player_id=None)` (global) / `process_fleet_tick(player_id=…)` (scoped refresh):
 
 - Ankünfte verarbeiten
 - Hold-Ende → return
 - Returns abschließen
 
+**Globaler Worker:** `game/fleet_worker.run_fleet_worker()` — verarbeitet fällige Bewegungen **aller** Spieler, auch wenn niemand online ist. HTTP cron: `POST /api/internal/cron/fleet-tick` (Bearer `GC_INTERNAL_CRON_TOKEN`); piggyback auf Ranking-Cron; throttled safety net bei Live-Requests (`_load_page_live_context`). Intervall: `GC_FLEET_WORKER_INTERVAL_SEC` (default 60); bei global fälligen Flotten wird sofort getickt.
+
 Aufgerufen von:
 
-- `GET /api/fleet/state`
+- `game/fleet_worker.run_fleet_worker()` (global, cron + request safety net)
+- `GET /api/game-state` / Page-Load (Spieler-scope + global safety net)
 - `queue_engine.finish_due_work()` (fleet_arrivals / fleet_returns counts)
-- Client countdown expiry → refresh
+- `scripts/run_tick.py` / Admin queue tick (global fleet pass)
 
 **Idempotenz:** Statuswechsel nur über `_claim_movement_status()`; wiederholter Tick = No-Op (keine doppelten Nachrichten/Ressourcen/Kolonien/Loot). Siehe GC-524.
 

@@ -18,6 +18,7 @@ from typing import Any, Dict, Tuple
 from flask import Request
 
 from game.config import get_internal_cron_token
+from game.fleet_worker import maybe_run_global_fleet_tick, run_fleet_worker
 from game.ranking_worker import run_ranking_worker
 
 logger = logging.getLogger(__name__)
@@ -184,6 +185,58 @@ def log_vote_reengagement_result(
         )
 
 
+def execute_fleet_tick(*, force: bool, source: str) -> Dict[str, Any]:
+    """Canonical global fleet tick — shared by HTTP cron and request safety net."""
+    return run_fleet_worker(force=force, source=source, persist=True)
+
+
+def log_fleet_tick_result(
+    payload: Dict[str, Any],
+    *,
+    log_prefix: str,
+    source_label: str,
+) -> None:
+    if payload.get("skipped_interval"):
+        _recompute_log(
+            log_prefix,
+            f"source={source_label} skipped_interval=true "
+            f"next_run_in_sec={payload.get('next_run_in_sec', 0)} "
+            f"duration_ms={payload.get('duration_ms', 0)}",
+        )
+    elif payload.get("ok"):
+        _recompute_log(
+            log_prefix,
+            f"source={source_label} "
+            f"arrivals={payload.get('processed_arrivals', 0)} "
+            f"holding={payload.get('processed_holding', 0)} "
+            f"returns={payload.get('processed_returns', 0)} "
+            f"duration_ms={payload.get('duration_ms', 0)}",
+        )
+    else:
+        _recompute_log(
+            log_prefix,
+            f"source={source_label} ok=false "
+            f"duration_ms={payload.get('duration_ms', 0)} "
+            f"errors={payload.get('errors', [])}",
+        )
+
+
+def _maybe_run_fleet_tick(*, force: bool, source: str) -> Dict[str, Any]:
+    """Run global fleet tick when due; never raises — ranking cron stays resilient."""
+    try:
+        payload = execute_fleet_tick(force=force, source=source)
+        log_fleet_tick_result(
+            payload,
+            log_prefix="fleet-http-cron",
+            source_label=source,
+        )
+        return payload
+    except Exception as exc:
+        logger.exception("fleet tick piggyback failed")
+        _recompute_log("fleet-http-cron", f"source={source} error={exc}")
+        return {"ok": False, "error": str(exc)}
+
+
 def _maybe_run_vote_reengagement(*, force: bool, source: str) -> Dict[str, Any]:
     """Run vote re-engagement when due; never raises — ranking cron stays resilient."""
     try:
@@ -223,10 +276,39 @@ def handle_internal_cron_ranking(request: Request) -> Tuple[Dict[str, Any], int]
 
     log_ranking_recompute_result(payload, log_prefix="ranking-http-cron", source_label="http")
 
+    fleet_payload = _maybe_run_fleet_tick(force=False, source="http_cron")
+    payload["fleet_tick"] = fleet_payload
+
     vote_payload = _maybe_run_vote_reengagement(force=False, source="http_cron")
     payload["vote_reengagement"] = vote_payload
 
     status = 200 if payload["ok"] else 500
+    return payload, status
+
+
+def handle_internal_cron_fleet_tick(request: Request) -> Tuple[Dict[str, Any], int]:
+    """
+    Process due fleet movements for all players on the active web-service database.
+
+    Auth: Authorization: Bearer <GC_INTERNAL_CRON_TOKEN>
+    Optional: ?force=1 or JSON {"force": true} to bypass the idle interval guard.
+    """
+    authorized, auth_err = verify_internal_cron_request(request)
+    if not authorized:
+        _recompute_log("fleet-http-cron", "unauthorized")
+        return {"ok": False, "error": auth_err or "unauthorized"}, 401
+
+    force = parse_force_flag(request)
+    _recompute_log("fleet-http-cron", f"request_received force={str(force).lower()}")
+    try:
+        payload = execute_fleet_tick(force=force, source="http_cron")
+    except Exception as exc:
+        logger.exception("internal cron fleet tick failed")
+        _recompute_log("fleet-http-cron", f"error={exc}")
+        return {"ok": False, "error": str(exc)}, 500
+
+    log_fleet_tick_result(payload, log_prefix="fleet-http-cron", source_label="http")
+    status = 200 if payload.get("ok") else 500
     return payload, status
 
 

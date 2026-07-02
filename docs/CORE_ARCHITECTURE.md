@@ -11,6 +11,7 @@ Jedes Ticket prüft vor Implementierung:
 |----------|--------|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Gesamtüberblick |
 | [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) | Dieses Dokument (Golden Rule) |
+| [BETA_GATE.md](BETA_GATE.md) | Alpha-Exit, Core Architecture Freeze, Beta-Governance |
 | [STATE_AJAX.md](STATE_AJAX.md) | Live-State, Polling |
 | [AJAX_PJAX_CONTRACT.md](AJAX_PJAX_CONTRACT.md) | Navigation, Actions, Lifecycle |
 | [PLANET_SCOPE.md](PLANET_SCOPE.md) | Aktiver Planet |
@@ -265,6 +266,7 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | Account-Forschung | `game/research.py` | [RESEARCH_SYSTEM.md](RESEARCH_SYSTEM.md) |
 | Shipyard-Queue | `game/shipyard_queue.py`, `game/shipyard.py` | [FLEET_SYSTEM.md](FLEET_SYSTEM.md) |
 | Fleet / Missionen | `game/fleet.py`, `game/fleet_calc.py` | [FLEET_SYSTEM.md](FLEET_SYSTEM.md) |
+| Fleet global tick (offline) | `game/fleet_worker.py` → `game/fleet.py` | `POST /api/internal/cron/fleet-tick`; piggyback ranking cron |
 | Fleet world-native targets (GC-590A) | `game/fleet_target.py` | [FLEET_SYSTEM.md](FLEET_SYSTEM.md) |
 | Fleet origin scope audit (GC-557C) | `game/fleet_origin.py` | [GC-557_GLOBAL_TIMER_AUDIT.md](GC-557_GLOBAL_TIMER_AUDIT.md) |
 | Defense-Queue | `game/defense.py`, `game/defense_api.py` | [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md) |
@@ -340,3 +342,5 @@ Regression: `tests/test_galaxy_gameplay_contract.py`, `tests/test_expansion_prot
 ## Zielzustand
 
 Verhalten wie eine moderne SPA: Shell bleibt, PJAX-Navigation, AJAX-Actions, serverseitige Wahrheit, deterministische Queues, konsistenter Planet Scope, kein State-Drift, neue Module brechen bestehende nicht.
+
+Ab `v1.0.0-beta.1` gilt zusätzlich [BETA_GATE.md](BETA_GATE.md): Core Architecture Freeze. Neue Features erweitern bestehende Owner; Grundsysteme werden nicht mehr ersetzt.

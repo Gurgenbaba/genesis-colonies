@@ -28,6 +28,9 @@ def _empty_tick_result(source: str, scope: str) -> Dict[str, Any]:
             "research": 0,
             "shipyard": 0,
             "defense": 0,
+            "fleet_arrivals": 0,
+            "fleet_returns": 0,
+            "fleet_holding": 0,
         },
         "affected_players": [],
         "affected_planets": [],
@@ -46,7 +49,7 @@ def _empty_tick_result(source: str, scope: str) -> Dict[str, Any]:
 def _merge_tick_results(target: Dict[str, Any], batch: Dict[str, Any]) -> None:
     fin = target["finished"]
     bfin = batch.get("finished") or {}
-    for key in ("buildings", "research", "shipyard", "defense"):
+    for key in ("buildings", "research", "shipyard", "defense", "fleet_arrivals", "fleet_returns", "fleet_holding"):
         fin[key] = int(fin.get(key, 0)) + int(bfin.get(key, 0))
 
     target["score_updates"] = int(target.get("score_updates", 0)) + int(batch.get("score_updates", 0))
@@ -136,6 +139,21 @@ def run_tick(
     )
 
     if not player_ids:
+        try:
+            from .fleet_worker import run_fleet_worker
+
+            fleet_result = run_fleet_worker(source=str(source or "cron"), force=True, persist=False)
+            result["finished"]["fleet_arrivals"] = int(fleet_result.get("processed_arrivals") or 0)
+            result["finished"]["fleet_returns"] = int(fleet_result.get("processed_returns") or 0)
+            result["finished"]["fleet_holding"] = int(fleet_result.get("processed_holding") or 0)
+            if fleet_result.get("errors"):
+                result["errors"].extend(f"fleet: {err}" for err in fleet_result["errors"])
+                result["ok"] = False
+        except Exception as exc:
+            result["ok"] = False
+            result["errors"].append(f"fleet tick: {exc}")
+            logger.exception("queue tick fleet worker failed source=%s", source)
+
         result["tick_elapsed_ms"] = int((time.perf_counter() - started) * 1000)
         result["duration_ms"] = result["tick_elapsed_ms"]
         if persist:
@@ -154,6 +172,21 @@ def run_tick(
                 recalc_ranks=recalc_ranks,
             )
             _merge_tick_results(result, batch_result)
+
+    try:
+        from .fleet_worker import run_fleet_worker
+
+        fleet_result = run_fleet_worker(source=str(source or "cron"), force=True, persist=False)
+        result["finished"]["fleet_arrivals"] = int(fleet_result.get("processed_arrivals") or 0)
+        result["finished"]["fleet_returns"] = int(fleet_result.get("processed_returns") or 0)
+        result["finished"]["fleet_holding"] = int(fleet_result.get("processed_holding") or 0)
+        if fleet_result.get("errors"):
+            result["errors"].extend(f"fleet: {err}" for err in fleet_result["errors"])
+            result["ok"] = False
+    except Exception as exc:
+        result["ok"] = False
+        result["errors"].append(f"fleet tick: {exc}")
+        logger.exception("queue tick fleet worker failed source=%s", source)
 
     result["tick_elapsed_ms"] = int((time.perf_counter() - started) * 1000)
     if result["duration_ms"] <= 0:
