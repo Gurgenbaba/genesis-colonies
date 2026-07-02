@@ -18,7 +18,7 @@ Dieses Dokument verhindert, dass der Alpha-Exit durch Wartungs-Schulden oder neu
 
 Der Versionswechsel zu `v1.0.0-beta.1` ist erst erlaubt, wenn alle Gates abgeschlossen sind:
 
-- [ ] **Alliance MVP abgeschlossen** — Hub, Mitglieder, Bewerbungen, Spenden, Projekte, Tech, Diplomatie-MVP und Logo-Upload sind spielbar; Combat-/Fleet-Diplomatie-Hooks sind bewusst post-Beta.
+- [x] **Alliance MVP abgeschlossen** — Hub, Mitglieder, Bewerbungen, Spenden, Projekte, Tech, Diplomatie-MVP, Logo-Upload, PJAX und Boni spielbar (GC-AL-MVP-01…09). Combat-/Diplomatie-Deep-Hooks bewusst post-Beta.
 - [ ] **GC-BETA-001 — Architecture & CI Green** — Architektur- und PJAX-Regressionstests grün; keine neuen Reload-/Href-Verstöße; GC-000 eingehalten.
 - [ ] **GC-BETA-002 — Documentation Reality Sync** — Master-Docs spiegeln den tatsächlichen Stand wider; keine bekannten Reality-Gaps.
 - [ ] **GC-BETA-003 — Alpha Exit Validation** — manueller Smoke-Test bestätigt, dass die Kernsysteme zusammen funktionieren.
@@ -37,7 +37,22 @@ v1.0.0-beta.1
 
 Ab `v1.0.0-beta.1` gilt der **Core Architecture Freeze**.
 
-Das Spiel ist nicht eingefroren. Eingefroren sind die Grundsatzentscheidungen und kanonischen Owner:
+> **Beta friert die Plattform ein — nicht die Produktentwicklung.**
+
+### Foundation Freeze vs. Feature Freeze
+
+**Der Core Architecture Freeze ist kein Feature Freeze.**
+
+Ab `v1.0.0-beta.1` wird die **Architektur** als stabile Plattform betrachtet. Kernsysteme wie Fleet, Queue Engine, Planet Scope, Economy, EffectResolver, Live State und Navigation werden nicht mehr durch neue Grundarchitekturen ersetzt.
+
+**Neue Features bleiben ausdrücklich erlaubt**, sofern sie bestehende Owner-Module erweitern und die Regeln der Core Architecture einhalten.
+
+Entscheidungsregel:
+
+- **Lässt sich das Feature innerhalb der bestehenden Plattform umsetzen?** → Normales Feature (`1.1.x`+)
+- **Erfordert das Feature eine neue Kernarchitektur oder einen Parallel-Owner?** → [Architecture Exception Process](#5-architecture-exception-process)
+
+Eingefroren sind die Grundsatzentscheidungen und kanonischen Owner:
 
 - Fleet Engine
 - Queue Engine
@@ -57,6 +72,12 @@ Verbindliche Regeln ab Beta:
 - Neue Features bauen ausschließlich auf bestehenden Ownern auf.
 - Server Authority bleibt unverändert.
 - GC-000 bleibt bindend.
+
+| Projektphase | Leitfrage |
+|--------------|-----------|
+| **Alpha** | Können wir das bauen? |
+| **Beta** | Funktioniert es zuverlässig? |
+| **Release** | Macht es den Spielern Spaß? |
 
 ---
 

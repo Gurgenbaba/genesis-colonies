@@ -2293,9 +2293,9 @@ def api_alliance_leave():
         leave_alliance(user_id, conn=conn)
         alliance_state = get_alliance_state(user_id, conn=conn)
     except ValueError as exc:
-        return jsonify({"ok": False, "reason": str(exc)}), 400
+        return _alliance_error_json(user_id, str(exc), "api_alliance_leave")
     except Exception:
-        return jsonify({"ok": False, "reason": "alliance_action_failed"}), 500
+        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_leave", status=500)
     finally:
         conn.close()
     return _alliance_action_json(user_id, alliance_state, "api_alliance_leave")
@@ -2315,9 +2315,9 @@ def api_alliance_description():
         update_alliance_description(user_id, str(data.get("description") or ""), conn=conn)
         alliance_state = get_alliance_state(user_id, conn=conn)
     except ValueError as exc:
-        return jsonify({"ok": False, "reason": str(exc)}), 400
+        return _alliance_error_json(user_id, str(exc), "api_alliance_description")
     except Exception:
-        return jsonify({"ok": False, "reason": "alliance_action_failed"}), 500
+        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_description", status=500)
     finally:
         conn.close()
     return _alliance_action_json(user_id, alliance_state, "api_alliance_description")
@@ -2433,9 +2433,9 @@ def api_alliance_project_start():
         )
         alliance_state = get_alliance_state(user_id, conn=conn)
     except ValueError as exc:
-        return jsonify({"ok": False, "reason": str(exc)}), 400
+        return _alliance_error_json(user_id, str(exc), "api_alliance_project_start")
     except Exception:
-        return jsonify({"ok": False, "reason": "alliance_action_failed"}), 500
+        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_project_start", status=500)
     finally:
         conn.close()
     return _alliance_action_json(user_id, alliance_state, "api_alliance_project_start")
@@ -2489,9 +2489,9 @@ def api_alliance_diplomacy_send():
         )
         alliance_state = get_alliance_state(user_id, conn=conn)
     except ValueError as exc:
-        return jsonify({"ok": False, "reason": str(exc)}), 400
+        return _alliance_error_json(user_id, str(exc), "api_alliance_diplomacy_send")
     except Exception:
-        return jsonify({"ok": False, "reason": "alliance_action_failed"}), 500
+        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_diplomacy_send", status=500)
     finally:
         conn.close()
     return _alliance_action_json(user_id, alliance_state, "api_alliance_diplomacy_send")
@@ -2516,12 +2516,189 @@ def api_alliance_diplomacy_respond():
         )
         alliance_state = get_alliance_state(user_id, conn=conn)
     except ValueError as exc:
-        return jsonify({"ok": False, "reason": str(exc)}), 400
+        return _alliance_error_json(user_id, str(exc), "api_alliance_diplomacy_respond")
     except Exception:
-        return jsonify({"ok": False, "reason": "alliance_action_failed"}), 500
+        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_diplomacy_respond", status=500)
     finally:
         conn.close()
     return _alliance_action_json(user_id, alliance_state, "api_alliance_diplomacy_respond")
+
+
+@app.route("/api/alliance/recruitment", methods=["POST"])
+@require_login
+def api_alliance_recruitment():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+    data = request.get_json(silent=True) or {}
+    from game.alliance import get_alliance_state, get_player_alliance, update_recruitment_mode
+
+    conn = db()
+    try:
+        membership = get_player_alliance(user_id, conn=conn)
+        if not membership:
+            raise ValueError("not_in_alliance")
+        update_recruitment_mode(
+            int(membership["alliance_id"]),
+            user_id,
+            str(data.get("mode") or ""),
+            conn=conn,
+        )
+        alliance_state = get_alliance_state(user_id, conn=conn)
+    except ValueError as exc:
+        return _alliance_error_json(user_id, str(exc), "api_alliance_recruitment")
+    except Exception:
+        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_recruitment", status=500)
+    finally:
+        conn.close()
+    return _alliance_action_json(user_id, alliance_state, "api_alliance_recruitment")
+
+
+@app.route("/api/alliance/profile", methods=["POST"])
+@require_login
+def api_alliance_profile_update():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+    data = request.get_json(silent=True) or {}
+    from game.alliance import get_alliance_state, get_player_alliance, update_alliance_profile
+
+    conn = db()
+    try:
+        membership = get_player_alliance(user_id, conn=conn)
+        if not membership:
+            raise ValueError("not_in_alliance")
+        kwargs: Dict[str, Any] = {}
+        if "name" in data:
+            kwargs["name"] = str(data.get("name") or "")
+        if "tag" in data:
+            kwargs["tag"] = str(data.get("tag") or "")
+        if "description" in data:
+            kwargs["description"] = str(data.get("description") or "")
+        update_alliance_profile(int(membership["alliance_id"]), user_id, conn=conn, **kwargs)
+        alliance_state = get_alliance_state(user_id, conn=conn)
+    except ValueError as exc:
+        return _alliance_error_json(user_id, str(exc), "api_alliance_profile_update")
+    except Exception:
+        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_profile_update", status=500)
+    finally:
+        conn.close()
+    return _alliance_action_json(user_id, alliance_state, "api_alliance_profile_update")
+
+
+@app.route("/api/alliance/member/role", methods=["POST"])
+@require_login
+def api_alliance_member_role():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+    data = request.get_json(silent=True) or {}
+    from game.alliance import get_alliance_state, get_player_alliance, set_member_role
+
+    conn = db()
+    try:
+        membership = get_player_alliance(user_id, conn=conn)
+        if not membership:
+            raise ValueError("not_in_alliance")
+        set_member_role(
+            int(membership["alliance_id"]),
+            user_id,
+            int(data.get("player_id") or 0),
+            str(data.get("role") or ""),
+            conn=conn,
+        )
+        alliance_state = get_alliance_state(user_id, conn=conn)
+    except ValueError as exc:
+        return _alliance_error_json(user_id, str(exc), "api_alliance_member_role")
+    except Exception:
+        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_member_role", status=500)
+    finally:
+        conn.close()
+    return _alliance_action_json(user_id, alliance_state, "api_alliance_member_role")
+
+
+@app.route("/api/alliance/leader/transfer", methods=["POST"])
+@require_login
+def api_alliance_leader_transfer():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+    data = request.get_json(silent=True) or {}
+    from game.alliance import get_alliance_state, get_player_alliance, transfer_leadership
+
+    conn = db()
+    try:
+        membership = get_player_alliance(user_id, conn=conn)
+        if not membership:
+            raise ValueError("not_in_alliance")
+        transfer_leadership(
+            int(membership["alliance_id"]),
+            user_id,
+            int(data.get("player_id") or 0),
+            conn=conn,
+        )
+        alliance_state = get_alliance_state(user_id, conn=conn)
+    except ValueError as exc:
+        return _alliance_error_json(user_id, str(exc), "api_alliance_leader_transfer")
+    except Exception:
+        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_leader_transfer", status=500)
+    finally:
+        conn.close()
+    return _alliance_action_json(user_id, alliance_state, "api_alliance_leader_transfer")
+
+
+@app.route("/api/alliance/member/kick", methods=["POST"])
+@require_login
+def api_alliance_member_kick():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+    data = request.get_json(silent=True) or {}
+    from game.alliance import get_alliance_state, get_player_alliance, kick_member
+
+    conn = db()
+    try:
+        membership = get_player_alliance(user_id, conn=conn)
+        if not membership:
+            raise ValueError("not_in_alliance")
+        kick_member(
+            int(membership["alliance_id"]),
+            user_id,
+            int(data.get("player_id") or 0),
+            conn=conn,
+        )
+        alliance_state = get_alliance_state(user_id, conn=conn)
+    except ValueError as exc:
+        return _alliance_error_json(user_id, str(exc), "api_alliance_member_kick")
+    except Exception:
+        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_member_kick", status=500)
+    finally:
+        conn.close()
+    return _alliance_action_json(user_id, alliance_state, "api_alliance_member_kick")
+
+
+@app.route("/api/alliance/disband", methods=["POST"])
+@require_login
+def api_alliance_disband():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+    from game.alliance import disband_alliance, get_alliance_state, get_player_alliance
+
+    conn = db()
+    try:
+        membership = get_player_alliance(user_id, conn=conn)
+        if not membership:
+            raise ValueError("not_in_alliance")
+        disband_alliance(int(membership["alliance_id"]), user_id, conn=conn)
+        alliance_state = get_alliance_state(user_id, conn=conn)
+    except ValueError as exc:
+        return _alliance_error_json(user_id, str(exc), "api_alliance_disband")
+    except Exception:
+        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_disband", status=500)
+    finally:
+        conn.close()
+    return _alliance_action_json(user_id, alliance_state, "api_alliance_disband")
 
 
 def _render_placeholder_module(module_key: str):

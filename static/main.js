@@ -14363,6 +14363,48 @@
     if (key === "alliance_logo_rate_limited") {
       return t("alliance_logo_rate_limited", "Bitte kurz warten und erneut versuchen.");
     }
+    if (key === "leader_must_transfer") {
+      return t("alliance_err_leader_must_transfer", "Als Leader musst du zuerst die Führung übertragen.");
+    }
+    if (key === "forbidden") {
+      return t("alliance_err_forbidden", "Keine Berechtigung.");
+    }
+    if (key === "member_not_found") {
+      return t("alliance_err_member_not_found", "Mitglied nicht gefunden.");
+    }
+    if (key === "transfer_not_officer") {
+      return t("alliance_err_transfer_not_officer", "Leadership kann nur an Offiziere übertragen werden.");
+    }
+    if (key === "duplicate_tag") {
+      return t("alliance_err_duplicate_tag", "Tag ist bereits vergeben.");
+    }
+    if (key === "duplicate_name") {
+      return t("alliance_err_duplicate_name", "Name ist bereits vergeben.");
+    }
+    if (key === "invalid_tag") {
+      return t("alliance_err_invalid_tag", "Tag ungültig.");
+    }
+    if (key === "invalid_role") {
+      return t("alliance_err_invalid_role", "Rolle ungültig.");
+    }
+    if (key === "duplicate_diplomacy_request") {
+      return t("alliance_err_duplicate_diplomacy", "Anfrage bereits offen.");
+    }
+    if (key === "pool_cap_exceeded") {
+      return t("alliance_err_pool_cap_exceeded", "Allianzkasse ist voll.");
+    }
+    if (key === "insufficient_resources") {
+      return t("alliance_err_insufficient_resources", "Nicht genug Ressourcen auf dem aktiven Planeten.");
+    }
+    if (key === "invalid_donation") {
+      return t("alliance_err_invalid_donation", "Ungültige Spende.");
+    }
+    if (key === "project_active") {
+      return t("alliance_err_project_active", "Es läuft bereits ein Allianz-Projekt.");
+    }
+    if (key === "insufficient_pool") {
+      return t("alliance_err_insufficient_pool", "Allianzkasse reicht nicht aus.");
+    }
     return key || fallback || t("alliance_action_failed", "Aktion fehlgeschlagen.");
   }
 
@@ -14412,6 +14454,9 @@
       const panel = page.querySelector("[data-alliance-active-project]");
       if (panel) {
         panel.dataset.finishAt = String(state.active_project.finish_at || "");
+        panel.dataset.startedAt = String(state.active_project.started_at || "");
+        panel.dataset.durationSeconds = String(state.active_project.duration_seconds || "");
+        panel.dataset.progressPct = String(state.active_project.progress_pct ?? "");
         updateAllianceProjectProgress(panel);
       }
     } else {
@@ -14423,7 +14468,8 @@
   function updateAllianceProjectProgress(panel) {
     if (!panel) return;
     const finishAt = Number(panel.dataset.finishAt || 0);
-    const startGuess = finishAt - 3600;
+    const startedAt = Number(panel.dataset.startedAt || 0);
+    const durationSec = Number(panel.dataset.durationSeconds || 0);
     const now = GC.getServerNow ? GC.getServerNow() : Date.now() / 1000;
     const fill = panel.querySelector("[data-project-fill]");
     const eta = panel.querySelector("[data-project-eta]");
@@ -14432,8 +14478,19 @@
       if (eta) eta.textContent = "";
       return;
     }
-    const total = Math.max(1, finishAt - startGuess);
-    const pct = Math.min(100, Math.max(0, ((now - startGuess) / total) * 100));
+    const serverPct = panel.dataset.progressPct;
+    let pct = serverPct !== "" && serverPct != null ? Number(serverPct) : NaN;
+    if (Number.isNaN(pct)) {
+      const total = durationSec > 0 ? durationSec : Math.max(1, finishAt - startedAt);
+      if (startedAt > 0 && total > 0) {
+        pct = Math.min(100, Math.max(0, ((now - startedAt) / total) * 100));
+      } else {
+        pct = 0;
+      }
+    } else if (startedAt > 0 && durationSec > 0) {
+      const elapsed = Math.max(0, now - startedAt);
+      pct = Math.min(100, Math.max(Number(serverPct), (elapsed / durationSec) * 100));
+    }
     if (fill) fill.style.width = pct.toFixed(1) + "%";
     if (eta) eta.textContent = GC.formatCountdown ? GC.formatCountdown(finishAt - now) : String(Math.ceil(finishAt - now)) + "s";
   }
@@ -14522,7 +14579,7 @@
     if (!form || form.tagName !== "FORM") return false;
     return Boolean(
       form.matches(
-        "[data-alliance-create-form], [data-alliance-join-form], [data-alliance-desc-form], [data-alliance-diplomacy-form]"
+        "[data-alliance-create-form], [data-alliance-join-form], [data-alliance-desc-form], [data-alliance-profile-form], [data-alliance-diplomacy-form]"
       )
     );
   }
@@ -14778,6 +14835,25 @@
           else showNotify(allianceErrorMessage(out, "Speichern fehlgeschlagen"), "error");
           return;
         }
+        if (action === "profile") {
+          const fd = new FormData(form);
+          const out = await allianceAction(
+            "/api/alliance/profile",
+            {
+              tag: String(fd.get("tag") || "").trim(),
+              name: String(fd.get("name") || "").trim(),
+              description: String(fd.get("description") || ""),
+            },
+            "alliance_profile"
+          );
+          if (out?.ok) {
+            showNotify(t("alliance_saved", "Gespeichert."), "success");
+            await allianceReloadHub("alliance_profile");
+          } else {
+            showNotify(allianceErrorMessage(out, "Speichern fehlgeschlagen"), "error");
+          }
+          return;
+        }
         if (action === "diplomacy") {
           const fd = new FormData(form);
           const out = await allianceAction(
@@ -14831,6 +14907,87 @@
         const out = await allianceAction("/api/alliance/leave", {}, "alliance_leave");
         if (out?.ok) await allianceReloadHub("alliance_leave");
         else showNotify(allianceErrorMessage(out, "Verlassen fehlgeschlagen"), "error");
+        return;
+      }
+
+      const disbandBtn = ev.target.closest("[data-alliance-disband]");
+      if (disbandBtn) {
+        ev.preventDefault();
+        const ok = window.confirm(
+          t("alliance_disband_confirm", "Allianz wirklich auflösen? Dies kann nicht rückgängig gemacht werden.")
+        );
+        if (!ok) return;
+        const out = await allianceAction("/api/alliance/disband", {}, "alliance_disband");
+        if (out?.ok) await allianceReloadHub("alliance_disband");
+        else showNotify(allianceErrorMessage(out, "Auflösen fehlgeschlagen"), "error");
+        return;
+      }
+
+      const recruitBtn = ev.target.closest("[data-recruitment-mode]");
+      if (recruitBtn) {
+        ev.preventDefault();
+        const mode = String(recruitBtn.dataset.recruitmentMode || "");
+        const out = await allianceAction("/api/alliance/recruitment", { mode }, "alliance_recruitment");
+        if (out?.ok) {
+          showNotify(t("alliance_saved", "Gespeichert."), "success");
+          await allianceReloadHub("alliance_recruitment");
+        } else {
+          showNotify(allianceErrorMessage(out, "Speichern fehlgeschlagen"), "error");
+        }
+        return;
+      }
+
+      const memberAction = (url, body, reason) => allianceAction(url, body, reason);
+
+      const roleBtn = ev.target.closest("[data-member-role]");
+      if (roleBtn) {
+        ev.preventDefault();
+        const parts = String(roleBtn.dataset.memberRole || "").split(":");
+        if (parts.length !== 2) return;
+        const pid = parseInt(parts[0], 10);
+        const role = parts[1];
+        if (!pid || !role) return;
+        const out = await memberAction(
+          "/api/alliance/member/role",
+          { player_id: pid, role },
+          "alliance_member_role"
+        );
+        if (out?.ok) await allianceReloadHub("alliance_member_role");
+        else showNotify(allianceErrorMessage(out, "Aktion fehlgeschlagen"), "error");
+        return;
+      }
+
+      const kickBtn = ev.target.closest("[data-member-kick]");
+      if (kickBtn) {
+        ev.preventDefault();
+        const pid = parseInt(kickBtn.dataset.memberKick || "0", 10);
+        if (!pid) return;
+        const out = await memberAction(
+          "/api/alliance/member/kick",
+          { player_id: pid },
+          "alliance_member_kick"
+        );
+        if (out?.ok) await allianceReloadHub("alliance_member_kick");
+        else showNotify(allianceErrorMessage(out, "Aktion fehlgeschlagen"), "error");
+        return;
+      }
+
+      const transferBtn = ev.target.closest("[data-member-transfer]");
+      if (transferBtn) {
+        ev.preventDefault();
+        const pid = parseInt(transferBtn.dataset.memberTransfer || "0", 10);
+        if (!pid) return;
+        const ok = window.confirm(
+          t("alliance_transfer_confirm", "Leadership wirklich übertragen?")
+        );
+        if (!ok) return;
+        const out = await memberAction(
+          "/api/alliance/leader/transfer",
+          { player_id: pid },
+          "alliance_leader_transfer"
+        );
+        if (out?.ok) await allianceReloadHub("alliance_leader_transfer");
+        else showNotify(allianceErrorMessage(out, "Aktion fehlgeschlagen"), "error");
         return;
       }
 

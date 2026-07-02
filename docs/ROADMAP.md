@@ -129,7 +129,7 @@ GC-803 ✅ → GC-900A–900E / GC-526–531 Logistics ✅ → GC-806 Navigation
 
 ---
 
-## Phase 5 — Social & Meta 🔄
+## Phase 5 — Social & Meta ✅ (Alliance MVP)
 
 | Item | Status | Notizen |
 |------|--------|---------|
@@ -137,8 +137,8 @@ GC-803 ✅ → GC-900A–900E / GC-526–531 Logistics ✅ → GC-806 Navigation
 | **Messages** — Inbox, Send | ✅ | Flotten-/System-Mails |
 | **Chat** — Rooms, DM, Alliance room | ✅ | Rate limit in-process |
 | Chat Admin (mute, ban, delete) | ✅ | |
-| **Allianz** — Hub UI (EPIC-09 MVP) | ✅ | GC-AL-001…006: Pool, Projekte, Tech, Diplomatie MVP |
-| Allianz Combat-/Fleet-Diplomatie-Hooks | 📋 | Hold/Transport auf Bündnis |
+| **Allianz** — Hub UI (EPIC-09 MVP) | ✅ | GC-AL-MVP-01…09: Management, Spenden, Projekte, Tech, Boni, PJAX |
+| Allianz Combat-/Diplomatie-Deep-Hooks | 📋 | Kriegs-Meta, Bündnis-Transport (post-Beta) |
 | **Ranking** — Live API | ✅ | |
 | Marketplace (Spieler-Handel) | 💡 | |
 
@@ -234,7 +234,7 @@ Start nach Completion-First-Pass (GC-610), sofern nicht reine Identity-Tickets (
 2025 Q1–Q2   Phase 0–2 ✅   Foundation, Economy, Admin
 2025 Q3–Q4   Phase 3–4 🔄   Multi-Kolonie, Galaxy, Fleet
 2026 Q1      Phase 4b 🔄     Defense ✅; Combat ✅
-2026 Q2      Phase 5–6       Alliance MVP, Beta Gate, Security
+2026 Q2      Phase 5–6       Alliance MVP ✅, Beta Gate, Security
 2026 Q3+     Phase 9         Imperium & Expansion (EPIC-15, GC-560+)
 ```
 
@@ -248,7 +248,7 @@ Genesis Colonies bleibt `v0.9.x` Alpha, bis alle Alpha-Exit-Gates aus [BETA_GATE
 
 | Gate | Ziel |
 |------|------|
-| Alliance MVP | Allianz-Hub, Bewerbungen, Spenden, Projekte, Tech, Diplomatie-MVP und Logo-Upload spielbar; Combat-/Fleet-Diplomatie-Hooks später |
+| Alliance MVP | ✅ Abgeschlossen (GC-AL-MVP-01…09) — Hub, Bewerbungen, Spenden, Projekte, Tech, Boni, PJAX; Deep-Hooks später |
 | GC-BETA-001 — Architecture & CI Green | Architektur- und PJAX-Regressionstests grün; keine neuen Reload-/Href-Verstöße |
 | GC-BETA-002 — Documentation Reality Sync | Master-Docs spiegeln den Code-Stand wider |
 | GC-BETA-003 — Alpha Exit Validation | Manueller Smoke-Test aller Kernsysteme ohne P0/P1-Fund |

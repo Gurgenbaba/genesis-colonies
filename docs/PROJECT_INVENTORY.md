@@ -1,6 +1,6 @@
 # Genesis Colonies — Project Inventory
 
-**Stand:** v1.5.9.2 (2026-06-24) — Doc-Reality-Sync; siehe [BALANCE_ANCHORS.md](BALANCE_ANCHORS.md) für Economy-Anker.
+**Stand:** v1.5.9.2 (2026-07-02) — Alliance MVP complete (GC-AL-MVP-09); siehe [BALANCE_ANCHORS.md](BALANCE_ANCHORS.md) für Economy-Anker.
 
 Audit-Methode: Module in `game/`, Routen in `app.py`, UI in `templates/` + `static/main.js`, pytest-Dateien, Master-Docs.
 
@@ -21,7 +21,7 @@ Audit-Methode: Module in `game/`, Routen in `app.py`, UI in `templates/` + `stat
 | **Logistics** | Collect ✅ / Distribute ✅ | `/logistics` (Collect + Distribute) | `…/collect`, `…/distribute` + `state` | `test_fleet_logistics.py` | ✅ | `auto_cargo` optional (Phase 2) |
 | **Messages** | `messages.py` | `/messages`, `messages.js` | `/api/messages/*` | `test_messages.py` | ✅ | ⚠️ `href`-Fallback (GC-512C) |
 | **Chat** | `chat.py` | Shell + `chat.js` | `/api/chat/*` (eigenes Poll) | `test_chat.py`, `test_chat_init` | ✅ | Ausnahme GC-000 dokumentiert |
-| **Alliance** | `alliance.py`, `alliance_catalog.py` | `/alliance`, `GC.modules.alliance` | `/api/alliance/*` + `state` | `test_alliance.py` | ✅ | Diplomatie Combat-Hooks später |
+| **Alliance** | `alliance.py`, `alliance_catalog.py` | `/alliance`, `GC.modules.alliance` | `/api/alliance/*` + `state` | `test_alliance.py` (66+) | ✅ MVP complete | Combat-/Diplomatie-Deep-Hooks post-Beta |
 | **Planet Evolution** | `planet_evolution/` | `/planet-evolution` | `/api/planets/<id>/*` + `state` | `test_planet_evolution*.py` | ✅ | ⚠️ Client `reloadCurrentPage` (GC-512A) |
 | **Ranking** | `ranking.py`, `scoring.py` | `/ranking` | `GET /api/ranking` | `test_ranking.py` | ✅ | — |
 | **Admin** | `admin.py`, `admin_api.py` | `/admin`, `admin.js` | `/api/admin/*` | `test_admin_*` | ✅ | ⚠️ Legacy Forms parallel |
@@ -60,7 +60,7 @@ Offene **Tech Debt** (kein Blocker): [GC-512_ARCHITECTURE_VALIDATION.md](GC-512_
 | `ECONOMY_SYSTEM.md` | Storage 150k, fuel_storage, loot floors | ✅ Reality-Sync 2026-06-24 |
 | `EffectResolver` build time | `power_build_seconds` (GC-850A) | ✅ Reality-Sync 2026-06-24 |
 | Shipyard envelope | `{ok,data}` statt `{ok,state}` | ⚠️ GC-512D backlog |
-| Alliance backend | Minimal | 🔄 MVP backlog |
+| Alliance backend + UI + PJAX | MVP complete (GC-AL-MVP-01…09) | ✅ Rollen, Rekrutierung, Spenden, Projekte, Boni, Tests, Docs |
 
 Historisches GC-601 Audit: [GC-601B_DOCUMENTATION_CONSISTENCY_SYNC.md](GC-601B_DOCUMENTATION_CONSISTENCY_SYNC.md) (closed).
 

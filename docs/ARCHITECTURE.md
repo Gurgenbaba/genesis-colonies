@@ -270,7 +270,7 @@ Vollständige Tabelle: **[PROJECT_INVENTORY.md](PROJECT_INVENTORY.md)** — hier
 | Empire / Command Map | `/empire`, `/api/command-map/*` | `planet_evolution/command_map.py` | ✅ |
 | Planet Evolution | `/planet-evolution` | `planet_evolution/` | ✅ |
 | Inventory / Auction / Vote | `/inventory`, `/auction-house`, `/vote-center` | respective modules | ✅ |
-| Alliance | `/alliance` | `alliance.py` | ✅ MVP (Combat-/Fleet-Diplomatie-Hooks später) |
+| Alliance | `/alliance`, `/api/alliance/*` | `alliance.py`, `alliance_catalog.py` | ✅ MVP complete (GC-AL-MVP-09) |
 
 ---
 
@@ -286,6 +286,7 @@ Vollständige Tabelle: **[PROJECT_INVENTORY.md](PROJECT_INVENTORY.md)** — hier
 | `GET /api/fleet/state` | login | Flotten-Live-State + Tick |
 | `POST /api/fleet/send` | login | Flotte senden |
 | `GET /api/galaxy/system` | login | System-Slots JSON |
+| `POST /api/alliance/*` | login | Allianz-Actions → `{ ok, state, alliance }` |
 | `GET /health` | öffentlich | System-Health |
 
 Vollständige Routenliste: `app.py` (grep `@app.route`).

@@ -1,30 +1,42 @@
-"""EPIC-09 Alliance Hub tests (GC-AL-001 … GC-AL-006)."""
+"""EPIC-09 Alliance Hub tests (GC-AL-001 … GC-AL-MVP-09)."""
 
 from __future__ import annotations
 
 import time
 import uuid
+from pathlib import Path
 
 import pytest
 
 from game.alliance import (
     alliance_hub_schema_ready,
     apply_to_alliance,
+    are_players_allied,
     create_alliance,
+    demote_member,
+    disband_alliance,
     donate_to_alliance,
     finish_due_alliance_projects,
     get_alliance_effect_modifiers,
+    get_alliance_expedition_loot_multiplier,
     get_alliance_public_profile,
     get_alliance_state,
     get_player_alliance,
     join_alliance_by_tag,
+    kick_member,
     leave_alliance,
+    promote_member,
     respond_application,
+    send_diplomacy_request,
+    set_member_role,
     start_alliance_project,
+    transfer_leadership,
     update_alliance_description,
+    update_alliance_profile,
+    update_recruitment_mode,
     withdraw_application,
 )
-from game.alliance_catalog import BASE_MEMBER_LIMIT, member_limit_from_buildings
+from game.alliance_catalog import BASE_MEMBER_LIMIT, DONATION_XP_DAILY_CAP, member_limit_from_buildings
 from game.db import db
 from game.effects import get_effect_resolver
 from game.models import create_user, ensure_player_and_homeworld, init_db
@@ -179,8 +191,13 @@ def test_project_start_and_finish(alliance_db):
         conn.commit()
         state = get_alliance_state(uid, conn=conn)
         assert state["active_project"] is not None
+        ap = state["active_project"]
+        assert int(ap["started_at"]) > 0
+        assert int(ap["finish_at"]) > int(ap["started_at"])
+        assert int(ap["duration_seconds"]) == int(ap["finish_at"]) - int(ap["started_at"])
+        assert 0 <= float(ap["progress_pct"]) <= 100
 
-        proj_id = int(state["active_project"]["id"])
+        proj_id = int(ap["id"])
         conn.execute(
             "UPDATE alliance_projects SET finish_at = ? WHERE id = ?;",
             (int(time.time()) - 1, proj_id),
@@ -716,3 +733,873 @@ def test_alliance_guest_directory_markup(alliance_db):
     assert f'data-alliance-browse-open="{aid}"' in body
     assert "data-alliance-detail" in body
     assert "data-alliance-apply-toggle" not in body
+
+
+def test_leader_must_transfer(alliance_db):
+    leader = _player(name="Leader")
+    officer = _player(name="Officer")
+    conn = db()
+    try:
+        create_alliance("LMT", "Transfer Test", leader, conn=conn)
+        conn.commit()
+        join_alliance_by_tag(officer, "LMT", conn=conn)
+        conn.commit()
+        with pytest.raises(ValueError, match="leader_must_transfer"):
+            leave_alliance(leader, conn=conn)
+    finally:
+        conn.close()
+
+
+def test_solo_leader_leave_disbands(alliance_db):
+    leader = _player()
+    conn = db()
+    try:
+        create_alliance("SOLO", "Solo", leader, conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(leader, conn=conn)["alliance_id"])
+        leave_alliance(leader, conn=conn)
+        conn.commit()
+        assert get_player_alliance(leader, conn=conn) is None
+        row = conn.execute("SELECT id FROM alliances WHERE id = ?;", (aid,)).fetchone()
+        assert row is None
+    finally:
+        conn.close()
+
+
+def test_role_management_flow(alliance_db):
+    leader = _player(name="Leader")
+    officer = _player(name="Officer")
+    member = _player(name="Member")
+    conn = db()
+    try:
+        create_alliance("ROL", "Roles", leader, conn=conn)
+        conn.commit()
+        join_alliance_by_tag(officer, "ROL", conn=conn)
+        join_alliance_by_tag(member, "ROL", conn=conn)
+        conn.commit()
+        promote_member(leader, officer, conn=conn)
+        conn.commit()
+        assert get_player_alliance(officer, conn=conn)["role"] == "officer"
+        demote_member(leader, officer, conn=conn)
+        conn.commit()
+        assert get_player_alliance(officer, conn=conn)["role"] == "member"
+        aid = int(get_player_alliance(leader, conn=conn)["alliance_id"])
+        transfer_leadership(aid, leader, officer, conn=conn)
+        conn.commit()
+        assert get_player_alliance(officer, conn=conn)["role"] == "leader"
+        assert get_player_alliance(leader, conn=conn)["role"] == "officer"
+        kick_member(aid, officer, member, conn=conn)
+        conn.commit()
+        assert get_player_alliance(member, conn=conn) is None
+    finally:
+        conn.close()
+
+
+def test_disband_alliance(alliance_db):
+    leader = _player()
+    member = _player()
+    conn = db()
+    try:
+        create_alliance("DSB", "Disband", leader, conn=conn)
+        conn.commit()
+        join_alliance_by_tag(member, "DSB", conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(leader, conn=conn)["alliance_id"])
+        disband_alliance(aid, leader, conn=conn)
+        conn.commit()
+        assert get_player_alliance(leader, conn=conn) is None
+        assert get_player_alliance(member, conn=conn) is None
+        assert conn.execute("SELECT id FROM alliances WHERE id = ?;", (aid,)).fetchone() is None
+    finally:
+        conn.close()
+
+
+def test_recruitment_mode_api(alliance_db):
+    leader = _player()
+    member = _player()
+    conn = db()
+    try:
+        create_alliance("REC", "Recruit", leader, conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(leader, conn=conn)["alliance_id"])
+        update_recruitment_mode(aid, leader, "application_only", conn=conn)
+        conn.commit()
+        state = get_alliance_state(leader, conn=conn)
+        assert state["recruitment_mode"] == "application_only"
+        with pytest.raises(ValueError, match="recruitment_application_only"):
+            join_alliance_by_tag(member, "REC", conn=conn)
+        update_recruitment_mode(aid, leader, "closed", conn=conn)
+        conn.commit()
+        with pytest.raises(ValueError, match="recruitment_closed"):
+            apply_to_alliance(member, aid, message="Please let me in", conn=conn)
+    finally:
+        conn.close()
+
+
+def test_donation_xp_daily_cap(alliance_db):
+    conn = db()
+    try:
+        uid = _player(conn=conn)
+        create_alliance("XPC", "XP Cap", uid, conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(uid, conn=conn)["alliance_id"])
+        now = int(time.time())
+        conn.executemany(
+            """
+            INSERT INTO alliance_donations (alliance_id, player_id, resource, amount, xp_granted, created_at)
+            VALUES (?, ?, 'metal', 1, 1, ?);
+            """,
+            [(aid, uid, now) for _ in range(DONATION_XP_DAILY_CAP - 1)],
+        )
+        conn.commit()
+        _fund_planet(uid, conn, metal=50_000)
+        before_xp = int(conn.execute("SELECT alliance_xp FROM alliances WHERE id = ?;", (aid,)).fetchone()["alliance_xp"])
+        donate_to_alliance(uid, "metal", 10_000, conn=conn)
+        conn.commit()
+        xp_today = int(
+            conn.execute(
+                "SELECT COALESCE(SUM(xp_granted), 0) AS xp FROM alliance_donations WHERE player_id = ?;",
+                (uid,),
+            ).fetchone()["xp"]
+        )
+        assert xp_today == DONATION_XP_DAILY_CAP
+        after_first = int(conn.execute("SELECT alliance_xp FROM alliances WHERE id = ?;", (aid,)).fetchone()["alliance_xp"])
+        assert after_first == before_xp + 1
+        donate_to_alliance(uid, "metal", 10_000, conn=conn)
+        conn.commit()
+        after_second = int(conn.execute("SELECT alliance_xp FROM alliances WHERE id = ?;", (aid,)).fetchone()["alliance_xp"])
+        assert after_second == after_first
+    finally:
+        conn.close()
+
+
+def test_project_completion_grants_xp(alliance_db):
+    conn = db()
+    try:
+        uid = _player(conn=conn)
+        create_alliance("PRX", "Project XP", uid, conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(uid, conn=conn)["alliance_id"])
+        conn.execute(
+            "UPDATE alliances SET pool_metal = 500000, pool_crystal = 500000, pool_fuel_cells = 500000 WHERE id = ?;",
+            (aid,),
+        )
+        conn.commit()
+        start_alliance_project(uid, "building", "alliance_headquarters", conn=conn)
+        conn.commit()
+        before = int(conn.execute("SELECT alliance_xp FROM alliances WHERE id = ?;", (aid,)).fetchone()["alliance_xp"])
+        conn.execute(
+            "UPDATE alliance_projects SET finish_at = ? WHERE alliance_id = ? AND status = 'active';",
+            (int(time.time()) - 1, aid),
+        )
+        finish_due_alliance_projects(conn=conn, alliance_id=aid)
+        conn.commit()
+        after = int(conn.execute("SELECT alliance_xp FROM alliances WHERE id = ?;", (aid,)).fetchone()["alliance_xp"])
+        assert after > before
+    finally:
+        conn.close()
+
+
+def test_diplomacy_war_and_duplicate_request(alliance_db):
+    from game.alliance import get_alliance_relation
+
+    leader_a = _player(name="A")
+    leader_b = _player(name="B")
+    conn = db()
+    try:
+        create_alliance("WAR", "Warriors", leader_a, conn=conn)
+        create_alliance("PEA", "Peace", leader_b, conn=conn)
+        conn.commit()
+        aid_a = int(get_player_alliance(leader_a, conn=conn)["alliance_id"])
+        aid_b = int(get_player_alliance(leader_b, conn=conn)["alliance_id"])
+        conn.execute(
+            "INSERT INTO alliance_buildings (alliance_id, building_key, level) VALUES (?, 'diplomacy_center', 1);",
+            (aid_a,),
+        )
+        conn.commit()
+        send_diplomacy_request(leader_a, "PEA", "war", conn=conn)
+        conn.commit()
+        assert get_alliance_relation(aid_a, aid_b, conn=conn) == "war"
+        send_diplomacy_request(leader_a, "PEA", "nap", conn=conn)
+        conn.commit()
+        with pytest.raises(ValueError, match="duplicate_diplomacy_request"):
+            send_diplomacy_request(leader_a, "PEA", "nap", conn=conn)
+    finally:
+        conn.close()
+
+
+def test_application_accept_notifies_applicant(alliance_db):
+    leader = _player(name="Leader")
+    applicant = _player(name="Applicant")
+    conn = db()
+    try:
+        create_alliance("NTF", "Notify", leader, conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(leader, conn=conn)["alliance_id"])
+        _set_recruitment_mode(conn, aid, "application_only")
+        conn.commit()
+        apply_to_alliance(applicant, aid, message="Ready to serve", conn=conn)
+        conn.commit()
+        app_id = int(
+            conn.execute(
+                "SELECT id FROM alliance_applications WHERE player_id = ? AND status = 'pending';",
+                (applicant,),
+            ).fetchone()["id"]
+        )
+        respond_application(leader, app_id, accept=True, conn=conn)
+        conn.commit()
+        msg = conn.execute(
+            "SELECT subject FROM player_messages WHERE recipient_player_id = ? ORDER BY id DESC LIMIT 1;",
+            (applicant,),
+        ).fetchone()
+        assert msg is not None
+        assert "NTF" in str(msg["subject"])
+    finally:
+        conn.close()
+
+
+def test_member_cannot_update_description(alliance_db):
+    leader = _player()
+    member = _player()
+    conn = db()
+    try:
+        create_alliance("FOR", "Forbidden", leader, conn=conn)
+        conn.commit()
+        join_alliance_by_tag(member, "FOR", conn=conn)
+        conn.commit()
+        with pytest.raises(ValueError, match="forbidden"):
+            update_alliance_description(member, "Nope", conn=conn)
+    finally:
+        conn.close()
+
+
+def test_api_alliance_state(alliance_db):
+    uid = _player()
+    client = _app_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+    resp = client.get("/api/alliance/state", headers={"X-Requested-With": "XMLHttpRequest"})
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["ok"] is True
+    assert "alliance" in data
+
+
+def test_api_leave_description_donate_project(alliance_db):
+    leader = _player()
+    member = _player()
+    conn = db()
+    try:
+        create_alliance("API", "Api Flow", leader, conn=conn)
+        conn.commit()
+        join_alliance_by_tag(member, "API", conn=conn)
+        conn.commit()
+        _fund_planet(leader, conn, metal=100_000)
+        conn.commit()
+    finally:
+        conn.close()
+
+    client = _app_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = leader
+
+    desc = client.post(
+        "/api/alliance/description",
+        json={"description": "Updated via API"},
+        headers={"Content-Type": "application/json"},
+    )
+    assert desc.status_code == 200
+    assert desc.get_json()["ok"] is True
+    assert desc.get_json()["alliance"]["description"] == "Updated via API"
+
+    donate = client.post(
+        "/api/alliance/donate",
+        json={"resource": "metal", "amount": 100},
+        headers={"Content-Type": "application/json"},
+    )
+    assert donate.status_code == 200, donate.get_json()
+    assert donate.get_json()["ok"] is True
+
+    conn = db()
+    try:
+        aid = int(get_player_alliance(leader, conn=conn)["alliance_id"])
+        conn.execute(
+            "UPDATE alliances SET pool_metal = 500000, pool_crystal = 500000, pool_fuel_cells = 500000 WHERE id = ?;",
+            (aid,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    project = client.post(
+        "/api/alliance/project/start",
+        json={"kind": "building", "key": "alliance_headquarters"},
+        headers={"Content-Type": "application/json"},
+    )
+    assert project.status_code == 200
+    assert project.get_json()["ok"] is True
+
+    with client.session_transaction() as sess:
+        sess["user_id"] = member
+    leave = client.post("/api/alliance/leave", json={}, headers={"Content-Type": "application/json"})
+    assert leave.status_code == 200
+    assert leave.get_json()["ok"] is True
+    assert leave.get_json()["alliance"]["in_alliance"] is False
+
+
+def test_api_leave_leader_error_payload(alliance_db):
+    leader = _player()
+    member = _player()
+    conn = db()
+    try:
+        create_alliance("LER", "Leader Err", leader, conn=conn)
+        conn.commit()
+        join_alliance_by_tag(member, "LER", conn=conn)
+        conn.commit()
+    finally:
+        conn.close()
+
+    client = _app_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = leader
+    resp = client.post("/api/alliance/leave", json={}, headers={"Content-Type": "application/json"})
+    assert resp.status_code == 400
+    data = resp.get_json()
+    assert data["ok"] is False
+    assert data["error"] == "leader_must_transfer"
+    assert "state" in data
+    assert "alliance" in data
+
+
+def test_api_recruitment_and_member_actions(alliance_db):
+    leader = _player()
+    member = _player()
+    conn = db()
+    try:
+        create_alliance("MGT", "Manage", leader, conn=conn)
+        conn.commit()
+        join_alliance_by_tag(member, "MGT", conn=conn)
+        conn.commit()
+    finally:
+        conn.close()
+
+    client = _app_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = leader
+
+    rec = client.post(
+        "/api/alliance/recruitment",
+        json={"mode": "application_only"},
+        headers={"Content-Type": "application/json"},
+    )
+    assert rec.status_code == 200
+    assert rec.get_json()["alliance"]["recruitment_mode"] == "application_only"
+
+    promote = client.post(
+        "/api/alliance/member/role",
+        json={"player_id": member, "role": "officer"},
+        headers={"Content-Type": "application/json"},
+    )
+    assert promote.status_code == 200
+    data = promote.get_json()
+    assert data["ok"] is True
+    assert "state" in data
+    assert "alliance" in data
+    roles = {m["player_id"]: m["role"] for m in data["alliance"]["members"]}
+    assert roles[member] == "officer"
+
+
+def test_set_member_role_leader_only(alliance_db):
+    leader = _player()
+    officer = _player()
+    member = _player()
+    conn = db()
+    try:
+        create_alliance("RLS", "Roles Only", leader, conn=conn)
+        conn.commit()
+        join_alliance_by_tag(officer, "RLS", conn=conn)
+        join_alliance_by_tag(member, "RLS", conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(leader, conn=conn)["alliance_id"])
+        set_member_role(aid, leader, officer, "officer", conn=conn)
+        conn.commit()
+        with pytest.raises(ValueError, match="forbidden"):
+            set_member_role(aid, officer, member, "officer", conn=conn)
+    finally:
+        conn.close()
+
+
+def test_officer_kick_permissions(alliance_db):
+    leader = _player()
+    officer = _player()
+    member = _player()
+    other_officer = _player()
+    conn = db()
+    try:
+        create_alliance("KCK", "Kick Perms", leader, conn=conn)
+        conn.commit()
+        join_alliance_by_tag(officer, "KCK", conn=conn)
+        join_alliance_by_tag(member, "KCK", conn=conn)
+        join_alliance_by_tag(other_officer, "KCK", conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(leader, conn=conn)["alliance_id"])
+        set_member_role(aid, leader, officer, "officer", conn=conn)
+        set_member_role(aid, leader, other_officer, "officer", conn=conn)
+        conn.commit()
+        kick_member(aid, officer, member, conn=conn)
+        conn.commit()
+        assert get_player_alliance(member, conn=conn) is None
+        with pytest.raises(ValueError, match="forbidden"):
+            kick_member(aid, officer, other_officer, conn=conn)
+        with pytest.raises(ValueError, match="forbidden"):
+            kick_member(aid, officer, leader, conn=conn)
+    finally:
+        conn.close()
+
+
+def test_transfer_leadership_to_member(alliance_db):
+    leader = _player()
+    member = _player()
+    conn = db()
+    try:
+        create_alliance("TRN", "Transfer", leader, conn=conn)
+        conn.commit()
+        join_alliance_by_tag(member, "TRN", conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(leader, conn=conn)["alliance_id"])
+        transfer_leadership(aid, leader, member, conn=conn)
+        conn.commit()
+        assert get_player_alliance(member, conn=conn)["role"] == "leader"
+        assert get_player_alliance(leader, conn=conn)["role"] == "officer"
+    finally:
+        conn.close()
+
+
+def test_disband_forbidden_for_officer(alliance_db):
+    leader = _player()
+    officer = _player()
+    conn = db()
+    try:
+        create_alliance("DSF", "Disband Forbidden", leader, conn=conn)
+        conn.commit()
+        join_alliance_by_tag(officer, "DSF", conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(leader, conn=conn)["alliance_id"])
+        set_member_role(aid, leader, officer, "officer", conn=conn)
+        conn.commit()
+        with pytest.raises(ValueError, match="forbidden"):
+            disband_alliance(aid, officer, conn=conn)
+    finally:
+        conn.close()
+
+
+def test_update_alliance_profile(alliance_db):
+    leader = _player()
+    conn = db()
+    try:
+        create_alliance("PRF", "Profile Old", leader, description="Old", conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(leader, conn=conn)["alliance_id"])
+        update_alliance_profile(
+            aid,
+            leader,
+            tag="NEW",
+            name="Profile New",
+            description="New lore",
+            conn=conn,
+        )
+        conn.commit()
+        state = get_alliance_state(leader, conn=conn)
+        assert state["tag"] == "NEW"
+        assert state["name"] == "Profile New"
+        assert state["description"] == "New lore"
+    finally:
+        conn.close()
+
+
+def test_duplicate_tag_and_name_rejected(alliance_db):
+    leader_a = _player()
+    leader_b = _player()
+    conn = db()
+    try:
+        create_alliance("DUP", "First Alliance", leader_a, conn=conn)
+        create_alliance("OTH", "Second Alliance", leader_b, conn=conn)
+        conn.commit()
+        aid_b = int(get_player_alliance(leader_b, conn=conn)["alliance_id"])
+        with pytest.raises(ValueError, match="duplicate_tag"):
+            update_alliance_profile(aid_b, leader_b, tag="DUP", conn=conn)
+        with pytest.raises(ValueError, match="duplicate_name"):
+            update_alliance_profile(aid_b, leader_b, name="First Alliance", conn=conn)
+    finally:
+        conn.close()
+
+
+def test_api_profile_update(alliance_db):
+    leader = _player()
+    conn = db()
+    try:
+        create_alliance("APIP2", "Api Profile", leader, conn=conn)
+        conn.commit()
+    finally:
+        conn.close()
+
+    client = _app_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = leader
+    resp = client.post(
+        "/api/alliance/profile",
+        json={"tag": "AP2", "name": "Updated Name", "description": "Updated desc"},
+        headers={"Content-Type": "application/json"},
+    )
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["ok"] is True
+    assert "state" in data
+    assert data["alliance"]["tag"] == "AP2"
+    assert data["alliance"]["name"] == "Updated Name"
+
+
+def test_donation_rejects_insufficient_resources(alliance_db):
+    conn = db()
+    try:
+        uid = _player(conn=conn)
+        create_alliance("INS", "Insufficient", uid, conn=conn)
+        conn.commit()
+        _fund_planet(uid, conn, metal=50, crystal=50, fuel=50)
+        with pytest.raises(ValueError, match="insufficient_resources"):
+            donate_to_alliance(uid, "metal", 500, conn=conn)
+    finally:
+        conn.close()
+
+
+def test_donation_rejects_invalid_amount(alliance_db):
+    conn = db()
+    try:
+        uid = _player(conn=conn)
+        create_alliance("INV", "Invalid", uid, conn=conn)
+        conn.commit()
+        _fund_planet(uid, conn)
+        with pytest.raises(ValueError, match="invalid_donation"):
+            donate_to_alliance(uid, "metal", 0, conn=conn)
+        with pytest.raises(ValueError, match="invalid_donation"):
+            donate_to_alliance(uid, "metal", -100, conn=conn)
+    finally:
+        conn.close()
+
+
+def test_donation_notifies_officers(alliance_db):
+    leader = _player(name="Leader")
+    member = _player(name="Donor")
+    conn = db()
+    try:
+        create_alliance("DNT", "DonateMsg", leader, conn=conn)
+        conn.commit()
+        join_alliance_by_tag(member, "DNT", conn=conn)
+        conn.commit()
+        _fund_planet(member, conn, metal=10_000)
+        donate_to_alliance(member, "metal", 500, conn=conn)
+        conn.commit()
+        msg = conn.execute(
+            """
+            SELECT subject, metadata_json FROM player_messages
+            WHERE recipient_player_id = ? ORDER BY id DESC LIMIT 1;
+            """,
+            (leader,),
+        ).fetchone()
+        assert msg is not None
+        assert "DNT" in str(msg["subject"])
+    finally:
+        conn.close()
+
+
+def test_project_start_requires_officer(alliance_db):
+    leader = _player()
+    member = _player()
+    conn = db()
+    try:
+        create_alliance("OFFP", "OfficerProj", leader, conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(leader, conn=conn)["alliance_id"])
+        join_alliance_by_tag(member, "OFFP", conn=conn)
+        conn.commit()
+        conn.execute(
+            "UPDATE alliances SET pool_metal = 500000, pool_crystal = 500000, pool_fuel_cells = 200000 WHERE id = ?;",
+            (aid,),
+        )
+        conn.commit()
+        with pytest.raises(ValueError, match="forbidden"):
+            start_alliance_project(member, "building", "alliance_headquarters", conn=conn)
+    finally:
+        conn.close()
+
+
+def test_project_start_consumes_alliance_pool(alliance_db):
+    conn = db()
+    try:
+        uid = _player(conn=conn)
+        create_alliance("CNS", "Consume", uid, conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(uid, conn=conn)["alliance_id"])
+        conn.execute(
+            "UPDATE alliances SET pool_metal = 500000, pool_crystal = 500000, pool_fuel_cells = 200000 WHERE id = ?;",
+            (aid,),
+        )
+        conn.commit()
+        before = get_alliance_state(uid, conn=conn)["pool"]
+        start_alliance_project(uid, "building", "alliance_headquarters", conn=conn)
+        conn.commit()
+        after = get_alliance_state(uid, conn=conn)["pool"]
+        assert after["metal"] < before["metal"]
+        assert after["crystal"] < before["crystal"]
+        assert after["fuel_cells"] < before["fuel_cells"]
+    finally:
+        conn.close()
+
+
+def test_cannot_start_second_active_project(alliance_db):
+    conn = db()
+    try:
+        uid = _player(conn=conn)
+        create_alliance("ONE", "SingleProj", uid, conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(uid, conn=conn)["alliance_id"])
+        conn.execute(
+            "UPDATE alliances SET pool_metal = 900000, pool_crystal = 900000, pool_fuel_cells = 400000 WHERE id = ?;",
+            (aid,),
+        )
+        conn.commit()
+        start_alliance_project(uid, "building", "alliance_headquarters", conn=conn)
+        conn.commit()
+        with pytest.raises(ValueError, match="project_active"):
+            start_alliance_project(uid, "building", "research_archive", conn=conn)
+    finally:
+        conn.close()
+
+
+def test_project_start_and_finish_notify_members(alliance_db):
+    leader = _player()
+    member = _player()
+    conn = db()
+    try:
+        create_alliance("PRM", "ProjMsg", leader, conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(leader, conn=conn)["alliance_id"])
+        join_alliance_by_tag(member, "PRM", conn=conn)
+        conn.commit()
+        conn.execute(
+            "UPDATE alliances SET pool_metal = 500000, pool_crystal = 500000, pool_fuel_cells = 200000 WHERE id = ?;",
+            (aid,),
+        )
+        conn.commit()
+        start_alliance_project(leader, "building", "alliance_headquarters", conn=conn)
+        conn.commit()
+        start_msg = conn.execute(
+            "SELECT subject FROM player_messages WHERE recipient_player_id = ? ORDER BY id DESC LIMIT 1;",
+            (member,),
+        ).fetchone()
+        assert start_msg is not None
+        assert "PRM" in str(start_msg["subject"])
+
+        proj_id = int(
+            conn.execute(
+                "SELECT id FROM alliance_projects WHERE alliance_id = ? AND status = 'active';",
+                (aid,),
+            ).fetchone()["id"]
+        )
+        conn.execute(
+            "UPDATE alliance_projects SET finish_at = ? WHERE id = ?;",
+            (int(time.time()) - 1, proj_id),
+        )
+        conn.commit()
+        finish_due_alliance_projects(conn=conn, alliance_id=aid)
+        conn.commit()
+        finish_msg = conn.execute(
+            "SELECT subject FROM player_messages WHERE recipient_player_id = ? ORDER BY id DESC LIMIT 1;",
+            (member,),
+        ).fetchone()
+        assert finish_msg is not None
+        assert "PRM" in str(finish_msg["subject"])
+    finally:
+        conn.close()
+
+
+def test_alliance_production_combat_bonuses_via_effect_resolver(alliance_db):
+    conn = db()
+    try:
+        uid = _player(conn=conn)
+        create_alliance("BNS", "Bonuses", uid, conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(uid, conn=conn)["alliance_id"])
+        conn.execute(
+            """
+            INSERT INTO alliance_technologies (alliance_id, tech_key, level)
+            VALUES (?, 'industrial_logistics', 3),
+                   (?, 'defensive_protocols', 2);
+            """,
+            (aid, aid),
+        )
+        conn.commit()
+
+        mods = get_alliance_effect_modifiers(uid, conn=conn)
+        assert mods["metal_prod_factor"] > 1.0
+        assert mods["crystal_prod_factor"] > 1.0
+        assert mods["armor_bonus"] > 0.0
+        assert mods["shield_bonus"] > 0.0
+
+        planet = get_context_planet(player_id=uid, conn=conn)
+        resolver = get_effect_resolver(uid, conn=conn, planet=planet)
+        rmods = resolver.get_modifiers()
+        assert rmods["metal_prod_factor"] > 1.0
+        assert rmods["armor_bonus"] > 0.0
+    finally:
+        conn.close()
+
+
+def test_expedition_loot_multiplier_hook(alliance_db):
+    conn = db()
+    try:
+        uid = _player(conn=conn)
+        create_alliance("EXP", "Expedition", uid, conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(uid, conn=conn)["alliance_id"])
+        conn.execute(
+            """
+            INSERT INTO alliance_technologies (alliance_id, tech_key, level)
+            VALUES (?, 'expedition_coordination', 2);
+            """,
+            (aid,),
+        )
+        conn.commit()
+        mult = get_alliance_expedition_loot_multiplier(uid, conn=conn)
+        assert mult > 1.0
+        outsider = _player(conn=conn)
+        conn.commit()
+        assert get_alliance_expedition_loot_multiplier(outsider, conn=conn) == 1.0
+    finally:
+        conn.close()
+
+
+def test_same_alliance_hold_permission(alliance_db):
+    leader = _player()
+    member = _player()
+    outsider = _player()
+    conn = db()
+    try:
+        create_alliance("HLD", "Hold", leader, conn=conn)
+        conn.commit()
+        join_alliance_by_tag(member, "HLD", conn=conn)
+        conn.commit()
+        assert are_players_allied(leader, member, conn=conn) is True
+        assert are_players_allied(leader, outsider, conn=conn) is False
+
+        from game.fleet import allowed_missions_for_target_type
+
+        ally_allowed = allowed_missions_for_target_type("ally_planet", hold_enabled=True)
+        foreign_allowed = allowed_missions_for_target_type("foreign_planet", hold_enabled=True)
+        assert "hold" in ally_allowed
+        assert "hold" not in foreign_allowed
+    finally:
+        conn.close()
+
+
+def test_api_donate_error_includes_state_and_alliance(alliance_db):
+    uid = _player()
+    conn = db()
+    try:
+        create_alliance("APIE", "ApiErr", uid, conn=conn)
+        conn.commit()
+    finally:
+        conn.close()
+
+    client = _app_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+    resp = client.post(
+        "/api/alliance/donate",
+        json={"resource": "metal", "amount": -1},
+        headers={"Content-Type": "application/json"},
+    )
+    assert resp.status_code == 400
+    data = resp.get_json()
+    assert data["ok"] is False
+    assert "state" in data
+    assert "alliance" in data
+    assert data["reason"] == "invalid_donation"
+
+
+def _alliance_js_block() -> str:
+    src = Path("static/main.js").read_text(encoding="utf-8")
+    start = src.find("function parseAlliancePageState")
+    init_start = src.find("  function initAlliance()")
+    end = src.find("\n  function debugDirectiveDomMutation", init_start)
+    assert start >= 0 and init_start > start and end > init_start
+    return src[start:end]
+
+
+def test_alliance_js_no_full_reload():
+    """GC-AL-MVP-08: Alliance module must not use full page reload navigation."""
+    block = _alliance_js_block()
+    assert "location.reload" not in block
+    assert "location.href =" not in block
+    assert "location.assign" not in block
+    assert "GC.fetchGameAction" in block
+    assert "applyActionState" in block
+    assert "allianceReloadHub" in block
+    assert "GC.navigateTo" in block or "GC.reloadCurrentPage" in block
+
+
+def test_alliance_template_project_server_timing_attributes(alliance_db):
+    uid = _player()
+    conn = db()
+    try:
+        create_alliance("TIM", "Timing", uid, conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(uid, conn=conn)["alliance_id"])
+        conn.execute(
+            "UPDATE alliances SET pool_metal = 500000, pool_crystal = 500000, pool_fuel_cells = 200000 WHERE id = ?;",
+            (aid,),
+        )
+        conn.commit()
+        start_alliance_project(uid, "building", "alliance_headquarters", conn=conn)
+        conn.commit()
+    finally:
+        conn.close()
+
+    client = _app_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+    resp = client.get("/alliance", headers={"X-Requested-With": "XMLHttpRequest"})
+    body = resp.get_data(as_text=True)
+    assert "data-alliance-active-project" in body
+    assert "data-duration-seconds=" in body
+    assert "data-progress-pct=" in body
+    assert "data-started-at=" in body
+    assert "data-finish-at=" in body
+
+
+def test_api_project_start_forbidden_includes_envelope(alliance_db):
+    leader = _player()
+    member = _player()
+    conn = db()
+    try:
+        create_alliance("PRF", "Perm", leader, conn=conn)
+        conn.commit()
+        join_alliance_by_tag(member, "PRF", conn=conn)
+        conn.commit()
+    finally:
+        conn.close()
+
+    client = _app_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = member
+    resp = client.post(
+        "/api/alliance/project/start",
+        json={"kind": "building", "key": "alliance_headquarters"},
+        headers={"Content-Type": "application/json"},
+    )
+    assert resp.status_code == 400
+    data = resp.get_json()
+    assert data["ok"] is False
+    assert data["reason"] == "forbidden"
+    assert "state" in data
+    assert "alliance" in data

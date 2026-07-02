@@ -34897,6 +34897,63 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   border-radius: var(--gc-radius-sm, 2px);
   background: rgba(0, 0, 0, 0.15);
 }
+.alliance-hub-member-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.alliance-hub-member-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+.alliance-hub-recruitment-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--gc-border-subtle, #222);
+}
+.alliance-hub-recruitment-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.75;
+}
+.alliance-hub-recruitment-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.alliance-hub-profile-settings {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--gc-border-subtle, #222);
+}
+.alliance-hub-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.alliance-hub-profile-actions {
+  margin-top: 8px;
+}
+.alliance-hub-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.78rem;
+}
+.alliance-hub-leave-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
 .alliance-hub-member-name { font-size: 0.85rem; }
 .alliance-hub-role-badge {
   align-self: flex-start;

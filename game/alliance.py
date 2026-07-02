@@ -54,14 +54,19 @@ def _day_start(ts: Optional[int] = None) -> int:
 
 
 def alliance_hub_schema_ready(conn) -> bool:
-    return (
-        table_exists(conn, "alliances")
-        and table_exists(conn, "alliance_members")
-        and table_exists(conn, "alliance_donations")
-        and table_exists(conn, "alliance_buildings")
-        and table_exists(conn, "alliance_technologies")
-        and table_exists(conn, "alliance_projects")
+    """Core hub tables from 088 — required for economy, projects, and guest browse."""
+    required = (
+        "alliances",
+        "alliance_members",
+        "alliance_donations",
+        "alliance_buildings",
+        "alliance_technologies",
+        "alliance_projects",
+        "alliance_applications",
+        "alliance_diplomacy",
+        "alliance_diplomacy_requests",
     )
+    return all(table_exists(conn, t) for t in required)
 
 
 def _normalize_role(role: str) -> str:
@@ -78,6 +83,22 @@ def is_officer_role(role: str) -> bool:
 def can_manage_applications(role: str) -> bool:
     """Officer roles may review applications (GC-AL-009 adds recruiter)."""
     return is_officer_role(role)
+
+
+def is_leader_role(role: str) -> bool:
+    return _normalize_role(role) == "leader"
+
+
+def can_kick_member(actor_role: str, target_role: str) -> bool:
+    actor = _normalize_role(actor_role)
+    target = _normalize_role(target_role)
+    if target == "leader":
+        return False
+    if actor == "leader":
+        return True
+    if actor == "officer":
+        return target == "member"
+    return False
 
 
 def _normalize_recruitment_mode(mode: Optional[str]) -> str:
@@ -509,6 +530,120 @@ def _active_project(alliance_id: int, conn) -> Optional[Dict[str, Any]]:
     return dict(row) if row else None
 
 
+def _project_progress_pct(proj: Mapping[str, Any], now: Optional[int] = None) -> float:
+    started = int(proj.get("started_at") or 0)
+    finish = int(proj.get("finish_at") or 0)
+    ts = int(now or _now())
+    if finish <= started:
+        return 100.0 if finish <= ts else 0.0
+    if ts >= finish:
+        return 100.0
+    if ts <= started:
+        return 0.0
+    return round(min(100.0, max(0.0, ((ts - started) / (finish - started)) * 100.0)), 1)
+
+
+def _serialize_active_project(proj: Optional[Mapping[str, Any]], *, now: Optional[int] = None) -> Optional[Dict[str, Any]]:
+    if not proj:
+        return None
+    ts = int(now or _now())
+    started = int(proj.get("started_at") or 0)
+    finish = int(proj.get("finish_at") or 0)
+    duration = max(0, finish - started)
+    out = dict(proj)
+    out["duration_seconds"] = duration
+    out["progress_pct"] = _project_progress_pct(out, ts)
+    return out
+
+
+def _notify_alliance_members(
+    alliance_id: int,
+    subject_key: str,
+    subject_default: str,
+    body_key: str,
+    body_default: str,
+    *,
+    conn,
+    metadata: Optional[Mapping[str, Any]] = None,
+    **fmt: object,
+) -> None:
+    try:
+        from .i18n import get_player_locale, tr
+        from .messages import create_message
+
+        for member in get_alliance_members(int(alliance_id), conn=conn):
+            pid = int(member["player_id"])
+            loc = get_player_locale(pid, conn=conn)
+            subject = tr(subject_key, subject_default, locale=loc, **fmt)
+            body = tr(body_key, body_default, locale=loc, **fmt)
+            create_message(
+                pid,
+                subject,
+                body,
+                category="system",
+                metadata={"alliance_id": int(alliance_id), **dict(metadata or {})},
+                conn=conn,
+            )
+    except Exception:
+        pass
+
+
+def _notify_officers_donation(
+    alliance_id: int,
+    donor_id: int,
+    donor_name: str,
+    resource: str,
+    amount: int,
+    *,
+    conn,
+) -> None:
+    try:
+        from .i18n import get_player_locale, tr
+        from .messages import create_message
+
+        tag_row = conn.execute(
+            "SELECT tag FROM alliances WHERE id = ? LIMIT 1;",
+            (int(alliance_id),),
+        ).fetchone()
+        tag = str(tag_row["tag"] if tag_row else "")
+        for member in get_alliance_members(int(alliance_id), conn=conn):
+            if not is_officer_role(member.get("role")):
+                continue
+            officer_id = int(member["player_id"])
+            loc = get_player_locale(officer_id, conn=conn)
+            subject = tr(
+                "alliance_msg_donation_subject",
+                "[%(tag)s] Alliance donation",
+                locale=loc,
+                tag=tag,
+            )
+            body = tr(
+                "alliance_msg_donation_body",
+                "%(name)s donated %(amount)s %(resource)s.",
+                locale=loc,
+                name=str(donor_name or ""),
+                amount=int(amount),
+                resource=str(resource or ""),
+            )
+            create_message(
+                officer_id,
+                subject,
+                body,
+                category="system",
+                sender_player_id=int(donor_id),
+                sender_name=str(donor_name or ""),
+                metadata={
+                    "alliance_id": int(alliance_id),
+                    "kind": "alliance_donation",
+                    "resource": str(resource or ""),
+                    "amount": int(amount),
+                },
+                conn=conn,
+            )
+    except Exception:
+        pass
+
+
 def _recent_donations(alliance_id: int, conn, *, limit: int = 8) -> List[Dict[str, Any]]:
     cur = conn.cursor()
     cur.execute(
@@ -625,6 +760,7 @@ def _notify_officers_new_application(
 ) -> None:
     """Optional inbox ping for leaders/officers (GC-AL-008)."""
     try:
+        from .i18n import get_player_locale, tr
         from .messages import create_message
 
         tag_row = conn.execute(
@@ -632,13 +768,26 @@ def _notify_officers_new_application(
             (int(alliance_id),),
         ).fetchone()
         tag = str(tag_row["tag"] if tag_row else "")
-        subject = f"[{tag}] Neue Allianzbewerbung"
-        body = f"{applicant_name} (ID {int(applicant_id)}) möchte beitreten.\n\n{message}"
         for member in get_alliance_members(int(alliance_id), conn=conn):
             if not can_manage_applications(member.get("role")):
                 continue
+            officer_id = int(member["player_id"])
+            loc = get_player_locale(officer_id, conn=conn)
+            subject = tr(
+                "alliance_msg_application_subject",
+                "[%(tag)s] Alliance application",
+                locale=loc,
+                tag=tag,
+            )
+            body = tr(
+                "alliance_msg_application_body",
+                "%(name)s wants to join.\n\n%(message)s",
+                locale=loc,
+                name=str(applicant_name or ""),
+                message=str(message or ""),
+            )
             create_message(
-                int(member["player_id"]),
+                officer_id,
                 subject,
                 body,
                 category="system",
@@ -647,6 +796,59 @@ def _notify_officers_new_application(
                 metadata={"alliance_id": int(alliance_id), "kind": "alliance_application"},
                 conn=conn,
             )
+    except Exception:
+        pass
+
+
+def _notify_application_response(
+    applicant_id: int,
+    *,
+    alliance_tag: str,
+    alliance_name: str,
+    accepted: bool,
+    conn,
+) -> None:
+    try:
+        from .i18n import get_player_locale, tr
+        from .messages import create_message
+
+        loc = get_player_locale(int(applicant_id), conn=conn)
+        tag = str(alliance_tag or "")
+        name = str(alliance_name or "")
+        if accepted:
+            subject = tr(
+                "alliance_msg_application_accepted_subject",
+                "[%(tag)s] Application accepted",
+                locale=loc,
+                tag=tag,
+            )
+            body = tr(
+                "alliance_msg_application_accepted_body",
+                "Your application to %(name)s was accepted.",
+                locale=loc,
+                name=name,
+            )
+        else:
+            subject = tr(
+                "alliance_msg_application_declined_subject",
+                "[%(tag)s] Application declined",
+                locale=loc,
+                tag=tag,
+            )
+            body = tr(
+                "alliance_msg_application_declined_body",
+                "Your application to %(name)s was declined.",
+                locale=loc,
+                name=name,
+            )
+        create_message(
+            int(applicant_id),
+            subject,
+            body,
+            category="system",
+            metadata={"kind": "alliance_application_response", "accepted": bool(accepted)},
+            conn=conn,
+        )
     except Exception:
         pass
 
@@ -730,14 +932,15 @@ def get_alliance_state(player_id: int, conn=None) -> Dict[str, Any]:
             techs=techs,
             trade_coord_level=trade_lvl,
         )
-        active = _active_project(aid, conn)
         now = _now()
+        active = _serialize_active_project(_active_project(aid, conn), now=now)
         if active and int(active.get("finish_at") or 0) <= now:
             finish_due_alliance_projects(conn=conn, alliance_id=aid)
             alliance_row = _load_alliance_row(aid, conn) or alliance_row
             buildings = _load_buildings(aid, conn)
             techs = _load_techs(aid, conn)
-            active = _active_project(aid, conn)
+            now = _now()
+            active = _serialize_active_project(_active_project(aid, conn), now=now)
             pool_data = _pool_snapshot(alliance_row, conn)
             projects_avail = available_projects(
                 alliance_level=level,
@@ -764,6 +967,8 @@ def get_alliance_state(player_id: int, conn=None) -> Dict[str, Any]:
                 **logo_fields,
                 "members": members,
                 "role": role,
+                "is_leader": is_leader_role(role),
+                "viewer_player_id": int(player_id),
                 "can_manage": is_officer_role(role),
                 "pool": pool_data["pool"],
                 "pool_cap": pool_data["cap"],
@@ -1106,12 +1311,16 @@ def respond_application(
         if not app or str(app["status"]) != "pending":
             raise ValueError("application_not_found")
         now = _now()
+        applicant_id = int(app["player_id"])
+        alliance_row = _load_alliance_row(aid, conn) or {}
+        alliance_tag = str(alliance_row.get("tag") or "")
+        alliance_name = str(alliance_row.get("name") or "")
         begin_write_transaction(conn)
         if accept:
-            row = _load_alliance_row(aid, conn) or {}
+            row = alliance_row
             if _member_count(aid, conn) >= int(row.get("member_limit") or BASE_MEMBER_LIMIT):
                 raise ValueError("alliance_full")
-            if get_player_alliance(int(app["player_id"]), conn=conn):
+            if get_player_alliance(applicant_id, conn=conn):
                 raise ValueError("player_already_allied")
             conn.execute(
                 """
@@ -1119,7 +1328,7 @@ def respond_application(
                 VALUES (?, ?, 'member', ?)
                 ON CONFLICT(alliance_id, player_id) DO NOTHING;
                 """,
-                (aid, int(app["player_id"]), now),
+                (aid, applicant_id, now),
             )
             conn.execute(
                 """
@@ -1133,7 +1342,7 @@ def respond_application(
                 UPDATE alliance_applications SET status = 'withdrawn', responded_at = ?
                 WHERE player_id = ? AND status = 'pending' AND id != ?;
                 """,
-                (now, int(app["player_id"]), int(application_id)),
+                (now, applicant_id, int(application_id)),
             )
         else:
             conn.execute(
@@ -1144,8 +1353,129 @@ def respond_application(
                 (now, int(application_id)),
             )
         commit(conn)
+        _notify_application_response(
+            applicant_id,
+            alliance_tag=alliance_tag,
+            alliance_name=alliance_name,
+            accepted=accept,
+            conn=conn,
+        )
     except Exception:
         rollback(conn)
+        raise
+    finally:
+        if own:
+            conn.close()
+
+
+def _normalize_alliance_tag(tag: Optional[str]) -> str:
+    return str(tag or "").strip().upper()[:8]
+
+
+def _normalize_alliance_name(name: Optional[str]) -> str:
+    return str(name or "").strip()[:64]
+
+
+def _assert_unique_alliance_identity(
+    conn,
+    *,
+    alliance_id: int,
+    tag: Optional[str] = None,
+    name: Optional[str] = None,
+) -> None:
+    cur = conn.cursor()
+    if tag is not None:
+        cur.execute(
+            "SELECT id FROM alliances WHERE tag = ? AND id != ? LIMIT 1;",
+            (tag, int(alliance_id)),
+        )
+        if cur.fetchone():
+            raise ValueError("duplicate_tag")
+    if name is not None:
+        cur.execute(
+            "SELECT id FROM alliances WHERE name = ? AND id != ? LIMIT 1;",
+            (name, int(alliance_id)),
+        )
+        if cur.fetchone():
+            raise ValueError("duplicate_name")
+
+
+def _require_membership_in_alliance(
+    actor_id: int,
+    alliance_id: int,
+    conn,
+    *,
+    leader_only: bool = False,
+    officer_ok: bool = True,
+) -> Dict[str, Any]:
+    membership = get_player_alliance(actor_id, conn=conn)
+    if not membership or int(membership["alliance_id"]) != int(alliance_id):
+        raise ValueError("forbidden")
+    role = _normalize_role(membership.get("role"))
+    if leader_only:
+        if not is_leader_role(role):
+            raise ValueError("forbidden")
+    elif officer_ok and not is_officer_role(role):
+        raise ValueError("forbidden")
+    membership = dict(membership)
+    membership["role"] = role
+    return membership
+
+
+def update_alliance_profile(
+    alliance_id: int,
+    actor_id: int,
+    *,
+    name: Optional[str] = None,
+    tag: Optional[str] = None,
+    description: Optional[str] = None,
+    conn=None,
+) -> None:
+    """Officer/leader may update alliance identity fields (partial update)."""
+    own = conn is None
+    if own:
+        conn = db()
+    aid = int(alliance_id)
+    try:
+        _require_membership_in_alliance(actor_id, aid, conn, officer_ok=True)
+        updates: Dict[str, Any] = {}
+        if name is not None:
+            norm_name = _normalize_alliance_name(name)
+            if not norm_name:
+                raise ValueError("invalid_alliance")
+            updates["name"] = norm_name
+        if tag is not None:
+            norm_tag = _normalize_alliance_tag(tag)
+            if not norm_tag:
+                raise ValueError("invalid_tag")
+            updates["tag"] = norm_tag
+        if description is not None:
+            updates["description"] = str(description or "").strip()[:512]
+        if not updates:
+            raise ValueError("invalid_alliance")
+        if own:
+            begin_write_transaction(conn)
+        _assert_unique_alliance_identity(
+            conn,
+            alliance_id=aid,
+            tag=updates.get("tag"),
+            name=updates.get("name"),
+        )
+        now = _now()
+        if "name" in updates:
+            conn.execute("UPDATE alliances SET name = ?, updated_at = ? WHERE id = ?;", (updates["name"], now, aid))
+        if "tag" in updates:
+            conn.execute("UPDATE alliances SET tag = ?, updated_at = ? WHERE id = ?;", (updates["tag"], now, aid))
+        if "description" in updates:
+            conn.execute(
+                "UPDATE alliances SET description = ?, updated_at = ? WHERE id = ?;",
+                (updates["description"], now, aid),
+            )
+        if own:
+            commit(conn)
+    except Exception:
+        if own:
+            rollback(conn)
         raise
     finally:
         if own:
@@ -1156,16 +1486,219 @@ def update_alliance_description(player_id: int, description: str, conn=None) -> 
     own = conn is None
     if own:
         conn = db()
-    desc = str(description or "").strip()[:512]
     try:
         membership = get_player_alliance(player_id, conn=conn)
-        if not membership or not is_officer_role(membership.get("role")):
+        if not membership:
+            raise ValueError("not_in_alliance")
+        update_alliance_profile(
+            int(membership["alliance_id"]),
+            int(player_id),
+            description=description,
+            conn=conn,
+        )
+    finally:
+        if own:
+            conn.close()
+
+
+def _member_role_in_alliance(alliance_id: int, target_player_id: int, conn) -> str:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT role FROM alliance_members
+        WHERE alliance_id = ? AND player_id = ?
+        LIMIT 1;
+        """,
+        (int(alliance_id), int(target_player_id)),
+    )
+    row = cur.fetchone()
+    if not row:
+        raise ValueError("member_not_found")
+    return _normalize_role(row["role"])
+
+
+def set_member_role(
+    alliance_id: int,
+    actor_id: int,
+    target_player_id: int,
+    role: str,
+    conn=None,
+) -> None:
+    """Leader-only role changes between officer and member."""
+    own = conn is None
+    if own:
+        conn = db()
+    aid = int(alliance_id)
+    target = int(target_player_id)
+    new_role = _normalize_role(role)
+    if new_role not in ("officer", "member"):
+        raise ValueError("invalid_role")
+    try:
+        _require_membership_in_alliance(actor_id, aid, conn, leader_only=True)
+        if target == int(actor_id):
+            raise ValueError("invalid_target")
+        target_role = _member_role_in_alliance(aid, target, conn)
+        if target_role == "leader":
+            raise ValueError("invalid_target")
+        if target_role == new_role:
+            return
+        if own:
+            begin_write_transaction(conn)
+        conn.execute(
+            "UPDATE alliance_members SET role = ? WHERE alliance_id = ? AND player_id = ?;",
+            (new_role, aid, target),
+        )
+        conn.execute("UPDATE alliances SET updated_at = ? WHERE id = ?;", (_now(), aid))
+        if own:
+            commit(conn)
+    except Exception:
+        if own:
+            rollback(conn)
+        raise
+    finally:
+        if own:
+            conn.close()
+
+
+def promote_member(leader_id: int, target_player_id: int, conn=None) -> None:
+    membership = get_player_alliance(leader_id, conn=conn)
+    if not membership:
+        raise ValueError("not_in_alliance")
+    set_member_role(
+        int(membership["alliance_id"]),
+        int(leader_id),
+        int(target_player_id),
+        "officer",
+        conn=conn,
+    )
+
+
+def demote_member(leader_id: int, target_player_id: int, conn=None) -> None:
+    membership = get_player_alliance(leader_id, conn=conn)
+    if not membership:
+        raise ValueError("not_in_alliance")
+    set_member_role(
+        int(membership["alliance_id"]),
+        int(leader_id),
+        int(target_player_id),
+        "member",
+        conn=conn,
+    )
+
+
+def transfer_leadership(
+    alliance_id: int,
+    actor_id: int,
+    target_player_id: int,
+    conn=None,
+) -> None:
+    own = conn is None
+    if own:
+        conn = db()
+    aid = int(alliance_id)
+    target = int(target_player_id)
+    try:
+        _require_membership_in_alliance(actor_id, aid, conn, leader_only=True)
+        if target == int(actor_id):
+            raise ValueError("invalid_target")
+        _member_role_in_alliance(aid, target, conn)
+        now = _now()
+        if own:
+            begin_write_transaction(conn)
+        conn.execute(
+            "UPDATE alliance_members SET role = 'officer' WHERE alliance_id = ? AND player_id = ?;",
+            (aid, int(actor_id)),
+        )
+        conn.execute(
+            "UPDATE alliance_members SET role = 'leader' WHERE alliance_id = ? AND player_id = ?;",
+            (aid, target),
+        )
+        conn.execute("UPDATE alliances SET updated_at = ? WHERE id = ?;", (now, aid))
+        if own:
+            commit(conn)
+    except Exception:
+        if own:
+            rollback(conn)
+        raise
+    finally:
+        if own:
+            conn.close()
+
+
+def kick_member(alliance_id: int, actor_id: int, target_player_id: int, conn=None) -> None:
+    own = conn is None
+    if own:
+        conn = db()
+    aid = int(alliance_id)
+    target = int(target_player_id)
+    try:
+        membership = _require_membership_in_alliance(actor_id, aid, conn, officer_ok=True)
+        if target == int(actor_id):
+            raise ValueError("invalid_target")
+        target_role = _member_role_in_alliance(aid, target, conn)
+        if not can_kick_member(membership.get("role"), target_role):
             raise ValueError("forbidden")
         if own:
             begin_write_transaction(conn)
         conn.execute(
-            "UPDATE alliances SET description = ?, updated_at = ? WHERE id = ?;",
-            (desc, _now(), int(membership["alliance_id"])),
+            "DELETE FROM alliance_members WHERE alliance_id = ? AND player_id = ?;",
+            (aid, target),
+        )
+        conn.execute("UPDATE alliances SET updated_at = ? WHERE id = ?;", (_now(), aid))
+        if own:
+            commit(conn)
+    except Exception:
+        if own:
+            rollback(conn)
+        raise
+    finally:
+        if own:
+            conn.close()
+
+
+def disband_alliance(alliance_id: int, actor_id: int, conn=None) -> None:
+    own = conn is None
+    if own:
+        conn = db()
+    aid = int(alliance_id)
+    try:
+        _require_membership_in_alliance(actor_id, aid, conn, leader_only=True)
+        if own:
+            begin_write_transaction(conn)
+        conn.execute("DELETE FROM alliances WHERE id = ?;", (aid,))
+        if own:
+            commit(conn)
+    except Exception:
+        if own:
+            rollback(conn)
+        raise
+    finally:
+        if own:
+            conn.close()
+
+
+def update_recruitment_mode(
+    alliance_id: int,
+    actor_id: int,
+    mode: str,
+    conn=None,
+) -> None:
+    own = conn is None
+    if own:
+        conn = db()
+    new_mode = _normalize_recruitment_mode(mode)
+    if new_mode not in RECRUITMENT_MODES:
+        raise ValueError("invalid_recruitment_mode")
+    aid = int(alliance_id)
+    try:
+        _require_membership_in_alliance(actor_id, aid, conn, officer_ok=True)
+        if not _recruitment_mode_column_ready(conn):
+            raise ValueError("alliance_unavailable")
+        if own:
+            begin_write_transaction(conn)
+        conn.execute(
+            "UPDATE alliances SET recruitment_mode = ?, updated_at = ? WHERE id = ?;",
+            (new_mode, _now(), aid),
         )
         if own:
             commit(conn)
@@ -1236,7 +1769,9 @@ def donate_to_alliance(player_id: int, resource: str, amount: int, conn=None) ->
         pool_data = _pool_snapshot(alliance_row, conn)
         cap = pool_data["cap"]
         pool = pool_data["pool"]
-        if int(pool.get(res) or 0) + amt > int(cap.get(res) or 0):
+        current = int(pool.get(res) or 0)
+        cap_val = int(cap.get(res) or 0)
+        if current >= cap_val or current + amt > cap_val:
             raise ValueError("pool_cap_exceeded")
 
         xp_today = _donation_xp_today(player_id, conn)
@@ -1267,6 +1802,11 @@ def donate_to_alliance(player_id: int, resource: str, amount: int, conn=None) ->
         )
         if xp_grant > 0:
             _grant_alliance_xp(conn, aid, int(xp_grant))
+        cur = conn.cursor()
+        cur.execute("SELECT name FROM players WHERE id = ? LIMIT 1;", (int(player_id),))
+        prow = cur.fetchone()
+        donor_name = str(prow["name"] if prow else f"Player {player_id}")
+        _notify_officers_donation(aid, int(player_id), donor_name, res, amt, conn=conn)
         commit(conn)
     except Exception:
         rollback(conn)
@@ -1395,6 +1935,19 @@ def start_alliance_project(player_id: int, project_kind: str, target_key: str, c
                 int(player_id),
             ),
         )
+        tag_row = _load_alliance_row(aid, conn) or {}
+        _notify_alliance_members(
+            aid,
+            "alliance_msg_project_started_subject",
+            "[%(tag)s] Alliance project started",
+            "alliance_msg_project_started_body",
+            "Project %(target)s → L%(level)s started.",
+            conn=conn,
+            metadata={"kind": "alliance_project_started", "project_kind": kind, "target_key": key},
+            tag=str(tag_row.get("tag") or ""),
+            target=str(key),
+            level=int(target_level),
+        )
         if own:
             commit(conn)
     except Exception:
@@ -1475,6 +2028,23 @@ def finish_due_alliance_projects(conn=None, *, alliance_id: Optional[int] = None
             )
             xp = max(10, cost_sum // PROJECT_XP_DIVISOR)
             _grant_alliance_xp(conn, aid, xp)
+            tag_row = _load_alliance_row(aid, conn) or {}
+            _notify_alliance_members(
+                aid,
+                "alliance_msg_project_finished_subject",
+                "[%(tag)s] Alliance project completed",
+                "alliance_msg_project_finished_body",
+                "Project %(target)s → L%(level)s completed.",
+                conn=conn,
+                metadata={
+                    "kind": "alliance_project_finished",
+                    "project_kind": kind,
+                    "target_key": key,
+                },
+                tag=str(tag_row.get("tag") or ""),
+                target=str(key),
+                level=int(lvl),
+            )
             finished += 1
         if own:
             commit(conn)
@@ -1565,6 +2135,17 @@ def send_diplomacy_request(
                 (lo, hi, now),
             )
         else:
+            cur.execute(
+                """
+                SELECT id FROM alliance_diplomacy_requests
+                WHERE from_alliance_id = ? AND to_alliance_id = ? AND request_type = ?
+                  AND status = 'pending'
+                LIMIT 1;
+                """,
+                (from_aid, to_aid, rtype),
+            )
+            if cur.fetchone():
+                raise ValueError("duplicate_diplomacy_request")
             conn.execute(
                 """
                 INSERT INTO alliance_diplomacy_requests (
