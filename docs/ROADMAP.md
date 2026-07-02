@@ -13,6 +13,8 @@ Status-Legende:
 
 **Epics → Tickets:** Epics werden nicht direkt implementiert. Siehe Ticket-Workflow in [CONTRIBUTING.md](CONTRIBUTING.md).
 
+**Beta Gate:** Der Übergang von Alpha zu Beta ist verbindlich in [BETA_GATE.md](BETA_GATE.md) geregelt. `v1.0.0-beta.1` ist erst erlaubt, wenn Alliance MVP, GC-BETA-001, GC-BETA-002 und GC-BETA-003 abgeschlossen sind.
+
 ---
 
 ## Phase 0 — Foundation ✅
@@ -232,11 +234,37 @@ Start nach Completion-First-Pass (GC-610), sofern nicht reine Identity-Tickets (
 2025 Q1–Q2   Phase 0–2 ✅   Foundation, Economy, Admin
 2025 Q3–Q4   Phase 3–4 🔄   Multi-Kolonie, Galaxy, Fleet
 2026 Q1      Phase 4b 🔄     Defense ✅; Combat ✅
-2026 Q2      Phase 5–6       Alliance polish, Security, Scale
+2026 Q2      Phase 5–6       Alliance MVP, Beta Gate, Security
 2026 Q3+     Phase 9         Imperium & Expansion (EPIC-15, GC-560+)
 ```
 
 *Timeline orientierend — keine festen Release-Daten.*
+
+---
+
+## Beta Gate & Versionsstrategie
+
+Genesis Colonies bleibt `v0.9.x` Alpha, bis alle Alpha-Exit-Gates aus [BETA_GATE.md](BETA_GATE.md) bestanden sind:
+
+| Gate | Ziel |
+|------|------|
+| Alliance MVP | Allianz-Hub, Bewerbungen, Spenden, Projekte, Tech, Diplomatie-MVP und Logo-Upload spielbar; Combat-/Fleet-Diplomatie-Hooks später |
+| GC-BETA-001 — Architecture & CI Green | Architektur- und PJAX-Regressionstests grün; keine neuen Reload-/Href-Verstöße |
+| GC-BETA-002 — Documentation Reality Sync | Master-Docs spiegeln den Code-Stand wider |
+| GC-BETA-003 — Alpha Exit Validation | Manueller Smoke-Test aller Kernsysteme ohne P0/P1-Fund |
+
+Versionsbedeutung:
+
+| Version | Bedeutung |
+|---------|-----------|
+| `0.9.x` | Alpha — Grundsysteme entstehen noch |
+| `1.0.0-beta.x` | Core Architecture Freeze; Fokus auf Stabilität, Balancing, UX, Performance und Community-Feedback |
+| `1.0.0` | Offizieller Release |
+| `1.0.x` | Bugfixes, Performance, kleine Quality-of-Life-Verbesserungen |
+| `1.1.x` | Neue Features auf bestehender Architektur |
+| `2.0` | Fundamentale Architektur- oder Designänderungen mit bewusstem Migrationspfad |
+
+Wartungs-Schulden sind kein Beta-Blocker, solange GC-000 eingehalten wird, CI grün ist, keine P0/P1 offen sind und die Schulden dokumentiert sind.
 
 ---
 
@@ -288,6 +316,7 @@ Vor neuen Features: **vorhandene Kernsysteme auf 100 %** — messbar via [GC-6
 4. **Kanonische Systeme** — kein Parallel-Build (siehe [ARCHITECTURE.md](ARCHITECTURE.md))
 5. **GC-000 Enforcement** — [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md); CI-Check `test_core_architecture_enforcement.py`
 6. **Tests mitliefern** — jede Queue/DB-Änderung braucht pytest
+7. **Beta Gate** — `v1.0.0-beta.1` nur nach [BETA_GATE.md](BETA_GATE.md); ab Beta gilt Core Architecture Freeze
 
 ### Architektur-Schulden (GC-000 Follow-ups)
 
@@ -336,6 +365,7 @@ Vor neuen Features: **vorhandene Kernsysteme auf 100 %** — messbar via [GC-6
 ## Verwandte Dokumente
 
 - [IMPERIUM_VISION.md](IMPERIUM_VISION.md) — Genesis 2.0 Design Manifest (EPIC-15)
+- [BETA_GATE.md](BETA_GATE.md) — Alpha-Exit, Core Architecture Freeze, Versionsstrategie
 - [GC-610_COMPLETE_DEFINITION_AUDIT.md](GC-610_COMPLETE_DEFINITION_AUDIT.md) — Definition of Complete / Reifegrade
 - [GC-600_PROJECT_GAP_ANALYSIS.md](GC-600_PROJECT_GAP_ANALYSIS.md) — Strategisches Gap-Audit
 - [GC-622_INTEGER_OVERFLOW_AUDIT.md](GC-622_INTEGER_OVERFLOW_AUDIT.md) — INT32/Overflow Tech-Audit ✅

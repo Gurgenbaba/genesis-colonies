@@ -33,6 +33,7 @@ Vor jeder Änderung die relevanten Docs lesen:
 |----------|------|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Architektur, Module, APIs |
 | [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) | GC-000 — verbindliche Kernregeln |
+| [BETA_GATE.md](BETA_GATE.md) | Alpha-Exit, Core Architecture Freeze, Beta-Governance |
 | [AJAX_PJAX_CONTRACT.md](AJAX_PJAX_CONTRACT.md) | PJAX, Actions, No-Reload |
 | [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md) | Queues: Finish, Cancel, Reschedule |
 | [GC-536_QUEUE_CARD_UX.md](GC-536_QUEUE_CARD_UX.md) | Queue-in-Card UX (Epic 536A–E) |
@@ -151,6 +152,7 @@ Vor jedem Ticket: [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) (Golden Rule + **
 - **Queue-Timer (kanonisch)** — aktiver Job: echte Restzeit; wartende Jobs: `finish_at − now` (Vorgänger + eigene Dauer); Unit-Queues seriell (`amount × unit_time`); siehe [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md) § *Kanonische Bauschleifen-Regel*
 - **EffectResolver** — autoritative Formeln, kein Frontend-Math
 - **Kanonische Keys** — `orbital_shipyard`, ein Fleet-State in `fleet_movements`
+- **Beta Gate** — vor `v1.0.0-beta.1`: [BETA_GATE.md](BETA_GATE.md); ab Beta gilt Core Architecture Freeze
 
 ---
 
