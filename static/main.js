@@ -17128,8 +17128,6 @@
     GC.buildFleetTargetPayload = buildFleetTargetPayload;
     GC.syncFleetMissionLockUi = syncFleetMissionLockUi;
     GC.resolveFleetWorldTargetPresentation = resolveFleetWorldTargetPresentation;
-    GC.scheduleMassExpoSplitPreview = scheduleMassExpoSplitPreview;
-    GC.updateMassExpoSplitPreview = updateMassExpoSplitPreview;
 
     const formatMassExpoShipLine = (ships) => {
       const parts = Object.entries(ships || {})
@@ -17212,6 +17210,9 @@
         if (submitBtn) submitBtn.disabled = true;
       }
     };
+
+    GC.scheduleMassExpoSplitPreview = scheduleMassExpoSplitPreview;
+    GC.updateMassExpoSplitPreview = updateMassExpoSplitPreview;
 
     const submitMassExpeditionSplit = async (page) => {
       const panel = page?.querySelector("[data-fleet-mass-expo-split]");
