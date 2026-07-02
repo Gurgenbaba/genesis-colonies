@@ -357,6 +357,8 @@ def test_galaxy_page_loads(galaxy_db, monkeypatch):
     assert "galaxy-ring-debris-marker" in ring_css or "galaxy-ring-debris-marker-img" in ring_css
     assert "img/debris/debris.jpg" in ring_css
     assert "galaxy-ring-inspector--card" in body
+    assert "galaxy-ring-slot-owner-label" in body
+    assert uname in body
     assert "galaxy-ring-inspector--side" not in body
     assert "galaxy-ring-inspector--dock" not in body
     assert "galaxy_slot_empty" in body or "Leer" in body or "Empty" in body
@@ -670,6 +672,8 @@ def test_galaxy_ring_compact_stage_css_contract(galaxy_db):
     css = (Path(__file__).resolve().parent.parent / "static" / "style.css").read_text(encoding="utf-8")
     assert ".galaxy-ring-stage--compact" in css
     assert "min(100%, 620px)" in css
+    assert ".galaxy-ring-slot-owner-label" in css
+    assert "Orbitron" in css.split(".galaxy-ring-slot-owner-label", 1)[1].split(".galaxy-ring-slot-owner-label--own", 1)[0]
     assert ".galaxy-ring-inspector--card" in css
     assert "position: absolute" in css
     assert "grid-template-columns: minmax(520px, 1fr) minmax(280px, 300px)" not in css

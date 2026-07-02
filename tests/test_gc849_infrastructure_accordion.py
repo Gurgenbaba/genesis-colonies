@@ -29,7 +29,9 @@ def test_gc849_infrastructure_section_toggle_does_not_restore_leftmenu():
     accordion = src.split("function initSidebarSectionAccordion()")[1].split("function initSidebarRightDrawer")[0]
     assert "setNavSectionExpanded(section" in accordion
     assert "restoreLeftmenuState" not in accordion.split("document.addEventListener(\"click\"")[1].split("});")[0]
-    assert "gc-nav-section--animating" in src.split("function setNavSectionExpanded")[1].split("function setNavGroupExpanded")[0]
+    set_nav = src.split("function setNavSectionExpanded", 1)[1].split("function setNavGroupExpanded", 1)[0]
+    assert "gc-nav-section--animating" in set_nav
+    assert 'classList.contains("is-expanded")' in set_nav
     assert "_leftmenuRouteCtxCache" in src
 
 

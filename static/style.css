@@ -13596,6 +13596,52 @@ body.gc-techtree-media-zoom-open{
 .galaxy-ring-slot-wrap[data-orbit-band="temperate"]{ z-index: 5; }
 .galaxy-ring-slot-wrap[data-orbit-band="cold"]{ z-index: 4; }
 .galaxy-ring-slot-wrap[data-orbit-band="expedition"]{ z-index: 7; }
+.galaxy-ring-slot-owner-label{
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  margin-bottom: 5px;
+  transform: translateX(-50%);
+  z-index: 4;
+  display: block;
+  width: max-content;
+  max-width: min(7.5rem, 22vw);
+  padding: 2px 5px;
+  font-family: Orbitron, Inter, system-ui, sans-serif;
+  font-size: clamp(0.5rem, 2.3vw, 0.6rem);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  color: rgba(210, 232, 248, 0.96);
+  background: rgba(2, 8, 18, 0.94);
+  border: 1px solid rgba(70, 229, 255, 0.42);
+  border-radius: var(--gc-radius-xs, 0);
+  box-shadow:
+    0 1px 6px rgba(0, 0, 0, 0.85),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.38);
+  text-shadow: 0 0 8px rgba(70, 229, 255, 0.28);
+}
+.galaxy-ring-slot-owner-label--own{
+  color: rgba(170, 255, 230, 0.98);
+  border-color: rgba(80, 240, 200, 0.58);
+  text-shadow: 0 0 8px rgba(80, 220, 180, 0.38);
+}
+.galaxy-ring-slot-owner-label--ally{
+  color: rgba(255, 232, 130, 0.98);
+  border-color: rgba(230, 210, 60, 0.58);
+  text-shadow: 0 0 8px rgba(220, 200, 60, 0.32);
+}
+.galaxy-ring-slot-owner-label--foreign{
+  color: rgba(255, 188, 148, 0.98);
+  border-color: rgba(255, 110, 70, 0.58);
+  text-shadow: 0 0 8px rgba(255, 90, 50, 0.32);
+}
 .galaxy-ring-slot{
   position: relative;
   left: auto;

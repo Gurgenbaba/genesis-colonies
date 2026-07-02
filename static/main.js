@@ -1404,6 +1404,7 @@
     const pid = Math.floor(Number(nextPlayerId) || 0);
     if (pid > 0 && _sessionPlayerId > 0 && pid !== _sessionPlayerId) {
       GC.lastState = null;
+      GC._lastSidebarNavSig = null;
       _clientStateGen += 1;
       _fleetHudStickyPayload = null;
       _fleetHudLastAppliedVersion = 0;
@@ -21111,11 +21112,23 @@
     return group.classList.contains("is-expanded");
   }
 
+  function navGroupExpandedUiMatches(group, expanded, key) {
+    if (group.classList.contains("is-expanded") !== expanded) return false;
+    if (key === "trading") {
+      const sub = document.getElementById("gc-nav-trading-sub");
+      if (!sub) return true;
+      const subExpanded = !sub.hidden && !sub.classList.contains("gc-nav-sub--collapsed");
+      return subExpanded === expanded;
+    }
+    return true;
+  }
+
   function setNavSectionExpanded(section, expanded, persist) {
     if (!section) return;
     const toggle = section.querySelector(".gc-nav-section-toggle");
     const body = section.querySelector(".gc-nav-section-body");
     if (!toggle || !body) return;
+    if (section.classList.contains("is-expanded") === expanded) return;
     const sidebar = section.closest(".gc-sidebar");
     const storageKey = navStorageKeyForSidebar(sidebar);
     const sectionKey = String(section.dataset.navSection || "");
@@ -21146,6 +21159,7 @@
     const toggle = group.querySelector(".gc-nav-group-toggle, a.gc-nav-link--has-sub[data-nav-module]");
     const body = group.querySelector(".gc-nav-group-body");
     const key = String(group.dataset.navGroupKey || "");
+    if (navGroupExpandedUiMatches(group, expanded, key)) return;
     group.classList.toggle("is-expanded", expanded);
     if (toggle) toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
     if (key === "trading") {
@@ -21197,13 +21211,11 @@
     sidebar.classList.toggle("gc-sidebar--role-nav", !fullNav);
 
     sidebar.querySelectorAll("[data-nav-module]").forEach((el) => {
-      el.hidden = true;
-    });
-    sidebar.querySelectorAll("[data-nav-module]").forEach((el) => {
-      if (!shouldShowSidebarNavLink(nav, el)) return;
       const sectionKey = String(el.closest("[data-nav-section]")?.dataset.navSection || "");
-      if (sectionKey && !sidebarAllowsSection(sidebar, sectionKey)) return;
-      el.hidden = false;
+      const shouldShow =
+        shouldShowSidebarNavLink(nav, el)
+        && (!sectionKey || sidebarAllowsSection(sidebar, sectionKey));
+      el.hidden = !shouldShow;
     });
 
     sidebar.querySelectorAll("[data-nav-section]").forEach((section) => {
@@ -21381,6 +21393,15 @@
   GC.syncRoleBasedSidebar = function syncRoleBasedSidebar(data) {
     const nav = resolveSidebarNavFromState(data);
     if (!nav) return;
+
+    const navSig = JSON.stringify(nav);
+    const navChanged = navSig !== GC._lastSidebarNavSig;
+    if (navChanged) GC._lastSidebarNavSig = navSig;
+
+    if (!navChanged) {
+      markLeftmenuActiveLinks(window.location.href, resolveLeftmenuRouteContext(window.location.href));
+      return;
+    }
 
     const sidebar = document.getElementById("gc-sidebar-nav");
     const sidebarRight = document.getElementById("gc-sidebar-nav-right");

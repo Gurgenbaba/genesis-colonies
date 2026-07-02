@@ -100,9 +100,17 @@
                       id="galaxy-ring-slot-{{ slot.position }}"
                       data-galaxy-ring-slot="{{ slot.position }}"
                       data-slot-title="{% if slot.occupied %}{{ slot.planet_name }}{% else %}{{ T('galaxy_empty_slot') }}{% endif %}"
-                      aria-label="{{ T('galaxy_slot_position', 'Pos') }} {{ slot.position }}{% if slot.occupied %}: {{ slot.planet_name }}{% else %}: {{ T('galaxy_empty_slot') }}{% endif %}"
+                      aria-label="{{ T('galaxy_slot_position', 'Pos') }} {{ slot.position }}{% if slot.occupied %}: {{ slot.planet_name }}{% if slot.commander_name %} — {{ slot.commander_name }}{% endif %}{% else %}: {{ T('galaxy_empty_slot') }}{% endif %}"
                       aria-controls="galaxy-ring-inspector-{{ slot.position }}"
                       aria-expanded="false">
+                {% if slot.occupied and slot.commander_name %}
+                <span class="galaxy-ring-slot-owner-label
+                      {% if slot.is_own_planet %}galaxy-ring-slot-owner-label--own
+                      {% elif slot.is_ally_planet %}galaxy-ring-slot-owner-label--ally
+                      {% else %}galaxy-ring-slot-owner-label--foreign{% endif %}"
+                      aria-hidden="true"
+                      title="{{ slot.commander_name }}">{{ slot.commander_name }}</span>
+                {% endif %}
                 <span class="galaxy-ring-slot-body
                       galaxy-ring-slot-body--{{ effect }}
                       {% if slot.occupied %}has-planet-image{% else %}is-climate-preview{% endif %}"

@@ -127,8 +127,11 @@ def test_main_js_persists_sidebar_state_in_local_storage():
     assert 'key === "buildings"' in resolve_group
     apply_desktop = src.split("function applyDesktopSidebarNav", 1)[1].split("function markLeftmenuActiveLinks", 1)[0]
     assert "syncNavSectionAccordionState" not in apply_desktop
+    assert "el.hidden = true;" not in apply_desktop
     sync_role = src.split("GC.syncRoleBasedSidebar = function syncRoleBasedSidebar", 1)[1].split("function initRoleBasedSidebar", 1)[0]
     assert "GC.restoreLeftmenuState" in sync_role
+    assert "markLeftmenuActiveLinks" in sync_role
+    assert "_lastSidebarNavSig" in sync_role
     assert "syncNavSectionAccordionState(sidebar)" not in sync_role
     init_page = src.split("GC.initPage = function initPage", 1)[1].split("GC.cleanupPage", 1)[0]
     assert "GC.restoreLeftmenuState(window.location.href)" in init_page
