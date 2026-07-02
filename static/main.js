@@ -15720,6 +15720,21 @@
       });
     };
 
+    /** GC-981 — programmatic ship qty changes must mirror manual input (preview + mass expo). */
+    const emitFleetShipInputChange = (page, inp) => {
+      if (!page || !inp) return;
+      syncFleetShipPickQtyMarks(page);
+      scrollFleetShipInputEnd(inp);
+      inp.dispatchEvent(new Event("input", { bubbles: true }));
+      inp.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+
+    const setFleetShipInputValue = (page, inp, n) => {
+      if (!inp) return;
+      setNumberInputValue(inp, n);
+      emitFleetShipInputChange(page, inp);
+    };
+
     const scrollFleetShipInputEnd = (inp) => {
       if (!inp) return;
       requestAnimationFrame(() => {
@@ -17006,6 +17021,7 @@
       scheduleTargetResolve(page);
       syncFleetShipPickQtyMarks(page);
       schedulePreview(page);
+      scheduleMassExpoSplitPreview(page);
     };
 
     const pickDefaultFleetTargetIfNeeded = (page) => {
@@ -17389,10 +17405,7 @@
         const row = maxShip.closest("[data-ship-key]");
         const have = parseInt(row?.getAttribute("data-ship-have") || "0", 10);
         const inp = form?.querySelector(`[data-ship-input="${key}"]`);
-        if (inp) setNumberInputValue(inp, have);
-        syncFleetShipPickQtyMarks(page);
-        scrollFleetShipInputEnd(inp);
-        schedulePreview(page);
+        if (inp) setFleetShipInputValue(page, inp, have);
         return;
       }
 
@@ -17403,10 +17416,7 @@
         const row = maxShipImage.closest("[data-ship-key]");
         const have = parseInt(row?.getAttribute("data-ship-have") || "0", 10);
         const inp = form?.querySelector(`[data-ship-input="${key}"]`);
-        if (inp && have > 0) setNumberInputValue(inp, have);
-        syncFleetShipPickQtyMarks(page);
-        scrollFleetShipInputEnd(inp);
-        schedulePreview(page);
+        if (inp && have > 0) setFleetShipInputValue(page, inp, have);
         return;
       }
 
@@ -26759,6 +26769,89 @@
     });
   }
 
+  function initGalaxyHudCoordInputs(root) {
+    const pageRoot = document.getElementById("galaxy-page-root");
+    const galaxyInp = root?.querySelector("[data-galaxy-hud-galaxy-input]");
+    const systemInp = root?.querySelector("[data-galaxy-hud-system-input]");
+    if (!root || !pageRoot || !galaxyInp || !systemInp) return;
+
+    const limits = {
+      galaxyMin: parseInt(root.dataset.galaxyMin || "1", 10) || 1,
+      galaxyMax: parseInt(root.dataset.galaxyMax || "1", 10) || 1,
+      systemMin: parseInt(root.dataset.systemMin || "1", 10) || 1,
+      systemMax: parseInt(root.dataset.systemMax || "499", 10) || 499,
+    };
+
+    const readStored = () => ({
+      galaxy: parseInt(pageRoot.dataset.galaxy || galaxyInp.value || "1", 10) || 1,
+      system: parseInt(pageRoot.dataset.system || systemInp.value || "1", 10) || 1,
+    });
+
+    const clampGalaxy = (n) =>
+      Math.min(limits.galaxyMax, Math.max(limits.galaxyMin, Math.floor(Number(n) || limits.galaxyMin)));
+    const clampSystem = (n) =>
+      Math.min(limits.systemMax, Math.max(limits.systemMin, Math.floor(Number(n) || limits.systemMin)));
+
+    const isCoordInput = (el) => el === galaxyInp || el === systemInp;
+
+    const restoreInputs = () => {
+      const stored = readStored();
+      galaxyInp.value = String(stored.galaxy);
+      systemInp.value = String(stored.system);
+    };
+
+    const buildNavUrl = (galaxy, system) => {
+      const params = new URLSearchParams(window.location.search);
+      params.set("view", "system");
+      params.set("galaxy", String(galaxy));
+      params.set("system", String(system));
+      params.delete("q");
+      params.delete("coord");
+      return `/galaxy?${params.toString()}`;
+    };
+
+    const commitNav = () => {
+      const rawG = String(galaxyInp.value ?? "").trim();
+      const rawS = String(systemInp.value ?? "").trim();
+      if (!/^\d+$/.test(rawG) || !/^\d+$/.test(rawS)) {
+        restoreInputs();
+        return;
+      }
+      const galaxy = clampGalaxy(rawG);
+      const system = clampSystem(rawS);
+      galaxyInp.value = String(galaxy);
+      systemInp.value = String(system);
+      const stored = readStored();
+      if (galaxy === stored.galaxy && system === stored.system) return;
+      const href = buildNavUrl(galaxy, system);
+      if (typeof GC.navigateTo === "function") GC.navigateTo(href);
+      else window.location.href = href;
+    };
+
+    const onKeyDown = (ev) => {
+      if (ev.key !== "Enter") return;
+      ev.preventDefault();
+      commitNav();
+    };
+
+    const onBlur = (ev) => {
+      if (isCoordInput(ev.relatedTarget)) return;
+      commitNav();
+    };
+
+    galaxyInp.addEventListener("keydown", onKeyDown);
+    systemInp.addEventListener("keydown", onKeyDown);
+    galaxyInp.addEventListener("blur", onBlur);
+    systemInp.addEventListener("blur", onBlur);
+
+    GC.registerCleanup(() => {
+      galaxyInp.removeEventListener("keydown", onKeyDown);
+      systemInp.removeEventListener("keydown", onKeyDown);
+      galaxyInp.removeEventListener("blur", onBlur);
+      systemInp.removeEventListener("blur", onBlur);
+    });
+  }
+
   function initGalaxyRingView() {
     const root = document.querySelector("[data-galaxy-ring-view]");
     if (!root) return;
@@ -26948,6 +27041,8 @@
     root.addEventListener("click", onOpenPlanetClick);
     root.addEventListener("click", onCloseClick);
     document.addEventListener("keydown", onKeyDown);
+
+    initGalaxyHudCoordInputs(root);
 
     const highlighted = root.querySelector(".galaxy-ring-slot.is-highlighted");
     if (highlighted) {

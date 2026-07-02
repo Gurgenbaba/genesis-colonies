@@ -6,6 +6,10 @@
 
 <div class="galaxy-ring-view"
      data-galaxy-ring-view
+     data-galaxy-min="{{ nav.galaxy_min if nav.galaxy_min is defined else 1 }}"
+     data-galaxy-max="{{ nav.galaxy_max if nav.galaxy_max is defined else 1 }}"
+     data-system-min="{{ nav.system_min if nav.system_min is defined else 1 }}"
+     data-system-max="{{ nav.system_max if nav.system_max is defined else 499 }}"
      data-active-planet-id="{{ (HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET is defined and HEADER_ACTIVE_PLANET else (active_planet_id if active_planet_id is defined else 0))|int }}"
      style="--gc-galaxy-map-tile: url('{{ url_for('static', filename='img/map.webp', v=GC_ASSET_VERSION) }}'); --gc-galaxy-map-tile-fallback: url('{{ url_for('static', filename='img/map.png', v=GC_ASSET_VERSION) }}'); --gc-galaxy-debris-img: url('{{ url_for('static', filename='img/debris/debris.jpg', v=GC_ASSET_VERSION) }}');">
   <section class="galaxy-hud-module" data-galaxy-hud-module>
@@ -23,7 +27,14 @@
             {% else %}
             <span class="galaxy-hud-arrow is-disabled" aria-hidden="true">&lsaquo;</span>
             {% endif %}
-            <span class="galaxy-hud-value galaxy-hud-value--fixed gc-mono">{{ nav.galaxy or 1 }}</span>
+            <input type="text"
+                   inputmode="numeric"
+                   pattern="[0-9]*"
+                   class="galaxy-hud-value gc-mono"
+                   data-galaxy-hud-galaxy-input
+                   value="{{ nav.galaxy or 1 }}"
+                   aria-label="{{ T('galaxy_label_galaxy') }}"
+                   autocomplete="off">
             {% if nav.multi_galaxy and nav.has_next_galaxy %}
             <a href="{{ url_for('galaxy_view', view='system', galaxy=nav.next_galaxy, system=nav.system) }}"
                class="galaxy-hud-arrow"
@@ -46,7 +57,14 @@
             {% else %}
             <span class="galaxy-hud-arrow is-disabled" aria-hidden="true">&lsaquo;</span>
             {% endif %}
-            <span class="galaxy-hud-value galaxy-hud-value--fixed gc-mono">{{ nav.system or 1 }}</span>
+            <input type="text"
+                   inputmode="numeric"
+                   pattern="[0-9]*"
+                   class="galaxy-hud-value gc-mono"
+                   data-galaxy-hud-system-input
+                   value="{{ nav.system or 1 }}"
+                   aria-label="{{ T('galaxy_label_system') }}"
+                   autocomplete="off">
             {% if nav.has_next %}
             <a href="{{ url_for('galaxy_view', view='system', galaxy=nav.galaxy, system=nav.next_system) }}"
                class="galaxy-hud-arrow"

@@ -355,3 +355,20 @@ def test_main_js_mass_expo_split_contract():
     assert "mass-expedition/preview" in js
     assert "submitMassExpeditionSplit" in js
     assert "data-fleet-mass-expo-split-submit" in js
+
+
+def test_main_js_ship_max_selection_triggers_mass_expo_preview():
+    """GC-981 — MAX / image pick must emit input events so mass expo reads ship inputs."""
+    js = Path("static/main.js").read_text(encoding="utf-8")
+    assert "setFleetShipInputValue" in js
+    assert "emitFleetShipInputChange" in js
+    assert "scheduleMassExpoSplitPreview" in js
+    max_image_idx = js.index('closest("[data-ship-max-image]")')
+    max_image_chunk = js[max_image_idx : max_image_idx + 550]
+    assert "setFleetShipInputValue" in max_image_chunk
+    max_btn_idx = js.index('closest("[data-ship-max]")')
+    max_btn_chunk = js[max_btn_idx : max_btn_idx + 550]
+    assert "setFleetShipInputValue" in max_btn_chunk
+    emit_chunk = js[js.index("emitFleetShipInputChange") : js.index("emitFleetShipInputChange") + 400]
+    assert 'new Event("input"' in emit_chunk
+    assert 'new Event("change"' in emit_chunk

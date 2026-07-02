@@ -348,6 +348,10 @@ def test_galaxy_page_loads(galaxy_db, monkeypatch):
     assert "galaxy-ring-compact-toggle" not in body
     assert "galaxy-table" not in body.lower()
     assert body.count("galaxy-hud-group") == 2
+    assert "data-galaxy-hud-galaxy-input" in body
+    assert "data-galaxy-hud-system-input" in body
+    assert 'inputmode="numeric"' in body
+    assert "galaxy-hud-value--fixed" not in body
     assert "data-player-card" in body
     assert "galaxy-fleet-action" in body
     assert "galaxy-ring-orbit--hot" not in body
@@ -827,3 +831,18 @@ def test_assign_free_coordinates_sequential_unchanged_for_colonization(galaxy_db
         conn.rollback()
     finally:
         conn.close()
+
+
+def test_galaxy_hud_coord_input_js_contract():
+    """Galaxy HUD coord inputs navigate via PJAX on Enter/blur."""
+    from pathlib import Path
+
+    js = Path("static/main.js").read_text(encoding="utf-8")
+    assert "initGalaxyHudCoordInputs" in js
+    assert "data-galaxy-hud-galaxy-input" in js
+    assert "data-galaxy-hud-system-input" in js
+    chunk = js.split("function initGalaxyHudCoordInputs")[1].split("function initGalaxyRingView")[0]
+    assert "GC.navigateTo" in chunk
+    assert 'ev.key !== "Enter"' in chunk or 'ev.key === "Enter"' in chunk
+    assert "clampGalaxy" in chunk
+    assert "clampSystem" in chunk

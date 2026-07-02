@@ -13303,6 +13303,11 @@ body.gc-techtree-media-zoom-open{
   font-size: 0.84rem;
   text-align: center;
 }
+.galaxy-hud-value:focus{
+  outline: none;
+  border-color: rgba(127, 255, 217, 0.55);
+  box-shadow: 0 0 0 1px rgba(127, 255, 217, 0.25);
+}
 .galaxy-hud-value--fixed{
   display: inline-flex;
   align-items: center;
