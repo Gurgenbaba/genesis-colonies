@@ -1,0 +1,31 @@
+# GitHub Pages / Jekyll — docs-only payload.
+# The live game runs on Railway (www.genesis-colonies.de), not GitHub Pages.
+# Excluding app code keeps the Pages artifact small and deploys reliable.
+title: Genesis Colonies Docs
+description: Architecture and design documentation
+theme: jekyll-theme-minimal
+
+exclude:
+  - app.py
+  - game
+  - tests
+  - static
+  - templates
+  - migrations
+  - scripts
+  - locales
+  - "*.py"
+  - "*.sql"
+  - "*.pyc"
+  - Dockerfile
+  - requirements.txt
+  - requirements-dev.txt
+  - .cursor
+  - .pytest_cache
+  - .gitignore
+  - VERSION
+
+include:
+  - docs
+  - README.md
+  - LICENSE
