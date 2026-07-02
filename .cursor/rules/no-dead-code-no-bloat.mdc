@@ -1,0 +1,70 @@
+---
+description: No dead code, no duplicate helpers, no bloat
+alwaysApply: true
+---
+
+# No Dead Code / No Bloat Rule
+
+Genesis Colonies bevorzugt klare, bestehende Owner-Systeme statt neue Hilfsfunktionen neben alter Logik.
+
+## Pflicht
+
+Wenn du bestehendes Verhalten änderst:
+
+1. Prüfe zuerst den bestehenden Owner.
+   - Erweitere die vorhandene Funktion, wenn sie dafür zuständig ist.
+   - Erstelle keine zweite Funktion mit fast gleichem Zweck.
+
+2. Wenn du eine neue Funktion einführst:
+   - Begründe kurz, warum die bestehende Funktion nicht erweitert werden kann.
+   - Aktualisiere alle Call-Sites auf die neue Funktion.
+   - Entferne oder deprecate die alte Funktion im selben Ticket.
+
+3. Lösche ungenutzten Code.
+   - Keine alten Helper stehen lassen, wenn sie nicht mehr aufgerufen werden.
+   - Keine parallelen Legacy-Pfade ohne dokumentierten Zweck.
+   - Keine "nur zur Sicherheit"-Duplikate.
+
+4. Nach Änderungen prüfen:
+   - `grep` / Suche nach alten Funktionsnamen
+   - keine ungenutzten Imports
+   - keine toten Template-Blöcke
+   - keine nicht mehr verwendeten JS-Handler
+   - keine doppelten CSS-Klassen für denselben Zweck
+
+5. Architektur-Owner beachten:
+   - Keine zweite Queue-Logik
+   - Keine zweite Fleet-Send-Logik
+   - Keine zweite Preset-Engine
+   - Keine zweite Production-/ROI-Formel
+   - Keine zweite Toast-/Notify-Logik
+   - Keine zweite Planet-/Galaxy-Gate-Logik
+
+## Verboten
+
+- Neue Funktion schreiben und alte unbenutzt liegen lassen.
+- Gleiche Business-Logik in zwei Modulen pflegen.
+- "Wrapper auf Wrapper auf Wrapper" ohne echten Zweck.
+- Neue Client-Formel für Server-Mechanik.
+- Legacy-Code behalten, obwohl er nicht mehr gebraucht wird.
+- Nur Tests an neue Nebenfunktion hängen, während alter Produktpfad weiter existiert.
+
+## Erlaubt
+
+- Kleine private Helper, wenn sie Duplikate reduzieren.
+- Adapter für echte Migrationen, aber nur mit:
+  - TODO/Enddatum oder Ticketnummer
+  - Tests für alten und neuen Pfad
+  - klarer Entfernungsperspektive
+
+## Required in final report
+
+Bei jedem Ticket kurz angeben:
+
+- Welche alte Logik wurde ersetzt?
+- Welche alte Logik wurde entfernt?
+- Welche alten Call-Sites wurden aktualisiert?
+- Welche Suche wurde gemacht, um Dead Code auszuschließen?
+
+Leitsatz:
+Wenn eine Änderung eine neue Funktion braucht, muss sie eine alte Duplikat-Logik reduzieren — nicht vermehren.

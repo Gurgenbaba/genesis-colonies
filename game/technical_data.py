@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-from .economy_balance import power_upgrade_cost
+from .economy_balance import power_upgrade_cost, upgrade_roi_hours
 from .production_formula import (
     FERDI_GROWTH_RATE,
     LEVEL_GROWTH,
@@ -150,22 +150,19 @@ def _upgrade_roi_hours(
     metal_cost: int,
     crystal_cost: int,
     delta_per_hour: int,
+    fuel_cells_cost: int = 0,
 ) -> Optional[float]:
-    if delta_per_hour <= 0:
+    if str(building_type) not in MINE_BUILDINGS:
         return None
-    btype = str(building_type)
-    if btype == "metal_mine":
-        basis = float(metal_cost)
-    elif btype == "crystal_mine":
-        basis = float(crystal_cost)
-    elif btype == "fuel_cell_plant":
-        basis = float(metal_cost) + float(crystal_cost)
-    else:
+    roi = upgrade_roi_hours(
+        metal_cost=int(metal_cost or 0),
+        crystal_cost=int(crystal_cost or 0),
+        fuel_cells_cost=int(fuel_cells_cost or 0),
+        delta_per_hour=float(delta_per_hour or 0),
+    )
+    if not math.isfinite(roi):
         return None
-    if basis <= 0:
-        return None
-    roi = basis / float(delta_per_hour)
-    return round(roi, 1) if math.isfinite(roi) else None
+    return round(roi, 1)
 
 
 def _active_production_bonuses(
@@ -292,6 +289,7 @@ def build_production_display(
     research_levels: Mapping[str, int],
     metal_cost: int = 0,
     crystal_cost: int = 0,
+    fuel_cells_cost: int = 0,
 ) -> Dict[str, Any]:
     resource = BUILDING_PRODUCTION_MAP[building_type]
     lvl = max(0, int(level))
@@ -307,6 +305,7 @@ def build_production_display(
         metal_cost=metal_cost,
         crystal_cost=crystal_cost,
         delta_per_hour=delta,
+        fuel_cells_cost=fuel_cells_cost,
     )
 
     return {

@@ -373,15 +373,16 @@ def mine_roi_cost_multiplier(target_level: int) -> float:
     """
     GC-821F — scale mine upgrade cost so neutral-slot metal-mine ROI follows anchor curve.
     Applied uniformly to all mine building types.
+
+    Calibration uses full upgrade value (metal + crystal share of raw total) so
+    ``mine_upgrade_roi_hours`` matches anchors after the full cost-basis ROI rule.
     """
     lvl = max(1, int(target_level))
     delta = production_delta_per_hour("metal", lvl)
     if delta <= 0:
         return 1.0
-    curve = BUILDING_UPGRADE_CURVES["metal_mine"]
     raw_total = _mine_upgrade_cost_total_raw("metal_mine", lvl)
-    metal_basis = raw_total * curve.metal_frac
-    baseline_roi = metal_basis / delta
+    baseline_roi = raw_total / delta
     if baseline_roi <= 0:
         return 1.0
     target = mine_roi_anchor_hours(lvl)
@@ -480,31 +481,64 @@ def production_delta_per_hour(
     return max(0.0, cur - prev)
 
 
+def upgrade_roi_cost_basis(
+    *,
+    metal_cost: int = 0,
+    crystal_cost: int = 0,
+    fuel_cells_cost: int = 0,
+) -> float:
+    """Total upgrade cost for ROI (all resource types; missing fuel_cells → 0)."""
+    return float(metal_cost or 0) + float(crystal_cost or 0) + float(fuel_cells_cost or 0)
+
+
+def upgrade_roi_hours(
+    *,
+    metal_cost: int = 0,
+    crystal_cost: int = 0,
+    fuel_cells_cost: int = 0,
+    delta_per_hour: float = 0,
+) -> float:
+    """Payback hours: sum(upgrade costs) / hourly production delta."""
+    delta = float(delta_per_hour or 0)
+    if delta <= 0:
+        return float("inf")
+    basis = upgrade_roi_cost_basis(
+        metal_cost=metal_cost,
+        crystal_cost=crystal_cost,
+        fuel_cells_cost=fuel_cells_cost,
+    )
+    if basis <= 0:
+        return float("inf")
+    return basis / delta
+
+
 def mine_upgrade_roi_hours(
     building_type: str,
     target_level: int,
     *,
     slot: int = NEUTRAL_BALANCE_SLOT,
     production_speed: float = 1.0,
+    fuel_cells_cost: int = 0,
+    delta_per_hour: Optional[float] = None,
 ) -> float:
-    """Payback hours: upgrade cost basis / hourly production delta (GC-821E)."""
+    """Payback hours: full upgrade cost / hourly production delta (GC-821E)."""
     btype = str(building_type)
     if btype not in MINE_BUILDING_TYPES:
         return float("inf")
     resource = MINE_RESOURCE_BY_BUILDING[btype]
     metal_cost, crystal_cost = power_upgrade_cost(btype, target_level)
-    delta = production_delta_per_hour(
-        resource, target_level, slot=slot, production_speed=production_speed
-    )
-    if delta <= 0:
-        return float("inf")
-    if btype == "metal_mine":
-        cost_basis = float(metal_cost)
-    elif btype == "crystal_mine":
-        cost_basis = float(crystal_cost)
+    if delta_per_hour is None:
+        delta = production_delta_per_hour(
+            resource, target_level, slot=slot, production_speed=production_speed
+        )
     else:
-        cost_basis = float(metal_cost) + float(crystal_cost)
-    return cost_basis / delta
+        delta = float(delta_per_hour)
+    return upgrade_roi_hours(
+        metal_cost=int(metal_cost),
+        crystal_cost=int(crystal_cost),
+        fuel_cells_cost=int(fuel_cells_cost or 0),
+        delta_per_hour=delta,
+    )
 
 
 def mine_upgrade_metal_hours(

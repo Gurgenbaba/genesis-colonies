@@ -17,6 +17,8 @@ Jedes Ticket prüft vor Implementierung:
 | [PLANET_SCOPE.md](PLANET_SCOPE.md) | Aktiver Planet |
 | [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md) | Queues, Finish/Cancel |
 
+**Agent-Regel (always apply):** [.cursor/rules/no-dead-code-no-bloat.mdc](../.cursor/rules/no-dead-code-no-bloat.mdc) — Regel 19: keine toten Helper, keine parallelen Duplikate; ersetzen und entfernen im selben Ticket.
+
 ---
 
 ## 1. Single Source of Truth
@@ -175,6 +177,7 @@ Eine Lösung ist **falsch**, wenn sie:
 - Planet Scope umgeht
 - Keinen klaren System-Owner hat (Regel 17)
 - Kolonien/Welten außerhalb des Expansion-Protocols erzeugt (Regel 18)
+- Neue Helper neben alter Logik einführt, ohne alte Call-Sites zu migrieren und Toten Code zu entfernen (Regel 19)
 
 → Überarbeiten, nicht mergen.
 
@@ -300,6 +303,34 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | Alliance Hub (identity, pool, projects, diplomacy) | `game/alliance.py`, `game/alliance_catalog.py` | [ALLIANCE_SYSTEM.md](ALLIANCE_SYSTEM.md) |
 
 **Ticket-Check:** Domäne identifizieren → nur Owner-Modul (+ Routes/`app.py`) ändern → kein zweites Modul für dieselbe Wahrheit.
+
+---
+
+## 19. No Dead Code / No Bloat
+
+> **Wenn eine Änderung eine neue Funktion braucht, muss sie alte Duplikat-Logik reduzieren — nicht vermehren.**
+
+Erzwingt Regel 15/17 auf Code-Ebene: keine zweite Hilfsfunktion neben dem Owner, kein Legacy-Pfad ohne dokumentierten Übergang.
+
+| Pflicht bei Änderung | Verboten |
+|----------------------|----------|
+| Bestehenden Owner prüfen und erweitern | Neue Funktion + alte unbenutzt liegen lassen |
+| Neue Funktion nur mit Migration aller Call-Sites + Entfernen/Deprecate im selben Ticket | Gleiche Business-Logik in zwei Modulen |
+| Toten Code löschen (Imports, Handler, Template-Blöcke, doppelte CSS) | Wrapper-Ketten ohne echten Zweck |
+| `grep` nach alten Symbolen vor Abschluss | Tests nur an Nebenfunktion, alter Produktpfad bleibt |
+
+**Typische Owner-Duplikate (nicht erneut einführen):** Queue-Logik, Fleet-Send, Preset-Engine, Production/ROI, Toast/Notify, Planet-/Galaxy-Gates.
+
+**Adapter nur mit:** Ticketnummer/Enddatum, Tests für alt+neu, klarer Entfernungsperspektive.
+
+**Ticket-Report (zusätzlich zu Root Cause / Tests):**
+
+- Welche alte Logik wurde ersetzt?
+- Welche alte Logik wurde entfernt?
+- Welche alten Call-Sites wurden aktualisiert?
+- Welche Suche wurde gemacht, um Dead Code auszuschließen?
+
+Volltext (Cursor always-apply): [.cursor/rules/no-dead-code-no-bloat.mdc](../.cursor/rules/no-dead-code-no-bloat.mdc).
 
 ---
 

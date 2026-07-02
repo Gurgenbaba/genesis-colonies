@@ -4834,9 +4834,8 @@
     );
 
     if (btn.dataset.buildCancelId) {
-      if (GC.actionLocks.build) return;
-      btn.dataset.busy = "1";
-      GC.actionLocks.build = true;
+      if (btn.dataset.busy === "1") return;
+      setProgressionActionBusy(btn, true);
       try {
         const json = await GC.fetchGameAction("/api/buildings/cancel", {
           method: "POST",
@@ -4849,16 +4848,14 @@
         console.error("Global build cancel failed:", err);
         showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
       } finally {
-        btn.dataset.busy = "0";
-        GC.actionLocks.build = false;
+        setProgressionActionBusy(btn, false);
       }
       return;
     }
 
     if (btn.dataset.researchCancelId) {
-      if (GC.actionLocks.research) return;
-      btn.dataset.busy = "1";
-      GC.actionLocks.research = true;
+      if (btn.dataset.busy === "1") return;
+      setProgressionActionBusy(btn, true);
       try {
         const json = await GC.fetchGameAction("/api/research/cancel", {
           method: "POST",
@@ -4871,8 +4868,7 @@
         console.error("Global research cancel failed:", err);
         showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
       } finally {
-        btn.dataset.busy = "0";
-        GC.actionLocks.research = false;
+        setProgressionActionBusy(btn, false);
       }
       return;
     }
@@ -29028,6 +29024,27 @@
   // =========================
   // Game actions (AJAX, kein Form-Reload)
   // =========================
+  function setProgressionActionBusy(el, busy) {
+    if (!el) return;
+    if (busy) {
+      el.dataset.busy = "1";
+      el.setAttribute("aria-busy", "true");
+      if (el.tagName === "BUTTON") el.disabled = true;
+      el.classList.add("is-loading", "is-busy");
+    } else {
+      delete el.dataset.busy;
+      el.removeAttribute("aria-busy");
+      if (
+        el.tagName === "BUTTON" &&
+        !el.classList.contains("gc-bld-head-action-btn--locked") &&
+        !el.classList.contains("gc-bld-head-action-btn--warn")
+      ) {
+        el.disabled = false;
+      }
+      el.classList.remove("is-loading", "is-busy");
+    }
+  }
+
   function initGameActions() {
     if (GC._gameActionsBound) return;
     GC._gameActionsBound = true;
@@ -29036,14 +29053,12 @@
       const upgradeMaxEl = e.target.closest("button.btn-upgrade-max:not([disabled])");
       if (upgradeMaxEl) {
         e.preventDefault();
-        if (upgradeMaxEl.dataset.busy === "1" || GC.actionLocks.build) return;
-        upgradeMaxEl.dataset.busy = "1";
-        GC.actionLocks.build = true;
+        if (upgradeMaxEl.dataset.busy === "1") return;
+        setProgressionActionBusy(upgradeMaxEl, true);
         const buildingType = upgradeMaxEl.dataset.building || "";
         const tab = _getActiveBuildingTab();
         if (!buildingType) {
-          upgradeMaxEl.dataset.busy = "0";
-          GC.actionLocks.build = false;
+          setProgressionActionBusy(upgradeMaxEl, false);
           showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
           return;
         }
@@ -29068,8 +29083,7 @@
           console.error("Upgrade MAX AJAX fehlgeschlagen:", err);
           showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
         } finally {
-          upgradeMaxEl.dataset.busy = "0";
-          GC.actionLocks.build = false;
+          setProgressionActionBusy(upgradeMaxEl, false);
         }
         return;
       }
@@ -29077,13 +29091,11 @@
       const researchMaxEl = e.target.closest("button.btn-research-max:not([disabled])");
       if (researchMaxEl) {
         e.preventDefault();
-        if (researchMaxEl.dataset.busy === "1" || GC.actionLocks.research) return;
-        researchMaxEl.dataset.busy = "1";
-        GC.actionLocks.research = true;
+        if (researchMaxEl.dataset.busy === "1") return;
+        setProgressionActionBusy(researchMaxEl, true);
         const techKey = researchMaxEl.dataset.techKey || "";
         if (!techKey) {
-          researchMaxEl.dataset.busy = "0";
-          GC.actionLocks.research = false;
+          setProgressionActionBusy(researchMaxEl, false);
           showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
           return;
         }
@@ -29103,8 +29115,7 @@
           console.error("Research MAX AJAX fehlgeschlagen:", err);
           showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
         } finally {
-          researchMaxEl.dataset.busy = "0";
-          GC.actionLocks.research = false;
+          setProgressionActionBusy(researchMaxEl, false);
         }
         return;
       }
@@ -29112,9 +29123,8 @@
       const upgradeEl = e.target.closest("a.btn-upgrade, button.btn-upgrade:not([disabled])");
       if (upgradeEl && !upgradeEl.hasAttribute("disabled")) {
         if (upgradeEl.tagName === "A") e.preventDefault();
-        if (upgradeEl.dataset.busy === "1" || GC.actionLocks.build) return;
-        upgradeEl.dataset.busy = "1";
-        GC.actionLocks.build = true;
+        if (upgradeEl.dataset.busy === "1") return;
+        setProgressionActionBusy(upgradeEl, true);
 
         const buildingType =
           upgradeEl.dataset.building ||
@@ -29125,8 +29135,7 @@
         const tab = _getActiveBuildingTab();
 
         if (!buildingType) {
-          upgradeEl.dataset.busy = "0";
-          GC.actionLocks.build = false;
+          setProgressionActionBusy(upgradeEl, false);
           showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
           return;
         }
@@ -29149,8 +29158,7 @@
             "error"
           );
         } finally {
-          upgradeEl.dataset.busy = "0";
-          GC.actionLocks.build = false;
+          setProgressionActionBusy(upgradeEl, false);
         }
         return;
       }
@@ -29158,9 +29166,8 @@
       const researchLink = e.target.closest("a.btn-research, button.btn-research:not([disabled])");
       if (researchLink && !researchLink.hasAttribute("disabled")) {
         if (researchLink.tagName === "A") e.preventDefault();
-        if (researchLink.dataset.busy === "1" || GC.actionLocks.research) return;
-        researchLink.dataset.busy = "1";
-        GC.actionLocks.research = true;
+        if (researchLink.dataset.busy === "1") return;
+        setProgressionActionBusy(researchLink, true);
 
         const match = (researchLink.getAttribute("href") || "").match(/\/research_start\/([^/?#]+)/);
         const techKey = match ? decodeURIComponent(match[1]) : "";
@@ -29182,8 +29189,7 @@
             "error"
           );
         } finally {
-          researchLink.dataset.busy = "0";
-          GC.actionLocks.research = false;
+          setProgressionActionBusy(researchLink, false);
         }
         return;
       }
@@ -29191,9 +29197,8 @@
       const buildCancelBtn = e.target.closest("[data-build-cancel-id]");
       if (buildCancelBtn) {
         e.preventDefault();
-        if (buildCancelBtn.dataset.busy === "1" || GC.actionLocks.build) return;
-        buildCancelBtn.dataset.busy = "1";
-        GC.actionLocks.build = true;
+        if (buildCancelBtn.dataset.busy === "1") return;
+        setProgressionActionBusy(buildCancelBtn, true);
         try {
           const json = await GC.fetchGameAction("/api/buildings/cancel", {
             method: "POST",
@@ -29208,8 +29213,7 @@
           console.error("Build cancel AJAX fehlgeschlagen:", err);
           showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
         } finally {
-          buildCancelBtn.dataset.busy = "0";
-          GC.actionLocks.build = false;
+          setProgressionActionBusy(buildCancelBtn, false);
         }
         return;
       }
@@ -29217,9 +29221,8 @@
       const researchCancelBtn = e.target.closest("[data-research-cancel-id]");
       if (researchCancelBtn) {
         e.preventDefault();
-        if (researchCancelBtn.dataset.busy === "1" || GC.actionLocks.research) return;
-        researchCancelBtn.dataset.busy = "1";
-        GC.actionLocks.research = true;
+        if (researchCancelBtn.dataset.busy === "1") return;
+        setProgressionActionBusy(researchCancelBtn, true);
         try {
           const json = await GC.fetchGameAction("/api/research/cancel", {
             method: "POST",
@@ -29234,8 +29237,7 @@
           console.error("Research cancel AJAX fehlgeschlagen:", err);
           showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
         } finally {
-          researchCancelBtn.dataset.busy = "0";
-          GC.actionLocks.research = false;
+          setProgressionActionBusy(researchCancelBtn, false);
         }
       }
     });

@@ -38,12 +38,12 @@ class TestGc821eMineRoiCurve:
 
     def test_roi_uses_production_delta_not_total(self):
         lvl = 60
-        metal_cost, _ = power_upgrade_cost("metal_mine", lvl)
+        metal_cost, crystal_cost = power_upgrade_cost("metal_mine", lvl)
         delta = production_delta_per_hour("metal", lvl)
         total = calculate_resource_output("metal", ProductionContext("metal", lvl - 1, slot=9))
         assert delta < total
-        roi_delta = metal_cost / delta
-        roi_total = metal_cost / total
+        roi_delta = (metal_cost + crystal_cost) / delta
+        roi_total = (metal_cost + crystal_cost) / total
         assert mine_upgrade_roi_hours("metal_mine", lvl) == pytest.approx(roi_delta)
         assert roi_delta > roi_total * 5
 

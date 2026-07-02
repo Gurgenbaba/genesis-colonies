@@ -984,14 +984,33 @@ def _technical_effects_at_level(
         out["effect_unit"] = "/h"
         out["effect_resource"] = res
         if int(level) >= 1:
-            from .economy_balance import production_delta_per_hour
+            prev_lvl = max(0, int(level) - 1)
+            if panel_ctx is not None:
+                prod_prev = panel_ctx.production_per_hour_at_target(building_type, prev_lvl)
+                prod_cur = prod
+            else:
+                from .logic import get_building_production_per_hour
 
-            delta = production_delta_per_hour(res, int(level))
+                bumped_prev = dict(bumped)
+                bumped_prev[building_type] = prev_lvl
+                prod_prev = get_building_production_per_hour(
+                    bumped_prev, ratio, research=research_levels
+                )
+            delta = max(
+                0,
+                int(prod.get(building_type, 0) or 0)
+                - int(prod_prev.get(building_type, 0) or 0),
+            )
             out["production_delta_per_hour"] = int(delta)
             if building_type in ("metal_mine", "crystal_mine", "fuel_cell_plant"):
-                from .economy_balance import mine_upgrade_roi_hours
+                from .economy_balance import upgrade_roi_hours
 
-                roi = mine_upgrade_roi_hours(building_type, int(level))
+                cost_m, cost_c = get_upgrade_cost(building_type, int(level) - 1)
+                roi = upgrade_roi_hours(
+                    metal_cost=int(cost_m),
+                    crystal_cost=int(cost_c),
+                    delta_per_hour=float(delta),
+                )
                 out["upgrade_roi_hours"] = round(roi, 1) if math.isfinite(roi) else None
         if res == "metal":
             out["production_metal_per_hour"] = val
@@ -1389,9 +1408,15 @@ def _make_panel_row(
     if energy_draw is not None:
         row["energy_draw"] = energy_draw
     if building_type in ("metal_mine", "crystal_mine", "fuel_cell_plant") and target_level >= 1:
-        from .economy_balance import mine_upgrade_roi_hours
+        from .economy_balance import upgrade_roi_hours
 
-        roi = mine_upgrade_roi_hours(building_type, target_level)
+        delta = float(row.get("effect_delta") or 0)
+        roi = upgrade_roi_hours(
+            metal_cost=int(row.get("cost_metal") or 0),
+            crystal_cost=int(row.get("cost_crystal") or 0),
+            fuel_cells_cost=int(row.get("cost_fuel_cells") or 0),
+            delta_per_hour=delta,
+        )
         row["upgrade_roi_hours"] = round(roi, 1) if math.isfinite(roi) else None
     if ssr is not None:
         ssr.add_tech_data_ms((time.perf_counter() - tech_t0) * 1000.0)

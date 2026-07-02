@@ -30,8 +30,13 @@ class TestGc821fRoiAnchors:
         mid = mine_roi_anchor_hours(30)
         assert 50 < mid < 100
 
-    def test_roi_multiplier_increases_early_game(self):
-        assert mine_roi_cost_multiplier(20) > mine_roi_cost_multiplier(100)
+    def test_roi_multiplier_increases_with_level(self):
+        """Endgame anchors need stronger cost scaling than early game (821F curve)."""
+        levels = ROI_BENCHMARK_LEVELS
+        for low, high in zip(levels, levels[1:]):
+            assert mine_roi_cost_multiplier(low) < mine_roi_cost_multiplier(high), (
+                f"cost multiplier must rise L{low}→L{high} to hit longer ROI anchors"
+            )
 
 
 class TestGc821fBulkUpgradePrep:

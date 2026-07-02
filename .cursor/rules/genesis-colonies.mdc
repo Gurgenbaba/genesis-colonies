@@ -9,10 +9,11 @@ alwaysApply: true
 
 ## Before any task
 
-1. Read `docs/WORKFLOW.md` and **`docs/CORE_ARCHITECTURE.md`** (GC-000, Regeln 15–17).
-2. Read the relevant master doc(s) for the ticket domain.
-3. Work only the ticket scope (max 3–5 files). No full-project analysis.
-4. Respect architecture: PJAX shell, planet scope (`get_context_planet`), single queue engine, canonical systems.
+1. Read `docs/WORKFLOW.md` and **`docs/CORE_ARCHITECTURE.md`** (GC-000, Regeln 15–17, **19**).
+2. Follow **`.cursor/rules/no-dead-code-no-bloat.mdc`** — extend Owner, remove replaced code in the same ticket.
+3. Read the relevant master doc(s) for the ticket domain.
+4. Work only the ticket scope (max 3–5 files). No full-project analysis.
+5. Respect architecture: PJAX shell, planet scope (`get_context_planet`), single queue engine, canonical systems.
 
 ## Master docs (single source of truth)
 
@@ -34,6 +35,7 @@ alwaysApply: true
 - **Parallel systems** (Regel 15): `shipyard`+`orbital_shipyard`, `fleet_state`+`fleet_movements`, `planet_session`+`active_planet_id`, `combat_v1`+`combat_v2` — only migration+alias, never two live systems
 - **Duplicate math** (Regel 16): no frontend production/fleet/combat/queue formulas — use `EffectResolver`, `fleet_calc`, `queue_engine`
 - **Wrong owner** (Regel 17): new logic must land in the Owner module from CORE_ARCHITECTURE §17, not a new parallel file
+- **Dead code / bloat** (Regel 19): no new helper beside old logic — migrate call-sites, delete unused code, `grep` old symbols before done
 - Queue mutations without `finish_due_work_once` first
 - POST actions without `{ ok, state }` + `applyActionState()` on client
 - Unrequested refactors outside the ticket
@@ -56,6 +58,7 @@ Output only:
 - Changed Files
 - Tests
 - Ergebnis
+- Regel 19: replaced/removed logic, updated call-sites, dead-code search
 
 Update master docs if architecture changed.
 
