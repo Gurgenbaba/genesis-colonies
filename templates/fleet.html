@@ -288,6 +288,34 @@
           </div>
         </section>
 
+        <section class="gc-panel fleet-panel fleet-mass-expo-split-panel" aria-labelledby="fleet-mass-expo-split-title" data-fleet-mass-expo-split-panel>
+          <div class="gc-panel-header">
+            <span class="gc-panel-title" id="fleet-mass-expo-split-title">{{ T("fleet_mass_expo_split_title") }}</span>
+          </div>
+          <div class="fleet-mass-expo-split-body" data-fleet-mass-expo-split>
+            <p class="fleet-mass-expo-split-hint">{{ T("fleet_mass_expo_split_hint") }}</p>
+            <dl class="fleet-mass-expo-split-preview" data-fleet-mass-expo-split-preview aria-live="polite">
+              <div class="fleet-mass-expo-split-preview-row">
+                <dt>{{ T("fleet_mass_expo_split_free_slots") }}</dt>
+                <dd class="gc-mono" data-fleet-mass-expo-free-slots>—</dd>
+              </div>
+              <div class="fleet-mass-expo-split-preview-row">
+                <dt>{{ T("fleet_mass_expo_split_per_fleet") }}</dt>
+                <dd data-fleet-mass-expo-per-fleet>—</dd>
+              </div>
+              <div class="fleet-mass-expo-split-preview-row">
+                <dt>{{ T("fleet_mass_expo_split_leftover") }}</dt>
+                <dd data-fleet-mass-expo-leftover>—</dd>
+              </div>
+            </dl>
+            <p class="fleet-mass-expo-split-status" data-fleet-mass-expo-split-status hidden></p>
+            <button type="button"
+                    class="gc-btn gc-btn-secondary"
+                    data-fleet-mass-expo-split-submit
+                    disabled>{{ T("fleet_mass_expo_split_start") }}</button>
+          </div>
+        </section>
+
         <section class="gc-panel fleet-panel fleet-load-panel fleet-ogame-bottom fleet-send-compact" aria-labelledby="fleet-load-title">
           <div class="fleet-form-row fleet-colonize-name-row" data-fleet-colonize-row hidden>
             <label class="fleet-form-label" for="fleet-colony-name">{{ T("fleet_colony_name_label") }}</label>
@@ -415,7 +443,8 @@
               </ul>
             </div>
             <div class="fleet-ogame-footer-col">
-              <h3 class="fleet-ogame-footer-title" id="fleet-mass-expo-title">{{ T("fleet_mass_expo_title") }}</h3>
+              <details class="fleet-mass-expo-legacy" data-fleet-mass-expo-legacy>
+                <summary class="fleet-ogame-footer-title">{{ T("fleet_mass_expo_legacy_title") }}</summary>
               <div id="fleet-mass-expo-form" class="fleet-mass-expo-form fleet-mass-expo-form--compact" data-fleet-mass-expo-panel>
                 <div class="fleet-form-row">
                   <label for="fleet-mass-preset">{{ T("fleet_mass_expo_preset") }}</label>
@@ -433,6 +462,7 @@
                 <p class="fleet-mass-result" data-fleet-mass-result hidden></p>
                 <button type="button" class="gc-btn gc-btn-secondary" data-fleet-mass-expo-submit>{{ T("fleet_mass_expo_start") }}</button>
               </div>
+              </details>
             </div>
           </div>
         </section>

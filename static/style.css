@@ -15595,6 +15595,56 @@ body.gc-techtree-media-zoom-open{
 .fleet-mass-expo-form--compact .fleet-form-row{
   margin-bottom: 8px;
 }
+.fleet-mass-expo-split-panel{
+  margin-top: 0.65rem;
+}
+.fleet-mass-expo-split-hint{
+  margin: 0 0 0.55rem;
+  font-size: 0.8rem;
+  color: var(--gc-text-soft);
+}
+.fleet-mass-expo-split-preview{
+  display: grid;
+  gap: 0.35rem;
+  margin: 0 0 0.65rem;
+  font-size: 0.78rem;
+}
+.fleet-mass-expo-split-preview-row{
+  display: grid;
+  grid-template-columns: minmax(6.5rem, 8rem) 1fr;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+.fleet-mass-expo-split-preview-row dt{
+  margin: 0;
+  color: var(--gc-text-soft);
+}
+.fleet-mass-expo-split-preview-row dd{
+  margin: 0;
+  word-break: break-word;
+}
+.fleet-mass-expo-split-status{
+  margin: 0 0 0.55rem;
+  font-size: 0.78rem;
+  color: #ff9b7a;
+}
+.fleet-mass-expo-legacy{
+  border: 1px solid rgba(0, 212, 255, 0.14);
+  border-radius: var(--gc-radius-sm);
+  padding: 0.45rem 0.55rem;
+}
+.fleet-mass-expo-legacy > summary{
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.fleet-mass-expo-legacy > summary::-webkit-details-marker{
+  display: none;
+}
+.fleet-mass-expo-legacy[open] > summary{
+  margin-bottom: 0.45rem;
+}
 
 .fleet-ships-groups{
   display: grid;

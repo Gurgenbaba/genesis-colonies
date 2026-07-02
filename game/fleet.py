@@ -4768,6 +4768,242 @@ def process_fleet_tick(
     return result
 
 
+def compute_mass_expedition_slot_split(
+    ships: Mapping[str, int],
+    available_slots: int,
+) -> Tuple[Dict[str, int], Dict[str, int], int]:
+    """GC-981 — floor(selected / slots) per hull; leftovers stay on planet."""
+    slots = max(0, int(available_slots or 0))
+    normalized = normalize_ships(ships)
+    if slots <= 0 or not normalized:
+        return {}, dict(normalized), 0
+
+    per_slot: Dict[str, int] = {}
+    leftover: Dict[str, int] = {}
+    for key, total in normalized.items():
+        qty = int(total)
+        if qty <= 0:
+            continue
+        per = qty // slots
+        rem = qty % slots
+        if per > 0:
+            per_slot[key] = per
+        if rem > 0:
+            leftover[key] = rem
+    return per_slot, leftover, slots
+
+
+def validate_mass_expedition_per_slot_fleet(
+    per_slot_ships: Mapping[str, int],
+) -> Tuple[bool, str]:
+    """Each expedition fleet must include at least one expedition-role hull."""
+    from .expedition_events import count_expedition_ships
+
+    if sum(int(v) for v in per_slot_ships.values()) <= 0:
+        return False, "mass_expo_split_too_small"
+    if int(count_expedition_ships(per_slot_ships)) <= 0:
+        return False, "mass_expo_no_expedition_ships"
+    return _mission_allowed("expedition", per_slot_ships, {})
+
+
+def preview_mass_expedition_slot_split(
+    *,
+    player_id: int,
+    origin_planet_id: int,
+    ships: Mapping[str, int],
+    conn=None,
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """GC-981 — authoritative split preview for mass expedition UX."""
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        if not fleet_schema_ready(conn):
+            return False, "fleet_unavailable", None
+
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT 1 FROM planets WHERE id = ? AND player_id = ? LIMIT 1;",
+            (int(origin_planet_id), int(player_id)),
+        )
+        if not cur.fetchone():
+            return False, "origin_not_found", None
+
+        slots = get_fleet_slot_status(int(player_id), conn=conn)
+        free_slots = int(slots.get("free") or 0)
+        normalized = normalize_ships(ships)
+        meta: Dict[str, Any] = {
+            "free_slots": free_slots,
+            "selected_ships": normalized,
+            "per_fleet_ships": {},
+            "leftover_ships": {},
+            "started_count": 0,
+        }
+        if free_slots <= 0:
+            return False, "fleet_slots_full", meta
+        if not normalized:
+            return False, "no_ships", meta
+
+        available = get_planet_ships(int(origin_planet_id), conn=conn)
+        for key, need in normalized.items():
+            if int(available.get(key, 0)) < int(need):
+                return False, "not_enough_ships", meta
+
+        per_slot, leftover, slot_count = compute_mass_expedition_slot_split(
+            normalized, free_slots
+        )
+        meta["per_fleet_ships"] = per_slot
+        meta["leftover_ships"] = leftover
+        meta["started_count"] = slot_count
+
+        ok_fleet, fleet_reason = validate_mass_expedition_per_slot_fleet(per_slot)
+        if not ok_fleet:
+            return False, fleet_reason, meta
+        return True, "", meta
+    finally:
+        if own and conn is not None:
+            conn.close()
+
+
+def mass_expedition_from_ships(
+    *,
+    player_id: int,
+    origin_planet_id: int,
+    ships: Mapping[str, int],
+    speed_percent: int = 100,
+    conn=None,
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """GC-981 — split selected ships evenly across free expedition slots."""
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        ok_prev, reason, preview = preview_mass_expedition_slot_split(
+            player_id=player_id,
+            origin_planet_id=origin_planet_id,
+            ships=ships,
+            conn=conn,
+        )
+        if not ok_prev:
+            return False, reason, preview
+
+        per_slot = dict(preview.get("per_fleet_ships") or {})
+        leftover = dict(preview.get("leftover_ships") or {})
+        slot_count = int(preview.get("started_count") or 0)
+        pct = int(speed_percent)
+        if pct < 10 or pct > 100:
+            pct = 100
+
+        slots = get_fleet_slot_status(int(player_id), conn=conn)
+        max_start = int(slots.get("free") or 0)
+
+        if own:
+            begin_write_transaction(conn)
+
+        now = _now()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO fleet_batches (player_id, batch_type, label, status, total_fleets, created_at, updated_at)
+            VALUES (?, 'mass_expedition', ?, 'running', ?, ?, ?);
+            """,
+            (
+                int(player_id),
+                f"Mass expedition x{slot_count}",
+                slot_count,
+                now,
+                now,
+            ),
+        )
+        batch_id = int(cur.lastrowid)
+
+        started: List[Dict[str, Any]] = []
+        skipped: List[Dict[str, Any]] = []
+
+        cur.execute(
+            "SELECT * FROM planets WHERE id = ? AND player_id = ? LIMIT 1;",
+            (int(origin_planet_id), int(player_id)),
+        )
+        origin_row = cur.fetchone()
+        if not origin_row:
+            if own:
+                rollback(conn)
+            return False, "origin_not_found", None
+        origin_planet = dict(origin_row)
+        origin_coords = _origin_coords(origin_planet)
+        tg, ts, _ = origin_coords
+        target_position = EXPEDITION_POSITION
+
+        for wave in range(slot_count):
+            if len(started) >= max_start:
+                skipped.append({"wave": wave + 1, "reason": "fleet_slots_full"})
+                continue
+
+            available = get_planet_ships(int(origin_planet_id), conn=conn)
+            can_send = True
+            for sk, need in per_slot.items():
+                if int(available.get(sk, 0)) < int(need):
+                    can_send = False
+                    break
+            if not can_send:
+                skipped.append({"wave": wave + 1, "reason": "not_enough_ships"})
+                continue
+
+            ok, send_reason, payload = send_fleet(
+                player_id=player_id,
+                origin_planet_id=origin_planet_id,
+                target_galaxy=tg,
+                target_system=ts,
+                target_position=target_position,
+                mission_type="expedition",
+                ships=per_slot,
+                resources={},
+                speed_percent=pct,
+                batch_id=batch_id,
+                departure_at=int(now) + len(started) * MASS_EXPEDITION_STAGGER_SECONDS,
+                conn=conn,
+            )
+            if ok and payload:
+                started.append({"wave": wave + 1, "fleet_id": payload["fleet"]["id"]})
+            else:
+                skipped.append({"wave": wave + 1, "reason": send_reason or "send_failed"})
+
+        batch_status = "completed" if started else "failed"
+        conn.execute(
+            "UPDATE fleet_batches SET status = ?, total_fleets = ?, updated_at = ? WHERE id = ?;",
+            (batch_status, len(started), now, batch_id),
+        )
+
+        if own:
+            commit(conn)
+
+        cur.execute("SELECT * FROM fleet_batches WHERE id = ?;", (batch_id,))
+        batch_row = dict(cur.fetchone())
+
+        return True, "", {
+            "batch": {
+                "id": batch_id,
+                "batch_type": batch_row["batch_type"],
+                "status": batch_row["status"],
+                "total_fleets": len(started),
+                "label": batch_row["label"],
+            },
+            "started": started,
+            "skipped": skipped,
+            "per_fleet_ships": per_slot,
+            "leftover_ships": leftover,
+            "started_count": len(started),
+            "active_slots": get_fleet_slot_status(player_id, conn=conn),
+        }
+    except Exception:
+        if own:
+            rollback(conn)
+        raise
+    finally:
+        if own and conn is not None:
+            conn.close()
+
+
 def mass_expedition(
     *,
     player_id: int,

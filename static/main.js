@@ -17128,6 +17128,154 @@
     GC.buildFleetTargetPayload = buildFleetTargetPayload;
     GC.syncFleetMissionLockUi = syncFleetMissionLockUi;
     GC.resolveFleetWorldTargetPresentation = resolveFleetWorldTargetPresentation;
+    GC.scheduleMassExpoSplitPreview = scheduleMassExpoSplitPreview;
+    GC.updateMassExpoSplitPreview = updateMassExpoSplitPreview;
+
+    const formatMassExpoShipLine = (ships) => {
+      const parts = Object.entries(ships || {})
+        .map(([key, qty]) => [key, parseInt(qty, 10) || 0])
+        .filter(([, qty]) => qty > 0)
+        .sort((a, b) => b[1] - a[1])
+        .map(([key, qty]) => `${formatNumber(qty)} ${tt(`fleet_ship_${key}`, key)}`);
+      return parts.length ? parts.join(" · ") : "—";
+    };
+
+    let massExpoSplitPreviewTimer = null;
+    const scheduleMassExpoSplitPreview = (page) => {
+      if (!page?.querySelector("[data-fleet-mass-expo-split]")) return;
+      if (massExpoSplitPreviewTimer) clearTimeout(massExpoSplitPreviewTimer);
+      massExpoSplitPreviewTimer = GC.setSafeTimeout(() => {
+        massExpoSplitPreviewTimer = null;
+        updateMassExpoSplitPreview(page);
+      }, 250);
+    };
+
+    const updateMassExpoSplitPreview = async (page) => {
+      const panel = page?.querySelector("[data-fleet-mass-expo-split]");
+      if (!panel) return;
+      const freeEl = panel.querySelector("[data-fleet-mass-expo-free-slots]");
+      const perFleetEl = panel.querySelector("[data-fleet-mass-expo-per-fleet]");
+      const leftoverEl = panel.querySelector("[data-fleet-mass-expo-leftover]");
+      const statusEl = panel.querySelector("[data-fleet-mass-expo-split-status]");
+      const submitBtn = panel.querySelector("[data-fleet-mass-expo-split-submit]");
+      const ships = getShipsSelection(page);
+
+      const setStatus = (msg, { hidden = false } = {}) => {
+        if (!statusEl) return;
+        statusEl.textContent = msg || "";
+        statusEl.hidden = hidden || !msg;
+      };
+
+      if (!Object.keys(ships).length) {
+        if (freeEl) freeEl.textContent = "—";
+        if (perFleetEl) perFleetEl.textContent = "—";
+        if (leftoverEl) leftoverEl.textContent = "—";
+        setStatus("", { hidden: true });
+        if (submitBtn) submitBtn.disabled = true;
+        return;
+      }
+
+      try {
+        const originId = resolveFleetOriginPlanetId(page);
+        const res = await GC.fetchGameAction("/api/fleet/mass-expedition/preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ origin_planet_id: originId, ships }),
+        });
+        const data = fleetPayload(res);
+        const preview = data && typeof data === "object" ? data : {};
+        const freeSlots = parseInt(preview.free_slots, 10);
+        if (freeEl) freeEl.textContent = Number.isFinite(freeSlots) ? String(freeSlots) : "0";
+        if (perFleetEl) perFleetEl.textContent = formatMassExpoShipLine(preview.per_fleet_ships);
+        if (leftoverEl) leftoverEl.textContent = formatMassExpoShipLine(preview.leftover_ships);
+
+        if (res?.ok) {
+          setStatus("", { hidden: true });
+          if (submitBtn) submitBtn.disabled = false;
+          return;
+        }
+
+        const reason = res?.error || res?.reason || "generic";
+        let msg = reasonText(reason);
+        if (reason === "fleet_slots_full") {
+          msg = tt("fleet_mass_expo_split_no_slots", "No free fleet slots available.");
+        } else if (reason === "mass_expo_split_too_small" || reason === "mass_expo_no_expedition_ships") {
+          msg = tt(
+            "fleet_mass_expo_split_too_small",
+            "Select enough expedition ships for at least one expedition per slot."
+          );
+        }
+        setStatus(msg);
+        if (submitBtn) submitBtn.disabled = true;
+      } catch (_) {
+        setStatus(reasonText("generic"));
+        if (submitBtn) submitBtn.disabled = true;
+      }
+    };
+
+    const submitMassExpeditionSplit = async (page) => {
+      const panel = page?.querySelector("[data-fleet-mass-expo-split]");
+      const submitBtn = panel?.querySelector("[data-fleet-mass-expo-split-submit]");
+      if (!panel || !submitBtn || panel.dataset.submitting === "1" || submitBtn.disabled) return;
+      panel.dataset.submitting = "1";
+      submitBtn.disabled = true;
+      const ships = getShipsSelection(page);
+      if (!Object.keys(ships).length) {
+        showNotify(tt("fleet_no_ships_selected", "No ships selected."), "error");
+        delete panel.dataset.submitting;
+        submitBtn.disabled = false;
+        return;
+      }
+      try {
+        const originId = resolveFleetOriginPlanetId(page);
+        const requestId =
+          typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+            ? crypto.randomUUID()
+            : `mass-expo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const res = await GC.fetchGameAction("/api/fleet/mass-expedition", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            origin_planet_id: originId,
+            ships,
+            request_id: requestId,
+          }),
+        });
+        if (res?.ok) {
+          const data = fleetPayload(res);
+          const started = parseInt(data.started_count, 10) || (data.started || []).length;
+          showNotify(
+            tt("fleet_mass_expo_split_success", "%(count)s expeditions launched.")
+              .replace("%(count)s", String(started)),
+            "success"
+          );
+          if (res.state) applyActionState(res, "fleet_mass_expo_success");
+          await refreshFleetState(page);
+          page.querySelectorAll("[data-ship-input]").forEach((inp) => { inp.value = "0"; });
+          syncFleetShipPickQtyMarks(page);
+          schedulePreview(page);
+          scheduleMassExpoSplitPreview(page);
+        } else {
+          const reason = res?.error || res?.reason || "generic";
+          let msg = reasonText(reason);
+          if (reason === "fleet_slots_full") {
+            msg = tt("fleet_mass_expo_split_no_slots", "No free fleet slots available.");
+          } else if (reason === "mass_expo_split_too_small" || reason === "mass_expo_no_expedition_ships") {
+            msg = tt(
+              "fleet_mass_expo_split_too_small",
+              "Select enough expedition ships for at least one expedition per slot."
+            );
+          }
+          showNotify(msg, "error");
+          scheduleMassExpoSplitPreview(page);
+        }
+      } catch (_) {
+        showNotify(reasonText("generic"), "error");
+      } finally {
+        delete panel.dataset.submitting;
+        scheduleMassExpoSplitPreview(page);
+      }
+    };
 
     const submitMassExpedition = async (page) => {
       const massForm = page?.querySelector("#fleet-mass-expo-form");
@@ -17355,6 +17503,13 @@
         return;
       }
 
+      const massExpoSplitBtn = e.target.closest("[data-fleet-mass-expo-split-submit]");
+      if (massExpoSplitBtn && page.contains(massExpoSplitBtn)) {
+        e.preventDefault();
+        submitMassExpeditionSplit(page);
+        return;
+      }
+
     });
 
     document.addEventListener("change", (e) => {
@@ -17402,6 +17557,7 @@
           scrollFleetShipInputEnd(e.target);
         }
         schedulePreview(page);
+        scheduleMassExpoSplitPreview(page);
       }
     });
 
@@ -17434,6 +17590,7 @@
           scrollFleetShipInputEnd(e.target);
         }
         schedulePreview(page);
+        scheduleMassExpoSplitPreview(page);
       }
     });
 
@@ -18287,6 +18444,9 @@
     applyFleetPageMode(page);
     if (typeof GC.syncFleetShipPickQtyMarks === "function") {
       GC.syncFleetShipPickQtyMarks(page);
+    }
+    if (typeof GC.scheduleMassExpoSplitPreview === "function") {
+      GC.scheduleMassExpoSplitPreview(page);
     }
   }
 

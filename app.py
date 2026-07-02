@@ -8362,11 +8362,12 @@ def api_fleet_logistics_distribute():
     return out
 
 
-@app.route("/api/fleet/mass-expedition", methods=["POST"])
+@app.route("/api/fleet/mass-expedition/preview", methods=["POST"])
 @require_login
-def api_fleet_mass_expedition():
-    from game.fleet import fleet_schema_ready, mass_expedition
+def api_fleet_mass_expedition_preview():
+    from game.fleet import fleet_schema_ready, preview_mass_expedition_slot_split
     from game.fleet_api import fleet_err, fleet_ok
+    from game.fleet_calc import normalize_ships
 
     user_id = int(session.get("user_id") or 0)
     if not user_id:
@@ -8375,12 +8376,65 @@ def api_fleet_mass_expedition():
         return jsonify(fleet_err("fleet_unavailable")), 503
 
     data = request.get_json(silent=True) or {}
+    ships = normalize_ships(data.get("ships") or {})
+    conn = db()
+    try:
+        from game.planet_evolution.repository import get_context_planet
+
+        planet = get_context_planet(user_id, conn=conn)
+        origin_id = int(data.get("origin_planet_id") or planet["id"])
+        ok, reason, preview = preview_mass_expedition_slot_split(
+            player_id=user_id,
+            origin_planet_id=origin_id,
+            ships=ships,
+            conn=conn,
+        )
+    finally:
+        conn.close()
+
+    if ok and preview is not None:
+        return jsonify(fleet_ok(preview, message_key="fleet_mass_expo_preview_ok"))
+    return jsonify(fleet_err(reason, data=preview or {})), 400
+
+
+@app.route("/api/fleet/mass-expedition", methods=["POST"])
+@require_login
+def api_fleet_mass_expedition():
+    from game.fleet import fleet_schema_ready, mass_expedition, mass_expedition_from_ships
+    from game.fleet_api import fleet_err, fleet_ok
+    from game.fleet_calc import normalize_ships
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify(fleet_err("not_logged_in")), 401
+    if not fleet_schema_ready(db()):
+        return jsonify(fleet_err("fleet_unavailable")), 503
+
+    data = request.get_json(silent=True) or {}
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    ships_payload = data.get("ships")
+    use_ship_split = ships_payload is not None
 
     def _mass_expo(conn):
         from game.planet_evolution.repository import get_context_planet
 
         planet = get_context_planet(user_id, conn=conn)
         origin_id = int(data.get("origin_planet_id") or planet["id"])
+        if use_ship_split:
+            ships = normalize_ships(ships_payload or {})
+            speed = int(data["speed_percent"]) if data.get("speed_percent") is not None else 100
+            return mass_expedition_from_ships(
+                player_id=user_id,
+                origin_planet_id=origin_id,
+                ships=ships,
+                speed_percent=speed,
+                conn=conn,
+            )
         return mass_expedition(
             player_id=user_id,
             origin_planet_id=origin_id,
@@ -8394,8 +8448,11 @@ def api_fleet_mass_expedition():
     ok, reason, result = _fleet_write_transaction(_mass_expo)
 
     if ok and result:
-        return jsonify(fleet_ok(result, message_key="fleet_mass_expo_success"))
-    return jsonify(fleet_err(reason)), 400
+        body = fleet_ok(result, message_key="fleet_mass_expo_success")
+        if request_id:
+            save_idempotent_action(user_id, request_id, body)
+        return jsonify(body)
+    return jsonify(fleet_err(reason, data=result if isinstance(result, dict) else {})), 400
 
 
 @app.route("/api/admin/planet/<int:planet_id>/ships", methods=["POST"])
