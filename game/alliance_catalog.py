@@ -315,3 +315,76 @@ def compute_bonus_chips(techs: Mapping[str, int]) -> List[Dict[str, Any]]:
             continue
         chips.append({"tech_key": t_key, "label_key": cfg.get("label_key"), "bonus_pct": round(pct, 1)})
     return chips
+
+
+def _tech_bonus_pct(cfg: Mapping[str, Any], level: int) -> float:
+    per = float(cfg.get("bonus_pct_per_level") or 0)
+    max_pct = float(cfg.get("bonus_max_pct") or 0)
+    return round(min(max_pct, per * max(0, int(level))), 1)
+
+
+def project_effect_preview(
+    kind: str,
+    key: str,
+    *,
+    current_level: int,
+    target_level: int,
+    buildings: Optional[Mapping[str, int]] = None,
+) -> Dict[str, Any]:
+    """UI preview lines for alliance project cards (current vs next level)."""
+    buildings = dict(buildings or {})
+    cfg = ALLIANCE_BUILDINGS.get(key) if kind == "building" else ALLIANCE_TECHNOLOGIES.get(key)
+    if not cfg:
+        return {"desc_key": "", "effect_key": "", "current_value": None, "next_value": None}
+
+    cur = max(0, int(current_level))
+    nxt = max(1, int(target_level))
+    desc_key = str(cfg.get("desc_key") or "")
+    effect_key = str(cfg.get("effect_key") or key)
+    current_value: Any = None
+    next_value: Any = None
+
+    if kind == "building":
+        effect_key = key
+        if key == "alliance_headquarters":
+            current_value = member_limit_from_buildings({**buildings, key: cur})
+            next_value = member_limit_from_buildings({**buildings, key: nxt})
+        elif key == "logistics_depot":
+            per = int(cfg.get("pool_cap_bonus_pct_per_level") or 0)
+            current_value = per * cur
+            next_value = per * nxt
+        elif key == "diplomacy_center":
+            current_value = cur >= 1
+            next_value = True
+        else:
+            current_value = cur
+            next_value = nxt
+    else:
+        current_value = _tech_bonus_pct(cfg, cur)
+        next_value = _tech_bonus_pct(cfg, nxt)
+
+    return {
+        "desc_key": desc_key,
+        "effect_key": effect_key,
+        "current_value": current_value,
+        "next_value": next_value,
+    }
+
+
+def enrich_available_projects(
+    projects: List[Dict[str, Any]],
+    *,
+    buildings: Mapping[str, int],
+) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for proj in projects:
+        row = dict(proj)
+        row["effect"] = project_effect_preview(
+            str(row.get("kind") or ""),
+            str(row.get("key") or ""),
+            current_level=int(row.get("current_level") or 0),
+            target_level=int(row.get("target_level") or 1),
+            buildings=buildings,
+        )
+        out.append(row)
+    return out

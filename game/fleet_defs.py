@@ -83,6 +83,9 @@ DEV_SEED_SHIPS: Dict[str, int] = {
     "seed_ark": 1,
 }
 
+# Max base build time per ship (4:20) — effective time may drop via yard level / bonuses (min 1s).
+MAX_SHIP_BUILD_SECONDS = 260
+
 # Phase 1 active hulls (eclipse_runner prepared but optional).
 ACTIVE_SHIP_KEYS: FrozenSet[str] = frozenset(
     {
@@ -168,7 +171,7 @@ SHIPS: Dict[str, Dict[str, Any]] = {
             "research": {"engine_tech": 3, "navigation_tech": 3},
         },
         "build_cost": {"metal": 5000, "crystal": 3750, "fuel_cells": 0},
-        "build_seconds": 300,
+        "build_seconds": 260,
         "score_value": 7000,
         "speed": 8000,
         "cargo": 2000,
@@ -210,7 +213,7 @@ SHIPS: Dict[str, Dict[str, Any]] = {
             "research": {"weapon_tech": 7, "armor_tech": 4},
         },
         "build_cost": {"metal": 18750, "crystal": 8750, "fuel_cells": 12500},
-        "build_seconds": 600,
+        "build_seconds": 240,
         "score_value": 22000,
         "speed": 10000,
         "cargo": 100,
@@ -231,7 +234,7 @@ SHIPS: Dict[str, Dict[str, Any]] = {
             "research": {"storage_tech": 5, "mining_tech": 4},
         },
         "build_cost": {"metal": 7500, "crystal": 7500, "fuel_cells": 750},
-        "build_seconds": 480,
+        "build_seconds": 200,
         "score_value": 12000,
         "speed": 7500,
         "cargo": 25000,
@@ -252,7 +255,7 @@ SHIPS: Dict[str, Dict[str, Any]] = {
             "research": {"storage_tech": 8, "mining_tech": 6, "fuel_efficiency": 5},
         },
         "build_cost": {"metal": 50000, "crystal": 50000, "fuel_cells": 25000},
-        "build_seconds": 7200,
+        "build_seconds": 260,
         "score_value": 50000,
         "speed": 500,
         "cargo": 100000,
@@ -273,7 +276,7 @@ SHIPS: Dict[str, Dict[str, Any]] = {
             "research": {"drone_tech": 5, "fuel_efficiency": 4},
         },
         "build_cost": {"metal": 12500, "crystal": 7500, "fuel_cells": 7500},
-        "build_seconds": 540,
+        "build_seconds": 220,
         "score_value": 16000,
         "speed": 2000,
         "cargo": 20000,
@@ -294,7 +297,7 @@ SHIPS: Dict[str, Dict[str, Any]] = {
             "research": {"navigation_tech": 6, "storage_tech": 5},
         },
         "build_cost": {"metal": 62500, "crystal": 37500, "fuel_cells": 60000},
-        "build_seconds": 3600,
+        "build_seconds": 260,
         "score_value": 80000,
         "speed": 1500,
         "cargo": 5000,
@@ -311,7 +314,7 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         "role": "expedition",
         "required_shipyard_level": 7,
         "build_cost": {"metal": 15000, "crystal": 10000, "fuel_cells": 62},
-        "build_seconds": 900,
+        "build_seconds": 260,
         "score_value": 20000,
         "speed": 6000,
         "cargo": 5000,

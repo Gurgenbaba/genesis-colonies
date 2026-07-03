@@ -82,6 +82,7 @@ def test_deep_vault_ark_definition():
     assert int(spec["speed"]) <= 500
     assert int(spec["attack"]) <= 5
     assert int(spec["required_shipyard_level"]) >= 6
+    assert int(spec["build_seconds"]) <= 260
 
 
 def test_deep_vault_ark_not_expedition_loot_ship():

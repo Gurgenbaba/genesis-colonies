@@ -34661,31 +34661,217 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
 }
 .alliance-hub-desc-empty { opacity: 0.55; font-style: italic; }
 
-.alliance-hub-bonus-section {
-  padding: 10px 16px;
+.alliance-hub-hero-quickstats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  opacity: 0.9;
+}
+.alliance-hub-hero-desc {
+  margin: 0;
+  max-width: 760px;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  opacity: 0.92;
+}
+.alliance-hub-hero-desc--empty { opacity: 0.55; font-style: italic; }
+
+.alliance-hub-xp-card {
+  padding: 14px 16px;
   border-bottom: 1px solid var(--gc-border-subtle, #222);
+  background: rgba(0, 0, 0, 0.1);
+}
+.alliance-hub-xp-hint {
+  margin: 8px 0 6px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  opacity: 0.85;
+}
+.alliance-hub-xp-sources {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.78rem;
+  line-height: 1.55;
+  opacity: 0.75;
+}
+.alliance-hub-xp-recent {
+  margin: 8px 0 0;
+  font-size: 0.75rem;
+  color: var(--gc-accent, #6ec8ff);
 }
 
-.alliance-hub-management {
-  padding: 14px 16px 16px;
-  border-top: 1px solid var(--gc-border-subtle, #222);
-  background: rgba(0, 0, 0, 0.14);
+.alliance-hub-project-desc {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  opacity: 0.85;
 }
-.alliance-hub-management .alliance-hub-profile-settings {
-  margin-bottom: 14px;
-  padding-bottom: 14px;
+.alliance-hub-project-effect-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.alliance-hub-project-effect-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 1px solid var(--gc-border-subtle, #222);
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.alliance-hub-project-effect-col--next {
+  border-color: rgba(110, 200, 255, 0.25);
+}
+.alliance-hub-project-effect-label {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.65;
+}
+.alliance-hub-project-effect-val {
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.alliance-hub-member-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.alliance-hub-member-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--gc-border-subtle, #222);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(0, 0, 0, 0.12);
+}
+.alliance-hub-member-row-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+.alliance-hub-member-avatar {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--gc-border, #334);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(110, 200, 255, 0.08);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.alliance-hub-member-row-body { min-width: 0; flex: 1; }
+.alliance-hub-member-row-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.alliance-hub-member-row-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 0.72rem;
+  opacity: 0.8;
+}
+.alliance-hub-member-leave {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--gc-border-subtle, #222);
+}
+
+.alliance-hub-dip-badge {
+  margin-left: auto;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 6px;
+  border: 1px solid var(--gc-border, #334);
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.alliance-hub-dip-badge--alliance { border-color: #7fd4a0; color: #7fd4a0; }
+.alliance-hub-dip-badge--nap { border-color: var(--gc-accent, #6ec8ff); color: var(--gc-accent, #6ec8ff); }
+.alliance-hub-dip-badge--war { border-color: #ff7a7a; color: #ff7a7a; }
+.alliance-hub-dip-badge--neutral { opacity: 0.7; }
+.alliance-hub-dip-intro {
+  margin: 0 0 10px;
+  font-size: 0.82rem;
+  opacity: 0.8;
+}
+.alliance-hub-coming-soon {
+  padding: 12px;
+  border: 1px solid var(--gc-border-subtle, #222);
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.alliance-hub-coming-soon-note {
+  margin: 6px 0 0;
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.alliance-hub-manage-modal {
+  border: none;
+  padding: 0;
+  background: transparent;
+  max-width: min(560px, calc(100vw - 24px));
+  width: 100%;
+  color: inherit;
+}
+.alliance-hub-manage-modal::backdrop {
+  background: rgba(4, 8, 18, 0.72);
+}
+.alliance-hub-manage-modal[hidden] { display: none !important; }
+.alliance-hub-manage-panel {
+  width: 100%;
+  max-height: min(90vh, 820px);
+  overflow: auto;
+  border: 1px solid var(--gc-border, #334);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: var(--gc-surface-1, #101620);
+  box-shadow: 0 0 32px rgba(110, 200, 255, 0.1);
+}
+.alliance-hub-manage-panel .gc-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--gc-border-subtle, #222);
 }
-.alliance-hub-management .alliance-hub-recruitment-control {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: none;
+.alliance-hub-manage-panel .gc-modal-title {
+  margin: 0;
+  font-size: 0.95rem;
 }
-.alliance-hub-management .alliance-hub-leave-wrap {
+.alliance-hub-manage-body {
+  padding: 14px;
+}
+.alliance-hub-manage-body .alliance-hub-leave-wrap {
   margin-top: 14px;
   padding-top: 12px;
   border-top: 1px solid var(--gc-border-subtle, #222);
   justify-content: flex-start;
+}
+
+.alliance-hub-bonus-section {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--gc-border-subtle, #222);
 }
 
 .alliance-hub-project-duration {
@@ -35490,6 +35676,9 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   }
   .alliance-hub-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .alliance-hub-project-effect-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

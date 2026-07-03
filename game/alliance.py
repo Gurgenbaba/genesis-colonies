@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 import time
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from . import image_assets
@@ -28,6 +29,7 @@ from .alliance_catalog import (
     available_projects,
     building_level,
     compute_bonus_chips,
+    enrich_available_projects,
     member_limit_from_buildings,
     pool_cap_from_projects,
     project_cost_and_duration,
@@ -335,6 +337,13 @@ def get_player_alliance(player_id: int, conn=None) -> Optional[Dict[str, Any]]:
             conn.close()
 
 
+def _unix_date_label(ts: int) -> str:
+    value = int(ts or 0)
+    if value <= 0:
+        return ""
+    return datetime.fromtimestamp(value, tz=timezone.utc).strftime("%Y-%m-%d")
+
+
 def get_alliance_members(alliance_id: int, conn=None) -> List[Dict[str, Any]]:
     own = conn is None
     if own:
@@ -343,10 +352,18 @@ def get_alliance_members(alliance_id: int, conn=None) -> List[Dict[str, Any]]:
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT am.player_id, am.role, am.joined_at, p.name AS player_name
+            SELECT am.player_id, am.role, am.joined_at, p.name AS player_name,
+                   COALESCE(p.last_seen, 0) AS last_seen,
+                   COALESCE(SUM(d.amount), 0) AS donation_points,
+                   COALESCE(SUM(d.xp_granted), 0) AS xp_contribution,
+                   COALESCE(ps.score_total, 0) AS total_score
             FROM alliance_members am
             JOIN players p ON p.id = am.player_id
+            LEFT JOIN alliance_donations d
+              ON d.alliance_id = am.alliance_id AND d.player_id = am.player_id
+            LEFT JOIN player_scores ps ON ps.player_id = am.player_id
             WHERE am.alliance_id = ?
+            GROUP BY am.player_id, am.role, am.joined_at, p.name, p.last_seen, ps.score_total
             ORDER BY
                 CASE am.role
                     WHEN 'leader' THEN 0
@@ -362,6 +379,11 @@ def get_alliance_members(alliance_id: int, conn=None) -> List[Dict[str, Any]]:
         for r in cur.fetchall():
             d = dict(r)
             d["role"] = _normalize_role(d.get("role"))
+            d["donation_points"] = int(d.get("donation_points") or 0)
+            d["xp_contribution"] = int(d.get("xp_contribution") or 0)
+            d["total_score"] = int(d.get("total_score") or 0)
+            d["joined_label"] = _unix_date_label(int(d.get("joined_at") or 0))
+            d["last_seen_label"] = _unix_date_label(int(d.get("last_seen") or 0))
             rows.append(d)
         return rows
     finally:
@@ -371,35 +393,16 @@ def get_alliance_members(alliance_id: int, conn=None) -> List[Dict[str, Any]]:
 
 def get_alliance_members_public(alliance_id: int, conn) -> List[Dict[str, Any]]:
     """Public member roster with donation contribution totals for guest profile."""
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT am.player_id, am.role, am.joined_at, p.name AS player_name,
-               COALESCE(SUM(d.amount), 0) AS donation_points
-        FROM alliance_members am
-        JOIN players p ON p.id = am.player_id
-        LEFT JOIN alliance_donations d
-          ON d.alliance_id = am.alliance_id AND d.player_id = am.player_id
-        WHERE am.alliance_id = ?
-        GROUP BY am.player_id, am.role, am.joined_at, p.name
-        ORDER BY donation_points DESC,
-            CASE am.role
-                WHEN 'leader' THEN 0
-                WHEN 'owner' THEN 0
-                WHEN 'officer' THEN 1
-                ELSE 2
-            END,
-            am.joined_at ASC;
-        """,
-        (int(alliance_id),),
+    members = get_alliance_members(alliance_id, conn=conn)
+    role_rank = {"leader": 0, "officer": 1, "member": 2}
+    members.sort(
+        key=lambda m: (
+            -int(m.get("donation_points") or 0),
+            role_rank.get(str(m.get("role") or "member"), 2),
+            int(m.get("joined_at") or 0),
+        )
     )
-    rows = []
-    for r in cur.fetchall():
-        d = dict(r)
-        d["role"] = _normalize_role(d.get("role"))
-        d["donation_points"] = int(d.get("donation_points") or 0)
-        rows.append(d)
-    return rows
+    return members
 
 
 def get_alliance_public_profile(alliance_id: int, conn=None) -> Dict[str, Any]:
@@ -514,6 +517,25 @@ def _pool_snapshot(alliance_row: Mapping[str, Any], conn) -> Dict[str, Any]:
         "cap": cap,
         "cap_bonus_pct": round(cap_bonus, 1),
     }
+
+
+def donation_limits_for_pool(
+    pool: Mapping[str, int],
+    cap: Mapping[str, int],
+    available_projects: List[Dict[str, Any]],
+) -> Dict[str, int]:
+    """Max donate per resource: pool headroom capped by cheapest project remaining need."""
+    limits: Dict[str, int] = {}
+    for res in VALID_DONATION_RESOURCES:
+        pool_val = int(pool.get(res) or 0)
+        cap_val = int(cap.get(res) or 0)
+        room = max(0, cap_val - pool_val)
+        if available_projects:
+            target = available_projects[0]
+            need = int((target.get("cost") or {}).get(res) or 0)
+            room = min(room, max(0, need - pool_val))
+        limits[res] = room
+    return limits
 
 
 def _active_project(alliance_id: int, conn) -> Optional[Dict[str, Any]]:
@@ -648,7 +670,7 @@ def _recent_donations(alliance_id: int, conn, *, limit: int = 8) -> List[Dict[st
     cur = conn.cursor()
     cur.execute(
         """
-        SELECT d.id, d.player_id, d.resource, d.amount, d.created_at, p.name AS player_name
+        SELECT d.id, d.player_id, d.resource, d.amount, d.xp_granted, d.created_at, p.name AS player_name
         FROM alliance_donations d
         JOIN players p ON p.id = d.player_id
         WHERE d.alliance_id = ?
@@ -951,6 +973,9 @@ def get_alliance_state(player_id: int, conn=None) -> Dict[str, Any]:
 
         diplomacy_unlocked = building_level(buildings, "diplomacy_center") >= 1
         logo_fields = _alliance_logo_payload(aid, alliance_row.get("logo_url"), conn)
+        recent_donations = _recent_donations(aid, conn)
+        last_donation_xp = int(recent_donations[0].get("xp_granted") or 0) if recent_donations else 0
+        projects_avail = enrich_available_projects(projects_avail, buildings=buildings)
         base.update(
             {
                 "in_alliance": True,
@@ -973,8 +998,14 @@ def get_alliance_state(player_id: int, conn=None) -> Dict[str, Any]:
                 "pool": pool_data["pool"],
                 "pool_cap": pool_data["cap"],
                 "pool_cap_bonus_pct": pool_data["cap_bonus_pct"],
+                "donation_limits": donation_limits_for_pool(
+                    pool_data["pool"],
+                    pool_data["cap"],
+                    projects_avail,
+                ),
                 "my_donations": _player_donation_totals(player_id, aid, conn),
-                "recent_donations": _recent_donations(aid, conn),
+                "recent_donations": recent_donations,
+                "last_donation_xp": last_donation_xp,
                 "buildings": buildings,
                 "technologies": techs,
                 "bonus_chips": compute_bonus_chips(techs),
@@ -1775,6 +1806,19 @@ def donate_to_alliance(player_id: int, resource: str, amount: int, conn=None) ->
         cap_val = int(cap.get(res) or 0)
         if current >= cap_val or current + amt > cap_val:
             raise ValueError("pool_cap_exceeded")
+
+        buildings = _load_buildings(aid, conn)
+        techs = _load_techs(aid, conn)
+        level = alliance_level_from_xp(int(alliance_row.get("alliance_xp") or 0))
+        projects_avail = available_projects(
+            alliance_level=level,
+            buildings=buildings,
+            techs=techs,
+            trade_coord_level=tech_level(techs, "trade_coordination"),
+        )
+        max_donate = int(donation_limits_for_pool(pool, cap, projects_avail).get(res) or 0)
+        if amt > max_donate:
+            raise ValueError("donation_exceeds_need")
 
         xp_today = _donation_xp_today(player_id, conn)
         xp_room = max(0, DONATION_XP_DAILY_CAP - xp_today)

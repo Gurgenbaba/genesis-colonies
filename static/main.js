@@ -188,6 +188,7 @@
     "[data-auction-bid-input]",
     "[data-scrap-qty]",
     "[data-logistics-resource]",
+    ".alliance-hub-donate-input",
   ].join(",");
 
   let _numInputDelegationBound = false;
@@ -14390,6 +14391,9 @@
     if (key === "pool_cap_exceeded") {
       return t("alliance_err_pool_cap_exceeded", "Allianzkasse ist voll.");
     }
+    if (key === "donation_exceeds_need") {
+      return t("alliance_err_donation_exceeds_need", "Spende übersteigt den noch benötigten Betrag.");
+    }
     if (key === "insufficient_resources") {
       return t("alliance_err_insufficient_resources", "Nicht genug Ressourcen auf dem aktiven Planeten.");
     }
@@ -14413,15 +14417,30 @@
     ["metal", "crystal", "fuel_cells"].forEach((res) => {
       const val = Number(state.pool?.[res] ?? 0);
       const cap = Number(state.pool_cap?.[res] ?? 0);
+      const maxVal = Number(state.donation_limits?.[res] ?? Math.max(0, cap - val));
       const valEl = page.querySelector(`[data-pool-val="${res}"]`);
       const capEl = page.querySelector(`[data-pool-cap="${res}"]`);
       const fillEl = page.querySelector(`[data-pool-fill="${res}"]`);
+      const input = page.querySelector(`[data-donate-amount="${res}"]`);
+      const btn = page.querySelector(`[data-donate-btn="${res}"]`);
       if (valEl) valEl.textContent = fmt(val);
       if (capEl) capEl.textContent = fmt(cap);
       if (fillEl) {
         const pct = cap > 0 ? Math.min(100, (val / cap) * 100) : 0;
         fillEl.style.width = `${pct}%`;
       }
+      if (input) {
+        input.dataset.inputMax = String(maxVal);
+        input.disabled = maxVal <= 0;
+        input.placeholder =
+          maxVal > 0
+            ? t("alliance_donate_max_hint", "Max. %(max)s").replace("%(max)s", fmt(maxVal))
+            : t("alliance_donate_complete", "Vollständig");
+        if (!input.matches(":focus") && readNumberInput(input) > maxVal) {
+          setNumberInputValue(input, maxVal);
+        }
+      }
+      if (btn) btn.disabled = maxVal <= 0;
     });
     const summary = page.querySelector("[data-alliance-summary]");
     if (summary && state.alliance_level != null) {
@@ -14535,6 +14554,12 @@
       busyBtns.forEach((btn) => {
         btn.disabled = false;
       });
+      const stateEl = document.getElementById("alliance-page-state");
+      if (stateEl) {
+        try {
+          patchAllianceDom(JSON.parse(stateEl.textContent || "{}"));
+        } catch (_) {}
+      }
     }
   }
 
@@ -14807,6 +14832,21 @@
       const page = document.getElementById("alliance-page");
       if (!page || !page.contains(ev.target)) return;
 
+      const manageOpen = ev.target.closest("[data-alliance-manage-open]");
+      if (manageOpen) {
+        ev.preventDefault();
+        const dlg = document.getElementById("alliance-manage-modal");
+        if (dlg && typeof dlg.showModal === "function") dlg.showModal();
+        return;
+      }
+      const manageClose = ev.target.closest("[data-alliance-manage-close]");
+      if (manageClose) {
+        ev.preventDefault();
+        const dlg = document.getElementById("alliance-manage-modal");
+        if (dlg && dlg.open) dlg.close();
+        return;
+      }
+
       const submitBtn = ev.target.closest("[data-alliance-submit]");
       if (submitBtn) {
         ev.preventDefault();
@@ -14872,7 +14912,7 @@
         ev.preventDefault();
         const res = donateBtn.dataset.donateBtn;
         const input = page.querySelector(`[data-donate-amount="${res}"]`);
-        const amount = parseInt(input?.value || "0", 10);
+        const amount = readNumberInput(input);
         if (!amount) return;
         const out = await allianceAction(
           "/api/alliance/donate",
@@ -15137,6 +15177,7 @@
     bindAllianceOnce();
     const page = document.getElementById("alliance-page");
     if (!page || page.dataset.ready !== "1") return;
+    bindFormattedNumberInputs(page);
     if (window.history?.replaceState && window.location.search) {
       window.history.replaceState(null, "", "/alliance");
     }
@@ -15153,6 +15194,8 @@
         _allianceProfileFetch = null;
       }
       _allianceDetailAid = 0;
+      const manageDlg = document.getElementById("alliance-manage-modal");
+      if (manageDlg?.open) manageDlg.close();
     });
     const proj = page.querySelector("[data-alliance-active-project]");
     if (proj) {

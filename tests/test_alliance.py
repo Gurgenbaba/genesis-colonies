@@ -17,9 +17,11 @@ from game.alliance import (
     demote_member,
     disband_alliance,
     donate_to_alliance,
+    donation_limits_for_pool,
     finish_due_alliance_projects,
     get_alliance_effect_modifiers,
     get_alliance_expedition_loot_multiplier,
+    get_alliance_members,
     get_alliance_public_profile,
     get_alliance_state,
     get_player_alliance,
@@ -554,16 +556,21 @@ def test_alliance_member_hub_module(alliance_db):
     assert "alliance-hub-hero" in body
     assert "alliance-hub-logo-frame--hero" in body
     assert "alliance-hub-stats" in body
-    assert "alliance-hub-desc-card" in body
-    assert "alliance-hub-management" in body
+    assert "alliance-hub-xp-card" in body
+    assert "alliance-hub-hero-desc" in body
+    assert "data-alliance-manage-modal" in body
+    assert "data-alliance-manage-open" in body
     assert "data-alliance-logo-upload" in body
     assert "data-alliance-profile-form" in body
     assert 'data-alliance-submit="profile"' in body
+    assert "alliance-hub-project-effect-grid" in body
+    assert "alliance-hub-member-list" in body
     assert "alliance-hub-pool-tile" in body
     assert "data-pool-val=\"metal\"" in body
     assert "alliance-hub-tab" in body
     assert "data-alliance-disband" in body
     assert "data-alliance-leave" in body
+    assert "alliance-hub-management" not in body
     assert "gc-btn-danger" in body
 
 
@@ -602,6 +609,56 @@ def test_alliance_active_project_renders_localized_label(alliance_db):
     assert "alliance_headquarters" not in subtitle
     assert "Headquarters" in subtitle or "Hauptquartier" in subtitle
     assert "→ L1" in subtitle
+
+
+def test_alliance_member_roster_includes_contribution_fields(alliance_db):
+    conn = db()
+    try:
+        uid = _player(conn=conn)
+        create_alliance("ROST", "Roster", uid, conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(uid, conn=conn)["alliance_id"])
+        _fund_planet(uid, conn)
+        donate_to_alliance(uid, "metal", 5000, conn=conn)
+        conn.commit()
+        members = get_alliance_members(aid, conn=conn)
+    finally:
+        conn.close()
+    assert len(members) == 1
+    row = members[0]
+    assert row["donation_points"] >= 5000
+    assert row["xp_contribution"] >= 0
+    assert "joined_label" in row
+    assert "last_seen_label" in row
+
+
+def test_project_effect_preview_headquarters_members(alliance_db):
+    from game.alliance_catalog import project_effect_preview
+
+    fx = project_effect_preview(
+        "building",
+        "alliance_headquarters",
+        current_level=0,
+        target_level=1,
+        buildings={"alliance_headquarters": 0},
+    )
+    assert fx["current_value"] == 5
+    assert fx["next_value"] == 7
+
+
+def test_available_projects_include_effect_preview(alliance_db):
+    uid = _player()
+    conn = db()
+    try:
+        create_alliance("FX", "Effects", uid, conn=conn)
+        conn.commit()
+        state = get_alliance_state(uid, conn=conn)
+    finally:
+        conn.close()
+    projects = [p for p in state["available_projects"] if p["key"] == "alliance_headquarters"]
+    assert projects
+    assert "effect" in projects[0]
+    assert projects[0]["effect"]["next_value"] == 7
 
 
 def test_alliance_create_api_pjax(alliance_db):
@@ -1717,3 +1774,126 @@ def test_api_project_start_forbidden_includes_envelope(alliance_db):
     assert data["reason"] == "forbidden"
     assert "state" in data
     assert "alliance" in data
+
+
+def test_donation_limits_cap_by_cheapest_project(alliance_db):
+    uid = _player()
+    conn = db()
+    try:
+        create_alliance("LIM", "Limits", uid, conn=conn)
+        conn.commit()
+        state = get_alliance_state(uid, conn=conn)
+        cheapest = state["available_projects"][0]
+        need_metal = int(cheapest["cost"]["metal"])
+        aid = int(state["alliance_id"])
+        pool_metal = 10_000
+        conn.execute("UPDATE alliances SET pool_metal = ? WHERE id = ?;", (pool_metal, aid))
+        conn.commit()
+        state = get_alliance_state(uid, conn=conn)
+        cap_room = max(0, int(state["pool_cap"]["metal"]) - pool_metal)
+        expected = min(max(0, need_metal - pool_metal), cap_room)
+        assert state["donation_limits"]["metal"] == expected
+        assert expected > 0
+    finally:
+        conn.close()
+
+
+def test_donation_rejects_exceeds_project_need(alliance_db):
+    uid = _player()
+    conn = db()
+    try:
+        create_alliance("OVR", "Overspend", uid, conn=conn)
+        conn.commit()
+        _fund_planet(uid, conn)
+        state = get_alliance_state(uid, conn=conn)
+        max_metal = int(state["donation_limits"]["metal"])
+        assert max_metal > 0
+        with pytest.raises(ValueError, match="donation_exceeds_need"):
+            donate_to_alliance(uid, "metal", max_metal + 1, conn=conn)
+    finally:
+        conn.close()
+
+    client = _app_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+    resp = client.post(
+        "/api/alliance/donate",
+        json={"resource": "metal", "amount": max_metal + 1},
+        headers={"Content-Type": "application/json"},
+    )
+    assert resp.status_code == 400
+    data = resp.get_json()
+    assert data["ok"] is False
+    assert data["reason"] == "donation_exceeds_need"
+    assert "state" in data
+    assert "alliance" in data
+
+
+def test_donation_limit_zero_when_project_need_met(alliance_db):
+    uid = _player()
+    conn = db()
+    try:
+        create_alliance("FUL", "FullNeed", uid, conn=conn)
+        conn.commit()
+        state = get_alliance_state(uid, conn=conn)
+        cheapest = state["available_projects"][0]
+        cost = cheapest["cost"]
+        aid = int(state["alliance_id"])
+        conn.execute(
+            """
+            UPDATE alliances
+            SET pool_metal = ?, pool_crystal = ?, pool_fuel_cells = ?
+            WHERE id = ?;
+            """,
+            (int(cost["metal"]), int(cost["crystal"]), int(cost["fuel_cells"]), aid),
+        )
+        conn.commit()
+        state = get_alliance_state(uid, conn=conn)
+        assert state["donation_limits"]["metal"] == 0
+        assert state["donation_limits"]["crystal"] == 0
+        assert state["donation_limits"]["fuel_cells"] == 0
+    finally:
+        conn.close()
+
+
+def test_alliance_donate_template_caps_input(alliance_db):
+    uid = _player()
+    conn = db()
+    try:
+        create_alliance("TPL", "Template", uid, conn=conn)
+        conn.commit()
+    finally:
+        conn.close()
+
+    client = _app_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+    resp = client.get("/alliance", headers={"X-Requested-With": "XMLHttpRequest"})
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert 'class="gc-input gc-num-input alliance-hub-donate-input"' in html
+    assert "data-input-max=" in html
+    assert "alliance_donate_max_hint" in html or "Max." in html
+
+
+def test_alliance_js_donate_uses_read_number_input():
+    block = _alliance_js_block()
+    assert "readNumberInput(input)" in block
+    assert "parseInt(input?.value" not in block
+
+
+def test_donation_limits_helper_matches_state(alliance_db):
+    uid = _player()
+    conn = db()
+    try:
+        create_alliance("HLR", "Helper", uid, conn=conn)
+        conn.commit()
+        state = get_alliance_state(uid, conn=conn)
+        limits = donation_limits_for_pool(
+            state["pool"],
+            state["pool_cap"],
+            state["available_projects"],
+        )
+        assert limits == state["donation_limits"]
+    finally:
+        conn.close()
