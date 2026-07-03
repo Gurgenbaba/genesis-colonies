@@ -34800,6 +34800,82 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   padding-top: 10px;
   border-top: 1px solid var(--gc-border-subtle, #222);
 }
+.alliance-hub-member-table-wrap {
+  overflow-x: auto;
+  margin-bottom: 12px;
+}
+.alliance-hub-member-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+.alliance-hub-member-table th,
+.alliance-hub-member-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--gc-border-subtle, #222);
+  text-align: left;
+  vertical-align: middle;
+}
+.alliance-hub-member-table th {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.75;
+}
+.alliance-hub-member-cell-player {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.alliance-hub-member-meta {
+  font-size: 0.72rem;
+  opacity: 0.85;
+  white-space: nowrap;
+}
+.alliance-hub-project-card--locked {
+  opacity: 0.92;
+  border-style: dashed;
+}
+.alliance-hub-project-req-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.alliance-hub-project-req {
+  font-size: 0.72rem;
+  color: var(--gc-warn, #e8b84a);
+}
+.alliance-hub-unlock-card {
+  padding: 12px;
+  border: 1px solid var(--gc-border-subtle, #222);
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.alliance-hub-unlock-project {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0;
+}
+.alliance-hub-section-hint {
+  margin: 4px 0 8px;
+  font-size: 0.78rem;
+  opacity: 0.8;
+}
+.alliance-hub-hero-actions--chat {
+  margin-top: 4px;
+}
+@media (max-width: 720px) {
+  .alliance-hub-member-table th:nth-child(n+5),
+  .alliance-hub-member-table td:nth-child(n+5) {
+    display: none;
+  }
+}
 
 .alliance-hub-dip-badge {
   margin-left: auto;

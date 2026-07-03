@@ -1741,4 +1741,12 @@
   GC.resumeChatPolling = resumeChatPolling;
   GC.TChat = CHAT;
   GC.whisperPlayer = whisperTo;
+
+  async function openAllianceChat() {
+    await openTChat();
+    const rooms = CHAT.bootstrap?.rooms || [];
+    const room = rooms.find((r) => String(r.room_type || "") === "alliance" && r.id && !r.disabled);
+    if (room) await switchRoom(Number(room.id));
+  }
+  GC.openAllianceChat = openAllianceChat;
 })();

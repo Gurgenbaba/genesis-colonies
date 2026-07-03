@@ -14407,6 +14407,12 @@
     if (key === "donation_exceeds_need") {
       return t("alliance_err_donation_exceeds_need", "Spende übersteigt den noch benötigten Betrag.");
     }
+    if (key === "invalid_broadcast") {
+      return t("alliance_err_invalid_broadcast", "Betreff und Nachricht sind erforderlich.");
+    }
+    if (key === "no_recipients") {
+      return t("alliance_err_no_recipients", "Keine Empfänger in der Allianz.");
+    }
     if (key === "insufficient_resources") {
       return t("alliance_err_insufficient_resources", "Nicht genug Ressourcen auf dem aktiven Planeten.");
     }
@@ -14865,6 +14871,69 @@
         return;
       }
 
+      const broadcastOpen = ev.target.closest("[data-alliance-broadcast-open]");
+      if (broadcastOpen) {
+        ev.preventDefault();
+        const dlg = document.getElementById("alliance-broadcast-modal");
+        if (dlg && typeof dlg.showModal === "function") dlg.showModal();
+        return;
+      }
+      const broadcastClose = ev.target.closest("[data-alliance-broadcast-close]");
+      if (broadcastClose) {
+        ev.preventDefault();
+        const dlg = document.getElementById("alliance-broadcast-modal");
+        if (dlg && dlg.open) dlg.close();
+        return;
+      }
+      const broadcastSubmit = ev.target.closest("[data-alliance-broadcast-submit]");
+      if (broadcastSubmit) {
+        ev.preventDefault();
+        const form = broadcastSubmit.closest("form");
+        if (!form) return;
+        const fd = new FormData(form);
+        const subject = String(fd.get("subject") || "").trim();
+        const body = String(fd.get("body") || "").trim();
+        if (!subject || !body) {
+          showNotify(t("alliance_err_invalid_broadcast", "Betreff und Nachricht sind erforderlich."), "error");
+          return;
+        }
+        const out = await allianceAction(
+          "/api/alliance/broadcast",
+          { subject, body },
+          "alliance_broadcast"
+        );
+        if (out?.ok) {
+          const count = Number(out.broadcast_count || 0);
+          const tpl = t("alliance_broadcast_ok", "Rundmail an %(count)s Mitglieder gesendet.");
+          showNotify(tpl.replace("%(count)s", String(count)), "success");
+          form.reset();
+          const dlg = document.getElementById("alliance-broadcast-modal");
+          if (dlg?.open) dlg.close();
+        } else {
+          showNotify(allianceErrorMessage(out, "Rundmail fehlgeschlagen"), "error");
+        }
+        return;
+      }
+
+      const chatOpen = ev.target.closest("[data-alliance-chat-open]");
+      if (chatOpen) {
+        ev.preventDefault();
+        if (typeof GC.openAllianceChat === "function") {
+          void GC.openAllianceChat();
+        } else if (typeof GC.openTChat === "function") {
+          void GC.openTChat();
+        }
+        return;
+      }
+
+      const tabJump = ev.target.closest("[data-alliance-tab-jump]");
+      if (tabJump) {
+        ev.preventDefault();
+        const key = String(tabJump.dataset.allianceTabJump || "projects");
+        switchAllianceTab(page, key);
+        return;
+      }
+
       const submitBtn = ev.target.closest("[data-alliance-submit]");
       if (submitBtn) {
         ev.preventDefault();
@@ -15179,16 +15248,23 @@
 
       const tab = ev.target.closest("[data-alliance-tab]");
       if (tab) {
-        const key = tab.dataset.allianceTab;
-        page.querySelectorAll(".alliance-hub-tab, .alliance-tab").forEach((t) =>
-          t.classList.toggle("is-active", t === tab)
-        );
-        page.querySelectorAll("[data-alliance-panel]").forEach((p) => {
-          const show = p.dataset.alliancePanel === key;
-          p.hidden = !show;
-          p.classList.toggle("is-active", show);
-        });
+        ev.preventDefault();
+        switchAllianceTab(page, String(tab.dataset.allianceTab || ""));
+        return;
       }
+    });
+  }
+
+  function switchAllianceTab(page, key) {
+    if (!page || !key) return;
+    const tabBtn = page.querySelector(`[data-alliance-tab="${key}"]`);
+    page.querySelectorAll(".alliance-hub-tab, .alliance-tab").forEach((t) =>
+      t.classList.toggle("is-active", t === tabBtn)
+    );
+    page.querySelectorAll("[data-alliance-panel]").forEach((p) => {
+      const show = p.dataset.alliancePanel === key;
+      p.hidden = !show;
+      p.classList.toggle("is-active", show);
     });
   }
 
@@ -15215,6 +15291,8 @@
       _allianceDetailAid = 0;
       const manageDlg = document.getElementById("alliance-manage-modal");
       if (manageDlg?.open) manageDlg.close();
+      const broadcastDlg = document.getElementById("alliance-broadcast-modal");
+      if (broadcastDlg?.open) broadcastDlg.close();
     });
     const proj = page.querySelector("[data-alliance-active-project]");
     if (proj) {

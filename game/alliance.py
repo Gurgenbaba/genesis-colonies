@@ -30,6 +30,7 @@ from .alliance_catalog import (
     building_level,
     compute_bonus_chips,
     enrich_available_projects,
+    locked_next_projects,
     member_limit_from_buildings,
     pool_cap_from_projects,
     project_cost_and_duration,
@@ -989,6 +990,21 @@ def get_alliance_state(player_id: int, conn=None) -> Dict[str, Any]:
         recent_donations = _recent_donations(aid, conn)
         last_donation_xp = int(recent_donations[0].get("xp_granted") or 0) if recent_donations else 0
         projects_avail = enrich_available_projects(projects_avail, buildings=buildings)
+        locked_projects = locked_next_projects(
+            alliance_level=level,
+            buildings=buildings,
+            techs=techs,
+            trade_coord_level=trade_lvl,
+        )
+        diplomacy_unlock_project = None
+        if not diplomacy_unlocked:
+            for src in (projects_avail, locked_projects):
+                for proj in src:
+                    if proj.get("kind") == "building" and proj.get("key") == "diplomacy_center":
+                        diplomacy_unlock_project = proj
+                        break
+                if diplomacy_unlock_project:
+                    break
         base.update(
             {
                 "in_alliance": True,
@@ -1008,6 +1024,8 @@ def get_alliance_state(player_id: int, conn=None) -> Dict[str, Any]:
                 "is_leader": is_leader_role(role),
                 "viewer_player_id": int(player_id),
                 "can_manage": is_officer_role(role),
+                "can_broadcast": is_officer_role(role),
+                "chat_alliance_room_key": f"alliance:{aid}",
                 "pool": pool_data["pool"],
                 "pool_cap": pool_data["cap"],
                 "pool_cap_bonus_pct": pool_data["cap_bonus_pct"],
@@ -1024,9 +1042,11 @@ def get_alliance_state(player_id: int, conn=None) -> Dict[str, Any]:
                 "technologies": techs,
                 "bonus_chips": compute_bonus_chips(techs),
                 "available_projects": projects_avail,
+                "locked_projects": locked_projects,
                 "active_project": active,
                 "applications": _pending_applications(aid, conn) if can_manage_applications(role) else [],
                 "diplomacy_unlocked": diplomacy_unlocked,
+                "diplomacy_unlock_project": diplomacy_unlock_project,
                 "diplomacy": _diplomacy_rows(aid, conn) if diplomacy_unlocked else [],
                 "diplomacy_requests": _diplomacy_requests(aid, conn) if diplomacy_unlocked else {},
                 "catalog": {
@@ -1036,6 +1056,71 @@ def get_alliance_state(player_id: int, conn=None) -> Dict[str, Any]:
             }
         )
         return base
+    finally:
+        if own:
+            conn.close()
+
+
+def send_alliance_broadcast(
+    player_id: int,
+    subject: str,
+    body: str,
+    *,
+    conn=None,
+) -> int:
+    """Officer broadcast to all alliance members (sender does not receive a copy)."""
+    subj = str(subject or "").strip()
+    msg = str(body or "").strip()
+    if len(subj) < 3 or len(msg) < 3:
+        raise ValueError("invalid_broadcast")
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        membership = get_player_alliance(player_id, conn=conn)
+        if not membership or not is_officer_role(membership.get("role")):
+            raise ValueError("forbidden")
+        aid = int(membership["alliance_id"])
+        tag = str(membership.get("tag") or "")
+        cur = conn.cursor()
+        cur.execute("SELECT name FROM players WHERE id = ? LIMIT 1;", (int(player_id),))
+        prow = cur.fetchone()
+        sender_name = str(prow["name"] if prow else f"Player {player_id}")
+        from .i18n import get_player_locale, tr
+        from .messages import create_message
+
+        sent = 0
+        for member in get_alliance_members(aid, conn=conn):
+            pid = int(member["player_id"])
+            if pid == int(player_id):
+                continue
+            loc = get_player_locale(pid, conn=conn)
+            mail_subject = tr(
+                "alliance_broadcast_subject",
+                "[%(tag)s] %(subject)s",
+                locale=loc,
+                tag=tag,
+                subject=subj,
+            )
+            result = create_message(
+                pid,
+                mail_subject,
+                msg,
+                category="player",
+                sender_player_id=int(player_id),
+                sender_name=sender_name,
+                metadata={
+                    "alliance_id": aid,
+                    "kind": "alliance_broadcast",
+                    "alliance_tag": tag,
+                },
+                conn=conn,
+            )
+            if result.get("ok"):
+                sent += 1
+        if sent <= 0:
+            raise ValueError("no_recipients")
+        return sent
     finally:
         if own:
             conn.close()

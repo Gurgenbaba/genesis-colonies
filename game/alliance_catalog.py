@@ -371,6 +371,122 @@ def project_effect_preview(
     }
 
 
+def describe_missing_requirements(
+    req: Optional[Mapping[str, Any]],
+    *,
+    alliance_level: int,
+    buildings: Mapping[str, int],
+    techs: Mapping[str, int],
+) -> List[Dict[str, Any]]:
+    """Human-facing unlock blockers for locked alliance projects."""
+    if not req:
+        return []
+    missing: List[Dict[str, Any]] = []
+    need_level = int(req.get("alliance_level") or 0)
+    if alliance_level < need_level:
+        missing.append(
+            {
+                "type": "alliance_level",
+                "key": str(need_level),
+                "need": need_level,
+                "have": alliance_level,
+                "label_key": "alliance_req_alliance_level",
+            }
+        )
+    for b_key, need in (req.get("building") or {}).items():
+        have = building_level(buildings, str(b_key))
+        if have < int(need):
+            missing.append(
+                {
+                    "type": "building",
+                    "key": str(b_key),
+                    "need": int(need),
+                    "have": have,
+                    "label_key": ALLIANCE_BUILDINGS.get(str(b_key), {}).get("label_key") or f"alliance_building_{b_key}",
+                }
+            )
+    for t_key, need in (req.get("tech") or {}).items():
+        have = tech_level(techs, str(t_key))
+        if have < int(need):
+            missing.append(
+                {
+                    "type": "tech",
+                    "key": str(t_key),
+                    "need": int(need),
+                    "have": have,
+                    "label_key": ALLIANCE_TECHNOLOGIES.get(str(t_key), {}).get("label_key") or f"alliance_tech_{t_key}",
+                }
+            )
+    return missing
+
+
+def locked_next_projects(
+    *,
+    alliance_level: int,
+    buildings: Mapping[str, int],
+    techs: Mapping[str, int],
+    trade_coord_level: int = 0,
+) -> List[Dict[str, Any]]:
+    """Next building/tech upgrades blocked by requirements (for unlock hints)."""
+    locked: List[Dict[str, Any]] = []
+    avail_keys = {
+        (p["kind"], p["key"])
+        for p in available_projects(
+            alliance_level=alliance_level,
+            buildings=buildings,
+            techs=techs,
+            trade_coord_level=trade_coord_level,
+        )
+    }
+
+    def _append(kind: str, key: str, cfg: Mapping[str, Any], cur: int, nxt: int) -> None:
+        if (kind, key) in avail_keys:
+            return
+        if nxt > int(cfg.get("max_level") or 1):
+            return
+        if _requirements_met(
+            cfg.get("requires"),
+            alliance_level=alliance_level,
+            buildings=buildings,
+            techs=techs,
+        ):
+            return
+        cost, duration = project_cost_and_duration(kind, key, nxt, trade_coord_level=trade_coord_level)
+        row = {
+            "kind": kind,
+            "key": key,
+            "current_level": cur,
+            "target_level": nxt,
+            "cost": cost,
+            "duration_sec": duration,
+            "label_key": cfg.get("label_key"),
+            "missing_requirements": describe_missing_requirements(
+                cfg.get("requires"),
+                alliance_level=alliance_level,
+                buildings=buildings,
+                techs=techs,
+            ),
+        }
+        row["effect"] = project_effect_preview(
+            kind,
+            key,
+            current_level=cur,
+            target_level=nxt,
+            buildings=buildings,
+        )
+        locked.append(row)
+
+    for b_key, cfg in ALLIANCE_BUILDINGS.items():
+        cur = building_level(buildings, b_key)
+        _append("building", b_key, cfg, cur, cur + 1)
+    for t_key, cfg in ALLIANCE_TECHNOLOGIES.items():
+        cur = tech_level(techs, t_key)
+        _append("tech", t_key, cfg, cur, cur + 1)
+
+    locked.sort(key=lambda p: (0 if p["kind"] == "building" else 1, p["key"]))
+    return locked
+
+
 def enrich_available_projects(
     projects: List[Dict[str, Any]],
     *,

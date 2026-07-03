@@ -30,6 +30,7 @@ from game.alliance import (
     leave_alliance,
     promote_member,
     respond_application,
+    send_alliance_broadcast,
     send_diplomacy_request,
     set_member_role,
     start_alliance_project,
@@ -565,7 +566,12 @@ def test_alliance_member_hub_module(alliance_db):
     assert "data-alliance-profile-form" in body
     assert 'data-alliance-submit="profile"' in body
     assert "alliance-hub-project-effect-grid" in body
-    assert "alliance-hub-member-list" in body
+    assert "alliance-hub-member-table" in body
+    assert "data-alliance-chat-open" in body
+    assert "data-alliance-broadcast-open" in body
+    assert "alliance-broadcast-modal" in body
+    assert "alliance-hub-project-card--locked" in body
+    assert "alliance-hub-unlock-card" in body
     assert "alliance-hub-pool-tile" in body
     assert "data-pool-val=\"metal\"" in body
     assert "alliance-hub-tab" in body
@@ -1974,5 +1980,122 @@ def test_donation_limits_helper_matches_state(alliance_db):
             active_project=state.get("active_project"),
         )
         assert limits == state["donation_limits"]
+    finally:
+        conn.close()
+
+
+def test_locked_projects_include_tech_when_archive_missing(alliance_db):
+    uid = _player()
+    conn = db()
+    try:
+        create_alliance("LCK", "Locked", uid, conn=conn)
+        conn.commit()
+        state = get_alliance_state(uid, conn=conn)
+        locked = state.get("locked_projects") or []
+        tech_locked = [p for p in locked if p.get("kind") == "tech"]
+        assert tech_locked
+        assert all(p.get("missing_requirements") for p in tech_locked)
+        assert any(
+            req.get("key") == "research_archive"
+            for p in tech_locked
+            for req in (p.get("missing_requirements") or [])
+        )
+    finally:
+        conn.close()
+
+
+def test_diplomacy_unlock_project_in_state(alliance_db):
+    uid = _player()
+    conn = db()
+    try:
+        create_alliance("DIP", "Diplo", uid, conn=conn)
+        conn.commit()
+        state = get_alliance_state(uid, conn=conn)
+        assert state["diplomacy_unlocked"] is False
+        proj = state.get("diplomacy_unlock_project")
+        assert proj is not None
+        assert proj.get("key") == "diplomacy_center"
+    finally:
+        conn.close()
+
+
+def test_alliance_broadcast_officers_only(alliance_db):
+    leader = _player()
+    member = _player()
+    conn = db()
+    try:
+        create_alliance("BC", "Broadcast", leader, conn=conn)
+        conn.commit()
+        join_alliance_by_tag(member, "BC", conn=conn)
+        conn.commit()
+    finally:
+        conn.close()
+
+    with pytest.raises(ValueError, match="forbidden"):
+        send_alliance_broadcast(member, "Hello", "Alliance news")
+
+    conn = db()
+    try:
+        count = send_alliance_broadcast(leader, "Orders", "All hands on deck.", conn=conn)
+        conn.commit()
+        assert count == 1
+        row = conn.execute(
+            "SELECT subject, body FROM player_messages WHERE recipient_player_id = ? ORDER BY id DESC LIMIT 1;",
+            (member,),
+        ).fetchone()
+        assert row is not None
+        assert "Orders" in str(row["subject"])
+        assert "All hands on deck." in str(row["body"])
+        leader_mail = conn.execute(
+            "SELECT COUNT(*) AS c FROM player_messages WHERE recipient_player_id = ?;",
+            (leader,),
+        ).fetchone()
+        assert int(leader_mail["c"]) == 0
+    finally:
+        conn.close()
+
+
+def test_api_alliance_broadcast(alliance_db):
+    leader = _player()
+    member = _player()
+    conn = db()
+    try:
+        create_alliance("APIB", "ApiBroadcast", leader, conn=conn)
+        conn.commit()
+        join_alliance_by_tag(member, "APIB", conn=conn)
+        conn.commit()
+    finally:
+        conn.close()
+
+    client = _app_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = leader
+    resp = client.post(
+        "/api/alliance/broadcast",
+        json={"subject": "Rally", "body": "Meeting tonight at 20:00."},
+        headers={"Content-Type": "application/json"},
+    )
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["ok"] is True
+    assert data.get("broadcast_count") == 1
+    assert "alliance" in data
+
+
+def test_tech_projects_available_after_research_archive(alliance_db):
+    uid = _player()
+    conn = db()
+    try:
+        create_alliance("TEC", "Tech", uid, conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(uid, conn=conn)["alliance_id"])
+        conn.execute(
+            "INSERT INTO alliance_buildings (alliance_id, building_key, level) VALUES (?, 'research_archive', 1) ON CONFLICT(alliance_id, building_key) DO UPDATE SET level = 1;",
+            (aid,),
+        )
+        conn.commit()
+        state = get_alliance_state(uid, conn=conn)
+        tech_avail = [p for p in state["available_projects"] if p.get("kind") == "tech"]
+        assert tech_avail
     finally:
         conn.close()

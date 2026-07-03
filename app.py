@@ -2572,6 +2572,35 @@ def api_alliance_member_kick():
     return _run_alliance_mutation(user_id, "api_alliance_member_kick", mutate)
 
 
+@app.route("/api/alliance/broadcast", methods=["POST"])
+@require_login
+def api_alliance_broadcast():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+    data = request.get_json(silent=True) or {}
+    from game.alliance import send_alliance_broadcast
+
+    sent_holder: Dict[str, int] = {"count": 0}
+
+    def mutate(conn):
+        sent_holder["count"] = int(
+            send_alliance_broadcast(
+                user_id,
+                str(data.get("subject") or ""),
+                str(data.get("body") or ""),
+                conn=conn,
+            )
+        )
+
+    resp = _run_alliance_mutation(user_id, "api_alliance_broadcast", mutate)
+    payload = resp.get_json()
+    if payload and payload.get("ok"):
+        payload["broadcast_count"] = sent_holder["count"]
+        return jsonify(payload)
+    return resp
+
+
 @app.route("/api/alliance/disband", methods=["POST"])
 @require_login
 def api_alliance_disband():
