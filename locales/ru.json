@@ -5451,6 +5451,7 @@
   "alliance_donate_btn": "Donate",
   "alliance_donate_max_hint": "Max. %(max)s",
   "alliance_donate_complete": "Complete",
+  "alliance_donate_need_met": "Requirement met",
   "alliance_active_project": "Active project",
   "alliance_tab_members": "Members",
   "alliance_tab_projects": "Projects",

@@ -15395,6 +15395,11 @@ body.gc-techtree-media-zoom-open{
   padding: 6px 8px;
   height: 100%;
 }
+.fleet-resources-fieldset--inactive{
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
+}
 .fleet-send-compact .fleet-resources-fieldset--compact .gc-fieldset-legend{
   margin-bottom: 4px;
   font-size: 0.72rem;

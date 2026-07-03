@@ -370,7 +370,13 @@
               data-donate-amount="{{ res }}"
               data-input-max="{{ donate_max }}"
               {% if donate_max <= 0 %}disabled{% endif %}
-              placeholder="{{ T('alliance_donate_max_hint', 'Max. %(max)s', max=donate_max|fmt_int) }}">
+              {% if donate_max > 0 %}
+              placeholder="{{ T('alliance_donate_max_hint', 'Max. %(max)s', max=donate_max|fmt_int) }}"
+              {% elif pool_cap > 0 and pool_val >= pool_cap %}
+              placeholder="{{ T('alliance_donate_complete', 'Vollständig') }}"
+              {% else %}
+              placeholder="{{ T('alliance_donate_need_met', 'Bedarf gedeckt') }}"
+              {% endif %}>
             <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-donate-btn="{{ res }}"
               {% if donate_max <= 0 %}disabled{% endif %}>{{ T("alliance_donate_btn", "Spenden") }}</button>
           </div>
@@ -545,7 +551,7 @@
     </div>
 
     {% if st.can_manage %}
-    <dialog class="gc-modal alliance-hub-manage-modal" id="alliance-manage-modal" data-alliance-manage-modal hidden>
+    <dialog class="gc-modal alliance-hub-manage-modal" id="alliance-manage-modal" data-alliance-manage-modal>
       <div class="gc-modal-panel alliance-hub-manage-panel">
         <header class="gc-modal-header">
           <h3 class="gc-modal-title">{{ T("alliance_management_title", "Verwaltung") }}</h3>

@@ -523,18 +523,25 @@ def donation_limits_for_pool(
     pool: Mapping[str, int],
     cap: Mapping[str, int],
     available_projects: List[Dict[str, Any]],
+    *,
+    active_project: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, int]:
-    """Max donate per resource: pool headroom capped by cheapest project remaining need."""
+    """Max donate per resource: pool headroom, capped by next project need when idle."""
     limits: Dict[str, int] = {}
     for res in VALID_DONATION_RESOURCES:
         pool_val = int(pool.get(res) or 0)
         cap_val = int(cap.get(res) or 0)
         room = max(0, cap_val - pool_val)
+        if active_project:
+            limits[res] = room
+            continue
         if available_projects:
             target = available_projects[0]
             need = int((target.get("cost") or {}).get(res) or 0)
-            room = min(room, max(0, need - pool_val))
-        limits[res] = room
+            project_room = max(0, need - pool_val)
+            limits[res] = room if project_room <= 0 else min(room, project_room)
+        else:
+            limits[res] = room
     return limits
 
 
@@ -639,13 +646,19 @@ def _notify_officers_donation(
                 locale=loc,
                 tag=tag,
             )
+            res_key = str(resource or "").strip().lower()
+            resource_label = tr(
+                f"resource_{res_key}",
+                res_key.replace("_", " ").title(),
+                locale=loc,
+            )
             body = tr(
                 "alliance_msg_donation_body",
                 "%(name)s donated %(amount)s %(resource)s.",
                 locale=loc,
                 name=str(donor_name or ""),
                 amount=int(amount),
-                resource=str(resource or ""),
+                resource=resource_label,
             )
             create_message(
                 officer_id,
@@ -1002,6 +1015,7 @@ def get_alliance_state(player_id: int, conn=None) -> Dict[str, Any]:
                     pool_data["pool"],
                     pool_data["cap"],
                     projects_avail,
+                    active_project=active,
                 ),
                 "my_donations": _player_donation_totals(player_id, aid, conn),
                 "recent_donations": recent_donations,
@@ -1816,7 +1830,16 @@ def donate_to_alliance(player_id: int, resource: str, amount: int, conn=None) ->
             techs=techs,
             trade_coord_level=tech_level(techs, "trade_coordination"),
         )
-        max_donate = int(donation_limits_for_pool(pool, cap, projects_avail).get(res) or 0)
+        active = _active_project(aid, conn)
+        max_donate = int(
+            donation_limits_for_pool(
+                pool,
+                cap,
+                projects_avail,
+                active_project=active,
+            ).get(res)
+            or 0
+        )
         if amt > max_donate:
             raise ValueError("donation_exceeds_need")
 

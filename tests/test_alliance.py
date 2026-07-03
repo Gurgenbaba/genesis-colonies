@@ -559,6 +559,7 @@ def test_alliance_member_hub_module(alliance_db):
     assert "alliance-hub-xp-card" in body
     assert "alliance-hub-hero-desc" in body
     assert "data-alliance-manage-modal" in body
+    assert 'id="alliance-manage-modal" hidden' not in body
     assert "data-alliance-manage-open" in body
     assert "data-alliance-logo-upload" in body
     assert "data-alliance-profile-form" in body
@@ -1829,15 +1830,13 @@ def test_donation_rejects_exceeds_project_need(alliance_db):
     assert "alliance" in data
 
 
-def test_donation_limit_zero_when_project_need_met(alliance_db):
+def test_donation_limit_zero_when_pool_full(alliance_db):
     uid = _player()
     conn = db()
     try:
-        create_alliance("FUL", "FullNeed", uid, conn=conn)
+        create_alliance("FUL", "FullPool", uid, conn=conn)
         conn.commit()
         state = get_alliance_state(uid, conn=conn)
-        cheapest = state["available_projects"][0]
-        cost = cheapest["cost"]
         aid = int(state["alliance_id"])
         conn.execute(
             """
@@ -1845,7 +1844,12 @@ def test_donation_limit_zero_when_project_need_met(alliance_db):
             SET pool_metal = ?, pool_crystal = ?, pool_fuel_cells = ?
             WHERE id = ?;
             """,
-            (int(cost["metal"]), int(cost["crystal"]), int(cost["fuel_cells"]), aid),
+            (
+                int(state["pool_cap"]["metal"]),
+                int(state["pool_cap"]["crystal"]),
+                int(state["pool_cap"]["fuel_cells"]),
+                aid,
+            ),
         )
         conn.commit()
         state = get_alliance_state(uid, conn=conn)
@@ -1855,6 +1859,80 @@ def test_donation_limit_zero_when_project_need_met(alliance_db):
     finally:
         conn.close()
 
+
+def test_donation_limits_allow_pool_stockpile_when_project_need_met(alliance_db):
+    uid = _player()
+    conn = db()
+    try:
+        create_alliance("STK", "Stockpile", uid, conn=conn)
+        conn.commit()
+        state = get_alliance_state(uid, conn=conn)
+        cheapest = state["available_projects"][0]
+        need_metal = int(cheapest["cost"]["metal"])
+        aid = int(state["alliance_id"])
+        conn.execute("UPDATE alliances SET pool_metal = ? WHERE id = ?;", (need_metal, aid))
+        conn.commit()
+        state = get_alliance_state(uid, conn=conn)
+        cap_room = max(0, int(state["pool_cap"]["metal"]) - need_metal)
+        assert state["donation_limits"]["metal"] == cap_room
+        assert cap_room > 0
+    finally:
+        conn.close()
+
+
+def test_donation_limits_active_project_uses_pool_cap_only(alliance_db):
+    uid = _player()
+    conn = db()
+    try:
+        create_alliance("ACT", "Active", uid, conn=conn)
+        conn.commit()
+        _fund_planet(uid, conn, metal=500_000, crystal=500_000, fuel=200_000)
+        state = get_alliance_state(uid, conn=conn)
+        aid = int(state["alliance_id"])
+        cheapest = state["available_projects"][0]
+        cost = cheapest["cost"]
+        conn.execute(
+            """
+            UPDATE alliances
+            SET pool_metal = ?, pool_crystal = ?, pool_fuel_cells = ?
+            WHERE id = ?;
+            """,
+            (int(cost["metal"]), int(cost["crystal"]), int(cost["fuel_cells"]), aid),
+        )
+        conn.commit()
+        start_alliance_project(uid, cheapest["kind"], cheapest["key"], conn=conn)
+        conn.commit()
+        state = get_alliance_state(uid, conn=conn)
+        assert state["active_project"] is not None
+        pool_metal = int(state["pool"]["metal"])
+        cap_metal = int(state["pool_cap"]["metal"])
+        assert state["donation_limits"]["metal"] == max(0, cap_metal - pool_metal)
+    finally:
+        conn.close()
+
+
+def test_donation_notify_uses_localized_resource(alliance_db):
+    uid = _player()
+    conn = db()
+    try:
+        create_alliance("MSG", "Messages", uid, conn=conn)
+        conn.commit()
+        _fund_planet(uid, conn)
+        donate_to_alliance(uid, "metal", 100, conn=conn)
+        conn.commit()
+        row = conn.execute(
+            """
+            SELECT body FROM player_messages
+            WHERE recipient_player_id = ?
+            ORDER BY id DESC LIMIT 1;
+            """,
+            (uid,),
+        ).fetchone()
+        assert row is not None
+        body = str(row["body"])
+        assert "Ferronit" in body
+    finally:
+        conn.close()
 
 def test_alliance_donate_template_caps_input(alliance_db):
     uid = _player()
@@ -1893,6 +1971,7 @@ def test_donation_limits_helper_matches_state(alliance_db):
             state["pool"],
             state["pool_cap"],
             state["available_projects"],
+            active_project=state.get("active_project"),
         )
         assert limits == state["donation_limits"]
     finally:

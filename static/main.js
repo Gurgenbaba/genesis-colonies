@@ -2174,6 +2174,7 @@
       const skipInitFetch = shouldSkipInitGameStateAfterSsr(page, opts) || skipGameState;
       if (!skipInitFetch && typeof GC.refreshGameState === "function") {
         await GC.refreshGameState("page_init");
+        preserveFleetHudAcrossNavigation();
       } else {
         if (skipInitFetch) {
           console.debug("[GC] initPage skip game-state (SSR fresh)", page, opts && opts.pjax ? "pjax" : "");
@@ -9722,13 +9723,25 @@
     }
     if (state && state.active_fleets !== undefined) {
       bumpFleetHudActionVersion(state);
-      renderGlobalFleetHud(state.active_fleets, {
-        reason: reasonStr,
-        stateVersion: extractStateVersion(state),
-        stateContext: state,
-        authoritativeFleetHud: true,
-        allowEmptyClear: isMutationStatePatchReason(reasonStr),
-      });
+      const incoming = normalizeActiveFleetsPayload(state.active_fleets);
+      const stickyCount = Number(_fleetHudStickyPayload?.count || 0);
+      const serverConfirmedEmpty = isFleetHudConfirmedEmpty(state.active_fleets);
+      if (stickyCount > 0 && incoming.count === 0 && !serverConfirmedEmpty) {
+        renderGlobalFleetHud(_fleetHudStickyPayload, {
+          reason: reasonStr,
+          sticky: true,
+          authoritativeFleetHud: false,
+          allowEmptyClear: false,
+        });
+      } else {
+        renderGlobalFleetHud(state.active_fleets, {
+          reason: reasonStr,
+          stateVersion: extractStateVersion(state),
+          stateContext: state,
+          authoritativeFleetHud: true,
+          allowEmptyClear: isMutationStatePatchReason(reasonStr) && serverConfirmedEmpty,
+        });
+      }
     } else if (isMutationStatePatchReason(reasonStr)) {
       bumpFleetHudActionVersion(state || { server_time: getTimerServerNow() });
     }
@@ -14432,10 +14445,15 @@
       if (input) {
         input.dataset.inputMax = String(maxVal);
         input.disabled = maxVal <= 0;
-        input.placeholder =
-          maxVal > 0
-            ? t("alliance_donate_max_hint", "Max. %(max)s").replace("%(max)s", fmt(maxVal))
-            : t("alliance_donate_complete", "Vollständig");
+        let hint;
+        if (maxVal > 0) {
+          hint = t("alliance_donate_max_hint", "Max. %(max)s").replace("%(max)s", fmt(maxVal));
+        } else if (cap > 0 && val >= cap) {
+          hint = t("alliance_donate_complete", "Vollständig");
+        } else {
+          hint = t("alliance_donate_need_met", "Bedarf gedeckt");
+        }
+        input.placeholder = hint;
         if (!input.matches(":focus") && readNumberInput(input) > maxVal) {
           setNumberInputValue(input, maxVal);
         }
@@ -14920,6 +14938,7 @@
           "alliance_donate"
         );
         if (!out?.ok) showNotify(allianceErrorMessage(out, "Spende fehlgeschlagen"), "error");
+        else if (input) setNumberInputValue(input, 0);
         return;
       }
 
@@ -16605,7 +16624,10 @@
       const mission = form.querySelector("[data-fleet-mission]")?.value || "transport";
       const resFieldset = page.querySelector("[data-fleet-resources-fieldset]");
       const showResources = ["transport", "deploy", "colonize", "collect"].includes(mission);
-      if (resFieldset) resFieldset.hidden = !showResources;
+      if (resFieldset) {
+        resFieldset.classList.toggle("fleet-resources-fieldset--inactive", !showResources);
+        resFieldset.setAttribute("aria-hidden", showResources ? "false" : "true");
+      }
       const expoHoursRow = page.querySelector("[data-fleet-expedition-hours-row]");
       if (expoHoursRow) expoHoursRow.hidden = !shouldShowExpeditionHours(page, mission);
       setColonizeRowVisible(page, mission);
@@ -18909,6 +18931,7 @@
         (nextUnitFinish > 0 && nextUnitFinish <= now);
       if (!overdue) {
         _renderProductionMiniQueue("shipyard-mini-queue", qd, { domain: "shipyard" });
+        patchShipyardCardQueues(page, qd);
         GC.startProgressTicker();
         return;
       }
@@ -18920,7 +18943,7 @@
     if (!jobs.length) _finishRefreshArmed.shipyard = false;
     else clearFinishRefreshArmed("shipyard", jobs);
 
-    clearAllProductionCardQueues(page);
+    patchShipyardCardQueues(page, qd);
     GC.startProgressTicker();
   }
 
@@ -19636,6 +19659,7 @@
         (nextUnitFinish > 0 && nextUnitFinish <= now);
       if (!overdue) {
         _renderProductionMiniQueue("defense-mini-queue", qd, { domain: "defense" });
+        patchDefenseCardQueues(page, qd);
         GC.startProgressTicker();
         return;
       }
@@ -19647,7 +19671,7 @@
     if (!jobs.length) _finishRefreshArmed.defense = false;
     else clearFinishRefreshArmed("defense", jobs);
 
-    clearAllProductionCardQueues(page);
+    patchDefenseCardQueues(page, qd);
     GC.startProgressTicker();
   }
 
