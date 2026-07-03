@@ -69,9 +69,9 @@ DEFAULT_GAME_SETTINGS: Dict[str, str] = {
     # historischer Alias (build_speed)
     "speed": "1.1",
 
-    # --- Score Defaults (Ranking) — Preset B: building 1.0, research 0.7 ---
+    # --- Score Defaults (Ranking) — building 1.0, research 0.01 (Admin live-tunable) ---
     "score_weight_buildings": "1.0",
-    "score_weight_research": "0.7",
+    "score_weight_research": "0.01",
     "score_weight_fleet": "1.0",
     "score_cost_exponent": "1.0",  # 1.0 = linear, >1 = stärker
     "score_softcap": "0.0",        # 0 = aus, z.B. 250000

@@ -42,8 +42,8 @@ def _grant_ship_test_prereqs(cur, planet_id: int, user_id: int) -> None:
     for tech in ('energy_tech', 'mining_tech', 'drone_tech', 'engine_tech', 'navigation_tech', 'weapon_tech', 'armor_tech', 'storage_tech', 'fuel_efficiency', 'shield_tech'):
         cur.execute('\n            INSERT INTO research_levels (user_id, tech_key, level)\n            VALUES (?, ?, ?)\n            ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;\n            ', (int(user_id), tech, 10))
 
-def test_all_nine_active_ship_types_exist():
-    assert len(ACTIVE_SHIP_KEYS) == 9
+def test_all_active_ship_types_exist():
+    assert len(ACTIVE_SHIP_KEYS) == 10
     for key in ACTIVE_SHIP_KEYS:
         assert key in SHIPS
         spec = SHIPS[key]

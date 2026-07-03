@@ -827,3 +827,64 @@ def test_delete_player_removes_user_and_planets(app_client):
     assert audit.status_code == 200
     entries = audit.get_json()["entries"]
     assert any(int(e.get("target_id") or 0) == user_id for e in entries)
+
+
+def test_delete_player_with_activity_xp_log(app_client):
+    client, admin_id, user_id = app_client
+    _login(client, "admin_cc", "adminpass123")
+
+    from game.db import table_exists
+    from game.models import db
+    from game.planet_evolution.repository import get_context_planet
+
+    conn = db()
+    try:
+        username = conn.execute(
+            "SELECT username FROM users WHERE id = ?;", (user_id,)
+        ).fetchone()["username"]
+        if table_exists(conn, "activity_xp_log"):
+            planet = get_context_planet(player_id=user_id, conn=conn)
+            conn.execute(
+                """
+                INSERT INTO activity_xp_log (
+                    player_id, planet_id, source_key, amount, day_bucket, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?);
+                """,
+                (user_id, int(planet["id"]), "test", 10, 1, time.time()),
+            )
+            conn.commit()
+    finally:
+        conn.close()
+
+    r = client.post(
+        f"/api/admin/player/{user_id}/delete",
+        json={"confirm": True, "expected_username": username},
+    )
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["ok"] is True
+    assert data["deleted"]["player_id"] == user_id
+
+    conn = db()
+    try:
+        assert conn.execute("SELECT 1 FROM users WHERE id = ?;", (user_id,)).fetchone() is None
+        if table_exists(conn, "activity_xp_log"):
+            assert (
+                conn.execute(
+                    "SELECT 1 FROM activity_xp_log WHERE player_id = ?;", (user_id,)
+                ).fetchone()
+                is None
+            )
+    finally:
+        conn.close()
+
+
+def test_admin_delete_error_envelope(app_client):
+    client, admin_id, user_id = app_client
+    _login(client, "admin_cc", "adminpass123")
+    r = client.post(f"/api/admin/player/{user_id}/delete", json={})
+    assert r.status_code == 400
+    data = r.get_json()
+    assert data["ok"] is False
+    assert data["error"] == "confirm_required"
+    assert data.get("message")

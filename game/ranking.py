@@ -116,7 +116,7 @@ def _score_exponent(conn) -> float:
 
 
 def _score_weights(conn) -> Tuple[float, float, float]:
-    from .models import get_game_settings
+    from .models import DEFAULT_GAME_SETTINGS, get_game_settings
 
     settings = get_game_settings(conn=conn) or {}
     try:
@@ -124,9 +124,10 @@ def _score_weights(conn) -> Tuple[float, float, float]:
     except (TypeError, ValueError):
         w_build = 1.0
     try:
-        w_research = float(settings.get("score_weight_research", 1.0) or 1.0)
+        default_research = float(DEFAULT_GAME_SETTINGS.get("score_weight_research", "0.01"))
+        w_research = float(settings.get("score_weight_research", default_research) or default_research)
     except (TypeError, ValueError):
-        w_research = 1.0
+        w_research = float(DEFAULT_GAME_SETTINGS.get("score_weight_research", "0.01"))
     try:
         w_fleet = float(settings.get("score_weight_fleet", 1.0) or 1.0)
     except (TypeError, ValueError):

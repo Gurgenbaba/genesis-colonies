@@ -207,6 +207,27 @@ Forschung löst Engpässe imperiumsweit: mehr Lager, schnellere Bauzeiten, effiz
 - expansion
 - planet_evolution
 
+---
+
+## Ranking / Forschungspunkte
+
+Owner: `game/ranking.py` → `compute_player_scores()`.
+
+| Regel | Detail |
+|-------|--------|
+| Basis | Pro Tech: **kumulative** investierte Kosten (Ferronit + Crytite) für Level 1 … aktuelles Level |
+| Formel pro Tech | `_sum_costs_up_to_level(base_m, base_c, cost_factor, level)` — identisch zur Gebäude-Logik |
+| Keine Doppelwertung | Nur `research_levels.level`; Queue-Ziellevel und Speed-Boni fließen **nicht** in Punkte ein |
+| Skalierung | `score_cost_exponent` (game_settings, default 1.0) auf die Summe aller Techs |
+| Gewicht | `score_weight_research` (game_settings, empfohlener Default **0.01**) |
+| Formel | **Research Score** = kumulative Forschungskosten (Ferronit + Crytite) × `score_weight_research` |
+| Live-Tuning | Admin Panel → Balance; überschreibt nur den gespeicherten Wert, kein Auto-Migrate auf Live-DBs |
+| Recompute | Admin → Ranking neu berechnen (`/api/admin/ranking/recompute`) oder `recompute_and_upsert_score()` |
+
+Sprünge nach abgeschlossener Forschung sind normal: jedes Level addiert die **vollen** Level-Kosten zur kumulativen Summe (kein „nur Delta“-Anzeige in der UI).
+
+---
+
 ## Commander Tips
 
 - Forschung sollte selten stillstehen — wie Bau-Queue parallel halten.

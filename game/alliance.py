@@ -1665,6 +1665,8 @@ def disband_alliance(alliance_id: int, actor_id: int, conn=None) -> None:
         _require_membership_in_alliance(actor_id, aid, conn, leader_only=True)
         if own:
             begin_write_transaction(conn)
+        if table_exists(conn, "gd_alliance_blocs"):
+            conn.execute("DELETE FROM gd_alliance_blocs WHERE alliance_id = ?;", (aid,))
         conn.execute("DELETE FROM alliances WHERE id = ?;", (aid,))
         if own:
             commit(conn)

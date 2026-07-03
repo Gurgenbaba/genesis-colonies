@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 import uuid
 from pathlib import Path
@@ -550,11 +551,57 @@ def test_alliance_member_hub_module(alliance_db):
     resp = client.get("/alliance", headers={"X-Requested-With": "XMLHttpRequest"})
     body = resp.get_data(as_text=True)
     assert "alliance-hub-module" in body
-    assert "alliance-hub-command" in body
+    assert "alliance-hub-hero" in body
+    assert "alliance-hub-logo-frame--hero" in body
+    assert "alliance-hub-stats" in body
+    assert "alliance-hub-desc-card" in body
+    assert "alliance-hub-management" in body
+    assert "data-alliance-logo-upload" in body
+    assert "data-alliance-profile-form" in body
+    assert 'data-alliance-submit="profile"' in body
     assert "alliance-hub-pool-tile" in body
     assert "data-pool-val=\"metal\"" in body
     assert "alliance-hub-tab" in body
+    assert "data-alliance-disband" in body
+    assert "data-alliance-leave" in body
     assert "gc-btn-danger" in body
+
+
+def test_alliance_active_project_renders_localized_label(alliance_db):
+    conn = db()
+    try:
+        uid = _player(conn=conn)
+        create_alliance("PRJ", "Project UI", uid, conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(uid, conn=conn)["alliance_id"])
+        _fund_planet(uid, conn)
+        conn.execute(
+            "UPDATE alliances SET pool_metal = 500000, pool_crystal = 500000, pool_fuel_cells = 200000 WHERE id = ?;",
+            (aid,),
+        )
+        conn.commit()
+        start_alliance_project(uid, "building", "alliance_headquarters", conn=conn)
+        conn.commit()
+    finally:
+        conn.close()
+
+    client = _app_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+    resp = client.get("/alliance", headers={"X-Requested-With": "XMLHttpRequest"})
+    body = resp.get_data(as_text=True)
+    assert "data-alliance-active-project" in body
+    assert "data-project-eta" in body
+
+    sub_match = re.search(
+        r'data-alliance-active-project[\s\S]*?alliance-hub-section-sub">([^<]+)',
+        body,
+    )
+    assert sub_match, "active project subtitle missing"
+    subtitle = sub_match.group(1)
+    assert "alliance_headquarters" not in subtitle
+    assert "Headquarters" in subtitle or "Hauptquartier" in subtitle
+    assert "→ L1" in subtitle
 
 
 def test_alliance_create_api_pjax(alliance_db):
@@ -1258,8 +1305,75 @@ def test_api_profile_update(alliance_db):
     assert data["alliance"]["tag"] == "AP2"
     assert data["alliance"]["name"] == "Updated Name"
 
+    conn = db()
+    try:
+        aid = int(
+            conn.execute(
+                "SELECT alliance_id FROM alliance_members WHERE player_id = ? LIMIT 1;",
+                (leader,),
+            ).fetchone()["alliance_id"]
+        )
+        row = conn.execute(
+            "SELECT tag, name, description FROM alliances WHERE id = ?;",
+            (aid,),
+        ).fetchone()
+        assert row["tag"] == "AP2"
+        assert row["name"] == "Updated Name"
+        assert row["description"] == "Updated desc"
+    finally:
+        conn.close()
 
-def test_donation_rejects_insufficient_resources(alliance_db):
+
+def test_api_profile_update_error_envelope(alliance_db):
+    leader = _player()
+    conn = db()
+    try:
+        create_alliance("ERR1", "Error One", leader, conn=conn)
+        conn.commit()
+    finally:
+        conn.close()
+
+    client = _app_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = leader
+    resp = client.post(
+        "/api/alliance/profile",
+        json={"tag": "", "name": ""},
+        headers={"Content-Type": "application/json"},
+    )
+    assert resp.status_code == 400
+    data = resp.get_json()
+    assert data["ok"] is False
+    assert data["error"] in ("invalid_alliance", "invalid_tag")
+    assert data.get("message")
+
+
+def test_api_disband_persists(alliance_db):
+    leader = _player()
+    conn = db()
+    try:
+        create_alliance("DSB2", "Disband API", leader, conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(leader, conn=conn)["alliance_id"])
+    finally:
+        conn.close()
+
+    client = _app_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = leader
+    resp = client.post("/api/alliance/disband", json={}, headers={"Content-Type": "application/json"})
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["ok"] is True
+    assert data["alliance"]["in_alliance"] is False
+
+    conn = db()
+    try:
+        assert conn.execute("SELECT id FROM alliances WHERE id = ?;", (aid,)).fetchone() is None
+        assert get_player_alliance(leader, conn=conn) is None
+    finally:
+        conn.close()
+
     conn = db()
     try:
         uid = _player(conn=conn)

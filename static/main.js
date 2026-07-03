@@ -14489,7 +14489,7 @@
       pct = Math.min(100, Math.max(Number(serverPct), (elapsed / durationSec) * 100));
     }
     if (fill) fill.style.width = pct.toFixed(1) + "%";
-    if (eta) eta.textContent = GC.formatCountdown ? GC.formatCountdown(finishAt - now) : String(Math.ceil(finishAt - now)) + "s";
+    if (eta) eta.textContent = formatCountdownRemain(Math.max(0, Math.ceil(finishAt - now)));
   }
 
   let _allianceActionInFlight = false;

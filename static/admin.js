@@ -105,6 +105,14 @@
     host.textContent = msg;
   }
 
+  /** Panel alert + global toast for failed admin API actions. */
+  function adminFail(res, fallback) {
+    const msg = res?.message || res?.error || fallback || t("admin_action_failed", "Aktion fehlgeschlagen");
+    showAlert(msg, "error");
+    notify(msg, "error");
+    return msg;
+  }
+
   /** Dedicated admin fetch – never uses GC.fetchJSON (game auth redirect logic). */
   const ADMIN_API_TIMEOUT_MS = 45000;
 
@@ -917,7 +925,10 @@
     const host = qs("#admin-news-repo-audit");
     if (!host) return;
     const data = await adminGet("/api/admin/universe-news/repository-audit");
-    if (!data.ok) return;
+    if (!data.ok) {
+      adminFail(data, t("admin_action_failed", "Aktion fehlgeschlagen"));
+      return;
+    }
     host.innerHTML = `
       <strong>${esc(t("admin_news_repo_title", "Repository-Historie"))}</strong>
       · Git: ${data.git_available ? esc(t("admin_news_repo_git_ok", "verfügbar")) : esc(t("admin_news_repo_git_missing", "nicht verfügbar"))}
@@ -3002,7 +3013,7 @@
         }
         await searchAdminPlayers();
         await syncAfterAdminChange("admin_player_delete");
-      } else showAlert(res.message || res.error, "error");
+      } else adminFail(res, t("admin_player_delete_failed", "Account konnte nicht gelöscht werden."));
       return res;
     }
     if (act === "player-effects") {
@@ -3032,7 +3043,7 @@
       if (res.ok) {
         notify(t("admin_action_success", "OK"), "success");
         await syncAfterAdminChange("admin_repair_homeworld");
-      }
+      } else adminFail(res);
       return res;
     }
     if (act === "player-resources-add" || act === "player-resources-set") {

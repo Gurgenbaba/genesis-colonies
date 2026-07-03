@@ -2115,6 +2115,7 @@ def _alliance_error_json(
     finish_source: str,
     *,
     status: int = 400,
+    message: Optional[str] = None,
 ):
     from game.alliance import get_alliance_state
 
@@ -2125,18 +2126,41 @@ def _alliance_error_json(
         conn.close()
     state, _ = _build_game_state_payload(include_panel=True, finish_source=finish_source)
     err = str(error or "alliance_action_failed")
+    msg = str(message or err)
     return (
         jsonify(
             {
                 "ok": False,
                 "error": err,
                 "reason": err,
+                "message": msg,
                 "state": state,
                 "alliance": alliance_state,
             }
         ),
         status,
     )
+
+
+def _run_alliance_mutation(user_id: int, finish_source: str, mutate_fn):
+    """Execute alliance write logic and commit — uncommitted writes were lost on conn.close()."""
+    from game.alliance import get_alliance_state
+
+    conn = db()
+    try:
+        mutate_fn(conn)
+        commit(conn)
+        alliance_state = get_alliance_state(user_id, conn=conn)
+    except ValueError as exc:
+        rollback(conn)
+        return _alliance_error_json(user_id, str(exc), finish_source)
+    except Exception:
+        rollback(conn)
+        logger.exception("alliance mutation failed source=%s user=%s", finish_source, user_id)
+        return _alliance_error_json(user_id, "alliance_action_failed", finish_source, status=500)
+    finally:
+        conn.close()
+    return _alliance_action_json(user_id, alliance_state, finish_source)
 
 
 @app.route("/api/alliance/state", methods=["GET"])
@@ -2183,11 +2207,9 @@ def api_alliance_create():
     if not user_id:
         return jsonify({"ok": False, "reason": "not_logged_in"}), 401
     data = request.get_json(silent=True) or {}
-    from game.alliance import create_alliance, get_alliance_state
-    from game.db import commit
+    from game.alliance import create_alliance
 
-    conn = db()
-    try:
+    def mutate(conn):
         create_alliance(
             str(data.get("tag") or ""),
             str(data.get("name") or ""),
@@ -2195,15 +2217,8 @@ def api_alliance_create():
             description=str(data.get("description") or ""),
             conn=conn,
         )
-        commit(conn)
-        alliance_state = get_alliance_state(user_id, conn=conn)
-    except ValueError as exc:
-        return _alliance_error_json(user_id, str(exc), "api_alliance_create")
-    except Exception:
-        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_create", status=500)
-    finally:
-        conn.close()
-    return _alliance_action_json(user_id, alliance_state, "api_alliance_create")
+
+    return _run_alliance_mutation(user_id, "api_alliance_create", mutate)
 
 
 @app.route("/api/alliance/join", methods=["POST"])
@@ -2213,21 +2228,12 @@ def api_alliance_join():
     if not user_id:
         return jsonify({"ok": False, "reason": "not_logged_in"}), 401
     data = request.get_json(silent=True) or {}
-    from game.alliance import get_alliance_state, join_alliance_by_tag
-    from game.db import commit
+    from game.alliance import join_alliance_by_tag
 
-    conn = db()
-    try:
+    def mutate(conn):
         join_alliance_by_tag(user_id, str(data.get("tag") or ""), conn=conn)
-        commit(conn)
-        alliance_state = get_alliance_state(user_id, conn=conn)
-    except ValueError as exc:
-        return _alliance_error_json(user_id, str(exc), "api_alliance_join")
-    except Exception:
-        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_join", status=500)
-    finally:
-        conn.close()
-    return _alliance_action_json(user_id, alliance_state, "api_alliance_join")
+
+    return _run_alliance_mutation(user_id, "api_alliance_join", mutate)
 
 
 @app.route("/api/alliance/apply", methods=["POST"])
@@ -2237,24 +2243,17 @@ def api_alliance_apply():
     if not user_id:
         return jsonify({"ok": False, "reason": "not_logged_in"}), 401
     data = request.get_json(silent=True) or {}
-    from game.alliance import apply_to_alliance, get_alliance_state
+    from game.alliance import apply_to_alliance
 
-    conn = db()
-    try:
+    def mutate(conn):
         apply_to_alliance(
             user_id,
             int(data.get("alliance_id") or 0),
             message=str(data.get("message") or ""),
             conn=conn,
         )
-        alliance_state = get_alliance_state(user_id, conn=conn)
-    except ValueError as exc:
-        return _alliance_error_json(user_id, str(exc), "api_alliance_apply")
-    except Exception:
-        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_apply", status=500)
-    finally:
-        conn.close()
-    return _alliance_action_json(user_id, alliance_state, "api_alliance_apply")
+
+    return _run_alliance_mutation(user_id, "api_alliance_apply", mutate)
 
 
 @app.route("/api/alliance/application/withdraw", methods=["POST"])
@@ -2263,21 +2262,12 @@ def api_alliance_application_withdraw():
     user_id = int(session.get("user_id") or 0)
     if not user_id:
         return jsonify({"ok": False, "reason": "not_logged_in"}), 401
-    from game.alliance import get_alliance_state, withdraw_application
+    from game.alliance import withdraw_application
 
-    conn = db()
-    try:
+    def mutate(conn):
         withdraw_application(user_id, conn=conn)
-        alliance_state = get_alliance_state(user_id, conn=conn)
-    except ValueError as exc:
-        return _alliance_error_json(user_id, str(exc), "api_alliance_application_withdraw")
-    except Exception:
-        return _alliance_error_json(
-            user_id, "alliance_action_failed", "api_alliance_application_withdraw", status=500
-        )
-    finally:
-        conn.close()
-    return _alliance_action_json(user_id, alliance_state, "api_alliance_application_withdraw")
+
+    return _run_alliance_mutation(user_id, "api_alliance_application_withdraw", mutate)
 
 
 @app.route("/api/alliance/leave", methods=["POST"])
@@ -2286,19 +2276,12 @@ def api_alliance_leave():
     user_id = int(session.get("user_id") or 0)
     if not user_id:
         return jsonify({"ok": False, "reason": "not_logged_in"}), 401
-    from game.alliance import get_alliance_state, leave_alliance
+    from game.alliance import leave_alliance
 
-    conn = db()
-    try:
+    def mutate(conn):
         leave_alliance(user_id, conn=conn)
-        alliance_state = get_alliance_state(user_id, conn=conn)
-    except ValueError as exc:
-        return _alliance_error_json(user_id, str(exc), "api_alliance_leave")
-    except Exception:
-        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_leave", status=500)
-    finally:
-        conn.close()
-    return _alliance_action_json(user_id, alliance_state, "api_alliance_leave")
+
+    return _run_alliance_mutation(user_id, "api_alliance_leave", mutate)
 
 
 @app.route("/api/alliance/description", methods=["POST"])
@@ -2308,19 +2291,12 @@ def api_alliance_description():
     if not user_id:
         return jsonify({"ok": False, "reason": "not_logged_in"}), 401
     data = request.get_json(silent=True) or {}
-    from game.alliance import get_alliance_state, update_alliance_description
+    from game.alliance import update_alliance_description
 
-    conn = db()
-    try:
+    def mutate(conn):
         update_alliance_description(user_id, str(data.get("description") or ""), conn=conn)
-        alliance_state = get_alliance_state(user_id, conn=conn)
-    except ValueError as exc:
-        return _alliance_error_json(user_id, str(exc), "api_alliance_description")
-    except Exception:
-        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_description", status=500)
-    finally:
-        conn.close()
-    return _alliance_action_json(user_id, alliance_state, "api_alliance_description")
+
+    return _run_alliance_mutation(user_id, "api_alliance_description", mutate)
 
 
 @app.route("/api/alliance/donate", methods=["POST"])
@@ -2330,24 +2306,17 @@ def api_alliance_donate():
     if not user_id:
         return jsonify({"ok": False, "reason": "not_logged_in"}), 401
     data = request.get_json(silent=True) or {}
-    from game.alliance import donate_to_alliance, get_alliance_state
+    from game.alliance import donate_to_alliance
 
-    conn = db()
-    try:
+    def mutate(conn):
         donate_to_alliance(
             user_id,
             str(data.get("resource") or ""),
             int(data.get("amount") or 0),
             conn=conn,
         )
-        alliance_state = get_alliance_state(user_id, conn=conn)
-    except ValueError as exc:
-        return _alliance_error_json(user_id, str(exc), "api_alliance_donate")
-    except Exception:
-        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_donate", status=500)
-    finally:
-        conn.close()
-    return _alliance_action_json(user_id, alliance_state, "api_alliance_donate")
+
+    return _run_alliance_mutation(user_id, "api_alliance_donate", mutate)
 
 
 @app.route("/api/alliance-logo/<int:alliance_id>")
@@ -2397,21 +2366,12 @@ def api_alliance_logo_upload():
     if not user_id:
         return jsonify({"ok": False, "reason": "not_logged_in"}), 401
     file_storage = request.files.get("logo")
-    from game.alliance import get_alliance_state, upload_alliance_logo
+    from game.alliance import upload_alliance_logo
 
-    conn = db()
-    try:
+    def mutate(conn):
         upload_alliance_logo(user_id, file_storage, conn=conn)
-        alliance_state = get_alliance_state(user_id, conn=conn)
-    except ValueError as exc:
-        return _alliance_error_json(user_id, str(exc), "api_alliance_logo_upload")
-    except Exception:
-        return _alliance_error_json(
-            user_id, "alliance_action_failed", "api_alliance_logo_upload", status=500
-        )
-    finally:
-        conn.close()
-    return _alliance_action_json(user_id, alliance_state, "api_alliance_logo_upload")
+
+    return _run_alliance_mutation(user_id, "api_alliance_logo_upload", mutate)
 
 
 @app.route("/api/alliance/project/start", methods=["POST"])
@@ -2421,24 +2381,17 @@ def api_alliance_project_start():
     if not user_id:
         return jsonify({"ok": False, "reason": "not_logged_in"}), 401
     data = request.get_json(silent=True) or {}
-    from game.alliance import get_alliance_state, start_alliance_project
+    from game.alliance import start_alliance_project
 
-    conn = db()
-    try:
+    def mutate(conn):
         start_alliance_project(
             user_id,
             str(data.get("kind") or ""),
             str(data.get("key") or ""),
             conn=conn,
         )
-        alliance_state = get_alliance_state(user_id, conn=conn)
-    except ValueError as exc:
-        return _alliance_error_json(user_id, str(exc), "api_alliance_project_start")
-    except Exception:
-        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_project_start", status=500)
-    finally:
-        conn.close()
-    return _alliance_action_json(user_id, alliance_state, "api_alliance_project_start")
+
+    return _run_alliance_mutation(user_id, "api_alliance_project_start", mutate)
 
 
 @app.route("/api/alliance/application/respond", methods=["POST"])
@@ -2448,26 +2401,17 @@ def api_alliance_application_respond():
     if not user_id:
         return jsonify({"ok": False, "reason": "not_logged_in"}), 401
     data = request.get_json(silent=True) or {}
-    from game.alliance import get_alliance_state, respond_application
+    from game.alliance import respond_application
 
-    conn = db()
-    try:
+    def mutate(conn):
         respond_application(
             user_id,
             int(data.get("application_id") or 0),
             accept=bool(data.get("accept")),
             conn=conn,
         )
-        alliance_state = get_alliance_state(user_id, conn=conn)
-    except ValueError as exc:
-        return _alliance_error_json(user_id, str(exc), "api_alliance_application_respond")
-    except Exception:
-        return _alliance_error_json(
-            user_id, "alliance_action_failed", "api_alliance_application_respond", status=500
-        )
-    finally:
-        conn.close()
-    return _alliance_action_json(user_id, alliance_state, "api_alliance_application_respond")
+
+    return _run_alliance_mutation(user_id, "api_alliance_application_respond", mutate)
 
 
 @app.route("/api/alliance/diplomacy/send", methods=["POST"])
@@ -2477,24 +2421,17 @@ def api_alliance_diplomacy_send():
     if not user_id:
         return jsonify({"ok": False, "reason": "not_logged_in"}), 401
     data = request.get_json(silent=True) or {}
-    from game.alliance import get_alliance_state, send_diplomacy_request
+    from game.alliance import send_diplomacy_request
 
-    conn = db()
-    try:
+    def mutate(conn):
         send_diplomacy_request(
             user_id,
             str(data.get("tag") or ""),
             str(data.get("request_type") or ""),
             conn=conn,
         )
-        alliance_state = get_alliance_state(user_id, conn=conn)
-    except ValueError as exc:
-        return _alliance_error_json(user_id, str(exc), "api_alliance_diplomacy_send")
-    except Exception:
-        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_diplomacy_send", status=500)
-    finally:
-        conn.close()
-    return _alliance_action_json(user_id, alliance_state, "api_alliance_diplomacy_send")
+
+    return _run_alliance_mutation(user_id, "api_alliance_diplomacy_send", mutate)
 
 
 @app.route("/api/alliance/diplomacy/respond", methods=["POST"])
@@ -2504,24 +2441,17 @@ def api_alliance_diplomacy_respond():
     if not user_id:
         return jsonify({"ok": False, "reason": "not_logged_in"}), 401
     data = request.get_json(silent=True) or {}
-    from game.alliance import get_alliance_state, respond_diplomacy_request
+    from game.alliance import respond_diplomacy_request
 
-    conn = db()
-    try:
+    def mutate(conn):
         respond_diplomacy_request(
             user_id,
             int(data.get("request_id") or 0),
             accept=bool(data.get("accept")),
             conn=conn,
         )
-        alliance_state = get_alliance_state(user_id, conn=conn)
-    except ValueError as exc:
-        return _alliance_error_json(user_id, str(exc), "api_alliance_diplomacy_respond")
-    except Exception:
-        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_diplomacy_respond", status=500)
-    finally:
-        conn.close()
-    return _alliance_action_json(user_id, alliance_state, "api_alliance_diplomacy_respond")
+
+    return _run_alliance_mutation(user_id, "api_alliance_diplomacy_respond", mutate)
 
 
 @app.route("/api/alliance/recruitment", methods=["POST"])
@@ -2531,10 +2461,9 @@ def api_alliance_recruitment():
     if not user_id:
         return jsonify({"ok": False, "reason": "not_logged_in"}), 401
     data = request.get_json(silent=True) or {}
-    from game.alliance import get_alliance_state, get_player_alliance, update_recruitment_mode
+    from game.alliance import get_player_alliance, update_recruitment_mode
 
-    conn = db()
-    try:
+    def mutate(conn):
         membership = get_player_alliance(user_id, conn=conn)
         if not membership:
             raise ValueError("not_in_alliance")
@@ -2544,14 +2473,8 @@ def api_alliance_recruitment():
             str(data.get("mode") or ""),
             conn=conn,
         )
-        alliance_state = get_alliance_state(user_id, conn=conn)
-    except ValueError as exc:
-        return _alliance_error_json(user_id, str(exc), "api_alliance_recruitment")
-    except Exception:
-        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_recruitment", status=500)
-    finally:
-        conn.close()
-    return _alliance_action_json(user_id, alliance_state, "api_alliance_recruitment")
+
+    return _run_alliance_mutation(user_id, "api_alliance_recruitment", mutate)
 
 
 @app.route("/api/alliance/profile", methods=["POST"])
@@ -2561,10 +2484,9 @@ def api_alliance_profile_update():
     if not user_id:
         return jsonify({"ok": False, "reason": "not_logged_in"}), 401
     data = request.get_json(silent=True) or {}
-    from game.alliance import get_alliance_state, get_player_alliance, update_alliance_profile
+    from game.alliance import get_player_alliance, update_alliance_profile
 
-    conn = db()
-    try:
+    def mutate(conn):
         membership = get_player_alliance(user_id, conn=conn)
         if not membership:
             raise ValueError("not_in_alliance")
@@ -2576,14 +2498,8 @@ def api_alliance_profile_update():
         if "description" in data:
             kwargs["description"] = str(data.get("description") or "")
         update_alliance_profile(int(membership["alliance_id"]), user_id, conn=conn, **kwargs)
-        alliance_state = get_alliance_state(user_id, conn=conn)
-    except ValueError as exc:
-        return _alliance_error_json(user_id, str(exc), "api_alliance_profile_update")
-    except Exception:
-        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_profile_update", status=500)
-    finally:
-        conn.close()
-    return _alliance_action_json(user_id, alliance_state, "api_alliance_profile_update")
+
+    return _run_alliance_mutation(user_id, "api_alliance_profile_update", mutate)
 
 
 @app.route("/api/alliance/member/role", methods=["POST"])
@@ -2593,10 +2509,9 @@ def api_alliance_member_role():
     if not user_id:
         return jsonify({"ok": False, "reason": "not_logged_in"}), 401
     data = request.get_json(silent=True) or {}
-    from game.alliance import get_alliance_state, get_player_alliance, set_member_role
+    from game.alliance import get_player_alliance, set_member_role
 
-    conn = db()
-    try:
+    def mutate(conn):
         membership = get_player_alliance(user_id, conn=conn)
         if not membership:
             raise ValueError("not_in_alliance")
@@ -2607,14 +2522,8 @@ def api_alliance_member_role():
             str(data.get("role") or ""),
             conn=conn,
         )
-        alliance_state = get_alliance_state(user_id, conn=conn)
-    except ValueError as exc:
-        return _alliance_error_json(user_id, str(exc), "api_alliance_member_role")
-    except Exception:
-        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_member_role", status=500)
-    finally:
-        conn.close()
-    return _alliance_action_json(user_id, alliance_state, "api_alliance_member_role")
+
+    return _run_alliance_mutation(user_id, "api_alliance_member_role", mutate)
 
 
 @app.route("/api/alliance/leader/transfer", methods=["POST"])
@@ -2624,10 +2533,9 @@ def api_alliance_leader_transfer():
     if not user_id:
         return jsonify({"ok": False, "reason": "not_logged_in"}), 401
     data = request.get_json(silent=True) or {}
-    from game.alliance import get_alliance_state, get_player_alliance, transfer_leadership
+    from game.alliance import get_player_alliance, transfer_leadership
 
-    conn = db()
-    try:
+    def mutate(conn):
         membership = get_player_alliance(user_id, conn=conn)
         if not membership:
             raise ValueError("not_in_alliance")
@@ -2637,14 +2545,8 @@ def api_alliance_leader_transfer():
             int(data.get("player_id") or 0),
             conn=conn,
         )
-        alliance_state = get_alliance_state(user_id, conn=conn)
-    except ValueError as exc:
-        return _alliance_error_json(user_id, str(exc), "api_alliance_leader_transfer")
-    except Exception:
-        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_leader_transfer", status=500)
-    finally:
-        conn.close()
-    return _alliance_action_json(user_id, alliance_state, "api_alliance_leader_transfer")
+
+    return _run_alliance_mutation(user_id, "api_alliance_leader_transfer", mutate)
 
 
 @app.route("/api/alliance/member/kick", methods=["POST"])
@@ -2654,10 +2556,9 @@ def api_alliance_member_kick():
     if not user_id:
         return jsonify({"ok": False, "reason": "not_logged_in"}), 401
     data = request.get_json(silent=True) or {}
-    from game.alliance import get_alliance_state, get_player_alliance, kick_member
+    from game.alliance import get_player_alliance, kick_member
 
-    conn = db()
-    try:
+    def mutate(conn):
         membership = get_player_alliance(user_id, conn=conn)
         if not membership:
             raise ValueError("not_in_alliance")
@@ -2667,14 +2568,8 @@ def api_alliance_member_kick():
             int(data.get("player_id") or 0),
             conn=conn,
         )
-        alliance_state = get_alliance_state(user_id, conn=conn)
-    except ValueError as exc:
-        return _alliance_error_json(user_id, str(exc), "api_alliance_member_kick")
-    except Exception:
-        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_member_kick", status=500)
-    finally:
-        conn.close()
-    return _alliance_action_json(user_id, alliance_state, "api_alliance_member_kick")
+
+    return _run_alliance_mutation(user_id, "api_alliance_member_kick", mutate)
 
 
 @app.route("/api/alliance/disband", methods=["POST"])
@@ -2683,22 +2578,15 @@ def api_alliance_disband():
     user_id = int(session.get("user_id") or 0)
     if not user_id:
         return jsonify({"ok": False, "reason": "not_logged_in"}), 401
-    from game.alliance import disband_alliance, get_alliance_state, get_player_alliance
+    from game.alliance import disband_alliance, get_player_alliance
 
-    conn = db()
-    try:
+    def mutate(conn):
         membership = get_player_alliance(user_id, conn=conn)
         if not membership:
             raise ValueError("not_in_alliance")
         disband_alliance(int(membership["alliance_id"]), user_id, conn=conn)
-        alliance_state = get_alliance_state(user_id, conn=conn)
-    except ValueError as exc:
-        return _alliance_error_json(user_id, str(exc), "api_alliance_disband")
-    except Exception:
-        return _alliance_error_json(user_id, "alliance_action_failed", "api_alliance_disband", status=500)
-    finally:
-        conn.close()
-    return _alliance_action_json(user_id, alliance_state, "api_alliance_disband")
+
+    return _run_alliance_mutation(user_id, "api_alliance_disband", mutate)
 
 
 def _render_placeholder_module(module_key: str):

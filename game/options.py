@@ -1346,6 +1346,8 @@ def hard_delete_player_account(player_id: int, *, conn) -> Dict[str, Any]:
 
     if table_exists(conn, "gd_votes"):
         cur.execute("DELETE FROM gd_votes WHERE player_id = ?;", (pid,))
+    if table_exists(conn, "activity_xp_log"):
+        cur.execute("DELETE FROM activity_xp_log WHERE player_id = ?;", (pid,))
     if table_exists(conn, "world_progress"):
         cur.execute("DELETE FROM world_progress WHERE player_id = ?;", (pid,))
     if table_exists(conn, "world_claims"):

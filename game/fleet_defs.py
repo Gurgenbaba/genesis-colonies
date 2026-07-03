@@ -95,6 +95,7 @@ ACTIVE_SHIP_KEYS: FrozenSet[str] = frozenset(
         "atlas_hauler",
         "harvest_reclaimer",
         "seed_ark",
+        "deep_vault_ark",
     }
 )
 
@@ -240,6 +241,27 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         "hull": 1200,
         "rapid_fire_targets": {},
         "crew": 8,
+    },
+    "deep_vault_ark": {
+        "name_key": "fleet_ship_deep_vault_ark",
+        "description_key": "fleet_ship_deep_vault_ark_desc",
+        "role": "cargo",
+        "required_shipyard_level": 6,
+        "requirements": {
+            "buildings": {"orbital_shipyard": 6, "metal_storage": 5, "crystal_storage": 5},
+            "research": {"storage_tech": 8, "mining_tech": 6, "fuel_efficiency": 5},
+        },
+        "build_cost": {"metal": 50000, "crystal": 50000, "fuel_cells": 25000},
+        "build_seconds": 7200,
+        "score_value": 50000,
+        "speed": 500,
+        "cargo": 100000,
+        "fuel": 120,
+        "attack": 1,
+        "shield": 10,
+        "hull": 800,
+        "rapid_fire_targets": {},
+        "crew": 12,
     },
     "harvest_reclaimer": {
         "name_key": "fleet_ship_harvest_reclaimer",

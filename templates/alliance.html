@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "partials/progression_cards.html" import render_resource_icon, render_resource_cost_chip with context %}
+{% from "partials/progression_cards.html" import render_resource_icon, render_resource_cost_chip, render_prog_duration with context %}
 
 {% macro alliance_hub_logo(alliance_id, tag, logo_url='', show_logo=false, size='md', alt='') %}
 <div class="alliance-hub-logo-frame alliance-hub-logo-frame--{{ size }}" data-alliance-logo-frame="{{ alliance_id }}">
@@ -154,50 +154,100 @@
 
   {% set rm = st.recruitment_mode|default('open') %}
   {% set xp_pct = ((st.alliance_xp / st.alliance_xp_next * 100) if st.alliance_xp_next else 100)|round(1) %}
+  {% if st.active_project %}
+  {% set ap_kind = st.active_project.project_kind|default('building') %}
+  {% set ap_key = st.active_project.target_key %}
+  {% set ap_catalog = st.catalog.buildings if ap_kind == 'building' else st.catalog.technologies %}
+  {% set ap_cfg = ap_catalog.get(ap_key, {}) %}
+  {% set ap_label = T(ap_cfg.label_key, ap_key) if ap_cfg else ap_key %}
+  {% endif %}
 
   <div class="alliance-hub-module gc-panel" data-alliance-member>
 
-    <section class="alliance-hub-command" data-alliance-summary>
-      <div class="alliance-hub-command-head">
-        <div class="alliance-hub-identity-block">
-          {{ alliance_hub_logo(st.alliance_id, st.tag, st.logo_url_client, st.show_logo, 'lg', st.name) }}
-          <div class="alliance-hub-identity">
-            <span class="alliance-hub-tag">[{{ st.tag }}]</span>
-            <span class="alliance-hub-name">{{ st.name }}</span>
-          </div>
-        </div>
-        <div class="alliance-hub-chip-row">
-          <span class="alliance-hub-chip alliance-hub-chip--level alliance-level-badge" data-alliance-level>L{{ st.alliance_level }}</span>
-          <span class="alliance-hub-chip alliance-hub-chip--members gc-mono">{{ st.member_count }}/{{ st.member_limit }}</span>
-          {% if rm == 'open' %}
-          <span class="alliance-hub-chip alliance-hub-chip--recruit alliance-hub-chip--recruit-open" data-alliance-recruit-badge>{{ T("alliance_recruit_open", "Offen") }}</span>
-          {% elif rm == 'application_only' %}
-          <span class="alliance-hub-chip alliance-hub-chip--recruit alliance-hub-chip--recruit-application" data-alliance-recruit-badge>{{ T("alliance_recruit_application_only", "Bewerbung") }}</span>
-          {% else %}
-          <span class="alliance-hub-chip alliance-hub-chip--recruit alliance-hub-chip--recruit-closed" data-alliance-recruit-badge>{{ T("alliance_recruit_closed", "Geschlossen") }}</span>
-          {% endif %}
-        </div>
-      </div>
+    <section class="alliance-hub-hero" data-alliance-summary>
       {% if st.can_manage %}
-      <div class="alliance-hub-recruitment-control" data-alliance-recruitment-control>
-        <span class="alliance-hub-recruitment-label">{{ T("alliance_recruitment_label", "Rekrutierung") }}</span>
-        <div class="alliance-hub-recruitment-modes" role="group" aria-label="{{ T('alliance_recruitment_label', 'Rekrutierung') }}">
-          <button type="button" class="gc-btn gc-btn-sm {% if rm == 'open' %}gc-btn-primary{% else %}gc-btn-secondary{% endif %}" data-recruitment-mode="open">{{ T("alliance_recruit_open", "Offen") }}</button>
-          <button type="button" class="gc-btn gc-btn-sm {% if rm == 'application_only' %}gc-btn-primary{% else %}gc-btn-secondary{% endif %}" data-recruitment-mode="application_only">{{ T("alliance_recruit_application_only", "Bewerbung") }}</button>
-          <button type="button" class="gc-btn gc-btn-sm {% if rm == 'closed' %}gc-btn-primary{% else %}gc-btn-secondary{% endif %}" data-recruitment-mode="closed">{{ T("alliance_recruit_closed", "Geschlossen") }}</button>
-        </div>
+      <div class="alliance-hub-hero-actions">
+        <label class="alliance-hub-logo-upload-label alliance-hub-hero-action">
+          <input type="file"
+                 accept="image/png,image/jpeg,image/webp"
+                 class="alliance-hub-logo-file"
+                 data-alliance-logo-upload
+                 hidden>
+          <span class="gc-btn gc-btn-xs gc-btn-secondary">{{ T("alliance_logo_upload_btn", "Logo hochladen") }}</span>
+        </label>
+        <a class="gc-btn gc-btn-xs gc-btn-secondary alliance-hub-hero-action" href="#alliance-management">{{ T("alliance_edit_profile_btn", "Profil bearbeiten") }}</a>
       </div>
       {% endif %}
-      <div class="alliance-hub-xp">
-        <div class="alliance-hub-xp-head">
-          <span class="alliance-hub-xp-label">{{ T("alliance_xp_label", "Allianz-XP") }}</span>
-          <span class="alliance-hub-xp-val gc-mono">{{ st.alliance_xp|fmt_int }} / {{ st.alliance_xp_next|fmt_int }}</span>
+      <div class="alliance-hub-hero-body">
+        <div class="alliance-hub-hero-logo-wrap">
+          {{ alliance_hub_logo(st.alliance_id, st.tag, st.logo_url_client, st.show_logo, 'hero', st.name) }}
         </div>
-        <div class="alliance-hub-xp-bar-wrap">
-          <div class="alliance-hub-xp-bar" style="width: {{ xp_pct }}%"></div>
+        <div class="alliance-hub-hero-meta">
+          <div class="alliance-hub-hero-identity">
+            <span class="alliance-hub-tag">[{{ st.tag }}]</span>
+            <h3 class="alliance-hub-name">{{ st.name }}</h3>
+          </div>
+          <div class="alliance-hub-xp alliance-hub-xp--hero">
+            <div class="alliance-hub-xp-head">
+              <span class="alliance-hub-xp-label">{{ T("alliance_xp_label", "Allianz-XP") }}</span>
+              <span class="alliance-hub-xp-val gc-mono">{{ st.alliance_xp|fmt_int }} / {{ st.alliance_xp_next|fmt_int }}</span>
+            </div>
+            <div class="alliance-hub-xp-bar-wrap">
+              <div class="alliance-hub-xp-bar" style="width: {{ xp_pct }}%"></div>
+            </div>
+          </div>
         </div>
       </div>
-      {% if st.bonus_chips %}
+    </section>
+
+    <section class="alliance-hub-stats" aria-label="{{ T('alliance_status_title', 'Allianz-Status') }}">
+      <article class="alliance-hub-stat-tile">
+        <span class="alliance-hub-stat-label">{{ T("alliance_tag_label", "Tag") }}</span>
+        <span class="alliance-hub-stat-value gc-mono">[{{ st.tag }}]</span>
+      </article>
+      <article class="alliance-hub-stat-tile">
+        <span class="alliance-hub-stat-label">{{ T("alliance_name_label", "Name") }}</span>
+        <span class="alliance-hub-stat-value">{{ st.name }}</span>
+      </article>
+      <article class="alliance-hub-stat-tile">
+        <span class="alliance-hub-stat-label">{{ T("alliance_tab_members", "Mitglieder") }}</span>
+        <span class="alliance-hub-stat-value gc-mono">{{ st.member_count }}/{{ st.member_limit }}</span>
+      </article>
+      <article class="alliance-hub-stat-tile">
+        <span class="alliance-hub-stat-label">{{ T("buildings_col_level", "Stufe") }}</span>
+        <span class="alliance-hub-stat-value gc-mono alliance-level-badge" data-alliance-level>L{{ st.alliance_level }}</span>
+      </article>
+      <article class="alliance-hub-stat-tile">
+        <span class="alliance-hub-stat-label">{{ T("alliance_xp_label", "Allianz-XP") }}</span>
+        <span class="alliance-hub-stat-value gc-mono">{{ st.alliance_xp|fmt_int }}</span>
+      </article>
+      <article class="alliance-hub-stat-tile">
+        <span class="alliance-hub-stat-label">{{ T("alliance_recruitment_label", "Rekrutierung") }}</span>
+        <span class="alliance-hub-stat-value">
+          {% if rm == 'open' %}
+          <span class="alliance-hub-recruit-badge alliance-hub-recruit-badge--open" data-alliance-recruit-badge>{{ T("alliance_recruit_open", "Offen") }}</span>
+          {% elif rm == 'application_only' %}
+          <span class="alliance-hub-recruit-badge alliance-hub-recruit-badge--application" data-alliance-recruit-badge>{{ T("alliance_recruit_application_only", "Bewerbung") }}</span>
+          {% else %}
+          <span class="alliance-hub-recruit-badge alliance-hub-recruit-badge--closed" data-alliance-recruit-badge>{{ T("alliance_recruit_closed", "Geschlossen") }}</span>
+          {% endif %}
+        </span>
+      </article>
+    </section>
+
+    <section class="alliance-hub-desc-card">
+      <header class="alliance-hub-section-head">
+        <span class="alliance-hub-section-title">{{ T("alliance_description_label", "Beschreibung") }}</span>
+      </header>
+      {% if st.description %}
+      <p class="alliance-hub-desc-text">{{ st.description }}</p>
+      {% else %}
+      <p class="alliance-hub-desc-empty">{{ T("alliance_no_description", "Keine Beschreibung hinterlegt.") }}</p>
+      {% endif %}
+    </section>
+
+    {% if st.bonus_chips %}
+    <section class="alliance-hub-bonus-section">
       <div class="alliance-hub-bonus-grid">
         {% for chip in st.bonus_chips %}
         <div class="alliance-hub-bonus-tile">
@@ -206,22 +256,23 @@
         </div>
         {% endfor %}
       </div>
-      {% endif %}
-      {% if st.can_manage %}
-      <div class="alliance-hub-logo-upload">
-        <label class="alliance-hub-logo-upload-label">
-          <span>{{ T("alliance_logo_upload", "Allianz-Logo") }}</span>
-          <input type="file"
-                 accept="image/png,image/jpeg,image/webp"
-                 class="alliance-hub-logo-file"
-                 data-alliance-logo-upload
-                 hidden>
-          <span class="gc-btn gc-btn-sm gc-btn-secondary">{{ T("alliance_logo_upload_btn", "Logo hochladen") }}</span>
-        </label>
-        <span class="alliance-hub-logo-upload-hint">{{ T("alliance_logo_upload_hint", "PNG/JPEG/WebP, max. 2 MB, quadratisch zugeschnitten.") }}</span>
-      </div>
-      {% endif %}
     </section>
+    {% endif %}
+
+    {% if st.active_project %}
+    <section class="alliance-hub-project-active" data-alliance-active-project
+             data-finish-at="{{ st.active_project.finish_at }}"
+             data-started-at="{{ st.active_project.started_at }}"
+             data-duration-seconds="{{ st.active_project.duration_seconds }}"
+             data-progress-pct="{{ st.active_project.progress_pct }}">
+      <header class="alliance-hub-section-head">
+        <span class="alliance-hub-section-title">{{ T("alliance_active_project", "Aktives Projekt") }}</span>
+        <span class="alliance-hub-section-sub">{{ ap_label }} → L{{ st.active_project.target_level }}</span>
+      </header>
+      <div class="alliance-hub-project-progress"><div class="alliance-hub-project-progress-fill" data-project-fill></div></div>
+      <div class="alliance-hub-project-eta gc-mono" data-project-eta></div>
+    </section>
+    {% endif %}
 
     <section class="alliance-hub-pool" data-alliance-donate>
       <header class="alliance-hub-section-head">
@@ -257,21 +308,6 @@
       </div>
     </section>
 
-    {% if st.active_project %}
-    <section class="alliance-hub-project-active" data-alliance-active-project
-             data-finish-at="{{ st.active_project.finish_at }}"
-             data-started-at="{{ st.active_project.started_at }}"
-             data-duration-seconds="{{ st.active_project.duration_seconds }}"
-             data-progress-pct="{{ st.active_project.progress_pct }}">
-      <header class="alliance-hub-section-head">
-        <span class="alliance-hub-section-title">{{ T("alliance_active_project", "Aktives Projekt") }}</span>
-        <span class="alliance-hub-section-sub">{{ st.active_project.target_key }} → L{{ st.active_project.target_level }}</span>
-      </header>
-      <div class="alliance-hub-project-progress"><div class="alliance-hub-project-progress-fill" data-project-fill></div></div>
-      <div class="alliance-hub-project-eta gc-mono" data-project-eta></div>
-    </section>
-    {% endif %}
-
     <div class="alliance-hub-tabs">
       <div class="alliance-hub-tab-bar" role="tablist">
         <button type="button" class="alliance-hub-tab is-active" data-alliance-tab="members">{{ T("alliance_tab_members", "Mitglieder") }}</button>
@@ -281,43 +317,6 @@
       </div>
 
       <section class="alliance-hub-tab-panel is-active" data-alliance-panel="members">
-      {% if st.can_manage %}
-      <div class="alliance-hub-profile-settings" data-alliance-profile-settings>
-        <header class="alliance-hub-section-head">
-          <span class="alliance-hub-section-title">{{ T("alliance_profile_settings", "Profil") }}</span>
-        </header>
-        <form class="alliance-hub-profile-form"
-              data-alliance-profile-form
-              data-alliance-action="profile"
-              method="post"
-              action="#"
-              novalidate>
-          <div class="alliance-hub-profile-grid">
-            <label class="alliance-hub-field">
-              <span>{{ T("alliance_tag_label", "Tag") }}</span>
-              <input type="text" name="tag" maxlength="8" class="gc-input" value="{{ st.tag }}">
-            </label>
-            <label class="alliance-hub-field">
-              <span>{{ T("alliance_name_label", "Name") }}</span>
-              <input type="text" name="name" maxlength="64" class="gc-input" value="{{ st.name }}">
-            </label>
-          </div>
-          <label class="alliance-hub-field" for="alliance-desc-input">
-            <span>{{ T("alliance_description_label", "Beschreibung") }}</span>
-            <textarea id="alliance-desc-input" name="description" maxlength="512" rows="3" class="gc-input">{{ st.description }}</textarea>
-          </label>
-          <div class="alliance-hub-profile-actions">
-            <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-alliance-submit="profile">{{ T("alliance_save_profile", "Profil speichern") }}</button>
-          </div>
-        </form>
-      </div>
-      {% elif st.description %}
-        <div class="alliance-hub-desc-readonly">
-          <span class="alliance-hub-desc-label">{{ T("alliance_description_label", "Beschreibung") }}</span>
-          <p class="alliance-hub-desc-text">{{ st.description }}</p>
-        </div>
-        {% endif %}
-
         <ul class="alliance-hub-member-grid">
           {% for m in st.members %}
           <li class="alliance-hub-member-card alliance-hub-member-card--{{ m.role }}" data-member-id="{{ m.player_id }}">
@@ -365,13 +364,6 @@
           {% endfor %}
         </div>
         {% endif %}
-
-        <div class="alliance-hub-leave-wrap">
-          {% if st.is_leader %}
-          <button type="button" class="gc-btn gc-btn-sm gc-btn-danger alliance-hub-disband-btn" data-alliance-disband>{{ T("alliance_disband_btn", "Allianz auflösen") }}</button>
-          {% endif %}
-          <button type="button" class="gc-btn gc-btn-sm gc-btn-danger alliance-hub-leave-btn" data-alliance-leave>{{ T("alliance_leave_btn", "Verlassen") }}</button>
-        </div>
       </section>
 
       <section class="alliance-hub-tab-panel" data-alliance-panel="projects" hidden>
@@ -386,6 +378,10 @@
               {{ render_resource_cost_chip('metal', p.cost.metal) }}
               {{ render_resource_cost_chip('crystal', p.cost.crystal) }}
               {{ render_resource_cost_chip('fuel_cells', p.cost.fuel_cells) }}
+            </div>
+            <div class="alliance-hub-project-duration">
+              <span class="alliance-hub-project-duration-label">{{ T("buildings_col_time", "Bauzeit") }}</span>
+              <span class="alliance-hub-project-duration-val gc-mono">{{ render_prog_duration(p.duration_sec) }}</span>
             </div>
             {% if st.can_manage and not st.active_project %}
             <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-start-project="{{ p.kind }}:{{ p.key }}">{{ T("alliance_start_project", "Start") }}</button>
@@ -409,6 +405,10 @@
               {{ render_resource_cost_chip('metal', p.cost.metal) }}
               {{ render_resource_cost_chip('crystal', p.cost.crystal) }}
               {{ render_resource_cost_chip('fuel_cells', p.cost.fuel_cells) }}
+            </div>
+            <div class="alliance-hub-project-duration">
+              <span class="alliance-hub-project-duration-label">{{ T("buildings_col_time", "Bauzeit") }}</span>
+              <span class="alliance-hub-project-duration-val gc-mono">{{ render_prog_duration(p.duration_sec) }}</span>
             </div>
             {% if st.can_manage and not st.active_project %}
             <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-start-project="{{ p.kind }}:{{ p.key }}">{{ T("alliance_start_project", "Start") }}</button>
@@ -465,6 +465,58 @@
         {% endif %}
       </section>
     </div>
+
+    <section class="alliance-hub-management" id="alliance-management">
+      <header class="alliance-hub-section-head">
+        <span class="alliance-hub-section-title">{{ T("alliance_management_title", "Verwaltung") }}</span>
+      </header>
+
+      {% if st.can_manage %}
+      <div class="alliance-hub-profile-settings" data-alliance-profile-settings>
+        <form class="alliance-hub-profile-form"
+              data-alliance-profile-form
+              data-alliance-action="profile"
+              method="post"
+              action="#"
+              novalidate>
+          <div class="alliance-hub-profile-grid">
+            <label class="alliance-hub-field">
+              <span>{{ T("alliance_tag_label", "Tag") }}</span>
+              <input type="text" name="tag" maxlength="8" class="gc-input" value="{{ st.tag }}">
+            </label>
+            <label class="alliance-hub-field">
+              <span>{{ T("alliance_name_label", "Name") }}</span>
+              <input type="text" name="name" maxlength="64" class="gc-input" value="{{ st.name }}">
+            </label>
+          </div>
+          <label class="alliance-hub-field" for="alliance-desc-input">
+            <span>{{ T("alliance_description_label", "Beschreibung") }}</span>
+            <textarea id="alliance-desc-input" name="description" maxlength="512" rows="4" class="gc-input">{{ st.description }}</textarea>
+          </label>
+          <p class="alliance-hub-logo-upload-hint">{{ T("alliance_logo_upload_hint", "PNG/JPEG/WebP, max. 2 MB, quadratisch zugeschnitten.") }}</p>
+          <div class="alliance-hub-profile-actions">
+            <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-alliance-submit="profile">{{ T("alliance_save_profile", "Profil speichern") }}</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="alliance-hub-recruitment-control" data-alliance-recruitment-control>
+        <span class="alliance-hub-recruitment-label">{{ T("alliance_recruitment_label", "Rekrutierung") }}</span>
+        <div class="alliance-hub-recruitment-modes" role="group" aria-label="{{ T('alliance_recruitment_label', 'Rekrutierung') }}">
+          <button type="button" class="gc-btn gc-btn-sm {% if rm == 'open' %}gc-btn-primary{% else %}gc-btn-secondary{% endif %}" data-recruitment-mode="open">{{ T("alliance_recruit_open", "Offen") }}</button>
+          <button type="button" class="gc-btn gc-btn-sm {% if rm == 'application_only' %}gc-btn-primary{% else %}gc-btn-secondary{% endif %}" data-recruitment-mode="application_only">{{ T("alliance_recruit_application_only", "Bewerbung") }}</button>
+          <button type="button" class="gc-btn gc-btn-sm {% if rm == 'closed' %}gc-btn-primary{% else %}gc-btn-secondary{% endif %}" data-recruitment-mode="closed">{{ T("alliance_recruit_closed", "Geschlossen") }}</button>
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="alliance-hub-leave-wrap">
+        {% if st.is_leader %}
+        <button type="button" class="gc-btn gc-btn-sm gc-btn-danger alliance-hub-disband-btn" data-alliance-disband>{{ T("alliance_disband_btn", "Allianz auflösen") }}</button>
+        {% endif %}
+        <button type="button" class="gc-btn gc-btn-sm gc-btn-danger alliance-hub-leave-btn" data-alliance-leave>{{ T("alliance_leave_btn", "Verlassen") }}</button>
+      </div>
+    </section>
 
     {% if st.recent_donations %}
     <section class="alliance-hub-donations-log">

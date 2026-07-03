@@ -393,6 +393,52 @@ def test_compute_player_scores_includes_fleet(temp_db):
     assert refresh["current_player"]["ranks"].get("fleet") == 1
 
 
+def test_compute_player_scores_research_uses_cumulative_costs(temp_db):
+    """Research ranking points = sum of invested metal+crystal per level (not target-level only)."""
+    from game.ranking import _sum_costs_up_to_level
+    from game.research import RESEARCH_TECHS
+
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    pid = _create_player("researcher")
+    conn = db()
+    conn.execute(
+        """
+        INSERT INTO research_levels (user_id, tech_key, level)
+        VALUES (?, 'energy_tech', 3)
+        ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;
+        """,
+        (pid,),
+    )
+    conn.commit()
+    conn.close()
+    _close_db()
+
+    cfg = RESEARCH_TECHS["energy_tech"]
+    cumulative = _sum_costs_up_to_level(
+        int(cfg["base_cost_m"]),
+        int(cfg["base_cost_c"]),
+        float(cfg["cost_factor"]),
+        3,
+    )
+    from game.models import DEFAULT_GAME_SETTINGS, get_game_settings
+
+    w_research = float((get_game_settings() or {}).get("score_weight_research") or DEFAULT_GAME_SETTINGS["score_weight_research"])
+    scores = compute_player_scores(pid)
+    assert scores["research_score"] == int(cumulative * w_research)
+    assert w_research == pytest.approx(0.01)
+    level2 = _sum_costs_up_to_level(
+        int(cfg["base_cost_m"]),
+        int(cfg["base_cost_c"]),
+        float(cfg["cost_factor"]),
+        2,
+    )
+    assert cumulative > level2
+    assert scores["research_score"] > int(level2 * w_research)
+
+
 def test_migration_014_idempotent(temp_db):
     _run_migrate(temp_db)
     _run_migrate(temp_db)

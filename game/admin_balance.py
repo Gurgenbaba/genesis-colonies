@@ -92,7 +92,7 @@ PRESET_B_BALANCE: Dict[str, Union[int, float, bool]] = {
     "shipyard_speed": 1.0,
     "shipyard_queue_limit": 3,
     "score_weight_buildings": 1.0,
-    "score_weight_research": 0.7,
+    "score_weight_research": 0.01,
     "score_weight_fleet": 1.0,
     "score_cost_exponent": float(DEFAULT_GAME_SETTINGS.get("score_cost_exponent", 1.0)),
     "score_softcap": float(DEFAULT_GAME_SETTINGS.get("score_softcap", 0.0)),

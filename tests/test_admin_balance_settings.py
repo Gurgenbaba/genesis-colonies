@@ -196,3 +196,30 @@ def test_save_balance_settings_unit():
     assert err is None
     assert settings["fuel_exchange_metal_per_unit"] == pytest.approx(2.5)
     assert settings["fuel_exchange_crystal_per_unit"] == pytest.approx(1.25)
+
+
+def test_score_weight_research_default_on_fresh_db(admin_env):
+    import game.db as gdb
+    from game.models import DEFAULT_GAME_SETTINGS, init_db
+
+    gdb._DB_PATH = None
+    init_db()
+
+    settings = get_game_settings()
+    assert float(settings["score_weight_research"]) == pytest.approx(
+        float(DEFAULT_GAME_SETTINGS["score_weight_research"])
+    )
+    assert float(settings["score_weight_research"]) == pytest.approx(0.01)
+
+
+def test_score_weight_research_admin_override_not_reset_by_init_db(admin_env):
+    import game.db as gdb
+    from game.models import init_db
+
+    gdb._DB_PATH = None
+    init_db()
+    save_game_settings({"score_weight_research": "0.65"})
+    init_db()
+
+    settings = get_game_settings()
+    assert float(settings["score_weight_research"]) == pytest.approx(0.65)
