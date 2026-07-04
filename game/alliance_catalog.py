@@ -145,6 +145,26 @@ ALLIANCE_TECHNOLOGIES: Dict[str, Dict[str, Any]] = {
 DIPLOMACY_RELATIONS = frozenset({"neutral", "nap", "alliance", "war"})
 DIPLOMACY_REQUEST_TYPES = frozenset({"nap", "alliance", "war"})
 
+AFFECTS_BY_EFFECT_KEY: Dict[str, List[str]] = {
+    "research_time_speed": ["alliance_affects_research"],
+    "expedition_loot_mult": ["alliance_affects_expedition"],
+    "production_factor": [
+        "alliance_affects_metal",
+        "alliance_affects_crystal",
+        "alliance_affects_fuel_cells",
+    ],
+    "defense_armor_shield": ["alliance_affects_defense"],
+    "pool_cap_and_project_speed": ["alliance_affects_pool", "alliance_affects_projects"],
+}
+
+AFFECTS_BY_BUILDING_KEY: Dict[str, List[str]] = {
+    "alliance_headquarters": ["alliance_affects_members"],
+    "research_archive": ["alliance_affects_tech_projects"],
+    "expedition_office": ["alliance_affects_expedition_tech"],
+    "logistics_depot": ["alliance_affects_pool"],
+    "diplomacy_center": ["alliance_affects_diplomacy"],
+}
+
 
 def alliance_xp_for_level(level: int) -> int:
     """Total XP required to reach ``level`` (level 1 = 0)."""
@@ -356,6 +376,12 @@ def project_effect_preview(
         elif key == "diplomacy_center":
             current_value = cur >= 1
             next_value = True
+        elif key == "research_archive":
+            current_value = cur
+            next_value = nxt
+        elif key == "expedition_office":
+            current_value = cur
+            next_value = nxt
         else:
             current_value = cur
             next_value = nxt
@@ -363,11 +389,18 @@ def project_effect_preview(
         current_value = _tech_bonus_pct(cfg, cur)
         next_value = _tech_bonus_pct(cfg, nxt)
 
+    affects_keys: List[str] = []
+    if kind == "building":
+        affects_keys = list(AFFECTS_BY_BUILDING_KEY.get(key) or [])
+    else:
+        affects_keys = list(AFFECTS_BY_EFFECT_KEY.get(effect_key) or [])
+
     return {
         "desc_key": desc_key,
         "effect_key": effect_key,
         "current_value": current_value,
         "next_value": next_value,
+        "affects_keys": affects_keys,
     }
 
 

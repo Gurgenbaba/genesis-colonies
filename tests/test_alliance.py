@@ -40,7 +40,7 @@ from game.alliance import (
     update_recruitment_mode,
     withdraw_application,
 )
-from game.alliance_catalog import BASE_MEMBER_LIMIT, DONATION_XP_DAILY_CAP, member_limit_from_buildings
+from game.alliance_catalog import BASE_MEMBER_LIMIT, DONATION_XP_DAILY_CAP, member_limit_from_buildings, project_effect_preview
 from game.db import db
 from game.effects import get_effect_resolver
 from game.models import create_user, ensure_player_and_homeworld, init_db
@@ -87,6 +87,44 @@ def _fund_planet(uid: int, conn, *, metal=500_000, crystal=500_000, fuel=100_000
         (float(metal), float(crystal), float(fuel), pid),
     )
     return pid
+
+
+ALLIANCE_INTERNAL_KEYS = (
+    "research_archive",
+    "alliance_headquarters",
+    "expedition_office",
+    "logistics_depot",
+    "diplomacy_center",
+    "research_network",
+    "expedition_coordination",
+    "industrial_logistics",
+    "defensive_protocols",
+    "trade_coordination",
+)
+
+
+def _alliance_member_hub_html(alliance_db, uid=None):
+    if uid is None:
+        uid = _player()
+        conn = db()
+        try:
+            create_alliance("HUB", "Hub UI", uid, conn=conn)
+            conn.commit()
+        finally:
+            conn.close()
+    client = _app_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+    resp = client.get("/alliance", headers={"X-Requested-With": "XMLHttpRequest"})
+    assert resp.status_code == 200
+    return resp.get_data(as_text=True)
+
+
+def _alliance_visible_text(html: str) -> str:
+    cleaned = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S | re.I)
+    cleaned = re.sub(r"\sdata-[a-z0-9_-]+=\"[^\"]*\"", "", cleaned, flags=re.I)
+    cleaned = re.sub(r"<[^>]+>", " ", cleaned)
+    return cleaned
 
 
 def test_schema_ready(alliance_db):
@@ -541,20 +579,10 @@ def test_alliance_page_no_wip_banner(alliance_db):
 
 
 def test_alliance_member_hub_module(alliance_db):
-    uid = _player()
-    conn = db()
-    try:
-        create_alliance("HUB", "Hub UI", uid, conn=conn)
-        conn.commit()
-    finally:
-        conn.close()
-    client = _app_client()
-    with client.session_transaction() as sess:
-        sess["user_id"] = uid
-    resp = client.get("/alliance", headers={"X-Requested-With": "XMLHttpRequest"})
-    body = resp.get_data(as_text=True)
+    body = _alliance_member_hub_html(alliance_db)
     assert "alliance-hub-module" in body
     assert "alliance-hub-hero" in body
+    assert "alliance-hub-hero-top" in body
     assert "alliance-hub-logo-frame--hero" in body
     assert "alliance-hub-stats" in body
     assert "alliance-hub-xp-card" in body
@@ -566,12 +594,19 @@ def test_alliance_member_hub_module(alliance_db):
     assert "data-alliance-profile-form" in body
     assert 'data-alliance-submit="profile"' in body
     assert "alliance-hub-project-effect-grid" in body
-    assert "alliance-hub-member-table" in body
+    assert "alliance-hub-member-table--roster" in body
+    assert "alliance-hub-member-grid--roster" not in body
+    assert "alliance-hub-hero-logo-row" in body
+    assert '<ul class="alliance-hub-project-grid"' not in body
+    assert "alliance-hub-project-card" in body
+    assert "<article class=\"alliance-hub-project-card" in body or "alliance-hub-project-card alliance-hub-project-card--locked" in body
     assert "data-alliance-chat-open" in body
     assert "data-alliance-broadcast-open" in body
     assert "alliance-broadcast-modal" in body
     assert "alliance-hub-project-card--locked" in body
-    assert "alliance-hub-unlock-card" in body
+    assert "alliance-hub-unlock-card--diplomacy" in body
+    assert "alliance-hub-project-affects" in body
+    assert "gc-prog-info" in body
     assert "alliance-hub-pool-tile" in body
     assert "data-pool-val=\"metal\"" in body
     assert "alliance-hub-tab" in body
@@ -579,6 +614,8 @@ def test_alliance_member_hub_module(alliance_db):
     assert "data-alliance-leave" in body
     assert "alliance-hub-management" not in body
     assert "gc-btn-danger" in body
+    assert body.count("alliance-hub-hero-actions") == 1
+    assert "alliance-hub-hero-actions--chat" not in body
 
 
 def test_alliance_active_project_renders_localized_label(alliance_db):
@@ -2099,3 +2136,68 @@ def test_tech_projects_available_after_research_archive(alliance_db):
         assert tech_avail
     finally:
         conn.close()
+
+
+def test_alliance_layout_uses_card_grids_not_lists(alliance_db):
+    body = _alliance_member_hub_html(alliance_db)
+    assert '<ul class="alliance-hub-project-grid"' not in body
+    assert '<ul class="alliance-hub-member-grid' not in body
+    assert 'class="alliance-hub-pool-grid"' in body
+    assert 'class="alliance-hub-tab-bar"' in body
+    assert 'class="alliance-hub-tab is-active"' in body
+    assert "alliance-hub-grid-section" in body
+    assert "alliance-hub-hero-logo-row" in body
+
+
+def test_alliance_no_internal_keys_visible(alliance_db):
+    body = _alliance_member_hub_html(alliance_db)
+    visible = _alliance_visible_text(body).lower()
+    for key in ALLIANCE_INTERNAL_KEYS:
+        assert key not in visible, f"internal key leaked into visible HTML: {key}"
+
+
+def test_alliance_hero_actions_single_group(alliance_db):
+    body = _alliance_member_hub_html(alliance_db)
+    assert body.count('class="alliance-hub-hero-actions"') == 1
+    assert "data-alliance-manage-open" in body
+    assert "data-alliance-chat-open" in body
+
+
+def test_alliance_member_roster_uses_cards_not_table(alliance_db):
+    body = _alliance_member_hub_html(alliance_db)
+    assert "alliance-hub-member-table--roster" in body
+    assert "alliance-hub-member-grid--roster" not in body
+
+
+def test_alliance_project_cards_show_localized_building_names(alliance_db):
+    body = _alliance_member_hub_html(alliance_db)
+    visible = _alliance_visible_text(body)
+    assert "Hauptquartier" in visible or "Headquarters" in visible
+    assert "research_archive" not in visible.lower()
+
+
+def test_alliance_diplomacy_jump_highlights_project(alliance_db):
+    body = _alliance_member_hub_html(alliance_db)
+    assert 'data-alliance-highlight-project="diplomacy_center"' in body
+    assert 'data-project-key="diplomacy_center"' in body
+
+
+def test_project_effect_preview_includes_affects_and_desc(alliance_db):
+    fx = project_effect_preview(
+        "tech",
+        "research_network",
+        current_level=0,
+        target_level=1,
+    )
+    assert fx["desc_key"] == "alliance_tech_research_network_desc"
+    assert fx["affects_keys"] == ["alliance_affects_research"]
+    hq = project_effect_preview(
+        "building",
+        "alliance_headquarters",
+        current_level=0,
+        target_level=1,
+        buildings={"alliance_headquarters": 0},
+    )
+    assert hq["desc_key"] == "alliance_building_hq_desc"
+    assert hq["affects_keys"] == ["alliance_affects_members"]
+    assert hq["next_value"] == member_limit_from_buildings({"alliance_headquarters": 1})

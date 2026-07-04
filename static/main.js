@@ -14930,7 +14930,8 @@
       if (tabJump) {
         ev.preventDefault();
         const key = String(tabJump.dataset.allianceTabJump || "projects");
-        switchAllianceTab(page, key);
+        const highlight = String(tabJump.dataset.allianceHighlightProject || "");
+        switchAllianceTab(page, key, highlight);
         return;
       }
 
@@ -15255,7 +15256,7 @@
     });
   }
 
-  function switchAllianceTab(page, key) {
+  function switchAllianceTab(page, key, highlightProjectKey) {
     if (!page || !key) return;
     const tabBtn = page.querySelector(`[data-alliance-tab="${key}"]`);
     page.querySelectorAll(".alliance-hub-tab, .alliance-tab").forEach((t) =>
@@ -15266,6 +15267,15 @@
       p.hidden = !show;
       p.classList.toggle("is-active", show);
     });
+    if (highlightProjectKey) {
+      requestAnimationFrame(() => {
+        const card = page.querySelector(`[data-project-key="${highlightProjectKey}"]`);
+        if (!card) return;
+        card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        card.classList.add("alliance-hub-project-card--highlight");
+        window.setTimeout(() => card.classList.remove("alliance-hub-project-card--highlight"), 2400);
+      });
+    }
   }
 
   function initAlliance() {

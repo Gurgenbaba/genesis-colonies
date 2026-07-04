@@ -1,5 +1,55 @@
 {% extends "base.html" %}
 {% from "partials/progression_cards.html" import render_resource_icon, render_resource_cost_chip, render_prog_duration with context %}
+{% from "partials/info_popover.html" import render_info_popover_trigger with context %}
+
+{% macro alliance_item_label(p) %}
+{{ T(p.label_key, T("alliance_project_fallback", "Allianzprojekt")) }}
+{% endmacro %}
+
+{% macro alliance_effect_value(p, fx, which) %}
+{% set val = fx.current_value if which == 'current' else fx.next_value %}
+{% if p.kind == 'building' and p.key == 'alliance_headquarters' %}
+{{ T("alliance_effect_members_limit", "Max. Mitglieder: %(count)s", count=val|int) }}
+{% elif p.kind == 'building' and p.key == 'logistics_depot' %}
+{{ T("alliance_effect_pool_cap", "+%(pct)s%% Pool-Kapazität", pct=val|int) }}
+{% elif p.kind == 'building' and p.key == 'diplomacy_center' %}
+{% if which == 'current' %}
+{% if val %}{{ T("alliance_effect_diplomacy_on", "Diplomatie aktiv") }}{% else %}{{ T("alliance_effect_diplomacy_off", "Noch gesperrt") }}{% endif %}
+{% else %}
+{{ T("alliance_effect_diplomacy_on", "Diplomatie aktiv") }}
+{% endif %}
+{% elif p.kind == 'building' and p.key == 'research_archive' %}
+{% if val|int >= 1 %}{{ T("alliance_effect_archive_on", "Technologieprojekte freigeschaltet") }}{% else %}{{ T("alliance_effect_archive_off", "Technologien gesperrt") }}{% endif %}
+{% elif p.kind == 'building' and p.key == 'expedition_office' %}
+{% if val|int >= 1 %}{{ T("alliance_effect_expo_office_on", "Expeditions-Technologien freigeschaltet") }}{% else %}{{ T("alliance_effect_expo_office_off", "Expeditions-Technologien gesperrt") }}{% endif %}
+{% elif p.kind == 'tech' %}
++{{ val }}%
+{% else %}
+{{ T("alliance_effect_level", "Stufe %(level)s", level=val|int) }}
+{% endif %}
+{% endmacro %}
+
+{% macro alliance_project_affects(fx) %}
+{% if fx.affects_keys %}
+<div class="alliance-hub-project-affects">
+  <span class="alliance-hub-project-affects-label">{{ T("alliance_affects_label", "Wirkt auf:") }}</span>
+  <div class="alliance-hub-project-affects-list">
+    {% for ak in fx.affects_keys %}
+    <span class="alliance-hub-project-affects-tag">{{ T(ak, ak) }}</span>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro alliance_project_tooltip(p) %}
+{% set fx = p.effect if p.effect is defined else {} %}
+{% set tip = T(fx.desc_key, '') if fx.desc_key else '' %}
+{% if not tip and p.missing_requirements %}
+{% set tip = T("alliance_tooltip_locked", "Voraussetzungen noch nicht erfüllt.") %}
+{% endif %}
+{{ render_info_popover_trigger(tip) }}
+{% endmacro %}
 
 {% macro alliance_hub_logo(alliance_id, tag, logo_url='', show_logo=false, size='md', alt='') %}
 <div class="alliance-hub-logo-frame alliance-hub-logo-frame--{{ size }}" data-alliance-logo-frame="{{ alliance_id }}">
@@ -18,97 +68,55 @@
 {% macro alliance_project_effect(p) %}
 {% set fx = p.effect if p.effect is defined else {} %}
 {% if fx.desc_key %}
-<p class="alliance-hub-project-desc">{{ T(fx.desc_key, p.key) }}</p>
+{% set desc_text = T(fx.desc_key, '') %}
+{% if desc_text %}
+<p class="alliance-hub-project-desc">{{ desc_text }}</p>
+{% endif %}
 {% endif %}
 {% if fx.current_value is not none or fx.next_value is not none %}
 <div class="alliance-hub-project-effect-grid">
   <div class="alliance-hub-project-effect-col">
     <span class="alliance-hub-project-effect-label">{{ T("alliance_effect_current", "Aktuell") }}</span>
-    <span class="alliance-hub-project-effect-val">
-      {% if p.kind == 'building' and p.key == 'alliance_headquarters' %}
-      {{ T("alliance_effect_members_limit", "Max. Mitglieder: %(count)s", count=fx.current_value|int) }}
-      {% elif p.kind == 'building' and p.key == 'logistics_depot' %}
-      {{ T("alliance_effect_pool_cap", "+%(pct)s%% Pool-Kapazität", pct=fx.current_value|int) }}
-      {% elif p.kind == 'building' and p.key == 'diplomacy_center' %}
-      {% if fx.current_value %}{{ T("alliance_effect_diplomacy_on", "Diplomatie aktiv") }}{% else %}{{ T("alliance_effect_diplomacy_off", "Noch gesperrt") }}{% endif %}
-      {% elif p.kind == 'tech' %}
-      {% if fx.effect_key == 'research_time_speed' %}
-      {{ T("alliance_effect_research_speed", "+%(pct)s%% Forschungsgeschwindigkeit", pct=fx.current_value) }}
-      {% elif fx.effect_key == 'expedition_loot_mult' %}
-      {{ T("alliance_effect_expo_loot", "+%(pct)s%% Expeditionsbeute", pct=fx.current_value) }}
-      {% elif fx.effect_key == 'production_factor' %}
-      {{ T("alliance_effect_production", "+%(pct)s%% Produktion", pct=fx.current_value) }}
-      {% elif fx.effect_key == 'defense_armor_shield' %}
-      {{ T("alliance_effect_defense", "+%(pct)s%% Verteidigung", pct=fx.current_value) }}
-      {% elif fx.effect_key == 'pool_cap_and_project_speed' %}
-      {{ T("alliance_effect_trade_coord", "+%(pct)s%% Pool & Projekte", pct=fx.current_value) }}
-      {% else %}
-      {{ T("alliance_effect_tech_bonus", "+%(pct)s%% Imperiumsbonus", pct=fx.current_value) }}
-      {% endif %}
-      {% else %}
-      L{{ p.current_level|default(0) }}
-      {% endif %}
-    </span>
+    <span class="alliance-hub-project-effect-val">{{ alliance_effect_value(p, fx, 'current') }}</span>
   </div>
   <div class="alliance-hub-project-effect-col alliance-hub-project-effect-col--next">
     <span class="alliance-hub-project-effect-label">{{ T("alliance_effect_next", "Nach Ausbau") }}</span>
-    <span class="alliance-hub-project-effect-val">
-      {% if p.kind == 'building' and p.key == 'alliance_headquarters' %}
-      {{ T("alliance_effect_members_limit", "Max. Mitglieder: %(count)s", count=fx.next_value|int) }}
-      {% elif p.kind == 'building' and p.key == 'logistics_depot' %}
-      {{ T("alliance_effect_pool_cap", "+%(pct)s%% Pool-Kapazität", pct=fx.next_value|int) }}
-      {% elif p.kind == 'building' and p.key == 'diplomacy_center' %}
-      {{ T("alliance_effect_diplomacy_on", "Diplomatie aktiv") }}
-      {% elif p.kind == 'tech' %}
-      {% if fx.effect_key == 'research_time_speed' %}
-      {{ T("alliance_effect_research_speed", "+%(pct)s%% Forschungsgeschwindigkeit", pct=fx.next_value) }}
-      {% elif fx.effect_key == 'expedition_loot_mult' %}
-      {{ T("alliance_effect_expo_loot", "+%(pct)s%% Expeditionsbeute", pct=fx.next_value) }}
-      {% elif fx.effect_key == 'production_factor' %}
-      {{ T("alliance_effect_production", "+%(pct)s%% Produktion", pct=fx.next_value) }}
-      {% elif fx.effect_key == 'defense_armor_shield' %}
-      {{ T("alliance_effect_defense", "+%(pct)s%% Verteidigung", pct=fx.next_value) }}
-      {% elif fx.effect_key == 'pool_cap_and_project_speed' %}
-      {{ T("alliance_effect_trade_coord", "+%(pct)s%% Pool & Projekte", pct=fx.next_value) }}
-      {% else %}
-      {{ T("alliance_effect_tech_bonus", "+%(pct)s%% Imperiumsbonus", pct=fx.next_value) }}
-      {% endif %}
-      {% else %}
-      L{{ p.target_level }}
-      {% endif %}
-    </span>
+    <span class="alliance-hub-project-effect-val">{{ alliance_effect_value(p, fx, 'next') }}</span>
   </div>
 </div>
 {% endif %}
+{{ alliance_project_affects(fx) }}
 {% endmacro %}
 
 {% macro alliance_locked_project_card(p) %}
-<li class="alliance-hub-project-card alliance-hub-project-card--locked">
+<article class="alliance-hub-project-card alliance-hub-project-card--locked" data-project-key="{{ p.key }}" data-project-kind="{{ p.kind }}">
   <div class="alliance-hub-project-card-head">
-    <span class="alliance-hub-project-name">{{ T(p.label_key, p.key) }}</span>
+    <span class="alliance-hub-project-name">{{ alliance_item_label(p) }}</span>
+    {{ alliance_project_tooltip(p) }}
     <span class="alliance-hub-project-level gc-mono">L{{ p.current_level|default(0) }} → L{{ p.target_level }}</span>
   </div>
   {{ alliance_project_effect(p) }}
-  <ul class="alliance-hub-project-req-list">
+  <div class="alliance-hub-project-req-list">
     {% for req in p.missing_requirements %}
-    <li class="alliance-hub-project-req">
+    <div class="alliance-hub-project-req">
       {% if req.type == 'alliance_level' %}
       {{ T("alliance_req_alliance_level", "Allianz-Stufe %(need)s (aktuell %(have)s)", need=req.need, have=req.have) }}
       {% elif req.type == 'building' %}
-      {{ T("alliance_req_building", "%(name)s Stufe %(need)s (aktuell %(have)s)", name=T(req.label_key, req.key), need=req.need, have=req.have) }}
+      {{ T("alliance_req_building", "%(name)s Stufe %(need)s (aktuell %(have)s)", name=T(req.label_key, T("alliance_project_fallback", "Projekt")), need=req.need, have=req.have) }}
       {% else %}
-      {{ T("alliance_req_tech", "%(name)s Stufe %(need)s (aktuell %(have)s)", name=T(req.label_key, req.key), need=req.need, have=req.have) }}
+      {{ T("alliance_req_tech", "%(name)s Stufe %(need)s (aktuell %(have)s)", name=T(req.label_key, T("alliance_project_fallback", "Technologie")), need=req.need, have=req.have) }}
       {% endif %}
-    </li>
+    </div>
     {% endfor %}
-  </ul>
-</li>
+  </div>
+</article>
 {% endmacro %}
 
 {% macro alliance_project_card(p, st) %}
-<li class="alliance-hub-project-card">
+<article class="alliance-hub-project-card" data-project-key="{{ p.key }}" data-project-kind="{{ p.kind }}">
   <div class="alliance-hub-project-card-head">
-    <span class="alliance-hub-project-name">{{ T(p.label_key, p.key) }}</span>
+    <span class="alliance-hub-project-name">{{ alliance_item_label(p) }}</span>
+    {{ alliance_project_tooltip(p) }}
     <span class="alliance-hub-project-level gc-mono">L{{ p.current_level|default(0) }} → L{{ p.target_level }}</span>
   </div>
   {{ alliance_project_effect(p) }}
@@ -124,7 +132,7 @@
   {% if st.can_manage and not st.active_project %}
   <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-start-project="{{ p.kind }}:{{ p.key }}">{{ T("alliance_start_project", "Start") }}</button>
   {% endif %}
-</li>
+</article>
 {% endmacro %}
 
 {% macro alliance_dip_relation(relation) %}
@@ -276,48 +284,48 @@
   {% set ap_key = st.active_project.target_key %}
   {% set ap_catalog = st.catalog.buildings if ap_kind == 'building' else st.catalog.technologies %}
   {% set ap_cfg = ap_catalog.get(ap_key, {}) %}
-  {% set ap_label = T(ap_cfg.label_key, ap_key) if ap_cfg else ap_key %}
+  {% set ap_label = T(ap_cfg.label_key, T('alliance_project_fallback', 'Projekt')) if ap_cfg else T('alliance_project_fallback', 'Projekt') %}
   {% endif %}
 
   <div class="alliance-hub-module gc-panel" data-alliance-member>
 
     <section class="alliance-hub-hero" data-alliance-summary>
-      {% if st.can_manage %}
-      <div class="alliance-hub-hero-actions">
-        <button type="button" class="gc-btn gc-btn-xs gc-btn-secondary alliance-hub-hero-action" data-alliance-manage-open>{{ T("alliance_edit_profile_btn", "Profil bearbeiten") }}</button>
-        {% if st.can_broadcast %}
-        <button type="button" class="gc-btn gc-btn-xs gc-btn-secondary alliance-hub-hero-action" data-alliance-broadcast-open>{{ T("alliance_broadcast_btn", "Rundmail") }}</button>
-        {% endif %}
-      </div>
-      {% endif %}
-      <div class="alliance-hub-hero-actions alliance-hub-hero-actions--chat">
-        <button type="button" class="gc-btn gc-btn-xs gc-btn-secondary alliance-hub-hero-action" data-alliance-chat-open>{{ T("alliance_chat_open_btn", "Allianz-Chat") }}</button>
-      </div>
-      <div class="alliance-hub-hero-body">
-        <div class="alliance-hub-hero-logo-wrap">
+      <div class="alliance-hub-hero-top">
+        <div class="alliance-hub-hero-logo-row">
           {{ alliance_hub_logo(st.alliance_id, st.tag, st.logo_url_client, st.show_logo, 'hero', st.name) }}
         </div>
-        <div class="alliance-hub-hero-meta">
-          <div class="alliance-hub-hero-identity">
-            <span class="alliance-hub-tag">[{{ st.tag }}]</span>
-            <h3 class="alliance-hub-name">{{ st.name }}</h3>
-          </div>
-          <div class="alliance-hub-hero-quickstats gc-mono">
-            <span>L{{ st.alliance_level }}</span>
-            <span>{{ st.member_count }}/{{ st.member_limit }}</span>
-            {% if rm == 'open' %}
-            <span class="alliance-hub-recruit-badge alliance-hub-recruit-badge--open" data-alliance-recruit-badge>{{ T("alliance_recruit_open", "Offen") }}</span>
-            {% elif rm == 'application_only' %}
-            <span class="alliance-hub-recruit-badge alliance-hub-recruit-badge--application" data-alliance-recruit-badge>{{ T("alliance_recruit_application_only", "Bewerbung") }}</span>
+        <div class="alliance-hub-hero-main">
+          <div class="alliance-hub-hero-meta">
+            <div class="alliance-hub-hero-identity">
+              <span class="alliance-hub-tag">[{{ st.tag }}]</span>
+              <h3 class="alliance-hub-name">{{ st.name }}</h3>
+            </div>
+            <div class="alliance-hub-hero-quickstats gc-mono">
+              <span>L{{ st.alliance_level }}</span>
+              <span>{{ st.member_count }}/{{ st.member_limit }}</span>
+              {% if rm == 'open' %}
+              <span class="alliance-hub-recruit-badge alliance-hub-recruit-badge--open" data-alliance-recruit-badge>{{ T("alliance_recruit_open", "Offen") }}</span>
+              {% elif rm == 'application_only' %}
+              <span class="alliance-hub-recruit-badge alliance-hub-recruit-badge--application" data-alliance-recruit-badge>{{ T("alliance_recruit_application_only", "Bewerbung") }}</span>
+              {% else %}
+              <span class="alliance-hub-recruit-badge alliance-hub-recruit-badge--closed" data-alliance-recruit-badge>{{ T("alliance_recruit_closed", "Geschlossen") }}</span>
+              {% endif %}
+            </div>
+            {% if st.description %}
+            <p class="alliance-hub-hero-desc">{{ st.description }}</p>
             {% else %}
-            <span class="alliance-hub-recruit-badge alliance-hub-recruit-badge--closed" data-alliance-recruit-badge>{{ T("alliance_recruit_closed", "Geschlossen") }}</span>
+            <p class="alliance-hub-hero-desc alliance-hub-hero-desc--empty">{{ T("alliance_no_description", "Keine Beschreibung hinterlegt.") }}</p>
             {% endif %}
           </div>
-          {% if st.description %}
-          <p class="alliance-hub-hero-desc">{{ st.description }}</p>
-          {% else %}
-          <p class="alliance-hub-hero-desc alliance-hub-hero-desc--empty">{{ T("alliance_no_description", "Keine Beschreibung hinterlegt.") }}</p>
-          {% endif %}
+          <div class="alliance-hub-hero-actions">
+            {% if st.can_manage %}
+            <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary alliance-hub-hero-action" data-alliance-manage-open>{{ T("alliance_edit_profile_btn", "Profil bearbeiten") }}</button>
+            {% if st.can_broadcast %}
+            <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary alliance-hub-hero-action" data-alliance-broadcast-open>{{ T("alliance_broadcast_btn", "Rundmail") }}</button>
+            {% endif %}
+            {% endif %}
+            <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary alliance-hub-hero-action" data-alliance-chat-open>{{ T("alliance_chat_open_btn", "Allianz-Chat") }}</button>
+          </div>
         </div>
       </div>
     </section>
@@ -359,7 +367,10 @@
 
     <section class="alliance-hub-xp-card" data-alliance-xp>
       <header class="alliance-hub-section-head">
-        <span class="alliance-hub-section-title">{{ T("alliance_xp_label", "Allianz-XP") }}</span>
+        <span class="alliance-hub-section-title alliance-hub-section-title--with-tip">
+          {{ T("alliance_xp_label", "Allianz-XP") }}
+          {{ render_info_popover_trigger(T("alliance_xp_tooltip", "Allianz-XP steigert die Stufe eures Bündnisses. Höhere Stufen schalten Gebäude, Technologien und mehr Mitgliederplätze frei. XP erhaltet ihr durch Spenden und abgeschlossene Projekte.")) }}
+        </span>
         <span class="alliance-hub-section-sub gc-mono">{{ st.alliance_xp|fmt_int }} / {{ st.alliance_xp_next|fmt_int }}</span>
       </header>
       <div class="alliance-hub-xp-bar-wrap">
@@ -447,26 +458,38 @@
       </div>
 
       <section class="alliance-hub-tab-panel is-active" data-alliance-panel="projects">
-        <ul class="alliance-hub-project-grid">
-          {% for p in st.available_projects if p.kind == 'building' %}
+        {% set locked_buildings = st.locked_projects|selectattr('kind', 'equalto', 'building')|list if st.locked_projects else [] %}
+        {% set available_buildings = st.available_projects|selectattr('kind', 'equalto', 'building')|list if st.available_projects else [] %}
+        <div class="alliance-hub-project-grid">
+          {% for p in available_buildings %}
           {{ alliance_project_card(p, st) }}
-          {% else %}
-          <li class="alliance-hub-empty">{{ T("alliance_no_projects", "Keine Projekte verfügbar.") }}</li>
           {% endfor %}
-        </ul>
+          {% if locked_buildings %}
+          <div class="alliance-hub-grid-section">
+            <h4 class="alliance-hub-subhead">{{ T("alliance_projects_locked_title", "Gesperrte Projekte") }}</h4>
+            <p class="alliance-hub-section-hint">{{ T("alliance_projects_locked_hint", "Voraussetzungen erfüllen, um diese Gebäude freizuschalten.") }}</p>
+          </div>
+          {% for p in locked_buildings %}
+          {{ alliance_locked_project_card(p) }}
+          {% endfor %}
+          {% endif %}
+          {% if not available_buildings and not locked_buildings %}
+          <div class="alliance-hub-empty">{{ T("alliance_no_projects", "Keine Projekte verfügbar.") }}</div>
+          {% endif %}
+        </div>
       </section>
 
       <section class="alliance-hub-tab-panel" data-alliance-panel="members" hidden>
         <div class="alliance-hub-member-table-wrap">
-          <table class="alliance-hub-member-table">
+          <table class="alliance-hub-member-table alliance-hub-member-table--roster">
             <thead>
               <tr>
                 <th scope="col">{{ T("alliance_member_col_player", "Spieler") }}</th>
                 <th scope="col">{{ T("alliance_member_col_role", "Rang") }}</th>
-                <th scope="col" class="gc-mono">{{ T("alliance_member_points", "Punkte") }}</th>
+                <th scope="col" class="gc-mono">{{ T("alliance_member_score", "Punkte") }}</th>
                 <th scope="col" class="gc-mono">{{ T("alliance_member_donations", "Spenden") }}</th>
-                <th scope="col" class="gc-mono">{{ T("alliance_member_xp_contrib", "XP") }}</th>
-                <th scope="col">{{ T("alliance_member_last_seen", "Aktiv") }}</th>
+                <th scope="col" class="gc-mono">{{ T("alliance_member_xp_contrib", "XP-Beitrag") }}</th>
+                <th scope="col">{{ T("alliance_member_last_seen", "Letzte Aktivität") }}</th>
                 <th scope="col">{{ T("alliance_member_joined", "Beitritt") }}</th>
                 {% if st.is_leader or st.can_manage %}
                 <th scope="col">{{ T("alliance_member_col_actions", "Aktionen") }}</th>
@@ -493,14 +516,14 @@
                   <div class="alliance-hub-member-actions">
                     {% if st.is_leader %}
                       {% if m.role == 'member' %}
-                      <button type="button" class="gc-btn gc-btn-xs gc-btn-secondary" data-member-role="{{ m.player_id }}:officer">{{ T("alliance_member_promote", "Befördern") }}</button>
+                      <button type="button" class="gc-btn gc-btn-xs gc-btn-secondary alliance-hub-member-action-btn" data-member-role="{{ m.player_id }}:officer" title="{{ T('alliance_member_promote', 'Befördern') }}" aria-label="{{ T('alliance_member_promote', 'Befördern') }}">↑</button>
                       {% elif m.role == 'officer' %}
-                      <button type="button" class="gc-btn gc-btn-xs gc-btn-secondary" data-member-role="{{ m.player_id }}:member">{{ T("alliance_member_demote", "Degradieren") }}</button>
+                      <button type="button" class="gc-btn gc-btn-xs gc-btn-secondary alliance-hub-member-action-btn" data-member-role="{{ m.player_id }}:member" title="{{ T('alliance_member_demote', 'Degradieren') }}" aria-label="{{ T('alliance_member_demote', 'Degradieren') }}">↓</button>
                       {% endif %}
-                      <button type="button" class="gc-btn gc-btn-xs gc-btn-secondary" data-member-transfer="{{ m.player_id }}">{{ T("alliance_member_transfer", "Leadership") }}</button>
+                      <button type="button" class="gc-btn gc-btn-xs gc-btn-secondary alliance-hub-member-action-btn" data-member-transfer="{{ m.player_id }}" title="{{ T('alliance_member_transfer', 'Leadership übertragen') }}" aria-label="{{ T('alliance_member_transfer', 'Leadership übertragen') }}">⇄</button>
                     {% endif %}
                     {% if st.is_leader or (st.can_manage and m.role == 'member') %}
-                    <button type="button" class="gc-btn gc-btn-xs gc-btn-ghost" data-member-kick="{{ m.player_id }}">{{ T("alliance_member_kick", "Entfernen") }}</button>
+                    <button type="button" class="gc-btn gc-btn-xs gc-btn-ghost alliance-hub-member-action-btn alliance-hub-member-action-btn--danger" data-member-kick="{{ m.player_id }}" title="{{ T('alliance_member_kick', 'Entfernen') }}" aria-label="{{ T('alliance_member_kick', 'Entfernen') }}">✕</button>
                     {% endif %}
                   </div>
                 </td>
@@ -548,34 +571,38 @@
             {% for chip in st.bonus_chips %}
             <div class="alliance-hub-bonus-tile">
               <span class="alliance-hub-bonus-pct gc-mono">+{{ chip.bonus_pct }}%</span>
-              <span class="alliance-hub-bonus-name">{{ T(chip.label_key, chip.tech_key) }}</span>
+              <span class="alliance-hub-bonus-name">{{ T(chip.label_key, T("alliance_project_fallback", "Technologie")) }}</span>
             </div>
             {% endfor %}
           </div>
         </div>
         {% endif %}
         <h4 class="alliance-hub-subhead">{{ T("alliance_tech_projects_title", "Forschungsprojekte") }}</h4>
-        <ul class="alliance-hub-project-grid">
-          {% for p in st.available_projects if p.kind == 'tech' %}
+        {% set locked_tech = st.locked_projects|selectattr('kind', 'equalto', 'tech')|list if st.locked_projects else [] %}
+        {% set available_tech = st.available_projects|selectattr('kind', 'equalto', 'tech')|list if st.available_projects else [] %}
+        <div class="alliance-hub-project-grid">
+          {% for p in available_tech %}
           {{ alliance_project_card(p, st) }}
           {% endfor %}
-        </ul>
-        {% set locked_tech = st.locked_projects|selectattr('kind', 'equalto', 'tech')|list if st.locked_projects else [] %}
-        {% if locked_tech %}
-        <h4 class="alliance-hub-subhead">{{ T("alliance_tech_locked_title", "Gesperrte Technologien") }}</h4>
-        <p class="alliance-hub-section-hint">{{ T("alliance_tech_locked_hint", "Voraussetzungen erfüllen, um diese Projekte freizuschalten.") }}</p>
-        <ul class="alliance-hub-project-grid">
+          {% if locked_tech %}
+          <div class="alliance-hub-grid-section">
+            <h4 class="alliance-hub-subhead">{{ T("alliance_tech_locked_title", "Gesperrte Technologien") }}</h4>
+            <p class="alliance-hub-section-hint">{{ T("alliance_tech_locked_hint", "Voraussetzungen erfüllen, um diese Projekte freizuschalten.") }}</p>
+          </div>
           {% for p in locked_tech %}
           {{ alliance_locked_project_card(p) }}
           {% endfor %}
-        </ul>
-        {% elif not (st.available_projects|selectattr('kind', 'equalto', 'tech')|list) %}
-        <p class="alliance-hub-empty">{{ T("alliance_no_tech_projects", "Keine Technologie-Projekte verfügbar.") }}</p>
-        {% if st.buildings.get('research_archive', 0) < 1 %}
-        <p class="alliance-hub-section-hint">{{ T("alliance_tech_unlock_archive", "Baue zuerst das Forschungsarchiv (Tab Projekte).") }}</p>
-        <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-alliance-tab-jump="projects">{{ T("alliance_goto_projects", "Zu Projekten") }}</button>
-        {% endif %}
-        {% endif %}
+          {% endif %}
+          {% if not available_tech and not locked_tech %}
+          <div class="alliance-hub-empty">{{ T("alliance_no_tech_projects", "Keine Technologie-Projekte verfügbar.") }}</div>
+          {% if st.buildings.get('research_archive', 0) < 1 %}
+          <div class="alliance-hub-grid-section">
+            <p class="alliance-hub-section-hint">{{ T("alliance_tech_unlock_archive", "Baue zuerst das Forschungsarchiv (Tab Projekte).") }}</p>
+            <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-alliance-tab-jump="projects">{{ T("alliance_goto_projects", "Zu Projekten") }}</button>
+          </div>
+          {% endif %}
+          {% endif %}
+        </div>
       </section>
 
       <section class="alliance-hub-tab-panel" data-alliance-panel="diplomacy" hidden>
@@ -620,34 +647,34 @@
         </div>
         {% endif %}
         {% else %}
-        <article class="alliance-hub-unlock-card">
-          <h4 class="alliance-hub-subhead">{{ T("alliance_diplomacy_locked_title", "Diplomatie-Zentrum erforderlich") }}</h4>
-          <p>{{ T("alliance_diplomacy_locked", "Diplomatie-Zentrum (Stufe 1) erforderlich.") }}</p>
+        <article class="alliance-hub-unlock-card alliance-hub-unlock-card--diplomacy">
+          <div class="alliance-hub-unlock-icon" aria-hidden="true">🔒</div>
+          <h4 class="alliance-hub-unlock-title">{{ T("alliance_diplomacy_locked_headline", "Diplomatie noch gesperrt") }}</h4>
+          <p class="alliance-hub-unlock-desc">{{ T("alliance_diplomacy_unlock_desc", "Baue zuerst das Diplomatiezentrum als Allianzprojekt, um Bündnisse, Waffenstillstände und Kriegserklärungen zu verwalten.") }}</p>
           {% if st.diplomacy_unlock_project %}
           {% set dip = st.diplomacy_unlock_project %}
-          <p class="alliance-hub-section-hint">{{ T("alliance_diplomacy_unlock_hint", "Schalte das Diplomatie-Zentrum über ein Allianz-Projekt frei.") }}</p>
-          <div class="alliance-hub-unlock-project">
-            <span class="alliance-hub-project-name">{{ T(dip.label_key, dip.key) }}</span>
+          <div class="alliance-hub-unlock-project" data-project-key="{{ dip.key }}" data-project-kind="{{ dip.kind }}">
+            <span class="alliance-hub-project-name">{{ alliance_item_label(dip) }}</span>
             <span class="alliance-hub-project-level gc-mono">L{{ dip.current_level|default(0) }} → L{{ dip.target_level }}</span>
           </div>
           {% if dip.missing_requirements %}
-          <ul class="alliance-hub-project-req-list">
+          <div class="alliance-hub-project-req-list">
             {% for req in dip.missing_requirements %}
-            <li class="alliance-hub-project-req">
+            <div class="alliance-hub-project-req">
               {% if req.type == 'alliance_level' %}
               {{ T("alliance_req_alliance_level", "Allianz-Stufe %(need)s (aktuell %(have)s)", need=req.need, have=req.have) }}
               {% elif req.type == 'building' %}
-              {{ T("alliance_req_building", "%(name)s Stufe %(need)s (aktuell %(have)s)", name=T(req.label_key, req.key), need=req.need, have=req.have) }}
+              {{ T("alliance_req_building", "%(name)s Stufe %(need)s (aktuell %(have)s)", name=T(req.label_key, T("alliance_project_fallback", "Projekt")), need=req.need, have=req.have) }}
               {% else %}
-              {{ T("alliance_req_tech", "%(name)s Stufe %(need)s (aktuell %(have)s)", name=T(req.label_key, req.key), need=req.need, have=req.have) }}
+              {{ T("alliance_req_tech", "%(name)s Stufe %(need)s (aktuell %(have)s)", name=T(req.label_key, T("alliance_project_fallback", "Technologie")), need=req.need, have=req.have) }}
               {% endif %}
-            </li>
+            </div>
             {% endfor %}
-          </ul>
+          </div>
           {% endif %}
-          <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-alliance-tab-jump="projects">{{ T("alliance_goto_projects", "Zu Projekten") }}</button>
+          <button type="button" class="gc-btn gc-btn-primary alliance-hub-unlock-btn" data-alliance-tab-jump="projects" data-alliance-highlight-project="diplomacy_center">{{ T("alliance_diplomacy_goto_project", "Zum Diplomatiezentrum") }}</button>
           {% else %}
-          <p class="alliance-hub-coming-soon-note">{{ T("alliance_diplomacy_coming", "Baue das Diplomatie-Zentrum, um Bündnisse, NAPs und Krieg zu verwalten.") }}</p>
+          <button type="button" class="gc-btn gc-btn-secondary alliance-hub-unlock-btn" data-alliance-tab-jump="projects">{{ T("alliance_goto_projects", "Zu Projekten") }}</button>
           {% endif %}
         </article>
         {% endif %}
