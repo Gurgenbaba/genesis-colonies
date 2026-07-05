@@ -53,7 +53,6 @@ from .fleet_defs import (
     PRESET_TYPES,
     all_ship_keys,
     canonical_ship_key,
-    get_ship,
     is_known_ship_key,
     ships_for_fleet_ui,
 )
@@ -64,6 +63,7 @@ from .galaxy import (
     validate_coordinates,
 )
 from .expedition_events import (
+    build_expedition_fleet_rating,
     build_expedition_report,
     calculate_expedition_loot_cap,
     count_expedition_ships,
@@ -1454,6 +1454,8 @@ def build_fleet_send_preview(
             payload["attack_limit"] = attack_limit_payload
         if noob_protection_payload:
             payload["noob_protection"] = noob_protection_payload
+        if mission == "expedition" and ships_n:
+            payload["expedition_rating"] = build_expedition_fleet_rating(ships_n)
         return payload
     finally:
         if own and conn is not None:
@@ -1504,6 +1506,8 @@ def _origin_coords(origin_planet: Dict[str, Any]) -> Tuple[int, int, int]:
 
 
 def _fleet_has_role(ships: Mapping[str, int], role: str) -> bool:
+    from .fleet_defs import ship_has_role
+
     for key, amount in ships.items():
         try:
             qty = int(amount)
@@ -1511,8 +1515,7 @@ def _fleet_has_role(ships: Mapping[str, int], role: str) -> bool:
             continue
         if qty <= 0:
             continue
-        spec = get_ship(str(key))
-        if spec and str(spec.get("role") or "") == role:
+        if ship_has_role(str(key), role):
             return True
     return False
 

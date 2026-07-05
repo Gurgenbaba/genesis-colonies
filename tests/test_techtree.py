@@ -79,15 +79,16 @@ def test_active_ships_present(techtree_db):
         assert key in ship_keys
 
 
-def test_eclipse_runner_marked_planned(techtree_db):
+def test_eclipse_runner_active_hybrid(techtree_db):
+    """GC-SHIP-1: Voidrunner is now an active expedition+combat hybrid, no longer phase2-only."""
     player_id = _create_player()
     ctx = get_techtree_page_context(user_id=player_id)
     ship_section = next(s for s in ctx["sections"] if s["key"] == "ships")
     eclipse = next((i for i in ship_section["nodes"] if i["key"] == "eclipse_runner"), None)
     assert eclipse is not None
-    assert SHIPS["eclipse_runner"].get("phase2_only") is True
-    assert eclipse["status"] == "planned"
-    assert eclipse["effect_status"] == "prepared"
+    assert SHIPS["eclipse_runner"].get("phase2_only") is None
+    assert eclipse["key"] in ACTIVE_SHIP_KEYS
+    assert eclipse["role_label_key"] == "techtree_role_expedition_combat"
 
 
 def test_defense_units_listed(techtree_db):

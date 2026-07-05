@@ -5,7 +5,7 @@ import uuid
 import pytest
 from game import db as gdb
 from game.db import db
-from game.fleet_defs import ACTIVE_SHIP_KEYS, LEGACY_SHIP_KEYS, SHIPS, canonical_ship_key, get_ship
+from game.fleet_defs import ACTIVE_SHIP_KEYS, LEGACY_SHIP_KEYS, SHIPS, canonical_ship_key, get_ship, sort_ship_keys_by_role
 from game.models import create_user, ensure_player_and_homeworld, get_planets_by_player, init_db
 
 @pytest.fixture
@@ -43,7 +43,7 @@ def _grant_ship_test_prereqs(cur, planet_id: int, user_id: int) -> None:
         cur.execute('\n            INSERT INTO research_levels (user_id, tech_key, level)\n            VALUES (?, ?, ?)\n            ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;\n            ', (int(user_id), tech, 10))
 
 def test_all_active_ship_types_exist():
-    assert len(ACTIVE_SHIP_KEYS) == 10
+    assert len(ACTIVE_SHIP_KEYS) == 11
     for key in ACTIVE_SHIP_KEYS:
         assert key in SHIPS
         spec = SHIPS[key]
@@ -58,6 +58,24 @@ def test_legacy_keys_not_primary_hull_names():
 def test_legacy_mapping_resolves():
     assert canonical_ship_key('small_cargo') == 'mule_courier'
     assert get_ship('spy_probe')['role'] == 'spy'
+
+def test_scout_beats_cargo_attack():
+    """Nomad (cargo) must not hit harder than Vanguard (scout) — GC-SHIP-2."""
+    assert int(SHIPS['spark_drone']['attack']) == 5
+    assert int(SHIPS['mule_courier']['attack']) == 1
+
+def test_shipyard_sort_by_role_then_level():
+    """Werft-Reihenfolge: cargo → expedition → combat → scout → spy → recycle → colony."""
+    ordered = sort_ship_keys_by_role(ACTIVE_SHIP_KEYS)
+    assert ordered.index('mule_courier') < ordered.index('solar_skiff')
+    assert ordered.index('solar_skiff') < ordered.index('falcon_interceptor')
+    assert ordered.index('falcon_interceptor') < ordered.index('spark_drone')
+    assert ordered.index('spark_drone') < ordered.index('veil_probe')
+    assert ordered.index('veil_probe') < ordered.index('harvest_reclaimer')
+    assert ordered.index('harvest_reclaimer') < ordered.index('seed_ark')
+    # Within cargo role: lower shipyard level first
+    assert ordered.index('mule_courier') < ordered.index('atlas_hauler')
+    assert ordered.index('atlas_hauler') < ordered.index('deep_vault_ark')
 
 def test_orbital_shipyard_building_in_catalog():
     from game.buildings import ALL_BUILDINGS, BUILDING_ORDER

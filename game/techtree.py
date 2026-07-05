@@ -19,7 +19,7 @@ from .buildings import (
     BUILDING_TAB,
 )
 from .defense_defs import ACTIVE_DEFENSE_KEYS, DEFENSES, DEFENSE_ORDER
-from .fleet_defs import ACTIVE_SHIP_KEYS, SHIPS, get_ship
+from .fleet_defs import ACTIVE_SHIP_KEYS, SHIPS, get_ship, ship_display_role, sort_ship_keys_by_role
 from .models import (
     get_planet_buildings,
     get_planet_defense,
@@ -63,6 +63,7 @@ SHIP_ROLE_LABEL_KEYS: Dict[str, str] = {
     "combat": "techtree_role_combat",
     "colony": "techtree_role_colonize",
     "expedition": "techtree_role_expedition",
+    "expedition_combat": "techtree_role_expedition_combat",
     "spy": "techtree_role_scout",
     "recycle": "techtree_role_support",
     "utility": "techtree_role_support",
@@ -417,14 +418,14 @@ def _build_ship_items(
     items: List[Dict[str, Any]] = []
     stock = ship_stock or {}
 
-    ship_keys = sorted(ACTIVE_SHIP_KEYS)
+    ship_keys = sort_ship_keys_by_role(ACTIVE_SHIP_KEYS)
     for key in ship_keys:
         spec = get_ship(key) or {}
         req_cfg = spec.get("requirements") or {}
         req_list = _expand_requirements(req_cfg, buildings, research)
         ok, _missing = check_ship_requirements(key, buildings=buildings, research=research)
         count = int(stock.get(key, 0) or 0)
-        role = str(spec.get("role") or "utility")
+        role = ship_display_role(key)
         cost = spec.get("build_cost") or {}
 
         items.append(

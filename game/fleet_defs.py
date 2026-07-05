@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, FrozenSet, List
+from typing import Any, Dict, FrozenSet, Iterable, List, Tuple
 
 SHIP_ROLES = frozenset(
     {"cargo", "combat", "spy", "recycle", "expedition", "scout", "utility", "colony"}
@@ -86,7 +86,7 @@ DEV_SEED_SHIPS: Dict[str, int] = {
 # Max base build time per ship (4:20) — effective time may drop via yard level / bonuses (min 1s).
 MAX_SHIP_BUILD_SECONDS = 260
 
-# Phase 1 active hulls (eclipse_runner prepared but optional).
+# Phase 1 active hulls (includes Voidrunner / eclipse_runner expedition+combat hybrid).
 ACTIVE_SHIP_KEYS: FrozenSet[str] = frozenset(
     {
         "spark_drone",
@@ -99,7 +99,21 @@ ACTIVE_SHIP_KEYS: FrozenSet[str] = frozenset(
         "harvest_reclaimer",
         "seed_ark",
         "deep_vault_ark",
+        "eclipse_runner",
     }
+)
+
+# Shipyard / fleet UI sort — cargo → expedition → combat → scout → spy → recycle → colony.
+SHIP_ROLE_DISPLAY_ORDER: Tuple[str, ...] = (
+    "cargo",
+    "expedition",
+    "expedition_combat",
+    "combat",
+    "scout",
+    "spy",
+    "recycle",
+    "colony",
+    "utility",
 )
 
 # build_cost: metal, crystal, fuel_cells — static defs; fuel_cells nur Mid/High-Tier (GC-860).
@@ -116,7 +130,7 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         "speed": 20000,
         "cargo": 10,
         "fuel": 5,
-        "attack": 1,
+        "attack": 5,
         "shield": 5,
         "hull": 200,
         "rapid_fire_targets": {"veil_probe": 2},
@@ -134,7 +148,7 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         "speed": 5000,
         "cargo": 5000,
         "fuel": 10,
-        "attack": 5,
+        "attack": 1,
         "shield": 10,
         "hull": 400,
         "rapid_fire_targets": {},
@@ -312,6 +326,7 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         "name_key": "fleet_ship_eclipse_runner",
         "description_key": "fleet_ship_eclipse_runner_desc",
         "role": "expedition",
+        "roles": ["expedition", "combat"],
         "required_shipyard_level": 7,
         "build_cost": {"metal": 15000, "crystal": 10000, "fuel_cells": 62},
         "build_seconds": 260,
@@ -324,7 +339,6 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         "hull": 2000,
         "rapid_fire_targets": {"spark_drone": 2},
         "crew": 8,
-        "phase2_only": True,
         "requirements": {
             "buildings": {"orbital_shipyard": 7},
             "research": {"engine_tech": 7, "shield_tech": 5},
@@ -344,6 +358,49 @@ def ship_icon_static_path(ship_key: str) -> str:
 def canonical_ship_key(ship_key: str) -> str:
     k = str(ship_key or "").strip()
     return LEGACY_SHIP_KEY_MAP.get(k, k)
+
+
+def ship_roles(ship_key: str) -> frozenset[str]:
+    """Primary role plus optional ``roles`` list from ship defs."""
+    spec = get_ship(ship_key) or {}
+    roles: set[str] = set()
+    primary = str(spec.get("role") or "").strip()
+    if primary:
+        roles.add(primary)
+    for raw in spec.get("roles") or ():
+        role = str(raw or "").strip()
+        if role:
+            roles.add(role)
+    return frozenset(roles)
+
+
+def ship_has_role(ship_key: str, role: str) -> bool:
+    return str(role) in ship_roles(ship_key)
+
+
+def ship_display_role(ship_key: str) -> str:
+    """UI role token for shipyard badges (hybrid expedition+combat → expedition_combat)."""
+    roles = ship_roles(ship_key)
+    if "expedition" in roles and "combat" in roles:
+        return "expedition_combat"
+    spec = get_ship(ship_key) or {}
+    return str(spec.get("role") or "utility")
+
+
+def sort_ship_keys_by_role(keys: Iterable[str]) -> List[str]:
+    order = {role: idx for idx, role in enumerate(SHIP_ROLE_DISPLAY_ORDER)}
+
+    def _sort_key(raw_key: str) -> tuple[int, int, str]:
+        key = canonical_ship_key(raw_key)
+        spec = SHIPS.get(key) or {}
+        display = ship_display_role(key)
+        return (
+            order.get(display, order.get(str(spec.get("role") or "utility"), 99)),
+            int(spec.get("required_shipyard_level") or 0),
+            key,
+        )
+
+    return sorted(keys, key=_sort_key)
 
 
 def is_known_ship_key(ship_key: str) -> bool:
@@ -405,12 +462,9 @@ def ship_combat_stats(ship_key: str):
     return combat_stats_for_ship(ship_key)
 
 
-def ship_defs_for_client(*, include_phase2: bool = False) -> List[Dict[str, Any]]:
+def ship_defs_for_client() -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
-    keys = sorted(ACTIVE_SHIP_KEYS)
-    if include_phase2:
-        keys = sorted(set(keys) | {"eclipse_runner"})
-    for key in keys:
+    for key in sort_ship_keys_by_role(ACTIVE_SHIP_KEYS):
         spec = SHIPS.get(key)
         if not spec:
             continue
@@ -419,5 +473,5 @@ def ship_defs_for_client(*, include_phase2: bool = False) -> List[Dict[str, Any]
 
 
 def ships_for_fleet_ui() -> List[Dict[str, Any]]:
-    """Hull list shown on fleet send UI (Phase 1 active hulls only)."""
-    return ship_defs_for_client(include_phase2=False)
+    """Hull list shown on fleet send UI (active hulls, role-ordered)."""
+    return ship_defs_for_client()

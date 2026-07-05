@@ -1751,6 +1751,10 @@ def test_expedition_preview_uses_loot_cap_not_transport_cargo(fleet_db):
     preview = build_fleet_send_preview(player_id=uid, origin_planet=origin, target_galaxy=g, target_system=s, target_position=EXPEDITION_POSITION, mission_type='expedition', ships=ships, resources={}, speed_percent=100, conn=conn)
     assert int(preview['cargo_total']) == calculate_expedition_loot_cap(ships)
     assert int(preview['cargo_total']) == calculate_expedition_loot_cap({'solar_skiff': 1})
+    rating = preview.get('expedition_rating') or {}
+    assert rating.get('escort_combat_value') == 5 * 4000
+    assert rating.get('expedition_hull_value') == 7000
+    assert float(rating.get('escort_ratio') or 0) > 0.5
     conn.close()
 
 def test_expedition_event_engine_report(fleet_db):

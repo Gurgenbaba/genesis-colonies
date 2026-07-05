@@ -13,7 +13,9 @@ from .fleet_defs import (
     canonical_ship_key,
     get_ship,
     is_known_ship_key,
+    ship_display_role,
     ship_icon_static_path,
+    sort_ship_keys_by_role,
 )
 from .models import db, get_planet_buildings, lock_planet_for_update
 
@@ -332,7 +334,7 @@ def _ship_catalog_entry(
     )
     entry: Dict[str, Any] = {
         "ship_key": ship_key,
-        "role": spec.get("role"),
+        "role": ship_display_role(ship_key),
         "attack": int(spec.get("attack", 0) or 0),
         "shield": int(spec.get("shield", 0) or 0),
         "hull": int(spec.get("hull", 0) or 0),
@@ -373,7 +375,7 @@ def list_buildable_ships(player_id: int, planet_id: int, *, conn=None) -> List[D
         queue_full = queue_count(planet_id, conn=conn) >= get_shipyard_queue_limit(conn=conn)
     ships_inv = get_ship_inventory(player_id, planet_id, conn=conn)
     out: List[Dict[str, Any]] = []
-    for key in sorted(ACTIVE_SHIP_KEYS):
+    for key in sort_ship_keys_by_role(ACTIVE_SHIP_KEYS):
         if not ship_unlocked(key, sy_level, player_id=player_id, planet_id=planet_id, conn=conn):
             continue
         entry = _ship_catalog_entry(
@@ -486,7 +488,7 @@ def list_locked_ships(player_id: int, planet_id: int, *, conn=None) -> List[Dict
     sy_level = get_shipyard_level(player_id, planet_id, conn=conn)
     ships_inv = get_ship_inventory(player_id, planet_id, conn=conn)
     out: List[Dict[str, Any]] = []
-    keys = sorted(set(ACTIVE_SHIP_KEYS) | {"eclipse_runner"})
+    keys = sort_ship_keys_by_role(ACTIVE_SHIP_KEYS)
     for key in keys:
         if ship_unlocked(key, sy_level, player_id=player_id, planet_id=planet_id, conn=conn):
             continue
@@ -920,7 +922,7 @@ def build_shipyard_page_context(player_id: int, planet: Mapping[str, Any], *, co
         "ready": True,
         **payload,
         "planet_id": planet_id,
-        "ship_defs": {row["key"]: row for row in ship_defs_for_client(include_phase2=True)},
+        "ship_defs": {row["key"]: row for row in ship_defs_for_client()},
     }
 
 

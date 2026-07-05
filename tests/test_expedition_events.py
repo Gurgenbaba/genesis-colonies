@@ -9,11 +9,15 @@ import pytest
 from game.expedition_events import (
     EXPEDITION_LOOT_EXPONENT,
     EXPEDITION_RANDOM_FACTOR_RANGE,
+    _VOIDRUNNER_DISCOVERY_BONUS,
     apply_expedition_ship_losses,
+    build_expedition_fleet_rating,
     build_expedition_report,
     calculate_base_expedition_loot,
     calculate_expo_value,
     calculate_expedition_combat_value,
+    calculate_expedition_escort_value,
+    calculate_expedition_hull_value,
     calculate_expedition_loot_cap,
     calculate_expedition_recycler_cargo,
     calculate_fleet_value,
@@ -72,6 +76,31 @@ def test_expo_value_uses_only_expedition_hulls():
     assert calculate_expo_value({"falcon_interceptor": 1000, "atlas_hauler": 500}) == 0
 
 
+def test_voidrunner_hybrid_counts_for_loot_and_combat():
+    """GC-SHIP-1: Voidrunner (expedition+combat) contributes to both expo loot and pirate combat."""
+    from game.expedition_events import _loss_role_priority
+
+    voidrunner = {"eclipse_runner": 5}
+    # Expedition role → counts toward loot and cargo cap.
+    assert calculate_expo_value(voidrunner) > 0
+    assert calculate_expedition_loot_cap(voidrunner) > 0
+    # Combat role → counts toward pirate survival value.
+    assert calculate_expedition_combat_value(voidrunner) > 0
+    # Hybrid is lost like combat (index 0) — protects pure expedition hulls (Odyssey).
+    assert _loss_role_priority("eclipse_runner") == _loss_role_priority("falcon_interceptor")
+    assert _loss_role_priority("eclipse_runner") < _loss_role_priority("solar_skiff")
+
+
+def test_voidrunner_lost_before_odyssey():
+    """Hybrid escort absorbs losses before the pure expedition hull it escorts."""
+    remaining, losses = apply_expedition_ship_losses(
+        {"eclipse_runner": 5, "solar_skiff": 5}, 40, min_remaining=1
+    )
+    assert int(losses.get("eclipse_runner") or 0) > 0
+    assert int(losses.get("solar_skiff") or 0) == 0
+    assert remaining.get("solar_skiff") == 5
+
+
 def test_canonical_base_loot_reference_values():
     """Community reference table without random/event factors (exponent per hull, linear in count)."""
     assert _ODYSSEY_FLEET_VALUE == 8750
@@ -109,6 +138,83 @@ def test_combat_and_cargo_ships_do_not_increase_expo_value():
     assert with_escorts == base
 
 
+def test_combat_value_is_escort_only_not_expo_hulls():
+    solo = calculate_expedition_combat_value({_ODYSSEY_KEY: 1})
+    with_escort = calculate_expedition_combat_value({_ODYSSEY_KEY: 1, "falcon_interceptor": 10})
+    with_hauler = calculate_expedition_combat_value({_ODYSSEY_KEY: 1, "atlas_hauler": 5})
+    assert solo == 0
+    assert with_escort == 10 * 4000
+    assert with_hauler == 0
+
+
+def test_hull_and_escort_values_split_roles():
+    fleet = {_ODYSSEY_KEY: 100, "falcon_interceptor": 1}
+    assert calculate_expedition_hull_value(fleet) == 100 * 7000
+    assert calculate_expedition_escort_value(fleet) == 4000
+    rating = build_expedition_fleet_rating(fleet)
+    assert rating["escort_ratio"] == pytest.approx(0.0057, abs=0.0001)
+    assert rating["escort_effectiveness"] < 0.05
+
+
+def test_one_escort_with_large_expo_fleet_has_minimal_pirate_advantage():
+    import random
+
+    small_expo = {_ODYSSEY_KEY: 1, "falcon_interceptor": 1}
+    large_expo = {_ODYSSEY_KEY: 100, "falcon_interceptor": 1}
+    small = resolve_pirate_encounter(random.Random(42), small_expo)
+    large = resolve_pirate_encounter(random.Random(42), large_expo)
+    assert small["win_chance"] > large["win_chance"]
+    assert large["escort_ratio"] < 0.01
+    assert small["escort_ratio"] > 0.5
+
+
+def test_scaled_escort_improves_pirate_outcome():
+    import random
+
+    weak = resolve_pirate_encounter(random.Random(7), {_ODYSSEY_KEY: 50, "falcon_interceptor": 2})
+    strong = resolve_pirate_encounter(random.Random(7), {_ODYSSEY_KEY: 50, "falcon_interceptor": 80})
+    assert strong["escort_ratio"] > weak["escort_ratio"]
+    assert strong["win_chance"] > weak["win_chance"]
+
+
+def test_voidrunner_discovery_bonus_once_per_fleet():
+    assert build_expedition_fleet_rating({"eclipse_runner": 1})["voidrunner_bonus_active"] is True
+    assert build_expedition_fleet_rating({"eclipse_runner": 5})["voidrunner_bonus_pct"] == 25
+    assert build_expedition_fleet_rating({"solar_skiff": 10})["voidrunner_bonus_active"] is False
+
+
+def test_voidrunner_boosts_positive_loot_event_weight():
+    import random
+    from game.expedition_events import _pick_event_key
+
+    loot_keys = {"mineral_deposit", "fuel_cache", "debris_salvage", "ancient_stash"}
+    base_loot = 0
+    boosted_loot = 0
+    for seed in range(500):
+        if _pick_event_key(random.Random(seed), 5, voidrunner_bonus=0.0) in loot_keys:
+            base_loot += 1
+        if _pick_event_key(random.Random(seed), 5, voidrunner_bonus=_VOIDRUNNER_DISCOVERY_BONUS) in loot_keys:
+            boosted_loot += 1
+    assert boosted_loot > base_loot
+
+
+def test_preview_and_outcome_share_expedition_rating():
+    ships = {"solar_skiff": 10, "falcon_interceptor": 5, "eclipse_runner": 2}
+    rating = build_expedition_fleet_rating(ships)
+    outcome = resolve_expedition_outcome(
+        4242,
+        cargo_total=calculate_expedition_loot_cap(ships),
+        expedition_ship_count=12,
+        flight_seconds=120,
+        ships=ships,
+    )
+    assert outcome["expedition_rating"]["escort_ratio"] == rating["escort_ratio"]
+    assert outcome["expedition_rating"]["voidrunner_bonus_active"] is True
+    _, meta = build_expedition_report("1:2:16", ships, outcome, locale="en")
+    assert meta["expedition_rating"]["escort_ratio"] == rating["escort_ratio"]
+    assert meta["voidrunner_bonus_active"] is True
+
+
 def test_cargo_cap_includes_haulers_not_combat_escorts():
     solo = calculate_expedition_loot_cap({_ODYSSEY_KEY: 1})
     with_escort = calculate_expedition_loot_cap({_ODYSSEY_KEY: 1, "falcon_interceptor": 10})
@@ -119,11 +225,8 @@ def test_cargo_cap_includes_haulers_not_combat_escorts():
 
 
 def test_combat_value_includes_escorts_not_haulers():
-    solo = calculate_expedition_combat_value({_ODYSSEY_KEY: 1})
-    with_escort = calculate_expedition_combat_value({_ODYSSEY_KEY: 1, "falcon_interceptor": 10})
-    with_hauler = calculate_expedition_combat_value({_ODYSSEY_KEY: 1, "atlas_hauler": 5})
-    assert with_escort > solo
-    assert with_hauler == solo
+    """Legacy alias — combat value is escort-only."""
+    test_combat_value_is_escort_only_not_expo_hulls()
 
 
 def test_haulers_increase_cargo_cap_not_loot():
@@ -385,7 +488,6 @@ def test_pirate_debris_created_from_ship_losses():
     combat = resolve_pirate_encounter(
         random.Random(101),
         ships,
-        calculate_expedition_combat_value(ships),
     )
     assert int(combat.get("losses_total") or 0) > 0
     debris = resolve_expedition_pirate_debris(
@@ -477,7 +579,7 @@ def test_pirate_encounter_never_wipes_fleet():
     ships = {"solar_skiff": 5, "falcon_interceptor": 50}
     for seed in range(200):
         rng = random.Random(seed)
-        combat = resolve_pirate_encounter(rng, ships, calculate_fleet_value(ships))
+        combat = resolve_pirate_encounter(rng, ships)
         remaining = combat["remaining_ships"]
         assert sum(remaining.values()) >= 1
 
@@ -567,7 +669,7 @@ def test_pirate_salvage_only_on_win():
 
     for seed in range(300):
         rng = random.Random(seed)
-        combat = resolve_pirate_encounter(rng, {"solar_skiff": 10}, calculate_fleet_value({"solar_skiff": 10}))
+        combat = resolve_pirate_encounter(rng, {"solar_skiff": 10})
         if not combat.get("won"):
             continue
         salvage_rng = random.Random(seed + 999)

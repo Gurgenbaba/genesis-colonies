@@ -32,7 +32,9 @@ Definiert in `game/fleet_defs.py`:
 - `ACTIVE_SHIP_KEYS` — im Fleet-UI sichtbar
 - `build_cost`: metal, crystal, fuel_cells (fuel_cells auf Mid/High-Tier; Odyssey unverändert)
 - Legacy-Key-Aliases für alte Saves
-- `eclipse_runner`: `phase2_only` — aus UI ausgeschlossen
+- `role` (primär) + optionale `roles`-Liste; Owner: `ship_roles()` / `ship_has_role()` / `ship_display_role()` in `fleet_defs.py`
+- Werft-/Techtree-Reihenfolge: `sort_ship_keys_by_role()` (`SHIP_ROLE_DISPLAY_ORDER`: cargo → expedition → combat → scout → spy → recycle → colony)
+- `eclipse_runner` (Voidrunner): Hybrid `roles: [expedition, combat]` (GC-SHIP-1) — bau- und expo-fähig ab Werft L7; zählt für Loot (expedition) **und** Piratenkampf (combat), Verlust-Priorität wie Kampf
 
 Schiffsbau: [Shipyard](BUILDINGS_SYSTEM.md) → `orbital_shipyard` → `shipyard_queue` → Credit auf `planet_ships`.
 
@@ -165,9 +167,13 @@ Nur Schiffe mit `role: expedition` zählen (Phase 1: **Odyssey** = `solar_skiff`
 |--------|-------|-------|
 | **Loot** (`expo_value`) | Expo-Schiffe | Eskorten, Frachter |
 | **Bergung** (`cargo_capacity`) | Expo-Frachtraum + Frachter | Kampf-Eskorten |
-| **Piratenkampf** (`fleet_value`) | Expo + Kampf-Eskorten | Frachter |
+| **Piratenkampf** (`fleet_value`) | Combat-Eskorten (`role: combat`, inkl. Hybrid) | Expo-Hüllen skalieren **Risiko** (Piratenstärke), kämpfen nicht selbst; Frachter zählen nicht |
 
 **Verluste (Expo-Balance):** Kampf-Eskorten (`role: combat`) absorbieren Schiffsverluste bei Piraten und Minenfeldern **zuerst**; Recycler (`role: recycle`) danach; Expo-Hüllen erst wenn beides erschöpft ist. Piraten-Event-Gewicht 4/123 (~3 %); Verlustbänder: Sieg 2–10 %, knapp 4–14 %, Niederlage 8–20 %.
+
+**Escort-Skalierung (GC-SHIP):** `escort_ratio = escort_combat_value / expedition_hull_value` — ein einzelnes Kampfschiff bei großer Odyssey-Flotte bringt kaum Schutz. Piratenstärke skaliert mit `expedition_hull_value`; Kampfkraft nur aus Eskorten. Owner: `build_expedition_fleet_rating()` / `resolve_pirate_encounter()` in `expedition_events.py`. Preview + Report liefern `expedition_rating` (escort_ratio, voidrunner_bonus).
+
+**Voidrunner-Bonus:** +25 % Gewicht/Loot-Qualität bei positiven Fund-Events (einmal pro Flotte, serverseitig) — kein Piraten-Schutz-Bonus.
 
 **Piraten-Trümmerfeld (Expo):** Nach Piratenkontakt mit Verlusten entsteht ein **ephemeres TF** (Spieler- + bei Sieg Piraten-Trümmer, kanonische `calculate_combat_debris`). Recycler an Bord bergen sofort in Recycler-Frachtraum (nicht Expo-Cargo-Cap); Rest verfällt. Kein persistentes Galaxy-Debris-Feld.
 

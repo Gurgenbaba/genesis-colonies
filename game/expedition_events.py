@@ -6,7 +6,7 @@ import math
 import random
 from typing import Any, Dict, Mapping, MutableMapping, Sequence, Tuple
 
-from .fleet_defs import SHIPS, VALID_RESOURCE_KEYS, ship_score_value
+from .fleet_defs import SHIPS, VALID_RESOURCE_KEYS, ship_has_role, ship_roles, ship_score_value
 
 EXPEDITION_REPORT_VERSION = 2
 
@@ -16,9 +16,20 @@ FLEET_LOOT_EXPONENT = EXPEDITION_LOOT_EXPONENT  # legacy alias for tests/imports
 EXPEDITION_RANDOM_FACTOR_RANGE = (0.66, 1.5)
 DEFAULT_EVENT_FACTOR = 1.0
 
-# Role split (GC-EXPEDITION-LOOT-FINAL): loot / bergung / piratenkampf
+# Role split (GC-EXPEDITION-LOOT-FINAL): loot / bergung / piratenkampf / escort
 _EXPEDITION_CARGO_ROLES = frozenset({"expedition", "cargo"})
-_EXPEDITION_COMBAT_ROLES = frozenset({"expedition", "combat"})
+_EXPEDITION_HULL_ROLES = frozenset({"expedition"})
+_EXPEDITION_ESCORT_ROLES = frozenset({"combat"})
+# Legacy alias — pirate combat uses escort-only fight power; hull value scales risk.
+_EXPEDITION_COMBAT_ROLES = _EXPEDITION_HULL_ROLES | _EXPEDITION_ESCORT_ROLES
+
+# Escort effectiveness — ratio-based, diminishing returns (GC-SHIP escort balance).
+_ESCORT_EFFECTIVENESS_CAP = 0.50
+_EXPO_ONLY_FIGHT_FACTOR = 0.08  # desperation fight when no combat escorts aboard
+
+# Voidrunner discovery bonus — once per fleet, server-side (GC-SHIP-1).
+_VOIDRUNNER_KEY = "eclipse_runner"
+_VOIDRUNNER_DISCOVERY_BONUS = 0.25
 
 # Per-event multiplier band, economy-day share, and resource split (shares sum to 1.0).
 _EVENT_LOOT_PROFILES: Dict[str, Dict[str, Any]] = {
@@ -391,9 +402,9 @@ def expedition_ship_fleet_value(ship_key: str) -> int:
     """Build-cost sum for one expedition hull — canonical loot scaling input (Odyssey = solar_skiff)."""
     from .fleet_defs import canonical_ship_key
 
-    spec = SHIPS.get(canonical_ship_key(ship_key)) or {}
-    if spec.get("role") != "expedition":
+    if not ship_has_role(ship_key, "expedition"):
         return 0
+    spec = SHIPS.get(canonical_ship_key(ship_key)) or {}
     costs = spec.get("build_cost") or {}
     return sum(int(costs.get(resource) or 0) for resource in VALID_RESOURCE_KEYS)
 
@@ -444,8 +455,8 @@ def _expo_value_for_outcome(
     return int(hulls * expedition_ship_expo_loot_unit("solar_skiff"))
 
 
-def calculate_expedition_combat_value(ships: Mapping[str, int]) -> int:
-    """Pirate survival input: expedition hulls + combat escorts (Frachter don't fight)."""
+def calculate_expedition_hull_value(ships: Mapping[str, int]) -> int:
+    """Score sum of expedition-role hulls — loot scaling and pirate risk input."""
     from .fleet_defs import canonical_ship_key
 
     total = 0
@@ -453,19 +464,88 @@ def calculate_expedition_combat_value(ships: Mapping[str, int]) -> int:
         amount = int(qty or 0)
         if amount <= 0:
             continue
-        spec = SHIPS.get(canonical_ship_key(str(key))) or {}
-        if spec.get("role") not in _EXPEDITION_COMBAT_ROLES:
+        canon = canonical_ship_key(str(key))
+        if not (_EXPEDITION_HULL_ROLES & ship_roles(canon)):
             continue
         total += amount * ship_score_value(str(key))
     return max(0, total)
+
+
+def calculate_expedition_escort_value(ships: Mapping[str, int]) -> int:
+    """Score sum of combat-role escorts only — pure expedition hulls do not fight pirates."""
+    from .fleet_defs import canonical_ship_key
+
+    total = 0
+    for key, qty in ships.items():
+        amount = int(qty or 0)
+        if amount <= 0:
+            continue
+        canon = canonical_ship_key(str(key))
+        if not (_EXPEDITION_ESCORT_ROLES & ship_roles(canon)):
+            continue
+        total += amount * ship_score_value(str(key))
+    return max(0, total)
+
+
+def calculate_expedition_combat_value(ships: Mapping[str, int]) -> int:
+    """Escort fight power for pirate encounters (combat role only, not expo hulls)."""
+    return calculate_expedition_escort_value(ships)
+
+
+def _escort_effectiveness(escort_ratio: float) -> float:
+    """Diminishing returns on escort_ratio; caps at _ESCORT_EFFECTIVENESS_CAP."""
+    ratio = max(0.0, float(escort_ratio))
+    if ratio <= 0.0:
+        return 0.0
+    raw = _ESCORT_EFFECTIVENESS_CAP * (1.0 - math.exp(-2.5 * ratio))
+    return min(_ESCORT_EFFECTIVENESS_CAP, raw)
+
+
+def _voidrunner_count(ships: Mapping[str, int] | None) -> int:
+    if not ships:
+        return 0
+    from .fleet_defs import canonical_ship_key
+
+    key = canonical_ship_key(_VOIDRUNNER_KEY)
+    return max(0, int(ships.get(key) or ships.get(_VOIDRUNNER_KEY) or 0))
+
+
+def _voidrunner_discovery_bonus(ships: Mapping[str, int] | None) -> float:
+    """+25 % positive event weight / loot quality — once per fleet when any Voidrunner aboard."""
+    if _voidrunner_count(ships) <= 0:
+        return 0.0
+    return _VOIDRUNNER_DISCOVERY_BONUS
+
+
+def _voidrunner_loot_mult(ships: Mapping[str, int] | None) -> float:
+    bonus = _voidrunner_discovery_bonus(ships)
+    return 1.0 + bonus if bonus > 0 else 1.0
+
+
+def build_expedition_fleet_rating(ships: Mapping[str, int]) -> Dict[str, Any]:
+    """Canonical expedition escort / voidrunner rating — preview, outcome, and report."""
+    hull_val = calculate_expedition_hull_value(ships)
+    escort_val = calculate_expedition_escort_value(ships)
+    ratio = escort_val / max(1, hull_val) if hull_val > 0 else 0.0
+    eff = _escort_effectiveness(ratio)
+    void_bonus = _voidrunner_discovery_bonus(ships)
+    return {
+        "expedition_hull_value": int(hull_val),
+        "escort_combat_value": int(escort_val),
+        "escort_ratio": round(ratio, 4),
+        "escort_effectiveness": round(eff, 4),
+        "voidrunner_bonus_active": void_bonus > 0,
+        "voidrunner_bonus_pct": int(round(void_bonus * 100)) if void_bonus > 0 else 0,
+    }
 
 
 def _fleet_value_for_outcome(
     ships: Mapping[str, int] | None,
     expedition_ship_count: int,
 ) -> int:
+    """Total fleet score for story/treasure events (not pirate fight power)."""
     if ships:
-        value = calculate_expedition_combat_value(ships)
+        value = calculate_fleet_value(ships)
         if value > 0:
             return value
     hulls = max(0, int(expedition_ship_count))
@@ -480,8 +560,7 @@ def count_expedition_ships(ships: Mapping[str, int]) -> int:
         amount = int(qty or 0)
         if amount <= 0:
             continue
-        spec = SHIPS.get(str(key)) or {}
-        if spec.get("role") == "expedition":
+        if ship_has_role(str(key), "expedition"):
             total += amount
     return total
 
@@ -495,9 +574,10 @@ def calculate_expedition_loot_cap(ships: Mapping[str, int]) -> int:
         amount = int(qty or 0)
         if amount <= 0:
             continue
-        spec = SHIPS.get(canonical_ship_key(str(key))) or {}
-        if spec.get("role") not in _EXPEDITION_CARGO_ROLES:
+        canon = canonical_ship_key(str(key))
+        if not (_EXPEDITION_CARGO_ROLES & ship_roles(canon)):
             continue
+        spec = SHIPS.get(canon) or {}
         cargo_total += int(spec.get("cargo") or 0) * amount
     return max(0, cargo_total)
 
@@ -508,9 +588,11 @@ def _pick_event_key(
     *,
     salvage: bool = False,
     event_bonus: float = 0.0,
+    voidrunner_bonus: float = 0.0,
 ) -> str:
     """Pick event; extra expedition hulls shift weight away from empty outcomes."""
     bonus = min(0.12, max(0, int(expedition_ship_count)) * 0.03) + max(0.0, float(event_bonus))
+    discovery_bonus = max(0.0, float(voidrunner_bonus))
     empty_keys = {"void_scan", "sensor_glitch", "ion_storm", "ancient_minefield", "nav_interference"}
     adjusted: list[tuple[str, float]] = []
     for event in _EXPEDITION_EVENTS:
@@ -521,7 +603,7 @@ def _pick_event_key(
         if key in empty_keys:
             weight = max(1.0, weight * (1.0 - bonus))
         elif _event_has_loot(key):
-            weight = weight * (1.0 + bonus)
+            weight = weight * (1.0 + bonus + discovery_bonus)
         adjusted.append((key, weight))
     if not adjusted:
         adjusted = [(str(_EXPEDITION_EVENTS[0]["key"]), 1.0)]
@@ -563,6 +645,7 @@ def _compute_event_loot(
     *,
     cargo_total: int = 0,
     event_factor: float = DEFAULT_EVENT_FACTOR,
+    loot_quality_mult: float = 1.0,
 ) -> Tuple[Dict[str, int], Dict[str, int]]:
     profile = _EVENT_LOOT_PROFILES.get(str(event_key))
     if not profile or int(expo_value) <= 0:
@@ -575,11 +658,12 @@ def _compute_event_loot(
         float(EXPEDITION_RANDOM_FACTOR_RANGE[1]),
     )
     global_event_factor = max(0.0, float(event_factor))
+    quality_mult = max(1.0, float(loot_quality_mult))
 
     base_loot = calculate_base_expedition_loot(int(expo_value))
     total_loot = max(
         0,
-        int(base_loot * random_factor * profile_mult * global_event_factor),
+        int(base_loot * random_factor * profile_mult * global_event_factor * quality_mult),
     )
     cargo_cap = max(0, int(cargo_total))
     if cargo_cap > 0:
@@ -738,13 +822,17 @@ def _pirate_win_chance(ratio: float) -> float:
 
 
 def _loss_role_priority(ship_key: str) -> int:
-    from .fleet_defs import SHIPS, canonical_ship_key
-
-    role = str((SHIPS.get(canonical_ship_key(str(ship_key))) or {}).get("role") or "utility")
-    try:
-        return _LOSS_ROLE_PRIORITY.index(role)
-    except ValueError:
+    """Lowest priority index across all roles — hybrid Voidrunner is lost like combat first."""
+    roles = ship_roles(str(ship_key))
+    if not roles:
         return len(_LOSS_ROLE_PRIORITY)
+    best = len(_LOSS_ROLE_PRIORITY)
+    for role in roles:
+        try:
+            best = min(best, _LOSS_ROLE_PRIORITY.index(role))
+        except ValueError:
+            continue
+    return best
 
 
 def apply_expedition_ship_losses(
@@ -1109,14 +1197,45 @@ def _resolve_event_delay_extra(
 def resolve_pirate_encounter(
     rng: random.Random,
     ships: Mapping[str, int],
-    fleet_value: int,
+    *,
+    expedition_hull_value: int | None = None,
+    escort_combat_value: int | None = None,
 ) -> Dict[str, Any]:
-    """Ratio-based pirate skirmish — no combat.py resolver; expedition fleet never wiped."""
-    fleet_points = max(1, int(fleet_value))
+    """Ratio-based pirate skirmish — pirates scale with expo hull risk, fight power from escorts only."""
+    expo_risk = max(
+        1,
+        int(
+            expedition_hull_value
+            if expedition_hull_value is not None
+            else calculate_expedition_hull_value(ships)
+        ),
+    )
+    escort_pts = max(
+        0,
+        int(
+            escort_combat_value
+            if escort_combat_value is not None
+            else calculate_expedition_escort_value(ships)
+        ),
+    )
+    escort_ratio = escort_pts / max(1, expo_risk)
+    escort_eff = _escort_effectiveness(escort_ratio)
+
     enemy_factor = rng.uniform(_PIRATE_ENEMY_FACTOR_RANGE[0], _PIRATE_ENEMY_FACTOR_RANGE[1])
-    pirate_points = max(1, int(fleet_points * enemy_factor))
-    ratio = fleet_points / max(1, pirate_points)
-    win_chance = _pirate_win_chance(ratio)
+    pirate_points = max(1, int(expo_risk * enemy_factor))
+
+    if escort_pts > 0:
+        fight_points = escort_pts
+    else:
+        fight_points = max(1, int(expo_risk * _EXPO_ONLY_FIGHT_FACTOR))
+
+    ratio = fight_points / max(1, pirate_points)
+    base_win = _pirate_win_chance(ratio)
+    win_chance = min(
+        _PIRATE_WIN_CHANCE_CLAMP[1],
+        base_win + escort_eff * (1.0 - base_win),
+    )
+    win_chance = max(_PIRATE_WIN_CHANCE_CLAMP[0], win_chance)
     won = rng.random() <= win_chance
 
     if won:
@@ -1124,12 +1243,18 @@ def resolve_pirate_encounter(
     else:
         lo, hi = _PIRATE_LOSS_DEFEAT_RANGE
     loss_pct = rng.randint(int(lo), int(hi))
+    if escort_eff > 0 and won:
+        loss_pct = max(1, int(loss_pct * (1.0 - escort_eff * 0.35)))
 
     remaining, losses = apply_expedition_ship_losses(ships, loss_pct)
     return {
         "won": bool(won),
         "pirate_points": int(pirate_points),
-        "fleet_points": int(fleet_points),
+        "expedition_hull_value": int(expo_risk),
+        "escort_combat_value": int(escort_pts),
+        "escort_ratio": float(escort_ratio),
+        "escort_effectiveness": float(escort_eff),
+        "fleet_points": int(fight_points),
         "ratio": float(ratio),
         "win_chance": float(win_chance),
         "loss_pct": int(loss_pct),
@@ -1148,9 +1273,9 @@ def calculate_expedition_recycler_cargo(ships: Mapping[str, int]) -> int:
         amount = int(qty or 0)
         if amount <= 0:
             continue
-        spec = SHIPS.get(canonical_ship_key(str(key))) or {}
-        if spec.get("role") != "recycle":
+        if not ship_has_role(str(key), "recycle"):
             continue
+        spec = SHIPS.get(canonical_ship_key(str(key))) or {}
         total += int(spec.get("cargo") or 0) * amount
     return max(0, total)
 
@@ -1240,6 +1365,9 @@ def resolve_expedition_outcome(
     global_event_factor = float(flags.get("expedition_event_factor") or DEFAULT_EVENT_FACTOR)
     expo_value = _expo_value_for_outcome(ships, expedition_ship_count)
     fleet_value = _fleet_value_for_outcome(ships, expedition_ship_count)
+    fleet_rating = build_expedition_fleet_rating(ships or {})
+    voidrunner_bonus = _voidrunner_discovery_bonus(ships)
+    voidrunner_loot_mult = _voidrunner_loot_mult(ships)
 
     rng = random.Random(int(movement_id) * 7919 + 104729)
     event_key = _pick_event_key(
@@ -1247,6 +1375,7 @@ def resolve_expedition_outcome(
         expedition_ship_count,
         salvage=salvage,
         event_bonus=event_bonus,
+        voidrunner_bonus=voidrunner_bonus,
     )
     event = _EVENT_BY_KEY[event_key]
     pirate_combat: Dict[str, Any] | None = None
@@ -1260,7 +1389,12 @@ def resolve_expedition_outcome(
 
     if event_key == "pirate_encounter" and ships:
         pirate_rng = random.Random(int(movement_id) * 31337 + 271828)
-        pirate_combat = resolve_pirate_encounter(pirate_rng, ships, fleet_value)
+        pirate_combat = resolve_pirate_encounter(
+            pirate_rng,
+            ships,
+            expedition_hull_value=int(fleet_rating["expedition_hull_value"]),
+            escort_combat_value=int(fleet_rating["escort_combat_value"]),
+        )
         remaining_ships = dict(pirate_combat.get("remaining_ships") or {})
         ship_losses = dict(pirate_combat.get("losses") or {})
         if pirate_combat.get("won"):
@@ -1329,6 +1463,7 @@ def resolve_expedition_outcome(
             expo_value,
             cargo_total=int(cargo_total),
             event_factor=global_event_factor,
+            loot_quality_mult=voidrunner_loot_mult,
         )
         lootboxes = _roll_expedition_lootboxes(rng, event_key)
     convoy_mode: str | None = None
@@ -1401,6 +1536,7 @@ def resolve_expedition_outcome(
         "expedition_ship_count": int(expedition_ship_count),
         "expo_value": int(expo_value),
         "fleet_value": int(fleet_value),
+        "expedition_rating": fleet_rating,
         "empire_daily_total": int(empire_daily_total),
         "raw_loot_total": int(cargo_meta.get("raw_loot_total") or loot_debug.get("raw_loot_total") or 0),
         "cargo_total": int(cargo_total),
@@ -1778,12 +1914,22 @@ def build_expedition_report(
             "won": bool(pirate_combat.get("won")),
             "pirate_points": int(pirate_combat.get("pirate_points") or 0),
             "fleet_points": int(pirate_combat.get("fleet_points") or 0),
+            "expedition_hull_value": int(pirate_combat.get("expedition_hull_value") or 0),
+            "escort_combat_value": int(pirate_combat.get("escort_combat_value") or 0),
+            "escort_ratio": float(pirate_combat.get("escort_ratio") or 0),
+            "escort_effectiveness": float(pirate_combat.get("escort_effectiveness") or 0),
             "ratio": float(pirate_combat.get("ratio") or 0),
             "win_chance": float(pirate_combat.get("win_chance") or 0),
             "loss_pct": int(pirate_combat.get("loss_pct") or 0),
             "salvage_tier": str(pirate_combat.get("salvage_tier") or "none"),
         }
         metadata["pirate_won"] = bool(pirate_combat.get("won"))
+    rating = dict(outcome.get("expedition_rating") or {})
+    if rating:
+        metadata["expedition_rating"] = rating
+        metadata["voidrunner_bonus_active"] = bool(rating.get("voidrunner_bonus_active"))
+        if rating.get("voidrunner_bonus_active"):
+            metadata["voidrunner_bonus_pct"] = int(rating.get("voidrunner_bonus_pct") or 0)
     if hazard:
         metadata["hazard"] = {
             "key": str(hazard.get("key") or event_key),
