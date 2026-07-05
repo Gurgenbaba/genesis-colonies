@@ -110,7 +110,7 @@ Pipeline (single request, one finish pass):
 ### `storage_tech` and depot capacity
 
 - **Depot base:** `storage_capacity_at_depot_level(level)` = `150_000 + 24h × mine_output("metal", level × 3)` before storage tech / terraformer.
-- **Tech formula:** additive linear multiplier, `capacity *= (1 + storage_tech_level × 0.33)`.
+- **Tech formula:** additive linear multiplier, `capacity *= (1 + storage_tech_level × 0.15)`.
 - **Also stacks with:** Terraformer (+5 % storage capacity per level) and external `storage_factor` modifiers.
 - **Not:** production-anchor jumps at L1, frontend math, or a second storage curve.
 

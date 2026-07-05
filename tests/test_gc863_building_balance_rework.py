@@ -16,6 +16,7 @@ from game.economy_balance import (
     NANOFACTORY_CRYSTAL_BASE,
     NANOFACTORY_METAL_BASE,
     STORAGE_BASE_CAPACITY,
+    STORAGE_BUILDING_COST_MULTIPLIER,
     STORAGE_REFERENCE_HOURS,
     STORAGE_REFERENCE_MINE_LEVEL_FACTOR,
     STORAGE_REFERENCE_RESOURCE,
@@ -78,6 +79,12 @@ class TestGc863StorageCosts:
         new_m, new_c = power_upgrade_cost("metal_storage", level)
         assert new_m > old_m
         assert new_c >= old_c
+
+    def test_storage_building_cost_multiplier(self):
+        assert STORAGE_BUILDING_COST_MULTIPLIER == 5.0
+        base_m, _ = power_upgrade_cost("solar_plant", 10)
+        storage_m, _ = power_upgrade_cost("metal_storage", 10)
+        assert storage_m > base_m * 3
 
 
 class TestGc863StorageCapacity:

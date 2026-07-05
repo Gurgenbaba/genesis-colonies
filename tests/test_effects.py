@@ -27,6 +27,7 @@ from game.effects import (
     clear_effect_resolver_cache,
     get_effect_resolver,
 )
+from game.effects.effect_resolver import STORAGE_TECH_PER_LEVEL
 from game.models import (
     add_build_job,
     create_user,
@@ -165,7 +166,7 @@ class TestResearchModifiers:
         cap1 = get_storage_capacity(b, r, mods=get_research_modifiers(pid))
 
         assert cap1["metal"] > cap0["metal"]
-        assert cap1["metal"] == pytest.approx(int(cap0["metal"] * 1.66))
+        assert cap1["metal"] == pytest.approx(int(cap0["metal"] * (1 + 2 * STORAGE_TECH_PER_LEVEL)))
 
     def test_buildtime_tech_speeds_build_and_research(self):
         pid = _create_player("buildtime")

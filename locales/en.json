@@ -1515,7 +1515,7 @@
   "desc_shield_tech": "Planned: +5% shield bonus per level. No planetary or fleet shield effect yet.",
   "desc_shipyard": "Unlocks ship construction. Higher levels unlock better hull classes and raise yard capacity.",
   "desc_solar_plant": "Large collector arrays that convert starlight into Aetherion energy to power your colony.",
-  "desc_storage_tech": "Increases Ferronite, Crytite, and Fuel Cells storage capacity by 33% per level. Stacks with storage buildings and the Terraformer.",
+  "desc_storage_tech": "Increases Ferronite, Crytite, and Fuel Cells storage capacity by 15% per level. Stacks with storage buildings and the Terraformer.",
   "desc_tech_armor_tech": "Steigert Haltbarkeit durch Verbundpanzer und adaptive Materialien.",
   "desc_tech_construction_optimization": "Reduces building and research times through standard modules and automation.",
   "desc_tech_cryogenic_drive": "More thrust, fewer losses — especially for large fleets.",

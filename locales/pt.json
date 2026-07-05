@@ -1514,7 +1514,7 @@
   "desc_shield_tech": "Planejado: +5% de bônus de escudo por nível. Nenhum efeito de escudo planetário ou de frota ainda.",
   "desc_shipyard": "Desbloqueia a construção de navios. Níveis mais altos desbloqueiam melhores classes de casco e aumentam a capacidade do pátio.",
   "desc_solar_plant": "Grandes matrizes coletoras que convertem a luz das estrelas em energia Aetherion para alimentar sua colônia.",
-  "desc_storage_tech": "Aumenta a capacidade de armazenamento de Ferronite, Crytite e células de combustível em 33% por nível. Acumula com edifícios de armazenamento e o Terraformer.",
+  "desc_storage_tech": "Aumenta a capacidade de armazenamento de Ferronite, Crytite e células de combustível em 15% por nível. Acumula com edifícios de armazenamento e o Terraformer.",
   "desc_tech_armor_tech": "Steigert Haltbarkeit durch Verbundpanzer e material adaptável.",
   "desc_tech_construction_optimization": "Reduz os tempos de construção e pesquisa por meio de módulos padrão e automação.",
   "desc_tech_cryogenic_drive": "Mais impulso, menos perdas — especialmente para grandes frotas.",

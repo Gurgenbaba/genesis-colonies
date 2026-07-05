@@ -1514,7 +1514,7 @@
   "desc_shield_tech": "Prévu : +5% de bonus de bouclier par niveau. Pas encore d'effet de bouclier planétaire ou de flotte.",
   "desc_shipyard": "Débloque la construction de navires. Des niveaux plus élevés débloquent de meilleures classes de coque et augmentent la capacité du chantier.",
   "desc_solar_plant": "De grands réseaux de collecteurs qui convertissent la lumière des étoiles en énergie Aetherion pour alimenter votre colonie.",
-  "desc_storage_tech": "Augmente la capacité de stockage de la Ferronite, de la Crytite et des cellules de carburant de 33% par niveau. Se cumule avec les bâtiments de stockage et le Terraformer.",
+  "desc_storage_tech": "Augmente la capacité de stockage de la Ferronite, de la Crytite et des cellules de carburant de 15% par niveau. Se cumule avec les bâtiments de stockage et le Terraformer.",
   "desc_tech_armor_tech": "Steigert Haltbarkeit durch Verbundpanzer und adaptative Materialien.",
   "desc_tech_construction_optimization": "Réduit les temps de construction et de recherche grâce à des modules standard et à l’automatisation.",
   "desc_tech_cryogenic_drive": "Plus de poussée, moins de pertes, surtout pour les grandes flottes.",

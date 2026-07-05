@@ -42,7 +42,7 @@ Vollständige Tabellen: **[GC_ANCHOR_TABLES_X1.md](GC_ANCHOR_TABLES_X1.md)**
 2. **Build-Zeit:** live via `power_build_seconds()` in `EffectResolver.get_build_time_seconds()` (GC-850A).
 3. **Forschung Kosten/Zeit:** live via `research_upgrade_cost()` / `research_time_anchor_hours()` (GC-825).
 4. **Minen-ROI-Anker:** L20=50h … L120=2000h — Ziel für Ferronit-Mine; Crytite/Brennzellen weichen ab.
-5. **Lager:** Basis-Cap wie Ferronit/Crytite/Brennzellen (`STORAGE_BASE_CAPACITY`); Storage skaliert per Ferdi-Referenzkurve (`150k + 24h × Ferronit-Minenproduktion bei Lagerlevel × 3`), `storage_tech` multipliziert additiv mit +33 %/Level.
+5. **Lager:** Basis-Cap wie Ferronit/Crytite/Brennzellen (`STORAGE_BASE_CAPACITY`); Storage skaliert per Ferdi-Referenzkurve (`150k + 24h × Ferronit-Minenproduktion bei Lagerlevel × 3`), `storage_tech` multipliziert additiv mit +15 %/Level; Lager-Upgrades ×5 Kosten (`STORAGE_BUILDING_COST_MULTIPLIER`).
 6. **Klima-Prod-Faktoren:** zusätzlich zu Slot/Temperatur in `production_formula.py` via `directive_modifier` (Klima + Galactic Directives + Diplomacy).
 7. **Produktions-Basis (Ferdi-Rebase):** `Standard + MineBasis × level × 1.075^level` — Standard 15k/10k/5k; Energie nur auf Minen-Anteil — siehe [PRODUCTION_FORMULA_SYSTEM.md](PRODUCTION_FORMULA_SYSTEM.md).
 8. **Forschung Kosten (GC-RESEARCH-COST-REBALANCE):** `research_cost_afford_hours × Referenzproduktion (Fe+Cr)` — steile Afford-Kurve (L10=8h … L120=8640h); Zeiten unverändert (GC-825).

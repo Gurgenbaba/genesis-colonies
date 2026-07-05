@@ -1514,7 +1514,7 @@
   "desc_shield_tech": "Planowane: +5% premii za tarczę na poziom. Nie ma jeszcze efektu tarczy planetarnej ani flotowej.",
   "desc_shipyard": "Odblokowuje konstrukcję statku. Wyższe poziomy odblokowują lepsze klasy kadłubów i zwiększają pojemność stoczni.",
   "desc_solar_plant": "Duże układy kolektorów, które przekształcają światło gwiazd w energię Aetherion, która zasila Twoją kolonię.",
-  "desc_storage_tech": "Zwiększa pojemność magazynu Ferronite, Crytite i ogniw paliwowych o 33% na poziom. Kumuluje się z budynkami magazynowymi i Terraformer.",
+  "desc_storage_tech": "Zwiększa pojemność magazynu Ferronite, Crytite i ogniw paliwowych o 15% na poziom. Kumuluje się z budynkami magazynowymi i Terraformer.",
   "desc_tech_armor_tech": "Steigert Haltbarkeit dzięki Verbundpanzer i materiałom adaptacyjnym.",
   "desc_tech_construction_optimization": "Skraca czas budowy i badań dzięki standardowym modułom i automatyzacji.",
   "desc_tech_cryogenic_drive": "Większy ciąg, mniej strat — szczególnie w przypadku dużych flot.",

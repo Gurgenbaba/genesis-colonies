@@ -34,7 +34,7 @@ BUILDTIME_TECH_DURATION = 0.97  # multiplicative: duration × 0.97 ** level
 NANOFACTORY_DURATION_PER_LEVEL = 0.70  # duration × 0.70 ** nanofactory_level
 COMMAND_CENTER_NANOFACTORY_DURATION = 0.75  # nanofactory build: × 0.75 ** cc_level
 FUEL_EFFICIENCY_PER_LEVEL = 0.03
-STORAGE_TECH_PER_LEVEL = 0.33
+STORAGE_TECH_PER_LEVEL = 0.15
 _DIVISION_EPS = 1e-12  # avoid div-by-zero only; not a balance cap
 
 # Production formulas: game/production_formula.py (GC-820) — do not duplicate here.
@@ -596,7 +596,7 @@ class EffectResolver:
             crystal_prod_factor *= drone_bonus
             sources.append(self._source_entry("prod_factor", "drone_tech", drone_bonus, ld))
 
-        # --- Research: storage_tech (+33% storage per level, additive) ---
+        # --- Research: storage_tech (+15% storage per level, additive) ---
         ls = _lvl(r, "storage_tech")
         if ls > 0:
             storage_factor *= 1.0 + STORAGE_TECH_PER_LEVEL * ls

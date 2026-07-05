@@ -27,6 +27,7 @@ from game.economy_balance import (
     storage_capacity_at_depot_level,
 )
 from game.effects import EffectResolver
+from game.effects.effect_resolver import STORAGE_TECH_PER_LEVEL
 from game.exchange import _EXCHANGE_SETTING_DEFAULTS
 from game.fleet_defs import SHIPS
 
@@ -108,8 +109,8 @@ class TestGc821BStorageAndExchange:
         tech10 = EffectResolver({"metal_storage": 18}, {"storage_tech": 10}).get_storage_capacity()["metal"]
         tech20 = EffectResolver({"metal_storage": 18}, {"storage_tech": 20}).get_storage_capacity()["metal"]
 
-        assert tech10 == pytest.approx(int(base * (1 + 10 * 0.33)), rel=0.001)
-        assert tech20 == pytest.approx(int(base * (1 + 20 * 0.33)), rel=0.001)
+        assert tech10 == pytest.approx(int(base * (1 + 10 * STORAGE_TECH_PER_LEVEL)), rel=0.001)
+        assert tech20 == pytest.approx(int(base * (1 + 20 * STORAGE_TECH_PER_LEVEL)), rel=0.001)
         assert tech20 > tech10 > base
 
     def test_terraformer_multiplies_final_storage_capacity(self):
@@ -138,7 +139,7 @@ class TestGc821BStorageAndExchange:
         for resource, building in cases:
             caps = EffectResolver({building: 30}, {"storage_tech": 5}).get_storage_capacity()
             expected_base = storage_capacity_at_depot_level(30)
-            expected = int(expected_base * (1 + 5 * 0.33))
+            expected = int(expected_base * (1 + 5 * STORAGE_TECH_PER_LEVEL))
             assert caps[resource] == expected
 
     def test_storage_reference_formula_constants(self):

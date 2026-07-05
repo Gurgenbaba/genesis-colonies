@@ -42,6 +42,8 @@ MINE_UPGRADE_ROI_TARGET_HOURS: Dict[int, float] = {
 MINE_BULK_UPGRADE_INCREMENTS: Tuple[int, ...] = (1, 5, 10)
 
 MINE_BUILDING_TYPES = frozenset({"metal_mine", "crystal_mine", "fuel_cell_plant"})
+STORAGE_BUILDING_TYPES = frozenset({"metal_storage", "crystal_storage", "fuel_storage"})
+STORAGE_BUILDING_COST_MULTIPLIER = 5.0
 MINE_RESOURCE_BY_BUILDING: Dict[str, str] = {
     "metal_mine": "metal",
     "crystal_mine": "crystal",
@@ -441,6 +443,8 @@ def power_upgrade_cost(building_type: str, target_level: int) -> Tuple[int, int]
         total *= mine_roi_cost_multiplier(lvl)
     else:
         total = curve.k * (float(lvl) ** curve.exponent)
+    if btype in STORAGE_BUILDING_TYPES:
+        total *= STORAGE_BUILDING_COST_MULTIPLIER
     total = max(total, 1.0)
     metal = max(1, int(math.ceil(total * curve.metal_frac)))
     crystal = max(0, int(math.ceil(total * curve.crystal_frac)))

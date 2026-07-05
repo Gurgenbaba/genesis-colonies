@@ -1515,7 +1515,7 @@
   "desc_shield_tech": "Vorbereitet: +5 % Schildbonus pro Stufe. Noch ohne planetare oder Flotten-Schildwirkung.",
   "desc_shipyard": "Schaltet Schiffsbau frei. Höhere Stufen schalten bessere Schiffsklassen frei und erhöhen die Orbitalwerft-Kapazität.",
   "desc_solar_plant": "Erzeugt Aetherion (∝ Stufe^1,4). Versorgt Minen und andere Verbraucher — Unterdeckung drosselt die Ressourcenproduktion.",
-  "desc_storage_tech": "Erhöht Ferronit-, Crytite- und Brennzellen-Lagerkapazität um 33 % pro Stufe. Stapelt mit Lagergebäuden und Terraformer.",
+  "desc_storage_tech": "Erhöht Ferronit-, Crytite- und Brennzellen-Lagerkapazität um 15 % pro Stufe. Stapelt mit Lagergebäuden und Terraformer.",
   "desc_tech_armor_tech": "Steigert Haltbarkeit durch Verbundpanzer und adaptive Materialien.",
   "desc_tech_construction_optimization": "Senkt Bau- & Forschungszeiten durch Standardmodule und Automatisierung.",
   "desc_tech_cryogenic_drive": "Mehr Schub, weniger Verluste – besonders bei großen Verbänden.",

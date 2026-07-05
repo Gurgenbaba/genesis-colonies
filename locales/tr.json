@@ -1514,7 +1514,7 @@
   "desc_shield_tech": "Planlanan: Seviye başına +%5 kalkan bonusu. Henüz gezegen veya filo kalkanı etkisi yok.",
   "desc_shipyard": "Gemi yapımının kilidini açar. Daha yüksek seviyeler daha iyi gövde sınıflarının kilidini açar ve tersane kapasitesini artırır.",
   "desc_solar_plant": "Koloninize güç sağlamak için yıldız ışığını Aetherion enerjiye dönüştüren büyük toplayıcı diziler.",
-  "desc_storage_tech": "Ferronite, Crytite ve yakıt hücresi depolama kapasitesini seviye başına %33 artırır. Depolama binaları ve Terraformer ile birikir.",
+  "desc_storage_tech": "Ferronite, Crytite ve yakıt hücresi depolama kapasitesini seviye başına %15 artırır. Depolama binaları ve Terraformer ile birikir.",
   "desc_tech_armor_tech": "Verbundpanzer ve uyarlanabilir Malzeme ile Steigert Durchbarkeit.",
   "desc_tech_construction_optimization": "Standart modüller ve otomasyon sayesinde inşaat ve araştırma sürelerini azaltır.",
   "desc_tech_cryogenic_drive": "Özellikle büyük filolar için daha fazla itiş gücü, daha az kayıp.",

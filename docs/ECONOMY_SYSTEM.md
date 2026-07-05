@@ -95,7 +95,7 @@ Details: [PRODUCTION_FORMULA_SYSTEM.md](PRODUCTION_FORMULA_SYSTEM.md).
 
 - Basis **150.000** Ferronit/Crytite/Brennzellen ohne Depot (`STORAGE_BASE_CAPACITY` / `EffectResolver.BASE_STORAGE`)
 - Mit `metal_storage` / `crystal_storage` / `fuel_storage`: **Ferdi-Referenzkurve** (`storage_capacity_at_depot_level`: Basis + 24h Ferronit-Minenproduktion bei `Lagerlevel × 3`)
-- Multiplier: `storage_tech` (+33 %/Lvl, additiv), `terraformer` (+5 % Kapazität/Lvl), `storage_factor`
+- Multiplier: `storage_tech` (+15 %/Lvl, additiv), `terraformer` (+5 % Kapazität/Lvl), `storage_factor`
 - Produktion kann Storage nicht überschreiten; bestehendes Overflow wird nicht getrimmt
 - **Trader Hub + Schrottplatz** dürfen jederzeit über Cap gutschreiben (Overflow bleibt erhalten)
 
