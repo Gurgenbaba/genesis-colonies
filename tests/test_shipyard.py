@@ -61,7 +61,7 @@ def test_legacy_mapping_resolves():
 
 def test_scout_beats_cargo_attack():
     """Nomad (cargo) must not hit harder than Vanguard (scout) — GC-SHIP-2."""
-    assert int(SHIPS['spark_drone']['attack']) == 5
+    assert int(SHIPS['spark_drone']['attack']) == 9
     assert int(SHIPS['mule_courier']['attack']) == 1
 
 def test_shipyard_sort_by_role_then_level():

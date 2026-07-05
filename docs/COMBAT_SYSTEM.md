@@ -118,6 +118,21 @@ After combat: `record_combat_outcome()` updates `score_destroyed_raw`; `compute_
 
 ---
 
+## Ship combat roles (balance owner: `game/fleet_defs.py`)
+
+Canonical combat stats live only in `fleet_defs.SHIPS` / `defense_defs.DEFENSES`. `combat_models.combat_stats_for_ship()` and the Battle Lab simulator read those defs — no JS combat math.
+
+| Hull | Role | Notes |
+|------|------|--------|
+| `spark_drone` (Vanguard Scout) | Light striker / screen | High attack per cost, low hull; RF vs `veil_probe`; countered by Raptor RF + Flak |
+| `falcon_interceptor` (Raptor) | Allrounder fighter | RF vs scouts/spy; not best DPS/cost or best vs equal-cost defense |
+| `ironclad_frigate` (Ironclad) | Heavy puncher / anti-defense | RF vs light ships + `sentinel_turret` / `plasma_arc`; slower, fuel-heavy |
+| Cargo / expo / colony hulls | Non-combat | Minimal or zero attack — not tuned as fleet DPS |
+
+Mass single-ship stacks are intentionally avoided: mixed fleets and planet defense remain viable at similar resource budgets.
+
+---
+
 ## Edge cases (handled)
 
 | Case | Outcome |

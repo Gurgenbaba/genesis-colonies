@@ -61,6 +61,30 @@ def test_build_simulation_input_ignores_unknown_keys():
     assert sim.attacker_ships == {"falcon_interceptor": 5}
 
 
+def test_simulator_combat_stats_match_fleet_and_defense_defs():
+    """Battle Lab must read the same attack/hull/shield values as live combat."""
+    from game.combat_models import combat_stats_for_defense, combat_stats_for_ship
+    from game.defense_defs import get_defense
+    from game.fleet_defs import ACTIVE_SHIP_KEYS, get_ship
+
+    for key in ("spark_drone", "falcon_interceptor", "ironclad_frigate"):
+        spec = get_ship(key) or {}
+        stats = combat_stats_for_ship(key)
+        assert stats is not None
+        assert stats.attack == int(spec["attack"])
+        assert stats.hull == int(spec["hull"])
+        assert stats.shield == int(spec["shield"])
+
+    for key in ("sentinel_turret", "plasma_arc", "flak_array"):
+        spec = get_defense(key) or {}
+        stats = combat_stats_for_defense(key)
+        assert stats is not None
+        assert stats.attack == int(spec["attack"])
+        assert stats.hull == int(spec["hull"])
+        assert stats.shield == int(spec["shield"])
+
+    assert "spark_drone" in ACTIVE_SHIP_KEYS
+
 def test_build_simulation_input_strict_rejects_unknown():
     payload = _baseline_payload(
         attacker_ships={"falcon_interceptor": 5, "bogus_ship": 1},

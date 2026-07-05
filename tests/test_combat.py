@@ -565,3 +565,126 @@ def test_balance_ironclad_fleet_beats_equal_sentinel_turrets():
 
     assert result.winner == WINNER_ATTACKER
     assert sum(result.defender_losses.values()) > 0
+
+
+def _build_cost_metal_crystal(spec: dict) -> int:
+    cost = spec.get("build_cost") or {}
+    return int(cost.get("metal") or 0) + int(cost.get("crystal") or 0)
+
+
+def _ships_for_budget(ship_key: str, budget: int) -> int:
+    from game.fleet_defs import get_ship
+
+    return max(1, budget // _build_cost_metal_crystal(get_ship(ship_key) or {}))
+
+
+def _defense_for_budget(defense_key: str, budget: int) -> int:
+    from game.defense_defs import get_defense
+
+    return max(1, budget // _build_cost_metal_crystal(get_defense(defense_key) or {}))
+
+
+def test_balance_scout_attack_not_extreme_vs_raptor():
+    scout = combat_stats_for_ship("spark_drone")
+    falcon = combat_stats_for_ship("falcon_interceptor")
+    assert scout is not None and falcon is not None
+    assert scout.attack >= 8
+    assert falcon.attack / scout.attack <= 6.0
+
+
+def test_balance_scout_squad_deals_damage_to_light_fleet():
+    attacker = make_combat_side("attacker", [_stack("spark_drone", 50)])
+    defender = make_combat_side("defender", [_stack("falcon_interceptor", 10)])
+    result = simulate_battle(attacker, defender, rng=_rng(42))
+
+    assert sum(result.defender_losses.values()) > 0
+
+
+def test_balance_mass_raptor_not_dominant_vs_mixed_fleet():
+    budget = 50_000
+    falcon_n = _ships_for_budget("falcon_interceptor", budget)
+    scout_n = _ships_for_budget("spark_drone", budget)
+    mass_raptor = make_combat_side("attacker", [_stack("falcon_interceptor", falcon_n)])
+    mixed = make_combat_side(
+        "defender",
+        [
+            _stack("falcon_interceptor", falcon_n // 2),
+            _stack("spark_drone", scout_n // 2),
+        ],
+    )
+    wins = sum(
+        1
+        for seed in range(20)
+        if simulate_battle(mass_raptor, mixed, rng=_rng(seed)).winner == WINNER_ATTACKER
+    )
+    assert wins < 16, "mass Raptor should not clearly beat equal-cost mixed fleet"
+
+
+def test_balance_mixed_fleet_beats_mass_raptor_as_attacker():
+    budget = 50_000
+    falcon_n = _ships_for_budget("falcon_interceptor", budget)
+    scout_n = _ships_for_budget("spark_drone", budget)
+    mixed = make_combat_side(
+        "attacker",
+        [
+            _stack("spark_drone", scout_n // 4),
+            _stack("falcon_interceptor", falcon_n // 2),
+            _stack("ironclad_frigate", 1),
+        ],
+    )
+    mass_raptor = make_combat_side("defender", [_stack("falcon_interceptor", falcon_n)])
+    wins = sum(
+        1
+        for seed in range(20)
+        if simulate_battle(mixed, mass_raptor, rng=_rng(seed + 100)).winner == WINNER_ATTACKER
+    )
+    assert wins >= 14, "mixed fleet should outperform pure Raptor stack in at least one role"
+
+
+def test_balance_equal_cost_raptor_does_not_trivially_beat_sentinel():
+    budget = 50_000
+    falcon_n = _ships_for_budget("falcon_interceptor", budget)
+    sent_n = _defense_for_budget("sentinel_turret", budget)
+    wins = sum(
+        1
+        for seed in range(20)
+        if simulate_battle(
+            make_combat_side("attacker", [_stack("falcon_interceptor", falcon_n)]),
+            make_combat_side(
+                "defender",
+                [_stack("sentinel_turret", sent_n, unit_type=COMBAT_UNIT_DEFENSE)],
+            ),
+            rng=_rng(seed + 200),
+        ).winner
+        == WINNER_ATTACKER
+    )
+    assert wins <= 4, "equal-cost Sentinel wall should remain relevant vs mass Raptor"
+
+
+def test_balance_ironclad_clears_defense_faster_than_raptor():
+    falcon_losses = []
+    iron_losses = []
+    iron_def_kills = 0
+    for seed in range(15):
+        falcon = simulate_battle(
+            make_combat_side("attacker", [_stack("falcon_interceptor", 10)]),
+            make_combat_side(
+                "defender",
+                [_stack("plasma_arc", 15, unit_type=COMBAT_UNIT_DEFENSE)],
+            ),
+            rng=_rng(seed + 300),
+        )
+        iron = simulate_battle(
+            make_combat_side("attacker", [_stack("ironclad_frigate", 2)]),
+            make_combat_side(
+                "defender",
+                [_stack("plasma_arc", 15, unit_type=COMBAT_UNIT_DEFENSE)],
+            ),
+            rng=_rng(seed + 300),
+        )
+        falcon_losses.append(sum(falcon.attacker_losses.values()))
+        iron_losses.append(sum(iron.attacker_losses.values()))
+        iron_def_kills += sum(iron.defender_losses.values())
+    assert sum(iron_losses) < sum(falcon_losses)
+    assert iron_def_kills > 0
+
