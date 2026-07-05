@@ -9467,8 +9467,18 @@ def api_admin_audit_log():
 # --------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    from game.config import init_config
+
+    init_config()
     host = os.environ.get("HOST", "127.0.0.1")
     port = int(os.environ.get("PORT", "5000"))
+    db_path = str(os.environ.get("GC_DB_PATH") or "").replace("\\", "/")
+    if sys.platform == "win32" and db_path in ("/data/game.db", "data/game.db"):
+        print(
+            "[GC] WARN: GC_DB_PATH=/data/game.db is for Railway, not local Windows dev. "
+            "Use GC_DB_PATH=game/game.db and FLASK_DEBUG=1 in .env — see .env.example.",
+            file=sys.stderr,
+        )
     if is_production() and is_debug_enabled():
         print("[GC] ERROR: Refusing to run production with FLASK_DEBUG=1", file=sys.stderr)
         raise SystemExit(1)

@@ -195,17 +195,16 @@ def test_locked_defense_catalog_exposes_requirements_items(defense_db):
     conn.close()
 
 
-def test_slug_launcher_is_cheapest_starter_defense():
+def test_slug_launcher_costs_ferronite_only():
     from game.defense_defs import DEFENSE_ORDER, get_defense, unit_build_cost
 
     assert DEFENSE_ORDER[0] == "slug_launcher"
-    slug_cost = sum(unit_build_cost("slug_launcher").values())
-    sentinel_cost = sum(unit_build_cost("sentinel_turret").values())
-    assert slug_cost < sentinel_cost
+    cost = unit_build_cost("slug_launcher")
+    assert int(cost.get("metal") or 0) == 2000
+    assert int(cost.get("crystal") or 0) == 0
+    assert int(cost.get("fuel_cells") or 0) == 0
     spec = get_defense("slug_launcher") or {}
     assert spec.get("requirements", {}).get("research") == {}
-    cost = unit_build_cost("slug_launcher")
-    assert int(cost.get("metal") or 0) > int(cost.get("crystal") or 0)
 
 
 def test_slug_launcher_builds_without_weapon_tech(defense_db):

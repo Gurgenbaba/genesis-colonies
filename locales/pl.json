@@ -1411,7 +1411,7 @@
   "defense_factory_level": "Poziom %(level)s",
   "defense_factory_title": "Defense Factory",
   "defense_slug_launcher": "Wyrzutnia slugów",
-  "defense_slug_launcher_desc": "Tania bateria kinetyczna — głównie ze slugów ferronitu. Skuteczna masowo przeciw zwiadowcom i lekkim myśliwcom.",
+  "defense_slug_launcher_desc": "Tania bateria kinetyczna — tylko 2000 ferronitu, bez crytitu. Skuteczna masowo przeciw zwiadowcom i lekkim myśliwcom.",
   "defense_flak_array": "Układ Flak",
   "defense_flak_array_desc": "Bateria wielowyrzutniowa z szybkim ogniem przeciwko małym i średnim celom.",
   "defense_hint": "Buduj stacjonarne wieżyczki i tarcze, aby chronić swoją kolonię. Odblokowuje się poprzez Defense Factory i Orbital Shipyard.",

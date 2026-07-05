@@ -1411,7 +1411,7 @@
   "defense_factory_level": "Seviye %(level)s",
   "defense_factory_title": "Defense Factory",
   "defense_slug_launcher": "Slug fırlatıcı",
-  "defense_slug_launcher_desc": "Ucuz kinetik atış bataryası — çoğunlukla ferronit slug'larından. Keşif ve hafif avcıları toplu etkili.",
+  "defense_slug_launcher_desc": "Ucuz kinetik atış bataryası — yalnızca 2000 ferronit, crytite yok. Keşif ve hafif avcıları toplu etkili.",
   "defense_flak_array": "Flak Dizisi",
   "defense_flak_array_desc": "Küçük ve orta ölçekli hedeflere karşı hızlı ateş edebilen çoklu fırlatıcı bataryası.",
   "defense_hint": "Koloninizi korumak için sabit taretler ve kalkanlar inşa edin. Defense Factory ve Orbital Shipyard aracılığıyla kilidi açılır.",

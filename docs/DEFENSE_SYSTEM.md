@@ -89,7 +89,7 @@ Definiert in `game/defense_defs.py` — Reihenfolge `DEFENSE_ORDER` / `ACTIVE_DE
 
 | Key | Rolle | Fabrik-Stufe | Gebäude / Forschung (Auszug) |
 |-----|-------|--------------|------------------------------|
-| `slug_launcher` | turret | 1 | `defense_factory` 1 — günstige Massen-Geschossbatterie (Raketenwerfer-Rolle; ferronitlastige Kosten) |
+| `slug_launcher` | turret | 1 | `defense_factory` 1 — 2000 Ferronit, kein Crytite (Raketenwerfer-Rolle / Ferronit-Senke) |
 | `sentinel_turret` | turret | 1 | `defense_factory` 1, `weapon_tech` 2 |
 | `plasma_arc` | turret | 2 | `defense_factory` 2, `weapon_tech` 4 |
 | `ion_bastion` | turret | 4 | `defense_factory` 4, `weapon_tech` 6, `armor_tech` 3 |
