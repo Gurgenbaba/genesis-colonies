@@ -126,7 +126,7 @@ Keine Überfüllung: Spende schlägt fehl mit `pool_cap_exceeded`. Officer erhal
 | Key | Effekt | Max |
 |-----|--------|-----|
 | `research_network` | `research_time_speed` | +3 % |
-| `expedition_coordination` | `expedition_loot_mult` | +5 % |
+| `expedition_coordination` | `expedition_loot_mult` + Expeditions-Fundchance | +5 % Beute, +4 % Fund |
 | `industrial_logistics` | Produktion (metal/crystal/fuel) | +2 % |
 | `defensive_protocols` | `armor_bonus` / `shield_bonus` | +3 % |
 | `trade_coordination` | Pool-Cap % + Projektdauer-Reduktion | +10 % Cap |
@@ -135,9 +135,9 @@ Keine Überfüllung: Spende schlägt fehl mit `pool_cap_exceeded`. Officer erhal
 
 | Key | Funktion |
 |-----|----------|
-| `alliance_headquarters` | +2 Mitglieder/Stufe (Basis 5) |
-| `research_archive` | Voraussetzung Alliance-Techs |
-| `expedition_office` | Voraussetzung Expedition Coordination |
+| `alliance_headquarters` | +2 Mitglieder/Stufe (Basis 5); Runtime-Limit wird aus HQ-Level abgeleitet |
+| `research_archive` | Voraussetzung Alliance-Techs; fertige Projekte schalten Techs sofort im State frei |
+| `expedition_office` | Voraussetzung Expedition Coordination; +Fundchance % pro Stufe |
 | `logistics_depot` | Pool-Cap-Bonus |
 | `diplomacy_center` | Diplomatie-Slots freischalten |
 

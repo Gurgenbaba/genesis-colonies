@@ -178,6 +178,72 @@ def test_member_limit_from_hq(alliance_db):
     assert member_limit_from_buildings({"alliance_headquarters": 2}) == BASE_MEMBER_LIMIT + 4
 
 
+def test_all_alliance_buildings_apply_at_runtime(alliance_db):
+    conn = db()
+    try:
+        uid = _player(conn=conn)
+        create_alliance("BLD", "Buildings", uid, conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(uid, conn=conn)["alliance_id"])
+        conn.executemany(
+            """
+            INSERT INTO alliance_buildings (alliance_id, building_key, level)
+            VALUES (?, ?, ?)
+            ON CONFLICT(alliance_id, building_key) DO UPDATE SET level = excluded.level;
+            """,
+            [
+                (aid, "alliance_headquarters", 1),
+                (aid, "research_archive", 1),
+                (aid, "expedition_office", 2),
+                (aid, "logistics_depot", 1),
+                (aid, "diplomacy_center", 1),
+            ],
+        )
+        conn.execute("UPDATE alliances SET member_limit = ? WHERE id = ?;", (BASE_MEMBER_LIMIT, aid))
+        conn.commit()
+
+        state = get_alliance_state(uid, conn=conn)
+        assert state["member_limit"] == BASE_MEMBER_LIMIT + 2
+        assert state["diplomacy_unlocked"] is True
+        assert state["pool_cap_bonus_pct"] == pytest.approx(8.0)
+        assert any(p.get("kind") == "tech" for p in state["available_projects"])
+
+        mods = get_alliance_effect_modifiers(uid, conn=conn)
+        assert mods["expedition_event_bonus"] > 0.0
+    finally:
+        conn.close()
+
+
+def test_state_auto_finish_recomputes_alliance_building_unlocks(alliance_db):
+    conn = db()
+    try:
+        uid = _player(conn=conn)
+        create_alliance("FIN", "Finishers", uid, conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(uid, conn=conn)["alliance_id"])
+        conn.execute(
+            "UPDATE alliances SET pool_metal = 500000, pool_crystal = 500000, pool_fuel_cells = 200000 WHERE id = ?;",
+            (aid,),
+        )
+        start_alliance_project(uid, "building", "research_archive", conn=conn)
+        conn.execute(
+            "UPDATE alliance_projects SET finish_at = ? WHERE alliance_id = ? AND status = 'active';",
+            (int(time.time()) - 1, aid),
+        )
+        conn.commit()
+
+        state = get_alliance_state(uid, conn=conn)
+        assert state["buildings"].get("research_archive") == 1
+        assert any(p.get("kind") == "tech" for p in state["available_projects"])
+        assert not any(
+            req.get("key") == "research_archive"
+            for p in state["locked_projects"]
+            for req in (p.get("missing_requirements") or [])
+        )
+    finally:
+        conn.close()
+
+
 def test_donation_and_pool_cap(alliance_db):
     conn = db()
     try:
@@ -1639,6 +1705,8 @@ def test_project_start_and_finish_notify_members(alliance_db):
 
 
 def test_alliance_production_combat_bonuses_via_effect_resolver(alliance_db):
+    from game.combat import combat_modifiers_for_player
+
     conn = db()
     try:
         uid = _player(conn=conn)
@@ -1666,6 +1734,10 @@ def test_alliance_production_combat_bonuses_via_effect_resolver(alliance_db):
         rmods = resolver.get_modifiers()
         assert rmods["metal_prod_factor"] > 1.0
         assert rmods["armor_bonus"] > 0.0
+
+        combat = combat_modifiers_for_player(uid, planet_id=int(planet["id"]), conn=conn)
+        assert combat.armor_bonus >= mods["armor_bonus"]
+        assert combat.shield_bonus >= mods["shield_bonus"]
     finally:
         conn.close()
 
@@ -1692,6 +1764,39 @@ def test_expedition_loot_multiplier_hook(alliance_db):
         assert get_alliance_expedition_loot_multiplier(outsider, conn=conn) == 1.0
     finally:
         conn.close()
+
+
+def test_expedition_event_bonus_from_alliance(alliance_db):
+    from game.alliance import get_alliance_expedition_event_bonus, get_alliance_effect_modifiers
+
+    conn = db()
+    try:
+        uid = _player(conn=conn)
+        create_alliance("EXB", "ExpoBonus", uid, conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(uid, conn=conn)["alliance_id"])
+        conn.execute(
+            """
+            INSERT INTO alliance_buildings (alliance_id, building_key, level)
+            VALUES (?, 'expedition_office', 3);
+            """,
+            (aid,),
+        )
+        conn.execute(
+            """
+            INSERT INTO alliance_technologies (alliance_id, tech_key, level)
+            VALUES (?, 'expedition_coordination', 5);
+            """,
+            (aid,),
+        )
+        conn.commit()
+        mods = get_alliance_effect_modifiers(uid, conn=conn)
+        assert mods["expedition_event_bonus"] == pytest.approx(0.058, abs=0.001)
+        assert get_alliance_expedition_event_bonus(uid, conn=conn) == pytest.approx(0.058, abs=0.001)
+        assert mods["expedition_loot_mult"] == pytest.approx(1.05, abs=0.001)
+    finally:
+        conn.close()
+
 
 
 def test_same_alliance_hold_permission(alliance_db):
@@ -2201,3 +2306,84 @@ def test_project_effect_preview_includes_affects_and_desc(alliance_db):
     assert hq["desc_key"] == "alliance_building_hq_desc"
     assert hq["affects_keys"] == ["alliance_affects_members"]
     assert hq["next_value"] == member_limit_from_buildings({"alliance_headquarters": 1})
+
+
+def test_trade_coordination_project_duration_uses_catalog_bonus(alliance_db):
+    from game.alliance_catalog import project_cost_and_duration, trade_coord_bonus_pct
+
+    _, base_dur = project_cost_and_duration("tech", "research_network", 1, trade_coord_level=0)
+    _, fast_dur = project_cost_and_duration("tech", "research_network", 1, trade_coord_level=5)
+    assert fast_dur < base_dur
+    assert trade_coord_bonus_pct(5) == pytest.approx(10.0)
+    expected = max(300, int(base_dur * (1.0 - 0.10)))
+    assert fast_dur == expected
+
+
+def test_trade_coordination_pool_cap_bonus(alliance_db):
+    from game.alliance import _pool_cap_bonus_pct
+
+    assert _pool_cap_bonus_pct({"trade_coordination": 5}, {}) == pytest.approx(10.0)
+    assert _pool_cap_bonus_pct({}, {"logistics_depot": 2}) == pytest.approx(16.0)
+
+
+def test_expedition_coordination_preview_dual_bonuses(alliance_db):
+    fx = project_effect_preview(
+        "tech",
+        "expedition_coordination",
+        current_level=1,
+        target_level=2,
+    )
+    assert fx["current_value"] == 1.0
+    assert fx["next_value"] == 2.0
+    assert fx["success_current_value"] == 0.8
+    assert fx["success_next_value"] == 1.6
+
+
+def test_all_alliance_technologies_apply_at_runtime(alliance_db):
+    from game.combat import combat_modifiers_for_player
+    from game.effects.effect_resolver import get_effect_resolver
+
+    conn = db()
+    try:
+        uid = _player(conn=conn)
+        create_alliance("TEC", "TechFX", uid, conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(uid, conn=conn)["alliance_id"])
+        conn.executemany(
+            """
+            INSERT INTO alliance_technologies (alliance_id, tech_key, level)
+            VALUES (?, ?, ?);
+            """,
+            [
+                (aid, "research_network", 2),
+                (aid, "industrial_logistics", 2),
+                (aid, "defensive_protocols", 2),
+                (aid, "expedition_coordination", 2),
+                (aid, "trade_coordination", 2),
+            ],
+        )
+        conn.commit()
+
+        mods = get_alliance_effect_modifiers(uid, conn=conn)
+        assert mods["research_time_speed"] > 1.0
+        assert mods["metal_prod_factor"] > 1.0
+        assert mods["crystal_prod_factor"] > 1.0
+        assert mods["fuel_prod_factor"] > 1.0
+        assert mods["armor_bonus"] > 0.0
+        assert mods["shield_bonus"] > 0.0
+        assert mods["expedition_loot_mult"] > 1.0
+        assert mods["expedition_event_bonus"] > 0.0
+
+        planet = get_context_planet(player_id=uid, conn=conn)
+        resolver = get_effect_resolver(uid, conn=conn, planet=planet)
+        rmods = resolver.get_modifiers()
+        assert rmods["research_time_speed"] > 1.0
+        assert rmods["metal_prod_factor"] > 1.0
+        assert rmods["armor_bonus"] > 0.0
+        assert rmods["shield_bonus"] > 0.0
+
+        combat = combat_modifiers_for_player(uid, planet_id=int(planet["id"]), conn=conn)
+        assert combat.armor_bonus > 0.0
+        assert combat.shield_bonus > 0.0
+    finally:
+        conn.close()

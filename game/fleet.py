@@ -4418,13 +4418,19 @@ def _handle_expedition_holding_end(movement: Dict[str, Any], *, conn, now: float
     except Exception:
         pass
     try:
-        from .alliance import get_alliance_expedition_loot_multiplier
+        from .alliance import get_alliance_effect_modifiers
 
-        alliance_mult = float(get_alliance_expedition_loot_multiplier(player_id, conn=conn))
+        alliance_mods = get_alliance_effect_modifiers(player_id, conn=conn)
+        alliance_mult = float(alliance_mods.get("expedition_loot_mult") or 1.0)
+        alliance_event_bonus = float(alliance_mods.get("expedition_event_bonus") or 0.0)
         if alliance_mult > 1.0:
             directive_flags["expedition_loot_mult"] = float(
                 directive_flags.get("expedition_loot_mult") or 1.0
             ) * alliance_mult
+        if alliance_event_bonus > 0.0:
+            directive_flags["expedition_event_bonus"] = float(
+                directive_flags.get("expedition_event_bonus") or 0.0
+            ) + alliance_event_bonus
     except Exception:
         pass
     from .empire_page import get_empire_production_aggregate

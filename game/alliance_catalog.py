@@ -50,6 +50,8 @@ ALLIANCE_BUILDINGS: Dict[str, Dict[str, Any]] = {
         "duration_sec": 5_400,
         "duration_factor": 1.4,
         "requires": {"building": {"research_archive": 1}, "alliance_level": 2},
+        "expedition_success_bonus_pct_per_level": 0.6,
+        "expedition_success_bonus_max_pct": 3.0,
     },
     "logistics_depot": {
         "label_key": "alliance_building_logistics_depot",
@@ -94,6 +96,8 @@ ALLIANCE_TECHNOLOGIES: Dict[str, Dict[str, Any]] = {
         "max_level": 5,
         "bonus_pct_per_level": 1.0,
         "bonus_max_pct": 5.0,
+        "success_bonus_pct_per_level": 0.8,
+        "success_bonus_max_pct": 4.0,
         "effect_key": "expedition_loot_mult",
         "base_cost": {"metal": 30_000, "crystal": 30_000, "fuel_cells": 10_000},
         "cost_factor": 1.95,
@@ -251,8 +255,8 @@ def project_cost_and_duration(
     lvl = max(1, int(target_level))
     cost = _scale_cost(cfg["base_cost"], float(cfg.get("cost_factor") or 1.8), lvl)
     duration = _project_duration(cfg, lvl)
-    speed_bonus = min(0.5, 0.02 * max(0, int(trade_coord_level)))
-    duration = max(300, int(duration * (1.0 - speed_bonus)))
+    speed_pct = trade_coord_bonus_pct(trade_coord_level)
+    duration = max(300, int(duration * (1.0 - speed_pct / 100.0)))
     return cost, duration
 
 
@@ -343,6 +347,24 @@ def _tech_bonus_pct(cfg: Mapping[str, Any], level: int) -> float:
     return round(min(max_pct, per * max(0, int(level))), 1)
 
 
+def _secondary_bonus_pct(cfg: Mapping[str, Any], level: int, *, per_key: str, max_key: str) -> float:
+    per = float(cfg.get(per_key) or 0)
+    if per <= 0:
+        return 0.0
+    max_pct = float(cfg.get(max_key) or 0)
+    raw = per * max(0, int(level))
+    return round(min(max_pct, raw) if max_pct > 0 else raw, 1)
+
+
+def trade_coord_bonus_pct(trade_coord_level: int) -> float:
+    """Pool-cap % and project-duration reduction % from Handelskoordination."""
+    lvl = max(0, int(trade_coord_level))
+    if lvl <= 0:
+        return 0.0
+    cfg = ALLIANCE_TECHNOLOGIES.get("trade_coordination") or {}
+    return _tech_bonus_pct(cfg, lvl)
+
+
 def project_effect_preview(
     kind: str,
     key: str,
@@ -380,8 +402,18 @@ def project_effect_preview(
             current_value = cur
             next_value = nxt
         elif key == "expedition_office":
-            current_value = cur
-            next_value = nxt
+            current_value = _secondary_bonus_pct(
+                cfg,
+                cur,
+                per_key="expedition_success_bonus_pct_per_level",
+                max_key="expedition_success_bonus_max_pct",
+            )
+            next_value = _secondary_bonus_pct(
+                cfg,
+                nxt,
+                per_key="expedition_success_bonus_pct_per_level",
+                max_key="expedition_success_bonus_max_pct",
+            )
         else:
             current_value = cur
             next_value = nxt
@@ -389,19 +421,39 @@ def project_effect_preview(
         current_value = _tech_bonus_pct(cfg, cur)
         next_value = _tech_bonus_pct(cfg, nxt)
 
+    success_current_value: Optional[float] = None
+    success_next_value: Optional[float] = None
+    if kind == "tech" and key == "expedition_coordination":
+        success_current_value = _secondary_bonus_pct(
+            cfg,
+            cur,
+            per_key="success_bonus_pct_per_level",
+            max_key="success_bonus_max_pct",
+        )
+        success_next_value = _secondary_bonus_pct(
+            cfg,
+            nxt,
+            per_key="success_bonus_pct_per_level",
+            max_key="success_bonus_max_pct",
+        )
+
     affects_keys: List[str] = []
     if kind == "building":
         affects_keys = list(AFFECTS_BY_BUILDING_KEY.get(key) or [])
     else:
         affects_keys = list(AFFECTS_BY_EFFECT_KEY.get(effect_key) or [])
 
-    return {
+    out: Dict[str, Any] = {
         "desc_key": desc_key,
         "effect_key": effect_key,
         "current_value": current_value,
         "next_value": next_value,
         "affects_keys": affects_keys,
     }
+    if success_current_value is not None:
+        out["success_current_value"] = success_current_value
+        out["success_next_value"] = success_next_value
+    return out
 
 
 def describe_missing_requirements(

@@ -73,7 +73,7 @@ After inventory boosters, `EffectResolver` applies alliance tech modifiers via `
 
 **Merge order:** Research/Buildings → Galactic Directives → Galactic Diplomacy → Inventory Boosters → **Alliance**.
 
-**Keys:** `research_time_speed`, production factors, `armor_bonus`, `shield_bonus`. Expedition loot uses `expedition_loot_mult` in `fleet.py` directive flags (not ER keys).
+**Keys:** `research_time_speed`, production factors, `armor_bonus`, `shield_bonus`. Expedition: `expedition_loot_mult` and `expedition_event_bonus` via `get_alliance_effect_modifiers()` in `fleet.py` directive flags (not ER keys). Handelskoordination: pool cap % and project duration via `trade_coord_bonus_pct()` in `alliance_catalog.py` (alliance-level, not per-player ER).
 
 Owner: `game/alliance.py` · [ALLIANCE_SYSTEM.md](ALLIANCE_SYSTEM.md)
 

@@ -35,6 +35,7 @@ from .alliance_catalog import (
     pool_cap_from_projects,
     project_cost_and_duration,
     tech_level,
+    trade_coord_bonus_pct,
 )
 from .db import begin_write_transaction, commit, db, rollback, table_exists
 from .planet_evolution.repository import get_context_planet
@@ -481,13 +482,14 @@ def _sync_member_limit(conn, alliance_id: int, buildings: Mapping[str, int]) -> 
     return limit
 
 
+def _effective_member_limit(alliance_id: int, conn) -> int:
+    """Canonical member limit is derived from HQ level; persisted value is a cache."""
+    buildings = _load_buildings(int(alliance_id), conn)
+    return member_limit_from_buildings(buildings)
+
+
 def _pool_cap_bonus_pct(techs: Mapping[str, int], buildings: Mapping[str, int]) -> float:
-    tc = tech_level(techs, "trade_coordination")
-    tc_cfg = ALLIANCE_TECHNOLOGIES.get("trade_coordination") or {}
-    tc_pct = min(
-        float(tc_cfg.get("bonus_max_pct") or 0),
-        float(tc_cfg.get("bonus_pct_per_level") or 0) * tc,
-    )
+    tc_pct = trade_coord_bonus_pct(tech_level(techs, "trade_coordination"))
     depot_cfg = ALLIANCE_BUILDINGS.get("logistics_depot") or {}
     depot_pct = int(depot_cfg.get("pool_cap_bonus_pct_per_level") or 0) * building_level(
         buildings, "logistics_depot"
@@ -975,6 +977,10 @@ def get_alliance_state(player_id: int, conn=None) -> Dict[str, Any]:
             alliance_row = _load_alliance_row(aid, conn) or alliance_row
             buildings = _load_buildings(aid, conn)
             techs = _load_techs(aid, conn)
+            xp = int(alliance_row.get("alliance_xp") or 0)
+            level = alliance_level_from_xp(xp)
+            next_xp = alliance_xp_for_level(level + 1)
+            trade_lvl = tech_level(techs, "trade_coordination")
             now = _now()
             active = _serialize_active_project(_active_project(aid, conn), now=now)
             pool_data = _pool_snapshot(alliance_row, conn)
@@ -1016,7 +1022,7 @@ def get_alliance_state(player_id: int, conn=None) -> Dict[str, Any]:
                 "alliance_xp": xp,
                 "alliance_xp_next": next_xp,
                 "member_count": len(members),
-                "member_limit": int(alliance_row.get("member_limit") or BASE_MEMBER_LIMIT),
+                "member_limit": _effective_member_limit(aid, conn),
                 "recruitment_mode": _alliance_recruitment_mode(alliance_row),
                 **logo_fields,
                 "members": members,
@@ -1306,7 +1312,7 @@ def apply_to_alliance(player_id: int, alliance_id: int, message: str = "", conn=
         mode = _alliance_recruitment_mode(row)
         if not allows_applications(mode):
             raise ValueError("recruitment_closed")
-        if _member_count(int(alliance_id), conn) >= int(row.get("member_limit") or BASE_MEMBER_LIMIT):
+        if _member_count(int(alliance_id), conn) >= _effective_member_limit(int(alliance_id), conn):
             raise ValueError("alliance_full")
         cur = conn.cursor()
         cur.execute(
@@ -1398,7 +1404,7 @@ def join_alliance_by_tag(player_id: int, tag: str, conn=None) -> None:
                 raise ValueError("recruitment_application_only")
             raise ValueError("recruitment_closed")
         aid = int(row["id"])
-        if _member_count(aid, conn) >= int(row["member_limit"] or BASE_MEMBER_LIMIT):
+        if _member_count(aid, conn) >= _effective_member_limit(aid, conn):
             raise ValueError("alliance_full")
         cur.execute(
             """
@@ -1448,7 +1454,7 @@ def respond_application(
         begin_write_transaction(conn)
         if accept:
             row = alliance_row
-            if _member_count(aid, conn) >= int(row.get("member_limit") or BASE_MEMBER_LIMIT):
+            if _member_count(aid, conn) >= _effective_member_limit(aid, conn):
                 raise ValueError("alliance_full")
             if get_player_alliance(applicant_id, conn=conn):
                 raise ValueError("player_already_allied")
@@ -2405,6 +2411,7 @@ def get_alliance_effect_modifiers(player_id: int, conn=None) -> Dict[str, float]
         "armor_bonus": 0.0,
         "shield_bonus": 0.0,
         "expedition_loot_mult": 1.0,
+        "expedition_event_bonus": 0.0,
     }
     try:
         if not alliance_hub_schema_ready(conn):
@@ -2412,7 +2419,18 @@ def get_alliance_effect_modifiers(player_id: int, conn=None) -> Dict[str, float]
         membership = get_player_alliance(player_id, conn=conn)
         if not membership:
             return mods
-        techs = _load_techs(int(membership["alliance_id"]), conn)
+        aid = int(membership["alliance_id"])
+        techs = _load_techs(aid, conn)
+        buildings = _load_buildings(aid, conn)
+
+        office_lvl = building_level(buildings, "expedition_office")
+        if office_lvl > 0:
+            office_cfg = ALLIANCE_BUILDINGS["expedition_office"]
+            per = float(office_cfg.get("expedition_success_bonus_pct_per_level") or 0)
+            max_pct = float(office_cfg.get("expedition_success_bonus_max_pct") or 0)
+            if per > 0:
+                pct = min(max_pct, per * office_lvl) if max_pct > 0 else per * office_lvl
+                mods["expedition_event_bonus"] += pct / 100.0
 
         rn = tech_level(techs, "research_network")
         if rn > 0:
@@ -2441,6 +2459,10 @@ def get_alliance_effect_modifiers(player_id: int, conn=None) -> Dict[str, float]
             cfg = ALLIANCE_TECHNOLOGIES["expedition_coordination"]
             pct = min(float(cfg["bonus_max_pct"]), float(cfg["bonus_pct_per_level"]) * ec)
             mods["expedition_loot_mult"] *= 1.0 + pct / 100.0
+            success_per = float(cfg.get("success_bonus_pct_per_level") or cfg["bonus_pct_per_level"])
+            success_max = float(cfg.get("success_bonus_max_pct") or cfg["bonus_max_pct"])
+            success_pct = min(success_max, success_per * ec)
+            mods["expedition_event_bonus"] += success_pct / 100.0
 
         return mods
     finally:
@@ -2450,6 +2472,10 @@ def get_alliance_effect_modifiers(player_id: int, conn=None) -> Dict[str, float]
 
 def get_alliance_expedition_loot_multiplier(player_id: int, conn=None) -> float:
     return float(get_alliance_effect_modifiers(player_id, conn=conn).get("expedition_loot_mult") or 1.0)
+
+
+def get_alliance_expedition_event_bonus(player_id: int, conn=None) -> float:
+    return float(get_alliance_effect_modifiers(player_id, conn=conn).get("expedition_event_bonus") or 0.0)
 
 
 def get_player_alliance_diplomacy_label(player_id: int, conn=None) -> str:

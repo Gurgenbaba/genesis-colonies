@@ -51,17 +51,18 @@ def combat_modifiers_for_player(
     planet_id: int | None = None,
     conn=None,
 ) -> CombatModifiers:
-    """Account research combat bonuses via EffectResolver (weapon / armor / shield tech)."""
-    from .effects.effect_resolver import EffectResolver, get_effect_resolver
+    """Account research + alliance combat bonuses via EffectResolver."""
+    from .effects.effect_resolver import get_effect_resolver
     from .models import get_planet_buildings, get_research_levels
 
     pid = int(player_id)
     if planet_id is not None:
-        resolver = EffectResolver(
-            get_planet_buildings(int(planet_id), conn=conn),
-            get_research_levels(pid, conn=conn),
-            player_id=pid,
-            planet_id=int(planet_id),
+        resolver = get_effect_resolver(
+            pid,
+            conn=conn,
+            buildings=get_planet_buildings(int(planet_id), conn=conn),
+            research=get_research_levels(pid, conn=conn),
+            planet={"id": int(planet_id)},
         )
     else:
         resolver = get_effect_resolver(pid, conn=conn)

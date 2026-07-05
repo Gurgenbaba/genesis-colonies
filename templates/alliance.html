@@ -21,7 +21,15 @@
 {% elif p.kind == 'building' and p.key == 'research_archive' %}
 {% if val|int >= 1 %}{{ T("alliance_effect_archive_on", "Technologieprojekte freigeschaltet") }}{% else %}{{ T("alliance_effect_archive_off", "Technologien gesperrt") }}{% endif %}
 {% elif p.kind == 'building' and p.key == 'expedition_office' %}
-{% if val|int >= 1 %}{{ T("alliance_effect_expo_office_on", "Expeditions-Technologien freigeschaltet") }}{% else %}{{ T("alliance_effect_expo_office_off", "Expeditions-Technologien gesperrt") }}{% endif %}
+{{ T("alliance_effect_expedition_find", "Fundchance: +%(pct)s%%", pct=val) }}
+{% elif p.kind == 'tech' and p.key == 'expedition_coordination' %}
+<div class="alliance-hub-project-effect-dual">
+  <span>{{ T("alliance_effect_expedition_loot", "Beute: +%(pct)s%%", pct=val) }}</span>
+  {% set sval = fx.success_current_value if which == 'current' else fx.success_next_value %}
+  {% if sval is not none %}
+  <span>{{ T("alliance_effect_expedition_find", "Fundchance: +%(pct)s%%", pct=sval) }}</span>
+  {% endif %}
+</div>
 {% elif p.kind == 'tech' %}
 +{{ val }}%
 {% else %}

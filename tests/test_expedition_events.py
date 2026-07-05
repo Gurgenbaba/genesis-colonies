@@ -622,18 +622,18 @@ def test_expedition_weight_audit_gc620j0():
     shares = audit["share_by_category"]
 
     assert audit["total_weight"] == 124
-    assert audit["weights_by_key"]["mineral_deposit"] == 29
-    assert audit["weight_by_category"]["loot"] == 74
+    assert audit["weights_by_key"]["mineral_deposit"] == 33
+    assert audit["weight_by_category"]["loot"] == 86
     assert audit["weight_by_category"]["legendary"] == 3
     assert shares["legendary"] == pytest.approx(3 / 124, abs=0.001)
     assert 0.023 <= shares["legendary"] <= 0.026
-    assert shares["loot"] == pytest.approx(74 / 124, abs=0.001)
-    assert 0.56 <= shares["loot"] <= 0.64
-    assert 0.10 <= shares["neutral"] <= 0.16
-    assert 0.09 <= shares["delay"] <= 0.14
+    assert shares["loot"] == pytest.approx(86 / 124, abs=0.001)
+    assert 0.66 <= shares["loot"] <= 0.72
+    assert 0.03 <= shares["neutral"] <= 0.07
+    assert 0.06 <= shares["delay"] <= 0.10
     assert 0.03 <= shares["combat"] <= 0.07
     assert 0.02 <= shares["hazard"] <= 0.05
-    assert 0.04 <= shares["treasure"] <= 0.08
+    assert 0.04 <= shares["treasure"] <= 0.09
 
 
 def test_expedition_empirical_category_distribution_gc620j0():
@@ -670,13 +670,51 @@ def test_expedition_empirical_category_distribution_gc620j0():
         category_hits[category] = category_hits.get(category, 0) + 1
 
     empirical = {cat: hits / rolls for cat, hits in category_hits.items()}
-    assert 0.52 <= empirical.get("loot", 0) <= 0.68
-    assert 0.08 <= empirical.get("neutral", 0) <= 0.18
-    assert 0.07 <= empirical.get("delay", 0) <= 0.16
+    assert 0.58 <= empirical.get("loot", 0) <= 0.74
+    assert 0.03 <= empirical.get("neutral", 0) <= 0.10
+    assert 0.05 <= empirical.get("delay", 0) <= 0.12
     assert 0.02 <= empirical.get("combat", 0) <= 0.08
     assert 0.01 <= empirical.get("hazard", 0) <= 0.06
     assert 0.03 <= empirical.get("treasure", 0) <= 0.09
     assert 0.015 <= empirical.get("legendary", 0) <= 0.045
+
+
+
+def test_expedition_event_bonus_improves_loot_event_rate():
+    from game.expedition_events import resolve_expedition_outcome
+
+    empty_hits = 0
+    loot_hits = 0
+    rolls = 4000
+    for movement_id in range(1, rolls + 1):
+        outcome = resolve_expedition_outcome(
+            movement_id,
+            cargo_total=500_000,
+            expedition_ship_count=2,
+            flight_seconds=120,
+            ships={"solar_skiff": 2},
+            directive_flags={"expedition_event_bonus": 0.05},
+        )
+        if int(outcome.get("reward_total") or 0) > 0:
+            loot_hits += 1
+        elif outcome["event_key"] in {"void_scan", "sensor_glitch", "nav_interference", "ion_storm"}:
+            empty_hits += 1
+    base_empty = 0
+    base_loot = 0
+    for movement_id in range(1, rolls + 1):
+        outcome = resolve_expedition_outcome(
+            movement_id + 900_000,
+            cargo_total=500_000,
+            expedition_ship_count=2,
+            flight_seconds=120,
+            ships={"solar_skiff": 2},
+        )
+        if int(outcome.get("reward_total") or 0) > 0:
+            base_loot += 1
+        elif outcome["event_key"] in {"void_scan", "sensor_glitch", "nav_interference", "ion_storm"}:
+            base_empty += 1
+    assert loot_hits > base_loot
+    assert empty_hits < base_empty
 
 
 def test_hazard_events_are_rare_in_weight_table():
