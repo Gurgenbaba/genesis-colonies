@@ -1410,6 +1410,8 @@
   "defense_factory": "Defense Factory",
   "defense_factory_level": "Level %(level)s",
   "defense_factory_title": "Defense Factory",
+  "defense_slug_launcher": "Slug Launcher",
+  "defense_slug_launcher_desc": "Cheap kinetic launch battery — built mostly from ferronite slugs. Mass effectively against scouts and light fighters.",
   "defense_flak_array": "Flak Array",
   "defense_flak_array_desc": "Multi-launcher battery with rapid fire against small and medium targets.",
   "defense_hint": "Build stationary turrets and shields to protect your colony. Unlocks via the Defense Factory and Orbital Shipyard.",

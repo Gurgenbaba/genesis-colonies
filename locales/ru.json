@@ -1410,6 +1410,8 @@
   "defense_factory": "Defense Factory",
   "defense_factory_level": "Уровень %(level)s",
   "defense_factory_title": "Defense Factory",
+  "defense_slug_launcher": "Пусковая установка slug",
+  "defense_slug_launcher_desc": "Дешёвая кинетическая батарея — в основном из slug-ов ферронита. Эффективна массой против разведчиков и лёгких истребителей.",
   "defense_flak_array": "Зенитный массив",
   "defense_flak_array_desc": "Многопусковая батарея с скорострельным огнем по малой и средней цели.",
   "defense_hint": "Стройте стационарные турели и щиты, чтобы защитить свою колонию. Разблокируется с помощью Defense Factory и Orbital Shipyard.",

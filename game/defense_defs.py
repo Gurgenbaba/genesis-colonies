@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, FrozenSet, List
 
 DEFENSE_ORDER: List[str] = [
+    "slug_launcher",
     "sentinel_turret",
     "plasma_arc",
     "ion_bastion",
@@ -16,6 +17,24 @@ DEFENSE_ORDER: List[str] = [
 ACTIVE_DEFENSE_KEYS: FrozenSet[str] = frozenset(DEFENSE_ORDER)
 
 DEFENSES: Dict[str, Dict[str, Any]] = {
+    "slug_launcher": {
+        "name_key": "defense_slug_launcher",
+        "description_key": "defense_slug_launcher_desc",
+        "role": "turret",
+        "required_defense_factory_level": 1,
+        "requirements": {"buildings": {"defense_factory": 1}, "research": {}},
+        "build_cost": {"metal": 150, "crystal": 50, "fuel_cells": 0},
+        "build_seconds": 20,
+        "score_value": 180,
+        "attack": 4,
+        "shield": 0,
+        "hull": 120,
+        "rapid_fire_targets": {
+            "spark_drone": 3,
+            "veil_probe": 4,
+            "mule_courier": 2,
+        },
+    },
     "sentinel_turret": {
         "name_key": "defense_sentinel_turret",
         "description_key": "defense_sentinel_turret_desc",

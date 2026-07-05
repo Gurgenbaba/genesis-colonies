@@ -75,7 +75,7 @@ def test_simulator_combat_stats_match_fleet_and_defense_defs():
         assert stats.hull == int(spec["hull"])
         assert stats.shield == int(spec["shield"])
 
-    for key in ("sentinel_turret", "plasma_arc", "flak_array"):
+    for key in ("slug_launcher", "sentinel_turret", "plasma_arc", "flak_array"):
         spec = get_defense(key) or {}
         stats = combat_stats_for_defense(key)
         assert stats is not None

@@ -193,3 +193,46 @@ def test_locked_defense_catalog_exposes_requirements_items(defense_db):
     items = sentinel.get('requirements_items') or []
     assert any((item.get('key') == 'weapon_tech' and (not item.get('met')) for item in items))
     conn.close()
+
+
+def test_slug_launcher_is_cheapest_starter_defense():
+    from game.defense_defs import DEFENSE_ORDER, get_defense, unit_build_cost
+
+    assert DEFENSE_ORDER[0] == "slug_launcher"
+    slug_cost = sum(unit_build_cost("slug_launcher").values())
+    sentinel_cost = sum(unit_build_cost("sentinel_turret").values())
+    assert slug_cost < sentinel_cost
+    spec = get_defense("slug_launcher") or {}
+    assert spec.get("requirements", {}).get("research") == {}
+    cost = unit_build_cost("slug_launcher")
+    assert int(cost.get("metal") or 0) > int(cost.get("crystal") or 0)
+
+
+def test_slug_launcher_builds_without_weapon_tech(defense_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, pid)
+    cur.execute("UPDATE planet_buildings SET defense_factory = 1 WHERE planet_id = ?;", (pid,))
+    cur.execute("DELETE FROM research_levels WHERE user_id = ?;", (uid,))
+    conn.commit()
+    ok, reason, result = build_defense(
+        player_id=uid, planet_id=pid, defense_key="slug_launcher", amount=3, conn=conn
+    )
+    assert ok, reason
+    assert result["defense_queue"]["summary"]["count"] == 1
+    cur.execute("UPDATE defense_queue SET finish_at = ? WHERE planet_id = ?;", (time.time() - 1, pid))
+    conn.commit()
+    finish_due_defense_jobs_for_planet(conn, pid, uid, now=time.time())
+    stock = get_planet_defense(pid, conn=conn)
+    assert stock.get("slug_launcher", 0) >= 3
+    conn.close()
+
+
+def test_slug_launcher_rapid_fire_vs_light_ships():
+    from game.defense_defs import defense_rapid_fire_multiplier
+
+    assert defense_rapid_fire_multiplier("slug_launcher", "spark_drone") == 3
+    assert defense_rapid_fire_multiplier("slug_launcher", "veil_probe") == 4
+    assert defense_rapid_fire_multiplier("slug_launcher", "falcon_interceptor") == 1

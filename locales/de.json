@@ -1410,6 +1410,8 @@
   "defense_factory": "Verteidigungsfabrik",
   "defense_factory_level": "Stufe %(level)s",
   "defense_factory_title": "Verteidigungsfabrik",
+  "defense_slug_launcher": "Slug-Werfer",
+  "defense_slug_launcher_desc": "Günstige kinetische Abschussbatterie — überwiegend aus Ferronit-Geschossen. Massenhaft effektiv gegen Aufklärer und leichte Jäger.",
   "defense_flak_array": "Flak-Batterie",
   "defense_flak_array_desc": "Mehrfach-Raketenbatterie mit Rapid-Fire gegen kleine und mittlere Ziele.",
   "defense_hint": "Baue stationäre Geschütze und Schilde zum Schutz deiner Kolonie. Freischaltung über die Verteidigungsfabrik — Produktionskapazität und Zykluszeit kommen von der Orbitalwerft. Gilt nur für den aktiven Planeten.",

@@ -85,10 +85,11 @@ Ranking-Spalte `player_scores.score_defense` existiert seit Migration `014_ranki
 
 ## Defense Units
 
-Definiert in `game/defense_defs.py` — Reihenfolge `DEFENSE_ORDER` / `ACTIVE_DEFENSE_KEYS` (6 Einheiten).
+Definiert in `game/defense_defs.py` — Reihenfolge `DEFENSE_ORDER` / `ACTIVE_DEFENSE_KEYS` (7 Einheiten).
 
 | Key | Rolle | Fabrik-Stufe | Gebäude / Forschung (Auszug) |
 |-----|-------|--------------|------------------------------|
+| `slug_launcher` | turret | 1 | `defense_factory` 1 — günstige Massen-Geschossbatterie (Raketenwerfer-Rolle; ferronitlastige Kosten) |
 | `sentinel_turret` | turret | 1 | `defense_factory` 1, `weapon_tech` 2 |
 | `plasma_arc` | turret | 2 | `defense_factory` 2, `weapon_tech` 4 |
 | `ion_bastion` | turret | 4 | `defense_factory` 4, `weapon_tech` 6, `armor_tech` 3 |
@@ -377,7 +378,7 @@ Flotten allein reichen nicht — Kolonien brauchen lokale Abwehr. Defense trennt
 
 - Baue **Verteidigungsfabrik** auf der zu schützenden Welt.
 - Öffne **Defense** — Einheiten bauen (Queue wie Werft), Requirements aus Gebäuden und Account-Forschung.
-- Einheiten: Türme und Barrieren (z. B. Sentinel, Plasma, Flak, Orbital Shield) — Freischaltung über Fabrik-Stufe und Techs.
+- Einheiten: Türme und Barrieren (z. B. Slug-Werfer, Sentinel, Plasma, Flak, Orbital Shield) — Freischaltung über Fabrik-Stufe und Techs.
 - Bestand ist **planetengebunden** — wie `planet_ships`.
 - Planetwechsel im Header wechselt die Defense-Ansicht.
 - Kampfwerte in Defense-Detail / Technische Daten — nicht Codex.

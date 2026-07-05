@@ -1410,6 +1410,8 @@
   "defense_factory": "Defense Factory",
   "defense_factory_level": "Nivel %(level)s",
   "defense_factory_title": "Defense Factory",
+  "defense_slug_launcher": "Lanzador de proyectiles",
+  "defense_slug_launcher_desc": "Batería cinética barata — construida sobre todo con proyectiles de ferronita. Eficaz en masa contra exploradores y cazas ligeros.",
   "defense_flak_array": "Matriz antiaérea",
   "defense_flak_array_desc": "Batería multilanzador con disparo rápido contra objetivos pequeños y medianos.",
   "defense_hint": "Construye torretas estacionarias y escudos para proteger tu colonia. Se desbloquea a través de Defense Factory y Orbital Shipyard.",

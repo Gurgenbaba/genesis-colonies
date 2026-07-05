@@ -1410,6 +1410,8 @@
   "defense_factory": "Defense Factory",
   "defense_factory_level": "Niveau %(level)s",
   "defense_factory_title": "Defense Factory",
+  "defense_slug_launcher": "Lanceur de slug",
+  "defense_slug_launcher_desc": "Batterie cinétique bon marché — construite surtout en slugs de ferronite. Efficace en masse contre éclaireurs et chasseurs légers.",
   "defense_flak_array": "Réseau Flak",
   "defense_flak_array_desc": "Batterie multi-lanceurs à tir rapide contre des cibles petites et moyennes.",
   "defense_hint": "Construisez des tourelles et des boucliers fixes pour protéger votre colonie. Se déverrouille via le Defense Factory et le Orbital Shipyard.",

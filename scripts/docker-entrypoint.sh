@@ -18,4 +18,6 @@ python migrate.py
 
 WORKERS="${GUNICORN_WORKERS:-1}"
 echo "[GC] Starting gunicorn on 0.0.0.0:${PORT} (workers=${WORKERS})..."
-exec gunicorn -w "${WORKERS}" -b "0.0.0.0:${PORT}" --timeout 120 app:app
+exec gunicorn -w "${WORKERS}" -b "0.0.0.0:${PORT}" --timeout 120 \
+  --access-logfile - --error-logfile - --log-level info \
+  app:app
