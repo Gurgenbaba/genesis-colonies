@@ -139,7 +139,20 @@ class TestGc821BStorageAndExchange:
             assert caps[resource] == expected
 
     def test_storage_growth_constant(self):
-        assert STORAGE_LEVEL_GROWTH == 1.98
+        assert STORAGE_LEVEL_GROWTH == 1.92
+        from game.economy_balance import STORAGE_LEVEL_GROWTH_LATE, STORAGE_LEVEL_GROWTH_PIVOT
+
+        assert STORAGE_LEVEL_GROWTH_LATE == 1.35
+        assert STORAGE_LEVEL_GROWTH_PIVOT == 10
+
+    def test_storage_endgame_cap_sane_with_high_tech(self):
+        """L22 + storage_tech 20 must stay well below trillion-scale caps."""
+        cap = EffectResolver(
+            {"fuel_storage": 22, "terraformer": 5},
+            {"storage_tech": 20},
+        ).get_storage_capacity()["fuel_cells"]
+        assert cap < 100_000_000_000
+        assert cap > 1_000_000_000
 
     def test_exchange_daily_limit_min_default(self):
         assert int(_EXCHANGE_SETTING_DEFAULTS["exchange_daily_limit_min"]) == EXCHANGE_DAILY_LIMIT_MIN

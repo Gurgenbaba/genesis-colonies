@@ -130,8 +130,10 @@ BUILD_TIME_CURVES: Dict[str, Tuple[float, float]] = {
 
 # GC-821B — default depot when no storage building (metal/crystal/fuel starter cap).
 STORAGE_BASE_CAPACITY = 150_000
-# GC-870 — progressive depot curve: BASE × GROW^level (same formula for L0+).
-STORAGE_LEVEL_GROWTH = 1.98
+# GC-870 — progressive depot curve: early exponential, late damped (avoids trillion caps).
+STORAGE_LEVEL_GROWTH = 1.92
+STORAGE_LEVEL_GROWTH_LATE = 1.35
+STORAGE_LEVEL_GROWTH_PIVOT = 10
 # Legacy GC-863 audit constant (no longer used for runtime storage cap).
 STORAGE_PRODUCTION_HOUR_MULTIPLIER = 120
 
@@ -390,9 +392,14 @@ def mine_roi_cost_multiplier(target_level: int) -> float:
 
 
 def storage_capacity_at_depot_level(storage_level: int) -> int:
-    """GC-870 — depot cap before storage_tech/terraformer (BASE × GROW^level)."""
+    """GC-870 — depot cap before storage_tech/terraformer (split growth curve)."""
     lvl = max(0, int(storage_level))
-    raw = float(STORAGE_BASE_CAPACITY) * (float(STORAGE_LEVEL_GROWTH) ** lvl)
+    pivot = int(STORAGE_LEVEL_GROWTH_PIVOT)
+    if lvl <= pivot:
+        raw = float(STORAGE_BASE_CAPACITY) * (float(STORAGE_LEVEL_GROWTH) ** lvl)
+    else:
+        pivot_cap = float(STORAGE_BASE_CAPACITY) * (float(STORAGE_LEVEL_GROWTH) ** pivot)
+        raw = pivot_cap * (float(STORAGE_LEVEL_GROWTH_LATE) ** (lvl - pivot))
     return max(STORAGE_BASE_CAPACITY, int(raw))
 
 

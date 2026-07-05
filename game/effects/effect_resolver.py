@@ -98,7 +98,7 @@ class EffectResolver:
     """
 
     BASE_STORAGE = STORAGE_BASE_CAPACITY  # GC-821B — single source in economy_balance
-    STORAGE_GROW = 1.98  # legacy audit alias; runtime uses economy_balance.storage_capacity_at_depot_level()
+    STORAGE_GROW = 1.92  # legacy audit alias; runtime uses economy_balance.storage_capacity_at_depot_level()
     MAX_BUILDING_LEVEL = 50
 
     # ------------------------------------------------------------------

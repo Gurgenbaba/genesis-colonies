@@ -94,7 +94,7 @@ Details: [PRODUCTION_FORMULA_SYSTEM.md](PRODUCTION_FORMULA_SYSTEM.md).
 ## Storage
 
 - Basis **150.000** Ferronit/Crytite/Brennzellen ohne Depot (`STORAGE_BASE_CAPACITY` / `EffectResolver.BASE_STORAGE`)
-- Mit `metal_storage` / `crystal_storage` / `fuel_storage`: **BASE × STORAGE_LEVEL_GROWTH^level** (`storage_capacity_at_depot_level`; gleiche Kurve für L0+)
+- Mit `metal_storage` / `crystal_storage` / `fuel_storage`: **split growth curve** (`storage_capacity_at_depot_level`: `1.92^level` bis L10, danach `1.35^(level−10)` auf Pivot-Basis)
 - Multiplier: `storage_tech` (+33 %/Lvl, additiv), `terraformer` (+5 % Kapazität/Lvl), `storage_factor`
 - Produktion kann Storage nicht überschreiten; bestehendes Overflow wird nicht getrimmt
 - **Trader Hub + Schrottplatz** dürfen jederzeit über Cap gutschreiben (Overflow bleibt erhalten)

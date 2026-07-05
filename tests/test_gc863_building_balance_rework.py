@@ -112,7 +112,11 @@ class TestGc863StorageCapacity:
             assert cap1 == storage_capacity_at_depot_level(1)
 
     def test_storage_growth_matches_constant(self):
-        assert STORAGE_LEVEL_GROWTH == 1.98
+        from game.economy_balance import STORAGE_LEVEL_GROWTH_LATE, STORAGE_LEVEL_GROWTH_PIVOT
+
+        assert STORAGE_LEVEL_GROWTH == 1.92
+        assert STORAGE_LEVEL_GROWTH_LATE == 1.35
+        assert STORAGE_LEVEL_GROWTH_PIVOT == 10
         assert storage_capacity_at_depot_level(0) == STORAGE_BASE_CAPACITY
         assert storage_capacity_at_depot_level(1) == int(STORAGE_BASE_CAPACITY * STORAGE_LEVEL_GROWTH)
 
