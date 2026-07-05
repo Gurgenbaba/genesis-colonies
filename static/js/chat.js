@@ -1744,8 +1744,15 @@
 
   async function openAllianceChat() {
     await openTChat();
-    const rooms = CHAT.bootstrap?.rooms || [];
-    const room = rooms.find((r) => String(r.room_type || "") === "alliance" && r.id && !r.disabled);
+    const findAllianceRoom = () =>
+      (CHAT.bootstrap?.rooms || []).find(
+        (r) => String(r.room_type || "") === "alliance" && r.id && !r.disabled
+      );
+    let room = findAllianceRoom();
+    if (!room) {
+      await refreshBootstrap();
+      room = findAllianceRoom();
+    }
     if (room) await switchRoom(Number(room.id));
   }
   GC.openAllianceChat = openAllianceChat;

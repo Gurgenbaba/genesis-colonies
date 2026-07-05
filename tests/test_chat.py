@@ -215,6 +215,40 @@ def test_alliance_isolation(app_client):
     assert app_client.get(f"/api/chat/messages?room_id={room_id}&after_id=0").get_json()["ok"] is False
 
 
+def test_alliance_chat_room_persists_after_bootstrap(app_client):
+    """Alliance room must survive bootstrap commit — otherwise room_not_found on open."""
+    uid = _create_player("ally_boot")
+    conn = db()
+    try:
+        create_alliance("CHT", "Chat Alliance", uid, conn=conn)
+        conn.commit()
+    finally:
+        conn.close()
+    _close_db()
+
+    with app_client.session_transaction() as sess:
+        sess["user_id"] = uid
+
+    boot = app_client.get("/api/chat/bootstrap").get_json()
+    assert boot["ok"]
+    ally_room = next(r for r in boot["data"]["rooms"] if r.get("room_type") == "alliance" and r.get("id"))
+    room_id = int(ally_room["id"])
+
+    msgs = app_client.get(f"/api/chat/messages?room_id={room_id}&after_id=0").get_json()
+    assert msgs["ok"], msgs.get("error")
+
+    conn = db()
+    try:
+        row = conn.execute(
+            "SELECT id FROM chat_rooms WHERE room_key = ? AND is_active = 1 LIMIT 1;",
+            (f"alliance:{int(boot['data']['player']['alliance']['alliance_id'])}",),
+        ).fetchone()
+        assert row is not None
+        assert int(row["id"]) == room_id
+    finally:
+        conn.close()
+
+
 def test_rate_limit(app_client):
     reset_rate_limits()
     uid = _create_player("spam")

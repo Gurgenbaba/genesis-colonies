@@ -1183,6 +1183,10 @@ def create_alliance(
             """,
             (aid,),
         )
+        if table_exists(conn, "chat_rooms"):
+            from .chat import ensure_alliance_room
+
+            ensure_alliance_room(aid, tag, conn)
         commit(conn)
         return {"id": aid, "tag": tag, "name": name}
     except Exception:

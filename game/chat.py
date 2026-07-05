@@ -156,6 +156,14 @@ def ensure_alliance_room(alliance_id: int, tag: str, conn) -> Dict[str, Any]:
     return dict(_get_room_by_id(conn, int(cur.lastrowid)) or {})
 
 
+def ensure_player_chat_rooms(player_id: int, conn) -> None:
+    """Create/persist global and alliance chat rooms needed for bootstrap."""
+    ensure_global_rooms(conn)
+    ally = get_player_alliance(player_id, conn=conn)
+    if ally:
+        ensure_alliance_room(int(ally["alliance_id"]), str(ally.get("tag") or ""), conn)
+
+
 def dm_room_key(a: int, b: int) -> str:
     x, y = sorted((int(a), int(b)))
     return f"dm:{x}:{y}"
@@ -736,7 +744,10 @@ def list_rooms_for_player(player_id: int, conn=None) -> List[Dict[str, Any]]:
     if own:
         conn = db()
     try:
-        ensure_global_rooms(conn)
+        if own:
+            begin_write_transaction(conn)
+            ensure_player_chat_rooms(player_id, conn)
+            commit(conn)
 
         if is_player_chat_banned(player_id, conn):
             return _json_error("chat_banned")
@@ -749,7 +760,7 @@ def list_rooms_for_player(player_id: int, conn=None) -> List[Dict[str, Any]]:
 
         ally = get_player_alliance(player_id, conn=conn)
         if ally:
-            ar = ensure_alliance_room(int(ally["alliance_id"]), str(ally["tag"]), conn)
+            ar = ensure_alliance_room(int(ally["alliance_id"]), str(ally.get("tag") or ""), conn)
             if ar:
                 rooms.append(_room_summary(ar, extra={"alliance_tag": ally["tag"]}))
         else:
@@ -788,6 +799,10 @@ def list_rooms_for_player(player_id: int, conn=None) -> List[Dict[str, Any]]:
                 rooms.append(_room_summary(adm))
 
         return rooms
+    except Exception:
+        if own:
+            rollback(conn)
+        raise
     finally:
         if own:
             conn.close()
@@ -1254,7 +1269,7 @@ def chat_bootstrap(player_id: int) -> Dict[str, Any]:
             return _json_error("chat_not_ready")
 
         begin_write_transaction(conn)
-        ensure_global_rooms(conn)
+        ensure_player_chat_rooms(player_id, conn)
         commit(conn)
 
         player = load_player(player_id, conn=conn) or {}
