@@ -19,9 +19,9 @@ from game.economy_balance import (
     research_base_time_seconds,
     reference_production_per_hour,
     STORAGE_BASE_CAPACITY,
-    STORAGE_LEVEL_GROWTH,
-    STORAGE_LEVEL_GROWTH_LATE,
-    STORAGE_LEVEL_GROWTH_PIVOT,
+    STORAGE_REFERENCE_HOURS,
+    STORAGE_REFERENCE_MINE_LEVEL_FACTOR,
+    STORAGE_REFERENCE_RESOURCE,
     EXCHANGE_DAILY_LIMIT_MIN,
     EXCHANGE_DAILY_LIMIT_PCT_DEFAULT,
     MINE_UPGRADE_ROI_TARGET_HOURS,
@@ -240,8 +240,9 @@ def main() -> None:
     lines.append(
         (
             f"Speicher Basis ohne Depot: **{STORAGE_BASE_CAPACITY:,}** · "
-            f"Depot-Kurve: **{STORAGE_LEVEL_GROWTH}**^level bis L{STORAGE_LEVEL_GROWTH_PIVOT}, "
-            f"danach **{STORAGE_LEVEL_GROWTH_LATE}**^(level−{STORAGE_LEVEL_GROWTH_PIVOT})"
+            f"Depot-Kurve: Basis + **{STORAGE_REFERENCE_HOURS}h** "
+            f"{STORAGE_REFERENCE_RESOURCE}-Minenproduktion bei **Lagerlevel × "
+            f"{STORAGE_REFERENCE_MINE_LEVEL_FACTOR}**"
         ).replace(",", ".")
     )
     lines.append("")

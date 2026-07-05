@@ -46,7 +46,7 @@ Curves: `BUILDING_UPGRADE_CURVES`, `BUILD_TIME_CURVES` in `economy_balance.py`.
 | Constant | Was | GC-821 |
 |----------|-----|--------|
 | `BASE_STORAGE` | 100 000 | 150 000 |
-| `STORAGE_GROW` | 1.8 | 1.75 |
+| Storage-Kurve | `BASE × growth^level` | Ferdi-Referenzkurve (`150k + 24h × Ferronit-Mine L×3`) |
 | `exchange_daily_limit_min` | 25 M | 500 000 |
 
 Trader limit still: `empire_day_total × pct / 100` (auto-scales with GC-820 production).

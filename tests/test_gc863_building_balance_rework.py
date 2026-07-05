@@ -16,7 +16,9 @@ from game.economy_balance import (
     NANOFACTORY_CRYSTAL_BASE,
     NANOFACTORY_METAL_BASE,
     STORAGE_BASE_CAPACITY,
-    STORAGE_LEVEL_GROWTH,
+    STORAGE_REFERENCE_HOURS,
+    STORAGE_REFERENCE_MINE_LEVEL_FACTOR,
+    STORAGE_REFERENCE_RESOURCE,
     nanofactory_upgrade_cost,
     power_upgrade_cost,
     storage_capacity_at_depot_level,
@@ -88,7 +90,7 @@ class TestGc863StorageCapacity:
         ],
     )
     @pytest.mark.parametrize("level", _BENCHMARK_LEVELS)
-    def test_capacity_follows_exponential_growth(self, resource: str, building: str, level: int):
+    def test_capacity_follows_reference_mine_growth(self, resource: str, building: str, level: int):
         expected = storage_capacity_at_depot_level(level)
 
         er = EffectResolver({building: level}, {})
@@ -111,14 +113,19 @@ class TestGc863StorageCapacity:
             assert cap0 == STORAGE_BASE_CAPACITY
             assert cap1 == storage_capacity_at_depot_level(1)
 
-    def test_storage_growth_matches_constant(self):
-        from game.economy_balance import STORAGE_LEVEL_GROWTH_LATE, STORAGE_LEVEL_GROWTH_PIVOT
+    def test_storage_growth_matches_reference_formula(self):
+        from game.production_formula import mine_output
 
-        assert STORAGE_LEVEL_GROWTH == 1.92
-        assert STORAGE_LEVEL_GROWTH_LATE == 1.35
-        assert STORAGE_LEVEL_GROWTH_PIVOT == 10
+        assert STORAGE_REFERENCE_RESOURCE == "metal"
+        assert STORAGE_REFERENCE_MINE_LEVEL_FACTOR == 3
+        assert STORAGE_REFERENCE_HOURS == 24
         assert storage_capacity_at_depot_level(0) == STORAGE_BASE_CAPACITY
-        assert storage_capacity_at_depot_level(1) == int(STORAGE_BASE_CAPACITY * STORAGE_LEVEL_GROWTH)
+        expected_l1 = int(
+            STORAGE_BASE_CAPACITY
+            + mine_output(STORAGE_REFERENCE_RESOURCE, STORAGE_REFERENCE_MINE_LEVEL_FACTOR)
+            * STORAGE_REFERENCE_HOURS
+        )
+        assert storage_capacity_at_depot_level(1) == expected_l1
 
 
 class TestGc863SolarCalibration:

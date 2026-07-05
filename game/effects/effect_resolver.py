@@ -98,7 +98,6 @@ class EffectResolver:
     """
 
     BASE_STORAGE = STORAGE_BASE_CAPACITY  # GC-821B — single source in economy_balance
-    STORAGE_GROW = 1.92  # legacy audit alias; runtime uses economy_balance.storage_capacity_at_depot_level()
     MAX_BUILDING_LEVEL = 50
 
     # ------------------------------------------------------------------
@@ -1054,7 +1053,7 @@ class EffectResolver:
         return self.fuel_storage_capacity()
 
     def _storage_base_cap(self, resource: str, storage_level: int) -> int:
-        """GC-870 progressive depot cap (BASE × GROW^level; resource-independent)."""
+        """GC-872 Ferdi reference depot cap; resource-independent."""
         from ..economy_balance import storage_capacity_at_depot_level
 
         _ = resource

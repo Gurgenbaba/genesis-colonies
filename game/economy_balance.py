@@ -16,6 +16,7 @@ from .production_formula import (
     LEVEL_GROWTH,
     ProductionContext,
     calculate_resource_output,
+    mine_output,
     normalize_resource_type,
 )
 
@@ -130,12 +131,10 @@ BUILD_TIME_CURVES: Dict[str, Tuple[float, float]] = {
 
 # GC-821B — default depot when no storage building (metal/crystal/fuel starter cap).
 STORAGE_BASE_CAPACITY = 150_000
-# GC-870 — progressive depot curve: early exponential, late damped (avoids trillion caps).
-STORAGE_LEVEL_GROWTH = 1.92
-STORAGE_LEVEL_GROWTH_LATE = 1.35
-STORAGE_LEVEL_GROWTH_PIVOT = 10
-# Legacy GC-863 audit constant (no longer used for runtime storage cap).
-STORAGE_PRODUCTION_HOUR_MULTIPLIER = 120
+# GC-872 — depot cap = base + 24h of a metal mine at 3× depot level.
+STORAGE_REFERENCE_RESOURCE = "metal"
+STORAGE_REFERENCE_MINE_LEVEL_FACTOR = 3
+STORAGE_REFERENCE_HOURS = 24
 
 # GC-863 — nanofactory upgrade costs (target level X); GC-863A steeper growth.
 NANOFACTORY_METAL_BASE = 10_000.0
@@ -392,15 +391,15 @@ def mine_roi_cost_multiplier(target_level: int) -> float:
 
 
 def storage_capacity_at_depot_level(storage_level: int) -> int:
-    """GC-870 — depot cap before storage_tech/terraformer (split growth curve)."""
+    """GC-872 — depot cap before storage_tech/terraformer (Ferdi 3× mine × 24h anchor)."""
     lvl = max(0, int(storage_level))
-    pivot = int(STORAGE_LEVEL_GROWTH_PIVOT)
-    if lvl <= pivot:
-        raw = float(STORAGE_BASE_CAPACITY) * (float(STORAGE_LEVEL_GROWTH) ** lvl)
-    else:
-        pivot_cap = float(STORAGE_BASE_CAPACITY) * (float(STORAGE_LEVEL_GROWTH) ** pivot)
-        raw = pivot_cap * (float(STORAGE_LEVEL_GROWTH_LATE) ** (lvl - pivot))
-    return max(STORAGE_BASE_CAPACITY, int(raw))
+    if lvl <= 0:
+        return STORAGE_BASE_CAPACITY
+    reference_mine_level = lvl * int(STORAGE_REFERENCE_MINE_LEVEL_FACTOR)
+    reference_day_cap = mine_output(STORAGE_REFERENCE_RESOURCE, reference_mine_level) * float(
+        STORAGE_REFERENCE_HOURS
+    )
+    return max(STORAGE_BASE_CAPACITY, int(STORAGE_BASE_CAPACITY + reference_day_cap))
 
 
 def storage_capacity_anchor(

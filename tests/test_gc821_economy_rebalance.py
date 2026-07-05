@@ -16,7 +16,9 @@ from game.economy_balance import (
     EXCHANGE_DAILY_LIMIT_MIN,
     LOOT_RESOURCE_FLOOR_MIN,
     STORAGE_BASE_CAPACITY,
-    STORAGE_LEVEL_GROWTH,
+    STORAGE_REFERENCE_HOURS,
+    STORAGE_REFERENCE_MINE_LEVEL_FACTOR,
+    STORAGE_REFERENCE_RESOURCE,
     balance_snapshot_table,
     mine_upgrade_metal_hours,
     power_build_seconds,
@@ -74,10 +76,11 @@ class TestGc821BStorageAndExchange:
         assert caps["crystal"] == STORAGE_BASE_CAPACITY
         assert caps["fuel_cells"] == STORAGE_BASE_CAPACITY
 
-    def test_storage_level_one_uses_exponential_growth(self):
+    def test_storage_level_one_uses_ferdi_reference_growth(self):
         er = EffectResolver({"metal_storage": 1}, {})
         caps = er.get_storage_capacity()
         assert caps["metal"] == storage_capacity_at_depot_level(1)
+        assert caps["metal"] > STORAGE_BASE_CAPACITY
 
     def test_storage_curve_smooth_progression(self):
         caps = [storage_capacity_at_depot_level(lvl) for lvl in range(4)]
@@ -138,21 +141,19 @@ class TestGc821BStorageAndExchange:
             expected = int(expected_base * (1 + 5 * 0.33))
             assert caps[resource] == expected
 
-    def test_storage_growth_constant(self):
-        assert STORAGE_LEVEL_GROWTH == 1.92
-        from game.economy_balance import STORAGE_LEVEL_GROWTH_LATE, STORAGE_LEVEL_GROWTH_PIVOT
-
-        assert STORAGE_LEVEL_GROWTH_LATE == 1.35
-        assert STORAGE_LEVEL_GROWTH_PIVOT == 10
+    def test_storage_reference_formula_constants(self):
+        assert STORAGE_REFERENCE_RESOURCE == "metal"
+        assert STORAGE_REFERENCE_MINE_LEVEL_FACTOR == 3
+        assert STORAGE_REFERENCE_HOURS == 24
 
     def test_storage_endgame_cap_sane_with_high_tech(self):
-        """L22 + storage_tech 20 must stay well below trillion-scale caps."""
+        """L42 + storage_tech 20 must stay below former trillion-scale caps."""
         cap = EffectResolver(
-            {"fuel_storage": 22, "terraformer": 5},
+            {"fuel_storage": 42, "terraformer": 5},
             {"storage_tech": 20},
         ).get_storage_capacity()["fuel_cells"]
         assert cap < 100_000_000_000
-        assert cap > 1_000_000_000
+        assert cap > 10_000_000_000
 
     def test_exchange_daily_limit_min_default(self):
         assert int(_EXCHANGE_SETTING_DEFAULTS["exchange_daily_limit_min"]) == EXCHANGE_DAILY_LIMIT_MIN
@@ -167,7 +168,7 @@ class TestGc821BStorageAndExchange:
         js = (root / "static" / "main.js").read_text(encoding="utf-8")
         forbidden = (
             "STORAGE_BASE_CAPACITY",
-            "STORAGE_LEVEL_GROWTH",
+            "STORAGE_REFERENCE_MINE_LEVEL_FACTOR",
             "storage_capacity_at_depot_level",
             "storage_tech_level",
             "storageTechLevel",
