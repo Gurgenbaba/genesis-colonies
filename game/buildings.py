@@ -1906,6 +1906,12 @@ def queue_build_for_planet(
     else:
         user_id = int(user_id)
 
+    from .options import vacation_blocks_outbound
+
+    ok_vacation, vac_reason = vacation_blocks_outbound(user_id, conn=db())
+    if not ok_vacation:
+        return False, vac_reason, {}
+
     want_max = str(queue_mode or "single").strip().lower() == "max"
 
     conn = db()

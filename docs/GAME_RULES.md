@@ -235,10 +235,10 @@ UI: `noob_protection_blocked` in Fleet-Preview/Send.
 | Phase | Verhalten |
 |-------|-----------|
 | **Aktivierung** | Mindestdauer **48 h**; Blocker wenn aktive Flotten, Auktionsgebote oder Queues offen |
-| **Während Urlaub** | Keine ausgehenden Flotten; kein Trader Hub; eingehende Angriffe/Spionage prall ab |
-| **Deaktivierung** | Erst nach Ablauf der Mindestdauer |
+| **Während Urlaub** | Keine ausgehenden Flotten; kein Trader Hub; kein Bau/Forschung/Werft/Verteidigung; Produktion und Queues pausiert; eingehende Angriffe/Spionage prall ab |
+| **Deaktivierung** | Erst nach Ablauf der Mindestdauer — **bleibt aktiv bis manuell beendet** |
 
-**Abweichung (Ist-Stand Code):** Produktion, Forschung und Bauqueues sind während Urlaub **nicht** pausiert — nur Flotten + Handel gesperrt. Geplante Verschärfung: Ticket + Changelog.
+**Abweichung (Ist-Stand Code):** ~~Produktion, Forschung und Bauqueues sind während Urlaub **nicht** pausiert~~ — seit GC-871 pausiert (Stand 2026-07-05).
 
 Ranking: Urlaub-Badge in Rangliste (`ranking_vacation_badge`).
 
@@ -489,8 +489,11 @@ Während aktiv:
   - vacation_blocks_outbound → alle Fleet-Sends blockiert
   - vacation_blocks_incoming_attack → attack/spy prall ab (Bounce)
   - exchange.py → Trader Hub blockiert
-  - Produktion/Forschung/Bau: NICHT blockiert (Ist-Stand v1.0)
-Deaktivierung:   locked_until muss abgelaufen sein
+  - queue_build / queue_research / shipyard / defense enqueue → blockiert
+  - finish_due_work → Bau/Forschung/Werft/Verteidigung/PE pausiert
+  - update_planet_resources → Produktion pausiert (last_update läuft weiter)
+  - Deaktivierung: locked_until = früheste Endzeit; bleibt aktiv bis manuell disabled
+  - repair_account_safety_state: deaktiviert NICHT automatisch nach Mindestdauer
 Audit:           vacation_mode_enabled / disabled
 Owner:           game/options.py
 Tests:           tests/test_fleet.py — test_vacation_mode_*

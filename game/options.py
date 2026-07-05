@@ -438,12 +438,9 @@ def _player_safety_row(player_id: int, conn) -> Dict[str, Any]:
 def _vacation_state_needs_repair(row: Dict[str, Any], now: int) -> bool:
     active = bool(int(row.get("vacation_mode_active") or 0))
     locked_until = row.get("vacation_locked_until")
-    if active:
-        if locked_until is None:
-            return True
-        if int(locked_until) <= now:
-            return True
-    elif locked_until is not None:
+    if active and locked_until is None:
+        return True
+    if not active and locked_until is not None:
         return True
     for legacy_col in ("vacation_mode", "vacation_until", "vacation_started_at"):
         if legacy_col in row and row.get(legacy_col) not in (None, "", 0):
@@ -493,11 +490,14 @@ def repair_account_safety_state(
         locked_until = row.get("vacation_locked_until")
         set_active = active
         set_locked = locked_until
-        if active and (locked_until is None or int(locked_until) <= now):
+        if active and locked_until is None:
             set_active = 0
             set_locked = None
         elif not active and locked_until is not None:
+            set_active = 0
             set_locked = None
+        else:
+            return False, _vacation_hud_from_row(row, now)
 
         begin_write_transaction(c)
         c.execute(
@@ -628,6 +628,11 @@ def vacation_blocks_outbound(player_id: int, *, conn=None) -> Tuple[bool, str]:
     if is_vacation_mode_active(int(player_id), conn=conn):
         return False, "options_error_vacation_active"
     return True, ""
+
+
+def vacation_freezes_account_progress(player_id: int, *, conn=None) -> bool:
+    """Pause production and queue progress while vacation mode is active."""
+    return is_vacation_mode_active(int(player_id), conn=conn)
 
 
 def vacation_blocks_incoming_attack(target_player_id: int, *, conn=None) -> bool:

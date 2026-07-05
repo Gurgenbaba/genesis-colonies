@@ -610,7 +610,8 @@ def test_api_game_state_research_queue_timer_fields(game_client):
     assert int(head.get("remaining_seconds") or 0) > 0
 
 
-def test_game_state_account_safety_self_heals_expired_vacation(game_client):
+def test_game_state_account_safety_keeps_vacation_after_min_duration(game_client):
+    """Mindestdauer abgelaufen = manuell deaktivierbar, nicht auto-aus."""
     client, pid = game_client
     conn = db()
     try:
@@ -627,7 +628,8 @@ def test_game_state_account_safety_self_heals_expired_vacation(game_client):
     assert r.status_code == 200
     body = r.get_json()
     safety = body.get("account_safety") or {}
-    assert safety.get("vacation_active") is False
+    assert safety.get("vacation_active") is True
+    assert safety.get("vacation_can_disable") is True
     assert int(body.get("player_id") or 0) == pid
 
 

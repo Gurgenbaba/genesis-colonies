@@ -337,6 +337,11 @@ def enqueue_ship_build(
     cost: Mapping[str, int],
     conn,
 ) -> Tuple[bool, str, int | None]:
+    from .options import vacation_blocks_outbound
+
+    ok_vacation, vac_reason = vacation_blocks_outbound(int(player_id), conn=conn)
+    if not ok_vacation:
+        return False, vac_reason, None
     if not shipyard_queue_table_ready(conn):
         return False, "fleet_unavailable", None
     if queue_count(planet_id, conn=conn) >= get_shipyard_queue_limit(conn=conn):

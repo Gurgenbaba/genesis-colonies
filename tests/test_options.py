@@ -334,6 +334,53 @@ def test_vacation_enable_and_disable(app_client):
     assert res_off.status_code == 400
     assert res_off.get_json()['error'] == 'options_error_vacation_locked'
 
+def test_vacation_stays_active_after_minimum_duration(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    ensure_account_safety_schema()
+    pid, _, _ = _create_player()
+    now = int(time.time())
+    conn = models.db()
+    conn.execute(
+        'UPDATE players SET vacation_mode_active = 1, vacation_locked_until = ? WHERE id = ?;',
+        (now - 120, pid),
+    )
+    conn.commit()
+    conn.close()
+
+    repaired, hud = repair_account_safety_state(pid)
+    assert repaired is False
+    assert hud['vacation_active'] is True
+    assert hud['vacation_can_disable'] is True
+
+
+def test_vacation_can_disable_after_minimum_duration(app_client, temp_db):
+    pid, uname, _ = _create_player()
+    _login(app_client, uname)
+    res_on = app_client.post(
+        '/api/options/vacation/enable',
+        json={'confirm_text': ACCOUNT_SAFETY_CONFIRM_PHRASES['vacation_enable']},
+        headers={'Accept': 'application/json'},
+    )
+    assert res_on.status_code == 200
+
+    conn = models.db()
+    conn.execute(
+        'UPDATE players SET vacation_locked_until = ? WHERE id = ?;',
+        (int(time.time()) - 60, pid),
+    )
+    conn.commit()
+    conn.close()
+
+    res_off = app_client.post(
+        '/api/options/vacation/disable',
+        json={'confirm_text': ACCOUNT_SAFETY_CONFIRM_PHRASES['vacation_disable']},
+        headers={'Accept': 'application/json'},
+    )
+    assert res_off.status_code == 200
+    assert res_off.get_json()['data']['vacation_active'] is False
+
+
 def test_account_deletion_request_and_cancel(app_client, temp_db):
     pid, uname, _ = _create_player()
     _login(app_client, uname)

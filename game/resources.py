@@ -301,6 +301,11 @@ def project_planet_resource_balances(planet: dict, *, conn, now: float | None = 
     _now, delta = _production_elapsed_seconds(planet, now=now)
     buildings = get_planet_buildings(planet_id, conn=conn)
     research = get_research_levels(user_id=player_id, conn=conn)
+    from .options import vacation_freezes_account_progress
+
+    if vacation_freezes_account_progress(player_id, conn=conn):
+        return planet
+
     resolver = get_effect_resolver(
         player_id,
         buildings=buildings,
@@ -374,6 +379,9 @@ def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool 
 
         buildings = get_planet_buildings(planet_id, conn=conn)
         research = get_research_levels(user_id=player_id, conn=conn)
+        from .options import vacation_freezes_account_progress
+
+        vacation_frozen = vacation_freezes_account_progress(player_id, conn=conn)
         resolver = get_effect_resolver(
             player_id,
             buildings=buildings,
@@ -391,25 +399,25 @@ def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool 
         prod_delta_metal = 0
         prod_delta_crystal = 0
         prod_delta_fuel = 0
-        if delta > 0:
+        if delta > 0 and not vacation_frozen:
             m_rate, c_rate = resolver.production_rates_per_sec(ratio)
             fc_rate = resolver.fuel_cells_rate_per_sec(ratio)
             prod_delta_metal = int(m_rate * delta)
             prod_delta_crystal = int(c_rate * delta)
             prod_delta_fuel = int(fc_rate * delta)
 
-        _apply_production_tick(
-            planet,
-            buildings,
-            delta=delta,
-            resolver=resolver,
-            ratio=ratio,
-            research=research,
-            mods=mods,
-            monotonic_floor=True,
-        )
+            _apply_production_tick(
+                planet,
+                buildings,
+                delta=delta,
+                resolver=resolver,
+                ratio=ratio,
+                research=research,
+                mods=mods,
+                monotonic_floor=True,
+            )
 
-        if delta > 0 and (prod_delta_metal or prod_delta_crystal or prod_delta_fuel):
+        if delta > 0 and not vacation_frozen and (prod_delta_metal or prod_delta_crystal or prod_delta_fuel):
             try:
                 from .directives.progress import emit_resource_produced_events
 
@@ -441,7 +449,7 @@ def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool 
         try:
             from .planet_evolution.repository import evolution_schema_ready
 
-            if evolution_schema_ready(conn):
+            if evolution_schema_ready(conn) and not vacation_frozen:
                 from .planet_evolution.bootstrap import ensure_planet_evolution
                 from .planet_evolution.tick import evolution_tick_planet
 

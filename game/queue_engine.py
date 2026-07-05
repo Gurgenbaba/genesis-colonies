@@ -635,7 +635,11 @@ def finish_due_work(
         planet_targets = _resolve_planet_targets(conn, player_id, planet_id)
         research_targets = _resolve_research_targets(conn, player_id, planet_id)
 
+        from .options import vacation_freezes_account_progress
+
         for pid_planet, pid_player in planet_targets:
+            if vacation_freezes_account_progress(pid_player, conn=conn):
+                continue
             try:
                 n = finish_planet_build_jobs(conn, pid_planet, pid_player, float(now))
                 if n > 0:
@@ -700,6 +704,8 @@ def finish_due_work(
                 logger.exception("queue_engine defense finish failed: %s", msg)
 
         for uid in research_targets:
+            if vacation_freezes_account_progress(uid, conn=conn):
+                continue
             try:
                 n = finish_player_research_jobs(conn, uid, float(now))
                 if n > 0:

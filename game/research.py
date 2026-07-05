@@ -872,6 +872,12 @@ def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None, *
     else:
         uid = int(user_id)
 
+    from .options import vacation_blocks_outbound
+
+    ok_vacation, vac_reason = vacation_blocks_outbound(uid, conn=db())
+    if not ok_vacation:
+        return False, vac_reason, None
+
     want_max = str(queue_mode or "single").strip().lower() == "max"
 
     conn = db()
