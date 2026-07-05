@@ -151,7 +151,7 @@ Preview: `POST /api/fleet/preview` → debounced im Client (~300ms).
 | **GC-402B** | Fleet send preview: mission hints, ok/blocked status, expedition auto-position 16 | `static/main.js`, `templates/fleet.html` |
 | **GC-402C** | Inbox debrief: event card, risk/find meta, loot chips, theme colors per event type | `static/js/messages.js`, `static/style.css` |
 
-Event keys: `void_scan`, `mineral_deposit`, `fuel_cache`, `debris_salvage`, `nav_interference`, `distress_beacon`, `sensor_glitch`, `ancient_stash`, `pirate_encounter`, `ion_storm`, `ancient_minefield`, `lost_container`, `abandoned_convoy`, `ancient_derelict`, `spatial_rift`, `time_anomaly`, `ancient_beacon`. Roll ist deterministisch pro `movement_id`. **Weight audit (GC-620J):** 124 Punkte gesamt — Loot ~60 %, Combat ~5 %, Hazard ~3 %, Treasure ~6 %, Legendary ~2,4 % (`spatial_rift`, `time_anomaly`, `ancient_beacon` je weight 1); `expedition_event_weight_audit()` für Regression-Tests.
+Event keys: `void_scan`, `mineral_deposit`, `fuel_cache`, `debris_salvage`, `nav_interference`, `distress_beacon`, `sensor_glitch`, `ancient_stash`, `pirate_encounter`, `ion_storm`, `ancient_minefield`, `lost_container`, `abandoned_convoy`, `ancient_derelict`, `spatial_rift`, `time_anomaly`, `ancient_beacon`. Roll ist deterministisch pro `movement_id`. **Weight audit (GC-620J):** 123 Punkte gesamt — Loot ~70 %, Combat ~3 %, Hazard ~2 %, Neutral ~7 %, Treasure ~6 %, Legendary ~2,4 % (`spatial_rift`, `time_anomaly`, `ancient_beacon` je weight 1); `expedition_event_weight_audit()` für Regression-Tests.
 
 #### Kanonische Expeditions-Loot-Formel (GC-EXPEDITION-LOOT-FINAL)
 
@@ -166,6 +166,10 @@ Nur Schiffe mit `role: expedition` zählen (Phase 1: **Odyssey** = `solar_skiff`
 | **Loot** (`expo_value`) | Expo-Schiffe | Eskorten, Frachter |
 | **Bergung** (`cargo_capacity`) | Expo-Frachtraum + Frachter | Kampf-Eskorten |
 | **Piratenkampf** (`fleet_value`) | Expo + Kampf-Eskorten | Frachter |
+
+**Verluste (Expo-Balance):** Kampf-Eskorten (`role: combat`) absorbieren Schiffsverluste bei Piraten und Minenfeldern **zuerst**; Recycler (`role: recycle`) danach; Expo-Hüllen erst wenn beides erschöpft ist. Piraten-Event-Gewicht 4/123 (~3 %); Verlustbänder: Sieg 2–10 %, knapp 4–14 %, Niederlage 8–20 %.
+
+**Piraten-Trümmerfeld (Expo):** Nach Piratenkontakt mit Verlusten entsteht ein **ephemeres TF** (Spieler- + bei Sieg Piraten-Trümmer, kanonische `calculate_combat_debris`). Recycler an Bord bergen sofort in Recycler-Frachtraum (nicht Expo-Cargo-Cap); Rest verfällt. Kein persistentes Galaxy-Debris-Feld.
 
 ```text
 per_hull_value = Summe(build_cost)   # metal + crystal + fuel_cells aus fleet_defs
@@ -186,7 +190,7 @@ Referenzwerte (Odyssey, ohne Random/Event; Exponent pro Hülle, linear in Anzahl
 
 Weitere Expo-Schiffe (z. B. `eclipse_runner`) werden automatisch über `role: expedition` + `build_cost` in `expo_value` einbezogen.
 
-**Legendary (GC-620J-A):** `spatial_rift` — 60 % verstärkter Fund (1,4–1,8×, cargo-capped) oder 40 % Rückkehrverzögerung (+25–55 % Flugzeit); `time_anomaly` — 50 % Dilatation (+20–40 % Flugzeit) oder 50 % Kompression (Flavor, kein echter Rückkehrgewinn); optional 30 % Mini-Bonus-Loot; `ancient_beacon` — 1× Premium/Alien/Research-Lootbox + kleine Ressourcen. Piratensieg (GC-620G/H): Verluste + optionale Ressourcenbeute; ~30 % Chance auf kleine Schiffbergung (nur leichte/mittlere Hüllen, Score-Cap). Hazards (GC-620I-A): `ion_storm` verlängert Rückkehr um 20–60 % Flugzeit; `ancient_minefield` verursacht 2–12 % Schiffsverluste ohne Kampf (Hard-Cap ≥1 Schiff). Story/Treasure (GC-620I-B): `lost_container` (~3 %) — Lootbox + kleine Ressourcen; `abandoned_convoy` (~1,6 %) — Ressourcen und/oder Convoy-Salvage; `ancient_derelict` (~0,8 %) — seltenes Mid-Hull + Premium-Cache.
+**Legendary (GC-620J-A):** `spatial_rift` — 60 % verstärkter Fund (1,4–1,8×, cargo-capped) oder 40 % Rückkehrverzögerung (+25–55 % Flugzeit); `time_anomaly` — 50 % Dilatation (+20–40 % Flugzeit) oder 50 % Kompression (Flavor, kein echter Rückkehrgewinn); optional 30 % Mini-Bonus-Loot; `ancient_beacon` — 1× Premium/Alien/Research-Lootbox + kleine Ressourcen. Piratensieg (GC-620G/H): Verluste zuerst an Eskorten; ~30 % Chance auf kleine Schiffbergung (nur leichte/mittlere Hüllen, Score-Cap). Hazards (GC-620I-A): `ion_storm` verlängert Rückkehr um 20–60 % Flugzeit; `ancient_minefield` verursacht 2–8 % Schiffsverluste ohne Kampf (Hard-Cap ≥1 Schiff, Eskorten zuerst). Story/Treasure (GC-620I-B): `lost_container` (~3 %) — Lootbox + kleine Ressourcen; `abandoned_convoy` (~1,6 %) — Ressourcen und/oder Convoy-Salvage; `ancient_derelict` (~0,8 %) — seltenes Mid-Hull + Premium-Cache.
 
 | **colonize** | `colonize_planet()`; verbraucht `seed_ark` |
 | **recycle** | Trümmer abbauen (`harvest_debris_at_field`); Fracht auf Rückflug; Report bei Ankunft |

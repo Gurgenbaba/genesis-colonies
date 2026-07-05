@@ -661,7 +661,8 @@
     if (!debris) return "";
     const recycleHref = fleetRecycleHrefFromCoords(meta?.target_coords);
     const footerParts = [];
-    if (debris.recycler_slots_needed > 0) {
+    const isExpeditionField = Boolean(meta?.debris?.expedition_field);
+    if (!isExpeditionField && debris.recycler_slots_needed > 0) {
       footerParts.push(
         `<div class="gc-combat-debris-hint">${esc(
           t("combat_report_debris_recycler_needed", "Recyclers needed: %(count)s").replace(
@@ -689,8 +690,17 @@
           `<span class="gc-combat-debris-harvested-value">${harvestedBits.join(" · ")}</span>` +
         `</div>`
       );
+    } else if (isExpeditionField && (debris.metal > 0 || debris.crystal > 0)) {
+      footerParts.push(
+        `<div class="gc-combat-debris-hint">${esc(
+          t(
+            "expedition_report_debris_uncollected",
+            "Debris field created — no reclaimer aboard to salvage."
+          )
+        )}</div>`
+      );
     }
-    if (recycleHref) {
+    if (recycleHref && !isExpeditionField) {
       footerParts.push(
         `<div class="gc-combat-debris-actions">` +
           `<a href="${esc(recycleHref)}" class="gc-btn gc-btn-primary gc-btn-sm">${esc(
@@ -1803,6 +1813,8 @@
           "gc-combat-report-panel--pirate"
         )
       );
+      const debrisPanel = renderCombatDebrisPanel(meta);
+      if (debrisPanel) sections.push(debrisPanel);
     }
 
     const hazard = meta.hazard || null;

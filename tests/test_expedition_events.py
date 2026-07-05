@@ -15,12 +15,14 @@ from game.expedition_events import (
     calculate_expo_value,
     calculate_expedition_combat_value,
     calculate_expedition_loot_cap,
+    calculate_expedition_recycler_cargo,
     calculate_fleet_value,
     expedition_event_weight_audit,
     expedition_ship_fleet_value,
     grant_expedition_lootboxes,
     is_allowed_expedition_lootbox,
     resolve_expedition_outcome,
+    resolve_expedition_pirate_debris,
     resolve_minefield_hazard,
     resolve_pirate_encounter,
     roll_lost_container_lootboxes,
@@ -370,6 +372,89 @@ def test_grant_expedition_lootboxes_persists_inventory(tmp_path, monkeypatch):
         gdb._DB_PATH = None
 
 
+def test_expo_only_fleet_still_takes_losses():
+    remaining, losses = apply_expedition_ship_losses({"solar_skiff": 500}, 20)
+    assert int(losses.get("solar_skiff") or 0) == 100
+    assert remaining.get("solar_skiff") == 400
+
+
+def test_pirate_debris_created_from_ship_losses():
+    import random
+
+    ships = {"solar_skiff": 100, "falcon_interceptor": 80}
+    combat = resolve_pirate_encounter(
+        random.Random(101),
+        ships,
+        calculate_expedition_combat_value(ships),
+    )
+    assert int(combat.get("losses_total") or 0) > 0
+    debris = resolve_expedition_pirate_debris(
+        remaining_ships=dict(combat["remaining_ships"]),
+        ship_losses=dict(combat["losses"]),
+        pirate_combat=combat,
+    )
+    assert debris is not None
+    field = debris["debris"]
+    assert int(field.get("metal") or 0) + int(field.get("crystal") or 0) > 0
+    assert field.get("expedition_field") is True
+
+
+def test_pirate_debris_collected_when_recycler_aboard():
+    fleet = {"solar_skiff": 50, "falcon_interceptor": 200, "harvest_reclaimer": 2}
+    remaining, losses = apply_expedition_ship_losses(fleet, 30)
+    assert sum(losses.values()) > 0
+    assert calculate_expedition_recycler_cargo(remaining) == 40_000
+    debris = resolve_expedition_pirate_debris(
+        remaining_ships=remaining,
+        ship_losses=losses,
+        pirate_combat={"won": True, "pirate_points": 80_000},
+    )
+    assert debris is not None
+    collected = debris["collected"]
+    assert int(collected.get("metal") or 0) + int(collected.get("crystal") or 0) > 0
+    assert int(debris["debris"].get("harvested_metal") or 0) == int(collected.get("metal") or 0)
+
+
+def test_pirate_debris_without_recycler_not_collected():
+    fleet = {"solar_skiff": 80, "falcon_interceptor": 120}
+    remaining, losses = apply_expedition_ship_losses(fleet, 25)
+    debris = resolve_expedition_pirate_debris(
+        remaining_ships=remaining,
+        ship_losses=losses,
+        pirate_combat={"won": False, "pirate_points": 60_000},
+    )
+    assert debris is not None
+    assert int(debris["collected"].get("metal") or 0) == 0
+    assert int(debris["collected"].get("crystal") or 0) == 0
+    assert int(debris["debris"].get("metal") or 0) > 0
+
+
+def test_pirate_outcome_credits_debris_to_rewards_with_recycler():
+    ships = {"solar_skiff": 30, "falcon_interceptor": 150, "harvest_reclaimer": 1}
+    for movement_id in range(1, 6000):
+        outcome = resolve_expedition_outcome(
+            movement_id,
+            cargo_total=500_000,
+            expedition_ship_count=30,
+            flight_seconds=120,
+            ships=ships,
+        )
+        if outcome.get("event_key") != "pirate_encounter":
+            continue
+        if int(outcome.get("losses_total") or 0) <= 0:
+            continue
+        debris = outcome.get("debris") or {}
+        harvested = int(debris.get("harvested_metal") or 0) + int(debris.get("harvested_crystal") or 0)
+        if harvested <= 0:
+            continue
+        rewards = outcome.get("rewards") or {}
+        assert int(rewards.get("metal") or 0) + int(rewards.get("crystal") or 0) >= harvested
+        _, meta = build_expedition_report("1:2:16", ships, outcome, locale="en")
+        assert meta.get("debris")
+        return
+    pytest.skip("no pirate encounter with losses and recycler salvage in search window")
+
+
 def test_pirate_encounter_event_weight_is_rare():
     hits = 0
     for movement_id in range(1, 5000):
@@ -383,7 +468,7 @@ def test_pirate_encounter_event_weight_is_rare():
         if outcome["event_key"] == "pirate_encounter":
             hits += 1
     rate = hits / 4999
-    assert 0.03 <= rate <= 0.10
+    assert 0.02 <= rate <= 0.08
 
 
 def test_pirate_encounter_never_wipes_fleet():
@@ -406,6 +491,22 @@ def test_apply_expedition_ship_losses_keeps_minimum_hull():
     assert sum(remaining.values()) >= 1
     assert sum(losses.values()) > 0
     assert sum(remaining.values()) + sum(losses.values()) == 110
+    assert remaining.get("solar_skiff") == 10
+    assert int(losses.get("falcon_interceptor") or 0) == 44
+
+
+def test_combat_escorts_absorb_losses_before_expo_hulls():
+    ships = {"solar_skiff": 500, "falcon_interceptor": 500}
+    remaining, losses = apply_expedition_ship_losses(ships, 30)
+    assert remaining.get("solar_skiff") == 500
+    assert int(losses.get("falcon_interceptor") or 0) == 300
+    assert "solar_skiff" not in losses
+
+
+def test_expo_only_fleet_still_takes_losses():
+    remaining, losses = apply_expedition_ship_losses({"solar_skiff": 500}, 20)
+    assert int(losses.get("solar_skiff") or 0) == 100
+    assert remaining.get("solar_skiff") == 400
 
 
 def test_pirate_outcome_deterministic_for_movement():
@@ -589,7 +690,7 @@ def test_ancient_minefield_never_wipes_fleet():
         hazard = resolve_minefield_hazard(random.Random(seed), ships)
         assert sum(hazard["remaining_ships"].values()) >= 1
         assert int(hazard["loss_pct"]) >= 2
-        assert int(hazard["loss_pct"]) <= 12
+        assert int(hazard["loss_pct"]) <= 8
 
 
 def test_ancient_minefield_outcome_no_loot_and_updates_fleet():
@@ -621,18 +722,20 @@ def test_expedition_weight_audit_gc620j0():
     audit = expedition_event_weight_audit()
     shares = audit["share_by_category"]
 
-    assert audit["total_weight"] == 124
+    assert audit["total_weight"] == 123
     assert audit["weights_by_key"]["mineral_deposit"] == 33
+    assert audit["weights_by_key"]["pirate_encounter"] == 4
+    assert audit["weights_by_key"]["ancient_minefield"] == 2
     assert audit["weight_by_category"]["loot"] == 86
     assert audit["weight_by_category"]["legendary"] == 3
-    assert shares["legendary"] == pytest.approx(3 / 124, abs=0.001)
+    assert shares["legendary"] == pytest.approx(3 / 123, abs=0.001)
     assert 0.023 <= shares["legendary"] <= 0.026
-    assert shares["loot"] == pytest.approx(86 / 124, abs=0.001)
+    assert shares["loot"] == pytest.approx(86 / 123, abs=0.001)
     assert 0.66 <= shares["loot"] <= 0.72
-    assert 0.03 <= shares["neutral"] <= 0.07
+    assert 0.05 <= shares["neutral"] <= 0.10
     assert 0.06 <= shares["delay"] <= 0.10
-    assert 0.03 <= shares["combat"] <= 0.07
-    assert 0.02 <= shares["hazard"] <= 0.05
+    assert 0.02 <= shares["combat"] <= 0.05
+    assert 0.01 <= shares["hazard"] <= 0.04
     assert 0.04 <= shares["treasure"] <= 0.09
 
 

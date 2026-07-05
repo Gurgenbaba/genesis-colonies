@@ -107,16 +107,28 @@ _EXPEDITION_LOOTBOX_DROPS: Dict[str, Dict[str, Any]] = {
 
 # Hazard events — non-combat risk (GC-620I-A).
 _ION_STORM_DELAY_MULT_RANGE = (0.20, 0.60)
-_MINEFIELD_LOSS_RANGE = (2, 12)
+_MINEFIELD_LOSS_RANGE = (2, 8)
 
 # Pirate encounter — lightweight ratio combat (no combat.py resolver).
 _PIRATE_ENEMY_FACTOR_RANGE = (0.70, 1.25)
 _PIRATE_WIN_CHANCE_BASE = 0.18
 _PIRATE_WIN_CHANCE_SCALE = 0.70
 _PIRATE_WIN_CHANCE_CLAMP = (0.10, 0.90)
-_PIRATE_LOSS_WIN_RANGE = (3, 18)
-_PIRATE_LOSS_CLOSE_RANGE = (8, 28)
-_PIRATE_LOSS_DEFEAT_RANGE = (18, 45)
+_PIRATE_LOSS_WIN_RANGE = (2, 10)
+_PIRATE_LOSS_CLOSE_RANGE = (4, 14)
+_PIRATE_LOSS_DEFEAT_RANGE = (8, 20)
+
+# Combat escorts absorb expedition losses first (combat → recycle → expedition → cargo → …).
+_LOSS_ROLE_PRIORITY: Tuple[str, ...] = (
+    "combat",
+    "recycle",
+    "expedition",
+    "cargo",
+    "spy",
+    "scout",
+    "utility",
+    "colony",
+)
 
 # Pirate salvage on win — light/mid hulls only; never beats shipyard cadence.
 _PIRATE_SALVAGE_NONE_CHANCE = 0.70
@@ -175,7 +187,7 @@ _EXPEDITION_JACKPOT_DROPS: Sequence[tuple[float, str]] = (
 _EXPEDITION_EVENTS: Sequence[Dict[str, Any]] = (
     {
         "key": "void_scan",
-        "weight": 4,
+        "weight": 6,
         "label_key": "expedition_event_void_scan",
         "desc_key": "expedition_event_void_scan_desc",
         "severity": "minor",
@@ -221,7 +233,7 @@ _EXPEDITION_EVENTS: Sequence[Dict[str, Any]] = (
     },
     {
         "key": "sensor_glitch",
-        "weight": 2,
+        "weight": 3,
         "label_key": "expedition_event_sensor_glitch",
         "desc_key": "expedition_event_sensor_glitch_desc",
         "severity": "minor",
@@ -236,7 +248,7 @@ _EXPEDITION_EVENTS: Sequence[Dict[str, Any]] = (
     },
     {
         "key": "pirate_encounter",
-        "weight": 7,
+        "weight": 4,
         "label_key": "expedition_event_pirate_encounter",
         "desc_key": "expedition_event_pirate_encounter_desc",
         "severity": "major",
@@ -253,7 +265,7 @@ _EXPEDITION_EVENTS: Sequence[Dict[str, Any]] = (
     },
     {
         "key": "ancient_minefield",
-        "weight": 3,
+        "weight": 2,
         "label_key": "expedition_event_ancient_minefield",
         "desc_key": "expedition_event_ancient_minefield_desc",
         "severity": "major",
@@ -725,46 +737,51 @@ def _pirate_win_chance(ratio: float) -> float:
     return max(_PIRATE_WIN_CHANCE_CLAMP[0], min(_PIRATE_WIN_CHANCE_CLAMP[1], raw))
 
 
+def _loss_role_priority(ship_key: str) -> int:
+    from .fleet_defs import SHIPS, canonical_ship_key
+
+    role = str((SHIPS.get(canonical_ship_key(str(ship_key))) or {}).get("role") or "utility")
+    try:
+        return _LOSS_ROLE_PRIORITY.index(role)
+    except ValueError:
+        return len(_LOSS_ROLE_PRIORITY)
+
+
 def apply_expedition_ship_losses(
     ships: Mapping[str, int],
     loss_pct: int,
     *,
     min_remaining: int = 1,
 ) -> Tuple[Dict[str, int], Dict[str, int]]:
-    """Apply proportional hull losses; never drop below ``min_remaining`` total ships."""
+    """Apply hull losses; combat escorts absorb before expedition hulls. Never wipe fleet."""
     loss_pct = max(0, min(100, int(loss_pct)))
     cleaned = {str(k): int(v) for k, v in (ships or {}).items() if int(v or 0) > 0}
     if loss_pct <= 0 or not cleaned:
         return cleaned, {}
 
     total = sum(cleaned.values())
-    if total <= max(1, int(min_remaining)):
+    floor = max(1, int(min_remaining))
+    if total <= floor:
         return cleaned, {}
 
-    loss_rate = loss_pct / 100.0
-    remaining: Dict[str, int] = {}
-    losses: Dict[str, int] = {}
-    for key, amount in cleaned.items():
-        lost_count = min(amount, max(0, int(math.floor(amount * loss_rate))))
-        rem = amount - lost_count
-        if lost_count > 0:
-            losses[key] = lost_count
-        if rem > 0:
-            remaining[key] = rem
+    loss_budget = min(total - floor, int(math.floor(total * loss_pct / 100.0)))
+    if loss_budget <= 0:
+        return cleaned, {}
 
-    rem_total = sum(remaining.values())
-    floor = max(1, int(min_remaining))
-    if rem_total < floor:
-        need = floor - rem_total
-        for key in sorted(losses.keys(), key=lambda k: losses[k], reverse=True):
-            if need <= 0:
-                break
-            restore = min(need, losses[key])
-            losses[key] -= restore
-            if losses[key] <= 0:
-                losses.pop(key, None)
-            remaining[key] = remaining.get(key, 0) + restore
-            need -= restore
+    remaining = dict(cleaned)
+    losses: Dict[str, int] = {}
+    ordered_keys = sorted(remaining.keys(), key=lambda k: (_loss_role_priority(k), k))
+    for key in ordered_keys:
+        if loss_budget <= 0:
+            break
+        take = min(int(remaining[key]), loss_budget)
+        if take <= 0:
+            continue
+        losses[key] = take
+        remaining[key] -= take
+        if remaining[key] <= 0:
+            remaining.pop(key, None)
+        loss_budget -= take
 
     remaining = {k: v for k, v in remaining.items() if v > 0}
     losses = {k: v for k, v in losses.items() if v > 0}
@@ -1122,6 +1139,87 @@ def resolve_pirate_encounter(
     }
 
 
+def calculate_expedition_recycler_cargo(ships: Mapping[str, int]) -> int:
+    """Cargo capacity of recycle-role hulls still on the expedition fleet."""
+    from .fleet_defs import SHIPS, canonical_ship_key
+
+    total = 0
+    for key, qty in ships.items():
+        amount = int(qty or 0)
+        if amount <= 0:
+            continue
+        spec = SHIPS.get(canonical_ship_key(str(key))) or {}
+        if spec.get("role") != "recycle":
+            continue
+        total += int(spec.get("cargo") or 0) * amount
+    return max(0, total)
+
+
+def _virtual_pirate_losses(pirate_points: int, *, won: bool) -> Dict[str, int]:
+    """Estimate destroyed pirate hulls for debris when the player wins."""
+    if not won:
+        return {}
+    pts = max(0, int(pirate_points))
+    if pts <= 0:
+        return {}
+    wreck_pts = int(pts * 0.60)
+    per_hull = max(1, ship_score_value("falcon_interceptor"))
+    count = max(1, wreck_pts // per_hull)
+    return {"falcon_interceptor": min(count, 500)}
+
+
+def _load_debris_into_recycler_cargo(
+    debris_metal: int,
+    debris_crystal: int,
+    cargo_cap: int,
+) -> Dict[str, int]:
+    from .resources import load_resources_up_to_cargo
+
+    pool = {
+        "metal": max(0, int(debris_metal)),
+        "crystal": max(0, int(debris_crystal)),
+        "fuel_cells": 0,
+    }
+    return load_resources_up_to_cargo(pool, max(0, int(cargo_cap)))
+
+
+def resolve_expedition_pirate_debris(
+    *,
+    remaining_ships: Mapping[str, int],
+    ship_losses: Mapping[str, int],
+    pirate_combat: Mapping[str, Any],
+) -> Dict[str, Any] | None:
+    """Ephemeral pirate debris field — recyclers aboard salvage during the same expedition."""
+    from .combat import build_combat_debris_metadata, calculate_combat_debris
+
+    player_losses = {str(k): int(v) for k, v in (ship_losses or {}).items() if int(v or 0) > 0}
+    pirate_losses = _virtual_pirate_losses(
+        int(pirate_combat.get("pirate_points") or 0),
+        won=bool(pirate_combat.get("won")),
+    )
+    if not player_losses and not pirate_losses:
+        return None
+
+    metal, crystal = calculate_combat_debris(player_losses, pirate_losses)
+    if metal <= 0 and crystal <= 0:
+        return None
+
+    recycler_cap = calculate_expedition_recycler_cargo(remaining_ships)
+    collected = {"metal": 0, "crystal": 0, "fuel_cells": 0}
+    if recycler_cap > 0:
+        collected = _load_debris_into_recycler_cargo(metal, crystal, recycler_cap)
+
+    debris_meta = dict(build_combat_debris_metadata(player_losses, pirate_losses) or {})
+    debris_meta["expedition_field"] = True
+    debris_meta["harvested_metal"] = int(collected.get("metal") or 0)
+    debris_meta["harvested_crystal"] = int(collected.get("crystal") or 0)
+    return {
+        "debris": debris_meta,
+        "collected": collected,
+        "recycler_cap": recycler_cap,
+    }
+
+
 def resolve_expedition_outcome(
     movement_id: int,
     *,
@@ -1271,6 +1369,20 @@ def resolve_expedition_outcome(
     )
     cargo_meta = _apply_cargo_cap(rewards, int(cargo_total))
 
+    debris_meta: Dict[str, Any] | None = None
+    if event_key == "pirate_encounter" and pirate_combat:
+        fleet_after = dict(remaining_ships) if remaining_ships else dict(ships or {})
+        debris_out = resolve_expedition_pirate_debris(
+            remaining_ships=fleet_after,
+            ship_losses=ship_losses,
+            pirate_combat=pirate_combat,
+        )
+        if debris_out:
+            debris_meta = dict(debris_out.get("debris") or {})
+            collected = dict(debris_out.get("collected") or {})
+            for key in VALID_RESOURCE_KEYS:
+                rewards[key] = int(rewards.get(key) or 0) + int(collected.get(key) or 0)
+
     if delay_extra_preset is not None:
         delay_extra = int(delay_extra_preset)
     else:
@@ -1318,6 +1430,8 @@ def resolve_expedition_outcome(
         result["remaining_ships"] = remaining_ships
     if hazard is not None:
         result["hazard"] = hazard
+    if debris_meta:
+        result["debris"] = debris_meta
     return result
 
 
@@ -1422,6 +1536,38 @@ def build_expedition_report(
                     "fleet_expedition_report_pirate_loss_rate",
                     "Ship losses: %(pct)s%%",
                     pct=fmt_int(int(pirate_combat.get("loss_pct") or 0)),
+                )
+            )
+
+    debris = dict(outcome.get("debris") or {}) if outcome.get("debris") else {}
+    if debris:
+        body_lines.append(_t("fleet_expedition_report_section_debris", "Debris field"))
+        h_m = int(debris.get("harvested_metal") or 0)
+        h_c = int(debris.get("harvested_crystal") or 0)
+        if h_m or h_c:
+            if h_m:
+                body_lines.append(
+                    _t(
+                        "fleet_expedition_report_debris_collected_line",
+                        "Salvaged: +%(amount)s %(resource)s",
+                        amount=fmt_int(h_m),
+                        resource=_t("resource_metal", "Ferronit"),
+                    )
+                )
+            if h_c:
+                body_lines.append(
+                    _t(
+                        "fleet_expedition_report_debris_collected_line",
+                        "Salvaged: +%(amount)s %(resource)s",
+                        amount=fmt_int(h_c),
+                        resource=_t("resource_crystal", "Crytite"),
+                    )
+                )
+        else:
+            body_lines.append(
+                _t(
+                    "expedition_report_debris_uncollected",
+                    "Debris field created — no reclaimer aboard to salvage.",
                 )
             )
 
@@ -1643,6 +1789,8 @@ def build_expedition_report(
             "key": str(hazard.get("key") or event_key),
             "loss_pct": int(hazard.get("loss_pct") or 0),
         }
+    if debris:
+        metadata["debris"] = debris
     if world.get("world_key"):
         metadata.update(
             {
