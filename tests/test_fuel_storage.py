@@ -67,14 +67,14 @@ def test_fuel_storage_base_capacity_without_building(fuel_storage_db):
 
 
 def test_fuel_storage_capacity_scales_like_metal_storage(fuel_storage_db):
-    from game.economy_balance import storage_capacity_anchor
+    from game.economy_balance import storage_capacity_at_depot_level
 
     planet = get_homeworld(player_id=fuel_storage_db)
     save_planet_buildings(int(planet["id"]), {"fuel_storage": 2})
     b = get_planet_buildings(int(planet["id"]))
     r = EffectResolver(b, get_research_levels(user_id=fuel_storage_db))
     cap = r.fuel_storage_capacity()
-    expected = EffectResolver.BASE_STORAGE + storage_capacity_anchor("fuel_cells", 2)
+    expected = storage_capacity_at_depot_level(2)
     assert cap == expected
 
 
@@ -135,6 +135,19 @@ def test_fuel_storage_panel_preview(fuel_storage_db):
     assert row["effect_kind"] == "storage"
     assert row["effect_resource"] == "fuel_cells"
     assert row["effect_next"] > row["effect_current"]
+
+
+def test_storage_panel_snapshot_diff_never_negative():
+    from game.buildings import _panel_effect_snapshot
+
+    row = _panel_effect_snapshot(
+        effect_kind="storage",
+        effect_current=500,
+        effect_next=250,
+        effect_resource="metal",
+    )
+    assert row["effect_kind"] == "storage"
+    assert row["effect_delta"] == 0
 
 
 def test_fuel_storage_in_resources_tab(fuel_storage_db):

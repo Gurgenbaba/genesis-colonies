@@ -45,20 +45,15 @@ def test_preview_levels_early_game():
     assert technical_preview_levels(3, 10) == [0, 1, 2, 3, 4, 5]
 
 
-def test_preview_levels_midgame_milestones():
+def test_preview_levels_midgame_consecutive():
     levels = technical_preview_levels(37, 120)
-    assert levels[0] == 37
-    assert 38 in levels
-    assert 40 in levels
-    assert 50 in levels
-    assert 60 in levels
-    assert all(l > 38 or l in (37, 38) for l in levels if l not in (37, 38))
+    assert levels == [37, 38, 39, 40, 41, 42]
 
 
-def test_row_roles():
+def test_row_roles_no_milestone():
     assert technical_row_role(37, 37, max_level=120) == "current"
     assert technical_row_role(38, 37, max_level=120) == "next"
-    assert technical_row_role(40, 37, max_level=120) == "milestone"
+    assert technical_row_role(40, 37, max_level=120) == "preview"
 
 
 def test_mine_technical_summary_and_table_fields(tech_db):
@@ -78,7 +73,8 @@ def test_mine_technical_summary_and_table_fields(tech_db):
     assert data["summary"]["display"]["layout"] == "production"
     level_nums = [r["level"] for r in data["levels"]]
     assert 20 in level_nums
-    assert 30 in level_nums
+    assert 24 in level_nums
+    assert 30 not in level_nums
     row1 = next(r for r in data["levels"] if r["level"] == 20)
     assert row1["display"]["step_delta"] > 0
     assert row1["display"]["energy_at_level"] < 0

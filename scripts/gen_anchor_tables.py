@@ -26,6 +26,7 @@ from game.economy_balance import (
     RESEARCH_TIME_ANCHOR_HOURS,
     RESEARCH_COST_AFFORD_HOURS,
     NEUTRAL_BALANCE_SLOT,
+    storage_capacity_at_depot_level,
 )
 from game.research import RESEARCH_TECHS
 from game.effects import EffectResolver
@@ -235,14 +236,19 @@ def main() -> None:
     lines.append("## 6) Speicher & Tausch")
     lines.append("")
     lines.append(
-        f"Speicher Basis L1: **{STORAGE_BASE_CAPACITY:,}** · Wachstum **×{STORAGE_LEVEL_GROWTH}**/Stufe".replace(",", ".")
+        (
+            f"Speicher Basis ohne Depot: **{STORAGE_BASE_CAPACITY:,}** · "
+            f"Depot-Kurve: BASE × **{STORAGE_LEVEL_GROWTH}**^level"
+        ).replace(",", ".")
     )
     lines.append("")
-    lines.append("| Lager-Stufe | Kapazität |")
-    lines.append("|-------------|-----------|")
+    lines.append("| Lager-Stufe | Ferronit | Crytite | Brennzellen |")
+    lines.append("|-------------|----------|---------|---------------|")
     for lvl in [1, 5, 10, 20, 30, 40, 50]:
-        cap = STORAGE_BASE_CAPACITY * (STORAGE_LEVEL_GROWTH ** max(0, lvl - 1))
-        lines.append(f"| {lvl} | {fmt_num(cap)} |")
+        cap = storage_capacity_at_depot_level(lvl)
+        lines.append(
+            f"| {lvl} | {fmt_num(cap)} | {fmt_num(cap)} | {fmt_num(cap)} |"
+        )
     lines.append("")
     lines.append(
         f"Tausch Tageslimit: min. **{EXCHANGE_DAILY_LIMIT_MIN:,}** oder **{EXCHANGE_DAILY_LIMIT_PCT_DEFAULT}%** "

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import random
 import uuid
+import math
 
 import pytest
 
@@ -12,7 +13,7 @@ from game.combat_models import COMBAT_UNIT_SHIP, combat_stats_for_ship, make_com
 from game.db import db
 from game.expedition_events import calculate_expo_value, count_expedition_ships, expedition_ship_fleet_value
 from game.fleet import preview_fleet_flight
-from game.fleet_calc import calculate_flight_seconds, calculate_total_cargo
+from game.fleet_calc import calculate_distance, calculate_flight_seconds, calculate_fuel_cost, calculate_total_cargo
 from game.fleet_defs import ACTIVE_SHIP_KEYS, SHIPS, get_ship
 from game.models import create_user, ensure_player_and_homeworld, get_homeworld, init_db
 from game.shipyard import build_ships
@@ -80,9 +81,37 @@ def test_deep_vault_ark_definition():
     assert spec["role"] == "cargo"
     assert int(spec["cargo"]) >= 100000
     assert int(spec["speed"]) <= 500
+    assert int(spec["fuel"]) == 25
     assert int(spec["attack"]) <= 5
     assert int(spec["required_shipyard_level"]) >= 6
     assert int(spec["build_seconds"]) <= 260
+
+
+def test_deep_vault_ark_fuel_rebalance():
+    """Save hauler: lower fuel stat than pre-rebalance (120); transporters unchanged."""
+    assert int(SHIPS["mule_courier"]["fuel"]) == 10
+    assert int(SHIPS["atlas_hauler"]["fuel"]) == 50
+
+    adj_system = calculate_distance((1, 1, 5), (1, 2, 5))
+    cross_galaxy = calculate_distance((1, 1, 5), (2, 1, 5))
+
+    ark_adj = calculate_fuel_cost({"deep_vault_ark": 1}, adj_system, 100)
+    ark_cross = calculate_fuel_cost({"deep_vault_ark": 1}, cross_galaxy, 100)
+    pre_adj = int(math.ceil(120 * adj_system / 35000.0))
+    pre_cross = int(math.ceil(120 * cross_galaxy / 35000.0))
+
+    assert ark_adj < pre_adj
+    assert ark_cross < pre_cross
+    assert pre_adj == 14
+    assert pre_cross == 82
+
+    mule_small = calculate_fuel_cost({"mule_courier": 1}, adj_system, 100)
+    atlas_routine = calculate_fuel_cost({"atlas_hauler": 1}, adj_system, 100)
+    assert ark_adj > mule_small
+    assert ark_adj < atlas_routine
+
+    full_save_equiv = calculate_fuel_cost({"mule_courier": 20}, adj_system, 100)
+    assert ark_adj < full_save_equiv
 
 
 def test_deep_vault_ark_not_expedition_loot_ship():
@@ -119,6 +148,12 @@ def test_deep_vault_ark_cargo_and_slow_preview(save_ship_db):
         )
         assert int(preview["flight_seconds"]) > 0
         assert int(preview["cargo_total"]) == 100000
+        assert int(preview["fuel_cost"]) == calculate_fuel_cost(
+            {"deep_vault_ark": 1},
+            int(preview["distance"]),
+            100,
+            fuel_efficiency_level=0,
+        )
     finally:
         conn.close()
 

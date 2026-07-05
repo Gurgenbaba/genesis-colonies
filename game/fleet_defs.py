@@ -259,7 +259,7 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         "score_value": 50000,
         "speed": 500,
         "cargo": 100000,
-        "fuel": 120,
+        "fuel": 25,
         "attack": 1,
         "shield": 10,
         "hull": 800,

@@ -59,6 +59,33 @@ def test_game_state_includes_fuel_storage_cap(fuel_db, monkeypatch):
     assert fuel_cap > 0
     assert fuel_cap == int(data['resources']['storage']['fuel_cells'])
 
+def test_game_state_storage_caps_match_effect_resolver(fuel_db, monkeypatch):
+    import importlib
+    import app as app_mod
+    importlib.reload(app_mod)
+    uid = _player()
+    from game.models import get_research_levels, save_planet_buildings, save_research_level
+    planet = get_homeworld(player_id=uid)
+    levels = {
+        'metal_storage': 18,
+        'crystal_storage': 18,
+        'fuel_storage': 18,
+        'fuel_cell_plant': 4,
+        'solar_plant': 8,
+    }
+    save_planet_buildings(int(planet['id']), levels)
+    save_research_level('storage_tech', 20, uid)
+    expected = EffectResolver(levels, get_research_levels(uid)).get_storage_capacity()
+    client = app_mod.app.test_client()
+    with client.session_transaction() as sess:
+        sess['user_id'] = uid
+    r = client.get('/api/game-state')
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data['ok'] is True
+    assert {k: int(v) for k, v in data['storage'].items()} == expected
+    assert {k: int(v) for k, v in data['resources']['storage'].items()} == expected
+
 def test_game_state_includes_fuel_cells(fuel_db, monkeypatch):
     import importlib
     import app as app_mod

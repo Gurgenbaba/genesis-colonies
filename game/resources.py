@@ -564,6 +564,64 @@ def sync_derived_state_after_queue_finish(
     return count
 
 
+def sync_player_planet_resources(
+    player_id: int,
+    *,
+    conn,
+    finish_queue_first: bool = False,
+    recalc_ranks: bool = False,
+    skip_fresh_sec: float = 0.0,
+) -> int:
+    """
+    Persist resource ticks for every owned planet (empire aggregates, exchange audit).
+
+    When ``finish_queue_first=True``, runs ``finish_player_due_work`` once per HTTP
+    request if live state was not already refreshed and due queue work exists, then
+    updates each planet with ``update_planet_resources(..., skip_queue_finish=True)``.
+
+    ``skip_fresh_sec`` skips planets ticked within the last N seconds (avoids double
+    work right after queue finish or game-state refresh on the same colony).
+    """
+    import time as _time
+
+    uid = int(player_id)
+    now = _time.time()
+
+    if finish_queue_first:
+        from .live_state import mark_request_live_refreshed, request_live_state_already_refreshed
+        from .queue_engine import finish_player_due_work
+        from .queue_poll import player_has_due_queue_work
+
+        if not request_live_state_already_refreshed():
+            if player_has_due_queue_work(uid, conn=conn):
+                finish_player_due_work(
+                    uid,
+                    conn,
+                    source="sync_player_planet_resources",
+                    update_scores=True,
+                    recalc_ranks=bool(recalc_ranks),
+                )
+            mark_request_live_refreshed()
+
+    from .models import get_planets_by_player
+
+    count = 0
+    try:
+        planets = get_planets_by_player(uid, conn=conn)
+    except Exception:
+        return 0
+
+    fresh_cutoff = float(skip_fresh_sec or 0.0)
+    for planet in planets:
+        if fresh_cutoff > 0:
+            last = float(planet.get("last_update") or 0)
+            if now - last < fresh_cutoff:
+                continue
+        update_planet_resources(dict(planet), conn=conn, skip_queue_finish=True)
+        count += 1
+    return count
+
+
 # ==========================================================================
 #   COMBAT LOOT / FLEET CARGO LOADING (GC-507)
 # ==========================================================================

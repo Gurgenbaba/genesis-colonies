@@ -111,9 +111,9 @@ BUILD_TIME_CURVES: Dict[str, Tuple[float, float]] = {
     "crystal_mine": (114.0, 1.35),
     "solar_plant": (130.0, 1.35),
     "fuel_cell_plant": (145.0, 1.36),
-    "metal_storage": (160.0, 1.36),
-    "crystal_storage": (160.0, 1.36),
-    "fuel_storage": (160.0, 1.36),
+    "metal_storage": (120.0, 1.36),
+    "crystal_storage": (120.0, 1.36),
+    "fuel_storage": (120.0, 1.36),
     "research_lab": (180.0, 1.38),
     "academy": (220.0, 1.38),
     "command_center": (280.0, 1.40),
@@ -128,12 +128,12 @@ BUILD_TIME_CURVES: Dict[str, Tuple[float, float]] = {
     "planet_core_nexus": (580.0, 1.45),
 }
 
-# GC-821B — default depot when no storage building (metal/crystal starter cap).
+# GC-821B — default depot when no storage building (metal/crystal/fuel starter cap).
 STORAGE_BASE_CAPACITY = 150_000
-# GC-863 — capacity anchor: production_per_hour(matching resource, level) × multiplier.
-STORAGE_PRODUCTION_HOUR_MULTIPLIER = 72  # GC-863 — ~3 days buffer at matching mine level (72 h prod)
-# Legacy exponent (pre-GC-863); kept for doc/tests referencing old curve.
-STORAGE_LEVEL_GROWTH = 1.75
+# GC-870 — progressive depot curve: BASE × GROW^level (same formula for L0+).
+STORAGE_LEVEL_GROWTH = 1.98
+# Legacy GC-863 audit constant (no longer used for runtime storage cap).
+STORAGE_PRODUCTION_HOUR_MULTIPLIER = 120
 
 # GC-863 — nanofactory upgrade costs (target level X); GC-863A steeper growth.
 NANOFACTORY_METAL_BASE = 10_000.0
@@ -389,6 +389,13 @@ def mine_roi_cost_multiplier(target_level: int) -> float:
     return max(0.05, target / baseline_roi)
 
 
+def storage_capacity_at_depot_level(storage_level: int) -> int:
+    """GC-870 — depot cap before storage_tech/terraformer (BASE × GROW^level)."""
+    lvl = max(0, int(storage_level))
+    raw = float(STORAGE_BASE_CAPACITY) * (float(STORAGE_LEVEL_GROWTH) ** lvl)
+    return max(STORAGE_BASE_CAPACITY, int(raw))
+
+
 def storage_capacity_anchor(
     resource_type: str,
     storage_level: int,
@@ -396,14 +403,12 @@ def storage_capacity_anchor(
     slot: int = NEUTRAL_BALANCE_SLOT,
     production_speed: float = 1.0,
 ) -> int:
-    """GC-863 — depot size from matching mine production at the same level."""
+    """Legacy additive name: total depot cap minus base (resource-independent)."""
+    _ = resource_type, slot, production_speed
     lvl = max(0, int(storage_level))
     if lvl <= 0:
         return 0
-    prod = reference_production_per_hour(
-        resource_type, lvl, slot=slot, production_speed=production_speed
-    )
-    return max(1, int(prod * STORAGE_PRODUCTION_HOUR_MULTIPLIER))
+    return max(0, storage_capacity_at_depot_level(lvl) - STORAGE_BASE_CAPACITY)
 
 
 def nanofactory_upgrade_cost(target_level: int) -> Tuple[int, int]:

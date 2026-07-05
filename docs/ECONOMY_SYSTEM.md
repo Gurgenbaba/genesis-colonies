@@ -87,15 +87,15 @@ Modifier: Slot, Temperatur (nur Brennzellen), `mining_tech` (+3 % Ferronit/Lvl),
 
 Details: [PRODUCTION_FORMULA_SYSTEM.md](PRODUCTION_FORMULA_SYSTEM.md).
 
-**Brennzellen-Lager:** Gleiche **Basis-Cap** wie Ferronit/Crytite (`STORAGE_BASE_CAPACITY` / `EffectResolver.BASE_STORAGE` = 150.000) — auch **ohne** `fuel_storage`. Mit Depot: **Basis + GC-863-Produktionsanker** (`BASE + storage_capacity_anchor`). Gebäude-Voraussetzung zum Bau: `fuel_cell_plant` ≥ 4.
+**Brennzellen-Lager:** Gleiche **Basis-Cap** wie Ferronit/Crytite (`STORAGE_BASE_CAPACITY` / `EffectResolver.BASE_STORAGE` = 150.000) — auch **ohne** `fuel_storage`. Mit Depot: **progressive Kurve** (`storage_capacity_at_depot_level`: BASE × GROW^level). Gebäude-Voraussetzung zum Bau: `fuel_cell_plant` ≥ 4.
 
 ---
 
 ## Storage
 
 - Basis **150.000** Ferronit/Crytite/Brennzellen ohne Depot (`STORAGE_BASE_CAPACITY` / `EffectResolver.BASE_STORAGE`)
-- Mit `metal_storage` / `crystal_storage` / `fuel_storage` ≥ 1: **Basis + GC-863-Produktionsanker** (`BASE + storage_capacity_anchor`)
-- Multiplier: `storage_tech` (+25 %/Lvl), `terraformer` (+5 % Kapazität/Lvl), `storage_factor`
+- Mit `metal_storage` / `crystal_storage` / `fuel_storage`: **BASE × STORAGE_LEVEL_GROWTH^level** (`storage_capacity_at_depot_level`; gleiche Kurve für L0+)
+- Multiplier: `storage_tech` (+33 %/Lvl, additiv), `terraformer` (+5 % Kapazität/Lvl), `storage_factor`
 - Produktion kann Storage nicht überschreiten; bestehendes Overflow wird nicht getrimmt
 - **Trader Hub + Schrottplatz** dürfen jederzeit über Cap gutschreiben (Overflow bleibt erhalten)
 

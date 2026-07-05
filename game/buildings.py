@@ -1212,7 +1212,7 @@ def _technical_level_row(
     )
     from .technical_data import enrich_building_technical_row
 
-    enrich_building_technical_row(row, building_type, buildings, research_levels, ratio, level)
+    enrich_building_technical_row(row, building_type, buildings, research_levels, ratio, level, panel_ctx=panel_ctx)
     return row
 
 
@@ -1239,7 +1239,6 @@ def build_building_technical_data(
     max_level = panel_ctx.max_level(btype)
     from .technical_data import (
         build_building_technical_summary,
-        build_production_milestones,
         resolve_technical_table_layout,
         technical_preview_levels,
         technical_row_role,
@@ -1273,6 +1272,7 @@ def build_building_technical_data(
         max_level=max_level,
         current_row=current_row,
         next_row=next_row,
+        panel_ctx=panel_ctx,
     )
 
     return {
@@ -1284,14 +1284,7 @@ def build_building_technical_data(
         "max_level": max_level,
         "table_layout": resolve_technical_table_layout(levels),
         "summary": summary,
-        "milestones": build_production_milestones(
-            building_type=btype,
-            buildings=buildings,
-            research_levels=research_levels,
-            ratio=ratio,
-            current=current,
-            max_level=max_level,
-        ),
+        "milestones": [],
         "levels": levels,
         "bulk_upgrade": _mine_bulk_upgrade_meta(
             btype,

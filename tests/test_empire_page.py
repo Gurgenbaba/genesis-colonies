@@ -9,8 +9,11 @@ import importlib
 import os
 import subprocess
 import sys
+import time
 import uuid
 from pathlib import Path
+from unittest.mock import patch
+
 import pytest
 import game.db as dbmod
 import game.models as models
@@ -18,6 +21,8 @@ from game.db import db
 from game.empire_page import build_empire_context
 from game.models import create_user, get_homeworld, get_planet_buildings, init_db, save_planet_buildings
 from game.planet_evolution.service import colonize_planet
+from game.resources import update_planet_resources
+from game.queue_engine import finish_due_work_once
 ROOT = Path(__file__).resolve().parent.parent
 MIGRATE_SCRIPT = ROOT / 'migrate.py'
 BASE_TEMPLATE = ROOT / 'templates' / 'base.html'
@@ -44,11 +49,13 @@ def _login_client(empire_db, monkeypatch):
     models.DB_PATH = empire_db
     import app as app_module
     importlib.reload(app_module)
+    app_module.app.config["TESTING"] = True
     uname = f'empire_route_{uuid.uuid4().hex[:8]}'
     ok, err, user = create_user(uname, 'test-pass-123')
     assert ok and user, err
     client = app_module.app.test_client()
-    client.post('/login', data={'username': uname, 'password': 'test-pass-123'})
+    res = client.post('/login', data={'username': uname, 'password': 'test-pass-123'})
+    assert res.status_code in (302, 303), res.get_data(as_text=True)
     return (client, int(user['id']), app_module)
 
 def _create_player() -> int:
@@ -57,7 +64,16 @@ def _create_player() -> int:
     assert ok and user, err
     return int(user['id'])
 
+def _unlock_colony_slot(player_id: int) -> None:
+    conn = db()
+    hw = get_homeworld(player_id=player_id, conn=conn)
+    conn.execute("UPDATE planets SET planet_level = 5 WHERE id = ?;", (int(hw["id"]),))
+    conn.commit()
+    conn.close()
+
+
 def _second_planet(player_id: int) -> int:
+    _unlock_colony_slot(player_id)
     ok, reason, extra = colonize_planet(player_id, name=f'Colony_{uuid.uuid4().hex[:4]}', galaxy=1, system=310, position=4, allow_legacy_coordinates=True, source='test')
     assert ok, reason
     return int(extra['planet_id'])
@@ -67,7 +83,8 @@ def test_build_empire_context_single_homeworld(empire_db):
     ctx = build_empire_context(player_id)
     assert ctx['commander']['id'] == player_id
     assert ctx['colony_count'] == 1
-    assert ctx['colony_limit']['current'] == 1
+    assert ctx['colony_limit']['owned_worlds'] == 1
+    assert ctx['colony_limit']['current'] == 0
     assert len(ctx['colonies']) == 1
     colony = ctx['colonies'][0]
     assert colony['is_homeworld'] is True
@@ -255,3 +272,85 @@ def test_empire_template_polished_structure(empire_db, monkeypatch):
     assert 'data-empire-section-toggle' in html
     assert 'empire-matrix-scroll' in html
     assert 'building_metal_mine' in html or 'Ferronit-Mine' in html
+
+
+def test_build_empire_context_syncs_stale_colony_resources_without_switch(empire_db):
+    """Empire totals must tick every owned planet — not only the active/context planet."""
+    player_id = _create_player()
+    hw = get_homeworld(player_id=player_id)
+    colony_id = _second_planet(player_id)
+    save_planet_buildings(int(hw['id']), {'metal_mine': 8, 'solar_plant': 8})
+    save_planet_buildings(int(colony_id), {'metal_mine': 12, 'solar_plant': 8})
+
+    stale_at = time.time() - 7200.0
+    conn = db()
+    conn.execute(
+        "UPDATE planets SET metal = ?, crystal = ?, fuel_cells = ?, last_update = ? WHERE id = ?;",
+        (100, 0, 0, stale_at, int(hw['id'])),
+    )
+    conn.execute(
+        "UPDATE planets SET metal = ?, crystal = ?, fuel_cells = ?, last_update = ? WHERE id = ?;",
+        (200, 0, 0, stale_at, int(colony_id)),
+    )
+    conn.commit()
+    conn.close()
+
+    ctx = build_empire_context(player_id)
+    by_id = {c['planet_id']: c for c in ctx['colonies']}
+    colony_metal = int(by_id[colony_id]['resources']['metal'])
+    empire_metal = int(ctx['matrix']['totals']['resources']['metal'])
+
+    assert colony_metal > 200
+    assert empire_metal == sum(int(c['resources']['metal']) for c in ctx['colonies'])
+    assert empire_metal > 300
+
+
+def test_build_empire_context_uses_skip_queue_finish_for_all_planets(empire_db):
+    player_id = _create_player()
+    colony_id = _second_planet(player_id)
+    hw = get_homeworld(player_id=player_id)
+    stale_at = time.time() - 3600.0
+    conn = db()
+    conn.execute(
+        "UPDATE planets SET last_update = ? WHERE id IN (?, ?);",
+        (stale_at, int(hw["id"]), int(colony_id)),
+    )
+    conn.commit()
+    conn.close()
+
+    with patch('game.resources.finish_due_work_once', wraps=finish_due_work_once) as mock_finish_once:
+        with patch('game.resources.update_planet_resources', wraps=update_planet_resources) as mock_update:
+            build_empire_context(player_id)
+
+    assert mock_update.call_count >= 2
+    for call in mock_update.call_args_list:
+        assert call.kwargs.get('skip_queue_finish') is True
+
+    finish_from_update = sum(
+        1 for call in mock_finish_once.call_args_list if call.kwargs.get('source') == 'resources'
+    )
+    assert finish_from_update == 0
+
+
+def test_empire_aggregate_resources_after_active_planet_only_sync(empire_db):
+    """Only refreshing the context planet must not leave empire totals stale."""
+    from game.logic import refresh_player_live_state
+
+    player_id = _create_player()
+    colony_id = _second_planet(player_id)
+    save_planet_buildings(int(colony_id), {'metal_mine': 10, 'solar_plant': 8})
+
+    stale_at = time.time() - 5400.0
+    conn = db()
+    conn.execute(
+        "UPDATE planets SET metal = ?, last_update = ? WHERE id = ?;",
+        (150, stale_at, int(colony_id)),
+    )
+    conn.commit()
+    conn.close()
+
+    refresh_player_live_state(player_id, finish_source="overview")
+
+    ctx = build_empire_context(player_id)
+    colony = next(c for c in ctx['colonies'] if c['planet_id'] == colony_id)
+    assert int(colony['resources']['metal']) > 150

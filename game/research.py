@@ -1449,7 +1449,6 @@ def build_research_technical_data(
     cfg = RESEARCH_TECHS[key]
     from .technical_data import (
         build_research_technical_summary,
-        build_research_effect_milestones,
         resolve_technical_table_layout,
         technical_preview_levels,
         technical_row_role,
@@ -1486,11 +1485,7 @@ def build_research_technical_data(
         "max_level": None,
         "table_layout": resolve_technical_table_layout(level_rows),
         "summary": summary,
-        "milestones": build_research_effect_milestones(
-            tech_key=key,
-            current=current,
-            levels=level_rows,
-        ),
+        "milestones": [],
         "levels": level_rows,
     }, None
 

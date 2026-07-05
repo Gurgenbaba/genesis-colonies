@@ -82,6 +82,7 @@ Formel: `research_cost_anchor_total(level)` = Referenzproduktion (Fe+Cr, Slot 9)
 | energy_tech | 5.85 Mio | 2.90 Mio | 1.0 Tage | 1.00 | 1.00 |
 | engine_tech | 8.75 Mio | 5.75 Mio | 1.6 Tage | 1.58 | 1.67 |
 | fuel_efficiency | 8.50 Mio | 3.00 Mio | 1.7 Tage | 1.67 | 1.33 |
+| interstellar_expansion | 14.50 Mio | 8.75 Mio | 2.0 Tage | 2.00 | 2.67 |
 | mining_tech | 5.85 Mio | 2.90 Mio | 1.1 Tage | 1.08 | 1.00 |
 | navigation_tech | 7.25 Mio | 4.25 Mio | 1.5 Tage | 1.50 | 1.33 |
 | shield_tech | 7.25 Mio | 4.25 Mio | 1.6 Tage | 1.58 | 1.33 |
@@ -96,40 +97,40 @@ Amortisation = Payback in **Produktionsstunden** der jeweiligen Ressource (Slot 
 
 | Ziel-Stufe | Ferronit | Crytite | Gesamt | Amortisation |
 |------------|----------|---------|--------|--------------|
-| 10 | 25k | 8.4k | 34k | 50 h |
-| 20 | 74k | 25k | 99k | 50 h |
-| 30 | 281k | 94k | 374k | 71 h |
-| 40 | 1.01 Mio | 336k | 1.34 Mio | 100 h |
-| 60 | 11.76 Mio | 3.92 Mio | 15.69 Mio | 200 h |
-| 80 | 159.01 Mio | 53.00 Mio | 212.02 Mio | 500 h |
-| 100 | 1640.39 Mio | 546.80 Mio | 2187.19 Mio | 1000 h |
-| 120 | 16395.64 Mio | 5465.21 Mio | 21860.86 Mio | 2000 h |
+| 10 | 19k | 6.3k | 25k | 50 h |
+| 20 | 56k | 19k | 74k | 50 h |
+| 30 | 211k | 70k | 281k | 71 h |
+| 40 | 755k | 252k | 1.01 Mio | 100 h |
+| 60 | 8.82 Mio | 2.94 Mio | 11.76 Mio | 200 h |
+| 80 | 119.26 Mio | 39.75 Mio | 159.01 Mio | 500 h |
+| 100 | 1230.30 Mio | 410.10 Mio | 1640.39 Mio | 1000 h |
+| 120 | 12296.73 Mio | 4098.91 Mio | 16395.64 Mio | 2000 h |
 
 ### Crytite-Mine
 
 | Ziel-Stufe | Ferronit | Crytite | Gesamt | Amortisation |
 |------------|----------|---------|--------|--------------|
-| 10 | 13k | 9.2k | 23k | 28 h |
-| 20 | 39k | 27k | 66k | 28 h |
-| 30 | 148k | 103k | 251k | 39 h |
-| 40 | 531k | 369k | 901k | 55 h |
-| 60 | 6.21 Mio | 4.31 Mio | 10.52 Mio | 110 h |
-| 80 | 83.90 Mio | 58.30 Mio | 142.21 Mio | 275 h |
-| 100 | 865.54 Mio | 601.48 Mio | 1467.02 Mio | 550 h |
-| 120 | 8651.04 Mio | 6011.74 Mio | 14662.77 Mio | 1100 h |
+| 10 | 10.0k | 6.9k | 17k | 50 h |
+| 20 | 29k | 20k | 50k | 50 h |
+| 30 | 111k | 77k | 188k | 71 h |
+| 40 | 399k | 277k | 676k | 101 h |
+| 60 | 4.66 Mio | 3.24 Mio | 7.89 Mio | 201 h |
+| 80 | 62.93 Mio | 43.73 Mio | 106.65 Mio | 503 h |
+| 100 | 649.16 Mio | 451.11 Mio | 1100.26 Mio | 1006 h |
+| 120 | 6488.28 Mio | 4508.80 Mio | 10997.08 Mio | 2012 h |
 
 ### Brennzellen-Anlage
 
 | Ziel-Stufe | Ferronit | Crytite | Gesamt | Amortisation |
 |------------|----------|---------|--------|--------------|
-| 10 | 15k | 9.8k | 25k | 127 h |
-| 20 | 43k | 29k | 72k | 127 h |
-| 30 | 164k | 110k | 274k | 180 h |
-| 40 | 590k | 393k | 983k | 255 h |
-| 60 | 6.89 Mio | 4.59 Mio | 11.48 Mio | 509 h |
-| 80 | 93.08 Mio | 62.05 Mio | 155.13 Mio | 1273 h |
-| 100 | 960.23 Mio | 640.15 Mio | 1600.38 Mio | 2546 h |
-| 120 | 9597.45 Mio | 6398.30 Mio | 15995.75 Mio | 5092 h |
+| 10 | 11k | 7.4k | 18k | 95 h |
+| 20 | 33k | 22k | 54k | 95 h |
+| 30 | 123k | 82k | 205k | 135 h |
+| 40 | 442k | 295k | 737k | 191 h |
+| 60 | 5.17 Mio | 3.44 Mio | 8.61 Mio | 382 h |
+| 80 | 69.81 Mio | 46.54 Mio | 116.35 Mio | 955 h |
+| 100 | 720.17 Mio | 480.12 Mio | 1200.29 Mio | 1909 h |
+| 120 | 7198.09 Mio | 4798.73 Mio | 11996.81 Mio | 3819 h |
 
 ### Minen ROI-Anker (explizite Zielwerte GC-821F)
 
@@ -146,11 +147,11 @@ Amortisation = Payback in **Produktionsstunden** der jeweiligen Ressource (Slot 
 
 | Stufe | metal_mine | crystal_mine | solar_plant | fuel_cell_plant | metal_storage | crystal_storage | fuel_storage | research_lab | academy | command_center | orbital_shipyard | defense_factory | barracks | radar_array | shield_generator | terraformer | nanofactory | geothermal_nexus | planet_core_nexus |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 10 | 34k | 23k | 34k | 25k | 66k | 66k | 57k | 523k | 726k | 581k | 523k | 82k | 42k | 45k | 107k | 150k | 280k | 230k | 314k |
-| 20 | 99k | 66k | 92k | 72k | 188k | 188k | 160k | 2.40 Mio | 3.34 Mio | 2.67 Mio | 2.40 Mio | 233k | 118k | 126k | 308k | 436k | 5.23 Mio | 673k | 925k |
-| 30 | 374k | 251k | 166k | 274k | 345k | 345k | 292k | 5.86 Mio | 8.14 Mio | 6.51 Mio | 5.86 Mio | 427k | 215k | 230k | 570k | 813k | 97.55 Mio | 1.26 Mio | 1.74 Mio |
-| 40 | 1.34 Mio | 901k | 252k | 983k | 531k | 531k | 446k | 11.04 Mio | 15.32 Mio | 12.26 Mio | 11.04 Mio | 658k | 329k | 352k | 882k | 1.27 Mio | 1820.89 Mio | 1.97 Mio | 2.73 Mio |
-| 50 | 4.65 Mio | 3.12 Mio | 349k | 3.40 Mio | 742k | 742k | 621k | 18.03 Mio | 25.04 Mio | 20.03 Mio | 18.03 Mio | 919k | 458k | 490k | 1.24 Mio | 1.79 Mio | 33988.44 Mio | 2.79 Mio | 3.86 Mio |
+| 10 | 25k | 17k | 34k | 18k | 66k | 66k | 57k | 523k | 726k | 581k | 523k | 82k | 42k | 45k | 107k | 150k | 280k | 230k | 314k |
+| 20 | 74k | 50k | 92k | 54k | 188k | 188k | 160k | 2.40 Mio | 3.34 Mio | 2.67 Mio | 2.40 Mio | 233k | 118k | 126k | 308k | 436k | 5.23 Mio | 673k | 925k |
+| 30 | 281k | 188k | 166k | 205k | 345k | 345k | 292k | 5.86 Mio | 8.14 Mio | 6.51 Mio | 5.86 Mio | 427k | 215k | 230k | 570k | 813k | 97.55 Mio | 1.26 Mio | 1.74 Mio |
+| 40 | 1.01 Mio | 676k | 252k | 737k | 531k | 531k | 446k | 11.04 Mio | 15.32 Mio | 12.26 Mio | 11.04 Mio | 658k | 329k | 352k | 882k | 1.27 Mio | 1820.89 Mio | 1.97 Mio | 2.73 Mio |
+| 50 | 3.49 Mio | 2.34 Mio | 349k | 2.55 Mio | 742k | 742k | 621k | 18.03 Mio | 25.04 Mio | 20.03 Mio | 18.03 Mio | 919k | 458k | 490k | 1.24 Mio | 1.79 Mio | 33988.44 Mio | 2.79 Mio | 3.86 Mio |
 
 *Normaler Max-Level: 50*
 
@@ -171,17 +172,17 @@ Formel: `power_build_seconds` = `TIME_K × Level^Exponent` · ÷ `build_speed` /
 
 ## 6) Speicher & Tausch
 
-Speicher Basis L1: **150.000** · Wachstum **×1.75**/Stufe
+Speicher Basis ohne Depot: **150.000** · Depot-Bonus: Referenzproduktion/h × **120**
 
-| Lager-Stufe | Kapazität |
-|-------------|-----------|
-| 1 | 150k |
-| 5 | 1.41 Mio |
-| 10 | 23.09 Mio |
-| 20 | 6220.34 Mio |
-| 30 | 1675693.83 Mio |
-| 40 | 451414139.08 Mio |
-| 50 | 121606179561.53 Mio |
+| Lager-Stufe | Ferronit | Crytite | Brennzellen |
+|-------------|----------|---------|---------------|
+| 1 | 1.97 Mio | 1.36 Mio | 847k |
+| 5 | 2.08 Mio | 1.44 Mio | 889k |
+| 10 | 2.32 Mio | 1.60 Mio | 982k |
+| 20 | 3.48 Mio | 2.37 Mio | 1.43 Mio |
+| 30 | 6.68 Mio | 4.50 Mio | 2.65 Mio |
+| 40 | 14.94 Mio | 10.01 Mio | 5.82 Mio |
+| 50 | 35.42 Mio | 23.66 Mio | 13.67 Mio |
 
 Tausch Tageslimit: min. **500.000** oder **80%** Imperiums-Tagesproduktion
 

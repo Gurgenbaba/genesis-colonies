@@ -9,11 +9,13 @@ import pytest
 
 import game.db as dbmod
 import game.models as models
-from game.buildings import build_building_technical_data, get_build_time
+from game.buildings import build_building_technical_data, get_build_time, BuildingsPanelContext
 from game.research import build_research_technical_data
 from game.db import db
 from game.effects import EffectResolver
-from game.models import create_user, ensure_player_and_homeworld, get_homeworld, get_research_levels, init_db, save_planet_buildings
+from game.economy_balance import STORAGE_BASE_CAPACITY
+from game.models import create_user, ensure_player_and_homeworld, get_homeworld, get_planet_buildings, get_research_levels, init_db, save_planet_buildings
+from game.technical_data import canonical_storage_capacity_for_building
 
 
 @pytest.fixture
@@ -167,6 +169,96 @@ def test_technical_data_defense_factory_unlock(tech_db):
     sec = current_row.get("secondary_effect") or {}
     assert sec.get("effect_kind") == "yard_reference"
     assert sec.get("effect_value") == 6
+
+
+def test_technical_data_storage_matches_effect_resolver(tech_db):
+    uid, _ = _create_player()
+    planet = get_homeworld(player_id=uid)
+    pid = int(planet["id"])
+    save_planet_buildings(pid, {"metal_mine": 8, "metal_storage": 1, "solar_plant": 8})
+
+    conn = db()
+    buildings = get_planet_buildings(pid, conn=conn)
+    research = get_research_levels(user_id=uid, conn=conn)
+    panel_ctx = BuildingsPanelContext.for_planet(planet, buildings, research, 1.0, conn=conn)
+
+    data, err = build_building_technical_data("metal_storage", user_id=uid, conn=conn)
+    assert err is None
+    assert data["table_layout"] == "storage"
+    assert data["milestones"] == []
+
+    prev_cap = None
+    for row in data["levels"]:
+        lvl = int(row["level"])
+        expected = canonical_storage_capacity_for_building(
+            "metal_storage",
+            lvl,
+            buildings=buildings,
+            research_levels=research,
+            panel_ctx=panel_ctx,
+        )
+        display = row["display"]
+        assert int(display["capacity_at_level"]) == expected
+        assert int(row["effect_value"]) == expected
+        if lvl == 0:
+            assert expected == STORAGE_BASE_CAPACITY
+            assert int(display["step_delta"]) == 0
+        else:
+            assert int(display["step_delta"]) == expected - int(prev_cap)
+            assert int(display["step_delta"]) >= 0
+        prev_cap = expected
+
+    summary = data["summary"]
+    cur = int(data["current_level"])
+    assert summary["display"]["current"] == canonical_storage_capacity_for_building(
+        "metal_storage", cur, buildings=buildings, research_levels=research, panel_ctx=panel_ctx
+    )
+    assert summary["display"]["next"] == canonical_storage_capacity_for_building(
+        "metal_storage", cur + 1, buildings=buildings, research_levels=research, panel_ctx=panel_ctx
+    )
+    conn.close()
+
+
+def test_technical_data_storage_with_storage_tech(tech_db):
+    uid, _ = _create_player()
+    planet = get_homeworld(player_id=uid)
+    pid = int(planet["id"])
+    save_planet_buildings(pid, {"metal_storage": 2, "solar_plant": 5})
+    conn = db()
+    conn.execute(
+        "INSERT OR REPLACE INTO research_levels (user_id, tech_key, level) VALUES (?, 'storage_tech', 3);",
+        (uid,),
+    )
+    conn.commit()
+    buildings = get_planet_buildings(pid, conn=conn)
+    research = get_research_levels(user_id=uid, conn=conn)
+    panel_ctx = BuildingsPanelContext.for_planet(planet, buildings, research, 1.0, conn=conn)
+
+    data, err = build_building_technical_data("metal_storage", user_id=uid, conn=conn)
+    assert err is None
+    row2 = next(r for r in data["levels"] if r["level"] == 2)
+    caps = panel_ctx.resolver_at_target("metal_storage", 2).get_storage_capacity()
+    assert int(row2["display"]["capacity_at_level"]) == int(caps["metal"])
+    conn.close()
+
+
+def test_technical_data_research_shows_next_levels_not_milestones(tech_db):
+    uid, _ = _create_player()
+    conn = db()
+    conn.execute(
+        "INSERT OR REPLACE INTO research_levels (user_id, tech_key, level) VALUES (?, 'mining_tech', 12);",
+        (uid,),
+    )
+    conn.commit()
+    data, err = build_research_technical_data("mining_tech", user_id=uid, conn=conn)
+    conn.close()
+    assert err is None
+    assert data["milestones"] == []
+    levels = [int(r["level"]) for r in data["levels"]]
+    assert levels == [12, 13, 14, 15, 16, 17]
+    cur = next(r for r in data["levels"] if r["level"] == 12)
+    nxt = next(r for r in data["levels"] if r["level"] == 13)
+    assert nxt["display"]["next"] > cur["display"]["current"]
 
 
 def test_technical_data_api_route(tech_db, monkeypatch):

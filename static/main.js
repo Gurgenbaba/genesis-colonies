@@ -5413,7 +5413,8 @@
     if (!display || typeof display !== "object") return null;
     const layout = String(display.layout || "");
     if (layout === "production") return Number(display.next_per_hour);
-    if (layout === "energy" || layout === "storage") return Number(display.next);
+    if (layout === "storage") return Number(display.capacity_at_level ?? display.value_at_level ?? display.next);
+    if (layout === "energy") return Number(display.next);
     if (layout === "effect_percent") return Number(display.next);
     return null;
   }
@@ -5533,13 +5534,15 @@
       }
     } else if (layout === "storage") {
       const deltaLabel = technicalT("buildings_prod_delta");
+      const capAt = display.capacity_at_level ?? display.next;
+      const capFrom = display.current;
       lines.push({
         label: technicalT("buildings_prod_current"),
-        value: formatNumberCompact(display.current),
+        value: formatNumberCompact(capFrom),
       });
       lines.push({
         label: technicalT("buildings_prod_after"),
-        value: formatNumberCompact(display.next),
+        value: formatNumberCompact(capAt),
       });
       if (display.at_max_level) {
         lines.push({

@@ -165,7 +165,7 @@ class TestResearchModifiers:
         cap1 = get_storage_capacity(b, r, mods=get_research_modifiers(pid))
 
         assert cap1["metal"] > cap0["metal"]
-        assert cap1["metal"] == pytest.approx(int(cap0["metal"] * 1.5))
+        assert cap1["metal"] == pytest.approx(int(cap0["metal"] * 1.66))
 
     def test_buildtime_tech_speeds_build_and_research(self):
         pid = _create_player("buildtime")

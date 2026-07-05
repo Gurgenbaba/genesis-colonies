@@ -17,6 +17,7 @@ import logging
 import os
 from typing import Any, Dict, List, Optional, Tuple
 
+from ..economy_balance import STORAGE_BASE_CAPACITY
 from ..models import get_game_settings, get_planet_buildings, get_research_levels
 from ..planet_evolution.repository import get_context_planet
 
@@ -33,6 +34,7 @@ BUILDTIME_TECH_DURATION = 0.97  # multiplicative: duration × 0.97 ** level
 NANOFACTORY_DURATION_PER_LEVEL = 0.70  # duration × 0.70 ** nanofactory_level
 COMMAND_CENTER_NANOFACTORY_DURATION = 0.75  # nanofactory build: × 0.75 ** cc_level
 FUEL_EFFICIENCY_PER_LEVEL = 0.03
+STORAGE_TECH_PER_LEVEL = 0.33
 _DIVISION_EPS = 1e-12  # avoid div-by-zero only; not a balance cap
 
 # Production formulas: game/production_formula.py (GC-820) — do not duplicate here.
@@ -95,8 +97,8 @@ class EffectResolver:
     Deterministic, server-side effect calculator for one planet + player research.
     """
 
-    BASE_STORAGE = 150_000  # GC-821B — see economy_balance.STORAGE_BASE_CAPACITY
-    STORAGE_GROW = 1.75
+    BASE_STORAGE = STORAGE_BASE_CAPACITY  # GC-821B — single source in economy_balance
+    STORAGE_GROW = 1.98  # legacy audit alias; runtime uses economy_balance.storage_capacity_at_depot_level()
     MAX_BUILDING_LEVEL = 50
 
     # ------------------------------------------------------------------
@@ -182,7 +184,7 @@ class EffectResolver:
 
     @staticmethod
     def storage_bonus_pct(level: int) -> int:
-        return int(round(25.0 * max(0, int(level or 0))))
+        return int(round(STORAGE_TECH_PER_LEVEL * 100 * max(0, int(level or 0))))
 
     @staticmethod
     def combat_bonus_pct(level: int) -> int:
@@ -595,10 +597,10 @@ class EffectResolver:
             crystal_prod_factor *= drone_bonus
             sources.append(self._source_entry("prod_factor", "drone_tech", drone_bonus, ld))
 
-        # --- Research: storage_tech (+25% storage per level) ---
+        # --- Research: storage_tech (+33% storage per level, additive) ---
         ls = _lvl(r, "storage_tech")
         if ls > 0:
-            storage_factor *= 1.0 + 0.25 * ls
+            storage_factor *= 1.0 + STORAGE_TECH_PER_LEVEL * ls
             sources.append(self._source_entry("storage_factor", "storage_tech", storage_factor, ls))
 
         # --- Research: buildtime_tech (duration × 0.97 ** level) ---
@@ -1052,13 +1054,11 @@ class EffectResolver:
         return self.fuel_storage_capacity()
 
     def _storage_base_cap(self, resource: str, storage_level: int) -> int:
-        """Planet base cap plus depot bonus from GC-863 production anchor (level 0 = base only)."""
-        from ..economy_balance import storage_capacity_anchor
+        """GC-870 progressive depot cap (BASE × GROW^level; resource-independent)."""
+        from ..economy_balance import storage_capacity_at_depot_level
 
-        lvl = max(0, int(storage_level))
-        if lvl <= 0:
-            return self.BASE_STORAGE
-        return self.BASE_STORAGE + storage_capacity_anchor(resource, lvl)
+        _ = resource
+        return storage_capacity_at_depot_level(max(0, int(storage_level)))
 
     def _metal_crystal_storage_base_cap(self, resource: str, storage_level: int) -> int:
         """Backward-compatible alias — use _storage_base_cap."""

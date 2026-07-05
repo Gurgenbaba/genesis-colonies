@@ -36,15 +36,22 @@ BUILDING_PRODUCTION_MAP: Dict[str, str] = {
 
 MINE_BUILDINGS = frozenset(BUILDING_PRODUCTION_MAP.keys())
 
-# GC-823B — technical modal level schedule (early L0–L5, midgame current + milestones).
+# GC-823B — technical modal level schedule (early L0–L5, midgame current + next levels).
 TECHNICAL_MILESTONE_LEVELS: Tuple[int, ...] = (10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120)
 TECHNICAL_EARLY_GAME_MAX_LEVEL = 5
+TECHNICAL_PREVIEW_AHEAD = 5
+
+STORAGE_BUILDING_RESOURCES: Dict[str, str] = {
+    "metal_storage": "metal",
+    "crystal_storage": "crystal",
+    "fuel_storage": "fuel_cells",
+}
 
 
 def technical_preview_levels(current: int, max_level: Optional[int] = None) -> List[int]:
     """
     Levels shown in the technical-data table.
-    Early game: L0..L5. Midgame: current, next upgrade, milestones above next.
+    Early game: L0..L5. Midgame+: current and the next five upgrade levels (no milestone gaps).
     """
     cur = max(0, int(current))
     cap = int(max_level) if max_level is not None else None
@@ -55,12 +62,10 @@ def technical_preview_levels(current: int, max_level: Optional[int] = None) -> L
             hi = min(hi, cap)
         levels = list(range(0, hi + 1))
     else:
-        levels = [cur]
-        if cap is None or cur < cap:
-            levels.append(cur + 1)
-        for milestone in TECHNICAL_MILESTONE_LEVELS:
-            if milestone > cur + 1 and (cap is None or milestone <= cap):
-                levels.append(milestone)
+        end = cur + TECHNICAL_PREVIEW_AHEAD
+        if cap is not None:
+            end = min(end, cap)
+        levels = list(range(cur, end + 1))
 
     seen: set[int] = set()
     out: List[int] = []
@@ -72,16 +77,39 @@ def technical_preview_levels(current: int, max_level: Optional[int] = None) -> L
 
 
 def technical_row_role(level: int, current: int, *, max_level: Optional[int] = None) -> str:
-    """Row badge: current | next | milestone | preview."""
+    """Row badge: current | next | preview."""
     lvl = int(level)
     cur = int(current)
     if lvl == cur:
         return "current"
     if lvl == cur + 1 and (max_level is None or cur < int(max_level)):
         return "next"
-    if lvl in TECHNICAL_MILESTONE_LEVELS:
-        return "milestone"
     return "preview"
+
+
+def canonical_storage_capacity_for_building(
+    building_type: str,
+    level: int,
+    *,
+    buildings: Mapping[str, int],
+    research_levels: Mapping[str, int],
+    panel_ctx=None,
+) -> int:
+    """Same cap path as buildings panel / game-state (EffectResolver + planet scope when available)."""
+    btype = str(building_type)
+    resource = STORAGE_BUILDING_RESOURCES.get(btype)
+    if not resource:
+        return 0
+    lv = max(0, int(level))
+    if panel_ctx is not None:
+        caps = panel_ctx.resolver_at_target(btype, lv).get_storage_capacity()
+    else:
+        from .effects import EffectResolver
+
+        bumped = dict(buildings)
+        bumped[btype] = lv
+        caps = EffectResolver(bumped, dict(research_levels or {})).get_storage_capacity()
+    return int(caps.get(resource, 0) or 0)
 
 
 def _mine_energy_draw_at(
@@ -385,17 +413,21 @@ def build_storage_display(
     next_val: int,
     resource: str,
     at_max_level: bool = False,
+    capacity_at_level: int | None = None,
+    step_delta: int | None = None,
 ) -> Dict[str, Any]:
+    cap_at = int(capacity_at_level if capacity_at_level is not None else next_val)
     cur = int(current or 0)
     nxt = int(next_val or 0)
-    step = max(0, nxt - cur)
+    step = int(step_delta) if step_delta is not None else max(0, nxt - cur)
     return {
         "layout": "storage",
         "table_layout": "storage",
         "resource": resource,
         "current": cur,
         "next": nxt,
-        "value_at_level": nxt,
+        "capacity_at_level": cap_at,
+        "value_at_level": cap_at,
         "delta": step,
         "step_delta": step,
         "at_max_level": bool(at_max_level),
@@ -446,6 +478,8 @@ def enrich_building_technical_row(
     research_levels: Mapping[str, int],
     ratio: float,
     level: int,
+    *,
+    panel_ctx=None,
 ) -> None:
     """Attach unified ``display`` block to a building technical-data level row."""
     lvl = max(0, int(level))
@@ -533,22 +567,34 @@ def enrich_building_technical_row(
         return
 
     if kind == "storage":
-        from .effects import EffectResolver
-
-        def _cap_at(lv: int) -> int:
-            b = dict(buildings)
-            b[btype] = lv
-            caps = EffectResolver(b, dict(research_levels or {})).get_storage_capacity()
-            res = str(row.get("effect_resource") or "metal")
-            return int(caps.get(res, 0) or 0)
-
-        cur = _cap_at(prev)
-        nxt = _cap_at(lvl)
+        resource = str(row.get("effect_resource") or "metal")
+        cap_at = canonical_storage_capacity_for_building(
+            btype,
+            lvl,
+            buildings=buildings,
+            research_levels=research_levels,
+            panel_ctx=panel_ctx,
+        )
+        cap_prev = (
+            canonical_storage_capacity_for_building(
+                btype,
+                lvl - 1,
+                buildings=buildings,
+                research_levels=research_levels,
+                panel_ctx=panel_ctx,
+            )
+            if lvl > 0
+            else 0
+        )
+        step = cap_at - cap_prev if lvl > 0 else 0
+        row["effect_value"] = cap_at
         row["display"] = build_storage_display(
-            current=cur,
-            next_val=nxt,
-            resource=str(row.get("effect_resource") or ""),
-            at_max_level=(lvl > 0 and cur == nxt),
+            current=cap_prev if lvl > 0 else cap_at,
+            next_val=cap_at,
+            resource=resource,
+            at_max_level=(lvl > 0 and cap_at == cap_prev),
+            capacity_at_level=cap_at,
+            step_delta=step,
         )
         return
 
@@ -657,12 +703,51 @@ def build_building_technical_summary(
     max_level: int,
     current_row: Optional[Dict[str, Any]],
     next_row: Optional[Dict[str, Any]],
+    panel_ctx=None,
 ) -> Dict[str, Any]:
     """Top-of-modal summary for the next building upgrade (or max level)."""
     cur = max(0, int(current))
     cap = max(0, int(max_level))
     if cur >= cap or not next_row:
         return {"at_max_level": True, "layout": "max_level", "level": cur}
+
+    btype = str(building_type)
+    if btype in STORAGE_BUILDING_RESOURCES and panel_ctx is not None:
+        resource = STORAGE_BUILDING_RESOURCES[btype]
+        cap_from = canonical_storage_capacity_for_building(
+            btype,
+            cur,
+            buildings=buildings,
+            research_levels=research_levels,
+            panel_ctx=panel_ctx,
+        )
+        cap_to = canonical_storage_capacity_for_building(
+            btype,
+            cur + 1,
+            buildings=buildings,
+            research_levels=research_levels,
+            panel_ctx=panel_ctx,
+        )
+        display = build_storage_display(
+            current=cap_from,
+            next_val=cap_to,
+            resource=resource,
+            capacity_at_level=cap_to,
+            step_delta=max(0, cap_to - cap_from),
+        )
+        return {
+            "at_max_level": False,
+            "layout": "storage",
+            "from_level": cur,
+            "to_level": cur + 1,
+            "display": display,
+            "cost_metal": int(next_row.get("cost_metal") or 0),
+            "cost_crystal": int(next_row.get("cost_crystal") or 0),
+            "time_seconds": int(next_row.get("time_seconds") or 0),
+            "upgrade_roi_hours": display.get("upgrade_roi_hours"),
+            "active_bonuses": [],
+            "formula": None,
+        }
 
     display = dict(next_row.get("display") or {})
     layout = str(display.get("layout") or "")

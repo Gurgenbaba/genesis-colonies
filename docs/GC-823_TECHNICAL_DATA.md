@@ -17,8 +17,7 @@ Production authority unchanged: `calculate_resource_output()`, ROI from live pla
 
 1. **Nächstes Upgrade** — `summary`: Aktuell / Nach Upgrade / Zuwachs / Amortisation (+ Kosten, Bau-/Forschungszeit).
 2. **Aktive Boni** — `summary.active_bonuses` (mines: slot/research/empire; research: lab/nanofactory/buildtime; yard: production bonuses).
-3. **Meilensteine** — `milestones` (mines: `build_production_milestones`; research: `build_research_effect_milestones`).
-4. **Stufenübersicht** — layout-specific table; `resolve_technical_table_layout` picks layout from any row (not only L0).
+3. **Stufenübersicht** — layout-specific table; `resolve_technical_table_layout` picks layout from any row (not only L0). Consecutive next levels (no milestone-only gaps).
 
 Ship/defense unit modals: `build_unit_technical_block` in `technical_data.py` → `templates/partials/unit_technical_detail.html` (build preview, combat stats, combat research bonuses).
 
@@ -28,12 +27,14 @@ Ship/defense unit modals: `build_unit_technical_block` in `technical_data.py` �
 
 1. **Summary (top)** — `data.summary`: Aktuell / Nach Upgrade / Zuwachs / Amortisation (research: research duration as ROI hours). At max level: `at_max_level` + `technical_max_level_reached`.
 2. **Active bonuses (mines)** — slot, research, empire, energy, events from `summary.active_bonuses` + formula collapsible.
-3. **Level table (bottom)** — layout-specific columns; row badges via `row_role`: `current`, `next`, `milestone`, `preview`.
+3. **Level table (bottom)** — layout-specific columns; row badges via `row_role`: `current`, `next`, `preview`.
 
 ### Level schedule (`technical_preview_levels`)
 
 - **Early game** (`current ≤ 5`): rows `L0 … L5`
-- **Midgame+**: `current`, `next` (`current + 1`), then milestones `10, 20, 30, …, 120` above next
+- **Midgame+**: `current` through `current + 5` (six consecutive rows)
+
+Storage caps in technical data use `canonical_storage_capacity_for_building()` → same `EffectResolver.get_storage_capacity()` path as buildings panel / HUD (`BuildingsPanelContext.resolver_at_target`).
 
 ---
 

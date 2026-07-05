@@ -16,11 +16,10 @@ from game.economy_balance import (
     NANOFACTORY_CRYSTAL_BASE,
     NANOFACTORY_METAL_BASE,
     STORAGE_BASE_CAPACITY,
-    STORAGE_PRODUCTION_HOUR_MULTIPLIER,
+    STORAGE_LEVEL_GROWTH,
     nanofactory_upgrade_cost,
     power_upgrade_cost,
-    reference_production_per_hour,
-    storage_capacity_anchor,
+    storage_capacity_at_depot_level,
 )
 from game.effects import EffectResolver
 from game.shipyard import BUILD_TIME_LEVEL_FACTOR
@@ -89,15 +88,13 @@ class TestGc863StorageCapacity:
         ],
     )
     @pytest.mark.parametrize("level", _BENCHMARK_LEVELS)
-    def test_capacity_follows_production_anchor(self, resource: str, building: str, level: int):
-        anchor = storage_capacity_anchor(resource, level)
-        expected = int(reference_production_per_hour(resource, level) * STORAGE_PRODUCTION_HOUR_MULTIPLIER)
-        assert anchor == expected
+    def test_capacity_follows_exponential_growth(self, resource: str, building: str, level: int):
+        expected = storage_capacity_at_depot_level(level)
 
         er = EffectResolver({building: level}, {})
         caps = er.get_storage_capacity()
         key = "fuel_cells" if resource == "fuel_cells" else resource
-        assert caps[key] == STORAGE_BASE_CAPACITY + anchor
+        assert caps[key] == expected
 
     def test_fuel_cells_base_capacity_without_depot(self):
         er = EffectResolver({"fuel_cell_plant": 5}, {})
@@ -112,7 +109,12 @@ class TestGc863StorageCapacity:
             cap1 = er1.get_storage_capacity()[key]
             assert cap1 > cap0
             assert cap0 == STORAGE_BASE_CAPACITY
-            assert cap1 == STORAGE_BASE_CAPACITY + storage_capacity_anchor(resource, 1)
+            assert cap1 == storage_capacity_at_depot_level(1)
+
+    def test_storage_growth_matches_constant(self):
+        assert STORAGE_LEVEL_GROWTH == 1.98
+        assert storage_capacity_at_depot_level(0) == STORAGE_BASE_CAPACITY
+        assert storage_capacity_at_depot_level(1) == int(STORAGE_BASE_CAPACITY * STORAGE_LEVEL_GROWTH)
 
 
 class TestGc863SolarCalibration:

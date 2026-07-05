@@ -107,6 +107,13 @@ Pipeline (single request, one finish pass):
 - **Not:** a flat reduction of total colony power draw from solar/command center/etc.
 - **UI:** `energy.used`, `energy.efficiency_pct`, overview energy hint class update on poll (no reload).
 
+### `storage_tech` and depot capacity
+
+- **Depot base:** `storage_capacity_at_depot_level(level)` in `game/economy_balance.py` = `STORAGE_BASE_CAPACITY × STORAGE_LEVEL_GROWTH^level` (same formula for all levels).
+- **Tech formula:** additive linear multiplier, `capacity *= (1 + storage_tech_level × 0.33)`.
+- **Also stacks with:** Terraformer (+5 % storage capacity per level) and external `storage_factor` modifiers.
+- **Not:** production-anchor jumps at L1, frontend math, or a second storage curve.
+
 ### Call order (no double finish)
 
 1. `refresh_player_live_state()` once per request (sets Flask `g.gc_live_state_refreshed`).

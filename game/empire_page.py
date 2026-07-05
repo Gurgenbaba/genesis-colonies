@@ -531,8 +531,10 @@ def build_empire_context(player_id: int, *, conn=None) -> Dict[str, Any]:
     Aggregate empire-wide colony data for the /empire page.
 
     All production and energy values are computed server-side via EffectResolver.
+    Resource balances are ticked for every owned planet before aggregation.
     """
     from .models import db as _db
+    from .resources import sync_player_planet_resources
 
     uid = int(player_id)
     own_conn = conn is None
@@ -540,6 +542,8 @@ def build_empire_context(player_id: int, *, conn=None) -> Dict[str, Any]:
         conn = _db()
 
     try:
+        sync_player_planet_resources(uid, conn=conn, finish_queue_first=True, skip_fresh_sec=2.0)
+
         player = load_player(uid, conn=conn) or {}
         planets = get_planets_by_player(uid, conn=conn)
         research = get_research_levels(user_id=uid, conn=conn)

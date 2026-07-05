@@ -6,6 +6,8 @@ Run: python -m pytest tests/test_gc821_economy_rebalance.py -v
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from game.buildings import get_build_time, get_upgrade_cost
@@ -14,15 +16,19 @@ from game.economy_balance import (
     EXCHANGE_DAILY_LIMIT_MIN,
     LOOT_RESOURCE_FLOOR_MIN,
     STORAGE_BASE_CAPACITY,
+    STORAGE_LEVEL_GROWTH,
     balance_snapshot_table,
     mine_upgrade_metal_hours,
     power_build_seconds,
     power_upgrade_cost,
     reference_production_per_hour,
+    storage_capacity_at_depot_level,
 )
 from game.effects import EffectResolver
 from game.exchange import _EXCHANGE_SETTING_DEFAULTS
 from game.fleet_defs import SHIPS
+
+
 class TestGc821CLootFloors:
     def test_loot_floors_raised(self):
         assert LOOT_RESOURCE_FLOOR_MIN >= 12_000
@@ -68,12 +74,72 @@ class TestGc821BStorageAndExchange:
         assert caps["crystal"] == STORAGE_BASE_CAPACITY
         assert caps["fuel_cells"] == STORAGE_BASE_CAPACITY
 
-    def test_storage_level_one_adds_production_anchor_to_base(self):
-        from game.economy_balance import storage_capacity_anchor
-
+    def test_storage_level_one_uses_exponential_growth(self):
         er = EffectResolver({"metal_storage": 1}, {})
         caps = er.get_storage_capacity()
-        assert caps["metal"] == STORAGE_BASE_CAPACITY + storage_capacity_anchor("metal", 1)
+        assert caps["metal"] == storage_capacity_at_depot_level(1)
+
+    def test_storage_curve_smooth_progression(self):
+        caps = [storage_capacity_at_depot_level(lvl) for lvl in range(4)]
+        assert caps[0] < caps[1] < caps[2] < caps[3]
+        delta_l1 = caps[1] - caps[0]
+        delta_l2 = caps[2] - caps[1]
+        delta_l3 = caps[3] - caps[2]
+        assert delta_l1 <= 3 * delta_l2
+        assert delta_l2 <= delta_l3
+
+    def test_storage_capacity_increases_monotonically_per_level(self):
+        for resource, building in (
+            ("metal", "metal_storage"),
+            ("crystal", "crystal_storage"),
+            ("fuel_cells", "fuel_storage"),
+        ):
+            previous = EffectResolver({building: 0}, {}).get_storage_capacity()[resource]
+            for level in range(1, 51):
+                cap = EffectResolver({building: level}, {}).get_storage_capacity()[resource]
+                assert cap > previous, f"{resource} storage L{level} did not increase"
+                previous = cap
+
+    def test_storage_tech_is_additive_and_combines_with_storage_level(self):
+        base = EffectResolver({"metal_storage": 18}, {}).get_storage_capacity()["metal"]
+        tech10 = EffectResolver({"metal_storage": 18}, {"storage_tech": 10}).get_storage_capacity()["metal"]
+        tech20 = EffectResolver({"metal_storage": 18}, {"storage_tech": 20}).get_storage_capacity()["metal"]
+
+        assert tech10 == pytest.approx(int(base * (1 + 10 * 0.33)), rel=0.001)
+        assert tech20 == pytest.approx(int(base * (1 + 20 * 0.33)), rel=0.001)
+        assert tech20 > tech10 > base
+
+    def test_terraformer_multiplies_final_storage_capacity(self):
+        base = EffectResolver({"metal_storage": 5}, {}).get_storage_capacity()["metal"]
+        terra3 = EffectResolver({"metal_storage": 5, "terraformer": 3}, {}).get_storage_capacity()["metal"]
+        assert terra3 == pytest.approx(int(base * 1.15), rel=0.001)
+        assert terra3 > base
+
+    def test_storage_l18_to_l19_delta_grows_with_level(self):
+        cap17 = EffectResolver({"metal_storage": 17}, {"storage_tech": 20}).get_storage_capacity()["metal"]
+        cap18 = EffectResolver({"metal_storage": 18}, {"storage_tech": 20}).get_storage_capacity()["metal"]
+        cap19 = EffectResolver({"metal_storage": 19}, {"storage_tech": 20}).get_storage_capacity()["metal"]
+        d1 = storage_capacity_at_depot_level(1) - storage_capacity_at_depot_level(0)
+        d18 = cap18 - cap17
+        d19 = cap19 - cap18
+
+        assert cap19 > cap18 > cap17
+        assert d19 > d18 > d1
+
+    def test_all_storage_resources_use_same_growth_rule(self):
+        cases = (
+            ("metal", "metal_storage"),
+            ("crystal", "crystal_storage"),
+            ("fuel_cells", "fuel_storage"),
+        )
+        for resource, building in cases:
+            caps = EffectResolver({building: 30}, {"storage_tech": 5}).get_storage_capacity()
+            expected_base = storage_capacity_at_depot_level(30)
+            expected = int(expected_base * (1 + 5 * 0.33))
+            assert caps[resource] == expected
+
+    def test_storage_growth_constant(self):
+        assert STORAGE_LEVEL_GROWTH == 1.98
 
     def test_exchange_daily_limit_min_default(self):
         assert int(_EXCHANGE_SETTING_DEFAULTS["exchange_daily_limit_min"]) == EXCHANGE_DAILY_LIMIT_MIN
@@ -82,6 +148,19 @@ class TestGc821BStorageAndExchange:
         ref = reference_production_per_hour("metal", 30)
         ctx = ProductionContext("metal", 30, slot=9)
         assert ref == pytest.approx(calculate_resource_output("metal", ctx))
+
+    def test_no_frontend_storage_formula(self):
+        root = Path(__file__).resolve().parent.parent
+        js = (root / "static" / "main.js").read_text(encoding="utf-8")
+        forbidden = (
+            "STORAGE_BASE_CAPACITY",
+            "STORAGE_LEVEL_GROWTH",
+            "storage_capacity_at_depot_level",
+            "storage_tech_level",
+            "storageTechLevel",
+        )
+        for token in forbidden:
+            assert token not in js
 
 
 class TestGc821CLootFloors:
