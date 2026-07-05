@@ -824,21 +824,23 @@ def test_expedition_weight_audit_gc620j0():
     audit = expedition_event_weight_audit()
     shares = audit["share_by_category"]
 
-    assert audit["total_weight"] == 123
+    assert audit["total_weight"] == 119
     assert audit["weights_by_key"]["mineral_deposit"] == 33
     assert audit["weights_by_key"]["pirate_encounter"] == 4
     assert audit["weights_by_key"]["ancient_minefield"] == 2
+    assert audit["weights_by_key"]["lost_container"] == 3
     assert audit["weight_by_category"]["loot"] == 86
     assert audit["weight_by_category"]["legendary"] == 3
-    assert shares["legendary"] == pytest.approx(3 / 123, abs=0.001)
+    assert audit["weight_by_category"]["treasure"] == 6
+    assert shares["legendary"] == pytest.approx(3 / 119, abs=0.001)
     assert 0.023 <= shares["legendary"] <= 0.026
-    assert shares["loot"] == pytest.approx(86 / 123, abs=0.001)
-    assert 0.66 <= shares["loot"] <= 0.72
+    assert shares["loot"] == pytest.approx(86 / 119, abs=0.001)
+    assert 0.68 <= shares["loot"] <= 0.75
     assert 0.05 <= shares["neutral"] <= 0.10
     assert 0.06 <= shares["delay"] <= 0.10
     assert 0.02 <= shares["combat"] <= 0.05
     assert 0.01 <= shares["hazard"] <= 0.04
-    assert 0.04 <= shares["treasure"] <= 0.09
+    assert 0.03 <= shares["treasure"] <= 0.07
 
 
 def test_expedition_empirical_category_distribution_gc620j0():
@@ -875,13 +877,31 @@ def test_expedition_empirical_category_distribution_gc620j0():
         category_hits[category] = category_hits.get(category, 0) + 1
 
     empirical = {cat: hits / rolls for cat, hits in category_hits.items()}
-    assert 0.58 <= empirical.get("loot", 0) <= 0.74
+    assert 0.58 <= empirical.get("loot", 0) <= 0.75
     assert 0.03 <= empirical.get("neutral", 0) <= 0.10
     assert 0.05 <= empirical.get("delay", 0) <= 0.12
     assert 0.02 <= empirical.get("combat", 0) <= 0.08
     assert 0.01 <= empirical.get("hazard", 0) <= 0.06
-    assert 0.03 <= empirical.get("treasure", 0) <= 0.09
+    assert 0.03 <= empirical.get("treasure", 0) <= 0.08
     assert 0.015 <= empirical.get("legendary", 0) <= 0.045
+
+
+def test_expedition_lootbox_rate_stays_rare():
+    """Any-lootbox rate should stay well below ~10% per expedition (GC expo balance)."""
+    rolls = 10_000
+    with_box = 0
+    for movement_id in range(1, rolls + 1):
+        outcome = resolve_expedition_outcome(
+            movement_id,
+            cargo_total=500_000,
+            expedition_ship_count=5,
+            flight_seconds=120,
+            ships={"solar_skiff": 5},
+        )
+        if outcome.get("lootboxes"):
+            with_box += 1
+    rate = with_box / rolls
+    assert 0.03 <= rate <= 0.08, f"lootbox rate {rate:.1%} outside 3–8% band"
 
 
 

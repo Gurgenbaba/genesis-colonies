@@ -97,12 +97,12 @@ _EVENT_LOOT_PROFILES: Dict[str, Dict[str, Any]] = {
 
 # Rare additive lootbox drops (resources unchanged). Chance = roll < value.
 _EXPEDITION_LOOTBOX_DROPS: Dict[str, Dict[str, Any]] = {
-    "void_scan": {"chance": 0.01, "boxes": ("research_capsule",)},
-    "mineral_deposit": {"chance": 0.02, "boxes": ("generic_supply_container", "resource_cache")},
-    "fuel_cache": {"chance": 0.02, "boxes": ("generic_supply_container", "resource_cache")},
-    "debris_salvage": {"chance": 0.05, "boxes": ("wreckage_container", "military_cache")},
-    "distress_beacon": {"chance": 0.06, "boxes": ("alien_cache", "military_cache")},
-    "ancient_stash": {"chance": 0.20, "boxes": ("alien_cache", "premium_cache", "research_capsule")},
+    "void_scan": {"chance": 0.005, "boxes": ("research_capsule",)},
+    "mineral_deposit": {"chance": 0.01, "boxes": ("generic_supply_container", "resource_cache")},
+    "fuel_cache": {"chance": 0.01, "boxes": ("generic_supply_container", "resource_cache")},
+    "debris_salvage": {"chance": 0.02, "boxes": ("wreckage_container", "military_cache")},
+    "distress_beacon": {"chance": 0.03, "boxes": ("alien_cache", "military_cache")},
+    "ancient_stash": {"chance": 0.08, "boxes": ("alien_cache", "premium_cache", "research_capsule")},
     "sensor_glitch": {"chance": 0.0, "boxes": ()},
     "nav_interference": {"chance": 0.0, "boxes": ()},
     "pirate_encounter": {"chance": 0.0, "boxes": ()},
@@ -284,21 +284,21 @@ _EXPEDITION_EVENTS: Sequence[Dict[str, Any]] = (
     },
     {
         "key": "lost_container",
-        "weight": 5,
+        "weight": 3,
         "label_key": "expedition_event_lost_container",
         "desc_key": "expedition_event_lost_container_desc",
         "severity": "normal",
     },
     {
         "key": "abandoned_convoy",
-        "weight": 3,
+        "weight": 2,
         "label_key": "expedition_event_abandoned_convoy",
         "desc_key": "expedition_event_abandoned_convoy_desc",
         "severity": "major",
     },
     {
         "key": "ancient_derelict",
-        "weight": 2,
+        "weight": 1,
         "label_key": "expedition_event_ancient_derelict",
         "desc_key": "expedition_event_ancient_derelict_desc",
         "severity": "major",
