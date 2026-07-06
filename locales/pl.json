@@ -243,6 +243,7 @@
   "admin_combat_bots_run_next": "Next scenario",
   "admin_combat_bots_scenarios": "scenarios",
   "admin_combat_bots_next": "Next",
+  "admin_combat_bots_scenario_filter": "Search scenario…",
   "admin_inventory_amount": "Kwota",
   "admin_inventory_grant_all_btn": "Daj wszystkim",
   "admin_inventory_grant_all_confirm": "Czy naprawdę przyznać %(amount)s× %(item)s wszystkim graczom?",

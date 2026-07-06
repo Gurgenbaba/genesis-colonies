@@ -243,6 +243,7 @@
   "admin_combat_bots_run_next": "Next scenario",
   "admin_combat_bots_scenarios": "scenarios",
   "admin_combat_bots_next": "Next",
+  "admin_combat_bots_scenario_filter": "Search scenario…",
   "admin_inventory_amount": "Amount",
   "admin_inventory_grant_all_btn": "Grant to all",
   "admin_inventory_grant_all_confirm": "Really grant %(amount)s× %(item)s to all players?",

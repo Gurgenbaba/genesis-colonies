@@ -952,6 +952,20 @@
   flex: 1 1 200px;
   max-width: 320px;
 }
+.admin-shell #admin-combat-bots-scenario-filter {
+  flex: 1 1 180px;
+  max-width: 240px;
+  min-width: 160px;
+}
+.admin-shell .admin-combat-bots-scenario-select,
+.admin-shell #admin-combat-bots-panel .admin-combat-bots-scenario-select {
+  flex: 2 1 280px;
+  max-width: 420px;
+  min-width: 220px;
+}
+.admin-shell #admin-combat-bots-panel .gc-hud-select-menu {
+  max-height: min(420px, 60vh);
+}
 
 .admin-detail { margin-top: 12px; }
 .admin-detail h3 {

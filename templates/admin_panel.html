@@ -501,7 +501,8 @@
           <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="combat-bots-ensure">{{ T("admin_combat_bots_ensure", "Bots anlegen") }}</button>
           <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="combat-bots-toggle" data-combat-bots-enabled="1">{{ T("admin_combat_bots_enable", "Aktivieren") }}</button>
           <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="combat-bots-toggle" data-combat-bots-enabled="0">{{ T("admin_combat_bots_disable", "Deaktivieren") }}</button>
-          <select id="admin-combat-bots-scenario" class="gc-input admin-search-input" data-gc-hud-select>
+          <input type="search" id="admin-combat-bots-scenario-filter" class="gc-input admin-search-input" placeholder="{{ T('admin_combat_bots_scenario_filter', 'Szenario suchen…') }}" autocomplete="off">
+          <select id="admin-combat-bots-scenario" class="gc-input admin-search-input admin-combat-bots-scenario-select" data-gc-hud-select>
             <option value="raptor_vs_aegis_equal_cost">{{ T("admin_combat_bots_scenario_raptor_aegis", "Raptor vs Aegis (equal cost)") }}</option>
           </select>
           <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="combat-bots-run">{{ T("admin_combat_bots_run", "Szenario starten") }}</button>

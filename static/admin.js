@@ -775,17 +775,42 @@
     host.innerHTML = `<table class="admin-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
   }
 
-  function populateCombatBotsScenarioSelect(scenarios) {
+  let combatBotsScenarioCatalog = [];
+
+  function populateCombatBotsScenarioSelect(scenarios, filterText) {
     const sel = qs("#admin-combat-bots-scenario");
     if (!sel || !Array.isArray(scenarios) || !scenarios.length) return;
     const current = sel.value;
-    sel.innerHTML = scenarios
+    const needle = String(filterText || "").trim().toLowerCase();
+    const filtered = needle
+      ? scenarios.filter((s) => {
+          const hay = `${s.key || ""} ${s.label || ""} ${s.notes || ""}`.toLowerCase();
+          return hay.includes(needle);
+        })
+      : scenarios;
+    const list = filtered.length ? filtered : scenarios;
+    sel.innerHTML = list
       .map(
         (s) =>
           `<option value="${esc(String(s.key))}">${esc(String(s.label || s.key))}</option>`
       )
       .join("");
-    if (current && scenarios.some((s) => s.key === current)) sel.value = current;
+    if (current && list.some((s) => s.key === current)) sel.value = current;
+    else if (list.length) sel.value = list[0].key;
+    if (typeof GC.rebuildHudSelect === "function" && sel._gcHudSelect) {
+      GC.rebuildHudSelect(sel);
+    } else {
+      syncAdminHudSelects(sel.closest("#admin-combat-bots-panel") || adminRoot());
+    }
+  }
+
+  function bindCombatBotsScenarioFilter() {
+    const input = qs("#admin-combat-bots-scenario-filter");
+    if (!input || input.dataset.gcCombatBotsFilterBound === "1") return;
+    input.dataset.gcCombatBotsFilterBound = "1";
+    input.addEventListener("input", () => {
+      populateCombatBotsScenarioSelect(combatBotsScenarioCatalog, input.value);
+    });
   }
 
   async function loadAdminCombatBots() {
@@ -796,7 +821,10 @@
       return data;
     }
     const status = data.status || {};
-    populateCombatBotsScenarioSelect(status.scenarios || []);
+    combatBotsScenarioCatalog = status.scenarios || [];
+    bindCombatBotsScenarioFilter();
+    const filterVal = qs("#admin-combat-bots-scenario-filter")?.value || "";
+    populateCombatBotsScenarioSelect(combatBotsScenarioCatalog, filterVal);
     const enabled = status.enabled ? t("admin_combat_bots_on", "aktiv") : t("admin_combat_bots_off", "inaktiv");
     const cd = Number(status.cooldown_seconds || 0);
     const nxt = status.next_scenario_key || "–";

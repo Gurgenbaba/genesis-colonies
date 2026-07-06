@@ -243,6 +243,7 @@
   "admin_combat_bots_run_next": "Nächstes Szenario",
   "admin_combat_bots_scenarios": "Szenarien",
   "admin_combat_bots_next": "Nächstes",
+  "admin_combat_bots_scenario_filter": "Szenario suchen…",
   "admin_inventory_amount": "Anzahl",
   "admin_inventory_grant_all_btn": "An alle vergeben",
   "admin_inventory_grant_all_confirm": "Wirklich %(amount)s× %(item)s an alle Spieler vergeben?",

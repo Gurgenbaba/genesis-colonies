@@ -1111,27 +1111,24 @@ def reset_bot_planet(
         set_planet_defense(int(planet_id), dict(defense or {}), conn=conn)
 
 
-def list_scenarios_payload() -> List[Dict[str, Any]]:
+def list_scenarios_payload(*, light: bool = False) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     for key in SCENARIO_KEYS:
         sc = COMBAT_BALANCE_SCENARIOS[key]
         budget = int(sc.cost_budget)
-        atk = sc.attacker_ships(budget)
-        def_ships = sc.defender_ships(budget)
-        def_def = sc.defender_defense(budget)
-        out.append(
-            {
-                "key": sc.key,
-                "label": sc.label,
-                "notes": sc.notes,
-                "cost_budget": budget,
-                "attacker": sc.attacker,
-                "attacker_preview": atk,
-                "defender_ships_preview": def_ships,
-                "defender_defense_preview": def_def,
-                "repeat_count": sc.repeat_count,
-            }
-        )
+        entry: Dict[str, Any] = {
+            "key": sc.key,
+            "label": sc.label,
+            "notes": sc.notes,
+            "cost_budget": budget,
+            "attacker": sc.attacker,
+            "repeat_count": sc.repeat_count,
+        }
+        if not light:
+            entry["attacker_preview"] = sc.attacker_ships(budget)
+            entry["defender_ships_preview"] = sc.defender_ships(budget)
+            entry["defender_defense_preview"] = sc.defender_defense(budget)
+        out.append(entry)
     return out
 
 
@@ -1527,7 +1524,7 @@ def get_combat_balance_bots_snapshot(*, conn) -> Dict[str, Any]:
         "scenario_count": len(SCENARIO_KEYS),
         "next_scenario_key": resolve_next_scenario_key(conn=conn),
         "pending_run": _has_pending_bot_run(conn=conn),
-        "scenarios": list_scenarios_payload(),
+        "scenarios": list_scenarios_payload(light=True),
         "bots_ready": alpha is not None and beta is not None,
         "alpha": alpha,
         "beta": beta,

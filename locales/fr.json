@@ -243,6 +243,7 @@
   "admin_combat_bots_run_next": "Next scenario",
   "admin_combat_bots_scenarios": "scenarios",
   "admin_combat_bots_next": "Next",
+  "admin_combat_bots_scenario_filter": "Search scenario…",
   "admin_inventory_amount": "Montant",
   "admin_inventory_grant_all_btn": "Accorde à tous",
   "admin_inventory_grant_all_confirm": "Accorder vraiment %(amount)s× %(item)s à tous les joueurs ?",
