@@ -6,13 +6,45 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 
 from game.config import init_config, is_production, validate_config
 from game.migrations_util import migrations_are_current
 
 
+def _init_db_with_retry(*, max_attempts: int = 8) -> None:
+    import sqlite3
+
+    from game.db import _is_sqlite_lock_error, format_sqlite_lock_startup_help
+    from game.models import init_db
+
+    last_err: BaseException | None = None
+    for attempt in range(max(1, int(max_attempts))):
+        try:
+            init_db()
+            return
+        except sqlite3.OperationalError as exc:
+            last_err = exc
+            if not _is_sqlite_lock_error(exc) or attempt + 1 >= max_attempts:
+                print(format_sqlite_lock_startup_help(), file=sys.stderr)
+                raise
+            time.sleep(min(2.0, 0.25 * (2**attempt)))
+    if last_err is not None:
+        print(format_sqlite_lock_startup_help(), file=sys.stderr)
+        raise last_err
+
+
 def bootstrap_application(*, skip_migration_check: bool = False) -> None:
     init_config()
+
+    if not is_production():
+        from game.db import resolve_db_path
+
+        try:
+            db_display = resolve_db_path().resolve()
+        except OSError:
+            db_display = resolve_db_path()
+        print(f"[GC bootstrap] SQLite database: {db_display}", file=sys.stderr)
 
     errors = validate_config(strict=is_production())
     if errors:
@@ -21,10 +53,10 @@ def bootstrap_application(*, skip_migration_check: bool = False) -> None:
         if is_production():
             raise SystemExit(1)
 
-    from game.models import init_db, purge_stale_idempotency_global
+    from game.models import purge_stale_idempotency_global
     from game.schema_validation import validate_core_schema
 
-    init_db()
+    _init_db_with_retry()
     purge_stale_idempotency_global()
 
     try:

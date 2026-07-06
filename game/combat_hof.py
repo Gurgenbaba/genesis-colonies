@@ -290,6 +290,100 @@ def backfill_combat_hof(*, limit: int | None = None, conn) -> Dict[str, Any]:
     }
 
 
+HOF_SYNC_RUNTIME_KEY = "combat_hof_last_message_id"
+HOF_SYNC_INTERVAL_SEC = 300
+
+
+def sync_combat_hof_incremental(*, conn, limit: int = 40) -> Dict[str, Any]:
+    """Import new combat inbox reports since last sync (no combat re-sim)."""
+    from .messages import _table_ready as messages_ready
+    from .runtime_state import get_runtime_value, set_runtime_value
+
+    if not hof_schema_ready(conn):
+        return {"ok": False, "error": "hof_schema_missing", "inserted": 0}
+    if not messages_ready(conn):
+        return {"ok": False, "error": "messages_schema_missing", "inserted": 0}
+
+    try:
+        last_id = int(get_runtime_value(HOF_SYNC_RUNTIME_KEY, conn=conn) or 0)
+    except (TypeError, ValueError):
+        last_id = 0
+
+    cur = conn.cursor()
+    cur.execute(f"SELECT fleet_id FROM {COMBAT_HOF_TABLE};")
+    existing_fleet_ids = {int(row["fleet_id"]) for row in cur.fetchall()}
+
+    cur.execute(
+        """
+        SELECT id, metadata_json, created_at
+        FROM player_messages
+        WHERE category = 'combat'
+          AND id > ?
+          AND (deleted_at IS NULL OR deleted_at = 0)
+          AND json_extract(metadata_json, '$.fleet_id') IS NOT NULL
+          AND json_extract(metadata_json, '$.report_phase') IS NULL
+        ORDER BY id ASC
+        LIMIT ?;
+        """,
+        (int(last_id), max(1, min(int(limit), 200))),
+    )
+
+    inserted = 0
+    skipped_existing = 0
+    skipped_invalid = 0
+    max_id = last_id
+
+    for row in cur.fetchall():
+        max_id = max(max_id, int(row["id"]))
+        meta = _json_loads(row["metadata_json"])
+        try:
+            fleet_id = int(meta.get("fleet_id"))
+        except (TypeError, ValueError):
+            skipped_invalid += 1
+            continue
+        if fleet_id in existing_fleet_ids:
+            skipped_existing += 1
+            continue
+        payload = _hof_payload_from_combat_metadata(meta)
+        if payload is None:
+            skipped_invalid += 1
+            continue
+        created_at = int(row["created_at"] or 0) or None
+        if record_hof_battle(**payload, created_at=created_at, conn=conn, prune=False):
+            inserted += 1
+            existing_fleet_ids.add(fleet_id)
+
+    pruned = prune_hof_entries_beyond_top(conn=conn) if inserted else 0
+    if max_id > last_id:
+        set_runtime_value(HOF_SYNC_RUNTIME_KEY, str(int(max_id)), conn=conn)
+
+    return {
+        "ok": True,
+        "inserted": inserted,
+        "skipped_existing": skipped_existing,
+        "skipped_invalid": skipped_invalid,
+        "pruned": pruned,
+        "last_message_id": max_id,
+    }
+
+
+def maybe_sync_combat_hof_incremental(*, conn, limit: int = 40) -> Dict[str, Any]:
+    """Throttled HoF catch-up for reports missed by live record_hof_battle."""
+    from .runtime_state import get_runtime_value, set_runtime_value
+
+    now = time.time()
+    throttle_key = "combat_hof_last_sync_at"
+    try:
+        last_at = float(get_runtime_value(throttle_key, conn=conn) or 0)
+    except (TypeError, ValueError):
+        last_at = 0.0
+    if last_at > 0 and (now - last_at) < float(HOF_SYNC_INTERVAL_SEC):
+        return {"ok": True, "skipped": "interval", "inserted": 0}
+    result = sync_combat_hof_incremental(conn=conn, limit=limit)
+    set_runtime_value(throttle_key, str(int(now)), conn=conn)
+    return result
+
+
 def record_hof_battle(
     *,
     fleet_id: int,

@@ -1283,6 +1283,11 @@ def get_sorted_ranking_entries(
         FROM players p
         LEFT JOIN player_scores ps ON ps.player_id = p.id
         {social_join}
+        WHERE NOT EXISTS (
+            SELECT 1 FROM users u
+            WHERE u.id = p.id
+              AND u.username IN ('gc_combat_bot_alpha', 'gc_combat_bot_beta')
+        )
         ORDER BY {total_expr} DESC,
                  COALESCE(ps.score_buildings, 0) DESC,
                  COALESCE(ps.score_research, 0) DESC,

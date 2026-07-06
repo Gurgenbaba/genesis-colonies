@@ -300,6 +300,7 @@
         break;
       case "balance":
         result = await loadAdminBalance();
+        loadAdminCombatBots().catch(() => {});
         break;
       case "server":
         result = await loadAdminServer();
@@ -741,6 +742,139 @@
       );
     } else {
       showAlert(res.message || res.error, "error");
+    }
+    return res;
+  }
+
+  function setCombatBotsStatus(msg) {
+    const host = qs("#admin-combat-bots-status");
+    if (host) host.textContent = msg || "";
+  }
+
+  function renderCombatBotsResults(payload) {
+    const host = qs("#admin-combat-bots-results");
+    if (!host) return;
+    const rows = payload?.results || payload?.status?.recent_results || [];
+    if (!rows.length) {
+      host.innerHTML = `<p class="admin-small-hint">${esc(t("admin_combat_bots_no_results", "Noch keine Bot-Kämpfe."))}</p>`;
+      return;
+    }
+    const head = `<tr><th>${esc(t("admin_combat_bots_col_scenario", "Szenario"))}</th><th>${esc(t("admin_combat_bots_col_winner", "Sieger"))}</th><th>${esc(t("admin_combat_bots_col_rounds", "Runden"))}</th><th>${esc(t("admin_combat_bots_col_fleet", "Flotte"))}</th><th>${esc(t("admin_combat_bots_col_status", "Status"))}</th></tr>`;
+    const body = rows
+      .map((r) => {
+        const resolved = r.resolved_at ? t("admin_combat_bots_resolved", "beendet") : t("admin_combat_bots_pending", "unterwegs");
+        return `<tr>
+          <td>${esc(String(r.scenario_key || ""))}</td>
+          <td>${esc(String(r.winner || "–"))}</td>
+          <td>${esc(String(r.rounds ?? "–"))}</td>
+          <td>${esc(String(r.fleet_movement_id ?? "–"))}</td>
+          <td>${esc(resolved)}</td>
+        </tr>`;
+      })
+      .join("");
+    host.innerHTML = `<table class="admin-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  }
+
+  function populateCombatBotsScenarioSelect(scenarios) {
+    const sel = qs("#admin-combat-bots-scenario");
+    if (!sel || !Array.isArray(scenarios) || !scenarios.length) return;
+    const current = sel.value;
+    sel.innerHTML = scenarios
+      .map(
+        (s) =>
+          `<option value="${esc(String(s.key))}">${esc(String(s.label || s.key))}</option>`
+      )
+      .join("");
+    if (current && scenarios.some((s) => s.key === current)) sel.value = current;
+  }
+
+  async function loadAdminCombatBots() {
+    setCombatBotsStatus(t("admin_combat_bots_loading", "Lade Bot-Status…"));
+    const data = await adminGet("/api/admin/combat-bots/results?limit=15");
+    if (!data.ok) {
+      setCombatBotsStatus(data.message || data.error || t("admin_action_failed", "Aktion fehlgeschlagen"));
+      return data;
+    }
+    const status = data.status || {};
+    populateCombatBotsScenarioSelect(status.scenarios || []);
+    const enabled = status.enabled ? t("admin_combat_bots_on", "aktiv") : t("admin_combat_bots_off", "inaktiv");
+    const cd = Number(status.cooldown_seconds || 0);
+    const nxt = status.next_scenario_key || "–";
+    const cnt = Number(status.scenario_count || 0);
+    setCombatBotsStatus(
+      `${t("admin_combat_bots_state", "Status")}: ${enabled}` +
+        ` — ${cnt} ${t("admin_combat_bots_scenarios", "Szenarien")}` +
+        ` — ${t("admin_combat_bots_next", "Nächstes")}: ${nxt}` +
+        (cd > 0 ? ` — ${t("admin_combat_bots_cooldown", "Cooldown")}: ${cd}s` : "")
+    );
+    renderCombatBotsResults(data);
+    return data;
+  }
+
+  async function ensureCombatBots() {
+    const res = await adminPost("/api/admin/combat-bots/ensure", {});
+    if (res.ok) {
+      notify(t("admin_combat_bots_ensure_ok", "Combat-Bots bereit."), "success");
+      await loadAdminCombatBots();
+    } else {
+      showAlert(res.message || res.error, "error");
+    }
+    return res;
+  }
+
+  async function toggleCombatBots(enabled) {
+    const res = await adminPost("/api/admin/combat-bots/toggle", { enabled: !!enabled });
+    if (res.ok) {
+      notify(
+        enabled
+          ? t("admin_combat_bots_enabled_msg", "Combat-Bots aktiviert.")
+          : t("admin_combat_bots_disabled_msg", "Combat-Bots deaktiviert."),
+        "success"
+      );
+      await loadAdminCombatBots();
+    } else {
+      showAlert(res.message || res.error, "error");
+    }
+    return res;
+  }
+
+  async function runCombatBotScenario(force) {
+    const sel = qs("#admin-combat-bots-scenario");
+    const scenarioKey = (sel?.value || "raptor_vs_aegis_equal_cost").trim();
+    setCombatBotsStatus(t("admin_combat_bots_running", "Starte Szenario…"));
+    const res = await adminPost("/api/admin/combat-bots/run-scenario", {
+      scenario_key: scenarioKey,
+      force: !!force,
+    });
+    if (res.ok) {
+      const flight = res.flight_seconds ?? "?";
+      notify(
+        t("admin_combat_bots_run_ok", "Angriff gestartet — echte Flugzeit.") + ` (${flight}s)`,
+        "success"
+      );
+      setCombatBotsStatus(
+        `${t("admin_combat_bots_run_ok", "Angriff gestartet — echte Flugzeit.")} fleet=${res.fleet_movement_id ?? "?"} flight=${flight}s`
+      );
+      await loadAdminCombatBots();
+    } else {
+      showAlert(res.message || res.error, "error");
+      setCombatBotsStatus(res.message || res.error || "");
+    }
+    return res;
+  }
+
+  async function runNextCombatBotScenario() {
+    setCombatBotsStatus(t("admin_combat_bots_running", "Starte Szenario…"));
+    const res = await adminPost("/api/admin/combat-bots/run-next-scenario", { force: true });
+    if (res.ok) {
+      notify(
+        `${t("admin_combat_bots_run_ok", "Angriff gestartet — echte Flugzeit.")} [${res.scenario_key || ""}]`,
+        "success"
+      );
+      await loadAdminCombatBots();
+    } else {
+      showAlert(res.message || res.error, "error");
+      setCombatBotsStatus(res.message || res.error || "");
     }
     return res;
   }
@@ -2874,6 +3008,11 @@
     if (act === "votes-search") return searchAdminVotesPlayers();
     if (act === "votes-reengagement-run") return runAdminVoteReengagement(btn);
     if (act === "combat-hof-backfill") return backfillCombatHof();
+    if (act === "combat-bots-ensure") return ensureCombatBots();
+    if (act === "combat-bots-toggle") return toggleCombatBots(btn.dataset.combatBotsEnabled === "1");
+    if (act === "combat-bots-run") return runCombatBotScenario(true);
+    if (act === "combat-bots-run-next") return runNextCombatBotScenario();
+    if (act === "combat-bots-refresh") return loadAdminCombatBots();
     if (act === "server-save") return saveAdminServer();
     if (act === "news-publish") return publishAdminNews(true);
     if (act === "news-publish-only") return publishAdminNews(false);

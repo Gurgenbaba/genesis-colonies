@@ -1175,7 +1175,20 @@ def validate_fleet_send(
     if mission == "attack" and target_info:
         target_planet_id = target_info.get("target_planet_id")
         target_player_id = target_info.get("target_player_id")
+        bot_fight = False
         if target_player_id:
+            from .combat_balance_bots import is_bot_versus_bot_fight, is_combat_balance_bot_player
+
+            atk_bot = is_combat_balance_bot_player(int(player_id), conn=conn)
+            def_bot = is_combat_balance_bot_player(int(target_player_id), conn=conn)
+            if atk_bot and not def_bot:
+                return False, "combat_bot_target_forbidden", {"target": target_info}
+            if def_bot and not atk_bot:
+                return False, "combat_bot_attacker_forbidden", {"target": target_info}
+            bot_fight = is_bot_versus_bot_fight(
+                int(player_id), int(target_player_id), conn=conn
+            )
+        if target_player_id and not bot_fight:
             ok_np, noob_protection_info = check_noob_protection(
                 int(player_id),
                 int(target_player_id),
@@ -1186,7 +1199,7 @@ def validate_fleet_send(
                     "target": target_info,
                     "noob_protection": noob_protection_info,
                 }
-        if target_planet_id:
+        if target_planet_id and not bot_fight:
             ok_limit, attack_limit_info = check_attack_limit(
                 int(player_id),
                 int(target_planet_id),
@@ -3077,7 +3090,13 @@ def _handle_attack_arrival(movement: Dict[str, Any], *, conn, now: float) -> boo
             )
             combat_applied = True
 
-        if combat_result is not None:
+        from .combat_balance_bots import finalize_combat_balance_run, is_bot_versus_bot_fight
+
+        bot_fight = defender_id > 0 and is_bot_versus_bot_fight(
+            int(player_id), int(defender_id), conn=conn
+        )
+
+        if combat_result is not None and not bot_fight:
             try:
                 from .scoring import record_combat_outcome
 
@@ -3163,22 +3182,23 @@ def _handle_attack_arrival(movement: Dict[str, Any], *, conn, now: float) -> boo
             defender_locale=defender_locale,
         )
         if combat_result is not None:
-            try:
-                from .directives.progress import emit_combat_directive_events
+            if not bot_fight:
+                try:
+                    from .directives.progress import emit_combat_directive_events
 
-                emit_combat_directive_events(
-                    int(player_id),
-                    movement_id=movement_id,
-                    winner=str(combat_result.winner or ""),
-                    defender_losses=combat_result.defender_losses,
-                    conn=conn,
-                    now=float(now),
-                )
-            except Exception:
-                logger.exception(
-                    "imperial_directives combat progress failed movement_id=%s",
-                    movement_id,
-                )
+                    emit_combat_directive_events(
+                        int(player_id),
+                        movement_id=movement_id,
+                        winner=str(combat_result.winner or ""),
+                        defender_losses=combat_result.defender_losses,
+                        conn=conn,
+                        now=float(now),
+                    )
+                except Exception:
+                    logger.exception(
+                        "imperial_directives combat progress failed movement_id=%s",
+                        movement_id,
+                    )
 
             try:
                 from .combat import calculate_combat_debris
@@ -3209,6 +3229,21 @@ def _handle_attack_arrival(movement: Dict[str, Any], *, conn, now: float) -> boo
                 )
             except Exception:
                 logger.exception("combat hall of fame record failed movement_id=%s", movement_id)
+
+            if bot_fight:
+                try:
+                    finalize_combat_balance_run(
+                        movement_id,
+                        combat_result=combat_result,
+                        loot=loot_taken,
+                        conn=conn,
+                        now=float(now),
+                    )
+                except Exception:
+                    logger.exception(
+                        "combat balance audit finalize failed movement_id=%s",
+                        movement_id,
+                    )
         return True
     except Exception:
         logger.exception(

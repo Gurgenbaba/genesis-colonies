@@ -21,6 +21,54 @@ logger = logging.getLogger(__name__)
 
 FLEET_WORKER_KEY = "fleet_worker_last"
 FLEET_WORKER_INTERVAL_SEC = float(os.environ.get("GC_FLEET_WORKER_INTERVAL_SEC", "60"))
+# Bot scheduler + HoF catch-up only on dedicated cron ticks — never during page/game-state polls.
+_BACKGROUND_MAINTENANCE_SOURCES = frozenset(
+    {
+        "cron",
+        "http_cron",
+        "fleet_cron",
+        "internal_cron",
+        "ranking_cron",
+    }
+)
+
+
+def _is_background_maintenance_source(source: str) -> bool:
+    return str(source or "").strip().lower() in _BACKGROUND_MAINTENANCE_SOURCES
+
+
+def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
+    """
+    HoF catch-up and combat-balance bot scheduler.
+
+    Runs only on cron sources with the fleet worker connection — never opens a
+    second writer during live page loads (SQLite lock safety).
+    """
+    if not _is_background_maintenance_source(source):
+        return
+    try:
+        begin_write_transaction(conn)
+        try:
+            from .combat_hof import maybe_sync_combat_hof_incremental
+
+            hof_sync = maybe_sync_combat_hof_incremental(conn=conn)
+            if hof_sync.get("inserted"):
+                _worker_log(f"hof-sync inserted={hof_sync.get('inserted')}")
+
+            from .combat_balance_bots import maybe_run_next_scheduled_scenario
+
+            bot_result = maybe_run_next_scheduled_scenario(conn=conn)
+            if bot_result.get("ok") and bot_result.get("fleet_movement_id"):
+                _worker_log(
+                    f"combat-bots scenario={bot_result.get('scenario_key')} "
+                    f"fleet={bot_result.get('fleet_movement_id')}"
+                )
+            commit(conn)
+        except Exception:
+            rollback(conn)
+            raise
+    except Exception:
+        logger.exception("post fleet maintenance failed source=%s", source)
 
 
 def _empty_worker_status() -> Dict[str, Any]:
@@ -223,6 +271,8 @@ def run_fleet_worker(
         tick_result = process_fleet_tick(player_id=None, conn=conn)
         commit(conn)
 
+        _maybe_run_post_fleet_maintenance(conn, source=source)
+
         duration_ms = int((time.perf_counter() - started) * 1000)
         result = {
             "ok": not bool(tick_result.get("errors")),
@@ -233,8 +283,12 @@ def run_fleet_worker(
             "duration_ms": duration_ms,
             "errors": list(tick_result.get("errors") or []),
         }
+
         if persist:
-            record_fleet_worker_result(result, source=source, conn=conn)
+            try:
+                record_fleet_worker_result(result, source=source, conn=conn)
+            except Exception:
+                logger.exception("record_fleet_worker_result failed")
         _worker_log(
             f"source={source} arrivals={result['processed_arrivals']} "
             f"holding={result['processed_holding']} returns={result['processed_returns']} "

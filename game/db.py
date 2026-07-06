@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import sys
 import threading
 import time
 from contextlib import contextmanager
@@ -51,6 +52,29 @@ def _is_sqlite_lock_error(exc: BaseException) -> bool:
         return False
     msg = str(exc).lower()
     return "locked" in msg or "busy" in msg
+
+
+def format_sqlite_lock_startup_help() -> str:
+    """Actionable hint when bootstrap cannot open the SQLite file for writing."""
+    db_path = resolve_db_path()
+    try:
+        resolved = str(db_path.resolve())
+    except OSError:
+        resolved = str(db_path)
+    lines = [
+        "[GC bootstrap] database is locked — another process is using the SQLite file.",
+        f"[GC bootstrap] DB path: {resolved}",
+        "[GC bootstrap] Local dev: GC_DB_PATH=game/game.db (see .env).",
+        "[GC bootstrap] Railway: GC_DB_PATH=/data/game.db on the web service volume.",
+        "[GC bootstrap] Fix: stop other python app.py / pytest instances, then retry.",
+    ]
+    if sys.platform == "win32":
+        lines.append(
+            "[GC bootstrap] Windows: Get-Process python | "
+            "Stop-Process -Id <pid> -Force"
+        )
+    return "\n".join(lines)
+
 
 def get_db_backend() -> str:
     return os.environ.get("GC_DB_BACKEND", "sqlite").strip().lower()

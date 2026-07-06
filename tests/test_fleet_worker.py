@@ -15,6 +15,8 @@ from game.fleet_worker import (
     FLEET_WORKER_INTERVAL_SEC,
     FLEET_WORKER_KEY,
     any_due_fleet_movements,
+    _is_background_maintenance_source,
+    _maybe_run_post_fleet_maintenance,
     run_fleet_worker,
 )
 from game.models import get_planets_by_player
@@ -73,6 +75,36 @@ def _start_expedition(conn, uid: int, pid: int) -> int:
     )
     assert ok, reason
     return int(result["fleet"]["id"])
+
+
+def test_background_maintenance_source_gate():
+    assert _is_background_maintenance_source("http_cron")
+    assert _is_background_maintenance_source("cron")
+    assert not _is_background_maintenance_source("overview")
+    assert not _is_background_maintenance_source("game_state")
+
+
+def test_post_fleet_maintenance_skipped_on_page_load(fleet_db, monkeypatch):
+    called = {"hof": False, "bot": False}
+
+    def fake_hof(**kw):
+        called["hof"] = True
+        return {"inserted": 0}
+
+    def fake_bot(**kw):
+        called["bot"] = True
+        return {"ok": True, "skipped": "disabled"}
+
+    monkeypatch.setattr("game.combat_hof.maybe_sync_combat_hof_incremental", fake_hof)
+    monkeypatch.setattr(
+        "game.combat_balance_bots.maybe_run_next_scheduled_scenario",
+        fake_bot,
+    )
+    conn = db()
+    _maybe_run_post_fleet_maintenance(conn, source="overview")
+    assert called["hof"] is False
+    assert called["bot"] is False
+    conn.close()
 
 
 def test_global_fleet_worker_processes_due_expedition(fleet_db):

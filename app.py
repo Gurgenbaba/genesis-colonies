@@ -4462,6 +4462,218 @@ def api_admin_backfill_combat_hof():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+@app.route("/api/admin/combat-bots/ensure", methods=["POST"])
+@require_admin_api
+def api_admin_combat_bots_ensure():
+    admin = get_current_user()
+    admin_id = int(admin["id"]) if admin else 0
+    conn = db()
+    try:
+        from game.db import begin_write_transaction, commit
+        from game.combat_balance_bots import ensure_combat_balance_bots
+
+        begin_write_transaction(conn)
+        payload = ensure_combat_balance_bots(conn=conn)
+        commit(conn)
+        if admin_id:
+            try:
+                from game.admin_audit import write_admin_audit
+
+                write_admin_audit(
+                    admin_id,
+                    "combat_bots_ensure",
+                    target_type="system",
+                    payload={"alpha_id": payload["alpha"]["player_id"], "beta_id": payload["beta"]["player_id"]},
+                )
+            except Exception:
+                pass
+        return jsonify(payload)
+    except Exception as exc:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        conn.close()
+
+
+@app.route("/api/admin/combat-bots/run-scenario", methods=["POST"])
+@require_admin_api
+def api_admin_combat_bots_run_scenario():
+    admin = get_current_user()
+    admin_id = int(admin["id"]) if admin else 0
+    body = request.get_json(silent=True) or {}
+    scenario_key = str(body.get("scenario_key") or "").strip()
+    force = bool(body.get("force"))
+    if not scenario_key:
+        return jsonify({"ok": False, "error": "missing_scenario_key"}), 400
+    conn = db()
+    try:
+        from game.db import begin_write_transaction, commit
+        from game.combat_balance_bots import run_combat_balance_scenario
+
+        begin_write_transaction(conn)
+        result = run_combat_balance_scenario(
+            scenario_key,
+            conn=conn,
+            force=force,
+            skip_cooldown=force,
+        )
+        if result.get("ok"):
+            commit(conn)
+        else:
+            conn.rollback()
+        if admin_id and result.get("ok"):
+            try:
+                from game.admin_audit import write_admin_audit
+
+                write_admin_audit(
+                    admin_id,
+                    "combat_bots_run_scenario",
+                    target_type="scenario",
+                    target_id=scenario_key,
+                    payload={
+                        "run_id": result.get("run_id"),
+                        "fleet_movement_id": result.get("fleet_movement_id"),
+                        "flight_seconds": result.get("flight_seconds"),
+                    },
+                )
+            except Exception:
+                pass
+        status = 200 if result.get("ok") else 400
+        return jsonify(result), status
+    except Exception as exc:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        conn.close()
+
+
+@app.route("/api/admin/combat-bots/run-next-scenario", methods=["POST"])
+@require_admin_api
+def api_admin_combat_bots_run_next_scenario():
+    admin = get_current_user()
+    admin_id = int(admin["id"]) if admin else 0
+    body = request.get_json(silent=True) or {}
+    force = bool(body.get("force"))
+    conn = db()
+    try:
+        from game.db import begin_write_transaction, commit
+        from game.combat_balance_bots import advance_scenario_index, resolve_next_scenario_key, run_combat_balance_scenario
+
+        key = resolve_next_scenario_key(conn=conn)
+        begin_write_transaction(conn)
+        result = run_combat_balance_scenario(
+            key,
+            conn=conn,
+            force=force,
+            skip_cooldown=force,
+        )
+        if result.get("ok"):
+            advance_scenario_index(conn=conn)
+            commit(conn)
+        else:
+            conn.rollback()
+        if admin_id and result.get("ok"):
+            try:
+                from game.admin_audit import write_admin_audit
+
+                write_admin_audit(
+                    admin_id,
+                    "combat_bots_run_next_scenario",
+                    target_type="scenario",
+                    target_id=key,
+                    payload={"fleet_movement_id": result.get("fleet_movement_id")},
+                )
+            except Exception:
+                pass
+        status = 200 if result.get("ok") else 400
+        return jsonify(result), status
+    except Exception as exc:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        conn.close()
+
+
+@app.route("/api/admin/combat-bots/toggle", methods=["POST"])
+@require_admin_api
+def api_admin_combat_bots_toggle():
+    admin = get_current_user()
+    admin_id = int(admin["id"]) if admin else 0
+    body = request.get_json(silent=True) or {}
+    if "enabled" not in body:
+        return jsonify({"ok": False, "error": "missing_enabled"}), 400
+    enabled = bool(body.get("enabled"))
+    conn = db()
+    try:
+        from game.db import begin_write_transaction, commit
+        from game.combat_balance_bots import set_combat_balance_bots_enabled
+
+        begin_write_transaction(conn)
+        set_combat_balance_bots_enabled(enabled, conn=conn)
+        commit(conn)
+        if admin_id:
+            try:
+                from game.admin_audit import write_admin_audit
+
+                write_admin_audit(
+                    admin_id,
+                    "combat_bots_toggle",
+                    target_type="system",
+                    payload={"enabled": enabled},
+                )
+            except Exception:
+                pass
+        return jsonify({"ok": True, "enabled": enabled})
+    except Exception as exc:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        conn.close()
+
+
+@app.route("/api/admin/combat-bots/results", methods=["GET"])
+@require_admin_api
+def api_admin_combat_bots_results():
+    limit_raw = request.args.get("limit", "20")
+    try:
+        limit = max(1, min(200, int(limit_raw)))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "invalid_limit"}), 400
+    conn = db()
+    try:
+        from game.combat_balance_bots import (
+            get_combat_balance_bots_snapshot,
+            list_combat_balance_results,
+        )
+
+        return jsonify(
+            {
+                "ok": True,
+                "results": list_combat_balance_results(conn=conn, limit=limit),
+                "status": {
+                    **get_combat_balance_bots_snapshot(conn=conn),
+                    "recent_results": list_combat_balance_results(conn=conn, limit=10),
+                },
+            }
+        )
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        conn.close()
+
+
 @app.route("/api/admin/rankings/recalculate", methods=["POST"])
 @require_admin_api
 def api_admin_recalculate_rankings():
@@ -9552,4 +9764,6 @@ if __name__ == "__main__":
         raise SystemExit(1)
     threaded_raw = os.environ.get("GC_FLASK_THREADED", "1" if not is_production() else "0").strip().lower()
     threaded = threaded_raw in ("1", "true", "yes", "on")
-    app.run(host=host, port=port, debug=is_debug_enabled(), threaded=threaded)
+    reloader_raw = os.environ.get("GC_FLASK_RELOADER", "1" if is_debug_enabled() else "0").strip().lower()
+    use_reloader = reloader_raw in ("1", "true", "yes", "on")
+    app.run(host=host, port=port, debug=is_debug_enabled(), threaded=threaded, use_reloader=use_reloader)

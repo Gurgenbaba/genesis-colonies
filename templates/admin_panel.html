@@ -493,6 +493,26 @@
       <div id="admin-balance-status" class="admin-small-hint" aria-live="polite"></div>
 
       <div class="admin-section-title">
+        <span class="admin-section-title-text">{{ T("admin_combat_bots_title", "Combat Balance Bots") }}</span>
+      </div>
+      <section class="admin-section" id="admin-combat-bots-panel">
+        <p class="admin-tab-hint admin-small-hint">{{ T("admin_combat_bots_hint", "Zwei interne Test-Bots — echte Angriffsflüge, kein Simulations-Spam. Standard: deaktiviert.") }}</p>
+        <div class="admin-toolbar admin-action-row-wrap">
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="combat-bots-ensure">{{ T("admin_combat_bots_ensure", "Bots anlegen") }}</button>
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="combat-bots-toggle" data-combat-bots-enabled="1">{{ T("admin_combat_bots_enable", "Aktivieren") }}</button>
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="combat-bots-toggle" data-combat-bots-enabled="0">{{ T("admin_combat_bots_disable", "Deaktivieren") }}</button>
+          <select id="admin-combat-bots-scenario" class="gc-input admin-search-input" data-gc-hud-select>
+            <option value="raptor_vs_aegis_equal_cost">{{ T("admin_combat_bots_scenario_raptor_aegis", "Raptor vs Aegis (equal cost)") }}</option>
+          </select>
+          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="combat-bots-run">{{ T("admin_combat_bots_run", "Szenario starten") }}</button>
+          <button type="button" class="gc-btn gc-btn-secondary gc-btn-sm" data-admin-action="combat-bots-run-next">{{ T("admin_combat_bots_run_next", "Nächstes Szenario") }}</button>
+          <button type="button" class="gc-btn gc-btn-secondary gc-btn-sm" data-admin-action="combat-bots-refresh">{{ T("admin_combat_bots_refresh", "Ergebnisse laden") }}</button>
+        </div>
+        <div id="admin-combat-bots-status" class="admin-small-hint" aria-live="polite"></div>
+        <div id="admin-combat-bots-results" class="admin-panel-body admin-table-wrap" aria-live="polite"></div>
+      </section>
+
+      <div class="admin-section-title">
         <span class="admin-section-title-text">{{ T("admin_balance_section_start", "Startressourcen") }}</span>
       </div>
       <section class="admin-section">
