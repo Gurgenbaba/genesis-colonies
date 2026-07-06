@@ -218,6 +218,21 @@ def _side_from_stacks(
     return units
 
 
+def _clone_units(units: Sequence[_UnitState]) -> List[_UnitState]:
+    return [
+        _UnitState(
+            unit_key=u.unit_key,
+            unit_type=u.unit_type,
+            amount=max(0, int(u.amount)),
+            stats=u.stats,
+            current_shield=max(0, int(u.current_shield)),
+            current_hull=max(0, int(u.current_hull)),
+        )
+        for u in units
+        if int(u.amount) > 0
+    ]
+
+
 def _sorted_live_units(units: Sequence[_UnitState]) -> List[_UnitState]:
     return sorted(
         [u for u in units if int(u.amount) > 0],
@@ -380,6 +395,28 @@ def _side_firepower(units: Sequence[_UnitState], mods: CombatModifiers) -> int:
     return power
 
 
+def _reset_live_shields(units: Sequence[_UnitState], mods: CombatModifiers) -> None:
+    """OGame-like round boundary: surviving lead units start each round with full shields."""
+    for unit in units:
+        if int(unit.amount) > 0:
+            unit.current_shield = _effective_shield(unit.stats, mods)
+
+
+def _resolve_elimination_winner(
+    attacker_units: Sequence[_UnitState],
+    defender_units: Sequence[_UnitState],
+) -> str:
+    atk_left = _total_units(attacker_units)
+    def_left = _total_units(defender_units)
+    if atk_left > 0 and def_left <= 0:
+        return WINNER_ATTACKER
+    if def_left > 0 and atk_left <= 0:
+        return WINNER_DEFENDER
+    if atk_left <= 0 and def_left <= 0:
+        return WINNER_DRAW
+    return WINNER_DRAW
+
+
 def _resolve_winner(
     attacker_units: Sequence[_UnitState],
     defender_units: Sequence[_UnitState],
@@ -423,26 +460,27 @@ def _run_round(
     rng: random.Random,
 ) -> Tuple[Dict[str, int], Dict[str, int]]:
     """
-    One battle round: attacker shoots, defender shoots, shield/hull damage, losses tracked.
+    One battle round: both sides fire from their round-start stacks, then losses are tracked.
     """
     before_atk = _initial_counts(atk_units)
     before_def = _initial_counts(def_units)
+    atk_shooters = _clone_units(atk_units)
+    def_shooters = _clone_units(def_units)
 
     _shooting_phase(
-        atk_units,
+        atk_shooters,
         def_units,
         attacker_mods=atk_mods,
         defender_mods=def_mods,
         rng=rng,
     )
-    if _total_units(def_units) > 0 and _total_units(atk_units) > 0:
-        _shooting_phase(
-            def_units,
-            atk_units,
-            attacker_mods=def_mods,
-            defender_mods=atk_mods,
-            rng=rng,
-        )
+    _shooting_phase(
+        def_shooters,
+        atk_units,
+        attacker_mods=def_mods,
+        defender_mods=atk_mods,
+        rng=rng,
+    )
 
     return _round_losses(before_atk, before_def, atk_units, def_units)
 
@@ -464,7 +502,9 @@ def simulate_battle(
     """
     Run a combat simulation. Inputs are not mutated; no side effects.
 
-    Per round: attacker shoots → defender shoots (rapid fire + shield/hull per shot).
+    Per round: both sides fire from their round-start stacks (rapid fire + shield/hull per shot).
+    Combat ends early only when one side is eliminated; otherwise the final
+    winner is decided after the round cap by remaining firepower.
     Pass ``attacker_player_id`` / ``defender_player_id`` to apply account research via
     :class:`game.effects.effect_resolver.EffectResolver` (weapon_tech, armor_tech, shield_tech).
     Explicit ``*_modifiers`` are added on top of resolver bonuses.
@@ -518,6 +558,8 @@ def simulate_battle(
     for round_no in range(1, rounds_limit + 1):
         if _total_units(atk_units) <= 0 or _total_units(def_units) <= 0:
             break
+        _reset_live_shields(atk_units, atk_mods)
+        _reset_live_shields(def_units, def_mods)
 
         round_atk_losses, round_def_losses = _run_round(
             atk_units,
@@ -536,7 +578,7 @@ def simulate_battle(
             )
         )
 
-        winner = _resolve_winner(atk_units, def_units, atk_mods=atk_mods, def_mods=def_mods)
+        winner = _resolve_elimination_winner(atk_units, def_units)
         if winner != WINNER_DRAW:
             break
 

@@ -29,9 +29,9 @@ Inputs are **not mutated**; no DB side effects.
 1. Build `_UnitState` per stack (shield/hull per lead unit).
 2. Early exit: both empty → draw; one side empty → other side wins (no rounds).
 3. Up to **6 rounds** (`DEFAULT_MAX_ROUNDS`); `max_rounds` is clamped to `[1, 6]`.
-4. Each round: attacker shoots → defender shoots.
+4. Each round: surviving lead units refresh shields, then both sides fire from their round-start stacks.
 5. Per shot: pick random live target, apply damage (shield then hull), rapid fire chain (cap **64**).
-6. Winner: side with units left; tie-break by remaining firepower; else draw.
+6. Early end only when one side is eliminated; if both sides still stand after round 6, tie-break by remaining firepower; else draw.
 
 Research modifiers (per side, additive on explicit overrides):
 
@@ -143,7 +143,7 @@ Mass single-ship stacks are intentionally avoided: mixed fleets and planet defen
 | Unknown unit keys in stock maps | Skipped by `stacks_from_counts()` |
 | `max_rounds=0` while fighting | Still runs 1 round (clamped) |
 | Non-combat ships (0 attack) | Contribute hull only; may extend to draw at round cap |
-| Shield-only damage | No unit loss until hull reaches 0 |
+| Shield-only damage | No unit loss until hull reaches 0; surviving lead-unit shields refresh each round |
 
 ---
 

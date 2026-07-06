@@ -218,7 +218,7 @@ def test_rapid_fire_increases_kills_vs_same_attack_without_rf():
     assert sum(falcon_result.defender_losses.values()) > sum(mule_result.defender_losses.values())
 
 
-def test_round_structure_attacker_then_defender_phase():
+def test_round_structure_records_per_round_losses():
     attacker = make_combat_side("attacker", [_stack("falcon_interceptor", 5)])
     defender = make_combat_side("defender", [_stack("falcon_interceptor", 5)])
     result = simulate_battle(attacker, defender, max_rounds=6, rng=_rng(1))
@@ -322,6 +322,32 @@ def test_shield_delays_defense_losses_in_battle():
 
     assert sum(result.defender_losses.values()) == 0
     assert result.rounds[0].defender_losses == {}
+
+
+def test_firepower_tiebreak_waits_until_round_cap():
+    attacker = make_combat_side("attacker", [_stack("falcon_interceptor", 1)])
+    defender = make_combat_side(
+        "defender",
+        [_stack("pulse_barrier", 1, unit_type=COMBAT_UNIT_DEFENSE)],
+    )
+    result = simulate_battle(attacker, defender, max_rounds=6, rng=_rng(12))
+
+    assert len(result.rounds) == 6
+    assert result.winner == WINNER_ATTACKER
+    assert result.attacker_losses == {}
+    assert result.defender_losses == {}
+
+
+def test_shields_refresh_between_combat_rounds():
+    attacker = make_combat_side("attacker", [_stack("falcon_interceptor", 10)])
+    defender = make_combat_side(
+        "defender",
+        [_stack("pulse_barrier", 1, unit_type=COMBAT_UNIT_DEFENSE)],
+    )
+    result = simulate_battle(attacker, defender, max_rounds=6, rng=_rng(13))
+
+    assert len(result.rounds) == 6
+    assert result.defender_losses == {}
 
 
 def test_shield_bonus_reduces_hull_damage():
@@ -600,7 +626,7 @@ def test_balance_scout_squad_deals_damage_to_light_fleet():
     assert sum(result.defender_losses.values()) > 0
 
 
-def test_balance_mass_raptor_not_dominant_vs_mixed_fleet():
+def test_balance_raptor_counters_unarmored_light_screen_over_full_rounds():
     budget = 50_000
     falcon_n = _ships_for_budget("falcon_interceptor", budget)
     scout_n = _ships_for_budget("spark_drone", budget)
@@ -617,7 +643,28 @@ def test_balance_mass_raptor_not_dominant_vs_mixed_fleet():
         for seed in range(20)
         if simulate_battle(mass_raptor, mixed, rng=_rng(seed)).winner == WINNER_ATTACKER
     )
-    assert wins < 16, "mass Raptor should not clearly beat equal-cost mixed fleet"
+    assert wins >= 16, "Raptor should punish unarmored light screens over full rounds"
+
+
+def test_balance_mass_raptor_not_dominant_vs_heavy_mixed_fleet():
+    budget = 50_000
+    falcon_n = _ships_for_budget("falcon_interceptor", budget)
+    scout_n = _ships_for_budget("spark_drone", budget)
+    mass_raptor = make_combat_side("attacker", [_stack("falcon_interceptor", falcon_n)])
+    mixed = make_combat_side(
+        "defender",
+        [
+            _stack("falcon_interceptor", falcon_n // 2),
+            _stack("spark_drone", scout_n // 4),
+            _stack("ironclad_frigate", 1),
+        ],
+    )
+    wins = sum(
+        1
+        for seed in range(20)
+        if simulate_battle(mass_raptor, mixed, rng=_rng(seed)).winner == WINNER_ATTACKER
+    )
+    assert wins < 16, "mass Raptor should not clearly beat heavy mixed fleet"
 
 
 def test_balance_mixed_fleet_beats_mass_raptor_as_attacker():
