@@ -1551,6 +1551,8 @@ def galaxy_view():
     system = 1
     active_planet_id: int | None = None
     hold_mission_enabled = False
+    has_seed_ark = False
+    planet_relocation: dict[str, Any] = {"active": False, "can_start": False}
     has_url_view = (
         request.args.get("galaxy", type=int) is not None
         or request.args.get("system", type=int) is not None
@@ -1590,6 +1592,13 @@ def galaxy_view():
     galactic_diplomacy_banner: dict[str, Any] = {"visible": False}
     try:
         hold_mission_enabled = _hold_mission_enabled(conn=conn)
+        from game.galaxy import get_relocation_client_state, player_has_seed_ark, relocation_schema_ready
+
+        has_seed_ark = player_has_seed_ark(user_id, conn=conn)
+        if active_planet_id and relocation_schema_ready(conn):
+            planet_relocation = get_relocation_client_state(
+                int(active_planet_id), conn=conn, now=time.time()
+            )
         if view == "command_map":
             from game.planet_evolution.command_map import build_command_map_payload
 
@@ -1636,6 +1645,8 @@ def galaxy_view():
         expedition_slot=build_expedition_slot(galaxy, system) if view != "command_map" else None,
         orbit_radii=galaxy_ring_orbit_radii_payload() if view != "command_map" else None,
         hold_mission_enabled=hold_mission_enabled,
+        has_seed_ark=has_seed_ark,
+        planet_relocation=planet_relocation,
         galaxy_view=view,
         command_map=command_map,
         galactic_directive_banner=galactic_directive_banner,
@@ -5402,6 +5413,42 @@ def api_planet_delete():
     return _options_api_response(True, err, data)
 
 
+@app.route("/api/planet/relocation/start", methods=["POST"])
+@require_login_api
+def api_planet_relocation_start():
+    pid = _current_player_id()
+    assert pid is not None
+    payload = request.get_json(silent=True) or {}
+    meta = _options_request_meta()
+    try:
+        galaxy = int(payload.get("galaxy") or payload.get("target_galaxy") or 0)
+        system = int(payload.get("system") or payload.get("target_system") or 0)
+        position = int(payload.get("position") or payload.get("target_position") or 0)
+    except (TypeError, ValueError):
+        return _action_json_response(
+            False,
+            "planet_relocation_invalid_coords",
+            None,
+            finish_source="api_planet_relocation_start",
+        )
+    from game.galaxy import start_planet_relocation
+
+    ok, err, data = start_planet_relocation(
+        int(pid),
+        galaxy,
+        system,
+        position,
+        ip=meta["ip"],
+        user_agent=meta["user_agent"],
+    )
+    return _action_json_response(
+        ok,
+        err,
+        data if ok else data,
+        finish_source="api_planet_relocation_start",
+    )
+
+
 @app.route("/api/options/email", methods=["POST"])
 @require_login_api
 def api_options_email():
@@ -6343,6 +6390,27 @@ def _payload_from_live_context(
             "current": len(payload.get("planets") or []) or 1,
             "max": 9,
         }
+
+    try:
+        from game.galaxy import get_relocation_client_state, relocation_schema_ready
+
+        if relocation_schema_ready(conn):
+            payload["planet_relocation"] = get_relocation_client_state(
+                int(active_planet_id),
+                conn=conn,
+                now=time.time(),
+            )
+        else:
+            payload["planet_relocation"] = {"active": False, "can_start": False}
+    except Exception:
+        payload["planet_relocation"] = {"active": False, "can_start": False}
+
+    try:
+        from game.galaxy import player_has_seed_ark
+
+        payload["has_seed_ark"] = player_has_seed_ark(user_id, conn=conn)
+    except Exception:
+        payload["has_seed_ark"] = False
 
     if include_panel:
         try:

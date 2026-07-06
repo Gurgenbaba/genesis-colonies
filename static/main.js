@@ -3785,6 +3785,7 @@
         shipyard: "/shipyard",
         defense: "/defense",
         fleet: "/fleet",
+        relocation: "/overview",
       };
       if (map[key]) return map[key];
       if (String(key || "").startsWith("fleet_")) return "/fleet";
@@ -11696,6 +11697,9 @@
         patchOverviewStatus(data.overview, data, buildings, prod);
         if (data.planet_teaser) patchPlanetTeaser(data.planet_teaser);
       }
+      if (typeof GC.patchPlanetRelocationFromState === "function") {
+        GC.patchPlanetRelocationFromState(data);
+      }
 
       if (forcePanel || shouldPatchGameStateModule("buildings")) {
       Object.keys(BUILDINGS).forEach((key) => {
@@ -12065,6 +12069,67 @@
     root.className = `gc-planet-teaser gc-panel gc-planet-teaser-${teaser.status || "countdown"}`;
   }
 
+  function patchPlanetRelocationFromState(data) {
+    const block = (data && data.planet_relocation) || (data && data.overview && data.overview.status && data.overview.status.planet && data.overview.status.planet.relocation);
+    if (!block || typeof block !== "object") return;
+
+    const form = document.getElementById("overview-planet-relocation-form");
+    const activeWrap = document.getElementById("overview-planet-relocation-active");
+    const cooldownWrap = document.getElementById("overview-planet-relocation-cooldown");
+    const currentEl = document.getElementById("overview-planet-relocation-current");
+    const targetEl = document.getElementById("overview-planet-relocation-target");
+    const timerEl = document.getElementById("overview-planet-relocation-timer");
+    const cooldownTimerEl = document.getElementById("overview-planet-relocation-cooldown-timer");
+    const startBtn = document.getElementById("overview-planet-relocation-btn");
+    if (!form) return;
+
+    const coordsDisplay =
+      (data.active_planet && data.active_planet.coordinates_formatted) ||
+      (data.overview && data.overview.status && data.overview.status.planet && data.overview.status.planet.coordinates && data.overview.status.planet.coordinates.display) ||
+      "";
+    if (currentEl) {
+      if (coordsDisplay) {
+        currentEl.textContent = tf("overview_planet_relocation_current", { coords: coordsDisplay }, "Aktuell: %(coords)s");
+        currentEl.hidden = false;
+      } else {
+        currentEl.hidden = true;
+      }
+    }
+
+    const coordsEl = document.getElementById("overview-planet-coords");
+    if (coordsEl && coordsDisplay && !block.active) {
+      _setIfChanged(coordsEl, coordsDisplay);
+    }
+
+    const isActive = Boolean(block.active);
+    const onCooldown = !isActive && !block.can_start && Number(block.cooldown_remaining_seconds || 0) > 0;
+
+    if (activeWrap) activeWrap.hidden = !isActive;
+    if (cooldownWrap) cooldownWrap.hidden = !onCooldown;
+    form.hidden = isActive || onCooldown || block.can_start === false;
+
+    if (isActive) {
+      if (targetEl) targetEl.textContent = String(block.target || "");
+      if (timerEl) {
+        const finishAt = Number(block.finish_at || 0);
+        const rem = Math.max(0, Number(block.remaining_seconds || 0));
+        timerEl.textContent = formatDuration(rem);
+        if (finishAt > 0) {
+          timerEl.dataset.timerTarget = String(finishAt);
+          timerEl.dataset.countdownAt = String(finishAt);
+          timerEl.dataset.refreshOnZero = "game-state";
+        }
+      }
+    } else if (onCooldown && cooldownTimerEl) {
+      cooldownTimerEl.textContent = formatDuration(Math.max(0, Number(block.cooldown_remaining_seconds || 0)));
+    }
+
+    if (startBtn) {
+      startBtn.disabled = isActive || onCooldown || block.can_start === false;
+    }
+  }
+  GC.patchPlanetRelocationFromState = patchPlanetRelocationFromState;
+
   function initOverview() {
     const trigger = document.getElementById("overview-planet-menu-trigger");
     const modal = document.getElementById("gc-planet-manage-root");
@@ -12108,6 +12173,9 @@
       const currentName = document.getElementById("overview-planet-name");
       if (nameInput && currentName) nameInput.value = (currentName.textContent || "").trim();
       syncDeleteState();
+      if (typeof GC.patchPlanetRelocationFromState === "function" && GC.lastState) {
+        GC.patchPlanetRelocationFromState(GC.lastState);
+      }
       if (hintEl) {
         hintEl.textContent = "";
         hintEl.hidden = true;
@@ -12224,6 +12292,50 @@
           if (err && err.message === "auth") return;
           setHint(t("planet_error_delete_failed", "Löschen fehlgeschlagen."), true);
           syncDeleteState();
+        }
+      });
+    }
+
+    const relocationForm = document.getElementById("overview-planet-relocation-form");
+    if (relocationForm && !relocationForm.dataset.bound) {
+      relocationForm.dataset.bound = "1";
+      relocationForm.addEventListener("submit", async (ev) => {
+        ev.preventDefault();
+        const gEl = document.getElementById("overview-planet-relocation-galaxy");
+        const sEl = document.getElementById("overview-planet-relocation-system");
+        const pEl = document.getElementById("overview-planet-relocation-position");
+        const galaxy = parseInt(gEl && gEl.value, 10);
+        const system = parseInt(sEl && sEl.value, 10);
+        const position = parseInt(pEl && pEl.value, 10);
+        if (!galaxy || !system || !position) return;
+        setHint("", false);
+        const startBtn = document.getElementById("overview-planet-relocation-btn");
+        if (startBtn) startBtn.disabled = true;
+        try {
+          const res = await GC.fetchGameAction("/api/planet/relocation/start", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ galaxy, system, position }),
+          });
+          if (typeof applyActionState === "function") applyActionState(res, "planet_relocation_start");
+          if (!res.ok) {
+            setHint(t(res.reason || res.error || "planet_relocation_failed", "Verschieben fehlgeschlagen."), true);
+            if (typeof GC.patchPlanetRelocationFromState === "function" && res.state) {
+              GC.patchPlanetRelocationFromState(res.state);
+            }
+            return;
+          }
+          setHint(t("planet_relocation_started", "Evakuierung gestartet."), false);
+          if (typeof GC.patchPlanetRelocationFromState === "function" && res.state) {
+            GC.patchPlanetRelocationFromState(res.state);
+          }
+        } catch (err) {
+          if (err && err.message === "auth") return;
+          setHint(t("planet_relocation_failed", "Verschieben fehlgeschlagen."), true);
+        } finally {
+          if (typeof GC.patchPlanetRelocationFromState === "function" && GC.lastState) {
+            GC.patchPlanetRelocationFromState(GC.lastState);
+          }
         }
       });
     }

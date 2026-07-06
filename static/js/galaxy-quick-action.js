@@ -467,6 +467,46 @@
       if (this._attackMenu) this.closeAttackMenu();
     },
 
+    async handleRelocationClick(ev, root) {
+      const btn = ev.target.closest("[data-galaxy-relocation-start]");
+      if (!btn || !root.contains(btn)) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+
+      const { t, showNotify, fetchGameAction, applyActionState } = deps();
+      const { targetGalaxy, targetSystem, targetPosition } = this.parseTargetCoords(btn);
+      const coords = this.coordsLabel(targetGalaxy, targetSystem, targetPosition);
+
+      if (!targetGalaxy || !targetSystem || !targetPosition || !fetchGameAction) return;
+
+      await this.runGuarded(btn, async () => {
+        const res = await fetchGameAction("/api/planet/relocation/start", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Requested-With": "XMLHttpRequest",
+          },
+          body: JSON.stringify({
+            galaxy: targetGalaxy,
+            system: targetSystem,
+            position: targetPosition,
+            request_id: this.makeRequestId("galaxy-reloc"),
+          }),
+        });
+        if (res?.ok) {
+          applyActionState(res, "planet_relocation_start");
+          const tpl = t("galaxy_relocation_success", "Evacuation to %(coords)s started.");
+          showNotify(tpl.replace("%(coords)s", coords), "success");
+          if (typeof window.GC?.reloadCurrentPage === "function") {
+            await window.GC.reloadCurrentPage({ force: true });
+          }
+        } else {
+          const reason = res?.reason || res?.error || "planet_relocation_failed";
+          showNotify(t(reason, t("planet_relocation_failed", "Relocation failed.")), "error");
+        }
+      });
+    },
+
     resetAttackPresetCache() {
       this._attackPresetsCache = null;
     },
@@ -477,12 +517,14 @@
       const onAttackMenu = (ev) => this.handleAttackMenuClick(ev);
       const onAttackOutside = (ev) => this.handleAttackOutsideClick(ev);
       const onDebris = (ev) => this.handleDebrisRecycleClick(ev, root);
+      const onRelocate = (ev) => this.handleRelocationClick(ev, root);
 
       root.addEventListener("click", onSpy);
       root.addEventListener("click", onAttack);
       document.addEventListener("click", onAttackMenu);
       document.addEventListener("click", onAttackOutside);
       root.addEventListener("click", onDebris);
+      root.addEventListener("click", onRelocate);
 
       return () => {
         root.removeEventListener("click", onSpy);
@@ -490,6 +532,7 @@
         document.removeEventListener("click", onAttackMenu);
         document.removeEventListener("click", onAttackOutside);
         root.removeEventListener("click", onDebris);
+        root.removeEventListener("click", onRelocate);
         this.closeAttackMenu();
         this.resetAttackPresetCache();
       };

@@ -50,8 +50,8 @@ def _format_remaining(seconds: int) -> str:
     return f"{rm}:{rs:02d}"
 
 
-def build_planet_meta(planet: Dict[str, Any]) -> Dict[str, Any]:
-    from .galaxy import get_planet_coordinates
+def build_planet_meta(planet: Dict[str, Any], *, conn=None) -> Dict[str, Any]:
+    from .galaxy import get_planet_coordinates, get_relocation_client_state, relocation_schema_ready
     from .planet_evolution.dna import effective_planet_class
 
     planet_class = effective_planet_class(planet)
@@ -63,6 +63,9 @@ def build_planet_meta(planet: Dict[str, Any]) -> Dict[str, Any]:
     is_homeworld = bool(int(planet.get("is_homeworld") or 0))
     theme = planet_theme_for_planet({**planet, "position": position})
     climate = theme.get("climate") or {}
+    relocation: Dict[str, Any] = {"active": False, "can_start": True}
+    if conn is not None and relocation_schema_ready(conn):
+        relocation = get_relocation_client_state(int(planet.get("id") or 0), conn=conn)
     return {
         "planet_id": _safe_int(planet.get("id")),
         "name": str(planet.get("name") or "Kolonie"),
@@ -79,6 +82,7 @@ def build_planet_meta(planet: Dict[str, Any]) -> Dict[str, Any]:
         "temperature": temp,
         "climate": climate,
         "theme": theme,
+        "relocation": relocation,
     }
 
 
@@ -119,6 +123,7 @@ def build_activity_lines(
     *,
     shipyard_queue: Optional[Dict[str, Any]] = None,
     defense_queue: Optional[Dict[str, Any]] = None,
+    planet_relocation: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     lines: List[Dict[str, Any]] = []
 
@@ -241,6 +246,21 @@ def build_activity_lines(
                 summary="",
                 href_key="defense_view",
                 label_key="overview_defense_idle",
+            )
+        )
+
+    reloc = planet_relocation if isinstance(planet_relocation, dict) else {}
+    if reloc.get("active"):
+        target = str(reloc.get("target") or "")
+        lines.append(
+            _build_activity_line(
+                key="relocation",
+                state="active",
+                summary=target,
+                remaining=_safe_int(reloc.get("remaining_seconds")),
+                finish_at=_safe_int(reloc.get("finish_at")),
+                href_key="overview",
+                label_key="overview_relocation_active",
             )
         )
 
@@ -485,8 +505,9 @@ def build_overview_status(
         if fleet_movements is None:
             fleet_movements = loaded_fleet
 
+    planet_meta = build_planet_meta(planet, conn=conn)
     status: Dict[str, Any] = {
-        "planet": build_planet_meta(planet),
+        "planet": planet_meta,
         "commander": {
             "id": _safe_int(player_view.get("id")),
             "name": str(player_view.get("name") or "Commander"),
@@ -515,6 +536,7 @@ def build_overview_status(
             research,
             shipyard_queue=shipyard_queue,
             defense_queue=defense_queue,
+            planet_relocation=planet_meta.get("relocation"),
         ),
         "warnings": build_overview_warnings(
             user_id=int(user_id),

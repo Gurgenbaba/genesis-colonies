@@ -12,6 +12,7 @@ from __future__ import annotations
 import random
 import re
 import sqlite3
+import time
 from typing import Any, Dict, List, Mapping, Optional, Set, Tuple
 
 from .db import db, table_exists, column_exists
@@ -875,3 +876,381 @@ def count_empty_galaxy_slots(*, conn: sqlite3.Connection) -> int:
     row = cur.fetchone()
     occupied = int(row["occupied"] if row else 0)
     return max(0, int(total) - occupied)
+
+
+# ---------------------------------------------------------------------------
+# Planet relocation (evacuation move)
+# ---------------------------------------------------------------------------
+
+RELOCATION_DURATION_SECONDS = 3600
+RELOCATION_COOLDOWN_SECONDS = 86400
+
+
+def player_has_seed_ark(player_id: int, *, conn: sqlite3.Connection) -> bool:
+    """True if any owned colony has at least one seed_ark (colonization ship)."""
+    from .fleet import get_planet_ships
+    from .models import get_planets_by_player
+
+    for planet in get_planets_by_player(int(player_id), conn=conn):
+        ships = get_planet_ships(int(planet["id"]), conn=conn) or {}
+        if int(ships.get("seed_ark") or 0) >= 1:
+            return True
+    return False
+
+
+def relocation_schema_ready(conn: sqlite3.Connection) -> bool:
+    return table_exists(conn, "planet_relocations")
+
+
+def _relocation_cooldown_column_ready(conn: sqlite3.Connection) -> bool:
+    return column_exists(conn, "planets", "relocation_cooldown_until")
+
+
+def _fetch_active_relocation_row(
+    conn: sqlite3.Connection,
+    planet_id: int,
+) -> Optional[Dict[str, Any]]:
+    if not relocation_schema_ready(conn):
+        return None
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT *
+        FROM planet_relocations
+        WHERE planet_id = ? AND status = 'active'
+        ORDER BY id DESC
+        LIMIT 1;
+        """,
+        (int(planet_id),),
+    )
+    row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def _relocation_row_to_client(
+    row: Dict[str, Any],
+    *,
+    now: float,
+) -> Dict[str, Any]:
+    finish_at = float(row.get("finish_at") or 0)
+    remaining = max(0, int(finish_at - float(now)))
+    return {
+        "active": True,
+        "relocation_id": int(row.get("id") or 0),
+        "from": format_coordinates(
+            int(row.get("from_galaxy") or 0),
+            int(row.get("from_system") or 0),
+            int(row.get("from_position") or 0),
+        ),
+        "target": format_coordinates(
+            int(row.get("target_galaxy") or 0),
+            int(row.get("target_system") or 0),
+            int(row.get("target_position") or 0),
+        ),
+        "target_galaxy": int(row.get("target_galaxy") or 0),
+        "target_system": int(row.get("target_system") or 0),
+        "target_position": int(row.get("target_position") or 0),
+        "started_at": int(float(row.get("started_at") or 0)),
+        "finish_at": int(finish_at),
+        "remaining_seconds": remaining,
+        "can_start": False,
+        "cooldown_until": 0,
+        "cooldown_remaining_seconds": 0,
+    }
+
+
+def get_relocation_client_state(
+    planet_id: int,
+    *,
+    conn: sqlite3.Connection,
+    now: Optional[float] = None,
+) -> Dict[str, Any]:
+    """UI/API block for planet manage modal and game-state."""
+    if now is None:
+        now = time.time()
+    now_f = float(now)
+    pid = int(planet_id)
+
+    idle: Dict[str, Any] = {
+        "active": False,
+        "relocation_id": 0,
+        "from": "",
+        "target": "",
+        "target_galaxy": 0,
+        "target_system": 0,
+        "target_position": 0,
+        "started_at": 0,
+        "finish_at": 0,
+        "remaining_seconds": 0,
+        "can_start": True,
+        "cooldown_until": 0,
+        "cooldown_remaining_seconds": 0,
+    }
+
+    if not relocation_schema_ready(conn):
+        idle["can_start"] = False
+        return idle
+
+    active = _fetch_active_relocation_row(conn, pid)
+    if active:
+        return _relocation_row_to_client(active, now=now_f)
+
+    cooldown_until = 0.0
+    if _relocation_cooldown_column_ready(conn):
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT relocation_cooldown_until FROM planets WHERE id = ? LIMIT 1;",
+            (pid,),
+        )
+        row = cur.fetchone()
+        if row:
+            cooldown_until = float(row["relocation_cooldown_until"] or 0)
+
+    if cooldown_until > now_f:
+        idle["can_start"] = False
+        idle["cooldown_until"] = int(cooldown_until)
+        idle["cooldown_remaining_seconds"] = max(0, int(cooldown_until - now_f))
+
+    return idle
+
+
+def start_planet_relocation(
+    player_id: int,
+    target_galaxy: int,
+    target_system: int,
+    target_position: int,
+    *,
+    conn: Optional[sqlite3.Connection] = None,
+    ip: Optional[str] = None,
+    user_agent: Optional[str] = None,
+) -> Tuple[bool, str, Dict[str, Any]]:
+    """
+    Schedule evacuation move of the player's active planet to a free slot.
+    Move completes after RELOCATION_DURATION_SECONDS via finish_due_relocations.
+    """
+    from .db import begin_write_transaction, commit, rollback
+    from .options import write_account_audit
+    from .planet_evolution.repository import get_context_planet
+
+    own = conn is None
+    if own:
+        conn = db()
+    assert conn is not None
+
+    if not relocation_schema_ready(conn):
+        if own:
+            conn.close()
+        return False, "planet_relocation_unavailable", {}
+
+    try:
+        planet = get_context_planet(int(player_id), conn=conn)
+        if not planet or not planet.get("id"):
+            return False, "planet_error_not_found", {}
+
+        planet_id = int(planet["id"])
+        coords = get_planet_coordinates(planet)
+        from_g = int(coords["galaxy"])
+        from_s = int(coords["system"])
+        from_p = int(coords["position"])
+
+        tg = int(target_galaxy)
+        ts = int(target_system)
+        tp = int(target_position)
+
+        try:
+            validate_coordinates(tg, ts, tp, conn=conn)
+        except GalaxyCoordinateError:
+            return False, "planet_relocation_invalid_coords", {}
+
+        if (from_g, from_s, from_p) == (tg, ts, tp):
+            return False, "planet_relocation_same_slot", {}
+
+        now = time.time()
+
+        state = get_relocation_client_state(planet_id, conn=conn, now=now)
+        if state.get("active"):
+            return False, "planet_relocation_already_active", state
+        if not state.get("can_start"):
+            return False, "planet_relocation_cooldown", state
+
+        if not coordinate_is_available(conn, tg, ts, tp):
+            return False, "planet_relocation_slot_taken", {}
+
+        begin_write_transaction(conn)
+        if not coordinate_is_available(conn, tg, ts, tp):
+            rollback(conn)
+            return False, "planet_relocation_slot_taken", {}
+
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO planet_relocations (
+                planet_id, player_id,
+                from_galaxy, from_system, from_position,
+                target_galaxy, target_system, target_position,
+                started_at, finish_at, status, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?);
+            """,
+            (
+                planet_id,
+                int(player_id),
+                from_g,
+                from_s,
+                from_p,
+                tg,
+                ts,
+                tp,
+                float(now),
+                float(now) + float(RELOCATION_DURATION_SECONDS),
+                float(now),
+            ),
+        )
+        write_account_audit(
+            int(player_id),
+            "planet_relocation_started",
+            payload={
+                "planet_id": planet_id,
+                "from": format_coordinates(from_g, from_s, from_p),
+                "target": format_coordinates(tg, ts, tp),
+                "finish_at": float(now) + float(RELOCATION_DURATION_SECONDS),
+            },
+            ip=ip,
+            user_agent=user_agent,
+            conn=conn,
+        )
+        commit(conn)
+        result = get_relocation_client_state(planet_id, conn=conn, now=now)
+        result["planet_id"] = planet_id
+        return True, "planet_relocation_started", result
+    except Exception:
+        if own:
+            rollback(conn)
+        return False, "planet_relocation_failed", {}
+    finally:
+        if own and conn is not None:
+            conn.close()
+
+
+def finish_due_relocations(
+    conn: sqlite3.Connection,
+    *,
+    player_id: Optional[int] = None,
+    now: Optional[float] = None,
+) -> int:
+    """Apply completed relocation jobs. Returns number of planets moved."""
+    if not relocation_schema_ready(conn):
+        return 0
+
+    if now is None:
+        now = time.time()
+    now_f = float(now)
+
+    from .options import write_account_audit
+
+    cur = conn.cursor()
+    params: List[Any] = [now_f]
+    sql = """
+        SELECT *
+        FROM planet_relocations
+        WHERE status = 'active' AND finish_at <= ?
+    """
+    if player_id is not None:
+        sql += " AND player_id = ?"
+        params.append(int(player_id))
+    sql += " ORDER BY finish_at ASC, id ASC;"
+    cur.execute(sql, tuple(params))
+    rows = [dict(r) for r in cur.fetchall()]
+    if not rows:
+        return 0
+
+    moved = 0
+    for row in rows:
+        rid = int(row["id"])
+        planet_id = int(row["planet_id"])
+        pid_player = int(row["player_id"])
+        tg = int(row["target_galaxy"])
+        ts = int(row["target_system"])
+        tp = int(row["target_position"])
+
+        try:
+            if not coordinate_is_available(conn, tg, ts, tp, exclude_planet_id=planet_id):
+                cur.execute(
+                    "UPDATE planet_relocations SET status = 'failed' WHERE id = ?;",
+                    (rid,),
+                )
+                write_account_audit(
+                    pid_player,
+                    "planet_relocation_failed",
+                    payload={
+                        "planet_id": planet_id,
+                        "target": format_coordinates(tg, ts, tp),
+                        "reason": "slot_taken",
+                    },
+                    conn=conn,
+                )
+                continue
+
+            assert_coordinate_available(conn, tg, ts, tp, exclude_planet_id=planet_id)
+            cur.execute(
+                """
+                UPDATE planets
+                SET galaxy = ?, system = ?, position = ?
+                WHERE id = ? AND player_id = ?;
+                """,
+                (tg, ts, tp, planet_id, pid_player),
+            )
+            if int(cur.rowcount or 0) <= 0:
+                cur.execute(
+                    "UPDATE planet_relocations SET status = 'failed' WHERE id = ?;",
+                    (rid,),
+                )
+                continue
+
+            cooldown_until = now_f + float(RELOCATION_COOLDOWN_SECONDS)
+            if _relocation_cooldown_column_ready(conn):
+                cur.execute(
+                    """
+                    UPDATE planets
+                    SET relocation_cooldown_until = ?
+                    WHERE id = ?;
+                    """,
+                    (cooldown_until, planet_id),
+                )
+
+            cur.execute(
+                "UPDATE planet_relocations SET status = 'completed' WHERE id = ?;",
+                (rid,),
+            )
+            write_account_audit(
+                pid_player,
+                "planet_relocation_completed",
+                payload={
+                    "planet_id": planet_id,
+                    "from": format_coordinates(
+                        int(row["from_galaxy"]),
+                        int(row["from_system"]),
+                        int(row["from_position"]),
+                    ),
+                    "target": format_coordinates(tg, ts, tp),
+                    "cooldown_until": cooldown_until,
+                },
+                conn=conn,
+            )
+            moved += 1
+        except Exception:
+            cur.execute(
+                "UPDATE planet_relocations SET status = 'failed' WHERE id = ?;",
+                (rid,),
+            )
+            write_account_audit(
+                pid_player,
+                "planet_relocation_failed",
+                payload={
+                    "planet_id": planet_id,
+                    "target": format_coordinates(tg, ts, tp),
+                    "reason": "error",
+                },
+                conn=conn,
+            )
+
+    return moved

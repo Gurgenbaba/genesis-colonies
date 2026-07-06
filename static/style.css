@@ -7106,11 +7106,34 @@ body.gc-perf-idle .overview-hero-fx::before{
   display: grid;
   gap: 8px;
 }
+.overview-planet-relocation-block{
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(120, 190, 255, 0.12);
+  display: grid;
+  gap: 10px;
+}
+.overview-planet-relocation-title{
+  margin: 0;
+  font-size: 0.92rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gc-text-soft);
+}
+.overview-planet-relocation-hint{ margin: 0; }
+.overview-planet-relocation-coords{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.overview-planet-relocation-current{ margin: 0; color: var(--gc-text-dim); }
+.overview-planet-relocation-active p{ margin: 0; }
+.overview-planet-relocation-timer{ margin: 4px 0 0; color: var(--gc-neon-cyan); }
 .overview-planet-delete-hint{ margin: 0; }
 .overview-planet-form-hint.is-error{ color: var(--gc-danger); }
 .overview-planet-form-hint.is-success{ color: var(--gc-neon-green, #23f2a6); }
 .gc-planet-manage-modal .gc-player-card-dialog{
-  width: min(440px, 100%);
+  width: min(480px, 100%);
 }
 .gc-planet-manage-modal .gc-player-card-fields .gc-input{
   width: 100%;
@@ -16646,6 +16669,10 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 }
 .galaxy-fleet-action--recycle{ color: #fbbf24; }
 .galaxy-fleet-action--recycle:hover{ color: #fcd34d; }
+.galaxy-fleet-action--relocate{ color: var(--gc-neon-cyan, #46e5ff); }
+.galaxy-fleet-action--relocate:hover,
+.galaxy-fleet-action--relocate:focus-visible{ color: #7ff4ff; }
+.galaxy-relocation-hint{ margin: 0; font-size: 0.82rem; }
 .fleet-preview-stat--debris .fleet-preview-stat-value{ color: #fbbf24; }
 .gc-expedition-report{
   display: flex;

@@ -50,6 +50,40 @@
              role="status"></p>
         </form>
 
+        <div class="overview-planet-relocation-block" id="overview-planet-relocation-block">
+          <h3 class="overview-planet-relocation-title">{{ T('overview_planet_relocation', 'Planet verschieben') }}</h3>
+          <p class="hint overview-planet-relocation-hint">{{ T('overview_planet_relocation_hint', 'Evakuierung dauert 1 Stunde. Danach 24h Abklingzeit für denselben Planeten. Nur freie Positionen (1–15).') }}</p>
+          <p class="overview-planet-relocation-current gc-mono" id="overview-planet-relocation-current" hidden></p>
+          <div class="overview-planet-relocation-active" id="overview-planet-relocation-active" hidden>
+            <p class="overview-planet-relocation-status">{{ T('overview_planet_relocation_in_progress', 'Evakuierung läuft nach') }} <span class="gc-mono" id="overview-planet-relocation-target"></span></p>
+            <p class="overview-planet-relocation-timer gc-mono" id="overview-planet-relocation-timer" data-timer-kind="queue" data-refresh-on-zero="game-state"></p>
+          </div>
+          <div class="overview-planet-relocation-cooldown" id="overview-planet-relocation-cooldown" hidden>
+            <p class="hint">{{ T('overview_planet_relocation_cooldown', 'Abklingzeit — erneutes Verschieben in') }} <span class="gc-mono" id="overview-planet-relocation-cooldown-timer"></span></p>
+          </div>
+          <form class="overview-planet-relocation-form" id="overview-planet-relocation-form" novalidate>
+            <div class="overview-planet-relocation-coords gc-player-card-fields">
+              <label class="gc-player-card-field">
+                <span class="gc-player-card-field-label">{{ T('galaxy_label_galaxy', 'Galaxie') }}</span>
+                <input type="number" class="gc-input" id="overview-planet-relocation-galaxy" name="galaxy" min="1" max="20" required autocomplete="off">
+              </label>
+              <label class="gc-player-card-field">
+                <span class="gc-player-card-field-label">{{ T('galaxy_label_system', 'System') }}</span>
+                <input type="number" class="gc-input" id="overview-planet-relocation-system" name="system" min="1" max="499" required autocomplete="off">
+              </label>
+              <label class="gc-player-card-field">
+                <span class="gc-player-card-field-label">{{ T('galaxy_slot_position', 'Pos') }}</span>
+                <input type="number" class="gc-input" id="overview-planet-relocation-position" name="position" min="1" max="15" required autocomplete="off">
+              </label>
+            </div>
+            <div class="gc-player-card-form-actions">
+              <button type="submit" class="gc-btn gc-btn-outline" id="overview-planet-relocation-btn">
+                {{ T('overview_planet_relocation_start', 'Evakuierung starten') }}
+              </button>
+            </div>
+          </form>
+        </div>
+
         <div class="overview-planet-delete-block" id="overview-planet-delete-block">
           <button type="button"
                   class="gc-btn gc-btn-danger gc-btn-sm overview-planet-delete-btn"

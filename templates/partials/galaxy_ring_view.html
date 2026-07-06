@@ -11,6 +11,7 @@
      data-system-min="{{ nav.system_min if nav.system_min is defined else 1 }}"
      data-system-max="{{ nav.system_max if nav.system_max is defined else 499 }}"
      data-active-planet-id="{{ (HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET is defined and HEADER_ACTIVE_PLANET else (active_planet_id if active_planet_id is defined else 0))|int }}"
+     data-has-seed-ark="{{ '1' if has_seed_ark is defined and has_seed_ark else '0' }}"
      style="--gc-galaxy-map-tile: url('{{ url_for('static', filename='img/map.webp', v=GC_ASSET_VERSION) }}'); --gc-galaxy-map-tile-fallback: url('{{ url_for('static', filename='img/map.png', v=GC_ASSET_VERSION) }}'); --gc-galaxy-debris-img: url('{{ url_for('static', filename='img/debris/debris.jpg', v=GC_ASSET_VERSION) }}');">
   <section class="galaxy-hud-module" data-galaxy-hud-module>
     <header class="galaxy-hud-header" aria-label="{{ T('galaxy_nav_label') }}">

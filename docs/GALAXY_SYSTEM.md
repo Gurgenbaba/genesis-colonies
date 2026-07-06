@@ -114,6 +114,30 @@ Siehe [EFFECTS.md](EFFECTS.md).
 
 ---
 
+## Planet relocation (Evakuierung)
+
+Owner: `game/galaxy.py` · Migration `093_planet_relocation`
+
+Spieler können den **aktiven Planeten** im Kolonie-Dialog (Overview → Planetenname) an eine **freie Position** `[G:S:P]` (1–15) verlegen.
+
+| Regel | Wert |
+|-------|------|
+| Dauer | 1 h (`RELOCATION_DURATION_SECONDS`) — Evakuierung, Planet bleibt bis Abschluss an alter Position |
+| Cooldown | 24 h pro Planet (`RELOCATION_COOLDOWN_SECONDS`) |
+| Ziel | Nur unbelegte Slots; bei Belegung zum Finish-Zeitpunkt → Status `failed` |
+| Finish | `finish_due_relocations()` via `queue_engine.finish_due_work` |
+
+API: `POST /api/planet/relocation/start` `{ galaxy, system, position }` → `{ ok, state }`.
+
+**Galaxie-UX:** Leerer Slot im Ring-Inspektor:
+- `seed_ark` irgendwo im Imperium → **Kolonisieren** (Fleet-Link)
+- kein `seed_ark`, aktiver Planet darf umziehen → **Umzug**-Button (`data-galaxy-relocation-start`)
+- Evakuierung aktiv / Cooldown → Hinweis statt Button
+
+Live-State: `planet_relocation` + `has_seed_ark` in `/api/game-state`.
+
+---
+
 ## Planet Scope
 
 - `active_planet_id` markiert aktiven Slot in Systemansicht

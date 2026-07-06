@@ -53,6 +53,13 @@ def test_galaxy_quick_action_debris_recycle_handler():
     assert 'mission_type: "recycle"' in js
 
 
+def test_galaxy_quick_action_relocation_handler():
+    js = _read_js()
+    assert "handleRelocationClick" in js
+    assert "data-galaxy-relocation-start" in js
+    assert "/api/planet/relocation/start" in js
+
+
 def test_main_js_wires_galaxy_quick_action():
     main_js = Path("static/main.js").read_text(encoding="utf-8")
     assert "GC.GalaxyQuickAction" in main_js

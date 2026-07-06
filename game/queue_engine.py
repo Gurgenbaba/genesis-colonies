@@ -51,6 +51,7 @@ def _empty_result(source: str) -> Dict[str, Any]:
             "defense": 0,
             "fleet_arrivals": 0,
             "fleet_returns": 0,
+            "planet_relocations": 0,
         },
         "affected_players": [],
         "affected_planets": [],
@@ -733,6 +734,34 @@ def finish_due_work(
             msg = f"fleet tick: {exc}"
             result["errors"].append(msg)
             logger.exception("queue_engine fleet tick failed: %s", msg)
+
+        try:
+            from .galaxy import finish_due_relocations, relocation_schema_ready
+
+            if relocation_schema_ready(conn):
+                reloc_player = int(player_id) if player_id is not None else None
+                n_reloc = finish_due_relocations(
+                    conn, player_id=reloc_player, now=float(now)
+                )
+                if n_reloc > 0:
+                    result["finished"]["planet_relocations"] += n_reloc
+                    if player_id is not None:
+                        affected_players.add(int(player_id))
+                    elif planet_id is not None:
+                        cur = conn.cursor()
+                        cur.execute(
+                            "SELECT player_id FROM planets WHERE id = ? LIMIT 1;",
+                            (int(planet_id),),
+                        )
+                        prow = cur.fetchone()
+                        if prow:
+                            affected_players.add(int(prow["player_id"]))
+                            affected_planets.add(int(planet_id))
+        except Exception as exc:
+            result["ok"] = False
+            msg = f"planet relocation: {exc}"
+            result["errors"].append(msg)
+            logger.exception("queue_engine planet relocation finish failed: %s", msg)
 
         if update_scores and affected_players:
             from .score_events import apply_score_updates_for_players
