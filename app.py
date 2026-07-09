@@ -315,6 +315,23 @@ def choose_background():
         set_request_locale(DEFAULT_LOCALE)
 
 
+@app.before_request
+def _fleet_tick_before_authenticated_request():
+    """Isolated fleet tick before SSR routes open a long-lived page connection."""
+    if request.endpoint == "static":
+        return None
+    uid = session.get("user_id")
+    if not uid:
+        return None
+    try:
+        from game.fleet_worker import maybe_run_global_fleet_tick
+
+        maybe_run_global_fleet_tick(force=False, source=str(request.endpoint or "request"))
+    except Exception:
+        logger.exception("before_request fleet tick failed endpoint=%s", request.endpoint)
+    return None
+
+
 # --------------------------------------------------------------------------
 # CONTEXT / GLOBALS
 # --------------------------------------------------------------------------
@@ -792,16 +809,17 @@ def _load_page_live_context(
         return None
 
     user_id = int(user_id)
+    src = str(finish_source or "page_load")
     own_conn = conn is None
     if own_conn:
-        conn = db()
-    src = str(finish_source or "page_load")
-    try:
-        from game.fleet_worker import maybe_run_global_fleet_tick
+        # Fleet worker opens its own writer — never while caller holds conn (SQLite lock safety).
+        try:
+            from game.fleet_worker import maybe_run_global_fleet_tick
 
-        maybe_run_global_fleet_tick(force=False, source=src)
-    except Exception:
-        logger.exception("global fleet tick safety net failed source=%s", src)
+            maybe_run_global_fleet_tick(force=False, source=src)
+        except Exception:
+            logger.exception("global fleet tick safety net failed source=%s", src)
+        conn = db()
     use_poll_live_path = src == "game_state" or _is_pjax_request()
     try:
         try:
@@ -9785,6 +9803,7 @@ if __name__ == "__main__":
         raise SystemExit(1)
     threaded_raw = os.environ.get("GC_FLASK_THREADED", "1" if not is_production() else "0").strip().lower()
     threaded = threaded_raw in ("1", "true", "yes", "on")
-    reloader_raw = os.environ.get("GC_FLASK_RELOADER", "1" if is_debug_enabled() else "0").strip().lower()
+    reloader_default = "0" if sys.platform == "win32" else ("1" if is_debug_enabled() else "0")
+    reloader_raw = os.environ.get("GC_FLASK_RELOADER", reloader_default).strip().lower()
     use_reloader = reloader_raw in ("1", "true", "yes", "on")
     app.run(host=host, port=port, debug=is_debug_enabled(), threaded=threaded, use_reloader=use_reloader)
