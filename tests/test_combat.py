@@ -33,9 +33,10 @@ from game.combat_models import (
     stacks_from_counts,
     validate_combat_registry,
 )
-from game.defense_defs import defense_rapid_fire_multiplier
+from game.defense_defs import defense_display_name, defense_rapid_fire_multiplier
 from game.fleet_defs import (
     rapid_fire_bonus_shot_chance,
+    ship_display_name,
     ship_rapid_fire_multiplier,
 )
 
@@ -462,10 +463,18 @@ def test_build_combat_report_includes_debris_metadata():
         defending_ships={},
         defending_defense={"sentinel_turret": 4},
         combat_result=combat_result,
+        locale="en",
     )
     assert meta["debris"] == debris
-    assert "Trümmerfeld" in body or "Debris field" in body
-    assert "Recycler benötigt:" in body or "Recyclers needed:" in body
+    assert "Debris field" in body
+    assert "Recyclers needed:" in body
+    from game.fleet_defs import ship_display_name
+    from game.defense_defs import defense_display_name
+
+    assert ship_display_name("falcon_interceptor", locale="en") in body
+    assert defense_display_name("sentinel_turret", locale="en") in body
+    assert "falcon_interceptor" not in body
+    assert "sentinel_turret" not in body
 
 
 def test_build_combat_report_omits_debris_when_none():
@@ -643,7 +652,7 @@ def test_balance_raptor_counters_unarmored_light_screen_over_full_rounds():
         for seed in range(20)
         if simulate_battle(mass_raptor, mixed, rng=_rng(seed)).winner == WINNER_ATTACKER
     )
-    assert wins >= 16, "Raptor should punish unarmored light screens over full rounds"
+    assert wins >= 16, f"{ship_display_name('falcon_interceptor')} should punish unarmored light screens over full rounds"
 
 
 def test_balance_mass_raptor_not_dominant_vs_heavy_mixed_fleet():
@@ -664,7 +673,7 @@ def test_balance_mass_raptor_not_dominant_vs_heavy_mixed_fleet():
         for seed in range(20)
         if simulate_battle(mass_raptor, mixed, rng=_rng(seed)).winner == WINNER_ATTACKER
     )
-    assert wins < 16, "mass Raptor should not clearly beat heavy mixed fleet"
+    assert wins < 16, f"mass {ship_display_name('falcon_interceptor')} should not clearly beat heavy mixed fleet"
 
 
 def test_balance_mixed_fleet_beats_mass_raptor_as_attacker():
@@ -685,7 +694,7 @@ def test_balance_mixed_fleet_beats_mass_raptor_as_attacker():
         for seed in range(20)
         if simulate_battle(mixed, mass_raptor, rng=_rng(seed + 100)).winner == WINNER_ATTACKER
     )
-    assert wins >= 14, "mixed fleet should outperform pure Raptor stack in at least one role"
+    assert wins >= 14, f"mixed fleet should outperform pure {ship_display_name('falcon_interceptor')} stack in at least one role"
 
 
 def test_balance_equal_cost_raptor_does_not_trivially_beat_sentinel():
@@ -705,7 +714,10 @@ def test_balance_equal_cost_raptor_does_not_trivially_beat_sentinel():
         ).winner
         == WINNER_ATTACKER
     )
-    assert wins <= 4, "equal-cost Sentinel wall should remain relevant vs mass Raptor"
+    assert wins <= 4, (
+        f"equal-cost {defense_display_name('sentinel_turret')} wall should remain relevant vs "
+        f"mass {ship_display_name('falcon_interceptor')}"
+    )
 
 
 def test_balance_ironclad_clears_defense_faster_than_raptor():

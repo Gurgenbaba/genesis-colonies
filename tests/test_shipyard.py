@@ -60,7 +60,7 @@ def test_legacy_mapping_resolves():
     assert get_ship('spy_probe')['role'] == 'spy'
 
 def test_scout_beats_cargo_attack():
-    """Nomad (cargo) must not hit harder than Vanguard (scout) — GC-SHIP-2."""
+    """Nomad (cargo) must not hit harder than Vanguard Scout — GC-SHIP-2."""
     assert int(SHIPS['spark_drone']['attack']) == 9
     assert int(SHIPS['mule_courier']['attack']) == 1
 

@@ -4615,10 +4615,31 @@ def api_admin_combat_bots_toggle():
     conn = db()
     try:
         from game.db import begin_write_transaction, commit
-        from game.combat_balance_bots import set_combat_balance_bots_enabled
+        from game.combat_balance_bots import (
+            LOCAL_BALANCE_TEST_HINT,
+            live_combat_balance_bots_allowed,
+            set_combat_balance_bots_enabled,
+        )
 
         begin_write_transaction(conn)
-        set_combat_balance_bots_enabled(enabled, conn=conn)
+        if enabled and not live_combat_balance_bots_allowed():
+            conn.rollback()
+            return jsonify(
+                {
+                    "ok": False,
+                    "error": "live_bots_disabled",
+                    "hint": LOCAL_BALANCE_TEST_HINT,
+                }
+            ), 403
+        if not set_combat_balance_bots_enabled(enabled, conn=conn):
+            conn.rollback()
+            return jsonify(
+                {
+                    "ok": False,
+                    "error": "live_bots_disabled",
+                    "hint": LOCAL_BALANCE_TEST_HINT,
+                }
+            ), 403
         commit(conn)
         if admin_id:
             try:

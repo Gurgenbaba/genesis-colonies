@@ -378,7 +378,7 @@ Flotten allein reichen nicht — Kolonien brauchen lokale Abwehr. Defense trennt
 
 - Baue **Verteidigungsfabrik** auf der zu schützenden Welt.
 - Öffne **Defense** — Einheiten bauen (Queue wie Werft), Requirements aus Gebäuden und Account-Forschung.
-- Einheiten: Türme und Barrieren (z. B. Slug-Werfer, Sentinel, Plasma, Flak, Orbital Shield) — Freischaltung über Fabrik-Stufe und Techs.
+- Einheiten: Türme und Barrieren (z. B. Slug Launcher, Sentinel Turret, Plasma Arc, Flak Array, Orbital Shield) — Freischaltung über Fabrik-Stufe und Techs.
 - Bestand ist **planetengebunden** — wie `planet_ships`.
 - Planetwechsel im Header wechselt die Defense-Ansicht.
 - Kampfwerte in Defense-Detail / Technische Daten — nicht Codex.

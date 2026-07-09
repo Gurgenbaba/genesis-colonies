@@ -216,6 +216,17 @@ def rapid_fire_bonus_shot_chance(rapid_fire_multiplier: int) -> float:
     return _chance(rapid_fire_multiplier)
 
 
+def defense_display_name(defense_key: str, *, locale: str | None = None) -> str:
+    """Player-facing defense label — same source as defense UI (`name_key` + i18n)."""
+    from .i18n import tr
+    from .mail import humanize_identifier_key
+
+    key = str(defense_key or "").strip()
+    spec = get_defense(key) or {}
+    name_key = str(spec.get("name_key") or f"defense_{key}").strip()
+    return tr(name_key, humanize_identifier_key(key), locale=locale)
+
+
 def defense_defs_for_client() -> List[Dict[str, Any]]:
     return [{"key": key, **DEFENSES[key]} for key in DEFENSE_ORDER if key in DEFENSES]
 

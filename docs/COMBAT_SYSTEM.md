@@ -124,9 +124,9 @@ Canonical combat stats live only in `fleet_defs.SHIPS` / `defense_defs.DEFENSES`
 
 | Hull | Role | Notes |
 |------|------|--------|
-| `spark_drone` (Vanguard Scout) | Light striker / screen | High attack per cost, low hull; RF vs `veil_probe`; countered by Raptor RF + Flak |
-| `falcon_interceptor` (Raptor) | Allrounder fighter | RF vs scouts/spy; not best DPS/cost or best vs equal-cost defense |
-| `ironclad_frigate` (Ironclad) | Heavy puncher / anti-defense | RF vs light ships + `sentinel_turret` / `plasma_arc`; slower, fuel-heavy |
+| `spark_drone` (Vanguard Scout) | Light striker / screen | High attack per cost, low hull; RF vs `veil_probe`; countered by Raptor Interceptor RF + Flak Array |
+| `falcon_interceptor` (Raptor Interceptor) | Allrounder fighter | RF vs scouts/spy; not best DPS/cost or best vs equal-cost defense |
+| `ironclad_frigate` (Aegis Frigate) | Heavy puncher / anti-defense | RF vs light ships + Sentinel Turret / Plasma Arc; slower, fuel-heavy |
 | Cargo / expo / colony hulls | Non-combat | Minimal or zero attack — not tuned as fleet DPS |
 
 Mass single-ship stacks are intentionally avoided: mixed fleets and planet defense remain viable at similar resource budgets.
@@ -149,12 +149,18 @@ Mass single-ship stacks are intentionally avoided: mixed fleets and planet defen
 
 ## Tests
 
+Combat balance is validated **locally via pytest** (no live in-game bot fights required):
+
 ```bash
+python -m pytest tests/test_combat.py -k balance -v
+python -m pytest tests/test_combat_balance_bots.py -v
 python -m pytest tests/test_combat.py -v
 python -m pytest tests/test_combat_simulator.py -v
 python -m pytest tests/test_fleet.py -k "attack or combat or debris or loot" -v
 python -m pytest tests/test_ranking.py::test_combat_destruction_increases_ranking_scores -v
 ```
+
+Live combat-balance bot accounts (`gc_combat_bot_alpha` / `beta`) and cron automation are **paused** (`LIVE_IN_GAME_BOTS_ENABLED = False` in `game/combat_balance_bots.py`) until a real bot-player mechanic ships.
 
 ---
 

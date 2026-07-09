@@ -27,7 +27,7 @@ from game.combat_balance_bots import (
 )
 from game.db import begin_write_transaction, commit, db
 from game.fleet import process_fleet_tick, send_fleet, validate_fleet_send
-from game.fleet_defs import ship_score_value
+from game.fleet_defs import ship_display_name, ship_score_value
 from game.models import create_user, ensure_player_and_homeworld, init_db
 from game.ranking import get_sorted_ranking_entries
 
@@ -37,6 +37,7 @@ def bot_db(tmp_path, monkeypatch):
     db_path = tmp_path / "combat_bots.db"
     monkeypatch.setenv("GC_DB_PATH", str(db_path))
     monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
+    monkeypatch.setattr("game.combat_balance_bots.LIVE_IN_GAME_BOTS_ENABLED", True)
     gdb._DB_PATH = None
     init_db()
     import migrate
@@ -258,6 +259,15 @@ def test_admin_only_api_guard(bot_db, monkeypatch):
         assert resp.status_code in (401, 403), path
 
 
+def test_toggle_rejects_enable_when_live_bots_off(bot_db, monkeypatch):
+    monkeypatch.setattr("game.combat_balance_bots.LIVE_IN_GAME_BOTS_ENABLED", False)
+    client, admin_id, _user_id = _admin_client(bot_db, monkeypatch)
+    _login(client, admin_id)
+    on = client.post("/api/admin/combat-bots/toggle", json={"enabled": True})
+    assert on.status_code == 403
+    assert on.get_json().get("error") == "live_bots_disabled"
+
+
 def test_toggle_works(bot_db, monkeypatch):
     client, admin_id, _user_id = _admin_client(bot_db, monkeypatch)
     _login(client, admin_id)
@@ -287,6 +297,31 @@ def test_ranking_excludes_combat_bots(bot_db):
     conn.close()
 
 
+def test_live_in_game_bots_disabled_by_default():
+    from game.combat_balance_bots import (
+        LIVE_IN_GAME_BOTS_ENABLED,
+        live_combat_balance_bots_allowed,
+        maybe_run_next_scheduled_scenario,
+        run_combat_balance_scenario,
+    )
+
+    assert LIVE_IN_GAME_BOTS_ENABLED is False
+    assert live_combat_balance_bots_allowed() is False
+
+
+def test_live_bots_blocked_without_test_override(bot_db, monkeypatch):
+    from game.combat_balance_bots import (
+        maybe_run_next_scheduled_scenario,
+        run_combat_balance_scenario,
+    )
+
+    monkeypatch.setattr("game.combat_balance_bots.LIVE_IN_GAME_BOTS_ENABLED", False)
+    conn = db()
+    assert maybe_run_next_scheduled_scenario(conn=conn).get("skipped") == "live_bots_disabled"
+    assert run_combat_balance_scenario("raptor_vs_aegis_equal_cost", conn=conn, force=True).get("error") == "live_bots_disabled"
+    conn.close()
+
+
 def test_all_scenario_keys_registered(bot_db):
     assert "raptor_vs_aegis_equal_cost" in COMBAT_BALANCE_SCENARIOS
     assert len(COMBAT_BALANCE_SCENARIOS) >= 200
@@ -300,6 +335,15 @@ def test_all_scenario_keys_registered(bot_db):
         assert isinstance(preview, dict)
         def_preview = sc.defender_defense(sc.cost_budget)
         assert isinstance(def_preview, dict)
+
+
+def test_scenario_labels_use_canonical_display_names(bot_db):
+    scenario = COMBAT_BALANCE_SCENARIOS["raptor_vs_aegis_equal_cost"]
+    raptor = ship_display_name("falcon_interceptor")
+    aegis = ship_display_name("ironclad_frigate")
+    assert raptor in scenario.label
+    assert aegis in scenario.label
+    assert "Raptor vs Aegis" not in scenario.label
 
 
 def test_mixed_defense_for_budget_uses_defense_score(bot_db):

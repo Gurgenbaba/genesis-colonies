@@ -897,13 +897,18 @@ def _format_kv_section(title: str, lines: Sequence[str]) -> str:
     return f"{title}\n" + "\n".join(f"  {line}" for line in lines)
 
 
-def _unit_label(unit_key: str, *, tr_fn) -> str:
+def _unit_label(unit_key: str, *, locale: str | None = None, tr_fn=None) -> str:
     key = str(unit_key or "").strip()
-    from .defense_defs import is_known_defense_key
+    resource_key = {
+        "metal": "resource_metal",
+        "crystal": "resource_crystal",
+        "fuel_cells": "resource_fuel_cells",
+    }.get(key)
+    if resource_key and tr_fn is not None:
+        return tr_fn(resource_key, key)
+    from .combat_models import unit_display_name
 
-    if is_known_defense_key(key):
-        return tr_fn(f"defense_{key}", key)
-    return tr_fn(f"fleet_ship_{key}", key)
+    return unit_display_name(key, locale=locale)
 
 
 def _format_stock_lines(
@@ -913,13 +918,14 @@ def _format_stock_lines(
     fmt_int,
     empty_key: str,
     empty_default: str,
+    locale: str | None = None,
 ) -> list[str]:
     entries = [(k, max(0, int(v))) for k, v in stock.items() if max(0, int(v)) > 0]
     if not entries:
         return [tr_fn(empty_key, empty_default)]
     lines: list[str] = []
     for key, qty in sorted(entries, key=lambda x: x[0]):
-        lines.append(f"{_unit_label(key, tr_fn=tr_fn)} ×{fmt_int(qty)}")
+        lines.append(f"{_unit_label(key, locale=locale, tr_fn=tr_fn)} ×{fmt_int(qty)}")
     return lines
 
 
@@ -1070,6 +1076,7 @@ def build_combat_report(
                     fmt_int=fmt_int,
                     empty_key="combat_report_fleet_empty",
                     empty_default="No attacking ships",
+                    locale=loc,
                 ),
             ],
         ),
@@ -1100,6 +1107,7 @@ def build_combat_report(
                     fmt_int=fmt_int,
                     empty_key="combat_report_defense_fleet_empty",
                     empty_default="No defending fleet",
+                    locale=loc,
                 ),
                 *_format_stock_lines(
                     def_def,
@@ -1107,6 +1115,7 @@ def build_combat_report(
                     fmt_int=fmt_int,
                     empty_key="combat_report_defense_structures_empty",
                     empty_default="No defensive structures",
+                    locale=loc,
                 ),
             ],
         ),
@@ -1148,6 +1157,7 @@ def build_combat_report(
                         fmt_int=fmt_int,
                         empty_key="combat_report_round_no_attacker_losses",
                         empty_default="No attacker losses this round",
+                        locale=loc,
                     ),
                     *_format_stock_lines(
                         rnd.get("defender_losses") or {},
@@ -1155,6 +1165,7 @@ def build_combat_report(
                         fmt_int=fmt_int,
                         empty_key="combat_report_round_no_defender_losses",
                         empty_default="No defender losses this round",
+                        locale=loc,
                     ),
                 ],
             )
@@ -1171,6 +1182,7 @@ def build_combat_report(
                     fmt_int=fmt_int,
                     empty_key="combat_report_no_attacker_losses",
                     empty_default="No attacker losses",
+                    locale=loc,
                 ),
                 *_format_stock_lines(
                     def_loss,
@@ -1178,6 +1190,7 @@ def build_combat_report(
                     fmt_int=fmt_int,
                     empty_key="combat_report_no_defender_losses",
                     empty_default="No defender losses",
+                    locale=loc,
                 ),
             ],
         )
@@ -1193,6 +1206,7 @@ def build_combat_report(
                     fmt_int=fmt_int,
                     empty_key="combat_report_return_empty",
                     empty_default="No ships returning",
+                    locale=loc,
                 ),
             )
         )
@@ -1209,6 +1223,7 @@ def build_combat_report(
                     fmt_int=fmt_int,
                     empty_key="combat_report_loot_empty",
                     empty_default="No plunder",
+                    locale=loc,
                 ),
             )
         )
@@ -1221,6 +1236,7 @@ def build_combat_report(
             fmt_int=fmt_int,
             empty_key="combat_report_debris_empty",
             empty_default="No debris",
+            locale=loc,
         )
         slots_needed = int(debris_meta.get("recycler_slots_needed") or 0)
         if slots_needed > 0:

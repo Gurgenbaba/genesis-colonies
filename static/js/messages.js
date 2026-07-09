@@ -141,11 +141,17 @@
 
   function shipLabel(key) {
     const k = String(key || "");
+    if (typeof GC !== "undefined" && typeof GC.shipDisplayName === "function") {
+      return GC.shipDisplayName(k);
+    }
     return t(`fleet_ship_${k}`, keyFallbackLabel(k));
   }
 
   function defenseLabel(key) {
     const k = String(key || "");
+    if (typeof GC !== "undefined" && typeof GC.defenseDisplayName === "function") {
+      return GC.defenseDisplayName(k);
+    }
     return t(`defense_${k}`, keyFallbackLabel(k));
   }
 

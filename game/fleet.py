@@ -3629,13 +3629,9 @@ def _emit_logistics_fleet_report(
 
 
 def _ship_display_name(ship_key: str, *, locale: str | None = None) -> str:
-    from .i18n import tr
-    from .mail import humanize_identifier_key
+    from .fleet_defs import ship_display_name
 
-    key = str(ship_key or "").strip()
-    if not key:
-        return ""
-    return tr(f"fleet_ship_{key}", humanize_identifier_key(key), locale=locale)
+    return ship_display_name(ship_key, locale=locale)
 
 
 def _format_fleet_ship_summary(ships: Mapping[str, Any], *, locale: str | None = None) -> str:

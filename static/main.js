@@ -51,6 +51,51 @@
     return s;
   }
 
+  // Canonical ship/defense labels (en) — fallback when i18n key missing; must match locales/en.json.
+  const CANONICAL_SHIP_LABELS = {
+    atlas_hauler: "Atlas Hauler",
+    deep_vault_ark: "Deep Vault Ark",
+    eclipse_runner: "Voidrunner",
+    falcon_interceptor: "Raptor Interceptor",
+    harvest_reclaimer: "Vulture Reclaimer",
+    ironclad_frigate: "Aegis Frigate",
+    mule_courier: "Nomad",
+    seed_ark: "Genesis Ark",
+    solar_skiff: "Odyssey",
+    spark_drone: "Vanguard Scout",
+    veil_probe: "Phantom Probe",
+  };
+  const CANONICAL_DEFENSE_LABELS = {
+    slug_launcher: "Slug Launcher",
+    sentinel_turret: "Sentinel Turret",
+    plasma_arc: "Plasma Arc",
+    ion_bastion: "Ion Bastion",
+    flak_array: "Flak Array",
+    pulse_barrier: "Pulse Barrier",
+    orbital_shield: "Orbital Shield",
+  };
+
+  function shipDisplayName(key) {
+    const k = String(key || "").trim();
+    if (!k) return "";
+    return t(`fleet_ship_${k}`, CANONICAL_SHIP_LABELS[k] || k);
+  }
+
+  function defenseDisplayName(key) {
+    const k = String(key || "").trim();
+    if (!k) return "";
+    return t(`defense_${k}`, CANONICAL_DEFENSE_LABELS[k] || k);
+  }
+
+  function unitDisplayName(key, defenseStock) {
+    const k = String(key || "").trim();
+    if (!k) return "";
+    if (defenseStock && Object.prototype.hasOwnProperty.call(defenseStock, k)) {
+      return defenseDisplayName(k);
+    }
+    return shipDisplayName(k);
+  }
+
   // =========================
   // DOM helpers
   // =========================
@@ -1393,6 +1438,9 @@
   initFormattedNumberInputDelegation();
   GC.t = t;
   GC.tf = tf;
+  GC.shipDisplayName = shipDisplayName;
+  GC.defenseDisplayName = defenseDisplayName;
+  GC.unitDisplayName = unitDisplayName;
   GC.syncFleetShipPickQtyMarks = syncFleetShipPickQtyMarks;
 
   function readDomPlayerId() {
@@ -4498,8 +4546,8 @@
       const amount = Math.floor(Number(job.target_amount || 0));
       const itemLabel =
         domain === "defense"
-          ? t(job.defense_label_key || `defense_${ownerKey}`, ownerKey)
-          : t(job.ship_label_key || `fleet_ship_${ownerKey}`, ownerKey);
+          ? t(job.defense_label_key || `defense_${ownerKey}`, defenseDisplayName(ownerKey))
+          : t(job.ship_label_key || `fleet_ship_${ownerKey}`, shipDisplayName(ownerKey));
       return amount > 1 ? `${itemLabel} ×${fmtNumber(amount)}` : itemLabel;
     }
     return _resolveQueueJobDisplayName(job, domain);
@@ -7165,8 +7213,8 @@
       qtyEl.className = "gc-card-queue-quantity gc-mono";
       const itemLabel =
         domain === "defense"
-          ? t(queueJob.defense_label_key || `defense_${shipKey}`, shipKey)
-          : t(queueJob.ship_label_key || `fleet_ship_${shipKey}`, shipKey);
+          ? t(queueJob.defense_label_key || `defense_${shipKey}`, defenseDisplayName(shipKey))
+          : t(queueJob.ship_label_key || `fleet_ship_${shipKey}`, shipDisplayName(shipKey));
       qtyEl.textContent = `${fmtNumber(targetAmount)}× ${itemLabel}`;
       block.appendChild(qtyEl);
     } else if (targetLevel > 0) {
@@ -7638,10 +7686,10 @@
       || job?.ship_key || job?.defense_key || ""
     );
     if (domain === "shipyard") {
-      return t(job.ship_label_key || `fleet_ship_${ownerKey}`, ownerKey);
+      return t(job.ship_label_key || `fleet_ship_${ownerKey}`, shipDisplayName(ownerKey));
     }
     if (domain === "defense") {
-      return t(job.defense_label_key || `defense_${ownerKey}`, ownerKey);
+      return t(job.defense_label_key || `defense_${ownerKey}`, defenseDisplayName(ownerKey));
     }
     const candidates = [];
     if (job?.label_key) candidates.push(job.label_key);
@@ -9983,7 +10031,7 @@
       || formatGlobalFleetHudTarget(mv);
     const ships = Array.isArray(mv.ships_breakdown) ? mv.ships_breakdown : [];
     const shipLines = ships.length
-      ? ships.map((s) => `${t(s.label_key || `fleet_ship_${s.key}`, s.key)} × ${fmtNumber(s.count)}`).join("<br>")
+      ? ships.map((s) => `${t(s.label_key || `fleet_ship_${s.key}`, shipDisplayName(s.key))} × ${fmtNumber(s.count)}`).join("<br>")
       : tf("fleet_drawer_tooltip_no_ships", {}, "Keine Schiffe");
     const res = mv.loaded_resources || mv.resources || {};
     const metal = Number(res.metal || 0);
@@ -16951,7 +16999,7 @@
     };
 
     const renderShipChips = (ships) => Object.entries(ships || {})
-      .map(([key, qty]) => `<span class="fleet-ship-chip">${tt(`fleet_ship_${key}`, key)} × ${formatNumber(qty)}</span>`)
+      .map(([key, qty]) => `<span class="fleet-ship-chip">${shipDisplayName(key)} × ${formatNumber(qty)}</span>`)
       .join("");
 
     const fleetLegKey = (mv, phase) => mv.status_label || mv.leg_label_key || (
@@ -17573,7 +17621,7 @@
         .map(([key, qty]) => [key, parseInt(qty, 10) || 0])
         .filter(([, qty]) => qty > 0)
         .sort((a, b) => b[1] - a[1])
-        .map(([key, qty]) => `${formatNumber(qty)} ${tt(`fleet_ship_${key}`, key)}`);
+        .map(([key, qty]) => `${formatNumber(qty)} ${shipDisplayName(key)}`);
       return parts.length ? parts.join(" · ") : "—";
     };
 
@@ -19736,7 +19784,7 @@
 
   function defenseLabel(defenseKey) {
     const k = String(defenseKey || "").trim();
-    return t(`defense_${k}`, k);
+    return defenseDisplayName(k);
   }
 
   function normalizeDefenseApiPayload(res) {
@@ -20506,7 +20554,7 @@
       const key = String(row.ship_key || "");
       const amount = Number(row.amount || 0);
       const icon = String(row.icon || "");
-      const shipName = tt(`fleet_ship_${key}`, key);
+      const shipName = shipDisplayName(key);
       const minM = Number(row.preview_refund_min?.metal || 0);
       const maxM = Number(row.preview_refund_max?.metal || 0);
       const minC = Number(row.preview_refund_min?.crystal || 0);
@@ -20661,7 +20709,7 @@
         const rkey = String(rw.reward_key || "");
         let label = "";
         if (rtype === "ship" || rtype === "ship_weighted") {
-          label = t(`fleet_ship_${rkey}`, rkey);
+          label = shipDisplayName(rkey);
         } else {
           label = collectorItemLabel(rkey);
         }

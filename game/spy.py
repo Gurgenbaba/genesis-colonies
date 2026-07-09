@@ -415,8 +415,9 @@ def _build_spy_report_body_impl(
     if tiers["fleet"]:
         if visible_ships:
             for key, qty in sorted(visible_ships.items()):
-                spec = get_ship(str(key)) or {}
-                label = _t(str(spec.get("name_key") or key), str(key))
+                from .fleet_defs import ship_display_name
+
+                label = ship_display_name(str(key))
                 ship_lines.append(f"{label} ×{fmt_int(qty)}")
         else:
             ship_lines.append(_t("fleet_spy_report_fleet_empty", "No ships detected in orbit"))

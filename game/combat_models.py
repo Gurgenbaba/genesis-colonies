@@ -225,3 +225,16 @@ def validate_combat_registry() -> List[str]:
         if stats.hull <= 0 and stats.attack <= 0 and stats.shield <= 0:
             errors.append(f"defense has no combat stats: {key}")
     return errors
+
+
+def unit_display_name(unit_key: str, *, locale: str | None = None) -> str:
+    """Player-facing ship or defense label — auto-detect kind, same source as fleet/defense UI."""
+    from .defense_defs import defense_display_name, is_known_defense_key
+    from .fleet_defs import ship_display_name
+
+    key = str(unit_key or "").strip()
+    if not key:
+        return ""
+    if is_known_defense_key(key):
+        return defense_display_name(key, locale=locale)
+    return ship_display_name(key, locale=locale)

@@ -496,14 +496,14 @@
         <span class="admin-section-title-text">{{ T("admin_combat_bots_title", "Combat Balance Bots") }}</span>
       </div>
       <section class="admin-section" id="admin-combat-bots-panel">
-        <p class="admin-tab-hint admin-small-hint">{{ T("admin_combat_bots_hint", "Zwei interne Test-Bots — echte Angriffsflüge, kein Simulations-Spam. Standard: deaktiviert.") }}</p>
+        <p class="admin-tab-hint admin-small-hint">{{ T("admin_combat_bots_hint", "Live-Bots pausiert — Balance lokal per pytest. Code bleibt für spätere Bot-Spieler-Mechanik.") }}</p>
         <div class="admin-toolbar admin-action-row-wrap">
           <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="combat-bots-ensure">{{ T("admin_combat_bots_ensure", "Bots anlegen") }}</button>
           <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="combat-bots-toggle" data-combat-bots-enabled="1">{{ T("admin_combat_bots_enable", "Aktivieren") }}</button>
           <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="combat-bots-toggle" data-combat-bots-enabled="0">{{ T("admin_combat_bots_disable", "Deaktivieren") }}</button>
           <input type="search" id="admin-combat-bots-scenario-filter" class="gc-input admin-search-input" placeholder="{{ T('admin_combat_bots_scenario_filter', 'Szenario suchen…') }}" autocomplete="off">
           <select id="admin-combat-bots-scenario" class="gc-input admin-search-input admin-combat-bots-scenario-select" data-gc-hud-select>
-            <option value="raptor_vs_aegis_equal_cost">{{ T("admin_combat_bots_scenario_raptor_aegis", "Raptor vs Aegis (equal cost)") }}</option>
+            <option value="raptor_vs_aegis_equal_cost">{{ T("admin_combat_bots_scenario_raptor_aegis", "Raptor Interceptor vs Aegis Frigate (equal cost)") }}</option>
           </select>
           <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="combat-bots-run">{{ T("admin_combat_bots_run", "Szenario starten") }}</button>
           <button type="button" class="gc-btn gc-btn-secondary gc-btn-sm" data-admin-action="combat-bots-run-next">{{ T("admin_combat_bots_run_next", "Nächstes Szenario") }}</button>

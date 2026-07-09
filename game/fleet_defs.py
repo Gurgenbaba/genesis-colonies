@@ -450,6 +450,17 @@ def rapid_fire_bonus_shot_chance(rapid_fire_multiplier: int) -> float:
     return (mult - 1) / mult
 
 
+def ship_display_name(ship_key: str, *, locale: str | None = None) -> str:
+    """Player-facing hull label — same source as fleet UI (`name_key` + i18n)."""
+    from .i18n import tr
+    from .mail import humanize_identifier_key
+
+    key = canonical_ship_key(str(ship_key or "").strip())
+    spec = get_ship(key) or {}
+    name_key = str(spec.get("name_key") or f"fleet_ship_{key}").strip()
+    return tr(name_key, humanize_identifier_key(key), locale=locale)
+
+
 def ship_score_value(ship_key: str) -> int:
     """Ranking / combat empire value per hull (falls back to build cost)."""
     from .combat_models import combat_stats_for_ship

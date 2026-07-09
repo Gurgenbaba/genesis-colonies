@@ -813,6 +813,23 @@
     });
   }
 
+  function syncCombatBotsLiveUi(status) {
+    const panel = qs("#admin-combat-bots-panel");
+    if (!panel) return;
+    const live = status?.live_in_game_enabled !== false;
+    panel.dataset.combatBotsLive = live ? "1" : "0";
+    qsa("[data-admin-action^='combat-bots-']", panel).forEach((btn) => {
+      const act = btn.dataset.adminAction || "";
+      if (act === "combat-bots-refresh") return;
+      btn.disabled = !live;
+      btn.setAttribute("aria-disabled", live ? "false" : "true");
+    });
+    const filter = qs("#admin-combat-bots-scenario-filter", panel);
+    const sel = qs("#admin-combat-bots-scenario", panel);
+    if (filter) filter.disabled = !live;
+    if (sel) sel.disabled = !live;
+  }
+
   async function loadAdminCombatBots() {
     setCombatBotsStatus(t("admin_combat_bots_loading", "Lade Bot-Status…"));
     const data = await adminGet("/api/admin/combat-bots/results?limit=15");
@@ -821,20 +838,31 @@
       return data;
     }
     const status = data.status || {};
+    syncCombatBotsLiveUi(status);
     combatBotsScenarioCatalog = status.scenarios || [];
     bindCombatBotsScenarioFilter();
     const filterVal = qs("#admin-combat-bots-scenario-filter")?.value || "";
     populateCombatBotsScenarioSelect(combatBotsScenarioCatalog, filterVal);
-    const enabled = status.enabled ? t("admin_combat_bots_on", "aktiv") : t("admin_combat_bots_off", "inaktiv");
-    const cd = Number(status.cooldown_seconds || 0);
-    const nxt = status.next_scenario_key || "–";
-    const cnt = Number(status.scenario_count || 0);
-    setCombatBotsStatus(
-      `${t("admin_combat_bots_state", "Status")}: ${enabled}` +
-        ` — ${cnt} ${t("admin_combat_bots_scenarios", "Szenarien")}` +
-        ` — ${t("admin_combat_bots_next", "Nächstes")}: ${nxt}` +
-        (cd > 0 ? ` — ${t("admin_combat_bots_cooldown", "Cooldown")}: ${cd}s` : "")
-    );
+    if (status.live_in_game_enabled === false) {
+      setCombatBotsStatus(
+        t(
+          "admin_combat_bots_live_disabled",
+          "Live-Bots pausiert — Balance lokal per pytest. Vorbereitet für spätere Bot-Spieler."
+        ) +
+          (status.local_testing_hint ? ` (${status.local_testing_hint})` : "")
+      );
+    } else {
+      const enabled = status.enabled ? t("admin_combat_bots_on", "aktiv") : t("admin_combat_bots_off", "inaktiv");
+      const cd = Number(status.cooldown_seconds || 0);
+      const nxt = status.next_scenario_key || "–";
+      const cnt = Number(status.scenario_count || 0);
+      setCombatBotsStatus(
+        `${t("admin_combat_bots_state", "Status")}: ${enabled}` +
+          ` — ${cnt} ${t("admin_combat_bots_scenarios", "Szenarien")}` +
+          ` — ${t("admin_combat_bots_next", "Nächstes")}: ${nxt}` +
+          (cd > 0 ? ` — ${t("admin_combat_bots_cooldown", "Cooldown")}: ${cd}s` : "")
+      );
+    }
     renderCombatBotsResults(data);
     return data;
   }
@@ -845,7 +873,15 @@
       notify(t("admin_combat_bots_ensure_ok", "Combat-Bots bereit."), "success");
       await loadAdminCombatBots();
     } else {
-      showAlert(res.message || res.error, "error");
+      showAlert(
+        res.error === "live_bots_disabled"
+          ? t(
+              "admin_combat_bots_live_disabled",
+              "Live-Bots pausiert — Balance lokal per pytest. Vorbereitet für spätere Bot-Spieler."
+            )
+          : res.message || res.error,
+        "error"
+      );
     }
     return res;
   }
@@ -861,7 +897,15 @@
       );
       await loadAdminCombatBots();
     } else {
-      showAlert(res.message || res.error, "error");
+      showAlert(
+        res.error === "live_bots_disabled"
+          ? t(
+              "admin_combat_bots_live_disabled",
+              "Live-Bots pausiert — Balance lokal per pytest. Vorbereitet für spätere Bot-Spieler."
+            )
+          : res.message || res.error,
+        "error"
+      );
     }
     return res;
   }
@@ -885,8 +929,23 @@
       );
       await loadAdminCombatBots();
     } else {
-      showAlert(res.message || res.error, "error");
-      setCombatBotsStatus(res.message || res.error || "");
+      showAlert(
+        res.error === "live_bots_disabled"
+          ? t(
+              "admin_combat_bots_live_disabled",
+              "Live-Bots pausiert — Balance lokal per pytest. Vorbereitet für spätere Bot-Spieler."
+            )
+          : res.message || res.error,
+        "error"
+      );
+      setCombatBotsStatus(
+        res.error === "live_bots_disabled"
+          ? t(
+              "admin_combat_bots_live_disabled",
+              "Live-Bots pausiert — Balance lokal per pytest. Vorbereitet für spätere Bot-Spieler."
+            )
+          : res.message || res.error || ""
+      );
     }
     return res;
   }
@@ -901,8 +960,23 @@
       );
       await loadAdminCombatBots();
     } else {
-      showAlert(res.message || res.error, "error");
-      setCombatBotsStatus(res.message || res.error || "");
+      showAlert(
+        res.error === "live_bots_disabled"
+          ? t(
+              "admin_combat_bots_live_disabled",
+              "Live-Bots pausiert — Balance lokal per pytest. Vorbereitet für spätere Bot-Spieler."
+            )
+          : res.message || res.error,
+        "error"
+      );
+      setCombatBotsStatus(
+        res.error === "live_bots_disabled"
+          ? t(
+              "admin_combat_bots_live_disabled",
+              "Live-Bots pausiert — Balance lokal per pytest. Vorbereitet für spätere Bot-Spieler."
+            )
+          : res.message || res.error || ""
+      );
     }
     return res;
   }

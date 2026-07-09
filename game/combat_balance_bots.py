@@ -47,6 +47,12 @@ SETTINGS_KEY_LAST_RUN = "combat_balance_bots_last_run_at"
 SETTINGS_KEY_SCENARIO_INDEX = "combat_balance_bots_scenario_index"
 RUNTIME_KEY_SCHEDULER_LAST = "combat_balance_bots_scheduler_last_at"
 
+# Live in-game automation (cron scheduler + admin launch + bot account provisioning).
+# Reserved for a future real bot-player mechanic. Balance tuning uses local pytest instead.
+LIVE_IN_GAME_BOTS_ENABLED = False
+
+LOCAL_BALANCE_TEST_HINT = "pytest tests/test_combat.py -k balance && pytest tests/test_combat_balance_bots.py"
+
 ScenarioBuilder = Callable[[int], Dict[str, int]]
 
 
@@ -101,6 +107,18 @@ def ships_for_budget(ship_key: str, budget: int) -> Dict[str, int]:
 
 def defense_for_budget(defense_key: str, budget: int) -> Dict[str, int]:
     return {str(defense_key): count_for_budget(defense_key, budget, kind="defense")}
+
+
+def _ship_name(ship_key: str) -> str:
+    from .combat_models import unit_display_name
+
+    return unit_display_name(ship_key)
+
+
+def _def_name(defense_key: str) -> str:
+    from .defense_defs import defense_display_name
+
+    return defense_display_name(defense_key)
 
 
 def mixed_defense_for_budget(spec: Mapping[str, float], budget: int) -> Dict[str, int]:
@@ -402,8 +420,8 @@ def _generate_matrix_scenarios() -> List[CombatBalanceScenario]:
         out.append(
             _scenario(
                 f"mirror_{ship}_std",
-                f"Mirror: {ship}",
-                f"Same mono stack both sides — {ship}.",
+                f"Mirror: {_ship_name(ship)}",
+                f"Same mono stack both sides — {_ship_name(ship)}.",
                 attacker_ships=_mono_ship(ship),
                 defender_ships=_mono_ship(ship),
             )
@@ -416,7 +434,7 @@ def _generate_matrix_scenarios() -> List[CombatBalanceScenario]:
             out.append(
                 _scenario(
                     f"pvp_{atk}_vs_{def_ship}_hangar",
-                    f"{atk} vs {def_ship} (hangar only)",
+                    f"{_ship_name(atk)} vs {_ship_name(def_ship)} (hangar only)",
                     f"Mono attacker vs mono hangar — no planet turrets.",
                     attacker_ships=_mono_ship(atk),
                     defender_ships=_mono_ship(def_ship),
@@ -429,8 +447,8 @@ def _generate_matrix_scenarios() -> List[CombatBalanceScenario]:
             out.append(
                 _scenario(
                     f"pvp_{atk}_vs_{def_ship}_defended",
-                    f"{atk} vs {def_ship}+{turret}",
-                    f"Hangar 65% + {turret} 35% on defender.",
+                    f"{_ship_name(atk)} vs {_ship_name(def_ship)}+{_def_name(turret)}",
+                    f"Hangar 65% + {_def_name(turret)} 35% on defender.",
                     attacker_ships=_mono_ship(atk),
                     defender_ships=d_ships,
                     defender_defense=d_def,
@@ -442,8 +460,8 @@ def _generate_matrix_scenarios() -> List[CombatBalanceScenario]:
             out.append(
                 _scenario(
                     f"raid_{ship}_vs_{defk}",
-                    f"{ship} vs {defk} wall",
-                    f"Fleet-only attacker vs full-budget {defk}.",
+                    f"{_ship_name(ship)} vs {_def_name(defk)} wall",
+                    f"Fleet-only attacker vs full-budget {_def_name(defk)}.",
                     attacker_ships=_mono_ship(ship),
                     defender_defense=_mono_defense(defk),
                 )
@@ -454,8 +472,8 @@ def _generate_matrix_scenarios() -> List[CombatBalanceScenario]:
             out.append(
                 _scenario(
                     f"raid_{ship}_vs_hangar_{defk}",
-                    f"{ship} vs hangar+{defk}",
-                    f"50% {ship} hangar + 50% {defk} on defender.",
+                    f"{_ship_name(ship)} vs hangar+{_def_name(defk)}",
+                    f"50% {_ship_name(ship)} hangar + 50% {_def_name(defk)} on defender.",
                     attacker_ships=_mono_ship(ship),
                     defender_ships=d_ships,
                     defender_defense=d_def,
@@ -469,15 +487,16 @@ def _generate_matrix_scenarios() -> List[CombatBalanceScenario]:
         ("eclipse_runner", "ironclad_frigate"),
     ):
         for tier_name, budget in _BUDGET_TIERS:
+            turret = _DEFENDER_COUNTER_TURRET.get(def_ship, "plasma_arc")
             d_ships, d_def = _defender_hangar_with_turrets(
-                def_ship, _DEFENDER_COUNTER_TURRET.get(def_ship, "plasma_arc"),
+                def_ship, turret,
                 hangar_frac=0.6,
                 turret_frac=0.4,
             )
             out.append(
                 _scenario(
                     f"duel_{atk}_vs_{def_ship}_{tier_name}",
-                    f"{atk} vs {def_ship} ({tier_name})",
+                    f"{_ship_name(atk)} vs {_ship_name(def_ship)} ({tier_name})",
                     f"Budget tier {tier_name} ({budget}) — hangar + counter turrets.",
                     cost_budget=budget,
                     attacker_ships=_mono_ship(atk),
@@ -492,7 +511,7 @@ def _generate_matrix_scenarios() -> List[CombatBalanceScenario]:
                 out.append(
                     _scenario(
                         f"duel_{atk}_vs_{defk}_{tier_name}",
-                        f"{atk} vs {defk} ({tier_name})",
+                        f"{_ship_name(atk)} vs {_def_name(defk)} ({tier_name})",
                         f"Budget tier {tier_name} ({budget}) — pure defense.",
                         cost_budget=budget,
                         attacker_ships=_mono_ship(atk),
@@ -528,7 +547,7 @@ def _generate_matrix_scenarios() -> List[CombatBalanceScenario]:
             _scenario(
                 f"mixed_{mix_key}_vs_defended",
                 f"Mixed {mix_key} vs defended",
-                f"Mixed attacker vs {hangar} hangar + {defk}.",
+                f"Mixed attacker vs {_ship_name(hangar)} hangar + {_def_name(defk)}.",
                 attacker_ships=_weighted_ships(spec),
                 defender_ships=d_ships,
                 defender_defense=d_def,
@@ -549,7 +568,7 @@ def _generate_matrix_scenarios() -> List[CombatBalanceScenario]:
         out.append(
             _scenario(
                 f"ironclad_vs_fullgrid_{tier_name}",
-                f"Ironclad vs full grid ({tier_name})",
+                f"{_ship_name('ironclad_frigate')} vs full grid ({tier_name})",
                 f"Heavy fleet vs all turret tiers at {budget}.",
                 cost_budget=budget,
                 attacker_ships=_mono_ship("ironclad_frigate"),
@@ -560,7 +579,8 @@ def _generate_matrix_scenarios() -> List[CombatBalanceScenario]:
             _scenario(
                 f"mixed_vs_mixed_def_{tier_name}",
                 f"Mixed fleet vs mixed turrets ({tier_name})",
-                f"Raptor+vanguard vs ion+flak+plasma at {budget}.",
+                f"{_ship_name('falcon_interceptor')}+{_ship_name('spark_drone')} vs "
+                f"{_def_name('ion_bastion')}+{_def_name('flak_array')}+{_def_name('plasma_arc')} at {budget}.",
                 cost_budget=budget,
                 attacker_ships=_mixed_fleet_equal_cost,
                 defender_defense=_mixed_heavy_defense,
@@ -569,8 +589,8 @@ def _generate_matrix_scenarios() -> List[CombatBalanceScenario]:
         out.append(
             _scenario(
                 f"raptor_vs_layered_planet_{tier_name}",
-                f"Raptor vs layered planet ({tier_name})",
-                f"Mono falcon vs hangar+sentinel+plasma+ion split.",
+                f"{_ship_name('falcon_interceptor')} vs layered planet ({tier_name})",
+                f"Mono {_ship_name('falcon_interceptor')} vs hangar+sentinel+plasma+ion split.",
                 cost_budget=budget,
                 attacker_ships=_mono_ship("falcon_interceptor"),
                 defender_ships=_weighted_ships({"falcon_interceptor": 0.4, "ironclad_frigate": 0.1}),
@@ -584,8 +604,8 @@ def _generate_matrix_scenarios() -> List[CombatBalanceScenario]:
         out.append(
             _scenario(
                 f"def_grid_{defk}_vs_ironclad",
-                f"Ironclad vs mono {defk}",
-                f"Single turret type full budget vs ironclad stack.",
+                f"{_ship_name('ironclad_frigate')} vs mono {_def_name(defk)}",
+                f"Single turret type full budget vs {_ship_name('ironclad_frigate')} stack.",
                 attacker_ships=_mono_ship("ironclad_frigate"),
                 defender_defense=_mono_defense(defk),
             )
@@ -597,93 +617,93 @@ def _generate_matrix_scenarios() -> List[CombatBalanceScenario]:
 _CURATED_SCENARIOS: Tuple[CombatBalanceScenario, ...] = (
         _scenario(
             "raptor_vs_aegis_equal_cost",
-            "Raptor vs Aegis Frigate (equal cost)",
-            "falcon_interceptor vs ironclad_frigate hangar.",
+            f"{_ship_name('falcon_interceptor')} vs {_ship_name('ironclad_frigate')} (equal cost)",
+            f"{_ship_name('falcon_interceptor')} vs {_ship_name('ironclad_frigate')} hangar.",
             attacker_ships=_raptor_vs_aegis_equal_cost,
             defender_ships=_aegis_hangar_equal_cost,
         ),
         _scenario(
             "vanguard_vs_raptor_equal_cost",
-            "Vanguard vs Raptor (equal cost)",
-            "spark_drone swarm vs falcon_interceptor hangar.",
+            f"{_ship_name('spark_drone')} vs {_ship_name('falcon_interceptor')} (equal cost)",
+            f"{_ship_name('spark_drone')} swarm vs {_ship_name('falcon_interceptor')} hangar.",
             attacker_ships=_vanguard_equal_cost,
             defender_ships=_raptor_equal_cost,
         ),
         _scenario(
             "ironclad_vs_raptor_equal_cost",
-            "Aegis vs Raptor (equal cost)",
-            "ironclad_frigate attacker vs falcon hangar — heavy vs screen.",
+            f"{_ship_name('ironclad_frigate')} vs {_ship_name('falcon_interceptor')} (equal cost)",
+            f"{_ship_name('ironclad_frigate')} attacker vs {_ship_name('falcon_interceptor')} hangar — heavy vs screen.",
             attacker_ships=_ironclad_equal_cost,
             defender_ships=_raptor_equal_cost,
         ),
         _scenario(
             "raptor_vs_ironclad_beta_attack",
-            "Raptor attack vs Aegis (Beta attacks)",
-            "Beta bot attacks with falcon vs Alpha ironclad hangar.",
+            f"{_ship_name('falcon_interceptor')} attack vs {_ship_name('ironclad_frigate')} (Beta attacks)",
+            f"Beta bot attacks with {_ship_name('falcon_interceptor')} vs Alpha {_ship_name('ironclad_frigate')} hangar.",
             attacker="beta",
             attacker_ships=_raptor_vs_aegis_equal_cost,
             defender_ships=_aegis_hangar_equal_cost,
         ),
         _scenario(
             "mixed_light_vs_mass_raptor_equal_cost",
-            "Mixed light vs mass Raptor",
-            "Vanguard + cargo vs mono falcon stack.",
+            f"Mixed light vs mass {_ship_name('falcon_interceptor')}",
+            f"{_ship_name('spark_drone')} + {_ship_name('mule_courier')} vs mono {_ship_name('falcon_interceptor')} stack.",
             attacker_ships=_mixed_light_equal_cost,
             defender_ships=_mass_raptor_equal_cost,
         ),
         _scenario(
             "mixed_fleet_vs_mass_ironclad",
-            "Mixed fleet vs mass Aegis",
-            "Raptor + Aegis mix vs ironclad wall.",
+            f"Mixed fleet vs mass {_ship_name('ironclad_frigate')}",
+            f"{_ship_name('falcon_interceptor')} + {_ship_name('ironclad_frigate')} mix vs {_ship_name('ironclad_frigate')} wall.",
             attacker_ships=_mixed_raptor_ironclad,
             defender_ships=_mass_ironclad,
         ),
         _scenario(
             "triple_mixed_vs_triple_mixed",
             "Triple mixed fleet mirror",
-            "Scout + Raptor + Aegis vs same composition.",
+            f"{_ship_name('spark_drone')} + {_ship_name('falcon_interceptor')} + {_ship_name('ironclad_frigate')} vs same composition.",
             attacker_ships=_triple_mixed_fleet,
             defender_ships=_triple_mixed_fleet,
         ),
         _scenario(
             "bomber_vs_defense_equal_cost",
-            "Ironclad vs Ion Bastion",
-            "Heavy ship vs ion_bastion turret.",
+            f"{_ship_name('ironclad_frigate')} vs {_def_name('ion_bastion')}",
+            f"Heavy ship vs {_def_name('ion_bastion')} turret.",
             attacker_ships=_ironclad_equal_cost,
             defender_defense=_ion_bastion_defense_equal_cost,
         ),
         _scenario(
             "raptor_vs_aegis_defense_equal_cost",
-            "Raptor vs Ion Bastion",
-            "falcon_interceptor vs ion_bastion.",
+            f"{_ship_name('falcon_interceptor')} vs {_def_name('ion_bastion')}",
+            f"{_ship_name('falcon_interceptor')} vs {_def_name('ion_bastion')}.",
             attacker_ships=_raptor_vs_aegis_equal_cost,
             defender_defense=_ion_bastion_defense_equal_cost,
         ),
         _scenario(
             "raptor_vs_flak_equal_cost",
-            "Raptor vs Flak Array",
-            "falcon vs flak_array — light-ship counter test.",
+            f"{_ship_name('falcon_interceptor')} vs {_def_name('flak_array')}",
+            f"{_ship_name('falcon_interceptor')} vs {_def_name('flak_array')} — light-ship counter test.",
             attacker_ships=_raptor_vs_aegis_equal_cost,
             defender_defense=_flak_defense,
         ),
         _scenario(
             "vanguard_swarm_vs_flak",
-            "Vanguard swarm vs Flak",
-            "spark_drone screen vs flak_array.",
+            f"{_ship_name('spark_drone')} swarm vs {_def_name('flak_array')}",
+            f"{_ship_name('spark_drone')} screen vs {_def_name('flak_array')}.",
             attacker_ships=_vanguard_swarm,
             defender_defense=_flak_defense,
         ),
         _scenario(
             "ironclad_vs_pulse_barrier",
-            "Ironclad vs Pulse Barrier",
-            "Heavy puncher vs shield defense.",
+            f"{_ship_name('ironclad_frigate')} vs {_def_name('pulse_barrier')}",
+            f"Heavy puncher vs {_def_name('pulse_barrier')}.",
             attacker_ships=_ironclad_equal_cost,
             defender_defense=_pulse_barrier_def,
         ),
         _scenario(
             "raptor_vs_slug_wall",
-            "Raptor vs Slug launcher wall",
-            "Early-game defense density vs falcon.",
+            f"{_ship_name('falcon_interceptor')} vs {_def_name('slug_launcher')} wall",
+            f"Early-game defense density vs {_ship_name('falcon_interceptor')}.",
             cost_budget=BUDGET_LOW,
             attacker_ships=_raptor_vs_aegis_equal_cost,
             defender_defense=_slug_wall,
@@ -691,14 +711,16 @@ _CURATED_SCENARIOS: Tuple[CombatBalanceScenario, ...] = (
         _scenario(
             "mixed_fleet_vs_mixed_defense",
             "Mixed fleet vs mixed turrets",
-            "Raptor + Vanguard vs sentinel + plasma.",
+            f"{_ship_name('falcon_interceptor')} + {_ship_name('spark_drone')} vs "
+            f"{_def_name('sentinel_turret')} + {_def_name('plasma_arc')}.",
             attacker_ships=_mixed_fleet_equal_cost,
             defender_defense=_defense_only_mixed,
         ),
         _scenario(
             "mixed_fleet_vs_heavy_defense",
             "Mixed fleet vs heavy defense layer",
-            "Raptor + Vanguard vs ion + flak + plasma.",
+            f"{_ship_name('falcon_interceptor')} + {_ship_name('spark_drone')} vs "
+            f"{_def_name('ion_bastion')} + {_def_name('flak_array')} + {_def_name('plasma_arc')}.",
             attacker_ships=_mixed_fleet_equal_cost,
             defender_defense=_mixed_heavy_defense,
         ),
@@ -713,23 +735,24 @@ _CURATED_SCENARIOS: Tuple[CombatBalanceScenario, ...] = (
         _scenario(
             "mixed_fleet_vs_hangar_and_defense",
             "Mixed fleet vs hangar + defense",
-            "Attacker mix vs half-budget raptors + layered turrets.",
+            f"Attacker mix vs half-budget {_ship_name('falcon_interceptor')} + layered turrets.",
             attacker_ships=_mixed_fleet_equal_cost,
             defender_ships=_hangar_raptor_half,
             defender_defense=_defense_mixed_half,
         ),
         _scenario(
             "ironclad_vs_hangar_and_defense",
-            "Ironclad vs hangar + defense",
-            "Heavy attacker vs raptor/ironclad hangar + plasma/sentinel.",
+            f"{_ship_name('ironclad_frigate')} vs hangar + defense",
+            f"Heavy attacker vs {_ship_name('falcon_interceptor')}/{_ship_name('ironclad_frigate')} hangar + "
+            f"{_def_name('plasma_arc')}/{_def_name('sentinel_turret')}.",
             attacker_ships=_ironclad_equal_cost,
             defender_ships=_hangar_mixed_half,
             defender_defense=_defense_mixed_half,
         ),
         _scenario(
             "raptor_vs_plasma_hangar_combo",
-            "Raptor vs Raptor + Plasma defense",
-            "Mono raptor vs combined hangar and plasma_arc.",
+            f"{_ship_name('falcon_interceptor')} vs {_ship_name('falcon_interceptor')} + {_def_name('plasma_arc')}",
+            f"Mono {_ship_name('falcon_interceptor')} vs combined hangar and {_def_name('plasma_arc')}.",
             attacker_ships=_raptor_vs_aegis_equal_cost,
             defender_ships=_hangar_raptor_half,
             defender_defense=_plasma_defense,
@@ -737,21 +760,21 @@ _CURATED_SCENARIOS: Tuple[CombatBalanceScenario, ...] = (
         _scenario(
             "cargo_escort_bad_case",
             "Cargo escort bad case",
-            "Mule + Raptor escort vs mass Raptor.",
+            f"{_ship_name('mule_courier')} + {_ship_name('falcon_interceptor')} escort vs mass {_ship_name('falcon_interceptor')}.",
             attacker_ships=_cargo_escort_bad_case,
             defender_ships=_mass_raptor_equal_cost,
         ),
         _scenario(
             "scout_screen_test",
-            "Scout screen vs mass Raptor",
-            "Vanguard + spy probes vs falcon stack.",
+            f"Scout screen vs mass {_ship_name('falcon_interceptor')}",
+            f"{_ship_name('spark_drone')} + {_ship_name('veil_probe')} vs {_ship_name('falcon_interceptor')} stack.",
             attacker_ships=_scout_screen_test,
             defender_ships=_mass_raptor_equal_cost,
         ),
         _scenario(
             "mass_ironclad_vs_full_grid",
-            "Mass Aegis vs full defense grid",
-            "High-budget ironclad wall vs all turret tiers.",
+            f"Mass {_ship_name('ironclad_frigate')} vs full defense grid",
+            f"High-budget {_ship_name('ironclad_frigate')} wall vs all turret tiers.",
             cost_budget=BUDGET_HIGH,
             attacker_ships=_mass_ironclad,
             defender_defense=_full_defense_layered,
@@ -875,15 +898,35 @@ def _save_setting_on_conn(key: str, value: str, *, conn) -> None:
     )
 
 
+def live_combat_balance_bots_allowed() -> bool:
+    """True when live bot-vs-bot fleet fights may run (cron/admin)."""
+    return bool(LIVE_IN_GAME_BOTS_ENABLED)
+
+
+def _live_bots_blocked(**extra: Any) -> Dict[str, Any]:
+    return {
+        "ok": False,
+        "error": "live_bots_disabled",
+        "hint": LOCAL_BALANCE_TEST_HINT,
+        **extra,
+    }
+
+
 def is_combat_balance_bots_enabled(*, conn) -> bool:
+    if not live_combat_balance_bots_allowed():
+        return False
     from .models import get_game_settings
 
     settings = get_game_settings(conn=conn) or {}
     return bool(int(settings.get(SETTINGS_KEY_ENABLED) or 0))
 
 
-def set_combat_balance_bots_enabled(enabled: bool, *, conn) -> None:
+def set_combat_balance_bots_enabled(enabled: bool, *, conn) -> bool:
+    """Persist auto-run toggle. Returns False when live bots are globally disabled."""
+    if bool(enabled) and not live_combat_balance_bots_allowed():
+        return False
     _save_setting_on_conn(SETTINGS_KEY_ENABLED, "1" if enabled else "0", conn=conn)
+    return True
 
 
 def _coord_taken(galaxy: int, system: int, position: int, *, conn, except_planet_id: int | None = None) -> bool:
@@ -1047,6 +1090,8 @@ def _ensure_single_bot(
 
 def ensure_combat_balance_bots(*, conn) -> Dict[str, Any]:
     """Create or refresh the two internal combat bots and their homeworlds."""
+    if not live_combat_balance_bots_allowed():
+        return _live_bots_blocked()
     from .db import begin_write_transaction
 
     begin_write_transaction(conn)
@@ -1186,6 +1231,8 @@ def maybe_run_next_scheduled_scenario(*, conn, now: float | None = None) -> Dict
 
     Never run from game-state / queue hot path (SQLite lock safety).
     """
+    if not live_combat_balance_bots_allowed():
+        return {"ok": True, "skipped": "live_bots_disabled", "hint": LOCAL_BALANCE_TEST_HINT}
     ts = float(now if now is not None else time.time())
     if not is_combat_balance_bots_enabled(conn=conn):
         return {"ok": True, "skipped": "disabled"}
@@ -1225,6 +1272,8 @@ def run_combat_balance_scenario(
     skip_cooldown: bool = False,
 ) -> Dict[str, Any]:
     """Prepare bots, spawn loadouts, dispatch a real attack fleet movement."""
+    if not live_combat_balance_bots_allowed():
+        return _live_bots_blocked(scenario_key=str(scenario_key or "").strip())
     from .db import begin_write_transaction
     from .fleet import build_fleet_send_preview, fleet_schema_ready, send_fleet
 
@@ -1518,6 +1567,8 @@ def get_combat_balance_bots_snapshot(*, conn) -> Dict[str, Any]:
     alpha = _bot_snapshot_entry(BOT_ALPHA_USERNAME, BOT_ALPHA_DISPLAY_NAME, conn=conn)
     beta = _bot_snapshot_entry(BOT_BETA_USERNAME, BOT_BETA_DISPLAY_NAME, conn=conn)
     return {
+        "live_in_game_enabled": live_combat_balance_bots_allowed(),
+        "local_testing_hint": LOCAL_BALANCE_TEST_HINT,
         "enabled": is_combat_balance_bots_enabled(conn=conn),
         "cooldown_seconds": _cooldown_remaining(conn=conn),
         "scheduler_interval_sec": int(BOT_SCHEDULER_INTERVAL_SEC),

@@ -1580,6 +1580,7 @@ def build_expedition_report(
     world_context: Mapping[str, Any] | None = None,
 ) -> Tuple[str, Dict[str, Any]]:
     from .i18n import fmt_int, tr
+    from .fleet_defs import ship_display_name
 
     def _t(key, default=None, **kw):
         return tr(key, default, locale=locale, **kw)
@@ -1837,8 +1838,7 @@ def build_expedition_report(
         for ship_key, qty in sorted(ship_losses.items()):
             if int(qty or 0) <= 0:
                 continue
-            spec = SHIPS.get(str(ship_key)) or {}
-            ship_name = _t(str(spec.get("name_key") or ship_key), str(ship_key))
+            ship_name = ship_display_name(str(ship_key), locale=locale)
             body_lines.append(
                 _t(
                     "fleet_expedition_report_loss_line",
@@ -1857,8 +1857,7 @@ def build_expedition_report(
         for ship_key, qty in sorted(salvaged_ships.items()):
             if int(qty or 0) <= 0:
                 continue
-            spec = SHIPS.get(str(ship_key)) or {}
-            ship_name = _t(str(spec.get("name_key") or ship_key), str(ship_key))
+            ship_name = ship_display_name(str(ship_key), locale=locale)
             body_lines.append(
                 _t(
                     "fleet_expedition_report_salvaged_line",

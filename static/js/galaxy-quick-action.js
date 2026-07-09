@@ -195,7 +195,9 @@
             .sort((a, b) => b[1] - a[1]);
           const shown = entries.slice(0, 3);
           const parts = shown.map(([key, qty]) => {
-            const shipName = t(`fleet_ship_${key}`, key);
+            const shipName = typeof GC !== "undefined" && typeof GC.shipDisplayName === "function"
+              ? GC.shipDisplayName(key)
+              : t(`fleet_ship_${key}`, key);
             return `${formatNumber(qty)} ${this.escapeHtml(shipName)}`;
           });
           const remaining = entries.length - shown.length;

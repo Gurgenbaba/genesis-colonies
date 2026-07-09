@@ -672,7 +672,7 @@ def append_spy_defense_report_lines(
     fmt_int,
 ) -> None:
     """Append plain-text defense intel section to a spy report body."""
-    from .defense_defs import get_defense
+    from .defense_defs import defense_display_name
 
     if tiers.get("defense"):
         lines: list[str] = []
@@ -703,8 +703,7 @@ def append_spy_defense_report_lines(
         units = defense.get("units") or {}
         if units:
             for key, qty in sorted(units.items()):
-                spec = get_defense(str(key)) or {}
-                label = tr(str(spec.get("name_key") or key), str(key))
+                label = defense_display_name(str(key))
                 lines.append(f"{label} ×{fmt_int(int(qty or 0))}")
         elif total_units <= 0:
             lines.append(tr("fleet_spy_report_defense_empty", "No defensive structures detected"))
