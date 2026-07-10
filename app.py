@@ -315,13 +315,29 @@ def choose_background():
         set_request_locale(DEFAULT_LOCALE)
 
 
+_FLEET_TICK_SKIP_ENDPOINTS = frozenset(
+    {
+        "static",
+        "api_game_state",
+    }
+)
+_FLEET_TICK_SKIP_PREFIXES = ("api_admin_", "api_chat_")
+
+
+def _should_run_fleet_tick_before_request() -> bool:
+    """Skip high-frequency polls and admin/chat APIs — avoids SQLite writer pile-up on local dev."""
+    endpoint = str(request.endpoint or "")
+    if endpoint in _FLEET_TICK_SKIP_ENDPOINTS:
+        return False
+    if any(endpoint.startswith(prefix) for prefix in _FLEET_TICK_SKIP_PREFIXES):
+        return False
+    return session.get("user_id") is not None
+
+
 @app.before_request
 def _fleet_tick_before_authenticated_request():
     """Isolated fleet tick before SSR routes open a long-lived page connection."""
-    if request.endpoint == "static":
-        return None
-    uid = session.get("user_id")
-    if not uid:
+    if not _should_run_fleet_tick_before_request():
         return None
     try:
         from game.fleet_worker import maybe_run_global_fleet_tick
@@ -812,13 +828,6 @@ def _load_page_live_context(
     src = str(finish_source or "page_load")
     own_conn = conn is None
     if own_conn:
-        # Fleet worker opens its own writer — never while caller holds conn (SQLite lock safety).
-        try:
-            from game.fleet_worker import maybe_run_global_fleet_tick
-
-            maybe_run_global_fleet_tick(force=False, source=src)
-        except Exception:
-            logger.exception("global fleet tick safety net failed source=%s", src)
         conn = db()
     use_poll_live_path = src == "game_state" or _is_pjax_request()
     try:
@@ -9458,6 +9467,7 @@ def _admin_json(result: Dict[str, Any], default_status: int = 200):
         "invalid_building": 400,
         "invalid_type": 400,
         "migration_failed": 500,
+        "internal_error": 500,
     }.get(err, 400)
     return jsonify(result), status
 

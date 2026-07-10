@@ -604,12 +604,29 @@
   function shouldRunGameLoop() {
     const body = document.body;
     if (!body) return false;
+    if (isAdminRoutePath(window.location.pathname)) return false;
     if (body.classList.contains("gc-body-simple")) return false;
     if (body.dataset.authPage === "1") return false;
     if (isAuthRoutePath()) return false;
     if (!body.classList.contains("gc-body-ingame")) return false;
     if (!document.querySelector("#main-content")) return false;
     return hasLiveStatusRoot();
+  }
+
+  /** Admin shell keeps HUD chrome but must not poll /api/game-state (SQLite + dev server). */
+  function isAdminShellPage(page) {
+    const p = page || (typeof GC !== "undefined" && GC.detectPage ? GC.detectPage() : "");
+    return p === "admin";
+  }
+
+  /** Full-page navigation target — admin always hard-loads (heavy shell + admin.js boot). */
+  function isAdminRoutePath(pathname) {
+    const p = String(pathname || "").replace(/\/$/, "") || "/";
+    return p === "/admin" || p.startsWith("/admin/");
+  }
+
+  function shouldPollGameState(page) {
+    return shouldRunGameLoop() && !isAdminShellPage(page);
   }
 
   /** GC-547 — visual loops (rAF/ticker/CSS-driven updates) only when tab is visible. */
@@ -910,7 +927,11 @@
 
   function applyPlanetLandscapeFromState(data) {
     const ap = data?.active_planet;
-    const url = String(ap?.landscape_url || "").trim();
+    // Partial HUD payloads (e.g. admin balance save) omit landscape — never strip the shell.
+    if (!ap || typeof ap !== "object" || !Object.prototype.hasOwnProperty.call(ap, "landscape_url")) {
+      return;
+    }
+    const url = String(ap.landscape_url || "").trim();
     if (!url) {
       document.body.classList.remove("gc-has-planet-landscape");
       document.body.style.removeProperty("--planet-landscape");
@@ -1139,9 +1160,10 @@
 
   function scheduleDeferredChatBoot() {
     if (GC._chatBootScheduled || GC._chatBootstrapDone) return;
+    if (isAdminShellPage()) return;
     GC._chatBootScheduled = true;
     GC.setSafeTimeout(() => {
-      if (!shouldRunGameLoop() || _authLoopAborted) return;
+      if (!shouldRunGameLoop() || _authLoopAborted || isAdminShellPage()) return;
       if (typeof GC.initChat === "function") GC.initChat();
     }, GC_DEFER_CHAT_BOOT_MS);
   }
@@ -1177,6 +1199,8 @@
     });
   }
 
+  let _activeRefreshFlightResolve = null;
+
   function abortInFlightGameStateFetches() {
     const pol = GC.polling;
     if (pol.abort) {
@@ -1186,6 +1210,21 @@
       pol.abort = null;
     }
     pol.inFlight = false;
+    if (_activeRefreshFlightResolve) {
+      const resolve = _activeRefreshFlightResolve;
+      _activeRefreshFlightResolve = null;
+      resolve(null);
+    }
+    GC.refreshInFlight = null;
+  }
+
+  /** Stop game-state polling and chat before admin mutations or leaving admin (SQLite safety). */
+  function quiesceLiveClientFetches(reason) {
+    abortInFlightGameStateFetches();
+    GC.stopPolling();
+    if (typeof GC.quiesceChat === "function") GC.quiesceChat(reason);
+    else if (typeof GC.stopChatPolling === "function") GC.stopChatPolling();
+    if (reason) console.debug("[GC] quiesceLiveClientFetches", reason);
   }
 
   let _planetPageReloadPromise = null;
@@ -1347,7 +1386,9 @@
     }
 
     if (!isPlanetSwitch) {
-      GC.startPolling(anyActive || lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard);
+      if (shouldPollGameState()) {
+        GC.startPolling(anyActive || lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard);
+      }
       GC.startProgressTicker();
       if (shouldRefreshTechnicalModalAfterAction(reasonStr)) {
         refreshOpenTechnicalModalIfNeeded();
@@ -1421,6 +1462,9 @@
   };
 
   window.GC = GC;
+
+  GC.abortInFlightGameStateFetches = abortInFlightGameStateFetches;
+  GC.quiesceLiveClientFetches = quiesceLiveClientFetches;
 
   GC.parseIntNumber = parseIntNumber;
   GC.readNumberInput = readNumberInput;
@@ -1740,6 +1784,7 @@
     _resetQueueLiveStates();
     GC.stopPolling();
     if (typeof GC.hideCardReqTooltip === "function") GC.hideCardReqTooltip();
+    if (typeof GC.teardownHudSelectPortals === "function") GC.teardownHudSelectPortals();
     GC.actionLocks.build = false;
     GC.actionLocks.research = false;
     _statusPollErrorLogged = false;
@@ -2017,8 +2062,9 @@
   };
 
   GC.stopPolling = function stopPolling() {
-    console.debug("[GC] polling stopped");
     const p = GC.polling;
+    if (!p.running && !p.timeoutId && !p.inFlight && !p.abort) return;
+    console.debug("[GC] polling stopped");
     p.running = false;
     p.started = false;
     if (p.timeoutId) {
@@ -2037,14 +2083,14 @@
     if (p.timeoutId) clearTimeout(p.timeoutId);
     p.timeoutId = setTimeout(p._pollTick || (p._pollTick = async function gameStatePollTick() {
       const pol = GC.polling;
-      if (!pol.running || !shouldRunGameLoop() || _authLoopAborted) {
+      if (!pol.running || !shouldPollGameState() || _authLoopAborted) {
         GC.stopPolling();
         return;
       }
       try {
         await GC.refreshGameState("poll");
       } catch (_) {}
-      if (!pol.running || !shouldRunGameLoop() || _authLoopAborted) {
+      if (!pol.running || !shouldPollGameState() || _authLoopAborted) {
         GC.stopPolling();
         return;
       }
@@ -2062,12 +2108,11 @@
   GC.shouldRunGameLoop = shouldRunGameLoop;
   GC.shouldRunVisualLoops = shouldRunVisualLoops;
   GC.shouldRunStatusPolling = shouldRunStatusPolling;
+  GC.shouldPollGameState = shouldPollGameState;
   GC.abortGameLoop = handleAuthFailure;
 
-  GC.startPolling = function startPolling(anyActive, isError = false) {
-    if (!shouldRunGameLoop()) {
-      console.debug("[GC] polling skipped (auth page)");
-      GC.stopPolling();
+  GC.startPolling = function startPolling(anyActive, isError = false, deferFirst = false) {
+    if (!shouldPollGameState()) {
       return;
     }
     if (_authLoopAborted) {
@@ -2095,7 +2140,7 @@
     GC.stopPolling();
 
     p.running = true;
-    const firstPollDelay = p.started ? next : 0;
+    const firstPollDelay = deferFirst ? next : p.started ? next : 0;
     p.started = true;
     p.lastInterval = next;
     console.debug("[GC] polling started", next, "ms", firstPollDelay ? "" : "(immediate first tick)");
@@ -2159,6 +2204,12 @@
     GC.currentPage = page;
     GC.pageLifecycle.initialized = true;
     console.debug("[GC] initPage", page);
+    if (typeof GC.teardownHudSelectPortals === "function") GC.teardownHudSelectPortals();
+    if (isAdminShellPage(page)) {
+      if (typeof GC.abortInFlightGameStateFetches === "function") GC.abortInFlightGameStateFetches();
+      GC.stopPolling();
+      if (typeof GC.stopChatPolling === "function") GC.stopChatPolling();
+    }
 
     const mod = GC.modules[page];
     if (page === "messages") {
@@ -2220,22 +2271,22 @@
     const afterInit = async () => {
       resyncServerTimeFromDom(true);
       const skipInitFetch = shouldSkipInitGameStateAfterSsr(page, opts) || skipGameState;
+      const willPoll = !skipPolling && shouldPollGameState(page);
       if (!skipInitFetch && typeof GC.refreshGameState === "function") {
         await GC.refreshGameState("page_init");
         preserveFleetHudAcrossNavigation();
-      } else {
-        if (skipInitFetch) {
-          console.debug("[GC] initPage skip game-state (SSR fresh)", page, opts && opts.pjax ? "pjax" : "");
-          bootstrapResourceLiveFromDom();
-          bootstrapHeaderBoostersFromDom();
-          _bootstrapPageQueueCompactLiveFromDom();
-          if (typeof GC.refreshGameState === "function") {
-            void GC.refreshGameState("page_init");
-          }
-        }
-        if (!skipPolling) {
-          GC.startPolling(lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard);
-        }
+      } else if (skipInitFetch) {
+        console.debug("[GC] initPage skip game-state (SSR fresh)", page, opts && opts.pjax ? "pjax" : "");
+        bootstrapResourceLiveFromDom();
+        bootstrapHeaderBoostersFromDom();
+        _bootstrapPageQueueCompactLiveFromDom();
+      }
+      if (willPoll) {
+        GC.startPolling(
+          lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard,
+          false,
+          Boolean(skipInitFetch)
+        );
       }
       GC.startProgressTicker();
       scheduleDeferredChatBoot();
@@ -2250,9 +2301,9 @@
     if (page === "messages") {
       const runAfter = typeof requestAnimationFrame === "function" ? requestAnimationFrame : (fn) => queueMicrotask(fn);
       runAfter(afterInit);
-    } else {
-      afterInit();
+      return;
     }
+    return afterInit();
   };
 
   function formatDuration(seconds) {
@@ -11506,6 +11557,14 @@
     return hasActiveBuild || hasActiveResearchNow || lastHadActiveShipyard;
   }
 
+  function shouldSyncRoleSidebarFromHudData(data, reason) {
+    const planetId = Number(data?.active_planet_id || data?.active_planet?.planet_id || 0);
+    if (!planetId) return false;
+    const r = String(reason || "");
+    if (r === "admin_balance_save" || r === "admin_balance_preset") return false;
+    return true;
+  }
+
   function applyHudOnlyGameState(data, reason, opts) {
     if (shouldRejectStaleGameState(data, reason, opts)) return false;
     const fetchSeq = Number((opts && opts._fetchSeq) || 0);
@@ -11519,10 +11578,12 @@
     if (typeof GC.updateHeaderPlanetSwitcherFromState === "function") {
       GC.updateHeaderPlanetSwitcherFromState(data);
     }
-    if (typeof GC.syncRoleBasedSidebar === "function") {
+    if (typeof GC.syncRoleBasedSidebar === "function" && shouldSyncRoleSidebarFromHudData(data, reason)) {
       GC.syncRoleBasedSidebar(data);
     }
-    applyPlanetLandscapeFromState(data);
+    if (shouldRunGameLoop()) {
+      applyPlanetLandscapeFromState(data);
+    }
 
     const p = data.player || {};
     const energy = data.energy || {};
@@ -11553,10 +11614,13 @@
       energyTotal: Math.floor(Number(p.energy_total ?? energy.total ?? resources.energy_total ?? 0)),
     }, opts);
 
-    const anyActive = syncHudQueueLiveStatesFromPoll(data);
+    let anyActive = false;
+    if (shouldRunGameLoop()) {
+      anyActive = syncHudQueueLiveStatesFromPoll(data);
+      GC.startProgressTicker();
+    }
     patchHudLastState(data, reason);
     markGameStateFetchApplied(opts);
-    GC.startProgressTicker();
     syncPerfBodyClasses();
     return anyActive;
   }
@@ -11937,7 +12001,7 @@
 
   /** Lightweight HUD refresh — standalone fetch, no pageLifecycle abort. */
   async function refreshHudFromGameState(reason) {
-    if (!shouldRunGameLoop() || _authLoopAborted) return null;
+    if (!shouldPollGameState() || _authLoopAborted) return null;
     try {
       const res = await fetch("/api/game-state", {
         credentials: "same-origin",
@@ -11971,6 +12035,9 @@
 
   async function refreshGameState(reason) {
     if (!shouldRunGameLoop() || _authLoopAborted) return null;
+    if (!shouldPollGameState() && String(reason || "") !== "planet_switch") {
+      return null;
+    }
 
     const reasonStr = String(reason || "");
     if (isPageReloadGameStateReason(reasonStr)) {
@@ -12005,6 +12072,7 @@
     const flight = new Promise((resolve) => {
       resolveFlight = resolve;
     });
+    _activeRefreshFlightResolve = resolveFlight;
     GC.refreshInFlight = flight;
 
     (async () => {
@@ -12039,7 +12107,7 @@
             GC.stopPolling();
             GC.startPolling(true);
           }
-        } else if (reason === "page_init" || reason === "tab_visible" || !GC.polling.running) {
+        } else if (shouldPollGameState() && (reason === "page_init" || reason === "tab_visible" || !GC.polling.running)) {
           GC.startPolling(wantPolling);
         }
         resolveFlight(data);
@@ -12065,7 +12133,7 @@
         logStatusPollErrorOnce(reason, err);
         markStatusWidgetOffline();
         p.backoff = Math.min(60000, (p.backoff || 2000) * 1.6);
-        if (reason !== "poll" && shouldRunGameLoop() && !_authLoopAborted && !GC.polling.running) {
+        if (reason !== "poll" && shouldPollGameState() && !_authLoopAborted && !GC.polling.running) {
           GC.startPolling(lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard, true);
         }
         resolveFlight(null);
@@ -12073,6 +12141,9 @@
       } finally {
         p.inFlight = false;
         p.abort = null;
+        if (_activeRefreshFlightResolve === resolveFlight) {
+          _activeRefreshFlightResolve = null;
+        }
         if (GC.refreshInFlight === flight) {
           GC.refreshInFlight = null;
         }
@@ -12093,6 +12164,8 @@
   GC.refreshHudFromGameState = refreshHudFromGameState;
   GC.applyHudFromGameState = function applyHudFromGameState(data, reason) {
     if (!data || data.ok === false) return false;
+    const planetId = Number(data.active_planet_id || data.active_planet?.planet_id || 0);
+    if (!planetId) return false;
     applyGameStateData(data, reason || "admin_hud", { hudOnly: true, forceResourceBar: true });
     clearStatusWidgetOffline();
     return true;
@@ -20986,12 +21059,24 @@
     return select._gcHudSelect;
   }
 
+  function reparentHudSelectMenu(wrap, menu) {
+    if (!wrap || !menu) return;
+    if (menu.parentNode !== wrap) wrap.appendChild(menu);
+    menu.classList.remove("gc-popover-layer");
+    menu.style.pointerEvents = "";
+    delete menu.dataset.gcHudSelectWrapId;
+  }
+
   function closeHudSelectWrap(wrap) {
     if (!wrap) return;
     const hud = hudSelectParts(wrap) || {};
     const menu = hud.menu;
     const trigger = hud.trigger;
-    if (menu) menu.hidden = true;
+    if (menu) {
+      menu.hidden = true;
+      menu.style.pointerEvents = "none";
+      reparentHudSelectMenu(wrap, menu);
+    }
     wrap.classList.remove("is-open");
     if (trigger) trigger.setAttribute("aria-expanded", "false");
   }
@@ -21007,6 +21092,7 @@
     floatHudSelectMenu(wrap, menu);
     positionHudSelectMenu(wrap, menu);
     menu.hidden = false;
+    menu.style.pointerEvents = "auto";
     wrap.classList.add("is-open");
     trigger.setAttribute("aria-expanded", "true");
     syncHudSelectOpenState();
@@ -21032,6 +21118,72 @@
       closeHudSelectWrap(wrap);
     });
     syncHudSelectOpenState();
+  }
+
+  function teardownHudSelectPortals() {
+    closeAllHudSelects();
+    document.querySelectorAll(".gc-hud-select").forEach((wrap) => {
+      const hud = hudSelectParts(wrap);
+      const menu = hud && hud.menu;
+      if (!menu) return;
+      menu.hidden = true;
+      menu.style.pointerEvents = "none";
+      reparentHudSelectMenu(wrap, menu);
+      wrap.classList.remove("is-open");
+      const trigger = wrap.querySelector(".gc-hud-select-trigger");
+      if (trigger) trigger.setAttribute("aria-expanded", "false");
+    });
+    document.querySelectorAll("body > .gc-hud-select-menu.gc-popover-layer").forEach((menu) => {
+      menu.hidden = true;
+      menu.style.pointerEvents = "none";
+      const wrapId = menu.dataset.gcHudSelectWrapId;
+      let reparented = false;
+      if (wrapId) {
+        const wrap = document.querySelector(`[data-gc-hud-select-id="${wrapId}"]`);
+        if (wrap) {
+          reparentHudSelectMenu(wrap, menu);
+          reparented = true;
+        }
+      }
+      if (!reparented) menu.remove();
+    });
+    document.body.classList.remove("gc-has-open-popover");
+  }
+
+  function releaseShellNavigationBlockers(reason) {
+    closeAllHudSelects();
+    teardownHudSelectPortals();
+    document.querySelectorAll("body > .gc-hud-select-menu.gc-popover-layer").forEach((menu) => {
+      menu.hidden = true;
+      menu.style.pointerEvents = "none";
+      menu.remove();
+    });
+    document.querySelectorAll(".gc-hud-select.is-open").forEach((wrap) => {
+      wrap.classList.remove("is-open");
+      const trigger = wrap.querySelector(".gc-hud-select-trigger");
+      if (trigger) trigger.setAttribute("aria-expanded", "false");
+    });
+    document.body.classList.remove("gc-has-open-popover");
+    document.querySelectorAll("a[href][data-pjax-busy='1']").forEach((link) => {
+      link.dataset.pjaxBusy = "0";
+    });
+    document.querySelectorAll(".gc-nav-section.gc-nav-section--animating").forEach((section) => {
+      section.classList.remove("gc-nav-section--animating");
+      if (section._gcNavAnimTimer) {
+        clearTimeout(section._gcNavAnimTimer);
+        section._gcNavAnimTimer = null;
+      }
+    });
+    if (reason) console.debug("[GC] releaseShellNavigationBlockers", reason);
+  }
+
+  function syncHudSelectLabelsInRoot(root) {
+    const scope = root && root.querySelectorAll ? root : document;
+    scope.querySelectorAll("select[data-gc-hud-select]").forEach((sel) => {
+      if (sel.dataset.gcHudSelectEnhanced === "1" && typeof syncHudSelect === "function") {
+        syncHudSelect(sel);
+      }
+    });
   }
 
   function syncHudSelect(select) {
@@ -21156,6 +21308,10 @@
   GC.initHudSelects = initHudSelects;
   GC.syncHudSelect = syncHudSelect;
   GC.rebuildHudSelect = rebuildHudSelect;
+  GC.closeAllHudSelects = closeAllHudSelects;
+  GC.teardownHudSelectPortals = teardownHudSelectPortals;
+  GC.releaseShellNavigationBlockers = releaseShellNavigationBlockers;
+  GC.syncHudSelectLabelsInRoot = syncHudSelectLabelsInRoot;
 
   function empireIdentityLabelKey(planet) {
     if (!planet) return "";
@@ -28900,6 +29056,7 @@
       dest = new URL(href, window.location.origin);
       if (dest.origin !== window.location.origin) return false;
       if (dest.pathname.includes("/logout")) return false;
+      if (isAdminRoutePath(dest.pathname)) return false;
     } catch (_) {
       return false;
     }
@@ -29009,16 +29166,41 @@
     return raw;
   }
 
+  function isValidLcpPreloadHref(href) {
+    const raw = String(href ?? "").trim();
+    if (!raw || raw === "#" || raw === "null" || raw === "undefined") return false;
+    try {
+      const parsed = new URL(raw, window.location.href);
+      return parsed.protocol === "http:" || parsed.protocol === "https:";
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function normalizeLcpPreloadHref(href) {
+    if (!isValidLcpPreloadHref(href)) return null;
+    try {
+      return new URL(String(href).trim(), window.location.href).href;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function removeLcpHeroPreloadLinks() {
+    const link = document.getElementById(GC_LCP_HERO_PRELOAD_ID);
+    if (link) link.remove();
+    document.querySelectorAll("link[data-gc-lcp-preload]").forEach((el) => el.remove());
+  }
+
   function syncLcpHeroPreload(href) {
-    const url = String(href || "").trim();
+    const url = normalizeLcpPreloadHref(href);
     let link = document.getElementById(GC_LCP_HERO_PRELOAD_ID);
     if (!url) {
-      if (link) link.remove();
-      document.querySelectorAll("link[data-gc-lcp-preload]").forEach((el) => el.remove());
+      removeLcpHeroPreloadLinks();
       return;
     }
     if (!link) {
-      document.querySelectorAll("link[data-gc-lcp-preload]").forEach((el) => el.remove());
+      removeLcpHeroPreloadLinks();
       link = document.createElement("link");
       link.id = GC_LCP_HERO_PRELOAD_ID;
       link.rel = "preload";
@@ -29104,13 +29286,88 @@
     };
   }
 
+  const PJAX_FETCH_TIMEOUT_MS = 25000;
+  let _pjaxNavigationSeq = 0;
+  let _activePjaxNavigation = null;
+
+  function mergeAbortSignals(signals) {
+    const ctrl = new AbortController();
+    const onAbort = () => {
+      try { ctrl.abort(); } catch (_) {}
+    };
+    signals.filter(Boolean).forEach((sig) => {
+      if (sig.aborted) onAbort();
+      else sig.addEventListener("abort", onAbort, { once: true });
+    });
+    return ctrl.signal;
+  }
+
+  function clearPjaxNavigation(nav, opts = {}) {
+    if (!nav) return;
+    if (nav.fetchTimeoutId) {
+      clearTimeout(nav.fetchTimeoutId);
+      nav.fetchTimeoutId = null;
+    }
+    if (nav.fetchTimeout) {
+      try { nav.fetchTimeout.abort(); } catch (_) {}
+      nav.fetchTimeout = null;
+    }
+    if (!opts.skipControllerAbort && nav.controller && !nav.controller.signal.aborted) {
+      try { nav.controller.abort(); } catch (_) {}
+    }
+    if (_activePjaxNavigation && _activePjaxNavigation.id === nav.id) {
+      _activePjaxNavigation = null;
+    }
+    if (GC._pjaxAbort === nav.controller) GC._pjaxAbort = null;
+    if (GC._pjaxTarget === nav.normalizedUrl) GC._pjaxTarget = null;
+  }
+
+  function supersedePjaxNavigation(reason) {
+    const prev = _activePjaxNavigation;
+    if (!prev) return;
+    console.debug("[GC] PJAX supersede", prev.normalizedUrl, reason || "");
+    clearPjaxNavigation(prev);
+  }
+
+  function beginPjaxNavigation(url, target) {
+    supersedePjaxNavigation("new_navigation");
+    const id = ++_pjaxNavigationSeq;
+    const controller = new AbortController();
+    const nav = {
+      id,
+      url,
+      normalizedUrl: target,
+      controller,
+      fetchTimeout: null,
+      fetchTimeoutId: null,
+      promise: null,
+    };
+    _activePjaxNavigation = nav;
+    GC._pjaxAbort = controller;
+    GC._pjaxTarget = target;
+    return nav;
+  }
+
+  function finishPjaxNavigation(nav) {
+    if (!nav) return;
+    clearPjaxNavigation(nav, { skipControllerAbort: true });
+  }
+
+  function shouldPjaxHardLoad(nav, fetchTimedOut, userAborted) {
+    if (!nav || userAborted) return false;
+    if (!_activePjaxNavigation || _activePjaxNavigation.id !== nav.id) return false;
+    if (!fetchTimedOut) return false;
+    if (normalizePjaxUrl(window.location.href) === nav.normalizedUrl) return false;
+    return true;
+  }
+
   GC.navigateTo = async function navigateTo(url, opts = {}) {
     const push = opts.push !== false;
     const target = normalizePjaxUrl(url);
 
-    if (GC.pjaxInFlight && GC._pjaxTarget === target) {
+    if (_activePjaxNavigation && _activePjaxNavigation.normalizedUrl === target && _activePjaxNavigation.promise) {
       console.debug("[GC] PJAX dedupe", target);
-      return GC.pjaxInFlight;
+      return _activePjaxNavigation.promise;
     }
 
     const current = normalizePjaxUrl(window.location.href);
@@ -29119,14 +29376,27 @@
       return Promise.resolve();
     }
 
-    if (GC._pjaxAbort) {
-      try { GC._pjaxAbort.abort(); } catch (_) {}
+    const leavingAdmin =
+      typeof GC.detectPage === "function"
+      && GC.detectPage() === "admin"
+      && !isAdminRoutePath(new URL(target, window.location.origin).pathname);
+    if (leavingAdmin) {
+      if (typeof GC.teardownHudSelectPortals === "function") GC.teardownHudSelectPortals();
+      if (typeof GC.quiesceLiveClientFetches === "function") GC.quiesceLiveClientFetches("leave_admin");
+      else if (typeof GC.abortInFlightGameStateFetches === "function") GC.abortInFlightGameStateFetches();
+      GC.stopPolling();
+    } else if (typeof GC.abortInFlightGameStateFetches === "function") {
+      GC.abortInFlightGameStateFetches();
+      GC.stopPolling();
     }
 
-    GC._pjaxTarget = target;
-    GC.pjaxInFlight = (async () => {
-      const ctrl = new AbortController();
-      GC._pjaxAbort = ctrl;
+    const nav = beginPjaxNavigation(url, target);
+    const navId = nav.id;
+    const ctrl = nav.controller;
+
+    nav.promise = (async () => {
+      let fetchTimeout = null;
+      let fetchTimeoutId = null;
       try {
         const cached = !opts.force && isGalaxySystemPjaxUrl(target) ? getGalaxyPjaxCached(target) : null;
         if (cached) {
@@ -29134,40 +29404,77 @@
           return;
         }
 
+        fetchTimeout = new AbortController();
+        nav.fetchTimeout = fetchTimeout;
+        fetchTimeoutId = setTimeout(() => {
+          nav.fetchTimeoutId = null;
+          fetchTimeoutId = null;
+          if (!_activePjaxNavigation || _activePjaxNavigation.id !== navId) return;
+          try { fetchTimeout.abort(); } catch (_) {}
+        }, PJAX_FETCH_TIMEOUT_MS);
+        nav.fetchTimeoutId = fetchTimeoutId;
+
+        const fetchSignal = mergeAbortSignals([ctrl.signal, fetchTimeout.signal]);
         const res = await fetch(url, {
           credentials: "same-origin",
           cache: isGalaxySystemPjaxUrl(target) ? "default" : "no-store",
-          signal: ctrl.signal,
+          signal: fetchSignal,
           headers: {
             "X-PJAX": "true",
             "X-Requested-With": "XMLHttpRequest",
             Accept: "text/html",
           },
         });
+        if (fetchTimeoutId) {
+          clearTimeout(fetchTimeoutId);
+          fetchTimeoutId = null;
+          nav.fetchTimeoutId = null;
+        }
+        if (_activePjaxNavigation?.id !== navId) return;
         if (!res.ok) throw new Error(`PJAX ${res.status}`);
         const html = await res.text();
+        if (_activePjaxNavigation?.id !== navId) return;
         const doc = new DOMParser().parseFromString(html, "text/html");
         const payload = pjaxPayloadFromDoc(doc);
         if (!payload) throw new Error("main-content missing");
         if (isGalaxySystemPjaxUrl(target)) cacheGalaxyPjaxFromDoc(url, doc);
         await applyPjaxPayload(url, payload, doc, { ...opts, push });
       } catch (err) {
-        if (err?.name === "AbortError") return;
+        if (err?.name === "AbortError") {
+          const fetchTimedOut = !!(fetchTimeout?.signal?.aborted);
+          const userAborted = !!ctrl.signal.aborted;
+          if (shouldPjaxHardLoad(nav, fetchTimedOut, userAborted)) {
+            console.warn("[GC] PJAX timeout, hard-loading", target);
+            finishPjaxNavigation(nav);
+            window.location.assign(url);
+          }
+          return;
+        }
+        if (_activePjaxNavigation?.id !== navId) return;
         console.error("[GC] PJAX navigation failed:", err);
         showNotify(
           t("msg_status_refresh_failed", "Seite konnte nicht geladen werden. Bitte erneut versuchen."),
           "error"
         );
-      } finally {
-        GC.pjaxInFlight = null;
-        if (GC._pjaxAbort === ctrl) GC._pjaxAbort = null;
-        if (shouldRunGameLoop() && !_authLoopAborted && !GC.polling.running && !opts.skipPolling) {
-          GC.startPolling(lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard);
+        if (typeof GC.detectPage === "function" && GC.detectPage() === "admin") {
+          finishPjaxNavigation(nav);
+          window.location.assign(url);
         }
+      } finally {
+        if (fetchTimeoutId) {
+          clearTimeout(fetchTimeoutId);
+          nav.fetchTimeoutId = null;
+        }
+        nav.fetchTimeout = null;
+        if (_activePjaxNavigation?.id === navId) {
+          finishPjaxNavigation(nav);
+        }
+        if (GC.pjaxInFlight === nav.promise) GC.pjaxInFlight = null;
       }
     })();
 
-    return GC.pjaxInFlight;
+    GC.pjaxInFlight = nav.promise;
+    return nav.promise;
   };
 
   function initPjax() {
@@ -29800,16 +30107,16 @@
       syncPerfBodyClasses();
       if (document.hidden) {
         pauseVisualLoops();
-        if (shouldRunGameLoop() && !_authLoopAborted) {
+        if (shouldPollGameState() && !_authLoopAborted) {
           GC.startPolling(lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard);
         }
         return;
       }
-      if (!shouldRunGameLoop() || _authLoopAborted) return;
+      if (!shouldPollGameState() || _authLoopAborted || isAdminShellPage()) return;
       _authLoopAborted = false;
       resumeVisualLoops();
       GC.refreshGameState("tab_visible");
-      if (typeof GC.initChat === "function") GC.initChat();
+      if (!isAdminShellPage() && typeof GC.initChat === "function") GC.initChat();
     });
   }
 
@@ -31717,6 +32024,7 @@
     GC._shellReady = true;
 
     window.GC = GC;
+    if (typeof teardownHudSelectPortals === "function") teardownHudSelectPortals();
     bindBuildingTabsOnce();
     initForms();
     initOptionsFormsCapture();

@@ -209,6 +209,7 @@ def build_balance_hud_snapshot(player_id: int) -> Optional[Dict[str, Any]]:
         if not player:
             return None
         planet = get_context_planet(uid, conn=conn)
+        planet_id = int(planet["id"])
         player_view, buildings, ratio, energy_total, energy_used, storage_caps = (
             _read_player_live_state_no_writes(uid, conn, player, planet)
         )
@@ -223,6 +224,8 @@ def build_balance_hud_snapshot(player_id: int) -> Optional[Dict[str, Any]]:
         fuel_cells = int(float(player_view.get("fuel_cells") or 0))
         payload: Dict[str, Any] = {
             "ok": True,
+            "active_planet_id": planet_id,
+            "active_planet": {"planet_id": planet_id},
             "player": {
                 "metal": metal,
                 "crystal": crystal,
@@ -327,7 +330,11 @@ def save_balance_settings(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, A
     if err:
         return None, err
 
-    save_game_settings(cleaned)
+    current = get_balance_settings()
+    changed = any(str(cleaned.get(key)) != str(current.get(key)) for key in cleaned)
+
+    if changed:
+        save_game_settings(cleaned)
 
     if apply_start_flag:
         from .admin import apply_start_resources_to_homeworlds
@@ -339,12 +346,13 @@ def save_balance_settings(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, A
             int(cleaned.get("start_fuel_cells", settings_now.get("start_fuel_cells", 0)) or 0),
         )
 
-    try:
-        from .ranking import invalidate_all_score_cache
+    if changed:
+        try:
+            from .ranking import invalidate_all_score_cache
 
-        invalidate_all_score_cache()
-    except Exception:
-        pass
+            invalidate_all_score_cache()
+        except Exception:
+            pass
 
     return get_balance_settings(), None
 

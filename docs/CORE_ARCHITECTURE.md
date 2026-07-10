@@ -292,7 +292,8 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | Imperial Directives (player High Command) | `game/directives/` | [IMPERIAL_DIRECTIVES.md](IMPERIAL_DIRECTIVES.md) |
 | Galactic Diplomacy | `game/galactic_diplomacy/` | [GALACTIC_DIPLOMACY.md](GALACTIC_DIPLOMACY.md) |
 | Referrals | `game/referrals.py` | GC-703 |
-| Ranking scores / ranks (batch) | `game/ranking_worker.py` → `game/ranking.py` | `POST /api/internal/cron/ranking` (HTTP cron on web service); local: `scripts/run_ranking_worker.py` |
+| Resource score (kanonischer Punktwert) | `game/resource_score.py` → `game/ranking.py` | [SCORE_SYSTEM.md](SCORE_SYSTEM.md) |
+| Ranking scores / ranks (batch) | `game/ranking_worker.py` → `game/ranking.py` | [SCORE_SYSTEM.md](SCORE_SYSTEM.md) · `POST /api/internal/cron/ranking` |
 | Vote re-engagement (inactive players) | `game/vote_reengagement.py` | Piggyback on ranking HTTP cron (30 min guard); optional `POST /api/internal/cron/vote-reengagement`; local: `scripts/run_vote_reengagement.py` |
 | Game Rules (Fair Play, PvP-Policy, Support) | `game/game_rules_panel.py` (UI) · Enforcement verteilt | [GAME_RULES.md](GAME_RULES.md) |
 | Genesis Codex (loader, unlocks) | `game/codex.py` | [GC-950_KNOWLEDGE_PIPELINE.md](GC-950_KNOWLEDGE_PIPELINE.md) |

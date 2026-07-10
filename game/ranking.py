@@ -4,11 +4,12 @@ Galactic ranking service – single source of truth for scores and ranks.
 Score persistence is refreshed live after gameplay mutations (``score_events``) and
 periodically by ``ranking_worker`` (10-minute safety net). Gameplay reads ``player_scores`` snapshots only.
 
-total_score = building + research + fleet + defense + destroyed + evolution
-combat_score = fleet_score + defense_score (active military)
-destroyed_score = weighted cumulative combat destruction (score_destroyed_raw)
-military_score = combat_score + destroyed_score
-Component weights from game_settings: score_weight_buildings, score_weight_research, score_weight_fleet.
+Wealth score (``total_score``) = resources + buildings + research + fleet + defense + evolution
+(computed via ``game.resource_score`` — canonical 1500/1000/500 divisors).
+
+``destroyed_score`` = lifetime combat prestige — **excluded** from ``total_score``.
+``combat_score`` = fleet_score + defense_score (active military).
+``military_score`` = combat_score + destroyed_score (display / military tab only).
 """
 
 from __future__ import annotations
@@ -49,6 +50,7 @@ def _safe_int(value: Any, *, default: int = 0) -> int:
 
 
 def _sanitize_scores(scores: Dict[str, Any]) -> Dict[str, int]:
+    resources = _safe_int(scores.get("resource_score", scores.get("score_resources", 0)))
     building = _safe_int(scores.get("building_score", scores.get("score_buildings", 0)))
     research = _safe_int(scores.get("research_score", scores.get("score_research", 0)))
     fleet = _safe_int(scores.get("fleet_score", scores.get("score_fleet", 0)))
@@ -60,11 +62,12 @@ def _sanitize_scores(scores: Dict[str, Any]) -> Dict[str, int]:
     combat = _safe_int(
         scores.get("combat_score", scores.get("score_combat", compute_combat_score(fleet, defense)))
     )
-    total = _safe_int(building + research + fleet + defense + destroyed + evolution)
+    total = _safe_int(resources + building + research + fleet + defense + evolution)
     destroyed_raw = _safe_int(scores.get("destroyed_raw", scores.get("score_destroyed_raw", 0)))
 
     return {
         "total_score": total,
+        "resource_score": resources,
         "building_score": building,
         "research_score": research,
         "fleet_score": fleet,
@@ -95,80 +98,100 @@ def _zero_scores() -> Dict[str, int]:
     return _sanitize_scores({})
 
 
-def _sum_costs_up_to_level(base_m: int, base_c: int, factor: float, level: int) -> int:
-    if level <= 0:
-        return 0
-    total = 0
-    for lv in range(1, level + 1):
-        mult = factor ** (lv - 1)
-        total += int(base_m * mult) + int(base_c * mult)
-    return _safe_int(total)
-
-
-def _score_exponent(conn) -> float:
-    from .models import get_game_settings
-
-    settings = get_game_settings(conn=conn) or {}
-    try:
-        return float(settings.get("score_cost_exponent", 1.0) or 1.0)
-    except (TypeError, ValueError):
-        return 1.0
-
-
-def _score_weights(conn) -> Tuple[float, float, float]:
-    from .models import DEFAULT_GAME_SETTINGS, get_game_settings
-
-    settings = get_game_settings(conn=conn) or {}
-    try:
-        w_build = float(settings.get("score_weight_buildings", 1.0) or 1.0)
-    except (TypeError, ValueError):
-        w_build = 1.0
-    try:
-        default_research = float(DEFAULT_GAME_SETTINGS.get("score_weight_research", "0.01"))
-        w_research = float(settings.get("score_weight_research", default_research) or default_research)
-    except (TypeError, ValueError):
-        w_research = float(DEFAULT_GAME_SETTINGS.get("score_weight_research", "0.01"))
-    try:
-        w_fleet = float(settings.get("score_weight_fleet", 1.0) or 1.0)
-    except (TypeError, ValueError):
-        w_fleet = 1.0
-    return max(0.0, w_build), max(0.0, w_research), max(0.0, w_fleet)
-
-
-def _destroyed_score_weight(conn) -> float:
-    from .models import get_game_settings
-
-    settings = get_game_settings(conn=conn) or {}
-    try:
-        return max(0.0, float(settings.get("score_weight_combat", 1.0) or 1.0))
-    except (TypeError, ValueError):
-        return 1.0
-
-
-def _compute_fleet_sum_costs(player_id: int, conn) -> int:
-    """Sum metal+crystal build costs for all owned hulls (planets + active movements)."""
+def _compute_fleet_score(player_id: int, conn) -> int:
+    """Fleet wealth score from hull build costs (canonical resource_score)."""
     from .fleet import get_player_owned_ship_counts
+    from .resource_score import score_from_cost_dict
     from .shipyard import _unit_build_cost
 
-    totals = get_player_owned_ship_counts(int(player_id), conn=conn)
-    fleet_sum = 0
-    for ship_key, qty in totals.items():
+    total = 0
+    for ship_key, qty in get_player_owned_ship_counts(int(player_id), conn=conn).items():
         count = int(qty or 0)
         if count <= 0:
             continue
-        cost = _unit_build_cost(str(ship_key))
-        unit = int(cost.get("metal") or 0) + int(cost.get("crystal") or 0)
+        unit = score_from_cost_dict(_unit_build_cost(str(ship_key)))
         if unit <= 0:
             continue
-        fleet_sum += unit * count
-    return _safe_int(fleet_sum)
+        total += unit * count
+    return _safe_int(total)
 
 
-def _compute_defense_sum_costs(player_id: int, conn) -> int:
-    """Raw defense empire sum (amount × score_value) before exponent."""
-    from .scoring import compute_defense_empire_sum
+def _compute_defense_score(player_id: int, conn) -> int:
+    """Defense wealth score from unit build costs (canonical resource_score)."""
+    from .defense_defs import unit_build_cost
+    from .models import get_player_defense_counts
+    from .resource_score import score_from_cost_dict
 
-    return _safe_int(compute_defense_empire_sum(int(player_id), conn=conn))
+    total = 0
+    for defense_key, qty in get_player_defense_counts(int(player_id), conn=conn).items():
+        count = int(qty or 0)
+        if count <= 0:
+            continue
+        unit = score_from_cost_dict(unit_build_cost(str(defense_key)))
+        if unit <= 0:
+            continue
+        total += unit * count
+    return _safe_int(total)
+
+
+def _compute_building_score(player_id: int, conn) -> int:
+    from .buildings import BUILDING_ORDER
+    from .economy_balance import cumulative_upgrade_resource_totals
+    from .models import get_planet_buildings, get_planets_by_player
+    from .resource_score import score_from_cost_dict
+
+    total_metal = 0
+    total_crystal = 0
+    total_fuel = 0
+    for planet in get_planets_by_player(int(player_id), conn=conn):
+        buildings = get_planet_buildings(int(planet["id"]), conn=conn)
+        for key in BUILDING_ORDER:
+            level = int(buildings.get(key, 0) or 0)
+            if level <= 0:
+                continue
+            totals = cumulative_upgrade_resource_totals(key, level)
+            total_metal += int(totals.get("metal") or 0)
+            total_crystal += int(totals.get("crystal") or 0)
+            total_fuel += int(totals.get("fuel_cells") or 0)
+    return score_from_cost_dict(
+        {"metal": total_metal, "crystal": total_crystal, "fuel_cells": total_fuel}
+    )
+
+
+def _compute_research_score(player_id: int, conn) -> int:
+    from .models import get_research_levels
+    from .research import RESEARCH_TECHS, cumulative_research_resource_totals
+    from .resource_score import score_from_cost_dict
+
+    total_metal = 0
+    total_crystal = 0
+    total_fuel = 0
+    levels = get_research_levels(int(player_id), conn=conn)
+    for tech_key in RESEARCH_TECHS:
+        level = int(levels.get(tech_key, 0) or 0)
+        if level <= 0:
+            continue
+        totals = cumulative_research_resource_totals(tech_key, level)
+        total_metal += int(totals.get("metal") or 0)
+        total_crystal += int(totals.get("crystal") or 0)
+        total_fuel += int(totals.get("fuel_cells") or 0)
+    return score_from_cost_dict(
+        {"metal": total_metal, "crystal": total_crystal, "fuel_cells": total_fuel}
+    )
+
+
+def _compute_resources_score(player_id: int, conn) -> int:
+    from .models import get_planets_by_player
+    from .resource_score import score_from_resources
+
+    total_metal = 0
+    total_crystal = 0
+    total_fuel = 0
+    for planet in get_planets_by_player(int(player_id), conn=conn):
+        total_metal += int(float(planet.get("metal") or 0))
+        total_crystal += int(float(planet.get("crystal") or 0))
+        total_fuel += int(float(planet.get("fuel_cells") or 0))
+    return score_from_resources(total_metal, total_crystal, total_fuel)
 
 
 def compute_player_scores(
@@ -178,63 +201,21 @@ def compute_player_scores(
     """
     Central score calculation. Returns component scores and total_score as their sum.
     """
-    from .models import get_planet_buildings, get_planets_by_player, get_research_levels
-
     owns_conn = False
     if conn is None:
         conn = db()
         owns_conn = True
 
     try:
-        exp = _score_exponent(conn)
-        w_build, w_research, w_fleet = _score_weights(conn)
-        from .buildings import BUILDING_ORDER
-        from .economy_balance import cumulative_upgrade_cost_sum
-
-        planets = get_planets_by_player(int(player_id), conn=conn)
-        building_sum_costs = 0
-        for p in planets:
-            b = get_planet_buildings(int(p["id"]), conn=conn)
-            for key in BUILDING_ORDER:
-                lvl = int(b.get(key, 0) or 0)
-                if lvl <= 0:
-                    continue
-                building_sum_costs += cumulative_upgrade_cost_sum(key, lvl)
-
-        from .research import RESEARCH_TECHS
-
-        building_score = _safe_int(
-            ((building_sum_costs**exp) * w_build) if building_sum_costs > 0 else 0
-        )
-
-        levels = get_research_levels(int(player_id), conn=conn)
-        research_sum_costs = 0
-        for tech_key, cfg in RESEARCH_TECHS.items():
-            lvl = int(levels.get(tech_key, 0) or 0)
-            if lvl <= 0:
-                continue
-            base_m = int(cfg.get("base_cost_m", 0) or 0)
-            base_c = int(cfg.get("base_cost_c", 0) or 0)
-            fac = float(cfg.get("cost_factor", 1.6) or 1.6)
-            research_sum_costs += _sum_costs_up_to_level(base_m, base_c, fac, lvl)
-
-        research_score = _safe_int(
-            ((research_sum_costs**exp) * w_research) if research_sum_costs > 0 else 0
-        )
-
-        fleet_sum_costs = _compute_fleet_sum_costs(int(player_id), conn)
-        fleet_score = _safe_int(
-            ((fleet_sum_costs**exp) * w_fleet) if fleet_sum_costs > 0 else 0
-        )
-        defense_sum_costs = _compute_defense_sum_costs(int(player_id), conn)
-        defense_score = _safe_int((defense_sum_costs**exp) if defense_sum_costs > 0 else 0)
         from .scoring import compute_combat_score, get_destroyed_raw
 
+        resource_score = _compute_resources_score(int(player_id), conn)
+        building_score = _compute_building_score(int(player_id), conn)
+        research_score = _compute_research_score(int(player_id), conn)
+        fleet_score = _compute_fleet_score(int(player_id), conn)
+        defense_score = _compute_defense_score(int(player_id), conn)
         destroyed_raw = get_destroyed_raw(int(player_id), conn=conn)
-        w_destroyed = _destroyed_score_weight(conn)
-        destroyed_score = _safe_int(
-            ((destroyed_raw**exp) * w_destroyed) if destroyed_raw > 0 else 0
-        )
+        destroyed_score = _safe_int(destroyed_raw)
         combat_score = compute_combat_score(fleet_score, defense_score)
         evolution_score = 0
         try:
@@ -246,6 +227,7 @@ def compute_player_scores(
 
         return _sanitize_scores(
             {
+                "resource_score": resource_score,
                 "building_score": building_score,
                 "research_score": research_score,
                 "fleet_score": fleet_score,
@@ -267,6 +249,9 @@ def _normalize_db_row(row: Optional[dict]) -> Dict[str, int]:
     keys = row.keys() if hasattr(row, "keys") else ()
     building = _safe_int(row.get("score_buildings", 0))
     research = _safe_int(row.get("score_research", 0))
+    resources = (
+        _safe_int(row.get("score_resources", 0)) if "score_resources" in keys else 0
+    )
     fleet = _safe_int(row.get("score_fleet", 0)) if "score_fleet" in keys else 0
     defense = _safe_int(row.get("score_defense", 0)) if "score_defense" in keys else 0
     evolution = (
@@ -281,6 +266,7 @@ def _normalize_db_row(row: Optional[dict]) -> Dict[str, int]:
     )
     result = _sanitize_scores(
         {
+            "resource_score": resources,
             "building_score": building,
             "research_score": research,
             "fleet_score": fleet,
@@ -303,6 +289,7 @@ def format_scores_for_playercard(normalized: Dict[str, int]) -> Dict[str, int]:
     military = int(normalized.get("military_score", 0) or 0)
     return {
         "score_total": int(normalized.get("total_score", 0) or 0),
+        "score_resources": int(normalized.get("resource_score", 0) or 0),
         "score_buildings": int(normalized.get("building_score", 0) or 0),
         "score_research": int(normalized.get("research_score", 0) or 0),
         "score_fleet": fleet,
@@ -313,6 +300,7 @@ def format_scores_for_playercard(normalized: Dict[str, int]) -> Dict[str, int]:
         "score_planet_evolution": int(normalized.get("evolution_score", 0) or 0),
         # Backward-compatible aliases (ranking/HUD internals)
         "total_score": int(normalized.get("total_score", 0) or 0),
+        "resource_score": int(normalized.get("resource_score", 0) or 0),
         "building_score": int(normalized.get("building_score", 0) or 0),
         "research_score": int(normalized.get("research_score", 0) or 0),
         "fleet_score": fleet,
@@ -340,15 +328,18 @@ def _normalize_payload(data: Optional[dict]) -> Dict[str, int]:
 
 
 def _total_score_sql(conn) -> str:
-    parts = [
-        "COALESCE(ps.score_buildings, 0)",
-        "COALESCE(ps.score_research, 0)",
-    ]
+    parts = []
+    if column_exists(conn, "player_scores", "score_resources"):
+        parts.append("COALESCE(ps.score_resources, 0)")
+    parts.extend(
+        [
+            "COALESCE(ps.score_buildings, 0)",
+            "COALESCE(ps.score_research, 0)",
+        ]
+    )
     if column_exists(conn, "player_scores", "score_fleet"):
         parts.append("COALESCE(ps.score_fleet, 0)")
         parts.append("COALESCE(ps.score_defense, 0)")
-    if column_exists(conn, "player_scores", "score_destroyed"):
-        parts.append("COALESCE(ps.score_destroyed, 0)")
     if column_exists(conn, "player_scores", "score_planet_evolution"):
         parts.append("COALESCE(ps.score_planet_evolution, 0)")
     return "(" + " + ".join(parts) + ")"
@@ -369,8 +360,45 @@ def upsert_player_scores(
     has_extended = column_exists(conn, "player_scores", "score_fleet")
     has_evolution = column_exists(conn, "player_scores", "score_planet_evolution")
     has_combat = column_exists(conn, "player_scores", "score_combat")
+    has_resources = column_exists(conn, "player_scores", "score_resources")
 
-    if has_extended and has_evolution and has_combat:
+    if has_extended and has_evolution and has_combat and has_resources:
+        cur.execute(
+            """
+            INSERT INTO player_scores (
+                player_id, score_total, score_resources, score_buildings, score_research,
+                score_fleet, score_defense, score_planet_evolution,
+                score_destroyed_raw, score_combat, score_destroyed, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now'))
+            ON CONFLICT(player_id) DO UPDATE SET
+                score_total = excluded.score_total,
+                score_resources = excluded.score_resources,
+                score_buildings = excluded.score_buildings,
+                score_research = excluded.score_research,
+                score_fleet = excluded.score_fleet,
+                score_defense = excluded.score_defense,
+                score_planet_evolution = excluded.score_planet_evolution,
+                score_destroyed_raw = excluded.score_destroyed_raw,
+                score_combat = excluded.score_combat,
+                score_destroyed = excluded.score_destroyed,
+                updated_at = excluded.updated_at
+            """,
+            (
+                int(player_id),
+                clean["total_score"],
+                clean["resource_score"],
+                clean["building_score"],
+                clean["research_score"],
+                clean["fleet_score"],
+                clean["defense_score"],
+                clean["evolution_score"],
+                clean.get("destroyed_raw", 0),
+                clean["combat_score"],
+                clean["destroyed_score"],
+            ),
+        )
+    elif has_extended and has_evolution and has_combat:
         cur.execute(
             """
             INSERT INTO player_scores (
@@ -516,6 +544,9 @@ def repair_player_score_totals(player_id: int, conn=None) -> bool:
         keys = row_dict.keys() if hasattr(row_dict, "keys") else ()
         building = _safe_int(row_dict.get("score_buildings", 0))
         research = _safe_int(row_dict.get("score_research", 0))
+        resources = (
+            _safe_int(row_dict.get("score_resources", 0)) if "score_resources" in keys else 0
+        )
         fleet = _safe_int(row_dict.get("score_fleet", 0)) if "score_fleet" in keys else 0
         defense = _safe_int(row_dict.get("score_defense", 0)) if "score_defense" in keys else 0
         evolution = (
@@ -531,13 +562,10 @@ def repair_player_score_totals(player_id: int, conn=None) -> bool:
         from .scoring import compute_combat_score
 
         combat = compute_combat_score(fleet, defense)
-        w_destroyed = _destroyed_score_weight(conn)
-        exp = _score_exponent(conn)
-        destroyed_score = _safe_int(
-            ((destroyed_raw**exp) * w_destroyed) if destroyed_raw > 0 else 0
-        )
+        destroyed_score = _safe_int(destroyed_raw)
         computed = _sanitize_scores(
             {
+                "resource_score": resources,
                 "building_score": building,
                 "research_score": research,
                 "fleet_score": fleet,
@@ -605,6 +633,12 @@ def ensure_player_score_row(player_id: int, conn=None) -> None:
     finally:
         if owns_conn:
             conn.close()
+
+
+def _resources_score_select(conn) -> str:
+    if column_exists(conn, "player_scores", "score_resources"):
+        return "COALESCE(ps.score_resources, 0) AS score_resources"
+    return "0 AS score_resources"
 
 
 def _fleet_defense_select(conn) -> str:
@@ -681,6 +715,7 @@ def _fetch_all_score_rows(conn) -> List[Dict[str, Any]]:
     _ensure_score_rows(conn)
     cur = conn.cursor()
     extra = _fleet_defense_select(conn)
+    resources_sel = _resources_score_select(conn)
     evo = _evolution_score_select(conn)
     combat_sel = _combat_ranking_select(conn)
     cur.execute(
@@ -689,6 +724,7 @@ def _fetch_all_score_rows(conn) -> List[Dict[str, Any]]:
             p.id AS player_id,
             p.name AS commander_name,
             COALESCE(ps.score_total, 0) AS score_total,
+            {resources_sel},
             COALESCE(ps.score_buildings, 0) AS score_buildings,
             COALESCE(ps.score_research, 0) AS score_research,
             {extra},
@@ -1008,6 +1044,7 @@ def get_player_score_cached(
     if not player_id:
         return {
             "total": 0,
+            "resources": 0,
             "buildings": 0,
             "research": 0,
             "fleet": 0,
@@ -1024,6 +1061,7 @@ def get_player_score_cached(
     def _to_legacy(s: Dict[str, int]) -> Dict[str, int]:
         return {
             "total": int(s.get("total_score", 0)),
+            "resources": int(s.get("resource_score", 0)),
             "buildings": int(s.get("building_score", 0)),
             "research": int(s.get("research_score", 0)),
             "fleet": int(s.get("fleet_score", 0)),
@@ -1254,6 +1292,7 @@ def get_sorted_ranking_entries(
 
     cur = conn.cursor()
     extra = _fleet_defense_select(conn)
+    resources_sel = _resources_score_select(conn)
     evo = _evolution_score_select(conn)
     combat_sel = _combat_ranking_select(conn)
     vacation_sel = _vacation_mode_select(conn)
@@ -1271,6 +1310,7 @@ def get_sorted_ranking_entries(
             p.id AS player_id,
             p.name AS commander_name,
             COALESCE(ps.score_total, 0) AS score_total,
+            {resources_sel},
             COALESCE(ps.score_buildings, 0) AS score_buildings,
             COALESCE(ps.score_research, 0) AS score_research,
             {extra},

@@ -1442,34 +1442,60 @@ def api_get_balance_settings() -> Dict[str, Any]:
 
 
 def api_save_balance_settings(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    import logging
+
     from game.admin_balance import build_balance_hud_snapshot, save_balance_settings
 
-    if not isinstance(body, dict):
-        return _err("invalid_payload", "Expected JSON object")
+    logger = logging.getLogger(__name__)
+    try:
+        if not isinstance(body, dict):
+            return _err("invalid_payload", "Expected JSON object")
 
-    settings, err = save_balance_settings(body)
-    if err:
-        if err in ("exchange_arbitrage_risk", "exchange_invalid_rate"):
-            return _err(err, err)
-        return _err("invalid_settings", err)
+        settings, err = save_balance_settings(body)
+        if err:
+            if err in ("exchange_arbitrage_risk", "exchange_invalid_rate"):
+                return _err(err, err)
+            return _err("invalid_settings", err)
 
-    audit(
-        int(admin_id),
-        "balance_settings_save",
-        target_type="system",
-        payload={"keys": sorted(body.keys())},
-    )
-    hud = build_balance_hud_snapshot(int(admin_id))
-    return _ok(settings=settings, hud=hud)
+        audit(
+            int(admin_id),
+            "balance_settings_save",
+            target_type="system",
+            payload={"keys": sorted(body.keys())},
+        )
+        out = _ok(settings=settings)
+        try:
+            hud = build_balance_hud_snapshot(int(admin_id))
+            if hud:
+                out["hud"] = hud
+        except Exception:
+            logger.warning("balance hud snapshot failed admin_id=%s", admin_id, exc_info=True)
+        return out
+    except Exception:
+        logger.exception("balance_settings_save failed admin_id=%s", admin_id)
+        return _err("internal_error", "Balance save failed")
 
 
 def api_apply_balance_preset_b(admin_id: int) -> Dict[str, Any]:
+    import logging
+
     from game.admin_balance import apply_preset_b, build_balance_hud_snapshot
 
-    settings = apply_preset_b()
-    audit(int(admin_id), "balance_preset_b", target_type="system")
-    hud = build_balance_hud_snapshot(int(admin_id))
-    return _ok(settings=settings, hud=hud)
+    logger = logging.getLogger(__name__)
+    try:
+        settings = apply_preset_b()
+        audit(int(admin_id), "balance_preset_b", target_type="system")
+        out = _ok(settings=settings)
+        try:
+            hud = build_balance_hud_snapshot(int(admin_id))
+            if hud:
+                out["hud"] = hud
+        except Exception:
+            logger.warning("balance preset hud snapshot failed admin_id=%s", admin_id, exc_info=True)
+        return out
+    except Exception:
+        logger.exception("balance_preset_b failed admin_id=%s", admin_id)
+        return _err("internal_error", "Preset apply failed")
 
 
 # ---------------------------------------------------------------------------

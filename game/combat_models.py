@@ -76,8 +76,9 @@ def _safe_int(value: Any, *, default: int = 0) -> int:
 
 
 def _score_from_build_cost(raw: Mapping[str, Any] | None) -> int:
-    cost = raw or {}
-    return _safe_int(cost.get("metal")) + _safe_int(cost.get("crystal"))
+    from .resource_score import score_from_cost_dict
+
+    return score_from_cost_dict(raw)
 
 
 def _normalize_rapid_fire(raw: Any, *, canonical_fn) -> Dict[str, int]:
@@ -101,10 +102,7 @@ def _stats_from_spec(
     *,
     canonical_target_fn,
 ) -> CombatUnitStats:
-    score_raw = spec.get("score_value")
-    score_value = _safe_int(score_raw) if score_raw is not None else _score_from_build_cost(
-        spec.get("build_cost") or {}
-    )
+    score_value = _score_from_build_cost(spec.get("build_cost") or {})
     return CombatUnitStats(
         unit_key=str(unit_key),
         unit_type=str(unit_type),

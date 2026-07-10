@@ -1,23 +1,31 @@
-"""Empire score helpers — defense stock, combat destruction, military aggregate."""
+"""Empire score helpers — combat destruction prestige, military aggregate."""
 
 from __future__ import annotations
 
 from typing import Dict, Mapping
 
-from .defense_defs import defense_score_value
-
 
 def compute_destroyed_raw_from_losses(losses: Mapping[str, int]) -> int:
-    """Raw destruction value from combat losses (sum of unit build costs)."""
-    from .combat import unit_build_cost_for_debris
+    """Lifetime combat prestige points from eliminated units (canonical resource_score)."""
+    from .defense_defs import is_known_defense_key, unit_build_cost
+    from .fleet_defs import canonical_ship_key, get_ship
+    from .resource_score import score_from_cost_dict
 
     total = 0
     for raw_key, raw_qty in losses.items():
         lost = max(0, int(raw_qty))
         if lost <= 0:
             continue
-        metal, crystal = unit_build_cost_for_debris(str(raw_key))
-        total += (int(metal) + int(crystal)) * lost
+        key = str(raw_key)
+        if is_known_defense_key(key):
+            cost = unit_build_cost(key)
+        else:
+            spec = get_ship(canonical_ship_key(key)) or {}
+            cost = spec.get("build_cost") or {}
+        unit_score = score_from_cost_dict(cost)
+        if unit_score <= 0:
+            continue
+        total += unit_score * lost
     return max(0, int(total))
 
 
@@ -113,26 +121,6 @@ def compute_military_score(
     return compute_combat_score(fleet_score, defense_score) + max(
         0, int(destroyed_score or 0)
     )
-
-
-def compute_defense_empire_sum(player_id: int, *, conn) -> int:
-    """
-    Raw defense empire value: sum(amount × score_value) over all owned planets.
-    Exponent / weighting is applied in ranking.compute_player_scores().
-    """
-    from .models import get_player_defense_counts
-
-    totals = get_player_defense_counts(int(player_id), conn=conn)
-    total = 0
-    for defense_key, qty in totals.items():
-        count = int(qty or 0)
-        if count <= 0:
-            continue
-        unit = defense_score_value(str(defense_key))
-        if unit <= 0:
-            continue
-        total += unit * count
-    return max(0, int(total))
 
 
 def attach_military_score(scores: Dict[str, int]) -> Dict[str, int]:

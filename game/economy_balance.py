@@ -613,6 +613,20 @@ def scaled_military_score(raw: int) -> int:
     return max(1, int(math.ceil(int(raw) * MILITARY_SCORE_MULTIPLIER)))
 
 
+def cumulative_upgrade_resource_totals(building_type: str, level: int) -> Dict[str, int]:
+    """GC-SCORE-D — cumulative metal/crystal/fuel invested for levels 1..level."""
+    lvl = max(0, int(level or 0))
+    if lvl <= 0:
+        return {"metal": 0, "crystal": 0, "fuel_cells": 0}
+    metal = 0
+    crystal = 0
+    for target in range(1, lvl + 1):
+        m, c = power_upgrade_cost(building_type, target)
+        metal += int(m)
+        crystal += int(c)
+    return {"metal": metal, "crystal": crystal, "fuel_cells": 0}
+
+
 def cumulative_upgrade_cost_sum(building_type: str, level: int) -> int:
     """Sum of metal+crystal spent for levels 1..level (GC-821 power costs)."""
     lvl = max(0, int(level or 0))

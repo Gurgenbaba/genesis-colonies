@@ -51,7 +51,7 @@ DEFAULT_GAME_SETTINGS: Dict[str, str] = {
 
     # Instant resource exchange (Trader Hub) — Speedgame defaults
     "exchange_enabled": "1",
-    "exchange_rate_metal_to_crystal": "2",
+    "exchange_rate_metal_to_crystal": "1.5",
     "exchange_rate_crystal_to_metal": "1",
     "exchange_daily_limit": "50000000000",
     "exchange_daily_limit_pct": "80",
@@ -61,8 +61,8 @@ DEFAULT_GAME_SETTINGS: Dict[str, str] = {
 
     # Fuel cells (production + Trader Hub routes)
     "fuel_exchange_enabled": "1",
-    "fuel_exchange_metal_per_unit": "20",
-    "fuel_exchange_crystal_per_unit": "14",
+    "fuel_exchange_metal_per_unit": "3",
+    "fuel_exchange_crystal_per_unit": "2",
     "fuel_exchange_min_units": "10",
     "fuel_production_per_hour": "2.0",  # legacy admin key — GC-820 uses production_formula LEVEL_GROWTH
 

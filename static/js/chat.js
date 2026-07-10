@@ -182,6 +182,9 @@
         data = await res.json();
       } catch (_) {}
       return { res, data };
+    }).catch((err) => {
+      if (err?.name === "AbortError") throw err;
+      throw err;
     });
   }
 
@@ -813,68 +816,106 @@
     }
   }
 
-  async function refreshBootstrap() {
-    const beforeUnread = totalUnread();
-    const { data } = await apiFetch("/api/chat/bootstrap");
-    if (!data.ok) return false;
-    CHAT.bootstrap = data.data;
-    CHAT.unread = { ...(data.data.unread || {}) };
-    CHAT.viewerName = data.data.player?.name || "";
-    CHAT.viewerId = Number(data.data.player?.id) || 0;
-    CHAT.uiState = mergeUiState(data.data.ui_state || {}, CHAT.uiState || {});
-    saveLocalUiState(CHAT.uiState);
-    if (!CHAT.activeRoomId) CHAT.activeRoomId = data.data.active_room_id;
-    pruneRoomState();
-    if (CHAT.activeRoomId && !(CHAT.bootstrap.rooms || []).some((r) => Number(r.id) === Number(CHAT.activeRoomId))) {
-      CHAT.activeRoomId = Number(CHAT.bootstrap.active_room_id || 0) || null;
+  let _bootstrapAbort = null;
+  let _initChatPromise = null;
+
+  function abortBootstrapInFlight() {
+    if (_bootstrapAbort) {
+      try { _bootstrapAbort.abort(); } catch (_) {}
+      _bootstrapAbort = null;
     }
-    updateFabBadge();
-    renderRoomList();
-    notifyChatUnreadIfIncreased(beforeUnread);
-    return true;
+    CHAT.polling.bootstrapInFlight = null;
+  }
+
+  function quiesceChat(reason) {
+    stopPolling();
+    abortBootstrapInFlight();
+    _initChatPromise = null;
+    if (reason) chatDebug("[chat] quiesce", reason);
+  }
+
+  async function refreshBootstrap() {
+    abortBootstrapInFlight();
+    const ctrl = new AbortController();
+    _bootstrapAbort = ctrl;
+    const beforeUnread = totalUnread();
+    try {
+      const { data } = await apiFetch("/api/chat/bootstrap", { signal: ctrl.signal });
+      if (!data.ok) return false;
+      CHAT.bootstrap = data.data;
+      CHAT.unread = { ...(data.data.unread || {}) };
+      CHAT.viewerName = data.data.player?.name || "";
+      CHAT.viewerId = Number(data.data.player?.id) || 0;
+      CHAT.uiState = mergeUiState(data.data.ui_state || {}, CHAT.uiState || {});
+      saveLocalUiState(CHAT.uiState);
+      if (!CHAT.activeRoomId) CHAT.activeRoomId = data.data.active_room_id;
+      pruneRoomState();
+      if (CHAT.activeRoomId && !(CHAT.bootstrap.rooms || []).some((r) => Number(r.id) === Number(CHAT.activeRoomId))) {
+        CHAT.activeRoomId = Number(CHAT.bootstrap.active_room_id || 0) || null;
+      }
+      updateFabBadge();
+      renderRoomList();
+      notifyChatUnreadIfIncreased(beforeUnread);
+      return true;
+    } catch (err) {
+      if (err?.name === "AbortError") return false;
+      throw err;
+    } finally {
+      if (_bootstrapAbort === ctrl) _bootstrapAbort = null;
+    }
   }
 
   async function bootstrap() {
-    const { data } = await apiFetch("/api/chat/bootstrap");
-    if (!data.ok) {
-      showError(data.error || "chat_not_ready");
-      return false;
-    }
-    CHAT.bootstrap = data.data;
-    const localState = loadLocalUiState();
-    CHAT.uiState = mergeUiState(data.data.ui_state || {}, localState || {});
-    CHAT.unread = { ...(data.data.unread || {}) };
-    CHAT.viewerName = data.data.player?.name || "";
-    CHAT.viewerId = Number(data.data.player?.id) || 0;
-    CHAT.activeRoomId = data.data.active_room_id;
-    CHAT.isMobile = window.matchMedia("(max-width: 768px)").matches;
-
-    pruneRoomState();
-    applyPanelGeometry(CHAT.uiState);
-    saveLocalUiState(CHAT.uiState);
-    updateFabBadge();
-    renderRoomList();
-    updateActiveRoomHeader();
-
-    const ui = CHAT.uiState || {};
-    const wantsOpen =
-      GC._chatWantsOpen === true || (!CHAT.isMobile && ui.is_open && !ui.is_minimized);
-    if (wantsOpen) {
-      setOpen(true);
-    } else {
-      CHAT.root.classList.remove("is-open");
-      CHAT.root.setAttribute("aria-hidden", "true");
-      if (CHAT.fab) CHAT.fab.style.removeProperty("display");
-    }
-
-    if (CHAT.activeRoomId) {
-      try {
-        await loadMessages(CHAT.activeRoomId, true);
-      } catch (err) {
-        console.debug("[TChat] load messages", err);
+    abortBootstrapInFlight();
+    const ctrl = new AbortController();
+    _bootstrapAbort = ctrl;
+    try {
+      const { data } = await apiFetch("/api/chat/bootstrap", { signal: ctrl.signal });
+      if (!data.ok) {
+        showError(data.error || "chat_not_ready");
+        return false;
       }
+      CHAT.bootstrap = data.data;
+      const localState = loadLocalUiState();
+      CHAT.uiState = mergeUiState(data.data.ui_state || {}, localState || {});
+      CHAT.unread = { ...(data.data.unread || {}) };
+      CHAT.viewerName = data.data.player?.name || "";
+      CHAT.viewerId = Number(data.data.player?.id) || 0;
+      CHAT.activeRoomId = data.data.active_room_id;
+      CHAT.isMobile = window.matchMedia("(max-width: 768px)").matches;
+
+      pruneRoomState();
+      applyPanelGeometry(CHAT.uiState);
+      saveLocalUiState(CHAT.uiState);
+      updateFabBadge();
+      renderRoomList();
+      updateActiveRoomHeader();
+
+      const ui = CHAT.uiState || {};
+      const wantsOpen =
+        GC._chatWantsOpen === true || (!CHAT.isMobile && ui.is_open && !ui.is_minimized);
+      if (wantsOpen) {
+        setOpen(true);
+      } else {
+        CHAT.root.classList.remove("is-open");
+        CHAT.root.setAttribute("aria-hidden", "true");
+        if (CHAT.fab) CHAT.fab.style.removeProperty("display");
+      }
+
+      if (CHAT.activeRoomId) {
+        try {
+          await loadMessages(CHAT.activeRoomId, true);
+        } catch (err) {
+          console.debug("[TChat] load messages", err);
+        }
+      }
+      return true;
+    } catch (err) {
+      if (err?.name === "AbortError") return false;
+      throw err;
+    } finally {
+      if (_bootstrapAbort === ctrl) _bootstrapAbort = null;
     }
-    return true;
   }
 
   function stopPolling() {
@@ -1686,8 +1727,6 @@
     return ok;
   }
 
-  let _initChatPromise = null;
-
   function initChat() {
     installGlobalChatHandlers();
     if (!getChatRoot()) return Promise.resolve(false);
@@ -1739,6 +1778,8 @@
   GC.initChat = initChat;
   GC.openTChat = openTChat;
   GC.resumeChatPolling = resumeChatPolling;
+  GC.stopChatPolling = stopPolling;
+  GC.quiesceChat = quiesceChat;
   GC.TChat = CHAT;
   GC.whisperPlayer = whisperTo;
 

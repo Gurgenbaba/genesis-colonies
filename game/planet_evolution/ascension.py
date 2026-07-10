@@ -63,6 +63,40 @@ def check_ascension_requirements(
     return len(missing) == 0, missing
 
 
+def ascension_cost_resources(ascension_key: str) -> Dict[str, int]:
+    """Score-relevant resources spent to start an ascension (metal/crystal/fuel_cells only)."""
+    adef = get_ascension(str(ascension_key)) or {}
+    cost = dict((adef.get("requirements") or {}).get("cost") or {})
+    return {
+        "metal": int(cost.get("metal") or 0),
+        "crystal": int(cost.get("crystal") or 0),
+        "fuel_cells": int(cost.get("fuel_cells") or 0),
+    }
+
+
+def ascension_invested_resource_totals(
+    planet_id: int,
+    conn: sqlite3.Connection,
+) -> Dict[str, int]:
+    """GC-SCORE-E — ascension metal/crystal already spent (completed or active queue)."""
+    keys: set[str] = set()
+    planet = get_planet_row(int(planet_id), conn=conn)
+    if planet and planet.get("ascension_key"):
+        keys.add(str(planet["ascension_key"]))
+    active = _get_planet_ascension_queue_row(int(planet_id), conn)
+    if active and active.get("ascension_key"):
+        keys.add(str(active["ascension_key"]))
+    metal = 0
+    crystal = 0
+    fuel = 0
+    for key in keys:
+        cost = ascension_cost_resources(key)
+        metal += int(cost["metal"])
+        crystal += int(cost["crystal"])
+        fuel += int(cost["fuel_cells"])
+    return {"metal": metal, "crystal": crystal, "fuel_cells": fuel}
+
+
 def _get_planet_ascension_queue_row(
     planet_id: int,
     conn: sqlite3.Connection,

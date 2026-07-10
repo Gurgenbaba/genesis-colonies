@@ -61,10 +61,18 @@
   function syncAdminHudSelects(root) {
     const scope = root && root.querySelectorAll ? root : adminRoot();
     if (!scope || typeof GC.initHudSelects !== "function") return;
+    scope.querySelectorAll(".gc-hud-select.is-open").forEach((wrap) => {
+      wrap.classList.remove("is-open");
+      const menu = wrap.querySelector(".gc-hud-select-menu");
+      if (menu) menu.hidden = true;
+      const trigger = wrap.querySelector(".gc-hud-select-trigger");
+      if (trigger) trigger.setAttribute("aria-expanded", "false");
+    });
     GC.initHudSelects(scope);
     if (typeof GC.rebuildHudSelect === "function") {
       scope.querySelectorAll("select[data-gc-hud-select]").forEach((sel) => {
         if (sel._gcHudSelect) GC.rebuildHudSelect(sel);
+        else if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(sel);
       });
     }
   }
@@ -329,6 +337,9 @@
         el.value = settings[key];
       }
     });
+    if (typeof GC.syncHudSelectLabelsInRoot === "function") {
+      GC.syncHudSelectLabelsInRoot(qs('[data-admin-panel="balance"]'));
+    }
   }
 
   function collectBalancePayload() {
@@ -359,13 +370,18 @@
     host.textContent = `×${prod} / ×${build} / ×${research}`;
   }
 
-  /** Apply HUD snapshot when server returned one (balance save). */
+  /** Balance save: patch resource bar only — no landscape/queue/game-loop side effects. */
   function applyBalanceHudSnapshot(hud, reason) {
     if (!hud || hud.ok === false) return false;
-    if (typeof GC.applyHudFromGameState === "function") {
-      return GC.applyHudFromGameState(hud, reason || "admin_balance_save");
-    }
-    return false;
+    const planetId = Number(hud.active_planet_id || hud.active_planet?.planet_id || 0);
+    if (!planetId) return false;
+    if (typeof GC.patchShellHudFromState !== "function") return false;
+    GC.patchShellHudFromState(hud, {
+      forceResourceBar: true,
+      reason: reason || "admin_balance_save",
+    });
+    if (typeof GC.clearStatusWidgetOffline === "function") GC.clearStatusWidgetOffline();
+    return true;
   }
 
   function focusAdminDetail(el) {
@@ -418,10 +434,26 @@
 
   async function afterBalanceMutation(settings, reason, extras) {
     updateAdminSpeedKpi(settings || {});
+    if (typeof GC.quiesceLiveClientFetches === "function") {
+      GC.quiesceLiveClientFetches(reason || "admin_balance_save");
+    } else {
+      if (typeof GC.stopChatPolling === "function") GC.stopChatPolling();
+      if (typeof GC.abortInFlightGameStateFetches === "function") GC.abortInFlightGameStateFetches();
+      if (typeof GC.stopPolling === "function") GC.stopPolling();
+    }
     await syncAfterAdminChange(reason || "admin_balance_save", {
       settings,
       hud: extras && extras.hud,
+      skipGameState: true,
     });
+    if (typeof GC.releaseShellNavigationBlockers === "function") {
+      GC.releaseShellNavigationBlockers(reason || "admin_balance_save");
+    } else if (typeof GC.teardownHudSelectPortals === "function") {
+      GC.teardownHudSelectPortals();
+    }
+    if (typeof GC.restoreLeftmenuState === "function") {
+      GC.restoreLeftmenuState(window.location.href);
+    }
   }
 
   async function loadAdminBalance() {
@@ -438,6 +470,11 @@
   async function saveAdminBalance() {
     setBalanceStatus(t("admin_balance_saving", "Speichern…"));
     const payload = collectBalancePayload();
+    if (typeof GC.quiesceLiveClientFetches === "function") {
+      GC.quiesceLiveClientFetches("admin_balance_save_pre");
+    } else if (typeof GC.stopChatPolling === "function") {
+      GC.stopChatPolling();
+    }
     const res = await adminPost("/api/admin/balance", payload);
     if (res.ok) {
       populateBalanceForm(res.settings || {});

@@ -17,21 +17,22 @@ DAY_SECONDS = 86400
 
 EXCHANGE_RESOURCES = ("metal", "crystal", "fuel_cells")
 
-_SAFE_FERRONITE_COST_PER_CRYTITE_BUY = 2.0
+_SCORE_NEUTRAL_RATE_TOLERANCE = 1e-6
+_SAFE_FERRONITE_COST_PER_CRYTITE_BUY = 1.5
 _SAFE_FERRONITE_RETURN_PER_CRYTITE_SELL = 1.0
 
 _EXCHANGE_SETTING_DEFAULTS = {
     "exchange_enabled": "1",
-    # Ferronite cost per 1 Crytite (buy) — divide input by this rate.
-    "exchange_rate_metal_to_crystal": "2",
-    # Ferronite return per 1 Crytite (sell) — multiply input by this rate.
+    # Ferronite cost per 1 Crytite (buy) — score-neutral 1.5 (GC-SCORE-F).
+    "exchange_rate_metal_to_crystal": "1.5",
+    # Ferronite return per 1 Crytite (sell) — spread below buy (anti-arbitrage).
     "exchange_rate_crystal_to_metal": "1",
     "exchange_daily_limit_pct": "80",
     "exchange_daily_limit_min": "500000",
     "exchange_min_amount": "100",
     "fuel_exchange_enabled": "1",
-    "fuel_exchange_metal_per_unit": "20",
-    "fuel_exchange_crystal_per_unit": "14",
+    "fuel_exchange_metal_per_unit": "3",
+    "fuel_exchange_crystal_per_unit": "2",
     "fuel_exchange_min_units": "10",
 }
 
@@ -81,6 +82,107 @@ def validate_exchange_rates(buy_cost: float, sell_return: float) -> Tuple[bool, 
     return True, None
 
 
+def score_neutral_exchange_reference() -> Dict[str, float]:
+    """Canonical trader unit rates from resource_score (GC-SCORE-F)."""
+    from .resource_score import score_neutral_exchange_rates
+
+    rates = score_neutral_exchange_rates()
+    return {
+        "ferronite_cost_per_crytite_buy": float(rates["metal_per_crystal"]),
+        "fuel_metal_per_unit": float(rates["metal_per_fuel_cell"]),
+        "fuel_crystal_per_unit": float(rates["crystal_per_fuel_cell"]),
+    }
+
+
+def _rates_close(a: float, b: float, *, tol: float = _SCORE_NEUTRAL_RATE_TOLERANCE) -> bool:
+    return abs(float(a) - float(b)) <= tol
+
+
+def validate_score_neutral_metal_crystal_buy(buy_cost: float) -> Tuple[bool, Optional[str]]:
+    """Buy rate must match score-neutral 1 Crytite = 1.5 Ferronit."""
+    ref = score_neutral_exchange_reference()["ferronite_cost_per_crytite_buy"]
+    if not _rates_close(buy_cost, ref):
+        return False, "exchange_score_neutral_buy_mismatch"
+    return True, None
+
+
+def validate_score_neutral_fuel_rates(metal_per: float, crystal_per: float) -> Tuple[bool, Optional[str]]:
+    """Fuel buy rates must match score-neutral 1 Brennzelle = 3F / 2C."""
+    ref = score_neutral_exchange_reference()
+    if not _rates_close(metal_per, ref["fuel_metal_per_unit"]):
+        return False, "exchange_score_neutral_fuel_metal_mismatch"
+    if not _rates_close(crystal_per, ref["fuel_crystal_per_unit"]):
+        return False, "exchange_score_neutral_fuel_crystal_mismatch"
+    return True, None
+
+
+def validate_score_neutral_exchange_config(cfg: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+    """True when active trader rates match canonical score-neutral reference."""
+    ok, err = validate_score_neutral_metal_crystal_buy(
+        float(cfg.get("rate_metal_to_crystal") or cfg.get("ferronite_cost_per_crytite_buy") or 0)
+    )
+    if not ok:
+        return ok, err
+    return validate_score_neutral_fuel_rates(
+        float(cfg.get("fuel_metal_per_unit") or 0),
+        float(cfg.get("fuel_crystal_per_unit") or 0),
+    )
+
+
+def exchange_trade_score_delta(
+    *,
+    metal: int,
+    crystal: int,
+    fuel_cells: int,
+    give_resource: str,
+    give_amount: int,
+    receive_resource: str,
+    receive_amount: int,
+) -> int:
+    """Signed score change for a single trade (floor divisors — can be negative on spread)."""
+    from .resource_score import score_from_resources
+
+    before = score_from_resources(metal, crystal, fuel_cells)
+    balances = {
+        "metal": int(metal),
+        "crystal": int(crystal),
+        "fuel_cells": int(fuel_cells),
+    }
+    balances[str(give_resource)] -= int(give_amount)
+    balances[str(receive_resource)] += int(receive_amount)
+    after = score_from_resources(
+        balances["metal"],
+        balances["crystal"],
+        balances["fuel_cells"],
+    )
+    return int(after - before)
+
+
+def trade_would_increase_score(
+    *,
+    metal: int,
+    crystal: int,
+    fuel_cells: int,
+    give_resource: str,
+    give_amount: int,
+    receive_resource: str,
+    receive_amount: int,
+) -> bool:
+    """Block trades that raise account score via misaligned rates (GC-SCORE-F)."""
+    return (
+        exchange_trade_score_delta(
+            metal=metal,
+            crystal=crystal,
+            fuel_cells=fuel_cells,
+            give_resource=give_resource,
+            give_amount=give_amount,
+            receive_resource=receive_resource,
+            receive_amount=receive_amount,
+        )
+        > 0
+    )
+
+
 def would_roundtrip_profit(amount: int, buy_cost: float, sell_return: float) -> bool:
     """Return True when Ferronite → Crytite → Ferronite yields more Ferronite."""
     start = max(0, int(amount))
@@ -115,10 +217,18 @@ def get_exchange_config(conn=None) -> Dict[str, Any]:
         settings = get_game_settings(conn=conn)
         enabled = str(settings.get("exchange_enabled", "1")).strip() not in ("0", "false", "False")
         fuel_enabled = str(settings.get("fuel_exchange_enabled", "1")).strip() not in ("0", "false", "False")
-        raw_buy = _float_setting(settings, "exchange_rate_metal_to_crystal", "2")
+        raw_buy = _float_setting(settings, "exchange_rate_metal_to_crystal", "1.5")
         raw_sell = _float_setting(settings, "exchange_rate_crystal_to_metal", "1")
         buy_cost, sell_return, corrected = _sanitize_metal_crystal_rates(raw_buy, raw_sell)
         rates_ok, rates_reason = validate_exchange_rates(buy_cost, sell_return)
+        fuel_metal = _float_setting(settings, "fuel_exchange_metal_per_unit", "3")
+        fuel_crystal = _float_setting(settings, "fuel_exchange_crystal_per_unit", "2")
+        cfg_for_neutral = {
+            "rate_metal_to_crystal": buy_cost,
+            "fuel_metal_per_unit": fuel_metal,
+            "fuel_crystal_per_unit": fuel_crystal,
+        }
+        score_neutral, score_neutral_reason = validate_score_neutral_exchange_config(cfg_for_neutral)
         return {
             "enabled": enabled,
             "fuel_enabled": fuel_enabled,
@@ -129,11 +239,13 @@ def get_exchange_config(conn=None) -> Dict[str, Any]:
             "rates_valid": rates_ok,
             "rates_block_reason": rates_reason or "",
             "rates_corrected": corrected,
+            "score_neutral": score_neutral,
+            "score_neutral_block_reason": score_neutral_reason or "",
             "daily_limit_pct": _float_setting(settings, "exchange_daily_limit_pct", "80"),
             "daily_limit_min": _int_setting(settings, "exchange_daily_limit_min", "25000000"),
             "min_amount": _int_setting(settings, "exchange_min_amount", "100"),
-            "fuel_metal_per_unit": _float_setting(settings, "fuel_exchange_metal_per_unit", "20"),
-            "fuel_crystal_per_unit": _float_setting(settings, "fuel_exchange_crystal_per_unit", "14"),
+            "fuel_metal_per_unit": fuel_metal,
+            "fuel_crystal_per_unit": fuel_crystal,
             "fuel_min_units": _int_setting(settings, "fuel_exchange_min_units", "10"),
         }
     finally:
@@ -441,6 +553,28 @@ def execute_exchange(
         if not planet or int(planet["player_id"]) != int(player_id):
             rollback(conn)
             return False, "planet_not_found", None
+
+        current_metal = int(float(planet["metal"] or 0))
+        current_crystal = int(float(planet["crystal"] or 0))
+        current_fuel = int(float(planet["fuel_cells"] or 0))
+        if trade_would_increase_score(
+            metal=current_metal,
+            crystal=current_crystal,
+            fuel_cells=current_fuel,
+            give_resource=give_resource,
+            give_amount=give_amount,
+            receive_resource=receive_resource,
+            receive_amount=receive_amount,
+        ):
+            rollback(conn)
+            logger.warning(
+                "[exchange] blocked trade: score increase give=%s receive=%s amount=%s -> %s",
+                give_resource,
+                receive_resource,
+                give_amount,
+                receive_amount,
+            )
+            return False, "exchange_score_exploit", None
 
         cur.execute(
             "SELECT exchange_daily_used, exchange_daily_reset_at FROM players WHERE id = ? LIMIT 1;",

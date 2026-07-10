@@ -28,6 +28,8 @@ def build_defense_detail_card(
     cost = unit_build_cost(key)
     build_cost = spec.get("build_cost") or cost
 
+    from .defense_defs import defense_score_value
+
     card: DefenseDetailCard = {
         "defense_key": key,
         "name_key": spec.get("name_key", f"defense_{key}"),
@@ -37,7 +39,7 @@ def build_defense_detail_card(
         "attack": int(stats.attack if stats else spec.get("attack", 0) or 0),
         "shield": int(stats.shield if stats else spec.get("shield", 0) or 0),
         "hull": int(stats.hull if stats else spec.get("hull", 0) or 0),
-        "score_value": int(stats.score_value if stats else spec.get("score_value", 0) or 0),
+        "score_value": defense_score_value(key),
         "icon": defense_icon_static_path(key),
         "build_cost_metal": int(build_cost.get("metal", 0) or 0),
         "build_cost_crystal": int(build_cost.get("crystal", 0) or 0),

@@ -56,17 +56,19 @@ def test_exchange_schema_ready(exchange_db):
 def test_exchange_config_defaults(exchange_db):
     cfg = get_exchange_config()
     assert cfg["enabled"] is True
-    assert cfg["rate_metal_to_crystal"] == 2.0
+    assert cfg["rate_metal_to_crystal"] == 1.5
     assert cfg["rate_crystal_to_metal"] == 1.0
     assert cfg["rates_valid"] is True
+    assert cfg["score_neutral"] is True
     assert cfg["daily_limit_pct"] == 80.0
     assert cfg["daily_limit_min"] == 25000000
     assert cfg["min_amount"] == 100
-    assert cfg["fuel_metal_per_unit"] == 20
-    assert cfg["fuel_crystal_per_unit"] == 14
+    assert cfg["fuel_metal_per_unit"] == 3
+    assert cfg["fuel_crystal_per_unit"] == 2
 
 
 def test_validate_exchange_rates_blocks_arbitrage():
+    assert validate_exchange_rates(1.5, 1) == (True, None)
     assert validate_exchange_rates(2, 1) == (True, None)
     assert validate_exchange_rates(1, 2)[0] is False
     assert validate_exchange_rates(1, 1)[0] is False
@@ -75,6 +77,7 @@ def test_validate_exchange_rates_blocks_arbitrage():
 
 def test_would_roundtrip_profit_safe_rates():
     for amount in (1, 10, 100, 1000, 1_000_000):
+        assert would_roundtrip_profit(amount, 1.5, 1) is False
         assert would_roundtrip_profit(amount, 2, 1) is False
 
 
@@ -84,17 +87,17 @@ def test_would_roundtrip_profit_detects_exploit():
 
 def test_exchange_metal_to_crystal_uses_buy_cost_division(exchange_db):
     cfg = get_exchange_config()
-    assert _preview_receive("metal", "crystal", 100, cfg) == 50
-    assert _preview_receive("metal", "crystal", 1000, cfg) == 500
+    assert _preview_receive("metal", "crystal", 100, cfg) == 66
+    assert _preview_receive("metal", "crystal", 1500, cfg) == 1000
 
 
 def test_exchange_roundtrip_loses_value(exchange_db):
     cfg = get_exchange_config()
-    start = 1000
+    start = 1500
     crytite = _preview_receive("metal", "crystal", start, cfg)
     ferronite_back = _preview_receive("crystal", "metal", crytite, cfg)
     assert ferronite_back <= start
-    assert ferronite_back == 500
+    assert ferronite_back == 1000
 
 
 def test_exchange_metal_to_crystal(exchange_db):
@@ -114,13 +117,13 @@ def test_exchange_metal_to_crystal(exchange_db):
         conn=conn,
     )
     assert ok, reason
-    assert result["receive_amount"] == 500
+    assert result["receive_amount"] == 666
     assert result["receive_resource"] == "crystal"
 
     cur.execute("SELECT metal, crystal FROM planets WHERE id = ?;", (pid,))
     row = cur.fetchone()
     assert int(row["metal"]) == 9000
-    assert int(row["crystal"]) == 500
+    assert int(row["crystal"]) == 666
 
     cur.execute("SELECT COUNT(*) AS c FROM exchange_log WHERE player_id = ?;", (uid,))
     assert int(cur.fetchone()["c"]) == 1
@@ -162,12 +165,12 @@ def test_exchange_fuel_cells_to_metal(exchange_db):
         conn=conn,
     )
     assert ok, reason
-    assert result["receive_amount"] == 200
+    assert result["receive_amount"] == 30
     assert result["receive_resource"] == "metal"
 
     cur.execute("SELECT metal, fuel_cells FROM planets WHERE id = ?;", (pid,))
     row = cur.fetchone()
-    assert int(row["metal"]) == 200
+    assert int(row["metal"]) == 30
     assert int(row["fuel_cells"]) == 90
     conn.close()
 
@@ -227,17 +230,17 @@ def test_exchange_metal_to_fuel_cells(exchange_db):
         planet_id=pid,
         direction="metal_to_fuel_cells",
         from_resource="metal",
-        amount=200,
+        amount=100,
         conn=conn,
     )
     assert ok, reason
-    assert result["receive_amount"] == 10
+    assert result["receive_amount"] == 33
     assert result["receive_resource"] == "fuel_cells"
 
     cur.execute("SELECT metal, fuel_cells FROM planets WHERE id = ?;", (pid,))
     row = cur.fetchone()
-    assert int(row["metal"]) == 9800
-    assert int(row["fuel_cells"]) == 10
+    assert int(row["metal"]) == 9900
+    assert int(row["fuel_cells"]) == 33
     conn.close()
 
 
@@ -260,7 +263,7 @@ def test_exchange_fuel_cells_uncapped(exchange_db):
     assert ok, reason
 
     cur.execute("SELECT fuel_cells FROM planets WHERE id = ?;", (pid,))
-    assert int(cur.fetchone()["fuel_cells"]) == 200
+    assert int(cur.fetchone()["fuel_cells"]) == 1400
     conn.close()
 
 
@@ -670,7 +673,7 @@ def test_exchange_config_sanitizes_unsafe_db_rates(exchange_db):
     conn.commit()
     cfg = get_exchange_config(conn=conn)
     conn.close()
-    assert cfg["rate_metal_to_crystal"] == 2.0
+    assert cfg["rate_metal_to_crystal"] == 1.5
     assert cfg["rate_crystal_to_metal"] == 1.0
     assert cfg["rates_corrected"] is True
 

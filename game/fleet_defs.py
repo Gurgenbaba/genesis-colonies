@@ -126,7 +126,6 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         "requirements": {"buildings": {"orbital_shipyard": 1, "research_lab": 1}, "research": {"energy_tech": 2}},
         "build_cost": {"metal": 625, "crystal": 250, "fuel_cells": 0},
         "build_seconds": 30,
-        "score_value": 700,
         "speed": 20000,
         "cargo": 10,
         "fuel": 5,
@@ -144,7 +143,6 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         "requirements": {"buildings": {"orbital_shipyard": 1}, "research": {"mining_tech": 3}},
         "build_cost": {"metal": 2500, "crystal": 2500, "fuel_cells": 0},
         "build_seconds": 120,
-        "score_value": 4000,
         "speed": 5000,
         "cargo": 5000,
         "fuel": 10,
@@ -165,7 +163,6 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         },
         "build_cost": {"metal": 1250, "crystal": 625, "fuel_cells": 0},
         "build_seconds": 60,
-        "score_value": 1500,
         "speed": 100000000,
         "cargo": 0,
         "fuel": 1,
@@ -186,7 +183,6 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         },
         "build_cost": {"metal": 5000, "crystal": 3750, "fuel_cells": 0},
         "build_seconds": 260,
-        "score_value": 7000,
         "speed": 8000,
         "cargo": 2000,
         "fuel": 3,
@@ -207,7 +203,6 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         },
         "build_cost": {"metal": 3750, "crystal": 1250, "fuel_cells": 0},
         "build_seconds": 180,
-        "score_value": 4000,
         "speed": 12500,
         "cargo": 50,
         "fuel": 20,
@@ -228,7 +223,6 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         },
         "build_cost": {"metal": 18750, "crystal": 8750, "fuel_cells": 12500},
         "build_seconds": 240,
-        "score_value": 22000,
         "speed": 10000,
         "cargo": 100,
         "fuel": 75,
@@ -254,7 +248,6 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         },
         "build_cost": {"metal": 7500, "crystal": 7500, "fuel_cells": 750},
         "build_seconds": 200,
-        "score_value": 12000,
         "speed": 7500,
         "cargo": 25000,
         "fuel": 50,
@@ -275,7 +268,6 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         },
         "build_cost": {"metal": 50000, "crystal": 50000, "fuel_cells": 25000},
         "build_seconds": 260,
-        "score_value": 50000,
         "speed": 500,
         "cargo": 100000,
         "fuel": 25,
@@ -296,7 +288,6 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         },
         "build_cost": {"metal": 12500, "crystal": 7500, "fuel_cells": 7500},
         "build_seconds": 220,
-        "score_value": 16000,
         "speed": 2000,
         "cargo": 20000,
         "fuel": 300,
@@ -317,7 +308,6 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         },
         "build_cost": {"metal": 62500, "crystal": 37500, "fuel_cells": 60000},
         "build_seconds": 260,
-        "score_value": 80000,
         "speed": 1500,
         "cargo": 5000,
         "fuel": 200,
@@ -335,7 +325,6 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         "required_shipyard_level": 7,
         "build_cost": {"metal": 15000, "crystal": 10000, "fuel_cells": 62},
         "build_seconds": 260,
-        "score_value": 20000,
         "speed": 6000,
         "cargo": 5000,
         "fuel": 40,
@@ -462,13 +451,11 @@ def ship_display_name(ship_key: str, *, locale: str | None = None) -> str:
 
 
 def ship_score_value(ship_key: str) -> int:
-    """Ranking / combat empire value per hull (falls back to build cost)."""
-    from .combat_models import combat_stats_for_ship
+    """Wealth score per hull — canonical resource_score from build_cost."""
+    from .resource_score import score_from_cost_dict
+    from .shipyard import _unit_build_cost
 
-    stats = combat_stats_for_ship(ship_key)
-    if stats is None:
-        return 0
-    return int(stats.score_value)
+    return score_from_cost_dict(_unit_build_cost(canonical_ship_key(ship_key)))
 
 
 def ship_combat_stats(ship_key: str):

@@ -488,6 +488,20 @@ def get_research_cost(tech_key: str, level: int) -> Tuple[int, int]:
     )
 
 
+def cumulative_research_resource_totals(tech_key: str, level: int) -> Dict[str, int]:
+    """GC-SCORE-D — cumulative metal/crystal/fuel invested for research levels 1..level."""
+    lvl = max(0, int(level or 0))
+    if lvl <= 0 or tech_key not in RESEARCH_TECHS:
+        return {"metal": 0, "crystal": 0, "fuel_cells": 0}
+    metal = 0
+    crystal = 0
+    for target in range(1, lvl + 1):
+        m, c = get_research_cost(tech_key, target)
+        metal += int(m)
+        crystal += int(c)
+    return {"metal": metal, "crystal": crystal, "fuel_cells": 0}
+
+
 def get_research_time(
     tech_key: str,
     level: int,

@@ -27106,6 +27106,14 @@ button.pe-hero-planet-hint:focus-visible {
 }
 .gc-hud-select-menu[hidden]{
   display: none !important;
+  pointer-events: none !important;
+}
+body > .gc-hud-select-menu.gc-popover-layer[hidden]{
+  display: none !important;
+  pointer-events: none !important;
+}
+body > .gc-hud-select-menu.gc-popover-layer:not([hidden]){
+  pointer-events: auto;
 }
 .gc-hud-select-item{
   display: block;

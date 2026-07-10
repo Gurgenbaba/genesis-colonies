@@ -364,6 +364,95 @@ def test_main_js_patches_boost_hud_from_game_state():
     assert 'data-gc-boost-hud' not in base
 
 
+def test_admin_balance_save_skips_blocking_game_state():
+    admin_src = _read("static/admin.js")
+    balance_section = admin_src.split("async function afterBalanceMutation")[1].split("async function loadAdminBalance")[0]
+    assert "skipGameState: true" in balance_section
+    assert "hud: extras && extras.hud" in balance_section
+    assert "abortInFlightGameStateFetches" in balance_section
+    assert "stopPolling" in balance_section
+    assert "stopChatPolling" in balance_section
+    assert "quiesceLiveClientFetches" in balance_section
+    assert "scheduleDeferredHudRefresh" not in admin_src
+    assert "releaseShellNavigationBlockers" in balance_section
+    assert "syncAdminHudSelects(qs('[data-admin-panel=\"balance\"]')" not in balance_section
+    snapshot_fn = admin_src.split("function applyBalanceHudSnapshot")[1].split("function focusAdminDetail")[0]
+    assert "patchShellHudFromState" in snapshot_fn
+    assert "applyHudFromGameState" not in snapshot_fn
+    assert "build_balance_hud_snapshot" in _read("game/admin_balance.py")
+    api_src = _read("game/admin_api.py")
+    assert "build_balance_hud_snapshot" in api_src.split("def api_save_balance_settings")[1].split("def api_apply_balance_preset_b")[0]
+    main_src = _read("static/main.js")
+    assert "GC.teardownHudSelectPortals = teardownHudSelectPortals" in main_src
+    assert "function reparentHudSelectMenu" in main_src
+    assert "shouldSyncRoleSidebarFromHudData" in main_src
+    assert "shouldPollGameState" in main_src
+    assert "function isAdminRoutePath(pathname)" in main_src
+    should_run = main_src.split("function shouldRunGameLoop()")[1].split("function isAdminShellPage")[0]
+    assert "isAdminRoutePath(window.location.pathname)" in should_run
+    assert "quiesceLiveClientFetches" in main_src
+    landscape_fn = main_src.split("function applyPlanetLandscapeFromState(data)")[1].split("function applyPlanetHeroThemeFromState")[0]
+    assert "hasOwnProperty.call(ap, \"landscape_url\")" in landscape_fn
+    assert "GC.releaseShellNavigationBlockers = releaseShellNavigationBlockers" in main_src
+    chat_boot = main_src.split("function scheduleDeferredChatBoot()")[1].split("function syncScopedPlanetIds")[0]
+    assert "isAdminShellPage()" in chat_boot
+    pjax_fn = main_src.split("function isPjaxEligibleLink(link)")[1].split("function normalizePjaxUrl")[0]
+    assert "isAdminRoutePath(dest.pathname)" in pjax_fn
+    assert 'if (GC.detectPage() === "admin") return false' not in pjax_fn
+    apply_hud = main_src.split("GC.applyHudFromGameState = function applyHudFromGameState")[1][:400]
+    assert "if (!planetId) return false" in apply_hud
+    sync_section = admin_src.split("async function syncAfterAdminChange")[1].split("async function afterBalanceMutation")[0]
+    assert "skipGameState !== true" in sync_section
+    assert "applyBalanceHudSnapshot" in sync_section
+
+
+def test_admin_pjax_exit_hard_load_entry():
+    """Admin entry is full page; leaving admin uses PJAX like other ingame nav."""
+    src = _read("static/main.js")
+    pjax_fn = src.split("function isPjaxEligibleLink(link)")[1].split("function normalizePjaxUrl")[0]
+    assert "isAdminRoutePath(dest.pathname)" in pjax_fn
+    assert 'GC.detectPage() === "admin"' not in pjax_fn
+    base = _read("templates/base.html")
+    assert "gc-nav-admin" in base
+    admin_nav = base.split("gc-nav-admin")[1][:300]
+    assert "data-no-pjax" in admin_nav
+    nav = src.split("GC.navigateTo = async function navigateTo")[1].split("function initPjax")[0]
+    assert "leavingAdmin" in nav
+    assert "teardownHudSelectPortals" in nav
+    assert "quiesceLiveClientFetches" in nav
+    assert "releaseShellNavigationBlockers" not in nav
+    assert "beginPjaxNavigation" in nav
+    assert "shouldPjaxHardLoad" in nav
+    assert "shouldPjaxHardLoad" in nav
+
+
+def test_pjax_navigation_owner_clears_stale_timeouts():
+    """PJAX nav ID guard — stale timeouts must not hard-load superseded destinations."""
+    src = _read("static/main.js")
+    assert "let _pjaxNavigationSeq = 0" in src
+    assert "let _activePjaxNavigation = null" in src
+    assert "function clearPjaxNavigation(nav" in src
+    assert "function supersedePjaxNavigation(reason)" in src
+    assert "function beginPjaxNavigation(url, target)" in src
+    assert "function shouldPjaxHardLoad(nav, fetchTimedOut, userAborted)" in src
+    dedupe = src.split("GC.navigateTo = async function navigateTo")[1].split("function initPjax")[0]
+    assert "_activePjaxNavigation.normalizedUrl === target" in dedupe
+    assert "nav.fetchTimeoutId" in dedupe
+    hard_load_fn = src.split("function shouldPjaxHardLoad")[1].split("GC.navigateTo = async function navigateTo")[0]
+    assert "_activePjaxNavigation.id !== nav.id" in hard_load_fn
+    assert "normalizePjaxUrl(window.location.href) === nav.normalizedUrl" in hard_load_fn
+    blockers = src.split("function releaseShellNavigationBlockers(reason)")[1].split("function syncHudSelectLabelsInRoot")[0]
+    assert "GC.pjaxInFlight = null" not in blockers
+    assert "GC._pjaxAbort" not in blockers
+    preload = src.split("function isValidLcpPreloadHref(href)")[1].split("GC.syncLcpHeroPreload = syncLcpHeroPreload")[0]
+    assert '"null"' in preload
+    assert '"undefined"' in preload
+    assert "normalizeLcpPreloadHref" in preload
+    assert "removeLcpHeroPreloadLinks" in preload
+    version = _read("VERSION").strip()
+    assert version == "1.5.9.8"
+
+
 def test_main_js_gc802_planet_switch_state_sync():
     src = _read("static/main.js")
     assert "syncScopedPlanetIds" in src
@@ -401,12 +490,18 @@ def test_main_js_gc742_ssr_skip_init_game_state():
     assert "shouldSkipInitGameStateAfterSsr(page, opts)" in init_body
     assert 'await GC.refreshGameState("page_init")' in init_body
     assert "bootstrapResourceLiveFromDom()" in init_body
-    pjax = src.split("GC.navigateTo = async function navigateTo")[1].split("function initPjax")[0]
-    assert "skipHydrate: opts.skipHydrate !== false" in pjax
-    assert "pjax: true" in pjax
+    assert "Boolean(skipInitFetch)" in init_body
+    assert 'void GC.refreshGameState("page_init")' not in init_body
+    pjax_apply = src.split("async function applyPjaxPayload(url, payload, doc, opts = {})")[1].split("function pjaxPayloadFromDoc")[0]
+    assert "skipHydrate: opts.skipHydrate !== false" in pjax_apply
+    assert "pjax: true" in pjax_apply
+    assert "return afterInit()" in src.split("GC.initPage = function initPage(opts)")[1].split("GC.stopPolling = function stopPolling")[0]
     cleanup = src.split("GC.cleanupPage = function cleanupPage()")[1].split("GC.abortGameLoop")[0]
     assert "abortInFlightGameStateFetches()" in cleanup
     assert "_preservePollingOnCleanup" not in cleanup
+    abort_fn = src.split("function abortInFlightGameStateFetches()")[1].split("let _planetPageReloadPromise")[0]
+    assert "_activeRefreshFlightResolve" in abort_fn
+    assert "GC.refreshInFlight = null" in abort_fn
 
 
 def test_app_gc745_pjax_server_fastpath():

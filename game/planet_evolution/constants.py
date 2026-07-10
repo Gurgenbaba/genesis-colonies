@@ -66,11 +66,3 @@ RARITY_XP_MULT = {
     "epic": 2.0,
     "legendary": 3.0,
 }
-
-DISCOVERY_RARITY_MULT = {
-    "common": 1,
-    "uncommon": 2,
-    "rare": 5,
-    "epic": 15,
-    "legendary": 50,
-}

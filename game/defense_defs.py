@@ -25,7 +25,6 @@ DEFENSES: Dict[str, Dict[str, Any]] = {
         "requirements": {"buildings": {"defense_factory": 1}, "research": {}},
         "build_cost": {"metal": 2000, "crystal": 0, "fuel_cells": 0},
         "build_seconds": 20,
-        "score_value": 2000,
         "attack": 4,
         "shield": 0,
         "hull": 120,
@@ -43,7 +42,6 @@ DEFENSES: Dict[str, Dict[str, Any]] = {
         "requirements": {"buildings": {"defense_factory": 1}, "research": {"weapon_tech": 2}},
         "build_cost": {"metal": 250, "crystal": 125, "fuel_cells": 0},
         "build_seconds": 30,
-        "score_value": 300,
         "attack": 5,
         "shield": 0,
         "hull": 200,
@@ -60,7 +58,6 @@ DEFENSES: Dict[str, Dict[str, Any]] = {
         },
         "build_cost": {"metal": 2500, "crystal": 625, "fuel_cells": 750},
         "build_seconds": 120,
-        "score_value": 2500,
         "attack": 25,
         "shield": 0,
         "hull": 500,
@@ -77,7 +74,6 @@ DEFENSES: Dict[str, Dict[str, Any]] = {
         },
         "build_cost": {"metal": 6250, "crystal": 3750, "fuel_cells": 1500},
         "build_seconds": 300,
-        "score_value": 8000,
         "attack": 100,
         "shield": 0,
         "hull": 800,
@@ -94,7 +90,6 @@ DEFENSES: Dict[str, Dict[str, Any]] = {
         },
         "build_cost": {"metal": 18750, "crystal": 10000, "fuel_cells": 2500},
         "build_seconds": 600,
-        "score_value": 23000,
         "attack": 250,
         "shield": 0,
         "hull": 1200,
@@ -116,7 +111,6 @@ DEFENSES: Dict[str, Dict[str, Any]] = {
         },
         "build_cost": {"metal": 12500, "crystal": 12500, "fuel_cells": 8500},
         "build_seconds": 900,
-        "score_value": 20000,
         "attack": 1,
         "shield": 500,
         "hull": 2000,
@@ -133,7 +127,6 @@ DEFENSES: Dict[str, Dict[str, Any]] = {
         },
         "build_cost": {"metal": 62500, "crystal": 62500, "fuel_cells": 25000},
         "build_seconds": 3600,
-        "score_value": 100000,
         "attack": 0,
         "shield": 2000,
         "hull": 5000,
@@ -188,18 +181,10 @@ def unit_build_cost(defense_key: str) -> Dict[str, int]:
 
 
 def defense_score_value(defense_key: str) -> int:
-    """Ranking points per stored unit (Empire score: amount × score_value)."""
-    from .combat_models import combat_stats_for_defense
+    """Wealth score per stored unit — canonical resource_score from build_cost."""
+    from .resource_score import score_from_cost_dict
 
-    stats = combat_stats_for_defense(defense_key)
-    if stats is not None:
-        return int(stats.score_value)
-    spec = get_defense(defense_key) or {}
-    raw = spec.get("score_value")
-    if raw is not None:
-        return max(0, int(raw))
-    cost = unit_build_cost(defense_key)
-    return max(0, int(cost.get("metal") or 0) + int(cost.get("crystal") or 0))
+    return score_from_cost_dict(unit_build_cost(str(defense_key)))
 
 
 def defense_combat_stats(defense_key: str):

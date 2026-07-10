@@ -56,6 +56,31 @@ def compute_planet_research_cost(tech_key: str, target_level: int) -> Tuple[int,
     return int(base_m * mult), int(base_c * mult)
 
 
+def cumulative_planet_research_resource_totals(
+    planet_id: int,
+    conn: Optional[sqlite3.Connection] = None,
+) -> Dict[str, int]:
+    """GC-SCORE-E — cumulative metal/crystal invested in planet research levels 1..level."""
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        metal = 0
+        crystal = 0
+        for tech_key, level in get_planet_research_levels(int(planet_id), conn=conn).items():
+            lvl = max(0, int(level or 0))
+            if lvl <= 0:
+                continue
+            for target in range(1, lvl + 1):
+                cost_m, cost_c = compute_planet_research_cost(str(tech_key), target)
+                metal += int(cost_m)
+                crystal += int(cost_c)
+        return {"metal": metal, "crystal": crystal, "fuel_cells": 0}
+    finally:
+        if own:
+            conn.close()
+
+
 def compute_planet_research_reward_xp(tech_key: str) -> Dict[str, Any]:
     """Canonical planet-XP grant for completing one level of planet research."""
     rdef = get_research_def(tech_key) or {}

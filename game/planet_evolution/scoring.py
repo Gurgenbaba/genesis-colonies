@@ -1,32 +1,26 @@
-"""Planet evolution score component for ranking."""
+"""Planet evolution score component for ranking (GC-SCORE-E)."""
 
 from __future__ import annotations
 
 import sqlite3
-from typing import Optional
 
 from ..db import column_exists, table_exists
-from .constants import DISCOVERY_RARITY_MULT
-from .repository import get_discoveries, get_legacy_tags
+from ..resource_score import add_score_from_cost_dicts
+from .ascension import ascension_invested_resource_totals
+from .planet_research import cumulative_planet_research_resource_totals
 
 
 def compute_single_planet_score(planet_id: int, conn: sqlite3.Connection) -> int:
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),))
-    row = cur.fetchone()
-    if not row:
+    if not table_exists(conn, "planets"):
         return 0
-    planet = dict(row)
+    cur = conn.cursor()
+    cur.execute("SELECT id FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),))
+    if not cur.fetchone():
+        return 0
 
-    level = int(planet.get("planet_level") or 1)
-    tier = int(planet.get("specialization_tier") or 0)
-    asc = int(planet.get("ascension_rank") or 0)
-    total = max(0, level - 1) * 100 + tier * 500 + asc * 5000
-    for disc in get_discoveries(planet_id, conn=conn):
-        rarity = str(disc.get("rarity") or "common")
-        total += 1000 * DISCOVERY_RARITY_MULT.get(rarity, 1)
-    total += len(get_legacy_tags(planet_id, conn=conn)) * 50
-    return max(0, int(total))
+    research = cumulative_planet_research_resource_totals(int(planet_id), conn=conn)
+    ascension = ascension_invested_resource_totals(int(planet_id), conn)
+    return add_score_from_cost_dicts(research, ascension)
 
 
 def compute_player_evolution_score(player_id: int, conn: sqlite3.Connection) -> int:

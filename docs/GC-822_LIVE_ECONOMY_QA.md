@@ -27,7 +27,7 @@ Measure how the rework affects real player states. **No new formulas.** Fix bugs
 | Trader | `exchange_limit_floor`, `low_trader_headroom` |
 | Expeditions / loot | empire production drives rewards (auto via GC-820) |
 | Military costs | fleet/defense defs GC-821D (+25 %) |
-| Ranking | `ranking_building_drift` vs legacy exponential investment |
+| Ranking | `ranking_score_rebase` — persistierte `player_scores` vs. live `compute_player_scores()` |
 
 ---
 
@@ -57,7 +57,8 @@ Read-only — no DB mutations.
 | Storage > new cap | **No trim** — production caps growth only |
 | Lower future upgrade costs (GC-821) | **Benefit** — no compensation clawback |
 | Higher fleet/defense build costs | **Expected** — no retroactive charge |
-| Ranking building score shift | **Expected** — `ranking.py` now uses GC-821 cumulative power costs |
+| Ranking building score shift (GC-821) | **Expected** — cumulative power costs |
+| Ranking score rebase (GC-SCORE) | **Expected** — einmalig Admin-Recompute nach Deploy |
 
 **No mandatory compensation** unless audit flags systematic unfairness (support case-by-case).
 
@@ -73,25 +74,35 @@ Read-only — no DB mutations.
 | `exchange_limit_floor` | Daily limit = `exchange_daily_limit_min` |
 | `active_build_queue` | Jobs in flight — verify after deploy |
 | `high_mine_legacy_cost` | Mine ≥60 — benefited most from GC-821 cost curve |
-| `ranking_building_drift` | Building score ±15 % vs legacy exponential sum |
+| `ranking_score_rebase` | Persistierter `score_total` weicht ≥15 % von `compute_player_scores()` ab — Admin-Recompute |
 | `low_trader_headroom` | Daily limit < 15 % of empire day production |
 
 ---
 
-## GC-822 code fix: ranking drift
+## GC-SCORE-G: ranking score rebase audit
+
+Nach GC-SCORE-B/E/F können `player_scores`-Snapshots von der kanonischen Berechnung abweichen.
+
+**Audit:** `ranking_score_rebase` vergleicht persistierte Zeile mit `compute_player_scores()` (±15 % auf `total_score`).
+
+**Fix:** einmalig `POST /api/admin/ranking/recompute` (Admin → Ranking neu berechnen) oder Ranking-Cron.
+
+---
+
+## GC-822 code fix: ranking drift (historisch)
 
 `compute_player_scores()` used legacy `BASE_COST × COST_FACTOR^level` while gameplay used GC-821 `power_upgrade_cost()`.
 
-**Fix:** building investment sum via `cumulative_upgrade_cost_sum()` in `economy_balance.py`.
+**Fix:** building investment sum via `cumulative_upgrade_resource_totals()` + `resource_score` (GC-SCORE-D).
 
-Fleet/defense scores already use `fleet_defs` / `defense_defs` (GC-821D updated).
+Fleet/defense scores use `build_cost` via `resource_score` (GC-SCORE-C).
 
 ---
 
 ## Tests
 
 ```bash
-python -m pytest tests/test_gc822_live_economy_audit.py -v
+python -m pytest tests/test_gc822_live_economy_audit.py tests/test_gc_score_g_ranking_rebase.py -v
 ```
 
 ---
@@ -102,7 +113,7 @@ python -m pytest tests/test_gc822_live_economy_audit.py -v
 2. Review `flag_counts` — especially `storage_near_full`, `energy_starved`
 3. Spot-check 3 profiles: early (mine ≤10), mid (~30), end (≥90)
 4. Confirm `/api/game-state` production matches audit `production_per_hour`
-5. After deploy: optional rank refresh (`invalidate` / poll) — expect modest building rank shifts
+5. After deploy: **Admin-Recompute** (`POST /api/admin/ranking/recompute`) — expect rank shifts from GC-SCORE rebase
 6. Monitor support tickets 48 h — trader limits, storage, queue completion
 
 ---

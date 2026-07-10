@@ -17,18 +17,21 @@ import pytest
 import game.db as dbmod
 import game.models as models
 from game.buildings import get_upgrade_cost
+from game.economy_balance import BENCHMARK_LEVELS, cumulative_upgrade_resource_totals
 from game.db import db
-from game.economy_balance import BENCHMARK_LEVELS, cumulative_upgrade_cost_sum
 from game.economy_live_audit import (
     FLAG_ENERGY_STARVED,
+    FLAG_RANKING_SCORE_REBASE,
     FLAG_STORAGE_NEAR_FULL,
+    FLAG_STORAGE_OVERFLOW,
     audit_player,
     migration_recommendations,
     player_audit_to_dict,
     synthetic_profile_audit,
 )
 from game.models import create_user, get_homeworld, init_db, save_planet_buildings
-from game.ranking import compute_player_scores
+from game.ranking import compute_player_scores, refresh_player_score, upsert_player_scores
+from game.resource_score import score_from_cost_dict
 
 ROOT = Path(__file__).resolve().parent.parent
 MIGRATE_SCRIPT = ROOT / "migrate.py"
@@ -139,7 +142,7 @@ class TestPlayerAudit:
         conn = db()
         try:
             conn.execute(
-                "UPDATE planets SET metal = 140000 WHERE id = ?;",
+                "UPDATE planets SET metal = 150000 WHERE id = ?;",
                 (int(planet["id"]),),
             )
             conn.commit()
@@ -148,16 +151,27 @@ class TestPlayerAudit:
         finally:
             conn.close()
 
-    def test_ranking_uses_gc821_cumulative_costs(self):
+    def test_ranking_building_score_uses_resource_score(self):
         pid = _create_player()
         planet = get_homeworld(player_id=pid)
         save_planet_buildings(int(planet["id"]), {"metal_mine": 20, "crystal_mine": 15})
         conn = db()
         try:
             scores = compute_player_scores(pid, conn=conn)
-            expected = cumulative_upgrade_cost_sum("metal_mine", 20) + cumulative_upgrade_cost_sum(
-                "crystal_mine", 15
-            )
+            metal = 0
+            crystal = 0
+            fuel = 0
+            from game.buildings import BUILDING_ORDER
+
+            for key in BUILDING_ORDER:
+                level = 20 if key == "metal_mine" else 15 if key == "crystal_mine" else 0
+                if level <= 0:
+                    continue
+                totals = cumulative_upgrade_resource_totals(key, level)
+                metal += int(totals["metal"])
+                crystal += int(totals["crystal"])
+                fuel += int(totals["fuel_cells"])
+            expected = score_from_cost_dict({"metal": metal, "crystal": crystal, "fuel_cells": fuel})
             assert scores["building_score"] == expected
         finally:
             conn.close()

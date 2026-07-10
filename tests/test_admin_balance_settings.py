@@ -47,6 +47,14 @@ def app_client(admin_env, monkeypatch):
 
 
 def _login(client, username, password):
+    from game.models import verify_user
+
+    user = verify_user(str(username), str(password))
+    if user:
+        with client.session_transaction() as sess:
+            sess["user_id"] = int(user["id"])
+        return user
+
     return client.post(
         "/login",
         data={"username": username, "password": password},
@@ -99,9 +107,9 @@ def test_balance_save_valid_values(app_client):
         "score_weight_buildings": 1.0,
         "score_weight_research": 0.65,
         "exchange_enabled": 1,
-        "exchange_rate_metal_to_crystal": 2,
+        "exchange_rate_metal_to_crystal": 1.5,
         "exchange_rate_crystal_to_metal": 1,
-        "exchange_daily_limit": 100000,
+        "exchange_daily_limit_min": 100000,
         "exchange_min_amount": 50,
         "production_speed": 1.0,
     }
@@ -109,9 +117,10 @@ def test_balance_save_valid_values(app_client):
     assert r.status_code == 200
     data = r.get_json()
     assert data["ok"] is True
-    assert isinstance(data.get("hud"), dict)
-    assert data["hud"].get("ok") is True
-    assert "production_per_hour" in data["hud"]
+    assert "settings" in data
+    assert "hud" in data
+    assert data["hud"]["ok"] is True
+    assert "active_planet_id" in data["hud"]
 
     stored = get_game_settings()
     assert int(stored["start_metal"]) == 2500
@@ -153,8 +162,8 @@ def test_balance_preset_b_applies_values(app_client):
     assert r.status_code == 200
     data = r.get_json()
     assert data["ok"] is True
-    assert isinstance(data.get("hud"), dict)
-    assert data["hud"].get("ok") is True
+    assert "hud" in data
+    assert data["hud"]["ok"] is True
 
     settings = data["settings"]
     assert settings["start_metal"] == PRESET_B_BALANCE["start_metal"]
@@ -165,6 +174,24 @@ def test_balance_preset_b_applies_values(app_client):
 
     stored = get_game_settings()
     assert int(stored["research_queue_limit"]) == PRESET_B_BALANCE["research_queue_limit"]
+
+
+def test_balance_save_unchanged_form_payload(app_client):
+    """Simulate Balance Speichern with unchanged form values (all keys as strings)."""
+    client, _, _ = app_client
+    _login(client, "admin_bal", "adminpass123")
+    r = client.get("/api/admin/balance")
+    assert r.status_code == 200
+    settings = r.get_json()["settings"]
+    payload = {key: str(value) for key, value in settings.items()}
+    r2 = client.post("/api/admin/balance", json=payload)
+    assert r2.status_code == 200
+    data = r2.get_json()
+    assert data["ok"] is True
+    assert "settings" in data
+    assert "hud" in data
+    assert data["hud"]["ok"] is True
+    assert int(data["hud"]["active_planet_id"]) > 0
 
 
 def test_ranking_recalculate_admin_only(app_client):

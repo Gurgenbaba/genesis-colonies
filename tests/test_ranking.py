@@ -32,6 +32,7 @@ from game.ranking import (
     repair_player_score_totals,
     refresh_player_score,
     upsert_player_scores,
+    _normalize_db_row,
 )
 from game.scoring import (
     compute_destroyed_raw_from_losses,
@@ -151,19 +152,21 @@ def _login(client, username: str, password: str = "test-pass-123") -> None:
 
 
 def test_total_score_is_sum_of_components():
-    clean = {
-        "total_score": 1500,
-        "building_score": 1000,
-        "research_score": 500,
-        "fleet_score": 0,
-        "defense_score": 0,
-    }
-    assert clean["total_score"] == (
-        clean["building_score"]
-        + clean["research_score"]
-        + clean["fleet_score"]
-        + clean["defense_score"]
+    from game.ranking import _sanitize_scores
+
+    clean = _sanitize_scores(
+        {
+            "resource_score": 0,
+            "building_score": 1000,
+            "research_score": 500,
+            "fleet_score": 0,
+            "defense_score": 0,
+            "destroyed_score": 250,
+            "evolution_score": 0,
+        }
     )
+    assert clean["total_score"] == 1500
+    assert clean["destroyed_score"] == 250
 
 
 def test_ranking_order_and_current_player_consistency(temp_db):
@@ -356,7 +359,16 @@ def test_compute_player_scores_returns_zero_for_new_player(temp_db):
     assert scores["building_score"] == 0
     assert scores["research_score"] == 0
     assert scores["fleet_score"] == 0
-    assert scores["total_score"] == 0
+    from game.models import DEFAULT_GAME_SETTINGS
+    from game.resource_score import score_from_resources
+
+    expected_resources = score_from_resources(
+        int(DEFAULT_GAME_SETTINGS["start_metal"]),
+        int(DEFAULT_GAME_SETTINGS["start_crystal"]),
+        int(DEFAULT_GAME_SETTINGS["start_fuel_cells"]),
+    )
+    assert scores["resource_score"] == expected_resources
+    assert scores["total_score"] == expected_resources
 
 
 def test_compute_player_scores_includes_fleet(temp_db):
@@ -374,7 +386,7 @@ def test_compute_player_scores_includes_fleet(temp_db):
     conn.execute(
         """
         INSERT INTO planet_ships (player_id, planet_id, ship_key, amount, created_at, updated_at)
-        VALUES (?, ?, 'spark_drone', 10, CAST(strftime('%s','now') AS INTEGER), CAST(strftime('%s','now') AS INTEGER))
+        VALUES (?, ?, 'mule_courier', 10, CAST(strftime('%s','now') AS INTEGER), CAST(strftime('%s','now') AS INTEGER))
         ON CONFLICT DO NOTHING;
         """,
         (pid, int(planet["id"])),
@@ -384,19 +396,17 @@ def test_compute_player_scores_includes_fleet(temp_db):
     _close_db()
 
     scores = compute_player_scores(pid)
-    # spark_drone: 500 metal + 200 crystal = 700 per hull × 10 = 7000
-    assert scores["fleet_score"] == 7000
-    assert scores["total_score"] == 7000
+    # mule_courier: 2500/2500/0 -> 3 points per hull × 10 = 30
+    assert scores["fleet_score"] == 30
 
     refresh = build_ranking_api_payload(pid, limit=10, refresh=True)
-    assert refresh["current_player"]["fleet_score"] == 7000
+    assert refresh["current_player"]["fleet_score"] == 30
     assert refresh["current_player"]["ranks"].get("fleet") == 1
 
 
 def test_compute_player_scores_research_uses_cumulative_costs(temp_db):
-    """Research ranking points = sum of invested metal+crystal per level (not target-level only)."""
-    from game.ranking import _sum_costs_up_to_level
-    from game.research import RESEARCH_TECHS
+    """Research ranking points = cumulative invested costs via resource_score."""
+    from game.research import RESEARCH_TECHS, get_research_cost
 
     _run_migrate(temp_db)
     init_db()
@@ -416,27 +426,26 @@ def test_compute_player_scores_research_uses_cumulative_costs(temp_db):
     conn.close()
     _close_db()
 
-    cfg = RESEARCH_TECHS["energy_tech"]
-    cumulative = _sum_costs_up_to_level(
-        int(cfg["base_cost_m"]),
-        int(cfg["base_cost_c"]),
-        float(cfg["cost_factor"]),
-        3,
-    )
-    from game.models import DEFAULT_GAME_SETTINGS, get_game_settings
+    total_metal = 0
+    total_crystal = 0
+    for target in range(1, 4):
+        metal, crystal = get_research_cost("energy_tech", target)
+        total_metal += int(metal)
+        total_crystal += int(crystal)
+    from game.resource_score import score_from_resources
 
-    w_research = float((get_game_settings() or {}).get("score_weight_research") or DEFAULT_GAME_SETTINGS["score_weight_research"])
+    cumulative = score_from_resources(total_metal, total_crystal, 0)
     scores = compute_player_scores(pid)
-    assert scores["research_score"] == int(cumulative * w_research)
-    assert w_research == pytest.approx(0.01)
-    level2 = _sum_costs_up_to_level(
-        int(cfg["base_cost_m"]),
-        int(cfg["base_cost_c"]),
-        float(cfg["cost_factor"]),
-        2,
-    )
+    assert scores["research_score"] == cumulative
+    level2_metal = 0
+    level2_crystal = 0
+    for target in range(1, 3):
+        metal, crystal = get_research_cost("energy_tech", target)
+        level2_metal += int(metal)
+        level2_crystal += int(crystal)
+    level2 = score_from_resources(level2_metal, level2_crystal, 0)
     assert cumulative > level2
-    assert scores["research_score"] > int(level2 * w_research)
+    assert scores["research_score"] > level2
 
 
 def test_migration_014_idempotent(temp_db):
@@ -1006,12 +1015,12 @@ def test_combat_destruction_increases_ranking_scores(temp_db):
             attacker_id=attacker,
             defender_id=defender,
             attacker_losses={},
-            defender_losses={"sentinel_turret": 4},
+            defender_losses={"plasma_arc": 4},
             conn=conn,
         )
         conn.commit()
         raw = get_destroyed_raw(attacker, conn=conn)
-        assert raw == compute_destroyed_raw_from_losses({"sentinel_turret": 4})
+        assert raw == compute_destroyed_raw_from_losses({"plasma_arc": 4})
 
         refresh_player_score(attacker, conn=conn)
         conn.commit()
@@ -1019,7 +1028,9 @@ def test_combat_destruction_increases_ranking_scores(temp_db):
         assert row is not None
         assert int(row["score_destroyed_raw"]) == raw
         assert int(row["score_destroyed"]) > 0
-        assert int(row["score_total"]) >= int(row["score_destroyed"])
+        normalized = _normalize_db_row(dict(row))
+        assert normalized["total_score"] == normalized["resource_score"]
+        assert normalized["destroyed_score"] == raw
     finally:
         conn.close()
     _close_db()
