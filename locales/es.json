@@ -1897,6 +1897,7 @@
   "fleet_error_colony_limit_reached": "Se alcanzó el límite de colonias.",
   "fleet_error_coordinate_occupied": "El espacio de destino ya está ocupado.",
   "fleet_error_fleet_slots_full": "Todos los espacios de flota en uso. Actualice la navegación hiperespacial para obtener más flotas paralelas.",
+  "fleet_error_mass_expo_slots_reserved": "La expedición masiva siempre deja 3 espacios libres. Mejora la navegación o espera los retornos.",
   "fleet_error_fleet_unavailable": "Sistema de flota no disponible.",
   "fleet_error_forbidden": "Permiso denegado.",
   "fleet_error_generic": "La acción de la flota fracasó.",

@@ -1897,6 +1897,7 @@
   "fleet_error_colony_limit_reached": "Koloni sınırına ulaşıldı.",
   "fleet_error_coordinate_occupied": "Hedef slot zaten dolu.",
   "fleet_error_fleet_slots_full": "Tüm filo yuvaları kullanımda. Daha paralel filolar için Hiperuzay Navigasyonunu yükseltin.",
+  "fleet_error_mass_expo_slots_reserved": "Toplu keşif her zaman 3 filo yuvasını boş bırakır. Navigasyonu yükseltin veya dönüşleri bekleyin.",
   "fleet_error_fleet_unavailable": "Filo sistemi mevcut değil.",
   "fleet_error_forbidden": "İzin reddedildi.",
   "fleet_error_generic": "Filo eylemi başarısız oldu.",

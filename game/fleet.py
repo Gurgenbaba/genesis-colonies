@@ -48,6 +48,7 @@ from .fleet_defs import (
     FLEET_MISSION_ORDER,
     FLEET_SPEED_HOLD_MISSIONS,
     FLEET_SPEED_WAR_MISSIONS,
+    MASS_EXPEDITION_SLOT_RESERVE,
     MASS_EXPEDITION_STAGGER_SECONDS,
     MISSION_TYPES,
     PRESET_TYPES,
@@ -67,7 +68,10 @@ from .expedition_events import (
     build_expedition_report,
     calculate_expedition_loot_cap,
     count_expedition_ships,
+    expedition_daily_efficiency_multiplier,
+    get_expedition_daily_expo_value,
     grant_expedition_lootboxes,
+    record_expedition_daily_value,
     resolve_expedition_outcome,
 )
 from .messages import (
@@ -4471,6 +4475,8 @@ def _handle_expedition_holding_end(movement: Dict[str, Any], *, conn, now: float
 
     empire_prod = get_empire_production_aggregate(player_id, conn=conn)
     empire_daily_total = int(empire_prod.get("total_per_day") or 0)
+    daily_expo_value = get_expedition_daily_expo_value(player_id, conn=conn, ts=now)
+    daily_efficiency_mult = expedition_daily_efficiency_multiplier(daily_expo_value)
     outcome = resolve_expedition_outcome(
         movement_id,
         cargo_total=cargo_total,
@@ -4480,11 +4486,19 @@ def _handle_expedition_holding_end(movement: Dict[str, Any], *, conn, now: float
         empire_daily_total=empire_daily_total,
         world_type=str(world_context.get("world_type") or "") if world_context else None,
         directive_flags=directive_flags,
+        daily_efficiency_mult=daily_efficiency_mult,
     )
     rewards = dict(outcome["rewards"])
     if world_key:
         rewards["world_key"] = world_key
     rewards["expedition_hours"] = _expedition_hours_from_movement(movement)
+    record_expedition_daily_value(
+        player_id,
+        movement_id,
+        int(outcome.get("expo_value") or 0),
+        conn=conn,
+        ts=now,
+    )
     grant_expedition_lootboxes(
         player_id,
         outcome.get("lootboxes") or [],
@@ -4808,6 +4822,13 @@ def process_fleet_tick(
     return result
 
 
+def mass_expedition_available_slots(player_id: int, *, conn) -> int:
+    """Free fleet slots mass expedition may use — always leaves MASS_EXPEDITION_SLOT_RESERVE free."""
+    slots = get_fleet_slot_status(int(player_id), conn=conn)
+    free = int(slots.get("free") or 0)
+    return max(0, free - int(MASS_EXPEDITION_SLOT_RESERVE))
+
+
 def compute_mass_expedition_slot_split(
     ships: Mapping[str, int],
     available_slots: int,
@@ -4871,9 +4892,12 @@ def preview_mass_expedition_slot_split(
 
         slots = get_fleet_slot_status(int(player_id), conn=conn)
         free_slots = int(slots.get("free") or 0)
+        usable_slots = mass_expedition_available_slots(int(player_id), conn=conn)
         normalized = normalize_ships(ships)
         meta: Dict[str, Any] = {
             "free_slots": free_slots,
+            "reserved_slots": int(MASS_EXPEDITION_SLOT_RESERVE),
+            "usable_slots": usable_slots,
             "selected_ships": normalized,
             "per_fleet_ships": {},
             "leftover_ships": {},
@@ -4881,6 +4905,8 @@ def preview_mass_expedition_slot_split(
         }
         if free_slots <= 0:
             return False, "fleet_slots_full", meta
+        if usable_slots <= 0:
+            return False, "mass_expo_slots_reserved", meta
         if not normalized:
             return False, "no_ships", meta
 
@@ -4890,7 +4916,7 @@ def preview_mass_expedition_slot_split(
                 return False, "not_enough_ships", meta
 
         per_slot, leftover, slot_count = compute_mass_expedition_slot_split(
-            normalized, free_slots
+            normalized, usable_slots
         )
         meta["per_fleet_ships"] = per_slot
         meta["leftover_ships"] = leftover
@@ -4935,7 +4961,7 @@ def mass_expedition_from_ships(
             pct = 100
 
         slots = get_fleet_slot_status(int(player_id), conn=conn)
-        max_start = int(slots.get("free") or 0)
+        max_start = mass_expedition_available_slots(int(player_id), conn=conn)
 
         if own:
             begin_write_transaction(conn)
@@ -5067,8 +5093,9 @@ def mass_expedition(
 
         pct = int(speed_percent if speed_percent is not None else preset.get("speed_percent") or 100)
         wave_count = max(1, int(waves))
-        slots = get_fleet_slot_status(player_id, conn=conn)
-        max_start = slots["free"]
+        max_start = mass_expedition_available_slots(int(player_id), conn=conn)
+        if max_start <= 0:
+            return False, "mass_expo_slots_reserved", None
         if target_slots is not None:
             max_start = min(max_start, max(0, int(target_slots)))
 

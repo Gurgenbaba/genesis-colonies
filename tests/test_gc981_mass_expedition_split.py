@@ -13,16 +13,41 @@ from game.fleet import (
     get_fleet_slot_status,
     get_planet_ships,
     mass_expedition,
+    mass_expedition_available_slots,
     mass_expedition_from_ships,
     preview_mass_expedition_slot_split,
     send_fleet,
 )
-from game.fleet_defs import EXPEDITION_POSITION
+from game.fleet_defs import EXPEDITION_POSITION, MASS_EXPEDITION_SLOT_RESERVE
 from game.models import get_planets_by_player
+from game.research import fleet_slots_for_navigation_level
 from tests.test_fleet import _fund_planet, _player, _seed_ships
 
 
 pytest_plugins = ("tests.test_fleet",)
+
+
+def _grant_navigation_for_mass_expo(cur, uid: int, *, min_usable: int = 1) -> int:
+    """Ensure enough fleet slots so mass expedition has at least min_usable waves."""
+    need_total = int(min_usable) + int(MASS_EXPEDITION_SLOT_RESERVE)
+    nav_level = 0
+    for nav in range(0, 25):
+        if fleet_slots_for_navigation_level(nav) >= need_total:
+            nav_level = nav
+            break
+    cur.execute(
+        """
+        INSERT INTO research_levels (user_id, tech_key, level)
+        VALUES (?, 'navigation_tech', ?)
+        ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;
+        """,
+        (int(uid), int(nav_level)),
+    )
+    return nav_level
+
+
+def _usable_slots(uid: int, conn) -> int:
+    return mass_expedition_available_slots(uid, conn=conn)
 
 
 def test_compute_mass_expedition_slot_split_floor_and_leftover():
@@ -41,6 +66,7 @@ def test_preview_mass_expedition_slot_split_success(fleet_db):
     pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
     cur = conn.cursor()
     _fund_planet(cur, pid)
+    _grant_navigation_for_mass_expo(cur, uid, min_usable=1)
     _seed_ships(pid, uid, {"solar_skiff": 70000, "mule_courier": 7000}, conn=conn)
     conn.commit()
 
@@ -51,9 +77,11 @@ def test_preview_mass_expedition_slot_split_success(fleet_db):
         conn=conn,
     )
     assert ok is True, reason
-    assert preview["free_slots"] >= 1
-    assert preview["per_fleet_ships"]["solar_skiff"] == 70000 // preview["free_slots"]
-    assert preview["started_count"] == preview["free_slots"]
+    usable = _usable_slots(uid, conn)
+    assert preview["usable_slots"] == usable
+    assert preview["reserved_slots"] == MASS_EXPEDITION_SLOT_RESERVE
+    assert preview["per_fleet_ships"]["solar_skiff"] == 70000 // usable
+    assert preview["started_count"] == usable
     conn.close()
 
 
@@ -63,19 +91,23 @@ def test_mass_expedition_from_ships_starts_split_fleets(fleet_db):
     pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
     cur = conn.cursor()
     _fund_planet(cur, pid, metal=5000000, crystal=5000000, fuel_cells=5000000)
+    _grant_navigation_for_mass_expo(cur, uid, min_usable=2)
     free_before = get_fleet_slot_status(uid, conn=conn)["free"]
-    total_skiff = free_before * 10000
-    _seed_ships(pid, uid, {"solar_skiff": total_skiff, "mule_courier": free_before * 1000}, conn=conn)
+    usable_before = _usable_slots(uid, conn)
+    total_skiff = usable_before * 10000
+    _seed_ships(pid, uid, {"solar_skiff": total_skiff, "mule_courier": usable_before * 1000}, conn=conn)
     conn.commit()
 
     ok, reason, result = mass_expedition_from_ships(
         player_id=uid,
         origin_planet_id=pid,
-        ships={"solar_skiff": total_skiff, "mule_courier": free_before * 1000},
+        ships={"solar_skiff": total_skiff, "mule_courier": usable_before * 1000},
         conn=conn,
     )
     assert ok is True, reason
-    assert result["started_count"] == free_before
+    assert result["started_count"] == usable_before
+    assert get_fleet_slot_status(uid, conn=conn)["free"] == free_before - usable_before
+    assert get_fleet_slot_status(uid, conn=conn)["free"] >= MASS_EXPEDITION_SLOT_RESERVE
     assert result["per_fleet_ships"]["solar_skiff"] == 10000
     assert result["per_fleet_ships"]["mule_courier"] == 1000
     assert result["leftover_ships"] == {}
@@ -88,7 +120,7 @@ def test_mass_expedition_from_ships_starts_split_fleets(fleet_db):
         (uid, int(result["batch"]["id"])),
     )
     rows = cur.fetchall()
-    assert len(rows) == free_before
+    assert len(rows) == usable_before
     for row in rows:
         ships = __import__("json").loads(row["ships_json"])
         assert ships["solar_skiff"] == 10000
@@ -106,12 +138,14 @@ def test_mass_expedition_from_ships_keeps_leftover_on_planet(fleet_db):
     pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
     cur = conn.cursor()
     _fund_planet(cur, pid, metal=5000000, crystal=5000000, fuel_cells=5000000)
+    _grant_navigation_for_mass_expo(cur, uid, min_usable=1)
     free_before = get_fleet_slot_status(uid, conn=conn)["free"]
-    total_skiff = free_before * 10000 + 5
+    usable_before = _usable_slots(uid, conn)
+    total_skiff = usable_before * 10000 + 5
     _seed_ships(pid, uid, {"solar_skiff": total_skiff}, conn=conn)
     conn.commit()
     _per, expected_leftover, _slots = compute_mass_expedition_slot_split(
-        {"solar_skiff": total_skiff}, free_before
+        {"solar_skiff": total_skiff}, usable_before
     )
 
     ok, reason, result = mass_expedition_from_ships(
@@ -125,6 +159,28 @@ def test_mass_expedition_from_ships_keeps_leftover_on_planet(fleet_db):
     assert int(get_planet_ships(pid, conn=conn).get("solar_skiff", 0)) == int(
         expected_leftover.get("solar_skiff", 0)
     )
+    conn.close()
+
+
+def test_mass_expedition_blocks_when_reserve_would_be_violated(fleet_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, pid)
+    _seed_ships(pid, uid, {"solar_skiff": 50}, conn=conn)
+    conn.commit()
+
+    ok, reason, preview = preview_mass_expedition_slot_split(
+        player_id=uid,
+        origin_planet_id=pid,
+        ships={"solar_skiff": 10},
+        conn=conn,
+    )
+    assert not ok
+    assert reason == "mass_expo_slots_reserved"
+    assert preview["free_slots"] == 3
+    assert preview["usable_slots"] == 0
     conn.close()
 
 
@@ -169,6 +225,7 @@ def test_mass_expedition_from_ships_blocks_without_expedition_ships(fleet_db):
     pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
     cur = conn.cursor()
     _fund_planet(cur, pid)
+    _grant_navigation_for_mass_expo(cur, uid, min_usable=1)
     free_before = get_fleet_slot_status(uid, conn=conn)["free"]
     _seed_ships(pid, uid, {"mule_courier": free_before * 10}, conn=conn)
     conn.commit()
@@ -190,15 +247,17 @@ def test_mass_expedition_from_ships_blocks_when_split_too_small(fleet_db):
     pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
     cur = conn.cursor()
     _fund_planet(cur, pid)
-    free_before = get_fleet_slot_status(uid, conn=conn)["free"]
-    assert free_before >= 2
-    _seed_ships(pid, uid, {"solar_skiff": free_before - 1}, conn=conn)
+    _grant_navigation_for_mass_expo(cur, uid, min_usable=2)
+    usable = _usable_slots(uid, conn)
+    assert usable >= 2
+    too_few = usable - 1
+    _seed_ships(pid, uid, {"solar_skiff": too_few}, conn=conn)
     conn.commit()
 
     ok, reason, _preview = preview_mass_expedition_slot_split(
         player_id=uid,
         origin_planet_id=pid,
-        ships={"solar_skiff": free_before - 1},
+        ships={"solar_skiff": too_few},
         conn=conn,
     )
     assert not ok
@@ -206,32 +265,16 @@ def test_mass_expedition_from_ships_blocks_when_split_too_small(fleet_db):
     conn.close()
 
 
-def test_mass_expedition_single_free_slot(fleet_db):
+def test_mass_expedition_single_usable_slot(fleet_db):
     conn = db()
     uid = _player(conn=conn)
     pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
     cur = conn.cursor()
     _fund_planet(cur, pid, metal=5000000, crystal=5000000, fuel_cells=5000000)
-    _seed_ships(pid, uid, {"solar_skiff": 100, "mule_courier": 1000}, conn=conn)
-    conn.commit()
-    slots = get_fleet_slot_status(uid, conn=conn)
-    free_start = int(slots["free"])
-    for _ in range(max(0, free_start - 1)):
-        send_fleet(
-            player_id=uid,
-            origin_planet_id=pid,
-            target_galaxy=1,
-            target_system=1,
-            target_position=EXPEDITION_POSITION,
-            mission_type="expedition",
-            ships={"solar_skiff": 1},
-            conn=conn,
-        )
-    conn.commit()
-    assert get_fleet_slot_status(uid, conn=conn)["free"] == 1
-
+    _grant_navigation_for_mass_expo(cur, uid, min_usable=1)
     _seed_ships(pid, uid, {"solar_skiff": 5000, "mule_courier": 800}, conn=conn)
     conn.commit()
+    assert _usable_slots(uid, conn) == 1
 
     ok_prev, reason_prev, preview = preview_mass_expedition_slot_split(
         player_id=uid,
@@ -240,7 +283,7 @@ def test_mass_expedition_single_free_slot(fleet_db):
         conn=conn,
     )
     assert ok_prev is True, reason_prev
-    assert preview["free_slots"] == 1
+    assert preview["usable_slots"] == 1
     assert preview["per_fleet_ships"] == {"solar_skiff": 5000, "mule_courier": 800}
     assert preview["leftover_ships"] == {}
 
@@ -254,6 +297,7 @@ def test_mass_expedition_single_free_slot(fleet_db):
     assert result["started_count"] == 1
     assert result["per_fleet_ships"] == preview["per_fleet_ships"]
     assert result["leftover_ships"] == preview["leftover_ships"]
+    assert get_fleet_slot_status(uid, conn=conn)["free"] == MASS_EXPEDITION_SLOT_RESERVE
     conn.close()
 
 
@@ -265,6 +309,7 @@ def test_legacy_mass_expedition_preset_still_works(fleet_db):
     pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
     cur = conn.cursor()
     _fund_planet(cur, pid, metal=500000, crystal=500000, fuel_cells=500000)
+    _grant_navigation_for_mass_expo(cur, uid, min_usable=1)
     _seed_ships(pid, uid, {"solar_skiff": 10}, conn=conn)
     conn.commit()
     ok, _, preset = create_preset(
@@ -294,8 +339,9 @@ def test_api_mass_expedition_split(fleet_db, monkeypatch):
     pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
     cur = conn.cursor()
     _fund_planet(cur, pid, metal=5000000, crystal=5000000, fuel_cells=5000000)
-    free_before = get_fleet_slot_status(uid, conn=conn)["free"]
-    _seed_ships(pid, uid, {"solar_skiff": free_before * 10000}, conn=conn)
+    _grant_navigation_for_mass_expo(cur, uid, min_usable=2)
+    usable_before = _usable_slots(uid, conn)
+    _seed_ships(pid, uid, {"solar_skiff": usable_before * 10000}, conn=conn)
     conn.commit()
     conn.close()
 
@@ -305,7 +351,7 @@ def test_api_mass_expedition_split(fleet_db, monkeypatch):
 
     preview = client.post(
         "/api/fleet/mass-expedition/preview",
-        json={"origin_planet_id": pid, "ships": {"solar_skiff": free_before * 10000}},
+        json={"origin_planet_id": pid, "ships": {"solar_skiff": usable_before * 10000}},
         headers={"Content-Type": "application/json"},
     )
     assert preview.status_code == 200
@@ -317,7 +363,7 @@ def test_api_mass_expedition_split(fleet_db, monkeypatch):
         "/api/fleet/mass-expedition",
         json={
             "origin_planet_id": pid,
-            "ships": {"solar_skiff": free_before * 10000},
+            "ships": {"solar_skiff": usable_before * 10000},
             "request_id": "gc981-mass-expo-test",
         },
         headers={"Content-Type": "application/json"},
@@ -325,7 +371,7 @@ def test_api_mass_expedition_split(fleet_db, monkeypatch):
     assert res.status_code == 200
     send_body = res.get_json()
     assert send_body["ok"] is True
-    assert send_body["data"]["started_count"] == free_before
+    assert send_body["data"]["started_count"] == usable_before
 
 
 def test_fleet_page_mass_expo_split_ui_contract(fleet_db, monkeypatch):

@@ -1897,6 +1897,7 @@
   "fleet_error_colony_limit_reached": "Osiągnięto limit kolonii.",
   "fleet_error_coordinate_occupied": "Miejsce docelowe jest już zajęte.",
   "fleet_error_fleet_slots_full": "Wszystkie miejsca na flotę są w użyciu. Ulepsz nawigację nadprzestrzenną, aby uzyskać więcej równoległych flot.",
+  "fleet_error_mass_expo_slots_reserved": "Masowa ekspedycja zawsze zostawia 3 wolne sloty. Ulepsz nawigację lub poczekaj na powroty.",
   "fleet_error_fleet_unavailable": "System flotowy niedostępny.",
   "fleet_error_forbidden": "Odmowa pozwolenia.",
   "fleet_error_generic": "Akcja floty nie powiodła się.",

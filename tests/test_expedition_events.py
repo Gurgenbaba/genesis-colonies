@@ -1194,3 +1194,68 @@ def test_legendary_events_are_very_rare():
     assert 0.015 <= rate <= 0.045, f"legendary rate {rate:.3f} out of band"
     for key, count in hits.items():
         assert count >= 1, f"never rolled {key}"
+
+
+def test_expedition_daily_efficiency_knots():
+    from game.expedition_events import (
+        expedition_daily_efficiency_multiplier,
+        expedition_daily_reference_unit,
+    )
+
+    ref = expedition_daily_reference_unit()
+    assert expedition_daily_efficiency_multiplier(0) == 1.0
+    assert expedition_daily_efficiency_multiplier(int(20 * ref)) == 1.0
+    assert expedition_daily_efficiency_multiplier(int(30 * ref)) == pytest.approx(0.95, abs=0.01)
+    assert expedition_daily_efficiency_multiplier(int(80 * ref)) == pytest.approx(0.60, abs=0.01)
+    assert expedition_daily_efficiency_multiplier(int(200 * ref)) == pytest.approx(0.60, abs=0.01)
+
+
+def test_expedition_daily_efficiency_reduces_loot(fleet_db):
+    from game.db import db
+    from game.expedition_events import (
+        expedition_daily_reference_unit,
+        get_expedition_daily_expo_value,
+        record_expedition_daily_value,
+        resolve_expedition_outcome,
+    )
+
+    conn = db()
+    uid = 42
+    ref = int(expedition_daily_reference_unit())
+    record_expedition_daily_value(uid, 9001, ref * 80, conn=conn, ts=1_700_000_000.0)
+    conn.commit()
+    assert get_expedition_daily_expo_value(uid, conn=conn, ts=1_700_000_000.0) == ref * 80
+
+    high = resolve_expedition_outcome(
+        1001,
+        cargo_total=5_000_000_000,
+        expedition_ship_count=1,
+        flight_seconds=120,
+        ships=_SMALL_FLEET,
+        daily_efficiency_mult=1.0,
+    )
+    low = resolve_expedition_outcome(
+        1001,
+        cargo_total=5_000_000_000,
+        expedition_ship_count=1,
+        flight_seconds=120,
+        ships=_SMALL_FLEET,
+        daily_efficiency_mult=0.6,
+    )
+    if int(high.get("reward_total") or 0) > 0:
+        assert int(low.get("reward_total") or 0) < int(high.get("reward_total") or 0)
+    conn.close()
+
+
+def test_record_expedition_daily_value_idempotent(fleet_db):
+    from game.db import db
+    from game.expedition_events import get_expedition_daily_expo_value, record_expedition_daily_value
+
+    conn = db()
+    uid = 99
+    ts = 1_700_000_000.0
+    assert record_expedition_daily_value(uid, 5001, 1200, conn=conn, ts=ts)
+    assert not record_expedition_daily_value(uid, 5001, 1200, conn=conn, ts=ts)
+    assert get_expedition_daily_expo_value(uid, conn=conn, ts=ts) == 1200
+    conn.commit()
+    conn.close()

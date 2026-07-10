@@ -1897,6 +1897,7 @@
   "fleet_error_colony_limit_reached": "Достигнут предел колонии.",
   "fleet_error_coordinate_occupied": "Целевой слот уже занят.",
   "fleet_error_fleet_slots_full": "Все слоты флота заняты. Обновите гиперпространственную навигацию, чтобы увеличить количество параллельных флотов.",
+  "fleet_error_mass_expo_slots_reserved": "Массовая экспедиция всегда оставляет 3 слота свободными. Улучшите навигацию или дождитесь возврата.",
   "fleet_error_fleet_unavailable": "Система флота недоступна.",
   "fleet_error_forbidden": "Доступ запрещен.",
   "fleet_error_generic": "Действия флота провалились.",

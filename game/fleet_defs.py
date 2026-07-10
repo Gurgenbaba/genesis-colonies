@@ -48,6 +48,8 @@ DEFAULT_EXPEDITION_STAY_HOURS = 1
 
 # Mass-expedition waves: 1s between departures so arrival/holding/return ticks do not overlap.
 MASS_EXPEDITION_STAGGER_SECONDS = 1
+# Mass expedition never uses the last N fleet slots — manual sends / returns keep headroom.
+MASS_EXPEDITION_SLOT_RESERVE = 3
 
 # Admin game_settings keys per mission category (higher = shorter flight legs).
 FLEET_SPEED_WAR_MISSIONS = frozenset({"attack", "spy"})

@@ -16,6 +16,18 @@ FLEET_LOOT_EXPONENT = EXPEDITION_LOOT_EXPONENT  # legacy alias for tests/imports
 EXPEDITION_RANDOM_FACTOR_RANGE = (0.66, 1.5)
 DEFAULT_EVENT_FACTOR = 1.0
 
+# Daily expedition diminishing returns — cumulative expo_value per UTC day (GC-EXPEDITION-DAILY).
+# Knot x = multiples of one solar_skiff expo unit; y = loot efficiency for the next expedition.
+EXPEDITION_DAILY_EFFICIENCY_KNOTS: Tuple[Tuple[float, float], ...] = (
+    (0.0, 1.00),
+    (20.0, 1.00),
+    (30.0, 0.95),
+    (40.0, 0.90),
+    (60.0, 0.75),
+    (80.0, 0.60),
+)
+EXPEDITION_DAILY_EFFICIENCY_FLOOR = 0.60
+
 # Role split (GC-EXPEDITION-LOOT-FINAL): loot / bergung / piratenkampf / escort
 _EXPEDITION_CARGO_ROLES = frozenset({"expedition", "cargo"})
 _EXPEDITION_HULL_ROLES = frozenset({"expedition"})
@@ -415,6 +427,140 @@ def expedition_ship_expo_loot_unit(ship_key: str) -> float:
     if raw <= 0:
         return 0.0
     return math.pow(raw, EXPEDITION_LOOT_EXPONENT)
+
+
+def expedition_daily_reference_unit() -> float:
+    """Reference expo_value unit for daily efficiency knots (one solar_skiff)."""
+    return max(1.0, float(expedition_ship_expo_loot_unit("solar_skiff")))
+
+
+def expedition_daily_day_bucket(ts: float | None = None) -> int:
+    import time
+
+    return int(float(ts if ts is not None else time.time()) // 86400)
+
+
+def _expedition_daily_tables_ready(conn) -> bool:
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'expedition_daily_value' LIMIT 1;"
+    )
+    return cur.fetchone() is not None
+
+
+def get_expedition_daily_expo_value(player_id: int, *, conn, ts: float | None = None) -> int:
+    """Accumulated expedition expo_value for the current UTC day (before current resolve)."""
+    if not _expedition_daily_tables_ready(conn):
+        return 0
+    bucket = expedition_daily_day_bucket(ts)
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT expo_value_total FROM expedition_daily_value
+        WHERE player_id = ? AND day_bucket = ? LIMIT 1;
+        """,
+        (int(player_id), int(bucket)),
+    )
+    row = cur.fetchone()
+    return int(row["expo_value_total"] if row else 0)
+
+
+def expedition_daily_efficiency_multiplier(daily_expo_value: int) -> float:
+    """
+    Loot efficiency for the next expedition based on today's accumulated expo_value.
+
+    Small/mid daily totals stay at 100%; extreme endgame spirals taper toward the floor.
+    """
+    ref = expedition_daily_reference_unit()
+    x = max(0.0, float(daily_expo_value)) / ref
+    knots = EXPEDITION_DAILY_EFFICIENCY_KNOTS
+    if not knots:
+        return 1.0
+    if x <= knots[0][0]:
+        return float(knots[0][1])
+    if x >= knots[-1][0]:
+        return max(EXPEDITION_DAILY_EFFICIENCY_FLOOR, float(knots[-1][1]))
+    for idx in range(len(knots) - 1):
+        x0, y0 = knots[idx]
+        x1, y1 = knots[idx + 1]
+        if x0 <= x <= x1:
+            if x1 <= x0:
+                return max(EXPEDITION_DAILY_EFFICIENCY_FLOOR, float(y1))
+            t = (x - x0) / (x1 - x0)
+            eff = float(y0) + t * (float(y1) - float(y0))
+            return max(EXPEDITION_DAILY_EFFICIENCY_FLOOR, eff)
+    return max(EXPEDITION_DAILY_EFFICIENCY_FLOOR, float(knots[-1][1]))
+
+
+def _scale_resource_rewards(rewards: MutableMapping[str, int], mult: float) -> None:
+    m = max(0.0, min(1.0, float(mult)))
+    if m >= 0.999999:
+        return
+    for key in VALID_RESOURCE_KEYS:
+        if key in rewards:
+            rewards[key] = max(0, int(int(rewards.get(key) or 0) * m))
+
+
+def record_expedition_daily_value(
+    player_id: int,
+    movement_id: int,
+    expo_value: int,
+    *,
+    conn,
+    ts: float | None = None,
+) -> bool:
+    """Idempotent: add expo_value once per completed expedition movement."""
+    if not _expedition_daily_tables_ready(conn):
+        return False
+    mid = int(movement_id)
+    pid = int(player_id)
+    value = max(0, int(expo_value))
+    if mid <= 0 or value <= 0:
+        return False
+    bucket = expedition_daily_day_bucket(ts)
+    import time
+
+    now = float(ts if ts is not None else time.time())
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT 1 FROM expedition_daily_recorded WHERE movement_id = ? LIMIT 1;",
+        (mid,),
+    )
+    if cur.fetchone():
+        return False
+    cur.execute(
+        """
+        INSERT INTO expedition_daily_recorded (movement_id, player_id, day_bucket, expo_value, recorded_at)
+        VALUES (?, ?, ?, ?, ?);
+        """,
+        (mid, pid, int(bucket), value, now),
+    )
+    cur.execute(
+        """
+        INSERT INTO expedition_daily_value (player_id, day_bucket, expo_value_total, expedition_count, updated_at)
+        VALUES (?, ?, ?, 1, ?)
+        ON CONFLICT(player_id, day_bucket) DO UPDATE SET
+            expo_value_total = expo_value_total + excluded.expo_value_total,
+            expedition_count = expedition_count + 1,
+            updated_at = excluded.updated_at;
+        """,
+        (pid, int(bucket), value, now),
+    )
+    return True
+
+
+def expedition_daily_status(player_id: int, *, conn, ts: float | None = None) -> Dict[str, Any]:
+    """HUD/report slice — today's accumulated expo_value and current efficiency."""
+    daily = get_expedition_daily_expo_value(player_id, conn=conn, ts=ts)
+    eff = expedition_daily_efficiency_multiplier(daily)
+    ref = expedition_daily_reference_unit()
+    return {
+        "day_bucket": expedition_daily_day_bucket(ts),
+        "daily_expo_value": int(daily),
+        "daily_efficiency_pct": int(round(eff * 100)),
+        "daily_efficiency_mult": float(eff),
+        "reference_expo_unit": int(ref),
+    }
 
 
 def calculate_expo_value(ships: Mapping[str, int]) -> int:
@@ -1355,6 +1501,7 @@ def resolve_expedition_outcome(
     empire_daily_total: int = 0,
     world_type: str | None = None,
     directive_flags: Mapping[str, Any] | None = None,
+    daily_efficiency_mult: float = 1.0,
 ) -> Dict[str, Any]:
     """Idempotent expedition resolution keyed by movement id."""
     flags = dict(directive_flags or {})
@@ -1496,6 +1643,8 @@ def resolve_expedition_outcome(
     elif event_key in ("ancient_minefield", "ion_storm"):
         rewards = _empty_rewards()
         loot_debug = {"expo_value": int(expo_value), "raw_loot_total": 0}
+    daily_eff = max(EXPEDITION_DAILY_EFFICIENCY_FLOOR, min(1.0, float(daily_efficiency_mult)))
+    _scale_resource_rewards(rewards, daily_eff)
     _apply_directive_reward_modifiers(
         rewards,
         loot_mult=loot_mult,
@@ -1538,6 +1687,8 @@ def resolve_expedition_outcome(
         "fleet_value": int(fleet_value),
         "expedition_rating": fleet_rating,
         "empire_daily_total": int(empire_daily_total),
+        "daily_efficiency_mult": float(daily_eff),
+        "daily_efficiency_pct": int(round(daily_eff * 100)),
         "raw_loot_total": int(cargo_meta.get("raw_loot_total") or loot_debug.get("raw_loot_total") or 0),
         "cargo_total": int(cargo_total),
         "losses": ship_losses,

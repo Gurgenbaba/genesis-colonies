@@ -196,6 +196,8 @@ Referenzwerte (Odyssey, ohne Random/Event; Exponent pro Hülle, linear in Anzahl
 
 Weitere Expo-Schiffe (z. B. `eclipse_runner`) werden automatisch über `role: expedition` + `build_cost` in `expo_value` einbezogen.
 
+**Tages-Diminishing Returns (GC-EXPEDITION-DAILY):** Pro UTC-Tag akkumuliert der Server `expo_value` jeder abgeschlossenen Expedition (`expedition_daily_value`). Die **nächste** Expedition multipliziert Ressourcen-Loot mit `daily_efficiency_mult` (100 % bis ~20 Referenz-Odyssees/Tag, dann stufenweise bis 60 % Floor bei ~80+). Reset um UTC-Mitternacht (`day_bucket = floor(unix/86400)`). Voidrunner-Event-Chancen bleiben; bei gedrosselter Effizienz liefern zusätzliche Events automatisch weniger Ressourcen. Owner: `expedition_daily_efficiency_multiplier()`, `record_expedition_daily_value()` in `expedition_events.py`.
+
 **Legendary (GC-620J-A):** `spatial_rift` — 60 % verstärkter Fund (1,4–1,8×, cargo-capped) oder 40 % Rückkehrverzögerung (+25–55 % Flugzeit); `time_anomaly` — 50 % Dilatation (+20–40 % Flugzeit) oder 50 % Kompression (Flavor, kein echter Rückkehrgewinn); optional 30 % Mini-Bonus-Loot; `ancient_beacon` — 1× Premium/Alien/Research-Lootbox + kleine Ressourcen. Piratensieg (GC-620G/H): Verluste zuerst an Eskorten; ~30 % Chance auf kleine Schiffbergung (nur leichte/mittlere Hüllen, Score-Cap). Hazards (GC-620I-A): `ion_storm` verlängert Rückkehr um 20–60 % Flugzeit; `ancient_minefield` verursacht 2–8 % Schiffsverluste ohne Kampf (Hard-Cap ≥1 Schiff, Eskorten zuerst). Story/Treasure (GC-620I-B): `lost_container` (~2,5 %) — Lootbox + kleine Ressourcen; `abandoned_convoy` (~1,7 %) — Ressourcen und/oder Convoy-Salvage; `ancient_derelict` (~0,8 %) — seltenes Mid-Hull + Premium-Cache. Zusätzliche Lootbox-Chancen auf normalen Loot-Events sind niedrig (1–8 % pro Event-Roll).
 
 | **colonize** | `colonize_planet()`; verbraucht `seed_ark` |
@@ -304,7 +306,8 @@ Aufgerufen von:
 | `/api/fleet/send` | POST | Send fleet |
 | `/api/fleet/presets` | GET/POST | List/create presets |
 | `/api/fleet/presets/<id>` | PUT/PATCH/DELETE | CRUD |
-| `/api/fleet/mass-expedition` | POST | Wave expeditions |
+| `/api/fleet/mass-expedition` | POST | Wave expeditions (GC-981 split; **reserves 3 fleet slots** — uses `free − 3` only) |
+| `/api/fleet/mass-expedition/preview` | POST | Split preview (`usable_slots`, `reserved_slots`) |
 | `/api/fleet/logistics/preview` | POST | Collect/Distribute plan preview |
 | `/api/fleet/logistics/collect` | POST | Multi-colony collect batch |
 | `/api/fleet/logistics/distribute` | POST | Multi-colony distribute batch |

@@ -1897,6 +1897,7 @@
   "fleet_error_colony_limit_reached": "Limite de colonie atteinte.",
   "fleet_error_coordinate_occupied": "L'emplacement cible est déjà occupé.",
   "fleet_error_fleet_slots_full": "Tous les emplacements de flotte utilisés. Améliorez la navigation hyperspatiale pour des flottes plus parallèles.",
+  "fleet_error_mass_expo_slots_reserved": "L'expédition de masse laisse toujours 3 emplacements libres. Améliorez la navigation ou attendez les retours.",
   "fleet_error_fleet_unavailable": "Système de flotte indisponible.",
   "fleet_error_forbidden": "Autorisation refusée.",
   "fleet_error_generic": "L'action de la flotte a échoué.",

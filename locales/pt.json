@@ -1897,6 +1897,7 @@
   "fleet_error_colony_limit_reached": "Limite de colônia atingido.",
   "fleet_error_coordinate_occupied": "O slot alvo já está ocupado.",
   "fleet_error_fleet_slots_full": "Todos os slots da frota em uso. Atualize a Navegação Hiperespacial para frotas mais paralelas.",
+  "fleet_error_mass_expo_slots_reserved": "Expedição em massa sempre mantém 3 slots livres. Melhore a navegação ou aguarde retornos.",
   "fleet_error_fleet_unavailable": "Sistema de frota indisponível.",
   "fleet_error_forbidden": "Permissão negada.",
   "fleet_error_generic": "A ação da frota falhou.",

@@ -6,7 +6,7 @@ import uuid
 import pytest
 from game import db as gdb
 from game.db import db
-from game.fleet import add_planet_ships, build_distribute_route, build_fleet_incoming_attack_alerts, build_fleet_send_preview, check_attack_limit, get_attack_limit_status, collect_resources, count_active_fleet_slots, create_preset, delete_preset, distribute_resources, fleet_schema_ready, get_fleet_slot_status, get_max_fleet_slots, get_planet_ships, list_presets, mass_expedition, mission_allowed_for_target, preview_fleet_flight, process_fleet_tick, evaluate_fleet_mission_target, resolve_fleet_target, send_fleet, validate_fleet_send, update_preset, _build_spy_report_body, _target_planet_snapshot
+from game.fleet import add_planet_ships, build_distribute_route, build_fleet_incoming_attack_alerts, build_fleet_send_preview, check_attack_limit, get_attack_limit_status, collect_resources, count_active_fleet_slots, create_preset, delete_preset, distribute_resources, fleet_schema_ready, get_fleet_slot_status, get_max_fleet_slots, get_planet_ships, list_presets, mass_expedition, mass_expedition_available_slots, mission_allowed_for_target, preview_fleet_flight, process_fleet_tick, evaluate_fleet_mission_target, resolve_fleet_target, send_fleet, validate_fleet_send, update_preset, _build_spy_report_body, _target_planet_snapshot
 from game.expedition_events import calculate_expedition_loot_cap, expedition_event_keys, resolve_expedition_outcome
 from game.fleet_calc import apply_departure_deduction, build_collect_route, calculate_distance, calculate_fleet_speed, calculate_flight_seconds, calculate_fuel_cost, calculate_total_cargo, enrich_movement_timing, fleet_ships_are_cargo_only, fuel_efficiency_factor, normalize_collect_source_planet_ids, normalize_ships, split_resources_evenly, split_ships_across_targets, validate_departure_balances
 from game.alliance import add_alliance_member, create_alliance
@@ -1887,14 +1887,23 @@ def test_mass_expedition_respects_slots(fleet_db):
     pid = int(get_planets_by_player(uid, conn=conn)[0]['id'])
     cur = conn.cursor()
     _fund_planet(cur, pid, metal=500000, crystal=500000, fuel_cells=500000)
+    cur.execute(
+        """
+        INSERT INTO research_levels (user_id, tech_key, level)
+        VALUES (?, 'navigation_tech', 8)
+        ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;
+        """,
+        (uid,),
+    )
     _seed_ships(pid, uid, {'solar_skiff': 20}, conn=conn)
     conn.commit()
     ok, _, preset = create_preset(uid, name='Expo', preset_type='expedition', ships_json={'solar_skiff': 1})
     assert ok
+    usable = mass_expedition_available_slots(uid, conn=conn)
     ok2, _, result = mass_expedition(player_id=uid, origin_planet_id=pid, preset_id=preset['id'], waves=10, conn=conn)
     assert ok2
-    assert len(result['started']) <= 3
-    assert len(result['skipped']) >= 7
+    assert len(result['started']) == usable
+    assert len(result['skipped']) >= 10 - usable
     conn.close()
 
 def test_no_max_ship_limit(fleet_db):
