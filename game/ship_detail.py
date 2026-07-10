@@ -74,4 +74,7 @@ def build_ship_detail_card(
             research_levels=research,
             next_yard_unit_seconds=unit_build_seconds(key, sy_level + 1),
         )
+        from game.combat_models import build_rapid_fire_matchup_payload
+
+        card["technical"].update(build_rapid_fire_matchup_payload(key, "ship"))
     return card, None

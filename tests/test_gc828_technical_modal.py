@@ -163,4 +163,17 @@ def test_defense_detail_includes_technical_block():
         research={"weapon_tech": 4, "armor_tech": 2},
     )
     assert err is None
-    assert card.get("technical", {}).get("combat")
+    tech = card.get("technical") or {}
+    assert tech.get("combat")
+    assert any(row.get("target_key") == "falcon_interceptor" for row in tech.get("rapid_fire_against") or [])
+
+
+def test_ship_detail_includes_rapid_fire_matchups():
+    card, err = build_ship_detail_card(
+        "falcon_interceptor",
+        buildings={"orbital_shipyard": 2},
+        research={"weapon_tech": 2},
+    )
+    assert err is None
+    tech = card.get("technical") or {}
+    assert any(row.get("target_key") == "spark_drone" for row in tech.get("rapid_fire_against") or [])

@@ -67,6 +67,47 @@
     </div>
   </div>
   {% endif %}
+
+  {% set rf_against = technical.get('rapid_fire_against') or [] %}
+  {% set rf_vulnerable = technical.get('vulnerable_to') or [] %}
+  {% if rf_against or rf_vulnerable %}
+  <div class="gc-tech-section gc-tech-section--rapid-fire">
+    <div class="gc-unit-rapid-fire-grid">
+      {% if rf_against %}
+      <div class="gc-unit-rapid-fire-col">
+        <div class="gc-tech-section-title">{{ T("unit_technical_rapid_fire_against", "Effektiv gegen") }}</div>
+        <ul class="gc-unit-rapid-fire-list">
+          {% for row in rf_against %}
+          <li class="gc-unit-rapid-fire-row">
+            {% if row.get('icon') %}
+            <img src="{{ row.icon }}" alt="" class="gc-unit-rapid-fire-icon" width="28" height="28" loading="lazy">
+            {% endif %}
+            <span class="gc-unit-rapid-fire-name">{{ T(row.get('name_key', ''), row.get('target_key', '')) }}</span>
+            <span class="gc-unit-rapid-fire-value gc-mono">{{ T("unit_technical_rapid_fire_value", "Rapid Fire ×%(value)s", value=row.get('rapid_fire')) }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+      {% if rf_vulnerable %}
+      <div class="gc-unit-rapid-fire-col">
+        <div class="gc-tech-section-title">{{ T("unit_technical_vulnerable_to", "Verwundbar gegen") }}</div>
+        <ul class="gc-unit-rapid-fire-list">
+          {% for row in rf_vulnerable %}
+          <li class="gc-unit-rapid-fire-row">
+            {% if row.get('icon') %}
+            <img src="{{ row.icon }}" alt="" class="gc-unit-rapid-fire-icon" width="28" height="28" loading="lazy">
+            {% endif %}
+            <span class="gc-unit-rapid-fire-name">{{ T(row.get('name_key', ''), row.get('source_key', '')) }}</span>
+            <span class="gc-unit-rapid-fire-value gc-mono">{{ T("unit_technical_vulnerable_rapid_fire_value", "Gegnerisches Rapid Fire ×%(value)s", value=row.get('rapid_fire')) }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
 </div>
 {% endif %}
 {% endmacro %}

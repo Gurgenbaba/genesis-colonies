@@ -26,6 +26,7 @@ from game.combat_models import (
     COMBAT_UNIT_DEFENSE,
     COMBAT_UNIT_SHIP,
     CombatStack,
+    build_rapid_fire_matchup_payload,
     combat_stats_for_defense,
     combat_stats_for_ship,
     make_combat_side,
@@ -71,6 +72,36 @@ def test_rapid_fire_multiplier_from_ship_defs():
 def test_rapid_fire_multiplier_from_defense_defs():
     assert defense_rapid_fire_multiplier("flak_array", "spark_drone") == 5
     assert defense_rapid_fire_multiplier("flak_array", "orbital_shield") == 1
+
+
+def test_build_rapid_fire_matchup_payload_ship_against_and_vulnerable():
+    payload = build_rapid_fire_matchup_payload("falcon_interceptor", COMBAT_UNIT_SHIP)
+    against = payload["rapid_fire_against"]
+    assert against
+    assert all(row["rapid_fire"] >= 2 for row in against)
+    assert against[0]["rapid_fire"] >= against[-1]["rapid_fire"]
+    assert any(row["target_key"] == "spark_drone" and row["rapid_fire"] == 3 for row in against)
+
+    vulnerable = payload["vulnerable_to"]
+    assert any(row["source_key"] == "plasma_arc" and row["rapid_fire"] == 2 for row in vulnerable)
+    assert all(row["rapid_fire"] >= 2 for row in vulnerable)
+
+
+def test_build_rapid_fire_matchup_payload_defense_includes_ships():
+    payload = build_rapid_fire_matchup_payload("flak_array", COMBAT_UNIT_DEFENSE)
+    against = payload["rapid_fire_against"]
+    assert any(row["target_type"] == COMBAT_UNIT_SHIP and row["rapid_fire"] == 5 for row in against)
+    assert not any(row["rapid_fire"] <= 1 for row in against)
+
+
+def test_build_rapid_fire_matchup_payload_unknown_unit_is_safe():
+    payload = build_rapid_fire_matchup_payload("unknown_hull_xyz", COMBAT_UNIT_SHIP)
+    assert payload == {"rapid_fire_against": [], "vulnerable_to": []}
+
+
+def test_build_rapid_fire_matchup_payload_no_rf_ship():
+    payload = build_rapid_fire_matchup_payload("mule_courier", COMBAT_UNIT_SHIP)
+    assert payload["rapid_fire_against"] == []
 
 
 def test_rapid_fire_bonus_shot_chance_from_multiplier():
