@@ -571,6 +571,53 @@ def account_safety_hud_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
     return get_account_safety_hud_state(int(user_id), conn=conn, self_heal=True)
 
 
+def notification_summary_for_client(user_id: int, *, conn) -> Dict[str, Any]:
+    """
+    Tiny notification heartbeat — unread + attack alerts only.
+
+    Must not run queue finish or full live refresh (client polls ~1s).
+    """
+    from game import messages as messages_logic
+    from game.logic import attach_canonical_server_time
+
+    uid = int(user_id)
+    unread = 0
+    latest_id: int | None = None
+    try:
+        unread = int(messages_logic.unread_count(uid, conn=conn, prepare=False) or 0)
+        raw_latest = messages_logic.latest_inbox_message_id(uid, conn=conn, prepare=False)
+        latest_id = int(raw_latest) if raw_latest else None
+    except Exception:
+        unread = 0
+        latest_id = None
+
+    fleet_alerts = {
+        "incoming_attack_count": 0,
+        "next_attack_arrival": None,
+        "has_incoming_attack": False,
+        "alert_key": "",
+        "incoming_attacks": [],
+    }
+    try:
+        from game.fleet import build_fleet_incoming_attack_alerts, fleet_schema_ready
+
+        if fleet_schema_ready(conn):
+            fleet_alerts = build_fleet_incoming_attack_alerts(uid, conn=conn) or fleet_alerts
+    except Exception:
+        pass
+
+    alert_key = str(fleet_alerts.get("alert_key") or "")
+    revision = f"{unread}:{latest_id or 0}:{alert_key}"
+    payload: Dict[str, Any] = {
+        "ok": True,
+        "unread_messages_count": max(0, unread),
+        "latest_message_id": latest_id,
+        "fleet_alerts": fleet_alerts,
+        "notification_revision": revision,
+    }
+    return attach_canonical_server_time(payload)
+
+
 def apply_lightweight_game_state_diet(payload: Dict[str, Any]) -> Dict[str, Any]:
     """
     GC-747 / GC-802: normal poll diet — keep shell HUD slices, drop page-catalog blocks.

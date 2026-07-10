@@ -1222,6 +1222,7 @@
   function quiesceLiveClientFetches(reason) {
     abortInFlightGameStateFetches();
     GC.stopPolling();
+    GC.stopNotificationPoll();
     if (typeof GC.quiesceChat === "function") GC.quiesceChat(reason);
     else if (typeof GC.stopChatPolling === "function") GC.stopChatPolling();
     if (reason) console.debug("[GC] quiesceLiveClientFetches", reason);
@@ -2063,7 +2064,10 @@
 
   GC.stopPolling = function stopPolling() {
     const p = GC.polling;
-    if (!p.running && !p.timeoutId && !p.inFlight && !p.abort) return;
+    if (!p.running && !p.timeoutId && !p.inFlight && !p.abort) {
+      stopNotificationPoll();
+      return;
+    }
     console.debug("[GC] polling stopped");
     p.running = false;
     p.started = false;
@@ -2075,6 +2079,7 @@
     try { if (p.abort) p.abort.abort(); } catch (_) {}
     p.inFlight = false;
     p.abort = null;
+    stopNotificationPoll();
   };
 
   /** Dedicated poll timer — not registered in pageLifecycle (survives until stopPolling). */
@@ -2111,6 +2116,104 @@
   GC.shouldPollGameState = shouldPollGameState;
   GC.abortGameLoop = handleAuthFailure;
 
+  const NOTIFICATION_POLL_MS = 1000;
+  const NOTIFICATION_POLL_HIDDEN_MS = 5000;
+  const _notificationPoll = {
+    running: false,
+    timeoutId: null,
+    inFlight: false,
+    abort: null,
+  };
+
+  function stopNotificationPoll() {
+    const n = _notificationPoll;
+    n.running = false;
+    if (n.timeoutId) {
+      clearTimeout(n.timeoutId);
+      n.timeoutId = null;
+    }
+    try {
+      if (n.abort) n.abort.abort();
+    } catch (_) {}
+    n.inFlight = false;
+    n.abort = null;
+  }
+
+  function applyNotificationSummary(data, reason) {
+    if (!data || data.ok === false) return;
+    const reasonStr = String(reason || "notification_poll");
+    syncServerClockFromState(data);
+    const hudSlice = {
+      ok: true,
+      server_time: data.server_time,
+      server_now: data.server_now,
+      unread_messages_count: data.unread_messages_count,
+      latest_message_id: data.latest_message_id,
+      fleet_alerts: data.fleet_alerts,
+      notification_revision: data.notification_revision,
+    };
+    patchHudLastState(hudSlice, reasonStr);
+    if (typeof data.unread_messages_count === "number") {
+      updateMessagesUnreadBadges(data.unread_messages_count);
+    }
+    _processUnreadMessagesPoll(hudSlice, reasonStr, {});
+    if (data.fleet_alerts) {
+      _maybePlayIncomingAttackNotify(data.fleet_alerts);
+      syncFleetAttackAlert(data.fleet_alerts);
+    }
+  }
+
+  function scheduleNotificationPoll(ms) {
+    const n = _notificationPoll;
+    if (!n.running || !shouldPollGameState() || _authLoopAborted) {
+      stopNotificationPoll();
+      return;
+    }
+    if (n.timeoutId) clearTimeout(n.timeoutId);
+    n.timeoutId = setTimeout(async () => {
+      n.timeoutId = null;
+      if (!n.running || !shouldPollGameState() || _authLoopAborted) {
+        stopNotificationPoll();
+        return;
+      }
+      if (n.inFlight) {
+        scheduleNotificationPoll(ms);
+        return;
+      }
+      const ctrl = new AbortController();
+      n.abort = ctrl;
+      n.inFlight = true;
+      try {
+        const data = await GC.fetchJSON("/api/notifications/summary", {
+          cache: "no-store",
+          signal: ctrl.signal,
+        });
+        applyNotificationSummary(data, "notification_poll");
+      } catch (err) {
+        if (err?.name !== "AbortError") {
+          console.debug("[GC] notification poll failed", err);
+        }
+      } finally {
+        n.inFlight = false;
+        n.abort = null;
+        if (n.running && shouldPollGameState() && !_authLoopAborted) {
+          const next = document.hidden ? NOTIFICATION_POLL_HIDDEN_MS : NOTIFICATION_POLL_MS;
+          scheduleNotificationPoll(next);
+        }
+      }
+    }, Math.max(0, ms));
+  }
+
+  GC.stopNotificationPoll = stopNotificationPoll;
+  GC.startNotificationPoll = function startNotificationPoll() {
+    if (!shouldPollGameState() || _authLoopAborted) return;
+    const n = _notificationPoll;
+    if (n.running) return;
+    n.running = true;
+    const delay = document.hidden ? NOTIFICATION_POLL_HIDDEN_MS : NOTIFICATION_POLL_MS;
+    scheduleNotificationPoll(delay);
+  };
+
   GC.startPolling = function startPolling(anyActive, isError = false, deferFirst = false) {
     if (!shouldPollGameState()) {
       return;
@@ -2145,6 +2248,7 @@
     p.lastInterval = next;
     console.debug("[GC] polling started", next, "ms", firstPollDelay ? "" : "(immediate first tick)");
     scheduleGameStatePoll(firstPollDelay);
+    GC.startNotificationPoll();
   };
 
   function scheduleMessagesInboxBoot() {
@@ -3568,11 +3672,11 @@
     if (!shouldRunGameLoop() || _authLoopAborted) return;
     const o = meta && typeof meta === "object" ? meta : {};
     if (o.buildingKey) trackBuildingsFinishDeltaKey(o.buildingKey);
-    if (_buildingsFinishRefreshTimer != null) return;
-    _buildingsFinishRefreshTimer = GC.setSafeTimeout(() => {
-      _buildingsFinishRefreshTimer = null;
-      void refreshBuildingsFinishState("buildings_finished");
-    }, BUILDINGS_FINISH_REFRESH_DEBOUNCE_MS);
+    requestQueueTimerZeroRefresh({
+      domain: "buildings",
+      jobId: Math.floor(Number(o.jobId || 0)),
+      finishAt: Math.floor(Number(o.finishAt || 0)),
+    });
   }
 
   function clearFinishRefreshArmed(type, queueList) {
@@ -3595,12 +3699,8 @@
 
   function requestFinishRefresh(type) {
     if (!shouldRunGameLoop() || _authLoopAborted) return;
-    if (type === "shipyard") {
-      requestProductionCompletionSync({ gameState: true, shipyard: true });
-      return;
-    }
-    if (type === "buildings") {
-      requestBuildingsFinishRefresh({});
+    if (type === "shipyard" || type === "defense" || type === "buildings") {
+      requestQueueTimerZeroRefresh({ domain: type, jobId: 0, finishAt: 0 });
       return;
     }
     const key = type === "research" || type === "planet_evolution" ? type : "buildings";
@@ -8520,11 +8620,8 @@
     return formatEta(Math.max(0, Math.ceil(remaining)));
   }
 
-  // GC-546D — production completion refresh (shipyard/defense): one debounced sync per timer zero.
-  const PRODUCTION_COMPLETION_DEBOUNCE_MS = 180;
+  // GC-546D — production completion refresh: canonical include_panel state at timer zero.
   let _queuePanelRefreshInFlight = null;
-  let _productionCompletionTimer = null;
-  let _productionCompletionPending = { gameState: false, shipyard: false, defense: false };
   let _shipyardApiInFlight = null;
   let _defenseApiInFlight = null;
   const _productionZeroHandled = { shipyard: "", defense: "" };
@@ -8540,27 +8637,9 @@
   function requestProductionCompletionSync(opts) {
     if (!shouldRunGameLoop() || _authLoopAborted) return;
     const o = opts && typeof opts === "object" ? opts : {};
-    if (o.gameState !== false) _productionCompletionPending.gameState = true;
-    if (o.shipyard) _productionCompletionPending.shipyard = true;
-    if (o.defense) _productionCompletionPending.defense = true;
-    if (_productionCompletionTimer != null) return;
-    _productionCompletionTimer = GC.setSafeTimeout(() => {
-      _productionCompletionTimer = null;
-      const pending = { ..._productionCompletionPending };
-      _productionCompletionPending = { gameState: false, shipyard: false, defense: false };
-      if (pending.gameState && typeof GC.refreshGameState === "function") {
-        GC.refreshGameState("timer_done");
-      } else {
-        if (pending.shipyard) {
-          const syPage = document.getElementById("shipyard-page");
-          if (syPage?.dataset.ready === "1") refreshShipyardStateCoalesced(syPage);
-        }
-        if (pending.defense) {
-          const defPage = document.getElementById("defense-page");
-          if (defPage?.dataset.ready === "1") refreshDefenseStateCoalesced(defPage);
-        }
-      }
-    }, PRODUCTION_COMPLETION_DEBOUNCE_MS);
+    if (o.gameState !== false) {
+      requestQueueTimerZeroRefresh({ domain: o.shipyard ? "shipyard" : o.defense ? "defense" : "production" });
+    }
   }
 
   function requestQueueTimerZeroRefresh(meta) {
@@ -8585,7 +8664,7 @@
         keysSnapshot.forEach((k) => _queueTimerZeroRefreshKeys.delete(k));
         return;
       }
-      Promise.resolve(GC.refreshGameState("queue_timer_zero")).finally(() => {
+      Promise.resolve(forceCanonicalGameStateRefresh("queue_timer_zero")).finally(() => {
           GC.setSafeTimeout(() => {
             keysSnapshot.forEach((k) => _queueTimerZeroRefreshKeys.delete(k));
           }, 1500);
@@ -8633,11 +8712,11 @@
   let _lastGlobalMovementExpiryRefreshMs = 0;
   let _queuedChainRefreshReason = null;
   const _timerZeroRefreshLastAt = new Map();
-  const TIMER_ZERO_REFRESH_MIN_MS = 900;
+  const TIMER_ZERO_REFRESH_MIN_MS = 250;
   const _queueTimerZeroRefreshKeys = new Set();
   let _queueTimerZeroRefreshTimer = null;
   let _queueTimerZeroPendingDomains = new Set();
-  const QUEUE_TIMER_ZERO_DEBOUNCE_MS = 80;
+  const QUEUE_TIMER_ZERO_DEBOUNCE_MS = 150;
 
   const MOVEMENT_EXPIRY_REFRESH_MS = 900;
   const MOVEMENT_EXPIRY_REFRESH_MS_SHORT = 200;
@@ -9569,6 +9648,18 @@
 
   function coercePollUnreadForHud(data, reason) {
     if (!data || typeof data.unread_messages_count !== "number") return data;
+    const r = String(reason || "");
+    if (
+      r === "poll"
+      || r === "notification_poll"
+      || r === "queue_timer_zero"
+      || r === "timer_done"
+      || r.endsWith("_finished")
+      || r.endsWith("_success")
+      || r === "messages_sync"
+    ) {
+      return data;
+    }
     const localUnread = GC.lastState?.unread_messages_count;
     if (typeof localUnread !== "number") return data;
     const incomingUnread = data.unread_messages_count;
@@ -9629,7 +9720,7 @@
 
     _lastMessagesUnreadPoll = hudUnread;
 
-    _maybePlayMessageNotifySound(data);
+    _maybePlayMessageNotifySound(data, { unreadIncreased });
 
     if (
       unreadIncreased
@@ -9646,13 +9737,18 @@
 
     if (
       unreadIncreased &&
-      onMessagesPage &&
-      GC.messagesPageState &&
-      GC.messagesPageState.listLoaded &&
-      !GC.messagesPageState.loading &&
-      typeof GC.messagesPageState.loadList === "function"
+      onMessagesPage
     ) {
-      GC.messagesPageState.loadList();
+      if (
+        GC.messagesPageState &&
+        GC.messagesPageState.listLoaded &&
+        !GC.messagesPageState.loading &&
+        typeof GC.messagesPageState.loadList === "function"
+      ) {
+        GC.messagesPageState.loadList();
+      } else if (typeof GC.bootMessagesInbox === "function") {
+        GC.bootMessagesInbox({ force: true, pjax: true });
+      }
     }
   }
 
@@ -10603,9 +10699,14 @@
     }
   }
 
-  function _maybePlayMessageNotifySound(data) {
+  function _maybePlayMessageNotifySound(data, opts) {
     const payload = data && typeof data === "object" ? data : {};
-    const alertKey = resolveMessageNotifySoundKey(payload);
+    const o = opts && typeof opts === "object" ? opts : {};
+    let alertKey = resolveMessageNotifySoundKey(payload);
+    if (!alertKey && o.unreadIncreased) {
+      const unread = Math.max(0, Math.floor(Number(payload.unread_messages_count) || 0));
+      if (unread > 0) alertKey = `u:${unread}`;
+    }
     if (!alertKey) return;
     if (!shouldPlayNotifySoundForKey(_notifySoundStorageKey(GC_NOTIFY_SOUND_LS_MESSAGE), alertKey)) {
       return;
@@ -11949,47 +12050,24 @@
       return hasActiveBuild || hasActiveResearchNow || lastHadActiveShipyard;
   }
 
-  function refreshPageAfterQueueEvent(reason) {
-    if (!shouldRunGameLoop() || _authLoopAborted) return Promise.resolve(null);
-    const reasonStr = String(reason || "");
-    if (reasonStr === "page_init") {
-      if (_queuePanelRefreshInFlight) return _queuePanelRefreshInFlight;
-      _queuePanelRefreshInFlight = (async () => {
-        try {
-          const data = await GC.fetchJSON("/api/game-state?include_panel=1", { cache: "no-store" });
-          if (!data || data.ok === false) return null;
-          syncServerClockFromState(data);
-          applyGameStateData(data, reasonStr);
-          return data;
-        } catch (err) {
-          if (err?.name !== "AbortError") {
-            console.error("[GC] queue finish refresh failed", err);
-          }
-          return null;
-        } finally {
-          _queuePanelRefreshInFlight = null;
-        }
-      })();
-      return _queuePanelRefreshInFlight;
-    }
-    const page = GC.currentPage || (typeof GC.detectPage === "function" ? GC.detectPage() : "");
-    if (page === "buildings" && collectBuildingsFinishDeltaKeys().length) {
-      return refreshBuildingsFinishState(reasonStr);
-    }
-    if (page === "buildings") {
-      return refreshBuildingsFinishState(reasonStr);
-    }
+  async function forceCanonicalGameStateRefresh(reason, opts) {
+    if (!shouldRunGameLoop() || _authLoopAborted) return null;
+    const reasonStr = String(reason || "queue_timer_zero");
+    const o = opts && typeof opts === "object" ? opts : {};
     if (_queuePanelRefreshInFlight) return _queuePanelRefreshInFlight;
     _queuePanelRefreshInFlight = (async () => {
       try {
         const data = await GC.fetchJSON("/api/game-state?include_panel=1", { cache: "no-store" });
         if (!data || data.ok === false) return null;
         syncServerClockFromState(data);
-        applyGameStateData(data, reasonStr || "queue_finished");
+        applyGameStateData(data, reasonStr, {
+          forcePanel: true,
+          forceResourceBar: Boolean(o.forceResourceBar !== false),
+        });
         return data;
       } catch (err) {
         if (err?.name !== "AbortError") {
-          console.error("[GC] queue finish refresh failed", err);
+          console.error("[GC] canonical state refresh failed", reasonStr, err);
         }
         return null;
       } finally {
@@ -11997,6 +12075,12 @@
       }
     })();
     return _queuePanelRefreshInFlight;
+  }
+  GC.forceCanonicalGameStateRefresh = forceCanonicalGameStateRefresh;
+
+  function refreshPageAfterQueueEvent(reason) {
+    if (!shouldRunGameLoop() || _authLoopAborted) return Promise.resolve(null);
+    return forceCanonicalGameStateRefresh(reason || "queue_timer_zero");
   }
 
   /** Lightweight HUD refresh — standalone fetch, no pageLifecycle abort. */
@@ -31912,7 +31996,7 @@
       },
       timers: {
         movementCountdownRefresh: _movementCountdownRefreshTimer != null,
-        productionCompletion: _productionCompletionTimer != null,
+        productionCompletion: _queueTimerZeroRefreshTimer != null,
         queueTimerZero: _queueTimerZeroRefreshTimer != null,
         queueZeroRefreshKeys: _queueTimerZeroRefreshKeys.size,
         movementExpiryStateEntries: _movementCountdownExpiryState.size,

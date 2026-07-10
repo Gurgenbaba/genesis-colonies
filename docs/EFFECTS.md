@@ -103,8 +103,17 @@ Pipeline (single request, one finish pass):
 ### `energy_tech` (mine consumption only)
 
 - **Effect:** reduces **mine** energy draw only (`metal_mine` / `crystal_mine`), not solar output or other buildings.
-- **Formula:** `mine_energy_factor = max(0, 1 − 0.05 × level)` for display/modifiers. Actual per-consumer draw: `max(1, int(raw × max(0.01, mine_energy_factor)))`. Display reduction % is linear and unbounded; gameplay draw never reaches 0 for active mines/plants.
-- **Not:** a flat reduction of total colony power draw from solar/command center/etc.
+- **Formula:** `mine_energy_factor = max(0, 1 − 0.01 × level)` for display/modifiers. Actual per-consumer draw: `max(1, int(raw × max(0.01, mine_energy_factor)))`. Display reduction % is linear and unbounded; gameplay draw never reaches 0 for active mines/plants.
+- **Alpha principle:** energy research improves mines but must not make power plants obsolete in the late game.
+
+### `buildtime_tech` (build + research duration)
+
+- **Formula:** duration × `0.985 ** level` (~1.5 % faster per level, multiplicative). Stacks with nanofactory, lab, academy — does not replace nanofactory investment.
+
+### `nanofactory` (building build duration)
+
+- **Formula:** build speed `1 + 0.55 × level^0.8` (diminishing returns — not × 0.70 per level). Upgrade costs: `base × 2.0 ** target_level`.
+- **Not:** unbounded exponential time collapse at high levels.
 - **UI:** `energy.used`, `energy.efficiency_pct`, overview energy hint class update on poll (no reload).
 
 ### `storage_tech` and depot capacity

@@ -572,19 +572,20 @@ def _panel_energy_ratio(buildings: Dict[str, int], research_levels: Dict[str, in
     return float(EffectResolver.energy_ratio(energy_total, energy_used))
 
 
-# Flat UI modifiers for build-time buildings (cards/technical data). Gameplay uses EffectResolver.
+# Command Center UI display for nanofactory-only build bonus (gameplay uses EffectResolver).
 COMMAND_CENTER_NANOFACTORY_BUILD_BONUS_PER_LEVEL = 15  # GC-863 — UI display only
-NANOFACTORY_BUILD_BONUS_PER_LEVEL = 30
 
 
 def command_center_nanofactory_build_bonus_pct(level: int) -> int:
-    """Flat UI modifier for Command Center cards/technical data (level × 25 %)."""
+    """Flat UI modifier for Command Center cards/technical data (level × 15 %)."""
     return int(COMMAND_CENTER_NANOFACTORY_BUILD_BONUS_PER_LEVEL * max(0, int(level or 0)))
 
 
 def nanofactory_build_bonus_pct(level: int) -> int:
-    """Flat UI modifier for Nanofactory cards/technical data (level × 30 %)."""
-    return int(NANOFACTORY_BUILD_BONUS_PER_LEVEL * max(0, int(level or 0)))
+    """Nanofactory build-speed bonus % — matches EffectResolver diminishing-returns curve."""
+    from .effects import EffectResolver
+
+    return EffectResolver.nanofactory_build_speed_bonus_pct(level)
 
 
 def _command_center_panel_snapshot(

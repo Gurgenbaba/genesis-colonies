@@ -1,5 +1,5 @@
 """
-GC-858 — Build-time modifier audit (no balance changes).
+GC-858 — Build-time modifier audit (Alpha balance refresh).
 
 Run: python -m pytest tests/test_gc858_build_time_modifier_audit.py tests/test_gc850a_build_time_wiring.py -v
 """
@@ -10,10 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from game.buildings import (
-    NANOFACTORY_BUILD_BONUS_PER_LEVEL,
-    nanofactory_build_bonus_pct,
-)
+from game.buildings import nanofactory_build_bonus_pct
 from game.economy_balance import power_build_seconds
 from game.effects import EffectResolver
 from game.technical_data import build_production_milestones
@@ -59,10 +56,11 @@ class TestGc858ModifierSources:
             "metal_mine", 20
         ) == mine
 
-    def test_one_second_floor_is_enforced(self):
+    def test_endgame_build_times_stay_above_one_second_floor(self):
+        """Alpha balance: stacked bonuses must not collapse all builds to 1s."""
         er = _er(*FERDI_LIKE)
-        for btype, lvl in (("metal_mine", 30), ("research_lab", 30), ("orbital_shipyard", 30)):
-            assert er.get_build_time_seconds(btype, lvl) == 1
+        assert er.get_build_time_seconds("metal_mine", 30) > 1
+        assert er.get_build_time_seconds("research_lab", 30) > 1
 
 
 class TestGc858ExampleProfiles:
@@ -77,17 +75,17 @@ class TestGc858ExampleProfiles:
             (
                 "midgame",
                 *MIDGAME,
-                [("metal_mine", 30, 1623)],
+                [("metal_mine", 30, 3483)],
             ),
             (
                 "ferdi_like",
                 *FERDI_LIKE,
                 [
-                    ("metal_mine", 20, 1),
-                    ("metal_mine", 30, 1),
-                    ("metal_mine", 50, 1),
-                    ("research_lab", 30, 1),
-                    ("orbital_shipyard", 30, 1),
+                    ("metal_mine", 20, 66),
+                    ("metal_mine", 30, 115),
+                    ("metal_mine", 50, 230),
+                    ("research_lab", 30, 202),
+                    ("orbital_shipyard", 30, 312),
                 ],
             ),
         ],
@@ -99,15 +97,12 @@ class TestGc858ExampleProfiles:
 
 
 class TestGc858DisplayVsRuntime:
-    def test_nanofactory_ui_flat_pct_differs_from_runtime(self):
+    def test_nanofactory_ui_matches_effect_resolver(self):
         nano_level = 22
         ui_pct = nanofactory_build_bonus_pct(nano_level)
-        assert ui_pct == NANOFACTORY_BUILD_BONUS_PER_LEVEL * nano_level
         er = _er({"nanofactory": nano_level}, {}, 1.0)
-        runtime_pct = er.get_build_time_reduction_pct("metal_mine")
-        assert ui_pct == 660
-        assert runtime_pct == 100
-        assert ui_pct != runtime_pct
+        assert ui_pct == EffectResolver.nanofactory_build_speed_bonus_pct(nano_level)
+        assert abs(ui_pct - er.get_build_time_speed_bonus_pct("metal_mine")) <= 2
 
     def test_production_milestone_is_not_build_time(self):
         buildings = {"metal_mine": 40, "crystal_mine": 30}
@@ -123,7 +118,7 @@ class TestGc858DisplayVsRuntime:
         big = max(int(m["display"].strip("+").strip().split()[0]) for m in milestones)
         er = _er({**buildings, "nanofactory": 22}, {"buildtime_tech": 17}, 10.0)
         assert big > 100
-        assert er.get_build_time_seconds("metal_mine", 41) == 1
+        assert er.get_build_time_seconds("metal_mine", 41) > 1
 
     def test_ferdi_like_card_modal_queue_still_match(self, monkeypatch):
         def _factory(_user_id, *, buildings=None, research=None, conn=None, force_refresh=False, **kwargs):
@@ -148,7 +143,8 @@ class TestGc858DisplayVsRuntime:
             "metal_mine", buildings, research, target, user_id=1, conn=None, ratio=1.0, is_current=False
         )
         enqueue = get_build_time("metal_mine", target, user_id=1, buildings=buildings, research_levels=research)
-        assert panel["time_seconds"] == modal["time_seconds"] == enqueue == 1
+        assert panel["time_seconds"] == modal["time_seconds"] == enqueue
+        assert enqueue > 1
 
 
 class TestGc858AuditDoc:
@@ -163,3 +159,10 @@ class TestGc858AuditDoc:
         text = (ROOT / "docs/EFFECTS.md").read_text(encoding="utf-8")
         assert "get_build_time_seconds" in text
         assert "1 second" in text.lower() or "1-second" in text.lower()
+
+    def test_nanofactory_diminishing_returns_at_high_level(self):
+        low_delta = (
+            EffectResolver.nanofactory_build_speed(16) - EffectResolver.nanofactory_build_speed(15)
+        )
+        early_delta = EffectResolver.nanofactory_build_speed(5) - EffectResolver.nanofactory_build_speed(4)
+        assert early_delta > low_delta

@@ -95,7 +95,7 @@ def test_energy_tech_consumption_display(tech_db):
     assert data["table_layout"] == "effect_percent"
     row2 = next(r for r in data["levels"] if r["level"] == 2)
     assert row2["display"]["display_mode"] == "consumption"
-    assert row2["display"]["value_at_level"] == 90
+    assert row2["display"]["value_at_level"] == 98
     assert data["summary"]["upgrade_roi_hours"] is not None
 
 

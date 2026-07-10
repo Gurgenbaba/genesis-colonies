@@ -50,7 +50,19 @@ Aufgerufen von:
 - **Supply:** `solar_plant` (+ `geothermal_nexus` via `solar_output_factor`)
 - **Demand:** `metal_mine`, `crystal_mine`, `fuel_cell_plant`
 - **Skalierung:** `energy_ratio = min(1, total/used)` drosselt alle Produktionsraten
-- **`energy_tech`:** reduziert nur Minen-Verbrauch (`mine_energy_factor`)
+- **`energy_tech`:** reduziert nur Minen-Verbrauch (`mine_energy_factor`) — **1 % pro Stufe** (Alpha-Balance)
+
+### Alpha-Balance-Grundsatz
+
+> Kein Fortschrittssystem darf ein anderes System vollständig eliminieren. Forschung und Spätgame-Gebäude verbessern Kernmechaniken (Bauzeiten, Energie, Lager), machen sie aber nicht bedeutungslos.
+
+| System | Alpha-Anpassung |
+|--------|-----------------|
+| `energy_tech` | 5 % → **1 %** Minen-Verbrauch pro Stufe |
+| `buildtime_tech` | 3 % → **~1,5 %** multiplikativ pro Stufe |
+| `nanofactory` | Kosten **×2,0** pro Stufe; Bauzeit-Bonus mit **abnehmendem Grenznutzen** (`1 + 0,55 × Stufe^0,8`) |
+
+Details: [EFFECTS.md](EFFECTS.md)
 - **Klima (Galaxie-Slot 1–15):** `planet_visuals.climate_economy_modifiers_for_position` → `EffectResolver` multipliziert `solar_output_factor` (Slot 1 ≈ +42 % Solar, Slot 15 ≈ −50 %). Gleiche Quelle wie Temperatur/Hero-Theme.
 
 ---

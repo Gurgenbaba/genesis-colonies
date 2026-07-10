@@ -96,7 +96,7 @@ class TestGc863aPercentBuildingCosts:
 
 class TestGc863aNanofactory:
     def test_growth_rate(self) -> None:
-        assert NANOFACTORY_COST_GROWTH == pytest.approx(1.34)
+        assert NANOFACTORY_COST_GROWTH == pytest.approx(2.0)
 
     @pytest.mark.parametrize("level", (1, 10, 25, 50))
     def test_formula_unchanged(self, level: int) -> None:

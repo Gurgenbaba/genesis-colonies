@@ -141,7 +141,7 @@ STORAGE_REFERENCE_HOURS = 24
 # GC-863 — nanofactory upgrade costs (target level X); GC-863A steeper growth.
 NANOFACTORY_METAL_BASE = 10_000.0
 NANOFACTORY_CRYSTAL_BASE = 5_000.0
-NANOFACTORY_COST_GROWTH = 1.34
+NANOFACTORY_COST_GROWTH = 2.0  # Alpha: doubles per target level (OGame-style steep investment)
 
 # GC-821B — exchange (scales with empire day production via exchange.py).
 EXCHANGE_DAILY_LIMIT_MIN = 500_000

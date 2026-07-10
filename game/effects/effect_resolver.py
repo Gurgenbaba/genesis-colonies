@@ -25,13 +25,14 @@ logger = logging.getLogger(__name__)
 
 EFFECT_DEBUG = os.environ.get("GC_EFFECT_DEBUG", "").strip().lower() in ("1", "true", "yes")
 
-# Research reduction formulas — single source of truth (GC-622C).
-# Linear per level; display % is unbounded. mine_energy_factor may reach 0; actual draw is floored.
-MINE_ENERGY_PER_LEVEL = 0.05
+# Research / building reduction formulas — single source of truth (GC-622C, Alpha balance).
+# Linear per level where noted; display % is unbounded. mine_energy_factor may reach 0; draw is floored.
+MINE_ENERGY_PER_LEVEL = 0.01  # Alpha: 1 % mine draw reduction per energy_tech level
 MINE_ENERGY_MIN_DRAW_FACTOR = 0.01  # gameplay floor: never 0 draw for active consumers
-BUILDTIME_PER_LEVEL = 0.03
-BUILDTIME_TECH_DURATION = 0.97  # multiplicative: duration × 0.97 ** level
-NANOFACTORY_DURATION_PER_LEVEL = 0.70  # duration × 0.70 ** nanofactory_level
+BUILDTIME_TECH_DURATION = 0.985  # multiplicative: duration × 0.985 ** level (~1.5 % per level)
+# Nanofactory: diminishing returns — speed = 1 + coeff × level^exp (not exponential per level).
+NANOFACTORY_SPEED_COEFF = 0.55
+NANOFACTORY_SPEED_EXPONENT = 0.8
 COMMAND_CENTER_NANOFACTORY_DURATION = 0.75  # nanofactory build: × 0.75 ** cc_level
 FUEL_EFFICIENCY_PER_LEVEL = 0.03
 STORAGE_TECH_PER_LEVEL = 0.15
@@ -154,6 +155,25 @@ class EffectResolver:
         factor = EffectResolver.buildtime_duration_factor_for_level(level)
         speed = 1.0 / max(factor, _DIVISION_EPS)
         return int(round((speed - 1.0) * 100))
+
+    @staticmethod
+    def nanofactory_build_speed(level: int) -> float:
+        """Build-speed multiplier from nanofactory level (1.0 = no bonus)."""
+        lvl = max(0, int(level or 0))
+        if lvl <= 0:
+            return 1.0
+        return 1.0 + NANOFACTORY_SPEED_COEFF * (float(lvl) ** NANOFACTORY_SPEED_EXPONENT)
+
+    @staticmethod
+    def nanofactory_duration_multiplier(level: int) -> float:
+        """Duration multiplier from nanofactory (< 1 = faster builds)."""
+        speed = EffectResolver.nanofactory_build_speed(level)
+        return 1.0 / max(speed, _DIVISION_EPS)
+
+    @staticmethod
+    def nanofactory_build_speed_bonus_pct(level: int) -> int:
+        speed = EffectResolver.nanofactory_build_speed(level)
+        return int(round(max(0.0, speed - 1.0) * 100))
 
     @staticmethod
     def fuel_efficiency_factor_for_level(level: int) -> float:
@@ -602,7 +622,7 @@ class EffectResolver:
             storage_factor *= 1.0 + STORAGE_TECH_PER_LEVEL * ls
             sources.append(self._source_entry("storage_factor", "storage_tech", storage_factor, ls))
 
-        # --- Research: buildtime_tech (duration × 0.97 ** level) ---
+        # --- Research: buildtime_tech (duration × BUILDTIME_TECH_DURATION ** level) ---
         lb = _lvl(r, "buildtime_tech")
         if lb > 0:
             duration_factor = float(BUILDTIME_TECH_DURATION ** lb)
@@ -646,15 +666,15 @@ class EffectResolver:
             cargo_multiplier *= 1.0 + 0.02 * leng
             sources.append(self._source_entry("fleet_speed_multiplier", "engine_tech", fleet_speed_multiplier, leng, prepared=True))
 
-        # --- Buildings: nanofactory (duration × 0.70 ** level — applied per building in get_build_time_duration_multiplier) ---
+        # --- Buildings: nanofactory (diminishing returns — applied in get_build_time_duration_multiplier) ---
         nano = _bld(b, "nanofactory")
         if nano > 0:
-            nano_duration = float(NANOFACTORY_DURATION_PER_LEVEL ** nano)
+            nano_speed = self.nanofactory_build_speed(nano)
             sources.append(
                 self._source_entry(
                     "build_time_speed",
                     "nanofactory",
-                    1.0 / max(nano_duration, _DIVISION_EPS),
+                    nano_speed,
                     nano,
                 )
             )
@@ -1140,7 +1160,7 @@ class EffectResolver:
         mult = 1.0
         nano = _bld(self.buildings, "nanofactory")
         if nano > 0:
-            mult *= float(NANOFACTORY_DURATION_PER_LEVEL ** nano)
+            mult *= self.nanofactory_duration_multiplier(nano)
         if str(building_type) == "nanofactory":
             cc = _bld(self.buildings, "command_center")
             if cc > 0:

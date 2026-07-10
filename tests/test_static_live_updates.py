@@ -101,7 +101,7 @@ def test_main_js_messages_inbox_reload_only_on_unread_increase():
     assert "unreadIncreased" in unread_section
     assert "function playNewMessageNotifySound()" in src
     assert "playNotificationSound(\"message\")" in src
-    assert "_maybePlayMessageNotifySound(data)" in unread_section
+    assert "_maybePlayMessageNotifySound(data, { unreadIncreased })" in unread_section
     tabs_section = src.split("function bindBuildingTabsOnce")[1].split("function initBuildings")[0]
     assert '#messages-tabs' in tabs_section
 
@@ -1004,8 +1004,9 @@ def test_main_js_gc541_queue_timer_hotfix():
     hud_section = src.split("function patchShellHudFromState(data, opts)")[1].split("GC.patchShellHudFromState = patchShellHudFromState")[0]
     assert 'getElementById("resource-bar")' in hud_section
     assert 'document.querySelectorAll(".res-value.metal, [data-res=\\"metal\\"]")' not in hud_section
-    apply_section = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function refreshPageAfterQueueEvent")[0]
-    assert "patchShellHudFromState(coercePollUnreadForHud(data, reason), { forceResourceBar, skipMessagesUnread })" in apply_section
+    apply_section = src.split("function applyGameStateData(data, _reason, opts)")[1].split("async function forceCanonicalGameStateRefresh")[0]
+    assert "patchShellHudFromState(coercePollUnreadForHud(data, reason)" in apply_section
+    assert "skipMessagesUnread" in apply_section
     assert "scoreStale" in hud_section
     assert "data-hud-online-value" in hud_section or "data-hud-online-value" in _read("templates/base.html")
     messages_js = _read("static/js/messages.js")
@@ -1241,7 +1242,7 @@ def test_notify_sound_assets_and_main_js_wiring():
     unread_fn = src.split("function _processUnreadMessagesPoll(data, reason, opts)")[1].split("function updateNavBadges")[0]
     assert "data.unread_messages_count" in unread_fn
     assert "coercePollUnreadForHud" in unread_fn
-    assert "_maybePlayMessageNotifySound(data)" in unread_fn
+    assert "_maybePlayMessageNotifySound(data, { unreadIncreased })" in unread_fn
     assert "latest_message_id" in unread_fn
     assert "_processUnreadMessagesPoll(data, reason" in src
     attack_fn = src.split("function _maybePlayIncomingAttackNotify(alerts)")[1].split("function syncFleetAttackAlert(alerts)")[0]
@@ -1463,11 +1464,10 @@ def test_main_js_gc640e_fleet_logistics_merge():
 
 
 def test_main_js_gc546d_production_completion_poll_storm_guards():
-    """GC-546D: debounced completion sync, no per-poll shipyard/defense API storm."""
+    """GC-546D: timer-zero completion routes through one canonical include_panel refresh."""
     src = _read("static/main.js")
 
     assert "function requestProductionCompletionSync(opts)" in src
-    assert "PRODUCTION_COMPLETION_DEBOUNCE_MS = 1100" in src
     assert "function _timerZeroAlreadyFired(el, target)" in src
     assert "el.dataset.refreshFiredAt" in src
     assert "function refreshShipyardStateCoalesced(page)" in src
@@ -1475,10 +1475,9 @@ def test_main_js_gc546d_production_completion_poll_storm_guards():
     assert "_shipyardApiInFlight" in src
     assert "_defenseApiInFlight" in src
 
-    prod_sync = src.split("function requestProductionCompletionSync(opts)")[1].split("function requestTimerZeroRefresh")[0]
-    assert "pending.gameState" in prod_sync
-    assert "refreshShipyardStateCoalesced(syPage)" in prod_sync
-    assert "pending.defense && !pending.gameState" in prod_sync
+    prod_sync = src.split("function requestProductionCompletionSync(opts)")[1].split("function requestQueueTimerZeroRefresh")[0]
+    assert "requestQueueTimerZeroRefresh" in prod_sync
+    assert "refreshShipyardStateCoalesced(syPage)" not in prod_sync
 
     apply = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function refreshPageAfterQueueEvent")[0]
     assert "syncProductionPanelsAfterGameState(data, reason, activePlanetId)" in apply
@@ -1500,7 +1499,7 @@ def test_main_js_gc546d_production_completion_poll_storm_guards():
 
     finish = src.split("function requestFinishRefresh(type)")[1].split("function releaseFinishRefreshLock")[0]
     assert 'type === "shipyard"' in finish
-    assert "requestProductionCompletionSync({ gameState: true, shipyard: true })" in finish
+    assert "requestQueueTimerZeroRefresh" in finish
 
     defense_timers = src.split("function startDefenseTimers()")[1].split("function bindDefenseOnce")[0]
     assert "setInterval" not in defense_timers
@@ -1819,12 +1818,13 @@ def test_main_js_gc539_same_type_queue_patch_and_timer_zero():
     assert "function reorderCardQueueBlocks(cardEl)" in src
     assert "function syncCardQueueOwnerClassesFromBlocks(cardEl, fallbackDomain)" in src
     assert "function requestQueueTimerZeroRefresh(meta)" in src
-    assert 'GC.refreshGameState("queue_timer_zero")' in src
+    assert "forceCanonicalGameStateRefresh(\"queue_timer_zero\")" in src
     timer_zero_fn = src.split("function requestQueueTimerZeroRefresh(meta)")[1].split(
         "function markCardQueueZeroRefresh"
     )[0]
+    assert "forceCanonicalGameStateRefresh" in timer_zero_fn
     assert "refreshShipyardStateCoalesced" not in timer_zero_fn
-    assert "QUEUE_TIMER_ZERO_DEBOUNCE_MS = 80" in src
+    assert "QUEUE_TIMER_ZERO_DEBOUNCE_MS = 150" in src
     assert "function markCardQueueZeroRefresh(block, jobId, finishAt)" in src
     assert "function isQueueTimerComplete(remaining, finishAt, serverNow)" in src
     assert "function queueTimerDisplaySeconds(remaining)" in src
@@ -2123,3 +2123,39 @@ def test_main_js_imperial_directive_expire_timer_targets_label_only():
     assert "data-directive-expires-at" in tpl
     assert "data-directive-expires-label" in tpl
     assert 'data-directive-expires="{{' not in tpl
+
+
+def test_main_js_notification_poll_singleton_heartbeat():
+    """Lightweight ~1s notification poll — unread/attack only, no full game-state."""
+    src = _read("static/main.js")
+    assert "const NOTIFICATION_POLL_MS = 1000" in src
+    assert '"/api/notifications/summary"' in src
+    assert "function applyNotificationSummary(data, reason)" in src
+    assert "GC.startNotificationPoll" in src
+    assert "GC.stopNotificationPoll" in src
+    start_poll = src.split("GC.startPolling = function startPolling")[1].split("function scheduleMessagesInboxBoot")[0]
+    assert "GC.startNotificationPoll()" in start_poll
+    coerce = src.split("function coercePollUnreadForHud(data, reason)")[1].split("function updateMessagesUnreadBadges")[0]
+    assert 'r === "notification_poll"' in coerce
+    assert 'r === "queue_timer_zero"' in coerce
+
+
+def test_main_js_force_canonical_refresh_on_timer_zero():
+    """Timer zero must fetch include_panel=1 and apply with forcePanel."""
+    src = _read("static/main.js")
+    assert "async function forceCanonicalGameStateRefresh(reason, opts)" in src
+    assert '"/api/game-state?include_panel=1"' in src.split("async function forceCanonicalGameStateRefresh")[1].split("GC.forceCanonicalGameStateRefresh")[0]
+    timer_zero = src.split("function requestQueueTimerZeroRefresh(meta)")[1].split("function markCardQueueZeroRefresh")[0]
+    assert "forceCanonicalGameStateRefresh" in timer_zero
+    assert "QUEUE_TIMER_ZERO_DEBOUNCE_MS = 150" in src
+    assert "TIMER_ZERO_REFRESH_MIN_MS = 250" in src
+
+
+def test_main_js_unread_increase_plays_sound_without_inbox():
+    """Unread increase triggers sound via notification poll — inbox open not required."""
+    src = _read("static/main.js")
+    unread_fn = src.split("function _processUnreadMessagesPoll(data, reason, opts)")[1].split("function updateNavBadges")[0]
+    assert "_maybePlayMessageNotifySound(data, { unreadIncreased })" in unread_fn
+    assert "_lastMessagesUnreadPoll = hudUnread" in unread_fn
+    notif = src.split("function applyNotificationSummary(data, reason)")[1].split("function scheduleNotificationPoll")[0]
+    assert "_processUnreadMessagesPoll(hudSlice, reasonStr, {})" in notif

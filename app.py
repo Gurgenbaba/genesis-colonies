@@ -6961,6 +6961,24 @@ def api_status():
     return api_game_state()
 
 
+@app.route("/api/notifications/summary")
+@require_login
+def api_notifications_summary():
+    """Lightweight ~1s client heartbeat — unread + attack alerts only (no queue finish)."""
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+
+    from game.live_state import notification_summary_for_client
+
+    conn = db()
+    try:
+        payload = notification_summary_for_client(user_id, conn=conn)
+        return jsonify(payload)
+    finally:
+        conn.close()
+
+
 @app.route("/api/game-state")
 @require_login
 def api_game_state():

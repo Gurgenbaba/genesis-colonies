@@ -127,7 +127,7 @@ def test_api_game_state_energy_after_energy_tech_finish(game_client):
     assert r1.status_code == 200
     data = r1.get_json()
     assert data["ok"] is True
-    assert float(data["energy"]["mine_energy_factor"]) == pytest.approx(0.95, rel=0.01)
+    assert float(data["energy"]["mine_energy_factor"]) == pytest.approx(0.99, rel=0.01)
     assert int(data["energy"]["used"]) < used_before
     assert data["overview"]["energy_hint"] in ("ok", "low", "zero")
     assert int(data["buildings"]["metal_mine"]) >= 6
@@ -631,6 +631,126 @@ def test_game_state_account_safety_keeps_vacation_after_min_duration(game_client
     assert safety.get("vacation_active") is True
     assert safety.get("vacation_can_disable") is True
     assert int(body.get("player_id") or 0) == pid
+
+
+def test_api_include_panel_finishes_due_build_level(game_client):
+    client, pid = game_client
+    planet = get_homeworld(player_id=pid)
+    planet_id = int(planet["id"])
+    _set_buildings(pid, {"metal_mine": 4, "solar_plant": 2})
+    now = time.time()
+    add_build_job(planet_id, "metal_mine", now - 120, now - 1)
+
+    body = client.get("/api/game-state?include_panel=1").get_json()
+    assert body.get("ok") is True
+    assert int((body.get("buildings") or {}).get("metal_mine") or 0) == 5
+    bq = body.get("build_queue") or {}
+    metal_jobs = [
+        j
+        for j in (bq.get("queue") or [])
+        if str(j.get("building_type") or j.get("building") or "") == "metal_mine"
+    ]
+    assert len(metal_jobs) == 0
+
+
+def test_api_include_panel_finishes_due_ship_delivery(game_client):
+    from game.shipyard import build_ship
+
+    client, pid = game_client
+    planet = get_homeworld(player_id=pid)
+    planet_id = int(planet["id"])
+    conn = db()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE planets SET metal = ?, crystal = ? WHERE id = ?;",
+        (100_000, 100_000, planet_id),
+    )
+    cur.execute(
+        """
+        UPDATE planet_buildings
+        SET orbital_shipyard = 1, research_lab = 10, command_center = 10, barracks = 10
+        WHERE planet_id = ?;
+        """,
+        (planet_id,),
+    )
+    for tech in ("energy_tech", "mining_tech", "drone_tech", "engine_tech"):
+        cur.execute(
+            """
+            INSERT INTO research_levels (user_id, tech_key, level)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;
+            """,
+            (pid, tech, 10),
+        )
+    conn.commit()
+    ok, reason, _ = build_ship(
+        player_id=pid, planet_id=planet_id, ship_key="mule_courier", amount=1, conn=conn
+    )
+    assert ok, reason
+    cur.execute(
+        "UPDATE shipyard_queue SET finish_at = ? WHERE planet_id = ?;",
+        (time.time() - 1, planet_id),
+    )
+    conn.commit()
+    conn.close()
+
+    body = client.get("/api/game-state?include_panel=1").get_json()
+    assert body.get("ok") is True
+    sy = body.get("shipyard") or {}
+    ships_block = sy.get("ships") or {}
+    current = ships_block.get("current_ships") or {}
+    assert int(current.get("mule_courier") or 0) >= 1
+
+
+def test_api_include_panel_finishes_due_research_level(game_client):
+    client, pid = game_client
+    _set_buildings(pid, {"research_lab": 3, "solar_plant": 1})
+    save_research_level("energy_tech", 7, pid)
+    now = time.time()
+    conn = db()
+    conn.execute(
+        "INSERT INTO research_queue (user_id, tech_key, start_at, finish_at) VALUES (?, ?, ?, ?);",
+        (pid, "energy_tech", now - 60, now - 1),
+    )
+    conn.commit()
+    conn.close()
+
+    body = client.get("/api/game-state?include_panel=1").get_json()
+    assert body.get("ok") is True
+    techs = (body.get("research") or {}).get("techs") or []
+    energy = next((t for t in techs if t.get("key") == "energy_tech"), None)
+    assert energy is not None
+    assert int(energy.get("level") or 0) == 8
+
+
+def test_api_notifications_summary_lightweight(game_client):
+    client, _pid = game_client
+    body = client.get("/api/notifications/summary").get_json()
+    assert body.get("ok") is True
+    assert "unread_messages_count" in body
+    assert "latest_message_id" in body
+    assert "fleet_alerts" in body
+    assert "notification_revision" in body
+    assert "buildings" not in body
+    assert "build_queue" not in body
+    assert "shipyard" not in body
+
+
+def test_api_notifications_summary_unread_after_message(game_client):
+    from game.messages import create_message
+
+    client, pid = game_client
+    conn = db()
+    try:
+        result = create_message(pid, "Live test", "Unread heartbeat", conn=conn)
+        assert result.get("ok") is True
+        conn.commit()
+    finally:
+        conn.close()
+
+    body = client.get("/api/notifications/summary").get_json()
+    assert body.get("ok") is True
+    assert int(body.get("unread_messages_count") or 0) >= 1
 
 
 def test_main_js_gc541_server_time_fallback_chain():
