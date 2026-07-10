@@ -69,6 +69,7 @@ from .expedition_events import (
     calculate_expedition_loot_cap,
     count_expedition_ships,
     expedition_daily_efficiency_multiplier,
+    expedition_daily_status,
     get_expedition_daily_expo_value,
     grant_expedition_lootboxes,
     record_expedition_daily_value,
@@ -1471,8 +1472,10 @@ def build_fleet_send_preview(
             payload["attack_limit"] = attack_limit_payload
         if noob_protection_payload:
             payload["noob_protection"] = noob_protection_payload
-        if mission == "expedition" and ships_n:
-            payload["expedition_rating"] = build_expedition_fleet_rating(ships_n)
+        if mission == "expedition":
+            payload["expedition_daily"] = expedition_daily_status(player_id, conn=conn)
+            if ships_n:
+                payload["expedition_rating"] = build_expedition_fleet_rating(ships_n)
         return payload
     finally:
         if own and conn is not None:
@@ -4902,6 +4905,7 @@ def preview_mass_expedition_slot_split(
             "per_fleet_ships": {},
             "leftover_ships": {},
             "started_count": 0,
+            "expedition_daily": expedition_daily_status(int(player_id), conn=conn),
         }
         if free_slots <= 0:
             return False, "fleet_slots_full", meta
@@ -6065,6 +6069,7 @@ def build_fleet_page_context(
             "shipyard_url": "/shipyard",
             "speed_options": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
             "mission_locks": _fleet_mission_locks_for_client(conn=conn),
+            "expedition_daily": expedition_daily_status(int(player_id), conn=conn),
         }
     finally:
         if ssr is not None:

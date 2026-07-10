@@ -551,15 +551,20 @@ def record_expedition_daily_value(
 
 def expedition_daily_status(player_id: int, *, conn, ts: float | None = None) -> Dict[str, Any]:
     """HUD/report slice — today's accumulated expo_value and current efficiency."""
-    daily = get_expedition_daily_expo_value(player_id, conn=conn, ts=ts)
+    import time
+
+    now = float(ts if ts is not None else time.time())
+    daily = get_expedition_daily_expo_value(player_id, conn=conn, ts=now)
     eff = expedition_daily_efficiency_multiplier(daily)
     ref = expedition_daily_reference_unit()
+    bucket = expedition_daily_day_bucket(now)
     return {
-        "day_bucket": expedition_daily_day_bucket(ts),
+        "day_bucket": bucket,
         "daily_expo_value": int(daily),
         "daily_efficiency_pct": int(round(eff * 100)),
         "daily_efficiency_mult": float(eff),
         "reference_expo_unit": int(ref),
+        "reset_at": int((bucket + 1) * 86400),
     }
 
 

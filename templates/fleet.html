@@ -307,6 +307,18 @@
                 <dt>{{ T("fleet_mass_expo_split_leftover") }}</dt>
                 <dd data-fleet-mass-expo-leftover>—</dd>
               </div>
+              <div class="fleet-mass-expo-split-preview-row fleet-expedition-daily-row" data-fleet-expedition-daily>
+                <dt>
+                  <span title="{{ T('fleet_expedition_daily_efficiency_tooltip') }}">{{ T("fleet_expedition_daily_efficiency_label") }}</span>
+                </dt>
+                <dd>
+                  <span class="fleet-expedition-daily-value">
+                    <span class="fleet-expedition-daily-dot" data-fleet-expedition-daily-dot aria-hidden="true"></span>
+                    <span data-fleet-expedition-daily-pct>—</span>
+                  </span>
+                  <span class="fleet-expedition-daily-reset gc-mono" data-fleet-expedition-daily-reset></span>
+                </dd>
+              </div>
             </dl>
             <p class="fleet-mass-expo-split-status" data-fleet-mass-expo-split-status hidden></p>
             <button type="button"
@@ -390,6 +402,14 @@
               <div class="fleet-preview-stat">
                 <span class="fleet-preview-stat-label">{{ T("fleet_preview_fuel_available") }}</span>
                 <span class="fleet-preview-stat-value gc-mono" data-preview-fuel-available>–</span>
+              </div>
+              <div class="fleet-preview-stat fleet-preview-stat--expedition-daily" data-preview-expedition-daily-row hidden>
+                <span class="fleet-preview-stat-label" title="{{ T('fleet_expedition_daily_efficiency_tooltip') }}">{{ T("fleet_expedition_daily_efficiency_label") }}</span>
+                <span class="fleet-preview-stat-value fleet-expedition-daily-value">
+                  <span class="fleet-expedition-daily-dot" data-preview-expedition-daily-dot aria-hidden="true"></span>
+                  <span data-preview-expedition-daily-pct>–</span>
+                </span>
+                <span class="fleet-expedition-daily-reset gc-mono" data-preview-expedition-daily-reset></span>
               </div>
             </div>
           </div>

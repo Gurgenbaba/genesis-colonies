@@ -17039,6 +17039,7 @@
       const expoHoursRow = page.querySelector("[data-fleet-expedition-hours-row]");
       if (expoHoursRow) expoHoursRow.hidden = !shouldShowExpeditionHours(page, mission);
       setColonizeRowVisible(page, mission);
+      syncExpeditionDailyEfficiencyUi(page);
       page.querySelectorAll(".fleet-ship-row[data-ship-role='recycle']").forEach((row) => {
         row.classList.toggle("fleet-ship-row--mission-focus", mission === "recycle");
       });
@@ -17053,6 +17054,96 @@
       });
       return text;
     };
+
+    const expeditionDailyEfficiencyTone = (pct) => {
+      const value = Math.max(0, parseInt(pct, 10) || 0);
+      if (value >= 95) return "good";
+      if (value >= 85) return "warn";
+      if (value >= 70) return "mid";
+      return "low";
+    };
+
+    const formatExpeditionDailyReset = (resetAt, serverNow) => {
+      const target = Number(resetAt || 0);
+      const now = Number.isFinite(serverNow) ? serverNow : getTimerServerNow();
+      if (!target) return "";
+      const rem = Math.max(0, Math.ceil(target - now));
+      const time = rem > 0 ? formatCountdownRemain(rem) : tt("fleet_expedition_daily_efficiency_reset_soon", "Soon");
+      return formatMissionHint("fleet_expedition_daily_efficiency_reset", { time });
+    };
+
+    const applyExpeditionDailyEfficiencyBlock = (root, daily, opts = {}) => {
+      if (!root || !daily || typeof daily !== "object") return;
+      const pct = Math.max(0, parseInt(daily.daily_efficiency_pct, 10) || 0);
+      const tone = expeditionDailyEfficiencyTone(pct);
+      const pctEl = root.querySelector(opts.pctSelector || "[data-fleet-expedition-daily-pct]");
+      const dotEl = root.querySelector(opts.dotSelector || "[data-fleet-expedition-daily-dot]");
+      const resetEl = root.querySelector(opts.resetSelector || "[data-fleet-expedition-daily-reset]");
+      if (pctEl) pctEl.textContent = `${pct}%`;
+      if (dotEl) {
+        dotEl.className = `fleet-expedition-daily-dot fleet-expedition-daily-dot--${tone}`;
+      }
+      if (resetEl) {
+        resetEl.textContent = formatExpeditionDailyReset(daily.reset_at);
+        resetEl.dataset.ts = String(daily.reset_at || "");
+      }
+      root.hidden = false;
+      root.dataset.expeditionDailyPct = String(pct);
+      root.dataset.expeditionDailyResetAt = String(daily.reset_at || "");
+    };
+
+    const hideExpeditionDailyEfficiencyBlock = (root) => {
+      if (!root) return;
+      root.hidden = true;
+      delete root.dataset.expeditionDailyPct;
+      delete root.dataset.expeditionDailyResetAt;
+    };
+
+    const syncExpeditionDailyEfficiencyUi = (page, daily) => {
+      if (!page) return;
+      const rt = getFleetRuntime(page);
+      if (daily && typeof daily === "object") {
+        rt.data.expedition_daily = daily;
+      }
+      const payload = rt.data?.expedition_daily;
+      if (!payload) return;
+
+      page.querySelectorAll("[data-fleet-expedition-daily]").forEach((block) => {
+        applyExpeditionDailyEfficiencyBlock(block, payload, {
+          pctSelector: "[data-fleet-expedition-daily-pct]",
+          dotSelector: "[data-fleet-expedition-daily-dot]",
+          resetSelector: "[data-fleet-expedition-daily-reset]",
+        });
+      });
+
+      const form = getForm(page);
+      const mission = form?.querySelector("[data-fleet-mission]")?.value || "transport";
+      const previewRow = page.querySelector("[data-preview-expedition-daily-row]");
+      if (previewRow) {
+        if (mission === "expedition") {
+          applyExpeditionDailyEfficiencyBlock(previewRow, payload, {
+            pctSelector: "[data-preview-expedition-daily-pct]",
+            dotSelector: "[data-preview-expedition-daily-dot]",
+            resetSelector: "[data-preview-expedition-daily-reset]",
+          });
+        } else {
+          hideExpeditionDailyEfficiencyBlock(previewRow);
+        }
+      }
+    };
+
+    const tickExpeditionDailyEfficiencyResets = (page) => {
+      if (!page) return;
+      const now = getTimerServerNow();
+      page.querySelectorAll("[data-fleet-expedition-daily-reset], [data-preview-expedition-daily-reset]").forEach((el) => {
+        const ts = Number(el.dataset.ts || 0);
+        if (!ts) return;
+        el.textContent = formatExpeditionDailyReset(ts, now);
+      });
+    };
+
+    GC.syncExpeditionDailyEfficiencyUi = syncExpeditionDailyEfficiencyUi;
+    GC.tickExpeditionDailyEfficiencyResets = tickExpeditionDailyEfficiencyResets;
 
     const resolveMissionFeedback = (page, missionType, preview, ships) => {
       const mission = String(missionType || "transport").toLowerCase();
@@ -17486,6 +17577,8 @@
           const fbText = missionFeedback.querySelector("[data-fleet-mission-feedback-text]");
           if (fbText) fbText.textContent = "";
         }
+        const previewDailyRow = page.querySelector("[data-preview-expedition-daily-row]");
+        if (previewDailyRow) hideExpeditionDailyEfficiencyBlock(previewDailyRow);
         if (sendBtn) sendBtn.disabled = true;
       };
       if (!Object.keys(ships).length) {
@@ -17602,6 +17695,7 @@
           }
           if (sendBtn) sendBtn.disabled = !p.can_send;
           updateFleetTargetInlineError(page, null);
+          if (p.expedition_daily) syncExpeditionDailyEfficiencyUi(page, p.expedition_daily);
         } else {
           resetPreview();
         }
@@ -17834,6 +17928,7 @@
         if (res?.ok) {
           setStatus("", { hidden: true });
           if (submitBtn) submitBtn.disabled = false;
+          if (preview.expedition_daily) syncExpeditionDailyEfficiencyUi(page, preview.expedition_daily);
           return;
         }
 
@@ -19087,6 +19182,19 @@
     if (typeof GC.scheduleMassExpoSplitPreview === "function") {
       GC.scheduleMassExpoSplitPreview(page);
     }
+    if (typeof GC.syncExpeditionDailyEfficiencyUi === "function") {
+      GC.syncExpeditionDailyEfficiencyUi(page);
+    }
+    const expeditionDailyTick = () => {
+      const live = document.getElementById("fleet-page");
+      if (!live || live.dataset.ready !== "1") return;
+      if (typeof GC.tickExpeditionDailyEfficiencyResets === "function") {
+        GC.tickExpeditionDailyEfficiencyResets(live);
+      }
+    };
+    expeditionDailyTick();
+    const expeditionDailyTimer = setInterval(expeditionDailyTick, 1000);
+    GC.registerCleanup(() => clearInterval(expeditionDailyTimer));
   }
 
   function applyFleetUrlPrefill(page) {

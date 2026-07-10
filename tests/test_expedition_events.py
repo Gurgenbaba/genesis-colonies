@@ -1259,3 +1259,15 @@ def test_record_expedition_daily_value_idempotent(fleet_db):
     assert get_expedition_daily_expo_value(uid, conn=conn, ts=ts) == 1200
     conn.commit()
     conn.close()
+
+
+def test_expedition_daily_status_includes_reset_at(fleet_db):
+    from game.db import db
+    from game.expedition_events import expedition_daily_status
+
+    conn = db()
+    ts = 1_700_000_000.0
+    status = expedition_daily_status(42, conn=conn, ts=ts)
+    assert status["daily_efficiency_pct"] == 100
+    assert status["reset_at"] == int((int(ts // 86400) + 1) * 86400)
+    conn.close()

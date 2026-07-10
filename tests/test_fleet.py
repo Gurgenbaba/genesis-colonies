@@ -1732,6 +1732,9 @@ def test_expedition_preview_slot_requires_expedition_mission(fleet_db):
     allowed = build_fleet_send_preview(player_id=uid, origin_planet=origin, target_galaxy=g, target_system=s, target_position=EXPEDITION_POSITION, mission_type='expedition', ships={'solar_skiff': 1}, resources={}, speed_percent=100, conn=conn)
     assert allowed['can_send'] is True
     assert allowed['target']['target_type'] == 'expedition_slot'
+    daily = allowed.get('expedition_daily') or {}
+    assert daily.get('daily_efficiency_pct') == 100
+    assert int(daily.get('reset_at') or 0) > 0
     assert int(allowed['cargo_total']) == calculate_expedition_loot_cap({'solar_skiff': 1})
     assert int(allowed['cargo_total']) != calculate_total_cargo({'solar_skiff': 1, 'falcon_interceptor': 5})
     conn.close()
@@ -3359,7 +3362,7 @@ def test_fleet_ui_active_buttons_have_handlers():
     js = (root / 'static' / 'main.js').read_text(encoding='utf-8')
     assert 'fleet-dev-panel' not in tpl
     assert 'data-fleet-dev-seed' not in tpl
-    required_bindings = ['bindFleetOnce', 'applyQuickTarget', '[data-ship-max]', '[data-ship-max-image]', '[data-fleet-res-max]', '[data-fleet-expedition-shortcut]', '[data-fleet-quick-target-select]', '[data-fleet-save-preset]', '[data-preset-load]', '[data-preset-delete]', '/api/shipyard/build', '/api/fleet/preview', '/api/fleet/send', '/api/fleet/mass-expedition', '/api/fleet/state', 'rt.sending', 'data-fleet-send-btn', 'data-preview-target-type', 'data-fleet-mission-feedback', 'updateMissionFeedback', 'applyExpeditionTarget', 'applyFleetUrlPrefill', 'syncExpeditionMissionTarget', 'updateFleetFormMode', 'shouldShowExpeditionHours', 'data-preview-mission-badge', 'data-fleet-expedition-shortcut', 'submitMassExpedition', 'data-fleet-mass-expo-submit', 'initHudSelects', 'data-gc-hud-select', 'tickFleetCountdowns', 'fleetRefreshBusy']
+    required_bindings = ['bindFleetOnce', 'applyQuickTarget', '[data-ship-max]', '[data-ship-max-image]', '[data-fleet-res-max]', '[data-fleet-expedition-shortcut]', '[data-fleet-quick-target-select]', '[data-fleet-save-preset]', '[data-preset-load]', '[data-preset-delete]', '/api/shipyard/build', '/api/fleet/preview', '/api/fleet/send', '/api/fleet/mass-expedition', '/api/fleet/state', 'rt.sending', 'data-fleet-send-btn', 'data-preview-target-type', 'data-fleet-mission-feedback', 'updateMissionFeedback', 'applyExpeditionTarget', 'applyFleetUrlPrefill', 'syncExpeditionMissionTarget', 'updateFleetFormMode', 'shouldShowExpeditionHours', 'data-preview-mission-badge', 'data-fleet-expedition-shortcut', 'submitMassExpedition', 'data-fleet-mass-expo-submit', 'syncExpeditionDailyEfficiencyUi', 'data-preview-expedition-daily-row', 'initHudSelects', 'data-gc-hud-select', 'tickFleetCountdowns', 'fleetRefreshBusy']
     for needle in required_bindings:
         assert needle in js, f'missing initFleet binding: {needle}'
     assert 'GC.modules.fleet = initFleet' in js

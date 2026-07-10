@@ -8343,6 +8343,52 @@ body:not(.gc-perf-idle) .research-bar-fill{
   padding-top: 0;
 }
 
+.gc-unit-rapid-fire-grid{
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem 0.85rem;
+}
+@media (max-width: 640px){
+  .gc-unit-rapid-fire-grid{
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.gc-unit-rapid-fire-col{
+  min-width: 0;
+}
+.gc-unit-rapid-fire-list{
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.gc-unit-rapid-fire-row{
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 0.4rem;
+  align-items: center;
+  padding: 0.25rem 0.35rem;
+  border: 1px solid rgba(70, 229, 255, 0.12);
+  background: rgba(0, 0, 0, 0.18);
+}
+.gc-unit-rapid-fire-icon{
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+.gc-unit-rapid-fire-name{
+  font-size: 0.78rem;
+  line-height: 1.25;
+  word-break: break-word;
+}
+.gc-unit-rapid-fire-value{
+  font-size: 0.72rem;
+  color: var(--gc-text-soft);
+  white-space: nowrap;
+}
+
 .gc-tech-formula{
   margin-top: 2px;
 }
@@ -15706,6 +15752,40 @@ body.gc-techtree-media-zoom-open{
   margin: 0 0 0.55rem;
   font-size: 0.78rem;
   color: #ff9b7a;
+}
+.fleet-expedition-daily-value{
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 600;
+}
+.fleet-expedition-daily-dot{
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: var(--gc-text-soft);
+}
+.fleet-expedition-daily-dot--good{ background: #4ade80; }
+.fleet-expedition-daily-dot--warn{ background: #facc15; }
+.fleet-expedition-daily-dot--mid{ background: #fb923c; }
+.fleet-expedition-daily-dot--low{ background: #f87171; }
+.fleet-expedition-daily-reset{
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  color: var(--gc-text-soft);
+}
+.fleet-preview-stat--expedition-daily{
+  grid-column: 1 / -1;
+}
+.fleet-preview-stat--expedition-daily .fleet-expedition-daily-reset{
+  margin-top: 0.2rem;
+}
+.fleet-expedition-daily-row dd{
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
 }
 .fleet-mass-expo-legacy{
   border: 1px solid rgba(0, 212, 255, 0.14);

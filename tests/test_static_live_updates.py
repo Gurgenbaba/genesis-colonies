@@ -171,10 +171,19 @@ def test_gc620f_expedition_preview_jackpot_hint():
     """GC-620F: fleet preview hints mention rare cargo jackpots; no frontend cap math."""
     main = _read("static/main.js")
     assert "fleet_expedition_hint_jackpot" in main
+    assert "syncExpeditionDailyEfficiencyUi" in main
+    assert "data-preview-expedition-daily-row" in main
     de = json.loads(_read("locales/de.json"))
     en = json.loads(_read("locales/en.json"))
     assert "fleet_expedition_hint_jackpot" in de
     assert "fleet_expedition_hint_jackpot" in en
+    for key in (
+        "fleet_expedition_daily_efficiency_label",
+        "fleet_expedition_daily_efficiency_reset",
+        "fleet_expedition_daily_efficiency_tooltip",
+    ):
+        assert key in de, f"missing de locale key {key}"
+        assert key in en, f"missing en locale key {key}"
 
 
 def test_chat_js_poll_updates_last_id_and_resume_bootstrap():

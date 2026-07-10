@@ -82,6 +82,9 @@ def test_preview_mass_expedition_slot_split_success(fleet_db):
     assert preview["reserved_slots"] == MASS_EXPEDITION_SLOT_RESERVE
     assert preview["per_fleet_ships"]["solar_skiff"] == 70000 // usable
     assert preview["started_count"] == usable
+    daily = preview.get("expedition_daily") or {}
+    assert daily.get("daily_efficiency_pct") == 100
+    assert int(daily.get("reset_at") or 0) > 0
     conn.close()
 
 
@@ -393,6 +396,8 @@ def test_fleet_page_mass_expo_split_ui_contract(fleet_db, monkeypatch):
     html = client.get("/fleet").get_data(as_text=True)
     assert "data-fleet-mass-expo-split" in html
     assert "data-fleet-mass-expo-split-submit" in html
+    assert "data-fleet-expedition-daily" in html
+    assert "data-preview-expedition-daily-row" in html
     assert "data-fleet-mass-expo-legacy" in html
 
 
