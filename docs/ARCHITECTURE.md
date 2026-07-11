@@ -340,6 +340,63 @@ Chat (`static/js/chat.js`) und Messages (`static/js/messages.js`) haben eigenes 
 
 ---
 
+## Request Performance Trace (GC-PERF-REQUEST-TRACE)
+
+Abschaltbares Server-Logging für **langsame HTTP-Requests** — ergänzt `GC_PERF_DEBUG` (Actions) und `GC_SSR_PERF_DEBUG` (SSR-Seiten), ersetzt sie nicht.
+
+### Flags
+
+| Variable | Default | Bedeutung |
+|----------|---------|-----------|
+| `GC_REQUEST_PERF_DEBUG` | `0` | `1` = Request-Trace aktiv |
+| `GC_PERF_DEBUG` | `0` | Aktiviert implizit auch Request-Trace (konsistent mit GC-841) |
+| `GC_REQUEST_PERF_SLOW_MS` | `500` | Nur Requests mit `total_ms` ≥ Schwellwert loggen |
+| `GC_REQUEST_PERF_SAMPLE` | `1.0` | Anteil gemessener Requests (`0.0`–`1.0`) |
+
+### Production-Empfehlung (Railway)
+
+```env
+GC_REQUEST_PERF_DEBUG=1
+GC_REQUEST_PERF_SLOW_MS=500
+GC_REQUEST_PERF_SAMPLE=1.0
+```
+
+30–60 Minuten unter echter Last, dann bei zu hohem Logvolumen `GC_REQUEST_PERF_SAMPLE=0.1`.
+
+### Logformat
+
+Eine Zeile pro langsamem Request:
+
+```text
+[GC REQUEST PERF] method=GET endpoint=api_game_state path=/api/game-state status=200 total_ms=842.4 bytes=28400 sample=1 finish_source=game_state_panel include_panel=1 fleet_tick_ms=45.2 finish_ms=620.0 resource_sync_ms=180.4 payload_ms=31.8 sql_count=47 db_begin_immediate_ms=12.3 db_write_transaction_ms=602.0
+```
+
+### Phasen (Owner: `game/live_state.py`)
+
+| Phase | Owner | Bedeutung |
+|-------|-------|-----------|
+| `fleet_tick_ms` | `app.py` before_request | Globaler Fleet-Tick inkl. Lock-Wartezeit |
+| `live_context_ms` | `_build_game_state_payload` | Live-Context-Laden |
+| `finish_ms` | `refresh_player_live_state` / poll path | Queue-Finish |
+| `resource_sync_ms` | `logic.py` | Ressourcen-Sync |
+| `payload_ms` | `_build_game_state_payload` | State-Payload-Aufbau |
+| `db_begin_immediate_ms` | `game/db.py` | `BEGIN IMMEDIATE` inkl. SQLite-Lock-Wait |
+| `db_write_transaction_ms` | `game/db.py` | Write-TX von Begin bis Commit/Rollback |
+
+Action-/SSR-Phasen werden beim Log aus bestehenden `ActionPerfTrace` / `SsrPerfTrace` übernommen (keine Doppelberechnung).
+
+### Datenschutz
+
+Keine Spielernamen, Session-IDs, Request-Bodies, Tokens oder SQL-Parameter. Routing über `request.endpoint`; `path` nur ergänzend.
+
+### Bekannte Grenzen
+
+- **Keine zuverlässige Einzel-SQL-Dauer** — `set_trace_callback` zählt nur (`sql_count` / `sql_write_count`), misst keine Statement-Laufzeit.
+- **Keine prozessübergreifende p95-Aggregation** — Auswertung aus strukturierten Logs (Railway Log Search).
+- **Keine Prometheus-Persistenz** in diesem Ticket.
+
+---
+
 ## Postgres-Vorbereitung
 
 `game/db.py` reserviert:

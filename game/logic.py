@@ -146,13 +146,24 @@ def read_player_live_state_for_poll(
         try:
             if need_write:
                 if should_finish:
-                    finish_player_due_work(
+                    finish_t0 = time.perf_counter()
+                    finish_result = finish_player_due_work(
                         uid,
                         conn,
                         source="game_state",
                         update_scores=True,
                         recalc_ranks=False,
                     )
+                    finish_ms = (time.perf_counter() - finish_t0) * 1000.0
+                    try:
+                        from .live_state import record_request_perf_phase, set_request_perf_meta
+
+                        record_request_perf_phase("finish_ms", finish_ms)
+                        derived = int(finish_result.get("derived_sync_count") or 0)
+                        if derived > 0:
+                            set_request_perf_meta("derived_sync_count", derived)
+                    except Exception:
+                        pass
                     record_poll_queue_finish(uid, conn=conn)
                     try:
                         from .alliance import finish_due_alliance_projects, get_player_alliance
@@ -171,11 +182,20 @@ def read_player_live_state_for_poll(
                 if not in_transaction(conn):
                     begin_write_transaction(conn)
 
+                sync_t0 = time.perf_counter()
                 planet, buildings, ratio, energy_total, energy_used = _res.update_planet_resources(
                     planet,
                     conn=conn,
                     skip_queue_finish=True,
                 )
+                try:
+                    from .live_state import record_request_perf_phase
+
+                    record_request_perf_phase(
+                        "resource_sync_ms", (time.perf_counter() - sync_t0) * 1000.0
+                    )
+                except Exception:
+                    pass
                 storage_caps = get_storage_capacity(buildings, user_id=uid, conn=conn)
 
                 if in_transaction(conn):
@@ -259,13 +279,21 @@ def refresh_player_live_state(
         ssr = current_ssr_perf()
         live_t0 = time.perf_counter()
         finish_t0 = time.perf_counter()
-        finish_player_due_work(
+        finish_result = finish_player_due_work(
             uid,
             conn,
             source=str(finish_source or "live_state"),
             update_scores=True,
             recalc_ranks=bool(recalc_ranks),
         )
+        try:
+            from .live_state import set_request_perf_meta
+
+            derived = int(finish_result.get("derived_sync_count") or 0)
+            if derived > 0:
+                set_request_perf_meta("derived_sync_count", derived)
+        except Exception:
+            pass
         try:
             from .alliance import finish_due_alliance_projects, get_player_alliance
 
@@ -279,6 +307,12 @@ def refresh_player_live_state(
             perf.add_finish_ms(finish_ms)
         if ssr is not None:
             ssr.add_finish_ms(finish_ms)
+        try:
+            from .live_state import record_request_perf_phase
+
+            record_request_perf_phase("finish_ms", finish_ms)
+        except Exception:
+            pass
 
         from .live_state import mark_request_live_refreshed
 
@@ -306,6 +340,14 @@ def refresh_player_live_state(
             perf.add_live_state_ms((time.perf_counter() - live_t0) * 1000.0)
         if ssr is not None:
             ssr.add_resource_sync_ms((time.perf_counter() - sync_t0) * 1000.0)
+        try:
+            from .live_state import record_request_perf_phase
+
+            sync_ms = (time.perf_counter() - sync_t0) * 1000.0
+            record_request_perf_phase("resource_sync_ms", sync_ms)
+            record_request_perf_phase("live_state_ms", (time.perf_counter() - live_t0) * 1000.0)
+        except Exception:
+            pass
 
         if own_conn:
             commit(conn)

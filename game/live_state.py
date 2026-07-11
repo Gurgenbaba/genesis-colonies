@@ -5,11 +5,54 @@ Request-scoped guard for the single-pass live refresh pipeline.
 from __future__ import annotations
 
 import logging
+import random
 import time
 from contextvars import ContextVar
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
+
+_REQUEST_PERF_PHASE_KEYS = frozenset(
+    {
+        "fleet_tick_ms",
+        "live_context_ms",
+        "live_state_ms",
+        "finish_ms",
+        "mutate_ms",
+        "resource_sync_ms",
+        "payload_ms",
+        "buildings_panel_ms",
+        "cards_ms",
+        "tech_data_ms",
+        "fleet_panel_ms",
+        "logistics_panel_ms",
+        "template_ms",
+        "db_begin_immediate_ms",
+        "db_write_transaction_ms",
+        "db_transaction_ms",
+    }
+)
+
+_REQUEST_PERF_META_KEYS = frozenset(
+    {
+        "finish_source",
+        "include_panel",
+        "panel_delta",
+        "fleet_tick_ran",
+        "fleet_tick_source",
+        "derived_sync_count",
+        "method",
+        "endpoint",
+        "path",
+        "status",
+        "bytes",
+        "content_type",
+        "sample",
+        "sql_count",
+        "sql_write_count",
+        "had_exception",
+    }
+)
 
 _action_perf_trace: ContextVar[Optional["ActionPerfTrace"]] = ContextVar(
     "gc_action_perf_trace", default=None
@@ -663,3 +706,324 @@ def apply_action_state_diet(payload: Dict[str, Any]) -> Dict[str, Any]:
         overview.pop("status", None)
         overview.pop("rows", None)
     return payload
+
+
+# ---------------------------------------------------------------------------
+# GC-PERF-REQUEST-TRACE — global slow-request profiling (extends GC-841/GC-853)
+# ---------------------------------------------------------------------------
+
+
+class RequestPerfState:
+    """Request-scoped timings stored on Flask ``g.gc_request_perf``."""
+
+    __slots__ = (
+        "sampled",
+        "started_at",
+        "phases",
+        "meta",
+        "sql_count",
+        "sql_write_count",
+        "logged",
+        "_write_tx_started_at",
+    )
+
+    def __init__(self, *, sampled: bool) -> None:
+        self.sampled = bool(sampled)
+        self.started_at = time.perf_counter()
+        self.phases: Dict[str, float] = {}
+        self.meta: Dict[str, Any] = {}
+        self.sql_count = 0
+        self.sql_write_count = 0
+        self.logged = False
+        self._write_tx_started_at: Optional[float] = None
+
+
+def is_request_perf_debug_enabled() -> bool:
+    from game.config import is_request_perf_debug_enabled as _enabled
+
+    return _enabled()
+
+
+def _request_perf_state() -> Optional[RequestPerfState]:
+    try:
+        from flask import g, has_request_context
+
+        if not has_request_context():
+            return None
+        return getattr(g, "gc_request_perf", None)
+    except ImportError:
+        return None
+
+
+def is_request_perf_sampled() -> bool:
+    state = _request_perf_state()
+    return bool(state and state.sampled)
+
+
+def start_request_perf(
+    *,
+    method: str = "",
+    endpoint: str = "",
+    path: str = "",
+) -> None:
+    """Begin request-scoped profiling when enabled and sampling selects this request."""
+    if not is_request_perf_debug_enabled():
+        return
+    try:
+        from flask import g, has_request_context
+
+        if not has_request_context():
+            return
+        sample_rate = 0.0
+        try:
+            from game.config import get_request_perf_sample
+
+            sample_rate = float(get_request_perf_sample())
+        except Exception:
+            sample_rate = 1.0
+        sampled = sample_rate >= 1.0 or (sample_rate > 0.0 and random.random() < sample_rate)
+        state = RequestPerfState(sampled=sampled)
+        g.gc_request_perf = state
+        if sampled:
+            set_request_perf_meta("method", str(method or ""))
+            set_request_perf_meta("endpoint", str(endpoint or ""))
+            set_request_perf_meta("path", str(path or ""))
+            set_request_perf_meta("sample", 1)
+    except Exception:
+        logger.debug("start_request_perf failed", exc_info=True)
+
+
+def record_request_perf_phase(name: str, duration_ms: float) -> None:
+    if not name or name not in _REQUEST_PERF_PHASE_KEYS:
+        return
+    try:
+        state = _request_perf_state()
+        if state is None or not state.sampled:
+            return
+        key = str(name)
+        state.phases[key] = float(state.phases.get(key, 0.0)) + max(0.0, float(duration_ms))
+    except Exception:
+        logger.debug("record_request_perf_phase failed name=%s", name, exc_info=True)
+
+
+def set_request_perf_meta(name: str, value: Any) -> None:
+    if not name or name not in _REQUEST_PERF_META_KEYS:
+        return
+    try:
+        state = _request_perf_state()
+        if state is None or not state.sampled:
+            return
+        state.meta[str(name)] = value
+    except Exception:
+        logger.debug("set_request_perf_meta failed name=%s", name, exc_info=True)
+
+
+def record_request_perf_sql_statement(sql: str) -> None:
+    """Count SQL statements via sqlite trace callback (no per-statement timing)."""
+    try:
+        state = _request_perf_state()
+        if state is None or not state.sampled:
+            return
+        state.sql_count += 1
+        normalized = str(sql or "").lstrip().upper()
+        if normalized.startswith(("INSERT", "UPDATE", "DELETE", "REPLACE")):
+            state.sql_write_count += 1
+    except Exception:
+        pass
+
+
+def attach_request_perf_sql_trace(conn) -> None:
+    if not is_request_perf_sampled():
+        return
+    try:
+        conn.set_trace_callback(record_request_perf_sql_statement)
+    except Exception:
+        pass
+
+
+def mark_request_perf_write_tx_started() -> None:
+    try:
+        state = _request_perf_state()
+        if state is None or not state.sampled:
+            return
+        state._write_tx_started_at = time.perf_counter()
+    except Exception:
+        pass
+
+
+def mark_request_perf_write_tx_finished() -> None:
+    try:
+        state = _request_perf_state()
+        if state is None or not state.sampled:
+            return
+        started = state._write_tx_started_at
+        if started is None:
+            return
+        elapsed_ms = (time.perf_counter() - float(started)) * 1000.0
+        state._write_tx_started_at = None
+        record_request_perf_phase("db_write_transaction_ms", elapsed_ms)
+        record_request_perf_phase("db_transaction_ms", elapsed_ms)
+    except Exception:
+        pass
+
+
+def _merge_existing_perf_traces(state: RequestPerfState) -> None:
+    """Reuse Action/SSR trace buckets — do not recompute the same phases."""
+    perf = current_action_perf()
+    if perf is not None:
+        for key, val in (
+            ("finish_ms", perf.finish_ms),
+            ("mutate_ms", perf.mutate_ms),
+            ("live_state_ms", perf.live_state_ms),
+            ("resource_sync_ms", perf.resource_sync_ms),
+            ("payload_ms", perf.payload_ms),
+        ):
+            if val > 0 and key not in state.phases:
+                state.phases[key] = float(val)
+    ssr = current_ssr_perf()
+    if ssr is not None:
+        for key, val in (
+            ("live_context_ms", ssr.live_context_ms),
+            ("finish_ms", ssr.finish_ms),
+            ("resource_sync_ms", ssr.resource_sync_ms),
+            ("buildings_panel_ms", ssr.buildings_panel_ms),
+            ("cards_ms", ssr.cards_ms),
+            ("tech_data_ms", ssr.tech_data_ms),
+            ("fleet_panel_ms", ssr.fleet_panel_ms),
+            ("logistics_panel_ms", ssr.logistics_panel_ms),
+            ("template_ms", ssr.template_ms),
+        ):
+            if val > 0 and key not in state.phases:
+                state.phases[key] = float(val)
+        if ssr.tab and "finish_source" not in state.meta:
+            state.meta["finish_source"] = f"{ssr.route}:{ssr.tab}"
+
+
+def _response_byte_length(response) -> int:
+    try:
+        content_length = response.headers.get("Content-Length")
+        if content_length is not None and str(content_length).strip().isdigit():
+            return int(content_length)
+    except Exception:
+        pass
+    try:
+        data = response.get_data()
+        return len(data) if data is not None else 0
+    except Exception:
+        return 0
+
+
+def _emit_request_perf_log(
+    state: RequestPerfState,
+    *,
+    status: int,
+    response_bytes: int,
+    content_type: str,
+    had_exception: bool = False,
+) -> None:
+    if state.logged:
+        return
+    try:
+        from game.config import get_request_perf_slow_ms
+
+        slow_ms = float(get_request_perf_slow_ms())
+    except Exception:
+        slow_ms = 500.0
+
+    total_ms = (time.perf_counter() - state.started_at) * 1000.0
+    if total_ms < slow_ms:
+        state.logged = True
+        return
+
+    _merge_existing_perf_traces(state)
+
+    state.meta["status"] = int(status)
+    state.meta["bytes"] = int(response_bytes or 0)
+    if content_type:
+        state.meta["content_type"] = str(content_type)
+    if had_exception:
+        state.meta["had_exception"] = 1
+    state.meta["sql_count"] = int(state.sql_count)
+    state.meta["sql_write_count"] = int(state.sql_write_count)
+
+    parts = [
+        f"method={state.meta.get('method', '')}",
+        f"endpoint={state.meta.get('endpoint', '')}",
+        f"path={state.meta.get('path', '')}",
+        f"status={int(status)}",
+        f"total_ms={round(total_ms, 1)}",
+        f"bytes={int(response_bytes or 0)}",
+        f"sample={state.meta.get('sample', 1)}",
+    ]
+
+    for meta_key in (
+        "finish_source",
+        "include_panel",
+        "panel_delta",
+        "fleet_tick_ran",
+        "fleet_tick_source",
+        "derived_sync_count",
+        "content_type",
+        "sql_count",
+        "sql_write_count",
+        "had_exception",
+    ):
+        if meta_key in state.meta:
+            parts.append(f"{meta_key}={state.meta[meta_key]}")
+
+    for phase_key in sorted(state.phases.keys()):
+        parts.append(f"{phase_key}={round(state.phases[phase_key], 1)}")
+
+    logger.info("[GC REQUEST PERF] %s", " ".join(parts))
+    state.logged = True
+
+
+def finish_request_perf_after(response):
+    """Log slow requests after the handler returns a response."""
+    state = _request_perf_state()
+    if state is None or not state.sampled:
+        return response
+    try:
+        status = int(getattr(response, "status_code", 200) or 200)
+        content_type = str(response.headers.get("Content-Type") or "")
+        response_bytes = _response_byte_length(response)
+        _emit_request_perf_log(
+            state,
+            status=status,
+            response_bytes=response_bytes,
+            content_type=content_type,
+        )
+        if not is_production_request_perf_header():
+            response.headers["X-GC-Request-Perf-Total-Ms"] = str(
+                round((time.perf_counter() - state.started_at) * 1000.0, 1)
+            )
+    except Exception:
+        logger.debug("finish_request_perf_after failed", exc_info=True)
+    return response
+
+
+def finish_request_perf_teardown(exc: BaseException | None = None) -> None:
+    """Fallback when after_request did not emit (rare); never raises."""
+    state = _request_perf_state()
+    if state is None or not state.sampled or state.logged:
+        return
+    try:
+        status = 500 if exc is not None else 0
+        _emit_request_perf_log(
+            state,
+            status=status,
+            response_bytes=0,
+            content_type="",
+            had_exception=exc is not None,
+        )
+    except Exception:
+        logger.debug("finish_request_perf_teardown failed", exc_info=True)
+
+
+def is_production_request_perf_header() -> bool:
+    try:
+        from game.config import is_production
+
+        return bool(is_production())
+    except Exception:
+        return False

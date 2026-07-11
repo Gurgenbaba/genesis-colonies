@@ -302,6 +302,16 @@ def _current_player_id() -> int | None:
 
 @app.before_request
 def choose_background():
+    from game.live_state import start_request_perf
+
+    try:
+        start_request_perf(
+            method=str(request.method or ""),
+            endpoint=str(request.endpoint or ""),
+            path=str(request.path or ""),
+        )
+    except Exception:
+        pass
     if "bg_class" not in session:
         session["bg_class"] = f"bg-{random.randint(1, 4)}"
     try:
@@ -340,10 +350,18 @@ def _fleet_tick_before_authenticated_request():
     """Isolated fleet tick before SSR routes open a long-lived page connection."""
     if not _should_run_fleet_tick_before_request():
         return None
+    ft0 = time.perf_counter()
     try:
         from game.fleet_worker import maybe_run_global_fleet_tick
+        from game.live_state import record_request_perf_phase, set_request_perf_meta
 
-        maybe_run_global_fleet_tick(force=False, source=str(request.endpoint or "request"))
+        endpoint = str(request.endpoint or "request")
+        set_request_perf_meta("fleet_tick_source", endpoint)
+        result = maybe_run_global_fleet_tick(force=False, source=endpoint)
+        record_request_perf_phase("fleet_tick_ms", (time.perf_counter() - ft0) * 1000.0)
+        if isinstance(result, dict):
+            ran = 0 if result.get("skipped_interval") else 1
+            set_request_perf_meta("fleet_tick_ran", ran)
     except Exception:
         logger.exception("before_request fleet tick failed endpoint=%s", request.endpoint)
     return None
@@ -730,7 +748,14 @@ def _session_cookie_secure() -> bool:
 def _gc_security_headers(response):
     secure = _session_cookie_secure() or bool(request.is_secure)
     response = apply_security_headers(response, secure=secure)
-    return apply_static_image_cache_headers(response)
+    response = apply_static_image_cache_headers(response)
+    try:
+        from game.live_state import finish_request_perf_after
+
+        response = finish_request_perf_after(response)
+    except Exception:
+        pass
+    return response
 
 
 def _auth_form_error_key() -> Optional[str]:
@@ -745,6 +770,12 @@ def _teardown_queue_finish_dedup(_exc=None):
     from game.queue_engine import clear_request_finish_dedup
 
     clear_request_finish_dedup()
+    try:
+        from game.live_state import finish_request_perf_teardown
+
+        finish_request_perf_teardown(_exc)
+    except Exception:
+        pass
 
 
 # --------------------------------------------------------------------------
@@ -6810,6 +6841,13 @@ def _build_game_state_payload(
     if lightweight and not force_include_panel:
         include_panel = False
 
+    from game.live_state import record_request_perf_phase, set_request_perf_meta
+
+    set_request_perf_meta("finish_source", str(finish_source or "game_state"))
+    set_request_perf_meta("include_panel", 1 if include_panel else 0)
+    if panel_delta_keys:
+        set_request_perf_meta("panel_delta", 1)
+
     conn = db()
     try:
         ctx_t0 = time.perf_counter()
@@ -6819,6 +6857,7 @@ def _build_game_state_payload(
             conn=conn,
             close_conn=False,
         )
+        record_request_perf_phase("live_context_ms", (time.perf_counter() - ctx_t0) * 1000.0)
         if ctx is None:
             return {"ok": False, "error": "not_logged_in"}, 0
 
@@ -6835,10 +6874,10 @@ def _build_game_state_payload(
         from game.live_state import current_action_perf
 
         perf = current_action_perf()
+        payload_ms = (time.perf_counter() - payload_t0) * 1000.0
         if perf is not None:
-            perf.add_payload_ms((time.perf_counter() - payload_t0) * 1000.0)
-            # live_state refresh happens inside _load_page_live_context (refresh_player_live_state)
-            _ = ctx_t0  # finish/resource_sync/live_state tracked in refresh_player_live_state
+            perf.add_payload_ms(payload_ms)
+        record_request_perf_phase("payload_ms", payload_ms)
         return payload, user_id
     finally:
         conn.close()

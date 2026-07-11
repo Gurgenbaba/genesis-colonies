@@ -194,6 +194,40 @@ def is_ssr_perf_debug_enabled() -> bool:
     return str(val).strip().lower() in ("1", "true", "yes", "on")
 
 
+def _env_float(
+    name: str,
+    default: float,
+    *,
+    minimum: float = 0.0,
+    maximum: float = 1.0,
+) -> float:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return min(maximum, max(minimum, float(raw)))
+    except ValueError:
+        return default
+
+
+def is_request_perf_debug_enabled() -> bool:
+    """GC-PERF-REQUEST-TRACE: global slow-request profiling (server logs only)."""
+    if is_action_perf_debug_enabled():
+        return True
+    val = os.environ.get("GC_REQUEST_PERF_DEBUG", "0")
+    return str(val).strip().lower() in ("1", "true", "yes", "on")
+
+
+def get_request_perf_slow_ms() -> float:
+    """Minimum total_ms before emitting a [GC REQUEST PERF] log line."""
+    return _env_float("GC_REQUEST_PERF_SLOW_MS", 500.0, minimum=0.0, maximum=600_000.0)
+
+
+def get_request_perf_sample() -> float:
+    """Fraction of requests to measure (0.0–1.0)."""
+    return _env_float("GC_REQUEST_PERF_SAMPLE", 1.0, minimum=0.0, maximum=1.0)
+
+
 def get_client_runtime_config() -> dict[str, int | bool]:
     """
     Client poll intervals (ms) injected into templates as GC_CLIENT_CONFIG.

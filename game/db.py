@@ -123,6 +123,12 @@ def db() -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=15000")
     conn.execute("PRAGMA synchronous=NORMAL")
+    try:
+        from game.live_state import attach_request_perf_sql_trace
+
+        attach_request_perf_sql_trace(conn)
+    except Exception:
+        pass
     return conn
 
 
@@ -146,12 +152,24 @@ def begin_write_transaction(conn: sqlite3.Connection, *, retries: int = 8) -> No
     _write_mutex_acquire()
     try:
         last_err: Optional[BaseException] = None
+        begin_t0 = time.perf_counter()
         for attempt in range(max(1, int(retries))):
             try:
                 if get_db_backend() == "postgres":
                     conn.execute("BEGIN")
                 else:
                     conn.execute("BEGIN IMMEDIATE")
+                begin_ms = (time.perf_counter() - begin_t0) * 1000.0
+                try:
+                    from game.live_state import (
+                        mark_request_perf_write_tx_started,
+                        record_request_perf_phase,
+                    )
+
+                    record_request_perf_phase("db_begin_immediate_ms", begin_ms)
+                    mark_request_perf_write_tx_started()
+                except Exception:
+                    pass
                 return
             except sqlite3.OperationalError as exc:
                 last_err = exc
@@ -169,12 +187,24 @@ def begin_write_transaction(conn: sqlite3.Connection, *, retries: int = 8) -> No
 
 
 def commit(conn: sqlite3.Connection) -> None:
+    try:
+        from game.live_state import mark_request_perf_write_tx_finished
+
+        mark_request_perf_write_tx_finished()
+    except Exception:
+        pass
     conn.commit()
     if not in_transaction(conn):
         _write_mutex_release()
 
 
 def rollback(conn: sqlite3.Connection) -> None:
+    try:
+        from game.live_state import mark_request_perf_write_tx_finished
+
+        mark_request_perf_write_tx_finished()
+    except Exception:
+        pass
     conn.rollback()
     if not in_transaction(conn):
         _write_mutex_release()
