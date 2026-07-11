@@ -2228,12 +2228,14 @@
   }
 
   GC.stopNotificationPoll = stopNotificationPoll;
-  GC.startNotificationPoll = function startNotificationPoll() {
+  GC.startNotificationPoll = function startNotificationPoll(deferMs) {
     if (!shouldPollGameState() || _authLoopAborted) return;
     const n = _notificationPoll;
     if (n.running) return;
     n.running = true;
-    const delay = document.hidden ? NOTIFICATION_POLL_HIDDEN_MS : NOTIFICATION_POLL_MS;
+    const delay = Number.isFinite(Number(deferMs))
+      ? Math.max(0, Number(deferMs))
+      : (document.hidden ? NOTIFICATION_POLL_HIDDEN_MS : NOTIFICATION_POLL_MS);
     scheduleNotificationPoll(delay);
   };
 
@@ -2266,12 +2268,15 @@
     GC.stopPolling();
 
     p.running = true;
-    const firstPollDelay = deferFirst ? next : p.started ? next : 0;
+    const deferFirstPoll = Boolean(deferFirst);
+    const firstPollDelay = deferFirstPoll
+      ? Math.min(next, 3000)
+      : (p.started ? next : 0);
     p.started = true;
     p.lastInterval = next;
-    console.debug("[GC] polling started", next, "ms", firstPollDelay ? "" : "(immediate first tick)");
+    console.debug("[GC] polling started", next, "ms", firstPollDelay ? `(first in ${firstPollDelay}ms)` : "(immediate first tick)");
     scheduleGameStatePoll(firstPollDelay);
-    GC.startNotificationPoll();
+    GC.startNotificationPoll(deferFirstPoll ? Math.max(2500, firstPollDelay) : undefined);
   };
 
   function scheduleMessagesInboxBoot() {
@@ -11056,7 +11061,11 @@
 
     if (GC.lastState?.active_fleets) {
       renderGlobalFleetHud(GC.lastState.active_fleets);
-    } else if (typeof GC.refreshGameState === "function" && shouldRunGameLoop()) {
+    } else if (
+      typeof GC.refreshGameState === "function"
+      && shouldRunGameLoop()
+      && !pageHasSsrLiveBoot()
+    ) {
       void GC.refreshGameState("fleet_drawer_boot");
     }
   }
@@ -32281,17 +32290,30 @@
 
     window.GC = GC;
     if (typeof teardownHudSelectPortals === "function") teardownHudSelectPortals();
-    bindBuildingTabsOnce();
     initForms();
     initOptionsFormsCapture();
     initSkipLink();
+    initLanguageSwitcher();
+    initSimplePageAmbience();
+    initMotionPreferenceListener();
+    initMobileNav();
+    initPjax();
+
+    if (!shouldRunGameLoop()) {
+      syncPerfBodyClasses();
+      try {
+        history.replaceState({ gcPjax: true }, "", window.location.href);
+      } catch (_) {}
+      return;
+    }
+
+    bindBuildingTabsOnce();
     initGameActions();
     initGlobalQueueHud();
     initGlobalFleetDrawer();
     bindPlanetEvolutionOnce();
     bindFleetOnce();
     initHeaderPlanetSwitcher();
-    initLanguageSwitcher();
     initSpecialPanel();
     initRoleBasedSidebar();
     initGcPopoversOnce();
@@ -32300,17 +32322,12 @@
     initVisibilityPolling();
     initNotificationSounds();
     initMilitaryUnitCostPreviewDelegation();
-    initMotionPreferenceListener();
-    initSimplePageAmbience();
     bootstrapPlanetLandscapeFromBoot();
-    syncPerfBodyClasses();
-    initMobileNav();
     initCodex();
     initCommunityHub();
     initSupportModule();
     initStickyResourceBar();
     initSidebarSticky();
-    initPjax();
     initShipDetailOnce();
     initBuildingTechnicalDataOnce();
     initPlayerCardOnce();
@@ -32320,6 +32337,7 @@
       if (link) GC.abortGameLoop("logout-click");
     }, true);
 
+    syncPerfBodyClasses();
     try {
       history.replaceState({ gcPjax: true }, "", window.location.href);
     } catch (_) {}

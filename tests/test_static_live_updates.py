@@ -518,7 +518,9 @@ def test_app_gc745_pjax_server_fastpath():
     app_py = _read("app.py")
     assert "def _is_pjax_request()" in app_py
     assert "def _is_lightweight_layout_request()" in app_py
-    assert "_is_pjax_request()" in app_py.split("use_poll_live_path =")[1].split("try:")[0]
+    assert "def _use_poll_live_path(finish_source: str)" in app_py
+    assert '"overview"' in app_py.split("_SSR_POLL_LIVE_SOURCES = frozenset")[1].split(")")[0]
+    assert "_use_poll_live_path(src)" in app_py.split("def _load_page_live_context(")[1].split("try:")[0]
     inject = app_py.split("def inject_globals()")[1].split("@app.route", 1)[0]
     assert "_is_lightweight_layout_request()" in inject
 
@@ -1380,6 +1382,10 @@ def test_main_js_fleet_hud_sticky_live_state():
     assert "notification_revision" in notif
     assert "fleetAlertsHudSignature" in notif
 
+    shell_once = src.split("function initShellOnce()")[1].split("// Boot")[0]
+    assert "if (!shouldRunGameLoop())" in shell_once
+    assert "pageHasSsrLiveBoot()" in src.split("function initGlobalFleetDrawer()")[1].split("GC.initGlobalFleetDrawer = initGlobalFleetDrawer")[0]
+
     fleet_py = _read("game/fleet.py")
     assert "fleets_confirmed_empty" in fleet_py
     assert "active_fleet_count" in fleet_py
@@ -2156,7 +2162,8 @@ def test_main_js_notification_poll_singleton_heartbeat():
     assert "_lastAppliedNotificationRevision" in src
     assert "fleetAlertsHudSignature" in src
     start_poll = src.split("GC.startPolling = function startPolling")[1].split("function scheduleMessagesInboxBoot")[0]
-    assert "GC.startNotificationPoll()" in start_poll
+    assert "GC.startNotificationPoll()" in start_poll or "GC.startNotificationPoll(deferFirstPoll" in start_poll
+    assert "Math.min(next, 3000)" in start_poll
     coerce = src.split("function coercePollUnreadForHud(data, reason)")[1].split("function updateMessagesUnreadBadges")[0]
     assert 'r === "notification_poll"' in coerce
     assert 'r === "queue_timer_zero"' in coerce

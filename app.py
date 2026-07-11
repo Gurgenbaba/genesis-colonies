@@ -829,7 +829,7 @@ def _load_page_live_context(
     own_conn = conn is None
     if own_conn:
         conn = db()
-    use_poll_live_path = src == "game_state" or _is_pjax_request()
+    use_poll_live_path = _use_poll_live_path(src)
     try:
         try:
             if use_poll_live_path:
@@ -929,6 +929,36 @@ def _load_page_live_context(
 def _is_game_state_poll_source(finish_source: str) -> bool:
     """Lightweight poll path (throttled persist). Panel polls use game_state_panel."""
     return str(finish_source or "") == "game_state"
+
+
+# SSR page loads — same throttled finish path as /api/game-state (GC-745 / boot perf).
+_SSR_POLL_LIVE_SOURCES = frozenset(
+    {
+        "overview",
+        "buildings",
+        "research",
+        "fleet",
+        "trader_hub",
+        "inventory",
+        "shipyard",
+        "defense",
+        "planet_evolution",
+        "techtree",
+        "alliance",
+        "auction_house",
+        "vote_center",
+        "galactic_politics",
+        "referrals",
+        "imperial_directives",
+        "combat_simulator",
+        "page_load",
+    }
+)
+
+
+def _use_poll_live_path(finish_source: str) -> bool:
+    src = str(finish_source or "")
+    return src == "game_state" or _is_pjax_request() or src in _SSR_POLL_LIVE_SOURCES
 
 
 # --------------------------------------------------------------------------

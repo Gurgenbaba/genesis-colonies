@@ -154,6 +154,16 @@ def read_player_live_state_for_poll(
                         recalc_ranks=False,
                     )
                     record_poll_queue_finish(uid, conn=conn)
+                    try:
+                        from .alliance import finish_due_alliance_projects, get_player_alliance
+
+                        membership = get_player_alliance(uid, conn=conn)
+                        if membership:
+                            finish_due_alliance_projects(
+                                conn=conn, alliance_id=int(membership["alliance_id"])
+                            )
+                    except Exception:
+                        pass
                     from .live_state import mark_request_live_refreshed
 
                     mark_request_live_refreshed()
