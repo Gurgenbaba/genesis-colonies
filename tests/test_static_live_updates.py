@@ -1375,8 +1375,10 @@ def test_main_js_fleet_hud_sticky_live_state():
     assert 'key === "active_fleets"' in patch_last
     assert "isFleetHudConfirmedEmpty(incoming)" in patch_last
 
-    hud_only = src.split("function applyHudOnlyGameState(data, reason, opts)")[1].split("// Status polling / GC.refreshGameState")[0]
-    assert hud_only.index("patchHudLastState(data, reason)") < hud_only.index("patchShellHudFromState(")
+    notif = src.split("function applyNotificationSummary(data, reason)")[1].split("function scheduleNotificationPoll")[0]
+    assert "_lastAppliedNotificationRevision" in notif
+    assert "notification_revision" in notif
+    assert "fleetAlertsHudSignature" in notif
 
     fleet_py = _read("game/fleet.py")
     assert "fleets_confirmed_empty" in fleet_py
@@ -2151,6 +2153,8 @@ def test_main_js_notification_poll_singleton_heartbeat():
     assert "function applyNotificationSummary(data, reason)" in src
     assert "GC.startNotificationPoll" in src
     assert "GC.stopNotificationPoll" in src
+    assert "_lastAppliedNotificationRevision" in src
+    assert "fleetAlertsHudSignature" in src
     start_poll = src.split("GC.startPolling = function startPolling")[1].split("function scheduleMessagesInboxBoot")[0]
     assert "GC.startNotificationPoll()" in start_poll
     coerce = src.split("function coercePollUnreadForHud(data, reason)")[1].split("function updateMessagesUnreadBadges")[0]

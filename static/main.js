@@ -1504,6 +1504,8 @@
       _fleetHudStickyPayload = null;
       _fleetHudLastAppliedVersion = 0;
       _fleetHudActionVersion = 0;
+      _lastAppliedNotificationRevision = null;
+      _lastFleetAlertsHudSig = "";
       _gameStateFetchAppliedSeq = 0;
       if (typeof syncFleetVacationNotice === "function") {
         syncFleetVacationNotice({});
@@ -2124,6 +2126,8 @@
     inFlight: false,
     abort: null,
   };
+  let _lastAppliedNotificationRevision = null;
+  let _lastFleetAlertsHudSig = "";
 
   function stopNotificationPoll() {
     const n = _notificationPoll;
@@ -2139,8 +2143,23 @@
     n.abort = null;
   }
 
+  function fleetAlertsHudSignature(alerts) {
+    if (!alerts || typeof alerts !== "object") return "";
+    return [
+      alerts.incoming_attack_count,
+      alerts.has_incoming_attack ? 1 : 0,
+      alerts.next_attack_arrival,
+      alerts.alert_key,
+    ].join("|");
+  }
+
   function applyNotificationSummary(data, reason) {
     if (!data || data.ok === false) return;
+    const revision = String(data.notification_revision ?? "");
+    if (revision && revision === _lastAppliedNotificationRevision) {
+      return;
+    }
+    if (revision) _lastAppliedNotificationRevision = revision;
     const reasonStr = String(reason || "notification_poll");
     syncServerClockFromState(data);
     const hudSlice = {
@@ -2158,8 +2177,12 @@
     }
     _processUnreadMessagesPoll(hudSlice, reasonStr, {});
     if (data.fleet_alerts) {
-      _maybePlayIncomingAttackNotify(data.fleet_alerts);
-      syncFleetAttackAlert(data.fleet_alerts);
+      const alertSig = fleetAlertsHudSignature(data.fleet_alerts);
+      if (alertSig !== _lastFleetAlertsHudSig) {
+        _lastFleetAlertsHudSig = alertSig;
+        _maybePlayIncomingAttackNotify(data.fleet_alerts);
+        syncFleetAttackAlert(data.fleet_alerts);
+      }
     }
   }
 
@@ -9706,17 +9729,20 @@
     const hudUnread = coercePollUnreadForHud(data, reason).unread_messages_count;
     const prevUnread = _lastMessagesUnreadPoll;
     const unreadIncreased = prevUnread !== null && hudUnread > prevUnread;
+    const messageSoundKey = resolveMessageNotifySoundKey(data);
 
-    console.debug("[GC] notify check", {
-      kind: "message",
-      unreadCount: hudUnread,
-      previousUnread: prevUnread,
-      unreadIncreased,
-      latestMessageId: data.latest_message_id,
-      messageSoundKey: resolveMessageNotifySoundKey(data),
-      notifyMessageSound: GC.settings?.notify_message_sound,
-      audioUnlocked: _notifyAudioUnlocked,
-    });
+    if (unreadIncreased || messageSoundKey) {
+      console.debug("[GC] notify check", {
+        kind: "message",
+        unreadCount: hudUnread,
+        previousUnread: prevUnread,
+        unreadIncreased,
+        latestMessageId: data.latest_message_id,
+        messageSoundKey,
+        notifyMessageSound: GC.settings?.notify_message_sound,
+        audioUnlocked: _notifyAudioUnlocked,
+      });
+    }
 
     _lastMessagesUnreadPoll = hudUnread;
 
@@ -10749,16 +10775,18 @@
     const active = _fleetIncomingAttackActive(data);
     const alertKey = resolveAttackAlertSoundKey(data);
 
-    console.debug("[GC] notify check", {
-      kind: "attack",
-      attackCount,
-      hasIncomingAttack: data.has_incoming_attack === true,
-      nextAttackArrival: data.next_attack_arrival,
-      alertKey,
-      active,
-      notifyAttackSound: GC.settings?.notify_attack_sound,
-      audioUnlocked: _notifyAudioUnlocked,
-    });
+    if (active && alertKey) {
+      console.debug("[GC] notify check", {
+        kind: "attack",
+        attackCount,
+        hasIncomingAttack: data.has_incoming_attack === true,
+        nextAttackArrival: data.next_attack_arrival,
+        alertKey,
+        active,
+        notifyAttackSound: GC.settings?.notify_attack_sound,
+        audioUnlocked: _notifyAudioUnlocked,
+      });
+    }
 
     if (!active || !alertKey) return;
     if (!shouldPlayNotifySoundForKey(_notifySoundStorageKey(GC_NOTIFY_SOUND_LS_ATTACK), alertKey)) {
@@ -11421,8 +11449,12 @@
     }
 
     if (data.fleet_alerts !== undefined) {
-      _maybePlayIncomingAttackNotify(data.fleet_alerts);
-      syncFleetAttackAlert(data.fleet_alerts);
+      const alertSig = fleetAlertsHudSignature(data.fleet_alerts);
+      if (alertSig !== _lastFleetAlertsHudSig) {
+        _lastFleetAlertsHudSig = alertSig;
+        _maybePlayIncomingAttackNotify(data.fleet_alerts);
+        syncFleetAttackAlert(data.fleet_alerts);
+      }
     }
 
     if (data.account_safety !== undefined) {
@@ -11721,8 +11753,6 @@
     const prod = data.production_per_hour || {};
     const storage = data.storage || {};
 
-    patchHudLastState(data, reason);
-
     patchShellHudFromState(coercePollUnreadForHud(data, reason), {
       forceResourceBar,
       skipMessagesUnread,
@@ -11751,6 +11781,7 @@
       anyActive = syncHudQueueLiveStatesFromPoll(data);
       GC.startProgressTicker();
     }
+    patchHudLastState(data, reason);
     markGameStateFetchApplied(opts);
     syncPerfBodyClasses();
     return anyActive;
@@ -29431,10 +29462,10 @@
       link.rel = "preload";
       link.as = "image";
       link.dataset.gcLcpPreload = "1";
-      document.head.appendChild(link);
     }
     if (link.getAttribute("href") === url) return;
     link.setAttribute("href", url);
+    if (!link.isConnected) document.head.appendChild(link);
     link.setAttribute("fetchpriority", "high");
     if (/\.webp(\?|$)/i.test(url)) link.type = "image/webp";
     else link.removeAttribute("type");
@@ -29456,10 +29487,10 @@
     const push = opts.push !== false;
     GC.cleanupPage();
     preserveFleetHudAcrossNavigation();
-    if (doc) syncLcpHeroPreloadFromPjaxDoc(doc);
     const main = document.getElementById("main-content");
     if (!main) throw new Error("main-content missing");
     main.innerHTML = payload.mainHtml;
+    syncLcpHeroPreload(resolveLcpHeroImageUrl(main));
     if (payload.title) document.title = payload.title;
     if (payload.serverTime) {
       document.body.dataset.serverTime = payload.serverTime;
