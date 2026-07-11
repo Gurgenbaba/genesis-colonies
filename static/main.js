@@ -9925,7 +9925,13 @@
       const incoming = normalizeActiveFleetsPayload(state.active_fleets);
       const stickyCount = Number(_fleetHudStickyPayload?.count || 0);
       const serverConfirmedEmpty = isFleetHudConfirmedEmpty(state.active_fleets);
-      if (stickyCount > 0 && incoming.count === 0 && !serverConfirmedEmpty) {
+      const stateVersion = extractStateVersion(state);
+      const canClearEmpty = canClearFleetHudToEmpty(state.active_fleets, {
+        reason: reasonStr,
+        authoritativeFleetHud: true,
+        allowEmptyClear: isMutationStatePatchReason(reasonStr) && serverConfirmedEmpty,
+      }, stateVersion);
+      if (stickyCount > 0 && incoming.count === 0 && !canClearEmpty) {
         renderGlobalFleetHud(_fleetHudStickyPayload, {
           reason: reasonStr,
           sticky: true,
@@ -9935,10 +9941,10 @@
       } else {
         renderGlobalFleetHud(state.active_fleets, {
           reason: reasonStr,
-          stateVersion: extractStateVersion(state),
+          stateVersion,
           stateContext: state,
           authoritativeFleetHud: true,
-          allowEmptyClear: isMutationStatePatchReason(reasonStr) && serverConfirmedEmpty,
+          allowEmptyClear: canClearEmpty,
         });
       }
     } else if (isMutationStatePatchReason(reasonStr)) {
@@ -10604,6 +10610,29 @@
     return data.has_incoming_attack === true || count > 0 || attacks.length > 0;
   }
 
+  function resolveFleetHudShellVisibilityMeta() {
+    const sticky = _fleetHudStickyPayload;
+    const stickyCount = Number(sticky?.count || 0);
+    if (stickyCount > 0) {
+      return { fleetCount: stickyCount, explicitEmpty: false };
+    }
+    if (sticky && sticky.fleets_confirmed_empty === true && stickyCount === 0) {
+      return { fleetCount: 0, explicitEmpty: true };
+    }
+    const root = document.getElementById("global-fleet-drawer-root") || document.querySelector("[data-global-fleet-drawer]");
+    const domRows = root
+      ? root.querySelectorAll("[data-fleet-drawer-row][data-movement-id]").length
+      : 0;
+    const fromState = GC.lastState?.active_fleets;
+    const stateCount = normalizeActiveFleetsPayload(fromState).count;
+    const fleetCount = Math.max(stateCount, domRows);
+    const explicitEmpty = fleetCount === 0
+      && domRows === 0
+      && isExplicitEmptyActiveFleets(fromState);
+    return { fleetCount, explicitEmpty };
+  }
+  GC.resolveFleetHudShellVisibilityMeta = resolveFleetHudShellVisibilityMeta;
+
   function _syncFleetHudShellVisibility(root, fleetCount, alerts, opts) {
     if (!root) return;
     const hasAlert = _fleetIncomingAttackActive(alerts);
@@ -10750,8 +10779,8 @@
       if (alertRow) {
         alertRow.remove();
       }
-      const fleetCount = normalizeActiveFleetsPayload(GC.lastState?.active_fleets).count;
-      _syncFleetHudShellVisibility(root, fleetCount, data, { explicitEmpty: isExplicitEmptyActiveFleets(GC.lastState?.active_fleets) });
+      const shellMeta = resolveFleetHudShellVisibilityMeta();
+      _syncFleetHudShellVisibility(root, shellMeta.fleetCount, data, { explicitEmpty: shellMeta.explicitEmpty });
       return;
     }
 
@@ -10790,8 +10819,8 @@
       root.prepend(alertRow);
     }
 
-    const fleetCount = normalizeActiveFleetsPayload(GC.lastState?.active_fleets).count;
-    _syncFleetHudShellVisibility(root, fleetCount, data, { explicitEmpty: isExplicitEmptyActiveFleets(GC.lastState?.active_fleets) });
+    const shellMeta = resolveFleetHudShellVisibilityMeta();
+    _syncFleetHudShellVisibility(root, shellMeta.fleetCount, data, { explicitEmpty: shellMeta.explicitEmpty });
     updateFleetAttackAlertCountdown(getTimerServerNow());
     GC.startProgressTicker();
   }
@@ -11692,6 +11721,8 @@
     const prod = data.production_per_hour || {};
     const storage = data.storage || {};
 
+    patchHudLastState(data, reason);
+
     patchShellHudFromState(coercePollUnreadForHud(data, reason), {
       forceResourceBar,
       skipMessagesUnread,
@@ -11720,7 +11751,6 @@
       anyActive = syncHudQueueLiveStatesFromPoll(data);
       GC.startProgressTicker();
     }
-    patchHudLastState(data, reason);
     markGameStateFetchApplied(opts);
     syncPerfBodyClasses();
     return anyActive;
@@ -17492,7 +17522,10 @@
       if (state.active_fleets !== undefined) {
         rt.data.active_fleets = activeFleetsItems(state.active_fleets);
         if (typeof GC.renderGlobalFleetHud === "function") {
-          GC.renderGlobalFleetHud(state.active_fleets);
+          GC.renderGlobalFleetHud(state.active_fleets, {
+            reason: "fleet_live_state",
+            authoritativeFleetHud: true,
+          });
         }
       }
       if (state.mission_locks) {

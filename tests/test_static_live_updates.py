@@ -1344,7 +1344,7 @@ def test_main_js_fleet_hud_sticky_live_state():
     assert "_gameStateFetchAppliedSeq" in src
     assert "markGameStateFetchApplied" in src
     assert "_fetchSeq: fetchSeq" in src
-    assert "preserveFleetHudAcrossNavigation()" in src.split("GC.navigateTo = async function navigateTo")[1].split("function initPjax")[0]
+    assert "preserveFleetHudAcrossNavigation()" in src.split("async function applyPjaxPayload(url, payload, doc, opts = {})")[1].split("function pjaxPayloadFromDoc")[0]
     assert "patchFleetHudFromActionPayload(json, reasonStr)" in src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]
     assert "mergeFleetMovementIntoHud(payload.fleet" in src
 
@@ -1362,12 +1362,21 @@ def test_main_js_fleet_hud_sticky_live_state():
     assert "hasExistingRows" in shell_vis
     assert "explicitEmpty" in shell_vis
 
+    assert "function resolveFleetHudShellVisibilityMeta()" in src
+    assert "GC.resolveFleetHudShellVisibilityMeta = resolveFleetHudShellVisibilityMeta" in src
+    sync_alert = src.split("function syncFleetAttackAlert(alerts)")[1].split("GC.syncFleetAttackAlert = syncFleetAttackAlert")[0]
+    assert "resolveFleetHudShellVisibilityMeta()" in sync_alert
+    assert "GC.lastState?.active_fleets).count" not in sync_alert
+
     patch_hud = src.split("function patchShellHudFromState(data, opts)")[1].split("GC.patchShellHudFromState = patchShellHudFromState")[0]
     assert "resolveFleetHudPayload(data.active_fleets" in patch_hud
 
     patch_last = src.split("function patchHudLastState(data, reason)")[1].split("function commitGameStateCache")[0]
     assert 'key === "active_fleets"' in patch_last
     assert "isFleetHudConfirmedEmpty(incoming)" in patch_last
+
+    hud_only = src.split("function applyHudOnlyGameState(data, reason, opts)")[1].split("// Status polling / GC.refreshGameState")[0]
+    assert hud_only.index("patchHudLastState(data, reason)") < hud_only.index("patchShellHudFromState(")
 
     fleet_py = _read("game/fleet.py")
     assert "fleets_confirmed_empty" in fleet_py
