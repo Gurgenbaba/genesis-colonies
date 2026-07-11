@@ -1759,8 +1759,9 @@
   // Alias used by messages.js (older name)
   GC.registerPageCleanup = GC.registerCleanup;
 
-  GC.cleanupPage = function cleanupPage() {
-    console.debug("[GC] cleanupPage");
+  GC.cleanupPage = function cleanupPage(opts) {
+    const preserveShell = Boolean(opts && opts.preserveShell);
+    console.debug("[GC] cleanupPage", preserveShell ? "(preserve shell)" : "");
     abortInFlightGameStateFetches();
     _clearMovementCountdownExpiryState();
     if (_movementCountdownRefreshTimer) {
@@ -1782,10 +1783,13 @@
     lc.intervals = [];
     lc.timeouts = [];
     lc.abortControllers = [];
-    GC.stopProgressTicker();
-    stopResourceTicker();
     _resetQueueLiveStates();
-    GC.stopPolling();
+    if (!preserveShell) {
+      GC.stopProgressTicker();
+      stopResourceTicker();
+      GC.stopPolling();
+      _lastMessagesUnreadPoll = null;
+    }
     if (typeof GC.hideCardReqTooltip === "function") GC.hideCardReqTooltip();
     if (typeof GC.teardownHudSelectPortals === "function") GC.teardownHudSelectPortals();
     GC.actionLocks.build = false;
@@ -1796,7 +1800,6 @@
     _numAnim.forEach((st) => { if (st?.raf) cancelAnimationFrame(st.raf); });
     _numAnim.clear();
     if (typeof rankingAbortInFlight === "function") rankingAbortInFlight();
-    _lastMessagesUnreadPoll = null;
     GC.currentPage = null;
     lc.initialized = false;
   };
@@ -2370,9 +2373,11 @@
 
     initFlashAutohide();
     initMotdBanner();
-    initWhatsNew();
-    bootstrapScoreStateFromDom();
-    bootstrapHeaderBoostersFromDom();
+    if (!opts?.pjax) {
+      initWhatsNew();
+      bootstrapScoreStateFromDom();
+      bootstrapHeaderBoostersFromDom();
+    }
     bindFormattedNumberInputs(document.getElementById("main-content") || document);
 
     const skipFreshServerHtml = skipHydrate || shouldSkipInitGameStateAfterSsr(page, opts);
@@ -2414,11 +2419,15 @@
         _bootstrapPageQueueCompactLiveFromDom();
       }
       if (willPoll) {
-        GC.startPolling(
-          lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard,
-          false,
-          Boolean(skipInitFetch)
-        );
+        if (GC.polling.running) {
+          GC.startProgressTicker();
+        } else {
+          GC.startPolling(
+            lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard,
+            false,
+            Boolean(skipInitFetch)
+          );
+        }
       }
       GC.startProgressTicker();
       scheduleDeferredChatBoot();
@@ -29494,7 +29503,7 @@
 
   async function applyPjaxPayload(url, payload, doc, opts = {}) {
     const push = opts.push !== false;
-    GC.cleanupPage();
+    GC.cleanupPage({ preserveShell: true });
     preserveFleetHudAcrossNavigation();
     const main = document.getElementById("main-content");
     if (!main) throw new Error("main-content missing");
@@ -29652,7 +29661,6 @@
       GC.stopPolling();
     } else if (typeof GC.abortInFlightGameStateFetches === "function") {
       GC.abortInFlightGameStateFetches();
-      GC.stopPolling();
     }
 
     const nav = beginPjaxNavigation(url, target);
