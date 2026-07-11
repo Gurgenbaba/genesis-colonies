@@ -319,6 +319,7 @@ _FLEET_TICK_SKIP_ENDPOINTS = frozenset(
     {
         "static",
         "api_game_state",
+        "api_notifications_summary",
     }
 )
 _FLEET_TICK_SKIP_PREFIXES = ("api_admin_", "api_chat_")
@@ -931,34 +932,10 @@ def _is_game_state_poll_source(finish_source: str) -> bool:
     return str(finish_source or "") == "game_state"
 
 
-# SSR page loads — same throttled finish path as /api/game-state (GC-745 / boot perf).
-_SSR_POLL_LIVE_SOURCES = frozenset(
-    {
-        "overview",
-        "buildings",
-        "research",
-        "fleet",
-        "trader_hub",
-        "inventory",
-        "shipyard",
-        "defense",
-        "planet_evolution",
-        "techtree",
-        "alliance",
-        "auction_house",
-        "vote_center",
-        "galactic_politics",
-        "referrals",
-        "imperial_directives",
-        "combat_simulator",
-        "page_load",
-    }
-)
-
-
 def _use_poll_live_path(finish_source: str) -> bool:
+    """Poll path only for /api/game-state and PJAX — full SSR loads use refresh_player_live_state."""
     src = str(finish_source or "")
-    return src == "game_state" or _is_pjax_request() or src in _SSR_POLL_LIVE_SOURCES
+    return src == "game_state" or _is_pjax_request()
 
 
 # --------------------------------------------------------------------------

@@ -525,8 +525,12 @@ def test_app_gc745_pjax_server_fastpath():
     assert "def _is_pjax_request()" in app_py
     assert "def _is_lightweight_layout_request()" in app_py
     assert "def _use_poll_live_path(finish_source: str)" in app_py
-    assert '"overview"' in app_py.split("_SSR_POLL_LIVE_SOURCES = frozenset")[1].split(")")[0]
+    poll_fn = app_py.split("def _use_poll_live_path(finish_source: str)")[1].split("def ", 1)[0]
+    assert "_is_pjax_request()" in poll_fn
+    assert 'src == "game_state"' in poll_fn
+    assert "_SSR_POLL_LIVE_SOURCES" not in app_py
     assert "_use_poll_live_path(src)" in app_py.split("def _load_page_live_context(")[1].split("try:")[0]
+    assert "api_notifications_summary" in app_py.split("_FLEET_TICK_SKIP_ENDPOINTS = frozenset")[1].split(")")[0]
     inject = app_py.split("def inject_globals()")[1].split("@app.route", 1)[0]
     assert "_is_lightweight_layout_request()" in inject
 
@@ -534,11 +538,14 @@ def test_app_gc745_pjax_server_fastpath():
     cleanup = js.split("GC.cleanupPage = function cleanupPage(opts)")[1].split("GC.requestFrame = function requestFrame")[0]
     assert "preserveShell" in cleanup
     assert "GC.cleanupPage({ preserveShell: true })" in js.split("async function applyPjaxPayload")[1].split("function pjaxPayloadFromDoc")[0]
+    assert "shouldHardNavigateForUrl" in js
+    assert "hardNavigate(link.href, \"logout-click\")" in js
     nav = js.split("GC.navigateTo = async function navigateTo")[1].split("function initPjax")[0]
     pre_nav = nav.split("beginPjaxNavigation")[0]
     normal_nav = pre_nav.split("} else if (typeof GC.abortInFlightGameStateFetches")[1].split("}")[0]
     assert "GC.abortInFlightGameStateFetches()" in normal_nav
     assert "GC.stopPolling()" not in normal_nav
+    assert "shouldHardNavigateForUrl(destUrl)" in pre_nav
 
 
 def test_gc746_overview_ssr_slim_context():

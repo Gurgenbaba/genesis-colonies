@@ -1228,6 +1228,23 @@
     if (reason) console.debug("[GC] quiesceLiveClientFetches", reason);
   }
 
+  function shouldHardNavigateForUrl(destUrl) {
+    if (!destUrl || destUrl.origin !== window.location.origin) return false;
+    const path = destUrl.pathname.replace(/\/$/, "") || "/";
+    if (AUTH_ROUTE_RE.test(path)) return true;
+    const inIngame = document.body?.classList.contains("gc-body-ingame");
+    const inSimple = document.body?.classList.contains("gc-body-simple") || document.body?.dataset?.authPage === "1";
+    if (inIngame && path === "/") return true;
+    if (inSimple && path !== "/" && !AUTH_ROUTE_RE.test(path)) return true;
+    return false;
+  }
+
+  function hardNavigate(url, reason) {
+    quiesceLiveClientFetches(reason || "hard-nav");
+    window.location.assign(url);
+  }
+  GC.hardNavigate = hardNavigate;
+
   let _planetPageReloadPromise = null;
   function reloadPageForActivePlanet(activePlanetId, reason) {
     if (GC.pjaxInFlight) return null;
@@ -29650,6 +29667,16 @@
       return Promise.resolve();
     }
 
+    let destUrl = null;
+    try {
+      destUrl = new URL(url, window.location.origin);
+    } catch (_) {}
+    if (destUrl && shouldHardNavigateForUrl(destUrl)) {
+      console.debug("[GC] hard navigate", destUrl.pathname, opts?.reason || "");
+      hardNavigate(destUrl.href, opts?.reason || "layout-nav");
+      return Promise.resolve();
+    }
+
     const leavingAdmin =
       typeof GC.detectPage === "function"
       && GC.detectPage() === "admin"
@@ -32315,6 +32342,8 @@
       return;
     }
 
+    _authLoopAborted = false;
+
     bindBuildingTabsOnce();
     initGameActions();
     initGlobalQueueHud();
@@ -32341,8 +32370,10 @@
     initPlayerCardOnce();
 
     document.addEventListener("click", (e) => {
-      const link = e.target.closest('a.logout-btn, a[href*="/logout"]');
-      if (link) GC.abortGameLoop("logout-click");
+      const link = e.target.closest('a[href*="/logout"]');
+      if (!link || !link.href) return;
+      e.preventDefault();
+      hardNavigate(link.href, "logout-click");
     }, true);
 
     syncPerfBodyClasses();
