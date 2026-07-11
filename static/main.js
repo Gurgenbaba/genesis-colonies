@@ -1127,6 +1127,7 @@
   function shouldSkipInitGameStateAfterSsr(page, opts) {
     if (opts && opts.skipGameState) return true;
     if (opts && opts.forceGameState) return false;
+    if (opts && opts.pjax) return false;
     return pageHasSsrLiveBoot();
   }
 
@@ -1227,23 +1228,6 @@
     else if (typeof GC.stopChatPolling === "function") GC.stopChatPolling();
     if (reason) console.debug("[GC] quiesceLiveClientFetches", reason);
   }
-
-  function shouldHardNavigateForUrl(destUrl) {
-    if (!destUrl || destUrl.origin !== window.location.origin) return false;
-    const path = destUrl.pathname.replace(/\/$/, "") || "/";
-    if (AUTH_ROUTE_RE.test(path)) return true;
-    const inIngame = document.body?.classList.contains("gc-body-ingame");
-    const inSimple = document.body?.classList.contains("gc-body-simple") || document.body?.dataset?.authPage === "1";
-    if (inIngame && path === "/") return true;
-    if (inSimple && path !== "/" && !AUTH_ROUTE_RE.test(path)) return true;
-    return false;
-  }
-
-  function hardNavigate(url, reason) {
-    quiesceLiveClientFetches(reason || "hard-nav");
-    window.location.assign(url);
-  }
-  GC.hardNavigate = hardNavigate;
 
   let _planetPageReloadPromise = null;
   function reloadPageForActivePlanet(activePlanetId, reason) {
@@ -1776,9 +1760,8 @@
   // Alias used by messages.js (older name)
   GC.registerPageCleanup = GC.registerCleanup;
 
-  GC.cleanupPage = function cleanupPage(opts) {
-    const preserveShell = Boolean(opts && opts.preserveShell);
-    console.debug("[GC] cleanupPage", preserveShell ? "(preserve shell)" : "");
+  GC.cleanupPage = function cleanupPage() {
+    console.debug("[GC] cleanupPage");
     abortInFlightGameStateFetches();
     _clearMovementCountdownExpiryState();
     if (_movementCountdownRefreshTimer) {
@@ -1800,13 +1783,10 @@
     lc.intervals = [];
     lc.timeouts = [];
     lc.abortControllers = [];
+    GC.stopProgressTicker();
+    stopResourceTicker();
     _resetQueueLiveStates();
-    if (!preserveShell) {
-      GC.stopProgressTicker();
-      stopResourceTicker();
-      GC.stopPolling();
-      _lastMessagesUnreadPoll = null;
-    }
+    GC.stopPolling();
     if (typeof GC.hideCardReqTooltip === "function") GC.hideCardReqTooltip();
     if (typeof GC.teardownHudSelectPortals === "function") GC.teardownHudSelectPortals();
     GC.actionLocks.build = false;
@@ -1817,6 +1797,7 @@
     _numAnim.forEach((st) => { if (st?.raf) cancelAnimationFrame(st.raf); });
     _numAnim.clear();
     if (typeof rankingAbortInFlight === "function") rankingAbortInFlight();
+    _lastMessagesUnreadPoll = null;
     GC.currentPage = null;
     lc.initialized = false;
   };
@@ -2436,15 +2417,11 @@
         _bootstrapPageQueueCompactLiveFromDom();
       }
       if (willPoll) {
-        if (GC.polling.running) {
-          GC.startProgressTicker();
-        } else {
-          GC.startPolling(
-            lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard,
-            false,
-            Boolean(skipInitFetch)
-          );
-        }
+        GC.startPolling(
+          lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard,
+          false,
+          Boolean(skipInitFetch)
+        );
       }
       GC.startProgressTicker();
       scheduleDeferredChatBoot();
@@ -29520,7 +29497,7 @@
 
   async function applyPjaxPayload(url, payload, doc, opts = {}) {
     const push = opts.push !== false;
-    GC.cleanupPage({ preserveShell: true });
+    GC.cleanupPage();
     preserveFleetHudAcrossNavigation();
     const main = document.getElementById("main-content");
     if (!main) throw new Error("main-content missing");
@@ -29671,9 +29648,10 @@
     try {
       destUrl = new URL(url, window.location.origin);
     } catch (_) {}
-    if (destUrl && shouldHardNavigateForUrl(destUrl)) {
-      console.debug("[GC] hard navigate", destUrl.pathname, opts?.reason || "");
-      hardNavigate(destUrl.href, opts?.reason || "layout-nav");
+    if (destUrl && AUTH_ROUTE_RE.test(destUrl.pathname.replace(/\/$/, "") || "/")) {
+      console.debug("[GC] hard navigate (auth)", destUrl.pathname);
+      quiesceLiveClientFetches("auth-nav");
+      window.location.assign(destUrl.href);
       return Promise.resolve();
     }
 
@@ -29688,6 +29666,7 @@
       GC.stopPolling();
     } else if (typeof GC.abortInFlightGameStateFetches === "function") {
       GC.abortInFlightGameStateFetches();
+      GC.stopPolling();
     }
 
     const nav = beginPjaxNavigation(url, target);
@@ -32373,7 +32352,8 @@
       const link = e.target.closest('a[href*="/logout"]');
       if (!link || !link.href) return;
       e.preventDefault();
-      hardNavigate(link.href, "logout-click");
+      quiesceLiveClientFetches("logout-click");
+      window.location.assign(link.href);
     }, true);
 
     syncPerfBodyClasses();

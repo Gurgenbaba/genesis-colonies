@@ -215,9 +215,10 @@ def test_main_js_game_state_polling_idempotent():
     pre_nav = nav_section.split("beginPjaxNavigation")[0]
     normal_nav = pre_nav.split("} else if (typeof GC.abortInFlightGameStateFetches")[1].split("}")[0]
     assert "GC.abortInFlightGameStateFetches()" in normal_nav
-    assert "GC.stopPolling()" not in normal_nav
+    assert "GC.stopPolling()" in normal_nav
     pjax_apply = src.split("async function applyPjaxPayload(url, payload, doc, opts = {})")[1].split("function pjaxPayloadFromDoc")[0]
-    assert "GC.cleanupPage({ preserveShell: true })" in pjax_apply
+    assert "GC.cleanupPage();" in pjax_apply
+    assert "preserveShell" not in pjax_apply
     assert "main-content missing" in pjax_apply
     fetch_section = src.split("GC.navigateTo = async function navigateTo")[1].split("async function applyPjaxPayload")[0]
     assert "await fetch(url" in fetch_section
@@ -497,6 +498,7 @@ def test_main_js_gc742_ssr_skip_init_game_state():
     assert "initPage skip game-state (SSR fresh)" in src
     skip_fn = src.split("function shouldSkipInitGameStateAfterSsr(page, opts)")[1].split("function bootstrapResourceLiveFromDom")[0]
     assert "return pageHasSsrLiveBoot()" in skip_fn
+    assert "opts.pjax" in skip_fn
     assert "_SSR_SKIP_INIT_GAME_STATE_PAGES" not in skip_fn
     assert "opts && opts.force) return false" not in skip_fn
     init_body = src.split("const afterInit = async () => {")[1].split("if (page === \"messages\")")[0]
@@ -509,11 +511,11 @@ def test_main_js_gc742_ssr_skip_init_game_state():
     assert "skipHydrate: opts.skipHydrate !== false" in pjax_apply
     assert "pjax: true" in pjax_apply
     assert "return afterInit()" in src.split("GC.initPage = function initPage(opts)")[1].split("GC.stopPolling = function stopPolling")[0]
-    cleanup = src.split("GC.cleanupPage = function cleanupPage(opts)")[1].split("GC.requestFrame = function requestFrame")[0]
-    assert "preserveShell" in cleanup
+    cleanup = src.split("GC.cleanupPage = function cleanupPage()")[1].split("GC.requestFrame = function requestFrame")[0]
+    assert "preserveShell" not in cleanup
     assert "abortInFlightGameStateFetches()" in cleanup
     assert "_preservePollingOnCleanup" not in cleanup
-    assert "GC.cleanupPage({ preserveShell: true })" in pjax_apply
+    assert "GC.cleanupPage();" in pjax_apply
     abort_fn = src.split("function abortInFlightGameStateFetches()")[1].split("let _planetPageReloadPromise")[0]
     assert "_activeRefreshFlightResolve" in abort_fn
     assert "GC.refreshInFlight = null" in abort_fn
@@ -535,17 +537,16 @@ def test_app_gc745_pjax_server_fastpath():
     assert "_is_lightweight_layout_request()" in inject
 
     js = _read("static/main.js")
-    cleanup = js.split("GC.cleanupPage = function cleanupPage(opts)")[1].split("GC.requestFrame = function requestFrame")[0]
-    assert "preserveShell" in cleanup
-    assert "GC.cleanupPage({ preserveShell: true })" in js.split("async function applyPjaxPayload")[1].split("function pjaxPayloadFromDoc")[0]
-    assert "shouldHardNavigateForUrl" in js
-    assert "hardNavigate(link.href, \"logout-click\")" in js
+    cleanup = js.split("GC.cleanupPage = function cleanupPage()")[1].split("GC.requestFrame = function requestFrame")[0]
+    assert "preserveShell" not in cleanup
+    assert "GC.cleanupPage();" in js.split("async function applyPjaxPayload")[1].split("function pjaxPayloadFromDoc")[0]
+    assert "quiesceLiveClientFetches(\"logout-click\")" in js
     nav = js.split("GC.navigateTo = async function navigateTo")[1].split("function initPjax")[0]
     pre_nav = nav.split("beginPjaxNavigation")[0]
     normal_nav = pre_nav.split("} else if (typeof GC.abortInFlightGameStateFetches")[1].split("}")[0]
     assert "GC.abortInFlightGameStateFetches()" in normal_nav
-    assert "GC.stopPolling()" not in normal_nav
-    assert "shouldHardNavigateForUrl(destUrl)" in pre_nav
+    assert "GC.stopPolling()" in normal_nav
+    assert "AUTH_ROUTE_RE.test(destUrl.pathname" in pre_nav
 
 
 def test_gc746_overview_ssr_slim_context():
