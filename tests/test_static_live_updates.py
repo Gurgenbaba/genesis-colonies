@@ -1247,6 +1247,11 @@ def test_main_js_gc640_global_fleet_hud():
     assert ".gc-fleet-hud-row" in css
     assert ".gc-fleet-drawer-panel" in css
     assert ".is-show-all" in css
+    assert ".gc-fleet-sheet-backdrop" in css
+    assert "body.gc-fleet-sheet-open" in css
+    assert "--gc-fleet-sheet-top" in css
+    assert "syncMobileFleetSheetLayout" in src
+    assert "gc-fleet-sheet-backdrop" in src
     assert ".gc-fleet-drawer-row" in css
     assert "data-fleet-drawer-empty" in base
     assert "data-fleet-drawer-toggle" not in base

@@ -36891,7 +36891,113 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
 
   .gc-fleet-hud-list,
   .gc-fleet-drawer-list{
-    max-height: 34vh;
+    max-height: min(28vh, 160px);
+  }
+
+  .gc-header-cmd .resource-bar.resource-bar-cmd > .gc-fleet-drawer-root,
+  .gc-header-cmd .resource-bar.resource-bar-cmd > .gc-fleet-hud-root{
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .gc-header-row-resources .gc-resource-sticky,
+  .gc-header-cmd .gc-header-row-resources{
+    overflow: visible;
+  }
+
+  .gc-fleet-drawer-root:not(.is-show-all) .gc-fleet-drawer-more,
+  .gc-fleet-hud-root:not(.is-show-all) .gc-fleet-drawer-more{
+    min-height: var(--gc-touch-min);
+    padding: 8px 10px;
+    text-align: center;
+  }
+
+  .gc-fleet-drawer-root.is-show-all,
+  .gc-fleet-hud-root.is-show-all{
+    position: fixed;
+    left: max(8px, var(--gc-safe-left));
+    right: max(8px, var(--gc-safe-right));
+    top: max(var(--gc-fleet-sheet-top, 96px), var(--gc-safe-top));
+    bottom: calc(var(--gc-bottom-nav-h) + var(--gc-safe-bottom) + 8px);
+    width: auto;
+    margin: 0;
+    z-index: calc(var(--gc-z-popover, 80) - 1);
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--gc-panel-border);
+    border-radius: var(--gc-radius-sm);
+    background: rgba(6, 12, 26, 0.98);
+    box-shadow: var(--gc-shadow-hard);
+    overflow: hidden;
+  }
+
+  .gc-fleet-drawer-root.is-show-all .gc-fleet-drawer-panel,
+  .gc-fleet-hud-root.is-show-all .gc-fleet-drawer-panel{
+    display: flex !important;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    padding: 8px 10px 0;
+  }
+
+  .gc-fleet-drawer-root.is-show-all .gc-fleet-drawer-list,
+  .gc-fleet-hud-root.is-show-all .gc-fleet-drawer-list{
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .gc-fleet-drawer-root.is-show-all .gc-fleet-drawer-more,
+  .gc-fleet-hud-root.is-show-all .gc-fleet-drawer-more{
+    flex: 0 0 auto;
+    min-height: var(--gc-touch-min);
+    margin: 0;
+    padding: 10px 12px;
+    border-top: 1px solid rgba(120, 190, 255, 0.16);
+    background: rgba(4, 8, 18, 0.96);
+    text-align: center;
+    font-weight: 700;
+    color: var(--gc-primary-2);
+  }
+
+  body.gc-fleet-sheet-open{
+    overflow: hidden;
+  }
+
+  .gc-fleet-sheet-backdrop{
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--gc-z-popover, 80) - 2);
+    border: none;
+    padding: 0;
+    margin: 0;
+    background: rgba(2, 6, 14, 0.62);
+    cursor: default;
+  }
+
+  .gc-fleet-sheet-backdrop[hidden]{
+    display: none !important;
+  }
+
+  .gc-bottom-nav-item{
+    flex: 0 0 72px;
+    min-width: 72px;
+  }
+
+  .gc-bottom-nav-label{
+    max-width: 68px;
+    white-space: normal;
+    line-height: 1.05;
+    font-size: 0.52rem;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .gc-fleet-hud-row,

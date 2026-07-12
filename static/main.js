@@ -10543,6 +10543,53 @@
     localStorage.setItem(FLEET_DRAWER_LS_SHOW_ALL, showAll ? "1" : "0");
   }
 
+  function isMobileFleetSheetViewport() {
+    return window.matchMedia("(max-width: 768px)").matches;
+  }
+
+  function getFleetSheetBackdrop() {
+    let backdrop = document.getElementById("gc-fleet-sheet-backdrop");
+    if (!backdrop) {
+      backdrop = document.createElement("button");
+      backdrop.type = "button";
+      backdrop.id = "gc-fleet-sheet-backdrop";
+      backdrop.className = "gc-fleet-sheet-backdrop";
+      backdrop.hidden = true;
+      backdrop.setAttribute("aria-label", t("close", "Schließen"));
+      document.body.appendChild(backdrop);
+      backdrop.addEventListener("click", () => {
+        if (!isFleetDrawerShowAll()) return;
+        setFleetDrawerShowAll(false);
+        if (GC.lastState?.active_fleets) {
+          renderGlobalFleetHud(GC.lastState.active_fleets);
+        } else if (typeof GC.renderGlobalFleetHud === "function") {
+          renderGlobalFleetHud(null);
+        }
+      });
+    }
+    return backdrop;
+  }
+
+  function syncMobileFleetSheetTop() {
+    if (!isMobileFleetSheetViewport()) return;
+    const header = document.querySelector(".gc-header-cmd");
+    const bottom = header ? Math.ceil(header.getBoundingClientRect().bottom) : 96;
+    document.documentElement.style.setProperty("--gc-fleet-sheet-top", `${Math.max(bottom + 4, 72)}px`);
+  }
+
+  function syncMobileFleetSheetLayout(root) {
+    const expanded = !!(root && root.classList.contains("is-show-all") && isMobileFleetSheetViewport());
+    const backdrop = getFleetSheetBackdrop();
+    backdrop.hidden = !expanded;
+    document.body.classList.toggle("gc-fleet-sheet-open", expanded);
+    if (expanded) {
+      syncMobileFleetSheetTop();
+      root?.setAttribute("aria-expanded", "true");
+    } else {
+      root?.setAttribute("aria-expanded", "false");
+    }
+  }
+
   function formatFleetDrawerRoute(mv) {
     if (!mv || typeof mv !== "object") return "–";
     const originName = String(mv.origin_name || "").trim();
@@ -11375,6 +11422,7 @@
       }
     }
 
+    syncMobileFleetSheetLayout(root);
     GC.startProgressTicker();
   }
 
@@ -11506,7 +11554,30 @@
     }
 
     document.addEventListener("scroll", hideFleetDrawerTooltip, true);
-    window.addEventListener("resize", hideFleetDrawerTooltip);
+    window.addEventListener("resize", () => {
+      hideFleetDrawerTooltip();
+      syncMobileFleetSheetTop();
+      const fleetRoot = document.getElementById("global-fleet-drawer-root")
+        || document.querySelector("[data-global-fleet-drawer]");
+      if (fleetRoot) syncMobileFleetSheetLayout(fleetRoot);
+    });
+
+    if (!document.documentElement.dataset.gcFleetSheetEscapeBound) {
+      document.documentElement.dataset.gcFleetSheetEscapeBound = "1";
+      document.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape" || !isMobileFleetSheetViewport() || !isFleetDrawerShowAll()) return;
+        setFleetDrawerShowAll(false);
+        if (GC.lastState?.active_fleets) {
+          renderGlobalFleetHud(GC.lastState.active_fleets);
+        }
+      });
+    }
+
+    GC.registerCleanup?.(() => {
+      document.body.classList.remove("gc-fleet-sheet-open");
+      const backdrop = document.getElementById("gc-fleet-sheet-backdrop");
+      if (backdrop) backdrop.hidden = true;
+    });
 
     if (GC.lastState?.active_fleets) {
       renderGlobalFleetHud(GC.lastState.active_fleets);
