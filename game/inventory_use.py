@@ -196,6 +196,50 @@ def _shift_queue_times(
     return actual
 
 
+def apply_active_head_queue_time_boost(
+    conn,
+    *,
+    rows: List[Mapping[str, Any]],
+    boost_seconds: int,
+    now: float,
+    table: str,
+    id_col: str,
+    start_col: str,
+    finish_col: str,
+    target: str,
+) -> Optional[Effect]:
+    """
+    Reduce only the active (head) job by up to ``boost_seconds``.
+
+    Queued rows cascade earlier by the effective shift — same as legacy
+    ``_shift_queue_times``, but Timekeeper must never treat the full queue
+    remaining as one apply target (inventory full-queue boosters unchanged).
+    """
+    if not rows:
+        return None
+    boost = max(0, int(boost_seconds))
+    if boost <= 0:
+        return None
+    actual = _shift_queue_times(
+        conn,
+        table=table,
+        id_col=id_col,
+        start_col=start_col,
+        finish_col=finish_col,
+        rows=rows,
+        reduction_sec=float(boost),
+        now=now,
+    )
+    if actual <= 0:
+        return None
+    return {
+        "kind": "time_boost",
+        "target": target,
+        "seconds_reduced": boost,
+        "seconds_shifted": int(actual),
+    }
+
+
 def _apply_full_queue_time_shift(
     conn,
     *,

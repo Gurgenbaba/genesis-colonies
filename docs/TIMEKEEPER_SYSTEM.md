@@ -15,7 +15,7 @@ Single **Imperium time account** — empire-wide, manual apply only, separate fr
 ## Rules
 
 - Never auto-debit on poll or page load.
-- Apply only via **⚡** on active queue cards → `/api/timekeeper/apply` with `mode: max` (server clamps to `min(balance, remaining)`).
+- Apply only via **⚡** on active queue cards → `/api/timekeeper/apply` with `mode: max` (server clamps to `min(balance, active_job_remaining)`).
 - Domains: `build`, `research`, `shipyard`, `defense`, `planet_research`, `ascension`.
 - Production boosters (`inventory_boosters`) unchanged.
 

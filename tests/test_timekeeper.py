@@ -285,6 +285,38 @@ def test_timekeeper_partial_clamps_to_remaining(timekeeper_db):
         conn.close()
 
 
+def test_timekeeper_finish_only_active_head_not_full_queue(timekeeper_db):
+    conn = db()
+    try:
+        uid = _player(conn=conn)
+        planet = get_context_planet(uid, conn=conn)
+        pid = int(planet["id"])
+        now = time.time()
+        add_build_job(pid, "metal_mine", now - 10, now + 120, conn=conn)
+        add_build_job(pid, "crystal_mine", now + 120, now + 240, conn=conn)
+        add_build_job(pid, "solar_plant", now + 240, now + 360, conn=conn)
+        begin_write_transaction(conn)
+        credit(uid, 3600, "test", conn=conn)
+        commit(conn)
+
+        begin_write_transaction(conn)
+        ok, reason, result = apply_timekeeper(uid, "build", planet_id=pid, mode="finish", conn=conn)
+        assert ok, reason
+        commit(conn)
+
+        applied = int(result.get("seconds_applied") or 0)
+        assert applied <= 120
+        rows = conn.execute(
+            "SELECT building_type, finish_time FROM build_queue WHERE planet_id = ? ORDER BY finish_time ASC;",
+            (pid,),
+        ).fetchall()
+        assert len(rows) == 2
+        assert str(rows[-1]["building_type"]) == "solar_plant"
+        assert float(rows[-1]["finish_time"]) > now + 60
+    finally:
+        conn.close()
+
+
 def test_timekeeper_max_uses_balance_not_full_remaining(timekeeper_db):
     conn = db()
     try:

@@ -2158,6 +2158,7 @@ def test_main_js_timekeeper_buttons_sync_immediately_after_action_state():
     assert "_primeActionStateTimekeeper(state)" in apply
     assert "_finalizeTimekeeperQueueButtons(state)" in apply
     assert "function _finalizeTimekeeperQueueButtons(state)" in src
+    assert "function _findGlobalActiveCardJob(queueRaw)" in src
     assert '"timekeeper"' in src.split("const _HUD_LAST_STATE_KEYS = [")[1].split("];")[0]
 
 

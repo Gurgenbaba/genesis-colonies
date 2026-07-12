@@ -3399,6 +3399,11 @@
       : t("buildings_btn_upgrade", "Ausbau starten");
 
     if (stateBtn && prevState === state) {
+      if (state === "go" && !cell.querySelector(".gc-bld-card-head-action-group")) {
+        const html = renderBuildingActionCell(b, bqSummary, bqQueueFull);
+        if (cell.innerHTML.trim() !== html.trim()) cell.innerHTML = html;
+        return;
+      }
       if (state === "go") {
         const goLink = cell.querySelector("a.btn-upgrade[data-action-state='go'], button.btn-upgrade[data-action-state='go']");
         if (goLink) {
@@ -6670,14 +6675,6 @@
           ` data-action-state="locked" aria-disabled="true" title="${fullLabel}" aria-label="${fullLabel}"><span class="gc-bld-head-action-icon">🔒</span></button>`;
         return;
       }
-
-      if (!queueFull && state === "locked") {
-        const href = `/upgrade/${encodeURIComponent(bType)}?src=buildings&tab=${encodeURIComponent(tab)}`;
-        cell.innerHTML =
-          `<a id="btn-${bType}" data-building="${bType}" data-action-state="go" href="${href}"` +
-          ` class="gc-bld-head-action-btn gc-bld-head-action-btn--go btn-upgrade"` +
-          ` title="${actionLabel}" aria-label="${actionLabel}"><span class="gc-bld-head-action-icon">+</span></a>`;
-      }
     });
   }
 
@@ -6705,6 +6702,7 @@
   GC.clearCardQueueBlock = function clearCardQueueBlock(cardEl) {
     if (!cardEl) return;
     cardEl.querySelectorAll("[data-gc-card-queue], [data-hero-queue]").forEach((block) => block.remove());
+    _clearCardQueueTimekeeperBtn(cardEl);
     stripHeroTimeChipQueueTimer(cardEl);
     resetHeroImageProgress(cardEl);
     _stripCardQueueOwnerClasses(cardEl);
@@ -6720,6 +6718,7 @@
     const cardEl = block.closest("[data-building-row], [data-research-card], [data-building-card]");
     block.remove();
     if (cardEl && !cardEl.querySelector("[data-gc-card-queue], [data-hero-queue]")) {
+      _clearCardQueueTimekeeperBtn(cardEl);
       stripHeroTimeChipQueueTimer(cardEl);
       resetHeroImageProgress(cardEl);
       _stripCardQueueOwnerClasses(cardEl);
@@ -7681,31 +7680,51 @@
     GC.lastState = { ...base, timekeeper: state.timekeeper };
   }
 
-  function _syncTimekeeperFromCardJobsByOwner(queueRaw, findCard, domain) {
+  function _clearCardQueueTimekeeperBtn(cardEl) {
+    if (!cardEl) return;
+    cardEl.querySelectorAll(
+      ".gc-bld-hero-action-slot--timekeeper [data-gc-timekeeper-apply], .gc-card-queue-time-row [data-gc-timekeeper-apply]"
+    ).forEach((btn) => btn.remove());
+  }
+
+  function _findGlobalActiveCardJob(queueRaw) {
     const byOwner = resolveCardJobsByOwner(queueRaw);
-    Object.entries(byOwner).forEach(([ownerKey, jobs]) => {
-      const card = findCard(ownerKey);
-      if (!card) return;
-      const list = (Array.isArray(jobs) ? jobs : [])
-        .filter((job) => job && typeof job === "object")
-        .slice()
-        .sort((a, b) => {
-          const pa = Math.floor(Number(a.queue_position || 0));
-          const pb = Math.floor(Number(b.queue_position || 0));
-          if (pa !== pb) return pa - pb;
-          return Math.floor(Number(a.job_id || 0)) - Math.floor(Number(b.job_id || 0));
-        });
-      const head = list.find((j) => String(j.status || "") === "active") || list[0];
-      if (!head || String(head.status || "") !== "active") return;
-      let block =
-        findHeroQueue(card)
-        || card.querySelector("[data-gc-card-queue][data-queue-active='1']")
-        || card.querySelector("[data-gc-card-queue]");
-      if (!block && typeof GC.renderCardQueueBlock === "function") {
-        block = GC.renderCardQueueBlock(card, head, { domain });
-      }
-      if (block) _syncTimekeeperApplyBtn(block, domain, head);
+    let found = null;
+    Object.values(byOwner).forEach((jobs) => {
+      const list = (Array.isArray(jobs) ? jobs : []).filter((job) => job && typeof job === "object");
+      list.forEach((job) => {
+        if (String(job.status || "") !== "active") return;
+        const pos = Math.floor(Number(job.queue_position || 9999));
+        const curPos = found ? Math.floor(Number(found.queue_position || 9999)) : 9999;
+        if (!found || pos < curPos) found = job;
+      });
     });
+    return found;
+  }
+
+  function _clearScopeTimekeeperApplyBtns(scope) {
+    const root = scope && scope.querySelectorAll ? scope : document;
+    root.querySelectorAll(
+      "[data-building-row] [data-gc-timekeeper-apply], [data-research-card] [data-gc-timekeeper-apply], [data-tech-key] [data-gc-timekeeper-apply], [data-gc-card-queue] [data-gc-timekeeper-apply]"
+    ).forEach((btn) => btn.remove());
+  }
+
+  function _syncTimekeeperFromCardJobsByOwner(queueRaw, findCard, domain) {
+    _clearScopeTimekeeperApplyBtns(document);
+    const activeJob = _findGlobalActiveCardJob(queueRaw);
+    if (!activeJob) return;
+    const ownerKey = String(activeJob.owner_key || "");
+    if (!ownerKey) return;
+    const card = findCard(ownerKey);
+    if (!card) return;
+    let block =
+      findHeroQueue(card)
+      || card.querySelector("[data-gc-card-queue][data-queue-active='1']")
+      || card.querySelector("[data-gc-card-queue]");
+    if (!block && typeof GC.renderCardQueueBlock === "function") {
+      block = GC.renderCardQueueBlock(card, activeJob, { domain });
+    }
+    if (block) _syncTimekeeperApplyBtn(block, domain, activeJob);
   }
 
   function _finalizeTimekeeperQueueButtons(state) {
@@ -7851,6 +7870,12 @@
 
   function _syncTimekeeperApplyBtn(parent, domain, queueJob) {
     if (!parent || !queueJob) return null;
+    const isActive = Boolean(queueJob.is_active) || String(queueJob.status || "") === "active";
+    if (!isActive) {
+      const cardEl = parent.closest("[data-building-row], [data-research-card], [data-building-card]");
+      if (cardEl) _clearCardQueueTimekeeperBtn(cardEl);
+      return null;
+    }
     const host = _resolveTimekeeperBtnHost(parent, queueJob);
     if (!host) return null;
     const rem = _queueJobTimekeeperRemaining(queueJob);

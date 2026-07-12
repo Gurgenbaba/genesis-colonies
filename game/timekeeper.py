@@ -200,15 +200,14 @@ def _row_field(row: Any, key: str) -> Any:
         return None
 
 
-def _queue_remaining_seconds(rows: List[Any], *, now: float, finish_col: str) -> float:
+def _active_head_remaining_seconds(rows: List[Any], *, now: float, finish_col: str) -> float:
+    """Timekeeper applies only against the active head job — not the full queue tail."""
     if not rows:
         return 0.0
-    last_finish = float(_row_field(rows[-1], finish_col) or 0)
     first_finish = float(_row_field(rows[0], finish_col) or 0)
-    remaining = max(0.0, last_finish - now)
-    if remaining <= 0 and first_finish > now:
-        remaining = max(0.0, first_finish - now)
-    return remaining
+    if first_finish <= 0:
+        return 0.0
+    return max(0.0, first_finish - now)
 
 
 def _resolve_apply_seconds(
@@ -255,10 +254,7 @@ def _apply_domain_shift(
     now: float,
 ) -> Optional[Dict[str, Any]]:
     from .inventory_use import (
-        apply_build_queue_booster,
-        apply_research_queue_booster,
-        apply_shipyard_queue_booster,
-        _apply_full_queue_time_shift,
+        apply_active_head_queue_time_boost,
         _finish_inventory_due_work,
     )
 
@@ -269,66 +265,48 @@ def _apply_domain_shift(
         return None
 
     dom = str(domain or "").strip().lower()
-    if dom == "build":
-        return apply_build_queue_booster(conn, uid, pid, boost, now=now)
-    if dom == "research":
-        return apply_research_queue_booster(conn, uid, boost, now=now)
-    if dom == "shipyard":
-        return apply_shipyard_queue_booster(conn, uid, pid, boost, now=now)
+    table_cfg = {
+        "build": ("build_queue", "id", "start_time", "finish_time", "build"),
+        "research": ("research_queue", "id", "start_at", "finish_at", "research"),
+        "shipyard": ("shipyard_queue", "id", "started_at", "finish_at", "shipyard"),
+        "defense": ("defense_queue", "id", "started_at", "finish_at", "defense"),
+        "planet_research": ("planet_research_queue", "id", "start_at", "finish_at", "planet_research"),
+        "ascension": ("planet_ascension_queue", "id", "start_at", "finish_at", "ascension"),
+    }
+    cfg = table_cfg.get(dom)
+    if not cfg:
+        return None
 
+    table, id_col, start_col, finish_col, target = cfg
+    if dom == "shipyard":
+        from .shipyard_queue import shipyard_queue_table_ready
+
+        if not shipyard_queue_table_ready(conn):
+            return None
     if dom == "defense":
-        from .defense import defense_queue_table_ready, list_defense_queue_rows
+        from .defense import defense_queue_table_ready
 
         if not defense_queue_table_ready(conn):
             return None
+    if dom in ("planet_research", "ascension"):
         _finish_inventory_due_work(conn, uid, planet_id=pid, source="timekeeper_apply")
-        rows = list(list_defense_queue_rows(pid, conn=conn))
-        return _apply_full_queue_time_shift(
-            conn,
-            rows=rows,
-            boost_seconds=boost,
-            now=now,
-            table="defense_queue",
-            id_col="id",
-            start_col="started_at",
-            finish_col="finish_at",
-            target="defense",
-        )
 
-    if dom == "planet_research":
-        from .planet_evolution.repository import get_planet_research_queue
+    rows, loaded_finish_col = _load_domain_rows(dom, uid, pid, conn=conn, now=now)
+    if not rows:
+        return None
+    finish_col = loaded_finish_col or finish_col
 
-        _finish_inventory_due_work(conn, uid, planet_id=pid, source="timekeeper_apply")
-        rows = list(get_planet_research_queue(pid, conn=conn))
-        return _apply_full_queue_time_shift(
-            conn,
-            rows=rows,
-            boost_seconds=boost,
-            now=now,
-            table="planet_research_queue",
-            id_col="id",
-            start_col="start_at",
-            finish_col="finish_at",
-            target="planet_research",
-        )
-
-    if dom == "ascension":
-        from .planet_evolution.ascension import _get_planet_ascension_queue_row
-
-        _finish_inventory_due_work(conn, uid, planet_id=pid, source="timekeeper_apply")
-        row = _get_planet_ascension_queue_row(pid, conn=conn)
-        rows = [row] if row else []
-        return _apply_full_queue_time_shift(
-            conn,
-            rows=rows,
-            boost_seconds=boost,
-            now=now,
-            table="planet_ascension_queue",
-            id_col="id",
-            start_col="start_at",
-            finish_col="finish_at",
-            target="ascension",
-        )
+    return apply_active_head_queue_time_boost(
+        conn,
+        rows=rows,
+        boost_seconds=boost,
+        now=now,
+        table=table,
+        id_col=id_col,
+        start_col=start_col,
+        finish_col=finish_col,
+        target=target,
+    )
 
     return None
 
@@ -405,7 +383,7 @@ def apply_timekeeper(
     if not rows:
         return False, "no_queue", {"timekeeper": serialize_for_client(uid, conn=conn)}
 
-    remaining = _queue_remaining_seconds(rows, now=now, finish_col=finish_col)
+    remaining = _active_head_remaining_seconds(rows, now=now, finish_col=finish_col)
     boost_seconds = _resolve_apply_seconds(
         balance=balance,
         remaining=remaining,
