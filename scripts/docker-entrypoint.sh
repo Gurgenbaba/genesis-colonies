@@ -29,6 +29,17 @@ else:
     print(f'[GC] Timeline seed skipped ({result.get(\"reason\", \"ok\")}).')
 "
 
+echo "[GC] Verifying Codex catalog..."
+python -c "
+from game.config import init_config
+init_config()
+from game.codex import ensure_codex_catalog_ready
+result = ensure_codex_catalog_ready()
+if not result.get('ok'):
+    raise SystemExit(f\"Codex catalog not ready: {result}\")
+print(f\"[GC] Codex catalog OK ({result.get('article_count')} articles, {result.get('category_count')} bands).\")
+"
+
 WORKERS="${GUNICORN_WORKERS:-1}"
 echo "[GC] Starting gunicorn on 0.0.0.0:${PORT} (workers=${WORKERS})..."
 exec gunicorn -w "${WORKERS}" -b "0.0.0.0:${PORT}" --timeout 120 \

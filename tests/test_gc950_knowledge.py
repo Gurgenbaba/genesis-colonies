@@ -19,7 +19,10 @@ from game.codex import (
     build_codex_client_config,
     build_codex_panel_state,
     catalog_articles,
+    clear_catalog_cache,
+    codex_catalog_status,
     codex_route_for_endpoint,
+    ensure_codex_catalog_ready,
     is_codex_unlocked,
     load_catalog,
     primary_codex_for_route,
@@ -82,6 +85,78 @@ def _extract_codex_client_json(html: str) -> dict:
     )
     assert match, "gc-codex-client script block missing"
     return json.loads(match.group(1))
+
+
+def test_codex_import_without_pyyaml_subprocess():
+    script = """
+import sys
+import types
+
+yaml_stub = types.ModuleType("yaml")
+yaml_stub.safe_load = lambda *_a, **_k: {}
+sys.modules["yaml"] = yaml_stub
+
+from game.codex import codex_catalog_status, load_catalog
+
+load_catalog(force_reload=True)
+status = codex_catalog_status()
+assert status["catalog_ready"], status
+assert status["article_count"] >= 13
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=str(ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+
+
+def test_codex_runtime_has_no_knowledge_parser_import():
+    src = (ROOT / "game" / "codex.py").read_text(encoding="utf-8")
+    assert "from .knowledge_parser" not in src
+    assert "import knowledge_parser" not in src
+
+
+def test_codex_catalog_deploy_inventory():
+    result = subprocess.run(
+        ["git", "ls-files", "--", "generated/codex/catalog.json"],
+        cwd=str(ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+    assert "generated/codex/catalog.json" in (result.stdout or "")
+
+
+def test_load_catalog_from_foreign_cwd(tmp_path, monkeypatch):
+    clear_catalog_cache()
+    monkeypatch.chdir(tmp_path)
+    catalog = load_catalog(force_reload=True)
+    assert len(catalog.get("articles") or {}) >= 13
+    assert codex_catalog_status()["catalog_ready"] is True
+
+
+def test_load_catalog_retries_after_missing_file(tmp_path, monkeypatch):
+    clear_catalog_cache()
+    missing = tmp_path / "missing-catalog.json"
+    monkeypatch.setattr("game.codex._CATALOG_PATH", missing)
+    first = load_catalog(force_reload=True)
+    assert not first.get("articles")
+
+    clear_catalog_cache()
+    monkeypatch.setattr("game.codex._CATALOG_PATH", CATALOG_PATH)
+    second = load_catalog(force_reload=True)
+    assert len(second.get("articles") or {}) >= 13
+
+
+def test_ensure_codex_catalog_ready():
+    result = ensure_codex_catalog_ready()
+    assert result["ok"] is True
+    assert result["article_count"] >= 13
+    assert result["category_count"] >= 4
 
 
 def test_player_articles_parsed_from_master_docs():
@@ -218,6 +293,16 @@ def test_discord_exports_match_catalog():
     assert exported == set(articles.keys())
 
 
+def test_options_renders_codex_panel_bands(gc950_db, monkeypatch):
+    client = _app_client(monkeypatch)
+    uid, _ = _create_player()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+    html = client.get("/options").get_data(as_text=True)
+    assert 'data-codex-id="' in html
+    assert "gc-codex-band" in html
+
+
 def test_overview_renders_codex_surfaces(gc950_db, monkeypatch):
     client = _app_client(monkeypatch)
     uid, _ = _create_player()
@@ -251,9 +336,16 @@ def test_game_state_includes_codex(gc950_db, monkeypatch):
     payload = client.get("/api/game-state").get_json()
     assert payload.get("ok") is True
     codex = payload.get("codex") or {}
+    assert codex.get("ok") is True
     assert codex.get("total_count") == len(catalog_articles())
     assert isinstance(codex.get("unlocked_ids"), list)
     assert codex.get("unlocked_count") == len(codex["unlocked_ids"])
+    catalog = codex.get("catalog") or {}
+    assert catalog.get("catalog_ready") is True
+    assert catalog.get("article_count", 0) > 0
+    assert catalog.get("category_count", 0) > 0
+    panel = codex.get("panel") or {}
+    assert panel.get("bands")
     articles = codex.get("articles") or {}
     assert articles
     assert articles["buildings"]["title"]
@@ -325,6 +417,13 @@ def test_game_state_codex_ok_without_sidebar_commander_tip(gc950_db, monkeypatch
     tip = codex.get("commander_tip")
     if tip:
         assert tip.get("text_key")
+
+
+def test_apply_codex_hydrates_empty_panel_from_game_state():
+    src = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+    assert "function codexHydratePanelFromState" in src
+    apply_fn = src.split("function applyCodexFromState")[1].split("function applyCommanderTipFromState")[0]
+    assert "codexHydratePanelFromState(codexState)" in apply_fn
 
 
 def test_apply_codex_commander_tip_noop_contract():

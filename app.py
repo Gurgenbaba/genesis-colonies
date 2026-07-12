@@ -585,7 +585,7 @@ def inject_globals():
     codex_primary: str | None = None
     codex_client: dict[str, Any] = {"articles": {}}
     try:
-        if not simple_layout and auth_user and auth_user.get("id"):
+        if auth_user and auth_user.get("id"):
             from flask import request
 
             from game.codex import build_codex_template_context
@@ -606,7 +606,9 @@ def inject_globals():
             finally:
                 _codex_conn.close()
     except Exception:
-        pass
+        import logging
+
+        logging.getLogger(__name__).exception("[GC CODEX] template context failed")
 
     rules_panel_ctx: dict[str, Any] = {
         "RULES_PANEL_SECTIONS": (),
@@ -6878,7 +6880,10 @@ def _payload_from_live_context(
 
         payload["codex"] = codex_for_game_state(user_id, conn=conn)
     except Exception:
-        payload["codex"] = {}
+        import logging
+
+        logging.getLogger(__name__).exception("[GC CODEX] game-state payload failed")
+        payload["codex"] = {"ok": False, "catalog": {"catalog_ready": False, "article_count": 0, "category_count": 0}}
 
     if own_conn and conn is not None:
         conn.close()

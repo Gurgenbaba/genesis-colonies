@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import date
-from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
@@ -12,9 +12,18 @@ import sqlite3
 
 from .db import db
 from .i18n import current_locale, tr
-from .knowledge_parser import ROOT as _ROOT
 
-_CATALOG_PATH = _ROOT / "generated" / "codex" / "catalog.json"
+_logger = logging.getLogger(__name__)
+
+_APP_ROOT = Path(__file__).resolve().parent.parent
+_CATALOG_PATH = _APP_ROOT / "generated" / "codex" / "catalog.json"
+_EMPTY_CATALOG: Dict[str, Any] = {
+    "articles": {},
+    "routes": {},
+    "bands": {},
+    "commander_tips_pool": [],
+}
+_catalog_cache: Dict[str, Any] | None = None
 
 _CODEX_SECTION_DEFS: tuple[tuple[str, str, str], ...] = (
     ("summary", "codex_section_summary", "Summary"),
@@ -36,12 +45,64 @@ _ROUTE_PRIMARY: Dict[str, str] = {
 }
 
 
-@lru_cache(maxsize=1)
-def load_catalog() -> Dict[str, Any]:
+def clear_catalog_cache() -> None:
+    global _catalog_cache
+    _catalog_cache = None
+
+
+def _empty_catalog(reason: str) -> Dict[str, Any]:
+    _logger.error(
+        "[GC CODEX] %s (catalog=%s exists=%s)",
+        reason,
+        _CATALOG_PATH.name,
+        _CATALOG_PATH.is_file(),
+    )
+    return dict(_EMPTY_CATALOG)
+
+
+def load_catalog(*, force_reload: bool = False) -> Dict[str, Any]:
+    """Load committed catalog.json — no knowledge_parser import (PyYAML not required at runtime)."""
+    global _catalog_cache
+    if _catalog_cache is not None and not force_reload:
+        return _catalog_cache
     if not _CATALOG_PATH.is_file():
-        return {"articles": {}, "routes": {}, "bands": {}, "commander_tips_pool": []}
-    with open(_CATALOG_PATH, encoding="utf-8") as fh:
-        return json.load(fh)
+        return _empty_catalog("catalog file missing")
+    try:
+        with open(_CATALOG_PATH, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except Exception:
+        _logger.exception("[GC CODEX ERROR] catalog JSON load failed")
+        return _empty_catalog("catalog JSON load failed")
+    articles = data.get("articles") or {}
+    if not articles:
+        return _empty_catalog("catalog has zero articles")
+    _catalog_cache = data
+    return data
+
+
+def codex_catalog_status() -> Dict[str, Any]:
+    catalog = load_catalog()
+    articles = catalog.get("articles") or {}
+    bands = catalog.get("bands") or {}
+    ready = bool(articles)
+    return {
+        "ok": ready,
+        "catalog_ready": ready,
+        "article_count": len(articles),
+        "category_count": len(bands),
+        "source": "generated/codex/catalog.json",
+    }
+
+
+def ensure_codex_catalog_ready() -> Dict[str, Any]:
+    """Deploy guard — verify catalog.json is present before serving traffic."""
+    status = codex_catalog_status()
+    if status["catalog_ready"]:
+        return {"ok": True, "action": "ok", **status}
+    _logger.error(
+        "[GC CODEX] deploy catalog unavailable — ensure generated/codex/catalog.json is committed"
+    )
+    return {"ok": False, "action": "missing", **status}
 
 
 def catalog_articles() -> Dict[str, Any]:
@@ -292,12 +353,17 @@ def codex_for_game_state(player_id: int, *, conn: sqlite3.Connection | None = No
         tip = commander_tip_for_date(int(player_id), conn=c)
         unlocked = unlocked_codex_ids(int(player_id), conn=c)
         client = build_codex_client_config(int(player_id), conn=c)
+        catalog = codex_catalog_status()
+        panel = build_codex_panel_state(int(player_id), conn=c)
         return {
+            "ok": catalog.get("catalog_ready", False),
             "unlocked_count": len(unlocked),
             "total_count": len(catalog_articles()),
             "unlocked_ids": sorted(unlocked),
             "commander_tip": tip,
             "articles": client.get("articles") or {},
+            "panel": panel,
+            "catalog": catalog,
         }
     finally:
         if own:

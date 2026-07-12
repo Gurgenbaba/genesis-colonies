@@ -464,7 +464,7 @@ def test_pjax_navigation_owner_clears_stale_timeouts():
     assert "normalizeLcpPreloadHref" in preload
     assert "removeLcpHeroPreloadLinks" in preload
     version = _read("VERSION").strip()
-    assert version == "0.5.9.13"
+    assert version == "0.5.9.14"
 
 
 def test_main_js_gc802_planet_switch_state_sync():

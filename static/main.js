@@ -31252,6 +31252,69 @@
     window.requestAnimationFrame(() => openCodexArticle(codexId));
   }
 
+  function codexBandLabelKey(band) {
+    if (!band || band.band === "—") return "codex_related_title";
+    return band.label_key || `codex_band_${band.band}`;
+  }
+
+  function codexBindArticleOpenButtons(root) {
+    if (!root) return;
+    root.querySelectorAll("[data-codex-article-open]").forEach((btn) => {
+      if (btn.dataset.codexBound === "1") return;
+      btn.dataset.codexBound = "1";
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-codex-article-open") || "";
+        if (id) codexRenderArticle(id);
+      });
+    });
+  }
+
+  function codexHydratePanelFromState(codexState) {
+    const root = document.querySelector("[data-codex-root]");
+    if (!root || !codexState) return;
+    const list = root.querySelector("[data-codex-list]");
+    if (!list || list.querySelector(".gc-codex-band")) return;
+
+    const panel = codexState.panel;
+    const bands = panel && Array.isArray(panel.bands) ? panel.bands : [];
+    if (!bands.length) return;
+
+    const unlocked = new Set(Array.isArray(codexState.unlocked_ids) ? codexState.unlocked_ids : []);
+    let html = "";
+    bands.forEach((band) => {
+      const articles = Array.isArray(band.articles) ? band.articles : [];
+      if (!articles.length) return;
+      const bandKey = band.band != null ? String(band.band) : "";
+      const bandTitle = bandKey !== "—"
+        ? t(codexBandLabelKey(band), bandKey ? `Band ${bandKey}` : "")
+        : t("codex_related_title", "Related systems");
+      html += `<section class="gc-codex-band" data-codex-band="${codexEscapeHtml(bandKey)}">`;
+      html += `<h3 class="gc-codex-band-title">${codexEscapeHtml(bandTitle)}</h3><ul class="gc-codex-band-list">`;
+      articles.forEach((art) => {
+        const id = art.codex_id || "";
+        if (!id) return;
+        const isUnlocked = art.unlocked === true || unlocked.has(id);
+        const title = t(art.title_key || `codex_${id}_title`, id);
+        const read = art.estimated_read || "";
+        html += `<li class="gc-codex-band-item${isUnlocked ? "" : " is-locked"}" data-codex-id="${codexEscapeHtml(id)}">`;
+        if (isUnlocked) {
+          html += `<button type="button" class="gc-codex-article-link" data-codex-article-open="${codexEscapeHtml(id)}"><span class="gc-codex-article-title">${codexEscapeHtml(title)}</span>${read ? `<span class="gc-codex-article-read gc-mono">${codexEscapeHtml(read)}</span>` : ""}</button>`;
+        } else {
+          html += `<button type="button" class="gc-codex-article-link gc-codex-article-link--locked" data-codex-article-open="${codexEscapeHtml(id)}"><span class="gc-codex-article-title">${codexEscapeHtml(title)}</span><span class="gc-codex-locked-label">${codexEscapeHtml(t("codex_locked", "Locked"))}</span>`;
+          if (art.teaser_key) {
+            html += `<span class="gc-codex-teaser hint">${codexEscapeHtml(t(art.teaser_key))}</span>`;
+          }
+          html += "</button>";
+        }
+        html += "</li>";
+      });
+      html += "</ul></section>";
+    });
+    if (!html) return;
+    list.innerHTML = html;
+    codexBindArticleOpenButtons(list);
+  }
+
   function applyCodexFromState(codexState) {
     if (!codexState || typeof codexState !== "object") return;
     GC.codexState = codexState;
@@ -31260,6 +31323,8 @@
     if (codexState.articles && typeof codexState.articles === "object") {
       window.GC_CODEX_CLIENT = { articles: codexState.articles };
     }
+
+    codexHydratePanelFromState(codexState);
 
     const root = document.querySelector("[data-codex-root]");
     if (root && GC.codexUnlockedIds.length) {
@@ -31319,12 +31384,7 @@
       backBtn.addEventListener("click", () => codexShowList(root));
     }
 
-    root.querySelectorAll("[data-codex-article-open]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const id = btn.getAttribute("data-codex-article-open") || "";
-        if (id) codexRenderArticle(id);
-      });
-    });
+    codexBindArticleOpenButtons(root);
 
     if (!document.documentElement.dataset.codexClickBound) {
       document.documentElement.dataset.codexClickBound = "1";
