@@ -669,10 +669,8 @@
           <li class="pe-rail-step pe-rail-step--{{ step_class }}">
             <span class="pe-rail-step-node"></span>
             <span class="pe-rail-step-copy">
-              <span class="pe-rail-step-label">{{ T(item.label_key, item.key) }}</span>
-              {% if item.building_label_key %}
-              <span class="pe-rail-step-building hint">{{ T("pe_establishment_building_req", "Gebäude: %(building)s · Stufe %(level)s", building=T(item.building_label_key, item.building_key or ""), level=(item.min_level or 1)|int) }}</span>
-              {% endif %}
+              <span class="pe-rail-step-label">{{ T(item.building_label_key or item.label_key, item.key) }}</span>
+              <span class="pe-rail-step-building hint">{{ T("pe_establishment_build_level", "Stufe %(level)s auf dieser Kolonie bauen", level=(item.min_level or 1)|int) }}</span>
             </span>
           </li>
           {% endfor %}
@@ -738,7 +736,7 @@
             {% else %}{{ T(action.body_key, "Nutze die Zeit, um deinen Planeten weiterzuentwickeln.") }}{% endif %}
           </p>
           {% if action.priority == 'establishment' and action.milestone_building_label_key %}
-          <p class="pe-goal-establishment hint">{{ T("pe_establishment_next_building", "Als Nächstes: %(building)s (Stufe %(level)s) auf dieser Kolonie", building=T(action.milestone_building_label_key, ""), level=(action.milestone_building_level or 1)|int) }}</p>
+          <p class="pe-goal-establishment hint">{{ T("pe_establishment_next_building", "Als Nächstes auf dieser Kolonie: %(building)s (Stufe %(level)s) — unter Gebäude bauen", building=T(action.milestone_building_label_key, ""), level=(action.milestone_building_level or 1)|int) }}</p>
           {% endif %}
           <button type="button"
                   class="pe-goal-benefits-btn pe-info-trigger"

@@ -1252,10 +1252,11 @@ def test_main_js_gc640_global_fleet_hud():
     assert "--gc-fleet-sheet-top" in css
     assert "syncMobileFleetSheetLayout" in src
     assert "gc-fleet-sheet-backdrop" in src
+    assert "gc-fleet-sheet-portal" in src
     assert ".gc-bottom-nav-item[hidden]" in css
     pe = _read("templates/planet_evolution.html")
     assert "pe_establishment_scope_hint" in pe
-    assert "pe-rail-step-building" in pe
+    assert "pe_establishment_build_level" in pe
     assert "ascension_ancient" in _read("locales/de.json")
     assert "ascension_machine" in _read("locales/en.json")
     assert ".gc-fleet-drawer-row" in css

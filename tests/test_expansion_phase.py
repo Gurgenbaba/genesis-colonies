@@ -230,6 +230,7 @@ def test_establishment_milestones_structure(expansion_phase_db):
         communication = next((m for m in milestones if m['key'] == 'communication'))
         assert communication['building_key'] == 'radar_array'
         assert communication['building_label_key'] == 'building_radar_array'
+        assert communication['label_key'] == 'building_radar_array'
         assert communication['min_level'] == 1
     finally:
         conn.close()

@@ -62,21 +62,21 @@ def _milestone_building_fields(spec: Mapping[str, Any]) -> Dict[str, Any]:
 ESTABLISHMENT_MILESTONE_DEFS: tuple[Dict[str, Any], ...] = (
     {
         "key": "habitat",
-        "label_key": "expansion_milestone_habitat",
+        "label_key": "building_command_center",
         "building": "command_center",
         "min_level": 1,
         "required": True,
     },
     {
         "key": "energy",
-        "label_key": "expansion_milestone_energy",
+        "label_key": "building_solar_plant",
         "building": "solar_plant",
         "min_level": 1,
         "required": True,
     },
     {
         "key": "communication",
-        "label_key": "expansion_milestone_communication",
+        "label_key": "building_radar_array",
         "building": "radar_array",
         "min_level": 1,
         "required": True,

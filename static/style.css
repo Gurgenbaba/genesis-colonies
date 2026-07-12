@@ -36962,8 +36962,9 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
     top: max(var(--gc-fleet-sheet-top, 96px), var(--gc-safe-top));
     bottom: calc(var(--gc-bottom-nav-h) + var(--gc-safe-bottom) + 8px);
     width: auto;
+    min-height: min(36vh, 280px);
     margin: 0;
-    z-index: calc(var(--gc-z-popover, 80) - 1);
+    z-index: calc(var(--gc-z-popover, 80) + 1);
     display: flex;
     flex-direction: column;
     border: 1px solid var(--gc-panel-border);
@@ -36971,6 +36972,24 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
     background: rgba(6, 12, 26, 0.98);
     box-shadow: var(--gc-shadow-hard);
     overflow: hidden;
+  }
+
+  .gc-fleet-drawer-root.is-show-all.gc-fleet-sheet-portal,
+  .gc-fleet-hud-root.is-show-all.gc-fleet-sheet-portal{
+    z-index: calc(var(--gc-z-popover, 80) + 1);
+  }
+
+  .gc-fleet-drawer-root.is-show-all.gc-fleet-sheet-portal::before,
+  .gc-fleet-hud-root.is-show-all.gc-fleet-sheet-portal::before{
+    content: attr(aria-label);
+    flex: 0 0 auto;
+    padding: 10px 12px 8px;
+    border-bottom: 1px solid rgba(120, 190, 255, 0.14);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--gc-primary-2);
   }
 
   .gc-fleet-drawer-root.is-show-all .gc-fleet-drawer-panel,
