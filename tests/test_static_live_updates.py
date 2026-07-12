@@ -2179,10 +2179,12 @@ def test_main_js_timekeeper_research_card_selector():
     assert "function _findResearchCard(ownerKey)" in src
     assert '[data-research-card][data-tech-key="' in src
     assert "function _syncActiveMiniQueueTimekeeperButtons()" in src
+    sync_state = src.split("function _syncTimekeeperButtonsFromState(state)")[1].split("function _refreshDomTimekeeperApplyBtns", 1)[0]
+    assert '_findResearchCard(ownerKey)' in sync_state
+    assert "querySelectorAll(\"[data-tech-key]\")" not in sync_state
     finalize = src.split("function _finalizeTimekeeperQueueButtons(state)")[1].split("function _queueJobTimekeeperRemaining")[0]
     assert "_syncActiveMiniQueueTimekeeperButtons()" in finalize
-    assert '_findResearchCard(ownerKey)' in finalize
-    assert "querySelectorAll(\"[data-tech-key]\")" not in finalize
+    assert "_syncTimekeeperButtonsFromState(state)" in finalize
 
 
 def test_main_js_timekeeper_buttons_sync_immediately_after_action_state():
@@ -2191,16 +2193,23 @@ def test_main_js_timekeeper_buttons_sync_immediately_after_action_state():
     apply = src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]
     assert "_primeActionStateTimekeeper(state)" in apply
     assert "_finalizeTimekeeperQueueButtons(state)" in apply
+    assert "patchQueuePanelsImmediate(state)" in apply
+    assert "resetQueueRenderSignaturesForImmediatePatch()" in apply
     assert "function _finalizeTimekeeperQueueButtons(state)" in src
     assert "function _findGlobalActiveCardJob(queueRaw)" in src
     assert "function _iterActiveCardJobsByOwner(queueRaw)" in src
     assert "function _refreshDomTimekeeperApplyBtns(serverNowTs)" in src
     assert "function _syncMiniQueueTimekeeperFromState(state)" in src
+    assert "function _syncTimekeeperButtonsFromState(state)" in src
     assert '"timekeeper"' in src.split("const _HUD_LAST_STATE_KEYS = [")[1].split("];")[0]
-    patch_immediate = src.split("function patchQueuePanelsImmediate(data)")[1].split("function _finishRefreshTimer", 1)[0]
-    assert "_finalizeTimekeeperQueueButtons(data)" in patch_immediate
+    patch_immediate = src.split("function patchQueuePanelsImmediate(data)")[1].split("let _finishRefreshTimer", 1)[0]
+    assert "buildings_panel_delta || data.buildings_panel" in patch_immediate
+    assert "patchShipyardPanelFromState(data, activePlanetId)" in patch_immediate
+    assert "patchDefensePanelFromGameState(data, activePlanetId)" in patch_immediate
+    assert "patchResearchPanel(researchRaw.techs, researchRaw)" in patch_immediate
     finalize = src.split("function _finalizeTimekeeperQueueButtons(state)")[1].split("function _queueJobTimekeeperRemaining")[0]
     assert "_clearScopeTimekeeperApplyBtns(document)" not in finalize
+    assert "_syncTimekeeperButtonsFromState(state)" in finalize
     assert "_refreshDomTimekeeperApplyBtns(getTimerServerNow())" in finalize
     can_patch = src.split("function canPatchCardQueueInPlace(existing, queueJob)")[1].split("function _patchCardQueueTimingDatasets")[0]
     assert "finishAt !== prevFinish" not in can_patch
@@ -2208,6 +2217,8 @@ def test_main_js_timekeeper_buttons_sync_immediately_after_action_state():
     assert "_refreshDomTimekeeperApplyBtns(serverNowTs)" in ticker
     tab = src.split("function activateBuildingTabByName(targetTab, focusEl)")[1].split("function bindBuildingTabsOnce", 1)[0]
     assert "_finalizeTimekeeperQueueButtons(GC.lastState)" in tab
+    mutation = src.split("function isMutationStatePatchReason(reason)")[1].split("function resetQueueRenderSignaturesForImmediatePatch")[0]
+    assert 'r.endsWith("_apply")' in mutation
 
 
 def test_main_js_inventory_tk_chip_deposits_without_scroll_jump():

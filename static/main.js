@@ -660,11 +660,19 @@
       r.endsWith("_success")
       || r.endsWith("_cancel")
       || r.endsWith("_finished")
+      || r.endsWith("_apply")
       || r === "queue_timer_zero"
       || r === "timer_done"
       || r === "shipyard_build"
       || r === "defense_build"
     );
+  }
+
+  function resetQueueRenderSignaturesForImmediatePatch() {
+    _lastQueueSignature = "";
+    _lastResearchQueueSignature = "";
+    _lastShipyardQueueSignature = "";
+    _lastDefenseQueueSignature = "";
   }
 
   function logActionStatePatch(phase, reason, detail) {
@@ -1362,15 +1370,10 @@
     });
     _primeActionStateTimekeeper(state);
     if (!isPlanetSwitch) {
-      if (state.buildings_panel_delta && document.querySelector(".buildings-prog-list")) {
-        patchBuildingPanel(state.buildings_panel_delta, state.build_queue);
-        if (state.build_queue) {
-          renderBuildQueue(state.build_queue);
-          updateBuildQueueActions(state.build_queue);
-        }
-      } else {
-        patchQueuePanelsImmediate(state);
+      if (reasonStr === "timekeeper_apply") {
+        resetQueueRenderSignaturesForImmediatePatch();
       }
+      patchQueuePanelsImmediate(state);
     }
 
     const anyActive = applyGameStateData(state, reason, {
@@ -3475,6 +3478,11 @@
         const row = document.querySelector(`[data-building-row="${key}"]`);
         if (!row) return;
 
+        const heroLevel = row.querySelector(".gc-bld-hero-level, .gc-bld-card-level");
+        if (heroLevel && heroLevel !== levelEl) {
+          _setIfChanged(heroLevel, fmtNumber(b.level));
+        }
+
         applyBuildingRowState(row, b);
         patchBuildingRequirements(row, b);
         patchBuildingProduction(row, b);
@@ -3561,12 +3569,21 @@
     updateResearchQueueActions(researchRaw);
   }
 
-  /** GC-838 — patch queue owner maps immediately from action/finish state (no poll wait). */
+  /** GC-838 — patch queue owner maps + card levels/stock immediately from action/finish state (no poll wait). */
   function patchQueuePanelsImmediate(data) {
     if (!data || data.ok === false) return false;
     let patched = false;
+    const activePlanetId = Number(data.active_planet_id || data.build_queue?.planet_id || 0);
+    const buildingsPanel = data.buildings_panel_delta || data.buildings_panel;
     const buildQueueRaw = data.build_queue ?? null;
-    if (buildQueueRaw != null && document.querySelector(".buildings-prog-list")) {
+    if (buildingsPanel && document.querySelector(".buildings-prog-list")) {
+      patchBuildingPanel(buildingsPanel, buildQueueRaw);
+      if (buildQueueRaw) {
+        renderBuildQueue(buildQueueRaw);
+        updateBuildQueueActions(buildQueueRaw);
+      }
+      patched = true;
+    } else if (buildQueueRaw != null && document.querySelector(".buildings-prog-list")) {
       patchCardQueuesFromOwnerMap(
         document,
         resolveCardJobsByOwner(buildQueueRaw),
@@ -3575,10 +3592,16 @@
         (root, key) => root.querySelector(`[data-building-row="${key}"]`)
       );
       renderBuildQueue(buildQueueRaw);
+      updateBuildQueueActions(buildQueueRaw);
       patched = true;
     }
     const researchRaw = data.research ?? null;
-    if (researchRaw != null && document.querySelector(".research-prog-list")) {
+    if (researchRaw?.techs && document.querySelector(".research-prog-list")) {
+      patchResearchPanel(researchRaw.techs, researchRaw);
+      renderResearchQueue(researchRaw);
+      updateResearchQueueActions(researchRaw);
+      patched = true;
+    } else if (researchRaw != null && document.querySelector(".research-prog-list")) {
       patchCardQueuesFromOwnerMap(
         document,
         resolveCardJobsByOwner(researchRaw),
@@ -3591,26 +3614,25 @@
     }
     const syPage = document.getElementById("shipyard-page");
     if (syPage?.dataset.ready === "1") {
-      const qd = data.shipyard?.queue || data.shipyard_queue;
-      if (qd) {
-        renderShipyardQueue(syPage, qd);
+      const syRaw = data.shipyard?.queue || data.shipyard_queue;
+      if (data.shipyard || syRaw) {
+        patchShipyardPanelFromState(data, activePlanetId);
         patched = true;
       }
     }
     const defPage = document.getElementById("defense-page");
     if (defPage?.dataset.ready === "1" && data.defense) {
-      const qd = data.defense.queue || data.defense.defense_queue;
-      if (qd) {
-        renderDefenseQueue(defPage, qd);
-        patched = true;
-      }
+      patchDefensePanelFromGameState(data, activePlanetId);
+      patched = true;
     }
     if (patched) {
       logActionStatePatch("queue owner map patched", "immediate", {
         build_owners: Object.keys(resolveCardJobsByOwner(buildQueueRaw)).length,
         research_owners: Object.keys(resolveCardJobsByOwner(researchRaw)).length,
+        buildings_panel: Boolean(buildingsPanel),
+        shipyard: Boolean(data.shipyard || data.shipyard_queue),
+        defense: Boolean(data.defense),
       });
-      _finalizeTimekeeperQueueButtons(data);
     }
     return patched;
   }
@@ -7743,91 +7765,85 @@
 
   function _pruneInactiveTimekeeperApplyBtns() {
     document.querySelectorAll("[data-gc-timekeeper-apply]").forEach((btn) => {
+      if (_timekeeperApplying) return;
       const miniCard = btn.closest("[data-mini-queue-card]");
       if (miniCard) {
         if (miniCard.dataset.queueActive !== "1") btn.remove();
         return;
       }
       const block = btn.closest("[data-gc-card-queue], [data-hero-queue]");
-      if (block) {
-        if (block.dataset.queueActive !== "1") btn.remove();
-        return;
-      }
-      const heroSlot = btn.closest(".gc-bld-hero-action-slot--timekeeper");
-      if (heroSlot) {
-        const cardEl = heroSlot.closest("[data-building-row], [data-research-card], [data-building-card]");
-        const activeBlock = cardEl?.querySelector("[data-gc-card-queue][data-queue-active='1'], [data-hero-queue][data-queue-active='1']");
-        if (!activeBlock) btn.remove();
+      if (block && block.dataset.queueActive !== "1") {
+        btn.remove();
       }
     });
   }
 
-  function _queueJobFromActiveDomBlock(block, domain) {
-    if (!block || block.dataset.queueActive !== "1") return null;
-    const finishAt = Math.floor(Number(block.dataset.finishAt || 0));
-    const total = Math.max(1, Math.floor(Number(block.dataset.totalSeconds || 1)));
-    const now = getTimerServerNow();
-    const srvRemRaw = block.dataset.serverRemaining;
-    const rem = finishAt > 0
-      ? Math.max(
-        0,
-        Math.floor(
-          queueJobRemainingSeconds(
-            finishAt,
-            now,
-            srvRemRaw === undefined || srvRemRaw === "" ? NaN : Number(srvRemRaw)
-          )
-        )
-      )
-      : Math.max(0, Math.floor(Number(block.dataset.serverRemaining || 0)));
-    return {
-      is_active: true,
-      status: "active",
-      job_id: Math.floor(Number(block.dataset.jobId || 0)),
-      finish_at: finishAt,
-      remaining_seconds: rem,
-      duration_seconds: total,
-      owner_key: block.closest("[data-building-row], [data-research-card], [data-ship-key], [data-defense-card]")?.getAttribute("data-building-row")
-        || block.closest("[data-research-card]")?.getAttribute("data-tech-key")
-        || block.closest("[data-ship-key]")?.getAttribute("data-ship-key")
-        || block.closest("[data-defense-card]")?.getAttribute("data-defense-card")
-        || "",
-    };
+  function _syncTimekeeperButtonsFromState(state) {
+    if (!state || state.ok === false) return;
+    if (state.build_queue && document.querySelector(".buildings-prog-list")) {
+      _syncTimekeeperFromCardJobsByOwner(
+        state.build_queue,
+        (ownerKey) => document.querySelector(`[data-building-row="${ownerKey}"]`),
+        "building"
+      );
+    }
+    if (state.research && document.querySelector(".research-prog-list")) {
+      _syncTimekeeperFromCardJobsByOwner(
+        state.research,
+        (ownerKey) => _findResearchCard(ownerKey),
+        "research"
+      );
+    }
+    if ((state.shipyard || state.shipyard_queue) && document.getElementById("shipyard-page")?.dataset.ready === "1") {
+      const syRaw = state.shipyard?.queue || state.shipyard_queue;
+      if (syRaw) {
+        _syncTimekeeperFromCardJobsByOwner(
+          syRaw,
+          (shipKey) => document.querySelector(`[data-ship-key="${shipKey}"][data-unlocked="1"]`),
+          "shipyard"
+        );
+      }
+    }
+    if (state.defense && document.getElementById("defense-page")?.dataset.ready === "1") {
+      const defRaw = state.defense.queue || state.defense.defense_queue;
+      if (defRaw) {
+        _syncTimekeeperFromCardJobsByOwner(
+          defRaw,
+          (defKey) => document.querySelector(`[data-defense-card="${defKey}"][data-unlocked="1"]`),
+          "defense"
+        );
+      }
+    }
+    _syncMiniQueueTimekeeperFromState(state);
   }
 
   function _refreshDomTimekeeperApplyBtns(serverNowTs) {
+    const state = GC.lastState;
+    if (state && state.ok !== false) {
+      _syncTimekeeperButtonsFromState(state);
+    }
     const now = Number.isFinite(serverNowTs) ? serverNowTs : getTimerServerNow();
-    document.querySelectorAll("[data-mini-queue-card][data-queue-active='1']").forEach((card) => {
-      const finishAt = Math.floor(Number(card.dataset.finishAt || 0));
-      if (finishAt <= 0) return;
-      const rem = Math.max(
-        0,
-        Math.floor(queueJobRemainingSeconds(finishAt, now, card.dataset.serverRemaining))
-      );
-      if (rem <= 0) {
-        card.querySelector("[data-gc-timekeeper-apply]")?.remove();
-        return;
+    document.querySelectorAll("[data-gc-timekeeper-apply]").forEach((btn) => {
+      const miniCard = btn.closest("[data-mini-queue-card]");
+      const block = btn.closest("[data-gc-card-queue], [data-hero-queue]");
+      const host = miniCard || block;
+      if (!host) return;
+      const finishAt = Math.floor(Number(host.dataset.finishAt || 0));
+      let rem = parseInt(btn.dataset.timekeeperRemaining, 10) || 0;
+      if (finishAt > 0) {
+        const srvRemRaw = host.dataset.serverRemaining;
+        rem = Math.max(
+          0,
+          Math.floor(
+            queueJobRemainingSeconds(
+              finishAt,
+              now,
+              srvRemRaw === undefined || srvRemRaw === "" ? NaN : Number(srvRemRaw)
+            )
+          )
+        );
       }
-      _syncTimekeeperApplyBtn(card, String(card.dataset.timerDomain || "build"), {
-        is_active: true,
-        status: "active",
-        job_id: Math.floor(Number(card.dataset.jobId || 0)),
-        finish_at: finishAt,
-        remaining_seconds: rem,
-        duration_seconds: Math.max(1, Math.floor(Number(card.dataset.totalSeconds || 1))),
-      });
-    });
-    document.querySelectorAll("[data-gc-card-queue][data-queue-active='1'], [data-hero-queue][data-queue-active='1']").forEach((block) => {
-      const domain = String(block.dataset.timerDomain || "building");
-      const job = _queueJobFromActiveDomBlock(block, domain);
-      if (!job || job.remaining_seconds <= 0) {
-        block.closest("[data-building-row], [data-research-card], [data-building-card]")
-          ?.querySelector(".gc-bld-hero-action-slot--timekeeper [data-gc-timekeeper-apply]")
-          ?.remove();
-        block.querySelector("[data-gc-timekeeper-apply]")?.remove();
-        return;
-      }
-      _syncTimekeeperApplyBtn(block, domain, job);
+      _applyTimekeeperBtnState(btn, rem, state);
     });
   }
 
@@ -7921,41 +7937,7 @@
   function _finalizeTimekeeperQueueButtons(state) {
     if (!state) return;
     _primeActionStateTimekeeper(state);
-    if (state.build_queue && document.querySelector(".buildings-prog-list")) {
-      _syncTimekeeperFromCardJobsByOwner(
-        state.build_queue,
-        (ownerKey) => document.querySelector(`[data-building-row="${ownerKey}"]`),
-        "building"
-      );
-    }
-    if (state.research && document.querySelector(".research-prog-list")) {
-      _syncTimekeeperFromCardJobsByOwner(
-        state.research,
-        (ownerKey) => _findResearchCard(ownerKey),
-        "research"
-      );
-    }
-    if ((state.shipyard || state.shipyard_queue) && document.getElementById("shipyard-page")?.dataset.ready === "1") {
-      const syRaw = state.shipyard?.queue || state.shipyard_queue;
-      if (syRaw) {
-        _syncTimekeeperFromCardJobsByOwner(
-          syRaw,
-          (shipKey) => document.querySelector(`[data-ship-key="${shipKey}"][data-unlocked="1"]`),
-          "shipyard"
-        );
-      }
-    }
-    if (state.defense && document.getElementById("defense-page")?.dataset.ready === "1") {
-      const defRaw = state.defense.queue || state.defense.defense_queue;
-      if (defRaw) {
-        _syncTimekeeperFromCardJobsByOwner(
-          defRaw,
-          (defKey) => document.querySelector(`[data-defense-card="${defKey}"][data-unlocked="1"]`),
-          "defense"
-        );
-      }
-    }
-    _syncMiniQueueTimekeeperFromState(state);
+    _syncTimekeeperButtonsFromState(state);
     _syncActiveMiniQueueTimekeeperButtons();
     _pruneInactiveTimekeeperApplyBtns();
     _refreshDomTimekeeperApplyBtns(getTimerServerNow());
@@ -9814,9 +9796,8 @@
 
     updateMiniQueueProgressBars(serverNowTs);
     updateSafetyCountdownTimers();
-    if (_timekeeperApplyBalance() > 0) {
+    if (_timekeeperApplyBalance() > 0 && !_timekeeperApplying) {
       _refreshDomTimekeeperApplyBtns(serverNowTs);
-      patchShellHudTimekeeper(GC.lastState || {});
     }
   }
 
@@ -20548,6 +20529,14 @@
     }
 
     if (!unlocked) return;
+    const ownedCount = ship.owned_count ?? ship.owned ?? ship.stock;
+    if (ownedCount != null) {
+      const stockEl = card.querySelector(`[data-shipyard-stock="${ship.ship_key}"]`);
+      if (stockEl) {
+        const text = fmtNumber(Number(ownedCount) || 0);
+        if (stockEl.textContent !== text) stockEl.textContent = text;
+      }
+    }
     const btn = card.querySelector("[data-shipyard-build]");
     const maxBtn = card.querySelector("[data-shipyard-max]");
     if (btn) {
