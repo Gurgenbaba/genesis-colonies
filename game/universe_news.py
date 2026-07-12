@@ -1494,10 +1494,46 @@ def _format_sidebar_version_label(version_tag: str) -> str:
     return f"v{tag}"
 
 
+def _player_release_fallback_label() -> str:
+    """Player-facing fallback when DB has no timeline — never use build VERSION (0.x.y.z internal)."""
+    latest = str(_latest_changelog_version() or "").strip()
+    if latest:
+        return _format_sidebar_version_label(latest)
+    return "Genesis"
+
+
+def ensure_changelog_seeded(*, conn: sqlite3.Connection | None = None) -> Dict[str, Any]:
+    """Import CHANGELOG.md major releases when the player timeline has none (e.g. fresh prod DB)."""
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT COUNT(*) AS c
+            FROM universe_news
+            WHERE is_major_release = 1 AND is_draft = 0;
+            """
+        )
+        if int(cur.fetchone()["c"]) > 0:
+            return {"ok": True, "seeded": False, "reason": "already_has_major_releases"}
+
+        result = import_changelog_markdown(conn=conn)
+        if own:
+            conn.commit()
+        return {
+            "ok": bool(result.get("ok")),
+            "seeded": bool(result.get("ok")),
+            "import": result,
+        }
+    finally:
+        if own:
+            conn.close()
+
+
 def sidebar_release_nav(*, conn: sqlite3.Connection | None = None) -> Dict[str, Any]:
     """Label + deep-link for sidebar version chip → Genesis Timeline (/news)."""
-    from game.config import get_app_version
-
     entries = list_news(limit=500, audience=AUDIENCE_PLAYER, conn=conn)
     published = [row for row in entries if not row.get("is_draft")]
     has_dev_stream = False
@@ -1530,8 +1566,11 @@ def sidebar_release_nav(*, conn: sqlite3.Connection | None = None) -> Dict[str, 
                 anchor_id = f"version-{version_tag.replace('.', '-')}"
 
     if not label:
-        app_version = str(get_app_version() or "").strip()
-        label = _format_sidebar_version_label(app_version) if app_version else "Genesis"
+        label = _player_release_fallback_label()
+        fallback_tag = str(_latest_changelog_version() or "").strip()
+        if fallback_tag:
+            version_tag = fallback_tag
+            anchor_id = f"version-{fallback_tag.replace('.', '-')}"
 
     news_url = "/news"
     href = f"{news_url}#{anchor_id}" if anchor_id else news_url

@@ -2,7 +2,7 @@
 
 Vollständige Entwicklungshistorie von Projektstart bis heute.  
 Clustered by milestone versions (not every commit).  
-Stand: **2026-06-18** · Alpha **v1.5.3**
+Stand: **2026-07-12** · Alpha-Meilenstein **v0.8** (Build-Zähler: `VERSION`, nur intern/Cache-Bust)
 
 > Spieler: Aktuelle Patchnotes live im Spiel unter **News** (`/news`) und im NEWS-Banner.  
 > Admins: Einträge im Admin-Panel → Server → Universums-News.

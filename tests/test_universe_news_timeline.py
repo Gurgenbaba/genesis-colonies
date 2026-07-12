@@ -25,6 +25,7 @@ from game.universe_news import (
     build_player_timeline,
     build_timeline,
     create_news,
+    ensure_changelog_seeded,
     import_changelog_markdown,
     import_git_history,
     list_news,
@@ -207,6 +208,32 @@ def test_development_stream_timeline_label(timeline_db):
     )
     assert dev_block is not None
     assert dev_block["version_label"] == "Ongoing Development"
+
+
+def test_sidebar_release_nav_falls_back_to_changelog_not_build_version(timeline_db):
+    from game.config import get_app_version
+
+    nav = sidebar_release_nav()
+    assert nav["label"] == "v0.8"
+    assert nav["href"] == "/news#version-v0-8"
+    build = str(get_app_version() or "").strip()
+    assert build.startswith("0.")
+    assert nav["label"] != f"v{build}"
+
+
+def test_ensure_changelog_seeded_idempotent(timeline_db):
+    first = ensure_changelog_seeded()
+    assert first["ok"] is True
+    assert first["seeded"] is True
+    assert int((first.get("import") or {}).get("inserted") or 0) >= 1
+
+    nav = sidebar_release_nav()
+    assert nav["label"] == "v0.8"
+
+    second = ensure_changelog_seeded()
+    assert second["ok"] is True
+    assert second["seeded"] is False
+    assert second["reason"] == "already_has_major_releases"
 
 
 def test_sidebar_release_nav_major_and_dev(timeline_db):

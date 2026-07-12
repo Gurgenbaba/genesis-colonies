@@ -1,6 +1,6 @@
 # Genesis Colonies — Roadmap
 
-Geplante Entwicklungsphasen und Meilensteine. Stand: **v1.5.9.2** (Alpha, Reality-Sync 2026-06-24).
+Geplante Entwicklungsphasen und Meilensteine. Stand: **v0.5.9.13** (Alpha, Reality-Sync 2026-07-12).
 
 Status-Legende:
 
