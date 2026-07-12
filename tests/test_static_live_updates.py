@@ -2162,6 +2162,21 @@ def test_main_js_timekeeper_buttons_sync_immediately_after_action_state():
     assert '"timekeeper"' in src.split("const _HUD_LAST_STATE_KEYS = [")[1].split("];")[0]
 
 
+def test_main_js_inventory_tk_chip_deposits_without_scroll_jump():
+    src = _read("static/main.js")
+    assert "function depositTimekeeperChip(chipBtn, domain)" in src
+    assert "function findDepositableLegacyTimeItem(domain)" in src
+    inv = src.split("function bindInventoryOnce()")[1].split("function tickInventoryCooldowns")[0]
+    assert "depositTimekeeperChip(tkChip" in inv
+    assert "ev.preventDefault()" in inv.split("depositTimekeeperChip(tkChip")[0][-400:]
+    effect = src.split("function renderInventoryEffect(effect, opts)")[1].split("function isInventoryPayload")[0]
+    assert 'effect?.kind === "timekeeper_credit"' in effect
+    assert "showNotify(text, \"success\")" in effect
+    scroll = src.split("function scrollInventoryToFeedback(opts)")[1].split("function renderInventoryEffect")[0]
+    assert "window.scrollTo" not in scroll
+    assert "preserveScroll" in scroll
+
+
 def test_main_js_trader_hub_exchange_live_preview():
     """Trader Hub: preview runs after formatted number input; locale parsing covers grouped ints."""
     src = _read("static/main.js")

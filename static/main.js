@@ -13243,25 +13243,68 @@
     }
   }
 
-  function scrollInventoryToFeedback() {
+  function findDepositableLegacyTimeItem(domain) {
+    const legacy = (_inventoryLastState || parseInventoryPageState())?.timekeeper?.legacy_time_items || [];
+    const dom = String(domain || "");
+    return (
+      legacy.find((item) => {
+        if (!item || legacyBoosterDomain(item.item_key) !== dom) return false;
+        if ((parseInt(item.amount, 10) || 0) < 1) return false;
+        return item.usable !== false;
+      }) || null
+    );
+  }
+
+  async function depositTimekeeperChip(chipBtn, domain) {
+    const page = document.getElementById("inventory-page");
+    if (!page || page.dataset.ready !== "1") return;
+    let item = findDepositableLegacyTimeItem(domain);
+    if (!item) {
+      await refreshInventoryFromServer();
+      item = findDepositableLegacyTimeItem(domain);
+    }
+    if (!item) {
+      showNotify(t("inv_error_item_not_usable", "Dieses Item kann nicht benutzt werden."), "error");
+      return;
+    }
+    void runInventoryAction(
+      chipBtn,
+      "/api/inventory/use",
+      {
+        item_key: item.item_key,
+        amount: 1,
+        request_id: `inv-tk-${domain}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      },
+      (res) => {
+        applyActionState(res, "inventory_use");
+        renderInventoryEffect(res.effect || {}, { preserveScroll: true });
+        applyInventoryActionResult(res);
+        void refreshInventoryFromServer();
+      }
+    );
+  }
+
+  function scrollInventoryToFeedback(opts) {
+    if (opts && opts.preserveScroll) return;
     const panel = document.getElementById("inventory-rewards-panel");
     const page = document.getElementById("inventory-page");
     const scrollTarget = panel && !panel.hidden ? panel : page;
     if (scrollTarget) {
       try {
-        scrollTarget.scrollIntoView({ behavior: "smooth", block: "start" });
+        scrollTarget.scrollIntoView({ behavior: "smooth", block: "nearest" });
       } catch (_) {
         scrollTarget.scrollIntoView(true);
       }
     }
-    try {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    } catch (_) {
-      window.scrollTo(0, 0);
-    }
   }
 
-  function renderInventoryEffect(effect) {
+  function renderInventoryEffect(effect, opts) {
+    const preserveScroll = Boolean(opts && opts.preserveScroll);
+    if (effect?.kind === "timekeeper_credit") {
+      const text = inventoryEffectMessage(effect);
+      if (text) showNotify(text, "success");
+      return;
+    }
     const panel = document.getElementById("inventory-rewards-panel");
     const msgEl = document.querySelector("[data-inventory-effect-message]");
     const list = document.querySelector("[data-inventory-rewards-list]");
@@ -13290,7 +13333,7 @@
     if (list) list.innerHTML = "";
     if (text) {
       panel.hidden = false;
-      scrollInventoryToFeedback();
+      scrollInventoryToFeedback({ preserveScroll });
     }
   }
 
@@ -13645,6 +13688,7 @@
       item_key: payload.item_key || payload.container_key,
       consumed: payload.consumed || payload.opened || 1,
     });
+    void refreshInventoryFromServer();
 
     const page = document.getElementById("inventory-page");
     if (page) {
@@ -14012,13 +14056,10 @@
     document.addEventListener("click", async (ev) => {
       const tkChip = ev.target.closest("[data-inventory-tk-chip-domain]");
       if (tkChip) {
+        ev.preventDefault();
         const page = document.getElementById("inventory-page");
         if (!page || page.dataset.ready !== "1") return;
-        const domain = tkChip.dataset.inventoryTkChipDomain;
-        const deposit = document.querySelector(
-          `[data-inventory-timekeeper-legacy] [data-inventory-tk-domain="${domain}"]:not([disabled])`
-        );
-        if (deposit) deposit.click();
+        void depositTimekeeperChip(tkChip, tkChip.dataset.inventoryTkChipDomain);
         return;
       }
 
