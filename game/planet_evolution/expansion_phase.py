@@ -40,6 +40,25 @@ PHASE_LABEL_KEYS: Dict[str, str] = {
     EXPANSION_PHASE_UNKNOWN: "expansion_phase_unknown",
 }
 
+_MILESTONE_BUILDING_LABEL_KEYS: Dict[str, str] = {
+    "command_center": "building_command_center",
+    "solar_plant": "building_solar_plant",
+    "radar_array": "building_radar_array",
+}
+
+
+def _milestone_building_fields(spec: Mapping[str, Any]) -> Dict[str, Any]:
+    building = str(spec.get("building") or "").strip()
+    if not building:
+        return {}
+    min_level = max(1, int(spec.get("min_level") or 1))
+    return {
+        "building_key": building,
+        "building_label_key": _MILESTONE_BUILDING_LABEL_KEYS.get(building) or f"building_{building}",
+        "min_level": min_level,
+    }
+
+
 ESTABLISHMENT_MILESTONE_DEFS: tuple[Dict[str, Any], ...] = (
     {
         "key": "habitat",
@@ -117,14 +136,14 @@ def get_establishment_milestones(
             building = str(spec.get("building") or "")
             min_level = max(1, int(spec.get("min_level") or 1))
             met = int(buildings.get(building) or 0) >= min_level
-        out.append(
-            {
-                "key": key,
-                "label_key": str(spec.get("label_key") or key),
-                "met": bool(met),
-                "required": required,
-            }
-        )
+        row: Dict[str, Any] = {
+            "key": key,
+            "label_key": str(spec.get("label_key") or key),
+            "met": bool(met),
+            "required": required,
+        }
+        row.update(_milestone_building_fields(spec))
+        out.append(row)
     return out
 
 

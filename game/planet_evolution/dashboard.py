@@ -576,6 +576,8 @@ def _next_action(
             cta_action="focus_section",
             cta_highlight="pe-section-establishment",
             milestone_label_key=str(first.get("label_key") or "") if first else "",
+            milestone_building_label_key=str(first.get("building_label_key") or "") if first else "",
+            milestone_building_level=int(first.get("min_level") or 1) if first else 0,
             met_count=int(establishment.get("met_count") or 0),
             required_count=int(establishment.get("required_count") or 0),
         )

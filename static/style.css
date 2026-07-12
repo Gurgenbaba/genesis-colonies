@@ -21224,29 +21224,42 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   .gc-fleet-hud-row,
   .gc-fleet-drawer-row{
     grid-template-columns: minmax(0, 1fr);
-    row-gap: 2px;
-    padding: 2px 0;
+    row-gap: 4px;
+    padding: 6px 0;
+    min-height: 0;
   }
 
-  .gc-fleet-hud-leader,
   .gc-fleet-hud-track{
     display: none;
   }
 
   .gc-fleet-hud-main{
-    grid-template-columns: 4.25rem minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    grid-template-columns: unset;
+    min-width: 0;
   }
 
   .gc-fleet-hud-route,
   .gc-fleet-drawer-row-route{
-    white-space: nowrap;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    word-break: break-word;
   }
 
   .gc-fleet-hud-meta{
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 4px 8px;
     width: 100%;
     max-width: 100%;
     min-width: 0;
-    grid-template-columns: 3rem 3.4rem 2.6rem minmax(0, 1fr);
+    grid-template-columns: unset;
   }
 }
 
@@ -26083,6 +26096,35 @@ button.pe-hero-planet-hint:focus-visible {
   font-weight: 700;
 }
 .planet-evolution-page .pe-rail-step-label {
+  display: block;
+  font-size: 0.72rem;
+  line-height: 1.25;
+}
+
+.planet-evolution-page .pe-rail-step-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.planet-evolution-page .pe-rail-step-building {
+  display: block;
+  font-size: 0.62rem;
+  line-height: 1.2;
+}
+
+.planet-evolution-page .pe-expansion-panel-scope {
+  margin: 0 0 8px;
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+
+.planet-evolution-page .pe-goal-establishment {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
   font-size: 0.88rem;
   line-height: 1.35;
 }
@@ -36983,16 +37025,27 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
     display: none !important;
   }
 
+  .gc-bottom-nav-item[hidden]{
+    display: none !important;
+  }
+
+  .gc-bottom-nav{
+    overflow-x: hidden;
+    justify-content: space-around;
+  }
+
   .gc-bottom-nav-item{
-    flex: 0 0 72px;
-    min-width: 72px;
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: none;
+    padding-inline: 2px;
   }
 
   .gc-bottom-nav-label{
-    max-width: 68px;
+    max-width: 100%;
     white-space: normal;
     line-height: 1.05;
-    font-size: 0.52rem;
+    font-size: 0.5rem;
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
@@ -37004,48 +37057,48 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   .gc-fleet-drawer-row{
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    row-gap: 3px;
+    row-gap: 4px;
     min-width: 0;
-    padding: 4px 0;
-  }
-
-  .gc-fleet-hud-main{
-    grid-template-columns: 4.25rem minmax(0, 1fr);
+    min-height: 0;
+    padding: 6px 0;
   }
 
   .gc-fleet-hud-track{
+    display: none;
+  }
+
+  .gc-fleet-hud-main{
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    grid-template-columns: unset;
     min-width: 0;
+  }
+
+  .gc-fleet-hud-route,
+  .gc-fleet-drawer-row-route{
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    word-break: break-word;
   }
 
   .gc-fleet-hud-meta{
     display: flex;
     flex-wrap: wrap;
-    justify-content: flex-start;
+    justify-content: space-between;
+    align-items: center;
     gap: 4px 8px;
     width: 100%;
     max-width: 100%;
     min-width: 0;
+    grid-template-columns: unset;
   }
 
-  .gc-bottom-nav{
-    overflow-x: auto;
-    overflow-y: hidden;
-    overscroll-behavior-x: contain;
-    scrollbar-width: none;
-    justify-content: flex-start;
-  }
-
-  .gc-bottom-nav::-webkit-scrollbar{
-    display: none;
-  }
-
-  .gc-bottom-nav-item{
-    flex: 0 0 66px;
-    min-width: 66px;
-  }
-
-  .gc-bottom-nav-label{
-    max-width: 58px;
+  .gc-fleet-drawer-root:not(.is-show-all) .gc-fleet-drawer-list,
+  .gc-fleet-hud-root:not(.is-show-all) .gc-fleet-drawer-list{
+    max-height: min(32vh, 180px);
   }
 
   .gc-nav-drawer-panel{

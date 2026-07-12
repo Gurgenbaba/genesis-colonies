@@ -23070,7 +23070,7 @@
     bottomNav.classList.toggle("gc-bottom-nav--role-nav", !fullNav);
 
     const cfg = window.GC_SIDEBAR_NAV_CONFIG || {};
-    const alwaysBottom = Array.isArray(cfg.mobile_always_bottom) ? cfg.mobile_always_bottom : ["messages"];
+    const alwaysBottom = Array.isArray(cfg.mobile_always_bottom) ? cfg.mobile_always_bottom : [];
     const slotMax = Math.max(0, MOBILE_BOTTOM_MAX - alwaysBottom.length);
     const prominent = MOBILE_BOTTOM_PRIORITY.filter(
       (key) => !alwaysBottom.includes(key) && navTierForModule(nav, key) === "prominent"
@@ -23082,7 +23082,7 @@
 
     bottomNav.querySelectorAll("a.gc-bottom-nav-item[data-nav-module]").forEach((el) => {
       const key = String(el.dataset.navModule || "");
-      const show = visibleSet.has(key) || el.dataset.navAlwaysVisible === "1";
+      const show = visibleSet.has(key);
       el.hidden = !show;
       el.classList.toggle("gc-nav-bottom-slot", show);
     });

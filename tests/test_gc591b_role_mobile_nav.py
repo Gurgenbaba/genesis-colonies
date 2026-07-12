@@ -55,6 +55,7 @@ def test_mobile_nav_contains_data_nav_module():
     assert 'id="gc-nav-drawer"' in base
     assert 'data-nav-module="overview"' in base
     assert 'data-nav-module="fleet"' in base
+    assert 'data-nav-always-visible' not in base.split('id="gc-bottom-nav"', 1)[1].split('id="gc-nav-drawer"', 1)[0]
     assert 'data-nav-module="research"' in sidebar
 
 def test_role_sync_targets_mobile_drawer():

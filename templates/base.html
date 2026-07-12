@@ -493,7 +493,6 @@
     </a>
     <a href="{{ url_for('messages_view') }}"
        data-nav-module="messages"
-       data-nav-always-visible="1"
        class="gc-bottom-nav-item gc-nav-module--{{ nav_module_tier(_sn, 'messages') }} {% if request.endpoint == 'messages_view' %}active{% endif %}"
        {% if 'messages' not in _mb %}hidden{% endif %}>
       <span class="gc-bottom-nav-icon gc-bottom-nav-icon--letter" aria-hidden="true">N</span>
