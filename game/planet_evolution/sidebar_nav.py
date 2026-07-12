@@ -29,7 +29,7 @@ ALL_NAV_MODULES: List[str] = [
 ]
 
 STANDALONE_NAV_MODULES = frozenset({"messages"})
-MOBILE_ALWAYS_BOTTOM: Tuple[str, ...] = ("messages",)
+MOBILE_ALWAYS_BOTTOM: Tuple[str, ...] = ()
 
 NAV_SECTION_MODULES: Dict[str, Tuple[str, ...]] = {
     "command": ("overview", "galaxy", "planet_evolution"),
@@ -238,7 +238,7 @@ def mobile_bottom_modules(sidebar_nav: Dict[str, Any] | None) -> List[str]:
     always = list(MOBILE_ALWAYS_BOTTOM)
     slot_count = max(0, MOBILE_BOTTOM_MAX - len(always))
     if not sidebar_nav or sidebar_nav.get("full_nav"):
-        base = ["overview", "buildings", "research"]
+        base = ["overview", "buildings", "research", "fleet"]
     else:
         base = [
             key

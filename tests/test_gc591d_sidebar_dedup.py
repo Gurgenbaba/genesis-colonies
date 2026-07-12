@@ -111,7 +111,7 @@ def _visible_module_lines(sidebar_html: str, module: str) -> list[str]:
 
 def test_sidebar_template_uses_single_section_slots():
     sidebar = _read('templates/partials/sidebar.html')
-    assert 'data-nav-placement' not in sidebar
+    assert 'data-nav-placement="{{ _nav_placement }}"' in sidebar
     assert 'data-nav-overflow="1"' not in sidebar
     assert 'data-nav-module="research"' in sidebar
 
@@ -152,6 +152,6 @@ def test_mining_colony_research_once_in_infrastructure(gc591d_db, monkeypatch):
 
 def test_mobile_drawer_dedupe_contract():
     base = _read('templates/base.html')
-    drawer = base.split('id="gc-nav-drawer-links"', 1)[1].split('</div>', 1)[0]
-    modules = re.findall('data-nav-module="([^"]+)"', drawer)
-    assert len(modules) == len(set(modules))
+    assert 'include "partials/sidebar.html"' in base
+    assert 'include "partials/sidebar_right.html"' in base
+    assert 'gc-nav-drawer-link' not in base

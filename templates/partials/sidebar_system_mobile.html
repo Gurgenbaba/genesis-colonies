@@ -1,0 +1,16 @@
+{# Mobile drawer only — options/admin live in bottom utility bar on desktop. #}
+{% set _sn = SIDEBAR_NAV or {'full_nav': true, 'modules': {}} %}
+<div class="gc-nav-section gc-nav-section--standalone"
+     data-nav-section="system">
+  <a href="{{ url_for('options_view') }}"
+     class="gc-nav-link {% if request.endpoint == 'options_view' %}active{% endif %}">
+    <span class="gc-nav-link-label">{{ T("nav_options") }}</span>
+  </a>
+  {% if AUTH_ADMIN %}
+  <a href="{{ url_for('admin_panel') }}"
+     class="gc-nav-link gc-nav-admin {% if request.endpoint == 'admin_panel' %}active{% endif %}"
+     data-no-pjax="1">
+    <span class="gc-nav-link-label">{{ T("nav_admin") }}</span>
+  </a>
+  {% endif %}
+</div>

@@ -13,7 +13,7 @@ def _read(rel: str) -> str:
 
 def test_sidebar_flat_buildings_group_without_nested_box():
     sidebar = _read("templates/partials/sidebar.html")
-    assert 'id="gc-nav-buildings-toggle"' in sidebar
+    assert '{{ _id_p }}nav-buildings-toggle' in sidebar
     assert 'id="gc-nav-buildings-parent"' not in sidebar
     assert "gc-nav-sub--buildings" not in sidebar
     assert 'data-nav-group-key="buildings"' in sidebar
@@ -35,8 +35,8 @@ def test_sidebar_economy_has_trading_subnav():
 def test_sidebar_section_bodies_use_css_collapse_not_hidden():
     sidebar = _read("templates/partials/sidebar.html")
     assert "gc-nav-section-body gc-nav-sub" not in sidebar
-    assert 'id="gc-nav-section-infrastructure"' in sidebar
-    assert 'id="gc-nav-section-infrastructure" hidden' not in sidebar
+    assert '{{ _id_p }}nav-section-infrastructure' in sidebar
+    assert '{{ _id_p }}nav-section-infrastructure" hidden' not in sidebar
 
 
 def test_sidebar_verwaltung_has_no_support_or_overflow():

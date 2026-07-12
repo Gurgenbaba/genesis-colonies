@@ -1,27 +1,39 @@
 {% set _sn = SIDEBAR_NAV or {'full_nav': true, 'modules': {}} %}
+{% set _shell = NAV_SHELL | default('desktop') %}
+{% if _shell == 'mobile-drawer-left' %}
+  {% set _nav_id = 'gc-mnav-sidebar-nav' %}
+  {% set _id_p = 'gc-mnav-' %}
+  {% set _nav_placement = 'mobile-drawer-left' %}
+  {% set _nav_shell_class = 'gc-sidebar-mobile-drawer' %}
+{% else %}
+  {% set _nav_id = 'gc-sidebar-nav' %}
+  {% set _id_p = 'gc-' %}
+  {% set _nav_placement = 'left' %}
+  {% set _nav_shell_class = 'gc-sidebar-desktop' %}
+{% endif %}
 {% set _cmd_open = request.endpoint in ('overview', 'galaxy_view', 'planet_evolution_view') %}
 {% set _infra_open = request.endpoint in ('buildings_view', 'research_view') %}
 {% set _mil_open = request.endpoint in ('shipyard_view', 'defense_view', 'fleet_view', 'combat_simulator_view') %}
-<nav class="gc-sidebar gc-sidebar-desktop gc-sidebar--left gc-sidebar-left{% if _sn.full_nav %} gc-sidebar--full-nav{% else %} gc-sidebar--role-nav{% endif %}"
-     id="gc-sidebar-nav"
+<nav class="gc-sidebar {{ _nav_shell_class }} gc-sidebar--left gc-sidebar-left{% if _sn.full_nav %} gc-sidebar--full-nav{% else %} gc-sidebar--role-nav{% endif %}"
+     id="{{ _nav_id }}"
      aria-label="Hauptnavigation"
      data-nav-role="{{ _sn.empire_role_key | default('general') }}"
      data-nav-full="{{ '1' if _sn.full_nav else '0' }}"
-     data-nav-placement="left">
+     data-nav-placement="{{ _nav_placement }}">
 
   <div class="gc-nav-section gc-nav-submenu-group{% if _cmd_open %} is-expanded{% endif %}"
        data-nav-section="command"
        {% if not sidebar_section_visible(_sn, 'command') %}hidden{% endif %}>
     <button type="button"
             class="gc-nav-link gc-nav-section-toggle gc-nav-link--has-sub"
-            id="gc-nav-section-command-toggle"
+            id="{{ _id_p }}nav-section-command-toggle"
             aria-expanded="{{ 'true' if _cmd_open else 'false' }}"
-            aria-controls="gc-nav-section-command">
+            aria-controls="{{ _id_p }}nav-section-command">
       <span class="gc-nav-link-label">{{ T("nav_section_command", "Kommando") }}</span>
       <span class="gc-nav-chevron" aria-hidden="true"></span>
     </button>
     <div class="gc-nav-section-body"
-         id="gc-nav-section-command">
+         id="{{ _id_p }}nav-section-command">
       <a href="{{ url_for('overview') }}"
          data-nav-module="overview"
          class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'overview') }} {% if request.endpoint == 'overview' %}active{% endif %}"
@@ -48,14 +60,14 @@
        {% if not sidebar_section_visible(_sn, 'infrastructure') %}hidden{% endif %}>
     <button type="button"
             class="gc-nav-link gc-nav-section-toggle gc-nav-link--has-sub"
-            id="gc-nav-section-infrastructure-toggle"
+            id="{{ _id_p }}nav-section-infrastructure-toggle"
             aria-expanded="{{ 'true' if _infra_open else 'false' }}"
-            aria-controls="gc-nav-section-infrastructure">
+            aria-controls="{{ _id_p }}nav-section-infrastructure">
       <span class="gc-nav-link-label">{{ T("nav_section_infrastructure", "Infrastruktur") }}</span>
       <span class="gc-nav-chevron" aria-hidden="true"></span>
     </button>
     <div class="gc-nav-section-body"
-         id="gc-nav-section-infrastructure">
+         id="{{ _id_p }}nav-section-infrastructure">
       {% set _bld_nav_tab = request.args.get('tab') or 'resources' %}
       <div class="gc-nav-buildings-group gc-nav-submenu-group"
            data-nav-group="buildings"
@@ -64,15 +76,15 @@
            {% if not module_in_section(_sn, 'buildings', 'infrastructure') %}hidden{% endif %}>
         <button type="button"
                 class="gc-nav-sub-link gc-nav-group-toggle gc-nav-link--has-sub gc-nav-module--{{ nav_module_tier(_sn, 'buildings') }}"
-                id="gc-nav-buildings-toggle"
+                id="{{ _id_p }}nav-buildings-toggle"
                 data-nav-module="buildings"
                 aria-expanded="false"
-                aria-controls="gc-nav-buildings-sub">
+                aria-controls="{{ _id_p }}nav-buildings-sub">
           <span class="gc-nav-link-label">{{ T("nav_buildings") }}</span>
           <span class="gc-nav-chevron" aria-hidden="true"></span>
         </button>
         <div class="gc-nav-group-body"
-             id="gc-nav-buildings-sub"
+             id="{{ _id_p }}nav-buildings-sub"
              aria-label="{{ T('buildings_tabs', 'Gebäude-Kategorien') }}">
           <button type="button"
                   class="gc-nav-sub-link gc-nav-sub-link--nested {{ 'active' if request.endpoint == 'buildings_view' and _bld_nav_tab == 'resources' else '' }}"
@@ -110,14 +122,14 @@
        {% if not sidebar_section_visible(_sn, 'military') %}hidden{% endif %}>
     <button type="button"
             class="gc-nav-link gc-nav-section-toggle gc-nav-link--has-sub"
-            id="gc-nav-section-military-toggle"
+            id="{{ _id_p }}nav-section-military-toggle"
             aria-expanded="{{ 'true' if _mil_open else 'false' }}"
-            aria-controls="gc-nav-section-military">
+            aria-controls="{{ _id_p }}nav-section-military">
       <span class="gc-nav-link-label">{{ T("nav_section_military", "Militär") }}</span>
       <span class="gc-nav-chevron" aria-hidden="true"></span>
     </button>
     <div class="gc-nav-section-body"
-         id="gc-nav-section-military">
+         id="{{ _id_p }}nav-section-military">
       <a href="{{ url_for('shipyard_view') }}"
          data-nav-module="shipyard"
          class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'shipyard') }} {% if request.endpoint == 'shipyard_view' %}active{% endif %}"

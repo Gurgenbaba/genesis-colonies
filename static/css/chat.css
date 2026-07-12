@@ -573,12 +573,13 @@
 /* Mobile */
 @media (max-width: 768px) {
   .gc-chat-fab {
-    bottom: max(72px, calc(12px + env(safe-area-inset-bottom, 0px)));
+    bottom: calc(var(--gc-bottom-nav-h, 64px) + var(--gc-safe-bottom, 0px) + 12px);
+    right: max(12px, env(safe-area-inset-right, 0px));
   }
 
   .gc-chat-panel {
     right: 0;
-    bottom: 0;
+    bottom: calc(var(--gc-bottom-nav-h, 64px) + var(--gc-safe-bottom, 0px));
     left: 0;
     width: 100% !important;
     height: min(82vh, 600px) !important;

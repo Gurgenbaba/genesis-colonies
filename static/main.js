@@ -22596,7 +22596,13 @@
 
   function navStorageKeyForSidebar(sidebar) {
     if (!sidebar) return NAV_SECTION_STORAGE_KEY;
-    if (sidebar.id === "gc-sidebar-nav-right" || sidebar.dataset.navPlacement === "right") {
+    const placement = sidebar.dataset.navPlacement || "";
+    if (
+      sidebar.id === "gc-sidebar-nav-right"
+      || sidebar.id === "gc-mnav-sidebar-nav-right"
+      || placement === "right"
+      || placement === "mobile-drawer-right"
+    ) {
       return NAV_SECTION_STORAGE_KEY_RIGHT;
     }
     return NAV_SECTION_STORAGE_KEY;
@@ -22620,7 +22626,13 @@
 
   function sidebarAllowsSection(sidebar, sectionKey) {
     if (!sidebar) return true;
-    if (sidebar.id === "gc-sidebar-nav-right" || sidebar.dataset.navPlacement === "right") {
+    const placement = sidebar.dataset.navPlacement || "";
+    if (
+      sidebar.id === "gc-sidebar-nav-right"
+      || sidebar.id === "gc-mnav-sidebar-nav-right"
+      || placement === "right"
+      || placement === "mobile-drawer-right"
+    ) {
       return RIGHT_NAV_SECTIONS.has(sectionKey);
     }
     return LEFT_NAV_SECTIONS.has(sectionKey);
@@ -22974,6 +22986,8 @@
 
     restoreSidebarMenuState(document.getElementById("gc-sidebar-nav"), targetUrl, routeCtx);
     restoreSidebarMenuState(document.getElementById("gc-sidebar-nav-right"), targetUrl, routeCtx);
+    restoreSidebarMenuState(document.getElementById("gc-mnav-sidebar-nav"), targetUrl, routeCtx);
+    restoreSidebarMenuState(document.getElementById("gc-mnav-sidebar-nav-right"), targetUrl, routeCtx);
     markLeftmenuActiveLinks(targetUrl, routeCtx);
   };
 
@@ -22991,7 +23005,7 @@
       (key) => !alwaysBottom.includes(key) && navTierForModule(nav, key) === "prominent"
     );
     const visible = fullNav
-      ? ["overview", "buildings", "research"].slice(0, slotMax)
+      ? ["overview", "buildings", "research", "fleet"].slice(0, slotMax)
       : prominent.slice(0, slotMax);
     const visibleSet = new Set([...visible, ...alwaysBottom]);
 
@@ -23005,51 +23019,18 @@
     return visibleSet;
   }
 
-  function applyMobileDrawerNav(drawer, nav, bottomModules) {
-    if (!drawer || !nav) return;
-    applyRoleNavTiers(drawer, nav);
-    const fullNav = !!nav.full_nav;
-    const bottomSet = bottomModules instanceof Set ? bottomModules : new Set(bottomModules || []);
-    drawer.classList.toggle("gc-nav-drawer--full-nav", fullNav);
-    drawer.classList.toggle("gc-nav-drawer--role-nav", !fullNav);
-
-    drawer.querySelectorAll("[data-nav-module]").forEach((el) => {
-      el.hidden = true;
-    });
-    drawer.querySelectorAll("[data-nav-module]").forEach((el) => {
-      const module = String(el.dataset.navModule || "");
-      if (bottomSet.has(module)) return;
-      if (fullNav) {
-        el.hidden = false;
-        return;
-      }
-      el.hidden = !mobileDrawerShowsModule(nav, module, bottomSet);
-    });
-
-    drawer.querySelectorAll("[data-nav-group]").forEach((group) => {
-      const links = group.querySelectorAll("[data-nav-module]");
-      let anyVisible = false;
-      links.forEach((el) => {
-        if (!el.hidden) anyVisible = true;
-      });
-      group.hidden = !anyVisible;
-    });
-  }
-
-  function mobileDrawerShowsModule(nav, module, bottomSet) {
-    if (bottomSet.has(module)) return false;
-    const utility = new Set(
-      Array.isArray(window.GC_SIDEBAR_NAV_CONFIG?.utility_modules)
-        ? window.GC_SIDEBAR_NAV_CONFIG.utility_modules
-        : (window.GC_SIDEBAR_NAV_CONFIG?.administration_modules || [])
-    );
-    if (utility.has(module)) return true;
-    const display = moduleDisplaySection(nav, module);
-    if (display === "administration") {
-      return navTierForModule(nav, module) === "secondary";
+  function syncMobileDrawerSidebars(nav) {
+    const drawer = document.getElementById("gc-nav-drawer");
+    const drawerLeft = document.getElementById("gc-mnav-sidebar-nav");
+    const drawerRight = document.getElementById("gc-mnav-sidebar-nav-right");
+    if (drawer && nav) {
+      const fullNav = !!nav.full_nav;
+      drawer.classList.toggle("gc-nav-drawer--full-nav", fullNav);
+      drawer.classList.toggle("gc-nav-drawer--role-nav", !fullNav);
+      applyRoleNavTiers(drawer, nav);
     }
-    return display === (window.GC_SIDEBAR_NAV_CONFIG?.module_primary_section || {})[module]
-      && navTierForModule(nav, module) === "prominent";
+    if (drawerLeft) applyDesktopSidebarNav(drawerLeft, nav);
+    if (drawerRight) applyDesktopSidebarNav(drawerRight, nav);
   }
 
   GC.syncRoleBasedSidebar = function syncRoleBasedSidebar(data) {
@@ -23076,7 +23057,7 @@
       const bottomModules = bottomNav
         ? applyMobileBottomNav(bottomNav, nav)
         : new Set();
-      if (drawer) applyMobileDrawerNav(drawer, nav, bottomModules);
+      if (drawer) syncMobileDrawerSidebars(nav);
     }
 
     GC.restoreLeftmenuState(window.location.href);
@@ -23102,7 +23083,7 @@
 
     document.addEventListener("click", (e) => {
       const groupToggle = e.target.closest(".gc-nav-group-toggle, #gc-nav-trading-parent");
-      let sidebar = groupToggle?.closest(".gc-sidebar-desktop");
+      let sidebar = groupToggle?.closest(".gc-sidebar-desktop, .gc-sidebar-mobile-drawer");
       if (groupToggle && sidebar) {
         e.preventDefault();
         const group = groupToggle.closest("[data-nav-group-key]");
@@ -23112,7 +23093,7 @@
       }
 
       const toggle = e.target.closest(".gc-nav-section-toggle");
-      sidebar = toggle?.closest(".gc-sidebar-desktop");
+      sidebar = toggle?.closest(".gc-sidebar-desktop, .gc-sidebar-mobile-drawer");
       if (!toggle || !sidebar) return;
       e.preventDefault();
       const section = toggle.closest("[data-nav-section]");
@@ -29936,6 +29917,8 @@
     "a.gc-command-center-action-btn, a.gc-command-center-fleet-link, a.gc-command-center-news-link, a.gc-command-center-activity-link, " +
     "a.fleet-mode-tab, a[data-gc-nav], a[data-command-action], " +
     "#gc-sidebar-nav a[href], #gc-sidebar-nav-right a[href], " +
+    "#gc-mnav-sidebar-nav a[href], #gc-mnav-sidebar-nav-right a[href], " +
+    "#gc-nav-drawer-panel-meta [data-nav-section='system'] a[href], " +
     "#gc-nav-trading-sub a.gc-nav-sub-link, #gc-nav-military-sub a.gc-nav-sub-link, #gc-nav-fleet-sub a.gc-nav-sub-link";
 
   function _tradingPageFromPath(path) {
@@ -30052,7 +30035,11 @@
   }
 
   function _clearSidebarNavActive() {
-    document.querySelectorAll("#gc-sidebar-nav .active, #gc-sidebar-nav-right .active").forEach((el) => {
+    document.querySelectorAll(
+      "#gc-sidebar-nav .active, #gc-sidebar-nav-right .active, " +
+      "#gc-mnav-sidebar-nav .active, #gc-mnav-sidebar-nav-right .active, " +
+      "#gc-nav-drawer-panel-meta [data-nav-section='system'] .active"
+    ).forEach((el) => {
       el.classList.remove("active");
     });
   }
@@ -30060,7 +30047,11 @@
   function _pickSidebarHrefActive(path) {
     let best = null;
     let bestDepth = -1;
-    document.querySelectorAll("#gc-sidebar-nav a.gc-nav-sub-link[href], #gc-sidebar-nav-right a.gc-nav-sub-link[href]").forEach((link) => {
+    document.querySelectorAll(
+      "#gc-sidebar-nav a.gc-nav-sub-link[href], #gc-sidebar-nav-right a.gc-nav-sub-link[href], " +
+      "#gc-mnav-sidebar-nav a.gc-nav-sub-link[href], #gc-mnav-sidebar-nav-right a.gc-nav-sub-link[href], " +
+      "#gc-nav-drawer-panel-meta [data-nav-section='system'] a.gc-nav-link[href]"
+    ).forEach((link) => {
       if (link.id === "gc-nav-trading-parent") return;
       const href = link.getAttribute("href");
       if (!href) return;
@@ -31109,8 +31100,38 @@
     if (!moreBtn || !drawer) return;
 
     const DRAWER_MS = 280;
+    const MOBILE_NAV_TAB_LS = "gc_mobile_nav_tab";
+
+    function readMobileNavTab() {
+      try {
+        const value = localStorage.getItem(MOBILE_NAV_TAB_LS);
+        return value === "meta" ? "meta" : "gameplay";
+      } catch (_) {
+        return "gameplay";
+      }
+    }
+
+    function setMobileNavTab(tabKey, persist = true) {
+      const key = tabKey === "meta" ? "meta" : "gameplay";
+      drawer.querySelectorAll("[data-mobile-nav-tab]").forEach((btn) => {
+        const active = (btn.dataset.mobileNavTab || "") === key;
+        btn.classList.toggle("is-active", active);
+        btn.setAttribute("aria-selected", active ? "true" : "false");
+      });
+      drawer.querySelectorAll("[data-mobile-nav-panel]").forEach((panelEl) => {
+        const active = (panelEl.dataset.mobileNavPanel || "") === key;
+        panelEl.classList.toggle("is-active", active);
+        panelEl.hidden = !active;
+      });
+      if (persist) {
+        try {
+          localStorage.setItem(MOBILE_NAV_TAB_LS, key);
+        } catch (_) {}
+      }
+    }
 
     function openDrawer() {
+      setMobileNavTab(readMobileNavTab(), false);
       drawer.hidden = false;
       document.body.classList.add("gc-nav-drawer-open");
       moreBtn.setAttribute("aria-expanded", "true");
@@ -31160,13 +31181,28 @@
     if (backdrop) backdrop.addEventListener("click", closeDrawer);
     if (closeBtn) closeBtn.addEventListener("click", closeDrawer);
 
-    drawer.querySelectorAll("a.gc-nav-drawer-link").forEach((link) => {
+    drawer.querySelectorAll("[data-mobile-nav-tab]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        setMobileNavTab(btn.dataset.mobileNavTab || "gameplay");
+      });
+    });
+
+    drawer.querySelectorAll(
+      "a.gc-nav-link[href], a.gc-nav-sub-link[href], a.gc-nav-drawer-link[href], " +
+      "button.gc-nav-link[data-special-open-window]"
+    ).forEach((link) => {
       link.addEventListener("click", closeDrawer);
     });
 
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && drawer.classList.contains("is-open")) closeDrawer();
     });
+
+    if (typeof GC.registerCleanup === "function") {
+      GC.registerCleanup(() => {
+        closeDrawer();
+      });
+    }
   }
 
   // =========================

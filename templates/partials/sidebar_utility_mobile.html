@@ -1,0 +1,38 @@
+{# Mobile META drawer — utility actions (desktop: bottom utility bar + special dock). #}
+<div class="gc-nav-section gc-nav-section--utility-mobile"
+     data-nav-section="utility">
+  <div class="gc-nav-section-label">{{ T("nav_section_utility", "Hilfe & Community") }}</div>
+  <button type="button"
+          class="gc-nav-link"
+          data-special-open-window="support">
+    <span class="gc-nav-link-label">{{ T("support_short", "Support") }}</span>
+  </button>
+  <button type="button"
+          class="gc-nav-link"
+          data-special-open-window="my-tickets">
+    <span class="gc-nav-link-label">{{ T("nav_tickets", "Tickets") }}</span>
+  </button>
+  <button type="button"
+          class="gc-nav-link"
+          data-special-open-window="codex">
+    <span class="gc-nav-link-label">{{ T("codex_short", "Codex") }}</span>
+  </button>
+  <button type="button"
+          class="gc-nav-link"
+          data-special-open-window="rules">
+    <span class="gc-nav-link-label">{{ T("rules_short", "Regeln") }}</span>
+  </button>
+  <button type="button"
+          class="gc-nav-link"
+          data-special-open-window="imprint">
+    <span class="gc-nav-link-label">{{ T("imprint_short", "Impressum") }}</span>
+  </button>
+  <a href="https://discord.gg/CYP8qWE7VM"
+     class="gc-nav-link gc-nav-link--external"
+     target="_blank"
+     rel="noopener noreferrer"
+     data-no-pjax
+     data-community-discord-link>
+    <span class="gc-nav-link-label">{{ T("community_discord_short", "Discord") }}</span>
+  </a>
+</div>

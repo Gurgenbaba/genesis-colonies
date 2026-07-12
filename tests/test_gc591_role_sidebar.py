@@ -93,7 +93,7 @@ def test_client_sidebar_nav_config_matches_roles():
 
 def test_sidebar_template_role_markers():
     sidebar = _read('templates/partials/sidebar.html')
-    assert 'id="gc-sidebar-nav"' in sidebar
+    assert 'id="{{ _nav_id }}"' in sidebar
     assert 'data-nav-module="overview"' in sidebar
     assert 'data-nav-module="research"' in sidebar
     assert 'data-nav-module="shipyard"' in sidebar
@@ -112,9 +112,10 @@ def test_main_js_planet_switch_updates_sidebar(gc591_db, monkeypatch):
     assert 'GC.syncRoleBasedSidebar' in src
     assert 'resolveSidebarNavFromState' in src
     assert 'applyDesktopSidebarNav' in src
-    assert 'applyMobileDrawerNav' in src
+    assert 'syncMobileDrawerSidebars' in src
     assert 'initRoleBasedSidebar' in src
-    assert src.index('GC.syncRoleBasedSidebar(data)') > src.index('function applyGameStateData')
+    assert 'GC.syncRoleBasedSidebar(data)' in src
+    assert src.index('function applyHudOnlyGameState') < src.index('GC.syncRoleBasedSidebar(data)')
     assert 'gc-sidebar-nav-config' in base
     assert 'GC_SIDEBAR_NAV_CONFIG' in base
     assert 'gc-sidebar--role-nav' in css

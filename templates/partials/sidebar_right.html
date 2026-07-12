@@ -1,4 +1,16 @@
 {% set _sn = SIDEBAR_NAV or {'full_nav': true, 'modules': {}} %}
+{% set _shell = NAV_SHELL | default('desktop') %}
+{% if _shell == 'mobile-drawer-right' %}
+  {% set _nav_id = 'gc-mnav-sidebar-nav-right' %}
+  {% set _id_p = 'gc-mnav-r-' %}
+  {% set _nav_placement = 'mobile-drawer-right' %}
+  {% set _nav_shell_class = 'gc-sidebar-mobile-drawer' %}
+{% else %}
+  {% set _nav_id = 'gc-sidebar-nav-right' %}
+  {% set _id_p = 'gc-' %}
+  {% set _nav_placement = 'right' %}
+  {% set _nav_shell_class = 'gc-sidebar-desktop' %}
+{% endif %}
 {% set _eco_open = request.endpoint in (
   'trader_hub_view', 'inventory_view', 'auction_house_view', 'empire_view', 'techtree_view'
 ) %}
@@ -6,12 +18,12 @@
   'alliance_view', 'ranking_view', 'chronicles_view', 'hall_of_fame_view', 'records_view',
   'referrals_view', 'vote_center_view', 'imperial_directives_view'
 ) %}
-<nav class="gc-sidebar gc-sidebar-desktop gc-sidebar--right gc-sidebar-right{% if _sn.full_nav %} gc-sidebar--full-nav{% else %} gc-sidebar--role-nav{% endif %}"
-     id="gc-sidebar-nav-right"
+<nav class="gc-sidebar {{ _nav_shell_class }} gc-sidebar--right gc-sidebar-right{% if _sn.full_nav %} gc-sidebar--full-nav{% else %} gc-sidebar--role-nav{% endif %}"
+     id="{{ _nav_id }}"
      aria-label="{{ T('nav_meta', 'Meta-Navigation') }}"
      data-nav-role="{{ _sn.empire_role_key | default('general') }}"
      data-nav-full="{{ '1' if _sn.full_nav else '0' }}"
-     data-nav-placement="right">
+     data-nav-placement="{{ _nav_placement }}">
 
   <div class="gc-nav-section gc-nav-section--standalone"
        data-nav-section="messages"
@@ -30,14 +42,14 @@
        {% if not sidebar_section_visible(_sn, 'economy') %}hidden{% endif %}>
     <button type="button"
             class="gc-nav-link gc-nav-section-toggle gc-nav-link--has-sub"
-            id="gc-nav-section-economy-toggle"
+            id="{{ _id_p }}nav-section-economy-toggle"
             aria-expanded="{{ 'true' if _eco_open else 'false' }}"
-            aria-controls="gc-nav-section-economy">
+            aria-controls="{{ _id_p }}nav-section-economy">
       <span class="gc-nav-link-label">{{ T("nav_section_economy", "Wirtschaft") }}</span>
       <span class="gc-nav-chevron" aria-hidden="true"></span>
     </button>
     <div class="gc-nav-section-body"
-         id="gc-nav-section-economy">
+         id="{{ _id_p }}nav-section-economy">
       <a href="{{ url_for('trader_hub_view') }}"
          data-nav-module="trading"
          data-trading-nav="trader_hub"
@@ -75,14 +87,14 @@
        {% if not sidebar_section_visible(_sn, 'administration') %}hidden{% endif %}>
     <button type="button"
             class="gc-nav-link gc-nav-section-toggle gc-nav-link--has-sub"
-            id="gc-nav-section-community-toggle"
+            id="{{ _id_p }}nav-section-community-toggle"
             aria-expanded="{{ 'true' if _comm_open else 'false' }}"
-            aria-controls="gc-nav-section-community">
+            aria-controls="{{ _id_p }}nav-section-community">
       <span class="gc-nav-link-label">{{ T("nav_section_community", "Community") }}</span>
       <span class="gc-nav-chevron" aria-hidden="true"></span>
     </button>
     <div class="gc-nav-section-body"
-         id="gc-nav-section-community">
+         id="{{ _id_p }}nav-section-community">
       <a href="{{ url_for('ranking_view') }}"
          data-nav-module="ranking"
          class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'ranking') }} {% if request.endpoint == 'ranking_view' %}active{% endif %}"

@@ -553,189 +553,53 @@
        data-nav-role="{{ _sn.empire_role_key | default('general') }}"
        data-nav-full="{{ '1' if _sn.full_nav else '0' }}">
     <div class="gc-nav-drawer-backdrop" id="gc-nav-drawer-backdrop" aria-hidden="true"></div>
-    <div class="gc-nav-drawer-panel" role="dialog" aria-modal="true" aria-label="{{ T('nav_more_admin', 'Mehr / Verwaltung') }}">
+    <div class="gc-nav-drawer-panel" role="dialog" aria-modal="true" aria-label="{{ T('nav_mobile_drawer', 'Navigation') }}">
       <div class="gc-nav-drawer-head">
-        <span class="gc-nav-drawer-title">{{ T("nav_more_admin", "Mehr / Verwaltung") }}</span>
+        <span class="gc-nav-drawer-title">{{ T("nav_mobile_drawer", "Navigation") }}</span>
         <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" id="gc-nav-drawer-close" aria-label="{{ T('close', 'Schließen') }}">✕</button>
       </div>
-      <div class="gc-nav-drawer-links" id="gc-nav-drawer-links">
-        <a href="{{ url_for('research_view') }}"
-           data-nav-module="research"
-           class="gc-nav-drawer-link gc-nav-module--{{ nav_module_tier(_sn, 'research') }} {% if request.endpoint == 'research_view' %}active{% endif %}"
-           {% if not mobile_drawer_shows_module(_sn, 'research', bottom_modules=_mb) %}hidden{% endif %}>
-          {{ T("nav_research") }}
-        </a>
-        <a href="{{ url_for('techtree_view') }}"
-           data-nav-module="techtree"
-           class="gc-nav-drawer-link gc-nav-module--{{ nav_module_tier(_sn, 'techtree') }} {% if request.endpoint == 'techtree_view' %}active{% endif %}"
-           {% if not mobile_drawer_shows_module(_sn, 'techtree', bottom_modules=_mb) %}hidden{% endif %}>
-          {{ T("nav_techtree", "Tech-Tree") }}
-        </a>
-        <a href="{{ url_for('planet_evolution_view') }}"
-           data-nav-module="planet_evolution"
-           class="gc-nav-drawer-link gc-nav-module--{{ nav_module_tier(_sn, 'planet_evolution') }} {% if request.endpoint == 'planet_evolution_view' %}active{% endif %}"
-           {% if not mobile_drawer_shows_module(_sn, 'planet_evolution', bottom_modules=_mb) %}hidden{% endif %}>
-          {{ T("nav_planet_evolution", "Planet Evolution") }}
-        </a>
-        <a href="{{ url_for('messages_view') }}"
-           data-nav-module="messages"
-           class="gc-nav-drawer-link gc-nav-module--{{ nav_module_tier(_sn, 'messages') }} {% if request.endpoint == 'messages_view' %}active{% endif %}"
-           {% if not mobile_drawer_shows_module(_sn, 'messages', bottom_modules=_mb) %}hidden{% endif %}>
-          <span>{{ T("nav_messages", "Nachrichten") }}</span>
-          <span class="gc-messages-nav-badge hidden" data-messages-unread-badge hidden aria-hidden="true"></span>
-        </a>
-        <a href="{{ url_for('empire_view') }}"
-           data-nav-module="empire"
-           class="gc-nav-drawer-link gc-nav-module--{{ nav_module_tier(_sn, 'empire') }} {% if request.endpoint == 'empire_view' %}active{% endif %}"
-           {% if not mobile_drawer_shows_module(_sn, 'empire', bottom_modules=_mb) %}hidden{% endif %}>
-          {{ T("nav_empire", "Empire") }}
-        </a>
-        {% set _mil_tiers = [nav_module_tier(_sn, 'shipyard'), nav_module_tier(_sn, 'defense')] %}
-        <div class="gc-nav-drawer-group{% if 'prominent' in _mil_tiers %} gc-nav-group--prominent{% endif %}{% if _mil_tiers and _mil_tiers | reject('equalto', 'secondary') | list | length == 0 %} gc-nav-group--secondary{% endif %}"
-             data-nav-group="military"
-             data-nav-group-modules="shipyard,defense">
-          <span class="gc-nav-drawer-group-label">{{ T("nav_military_hub", "Militärproduktion") }}</span>
-          <a href="{{ url_for('shipyard_view') }}"
-             data-nav-module="shipyard"
-             class="gc-nav-drawer-link gc-nav-drawer-sublink gc-nav-module--{{ nav_module_tier(_sn, 'shipyard') }} {% if request.endpoint == 'shipyard_view' %}active{% endif %}"
-             {% if not mobile_drawer_shows_module(_sn, 'shipyard', bottom_modules=_mb) %}hidden{% endif %}>
-            {{ T("nav_shipyard") }}
-          </a>
-          <a href="{{ url_for('defense_view') }}"
-             data-nav-module="defense"
-             class="gc-nav-drawer-link gc-nav-drawer-sublink gc-nav-module--{{ nav_module_tier(_sn, 'defense') }} {% if request.endpoint == 'defense_view' %}active{% endif %}"
-             {% if not mobile_drawer_shows_module(_sn, 'defense', bottom_modules=_mb) %}hidden{% endif %}>
-            {{ T("nav_defense") }}
-          </a>
+      <div class="gc-nav-drawer-tabs" role="tablist" aria-label="{{ T('nav_mobile_drawer', 'Navigation') }}">
+        <button type="button"
+                class="gc-nav-drawer-tab is-active"
+                id="gc-nav-drawer-tab-gameplay"
+                role="tab"
+                aria-selected="true"
+                aria-controls="gc-nav-drawer-panel-gameplay"
+                data-mobile-nav-tab="gameplay">
+          {{ T("nav_mobile_tab_gameplay", "SPIEL") }}
+        </button>
+        <button type="button"
+                class="gc-nav-drawer-tab"
+                id="gc-nav-drawer-tab-meta"
+                role="tab"
+                aria-selected="false"
+                aria-controls="gc-nav-drawer-panel-meta"
+                data-mobile-nav-tab="meta">
+          {{ T("nav_mobile_tab_meta", "META") }}
+        </button>
+      </div>
+      <div class="gc-nav-drawer-body">
+        <div class="gc-nav-drawer-panel-tab is-active"
+             id="gc-nav-drawer-panel-gameplay"
+             role="tabpanel"
+             aria-labelledby="gc-nav-drawer-tab-gameplay"
+             data-mobile-nav-panel="gameplay">
+          {% with NAV_SHELL='mobile-drawer-left' %}
+            {% include "partials/sidebar.html" %}
+          {% endwith %}
         </div>
-        {% set _fleet_tiers = [nav_module_tier(_sn, 'fleet'), nav_module_tier(_sn, 'logistics')] %}
-        <div class="gc-nav-drawer-group{% if 'prominent' in _fleet_tiers %} gc-nav-group--prominent{% endif %}{% if _fleet_tiers and _fleet_tiers | reject('equalto', 'secondary') | list | length == 0 %} gc-nav-group--secondary{% endif %}"
-             data-nav-group="fleet"
-             data-nav-group-modules="fleet,logistics">
-          <span class="gc-nav-drawer-group-label">{{ T("nav_fleet_hub", "Flotte & Logistik") }}</span>
-          <a href="{{ url_for('fleet_view') }}"
-             data-nav-module="fleet"
-             class="gc-nav-drawer-link gc-nav-drawer-sublink gc-nav-module--{{ nav_module_tier(_sn, 'fleet') }} {% if request.endpoint == 'fleet_view' and not _fleet_logistics_active %}active{% endif %}"
-             {% if not mobile_drawer_shows_module(_sn, 'fleet', bottom_modules=_mb) %}hidden{% endif %}>
-            {{ T("nav_fleet") }}
-          </a>
-          <a href="{{ url_for('fleet_view') }}?mode=collect"
-             data-nav-module="logistics"
-             class="gc-nav-drawer-link gc-nav-drawer-sublink gc-nav-module--{{ nav_module_tier(_sn, 'logistics') }} {% if _fleet_logistics_active %}active{% endif %}"
-             {% if not mobile_drawer_shows_module(_sn, 'logistics', bottom_modules=_mb) %}hidden{% endif %}>
-            {{ T("nav_logistics", "Logistics") }}
-          </a>
+        <div class="gc-nav-drawer-panel-tab"
+             id="gc-nav-drawer-panel-meta"
+             role="tabpanel"
+             aria-labelledby="gc-nav-drawer-tab-meta"
+             data-mobile-nav-panel="meta"
+             hidden>
+          {% with NAV_SHELL='mobile-drawer-right' %}
+            {% include "partials/sidebar_right.html" %}
+          {% endwith %}
+          {% include "partials/sidebar_system_mobile.html" %}
+          {% include "partials/sidebar_utility_mobile.html" %}
         </div>
-        <div class="gc-nav-drawer-group"
-             data-nav-group="trading"
-             data-nav-group-modules="trading">
-          <span class="gc-nav-drawer-group-label">{{ T("nav_trading_post", "Kommando") }}</span>
-          <a href="{{ url_for('trader_hub_view') }}"
-             data-nav-module="trading"
-             class="gc-nav-drawer-link gc-nav-drawer-sublink gc-nav-module--{{ nav_module_tier(_sn, 'trading') }} {% if request.endpoint == 'trader_hub_view' %}active{% endif %}"
-             {% if not mobile_drawer_shows_module(_sn, 'trading', bottom_modules=_mb) %}hidden{% endif %}>
-            {{ T("nav_trader_hub", "Trader Hub") }}
-          </a>
-          <a href="{{ url_for('auction_house_view') }}"
-             class="gc-nav-drawer-link gc-nav-drawer-sublink {% if request.endpoint == 'auction_house_view' %}active{% endif %}">
-            {{ T("nav_auction_house", "Auktionshaus") }}
-          </a>
-          <a href="{{ url_for('inventory_view') }}"
-             class="gc-nav-drawer-link gc-nav-drawer-sublink {% if request.endpoint == 'inventory_view' %}active{% endif %}">
-            {{ T("nav_inventory", "Inventar") }}
-          </a>
-          <a href="{{ url_for('imperial_directives_view') }}"
-             class="gc-nav-drawer-link gc-nav-drawer-sublink {% if request.endpoint == 'imperial_directives_view' %}active{% endif %}"
-             data-nav-key="imperial_directives">
-            <span>{{ T("nav_imperial_directives", "Imperial Directives") }}</span>
-            <span class="gc-nav-badge hidden" data-nav-badge="imperial_directives" hidden aria-hidden="true"></span>
-          </a>
-          <a href="{{ url_for('vote_center_view') }}"
-             class="gc-nav-drawer-link gc-nav-drawer-sublink {% if request.endpoint == 'vote_center_view' %}active{% endif %}"
-             data-nav-key="vote_center">
-            <span>{{ T("nav_vote_center", "Vote Center") }}</span>
-            <span class="gc-nav-badge hidden" data-nav-badge="vote_center" hidden aria-hidden="true"></span>
-          </a>
-          <a href="{{ url_for('galactic_politics_view') }}"
-             class="gc-nav-drawer-link gc-nav-drawer-sublink gc-nav-wip {% if request.endpoint == 'galactic_politics_view' %}active{% endif %}"
-             data-nav-key="government">
-            <span>{{ T("nav_galactic_politics", "Galaktische Politik") }}</span>
-            <span class="gc-nav-badge gc-nav-badge--alert hidden" data-nav-badge="government" hidden aria-hidden="true"></span>
-            <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>
-          </a>
-          <a href="{{ url_for('skilltree_view') }}"
-             class="gc-nav-drawer-link gc-nav-drawer-sublink gc-nav-wip {% if request.endpoint == 'skilltree_view' %}active{% endif %}">
-            {{ T("nav_skilltree", "Skilltree") }} <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>
-          </a>
-          <a href="{{ url_for('premium_view') }}"
-             class="gc-nav-drawer-link gc-nav-drawer-sublink gc-nav-wip {% if request.endpoint == 'premium_view' %}active{% endif %}">
-            {{ T("nav_premium", "Premium") }} <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>
-          </a>
-        </div>
-        <a href="{{ url_for('buildings_view') }}"
-           data-nav-module="buildings"
-           class="gc-nav-drawer-link gc-nav-module--{{ nav_module_tier(_sn, 'buildings') }} {% if request.endpoint == 'buildings_view' %}active{% endif %}"
-           {% if not mobile_drawer_shows_module(_sn, 'buildings', bottom_modules=_mb) %}hidden{% endif %}>
-          {{ T("nav_buildings") }}
-        </a>
-        <a href="{{ url_for('alliance_view') }}"
-           data-nav-module="alliance"
-           class="gc-nav-drawer-link gc-nav-module--{{ nav_module_tier(_sn, 'alliance') }} {% if request.endpoint == 'alliance_view' %}active{% endif %}"
-           {% if not mobile_drawer_shows_module(_sn, 'alliance', bottom_modules=_mb) %}hidden{% endif %}>
-          {{ T("nav_alliance") }}
-        </a>
-        <a href="{{ url_for('galaxy_view') }}"
-           data-nav-module="galaxy"
-           class="gc-nav-drawer-link gc-nav-module--{{ nav_module_tier(_sn, 'galaxy') }} {% if request.endpoint == 'galaxy_view' %}active{% endif %}"
-           {% if not mobile_drawer_shows_module(_sn, 'galaxy', bottom_modules=_mb) %}hidden{% endif %}>
-          {{ T("nav_galaxy") }}
-        </a>
-        <a href="{{ url_for('ranking_view') }}"
-           data-nav-module="ranking"
-           class="gc-nav-drawer-link gc-nav-module--{{ nav_module_tier(_sn, 'ranking') }} {% if request.endpoint == 'ranking_view' %}active{% endif %}"
-           {% if not mobile_drawer_shows_module(_sn, 'ranking', bottom_modules=_mb) %}hidden{% endif %}>
-          {{ T("nav_ranking", "Ranking") }}
-        </a>
-        <a href="{{ url_for('chronicles_view') }}"
-           data-nav-module="chronicles"
-           class="gc-nav-drawer-link gc-nav-module--{{ nav_module_tier(_sn, 'chronicles') }} {% if request.endpoint == 'chronicles_view' %}active{% endif %}"
-           {% if not mobile_drawer_shows_module(_sn, 'chronicles', bottom_modules=_mb) %}hidden{% endif %}>
-          {{ T("nav_chronicles", "Chroniken") }}
-        </a>
-        <a href="{{ url_for('hall_of_fame_view') }}"
-           data-nav-module="hall_of_fame"
-           class="gc-nav-drawer-link gc-nav-module--{{ nav_module_tier(_sn, 'hall_of_fame') }} {% if request.endpoint == 'hall_of_fame_view' %}active{% endif %}"
-           {% if not mobile_drawer_shows_module(_sn, 'hall_of_fame', bottom_modules=_mb) %}hidden{% endif %}>
-          {{ T("nav_hall_of_fame", "Hall of Fame") }}
-        </a>
-        <a href="{{ url_for('referrals_view') }}"
-           data-nav-module="referrals"
-           data-nav-key="referrals"
-           class="gc-nav-drawer-link gc-nav-module--{{ nav_module_tier(_sn, 'referrals') }} {% if request.endpoint == 'referrals_view' %}active{% endif %}"
-           {% if not mobile_drawer_shows_module(_sn, 'referrals', bottom_modules=_mb) %}hidden{% endif %}>
-          <span>{{ T("nav_referrals", "Referral") }}</span>
-          <span class="gc-nav-badge gc-nav-badge--alert hidden" data-nav-badge="referrals" hidden aria-hidden="true"></span>
-        </a>
-        <a href="{{ url_for('records_view') }}"
-           data-nav-module="records"
-           class="gc-nav-drawer-link gc-nav-module--{{ nav_module_tier(_sn, 'records') }} {% if request.endpoint == 'records_view' %}active{% endif %}"
-           {% if not mobile_drawer_shows_module(_sn, 'records', bottom_modules=_mb) %}hidden{% endif %}>
-          {{ T("nav_records", "Rekorde") }}
-        </a>
-        <a href="{{ url_for('options_view') }}"
-           data-nav-module="options"
-           class="gc-nav-drawer-link gc-nav-module--{{ nav_module_tier(_sn, 'options') }} {% if request.endpoint == 'options_view' %}active{% endif %}"
-           {% if not mobile_drawer_shows_module(_sn, 'options', bottom_modules=_mb) %}hidden{% endif %}>
-          <span class="gc-nav-icon" aria-hidden="true">⚙</span>
-          {{ T("nav_options") }}
-        </a>
-        {% if AUTH_ADMIN %}
-        <a href="{{ url_for('admin_panel') }}"
-           class="gc-nav-drawer-link gc-nav-admin {% if request.endpoint == 'admin_panel' %}active{% endif %}"
-           data-no-pjax="1">
-          🛠️ {{ T("nav_admin") }}
-        </a>
-        {% endif %}
       </div>
     </div>
   </div>
