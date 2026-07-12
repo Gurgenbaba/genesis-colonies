@@ -1,0 +1,44 @@
+# Timekeeper System (GC-TIMEKEEPER-001)
+
+Single **Imperium time account** — empire-wide, manual apply only, separate from production % boosters.
+
+## Owner
+
+| Module | Responsibility |
+|--------|----------------|
+| `game/timekeeper.py` | Balance, credit/debit, apply, serialize |
+| `game/inventory_use.py` | Legacy time items → `credit()` |
+| `game/inventory.py` | Inventory hero + legacy deposit list |
+| `app.py` | `/api/timekeeper/apply`, game-state slice |
+| `static/main.js` | HUD patch, one-click ⚡ apply (`mode: max`) |
+
+## Rules
+
+- Never auto-debit on poll or page load.
+- Apply only via **⚡** on active queue cards → `/api/timekeeper/apply` with `mode: max` (server clamps to `min(balance, remaining)`).
+- Domains: `build`, `research`, `shipyard`, `defense`, `planet_research`, `ascension`.
+- Production boosters (`inventory_boosters`) unchanged.
+
+## Schema
+
+- `timekeeper_balances` — `player_id`, `balance_sec`
+- `timekeeper_transactions` — ledger (credit/debit audit)
+
+## API
+
+`POST /api/timekeeper/apply`
+
+```json
+{
+  "domain": "build",
+  "planet_id": 1,
+  "mode": "partial|max|finish",
+  "seconds": 1800
+}
+```
+
+Response: `{ ok, reason, state, timekeeper, seconds_applied }`
+
+## Migration
+
+`migrations/098_timekeeper.sql`

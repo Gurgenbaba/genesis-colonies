@@ -7,6 +7,35 @@
 {% set _first_container_img = (url_for('static', filename=_containers[0].image) if _containers[0].image is defined else _loot_fallback) if _containers else '' %}
 {% set _lcp_preload_href = (_first_container_img|webp_static) if _first_container_img else '' %}
 
+{% macro inventory_tk_domain_chips(legacy_items) %}
+  {% set ns = namespace(build=0, research=0, shipyard=0) %}
+  {% for item in legacy_items or [] %}
+    {% set key = item.item_key|string %}
+    {% if key.startswith('booster_build') %}
+      {% set ns.build = ns.build + (item.amount|int) %}
+    {% elif key.startswith('booster_research') %}
+      {% set ns.research = ns.research + (item.amount|int) %}
+    {% elif key.startswith('booster_shipyard') %}
+      {% set ns.shipyard = ns.shipyard + (item.amount|int) %}
+    {% endif %}
+  {% endfor %}
+  {% if ns.build > 0 %}
+  <button type="button" class="inventory-tk-chip inventory-tk-chip--build gc-mono" data-inventory-tk-chip-domain="build" title="{{ T('inv_tk_chip_build_hint', 'Bau-Booster einzahlen') }}">
+    {{ T('inv_tk_chip_build', 'Bau') }} +{{ ns.build|fmt_int }}
+  </button>
+  {% endif %}
+  {% if ns.research > 0 %}
+  <button type="button" class="inventory-tk-chip inventory-tk-chip--research gc-mono" data-inventory-tk-chip-domain="research" title="{{ T('inv_tk_chip_research_hint', 'Forschungs-Booster einzahlen') }}">
+    {{ T('inv_tk_chip_research', 'Forschung') }} +{{ ns.research|fmt_int }}
+  </button>
+  {% endif %}
+  {% if ns.shipyard > 0 %}
+  <button type="button" class="inventory-tk-chip inventory-tk-chip--shipyard gc-mono" data-inventory-tk-chip-domain="shipyard" title="{{ T('inv_tk_chip_shipyard_hint', 'Werft-Booster einzahlen') }}">
+    {{ T('inv_tk_chip_shipyard', 'Werft') }} +{{ ns.shipyard|fmt_int }}
+  </button>
+  {% endif %}
+{% endmacro %}
+
 {% block extra_head %}
 {{ super() }}
 {% if _lcp_preload_href %}
@@ -23,14 +52,15 @@
   <script type="application/json" id="inventory-page-state">{{ inv_data | tojson }}</script>
   {% endif %}
 
-  <header class="gc-page-header section-header inventory-headline">
-    <h2 class="section-title">{{ T("inv_title", "Inventar") }}</h2>
-    <p class="section-hint hint">{{ T("inv_hint", "Öffne Container und verwalte deine Beute.") }}</p>
-    {% if inv_data.planet_name is defined and inv_data.planet_name %}
-    <p class="inventory-planet-scope gc-mono" data-inventory-planet-scope>
-      {{ T("inv_planet_scope", "Ressourcen werden gutgeschrieben auf: %(name)s", name=inv_data.planet_name) }}
-    </p>
-    {% endif %}
+  <header class="gc-page-header section-header inventory-headline inventory-headline--compact">
+    <div class="inventory-headline__row">
+      <h2 class="section-title">{{ T("inv_title", "Inventar") }}</h2>
+      {% if inv_data.planet_name is defined and inv_data.planet_name %}
+      <p class="inventory-planet-scope gc-mono" data-inventory-planet-scope>
+        {{ T("inv_planet_scope_short", "Gutschrift: %(name)s", name=inv_data.planet_name) }}
+      </p>
+      {% endif %}
+    </div>
   </header>
 
   {% if inv_data.ready is defined and inv_data.ready == false %}
@@ -39,49 +69,11 @@
   </section>
   {% else %}
 
-  <div id="gc-loot-modal-root" class="gc-loot-modal-root" aria-hidden="true"></div>
-
-  <section class="gc-panel inventory-panel inventory-active-boosters-panel"
-           id="inventory-active-boosters-panel"
-           data-inventory-active-boosters
-           {% if not inv_data.active_boosters is defined or not inv_data.active_boosters.active_effects %}hidden{% endif %}>
-    <div class="gc-panel-header">
-      <span class="gc-panel-title">{{ T("inv_active_boosters_title", "Aktive Booster") }}</span>
-      <span class="gc-panel-subtitle">{{ T("inv_active_boosters_subtitle", "Laufende Dauer-Effekte") }}</span>
-    </div>
-    <ul class="inventory-active-boosters-list" data-inventory-active-boosters-list>
-      {% for effect in (inv_data.active_boosters.active_effects if inv_data.active_boosters is defined else []) %}
-      <li class="inventory-active-booster-row"
-          data-boost-key="{{ effect.key }}"
-          data-remaining-seconds="{{ effect.remaining_seconds|int }}">
-        <span class="inventory-active-booster-label">{{ effect.label }}</span>
-        <span class="inventory-active-booster-effect">{{ effect.effect_summary }}</span>
-        <span class="inventory-active-booster-domain">{{ T("inv_boost_domain_" ~ effect.affected_domain, effect.affected_domain) }}</span>
-        <span class="inventory-active-booster-time gc-mono" data-boost-remaining>{{ effect.remaining_seconds|int }}s</span>
-        {% if effect.note %}
-        <span class="inventory-active-booster-note">{{ effect.note }}</span>
-        {% endif %}
-      </li>
-      {% endfor %}
-    </ul>
-  </section>
-
-  <section class="gc-panel inventory-panel inventory-rewards-panel-wrap" id="inventory-rewards-panel" hidden aria-live="polite">
-    <div class="gc-panel-header">
-      <span class="gc-panel-title">{{ T("inv_rewards_title", "Erhaltene Belohnungen") }}</span>
-      <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-inventory-rewards-close>
-        {{ T("inv_rewards_close", "Schließen") }}
-      </button>
-    </div>
-    <p class="inventory-effect-message" data-inventory-effect-message hidden></p>
-    <ul class="inventory-rewards-list" data-inventory-rewards-list></ul>
-  </section>
-
-  <section class="gc-panel inventory-panel">
-    <div class="gc-panel-header">
-      <span class="gc-panel-title">{{ T("inv_containers_title", "Container") }}</span>
-      <span class="gc-panel-subtitle">{{ T("inv_containers_subtitle", "Gewichtete Loot-Pools — serverseitig gerollt") }}</span>
-    </div>
+  <section class="gc-panel inventory-panel inventory-containers-hero" id="inventory-containers-panel">
+    <header class="inventory-containers-hub__head">
+      <span class="inventory-containers-hub__title">{{ T("inv_containers_title", "Container") }}</span>
+      <span class="inventory-containers-hub__sub gc-mono">{{ T("inv_containers_subtitle_short", "Loot-Pools") }}</span>
+    </header>
     <div class="inventory-container-grid" data-inventory-container-grid>
       {% for c in inv_data.containers %}
       {% set _owned = (c.amount|int) > 0 %}
@@ -112,7 +104,9 @@
               {{ T("inv_rarity_" ~ c.rarity, c.rarity) }}
             </span>
           </div>
-          <p class="inventory-loot-card-hint" data-inventory-hint="{{ c.item_key }}" data-cooldown-seconds="{{ _cooldown }}">
+          <p class="inventory-loot-card-status gc-mono"
+             data-inventory-hint="{{ c.item_key }}"
+             data-cooldown-seconds="{{ _cooldown }}">
             {% if _owned %}
               {{ T("inv_card_owned_hint", "Bereit zum Öffnen") }}
             {% elif _free_ready %}
@@ -158,7 +152,69 @@
     </div>
   </section>
 
-  <section class="gc-panel inventory-panel">
+  {% set tk = inv_data.timekeeper if inv_data.timekeeper is defined else {'balance_sec': 0, 'label': '0min'} %}
+  {% set _tk_legacy = tk.legacy_time_items if tk.legacy_time_items is defined else [] %}
+  <section class="gc-panel inventory-panel inventory-tk-bar" id="inventory-timekeeper-panel" data-inventory-timekeeper>
+    <div class="inventory-tk-bar__row">
+      <span class="inventory-tk-bar__glyph" aria-hidden="true">⏳</span>
+      <span class="inventory-tk-bar__tag gc-mono">{{ T('timekeeper_short', 'TK') }}</span>
+      <strong class="inventory-tk-bar__balance gc-mono" data-inventory-timekeeper-balance>{{ tk.label }}</strong>
+      <div class="inventory-tk-bar__chips" data-inventory-timekeeper-chips aria-label="{{ T('inv_tk_deposit_chips', 'Einzahlbare Zeit-Booster') }}">
+        {{ inventory_tk_domain_chips(_tk_legacy) }}
+      </div>
+    </div>
+    {% if _tk_legacy %}
+    <div class="inventory-tk-bar__deposit-list" data-inventory-timekeeper-legacy hidden>
+      {% for item in _tk_legacy %}
+      <button type="button"
+              class="inventory-tk-deposit-btn"
+              data-inventory-use="{{ item.item_key }}"
+              data-inventory-tk-domain="{% if item.item_key.startswith('booster_build') %}build{% elif item.item_key.startswith('booster_research') %}research{% elif item.item_key.startswith('booster_shipyard') %}shipyard{% else %}other{% endif %}"
+              {% if not (item.usable is defined and item.usable) %}disabled{% endif %}
+              title="{{ T(item.name_key, item.item_key) }}">
+        <span class="inventory-tk-deposit-btn__icon" aria-hidden="true">{{ item.icon|default('⚡') }}</span>
+        <span class="inventory-tk-deposit-btn__label">{{ T(item.name_key, item.item_key) }}</span>
+        <span class="inventory-tk-deposit-btn__amt gc-mono">×{{ item.amount|fmt_int }}</span>
+      </button>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </section>
+
+  <div id="gc-loot-modal-root" class="gc-loot-modal-root" aria-hidden="true"></div>
+
+  <section class="gc-panel inventory-panel inventory-rewards-panel-wrap" id="inventory-rewards-panel" hidden aria-live="polite">
+    <div class="gc-panel-header">
+      <span class="gc-panel-title">{{ T("inv_rewards_title", "Erhaltene Belohnungen") }}</span>
+      <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-inventory-rewards-close>
+        {{ T("inv_rewards_close", "Schließen") }}
+      </button>
+    </div>
+    <p class="inventory-effect-message" data-inventory-effect-message hidden></p>
+    <ul class="inventory-rewards-list" data-inventory-rewards-list></ul>
+  </section>
+
+  <section class="gc-panel inventory-panel inventory-active-boosters-panel"
+           id="inventory-active-boosters-panel"
+           data-inventory-active-boosters
+           {% if not inv_data.active_boosters is defined or not inv_data.active_boosters.active_effects %}hidden{% endif %}>
+    <div class="gc-panel-header inventory-active-boosters-head">
+      <span class="gc-panel-title">{{ T("inv_active_boosters_title", "Aktive Booster") }}</span>
+    </div>
+    <ul class="inventory-active-boosters-list" data-inventory-active-boosters-list>
+      {% for effect in (inv_data.active_boosters.active_effects if inv_data.active_boosters is defined else []) %}
+      <li class="inventory-active-booster-row"
+          data-boost-key="{{ effect.key }}"
+          data-remaining-seconds="{{ effect.remaining_seconds|int }}">
+        <span class="inventory-active-booster-label">{{ effect.label }}</span>
+        <span class="inventory-active-booster-effect">{{ effect.effect_summary }}</span>
+        <span class="inventory-active-booster-time gc-mono" data-boost-remaining>{{ effect.remaining_seconds|int }}s</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="gc-panel inventory-panel inventory-items-panel">
     <div class="gc-panel-header">
       <span class="gc-panel-title">{{ T("inv_items_title", "Items") }}</span>
       <span class="gc-panel-subtitle">{{ T("inv_items_subtitle", "Booster, Fragmente und Spezialitems") }}</span>

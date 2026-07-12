@@ -302,6 +302,7 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | Collector Exchange (Offers, Redeem, Stats) | `game/collector_exchange.py`, `game/collector_catalog.py` | [COLLECTOR_EXCHANGE.md](COLLECTOR_EXCHANGE.md) |
 | Collector Prestige (Milestones, Titles) | `game/collector_prestige.py` | [COLLECTOR_EXCHANGE.md](COLLECTOR_EXCHANGE.md) |
 | Alliance Hub (identity, pool, projects, diplomacy) | `game/alliance.py`, `game/alliance_catalog.py` | [ALLIANCE_SYSTEM.md](ALLIANCE_SYSTEM.md) |
+| Imperium Timekeeper (Zeitkonto, manuelles Einsetzen) | `game/timekeeper.py` | [TIMEKEEPER_SYSTEM.md](TIMEKEEPER_SYSTEM.md) |
 
 **Ticket-Check:** Domäne identifizieren → nur Owner-Modul (+ Routes/`app.py`) ändern → kein zweites Modul für dieselbe Wahrheit.
 

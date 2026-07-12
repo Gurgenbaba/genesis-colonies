@@ -126,7 +126,8 @@ def test_research_pct_booster_increases_research_time_speed(gc968_db):
     conn.close()
 
 
-def test_research_booster_reduces_queue_duration(gc968_db):
+def test_research_booster_credits_timekeeper(gc968_db):
+    """Legacy time booster credits Timekeeper — no direct queue shift."""
     conn = db()
     uid = _uid(conn)
     planet = get_context_planet(uid, conn=conn)
@@ -144,7 +145,7 @@ def test_research_booster_reduces_queue_duration(gc968_db):
     )
 
     begin_write_transaction(conn)
-    ok, reason, _ = use_inventory_item(uid, pid, "booster_research_30m", 1, conn=conn)
+    ok, reason, result = use_inventory_item(uid, pid, "booster_research_30m", 1, conn=conn)
     commit(conn)
     assert ok, reason
 
@@ -154,7 +155,11 @@ def test_research_booster_reduces_queue_duration(gc968_db):
             (uid,),
         ).fetchone()["finish_at"]
     )
-    assert finish_after <= finish_before - 1500
+    assert finish_after == finish_before
+    from game.timekeeper import get_balance
+
+    assert get_balance(uid, conn=conn) == 1800
+    assert int((result or {}).get("effect", {}).get("seconds_credited") or 0) == 1800
     conn.close()
 
 

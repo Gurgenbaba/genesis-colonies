@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_req_tooltip, render_req_hover_attrs, render_max_queue_preview_attrs with context %}
 {% from "partials/building_effect_strip.html" import render_building_effect_bundle, render_building_prog_costs with context %}
-{% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
+{% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer, render_timekeeper_apply_btn with context %}
 {% from "partials/page_mini_queue_strip.html" import render_page_mini_queue_strip with context %}
 {% from "partials/card_hero_img_macros.html" import render_hero_img_stack with context %}
 
@@ -157,16 +157,23 @@
             {% set _card_load = 'high' if loop.index0 == 0 else 'lazy' %}
             {{ render_hero_img_stack(_bld_webp, _bld_png, b.queue_job if b.queue_job is defined else none, _card_load, loop.index0 == 0) }}
             {% if b.queue_job is defined and b.queue_job %}
-            {{ render_hero_queue(b.queue_job, 'build', 'building') }}
+            {{ render_hero_queue(b.queue_job, 'build', 'build') }}
             {% endif %}
             <div class="gc-bld-hero-right-stack">
               <span id="level-{{ building_type }}"
                     class="gc-hero-stat-badge gc-hero-stat-badge--level gc-bld-hero-level"
                     title="{{ T('buildings_col_level') }}"
                     aria-label="{{ T('buildings_col_level') }}">{{ b.level|fmt_int }}</span>
-              <span class="gc-bld-hero-action-slot gc-bld-hero-action-slot--time">
-                {{ render_hero_time_chip(b.queue_job if b.queue_job is defined else none, b.time_seconds, 'build', T('buildings_col_time')) }}
-              </span>
+              <div class="gc-bld-hero-action-row">
+                <span class="gc-bld-hero-action-slot gc-bld-hero-action-slot--timekeeper">
+                  {% if b.queue_job is defined and b.queue_job and b.queue_job.status == 'active' %}
+                  {{ render_timekeeper_apply_btn('build', b.queue_job) }}
+                  {% endif %}
+                </span>
+                <span class="gc-bld-hero-action-slot gc-bld-hero-action-slot--time">
+                  {{ render_hero_time_chip(b.queue_job if b.queue_job is defined else none, b.time_seconds, 'build', T('buildings_col_time')) }}
+                </span>
+              </div>
             </div>
             <div class="gc-bld-card-hero-title">
               <div class="gc-bld-card-title-wrap">

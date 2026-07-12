@@ -86,9 +86,20 @@ def _effect_message(effect: Effect) -> Dict[str, Any]:
             "message_key": f"inv_effect_resource_{key}" if key else "inv_effect_resource",
             "message_params": {"amount": int(effect.get("amount") or 0)},
         }
+    if kind == "timekeeper_credit":
+        sec = int(effect.get("seconds_credited") or 0)
+        minutes = max(1, int(round(sec / 60)))
+        return {
+            "message_key": "inv_effect_timekeeper_credit",
+            "message_params": {
+                "seconds": sec,
+                "minutes": minutes,
+                "label": str(effect.get("label") or ""),
+            },
+        }
     if kind == "time_boost":
         target = str(effect.get("target") or "build")
-        sec = int(effect.get("seconds_reduced") or 0)
+        sec = int(effect.get("seconds_reduced") or effect.get("seconds_credited") or 0)
         minutes = max(1, int(round(sec / 60)))
         return {
             "message_key": f"inv_effect_{target}_boost",
@@ -459,7 +470,7 @@ def _datacore_fail_reason(item_key: str) -> str:
 
 def _use_fail_reason(item_key: str) -> str:
     if _is_time_booster_item(item_key):
-        return _time_booster_fail_reason(item_key)
+        return "timekeeper_unavailable"
     if is_research_datacore_item(item_key):
         return _datacore_fail_reason(item_key)
     return "no_effect_target"
@@ -733,9 +744,12 @@ def _apply_single_use(
     if kind == "planet_xp":
         return _apply_planet_xp_effect(planet_id, int(effect.get("xp") or 0), conn=conn)
     if kind == "time_boost":
-        target = str(effect.get("target") or "build")
-        seconds = int(effect.get("seconds") or 0)
-        return _apply_time_boost(target, seconds, user_id=user_id, planet_id=planet_id, conn=conn)
+        from .timekeeper import credit_from_booster_item
+
+        credited = credit_from_booster_item(user_id, item_key, conn=conn)
+        if credited is None:
+            return None
+        return credited
     if kind == "research_datacore":
         return apply_datacore_research_boost(conn, user_id, item_key)
     if kind == "production_grant":
@@ -824,6 +838,17 @@ def _merge_effects(effects: List[Effect]) -> Effect:
         out.update(_effect_message(out))
         return out
     kind = str(effects[0].get("kind") or "")
+    if kind == "timekeeper_credit":
+        total = sum(int(e.get("seconds_credited") or 0) for e in effects)
+        out = {
+            "kind": "timekeeper_credit",
+            "seconds_credited": total,
+            "count": len(effects),
+            "balance_sec": int(effects[-1].get("balance_sec") or 0),
+            "label": str(effects[-1].get("label") or ""),
+        }
+        out.update(_effect_message(out))
+        return out
     if kind == "time_boost":
         total = sum(int(e.get("seconds_reduced") or 0) for e in effects)
         out = {
@@ -1000,15 +1025,14 @@ def enrich_inventory_item_row(
     if spec.get("exchange_endgame"):
         out["exchange_endgame"] = True
 
-    if (
-        _is_time_booster_item(key)
-        and user_id is not None
-        and planet_id is not None
-        and conn is not None
-    ):
-        if not time_booster_has_active_queue(int(user_id), int(planet_id), key, conn=conn):
+    if _is_time_booster_item(key):
+        from .timekeeper import schema_ready as timekeeper_schema_ready
+
+        out["timekeeper_deposit"] = True
+        out["booster_seconds"] = int(BOOSTER_TIME_SECONDS.get(key) or 0)
+        if not timekeeper_schema_ready(conn):
             out["usable"] = False
-            out["use_block_reason"] = _time_booster_fail_reason(key)
+            out["use_block_reason"] = "timekeeper_unavailable"
 
     if (
         is_research_datacore_item(key)

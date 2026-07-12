@@ -241,7 +241,8 @@ def test_locked_rewards_still_not_redeemable():
         assert collector_reward_is_redeemable(key) is False
 
 
-def test_build_time_booster_still_queue_shift(gc968b_db):
+def test_build_time_booster_credits_timekeeper(gc968b_db):
+    """Legacy build time booster credits Timekeeper — no direct queue shift."""
     conn = db()
     uid = _uid(conn)
     planet = get_context_planet(uid, conn=conn)
@@ -259,7 +260,7 @@ def test_build_time_booster_still_queue_shift(gc968b_db):
     )
 
     begin_write_transaction(conn)
-    ok, reason, _ = use_inventory_item(uid, pid, "booster_build_15m", 1, conn=conn)
+    ok, reason, result = use_inventory_item(uid, pid, "booster_build_15m", 1, conn=conn)
     commit(conn)
     assert ok, reason
 
@@ -269,7 +270,11 @@ def test_build_time_booster_still_queue_shift(gc968b_db):
             (pid,),
         ).fetchone()["finish_time"]
     )
-    assert finish_after < finish_before
+    assert finish_after == finish_before
+    from game.timekeeper import get_balance
+
+    assert get_balance(uid, conn=conn) == 900
+    assert int((result or {}).get("effect", {}).get("seconds_credited") or 0) == 900
     conn.close()
 
 

@@ -269,8 +269,10 @@ def build_loot_drops_reference(*, conn=None, user_id: Optional[int] = None) -> L
 
 
 def build_inventory_state(user_id: int, *, conn, locale: str | None = None) -> Dict[str, Any]:
+    from .inventory_catalog import BOOSTER_TIME_SECONDS
     from .inventory_use import enrich_inventory_item_row
     from .planet_evolution.repository import get_context_planet
+    from .timekeeper import is_legacy_time_booster_item, recent_transactions, serialize_for_client
 
     if locale is None:
         try:
@@ -285,6 +287,16 @@ def build_inventory_state(user_id: int, *, conn, locale: str | None = None) -> D
     planet_id = int(planet["id"])
     owned_containers = {str(i["item_key"]): i for i in items if i["item_type"] == "container"}
     containers = build_container_catalog(owned_containers, user_id=int(user_id), conn=conn)
+    legacy_time_items = [
+        enrich_inventory_item_row(
+            i,
+            user_id=int(user_id),
+            planet_id=planet_id,
+            conn=conn,
+        )
+        for i in items
+        if i["item_type"] != "container" and is_legacy_time_booster_item(str(i["item_key"]))
+    ]
     other_items = [
         enrich_inventory_item_row(
             i,
@@ -293,12 +305,20 @@ def build_inventory_state(user_id: int, *, conn, locale: str | None = None) -> D
             conn=conn,
         )
         for i in items
-        if i["item_type"] != "container"
+        if i["item_type"] != "container" and not is_legacy_time_booster_item(str(i["item_key"]))
     ]
+    tk = serialize_for_client(int(user_id), conn=conn)
+    tk["legacy_time_items"] = legacy_time_items
+    tk["legacy_time_seconds"] = sum(
+        int(BOOSTER_TIME_SECONDS.get(str(i.get("item_key") or "")) or 0) * int(i.get("amount") or 0)
+        for i in legacy_time_items
+    )
+    tk["history"] = recent_transactions(int(user_id), conn=conn, limit=12)
     return {
         "ready": inventory_schema_ready(conn),
         "containers": containers,
         "other_items": other_items,
+        "timekeeper": tk,
         "loot_drops": build_loot_drops_reference(conn=conn, user_id=int(user_id)),
         "craft_recipes": _craft_recipes_reference(),
         "all": items,

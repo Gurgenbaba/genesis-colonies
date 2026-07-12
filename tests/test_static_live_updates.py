@@ -2112,6 +2112,55 @@ def test_main_js_mini_queue_research_label_resolution():
     assert "label_key: raw.label_key || ownerKey" in collect
 
 
+def test_main_js_timekeeper_apply_btn_survives_live_queue_patch():
+    """Live queue re-renders must keep ⚡ Zeit einsetzen on active jobs."""
+    src = _read("static/main.js")
+    assert "function _syncTimekeeperApplyBtn(parent, domain, queueJob)" in src
+    mini = src.split("GC.renderMiniQueueStrip = function renderMiniQueueStrip")[1].split("function _renderProductionMiniQueue")[0]
+    assert "_syncTimekeeperApplyBtn(card, domain, job)" in mini
+    hero = src.split("function renderHeroQueueOverlay(cardEl, queueJob, opts)")[1].split("function _cardQueueTimerMeta")[0]
+    assert "_syncTimekeeperApplyBtn(block, domain, queueJob)" in hero
+    card_block = src.split("GC.renderCardQueueBlock = function renderCardQueueBlock")[1].split("function _syncBuildQueueLiveState")[0]
+    assert "_syncTimekeeperApplyBtn(block, domain, queueJob)" in card_block
+
+
+def test_main_js_timekeeper_queue_btn_is_compact_icon():
+    src = _read("static/main.js")
+    assert 'className = "gc-queue-timekeeper-btn"' in src
+    assert 'innerHTML = \'<span aria-hidden="true">⚡</span>\'' in src
+    macro = _read("templates/partials/card_queue_macros.html")
+    assert "gc-queue-timekeeper-btn" in macro
+    assert '<span aria-hidden="true">⚡</span>' in macro
+    css = _read("static/style.css")
+    assert ".gc-queue-timekeeper-btn" in css
+    assert "grid-column: 1 / -1" not in css.split(".gc-queue-timekeeper-btn")[1].split("@media")[0]
+
+
+def test_main_js_timekeeper_one_click_apply_flow():
+    """⚡ on queue cards must POST mode=max directly — no modal."""
+    src = _read("static/main.js")
+    tk = src.split("function initTimekeeperOnce()")[1].split("function patchShellHudFromState")[0]
+    assert "submitTimekeeperApplyFromBtn(openBtn)" in tk
+    assert 'mode: "max"' in src.split("function submitTimekeeperApplyFromBtn")[1].split("function initTimekeeperOnce")[0]
+    assert "openTimekeeperModal" not in src
+    assert "gc-timekeeper-modal" not in src
+    assert 'applyActionState(res, "timekeeper_apply")' in src
+    assert "_timekeeperApplying" in src
+    assert "_timekeeperOpenContext(openBtn)" in src
+    assert 'GC.fetchGameAction("/api/timekeeper/apply"' in src
+    assert "gc-timekeeper-modal" not in _read("templates/base.html")
+
+
+def test_main_js_timekeeper_buttons_sync_immediately_after_action_state():
+    """⚡ must appear on queue start without waiting for the next poll."""
+    src = _read("static/main.js")
+    apply = src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]
+    assert "_primeActionStateTimekeeper(state)" in apply
+    assert "_finalizeTimekeeperQueueButtons(state)" in apply
+    assert "function _finalizeTimekeeperQueueButtons(state)" in src
+    assert '"timekeeper"' in src.split("const _HUD_LAST_STATE_KEYS = [")[1].split("];")[0]
+
+
 def test_main_js_trader_hub_exchange_live_preview():
     """Trader Hub: preview runs after formatted number input; locale parsing covers grouped ints."""
     src = _read("static/main.js")

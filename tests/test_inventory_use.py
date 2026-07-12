@@ -72,11 +72,11 @@ def _login_client(inventory_use_db, monkeypatch):
 
     conn = db()
     uid = _player(conn=conn)
-    uname = conn.execute("SELECT username FROM users WHERE id = ?;", (uid,)).fetchone()["username"]
     conn.close()
 
     client = app_module.app.test_client()
-    client.post("/login", data={"username": uname, "password": "test-pass-123"})
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
     return client, uid, app_module
 
 
@@ -124,6 +124,7 @@ def test_build_booster_reduces_queue_time(inventory_use_db):
 
 
 def test_build_booster_applies_to_queued_build_job(inventory_use_db):
+    """Legacy time booster deposits seconds on the Timekeeper account (no direct queue shift)."""
     conn = db()
     uid = _player(conn=conn)
     planet = get_context_planet(uid, conn=conn)
@@ -151,12 +152,16 @@ def test_build_booster_applies_to_queued_build_job(inventory_use_db):
             (pid,),
         ).fetchone()["finish_time"]
     )
-    assert finish_after <= finish_before - 3500
-    assert int((result or {}).get("effect", {}).get("seconds_reduced") or 0) == 3600
+    assert finish_after == finish_before
+    from game.timekeeper import get_balance
+
+    assert get_balance(uid, conn=conn) == 3600
+    assert int((result or {}).get("effect", {}).get("seconds_credited") or 0) == 3600
     conn.close()
 
 
 def test_build_booster_applies_to_waiting_second_job(inventory_use_db):
+    """Deposits on Timekeeper — queue timestamps unchanged."""
     conn = db()
     uid = _player(conn=conn)
     planet = get_context_planet(uid, conn=conn)
@@ -182,20 +187,21 @@ def test_build_booster_applies_to_waiting_second_job(inventory_use_db):
     assert ok, reason
     commit(conn)
 
-    last_row = conn.execute(
-        """
-        SELECT finish_time FROM build_queue
-        WHERE planet_id = ? ORDER BY finish_time DESC LIMIT 1;
-        """,
-        (pid,),
-    ).fetchone()
-    assert last_row is not None
-    second_after = float(last_row["finish_time"])
-    assert second_after <= second_before - 3500
+    second_after = float(
+        conn.execute(
+            """
+            SELECT finish_time FROM build_queue
+            WHERE planet_id = ? ORDER BY finish_time DESC LIMIT 1;
+            """,
+            (pid,),
+        ).fetchone()["finish_time"]
+    )
+    assert second_after == second_before
     conn.close()
 
 
 def test_build_booster_consumed_even_if_remaining_time_shorter(inventory_use_db):
+    """Item consumed; full booster seconds credited — queue not auto-finished."""
     conn = db()
     uid = _player(conn=conn)
     planet = get_context_planet(uid, conn=conn)
@@ -215,16 +221,17 @@ def test_build_booster_consumed_even_if_remaining_time_shorter(inventory_use_db)
         (uid, "booster_build_1h"),
     ).fetchone()
     assert booster_row is None
-    assert int((result or {}).get("effect", {}).get("seconds_reduced") or 0) == 3600
+    assert int((result or {}).get("effect", {}).get("seconds_credited") or 0) == 3600
     queue_count = conn.execute(
         "SELECT COUNT(*) AS c FROM build_queue WHERE planet_id = ?;",
         (pid,),
     ).fetchone()["c"]
-    assert int(queue_count) == 0
+    assert int(queue_count) == 1
     conn.close()
 
 
-def test_build_booster_not_consumed_without_job(inventory_use_db):
+def test_build_booster_usable_without_queue(inventory_use_db):
+    """Legacy time booster deposits on Timekeeper without active build queue."""
     conn = db()
     uid = _player(conn=conn)
     planet = get_context_planet(uid, conn=conn)
@@ -233,38 +240,51 @@ def test_build_booster_not_consumed_without_job(inventory_use_db):
     conn.commit()
 
     begin_write_transaction(conn)
-    ok, reason, _ = use_inventory_item(uid, pid, "booster_build_5m", 1, conn=conn)
-    rollback(conn)
-    assert not ok
-    assert reason == "no_build_queue"
+    ok, reason, result = use_inventory_item(uid, pid, "booster_build_5m", 1, conn=conn)
+    assert ok, reason
+    commit(conn)
 
-    amt = conn.execute(
-        "SELECT amount FROM player_inventory_items WHERE user_id = ? AND item_key = ?;",
-        (uid, "booster_build_5m"),
-    ).fetchone()
-    assert int(amt["amount"]) == 1
+    from game.timekeeper import get_balance
+
+    assert get_balance(uid, conn=conn) == 300
+    assert int((result or {}).get("effect", {}).get("seconds_credited") or 0) == 300
     conn.close()
 
 
-def test_use_item_api_does_not_hang_on_build_booster_error(inventory_use_db, monkeypatch):
-    client, uid, _ = _login_client(inventory_use_db, monkeypatch)
+def test_use_item_api_credits_timekeeper_without_queue(inventory_use_db, monkeypatch):
+    import game.db as dbmod
+    import game.models as models
+
+    db_path = os.environ.get("GC_DB_PATH")
+    dbmod.DB_PATH = db_path
+    models.DB_PATH = db_path
+    import app as app_module
+
+    importlib.reload(app_module)
+
     conn = db()
+    uid = _player(conn=conn)
     grant_inventory_item(uid, "booster_build_1h", 1, conn=conn)
     conn.commit()
     conn.close()
+
+    client = app_module.app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
 
     r = client.post(
         "/api/inventory/use-item",
         json={"item_key": "booster_build_1h", "amount": 1},
     )
-    assert r.status_code == 400
+    assert r.status_code == 200
     payload = r.get_json()
-    assert payload["ok"] is False
-    assert payload["reason"] == "no_build_queue"
+    assert payload["ok"] is True
+    assert int((payload.get("effect") or {}).get("seconds_credited") or 0) == 3600
     assert "state" in payload
 
 
-def test_research_booster_reduces_research_time(inventory_use_db):
+def test_research_booster_credits_timekeeper(inventory_use_db):
+    """Legacy research time booster credits Timekeeper — no direct queue shift."""
     conn = db()
     uid = _player(conn=conn)
     planet = get_context_planet(uid, conn=conn)
@@ -292,12 +312,13 @@ def test_research_booster_reduces_research_time(inventory_use_db):
             (uid,),
         ).fetchone()["finish_at"]
     )
-    assert finish_after <= finish_before - 800
-    assert int((result or {}).get("effect", {}).get("seconds_reduced") or 0) == 900
+    assert finish_after == finish_before
+    assert int((result or {}).get("effect", {}).get("seconds_credited") or 0) == 900
     conn.close()
 
 
 def test_research_booster_applies_to_waiting_second_job(inventory_use_db):
+    """Deposits on Timekeeper — research queue timestamps unchanged."""
     conn = db()
     uid = _player(conn=conn)
     planet = get_context_planet(uid, conn=conn)
@@ -332,11 +353,11 @@ def test_research_booster_applies_to_waiting_second_job(inventory_use_db):
             (uid,),
         ).fetchone()["finish_at"]
     )
-    assert second_after <= second_before - 800
+    assert second_after == second_before
     conn.close()
 
 
-def test_shipyard_booster_reduces_shipyard_time(inventory_use_db):
+def test_shipyard_booster_credits_timekeeper(inventory_use_db):
     from game.shipyard_queue import shipyard_queue_table_ready
 
     conn = db()
@@ -367,7 +388,7 @@ def test_shipyard_booster_reduces_shipyard_time(inventory_use_db):
     )
 
     begin_write_transaction(conn)
-    ok, reason, _ = use_inventory_item(uid, pid, "booster_shipyard_15m", 1, conn=conn)
+    ok, reason, result = use_inventory_item(uid, pid, "booster_shipyard_15m", 1, conn=conn)
     assert ok, reason
     commit(conn)
 
@@ -377,7 +398,8 @@ def test_shipyard_booster_reduces_shipyard_time(inventory_use_db):
             (pid,),
         ).fetchone()["finish_at"]
     )
-    assert finish_after <= finish_before - 800
+    assert finish_after == finish_before
+    assert int((result or {}).get("effect", {}).get("seconds_credited") or 0) == 900
     conn.close()
 
 
@@ -498,10 +520,12 @@ def test_inventory_state_includes_use_metadata(inventory_use_db):
     state = build_inventory_state(uid, conn=conn)
     assert inventory_schema_ready(conn)
     by_key = {i["item_key"]: i for i in state["other_items"]}
-    assert by_key["booster_build_5m"]["usable"] is False
-    assert by_key["booster_build_5m"]["use_block_reason"] == "no_build_queue"
-    assert by_key["booster_research_15m"]["usable"] is False
-    assert by_key["booster_research_15m"]["use_block_reason"] == "no_research_queue"
+    assert "booster_build_5m" not in by_key
+    assert "booster_research_15m" not in by_key
+    legacy = {i["item_key"]: i for i in (state.get("timekeeper") or {}).get("legacy_time_items") or []}
+    assert legacy["booster_build_5m"]["usable"] is True
+    assert legacy["booster_build_5m"]["timekeeper_deposit"] is True
+    assert legacy["booster_research_15m"]["usable"] is True
     assert by_key["fragment_dna_common"]["craft_material"] is True
     assert by_key["fragment_dna_common"]["craft_progress"][0]["owned"] == 17
     assert by_key["mythic_genesis_core"]["collectible"] is True
@@ -509,28 +533,23 @@ def test_inventory_state_includes_use_metadata(inventory_use_db):
     conn.close()
 
 
-def test_time_booster_usable_when_queue_active(inventory_use_db):
+def test_time_booster_usable_in_legacy_section(inventory_use_db):
     from game.inventory import build_inventory_state
 
     conn = db()
     uid = _player(conn=conn)
-    planet = get_context_planet(uid, conn=conn)
-    pid = int(planet["id"])
-    now = time.time()
-    add_build_job(pid, "metal_mine", now - 5, now + 3600, conn=conn)
-    add_research_job(uid, "energy_tech", now - 5, now + 3600, conn=conn)
     grant_inventory_item(uid, "booster_build_5m", 1, conn=conn)
     grant_inventory_item(uid, "booster_research_15m", 1, conn=conn)
     conn.commit()
 
     state = build_inventory_state(uid, conn=conn)
-    by_key = {i["item_key"]: i for i in state["other_items"]}
-    assert by_key["booster_build_5m"]["usable"] is True
-    assert by_key["booster_research_15m"]["usable"] is True
+    legacy = {i["item_key"]: i for i in (state.get("timekeeper") or {}).get("legacy_time_items") or []}
+    assert legacy["booster_build_5m"]["usable"] is True
+    assert legacy["booster_research_15m"]["usable"] is True
     conn.close()
 
 
-def test_research_booster_not_consumed_without_job(inventory_use_db):
+def test_research_booster_usable_without_job(inventory_use_db):
     conn = db()
     uid = _player(conn=conn)
     planet = get_context_planet(uid, conn=conn)
@@ -539,20 +558,15 @@ def test_research_booster_not_consumed_without_job(inventory_use_db):
     conn.commit()
 
     begin_write_transaction(conn)
-    ok, reason, _ = use_inventory_item(uid, pid, "booster_research_15m", 1, conn=conn)
-    rollback(conn)
-    assert not ok
-    assert reason == "no_research_queue"
+    ok, reason, result = use_inventory_item(uid, pid, "booster_research_15m", 1, conn=conn)
+    assert ok, reason
+    commit(conn)
 
-    amt = conn.execute(
-        "SELECT amount FROM player_inventory_items WHERE user_id = ? AND item_key = ?;",
-        (uid, "booster_research_15m"),
-    ).fetchone()
-    assert int(amt["amount"]) == 1
+    assert int((result or {}).get("effect", {}).get("seconds_credited") or 0) == 900
     conn.close()
 
 
-def test_shipyard_booster_not_consumed_without_job(inventory_use_db):
+def test_shipyard_booster_usable_without_job(inventory_use_db):
     from game.shipyard_queue import shipyard_queue_table_ready
 
     conn = db()
@@ -565,10 +579,11 @@ def test_shipyard_booster_not_consumed_without_job(inventory_use_db):
     conn.commit()
 
     begin_write_transaction(conn)
-    ok, reason, _ = use_inventory_item(uid, pid, "booster_shipyard_15m", 1, conn=conn)
-    rollback(conn)
-    assert not ok
-    assert reason == "no_shipyard_queue"
+    ok, reason, result = use_inventory_item(uid, pid, "booster_shipyard_15m", 1, conn=conn)
+    assert ok, reason
+    commit(conn)
+
+    assert int((result or {}).get("effect", {}).get("seconds_credited") or 0) == 900
     conn.close()
 
 
@@ -1045,7 +1060,7 @@ def test_build_booster_short_remaining_no_db_lock(inventory_use_db, monkeypatch)
         (uid, "booster_build_1h"),
     ).fetchone()
     conn.close()
-    assert int(queue_count) == 0
+    assert int(queue_count) == 1
     assert booster_row is None
 
 

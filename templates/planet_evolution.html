@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_prog_identity with context %}
-{% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
+{% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer, render_timekeeper_apply_btn with context %}
 
 {% macro pe_history_item_label(item) -%}
   {% set tk = item.title_key|default('') %}
@@ -255,7 +255,10 @@
       {{ T('pe_ascension_phase', 'Phase %(n)s', n=qj.target_phase|int) }}
     </div>
     {% endif %}
-    {{ render_card_queue_timer(qj, qj.owner_type|default('planet_research'), 'planet_evolution') }}
+    <div class="gc-card-queue-time-row">
+      {{ render_timekeeper_apply_btn(qj.owner_type|default('planet_research'), qj) }}
+      {{ render_card_queue_timer(qj, qj.owner_type|default('planet_research'), 'planet_evolution') }}
+    </div>
     {% if qj.status == 'active' %}
     <div class="gc-card-queue-bar" role="progressbar"
          aria-valuemin="0" aria-valuemax="100"

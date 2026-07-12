@@ -635,9 +635,11 @@ def inject_globals():
         pass
 
     header_active_boosters: dict[str, Any] = {"ready": False, "active": [], "active_effects": []}
+    header_timekeeper: dict[str, Any] = {"ready": False, "balance_sec": 0, "label": "0min"}
     try:
         if auth_user and auth_user.get("id") and not simple_layout:
             from game.inventory_boosters import build_inventory_boosters_state
+            from game.timekeeper import serialize_for_client
 
             _boost_conn = db()
             try:
@@ -646,6 +648,7 @@ def inject_globals():
                     conn=_boost_conn,
                     locale=active_locale,
                 )
+                header_timekeeper = serialize_for_client(int(auth_user["id"]), conn=_boost_conn)
             finally:
                 _boost_conn.close()
     except Exception:
@@ -685,6 +688,7 @@ def inject_globals():
         HEADER_ACTIVE_PLANET=header_active_planet,
         HEADER_PLANET_LIMIT=header_planet_limit,
         HEADER_ACTIVE_BOOSTERS=header_active_boosters,
+        TIMEKEEPER=header_timekeeper,
         SIDEBAR_NAV=sidebar_nav,
         SIDEBAR_NAV_CLIENT=client_sidebar_nav_config(),
         ADMINISTRATION_MODULES=sorted(ADMINISTRATION_MODULES),
@@ -2983,6 +2987,72 @@ def api_inventory_use_item():
         },
         request_id=request_id,
     )
+
+
+@app.route("/api/timekeeper/apply", methods=["POST"])
+@require_login
+def api_timekeeper_apply():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    domain = str(data.get("domain") or "").strip().lower()
+    mode = str(data.get("mode") or "partial").strip().lower()
+    try:
+        seconds = int(data.get("seconds") or 0)
+    except (TypeError, ValueError):
+        seconds = 0
+    planet_id_raw = data.get("planet_id")
+    planet_id = int(planet_id_raw) if planet_id_raw is not None and str(planet_id_raw).strip() != "" else None
+
+    from game.db import begin_write_transaction, commit, rollback
+    from game.planet_evolution.repository import get_context_planet
+    from game.timekeeper import apply_timekeeper
+
+    conn = db()
+    try:
+        if planet_id is None and domain in (
+            "build",
+            "shipyard",
+            "defense",
+            "planet_research",
+            "ascension",
+        ):
+            planet = get_context_planet(user_id, conn=conn)
+            planet_id = int(planet["id"])
+        begin_write_transaction(conn)
+        ok, reason, result = apply_timekeeper(
+            user_id,
+            domain,
+            planet_id=planet_id,
+            seconds=seconds if mode == "partial" else None,
+            mode=mode,
+            conn=conn,
+        )
+        if not ok:
+            rollback(conn)
+            state, _ = _build_game_state_payload(include_panel=True, finish_source="api_timekeeper_apply")
+            body = {"ok": False, "reason": reason, "state": state}
+            if result.get("timekeeper"):
+                body["timekeeper"] = result["timekeeper"]
+            return jsonify(body), 400
+        commit(conn)
+        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_timekeeper_apply")
+        return jsonify(
+            {
+                "ok": True,
+                "reason": "ok",
+                "state": state,
+                "timekeeper": result.get("timekeeper"),
+                "seconds_applied": result.get("seconds_applied"),
+            }
+        )
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
 
 
 @app.route("/api/inventory/craft", methods=["POST"])
@@ -6363,6 +6433,13 @@ def _payload_from_live_context(
             "energy_hint": energy_hint,
         },
     }
+
+    try:
+        from game.timekeeper import serialize_for_client
+
+        payload["timekeeper"] = serialize_for_client(int(user_id), conn=conn)
+    except Exception:
+        payload["timekeeper"] = {"ready": False, "balance_sec": 0, "label": "0min"}
 
     if include_panel:
         from game.buildings import get_overview_building_rows

@@ -8,3 +8,16 @@
 {% set wait_ts = finish_ts if finish_ts else (qj.start_at if qj.start_at is defined else none) %}
 <{{ tag }} class="gc-card-queue-timer gc-mono"{% if wait_ts %} data-timer-target="{{ wait_ts|int }}" data-timer-kind="{{ timer_kind }}" data-refresh-on-zero="{{ refresh_on_zero }}" data-countdown-at="{{ wait_ts|int }}"{% if qj.remaining_seconds is defined %} data-server-remaining="{{ qj.remaining_seconds|int }}"{% endif %}{% endif %}>{{ qj.remaining_seconds|default(0)|int }}s</{{ tag }}>
 {%- endmacro %}
+
+{% macro render_timekeeper_apply_btn(domain, qj) -%}
+{% set is_active = (qj.status is defined and qj.status == 'active') or (qj.is_active is defined and qj.is_active) %}
+{% if is_active and (qj.remaining_seconds|default(0)|int) > 0 %}
+<button type="button"
+        class="gc-queue-timekeeper-btn"
+        data-gc-timekeeper-apply
+        data-timekeeper-domain="{{ domain }}"
+        data-timekeeper-remaining="{{ qj.remaining_seconds|default(0)|int }}"
+        title="{{ T('timekeeper_apply_tooltip', 'Verfügbare Zeit einsetzen') }}"
+        aria-label="{{ T('timekeeper_apply_tooltip', 'Verfügbare Zeit einsetzen') }}"><span aria-hidden="true">⚡</span></button>
+{% endif %}
+{%- endmacro %}

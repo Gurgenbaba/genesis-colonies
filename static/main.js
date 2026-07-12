@@ -1360,6 +1360,7 @@
       build_queue_owners: Object.keys(resolveCardJobsByOwner(state.build_queue)).length,
       research_owners: Object.keys(resolveCardJobsByOwner(state.research)).length,
     });
+    _primeActionStateTimekeeper(state);
     if (!isPlanetSwitch) {
       if (state.buildings_panel_delta && document.querySelector(".buildings-prog-list")) {
         patchBuildingPanel(state.buildings_panel_delta, state.build_queue);
@@ -1388,6 +1389,7 @@
     }
 
     if (!isPlanetSwitch) {
+      _finalizeTimekeeperQueueButtons(state);
       if (shouldPollGameState()) {
         GC.startPolling(anyActive || lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard);
       }
@@ -2671,6 +2673,12 @@
       forbidden: t("msg_action_forbidden", "Aktion nicht erlaubt."),
       max_level_reached: t("msg_build_max_level", "Maximale Stufe erreicht."),
       missing_job_id: t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."),
+      insufficient_timekeeper: t("timekeeper_error_insufficient", "Nicht genug Imperiumszeit."),
+      timekeeper_unavailable: t("timekeeper_error_unavailable", "Timekeeper nicht verfügbar."),
+      no_queue: t("timekeeper_error_no_queue", "Keine aktive Warteschlange."),
+      no_effect: t("timekeeper_error_no_effect", "Zeit konnte nicht angewendet werden."),
+      invalid_domain: t("timekeeper_error_invalid_domain", "Ungültige Warteschlange."),
+      planet_required: t("timekeeper_error_planet_required", "Planet-Kontext fehlt."),
     };
     return map[reason] || t("msg_generic_error", "Aktion fehlgeschlagen.");
   }
@@ -7058,6 +7066,7 @@
 
     if (isActive && finishAt > 0) assignMonotonicServerRemaining(block, remaining, finishAt);
     applyHeroQueueVisual(cardEl, block, queueJob, pct, remaining, timerKind, refreshOnZero);
+    _syncTimekeeperApplyBtn(block, _cardQueueDomain(queueJob, opts), queueJob);
     return block;
   }
 
@@ -7159,6 +7168,7 @@
       ? (totalSeconds > 0 ? 100 * (1 - remaining / totalSeconds) : progressPct)
       : 0;
     applyHeroQueueVisual(cardEl, block, queueJob, pct, remaining, timerKind, refreshOnZero);
+    _syncTimekeeperApplyBtn(block, domain, queueJob);
     syncCardQueueOwnerClassesFromBlocks(cardEl, domain);
     return block;
   }
@@ -7237,6 +7247,7 @@
       assignMonotonicServerRemaining(block, remaining, finishAt);
     }
 
+    _syncTimekeeperApplyBtn(block, domain, queueJob);
     return block;
   }
 
@@ -7434,7 +7445,10 @@
     } else if (!isActive) {
       timerEl.textContent = formatEta(Math.max(0, Math.floor(Number(queueJob.remaining_seconds || 0))));
     }
-    block.appendChild(timerEl);
+    const timeRow = document.createElement("div");
+    timeRow.className = "gc-card-queue-time-row";
+    timeRow.appendChild(timerEl);
+    block.appendChild(timeRow);
 
     if (isActive) {
       const bar = document.createElement("div");
@@ -7476,6 +7490,8 @@
           : t("action_cancel", "Abbrechen");
       block.appendChild(cancelBtn);
     }
+
+    _syncTimekeeperApplyBtn(block, domain, queueJob);
 
     const slot = cardEl.querySelector(".gc-bld-card-queue-slot");
     const isQueueListHost =
@@ -7653,6 +7669,213 @@
     return _resolveQueueJobDisplayName(job, domain);
   }
 
+  function _timekeeperApplyBalance(fromState) {
+    const src = fromState && typeof fromState === "object" ? fromState : GC.lastState;
+    const tk = (src && src.timekeeper) || {};
+    return Math.max(0, parseInt(tk.balance_sec, 10) || 0);
+  }
+
+  function _primeActionStateTimekeeper(state) {
+    if (!state || !state.timekeeper) return;
+    const base = GC.lastState && GC.lastState.ok === true ? GC.lastState : { ok: true };
+    GC.lastState = { ...base, timekeeper: state.timekeeper };
+  }
+
+  function _syncTimekeeperFromCardJobsByOwner(queueRaw, findCard, domain) {
+    const byOwner = resolveCardJobsByOwner(queueRaw);
+    Object.entries(byOwner).forEach(([ownerKey, jobs]) => {
+      const card = findCard(ownerKey);
+      if (!card) return;
+      const list = (Array.isArray(jobs) ? jobs : [])
+        .filter((job) => job && typeof job === "object")
+        .slice()
+        .sort((a, b) => {
+          const pa = Math.floor(Number(a.queue_position || 0));
+          const pb = Math.floor(Number(b.queue_position || 0));
+          if (pa !== pb) return pa - pb;
+          return Math.floor(Number(a.job_id || 0)) - Math.floor(Number(b.job_id || 0));
+        });
+      const head = list.find((j) => String(j.status || "") === "active") || list[0];
+      if (!head || String(head.status || "") !== "active") return;
+      let block =
+        findHeroQueue(card)
+        || card.querySelector("[data-gc-card-queue][data-queue-active='1']")
+        || card.querySelector("[data-gc-card-queue]");
+      if (!block && typeof GC.renderCardQueueBlock === "function") {
+        block = GC.renderCardQueueBlock(card, head, { domain });
+      }
+      if (block) _syncTimekeeperApplyBtn(block, domain, head);
+    });
+  }
+
+  function _finalizeTimekeeperQueueButtons(state) {
+    if (!state) return;
+    _primeActionStateTimekeeper(state);
+    if (state.build_queue && document.querySelector(".buildings-prog-list")) {
+      _syncTimekeeperFromCardJobsByOwner(
+        state.build_queue,
+        (ownerKey) => document.querySelector(`[data-building-row="${ownerKey}"]`),
+        "building"
+      );
+    }
+    if (state.research && document.querySelector(".research-prog-list")) {
+      _syncTimekeeperFromCardJobsByOwner(
+        state.research,
+        (ownerKey) => document.querySelector(`[data-tech-key="${ownerKey}"]`),
+        "research"
+      );
+    }
+    document.querySelectorAll("[data-mini-queue-card][data-queue-active='1']").forEach((card) => {
+      const btn = card.querySelector("[data-gc-timekeeper-apply]");
+      if (btn) {
+        _applyTimekeeperBtnState(btn, parseInt(btn.dataset.timekeeperRemaining, 10) || 0, state);
+      }
+    });
+    patchShellHudTimekeeper(state);
+  }
+
+  function _queueJobTimekeeperRemaining(queueJob) {
+    if (!queueJob || typeof queueJob !== "object") return 0;
+    const isActive = Boolean(queueJob.is_active) || String(queueJob.status || "") === "active";
+    if (!isActive) return 0;
+    const finishAt = Math.floor(Number(queueJob.finish_at || queueJob.finish_time || 0));
+    const now = getTimerServerNow();
+    if (finishAt > 0) {
+      return Math.max(
+        0,
+        Math.floor(
+          queueJobRemainingSeconds(
+            finishAt,
+            now,
+            Math.max(0, Math.floor(Number(queueJob.remaining_seconds || 0)))
+          )
+        )
+      );
+    }
+    return Math.max(0, Math.floor(Number(queueJob.remaining_seconds || 0)));
+  }
+
+  function _applyTimekeeperBtnState(btn, remaining, stateForBalance) {
+    if (!btn) return;
+    const rem = Math.max(0, Math.floor(Number(remaining) || 0));
+    const bal = _timekeeperApplyBalance(stateForBalance);
+    btn.dataset.timekeeperRemaining = String(rem);
+    btn.hidden = bal <= 0 || rem <= 0;
+    btn.disabled = bal <= 0 || rem <= 0;
+  }
+
+  function _ensureHeroTimekeeperSlot(cardEl) {
+    if (!cardEl) return null;
+    const stack = cardEl.querySelector(".gc-bld-hero-right-stack");
+    if (!stack) return null;
+    let row = stack.querySelector(".gc-bld-hero-action-row");
+    const timeSlot = stack.querySelector(".gc-bld-hero-action-slot--time");
+    if (!row && timeSlot) {
+      row = document.createElement("div");
+      row.className = "gc-bld-hero-action-row";
+      stack.insertBefore(row, timeSlot);
+      row.appendChild(timeSlot);
+    }
+    row = row || stack;
+    let tkSlot = stack.querySelector(".gc-bld-hero-action-slot--timekeeper");
+    if (!tkSlot) {
+      tkSlot = document.createElement("span");
+      tkSlot.className = "gc-bld-hero-action-slot gc-bld-hero-action-slot--timekeeper";
+      if (timeSlot && row.contains(timeSlot)) row.insertBefore(tkSlot, timeSlot);
+      else row.appendChild(tkSlot);
+    }
+    return tkSlot;
+  }
+
+  function _ensureCardQueueTimeRow(block) {
+    if (!block) return null;
+    let row = block.querySelector(".gc-card-queue-time-row");
+    if (row) return row;
+    const timerEl = block.querySelector(":scope > .gc-card-queue-timer");
+    row = document.createElement("div");
+    row.className = "gc-card-queue-time-row";
+    if (timerEl) {
+      timerEl.replaceWith(row);
+      row.appendChild(timerEl);
+    } else {
+      block.appendChild(row);
+    }
+    return row;
+  }
+
+  function _resolveTimekeeperBtnHost(parent, queueJob) {
+    if (!parent) return null;
+    if (parent.dataset?.heroQueue === "1" || parent.classList?.contains("gc-bld-hero-queue")) {
+      const cardEl = parent.closest("[data-building-row], [data-research-card], [data-building-card]");
+      return _ensureHeroTimekeeperSlot(cardEl);
+    }
+    if (parent.dataset?.miniQueueCard !== undefined || parent.hasAttribute("data-mini-queue-card")) {
+      return parent;
+    }
+    if (parent.dataset?.gcCardQueue === "1" || parent.classList?.contains("gc-card-queue-block")) {
+      return _ensureCardQueueTimeRow(parent);
+    }
+    if (parent.classList?.contains("gc-card-queue-time-row")) return parent;
+    if (parent.classList?.contains("gc-bld-hero-action-slot--timekeeper")) return parent;
+    return parent;
+  }
+
+  function _insertTimekeeperBtn(host, btn) {
+    if (!host || !btn) return;
+    if (host.dataset?.miniQueueCard !== undefined || host.hasAttribute("data-mini-queue-card")) {
+      const cancel = host.querySelector(".gc-mini-queue-card__cancel");
+      if (cancel) host.insertBefore(btn, cancel);
+      else host.appendChild(btn);
+      return;
+    }
+    if (host.classList?.contains("gc-card-queue-time-row")) {
+      host.insertBefore(btn, host.firstChild);
+      return;
+    }
+    host.appendChild(btn);
+  }
+
+  function _createTimekeeperApplyBtn(domain, remaining) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "gc-queue-timekeeper-btn";
+    btn.setAttribute("data-gc-timekeeper-apply", "");
+    btn.setAttribute("data-timekeeper-domain", String(domain || "build"));
+    const tip = _timekeeperApplyTooltip();
+    btn.title = tip;
+    btn.setAttribute("aria-label", tip);
+    btn.innerHTML = '<span aria-hidden="true">⚡</span>';
+    _applyTimekeeperBtnState(btn, remaining);
+    return btn;
+  }
+
+  function _syncTimekeeperApplyBtn(parent, domain, queueJob) {
+    if (!parent || !queueJob) return null;
+    const host = _resolveTimekeeperBtnHost(parent, queueJob);
+    if (!host) return null;
+    const rem = _queueJobTimekeeperRemaining(queueJob);
+    const show = rem > 0;
+    let btn = host.querySelector("[data-gc-timekeeper-apply]");
+    if (!show) {
+      if (btn) btn.remove();
+      return null;
+    }
+    const dom = String(domain || parent.dataset.timerDomain || host.dataset.timerDomain || "build");
+    if (!btn) {
+      btn = _createTimekeeperApplyBtn(dom, rem);
+      _insertTimekeeperBtn(host, btn);
+    } else {
+      btn.setAttribute("data-timekeeper-domain", dom);
+      _applyTimekeeperBtnState(btn, rem);
+    }
+    const jobId = Math.floor(
+      Number(host?.dataset?.jobId || parent?.dataset?.jobId || queueJob?.job_id || 0)
+    );
+    if (jobId > 0) btn.setAttribute("data-timekeeper-job-id", String(jobId));
+    else btn.removeAttribute("data-timekeeper-job-id");
+    return btn;
+  }
+
   GC.renderMiniQueueStrip = function renderMiniQueueStrip(rootEl, jobs, options) {
     if (!rootEl) return;
     const opts = options && typeof options === "object" ? options : {};
@@ -7728,6 +7951,8 @@
           if (bar) bar.setAttribute("aria-valuenow", String(pct));
           _applyProgressFill(fill, pct);
         }
+        if (isActive) _syncTimekeeperApplyBtn(card, domain, job);
+        else card.querySelector("[data-gc-timekeeper-apply]")?.remove();
       });
       return;
     }
@@ -7817,6 +8042,8 @@
       }
       body.appendChild(timerEl);
       card.appendChild(body);
+
+      if (isActive) _syncTimekeeperApplyBtn(card, domain, job);
 
       if (job.cancelable !== false && jobId > 0 && cancelDataset) {
         const cancelBtn = document.createElement("button");
@@ -11267,6 +11494,140 @@
     patchShellHudBoosters(GC.lastState || { active_boosters: { active_effects: _boostHudState.effects } });
   }
 
+  function patchShellHudTimekeeper(data) {
+    const tk = data && data.timekeeper;
+    if (!tk) return;
+    const bal = parseInt(tk.balance_sec, 10) || 0;
+    const label = String(tk.label || formatDuration(bal));
+    document.querySelectorAll("[data-timekeeper-balance]").forEach((el) => {
+      _setIfChanged(el, label);
+    });
+    patchHudCapacityBar("timekeeper", bal, 86400, { animate: false });
+    document.querySelectorAll("[data-gc-timekeeper-apply]").forEach((btn) => {
+      const rem = parseInt(btn.dataset.timekeeperRemaining, 10) || 0;
+      const unavailable = bal <= 0 || rem <= 0;
+      btn.hidden = unavailable;
+      btn.disabled = unavailable || _timekeeperApplying;
+    });
+    _syncTimekeeperApplyBtnTooltips();
+  }
+
+  let _timekeeperApplying = false;
+
+  function _normalizeTimekeeperDomain(domain) {
+    const d = String(domain || "").trim().toLowerCase();
+    const aliases = {
+      building: "build",
+      buildings: "build",
+      planet_evolution: "planet_research",
+      pe_research: "planet_research",
+    };
+    return aliases[d] || d;
+  }
+
+  function _timekeeperOpenContext(openBtn) {
+    const host = openBtn.closest("[data-job-id], [data-gc-card-queue], [data-hero-queue], [data-mini-queue-card]");
+    const jobId = Math.floor(
+      Number(
+        host?.dataset?.jobId
+          || openBtn.getAttribute("data-timekeeper-job-id")
+          || openBtn.dataset.timekeeperJobId
+          || 0
+      )
+    );
+    const planetId = Math.floor(
+      Number(
+        GC.lastState?.active_planet_id
+          || GC.lastState?.build_queue?.planet_id
+          || (typeof GC.getDomPlanetId === "function" ? GC.getDomPlanetId() : 0)
+          || 0
+      )
+    );
+    return {
+      domain: _normalizeTimekeeperDomain(
+        openBtn.getAttribute("data-timekeeper-domain")
+          || openBtn.dataset.timekeeperDomain
+          || openBtn.getAttribute("data-timer-domain")
+          || openBtn.dataset.timerDomain
+          || "build"
+      ),
+      remaining: parseInt(
+        openBtn.getAttribute("data-timekeeper-remaining") || openBtn.dataset.timekeeperRemaining,
+        10
+      ) || 0,
+      jobId,
+      planetId,
+    };
+  }
+
+  function _timekeeperApplyTooltip() {
+    const tk = (GC.lastState && GC.lastState.timekeeper) || {};
+    const label = String(tk.label || "").trim();
+    if (label && label !== "0min" && (parseInt(tk.balance_sec, 10) || 0) > 0) {
+      return tf("timekeeper_apply_tooltip_up_to", { label }, `Bis zu ${label} einsetzen`);
+    }
+    return t("timekeeper_apply_tooltip", "Verfügbare Zeit einsetzen");
+  }
+
+  function _syncTimekeeperApplyBtnTooltips() {
+    const tip = _timekeeperApplyTooltip();
+    document.querySelectorAll("[data-gc-timekeeper-apply]").forEach((btn) => {
+      btn.title = tip;
+      btn.setAttribute("aria-label", tip);
+    });
+  }
+
+  async function submitTimekeeperApplyFromBtn(openBtn) {
+    if (!openBtn || openBtn.disabled || _timekeeperApplying) return;
+    const ctx = _timekeeperOpenContext(openBtn);
+    if (!ctx.domain || ctx.remaining <= 0 || _timekeeperApplyBalance() <= 0) return;
+
+    _timekeeperApplying = true;
+    openBtn.disabled = true;
+
+    const body = {
+      domain: ctx.domain,
+      mode: "max",
+      request_id: `tk-${ctx.domain}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    };
+    if (ctx.jobId > 0) body.job_id = ctx.jobId;
+    if (ctx.planetId > 0) body.planet_id = ctx.planetId;
+
+    try {
+      const res = await GC.fetchGameAction("/api/timekeeper/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (res && res.timekeeper && res.state && typeof res.state === "object") {
+        res.state.timekeeper = res.state.timekeeper || res.timekeeper;
+      }
+      applyActionState(res, "timekeeper_apply");
+      if (!res || !res.ok) {
+        showNotify(mapActionError(res?.reason, res?.payload), "error");
+      }
+    } catch (err) {
+      console.error("[GC] timekeeper apply failed", err);
+      showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
+    } finally {
+      _timekeeperApplying = false;
+      patchShellHudTimekeeper(GC.lastState || {});
+    }
+  }
+
+  function initTimekeeperOnce() {
+    if (GC._timekeeperReady) return;
+    GC._timekeeperReady = true;
+
+    document.addEventListener("click", (ev) => {
+      const openBtn = ev.target.closest("[data-gc-timekeeper-apply]");
+      if (!openBtn || openBtn.disabled) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      void submitTimekeeperApplyFromBtn(openBtn);
+    });
+  }
+
   function patchShellHudFromState(data, opts) {
     if (!data || data.ok === false) return;
     const forceResourceBar = Boolean(opts && opts.forceResourceBar);
@@ -11390,6 +11751,7 @@
     }
 
     patchShellHudBoosters(data);
+    patchShellHudTimekeeper(data);
 
     patchHeaderPlanetLimitFromState(data, forceResourceBar);
 
@@ -11622,6 +11984,7 @@
     "energy_efficiency_pct",
     "energy_ratio",
     "buildings",
+    "timekeeper",
   ];
 
   function isHudOnlyGameStateReason(reason) {
@@ -13473,8 +13836,59 @@
     panel.hidden = false;
   }
 
+  function legacyBoosterDomain(itemKey) {
+    const key = String(itemKey || "");
+    if (key.startsWith("booster_build")) return "build";
+    if (key.startsWith("booster_research")) return "research";
+    if (key.startsWith("booster_shipyard")) return "shipyard";
+    return "other";
+  }
+
+  function patchInventoryTimekeeperChips(tk) {
+    const chipHost = document.querySelector("[data-inventory-timekeeper-chips]");
+    const legacyHost = document.querySelector("[data-inventory-timekeeper-legacy]");
+    const legacy = (tk && tk.legacy_time_items) || [];
+    const counts = { build: 0, research: 0, shipyard: 0 };
+    legacy.forEach((item) => {
+      const dom = legacyBoosterDomain(item.item_key);
+      if (counts[dom] != null) counts[dom] += parseInt(item.amount, 10) || 0;
+    });
+    if (chipHost) {
+      const chips = [
+        ["build", "inv_tk_chip_build", "Bau"],
+        ["research", "inv_tk_chip_research", "Forschung"],
+        ["shipyard", "inv_tk_chip_shipyard", "Werft"],
+      ];
+      chipHost.innerHTML = chips
+        .filter(([dom]) => (counts[dom] || 0) > 0)
+        .map(
+          ([dom, key, fallback]) =>
+            `<button type="button" class="inventory-tk-chip inventory-tk-chip--${dom} gc-mono" data-inventory-tk-chip-domain="${dom}">${escapeHtml(t(key, fallback))} +${formatNumber(counts[dom])}</button>`
+        )
+        .join("");
+    }
+    if (legacyHost) {
+      legacyHost.innerHTML = legacy
+        .map((item) => {
+          const dom = legacyBoosterDomain(item.item_key);
+          const usable = Boolean(item.usable);
+          const name = t(item.name_key || item.item_key, item.item_key);
+          const icon = item.icon || "⚡";
+          const amt = parseInt(item.amount, 10) || 0;
+          return `<button type="button" class="inventory-tk-deposit-btn" data-inventory-use="${escapeHtml(item.item_key)}" data-inventory-tk-domain="${dom}"${usable ? "" : " disabled"} title="${escapeHtml(name)}"><span class="inventory-tk-deposit-btn__icon" aria-hidden="true">${icon}</span><span class="inventory-tk-deposit-btn__label">${escapeHtml(name)}</span><span class="inventory-tk-deposit-btn__amt gc-mono">×${formatNumber(amt)}</span></button>`;
+        })
+        .join("");
+      legacyHost.hidden = legacy.length === 0;
+    }
+  }
+
   function patchInventoryDom(inventory) {
     const inv = inventory || {};
+    const tk = inv.timekeeper || {};
+    document.querySelectorAll("[data-inventory-timekeeper-balance]").forEach((el) => {
+      _setIfChanged(el, String(tk.label || formatDuration(parseInt(tk.balance_sec, 10) || 0)));
+    });
+    patchInventoryTimekeeperChips(tk);
     const containers = inv.containers || [];
     const items = inv.other_items || [];
 
@@ -13494,7 +13908,7 @@
       const cooldownSeconds = row ? parseInt(row.cooldown_seconds, 10) || 0 : 0;
       const openBlocked = Boolean(row && row.open_blocked);
       const maxOpen = row ? parseInt(row.max_open_amount, 10) || 10 : 10;
-      const hint = card.querySelector(".inventory-loot-card-hint");
+      const hint = card.querySelector(".inventory-loot-card-status, .inventory-loot-card-hint");
       if (hint) {
         hint.dataset.cooldownSeconds = String(cooldownSeconds);
         if (owned) {
@@ -13571,6 +13985,18 @@
     GC._inventoryEventsBound = true;
 
     document.addEventListener("click", async (ev) => {
+      const tkChip = ev.target.closest("[data-inventory-tk-chip-domain]");
+      if (tkChip) {
+        const page = document.getElementById("inventory-page");
+        if (!page || page.dataset.ready !== "1") return;
+        const domain = tkChip.dataset.inventoryTkChipDomain;
+        const deposit = document.querySelector(
+          `[data-inventory-timekeeper-legacy] [data-inventory-tk-domain="${domain}"]:not([disabled])`
+        );
+        if (deposit) deposit.click();
+        return;
+      }
+
       const useBtn = ev.target.closest("[data-inventory-use]");
       if (useBtn && !useBtn.disabled) {
         const page = document.getElementById("inventory-page");
@@ -13690,7 +14116,7 @@
         if (card && card.dataset.inventoryContainer === "container_basic") {
           const amountEl = card.querySelector('[data-inventory-amount="container_basic"]');
           const amount = amountEl ? parseInt(amountEl.textContent, 10) || 0 : 0;
-          const hint = card.querySelector(".inventory-loot-card-hint");
+          const hint = card.querySelector(".inventory-loot-card-status, .inventory-loot-card-hint");
           const openBtn = card.querySelector('[data-inventory-open][data-open-amount="1"]');
           if (amount <= 0) {
             card.classList.add("inventory-loot-card--free-ready");
@@ -32347,6 +32773,7 @@
     initShipDetailOnce();
     initBuildingTechnicalDataOnce();
     initPlayerCardOnce();
+    initTimekeeperOnce();
 
     document.addEventListener("click", (e) => {
       const link = e.target.closest('a[href*="/logout"]');

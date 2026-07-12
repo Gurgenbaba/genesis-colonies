@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_shipyard_resource_blocker, render_req_hover_attrs, render_max_queue_preview_attrs with context %}
 {% from "partials/building_effect_strip.html" import render_compact_effect_row with context %}
-{% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
+{% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer, render_timekeeper_apply_btn with context %}
 {% from "partials/page_mini_queue_strip.html" import render_page_mini_queue_strip with context %}
 {% from "partials/card_hero_img_macros.html" import render_hero_img_stack with context %}
 
@@ -74,7 +74,10 @@
       {{ T('label_level_short', 'L') }}{{ qj.target_level|int }}
     </div>
     {% endif %}
-    {{ render_card_queue_timer(qj, 'research', 'game-state') }}
+    <div class="gc-card-queue-time-row">
+      {{ render_timekeeper_apply_btn('research', qj) }}
+      {{ render_card_queue_timer(qj, 'research', 'game-state') }}
+    </div>
     {% if qj.status == 'active' %}
     <div class="gc-card-queue-bar" role="progressbar"
          aria-valuemin="0" aria-valuemax="100"
@@ -238,9 +241,16 @@
         <span class="gc-hero-stat-badge gc-hero-stat-badge--level gc-bld-hero-level tech-level-current"
               title="{{ T('buildings_col_level') }}"
               aria-label="{{ T('buildings_col_level') }}">{{ curr_lvl|fmt_int }}</span>
-        <span class="gc-bld-hero-action-slot gc-bld-hero-action-slot--time">
-          {{ render_hero_time_chip(tech.queue_job if tech.queue_job is defined else none, tech.time_seconds, 'research', T('research_col_time')) }}
-        </span>
+        <div class="gc-bld-hero-action-row">
+          <span class="gc-bld-hero-action-slot gc-bld-hero-action-slot--timekeeper">
+            {% if tech.queue_job is defined and tech.queue_job and tech.queue_job.status == 'active' %}
+            {{ render_timekeeper_apply_btn('research', tech.queue_job) }}
+            {% endif %}
+          </span>
+          <span class="gc-bld-hero-action-slot gc-bld-hero-action-slot--time">
+            {{ render_hero_time_chip(tech.queue_job if tech.queue_job is defined else none, tech.time_seconds, 'research', T('research_col_time')) }}
+          </span>
+        </div>
       </div>
       <div class="gc-bld-card-hero-title">
         <div class="gc-bld-card-title-wrap">

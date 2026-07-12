@@ -1,5 +1,5 @@
 {# GC-QUEUE-MINI-CARDS — horizontal mini-queue strip (buildings / research / shipyard / defense) #}
-{% from "partials/card_queue_macros.html" import render_card_queue_data_attrs with context %}
+{% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_timekeeper_apply_btn with context %}
 
 {% macro _mini_queue_job_label(domain, job) %}
   {% if domain == 'shipyard' %}
@@ -61,6 +61,9 @@
             data-countdown-at="{{ job.finish_at|int }}"
             data-server-remaining="{{ job.remaining_seconds|default(0)|int }}">{{ job.remaining_seconds|default(0)|int }}s</span>
     </div>
+    {% if job.is_active %}
+    {{ render_timekeeper_apply_btn(domain, job) }}
+    {% endif %}
     {% if job.cancelable %}
     <button type="button"
             class="gc-mini-queue-card__cancel"
