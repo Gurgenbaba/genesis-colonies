@@ -629,6 +629,7 @@ def test_codex_shell_init_before_game_loop_gate():
     assert init_shell.index("initShellChrome();") < early
     for needle in ("initSpecialPanel();", "initRoleBasedSidebar();", "initCodex();"):
         assert needle in shell_chrome, needle
+    assert "dataset.gcSpecialOpenBound" in shell_chrome
     after = init_shell[early:]
     assert "initSpecialPanel();" not in after
     assert "initCodex();" not in after

@@ -32796,6 +32796,18 @@
     initCodex();
     initCommunityHub();
     initSupportModule();
+
+    if (!document.documentElement.dataset.gcSpecialOpenBound) {
+      document.documentElement.dataset.gcSpecialOpenBound = "1";
+      document.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-special-open-window]");
+        if (!btn) return;
+        if (btn.closest(".gc-bottom-utility-bar")) return;
+        e.preventDefault();
+        const target = btn.dataset.specialOpenWindow || "";
+        if (target && typeof openSpecialWindow === "function") openSpecialWindow(target);
+      });
+    }
   }
 
   function initShellOnce() {
