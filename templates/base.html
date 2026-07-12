@@ -243,7 +243,8 @@
             {% set tk_bal = (tk.balance_sec|int) if tk.balance_sec is defined else 0 %}
             <div class="hud-res-panel hud-res-timekeeper" data-hud-res="timekeeper" title="{{ T('timekeeper_name', 'Timekeeper') }}" aria-label="{{ T('timekeeper_name', 'Timekeeper') }}">
               <div class="hud-res-body res-block res-block-timekeeper">
-                <span class="hud-res-icon hud-res-icon--timekeeper res-icon--hud" aria-hidden="true">⏳</span>
+                <span class="hud-res-badge" aria-hidden="true">{{ T('timekeeper_short', 'TK') }}</span>
+                {{ render_resource_icon('timekeeper', hud=true, lazy=false, priority='high', alt=T('timekeeper_name', 'Timekeeper')) }}
                 <span class="hud-res-amount">
                   <span class="hud-res-name">{{ T('timekeeper_short', 'TK') }}</span>
                   <span class="res-value timekeeper gc-mono" data-timekeeper-balance>{{ tk.label }}</span>

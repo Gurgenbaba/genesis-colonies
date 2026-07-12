@@ -10792,6 +10792,7 @@ a.gc-bld-head-action-btn--go:focus-visible{
   --gc-icon-crytite: url("/static/img/res/Crytite.webp");
   --gc-icon-fuel-cells: url("/static/img/res/Brennzellen.webp");
   --gc-icon-energy: url("/static/img/res/Energie.webp");
+  --gc-icon-timekeeper: url("/static/img/res/timekeeper.webp");
 }
 
 .gc-res-icon{
@@ -10819,11 +10820,16 @@ span.gc-res-icon.gc-res-metal{ background-image: var(--gc-icon-ferronit); }
 span.gc-res-icon.gc-res-crystal{ background-image: var(--gc-icon-crytite); }
 span.gc-res-icon.gc-res-fuel-cells{ background-image: var(--gc-icon-fuel-cells); }
 span.gc-res-icon.gc-res-energy{ background-image: var(--gc-icon-energy); }
+span.gc-res-icon.gc-res-timekeeper{ background-image: var(--gc-icon-timekeeper); }
 .gc-res-icon--sm{ width: 14px; height: 14px; }
 .gc-res-icon--lg{ width: 28px; height: 28px; }
 .gc-res-icon--xl{ width: 42px; height: 42px; }
 img.gc-res-icon.gc-res-energy{
   filter: drop-shadow(0 0 12px rgba(255, 196, 0, 0.28));
+}
+img.gc-res-icon.gc-res-timekeeper,
+.gc-res-icon.gc-res-timekeeper{
+  filter: drop-shadow(0 0 10px rgba(62, 200, 208, 0.28));
 }
 
 .gc-resource-summary-item,
@@ -36450,17 +36456,6 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   --hud-res-glow: rgba(62, 200, 208, 0.28);
   --hud-res-bg: rgba(62, 200, 208, 0.07);
 }
-.gc-header-cmd .hud-res-icon--timekeeper{
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 42px;
-  height: 42px;
-  flex-shrink: 0;
-  font-size: 1.35rem;
-  line-height: 1;
-  filter: drop-shadow(0 0 10px var(--hud-res-glow));
-}
 .gc-queue-timekeeper-btn{
   display: inline-flex;
   align-items: center;
@@ -36515,11 +36510,9 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
     padding: 5px 6px 5px 8px;
     min-height: 3.05rem;
   }
-  .gc-header-cmd .hud-res-body .res-icon--hud,
-  .gc-header-cmd .hud-res-icon--timekeeper{
+  .gc-header-cmd .hud-res-body .res-icon--hud{
     width: 38px;
     height: 38px;
-    font-size: 1.2rem;
   }
   .gc-header-cmd .hud-res-body .res-value,
   .gc-header-cmd .hud-res-body .res-value.energy,
@@ -36542,11 +36535,9 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
     padding: 4px 5px 4px 7px;
     min-height: 2.9rem;
   }
-  .gc-header-cmd .hud-res-body .res-icon--hud,
-  .gc-header-cmd .hud-res-icon--timekeeper{
+  .gc-header-cmd .hud-res-body .res-icon--hud{
     width: 34px;
     height: 34px;
-    font-size: 1.05rem;
   }
   .gc-header-cmd .hud-res-name{
     font-size: 0.54rem;

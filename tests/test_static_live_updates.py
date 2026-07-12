@@ -598,6 +598,8 @@ def test_gc744_resource_icons_use_webp():
     assert "img/res/Crytite.webp" in macro
     assert "img/res/Brennzellen.webp" in macro
     assert "img/res/Energie.webp" in macro
+    assert "img/res/timekeeper.webp" in macro
+    assert "gc-res-timekeeper" in macro
     assert "img/res/Ferronit.png" not in macro
     assert "loading=\"lazy\"" in macro
     assert "loading=\"eager\"" in macro
@@ -610,6 +612,10 @@ def test_gc744_resource_icons_use_webp():
     assert "render_resource_icon('metal'" not in overview
     base = _read("templates/base.html")
     assert "render_resource_icon('metal', hud=true, lazy=false, priority='high'" in base
+    assert "render_resource_icon('timekeeper', hud=true, lazy=false, priority='high'" in base
+    assert "hud-res-icon--timekeeper" not in base
+    tk_panel = base.split("hud-res-panel hud-res-timekeeper")[1].split("</div>", 1)[0]
+    assert "⏳" not in tk_panel
 
 
 def test_gc807b_hud_capacity_polish():
