@@ -464,7 +464,7 @@ def test_pjax_navigation_owner_clears_stale_timeouts():
     assert "normalizeLcpPreloadHref" in preload
     assert "removeLcpHeroPreloadLinks" in preload
     version = _read("VERSION").strip()
-    assert version == "0.5.9.14"
+    assert version == "0.5.9.15"
 
 
 def test_main_js_gc802_planet_switch_state_sync():
@@ -2172,6 +2172,17 @@ def test_main_js_timekeeper_one_click_apply_flow():
     assert "_timekeeperOpenContext(openBtn)" in src
     assert 'GC.fetchGameAction("/api/timekeeper/apply"' in src
     assert "gc-timekeeper-modal" not in _read("templates/base.html")
+
+
+def test_main_js_timekeeper_research_card_selector():
+    src = _read("static/main.js")
+    assert "function _findResearchCard(ownerKey)" in src
+    assert '[data-research-card][data-tech-key="' in src
+    assert "function _syncActiveMiniQueueTimekeeperButtons()" in src
+    finalize = src.split("function _finalizeTimekeeperQueueButtons(state)")[1].split("function _queueJobTimekeeperRemaining")[0]
+    assert "_syncActiveMiniQueueTimekeeperButtons()" in finalize
+    assert '_findResearchCard(ownerKey)' in finalize
+    assert "querySelectorAll(\"[data-tech-key]\")" not in finalize
 
 
 def test_main_js_timekeeper_buttons_sync_immediately_after_action_state():

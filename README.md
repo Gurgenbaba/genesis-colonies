@@ -6,7 +6,7 @@ Browser-basiertes Sci-Fi-Strategiespiel (OGame-inspiriert) — entwickelt als pr
 
 | | |
 |---|---|
-| **Version** | `0.5.9.14` (siehe [`VERSION`](VERSION)) |
+| **Version** | `0.5.9.15` (siehe [`VERSION`](VERSION)) |
 | **Stack** | Python 3.10+ · Flask 3 · SQLite (WAL) · Vanilla JS |
 | **Status** | Alpha — Economy, Combat, Defense, Fleet, Imperium-MVP spielbar |
 | **Health** | `GET /health` |

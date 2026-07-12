@@ -3513,14 +3513,14 @@
       patchCardQueuesFromOwnerMap(
         document,
         resolveCardJobsByOwner(researchRaw),
-        (root) => root.querySelectorAll("[data-tech-key]"),
+        _listResearchCards,
         (row) => row.getAttribute("data-tech-key") || "",
-        (root, key) => root.querySelector(`[data-tech-key="${key}"]`)
+        (root, key) => root.querySelector(`[data-research-card][data-tech-key="${key}"]`)
       );
     }
 
     techs.forEach((tech) => {
-      const row = document.querySelector(`[data-tech-key="${tech.key}"]`);
+      const row = _findResearchCard(tech.key);
       if (!row) return;
 
       applyResearchRowState(row, tech);
@@ -3582,9 +3582,9 @@
       patchCardQueuesFromOwnerMap(
         document,
         resolveCardJobsByOwner(researchRaw),
-        (root) => root.querySelectorAll("[data-tech-key]"),
+        _listResearchCards,
         (row) => row.getAttribute("data-tech-key") || "",
-        (root, key) => root.querySelector(`[data-tech-key="${key}"]`)
+        (root, key) => root.querySelector(`[data-research-card][data-tech-key="${key}"]`)
       );
       renderResearchQueue(researchRaw);
       patched = true;
@@ -7705,12 +7705,43 @@
   function _clearScopeTimekeeperApplyBtns(scope) {
     const root = scope && scope.querySelectorAll ? scope : document;
     root.querySelectorAll(
-      "[data-building-row] [data-gc-timekeeper-apply], [data-research-card] [data-gc-timekeeper-apply], [data-tech-key] [data-gc-timekeeper-apply], [data-gc-card-queue] [data-gc-timekeeper-apply]"
+      "[data-building-row] [data-gc-timekeeper-apply], [data-research-card] [data-gc-timekeeper-apply], [data-gc-card-queue] [data-gc-timekeeper-apply], [data-mini-queue-card] [data-gc-timekeeper-apply]"
     ).forEach((btn) => btn.remove());
   }
 
+  function _findResearchCard(ownerKey) {
+    const key = String(ownerKey || "").trim();
+    if (!key) return null;
+    return document.querySelector(`[data-research-card][data-tech-key="${key}"]`);
+  }
+
+  function _listResearchCards(root) {
+    const scope = root && root.querySelectorAll ? root : document;
+    return scope.querySelectorAll("[data-research-card][data-tech-key]");
+  }
+
+  function _syncActiveMiniQueueTimekeeperButtons() {
+    document.querySelectorAll("[data-mini-queue-card][data-queue-active='1']").forEach((card) => {
+      const domain = String(card.dataset.timerDomain || "build");
+      const finishAt = Math.floor(Number(card.dataset.finishAt || 0));
+      const total = Math.max(1, Math.floor(Number(card.dataset.totalSeconds || 1)));
+      const now = getTimerServerNow();
+      const rem = finishAt > 0
+        ? Math.max(0, Math.floor(queueJobRemainingSeconds(finishAt, now, NaN)))
+        : 0;
+      if (rem <= 0) return;
+      _syncTimekeeperApplyBtn(card, domain, {
+        is_active: true,
+        status: "active",
+        job_id: Math.floor(Number(card.dataset.jobId || 0)),
+        finish_at: finishAt,
+        remaining_seconds: rem,
+        duration_seconds: total,
+      });
+    });
+  }
+
   function _syncTimekeeperFromCardJobsByOwner(queueRaw, findCard, domain) {
-    _clearScopeTimekeeperApplyBtns(document);
     const activeJob = _findGlobalActiveCardJob(queueRaw);
     if (!activeJob) return;
     const ownerKey = String(activeJob.owner_key || "");
@@ -7730,6 +7761,7 @@
   function _finalizeTimekeeperQueueButtons(state) {
     if (!state) return;
     _primeActionStateTimekeeper(state);
+    _clearScopeTimekeeperApplyBtns(document);
     if (state.build_queue && document.querySelector(".buildings-prog-list")) {
       _syncTimekeeperFromCardJobsByOwner(
         state.build_queue,
@@ -7740,16 +7772,31 @@
     if (state.research && document.querySelector(".research-prog-list")) {
       _syncTimekeeperFromCardJobsByOwner(
         state.research,
-        (ownerKey) => document.querySelector(`[data-tech-key="${ownerKey}"]`),
+        (ownerKey) => _findResearchCard(ownerKey),
         "research"
       );
     }
-    document.querySelectorAll("[data-mini-queue-card][data-queue-active='1']").forEach((card) => {
-      const btn = card.querySelector("[data-gc-timekeeper-apply]");
-      if (btn) {
-        _applyTimekeeperBtnState(btn, parseInt(btn.dataset.timekeeperRemaining, 10) || 0, state);
+    if ((state.shipyard || state.shipyard_queue) && document.getElementById("shipyard-page")?.dataset.ready === "1") {
+      const syRaw = state.shipyard?.queue || state.shipyard_queue;
+      if (syRaw) {
+        _syncTimekeeperFromCardJobsByOwner(
+          syRaw,
+          (shipKey) => document.querySelector(`[data-ship-key="${shipKey}"][data-unlocked="1"]`),
+          "shipyard"
+        );
       }
-    });
+    }
+    if (state.defense && document.getElementById("defense-page")?.dataset.ready === "1") {
+      const defRaw = state.defense.queue || state.defense.defense_queue;
+      if (defRaw) {
+        _syncTimekeeperFromCardJobsByOwner(
+          defRaw,
+          (defKey) => document.querySelector(`[data-defense-card="${defKey}"][data-unlocked="1"]`),
+          "defense"
+        );
+      }
+    }
+    _syncActiveMiniQueueTimekeeperButtons();
     patchShellHudTimekeeper(state);
   }
 
@@ -12474,9 +12521,9 @@
         patchCardQueuesFromOwnerMap(
           document,
           resolveCardJobsByOwner(research),
-          (root) => root.querySelectorAll("[data-tech-key]"),
+          _listResearchCards,
           (row) => row.getAttribute("data-tech-key") || "",
-          (root, key) => root.querySelector(`[data-tech-key="${key}"]`)
+          (root, key) => root.querySelector(`[data-research-card][data-tech-key="${key}"]`)
         );
       }
 
