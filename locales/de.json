@@ -1953,7 +1953,7 @@
   "fleet_expedition_daily_efficiency_label": "Expeditions-Effizienz",
   "fleet_expedition_daily_efficiency_reset": "Zurücksetzung in: %(time)s (UTC)",
   "fleet_expedition_daily_efficiency_reset_soon": "Gleich",
-  "fleet_expedition_daily_efficiency_tooltip": "Die Effizienz sinkt mit dem heute bereits gesammelten Expeditionswert und wird täglich um 00:00 UTC zurückgesetzt.",
+  "fleet_expedition_daily_efficiency_tooltip": "Die Effizienz sinkt pro Spieler alle 30 abgeschlossenen Expeditionen am Tag um 5 % (Minimum 45 %) und wird täglich um 00:00 UTC zurückgesetzt.",
   "fleet_expedition_hint_no_hull": "Expeditionsrumpf (Solar Skiff) oder Frachter für diese Mission hinzufügen.",
   "fleet_expedition_hint_ready": "Tiefraum-Scan bereit — %(ships)s Expeditionsrumpf/Rümpfe, %(cargo)s Frachtraum für Beute.",
   "fleet_expedition_hint_select_mission": "Position 16 ist der Expeditionsslot — Mission auf Expedition stellen.",

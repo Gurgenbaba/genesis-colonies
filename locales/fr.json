@@ -1952,7 +1952,7 @@
   "fleet_expedition_daily_efficiency_label": "Efficacité d'expédition",
   "fleet_expedition_daily_efficiency_reset": "Réinitialisation dans : %(time)s (UTC)",
   "fleet_expedition_daily_efficiency_reset_soon": "Bientôt",
-  "fleet_expedition_daily_efficiency_tooltip": "L'efficacité diminue avec la valeur d'expédition accumulée aujourd'hui et se réinitialise chaque jour à 00:00 UTC.",
+  "fleet_expedition_daily_efficiency_tooltip": "L'efficacité baisse de 5 % toutes les 30 expéditions terminées aujourd'hui par joueur (minimum 45 %) et se réinitialise chaque jour à 00:00 UTC.",
   "fleet_expedition_hint_no_hull": "Ajoutez une coque d'expédition (Solar Skiff) ou des cargos pour exécuter cette mission.",
   "fleet_expedition_hint_ready": "Prêt pour l'analyse de l'espace lointain – %(ships)s coque(s) d'expédition, %(cargo)s capacité de chargement pour le butin.",
   "fleet_expedition_hint_select_mission": "La position 16 est l’emplacement d’expédition – changez de mission en Expédition.",

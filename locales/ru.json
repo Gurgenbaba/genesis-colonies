@@ -1952,7 +1952,7 @@
   "fleet_expedition_daily_efficiency_label": "Эффективность экспедиций",
   "fleet_expedition_daily_efficiency_reset": "Сброс через: %(time)s (UTC)",
   "fleet_expedition_daily_efficiency_reset_soon": "Скоро",
-  "fleet_expedition_daily_efficiency_tooltip": "Эффективность снижается с накопленным сегодня значением экспедиций и сбрасывается ежедневно в 00:00 UTC.",
+  "fleet_expedition_daily_efficiency_tooltip": "Эффективность снижается на 5% за каждые 30 завершённых экспедиций за день у игрока (минимум 45%) и сбрасывается ежедневно в 00:00 UTC.",
   "fleet_expedition_hint_no_hull": "Чтобы выполнить эту миссию, добавьте корпус экспедиции («Солнечный скиф») или грузовые корабли.",
   "fleet_expedition_hint_ready": "Готово к сканированию в дальнем космосе — экспедиционный корпус %(ships)s, грузовой отсек %(cargo)s для добычи.",
   "fleet_expedition_hint_select_mission": "Позиция 16 — слот экспедиции — переключите миссию на «Экспедицию».",

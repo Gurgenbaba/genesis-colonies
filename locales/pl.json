@@ -1952,7 +1952,7 @@
   "fleet_expedition_daily_efficiency_label": "Efektywność ekspedycji",
   "fleet_expedition_daily_efficiency_reset": "Reset za: %(time)s (UTC)",
   "fleet_expedition_daily_efficiency_reset_soon": "Wkrótce",
-  "fleet_expedition_daily_efficiency_tooltip": "Efektywność spada wraz z dzisiejszą skumulowaną wartością ekspedycji i resetuje się codziennie o 00:00 UTC.",
+  "fleet_expedition_daily_efficiency_tooltip": "Efektywność spada o 5% co 30 ukończonych ekspedycji dziennie na gracza (minimum 45%) i resetuje się codziennie o 00:00 UTC.",
   "fleet_expedition_hint_no_hull": "Aby rozpocząć tę misję, dodaj kadłub ekspedycyjny (Skiff słoneczny) lub statki towarowe.",
   "fleet_expedition_hint_ready": "Gotowy do skanowania w głębokim kosmosie — kadłub(y) ekspedycyjny %(ships)s, pojemność %(cargo)s na łup.",
   "fleet_expedition_hint_select_mission": "Pozycja 16 to miejsce na ekspedycję — zmień misję na Ekspedycję.",

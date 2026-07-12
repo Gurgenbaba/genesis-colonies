@@ -1953,7 +1953,7 @@
   "fleet_expedition_daily_efficiency_label": "Expedition efficiency",
   "fleet_expedition_daily_efficiency_reset": "Reset in: %(time)s (UTC)",
   "fleet_expedition_daily_efficiency_reset_soon": "Soon",
-  "fleet_expedition_daily_efficiency_tooltip": "Efficiency decreases with today's accumulated expedition value and resets daily at 00:00 UTC.",
+  "fleet_expedition_daily_efficiency_tooltip": "Efficiency drops by 5% for every 30 completed expeditions today per player (minimum 45%) and resets daily at 00:00 UTC.",
   "fleet_expedition_hint_no_hull": "Add an expedition hull (Solar Skiff) or cargo ships to run this mission.",
   "fleet_expedition_hint_ready": "Deep-space scan ready — %(ships)s expedition hull(s), %(cargo)s cargo capacity for loot.",
   "fleet_expedition_hint_select_mission": "Position 16 is the expedition slot — switch mission to Expedition.",

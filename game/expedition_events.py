@@ -16,17 +16,10 @@ FLEET_LOOT_EXPONENT = EXPEDITION_LOOT_EXPONENT  # legacy alias for tests/imports
 EXPEDITION_RANDOM_FACTOR_RANGE = (0.66, 1.5)
 DEFAULT_EVENT_FACTOR = 1.0
 
-# Daily expedition diminishing returns — cumulative expo_value per UTC day (GC-EXPEDITION-DAILY).
-# Knot x = multiples of one solar_skiff expo unit; y = loot efficiency for the next expedition.
-EXPEDITION_DAILY_EFFICIENCY_KNOTS: Tuple[Tuple[float, float], ...] = (
-    (0.0, 1.00),
-    (20.0, 1.00),
-    (30.0, 0.95),
-    (40.0, 0.90),
-    (60.0, 0.75),
-    (80.0, 0.60),
-)
-EXPEDITION_DAILY_EFFICIENCY_FLOOR = 0.60
+# Daily expedition diminishing returns — completed expedition count per player per UTC day (GC-EXPEDITION-DAILY).
+EXPEDITION_DAILY_EFFICIENCY_STEP_EXPEDITIONS = 30
+EXPEDITION_DAILY_EFFICIENCY_STEP_DROP = 0.05
+EXPEDITION_DAILY_EFFICIENCY_FLOOR = 0.45
 
 # Role split (GC-EXPEDITION-LOOT-FINAL): loot / bergung / piratenkampf / escort
 _EXPEDITION_CARGO_ROLES = frozenset({"expedition", "cargo"})
@@ -429,11 +422,6 @@ def expedition_ship_expo_loot_unit(ship_key: str) -> float:
     return math.pow(raw, EXPEDITION_LOOT_EXPONENT)
 
 
-def expedition_daily_reference_unit() -> float:
-    """Reference expo_value unit for daily efficiency knots (one solar_skiff)."""
-    return max(1.0, float(expedition_ship_expo_loot_unit("solar_skiff")))
-
-
 def expedition_daily_day_bucket(ts: float | None = None) -> int:
     import time
 
@@ -465,31 +453,36 @@ def get_expedition_daily_expo_value(player_id: int, *, conn, ts: float | None = 
     return int(row["expo_value_total"] if row else 0)
 
 
-def expedition_daily_efficiency_multiplier(daily_expo_value: int) -> float:
-    """
-    Loot efficiency for the next expedition based on today's accumulated expo_value.
+def get_expedition_daily_count(player_id: int, *, conn, ts: float | None = None) -> int:
+    """Completed expedition count for the current UTC day (before current resolve)."""
+    if not _expedition_daily_tables_ready(conn):
+        return 0
+    bucket = expedition_daily_day_bucket(ts)
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT expedition_count FROM expedition_daily_value
+        WHERE player_id = ? AND day_bucket = ? LIMIT 1;
+        """,
+        (int(player_id), int(bucket)),
+    )
+    row = cur.fetchone()
+    return int(row["expedition_count"] if row else 0)
 
-    Small/mid daily totals stay at 100%; extreme endgame spirals taper toward the floor.
+
+def expedition_daily_efficiency_multiplier(completed_expeditions_today: int) -> float:
     """
-    ref = expedition_daily_reference_unit()
-    x = max(0.0, float(daily_expo_value)) / ref
-    knots = EXPEDITION_DAILY_EFFICIENCY_KNOTS
-    if not knots:
+    Loot efficiency for the next expedition based on today's completed expedition count.
+
+    Per player, UTC day bucket: 100% for the first 30 expeditions, then -5% per 30, floor 45%.
+    """
+    count = max(0, int(completed_expeditions_today))
+    step = max(1, int(EXPEDITION_DAILY_EFFICIENCY_STEP_EXPEDITIONS))
+    if count < step:
         return 1.0
-    if x <= knots[0][0]:
-        return float(knots[0][1])
-    if x >= knots[-1][0]:
-        return max(EXPEDITION_DAILY_EFFICIENCY_FLOOR, float(knots[-1][1]))
-    for idx in range(len(knots) - 1):
-        x0, y0 = knots[idx]
-        x1, y1 = knots[idx + 1]
-        if x0 <= x <= x1:
-            if x1 <= x0:
-                return max(EXPEDITION_DAILY_EFFICIENCY_FLOOR, float(y1))
-            t = (x - x0) / (x1 - x0)
-            eff = float(y0) + t * (float(y1) - float(y0))
-            return max(EXPEDITION_DAILY_EFFICIENCY_FLOOR, eff)
-    return max(EXPEDITION_DAILY_EFFICIENCY_FLOOR, float(knots[-1][1]))
+    steps = count // step
+    eff = 1.0 - steps * float(EXPEDITION_DAILY_EFFICIENCY_STEP_DROP)
+    return max(EXPEDITION_DAILY_EFFICIENCY_FLOOR, eff)
 
 
 def _scale_resource_rewards(rewards: MutableMapping[str, int], mult: float) -> None:
@@ -554,16 +547,16 @@ def expedition_daily_status(player_id: int, *, conn, ts: float | None = None) ->
     import time
 
     now = float(ts if ts is not None else time.time())
-    daily = get_expedition_daily_expo_value(player_id, conn=conn, ts=now)
-    eff = expedition_daily_efficiency_multiplier(daily)
-    ref = expedition_daily_reference_unit()
+    daily_count = get_expedition_daily_count(player_id, conn=conn, ts=now)
+    daily_expo = get_expedition_daily_expo_value(player_id, conn=conn, ts=now)
+    eff = expedition_daily_efficiency_multiplier(daily_count)
     bucket = expedition_daily_day_bucket(now)
     return {
         "day_bucket": bucket,
-        "daily_expo_value": int(daily),
+        "daily_expedition_count": int(daily_count),
+        "daily_expo_value": int(daily_expo),
         "daily_efficiency_pct": int(round(eff * 100)),
         "daily_efficiency_mult": float(eff),
-        "reference_expo_unit": int(ref),
         "reset_at": int((bucket + 1) * 86400),
     }
 

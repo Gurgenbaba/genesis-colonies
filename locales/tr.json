@@ -1952,7 +1952,7 @@
   "fleet_expedition_daily_efficiency_label": "Keşif verimliliği",
   "fleet_expedition_daily_efficiency_reset": "Sıfırlama: %(time)s (UTC)",
   "fleet_expedition_daily_efficiency_reset_soon": "Yakında",
-  "fleet_expedition_daily_efficiency_tooltip": "Verimlilik bugün biriken keşif değeriyle düşer ve her gün 00:00 UTC'de sıfırlanır.",
+  "fleet_expedition_daily_efficiency_tooltip": "Verimlilik, oyuncu başına günde tamamlanan her 30 keşifte %5 düşer (en az %45) ve her gün 00:00 UTC'de sıfırlanır.",
   "fleet_expedition_hint_no_hull": "Bu görevi gerçekleştirmek için bir keşif gövdesi (Solar Skiff) veya kargo gemileri ekleyin.",
   "fleet_expedition_hint_ready": "Derin uzay taramasına hazır — %(ships)s keşif teknesi/gövdeleri, %(cargo)s yağma için kargo kapasitesi.",
   "fleet_expedition_hint_select_mission": "Pozisyon 16 keşif yuvasıdır; görevi Keşif olarak değiştirin.",

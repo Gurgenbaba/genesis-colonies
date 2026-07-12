@@ -1196,35 +1196,54 @@ def test_legendary_events_are_very_rare():
         assert count >= 1, f"never rolled {key}"
 
 
-def test_expedition_daily_efficiency_knots():
+def test_expedition_daily_efficiency_steps():
+    from game.expedition_events import expedition_daily_efficiency_multiplier
+
+    assert expedition_daily_efficiency_multiplier(0) == 1.0
+    assert expedition_daily_efficiency_multiplier(4) == 1.0
+    assert expedition_daily_efficiency_multiplier(29) == 1.0
+    assert expedition_daily_efficiency_multiplier(30) == pytest.approx(0.95, abs=0.001)
+    assert expedition_daily_efficiency_multiplier(59) == pytest.approx(0.95, abs=0.001)
+    assert expedition_daily_efficiency_multiplier(60) == pytest.approx(0.90, abs=0.001)
+    assert expedition_daily_efficiency_multiplier(330) == pytest.approx(0.45, abs=0.001)
+    assert expedition_daily_efficiency_multiplier(400) == pytest.approx(0.45, abs=0.001)
+
+
+def test_expedition_daily_efficiency_ignores_expo_value(fleet_db):
+    from game.db import db
     from game.expedition_events import (
-        expedition_daily_efficiency_multiplier,
-        expedition_daily_reference_unit,
+        expedition_daily_status,
+        get_expedition_daily_count,
+        record_expedition_daily_value,
     )
 
-    ref = expedition_daily_reference_unit()
-    assert expedition_daily_efficiency_multiplier(0) == 1.0
-    assert expedition_daily_efficiency_multiplier(int(20 * ref)) == 1.0
-    assert expedition_daily_efficiency_multiplier(int(30 * ref)) == pytest.approx(0.95, abs=0.01)
-    assert expedition_daily_efficiency_multiplier(int(80 * ref)) == pytest.approx(0.60, abs=0.01)
-    assert expedition_daily_efficiency_multiplier(int(200 * ref)) == pytest.approx(0.60, abs=0.01)
+    conn = db()
+    uid = 42
+    ts = 1_700_000_000.0
+    for mid in range(6001, 6005):
+        record_expedition_daily_value(uid, mid, 50_000, conn=conn, ts=ts)
+    conn.commit()
+    assert get_expedition_daily_count(uid, conn=conn, ts=ts) == 4
+    status = expedition_daily_status(uid, conn=conn, ts=ts)
+    assert status["daily_efficiency_pct"] == 100
+    conn.close()
 
 
 def test_expedition_daily_efficiency_reduces_loot(fleet_db):
     from game.db import db
     from game.expedition_events import (
-        expedition_daily_reference_unit,
-        get_expedition_daily_expo_value,
+        get_expedition_daily_count,
         record_expedition_daily_value,
         resolve_expedition_outcome,
     )
 
     conn = db()
     uid = 42
-    ref = int(expedition_daily_reference_unit())
-    record_expedition_daily_value(uid, 9001, ref * 80, conn=conn, ts=1_700_000_000.0)
+    ts = 1_700_000_000.0
+    for mid in range(9001, 9031):
+        record_expedition_daily_value(uid, mid, 1200, conn=conn, ts=ts)
     conn.commit()
-    assert get_expedition_daily_expo_value(uid, conn=conn, ts=1_700_000_000.0) == ref * 80
+    assert get_expedition_daily_count(uid, conn=conn, ts=ts) == 30
 
     high = resolve_expedition_outcome(
         1001,
@@ -1240,10 +1259,24 @@ def test_expedition_daily_efficiency_reduces_loot(fleet_db):
         expedition_ship_count=1,
         flight_seconds=120,
         ships=_SMALL_FLEET,
-        daily_efficiency_mult=0.6,
+        daily_efficiency_mult=0.95,
     )
     if int(high.get("reward_total") or 0) > 0:
         assert int(low.get("reward_total") or 0) < int(high.get("reward_total") or 0)
+    conn.close()
+
+
+def test_expedition_daily_efficiency_per_player(fleet_db):
+    from game.db import db
+    from game.expedition_events import expedition_daily_status, record_expedition_daily_value
+
+    conn = db()
+    ts = 1_700_000_000.0
+    for mid in range(7001, 7031):
+        record_expedition_daily_value(1, mid, 500, conn=conn, ts=ts)
+    conn.commit()
+    assert expedition_daily_status(1, conn=conn, ts=ts)["daily_efficiency_pct"] == 95
+    assert expedition_daily_status(2, conn=conn, ts=ts)["daily_efficiency_pct"] == 100
     conn.close()
 
 

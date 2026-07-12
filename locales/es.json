@@ -1952,7 +1952,7 @@
   "fleet_expedition_daily_efficiency_label": "Eficiencia de expedición",
   "fleet_expedition_daily_efficiency_reset": "Reinicio en: %(time)s (UTC)",
   "fleet_expedition_daily_efficiency_reset_soon": "Pronto",
-  "fleet_expedition_daily_efficiency_tooltip": "La eficiencia baja con el valor de expedición acumulado hoy y se reinicia cada día a las 00:00 UTC.",
+  "fleet_expedition_daily_efficiency_tooltip": "La eficiencia baja un 5 % por cada 30 expediciones completadas hoy por jugador (mínimo 45 %) y se reinicia cada día a las 00:00 UTC.",
   "fleet_expedition_hint_no_hull": "Añade un casco de expedición (Solar Skiff) o barcos de carga para ejecutar esta misión.",
   "fleet_expedition_hint_ready": "Escaneo del espacio profundo listo: %(ships)s casco(s) de expedición, %(cargo)s capacidad de carga para el botín.",
   "fleet_expedition_hint_select_mission": "La posición 16 es el espacio de expedición: cambie la misión a Expedición.",

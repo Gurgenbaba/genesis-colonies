@@ -70,7 +70,7 @@ from .expedition_events import (
     count_expedition_ships,
     expedition_daily_efficiency_multiplier,
     expedition_daily_status,
-    get_expedition_daily_expo_value,
+    get_expedition_daily_count,
     grant_expedition_lootboxes,
     record_expedition_daily_value,
     resolve_expedition_outcome,
@@ -4478,8 +4478,8 @@ def _handle_expedition_holding_end(movement: Dict[str, Any], *, conn, now: float
 
     empire_prod = get_empire_production_aggregate(player_id, conn=conn)
     empire_daily_total = int(empire_prod.get("total_per_day") or 0)
-    daily_expo_value = get_expedition_daily_expo_value(player_id, conn=conn, ts=now)
-    daily_efficiency_mult = expedition_daily_efficiency_multiplier(daily_expo_value)
+    daily_expedition_count = get_expedition_daily_count(player_id, conn=conn, ts=now)
+    daily_efficiency_mult = expedition_daily_efficiency_multiplier(daily_expedition_count)
     outcome = resolve_expedition_outcome(
         movement_id,
         cargo_total=cargo_total,
