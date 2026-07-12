@@ -2193,7 +2193,21 @@ def test_main_js_timekeeper_buttons_sync_immediately_after_action_state():
     assert "_finalizeTimekeeperQueueButtons(state)" in apply
     assert "function _finalizeTimekeeperQueueButtons(state)" in src
     assert "function _findGlobalActiveCardJob(queueRaw)" in src
+    assert "function _iterActiveCardJobsByOwner(queueRaw)" in src
+    assert "function _refreshDomTimekeeperApplyBtns(serverNowTs)" in src
+    assert "function _syncMiniQueueTimekeeperFromState(state)" in src
     assert '"timekeeper"' in src.split("const _HUD_LAST_STATE_KEYS = [")[1].split("];")[0]
+    patch_immediate = src.split("function patchQueuePanelsImmediate(data)")[1].split("function _finishRefreshTimer", 1)[0]
+    assert "_finalizeTimekeeperQueueButtons(data)" in patch_immediate
+    finalize = src.split("function _finalizeTimekeeperQueueButtons(state)")[1].split("function _queueJobTimekeeperRemaining")[0]
+    assert "_clearScopeTimekeeperApplyBtns(document)" not in finalize
+    assert "_refreshDomTimekeeperApplyBtns(getTimerServerNow())" in finalize
+    can_patch = src.split("function canPatchCardQueueInPlace(existing, queueJob)")[1].split("function _patchCardQueueTimingDatasets")[0]
+    assert "finishAt !== prevFinish" not in can_patch
+    ticker = src.split("function updateAllProgressBars(serverNow)")[1].split("function updateMiniQueueProgressBars", 1)[0]
+    assert "_refreshDomTimekeeperApplyBtns(serverNowTs)" in ticker
+    tab = src.split("function activateBuildingTabByName(targetTab, focusEl)")[1].split("function bindBuildingTabsOnce", 1)[0]
+    assert "_finalizeTimekeeperQueueButtons(GC.lastState)" in tab
 
 
 def test_main_js_inventory_tk_chip_deposits_without_scroll_jump():

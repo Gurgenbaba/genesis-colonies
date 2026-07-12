@@ -3610,6 +3610,7 @@
         build_owners: Object.keys(resolveCardJobsByOwner(buildQueueRaw)).length,
         research_owners: Object.keys(resolveCardJobsByOwner(researchRaw)).length,
       });
+      _finalizeTimekeeperQueueButtons(data);
     }
     return patched;
   }
@@ -5251,6 +5252,9 @@
     syncBuildingSidebarTab(tab);
     pageRoot.dataset.activeBuildingTab = tab;
     if (focusEl && typeof focusEl.focus === "function") focusEl.focus();
+    if (GC.lastState && GC.lastState.ok !== false) {
+      _finalizeTimekeeperQueueButtons(GC.lastState);
+    }
   }
 
   function bindBuildingTabsOnce() {
@@ -6836,12 +6840,17 @@
     const isActive = status === "active";
     if (wasActive !== isActive) return false;
 
-    const finishAt = Math.floor(Number(queueJob.finish_at || 0));
-    const prevFinish = parseTimerTarget(existing.dataset.finishAt || 0);
-
-    if (!finishAt || finishAt !== prevFinish) return false;
-
     return true;
+  }
+
+  function _patchCardQueueTimingDatasets(block, queueJob) {
+    if (!block || !queueJob) return;
+    const finishAt = Math.floor(Number(queueJob.finish_at || queueJob.finish_time || 0));
+    const startAt = Math.floor(Number(queueJob.start_at || 0));
+    if (finishAt > 0) block.dataset.finishAt = String(finishAt);
+    else delete block.dataset.finishAt;
+    if (startAt > 0) block.dataset.startAt = String(startAt);
+    else delete block.dataset.startAt;
   }
 
   function syncCardQueueOwnerClasses(cardEl, queueJob, domain) {
@@ -7063,6 +7072,7 @@
       ensureHeroQueuedBadgeTimer(block, queueJob, timerKind, refreshOnZero);
     }
 
+    _patchCardQueueTimingDatasets(block, queueJob);
     if (isActive && finishAt > 0) assignMonotonicServerRemaining(block, remaining, finishAt);
     applyHeroQueueVisual(cardEl, block, queueJob, pct, remaining, timerKind, refreshOnZero);
     _syncTimekeeperApplyBtn(block, _cardQueueDomain(queueJob, opts), queueJob);
@@ -7235,6 +7245,7 @@
       _setIfChanged(statusEl, statusLabel);
     }
 
+    _patchCardQueueTimingDatasets(block, queueJob);
     if (isActive) {
       assignMonotonicServerRemaining(block, remaining, finishAt);
       const pct = totalSeconds > 0 ? 100 * (1 - remaining / totalSeconds) : progressPct;
@@ -7307,6 +7318,9 @@
       }
       syncCardQueueOwnerClassesFromBlocks(card, _cardQueueDomain(headJob));
     });
+    if (GC.lastState && GC.lastState.ok !== false) {
+      _refreshDomTimekeeperApplyBtns(getTimerServerNow());
+    }
   }
 
   GC.renderCardQueueBlock = function renderCardQueueBlock(cardEl, queueJob, opts) {
@@ -7702,11 +7716,119 @@
     return found;
   }
 
+  function _iterActiveCardJobsByOwner(queueRaw) {
+    const byOwner = resolveCardJobsByOwner(queueRaw);
+    const out = [];
+    Object.entries(byOwner).forEach(([ownerKey, jobs]) => {
+      const list = (Array.isArray(jobs) ? jobs : []).filter((job) => job && typeof job === "object");
+      const activeJob = list.find((job) => String(job.status || "") === "active");
+      if (!activeJob) return;
+      out.push({ ownerKey: String(ownerKey || activeJob.owner_key || ""), job: activeJob });
+    });
+    if (!out.length) {
+      const fallback = _findGlobalActiveCardJob(queueRaw);
+      if (fallback && String(fallback.status || "") === "active") {
+        out.push({ ownerKey: String(fallback.owner_key || ""), job: fallback });
+      }
+    }
+    return out;
+  }
+
   function _clearScopeTimekeeperApplyBtns(scope) {
     const root = scope && scope.querySelectorAll ? scope : document;
     root.querySelectorAll(
-      "[data-building-row] [data-gc-timekeeper-apply], [data-research-card] [data-gc-timekeeper-apply], [data-gc-card-queue] [data-gc-timekeeper-apply], [data-mini-queue-card] [data-gc-timekeeper-apply]"
+      "[data-building-row] [data-gc-timekeeper-apply], [data-research-card] [data-gc-timekeeper-apply], [data-gc-card-queue] [data-gc-timekeeper-apply], [data-mini-queue-card] [data-gc-timekeeper-apply], .gc-bld-hero-action-slot--timekeeper [data-gc-timekeeper-apply]"
     ).forEach((btn) => btn.remove());
+  }
+
+  function _pruneInactiveTimekeeperApplyBtns() {
+    document.querySelectorAll("[data-gc-timekeeper-apply]").forEach((btn) => {
+      const miniCard = btn.closest("[data-mini-queue-card]");
+      if (miniCard) {
+        if (miniCard.dataset.queueActive !== "1") btn.remove();
+        return;
+      }
+      const block = btn.closest("[data-gc-card-queue], [data-hero-queue]");
+      if (block) {
+        if (block.dataset.queueActive !== "1") btn.remove();
+        return;
+      }
+      const heroSlot = btn.closest(".gc-bld-hero-action-slot--timekeeper");
+      if (heroSlot) {
+        const cardEl = heroSlot.closest("[data-building-row], [data-research-card], [data-building-card]");
+        const activeBlock = cardEl?.querySelector("[data-gc-card-queue][data-queue-active='1'], [data-hero-queue][data-queue-active='1']");
+        if (!activeBlock) btn.remove();
+      }
+    });
+  }
+
+  function _queueJobFromActiveDomBlock(block, domain) {
+    if (!block || block.dataset.queueActive !== "1") return null;
+    const finishAt = Math.floor(Number(block.dataset.finishAt || 0));
+    const total = Math.max(1, Math.floor(Number(block.dataset.totalSeconds || 1)));
+    const now = getTimerServerNow();
+    const srvRemRaw = block.dataset.serverRemaining;
+    const rem = finishAt > 0
+      ? Math.max(
+        0,
+        Math.floor(
+          queueJobRemainingSeconds(
+            finishAt,
+            now,
+            srvRemRaw === undefined || srvRemRaw === "" ? NaN : Number(srvRemRaw)
+          )
+        )
+      )
+      : Math.max(0, Math.floor(Number(block.dataset.serverRemaining || 0)));
+    return {
+      is_active: true,
+      status: "active",
+      job_id: Math.floor(Number(block.dataset.jobId || 0)),
+      finish_at: finishAt,
+      remaining_seconds: rem,
+      duration_seconds: total,
+      owner_key: block.closest("[data-building-row], [data-research-card], [data-ship-key], [data-defense-card]")?.getAttribute("data-building-row")
+        || block.closest("[data-research-card]")?.getAttribute("data-tech-key")
+        || block.closest("[data-ship-key]")?.getAttribute("data-ship-key")
+        || block.closest("[data-defense-card]")?.getAttribute("data-defense-card")
+        || "",
+    };
+  }
+
+  function _refreshDomTimekeeperApplyBtns(serverNowTs) {
+    const now = Number.isFinite(serverNowTs) ? serverNowTs : getTimerServerNow();
+    document.querySelectorAll("[data-mini-queue-card][data-queue-active='1']").forEach((card) => {
+      const finishAt = Math.floor(Number(card.dataset.finishAt || 0));
+      if (finishAt <= 0) return;
+      const rem = Math.max(
+        0,
+        Math.floor(queueJobRemainingSeconds(finishAt, now, card.dataset.serverRemaining))
+      );
+      if (rem <= 0) {
+        card.querySelector("[data-gc-timekeeper-apply]")?.remove();
+        return;
+      }
+      _syncTimekeeperApplyBtn(card, String(card.dataset.timerDomain || "build"), {
+        is_active: true,
+        status: "active",
+        job_id: Math.floor(Number(card.dataset.jobId || 0)),
+        finish_at: finishAt,
+        remaining_seconds: rem,
+        duration_seconds: Math.max(1, Math.floor(Number(card.dataset.totalSeconds || 1))),
+      });
+    });
+    document.querySelectorAll("[data-gc-card-queue][data-queue-active='1'], [data-hero-queue][data-queue-active='1']").forEach((block) => {
+      const domain = String(block.dataset.timerDomain || "building");
+      const job = _queueJobFromActiveDomBlock(block, domain);
+      if (!job || job.remaining_seconds <= 0) {
+        block.closest("[data-building-row], [data-research-card], [data-building-card]")
+          ?.querySelector(".gc-bld-hero-action-slot--timekeeper [data-gc-timekeeper-apply]")
+          ?.remove();
+        block.querySelector("[data-gc-timekeeper-apply]")?.remove();
+        return;
+      }
+      _syncTimekeeperApplyBtn(block, domain, job);
+    });
   }
 
   function _findResearchCard(ownerKey) {
@@ -7718,6 +7840,61 @@
   function _listResearchCards(root) {
     const scope = root && root.querySelectorAll ? root : document;
     return scope.querySelectorAll("[data-research-card][data-tech-key]");
+  }
+
+  function _syncTimekeeperOnCard(card, activeJob, domain) {
+    if (!card || !activeJob) return;
+    let block =
+      findHeroQueue(card)
+      || card.querySelector("[data-gc-card-queue][data-queue-active='1']")
+      || card.querySelector("[data-gc-card-queue]");
+    if (!block && typeof GC.renderCardQueueBlock === "function") {
+      block = GC.renderCardQueueBlock(card, activeJob, { domain });
+    }
+    if (block) _syncTimekeeperApplyBtn(block, domain, activeJob);
+  }
+
+  function _syncTimekeeperFromCardJobsByOwner(queueRaw, findCard, domain) {
+    _iterActiveCardJobsByOwner(queueRaw).forEach(({ ownerKey, job }) => {
+      const key = String(ownerKey || job.owner_key || "").trim();
+      if (!key) return;
+      const card = findCard(key);
+      if (!card) return;
+      _syncTimekeeperOnCard(card, job, domain);
+    });
+  }
+
+  function _syncMiniQueueTimekeeperFromState(state) {
+    if (!state || typeof state !== "object") return;
+    const specs = [
+      { hostId: "build-mini-queue", raw: state.build_queue, domain: "building" },
+      { hostId: "research-mini-queue", raw: state.research, domain: "research" },
+      { hostId: "shipyard-mini-queue", raw: state.shipyard?.queue || state.shipyard_queue, domain: "shipyard" },
+      { hostId: "defense-mini-queue", raw: state.defense?.queue || state.defense?.defense_queue, domain: "defense" },
+    ];
+    specs.forEach(({ hostId, raw, domain }) => {
+      if (!raw || !document.getElementById(hostId)) return;
+      _collectMiniQueueJobs(raw, domain)
+        .filter((job) => Boolean(job.is_active) || String(job.status || "") === "active")
+        .forEach((job) => {
+          const jobId = Math.floor(Number(job.job_id || 0));
+          if (jobId <= 0) return;
+          let card = document.querySelector(`[data-mini-queue-card][data-job-id="${jobId}"]`);
+          if (!card) return;
+          const finishAt = Math.floor(Number(job.finish_at || 0));
+          if (finishAt > 0) card.dataset.finishAt = String(finishAt);
+          if (job.duration_seconds) card.dataset.totalSeconds = String(Math.max(1, Math.floor(Number(job.duration_seconds))));
+          card.dataset.queueActive = "1";
+          _syncTimekeeperApplyBtn(card, domain, {
+            is_active: true,
+            status: "active",
+            job_id: jobId,
+            finish_at: finishAt,
+            remaining_seconds: Math.max(0, Math.floor(Number(job.remaining_seconds || 0))),
+            duration_seconds: Math.max(1, Math.floor(Number(job.duration_seconds || card.dataset.totalSeconds || 1))),
+          });
+        });
+    });
   }
 
   function _syncActiveMiniQueueTimekeeperButtons() {
@@ -7741,27 +7918,9 @@
     });
   }
 
-  function _syncTimekeeperFromCardJobsByOwner(queueRaw, findCard, domain) {
-    const activeJob = _findGlobalActiveCardJob(queueRaw);
-    if (!activeJob) return;
-    const ownerKey = String(activeJob.owner_key || "");
-    if (!ownerKey) return;
-    const card = findCard(ownerKey);
-    if (!card) return;
-    let block =
-      findHeroQueue(card)
-      || card.querySelector("[data-gc-card-queue][data-queue-active='1']")
-      || card.querySelector("[data-gc-card-queue]");
-    if (!block && typeof GC.renderCardQueueBlock === "function") {
-      block = GC.renderCardQueueBlock(card, activeJob, { domain });
-    }
-    if (block) _syncTimekeeperApplyBtn(block, domain, activeJob);
-  }
-
   function _finalizeTimekeeperQueueButtons(state) {
     if (!state) return;
     _primeActionStateTimekeeper(state);
-    _clearScopeTimekeeperApplyBtns(document);
     if (state.build_queue && document.querySelector(".buildings-prog-list")) {
       _syncTimekeeperFromCardJobsByOwner(
         state.build_queue,
@@ -7796,7 +7955,10 @@
         );
       }
     }
+    _syncMiniQueueTimekeeperFromState(state);
     _syncActiveMiniQueueTimekeeperButtons();
+    _pruneInactiveTimekeeperApplyBtns();
+    _refreshDomTimekeeperApplyBtns(getTimerServerNow());
     patchShellHudTimekeeper(state);
   }
 
@@ -9652,6 +9814,10 @@
 
     updateMiniQueueProgressBars(serverNowTs);
     updateSafetyCountdownTimers();
+    if (_timekeeperApplyBalance() > 0) {
+      _refreshDomTimekeeperApplyBtns(serverNowTs);
+      patchShellHudTimekeeper(GC.lastState || {});
+    }
   }
 
   function updateMiniQueueProgressBars(serverNowTs) {
@@ -11683,7 +11849,11 @@
       showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
     } finally {
       _timekeeperApplying = false;
-      patchShellHudTimekeeper(GC.lastState || {});
+      if (GC.lastState && GC.lastState.ok !== false) {
+        _finalizeTimekeeperQueueButtons(GC.lastState);
+      } else {
+        patchShellHudTimekeeper(GC.lastState || {});
+      }
     }
   }
 
