@@ -618,6 +618,22 @@ def test_gc744_resource_icons_use_webp():
     assert "⏳" not in tk_panel
 
 
+def test_codex_shell_init_before_game_loop_gate():
+    """Codex/support bottom-bar clicks must bind even when game-state polling is skipped."""
+    src = _read("static/main.js")
+    init_shell = src.split("function initShellOnce", 1)[1].split("function initPage", 1)[0]
+    shell_chrome = src.split("function initShellChrome", 1)[1].split("function initShellOnce", 1)[0]
+    early = init_shell.find("if (!shouldRunGameLoop())")
+    assert early != -1
+    assert "initShellChrome();" in init_shell
+    assert init_shell.index("initShellChrome();") < early
+    for needle in ("initSpecialPanel();", "initRoleBasedSidebar();", "initCodex();"):
+        assert needle in shell_chrome, needle
+    after = init_shell[early:]
+    assert "initSpecialPanel();" not in after
+    assert "initCodex();" not in after
+
+
 def test_gc807b_hud_capacity_polish():
     """GC-807B-R1: compact HUD bars, energy always visible, fuel storage same pipeline as metal/crystal."""
     macro = _read("templates/partials/progression_cards.html")

@@ -32790,6 +32790,14 @@
     return { now, clientWall, driftSec, lines, perf };
   };
 
+  function initShellChrome() {
+    initSpecialPanel();
+    initRoleBasedSidebar();
+    initCodex();
+    initCommunityHub();
+    initSupportModule();
+  }
+
   function initShellOnce() {
     if (GC._shellReady) return;
     GC._shellReady = true;
@@ -32804,6 +32812,7 @@
     initMotionPreferenceListener();
     initMobileNav();
     initPjax();
+    initShellChrome();
 
     if (!shouldRunGameLoop()) {
       syncPerfBodyClasses();
@@ -32822,8 +32831,6 @@
     bindPlanetEvolutionOnce();
     bindFleetOnce();
     initHeaderPlanetSwitcher();
-    initSpecialPanel();
-    initRoleBasedSidebar();
     initGcPopoversOnce();
     initCardRequirementsHoverOnce();
     initMaxQueueHoverOnce();
@@ -32831,9 +32838,6 @@
     initNotificationSounds();
     initMilitaryUnitCostPreviewDelegation();
     bootstrapPlanetLandscapeFromBoot();
-    initCodex();
-    initCommunityHub();
-    initSupportModule();
     initStickyResourceBar();
     initSidebarSticky();
     initShipDetailOnce();

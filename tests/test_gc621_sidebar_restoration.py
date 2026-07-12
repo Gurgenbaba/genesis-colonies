@@ -138,8 +138,13 @@ def test_main_js_persists_sidebar_state_in_local_storage():
     assert "syncLayoutShellMode" not in init_page
     assert "initBottomUtilityBar" in src
     init_shell = src.split("function initShellOnce", 1)[1].split("function initPage", 1)[0]
-    assert "initSpecialPanel();" in init_shell
-    assert init_shell.index("initSpecialPanel();") < init_shell.index("initRoleBasedSidebar();")
+    shell_chrome = src.split("function initShellChrome", 1)[1].split("function initShellOnce", 1)[0]
+    assert "initShellChrome();" in init_shell
+    assert "initSpecialPanel();" in shell_chrome
+    early_return = init_shell.find("if (!shouldRunGameLoop())")
+    assert early_return != -1
+    assert init_shell.index("initShellChrome();") < early_return
+    assert shell_chrome.index("initSpecialPanel();") < shell_chrome.index("initRoleBasedSidebar();")
     open_special = src.split("function openSpecialWindow", 1)[1].split("GC.openSpecialWindow = openSpecialWindow", 1)[0]
     assert "btn.click()" not in open_special
     route_ctx = src.split("function resolveLeftmenuRouteContext", 1)[1].split("function resolveNavSectionExpanded", 1)[0]
