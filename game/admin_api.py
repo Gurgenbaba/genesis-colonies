@@ -4,15 +4,18 @@ Admin Control Center JSON API – business logic for /api/admin/* routes.
 
 from __future__ import annotations
 
+import logging
 import os
 import sqlite3
 import sys
+import threading
 import time
+import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
 from game.admin_audit import list_admin_audit, write_admin_audit
 from game.config import get_app_version, is_debug_enabled, is_production
-from game.db import db, resolve_db_path, table_exists
+from game.db import db, resolve_db_path, table_exists, write_mutex_depth
 from game.health import build_health_report
 from game.migrations_util import get_applied_migration_names, list_migration_files, migrations_are_current
 from game.models import (
@@ -59,6 +62,27 @@ def _ok(**payload: Any) -> Dict[str, Any]:
     out: Dict[str, Any] = {"ok": True}
     out.update(payload)
     return out
+
+
+_admin_settings_log = logging.getLogger(__name__)
+
+
+def _admin_settings_trace(phase: str, *, request_id: str | None = None, **fields: Any) -> None:
+    """Opt-in via GC_ADMIN_SETTINGS_DEBUG=1 — no setting values logged."""
+    flag = os.environ.get("GC_ADMIN_SETTINGS_DEBUG", "").strip().lower()
+    if flag not in ("1", "true", "yes", "on"):
+        return
+    parts = [
+        "[GC ADMIN SETTINGS]",
+        f"phase={phase}",
+        f"worker_pid={os.getpid()}",
+        f"thread_id={threading.get_ident()}",
+    ]
+    if request_id:
+        parts.append(f"request_id={request_id}")
+    for key in sorted(fields):
+        parts.append(f"{key}={fields[key]}")
+    _admin_settings_log.info(" ".join(str(p) for p in parts))
 
 
 def clamp_resource(value: Any, default: float = 0.0) -> float:
@@ -1667,17 +1691,56 @@ def api_get_server_settings() -> Dict[str, Any]:
 def api_save_server_settings(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
     from game.admin import get_admin_settings, update_admin_settings
 
+    request_id = uuid.uuid4().hex[:12]
+    t0 = time.perf_counter()
+    keys = sorted(body.keys()) if isinstance(body, dict) else []
+    _admin_settings_trace("request_start", request_id=request_id, keys=keys)
+
     if not isinstance(body, dict):
         return _err("invalid_payload", "Expected JSON object")
-    update_admin_settings(body)
-    settings = get_admin_settings()
-    audit(
-        int(admin_id),
-        "server_settings_save",
-        target_type="system",
-        payload={"keys": sorted(body.keys())},
-    )
-    return _ok(settings=settings)
+    try:
+        _admin_settings_trace(
+            "transaction_begin",
+            request_id=request_id,
+            mutex_depth=write_mutex_depth(),
+        )
+        update_admin_settings(body)
+        _admin_settings_trace(
+            "settings_updated",
+            request_id=request_id,
+            mutex_depth=write_mutex_depth(),
+        )
+        settings = get_admin_settings()
+        _admin_settings_trace(
+            "transaction_commit",
+            request_id=request_id,
+            mutex_depth=write_mutex_depth(),
+        )
+        audit(
+            int(admin_id),
+            "server_settings_save",
+            target_type="system",
+            payload={"keys": keys},
+        )
+        duration_ms = int((time.perf_counter() - t0) * 1000)
+        _admin_settings_trace(
+            "response",
+            request_id=request_id,
+            duration_ms=duration_ms,
+            mutex_depth=write_mutex_depth(),
+        )
+        return _ok(settings=settings)
+    except Exception as exc:
+        duration_ms = int((time.perf_counter() - t0) * 1000)
+        _admin_settings_trace(
+            "error",
+            request_id=request_id,
+            duration_ms=duration_ms,
+            mutex_depth=write_mutex_depth(),
+            exception_type=type(exc).__name__,
+            message=str(exc)[:200],
+        )
+        raise
 
 
 def api_apply_resource_tools(admin_id: int, body: Dict[str, Any], actor_user_id: int) -> Dict[str, Any]:

@@ -20,7 +20,7 @@ import threading
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from .db import begin_write_transaction, column_exists, db, table_exists
+from .db import begin_write_transaction, column_exists, commit, db, rollback, table_exists
 
 logger = logging.getLogger(__name__)
 
@@ -866,11 +866,11 @@ def recalculate_ranks(conn=None) -> int:
                 begin_write_transaction(conn)
             count = _apply()
             if owns_conn:
-                conn.commit()
+                commit(conn)
             return count
     except Exception:
         if owns_conn:
-            conn.rollback()
+            rollback(conn)
         raise
     finally:
         if owns_conn:
@@ -925,7 +925,7 @@ def recalculate_all_rankings(
             invalidate_all_score_cache()
 
             if owns_conn:
-                conn.commit()
+                commit(conn)
 
         duration_ms = int((time.perf_counter() - started) * 1000)
         result = {
@@ -946,7 +946,7 @@ def recalculate_all_rankings(
     except Exception as exc:
         if owns_conn:
             try:
-                conn.rollback()
+                rollback(conn)
             except Exception:
                 pass
         logger.exception("recalculate_all_rankings failed")

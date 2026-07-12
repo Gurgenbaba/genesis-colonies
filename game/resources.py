@@ -526,7 +526,7 @@ def sync_derived_state_after_queue_finish(
 
     try:
         if own_conn:
-            from .db import begin_write_transaction
+            from .db import begin_write_transaction, commit, rollback
 
             begin_write_transaction(conn)
 
@@ -560,10 +560,10 @@ def sync_derived_state_after_queue_finish(
                 count += 1
 
         if own_conn:
-            conn.commit()
+            commit(conn)
     except Exception:
         if own_conn:
-            conn.rollback()
+            rollback(conn)
         raise
     finally:
         if own_conn:

@@ -463,7 +463,7 @@ def init_db() -> None:
             (key, str(val)),
         )
 
-    conn.commit()
+    commit(conn)
     conn.close()
 
 
@@ -556,7 +556,7 @@ def create_default_admin(conn: sqlite3.Connection | None = None) -> None:
             (admin_id, "Gurkenvater"),
         )
 
-    conn.commit()
+    commit(conn)
     if own_conn:
         conn.close()
 
@@ -652,14 +652,14 @@ def create_user(username: str, password: str, is_admin: int = 0, email: str | No
 
         ensure_player_score_row(int(user_id), conn=conn)
 
-        conn.commit()
+        commit(conn)
         return True, None, {"id": user_id, "username": uname, "is_admin": bool(is_admin)}
 
     except sqlite3.IntegrityError:
-        conn.rollback()
+        rollback(conn)
         return False, "Benutzername ist bereits vergeben.", None
     except Exception as e:
-        conn.rollback()
+        rollback(conn)
         return False, str(e), None
     finally:
         cur.close()
@@ -683,7 +683,7 @@ def touch_player_online(player_id: int) -> None:
             "UPDATE players SET last_seen = ? WHERE id = ? AND (last_seen IS NULL OR last_seen < ?)",
             (now, int(player_id), touch_before),
         )
-        conn.commit()
+        commit(conn)
     finally:
         conn.close()
 
@@ -896,11 +896,11 @@ def ensure_player_and_homeworld(
                 pass
 
         if own_conn:
-            conn.commit()
+            commit(conn)
 
     except Exception:
         if own_conn:
-            conn.rollback()
+            rollback(conn)
         raise
     finally:
         if own_conn:
@@ -1041,10 +1041,10 @@ def save_planet(planet: Dict[str, Any], conn: sqlite3.Connection | None = None) 
         )
 
         if own_conn:
-            conn.commit()
+            commit(conn)
     except Exception:
         if own_conn:
-            conn.rollback()
+            rollback(conn)
         raise
     finally:
         if own_conn:
@@ -1251,9 +1251,9 @@ def adjust_homeworld_resources(
                 (int(metal_delta), int(crystal_delta), int(fuel_cells_delta), int(player_id)),
             )
 
-        conn.commit()
+        commit(conn)
     except Exception:
-        conn.rollback()
+        rollback(conn)
         raise
     finally:
         conn.close()
@@ -1287,7 +1287,7 @@ def get_planet_buildings(planet_id: int, conn: sqlite3.Connection | None = None)
     if not row:
         cur.execute("INSERT INTO planet_buildings (planet_id) VALUES (?);", (int(planet_id),))
         if own_conn:
-            conn.commit()
+            commit(conn)
         cur.execute("SELECT * FROM planet_buildings WHERE planet_id = ?;", (int(planet_id),))
         row = cur.fetchone()
 
@@ -1316,9 +1316,9 @@ def save_planet_buildings(planet_id: int, buildings: Dict[str, int]) -> None:
             """,
             [int(buildings.get(k, 0)) for k in keys] + [int(planet_id)],
         )
-        conn.commit()
+        commit(conn)
     except Exception:
-        conn.rollback()
+        rollback(conn)
         raise
     finally:
         conn.close()
@@ -1390,12 +1390,12 @@ def add_build_job(
         job_id = cur.lastrowid
 
         if own_conn:
-            conn.commit()
+            commit(conn)
 
         return int(job_id)
     except Exception:
         if own_conn:
-            conn.rollback()
+            rollback(conn)
         raise
     finally:
         if own_conn:
@@ -1414,10 +1414,10 @@ def delete_build_job(job_id: int, conn: sqlite3.Connection | None = None) -> Non
             begin_write_transaction(conn)
         cur.execute("DELETE FROM build_queue WHERE id = ?;", (int(job_id),))
         if own_conn:
-            conn.commit()
+            commit(conn)
     except Exception:
         if own_conn:
-            conn.rollback()
+            rollback(conn)
         raise
     finally:
         if own_conn:
@@ -1529,9 +1529,9 @@ def save_game_settings(
                 """,
                 (key, value_str),
             )
-        conn.commit()
+        commit(conn)
     except Exception:
-        conn.rollback()
+        rollback(conn)
         raise
     finally:
         conn.close()
@@ -1573,9 +1573,9 @@ def save_research_level(tech_key: str, level: int, user_id: int) -> None:
             """,
             (int(user_id), str(tech_key), int(level)),
         )
-        conn.commit()
+        commit(conn)
     except Exception:
-        conn.rollback()
+        rollback(conn)
         raise
     finally:
         conn.close()
@@ -1639,12 +1639,12 @@ def add_research_job(
         job_id = int(cur.lastrowid)
 
         if own_conn:
-            conn.commit()
+            commit(conn)
 
         return job_id
     except Exception:
         if own_conn:
-            conn.rollback()
+            rollback(conn)
         raise
     finally:
         if own_conn:
@@ -1663,10 +1663,10 @@ def delete_research_job(job_id: int, conn: sqlite3.Connection | None = None) -> 
             begin_write_transaction(conn)
         cur.execute("DELETE FROM research_queue WHERE id = ?;", (int(job_id),))
         if own_conn:
-            conn.commit()
+            commit(conn)
     except Exception:
         if own_conn:
-            conn.rollback()
+            rollback(conn)
         raise
     finally:
         if own_conn:
@@ -1783,13 +1783,13 @@ def finish_due_build_jobs(
             recompute_and_upsert_score(int(player_id), conn=conn)
 
         if owns_conn:
-            conn.commit()
+            commit(conn)
 
         return count > 0
 
     except Exception:
         if owns_conn:
-            conn.rollback()
+            rollback(conn)
         raise
     finally:
         if owns_conn:
@@ -1829,13 +1829,13 @@ def finish_due_research_jobs(
             recompute_and_upsert_score(int(user_id), conn=conn)
 
         if owns_conn:
-            conn.commit()
+            commit(conn)
 
         return count > 0
 
     except Exception:
         if owns_conn:
-            conn.rollback()
+            rollback(conn)
         raise
     finally:
         if owns_conn:

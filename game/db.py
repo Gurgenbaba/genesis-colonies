@@ -113,6 +113,11 @@ class TxAbort(Exception):
         self.result = result
 
 
+def write_mutex_depth() -> int:
+    """Process-local SQLite writer mutex depth (0 = idle)."""
+    return _write_mutex_depth()
+
+
 def db() -> sqlite3.Connection:
     if get_db_backend() != "sqlite":
         raise NotImplementedError(_postgres_not_implemented_message())
