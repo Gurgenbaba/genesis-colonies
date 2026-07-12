@@ -1587,19 +1587,6 @@ body.gc-body-ingame.gc-has-planet-landscape button.gc-nav-link.gc-nav-submenu-to
   .gc-special-root > .gc-special-bar{
     display: none !important;
   }
-
-  /* GC-806C: bottom utility dock is the desktop entry — panel must stack above it */
-  .gc-special-root{
-    z-index: calc(var(--gc-z-sticky, 200) + 2);
-    bottom: calc(var(--gc-bottom-util-h, 36px) + var(--gc-safe-bottom, 0px) + 10px);
-  }
-
-  .gc-special-window{
-    z-index: calc(var(--gc-z-sticky, 200) + 2);
-    right: calc(14px + var(--gc-safe-right));
-    bottom: calc(var(--gc-bottom-util-h, 36px) + var(--gc-safe-bottom, 0px) + 10px);
-    max-height: min(68vh, 680px);
-  }
 }
 
 .gc-sidebar--right{
@@ -19290,6 +19277,21 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 
 .gc-special-window[hidden]{
   display: none !important;
+}
+
+/* GC-806C desktop: bottom utility dock entry — must stack above dock (after base .gc-special-* rules) */
+@media (min-width: 769px){
+  .gc-special-root{
+    z-index: calc(var(--gc-z-sticky, 200) + 2);
+    bottom: calc(var(--gc-bottom-util-h, 36px) + var(--gc-safe-bottom, 0px) + 10px);
+  }
+
+  .gc-special-window{
+    z-index: calc(var(--gc-z-sticky, 200) + 2);
+    right: calc(14px + var(--gc-safe-right));
+    bottom: calc(var(--gc-bottom-util-h, 36px) + var(--gc-safe-bottom, 0px) + 10px);
+    max-height: min(68vh, 680px);
+  }
 }
 
 .gc-codex-intro{

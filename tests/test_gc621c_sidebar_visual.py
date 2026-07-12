@@ -57,7 +57,10 @@ def test_gc806_dual_sidebar_layout_contract():
 def test_gc621c_desktop_special_window_stacks_above_bottom_dock():
     """Desktop Codex opens from bottom utility bar — panel must not sit under z-index 201 dock."""
     css = _read("static/style.css")
-    desktop = css.split("@media (min-width: 769px)", 1)[1].split("@media", 1)[0]
+    base_root = css.index(".gc-special-root{")
+    desktop_fix = css.index("/* GC-806C desktop: bottom utility dock entry")
+    assert desktop_fix > base_root, "desktop special-window fix must come after base .gc-special-root"
+    desktop = css.split("/* GC-806C desktop: bottom utility dock entry", 1)[1].split("@media", 2)[1]
     assert "gc-bottom-util-h" in desktop
     assert "gc-special-window" in desktop
     assert "z-index: calc(var(--gc-z-sticky, 200) + 2)" in desktop
