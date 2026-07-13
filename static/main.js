@@ -1793,7 +1793,13 @@
     _resetQueueLiveStates();
     GC.stopPolling();
     if (typeof GC.hideCardReqTooltip === "function") GC.hideCardReqTooltip();
-    if (typeof GC.teardownHudSelectPortals === "function") GC.teardownHudSelectPortals();
+    // Important: clear any stuck PJAX/link blockers (e.g. after leaving admin).
+    // This also closes HUD portals/menus and resets nav animation state.
+    try {
+      releaseShellNavigationBlockers("cleanup");
+    } catch (_) {
+      if (typeof GC.teardownHudSelectPortals === "function") GC.teardownHudSelectPortals();
+    }
     GC.actionLocks.build = false;
     GC.actionLocks.research = false;
     _statusPollErrorLogged = false;

@@ -426,15 +426,16 @@ def test_admin_pjax_exit_hard_load_entry():
     pjax_fn = src.split("function isPjaxEligibleLink(link)")[1].split("function normalizePjaxUrl")[0]
     assert "isAdminRoutePath(dest.pathname)" in pjax_fn
     assert 'GC.detectPage() === "admin"' not in pjax_fn
-    base = _read("templates/base.html")
-    assert "gc-nav-admin" in base
-    admin_nav = base.split("gc-nav-admin")[1][:300]
+    mobile_sys = _read("templates/partials/sidebar_system_mobile.html")
+    assert "gc-nav-admin" in mobile_sys
+    admin_nav = mobile_sys.split("gc-nav-admin")[1][:300]
     assert "data-no-pjax" in admin_nav
     nav = src.split("GC.navigateTo = async function navigateTo")[1].split("function initPjax")[0]
     assert "leavingAdmin" in nav
     assert "teardownHudSelectPortals" in nav
     assert "quiesceLiveClientFetches" in nav
-    assert "releaseShellNavigationBlockers" not in nav
+    # Safety: ensure stale nav blockers cannot survive admin → ingame PJAX.
+    assert "releaseShellNavigationBlockers" in src.split("GC.cleanupPage = function cleanupPage()")[1][:2500]
     assert "beginPjaxNavigation" in nav
     assert "shouldPjaxHardLoad" in nav
     assert "shouldPjaxHardLoad" in nav
