@@ -5,6 +5,8 @@ Account / profile options – player name, homeworld, email, password.
 from __future__ import annotations
 
 import json
+import logging
+import os
 import re
 import secrets
 import time
@@ -28,6 +30,12 @@ EMAIL_MAX = 254
 
 VACATION_MIN_DURATION_SEC = 48 * 3600
 ACCOUNT_DELETION_GRACE_SEC = 7 * 24 * 3600
+ACCOUNT_DELETION_WORKER_KEY = "account_deletion_worker_last"
+ACCOUNT_DELETION_WORKER_INTERVAL_SEC = float(
+    os.environ.get("GC_ACCOUNT_DELETION_WORKER_INTERVAL_SEC", "60")
+)
+
+logger = logging.getLogger(__name__)
 
 ACCOUNT_SAFETY_CONFIRM_PHRASES: Dict[str, str] = {
     "vacation_enable": "ENABLE VACATION",
@@ -562,6 +570,7 @@ def get_account_safety_hud_state(
             return _vacation_hud_from_row({}, _now_ts())
         if self_heal:
             repair_account_safety_state(int(pid), conn=c)
+            process_due_account_deletion(int(pid), conn=c)
         row = _player_safety_row(int(pid), c)
         return _vacation_hud_from_row(row, _now_ts())
     finally:
@@ -1430,6 +1439,182 @@ def execute_account_deletion(player_id: int, *, conn) -> None:
         """,
         (f"Deleted-{pid}", _now_ts(), pid),
     )
+
+
+def any_due_account_deletions(*, now: Optional[int] = None, conn=None) -> bool:
+    """True when any player is past account_deletion_due_at and not yet anonymized."""
+    owns = conn is None
+    c = conn or db()
+    ts = int(now if now is not None else _now_ts())
+    try:
+        row = c.execute(
+            """
+            SELECT 1 FROM players
+            WHERE account_deletion_due_at IS NOT NULL
+              AND account_deletion_due_at <= ?
+              AND (account_deleted_at IS NULL OR account_deleted_at = 0)
+            LIMIT 1;
+            """,
+            (ts,),
+        ).fetchone()
+        return row is not None
+    finally:
+        if owns:
+            c.close()
+
+
+def process_all_due_account_deletions(*, conn=None) -> Dict[str, Any]:
+    """Execute every scheduled account deletion that is past due."""
+    owns = conn is None
+    c = conn or db()
+    now = _now_ts()
+    processed: List[int] = []
+    errors: List[Dict[str, Any]] = []
+    try:
+        rows = c.execute(
+            """
+            SELECT id FROM players
+            WHERE account_deletion_due_at IS NOT NULL
+              AND account_deletion_due_at <= ?
+              AND (account_deleted_at IS NULL OR account_deleted_at = 0)
+            ORDER BY account_deletion_due_at ASC;
+            """,
+            (now,),
+        ).fetchall()
+        if not rows:
+            return {"ok": True, "processed": processed, "count": 0, "errors": errors}
+        begin_write_transaction(c)
+        try:
+            for row in rows:
+                pid = int(row["id"])
+                try:
+                    if process_due_account_deletion(pid, conn=c):
+                        processed.append(pid)
+                except Exception as exc:
+                    errors.append({"player_id": pid, "error": str(exc)})
+                    logger.exception("account deletion failed player_id=%s", pid)
+            commit(c)
+        except Exception:
+            rollback(c)
+            raise
+        return {
+            "ok": not errors,
+            "processed": processed,
+            "count": len(processed),
+            "errors": errors,
+        }
+    except Exception:
+        if owns:
+            rollback(c)
+        raise
+    finally:
+        if owns:
+            c.close()
+
+
+def _load_account_deletion_worker_record(conn=None) -> Optional[Dict[str, Any]]:
+    from .runtime_state import get_runtime_value
+
+    raw = get_runtime_value(ACCOUNT_DELETION_WORKER_KEY, conn=conn)
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def seconds_until_account_deletion_worker_allowed(
+    *,
+    now: Optional[float] = None,
+    conn=None,
+) -> float:
+    data = _load_account_deletion_worker_record(conn=conn)
+    if not data or not data.get("ok"):
+        return 0.0
+    try:
+        last_at = float(data.get("at") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    if last_at <= 0:
+        return 0.0
+    now_f = float(now if now is not None else time.time())
+    remaining = (last_at + ACCOUNT_DELETION_WORKER_INTERVAL_SEC) - now_f
+    return max(0.0, remaining)
+
+
+def should_run_account_deletion_worker(
+    *,
+    force: bool = False,
+    now: Optional[float] = None,
+    conn=None,
+) -> bool:
+    if force:
+        return True
+    if any_due_account_deletions(now=int(now) if now is not None else None, conn=conn):
+        return True
+    return seconds_until_account_deletion_worker_allowed(now=now, conn=conn) <= 0.0
+
+
+def maybe_run_due_account_deletions(
+    *,
+    force: bool = False,
+    source: str = "",
+    conn=None,
+) -> Dict[str, Any]:
+    """Throttled global pass — offline players and cron safety net."""
+    from .runtime_state import set_runtime_value
+
+    owns = conn is None
+    c = conn or db()
+    started = time.time()
+    if not should_run_account_deletion_worker(force=force, conn=c):
+        remaining = seconds_until_account_deletion_worker_allowed(conn=c)
+        return {
+            "ok": True,
+            "skipped_interval": True,
+            "count": 0,
+            "processed": [],
+            "errors": [],
+            "next_run_in_sec": int(remaining),
+            "duration_ms": int((time.time() - started) * 1000),
+            "source": source,
+        }
+    try:
+        result = process_all_due_account_deletions(conn=c)
+        payload = {
+            **result,
+            "skipped_interval": False,
+            "duration_ms": int((time.time() - started) * 1000),
+            "source": source,
+        }
+        set_runtime_value(
+            ACCOUNT_DELETION_WORKER_KEY,
+            json.dumps({"at": time.time(), "ok": bool(result.get("ok", True)), "source": source}),
+            conn=c,
+        )
+        if result.get("count"):
+            logger.info(
+                "account deletion worker processed=%s source=%s",
+                result.get("count"),
+                source,
+            )
+        return payload
+    except Exception as exc:
+        logger.exception("account deletion worker failed source=%s", source)
+        return {
+            "ok": False,
+            "skipped_interval": False,
+            "count": 0,
+            "processed": [],
+            "errors": [{"error": str(exc)}],
+            "duration_ms": int((time.time() - started) * 1000),
+            "source": source,
+        }
+    finally:
+        if owns:
+            c.close()
 
 
 def process_due_account_deletion(player_id: int, *, conn=None) -> bool:

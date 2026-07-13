@@ -16,7 +16,7 @@ import game.db as dbmod
 import game.models as models
 from game.models import create_user, ensure_player_and_homeworld, init_db, verify_password
 from game.options import reset_sensitive_rate_limits
-from game.options import ACCOUNT_SAFETY_CONFIRM_PHRASES, cancel_account_deletion, ensure_account_options_schema, ensure_account_safety_schema, get_account_safety_snapshot, get_account_safety_state, get_destructive_action_blocker_details, get_destructive_action_blockers, get_options_snapshot, repair_account_safety_state, reset_sensitive_rate_limits, update_active_planet_name, update_email, update_homeworld_name, update_password, update_player_name, validate_display_name
+from game.options import ACCOUNT_SAFETY_CONFIRM_PHRASES, cancel_account_deletion, ensure_account_options_schema, ensure_account_safety_schema, get_account_safety_snapshot, get_account_safety_state, get_destructive_action_blocker_details, get_destructive_action_blockers, get_options_snapshot, is_account_deleted, maybe_run_due_account_deletions, process_all_due_account_deletions, repair_account_safety_state, request_account_deletion, reset_sensitive_rate_limits, update_active_planet_name, update_email, update_homeworld_name, update_password, update_player_name, validate_display_name
 from game.planet_evolution.repository import set_active_planet_id
 from game.planet_evolution.service import colonize_planet
 from game.security import reset_auth_rate_limits
@@ -390,6 +390,90 @@ def test_account_deletion_request_and_cancel(app_client, temp_db):
     res_cancel = app_client.post('/api/options/account-deletion/cancel', json={}, headers={'Accept': 'application/json'})
     assert res_cancel.status_code == 200
     assert res_cancel.get_json()['data']['deletion_pending'] is False
+
+
+def test_due_account_deletion_executes_on_game_state_hud_self_heal(temp_db):
+    from game.live_state import account_safety_hud_for_game_state
+
+    _run_migrate(temp_db)
+    init_db()
+    ensure_account_safety_schema()
+    pid, _, _ = _create_player()
+    conn = models.db()
+    try:
+        past = int(time.time()) - 60
+        conn.execute(
+            """
+            UPDATE players
+            SET account_deletion_requested_at = ?, account_deletion_due_at = ?
+            WHERE id = ?;
+            """,
+            (past - 7 * 24 * 3600, past, pid),
+        )
+        conn.commit()
+        hud = account_safety_hud_for_game_state(pid, conn=conn)
+        assert hud["deletion_pending"] is False
+        row = conn.execute(
+            "SELECT account_deleted_at FROM players WHERE id = ?;",
+            (pid,),
+        ).fetchone()
+        assert int(row["account_deleted_at"] or 0) > 0
+        assert is_account_deleted(pid, conn=conn)
+    finally:
+        conn.close()
+
+
+def test_process_all_due_account_deletions_runs_without_options_visit(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    ensure_account_safety_schema()
+    pid_a, _, _ = _create_player()
+    pid_b, _, _ = _create_player()
+    conn = models.db()
+    try:
+        past = int(time.time()) - 30
+        conn.execute(
+            """
+            UPDATE players
+            SET account_deletion_requested_at = ?, account_deletion_due_at = ?
+            WHERE id IN (?, ?);
+            """,
+            (past - 7 * 24 * 3600, past, pid_a, pid_b),
+        )
+        conn.commit()
+        result = process_all_due_account_deletions(conn=conn)
+        assert result["count"] == 2
+        assert set(result["processed"]) == {pid_a, pid_b}
+        for pid in (pid_a, pid_b):
+            assert is_account_deleted(pid, conn=conn)
+    finally:
+        conn.close()
+
+
+def test_maybe_run_due_account_deletions_force_processes_overdue(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    ensure_account_safety_schema()
+    pid, _, _ = _create_player()
+    conn = models.db()
+    try:
+        past = int(time.time()) - 10
+        conn.execute(
+            """
+            UPDATE players
+            SET account_deletion_requested_at = ?, account_deletion_due_at = ?
+            WHERE id = ?;
+            """,
+            (past - 7 * 24 * 3600, past, pid),
+        )
+        conn.commit()
+        payload = maybe_run_due_account_deletions(force=True, source="test")
+        assert payload["count"] == 1
+        assert payload["processed"] == [pid]
+        assert is_account_deleted(pid, conn=conn)
+    finally:
+        conn.close()
+
 
 def test_account_reset_wipes_colonies(app_client):
     pid, uname, password = _create_player()

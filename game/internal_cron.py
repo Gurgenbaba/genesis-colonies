@@ -282,6 +282,17 @@ def handle_internal_cron_ranking(request: Request) -> Tuple[Dict[str, Any], int]
     vote_payload = _maybe_run_vote_reengagement(force=False, source="http_cron")
     payload["vote_reengagement"] = vote_payload
 
+    try:
+        from game.options import maybe_run_due_account_deletions
+
+        payload["account_deletions"] = maybe_run_due_account_deletions(
+            force=force,
+            source="http_cron",
+        )
+    except Exception as exc:
+        logger.exception("internal cron account deletion worker failed")
+        payload["account_deletions"] = {"ok": False, "error": str(exc)}
+
     status = 200 if payload["ok"] else 500
     return payload, status
 

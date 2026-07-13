@@ -362,6 +362,13 @@ def _fleet_tick_before_authenticated_request():
         if isinstance(result, dict):
             ran = 0 if result.get("skipped_interval") else 1
             set_request_perf_meta("fleet_tick_ran", ran)
+        ad0 = time.perf_counter()
+        from game.options import maybe_run_due_account_deletions
+
+        ad_result = maybe_run_due_account_deletions(force=False, source=endpoint)
+        record_request_perf_phase("account_deletion_worker_ms", (time.perf_counter() - ad0) * 1000.0)
+        if isinstance(ad_result, dict) and ad_result.get("count"):
+            set_request_perf_meta("account_deletions_ran", int(ad_result.get("count") or 0))
     except Exception:
         logger.exception("before_request fleet tick failed endpoint=%s", request.endpoint)
     return None
