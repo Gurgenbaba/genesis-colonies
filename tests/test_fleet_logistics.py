@@ -28,8 +28,12 @@ def logistics_db(tmp_path, monkeypatch):
 def _hub_and_sources(uid: int, conn, *, sources: int=2):
     hub = int(get_planets_by_player(uid, conn=conn)[0]['id'])
     colony_ids = []
+    # Expansion Protocol gate: ensure colony slots are unlocked before colonizing.
+    # Reuse the canonical helper from test_fleet (it unlocks then colonizes).
+    _second_colony(uid, conn=conn)
     for i in range(sources):
-        pos = 5 + i
+        # Avoid coordinate collision with _second_colony (uses position=5).
+        pos = 6 + i
         ok, reason, extra = colonize_planet(uid, name=f'Colony {pos}', galaxy=1, system=300, position=pos, conn=conn, allow_legacy_coordinates=True, source='test')
         assert ok, reason
         cid = int(extra['planet_id'])
@@ -536,7 +540,7 @@ def test_distribute_hub_in_targets_filtered(logistics_db):
         assert int(cur.fetchone()['target_planet_id']) != hub
     conn.close()
 
-def test_distribute_storage_cap_clamps_and_leaves_surplus_on_hub(logistics_db):
+def test_distribute_ignores_storage_cap_and_debits_full_amount(logistics_db):
     conn = db()
     uid = _player(conn=conn)
     hub, targets = _hub_and_sources(uid, conn, sources=2)
@@ -547,19 +551,18 @@ def test_distribute_storage_cap_clamps_and_leaves_surplus_on_hub(logistics_db):
     research = get_research_levels(user_id=uid, conn=conn)
     caps = get_storage_capacity(buildings, research=research)
     cur.execute('UPDATE planets SET metal = ?, crystal = ? WHERE id = ?;', (max(0, int(caps['metal']) - 500), max(0, int(caps['crystal']) - 100), target))
-    _seed_ships(hub, uid, {'mule_courier': 4}, conn=conn)
+    _seed_ships(hub, uid, {'mule_courier': 6}, conn=conn)
     cur.execute('SELECT metal FROM planets WHERE id = ?;', (hub,))
     hub_before = float(cur.fetchone()['metal'])
     conn.commit()
-    ok, reason, payload = distribute_resources(player_id=uid, origin_planet_id=hub, target_planet_ids=[target], ships={'mule_courier': 2}, resources_mode='equal', resources={'metal': 20000, 'crystal': 2000, 'fuel_cells': 0}, conn=conn)
+    ok, reason, payload = distribute_resources(player_id=uid, origin_planet_id=hub, target_planet_ids=[target], ships={'mule_courier': 5}, resources_mode='equal', resources={'metal': 20000, 'crystal': 2000, 'fuel_cells': 0}, conn=conn)
     assert ok, reason
     delivered = payload['delivered_total']
-    assert delivered['metal'] <= 500
-    assert delivered['metal'] > 0
+    assert delivered['metal'] == 20000
+    assert delivered['crystal'] == 2000
     cur.execute('SELECT metal FROM planets WHERE id = ?;', (hub,))
     hub_after = float(cur.fetchone()['metal'])
     assert hub_before - hub_after == pytest.approx(delivered['metal'], rel=0, abs=1)
-    assert hub_before - hub_after < 20000
     conn.close()
 
 def test_distribute_api_returns_state(logistics_db):
