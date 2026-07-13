@@ -5199,34 +5199,15 @@ def mass_expedition(
             conn.close()
 
 
-class DistributeRouteLeg(TypedDict):
+class DistributeRouteLeg(TypedDict, total=False):
     planet_id: int
     galaxy: int
     system: int
     position: int
     ships: Dict[str, int]
     resources: Dict[str, int]
+    resources_requested: Dict[str, int]
 
-
-def _metal_crystal_storage_headroom(planet_id: int, player_id: int, *, conn) -> Dict[str, int]:
-    """Storage headroom for distribute clamp — metal/crystal only (fuel_cells uncapped)."""
-    full = _planet_storage_headroom(planet_id, player_id, conn=conn)
-    return {"metal": int(full.get("metal", 0)), "crystal": int(full.get("crystal", 0))}
-
-
-def _clamp_distribute_delivery(
-    resources: Mapping[str, Any],
-    metal_crystal_headroom: Mapping[str, int],
-) -> Dict[str, int]:
-    """Clamp metal/crystal to target storage; fuel_cells delivered without storage cap."""
-    loaded = calculate_loaded_resources(resources)
-    return calculate_loaded_resources(
-        {
-            "metal": min(loaded["metal"], max(0, int(metal_crystal_headroom.get("metal", 0)))),
-            "crystal": min(loaded["crystal"], max(0, int(metal_crystal_headroom.get("crystal", 0)))),
-            "fuel_cells": loaded["fuel_cells"],
-        }
-    )
 
 
 def _parse_target_resources_map(
@@ -5273,6 +5254,7 @@ def build_distribute_route(
     free_fleet_slots: int,
     player_id: int,
     conn,
+    for_preview: bool = False,
 ) -> Tuple[bool, str, Optional[List[DistributeRouteLeg]], Optional[Dict[str, int]]]:
     """Validate distribute targets, compute per-leg cargo/ships, enforce slots and cargo caps."""
     origin = int(origin_planet_id or 0)
@@ -5324,11 +5306,20 @@ def build_distribute_route(
         per_target = parsed
     elif mode == "equal":
         requested = calculate_loaded_resources(resources)
-        if loaded_resource_total(requested) <= 0:
-            return False, "no_resources", None, None
-        shares = split_resources_evenly(requested, len(entries))
-        for entry, share in zip(entries, shares):
-            per_target[int(entry["planet_id"])] = share
+        requested_total = loaded_resource_total(requested)
+        if requested_total <= 0:
+            if not for_preview:
+                return False, "no_resources", None, None
+            for entry in entries:
+                per_target[int(entry["planet_id"])] = {
+                    "metal": 0,
+                    "crystal": 0,
+                    "fuel_cells": 0,
+                }
+        else:
+            shares = split_resources_evenly(requested, len(entries))
+            for entry, share in zip(entries, shares):
+                per_target[int(entry["planet_id"])] = share
     else:
         return False, "invalid_resources_mode", None, None
 
@@ -5338,20 +5329,20 @@ def build_distribute_route(
         if mode == "custom" and pid not in per_target:
             continue
         share = per_target.get(pid) or {"metal": 0, "crystal": 0, "fuel_cells": 0}
-        headroom = _metal_crystal_storage_headroom(pid, int(player_id), conn=conn)
-        deliverable = _clamp_distribute_delivery(share, headroom)
-        if loaded_resource_total(deliverable) <= 0:
+        share_loaded = calculate_loaded_resources(share)
+        if loaded_resource_total(share_loaded) <= 0 and not for_preview:
             continue
-        legs.append(
-            {
-                "planet_id": pid,
-                "galaxy": int(entry["galaxy"]),
-                "system": int(entry["system"]),
-                "position": int(entry["position"]),
-                "ships": {},
-                "resources": deliverable,
-            }
-        )
+        leg: DistributeRouteLeg = {
+            "planet_id": pid,
+            "galaxy": int(entry["galaxy"]),
+            "system": int(entry["system"]),
+            "position": int(entry["position"]),
+            "ships": {},
+            "resources": share_loaded,
+        }
+        if for_preview:
+            leg["resources_requested"] = share_loaded
+        legs.append(leg)
 
     if int(free_fleet_slots) <= 0:
         return False, "fleet_slots_full", None, None
@@ -5362,52 +5353,18 @@ def build_distribute_route(
     for leg, alloc in zip(legs, ship_allocs):
         if not alloc or calculate_total_cargo(alloc) <= 0:
             return False, "not_enough_ships", None, None
-        cargo = leg["resources"]
+        cargo = (
+            leg.get("resources_requested") or leg["resources"]
+            if for_preview
+            else leg["resources"]
+        )
         if loaded_resource_total(cargo) > calculate_total_cargo(alloc):
-            return False, "not_enough_cargo", None, None
+            if not for_preview:
+                return False, "not_enough_cargo", None, None
         leg["ships"] = dict(alloc)
 
     delivered_total = _sum_loaded_resources([leg["resources"] for leg in legs])
     return True, "", legs, delivered_total
-
-
-def _planet_storage_headroom(planet_id: int, player_id: int, *, conn) -> Dict[str, int]:
-    from .models import get_planet_buildings
-    from .resources import get_storage_capacity
-
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT metal, crystal, fuel_cells FROM planets WHERE id = ? LIMIT 1;",
-        (int(planet_id),),
-    )
-    row = cur.fetchone()
-    if not row:
-        return {"metal": 0, "crystal": 0, "fuel_cells": 0}
-    buildings = get_planet_buildings(int(planet_id), conn=conn)
-    research = get_research_levels(user_id=int(player_id), conn=conn)
-    caps = get_storage_capacity(buildings, research=research, conn=conn)
-    return {
-        "metal": max(0, int(caps.get("metal", 0) or 0) - int(float(row["metal"] or 0))),
-        "crystal": max(0, int(caps.get("crystal", 0) or 0) - int(float(row["crystal"] or 0))),
-        "fuel_cells": max(
-            0,
-            int(caps.get("fuel_cells", 0) or 0) - int(float(row["fuel_cells"] or 0)),
-        ),
-    }
-
-
-def _clamp_resources_to_headroom(
-    resources: Mapping[str, Any],
-    headroom: Mapping[str, int],
-) -> Dict[str, int]:
-    loaded = calculate_loaded_resources(resources)
-    return calculate_loaded_resources(
-        {
-            "metal": min(loaded["metal"], max(0, int(headroom.get("metal", 0)))),
-            "crystal": min(loaded["crystal"], max(0, int(headroom.get("crystal", 0)))),
-            "fuel_cells": min(loaded["fuel_cells"], max(0, int(headroom.get("fuel_cells", 0)))),
-        }
-    )
 
 
 def _sum_loaded_resources(items: Sequence[Mapping[str, Any]]) -> Dict[str, int]:

@@ -1988,7 +1988,7 @@ def test_distribute_route_debits_origin_on_start(fleet_db):
     assert delivered == 8000
     conn.close()
 
-def test_distribute_route_storage_cap_clamps_metal(fleet_db):
+def test_distribute_route_delivers_full_amount_despite_full_storage(fleet_db):
     from game.models import get_planet_buildings
     from game.resources import get_storage_capacity
     conn = db()
@@ -2003,10 +2003,10 @@ def test_distribute_route_storage_cap_clamps_metal(fleet_db):
     cur.execute('UPDATE planets SET metal = ?, crystal = ? WHERE id = ?;', (max(0, int(caps['metal']) - 400), max(0, int(caps['crystal']) - 50), target))
     _seed_ships(hub, uid, {'mule_courier': 3}, conn=conn)
     conn.commit()
-    ok, _, payload = distribute_resources(player_id=uid, origin_planet_id=hub, target_planet_ids=[target], ships={'mule_courier': 2}, resources_mode='equal', resources={'metal': 20000, 'crystal': 500, 'fuel_cells': 0}, conn=conn)
+    ok, _, payload = distribute_resources(player_id=uid, origin_planet_id=hub, target_planet_ids=[target], ships={'mule_courier': 2}, resources_mode='equal', resources={'metal': 8000, 'crystal': 500, 'fuel_cells': 0}, conn=conn)
     assert ok
-    assert payload['delivered_total']['metal'] <= 400
-    assert payload['delivered_total']['metal'] > 0
+    assert payload['delivered_total']['metal'] == 8000
+    assert payload['delivered_total']['crystal'] == 500
     conn.close()
 
 def test_distribute_route_fuel_cells_uncapped_at_target(fleet_db):

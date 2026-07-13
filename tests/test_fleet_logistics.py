@@ -307,6 +307,119 @@ def test_logistics_preview_api_collect(logistics_db):
     assert len(preview.get('legs') or []) == 2
     assert preview.get('can_launch') is True
 
+def test_logistics_preview_distribute_ships_only_shows_cargo_capacity(logistics_db):
+    import app as app_mod
+    conn = db()
+    uid = _player(conn=conn)
+    hub = int(get_planets_by_player(uid, conn=conn)[0]['id'])
+    target = _second_colony(uid, conn=conn)
+    _seed_ships(hub, uid, {'mule_courier': 4}, conn=conn)
+    conn.commit()
+    conn.close()
+    client = app_mod.app.test_client()
+    with client.session_transaction() as sess:
+        sess['user_id'] = uid
+    res = client.post(
+        '/api/fleet/logistics/preview',
+        json={
+            'mode': 'distribute',
+            'origin_planet_id': hub,
+            'target_planet_ids': [target],
+            'ships': {'mule_courier': 4},
+            'resources_mode': 'equal',
+            'resources': {'metal': 0, 'crystal': 0, 'fuel_cells': 0},
+            'ships_selection_mode': 'manual',
+        },
+    )
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body['ok'] is True
+    preview = body.get('data', {}).get('preview') or {}
+    assert preview.get('mode') == 'distribute'
+    assert preview.get('cargo_total') == 20000
+    assert preview.get('cargo_used') == 0
+    assert preview.get('can_launch') is False
+    assert preview.get('block_reason') == 'no_resources'
+    assert len(preview.get('legs') or []) == 1
+
+def test_logistics_preview_distribute_cargo_sums_requested_resources(logistics_db):
+    """Preview cargo_used sums all requested resource types."""
+    import app as app_mod
+    conn = db()
+    uid = _player(conn=conn)
+    hub = int(get_planets_by_player(uid, conn=conn)[0]['id'])
+    target = _second_colony(uid, conn=conn)
+    cur = conn.cursor()
+    buildings = get_planet_buildings(target, conn=conn)
+    research = get_research_levels(user_id=uid, conn=conn)
+    caps = get_storage_capacity(buildings, research=research, conn=conn)
+    _fund_planet(cur, target, metal=int(caps['metal']), crystal=int(caps['crystal']), fuel_cells=0)
+    _seed_ships(hub, uid, {'mule_courier': 10}, conn=conn)
+    conn.commit()
+    conn.close()
+    client = app_mod.app.test_client()
+    with client.session_transaction() as sess:
+        sess['user_id'] = uid
+    res = client.post(
+        '/api/fleet/logistics/preview',
+        json={
+            'mode': 'distribute',
+            'origin_planet_id': hub,
+            'target_planet_ids': [target],
+            'ships': {'mule_courier': 10},
+            'resources_mode': 'equal',
+            'resources': {'metal': 50000, 'crystal': 50000, 'fuel_cells': 50000},
+            'ships_selection_mode': 'manual',
+        },
+    )
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body['ok'] is True
+    preview = body.get('data', {}).get('preview') or {}
+    assert preview.get('cargo_used') == 150000
+    assert preview.get('cargo_total') == 50000
+    leg = (preview.get('legs') or [])[0]
+    assert leg.get('resources') == {'metal': 50000, 'crystal': 50000, 'fuel_cells': 50000}
+    assert leg.get('resources_requested') == {'metal': 50000, 'crystal': 50000, 'fuel_cells': 50000}
+
+def test_logistics_collect_credits_hub_despite_full_storage(logistics_db):
+    """Collect logistics ignores hub storage caps — cargo always reaches the hub."""
+    conn = db()
+    uid = _player(conn=conn)
+    hub = int(get_planets_by_player(uid, conn=conn)[0]['id'])
+    source = _second_colony(uid, conn=conn)
+    cur = conn.cursor()
+    buildings = get_planet_buildings(hub, conn=conn)
+    research = get_research_levels(user_id=uid, conn=conn)
+    caps = get_storage_capacity(buildings, research=research, conn=conn)
+    _fund_planet(cur, hub, metal=int(caps['metal']), crystal=int(caps['crystal']), fuel_cells=50000)
+    _fund_planet(cur, source, metal=8000, crystal=0, fuel_cells=0)
+    _seed_ships(hub, uid, {'mule_courier': 2}, conn=conn)
+    conn.commit()
+    ok, reason, payload = collect_resources(
+        player_id=uid,
+        target_planet_id=hub,
+        source_planet_ids=[source],
+        ships={'mule_courier': 1},
+        conn=conn,
+    )
+    assert ok, reason
+    fleet_id = int(payload['started'][0]['fleet_id'])
+    cur.execute('SELECT metal FROM planets WHERE id = ?;', (hub,))
+    hub_before_return = int(cur.fetchone()['metal'])
+    now = time.time()
+    cur.execute('UPDATE fleet_movements SET arrival_at = ? WHERE id = ?;', (now - 1, fleet_id))
+    conn.commit()
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+    cur.execute('UPDATE fleet_movements SET return_at = ? WHERE id = ?;', (now - 1, fleet_id))
+    conn.commit()
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+    cur.execute('SELECT metal FROM planets WHERE id = ?;', (hub,))
+    assert int(cur.fetchone()['metal']) > hub_before_return
+    conn.close()
+
 def test_distribute_happy_path_three_targets(logistics_db):
     conn = db()
     uid = _player(conn=conn)

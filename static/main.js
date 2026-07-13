@@ -19751,14 +19751,6 @@
       }
       return;
     }
-    if (mode === "distribute") {
-      const res = getLogisticsResourcesSelection(page);
-      if ((res.metal || 0) + (res.crystal || 0) + (res.fuel_cells || 0) <= 0) {
-        resetLogisticsPreview(page, "logistics_distribute_no_resources");
-        return;
-      }
-    }
-
     try {
       const res = await GC.fetchJSON("/api/fleet/logistics/preview", {
         method: "POST",

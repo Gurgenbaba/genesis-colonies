@@ -8694,11 +8694,15 @@ def _build_logistics_preview(
             free_fleet_slots=int(slots["free"]),
             player_id=int(user_id),
             conn=conn,
+            for_preview=True,
         )
         if route_ok and route_legs:
             origin_row = planet_rows.get(origin_id) or dict(planet)
             for leg in route_legs:
-                cargo = calculate_loaded_resources(leg.get("resources"))
+                cargo_deliverable = calculate_loaded_resources(leg.get("resources"))
+                cargo_requested = calculate_loaded_resources(
+                    leg.get("resources_requested") or leg.get("resources")
+                )
                 leg_previews = build_fleet_send_preview(
                     player_id=int(user_id),
                     origin_planet=origin_row,
@@ -8707,7 +8711,7 @@ def _build_logistics_preview(
                     target_position=int(leg["position"]),
                     mission_type="transport",
                     ships=leg["ships"],
-                    resources=cargo,
+                    resources=cargo_requested,
                     speed_percent=speed_percent,
                     conn=conn,
                 )
@@ -8728,7 +8732,8 @@ def _build_logistics_preview(
                         "fuel_cost": int(leg_previews.get("fuel_cost") or 0),
                         "can_send": bool(leg_previews.get("can_send")),
                         "block_reason": str(leg_previews.get("block_reason") or ""),
-                        "resources": cargo,
+                        "resources": cargo_deliverable,
+                        "resources_requested": cargo_requested,
                     }
                 )
     else:
@@ -8738,6 +8743,13 @@ def _build_logistics_preview(
     if not route_ok or not legs:
         base["block_reason"] = route_reason or "no_deliverable_resources"
         return base
+
+    distribute_requested_total = 0
+    if mode == "distribute":
+        distribute_requested_total = sum(
+            loaded_resource_total(leg.get("resources_requested") or leg.get("resources") or {})
+            for leg in legs
+        )
 
     targets_selected = 0
     if mode == "collect":
@@ -8763,6 +8775,16 @@ def _build_logistics_preview(
         can_launch = False
         if not block_reason:
             block_reason = "fleet_slots_full"
+    if mode == "distribute" and distribute_requested_total <= 0:
+        can_launch = False
+        if not block_reason:
+            block_reason = "no_resources"
+    elif mode == "distribute" and distribute_requested_total > 0:
+        deliverable_total = loaded_resource_total(delivered_total or {})
+        if deliverable_total <= 0:
+            can_launch = False
+            if not block_reason:
+                block_reason = "no_deliverable_resources"
 
     base.update(
         {

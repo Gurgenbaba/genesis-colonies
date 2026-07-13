@@ -231,7 +231,7 @@ Multi-Kolonie-Ressourcenbewegung über **`/logistics`** und `collect_resources` 
 | Schiffs-Split | `split_ships_across_targets` — Rest je Typ auf **letztes** Ziel | gleich |
 | Ressourcen-Modus | `resources_mode`: nur **`all`** (alles Verfügbares am Quell-Planet bis Cargo-Cap) | **`equal`** (Gesamtmenge gleichmäßig) oder **`custom`** (`target_resources` pro Planet) |
 | Kapazität | Laden am Ziel bis `calculate_total_cargo(ships)` | `not_enough_cargo`, wenn Leg-Fracht > Leg-Schiff-Cargo |
-| Storage-Caps | — (Quelle wird bei Ankunft debited) | **metal/crystal** auf Ziel-Lager begrenzt (`_clamp_distribute_delivery`); **fuel_cells** ohne Storage-Clamp |
+| Storage-Caps | — (Logistik ignoriert Ziel-Lager; Overflow erlaubt) | — (Logistik ignoriert Ziel-Lager; Overflow erlaubt) |
 | Leere Legs | — | Ziele ohne lieferbare Menge werden übersprungen; `no_deliverable_resources`, wenn nichts übrig |
 
 ### Slot-Regeln
