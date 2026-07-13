@@ -30,7 +30,7 @@
 {% block extra_head %}
 {{ super() }}
 {% if _lcp_preload_href %}
-<link rel="preload" as="image" type="image/webp" href="{{ _lcp_preload_href }}" fetchpriority="high">
+<link id="gc-lcp-hero-preload" rel="preload" as="image" type="image/webp" href="{{ _lcp_preload_href }}" fetchpriority="high" data-gc-lcp-preload="1">
 {% endif %}
 {% endblock %}
 

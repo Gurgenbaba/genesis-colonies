@@ -60,6 +60,14 @@ def test_gc747b_buildings_ssr_slimdown():
     subnav_block = bind_tabs.split('[id$="nav-buildings-sub"]')[1].split('.building-tabs .tab-btn')[0]
     assert "GC.navigateTo(`/buildings?tab=" in subnav_block
     assert "activateBuildingTabByName(tab, subBtn)" not in subnav_block
+    assert "function isBuildingsTabOnlyNavigation(url)" in src
+    nav = src.split("GC.navigateTo = async function navigateTo(url, opts = {})")[1].split("function initPjax()", 1)[0]
+    assert "preserveGameLoop: true" in nav
+    assert "skipGameState: true" in nav
+    assert "skipPolling: true" in nav
+    cleanup = src.split("GC.cleanupPage = function cleanupPage(opts = {})")[1].split("GC.registerCleanup", 1)[0]
+    assert "preserveGameLoop" in cleanup
+    assert "if (!preserveGameLoop) GC.stopPolling();" in cleanup
     buildings_html = (ROOT / "templates" / "buildings.html").read_text(encoding="utf-8")
     assert "panel-resources" not in buildings_html
     assert 'render_building_table(rows_by_tab.get(active_tab' in buildings_html

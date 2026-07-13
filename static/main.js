@@ -1765,9 +1765,10 @@
   // Alias used by messages.js (older name)
   GC.registerPageCleanup = GC.registerCleanup;
 
-  GC.cleanupPage = function cleanupPage() {
-    console.debug("[GC] cleanupPage");
-    abortInFlightGameStateFetches();
+  GC.cleanupPage = function cleanupPage(opts = {}) {
+    const preserveGameLoop = Boolean(opts.preserveGameLoop);
+    console.debug("[GC] cleanupPage", preserveGameLoop ? "(preserve game loop)" : "");
+    if (!preserveGameLoop) abortInFlightGameStateFetches();
     _clearMovementCountdownExpiryState();
     if (_movementCountdownRefreshTimer) {
       clearTimeout(_movementCountdownRefreshTimer);
@@ -1791,7 +1792,7 @@
     GC.stopProgressTicker();
     stopResourceTicker();
     _resetQueueLiveStates();
-    GC.stopPolling();
+    if (!preserveGameLoop) GC.stopPolling();
     if (typeof GC.hideCardReqTooltip === "function") GC.hideCardReqTooltip();
     // Important: clear any stuck PJAX/link blockers (e.g. after leaving admin).
     // This also closes HUD portals/menus and resets nav animation state.
@@ -30156,6 +30157,21 @@
     return !!(link.matches(PJAX_NAV_LINK) || link.closest("#main-content"));
   }
 
+  function isBuildingsTabOnlyNavigation(url) {
+    try {
+      const dest = new URL(url, window.location.origin);
+      const here = new URL(window.location.href);
+      const destPath = dest.pathname.replace(/\/$/, "") || "/";
+      const herePath = here.pathname.replace(/\/$/, "") || "/";
+      if (destPath !== "/buildings" || herePath !== "/buildings") return false;
+      const destTab = dest.searchParams.get("tab") || "resources";
+      const hereTab = here.searchParams.get("tab") || "resources";
+      return destTab !== hereTab;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function normalizePjaxUrl(url) {
     try {
       const u = new URL(url, window.location.origin);
@@ -30288,9 +30304,11 @@
   }
 
   function removeLcpHeroPreloadLinks() {
-    const link = document.getElementById(GC_LCP_HERO_PRELOAD_ID);
-    if (link) link.remove();
-    document.querySelectorAll("link[data-gc-lcp-preload]").forEach((el) => el.remove());
+    document
+      .querySelectorAll(
+        `#${GC_LCP_HERO_PRELOAD_ID}, link[data-gc-lcp-preload], head link[rel="preload"][as="image"]`
+      )
+      .forEach((el) => el.remove());
   }
 
   function syncLcpHeroPreload(href) {
@@ -30330,7 +30348,7 @@
 
   async function applyPjaxPayload(url, payload, doc, opts = {}) {
     const push = opts.push !== false;
-    GC.cleanupPage();
+    GC.cleanupPage({ preserveGameLoop: Boolean(opts.preserveGameLoop) });
     preserveFleetHudAcrossNavigation();
     const main = document.getElementById("main-content");
     if (!main) throw new Error("main-content missing");
@@ -30463,6 +30481,10 @@
   }
 
   GC.navigateTo = async function navigateTo(url, opts = {}) {
+    if (isBuildingsTabOnlyNavigation(url)) {
+      opts = { skipGameState: true, skipPolling: true, preserveGameLoop: true, ...opts };
+      console.debug("[GC] PJAX light buildings tab");
+    }
     const push = opts.push !== false;
     const target = normalizePjaxUrl(url);
 
@@ -30497,7 +30519,7 @@
       if (typeof GC.quiesceLiveClientFetches === "function") GC.quiesceLiveClientFetches("leave_admin");
       else if (typeof GC.abortInFlightGameStateFetches === "function") GC.abortInFlightGameStateFetches();
       GC.stopPolling();
-    } else if (typeof GC.abortInFlightGameStateFetches === "function") {
+    } else if (!opts.preserveGameLoop && typeof GC.abortInFlightGameStateFetches === "function") {
       GC.abortInFlightGameStateFetches();
       GC.stopPolling();
     }
