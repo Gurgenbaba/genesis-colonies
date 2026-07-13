@@ -3582,6 +3582,9 @@
         renderBuildQueue(buildQueueRaw);
         updateBuildQueueActions(buildQueueRaw);
       }
+      if (GC.detectPage && GC.detectPage() === "buildings") {
+        activateBuildingTabByName(null, null);
+      }
       patched = true;
     } else if (buildQueueRaw != null && document.querySelector(".buildings-prog-list")) {
       patchCardQueuesFromOwnerMap(
@@ -5224,12 +5227,29 @@
   }
   GC.initGlobalQueueHud = initGlobalQueueHud;
 
-  function _getActiveBuildingTab() {
+  function buildingSubnavRoots() {
+    return document.querySelectorAll('[id$="nav-buildings-sub"]');
+  }
+
+  function resolveBuildingsActiveTab(preferred) {
     const pageRoot = document.querySelector("[data-buildings-page]");
-    if (pageRoot?.dataset?.activeBuildingTab) return pageRoot.dataset.activeBuildingTab;
-    const sub = document.getElementById("gc-nav-buildings-sub");
-    const active = sub?.querySelector("[data-building-tab].active");
-    return active?.dataset?.buildingTab || "resources";
+    if (!pageRoot) return String(preferred || "resources");
+    try {
+      const urlTab = new URL(window.location.href).searchParams.get("tab");
+      if (urlTab) return urlTab;
+    } catch (_) {}
+    if (pageRoot.dataset.activeBuildingTab) return pageRoot.dataset.activeBuildingTab;
+    const panel = pageRoot.querySelector(".tab-content[data-tab]");
+    if (panel?.dataset?.tab) return panel.dataset.tab;
+    for (const sub of buildingSubnavRoots()) {
+      const active = sub.querySelector("[data-building-tab].active");
+      if (active?.dataset?.buildingTab) return active.dataset.buildingTab;
+    }
+    return String(preferred || "resources");
+  }
+
+  function _getActiveBuildingTab() {
+    return resolveBuildingsActiveTab("resources");
   }
 
   function _setSubnavGroupExpanded(groupEl, parentEl, expanded) {
@@ -5250,29 +5270,38 @@
   }
 
   function syncBuildingSidebarTab(tab) {
-    const sub = document.getElementById("gc-nav-buildings-sub");
-    if (!sub) return;
-    if (tab == null || tab === "") {
-      sub.querySelectorAll("[data-building-tab]").forEach((el) => el.classList.remove("active"));
-      return;
-    }
-    const target = String(tab || "resources");
-    sub.querySelectorAll("[data-building-tab]").forEach((el) => {
-      el.classList.toggle("active", el.dataset.buildingTab === target);
+    const target = tab == null || tab === "" ? null : String(tab || "resources");
+    buildingSubnavRoots().forEach((sub) => {
+      if (!target) {
+        sub.querySelectorAll("[data-building-tab]").forEach((el) => el.classList.remove("active"));
+        return;
+      }
+      sub.querySelectorAll("[data-building-tab]").forEach((el) => {
+        el.classList.toggle("active", el.dataset.buildingTab === target);
+      });
     });
   }
 
   function activateBuildingTabByName(targetTab, focusEl) {
     const pageRoot = document.querySelector("[data-buildings-page]");
     if (!pageRoot) return;
-    const tab = String(targetTab || "resources");
-    pageRoot.querySelectorAll(".tab-content[data-tab]").forEach((c) => {
-      const isActive = c.dataset.tab === tab;
-      c.classList.toggle("active", isActive);
-      if (c.getAttribute("role") === "tabpanel") c.hidden = !isActive;
-    });
-    syncBuildingSidebarTab(tab);
-    pageRoot.dataset.activeBuildingTab = tab;
+    const tab = resolveBuildingsActiveTab(targetTab);
+    const panels = pageRoot.querySelectorAll(".tab-content[data-tab]");
+    if (panels.length === 1) {
+      const panel = panels[0];
+      panel.classList.add("active");
+      if (panel.getAttribute("role") === "tabpanel") panel.hidden = false;
+      syncBuildingSidebarTab(panel.dataset.tab || tab);
+      pageRoot.dataset.activeBuildingTab = panel.dataset.tab || tab;
+    } else {
+      panels.forEach((c) => {
+        const isActive = c.dataset.tab === tab;
+        c.classList.toggle("active", isActive);
+        if (c.getAttribute("role") === "tabpanel") c.hidden = !isActive;
+      });
+      syncBuildingSidebarTab(tab);
+      pageRoot.dataset.activeBuildingTab = tab;
+    }
     if (focusEl && typeof focusEl.focus === "function") focusEl.focus();
     if (GC.lastState && GC.lastState.ok !== false) {
       _finalizeTimekeeperQueueButtons(GC.lastState);
@@ -5284,7 +5313,7 @@
     GC._tabsBound = true;
 
     document.addEventListener("click", (e) => {
-      const subBtn = e.target.closest("#gc-nav-buildings-sub [data-building-tab]");
+      const subBtn = e.target.closest('[id$="nav-buildings-sub"] [data-building-tab]');
       if (subBtn) {
         e.preventDefault();
         const tab = subBtn.dataset.buildingTab || "resources";
@@ -19894,36 +19923,41 @@
           return;
         }
         let res;
-        if (mode === "collect") {
-          res = await GC.fetchGameAction("/api/fleet/logistics/collect", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              target_planet_id: originId,
-              source_planet_ids: colonyIds,
-              ships,
-              resources_mode: "all",
-              ships_selection_mode: "manual",
-            }),
-          });
-        } else {
-          const resources = getLogisticsResourcesSelection(page);
-          if ((resources.metal || 0) + (resources.crystal || 0) + (resources.fuel_cells || 0) <= 0) {
-            notifyLogisticsFailure(page, mode, tt("logistics_distribute_no_resources"));
-            return;
+        try {
+          if (mode === "collect") {
+            res = await GC.fetchGameAction("/api/fleet/logistics/collect", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                target_planet_id: originId,
+                source_planet_ids: colonyIds,
+                ships,
+                resources_mode: "all",
+                ships_selection_mode: "manual",
+              }),
+            });
+          } else {
+            const resources = getLogisticsResourcesSelection(page);
+            if ((resources.metal || 0) + (resources.crystal || 0) + (resources.fuel_cells || 0) <= 0) {
+              notifyLogisticsFailure(page, mode, tt("logistics_distribute_no_resources"));
+              return;
+            }
+            res = await GC.fetchGameAction("/api/fleet/logistics/distribute", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                origin_planet_id: originId,
+                target_planet_ids: colonyIds,
+                ships,
+                resources,
+                resources_mode: "equal",
+                ships_selection_mode: "manual",
+              }),
+            });
           }
-          res = await GC.fetchGameAction("/api/fleet/logistics/distribute", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              origin_planet_id: originId,
-              target_planet_ids: colonyIds,
-              ships,
-              resources,
-              resources_mode: "equal",
-              ships_selection_mode: "manual",
-            }),
-          });
+        } catch (_) {
+          notifyLogisticsFailure(page, mode, logisticsReasonText("generic"));
+          return;
         }
         if (res?.ok) {
           const okKey =
@@ -19933,9 +19967,13 @@
             "success"
           );
           applyLogisticsActionState(page, res);
-          await refreshLogisticsLiveState(page);
-          if (typeof GC.reloadCurrentPage === "function") {
-            await GC.reloadCurrentPage({ force: true });
+          try {
+            await refreshLogisticsLiveState(page);
+            if (typeof GC.reloadCurrentPage === "function") {
+              await GC.reloadCurrentPage({ force: true });
+            }
+          } catch (err) {
+            console.warn("[GC] logistics post-success refresh failed", err);
           }
         } else {
           notifyLogisticsFailure(page, mode, logisticsReasonText(apiError(res)));

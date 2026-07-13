@@ -2469,6 +2469,160 @@ def test_logistics_collect_arrival_double_tick_idempotent(fleet_db):
     assert int(after_twice['metal']) < int(before['metal'])
     conn.close()
 
+
+def test_logistics_collect_dual_arrival_same_source_no_dup(fleet_db):
+    """Two collect fleets arriving together must not load more than the source holds."""
+    conn = db()
+    uid = _player(conn=conn)
+    hub = int(get_planets_by_player(uid, conn=conn)[0]['id'])
+    source = _second_colony(uid, conn=conn)
+    g, s, p = _planet_coords(source, conn=conn)
+    cur = conn.cursor()
+    _fund_planet(cur, hub, metal=50000, crystal=5000, fuel_cells=50000)
+    _fund_planet(cur, source, metal=12000, crystal=3000, fuel_cells=500)
+    _seed_ships(hub, uid, {'mule_courier': 4}, conn=conn)
+    conn.commit()
+
+    cur.execute('SELECT metal, crystal, fuel_cells FROM planets WHERE id = ?;', (source,))
+    source_before = dict(cur.fetchone())
+    source_total_before = (
+        int(source_before['metal']) + int(source_before['crystal']) + int(source_before['fuel_cells'])
+    )
+
+    ok1, _, r1 = send_fleet(
+        player_id=uid,
+        origin_planet_id=hub,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type='collect',
+        ships={'mule_courier': 2},
+        conn=conn,
+    )
+    ok2, _, r2 = send_fleet(
+        player_id=uid,
+        origin_planet_id=hub,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type='collect',
+        ships={'mule_courier': 2},
+        conn=conn,
+    )
+    assert ok1 and ok2
+    fleet_ids = [int(r1['fleet']['id']), int(r2['fleet']['id'])]
+    for fid in fleet_ids:
+        _force_outbound_arrival(conn, fid)
+    conn.commit()
+
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+
+    cur.execute('SELECT metal, crystal, fuel_cells FROM planets WHERE id = ?;', (source,))
+    source_after = dict(cur.fetchone())
+    source_total_after = (
+        int(source_after['metal']) + int(source_after['crystal']) + int(source_after['fuel_cells'])
+    )
+    removed = source_total_before - source_total_after
+
+    cargo_total = 0
+    for fid in fleet_ids:
+        cur.execute('SELECT resources_json, status FROM fleet_movements WHERE id = ?;', (fid,))
+        row = cur.fetchone()
+        assert row['status'] == 'returning'
+        res = json.loads(row['resources_json'])
+        cargo_total += int(res.get('metal') or 0) + int(res.get('crystal') or 0) + int(res.get('fuel_cells') or 0)
+
+    assert removed > 0
+    assert cargo_total == removed
+    assert source_total_after >= 0
+
+    cur.execute('SELECT metal, crystal, fuel_cells FROM planets WHERE id = ?;', (hub,))
+    hub_before_return = dict(cur.fetchone())
+    now = time.time()
+    for fid in fleet_ids:
+        cur.execute(
+            "UPDATE fleet_movements SET return_at = ? WHERE id = ?;",
+            (now - 1, fid),
+        )
+    conn.commit()
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+
+    cur.execute('SELECT metal, crystal, fuel_cells FROM planets WHERE id = ?;', (hub,))
+    hub_after_return = dict(cur.fetchone())
+    hub_gain = (
+        (int(hub_after_return['metal']) - int(hub_before_return['metal']))
+        + (int(hub_after_return['crystal']) - int(hub_before_return['crystal']))
+        + (int(hub_after_return['fuel_cells']) - int(hub_before_return['fuel_cells']))
+    )
+    assert hub_gain == removed
+    conn.close()
+
+
+def test_logistics_distribute_hub_target_conservation(fleet_db):
+    """Distribute: hub debit at send equals target credit at arrival; cargo json cleared."""
+    conn = db()
+    uid = _player(conn=conn)
+    hub = int(get_planets_by_player(uid, conn=conn)[0]['id'])
+    target = _second_colony(uid, conn=conn)
+    cur = conn.cursor()
+    _fund_planet(cur, hub, metal=50000, crystal=10000, fuel_cells=50000)
+    _fund_planet(cur, target, metal=100, crystal=50)
+    _seed_ships(hub, uid, {'mule_courier': 2}, conn=conn)
+    conn.commit()
+
+    cur.execute('SELECT metal, crystal, fuel_cells FROM planets WHERE id = ?;', (hub,))
+    hub_before = dict(cur.fetchone())
+    cur.execute('SELECT metal, crystal, fuel_cells FROM planets WHERE id = ?;', (target,))
+    target_before = dict(cur.fetchone())
+    hub_total_before = sum(int(hub_before[k]) for k in ('metal', 'crystal', 'fuel_cells'))
+    target_total_before = sum(int(target_before[k]) for k in ('metal', 'crystal', 'fuel_cells'))
+
+    ok, _, payload = distribute_resources(
+        player_id=uid,
+        origin_planet_id=hub,
+        target_planet_ids=[target],
+        ships={'mule_courier': 1},
+        resources_mode='equal',
+        resources={'metal': 2500, 'crystal': 400, 'fuel_cells': 0},
+        conn=conn,
+    )
+    assert ok
+    fleet_id = int(payload['started'][0]['fleet_id'])
+    cur.execute('SELECT metal, crystal, fuel_cells FROM planets WHERE id = ?;', (hub,))
+    hub_after_send = dict(cur.fetchone())
+    hub_removed_at_send = hub_total_before - sum(
+        int(hub_after_send[k]) for k in ('metal', 'crystal', 'fuel_cells')
+    )
+    assert hub_removed_at_send > 0
+
+    _force_outbound_arrival(conn, fleet_id)
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+
+    cur.execute('SELECT resources_json, status FROM fleet_movements WHERE id = ?;', (fleet_id,))
+    mv = cur.fetchone()
+    assert mv['status'] == 'returning'
+    from game.fleet_calc import loaded_resource_total
+    assert loaded_resource_total(json.loads(mv['resources_json'])) == 0
+
+    cur.execute('SELECT metal, crystal, fuel_cells FROM planets WHERE id = ?;', (target,))
+    target_after = dict(cur.fetchone())
+    target_gained = sum(int(target_after[k]) for k in ('metal', 'crystal', 'fuel_cells')) - target_total_before
+    delivered = payload['started'][0]['resources']
+    delivered_total = sum(int(delivered.get(k) or 0) for k in ('metal', 'crystal', 'fuel_cells'))
+    assert target_gained == delivered_total
+    assert delivered_total > 0
+
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+    cur.execute('SELECT metal, crystal, fuel_cells FROM planets WHERE id = ?;', (target,))
+    target_twice = dict(cur.fetchone())
+    assert target_twice == target_after
+    conn.close()
+
+
 def test_logistics_distribute_rejects_over_cargo(fleet_db):
     conn = db()
     uid = _player(conn=conn)

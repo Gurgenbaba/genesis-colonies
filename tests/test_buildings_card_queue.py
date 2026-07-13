@@ -57,12 +57,13 @@ def test_gc747b_buildings_ssr_slimdown():
     refresh_body = src.split("async function refreshGameState(reason)")[1].split("GC.refreshGameState = refreshGameState")[0]
     assert "include_panel=1" not in refresh_body
     bind_tabs = src.split("function bindBuildingTabsOnce()")[1].split("function initBuildings()")[0]
-    subnav_block = bind_tabs.split("#gc-nav-buildings-sub")[1].split('.building-tabs .tab-btn')[0]
+    subnav_block = bind_tabs.split('[id$="nav-buildings-sub"]')[1].split('.building-tabs .tab-btn')[0]
     assert "GC.navigateTo(`/buildings?tab=" in subnav_block
     assert "activateBuildingTabByName(tab, subBtn)" not in subnav_block
     buildings_html = (ROOT / "templates" / "buildings.html").read_text(encoding="utf-8")
     assert "panel-resources" not in buildings_html
     assert 'render_building_table(rows_by_tab.get(active_tab' in buildings_html
+    assert 'id$="nav-buildings-sub"' in bind_tabs or '[id$="nav-buildings-sub"]' in bind_tabs
     css = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
     assert "Ferronit.webp" in css
     assert "Ferronit.png" not in css

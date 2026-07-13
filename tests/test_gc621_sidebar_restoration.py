@@ -120,6 +120,9 @@ def test_main_js_persists_sidebar_state_in_local_storage():
     assert "syncBuildingsSubnavFromState" in src
     assert "_clearSidebarNavActive" in src
     assert "syncBuildingSidebarTab(null)" in src
+    assert "buildingSubnavRoots" in src
+    assert 'id$="nav-buildings-sub"' in src
+    assert "resolveBuildingsActiveTab" in src
     assert "gc-nav-group-toggle" in src
     accordion = src.split("function syncNavSectionAccordionState", 1)[1].split("function applyDesktopSidebarNav", 1)[0]
     assert "hasActive" not in accordion

@@ -2996,28 +2996,6 @@ def _calculate_collect_load(
     return load_resources_up_to_cargo(available, remaining_cap)
 
 
-def _planet_resources_for_collect_load(planet_id: int, *, conn) -> Dict[str, int]:
-    """Tick target production, then return collectable resource amounts."""
-    lock_planet_for_update(conn, int(planet_id))
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),))
-    row = cur.fetchone()
-    if not row:
-        return {"metal": 0, "crystal": 0, "fuel_cells": 0}
-    from .resources import update_planet_resources
-
-    planet, *_rest = update_planet_resources(
-        dict(row),
-        conn=conn,
-        skip_queue_finish=True,
-    )
-    return {
-        "metal": max(0, int(float(planet.get("metal") or 0))),
-        "crystal": max(0, int(float(planet.get("crystal") or 0))),
-        "fuel_cells": max(0, int(float(planet.get("fuel_cells") or 0))),
-    }
-
-
 def _player_name(player_id: int, *, conn) -> str:
     cur = conn.cursor()
     cur.execute("SELECT name FROM players WHERE id = ? LIMIT 1;", (int(player_id),))
@@ -3798,6 +3776,11 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
     if mission == "transport":
         timing = _return_timing_from_now(movement, now=now)
         return_at = timing["return_at"]
+        delivery = calculate_loaded_resources(resources)
+        credited_target = False
+        if target_id and loaded_resource_total(delivery) > 0:
+            _credit_planet_resources(int(target_id), delivery, conn=conn)
+            credited_target = True
         claimed = _claim_movement_status(
             conn,
             movement_id,
@@ -3808,9 +3791,10 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
             extra_params=(return_at, _json_dumps({})),
         )
         if not claimed:
+            if credited_target and target_id:
+                _debit_planet_resources(int(target_id), delivery, conn=conn)
             return False
         if target_id:
-            _credit_planet_resources(int(target_id), resources, conn=conn)
             snapshot = _target_planet_snapshot(int(target_id), conn=conn)
             origin_id = int(movement["origin_planet_id"])
             cur = conn.cursor()
@@ -3931,8 +3915,21 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
             target_name = str(snapshot.get("planet_name") or "")
             owner_id = int(snapshot.get("owner_id") or 0)
             if owner_id == player_id:
-                available = _planet_resources_for_collect_load(int(target_id), conn=conn)
-                collected = _calculate_collect_load(available, remaining_cap)
+                from .resources import get_planet_resource_stock
+
+                available = get_planet_resource_stock(int(target_id), conn=conn)
+                proposed = _calculate_collect_load(available, remaining_cap)
+                if loaded_resource_total(proposed) > 0:
+                    if _debit_planet_resources(int(target_id), proposed, conn=conn):
+                        collected = proposed
+                    else:
+                        # Concurrent collect on same source: load only what debit allows.
+                        retry_available = get_planet_resource_stock(int(target_id), conn=conn)
+                        retry = _calculate_collect_load(retry_available, remaining_cap)
+                        if loaded_resource_total(retry) > 0 and _debit_planet_resources(
+                            int(target_id), retry, conn=conn
+                        ):
+                            collected = retry
 
         final_resources = calculate_loaded_resources(
             {
@@ -3951,10 +3948,9 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
             extra_params=(return_at, _json_dumps(final_resources)),
         )
         if not claimed:
+            if target_id and loaded_resource_total(collected) > 0:
+                _credit_planet_resources(int(target_id), collected, conn=conn)
             return False
-        if target_id and loaded_resource_total(collected) > 0:
-            if not _debit_planet_resources(int(target_id), collected, conn=conn):
-                collected = {"metal": 0, "crystal": 0, "fuel_cells": 0}
 
         origin_id = int(movement["origin_planet_id"])
         cur = conn.cursor()
@@ -4702,7 +4698,8 @@ def _handle_return(movement: Dict[str, Any], *, conn, now: float) -> bool:
     if not _complete_movement(movement_id, conn=conn, now=now, from_status="returning"):
         return False
     add_planet_ships(origin_id, player_id, ships, conn=conn)
-    _credit_planet_resources(origin_id, resources, conn=conn)
+    if loaded_resource_total(resources) > 0:
+        _credit_planet_resources(origin_id, resources, conn=conn)
     return True
 
 
