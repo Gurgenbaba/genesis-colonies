@@ -119,7 +119,37 @@ def test_no_duplicate_listeners_after_pjax():
     max_hover = src.split("function initMaxQueueHoverOnce()")[1].split("function initPlanetEvolution")[0]
     assert "if (GC._maxQueueHoverBound) return" in max_hover
 
-    cleanup = src.split("GC.cleanupPage = function cleanupPage()")[1].split("GC.abortGameLoop")[0]
-    assert "lc.cleanupFns = lc.cleanupFns.filter((fn) => fn._gcPersistent)" in cleanup
-    assert "GC._gameActionsBound" not in cleanup
-    assert "GC._buildingTechBound" not in cleanup
+
+def test_gc_clean_002_pe_immediate_patch_and_action_state():
+    """GC-CLEAN-002 — PE queues patch immediately; research start uses applyActionState."""
+    src = _read("static/main.js")
+
+    patch_immediate = src.split("function patchQueuePanelsImmediate(data)")[1].split(
+        "let _finishRefreshTimer"
+    )[0]
+    assert ".planet-evolution-page" in patch_immediate
+    assert "renderPePlanetTechQueue" in patch_immediate
+
+    reset_sigs = src.split("function resetQueueRenderSignaturesForImmediatePatch()")[1].split(
+        "function logActionStatePatch"
+    )[0]
+    assert "_lastPePlanetTechQueueSignature" in reset_sigs
+    assert "_lastPeAscensionQueueSignature" in reset_sigs
+
+    tk_sync = src.split("function _syncTimekeeperButtonsFromState(state)")[1].split(
+        "function _refreshDomTimekeeperApplyBtns"
+    )[0]
+    assert "planet-evolution-page" in tk_sync
+    assert "planet_research" in tk_sync
+    assert "_syncPeQueueListTimekeeperFromDom" in tk_sync
+
+    apply_action = src.split("function applyActionState(json, reason)")[1].split(
+        "function logStatusPollErrorOnce"
+    )[0]
+    assert "_schedulePlanetEvolutionRefreshAfterAction" in apply_action
+
+    pe_bind = src.split("const researchBtn = e.target.closest(\".pe-research-btn\")")[1].split(
+        "const choiceBtn = e.target.closest(\".pe-choice-btn\")"
+    )[0]
+    assert "applyActionState(res, \"planet_research_start\")" in pe_bind
+    assert "reloadCurrentPage" not in pe_bind

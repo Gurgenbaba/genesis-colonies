@@ -675,6 +675,8 @@
     _lastResearchQueueSignature = "";
     _lastShipyardQueueSignature = "";
     _lastDefenseQueueSignature = "";
+    _lastPePlanetTechQueueSignature = "";
+    _lastPeAscensionQueueSignature = "";
   }
 
   function logActionStatePatch(phase, reason, detail) {
@@ -1426,6 +1428,7 @@
 
     if (!isPlanetSwitch) {
       _finalizeTimekeeperQueueButtons(state);
+      _schedulePlanetEvolutionRefreshAfterAction(reasonStr);
       if (shouldPollGameState()) {
         GC.startPolling(anyActive || lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard);
       }
@@ -3674,6 +3677,21 @@
       patchDefensePanelFromGameState(data, activePlanetId);
       patched = true;
     }
+    const pePage = document.querySelector(".planet-evolution-page");
+    if (pePage) {
+      const peResearchRaw = _normalizePePlanetTechQueueRaw(
+        data.planet_research ?? data.planet_evolution?.research_ux ?? null
+      );
+      if (peResearchRaw) {
+        renderPePlanetTechQueue(peResearchRaw);
+        patched = true;
+      }
+      const peAscRaw = data.planet_evolution?.ascension_ux ?? data.ascension ?? null;
+      if (peAscRaw && (peAscRaw.card_jobs_by_owner || peAscRaw.summary || peAscRaw.queue)) {
+        renderPeAscensionQueue(peAscRaw);
+        patched = true;
+      }
+    }
     if (patched) {
       logActionStatePatch("queue owner map patched", "immediate", {
         build_owners: Object.keys(resolveCardJobsByOwner(buildQueueRaw)).length,
@@ -3681,6 +3699,7 @@
         buildings_panel: Boolean(buildingsPanel),
         shipyard: Boolean(data.shipyard || data.shipyard_queue),
         defense: Boolean(data.defense),
+        planet_evolution: Boolean(pePage),
       });
     }
     return patched;
@@ -7889,6 +7908,20 @@
         );
       }
     }
+    if (document.querySelector(".planet-evolution-page")) {
+      const peResearchRaw = _normalizePePlanetTechQueueRaw(
+        state.planet_research ?? state.planet_evolution?.research_ux ?? null
+      );
+      if (peResearchRaw) {
+        _syncTimekeeperFromCardJobsByOwner(
+          peResearchRaw,
+          (ownerKey) => document.querySelector(`[data-planet-tech-card][data-tech-key="${ownerKey}"]`),
+          "planet_research"
+        );
+      }
+      _syncPeQueueListTimekeeperFromDom("pe-planet-tech-queue-list", "planet_research");
+      _syncPeQueueListTimekeeperFromDom("pe-ascension-queue-list", "ascension");
+    }
     _syncMiniQueueTimekeeperFromState(state);
   }
 
@@ -8842,6 +8875,88 @@
   let _lastPePlanetTechQueueSignature = "";
   let _lastPeAscensionQueueSignature = "";
 
+  function _resolveActivePePlanetId() {
+    const page = document.querySelector(".planet-evolution-page");
+    const fromPage = Math.floor(Number(page?.dataset?.planetId || 0));
+    if (fromPage > 0) return fromPage;
+    return Math.floor(Number(GC.lastState?.active_planet_id || GC.getDomPlanetId?.() || 0));
+  }
+
+  function _normalizePePlanetTechQueueRaw(raw) {
+    if (!raw || typeof raw !== "object") return null;
+    if (raw.card_jobs_by_owner && (raw.queue_count != null || raw.summary)) {
+      return {
+        ...raw,
+        queue_count: raw.queue_count ?? raw.summary?.count ?? 0,
+        queue_limit: raw.queue_limit ?? raw.summary?.limit ?? 2,
+        card_jobs_by_owner: resolveCardJobsByOwner(raw),
+      };
+    }
+    const byOwner = resolveCardJobsByOwner(raw);
+    if (!Object.keys(byOwner).length && !Array.isArray(raw.queue)) return null;
+    return {
+      ...raw,
+      queue_count: raw.summary?.count ?? (Array.isArray(raw.queue) ? raw.queue.length : 0),
+      queue_limit: raw.queue_limit ?? raw.summary?.limit ?? 2,
+      card_jobs_by_owner: byOwner,
+    };
+  }
+
+  function _shouldRefreshPlanetEvolutionAfterAction(reasonStr) {
+    if (!document.querySelector(".planet-evolution-page")) return false;
+    const r = String(reasonStr || "");
+    if (r === "timekeeper_apply") return true;
+    if (r === "planet_research_start") return true;
+    if (r.startsWith("planet_research")) return true;
+    return false;
+  }
+
+  function _schedulePlanetEvolutionRefreshAfterAction(reasonStr) {
+    if (!_shouldRefreshPlanetEvolutionAfterAction(reasonStr)) return;
+    const pid = _resolveActivePePlanetId();
+    if (!pid) return;
+    void refreshPlanetEvolutionState(pid).then(() => {
+      if (GC.lastState && GC.lastState.ok !== false) {
+        _finalizeTimekeeperQueueButtons(GC.lastState);
+      }
+      GC.startProgressTicker();
+    });
+  }
+
+  function _syncPeQueueListTimekeeperFromDom(listId, domain) {
+    const listEl = document.getElementById(listId);
+    if (!listEl) return;
+    const now = getTimerServerNow();
+    listEl.querySelectorAll("[data-gc-card-queue][data-queue-active='1']").forEach((block) => {
+      const jobId = Math.floor(Number(block.dataset.jobId || 0));
+      if (jobId <= 0) return;
+      const finishAt = Math.floor(Number(block.dataset.finishAt || 0));
+      const total = Math.max(1, Math.floor(Number(block.dataset.totalSeconds || 1)));
+      const srvRemRaw = block.dataset.serverRemaining;
+      const rem = finishAt > 0
+        ? Math.max(
+          0,
+          Math.floor(
+            queueJobRemainingSeconds(
+              finishAt,
+              now,
+              srvRemRaw === undefined || srvRemRaw === "" ? NaN : Number(srvRemRaw)
+            )
+          )
+        )
+        : 0;
+      if (rem <= 0) return;
+      _syncTimekeeperApplyBtn(block, domain, {
+        is_active: true,
+        status: "active",
+        job_id: jobId,
+        finish_at: finishAt,
+        remaining_seconds: rem,
+        duration_seconds: total,
+      });
+    });
+  }
+
   function _pePlanetTechQueueSignature(rdx) {
     try {
       const count = rdx?.queue_count ?? 0;
@@ -8958,7 +9073,11 @@
   function patchPePlanetTechCardQueues(rdx) {
     const page = document.querySelector(".planet-evolution-page");
     if (!page) return;
-    _renderPeQueueList(document.getElementById("pe-planet-tech-queue-list"), rdx);
+    const byOwner = resolveCardJobsByOwner(rdx);
+    _renderPeQueueList(document.getElementById("pe-planet-tech-queue-list"), {
+      ...(rdx && typeof rdx === "object" ? rdx : {}),
+      card_jobs_by_owner: byOwner,
+    });
     page.querySelectorAll("[data-planet-tech-card] [data-gc-card-queue]").forEach((block) => block.remove());
   }
 
@@ -9034,6 +9153,9 @@
     const dash = payload.dashboard || {};
     if (dash.research_ux) renderPePlanetTechQueue(dash.research_ux);
     if (dash.ascension_ux) renderPeAscensionQueue(dash.ascension_ux);
+    if (GC.lastState && GC.lastState.ok !== false) {
+      _finalizeTimekeeperQueueButtons(GC.lastState);
+    }
     GC.startProgressTicker();
   }
 
@@ -24144,11 +24266,9 @@
         try {
           res = await postAction(`/api/planets/${planetId}/research/start`, { tech_key: techKey, request_id: requestId });
           if (res?.ok) {
-            _lastPePlanetTechQueueSignature = "";
-            if (typeof GC.reloadCurrentPage === "function") {
-              await GC.reloadCurrentPage({ force: true });
-            }
-            if (typeof GC.refreshGameState === "function") {
+            if (res.state && typeof applyActionState === "function") {
+              applyActionState(res, "planet_research_start");
+            } else if (typeof GC.refreshGameState === "function") {
               await GC.refreshGameState("planet_research_start");
             }
           } else showNotify(reasonText(res?.reason), "error");
