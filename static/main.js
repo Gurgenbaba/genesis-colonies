@@ -13690,41 +13690,35 @@
     const btnList = (Array.isArray(buttons) ? buttons : [buttons]).filter(Boolean);
     if (!btnList.length) return;
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), INVENTORY_ACTION_TIMEOUT_MS);
     btnList.forEach((btn) => lockInventoryActionBtn(btn));
 
+    let timeoutId = null;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => {
+        const err = new Error("inventory action timeout");
+        err.name = "AbortError";
+        reject(err);
+      }, INVENTORY_ACTION_TIMEOUT_MS);
+    });
+
     try {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Requested-With": "XMLHttpRequest",
-        },
-        body: JSON.stringify(payload),
-        credentials: "same-origin",
-        redirect: "manual",
-        signal: controller.signal,
-      });
-      const ct = (res.headers.get("content-type") || "").toLowerCase();
-      let json = {};
-      if (ct.includes("application/json")) {
-        try {
-          json = await res.json();
-        } catch (_) {}
-      }
-      if (res.status === 401 || res.status === 403 || json.error === "not_logged_in") {
-        if (typeof handleAuthFailure === "function") handleAuthFailure(`inventory-action-http-${res.status}`);
-        if (typeof throwAuthError === "function") throwAuthError();
-      }
+      const json = await Promise.race([
+        GC.fetchGameAction(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Requested-With": "XMLHttpRequest",
+          },
+          body: JSON.stringify(payload),
+        }),
+        timeoutPromise,
+      ]);
       if (!json || json.ok !== true) {
-        const reason = json?.reason || (res.status >= 500 ? "inventory_action_failed" : "generic");
+        const reason = json?.reason || "generic";
         const msg =
           json?.message ||
-          (res.status >= 500
-            ? t("inv_error_action_retry", "Inventar-Aktion fehlgeschlagen. Bitte erneut versuchen.")
-            : inventoryUseReasonText(reason));
-        console.warn("[GC] inventory action failed:", reason, res.status, json);
+          inventoryUseReasonText(reason);
+        console.warn("[GC] inventory action failed:", reason, json);
         showNotify(msg, "error");
         scrollInventoryToFeedback();
         patchInventoryDom(_inventoryLastState || parseInventoryPageState());
@@ -13743,7 +13737,7 @@
       scrollInventoryToFeedback();
       patchInventoryDom(_inventoryLastState || parseInventoryPageState());
     } finally {
-      clearTimeout(timeout);
+      if (timeoutId) clearTimeout(timeoutId);
       btnList.forEach((btn) => releaseInventoryActionBtn(btn));
     }
   }
@@ -16216,13 +16210,12 @@
       if (_allianceActionInFlight) return;
       _allianceActionInFlight = true;
       try {
-        const res = await fetch("/api/alliance/logo", {
+        const out = await GC.fetchGameAction("/api/alliance/logo", {
           method: "POST",
           credentials: "same-origin",
           headers: { "X-Requested-With": "XMLHttpRequest" },
           body: fd,
         });
-        const out = await res.json();
         if (out?.state) applyActionState(out, "alliance_logo_upload");
         if (out?.alliance) {
           const stateEl = document.getElementById("alliance-page-state");
@@ -23582,14 +23575,12 @@
       const wrap = select._gcHudSelect && select._gcHudSelect.wrap;
       if (trigger) trigger.disabled = true;
       try {
-        const res = await fetch(apiUrl, {
+        const data = await GC.fetchGameAction(apiUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json", Accept: "application/json" },
           body: JSON.stringify({ locale: loc }),
-          credentials: "same-origin",
         });
-        const data = await res.json().catch(() => null);
-        if (!res.ok || !data || data.ok !== true) {
+        if (!data || data.ok !== true) {
           console.warn("[GC] locale switch rejected", data && data.error);
           select.value = prev;
           syncHudSelect(select);
@@ -32813,13 +32804,11 @@
     pcSetLoading(true);
 
     try {
-      const res = await fetch("/api/player-card/me/avatar", {
+      const data = await GC.fetchGameAction("/api/player-card/me/avatar", {
         method: "POST",
-        credentials: "same-origin",
         headers: { "X-Requested-With": "XMLHttpRequest" },
         body: fd,
       });
-      const data = await res.json();
       pcSetLoading(false);
       if (!data.ok) {
         const key = data.reason || "playercard_avatar_upload_error";
@@ -32882,16 +32871,14 @@
     pcSetLoading(true);
 
     try {
-      const res = await fetch("/api/player-card/me", {
+      const data = await GC.fetchGameAction("/api/player-card/me", {
         method: "POST",
-        credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
           "X-Requested-With": "XMLHttpRequest",
         },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
       pcSetLoading(false);
       if (!data.ok) {
         const key = data.reason || "playercard_save_error";
