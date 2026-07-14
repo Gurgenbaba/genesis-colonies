@@ -5753,6 +5753,23 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   gap: 0.55rem;
   align-items: end;
 }
+.trader-hub-page .gc-trader-amount-input-row{
+  display: flex;
+  align-items: stretch;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.trader-hub-page .gc-trader-amount-input-row .gc-trader-input{
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.trader-hub-page .gc-trader-max-btn{
+  flex: 0 0 auto;
+  min-width: 2.75rem;
+  padding-inline: 0.45rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
 .trader-hub-page .gc-trader-field-label{
   display: block;
   margin-bottom: 0.35rem;

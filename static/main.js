@@ -1206,8 +1206,12 @@
   const GC_DEFER_WHATS_NEW_MS = 800;
 
   function scheduleDeferredChatBoot() {
-    if (GC._chatBootScheduled || GC._chatBootstrapDone) return;
     if (isAdminShellPage()) return;
+    if (GC._chatBootstrapDone) {
+      if (typeof GC.resumeChatPolling === "function") GC.resumeChatPolling();
+      return;
+    }
+    if (GC._chatBootScheduled) return;
     GC._chatBootScheduled = true;
     GC.setSafeTimeout(() => {
       if (!shouldRunGameLoop() || _authLoopAborted || isAdminShellPage()) return;
@@ -21549,6 +21553,7 @@
     const rateDisplayEl = panel.querySelector("[data-exchange-rate-display]");
     const giveTiles = panel.querySelectorAll("[data-exchange-give]");
     const receiveTiles = panel.querySelectorAll("[data-exchange-receive]");
+    const maxBtn = panel.querySelector("[data-exchange-max]");
     if (!form || !amountInput || !previewEl) return;
 
     const tt = (key, fallback) => t(key, fallback);
@@ -21686,6 +21691,66 @@
 
     const formatRate = (rate) => (rate >= 1 ? String(Math.round(rate)) : rate.toFixed(3).replace(/\.?0+$/, ""));
 
+    const readExchangeGiveBalance = (resource) => {
+      const ex = GC.lastState?.exchange;
+      if (ex?.balances && typeof ex.balances[resource] === "number") {
+        return Math.max(0, Math.floor(ex.balances[resource]));
+      }
+      const dsMap = {
+        metal: panel.dataset.balanceMetal,
+        crystal: panel.dataset.balanceCrystal,
+        fuel_cells: panel.dataset.balanceFuelCells,
+      };
+      const fromDs = parseIntNumber(dsMap[resource]);
+      if (Number.isFinite(fromDs) && fromDs >= 0) return fromDs;
+      const p = GC.lastState?.player || GC.lastState?.resources || {};
+      const fromPlayer = parseIntNumber(p[resource]);
+      if (Number.isFinite(fromPlayer) && fromPlayer >= 0) return fromPlayer;
+      return 0;
+    };
+
+    const readExchangeDailyRemaining = () => {
+      const ex = GC.lastState?.exchange;
+      if (typeof ex?.daily_remaining === "number") {
+        return Math.max(0, Math.floor(ex.daily_remaining));
+      }
+      const fromDs = parseIntNumber(panel.dataset.dailyRemaining);
+      if (Number.isFinite(fromDs) && fromDs >= 0) return fromDs;
+      const used = parseIntNumber(dailyUsedEl?.textContent);
+      const limit = parseIntNumber(dailyLimitEl?.textContent);
+      if (Number.isFinite(used) && Number.isFinite(limit) && limit >= 0) {
+        return Math.max(0, limit - used);
+      }
+      return 0;
+    };
+
+    const computeExchangeMaxInput = () => {
+      const dir = selectedDirection();
+      if (!ROUTES[dir]) return 0;
+      const { from } = routeParts(dir);
+      if (!from) return 0;
+      const balance = readExchangeGiveBalance(from);
+      const remaining = readExchangeDailyRemaining();
+      return Math.max(0, Math.min(balance, remaining));
+    };
+
+    const updateExchangeMaxBtn = () => {
+      if (!maxBtn) return;
+      const minNow = parseInt(panel.dataset.routeMin || String(minForRoute(selectedDirection())), 10);
+      const maxVal = computeExchangeMaxInput();
+      const enabled = maxVal > 0 && maxVal >= minNow && panel.dataset.disabled !== "1";
+      maxBtn.disabled = !enabled;
+      maxBtn.setAttribute("aria-disabled", enabled ? "false" : "true");
+    };
+
+    const applyExchangeMaxAmount = () => {
+      const maxVal = computeExchangeMaxInput();
+      if (maxVal <= 0) return;
+      setNumberInputValue(amountInput, maxVal);
+      amountInput.dispatchEvent(new Event("input", { bubbles: true }));
+      scheduleUpdatePreview();
+    };
+
     const setDirection = (dir) => {
       const next = ROUTES[dir] ? dir : "metal_to_crystal";
       panel.dataset.dir = next;
@@ -21701,6 +21766,7 @@
         setNumberInputValue(amountInput, minNow);
       }
       updatePreview();
+      updateExchangeMaxBtn();
     };
 
     const setResourcePair = (give, receive) => {
@@ -21736,6 +21802,7 @@
       if (receiveSummaryEl) {
         receiveSummaryEl.textContent = `${formatNumber(receive)} ${receiveLabel}`;
       }
+      updateExchangeMaxBtn();
     };
 
     const scheduleUpdatePreview = () => {
@@ -21753,6 +21820,20 @@
       }
       if (typeof exchange.daily_remaining === "number" && remainingEl) {
         remainingEl.textContent = fmtNumber(exchange.daily_remaining);
+      }
+      if (typeof exchange.daily_remaining === "number") {
+        panel.dataset.dailyRemaining = String(Math.max(0, Math.floor(exchange.daily_remaining)));
+      }
+      if (exchange.balances && typeof exchange.balances === "object") {
+        if (typeof exchange.balances.metal === "number") {
+          panel.dataset.balanceMetal = String(Math.max(0, Math.floor(exchange.balances.metal)));
+        }
+        if (typeof exchange.balances.crystal === "number") {
+          panel.dataset.balanceCrystal = String(Math.max(0, Math.floor(exchange.balances.crystal)));
+        }
+        if (typeof exchange.balances.fuel_cells === "number") {
+          panel.dataset.balanceFuelCells = String(Math.max(0, Math.floor(exchange.balances.fuel_cells)));
+        }
       }
       if (typeof exchange.daily_limit === "number" && dailyLimitEl) {
         dailyLimitEl.textContent = fmtNumber(exchange.daily_limit);
@@ -21786,6 +21867,7 @@
         panel.dataset.min = String(exchange.min_amount);
       }
       setDirection(selectedDirection());
+      updateExchangeMaxBtn();
     };
 
     if (!panel.dataset.exchangeBound) {
@@ -21817,6 +21899,11 @@
       amountInput.addEventListener("keyup", scheduleUpdatePreview);
       amountInput.addEventListener("paste", () => {
         scheduleUpdatePreview();
+      });
+      maxBtn?.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (maxBtn.disabled) return;
+        applyExchangeMaxAmount();
       });
 
       form.addEventListener("submit", async (e) => {
@@ -21876,11 +21963,13 @@
           }
         } finally {
           updatePreview();
+          updateExchangeMaxBtn();
         }
       });
     }
 
     panel._patchExchangeFromState = patchExchangeFromState;
+    panel._computeExchangeMaxInput = computeExchangeMaxInput;
     if (!amountInput.value) amountInput.value = String(minForRoute(selectedDirection()));
     setDirection(selectedDirection());
   }

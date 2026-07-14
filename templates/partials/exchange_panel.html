@@ -11,6 +11,14 @@
          data-fuel-min="{{ ex.fuel_min_units or 10 }}"
          data-min="{{ ex.min_amount or 100 }}"
          data-dir="{{ default_dir }}"
+         {% if ex.balances is defined %}
+         data-balance-metal="{{ ex.balances.metal|default(0) }}"
+         data-balance-crystal="{{ ex.balances.crystal|default(0) }}"
+         data-balance-fuel-cells="{{ ex.balances.fuel_cells|default(0) }}"
+         {% endif %}
+         {% if ex.daily_remaining is defined %}
+         data-daily-remaining="{{ ex.daily_remaining|default(0) }}"
+         {% endif %}
          aria-label="{{ T('exchange_title') }}">
   <div class="gc-panel-header">
     <div class="gc-panel-head-left">
@@ -71,13 +79,20 @@
     <div class="gc-trader-amount-row">
       <div class="gc-trader-amount-field">
         <label class="gc-trader-field-label" for="gc-exchange-amount">{{ T('exchange_amount_give', 'Amount to give')|upper }}</label>
-        <input type="text"
-               id="gc-exchange-amount"
-               class="gc-trader-input gc-exchange-input gc-num-input"
-               min="{{ ex.min_amount }}"
-               inputmode="numeric"
-               value="{{ ex.min_amount }}"
-               data-exchange-min="{{ ex.min_amount }}">
+        <div class="gc-trader-amount-input-row">
+          <input type="text"
+                 id="gc-exchange-amount"
+                 class="gc-trader-input gc-exchange-input gc-num-input"
+                 min="{{ ex.min_amount }}"
+                 inputmode="numeric"
+                 value="{{ ex.min_amount }}"
+                 data-exchange-min="{{ ex.min_amount }}">
+          <button type="button"
+                  class="gc-btn gc-btn-ghost gc-trader-max-btn"
+                  data-exchange-max
+                  disabled
+                  aria-label="{{ T('progression_btn_max_queue', 'MAX') }}">{{ T('progression_btn_max_queue', 'MAX') }}</button>
+        </div>
       </div>
       <span class="gc-trader-amount-arrow" aria-hidden="true">→</span>
       <div class="gc-trader-amount-field">
