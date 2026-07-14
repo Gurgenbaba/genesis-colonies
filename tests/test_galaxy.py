@@ -586,7 +586,17 @@ def test_galaxy_foreign_planet_fleet_shortcuts(galaxy_db, monkeypatch):
 
 
 def test_galaxy_empty_slot_shows_colonize_fleet_shortcut(galaxy_db, monkeypatch):
-    client, _uid = _galaxy_client(monkeypatch)
+    from game.db import commit
+    from game.fleet import add_planet_ships
+
+    client, uid = _galaxy_client(monkeypatch)
+    planet = get_planets_by_player(uid)[0]
+    conn = db()
+    try:
+        add_planet_ships(int(planet["id"]), uid, {"seed_ark": 1}, conn=conn)
+        commit(conn)
+    finally:
+        conn.close()
     resp = client.get("/galaxy?view=system&galaxy=1&system=499")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)

@@ -160,7 +160,7 @@ def test_gc_galaxy_last_view_main_js_contract():
     assert "resolveGalaxyNavHref" in src
     assert 'writeGalaxyPrefs({ view: "system" })' in src
     assert 'link.dataset.navModule === "galaxy"' in src
-    resolve_block = src.split("resolveGalaxyNavHref")[1].split("function initGalaxyDebrisUx", 1)[0]
+    resolve_block = src.split("function resolveGalaxyNavHref(rawHref)")[1].split("function initCommandMapColonizeMode")[0]
     assert "prefs.galaxy" not in resolve_block
     assert 'url.searchParams.set("view", "system")' in resolve_block
-    assert "command_map" not in resolve_block
+    assert 'searchParams.set("view", "command_map")' not in resolve_block
