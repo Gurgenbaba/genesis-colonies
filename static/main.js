@@ -2014,8 +2014,13 @@
       return Promise.resolve();
     }
     const target = `${window.location.pathname || "/"}${window.location.search || ""}`;
+    const navOpts = { push: false, force: true, ...(opts || {}) };
+    if (navOpts.skipPolling) {
+      navOpts.preserveGameLoop = navOpts.preserveGameLoop !== false;
+      console.debug("[GC] PJAX light reload", target);
+    }
     if (typeof GC.navigateTo === "function") {
-      return GC.navigateTo(target, { push: false, force: true, ...(opts || {}) });
+      return GC.navigateTo(target, navOpts);
     }
     window.location.reload();
     return Promise.resolve();
@@ -24731,6 +24736,53 @@
     });
   }
 
+  function collectGalaxyPrefetchHrefs(scope) {
+    const root = scope && scope.querySelectorAll ? scope : document;
+    const urls = new Set();
+    root.querySelectorAll('a[href*="/galaxy"], a.gc-galaxy-coord-link[href]').forEach((link) => {
+      if (!link.href) return;
+      try {
+        const u = new URL(link.href, window.location.origin);
+        const href = `${u.pathname}${u.search}`;
+        if (isGalaxySystemPjaxUrl(href)) urls.add(href);
+      } catch (_) {}
+    });
+    return urls;
+  }
+
+  function prefetchGalaxyNavHints(scope) {
+    if (!shouldRunGameLoop()) return;
+    collectGalaxyPrefetchHrefs(scope).forEach((href) => prefetchGalaxyHref(href));
+  }
+
+  function initGalaxyPrefetchHints() {
+    if (GC._galaxyPrefetchHintsBound) return;
+    GC._galaxyPrefetchHintsBound = true;
+
+    const scheduleBootPrefetch = () => prefetchGalaxyNavHints(document);
+    if (typeof requestIdleCallback === "function") {
+      requestIdleCallback(scheduleBootPrefetch, { timeout: 3000 });
+    } else {
+      setTimeout(scheduleBootPrefetch, 1500);
+    }
+
+    document.addEventListener(
+      "mouseover",
+      (e) => {
+        const link = e.target.closest('a[href*="/galaxy"], a.gc-galaxy-coord-link[href]');
+        if (!link || !link.href) return;
+        try {
+          const u = new URL(link.href, window.location.origin);
+          const href = `${u.pathname}${u.search}`;
+          if (isGalaxySystemPjaxUrl(href)) prefetchGalaxyHref(href);
+        } catch (_) {}
+      },
+      { passive: true }
+    );
+  }
+
+  GC.prefetchGalaxyNavHints = prefetchGalaxyNavHints;
+
   GC.invalidateGalaxyPjaxCache = invalidateGalaxyPjaxCache;
   GC.warmGalaxyRingImages = warmGalaxyRingImages;
 
@@ -33352,6 +33404,7 @@
     initCardRequirementsHoverOnce();
     initMaxQueueHoverOnce();
     initVisibilityPolling();
+    initGalaxyPrefetchHints();
     initNotificationSounds();
     initMilitaryUnitCostPreviewDelegation();
     bootstrapPlanetLandscapeFromBoot();

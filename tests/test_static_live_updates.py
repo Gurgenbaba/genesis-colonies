@@ -300,6 +300,9 @@ def test_main_js_galaxy_prefetch_on_init():
     src = _read("static/main.js")
     assert "GC.modules.galaxy = initGalaxy" in src
     assert "prefetchGalaxyAdjacent" in src
+    assert "initGalaxyPrefetchHints" in src
+    assert "prefetchGalaxyNavHints" in src
+    assert "initGalaxyPrefetchHints();" in src.split("function initShellOnce()")[1].split("function init")[0]
     assert 'path.endsWith("/galaxy")' in src
     assert "bindGalaxyKeyboardOnce" not in src
 
@@ -479,6 +482,7 @@ def test_main_js_gc802_planet_switch_state_sync():
     assert "hudOnly: isPlanetSwitch" in planet_switch_apply
     assert "skipHydrate: true" in switch_section
     assert "skipGameState: true" in switch_section
+    assert "preserveGameLoop" in src.split("GC.reloadCurrentPage = function reloadCurrentPage")[1].split("function hydratePageFromLastState", 1)[0]
     assert 'refreshGameState("planet_switch")' not in switch_section
     assert "bootstrapResourceLiveFromDom()" in switch_section
     action_body = src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]
@@ -512,11 +516,12 @@ def test_main_js_gc742_ssr_skip_init_game_state():
     assert "skipHydrate: opts.skipHydrate !== false" in pjax_apply
     assert "pjax: true" in pjax_apply
     assert "return afterInit()" in src.split("GC.initPage = function initPage(opts)")[1].split("GC.stopPolling = function stopPolling")[0]
-    cleanup = src.split("GC.cleanupPage = function cleanupPage()")[1].split("GC.requestFrame = function requestFrame")[0]
+    cleanup = src.split("GC.cleanupPage = function cleanupPage(opts = {})")[1].split("GC.requestFrame = function requestFrame")[0]
     assert "preserveShell" not in cleanup
+    assert "preserveGameLoop" in cleanup
     assert "abortInFlightGameStateFetches()" in cleanup
     assert "_preservePollingOnCleanup" not in cleanup
-    assert "GC.cleanupPage();" in pjax_apply
+    assert "GC.cleanupPage({ preserveGameLoop:" in pjax_apply
     abort_fn = src.split("function abortInFlightGameStateFetches()")[1].split("let _planetPageReloadPromise")[0]
     assert "_activeRefreshFlightResolve" in abort_fn
     assert "GC.refreshInFlight = null" in abort_fn
