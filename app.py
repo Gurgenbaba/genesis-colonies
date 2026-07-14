@@ -7117,7 +7117,7 @@ def api_status():
 @app.route("/api/notifications/summary")
 @require_login
 def api_notifications_summary():
-    """Lightweight ~1s client heartbeat — unread + attack alerts only (no queue finish)."""
+    """Lightweight notification heartbeat — unread + attack alerts only (no queue finish)."""
     user_id = int(session.get("user_id") or 0)
     if not user_id:
         return jsonify({"ok": False, "error": "not_logged_in"}), 401

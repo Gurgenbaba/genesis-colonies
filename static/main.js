@@ -1555,6 +1555,7 @@
       _fleetHudActionVersion = 0;
       _lastAppliedNotificationRevision = null;
       _lastFleetAlertsHudSig = "";
+      _lastGameStateNotificationAt = 0;
       _gameStateFetchAppliedSeq = 0;
       if (typeof syncFleetVacationNotice === "function") {
         syncFleetVacationNotice({});
@@ -2180,8 +2181,9 @@
   GC.abortGameLoop = handleAuthFailure;
   GC.scheduleAuthSessionRecovery = scheduleAuthSessionRecovery;
 
-  const NOTIFICATION_POLL_MS = 1000;
-  const NOTIFICATION_POLL_HIDDEN_MS = 5000;
+  const NOTIFICATION_POLL_MS = 12000;
+  const NOTIFICATION_POLL_HIDDEN_MS = 20000;
+  const NOTIFICATION_GAME_STATE_DEDUP_MS = 5500;
   const _notificationPoll = {
     running: false,
     timeoutId: null,
@@ -2190,6 +2192,41 @@
   };
   let _lastAppliedNotificationRevision = null;
   let _lastFleetAlertsHudSig = "";
+  let _lastGameStateNotificationAt = 0;
+
+  function notificationRevisionFromHud(data) {
+    if (!data || typeof data !== "object") return "";
+    if (data.notification_revision != null && data.notification_revision !== "") {
+      return String(data.notification_revision);
+    }
+    const hasUnread = typeof data.unread_messages_count === "number";
+    const hasAlerts = data.fleet_alerts !== undefined;
+    if (!hasUnread && !hasAlerts) return "";
+    const unread = Math.max(0, Number(data.unread_messages_count) || 0);
+    const latest = Number(data.latest_message_id) || 0;
+    const alertKey = String(data.fleet_alerts?.alert_key || "");
+    return `${unread}:${latest}:${alertKey}`;
+  }
+
+  function markNotificationFreshFromGameState(data) {
+    if (!data || typeof data !== "object") return;
+    const hasNotif =
+      typeof data.unread_messages_count === "number"
+      || data.fleet_alerts !== undefined
+      || data.notification_revision != null;
+    if (!hasNotif) return;
+    const rev = notificationRevisionFromHud(data);
+    if (rev) _lastAppliedNotificationRevision = rev;
+    _lastGameStateNotificationAt = Date.now();
+  }
+
+  function shouldSkipNotificationPollFetch() {
+    if (!_lastGameStateNotificationAt) return false;
+    const gsFresh = Date.now() - _lastGameStateNotificationAt;
+    const gameStateInterval = Number(GC.polling?.lastInterval) || 5000;
+    const dedupMs = Math.max(NOTIFICATION_GAME_STATE_DEDUP_MS, gameStateInterval + 500);
+    return gsFresh >= 0 && gsFresh < dedupMs;
+  }
 
   function stopNotificationPoll() {
     const n = _notificationPoll;
@@ -2263,6 +2300,11 @@
       }
       if (n.inFlight) {
         scheduleNotificationPoll(ms);
+        return;
+      }
+      if (shouldSkipNotificationPollFetch()) {
+        const next = document.hidden ? NOTIFICATION_POLL_HIDDEN_MS : NOTIFICATION_POLL_MS;
+        scheduleNotificationPoll(next);
         return;
       }
       const ctrl = new AbortController();
@@ -12380,6 +12422,8 @@
     if (data.global_queue_hud !== undefined || data.build_queue !== undefined) {
       renderGlobalQueueHud(data.global_queue_hud || data);
     }
+
+    markNotificationFreshFromGameState(data);
   }
 
   GC.patchShellHudFromState = patchShellHudFromState;

@@ -2346,9 +2346,13 @@ def test_main_js_imperial_directive_expire_timer_targets_label_only():
 
 
 def test_main_js_notification_poll_singleton_heartbeat():
-    """Lightweight ~1s notification poll — unread/attack only, no full game-state."""
+    """Lightweight notification poll — unread/attack only, deduped against game-state."""
     src = _read("static/main.js")
-    assert "const NOTIFICATION_POLL_MS = 1000" in src
+    assert "const NOTIFICATION_POLL_MS = 12000" in src
+    assert "const NOTIFICATION_POLL_HIDDEN_MS = 20000" in src
+    assert "NOTIFICATION_GAME_STATE_DEDUP_MS" in src
+    assert "shouldSkipNotificationPollFetch" in src
+    assert "markNotificationFreshFromGameState" in src
     assert '"/api/notifications/summary"' in src
     assert "function applyNotificationSummary(data, reason)" in src
     assert "GC.startNotificationPoll" in src
