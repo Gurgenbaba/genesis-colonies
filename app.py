@@ -6667,18 +6667,20 @@ def _payload_from_live_context(
     try:
         from game.live_state import imperial_directives_for_game_state
 
-        payload["imperial_directives"] = imperial_directives_for_game_state(user_id, conn=conn)
+        if not lightweight:
+            payload["imperial_directives"] = imperial_directives_for_game_state(user_id, conn=conn)
     except Exception:
-        payload["imperial_directives"] = {
-            "ready": False,
-            "daily_completed": 0,
-            "daily_total": 0,
-            "weekly_completed": 0,
-            "weekly_total": 0,
-            "claimable_count": 0,
-            "daily_reset_at": 0,
-            "weekly_reset_at": 0,
-        }
+        if not lightweight:
+            payload["imperial_directives"] = {
+                "ready": False,
+                "daily_completed": 0,
+                "daily_total": 0,
+                "weekly_completed": 0,
+                "weekly_total": 0,
+                "claimable_count": 0,
+                "daily_reset_at": 0,
+                "weekly_reset_at": 0,
+            }
 
     try:
         from game.live_state import fleet_hud_for_game_state
@@ -6796,23 +6798,25 @@ def _payload_from_live_context(
     try:
         from game.galaxy import get_relocation_client_state, relocation_schema_ready
 
-        if relocation_schema_ready(conn):
+        if not lightweight and relocation_schema_ready(conn):
             payload["planet_relocation"] = get_relocation_client_state(
                 int(active_planet_id),
                 conn=conn,
                 now=time.time(),
             )
-        else:
+        elif not lightweight:
             payload["planet_relocation"] = {"active": False, "can_start": False}
     except Exception:
-        payload["planet_relocation"] = {"active": False, "can_start": False}
+        if not lightweight:
+            payload["planet_relocation"] = {"active": False, "can_start": False}
 
-    try:
-        from game.galaxy import player_has_seed_ark
+    if not lightweight:
+        try:
+            from game.galaxy import player_has_seed_ark
 
-        payload["has_seed_ark"] = player_has_seed_ark(user_id, conn=conn)
-    except Exception:
-        payload["has_seed_ark"] = False
+            payload["has_seed_ark"] = player_has_seed_ark(user_id, conn=conn)
+        except Exception:
+            payload["has_seed_ark"] = False
 
     if include_panel:
         try:
@@ -6900,15 +6904,16 @@ def _payload_from_live_context(
         except Exception:
             payload["planet_teaser"] = {"visible": False}
 
-    try:
-        from game.codex import codex_for_game_state
+    if not lightweight:
+        try:
+            from game.codex import codex_for_game_state
 
-        payload["codex"] = codex_for_game_state(user_id, conn=conn)
-    except Exception:
-        import logging
+            payload["codex"] = codex_for_game_state(user_id, conn=conn)
+        except Exception:
+            import logging
 
-        logging.getLogger(__name__).exception("[GC CODEX] game-state payload failed")
-        payload["codex"] = {"ok": False, "catalog": {"catalog_ready": False, "article_count": 0, "category_count": 0}}
+            logging.getLogger(__name__).exception("[GC CODEX] game-state payload failed")
+            payload["codex"] = {"ok": False, "catalog": {"catalog_ready": False, "article_count": 0, "category_count": 0}}
 
     if own_conn and conn is not None:
         conn.close()

@@ -8,7 +8,7 @@ import logging
 import random
 import time
 from contextvars import ContextVar
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -668,23 +668,178 @@ def notification_summary_for_client(user_id: int, *, conn) -> Dict[str, Any]:
     return attach_canonical_server_time(payload)
 
 
+_ACTIVE_PLANET_POLL_KEYS = (
+    "planet_id",
+    "name",
+    "is_homeworld",
+    "empire_role_key",
+    "empire_role_icon",
+    "empire_identity_key",
+    "planet_class",
+    "planet_class_label_key",
+    "coordinates_formatted",
+    "position",
+    "landscape_url",
+    "landscape_webp_url",
+    "herocard_url",
+    "herocard_webp_url",
+    "herocard_webp_srcset",
+    "herocard_webp_sizes",
+    "accent_color",
+    "secondary_color",
+    "glow_color",
+    "planet_effect",
+    "theme_key",
+    "theme_group",
+    "slot_label_key",
+)
+
+_PLANET_SWITCHER_POLL_KEYS = (
+    "planet_id",
+    "name",
+    "is_homeworld",
+    "is_active",
+    "planet_class",
+    "planet_class_label_key",
+    "coordinates_formatted",
+    "position",
+    "empire_role_key",
+    "empire_role_icon",
+    "empire_identity_key",
+)
+
+_FLEET_DRAWER_ITEM_POLL_KEYS = (
+    "id",
+    "movement_id",
+    "mission",
+    "mission_type",
+    "mission_label_key",
+    "status",
+    "status_label",
+    "phase",
+    "leg_phase",
+    "leg_label_key",
+    "origin_name",
+    "origin_coords",
+    "target_name",
+    "target_coords",
+    "ship_count",
+    "ships_breakdown",
+    "loaded_resources",
+    "total_seconds",
+    "duration_seconds",
+    "flight_seconds",
+    "progress_pct",
+    "remaining_seconds",
+    "arrival_at",
+    "return_at",
+    "departure_at",
+    "started_at",
+    "holding_until",
+    "can_recall",
+    "can_cancel",
+    "action_label_key",
+    "cancel_reason",
+)
+
+
+def active_planet_poll_slice(active_planet: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """GC-PERF-005: shell poll — landscape/theme/switcher fields only."""
+    if not isinstance(active_planet, dict):
+        return {}
+    return {k: active_planet[k] for k in _ACTIVE_PLANET_POLL_KEYS if k in active_planet}
+
+
+def planets_poll_slice(planets: Optional[Any]) -> List[Dict[str, Any]]:
+    if not isinstance(planets, list):
+        return []
+    out: List[Dict[str, Any]] = []
+    for row in planets:
+        if not isinstance(row, dict):
+            continue
+        slim = {k: row[k] for k in _PLANET_SWITCHER_POLL_KEYS if k in row}
+        if slim:
+            out.append(slim)
+    return out
+
+
+def active_fleet_item_poll_slice(item: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    if not isinstance(item, dict):
+        return {}
+    slim = {k: item[k] for k in _FLEET_DRAWER_ITEM_POLL_KEYS if k in item}
+    if "movement_id" not in slim and "id" in slim:
+        slim["movement_id"] = slim["id"]
+    return slim
+
+
+def active_fleets_poll_slice(active_fleets: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    if not isinstance(active_fleets, dict):
+        return {
+            "count": 0,
+            "active_fleet_count": 0,
+            "fleets_confirmed_empty": True,
+            "visible_limit": 1,
+            "next_remaining_seconds": 0,
+            "items": [],
+        }
+    items = [
+        active_fleet_item_poll_slice(row)
+        for row in (active_fleets.get("items") or [])
+        if isinstance(row, dict)
+    ]
+    return {
+        "count": int(active_fleets.get("count") or len(items) or 0),
+        "active_fleet_count": int(active_fleets.get("active_fleet_count") or len(items) or 0),
+        "fleets_confirmed_empty": bool(active_fleets.get("fleets_confirmed_empty", len(items) == 0)),
+        "visible_limit": max(1, int(active_fleets.get("visible_limit") or 1)),
+        "next_remaining_seconds": max(0, int(active_fleets.get("next_remaining_seconds") or 0)),
+        "items": items,
+    }
+
+
 def apply_lightweight_game_state_diet(payload: Dict[str, Any]) -> Dict[str, Any]:
     """
-    GC-747 / GC-802: normal poll diet — keep shell HUD slices, drop page-catalog blocks.
+    GC-747 / GC-802 / GC-PERF-005: normal poll diet — shell HUD only.
 
-    Keeps: planet_limit, planets (switcher), active_planet (+ sidebar_nav for role nav),
-    active_fleets, fleet_slots, fleet_alerts, account_safety (vacation HUD).
-    Drops: player_stats, building_queue, research_queue, planet_teaser, research.techs.
+    Keeps: resources, queues, fleet HUD, switcher planets, score, nav badges.
+    Drops: page catalogs, codex, buildings map, relocation, heavy fleet rows.
     """
     for key in (
         "player_stats",
         "building_queue",
         "research_queue",
         "planet_teaser",
+        "buildings",
+        "codex",
+        "imperial_directives",
+        "planet_relocation",
+        "has_seed_ark",
     ):
         payload.pop(key, None)
+
+    resources = payload.get("resources")
+    if isinstance(resources, dict) and "storage" in resources and "storage" in payload:
+        resources = dict(resources)
+        resources.pop("storage", None)
+        payload["resources"] = resources
+
     if "research" in payload:
         payload["research"] = research_poll_slice(payload.get("research"))
+
+    if "active_planet" in payload:
+        payload["active_planet"] = active_planet_poll_slice(payload.get("active_planet"))
+
+    if "planets" in payload:
+        payload["planets"] = planets_poll_slice(payload.get("planets"))
+
+    if "active_fleets" in payload:
+        payload["active_fleets"] = active_fleets_poll_slice(payload.get("active_fleets"))
+
+    unread = payload.get("unread_messages_count")
+    latest = payload.get("latest_message_id")
+    alert_key = str((payload.get("fleet_alerts") or {}).get("alert_key") or "")
+    payload["notification_revision"] = f"{max(0, int(unread or 0))}:{int(latest or 0) if latest else 0}:{alert_key}"
+
     return payload
 
 

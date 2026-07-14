@@ -306,6 +306,8 @@ def test_api_game_state_poll_is_lightweight(game_client):
     assert "player" in body
     assert "build_queue" in body
     assert "unread_messages_count" in body
+    assert "buildings" not in body
+    assert "codex" not in body
     assert "buildings_panel" not in body
     assert "exchange" not in body
     assert "fuel_exchange" not in body
@@ -334,7 +336,7 @@ def test_api_game_state_poll_is_diet_gc747(game_client):
     assert "techs" not in research
     assert "queue" in research
     assert "summary" in research
-    assert "buildings" in body
+    assert "buildings" not in body
     assert "production_per_hour" in body
     assert isinstance(body.get("planets"), list)
     assert len(body["planets"]) >= 1
@@ -345,13 +347,19 @@ def test_api_game_state_poll_is_diet_gc747(game_client):
     assert "building_queue" not in body
     assert "research_queue" not in body
     assert "planet_teaser" not in body
+    assert "buildings" not in body
+    assert "codex" not in body
+    assert "imperial_directives" not in body
+    assert "planet_relocation" not in body
     assert "exchange" not in body
     assert "scrapyard" not in body
     assert "buildings_panel" not in body
     assert "score" in body
     ap = body.get("active_planet") or {}
     assert ap.get("planet_id")
-    assert "sidebar_nav" in ap
+    assert "sidebar_nav" not in ap
+    assert ap.get("empire_role_key") or ap.get("is_homeworld") is not None
+    assert body.get("notification_revision")
     raw = client.get("/api/game-state").get_data(as_text=True)
     assert len(raw) < 16000
 
