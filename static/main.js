@@ -14,6 +14,9 @@
   if (typeof window !== "undefined" && window.GC_CLIENT_CONFIG?.action_perf_debug) {
     window.GC_PERF_DEBUG = true;
   }
+  if (typeof window !== "undefined" && window.GC_CLIENT_CONFIG?.nav_perf_debug) {
+    window.GC_NAV_PERF_DEBUG = true;
+  }
 
   // =========================
   // i18n helpers
@@ -30564,11 +30567,14 @@
 
   async function applyPjaxPayload(url, payload, doc, opts = {}) {
     const push = opts.push !== false;
+    const navPerf = _navPerfSession;
     GC.cleanupPage({ preserveGameLoop: Boolean(opts.preserveGameLoop) });
     preserveFleetHudAcrossNavigation();
     const main = document.getElementById("main-content");
     if (!main) throw new Error("main-content missing");
+    const swapT0 = navPerf ? performance.now() : 0;
     main.innerHTML = payload.mainHtml;
+    if (navPerf) navPerf.swapEndAt = performance.now();
     if (!opts.skipLcpPreload) {
       syncLcpHeroPreload(resolveLcpHeroImageUrl(main));
     }
@@ -30605,6 +30611,7 @@
       skipGameState: Boolean(opts.skipGameState),
       skipPolling: Boolean(opts.skipPolling),
     });
+    if (_navPerfSession) _navPerfSession.initEndAt = performance.now();
     preserveFleetHudAcrossNavigation();
     if (document.querySelector(".galaxy-page")) prefetchGalaxyAdjacent();
   }
@@ -30698,6 +30705,96 @@
     return true;
   }
 
+  let _navPerfSession = null;
+  let _navPerfFetchWrapped = false;
+
+  function isNavPerfDebug() {
+    return window.GC_NAV_PERF_DEBUG === true;
+  }
+
+  function _navPerfRequestKind(url, init) {
+    const raw = String(url || "");
+    if (raw.includes("/api/game-state")) return "game-state";
+    if (raw.includes("/api/planets/") && raw.includes("/state")) return "planet-state";
+    if (raw.includes("/api/notifications")) return "notifications";
+    if (raw.includes("/galaxy")) return "galaxy";
+    const headers = init && init.headers;
+    if (headers) {
+      const pjaxHdr = headers["X-PJAX"] || headers["x-pjax"];
+      if (String(pjaxHdr || "").trim()) return "pjax";
+    }
+    if (String(init?.headers?.Accept || "").includes("text/html")) return "html";
+    return "fetch";
+  }
+
+  function ensureNavPerfFetchHook() {
+    if (_navPerfFetchWrapped || !isNavPerfDebug()) return;
+    _navPerfFetchWrapped = true;
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = function navPerfFetchWrap(input, init) {
+      const session = _navPerfSession;
+      if (session) {
+        const url = typeof input === "string" ? input : input?.url || "";
+        const started = performance.now();
+        const entry = {
+          url: String(url).slice(0, 240),
+          kind: _navPerfRequestKind(url, init),
+          offset_ms: Math.round(started - session.clickAt),
+          t0: started,
+        };
+        session.concurrent.push(entry);
+        return nativeFetch(input, init).then((res) => {
+          entry.duration_ms = Math.round(performance.now() - entry.t0);
+          entry.status = res.status;
+          return res;
+        }).catch((err) => {
+          entry.duration_ms = Math.round(performance.now() - entry.t0);
+          entry.error = String(err?.message || err);
+          throw err;
+        });
+      }
+      return nativeFetch(input, init);
+    };
+  }
+
+  function beginNavPerf(fromPath, toUrl) {
+    if (!isNavPerfDebug()) return;
+    ensureNavPerfFetchHook();
+    _navPerfSession = {
+      from: String(fromPath || ""),
+      to: normalizePjaxUrl(toUrl),
+      clickAt: performance.now(),
+      fetchStartAt: 0,
+      fetchEndAt: 0,
+      parseEndAt: 0,
+      swapEndAt: 0,
+      initEndAt: 0,
+      concurrent: [],
+      cached: false,
+    };
+  }
+
+  function finishNavPerf(extra) {
+    if (!_navPerfSession || !isNavPerfDebug()) return;
+    const s = _navPerfSession;
+    const round = (v) => (Number.isFinite(v) ? Math.round(v) : null);
+    const payload = {
+      from: s.from,
+      to: s.to,
+      cached: Boolean(s.cached),
+      click_to_fetch_start_ms: s.fetchStartAt ? round(s.fetchStartAt - s.clickAt) : null,
+      fetch_ms: s.fetchEndAt && s.fetchStartAt ? round(s.fetchEndAt - s.fetchStartAt) : null,
+      parse_ms: s.parseEndAt && s.fetchEndAt ? round(s.parseEndAt - s.fetchEndAt) : null,
+      swap_ms: s.swapEndAt && s.parseEndAt ? round(s.swapEndAt - s.parseEndAt) : null,
+      init_ms: s.initEndAt && s.swapEndAt ? round(s.initEndAt - s.swapEndAt) : null,
+      total_navigation_ms: round(performance.now() - s.clickAt),
+      concurrent_requests: s.concurrent,
+    };
+    if (extra && typeof extra === "object") Object.assign(payload, extra);
+    console.info("[GC NAV PERF]", payload);
+    _navPerfSession = null;
+  }
+
   GC.navigateTo = async function navigateTo(url, opts = {}) {
     if (isBuildingsTabOnlyNavigation(url)) {
       opts = { skipGameState: true, skipPolling: true, preserveGameLoop: true, skipLcpPreload: true, ...opts };
@@ -30748,6 +30845,7 @@
     const nav = beginPjaxNavigation(url, target);
     const navId = nav.id;
     const ctrl = nav.controller;
+    beginNavPerf(current, target);
 
     nav.promise = (async () => {
       let fetchTimeout = null;
@@ -30755,6 +30853,10 @@
       try {
         const cached = !opts.force && isGalaxySystemPjaxUrl(target) ? getGalaxyPjaxCached(target) : null;
         if (cached) {
+          if (_navPerfSession) {
+            _navPerfSession.cached = true;
+            _navPerfSession.parseEndAt = performance.now();
+          }
           await applyPjaxPayload(url, cached, null, { ...opts, push });
           return;
         }
@@ -30770,6 +30872,7 @@
         nav.fetchTimeoutId = fetchTimeoutId;
 
         const fetchSignal = mergeAbortSignals([ctrl.signal, fetchTimeout.signal]);
+        if (_navPerfSession) _navPerfSession.fetchStartAt = performance.now();
         const res = await fetch(url, {
           credentials: "same-origin",
           cache: isGalaxySystemPjaxUrl(target) ? "default" : "no-store",
@@ -30780,6 +30883,7 @@
             Accept: "text/html",
           },
         });
+        if (_navPerfSession) _navPerfSession.fetchEndAt = performance.now();
         if (fetchTimeoutId) {
           clearTimeout(fetchTimeoutId);
           fetchTimeoutId = null;
@@ -30788,6 +30892,7 @@
         if (_activePjaxNavigation?.id !== navId) return;
         if (!res.ok) throw new Error(`PJAX ${res.status}`);
         const html = await res.text();
+        if (_navPerfSession) _navPerfSession.parseEndAt = performance.now();
         if (_activePjaxNavigation?.id !== navId) return;
         const doc = new DOMParser().parseFromString(html, "text/html");
         const payload = pjaxPayloadFromDoc(doc);
@@ -30825,6 +30930,7 @@
           finishPjaxNavigation(nav);
         }
         if (GC.pjaxInFlight === nav.promise) GC.pjaxInFlight = null;
+        finishNavPerf({ skip_game_state: Boolean(opts.skipGameState), skip_polling: Boolean(opts.skipPolling) });
       }
     })();
 

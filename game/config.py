@@ -188,6 +188,12 @@ def is_action_perf_debug_enabled() -> bool:
     return str(val).strip().lower() in ("1", "true", "yes", "on")
 
 
+def is_nav_perf_debug_enabled() -> bool:
+    """GC-PERF-002: browser PJAX navigation timing (console, debug only)."""
+    val = os.environ.get("GC_NAV_PERF_DEBUG", "0")
+    return str(val).strip().lower() in ("1", "true", "yes", "on")
+
+
 def is_ssr_perf_debug_enabled() -> bool:
     """GC-853: optional SSR page render profiling (server logs only)."""
     val = os.environ.get("GC_SSR_PERF_DEBUG", "0")
@@ -258,6 +264,7 @@ def get_client_runtime_config() -> dict[str, int | bool]:
         ),
         "command_map_dev_mode": is_command_map_dev_mode(),
         "action_perf_debug": is_action_perf_debug_enabled(),
+        "nav_perf_debug": is_nav_perf_debug_enabled(),
     }
 
 

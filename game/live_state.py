@@ -15,7 +15,9 @@ logger = logging.getLogger(__name__)
 _REQUEST_PERF_PHASE_KEYS = frozenset(
     {
         "fleet_tick_ms",
+        "account_deletion_worker_ms",
         "live_context_ms",
+        "page_context_ms",
         "live_state_ms",
         "finish_ms",
         "mutate_ms",
@@ -27,6 +29,8 @@ _REQUEST_PERF_PHASE_KEYS = frozenset(
         "fleet_panel_ms",
         "logistics_panel_ms",
         "template_ms",
+        "template_render_ms",
+        "db_connection_ms",
         "db_begin_immediate_ms",
         "db_write_transaction_ms",
         "db_transaction_ms",
@@ -36,11 +40,14 @@ _REQUEST_PERF_PHASE_KEYS = frozenset(
 _REQUEST_PERF_META_KEYS = frozenset(
     {
         "finish_source",
+        "route",
+        "pjax",
         "include_panel",
         "panel_delta",
         "fleet_tick_ran",
         "fleet_tick_source",
         "derived_sync_count",
+        "account_deletions_ran",
         "method",
         "endpoint",
         "path",
@@ -884,6 +891,7 @@ def _merge_existing_perf_traces(state: RequestPerfState) -> None:
     if ssr is not None:
         for key, val in (
             ("live_context_ms", ssr.live_context_ms),
+            ("page_context_ms", ssr.live_context_ms),
             ("finish_ms", ssr.finish_ms),
             ("resource_sync_ms", ssr.resource_sync_ms),
             ("buildings_panel_ms", ssr.buildings_panel_ms),
@@ -892,9 +900,12 @@ def _merge_existing_perf_traces(state: RequestPerfState) -> None:
             ("fleet_panel_ms", ssr.fleet_panel_ms),
             ("logistics_panel_ms", ssr.logistics_panel_ms),
             ("template_ms", ssr.template_ms),
+            ("template_render_ms", ssr.template_ms),
         ):
             if val > 0 and key not in state.phases:
                 state.phases[key] = float(val)
+        if ssr.route:
+            state.meta.setdefault("route", ssr.route)
         if ssr.tab and "finish_source" not in state.meta:
             state.meta["finish_source"] = f"{ssr.route}:{ssr.tab}"
 
@@ -958,11 +969,14 @@ def _emit_request_perf_log(
 
     for meta_key in (
         "finish_source",
+        "route",
+        "pjax",
         "include_panel",
         "panel_delta",
         "fleet_tick_ran",
         "fleet_tick_source",
         "derived_sync_count",
+        "account_deletions_ran",
         "content_type",
         "sql_count",
         "sql_write_count",

@@ -122,7 +122,18 @@ def db() -> sqlite3.Connection:
     if get_db_backend() != "sqlite":
         raise NotImplementedError(_postgres_not_implemented_message())
     db_path = ensure_db_parent_dir()
+    conn_t0 = time.perf_counter()
     conn = sqlite3.connect(db_path, timeout=30.0)
+    try:
+        from game.live_state import is_request_perf_sampled, record_request_perf_phase
+
+        if is_request_perf_sampled():
+            record_request_perf_phase(
+                "db_connection_ms",
+                (time.perf_counter() - conn_t0) * 1000.0,
+            )
+    except Exception:
+        pass
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")

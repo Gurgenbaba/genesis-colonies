@@ -872,6 +872,18 @@ def _load_page_live_context(
     user_id = int(user_id)
     src = str(finish_source or "page_load")
     own_conn = conn is None
+    ctx_t0 = time.perf_counter()
+    try:
+        from flask import has_request_context, request as flask_request
+        from game.live_state import record_request_perf_phase, set_request_perf_meta
+
+        if has_request_context():
+            set_request_perf_meta("finish_source", src)
+            set_request_perf_meta("route", str(flask_request.path or ""))
+            if str(flask_request.headers.get("X-PJAX") or "").strip().lower() in ("1", "true", "yes"):
+                set_request_perf_meta("pjax", 1)
+    except Exception:
+        pass
     if own_conn:
         conn = db()
     use_poll_live_path = _use_poll_live_path(src)
@@ -955,6 +967,16 @@ def _load_page_live_context(
     finally:
         if own_conn or close_conn:
             conn.close()
+
+    try:
+        from game.live_state import record_request_perf_phase
+
+        record_request_perf_phase(
+            "page_context_ms",
+            (time.perf_counter() - ctx_t0) * 1000.0,
+        )
+    except Exception:
+        pass
 
     return {
         "player_view": player_view,
