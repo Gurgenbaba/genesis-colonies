@@ -1597,9 +1597,16 @@ def techtree_view():
 @app.route("/galaxy")
 @require_login
 def galaxy_view():
-    player_view, _, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
-    if player_view is None:
-        return redirect(url_for("login"))
+    user_id = int(session["user_id"])
+    if _is_pjax_request():
+        player_view = {"id": user_id}
+        energy_total = 0
+        energy_used = 0
+        storage_caps = {"metal": 0, "crystal": 0, "fuel_cells": 0}
+    else:
+        player_view, _, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
+        if player_view is None:
+            return redirect(url_for("login"))
 
     from game.galaxy import (
         build_galaxy_nav,
@@ -1613,7 +1620,6 @@ def galaxy_view():
 
     from game.config import is_command_map_accessible
 
-    user_id = int(session["user_id"])
     view = (request.args.get("view") or "system").strip().lower()
     if view == "imperium":
         view = "system"

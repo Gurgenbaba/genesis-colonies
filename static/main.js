@@ -1169,7 +1169,6 @@
   function shouldSkipInitGameStateAfterSsr(page, opts) {
     if (opts && opts.skipGameState) return true;
     if (opts && opts.forceGameState) return false;
-    if (opts && opts.pjax) return false;
     return pageHasSsrLiveBoot();
   }
 
@@ -30261,6 +30260,23 @@
     }
   }
 
+  function isIngameShellPjaxNavigation(url, opts = {}) {
+    if (opts && opts.forceGameState) return false;
+    if (opts && opts.force) return false;
+    if (opts && opts.fullDocument) return false;
+    if (!pageHasSsrLiveBoot()) return false;
+    try {
+      const dest = new URL(url, window.location.origin);
+      const path = dest.pathname.replace(/\/$/, "") || "/";
+      if (AUTH_ROUTE_RE.test(path)) return false;
+      if (isAdminRoutePath(path)) return false;
+      if (path === "/" && document.body?.dataset?.authPage === "1") return false;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function normalizePjaxUrl(url) {
     try {
       const u = new URL(url, window.location.origin);
@@ -30573,6 +30589,9 @@
     if (isBuildingsTabOnlyNavigation(url)) {
       opts = { skipGameState: true, skipPolling: true, preserveGameLoop: true, ...opts };
       console.debug("[GC] PJAX light buildings tab");
+    } else if (isIngameShellPjaxNavigation(url, opts)) {
+      opts = { skipGameState: true, preserveGameLoop: true, ...opts };
+      console.debug("[GC] PJAX light navigation", url);
     }
     const push = opts.push !== false;
     const target = normalizePjaxUrl(url);

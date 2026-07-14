@@ -503,8 +503,12 @@ def test_main_js_gc742_ssr_skip_init_game_state():
     assert "initPage skip game-state (SSR fresh)" in src
     skip_fn = src.split("function shouldSkipInitGameStateAfterSsr(page, opts)")[1].split("function bootstrapResourceLiveFromDom")[0]
     assert "return pageHasSsrLiveBoot()" in skip_fn
-    assert "opts.pjax" in skip_fn
+    assert "opts.pjax) return false" not in skip_fn
     assert "_SSR_SKIP_INIT_GAME_STATE_PAGES" not in skip_fn
+    assert "function isIngameShellPjaxNavigation(url, opts" in src
+    nav_to = src.split("GC.navigateTo = async function navigateTo(url, opts = {})")[1].split("const push = opts.push")[0]
+    assert "isIngameShellPjaxNavigation(url, opts)" in nav_to
+    assert "skipGameState: true, preserveGameLoop: true" in nav_to
     assert "opts && opts.force) return false" not in skip_fn
     init_body = src.split("const afterInit = async () => {")[1].split("if (page === \"messages\")")[0]
     assert "shouldSkipInitGameStateAfterSsr(page, opts)" in init_body
@@ -541,15 +545,19 @@ def test_app_gc745_pjax_server_fastpath():
     assert "api_notifications_summary" in app_py.split("_FLEET_TICK_SKIP_ENDPOINTS = frozenset")[1].split(")")[0]
     inject = app_py.split("def inject_globals()")[1].split("@app.route", 1)[0]
     assert "_is_lightweight_layout_request()" in inject
+    galaxy_view = app_py.split("def galaxy_view()")[1].split("@app.route", 1)[0]
+    assert "_is_pjax_request()" in galaxy_view
+    assert "_load_player_view_with_resources()" in galaxy_view
 
     js = _read("static/main.js")
-    cleanup = js.split("GC.cleanupPage = function cleanupPage()")[1].split("GC.requestFrame = function requestFrame")[0]
+    cleanup = js.split("GC.cleanupPage = function cleanupPage(opts = {})")[1].split("GC.requestFrame = function requestFrame")[0]
     assert "preserveShell" not in cleanup
-    assert "GC.cleanupPage();" in js.split("async function applyPjaxPayload")[1].split("function pjaxPayloadFromDoc")[0]
+    assert "GC.cleanupPage({ preserveGameLoop:" in js.split("async function applyPjaxPayload")[1].split("function pjaxPayloadFromDoc")[0]
     assert "quiesceLiveClientFetches(\"logout-click\")" in js
     nav = js.split("GC.navigateTo = async function navigateTo")[1].split("function initPjax")[0]
     pre_nav = nav.split("beginPjaxNavigation")[0]
-    normal_nav = pre_nav.split("} else if (typeof GC.abortInFlightGameStateFetches")[1].split("}")[0]
+    assert "isIngameShellPjaxNavigation(url, opts)" in nav
+    normal_nav = pre_nav.split("} else if (!opts.preserveGameLoop && typeof GC.abortInFlightGameStateFetches")[1].split("}")[0]
     assert "GC.abortInFlightGameStateFetches()" in normal_nav
     assert "GC.stopPolling()" in normal_nav
     assert "AUTH_ROUTE_RE.test(destUrl.pathname" in pre_nav
