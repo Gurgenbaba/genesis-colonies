@@ -1610,9 +1610,11 @@ def galaxy_view():
 
     from game.galaxy import (
         build_galaxy_nav,
-        build_minimap_range,
         get_planet_coordinates,
+        get_relocation_client_state,
         list_system,
+        player_has_seed_ark,
+        relocation_schema_ready,
         resolve_view_coordinates,
     )
     from game.fleet import build_expedition_slot, _hold_mission_enabled
@@ -1634,23 +1636,11 @@ def galaxy_view():
     galaxy = 1
     system = 1
     active_planet_id: int | None = None
-    hold_mission_enabled = False
-    has_seed_ark = False
-    planet_relocation: dict[str, Any] = {"active": False, "can_start": False}
     has_url_view = (
         request.args.get("galaxy", type=int) is not None
         or request.args.get("system", type=int) is not None
         or bool(request.args.get("q") or request.args.get("coord"))
     )
-    try:
-        active_planet_id = get_active_planet_id(user_id) or None
-        if not has_url_view:
-            planet = get_context_planet(user_id)
-            coords = get_planet_coordinates(planet)
-            galaxy = int(coords["galaxy"])
-            system = int(coords["system"])
-    except Exception:
-        active_planet_id = None
 
     carry_system = None
     try:
@@ -1659,25 +1649,38 @@ def galaxy_view():
     except (TypeError, ValueError):
         carry_system = None
 
-    galaxy, system, highlight_pos = resolve_view_coordinates(
-        default_galaxy=galaxy,
-        default_system=system,
-        req_galaxy=request.args.get("galaxy", type=int),
-        req_system=request.args.get("system", type=int),
-        coord_query=request.args.get("q") or request.args.get("coord"),
-        carry_system=carry_system,
-    )
-    session["galaxy_view_galaxy"] = int(galaxy)
-    session["galaxy_view_system"] = int(system)
-
     conn = db()
+    hold_mission_enabled = False
+    has_seed_ark = False
+    planet_relocation: dict[str, Any] = {"active": False, "can_start": False}
     command_map: dict[str, Any] = {"nodes": [], "edges": []}
     galactic_directive_banner: dict[str, Any] = {"visible": False}
     galactic_diplomacy_banner: dict[str, Any] = {"visible": False}
+    galaxy_nav: dict[str, Any] = {}
+    system_data: dict[str, Any] = {"galaxy": galaxy, "system": system, "slots": []}
     try:
-        hold_mission_enabled = _hold_mission_enabled(conn=conn)
-        from game.galaxy import get_relocation_client_state, player_has_seed_ark, relocation_schema_ready
+        try:
+            active_planet_id = get_active_planet_id(user_id, conn=conn) or None
+            if not has_url_view:
+                planet = get_context_planet(user_id, conn=conn)
+                coords = get_planet_coordinates(planet)
+                galaxy = int(coords["galaxy"])
+                system = int(coords["system"])
+        except Exception:
+            active_planet_id = None
 
+        galaxy, system, highlight_pos = resolve_view_coordinates(
+            default_galaxy=galaxy,
+            default_system=system,
+            req_galaxy=request.args.get("galaxy", type=int),
+            req_system=request.args.get("system", type=int),
+            coord_query=request.args.get("q") or request.args.get("coord"),
+            carry_system=carry_system,
+        )
+        session["galaxy_view_galaxy"] = int(galaxy)
+        session["galaxy_view_system"] = int(system)
+
+        hold_mission_enabled = _hold_mission_enabled(conn=conn)
         has_seed_ark = player_has_seed_ark(user_id, conn=conn)
         if active_planet_id and relocation_schema_ready(conn):
             planet_relocation = get_relocation_client_state(
@@ -1692,27 +1695,19 @@ def galaxy_view():
 
         galactic_directive_banner = build_galactic_directive_banner(galaxy, conn=conn)
         galactic_diplomacy_banner = build_galactic_diplomacy_banner(galaxy, conn=conn)
+
+        galaxy_nav = build_galaxy_nav(galaxy, system, conn=conn)
+        if view != "command_map":
+            system_data = list_system(
+                galaxy,
+                system,
+                conn=conn,
+                viewer_player_id=user_id,
+                active_planet_id=active_planet_id,
+                highlight_position=highlight_pos,
+            )
     finally:
         conn.close()
-
-    if view == "command_map":
-        galaxy_nav = build_galaxy_nav(galaxy, system)
-        system_data = {"galaxy": galaxy, "system": system, "slots": []}
-        minimap = []
-    else:
-        galaxy_nav = build_galaxy_nav(galaxy, system)
-        system_data = list_system(
-            galaxy,
-            system,
-            viewer_player_id=user_id,
-            active_planet_id=active_planet_id,
-            highlight_position=highlight_pos,
-        )
-        minimap = build_minimap_range(
-            galaxy,
-            system,
-            viewer_player_id=user_id,
-        )
 
     from game.planet_visuals import galaxy_ring_orbit_radii_payload
 
@@ -1724,7 +1719,6 @@ def galaxy_view():
         storage_caps=storage_caps,
         galaxy_nav=galaxy_nav,
         system_data=system_data,
-        minimap=minimap,
         viewer_player_id=user_id,
         expedition_slot=build_expedition_slot(galaxy, system) if view != "command_map" else None,
         orbit_radii=galaxy_ring_orbit_radii_payload() if view != "command_map" else None,

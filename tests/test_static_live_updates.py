@@ -548,6 +548,10 @@ def test_app_gc745_pjax_server_fastpath():
     galaxy_view = app_py.split("def galaxy_view()")[1].split("@app.route", 1)[0]
     assert "_is_pjax_request()" in galaxy_view
     assert "_load_player_view_with_resources()" in galaxy_view
+    assert "build_minimap_range" not in galaxy_view
+    assert "minimap=" not in galaxy_view
+    assert "list_system(" in galaxy_view
+    assert "conn=conn" in galaxy_view.split("list_system(")[1].split(")", 1)[0]
 
     js = _read("static/main.js")
     cleanup = js.split("GC.cleanupPage = function cleanupPage(opts = {})")[1].split("GC.requestFrame = function requestFrame")[0]
