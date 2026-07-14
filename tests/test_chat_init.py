@@ -63,10 +63,14 @@ def test_chat_js_message_time_includes_date_outside_today():
     assert "sameDay" not in locale_fmt
 
 
-def test_main_js_init_page_calls_init_chat_not_resume():
+def test_main_js_deferred_chat_boot_resumes_without_rebootstrap():
     src = _read("static/main.js")
+    block = src.split("function scheduleDeferredChatBoot()")[1].split("function syncScopedPlanetIds")[0]
+    assert "GC._chatBootstrapDone" in block
+    assert "GC.resumeChatPolling()" in block
+    assert block.index("GC._chatBootstrapDone") < block.index("GC.resumeChatPolling()")
     init_section = src.split("function initPage")[1].split("function formatDuration")[0]
-    assert "GC.initChat()" in init_section
+    assert "scheduleDeferredChatBoot()" in init_section
     assert "GC.resumeChatPolling()" not in init_section
 
 
@@ -78,6 +82,32 @@ def test_main_js_shell_does_not_init_chat():
 
 def test_main_js_special_panel_uses_open_tchat():
     src = _read("static/main.js")
-    block = src.split('target === "chat"')[1][:500]
+    block = src.split('key === "chat"')[1][:500]
     assert "GC.openTChat" in block
     assert "openTChat failed" in block
+
+
+def test_chat_poll_uses_messages_delta_not_bootstrap_when_hidden():
+    """GC-PERF-003: pollTick must not re-fetch /api/chat/bootstrap on every hidden tick."""
+    src = _read("static/js/chat.js")
+    poll = src.split("async function pollTick()")[1].split("function startPolling()")[0]
+    assert "refreshBootstrap()" not in poll
+    assert "/api/chat/messages" in poll
+    assert "applyIncomingPollMessages" in poll
+
+
+def test_chat_resume_polling_does_not_schedule_bootstrap_refresh():
+    src = _read("static/js/chat.js")
+    resume = src.split("function resumeChatPolling()")[1].split("async function sendMessage")[0]
+    assert "scheduleBootstrapRefresh" not in resume
+    assert "schedulePoll()" in resume
+
+
+def test_chat_bootstrap_only_on_initial_lifecycle():
+    src = _read("static/js/chat.js")
+    assert "GC._chatBootstrapDone" in src
+    init_bootstrap = src.split("async function runInitialBootstrap()")[1].split("async function initChatCore()")[0]
+    assert "GC._chatBootstrapDone = true" in init_bootstrap
+    assert 'apiFetch("/api/chat/bootstrap"' in src.split("async function bootstrap()")[1].split("function stopPolling()")[0]
+    poll = src.split("async function pollTick()")[1].split("function startPolling()")[0]
+    assert "/api/chat/bootstrap" not in poll

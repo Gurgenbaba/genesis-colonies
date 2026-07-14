@@ -985,18 +985,6 @@
     }
 
     const panelVisible = isChatPanelVisible();
-
-    if (!panelVisible) {
-      try {
-        await refreshBootstrap();
-      } catch (e) {
-        if (e?.name !== "AbortError") chatDebug("[chat] poll unread sync", e);
-      } finally {
-        schedulePoll();
-      }
-      return;
-    }
-
     const roomId = CHAT.activeRoomId;
     const after = CHAT.lastMsgIdByRoom[roomId] || 0;
     const ctrl = new AbortController();
@@ -1049,9 +1037,6 @@
     if (!CHAT.bootstrap) return;
     if (isPollTimerActive()) return;
     CHAT.polling.started = true;
-    const stale = !CHAT.polling.lastBootstrapAt
-      || (Date.now() - CHAT.polling.lastBootstrapAt) > (CHAT.polling.bootstrapIntervalMs || 300000);
-    if (stale) scheduleBootstrapRefresh(false);
     schedulePoll();
   }
 
