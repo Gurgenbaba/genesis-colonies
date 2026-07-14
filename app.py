@@ -1598,15 +1598,9 @@ def techtree_view():
 @require_login
 def galaxy_view():
     user_id = int(session["user_id"])
-    if _is_pjax_request():
-        player_view = {"id": user_id}
-        energy_total = 0
-        energy_used = 0
-        storage_caps = {"metal": 0, "crystal": 0, "fuel_cells": 0}
-    else:
-        player_view, _, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
-        if player_view is None:
-            return redirect(url_for("login"))
+    player_view, _, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
+    if player_view is None:
+        return redirect(url_for("login"))
 
     from game.galaxy import (
         build_galaxy_nav,

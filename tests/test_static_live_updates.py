@@ -546,7 +546,6 @@ def test_app_gc745_pjax_server_fastpath():
     inject = app_py.split("def inject_globals()")[1].split("@app.route", 1)[0]
     assert "_is_lightweight_layout_request()" in inject
     galaxy_view = app_py.split("def galaxy_view()")[1].split("@app.route", 1)[0]
-    assert "_is_pjax_request()" in galaxy_view
     assert "_load_player_view_with_resources()" in galaxy_view
     assert "build_minimap_range" not in galaxy_view
     assert "minimap=" not in galaxy_view

@@ -585,6 +585,15 @@ def test_galaxy_foreign_planet_fleet_shortcuts(galaxy_db, monkeypatch):
     assert "galaxy-fleet-action--quick-attack" in body
 
 
+def test_galaxy_pjax_renders_without_template_error(galaxy_db, monkeypatch):
+    client, _uid = _galaxy_client(monkeypatch)
+    resp = client.get("/galaxy?view=system", headers={"X-PJAX": "true"})
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "galaxy-page" in body
+    assert "res-value metal" in body
+
+
 def test_galaxy_empty_slot_shows_colonize_fleet_shortcut(galaxy_db, monkeypatch):
     from game.db import commit
     from game.fleet import add_planet_ships

@@ -30458,7 +30458,9 @@
     const main = document.getElementById("main-content");
     if (!main) throw new Error("main-content missing");
     main.innerHTML = payload.mainHtml;
-    syncLcpHeroPreload(resolveLcpHeroImageUrl(main));
+    if (!opts.skipLcpPreload) {
+      syncLcpHeroPreload(resolveLcpHeroImageUrl(main));
+    }
     if (payload.title) document.title = payload.title;
     if (payload.serverTime) {
       document.body.dataset.serverTime = payload.serverTime;
@@ -30587,7 +30589,7 @@
 
   GC.navigateTo = async function navigateTo(url, opts = {}) {
     if (isBuildingsTabOnlyNavigation(url)) {
-      opts = { skipGameState: true, skipPolling: true, preserveGameLoop: true, ...opts };
+      opts = { skipGameState: true, skipPolling: true, preserveGameLoop: true, skipLcpPreload: true, ...opts };
       console.debug("[GC] PJAX light buildings tab");
     } else if (isIngameShellPjaxNavigation(url, opts)) {
       opts = { skipGameState: true, preserveGameLoop: true, ...opts };

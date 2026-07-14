@@ -65,6 +65,7 @@ def test_gc747b_buildings_ssr_slimdown():
     assert "preserveGameLoop: true" in nav
     assert "skipGameState: true" in nav
     assert "skipPolling: true" in nav
+    assert "skipLcpPreload: true" in nav
     cleanup = src.split("GC.cleanupPage = function cleanupPage(opts = {})")[1].split("GC.registerCleanup", 1)[0]
     assert "preserveGameLoop" in cleanup
     assert "if (!preserveGameLoop) GC.stopPolling();" in cleanup
