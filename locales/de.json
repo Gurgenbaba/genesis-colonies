@@ -3196,6 +3196,7 @@
   "msg_logout_success": "Abgemeldet.",
   "msg_no_permission": "Keine Berechtigung.",
   "msg_not_logged_in": "Du bist nicht eingeloggt.",
+  "msg_session_expired": "Sitzung abgelaufen — du wirst zur Anmeldung weitergeleitet.",
   "msg_register_failed": "Account konnte nicht erstellt werden.",
   "msg_register_need_user_pass": "Bitte Benutzername und Passwort angeben.",
   "msg_register_need_user_pass_email": "Bitte Benutzername, E-Mail und Passwort angeben.",

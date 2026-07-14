@@ -1223,6 +1223,7 @@ def test_main_js_gc640_global_fleet_hud():
     assert "GC.initGlobalFleetDrawer = initGlobalFleetDrawer" in src
     assert "normalizeActiveFleetsPayload" in src
     assert "FLEET_DRAWER_LS_SHOW_ALL" in src
+    assert "FLEET_DRAWER_VISIBLE_LIMIT_DEFAULT = 1" in src
     assert "FLEET_DRAWER_LS_EXPANDED" not in src
     assert "data-fleet-drawer-empty" in src
     assert "fleetDrawerTotalShips" in src
@@ -1265,6 +1266,7 @@ def test_main_js_gc640_global_fleet_hud():
     assert "data-fleet-drawer-toggle" not in base
     assert ".gc-fleet-nav-badge" in css
     fleet_py = _read("game/fleet.py")
+    assert "FLEET_DRAWER_VISIBLE_LIMIT = 1" in fleet_py
     assert "build_active_fleets_payload" in fleet_py
     assert "recall_fleet_movement" in fleet_py
 
@@ -1675,6 +1677,21 @@ def test_main_js_gc546a_score_delta_deduplication():
     assert "showScoreDelta" not in overview
     css = _read("static/style.css")
     assert "animation-fill-mode: none" in css.split(".gc-score-pill .gc-score-delta.show")[1][:220]
+
+
+def test_main_js_auth_session_recovery_on_failure():
+    """Lost session must notify and redirect — not leave a dead ingame shell."""
+    src = _read("static/main.js")
+    assert "function scheduleAuthSessionRecovery(reason)" in src
+    recovery = src.split("function scheduleAuthSessionRecovery(reason)")[1].split("function handleAuthFailure", 1)[0]
+    assert "msg_session_expired" in recovery
+    assert 'window.location.assign("/login")' in recovery
+    assert "quiesceLiveClientFetches" in recovery
+    auth = src.split("function handleAuthFailure(reason)")[1].split("function throwAuthError", 1)[0]
+    assert "scheduleAuthSessionRecovery(reason)" in auth
+    vis = src.split("function initVisibilityPolling()")[1].split("function initMobileNav", 1)[0]
+    assert "_authRecoveryStarted" in vis
+    assert 'GC.refreshGameState("tab_visible")' in vis
 
 
 def test_main_js_gc547_gpu_idle_visual_loop_guards():

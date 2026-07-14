@@ -3195,6 +3195,7 @@
   "msg_logout_success": "Desconectado.",
   "msg_no_permission": "Você não tem permissão para esta ação.",
   "msg_not_logged_in": "Você não está logado.",
+  "msg_session_expired": "Sessão expirada — redirecionando para o login.",
   "msg_register_failed": "Não foi possível criar a conta.",
   "msg_register_need_user_pass": "Por favor, digite nome de usuário e senha.",
   "msg_register_need_user_pass_email": "Por favor, insira nome de usuário, e-mail e senha.",

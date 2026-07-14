@@ -3686,6 +3686,7 @@ def test_build_active_fleets_payload_confirmed_empty_flags(fleet_db):
     assert empty['count'] == 0
     assert empty['active_fleet_count'] == 0
     assert empty['fleets_confirmed_empty'] is True
+    assert empty['visible_limit'] == 1
     conn.close()
 
 def test_recall_fleet_movement_before_overdue_arrival_tick(fleet_db):

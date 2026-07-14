@@ -585,6 +585,8 @@
 
   let _statusPollErrorLogged = false;
   let _authLoopAborted = false;
+  let _authRecoveryStarted = false;
+  const AUTH_RECOVERY_REDIRECT_MS = 1500;
 
   const AUTH_ROUTE_RE = /^\/(login|register|logout)(\/|$)/i;
 
@@ -880,6 +882,37 @@
     return shouldRunGameLoop();
   }
 
+  function scheduleAuthSessionRecovery(reason) {
+    if (_authRecoveryStarted || !shouldRunGameLoop()) return;
+    _authRecoveryStarted = true;
+    console.debug("[GC] session recovery scheduled", reason || "");
+    showNotify(
+      t(
+        "msg_session_expired",
+        "Sitzung abgelaufen — du wirst zur Anmeldung weitergeleitet."
+      ),
+      "warning"
+    );
+    if (typeof quiesceLiveClientFetches === "function") {
+      quiesceLiveClientFetches("session-lost");
+    } else {
+      GC.stopPolling();
+      if (typeof GC.stopNotificationPoll === "function") GC.stopNotificationPoll();
+    }
+    const redirect = () => {
+      try {
+        window.location.assign("/login");
+      } catch (_) {
+        window.location.href = "/login";
+      }
+    };
+    if (typeof GC.setSafeTimeout === "function") {
+      GC.setSafeTimeout(redirect, AUTH_RECOVERY_REDIRECT_MS);
+    } else {
+      setTimeout(redirect, AUTH_RECOVERY_REDIRECT_MS);
+    }
+  }
+
   function handleAuthFailure(reason) {
     if (_authLoopAborted) return;
     _authLoopAborted = true;
@@ -888,6 +921,7 @@
     GC.stopPolling();
     GC.stopProgressTicker();
     _statusPollErrorLogged = true;
+    scheduleAuthSessionRecovery(reason);
   }
 
   function throwAuthError() {
@@ -2130,6 +2164,7 @@
   GC.shouldRunStatusPolling = shouldRunStatusPolling;
   GC.shouldPollGameState = shouldPollGameState;
   GC.abortGameLoop = handleAuthFailure;
+  GC.scheduleAuthSessionRecovery = scheduleAuthSessionRecovery;
 
   const NOTIFICATION_POLL_MS = 1000;
   const NOTIFICATION_POLL_HIDDEN_MS = 5000;
@@ -10543,16 +10578,18 @@
   }
   GC.resolveFleetHudPayload = resolveFleetHudPayload;
 
+  const FLEET_DRAWER_VISIBLE_LIMIT_DEFAULT = 1;
+
   function normalizeActiveFleetsPayload(raw) {
     if (!raw) {
-      return { count: 0, visible_limit: 5, next_remaining_seconds: 0, items: [] };
+      return { count: 0, visible_limit: FLEET_DRAWER_VISIBLE_LIMIT_DEFAULT, next_remaining_seconds: 0, items: [] };
     }
     if (Array.isArray(raw)) {
       const items = raw.map(normalizeFleetDrawerItem);
       const primary = items.length ? pickPrimaryFleetMovement(items) : null;
       return {
         count: items.length,
-        visible_limit: 5,
+        visible_limit: FLEET_DRAWER_VISIBLE_LIMIT_DEFAULT,
         next_remaining_seconds: Number(primary?.remaining_seconds || 0),
         items,
       };
@@ -10560,7 +10597,7 @@
     const items = (Array.isArray(raw.items) ? raw.items : []).map(normalizeFleetDrawerItem);
     return {
       count: Number(raw.count) || items.length,
-      visible_limit: Number(raw.visible_limit) || 5,
+      visible_limit: Number(raw.visible_limit) || FLEET_DRAWER_VISIBLE_LIMIT_DEFAULT,
       next_remaining_seconds: Number(raw.next_remaining_seconds) || 0,
       items,
     };
@@ -11446,7 +11483,7 @@
     root.hidden = false;
 
     const showAll = isFleetDrawerShowAll();
-    const visibleLimit = Math.max(1, Number(payload.visible_limit) || 5);
+    const visibleLimit = Math.max(1, Number(payload.visible_limit) || FLEET_DRAWER_VISIBLE_LIMIT_DEFAULT);
 
     const hasIncomingAttack = _fleetIncomingAttackActive(GC.lastState?.fleet_alerts);
     _syncFleetHudShellVisibility(root, count, GC.lastState?.fleet_alerts, {
@@ -31246,8 +31283,8 @@
         }
         return;
       }
-      if (!shouldPollGameState() || _authLoopAborted || isAdminShellPage()) return;
-      _authLoopAborted = false;
+      if (!shouldPollGameState() || _authRecoveryStarted || isAdminShellPage()) return;
+      if (_authLoopAborted) _authLoopAborted = false;
       resumeVisualLoops();
       GC.refreshGameState("tab_visible");
       if (!isAdminShellPage() && typeof GC.initChat === "function") GC.initChat();

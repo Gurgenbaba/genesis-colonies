@@ -1899,7 +1899,7 @@ def admin_advance_fleet_movement(
     }
 
 
-FLEET_DRAWER_VISIBLE_LIMIT = 5
+FLEET_DRAWER_VISIBLE_LIMIT = 1
 
 
 def _movement_ship_count(movement: Mapping[str, Any]) -> int:

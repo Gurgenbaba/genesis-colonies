@@ -3195,6 +3195,7 @@
   "msg_logout_success": "Cerrado la sesión.",
   "msg_no_permission": "No tienes permiso para esta acción.",
   "msg_not_logged_in": "No has iniciado sesión.",
+  "msg_session_expired": "Sesión caducada — redirigiendo al inicio de sesión.",
   "msg_register_failed": "No se pudo crear la cuenta.",
   "msg_register_need_user_pass": "Por favor ingrese nombre de usuario y contraseña.",
   "msg_register_need_user_pass_email": "Por favor ingrese nombre de usuario, correo electrónico y contraseña.",

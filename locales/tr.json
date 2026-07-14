@@ -3195,6 +3195,7 @@
   "msg_logout_success": "Oturumu kapattım.",
   "msg_no_permission": "Bu işlem için izniniz yok.",
   "msg_not_logged_in": "Oturum açmadınız.",
+  "msg_session_expired": "Oturum süresi doldu — girişe yönlendiriliyorsunuz.",
   "msg_register_failed": "Hesap oluşturulamadı.",
   "msg_register_need_user_pass": "Lütfen kullanıcı adınızı ve şifrenizi giriniz.",
   "msg_register_need_user_pass_email": "Lütfen kullanıcı adınızı, e-posta adresinizi ve şifrenizi girin.",

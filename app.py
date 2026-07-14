@@ -6669,11 +6669,13 @@ def _payload_from_live_context(
 
         fleet_hud = fleet_hud_for_game_state(user_id, conn=conn)
         if fleet_hud is not None:
+            from game.fleet import FLEET_DRAWER_VISIBLE_LIMIT
+
             payload["active_fleets"] = fleet_hud.get("active_fleets") or {
                 "count": 0,
                 "active_fleet_count": 0,
                 "fleets_confirmed_empty": True,
-                "visible_limit": 5,
+                "visible_limit": FLEET_DRAWER_VISIBLE_LIMIT,
                 "next_remaining_seconds": 0,
                 "items": [],
             }

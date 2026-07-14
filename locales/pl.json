@@ -3195,6 +3195,7 @@
   "msg_logout_success": "Wylogowałem się.",
   "msg_no_permission": "Nie masz uprawnień do tej akcji.",
   "msg_not_logged_in": "Nie jesteś zalogowany.",
+  "msg_session_expired": "Sesja wygasła — przekierowanie do logowania.",
   "msg_register_failed": "Nie można utworzyć konta.",
   "msg_register_need_user_pass": "Proszę wprowadzić nazwę użytkownika i hasło.",
   "msg_register_need_user_pass_email": "Wprowadź nazwę użytkownika, adres e-mail i hasło.",

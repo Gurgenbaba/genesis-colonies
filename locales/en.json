@@ -3196,6 +3196,7 @@
   "msg_logout_success": "Logged out.",
   "msg_no_permission": "You do not have permission for this action.",
   "msg_not_logged_in": "You are not logged in.",
+  "msg_session_expired": "Session expired — redirecting you to login.",
   "msg_register_failed": "Could not create account.",
   "msg_register_need_user_pass": "Please enter username and password.",
   "msg_register_need_user_pass_email": "Please enter username, email, and password.",
