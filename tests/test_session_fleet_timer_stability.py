@@ -52,8 +52,24 @@ def test_fleet_drawer_timer_stays_numeric_at_zero():
     )[0]
     assert '_setIfChanged(cdEl, "0s")' in timers
     assert 't("fleet_arrival_at"' not in timers
-    assert "fleetArrivedKey" in timers
-    assert "fleetDrawerCountdownAt(mv) === target" in timers
+    assert "liveTarget > target" in timers
+    assert "patchFleetDrawerRowCountdown(row, mv)" in timers
+    assert "resolveFleetDrawerCountdownAt" in src
+    assert "holding_until" in src.split("function resolveFleetDrawerCountdownAt")[1].split(
+        "function normalizeFleetDrawerItem"
+    )[0]
+
+
+def test_fleet_poll_slice_keeps_countdown_at():
+    py = _read("game/live_state.py")
+    keys = py.split("_FLEET_DRAWER_ITEM_POLL_KEYS = (")[1].split(")")[0]
+    assert '"countdown_at"' in keys
+    assert '"holding_until"' in keys
+    fleet = _read("game/fleet.py")
+    fmt = fleet.split("def format_movement_drawer_item")[1].split(
+        "def build_active_fleets_payload"
+    )[0]
+    assert '"countdown_at"' in fmt
 
 
 def test_permanent_session_configured():

@@ -11050,6 +11050,25 @@
   let _globalFleetDrawerBound = false;
   const FLEET_DRAWER_LS_SHOW_ALL = "gc:fleetDrawer:showAll";
 
+  function resolveFleetDrawerCountdownAt(mv) {
+    if (!mv || typeof mv !== "object") return 0;
+    const status = String(mv.status || mv.phase || mv.leg_phase || "").toLowerCase();
+    const direct = Number(mv.countdown_at || 0);
+    if (direct > 0) return direct;
+    // Holding must use holding_until — never fall back to past arrival_at.
+    if (status === "holding") {
+      const hold = Number(mv.holding_until || 0);
+      if (hold > 0) return hold;
+    }
+    if (status === "returning") {
+      const ret = Number(mv.return_at || mv.home_at || 0);
+      if (ret > 0) return ret;
+    }
+    const arrival = Number(mv.arrival_at || 0);
+    if (arrival > 0) return arrival;
+    return Number(mv.return_at || mv.home_at || mv.holding_until || 0) || 0;
+  }
+
   function normalizeFleetDrawerItem(mv) {
     if (!mv || typeof mv !== "object") return mv;
     const mission = String(mv.mission || mv.mission_type || "transport").trim().toLowerCase();
@@ -11079,7 +11098,7 @@
         fuel_cells: Number(res.fuel_cells || 0),
       },
       remaining_seconds: Math.max(0, Number(mv.remaining_seconds || 0)),
-      countdown_at: Number(mv.countdown_at || mv.arrival_at || mv.return_at || 0) || 0,
+      countdown_at: resolveFleetDrawerCountdownAt(mv),
     };
   }
 
@@ -11406,7 +11425,7 @@
   let _fleetDrawerTooltipTrigger = null;
 
   function fleetDrawerCountdownAt(mv) {
-    return Number(mv?.countdown_at || mv?.arrival_at || mv?.return_at || 0);
+    return resolveFleetDrawerCountdownAt(mv);
   }
 
   function fleetDrawerRemainingSeconds(mv, serverNow) {
@@ -11473,16 +11492,18 @@
       ) {
         remaining = movementRemainingSeconds(target, now, Number(mv.remaining_seconds));
       }
-      const countdownKey = String(cdEl.dataset.countdownKey || target);
+      // If DOM target is stale (e.g. past arrival_at) but server still has remaining,
+      // re-bind to the live countdown_at instead of locking at 0s.
+      const srvLiveRem = mv ? Math.max(0, Number(mv.remaining_seconds || 0)) : 0;
+      const liveTarget = mv ? fleetDrawerCountdownAt(mv) : 0;
+      if (remaining <= 0 && srvLiveRem > 0 && liveTarget > target) {
+        delete cdEl.dataset.fleetArrivedKey;
+        patchFleetDrawerRowCountdown(row, mv);
+        target = parseTimerTarget(cdEl.dataset.timerTarget || cdEl.dataset.countdownAt || 0) || liveTarget;
+        remaining = movementRemainingSeconds(target, now, srvLiveRem);
+      }
       if (remaining <= 0) {
-        // Keep a stable timer glyph — do not put status words ("Ankunft") in the time column.
-        cdEl.dataset.fleetArrivedKey = countdownKey;
-        _setIfChanged(cdEl, "0s");
-        row.classList.add("is-arrived");
-        cdEl.classList.add("is-arrived");
-        remaining = 0;
-      } else if (cdEl.dataset.fleetArrivedKey === countdownKey) {
-        // Stick at 0s until server advances the countdown key/phase.
+        // Stable numeric zero — no status words in the time column.
         _setIfChanged(cdEl, "0s");
         row.classList.add("is-arrived");
         cdEl.classList.add("is-arrived");
