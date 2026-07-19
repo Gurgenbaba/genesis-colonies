@@ -20901,7 +20901,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 
 .gc-fleet-hud-meta{
   display: grid;
-  grid-template-columns: 3.6rem 4.5rem 3.4rem 6rem;
+  grid-template-columns: 4.2rem 3.6rem 3.6rem 6rem;
   column-gap: 6px;
   align-items: center;
   justify-items: end;
@@ -20980,7 +20980,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 .gc-fleet-hud-time,
 .gc-fleet-drawer-chip--arrival{
   width: 100%;
-  min-width: 0;
+  min-width: 2.6rem;
   text-align: right;
   font-size: 0.66rem;
   font-weight: 600;
@@ -20992,6 +20992,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  justify-self: end;
 }
 
 .gc-fleet-hud-row.is-urgent .gc-fleet-hud-time,

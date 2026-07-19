@@ -101,7 +101,7 @@ def test_main_js_notify_dedup_contract():
     assert "function resolveAttackAlertSoundKey(alerts)" in src
     assert "function resolveMessageNotifySoundKey(data)" in src
     assert "_maybePlayIncomingAttackNotify(data.fleet_alerts)" in src
-    assert "_maybePlayMessageNotifySound(data)" in src
+    assert "_maybePlayMessageNotifySound(data" in src
     assert "notifySoundVolumeForKind(kind)" in src
     assert "_incomingAttackNotifyPrimed" not in src
 
@@ -114,5 +114,7 @@ def test_main_js_notify_dedup_contract():
     unread_fn = src.split("function _processUnreadMessagesPoll(data, reason, opts)")[1].split(
         "function updateNavBadges"
     )[0]
-    assert "_maybePlayMessageNotifySound(data)" in unread_fn
-    assert "playNewMessageNotifySound();" not in unread_fn.split("_maybePlayMessageNotifySound(data)")[0]
+    # GC-FLEET-NOTIFICATION-BATCH-001: sound gated with toast batch / message-id dedupe.
+    assert "_maybePlayMessageNotifySound(data, { unreadIncreased: true })" in unread_fn
+    assert "_queueMessageNotifyItems" in unread_fn
+    assert "playNewMessageNotifySound();" not in unread_fn.split("_maybePlayMessageNotifySound(data")[0]

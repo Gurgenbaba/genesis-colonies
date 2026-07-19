@@ -114,6 +114,9 @@ def login_user(user: Any) -> None:
     session["user_id"] = pid
     if username:
         session["username"] = str(username)
+    # Persist across browser restarts — avoid silent session drops on refresh/poll.
+    session.permanent = True
+    session.modified = True
 
 
 def logout_user() -> None:

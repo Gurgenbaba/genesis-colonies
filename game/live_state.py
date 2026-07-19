@@ -633,13 +633,19 @@ def notification_summary_for_client(user_id: int, *, conn) -> Dict[str, Any]:
     uid = int(user_id)
     unread = 0
     latest_id: int | None = None
+    new_items: list = []
     try:
         unread = int(messages_logic.unread_count(uid, conn=conn, prepare=False) or 0)
         raw_latest = messages_logic.latest_inbox_message_id(uid, conn=conn, prepare=False)
         latest_id = int(raw_latest) if raw_latest else None
+        if unread > 0:
+            new_items = messages_logic.notification_toast_items(
+                uid, limit=16, conn=conn, prepare=False
+            )
     except Exception:
         unread = 0
         latest_id = None
+        new_items = []
 
     fleet_alerts = {
         "incoming_attack_count": 0,
@@ -664,6 +670,11 @@ def notification_summary_for_client(user_id: int, *, conn) -> Dict[str, Any]:
         "latest_message_id": latest_id,
         "fleet_alerts": fleet_alerts,
         "notification_revision": revision,
+        "notifications": {
+            "unread_count": max(0, unread),
+            "newest_id": latest_id,
+            "new_items": new_items,
+        },
     }
     return attach_canonical_server_time(payload)
 

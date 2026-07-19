@@ -6,6 +6,7 @@ import re
 import sqlite3
 import sys
 import time
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
@@ -800,7 +801,13 @@ def inject_globals():
 
 _skip_mig = os.environ.get("GC_SKIP_MIGRATION_CHECK", "0").strip().lower() in ("1", "true", "yes")
 bootstrap_application(skip_migration_check=_skip_mig)
-app.secret_key = get_secret_key() or os.urandom(32).hex()
+_secret = get_secret_key()
+if not _secret:
+    # Dev fallback only — rotating keys invalidate every cookie on restart.
+    _secret = os.environ.get("GC_DEV_SECRET_KEY", "").strip() or "gc-dev-only-unstable-secret"
+    if is_production():
+        raise RuntimeError("SECRET_KEY must be set in production")
+app.secret_key = _secret
 
 _cookie_secure = session_cookie_secure_override()
 if _cookie_secure is None:
@@ -810,6 +817,8 @@ app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=_cookie_secure,
+    PERMANENT_SESSION_LIFETIME=timedelta(days=31),
+    SESSION_REFRESH_EACH_REQUEST=True,
 )
 
 
@@ -6715,9 +6724,27 @@ def _payload_from_live_context(
             prepare=not lightweight,
         )
         payload["latest_message_id"] = int(latest_message_id) if latest_message_id else None
+        toast_items = []
+        if int(payload["unread_messages_count"] or 0) > 0:
+            toast_items = messages_logic.notification_toast_items(
+                user_id,
+                limit=16,
+                conn=conn,
+                prepare=False,
+            )
+        payload["notifications"] = {
+            "unread_count": max(0, int(payload["unread_messages_count"] or 0)),
+            "newest_id": payload["latest_message_id"],
+            "new_items": toast_items,
+        }
     except Exception:
         payload["unread_messages_count"] = 0
         payload["latest_message_id"] = None
+        payload["notifications"] = {
+            "unread_count": 0,
+            "newest_id": None,
+            "new_items": [],
+        }
 
     try:
         from game.live_state import nav_badges_for_game_state
@@ -7180,14 +7207,14 @@ def _defense_json_response(
 
 
 @app.route("/api/status")
-@require_login
+@require_login_api
 def api_status():
     """Alias von /api/game-state (gleiches Schema)."""
     return api_game_state()
 
 
 @app.route("/api/notifications/summary")
-@require_login
+@require_login_api
 def api_notifications_summary():
     """Lightweight notification heartbeat — unread + attack alerts only (no queue finish)."""
     user_id = int(session.get("user_id") or 0)
@@ -7205,7 +7232,7 @@ def api_notifications_summary():
 
 
 @app.route("/api/game-state")
-@require_login
+@require_login_api
 def api_game_state():
     want_panel = request.args.get("include_panel", "").lower() in ("1", "true", "yes")
     delta_keys = _parse_panel_delta_buildings_param()

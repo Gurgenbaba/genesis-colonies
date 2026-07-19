@@ -920,13 +920,25 @@
 
   function handleAuthFailure(reason) {
     if (_authLoopAborted) return;
+    const reasonStr = String(reason || "");
+    // Immediate only for clear login redirects / HTML login shells.
+    const immediate =
+      reasonStr === "redirect"
+      || reasonStr === "html-on-api"
+      || reasonStr.includes("banned")
+      || reasonStr.startsWith("action-http-401")
+      || reasonStr.startsWith("http-401");
+    if (!immediate && !noteConfirmedAuthFailure(reasonStr)) {
+      console.debug("[GC] auth failure deferred", reasonStr, _authFailureStreak);
+      return;
+    }
     _authLoopAborted = true;
-    console.debug("[GC] auth redirect detected", reason || "");
+    console.debug("[GC] auth redirect detected", reasonStr);
     console.debug("[GC] polling aborted");
     GC.stopPolling();
     GC.stopProgressTicker();
     _statusPollErrorLogged = true;
-    scheduleAuthSessionRecovery(reason);
+    scheduleAuthSessionRecovery(reasonStr);
   }
 
   function throwAuthError() {
@@ -957,13 +969,31 @@
     }
   }
 
+  let _authFailureStreak = 0;
+  const AUTH_FAILURE_STREAK_LIMIT = 2;
+
   function isAuthStatusFailure(err, data) {
     if (err?.authRedirect) return true;
     if (data?.error === "not_logged_in") return true;
     const status = Number(err?.status || 0);
-    if (status === 401 || status === 403) return true;
+    // Only hard auth loss — not parse/transport noise (non_json / invalid_json).
+    if (status === 401) return true;
+    if (status === 403 && data?.error === "banned") return true;
     const msg = String(err?.message || "");
-    return /HTTP 401|HTTP 403|not_logged_in|non_json_response|invalid_json_response/i.test(msg);
+    if (/not_logged_in/i.test(msg)) return true;
+    if (/HTTP 401\b/i.test(msg)) return true;
+    if (/HTTP 403\b/i.test(msg) && /banned/i.test(msg)) return true;
+    return false;
+  }
+
+  function noteConfirmedAuthFailure(reason) {
+    _authFailureStreak += 1;
+    console.debug("[GC] auth failure streak", _authFailureStreak, reason || "");
+    return _authFailureStreak >= AUTH_FAILURE_STREAK_LIMIT;
+  }
+
+  function clearAuthFailureStreak() {
+    _authFailureStreak = 0;
   }
 
   function landscapeWebpUrlFromRaster(url) {
@@ -1300,6 +1330,11 @@
   let _lastAppliedServerTime = 0;
   let _lastAppliedStateVersion = 0;
   let _fleetRefreshSeq = 0;
+  let _fleetStateRefreshPromise = null;
+  let _fleetStateRefreshQueued = false;
+  let _fleetStateRefreshTimer = null;
+  let _fleetStateRefreshReasons = new Set();
+  const FLEET_STATE_REFRESH_COALESCE_MS = 200;
   let _gameStateFetchSeq = 0;
   let _gameStateFetchAppliedSeq = 0;
   let _fleetHudStickyPayload = null;
@@ -1564,6 +1599,12 @@
         syncHeaderVacationBanner({});
       }
       _lastMessagesUnreadPoll = null;
+      _lastToastedMessageId = 0;
+      _pendingMessageNotifyItems = [];
+      if (_messageNotifyBatchTimer) {
+        clearTimeout(_messageNotifyBatchTimer);
+        _messageNotifyBatchTimer = null;
+      }
       console.debug("[GC] client state reset (account switch)", _sessionPlayerId, "->", pid, reason || "");
     }
     if (pid > 0) _sessionPlayerId = pid;
@@ -1820,6 +1861,12 @@
     }
     _movementCountdownRefreshPending.fleet = false;
     _movementCountdownRefreshPending.overview = false;
+    if (_fleetStateRefreshTimer) {
+      clearTimeout(_fleetStateRefreshTimer);
+      _fleetStateRefreshTimer = null;
+    }
+    _fleetStateRefreshQueued = false;
+    _fleetStateRefreshReasons.clear();
     const lc = GC.pageLifecycle;
     lc.rafIds.forEach((id) => { try { cancelAnimationFrame(id); } catch (_) {} });
     lc.intervals.forEach((id) => clearInterval(id));
@@ -1909,8 +1956,12 @@
     if (perfActive) {
       markActionPerfFetchEnd(rawText.length || Number(res.headers.get("content-length") || 0), data._action_perf);
     }
-    if (res.status === 401 || res.status === 403 || data.error === "not_logged_in") {
-      handleAuthFailure(`action-http-${res.status}`);
+    if (data.error === "not_logged_in" || res.status === 401) {
+      handleAuthFailure(`action-http-${res.status || 401}`);
+      throwAuthError();
+    }
+    if (res.status === 403 && data.error === "banned") {
+      handleAuthFailure("action-http-403-banned");
       throwAuthError();
     }
     return data;
@@ -1948,12 +1999,25 @@
       inspectFetchResponseForAuth(res, ct);
 
       if (!res.ok) {
-        if (status === 401 || status === 403) {
+        if (status === 401) {
           handleAuthFailure(`http-${status}`);
           throwAuthError();
         }
+        let denied = null;
+        if (status === 403 && ct.includes("application/json")) {
+          try {
+            denied = await res.json();
+          } catch (_) {
+            denied = null;
+          }
+          if (denied && denied.error === "banned") {
+            handleAuthFailure("http-403-banned");
+            throwAuthError();
+          }
+        }
         const err = new Error(`HTTP ${status}`);
         err.status = status;
+        if (denied) err.data = denied;
         throw err;
       }
       if (!ct.includes("application/json")) {
@@ -2254,6 +2318,7 @@
 
   function applyNotificationSummary(data, reason) {
     if (!data || data.ok === false) return;
+    clearAuthFailureStreak();
     const revision = String(data.notification_revision ?? "");
     if (revision && revision === _lastAppliedNotificationRevision) {
       return;
@@ -2269,6 +2334,7 @@
       latest_message_id: data.latest_message_id,
       fleet_alerts: data.fleet_alerts,
       notification_revision: data.notification_revision,
+      notifications: data.notifications,
     };
     patchHudLastState(hudSlice, reasonStr);
     if (typeof data.unread_messages_count === "number") {
@@ -9483,10 +9549,12 @@
   let _pageTimerLoopRunning = false;
 
   function getTimerServerNow() {
+    // Only adopt lastState clock when it is ahead of the local estimate.
+    // Never pull the timer clock backward on every tick (causes 1s↔0s / Ankunft flicker).
     const st = Number(GC.lastState?.server_now ?? GC.lastState?.server_time ?? 0);
-    if (st) {
+    if (st > 0) {
       const approx = serverNow();
-      if (!TIME.serverNow || st > approx - 0.5) setServerTime(st);
+      if (!TIME.serverNow || st > approx + 0.05) setServerTime(st);
     }
     return serverNow();
   }
@@ -9772,7 +9840,8 @@
       _movementCountdownRefreshTimer = null;
     }
 
-    const debounceMs = _movementExpiryRefreshDebounceMs();
+    // GC-FLEET-NOTIFICATION-BATCH-001: coalesce multi-row zeros (150–300ms).
+    const debounceMs = Math.max(150, Math.min(300, _movementExpiryRefreshDebounceMs() * 2));
     _movementCountdownRefreshTimer = GC.setSafeTimeout(() => {
       _movementCountdownRefreshTimer = null;
       if (_movementCountdownRefreshPending[pendingKey]) return;
@@ -9792,34 +9861,24 @@
         if (remaining <= 0) staleKeys.push(_movementCountdownKey(el));
       });
 
-      const fleetPage = document.getElementById("fleet-page");
-      const fleetReady = fleetPage && fleetPage.dataset.ready === "1";
+      if (typeof GC._debugFleetBatch === "object") {
+        GC._debugFleetBatch.staleCountdowns = staleKeys.length;
+        GC._debugFleetBatch.fleetStateRequests =
+          (GC._debugFleetBatch.fleetStateRequests || 0) + 1;
+      }
+
       let refreshPromise = Promise.resolve();
-      if (pendingKey === "fleet" && fleetReady && typeof GC.refreshFleetState === "function") {
-        fleetPage.dataset.fleetRefreshBusy = "1";
-        refreshPromise = GC.refreshFleetState(fleetPage).finally(() => {
-          delete fleetPage.dataset.fleetRefreshBusy;
-        });
+      if (typeof GC.scheduleFleetStateRefresh === "function") {
+        refreshPromise = GC.scheduleFleetStateRefresh(`countdown_${pendingKey}`, { immediate: true });
       }
       if (typeof GC.refreshGameState === "function") {
         refreshPromise = refreshPromise.then(() =>
           GC.refreshGameState("fleet_countdown_expired")
         );
-      } else if (pendingKey !== "fleet" || !fleetReady) {
-        refreshPromise = Promise.resolve();
       }
 
       Promise.resolve(refreshPromise).finally(() => {
         _movementCountdownRefreshPending[pendingKey] = false;
-        const fleetPageLater = document.getElementById("fleet-page");
-        if (
-          fleetPageLater &&
-          fleetPageLater.dataset.ready === "1" &&
-          typeof GC.refreshFleetState === "function" &&
-          pendingKey === "overview"
-        ) {
-          GC.refreshFleetState(fleetPageLater);
-        }
         staleKeys.forEach((key) => {
           let stillStale = false;
           document.querySelectorAll("[data-countdown-at]").forEach((el) => {
@@ -10624,8 +10683,20 @@
   // Messages unread badges (game-state polling)
   // =========================
   let _lastMessagesUnreadPoll = null;
+  let _lastToastedMessageId = 0;
+  let _pendingMessageNotifyItems = [];
+  let _messageNotifyBatchTimer = null;
   let _messagesUnreadLocalAt = 0;
   const MESSAGES_UNREAD_LOCAL_GUARD_MS = 30000;
+  const MESSAGE_NOTIFY_BATCH_MS = 250;
+  const MESSAGE_NOTIFY_GROUP_ORDER = [
+    "combat",
+    "espionage",
+    "expedition",
+    "logistics",
+    "player",
+    "system",
+  ];
 
   function coercePollUnreadForHud(data, reason) {
     if (!data || typeof data.unread_messages_count !== "number") return data;
@@ -10679,6 +10750,192 @@
     _lastMessagesUnreadPoll = Math.max(0, Number(count) || 0);
   };
 
+  function _messageNotifyGroupKey(item) {
+    const cat = String(item?.category || "system").toLowerCase();
+    if (cat === "combat" || cat === "espionage" || cat === "expedition" || cat === "player") {
+      return cat;
+    }
+    const mission = String(item?.mission_type || "").toLowerCase();
+    const phase = String(item?.report_phase || "").trim();
+    if (
+      phase
+      || mission === "transport"
+      || mission === "collect"
+      || mission === "deploy"
+      || mission === "recycle"
+    ) {
+      return "logistics";
+    }
+    return "system";
+  }
+
+  function _messageNotifyGroupCopy(groupKey, count) {
+    const n = Math.max(1, Math.floor(Number(count) || 1));
+    const titleKey = (base) => (n === 1 ? `${base}_one` : base);
+    if (groupKey === "expedition") {
+      return {
+        title: tf(
+          titleKey("messages.notify_batch_expedition_title"),
+          { count: n },
+          n === 1 ? "1 Expedition abgeschlossen" : `${n} Expeditionen abgeschlossen`
+        ),
+        body: t(
+          "messages.notify_batch_expedition_body",
+          "Neue Expeditionsberichte sind eingetroffen."
+        ),
+        filter: "expedition",
+      };
+    }
+    if (groupKey === "combat") {
+      return {
+        title: tf(
+          titleKey("messages.notify_batch_combat_title"),
+          { count: n },
+          n === 1 ? "1 Kampfbericht" : `${n} Kampfberichte`
+        ),
+        body: t("messages.notify_batch_combat_body", "Neue Kampfberichte sind eingetroffen."),
+        filter: "combat",
+      };
+    }
+    if (groupKey === "espionage") {
+      return {
+        title: tf(
+          titleKey("messages.notify_batch_espionage_title"),
+          { count: n },
+          n === 1 ? "1 Spionagebericht" : `${n} Spionageberichte`
+        ),
+        body: t("messages.notify_batch_espionage_body", "Neue Spionageberichte sind eingetroffen."),
+        filter: "espionage",
+      };
+    }
+    if (groupKey === "logistics") {
+      return {
+        title: tf(
+          titleKey("messages.notify_batch_logistics_title"),
+          { count: n },
+          n === 1 ? "1 Logistikbericht" : `${n} Logistikberichte`
+        ),
+        body: t("messages.notify_batch_logistics_body", "Neue Logistikberichte sind eingetroffen."),
+        filter: "system",
+      };
+    }
+    if (groupKey === "player") {
+      return {
+        title: tf(
+          titleKey("messages.notify_batch_player_title"),
+          { count: n },
+          n === 1 ? "1 Spielernachricht" : `${n} Spielernachrichten`
+        ),
+        body: t("messages.notify_batch_player_body", "Neue Nachrichten von Spielern."),
+        filter: "player",
+      };
+    }
+    if (n > 1) {
+      return {
+        title: tf("messages.notify_new_count", { count: n }, `Du hast ${n} ungelesene Nachrichten.`),
+        body: t("messages.notify_batch_system_body", "Neue Systemmeldungen sind eingetroffen."),
+        filter: "system",
+      };
+    }
+    return {
+      title: t("messages.notify_new", "Neue Nachricht im Posteingang."),
+      body: t("messages.notify_batch_system_body", "Neue Systemmeldungen sind eingetroffen."),
+      filter: "all",
+    };
+  }
+
+  function _openMessagesFilterFromToast(filter) {
+    const cat = String(filter || "all");
+    try {
+      sessionStorage.setItem("gc_messages_prefer_filter", cat);
+    } catch (_) {}
+    if (typeof GC.navigateTo === "function") {
+      GC.navigateTo("/messages");
+    }
+  }
+
+  function _flushMessageNotifyBatch() {
+    _messageNotifyBatchTimer = null;
+    const items = _pendingMessageNotifyItems;
+    _pendingMessageNotifyItems = [];
+    if (!items.length) return;
+    if (GC.detectPage() === "messages") return;
+
+    const byGroup = new Map();
+    let maxId = _lastToastedMessageId;
+    items.forEach((item) => {
+      const id = Math.floor(Number(item?.id) || 0);
+      if (id > 0) maxId = Math.max(maxId, id);
+      const key = _messageNotifyGroupKey(item);
+      byGroup.set(key, (byGroup.get(key) || 0) + 1);
+    });
+
+    const ordered = MESSAGE_NOTIFY_GROUP_ORDER.filter((k) => byGroup.has(k));
+    Object.keys(Object.fromEntries(byGroup)).forEach((k) => {
+      if (!ordered.includes(k)) ordered.push(k);
+    });
+
+    let toastCount = 0;
+    ordered.forEach((groupKey) => {
+      const count = byGroup.get(groupKey) || 0;
+      if (count <= 0) return;
+      const copy = _messageNotifyGroupCopy(groupKey, count);
+      const toastEl = typeof GC.showToast === "function"
+        ? GC.showToast(copy.body, "info", { title: copy.title })
+        : (typeof GC.showNotify === "function" ? GC.showNotify(copy.title, "info") : null);
+      toastCount += 1;
+      if (toastEl && toastEl.addEventListener) {
+        toastEl.style.cursor = "pointer";
+        toastEl.addEventListener("click", (ev) => {
+          if (ev.target && ev.target.closest && ev.target.closest("[data-gc-toast-dismiss]")) return;
+          _openMessagesFilterFromToast(copy.filter);
+        });
+      }
+    });
+
+    if (maxId > _lastToastedMessageId) _lastToastedMessageId = maxId;
+    if (typeof GC._debugFleetBatch === "object") {
+      GC._debugFleetBatch.visibleToasts = (GC._debugFleetBatch.visibleToasts || 0) + toastCount;
+      GC._debugFleetBatch.batchedMessageItems = items.length;
+    }
+  }
+
+  function _queueMessageNotifyItems(items) {
+    const list = Array.isArray(items) ? items : [];
+    if (!list.length) return;
+    const fresh = [];
+    list.forEach((item) => {
+      const id = Math.floor(Number(item?.id) || 0);
+      if (id > 0 && id <= _lastToastedMessageId) return;
+      fresh.push(item);
+    });
+    if (!fresh.length) return;
+    _pendingMessageNotifyItems.push(...fresh);
+    if (_messageNotifyBatchTimer) clearTimeout(_messageNotifyBatchTimer);
+    _messageNotifyBatchTimer = setTimeout(_flushMessageNotifyBatch, MESSAGE_NOTIFY_BATCH_MS);
+  }
+
+  function _extractNotificationToastItems(data, unreadDelta) {
+    const fromSlice = data?.notifications?.new_items;
+    if (Array.isArray(fromSlice) && fromSlice.length) {
+      return fromSlice.filter((item) => {
+        const id = Math.floor(Number(item?.id) || 0);
+        return id > _lastToastedMessageId;
+      });
+    }
+    const delta = Math.max(0, Math.floor(Number(unreadDelta) || 0));
+    if (delta <= 0) return [];
+    const latest = Math.floor(Number(data?.latest_message_id) || 0);
+    if (latest <= _lastToastedMessageId) return [];
+    // Fallback without category slice: synthetic ids so batch count matches unread delta.
+    const items = [];
+    for (let i = 0; i < delta; i += 1) {
+      const id = Math.max(_lastToastedMessageId + 1, latest - (delta - 1 - i));
+      items.push({ id, category: "system", mission_type: null });
+    }
+    return items;
+  }
+
   function _processUnreadMessagesPoll(data, reason, opts) {
     if (!data || typeof data.unread_messages_count !== "number") return;
     if (opts && opts.skipMessagesUnread) return;
@@ -10687,7 +10944,9 @@
     const hudUnread = coercePollUnreadForHud(data, reason).unread_messages_count;
     const prevUnread = _lastMessagesUnreadPoll;
     const unreadIncreased = prevUnread !== null && hudUnread > prevUnread;
+    const unreadDelta = unreadIncreased ? hudUnread - prevUnread : 0;
     const messageSoundKey = resolveMessageNotifySoundKey(data);
+    const latestId = Math.floor(Number(data.latest_message_id) || 0);
 
     if (unreadIncreased || messageSoundKey) {
       console.debug("[GC] notify check", {
@@ -10695,6 +10954,7 @@
         unreadCount: hudUnread,
         previousUnread: prevUnread,
         unreadIncreased,
+        unreadDelta,
         latestMessageId: data.latest_message_id,
         messageSoundKey,
         notifyMessageSound: GC.settings?.notify_message_sound,
@@ -10704,19 +10964,20 @@
 
     _lastMessagesUnreadPoll = hudUnread;
 
-    _maybePlayMessageNotifySound(data, { unreadIncreased });
+    const toastItems = unreadIncreased
+      ? _extractNotificationToastItems(data, unreadDelta)
+      : [];
 
-    if (
-      unreadIncreased
-      && !onMessagesPage
-      && typeof GC.showNotify === "function"
-    ) {
-      let notifyLabel = "Neue Nachricht.";
-      try {
-        const dict = window.GC_LOCALE || {};
-        if (dict.messages_notify_new) notifyLabel = String(dict.messages_notify_new);
-      } catch (_) {}
-      GC.showNotify(notifyLabel, "info");
+    // Sound once per batch via latest_message_id dedupe (not per unread step).
+    if (toastItems.length || (unreadIncreased && latestId > _lastToastedMessageId)) {
+      _maybePlayMessageNotifySound(data, { unreadIncreased: true });
+    }
+
+    if (toastItems.length && !onMessagesPage) {
+      _queueMessageNotifyItems(toastItems);
+    } else if (latestId > _lastToastedMessageId && !toastItems.length) {
+      // Baseline advance when toast skipped (e.g. messages page / no delta items).
+      _lastToastedMessageId = latestId;
     }
 
     if (
@@ -11197,24 +11458,37 @@
         target = parseTimerTarget(cdEl.dataset.timerTarget || cdEl.dataset.countdownAt || 0);
       }
       if (!target) return;
+      // Prefer DOM countdown target — never mix with a different mv phase target
+      // (that flipped timer ↔ "Ankunft" / mission-like labels every tick).
       const srvRem = cdEl.dataset.serverRemaining;
       let remaining = movementRemainingSeconds(
         target,
         now,
         srvRem === undefined || srvRem === "" ? NaN : Number(srvRem)
       );
-      if (mv && Number.isFinite(Number(mv.remaining_seconds))) {
-        remaining = movementRemainingSeconds(
-          fleetDrawerCountdownAt(mv),
-          now,
-          Number(mv.remaining_seconds)
-        );
+      if (
+        mv
+        && Number.isFinite(Number(mv.remaining_seconds))
+        && fleetDrawerCountdownAt(mv) === target
+      ) {
+        remaining = movementRemainingSeconds(target, now, Number(mv.remaining_seconds));
       }
+      const countdownKey = String(cdEl.dataset.countdownKey || target);
       if (remaining <= 0) {
-        _setIfChanged(cdEl, t("fleet_arrival_at", "Ankunft"));
+        // Keep a stable timer glyph — do not put status words ("Ankunft") in the time column.
+        cdEl.dataset.fleetArrivedKey = countdownKey;
+        _setIfChanged(cdEl, "0s");
         row.classList.add("is-arrived");
         cdEl.classList.add("is-arrived");
+        remaining = 0;
+      } else if (cdEl.dataset.fleetArrivedKey === countdownKey) {
+        // Stick at 0s until server advances the countdown key/phase.
+        _setIfChanged(cdEl, "0s");
+        row.classList.add("is-arrived");
+        cdEl.classList.add("is-arrived");
+        remaining = 0;
       } else {
+        delete cdEl.dataset.fleetArrivedKey;
         _setIfChanged(cdEl, formatCountdownRemain(remaining));
         row.classList.remove("is-arrived");
         cdEl.classList.remove("is-arrived");
@@ -11487,6 +11761,7 @@
     const prevKey = cdChip.dataset.countdownKey || "";
     const prevTarget = Number(cdChip.dataset.countdownAt || 0);
     if (prevKey !== countdownKey || prevTarget !== countdownAt) {
+      delete cdChip.dataset.fleetArrivedKey;
       applyQueueJobTimerAttrs(
         cdChip,
         countdownAt,
@@ -11786,7 +12061,7 @@
       row.classList.toggle("is-urgent", remaining < 10);
       cdEl.classList.toggle("is-urgent", remaining < 10);
     } else if (arrivalAt > 0) {
-      _setIfChanged(cdEl, t("fleet_arrival_at", "Ankunft"));
+      _setIfChanged(cdEl, "0s");
       row.classList.remove("is-urgent");
       cdEl.classList.remove("is-urgent");
     }
@@ -11922,20 +12197,23 @@
     _syncFleetHudShellVisibility(root, count, GC.lastState?.fleet_alerts, {
       explicitEmpty: Boolean(resolved.explicitEmpty),
     });
-    if (count > 0) notifyFleetDrawerLayoutChange();
 
     const listEl = root.querySelector("[data-fleet-drawer-list]");
     const moreBtn = root.querySelector("[data-fleet-drawer-more]");
     rememberFleetDrawerMovements(list);
+    const wasShowAll = root.classList.contains("is-show-all");
+    const nowShowAll = showAll && count > visibleLimit;
     if (listEl) {
-      const expandedList = showAll && count > visibleLimit;
+      const expandedList = nowShowAll;
       listEl.classList.toggle("is-show-all", expandedList);
       root.classList.toggle("is-show-all", expandedList);
       const visibleItems = showAll || count <= visibleLimit ? list : list.slice(0, visibleLimit);
       const prevCount = Number(listEl.dataset.fleetDrawerCount || 0);
-      if (prevCount !== count) {
+      const countChanged = prevCount !== count;
+      if (countChanged) {
         _clearMovementCountdownExpiryState();
         listEl.dataset.fleetDrawerCount = String(count);
+        if (count > 0) notifyFleetDrawerLayoutChange();
       }
       syncFleetDrawerList(listEl, visibleItems, {
         authoritative: resolved.authoritative !== false,
@@ -11959,7 +12237,10 @@
       }
     }
 
-    syncMobileFleetSheetLayout(root);
+    if (wasShowAll !== nowShowAll || !root.dataset.fleetSheetSynced) {
+      syncMobileFleetSheetLayout(root);
+      root.dataset.fleetSheetSynced = "1";
+    }
     GC.startProgressTicker();
   }
 
@@ -13408,7 +13689,7 @@
         headers: { Accept: "application/json" },
       });
       if (!res.ok) {
-        if (res.status === 401 || res.status === 403) handleAuthFailure("admin_hud");
+        if (res.status === 401) handleAuthFailure("admin_hud");
         return null;
       }
       const ct = (res.headers.get("content-type") || "").toLowerCase();
@@ -13418,6 +13699,7 @@
         if (isAuthStatusFailure(null, data)) handleAuthFailure("admin_hud");
         return null;
       }
+      clearAuthFailureStreak();
       _statusPollErrorLogged = false;
       clearStatusWidgetOffline();
       applyGameStateData(data, reason || "admin_hud", { hudOnly: true });
@@ -13448,7 +13730,7 @@
     const hudOnly = isHudOnlyGameStateReason(reasonStr);
 
     if (GC.refreshInFlight) {
-      if (isChainReason) {
+      if (isChainReason || reasonStr === "fleet_countdown_expired") {
         if (!_queuedChainRefreshReason) _queuedChainRefreshReason = reasonStr;
       }
       return GC.refreshInFlight;
@@ -13483,6 +13765,7 @@
           return null;
         }
 
+        clearAuthFailureStreak();
         p.backoff = 0;
         _statusPollErrorLogged = false;
         clearStatusWidgetOffline();
@@ -18757,6 +19040,9 @@
       const activeListEl = page.querySelector("[data-fleet-active-list]");
       if (!activeListEl) return;
       const list = Array.isArray(fleets) ? fleets : [];
+      if (typeof GC._debugFleetBatch === "object") {
+        GC._debugFleetBatch.fleetDomPatches = (GC._debugFleetBatch.fleetDomPatches || 0) + 1;
+      }
       if (!list.length) {
         activeListEl.dataset.fleetSig = "";
         _clearMovementCountdownExpiryState();
@@ -18769,6 +19055,9 @@
       )).join("|");
       const sigChanged = activeListEl.dataset.fleetSig !== signature;
       if (sigChanged) {
+        const scrollParent = activeListEl.closest(".gc-panel, .gc-main, #main-content") || activeListEl;
+        const scrollTop = scrollParent.scrollTop || 0;
+        const pageScrollY = window.scrollY || window.pageYOffset || 0;
         activeListEl.dataset.fleetSig = signature;
         _clearMovementCountdownExpiryState();
         activeListEl.innerHTML = list.map((mv) => {
@@ -18791,12 +19080,15 @@
           <div class="fleet-active-times gc-mono">${countdown}</div>
         </article>`;
         }).join("");
+        if (scrollParent) scrollParent.scrollTop = scrollTop;
+        if (Number.isFinite(pageScrollY)) window.scrollTo(0, pageScrollY);
       } else {
         patchActiveFleetCards(page, list);
       }
       updateMovementCountdowns(getApproxServerNow());
       GC.startProgressTicker();
     };
+    GC.renderActiveFleets = renderActiveFleets;
 
     const renderPresetSelect = (page, presets) => {
       const optionHtml = `<option value="">${tt("fleet_preset_none", "— none —")}</option>` +
@@ -18903,6 +19195,7 @@
       }
       if (state.active_fleets !== undefined) {
         rt.data.active_fleets = activeFleetsItems(state.active_fleets);
+        renderActiveFleets(page, rt.data.active_fleets);
         if (typeof GC.renderGlobalFleetHud === "function") {
           GC.renderGlobalFleetHud(state.active_fleets, {
             reason: "fleet_live_state",
@@ -18922,19 +19215,74 @@
     };
 
     const refreshFleetState = async (page) => {
+      if (_fleetStateRefreshPromise) {
+        _fleetStateRefreshQueued = true;
+        return _fleetStateRefreshPromise;
+      }
+      const targetPage = page || document.getElementById("fleet-page");
+      if (!targetPage || targetPage.dataset.ready !== "1") {
+        return null;
+      }
       const seq = ++_fleetRefreshSeq;
-      try {
-        const rt = getFleetRuntime(page);
-        let planetId = parseInt(page.dataset.planetId || rt.data?.planet_id || "0", 10);
-        if (!planetId) {
-          planetId = Number(GC.lastState?.active_planet_id || 0);
+      targetPage.dataset.fleetRefreshBusy = "1";
+      _fleetStateRefreshPromise = (async () => {
+        try {
+          const rt = getFleetRuntime(targetPage);
+          let planetId = parseInt(targetPage.dataset.planetId || rt.data?.planet_id || "0", 10);
+          if (!planetId) {
+            planetId = Number(GC.lastState?.active_planet_id || 0);
+          }
+          const q = planetId ? `?planet_id=${planetId}` : "";
+          const res = await GC.fetchJSON(`/api/fleet/state${q}`, { cache: "no-store" });
+          if (res?.ok) applyLiveState(targetPage, fleetPayload(res), { seq });
+          return res;
+        } catch (_) {
+          return null;
+        } finally {
+          delete targetPage.dataset.fleetRefreshBusy;
         }
-        const q = planetId ? `?planet_id=${planetId}` : "";
-        const res = await GC.fetchJSON(`/api/fleet/state${q}`, { cache: "no-store" });
-        if (res?.ok) applyLiveState(page, fleetPayload(res), { seq });
-      } catch (_) {}
+      })().finally(() => {
+        _fleetStateRefreshPromise = null;
+        if (_fleetStateRefreshQueued) {
+          _fleetStateRefreshQueued = false;
+          const live = document.getElementById("fleet-page");
+          if (live && live.dataset.ready === "1") {
+            void refreshFleetState(live);
+          }
+        }
+      });
+      return _fleetStateRefreshPromise;
     };
     GC.refreshFleetState = refreshFleetState;
+
+    GC.scheduleFleetStateRefresh = function scheduleFleetStateRefresh(reason, opts) {
+      const reasonStr = String(reason || "fleet_state");
+      _fleetStateRefreshReasons.add(reasonStr);
+      if (typeof GC._debugFleetBatch === "object") {
+        GC._debugFleetBatch.scheduledReasons = Array.from(_fleetStateRefreshReasons);
+      }
+      const run = () => {
+        _fleetStateRefreshTimer = null;
+        const reasons = Array.from(_fleetStateRefreshReasons);
+        _fleetStateRefreshReasons.clear();
+        const fleetPage = document.getElementById("fleet-page");
+        if (!fleetPage || fleetPage.dataset.ready !== "1") return Promise.resolve(null);
+        if (typeof GC._debugFleetBatch === "object") {
+          GC._debugFleetBatch.coalescedReasons = reasons;
+        }
+        return refreshFleetState(fleetPage);
+      };
+      if (opts && opts.immediate) {
+        if (_fleetStateRefreshTimer) {
+          clearTimeout(_fleetStateRefreshTimer);
+          _fleetStateRefreshTimer = null;
+        }
+        return run();
+      }
+      if (_fleetStateRefreshTimer) return _fleetStateRefreshPromise || Promise.resolve(null);
+      _fleetStateRefreshTimer = GC.setSafeTimeout(run, FLEET_STATE_REFRESH_COALESCE_MS);
+      return _fleetStateRefreshPromise || Promise.resolve(null);
+    };
 
     const runPreview = async (page) => {
       const rt = getFleetRuntime(page);

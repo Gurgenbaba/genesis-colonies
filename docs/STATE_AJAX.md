@@ -55,6 +55,21 @@ _load_page_live_context(finish_source=…)
 - `patchShellHudFromState()` is the **only** DOM writer for the shell HUD
 - Planet switch: POST → `applyActionState(..., "planet_switch")` (HUD-only) → `reloadCurrentPage({ skipGameState, skipPolling, skipHydrate })` → poll restart
 
+### State-cycle batching (GC-FLEET-NOTIFICATION-BATCH-001)
+
+Mehrere Änderungen innerhalb **eines** State-Zyklus werden gemeinsam gepatcht:
+
+| Regel | Pflicht |
+|-------|---------|
+| Fleet countdown zero | `requestMovementCountdownRefresh` debounce (150–300 ms) → höchstens ein `scheduleFleetStateRefresh` + ein `refreshGameState("fleet_countdown_expired")` |
+| Fleet page list | `applyLiveState` → `renderActiveFleets` (Patch/Signatur); kein `initFleet()` erneut; Scroll erhalten |
+| In-flight coalesce | Laufender Fleet-/Game-State-Request wird nicht dupliziert; weitere Gründe mergen |
+| Notifications UI | Toast/Sound nach Kategorie bündeln; persistente `player_messages` bleiben einzeln |
+| Dedupe | `latest_message_id` / `_lastToastedMessageId` — nicht nur `unread_count` |
+| Payload | `notifications.new_items[]` (id, category, mission_type, …) — keine Message-Bodies im Diet-Poll |
+
+`GET /api/notifications/summary` liefert denselben `notifications`-Slice. Kein paralleler Fleet-Poller.
+
 ## Kanonische Queue-Timer (Live-UI)
 
 Verbindliche Regeln: [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md) § *Kanonische Bauschleifen-Regel*.

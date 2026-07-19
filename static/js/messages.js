@@ -2627,7 +2627,15 @@
 
     syncMessagesDomInit(initSeq);
 
-    const domFilter = readActiveFilterFromDom();
+    let domFilter = readActiveFilterFromDom();
+    try {
+      const prefer = String(sessionStorage.getItem("gc_messages_prefer_filter") || "").trim();
+      if (prefer) {
+        sessionStorage.removeItem("gc_messages_prefer_filter");
+        const preferBtn = document.querySelector(`#messages-tabs .tab-btn[data-filter="${prefer}"]`);
+        if (preferBtn) domFilter = prefer;
+      }
+    } catch (_) {}
 
     const tabsEl = document.getElementById("messages-tabs");
     tabsEl?.querySelectorAll(".tab-btn[data-filter]").forEach((btn) => {

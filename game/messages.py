@@ -1147,6 +1147,71 @@ def latest_inbox_message_id(player_id: int, *, conn=None, prepare: bool = True) 
             conn.close()
 
 
+def notification_toast_items(
+    player_id: int,
+    *,
+    limit: int = 16,
+    conn=None,
+    prepare: bool = False,
+) -> list[dict[str, Any]]:
+    """
+    Lightweight unread inbox slice for client toast batching (GC-FLEET-NOTIFICATION-BATCH-001).
+
+    No message bodies — id/category/mission_type/subject/created_at only.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = db()
+    try:
+        if not _table_ready(conn):
+            return []
+        if prepare:
+            _prepare_inbox(conn, int(player_id))
+        cap = max(1, min(32, int(limit or 16)))
+        cur = conn.cursor()
+        cur.execute(
+            f"""
+            SELECT id, category, subject, created_at, metadata_json
+            FROM player_messages
+            WHERE {_inbox_visibility_clause(archived=False)}
+              {_unread_clause()}
+            ORDER BY id DESC
+            LIMIT ?;
+            """,
+            (int(player_id), cap),
+        )
+        rows = cur.fetchall() or []
+        items: list[dict[str, Any]] = []
+        for row in reversed(rows):
+            mid = _safe_int(row["id"])
+            if mid <= 0:
+                continue
+            meta = _parse_metadata(row["metadata_json"]) or {}
+            mission_type = str(meta.get("mission_type") or "").strip().lower()
+            report_phase = str(meta.get("report_phase") or "").strip()
+            category = str(row["category"] or "system").strip().lower() or "system"
+            priority = 0
+            if category == "combat":
+                priority = 2
+            elif category in ("espionage", "expedition"):
+                priority = 1
+            items.append(
+                {
+                    "id": mid,
+                    "category": category,
+                    "mission_type": mission_type or None,
+                    "report_phase": report_phase or None,
+                    "subject": str(row["subject"] or "")[:SUBJECT_MAX],
+                    "created_at": _safe_int(row["created_at"], 0),
+                    "priority": priority,
+                }
+            )
+        return items
+    finally:
+        if own_conn:
+            conn.close()
+
+
 def unread_count(player_id: int, *, conn=None, prepare: bool = True) -> int:
     own_conn = conn is None
     if own_conn:

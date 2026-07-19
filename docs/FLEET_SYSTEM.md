@@ -322,11 +322,15 @@ Response envelope: `{ ok, error, message_key, data }` via `fleet_api.py`.
 
 - Module: `GC.modules.fleet` → `initFleet()`
 - Forms: `data-no-pjax` (fetch-only send)
-- `refreshFleetState()` on init, after actions, countdown zero
+- `scheduleFleetStateRefresh()` / `refreshFleetState()` — coalesced (ein In-Flight-Request); nach Actions und Countdown-Zero
+- `applyLiveState` → `renderActiveFleets` patched die aktive Liste (Signatur); kein erneutes `initFleet()` nur wegen State
+- Countdown-Zero: kein Reload pro Zeile — debounce + ein Game-State-Refresh (`fleet_countdown_expired`)
+- Mobile Fleet-Drawer: `is-show-all` / „Weniger anzeigen“ bleibt; Sheet-Layout nur bei Expand-Änderung
 - Realigns `planet_id` from `GC.lastState.active_planet_id`
 - Galaxy prefill: `applyFleetUrlPrefill()` from query params
 - **GC-402B:** Mission feedback panel (`data-fleet-mission-feedback`), preview status `is-ok` / `is-blocked`, expedition → position 16
 - **Logistics:** `initLogistics()` auf `/logistics` — Tabs Collect/Distribute, debounced Preview, Hub = `data-logistics-origin` / `data-logistics-hub`
+- **GC-FLEET-NOTIFICATION-BATCH-001:** Expeditions-/Missionsberichte bleiben einzeln im Posteingang; UI-Toasts werden gruppiert
 
 Templates: `templates/fleet.html` (Link zu Logistics), `templates/logistics.html` (Wrapper), `templates/fleet_logistics.html` (Markup).
 

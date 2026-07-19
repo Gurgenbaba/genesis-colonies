@@ -101,7 +101,7 @@ def test_main_js_messages_inbox_reload_only_on_unread_increase():
     assert "unreadIncreased" in unread_section
     assert "function playNewMessageNotifySound()" in src
     assert "playNotificationSound(\"message\")" in src
-    assert "_maybePlayMessageNotifySound(data, { unreadIncreased })" in unread_section
+    assert "_maybePlayMessageNotifySound(data, { unreadIncreased: true })" in unread_section
     tabs_section = src.split("function bindBuildingTabsOnce")[1].split("function initBuildings")[0]
     assert '#messages-tabs' in tabs_section
 
@@ -1391,7 +1391,8 @@ def test_notify_sound_assets_and_main_js_wiring():
     unread_fn = src.split("function _processUnreadMessagesPoll(data, reason, opts)")[1].split("function updateNavBadges")[0]
     assert "data.unread_messages_count" in unread_fn
     assert "coercePollUnreadForHud" in unread_fn
-    assert "_maybePlayMessageNotifySound(data, { unreadIncreased })" in unread_fn
+    assert "_maybePlayMessageNotifySound(data, { unreadIncreased: true })" in unread_fn
+    assert "_queueMessageNotifyItems" in unread_fn
     assert "latest_message_id" in unread_fn
     assert "_processUnreadMessagesPoll(data, reason" in src
     attack_fn = src.split("function _maybePlayIncomingAttackNotify(alerts)")[1].split("function syncFleetAttackAlert(alerts)")[0]
@@ -1764,7 +1765,9 @@ def test_main_js_auth_session_recovery_on_failure():
     assert 'window.location.assign("/login")' in recovery
     assert "quiesceLiveClientFetches" in recovery
     auth = src.split("function handleAuthFailure(reason)")[1].split("function throwAuthError", 1)[0]
-    assert "scheduleAuthSessionRecovery(reason)" in auth
+    # Soft failures need a streak; hard 401/redirect still recover immediately.
+    assert "scheduleAuthSessionRecovery(reasonStr)" in auth
+    assert "noteConfirmedAuthFailure" in auth
     vis = src.split("function initVisibilityPolling()")[1].split("function initMobileNav", 1)[0]
     assert "_authRecoveryStarted" in vis
     assert 'GC.refreshGameState("tab_visible")' in vis
@@ -2446,7 +2449,9 @@ def test_main_js_unread_increase_plays_sound_without_inbox():
     """Unread increase triggers sound via notification poll — inbox open not required."""
     src = _read("static/main.js")
     unread_fn = src.split("function _processUnreadMessagesPoll(data, reason, opts)")[1].split("function updateNavBadges")[0]
-    assert "_maybePlayMessageNotifySound(data, { unreadIncreased })" in unread_fn
+    assert "_maybePlayMessageNotifySound(data, { unreadIncreased: true })" in unread_fn
+    assert "_queueMessageNotifyItems" in unread_fn
     assert "_lastMessagesUnreadPoll = hudUnread" in unread_fn
     notif = src.split("function applyNotificationSummary(data, reason)")[1].split("function scheduleNotificationPoll")[0]
     assert "_processUnreadMessagesPoll(hudSlice, reasonStr, {})" in notif
+    assert "notifications: data.notifications" in notif

@@ -100,8 +100,16 @@ if (res.ok) applyActionState(res, "reason_string");
 |----------|---------|
 | `location.reload()` nach erfolgreicher Action | `applyActionState(res, …)` |
 | UI raten und Ressourcen lokal abziehen | State vom Server patchen |
+| Pro Countdown-Zeile / Nachricht eigenen Full-Reload | Ein State-Patch pro Zyklus (`scheduleFleetStateRefresh`, gebündelte Toasts) |
 
 Idempotenz: Header `X-Request-Id` oder JSON `request_id`.
+
+### Notification batching (GC-FLEET-NOTIFICATION-BATCH-001)
+
+- Server behält Einzel-Nachrichten in `player_messages`.
+- Client bündelt Toast/Sound pro Kategorie innerhalb eines kurzen Fensters (`MESSAGE_NOTIFY_BATCH_MS`).
+- Incoming-Attack-Alarme bleiben separat (`fleet_alerts` / `_maybePlayIncomingAttackNotify`).
+- Unread-Badge nutzt die echte Anzahl; Toasts deduplizieren über Message-IDs.
 
 ---
 
