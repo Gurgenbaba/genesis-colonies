@@ -370,15 +370,15 @@ def test_shipyard_batch_duration_at_yard_capacity():
 
     cap = orbital_production_batch_capacity(1)
     unit = 100
-    assert cap == 6
-    assert production_job_duration_seconds(unit_seconds=unit, amount=6, batch_capacity=cap) == unit
-    assert production_job_duration_seconds(unit_seconds=unit, amount=7, batch_capacity=cap) == unit * 2
+    assert cap == 7
+    assert production_job_duration_seconds(unit_seconds=unit, amount=7, batch_capacity=cap) == unit
+    assert production_job_duration_seconds(unit_seconds=unit, amount=8, batch_capacity=cap) == unit * 2
 
 
 def test_shipyard_level2_batch_capacity():
     from game.shipyard import orbital_production_batch_capacity
 
-    assert orbital_production_batch_capacity(2) == 11
+    assert orbital_production_batch_capacity(2) == 15
 
 
 def test_main_js_exposes_render_mini_queue_strip():

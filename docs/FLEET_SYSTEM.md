@@ -69,13 +69,13 @@ Ergebnis: `max(1, …)` Sekunden — Funktionen `unit_build_seconds()` / `_effec
 
 | Konzept | Formel / Owner |
 |---------|----------------|
-| Yard-Kapazität pro Zyklus | `max(1, floor(1 + level×4 + level^1.35))` — z. B. L1=6, L2=11, L5=29, L10=63, L50≈397 |
+| Yard-Kapazität pro Zyklus | `max(1, floor(1 + level×5 + level^2.3))` — z. B. L1=7, L2=15, L5=66, L10=250, L50≈8335 |
 | Einheiten pro Zyklus | = Yard-Kapazität (alle Schiffstypen gleich; kein Gewicht) |
 | Auftragsdauer | `ceil(amount / capacity) × unit_seconds` (`production_job_duration_seconds`) |
 | Live-Restzeit | `production_live_order_remaining_seconds` → `finish_at` (Sync bei Werft-Upgrade) |
 
-Beispiel Speed ×1, Werft L1 (Kapazität 6), `mule_courier` (`build_seconds = 120`):  
-`unit_seconds = 120` → Auftrag über 10 Schiffe = `ceil(10/6) × 120 = 240 s`.
+Beispiel Speed ×1, Werft L1 (Kapazität 7), `mule_courier` (`build_seconds = 120`):  
+`unit_seconds = 120` → Auftrag über 10 Schiffe = `ceil(10/7) × 120 = 240 s`.
 
 Kosten: `fleet_defs.build_cost` — **kein** Level-Multiplier (metal/crystal/fuel_cells direkt aus Def).
 

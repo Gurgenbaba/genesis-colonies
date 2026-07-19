@@ -410,13 +410,13 @@ def test_production_job_duration_batching_capacity_nine():
 def test_orbital_production_batch_capacity_curve():
     from game.shipyard import orbital_production_batch_capacity
 
-    assert orbital_production_batch_capacity(1) == 6
-    assert orbital_production_batch_capacity(2) == 11
-    assert orbital_production_batch_capacity(5) == 29
-    assert orbital_production_batch_capacity(10) == 63
-    assert orbital_production_batch_capacity(20) == 138
-    assert orbital_production_batch_capacity(30) == 219
-    assert orbital_production_batch_capacity(50) == 397
+    assert orbital_production_batch_capacity(1) == 7
+    assert orbital_production_batch_capacity(2) == 15
+    assert orbital_production_batch_capacity(5) == 66
+    assert orbital_production_batch_capacity(10) == 250
+    assert orbital_production_batch_capacity(20) == 1083
+    assert orbital_production_batch_capacity(30) == 2647
+    assert orbital_production_batch_capacity(50) == 8335
 
 
 def test_production_infer_total_units_with_batch_capacity():
@@ -437,13 +437,16 @@ def test_production_infer_total_units_with_batch_capacity():
 
 
 def test_million_units_not_instant_at_high_yard():
+    """L50 scales for mass builds: ~6 h for 20M light ships at ~9 s/cycle; not instant."""
     from game.shipyard import orbital_production_batch_capacity, production_job_duration_seconds
 
     cap = orbital_production_batch_capacity(50)
-    unit = 30
-    total = production_job_duration_seconds(unit_seconds=unit, amount=1_000_000, batch_capacity=cap)
-    assert total > 3600
-    assert cap < 500
+    assert cap == 8335
+    unit = 9
+    total = production_job_duration_seconds(
+        unit_seconds=unit, amount=20_000_000, batch_capacity=cap
+    )
+    assert 5.5 * 3600 <= total <= 6.5 * 3600
 
 
 def test_unit_batch_capacity_same_for_all_ships():

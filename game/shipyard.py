@@ -47,9 +47,9 @@ def shipyard_level_for_planet(planet_id: int, *, conn=None) -> int:
 
 
 def orbital_production_batch_capacity(shipyard_level: int) -> int:
-    """Parallel units built per production cycle (damped curve; not exponential)."""
+    """Parallel units built per production cycle (late-game quadratic-ish curve)."""
     lvl = max(1, int(shipyard_level or 1))
-    return max(1, int(math.floor(1 + lvl * 4 + lvl**1.35)))
+    return max(1, int(math.floor(1 + lvl * 5 + lvl**2.3)))
 
 
 def shipyard_batch_capacity(shipyard_level: int) -> int:
@@ -273,7 +273,7 @@ def production_schedule_matches_live_params(
         amount=total,
         batch_capacity=batch_capacity,
     )
-    return abs(int(scheduled_duration) - expected) <= max(1, unit // 2)
+    return abs(int(scheduled_duration) - expected) <= 1
 
 
 def production_live_order_remaining_seconds(
