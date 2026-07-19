@@ -8270,6 +8270,60 @@ body:not(.gc-perf-idle) .research-bar-fill{
   padding: 2px 0;
 }
 
+/* GC-TECHCARD-UX-001 — impact summary (scoped; not global card/queue) */
+.gc-tech-impact{
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.gc-tech-impact-blurb{
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: rgba(200, 220, 235, 0.92);
+}
+.gc-tech-impact-block{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border: 1px solid rgba(100, 160, 190, 0.22);
+  background: rgba(8, 20, 36, 0.35);
+  border-radius: var(--gc-radius-sm);
+}
+.gc-tech-impact-heading{
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(140, 200, 220, 0.88);
+}
+.gc-tech-impact-heading--sub{
+  margin-top: 2px;
+  color: rgba(180, 220, 200, 0.9);
+}
+.gc-tech-impact-affects{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+}
+.gc-tech-impact-affect{
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid rgba(100, 160, 190, 0.28);
+  border-radius: var(--gc-radius-sm);
+  font-size: 0.72rem;
+  color: rgba(180, 220, 235, 0.92);
+}
+.gc-tech-impact-unlocks{
+  margin: 0;
+  padding: 0 0 0 1.1rem;
+}
+.gc-tech-impact-unlock{
+  font-size: 0.8rem;
+  color: rgba(200, 230, 210, 0.95);
+}
+
 .gc-tech-metrics{
   display: flex;
   flex-direction: column;

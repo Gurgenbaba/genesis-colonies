@@ -1445,6 +1445,54 @@ def _make_panel_row(
             building_type, buildings, target_level, ratio, research_levels, panel_ctx=panel_ctx
         )
     )
+    # GC-TECHCARD-UX-001E — compact cards prefer concrete impact.next.delta
+    try:
+        from .technical_data import resolve_building_impact
+
+        kind = str(row.get("effect_kind") or "")
+        display_for_impact: Dict[str, Any] = {"layout": kind}
+        if kind == "production":
+            display_for_impact = {
+                "layout": "production",
+                "current_per_hour": int(row.get("effect_current") or 0),
+                "next_per_hour": int(row.get("effect_next") or 0),
+            }
+        elif kind == "storage":
+            display_for_impact = {
+                "layout": "storage",
+                "current": int(row.get("effect_current") or 0),
+                "next": int(row.get("effect_next") or 0),
+            }
+        elif kind == "energy":
+            display_for_impact = {
+                "layout": "energy",
+                "current": int(row.get("effect_current") or 0),
+                "next": int(row.get("effect_next") or 0),
+            }
+        elif kind == "yard_capacity":
+            display_for_impact = {
+                "layout": "yard",
+                "batch_capacity_current": int(row.get("effect_current") or 0),
+                "batch_capacity": int(row.get("effect_next") or 0),
+                "capacity_at_level": int(row.get("effect_next") or 0),
+            }
+        elif building_type == "nanofactory":
+            display_for_impact = {
+                "layout": "nanofactory_build_time",
+                "nano_time_preview": row.get("nano_time_preview") or {},
+            }
+        impact = resolve_building_impact(
+            building_type=building_type,
+            buildings=buildings,
+            research_levels=research_levels,
+            current=level,
+            display=display_for_impact,
+            panel_ctx=panel_ctx,
+        )
+        if impact:
+            row["impact"] = impact
+    except Exception:
+        pass
     energy_draw = _panel_energy_draw_delta(row)
     if energy_draw is not None:
         row["energy_draw"] = energy_draw

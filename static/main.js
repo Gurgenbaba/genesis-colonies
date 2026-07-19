@@ -2925,9 +2925,30 @@
     }
     if (delta <= 0) return "";
     if (kind === "production") {
-      return renderCardLrRow(metric, `+${fmtIntParts(delta).display}/h`);
+      const d = Math.floor(Number(effectRow.impact?.next?.delta) || delta);
+      return renderCardLrRow(metric, `+${fmtIntParts(d).display}/h`);
     }
     if (kind === "bonus_percent") {
+      const impact = effectRow.impact;
+      if (impact && impact.next) {
+        const ex = impact.example || {};
+        if (ex.kind === "duration") {
+          const saved = Math.max(0, Math.floor(Number(ex.saved_seconds) || 0));
+          const to = formatDuration(impact.next.to);
+          let val = to;
+          if (saved > 0) val += ` · −${formatDuration(saved)}`;
+          return renderCardLrRow(metric, val);
+        }
+        const unit = impact.next.unit || "";
+        const d = Number(impact.next.delta);
+        if (Number.isFinite(d) && d !== 0) {
+          const sign = d > 0 ? "+" : "";
+          const body = unit === "/h"
+            ? `${sign}${fmtIntParts(Math.abs(d)).display}/h`
+            : `${sign}${fmtIntParts(Math.abs(d)).display}${unit || ""}`;
+          return renderCardLrRow(metric, body);
+        }
+      }
       const preview = effectRow.nano_time_preview;
       if (preview && buildingKey === "nanofactory") {
         const speedNext = preview.speed_next != null ? String(preview.speed_next) : "";
@@ -6143,6 +6164,131 @@
     );
   }
 
+  function formatTechImpactValue(raw, unit) {
+    const u = String(unit || "");
+    if (u === "s") return formatDuration(raw);
+    if (u === "×") return `×${raw}`;
+    if (u === "%") return `${fmtNumber(raw)}%`;
+    if (u === "/h") return `${formatNumberCompact(raw)}/h`;
+    if (raw == null || raw === "") return "—";
+    return formatNumberCompact(raw);
+  }
+
+  function renderTechnicalImpactSummary(impact) {
+    if (!impact || typeof impact !== "object") return "";
+    const lines = [];
+    // Description stays on the modal header (setTechnicalModalDescription) — do not repeat blurb_key here.
+    const cur = impact.current || {};
+    const nxt = impact.next || {};
+    const example = impact.example || {};
+    const unit = nxt.unit || cur.unit || "";
+    const isDuration = example.kind === "duration" || unit === "s";
+    const isUnlock = example.kind === "unlock";
+
+    // Line label must not repeat the section heading "Aktuell".
+    let currentLineLabel = "";
+    const rawCurLabelKey = String(cur.label_key || "").trim();
+    if (rawCurLabelKey && rawCurLabelKey !== "techcard_current") {
+      currentLineLabel = t(rawCurLabelKey, "");
+      if (!currentLineLabel || currentLineLabel === rawCurLabelKey) currentLineLabel = "";
+    }
+    if (!currentLineLabel) {
+      if (isDuration) {
+        currentLineLabel = t("buildings_technical_nano_example", "Beispiel Ferronit-Mine");
+      } else if (example.kind === "capacity" || example.kind === "slots") {
+        currentLineLabel = t("techcard_value", "Wert");
+      } else if (unit === "/h") {
+        currentLineLabel = t("techcard_production", "Produktion");
+      } else {
+        currentLineLabel = t("techcard_value", "Wert");
+      }
+    }
+
+    lines.push(
+      `<div class="gc-tech-impact-block">` +
+        `<div class="gc-tech-impact-heading">${escapeHtml(t("techcard_current", "Aktuell"))}</div>` +
+        `<div class="gc-tech-line">` +
+        `<span class="gc-tech-label">${escapeHtml(currentLineLabel)}</span>` +
+        `<span class="gc-tech-val gc-mono">${escapeHtml(formatTechImpactValue(cur.value, unit))}</span>` +
+        `</div></div>`
+    );
+
+    if (isUnlock && Array.isArray(example.unlocks) && example.unlocks.length) {
+      const unlocks = example.unlocks
+        .map((u) => {
+          const key = u && u.label_key ? String(u.label_key) : "";
+          const label = key ? t(key, key) : "";
+          return label
+            ? `<li class="gc-tech-impact-unlock">${escapeHtml(label)}</li>`
+            : "";
+        })
+        .filter(Boolean)
+        .join("");
+      if (unlocks) {
+        lines.push(
+          `<div class="gc-tech-impact-block">` +
+            `<div class="gc-tech-impact-heading">${escapeHtml(t("techcard_next_level", "Nächste Stufe"))}</div>` +
+            `<div class="gc-tech-impact-heading gc-tech-impact-heading--sub">${escapeHtml(t("techcard_unlocks", "Schaltet frei"))}</div>` +
+            `<ul class="gc-tech-impact-unlocks">${unlocks}</ul></div>`
+        );
+      }
+    } else {
+      const fromDisp = formatTechImpactValue(nxt.from, unit);
+      const toDisp = formatTechImpactValue(nxt.to, unit);
+      let deltaDisp = "";
+      if (isDuration) {
+        const saved = Math.max(0, Math.floor(Number(example.saved_seconds != null ? example.saved_seconds : -(Number(nxt.delta) || 0)) || 0));
+        const pct = example.marginal_duration_reduction_pct != null
+          ? example.marginal_duration_reduction_pct
+          : nxt.delta_pct;
+        deltaDisp = saved > 0
+          ? tf("techcard_savings", { time: formatDuration(saved) }, `−${formatDuration(saved)}`)
+          : "";
+        if (pct != null && Number(pct) !== 0) {
+          deltaDisp += deltaDisp ? ` (${pct}%)` : `${pct}%`;
+        }
+      } else {
+        const deltaNum = Number(nxt.delta);
+        if (Number.isFinite(deltaNum) && deltaNum !== 0) {
+          const sign = deltaNum > 0 ? "+" : "";
+          deltaDisp = `${sign}${formatTechImpactValue(Math.abs(deltaNum), unit)}`;
+          if (nxt.delta_pct != null) deltaDisp += ` (${nxt.delta_pct}%)`;
+        }
+      }
+      lines.push(
+        `<div class="gc-tech-impact-block">` +
+          `<div class="gc-tech-impact-heading">${escapeHtml(t("techcard_next_level", "Nächste Stufe"))}</div>` +
+          `<div class="gc-tech-line gc-tech-line--delta">` +
+          `<span class="gc-tech-label">${escapeHtml(fromDisp)} → ${escapeHtml(toDisp)}</span>` +
+          (deltaDisp
+            ? `<span class="gc-tech-val gc-mono">${escapeHtml(deltaDisp)}</span>`
+            : "") +
+          `</div></div>`
+      );
+    }
+
+    const affects = Array.isArray(impact.affects) ? impact.affects : [];
+    if (affects.length) {
+      const chips = affects
+        .map((a) => {
+          const key = a && a.label_key ? String(a.label_key) : "";
+          if (!key) return "";
+          const label = t(key, key);
+          return `<span class="gc-tech-impact-affect">${escapeHtml(label)}</span>`;
+        })
+        .filter(Boolean)
+        .join("");
+      if (chips) {
+        lines.push(
+          `<div class="gc-tech-impact-block">` +
+            `<div class="gc-tech-impact-heading">${escapeHtml(t("techcard_affects", "Wirkt auf"))}</div>` +
+            `<div class="gc-tech-impact-affects">${chips}</div></div>`
+        );
+      }
+    }
+    return `<div class="gc-tech-impact">${lines.join("")}</div>`;
+  }
+
   function renderTechnicalSummaryDetail(summary, { isResearch = false, showEnergy = true, milestones = [] } = {}) {
     if (!summary || typeof summary !== "object") return "";
     if (summary.at_max_level) {
@@ -6155,7 +6301,10 @@
 
     const display = summary.display || {};
     const layout = String(display.layout || summary.layout || "");
-    const metricsHtml = renderTechnicalMetricsFromDisplay(display, { isResearch });
+    const impactHtml = summary.impact ? renderTechnicalImpactSummary(summary.impact) : "";
+    const metricsHtml = impactHtml
+      ? ""
+      : renderTechnicalMetricsFromDisplay(display, { isResearch });
     const roiLabel = isResearch
       ? t("buildings_technical_col_roi", "Amortisation")
       : technicalT("buildings_technical_col_roi");
@@ -6192,7 +6341,7 @@
         `</div>`,
     ];
 
-    const section1Body = metricsHtml + roiHtml + footerLines.join("");
+    const section1Body = impactHtml + metricsHtml + roiHtml + footerLines.join("");
     const milestonesHtml = renderTechnicalMilestonesSection(milestones);
     const tableTitle =
       `<div class="gc-tech-section gc-tech-section--table">` +

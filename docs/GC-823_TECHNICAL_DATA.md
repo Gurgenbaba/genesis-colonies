@@ -8,6 +8,7 @@ Server-built `display` blocks and `summary` for building/research technical moda
 | Building API | `game/buildings.py` → `build_building_technical_data` |
 | Research API | `game/research.py` → `build_research_technical_data` |
 | Modal renderer | `static/main.js` → `renderBuildingTechnicalTable` |
+| Impact UX (Aussage statt Prozent) | `summary.impact` — [TECHCARD_UX.md](TECHCARD_UX.md) (GC-TECHCARD-UX-001) |
 
 Production authority unchanged: `calculate_resource_output()`, ROI from live planet context.
 

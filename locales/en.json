@@ -5782,5 +5782,12 @@
   "buildings_technical_nano_vs_l0": "%(from)s → %(to)s (−%(saved)s)",
   "buildings_technical_nano_other_mods": "Other modifiers",
   "buildings_technical_nano_mod_buildtime": "Build optimization L%(level)s",
-  "buildings_technical_nano_mod_universe": "Universe ×%(speed)s"
+  "buildings_technical_nano_mod_universe": "Universe ×%(speed)s",
+  "techcard_current": "Current",
+  "techcard_next_level": "Next level",
+  "techcard_affects": "Affects",
+  "techcard_unlocks": "Unlocks",
+  "techcard_savings": "Saves %(time)s",
+  "techcard_value": "Value",
+  "techcard_production": "Production"
 }

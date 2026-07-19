@@ -5782,5 +5782,12 @@
   "buildings_technical_nano_vs_l0": "%(from)s → %(to)s (−%(saved)s)",
   "buildings_technical_nano_other_mods": "Другие модификаторы",
   "buildings_technical_nano_mod_buildtime": "Оптимизация строительства У%(level)s",
-  "buildings_technical_nano_mod_universe": "Вселенная ×%(speed)s"
+  "buildings_technical_nano_mod_universe": "Вселенная ×%(speed)s",
+  "techcard_current": "Сейчас",
+  "techcard_next_level": "Следующий уровень",
+  "techcard_affects": "Влияет на",
+  "techcard_unlocks": "Открывает",
+  "techcard_savings": "Экономия %(time)s",
+  "techcard_value": "Значение",
+  "techcard_production": "Производство"
 }

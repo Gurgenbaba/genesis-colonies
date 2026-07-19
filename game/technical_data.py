@@ -383,6 +383,166 @@ def build_effect_percent_display(
     }
 
 
+def _impact_delta_pct(current: float, nxt: float) -> Optional[float]:
+    cur = float(current or 0)
+    if cur <= 0:
+        return None
+    return round(100.0 * (float(nxt) - cur) / cur, 1)
+
+
+def build_impact_summary(
+    *,
+    blurb_key: str = "",
+    current_label_key: str = "techcard_current",
+    current_value: Any = None,
+    current_unit: str = "",
+    next_label_key: str = "techcard_next_level",
+    next_from: Any = None,
+    next_to: Any = None,
+    next_delta: Any = None,
+    next_delta_pct: Optional[float] = None,
+    next_unit: str = "",
+    affects: Optional[List[Dict[str, str]]] = None,
+    example: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """GC-TECHCARD-UX-001 — canonical 4-question impact block (server authority)."""
+    unit = str(next_unit or current_unit or "")
+    cur_val = current_value
+    from_v = next_from if next_from is not None else cur_val
+    to_v = next_to
+    delta_v = next_delta
+    if delta_v is None and from_v is not None and to_v is not None:
+        try:
+            delta_v = int(to_v) - int(from_v)
+        except (TypeError, ValueError):
+            delta_v = None
+    pct = next_delta_pct
+    if pct is None and from_v is not None and to_v is not None:
+        try:
+            pct = _impact_delta_pct(float(from_v), float(to_v))
+        except (TypeError, ValueError):
+            pct = None
+    impact: Dict[str, Any] = {
+        "blurb_key": str(blurb_key or ""),
+        "current": {
+            "label_key": str(current_label_key or "techcard_current"),
+            "value": cur_val,
+            "unit": unit,
+        },
+        "next": {
+            "label_key": str(next_label_key or "techcard_next_level"),
+            "from": from_v,
+            "to": to_v,
+            "delta": delta_v,
+            "delta_pct": pct,
+            "unit": unit,
+        },
+        "affects": list(affects or []),
+    }
+    if example:
+        impact["example"] = dict(example)
+    return impact
+
+
+def impact_from_rate(
+    *,
+    blurb_key: str,
+    current_rate: int,
+    next_rate: int,
+    unit: str = "/h",
+    affects: Optional[List[Dict[str, str]]] = None,
+    kind: str = "rate",
+) -> Dict[str, Any]:
+    cur = max(0, int(current_rate or 0))
+    nxt = max(0, int(next_rate or 0))
+    delta = nxt - cur
+    return build_impact_summary(
+        blurb_key=blurb_key,
+        current_value=cur,
+        current_unit=unit,
+        next_from=cur,
+        next_to=nxt,
+        next_delta=delta,
+        next_unit=unit,
+        affects=affects,
+        example={"kind": kind, "current": cur, "next": nxt, "delta": delta, "unit": unit},
+    )
+
+
+def impact_from_capacity(
+    *,
+    blurb_key: str,
+    current_cap: int,
+    next_cap: int,
+    affects: Optional[List[Dict[str, str]]] = None,
+) -> Dict[str, Any]:
+    return impact_from_rate(
+        blurb_key=blurb_key,
+        current_rate=current_cap,
+        next_rate=next_cap,
+        unit="",
+        affects=affects,
+        kind="capacity",
+    )
+
+
+def impact_from_duration_seconds(
+    *,
+    blurb_key: str,
+    current_seconds: int,
+    next_seconds: int,
+    affects: Optional[List[Dict[str, str]]] = None,
+    extra_example: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    cur = max(0, int(current_seconds or 0))
+    nxt = max(0, int(next_seconds or 0))
+    saved = max(0, cur - nxt)
+    pct = _impact_delta_pct(cur, nxt)  # negative when faster
+    example: Dict[str, Any] = {
+        "kind": "duration",
+        "seconds_current": cur,
+        "seconds_next": nxt,
+        "saved_seconds": saved,
+        "delta_pct": pct,
+    }
+    if extra_example:
+        example.update(extra_example)
+    return build_impact_summary(
+        blurb_key=blurb_key,
+        current_value=cur,
+        current_unit="s",
+        next_from=cur,
+        next_to=nxt,
+        next_delta=-saved,
+        next_delta_pct=pct,
+        next_unit="s",
+        affects=affects,
+        example=example,
+    )
+
+
+_PRODUCTION_AFFECTS: Dict[str, List[Dict[str, str]]] = {
+    "metal_mine": [
+        {"label_key": "building_metal_mine"},
+        {"label_key": "nav_overview"},
+    ],
+    "crystal_mine": [
+        {"label_key": "building_crystal_mine"},
+        {"label_key": "nav_overview"},
+    ],
+    "fuel_cell_plant": [
+        {"label_key": "building_fuel_cell_plant"},
+        {"label_key": "nav_overview"},
+    ],
+}
+
+_STORAGE_AFFECTS: Dict[str, List[Dict[str, str]]] = {
+    "metal_storage": [{"label_key": "building_metal_storage"}, {"label_key": "nav_overview"}],
+    "crystal_storage": [{"label_key": "building_crystal_storage"}, {"label_key": "nav_overview"}],
+    "fuel_storage": [{"label_key": "building_fuel_storage"}, {"label_key": "nav_overview"}],
+}
+
+
 def build_nanofactory_time_preview(
     buildings: Mapping[str, int],
     research_levels: Mapping[str, int],
@@ -834,6 +994,221 @@ def enrich_research_technical_row(row: Dict[str, Any], tech_key: str, level: int
     }
 
 
+def resolve_building_impact(
+    *,
+    building_type: str,
+    buildings: Mapping[str, int],
+    research_levels: Mapping[str, int],
+    current: int,
+    display: Mapping[str, Any],
+    panel_ctx=None,
+) -> Optional[Dict[str, Any]]:
+    """Build TECHCARD impact for a building summary (GC-TECHCARD-UX-001)."""
+    from .effects import EffectResolver
+
+    btype = str(building_type)
+    cur = max(0, int(current))
+    blurb = f"desc_{btype}"
+    layout = str(display.get("layout") or "")
+
+    if btype in MINE_BUILDINGS or layout == "production":
+        cur_rate = int(display.get("current_per_hour") or 0)
+        nxt_rate = int(display.get("next_per_hour") or 0)
+        return impact_from_rate(
+            blurb_key=blurb,
+            current_rate=cur_rate,
+            next_rate=nxt_rate,
+            unit="/h",
+            affects=_PRODUCTION_AFFECTS.get(btype, [{"label_key": f"building_{btype}"}, {"label_key": "nav_overview"}]),
+        )
+
+    if btype in STORAGE_BUILDING_RESOURCES or layout == "storage":
+        cur_cap = int(display.get("current") or 0)
+        nxt_cap = int(display.get("next") or display.get("capacity_at_level") or 0)
+        return impact_from_capacity(
+            blurb_key=blurb,
+            current_cap=cur_cap,
+            next_cap=nxt_cap,
+            affects=_STORAGE_AFFECTS.get(btype, [{"label_key": f"building_{btype}"}]),
+        )
+
+    if layout == "energy" or btype == "solar_plant":
+        cur_e = int(display.get("current") or 0)
+        nxt_e = int(display.get("next") or 0)
+        return impact_from_rate(
+            blurb_key=blurb,
+            current_rate=cur_e,
+            next_rate=nxt_e,
+            unit="",
+            affects=[{"label_key": "building_solar_plant"}, {"label_key": "energy"}],
+            kind="energy",
+        )
+
+    if layout == "yard" or btype in ("orbital_shipyard", "defense_factory"):
+        cur_cap = int(display.get("batch_capacity_current") or 0)
+        nxt_cap = int(display.get("batch_capacity") or display.get("capacity_at_level") or 0)
+        return impact_from_rate(
+            blurb_key=blurb,
+            current_rate=cur_cap,
+            next_rate=nxt_cap,
+            unit="",
+            affects=[{"label_key": f"building_{btype}"}, {"label_key": "nav_shipyard" if btype == "orbital_shipyard" else "nav_defense"}],
+            kind="capacity",
+        )
+
+    if btype == "nanofactory" or layout == "nanofactory_build_time":
+        preview = display.get("nano_time_preview") or {}
+        if not preview:
+            base = getattr(panel_ctx, "resolver", None) if panel_ctx is not None else None
+            preview = build_nanofactory_time_preview(
+                buildings, research_levels, nano_level=cur, base_resolver=base
+            )
+        return impact_from_duration_seconds(
+            blurb_key=blurb,
+            current_seconds=int(preview.get("seconds_current") or 0),
+            next_seconds=int(preview.get("seconds_next") or 0),
+            affects=[
+                {"label_key": "building_metal_mine"},
+                {"label_key": "nav_buildings"},
+                {"label_key": "nav_overview"},
+            ],
+            extra_example={
+                "speed_current": preview.get("speed_current"),
+                "speed_next": preview.get("speed_next"),
+                "saved_vs_l0_seconds": preview.get("saved_vs_l0_seconds"),
+                "seconds_nano_0": preview.get("seconds_nano_0"),
+                "marginal_duration_reduction_pct": preview.get("marginal_duration_reduction_pct"),
+                "reference_building": preview.get("reference_building"),
+            },
+        )
+
+    if btype == "command_center":
+        # CC only accelerates nanofactory upgrades — never other buildings.
+        base = getattr(panel_ctx, "resolver", None) if panel_ctx is not None else None
+
+        def _nano_upgrade_seconds(cc_level: int) -> int:
+            bld = dict(buildings or {})
+            bld["command_center"] = max(0, int(cc_level))
+            nano_lvl = int(bld.get("nanofactory", 0) or 0)
+            target = nano_lvl + 1
+            if base is not None:
+                er = EffectResolver(
+                    bld,
+                    dict(research_levels or {}),
+                    settings=getattr(base, "_settings", None),
+                    player_id=getattr(base, "player_id", None),
+                    planet_id=getattr(base, "planet_id", None),
+                    planet_position=getattr(base, "planet_position", None),
+                    galaxy_id=getattr(base, "galaxy_id", None),
+                    conn=getattr(base, "_conn", None),
+                )
+            else:
+                er = EffectResolver(bld, dict(research_levels or {}))
+            return int(er.get_build_time_seconds("nanofactory", target))
+
+        t_cur = _nano_upgrade_seconds(cur)
+        t_nxt = _nano_upgrade_seconds(cur + 1)
+        return impact_from_duration_seconds(
+            blurb_key=blurb,
+            current_seconds=t_cur,
+            next_seconds=t_nxt,
+            affects=[{"label_key": "building_nanofactory"}],
+            extra_example={"scope": "nanofactory_upgrade_only"},
+        )
+
+    if btype in ("research_lab", "academy"):
+        base = getattr(panel_ctx, "resolver", None) if panel_ctx is not None else None
+        research = dict(research_levels or {})
+
+        def _research_seconds(bld_levels: Mapping[str, int]) -> int:
+            if base is not None:
+                er = EffectResolver(
+                    dict(bld_levels),
+                    research,
+                    settings=getattr(base, "_settings", None),
+                    player_id=getattr(base, "player_id", None),
+                    planet_id=getattr(base, "planet_id", None),
+                    planet_position=getattr(base, "planet_position", None),
+                    galaxy_id=getattr(base, "galaxy_id", None),
+                    conn=getattr(base, "_conn", None),
+                )
+            else:
+                er = EffectResolver(dict(bld_levels), research)
+            # Reference: next level of energy_tech (always defined).
+            tech_lvl = int(research.get("energy_tech", 0) or 0) + 1
+            return int(er.get_research_time_seconds("energy_tech", tech_lvl))
+
+        bld_cur = dict(buildings or {})
+        bld_nxt = dict(bld_cur)
+        bld_nxt[btype] = cur + 1
+        return impact_from_duration_seconds(
+            blurb_key=blurb,
+            current_seconds=_research_seconds(bld_cur),
+            next_seconds=_research_seconds(bld_nxt),
+            affects=[{"label_key": "nav_research"}, {"label_key": f"building_{btype}"}],
+            extra_example={"reference_tech": "energy_tech"},
+        )
+
+    if btype == "terraformer":
+        # Storage capacity bonus: metal storage as concrete example.
+        bld_cur = dict(buildings or {})
+        bld_nxt = dict(bld_cur)
+        bld_nxt["terraformer"] = cur + 1
+        cap_cur = canonical_storage_capacity_for_building(
+            "metal_storage",
+            int(bld_cur.get("metal_storage", 0) or 0),
+            buildings=bld_cur,
+            research_levels=research_levels,
+            panel_ctx=panel_ctx,
+        )
+        cap_nxt = canonical_storage_capacity_for_building(
+            "metal_storage",
+            int(bld_nxt.get("metal_storage", 0) or 0),
+            buildings=bld_nxt,
+            research_levels=research_levels,
+            panel_ctx=panel_ctx,
+        )
+        return impact_from_capacity(
+            blurb_key=blurb,
+            current_cap=cap_cur,
+            next_cap=cap_nxt,
+            affects=[{"label_key": "building_metal_storage"}, {"label_key": "building_terraformer"}],
+        )
+
+    if btype in ("geothermal_nexus", "planet_core_nexus"):
+        base = getattr(panel_ctx, "resolver", None) if panel_ctx is not None else None
+
+        def _max_mine(bld: Mapping[str, int]) -> int:
+            if base is not None:
+                er = EffectResolver(
+                    dict(bld),
+                    dict(research_levels or {}),
+                    settings=getattr(base, "_settings", None),
+                    player_id=getattr(base, "player_id", None),
+                    planet_id=getattr(base, "planet_id", None),
+                    planet_position=getattr(base, "planet_position", None),
+                    galaxy_id=getattr(base, "galaxy_id", None),
+                    conn=getattr(base, "_conn", None),
+                )
+            else:
+                er = EffectResolver(dict(bld), dict(research_levels or {}))
+            return int(er.get_max_building_level("metal_mine"))
+
+        bld_cur = dict(buildings or {})
+        bld_nxt = dict(bld_cur)
+        bld_nxt[btype] = cur + 1
+        return impact_from_rate(
+            blurb_key=blurb,
+            current_rate=_max_mine(bld_cur),
+            next_rate=_max_mine(bld_nxt),
+            unit="",
+            affects=[{"label_key": "building_metal_mine"}, {"label_key": f"building_{btype}"}],
+            kind="capacity",
+        )
+
+    return None
+
+
 def build_building_technical_summary(
     *,
     building_type: str,
@@ -876,7 +1251,7 @@ def build_building_technical_summary(
             capacity_at_level=cap_to,
             step_delta=max(0, cap_to - cap_from),
         )
-        return {
+        out = {
             "at_max_level": False,
             "layout": "storage",
             "from_level": cur,
@@ -889,6 +1264,17 @@ def build_building_technical_summary(
             "active_bonuses": [],
             "formula": None,
         }
+        impact = resolve_building_impact(
+            building_type=btype,
+            buildings=buildings,
+            research_levels=research_levels,
+            current=cur,
+            display=display,
+            panel_ctx=panel_ctx,
+        )
+        if impact:
+            out["impact"] = impact
+        return out
 
     display = dict(next_row.get("display") or {})
     layout = str(display.get("layout") or "")
@@ -899,7 +1285,7 @@ def build_building_technical_summary(
         display["batch_capacity"] = display.get("capacity_at_level")
         display["build_time_reduction_next"] = display.get("reduction_at_level")
 
-    return {
+    out = {
         "at_max_level": False,
         "layout": layout or "plain",
         "from_level": cur,
@@ -912,6 +1298,198 @@ def build_building_technical_summary(
         "active_bonuses": display.get("active_bonuses") or [],
         "formula": display.get("formula"),
     }
+    impact = resolve_building_impact(
+        building_type=btype,
+        buildings=buildings,
+        research_levels=research_levels,
+        current=cur,
+        display=display,
+        panel_ctx=panel_ctx,
+    )
+    if impact:
+        out["impact"] = impact
+    return out
+
+
+def resolve_research_impact(
+    *,
+    tech_key: str,
+    current: int,
+    buildings: Optional[Mapping[str, int]],
+    research_levels: Optional[Mapping[str, int]],
+    effect: Mapping[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """TECHCARD impact for research summaries — concrete gameplay units."""
+    from .effects import EffectResolver
+    from .research import fleet_slots_for_navigation_level
+
+    key = str(tech_key)
+    cur = max(0, int(current))
+    nxt = cur + 1
+    blurb = f"desc_{key}"
+    bld = dict(buildings or {})
+    research = dict(research_levels or {})
+
+    if key in ("mining_tech", "drone_tech"):
+        mine_lvl = max(1, int(bld.get("metal_mine", 0) or 0))
+        r_cur = EffectResolver(bld, {**research, key: cur})
+        r_nxt = EffectResolver(bld, {**research, key: nxt})
+        # Use production_per_hour metal via resolver helper if available.
+        prod_cur = int(r_cur.get_building_production_per_hour(1.0).get("metal", 0) or 0)
+        prod_nxt = int(r_nxt.get_building_production_per_hour(1.0).get("metal", 0) or 0)
+        if prod_cur <= 0 and mine_lvl <= 0:
+            # Fallback: show percent as rate of 100 for readability only when no mine.
+            return impact_from_rate(
+                blurb_key=blurb,
+                current_rate=int(effect.get("effect_current") or 0),
+                next_rate=int(effect.get("effect_next") or 0),
+                unit="%",
+                affects=[{"label_key": "building_metal_mine"}],
+            )
+        return impact_from_rate(
+            blurb_key=blurb,
+            current_rate=prod_cur,
+            next_rate=prod_nxt,
+            unit="/h",
+            affects=[{"label_key": "building_metal_mine"}, {"label_key": "nav_overview"}],
+        )
+
+    if key == "storage_tech":
+        store_lvl = int(bld.get("metal_storage", 0) or 0)
+        cap_cur = canonical_storage_capacity_for_building(
+            "metal_storage", store_lvl, buildings=bld, research_levels={**research, key: cur}
+        )
+        cap_nxt = canonical_storage_capacity_for_building(
+            "metal_storage", store_lvl, buildings=bld, research_levels={**research, key: nxt}
+        )
+        return impact_from_capacity(
+            blurb_key=blurb,
+            current_cap=cap_cur,
+            next_cap=cap_nxt,
+            affects=[{"label_key": "building_metal_storage"}],
+        )
+
+    if key == "buildtime_tech":
+        r_cur = EffectResolver(bld, {**research, key: cur})
+        r_nxt = EffectResolver(bld, {**research, key: nxt})
+        target = max(1, int(bld.get("metal_mine", 0) or 0) + 1)
+        return impact_from_duration_seconds(
+            blurb_key=blurb,
+            current_seconds=int(r_cur.get_build_time_seconds("metal_mine", target)),
+            next_seconds=int(r_nxt.get_build_time_seconds("metal_mine", target)),
+            affects=[{"label_key": "building_metal_mine"}, {"label_key": "nav_overview"}],
+            extra_example={"reference_building": "metal_mine"},
+        )
+
+    if key == "energy_tech":
+        # Concrete mine energy draw at metal_mine level.
+        mine_lvl = max(1, int(bld.get("metal_mine", 0) or 1))
+        r_cur = EffectResolver({**bld, "metal_mine": mine_lvl}, {**research, key: cur})
+        r_nxt = EffectResolver({**bld, "metal_mine": mine_lvl}, {**research, key: nxt})
+        draw_cur = int(r_cur.building_energy_draw("metal_mine", level=mine_lvl))
+        draw_nxt = int(r_nxt.building_energy_draw("metal_mine", level=mine_lvl))
+        return impact_from_rate(
+            blurb_key=blurb,
+            current_rate=draw_cur,
+            next_rate=draw_nxt,
+            unit="",
+            affects=[{"label_key": "building_metal_mine"}, {"label_key": "energy"}],
+            kind="energy",
+        )
+
+    if key == "navigation_tech":
+        slots_cur = int(fleet_slots_for_navigation_level(cur))
+        slots_nxt = int(fleet_slots_for_navigation_level(nxt))
+        return impact_from_rate(
+            blurb_key=blurb,
+            current_rate=slots_cur,
+            next_rate=slots_nxt,
+            unit="",
+            affects=[{"label_key": "nav_fleet"}, {"label_key": "research_navigation_tech"}],
+            kind="slots",
+        )
+
+    if key in ("engine_tech", "fuel_efficiency"):
+        # Speed / fuel factor as × multiplier (server), still more concrete than bare +.
+        if key == "engine_tech":
+            f_cur = 1.0 + 0.02 * cur
+            f_nxt = 1.0 + 0.02 * nxt
+            return build_impact_summary(
+                blurb_key=blurb,
+                current_value=round(f_cur, 2),
+                current_unit="×",
+                next_from=round(f_cur, 2),
+                next_to=round(f_nxt, 2),
+                next_delta=round(f_nxt - f_cur, 2),
+                next_unit="×",
+                affects=[{"label_key": "nav_fleet"}],
+                example={"kind": "rate", "unit": "×", "current": round(f_cur, 2), "next": round(f_nxt, 2)},
+            )
+        # fuel: remaining factor
+        f_cur = float(EffectResolver.fuel_efficiency_factor_for_level(cur))
+        f_nxt = float(EffectResolver.fuel_efficiency_factor_for_level(nxt))
+        # Show relative fuel use % of base (lower is better).
+        use_cur = int(round(f_cur * 100))
+        use_nxt = int(round(f_nxt * 100))
+        return impact_from_rate(
+            blurb_key=blurb,
+            current_rate=use_cur,
+            next_rate=use_nxt,
+            unit="%",
+            affects=[{"label_key": "nav_fleet"}],
+            kind="rate",
+        )
+
+    if key in ("weapon_tech", "armor_tech", "shield_tech"):
+        # Reference combat stat: base 1000 scaled by +5%/level.
+        base = 1000
+        bonus_cur = 1.0 + 0.05 * cur
+        bonus_nxt = 1.0 + 0.05 * nxt
+        return impact_from_rate(
+            blurb_key=blurb,
+            current_rate=int(round(base * bonus_cur)),
+            next_rate=int(round(base * bonus_nxt)),
+            unit="",
+            affects=[{"label_key": "nav_fleet"}, {"label_key": f"research_{key}"}],
+            kind="capacity",
+        )
+
+    if key == "interstellar_expansion":
+        from .planet_evolution.expansion_protocol import interstellar_expansion_reach_label
+
+        return build_impact_summary(
+            blurb_key=blurb,
+            current_label_key="techcard_current",
+            current_value=cur,
+            current_unit="",
+            next_from=cur,
+            next_to=nxt,
+            next_delta=1,
+            affects=[
+                {"label_key": "research_interstellar_expansion"},
+                {"label_key": "nav_galaxy"},
+            ],
+            example={
+                "kind": "unlock",
+                "reach_current_key": interstellar_expansion_reach_label(cur),
+                "reach_next_key": interstellar_expansion_reach_label(nxt),
+                "unlocks": [
+                    {"label_key": interstellar_expansion_reach_label(nxt)},
+                    {"label_key": "nav_galaxy"},
+                ],
+            },
+        )
+
+    # Generic numeric effect fallback (still structured).
+    if effect.get("effect_kind") in ("bonus_percent", "reduction_percent", "level"):
+        return impact_from_rate(
+            blurb_key=blurb,
+            current_rate=int(effect.get("effect_current") or 0),
+            next_rate=int(effect.get("effect_next") or 0),
+            unit="%" if "percent" in str(effect.get("effect_kind")) else "",
+            affects=[{"label_key": f"research_{key}"}],
+        )
+    return None
 
 
 def build_research_technical_summary(
@@ -967,7 +1545,7 @@ def build_research_technical_summary(
     if buildings is not None and research_levels is not None:
         bonuses = _active_research_bonuses_for_planet(buildings, research_levels)
 
-    return {
+    out = {
         "at_max_level": False,
         "layout": str(display.get("layout") or "plain"),
         "from_level": cur,
@@ -979,6 +1557,16 @@ def build_research_technical_summary(
         "upgrade_roi_hours": roi_hours,
         "active_bonuses": bonuses,
     }
+    impact = resolve_research_impact(
+        tech_key=key,
+        current=cur,
+        buildings=buildings,
+        research_levels=research_levels,
+        effect=effect,
+    )
+    if impact:
+        out["impact"] = impact
+    return out
 
 
 def _active_research_bonuses(tech_key: str, current_level: int) -> List[Dict[str, Any]]:

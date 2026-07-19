@@ -262,7 +262,7 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | Produktionsformeln | `game/production_formula.py` | [PRODUCTION_FORMULA_SYSTEM.md](PRODUCTION_FORMULA_SYSTEM.md) |
 | Economy-Rebalance (GC-821) | `game/economy_balance.py` | [GC-821_ECONOMY_REBALANCE.md](GC-821_ECONOMY_REBALANCE.md) · [BALANCE_ANCHORS.md](BALANCE_ANCHORS.md) |
 | Queue refunds (GC-831) | `game/queue_refund.py` | [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md) |
-| Technical data display (GC-823) | `game/technical_data.py` | [GC-823_TECHNICAL_DATA.md](GC-823_TECHNICAL_DATA.md) |
+| Technical data display (GC-823) | `game/technical_data.py` | [GC-823_TECHNICAL_DATA.md](GC-823_TECHNICAL_DATA.md) · [TECHCARD_UX.md](TECHCARD_UX.md) |
 | Live economy QA (GC-822) | `game/economy_live_audit.py` | [GC-822_LIVE_ECONOMY_QA.md](GC-822_LIVE_ECONOMY_QA.md) |
 | Effekte / Energie / Storage / Zeit | `game/effects/` (`EffectResolver`) | [EFFECTS.md](EFFECTS.md) |
 | Buildings / Bau-Queue | `game/buildings.py` | [BUILDINGS_SYSTEM.md](BUILDINGS_SYSTEM.md) |

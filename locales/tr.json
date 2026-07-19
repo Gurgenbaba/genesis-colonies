@@ -5782,5 +5782,12 @@
   "buildings_technical_nano_vs_l0": "%(from)s → %(to)s (−%(saved)s)",
   "buildings_technical_nano_other_mods": "Diğer değiştiriciler",
   "buildings_technical_nano_mod_buildtime": "İnşa optimizasyonu S%(level)s",
-  "buildings_technical_nano_mod_universe": "Evren ×%(speed)s"
+  "buildings_technical_nano_mod_universe": "Evren ×%(speed)s",
+  "techcard_current": "Mevcut",
+  "techcard_next_level": "Sonraki seviye",
+  "techcard_affects": "Etkiler",
+  "techcard_unlocks": "Açar",
+  "techcard_savings": "Kazanç %(time)s",
+  "techcard_value": "Değer",
+  "techcard_production": "Üretim"
 }
