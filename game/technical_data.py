@@ -493,6 +493,7 @@ def impact_from_duration_seconds(
     next_seconds: int,
     affects: Optional[List[Dict[str, str]]] = None,
     extra_example: Optional[Dict[str, Any]] = None,
+    current_label_key: str = "techcard_current",
 ) -> Dict[str, Any]:
     cur = max(0, int(current_seconds or 0))
     nxt = max(0, int(next_seconds or 0))
@@ -509,6 +510,7 @@ def impact_from_duration_seconds(
         example.update(extra_example)
     return build_impact_summary(
         blurb_key=blurb_key,
+        current_label_key=current_label_key,
         current_value=cur,
         current_unit="s",
         next_from=cur,
@@ -543,6 +545,38 @@ _STORAGE_AFFECTS: Dict[str, List[Dict[str, str]]] = {
 }
 
 
+def _pick_longest_build_reference(
+    resolver,
+    buildings: Mapping[str, int],
+) -> Tuple[str, int]:
+    """Choose the planet's longest next upgrade (excludes nanofactory self-upgrade)."""
+    from .buildings import BUILDING_ORDER
+
+    best_building = "metal_mine"
+    best_target = max(1, int(buildings.get("metal_mine", 0) or 0) + 1)
+    best_seconds = -1
+    for btype in BUILDING_ORDER:
+        if btype == "nanofactory":
+            continue
+        cur_lvl = int(buildings.get(btype, 0) or 0)
+        try:
+            max_lvl = int(resolver.get_max_building_level(btype))
+        except Exception:
+            max_lvl = cur_lvl + 1
+        if cur_lvl >= max_lvl:
+            continue
+        target = cur_lvl + 1
+        try:
+            secs = int(resolver.get_build_time_seconds(btype, target))
+        except Exception:
+            continue
+        if secs > best_seconds:
+            best_seconds = secs
+            best_building = btype
+            best_target = target
+    return best_building, int(best_target)
+
+
 def build_nanofactory_time_preview(
     buildings: Mapping[str, int],
     research_levels: Mapping[str, int],
@@ -564,9 +598,6 @@ def build_nanofactory_time_preview(
     cur_nano = int(nano_level) if nano_level is not None else int(bld.get("nanofactory", 0) or 0)
     cur_nano = max(0, cur_nano)
     next_nano = cur_nano + 1
-
-    ref_building = "metal_mine"
-    ref_target = max(1, int(bld.get(ref_building, 0) or 0) + 1)
 
     def _clone(nano_lvl: int):
         clone_bld = dict(bld)
@@ -599,6 +630,10 @@ def build_nanofactory_time_preview(
     r0 = _clone(0)
     r_cur = _clone(cur_nano)
     r_next = _clone(next_nano)
+
+    # Example = longest next upgrade under current nano (most tangible savings).
+    ref_building, ref_target = _pick_longest_build_reference(r_cur, bld)
+    ref_label_key = f"building_{ref_building}"
 
     seconds_l0 = int(r0.get_build_time_seconds(ref_building, ref_target))
     seconds_cur = int(r_cur.get_build_time_seconds(ref_building, ref_target))
@@ -635,6 +670,7 @@ def build_nanofactory_time_preview(
         "speed_bonus_pct_current": int(EffectResolver.nanofactory_build_speed_bonus_pct(cur_nano)),
         "speed_bonus_pct_next": int(EffectResolver.nanofactory_build_speed_bonus_pct(next_nano)),
         "reference_building": ref_building,
+        "reference_building_label_key": ref_label_key,
         "reference_target_level": int(ref_target),
         "seconds_nano_0": seconds_l0,
         "seconds_current": seconds_cur,
@@ -1063,12 +1099,17 @@ def resolve_building_impact(
             preview = build_nanofactory_time_preview(
                 buildings, research_levels, nano_level=cur, base_resolver=base
             )
+        ref_key = str(
+            preview.get("reference_building_label_key")
+            or f"building_{preview.get('reference_building') or 'metal_mine'}"
+        )
         return impact_from_duration_seconds(
             blurb_key=blurb,
             current_seconds=int(preview.get("seconds_current") or 0),
             next_seconds=int(preview.get("seconds_next") or 0),
+            current_label_key=ref_key,
             affects=[
-                {"label_key": "building_metal_mine"},
+                {"label_key": ref_key},
                 {"label_key": "nav_buildings"},
                 {"label_key": "nav_overview"},
             ],
@@ -1079,6 +1120,8 @@ def resolve_building_impact(
                 "seconds_nano_0": preview.get("seconds_nano_0"),
                 "marginal_duration_reduction_pct": preview.get("marginal_duration_reduction_pct"),
                 "reference_building": preview.get("reference_building"),
+                "reference_building_label_key": ref_key,
+                "reference_target_level": preview.get("reference_target_level"),
             },
         )
 

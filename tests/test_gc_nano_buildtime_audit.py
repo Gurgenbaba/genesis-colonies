@@ -116,8 +116,10 @@ class TestNanoPreviewPayload:
             nano_level=0,
             settings=SPEED_ONE,
         )
-        assert preview["reference_building"] == "metal_mine"
-        assert preview["reference_target_level"] == 5
+        # With uniform base times, first eligible upgrade wins; metal_mine is fine.
+        assert preview["reference_building"]
+        assert preview["reference_building_label_key"] == f"building_{preview['reference_building']}"
+        assert preview["reference_target_level"] >= 1
         assert preview["speed_current"] == 1.0
         assert preview["speed_next"] == 1.55
         assert preview["seconds_nano_0"] == 480
@@ -126,6 +128,25 @@ class TestNanoPreviewPayload:
         assert preview["saved_vs_l0_seconds"] == 0
         assert preview["saved_marginal_seconds"] == 171
         assert preview["modifiers"]["buildtime_tech_level"] == 0
+
+    def test_preview_picks_longest_building(self, monkeypatch):
+        def _seconds(btype, level):
+            if btype == "research_lab":
+                return 9000
+            if btype == "metal_mine":
+                return 480
+            return 100
+
+        monkeypatch.setattr("game.economy_balance.power_build_seconds", _seconds)
+        preview = build_nanofactory_time_preview(
+            {"metal_mine": 4, "research_lab": 10, "nanofactory": 1},
+            {},
+            nano_level=1,
+            settings=SPEED_ONE,
+        )
+        assert preview["reference_building"] == "research_lab"
+        assert preview["reference_target_level"] == 11
+        assert preview["reference_building_label_key"] == "building_research_lab"
 
     def test_preview_separates_buildtime_tech(self, monkeypatch):
         monkeypatch.setattr(

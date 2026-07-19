@@ -45,7 +45,7 @@ Percent alone is forbidden as the primary statement. Percent may appear only as 
 | Storage | capacity | Same as HUD caps |
 | Energy (solar) | energy points | Generation |
 | Yard / defense factory | ships or units / cycle | Not bare `%` |
-| Nanofactory | build seconds (reference mine) | Marginal vs cumulative |
+| Nanofactory | build seconds (longest next upgrade on planet) | Marginal vs cumulative; excludes nanofactory self-upgrade |
 | Command Center | nanofactory upgrade seconds only | Never mine times |
 | Research eco | production / storage / build seconds | Via EffectResolver |
 | Research fleet | slots / speed factor / fuel | Via fleet helpers |

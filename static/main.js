@@ -5997,8 +5997,15 @@
         label: t("buildings_technical_nano_speed_next", "Nächste Stufe"),
         value: tf("buildings_technical_nano_speed", { factor: speedNext }, `×${speedNext}`),
       });
+      const refLabelKey = String(
+        preview.reference_building_label_key
+          || (preview.reference_building ? `building_${preview.reference_building}` : "")
+      ).trim();
+      const refLabel = refLabelKey
+        ? t(refLabelKey, t("buildings_technical_nano_example", "Längstes Gebäude"))
+        : t("buildings_technical_nano_example", "Längstes Gebäude");
       lines.push({
-        label: t("buildings_technical_nano_example", "Beispiel Ferronit-Mine"),
+        label: refLabel,
         value: `${formatDuration(secCur)} → ${formatDuration(secNext)}`,
         highlight: true,
       });
@@ -6193,8 +6200,17 @@
       if (!currentLineLabel || currentLineLabel === rawCurLabelKey) currentLineLabel = "";
     }
     if (!currentLineLabel) {
-      if (isDuration) {
-        currentLineLabel = t("buildings_technical_nano_example", "Beispiel Ferronit-Mine");
+      const refLabelKey = String(
+        example.reference_building_label_key
+          || (example.reference_building ? `building_${example.reference_building}` : "")
+      ).trim();
+      if (isDuration && refLabelKey) {
+        currentLineLabel = t(refLabelKey, refLabelKey);
+        if (currentLineLabel === refLabelKey) {
+          currentLineLabel = t("buildings_technical_nano_example", "Längstes Gebäude");
+        }
+      } else if (isDuration) {
+        currentLineLabel = t("buildings_technical_nano_example", "Längstes Gebäude");
       } else if (example.kind === "capacity" || example.kind === "slots") {
         currentLineLabel = t("techcard_value", "Wert");
       } else if (unit === "/h") {
