@@ -296,6 +296,103 @@ def recalculate_queue_finish_times(
         schedule_at = finish
 
 
+def sync_defense_queue_finish_times(
+    planet_id: int,
+    *,
+    conn,
+    now: Optional[float] = None,
+) -> None:
+    """Align finish_at with live batch remaining; preserve head started_at when params match."""
+    from .shipyard import (
+        production_live_order_remaining_seconds,
+        production_schedule_matches_live_params,
+    )
+
+    if not defense_queue_table_ready(conn):
+        return
+    sy_level = _production_shipyard_level(planet_id, conn=conn)
+    ts = float(now if now is not None else _now())
+    rows = list_defense_queue_rows(planet_id, conn=conn)
+    if not rows:
+        return
+
+    cur = conn.cursor()
+    head = rows[0]
+    rem = max(0, int(head.get("amount") or 0))
+    if rem > 0:
+        dk = str(head["defense_key"])
+        unit = unit_build_seconds(dk, sy_level, conn=conn, planet_id=int(planet_id))
+        cap = _batch_capacity_for_defense(dk, sy_level)
+        scheduled = _job_scheduled_duration_seconds(head)
+        total_guess = _job_total_units(head, sy_level, conn=conn)
+        params_ok = production_schedule_matches_live_params(
+            scheduled_duration=scheduled,
+            total_units=max(rem, total_guess),
+            unit_seconds=unit,
+            batch_capacity=cap,
+        )
+        if params_ok:
+            total = max(rem, total_guess)
+            delivered = max(0, total - rem)
+            started_at = float(head.get("started_at") or ts)
+        else:
+            total = rem
+            delivered = 0
+            started_at = ts
+        live_rem = production_live_order_remaining_seconds(
+            remaining_amount=rem,
+            unit_seconds=unit,
+            batch_capacity=cap,
+            started_at=started_at,
+            delivered=delivered,
+            now=ts,
+            scheduled_duration=scheduled,
+            total_units=max(rem, total_guess),
+        )
+        new_finish = ts + live_rem
+        old_finish = float(head.get("finish_at") or 0)
+        old_started = float(head.get("started_at") or 0)
+        if (not params_ok and abs(started_at - old_started) >= 0.5) or abs(
+            new_finish - old_finish
+        ) >= 0.5:
+            if params_ok:
+                cur.execute(
+                    "UPDATE defense_queue SET finish_at = ? WHERE id = ?;",
+                    (new_finish, int(head["id"])),
+                )
+            else:
+                cur.execute(
+                    """
+                    UPDATE defense_queue
+                    SET started_at = ?, finish_at = ?
+                    WHERE id = ?;
+                    """,
+                    (started_at, new_finish, int(head["id"])),
+                )
+            head = {**head, "finish_at": new_finish, "started_at": started_at}
+        schedule_at = float(head.get("finish_at") or (ts + live_rem))
+    else:
+        schedule_at = ts
+
+    for row in rows[1:]:
+        dk = str(row["defense_key"])
+        amt = max(1, int(row.get("amount") or 1))
+        duration = _job_duration_seconds(
+            dk, amt, sy_level, conn=conn, planet_id=int(planet_id)
+        )
+        started = schedule_at
+        finish = schedule_at + duration
+        cur.execute(
+            """
+            UPDATE defense_queue
+            SET started_at = ?, finish_at = ?
+            WHERE id = ?;
+            """,
+            (started, finish, int(row["id"])),
+        )
+        schedule_at = finish
+
+
 def queue_count(planet_id: int, *, conn) -> int:
     cur = conn.cursor()
     cur.execute(
@@ -492,6 +589,7 @@ def _finish_due_defense_jobs_impl(
             "UPDATE defense_queue SET amount = ? WHERE id = ?;",
             (remaining, int(head["id"])),
         )
+        sync_defense_queue_finish_times(planet_id, conn=conn, now=ts)
         break
 
     if completed_jobs:
@@ -755,6 +853,7 @@ def _defense_job_row_for_client(
     conn,
 ) -> Dict[str, Any]:
     from .defense_defs import defense_icon_static_path
+    from .shipyard import production_live_order_remaining_seconds
 
     dk = str(row["defense_key"])
     amount_remaining = max(0, int(row.get("amount") or 0))
@@ -762,11 +861,32 @@ def _defense_job_row_for_client(
     units_delivered = max(0, total_units - amount_remaining)
     unit_sec = unit_build_seconds(dk, shipyard_level, conn=conn)
     finish_at = float(row.get("finish_at") or 0)
-    order_total_seconds = _job_scheduled_duration_seconds(row)
     is_active = idx == 0
-    order_remaining = max(0, int(finish_at - now))
-    next_finish_at = _next_unit_finish_at(row, shipyard_level, conn=conn) if is_active else finish_at
     started_at = float(row.get("started_at") or 0)
+    cap = _batch_capacity_for_defense(dk, shipyard_level)
+
+    if is_active and amount_remaining > 0:
+        order_remaining = production_live_order_remaining_seconds(
+            remaining_amount=amount_remaining,
+            unit_seconds=unit_sec,
+            batch_capacity=cap,
+            started_at=started_at,
+            delivered=units_delivered,
+            now=float(now),
+            scheduled_duration=_job_scheduled_duration_seconds(row),
+            total_units=total_units,
+        )
+        finish_at = float(now) + order_remaining
+        order_total_seconds = max(
+            1,
+            int(finish_at - started_at) if started_at > 0 else order_remaining,
+        )
+        next_finish_at = _next_unit_finish_at(row, shipyard_level, conn=conn)
+    else:
+        order_remaining = max(0, int(finish_at - now))
+        order_total_seconds = _job_scheduled_duration_seconds(row)
+        next_finish_at = finish_at
+
     start_at = started_at if is_active and started_at > 0 else max(0.0, finish_at - order_total_seconds)
 
     return {
@@ -805,6 +925,7 @@ def defense_queue_for_client(
     ts = float(now if now is not None else _now())
     if defense_queue_table_ready(conn):
         finish_due_defense_jobs_for_planet(conn, int(planet_id), int(player_id), now=ts)
+        sync_defense_queue_finish_times(int(planet_id), conn=conn, now=ts)
 
     rows = list_defense_queue_rows(planet_id, conn=conn) if defense_queue_table_ready(conn) else []
     jobs: List[Dict[str, Any]] = []

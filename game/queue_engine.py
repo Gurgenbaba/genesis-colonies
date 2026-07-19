@@ -424,6 +424,34 @@ def finish_planet_build_jobs(
                 player_id,
                 planet_id,
             )
+        if any(
+            str(c.get("building_type") or "") == "orbital_shipyard"
+            for c in build_completions
+        ):
+            try:
+                from .defense import sync_defense_queue_finish_times
+                from .shipyard import get_shipyard_level
+                from .shipyard_queue import sync_shipyard_queue_finish_times
+
+                sy_level = get_shipyard_level(
+                    int(player_id), int(planet_id), conn=conn
+                )
+                sync_shipyard_queue_finish_times(
+                    int(planet_id),
+                    int(sy_level),
+                    conn=conn,
+                    now=float(now),
+                )
+                sync_defense_queue_finish_times(
+                    int(planet_id), conn=conn, now=float(now)
+                )
+            except Exception:
+                logger.exception(
+                    "shipyard/defense queue sync after orbital_shipyard finish failed "
+                    "player=%s planet=%s",
+                    player_id,
+                    planet_id,
+                )
 
     return completed
 

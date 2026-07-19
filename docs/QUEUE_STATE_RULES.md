@@ -81,17 +81,23 @@ Jeder Auftrag erscheint **unmittelbar nach Start** in der jeweiligen Bauschleife
 
 Kanonisches Card-Feld: `remaining_seconds` aus `game/queue_card.py` — wartende Jobs **nie** nur `start_at − now`.
 
-### Unit-Queues (serieller Auftrag)
+### Unit-Queues (Batch-Kapazität)
 
-Schiffsbau, Verteidigungsbau und alle zukünftigen **Unit-Queues** bauen pro Auftrag **seriell**:
+Schiffsbau, Verteidigungsbau und alle zukünftigen **Unit-Queues** nutzen die **Werft-Batch-Kapazität** (nicht `amount × unit_time`):
 
 ```text
-Auftragsdauer = amount × Bauzeit_pro_Einheit
+cycles = ceil(amount / capacity)
+Auftragsdauer = cycles × unit_seconds
 ```
 
-**Beispiel:** 1 Schiff = 5 s, Menge 100 → Auftrag = **500 s** in der Queue. Ein danach eingereihter Auftrag addiert dessen Anzeige: `Rest_vorherige_Aufträge + eigene_Auftragsdauer`.
+Owner: `production_job_duration_seconds` / `production_live_order_remaining_seconds` in `game/shipyard.py`.  
+Kapazität: `orbital_production_batch_capacity(yard_level)`. Restzeit und Timekeeper lesen denselben `finish_at` (Sync bei Level-Up / Live-Params).
 
-Verboten: UI zeigt nur die Einzel-Einheit-Zeit (z. B. 5 s), während der Auftrag 500 s blockiert.
+**Beispiel:** Zyklus 21 s, Kapazität 63, Menge 2681 → `ceil(2681/63) × 21 = 903 s` (nicht `2681 × 21`).
+
+Ein danach eingereihter Auftrag addiert dessen Anzeige: `Rest_vorherige_Aufträge + eigene_Auftragsdauer`.
+
+Verboten: UI zeigt nur die Einzel-Zyklus-Zeit, während der Auftrag mehrere Zyklen blockiert; verboten auch `amount × unit_seconds` bei aktivem Kapazitätssystem.
 
 Referenz: `order_total_seconds` / `order_remaining` in `game/shipyard_queue.py`, `game/defense.py`; Card-Adapter `map_shipyard_queue_to_card_jobs`, `map_defense_queue_to_card_jobs`.
 

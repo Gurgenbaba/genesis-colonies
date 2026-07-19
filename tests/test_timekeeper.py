@@ -345,3 +345,152 @@ def test_timekeeper_max_uses_balance_not_full_remaining(timekeeper_db):
         assert finish_after <= now + 7200 - 1100
     finally:
         conn.close()
+
+
+def _grant_shipyard_tk_prereqs(cur, planet_id: int, user_id: int) -> None:
+    cur.execute(
+        """
+        UPDATE planet_buildings
+        SET orbital_shipyard = 1, research_lab = 10, command_center = 10, barracks = 10
+        WHERE planet_id = ?;
+        """,
+        (int(planet_id),),
+    )
+    for tech in (
+        "energy_tech",
+        "mining_tech",
+        "drone_tech",
+        "engine_tech",
+        "navigation_tech",
+        "weapon_tech",
+        "armor_tech",
+        "storage_tech",
+        "fuel_efficiency",
+        "shield_tech",
+    ):
+        cur.execute(
+            """
+            INSERT INTO research_levels (user_id, tech_key, level)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;
+            """,
+            (int(user_id), tech, 10),
+        )
+
+
+def test_timekeeper_shipyard_debit_matches_batch_remaining_not_serial(timekeeper_db):
+    """TK cost for shipyard uses batch finish_at, never amount × unit_seconds."""
+    from game.shipyard import (
+        build_ship,
+        orbital_production_batch_capacity,
+        production_job_duration_seconds,
+        unit_build_seconds,
+    )
+
+    conn = db()
+    try:
+        uid = _player(conn=conn)
+        planet = get_context_planet(uid, conn=conn)
+        pid = int(planet["id"])
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE planets SET metal = ?, crystal = ?, fuel_cells = ? WHERE id = ?;",
+            (5_000_000, 5_000_000, 500_000, pid),
+        )
+        _grant_shipyard_tk_prereqs(cur, pid, uid)
+        conn.commit()
+
+        qty = 40
+        ok, reason, _ = build_ship(
+            player_id=uid, planet_id=pid, ship_key="mule_courier", amount=qty, conn=conn
+        )
+        assert ok, reason
+        unit = unit_build_seconds("mule_courier", 1, conn=conn, planet_id=pid)
+        cap = orbital_production_batch_capacity(1)
+        batch_remaining = production_job_duration_seconds(
+            unit_seconds=unit, amount=qty, batch_capacity=cap
+        )
+        serial_remaining = qty * unit
+        assert batch_remaining < serial_remaining
+
+        begin_write_transaction(conn)
+        credit(uid, serial_remaining + 10_000, "test", conn=conn)
+        commit(conn)
+
+        begin_write_transaction(conn)
+        ok, reason, result = apply_timekeeper(
+            uid, "shipyard", planet_id=pid, mode="finish", conn=conn
+        )
+        assert ok, reason
+        commit(conn)
+
+        applied = int(result.get("seconds_applied") or 0)
+        assert applied <= batch_remaining + 2
+        assert applied < serial_remaining
+        assert get_balance(uid, conn=conn) == serial_remaining + 10_000 - applied
+    finally:
+        conn.close()
+
+
+def test_timekeeper_defense_debit_matches_batch_remaining_not_serial(timekeeper_db):
+    """TK cost for defense uses batch finish_at, never amount × unit_seconds."""
+    from game.defense import build_defense, unit_build_seconds
+    from game.shipyard import orbital_production_batch_capacity, production_job_duration_seconds
+
+    conn = db()
+    try:
+        uid = _player(conn=conn)
+        planet = get_context_planet(uid, conn=conn)
+        pid = int(planet["id"])
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE planets SET metal = ?, crystal = ?, fuel_cells = ? WHERE id = ?;",
+            (5_000_000, 5_000_000, 500_000, pid),
+        )
+        cur.execute(
+            "UPDATE planet_buildings SET defense_factory = 1, orbital_shipyard = 1 WHERE planet_id = ?;",
+            (pid,),
+        )
+        cur.execute(
+            """
+            INSERT INTO research_levels (user_id, tech_key, level)
+            VALUES (?, 'weapon_tech', 2)
+            ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;
+            """,
+            (uid,),
+        )
+        conn.commit()
+
+        qty = 20
+        ok, reason, _ = build_defense(
+            player_id=uid,
+            planet_id=pid,
+            defense_key="sentinel_turret",
+            amount=qty,
+            conn=conn,
+        )
+        assert ok, reason
+        unit = unit_build_seconds("sentinel_turret", 1, conn=conn, planet_id=pid)
+        cap = orbital_production_batch_capacity(1)
+        batch_remaining = production_job_duration_seconds(
+            unit_seconds=unit, amount=qty, batch_capacity=cap
+        )
+        serial_remaining = qty * unit
+        assert batch_remaining < serial_remaining
+
+        begin_write_transaction(conn)
+        credit(uid, serial_remaining + 10_000, "test", conn=conn)
+        commit(conn)
+
+        begin_write_transaction(conn)
+        ok, reason, result = apply_timekeeper(
+            uid, "defense", planet_id=pid, mode="finish", conn=conn
+        )
+        assert ok, reason
+        commit(conn)
+
+        applied = int(result.get("seconds_applied") or 0)
+        assert applied <= batch_remaining + 2
+        assert applied < serial_remaining
+    finally:
+        conn.close()

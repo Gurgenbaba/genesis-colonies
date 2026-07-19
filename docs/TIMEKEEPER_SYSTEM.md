@@ -17,6 +17,7 @@ Single **Imperium time account** — empire-wide, manual apply only, separate fr
 - Never auto-debit on poll or page load.
 - Apply only via **⚡** on active queue cards → `/api/timekeeper/apply` with `mode: max` (server clamps to `min(balance, active_job_remaining)`).
 - Domains: `build`, `research`, `shipyard`, `defense`, `planet_research`, `ascension`.
+- Shipyard/Defense: vor Debit `sync_*_queue_finish_times` (Batch-Restzeit); Kosten = Head-`finish_at − now`, nie `amount × unit_seconds`.
 - Production boosters (`inventory_boosters`) unchanged.
 
 ## Schema

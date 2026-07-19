@@ -61,7 +61,7 @@ Verbindliche Regeln: [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md) § *Kanonische
 
 | Rolle | Pflicht |
 |-------|---------|
-| **Server** | `finish_at`, `start_at`, `remaining_seconds` / `order_remaining` in game-state und Action-Responses; Unit-Aufträge als `amount × unit_time` |
+| **Server** | `finish_at`, `start_at`, `remaining_seconds` / `order_remaining` in game-state und Action-Responses; Unit-Aufträge als `ceil(amount / capacity) × unit_seconds` |
 | **Client** | `applyActionState()` / `applyGameStateData()` patchen Cards sofort; kein Frontend-Scheduling |
 | **Aktiver Job** | Timer = Rest bis `finish_at` |
 | **Wartender Job** | Timer = `finish_at − now` (Vorgänger + eigene Dauer), **nicht** nur `start_at − now` |

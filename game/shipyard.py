@@ -226,6 +226,94 @@ def production_next_batch_finish_at(
     return float(started_at) + next_batch * unit
 
 
+def production_active_order_remaining_seconds(
+    *,
+    remaining_amount: int,
+    unit_seconds: int,
+    batch_capacity: int,
+    started_at: float,
+    delivered: int,
+    now: float,
+) -> int:
+    """Wall-clock seconds left on an active batch order (stable yard params).
+
+    ``ceil(remaining / capacity)`` cycles, with the current cycle ending at
+    ``production_next_batch_finish_at`` (preserves mid-cycle progress via started_at).
+    """
+    rem = max(0, int(remaining_amount))
+    if rem <= 0:
+        return 0
+    unit = max(1, int(unit_seconds))
+    cap = max(1, int(batch_capacity))
+    batches_left = (rem + cap - 1) // cap
+    next_at = production_next_batch_finish_at(
+        started_at=float(started_at),
+        delivered=max(0, int(delivered)),
+        unit_seconds=unit,
+        batch_capacity=cap,
+    )
+    first = max(0.0, float(next_at) - float(now))
+    return max(0, int(math.ceil(first + max(0, batches_left - 1) * unit)))
+
+
+def production_schedule_matches_live_params(
+    *,
+    scheduled_duration: int,
+    total_units: int,
+    unit_seconds: int,
+    batch_capacity: int,
+) -> bool:
+    """True when stored finish-start duration matches current batch formula for total_units."""
+    total = max(0, int(total_units))
+    if total <= 0:
+        return True
+    unit = max(1, int(unit_seconds))
+    expected = production_job_duration_seconds(
+        unit_seconds=unit,
+        amount=total,
+        batch_capacity=batch_capacity,
+    )
+    return abs(int(scheduled_duration) - expected) <= max(1, unit // 2)
+
+
+def production_live_order_remaining_seconds(
+    *,
+    remaining_amount: int,
+    unit_seconds: int,
+    batch_capacity: int,
+    started_at: float,
+    delivered: int,
+    now: float,
+    scheduled_duration: int | None = None,
+    total_units: int | None = None,
+) -> int:
+    """Batch remaining seconds; falls back when yard level/speed drifted vs schedule."""
+    rem = max(0, int(remaining_amount))
+    if rem <= 0:
+        return 0
+    unit = max(1, int(unit_seconds))
+    cap = max(1, int(batch_capacity))
+    total = max(rem, int(total_units if total_units is not None else rem))
+    if scheduled_duration is not None and not production_schedule_matches_live_params(
+        scheduled_duration=int(scheduled_duration),
+        total_units=total,
+        unit_seconds=unit,
+        batch_capacity=cap,
+    ):
+        # Params changed mid-job — recompute from remaining only (no stale delivered).
+        return production_job_duration_seconds(
+            unit_seconds=unit, amount=rem, batch_capacity=cap
+        )
+    return production_active_order_remaining_seconds(
+        remaining_amount=rem,
+        unit_seconds=unit,
+        batch_capacity=cap,
+        started_at=float(started_at),
+        delivered=max(0, int(delivered)),
+        now=float(now),
+    )
+
+
 def _directive_time_speed(
     planet_id: int | None,
     speed_key: str,

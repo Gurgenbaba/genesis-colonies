@@ -52,17 +52,17 @@ Die **Schiffsbau-Zeit pro Einheit** in der Werft-Queue ist ein separates System.
 | Universum-Speed | `game_settings.shipyard_speed` (Default 1.0, clamp 0.1–10) |
 | Direktiven-Bonus | `EffectResolver` / Galactic Directives → `shipyard_time_speed` (pro Planet) |
 
-**Formel (eine Einheit, ein Produktionszyklus):**
+**Formel (ein Produktionszyklus):**
 
 ```text
 unit_seconds = ceil(
-  build_seconds × 0.9^(yard_level − 1)
+  build_seconds × 0.975^(yard_level − 1)
   ÷ shipyard_speed
   ÷ shipyard_time_speed
 )
 ```
 
-Konstante: `BUILD_TIME_LEVEL_FACTOR = 0.90` (−10 % pro Werft-Stufe über 1).  
+Konstante: `BUILD_TIME_LEVEL_FACTOR = 0.975` (−2.5 % Schiffbauzeit pro Werft-Stufe über 1, GC-863A).  
 Ergebnis: `max(1, …)` Sekunden — Funktionen `unit_build_seconds()` / `_effective_build_seconds()`.
 
 **Progressive Lieferung (Mehrfachauftrag):**
@@ -72,6 +72,7 @@ Ergebnis: `max(1, …)` Sekunden — Funktionen `unit_build_seconds()` / `_effec
 | Yard-Kapazität pro Zyklus | `max(1, floor(1 + level×4 + level^1.35))` — z. B. L1=6, L2=11, L5=29, L10=63, L50≈397 |
 | Einheiten pro Zyklus | = Yard-Kapazität (alle Schiffstypen gleich; kein Gewicht) |
 | Auftragsdauer | `ceil(amount / capacity) × unit_seconds` (`production_job_duration_seconds`) |
+| Live-Restzeit | `production_live_order_remaining_seconds` → `finish_at` (Sync bei Werft-Upgrade) |
 
 Beispiel Speed ×1, Werft L1 (Kapazität 6), `mule_courier` (`build_seconds = 120`):  
 `unit_seconds = 120` → Auftrag über 10 Schiffe = `ceil(10/6) × 120 = 240 s`.
@@ -80,7 +81,7 @@ Kosten: `fleet_defs.build_cost` — **kein** Level-Multiplier (metal/crystal/fue
 
 Cancel-Refund: `shipyard_queue` → `queue_refund.refund_from_stored_costs` (GC-831).
 
-Analoges Muster für Verteidigung: [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md) (`defense_factory`-Stufe, `defense_time_speed`).
+Analoges Batch-Muster für Verteidigung: [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md) (Unlock über `defense_factory`; Zykluszeit/Kapazität über Orbitalwerft + `defense_time_speed`).
 
 **Queue-UX (GC-536D):** Werftaufträge erscheinen in der jeweiligen Schiff-Card (`queue_job` via `game/queue_card.py` + `_attach_queue_jobs_to_ship_rows` in `game/shipyard.py`). Seitenkopf nur noch Kompaktstatus (`#shipyard-queue-compact`), kein großes Queue-Panel.
 

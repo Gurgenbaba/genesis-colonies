@@ -101,7 +101,7 @@ Jede Definition enthält:
 
 - `name_key` / `description_key` / `role` (i18n + UI-Badge)
 - `build_cost`: `{ metal, crystal }` — Quelle für Kosten und Fallback-Score
-- `build_seconds` — Basis-Bauzeit (skaliert mit Fabrik-Stufe)
+- `build_seconds` — Basis-Zykluszeit (skaliert mit Orbitalwerft-Stufe; Unlock weiter über Fabrik)
 - `requirements`: `{ buildings, research }` — geprüft via `defense_unlocked()`
 - **Combat prep:** `attack`, `shield`, `hull`, `score_value`, `rapid_fire_targets`
 
@@ -121,8 +121,9 @@ Implementierung: `game/defense.py` (Queue-Logik), Auslieferung über [Queue Engi
 |-------|------|
 | Max. Aufträge | 3 (Default `MAX_DEFENSE_QUEUE`; Override `defense_queue_limit` / Fallback `shipyard_queue_limit` in Game Settings) |
 | Kosten | Sofort beim Einreihen von Planet-Ressourcen abgebucht |
-| Lieferung | **Progressiv** — Einheiten erscheinen nacheinander im Bestand (`progressive_units_to_deliver`) |
-| Bauzeit | `build_seconds` × Fabrik-Level-Faktor (`BUILD_TIME_LEVEL_FACTOR` 0.90) × globale `shipyard_speed` |
+| Lieferung | **Progressiv in Batches** — Kapazität der Orbitalwerft pro Zyklus (`orbital_production_batch_capacity`) |
+| Zykluszeit | `build_seconds` × Defense-Faktor (`BUILD_TIME_LEVEL_FACTOR` 0.90 auf Werft-Level) ÷ `shipyard_speed` ÷ `defense_time_speed` |
+| Auftragsdauer | `ceil(amount / capacity) × unit_seconds` (`production_job_duration_seconds`; gleiche Owner-Formel wie Werft) |
 | Cancel | Nur Jobs mit `status = queued`; **GC-831 Refund** (100 % pending / 50 % active) via `queue_refund.refund_from_stored_costs` |
 
 Ablauf `build_defense()`:

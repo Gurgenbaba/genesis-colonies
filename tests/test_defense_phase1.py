@@ -96,6 +96,41 @@ def test_build_defense_delivers_to_planet_stock(defense_db):
     assert stock.get('sentinel_turret', 0) >= 2
     conn.close()
 
+
+def test_defense_order_duration_uses_batch_capacity(defense_db):
+    """GC-SHIPYARD-TIME-1: defense duration is ceil(amount/cap)×unit, not amount×unit."""
+    from game.defense import defense_queue_for_client, unit_build_seconds
+    from game.shipyard import orbital_production_batch_capacity, production_job_duration_seconds
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]['id'])
+    cur = conn.cursor()
+    _fund_planet(cur, pid, metal=5_000_000, crystal=5_000_000)
+    _grant_defense_prereqs(cur, pid, uid, factory_level=1)
+    cur.execute('UPDATE planet_buildings SET orbital_shipyard = 1 WHERE planet_id = ?;', (pid,))
+    conn.commit()
+    qty = 20
+    ok, reason, _ = build_defense(
+        player_id=uid, planet_id=pid, defense_key='sentinel_turret', amount=qty, conn=conn
+    )
+    assert ok, reason
+    row = list_defense_queue_rows(pid, conn=conn)[0]
+    started = float(row['started_at'])
+    finish = float(row['finish_at'])
+    unit = unit_build_seconds('sentinel_turret', 1, conn=conn, planet_id=pid)
+    cap = orbital_production_batch_capacity(1)
+    expected = production_job_duration_seconds(
+        unit_seconds=unit, amount=qty, batch_capacity=cap
+    )
+    assert int(finish - started) == expected
+    assert expected < qty * unit
+    q = defense_queue_for_client(uid, pid, conn=conn, now=started)
+    # Client remaining must stay on the batch curve (never serial amount×unit).
+    assert q['queue'][0]['order_remaining'] < qty * unit
+    assert abs(int(q['queue'][0]['order_remaining']) - expected) <= max(1, unit)
+    conn.close()
+
 def test_defense_stock_is_planet_scoped(defense_db):
     conn = db()
     uid = _player(conn=conn)

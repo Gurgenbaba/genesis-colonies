@@ -460,6 +460,160 @@ def test_unit_batch_capacity_same_for_all_ships():
     slow = unit_batch_capacity(lvl, base_unit_seconds_for_ship("atlas_hauler"))
     assert fast == slow == base
 
+
+def test_production_active_order_remaining_seconds_batch_formula():
+    """Restzeit = current-cycle remainder + (batches_left - 1) × unit."""
+    from game.shipyard import production_active_order_remaining_seconds
+
+    unit = 30
+    cap = 9
+    started = 1_000_000.0
+    # Full order of 19 units → 3 batches; at t=started, first cycle still full.
+    rem = production_active_order_remaining_seconds(
+        remaining_amount=19,
+        unit_seconds=unit,
+        batch_capacity=cap,
+        started_at=started,
+        delivered=0,
+        now=started,
+    )
+    assert rem == 90
+    # Mid first cycle: 10s elapsed → 20s left on first + 2 full cycles.
+    rem_mid = production_active_order_remaining_seconds(
+        remaining_amount=19,
+        unit_seconds=unit,
+        batch_capacity=cap,
+        started_at=started,
+        delivered=0,
+        now=started + 10,
+    )
+    assert rem_mid == 80
+    # After one batch delivered (9 units): 10 remaining → 2 cycles, next at started+2*unit.
+    rem_after = production_active_order_remaining_seconds(
+        remaining_amount=10,
+        unit_seconds=unit,
+        batch_capacity=cap,
+        started_at=started,
+        delivered=9,
+        now=started + unit,
+    )
+    assert rem_after == 60
+
+
+def test_orbital_shipyard_building_finish_resyncs_queue(shipyard_db):
+    """GC-SHIPYARD-TIME-2: finishing orbital_shipyard syncs active shipyard finish_at."""
+    from game.models import add_build_job
+    from game.queue_engine import finish_planet_build_jobs
+    from game.shipyard import (
+        build_ship,
+        orbital_production_batch_capacity,
+        production_job_duration_seconds,
+        unit_build_seconds,
+    )
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, pid, metal=5_000_000, crystal=5_000_000)
+    cur.execute("UPDATE planet_buildings SET orbital_shipyard = 1 WHERE planet_id = ?;", (pid,))
+    _grant_ship_test_prereqs(cur, pid, uid)
+    conn.commit()
+
+    qty = 40
+    ok, reason, _ = build_ship(
+        player_id=uid, planet_id=pid, ship_key="mule_courier", amount=qty, conn=conn
+    )
+    assert ok, reason
+    finish_before = float(
+        conn.execute(
+            "SELECT finish_at FROM shipyard_queue WHERE planet_id = ?;", (pid,)
+        ).fetchone()["finish_at"]
+    )
+
+    now = time.time()
+    add_build_job(pid, "orbital_shipyard", now - 30, now - 1, conn=conn)
+    conn.commit()
+    finished = finish_planet_build_jobs(conn, pid, uid, now)
+    assert finished >= 1
+    sy_lvl = int(
+        conn.execute(
+            "SELECT orbital_shipyard FROM planet_buildings WHERE planet_id = ?;", (pid,)
+        ).fetchone()["orbital_shipyard"]
+    )
+    assert sy_lvl == 2
+    finish_after = float(
+        conn.execute(
+            "SELECT finish_at FROM shipyard_queue WHERE planet_id = ?;", (pid,)
+        ).fetchone()["finish_at"]
+    )
+    unit = unit_build_seconds("mule_courier", sy_lvl, conn=conn, planet_id=pid)
+    cap = orbital_production_batch_capacity(sy_lvl)
+    expected = production_job_duration_seconds(
+        unit_seconds=unit, amount=qty, batch_capacity=cap
+    )
+    assert finish_after < finish_before
+    assert abs((finish_after - now) - expected) <= 1
+    conn.close()
+
+
+def test_shipyard_finish_at_syncs_when_yard_level_rises(shipyard_db):
+    """GC-SHIPYARD-TIME-1: mid-job yard upgrade shortens finish_at via batch remaining."""
+    from game.shipyard import (
+        build_ship,
+        orbital_production_batch_capacity,
+        production_job_duration_seconds,
+        unit_build_seconds,
+    )
+    from game.shipyard_queue import shipyard_queue_for_client, sync_shipyard_queue_finish_times
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, pid, metal=5_000_000, crystal=5_000_000)
+    cur.execute("UPDATE planet_buildings SET orbital_shipyard = 1 WHERE planet_id = ?;", (pid,))
+    _grant_ship_test_prereqs(cur, pid, uid)
+    conn.commit()
+
+    qty = 40
+    ok, reason, _ = build_ship(
+        player_id=uid, planet_id=pid, ship_key="mule_courier", amount=qty, conn=conn
+    )
+    assert ok, reason
+    cur.execute(
+        "SELECT started_at, finish_at, amount FROM shipyard_queue WHERE planet_id = ?;",
+        (pid,),
+    )
+    job = cur.fetchone()
+    started = float(job["started_at"])
+    finish_l1 = float(job["finish_at"])
+    unit_l1 = unit_build_seconds("mule_courier", 1, conn=conn, planet_id=pid)
+    cap_l1 = orbital_production_batch_capacity(1)
+    assert int(finish_l1 - started) == production_job_duration_seconds(
+        unit_seconds=unit_l1, amount=qty, batch_capacity=cap_l1
+    )
+
+    cur.execute("UPDATE planet_buildings SET orbital_shipyard = 10 WHERE planet_id = ?;", (pid,))
+    conn.commit()
+    now = started + 1.0
+    sync_shipyard_queue_finish_times(pid, 10, conn=conn, now=now)
+    cur.execute("SELECT finish_at FROM shipyard_queue WHERE planet_id = ?;", (pid,))
+    finish_l10 = float(cur.fetchone()["finish_at"])
+    unit_l10 = unit_build_seconds("mule_courier", 10, conn=conn, planet_id=pid)
+    cap_l10 = orbital_production_batch_capacity(10)
+    expected = production_job_duration_seconds(
+        unit_seconds=unit_l10, amount=qty, batch_capacity=cap_l10
+    )
+    assert finish_l10 < finish_l1
+    assert abs((finish_l10 - now) - expected) <= 1
+
+    q = shipyard_queue_for_client(uid, pid, 10, conn=conn, now=now)
+    assert q["queue"][0]["order_remaining"] <= expected + 1
+    assert q["queue"][0]["order_remaining"] < int(finish_l1 - now)
+    conn.close()
+
+
 def test_shipyard_job_force_completes_at_finish_at(shipyard_db):
     """GC-633: jobs past finish_at deliver remaining units and leave the queue."""
     from game.fleet import get_planet_ships

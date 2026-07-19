@@ -325,16 +325,28 @@ def _load_domain_rows(domain: str, user_id: int, planet_id: int, *, conn, now: f
 
         return list(get_research_queue_rows(uid, conn=conn)), "finish_at"
     if dom == "shipyard":
-        from .shipyard_queue import list_shipyard_queue_rows, shipyard_queue_table_ready
+        from .shipyard import get_shipyard_level
+        from .shipyard_queue import (
+            list_shipyard_queue_rows,
+            shipyard_queue_table_ready,
+            sync_shipyard_queue_finish_times,
+        )
 
         if not shipyard_queue_table_ready(conn):
             return [], "finish_at"
+        sy_level = get_shipyard_level(uid, pid, conn=conn)
+        sync_shipyard_queue_finish_times(pid, int(sy_level), conn=conn, now=float(now))
         return list(list_shipyard_queue_rows(pid, conn=conn)), "finish_at"
     if dom == "defense":
-        from .defense import defense_queue_table_ready, list_defense_queue_rows
+        from .defense import (
+            defense_queue_table_ready,
+            list_defense_queue_rows,
+            sync_defense_queue_finish_times,
+        )
 
         if not defense_queue_table_ready(conn):
             return [], "finish_at"
+        sync_defense_queue_finish_times(pid, conn=conn, now=float(now))
         return list(list_defense_queue_rows(pid, conn=conn)), "finish_at"
     if dom == "planet_research":
         from .planet_evolution.repository import get_planet_research_queue
