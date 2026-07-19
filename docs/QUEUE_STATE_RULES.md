@@ -68,7 +68,12 @@ Verbindlich für **alle** Queue-Systeme (Gebäude, Forschung, Werft, Verteidigun
 
 ### Sofort sichtbar
 
-Jeder Auftrag erscheint **unmittelbar nach Start** in der jeweiligen Bauschleife (Card-Queue + Kompaktstatus) — ohne manuellen Reload. Actions liefern `{ ok, state }`; `applyActionState()` patcht alle betroffenen Panels.
+Jeder Auftrag erscheint **unmittelbar nach Start** in der jeweiligen Bauschleife — ohne manuellen Reload. Actions liefern `{ ok, state }`; `applyActionState()` patcht alle betroffenen Panels.
+
+| Queue-Art | Presentation |
+|-----------|----------------|
+| Gebäude / Forschung / Planet Evolution | Job in zugehöriger Item-Card (+ Mini-Strip oben wo vorhanden) |
+| **Unit-Queues** (Shipyard, Defense) | **Nur** zentrale Mini-Bauschleife oben (`#shipyard-mini-queue` / `#defense-mini-queue`) — **keine** Queue-UI in Unit-Cards (GC-UNIT-QUEUE-DEDUP-001) |
 
 ### Timer pro Position
 
@@ -135,13 +140,13 @@ Queue-Mutationen liefern immer frischen **`state`** (game-state payload) — sie
 
 Frontend zeigt Queue-Fortschritt aus `state.build_queue`, `state.research`, etc. — keine eigene Queue-Berechnung.
 
-### Presentation (GC-536A ✅)
+### Presentation (GC-536A ✅ / GC-UNIT-QUEUE-DEDUP-001)
 
-Queue-**Logik** bleibt in `game/queue_engine.py` und den Domänen-Ownern. Queue-**UX** wandert in Item-Cards — siehe [GC-536_QUEUE_CARD_UX.md](GC-536_QUEUE_CARD_UX.md).
+Queue-**Logik** bleibt in `game/queue_engine.py` und den Domänen-Ownern. Presentation-Adapter: `game/queue_card.py` (**keine zweite Queue**).
 
-- Kanonisches Card-Job-Format: `game/queue_card.py` (Presentation-Adapter, **keine zweite Queue**)
-- GC-536A: Adapter + Tests + JS-Stub
-- GC-536B–F: Cards produktiv; Kompaktstatus oben, Legacy-Panels entfernt (✅)
+- Gebäude / Forschung / PE: Jobs in Item-Cards (+ Mini-Strip)
+- **Unit-Queues (Shipyard / Defense):** ausschließlich zentrale Mini-Bauschleife; `renderCardQueueBlock` liefert für `shipyard`/`defense` `null`; TK/Cancel nur im Strip
+- Serializer (`map_*_queue_to_card_jobs`, `mini_queue_jobs`) bleiben für Strip/HUD — nicht für Unit-Card-DOM
 
 ---
 

@@ -35,13 +35,13 @@ return max(int(seconds), 1)   # 1-second floor (GC-858)
 
 **`effective_speed`** stacks multiplicatively:
 
-1. `buildtime_tech` → `build_time_speed × (1 / 0.97^level)`
+1. `buildtime_tech` → duration `× 0.985^level` (applied as ÷ in `build_time_speed`)
 2. Galactic directives / diplomacy → `build_time_speed` (whitelist)
-3. `nanofactory` → duration `× 0.70^level` (applied as ÷ in player speed)
+3. `nanofactory` → build speed `1 + 0.55 × level^0.8` (duration ÷ speed; diminishing returns)
 4. `command_center` → duration `× 0.75^level` for **nanofactory upgrades only**
 5. Admin/universe `build_speed` setting
 
-**UI note (GC-858):** Nanofactory card shows flat `level × 30 %` for display; runtime uses `0.70^level`. Production milestones (`+N %`) are **output** previews, not build-speed bonuses. See [GC-858_BUILD_TIME_MODIFIER_AUDIT.md](GC-858_BUILD_TIME_MODIFIER_AUDIT.md).
+**UI (GC-NANO-BUILDTIME-AUDIT-001):** Nanofactory tech card shows server preview (speed × current/next, reference build seconds, cumulative vs marginal savings) — no frontend formula. Production milestones (`+N %`) are **output** previews, not build-speed bonuses. Historical audit notes: [GC-858_BUILD_TIME_MODIFIER_AUDIT.md](GC-858_BUILD_TIME_MODIFIER_AUDIT.md).
 
 ### Galactic directives (GC-720E / GC-720E2)
 
@@ -112,9 +112,18 @@ Pipeline (single request, one finish pass):
 
 ### `nanofactory` (building build duration)
 
-- **Formula:** build speed `1 + 0.55 × level^0.8` (diminishing returns — not × 0.70 per level). Upgrade costs: `base × 2.0 ** target_level`.
-- **Not:** unbounded exponential time collapse at high levels.
-- **UI:** `energy.used`, `energy.efficiency_pct`, overview energy hint class update on poll (no reload).
+- **Role:** shortens build time of **other buildings** (and also its own upgrade — same duration multiplier path). Does **not** use Command Center.
+- **Formula (canonical):** `speed_nano = 1 + 0.55 × level^0.8`, then `duration /= speed_nano`. Owner: `EffectResolver.nanofactory_build_speed` / `get_build_time_seconds`.
+- **Marginal next level:** `duration_next ≈ duration_current × (speed_cur / speed_next)` — at high levels ~2–3 % (e.g. Nano 25→26), not a flat −25 % of the displayed time.
+- **Not:** obsolete exponential nano collapse (`0.70^level` / player expectation “−25 % per nano level on current time”).
+- **UI:** Tech-card preview from `build_nanofactory_time_preview()` uses reference **`metal_mine`** (never mixes Command Center into that example). Shows speed × current/next, cumulative vs L0, and marginal next-level seconds.
+- Upgrade costs: see [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) / `nanofactory_upgrade_cost`.
+
+### `command_center` (nanofactory upgrade duration only)
+
+- **Role:** shortens **only** the build time of the **nanofactory** building (`duration × 0.75^cc_level`).
+- **Never** applied to mines, labs, yards, or other normal buildings — Command Center must not appear in their nano preview.
+- UI flat “×15 %” on the CC card is a separate display helper; runtime for nano upgrades is `0.75^level`.
 
 ### `storage_tech` and depot capacity
 

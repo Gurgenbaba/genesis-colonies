@@ -181,14 +181,16 @@ Planet-Auflösung: Query/Body `planet_id` oder Session-Kontext-Planet.
 
 ## Frontend
 
-Template: `templates/defense.html` — Layout wie Orbitalwerft (Fabrik-Stufe → Queue → Bestand → Baubar → Gesperrt).
+Template: `templates/defense.html` — Layout wie Orbitalwerft (Fabrik-Stufe → zentrale Mini-Bauschleife → Baubar → Gesperrt).
+
+**Queue-UX (GC-UNIT-QUEUE-DEDUP-001):** Defense ist eine **Unit-Queue** — Aufträge nur in `#defense-mini-queue` (`render_page_mini_queue_strip`: Status, Menge, Timer, Fortschritt, Timekeeper ⚡, Abbrechen). Unit-Cards ohne Queue-UI.
 
 JavaScript (`static/main.js`):
 
 - Modul: `GC.modules.defense` → `initDefense()`
 - Initial state: `#defense-page-state` JSON
 - Poll: `GET /api/defense?planet_id=` — `normalizeDefenseApiPayload()` für Build/Cancel-Responses
-- Queue: Fortschrittsbalken, Cancel-Button, `DEFENSEQ` Timer + `GC.startProgressTicker()`
+- Queue: Mini-Strip + `DEFENSEQ` Timer + `GC.startProgressTicker()`; `clearAllProductionCardQueues` hält Cards frei
 - Inventar + Baubare Karten: `data-defense-detail` → gemeinsames Schiff/Defense-Detail-Modal
 - **Keine Success-Toasts** bei Bau/Cancel (Queue-UI reicht); Fehler-Toasts bleiben
 - PJAX: Cleanup via `GC.registerCleanup(stopDefenseTimers)`; Seite neu initialisiert nach Navigation

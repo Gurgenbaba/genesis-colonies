@@ -5770,5 +5770,17 @@
   "timekeeper_hud_cap": "Pool 24h",
   "energy_short": "EN",
   "timekeeper_short": "TK",
-  "timekeeper_hud_cap_short": "24h"
+  "timekeeper_hud_cap_short": "24h",
+  "buildings_technical_nano_speed": "×%(factor)s",
+  "buildings_technical_nano_marginal_save": "−%(time)s",
+  "buildings_technical_nano_speed_current": "Nanofusine actuelle",
+  "buildings_technical_nano_speed_next": "Niveau suivant",
+  "buildings_technical_nano_example": "Exemple mine de métal",
+  "buildings_technical_nano_marginal_label": "Gain niveau suivant",
+  "buildings_technical_nano_marginal_with_pct": "%(time)s (−%(percent)s%%)",
+  "buildings_technical_nano_vs_l0_label": "Total vs. sans nano",
+  "buildings_technical_nano_vs_l0": "%(from)s → %(to)s (−%(saved)s)",
+  "buildings_technical_nano_other_mods": "Autres modificateurs",
+  "buildings_technical_nano_mod_buildtime": "Optimisation construction N%(level)s",
+  "buildings_technical_nano_mod_universe": "Univers ×%(speed)s"
 }

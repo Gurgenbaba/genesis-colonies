@@ -383,6 +383,137 @@ def build_effect_percent_display(
     }
 
 
+def build_nanofactory_time_preview(
+    buildings: Mapping[str, int],
+    research_levels: Mapping[str, int],
+    *,
+    nano_level: Optional[int] = None,
+    settings: Optional[Mapping[str, Any]] = None,
+    player_id: Optional[int] = None,
+    planet_id: Optional[int] = None,
+    planet_position: Optional[int] = None,
+    galaxy_id: Optional[int] = None,
+    conn=None,
+    base_resolver=None,
+) -> Dict[str, Any]:
+    """GC-NANO-001 — server-only nano speed + reference build-time preview (no frontend math)."""
+    from .effects import EffectResolver
+
+    bld = {str(k): int(v or 0) for k, v in dict(buildings or {}).items()}
+    research = {str(k): int(v or 0) for k, v in dict(research_levels or {}).items()}
+    cur_nano = int(nano_level) if nano_level is not None else int(bld.get("nanofactory", 0) or 0)
+    cur_nano = max(0, cur_nano)
+    next_nano = cur_nano + 1
+
+    ref_building = "metal_mine"
+    ref_target = max(1, int(bld.get(ref_building, 0) or 0) + 1)
+
+    def _clone(nano_lvl: int):
+        clone_bld = dict(bld)
+        clone_bld["nanofactory"] = int(nano_lvl)
+        if base_resolver is not None:
+            return EffectResolver(
+                clone_bld,
+                research,
+                settings=getattr(base_resolver, "_settings", None),
+                player_id=getattr(base_resolver, "player_id", None),
+                planet_id=getattr(base_resolver, "planet_id", None),
+                planet_position=getattr(base_resolver, "planet_position", None),
+                galaxy_id=getattr(base_resolver, "galaxy_id", None),
+                conn=getattr(base_resolver, "_conn", None),
+                skip_inventory_boosters=bool(
+                    getattr(base_resolver, "_skip_inventory_boosters", False)
+                ),
+            )
+        return EffectResolver(
+            clone_bld,
+            research,
+            settings=dict(settings) if settings is not None else None,
+            player_id=player_id,
+            planet_id=planet_id,
+            planet_position=planet_position,
+            galaxy_id=galaxy_id,
+            conn=conn,
+        )
+
+    r0 = _clone(0)
+    r_cur = _clone(cur_nano)
+    r_next = _clone(next_nano)
+
+    seconds_l0 = int(r0.get_build_time_seconds(ref_building, ref_target))
+    seconds_cur = int(r_cur.get_build_time_seconds(ref_building, ref_target))
+    seconds_next = int(r_next.get_build_time_seconds(ref_building, ref_target))
+
+    speed_cur = float(EffectResolver.nanofactory_build_speed(cur_nano))
+    speed_next = float(EffectResolver.nanofactory_build_speed(next_nano))
+    saved_vs_l0 = max(0, seconds_l0 - seconds_cur)
+    saved_marginal = max(0, seconds_cur - seconds_next)
+    marginal_pct = 0.0
+    if seconds_cur > 0:
+        marginal_pct = round(100.0 * float(saved_marginal) / float(seconds_cur), 2)
+
+    r_cur.get_modifiers()
+    source_labels: List[str] = []
+    for src in getattr(r_cur, "_sources", []) or []:
+        if src.get("status") != "active":
+            continue
+        label = str(src.get("key") or src.get("label") or src.get("source") or "").strip()
+        if label:
+            source_labels.append(label)
+
+    build_speed = 1.0
+    try:
+        build_speed = float(r_cur.build_speed_setting())
+    except Exception:
+        build_speed = 1.0
+
+    return {
+        "nano_level": cur_nano,
+        "nano_level_next": next_nano,
+        "speed_current": round(speed_cur, 2),
+        "speed_next": round(speed_next, 2),
+        "speed_bonus_pct_current": int(EffectResolver.nanofactory_build_speed_bonus_pct(cur_nano)),
+        "speed_bonus_pct_next": int(EffectResolver.nanofactory_build_speed_bonus_pct(next_nano)),
+        "reference_building": ref_building,
+        "reference_target_level": int(ref_target),
+        "seconds_nano_0": seconds_l0,
+        "seconds_current": seconds_cur,
+        "seconds_next": seconds_next,
+        "saved_vs_l0_seconds": int(saved_vs_l0),
+        "saved_marginal_seconds": int(saved_marginal),
+        "marginal_duration_reduction_pct": marginal_pct,
+        "modifiers": {
+            "nanofactory_level": cur_nano,
+            "buildtime_tech_level": int(research.get("buildtime_tech", 0) or 0),
+            "universe_build_speed": build_speed,
+            "sources": source_labels,
+        },
+    }
+
+
+def build_nanofactory_time_display(preview: Mapping[str, Any]) -> Dict[str, Any]:
+    """Display block for nanofactory technical modal / summary."""
+    p = dict(preview or {})
+    return {
+        "layout": "nanofactory_build_time",
+        "table_layout": "effect_percent",
+        "effect_kind": "bonus_percent",
+        "unit": "%",
+        "current": int(p.get("speed_bonus_pct_current") or 0),
+        "next": int(p.get("speed_bonus_pct_next") or 0),
+        "value_at_level": int(p.get("speed_bonus_pct_current") or 0),
+        "delta": max(
+            0,
+            int(p.get("speed_bonus_pct_next") or 0) - int(p.get("speed_bonus_pct_current") or 0),
+        ),
+        "step_delta": max(
+            0,
+            int(p.get("speed_bonus_pct_next") or 0) - int(p.get("speed_bonus_pct_current") or 0),
+        ),
+        "nano_time_preview": p,
+    }
+
+
 def build_consumption_percent_display(
     *,
     consumption_at_level: int,
@@ -526,10 +657,7 @@ def enrich_building_technical_row(
         return
 
     if kind in ("bonus_percent", "reduction_percent"):
-        from .buildings import (
-            command_center_nanofactory_build_bonus_pct,
-            nanofactory_build_bonus_pct,
-        )
+        from .buildings import command_center_nanofactory_build_bonus_pct
         from .effects import EffectResolver
 
         bumped = dict(buildings)
@@ -537,15 +665,28 @@ def enrich_building_technical_row(
         r_prev = EffectResolver({**buildings, btype: prev}, dict(research_levels or {}))
         r_cur = EffectResolver(bumped, dict(research_levels or {}))
 
+        if btype == "nanofactory":
+            # Row at level L: preview as if nano is at L-1 → L (matches effect_current/next pattern).
+            base = getattr(panel_ctx, "resolver", None) if panel_ctx is not None else None
+            preview = build_nanofactory_time_preview(
+                buildings,
+                research_levels,
+                nano_level=prev,
+                base_resolver=base,
+            )
+            row["effect_current"] = int(preview["speed_bonus_pct_current"])
+            row["effect_next"] = int(preview["speed_bonus_pct_next"])
+            row["effect_delta"] = max(0, row["effect_next"] - row["effect_current"])
+            row["nano_time_preview"] = preview
+            row["display"] = build_nanofactory_time_display(preview)
+            return
+
         if btype == "research_lab":
             cur_pct = int(round((r_prev.research_lab_bonus() - 1.0) * 100))
             nxt_pct = int(round((r_cur.research_lab_bonus() - 1.0) * 100))
         elif btype == "academy":
             cur_pct = max(0, prev) * 5
             nxt_pct = max(0, lvl) * 5
-        elif btype == "nanofactory":
-            cur_pct = nanofactory_build_bonus_pct(prev)
-            nxt_pct = nanofactory_build_bonus_pct(lvl)
         elif btype == "command_center":
             cur_pct = command_center_nanofactory_build_bonus_pct(prev)
             nxt_pct = command_center_nanofactory_build_bonus_pct(lvl)

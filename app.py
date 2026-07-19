@@ -645,19 +645,85 @@ def inject_globals():
 
     header_active_boosters: dict[str, Any] = {"ready": False, "active": [], "active_effects": []}
     header_timekeeper: dict[str, Any] = {"ready": False, "balance_sec": 0, "label": "0min"}
+    # GC-INSTANT-UX-001A — slim shell HUD for first paint (fleet + unread); avoids deferred poll gap.
+    header_hud_boot: dict[str, Any] = {
+        "ok": True,
+        "active_fleets": None,
+        "fleet_alerts": {
+            "incoming_attack_count": 0,
+            "next_attack_arrival": None,
+            "has_incoming_attack": False,
+            "alert_key": "",
+            "incoming_attacks": [],
+        },
+        "fleet_slots": {"active": 0, "max": 0, "free": 0},
+        "unread_messages_count": 0,
+        "latest_message_id": None,
+    }
     try:
         if auth_user and auth_user.get("id") and not simple_layout:
+            from game.fleet import FLEET_DRAWER_VISIBLE_LIMIT
             from game.inventory_boosters import build_inventory_boosters_state
+            from game.live_state import fleet_hud_for_game_state
+            from game import messages as messages_logic
             from game.timekeeper import serialize_for_client
 
             _boost_conn = db()
             try:
+                uid = int(auth_user["id"])
                 header_active_boosters = build_inventory_boosters_state(
-                    int(auth_user["id"]),
+                    uid,
                     conn=_boost_conn,
                     locale=active_locale,
                 )
-                header_timekeeper = serialize_for_client(int(auth_user["id"]), conn=_boost_conn)
+                header_timekeeper = serialize_for_client(uid, conn=_boost_conn)
+                try:
+                    header_hud_boot["unread_messages_count"] = int(
+                        messages_logic.unread_count(uid, conn=_boost_conn, prepare=False) or 0
+                    )
+                    latest_mid = messages_logic.latest_inbox_message_id(
+                        uid, conn=_boost_conn, prepare=False
+                    )
+                    header_hud_boot["latest_message_id"] = int(latest_mid) if latest_mid else None
+                except Exception:
+                    pass
+                try:
+                    fleet_hud = fleet_hud_for_game_state(uid, conn=_boost_conn)
+                    if fleet_hud is not None:
+                        header_hud_boot["active_fleets"] = fleet_hud.get("active_fleets") or {
+                            "count": 0,
+                            "active_fleet_count": 0,
+                            "fleets_confirmed_empty": True,
+                            "visible_limit": FLEET_DRAWER_VISIBLE_LIMIT,
+                            "next_remaining_seconds": 0,
+                            "items": [],
+                        }
+                        header_hud_boot["fleet_slots"] = fleet_hud.get("fleet_slots") or {
+                            "active": 0,
+                            "max": 0,
+                            "free": 0,
+                        }
+                        header_hud_boot["fleet_alerts"] = fleet_hud.get("fleet_alerts") or header_hud_boot[
+                            "fleet_alerts"
+                        ]
+                    else:
+                        header_hud_boot["active_fleets"] = {
+                            "count": 0,
+                            "active_fleet_count": 0,
+                            "fleets_confirmed_empty": True,
+                            "visible_limit": FLEET_DRAWER_VISIBLE_LIMIT,
+                            "next_remaining_seconds": 0,
+                            "items": [],
+                        }
+                except Exception:
+                    header_hud_boot["active_fleets"] = {
+                        "count": 0,
+                        "active_fleet_count": 0,
+                        "fleets_confirmed_empty": True,
+                        "visible_limit": FLEET_DRAWER_VISIBLE_LIMIT,
+                        "next_remaining_seconds": 0,
+                        "items": [],
+                    }
             finally:
                 _boost_conn.close()
     except Exception:
@@ -697,6 +763,7 @@ def inject_globals():
         HEADER_ACTIVE_PLANET=header_active_planet,
         HEADER_PLANET_LIMIT=header_planet_limit,
         HEADER_ACTIVE_BOOSTERS=header_active_boosters,
+        HEADER_HUD_BOOT=header_hud_boot,
         TIMEKEEPER=header_timekeeper,
         SIDEBAR_NAV=sidebar_nav,
         SIDEBAR_NAV_CLIENT=client_sidebar_nav_config(),

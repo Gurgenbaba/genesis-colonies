@@ -52,21 +52,22 @@ Siehe auch [GC-512_QUEUE_MANUAL_QA.md](GC-512_QUEUE_MANUAL_QA.md) § B.
 
 ---
 
-## 4b. Queue Card UX — global (GC-536F)
+## 4b. Queue Card UX — global (GC-536F / GC-UNIT-QUEUE-DEDUP-001)
 
-Manuelle QA über alle Queue-Seiten. Kein großes Queue-Panel mehr; Timer nur in Cards.
+Manuelle QA über alle Queue-Seiten. Kein großes Queue-Panel mehr.
 
 | # | Seite | Schritt | Erwartung |
 |---|-------|---------|-----------|
-| Q1 | `/buildings` | Bau starten | Kompaktheader nur Zähler; Card zeigt AKTIV + Timer + Progress |
-| Q2 | `/research` | 2. Tech anreihen | Wartender Job: QUEUE #n + „Startet in …“ in Tech-Card |
-| Q3 | `/shipyard` | Schiff bauen | Werft-Card zeigt Menge×Typ + Timer; Kompaktstatus `🚀 N Werftaufträge` |
-| Q3b | `/defense` | Verteidigung bauen | Defense-Card zeigt Menge×Typ + Timer; Kompaktstatus `🛡 N Verteidigungsaufträge` |
+| Q1 | `/buildings` | Bau starten | Mini-Strip oben + Card zeigt AKTIV + Timer + Progress + ⚡ |
+| Q2 | `/research` | 2. Tech anreihen | Wartender Job: QUEUE in Tech-Card; Mini-Strip aktualisiert |
+| Q3 | `/shipyard` | Schiff bauen | **Nur** zentrale Mini-Bauschleife oben (Menge, Timer, Progress, ⚡, Abbrechen); Schiff-Card ohne Queue-UI |
+| Q3b | `/defense` | Verteidigung bauen | **Nur** zentrale Mini-Bauschleife oben; Defense-Card ohne Queue-UI |
+| Q3c | `/shipyard` oder `/defense` | Timekeeper ⚡ | ⚡ nur in der oberen Bauschleife (aktiver Job); nach Apply sofort ohne Reload |
 | Q4 | `/planet_evolution` | Planet-Tech starten | Card-Queue mit DNA-Akzent; kein separater Job-Listenblock |
 | Q5 | `/planet_evolution` | Ascension (Stufe ≥25) | Ascension-Card mit Orbit-Pulse; Kompaktstatus `🌌 N Ascension-Aufträge` |
-| Q6 | PJAX | Buildings → Research → zurück | Card-Timer konsistent, kein Full-Reload |
-| Q7 | Mobile 390px | Alle vier Seiten | Kein horizontaler Overflow; Kompaktheader bricht um |
-| Q8 | Cancel | Aktiven Job in Card abbrechen | Nächster Job erscheint in derselben Card ohne Reload |
+| Q6 | PJAX | Buildings → Research → Shipyard | Keine doppelte Unit-Queue in Cards nach Navigation |
+| Q7 | Mobile 390px | Alle vier Seiten | Kein horizontaler Overflow; Mini-Strip / Cards umbrechen sauber |
+| Q8 | Cancel | Job in Mini-Strip / Card abbrechen | Nächster Job wird aktiv ohne Reload; Unit-Cards bleiben queue-frei |
 
 Referenz: [GC-536_QUEUE_CARD_UX.md](GC-536_QUEUE_CARD_UX.md) · [GC-512_QUEUE_MANUAL_QA.md](GC-512_QUEUE_MANUAL_QA.md) F1–F5
 

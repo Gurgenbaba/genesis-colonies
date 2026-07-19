@@ -8615,10 +8615,13 @@ a.gc-bld-head-action-btn--go:focus-visible{
   color: rgba(255, 255, 255, 1);
 }
 
-.gc-bld-head-action-btn--busy{
+.gc-bld-head-action-btn--busy,
+.gc-bld-head-action-btn.is-busy,
+.gc-bld-head-action-btn.is-loading{
   border-color: rgba(127, 255, 217, 0.38);
   color: rgba(180, 245, 255, 0.92);
   cursor: default;
+  opacity: 0.82;
 }
 
 .gc-bld-head-action-btn--warn{
@@ -9917,94 +9920,7 @@ a.gc-bld-head-action-btn--go:focus-visible{
   to{ transform: translateY(6px); }
 }
 
-/* GC-536 — defense card queue (shipyard-page family — cyan base, amber glyph) */
-.defense-queue-compact{
-  /* extends .gc-page-queue-compact */
-}
-
-.defense-page .gc-card-queue-block{
-  margin: 4px 0 2px;
-}
-
-.gc-card-queue-block--defense{
-  border-color: rgba(90, 200, 255, 0.22);
-  background:
-    linear-gradient(135deg, rgba(8, 16, 28, 0.94), rgba(6, 12, 22, 0.9));
-}
-
-.gc-card-queue-glyph--defense{
-  border-color: rgba(255, 154, 26, 0.48);
-  background: rgba(255, 154, 26, 0.1);
-  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-  border-radius: 0;
-  animation: gc-card-queue-spin 6s linear infinite;
-}
-
-.gc-card-queue-block--defense .gc-card-queue-cancel{
-  align-self: flex-start;
-  margin-top: 0;
-  font-size: 0.68rem;
-  letter-spacing: 0.04em;
-  opacity: 0.88;
-}
-
-.gc-card-queue-scanline--defense{
-  background: repeating-linear-gradient(
-    90deg,
-    transparent 0,
-    transparent 3px,
-    rgba(90, 200, 255, 0.06) 3px,
-    rgba(90, 200, 255, 0.06) 4px
-  );
-  animation: gc-card-queue-scan 2.8s linear infinite;
-}
-
-/* GC-536D — shipyard card queue accents */
-.gc-ship-card--in-queue{
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.22) inset,
-    0 0 18px rgba(90, 200, 255, 0.08);
-}
-
-.gc-ship-card--queue-active{
-  border-color: rgba(90, 200, 255, 0.34);
-}
-
-.gc-card-queue-block--shipyard{
-  border-color: rgba(90, 200, 255, 0.22);
-  background:
-    linear-gradient(135deg, rgba(8, 16, 28, 0.94), rgba(6, 12, 22, 0.9));
-}
-
-.gc-card-queue-quantity{
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: var(--gc-text);
-  margin: 2px 0 4px;
-  letter-spacing: 0.02em;
-}
-
-.gc-card-queue-glyph--shipyard{
-  border-color: rgba(90, 200, 255, 0.55);
-  background: rgba(70, 180, 255, 0.08);
-  border-radius: 50%;
-  animation: gc-card-queue-spin 5s linear infinite;
-}
-
-.gc-card-queue-scanline--shipyard{
-  background: repeating-linear-gradient(
-    90deg,
-    transparent 0,
-    transparent 3px,
-    rgba(90, 200, 255, 0.06) 3px,
-    rgba(90, 200, 255, 0.06) 4px
-  );
-  animation: gc-card-queue-scan 2.8s linear infinite;
-}
-
-.shipyard-queue-compact{
-  /* extends .gc-page-queue-compact */
-}
+/* GC-UNIT-QUEUE-DEDUP-001: shipyard/defense queue UI only in .gc-mini-queue-strip */
 
 /* GC-536E — planet-tech + ascension card queue accents */
 .pe-queue-compact{
@@ -10199,14 +10115,10 @@ a.gc-bld-head-action-btn--go:focus-visible{
   .gc-card-queue-scanline,
   .gc-card-queue-glyph--research,
   .gc-card-queue-scanline--research,
-  .gc-card-queue-glyph--shipyard,
-  .gc-card-queue-scanline--shipyard,
   .gc-card-queue-glyph--planet-research,
   .gc-card-queue-scanline--planet-research,
   .gc-card-queue-glyph--ascension,
   .gc-card-queue-scanline--ascension,
-  .gc-card-queue-glyph--defense,
-  .gc-card-queue-scanline--defense,
   .gc-card-queue-block--advance{
     animation: none !important;
   }
@@ -16683,6 +16595,13 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 .fleet-send-submit:disabled{
   opacity: 0.45;
   cursor: not-allowed;
+}
+.fleet-send-submit.is-busy,
+.fleet-send-submit.is-loading{
+  opacity: 0.62;
+  cursor: default;
+  border-color: rgba(127, 255, 217, 0.38);
+  color: rgba(180, 245, 255, 0.92);
 }
 .fleet-send-submit-icon{
   font-size: 0.75rem;
@@ -36659,6 +36578,18 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
 .gc-queue-timekeeper-btn:disabled,
 .gc-queue-timekeeper-btn[hidden]{
   display: none !important;
+}
+
+/* GC-INSTANT-UX-001B: keep TK button visible while action is in-flight. */
+.gc-queue-timekeeper-btn:disabled.is-busy,
+.gc-queue-timekeeper-btn:disabled.is-loading,
+.gc-queue-timekeeper-btn.is-busy,
+.gc-queue-timekeeper-btn.is-loading{
+  display: inline-flex !important;
+  opacity: 0.55;
+  cursor: default;
+  border-color: rgba(70, 229, 255, 0.38);
+  color: rgba(180, 245, 255, 0.88);
 }
 
 .gc-mini-queue-card .gc-queue-timekeeper-btn{

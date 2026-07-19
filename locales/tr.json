@@ -5770,5 +5770,17 @@
   "timekeeper_hud_cap": "24s havuz",
   "energy_short": "EN",
   "timekeeper_short": "TK",
-  "timekeeper_hud_cap_short": "24h"
+  "timekeeper_hud_cap_short": "24h",
+  "buildings_technical_nano_speed": "×%(factor)s",
+  "buildings_technical_nano_marginal_save": "−%(time)s",
+  "buildings_technical_nano_speed_current": "Mevcut nanofabrika",
+  "buildings_technical_nano_speed_next": "Sonraki seviye",
+  "buildings_technical_nano_example": "Örnek metal madeni",
+  "buildings_technical_nano_marginal_label": "Sonraki seviye kazancı",
+  "buildings_technical_nano_marginal_with_pct": "%(time)s (−%(percent)s%%)",
+  "buildings_technical_nano_vs_l0_label": "Nano olmadan toplam",
+  "buildings_technical_nano_vs_l0": "%(from)s → %(to)s (−%(saved)s)",
+  "buildings_technical_nano_other_mods": "Diğer değiştiriciler",
+  "buildings_technical_nano_mod_buildtime": "İnşa optimizasyonu S%(level)s",
+  "buildings_technical_nano_mod_universe": "Evren ×%(speed)s"
 }

@@ -381,6 +381,62 @@ def test_main_js_patches_boost_hud_from_game_state():
     assert 'data-gc-boost-hud' not in base
 
 
+def test_gc_instant_ux_ssr_hud_boot_contract():
+    """GC-INSTANT-UX-001A: fleet + unread hydrate from SSR before deferred poll."""
+    src = _read("static/main.js")
+    base = _read("templates/base.html")
+    app_py = _read("app.py")
+    assert 'id="gc-hud-boot-state"' in base
+    assert "HEADER_HUD_BOOT" in base
+    assert "HEADER_HUD_BOOT=header_hud_boot" in app_py
+    assert "fleet_hud_for_game_state" in app_py.split("header_hud_boot")[1][:2500]
+    assert "function bootstrapHudFromDom()" in src
+    assert "GC.bootstrapHudFromDom = bootstrapHudFromDom" in src
+    shell = src.split("function initShellOnce()")[1].split("document.addEventListener(\"DOMContentLoaded\"")[0]
+    assert "bootstrapHudFromDom()" in shell
+    assert shell.index("bootstrapHudFromDom()") < shell.index("initGlobalFleetDrawer()")
+    boot_fn = src.split("function bootstrapHudFromDom()")[1].split("GC.bootstrapHudFromDom")[0]
+    assert 'getElementById("gc-hud-boot-state")' in boot_fn
+    assert 'mergeLastState(boot, "ssr_hud_boot")' in boot_fn or 'ssr_hud_boot' in boot_fn
+    assert "patchShellHudFromState" in boot_fn
+    assert "unread_messages_count" in boot_fn
+    assert "active_fleets" in boot_fn
+    # GC-742 skip remains: no forced page_init when SSR live boot is present.
+    skip_fn = src.split("function shouldSkipInitGameStateAfterSsr")[1].split("function bootstrapResourceLiveFromDom")[0]
+    assert "pageHasSsrLiveBoot()" in skip_fn
+
+
+def test_gc_instant_ux_action_busy_contract():
+    """GC-INSTANT-UX-001B: shared busy helper wires progression CSS + fleet/TK submit."""
+    src = _read("static/main.js")
+    css = _read("static/style.css")
+    busy_fn = src.split("function setProgressionActionBusy")[1].split("function initGameActions")[0]
+    assert 'classList.add("is-loading", "is-busy", "gc-bld-head-action-btn--busy")' in busy_fn
+    assert "GC.setActionBusy = setProgressionActionBusy" in src
+    assert ".gc-bld-head-action-btn--busy" in css
+    assert ".fleet-send-submit.is-busy" in css
+    assert ".gc-queue-timekeeper-btn:disabled.is-busy" in css
+    tk_fn = src.split("async function submitTimekeeperApplyFromBtn")[1].split("function initTimekeeperOnce")[0]
+    assert "setProgressionActionBusy(openBtn, true)" in tk_fn
+    assert "setProgressionActionBusy(openBtn, false)" in tk_fn
+    assert "setProgressionActionBusy(submitBtn, true)" in src
+    assert "setProgressionActionBusy(submitBtn, false)" in src
+
+
+def test_gc_instant_ux_fleet_ssr_skip_refresh_contract():
+    """GC-INSTANT-UX-001C: initFleet skips /api/fleet/state when SSR ready."""
+    src = _read("static/main.js")
+    init_fn = src.split("function initFleet()")[1].split("function applyFleetUrlPrefill")[0]
+    assert "hasSsrFleetBoot" in init_fn
+    assert "rt.data.ready === true" in init_fn
+    assert "GC.refreshFleetState(page)" in init_fn
+    assert "!hasSsrFleetBoot && typeof GC.refreshFleetState" in init_fn
+    contract = _read("docs/AJAX_PJAX_CONTRACT.md")
+    assert "pageHasSsrLiveBoot" in contract
+    assert "bootstrapHudFromDom" in contract
+    assert "refreshFleetState" in contract
+
+
 def test_admin_balance_save_skips_blocking_game_state():
     admin_src = _read("static/admin.js")
     balance_section = admin_src.split("async function afterBalanceMutation")[1].split("async function loadAdminBalance")[0]
@@ -1096,8 +1152,9 @@ def test_main_js_gc542_research_shipyard_queue_timer_parity():
     assert "function applyQueueJobTimerAttrs(el, finishTime, kind, refreshOnZero, remaining)" in src
     assert "function patchResearchPanelFromState(data)" in src
     assert "function patchShipyardPanelFromState(data, activePlanetId)" in src
-    assert "function patchShipyardCardQueues(page, queueData)" in src
+    assert "function patchShipyardCardQueues(page, _queueData)" in src or "function patchShipyardCardQueues(page, queueData)" in src
     assert "GC.renderMiniQueueStrip = function renderMiniQueueStrip" in src
+    assert 'domain === "shipyard" || domain === "defense"' in src.split("GC.renderCardQueueBlock = function renderCardQueueBlock")[1].split("const sig = cardQueueJobSignature")[0]
     parse_section = src.split("function parseTimerTarget(raw)")[1].split("function resolveQueueJobFinishTime")[0]
     assert r"/^\d+(\.\d+)?$/" in parse_section
     research_partial = _read("templates/partials/research_queue.html")
@@ -1126,9 +1183,9 @@ def test_main_js_gc542_research_shipyard_queue_timer_parity():
     patch_queues = src.split("function patchCardQueuesFromOwnerMap(page, byOwner, listCards, ownerKeyFromCard, findCard)")[1].split("GC.renderCardQueueBlock = function renderCardQueueBlock")[0]
     assert "activeKeys.has(key)" in patch_queues
     assert "GC.clearCardQueueBlock(card)" in patch_queues
-    patch_sy = src.split("function patchShipyardCardQueues(page, queueData)")[1].split("function shipyardIconUrl")[0]
-    assert "patchCardQueuesFromOwnerMap" in patch_sy
-    assert "GC.clearCardQueueBlock(card);" not in patch_sy.split("patchCardQueuesFromOwnerMap")[0]
+    patch_sy = src.split("function patchShipyardCardQueues(page")[1].split("function shipyardIconUrl")[0]
+    assert "clearAllProductionCardQueues(page)" in patch_sy
+    assert "patchCardQueuesFromOwnerMap" not in patch_sy
     card_queue = src.split("function cardQueueJobSignature(queueJob)")[1].split("function canPatchCardQueueInPlace")[0]
     assert "target_amount" in card_queue
     assert "function canPatchCardQueueInPlace(existing, queueJob)" in src
@@ -1154,9 +1211,12 @@ def test_main_js_gc631_formatted_unit_inputs_and_queue_clear():
     assert "maxBtn.dataset.maxQty" in shipyard_bind
     assert "parseIntNumber(" in shipyard_bind
     assert "function clearProductionCardQueueState(card)" in src
-    patch_sy = src.split("function patchShipyardCardQueues(page, queueData)")[1].split("function shipyardIconUrl")[0]
-    assert "resolveCardJobsByOwner(queueData)" in patch_sy
+    patch_sy = src.split("function patchShipyardCardQueues(page")[1].split("function shipyardIconUrl")[0]
+    assert "clearAllProductionCardQueues(page)" in patch_sy
     assert "function resolveCardJobsByOwner(queueRaw)" in src
+    render_sy_clear = src.split("function renderShipyardQueue(page, queueData)")[1].split("function parseShipyardPageData")[0]
+    assert "clearAllProductionCardQueues(page)" in render_sy_clear
+    assert "patchShipyardCardQueues" not in render_sy_clear
     owner_helper = src.split("function resolveCardJobsByOwner(queueRaw)")[1].split("function renderMaxQueueButtonLabel")[0]
     assert "return raw && typeof raw === \"object\" ? raw : {}" in owner_helper
     patch_queues = src.split("function patchCardQueuesFromOwnerMap(page, byOwner, listCards, ownerKeyFromCard, findCard)")[1].split("GC.renderCardQueueBlock = function renderCardQueueBlock")[0]
@@ -2228,6 +2288,10 @@ def test_main_js_timekeeper_research_card_selector():
     sync_state = src.split("function _syncTimekeeperButtonsFromState(state)")[1].split("function _refreshDomTimekeeperApplyBtns", 1)[0]
     assert '_findResearchCard(ownerKey)' in sync_state
     assert "querySelectorAll(\"[data-tech-key]\")" not in sync_state
+    # GC-UNIT-QUEUE-DEDUP-001: unit-queue TK only via mini strip, never unit cards.
+    assert 'data-ship-key="${shipKey}"' not in sync_state
+    assert 'data-defense-card="${defKey}"' not in sync_state
+    assert "_syncMiniQueueTimekeeperFromState(state)" in sync_state
     finalize = src.split("function _finalizeTimekeeperQueueButtons(state)")[1].split("function _queueJobTimekeeperRemaining")[0]
     assert "_syncActiveMiniQueueTimekeeperButtons()" in finalize
     assert "_syncTimekeeperButtonsFromState(state)" in finalize

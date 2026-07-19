@@ -188,11 +188,15 @@ def test_build_time_nodes_have_description_and_effect_preview(techtree_db):
         assert preview.get("effect_kind") == "bonus_percent"
         assert int(preview.get("effect_value") or 0) >= 0
 
+    from game.buildings import command_center_nanofactory_build_bonus_pct
+
     cc = by_building["command_center"]
-    assert cc["effect_preview"]["effect_value"] == 50  # level 2 × 25 %
+    # GC-863 UI: flat ×15 % per CC level (runtime for nano upgrades remains 0.75^cc).
+    assert cc["effect_preview"]["effect_value"] == command_center_nanofactory_build_bonus_pct(2)
 
     nano = by_building["nanofactory"]
-    assert nano["effect_preview"]["effect_value"] == 90  # level 3 × 30 %
+    # GC-NANO-001: speed bonus % from 1 + 0.55 × level^0.8 (not flat ×30).
+    assert nano["effect_preview"]["effect_value"] == EffectResolver.nanofactory_build_speed_bonus_pct(3)
 
     buildtime = by_research["buildtime_tech"]
     assert buildtime.get("description_key") == "desc_buildtime_tech"

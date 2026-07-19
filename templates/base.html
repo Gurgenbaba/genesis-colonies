@@ -294,6 +294,9 @@
           {% if HEADER_ACTIVE_BOOSTERS is defined and HEADER_ACTIVE_BOOSTERS.active_effects %}
           <script type="application/json" id="gc-header-boosters-state">{{ HEADER_ACTIVE_BOOSTERS | tojson }}</script>
           {% endif %}
+          {% if HEADER_HUD_BOOT is defined and HEADER_HUD_BOOT %}
+          <script type="application/json" id="gc-hud-boot-state">{{ HEADER_HUD_BOOT | tojson }}</script>
+          {% endif %}
           <div id="global-fleet-drawer-root"
                class="gc-fleet-hud-root gc-fleet-drawer-root"
                data-global-fleet-drawer

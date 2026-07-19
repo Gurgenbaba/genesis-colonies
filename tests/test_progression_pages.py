@@ -71,14 +71,15 @@ def test_locale_mechanics_descriptions():
             assert "5 %" in locale["desc_terraformer"] and "Lager" in locale["desc_terraformer"]
             assert "Infrastruktur" in locale["desc_terraformer"]
             assert "5 %" in locale["desc_academy"] and "Forschung" in locale["desc_academy"]
-            assert "30 %" in locale["desc_nanofactory"] and "Bauzeit" in locale["desc_nanofactory"]
+            # GC-NANO-001: diminishing returns — not flat 30 % per level.
+            assert "Grenznutzen" in locale["desc_nanofactory"] and "Bauzeit" in locale["desc_nanofactory"]
             assert "10 %" in locale["desc_mining_tech"] and "4 %" in locale["desc_mining_tech"]
             assert "15 %" in locale["desc_storage_tech"] and "Lager" in locale["desc_storage_tech"]
         else:
             assert "5%" in locale["desc_terraformer"] and "storage" in locale["desc_terraformer"].lower()
             assert "infrastructure" in locale["desc_terraformer"].lower()
             assert "5%" in locale["desc_academy"] and "research" in locale["desc_academy"].lower()
-            assert "30%" in locale["desc_nanofactory"] and "build" in locale["desc_nanofactory"].lower()
+            assert "diminishing" in locale["desc_nanofactory"].lower() and "build" in locale["desc_nanofactory"].lower()
             assert "10%" in locale["desc_mining_tech"] and "4%" in locale["desc_mining_tech"]
             assert "15%" in locale["desc_storage_tech"] and "storage" in locale["desc_storage_tech"].lower()
 
@@ -87,8 +88,8 @@ def test_locale_mechanics_descriptions():
             assert desc_key in locale, f"missing {label} locale key {desc_key}"
             assert not locale[desc_key].startswith("desc_")
 
-        for key in RESEARCH_TECHS:
-            desc_key = f"desc_{key}"
+        for key, cfg in RESEARCH_TECHS.items():
+            desc_key = str((cfg or {}).get("description_key") or f"desc_{key}")
             assert desc_key in locale, f"missing {label} locale key {desc_key}"
             assert not locale[desc_key].startswith("desc_")
 

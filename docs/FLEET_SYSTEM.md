@@ -83,7 +83,7 @@ Cancel-Refund: `shipyard_queue` → `queue_refund.refund_from_stored_costs` (GC-
 
 Analoges Batch-Muster für Verteidigung: [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md) (Unlock über `defense_factory`; Zykluszeit/Kapazität über Orbitalwerft + `defense_time_speed`).
 
-**Queue-UX (GC-536D):** Werftaufträge erscheinen in der jeweiligen Schiff-Card (`queue_job` via `game/queue_card.py` + `_attach_queue_jobs_to_ship_rows` in `game/shipyard.py`). Seitenkopf nur noch Kompaktstatus (`#shipyard-queue-compact`), kein großes Queue-Panel.
+**Queue-UX (GC-UNIT-QUEUE-DEDUP-001):** Werft ist eine **Unit-Queue** — Aufträge erscheinen ausschließlich in der zentralen Mini-Bauschleife (`#shipyard-mini-queue` / `render_page_mini_queue_strip`: Status, Menge, Timer, Fortschritt, Timekeeper ⚡, Abbrechen). Schiff-Cards enthalten keine Queue-UI. Serializer (`map_shipyard_queue_to_card_jobs`, `mini_queue_jobs`) bleiben für Strip/HUD; `queue_job` am Ship-Row ist optional und wird nicht in der Card gerendert.
 
 ---
 

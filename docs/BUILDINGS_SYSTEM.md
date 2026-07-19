@@ -52,9 +52,9 @@ Legacy `BASE_COST × COST_FACTOR^(level-1)` nur noch Audit/Tests — **nicht** d
 
 `EffectResolver.get_build_time_seconds()` → `power_build_seconds()` ÷ multiplicative speed stack; **minimum 1 second** (`max(int(seconds), 1)`).
 
-Sources: `build_speed` (universe), `buildtime_tech`, `nanofactory` (`× 0.70^level`), `command_center` (nanofactory upgrades only), galactic directives/diplomacy. Full audit: [GC-858_BUILD_TIME_MODIFIER_AUDIT.md](GC-858_BUILD_TIME_MODIFIER_AUDIT.md).
+Sources: `build_speed` (universe), `buildtime_tech` (`× 0.985^level`), `nanofactory` (speed `1 + 0.55 × level^0.8`), `command_center` (nanofactory upgrades only, `× 0.75^cc_level`), galactic directives/diplomacy. Details: [EFFECTS.md](EFFECTS.md). Historical profiles: [GC-858_BUILD_TIME_MODIFIER_AUDIT.md](GC-858_BUILD_TIME_MODIFIER_AUDIT.md) (nanofactory formula section superseded by GC-NANO-BUILDTIME-AUDIT-001).
 
-**UI:** Nanofactory card shows flat `level × 30 %` — **display only**; runtime uses exponential duration. Production milestones (`+N %`) are output previews, not build-speed.
+**UI:** Nanofactory tech card shows server preview (speed × current/next, reference build time, cumulative vs marginal savings). Production milestones (`+N %`) are output previews, not build-speed.
 
 **Abgrenzung Werft:** Das Upgrade des Gebäudes `orbital_shipyard` nutzt diese Kurve. Die **Schiffsbau-Zeit pro Einheit** in der Werft-Queue ist separat dokumentiert in [FLEET_SYSTEM.md](FLEET_SYSTEM.md) (GC-852).
 

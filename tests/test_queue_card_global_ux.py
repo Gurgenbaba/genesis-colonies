@@ -182,6 +182,18 @@ def test_main_js_uses_render_card_queue_block_for_all_domains():
         "patchDefenseCardQueues",
     ):
         assert fn in js, f"missing card queue patcher: {fn}"
+    # GC-UNIT-QUEUE-DEDUP-001: unit queues never render into ship/defense cards.
+    render_guard = js.split("GC.renderCardQueueBlock = function renderCardQueueBlock")[1].split(
+        "const sig = cardQueueJobSignature"
+    )[0]
+    assert 'domain === "shipyard" || domain === "defense"' in render_guard
+    assert "return null" in render_guard
+    patch_sy = js.split("function patchShipyardCardQueues(page")[1].split("function shipyardIconUrl")[0]
+    assert "clearAllProductionCardQueues(page)" in patch_sy
+    assert "patchCardQueuesFromOwnerMap" not in patch_sy
+    patch_def = js.split("function patchDefenseCardQueues(page")[1].split("function _syncDefenseQueueLiveState")[0]
+    assert "clearAllProductionCardQueues(page)" in patch_def
+    assert "patchCardQueuesFromOwnerMap" not in patch_def
     render_block = js.split("GC.renderCardQueueBlock = function renderCardQueueBlock")[1].split(
         "return block;"
     )[0]

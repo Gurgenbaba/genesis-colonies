@@ -61,10 +61,11 @@ def test_missing_card_jobs_by_owner_treated_as_empty_map():
     assert "resolveCardJobsByOwner(researchRaw)" in research_patch
     assert "researchRaw != null" in research_patch
 
-    shipyard_patch = src.split("function patchShipyardCardQueues(page, queueData)")[1].split(
+    shipyard_patch = src.split("function patchShipyardCardQueues(page")[1].split(
         "function shipyardIconUrl"
     )[0]
-    assert "resolveCardJobsByOwner(queueData)" in shipyard_patch
+    assert "clearAllProductionCardQueues(page)" in shipyard_patch
+    assert "patchCardQueuesFromOwnerMap" not in shipyard_patch
 
     pe_patch = src.split("function patchPePlanetTechCardQueues(rdx)")[1].split(
         "function patchPeAscensionCardQueues"

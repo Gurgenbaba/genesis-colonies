@@ -16,12 +16,23 @@ Verbindlicher Client-Server-Vertrag für Navigation und Aktionen. Siehe [STATE_A
 
 ```text
 Klick Nav-Link
-  → GC.cleanupPage()
+  → GC.cleanupPage({ preserveGameLoop? })
   → fetch(url, { headers: { "X-PJAX": "true" } })
   → #main-content aus HTML extrahieren und ersetzen
-  → GC.initPage({ force: true })
-  → GC.refreshGameState("page_init")
+  → GC.initPage({ pjax, skipGameState?, skipPolling? })
+  → refreshGameState("page_init") nur wenn nicht SSR-/Light-PJAX-Skip
 ```
+
+Light-PJAX und SSR-Skip (Owner: `static/main.js`, Details in [STATE_AJAX.md](STATE_AJAX.md)):
+
+| Fall | Verhalten |
+|------|-----------|
+| `pageHasSsrLiveBoot()` / `shouldSkipInitGameStateAfterSsr` | Kein sofortiger Full-`/api/game-state` nach frischem SSR (GC-742) |
+| Ingame-Shell / Buildings-Tab Light-PJAX | `skipGameState` (+ ggf. `preserveGameLoop` / `skipPolling`) |
+| Shell-HUD nach Login | `#gc-hud-boot-state` → `bootstrapHudFromDom()` vor Fleet-Drawer (GC-INSTANT-UX-001A) |
+| Fleet-Seite mit `#fleet-page-state` `ready: true` | `initFleet` skippt sofortiges `refreshFleetState` (GC-INSTANT-UX-001C) |
+
+Diet-Poll / deferred first poll liefert weiterhin Live-Updates; kein zweites Polling-System.
 
 ### Pflicht-APIs (`static/main.js`)
 
@@ -32,6 +43,8 @@ Klick Nav-Link
 | `GC.fetchGameAction(url, options)` | POST/GET mit Credentials, JSON |
 | `GC.refreshGameState(reason)` | `GET /api/game-state` |
 | `applyActionState(json, reason)` | `json.state` anwenden + Polling neu starten |
+| `GC.bootstrapHudFromDom()` | Slim HUD (fleets/unread) aus SSR hydratisieren |
+| `GC.setActionBusy(el, busy)` | Pending-UX (`is-busy` / `gc-bld-head-action-btn--busy`) |
 
 ---
 

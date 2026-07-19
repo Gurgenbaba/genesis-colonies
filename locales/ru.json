@@ -5770,5 +5770,17 @@
   "timekeeper_hud_cap": "Пул 24ч",
   "energy_short": "EN",
   "timekeeper_short": "TK",
-  "timekeeper_hud_cap_short": "24h"
+  "timekeeper_hud_cap_short": "24h",
+  "buildings_technical_nano_speed": "×%(factor)s",
+  "buildings_technical_nano_marginal_save": "−%(time)s",
+  "buildings_technical_nano_speed_current": "Текущая нанофабрика",
+  "buildings_technical_nano_speed_next": "Следующий уровень",
+  "buildings_technical_nano_example": "Пример: металлическая шахта",
+  "buildings_technical_nano_marginal_label": "Экономия следующего уровня",
+  "buildings_technical_nano_marginal_with_pct": "%(time)s (−%(percent)s%%)",
+  "buildings_technical_nano_vs_l0_label": "Всего без нано",
+  "buildings_technical_nano_vs_l0": "%(from)s → %(to)s (−%(saved)s)",
+  "buildings_technical_nano_other_mods": "Другие модификаторы",
+  "buildings_technical_nano_mod_buildtime": "Оптимизация строительства У%(level)s",
+  "buildings_technical_nano_mod_universe": "Вселенная ×%(speed)s"
 }

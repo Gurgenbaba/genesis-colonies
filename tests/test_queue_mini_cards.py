@@ -325,6 +325,7 @@ def test_templates_use_mini_queue_strip_not_card_queue():
     shipyard = (ROOT / "templates/shipyard.html").read_text(encoding="utf-8")
     defense = (ROOT / "templates/defense.html").read_text(encoding="utf-8")
     partial = (ROOT / "templates/partials/page_mini_queue_strip.html").read_text(encoding="utf-8")
+    macros = (ROOT / "templates/partials/card_queue_macros.html").read_text(encoding="utf-8")
     assert "render_page_mini_queue_strip" in shipyard
     assert "shipyard-mini-queue" in shipyard
     assert "gc-card-queue-block" not in shipyard
@@ -334,6 +335,12 @@ def test_templates_use_mini_queue_strip_not_card_queue():
     assert "gc-card-queue-block" not in defense
     assert "data-defense-queue-slot" not in defense
     assert "gc-mini-queue-strip" in partial
+    # Central strip owns TK + cancel for unit queues.
+    assert "render_timekeeper_apply_btn" in partial
+    assert "data-gc-timekeeper-apply" in macros
+    assert "gc-mini-queue-card__cancel" in partial
+    assert "data-shipyard-queue-cancel" in shipyard
+    assert "data-defense-queue-cancel" in defense
 
 
 def test_mini_queue_includes_batch_size():

@@ -616,26 +616,61 @@ def _command_center_effect_payload(level: int) -> Dict[str, Any]:
 def _nanofactory_panel_snapshot(
     buildings: Dict[str, int],
     target_level: int,
+    *,
+    research_levels: Optional[Dict[str, int]] = None,
+    panel_ctx: Optional[BuildingsPanelContext] = None,
 ) -> Dict[str, Any]:
+    from .technical_data import build_nanofactory_time_preview
+
     cur = int(buildings.get("nanofactory", 0) or 0)
     nxt = int(target_level)
-    return _panel_effect_snapshot(
+    out = _panel_effect_snapshot(
         effect_kind="bonus_percent",
         effect_current=nanofactory_build_bonus_pct(cur),
         effect_next=nanofactory_build_bonus_pct(nxt),
         effect_resource="build",
         effect_unit="%",
     )
+    base = panel_ctx.resolver if panel_ctx is not None else None
+    preview = build_nanofactory_time_preview(
+        buildings,
+        research_levels or (panel_ctx.research_levels if panel_ctx is not None else {}),
+        nano_level=cur,
+        base_resolver=base,
+    )
+    out["nano_time_preview"] = preview
+    out["build_time_factor"] = preview.get("speed_current")
+    return out
 
 
-def _nanofactory_effect_payload(level: int) -> Dict[str, Any]:
+def _nanofactory_effect_payload(
+    level: int,
+    *,
+    buildings: Optional[Dict[str, int]] = None,
+    research_levels: Optional[Dict[str, int]] = None,
+    panel_ctx: Optional[BuildingsPanelContext] = None,
+) -> Dict[str, Any]:
+    from .technical_data import build_nanofactory_time_preview
+
     pct = nanofactory_build_bonus_pct(level)
-    return {
+    out: Dict[str, Any] = {
         "effect_kind": "bonus_percent",
         "effect_value": pct,
         "effect_unit": "%",
         "effect_resource": "build",
     }
+    bld = dict(buildings or {})
+    bld["nanofactory"] = int(level)
+    base = panel_ctx.resolver if panel_ctx is not None else None
+    preview = build_nanofactory_time_preview(
+        bld,
+        research_levels or (panel_ctx.research_levels if panel_ctx is not None else {}),
+        nano_level=int(level),
+        base_resolver=base,
+    )
+    out["nano_time_preview"] = preview
+    out["build_time_factor"] = preview.get("speed_current")
+    return out
 
 
 def _panel_effect_snapshot(
@@ -831,7 +866,12 @@ def _panel_upgrade_effect_fields(
         )
 
     if building_type == "nanofactory":
-        return _nanofactory_panel_snapshot(buildings, target_level)
+        return _nanofactory_panel_snapshot(
+            buildings,
+            target_level,
+            research_levels=research_levels,
+            panel_ctx=panel_ctx,
+        )
 
     if building_type == "command_center":
         return _command_center_panel_snapshot(buildings, target_level)
@@ -1071,7 +1111,14 @@ def _technical_effects_at_level(
         return out
 
     if building_type == "nanofactory":
-        out.update(_nanofactory_effect_payload(int(level)))
+        out.update(
+            _nanofactory_effect_payload(
+                int(level),
+                buildings=buildings,
+                research_levels=research_levels,
+                panel_ctx=panel_ctx,
+            )
+        )
         return out
 
     if building_type == "command_center":
