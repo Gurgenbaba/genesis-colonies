@@ -412,19 +412,26 @@
     if (options.hud) applyBalanceHudSnapshot(options.hud, reason || "admin_change");
 
     if (options.skipGameState !== true) {
-      if (typeof GC.refreshGameState === "function") {
-        try {
-          await GC.refreshGameState(reason || "admin_change");
-        } catch (_) {
-          /* non-fatal */
-        }
-      } else if (typeof GC.refreshHudFromGameState === "function") {
+      // Prefer HUD refresh — works on /admin (refreshGameState no-ops there).
+      if (typeof GC.refreshHudFromGameState === "function") {
         try {
           await GC.refreshHudFromGameState(reason || "admin_change");
         } catch (_) {
           /* non-fatal */
         }
+      } else if (typeof GC.refreshGameState === "function") {
+        try {
+          await GC.refreshGameState(reason || "admin_change");
+        } catch (_) {
+          /* non-fatal */
+        }
       }
+    }
+
+    if (typeof GC.releaseShellNavigationBlockers === "function") {
+      GC.releaseShellNavigationBlockers(reason || "admin_change");
+    } else if (typeof GC.teardownHudSelectPortals === "function") {
+      GC.teardownHudSelectPortals();
     }
 
     if (options.reloadTab) {

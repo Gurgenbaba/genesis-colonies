@@ -767,10 +767,12 @@ def set_planet_buildings_bulk(admin_id: int, planet_id: int, body: Dict[str, Any
 
     conn = db()
     try:
+        begin_write_transaction(conn)
         cur = conn.cursor()
         cur.execute("SELECT player_id FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),))
         row = cur.fetchone()
         if not row:
+            rollback(conn)
             return _err("not_found", "Planet not found.")
         player_id = int(row["player_id"])
         buildings = get_planet_buildings(int(planet_id), conn=conn)
@@ -783,6 +785,10 @@ def set_planet_buildings_bulk(admin_id: int, planet_id: int, body: Dict[str, Any
             sync_derived_state_after_queue_finish(planet_ids=[int(planet_id)], conn=conn)
         except Exception:
             _admin_settings_log.exception("admin planet buildings derived sync failed")
+        commit(conn)
+    except Exception:
+        rollback(conn)
+        raise
     finally:
         conn.close()
 

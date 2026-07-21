@@ -13723,9 +13723,16 @@
     return forceCanonicalGameStateRefresh(reason || "queue_timer_zero");
   }
 
-  /** Lightweight HUD refresh — standalone fetch, no pageLifecycle abort. */
+  /** Lightweight HUD refresh — works on /admin too (shell chrome stays mounted). */
   async function refreshHudFromGameState(reason) {
-    if (!shouldPollGameState() || _authLoopAborted) return null;
+    const reasonStr = String(reason || "admin_hud");
+    const allowOnAdmin =
+      reasonStr === "admin_hud"
+      || reasonStr.startsWith("admin_")
+      || reasonStr === "leave_admin";
+    if (_authLoopAborted) return null;
+    if (!shouldPollGameState() && !allowOnAdmin) return null;
+    if (!hasLiveStatusRoot()) return null;
     try {
       const res = await fetch("/api/game-state", {
         credentials: "same-origin",
@@ -13746,7 +13753,7 @@
       clearAuthFailureStreak();
       _statusPollErrorLogged = false;
       clearStatusWidgetOffline();
-      applyGameStateData(data, reason || "admin_hud", { hudOnly: true });
+      applyGameStateData(data, reasonStr, { hudOnly: true, forceResourceBar: true });
       return data;
     } catch (err) {
       if (isAuthStatusFailure(err)) {
@@ -23362,6 +23369,18 @@
         section._gcNavAnimTimer = null;
       }
     });
+    const switcher = document.getElementById("gc-planet-switcher");
+    if (switcher) {
+      switcher.classList.remove("is-busy", "is-open");
+      switcher.querySelectorAll(".gc-planet-switcher-item").forEach((btn) => {
+        btn.disabled = false;
+      });
+      const menu = document.getElementById("gc-planet-switcher-menu");
+      if (menu) menu.hidden = true;
+      const trigger = document.getElementById("gc-planet-switcher-trigger");
+      if (trigger) trigger.setAttribute("aria-expanded", "false");
+      document.querySelector(".gc-header-cmd")?.classList.remove("gc-header-planet-menu-open");
+    }
     if (reason) console.debug("[GC] releaseShellNavigationBlockers", reason);
   }
 
@@ -24618,26 +24637,37 @@
             if (!el || !name) return;
             el.textContent = name;
           });
-          await GC.reloadCurrentPage({
-            force: true,
-            skipHydrate: true,
-            skipGameState: true,
-            skipPolling: true,
-          });
+          // Admin shell: never PJAX-reload /admin — keep switch live (HUD + state only).
+          const onAdmin =
+            typeof GC.detectPage === "function" && GC.detectPage() === "admin";
+          if (!onAdmin) {
+            await GC.reloadCurrentPage({
+              force: true,
+              skipHydrate: true,
+              skipGameState: true,
+              skipPolling: true,
+            });
+          }
           syncScopedPlanetIds(planetId);
           bootstrapResourceLiveFromDom();
           bootstrapHeaderBoostersFromDom();
           _bootstrapPageQueueCompactLiveFromDom();
+          if (typeof GC.releaseShellNavigationBlockers === "function") {
+            GC.releaseShellNavigationBlockers("planet_switch");
+          }
           const fleetPage = document.getElementById("fleet-page");
           if (
-            fleetPage &&
-            fleetPage.dataset.ready === "1" &&
-            typeof GC.refreshFleetState === "function"
+            !onAdmin
+            && fleetPage
+            && fleetPage.dataset.ready === "1"
+            && typeof GC.refreshFleetState === "function"
           ) {
             await GC.refreshFleetState(fleetPage);
           }
-          GC.startPolling(anyActive || lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard);
-          GC.startProgressTicker();
+          if (!onAdmin) {
+            GC.startPolling(anyActive || lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard);
+            GC.startProgressTicker();
+          }
         } else {
           showNotify(planetSwitchReasonText(res?.reason), "error");
         }
@@ -31754,6 +31784,9 @@
       if (typeof GC.quiesceLiveClientFetches === "function") GC.quiesceLiveClientFetches("leave_admin");
       else if (typeof GC.abortInFlightGameStateFetches === "function") GC.abortInFlightGameStateFetches();
       GC.stopPolling();
+      if (typeof GC.releaseShellNavigationBlockers === "function") {
+        GC.releaseShellNavigationBlockers("leave_admin");
+      }
     } else if (!opts.preserveGameLoop && typeof GC.abortInFlightGameStateFetches === "function") {
       GC.abortInFlightGameStateFetches();
       GC.stopPolling();
