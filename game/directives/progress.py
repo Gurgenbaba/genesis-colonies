@@ -155,8 +155,12 @@ def _record_progress_delta(
             (int(player_directive_id), str(source_event_id), int(delta), int(now)),
         )
         return True
-    except sqlite3.IntegrityError:
-        return False
+    except Exception as exc:
+        from ..db import is_integrity_error
+
+        if is_integrity_error(exc):
+            return False
+        raise
 
 
 def _event_delta(definition: Mapping[str, Any], event: Mapping[str, Any]) -> int:

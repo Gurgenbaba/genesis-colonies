@@ -7,6 +7,7 @@ import sqlite3
 import threading
 from typing import Any, Dict, List, Optional
 
+from ..db import table_exists
 from ..models import db
 
 _CACHE_LOCK = threading.RLock()
@@ -60,12 +61,10 @@ def normalize_directive_key(value: Any) -> str:
 
 
 def schema_ready(*, conn: sqlite3.Connection) -> bool:
+    # Owner: game.db.table_exists (PG-safe). Never query sqlite_master on Postgres.
     try:
-        row = conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'gd_directive_definitions' LIMIT 1;"
-        ).fetchone()
-        return row is not None
-    except sqlite3.Error:
+        return table_exists(conn, "gd_directive_definitions")
+    except Exception:
         return False
 
 

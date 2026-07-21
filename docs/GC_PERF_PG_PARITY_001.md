@@ -1,6 +1,6 @@
 # GC-PERF-PG-PARITY-001 — Backend-Parität auf leerer PostgreSQL-DB
 
-> Status: ✅ Block A/B SQLite + PG Staging grün · C–F offen  
+> Status: ✅ Block A/B/C · 📋 D–F offen  
 > Epic: EPIC-19 Performance Core · [GC_PERF_CORE.md](GC_PERF_CORE.md)  
 > Vorbedingung: ✅ [GC-PERF-PG-SCHEMA-001](GC_PERF_PG_SCHEMA_001.md)  
 > **Kein Livedaten-Import · kein Production-Cutover · kein produktiver Worker gegen Postgres.**  
@@ -21,7 +21,7 @@ Schema-Port ist grün, aber Verhaltensparität (Auth, Queues, Fleet, …) zwisch
 |-------|--------|--------|
 | **A** | Auth + Bootstrap + Homeworld | ✅ SQLite + PG |
 | **B** | Economy + Planet Scope | ✅ SQLite + PG |
-| **C** | Unit Queues (Build/Research/Shipyard/Defense) | 📋 |
+| **C** | Unit Queues (Build/Research/Shipyard/Defense) | ✅ SQLite + PG |
 | **D** | Fleet + Combat | 📋 |
 | **E** | Evolution + Meta | 📋 |
 | **F** | Race + Restart / Tick-Idempotenz | 📋 |
@@ -64,9 +64,9 @@ python -m pytest tests/test_gc_perf_pg_parity_001.py -v -s
 - [ ] Registrierung und Login auf PG grün
 - [ ] Default-Spieler + Homeworld korrekt
 - [ ] aktive Kolonie korrekt
-- [ ] Gebäude-/Research-Queues grün
-- [ ] Shipyard-/Defense-Queues grün
-- [ ] Refund und Reschedule identisch
+- [x] Gebäude-/Research-Queues grün
+- [x] Shipyard-/Defense-Queues grün
+- [x] Refund und Reschedule identisch
 - [ ] Fleet send/arrival/return grün
 - [ ] Combat/Loot/Debris grün
 - [ ] Expedition grün
@@ -102,6 +102,18 @@ python -m pytest tests/test_gc_perf_pg_parity_001.py -v -s
 - [ ] aktive Kolonie wechseln (HTTP)
 - [ ] Poll ohne Writes bei Unverändert
 
+### Block C
+
+- [x] Buildings: enqueue + finish_due + level-up
+- [x] Buildings: cancel pending → full refund + empty queue
+- [x] Account research: enqueue + cancel pending refund
+- [x] Shipyard: dual enqueue, cancel head → reschedule remaining, finish → ships
+- [x] Defense: enqueue + cancel
+- [x] Parallel build enqueue (2 jobs)
+- [x] SQLite (`test_parity_c_queues_sqlite`)
+- [x] PG Staging (`test_parity_c_queues_postgres`) — nested `COMMIT` in GDP personality ensure + `sqlite_master` schema probes fixed
+- [ ] Planet Research / Ascension (optional follow-up in C or E)
+
 ---
 
 ## Paritäts-Matrix
@@ -110,10 +122,10 @@ python -m pytest tests/test_gc_perf_pg_parity_001.py -v -s
 | ---------- | -----: | ---------: | ---------- |
 | Auth (A)   |   grün |       grün | — |
 | Economy (B)|   grün |       grün | Scalar `MAX`→`GREATEST` |
-| Buildings  |    —   |        —   | Block C    |
-| Research   |    —   |        —   | Block C    |
-| Shipyard   |    —   |        —   | Block C    |
-| Defense    |    —   |        —   | Block C    |
+| Buildings  |   grün |       grün | nested COMMIT / SAVEPOINT |
+| Research   |   grün |       grün | — |
+| Shipyard   |   grün |       grün | — |
+| Defense    |   grün |       grün | — |
 | Fleet      |    —   |        —   | Block D    |
 | Combat     |    —   |        —   | Block D    |
 | Evolution  |    —   |        —   | Block E    |

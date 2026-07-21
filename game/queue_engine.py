@@ -44,15 +44,76 @@ def _run_finish_step(conn: sqlite3.Connection, label: str, fn) -> Any:
     try:
         out = fn()
         if use_sp and sp is not None:
-            conn.execute(f"RELEASE SAVEPOINT {sp}")
+            try:
+                conn.execute(f"RELEASE SAVEPOINT {sp}")
+            except Exception:
+                # Nested code may have left TX aborted; undo this step and re-raise.
+                try:
+                    conn.execute(f"ROLLBACK TO SAVEPOINT {sp}")
+                    conn.execute(f"RELEASE SAVEPOINT {sp}")
+                except Exception:
+                    logger.exception(
+                        "queue_engine savepoint recover-after-release failed (%s)", label
+                    )
+                raise
         return out
     except Exception:
         if use_sp and sp is not None:
             try:
                 conn.execute(f"ROLLBACK TO SAVEPOINT {sp}")
+                conn.execute(f"RELEASE SAVEPOINT {sp}")
             except Exception:
                 logger.exception("queue_engine savepoint rollback failed (%s)", label)
         raise
+
+
+def _run_optional_side_effect(conn: sqlite3.Connection, label: str, fn) -> None:
+    """
+    Best-effort side effect inside an open finish TX.
+    On Postgres, isolate with SAVEPOINT so a failure (including errors swallowed
+    inside ``fn``) cannot abort the parent TX.
+    """
+    global _SAVEPOINT_SEQ
+    use_sp = get_db_backend() == "postgres"
+    sp = None
+    if use_sp:
+        _SAVEPOINT_SEQ = (_SAVEPOINT_SEQ + 1) % 1_000_000
+        sp = f"qe_side_{_SAVEPOINT_SEQ}"
+        try:
+            conn.execute(f"SAVEPOINT {sp}")
+        except Exception:
+            logger.exception("queue_engine could not open side-effect savepoint (%s)", label)
+            sp = None
+            # Still try fn on SQLite semantics; on aborted PG TX this will fail loudly.
+    try:
+        fn()
+    except Exception:
+        if use_sp and sp is not None:
+            try:
+                conn.execute(f"ROLLBACK TO SAVEPOINT {sp}")
+                conn.execute(f"RELEASE SAVEPOINT {sp}")
+            except Exception:
+                logger.exception(
+                    "queue_engine side-effect savepoint rollback failed (%s)", label
+                )
+        logger.exception("queue_engine optional side effect failed (%s)", label)
+        return
+    if use_sp and sp is not None:
+        try:
+            conn.execute(f"RELEASE SAVEPOINT {sp}")
+        except Exception:
+            # ``fn`` likely caught a Postgres error and left the TX aborted.
+            try:
+                conn.execute(f"ROLLBACK TO SAVEPOINT {sp}")
+                conn.execute(f"RELEASE SAVEPOINT {sp}")
+                logger.warning(
+                    "queue_engine recovered aborted TX after side effect (%s)", label
+                )
+            except Exception:
+                logger.exception(
+                    "queue_engine could not recover aborted TX after side effect (%s)",
+                    label,
+                )
 
 _BUILDING_KEYS = [
     "metal_mine", "crystal_mine", "solar_plant",
@@ -409,14 +470,17 @@ def finish_planet_build_jobs(
         try:
             from .activity_xp import SOURCE_BUILDING_FINISH, grant_queue_job_activity_xp
 
-            grant_queue_job_activity_xp(
-                int(player_id),
-                int(planet_id),
-                SOURCE_BUILDING_FINISH,
-                job_id,
-                conn=conn,
-                now=float(now),
-            )
+            def _grant_build_xp() -> None:
+                grant_queue_job_activity_xp(
+                    int(player_id),
+                    int(planet_id),
+                    SOURCE_BUILDING_FINISH,
+                    job_id,
+                    conn=conn,
+                    now=float(now),
+                )
+
+            _run_optional_side_effect(conn, f"axp_build:{job_id}", _grant_build_xp)
         except Exception:
             logger.exception(
                 "activity_xp building grant failed player=%s planet=%s job=%s",
@@ -426,7 +490,7 @@ def finish_planet_build_jobs(
             )
 
     if build_completions:
-        try:
+        def _emit_build() -> None:
             from .directives.progress import emit_build_complete_events
 
             emit_build_complete_events(
@@ -435,27 +499,21 @@ def finish_planet_build_jobs(
                 conn=conn,
                 now=float(now),
             )
-        except Exception:
-            logger.exception(
-                "imperial_directives build progress failed player=%s planet=%s",
-                player_id,
-                planet_id,
-            )
-        try:
+
+        _run_optional_side_effect(conn, f"dir_build:{planet_id}", _emit_build)
+
+        def _sync_establishment() -> None:
             from .planet_evolution.expansion_protocol import sync_establishment_state
 
             sync_establishment_state(int(planet_id), conn=conn)
-        except Exception:
-            logger.exception(
-                "expansion establishment sync failed player=%s planet=%s",
-                player_id,
-                planet_id,
-            )
+
+        _run_optional_side_effect(conn, f"est_sync:{planet_id}", _sync_establishment)
+
         if any(
             str(c.get("building_type") or "") == "orbital_shipyard"
             for c in build_completions
         ):
-            try:
+            def _sync_yard_queues() -> None:
                 from .defense import sync_defense_queue_finish_times
                 from .shipyard import get_shipyard_level
                 from .shipyard_queue import sync_shipyard_queue_finish_times
@@ -472,13 +530,8 @@ def finish_planet_build_jobs(
                 sync_defense_queue_finish_times(
                     int(planet_id), conn=conn, now=float(now)
                 )
-            except Exception:
-                logger.exception(
-                    "shipyard/defense queue sync after orbital_shipyard finish failed "
-                    "player=%s planet=%s",
-                    player_id,
-                    planet_id,
-                )
+
+            _run_optional_side_effect(conn, f"yard_sync:{planet_id}", _sync_yard_queues)
 
     return completed
 
@@ -568,12 +621,15 @@ def finish_player_research_jobs(
         try:
             from .activity_xp import grant_account_research_activity_xp
 
-            grant_account_research_activity_xp(
-                int(user_id),
-                job_id,
-                conn=conn,
-                now=float(now),
-            )
+            def _grant_research_xp() -> None:
+                grant_account_research_activity_xp(
+                    int(user_id),
+                    job_id,
+                    conn=conn,
+                    now=float(now),
+                )
+
+            _run_optional_side_effect(conn, f"axp_research:{job_id}", _grant_research_xp)
         except Exception:
             logger.exception(
                 "activity_xp account research grant failed player=%s job=%s",
@@ -582,7 +638,7 @@ def finish_player_research_jobs(
             )
 
     if research_completions:
-        try:
+        def _emit_research() -> None:
             from .directives.progress import emit_research_complete_events
 
             emit_research_complete_events(
@@ -591,11 +647,8 @@ def finish_player_research_jobs(
                 conn=conn,
                 now=float(now),
             )
-        except Exception:
-            logger.exception(
-                "imperial_directives research progress failed player=%s",
-                user_id,
-            )
+
+        _run_optional_side_effect(conn, f"dir_research:{user_id}", _emit_research)
 
     return completed
 

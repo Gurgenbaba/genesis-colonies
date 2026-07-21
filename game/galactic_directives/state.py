@@ -6,7 +6,7 @@ import sqlite3
 import time
 from typing import Any, Dict, List, Optional
 
-from ..db import begin_write_transaction, commit, db
+from ..db import begin_write_transaction, commit, db, in_transaction, is_integrity_error, rollback
 from ..galaxy import get_galaxy_max
 from .definitions import (
     get_directive_definition,
@@ -76,6 +76,10 @@ def ensure_galaxy_state(
         if existing is not None:
             return existing
 
+        # Nested inside an outer write TX: never COMMIT the shared connection.
+        if in_transaction(conn) and not own_conn:
+            return _default_state_row(galaxy_id)
+
         now = int(time.time())
         begin_write_transaction(conn)
         try:
@@ -89,9 +93,13 @@ def ensure_galaxy_state(
                 (galaxy_id, FALLBACK_PRIMARY, now, now),
             )
             commit(conn)
-        except sqlite3.Error:
-            # Concurrent insert — fall through to read.
-            pass
+        except Exception as exc:
+            try:
+                rollback(conn)
+            except Exception:
+                pass
+            if not is_integrity_error(exc) and not isinstance(exc, sqlite3.Error):
+                raise
 
         row = _fetch_state_row(galaxy_id, conn)
         return row if row is not None else _default_state_row(galaxy_id)

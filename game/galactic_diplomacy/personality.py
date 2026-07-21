@@ -7,7 +7,7 @@ import sqlite3
 import time
 from typing import Any, Dict, List, Mapping, Optional
 
-from ..db import begin_write_transaction, commit, db
+from ..db import begin_write_transaction, commit, db, in_transaction, is_integrity_error, rollback
 from .blocs import normalize_galaxy
 from .definitions import (
     PERSONALITY_KEYS,
@@ -148,6 +148,16 @@ def ensure_galaxy_personality_state(
         if existing is not None:
             return _build_personality_payload(galaxy_id, existing, conn=conn, source="state")
 
+        # Nested inside an outer write TX (EffectResolver / queue finish): never COMMIT
+        # the shared connection — that would destroy SAVEPOINTs and abort spend/finish.
+        if in_transaction(conn) and not own_conn:
+            return _build_personality_payload(
+                galaxy_id,
+                _default_state_row(galaxy_id),
+                conn=conn,
+                source="fallback",
+            )
+
         now = int(time.time())
         begin_write_transaction(conn)
         try:
@@ -160,8 +170,13 @@ def ensure_galaxy_personality_state(
                 (galaxy_id, "{}", now),
             )
             commit(conn)
-        except sqlite3.Error:
-            pass
+        except Exception as exc:
+            try:
+                rollback(conn)
+            except Exception:
+                pass
+            if not is_integrity_error(exc) and not isinstance(exc, sqlite3.Error):
+                raise
 
         row = _fetch_state_row(galaxy_id, conn)
         if row is None:

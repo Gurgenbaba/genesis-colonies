@@ -20,7 +20,7 @@
 | Diet-State / Poll-Delta | ✅ |
 | Lazy-Persistierung / Cache / Lasttest-Tool | ✅ Basis |
 | PostgreSQL-Schema (alle Tabellen/Migrationen) | ✅ **GC-PERF-PG-SCHEMA-001** |
-| Backend-Parität auf leerer PG-DB | 🔄 → **GC-PERF-PG-PARITY-001** |
+| Backend-Parität auf leerer PG-DB | 🔄 A/B/C ✅ · D–F → **GC-PERF-PG-PARITY-001** |
 | SQLite→Postgres Datenimport | ❌ → GC-PERF-PG-MIGRATE-001 |
 | Railway Staging + Smoke + Baseline | ❌ |
 | Production-Cutover | ❌ |
@@ -65,7 +65,7 @@ Schema-Port
 | Ticket | Inhalt | Status |
 |--------|--------|--------|
 | **[GC-PERF-PG-SCHEMA-001](GC_PERF_PG_SCHEMA_001.md)** | PostgreSQL-Schema & Migration Parity | ✅ |
-| **[GC-PERF-PG-PARITY-001](GC_PERF_PG_PARITY_001.md)** | Backend-Parität auf leerer PG-DB (kritische Systeme) | ✅ A/B · 📋 C–F |
+| **[GC-PERF-PG-PARITY-001](GC_PERF_PG_PARITY_001.md)** | Backend-Parität auf leerer PG-DB (kritische Systeme) | ✅ A/B/C · 📋 D–F |
 | **GC-PERF-PG-MIGRATE-001** | SQLite→Postgres Importer + Invarianten | 📋 |
 | **GC-PERF-PG-STAGING-001** | Railway Staging + Worker + Smoke | 📋 |
 | **GC-PERF-PG-BASELINE-001** | SQLite vs PG Staging Metriken | 📋 |

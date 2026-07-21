@@ -25,6 +25,9 @@ logger = logging.getLogger(__name__)
 
 EFFECT_DEBUG = os.environ.get("GC_EFFECT_DEBUG", "").strip().lower() in ("1", "true", "yes")
 
+# Isolate optional DB probes so a failure cannot abort an outer write TX (PARITY-001).
+_ER_SAVEPOINT_SEQ = 0
+
 # Research / building reduction formulas — single source of truth (GC-622C, Alpha balance).
 # Linear per level where noted; display % is unbounded. mine_energy_factor may reach 0; draw is floored.
 MINE_ENERGY_PER_LEVEL = 0.01  # Alpha: 1 % mine draw reduction per energy_tech level
@@ -337,6 +340,50 @@ class EffectResolver:
             return "galactic_diplomacy"
         return "gdp:" + "+".join(parts)
 
+    def _run_optional_conn_probe(self, label: str, fn):
+        """
+        Run an optional DB-backed modifier probe.
+
+        On Postgres, wrap in SAVEPOINT so a failure cannot abort an outer write TX
+        (queue finish, spend, etc.). Never full-rollback the shared connection here.
+        """
+        global _ER_SAVEPOINT_SEQ
+        conn = self._conn
+        if conn is None:
+            return fn()
+        from ..db import get_db_backend
+
+        use_sp = get_db_backend() == "postgres"
+        sp = None
+        if use_sp:
+            _ER_SAVEPOINT_SEQ = (_ER_SAVEPOINT_SEQ + 1) % 1_000_000
+            sp = f"er_{_ER_SAVEPOINT_SEQ}"
+            try:
+                conn.execute(f"SAVEPOINT {sp}")
+            except Exception:
+                sp = None
+        try:
+            out = fn()
+        except Exception:
+            if use_sp and sp is not None:
+                try:
+                    conn.execute(f"ROLLBACK TO SAVEPOINT {sp}")
+                    conn.execute(f"RELEASE SAVEPOINT {sp}")
+                except Exception:
+                    logger.exception("effect_resolver savepoint rollback failed (%s)", label)
+            raise
+        if use_sp and sp is not None:
+            try:
+                conn.execute(f"RELEASE SAVEPOINT {sp}")
+            except Exception:
+                try:
+                    conn.execute(f"ROLLBACK TO SAVEPOINT {sp}")
+                    conn.execute(f"RELEASE SAVEPOINT {sp}")
+                except Exception:
+                    logger.exception("effect_resolver savepoint release failed (%s)", label)
+                raise
+        return out
+
     def _apply_gd_er_mods(
         self,
         values: Dict[str, float],
@@ -353,7 +400,10 @@ class EffectResolver:
                 get_galaxy_directive_mechanics,
             )
 
-            payload = get_galaxy_directive_mechanics(self.galaxy_id, conn=self._conn)
+            payload = self._run_optional_conn_probe(
+                "gd",
+                lambda: get_galaxy_directive_mechanics(self.galaxy_id, conn=self._conn),
+            )
         except Exception as exc:
             if EFFECT_DEBUG:
                 logger.warning(
@@ -396,7 +446,10 @@ class EffectResolver:
             )
             from ..galactic_diplomacy.mechanics import get_galaxy_diplomacy_mechanics
 
-            payload = get_galaxy_diplomacy_mechanics(self.galaxy_id, conn=self._conn)
+            payload = self._run_optional_conn_probe(
+                "gdp",
+                lambda: get_galaxy_diplomacy_mechanics(self.galaxy_id, conn=self._conn),
+            )
         except Exception as exc:
             if EFFECT_DEBUG:
                 logger.warning(
@@ -432,12 +485,18 @@ class EffectResolver:
         try:
             from ..alliance import alliance_hub_schema_ready, get_alliance_effect_modifiers
 
-            if not alliance_hub_schema_ready(self._conn):
-                return values
-            amods = get_alliance_effect_modifiers(int(self.player_id), conn=self._conn)
+            def _probe():
+                if not alliance_hub_schema_ready(self._conn):
+                    return None
+                return get_alliance_effect_modifiers(int(self.player_id), conn=self._conn)
+
+            amods = self._run_optional_conn_probe("alliance", _probe)
         except Exception as exc:
             if EFFECT_DEBUG:
                 logger.warning("alliance_modifiers_failed player=%s err=%s", self.player_id, exc)
+            return values
+
+        if not amods:
             return values
 
         out = dict(values)
@@ -549,16 +608,19 @@ class EffectResolver:
         except Exception:
             return values
         try:
-            if not boosters_schema_ready(self._conn):
-                return values
-            mults = get_active_booster_multipliers(int(self.player_id), conn=self._conn)
-        except Exception:
-            try:
-                from ..db import recover_aborted_transaction
+            def _probe():
+                if not boosters_schema_ready(self._conn):
+                    return {}
+                return get_active_booster_multipliers(int(self.player_id), conn=self._conn)
 
-                recover_aborted_transaction(self._conn)
-            except Exception:
-                pass
+            mults = self._run_optional_conn_probe("boosters", _probe) or {}
+        except Exception as exc:
+            if EFFECT_DEBUG:
+                logger.warning(
+                    "inventory_booster_modifiers_failed player=%s err=%s",
+                    self.player_id,
+                    exc,
+                )
             return values
         if not mults:
             return values

@@ -44,11 +44,9 @@ def day_bucket(ts: Optional[float] = None) -> int:
 
 
 def _table_ready(conn: sqlite3.Connection) -> bool:
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'activity_xp_log' LIMIT 1;"
-    )
-    return cur.fetchone() is not None
+    from .db import table_exists
+
+    return bool(table_exists(conn, "activity_xp_log"))
 
 
 def _resolve_idempotency_key(
