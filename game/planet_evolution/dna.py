@@ -11,7 +11,8 @@ from ..models import get_game_settings
 from .constants import AFFINITY_KEYS
 from .definitions import get_traits
 
-# SQLite INTEGER is signed 64-bit; keep seeds in [0, 2^63-1].
+# SQLite INTEGER is signed 64-bit; Postgres needs BIGINT for the same range.
+# Keep seeds in [0, 2^63-1].
 MAX_SQLITE_SIGNED_INT = (1 << 63) - 1
 
 

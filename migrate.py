@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Genesis Colonies – Simple Migration Runner (SQLite)
+Genesis Colonies – Migration Runner (SQLite default; Postgres via GC_DB_BACKEND).
 
 Usage:
     python migrate.py
@@ -8,12 +8,12 @@ Usage:
 - Führt alle *.sql Dateien im Ordner "migrations" aus,
   die noch nicht in migration_history eingetragen sind.
 - Speichert jede ausgeführte Migration in migration_history.
+- GC-PERF-PG-SCHEMA-001: bei postgres Statements via game.sql_pg_rewrite;
+  zweiter Lauf ist idempotent.
 
 Robustheit:
-- Autocommit-Connection (isolation_level=None), damit Migrations-SQL selbst BEGIN/COMMIT
-  enthalten darf, ohne "cannot start a transaction within a transaction".
-- Führt Migrationen Statement-weise aus (Splitter), damit wir idempotente Fehler
-  (duplicate column / already exists / etc.) pro Statement überspringen können.
+- Autocommit-Connection, damit Migrations-SQL selbst BEGIN/COMMIT enthalten darf.
+- Statement-weise Ausführung; idempotente Fehler werden übersprungen.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ import os
 import sqlite3
 import time
 from pathlib import Path
-from typing import List
+from typing import Any, List, Set
 
 
 # ----------------------------------------
@@ -38,11 +38,38 @@ def _db_path() -> Path:
     return resolve_db_path()
 
 
+def _backend() -> str:
+    from game.db import get_db_backend
+
+    return get_db_backend()
+
+
 # ----------------------------------------
 # Helper: Environment
 # ----------------------------------------
 
 def ensure_db_exists() -> None:
+    if _backend() == "postgres":
+        # Numbered migrations start at 006 and assume init_db core tables exist.
+        print("[INFO] GC_DB_BACKEND=postgres — bootstrap core schema (users/players/planets/…)")
+        from game.db_pg import connect_postgres_migration
+        from game.schema_bootstrap import bootstrap_core_schema, core_schema_ready
+
+        conn = connect_postgres_migration()
+        try:
+            if core_schema_ready(conn):
+                print("[INFO] Core schema already present.")
+            else:
+                n = bootstrap_core_schema(conn)
+                print(f"[INFO] Core schema statements applied: {n}")
+            from game.schema_bootstrap import ensure_postgres_i64_columns
+
+            widened = ensure_postgres_i64_columns(conn)
+            if widened:
+                print(f"[INFO] Widened 64-bit columns: {', '.join(widened)}")
+        finally:
+            conn.close()
+        return
     db_path = _db_path()
     if not db_path.exists():
         print(f"[INFO] DB nicht gefunden – bootstrap via init_db(): {db_path}")
@@ -55,16 +82,20 @@ def ensure_migrations_dir() -> None:
         raise SystemExit(f"[ERROR] migrations-Verzeichnis nicht gefunden: {MIGRATIONS_DIR}")
 
 
-def get_connection() -> sqlite3.Connection:
+def get_connection() -> Any:
+    """Autocommit connection for the configured backend."""
+    if _backend() == "postgres":
+        from game.db_pg import connect_postgres_migration
+
+        return connect_postgres_migration()
+
     from game.db import ensure_db_parent_dir
 
-    # WICHTIG: autocommit mode => keine implicit transaction von sqlite3
     db_path = ensure_db_parent_dir()
     conn = sqlite3.connect(db_path, isolation_level=None)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA foreign_keys=ON;")
-    # Optional: slightly safer busy handling
     conn.execute("PRAGMA busy_timeout=4000;")
     return conn
 
@@ -73,7 +104,18 @@ def get_connection() -> sqlite3.Connection:
 # Migration History
 # ----------------------------------------
 
-def ensure_migration_history_table(conn: sqlite3.Connection) -> None:
+def ensure_migration_history_table(conn: Any) -> None:
+    if _backend() == "postgres":
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS migration_history (
+                id          BIGSERIAL PRIMARY KEY,
+                name        TEXT NOT NULL UNIQUE,
+                applied_at  BIGINT NOT NULL
+            );
+            """
+        )
+        return
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS migration_history (
@@ -85,14 +127,28 @@ def ensure_migration_history_table(conn: sqlite3.Connection) -> None:
     )
 
 
-def get_applied_migrations(conn: sqlite3.Connection) -> set[str]:
+def get_applied_migrations(conn: Any) -> Set[str]:
     cur = conn.cursor()
     cur.execute("SELECT name FROM migration_history;")
-    return {row["name"] for row in cur.fetchall()}
+    rows = cur.fetchall()
+    names: Set[str] = set()
+    for row in rows:
+        if isinstance(row, dict) or hasattr(row, "keys"):
+            names.add(str(row["name"]))
+        else:
+            names.add(str(row[0]))
+    return names
 
 
-def mark_migration_applied(conn: sqlite3.Connection, filename: str) -> None:
+def mark_migration_applied(conn: Any, filename: str) -> None:
     ts = int(time.time())
+    if _backend() == "postgres":
+        conn.execute(
+            "INSERT INTO migration_history (name, applied_at) VALUES (?, ?) "
+            "ON CONFLICT (name) DO NOTHING;",
+            (filename, ts),
+        )
+        return
     conn.execute(
         "INSERT INTO migration_history (name, applied_at) VALUES (?, ?);",
         (filename, ts),
@@ -255,15 +311,25 @@ def _is_idempotent_sqlite_error(e: sqlite3.Error) -> bool:
 # Apply Migration
 # ----------------------------------------
 
-def apply_migration(conn: sqlite3.Connection, filename: str, sql_text: str) -> None:
+def apply_migration(conn: Any, filename: str, sql_text: str) -> None:
     """
     Führt eine Migration aus:
+    - optional Postgres-Dialekt-Rewrite (GC-PERF-PG-SCHEMA-001)
     - split in statements
-    - wenn Migration selbst BEGIN/COMMIT enthält -> so ausführen
-    - sonst: wir machen BEGIN IMMEDIATE / COMMIT
+    - SQLite: BEGIN IMMEDIATE / COMMIT
+    - Postgres: SAVEPOINT pro Statement (Fehler dürfen die TX nicht aborten)
     - idempotente Fehler pro Statement werden übersprungen
     """
     print(f"  -> wende Migration an: {filename}")
+
+    if _backend() == "postgres":
+        from game.sql_pg_rewrite import rewrite_migration_script
+
+        sql_text, notes = rewrite_migration_script(sql_text)
+        for note in notes[:8]:
+            print(f"     [pg-rewrite] {note}")
+        if len(notes) > 8:
+            print(f"     [pg-rewrite] … +{len(notes) - 8} further notes")
 
     statements = _split_sql_statements(sql_text)
     statements = [s.strip() for s in statements if s.strip()]
@@ -274,34 +340,55 @@ def apply_migration(conn: sqlite3.Connection, filename: str, sql_text: str) -> N
         return
 
     has_tx = _contains_explicit_transaction(statements)
+    backend = _backend()
 
     try:
         if not has_tx:
-            conn.execute("BEGIN IMMEDIATE;")
+            if backend == "postgres":
+                conn.execute("BEGIN;")
+            else:
+                conn.execute("BEGIN IMMEDIATE;")
 
-        for s in statements:
+        for idx, s in enumerate(statements):
             s_clean = s.strip()
             if not s_clean:
                 continue
+            if backend == "postgres" and s_clean.upper().startswith("PRAGMA"):
+                continue
 
-            try:
-                conn.execute(s_clean)
-            except sqlite3.Error as e:
-                if _is_idempotent_sqlite_error(e):
-                    print(f"     [skip idempotent] {e} | stmt: {s_clean[:80]}")
-                    continue
-                # Nicht-idempotent => hart stoppen
-                raise
+            if backend == "postgres":
+                sp = f"gc_mig_{idx}"
+                conn.execute(f"SAVEPOINT {sp};")
+                try:
+                    conn.execute(s_clean)
+                    conn.execute(f"RELEASE SAVEPOINT {sp};")
+                except Exception as e:
+                    try:
+                        conn.execute(f"ROLLBACK TO SAVEPOINT {sp};")
+                    except Exception:
+                        pass
+                    from game.sql_pg_rewrite import is_idempotent_postgres_error
+
+                    if is_idempotent_postgres_error(e):
+                        print(f"     [skip idempotent] {e} | stmt: {s_clean[:80]}")
+                        continue
+                    raise
+            else:
+                try:
+                    conn.execute(s_clean)
+                except sqlite3.Error as e:
+                    if _is_idempotent_sqlite_error(e):
+                        print(f"     [skip idempotent] {e} | stmt: {s_clean[:80]}")
+                        continue
+                    raise
 
         if not has_tx:
             conn.execute("COMMIT;")
 
-        # Migration als erfolgreich markieren (eigener Mini-Commit bei autocommit nötig? nein, autocommit schreibt sofort)
         mark_migration_applied(conn, filename)
         print(f"  OK Migration erfolgreich: {filename}")
 
-    except sqlite3.Error as e:
-        # Wenn wir selbst BEGIN gemacht haben => rollback
+    except Exception as e:
         try:
             if not has_tx:
                 conn.execute("ROLLBACK;")
@@ -317,13 +404,27 @@ def apply_migration(conn: sqlite3.Connection, filename: str, sql_text: str) -> N
 
 def main() -> None:
     from game.config import init_config
+    from game.db import describe_db_connection
 
     init_config()
-    db_path = _db_path()
+    backend = _backend()
     print("=== Genesis Colonies – Migration Runner ===")
-    print(f"DB:         {db_path}")
+    print(f"Backend:    {backend}")
+    if backend == "sqlite":
+        print(f"DB:         {_db_path()}")
+    else:
+        info = describe_db_connection()
+        print(f"DB:         postgres (url_set={info.get('database_url_set')})")
     print(f"Migrations: {MIGRATIONS_DIR}")
     print("-------------------------------------------")
+
+    if backend == "postgres":
+        url = os.environ.get("DATABASE_URL", "").strip()
+        if not url:
+            raise SystemExit(
+                "[ERROR] GC_DB_BACKEND=postgres requires DATABASE_URL. "
+                "No silent SQLite fallback."
+            )
 
     ensure_db_exists()
     ensure_migrations_dir()
@@ -346,7 +447,8 @@ def main() -> None:
             print("Alle Migrationen sind bereits angewendet.")
         else:
             print(f"Neue Migrationen: {len(new_migrations)}")
-            _ensure_galaxy_coordinates(conn)
+            if backend == "sqlite":
+                _ensure_galaxy_coordinates(conn)
 
             for path in new_migrations:
                 filename = path.name
@@ -356,12 +458,13 @@ def main() -> None:
 
             print("\nAlle neuen Migrationen erfolgreich angewendet.")
 
-        _ensure_galaxy_coordinates(conn)
+        if backend == "sqlite":
+            _ensure_galaxy_coordinates(conn)
     finally:
         conn.close()
 
 
-def _ensure_galaxy_coordinates(conn: sqlite3.Connection) -> None:
+def _ensure_galaxy_coordinates(conn: Any) -> None:
     """Backfill / dedupe planet coordinates before unique index enforcement."""
     try:
         from game.galaxy import repair_missing_coordinates

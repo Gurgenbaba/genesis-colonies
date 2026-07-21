@@ -8,7 +8,7 @@ import threading
 import time
 from typing import Any, Dict, List, Optional
 
-from ..db import begin_write_transaction, commit, db
+from ..db import begin_write_transaction, column_exists, commit, db, table_exists
 from .blocs import normalize_galaxy
 from .definitions import schema_ready
 
@@ -55,17 +55,10 @@ def normalize_emergency_key(value: Any) -> str:
 
 def emergency_schema_ready(*, conn: sqlite3.Connection) -> bool:
     try:
-        row = conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'gd_emergency_state' LIMIT 1;"
-        ).fetchone()
-        if row is None:
+        if not table_exists(conn, "gd_emergency_state"):
             return False
-        cols = {
-            r["name"]
-            for r in conn.execute("PRAGMA table_info(gd_emergency_definitions);").fetchall()
-        }
-        return "category" in cols
-    except sqlite3.Error:
+        return column_exists(conn, "gd_emergency_definitions", "category")
+    except Exception:
         return False
 
 

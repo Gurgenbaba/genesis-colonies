@@ -58,6 +58,10 @@ _REQUEST_PERF_META_KEYS = frozenset(
         "sql_count",
         "sql_write_count",
         "had_exception",
+        "diet_payload_bytes",
+        "budget_miss",
+        "state_version",
+        "delta_since",
     }
 )
 
@@ -853,7 +857,189 @@ def apply_lightweight_game_state_diet(payload: Dict[str, Any]) -> Dict[str, Any]
     alert_key = str((payload.get("fleet_alerts") or {}).get("alert_key") or "")
     payload["notification_revision"] = f"{max(0, int(unread or 0))}:{int(latest or 0) if latest else 0}:{alert_key}"
 
+    payload["poll_version"] = compute_poll_version(payload)
+
+    try:
+        import json
+
+        diet_bytes = len(json.dumps(payload, separators=(",", ":"), default=str).encode("utf-8"))
+        set_request_perf_meta("diet_payload_bytes", diet_bytes)
+        set_request_perf_meta("state_version", int(payload["poll_version"]))
+    except Exception:
+        pass
+
     return payload
+
+
+def compute_state_version(payload: Dict[str, Any]) -> int:
+    """Alias kept for tests — prefer ``compute_poll_version`` (GC-PERF-STATE-002)."""
+    return compute_poll_version(payload)
+
+
+def compute_poll_version(payload: Dict[str, Any]) -> int:
+    """
+    GC-PERF-STATE-002: stable int fingerprint of diet HUD fields.
+
+    Excludes continuously projected resource floats so idle polls can short-circuit
+    via ``?since=``. Version changes when queues/fleets/notifications/energy caps
+    or committed resource snapshot markers change.
+    """
+    import hashlib
+    import json
+
+    def _queue_fp(queue: Any) -> Any:
+        if not isinstance(queue, list):
+            return queue
+        out = []
+        for job in queue:
+            if not isinstance(job, dict):
+                continue
+            out.append(
+                {
+                    "id": job.get("id") or job.get("job_id"),
+                    "status": job.get("status"),
+                    "finish_at": int(float(job.get("finish_at") or job.get("finish_time") or 0)),
+                    "building_key": job.get("building_key") or job.get("key"),
+                    "tech_key": job.get("tech_key"),
+                }
+            )
+        return out
+
+    def _fleet_fp(fleets: Any) -> Any:
+        if not isinstance(fleets, dict):
+            return fleets
+        items = fleets.get("items") or fleets.get("fleets") or []
+        slim_items = []
+        if isinstance(items, list):
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                slim_items.append(
+                    {
+                        "id": item.get("movement_id") or item.get("id"),
+                        "status": item.get("status"),
+                        "arrival_at": int(float(item.get("arrival_at") or 0)),
+                        "return_at": int(float(item.get("return_at") or 0)),
+                    }
+                )
+        return {
+            "count": fleets.get("count") or fleets.get("active_fleet_count"),
+            "items": slim_items,
+        }
+
+    energy = payload.get("energy") if isinstance(payload.get("energy"), dict) else {}
+    active = payload.get("active_planet") if isinstance(payload.get("active_planet"), dict) else {}
+    research = payload.get("research") if isinstance(payload.get("research"), dict) else {}
+
+    slim = {
+        "notification_revision": payload.get("notification_revision"),
+        "unread_messages_count": payload.get("unread_messages_count"),
+        "build_queue": _queue_fp(payload.get("build_queue")),
+        "research_queue": _queue_fp(research.get("queue")),
+        "active_fleets": _fleet_fp(payload.get("active_fleets")),
+        "energy_used": int(energy.get("used") or 0),
+        "energy_total": int(energy.get("total") or 0),
+        "planet_id": active.get("id") or active.get("planet_id"),
+        "last_update": int(float(active.get("last_update") or 0)),
+        "score": payload.get("score"),
+        "nav_badges": payload.get("nav_badges"),
+    }
+    raw = json.dumps(slim, sort_keys=True, separators=(",", ":"), default=str)
+    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()
+    return int(digest[:12], 16)
+
+
+def build_delta_game_state(
+    payload: Dict[str, Any],
+    *,
+    since: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    GC-PERF-STATE-002: if ``since`` matches current ``poll_version``, return tiny unchanged envelope.
+
+    ``state_version`` remains the server clock (GC-557C). Delta uses ``poll_version`` only.
+    """
+    version = int(payload.get("poll_version") or compute_poll_version(payload))
+    payload["poll_version"] = version
+    if since is not None and int(since) == version:
+        return {
+            "ok": True,
+            "unchanged": True,
+            "since": int(since),
+            "version": version,
+            "poll_version": version,
+            "server_time": payload.get("server_time"),
+            "server_now": payload.get("server_now"),
+            "state_version": payload.get("state_version"),
+        }
+    out = dict(payload)
+    out["unchanged"] = False
+    out["version"] = version
+    out["poll_version"] = version
+    if since is not None:
+        out["since"] = int(since)
+        out["changed"] = {
+            "resources": payload.get("resources"),
+            "energy": payload.get("energy"),
+            "build_queue": payload.get("build_queue"),
+            "research": payload.get("research"),
+            "active_fleets": payload.get("active_fleets"),
+            "notification_revision": payload.get("notification_revision"),
+        }
+    return out
+
+
+def evaluate_request_perf_budgets(
+    *,
+    total_ms: float,
+    response_bytes: int,
+    sql_count: int,
+    sql_write_count: int,
+    finish_source: str = "",
+    include_panel: Any = None,
+) -> List[str]:
+    """
+    GC-PERF-CORE-001: compare request metrics against documented budgets.
+
+    Returns list of miss keys (e.g. ``diet_poll_ms``). Empty = within budget.
+    """
+    try:
+        from game.config import get_perf_budgets
+
+        budgets = get_perf_budgets()
+    except Exception:
+        return []
+
+    misses: List[str] = []
+    src = str(finish_source or "")
+    is_diet_poll = src == "game_state" and not bool(include_panel)
+    is_action = src.startswith("action") or "upgrade" in src or "cancel" in src
+    is_pjax = "pjax" in src or src.endswith("_ssr")
+
+    if is_diet_poll:
+        if total_ms > float(budgets.get("diet_poll_ms", 40.0)):
+            misses.append("diet_poll_ms")
+        diet_bytes = response_bytes
+        try:
+            state = _request_perf_state()
+            if state and "diet_payload_bytes" in state.meta:
+                diet_bytes = int(state.meta["diet_payload_bytes"])
+        except Exception:
+            pass
+        if diet_bytes > float(budgets.get("diet_payload_bytes", 15_360.0)):
+            misses.append("diet_payload_bytes")
+        if sql_count > float(budgets.get("diet_sql_count", 5.0)):
+            misses.append("diet_sql_count")
+        if sql_write_count > float(budgets.get("diet_sql_write_count", 0.0)):
+            misses.append("diet_sql_write_count")
+    elif is_action:
+        if total_ms > float(budgets.get("action_ms", 120.0)):
+            misses.append("action_ms")
+    elif is_pjax:
+        if total_ms > float(budgets.get("pjax_ssr_ms", 100.0)):
+            misses.append("pjax_ssr_ms")
+
+    return misses
 
 
 def apply_action_state_diet(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -1125,6 +1311,17 @@ def _emit_request_perf_log(
     state.meta["sql_count"] = int(state.sql_count)
     state.meta["sql_write_count"] = int(state.sql_write_count)
 
+    misses = evaluate_request_perf_budgets(
+        total_ms=total_ms,
+        response_bytes=int(response_bytes or 0),
+        sql_count=int(state.sql_count),
+        sql_write_count=int(state.sql_write_count),
+        finish_source=str(state.meta.get("finish_source") or ""),
+        include_panel=state.meta.get("include_panel"),
+    )
+    if misses:
+        state.meta["budget_miss"] = ",".join(misses)
+
     parts = [
         f"method={state.meta.get('method', '')}",
         f"endpoint={state.meta.get('endpoint', '')}",
@@ -1148,6 +1345,10 @@ def _emit_request_perf_log(
         "content_type",
         "sql_count",
         "sql_write_count",
+        "diet_payload_bytes",
+        "budget_miss",
+        "state_version",
+        "delta_since",
         "had_exception",
     ):
         if meta_key in state.meta:

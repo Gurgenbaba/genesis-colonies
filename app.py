@@ -907,6 +907,15 @@ def api_internal_cron_fleet_tick():
     return jsonify(payload), status
 
 
+@app.route("/api/internal/cron/queue-tick", methods=["POST"])
+def api_internal_cron_queue_tick():
+    """Token-gated global queue finish — GC-PERF-WORKER-001 (same finish_due_work owner)."""
+    from game.internal_cron import handle_internal_cron_queue_tick
+
+    payload, status = handle_internal_cron_queue_tick(request)
+    return jsonify(payload), status
+
+
 # --------------------------------------------------------------------------
 # HELPER: Spieler-View + Ressourcen laden (conn-safe)
 # --------------------------------------------------------------------------
@@ -6539,12 +6548,9 @@ def _payload_from_live_context(
             "energy_efficiency_pct": energy_efficiency_pct,
             "storage": storage_caps,
         },
-        "buildings": buildings,
         "build_queue": build_queue,
-        "building_queue": build_queue,
         "production_per_hour": prod_per_hour,
         "research": research,
-        "research_queue": research.get("queue", []),
         "storage": storage_caps,
         "energy": {
             "total": int(energy_total),
@@ -6557,6 +6563,15 @@ def _payload_from_live_context(
             "energy_hint": energy_hint,
         },
     }
+
+    # GC-PERF-STATE-001: do not attach heavy catalogs on diet polls (no build-then-strip).
+    if not lightweight:
+        payload["buildings"] = buildings
+        payload["building_queue"] = build_queue
+        payload["research_queue"] = research.get("queue", [])
+    else:
+        # Slim queue aliases only — diet keeps build_queue / research slice.
+        pass
 
     try:
         from game.timekeeper import serialize_for_client
@@ -7281,6 +7296,16 @@ def api_game_state():
         )
     if not payload.get("ok"):
         return jsonify({"ok": False, "error": "not_logged_in"}), 401
+
+    # GC-PERF-STATE-002: optional delta short-circuit for diet polls.
+    since_raw = request.args.get("since", "").strip()
+    if since_raw.isdigit() and not want_panel and not delta_keys:
+        from game.live_state import build_delta_game_state, set_request_perf_meta
+
+        since_val = int(since_raw)
+        set_request_perf_meta("delta_since", since_val)
+        payload = build_delta_game_state(payload, since=since_val)
+
     return jsonify(payload)
 
 

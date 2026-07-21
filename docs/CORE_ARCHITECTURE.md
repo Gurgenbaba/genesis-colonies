@@ -270,6 +270,7 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | Shipyard-Queue | `game/shipyard_queue.py`, `game/shipyard.py` | [FLEET_SYSTEM.md](FLEET_SYSTEM.md) |
 | Fleet / Missionen | `game/fleet.py`, `game/fleet_calc.py` | [FLEET_SYSTEM.md](FLEET_SYSTEM.md) |
 | Fleet global tick (offline) | `game/fleet_worker.py` → `game/fleet.py` | `POST /api/internal/cron/fleet-tick`; piggyback ranking cron |
+| Queue global tick (offline) | `game/tick_runner.py` → `game/queue_engine.py` | `POST /api/internal/cron/queue-tick`; `scripts/run_game_worker.py`; `GC_GAME_WORKER_PRIMARY` |
 | Fleet world-native targets (GC-590A) | `game/fleet_target.py` | [FLEET_SYSTEM.md](FLEET_SYSTEM.md) |
 | Fleet origin scope audit (GC-557C) | `game/fleet_origin.py` | [GC-557_GLOBAL_TIMER_AUDIT.md](GC-557_GLOBAL_TIMER_AUDIT.md) |
 | Defense-Queue | `game/defense.py`, `game/defense_api.py` | [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md) |
@@ -294,6 +295,7 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | Referrals | `game/referrals.py` | GC-703 |
 | Resource score (kanonischer Punktwert) | `game/resource_score.py` → `game/ranking.py` | [SCORE_SYSTEM.md](SCORE_SYSTEM.md) |
 | Ranking scores / ranks (batch) | `game/ranking_worker.py` → `game/ranking.py` | [SCORE_SYSTEM.md](SCORE_SYSTEM.md) · `POST /api/internal/cron/ranking` |
+| Definition / settings cache | `game/definition_cache.py` | Process + optional Redis (`GC_REDIS_URL`); never SoT for queues/fleets |
 | Vote re-engagement (inactive players) | `game/vote_reengagement.py` | Piggyback on ranking HTTP cron (30 min guard); optional `POST /api/internal/cron/vote-reengagement`; local: `scripts/run_vote_reengagement.py` |
 | Game Rules (Fair Play, PvP-Policy, Support) | `game/game_rules_panel.py` (UI) · Enforcement verteilt | [GAME_RULES.md](GAME_RULES.md) |
 | Genesis Codex (loader, unlocks) | `game/codex.py` | [GC-950_KNOWLEDGE_PIPELINE.md](GC-950_KNOWLEDGE_PIPELINE.md) |

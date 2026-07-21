@@ -14,7 +14,7 @@ import time
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from .auction_house import is_event_box, resolve_inventory_key
-from .db import table_exists
+from .db import column_exists, table_exists
 from .inventory import grant_inventory_item, inventory_schema_ready
 from .inventory_catalog import container_image_path, item_catalog_entry
 
@@ -714,11 +714,14 @@ def set_user_registration_meta(
     now: Optional[int] = None,
 ) -> None:
     """Persist registration timestamp/IP when schema columns exist."""
-    cur = conn.cursor()
-    cur.execute("PRAGMA table_info(users);")
-    cols = {str(row[1]) for row in cur.fetchall()}
-    if "registered_at" not in cols and "registration_ip" not in cols:
+    cols = set()
+    if column_exists(conn, "users", "registered_at"):
+        cols.add("registered_at")
+    if column_exists(conn, "users", "registration_ip"):
+        cols.add("registration_ip")
+    if not cols:
         return
+    cur = conn.cursor()
     ts = int(now if now is not None else time.time())
     ip_val = str(registration_ip or "").strip()[:64] or None
     sets: List[str] = []

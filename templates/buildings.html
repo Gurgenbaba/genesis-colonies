@@ -266,3 +266,7 @@
 </div>
 
 {% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/pages/buildings.js') }}?v={{ GC_ASSET_VERSION }}"></script>
+{% endblock %}

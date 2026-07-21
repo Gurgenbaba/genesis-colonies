@@ -163,12 +163,23 @@ Details: [SECURITY.md](SECURITY.md)
 
 ## Phase 7 — Platform & Scale 📋
 
+Master-Doc: **[GC_PERF_CORE.md](GC_PERF_CORE.md)** (EPIC Performance Core — Maximum Speed Stack).
+
 | Item | Status | Notizen |
 |------|--------|--------|
-| PostgreSQL Backend | 📋 | Hooks in `game/db.py` |
-| Multi-Worker / horizontale Skalierung | 📋 | Benötigt Postgres + Locks |
-| Redis Sessions/Cache/Chat rate limit | 💡 | |
-| WebSocket Push (optional) | 💡 | Polling bleibt Fallback |
+| Performance Core Epic | ✅ Foundation | Cutover-Serie offen — [GC_PERF_CORE.md](GC_PERF_CORE.md) |
+| Messbarkeit (GC-PERF-CORE-001) | ✅ | Request-/SQL-/Payload-Budgets auf RequestPerf |
+| PostgreSQL Backend (Driver/Pool) | ✅ | `game/db.py` + `game/db_pg.py` |
+| **PostgreSQL Schema-Port** | ✅ | **[GC-PERF-PG-SCHEMA-001](GC_PERF_PG_SCHEMA_001.md)** |
+| **PostgreSQL Backend-Parität** | 🔄 | **[GC-PERF-PG-PARITY-001](GC_PERF_PG_PARITY_001.md)** — Block A (Auth) |
+| PG Parität / Datenimport / Staging / Cutover | 📋 | PG-PARITY → MIGRATE → STAGING → CUTOVER |
+| Multi-Worker / Game-Worker | ✅ vorbereitet | Erst nach Schema + Staging produktiv nutzen |
+| Diet/Delta State | ✅ | `poll_version` + `?since=` |
+| Lazy Resource Accrual | ✅ | `GC_RESOURCE_PERSIST_SEC` (default 600) |
+| `main.js` Modularisierung | 🔄 Scaffold | Echter Split → GC-PERF-JS-002 |
+| Redis / Definition Cache | ✅ Basis | EffectResolver-Cache → GC-PERF-EFFECT-CACHE-001 |
+| Lasttest-Werkzeug | ✅ | `scripts/perf_load_test.py` — Staging-Baseline später |
+| WebSocket Push (optional) | 💡 | Polling bleibt Fallback — erst nach State/DB |
 | i18n UI-Switch (DE/EN) | 🔄 | `game/i18n.py`, `en.json`; Default `de` |
 | CDN / Asset-Pipeline | 💡 | `VERSION` Cache-Bust |
 

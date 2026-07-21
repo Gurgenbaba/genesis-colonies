@@ -133,14 +133,21 @@ def read_player_live_state_for_poll(
         now = time.time()
         last_raw = planet.get("last_update")
         last = float(last_raw) if last_raw is not None else now
-        persist_resources = (now - last) >= 120.0
+        from game.config import get_resource_persist_interval_sec, is_game_worker_primary
+
+        persist_resources = (now - last) >= float(get_resource_persist_interval_sec())
 
         fleet_dirty = player_fleet_is_dirty(uid, conn=conn, now=now)
         has_due = player_has_due_queue_work(uid, conn=conn, now=now) or fleet_dirty
         has_pending = player_has_pending_queue_work(uid, conn=conn)
-        should_finish = has_due or (
-            has_pending and seconds_until_poll_finish_allowed(uid, conn=conn) <= 0.0
-        )
+
+        if is_game_worker_primary():
+            # Worker owns cadence; poll only finishes when work is actually due.
+            should_finish = bool(has_due)
+        else:
+            should_finish = has_due or (
+                has_pending and seconds_until_poll_finish_allowed(uid, conn=conn) <= 0.0
+            )
         need_write = bool(should_finish or persist_resources or fleet_dirty)
 
         try:
@@ -286,6 +293,9 @@ def refresh_player_live_state(
             update_scores=True,
             recalc_ranks=bool(recalc_ranks),
         )
+        from .db import recover_aborted_transaction
+
+        recover_aborted_transaction(conn)
         try:
             from .live_state import set_request_perf_meta
 
@@ -301,7 +311,7 @@ def refresh_player_live_state(
             if membership:
                 finish_due_alliance_projects(conn=conn, alliance_id=int(membership["alliance_id"]))
         except Exception:
-            pass
+            recover_aborted_transaction(conn)
         finish_ms = (time.perf_counter() - finish_t0) * 1000.0
         if perf is not None:
             perf.add_finish_ms(finish_ms)
@@ -318,6 +328,7 @@ def refresh_player_live_state(
 
         mark_request_live_refreshed()
 
+        recover_aborted_transaction(conn)
         if not in_transaction(conn):
             begin_write_transaction(conn)
 

@@ -20,6 +20,7 @@ Epics beschreiben nur das Ziel. **Niemals direkt implementieren.**
 | EPIC-07 | Research (Account-Tech) | [RESEARCH_SYSTEM.md](RESEARCH_SYSTEM.md) |
 | EPIC-15 | Imperium & Expansion (Genesis 2.0) | [IMPERIUM_VISION.md](IMPERIUM_VISION.md) |
 | EPIC-17 | Imperial Directives (High Command) | [IMPERIAL_DIRECTIVES.md](IMPERIAL_DIRECTIVES.md) |
+| EPIC-19 | Performance Core (Maximum Speed Stack) | [GC_PERF_CORE.md](GC_PERF_CORE.md) |
 
 Epic → in **3–5 Tickets** zerlegen (große Epics: Phasen in Master-Doc). Siehe [EPICS.md](EPICS.md).
 
@@ -38,6 +39,7 @@ Vor jeder Änderung die relevanten Docs lesen:
 | [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md) | Queues: Finish, Cancel, Reschedule |
 | [GC-536_QUEUE_CARD_UX.md](GC-536_QUEUE_CARD_UX.md) | Queue-in-Card UX (Epic 536A–E) |
 | [ROADMAP.md](ROADMAP.md) | Status, Phasen, Schulden |
+| [GC_PERF_CORE.md](GC_PERF_CORE.md) | Performance Core — Budgets, PG, Worker, State |
 | [PLANET_SCOPE.md](PLANET_SCOPE.md) | Aktiver Planet, Switch, Scope |
 | [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) | Ressourcen, Exchange, Fuel |
 | [COLLECTOR_EXCHANGE.md](COLLECTOR_EXCHANGE.md) | Sammler-Markt, Collectibles, Prestige |

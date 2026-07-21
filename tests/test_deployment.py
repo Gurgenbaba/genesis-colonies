@@ -40,19 +40,37 @@ def test_config_rejects_insecure_secret_in_production(monkeypatch):
     assert any("SECRET_KEY" in e for e in errors)
 
 
-def test_config_rejects_postgres_backend_in_production(monkeypatch):
+def test_config_postgres_requires_database_url(monkeypatch):
+    """GC-PERF-DB-002: postgres is implemented but needs DATABASE_URL (+ psycopg)."""
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("FLASK_ENV", "production")
     monkeypatch.setenv("SECRET_KEY", "a" * 64)
     monkeypatch.setenv("FLASK_DEBUG", "0")
     monkeypatch.setenv("GC_DB_BACKEND", "postgres")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
 
     from game.config import init_config, validate_config
 
     init_config()
     errors = validate_config(strict=True)
-    assert any("postgres" in e.lower() for e in errors)
-    assert any("Railway" in e or "sqlite" in e.lower() for e in errors)
+    assert any("DATABASE_URL" in e for e in errors)
+
+
+def test_config_postgres_accepts_url_when_psycopg_present(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("FLASK_ENV", "production")
+    monkeypatch.setenv("SECRET_KEY", "a" * 64)
+    monkeypatch.setenv("FLASK_DEBUG", "0")
+    monkeypatch.setenv("GC_DB_BACKEND", "postgres")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@localhost:5432/gc")
+
+    from game.config import init_config, validate_config
+
+    init_config()
+    errors = validate_config(strict=True)
+    assert not any("not implemented" in e.lower() for e in errors)
+    # DATABASE_URL is set; remaining errors must not be the missing-URL gate
+    assert not any(e == "GC_DB_BACKEND=postgres requires DATABASE_URL=postgresql://…" for e in errors)
 
 
 def test_ensure_db_parent_dir_creates_volume_path(monkeypatch, tmp_path):
@@ -68,15 +86,16 @@ def test_ensure_db_parent_dir_creates_volume_path(monkeypatch, tmp_path):
     assert resolve_db_path() == db_file
 
 
-def test_db_rejects_postgres_backend_at_connect(monkeypatch):
+def test_db_postgres_requires_url_at_connect(monkeypatch):
+    """Without DATABASE_URL, connect still fails clearly (no silent SQLite fallback)."""
     monkeypatch.setenv("GC_DB_BACKEND", "postgres")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
 
     from game.db import db
 
     with pytest.raises(NotImplementedError) as exc:
         db()
-    assert "PostgreSQL" in str(exc.value) or "postgres" in str(exc.value).lower()
-
+    assert "PostgreSQL" in str(exc.value) or "postgres" in str(exc.value).lower() or "DATABASE_URL" in str(exc.value)
 
 def test_config_rejects_debug_in_production(monkeypatch):
     monkeypatch.setenv("APP_ENV", "production")

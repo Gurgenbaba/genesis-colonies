@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-from .db import begin_write_transaction, commit, db, rollback
+from .db import begin_write_transaction, commit, db, rollback, table_columns
 from .fleet_defs import canonical_ship_key, get_ship, is_known_ship_key
 from .models import lock_planet_for_update
 from .queue_refund import refund_from_stored_costs, refund_summary_percents
@@ -32,9 +32,7 @@ def shipyard_queue_table_ready(conn) -> bool:
 
     if not table_exists(conn, "shipyard_queue"):
         return False
-    cur = conn.cursor()
-    cur.execute("PRAGMA table_info(shipyard_queue);")
-    cols = {str(r[1]) for r in cur.fetchall()}
+    cols = table_columns(conn, "shipyard_queue")
     return "queue_position" in cols and "cost_metal" in cols
 
 

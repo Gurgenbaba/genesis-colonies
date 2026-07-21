@@ -6,7 +6,7 @@ import math
 import time
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-from .db import begin_write_transaction, commit, db, in_transaction, rollback, table_exists
+from .db import begin_write_transaction, commit, db, in_transaction, rollback, table_columns, table_exists
 from .defense_defs import (
     ACTIVE_DEFENSE_KEYS,
     DEFENSES,
@@ -36,9 +36,7 @@ def _now() -> float:
 def defense_queue_table_ready(conn) -> bool:
     if not table_exists(conn, "defense_queue"):
         return False
-    cur = conn.cursor()
-    cur.execute("PRAGMA table_info(defense_queue);")
-    cols = {str(r[1]) for r in cur.fetchall()}
+    cols = table_columns(conn, "defense_queue")
     return "queue_position" in cols and "cost_metal" in cols
 
 

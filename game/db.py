@@ -1,12 +1,13 @@
 """
 Genesis Colonies – DB access layer.
 
-SQLite today; Postgres migration path via GC_DB_BACKEND=postgres (future).
+SQLite default; PostgreSQL via GC_DB_BACKEND=postgres + DATABASE_URL (GC-PERF-DB-002).
 
 Transaction rules:
 - Use begin_write_transaction() for all writes (SQLite: BEGIN IMMEDIATE).
 - Use commit() / rollback() explicitly in multi-step game logic.
 - Use with_transaction() for short atomic blocks.
+- Postgres: BEGIN + lock_planet_for_update() / lock_player_for_update().
 """
 
 from __future__ import annotations
@@ -26,18 +27,25 @@ DB_PATH = BASE_DIR / "game.db"
 _SQLITE_WRITE_MUTEX = threading.RLock()
 _WRITE_MUTEX_DEPTH = threading.local()
 
+# Connection type used across call sites (sqlite3 or PgConnection wrapper).
+DbConn = Any
+
 
 def _write_mutex_depth() -> int:
     return int(getattr(_WRITE_MUTEX_DEPTH, "n", 0) or 0)
 
 
 def _write_mutex_acquire() -> None:
+    if get_db_backend() != "sqlite":
+        return
     if _write_mutex_depth() == 0:
         _SQLITE_WRITE_MUTEX.acquire()
     _WRITE_MUTEX_DEPTH.n = _write_mutex_depth() + 1
 
 
 def _write_mutex_release() -> None:
+    if get_db_backend() != "sqlite":
+        return
     depth = _write_mutex_depth()
     if depth <= 0:
         return
@@ -80,15 +88,10 @@ def get_db_backend() -> str:
     return os.environ.get("GC_DB_BACKEND", "sqlite").strip().lower()
 
 
-_POSTGRES_NOT_IMPLEMENTED = (
-    "PostgreSQL (GC_DB_BACKEND=postgres) is not implemented yet. "
-    "Use GC_DB_BACKEND=sqlite with GC_DB_PATH=/data/game.db and a Railway Volume "
-    "mounted at /data. Do not link a PostgreSQL service on Railway until this backend ships."
+_POSTGRES_NOT_CONFIGURED = (
+    "PostgreSQL backend selected (GC_DB_BACKEND=postgres) but not usable. "
+    "Set DATABASE_URL=postgresql://… and install: pip install 'psycopg[binary]' psycopg_pool"
 )
-
-
-def _postgres_not_implemented_message() -> str:
-    return _POSTGRES_NOT_IMPLEMENTED
 
 
 def resolve_db_path() -> Path:
@@ -114,13 +117,46 @@ class TxAbort(Exception):
 
 
 def write_mutex_depth() -> int:
-    """Process-local SQLite writer mutex depth (0 = idle)."""
+    """Process-local SQLite writer mutex depth (0 = idle). Always 0 on Postgres."""
+    if get_db_backend() != "sqlite":
+        return 0
     return _write_mutex_depth()
 
 
-def db() -> sqlite3.Connection:
-    if get_db_backend() != "sqlite":
-        raise NotImplementedError(_postgres_not_implemented_message())
+def db() -> DbConn:
+    """Open a DB connection for the configured backend."""
+    backend = get_db_backend()
+    if backend == "postgres":
+        conn_t0 = time.perf_counter()
+        try:
+            from game.db_pg import connect_postgres
+
+            conn = connect_postgres()
+        except NotImplementedError:
+            raise
+        except Exception as exc:
+            raise NotImplementedError(f"{_POSTGRES_NOT_CONFIGURED} ({exc})") from exc
+        try:
+            from game.live_state import is_request_perf_sampled, record_request_perf_phase
+
+            if is_request_perf_sampled():
+                record_request_perf_phase(
+                    "db_connection_ms",
+                    (time.perf_counter() - conn_t0) * 1000.0,
+                )
+        except Exception:
+            pass
+        try:
+            from game.live_state import attach_request_perf_sql_trace
+
+            attach_request_perf_sql_trace(conn)
+        except Exception:
+            pass
+        return conn
+
+    if backend != "sqlite":
+        raise NotImplementedError(f"Unsupported GC_DB_BACKEND={backend!r}")
+
     db_path = ensure_db_parent_dir()
     conn_t0 = time.perf_counter()
     conn = sqlite3.connect(db_path, timeout=30.0)
@@ -148,21 +184,48 @@ def db() -> sqlite3.Connection:
     return conn
 
 
-def in_transaction(conn: sqlite3.Connection) -> bool:
+def in_transaction(conn: DbConn) -> bool:
     if hasattr(conn, "in_transaction"):
         return bool(conn.in_transaction)
     return False
 
 
-def begin_write_transaction(conn: sqlite3.Connection, *, retries: int = 8) -> None:
+def recover_aborted_transaction(conn: DbConn) -> None:
+    """
+    Clear an aborted Postgres transaction so later statements can run.
+
+    No-op on SQLite. Call after swallowed DB errors on a shared connection,
+    and before begin_write_transaction when the connection may be INERROR.
+    """
+    if get_db_backend() != "postgres":
+        return
+    try:
+        raw = getattr(conn, "_conn", None)
+        info = getattr(raw, "info", None) if raw is not None else None
+        status = getattr(info, "transaction_status", None) if info is not None else None
+        # psycopg: 0=IDLE 1=ACTIVE 2=INTRANS 3=INERROR
+        if status is not None and int(status) == 3:
+            rollback(conn)
+            return
+    except Exception:
+        pass
+    try:
+        conn.execute("SELECT 1 AS gc_tx_ok;")
+    except Exception:
+        rollback(conn)
+
+
+def begin_write_transaction(conn: DbConn, *, retries: int = 8) -> None:
     """
     Start a write transaction with appropriate locking.
 
     SQLite: BEGIN IMMEDIATE (single-writer lock, race-safe queues).
-    Postgres (future): BEGIN — pair with lock_planet_for_update() / lock_player_for_update().
+    Postgres: BEGIN — pair with lock_planet_for_update() / lock_player_for_update().
 
-    Serializes writers within the process to avoid SQLITE_BUSY under Flask threading.
+    Serializes writers within the process on SQLite to avoid SQLITE_BUSY under Flask threading.
     """
+    if get_db_backend() == "postgres":
+        recover_aborted_transaction(conn)
     if in_transaction(conn):
         return
     _write_mutex_acquire()
@@ -173,6 +236,8 @@ def begin_write_transaction(conn: sqlite3.Connection, *, retries: int = 8) -> No
             try:
                 if get_db_backend() == "postgres":
                     conn.execute("BEGIN")
+                    if hasattr(conn, "_in_tx"):
+                        conn._in_tx = True  # type: ignore[attr-defined]
                 else:
                     conn.execute("BEGIN IMMEDIATE")
                 begin_ms = (time.perf_counter() - begin_t0) * 1000.0
@@ -202,7 +267,7 @@ def begin_write_transaction(conn: sqlite3.Connection, *, retries: int = 8) -> No
         raise
 
 
-def commit(conn: sqlite3.Connection) -> None:
+def commit(conn: DbConn) -> None:
     try:
         from game.live_state import mark_request_perf_write_tx_finished
 
@@ -214,7 +279,7 @@ def commit(conn: sqlite3.Connection) -> None:
         _write_mutex_release()
 
 
-def rollback(conn: sqlite3.Connection) -> None:
+def rollback(conn: DbConn) -> None:
     try:
         from game.live_state import mark_request_perf_write_tx_finished
 
@@ -236,14 +301,14 @@ def sqlite_write_lock() -> Generator[None, None, None]:
         _write_mutex_release()
 
 
-def lock_planet_for_update(conn: sqlite3.Connection, planet_id: int) -> None:
+def lock_planet_for_update(conn: DbConn, planet_id: int) -> None:
     """Postgres: row-level lock before queue/spend. SQLite: no-op (IMMEDIATE covers writers)."""
     if get_db_backend() != "postgres":
         return
     conn.execute("SELECT id FROM planets WHERE id = ? FOR UPDATE;", (int(planet_id),))
 
 
-def lock_player_for_update(conn: sqlite3.Connection, user_id: int) -> None:
+def lock_player_for_update(conn: DbConn, user_id: int) -> None:
     """Postgres: serialize research queue mutations per player."""
     if get_db_backend() != "postgres":
         return
@@ -252,10 +317,10 @@ def lock_player_for_update(conn: sqlite3.Connection, user_id: int) -> None:
 
 @contextmanager
 def with_transaction(
-    conn: Optional[sqlite3.Connection] = None,
+    conn: Optional[DbConn] = None,
     *,
     close: bool = False,
-) -> Generator[sqlite3.Connection, None, None]:
+) -> Generator[DbConn, None, None]:
     """
     Context manager: begin → yield → commit on success, rollback on error/TxAbort.
     Does not close conn unless close=True or conn was created here.
@@ -285,7 +350,11 @@ def with_transaction(
             conn.close()
 
 
-def table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
+def table_exists(conn: DbConn, table_name: str) -> bool:
+    if get_db_backend() == "postgres":
+        from game.db_pg import postgres_table_exists
+
+        return postgres_table_exists(conn, table_name)
     cur = conn.cursor()
     cur.execute(
         "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1;",
@@ -294,7 +363,11 @@ def table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
     return cur.fetchone() is not None
 
 
-def index_exists(conn: sqlite3.Connection, index_name: str) -> bool:
+def index_exists(conn: DbConn, index_name: str) -> bool:
+    if get_db_backend() == "postgres":
+        from game.db_pg import postgres_index_exists
+
+        return postgres_index_exists(conn, index_name)
     cur = conn.cursor()
     cur.execute(
         "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ? LIMIT 1;",
@@ -303,17 +376,43 @@ def index_exists(conn: sqlite3.Connection, index_name: str) -> bool:
     return cur.fetchone() is not None
 
 
-def table_columns(conn: sqlite3.Connection, table_name: str) -> set[str]:
+def table_columns(conn: DbConn, table_name: str) -> set[str]:
+    if get_db_backend() == "postgres":
+        from game.db_pg import postgres_table_columns
+
+        return postgres_table_columns(conn, table_name)
     cur = conn.cursor()
     cur.execute(f"PRAGMA table_info({table_name});")
     return {str(row["name"]) for row in cur.fetchall()}
 
 
-def column_exists(conn: sqlite3.Connection, table_name: str, column_name: str) -> bool:
+def column_exists(conn: DbConn, table_name: str, column_name: str) -> bool:
     return column_name in table_columns(conn, table_name)
 
 
-def get_connection() -> sqlite3.Connection:
+def is_integrity_error(exc: BaseException) -> bool:
+    """
+    True for unique/check/FK violations on SQLite or PostgreSQL.
+
+    Owner for dual-backend Integrity handling (GC-PERF-PG-PARITY-001).
+    """
+    if isinstance(exc, sqlite3.IntegrityError):
+        return True
+    try:
+        from psycopg.errors import ForeignKeyViolation, IntegrityError, UniqueViolation
+
+        if isinstance(exc, (IntegrityError, UniqueViolation, ForeignKeyViolation)):
+            return True
+    except Exception:
+        pass
+    name = type(exc).__name__
+    if name in ("IntegrityError", "UniqueViolation", "ForeignKeyViolation", "CheckViolation"):
+        return True
+    msg = str(exc).lower()
+    return "unique" in msg or "foreign key" in msg or "check constraint" in msg
+
+
+def get_connection() -> DbConn:
     """Canonical DB connection helper (alias for db())."""
     return db()
 
@@ -331,10 +430,17 @@ def describe_db_connection() -> dict[str, Any]:
     }
     if backend == "sqlite":
         info["db_path"] = str(resolve_db_path())
+    elif backend == "postgres":
+        try:
+            from game.db_pg import get_pool_max_size
+
+            info["pg_pool_max"] = get_pool_max_size()
+        except Exception:
+            pass
     return info
 
 
-def count_table_rows(conn: sqlite3.Connection, table_name: str) -> int:
+def count_table_rows(conn: DbConn, table_name: str) -> int:
     if not table_exists(conn, table_name):
         return 0
     cur = conn.cursor()
@@ -343,7 +449,7 @@ def count_table_rows(conn: sqlite3.Connection, table_name: str) -> int:
     return int(row["cnt"] if row and row["cnt"] is not None else 0)
 
 
-def get_db_identity(conn: Optional[sqlite3.Connection] = None) -> str:
+def get_db_identity(conn: Optional[DbConn] = None) -> str:
     """Short fingerprint: backend, path, row counts, top score."""
     owns = conn is None
     if owns:
@@ -369,7 +475,7 @@ def get_db_identity(conn: Optional[sqlite3.Connection] = None) -> str:
             conn.close()
 
 
-def gather_score_stats(conn: sqlite3.Connection) -> dict[str, int]:
+def gather_score_stats(conn: DbConn) -> dict[str, int]:
     """Aggregate player_scores snapshot for worker before/after logs."""
     if not table_exists(conn, "player_scores"):
         return {"scores_rows": 0, "scores_positive": 0, "top_score": 0}
@@ -383,7 +489,7 @@ def gather_score_stats(conn: sqlite3.Connection) -> dict[str, int]:
     return {"scores_rows": rows, "scores_positive": positive, "top_score": top}
 
 
-def gather_db_startup_diagnostics(conn: Optional[sqlite3.Connection] = None) -> dict[str, Any]:
+def gather_db_startup_diagnostics(conn: Optional[DbConn] = None) -> dict[str, Any]:
     """DB target fingerprint for ranking worker / cron startup logs."""
     owns = conn is None
     if owns:

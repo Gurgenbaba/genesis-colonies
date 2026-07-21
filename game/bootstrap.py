@@ -15,8 +15,12 @@ from game.migrations_util import migrations_are_current
 def _init_db_with_retry(*, max_attempts: int = 8) -> None:
     import sqlite3
 
-    from game.db import _is_sqlite_lock_error, format_sqlite_lock_startup_help
+    from game.db import get_db_backend, _is_sqlite_lock_error, format_sqlite_lock_startup_help
     from game.models import init_db
+
+    if get_db_backend() == "postgres":
+        init_db()
+        return
 
     last_err: BaseException | None = None
     for attempt in range(max(1, int(max_attempts))):
@@ -38,13 +42,20 @@ def bootstrap_application(*, skip_migration_check: bool = False) -> None:
     init_config()
 
     if not is_production():
-        from game.db import resolve_db_path
+        from game.db import database_url_is_set, get_db_backend, resolve_db_path
 
-        try:
-            db_display = resolve_db_path().resolve()
-        except OSError:
-            db_display = resolve_db_path()
-        print(f"[GC bootstrap] SQLite database: {db_display}", file=sys.stderr)
+        if get_db_backend() == "postgres":
+            print(
+                f"[GC bootstrap] Database backend: postgres "
+                f"(url_set={database_url_is_set()})",
+                file=sys.stderr,
+            )
+        else:
+            try:
+                db_display = resolve_db_path().resolve()
+            except OSError:
+                db_display = resolve_db_path()
+            print(f"[GC bootstrap] SQLite database: {db_display}", file=sys.stderr)
 
     errors = validate_config(strict=is_production())
     if errors:

@@ -601,13 +601,15 @@ def on_player_score_changed(player_id: int, conn=None) -> Dict[str, int]:
 
 def _ensure_score_rows(conn) -> int:
     cur = conn.cursor()
+    now = int(time.time())
     cur.execute(
         """
         INSERT INTO player_scores (player_id, score_total, score_buildings, score_research, updated_at)
-        SELECT p.id, 0, 0, 0, CAST(strftime('%s','now') AS INTEGER)
+        SELECT p.id, 0, 0, 0, ?
         FROM players p
         WHERE NOT EXISTS (SELECT 1 FROM player_scores s WHERE s.player_id = p.id)
-        """
+        """,
+        (now,),
     )
     return int(cur.rowcount or 0)
 
@@ -623,10 +625,10 @@ def ensure_player_score_row(player_id: int, conn=None) -> None:
         cur.execute(
             """
             INSERT INTO player_scores (player_id, score_total, score_buildings, score_research, updated_at)
-            VALUES (?, 0, 0, 0, CAST(strftime('%s','now') AS INTEGER))
+            VALUES (?, 0, 0, 0, ?)
             ON CONFLICT(player_id) DO NOTHING;
             """,
-            (int(player_id),),
+            (int(player_id), int(time.time())),
         )
         if owns_conn:
             conn.commit()

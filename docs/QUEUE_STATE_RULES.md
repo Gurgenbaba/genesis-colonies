@@ -131,6 +131,7 @@ Card adapter: `is_queue_job_client_visible()` in `game/queue_card.py` filters du
 - Ein Aufruf von `finish_due_work_once` pro HTTP-Request (außer dokumentierte Admin/Cron-Pfade).
 - Lesende Pfade: `skip_finish=True` nach bereits gelaufenem Refresh.
 - Poll: `finish_source=game_state` — leichtgewichtig, siehe [STATE_AJAX.md](STATE_AJAX.md).
+- **GC-PERF-WORKER-001:** Mit `GC_GAME_WORKER_PRIMARY=1` finish't der Poll nur noch bei tatsächlich fälliger Arbeit (Safety-Net). Reguläre Finishes: `POST /api/internal/cron/queue-tick` / `scripts/run_game_worker.py` → weiterhin `finish_due_work` (kein Parallel-System).
 
 ---
 

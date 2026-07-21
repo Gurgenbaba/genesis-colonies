@@ -16,7 +16,7 @@ import time
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .auction_house import is_event_box, resolve_inventory_key
-from .db import db, table_exists
+from .db import column_exists, db, table_exists
 from .inventory import grant_inventory_item, inventory_schema_ready
 from .inventory_catalog import container_image_path, item_catalog_entry
 
@@ -122,17 +122,13 @@ def vote_rewards_schema_ready(conn) -> bool:
 def vote_reward_next_at_column_ready(conn) -> bool:
     if not vote_rewards_schema_ready(conn):
         return False
-    cur = conn.cursor()
-    cur.execute("PRAGMA table_info(vote_rewards);")
-    return any(str(row[1]) == "provider_next_vote_at" for row in cur.fetchall())
+    return column_exists(conn, "vote_rewards", "provider_next_vote_at")
 
 
 def vote_channel_column_ready(conn) -> bool:
     if not vote_rewards_schema_ready(conn):
         return False
-    cur = conn.cursor()
-    cur.execute("PRAGMA table_info(vote_rewards);")
-    return any(str(row[1]) == "vote_channel" for row in cur.fetchall())
+    return column_exists(conn, "vote_rewards", "vote_channel")
 
 
 def vote_providers_schema_ready(conn) -> bool:

@@ -70,6 +70,12 @@ def reload_definitions(conn: Optional[sqlite3.Connection] = None) -> None:
                 for r in cur.execute("SELECT * FROM pe_ascension_definitions;").fetchall()
             }
             _CACHE["loaded"] = True
+        try:
+            from game.definition_cache import bump_config_version
+
+            bump_config_version()
+        except Exception:
+            pass
     finally:
         if own:
             conn.close()

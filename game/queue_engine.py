@@ -13,7 +13,7 @@ import threading
 import time
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from .db import begin_write_transaction, commit, db, in_transaction, rollback
+from .db import begin_write_transaction, commit, db, get_db_backend, in_transaction, rollback
 from .models import (
     delete_build_job,
     get_build_queue_rows,
@@ -26,6 +26,33 @@ logger = logging.getLogger(__name__)
 _ENGINE_LOCK = threading.RLock()
 
 _MAX_FINISH_PASSES = 8
+_SAVEPOINT_SEQ = 0
+
+
+def _run_finish_step(conn: sqlite3.Connection, label: str, fn) -> Any:
+    """
+    Run one finish subsection. On Postgres, wrap in SAVEPOINT so a failure
+    does not abort the whole finish transaction (GC-PERF-PG-PARITY-001).
+    """
+    global _SAVEPOINT_SEQ
+    use_sp = get_db_backend() == "postgres"
+    sp = None
+    if use_sp:
+        _SAVEPOINT_SEQ = (_SAVEPOINT_SEQ + 1) % 1_000_000
+        sp = f"qe_{_SAVEPOINT_SEQ}"
+        conn.execute(f"SAVEPOINT {sp}")
+    try:
+        out = fn()
+        if use_sp and sp is not None:
+            conn.execute(f"RELEASE SAVEPOINT {sp}")
+        return out
+    except Exception:
+        if use_sp and sp is not None:
+            try:
+                conn.execute(f"ROLLBACK TO SAVEPOINT {sp}")
+            except Exception:
+                logger.exception("queue_engine savepoint rollback failed (%s)", label)
+        raise
 
 _BUILDING_KEYS = [
     "metal_mine", "crystal_mine", "solar_plant",
@@ -670,7 +697,10 @@ def finish_due_work(
             if vacation_freezes_account_progress(pid_player, conn=conn):
                 continue
             try:
-                n = finish_planet_build_jobs(conn, pid_planet, pid_player, float(now))
+                def _build():
+                    return finish_planet_build_jobs(conn, pid_planet, pid_player, float(now))
+
+                n = _run_finish_step(conn, f"build:{pid_planet}", _build)
                 if n > 0:
                     result["finished"]["buildings"] += n
                     affected_players.add(pid_player)
@@ -682,9 +712,11 @@ def finish_due_work(
                 logger.exception("queue_engine build finish failed: %s", msg)
 
             try:
-                from .planet_evolution.repository import evolution_schema_ready
+                def _pe():
+                    from .planet_evolution.repository import evolution_schema_ready
 
-                if evolution_schema_ready(conn):
+                    if not evolution_schema_ready(conn):
+                        return
                     from .planet_evolution.planet_research import finish_planet_research_jobs
                     from .planet_evolution.ascension import finish_ascension_jobs
 
@@ -698,6 +730,8 @@ def finish_due_work(
                         result["finished"]["ascension"] += n_as
                         affected_players.add(pid_player)
                         affected_planets.add(pid_planet)
+
+                _run_finish_step(conn, f"pe:{pid_planet}", _pe)
             except Exception as exc:
                 result["ok"] = False
                 msg = f"planet_evolution planet={pid_planet}: {exc}"
@@ -705,9 +739,12 @@ def finish_due_work(
                 logger.exception("queue_engine planet evolution finish failed: %s", msg)
 
             try:
-                n_sy = finish_planet_shipyard_jobs(
-                    conn, pid_planet, pid_player, float(now)
-                )
+                def _sy():
+                    return finish_planet_shipyard_jobs(
+                        conn, pid_planet, pid_player, float(now)
+                    )
+
+                n_sy = _run_finish_step(conn, f"sy:{pid_planet}", _sy)
                 if n_sy > 0:
                     result["finished"]["shipyard"] += n_sy
                     affected_players.add(pid_player)
@@ -719,9 +756,12 @@ def finish_due_work(
                 logger.exception("queue_engine shipyard finish failed: %s", msg)
 
             try:
-                n_def = finish_planet_defense_jobs(
-                    conn, pid_planet, pid_player, float(now)
-                )
+                def _df():
+                    return finish_planet_defense_jobs(
+                        conn, pid_planet, pid_player, float(now)
+                    )
+
+                n_def = _run_finish_step(conn, f"def:{pid_planet}", _df)
                 if n_def > 0:
                     result["finished"]["defense"] += n_def
                     affected_players.add(pid_player)
@@ -736,7 +776,10 @@ def finish_due_work(
             if vacation_freezes_account_progress(uid, conn=conn):
                 continue
             try:
-                n = finish_player_research_jobs(conn, uid, float(now))
+                def _res():
+                    return finish_player_research_jobs(conn, uid, float(now))
+
+                n = _run_finish_step(conn, f"research:{uid}", _res)
                 if n > 0:
                     result["finished"]["research"] += n
                     affected_players.add(uid)
@@ -747,9 +790,11 @@ def finish_due_work(
                 logger.exception("queue_engine research finish failed: %s", msg)
 
         try:
-            from .fleet import fleet_schema_ready, process_fleet_tick
+            def _fleet():
+                from .fleet import fleet_schema_ready, process_fleet_tick
 
-            if fleet_schema_ready(conn):
+                if not fleet_schema_ready(conn):
+                    return
                 fleet_player = int(player_id) if player_id is not None else None
                 fleet_result = process_fleet_tick(player_id=fleet_player, now=float(now), conn=conn)
                 result["finished"]["fleet_arrivals"] += int(fleet_result.get("processed_arrivals") or 0)
@@ -757,6 +802,8 @@ def finish_due_work(
                 if fleet_result.get("errors"):
                     for err in fleet_result["errors"]:
                         result["errors"].append(f"fleet: {err}")
+
+            _run_finish_step(conn, "fleet", _fleet)
         except Exception as exc:
             result["ok"] = False
             msg = f"fleet tick: {exc}"
@@ -764,9 +811,11 @@ def finish_due_work(
             logger.exception("queue_engine fleet tick failed: %s", msg)
 
         try:
-            from .galaxy import finish_due_relocations, relocation_schema_ready
+            def _reloc():
+                from .galaxy import finish_due_relocations, relocation_schema_ready
 
-            if relocation_schema_ready(conn):
+                if not relocation_schema_ready(conn):
+                    return
                 reloc_player = int(player_id) if player_id is not None else None
                 n_reloc = finish_due_relocations(
                     conn, player_id=reloc_player, now=float(now)
@@ -785,43 +834,66 @@ def finish_due_work(
                         if prow:
                             affected_players.add(int(prow["player_id"]))
                             affected_planets.add(int(planet_id))
+
+            _run_finish_step(conn, "reloc", _reloc)
         except Exception as exc:
             result["ok"] = False
             msg = f"planet relocation: {exc}"
             result["errors"].append(msg)
             logger.exception("queue_engine planet relocation finish failed: %s", msg)
 
-        if update_scores and affected_players:
-            from .score_events import apply_score_updates_for_players
+        try:
+            def _scores():
+                if not (update_scores and affected_players):
+                    return
+                from .score_events import apply_score_updates_for_players
 
-            result["score_updates"] = apply_score_updates_for_players(
-                affected_players,
-                conn=conn,
-                recalc_ranks=recalc_ranks,
-                reason=str(source or "queue_finish"),
-            )
-            result["rank_recalculated"] = bool(recalc_ranks and result["score_updates"] > 0)
-
-        derived_synced = 0
-        account_wide_sync = (
-            int(result["finished"]["research"]) > 0
-            or int(result["finished"]["planet_research"]) > 0
-            or int(result["finished"]["ascension"]) > 0
-        )
-        if affected_planets or (affected_players and account_wide_sync):
-            from .resources import sync_derived_state_after_queue_finish
-
-            if account_wide_sync:
-                derived_synced = sync_derived_state_after_queue_finish(
-                    player_ids=affected_players,
+                result["score_updates"] = apply_score_updates_for_players(
+                    affected_players,
                     conn=conn,
+                    recalc_ranks=recalc_ranks,
+                    reason=str(source or "queue_finish"),
                 )
-            else:
-                derived_synced = sync_derived_state_after_queue_finish(
-                    planet_ids=affected_planets,
-                    conn=conn,
+                result["rank_recalculated"] = bool(
+                    recalc_ranks and result["score_updates"] > 0
                 )
-        result["derived_sync_count"] = int(derived_synced)
+
+            _run_finish_step(conn, "scores", _scores)
+        except Exception as exc:
+            result["ok"] = False
+            msg = f"score updates: {exc}"
+            result["errors"].append(msg)
+            logger.exception("queue_engine score updates failed: %s", msg)
+
+        try:
+            def _derived():
+                account_wide_sync = (
+                    int(result["finished"]["research"]) > 0
+                    or int(result["finished"]["planet_research"]) > 0
+                    or int(result["finished"]["ascension"]) > 0
+                )
+                if not (affected_planets or (affected_players and account_wide_sync)):
+                    return
+                from .resources import sync_derived_state_after_queue_finish
+
+                if account_wide_sync:
+                    synced = sync_derived_state_after_queue_finish(
+                        player_ids=affected_players,
+                        conn=conn,
+                    )
+                else:
+                    synced = sync_derived_state_after_queue_finish(
+                        planet_ids=affected_planets,
+                        conn=conn,
+                    )
+                result["derived_sync_count"] = int(synced)
+
+            _run_finish_step(conn, "derived", _derived)
+        except Exception as exc:
+            result["ok"] = False
+            msg = f"derived sync: {exc}"
+            result["errors"].append(msg)
+            logger.exception("queue_engine derived sync failed: %s", msg)
 
     try:
         if manage_transaction:
@@ -837,8 +909,13 @@ def finish_due_work(
             _execute_finish()
 
     except Exception as exc:
-        if manage_transaction and owns_conn:
-            rollback(conn)
+        if manage_transaction:
+            if owns_conn:
+                rollback(conn)
+            else:
+                from .db import recover_aborted_transaction
+
+                recover_aborted_transaction(conn)
         result["ok"] = False
         result["errors"].append(str(exc))
         logger.exception("queue_engine.finish_due_work failed source=%s", source)

@@ -37,7 +37,7 @@ from .alliance_catalog import (
     tech_level,
     trade_coord_bonus_pct,
 )
-from .db import begin_write_transaction, commit, db, rollback, table_exists
+from .db import begin_write_transaction, column_exists, commit, db, rollback, table_exists
 from .planet_evolution.repository import get_context_planet
 
 VALID_DONATION_RESOURCES = frozenset({"metal", "crystal", "fuel_cells"})
@@ -119,15 +119,11 @@ def allows_applications(mode: Optional[str]) -> bool:
 
 
 def _recruitment_mode_column_ready(conn) -> bool:
-    cur = conn.cursor()
-    cur.execute("PRAGMA table_info(alliances);")
-    return any(str(row[1]) == "recruitment_mode" for row in cur.fetchall())
+    return column_exists(conn, "alliances", "recruitment_mode")
 
 
 def _logo_url_column_ready(conn) -> bool:
-    cur = conn.cursor()
-    cur.execute("PRAGMA table_info(alliances);")
-    return any(str(row[1]) == "logo_url" for row in cur.fetchall())
+    return column_exists(conn, "alliances", "logo_url")
 
 
 def _alliance_recruitment_mode(row: Mapping[str, Any]) -> str:

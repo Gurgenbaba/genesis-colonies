@@ -12,7 +12,15 @@ import secrets
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from .db import begin_write_transaction, column_exists, commit, db, rollback, table_exists
+from .db import (
+    begin_write_transaction,
+    column_exists,
+    commit,
+    db,
+    rollback,
+    table_columns,
+    table_exists,
+)
 from .models import (
     ensure_player_and_homeworld,
     hash_password,
@@ -97,7 +105,7 @@ def ensure_account_options_schema(conn=None) -> None:
     c = conn or db()
     cur = c.cursor()
     try:
-        cols = {row[1] for row in cur.execute("PRAGMA table_info(users);").fetchall()}
+        cols = table_columns(c, "users")
         if "email" not in cols:
             cur.execute("ALTER TABLE users ADD COLUMN email TEXT;")
         if "notify_attack_sound" not in cols:
@@ -366,7 +374,7 @@ def ensure_account_safety_schema(conn=None) -> None:
     c = conn or db()
     cur = c.cursor()
     try:
-        cols = {row[1] for row in cur.execute("PRAGMA table_info(players);").fetchall()}
+        cols = table_columns(c, "players")
         for col, typedef in (
             ("vacation_mode_active", "INTEGER NOT NULL DEFAULT 0"),
             ("vacation_locked_until", "INTEGER"),

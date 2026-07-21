@@ -9,7 +9,7 @@ import secrets
 import time
 from typing import Any, Dict, Optional, Tuple
 
-from .db import begin_write_transaction, column_exists, commit, db, rollback
+from .db import begin_write_transaction, column_exists, commit, db, rollback, table_columns
 from .mail import send_mail
 from .models import hash_password, verify_password
 from .options import ensure_account_options_schema, validate_email, validate_new_password
@@ -58,7 +58,7 @@ def ensure_user_email_auth_schema(conn=None) -> None:
     cur = c.cursor()
     try:
         ensure_account_options_schema(c)
-        cols = {row[1] for row in cur.execute("PRAGMA table_info(users);").fetchall()}
+        cols = table_columns(c, "users")
         additions = {
             "email_verified": "INTEGER NOT NULL DEFAULT 0",
             "email_verification_token": "TEXT",

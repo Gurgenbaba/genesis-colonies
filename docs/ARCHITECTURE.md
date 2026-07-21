@@ -395,15 +395,27 @@ Keine Spielernamen, Session-IDs, Request-Bodies, Tokens oder SQL-Parameter. Rout
 - **Keine prozessübergreifende p95-Aggregation** — Auswertung aus strukturierten Logs (Railway Log Search).
 - **Keine Prometheus-Persistenz** in diesem Ticket.
 
+### GC-PERF-CORE-001 — Budgets
+
+Harte Zielwerte in `game.config.get_perf_budgets()` (siehe [GC_PERF_CORE.md](GC_PERF_CORE.md)).
+Bei aktivem Request-Trace und Überschreitung: Meta-Feld `budget_miss=diet_poll_ms,…`.
+Diet-Payload-Größe: `diet_payload_bytes` nach `apply_lightweight_game_state_diet`.
+Baseline: `python scripts/perf_baseline.py`.
+
 ---
 
-## Postgres-Vorbereitung
+## Postgres-Vorbereitung / GC-PERF-DB-002
 
-`game/db.py` reserviert:
+`game/db.py` + Adapter `game/db_pg.py`:
 
-- `GC_DB_BACKEND=postgres` (aktuell: `NotImplementedError`)
-- `lock_planet_for_update()` / `lock_player_for_update()` — No-Op auf SQLite
-- Portable SQL in Migrationen wo möglich
+- `GC_DB_BACKEND=postgres` + `DATABASE_URL=postgresql://…`
+- Connection Pool (`psycopg_pool`, `GC_PG_POOL_MAX`)
+- `?` → `%s` Placeholder-Rewrite
+- `lock_planet_for_update()` / `lock_player_for_update()` — `FOR UPDATE`
+- Portable `table_exists` / `table_columns` / `index_exists`
+- SQLite bleibt Default für Dev und bestehende Deploys
+
+Audit: [GC_PERF_DB_001_POSTGRES_AUDIT.md](GC_PERF_DB_001_POSTGRES_AUDIT.md) · Epic: [GC_PERF_CORE.md](GC_PERF_CORE.md)
 
 ---
 

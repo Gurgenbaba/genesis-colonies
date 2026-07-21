@@ -1,13 +1,14 @@
 """
-Internal HTTP cron handlers — run inside the web process (same SQLite volume).
+Internal HTTP cron handlers — run inside the web process (same SQLite volume by default).
 
 Railway SQLite deployments must not use a separate worker service; external schedulers
-call POST /api/internal/cron/ranking with GC_INTERNAL_CRON_TOKEN.
+call POST /api/internal/cron/* with GC_INTERNAL_CRON_TOKEN.
 
-Vote re-engagement piggybacks on the same ranking cron (30-minute interval guard).
-Optional dedicated endpoint: POST /api/internal/cron/vote-reengagement.
+Endpoints:
+  - ranking, fleet-tick, vote-reengagement, queue-tick (GC-PERF-WORKER-001)
 
-Admin manual trigger: POST /api/admin/ranking/recompute (@require_admin_api, force=1).
+With GC_DB_BACKEND=postgres, a dedicated ``scripts/run_game_worker.py`` process is supported.
+Vote re-engagement piggybacks on the ranking cron (30-minute interval guard).
 """
 
 from __future__ import annotations
@@ -199,6 +200,37 @@ def execute_fleet_tick(*, force: bool, source: str) -> Dict[str, Any]:
     return run_fleet_worker(force=force, source=source, persist=True)
 
 
+def execute_queue_tick(*, force: bool, source: str) -> Dict[str, Any]:
+    """
+    GC-PERF-WORKER-001: global due-queue finish via tick_runner (same engine as admin/CLI).
+
+    ``force`` is accepted for API symmetry; queue tick always processes currently due work.
+    """
+    from game.tick_runner import run_tick
+
+    _ = force  # reserved for future interval guard parity with fleet/ranking
+    return run_tick(scope="due", source=str(source or "http_cron"), persist=True)
+
+
+def log_queue_tick_result(
+    payload: Dict[str, Any],
+    *,
+    log_prefix: str,
+    source_label: str,
+) -> None:
+    finished = payload.get("finished") or {}
+    _recompute_log(
+        log_prefix,
+        f"source={source_label} ok={str(bool(payload.get('ok'))).lower()} "
+        f"players={payload.get('players_processed', 0)} "
+        f"buildings={finished.get('buildings', 0)} "
+        f"research={finished.get('research', 0)} "
+        f"shipyard={finished.get('shipyard', 0)} "
+        f"defense={finished.get('defense', 0)} "
+        f"duration_ms={payload.get('duration_ms', 0)}",
+    )
+
+
 def log_fleet_tick_result(
     payload: Dict[str, Any],
     *,
@@ -328,6 +360,33 @@ def handle_internal_cron_fleet_tick(request: Request) -> Tuple[Dict[str, Any], i
         return {"ok": False, "error": str(exc)}, 500
 
     log_fleet_tick_result(payload, log_prefix="fleet-http-cron", source_label="http")
+    status = 200 if payload.get("ok") else 500
+    return payload, status
+
+
+def handle_internal_cron_queue_tick(request: Request) -> Tuple[Dict[str, Any], int]:
+    """
+    GC-PERF-WORKER-001: process due build/research/shipyard/defense queues globally.
+
+    Auth: Authorization: Bearer <GC_INTERNAL_CRON_TOKEN>
+    Uses the same ``finish_due_work`` owner as request-path finishes (no parallel queue).
+    """
+    authorized, auth_err = verify_internal_cron_request(request)
+    if not authorized:
+        _recompute_log("queue-http-cron", "unauthorized")
+        return {"ok": False, "error": auth_err or "unauthorized"}, 401
+
+    force = parse_force_flag(request)
+    _recompute_log("queue-http-cron", f"request_received force={str(force).lower()}")
+    try:
+        payload = execute_queue_tick(force=force, source="http_cron")
+    except Exception as exc:
+        logger.exception("internal cron queue tick failed")
+        _recompute_log("queue-http-cron", f"error={exc}")
+        return {"ok": False, "error": str(exc)}, 500
+
+    log_queue_tick_result(payload, log_prefix="queue-http-cron", source_label="http")
+    # Fleet is already part of run_tick; expose nested summary if present.
     status = 200 if payload.get("ok") else 500
     return payload, status
 

@@ -548,9 +548,18 @@ class EffectResolver:
             )
         except Exception:
             return values
-        if not boosters_schema_ready(self._conn):
+        try:
+            if not boosters_schema_ready(self._conn):
+                return values
+            mults = get_active_booster_multipliers(int(self.player_id), conn=self._conn)
+        except Exception:
+            try:
+                from ..db import recover_aborted_transaction
+
+                recover_aborted_transaction(self._conn)
+            except Exception:
+                pass
             return values
-        mults = get_active_booster_multipliers(int(self.player_id), conn=self._conn)
         if not mults:
             return values
         out = dict(values)

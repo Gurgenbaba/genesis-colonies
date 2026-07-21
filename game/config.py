@@ -103,6 +103,36 @@ def get_internal_cron_token() -> str:
     return _env_str("GC_INTERNAL_CRON_TOKEN")
 
 
+def is_game_worker_primary() -> bool:
+    """
+    GC-PERF-WORKER-001: when true, periodic poll queue-finish is disabled.
+
+    Due jobs still finish on poll as a safety net; the external game worker
+    (HTTP cron / scripts/run_game_worker.py) owns the regular finish cadence.
+    """
+    val = os.environ.get("GC_GAME_WORKER_PRIMARY", "0")
+    return str(val).strip().lower() in ("1", "true", "yes", "on")
+
+
+def get_resource_persist_interval_sec() -> float:
+    """
+    GC-PERF-RES-001: minimum idle seconds before poll may persist projected resources.
+
+    Default 600s (was hardcoded 120). Writes still happen on queue finish / fleet dirty.
+    """
+    return _env_float("GC_RESOURCE_PERSIST_SEC", 600.0, minimum=30.0, maximum=86_400.0)
+
+
+def get_definition_cache_ttl_sec() -> float:
+    """GC-PERF-CACHE-001: process-local definition cache TTL."""
+    return _env_float("GC_DEFINITION_CACHE_TTL_SEC", 300.0, minimum=1.0, maximum=86_400.0)
+
+
+def get_redis_url() -> str:
+    """Optional Redis URL for ephemeral cache (never source of truth)."""
+    return (os.environ.get("GC_REDIS_URL") or os.environ.get("REDIS_URL") or "").strip()
+
+
 def _env_int(name: str, default: int, *, minimum: int = 1) -> int:
     raw = os.environ.get(name, "").strip()
     if not raw:
@@ -234,6 +264,35 @@ def get_request_perf_sample() -> float:
     return _env_float("GC_REQUEST_PERF_SAMPLE", 1.0, minimum=0.0, maximum=1.0)
 
 
+def get_perf_budgets() -> dict[str, float]:
+    """
+    GC-PERF-CORE-001: hard performance budgets (see docs/GC_PERF_CORE.md).
+
+    Used by request-perf logging and scripts/perf_baseline.py.
+    Env overrides: GC_PERF_BUDGET_<KEY> (e.g. GC_PERF_BUDGET_DIET_POLL_MS=40).
+    """
+    defaults: dict[str, float] = {
+        "pjax_ssr_ms": 100.0,
+        "action_ms": 120.0,
+        "diet_poll_ms": 40.0,
+        "diet_payload_bytes": 15_360.0,  # 15 KB
+        "definition_lookup_ms": 1.0,
+        "diet_sql_count": 5.0,
+        "diet_sql_write_count": 0.0,
+    }
+    out: dict[str, float] = {}
+    for key, default in defaults.items():
+        env_key = "GC_PERF_BUDGET_" + key.upper()
+        out[key] = _env_float(env_key, default, minimum=0.0, maximum=10_000_000.0)
+    return out
+
+
+def is_perf_budget_assert_enabled() -> bool:
+    """When set, tests may fail on budget misses (never on by default in prod)."""
+    val = os.environ.get("GC_PERF_BUDGET_ASSERT", "0")
+    return str(val).strip().lower() in ("1", "true", "yes", "on")
+
+
 def get_client_runtime_config() -> dict[str, int | bool]:
     """
     Client poll intervals (ms) injected into templates as GC_CLIENT_CONFIG.
@@ -306,19 +365,29 @@ def validate_config(*, strict: bool | None = None) -> list[str]:
         errors.append(f"Unsupported GC_DB_BACKEND: {backend}")
 
     if backend == "postgres":
-        msg = (
-            "GC_DB_BACKEND=postgres is not implemented yet. "
-            "For Railway/production use GC_DB_BACKEND=sqlite, GC_DB_PATH=/data/game.db, "
-            "and a persistent volume at /data. Do not add or link PostgreSQL on Railway yet."
-        )
-        errors.append(msg)
+        db_url = os.environ.get("DATABASE_URL", "").strip()
+        if not db_url:
+            errors.append(
+                "GC_DB_BACKEND=postgres requires DATABASE_URL=postgresql://…"
+            )
+        else:
+            try:
+                import psycopg  # noqa: F401
+                import psycopg_pool  # noqa: F401
+            except ImportError:
+                errors.append(
+                    "GC_DB_BACKEND=postgres requires: pip install 'psycopg[binary]' psycopg_pool"
+                )
 
     if strict and is_production():
         db_url = os.environ.get("DATABASE_URL", "").strip().lower()
-        if db_url.startswith("postgres://") or db_url.startswith("postgresql://"):
+        if backend == "sqlite" and (
+            db_url.startswith("postgres://") or db_url.startswith("postgresql://")
+        ):
             warnings.append(
-                "DATABASE_URL points to PostgreSQL but is ignored — the app uses SQLite only. "
-                "Unset DATABASE_URL or remove the Postgres service link; set GC_DB_PATH=/data/game.db."
+                "DATABASE_URL points to PostgreSQL but GC_DB_BACKEND=sqlite — "
+                "Postgres URL is ignored. Set GC_DB_BACKEND=postgres to use it, "
+                "or unset DATABASE_URL for SQLite-only deploys."
             )
         if not get_internal_cron_token():
             warnings.append(

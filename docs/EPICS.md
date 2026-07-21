@@ -17,7 +17,8 @@ Status: v1.5.9.2 (2026-06-24)
 | EPIC-09 | Alliance Hub | 🔄 | `/alliance` Platzhalter-UI; Backend minimal — [ROADMAP.md](ROADMAP.md) Phase 5 |
 | EPIC-10 | Social (Chat, Messages) | ✅ | ARCHITECTURE |
 | EPIC-11 | Security Hardening | 📋 | [SECURITY.md](SECURITY.md) |
-| EPIC-12 | Platform Scale (Postgres) | 📋 | ARCHITECTURE |
+| EPIC-12 | Platform Scale (Postgres) | 📋 | ARCHITECTURE · Phase 7 |
+| EPIC-19 | Performance Core (Maximum Speed Stack) | 🔄 | [GC_PERF_CORE.md](GC_PERF_CORE.md) |
 | EPIC-13 | Queue Card UX | ✅ | [GC-536_QUEUE_CARD_UX.md](GC-536_QUEUE_CARD_UX.md) |
 | EPIC-14 | Megabunker UX Feedback Polish | 📋 | [GC-557_MEGABUNKER_UX_FEEDBACK_POLISH.md](GC-557_MEGABUNKER_UX_FEEDBACK_POLISH.md) |
 | EPIC-15 | Imperium & Expansion (Genesis 2.0) | 📋 | [IMPERIUM_VISION.md](IMPERIUM_VISION.md) |
@@ -100,6 +101,26 @@ Details: [IMPERIUM_VISION.md](IMPERIUM_VISION.md) · [EXPANSION_PROTOCOL.md](EXP
 | GC-914B | Page UI + i18n (8 Locales) |
 
 Details: [IMPERIAL_DIRECTIVES.md](IMPERIAL_DIRECTIVES.md)
+
+**EPIC-19 Performance Core** → nicht als Ganzes implementieren:
+
+| Ticket | Fokus |
+|--------|-------|
+| GC-PERF-CORE-001 | Messbarkeit: Budgets, Diet-Bytes, Baseline |
+| GC-PERF-DB-001 | PostgreSQL-Kompatibilitätsaudit |
+| GC-PERF-DB-002 | PostgreSQL + Connection Pool |
+| GC-PERF-WORKER-001 | Queue-/Fleet-Worker (Ausführungsort) |
+| GC-PERF-STATE-001/002 | Diet-Minimierung + Delta-State |
+| GC-PERF-RES-001 | Lazy Resource Accrual |
+| GC-PERF-JS-001 | `main.js` Core/Pages-Split |
+| GC-PERF-CACHE-001 | Definition-/Settings-Cache (+ Redis flüchtig) |
+| GC-PERF-LOAD-001 | Lasttest |
+| **GC-PERF-PG-SCHEMA-001** | ✅ PostgreSQL-Schema & Migration Parity — [Spec](GC_PERF_PG_SCHEMA_001.md) |
+| **GC-PERF-PG-PARITY-001** | 🔄 Backend-Parität auf leerer PG-DB — [Spec](GC_PERF_PG_PARITY_001.md) |
+| GC-PERF-PG-MIGRATE-001 | SQLite→Postgres Datenimport |
+| GC-PERF-JS-002 | Echter `main.js`-Split |
+
+Details: [GC_PERF_CORE.md](GC_PERF_CORE.md) · [ROADMAP.md](ROADMAP.md) Phase 7
 
 **EPIC-16 Genesis Knowledge Base** → nicht als Ganzes implementieren:
 

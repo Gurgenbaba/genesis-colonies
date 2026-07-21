@@ -6,7 +6,7 @@ import sqlite3
 import time
 from typing import Any, Dict, Optional, Tuple
 
-from ..db import table_exists
+from ..db import column_exists, table_exists
 from .sector_grid import sector_coords
 from .strategic_worlds import strategic_world_type_for_coords
 
@@ -47,11 +47,7 @@ class WorldColonizationError(ValueError):
 def world_colonization_schema_ready(*, conn: sqlite3.Connection) -> bool:
     if not table_exists(conn, "world_claims"):
         return False
-    cols = {
-        str(row[1])
-        for row in conn.execute("PRAGMA table_info(planets);").fetchall()
-    }
-    required = {
+    required = (
         "world_key",
         "world_x",
         "world_y",
@@ -59,8 +55,8 @@ def world_colonization_schema_ready(*, conn: sqlite3.Connection) -> bool:
         "sector_y",
         "planet_role",
         "origin_world_key",
-    }
-    return required.issubset(cols)
+    )
+    return all(column_exists(conn, "planets", col) for col in required)
 
 
 def build_world_key(

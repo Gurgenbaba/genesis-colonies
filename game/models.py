@@ -92,17 +92,42 @@ def harden_planets_schema(conn: sqlite3.Connection) -> None:
 
     cur = conn.cursor()
 
-    if not column_exists(conn, "planets", "player_id"):
+    def _exec_optional(sql: str) -> None:
+        """Run DDL; ignore idempotent failures without aborting the Postgres TX."""
+        cur.execute("SAVEPOINT gc_harden")
         try:
-            cur.execute("ALTER TABLE planets ADD COLUMN player_id INTEGER;")
-        except sqlite3.OperationalError:
-            pass
+            cur.execute(sql)
+            cur.execute("RELEASE SAVEPOINT gc_harden")
+        except Exception as exc:
+            try:
+                cur.execute("ROLLBACK TO SAVEPOINT gc_harden")
+            except Exception:
+                from game.db import get_db_backend, rollback
+
+                if get_db_backend() == "postgres":
+                    rollback(conn)
+            if isinstance(exc, sqlite3.OperationalError):
+                return
+            try:
+                from game.sql_pg_rewrite import is_idempotent_postgres_error
+
+                if is_idempotent_postgres_error(exc):
+                    return
+            except Exception:
+                pass
+            from game.db import is_integrity_error
+
+            if is_integrity_error(exc):
+                return
+            raise
+
+    if not column_exists(conn, "planets", "player_id"):
+        _exec_optional("ALTER TABLE planets ADD COLUMN player_id INTEGER;")
 
     if not column_exists(conn, "planets", "is_homeworld"):
-        try:
-            cur.execute("ALTER TABLE planets ADD COLUMN is_homeworld INTEGER NOT NULL DEFAULT 0;")
-        except sqlite3.OperationalError:
-            pass
+        _exec_optional(
+            "ALTER TABLE planets ADD COLUMN is_homeworld INTEGER NOT NULL DEFAULT 0;"
+        )
 
     if column_exists(conn, "planets", "player_id"):
         cur.execute("UPDATE planets SET player_id = 1 WHERE player_id IS NULL;")
@@ -135,13 +160,104 @@ def harden_planets_schema(conn: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_planets_player_homeworld ON planets(player_id, is_homeworld);",
         "CREATE INDEX IF NOT EXISTS idx_planets_player ON planets(player_id, is_homeworld);",
     ):
+        _exec_optional(idx_sql)
+
+
+def _recover_postgres_transaction(conn) -> None:
+    """Clear an aborted Postgres transaction so later seed steps can run."""
+    from game.db import recover_aborted_transaction
+
+    recover_aborted_transaction(conn)
+
+
+def _pg_init_progress(msg: str) -> None:
+    import os
+
+    if os.environ.get("GC_PG_INIT_PROGRESS", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    ):
+        print(f"[init_db_pg] {msg}", flush=True)
+
+
+def _init_db_postgres() -> None:
+    """
+    Postgres schema is owned by migrate.py + schema_bootstrap.
+    init_db only seeds defaults on an already-migrated database.
+    """
+    _pg_init_progress("pool checkout …")
+    conn = db()
+    try:
+        from game.schema_bootstrap import bootstrap_core_schema, core_schema_ready
+
+        _pg_init_progress("core_schema_ready …")
+        if not core_schema_ready(conn):
+            _pg_init_progress("bootstrap_core_schema …")
+            bootstrap_core_schema(conn)
+
+        from game.schema_bootstrap import ensure_postgres_i64_columns
+
+        _pg_init_progress("ensure_postgres_i64_columns …")
+        ensure_postgres_i64_columns(conn)
+        commit(conn)
+
+        _recover_postgres_transaction(conn)
+        _pg_init_progress("create_default_admin …")
+        create_default_admin(conn)
+
+        _recover_postgres_transaction(conn)
         try:
-            cur.execute(idx_sql)
-        except sqlite3.OperationalError:
-            pass
+            _pg_init_progress("create_default_player_and_homeworld …")
+            create_default_player_and_homeworld(conn)
+            commit(conn)
+        except Exception:
+            rollback(conn)
+            raise
+
+        _recover_postgres_transaction(conn)
+        try:
+            from .ranking import backfill_player_score_rows
+
+            _pg_init_progress("backfill_player_score_rows …")
+            backfill_player_score_rows(conn=conn)
+            commit(conn)
+        except Exception:
+            rollback(conn)
+            raise
+
+        _recover_postgres_transaction(conn)
+        try:
+            _pg_init_progress("seed game_settings …")
+            for key, val in DEFAULT_GAME_SETTINGS.items():
+                conn.execute(
+                    """
+                    INSERT INTO game_settings (key, value)
+                    VALUES (?, ?)
+                    ON CONFLICT (key) DO NOTHING;
+                    """,
+                    (key, str(val)),
+                )
+            commit(conn)
+        except Exception:
+            rollback(conn)
+            raise
+        _pg_init_progress("done")
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
 
 
 def init_db() -> None:
+    from game.db import get_db_backend
+
+    if get_db_backend() == "postgres":
+        _init_db_postgres()
+        return
+
     conn = db()
     cur = conn.cursor()
 
@@ -655,11 +771,12 @@ def create_user(username: str, password: str, is_admin: int = 0, email: str | No
         commit(conn)
         return True, None, {"id": user_id, "username": uname, "is_admin": bool(is_admin)}
 
-    except sqlite3.IntegrityError:
-        rollback(conn)
-        return False, "Benutzername ist bereits vergeben.", None
     except Exception as e:
         rollback(conn)
+        from game.db import is_integrity_error
+
+        if is_integrity_error(e):
+            return False, "Benutzername ist bereits vergeben.", None
         return False, str(e), None
     finally:
         cur.close()
@@ -798,7 +915,8 @@ def ensure_player_and_homeworld(
             start_crystal = float(DEFAULT_GAME_SETTINGS["start_crystal"])
             start_fuel_cells = float(DEFAULT_GAME_SETTINGS.get("start_fuel_cells", 500))
             try:
-                settings = get_game_settings()
+                # Reuse caller conn — nested db() checkout can deadlock the PG pool.
+                settings = get_game_settings(conn)
                 start_metal = float(settings.get("start_metal", start_metal))
                 start_crystal = float(settings.get("start_crystal", start_crystal))
                 start_fuel_cells = float(settings.get("start_fuel_cells", start_fuel_cells))
@@ -823,13 +941,15 @@ def ensure_player_and_homeworld(
                     is_homeworld=True,
                 )
                 try:
-                    settings = get_game_settings()
+                    settings = get_game_settings(conn)
                     salt = settings.get("planet_evolution_server_salt", "genesis_colonies_v1")
                 except Exception:
                     salt = "genesis_colonies_v1"
                 dna_seed = _stable_seed(galaxy, system or 0, position or 0, salt)
                 has_class_col = column_exists(conn, "planets", "planet_class")
                 has_seed_col = column_exists(conn, "planets", "dna_seed")
+                sp = f"hw_ins_{_attempt}"
+                cur.execute(f"SAVEPOINT {sp}")
                 try:
                     if has_class_col and has_seed_col:
                         cur.execute(
@@ -875,25 +995,37 @@ def ensure_player_and_homeworld(
                                 int(position),
                             ),
                         )
+                    cur.execute(f"RELEASE SAVEPOINT {sp}")
                     pid = cur.lastrowid
                     break
-                except sqlite3.IntegrityError:
-                    if _attempt >= 4:
-                        raise
-                    continue
+                except Exception as insert_exc:
+                    try:
+                        cur.execute(f"ROLLBACK TO SAVEPOINT {sp}")
+                    except Exception:
+                        pass
+                    from game.db import is_integrity_error
+
+                    if is_integrity_error(insert_exc) and _attempt < 4:
+                        continue
+                    raise
             if pid is None:
                 raise RuntimeError("homeworld_insert_failed")
 
             cur.execute("INSERT INTO planet_buildings (planet_id) VALUES (?);", (int(pid),))
 
+            cur.execute("SAVEPOINT pe_boot")
             try:
                 from game.planet_evolution.bootstrap import ensure_planet_evolution
                 from game.planet_evolution.repository import evolution_schema_ready
 
                 if evolution_schema_ready(conn):
                     ensure_planet_evolution(int(pid), conn)
+                cur.execute("RELEASE SAVEPOINT pe_boot")
             except Exception:
-                pass
+                try:
+                    cur.execute("ROLLBACK TO SAVEPOINT pe_boot")
+                except Exception:
+                    pass
 
         if own_conn:
             commit(conn)

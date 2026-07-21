@@ -29,7 +29,8 @@ Actions use `_player_context_for_action()` (read-only DB) then **one** `refresh_
 - Shell HUD on diet polls: `planet_limit`, `planets[]` (switcher), `active_planet` (+ `sidebar_nav`); no `research.techs[]`
 - No `overview.status` (shipyard/fleet activity queries skipped)
 - Inbox unread count read-only (`prepare=False`)
-- Resource persist writes throttled (≥120 s since last planet update)
+- Resource persist writes throttled (`GC_RESOURCE_PERSIST_SEC`, default ≥600 s since last planet update; GC-PERF-RES-001)
+- Diet payload includes `poll_version` (HUD fingerprint); optional `?since=<poll_version>` returns `{unchanged:true}` when fingerprint matches (GC-PERF-STATE-002). Distinct from `state_version` (server clock, GC-557C).
 
 Full panel payload is returned on **page load** and after **POST actions** (build, trade, fleet, …).
 

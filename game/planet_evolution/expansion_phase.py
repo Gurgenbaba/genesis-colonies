@@ -9,7 +9,7 @@ import json
 import sqlite3
 from typing import Any, Dict, List, Mapping, Optional
 
-from ..db import table_exists
+from ..db import column_exists, table_exists
 from ..fleet_defs import ACTIVE_FLEET_STATUSES
 from ..models import get_planet_buildings
 from .expansion_gates import EXPANSION_SITES
@@ -175,8 +175,7 @@ def _get_planet_by_world_key(
         return None
     if not table_exists(conn, "planets"):
         return None
-    cols = {str(row[1]) for row in conn.execute("PRAGMA table_info(planets);").fetchall()}
-    if "world_key" not in cols:
+    if not column_exists(conn, "planets", "world_key"):
         return None
     row = conn.execute(
         """
