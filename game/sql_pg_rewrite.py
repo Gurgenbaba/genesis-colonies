@@ -110,6 +110,144 @@ def is_pragma_statement(sql: str) -> bool:
     return strip_leading_sql_comments(sql).upper().startswith("PRAGMA")
 
 
+def _find_matching_paren(text: str, open_idx: int) -> int:
+    """Index of ')' matching text[open_idx] == '('; -1 if unbalanced."""
+    depth = 0
+    in_single = in_double = False
+    i = open_idx
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if in_single:
+            if ch == "'":
+                if i + 1 < n and text[i + 1] == "'":
+                    i += 2
+                    continue
+                in_single = False
+            i += 1
+            continue
+        if in_double:
+            if ch == '"':
+                if i + 1 < n and text[i + 1] == '"':
+                    i += 2
+                    continue
+                in_double = False
+            i += 1
+            continue
+        if ch == "'":
+            in_single = True
+            i += 1
+            continue
+        if ch == '"':
+            in_double = True
+            i += 1
+            continue
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return -1
+
+
+def _args_have_top_level_comma(args: str) -> bool:
+    depth = 0
+    in_single = in_double = False
+    i = 0
+    n = len(args)
+    while i < n:
+        ch = args[i]
+        if in_single:
+            if ch == "'":
+                if i + 1 < n and args[i + 1] == "'":
+                    i += 2
+                    continue
+                in_single = False
+            i += 1
+            continue
+        if in_double:
+            if ch == '"':
+                if i + 1 < n and args[i + 1] == '"':
+                    i += 2
+                    continue
+                in_double = False
+            i += 1
+            continue
+        if ch == "'":
+            in_single = True
+        elif ch == '"':
+            in_double = True
+        elif ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            return True
+        i += 1
+    return False
+
+
+def rewrite_sqlite_scalar_minmax(sql: str) -> str:
+    """
+    SQLite scalar ``MAX(a, b, …)`` / ``MIN(a, b, …)`` → Postgres ``GREATEST`` / ``LEAST``.
+
+    Leaves single-arg aggregates alone (``MAX(score)``, ``MIN(created_at)``).
+    """
+    text = str(sql or "")
+    if not text:
+        return text
+    out: list[str] = []
+    i = 0
+    n = len(text)
+    upper = text.upper()
+    while i < n:
+        # Match MAX( or MIN( as whole words
+        matched = None
+        if upper.startswith("MAX", i) and (i == 0 or not (upper[i - 1].isalnum() or upper[i - 1] == "_")):
+            j = i + 3
+            while j < n and text[j].isspace():
+                j += 1
+            if j < n and text[j] == "(":
+                matched = ("MAX", "GREATEST", j)
+        elif upper.startswith("MIN", i) and (i == 0 or not (upper[i - 1].isalnum() or upper[i - 1] == "_")):
+            j = i + 3
+            while j < n and text[j].isspace():
+                j += 1
+            if j < n and text[j] == "(":
+                matched = ("MIN", "LEAST", j)
+        if matched is None:
+            out.append(text[i])
+            i += 1
+            continue
+        _old, replacement, open_idx = matched
+        close_idx = _find_matching_paren(text, open_idx)
+        if close_idx < 0:
+            out.append(text[i])
+            i += 1
+            continue
+        args = text[open_idx + 1 : close_idx]
+        if _args_have_top_level_comma(args):
+            args_rw = rewrite_sqlite_scalar_minmax(args)
+            out.append(replacement)
+            out.append("(")
+            out.append(args_rw)
+            out.append(")")
+            i = close_idx + 1
+        else:
+            # Aggregate / single-arg — keep name, continue scanning inside args
+            out.append(text[i : open_idx + 1])
+            i = open_idx + 1
+    return "".join(out)
+
+
+def has_sqlite_scalar_minmax(sql: str) -> bool:
+    """True when SQL contains multi-arg SQLite MAX/MIN that Postgres rejects."""
+    rewritten = rewrite_sqlite_scalar_minmax(sql)
+    return rewritten != str(sql or "")
+
+
 def rewrite_sqlite_statement(stmt: str) -> str:
     """Rewrite one SQLite statement for PostgreSQL. Empty string = skip (e.g. PRAGMA)."""
     text = str(stmt or "").strip()
@@ -122,6 +260,9 @@ def rewrite_sqlite_statement(stmt: str) -> str:
     body = strip_leading_sql_comments(text)
     if not body:
         return ""
+
+    # SQLite scalar MAX(a,b)/MIN(a,b) → GREATEST/LEAST (before other transforms)
+    body = rewrite_sqlite_scalar_minmax(body)
 
     body = re.sub(
         r"\bBEGIN\s+(IMMEDIATE|EXCLUSIVE|DEFERRED)\b",

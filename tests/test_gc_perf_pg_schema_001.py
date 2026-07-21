@@ -10,6 +10,7 @@ Live migrate (optional):
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -22,6 +23,30 @@ def test_ticket_doc_exists():
     core = (ROOT / "docs" / "GC_PERF_CORE.md").read_text(encoding="utf-8")
     assert "Core Foundation abgeschlossen" in core
     assert "GC-PERF-PG-SCHEMA-001" in core
+
+
+def test_rewrite_scalar_max_min_to_greatest_least():
+    from game.sql_pg_rewrite import rewrite_sqlite_statement
+
+    out = rewrite_sqlite_statement(
+        "UPDATE planets SET metal = MAX(0, ?), crystal = MAX(0, crystal + ?) WHERE id = ?;"
+    )
+    assert "GREATEST(0, ?)" in out
+    assert "GREATEST(0, crystal + ?)" in out
+    assert "MAX(0" not in out.upper().replace("GREATEST", "")
+
+    nested = rewrite_sqlite_statement(
+        "UPDATE planets SET metal = MIN(?, MAX(0, metal + ?)) WHERE id = ?;"
+    )
+    assert "LEAST" in nested.upper()
+    assert "GREATEST" in nested.upper()
+    assert re.search(r"\bMAX\s*\(", nested, re.I) is None
+    assert re.search(r"\bMIN\s*\(", nested, re.I) is None
+
+    # Aggregate single-arg MAX must stay
+    agg = rewrite_sqlite_statement("SELECT COALESCE(MAX(score_total), 0) AS top FROM player_scores;")
+    assert "MAX(score_total)" in agg
+    assert "GREATEST" not in agg.upper()
 
 
 def test_rewrite_skips_pragma():

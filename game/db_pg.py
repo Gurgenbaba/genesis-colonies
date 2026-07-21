@@ -31,6 +31,11 @@ def _needs_sqlite_dialect_rewrite(sql: str) -> bool:
         return True
     if "STRFTIME" in upper:
         return True
+    # SQLite scalar MAX(a,b) / MIN(a,b) — Postgres only has aggregate MAX/MIN
+    from game.sql_pg_rewrite import has_sqlite_scalar_minmax
+
+    if has_sqlite_scalar_minmax(sql):
+        return True
     return False
 
 

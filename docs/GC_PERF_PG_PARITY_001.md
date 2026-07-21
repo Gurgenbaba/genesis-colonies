@@ -1,10 +1,11 @@
 # GC-PERF-PG-PARITY-001 — Backend-Parität auf leerer PostgreSQL-DB
 
-> Status: 🔄 Block A SQLite grün · Block B gestartet · PG-Live separat  
+> Status: ✅ Block A/B SQLite + PG Staging grün · C–F offen  
 > Epic: EPIC-19 Performance Core · [GC_PERF_CORE.md](GC_PERF_CORE.md)  
 > Vorbedingung: ✅ [GC-PERF-PG-SCHEMA-001](GC_PERF_PG_SCHEMA_001.md)  
 > **Kein Livedaten-Import · kein Production-Cutover · kein produktiver Worker gegen Postgres.**  
-> **Lokal Default bleibt SQLite (`game/game.db`) — Postgres nur in eigener Shell mit `GC_TEST_POSTGRES_URL`.**
+> **Lokal Default bleibt SQLite (`game/game.db`). Kein lokales Docker-Postgres.**  
+> **Postgres-Parität nur in eigener Shell mit `GC_TEST_POSTGRES_URL` (Railway Staging).**
 
 ---
 
@@ -18,8 +19,8 @@ Schema-Port ist grün, aber Verhaltensparität (Auth, Queues, Fleet, …) zwisch
 
 | Block | Domäne | Status |
 |-------|--------|--------|
-| **A** | Auth + Bootstrap + Homeworld | ✅ SQLite · 🔄 PG (eigene Session) |
-| **B** | Economy + Planet Scope | 🔄 SQLite-Tests · PG parallel |
+| **A** | Auth + Bootstrap + Homeworld | ✅ SQLite + PG |
+| **B** | Economy + Planet Scope | ✅ SQLite + PG |
 | **C** | Unit Queues (Build/Research/Shipyard/Defense) | 📋 |
 | **D** | Fleet + Combat | 📋 |
 | **E** | Evolution + Meta | 📋 |
@@ -83,16 +84,21 @@ python -m pytest tests/test_gc_perf_pg_parity_001.py -v -s
 - [x] Default-Reuse-Fixture für bereits migrierte Staging-DB (kein Hang am Full-Migrate)
 - [x] Default-Admin + Homeworld nach `init_db`
 - [x] `create_user` → Player + Homeworld + Score-Row
+- [x] `users.id == players.id`
+- [x] `active_planet_id` auf eigenen Homeworld gesetzt (Owner: `ensure_player_and_homeworld`)
+- [x] Default-Gebäude = 0, Start-Ressourcen = `DEFAULT_GAME_SETTINGS`
+- [x] `game_settings` Keys/Werte = SQLite-Defaults
+- [x] `init_db` erneut → keine Duplikate (Users/Planets/Settings)
 - [x] Duplicate-Username → klarer Fehler (PG UniqueViolation)
 - [x] Passwort-Hash Verify Roundtrip
 - [x] `dna_seed` speicherbar (BIGINT)
 - [x] SQLite-Parity-Test grün (`test_parity_a_auth_bootstrap_sqlite`)
-- [ ] PG-Parity-Test grün in separater Session (`test_parity_a_auth_bootstrap_postgres`)
+- [x] PG-Parity-Test grün (`test_parity_a_auth_bootstrap_postgres`)
 
 ### Block B
 
-- [x] SQLite: Ressourcen-Tick + Context-Planet (`test_parity_b_economy_scope_sqlite`)
-- [ ] PG: derselbe Test in separater Session
+- [x] SQLite: Ressourcen-Tick + Context-Planet + `active_planet_id` (`test_parity_b_economy_scope_sqlite`)
+- [x] PG: derselbe Test (`test_parity_b_economy_scope_postgres`) — Scalar-`MAX`→`GREATEST` im Dialekt-Owner
 - [ ] aktive Kolonie wechseln (HTTP)
 - [ ] Poll ohne Writes bei Unverändert
 
@@ -102,8 +108,8 @@ python -m pytest tests/test_gc_perf_pg_parity_001.py -v -s
 
 | Domäne     | SQLite | PostgreSQL | Abweichung |
 | ---------- | -----: | ---------: | ---------- |
-| Auth (A)   |   grün |    pending | TX/PRAGMA-Härtung lokal; PG-Session offen |
-| Economy (B)|   grün |    pending | Scope/Resources SQLite-Test |
+| Auth (A)   |   grün |       grün | — |
+| Economy (B)|   grün |       grün | Scalar `MAX`→`GREATEST` |
 | Buildings  |    —   |        —   | Block C    |
 | Research   |    —   |        —   | Block C    |
 | Shipyard   |    —   |        —   | Block C    |

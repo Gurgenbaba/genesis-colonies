@@ -1054,6 +1054,43 @@ def ensure_player_and_homeworld(
                 except Exception:
                     pass
 
+            # Persist context planet at create time (get_active_planet_id also falls back).
+            from game.planet_evolution.repository import set_active_planet_id
+
+            set_active_planet_id(int(player_id), int(pid), conn)
+        else:
+            # Idempotent heal: set active_planet_id when NULL or pointing at a non-owned row.
+            # Do not overwrite a valid colony switch.
+            if column_exists(conn, "players", "active_planet_id"):
+                from game.planet_evolution.repository import set_active_planet_id
+
+                cur.execute(
+                    """
+                    SELECT id FROM planets
+                    WHERE player_id = ? AND is_homeworld = 1
+                    ORDER BY id ASC LIMIT 1;
+                    """,
+                    (int(player_id),),
+                )
+                hw_row = cur.fetchone()
+                if hw_row is not None:
+                    hw_id = int(hw_row["id"] if isinstance(hw_row, dict) else hw_row[0])
+                    cur.execute(
+                        "SELECT active_planet_id FROM players WHERE id = ? LIMIT 1;",
+                        (int(player_id),),
+                    )
+                    ap_row = cur.fetchone()
+                    ap = ap_row["active_planet_id"] if ap_row else None
+                    if ap is None:
+                        set_active_planet_id(int(player_id), hw_id, conn)
+                    else:
+                        cur.execute(
+                            "SELECT id FROM planets WHERE id = ? AND player_id = ? LIMIT 1;",
+                            (int(ap), int(player_id)),
+                        )
+                        if not cur.fetchone():
+                            set_active_planet_id(int(player_id), hw_id, conn)
+
         if own_conn:
             commit(conn)
 

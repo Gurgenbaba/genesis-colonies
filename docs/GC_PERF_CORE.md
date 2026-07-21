@@ -65,7 +65,7 @@ Schema-Port
 | Ticket | Inhalt | Status |
 |--------|--------|--------|
 | **[GC-PERF-PG-SCHEMA-001](GC_PERF_PG_SCHEMA_001.md)** | PostgreSQL-Schema & Migration Parity | ✅ |
-| **[GC-PERF-PG-PARITY-001](GC_PERF_PG_PARITY_001.md)** | Backend-Parität auf leerer PG-DB (kritische Systeme) | 🔄 A/B |
+| **[GC-PERF-PG-PARITY-001](GC_PERF_PG_PARITY_001.md)** | Backend-Parität auf leerer PG-DB (kritische Systeme) | ✅ A/B · 📋 C–F |
 | **GC-PERF-PG-MIGRATE-001** | SQLite→Postgres Importer + Invarianten | 📋 |
 | **GC-PERF-PG-STAGING-001** | Railway Staging + Worker + Smoke | 📋 |
 | **GC-PERF-PG-BASELINE-001** | SQLite vs PG Staging Metriken | 📋 |

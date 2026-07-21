@@ -1,6 +1,8 @@
 """
 GC-PERF-PG-PARITY-001 — PostgreSQL test database owner.
 
+No local Docker. Postgres parity uses a remote staging URL only.
+
 Default (fast, Railway-friendly):
   Reuse ``GC_TEST_POSTGRES_URL`` (already migrated staging DB), wipe a small
   set of game tables between tests. Do not run parallel parity suites against
