@@ -788,3 +788,20 @@ def test_distribute_uses_all_free_slots_no_mass_expo_reserve(logistics_db):
     assert started == min(len(targets), free)
     assert started > max(0, free - MASS_EXPEDITION_SLOT_RESERVE)
     conn.close()
+
+
+def test_logistics_slots_capped_status_uses_tf_for_repeated_placeholders():
+    """Locale repeats launching; String.replace only fills the first occurrence."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    js = (root / "static" / "main.js").read_text(encoding="utf-8")
+    de = json.loads((root / "locales" / "de.json").read_text(encoding="utf-8"))
+    en = json.loads((root / "locales" / "en.json").read_text(encoding="utf-8"))
+    for loc in (de, en):
+        tpl = loc["logistics_preview_slots_capped"]
+        assert tpl.count("%(launching)s") >= 2
+        assert "%(selected)s" in tpl and "%(skipped)s" in tpl
+    idx = js.index("logistics_preview_slots_capped")
+    chunk = js[idx - 80 : idx + 280]
+    assert "tf(" in chunk
+    assert '.replace("%(launching)s"' not in chunk

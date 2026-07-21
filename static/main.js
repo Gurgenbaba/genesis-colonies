@@ -20647,10 +20647,16 @@
       const skipped = parseInt(preview.targets_skipped || "0", 10) || 0;
       if (canLaunch) {
         if (skipped > 0) {
-          statusEl.textContent = tt("logistics_preview_slots_capped", "")
-            .replace("%(launching)s", String(preview.targets_launching || (preview.legs || []).length))
-            .replace("%(selected)s", String(preview.targets_selected || 0))
-            .replace("%(skipped)s", String(skipped));
+          const launching = preview.targets_launching || (preview.legs || []).length;
+          statusEl.textContent = tf(
+            "logistics_preview_slots_capped",
+            {
+              launching,
+              selected: preview.targets_selected || 0,
+              skipped,
+            },
+            "Ready: %(launching)s of %(selected)s colonies — using all %(launching)s free slots (%(skipped)s waiting)."
+          );
         } else {
           statusEl.textContent = tt("logistics_preview_ready");
         }
