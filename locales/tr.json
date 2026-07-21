@@ -5824,5 +5824,8 @@
   "admin_http_404_json": "HTTP 404 — rota yok (sunucuyu yeniden baslat / hard reload).",
   "logistics_select_all": "Tümünü seç",
   "logistics_select_none": "Hiçbiri",
-  "logistics_auto_cargo_hint": "Hub’daki boş kargo gemileri otomatik seçilir. Kapasite yetmezse filolar yine de kalkar ve sığabildiği kadar taşır."
+  "logistics_auto_cargo_hint": "Hub’daki boş kargo gemileri otomatik seçilir. Kapasite yetmezse filolar yine de kalkar ve sığabildiği kadar taşır.",
+  "combat_sim_warning_iterations_clamped": "Çok büyük filo: simülasyonun yanıt vermesi için yineleme sayısı sınırlandı.",
+  "combat_simulator_timeout": "Simülasyon iptal edildi — filo çok büyük veya sunucu meşgul.",
+  "combat_simulator_run_failed": "Simülasyon başarısız."
 }

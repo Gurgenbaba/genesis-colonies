@@ -5824,5 +5824,8 @@
   "admin_http_404_json": "HTTP 404 — ruta ausente (reinicia el servidor / hard reload).",
   "logistics_select_all": "Seleccionar todo",
   "logistics_select_none": "Ninguno",
-  "logistics_auto_cargo_hint": "Los cargueros libres del hub se eligen automáticamente. Si no hay capacidad suficiente, las flotas salen igual y llevan lo que puedan."
+  "logistics_auto_cargo_hint": "Los cargueros libres del hub se eligen automáticamente. Si no hay capacidad suficiente, las flotas salen igual y llevan lo que puedan.",
+  "combat_sim_warning_iterations_clamped": "Flota muy grande: se limitaron las iteraciones para que la simulación responda.",
+  "combat_simulator_timeout": "Simulación cancelada: flota demasiado grande o servidor ocupado.",
+  "combat_simulator_run_failed": "La simulación falló."
 }

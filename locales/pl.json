@@ -5824,5 +5824,8 @@
   "admin_http_404_json": "HTTP 404 — brak trasy (zrestartuj serwer / hard reload).",
   "logistics_select_all": "Zaznacz wszystkie",
   "logistics_select_none": "Odznacz",
-  "logistics_auto_cargo_hint": "Wolne frachtowce na hubie są wybierane automatycznie. Przy braku pojemności floty i tak startują z tym, co się zmieści."
+  "logistics_auto_cargo_hint": "Wolne frachtowce na hubie są wybierane automatycznie. Przy braku pojemności floty i tak startują z tym, co się zmieści.",
+  "combat_sim_warning_iterations_clamped": "Bardzo duża flota: ograniczono liczbę iteracji, by symulacja mogła odpowiedzieć.",
+  "combat_simulator_timeout": "Symulacja przerwana — flota zbyt duża lub serwer przeciążony.",
+  "combat_simulator_run_failed": "Symulacja nie powiodła się."
 }

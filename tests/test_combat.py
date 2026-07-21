@@ -778,3 +778,37 @@ def test_balance_ironclad_clears_defense_faster_than_raptor():
     assert sum(iron_losses) < sum(falcon_losses)
     assert iron_def_kills > 0
 
+
+def test_mega_fleet_battle_completes_quickly():
+    """Million-scale stacks must use aggregate path and finish in wall-clock budget."""
+    attacker = make_combat_side(
+        "attacker",
+        [
+            _stack("falcon_interceptor", 1_000_000),
+            _stack("ironclad_frigate", 500_000),
+            _stack("atlas_hauler", 1_000_000),
+        ],
+    )
+    defender = make_combat_side(
+        "defender",
+        [
+            _stack("ion_bastion", 2_000_000, unit_type=COMBAT_UNIT_DEFENSE),
+            _stack("flak_array", 500_000, unit_type=COMBAT_UNIT_DEFENSE),
+            _stack("sentinel_turret", 50_000, unit_type=COMBAT_UNIT_DEFENSE),
+        ],
+    )
+    t0 = time.perf_counter()
+    result = simulate_battle(attacker, defender, rng=_rng(99))
+    elapsed = time.perf_counter() - t0
+    assert result.winner in (WINNER_ATTACKER, WINNER_DEFENDER, WINNER_DRAW)
+    assert elapsed < 2.5, f"mega fleet battle too slow: {elapsed:.3f}s"
+
+
+def test_exact_path_unchanged_for_small_seeded_battle():
+    """Regression: small fleets stay on exact per-hull path and stay deterministic."""
+    attacker = make_combat_side("attacker", [_stack("falcon_interceptor", 120)])
+    defender = make_combat_side("defender", [_stack("ironclad_frigate", 40)])
+    a = simulate_battle(attacker, defender, rng=_rng(4242))
+    b = simulate_battle(attacker, defender, rng=_rng(4242))
+    assert a == b
+

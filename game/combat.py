@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import random
 import time
 from dataclasses import dataclass
@@ -24,6 +25,9 @@ WINNER_DRAW = "draw"
 
 DEFAULT_MAX_ROUNDS = 6
 _MAX_RF_CHAIN = 64
+# Below this per-stack firer count, keep exact per-hull shots (existing tests / small fleets).
+# Above: aggregate Monte-Carlo path — same RF rules, O(stacks + kills) instead of O(hulls).
+_EXACT_SHOT_THRESHOLD = 8_000
 
 
 @dataclass
@@ -326,6 +330,210 @@ def _fire_ship_shots(
             break
 
 
+def _binomial(rng: random.Random, n: int, p: float) -> int:
+    """Binomial(n, p) sample. Normal approx for large n to stay O(1)."""
+    nn = max(0, int(n))
+    if nn <= 0:
+        return 0
+    pp = float(p)
+    if pp <= 0.0:
+        return 0
+    if pp >= 1.0:
+        return nn
+    if nn <= 64:
+        return sum(1 for _ in range(nn) if rng.random() < pp)
+    mean = nn * pp
+    var = nn * pp * (1.0 - pp)
+    if var <= 0.0:
+        return int(round(mean))
+    sample = rng.gauss(mean, math.sqrt(var))
+    return max(0, min(nn, int(sample + 0.5)))
+
+
+def _multinomial(rng: random.Random, n: int, weights: Sequence[int]) -> List[int]:
+    """Distribute n indistinguishable trials across weighted bins."""
+    bins = len(weights)
+    if bins <= 0:
+        return []
+    remaining = max(0, int(n))
+    if remaining <= 0:
+        return [0] * bins
+    total_w = sum(max(0, int(w)) for w in weights)
+    if total_w <= 0:
+        out = [0] * bins
+        out[-1] = remaining
+        return out
+    out: List[int] = []
+    left_w = total_w
+    for i, raw_w in enumerate(weights):
+        if i == bins - 1:
+            out.append(remaining)
+            break
+        w = max(0, int(raw_w))
+        if remaining <= 0 or left_w <= 0 or w <= 0:
+            out.append(0)
+            left_w -= w
+            continue
+        k = _binomial(rng, remaining, w / left_w)
+        out.append(k)
+        remaining -= k
+        left_w -= w
+    return out
+
+
+def _geometric_shot_count(rng: random.Random, ships: int, bonus_chance: float) -> int:
+    """
+    Total shots from ``ships`` firers with rapid-fire bonus chance ``bonus_chance``.
+    Same rule as ``_fire_ship_shots``: first shot always, then keep going with p until fail/cap.
+    """
+    rem = max(0, int(ships))
+    if rem <= 0:
+        return 0
+    p = float(bonus_chance)
+    total = 0
+    for _ in range(_MAX_RF_CHAIN):
+        total += rem
+        if rem <= 0 or p <= 0.0:
+            break
+        rem = _binomial(rng, rem, p)
+    return total
+
+
+def _shots_to_finish_hp(shield: int, hull: int, damage_per_shot: int) -> int:
+    """How many identical shots destroy a unit starting at the given shield/hull."""
+    s = max(0, int(shield))
+    h = max(0, int(hull))
+    dmg = max(0, int(damage_per_shot))
+    if dmg <= 0:
+        return 10**18
+    if s <= 0 and h <= 0:
+        return 0
+    shots = 0
+    # Hard cap: pathological tiny damage vs huge hull still terminates via bulk math below.
+    while h > 0 and shots < 1_000_000:
+        rem = dmg
+        if s > 0:
+            absorbed = min(s, rem)
+            s -= absorbed
+            rem -= absorbed
+        if rem > 0:
+            h -= rem
+        shots += 1
+    return shots
+
+
+def _apply_shots_bulk(
+    unit: _UnitState,
+    shots: int,
+    damage_per_shot: int,
+    *,
+    mods: CombatModifiers,
+) -> None:
+    """Apply ``shots`` identical hits to a stack; O(destroyed units), not O(shots)."""
+    remaining_shots = max(0, int(shots))
+    dmg = max(0, int(damage_per_shot))
+    if remaining_shots <= 0 or dmg <= 0 or unit.amount <= 0:
+        return
+
+    full_shield = _effective_shield(unit.stats, mods)
+    full_hull = _effective_hull(unit.stats, mods)
+    if full_hull <= 0 and full_shield <= 0:
+        return
+
+    shots_per_fresh = _shots_to_finish_hp(full_shield, full_hull, dmg)
+    if shots_per_fresh <= 0:
+        unit.amount = 0
+        unit.current_shield = 0
+        unit.current_hull = 0
+        return
+
+    while remaining_shots > 0 and unit.amount > 0:
+        shots_to_kill_lead = _shots_to_finish_hp(unit.current_shield, unit.current_hull, dmg)
+        if shots_to_kill_lead <= 0:
+            unit.amount -= 1
+            if unit.amount > 0:
+                unit.current_shield = full_shield
+                unit.current_hull = full_hull
+            else:
+                unit.current_shield = 0
+                unit.current_hull = 0
+            continue
+
+        if remaining_shots < shots_to_kill_lead:
+            # Partial damage on lead — apply shot-by-shot for shield/hull fidelity.
+            for _ in range(remaining_shots):
+                _apply_damage_to_lead(unit, dmg, mods=mods)
+            return
+
+        remaining_shots -= shots_to_kill_lead
+        unit.amount -= 1
+        if unit.amount <= 0:
+            unit.current_shield = 0
+            unit.current_hull = 0
+            return
+        unit.current_shield = full_shield
+        unit.current_hull = full_hull
+
+        if remaining_shots >= shots_per_fresh:
+            kills = min(unit.amount, remaining_shots // shots_per_fresh)
+            if kills > 0:
+                unit.amount -= kills
+                remaining_shots -= kills * shots_per_fresh
+                if unit.amount > 0:
+                    unit.current_shield = full_shield
+                    unit.current_hull = full_hull
+                else:
+                    unit.current_shield = 0
+                    unit.current_hull = 0
+                    return
+
+
+def _fire_stack_aggregate(
+    attacker: _UnitState,
+    defenders: List[_UnitState],
+    *,
+    attacker_mods: CombatModifiers,
+    defender_mods: CombatModifiers,
+    rng: random.Random,
+) -> None:
+    """
+    Large-stack shooting: same RF first-target rule, but batch shot counts and HP apply.
+    Used only when firer amount exceeds ``_EXACT_SHOT_THRESHOLD``.
+    """
+    attack = _effective_attack(attacker.stats, attacker_mods)
+    ships = max(0, int(attacker.amount))
+    if attack <= 0 or ships <= 0:
+        return
+
+    live = [u for u in defenders if int(u.amount) > 0]
+    if not live:
+        return
+
+    weights = [max(0, int(u.amount)) for u in live]
+    first_picks = _multinomial(rng, ships, weights)
+
+    total_shots = 0
+    for target, n_ships in zip(live, first_picks):
+        if n_ships <= 0:
+            continue
+        mult = _rapid_fire_multiplier(attacker.stats, target)
+        bonus_chance = rapid_fire_bonus_shot_chance(mult)
+        total_shots += _geometric_shot_count(rng, n_ships, bonus_chance)
+
+    if total_shots <= 0:
+        return
+
+    # Each RF shot re-picks a target — redistribute the shot pool by current weights.
+    live = [u for u in defenders if int(u.amount) > 0]
+    if not live:
+        return
+    weights = [max(0, int(u.amount)) for u in live]
+    shot_dist = _multinomial(rng, total_shots, weights)
+    for target, n_shots in zip(live, shot_dist):
+        if n_shots > 0 and target.amount > 0:
+            _apply_shots_bulk(target, n_shots, attack, mods=defender_mods)
+
+
 def _shooting_phase(
     attackers: List[_UnitState],
     defenders: List[_UnitState],
@@ -338,10 +546,24 @@ def _shooting_phase(
     for unit in _sorted_live_units(attackers):
         if _effective_attack(unit.stats, attacker_mods) <= 0:
             continue
-        for _ in range(int(unit.amount)):
-            if _total_units(defenders) <= 0:
-                return
-            _fire_ship_shots(
+        amount = int(unit.amount)
+        if amount <= 0:
+            continue
+        if _total_units(defenders) <= 0:
+            return
+        if amount <= _EXACT_SHOT_THRESHOLD:
+            for _ in range(amount):
+                if _total_units(defenders) <= 0:
+                    return
+                _fire_ship_shots(
+                    unit,
+                    defenders,
+                    attacker_mods=attacker_mods,
+                    defender_mods=defender_mods,
+                    rng=rng,
+                )
+        else:
+            _fire_stack_aggregate(
                 unit,
                 defenders,
                 attacker_mods=attacker_mods,

@@ -5824,5 +5824,8 @@
   "admin_http_404_json": "HTTP 404 — Route fehlt (Server neu starten / Hard-Reload).",
   "logistics_select_all": "Alle markieren",
   "logistics_select_none": "Keine",
-  "logistics_auto_cargo_hint": "Freie Frachter auf dem Hub werden automatisch gewählt. Reicht die Kapazität nicht, startet trotzdem ein Teil der Flotten."
+  "logistics_auto_cargo_hint": "Freie Frachter auf dem Hub werden automatisch gewählt. Reicht die Kapazität nicht, startet trotzdem ein Teil der Flotten.",
+  "combat_sim_warning_iterations_clamped": "Sehr große Flotte: Iterationen begrenzt, damit die Simulation antwortet.",
+  "combat_simulator_timeout": "Simulation abgebrochen — Flotte zu groß oder Server überlastet.",
+  "combat_simulator_run_failed": "Simulation fehlgeschlagen."
 }

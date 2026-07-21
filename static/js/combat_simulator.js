@@ -858,16 +858,41 @@
         btn.disabled = true;
       });
       try {
-        const res = await GC.fetchGameAction("/api/combat-simulator/run", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
+        const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+        const timeoutId = controller
+          ? setTimeout(() => controller.abort(), 60000)
+          : null;
+        let res;
+        try {
+          res = await GC.fetchGameAction("/api/combat-simulator/run", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+            signal: controller ? controller.signal : undefined,
+          });
+        } finally {
+          if (timeoutId) clearTimeout(timeoutId);
+        }
         if (res && res.ok && res.result) {
           lastResult = res.result;
           renderSummary(res.result);
         } else if (GC.showFlash) {
-          GC.showFlash(res?.error || "Simulation failed", "error");
+          const errKey = res?.error;
+          const msg =
+            errKey && typeof GC.t === "function"
+              ? GC.t(errKey, errKey)
+              : res?.error || "Simulation failed";
+          GC.showFlash(msg, "error");
+        }
+      } catch (err) {
+        if (GC.showFlash) {
+          const aborted = err && (err.name === "AbortError" || String(err).includes("abort"));
+          GC.showFlash(
+            aborted
+              ? tr("combat_simulator_timeout", "Simulation abgebrochen — Flotte zu groß oder Server überlastet.")
+              : tr("combat_simulator_run_failed", "Simulation fehlgeschlagen."),
+            "error"
+          );
         }
       } finally {
         root.querySelectorAll("[data-sim-run]").forEach((btn) => {

@@ -1933,12 +1933,14 @@
   /** GC-835 — mutation fetches must not register with pageLifecycle (survive PJAX cleanup). */
   GC.fetchGameAction = async function fetchGameAction(url, options = {}) {
     const fetchOpts = { ...options };
+    const externalSignal = fetchOpts.signal;
     delete fetchOpts.signal;
     const route = String(url || "");
     const perfActive = isActionPerfDebug() && _actionPerfSession && _actionPerfSession.route === route;
     if (perfActive) markActionPerfFetchStart();
     const res = await fetch(url, {
       ...fetchOpts,
+      signal: externalSignal,
       credentials: fetchOpts.credentials || "same-origin",
       redirect: fetchOpts.redirect || "manual",
     });

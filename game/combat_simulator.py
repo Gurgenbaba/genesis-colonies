@@ -34,6 +34,10 @@ MAX_ITERATIONS = 500
 DEFAULT_PLAYER_ITERATIONS = 50
 DEFAULT_ADMIN_ITERATIONS = 300
 TECH_BONUS_PER_LEVEL = 0.05
+# Soft cap for Monte-Carlo when fleets are huge (aggregate combat is fast; still bound CPU).
+_MAX_MC_HULL_EVENTS = 2_000_000_000
+_MEGA_FLEET_HULLS = 250_000
+_MEGA_FLEET_MAX_ITERATIONS = 50
 
 
 @dataclass
@@ -390,6 +394,23 @@ def run_monte_carlo_simulation(
             out["field_errors"] = field_errors
         return out
 
+    hulls = (
+        sum(max(0, int(v)) for v in sim.attacker_ships.values())
+        + sum(max(0, int(v)) for v in sim.defender_ships.values())
+        + sum(max(0, int(v)) for v in sim.defender_defense.values())
+    )
+    # Bound worst-case CPU if someone asks for 500 iters of billion-scale fleets.
+    if hulls > 0:
+        # Six rounds × two sides ≈ 12 firing waves; keep product under budget.
+        budget_iters = max(1, int(_MAX_MC_HULL_EVENTS // max(1, hulls * 12)))
+        if budget_iters < sim.iterations:
+            sim.iterations = budget_iters
+            sim.warnings = list(sim.warnings) + ["iterations_clamped_for_fleet_size"]
+        # Mega fleets: keep Battle Lab responsive (~seconds, not minutes).
+        if hulls >= _MEGA_FLEET_HULLS and sim.iterations > _MEGA_FLEET_MAX_ITERATIONS:
+            sim.iterations = _MEGA_FLEET_MAX_ITERATIONS
+            sim.warnings = list(sim.warnings) + ["iterations_clamped_for_fleet_size"]
+
     base_seed = sim.seed if sim.seed is not None else random.randrange(1, 2_000_000_000)
     runs: List[Dict[str, Any]] = []
     for i in range(sim.iterations):
@@ -422,6 +443,7 @@ def run_monte_carlo_simulation(
             {
                 "mode": "monte_carlo",
                 "iterations": sim.iterations,
+                "iterations_requested": int(iterations),
                 "seed": base_seed,
                 "warnings": sorted(set(warnings)),
                 "ignored_keys": list(sim.ignored_keys),
@@ -538,6 +560,7 @@ WARNING_I18N_KEYS: Dict[str, str] = {
     "cannot_loot_all_resources": "combat_sim_warning_partial_loot",
     "draw_risk": "combat_sim_warning_draw_risk",
     "draw_outcome": "combat_sim_warning_draw_outcome",
+    "iterations_clamped_for_fleet_size": "combat_sim_warning_iterations_clamped",
 }
 
 UNSCANNED_FIELD_LABELS: Dict[str, str] = {

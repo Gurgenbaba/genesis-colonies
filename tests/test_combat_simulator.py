@@ -947,3 +947,31 @@ def test_css_dashboard_visual():
         ".gbl-why-chips",
     ):
         assert cls in css
+
+
+def test_mega_fleet_monte_carlo_clamps_and_finishes():
+    """Battle Lab must not hang on million-scale inputs."""
+    import time
+
+    payload = _baseline_payload(
+        attacker_ships={
+            "falcon_interceptor": 1_000_000,
+            "ironclad_frigate": 1_000_000,
+            "atlas_hauler": 1_000_000,
+        },
+        defender_ships={},
+        defender_defense={
+            "ion_bastion": 5_000_000,
+            "flak_array": 500_000,
+        },
+        iterations=300,
+        seed=7,
+        calculate_loot=False,
+    )
+    t0 = time.perf_counter()
+    out = run_monte_carlo_simulation(payload, user_id=1, iterations=300)
+    elapsed = time.perf_counter() - t0
+    assert out["ok"] is True
+    assert out["result"]["iterations"] <= 50
+    assert "iterations_clamped_for_fleet_size" in out["result"]["warnings"]
+    assert elapsed < 15.0, f"mega MC too slow: {elapsed:.3f}s"
