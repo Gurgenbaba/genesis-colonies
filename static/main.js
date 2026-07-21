@@ -20799,12 +20799,10 @@
   }
 
   function bindLogisticsOnce() {
-    if (_logisticsBound) return;
+    // Session-stable like bindFleetOnce — never reset on PJAX or document listeners multiply.
+    if (GC._logisticsEventsBound || _logisticsBound) return;
+    GC._logisticsEventsBound = true;
     _logisticsBound = true;
-
-    GC.registerCleanup(() => {
-      _logisticsBound = false;
-    });
 
     document.addEventListener("click", (e) => {
       const tabBtn = e.target.closest("[data-logistics-tab]");
@@ -21014,6 +21012,9 @@
     refreshLogisticsLiveState(page);
     GC.registerCleanup(() => {
       page._logisticsLivePending = false;
+      const prev = _logisticsPreviewTimers.get(page);
+      if (prev) clearTimeout(prev);
+      _logisticsPreviewTimers.delete(page);
     });
   }
 

@@ -37130,6 +37130,11 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
     overflow: hidden;
   }
 
+  /* Bottom nav must stay above the sheet backdrop (popover z ≈ 12k). */
+  body.gc-fleet-sheet-open .gc-bottom-nav{
+    z-index: calc(var(--gc-z-popover, 12050) + 5);
+  }
+
   .gc-fleet-sheet-backdrop{
     position: fixed;
     inset: 0;

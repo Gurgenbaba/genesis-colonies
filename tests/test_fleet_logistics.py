@@ -805,3 +805,17 @@ def test_logistics_slots_capped_status_uses_tf_for_repeated_placeholders():
     chunk = js[idx - 80 : idx + 280]
     assert "tf(" in chunk
     assert '.replace("%(launching)s"' not in chunk
+
+
+def test_logistics_bind_once_does_not_reset_on_cleanup():
+    """PJAX cleanup must not re-arm document listeners (nav lag / duplicate submits)."""
+    from pathlib import Path
+    js = (Path(__file__).resolve().parent.parent / "static" / "main.js").read_text(encoding="utf-8")
+    bind_idx = js.index("function bindLogisticsOnce()")
+    bind_chunk = js[bind_idx : bind_idx + 900]
+    assert "GC._logisticsEventsBound" in bind_chunk
+    assert "_logisticsBound = false" not in bind_chunk
+    assert "registerCleanup" not in bind_chunk
+    assert "body.gc-fleet-sheet-open .gc-bottom-nav" in (
+        Path(__file__).resolve().parent.parent / "static" / "style.css"
+    ).read_text(encoding="utf-8")
