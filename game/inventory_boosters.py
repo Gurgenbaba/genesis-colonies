@@ -238,7 +238,9 @@ def activate_inventory_booster(
             existing_mult = float(row["multiplier"] or 1.0)
             existing_expires = float(row["expires_at"] or 0)
             multiplier = max(existing_mult, multiplier)
-            new_expires = max(existing_expires, new_expires)
+            # Stack remaining duration: extend from the later of now / current expiry.
+            base = max(existing_expires, ts)
+            new_expires = base + duration
             cur.execute(
                 """
                 UPDATE player_active_boosters

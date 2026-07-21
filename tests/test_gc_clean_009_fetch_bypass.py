@@ -36,7 +36,7 @@ RAW_FETCH_ALLOWLIST = {
 def test_inventory_actions_use_fetch_game_action():
     src = _read("static/main.js")
     block = src.split("async function runInventoryAction(buttons, url, payload, onSuccess)")[1].split(
-        "function findDepositableLegacyTimeItem"
+        "function countDepositableLegacyTimeItems"
     )[0]
     assert "GC.fetchGameAction(url" in block
     assert re.search(r"\bfetch\s*\(", block) is None

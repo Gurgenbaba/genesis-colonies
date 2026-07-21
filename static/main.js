@@ -14408,27 +14408,25 @@
     }
   }
 
-  function findDepositableLegacyTimeItem(domain) {
+  function countDepositableLegacyTimeItems(domain) {
     const legacy = (_inventoryLastState || parseInventoryPageState())?.timekeeper?.legacy_time_items || [];
     const dom = String(domain || "");
-    return (
-      legacy.find((item) => {
-        if (!item || legacyBoosterDomain(item.item_key) !== dom) return false;
-        if ((parseInt(item.amount, 10) || 0) < 1) return false;
-        return item.usable !== false;
-      }) || null
-    );
+    return legacy.reduce((sum, item) => {
+      if (!item || legacyBoosterDomain(item.item_key) !== dom) return sum;
+      if (item.usable === false) return sum;
+      return sum + (parseInt(item.amount, 10) || 0);
+    }, 0);
   }
 
   async function depositTimekeeperChip(chipBtn, domain) {
     const page = document.getElementById("inventory-page");
     if (!page || page.dataset.ready !== "1") return;
-    let item = findDepositableLegacyTimeItem(domain);
-    if (!item) {
+    let count = countDepositableLegacyTimeItems(domain);
+    if (count < 1) {
       await refreshInventoryFromServer();
-      item = findDepositableLegacyTimeItem(domain);
+      count = countDepositableLegacyTimeItems(domain);
     }
-    if (!item) {
+    if (count < 1) {
       showNotify(t("inv_error_item_not_usable", "Dieses Item kann nicht benutzt werden."), "error");
       return;
     }
@@ -14436,8 +14434,7 @@
       chipBtn,
       "/api/inventory/use",
       {
-        item_key: item.item_key,
-        amount: 1,
+        deposit_domain: String(domain || ""),
         request_id: `inv-tk-${domain}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       },
       (res) => {

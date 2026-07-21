@@ -11,7 +11,9 @@ import time
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from .db import table_exists
-from .inventory_catalog import BOOSTER_TIME_SECONDS
+from .inventory_catalog import BOOSTER_QUEUE_TARGET, BOOSTER_TIME_SECONDS
+
+DEPOSIT_DOMAINS = frozenset({"build", "research", "shipyard"})
 
 TIMEKEEPER_DOMAINS = frozenset(
     {
@@ -189,6 +191,82 @@ def credit_from_booster_item(player_id: int, item_key: str, *, conn) -> Optional
 
 def is_legacy_time_booster_item(item_key: str) -> bool:
     return str(item_key or "") in BOOSTER_TIME_SECONDS
+
+
+def normalize_deposit_domain(domain: str) -> Optional[str]:
+    raw = str(domain or "").strip().lower()
+    dom = str(DOMAIN_ALIASES.get(raw, raw) or "")
+    if dom in DEPOSIT_DOMAINS:
+        return dom
+    return None
+
+
+def deposit_legacy_domain(
+    player_id: int,
+    domain: str,
+    *,
+    conn,
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """
+    Deposit all owned legacy time boosters for one queue domain into Timekeeper.
+
+    One-click inventory chips (Bau / Forschung / Werft) call this so +N means
+    all N items, not a single SKU use.
+    """
+    from game.inventory import consume_inventory_item, inventory_amount, inventory_schema_ready
+
+    dom = normalize_deposit_domain(domain)
+    if not dom:
+        return False, "invalid_domain", None
+    if not schema_ready(conn):
+        return False, "timekeeper_unavailable", None
+    if not inventory_schema_ready(conn):
+        return False, "inventory_unavailable", None
+
+    uid = int(player_id)
+    consumed_items: List[Dict[str, Any]] = []
+    total_seconds = 0
+    total_consumed = 0
+
+    for key, unit_seconds in BOOSTER_TIME_SECONDS.items():
+        if str(BOOSTER_QUEUE_TARGET.get(key) or "") != dom:
+            continue
+        owned = int(inventory_amount(uid, key, conn=conn) or 0)
+        if owned <= 0:
+            continue
+        credit_sec = int(owned) * int(unit_seconds)
+        if not consume_inventory_item(uid, key, owned, conn=conn):
+            continue
+        credit(uid, credit_sec, f"deposit:{dom}:{key}", conn=conn)
+        total_seconds += credit_sec
+        total_consumed += owned
+        consumed_items.append(
+            {
+                "item_key": key,
+                "amount": owned,
+                "seconds_credited": credit_sec,
+            }
+        )
+
+    if total_seconds <= 0 or total_consumed <= 0:
+        return False, "no_depositable_items", None
+
+    new_bal = get_balance(uid, conn=conn)
+    effect = {
+        "kind": "timekeeper_credit",
+        "domain": dom,
+        "seconds_credited": total_seconds,
+        "balance_sec": new_bal,
+        "label": format_balance_label(new_bal),
+        "items": consumed_items,
+        "count": total_consumed,
+    }
+    return True, "timekeeper_deposit_ok", {
+        "item_key": f"timekeeper_deposit:{dom}",
+        "consumed": total_consumed,
+        "effects": [effect],
+        "effect": effect,
+    }
 
 
 def _row_field(row: Any, key: str) -> Any:

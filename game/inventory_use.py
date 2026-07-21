@@ -821,6 +821,28 @@ def _apply_single_use(
 from .inventory_catalog import ITEM_CATALOG  # noqa: E402
 
 
+def deposit_timekeeper_domain(
+    user_id: int,
+    domain: str,
+    *,
+    conn,
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """One-click deposit of all legacy time boosters for a domain into Timekeeper."""
+    if not inventory_schema_ready(conn):
+        return False, "inventory_unavailable", None
+    from .timekeeper import deposit_legacy_domain
+
+    ok, reason, result = deposit_legacy_domain(int(user_id), domain, conn=conn)
+    if not ok or not result:
+        return ok, reason, None
+    effect = dict(result.get("effect") or {})
+    effect.update(_effect_message(effect))
+    out = dict(result)
+    out["effect"] = effect
+    out["effects"] = [effect]
+    return True, "item_use_ok", out
+
+
 def use_inventory_item(
     user_id: int,
     planet_id: int,

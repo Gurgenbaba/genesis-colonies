@@ -13,7 +13,7 @@ import pytest
 
 from game.db import begin_write_transaction, commit, db, rollback
 from game.inventory import grant_inventory_item
-from game.inventory_use import use_inventory_item
+from game.inventory_use import deposit_timekeeper_domain, use_inventory_item
 from game.models import add_build_job, create_user, ensure_player_and_homeworld, init_db
 from game.planet_evolution.repository import get_context_planet
 from game.timekeeper import (
@@ -21,6 +21,7 @@ from game.timekeeper import (
     credit,
     credit_from_booster_item,
     debit,
+    deposit_legacy_domain,
     get_balance,
     schema_ready,
     serialize_for_client,
@@ -117,6 +118,49 @@ def test_legacy_booster_credits_timekeeper_not_queue(timekeeper_db):
         effect = (result or {}).get("effect") or {}
         assert effect.get("kind") == "timekeeper_credit"
         assert int(effect.get("seconds_credited") or 0) == 3600
+    finally:
+        conn.close()
+
+
+def test_deposit_legacy_domain_credits_all_build_boosters(timekeeper_db):
+    conn = db()
+    try:
+        uid = _player(conn=conn)
+        grant_inventory_item(uid, "booster_build_15m", 3, conn=conn)
+        grant_inventory_item(uid, "booster_build_1h", 2, conn=conn)
+        grant_inventory_item(uid, "booster_research_15m", 4, conn=conn)
+        conn.commit()
+
+        begin_write_transaction(conn)
+        ok, reason, result = deposit_timekeeper_domain(uid, "build", conn=conn)
+        assert ok, reason
+        commit(conn)
+
+        expected = 3 * 15 * 60 + 2 * 3600
+        assert get_balance(uid, conn=conn) == expected
+        assert int((result or {}).get("consumed") or 0) == 5
+        effect = (result or {}).get("effect") or {}
+        assert effect.get("kind") == "timekeeper_credit"
+        assert int(effect.get("seconds_credited") or 0) == expected
+
+        from game.inventory import inventory_amount
+
+        assert inventory_amount(uid, "booster_build_15m", conn=conn) == 0
+        assert inventory_amount(uid, "booster_build_1h", conn=conn) == 0
+        assert inventory_amount(uid, "booster_research_15m", conn=conn) == 4
+    finally:
+        conn.close()
+
+
+def test_deposit_legacy_domain_helper_rejects_empty(timekeeper_db):
+    conn = db()
+    try:
+        uid = _player(conn=conn)
+        begin_write_transaction(conn)
+        ok, reason, _ = deposit_legacy_domain(uid, "build", conn=conn)
+        rollback(conn)
+        assert ok is False
+        assert reason == "no_depositable_items"
     finally:
         conn.close()
 

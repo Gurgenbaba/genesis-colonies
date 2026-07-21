@@ -2342,7 +2342,8 @@ def test_main_js_timekeeper_buttons_sync_immediately_after_action_state():
 def test_main_js_inventory_tk_chip_deposits_without_scroll_jump():
     src = _read("static/main.js")
     assert "function depositTimekeeperChip(chipBtn, domain)" in src
-    assert "function findDepositableLegacyTimeItem(domain)" in src
+    assert "function countDepositableLegacyTimeItems(domain)" in src
+    assert "deposit_domain:" in src
     inv = src.split("function bindInventoryOnce()")[1].split("function tickInventoryCooldowns")[0]
     assert "depositTimekeeperChip(tkChip" in inv
     assert "ev.preventDefault()" in inv.split("depositTimekeeperChip(tkChip")[0][-400:]
@@ -2352,7 +2353,6 @@ def test_main_js_inventory_tk_chip_deposits_without_scroll_jump():
     scroll = src.split("function scrollInventoryToFeedback(opts)")[1].split("function renderInventoryEffect")[0]
     assert "window.scrollTo" not in scroll
     assert "preserveScroll" in scroll
-
 
 def test_main_js_trader_hub_exchange_live_preview():
     """Trader Hub: preview runs after formatted number input; locale parsing covers grouped ints."""

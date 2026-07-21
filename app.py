@@ -3037,6 +3037,7 @@ def api_inventory_use_item():
 
     data = request.get_json(silent=True) or {}
     item_key = str(data.get("item_key") or "").strip()
+    deposit_domain = str(data.get("deposit_domain") or "").strip().lower()
     try:
         amount = int(data.get("amount") or 1)
     except (TypeError, ValueError):
@@ -3049,7 +3050,7 @@ def api_inventory_use_item():
             return jsonify(cached)
 
     from game.inventory import inventory_schema_ready, run_inventory_mutation
-    from game.inventory_use import use_inventory_item
+    from game.inventory_use import deposit_timekeeper_domain, use_inventory_item
     from game.planet_evolution.repository import get_context_planet
 
     conn = db()
@@ -3064,9 +3065,14 @@ def api_inventory_use_item():
         conn.close()
 
     try:
-        ok, reason, result = run_inventory_mutation(
-            lambda conn: use_inventory_item(user_id, planet_id, item_key, amount, conn=conn)
-        )
+        if deposit_domain:
+            ok, reason, result = run_inventory_mutation(
+                lambda conn: deposit_timekeeper_domain(user_id, deposit_domain, conn=conn)
+            )
+        else:
+            ok, reason, result = run_inventory_mutation(
+                lambda conn: use_inventory_item(user_id, planet_id, item_key, amount, conn=conn)
+            )
     except Exception:
         return _inventory_action_error_response(
             user_id, "inventory_action_failed", "inventory_use", status=500

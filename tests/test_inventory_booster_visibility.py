@@ -170,6 +170,29 @@ def test_inventory_state_includes_active_effects(inv_vis_db):
     conn.close()
 
 
+def test_production_booster_duration_stacks_on_reuse(inv_vis_db):
+    conn = db()
+    uid = _uid(conn=conn)
+    now = 1_700_000_000.0
+    from game.inventory_boosters import activate_inventory_booster, list_active_boosters
+
+    begin_write_transaction(conn)
+    first = activate_inventory_booster(uid, "booster_production_25", conn=conn, now=now)
+    assert first is not None
+    first_expires = float(first["expires_at"])
+    # Catalog duration is 1h — redeem again with half remaining.
+    mid = now + 30 * 60
+    second = activate_inventory_booster(uid, "booster_production_25", conn=conn, now=mid)
+    commit(conn)
+    assert second is not None
+    expected = first_expires + 3600
+    assert abs(float(second["expires_at"]) - expected) < 1.0
+    active = list_active_boosters(uid, conn=conn, now=mid)
+    metal = next(r for r in active if r["effect_key"] == "metal_prod_factor")
+    assert abs(float(metal["expires_at"]) - expected) < 1.0
+    conn.close()
+
+
 def test_api_inventory_use_idempotent(inv_vis_db, monkeypatch):
     import game.db as dbmod
     import game.models as models
