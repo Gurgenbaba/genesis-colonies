@@ -147,11 +147,20 @@ def _effect_message(effect: Effect) -> Dict[str, Any]:
             },
         }
     if kind == "active_boost":
+        rem = int(effect.get("remaining_seconds") or 0)
+        if rem <= 0:
+            expires = float(effect.get("expires_at") or 0)
+            if expires > 0:
+                rem = max(0, int(expires - time.time()))
+        if rem <= 0:
+            rem = int(effect.get("duration_seconds") or 0)
+        hours = max(1, int(round(rem / 3600.0))) if rem >= 1800 else max(1, int(effect.get("duration_seconds") or 3600) // 3600)
         return {
             "message_key": "inv_effect_active_boost",
             "message_params": {
                 "effect_key": str(effect.get("effect_key") or ""),
-                "hours": max(1, int(round(int(effect.get("duration_seconds") or 0) / 3600))),
+                "hours": hours,
+                "remaining_seconds": rem,
             },
         }
     return {"message_key": "inv_effect_generic", "message_params": {}}

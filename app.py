@@ -3069,6 +3069,8 @@ def api_inventory_use_item():
             ok, reason, result = run_inventory_mutation(
                 lambda conn: deposit_timekeeper_domain(user_id, deposit_domain, conn=conn)
             )
+        elif not item_key:
+            return _inventory_action_error_response(user_id, "missing_item", "inventory_use")
         else:
             ok, reason, result = run_inventory_mutation(
                 lambda conn: use_inventory_item(user_id, planet_id, item_key, amount, conn=conn)

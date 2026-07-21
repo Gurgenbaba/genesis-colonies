@@ -267,12 +267,14 @@ def activate_inventory_booster(
         )
 
     primary = activated[0]
+    remaining = max(0, int(float(primary["expires_at"]) - ts))
     return {
         "kind": "active_boost",
         "effect_key": str(primary["effect_key"]),
         "multiplier": float(primary["multiplier"]),
         "expires_at": float(primary["expires_at"]),
         "duration_seconds": int(specs[0]["duration_seconds"]),
+        "remaining_seconds": remaining,
         "source_item_key": str(item_key),
         "activated_effects": activated,
     }

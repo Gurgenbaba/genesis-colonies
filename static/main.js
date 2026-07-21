@@ -12576,13 +12576,16 @@
     return head ? `${head} · ${formatDuration(rem)}` : formatDuration(rem);
   }
 
-  function patchShellHudBoosters(data) {
+  function patchShellHudBoosters(data, opts) {
     const incoming = _resolveBoostEffectsFromState(data);
     const serverEffects = data?.active_boosters?.active_effects;
+    const resyncClock = !(opts && opts.resync === false);
 
     if (Array.isArray(serverEffects) && serverEffects.length) {
       _boostHudState.effects = incoming;
-      _boostHudState.syncedAt = getApproxServerNow();
+      if (resyncClock) {
+        _boostHudState.syncedAt = getApproxServerNow();
+      }
     } else if (Array.isArray(serverEffects) && serverEffects.length === 0) {
       _boostHudState.effects = [];
     } else if (incoming.length) {
@@ -12665,7 +12668,12 @@
 
   function tickBoostHudCountdown() {
     if (!_boostHudState.effects.length) return;
-    patchShellHudBoosters(GC.lastState || { active_boosters: { active_effects: _boostHudState.effects } });
+    // Local countdown only — do not re-sync the clock from lastState every tick
+    // (that made stacked remaining look like a reset to the last polled snapshot).
+    patchShellHudBoosters(
+      { active_boosters: { active_effects: _boostHudState.effects } },
+      { resync: false }
+    );
   }
 
   function patchShellHudTimekeeper(data) {
@@ -14344,6 +14352,7 @@
       item_not_usable: t("inv_error_item_not_usable", "Dieses Item kann nicht benutzt werden."),
       item_locked_planned: t("inv_hint_locked_planned", "Bald verfügbar"),
       invalid_item: t("inv_error_invalid_item", "Unbekanntes Item."),
+      missing_item: t("inv_error_invalid_item", "Unbekanntes Item."),
       inventory_unavailable: t("inv_unavailable", "Inventar ist derzeit nicht verfügbar."),
       inventory_action_failed: t("inv_error_action_failed", "Inventar-Aktion ist fehlgeschlagen."),
     };
@@ -14408,42 +14417,123 @@
     }
   }
 
-  function countDepositableLegacyTimeItems(domain) {
+  function listDepositableLegacyTimeItems(domain) {
     const legacy = (_inventoryLastState || parseInventoryPageState())?.timekeeper?.legacy_time_items || [];
     const dom = String(domain || "");
-    return legacy.reduce((sum, item) => {
-      if (!item || legacyBoosterDomain(item.item_key) !== dom) return sum;
-      if (item.usable === false) return sum;
-      return sum + (parseInt(item.amount, 10) || 0);
-    }, 0);
+    return legacy.filter((item) => {
+      if (!item || legacyBoosterDomain(item.item_key) !== dom) return false;
+      if (item.usable === false) return false;
+      return (parseInt(item.amount, 10) || 0) > 0;
+    });
+  }
+
+  function countDepositableLegacyTimeItems(domain) {
+    return listDepositableLegacyTimeItems(domain).reduce(
+      (sum, item) => sum + (parseInt(item.amount, 10) || 0),
+      0
+    );
   }
 
   async function depositTimekeeperChip(chipBtn, domain) {
     const page = document.getElementById("inventory-page");
     if (!page || page.dataset.ready !== "1") return;
-    let count = countDepositableLegacyTimeItems(domain);
-    if (count < 1) {
+    const dom = String(domain || "").trim();
+    if (!dom) return;
+
+    let items = listDepositableLegacyTimeItems(dom);
+    if (!items.length) {
       await refreshInventoryFromServer();
-      count = countDepositableLegacyTimeItems(domain);
+      items = listDepositableLegacyTimeItems(dom);
     }
-    if (count < 1) {
+    if (!items.length) {
       showNotify(t("inv_error_item_not_usable", "Dieses Item kann nicht benutzt werden."), "error");
       return;
     }
-    void runInventoryAction(
-      chipBtn,
-      "/api/inventory/use",
-      {
-        deposit_domain: String(domain || ""),
-        request_id: `inv-tk-${domain}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      },
-      (res) => {
-        applyActionState(res, "inventory_use");
-        renderInventoryEffect(res.effect || {}, { preserveScroll: true });
-        applyInventoryActionResult(res);
-        void refreshInventoryFromServer();
+
+    const applyDepositSuccess = (res) => {
+      applyActionState(res, "inventory_use");
+      renderInventoryEffect(res.effect || {}, { preserveScroll: true });
+      applyInventoryActionResult(res);
+      void refreshInventoryFromServer();
+    };
+
+    // Prefer atomic domain deposit (new server). Old processes ignore deposit_domain
+    // and answer invalid_item for empty item_key — fall back to per-SKU use.
+    lockInventoryActionBtn(chipBtn);
+    let timeoutId = null;
+    try {
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          const err = new Error("inventory action timeout");
+          err.name = "AbortError";
+          reject(err);
+        }, INVENTORY_ACTION_TIMEOUT_MS);
+      });
+      const atomic = await Promise.race([
+        GC.fetchGameAction("/api/inventory/use", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Requested-With": "XMLHttpRequest",
+          },
+          body: JSON.stringify({
+            deposit_domain: dom,
+            request_id: `inv-tk-${dom}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          }),
+        }),
+        timeoutPromise,
+      ]);
+      if (atomic && atomic.ok === true) {
+        applyDepositSuccess(atomic);
+        return;
       }
-    );
+      const reason = atomic?.reason || "generic";
+      if (reason !== "invalid_item" && reason !== "missing_item") {
+        showNotify(atomic?.message || inventoryUseReasonText(reason), "error");
+        scrollInventoryToFeedback();
+        patchInventoryDom(_inventoryLastState || parseInventoryPageState());
+        return;
+      }
+    } catch (err) {
+      if (err?.name === "AbortError") {
+        showNotify(t("inv_error_action_timeout", "Inventar-Aktion hat zu lange gedauert."), "error");
+        scrollInventoryToFeedback();
+        patchInventoryDom(_inventoryLastState || parseInventoryPageState());
+        return;
+      }
+      if (!err?.gcAuth) {
+        console.warn("[GC] inventory tk atomic deposit error", err);
+      }
+      // Fall through to per-SKU deposit.
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+      releaseInventoryActionBtn(chipBtn);
+    }
+
+    for (const item of items) {
+      let left = parseInt(item.amount, 10) || 0;
+      const itemKey = String(item.item_key || "");
+      if (!itemKey || left < 1) continue;
+      while (left > 0) {
+        const chunk = Math.min(100, left);
+        let ok = false;
+        await runInventoryAction(
+          chipBtn,
+          "/api/inventory/use",
+          {
+            item_key: itemKey,
+            amount: chunk,
+            request_id: `inv-tk-${dom}-${itemKey}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          },
+          (res) => {
+            ok = true;
+            applyDepositSuccess(res);
+          }
+        );
+        if (!ok) return;
+        left -= chunk;
+      }
+    }
   }
 
   function scrollInventoryToFeedback(opts) {

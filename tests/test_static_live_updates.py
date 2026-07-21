@@ -529,7 +529,7 @@ def test_pjax_navigation_owner_clears_stale_timeouts():
     assert "normalizeLcpPreloadHref" in preload
     assert "removeLcpHeroPreloadLinks" in preload
     version = _read("VERSION").strip()
-    assert version == "0.5.9.15"
+    assert version == "0.5.9.16"
 
 
 def test_main_js_gc802_planet_switch_state_sync():
@@ -2342,8 +2342,10 @@ def test_main_js_timekeeper_buttons_sync_immediately_after_action_state():
 def test_main_js_inventory_tk_chip_deposits_without_scroll_jump():
     src = _read("static/main.js")
     assert "function depositTimekeeperChip(chipBtn, domain)" in src
+    assert "function listDepositableLegacyTimeItems(domain)" in src
     assert "function countDepositableLegacyTimeItems(domain)" in src
     assert "deposit_domain:" in src
+    assert 'reason !== "invalid_item"' in src
     inv = src.split("function bindInventoryOnce()")[1].split("function tickInventoryCooldowns")[0]
     assert "depositTimekeeperChip(tkChip" in inv
     assert "ev.preventDefault()" in inv.split("depositTimekeeperChip(tkChip")[0][-400:]

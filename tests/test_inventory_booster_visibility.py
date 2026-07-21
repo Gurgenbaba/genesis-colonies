@@ -187,9 +187,27 @@ def test_production_booster_duration_stacks_on_reuse(inv_vis_db):
     assert second is not None
     expected = first_expires + 3600
     assert abs(float(second["expires_at"]) - expected) < 1.0
+    assert int(second.get("remaining_seconds") or 0) == int(expected - mid)
     active = list_active_boosters(uid, conn=conn, now=mid)
     metal = next(r for r in active if r["effect_key"] == "metal_prod_factor")
     assert abs(float(metal["expires_at"]) - expected) < 1.0
+    conn.close()
+
+
+def test_research_pct_booster_duration_stacks_on_reuse(inv_vis_db):
+    conn = db()
+    uid = _uid(conn=conn)
+    now = 1_700_000_000.0
+    from game.inventory_boosters import activate_inventory_booster
+
+    begin_write_transaction(conn)
+    first = activate_inventory_booster(uid, "booster_research_pct_2_24h", conn=conn, now=now)
+    mid = now + 6 * 3600
+    second = activate_inventory_booster(uid, "booster_research_pct_2_24h", conn=conn, now=mid)
+    commit(conn)
+    assert first and second
+    assert abs(float(second["expires_at"]) - (float(first["expires_at"]) + 24 * 3600)) < 1.0
+    assert int(second.get("remaining_seconds") or 0) >= 24 * 3600
     conn.close()
 
 
