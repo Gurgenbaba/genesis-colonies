@@ -17,8 +17,13 @@ from game.vote_reengagement import run_vote_reengagement
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run vote re-engagement batch for inactive players")
-    parser.add_argument("--force", action="store_true", help="Ignore stagger slots (admin/debug)")
-    parser.add_argument("--batch-size", type=int, default=None, help="Max votes per run")
+    parser.add_argument("--force", action="store_true", help="Ignore interval guard and stagger slots")
+    parser.add_argument(
+        "--catch-all",
+        action="store_true",
+        help="Reward all currently voteable inactive players (ignores interval/slots; safety cap 5000)",
+    )
+    parser.add_argument("--batch-size", type=int, default=None, help="Max votes per run (ignored with --catch-all)")
     parser.add_argument("--source", default="cli", help="Source label for logs")
     args = parser.parse_args()
 
@@ -28,6 +33,7 @@ def main() -> int:
         payload = run_vote_reengagement(
             conn=conn,
             force=bool(args.force),
+            catch_all=bool(args.catch_all),
             batch_size=args.batch_size,
             source=str(args.source or "cli"),
         )

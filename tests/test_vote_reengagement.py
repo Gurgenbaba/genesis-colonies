@@ -236,3 +236,73 @@ def test_reengagement_disabled_is_noop(reengagement_db, monkeypatch):
     assert result["ok"] is True
     assert result.get("skipped_disabled") is True
     conn.close()
+
+
+def test_reengagement_force_without_catchall_is_batch_limited(reengagement_db):
+    now = int(time.time())
+    inactive_seen = now - int(RANKING_INACTIVE_AFTER_SEC) - 3600
+    for _ in range(5):
+        _player(last_seen=inactive_seen)
+    conn = db()
+    result = run_vote_reengagement(conn=conn, now=now, force=True, batch_size=2, persist=False)
+    assert result["ok"] is True
+    assert result["catch_all"] is False
+    assert result["created"] == 2
+    assert result["eligible_inactive"] == 5
+    assert result["exhausted"] is False
+    total = conn.execute(
+        "SELECT COUNT(*) AS c FROM vote_rewards WHERE vote_channel = ?;",
+        (VOTE_CHANNEL_REENGAGEMENT,),
+    ).fetchone()["c"]
+    assert int(total) == 2
+    conn.close()
+
+
+def test_reengagement_catchall_rewards_beyond_default_batch(reengagement_db):
+    now = int(time.time())
+    inactive_seen = now - int(RANKING_INACTIVE_AFTER_SEC) - 3600
+    for _ in range(5):
+        _player(last_seen=inactive_seen)
+    conn = db()
+    result = run_vote_reengagement(conn=conn, now=now, catch_all=True, persist=False)
+    assert result["ok"] is True
+    assert result["catch_all"] is True
+    assert result["force"] is True
+    assert result["created"] == 5
+    assert result["eligible_inactive"] == 5
+    assert result["exhausted"] is True
+    total = conn.execute(
+        "SELECT COUNT(*) AS c FROM vote_rewards WHERE vote_channel = ?;",
+        (VOTE_CHANNEL_REENGAGEMENT,),
+    ).fetchone()["c"]
+    assert int(total) == 5
+    conn.close()
+
+
+def test_reengagement_catchall_exhausts_when_no_provider_left(reengagement_db):
+    now = int(time.time())
+    inactive_seen = now - int(RANKING_INACTIVE_AFTER_SEC) - 3600
+    uid = _player(last_seen=inactive_seen)
+    conn = db()
+    total_created = 0
+    exhausted_empty = False
+    for _ in range(20):
+        result = run_vote_reengagement(conn=conn, now=now, catch_all=True, persist=False)
+        assert result["ok"] is True
+        total_created += int(result["created"] or 0)
+        if int(result["created"] or 0) == 0:
+            assert result["exhausted"] is True
+            assert result["eligible_inactive"] == 1
+            assert result["skipped_no_provider"] + result["skipped_not_ready"] >= 1
+            exhausted_empty = True
+            break
+    assert exhausted_empty is True
+    assert total_created >= 1
+    final = run_vote_reengagement(conn=conn, now=now, catch_all=True, persist=False)
+    assert final["created"] == 0
+    total = conn.execute(
+        "SELECT COUNT(*) AS c FROM vote_rewards WHERE user_id = ?;",
+        (uid,),
+    ).fetchone()["c"]
+    assert int(total) == total_created
+    conn.close()

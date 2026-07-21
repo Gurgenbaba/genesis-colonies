@@ -13,7 +13,7 @@ Admin manual trigger: POST /api/admin/ranking/recompute (@require_admin_api, for
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from flask import Request
 
@@ -134,6 +134,8 @@ def execute_vote_reengagement(
     *,
     force: bool,
     source: str,
+    catch_all: bool = False,
+    batch_size: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Canonical vote re-engagement batch — shared by HTTP cron and ranking piggyback."""
     from game.db import begin_write_transaction, commit, db, rollback
@@ -142,7 +144,14 @@ def execute_vote_reengagement(
     conn = db()
     try:
         begin_write_transaction(conn)
-        payload = run_vote_reengagement(conn=conn, force=force, persist=True, source=source)
+        payload = run_vote_reengagement(
+            conn=conn,
+            force=force,
+            catch_all=catch_all,
+            batch_size=batch_size,
+            persist=True,
+            source=source,
+        )
         if payload.get("ok") and not payload.get("skipped_interval"):
             commit(conn)
         else:
@@ -366,9 +375,19 @@ def handle_internal_cron_vote_reengagement(request: Request) -> Tuple[Dict[str, 
     return payload, status
 
 
-def handle_admin_vote_reengagement_run(*, force: bool = True) -> Tuple[Dict[str, Any], int]:
+def handle_admin_vote_reengagement_run(
+    *,
+    force: bool = True,
+    catch_all: bool = False,
+    batch_size: Optional[int] = None,
+) -> Tuple[Dict[str, Any], int]:
     try:
-        payload = execute_vote_reengagement(force=force, source="admin")
+        payload = execute_vote_reengagement(
+            force=force,
+            catch_all=catch_all,
+            batch_size=batch_size,
+            source="admin",
+        )
     except Exception as exc:
         logger.exception("admin vote reengagement run failed")
         return {"ok": False, "error": str(exc)}, 500

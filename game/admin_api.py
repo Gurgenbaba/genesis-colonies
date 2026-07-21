@@ -51,7 +51,11 @@ CONFIRM_PHRASES: Dict[str, str] = {
     "run_migrations": "RUN MIGRATIONS",
     "broadcast_messages": "SEND SYSTEM BROADCAST",
     "universe_reset_keep_inventory": "RESET UNIVERSE KEEP INVENTORY",
+    "inactive_storage_boost": "BOOST INACTIVE STORAGE",
 }
+
+INACTIVE_STORAGE_KEYS: Tuple[str, ...] = ("metal_storage", "crystal_storage", "fuel_storage")
+INACTIVE_STORAGE_TARGET_LEVEL = 15
 
 
 def _err(code: str, message: str = "") -> Dict[str, Any]:
@@ -318,10 +322,18 @@ def get_player_detail(player_id: int) -> Dict[str, Any]:
         score = get_player_score_row(int(player_id)) or {}
         rank, total = get_player_rank(int(player_id))
 
+        from game.models import get_research_levels
+        from game.research import RESEARCH_TECHS
+
+        research = get_research_levels(int(player_id), conn=conn)
+        research_keys = list(RESEARCH_TECHS.keys())
+
         return _ok(
             player=player,
             planets=planets,
             homeworld=homeworld,
+            research=research,
+            research_keys=research_keys,
             score={
                 "total": int(score.get("score_total") or 0),
                 "buildings": int(score.get("score_buildings") or 0),
@@ -631,7 +643,53 @@ def get_planet_detail(planet_id: int) -> Dict[str, Any]:
             (int(planet_id),),
         )
         queue = [dict(r) for r in cur.fetchall()]
-        return _ok(planet=planet, buildings=buildings, build_queue=queue)
+
+        storage_caps: Dict[str, int] = {"metal": 0, "crystal": 0, "fuel_cells": 0}
+        try:
+            from game.effects import EffectResolver
+            from game.models import get_research_levels
+
+            player_id = int(planet.get("player_id") or 0)
+            research = get_research_levels(player_id, conn=conn) if player_id else {}
+            storage_caps = EffectResolver(buildings, research).get_storage_capacity()
+        except Exception:
+            pass
+
+        ships: Dict[str, int] = {}
+        defense: Dict[str, int] = {}
+        ship_keys: List[str] = []
+        defense_keys: List[str] = []
+        try:
+            from game.fleet import fleet_schema_ready, get_planet_ships
+            from game.fleet_defs import ACTIVE_SHIP_KEYS, sort_ship_keys_by_role
+
+            ship_keys = list(sort_ship_keys_by_role(ACTIVE_SHIP_KEYS))
+            if fleet_schema_ready(conn):
+                ships = get_planet_ships(int(planet_id), conn=conn)
+        except Exception:
+            ships = {}
+            ship_keys = []
+        try:
+            from game.defense_defs import DEFENSE_ORDER
+            from game.models import get_planet_defense
+
+            defense_keys = list(DEFENSE_ORDER)
+            defense = get_planet_defense(int(planet_id), conn=conn)
+        except Exception:
+            defense = {}
+            defense_keys = []
+
+        return _ok(
+            planet=planet,
+            buildings=buildings,
+            building_keys=list(BUILDING_KEYS),
+            storage_caps=storage_caps,
+            build_queue=queue,
+            ships=ships,
+            ship_keys=ship_keys,
+            defense=defense,
+            defense_keys=defense_keys,
+        )
     finally:
         conn.close()
 
@@ -688,6 +746,24 @@ def set_planet_building(admin_id: int, planet_id: int, body: Dict[str, Any]) -> 
     if building_type not in BUILDING_KEYS:
         return _err("invalid_building", "Unknown building type.")
     level = clamp_building_level(body.get("level", 0))
+    return set_planet_buildings_bulk(
+        admin_id,
+        planet_id,
+        {"buildings": {building_type: level}},
+    )
+
+
+def set_planet_buildings_bulk(admin_id: int, planet_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    raw = body.get("buildings")
+    if not isinstance(raw, dict) or not raw:
+        return _err("invalid_buildings", "buildings map required.")
+
+    updates: Dict[str, int] = {}
+    for key, value in raw.items():
+        btype = str(key or "").strip()
+        if btype not in BUILDING_KEYS:
+            return _err("invalid_building", f"Unknown building type: {btype}")
+        updates[btype] = clamp_building_level(value)
 
     conn = db()
     try:
@@ -698,20 +774,223 @@ def set_planet_building(admin_id: int, planet_id: int, body: Dict[str, Any]) -> 
             return _err("not_found", "Planet not found.")
         player_id = int(row["player_id"])
         buildings = get_planet_buildings(int(planet_id), conn=conn)
-        buildings[building_type] = level
+        buildings.update(updates)
         save_planet_buildings(int(planet_id), buildings)
         recompute_and_upsert_score(player_id, conn=conn)
+        try:
+            from game.resources import sync_derived_state_after_queue_finish
+
+            sync_derived_state_after_queue_finish(planet_ids=[int(planet_id)], conn=conn)
+        except Exception:
+            _admin_settings_log.exception("admin planet buildings derived sync failed")
     finally:
         conn.close()
 
     audit(
         admin_id,
-        "planet_building",
+        "planet_buildings",
         target_type="planet",
         target_id=planet_id,
-        payload={"building_type": building_type, "level": level},
+        payload={"buildings": updates},
     )
     return get_planet_detail(planet_id)
+
+
+def apply_inactive_storage_boost(
+    *,
+    target_level: int = INACTIVE_STORAGE_TARGET_LEVEL,
+    now: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Raise metal/crystal/fuel storage on all ranking-inactive players' planets
+    to at least ``target_level`` (never lowers existing higher levels).
+    """
+    from game.ranking import RANKING_INACTIVE_AFTER_SEC
+
+    level = clamp_building_level(target_level, INACTIVE_STORAGE_TARGET_LEVEL)
+    ts = int(now if now is not None else time.time())
+    cutoff = ts - int(RANKING_INACTIVE_AFTER_SEC)
+    result: Dict[str, Any] = {
+        "ok": True,
+        "target_level": level,
+        "inactive_players": 0,
+        "planets_touched": 0,
+        "planets_updated": 0,
+        "players_rescored": 0,
+    }
+
+    conn = db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT p.id AS player_id, pl.id AS planet_id
+            FROM players p
+            JOIN users u ON u.id = p.id
+            JOIN planets pl ON pl.player_id = p.id
+            WHERE COALESCE(p.last_seen, 0) > 0
+              AND COALESCE(p.last_seen, 0) <= ?
+              AND COALESCE(p.banned_until, 0) <= ?
+            ORDER BY p.id ASC, pl.id ASC;
+            """,
+            (cutoff, ts),
+        )
+        rows = cur.fetchall()
+    finally:
+        conn.close()
+
+    player_ids = sorted({int(r["player_id"]) for r in rows})
+    result["inactive_players"] = len(player_ids)
+    result["planets_touched"] = len(rows)
+
+    updated_players: set[int] = set()
+    for row in rows:
+        planet_id = int(row["planet_id"])
+        player_id = int(row["player_id"])
+        buildings = get_planet_buildings(planet_id)
+        changed = False
+        for key in INACTIVE_STORAGE_KEYS:
+            current = int(buildings.get(key) or 0)
+            if current < level:
+                buildings[key] = level
+                changed = True
+        if not changed:
+            continue
+        save_planet_buildings(planet_id, buildings)
+        result["planets_updated"] += 1
+        updated_players.add(player_id)
+
+    for player_id in sorted(updated_players):
+        score_conn = db()
+        try:
+            recompute_and_upsert_score(player_id, conn=score_conn)
+        finally:
+            score_conn.close()
+    result["players_rescored"] = len(updated_players)
+    return result
+
+
+def boost_inactive_storage(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    if not admin_action_confirmed(body, "inactive_storage_boost"):
+        return _err("confirm_required", "Type BOOST INACTIVE STORAGE to confirm.")
+    target = body.get("target_level", INACTIVE_STORAGE_TARGET_LEVEL)
+    result = apply_inactive_storage_boost(target_level=int(target) if target is not None else INACTIVE_STORAGE_TARGET_LEVEL)
+    if not result.get("ok"):
+        return result
+    audit(
+        admin_id,
+        "inactive_storage_boost",
+        target_type="system",
+        payload={
+            "target_level": result.get("target_level"),
+            "inactive_players": result.get("inactive_players"),
+            "planets_touched": result.get("planets_touched"),
+            "planets_updated": result.get("planets_updated"),
+            "players_rescored": result.get("players_rescored"),
+        },
+    )
+    return result
+
+
+def set_player_research(admin_id: int, player_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    from game.models import save_research_level
+    from game.research import RESEARCH_TECHS
+
+    raw = body.get("research")
+    if not isinstance(raw, dict) or not raw:
+        tech_key = str(body.get("tech_key") or "").strip()
+        if not tech_key:
+            return _err("invalid_research", "research map or tech_key required.")
+        raw = {tech_key: body.get("level", 0)}
+
+    updates: Dict[str, int] = {}
+    for key, value in raw.items():
+        tech = str(key or "").strip()
+        if tech not in RESEARCH_TECHS:
+            return _err("invalid_research", f"Unknown tech: {tech}")
+        updates[tech] = clamp_building_level(value)
+
+    conn = db()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT 1 FROM users WHERE id = ? LIMIT 1;", (int(player_id),))
+        if not cur.fetchone():
+            return _err("not_found", "Player not found.")
+    finally:
+        conn.close()
+
+    for tech, level in updates.items():
+        save_research_level(tech, level, int(player_id))
+
+    score_conn = db()
+    try:
+        recompute_and_upsert_score(int(player_id), conn=score_conn)
+    finally:
+        score_conn.close()
+
+    audit(
+        admin_id,
+        "player_research",
+        target_type="player",
+        target_id=player_id,
+        payload={"research": updates},
+    )
+    return get_player_detail(int(player_id))
+
+
+def set_planet_defense_stock(admin_id: int, planet_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    from game.defense_defs import is_known_defense_key
+    from game.models import begin_write_transaction, commit, get_planet_defense, rollback, set_planet_defense
+
+    raw = body.get("defense")
+    if not isinstance(raw, dict) or not raw:
+        return _err("invalid_defense", "defense map required.")
+
+    updates: Dict[str, int] = {}
+    for key, value in raw.items():
+        dk = str(key or "").strip()
+        if not is_known_defense_key(dk):
+            return _err("invalid_defense", f"Unknown defense: {dk}")
+        try:
+            qty = int(value)
+        except (TypeError, ValueError):
+            qty = 0
+        updates[dk] = max(0, min(qty, 1_000_000))
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        cur = conn.cursor()
+        cur.execute("SELECT id FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),))
+        if not cur.fetchone():
+            rollback(conn)
+            return _err("not_found", "Planet not found.")
+        current = get_planet_defense(int(planet_id), conn=conn)
+        mode = str(body.get("mode") or "set").lower()
+        if mode == "add":
+            merged = dict(current)
+            for dk, qty in updates.items():
+                merged[dk] = max(0, int(merged.get(dk, 0)) + qty)
+            set_planet_defense(int(planet_id), merged, conn=conn)
+        else:
+            merged = dict(current)
+            merged.update(updates)
+            set_planet_defense(int(planet_id), merged, conn=conn)
+        commit(conn)
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+    audit(
+        admin_id,
+        "planet_defense",
+        target_type="planet",
+        target_id=planet_id,
+        payload={"defense": updates, "mode": str(body.get("mode") or "set")},
+    )
+    return get_planet_detail(int(planet_id))
 
 
 def repair_homeworld(admin_id: int, player_id: int) -> Dict[str, Any]:

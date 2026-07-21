@@ -9,12 +9,12 @@ import random
 import time
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from .db import begin_write_transaction, commit, db, lock_planet_for_update, rollback, table_exists
 from .inventory_catalog import (
     CONTAINER_BASIC_COOLDOWN_SEC,
     CONTAINER_BASIC_KEY,
     CONTAINER_DISPLAY_ORDER,
     CONTAINER_KEYS,
+    CONTAINER_OPEN_HARD_CAP,
     GRANTABLE_ITEM_KEYS,
     ROLL_PREVIEW_MAX,
     ROLL_PREVIEW_MIN,
@@ -26,6 +26,7 @@ from .inventory_catalog import (
     item_catalog_entry,
 )
 from . import inventory_loot
+from .db import begin_write_transaction, column_exists, commit, db, lock_planet_for_update, rollback, table_exists
 
 LootEntry = Dict[str, Any]
 Reward = Dict[str, Any]
@@ -93,21 +94,120 @@ def _last_container_open_at(user_id: int, container_key: str, *, conn) -> Option
     return float(row["created_at"])
 
 
+def _basic_timer_columns_ready(conn) -> bool:
+    return column_exists(conn, "players", "basic_container_timer_started_at") and column_exists(
+        conn, "players", "basic_container_next_free_at"
+    )
+
+
+def _get_basic_free_timer(user_id: int, *, conn) -> Tuple[Optional[float], Optional[float]]:
+    if not _basic_timer_columns_ready(conn):
+        return None, None
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT basic_container_timer_started_at, basic_container_next_free_at
+        FROM players WHERE id = ? LIMIT 1;
+        """,
+        (int(user_id),),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None, None
+    started = row["basic_container_timer_started_at"]
+    next_free = row["basic_container_next_free_at"]
+    return (
+        float(started) if started is not None else None,
+        float(next_free) if next_free is not None else None,
+    )
+
+
+def ensure_basic_container_timer_on_grant(
+    user_id: int,
+    *,
+    conn,
+    now: Optional[float] = None,
+) -> None:
+    """
+    Start the standard-container free-open clock on first grant.
+    Later grants and stock opens must not reset it.
+    """
+    if not _basic_timer_columns_ready(conn):
+        return
+    ts = float(now if now is not None else time.time())
+    started, next_free = _get_basic_free_timer(int(user_id), conn=conn)
+    if started is not None and next_free is not None:
+        return
+    next_at = ts + float(CONTAINER_BASIC_COOLDOWN_SEC)
+    conn.execute(
+        """
+        UPDATE players
+        SET basic_container_timer_started_at = COALESCE(basic_container_timer_started_at, ?),
+            basic_container_next_free_at = COALESCE(basic_container_next_free_at, ?)
+        WHERE id = ?;
+        """,
+        (ts, next_at, int(user_id)),
+    )
+
+
+def _advance_basic_free_timer_after_free_open(
+    user_id: int,
+    *,
+    conn,
+    now: Optional[float] = None,
+) -> None:
+    """Advance free-open schedule by +24h from the previous next_free (not from now)."""
+    if not _basic_timer_columns_ready(conn):
+        return
+    ts = float(now if now is not None else time.time())
+    started, next_free = _get_basic_free_timer(int(user_id), conn=conn)
+    if started is None:
+        started = ts
+    base = float(next_free) if next_free is not None else ts
+    new_next = base + float(CONTAINER_BASIC_COOLDOWN_SEC)
+    # Catch up missed windows without anchoring to wall-clock "now + 24h".
+    while new_next <= ts:
+        new_next += float(CONTAINER_BASIC_COOLDOWN_SEC)
+    conn.execute(
+        """
+        UPDATE players
+        SET basic_container_timer_started_at = COALESCE(basic_container_timer_started_at, ?),
+            basic_container_next_free_at = ?
+        WHERE id = ?;
+        """,
+        (started, new_next, int(user_id)),
+    )
+
+
 def basic_container_cooldown_remaining(
     user_id: int,
     *,
     conn,
     now: Optional[float] = None,
 ) -> int:
-    """Seconds until the next standard-container open is allowed (0 = ready)."""
+    """Seconds until the next free standard-container open is allowed (0 = ready)."""
     if not inventory_schema_ready(conn):
         return 0
+    ts = float(now if now is not None else time.time())
+    if _basic_timer_columns_ready(conn):
+        _started, next_free = _get_basic_free_timer(int(user_id), conn=conn)
+        if next_free is None:
+            return 0
+        return max(0, int(float(next_free) - ts))
+    # Legacy fallback before migration 099: last open log (resets on open).
     last = _last_container_open_at(user_id, CONTAINER_BASIC_KEY, conn=conn)
     if last is None:
         return 0
-    ts = float(now if now is not None else time.time())
     remaining = float(CONTAINER_BASIC_COOLDOWN_SEC) - (ts - float(last))
     return max(0, int(remaining))
+
+
+def basic_container_next_free_at(user_id: int, *, conn, now: Optional[float] = None) -> Optional[float]:
+    ts = float(now if now is not None else time.time())
+    remaining = basic_container_cooldown_remaining(user_id, conn=conn, now=ts)
+    if remaining <= 0:
+        return None
+    return ts + float(remaining)
 
 
 def _attach_container_rules(
@@ -118,20 +218,23 @@ def _attach_container_rules(
 ) -> Dict[str, Any]:
     key = str(entry["item_key"])
     amount = int(entry.get("amount") or 0)
-    max_open = 10
+    max_open = int(CONTAINER_OPEN_HARD_CAP)
     cooldown_seconds = 0
     cooldown_active = False
     open_blocked = False
     free_open_available = False
     if key == CONTAINER_BASIC_KEY:
-        max_open = 1
         if user_id is not None and conn is not None:
             cooldown_seconds = basic_container_cooldown_remaining(int(user_id), conn=conn)
             cooldown_active = cooldown_seconds > 0
             # Cooldown limits the free daily open — owned stock can always be opened.
             open_blocked = cooldown_active and amount <= 0
             free_open_available = amount <= 0 and not cooldown_active
+    openable = min(amount, max_open)
+    if free_open_available and openable < 1:
+        openable = 1
     entry["max_open_amount"] = max_open
+    entry["openable_amount"] = int(openable)
     entry["cooldown_seconds"] = cooldown_seconds
     entry["cooldown_active"] = cooldown_active
     entry["free_open_available"] = free_open_available
@@ -444,6 +547,8 @@ def grant_inventory_item(
         record_lifetime_acquired(int(user_id), key, amt, conn=conn)
     except Exception:
         pass
+    if key == CONTAINER_BASIC_KEY:
+        ensure_basic_container_timer_on_grant(int(user_id), conn=conn, now=now)
     return True
 
 
@@ -835,25 +940,24 @@ def open_containers(
 
     if open_count < 1:
         return False, "invalid_amount", None
-    if open_count > 10:
+    if open_count > int(CONTAINER_OPEN_HARD_CAP):
         return False, "amount_too_high", None
 
     owned = _inventory_amount(user_id, key, conn=conn)
     free_basic_open = False
 
     if key == CONTAINER_BASIC_KEY:
-        if open_count > 1:
-            return False, "basic_open_once", None
         if owned < open_count:
             cooldown_seconds = basic_container_cooldown_remaining(user_id, conn=conn)
             if cooldown_seconds > 0:
-                last = _last_container_open_at(user_id, key, conn=conn)
-                next_open_at = float(last or time.time()) + float(CONTAINER_BASIC_COOLDOWN_SEC)
+                next_open_at = basic_container_next_free_at(user_id, conn=conn)
                 return False, "container_cooldown", {
                     "container_key": key,
                     "cooldown_seconds": cooldown_seconds,
                     "next_open_at": next_open_at,
                 }
+            if open_count != 1:
+                return False, "basic_free_open_once", None
             free_basic_open = True
 
     if not free_basic_open and owned < open_count:
@@ -871,6 +975,8 @@ def open_containers(
 
     _apply_rewards(user_id, planet_id, rewards, conn=conn)
     _log_container_open(user_id, planet_id, key, rewards, conn=conn)
+    if free_basic_open:
+        _advance_basic_free_timer_after_free_open(user_id, conn=conn)
 
     container_meta = item_catalog_entry(key)
     preview_rng = random.Random(roll_rng.randint(0, 2**31 - 1))

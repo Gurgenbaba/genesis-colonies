@@ -257,13 +257,15 @@ def test_amount_above_owned_rejected(inventory_db):
 
 
 def test_amount_above_max_rejected(inventory_db):
+    from game.inventory_catalog import CONTAINER_OPEN_HARD_CAP
+
     conn = db()
     uid = _player(conn=conn)
     planet = get_context_planet(uid, conn=conn)
     pid = int(planet["id"])
-    grant_inventory_item(uid, "container_basic", 20, conn=conn)
+    grant_inventory_item(uid, "container_basic", CONTAINER_OPEN_HARD_CAP + 5, conn=conn)
     begin_write_transaction(conn)
-    ok, reason, _ = open_containers(uid, pid, "container_basic", 11, conn=conn)
+    ok, reason, _ = open_containers(uid, pid, "container_basic", CONTAINER_OPEN_HARD_CAP + 1, conn=conn)
     rollback(conn)
     assert not ok
     assert reason == "amount_too_high"
@@ -384,7 +386,9 @@ def test_basic_container_owned_bypasses_cooldown(inventory_db):
     assert basic["open_blocked"] is False
     assert basic["cooldown_active"] is True
     assert int(basic["cooldown_seconds"]) > 0
-    assert basic["max_open_amount"] == 1
+    from game.inventory_catalog import CONTAINER_OPEN_HARD_CAP
+
+    assert basic["max_open_amount"] == CONTAINER_OPEN_HARD_CAP
     conn.close()
 
 
@@ -440,17 +444,70 @@ def test_basic_container_cooldown_expires(inventory_db, monkeypatch):
     conn.close()
 
 
-def test_basic_container_rejects_multi_open(inventory_db):
+def test_basic_container_allows_max_open(inventory_db):
     conn = db()
     uid = _player(conn=conn)
     planet = get_context_planet(uid, conn=conn)
     pid = int(planet["id"])
     grant_inventory_item(uid, "container_basic", 5, conn=conn)
     begin_write_transaction(conn)
-    ok, reason, _ = open_containers(uid, pid, "container_basic", 2, conn=conn)
-    rollback(conn)
-    assert not ok
-    assert reason == "basic_open_once"
+    ok, reason, result = open_containers(uid, pid, "container_basic", 5, conn=conn, rng=random.Random(7))
+    commit(conn)
+    assert ok, reason
+    assert int((result or {}).get("opened") or 0) == 5
+    owned = conn.execute(
+        "SELECT amount FROM player_inventory_items WHERE user_id = ? AND item_key = ?;",
+        (uid, CONTAINER_BASIC_KEY),
+    ).fetchone()
+    assert owned is None
+    # Stock opens must not clear the free-open timer started on grant.
+    assert basic_container_cooldown_remaining(uid, conn=conn) > 0
+    conn.close()
+
+
+def test_basic_container_stock_open_does_not_reset_timer(inventory_db):
+    conn = db()
+    uid = _player(conn=conn)
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+    grant_inventory_item(uid, "container_basic", 3, conn=conn)
+    conn.commit()
+    before = conn.execute(
+        "SELECT basic_container_next_free_at FROM players WHERE id = ?;",
+        (uid,),
+    ).fetchone()["basic_container_next_free_at"]
+    assert before is not None
+
+    begin_write_transaction(conn)
+    ok, reason, _ = open_containers(uid, pid, "container_basic", 2, conn=conn, rng=random.Random(3))
+    assert ok, reason
+    commit(conn)
+
+    after = conn.execute(
+        "SELECT basic_container_next_free_at FROM players WHERE id = ?;",
+        (uid,),
+    ).fetchone()["basic_container_next_free_at"]
+    assert float(after) == float(before)
+    conn.close()
+
+
+def test_basic_container_mid_grant_does_not_reset_timer(inventory_db):
+    conn = db()
+    uid = _player(conn=conn)
+    grant_inventory_item(uid, "container_basic", 1, conn=conn)
+    conn.commit()
+    first = conn.execute(
+        "SELECT basic_container_timer_started_at, basic_container_next_free_at FROM players WHERE id = ?;",
+        (uid,),
+    ).fetchone()
+    grant_inventory_item(uid, "container_basic", 4, conn=conn)
+    conn.commit()
+    second = conn.execute(
+        "SELECT basic_container_timer_started_at, basic_container_next_free_at FROM players WHERE id = ?;",
+        (uid,),
+    ).fetchone()
+    assert float(second["basic_container_timer_started_at"]) == float(first["basic_container_timer_started_at"])
+    assert float(second["basic_container_next_free_at"]) == float(first["basic_container_next_free_at"])
     conn.close()
 
 

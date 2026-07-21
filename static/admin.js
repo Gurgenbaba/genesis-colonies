@@ -176,7 +176,13 @@
       return {
         ok: false,
         error: "invalid_json",
-        message: `HTTP ${res.status}: invalid JSON response`,
+        message:
+          res.status === 404
+            ? t(
+                "admin_http_404_json",
+                "HTTP 404 — Route fehlt (Server neu starten / Hard-Reload)."
+              )
+            : `HTTP ${res.status}: invalid JSON response`,
         httpStatus: res.status,
       };
     }
@@ -737,16 +743,44 @@
     return data;
   }
 
-  async function runAdminVoteReengagement(triggerBtn) {
+  async function runAdminVoteReengagement(triggerBtn, opts) {
+    const options = opts || {};
+    const catchAll = !!options.catchAll;
+    if (catchAll) {
+      const ok = window.confirm(
+        t(
+          "admin_votes_reengagement_catchall_confirm",
+          "Alle derzeit vote-bereiten Inaktiven belohnen? (Ignoriert Slot/Interval, max. 5000)"
+        )
+      );
+      if (!ok) return null;
+    }
     const resultEl = qs("#admin-votes-reengagement-result");
-    if (resultEl) resultEl.textContent = t("admin_votes_reengagement_running", "Re-Engagement-Lauf …");
+    if (resultEl) {
+      resultEl.textContent = catchAll
+        ? t("admin_votes_reengagement_catchall_running", "Catch-all Re-Engagement …")
+        : t("admin_votes_reengagement_running", "Re-Engagement-Lauf …");
+    }
     setBusy(triggerBtn, true);
     try {
-      const res = await adminPost("/api/admin/votes/reengagement-run", { force: true });
+      const res = await adminPost("/api/admin/votes/reengagement-run", {
+        force: true,
+        catch_all: catchAll,
+      });
       if (res.ok) {
-        const msg = t("admin_votes_reengagement_success", "Re-Engagement: {created} Votes erstellt (Slot {slot}).")
-          .replace("{created}", String(res.created ?? 0))
-          .replace("{slot}", String(res.slot ?? "–"));
+        const msg = catchAll
+          ? t(
+              "admin_votes_reengagement_catchall_success",
+              "Catch-all: {created} Votes · eligible {eligible} · skipped_ready {skipped_ready} · skipped_provider {skipped_provider} · exhausted {exhausted}."
+            )
+              .replace("{created}", String(res.created ?? 0))
+              .replace("{eligible}", String(res.eligible_inactive ?? 0))
+              .replace("{skipped_ready}", String(res.skipped_not_ready ?? 0))
+              .replace("{skipped_provider}", String(res.skipped_no_provider ?? 0))
+              .replace("{exhausted}", res.exhausted ? "yes" : "no")
+          : t("admin_votes_reengagement_success", "Re-Engagement: {created} Votes erstellt (Slot {slot}).")
+              .replace("{created}", String(res.created ?? 0))
+              .replace("{slot}", String(res.slot ?? "–"));
         notify(msg, "success");
         if (resultEl) resultEl.textContent = msg;
         await loadAdminVotes();
@@ -758,6 +792,48 @@
       return res;
     } catch (err) {
       const errMsg = err?.message || t("admin_votes_reengagement_error", "Re-Engagement fehlgeschlagen.");
+      showAlert(errMsg, "error");
+      if (resultEl) resultEl.textContent = errMsg;
+      return { ok: false, error: errMsg };
+    } finally {
+      setBusy(triggerBtn, false);
+    }
+  }
+
+  async function runInactiveStorageBoost(triggerBtn) {
+    const ok = window.confirm(
+      t(
+        "admin_inactive_storage_boost_confirm",
+        "Alle Planeten inaktiver Spieler: Ferronit-/Crytite-/Brennzellen-Lager mindestens auf Stufe 15 setzen?"
+      )
+    );
+    if (!ok) return null;
+    const resultEl = qs("#admin-inactive-storage-result");
+    if (resultEl) {
+      resultEl.textContent = t("admin_inactive_storage_boost_running", "Lager-Boost für Inaktive …");
+    }
+    setBusy(triggerBtn, true);
+    try {
+      const res = await adminPost("/api/admin/inactive/storage-boost", { confirm: true });
+      if (res.ok) {
+        const msg = t(
+          "admin_inactive_storage_boost_success",
+          "Lager-Boost: {updated} Planeten · {players} Inaktive · Stufe {level}."
+        )
+          .replace("{updated}", String(res.planets_updated ?? 0))
+          .replace("{players}", String(res.inactive_players ?? 0))
+          .replace("{level}", String(res.target_level ?? 15));
+        notify(msg, "success");
+        if (resultEl) resultEl.textContent = msg;
+      } else {
+        const errMsg =
+          res.message || res.error || t("admin_inactive_storage_boost_error", "Lager-Boost fehlgeschlagen.");
+        showAlert(errMsg, "error");
+        if (resultEl) resultEl.textContent = errMsg;
+      }
+      return res;
+    } catch (err) {
+      const errMsg = err?.message || t("admin_inactive_storage_boost_error", "Lager-Boost fehlgeschlagen.");
       showAlert(errMsg, "error");
       if (resultEl) resultEl.textContent = errMsg;
       return { ok: false, error: errMsg };
@@ -2084,6 +2160,30 @@
     const p = data.player || {};
     const hw = data.homeworld || {};
     const score = data.score || {};
+    const planets = Array.isArray(data.planets) ? data.planets : [];
+    const research = data.research || {};
+    const researchKeys = Array.isArray(data.research_keys) ? data.research_keys : Object.keys(research);
+    const planetRows = planets
+      .map(
+        (pl) =>
+          `<tr class="admin-entity-row" data-admin-open-planet="${pl.id}" title="${esc(t("admin_btn_details", "Details"))}">` +
+          `<td class="col-id">${pl.id}</td>` +
+          `<td class="col-name">${esc(pl.name || "")}</td>` +
+          `<td class="col-flag">${pl.is_homeworld ? "HW" : "–"}</td>` +
+          `</tr>`
+      )
+      .join("");
+    const researchGrid = researchKeys
+      .map((key) => {
+        const lvl = Number(research[key] || 0);
+        return (
+          `<label class="admin-level-cell">` +
+          `<span class="admin-level-key">${esc(key)}</span>` +
+          `<input type="number" min="0" max="100" class="admin-input admin-input-sm admin-research-level" data-tech-key="${esc(key)}" value="${lvl}">` +
+          `</label>`
+        );
+      })
+      .join("");
     el.innerHTML = `
       <h3 class="admin-subtitle">#${p.id} ${playerNameLink(p.id, p.username)} ${p.is_admin ? statusBadge("ok", "Admin") : ""}</h3>
       <p>${t("admin_col_last_seen", "Zuletzt")}: ${esc(fmtTs(p.last_seen))} · Score: ${fmtInt(score.total)} (#${score.rank || "?"})</p>
@@ -2106,7 +2206,24 @@
         <input type="number" min="0" class="admin-input admin-input-sm" id="admin-player-fuel" placeholder="${t("fuel_cells", "Brennzellen")}">
         <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="player-resources-add" data-player-id="${p.id}">${t("admin_btn_apply", "Addieren")}</button>
         <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="player-resources-set" data-player-id="${p.id}">${t("admin_btn_set_resources", "Setzen")}</button>
-      </div>`;
+      </div>
+      <div class="admin-section-title"><span class="admin-section-title-text">${t("admin_player_planets", "Planeten")}</span></div>
+      ${
+        planetRows
+          ? `<div class="admin-table-wrap"><table class="admin-table table-std admin-table--entity"><thead><tr>
+              <th>${esc(t("admin_col_id", "ID"))}</th>
+              <th>${esc(t("admin_col_name", "Name"))}</th>
+              <th>HW</th>
+            </tr></thead><tbody>${planetRows}</tbody></table></div>`
+          : `<p class="admin-small-hint">${esc(t("admin_player_no_planets", "Keine Planeten."))}</p>`
+      }
+      <details class="admin-buildings-detail open" open>
+        <summary>${t("admin_research", "Forschung")}</summary>
+        <div class="admin-level-grid">${researchGrid || `<p class="admin-small-hint">–</p>`}</div>
+        <div class="admin-toolbar">
+          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="player-research-save" data-player-id="${p.id}">${t("admin_btn_save_research", "Forschung speichern")}</button>
+        </div>
+      </details>`;
     syncAdminHudSelects(el);
     focusAdminDetail(el);
   }
@@ -2157,25 +2274,82 @@
     if (!el || !data.ok) return;
     const pl = data.planet || {};
     const b = data.buildings || {};
-    const buildingOpts = Object.keys(b)
-      .map((k) => `<option value="${esc(k)}">${esc(k)} (${b[k]})</option>`)
+    const keys = Array.isArray(data.building_keys) && data.building_keys.length
+      ? data.building_keys
+      : Object.keys(b);
+    const caps = data.storage_caps || {};
+    const ships = data.ships || {};
+    const defense = data.defense || {};
+    const shipKeys = Array.isArray(data.ship_keys) && data.ship_keys.length
+      ? data.ship_keys
+      : Object.keys(ships);
+    const defenseKeys = Array.isArray(data.defense_keys) && data.defense_keys.length
+      ? data.defense_keys
+      : Object.keys(defense);
+    const buildingGrid = keys
+      .map((key) => {
+        const lvl = Number(b[key] || 0);
+        return (
+          `<label class="admin-level-cell">` +
+          `<span class="admin-level-key">${esc(key)}</span>` +
+          `<input type="number" min="0" max="100" class="admin-input admin-input-sm admin-building-level" data-building-key="${esc(key)}" value="${lvl}">` +
+          `</label>`
+        );
+      })
+      .join("");
+    const shipGrid = shipKeys
+      .map((key) => {
+        const qty = Number(ships[key] || 0);
+        return (
+          `<label class="admin-level-cell">` +
+          `<span class="admin-level-key">${esc(key)}</span>` +
+          `<input type="number" min="0" class="admin-input admin-input-sm admin-ship-qty" data-ship-key="${esc(key)}" value="${qty}">` +
+          `</label>`
+        );
+      })
+      .join("");
+    const defenseGrid = defenseKeys
+      .map((key) => {
+        const qty = Number(defense[key] || 0);
+        return (
+          `<label class="admin-level-cell">` +
+          `<span class="admin-level-key">${esc(key)}</span>` +
+          `<input type="number" min="0" class="admin-input admin-input-sm admin-defense-qty" data-defense-key="${esc(key)}" value="${qty}">` +
+          `</label>`
+        );
+      })
       .join("");
     el.innerHTML = `
       <h3 class="admin-subtitle">#${pl.id} ${esc(pl.name || "")}</h3>
       <p>${t("metal", "Ferronit")}: ${fmtInt(pl.metal)} · ${t("crystal", "Crytite")}: ${fmtInt(pl.crystal)} · ${t("fuel_cells", "Brennzellen")}: ${fmtInt(pl.fuel_cells)}</p>
-      <details class="admin-buildings-detail"><summary>${t("admin_buildings", "Gebäude")}</summary><pre>${esc(JSON.stringify(b, null, 2))}</pre></details>
+      <p class="admin-small-hint">${t("admin_storage_caps", "Lager-Caps")}: ${t("metal", "Ferronit")} ${fmtInt(caps.metal)} · ${t("crystal", "Crytite")} ${fmtInt(caps.crystal)} · ${t("fuel_cells", "Brennzellen")} ${fmtInt(caps.fuel_cells)}</p>
       <div class="admin-toolbar admin-toolbar--tight">
         <input type="number" min="0" class="admin-input admin-input-sm" id="admin-planet-metal" placeholder="${t("metal", "Ferronit")}">
         <input type="number" min="0" class="admin-input admin-input-sm" id="admin-planet-crystal" placeholder="${t("crystal", "Crytite")}">
         <input type="number" min="0" class="admin-input admin-input-sm" id="admin-planet-fuel" placeholder="${t("fuel_cells", "Brennzellen")}">
         <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="planet-resources-set" data-planet-id="${pl.id}">${t("admin_btn_set_resources", "Setzen")}</button>
       </div>
-      <div class="admin-toolbar admin-toolbar--tight">
-        <select ${ADMIN_SELECT_ATTRS} id="admin-planet-building-type">${buildingOpts}</select>
-        <input type="number" min="0" max="100" class="admin-input admin-input-sm" id="admin-planet-building-level" placeholder="Level">
-        <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="planet-building-set" data-planet-id="${pl.id}">${t("admin_btn_set_building", "Gebäude setzen")}</button>
-      </div>
-      
+      <details class="admin-buildings-detail" open>
+        <summary>${t("admin_buildings", "Gebäude")}</summary>
+        <div class="admin-level-grid" id="admin-planet-buildings-grid">${buildingGrid}</div>
+        <div class="admin-toolbar">
+          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="planet-buildings-save" data-planet-id="${pl.id}">${t("admin_btn_save_buildings", "Gebäude speichern")}</button>
+        </div>
+      </details>
+      <details class="admin-buildings-detail">
+        <summary>${t("admin_ships", "Schiffe")}</summary>
+        <div class="admin-level-grid">${shipGrid}</div>
+        <div class="admin-toolbar">
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="planet-ships-save" data-planet-id="${pl.id}">${t("admin_btn_save_ships", "Schiffe setzen")}</button>
+        </div>
+      </details>
+      <details class="admin-buildings-detail">
+        <summary>${t("admin_defense", "Verteidigung")}</summary>
+        <div class="admin-level-grid">${defenseGrid}</div>
+        <div class="admin-toolbar">
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="planet-defense-save" data-planet-id="${pl.id}">${t("admin_btn_save_defense", "Verteidigung setzen")}</button>
+        </div>
+      </details>
       <div class="admin-danger-zone">
         <p class="admin-small-hint">${t("admin_planet_reset_hint", "Planet auf Ausgangszustand zurücksetzen.")}</p>
         <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="planet-reset" data-planet-id="${pl.id}">${t("admin_btn_reset_planet", "Planet reset")}</button>
@@ -3146,6 +3320,8 @@
     if (act === "votes-refresh") return loadAdminVotes();
     if (act === "votes-search") return searchAdminVotesPlayers();
     if (act === "votes-reengagement-run") return runAdminVoteReengagement(btn);
+    if (act === "votes-reengagement-catchall") return runAdminVoteReengagement(btn, { catchAll: true });
+    if (act === "inactive-storage-boost") return runInactiveStorageBoost(btn);
     if (act === "combat-hof-backfill") return backfillCombatHof();
     if (act === "combat-bots-ensure") return ensureCombatBots();
     if (act === "combat-bots-toggle") return toggleCombatBots(btn.dataset.combatBotsEnabled === "1");
@@ -3500,20 +3676,87 @@
       });
       if (res.ok) {
         notify(t("admin_action_success", "OK"), "success");
+        renderPlanetDetail(res);
         await searchAdminPlanets();
         await syncAfterAdminChange("admin_planet_resources");
       } else showAlert(res.message, "error");
       return res;
     }
-    if (act === "planet-building-set") {
-      const res = await adminPost(`/api/admin/planet/${btn.dataset.planetId}/building`, {
-        building_type: qs("#admin-planet-building-type")?.value,
-        level: qs("#admin-planet-building-level")?.value || 0,
+    if (act === "planet-buildings-save") {
+      const buildings = {};
+      qsa(".admin-building-level").forEach((input) => {
+        const key = input.getAttribute("data-building-key");
+        if (!key) return;
+        buildings[key] = parseInt(input.value, 10) || 0;
+      });
+      const planetId = btn.dataset.planetId;
+      let res = await adminPost(`/api/admin/planet/${planetId}/buildings`, { buildings });
+      // Legacy fallback: singular /building when bulk route is unavailable (stale process).
+      if (!res.ok && Number(res.httpStatus) === 404) {
+        for (const [building_type, level] of Object.entries(buildings)) {
+          res = await adminPost(`/api/admin/planet/${planetId}/building`, {
+            building_type,
+            level,
+          });
+          if (!res.ok) break;
+        }
+      }
+      if (res.ok) {
+        notify(t("admin_action_success", "OK"), "success");
+        renderPlanetDetail(res);
+        await syncAfterAdminChange("admin_planet_buildings");
+      } else showAlert(res.message || res.error, "error");
+      return res;
+    }
+    if (act === "planet-ships-save") {
+      const ships = {};
+      qsa(".admin-ship-qty").forEach((input) => {
+        const key = input.getAttribute("data-ship-key");
+        if (!key) return;
+        ships[key] = parseInt(input.value, 10) || 0;
+      });
+      const res = await adminPost(`/api/admin/planet/${btn.dataset.planetId}/ships`, {
+        ships,
+        replace: true,
       });
       if (res.ok) {
         notify(t("admin_action_success", "OK"), "success");
-        await syncAfterAdminChange("admin_planet_building");
-      } else showAlert(res.message, "error");
+        await loadAdminPlanet(btn.dataset.planetId);
+        await syncAfterAdminChange("admin_planet_ships");
+      } else showAlert(res.message || res.error, "error");
+      return res;
+    }
+    if (act === "planet-defense-save") {
+      const defense = {};
+      qsa(".admin-defense-qty").forEach((input) => {
+        const key = input.getAttribute("data-defense-key");
+        if (!key) return;
+        defense[key] = parseInt(input.value, 10) || 0;
+      });
+      const res = await adminPost(`/api/admin/planet/${btn.dataset.planetId}/defense`, {
+        defense,
+        mode: "set",
+      });
+      if (res.ok) {
+        notify(t("admin_action_success", "OK"), "success");
+        renderPlanetDetail(res);
+        await syncAfterAdminChange("admin_planet_defense");
+      } else showAlert(res.message || res.error, "error");
+      return res;
+    }
+    if (act === "player-research-save") {
+      const research = {};
+      qsa(".admin-research-level").forEach((input) => {
+        const key = input.getAttribute("data-tech-key");
+        if (!key) return;
+        research[key] = parseInt(input.value, 10) || 0;
+      });
+      const res = await adminPost(`/api/admin/player/${btn.dataset.playerId}/research`, { research });
+      if (res.ok) {
+        notify(t("admin_action_success", "OK"), "success");
+        await renderPlayerDetail(res);
+        await syncAfterAdminChange("admin_player_research");
+      } else showAlert(res.message || res.error, "error");
       return res;
     }
     if (act === "planet-reset") {
@@ -3574,6 +3817,15 @@
         } finally {
           setBusy(btn, false);
         }
+        return;
+      }
+
+      const openPlanetRow = e.target.closest("tr[data-admin-open-planet]");
+      if (openPlanetRow) {
+        const planetId = openPlanetRow.getAttribute("data-admin-open-planet");
+        switchTab("planets");
+        await loadTab("planets");
+        await loadAdminPlanet(planetId);
         return;
       }
 

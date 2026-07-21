@@ -12819,6 +12819,19 @@
     const storage = data.storage || {};
     const prod = data.production_per_hour || {};
 
+    // Partial HUD merges (SSR fleet/unread boot) must not wipe SSR resource amounts to 0.
+    const hasResourceSnapshot = Boolean(
+      resourceOverrides ||
+      (data.player &&
+        (data.player.metal != null ||
+          data.player.crystal != null ||
+          data.player.fuel_cells != null)) ||
+      (data.resources &&
+        (data.resources.metal != null ||
+          data.resources.crystal != null ||
+          data.resources.fuel_cells != null))
+    );
+
     const storageMetal = Math.floor(Number(storage.metal || 0));
     const storageCrystal = Math.floor(Number(storage.crystal || 0));
     const storageFuelCells = Math.floor(Number(storage.fuel_cells || 0));
@@ -12847,7 +12860,7 @@
     const prodFuelCells = Math.floor(Number(prod.fuel_cell_plant ?? prod.fuel_cells ?? 0));
 
     const bar = document.getElementById("resource-bar");
-    if (bar) {
+    if (bar && hasResourceSnapshot) {
       if (forceResourceBar || _last.metal !== metal) {
         bar.querySelectorAll(".res-value.metal").forEach((el) => { _setIfChanged(el, fmtNumber(metal)); });
         _last.metal = metal;
@@ -15128,7 +15141,7 @@
       card.hidden = false;
       const cooldownSeconds = row ? parseInt(row.cooldown_seconds, 10) || 0 : 0;
       const openBlocked = Boolean(row && row.open_blocked);
-      const maxOpen = row ? parseInt(row.max_open_amount, 10) || 10 : 10;
+      const maxOpen = row ? parseInt(row.max_open_amount, 10) || 500 : 500;
       const hint = card.querySelector(".inventory-loot-card-status, .inventory-loot-card-hint");
       if (hint) {
         hint.dataset.cooldownSeconds = String(cooldownSeconds);
@@ -15150,7 +15163,15 @@
           ? `${t("inv_basic_cooldown_timer", "Gratis-Öffnung in")} ${formatCountdownRemain(cooldownSeconds)}`
           : t("inv_basic_cooldown_ready", "Jetzt verfügbar");
       }
+      card.dataset.maxOpen = String(maxOpen);
       card.querySelectorAll("[data-inventory-open]").forEach((btn) => {
+        const isMaxBtn = btn.dataset.openMax === "1";
+        if (isMaxBtn) {
+          const openable = Math.max(0, Math.min(amount, maxOpen));
+          btn.dataset.openAmount = String(Math.max(openable, 2));
+          btn.disabled = !owned || openBlocked || amount < 2 || maxOpen < 2;
+          return;
+        }
         const need = parseInt(btn.dataset.openAmount, 10) || 1;
         const overMax = need > maxOpen;
         if (isBasic && need === 1) {
@@ -15293,8 +15314,22 @@
       if (!page || page.dataset.ready !== "1") return;
 
       const itemKey = openBtn.dataset.inventoryOpen;
-      const amount = parseInt(openBtn.dataset.openAmount, 10) || 1;
       if (!itemKey) return;
+      let amount = parseInt(openBtn.dataset.openAmount, 10) || 1;
+      if (openBtn.dataset.openMax === "1") {
+        const card = openBtn.closest("[data-inventory-container]");
+        const stockEl = card && card.querySelector(`[data-inventory-amount="${itemKey}"]`);
+        const owned = Math.max(0, parseInt(stockEl && stockEl.textContent, 10) || 0);
+        const maxOpen = Math.max(
+          1,
+          parseInt(card && card.dataset.maxOpen, 10) ||
+            parseInt(openBtn.dataset.openAmount, 10) ||
+            500
+        );
+        amount = Math.min(owned, maxOpen);
+        if (amount < 2) return;
+        openBtn.dataset.openAmount = String(amount);
+      }
 
       const openButtons = Array.from(page.querySelectorAll("[data-inventory-open]"));
       void runInventoryAction(

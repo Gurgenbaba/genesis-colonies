@@ -5024,7 +5024,17 @@ def api_admin_votes_reengagement_run():
     admin_id = int(admin["id"]) if admin else 0
     body = request.get_json(silent=True) or {}
     force = bool(body.get("force") in (True, 1, "1", "true", "yes", "on"))
-    payload, status = handle_admin_vote_reengagement_run(force=force or True)
+    catch_all = bool(body.get("catch_all") in (True, 1, "1", "true", "yes", "on"))
+    batch_size = body.get("batch_size")
+    try:
+        batch_size_int = int(batch_size) if batch_size is not None else None
+    except (TypeError, ValueError):
+        batch_size_int = None
+    payload, status = handle_admin_vote_reengagement_run(
+        force=force or True,
+        catch_all=catch_all,
+        batch_size=batch_size_int,
+    )
     if admin_id and payload.get("ok"):
         try:
             from game.admin_audit import write_admin_audit
@@ -5037,6 +5047,11 @@ def api_admin_votes_reengagement_run():
                     "created": payload.get("created"),
                     "slot": payload.get("slot"),
                     "force": payload.get("force"),
+                    "catch_all": payload.get("catch_all"),
+                    "eligible_inactive": payload.get("eligible_inactive"),
+                    "exhausted": payload.get("exhausted"),
+                    "skipped_not_ready": payload.get("skipped_not_ready"),
+                    "skipped_no_provider": payload.get("skipped_no_provider"),
                     "duration_ms": payload.get("duration_ms"),
                 },
             )
@@ -9850,6 +9865,12 @@ def api_admin_player_resources(player_id: int):
     return _admin_json(admin_api_logic.set_player_resources(_admin_actor_id(), player_id, _admin_body()))
 
 
+@app.route("/api/admin/player/<int:player_id>/research", methods=["POST"])
+@require_admin_api
+def api_admin_player_research(player_id: int):
+    return _admin_json(admin_api_logic.set_player_research(_admin_actor_id(), player_id, _admin_body()))
+
+
 @app.route("/api/admin/player/<int:player_id>/repair-homeworld", methods=["POST"])
 @require_admin_api
 def api_admin_player_repair_homeworld(player_id: int):
@@ -9939,6 +9960,24 @@ def api_admin_planet_resources(planet_id: int):
 @require_admin_api
 def api_admin_planet_building(planet_id: int):
     return _admin_json(admin_api_logic.set_planet_building(_admin_actor_id(), planet_id, _admin_body()))
+
+
+@app.route("/api/admin/planet/<int:planet_id>/buildings", methods=["POST"])
+@require_admin_api
+def api_admin_planet_buildings(planet_id: int):
+    return _admin_json(admin_api_logic.set_planet_buildings_bulk(_admin_actor_id(), planet_id, _admin_body()))
+
+
+@app.route("/api/admin/planet/<int:planet_id>/defense", methods=["POST"])
+@require_admin_api
+def api_admin_planet_defense(planet_id: int):
+    return _admin_json(admin_api_logic.set_planet_defense_stock(_admin_actor_id(), planet_id, _admin_body()))
+
+
+@app.route("/api/admin/inactive/storage-boost", methods=["POST"])
+@require_admin_api
+def api_admin_inactive_storage_boost():
+    return _admin_json(admin_api_logic.boost_inactive_storage(_admin_actor_id(), _admin_body()))
 
 
 @app.route("/api/admin/planet/<int:planet_id>/reset", methods=["POST"])

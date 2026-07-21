@@ -401,6 +401,11 @@ def test_gc_instant_ux_ssr_hud_boot_contract():
     assert "patchShellHudFromState" in boot_fn
     assert "unread_messages_count" in boot_fn
     assert "active_fleets" in boot_fn
+    # Partial HUD boot must not wipe SSR resource amounts to 0.
+    hud_fn = src.split("function patchShellHudFromState(data, opts)")[1].split(
+        "GC.patchShellHudFromState = patchShellHudFromState"
+    )[0]
+    assert "hasResourceSnapshot" in hud_fn
     # GC-742 skip remains: no forced page_init when SSR live boot is present.
     skip_fn = src.split("function shouldSkipInitGameStateAfterSsr")[1].split("function bootstrapResourceLiveFromDom")[0]
     assert "pageHasSsrLiveBoot()" in skip_fn

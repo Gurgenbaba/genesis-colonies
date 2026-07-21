@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 REENGAGEMENT_SLOTS_PER_DAY = 48
 DEFAULT_BATCH_SIZE = 12
 MAX_BATCH_SIZE = 50
+CATCH_ALL_SAFETY_CAP = 5000
 _SLOT_HASH = 2654435761
 _PROVIDER_HASH = 1597334677
 
@@ -174,6 +175,7 @@ def run_vote_reengagement(
     now: Optional[int] = None,
     batch_size: Optional[int] = None,
     force: bool = False,
+    catch_all: bool = False,
     persist: bool = True,
     source: str = "cron",
 ) -> Dict[str, Any]:
@@ -184,11 +186,23 @@ def run_vote_reengagement(
     VOTE_REENGAGEMENT_INTERVAL_SEC (30 min). Intended to piggyback on the
     ranking HTTP cron (every 10 min) without a separate scheduler.
 
+    When catch_all=True, ignores interval + slot filters and processes every
+    currently voteable inactive player up to CATCH_ALL_SAFETY_CAP grants.
+    Cron should keep catch_all=False (staggered batch).
+
     Returns summary dict suitable for cron logs and admin manual runs.
     """
     started = time.time()
     ts = int(now if now is not None else time.time())
-    limit = batch_size if batch_size is not None else reengagement_batch_size()
+    do_catch_all = bool(catch_all)
+    # catch_all implies force semantics for interval/slot
+    do_force = bool(force) or do_catch_all
+    if do_catch_all:
+        limit = CATCH_ALL_SAFETY_CAP
+    elif batch_size is not None:
+        limit = max(1, min(int(batch_size), CATCH_ALL_SAFETY_CAP if do_force else MAX_BATCH_SIZE))
+    else:
+        limit = reengagement_batch_size()
     result: Dict[str, Any] = {
         "ok": True,
         "source": str(source or "cron"),
@@ -197,10 +211,13 @@ def run_vote_reengagement(
         "skipped_wrong_slot": 0,
         "skipped_no_provider": 0,
         "skipped_interval": False,
+        "eligible_inactive": 0,
+        "exhausted": False,
+        "catch_all": do_catch_all,
         "errors": [],
         "slot": _current_slot(ts),
         "batch_size": int(limit),
-        "force": bool(force),
+        "force": do_force,
     }
 
     if not vote_reengagement_enabled():
@@ -209,7 +226,7 @@ def run_vote_reengagement(
         result["duration_ms"] = int((time.time() - started) * 1000)
         return result
 
-    if not force:
+    if not do_force:
         wait = seconds_until_vote_reengagement_allowed(now=ts, conn=conn)
         if wait > 0:
             result["skipped_interval"] = True
@@ -233,11 +250,16 @@ def run_vote_reengagement(
         result["duration_ms"] = int((time.time() - started) * 1000)
         return result
 
+    eligible = _eligible_inactive_user_ids(conn, now=ts)
+    result["eligible_inactive"] = len(eligible)
+
     created = 0
-    for user_id in _eligible_inactive_user_ids(conn, now=ts):
+    hit_cap = False
+    for user_id in eligible:
         if created >= limit:
+            hit_cap = True
             break
-        if not force and not player_in_reengagement_slot(user_id, now=ts):
+        if not do_force and not player_in_reengagement_slot(user_id, now=ts):
             result["skipped_wrong_slot"] += 1
             continue
 
@@ -265,16 +287,21 @@ def run_vote_reengagement(
         else:
             result["skipped_not_ready"] += 1
 
+    result["exhausted"] = bool(do_catch_all and not hit_cap)
     result["duration_ms"] = int((time.time() - started) * 1000)
     if persist and result.get("ok") and not result.get("skipped_interval"):
         record_vote_reengagement_result(result, source=source, conn=conn)
     logger.info(
-        "vote reengagement source=%s created=%s slot=%s skipped_slot=%s skipped_no_provider=%s duration_ms=%s",
+        "vote reengagement source=%s created=%s slot=%s skipped_slot=%s skipped_no_provider=%s "
+        "eligible=%s catch_all=%s exhausted=%s duration_ms=%s",
         source,
         created,
         result["slot"],
         result["skipped_wrong_slot"],
         result["skipped_no_provider"],
+        result["eligible_inactive"],
+        do_catch_all,
+        result["exhausted"],
         result["duration_ms"],
     )
     return result

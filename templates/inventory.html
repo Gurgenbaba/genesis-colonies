@@ -82,12 +82,13 @@
       {% set _blocked = c.open_blocked is defined and c.open_blocked %}
       {% set _free_ready = c.item_key == 'container_basic' and c.free_open_available is defined and c.free_open_available %}
       {% set _can_open = (_owned and not _blocked) or _free_ready %}
-      {% set _max_open = (c.max_open_amount|int) if c.max_open_amount is defined else 10 %}
+      {% set _max_open = (c.max_open_amount|int) if c.max_open_amount is defined else 500 %}
       {% set _img = url_for('static', filename=c.image) if c.image is defined else _loot_fallback %}
       {% set _card_load = 'high' if loop.index0 == 0 else 'lazy' %}
       <article class="inventory-loot-card inventory-container-card {{ 'inventory-loot-card--owned' if _owned else ('inventory-loot-card--free-ready' if _free_ready else 'inventory-loot-card--empty') }}"
                data-inventory-container="{{ c.item_key }}"
-               data-rarity="{{ c.rarity }}">
+               data-rarity="{{ c.rarity }}"
+               data-max-open="{{ _max_open }}">
         <div class="inventory-loot-card-hero">
           <div class="inventory-loot-card-glow inventory-loot-card-glow--{{ c.rarity }}" aria-hidden="true"></div>
           {{ render_card_hero_img(_img, T(c.name_key, c.item_key), 'inventory-loot-card-img', _card_load, loop.index0 == 0, 320, 180, "this.onerror=null;this.src='" ~ _loot_fallback ~ "';") }}
@@ -137,13 +138,15 @@
                   {% if not _can_open %}disabled{% endif %}>
             {{ T("inv_open_btn", "Öffnen") }}
           </button>
+          {% set _openable = (c.openable_amount|int) if c.openable_amount is defined else (c.amount|int) %}
           {% if _max_open > 1 %}
           <button type="button"
                   class="gc-btn gc-btn-secondary gc-btn-sm inventory-open-btn"
                   data-inventory-open="{{ c.item_key }}"
-                  data-open-amount="10"
-                  {% if (c.amount|int) < 10 %}disabled{% endif %}>
-            {{ T("inv_open_10_btn", "10× öffnen") }}
+                  data-open-amount="{{ _openable if _openable > 1 else 2 }}"
+                  data-open-max="1"
+                  {% if (c.amount|int) < 2 %}disabled{% endif %}>
+            {{ T("inv_open_max_btn", "Max öffnen") }}
           </button>
           {% endif %}
         </div>

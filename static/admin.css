@@ -669,6 +669,7 @@
   margin: 10px 0;
   border: 1px solid var(--gc-border);
   background: rgba(0, 0, 0, 0.25);
+  border-radius: var(--gc-radius-sm, 2px);
 }
 
 .admin-shell .admin-buildings-detail summary {
@@ -688,6 +689,34 @@
   font-family: var(--gc-mono);
   font-size: 0.72rem;
   border-top: 1px solid var(--gc-border);
+}
+
+.admin-shell .admin-level-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--gc-border);
+}
+
+.admin-shell .admin-level-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+
+.admin-shell .admin-level-key {
+  font-family: var(--gc-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: var(--gc-text-soft);
+  word-break: break-all;
+}
+
+.admin-shell .admin-level-cell .admin-input {
+  width: 100%;
+  border-radius: var(--gc-radius-sm, 2px);
 }
 
 .admin-shell .ban-table-wrapper {

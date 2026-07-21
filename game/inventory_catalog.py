@@ -24,6 +24,8 @@ CONTAINER_KEYS: FrozenSet[str] = frozenset(
 
 CONTAINER_BASIC_KEY = "container_basic"
 CONTAINER_BASIC_COOLDOWN_SEC = 24 * 60 * 60
+# Max containers opened in one request (UI "Max öffnen") — high enough for large stockpiles.
+CONTAINER_OPEN_HARD_CAP = 500
 
 # GC-543 — lootbox roller strip length (UI-only; server rewards unchanged).
 ROLL_PREVIEW_MIN = 30
