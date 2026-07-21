@@ -3519,6 +3519,10 @@ def test_fleet_ui_active_buttons_have_handlers():
     required_bindings = ['bindFleetOnce', 'applyQuickTarget', '[data-ship-max]', '[data-ship-max-image]', '[data-fleet-res-max]', '[data-fleet-expedition-shortcut]', '[data-fleet-quick-target-select]', '[data-fleet-save-preset]', '[data-preset-load]', '[data-preset-delete]', '/api/shipyard/build', '/api/fleet/preview', '/api/fleet/send', '/api/fleet/mass-expedition', '/api/fleet/state', 'rt.sending', 'data-fleet-send-btn', 'data-preview-target-type', 'data-fleet-mission-feedback', 'updateMissionFeedback', 'applyExpeditionTarget', 'applyFleetUrlPrefill', 'syncExpeditionMissionTarget', 'updateFleetFormMode', 'shouldShowExpeditionHours', 'data-preview-mission-badge', 'data-fleet-expedition-shortcut', 'submitMassExpedition', 'data-fleet-mass-expo-submit', 'syncExpeditionDailyEfficiencyUi', 'data-preview-expedition-daily-row', 'initHudSelects', 'data-gc-hud-select', 'tickFleetCountdowns', 'fleetRefreshBusy']
     for needle in required_bindings:
         assert needle in js, f'missing initFleet binding: {needle}'
+    # MAX fuel_cells must target data-fleet-res-fuel-cells (hyphen), not fuel_cells.
+    assert 'data-fleet-res-max="fuel_cells"' in tpl
+    assert 'data-fleet-res-fuel-cells' in tpl
+    assert 'replace(/_/g, "-")' in js
     assert 'GC.modules.fleet = initFleet' in js
     assert 'GC.modules.shipyard = initShipyard' in js
     assert 'path.endsWith("/fleet")' in js

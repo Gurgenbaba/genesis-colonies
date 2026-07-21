@@ -20069,7 +20069,9 @@
         const cargoFree = parseInt(rt.lastPreview?.cargo_free ?? "0", 10) || 0;
         const bal = rt.data.resources?.[res] || 0;
         let val = Math.min(bal, cargoFree > 0 ? cargoFree : bal);
-        const inp = page.querySelector(`[data-fleet-res-${res}]`);
+        // DOM attrs use hyphens (data-fleet-res-fuel-cells); API keys use underscores.
+        const resAttr = String(res || "").replace(/_/g, "-");
+        const inp = page.querySelector(`[data-fleet-res-${resAttr}]`);
         if (inp) setNumberInputValue(inp, Math.max(0, val));
         schedulePreview(page);
         return;
