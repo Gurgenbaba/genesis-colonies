@@ -68,6 +68,7 @@ LEGACY_SHIP_KEY_MAP: Dict[str, str] = {
     "spy_probe": "veil_probe",
     "recycler": "harvest_reclaimer",
     "expedition_vessel": "solar_skiff",
+    "treasure_ark": "deep_vault_ark",
 }
 
 LEGACY_SHIP_KEYS: FrozenSet[str] = frozenset(LEGACY_SHIP_KEY_MAP.keys())

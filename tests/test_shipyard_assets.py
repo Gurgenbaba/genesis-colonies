@@ -49,6 +49,19 @@ def test_all_known_ship_icons_exist_on_disk():
     assert not missing, f"Missing ship PNGs: {missing}"
 
 
+def test_deep_vault_ark_has_webp_sibling_not_placeholder():
+    """Tresor-Arche art must be unique (not atlas_hauler) with WebP for fleet/shipyard picture tags."""
+    import hashlib
+
+    png = SHIPS_IMG / "deep_vault_ark.png"
+    webp = SHIPS_IMG / "deep_vault_ark.webp"
+    atlas = SHIPS_IMG / "atlas_hauler.png"
+    assert png.is_file() and webp.is_file()
+    assert hashlib.sha256(png.read_bytes()).hexdigest() != hashlib.sha256(atlas.read_bytes()).hexdigest()
+    assert webp.stat().st_size < png.stat().st_size
+    assert png.stat().st_size < 600_000
+
+
 def test_eclipse_runner_icon_file_exists():
     assert (SHIPS_IMG / "eclipse_runner.png").is_file()
 
