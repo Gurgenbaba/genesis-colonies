@@ -77,6 +77,14 @@
             {% if log_ctx.colonies|length <= 1 %}
             <p class="logistics-empty-colonies hint">{{ T("logistics_need_second_colony_collect") }}</p>
             {% else %}
+            <div class="logistics-select-all-row">
+              <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm" data-logistics-select-all="collect" data-logistics-select-all-action="all">
+                {{ T("logistics_select_all") }}
+              </button>
+              <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm" data-logistics-select-all="collect" data-logistics-select-all-action="none">
+                {{ T("logistics_select_none") }}
+              </button>
+            </div>
             <ul class="logistics-sources-list" data-logistics-colony-list="collect">
               {% for col in log_ctx.colonies %}
               {% set res = col.resources if col.resources is defined else {} %}
@@ -105,35 +113,9 @@
           </fieldset>
         </div>
 
-        <div class="logistics-layout-col logistics-layout-col--ships">
-          <fieldset class="fleet-ships-fieldset gc-fieldset">
-            <legend class="gc-fieldset-legend">{{ T("logistics_cargo_ships_title") }}</legend>
-            <p class="hint logistics-hint">{{ T("logistics_cargo_ships_hint") }}</p>
-            <div class="fleet-ships-grid" data-logistics-ships-grid="collect">
-              {% for ship in log_ctx.cargo_ship_defs %}
-              {% set have = log_ctx.ships.get(ship.key, 0) if log_ctx.ships else 0 %}
-              <div class="fleet-ship-row{% if have <= 0 %} is-empty{% endif %}"
-                   data-ship-key="{{ ship.key }}" data-ship-have="{{ have }}" data-ship-role="cargo">
-                <div class="fleet-ship-row-main">
-                  <span class="fleet-ship-name">{{ T(ship.name_key) }}</span>
-                  <span class="gc-panel-tag fleet-ship-role-pill fleet-ship-role-pill--cargo">{{ T("shipyard_role_cargo") }}</span>
-                  <span class="fleet-ship-stock gc-mono" data-logistics-ship-stock>×{{ have|fmt_int }}</span>
-                </div>
-                <div class="fleet-ship-row-controls">
-                  <input type="text" min="0" max="{{ have }}" value="0" inputmode="numeric"
-                         class="fleet-ship-input gc-mono gc-num-input" data-logistics-ship-input="{{ ship.key }}"
-                         aria-label="{{ T(ship.name_key) }}">
-                  <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm fleet-ship-max" data-logistics-ship-max="{{ ship.key }}">
-                    {{ T("fleet_btn_max") }}
-                  </button>
-                </div>
-              </div>
-              {% endfor %}
-            </div>
-          </fieldset>
-
+        <div class="logistics-layout-col logistics-layout-col--actions">
+          <p class="hint logistics-hint logistics-auto-cargo-hint">{{ T("logistics_auto_cargo_hint") }}</p>
           <p class="logistics-error fleet-form-error" data-logistics-error="collect" hidden role="alert"></p>
-
           <div class="fleet-logistics-actions logistics-actions">
             <button type="submit" class="gc-btn gc-btn-primary gc-btn-sm" data-logistics-submit="collect" disabled>
               {{ T("logistics_collect_submit") }}
@@ -158,6 +140,14 @@
             {% if log_ctx.colonies|length <= 1 %}
             <p class="logistics-empty-colonies hint">{{ T("logistics_need_second_colony_distribute") }}</p>
             {% else %}
+            <div class="logistics-select-all-row">
+              <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm" data-logistics-select-all="distribute" data-logistics-select-all-action="all">
+                {{ T("logistics_select_all") }}
+              </button>
+              <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm" data-logistics-select-all="distribute" data-logistics-select-all-action="none">
+                {{ T("logistics_select_none") }}
+              </button>
+            </div>
             <ul class="logistics-sources-list" data-logistics-colony-list="distribute">
               {% for col in log_ctx.colonies %}
               <li class="logistics-source-card logistics-colony-card" data-colony-planet-id="{{ col.planet_id }}">
@@ -178,59 +168,44 @@
             </ul>
             {% endif %}
           </fieldset>
-
-          <fieldset class="fleet-resources-fieldset gc-fieldset">
-            <legend class="gc-fieldset-legend">{{ T("logistics_cargo_label") }}</legend>
-            <p class="hint logistics-hint">{{ T("logistics_distribute_equal_hint") }}</p>
-            <div class="fleet-resource-grid">
-              <div class="fleet-resource-row">
-                <label for="logistics-res-metal" class="fleet-resource-label">{{ render_resource_icon('metal') }}{{ T("resource_metal") }}</label>
-                <input type="text" id="logistics-res-metal" min="0" value="0" inputmode="numeric"
-                       class="fleet-resource-input gc-mono gc-num-input" data-logistics-resource="metal">
-              </div>
-              <div class="fleet-resource-row">
-                <label for="logistics-res-crystal" class="fleet-resource-label">{{ render_resource_icon('crystal') }}{{ T("resource_crystal") }}</label>
-                <input type="text" id="logistics-res-crystal" min="0" value="0" inputmode="numeric"
-                       class="fleet-resource-input gc-mono gc-num-input" data-logistics-resource="crystal">
-              </div>
-              <div class="fleet-resource-row">
-                <label for="logistics-res-fuel" class="fleet-resource-label">{{ render_resource_icon('fuel_cells') }}{{ T("resource_fuel_cells") }}</label>
-                <input type="text" id="logistics-res-fuel" min="0" value="0" inputmode="numeric"
-                       class="fleet-resource-input gc-mono gc-num-input" data-logistics-resource="fuel_cells">
-              </div>
-            </div>
-          </fieldset>
         </div>
 
-        <div class="logistics-layout-col logistics-layout-col--ships">
-          <fieldset class="fleet-ships-fieldset gc-fieldset">
-            <legend class="gc-fieldset-legend">{{ T("logistics_cargo_ships_title") }}</legend>
-            <p class="hint logistics-hint">{{ T("logistics_cargo_ships_hint") }}</p>
-            <div class="fleet-ships-grid" data-logistics-ships-grid="distribute">
-              {% for ship in log_ctx.cargo_ship_defs %}
-              {% set have = log_ctx.ships.get(ship.key, 0) if log_ctx.ships else 0 %}
-              <div class="fleet-ship-row{% if have <= 0 %} is-empty{% endif %}"
-                   data-ship-key="{{ ship.key }}" data-ship-have="{{ have }}" data-ship-role="cargo">
-                <div class="fleet-ship-row-main">
-                  <span class="fleet-ship-name">{{ T(ship.name_key) }}</span>
-                  <span class="gc-panel-tag fleet-ship-role-pill fleet-ship-role-pill--cargo">{{ T("shipyard_role_cargo") }}</span>
-                  <span class="fleet-ship-stock gc-mono" data-logistics-ship-stock>×{{ have|fmt_int }}</span>
-                </div>
-                <div class="fleet-ship-row-controls">
-                  <input type="text" min="0" max="{{ have }}" value="0" inputmode="numeric"
-                         class="fleet-ship-input gc-mono gc-num-input" data-logistics-ship-input="{{ ship.key }}"
-                         aria-label="{{ T(ship.name_key) }}">
-                  <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm fleet-ship-max" data-logistics-ship-max="{{ ship.key }}">
-                    {{ T("fleet_btn_max") }}
-                  </button>
-                </div>
+        <div class="logistics-layout-col logistics-layout-col--actions">
+          <fieldset class="fleet-resources-fieldset gc-fieldset logistics-resources-fieldset">
+            <legend class="gc-fieldset-legend">{{ T("logistics_cargo_label") }}</legend>
+            <p class="hint logistics-hint">{{ T("logistics_distribute_equal_hint") }}</p>
+            <div class="fleet-resource-grid logistics-resource-grid">
+              <div class="fleet-resource-row logistics-resource-row fleet-resource-row--metal">
+                <label for="logistics-res-metal" class="fleet-resource-label">{{ render_resource_icon('metal') }}{{ T("resource_metal") }}</label>
+                <input type="text" id="logistics-res-metal" min="0" value="0" inputmode="numeric"
+                       class="fleet-resource-input logistics-resource-input gc-mono gc-num-input" data-logistics-resource="metal"
+                       autocomplete="off" spellcheck="false">
+                <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm fleet-res-max-btn" data-logistics-res-max="metal">
+                  {{ T("fleet_btn_max") }}
+                </button>
               </div>
-              {% endfor %}
+              <div class="fleet-resource-row logistics-resource-row fleet-resource-row--crystal">
+                <label for="logistics-res-crystal" class="fleet-resource-label">{{ render_resource_icon('crystal') }}{{ T("resource_crystal") }}</label>
+                <input type="text" id="logistics-res-crystal" min="0" value="0" inputmode="numeric"
+                       class="fleet-resource-input logistics-resource-input gc-mono gc-num-input" data-logistics-resource="crystal"
+                       autocomplete="off" spellcheck="false">
+                <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm fleet-res-max-btn" data-logistics-res-max="crystal">
+                  {{ T("fleet_btn_max") }}
+                </button>
+              </div>
+              <div class="fleet-resource-row logistics-resource-row fleet-resource-row--fuel">
+                <label for="logistics-res-fuel" class="fleet-resource-label">{{ render_resource_icon('fuel_cells') }}{{ T("resource_fuel_cells") }}</label>
+                <input type="text" id="logistics-res-fuel" min="0" value="0" inputmode="numeric"
+                       class="fleet-resource-input logistics-resource-input gc-mono gc-num-input" data-logistics-resource="fuel_cells"
+                       autocomplete="off" spellcheck="false">
+                <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm fleet-res-max-btn" data-logistics-res-max="fuel_cells">
+                  {{ T("fleet_btn_max") }}
+                </button>
+              </div>
             </div>
           </fieldset>
-
+          <p class="hint logistics-hint logistics-auto-cargo-hint">{{ T("logistics_auto_cargo_hint") }}</p>
           <p class="logistics-error fleet-form-error" data-logistics-error="distribute" hidden role="alert"></p>
-
           <div class="fleet-logistics-actions logistics-actions">
             <button type="submit" class="gc-btn gc-btn-primary gc-btn-sm" data-logistics-submit="distribute" disabled>
               {{ T("logistics_distribute_submit") }}

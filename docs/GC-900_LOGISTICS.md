@@ -2,25 +2,18 @@
 
 > Epic: Economy / Operations — **Ressourcen zwischen eigenen Kolonien** planbar bewegen  
 > Voraussetzung: GC-801/802 State-Sync, GC-800 Recycler ✅, `fleet_movements` + `fleet_batches` vorhanden  
-> **Nicht:** neues Fleet-System, parallele Logistics-State-Engine, neue Queue
+> **Nicht:** neues Fleet-System, parallele Logistics-State-Engine, neue Queue  
+> **Status:** Collect + Distribute live (GC-900A–E / GC-526–533). **`auto_cargo` UI-Default** (manuelle Ships nur noch API).
 
 ---
 
-## Problem
+## Problem (historisch — gelöst)
 
-Spieler mit mehreren Kolonien können Ressourcen zwar **einzeln** per Fleet-Mission `transport` / `collect` bewegen, aber die **Bulk-Logistics-APIs** sind nur validiert und geben `logistics_not_implemented` zurück:
-
-| Baustein | Status | Ort |
-|----------|--------|-----|
-| `collect_resources()` | Stub | `game/fleet.py` — `validate_logistics_planets` ✅, Implementierung ❌ |
-| `distribute_resources()` | Stub | `game/fleet.py` — gleiches Muster |
-| Routes | Stub | `app.py` — `POST /api/fleet/logistics/collect`, `…/distribute` |
-| UI | Fehlt | Keine Logistics-Seite; Fleet-UI kennt Missionen nicht |
-| Einzel-`collect` | ✅ | `send_fleet` mission `collect` — **ein** Ziel, **eine** Fahrt (nicht GC-900) |
+Spieler mit mehreren Kolonien brauchten Bulk-Collect/Distribute statt N× Einzel-`transport`/`collect`. MVP + UI sind implementiert; dieses Doc bleibt Spec/Referenz.
 
 ```text
-Heute:  Kolonie A → (manuell N× Fleet send) → Hub
-GC-900: Hub ← (ein Plan: A+B+C, Cargo-Verteilung, Slot-Check) ← automatisiert
+Live:  Hub ← (Plan: A+B+C, auto_cargo, Slot-Check) ← automatisiert
+UI:    Kolonien markieren → (Mengen bei Distribute) → Start
 ```
 
 ---
@@ -39,8 +32,9 @@ MVP-Constraints:
 - Nur **Cargo-Schiffe** (`role == cargo` in `fleet_defs`)
 - Nur **eigene** Planeten (`validate_logistics_planets` / `_planet_owned_by`)
 - **Fleet-Slots:** jede gestartete Ziel-Fahrt verbraucht **1 Slot** (kein Batch-Slot-Rabatt im MVP)
-- **Cargo-Kapazität** und **Storage-Caps** nur serverseitig (`fleet_calc`, `get_storage_capacity`)
+- **Cargo-Kapazität** serverseitig (`fleet_calc`); Storage-Caps auf Zielen werden **ignoriert** (Overflow erlaubt)
 - Ankunft/Rückflug über bestehendes **`process_fleet_tick`** / `fleet_movements` — kein neuer Tick
+- **`auto_cargo`:** Server wählt freie Frachter am Hub; bei zu wenig Kapazität Teilstart / Mengen-Clamp statt Hard-Fail
 
 ---
 
@@ -55,7 +49,7 @@ MVP-Constraints:
 | Neue Ressourcenarten | metal / crystal / fuel_cells |
 | Neue Queue-Engine | Queue-Regeln nur für Schiffsbau/Forschung |
 | `deploy` bei Distribute | MVP: liefern + leerer Rückflug |
-| `auto_cargo` / Preset-only ohne Implementierung | Stub-Modi explizit Phase 2 |
+| Preset-only Ships | `ships_selection_mode=preset` weiter Stub |
 
 ---
 
@@ -88,11 +82,11 @@ Referenz-Muster: [GC-800_RECYCLER.md](GC-800_RECYCLER.md) (Mission + Tick), [STA
 | `source_planet_ids` | Liste **Quell-Kolonien** (eigene Planeten), von denen abgeholt wird |
 | `resources_mode` | z. B. `all` (MVP: alles bis Cargo-Cap) |
 | `resources` | Optional explizite Mengen (Phase 2 / `manual` modes) |
-| `ships_selection_mode` | `manual` (MVP) — `auto_cargo` / `preset` → derzeit Stub |
-| `preset_id` | Optional; Preset-Flow Phase 2 (GC-900E) |
-| `ships` | **Fehlt in Route** — GC-900B: `{ "mule_courier": 50 }` Pflicht bei `manual` |
+| `ships_selection_mode` | **`auto_cargo`** (UI-Default) oder **`manual`** (API/Tests); `preset` → Stub |
+| `preset_id` | Optional; Preset-Flow weiter Phase 2 |
+| `ships` | Pflicht bei `manual`; bei `auto_cargo` leer / ignoriert — Server allokiert aus Hub-Stock |
 
-**Distribute** — `POST /api/fleet/logistics/distribute` (Implementierung **GC-900D**, nicht 900B)
+**Distribute** — `POST /api/fleet/logistics/distribute`
 
 | Feld | Bedeutung |
 |------|-----------|
@@ -100,21 +94,11 @@ Referenz-Muster: [GC-800_RECYCLER.md](GC-800_RECYCLER.md) (Mission + Tick), [STA
 | `target_planet_ids` | **Ziel-Kolonien** |
 | `resources_mode` | z. B. `equal` — gleichmäßige Verteilung (MVP) |
 | `resources` | `{ metal, crystal, fuel_cells }` Gesamtfracht |
-| `ships_selection_mode` | `manual` (MVP) |
+| `ships_selection_mode` | **`auto_cargo`** (UI) oder **`manual`** |
 
-### Stub-Verhalten heute
+### Live-Verhalten
 
-```python
-# game/fleet.py — gibt immer validated payload + logistics_not_implemented
-return False, "logistics_not_implemented", {
-    "ok": False,
-    "reason": "logistics_not_implemented",
-    "message_key": "fleet_logistics_not_implemented",
-    "validated": True,
-}
-```
-
-Routes antworten mit `fleet_ok` / `fleet_err` **ohne** kanonisches `state`-Envelope — **GC-900B** muss auf `_action_json_response(..., finish_source="api_fleet_logistics_*")` umgestellt werden.
+`collect_resources` / `distribute_resources` orchestrieren `fleet_batches` + N× `send_fleet`. Preview: `POST /api/fleet/logistics/preview` mit gleichem `ships_selection_mode`.
 
 ### Hilfsfunktionen (bereits vorhanden)
 
@@ -305,7 +289,7 @@ Fehler: `ok: false`, trotzdem **`state`** nach Mutation wo sinnvoll (GC-801).
 | Ticket | Inhalt |
 |--------|--------|
 | **GC-900C** | Collect UI: Multi-Select eigene Kolonien, Hub, Cargo-Schiffe, Send → `/api/fleet/logistics/collect` |
-| **GC-900E** | Distribute UI + Polish: Presets, Batch-Overview, `auto_cargo`, i18n (i18n-Keys existieren teils) |
+| **GC-900E** | Distribute UI + Polish: Presets, Batch-Overview — **`auto_cargo` live** (UI-Default); Preset-only weiter offen |
 
 MVP-UI-Regeln:
 

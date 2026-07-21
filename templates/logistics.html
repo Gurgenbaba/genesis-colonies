@@ -128,16 +128,18 @@
   letter-spacing: 0.04em;
   border-radius: var(--gc-radius-sm);
 }
-.logistics-page--compact .fleet-resource-row {
+.logistics-page--compact .fleet-resource-row:not(.logistics-resource-row) {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
 }
 .logistics-page--compact .fleet-resource-label {
+  font-size: 0.78rem;
+}
+.logistics-page--compact .fleet-resource-row:not(.logistics-resource-row) .fleet-resource-label {
   flex: 1 1 120px;
   min-width: 0;
-  font-size: 0.78rem;
 }
 .logistics-page--compact .logistics-actions { margin-top: 8px; }
 .logistics-page--compact [data-logistics-submit] {

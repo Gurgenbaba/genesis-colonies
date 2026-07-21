@@ -11,6 +11,8 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple, Typ
 
 from .db import begin_write_transaction, commit, db, lock_planet_for_update, rollback, table_exists
 from .fleet_calc import (
+    allocate_auto_cargo_ships,
+    allocate_auto_cargo_ships_for_targets,
     apply_departure_deduction,
     build_collect_route,
     build_flight_preview_payload,
@@ -28,6 +30,7 @@ from .fleet_calc import (
     collect_route_sort_key,
     normalize_collect_source_planet_ids,
     normalize_ships,
+    planet_resource_total,
     split_resources_evenly,
     split_ships_across_targets,
     validate_collect_source_planet,
@@ -5258,6 +5261,8 @@ def build_distribute_route(
     player_id: int,
     conn,
     for_preview: bool = False,
+    clamp_to_cargo: bool = False,
+    skip_invalid_planets: bool = False,
 ) -> Tuple[bool, str, Optional[List[DistributeRouteLeg]], Optional[Dict[str, int]]]:
     """Validate distribute targets, compute per-leg cargo/ships, enforce slots and cargo caps."""
     origin = int(origin_planet_id or 0)
@@ -5279,6 +5284,8 @@ def build_distribute_route(
             player_id=int(player_id),
         )
         if not ok or not coords:
+            if skip_invalid_planets:
+                continue
             return False, reason or "planet_not_found", None, None
         entries.append(
             {
@@ -5289,6 +5296,9 @@ def build_distribute_route(
             }
         )
 
+    if not entries:
+        return False, "no_planets", None, None
+
     entries.sort(
         key=lambda e: collect_route_sort_key(
             galaxy=int(e["galaxy"]),
@@ -5297,6 +5307,14 @@ def build_distribute_route(
             planet_id=int(e["planet_id"]),
         )
     )
+
+    # Logistics uses ALL free slots (no mass-expo reserve). Cap targets before
+    # equal-split so the full cargo goes to the legs that actually launch.
+    slots_free = int(free_fleet_slots)
+    if slots_free <= 0:
+        return False, "fleet_slots_full", None, None
+    if len(entries) > slots_free:
+        entries = entries[:slots_free]
 
     mode = str(resources_mode or "").strip().lower()
     allowed_ids = {int(e["planet_id"]) for e in entries}
@@ -5347,24 +5365,45 @@ def build_distribute_route(
             leg["resources_requested"] = share_loaded
         legs.append(leg)
 
-    if int(free_fleet_slots) <= 0:
-        return False, "fleet_slots_full", None, None
-    if len(legs) > int(free_fleet_slots):
-        legs = legs[: int(free_fleet_slots)]
+    if not legs:
+        return False, "no_deliverable_resources", None, None
+
+    if clamp_to_cargo:
+        total_units = sum(int(v) for v in ships_n.values())
+        if total_units > 0 and len(legs) > total_units:
+            legs = legs[:total_units]
 
     ship_allocs = split_ships_across_targets(ships_n, len(legs))
+    kept: List[DistributeRouteLeg] = []
     for leg, alloc in zip(legs, ship_allocs):
         if not alloc or calculate_total_cargo(alloc) <= 0:
+            if clamp_to_cargo:
+                continue
             return False, "not_enough_ships", None, None
         cargo = (
             leg.get("resources_requested") or leg["resources"]
             if for_preview
             else leg["resources"]
         )
-        if loaded_resource_total(cargo) > calculate_total_cargo(alloc):
-            if not for_preview:
+        cargo_cap = calculate_total_cargo(alloc)
+        if loaded_resource_total(cargo) > cargo_cap:
+            if clamp_to_cargo:
+                from .resources import load_resources_up_to_cargo
+
+                clamped = load_resources_up_to_cargo(cargo, cargo_cap)
+                leg["resources"] = clamped
+                if for_preview and "resources_requested" not in leg:
+                    leg["resources_requested"] = calculate_loaded_resources(cargo)
+            elif not for_preview:
                 return False, "not_enough_cargo", None, None
         leg["ships"] = dict(alloc)
+        if loaded_resource_total(leg["resources"]) <= 0 and not for_preview:
+            continue
+        kept.append(leg)
+
+    legs = kept
+    if not legs:
+        return False, "no_deliverable_resources", None, None
 
     delivered_total = _sum_loaded_resources([leg["resources"] for leg in legs])
     return True, "", legs, delivered_total
@@ -5453,8 +5492,10 @@ def collect_resources(
     if hub_id <= 0:
         return False, "origin_not_found", None
 
-    mode = str(ships_selection_mode or "").strip().lower()
-    if mode in ("auto_cargo", "preset"):
+    mode = str(ships_selection_mode or "").strip().lower() or "manual"
+    if mode == "preset":
+        return False, "invalid_ships_selection_mode", None
+    if mode not in ("manual", "auto_cargo"):
         return False, "invalid_ships_selection_mode", None
 
     if str(resources_mode or "").strip().lower() != "all":
@@ -5468,9 +5509,11 @@ def collect_resources(
     if not source_ids:
         return False, "no_planets", None
 
-    ok_ships, ship_reason, ships_n = validate_logistics_manual_ships(ships)
-    if not ok_ships:
-        return False, ship_reason, None
+    ships_n: Dict[str, int] = {}
+    if mode == "manual":
+        ok_ships, ship_reason, ships_n = validate_logistics_manual_ships(ships)
+        if not ok_ships:
+            return False, ship_reason, None
 
     own = conn is None
     if own:
@@ -5484,6 +5527,18 @@ def collect_resources(
         if hub_row is None or int(hub_row.get("player_id") or 0) != int(player_id):
             return False, "origin_not_found", None
 
+        source_weights: Dict[int, int] = {}
+        if mode == "auto_cargo":
+            cargo_needed = 0
+            for sid in source_ids:
+                total = planet_resource_total(planet_rows.get(int(sid)))
+                source_weights[int(sid)] = total
+                cargo_needed += total
+            available_stock = get_planet_ships(hub_id, conn=conn)
+            ships_n = allocate_auto_cargo_ships(available_stock, cargo_needed)
+            if not ships_n:
+                return False, "no_ships", None
+
         slots = get_fleet_slot_status(player_id, conn=conn)
         ok_route, route_reason, legs = build_collect_route(
             origin_planet_id=hub_id,
@@ -5492,6 +5547,9 @@ def collect_resources(
             ships=ships_n,
             free_fleet_slots=int(slots["free"]),
             player_id=int(player_id),
+            source_weights=source_weights if mode == "auto_cargo" else None,
+            skip_empty_ship_legs=(mode == "auto_cargo"),
+            skip_invalid_planets=(mode == "auto_cargo"),
         )
         if not ok_route or not legs:
             return False, route_reason or "no_planets", None
@@ -5524,6 +5582,7 @@ def collect_resources(
         batch_id = int(cur.lastrowid)
 
         started: List[Dict[str, Any]] = []
+        send_skipped: List[Dict[str, Any]] = []
         for leg in legs:
             ok_send, send_reason, payload = send_fleet(
                 player_id=player_id,
@@ -5540,6 +5599,14 @@ def collect_resources(
                 conn=conn,
             )
             if not ok_send or not payload:
+                if mode == "auto_cargo":
+                    send_skipped.append(
+                        {
+                            "planet_id": int(leg["planet_id"]),
+                            "reason": send_reason or "send_failed",
+                        }
+                    )
+                    continue
                 if own:
                     rollback(conn)
                 return False, send_reason or "send_failed", None
@@ -5550,7 +5617,12 @@ def collect_resources(
                 }
             )
 
-        batch_status = "completed" if started else "failed"
+        if not started:
+            if own:
+                rollback(conn)
+            return False, (send_skipped[0]["reason"] if send_skipped else route_reason) or "send_failed", None
+
+        batch_status = "completed"
         conn.execute(
             "UPDATE fleet_batches SET status = ?, total_fleets = ?, updated_at = ? WHERE id = ?;",
             (batch_status, len(started), now, batch_id),
@@ -5561,6 +5633,9 @@ def collect_resources(
 
         cur.execute("SELECT * FROM fleet_batches WHERE id = ?;", (batch_id,))
         batch_row = dict(cur.fetchone())
+
+        launched_ids = {int(item["source_planet_id"]) for item in started}
+        skipped = [int(sid) for sid in source_ids if int(sid) not in launched_ids]
 
         return True, "", {
             "batch": {
@@ -5580,8 +5655,12 @@ def collect_resources(
                     "ships": dict(leg["ships"]),
                 }
                 for leg in legs
+                if int(leg["planet_id"]) in launched_ids
             ],
-            "skipped": [],
+            "skipped": skipped,
+            "send_skipped": send_skipped,
+            "ships_used": dict(ships_n),
+            "ships_selection_mode": mode,
             "active_slots": get_fleet_slot_status(player_id, conn=conn),
         }
     except Exception:
@@ -5612,8 +5691,10 @@ def distribute_resources(
     if hub_id <= 0:
         return False, "origin_not_found", None
 
-    sel_mode = str(ships_selection_mode or "").strip().lower()
-    if sel_mode in ("auto_cargo", "preset"):
+    sel_mode = str(ships_selection_mode or "").strip().lower() or "manual"
+    if sel_mode == "preset":
+        return False, "invalid_ships_selection_mode", None
+    if sel_mode not in ("manual", "auto_cargo"):
         return False, "invalid_ships_selection_mode", None
 
     res_mode = str(resources_mode or "").strip().lower()
@@ -5630,9 +5711,11 @@ def distribute_resources(
     if not target_ids:
         return False, "no_planets", None
 
-    ok_ships, ship_reason, ships_n = validate_logistics_manual_ships(ships)
-    if not ok_ships:
-        return False, ship_reason, None
+    ships_n: Dict[str, int] = {}
+    if sel_mode == "manual":
+        ok_ships, ship_reason, ships_n = validate_logistics_manual_ships(ships)
+        if not ok_ships:
+            return False, ship_reason, None
 
     own = conn is None
     if own:
@@ -5646,7 +5729,29 @@ def distribute_resources(
         if hub_row is None or int(hub_row.get("player_id") or 0) != int(player_id):
             return False, "origin_not_found", None
 
-        slots = get_fleet_slot_status(player_id, conn=conn)
+        if sel_mode == "auto_cargo":
+            if res_mode == "equal":
+                cargo_needed = loaded_resource_total(calculate_loaded_resources(resources))
+            else:
+                cargo_needed = 0
+                parsed = target_resources or {}
+                if isinstance(parsed, Mapping):
+                    for raw in parsed.values():
+                        cargo_needed += loaded_resource_total(calculate_loaded_resources(raw))
+            available_stock = get_planet_ships(hub_id, conn=conn)
+            slots = get_fleet_slot_status(player_id, conn=conn)
+            # Use every free slot — never apply MASS_EXPEDITION_SLOT_RESERVE here.
+            launchable = min(len(target_ids), max(0, int(slots["free"])))
+            ships_n = allocate_auto_cargo_ships_for_targets(
+                available_stock,
+                cargo_needed,
+                max(1, launchable),
+            )
+            if not ships_n:
+                return False, "no_ships", None
+        else:
+            slots = get_fleet_slot_status(player_id, conn=conn)
+
         ok_route, route_reason, legs, delivered_total = build_distribute_route(
             origin_planet_id=hub_id,
             target_planet_ids=target_ids,
@@ -5658,6 +5763,8 @@ def distribute_resources(
             free_fleet_slots=int(slots["free"]),
             player_id=int(player_id),
             conn=conn,
+            clamp_to_cargo=(sel_mode == "auto_cargo"),
+            skip_invalid_planets=(sel_mode == "auto_cargo"),
         )
         if not ok_route or not legs or not delivered_total:
             return False, route_reason or "no_deliverable_resources", None
@@ -5709,6 +5816,7 @@ def distribute_resources(
         batch_id = int(cur.lastrowid)
 
         started: List[Dict[str, Any]] = []
+        send_skipped: List[Dict[str, Any]] = []
         for leg in legs:
             ok_send, send_reason, payload = send_fleet(
                 player_id=player_id,
@@ -5725,6 +5833,14 @@ def distribute_resources(
                 conn=conn,
             )
             if not ok_send or not payload:
+                if sel_mode == "auto_cargo":
+                    send_skipped.append(
+                        {
+                            "planet_id": int(leg["planet_id"]),
+                            "reason": send_reason or "send_failed",
+                        }
+                    )
+                    continue
                 if own:
                     rollback(conn)
                 return False, send_reason or "send_failed", None
@@ -5736,7 +5852,12 @@ def distribute_resources(
                 }
             )
 
-        batch_status = "completed" if started else "failed"
+        if not started:
+            if own:
+                rollback(conn)
+            return False, (send_skipped[0]["reason"] if send_skipped else route_reason) or "send_failed", None
+
+        batch_status = "completed"
         conn.execute(
             "UPDATE fleet_batches SET status = ?, total_fleets = ?, updated_at = ? WHERE id = ?;",
             (batch_status, len(started), now, batch_id),
@@ -5747,6 +5868,12 @@ def distribute_resources(
 
         cur.execute("SELECT * FROM fleet_batches WHERE id = ?;", (batch_id,))
         batch_row = dict(cur.fetchone())
+
+        launched_ids = {int(item["target_planet_id"]) for item in started}
+        skipped = [int(tid) for tid in target_ids if int(tid) not in launched_ids]
+        delivered_started = _sum_loaded_resources(
+            [item.get("resources") or {} for item in started]
+        )
 
         return True, "", {
             "batch": {
@@ -5767,9 +5894,13 @@ def distribute_resources(
                     "resources": calculate_loaded_resources(leg["resources"]),
                 }
                 for leg in legs
+                if int(leg["planet_id"]) in launched_ids
             ],
-            "skipped": [],
-            "delivered_total": delivered_total,
+            "skipped": skipped,
+            "send_skipped": send_skipped,
+            "delivered_total": delivered_started or delivered_total,
+            "ships_used": dict(ships_n),
+            "ships_selection_mode": sel_mode,
             "active_slots": get_fleet_slot_status(player_id, conn=conn),
         }
     except Exception:

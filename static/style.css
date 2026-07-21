@@ -15482,7 +15482,7 @@ body.gc-techtree-media-zoom-open{
 }
 .fleet-send-compact-grid{
   display: grid;
-  grid-template-columns: minmax(0, 248px) minmax(0, 1fr);
+  grid-template-columns: minmax(280px, 0.95fr) minmax(0, 1.15fr);
   gap: 8px 10px;
   align-items: stretch;
 }
@@ -15490,6 +15490,7 @@ body.gc-techtree-media-zoom-open{
   margin: 0;
   padding: 6px 8px;
   height: 100%;
+  min-width: 0;
 }
 .fleet-resources-fieldset--inactive{
   visibility: hidden;
@@ -15502,14 +15503,19 @@ body.gc-techtree-media-zoom-open{
 }
 .fleet-send-compact .fleet-resources-rows{
   display: grid;
-  gap: 4px;
+  gap: 6px;
 }
+/* Label+MAX on top, full-width amount below — billions stay readable. */
 .fleet-send-compact .fleet-resource-row{
-  grid-template-columns: minmax(0, 1fr) 72px 42px;
-  gap: 4px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "label max"
+    "input input";
+  gap: 4px 6px;
   margin-bottom: 0;
 }
 .fleet-send-compact .fleet-resource-label{
+  grid-area: label;
   font-size: 0.72rem;
   gap: 4px;
   min-width: 0;
@@ -15518,16 +15524,24 @@ body.gc-techtree-media-zoom-open{
   white-space: nowrap;
 }
 .fleet-send-compact .fleet-resource-input{
+  grid-area: input;
   width: 100%;
-  min-height: 26px;
-  padding: 2px 4px;
-  font-size: 0.72rem;
+  min-width: 0;
+  max-width: none;
+  min-height: 32px;
+  padding: 4px 8px;
+  font-size: 0.88rem;
+  text-align: right;
+  overflow-x: auto;
 }
 .fleet-send-compact .fleet-res-max-btn{
+  grid-area: max;
   min-height: 26px;
-  padding: 2px 5px;
+  min-width: 2.75rem;
+  padding: 2px 6px;
   font-size: 0.62rem;
   letter-spacing: 0.04em;
+  justify-self: end;
 }
 .fleet-preview-hud--inline{
   margin: 0;
@@ -16287,14 +16301,14 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 }
 .fleet-resource-row{
   display: grid;
-  grid-template-columns: 1fr 100px 64px;
+  grid-template-columns: minmax(5.5rem, auto) minmax(12rem, 1fr) auto;
   gap: 8px;
   align-items: center;
   margin-bottom: 6px;
 }
 .fleet-resource-row:last-child{ margin-bottom: 0; }
 .fleet-resource-row input{
-  text-align: center;
+  text-align: right;
   font-family: var(--gc-mono);
 }
 .fleet-page .fleet-resource-summary{
@@ -16666,8 +16680,10 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 .fleet-resource-row--fuel label{ color: #fbbf24; }
 .fleet-resource-input{
   width: 100%;
+  min-width: 0;
+  max-width: none;
   padding: 6px 8px;
-  text-align: center;
+  text-align: right;
   border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(70, 229, 255, 0.18);
   background: rgba(3, 8, 18, 0.85);
@@ -17262,6 +17278,13 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   .logistics-layout{ grid-template-columns: 1fr; }
 }
 .logistics-layout-col{ min-width: 0; }
+.logistics-select-all-row{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 4px;
+}
+.logistics-auto-cargo-hint{ margin: 0 0 12px; }
 .logistics-hub-row{ margin-bottom: 12px; }
 .logistics-hub-select{ width: 100%; max-width: 100%; }
 .logistics-page--compact .fleet-ship-input{
@@ -17277,6 +17300,81 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   min-height: 28px;
   padding: 5px 6px;
   font-size: 0.82rem;
+}
+/* Logistics distribute: full-width inputs for large formatted totals (billions+). */
+#logistics-distribute-form .logistics-resources-fieldset{
+  width: 100%;
+  min-width: 0;
+}
+#logistics-distribute-form .logistics-resource-grid{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+#logistics-distribute-form .logistics-resource-row,
+.logistics-panel--distribute .logistics-resource-row,
+.logistics-page--compact #logistics-distribute-form .logistics-resource-row{
+  display: grid;
+  grid-template-columns: minmax(5.5rem, 7.5rem) minmax(12rem, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  flex-wrap: nowrap;
+}
+#logistics-distribute-form .logistics-resource-row .fleet-resource-label,
+.logistics-panel--distribute .logistics-resource-row .fleet-resource-label,
+.logistics-page--compact #logistics-distribute-form .logistics-resource-row .fleet-resource-label{
+  flex: none;
+  min-width: 0;
+  white-space: nowrap;
+}
+#logistics-distribute-form .logistics-resource-input,
+.logistics-panel--distribute .logistics-resource-input,
+.logistics-page--compact #logistics-distribute-form .logistics-resource-input,
+.logistics-page--compact .logistics-panel--distribute .logistics-resource-input{
+  width: 100%;
+  min-width: 12rem;
+  max-width: none;
+  min-height: 36px;
+  padding: 8px 10px;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  text-align: right;
+  overflow-x: auto;
+}
+#logistics-distribute-form .fleet-res-max-btn,
+.logistics-panel--distribute .fleet-res-max-btn{
+  min-width: 3.25rem;
+  justify-self: start;
+  flex: none;
+}
+@media (max-width: 560px){
+  #logistics-distribute-form .logistics-resource-row,
+  .logistics-panel--distribute .logistics-resource-row,
+  .logistics-page--compact #logistics-distribute-form .logistics-resource-row{
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "label max"
+      "input input";
+  }
+  #logistics-distribute-form .logistics-resource-row .fleet-resource-label,
+  .logistics-panel--distribute .logistics-resource-row .fleet-resource-label{
+    grid-area: label;
+  }
+  #logistics-distribute-form .logistics-resource-input,
+  .logistics-panel--distribute .logistics-resource-input,
+  .logistics-page--compact #logistics-distribute-form .logistics-resource-input{
+    grid-area: input;
+    min-width: 0;
+    min-height: 42px;
+    font-size: 1.05rem;
+  }
+  #logistics-distribute-form .fleet-res-max-btn,
+  .logistics-panel--distribute .fleet-res-max-btn{
+    grid-area: max;
+    justify-self: end;
+  }
 }
 .logistics-sources-fieldset{ margin-top: 4px; }
 .logistics-sources-list{
@@ -37035,6 +37133,8 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   .gc-fleet-sheet-backdrop{
     position: fixed;
     inset: 0;
+    /* Leave bottom nav clickable (Kommando / Nachrichten) while sheet is open. */
+    bottom: calc(var(--gc-bottom-nav-h, 64px) + var(--gc-safe-bottom, 0px));
     z-index: calc(var(--gc-z-popover, 80) - 2);
     border: none;
     padding: 0;

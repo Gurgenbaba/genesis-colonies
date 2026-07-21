@@ -272,6 +272,9 @@ def test_logistics_page_renders_collect_form(logistics_db, monkeypatch):
     assert 'logistics-collect-form' in html
     assert 'logistics-tab-distribute' in html
     assert 'data-logistics-hub' in html
+    assert 'data-logistics-select-all="collect"' in html
+    assert 'logistics-auto-cargo-hint' in html
+    assert 'data-logistics-ship-input' not in html
 
 def test_collect_logistics_api_returns_state(logistics_db):
     import app as app_mod
@@ -583,3 +586,205 @@ def test_distribute_api_returns_state(logistics_db):
     assert body['ok'] is True
     assert body.get('state', {}).get('ok') is True
     assert body.get('data', {}).get('batch', {}).get('batch_type') == 'distribute_resources'
+
+def test_collect_auto_cargo_happy_path(logistics_db):
+    """auto_cargo picks freighters from hub stock without client ships map."""
+    conn = db()
+    uid = _player(conn=conn)
+    hub, sources = _hub_and_sources(uid, conn, sources=2)
+    for cid in sources:
+        _fund_planet(conn.cursor(), cid, metal=8000, crystal=1000)
+    _seed_ships(hub, uid, {'mule_courier': 6}, conn=conn)
+    conn.commit()
+    ok, reason, payload = collect_resources(
+        player_id=uid,
+        target_planet_id=hub,
+        source_planet_ids=sources,
+        ships={},
+        ships_selection_mode='auto_cargo',
+        conn=conn,
+    )
+    assert ok, reason
+    assert len(payload['started']) == 2
+    assert payload['ships_selection_mode'] == 'auto_cargo'
+    assert payload['ships_used'].get('mule_courier', 0) > 0
+    assert payload['skipped'] == []
+    conn.close()
+
+
+def test_collect_auto_cargo_partial_when_few_freighters(logistics_db):
+    """Fewer freighters than sources → launch what fits, skip the rest."""
+    conn = db()
+    uid = _player(conn=conn)
+    hub, sources = _hub_and_sources(uid, conn, sources=3)
+    for cid in sources:
+        _fund_planet(conn.cursor(), cid, metal=20000, crystal=2000)
+    _seed_ships(hub, uid, {'mule_courier': 2}, conn=conn)
+    conn.commit()
+    ok, reason, payload = collect_resources(
+        player_id=uid,
+        target_planet_id=hub,
+        source_planet_ids=sources,
+        ships={},
+        ships_selection_mode='auto_cargo',
+        conn=conn,
+    )
+    assert ok, reason
+    assert len(payload['started']) == 2
+    assert len(payload['skipped']) == 1
+    assert sum(payload['ships_used'].values()) == 2
+    conn.close()
+
+
+def test_collect_auto_cargo_no_ships(logistics_db):
+    conn = db()
+    uid = _player(conn=conn)
+    hub, sources = _hub_and_sources(uid, conn, sources=1)
+    _fund_planet(conn.cursor(), sources[0], metal=5000, crystal=500)
+    _seed_ships(hub, uid, {'falcon_interceptor': 5}, conn=conn)
+    conn.commit()
+    ok, reason, payload = collect_resources(
+        player_id=uid,
+        target_planet_id=hub,
+        source_planet_ids=sources,
+        ships={},
+        ships_selection_mode='auto_cargo',
+        conn=conn,
+    )
+    assert ok is False
+    assert reason == 'no_ships'
+    assert payload is None
+    conn.close()
+
+
+def test_distribute_auto_cargo_happy_path(logistics_db):
+    conn = db()
+    uid = _player(conn=conn)
+    hub, targets = _hub_and_sources(uid, conn, sources=2)
+    _fund_planet(conn.cursor(), hub, metal=100000, crystal=20000, fuel_cells=20000)
+    _seed_ships(hub, uid, {'mule_courier': 8}, conn=conn)
+    conn.commit()
+    ok, reason, payload = distribute_resources(
+        player_id=uid,
+        origin_planet_id=hub,
+        target_planet_ids=targets,
+        ships={},
+        resources={'metal': 10000, 'crystal': 2000},
+        resources_mode='equal',
+        ships_selection_mode='auto_cargo',
+        conn=conn,
+    )
+    assert ok, reason
+    assert len(payload['started']) == 2
+    assert payload['ships_selection_mode'] == 'auto_cargo'
+    assert payload['delivered_total']['metal'] == 10000
+    assert payload['delivered_total']['crystal'] == 2000
+    conn.close()
+
+
+def test_distribute_auto_cargo_clamps_when_not_enough_cargo(logistics_db):
+    """Requested resources exceed freighter cargo → clamp and still launch."""
+    conn = db()
+    uid = _player(conn=conn)
+    hub, targets = _hub_and_sources(uid, conn, sources=1)
+    _fund_planet(conn.cursor(), hub, metal=500000, crystal=50000, fuel_cells=20000)
+    _seed_ships(hub, uid, {'mule_courier': 1}, conn=conn)
+    conn.commit()
+    ok, reason, payload = distribute_resources(
+        player_id=uid,
+        origin_planet_id=hub,
+        target_planet_ids=targets,
+        ships={},
+        resources={'metal': 100000, 'crystal': 0, 'fuel_cells': 0},
+        resources_mode='equal',
+        ships_selection_mode='auto_cargo',
+        conn=conn,
+    )
+    assert ok, reason
+    assert payload['delivered_total']['metal'] == 5000
+    assert payload['delivered_total']['crystal'] == 0
+    conn.close()
+
+
+def test_collect_auto_cargo_api_preview_and_submit(logistics_db):
+    import app as app_mod
+    conn = db()
+    uid = _player(conn=conn)
+    hub, sources = _hub_and_sources(uid, conn, sources=2)
+    for cid in sources:
+        _fund_planet(conn.cursor(), cid, metal=6000, crystal=500)
+    _seed_ships(hub, uid, {'mule_courier': 4}, conn=conn)
+    conn.commit()
+    conn.close()
+    client = app_mod.app.test_client()
+    with client.session_transaction() as sess:
+        sess['user_id'] = uid
+    preview = client.post(
+        '/api/fleet/logistics/preview',
+        json={
+            'mode': 'collect',
+            'target_planet_id': hub,
+            'source_planet_ids': sources,
+            'resources_mode': 'all',
+            'ships_selection_mode': 'auto_cargo',
+        },
+    )
+    assert preview.status_code == 200
+    pbody = preview.get_json()
+    assert pbody['ok'] is True
+    prev = pbody['data']['preview']
+    assert prev['can_launch'] is True
+    assert prev['ships_used'].get('mule_courier', 0) > 0
+    res = client.post(
+        '/api/fleet/logistics/collect',
+        json={
+            'target_planet_id': hub,
+            'source_planet_ids': sources,
+            'resources_mode': 'all',
+            'ships_selection_mode': 'auto_cargo',
+            'request_id': str(uuid.uuid4()),
+        },
+    )
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body['ok'] is True
+    assert body.get('data', {}).get('batch', {}).get('batch_type') == 'collect_resources'
+
+def test_distribute_uses_all_free_slots_no_mass_expo_reserve(logistics_db):
+    """Logistics must use every free slot — never MASS_EXPEDITION_SLOT_RESERVE."""
+    from game.fleet_defs import MASS_EXPEDITION_SLOT_RESERVE
+    from tests.test_fleet import _set_research_level
+
+    conn = db()
+    uid = _player(conn=conn)
+    hub, _ = _hub_and_sources(uid, conn, sources=3)
+    # nav 8 → 6 fleet slots; mass-expo would only use free-3=3
+    cur = conn.cursor()
+    _set_research_level(cur, uid, 'navigation_tech', 8)
+    _fund_planet(cur, hub, metal=500000, crystal=50000, fuel_cells=50000)
+    _seed_ships(hub, uid, {'mule_courier': 40}, conn=conn)
+    conn.commit()
+
+    targets = [int(p['id']) for p in get_planets_by_player(uid, conn=conn) if int(p['id']) != hub]
+    assert len(targets) >= 4
+    slots = get_fleet_slot_status(uid, conn=conn)
+    free = int(slots['free'])
+    assert free == 6
+    assert free > MASS_EXPEDITION_SLOT_RESERVE
+
+    ok, reason, payload = distribute_resources(
+        player_id=uid,
+        origin_planet_id=hub,
+        target_planet_ids=targets,
+        ships={},
+        resources={'metal': 12000, 'crystal': 0},
+        resources_mode='equal',
+        ships_selection_mode='auto_cargo',
+        conn=conn,
+    )
+    assert ok, reason
+    started = len(payload['started'])
+    # Must launch min(targets, free) — not free - MASS_EXPEDITION_SLOT_RESERVE
+    assert started == min(len(targets), free)
+    assert started > max(0, free - MASS_EXPEDITION_SLOT_RESERVE)
+    conn.close()

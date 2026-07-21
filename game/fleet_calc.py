@@ -7,6 +7,7 @@ import time
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, TypedDict
 
 from .fleet_defs import (
+    ACTIVE_SHIP_KEYS,
     DEFAULT_EXPEDITION_STAY_HOURS,
     DEFAULT_HOLD_SECONDS,
     EXPEDITION_STAY_HOURS_MAX,
@@ -16,6 +17,7 @@ from .fleet_defs import (
     canonical_ship_key,
     get_ship,
     is_known_ship_key,
+    ship_has_role,
 )
 from .effects.effect_resolver import FUEL_EFFICIENCY_PER_LEVEL, EffectResolver
 
@@ -446,6 +448,117 @@ def validate_collect_source_planet(
     }
 
 
+def planet_resource_total(planet_row: Mapping[str, Any] | None) -> int:
+    """Sum metal + crystal + fuel_cells on a planet row (collect auto-cargo demand)."""
+    if not planet_row:
+        return 0
+    return (
+        max(0, int(float(planet_row.get("metal") or 0)))
+        + max(0, int(float(planet_row.get("crystal") or 0)))
+        + max(0, int(float(planet_row.get("fuel_cells") or 0)))
+    )
+
+
+def cargo_hulls_by_capacity_desc() -> List[str]:
+    """Active cargo-role hulls, largest cargo first (stable key tie-break)."""
+    keys: List[str] = []
+    for key in ACTIVE_SHIP_KEYS:
+        if ship_has_role(str(key), "cargo"):
+            keys.append(str(key))
+    keys.sort(key=lambda k: (-int((get_ship(k) or {}).get("cargo") or 0), k))
+    return keys
+
+
+def filter_available_cargo_ships(available_ships: Mapping[str, int] | None) -> Dict[str, int]:
+    """Keep only cargo-role hulls with positive stock."""
+    out: Dict[str, int] = {}
+    for key, qty in normalize_ships(available_ships).items():
+        if ship_has_role(key, "cargo") and int((get_ship(key) or {}).get("cargo") or 0) > 0:
+            out[key] = int(qty)
+    return out
+
+
+def allocate_auto_cargo_ships(
+    available_ships: Mapping[str, int] | None,
+    cargo_needed: int,
+) -> Dict[str, int]:
+    """
+    Pick free cargo hulls (largest first) until ``cargo_needed`` is covered.
+
+    If stock cannot cover demand, returns **all** available cargo ships so the
+    job can still launch as a partial collect/distribute.
+    """
+    stock = filter_available_cargo_ships(available_ships)
+    if not stock:
+        return {}
+    needed = max(0, int(cargo_needed))
+    if needed <= 0:
+        return {}
+
+    selected: Dict[str, int] = {}
+    remaining = needed
+    for key in cargo_hulls_by_capacity_desc():
+        have = int(stock.get(key, 0))
+        if have <= 0:
+            continue
+        per = int((get_ship(key) or {}).get("cargo") or 0)
+        if per <= 0:
+            continue
+        if remaining <= 0:
+            break
+        take = min(have, int(math.ceil(remaining / float(per))))
+        if take > 0:
+            selected[key] = take
+            remaining -= take * per
+
+    if remaining > 0:
+        for key in cargo_hulls_by_capacity_desc():
+            have = int(stock.get(key, 0))
+            already = int(selected.get(key, 0))
+            left = have - already
+            if left > 0:
+                selected[key] = already + left
+
+    return normalize_ships(selected)
+
+
+def allocate_auto_cargo_ships_for_targets(
+    available_ships: Mapping[str, int] | None,
+    cargo_needed: int,
+    target_count: int,
+) -> Dict[str, int]:
+    """
+    Auto-cargo for multi-target distribute: reserve enough hulls per leg so an
+    equal resource split fits each leg's cargo when stock allows.
+    """
+    stock = filter_available_cargo_ships(available_ships)
+    if not stock:
+        return {}
+    n = max(1, int(target_count))
+    needed = max(0, int(cargo_needed))
+    if needed <= 0:
+        return {}
+
+    per_leg = int(math.ceil(needed / float(n)))
+    selected: Dict[str, int] = {}
+    remaining_stock = dict(stock)
+    for _ in range(n):
+        leg = allocate_auto_cargo_ships(remaining_stock, per_leg)
+        if not leg:
+            break
+        for key, qty in leg.items():
+            selected[key] = int(selected.get(key, 0)) + int(qty)
+            left = int(remaining_stock.get(key, 0)) - int(qty)
+            if left > 0:
+                remaining_stock[key] = left
+            else:
+                remaining_stock.pop(key, None)
+
+    if not selected:
+        return allocate_auto_cargo_ships(stock, needed)
+    return normalize_ships(selected)
+
+
 def build_collect_route(
     *,
     origin_planet_id: int,
@@ -454,6 +567,9 @@ def build_collect_route(
     ships: Mapping[str, int],
     free_fleet_slots: int,
     player_id: int,
+    source_weights: Mapping[int, int] | None = None,
+    skip_empty_ship_legs: bool = False,
+    skip_invalid_planets: bool = False,
 ) -> Tuple[bool, str, Optional[List[CollectRouteLeg]]]:
     """Validate collect targets, sort deterministically, split cargo ships, enforce slots."""
     sources = normalize_collect_source_planet_ids(origin_planet_id, source_planet_ids)
@@ -474,6 +590,8 @@ def build_collect_route(
             player_id=int(player_id),
         )
         if not ok or not coords:
+            if skip_invalid_planets:
+                continue
             return False, reason or "planet_not_found", None
         entries.append(
             {
@@ -483,6 +601,9 @@ def build_collect_route(
                 "position": coords["position"],
             }
         )
+
+    if not entries:
+        return False, "no_planets", None
 
     entries.sort(
         key=lambda e: collect_route_sort_key(
@@ -499,10 +620,26 @@ def build_collect_route(
     if len(entries) > slots_free:
         entries = entries[:slots_free]
 
-    allocations = split_ships_across_targets(ships_n, len(entries))
+    total_units = sum(int(v) for v in ships_n.values())
+    if skip_empty_ship_legs and total_units > 0 and len(entries) > total_units:
+        entries = entries[:total_units]
+
+    weights: List[int] | None = None
+    if source_weights is not None and entries:
+        weights = [max(0, int(source_weights.get(int(e["planet_id"]), 0))) for e in entries]
+        if sum(weights) <= 0:
+            weights = None
+
+    if weights is not None:
+        allocations = split_ships_by_weights(ships_n, weights)
+    else:
+        allocations = split_ships_across_targets(ships_n, len(entries))
+
     legs: List[CollectRouteLeg] = []
     for entry, alloc in zip(entries, allocations):
         if not alloc or calculate_total_cargo(alloc) <= 0:
+            if skip_empty_ship_legs:
+                continue
             return False, "not_enough_ships", None
         legs.append(
             {
@@ -515,7 +652,7 @@ def build_collect_route(
         )
 
     if not legs:
-        return False, "no_deliverable_resources", None, None
+        return False, "no_deliverable_resources", None
 
     return True, "", legs
 
@@ -526,8 +663,9 @@ def fleet_ships_are_cargo_only(ships: Mapping[str, int]) -> tuple[bool, str]:
     if not ships_n:
         return False, "no_ships"
     for key in ships_n:
-        spec = get_ship(str(key))
-        if not spec or str(spec.get("role") or "") != "cargo":
+        if not ship_has_role(str(key), "cargo"):
+            return False, "no_cargo_ships"
+        if int((get_ship(str(key)) or {}).get("cargo") or 0) <= 0:
             return False, "no_cargo_ships"
     return True, ""
 
@@ -546,6 +684,42 @@ def split_ships_across_targets(ships: Mapping[str, int], target_count: int) -> l
         last_qty = base + rem
         if last_qty > 0:
             parts[target_count - 1][key] = last_qty
+    return [normalize_ships(p) for p in parts]
+
+
+def split_ships_by_weights(
+    ships: Mapping[str, int],
+    weights: Sequence[int],
+) -> list[Dict[str, int]]:
+    """Split fleet proportionally by weights (largest-remainder per hull type)."""
+    n = len(weights)
+    if n < 1:
+        return []
+    ships_n = normalize_ships(ships)
+    w = [max(0, int(x)) for x in weights]
+    total_w = sum(w)
+    if total_w <= 0:
+        return split_ships_across_targets(ships_n, n)
+
+    parts: list[Dict[str, int]] = [{} for _ in range(n)]
+    for key, total in ships_n.items():
+        qty = int(total)
+        if qty <= 0:
+            continue
+        exact = [(qty * wi) / float(total_w) for wi in w]
+        floors = [int(math.floor(v)) for v in exact]
+        assigned = sum(floors)
+        rem = qty - assigned
+        order = sorted(
+            range(n),
+            key=lambda i: (-(exact[i] - floors[i]), i),
+        )
+        for i in range(n):
+            if floors[i] > 0:
+                parts[i][key] = floors[i]
+        for j in range(rem):
+            i = order[j % n]
+            parts[i][key] = int(parts[i].get(key, 0)) + 1
     return [normalize_ships(p) for p in parts]
 
 

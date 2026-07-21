@@ -229,15 +229,17 @@ Multi-Kolonie-Ressourcenbewegung über **`/logistics`** und `collect_resources` 
 | Regel | Collect | Distribute |
 |-------|---------|------------|
 | Schiffstypen | Nur `role == cargo` (`fleet_ships_are_cargo_only`) | gleich |
-| Schiffs-Split | `split_ships_across_targets` — Rest je Typ auf **letztes** Ziel | gleich |
+| Schiffs-Auswahl | UI: **`auto_cargo`** (Default); API: `manual` bleibt gültig | gleich |
+| Auto-Allokation | `allocate_auto_cargo_ships` — Bedarf = Summe Quellen-Ressourcen; bei Mangel **alle** freien Frachter, Teilstart | `allocate_auto_cargo_ships_for_targets` — genug Cargo pro Leg für Equal-Split; bei Mangel clamp |
+| Schiffs-Split | `auto_cargo`: `split_ships_by_weights` (Ressourcen pro Quelle); `manual`: `split_ships_across_targets` | `split_ships_across_targets` |
 | Ressourcen-Modus | `resources_mode`: nur **`all`** (alles Verfügbares am Quell-Planet bis Cargo-Cap) | **`equal`** (Gesamtmenge gleichmäßig) oder **`custom`** (`target_resources` pro Planet) |
-| Kapazität | Laden am Ziel bis `calculate_total_cargo(ships)` | `not_enough_cargo`, wenn Leg-Fracht > Leg-Schiff-Cargo |
+| Kapazität | Laden am Ziel bis `calculate_total_cargo(ships)` | `manual`: `not_enough_cargo` wenn Leg-Fracht > Leg-Cargo; `auto_cargo`: Mengen auf Leg-Cargo kappen (`load_resources_up_to_cargo`) |
 | Storage-Caps | — (Logistik ignoriert Ziel-Lager; Overflow erlaubt) | — (Logistik ignoriert Ziel-Lager; Overflow erlaubt) |
-| Leere Legs | — | Ziele ohne lieferbare Menge werden übersprungen; `no_deliverable_resources`, wenn nichts übrig |
+| Leere Legs | `auto_cargo`: 0-Schiff-Legs → `skipped` | Ziele ohne lieferbare Menge werden übersprungen; `no_deliverable_resources`, wenn nichts übrig |
 
 ### Slot-Regeln
 
-- `get_fleet_slot_status(player_id)` → `free` muss **> 0** sein; pro Leg ein Slot. Mehr gewählte Kolonien als freie Slots → Route wird auf **`free`** gekappt (deterministische Sortierung); übersprungene Ziele in Preview (`targets_skipped`). Bei **0** freien Slots: `fleet_slots_full`.
+- `get_fleet_slot_status(player_id)` → `free` muss **> 0** sein; pro Leg ein Slot. Logistik nutzt **alle** freien Slots (kein `MASS_EXPEDITION_SLOT_RESERVE` — Reserve nur bei Mass-Expedition). Mehr gewählte Kolonien als freie Slots → Route auf **`free`** gekappt (deterministische Sortierung; Equal-Split erst danach); übersprungene Ziele in Preview (`targets_skipped`). Bei **0** freien Slots: `fleet_slots_full`.
 - Basis-Slots: **`navigation_tech`**-Tiers (Fallback 3) — identisch zu Einzel-`send_fleet`; siehe `fleet_slots_for_navigation_level()` in `game/research.py`.
 - Bulk-Job blockiert atomisch: zu wenig Schiffe auf dem Hub → Rollback des gesamten Collect/Distribute-POST.
 
@@ -267,7 +269,7 @@ API: `notify_logistics_fleet_report()` in `game/messages.py`. Normale **`transpo
 
 Planet-Scope: Hub = aktiver Kontext-Planet (`get_context_planet`) bzw. explizit im Body; Client: `GC.fetchGameAction` + `applyActionState()` (`static/main.js` → `initLogistics()`).
 
-**GC-533 UI/Client:** Kompakte Genesis-Oberfläche (`logistics-page--compact` in `templates/fleet_logistics.html`). Quell-Kolonien, Cargo-Mengen und MAX werden clientseitig validiert; Start erst nach erfolgreichem Preview (`can_launch`). Fehler als Inline-Hinweis + `showNotify`. Cargo-Gate serverseitig: `validate_logistics_manual_ships()` in `game/fleet.py` / `fleet_logistics_validate_ships()` in `game/fleet_api.py`.
+**GC-533 UI/Client:** Kompakte Genesis-Oberfläche (`logistics-page--compact`). Kolonien markieren (inkl. Alle/Keine), Distribute: Gesamtmengen eingeben — **keine manuelle Frachter-Auswahl**. Client sendet `ships_selection_mode: "auto_cargo"`. Start erst nach erfolgreichem Preview (`can_launch`). Fehler als Inline-Hinweis + `showNotify`. Manual-API weiter über `validate_logistics_manual_ships()`.
 
 **Manuelle QA (GC-533):** [GC-533_MANUAL_QA_LOGISTICS.md](GC-533_MANUAL_QA_LOGISTICS.md), Checkliste [ALPHA_TESTPLAN.md § 12](ALPHA_TESTPLAN.md#12-fleet-logistics-gc-533--manuelle-browser-qa).
 
@@ -354,7 +356,7 @@ Inbox expedition reports: `static/js/messages.js` → `renderExpeditionReport()`
 
 ## Placeholder / Phase 2
 
-- Logistics: `auto_cargo` / Preset-only ship selection (`invalid_ships_selection_mode`)
+- Logistics: Preset-only ship selection (`preset` → `invalid_ships_selection_mode`)
 - Recycler UI/PJAX polish (GC-800B) — Backend mission `recycle` ✅ GC-800A
 - `fleet_presets.mission_type` CHECK fehlt `colonize` (nur movements migriert in 032)
 

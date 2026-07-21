@@ -112,9 +112,12 @@ def fleet_logistics_collect(
     """Run bulk collect logistics (N× ``collect`` movements under one batch)."""
     from .fleet import collect_resources
 
-    ok_ships, ship_reason, ships_n = fleet_logistics_validate_ships(ships)
-    if not ok_ships:
-        return False, ship_reason, None
+    mode = str(ships_selection_mode or "").strip().lower() or "manual"
+    ships_n: Dict[str, int] = {}
+    if mode == "manual":
+        ok_ships, ship_reason, ships_n = fleet_logistics_validate_ships(ships)
+        if not ok_ships:
+            return False, ship_reason, None
 
     return collect_resources(
         player_id=int(player_id),
@@ -123,7 +126,7 @@ def fleet_logistics_collect(
         ships=ships_n,
         resources_mode=resources_mode,
         resources=resources,
-        ships_selection_mode=ships_selection_mode,
+        ships_selection_mode=mode,
         preset_id=preset_id,
         speed_percent=speed_percent,
         conn=conn,
@@ -147,9 +150,12 @@ def fleet_logistics_distribute(
     """Run bulk distribute logistics (N× ``transport`` movements under one batch)."""
     from .fleet import distribute_resources
 
-    ok_ships, ship_reason, ships_n = fleet_logistics_validate_ships(ships)
-    if not ok_ships:
-        return False, ship_reason, None
+    mode = str(ships_selection_mode or "").strip().lower() or "manual"
+    ships_n: Dict[str, int] = {}
+    if mode == "manual":
+        ok_ships, ship_reason, ships_n = fleet_logistics_validate_ships(ships)
+        if not ok_ships:
+            return False, ship_reason, None
 
     return distribute_resources(
         player_id=int(player_id),
@@ -159,7 +165,7 @@ def fleet_logistics_distribute(
         resources_mode=resources_mode,
         resources=resources,
         target_resources=target_resources,
-        ships_selection_mode=ships_selection_mode,
+        ships_selection_mode=mode,
         preset_id=preset_id,
         speed_percent=speed_percent,
         conn=conn,

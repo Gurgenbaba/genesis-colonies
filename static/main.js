@@ -226,7 +226,6 @@
     "[data-shipyard-qty]",
     "[data-defense-qty]",
     "[data-ship-input]",
-    "[data-logistics-ship-input]",
     "[data-fleet-res-metal]",
     "[data-fleet-res-crystal]",
     "[data-fleet-res-fuel-cells]",
@@ -255,7 +254,7 @@
     }
     if (
       inp.matches(
-        "[data-ship-input],[data-logistics-ship-input],[data-scrap-qty],.gc-scrapyard-qty,[data-logistics-resource]"
+        "[data-ship-input],[data-scrap-qty],.gc-scrapyard-qty,[data-logistics-resource]"
       )
     ) {
       const maxAttr = inp.getAttribute("max");
@@ -12413,16 +12412,21 @@
     }
 
     GC.registerCleanup?.(() => {
+      setFleetDrawerShowAll(false);
       document.body.classList.remove("gc-fleet-sheet-open");
       const backdrop = document.getElementById("gc-fleet-sheet-backdrop");
       if (backdrop) backdrop.hidden = true;
       const fleetRoot = document.getElementById("global-fleet-drawer-root")
         || document.querySelector("[data-global-fleet-drawer]");
       if (fleetRoot) {
+        fleetRoot.classList.remove("is-show-all");
+        const listEl = fleetRoot.querySelector("[data-fleet-drawer-list]");
+        if (listEl) listEl.classList.remove("is-show-all");
         _restoreFleetSheetPortal(fleetRoot);
         _fleetSheetAnchor = null;
+        delete fleetRoot.dataset.fleetSheetSynced;
       }
-    });
+    }, { persistent: true });
 
     if (GC.lastState?.active_fleets) {
       renderGlobalFleetHud(GC.lastState.active_fleets);
@@ -20373,15 +20377,6 @@
     showNotify(message, "error");
   }
 
-  function clampLogisticsShipInput(inp) {
-    if (!inp) return;
-    const max = parseIntNumber(inp.getAttribute("max") || "0");
-    let v = readNumberInput(inp);
-    if (!Number.isFinite(v) || v < 0) v = 0;
-    if (Number.isFinite(max) && max >= 0 && v > max) v = max;
-    setNumberInputValue(inp, v);
-  }
-
   function logisticsSubmitEnabled(page, mode) {
     if (!logisticsFormReady(page, mode)) return false;
     const preview = page._logisticsLastPreview;
@@ -20484,18 +20479,6 @@
     return sel ? parseInt(sel.value, 10) : 0;
   }
 
-  function getLogisticsShipsSelection(page, mode) {
-    const ships = {};
-    const grid = page.querySelector(`[data-logistics-ships-grid="${mode}"]`);
-    if (!grid) return ships;
-    grid.querySelectorAll("[data-logistics-ship-input]").forEach((inp) => {
-      const key = inp.getAttribute("data-logistics-ship-input");
-      const qty = readNumberInput(inp);
-      if (key && qty > 0) ships[key] = qty;
-    });
-    return ships;
-  }
-
   function getLogisticsResourcesSelection(page) {
     const resources = { metal: 0, crystal: 0, fuel_cells: 0 };
     page.querySelectorAll("[data-logistics-resource]").forEach((inp) => {
@@ -20517,23 +20500,6 @@
 
   function updateLogisticsOriginShips(page, data) {
     const originId = getLogisticsOriginId(page);
-    const colony = getLogisticsColonyById(data, originId);
-    const stock = colony?.ships || {};
-    page.querySelectorAll("[data-logistics-ships-grid]").forEach((grid) => {
-      grid.querySelectorAll("[data-ship-key]").forEach((row) => {
-        const key = row.getAttribute("data-ship-key");
-        const have = parseInt(stock[key] || "0", 10) || 0;
-        row.dataset.shipHave = String(have);
-        row.classList.toggle("is-empty", have <= 0);
-        const stockEl = row.querySelector("[data-logistics-ship-stock]");
-        if (stockEl) stockEl.textContent = `×${fmtNumber(have)}`;
-        const inp = row.querySelector("[data-logistics-ship-input]");
-        if (inp) {
-          inp.max = String(have);
-          if (readNumberInput(inp) > have) setNumberInputValue(inp, have);
-        }
-      });
-    });
     syncLogisticsColonyVisibility(page, originId);
     syncLogisticsColonySelected(page);
     scheduleLogisticsPreview(page);
@@ -20596,14 +20562,26 @@
     const m = mode || getLogisticsMode(page);
     const originId = getLogisticsOriginId(page);
     const colonyIds = getLogisticsSelectedColonyIds(page, m);
-    const ships = getLogisticsShipsSelection(page, m);
-    const shipTotal = Object.values(ships).reduce((a, b) => a + b, 0);
-    if (!originId || !colonyIds.length || !shipTotal) return false;
+    if (!originId || !colonyIds.length) return false;
     if (m === "distribute") {
       const res = getLogisticsResourcesSelection(page);
       if ((res.metal || 0) + (res.crystal || 0) + (res.fuel_cells || 0) <= 0) return false;
     }
     return true;
+  }
+
+  function setLogisticsColonySelection(page, mode, checked) {
+    page.querySelectorAll(`[data-logistics-colony-cb="${mode}"]`).forEach((cb) => {
+      const card = cb.closest("[data-colony-planet-id]");
+      if (card && card.hidden) {
+        cb.checked = false;
+        return;
+      }
+      cb.checked = !!checked;
+    });
+    syncLogisticsColonySelected(page);
+    updateLogisticsSubmitButtons(page);
+    scheduleLogisticsPreview(page);
   }
 
   function updateLogisticsSubmitButtons(page) {
@@ -20728,14 +20706,13 @@
   function buildLogisticsPreviewBody(page) {
     const mode = getLogisticsMode(page);
     const originId = getLogisticsOriginId(page);
-    const ships = getLogisticsShipsSelection(page, mode);
     const body = {
       mode,
       origin_planet_id: originId,
       target_planet_id: originId,
-      ships,
+      ships: {},
       speed_percent: 100,
-      ships_selection_mode: "manual",
+      ships_selection_mode: "auto_cargo",
     };
     if (mode === "collect") {
       body.source_planet_ids = getLogisticsSelectedColonyIds(page, "collect");
@@ -20751,19 +20728,22 @@
   async function refreshLogisticsPreview(page) {
     const mode = getLogisticsMode(page);
     const originId = getLogisticsOriginId(page);
-    const ships = getLogisticsShipsSelection(page, mode);
     const colonyIds = getLogisticsSelectedColonyIds(page, mode);
-    const shipTotal = Object.values(ships).reduce((a, b) => a + b, 0);
 
-    if (!originId || !colonyIds.length || !shipTotal) {
-      if (!colonyIds.length && originId && shipTotal) {
+    if (!originId || !colonyIds.length) {
+      if (!colonyIds.length && originId) {
         resetLogisticsPreview(page, "logistics_preview_select_colonies");
-      } else if (!shipTotal && originId && colonyIds.length) {
-        resetLogisticsPreview(page, "logistics_preview_select_ships");
       } else {
         resetLogisticsPreview(page);
       }
       return;
+    }
+    if (mode === "distribute") {
+      const res = getLogisticsResourcesSelection(page);
+      if ((res.metal || 0) + (res.crystal || 0) + (res.fuel_cells || 0) <= 0) {
+        resetLogisticsPreview(page, "logistics_distribute_no_resources");
+        return;
+      }
     }
     try {
       const res = await GC.fetchJSON("/api/fleet/logistics/preview", {
@@ -20828,19 +20808,27 @@
         return;
       }
 
-      const maxBtn = e.target.closest("[data-logistics-ship-max]");
-      if (!maxBtn) return;
-      const page = document.getElementById("logistics-page");
-      if (!page || !page.contains(maxBtn)) return;
-      const mode = getLogisticsMode(page);
-      const grid = page.querySelector(`[data-logistics-ships-grid="${mode}"]`);
-      const key = maxBtn.getAttribute("data-logistics-ship-max");
-      const row = grid?.querySelector(`[data-ship-key="${key}"]`);
-      const inp = row?.querySelector("[data-logistics-ship-input]");
-      if (inp) {
-        inp.value = formatNumber(parseInt(row.dataset.shipHave || inp.getAttribute("max") || "0", 10) || 0);
-        clampLogisticsShipInput(inp);
-        syncLogisticsColonySelected(page);
+      const selectAllBtn = e.target.closest("[data-logistics-select-all]");
+      if (selectAllBtn) {
+        const page = document.getElementById("logistics-page");
+        if (!page || !page.contains(selectAllBtn)) return;
+        const mode = selectAllBtn.getAttribute("data-logistics-select-all") || getLogisticsMode(page);
+        const action = selectAllBtn.getAttribute("data-logistics-select-all-action") || "all";
+        setLogisticsColonySelection(page, mode, action !== "none");
+        return;
+      }
+
+      const resMaxBtn = e.target.closest("[data-logistics-res-max]");
+      if (resMaxBtn) {
+        const page = document.getElementById("logistics-page");
+        if (!page || !page.contains(resMaxBtn)) return;
+        const key = resMaxBtn.getAttribute("data-logistics-res-max");
+        const inp = page.querySelector(`[data-logistics-resource="${key}"]`);
+        if (!inp || !key) return;
+        const data = parseLogisticsPageData(page);
+        const hub = getLogisticsColonyById(data, getLogisticsOriginId(page));
+        const have = Math.max(0, parseInt(hub?.resources?.[key] ?? data?.resources?.[key] ?? "0", 10) || 0);
+        setNumberInputValue(inp, have);
         updateLogisticsSubmitButtons(page);
         scheduleLogisticsPreview(page);
       }
@@ -20852,16 +20840,12 @@
       if (
         e.target.matches("[data-logistics-origin]") ||
         e.target.matches("[data-logistics-colony-cb]") ||
-        e.target.matches("[data-logistics-ship-input]") ||
         e.target.matches("[data-logistics-resource]")
       ) {
         const data = parseLogisticsPageData(page);
         if (e.target.matches("[data-logistics-origin]")) {
           updateLogisticsOriginShips(page, data);
         } else {
-          if (e.target.matches("[data-logistics-ship-input]")) {
-            clampLogisticsShipInput(e.target);
-          }
           syncLogisticsColonySelected(page);
           updateLogisticsSubmitButtons(page);
           scheduleLogisticsPreview(page);
@@ -20872,11 +20856,7 @@
     document.addEventListener("input", (e) => {
       const page = document.getElementById("logistics-page");
       if (!page || page.dataset.ready !== "1") return;
-      if (e.target.matches("[data-logistics-ship-input]")) {
-        clampLogisticsShipInput(e.target);
-        updateLogisticsSubmitButtons(page);
-        scheduleLogisticsPreview(page);
-      } else if (e.target.matches("[data-logistics-resource]")) {
+      if (e.target.matches("[data-logistics-resource]")) {
         updateLogisticsSubmitButtons(page);
         scheduleLogisticsPreview(page);
       }
@@ -20897,9 +20877,8 @@
 
       const originId = getLogisticsOriginId(page);
       const colonyIds = getLogisticsSelectedColonyIds(page, mode);
-      const ships = getLogisticsShipsSelection(page, mode);
 
-      if (!originId || !colonyIds.length || !Object.keys(ships).length) {
+      if (!originId || !colonyIds.length) {
         notifyLogisticsFailure(
           page,
           mode,
@@ -20937,9 +20916,9 @@
               body: JSON.stringify({
                 target_planet_id: originId,
                 source_planet_ids: colonyIds,
-                ships,
+                ships: {},
                 resources_mode: "all",
-                ships_selection_mode: "manual",
+                ships_selection_mode: "auto_cargo",
               }),
             });
           } else {
@@ -20954,10 +20933,10 @@
               body: JSON.stringify({
                 origin_planet_id: originId,
                 target_planet_ids: colonyIds,
-                ships,
+                ships: {},
                 resources,
                 resources_mode: "equal",
-                ships_selection_mode: "manual",
+                ships_selection_mode: "auto_cargo",
               }),
             });
           }
@@ -20974,6 +20953,21 @@
           );
           applyLogisticsActionState(page, res);
           try {
+            // Collapse mobile fleet sheet before PJAX reload so bottom nav stays usable.
+            if (typeof setFleetDrawerShowAll === "function") setFleetDrawerShowAll(false);
+            document.body.classList.remove("gc-fleet-sheet-open");
+            const backdrop = document.getElementById("gc-fleet-sheet-backdrop");
+            if (backdrop) backdrop.hidden = true;
+            const fleetRoot = document.getElementById("global-fleet-drawer-root")
+              || document.querySelector("[data-global-fleet-drawer]");
+            if (fleetRoot) {
+              fleetRoot.classList.remove("is-show-all");
+              const listEl = fleetRoot.querySelector("[data-fleet-drawer-list]");
+              if (listEl) listEl.classList.remove("is-show-all");
+              if (typeof syncMobileFleetSheetLayout === "function") {
+                syncMobileFleetSheetLayout(fleetRoot);
+              }
+            }
             await refreshLogisticsLiveState(page);
             if (typeof GC.reloadCurrentPage === "function") {
               await GC.reloadCurrentPage({ force: true });
