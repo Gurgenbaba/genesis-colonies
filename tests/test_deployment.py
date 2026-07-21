@@ -63,6 +63,7 @@ def test_config_postgres_accepts_url_when_psycopg_present(monkeypatch):
     monkeypatch.setenv("FLASK_DEBUG", "0")
     monkeypatch.setenv("GC_DB_BACKEND", "postgres")
     monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@localhost:5432/gc")
+    monkeypatch.setenv("GC_ALLOW_POSTGRES_PROD", "1")
 
     from game.config import init_config, validate_config
 
@@ -71,6 +72,23 @@ def test_config_postgres_accepts_url_when_psycopg_present(monkeypatch):
     assert not any("not implemented" in e.lower() for e in errors)
     # DATABASE_URL is set; remaining errors must not be the missing-URL gate
     assert not any(e == "GC_DB_BACKEND=postgres requires DATABASE_URL=postgresql://…" for e in errors)
+    assert not any("blocked in production until cutover" in e for e in errors)
+
+
+def test_config_postgres_blocked_in_production_without_allow(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("FLASK_ENV", "production")
+    monkeypatch.setenv("SECRET_KEY", "a" * 64)
+    monkeypatch.setenv("FLASK_DEBUG", "0")
+    monkeypatch.setenv("GC_DB_BACKEND", "postgres")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@localhost:5432/gc")
+    monkeypatch.delenv("GC_ALLOW_POSTGRES_PROD", raising=False)
+
+    from game.config import init_config, validate_config
+
+    init_config()
+    errors = validate_config(strict=True)
+    assert any("blocked in production until cutover" in e for e in errors)
 
 
 def test_ensure_db_parent_dir_creates_volume_path(monkeypatch, tmp_path):

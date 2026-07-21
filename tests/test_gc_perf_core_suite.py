@@ -112,7 +112,8 @@ def test_game_worker_and_load_scripts_exist():
     assert (ROOT / "docs" / "GC_PERF_DB_001_POSTGRES_AUDIT.md").is_file()
 
 
-def test_diet_payload_has_state_version(game_client):
+def test_diet_payload_has_state_version(game_client, monkeypatch):
+    monkeypatch.setenv("GC_STATE_DELTA", "1")
     client, _pid = game_client
     resp = client.get("/api/game-state")
     assert resp.status_code == 200
@@ -137,6 +138,7 @@ def test_delta_api_unchanged_when_fingerprint_forced(game_client, monkeypatch):
     """Force stable poll_version so ?since= short-circuit is deterministic."""
     from game import live_state as ls
 
+    monkeypatch.setenv("GC_STATE_DELTA", "1")
     monkeypatch.setattr(ls, "compute_poll_version", lambda _payload: 424242)
 
     client, _pid = game_client

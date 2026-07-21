@@ -13218,6 +13218,8 @@
     const merged = { ...GC.lastState };
     _HUD_LAST_STATE_KEYS.forEach((key) => {
       if (!(key in next) || next[key] === undefined) return;
+      // Never poison switcher/cache with empty diet/error payloads.
+      if (key === "planets" && Array.isArray(next[key]) && next[key].length === 0) return;
       if (key === "active_fleets") {
         const incoming = next.active_fleets;
         if (isActiveFleetsPayloadMissing(incoming)) return;
@@ -24526,11 +24528,10 @@
   }
 
   function initHeaderPlanetSwitcher() {
-    if (GC._headerPlanetSwitcherBound) return;
-    GC._headerPlanetSwitcherBound = true;
-
     const root = document.getElementById("gc-planet-switcher");
     if (!root) return;
+    if (GC._headerPlanetSwitcherBound) return;
+    GC._headerPlanetSwitcherBound = true;
 
     const trigger = document.getElementById("gc-planet-switcher-trigger");
     const headerEl = document.querySelector(".gc-header-cmd");

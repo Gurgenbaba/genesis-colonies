@@ -21,6 +21,7 @@ from .db import (
     lock_player_for_update,
     table_exists,
     column_exists,
+    index_exists,
 )
 
 
@@ -155,11 +156,19 @@ def harden_planets_schema(conn: sqlite3.Connection) -> None:
             """
         )
 
-    for idx_sql in (
-        "CREATE INDEX IF NOT EXISTS idx_planets_player_id ON planets(player_id);",
-        "CREATE INDEX IF NOT EXISTS idx_planets_player_homeworld ON planets(player_id, is_homeworld);",
-        "CREATE INDEX IF NOT EXISTS idx_planets_player ON planets(player_id, is_homeworld);",
+    for idx_name, idx_sql in (
+        ("idx_planets_player_id", "CREATE INDEX IF NOT EXISTS idx_planets_player_id ON planets(player_id);"),
+        (
+            "idx_planets_player_homeworld",
+            "CREATE INDEX IF NOT EXISTS idx_planets_player_homeworld ON planets(player_id, is_homeworld);",
+        ),
+        (
+            "idx_planets_player",
+            "CREATE INDEX IF NOT EXISTS idx_planets_player ON planets(player_id, is_homeworld);",
+        ),
     ):
+        if index_exists(conn, idx_name):
+            continue
         _exec_optional(idx_sql)
 
 
@@ -207,6 +216,25 @@ def _init_db_postgres() -> None:
         _pg_init_progress("create_default_admin …")
         create_default_admin(conn)
 
+        # Seed settings before homeworld — avoid mid-bootstrap get_game_settings bulk INSERT
+        # (was ~40× lastval round-trips over the Railway public proxy).
+        _recover_postgres_transaction(conn)
+        try:
+            _pg_init_progress("seed game_settings …")
+            for key, val in DEFAULT_GAME_SETTINGS.items():
+                conn.execute(
+                    """
+                    INSERT INTO game_settings (key, value)
+                    VALUES (?, ?)
+                    ON CONFLICT (key) DO NOTHING;
+                    """,
+                    (key, str(val)),
+                )
+            commit(conn)
+        except Exception:
+            rollback(conn)
+            raise
+
         _recover_postgres_transaction(conn)
         try:
             _pg_init_progress("create_default_player_and_homeworld …")
@@ -222,23 +250,6 @@ def _init_db_postgres() -> None:
 
             _pg_init_progress("backfill_player_score_rows …")
             backfill_player_score_rows(conn=conn)
-            commit(conn)
-        except Exception:
-            rollback(conn)
-            raise
-
-        _recover_postgres_transaction(conn)
-        try:
-            _pg_init_progress("seed game_settings …")
-            for key, val in DEFAULT_GAME_SETTINGS.items():
-                conn.execute(
-                    """
-                    INSERT INTO game_settings (key, value)
-                    VALUES (?, ?)
-                    ON CONFLICT (key) DO NOTHING;
-                    """,
-                    (key, str(val)),
-                )
             commit(conn)
         except Exception:
             rollback(conn)
@@ -889,8 +900,10 @@ def ensure_player_and_homeworld(
         if own_conn:
             begin_write_transaction(conn)
 
+        _pg_init_progress("homeworld: harden_planets_schema …")
         harden_planets_schema(conn)
 
+        _pg_init_progress("homeworld: ensure player row …")
         cur.execute("SELECT 1 FROM players WHERE id = ? LIMIT 1;", (int(player_id),))
         row = cur.fetchone()
         if not row:
@@ -909,6 +922,7 @@ def ensure_player_and_homeworld(
         c = int(cur.fetchone()["c"])
 
         if c == 0:
+            _pg_init_progress("homeworld: assign coords + insert …")
             now = time.time()
 
             start_metal = float(DEFAULT_GAME_SETTINGS["start_metal"])
@@ -995,8 +1009,20 @@ def ensure_player_and_homeworld(
                                 int(position),
                             ),
                         )
-                    cur.execute(f"RELEASE SAVEPOINT {sp}")
                     pid = cur.lastrowid
+                    cur.execute(f"RELEASE SAVEPOINT {sp}")
+                    # Fallback if adapter could not resolve serial id (explicit PK inserts).
+                    if pid is None:
+                        row = cur.execute(
+                            """
+                            SELECT id FROM planets
+                            WHERE player_id = ? AND is_homeworld = 1
+                            ORDER BY id DESC LIMIT 1;
+                            """,
+                            (int(player_id),),
+                        ).fetchone()
+                        if row is not None:
+                            pid = int(row["id"] if isinstance(row, dict) else row[0])
                     break
                 except Exception as insert_exc:
                     try:
@@ -1013,6 +1039,7 @@ def ensure_player_and_homeworld(
 
             cur.execute("INSERT INTO planet_buildings (planet_id) VALUES (?);", (int(pid),))
 
+            _pg_init_progress("homeworld: planet_evolution bootstrap …")
             cur.execute("SAVEPOINT pe_boot")
             try:
                 from game.planet_evolution.bootstrap import ensure_planet_evolution
@@ -1037,6 +1064,7 @@ def ensure_player_and_homeworld(
     finally:
         if own_conn:
             conn.close()
+
 
 
 def create_default_player_and_homeworld(conn: sqlite3.Connection | None = None) -> None:
@@ -1577,7 +1605,15 @@ def _ensure_game_settings(cur: sqlite3.Cursor) -> Dict[str, str]:
                 """,
                 (key, str(value)),
             )
-        cur.connection.commit()
+        # sqlite3.Cursor.connection / PgCursor.connection
+        conn = getattr(cur, "connection", None)
+        if conn is not None:
+            commit(conn)
+        else:
+            try:
+                cur.connection.commit()  # type: ignore[attr-defined]
+            except Exception:
+                pass
 
         cur.execute("SELECT key, value FROM game_settings;")
         rows = cur.fetchall()

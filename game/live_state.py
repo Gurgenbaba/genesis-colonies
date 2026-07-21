@@ -857,7 +857,11 @@ def apply_lightweight_game_state_diet(payload: Dict[str, Any]) -> Dict[str, Any]
     alert_key = str((payload.get("fleet_alerts") or {}).get("alert_key") or "")
     payload["notification_revision"] = f"{max(0, int(unread or 0))}:{int(latest or 0) if latest else 0}:{alert_key}"
 
-    payload["poll_version"] = compute_poll_version(payload)
+    try:
+        payload["poll_version"] = compute_poll_version(payload)
+    except Exception:
+        # Never break diet polls — fingerprint is best-effort.
+        payload["poll_version"] = int(payload.get("server_time") or time.time())
 
     try:
         import json

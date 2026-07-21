@@ -128,12 +128,47 @@ class PgRow(dict):
 
 
 class PgCursor:
-    def __init__(self, raw_cursor: Any) -> None:
+    def __init__(self, raw_cursor: Any, connection: Any = None) -> None:
         self._cur = raw_cursor
-        self.lastrowid: Optional[int] = None
+        # sqlite3.Cursor.connection — used by _ensure_game_settings commit path
+        self.connection = connection
+        self._lastrowid: Optional[int] = None
+        # True after INSERT until lastrowid is read — avoid lastval() RTT on bulk seeds
+        self._lastrowid_pending = False
         self.rowcount: int = -1
         self.description = None
         self._skipped_result = False
+
+    @property
+    def lastrowid(self) -> Optional[int]:
+        if self._lastrowid_pending:
+            self._resolve_lastrowid()
+        return self._lastrowid
+
+    @lastrowid.setter
+    def lastrowid(self, value: Optional[int]) -> None:
+        self._lastrowid = value
+        self._lastrowid_pending = False
+
+    def _resolve_lastrowid(self) -> None:
+        """Resolve serial/identity id via lastval() (SAVEPOINT — must not abort TX)."""
+        self._lastrowid_pending = False
+        self._lastrowid = None
+        try:
+            self._cur.execute("SAVEPOINT gc_lastval")
+            try:
+                lv = self._cur.execute("SELECT lastval() AS id").fetchone()
+                if lv is not None:
+                    self._lastrowid = int(lv["id"] if isinstance(lv, dict) else lv[0])
+                self._cur.execute("RELEASE SAVEPOINT gc_lastval")
+            except Exception:
+                self._lastrowid = None
+                try:
+                    self._cur.execute("ROLLBACK TO SAVEPOINT gc_lastval")
+                except Exception:
+                    pass
+        except Exception:
+            self._lastrowid = None
 
     def execute(self, sql: str, params: Sequence[Any] | None = None):
         text = str(sql or "")
@@ -146,7 +181,7 @@ class PgCursor:
                 # e.g. PRAGMA — no-op on Postgres (fetchall → [])
                 self.description = None
                 self.rowcount = -1
-                self.lastrowid = None
+                # keep lastrowid (sqlite keeps it across no-ops)
                 self._skipped_result = True
                 return self
             text = dialect
@@ -157,25 +192,11 @@ class PgCursor:
             self._cur.execute(rewritten, tuple(params))
         self.description = self._cur.description
         self.rowcount = int(getattr(self._cur, "rowcount", -1) or -1)
-        self.lastrowid = None
-        # lastval() errors when INSERT did not use a serial/identity (explicit PKs).
-        # That ERROR aborts the Postgres transaction even if we catch it — use SAVEPOINT.
+        # Match sqlite3: lastrowid persists across non-INSERT statements.
+        # Resolve lazily — bulk INSERT seeds (game_settings) must not pay lastval RTT.
         if rewritten.lstrip().upper().startswith("INSERT"):
-            try:
-                self._cur.execute("SAVEPOINT gc_lastval")
-                try:
-                    lv = self._cur.execute("SELECT lastval() AS id").fetchone()
-                    if lv is not None:
-                        self.lastrowid = int(lv["id"] if isinstance(lv, dict) else lv[0])
-                    self._cur.execute("RELEASE SAVEPOINT gc_lastval")
-                except Exception:
-                    self.lastrowid = None
-                    try:
-                        self._cur.execute("ROLLBACK TO SAVEPOINT gc_lastval")
-                    except Exception:
-                        pass
-            except Exception:
-                self.lastrowid = None
+            self._lastrowid = None
+            self._lastrowid_pending = True
         return self
 
     def executemany(self, sql: str, seq_of_params: Iterable[Sequence[Any]]):
@@ -191,6 +212,9 @@ class PgCursor:
         rewritten = rewrite_sqlite_placeholders(text)
         self._cur.executemany(rewritten, list(seq_of_params))
         self.rowcount = int(getattr(self._cur, "rowcount", -1) or -1)
+        if rewritten.lstrip().upper().startswith("INSERT"):
+            self._lastrowid = None
+            self._lastrowid_pending = True
         return self
 
     def _wrap_row(self, row: Any) -> Any:
@@ -243,7 +267,7 @@ class PgConnection:
     def cursor(self) -> PgCursor:
         from psycopg.rows import dict_row
 
-        return PgCursor(self._conn.cursor(row_factory=dict_row))
+        return PgCursor(self._conn.cursor(row_factory=dict_row), connection=self)
 
     def execute(self, sql: str, params: Sequence[Any] | None = None) -> PgCursor:
         cur = self.cursor()

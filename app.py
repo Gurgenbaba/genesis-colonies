@@ -6548,9 +6548,12 @@ def _payload_from_live_context(
             "energy_efficiency_pct": energy_efficiency_pct,
             "storage": storage_caps,
         },
+        "buildings": buildings,
         "build_queue": build_queue,
+        "building_queue": build_queue,
         "production_per_hour": prod_per_hour,
         "research": research,
+        "research_queue": research.get("queue", []),
         "storage": storage_caps,
         "energy": {
             "total": int(energy_total),
@@ -6564,14 +6567,11 @@ def _payload_from_live_context(
         },
     }
 
-    # GC-PERF-STATE-001: do not attach heavy catalogs on diet polls (no build-then-strip).
-    if not lightweight:
-        payload["buildings"] = buildings
-        payload["building_queue"] = build_queue
-        payload["research_queue"] = research.get("queue", [])
-    else:
-        # Slim queue aliases only — diet keeps build_queue / research slice.
-        pass
+    # Diet polls strip catalogs in apply_lightweight_game_state_diet (attach-then-strip).
+    if lightweight:
+        payload.pop("buildings", None)
+        payload.pop("building_queue", None)
+        payload.pop("research_queue", None)
 
     try:
         from game.timekeeper import serialize_for_client
@@ -7297,9 +7297,15 @@ def api_game_state():
     if not payload.get("ok"):
         return jsonify({"ok": False, "error": "not_logged_in"}), 401
 
-    # GC-PERF-STATE-002: optional delta short-circuit for diet polls.
+    # GC-PERF-STATE-002: optional delta short-circuit (opt-in — client must handle unchanged).
     since_raw = request.args.get("since", "").strip()
-    if since_raw.isdigit() and not want_panel and not delta_keys:
+    delta_enabled = os.environ.get("GC_STATE_DELTA", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+    if delta_enabled and since_raw.isdigit() and not want_panel and not delta_keys:
         from game.live_state import build_delta_game_state, set_request_perf_meta
 
         since_val = int(since_raw)

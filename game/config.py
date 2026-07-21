@@ -378,6 +378,20 @@ def validate_config(*, strict: bool | None = None) -> list[str]:
                 errors.append(
                     "GC_DB_BACKEND=postgres requires: pip install 'psycopg[binary]' psycopg_pool"
                 )
+        # Cutover guard: never silently run production on Postgres.
+        if is_production():
+            allow_prod = os.environ.get("GC_ALLOW_POSTGRES_PROD", "").strip().lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            )
+            if not allow_prod:
+                errors.append(
+                    "GC_DB_BACKEND=postgres is blocked in production until cutover. "
+                    "Set GC_DB_BACKEND=sqlite (and GC_DB_PATH=/data/game.db). "
+                    "Only set GC_ALLOW_POSTGRES_PROD=1 for an intentional Postgres cutover."
+                )
 
     if strict and is_production():
         db_url = os.environ.get("DATABASE_URL", "").strip().lower()
