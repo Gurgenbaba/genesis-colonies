@@ -13888,13 +13888,10 @@
         if (data.unchanged === true) {
           rememberPollVersion(data);
           const wantPolling = hasBusyLiveActivity();
-          if (reason === "poll") {
-            const pol = GC.polling;
-            if (wantPolling && pol.running && pol.lastInterval > pol.intervalActive + 100) {
-              GC.stopPolling();
-              GC.startPolling(true);
-            }
-          } else if (shouldPollGameState() && (reason === "page_init" || reason === "tab_visible" || !GC.polling.running)) {
+          // Cadence is owned by gameStatePollTick (active/idle/hidden). Do not
+          // stop+start here — when hidden, lastInterval is always > active and
+          // that thrash restarted polls every tick (GC-PERF-POLL-THRASH-001).
+          if (reason !== "poll" && shouldPollGameState() && (reason === "page_init" || reason === "tab_visible" || !GC.polling.running)) {
             GC.startPolling(wantPolling);
           }
           resolveFlight(data);
@@ -13904,13 +13901,7 @@
         rememberPollVersion(data);
         const anyActive = applyGameStateData(data, reason, { hudOnly, _fetchSeq: fetchSeq });
         const wantPolling = anyActive || hasBusyLiveActivity();
-        if (reason === "poll") {
-          const pol = GC.polling;
-          if (wantPolling && pol.running && pol.lastInterval > pol.intervalActive + 100) {
-            GC.stopPolling();
-            GC.startPolling(true);
-          }
-        } else if (shouldPollGameState() && (reason === "page_init" || reason === "tab_visible" || !GC.polling.running)) {
+        if (reason !== "poll" && shouldPollGameState() && (reason === "page_init" || reason === "tab_visible" || !GC.polling.running)) {
           GC.startPolling(wantPolling);
         }
         resolveFlight(data);
@@ -31856,9 +31847,19 @@
       if (typeof GC.releaseShellNavigationBlockers === "function") {
         GC.releaseShellNavigationBlockers("leave_admin");
       }
-    } else if (!opts.preserveGameLoop && typeof GC.abortInFlightGameStateFetches === "function") {
-      GC.abortInFlightGameStateFetches();
-      GC.stopPolling();
+    } else {
+      // Always abort hung /api/game-state polls before HTML PJAX. Light-nav used to
+      // keep in-flight diet polls (preserveGameLoop), which can starve the single
+      // SQLite worker after long idle — clicks appear dead until hard refresh.
+      if (typeof GC.abortInFlightGameStateFetches === "function") {
+        GC.abortInFlightGameStateFetches();
+      }
+      if (!opts.preserveGameLoop) {
+        GC.stopPolling();
+      }
+      if (typeof GC.releaseShellNavigationBlockers === "function") {
+        GC.releaseShellNavigationBlockers("pjax_nav");
+      }
     }
 
     const nav = beginPjaxNavigation(url, target);
@@ -31935,10 +31936,13 @@
           t("msg_status_refresh_failed", "Seite konnte nicht geladen werden. Bitte erneut versuchen."),
           "error"
         );
-        if (typeof GC.detectPage === "function" && GC.detectPage() === "admin") {
-          finishPjaxNavigation(nav);
-          window.location.assign(url);
+        // Hard-load recovery: admin always; elsewhere after network/HTTP failure so
+        // idle/SQLite timeouts do not leave the shell permanently stuck on toast-only.
+        finishPjaxNavigation(nav);
+        if (typeof GC.releaseShellNavigationBlockers === "function") {
+          GC.releaseShellNavigationBlockers("pjax_fail");
         }
+        window.location.assign(url);
       } finally {
         if (fetchTimeoutId) {
           clearTimeout(fetchTimeoutId);
@@ -32596,6 +32600,9 @@
       }
       if (!shouldPollGameState() || _authRecoveryStarted || isAdminShellPage()) return;
       if (_authLoopAborted) _authLoopAborted = false;
+      if (typeof GC.releaseShellNavigationBlockers === "function") {
+        GC.releaseShellNavigationBlockers("tab_visible");
+      }
       resumeVisualLoops();
       GC.refreshGameState("tab_visible");
       if (!isAdminShellPage() && typeof GC.initChat === "function") GC.initChat();

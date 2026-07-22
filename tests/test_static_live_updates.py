@@ -213,11 +213,13 @@ def test_main_js_game_state_polling_idempotent():
     assert "resolveFlight" in src
     nav_section = src.split("GC.navigateTo = async function navigateTo")[1].split("function initPjax")[0]
     pre_nav = nav_section.split("beginPjaxNavigation")[0]
-    normal_nav = pre_nav.split("} else if (typeof GC.abortInFlightGameStateFetches")[1].split("}")[0]
-    assert "GC.abortInFlightGameStateFetches()" in normal_nav
-    assert "GC.stopPolling()" in normal_nav
+    assert "abortInFlightGameStateFetches()" in pre_nav
+    assert "GC.stopPolling()" in pre_nav
+    assert "releaseShellNavigationBlockers(\"pjax_nav\")" in pre_nav
+    # Light-nav must still abort hung game-state polls (idle SQLite starvation).
+    assert "!opts.preserveGameLoop && typeof GC.abortInFlightGameStateFetches" not in pre_nav
     pjax_apply = src.split("async function applyPjaxPayload(url, payload, doc, opts = {})")[1].split("function pjaxPayloadFromDoc")[0]
-    assert "GC.cleanupPage();" in pjax_apply
+    assert "GC.cleanupPage({ preserveGameLoop:" in pjax_apply
     assert "preserveShell" not in pjax_apply
     assert "main-content missing" in pjax_apply
     fetch_section = src.split("GC.navigateTo = async function navigateTo")[1].split("async function applyPjaxPayload")[0]
@@ -602,7 +604,8 @@ def test_app_gc745_pjax_server_fastpath():
     assert "_is_pjax_request()" in poll_fn
     assert 'src == "game_state"' in poll_fn
     assert "_SSR_POLL_LIVE_SOURCES" not in app_py
-    assert "_use_poll_live_path(src)" in app_py.split("def _load_page_live_context(")[1].split("try:")[0]
+    load_ctx = app_py.split("def _load_page_live_context(")[1].split("\ndef ", 1)[0]
+    assert "_use_poll_live_path(src)" in load_ctx
     assert "api_notifications_summary" in app_py.split("_FLEET_TICK_SKIP_ENDPOINTS = frozenset")[1].split(")")[0]
     inject = app_py.split("def inject_globals()")[1].split("@app.route", 1)[0]
     assert "_is_lightweight_layout_request()" in inject
@@ -621,9 +624,10 @@ def test_app_gc745_pjax_server_fastpath():
     nav = js.split("GC.navigateTo = async function navigateTo")[1].split("function initPjax")[0]
     pre_nav = nav.split("beginPjaxNavigation")[0]
     assert "isIngameShellPjaxNavigation(url, opts)" in nav
-    normal_nav = pre_nav.split("} else if (!opts.preserveGameLoop && typeof GC.abortInFlightGameStateFetches")[1].split("}")[0]
-    assert "GC.abortInFlightGameStateFetches()" in normal_nav
-    assert "GC.stopPolling()" in normal_nav
+    assert "abortInFlightGameStateFetches()" in pre_nav
+    assert "GC.stopPolling()" in pre_nav
+    assert "releaseShellNavigationBlockers(\"pjax_nav\")" in pre_nav
+    assert "!opts.preserveGameLoop && typeof GC.abortInFlightGameStateFetches" not in pre_nav
     assert "AUTH_ROUTE_RE.test(destUrl.pathname" in pre_nav
 
 
