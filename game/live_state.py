@@ -63,6 +63,7 @@ _REQUEST_PERF_META_KEYS = frozenset(
         "state_version",
         "delta_since",
         "diet_early_exit",
+        "diet_probe_skip",
     }
 )
 
@@ -865,6 +866,17 @@ def apply_lightweight_game_state_diet(payload: Dict[str, Any]) -> Dict[str, Any]
         payload["poll_version"] = int(payload.get("server_time") or time.time())
 
     try:
+        pid = int(payload.get("player_id") or 0)
+        if pid > 0:
+            remember_diet_poll_fingerprint(
+                pid,
+                version=int(payload["poll_version"]),
+                unread=int(payload.get("unread_messages_count") or 0),
+            )
+    except Exception:
+        pass
+
+    try:
         import json
 
         diet_bytes = len(json.dumps(payload, separators=(",", ":"), default=str).encode("utf-8"))
@@ -1050,10 +1062,13 @@ def try_diet_poll_early_unchanged(
     conn=None,
 ) -> Optional[Dict[str, Any]]:
     """
-    GC-PERF-STATE-004: tiny ``{unchanged:true}`` before ``_build_game_state_payload``.
+    GC-PERF-STATE-004 / STATE-005: tiny ``{unchanged:true}`` before full diet build.
 
     Due queue/fleet work always forces a full build so finish stays on the poll owner path.
+    STATE-005: if process-local fingerprint still matches ``since`` and unread is unchanged,
+    skip the heavy ``probe_poll_version`` (EffectResolver + nav badges).
     """
+    from game import messages as messages_logic
     from game.logic import attach_canonical_server_time
     from game.models import db as _db
     from game.queue_poll import player_fleet_is_dirty, player_has_due_queue_work
@@ -1067,14 +1082,42 @@ def try_diet_poll_early_unchanged(
         if player_has_due_queue_work(uid, conn=conn, now=now) or player_fleet_is_dirty(
             uid, conn=conn, now=now
         ):
+            clear_diet_poll_fingerprint(uid)
             set_request_perf_meta("diet_early_exit", 0)
             return None
+
+        cached = _DIET_POLL_FP_CACHE.get(uid)
+        if cached is not None and int(cached[0]) == int(since):
+            try:
+                unread = int(messages_logic.unread_count(uid, conn=conn, prepare=False) or 0)
+            except Exception:
+                unread = -1
+            if unread == int(cached[1]):
+                set_request_perf_meta("diet_early_exit", 1)
+                set_request_perf_meta("diet_probe_skip", 1)
+                envelope: Dict[str, Any] = {
+                    "ok": True,
+                    "unchanged": True,
+                    "since": int(since),
+                    "version": int(since),
+                    "poll_version": int(since),
+                    "diet_early_exit": 1,
+                    "diet_probe_skip": 1,
+                }
+                return attach_canonical_server_time(envelope)
+
         ver = probe_poll_version(uid, conn)
         if ver is None or int(ver) != int(since):
             set_request_perf_meta("diet_early_exit", 0)
             return None
+        try:
+            unread = int(messages_logic.unread_count(uid, conn=conn, prepare=False) or 0)
+        except Exception:
+            unread = 0
+        remember_diet_poll_fingerprint(uid, version=int(ver), unread=unread)
         set_request_perf_meta("diet_early_exit", 1)
-        envelope: Dict[str, Any] = {
+        set_request_perf_meta("diet_probe_skip", 0)
+        envelope = {
             "ok": True,
             "unchanged": True,
             "since": int(since),
@@ -1090,6 +1133,21 @@ def try_diet_poll_early_unchanged(
     finally:
         if owns_conn and conn is not None:
             conn.close()
+
+
+# GC-PERF-STATE-005: process-local diet fingerprint (safe for single-worker SQLite default).
+_DIET_POLL_FP_CACHE: Dict[int, tuple] = {}
+
+
+def remember_diet_poll_fingerprint(player_id: int, *, version: int, unread: int) -> None:
+    _DIET_POLL_FP_CACHE[int(player_id)] = (int(version), max(0, int(unread or 0)))
+
+
+def clear_diet_poll_fingerprint(player_id: Optional[int] = None) -> None:
+    if player_id is None:
+        _DIET_POLL_FP_CACHE.clear()
+        return
+    _DIET_POLL_FP_CACHE.pop(int(player_id), None)
 
 
 def build_delta_game_state(

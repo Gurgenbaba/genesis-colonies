@@ -269,3 +269,49 @@ def test_diet_early_exit_blocked_when_queue_due(game_client, monkeypatch):
     data = resp.get_json()
     assert calls["n"] == 1
     assert data.get("diet_early_exit") != 1
+
+def test_diet_probe_skip_uses_process_local_fingerprint(game_client, monkeypatch):
+    """GC-PERF-STATE-005: matching since skips heavy probe_poll_version."""
+    from game import live_state as ls
+
+    monkeypatch.delenv("GC_STATE_DELTA", raising=False)
+    monkeypatch.setattr(
+        "game.queue_poll.player_has_due_queue_work", lambda *_a, **_k: False
+    )
+    monkeypatch.setattr("game.queue_poll.player_fleet_is_dirty", lambda *_a, **_k: False)
+    ls.clear_diet_poll_fingerprint()
+
+    probe_calls = {"n": 0}
+
+    def counting_probe(*_a, **_k):
+        probe_calls["n"] += 1
+        return 888001
+
+    monkeypatch.setattr(ls, "probe_poll_version", counting_probe)
+    monkeypatch.setattr("game.messages.unread_count", lambda *_a, **_k: 0)
+
+    client, pid = game_client
+    ls.remember_diet_poll_fingerprint(int(pid), version=888001, unread=0)
+
+    resp = client.get("/api/game-state?since=888001")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data.get("unchanged") is True
+    assert data.get("diet_early_exit") == 1
+    assert data.get("diet_probe_skip") == 1
+    assert probe_calls["n"] == 0
+
+
+def test_poll_thrash_pattern_removed_from_refresh():
+    """GC-PERF-POLL-THRASH-001: poll path must not stop+start on lastInterval > active."""
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parents[1] / "static" / "main.js").read_text(
+        encoding="utf-8"
+    )
+    assert "Cadence is owned by gameStatePollTick" in src
+    parts = src.split("if (data.unchanged === true)")
+    assert len(parts) >= 2
+    unchanged_branch = parts[1].split("rememberPollVersion(data);")[0]
+    assert "GC.stopPolling()" not in unchanged_branch
+    assert "GC.startPolling(true)" not in unchanged_branch
