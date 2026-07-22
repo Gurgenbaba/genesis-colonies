@@ -7297,14 +7297,11 @@ def api_game_state():
     if not payload.get("ok"):
         return jsonify({"ok": False, "error": "not_logged_in"}), 401
 
-    # GC-PERF-STATE-002: optional delta short-circuit (opt-in — client must handle unchanged).
+    # GC-PERF-LIVE-001: diet delta short-circuit default ON (client handles unchanged).
+    # Set GC_STATE_DELTA=0|false|off to disable.
     since_raw = request.args.get("since", "").strip()
-    delta_enabled = os.environ.get("GC_STATE_DELTA", "").strip().lower() in (
-        "1",
-        "true",
-        "yes",
-        "on",
-    )
+    delta_raw = os.environ.get("GC_STATE_DELTA", "1").strip().lower()
+    delta_enabled = delta_raw not in ("0", "false", "no", "off")
     if delta_enabled and since_raw.isdigit() and not want_panel and not delta_keys:
         from game.live_state import build_delta_game_state, set_request_perf_meta
 

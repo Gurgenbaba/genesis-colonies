@@ -661,11 +661,26 @@ def test_gc803_simple_hud_poll_contract():
     assert "function gameStateWantPanelPoll" not in src
     refresh = src.split("async function refreshGameState(reason)")[1].split("GC.refreshGameState = refreshGameState")[0]
     assert "include_panel=1" not in refresh
-    assert 'fetchJSON("/api/game-state"' in refresh
+    assert 'gameStateUrl = "/api/game-state"' in refresh or 'fetchJSON("/api/game-state"' in refresh
+    assert "GC.fetchJSON(gameStateUrl" in refresh or 'fetchJSON("/api/game-state"' in refresh
     live = _read("game/live_state.py")
     assert "def apply_lightweight_game_state_diet(payload" in live
     assert "def research_poll_slice(research" in live
     assert "mini_queue_jobs" in live.split("def research_poll_slice(research")[1].split("def account_safety_hud_for_game_state")[0]
+
+
+def test_gc_perf_live_001_diet_since_and_busy_fleet_contract():
+    """GC-PERF-LIVE-001: client sends ?since=, skips unchanged apply, busy includes fleets."""
+    src = _read("static/main.js")
+    refresh = src.split("async function refreshGameState(reason)")[1].split("GC.refreshGameState = refreshGameState")[0]
+    assert "since=" in refresh
+    assert "_lastPollVersion" in refresh
+    assert "data.unchanged === true" in refresh
+    assert "function hasBusyLiveActivity()" in src
+    assert "lastHadActiveFleet" in src
+    assert "lastHadActiveDefense" in src
+    assert "syncActiveFleetBusyFromState" in src
+    assert "hasBusyLiveActivity()" in src.split("function scheduleGameStatePoll")[1].split("GC.stopStatusPoller")[0]
 
 
 def test_gc744_resource_icons_use_webp():

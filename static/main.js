@@ -1471,7 +1471,7 @@
       _finalizeTimekeeperQueueButtons(state);
       _schedulePlanetEvolutionRefreshAfterAction(reasonStr);
       if (shouldPollGameState()) {
-        GC.startPolling(anyActive || lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard);
+        GC.startPolling(anyActive || hasBusyLiveActivity());
       }
       GC.startProgressTicker();
       if (shouldRefreshTechnicalModalAfterAction(reasonStr)) {
@@ -2229,7 +2229,7 @@
         return;
       }
       GC.startProgressTicker();
-      const active = lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard;
+      const active = hasBusyLiveActivity();
       let interval = pol.intervalIdle;
       if (active) interval = pol.intervalActive;
       if (document.hidden) interval = pol.intervalHidden;
@@ -2588,7 +2588,7 @@
       }
       if (willPoll) {
         GC.startPolling(
-          lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard,
+          hasBusyLiveActivity(),
           false,
           Boolean(skipInitFetch)
         );
@@ -10402,10 +10402,43 @@
   let lastHadActiveJob = false;
   let lastHadActiveResearch = false;
   let lastHadActiveShipyard = false;
+  let lastHadActiveDefense = false;
+  let lastHadActiveFleet = false;
+  let _lastPollVersion = 0;
   let lastBuildQueueCount = null;
   let lastBuildQueueFull = null;
   let lastResearchQueueCount = null;
   let lastResearchQueueFull = null;
+
+  function hasBusyLiveActivity() {
+    return (
+      lastHadActiveJob
+      || lastHadActiveResearch
+      || lastHadActiveShipyard
+      || lastHadActiveDefense
+      || lastHadActiveFleet
+    );
+  }
+
+  function rememberPollVersion(data) {
+    const ver = Number(data?.poll_version || data?.version || 0);
+    if (Number.isFinite(ver) && ver > 0) _lastPollVersion = ver;
+  }
+
+  function syncActiveFleetBusyFromState(data) {
+    const now = getTimerServerNow();
+    const fleets = normalizeActiveFleetsPayload(data?.active_fleets);
+    let busy = Number(fleets.count || 0) > 0;
+    if (!busy && Array.isArray(fleets.items)) {
+      busy = fleets.items.some((it) => {
+        if (!it || typeof it !== "object") return false;
+        const arr = Number(it.arrival_at || 0);
+        const ret = Number(it.return_at || 0);
+        return (arr > now) || (ret > now);
+      });
+    }
+    lastHadActiveFleet = Boolean(busy);
+  }
 
   /** Client-side resource projection for the active planet (synced on each game-state). */
   const _resourceLive = {
@@ -13285,6 +13318,11 @@
         }
       });
     }
+    if (data?.defense) {
+      const defSlice = data.defense.queue || data.defense.defense_queue;
+      const defQ = defSlice?.queue ?? defSlice;
+      if (Array.isArray(defQ)) _syncDefenseQueueLiveState(defQ);
+    }
 
     const hasActiveBuild = queueList.length > 0;
     const bqLimitFinal = buildQueueRaw?.summary?.limit ?? 3;
@@ -13300,8 +13338,10 @@
     lastResearchQueueFull = rqCountFinal >= rqLimitFinal;
     lastHadActiveResearch = hasActiveResearchNow;
     lastHadActiveShipyard = SHIPYARDQ.active.finishTime > getTimerServerNow();
+    lastHadActiveDefense = DEFENSEQ.active.finishTime > getTimerServerNow();
+    syncActiveFleetBusyFromState(data);
 
-    return hasActiveBuild || hasActiveResearchNow || lastHadActiveShipyard;
+    return hasBusyLiveActivity();
   }
 
   function shouldSyncRoleSidebarFromHudData(data, reason) {
@@ -13547,6 +13587,8 @@
       lastResearchQueueFull = rqCountFinal >= rqLimitFinal;
       lastHadActiveResearch = hasActiveResearchNow;
       lastHadActiveShipyard = SHIPYARDQ.active.finishTime > getTimerServerNow();
+      lastHadActiveDefense = DEFENSEQ.active.finishTime > getTimerServerNow();
+      syncActiveFleetBusyFromState(data);
 
       renderBuildQueue(buildQueueRaw);
 
@@ -13693,8 +13735,8 @@
       }
 
       markGameStateFetchApplied(opts);
-      return hasActiveBuild || hasActiveResearchNow || lastHadActiveShipyard;
-  }
+      return hasBusyLiveActivity();
+    }
 
   async function forceCanonicalGameStateRefresh(reason, opts) {
     if (!shouldRunGameLoop() || _authLoopAborted) return null;
@@ -13815,7 +13857,12 @@
 
     (async () => {
       try {
-        const data = await GC.fetchJSON("/api/game-state", { cache: "no-store", signal: ctrl.signal });
+        let gameStateUrl = "/api/game-state";
+        // GC-PERF-LIVE-001: diet polls send ?since= for unchanged short-circuit.
+        if (hudOnly && _lastPollVersion > 0) {
+          gameStateUrl = `/api/game-state?since=${encodeURIComponent(String(_lastPollVersion))}`;
+        }
+        const data = await GC.fetchJSON(gameStateUrl, { cache: "no-store", signal: ctrl.signal });
         if (!data || data.ok === false) {
           if (isAuthStatusFailure(null, data)) handleAuthFailure("game-state-payload");
           resolveFlight(null);
@@ -13838,8 +13885,25 @@
           return null;
         }
 
+        if (data.unchanged === true) {
+          rememberPollVersion(data);
+          const wantPolling = hasBusyLiveActivity();
+          if (reason === "poll") {
+            const pol = GC.polling;
+            if (wantPolling && pol.running && pol.lastInterval > pol.intervalActive + 100) {
+              GC.stopPolling();
+              GC.startPolling(true);
+            }
+          } else if (shouldPollGameState() && (reason === "page_init" || reason === "tab_visible" || !GC.polling.running)) {
+            GC.startPolling(wantPolling);
+          }
+          resolveFlight(data);
+          return data;
+        }
+
+        rememberPollVersion(data);
         const anyActive = applyGameStateData(data, reason, { hudOnly, _fetchSeq: fetchSeq });
-        const wantPolling = anyActive || lastHadActiveJob || lastHadActiveResearch;
+        const wantPolling = anyActive || hasBusyLiveActivity();
         if (reason === "poll") {
           const pol = GC.polling;
           if (wantPolling && pol.running && pol.lastInterval > pol.intervalActive + 100) {
@@ -13873,7 +13937,7 @@
         markStatusWidgetOffline();
         p.backoff = Math.min(60000, (p.backoff || 2000) * 1.6);
         if (reason !== "poll" && shouldPollGameState() && !_authLoopAborted && !GC.polling.running) {
-          GC.startPolling(lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard, true);
+          GC.startPolling(hasBusyLiveActivity(), true);
         }
         resolveFlight(null);
         return null;
@@ -24670,7 +24734,7 @@
             await GC.refreshFleetState(fleetPage);
           }
           if (!onAdmin) {
-            GC.startPolling(anyActive || lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard);
+            GC.startPolling(anyActive || hasBusyLiveActivity());
             GC.startProgressTicker();
           }
         } else {
@@ -32526,7 +32590,7 @@
       if (document.hidden) {
         pauseVisualLoops();
         if (shouldPollGameState() && !_authLoopAborted) {
-          GC.startPolling(lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard);
+          GC.startPolling(hasBusyLiveActivity());
         }
         return;
       }

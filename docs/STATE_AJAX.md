@@ -30,11 +30,14 @@ Actions use `_player_context_for_action()` (read-only DB) then **one** `refresh_
 - No `overview.status` (shipyard/fleet activity queries skipped)
 - Inbox unread count read-only (`prepare=False`)
 - Resource persist writes throttled (`GC_RESOURCE_PERSIST_SEC`, default ≥600 s since last planet update; GC-PERF-RES-001)
-- Diet payload includes `poll_version` (HUD fingerprint); optional `?since=<poll_version>` returns `{unchanged:true}` when fingerprint matches (GC-PERF-STATE-002). Distinct from `state_version` (server clock, GC-557C).
+- Diet payload includes `poll_version` (HUD fingerprint); client diet polls send `?since=<poll_version>` and skip HUD apply on `{unchanged:true}` (**GC-PERF-LIVE-001**, server default on; `GC_STATE_DELTA=0` disables). Distinct from `state_version` (server clock, GC-557C).
+- Busy-Poll (`intervalActive`): Build, Research, Shipyard, **Defense**, and **active fleets** — not only build/research/shipyard.
 
 Full panel payload is returned on **page load** and after **POST actions** (build, trade, fleet, …).
 
 Production client intervals (override via `GC_POLL_*` env): active 8 s, idle 12 s, hidden 30 s.
+
+Note: `{unchanged:true}` currently saves payload size and client apply; the diet payload is still built server-side. Early exit before `_build_game_state_payload` → follow-up **GC-PERF-STATE-004**.
 
 ## Server pipeline
 

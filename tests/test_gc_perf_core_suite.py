@@ -113,7 +113,7 @@ def test_game_worker_and_load_scripts_exist():
 
 
 def test_diet_payload_has_state_version(game_client, monkeypatch):
-    monkeypatch.setenv("GC_STATE_DELTA", "1")
+    monkeypatch.delenv("GC_STATE_DELTA", raising=False)
     client, _pid = game_client
     resp = client.get("/api/game-state")
     assert resp.status_code == 200
@@ -134,6 +134,25 @@ def test_diet_payload_has_state_version(game_client, monkeypatch):
         assert int(data2.get("poll_version") or data2.get("version") or 0) != 0
 
 
+def test_delta_api_default_on_when_fingerprint_forced(game_client, monkeypatch):
+    """GC-PERF-LIVE-001: delta short-circuit is default-on (no GC_STATE_DELTA=1 required)."""
+    from game import live_state as ls
+
+    monkeypatch.delenv("GC_STATE_DELTA", raising=False)
+    monkeypatch.setattr(ls, "compute_poll_version", lambda _payload: 424242)
+
+    client, _pid = game_client
+    resp = client.get("/api/game-state")
+    assert resp.status_code == 200
+    assert int(resp.get_json()["poll_version"]) == 424242
+
+    resp2 = client.get("/api/game-state?since=424242")
+    assert resp2.status_code == 200
+    data2 = resp2.get_json()
+    assert data2.get("unchanged") is True
+    assert int(data2.get("version")) == 424242
+
+
 def test_delta_api_unchanged_when_fingerprint_forced(game_client, monkeypatch):
     """Force stable poll_version so ?since= short-circuit is deterministic."""
     from game import live_state as ls
@@ -150,3 +169,19 @@ def test_delta_api_unchanged_when_fingerprint_forced(game_client, monkeypatch):
     data2 = resp2.get_json()
     assert data2.get("unchanged") is True
     assert int(data2.get("version")) == 424242
+
+
+def test_delta_api_can_be_disabled(game_client, monkeypatch):
+    from game import live_state as ls
+
+    monkeypatch.setenv("GC_STATE_DELTA", "0")
+    monkeypatch.setattr(ls, "compute_poll_version", lambda _payload: 424242)
+
+    client, _pid = game_client
+    resp = client.get("/api/game-state")
+    assert resp.status_code == 200
+    resp2 = client.get("/api/game-state?since=424242")
+    assert resp2.status_code == 200
+    data2 = resp2.get_json()
+    assert data2.get("unchanged") is not True
+    assert "poll_version" in data2
