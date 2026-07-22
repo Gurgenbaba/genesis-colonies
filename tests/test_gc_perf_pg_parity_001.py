@@ -928,3 +928,116 @@ def test_parity_d_fleet_combat_sqlite(sqlite_parity_db):
 @requires_postgres
 def test_parity_d_fleet_combat_postgres(pg_parity_db):
     _assert_fleet_combat_parity()
+
+
+# ---------------------------------------------------------------------------
+# Block E — Evolution + Meta
+# ---------------------------------------------------------------------------
+
+
+def _assert_evolution_parity() -> None:
+    import time
+
+    from game.db import begin_write_transaction, commit, db
+    from game.models import create_user, ensure_player_and_homeworld, get_homeworld, get_planets_by_player
+    from game.planet_evolution.bootstrap import ensure_planet_evolution
+    from game.planet_evolution.definitions import reload_definitions
+    from game.planet_evolution.dna import MAX_SQLITE_SIGNED_INT
+    from game.planet_evolution.mechanics import compile_planet_mechanics
+    from game.planet_evolution.planet_research import (
+        finish_planet_research_jobs,
+        get_planet_research_status,
+        queue_planet_research,
+    )
+    from game.planet_evolution.repository import (
+        evolution_schema_ready,
+        get_planet_research_levels,
+        save_planet_dna,
+    )
+    from game.planet_evolution.service import pick_specialization
+    from game.planet_evolution.specialization import eligible_specialization_keys
+    from game.ranking import get_player_score_cached
+
+    conn = db()
+    try:
+        reload_definitions(conn)
+        assert evolution_schema_ready(conn) is True
+    finally:
+        conn.close()
+
+    ok, err, user = create_user(_parity_d_username("evo"), "test-pass-123")
+    assert ok, err
+    uid = int(user["id"])
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ensure_player_and_homeworld(uid, player_name="EvoCommander", conn=conn)
+        home = get_homeworld(uid, conn=conn)
+        assert home is not None
+        pid = int(home["id"])
+        dna_seed = int(home.get("dna_seed") or 0)
+        assert 0 <= dna_seed <= MAX_SQLITE_SIGNED_INT
+
+        ensure_planet_evolution(pid, conn)
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE planets SET metal = 999999, crystal = 999999, planet_level = 8, dna_reveal_tier = 2 WHERE id = ?;",
+            (pid,),
+        )
+        cur.execute(
+            "UPDATE planet_buildings SET research_lab = 5 WHERE planet_id = ?;",
+            (pid,),
+        )
+        forge_dna = {
+            "rarity_tier": "uncommon",
+            "geology_traits": ["ferronit_rich_crust", "deep_core_pressure"],
+            "atmosphere_traits": [],
+            "environment_traits": ["unstable_mantle"],
+            "anomaly_traits": [],
+            "hidden_traits": [],
+            "affinity_scores": {"industry": 70, "science": 10, "trade": 10},
+            "risk_profile": {},
+            "resource_potential": {},
+        }
+        save_planet_dna(pid, forge_dna, conn)
+        commit(conn)
+
+        ok, reason, extra = queue_planet_research(
+            pid, "industry_t1_automation", player_id=uid, conn=conn
+        )
+        assert ok, reason
+        assert extra and extra.get("job_id")
+        finished = finish_planet_research_jobs(conn, pid, time.time() + 99999)
+        assert finished >= 1
+        commit(conn)
+        levels = get_planet_research_levels(pid, conn=conn)
+        assert int(levels.get("industry_t1_automation") or 0) >= 1
+        status = get_planet_research_status(pid, conn=conn)
+        assert isinstance(status, dict)
+
+        eligible = eligible_specialization_keys(pid, conn)
+        assert "forge_world" in eligible
+        ok, reason, extra = pick_specialization(pid, "forge_world", uid, conn=conn)
+        assert ok, reason
+        assert extra and int(extra.get("tier") or 0) == 1
+        commit(conn)
+        mech = compile_planet_mechanics(pid, conn)
+        assert "refined_ferronit" in (mech.get("export_slots") or [])
+    finally:
+        conn.close()
+
+    score = get_player_score_cached(uid, read_only=True) or {}
+    assert int(score.get("total") or 0) >= 0
+    # Meta: planets list still resolves after PE writes
+    planets = get_planets_by_player(uid)
+    assert any(int(p["id"]) == pid for p in planets)
+
+
+def test_parity_e_evolution_sqlite(sqlite_parity_db):
+    _assert_evolution_parity()
+
+
+@requires_postgres
+def test_parity_e_evolution_postgres(pg_parity_db):
+    _assert_evolution_parity()

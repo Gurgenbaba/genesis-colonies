@@ -57,7 +57,13 @@ _WIPE_TABLES: tuple[str, ...] = (
     "player_messages",
     "expedition_daily_value",
     "planet_research_queue",
+    "planet_research_levels",
     "planet_ascension_queue",
+    "planet_locked_choices",
+    "planet_mechanics",
+    "planet_dna",
+    "planet_culture",
+    "planet_policies",
 )
 
 
