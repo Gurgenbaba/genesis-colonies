@@ -76,6 +76,8 @@
       started: false,
       interval: 8000,
       intervalHidden: 12000,
+      // GC-PERF-CHAT-IDLE-001: slow message poll while panel closed (badge via bootstrap).
+      intervalClosed: 45000,
       bootstrapIntervalMs: 60000,
       lastBootstrapAt: 0,
       bootstrapInFlight: null,
@@ -496,6 +498,7 @@
 
     if (!open) {
       setMinimized();
+      schedulePoll();
       return;
     }
 
@@ -513,6 +516,7 @@
     scrollToBottom(true);
     markRead();
     persistState({ is_open: true, is_minimized: false }, true);
+    schedulePoll();
   }
 
   function toggleMaximize() {
@@ -970,12 +974,18 @@
     }
   }
 
+  function pollDelayMs() {
+    // Hidden tab first (battery / background), then closed panel, else active open poll.
+    if (document.hidden) return CHAT.polling.intervalHidden;
+    if (!isChatPanelVisible()) return CHAT.polling.intervalClosed;
+    return CHAT.polling.interval;
+  }
+
   function schedulePoll() {
     clearPollTimer();
     if (!CHAT.root || !CHAT.activeRoomId) return;
     CHAT.polling.started = true;
-    const delay = document.hidden ? CHAT.polling.intervalHidden : CHAT.polling.interval;
-    CHAT.polling.timer = setTimeout(pollTick, delay);
+    CHAT.polling.timer = setTimeout(pollTick, pollDelayMs());
   }
 
   async function pollTick() {

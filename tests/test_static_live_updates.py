@@ -307,6 +307,19 @@ def test_main_js_galaxy_prefetch_on_init():
     assert "initGalaxyPrefetchHints();" in src.split("function initShellOnce()")[1].split("function init")[0]
     assert 'path.endsWith("/galaxy")' in src
     assert "bindGalaxyKeyboardOnce" not in src
+    # GC-PERF-GALAXY-PREFETCH-GATE-001
+    assert "shouldPauseGalaxyPrefetch" in src
+    assert "GALAXY_PREFETCH_CONCURRENCY = 1" in src
+    assert "_galaxyPrefetchQueue" in src
+    assert "pumpGalaxyPrefetchQueue" in src
+    assert "scheduleBootPrefetch" not in src
+    assert "prefetchGalaxyNavHints(document)" not in src
+    hints = src.split("function initGalaxyPrefetchHints()")[1].split("GC.prefetchGalaxyNavHints")[0]
+    assert "mouseover" in hints
+    assert "visibilitychange" in hints
+    nav_hints = src.split("function prefetchGalaxyNavHints(scope)")[1].split("function initGalaxyPrefetchHints()")[0]
+    assert "getGalaxyPageRoot()" in nav_hints
+    assert "scope !== document" in nav_hints
 
 
 def test_fleet_form_excluded_from_pjax_get_submit():
@@ -609,6 +622,19 @@ def test_app_gc745_pjax_server_fastpath():
     assert "api_notifications_summary" in app_py.split("_FLEET_TICK_SKIP_ENDPOINTS = frozenset")[1].split(")")[0]
     inject = app_py.split("def inject_globals()")[1].split("@app.route", 1)[0]
     assert "_is_lightweight_layout_request()" in inject
+    # GC-PERF-PJAX-CTX-SHELL-001: score/rank + planet switcher are shell-only.
+    score_block = inject.split("# score + rank")[1].split("header_planets:")[0]
+    assert "not simple_layout" in score_block
+    assert "get_player_score_cached" in score_block
+    planets_block = inject.split("header_planets:")[1].split("current_planet_landscape_url")[0]
+    assert "not simple_layout" in planets_block
+    assert "list_player_planets_for_switcher" in planets_block
+    landscape_block = inject.split("current_planet_landscape_url = None")[1].split(
+        "from game.config import get_client_runtime_config"
+    )[0]
+    assert "not simple_layout" in landscape_block
+    # Codex stays available for #main-content on PJAX.
+    assert "build_codex_template_context" in inject
     galaxy_view = app_py.split("def galaxy_view()")[1].split("@app.route", 1)[0]
     assert "_load_player_view_with_resources()" in galaxy_view
     assert "build_minimap_range" not in galaxy_view

@@ -338,3 +338,49 @@ def test_humanize_requirement_lines_renders_translated_text_not_raw_dict():
     for line in lines:
         assert "label_key" not in line
         assert "fallback" not in line
+
+
+def test_pe_ssr_boot_history_limit_and_locked_card_template():
+    """GC-PERF-PJAX-BYTES-HEAVY-001: SSR history window + locked cards omit info source."""
+    tpl = (Path(__file__).resolve().parents[1] / "templates" / "planet_evolution.html").read_text(
+        encoding="utf-8"
+    )
+    card_macro = tpl.split("{% macro pe_research_tech_card")[1].split("{% endmacro %}")[0]
+    assert "variant != 'locked'" in card_macro
+    assert "GC-PERF-PJAX-BYTES-HEAVY-001" in card_macro
+    assert "pe_tech_info_source(tech)" in card_macro
+
+    app_src = (Path(__file__).resolve().parents[1] / "app.py").read_text(encoding="utf-8")
+    pe_view = app_src.split("def planet_evolution_view()")[1].split("@app.route", 1)[0]
+    assert "ssr_boot=True" in pe_view
+
+    svc = (Path(__file__).resolve().parents[1] / "game" / "planet_evolution" / "service.py").read_text(
+        encoding="utf-8"
+    )
+    payload_fn = svc.split("def get_planet_state_payload(")[1].split("\ndef set_active_planet")[0]
+    assert "ssr_boot: bool = False" in payload_fn
+    assert "history_limit = 5 if ssr_boot else 20" in payload_fn
+
+
+def test_ssr_boot_payload_uses_short_history(evo_db):
+    from game.planet_evolution.history import append_history
+    from game.planet_evolution.service import get_planet_state_payload
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    for i in range(12):
+        append_history(
+            pid,
+            "level_up",
+            "pe_history_level_up",
+            conn=conn,
+            payload={"level": i + 1},
+        )
+    conn.commit()
+    ssr = get_planet_state_payload(pid, player_id=uid, conn=conn, ssr_boot=True)
+    full = get_planet_state_payload(pid, player_id=uid, conn=conn, ssr_boot=False)
+    conn.close()
+    assert len((ssr.get("dashboard") or {}).get("history", {}).get("items") or []) <= 5
+    assert len((full.get("dashboard") or {}).get("history", {}).get("items") or []) >= 5
+    assert len((full.get("dashboard") or {}).get("history", {}).get("items") or []) <= 20

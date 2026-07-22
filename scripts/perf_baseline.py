@@ -44,6 +44,59 @@ def _eval_diet(total_ms: float, payload_bytes: int, sql_count: int = 0, sql_writ
     )
 
 
+def _pjax_html_misses(payload_bytes: int, budgets: dict) -> list[str]:
+    ceiling = float(budgets.get("pjax_html_bytes") or 0)
+    if ceiling > 0 and payload_bytes > ceiling:
+        return ["pjax_html_bytes"]
+    return []
+
+
+def _sample_get(client, path: str, *, headers: dict | None = None) -> dict:
+    t0 = time.perf_counter()
+    resp = client.get(path, headers=headers or {})
+    total_ms = (time.perf_counter() - t0) * 1000.0
+    body = resp.get_data() or b""
+    return {
+        "path": path,
+        "status": resp.status_code,
+        "total_ms": round(total_ms, 1),
+        "bytes": len(body),
+        "headers": headers or {},
+    }
+
+
+def _try_login_baseline_user(client) -> bool:
+    """Opt-in auth for PJAX HTML samples (GC_PERF_BASELINE_LOGIN=1)."""
+    flag = os.environ.get("GC_PERF_BASELINE_LOGIN", "0").strip().lower()
+    if flag not in ("1", "true", "yes", "on"):
+        return False
+    try:
+        from game.models import create_user, db, ensure_player_and_homeworld
+
+        conn = db()
+        ok, _err, user = create_user("perf_baseline_user", "perf-baseline-pass-123")
+        if not ok and user is None:
+            cur = conn.execute(
+                "SELECT id FROM users WHERE username = ? LIMIT 1;",
+                ("perf_baseline_user",),
+            )
+            row = cur.fetchone()
+            if not row:
+                conn.close()
+                return False
+            uid = int(row["id"] if hasattr(row, "keys") else row[0])
+        else:
+            uid = int(user["id"])
+        ensure_player_and_homeworld(uid, player_name="PerfBaseline", conn=conn)
+        conn.commit()
+        conn.close()
+        with client.session_transaction() as sess:
+            sess["user_id"] = uid
+        return True
+    except Exception:
+        return False
+
+
 def _run_via_test_client() -> dict:
     os.environ.setdefault("GC_REQUEST_PERF_DEBUG", "1")
     os.environ.setdefault("GC_REQUEST_PERF_SLOW_MS", "0")
@@ -58,25 +111,31 @@ def _run_via_test_client() -> dict:
     with app.test_client() as client:
         # Login path varies; baseline measures anonymous → expect redirect/401
         # Prefer authenticated fixture via env GC_PERF_BASELINE_SESSION if set.
-        t0 = time.perf_counter()
-        resp = client.get("/api/game-state")
-        total_ms = (time.perf_counter() - t0) * 1000.0
-        body = resp.get_data() or b""
-        payload_bytes = len(body)
-        status = resp.status_code
+        sample = _sample_get(client, "/api/game-state")
         misses = []
-        if status == 200:
-            misses = _eval_diet(total_ms, payload_bytes)
-        results.append(
-            {
-                "path": "/api/game-state",
-                "status": status,
-                "total_ms": round(total_ms, 1),
-                "bytes": payload_bytes,
-                "budget_miss": misses,
-                "note": "unauthenticated unless session cookie provided",
-            }
+        if sample["status"] == 200:
+            misses = _eval_diet(sample["total_ms"], sample["bytes"])
+        sample["budget_miss"] = misses
+        sample["note"] = "unauthenticated unless session cookie provided"
+        results.append(sample)
+
+        # GC-PERF-PJAX-BYTES-HEAVY-001: measure PE PJAX HTML size when logged in.
+        logged_in = _try_login_baseline_user(client)
+        pe = _sample_get(
+            client,
+            "/planet-evolution",
+            headers={"X-PJAX": "true", "X-Requested-With": "XMLHttpRequest"},
         )
+        pe["budget_miss"] = (
+            _pjax_html_misses(pe["bytes"], budgets) if pe["status"] == 200 else []
+        )
+        pe["note"] = (
+            "pjax_html_bytes sample"
+            if logged_in
+            else "pjax sample skipped auth (unauthenticated redirect likely)"
+        )
+        pe["pjax"] = True
+        results.append(pe)
 
     return {"mode": "test_client", "budgets": budgets, "samples": results}
 
@@ -87,34 +146,40 @@ def _run_via_url(base_url: str) -> dict:
     from game.config import get_perf_budgets
 
     budgets = get_perf_budgets()
-    url = base_url.rstrip("/") + "/api/game-state"
-    t0 = time.perf_counter()
-    req = urllib.request.Request(url, method="GET")
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            body = resp.read()
-            status = resp.status
-    except Exception as exc:
-        return {
-            "mode": "url",
-            "budgets": budgets,
-            "samples": [{"path": "/api/game-state", "error": str(exc)}],
-        }
-    total_ms = (time.perf_counter() - t0) * 1000.0
-    misses = _eval_diet(total_ms, len(body)) if status == 200 else []
-    return {
-        "mode": "url",
-        "budgets": budgets,
-        "samples": [
+    samples = []
+    for path, headers in (
+        ("/api/game-state", {}),
+        (
+            "/planet-evolution",
+            {"X-PJAX": "true", "X-Requested-With": "XMLHttpRequest"},
+        ),
+    ):
+        url = base_url.rstrip("/") + path
+        t0 = time.perf_counter()
+        req = urllib.request.Request(url, method="GET", headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                body = resp.read()
+                status = resp.status
+        except Exception as exc:
+            samples.append({"path": path, "error": str(exc)})
+            continue
+        total_ms = (time.perf_counter() - t0) * 1000.0
+        if path == "/api/game-state":
+            misses = _eval_diet(total_ms, len(body)) if status == 200 else []
+        else:
+            misses = _pjax_html_misses(len(body), budgets) if status == 200 else []
+        samples.append(
             {
-                "path": "/api/game-state",
+                "path": path,
                 "status": status,
                 "total_ms": round(total_ms, 1),
                 "bytes": len(body),
                 "budget_miss": misses,
+                "pjax": bool(headers),
             }
-        ],
-    }
+        )
+    return {"mode": "url", "budgets": budgets, "samples": samples}
 
 
 def main() -> int:

@@ -122,6 +122,8 @@ def get_planet_state_payload(
     planet_id: int,
     player_id: Optional[int] = None,
     conn: Optional[sqlite3.Connection] = None,
+    *,
+    ssr_boot: bool = False,
 ) -> Dict[str, Any]:
     own = conn is None
     if own:
@@ -156,6 +158,8 @@ def get_planet_state_payload(
             "queues": mechanics.get("queue_limits") or {},
         }
         research_status = get_planet_research_status(planet_id, conn=conn)
+        # Page SSR: smaller chronicle window (API hydrate keeps full 20).
+        history_limit = 5 if ssr_boot else 20
         dashboard = build_dashboard_extras(
             planet_id,
             planet=planet,
@@ -166,6 +170,7 @@ def get_planet_state_payload(
             active_event=active_event,
             eligible_specializations=eligible_specialization_keys(planet_id, conn),
             conn=conn,
+            history_limit=history_limit,
         )
 
         return {

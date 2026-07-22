@@ -485,10 +485,10 @@ def inject_globals():
     except Exception:
         player_stats = {}
 
-    # score + rank (header/sidebar) – darf niemals crashen
+    # score + rank (header/sidebar) – shell only; skip on PJAX/auth (GC-PERF-PJAX-CTX-SHELL-001)
     try:
         user_id = session.get("user_id")
-        if user_id is not None:
+        if user_id is not None and not simple_layout:
             player_id = int(user_id)  # players.id == users.id
 
             s = get_player_score_cached(player_id, read_only=True) or {}
@@ -507,7 +507,7 @@ def inject_globals():
     header_planet_limit: dict[str, Any] | None = None
     try:
         user_id = session.get("user_id")
-        if user_id is not None:
+        if user_id is not None and not simple_layout:
             from game.planet_evolution.service import list_player_planets_for_switcher
 
             header_planets = list_player_planets_for_switcher(int(user_id))
@@ -532,7 +532,7 @@ def inject_globals():
     current_planet_landscape_webp_url = None
     try:
         user_id = session.get("user_id")
-        if user_id is not None:
+        if user_id is not None and not simple_layout:
             from game.planet_visuals import landscape_filename_for_planet, raster_webp_relpath
 
             landscape_fn = landscape_filename_for_planet(header_active_planet)
@@ -9538,7 +9538,9 @@ def planet_evolution_view():
     try:
         try:
             active_id = get_active_planet_id(user_id, conn=conn)
-            planet_state = get_planet_state_payload(active_id, player_id=user_id, conn=conn)
+            planet_state = get_planet_state_payload(
+                active_id, player_id=user_id, conn=conn, ssr_boot=True
+            )
             commit(conn)
         except sqlite3.OperationalError:
             rollback(conn)

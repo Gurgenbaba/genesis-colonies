@@ -25692,6 +25692,10 @@
   // Galaxy page — PJAX cache + image warm pool (GC-594 perf)
   // =========================
   const _galaxyPrefetchUrls = new Set();
+  const _galaxyPrefetchQueue = [];
+  let _galaxyPrefetchActive = 0;
+  let _galaxyPrefetchResumeTimer = null;
+  const GALAXY_PREFETCH_CONCURRENCY = 1;
   const _galaxyPjaxCache = new Map();
   const _galaxyImageWarmSet = new Set();
   const GALAXY_PJAX_CACHE_MAX = 32;
@@ -25813,7 +25817,6 @@
   async function fetchGalaxyPjaxIntoCache(href) {
     if (!href || !isGalaxySystemPjaxUrl(href)) return;
     if (getGalaxyPjaxCached(href)) return;
-    if (_galaxyPrefetchUrls.has(href)) return;
     if (_galaxyPrefetchUrls.size >= 48) return;
     _galaxyPrefetchUrls.add(href);
     try {
@@ -25826,7 +25829,10 @@
           Accept: "text/html",
         },
       });
-      if (!res.ok) return;
+      if (!res.ok) {
+        _galaxyPrefetchUrls.delete(href);
+        return;
+      }
       const html = await res.text();
       const doc = new DOMParser().parseFromString(html, "text/html");
       cacheGalaxyPjaxFromDoc(href, doc);
@@ -25835,9 +25841,47 @@
     }
   }
 
+  // GC-PERF-GALAXY-PREFETCH-GATE-001: serialize prefetch; pause vs PJAX / game-state / hidden.
+  function shouldPauseGalaxyPrefetch() {
+    if (document.hidden) return true;
+    if (GC.pjaxInFlight) return true;
+    if (GC.refreshInFlight) return true;
+    return false;
+  }
+
+  function scheduleGalaxyPrefetchPump(delayMs) {
+    if (_galaxyPrefetchResumeTimer) return;
+    _galaxyPrefetchResumeTimer = setTimeout(() => {
+      _galaxyPrefetchResumeTimer = null;
+      pumpGalaxyPrefetchQueue();
+    }, Math.max(0, Number(delayMs) || 400));
+  }
+
+  function pumpGalaxyPrefetchQueue() {
+    while (_galaxyPrefetchActive < GALAXY_PREFETCH_CONCURRENCY && _galaxyPrefetchQueue.length) {
+      if (shouldPauseGalaxyPrefetch()) {
+        scheduleGalaxyPrefetchPump(400);
+        return;
+      }
+      const href = _galaxyPrefetchQueue.shift();
+      if (!href || getGalaxyPjaxCached(href)) continue;
+      if (_galaxyPrefetchUrls.has(href)) continue;
+      _galaxyPrefetchActive += 1;
+      Promise.resolve(fetchGalaxyPjaxIntoCache(href)).finally(() => {
+        _galaxyPrefetchActive = Math.max(0, _galaxyPrefetchActive - 1);
+        pumpGalaxyPrefetchQueue();
+      });
+    }
+  }
+
   function prefetchGalaxyHref(href) {
-    if (!href) return;
-    const run = () => fetchGalaxyPjaxIntoCache(href);
+    if (!href || !isGalaxySystemPjaxUrl(href)) return;
+    if (!shouldRunGameLoop()) return;
+    if (getGalaxyPjaxCached(href)) return;
+    if (_galaxyPrefetchUrls.has(href)) return;
+    if (_galaxyPrefetchQueue.includes(href)) return;
+    _galaxyPrefetchQueue.push(href);
+    const run = () => pumpGalaxyPrefetchQueue();
     if (typeof requestIdleCallback === "function") {
       requestIdleCallback(run, { timeout: 1800 });
     } else {
@@ -25857,7 +25901,8 @@
   }
 
   function collectGalaxyPrefetchHrefs(scope) {
-    const root = scope && scope.querySelectorAll ? scope : document;
+    const root = scope && scope.querySelectorAll ? scope : null;
+    if (!root) return new Set();
     const urls = new Set();
     root.querySelectorAll('a[href*="/galaxy"], a.gc-galaxy-coord-link[href]').forEach((link) => {
       if (!link.href) return;
@@ -25871,20 +25916,21 @@
   }
 
   function prefetchGalaxyNavHints(scope) {
+    // Prefer galaxy page scope — never document-wide boot stampede.
     if (!shouldRunGameLoop()) return;
-    collectGalaxyPrefetchHrefs(scope).forEach((href) => prefetchGalaxyHref(href));
+    const page = getGalaxyPageRoot();
+    const root = page || (scope && scope.querySelectorAll && scope !== document ? scope : null);
+    if (!root) return;
+    collectGalaxyPrefetchHrefs(root).forEach((href) => prefetchGalaxyHref(href));
   }
 
   function initGalaxyPrefetchHints() {
     if (GC._galaxyPrefetchHintsBound) return;
     GC._galaxyPrefetchHintsBound = true;
 
-    const scheduleBootPrefetch = () => prefetchGalaxyNavHints(document);
-    if (typeof requestIdleCallback === "function") {
-      requestIdleCallback(scheduleBootPrefetch, { timeout: 3000 });
-    } else {
-      setTimeout(scheduleBootPrefetch, 1500);
-    }
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) pumpGalaxyPrefetchQueue();
+    });
 
     document.addEventListener(
       "mouseover",

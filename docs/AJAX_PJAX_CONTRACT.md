@@ -33,6 +33,7 @@ Light-PJAX und SSR-Skip (Owner: `static/main.js`, Details in [STATE_AJAX.md](STA
 | PJAX fetch failure | Hard-load fallback (`location.assign`) so the shell does not stay toast-only |
 | Shell-HUD nach Login | `#gc-hud-boot-state` → `bootstrapHudFromDom()` vor Fleet-Drawer (GC-INSTANT-UX-001A) |
 | Fleet-Seite mit `#fleet-page-state` `ready: true` | `initFleet` skippt sofortiges `refreshFleetState` (GC-INSTANT-UX-001C) |
+| PJAX server context | Score/Rank, `HEADER_PLANETS`, Landscape hinter `_is_lightweight_layout_request()` — Shell bleibt im DOM (**GC-PERF-PJAX-CTX-SHELL-001**) |
 
 Diet-Poll / deferred first poll liefert weiterhin Live-Updates; kein zweites Polling-System.
 

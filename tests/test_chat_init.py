@@ -96,6 +96,21 @@ def test_chat_poll_uses_messages_delta_not_bootstrap_when_hidden():
     assert "applyIncomingPollMessages" in poll
 
 
+def test_chat_idle_poll_slows_when_panel_closed():
+    """GC-PERF-CHAT-IDLE-001: closed panel uses intervalClosed; open stays at interval."""
+    src = _read("static/js/chat.js")
+    assert "intervalClosed: 45000" in src
+    delay_fn = src.split("function pollDelayMs()")[1].split("function schedulePoll()")[0]
+    assert "document.hidden" in delay_fn
+    assert "isChatPanelVisible()" in delay_fn
+    assert "intervalClosed" in delay_fn
+    assert "intervalHidden" in delay_fn
+    schedule = src.split("function schedulePoll()")[1].split("async function pollTick()")[0]
+    assert "pollDelayMs()" in schedule
+    set_open = src.split("function setOpen(open)")[1].split("function toggleMaximize()")[0]
+    assert set_open.count("schedulePoll()") >= 2
+
+
 def test_chat_resume_polling_does_not_schedule_bootstrap_refresh():
     src = _read("static/js/chat.js")
     resume = src.split("function resumeChatPolling()")[1].split("async function sendMessage")[0]

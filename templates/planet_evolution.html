@@ -198,11 +198,13 @@
     <div class="pe-tech-card-info">
       <div class="pe-tech-card-name-row">
         <h4 class="pe-tech-card-name">{{ T(tech.label_key, pe_humanize_key(tech.tech_key)) }}</h4>
+        {% if variant != 'locked' %}
         <button type="button"
                 class="pe-tech-info-btn pe-info-trigger"
                 aria-label="{{ T('pe_tech_info_open', 'Tech-Info anzeigen') }}"
                 aria-expanded="false"
                 aria-controls="pe-tech-info-{{ tech.tech_key }}">?</button>
+        {% endif %}
       </div>
       <p class="pe-tech-card-meta gc-mono">
         {{ T("resource_metal", "Ferronit") }} {{ tech.cost_metal|int }} · {{ T("resource_crystal", "Crytite") }} {{ tech.cost_crystal|int }}
@@ -218,7 +220,10 @@
         {%- endfor -%}
       </p>
       {% endif %}
+      {# GC-PERF-PJAX-BYTES-HEAVY-001: locked cards skip pe_tech_info_source (~3KB each). #}
+      {% if variant != 'locked' %}
       {{ pe_tech_info_source(tech) }}
+      {% endif %}
     </div>
     <div class="pe-tech-card-action">{{ pe_research_card_actions(tech, planet_id, queue_has_room) }}</div>
   </div>
@@ -384,7 +389,6 @@
 {% set ps = planet_state if planet_state is defined and planet_state else {} %}
 <div class="gc-page planet-evolution-page pe-dashboard pe-journey" data-planet-id="{{ ps.planet_id if ps.planet_id is defined else '' }}">
 
-  {% set research = ps.research if ps.research is defined else {} %}
   {% set dash = ps.dashboard if ps.dashboard is defined else {} %}
   {% set traits = dash.traits if dash.traits is defined else [] %}
   {% set hdr = dash.header if dash.header is defined else {} %}

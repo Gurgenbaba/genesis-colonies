@@ -24,6 +24,7 @@ def test_perf_budgets_defaults(monkeypatch):
         "GC_PERF_BUDGET_DIET_PAYLOAD_BYTES",
         "GC_PERF_BUDGET_ACTION_MS",
         "GC_PERF_BUDGET_PJAX_SSR_MS",
+        "GC_PERF_BUDGET_PJAX_HTML_BYTES",
         "GC_PERF_BUDGET_DIET_SQL_COUNT",
         "GC_PERF_BUDGET_DIET_SQL_WRITE_COUNT",
     ):
@@ -34,6 +35,7 @@ def test_perf_budgets_defaults(monkeypatch):
     assert budgets["diet_payload_bytes"] == 15_360.0
     assert budgets["action_ms"] == 120.0
     assert budgets["pjax_ssr_ms"] == 100.0
+    assert budgets["pjax_html_bytes"] == 220_000.0
     assert budgets["diet_sql_count"] == 5.0
     assert budgets["diet_sql_write_count"] == 0.0
     assert budgets["definition_lookup_ms"] == 1.0

@@ -946,6 +946,7 @@ def build_dashboard_extras(
     active_event: Optional[Dict[str, Any]],
     eligible_specializations: Optional[List[str]] = None,
     conn: sqlite3.Connection,
+    history_limit: int = 20,
 ) -> Dict[str, Any]:
     reveal = int(planet.get("dna_reveal_tier") or 0)
     raw_level = planet.get("planet_level")
@@ -1087,7 +1088,8 @@ def build_dashboard_extras(
         "warnings": warnings,
         "events_feed": _events_feed(planet_id, conn),
         "open_events_count": open_events,
-        "history": get_history(planet_id, limit=20, conn=conn),
+        # GC-PERF-PJAX-BYTES-HEAVY-001: page SSR uses a smaller history window.
+        "history": get_history(planet_id, limit=max(1, min(int(history_limit), 200)), conn=conn),
         "identity_teaser": build_identity_teaser(
             planet=planet,
             eligible_specs=eligible,

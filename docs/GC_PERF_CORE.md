@@ -28,6 +28,10 @@
 | EffectResolver-Cache | ✅ request-scoped (**GC-PERF-EFFECT-CACHE-001**) |
 | Diet early-exit vor Payload-Build | ✅ **GC-PERF-STATE-004** + probe-skip **STATE-005** |
 | Poll stop/start thrash (hidden+busy) | ✅ **GC-PERF-POLL-THRASH-001** |
+| Chat idle poll (panel closed) | ✅ **GC-PERF-CHAT-IDLE-001** |
+| PJAX shell globals skip (score/planets) | ✅ **GC-PERF-PJAX-CTX-SHELL-001** |
+| Galaxy prefetch gate (concurrency + pause) | ✅ **GC-PERF-GALAXY-PREFETCH-GATE-001** |
+| PE PJAX HTML slim + baseline bytes | ✅ **GC-PERF-PJAX-BYTES-HEAVY-001** |
 
 ## Zielarchitektur
 
@@ -78,6 +82,10 @@ Schema-Port
 | **GC-PERF-STATE-004** | Early exit vor diet payload build | ✅ |
 | **GC-PERF-STATE-005** | Process-local probe skip when since+unread match | ✅ |
 | **GC-PERF-POLL-THRASH-001** | No stop/start on unchanged hidden polls | ✅ |
+| **GC-PERF-CHAT-IDLE-001** | Chat message poll slows when panel closed | ✅ |
+| **GC-PERF-PJAX-CTX-SHELL-001** | Skip score/rank/HEADER_PLANETS on PJAX | ✅ |
+| **GC-PERF-GALAXY-PREFETCH-GATE-001** | Galaxy prefetch concurrency=1 + pause | ✅ |
+| **GC-PERF-PJAX-BYTES-HEAVY-001** | PE SSR slim (locked info + history) + baseline | ✅ |
 
 ## Explizit nicht tun (jetzt)
 

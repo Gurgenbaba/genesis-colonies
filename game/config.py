@@ -273,6 +273,7 @@ def get_perf_budgets() -> dict[str, float]:
     """
     defaults: dict[str, float] = {
         "pjax_ssr_ms": 100.0,
+        "pjax_html_bytes": 220_000.0,  # GC-PERF-PJAX-BYTES-HEAVY-001 soft ceiling for heavy mains
         "action_ms": 120.0,
         "diet_poll_ms": 40.0,
         "diet_payload_bytes": 15_360.0,  # 15 KB
