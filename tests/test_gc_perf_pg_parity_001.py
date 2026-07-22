@@ -1041,3 +1041,144 @@ def test_parity_e_evolution_sqlite(sqlite_parity_db):
 @requires_postgres
 def test_parity_e_evolution_postgres(pg_parity_db):
     _assert_evolution_parity()
+
+
+# ---------------------------------------------------------------------------
+# Block F — Race + Restart / Tick idempotency
+# ---------------------------------------------------------------------------
+
+
+def _assert_race_restart_parity() -> None:
+    import threading
+    import time
+
+    from game.buildings import queue_build_for_planet
+    from game.db import begin_write_transaction, commit, db
+    from game.fleet import process_fleet_tick, send_fleet
+    from game.models import (
+        create_user,
+        ensure_player_and_homeworld,
+        get_build_queue_rows,
+        get_homeworld,
+        get_planet_buildings,
+    )
+    from tests.pg_fixtures import close_pg_pool
+
+    ok, err, user = create_user(_parity_d_username("race"), "test-pass-123")
+    assert ok, err
+    uid = int(user["id"])
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ensure_player_and_homeworld(uid, player_name="RacePilot", conn=conn)
+        home = get_homeworld(uid, conn=conn)
+        pid = int(home["id"])
+        cur = conn.cursor()
+        _parity_d_fund(cur, pid, metal=500000, crystal=500000, fuel_cells=50000)
+        cur.execute(
+            """
+            UPDATE planet_buildings
+            SET metal_mine = 5, crystal_mine = 5, solar_plant = 8, research_lab = 5
+            WHERE planet_id = ?;
+            """,
+            (pid,),
+        )
+        _parity_d_seed_ships(conn, pid, uid, {"mule_courier": 4})
+        colony2 = _parity_d_second_colony(conn, uid, pid)
+        g2, s2, p2 = _parity_d_coords(conn, colony2)
+        commit(conn)
+    finally:
+        conn.close()
+
+    # 1) Concurrent build enqueues — no overflow / duplicate corruption
+    results: list[tuple[bool, str]] = []
+    lock = threading.Lock()
+
+    def _enqueue_one(building_key: str) -> None:
+        try:
+            planet = dict(get_homeworld(uid))
+            buildings = get_planet_buildings(int(planet["id"]))
+            ok_q, reason_q, _ = queue_build_for_planet(
+                planet, buildings, building_key, user_id=uid
+            )
+            with lock:
+                results.append((bool(ok_q), str(reason_q or "")))
+        except Exception as exc:
+            with lock:
+                results.append((False, f"exc:{exc}"))
+
+    t1 = threading.Thread(target=_enqueue_one, args=("metal_mine",))
+    t2 = threading.Thread(target=_enqueue_one, args=("crystal_mine",))
+    t1.start()
+    t2.start()
+    t1.join(timeout=30)
+    t2.join(timeout=30)
+    assert not t1.is_alive() and not t2.is_alive()
+    assert len(results) == 2
+    assert sum(1 for ok_r, _ in results if ok_r) >= 1
+    rows = get_build_queue_rows(pid)
+    assert 1 <= len(rows) <= 2
+
+    # 2) Fleet tick double-call idempotent + 3) restart (pool close / reopen)
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ok, reason, result = send_fleet(
+            player_id=uid,
+            origin_planet_id=pid,
+            target_galaxy=g2,
+            target_system=s2,
+            target_position=p2,
+            mission_type="transport",
+            ships={"mule_courier": 1},
+            resources={"metal": 1000, "crystal": 0},
+            conn=conn,
+        )
+        assert ok, reason
+        fleet_id = int(result["fleet"]["id"])
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE fleet_movements SET arrival_at = ? WHERE id = ?;",
+            (time.time() - 1, fleet_id),
+        )
+        commit(conn)
+    finally:
+        conn.close()
+
+    # Simulate worker restart: drop pooled connections, then process due arrival.
+    try:
+        close_pg_pool()
+    except Exception:
+        pass
+
+    conn = db()
+    try:
+        tick1 = process_fleet_tick(player_id=uid, conn=conn)
+        commit(conn)
+        assert int(tick1.get("processed_arrivals") or 0) == 1
+        cur = conn.cursor()
+        cur.execute("SELECT status FROM fleet_movements WHERE id = ?;", (fleet_id,))
+        assert cur.fetchone()["status"] == "returning"
+        tick2 = process_fleet_tick(player_id=uid, conn=conn)
+        commit(conn)
+        assert int(tick2.get("processed_arrivals") or 0) == 0
+        cur.execute("SELECT metal FROM planets WHERE id = ?;", (colony2,))
+        metal_once = float(cur.fetchone()["metal"])
+        tick3 = process_fleet_tick(player_id=uid, conn=conn)
+        commit(conn)
+        cur.execute("SELECT metal FROM planets WHERE id = ?;", (colony2,))
+        metal_twice = float(cur.fetchone()["metal"])
+        assert metal_once == metal_twice
+        assert int(tick3.get("processed_arrivals") or 0) == 0
+    finally:
+        conn.close()
+
+
+def test_parity_f_race_restart_sqlite(sqlite_parity_db):
+    _assert_race_restart_parity()
+
+
+@requires_postgres
+def test_parity_f_race_restart_postgres(pg_parity_db):
+    _assert_race_restart_parity()

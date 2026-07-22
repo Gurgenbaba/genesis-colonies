@@ -1,6 +1,6 @@
 # GC-PERF-PG-PARITY-001 — Backend-Parität auf leerer PostgreSQL-DB
 
-> Status: ✅ Block A/B/C/D/E · 📋 F offen  
+> Status: ✅ Block A–F (SQLite grün; PG wenn `GC_TEST_POSTGRES_URL`)  
 > Epic: EPIC-19 Performance Core · [GC_PERF_CORE.md](GC_PERF_CORE.md)  
 > Vorbedingung: ✅ [GC-PERF-PG-SCHEMA-001](GC_PERF_PG_SCHEMA_001.md)  
 > **Kein Livedaten-Import · kein Production-Cutover · kein produktiver Worker gegen Postgres.**  
@@ -24,7 +24,7 @@ Schema-Port ist grün, aber Verhaltensparität (Auth, Queues, Fleet, …) zwisch
 | **C** | Unit Queues (Build/Research/Shipyard/Defense) | ✅ SQLite + PG |
 | **D** | Fleet + Combat | ✅ |
 | **E** | Evolution + Meta | ✅ |
-| **F** | Race + Restart / Tick-Idempotenz | 📋 |
+| **F** | Race + Restart / Tick-Idempotenz | ✅ |
 
 ---
 
@@ -71,11 +71,11 @@ python -m pytest tests/test_gc_perf_pg_parity_001.py -v -s
 - [x] Combat/Loot/Debris grün
 - [x] Expedition grün
 - [x] Planet Evolution grün
-- [ ] Poll-State und Actions grün
-- [ ] parallele Enqueues ohne Duplicate/Overflow
-- [ ] Worker-Tick idempotent
-- [ ] Neustart verliert keinen Zustand
-- [ ] keine SQLite-spezifischen Runtime-Queries im getesteten Pfad
+- [x] Poll-State und Actions grün
+- [x] parallele Enqueues ohne Duplicate/Overflow
+- [x] Worker-Tick idempotent
+- [x] Neustart verliert keinen Zustand
+- [x] keine SQLite-spezifischen Runtime-Queries im getesteten Pfad
 - [x] SQLite-Suite-Pfad für Block A weiterhin grün
 
 ### Block A
@@ -136,6 +136,14 @@ python -m pytest tests/test_gc_perf_pg_parity_001.py -v -s
 - [x] SQLite (`test_parity_e_evolution_sqlite`)
 - [ ] PG Staging (`test_parity_e_evolution_postgres`) — run when `GC_TEST_POSTGRES_URL` set
 
+### Block F
+
+- [x] Concurrent build enqueues without queue corruption
+- [x] Fleet tick double-call idempotent after pool restart
+- [x] Due movement still processes after `close_pg_pool` / reconnect
+- [x] SQLite (`test_parity_f_race_restart_sqlite`)
+- [ ] PG Staging (`test_parity_f_race_restart_postgres`) — run when `GC_TEST_POSTGRES_URL` set
+
 ---
 
 ## Paritäts-Matrix
@@ -151,7 +159,7 @@ python -m pytest tests/test_gc_perf_pg_parity_001.py -v -s
 | Fleet      |   grün |       📋* | Block D — SQLite ✅; PG via staging URL |
 | Combat     |   grün |       📋* | Block D — SQLite ✅; PG via staging URL |
 | Evolution  |   grün |       📋* | Block E — SQLite ✅; PG via staging URL |
-| Race tests |    —   |        —   | Block F    |
+| Race tests |   grün |       📋* | Block F — SQLite ✅; PG via staging URL |
 
 Nach vollständiger Matrix → **GC-PERF-PG-MIGRATE-001**.
 
