@@ -34,10 +34,9 @@ MAX_ITERATIONS = 500
 DEFAULT_PLAYER_ITERATIONS = 50
 DEFAULT_ADMIN_ITERATIONS = 300
 TECH_BONUS_PER_LEVEL = 0.05
-# Soft cap for Monte-Carlo when fleets are huge (aggregate combat is fast; still bound CPU).
-_MAX_MC_HULL_EVENTS = 2_000_000_000
-_MEGA_FLEET_HULLS = 250_000
-_MEGA_FLEET_MAX_ITERATIONS = 50
+# Aggregate combat (_EXACT_SHOT_THRESHOLD) is O(stacks × rounds), not O(hulls).
+# Do not clamp MC iterations by hull count — that cut admin XXL runs (e.g. 1.4B
+# Odyssey) from 300 → ~3. MAX_ITERATIONS remains the hard cap.
 
 
 @dataclass
@@ -393,23 +392,6 @@ def run_monte_carlo_simulation(
         if field_errors:
             out["field_errors"] = field_errors
         return out
-
-    hulls = (
-        sum(max(0, int(v)) for v in sim.attacker_ships.values())
-        + sum(max(0, int(v)) for v in sim.defender_ships.values())
-        + sum(max(0, int(v)) for v in sim.defender_defense.values())
-    )
-    # Bound worst-case CPU if someone asks for 500 iters of billion-scale fleets.
-    if hulls > 0:
-        # Six rounds × two sides ≈ 12 firing waves; keep product under budget.
-        budget_iters = max(1, int(_MAX_MC_HULL_EVENTS // max(1, hulls * 12)))
-        if budget_iters < sim.iterations:
-            sim.iterations = budget_iters
-            sim.warnings = list(sim.warnings) + ["iterations_clamped_for_fleet_size"]
-        # Mega fleets: keep Battle Lab responsive (~seconds, not minutes).
-        if hulls >= _MEGA_FLEET_HULLS and sim.iterations > _MEGA_FLEET_MAX_ITERATIONS:
-            sim.iterations = _MEGA_FLEET_MAX_ITERATIONS
-            sim.warnings = list(sim.warnings) + ["iterations_clamped_for_fleet_size"]
 
     base_seed = sim.seed if sim.seed is not None else random.randrange(1, 2_000_000_000)
     runs: List[Dict[str, Any]] = []

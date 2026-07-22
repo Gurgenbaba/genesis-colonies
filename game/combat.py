@@ -401,25 +401,40 @@ def _geometric_shot_count(rng: random.Random, ships: int, bonus_chance: float) -
 
 def _shots_to_finish_hp(shield: int, hull: int, damage_per_shot: int) -> int:
     """How many identical shots destroy a unit starting at the given shield/hull."""
-    s = max(0, int(shield))
-    h = max(0, int(hull))
     dmg = max(0, int(damage_per_shot))
     if dmg <= 0:
         return 10**18
-    if s <= 0 and h <= 0:
+    # Shield does not regen between shots on the same lead unit, so HP is one pool.
+    pool = max(0, int(shield)) + max(0, int(hull))
+    if pool <= 0:
         return 0
-    shots = 0
-    # Hard cap: pathological tiny damage vs huge hull still terminates via bulk math below.
-    while h > 0 and shots < 1_000_000:
-        rem = dmg
-        if s > 0:
-            absorbed = min(s, rem)
-            s -= absorbed
-            rem -= absorbed
-        if rem > 0:
-            h -= rem
-        shots += 1
-    return shots
+    return (pool + dmg - 1) // dmg
+
+
+def _apply_pool_damage_to_lead(
+    unit: _UnitState,
+    total_damage: int,
+    *,
+    mods: CombatModifiers,
+) -> None:
+    """Apply aggregated damage to the lead unit (shield then hull); may destroy and refresh."""
+    remaining = max(0, int(total_damage))
+    if remaining <= 0 or unit.amount <= 0:
+        return
+    if unit.current_shield > 0:
+        absorbed = min(unit.current_shield, remaining)
+        unit.current_shield -= absorbed
+        remaining -= absorbed
+    if remaining > 0:
+        unit.current_hull -= remaining
+    if unit.current_hull <= 0:
+        unit.amount -= 1
+        if unit.amount > 0:
+            unit.current_shield = _effective_shield(unit.stats, mods)
+            unit.current_hull = _effective_hull(unit.stats, mods)
+        else:
+            unit.current_shield = 0
+            unit.current_hull = 0
 
 
 def _apply_shots_bulk(
@@ -429,7 +444,7 @@ def _apply_shots_bulk(
     *,
     mods: CombatModifiers,
 ) -> None:
-    """Apply ``shots`` identical hits to a stack; O(destroyed units), not O(shots)."""
+    """Apply ``shots`` identical hits to a stack; O(1) in shot count (aggregate path)."""
     remaining_shots = max(0, int(shots))
     dmg = max(0, int(damage_per_shot))
     if remaining_shots <= 0 or dmg <= 0 or unit.amount <= 0:
@@ -447,9 +462,10 @@ def _apply_shots_bulk(
         unit.current_hull = 0
         return
 
-    while remaining_shots > 0 and unit.amount > 0:
-        shots_to_kill_lead = _shots_to_finish_hp(unit.current_shield, unit.current_hull, dmg)
-        if shots_to_kill_lead <= 0:
+    # Damaged lead first (not at full HP).
+    if unit.current_shield != full_shield or unit.current_hull != full_hull:
+        need = _shots_to_finish_hp(unit.current_shield, unit.current_hull, dmg)
+        if need <= 0:
             unit.amount -= 1
             if unit.amount > 0:
                 unit.current_shield = full_shield
@@ -457,35 +473,34 @@ def _apply_shots_bulk(
             else:
                 unit.current_shield = 0
                 unit.current_hull = 0
-            continue
-
-        if remaining_shots < shots_to_kill_lead:
-            # Partial damage on lead — apply shot-by-shot for shield/hull fidelity.
-            for _ in range(remaining_shots):
-                _apply_damage_to_lead(unit, dmg, mods=mods)
+                return
+        elif remaining_shots < need:
+            _apply_pool_damage_to_lead(unit, remaining_shots * dmg, mods=mods)
             return
+        else:
+            remaining_shots -= need
+            unit.amount -= 1
+            if unit.amount <= 0:
+                unit.current_shield = 0
+                unit.current_hull = 0
+                return
+            unit.current_shield = full_shield
+            unit.current_hull = full_hull
 
-        remaining_shots -= shots_to_kill_lead
-        unit.amount -= 1
-        if unit.amount <= 0:
-            unit.current_shield = 0
-            unit.current_hull = 0
-            return
-        unit.current_shield = full_shield
-        unit.current_hull = full_hull
+    if remaining_shots >= shots_per_fresh and unit.amount > 0:
+        kills = min(unit.amount, remaining_shots // shots_per_fresh)
+        if kills > 0:
+            unit.amount -= kills
+            remaining_shots -= kills * shots_per_fresh
+            if unit.amount <= 0:
+                unit.current_shield = 0
+                unit.current_hull = 0
+                return
+            unit.current_shield = full_shield
+            unit.current_hull = full_hull
 
-        if remaining_shots >= shots_per_fresh:
-            kills = min(unit.amount, remaining_shots // shots_per_fresh)
-            if kills > 0:
-                unit.amount -= kills
-                remaining_shots -= kills * shots_per_fresh
-                if unit.amount > 0:
-                    unit.current_shield = full_shield
-                    unit.current_hull = full_hull
-                else:
-                    unit.current_shield = 0
-                    unit.current_hull = 0
-                    return
+    if remaining_shots > 0 and unit.amount > 0:
+        _apply_pool_damage_to_lead(unit, remaining_shots * dmg, mods=mods)
 
 
 def _fire_stack_aggregate(

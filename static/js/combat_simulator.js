@@ -836,6 +836,22 @@
       toolbar.hidden = !(panel.dataset.simPanel === "ships" || panel.dataset.simPanel === "defense");
     }
 
+    function sumUnitMap(map) {
+      let total = 0;
+      Object.keys(map || {}).forEach((key) => {
+        total += Math.max(0, parseInt(map[key], 10) || 0);
+      });
+      return total;
+    }
+
+    function simulationFetchTimeoutMs(iterations, unitTotal) {
+      // XXL fleets × high MC need headroom beyond the default 60s abort.
+      if (iterations >= 100 || unitTotal >= 250000) {
+        return 180000;
+      }
+      return 60000;
+    }
+
     async function runSimulation() {
       const defaultIter = parseInt(root.dataset.defaultIterations || "50", 10) || 50;
       const iterInput = root.querySelector("[data-sim-iterations]");
@@ -844,10 +860,13 @@
         Math.min(500, parseInt(iterInput?.value, 10) || defaultIter)
       );
       const calculateLoot = Boolean(root.querySelector("[data-sim-calculate-loot]")?.checked);
+      const attackerShips = readShips("attacker");
+      const defenderShips = readShips("defender");
+      const defenderDefense = readDefense();
       const payload = {
-        attacker_ships: readShips("attacker"),
-        defender_ships: readShips("defender"),
-        defender_defense: readDefense(),
+        attacker_ships: attackerShips,
+        defender_ships: defenderShips,
+        defender_defense: defenderDefense,
         attacker_tech: readTech("attacker"),
         defender_tech: readTech("defender"),
         defender_resources: readResources(),
@@ -858,9 +877,12 @@
         btn.disabled = true;
       });
       try {
+        const unitTotal =
+          sumUnitMap(attackerShips) + sumUnitMap(defenderShips) + sumUnitMap(defenderDefense);
+        const abortMs = simulationFetchTimeoutMs(iterations, unitTotal);
         const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
         const timeoutId = controller
-          ? setTimeout(() => controller.abort(), 60000)
+          ? setTimeout(() => controller.abort(), abortMs)
           : null;
         let res;
         try {

@@ -309,6 +309,29 @@ def test_accepts_raw_stack_sequences():
     assert isinstance(result.rounds, tuple)
 
 
+def test_shots_to_finish_hp_matches_pool_ceil():
+    from game.combat import _shots_to_finish_hp
+
+    assert _shots_to_finish_hp(0, 0, 10) == 0
+    assert _shots_to_finish_hp(100, 100, 50) == 4
+    assert _shots_to_finish_hp(30, 100, 100) == 2
+    assert _shots_to_finish_hp(500, 2000, 0) >= 10**18
+
+
+def test_apply_shots_bulk_partial_and_full_wipe():
+    from game.combat import _apply_shots_bulk
+
+    mods = CombatModifiers()
+    units = _side_from_stacks([_stack("sentinel_turret", 5, unit_type=COMBAT_UNIT_DEFENSE)], mods=mods)
+    unit = units[0]
+    _apply_shots_bulk(unit, 1, 50, mods=mods)
+    assert unit.amount == 5
+    assert unit.current_hull == 150
+
+    _apply_shots_bulk(unit, 1000, 50, mods=mods)
+    assert unit.amount == 0
+
+
 def test_shield_absorbs_before_hull_on_lead_unit():
     stack = _stack("pulse_barrier", 1, unit_type=COMBAT_UNIT_DEFENSE)
     units = _side_from_stacks([stack], mods=CombatModifiers())

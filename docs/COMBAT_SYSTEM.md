@@ -65,7 +65,8 @@ Player/admin tool at `/combat-simulator` — **same resolver**, no persistence.
 - `list_combat_simulator_spy_reports()` / `import_spy_report_for_simulator()` — inbox metadata only, no live target queries
 - `parse_spy_report_metadata_for_defender()` — partial intel (`intel_tiers`), unscanned fields marked
 - `run_combat_simulation()` / `run_monte_carlo_simulation()` — call `simulate_battle()` only
-- Mega fleets (≥250k hulls): Monte-Carlo iterations soft-capped (default 50) with warning `iterations_clamped_for_fleet_size`
+- Large fleets use the aggregate shooting path in `combat.py` (O(stacks), not O(hulls); bulk HP apply is O(1) in shot count). Requested Monte-Carlo count is honored up to `MAX_ITERATIONS` (admin default **300**); no hull-based iteration soft-cap
+- Client abort: 60s default; **180s** when iterations ≥100 or total units ≥250k
 - `summarize_simulation_results()` — win rates, average losses/debris/loot, sample report
 - Loot preview uses `calculate_plunder_pool()` + `load_resources_up_to_cargo()` (no planet debit)
 - Admin balancing mode: default 300 iterations, unit efficiency table, CSV/JSON copy

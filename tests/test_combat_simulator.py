@@ -949,8 +949,8 @@ def test_css_dashboard_visual():
         assert cls in css
 
 
-def test_mega_fleet_monte_carlo_clamps_and_finishes():
-    """Battle Lab must not hang on million-scale inputs."""
+def test_mega_fleet_monte_carlo_runs_full_300():
+    """Battle Lab XXL fleets must complete the requested 300 MC runs (no mega soft-cap)."""
     import time
 
     payload = _baseline_payload(
@@ -972,6 +972,45 @@ def test_mega_fleet_monte_carlo_clamps_and_finishes():
     out = run_monte_carlo_simulation(payload, user_id=1, iterations=300)
     elapsed = time.perf_counter() - t0
     assert out["ok"] is True
-    assert out["result"]["iterations"] <= 50
-    assert "iterations_clamped_for_fleet_size" in out["result"]["warnings"]
-    assert elapsed < 15.0, f"mega MC too slow: {elapsed:.3f}s"
+    assert out["result"]["iterations"] == 300
+    assert out["result"]["iterations_requested"] == 300
+    assert "iterations_clamped_for_fleet_size" not in out["result"]["warnings"]
+    assert elapsed < 90.0, f"mega MC too slow: {elapsed:.3f}s"
+
+
+def test_billion_scale_monte_carlo_runs_full_300():
+    """Admin XXL with ~1B+ hulls must still run all 300 battles (aggregate path)."""
+    import time
+
+    payload = _baseline_payload(
+        attacker_ships={
+            "solar_skiff": 1_000_000_000,
+            "eclipse_runner": 90_000_000,
+            "atlas_hauler": 1_000_000,
+            "falcon_interceptor": 1_000_000,
+            "ironclad_frigate": 1_000_000,
+        },
+        defender_ships={
+            "atlas_hauler": 50,
+            "solar_skiff": 50,
+            "falcon_interceptor": 50,
+            "ironclad_frigate": 50,
+        },
+        defender_defense={
+            "flak_array": 50,
+            "ion_bastion": 50,
+            "orbital_shield": 50,
+            "sentinel_turret": 50,
+        },
+        iterations=300,
+        seed=42,
+        calculate_loot=False,
+    )
+    t0 = time.perf_counter()
+    out = run_monte_carlo_simulation(payload, user_id=1, iterations=300)
+    elapsed = time.perf_counter() - t0
+    assert out["ok"] is True
+    assert out["result"]["iterations"] == 300
+    assert out["result"]["iterations_requested"] == 300
+    assert "iterations_clamped_for_fleet_size" not in (out["result"].get("warnings") or [])
+    assert elapsed < 90.0, f"billion-scale MC too slow: {elapsed:.3f}s"
