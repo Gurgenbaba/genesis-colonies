@@ -31,7 +31,7 @@ def test_client_runtime_config_production_slower_poll(monkeypatch):
     from game.config import get_client_runtime_config
 
     cfg = get_client_runtime_config()
-    assert cfg["poll_active_ms"] == 8000
+    assert cfg["poll_active_ms"] == 5000
     assert cfg["poll_idle_ms"] == 12000
     assert cfg["poll_hidden_ms"] == 30000
     assert cfg["shipyard_poll_ms"] == 10000

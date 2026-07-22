@@ -302,7 +302,7 @@ def get_client_runtime_config() -> dict[str, int | bool]:
     """
     if is_production():
         defaults = {
-            "poll_active_ms": 8000,
+            "poll_active_ms": 5000,  # GC-PERF-STATE-004: closer to server finish cadence
             "poll_idle_ms": 12000,
             "poll_hidden_ms": 30000,
             "shipyard_poll_ms": 10000,

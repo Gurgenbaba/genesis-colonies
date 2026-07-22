@@ -7274,6 +7274,22 @@ def api_notifications_summary():
 def api_game_state():
     want_panel = request.args.get("include_panel", "").lower() in ("1", "true", "yes")
     delta_keys = _parse_panel_delta_buildings_param()
+    since_raw = request.args.get("since", "").strip()
+    delta_raw = os.environ.get("GC_STATE_DELTA", "1").strip().lower()
+    delta_enabled = delta_raw not in ("0", "false", "no", "off")
+
+    # GC-PERF-STATE-004: idle diet short-circuit before expensive payload build.
+    if delta_enabled and since_raw.isdigit() and not want_panel and not delta_keys:
+        user = get_current_user()
+        if user:
+            from game.live_state import set_request_perf_meta, try_diet_poll_early_unchanged
+
+            since_val = int(since_raw)
+            set_request_perf_meta("delta_since", since_val)
+            early = try_diet_poll_early_unchanged(int(user["id"]), since_val)
+            if early is not None:
+                return jsonify(early)
+
     if delta_keys:
         payload, _player_id = _build_game_state_payload(
             include_panel=False,
@@ -7298,10 +7314,7 @@ def api_game_state():
         return jsonify({"ok": False, "error": "not_logged_in"}), 401
 
     # GC-PERF-LIVE-001: diet delta short-circuit default ON (client handles unchanged).
-    # Set GC_STATE_DELTA=0|false|off to disable.
-    since_raw = request.args.get("since", "").strip()
-    delta_raw = os.environ.get("GC_STATE_DELTA", "1").strip().lower()
-    delta_enabled = delta_raw not in ("0", "false", "no", "off")
+    # Set GC_STATE_DELTA=0|false|off to disable. Defense-in-depth after full build.
     if delta_enabled and since_raw.isdigit() and not want_panel and not delta_keys:
         from game.live_state import build_delta_game_state, set_request_perf_meta
 

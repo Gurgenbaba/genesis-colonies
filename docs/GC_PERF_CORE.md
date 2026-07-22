@@ -17,7 +17,7 @@
 | Messbarkeit | ✅ |
 | PostgreSQL-Treiber und Pool | ✅ vorbereitet |
 | Worker-Infrastruktur | ✅ vorbereitet |
-| Diet-State / Poll-Delta | ✅ Client `?since=` + default-on (**GC-PERF-LIVE-001**); early server exit → STATE-004 |
+| Diet-State / Poll-Delta | ✅ Client `?since=` + default-on (**GC-PERF-LIVE-001**); server early-exit (**GC-PERF-STATE-004**) |
 | Lazy-Persistierung / Cache / Lasttest-Tool | ✅ Basis |
 | PostgreSQL-Schema (alle Tabellen/Migrationen) | ✅ **GC-PERF-PG-SCHEMA-001** |
 | Backend-Parität auf leerer PG-DB | 🔄 A/B/C ✅ · D–F → **GC-PERF-PG-PARITY-001** |
@@ -26,7 +26,7 @@
 | Production-Cutover | ❌ |
 | Vollständiger `main.js`-Split | 🔄 Scaffold → GC-PERF-JS-002 |
 | EffectResolver-Cache | 📋 nach Messung → GC-PERF-EFFECT-CACHE-001 |
-| Diet early-exit vor Payload-Build | 📋 → GC-PERF-STATE-004 |
+| Diet early-exit vor Payload-Build | ✅ **GC-PERF-STATE-004** |
 
 ## Zielarchitektur
 
@@ -74,7 +74,7 @@ Schema-Port
 | **GC-PERF-JS-002** | Echter `main.js`-Split (Symbole löschen) | 📋 |
 | **GC-PERF-EFFECT-CACHE-001** | EffectResolver-Cache nach Messung | 📋 |
 | **GC-PERF-LIVE-001** | Client diet `?since=` + Busy-Poll Fleet/Defense | ✅ |
-| **GC-PERF-STATE-004** | Early exit vor diet payload build | 📋 |
+| **GC-PERF-STATE-004** | Early exit vor diet payload build | ✅ |
 
 ## Explizit nicht tun (jetzt)
 

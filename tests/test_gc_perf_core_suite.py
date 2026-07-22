@@ -176,6 +176,7 @@ def test_delta_api_can_be_disabled(game_client, monkeypatch):
 
     monkeypatch.setenv("GC_STATE_DELTA", "0")
     monkeypatch.setattr(ls, "compute_poll_version", lambda _payload: 424242)
+    monkeypatch.setattr(ls, "probe_poll_version", lambda *_a, **_k: 424242)
 
     client, _pid = game_client
     resp = client.get("/api/game-state")
@@ -185,3 +186,86 @@ def test_delta_api_can_be_disabled(game_client, monkeypatch):
     data2 = resp2.get_json()
     assert data2.get("unchanged") is not True
     assert "poll_version" in data2
+
+
+def test_probe_poll_version_matches_compute_for_fixture(game_client):
+    """GC-PERF-STATE-004: probe fingerprint matches diet compute_poll_version."""
+    from game.db import db
+    from game.live_state import compute_poll_version, probe_poll_version
+
+    client, pid = game_client
+    resp = client.get("/api/game-state")
+    assert resp.status_code == 200
+    payload = resp.get_json()
+    assert payload.get("ok") is True
+    diet_ver = int(payload["poll_version"])
+    assert diet_ver == compute_poll_version(payload)
+
+    conn = db()
+    try:
+        probed = probe_poll_version(int(pid), conn)
+    finally:
+        conn.close()
+    assert probed is not None
+    assert int(probed) == diet_ver
+
+
+def test_diet_early_exit_skips_full_payload_build(game_client, monkeypatch):
+    """Idle matching since must not call _build_game_state_payload."""
+    import app as app_module
+    from game import live_state as ls
+
+    monkeypatch.delenv("GC_STATE_DELTA", raising=False)
+    monkeypatch.setattr(ls, "probe_poll_version", lambda *_a, **_k: 777001)
+    monkeypatch.setattr(
+        "game.queue_poll.player_has_due_queue_work", lambda *_a, **_k: False
+    )
+    monkeypatch.setattr("game.queue_poll.player_fleet_is_dirty", lambda *_a, **_k: False)
+
+    calls = {"n": 0}
+    real_build = app_module._build_game_state_payload
+
+    def counting_build(*args, **kwargs):
+        calls["n"] += 1
+        return real_build(*args, **kwargs)
+
+    monkeypatch.setattr(app_module, "_build_game_state_payload", counting_build)
+
+    client, _pid = game_client
+    resp = client.get("/api/game-state?since=777001")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data.get("unchanged") is True
+    assert data.get("diet_early_exit") == 1
+    assert int(data.get("poll_version")) == 777001
+    assert calls["n"] == 0
+
+
+def test_diet_early_exit_blocked_when_queue_due(game_client, monkeypatch):
+    """Due queue work must take the full build path (finish owner)."""
+    import app as app_module
+    from game import live_state as ls
+
+    monkeypatch.delenv("GC_STATE_DELTA", raising=False)
+    monkeypatch.setattr(ls, "probe_poll_version", lambda *_a, **_k: 777002)
+    monkeypatch.setattr(ls, "compute_poll_version", lambda _payload: 777002)
+    monkeypatch.setattr(
+        "game.queue_poll.player_has_due_queue_work", lambda *_a, **_k: True
+    )
+    monkeypatch.setattr("game.queue_poll.player_fleet_is_dirty", lambda *_a, **_k: False)
+
+    calls = {"n": 0}
+    real_build = app_module._build_game_state_payload
+
+    def counting_build(*args, **kwargs):
+        calls["n"] += 1
+        return real_build(*args, **kwargs)
+
+    monkeypatch.setattr(app_module, "_build_game_state_payload", counting_build)
+
+    client, _pid = game_client
+    resp = client.get("/api/game-state?since=777002")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert calls["n"] == 1
+    assert data.get("diet_early_exit") != 1

@@ -62,6 +62,7 @@ _REQUEST_PERF_META_KEYS = frozenset(
         "budget_miss",
         "state_version",
         "delta_since",
+        "diet_early_exit",
     }
 )
 
@@ -880,6 +881,82 @@ def compute_state_version(payload: Dict[str, Any]) -> int:
     return compute_poll_version(payload)
 
 
+def _queue_fp_for_poll(queue: Any) -> Any:
+    """Stable queue fingerprint — ids/finish times only (ignore ticking remaining)."""
+    if isinstance(queue, dict):
+        queue = queue.get("queue") or queue.get("jobs") or []
+    if not isinstance(queue, list):
+        return []
+    out = []
+    for job in queue:
+        if not isinstance(job, dict):
+            continue
+        out.append(
+            {
+                "id": job.get("id") or job.get("job_id"),
+                "status": job.get("status"),
+                "finish_at": int(float(job.get("finish_at") or job.get("finish_time") or 0)),
+                "building_key": job.get("building_key")
+                or job.get("key")
+                or job.get("building_type"),
+                "tech_key": job.get("tech_key"),
+            }
+        )
+    return out
+
+
+def _fleet_fp_for_poll(fleets: Any) -> Any:
+    if not isinstance(fleets, dict):
+        return fleets
+    items = fleets.get("items") or fleets.get("fleets") or []
+    slim_items = []
+    if isinstance(items, list):
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            slim_items.append(
+                {
+                    "id": item.get("movement_id") or item.get("id"),
+                    "status": item.get("status"),
+                    "arrival_at": int(float(item.get("arrival_at") or 0)),
+                    "return_at": int(float(item.get("return_at") or 0)),
+                }
+            )
+    return {
+        "count": fleets.get("count") or fleets.get("active_fleet_count"),
+        "items": slim_items,
+    }
+
+
+def _hash_poll_slim(slim: Dict[str, Any]) -> int:
+    import hashlib
+    import json
+
+    raw = json.dumps(slim, sort_keys=True, separators=(",", ":"), default=str)
+    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()
+    return int(digest[:12], 16)
+
+
+def poll_slim_from_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract the HUD slim dict hashed by ``compute_poll_version``."""
+    energy = payload.get("energy") if isinstance(payload.get("energy"), dict) else {}
+    active = payload.get("active_planet") if isinstance(payload.get("active_planet"), dict) else {}
+    research = payload.get("research") if isinstance(payload.get("research"), dict) else {}
+    return {
+        "notification_revision": payload.get("notification_revision"),
+        "unread_messages_count": payload.get("unread_messages_count"),
+        "build_queue": _queue_fp_for_poll(payload.get("build_queue")),
+        "research_queue": _queue_fp_for_poll(research.get("queue")),
+        "active_fleets": _fleet_fp_for_poll(payload.get("active_fleets")),
+        "energy_used": int(energy.get("used") or 0),
+        "energy_total": int(energy.get("total") or 0),
+        "planet_id": active.get("id") or active.get("planet_id"),
+        "last_update": int(float(active.get("last_update") or 0)),
+        "score": payload.get("score"),
+        "nav_badges": payload.get("nav_badges"),
+    }
+
+
 def compute_poll_version(payload: Dict[str, Any]) -> int:
     """
     GC-PERF-STATE-002: stable int fingerprint of diet HUD fields.
@@ -888,69 +965,131 @@ def compute_poll_version(payload: Dict[str, Any]) -> int:
     via ``?since=``. Version changes when queues/fleets/notifications/energy caps
     or committed resource snapshot markers change.
     """
-    import hashlib
-    import json
+    return _hash_poll_slim(poll_slim_from_payload(payload))
 
-    def _queue_fp(queue: Any) -> Any:
-        if not isinstance(queue, list):
-            return queue
-        out = []
-        for job in queue:
-            if not isinstance(job, dict):
-                continue
-            out.append(
-                {
-                    "id": job.get("id") or job.get("job_id"),
-                    "status": job.get("status"),
-                    "finish_at": int(float(job.get("finish_at") or job.get("finish_time") or 0)),
-                    "building_key": job.get("building_key") or job.get("key"),
-                    "tech_key": job.get("tech_key"),
-                }
-            )
-        return out
 
-    def _fleet_fp(fleets: Any) -> Any:
-        if not isinstance(fleets, dict):
-            return fleets
-        items = fleets.get("items") or fleets.get("fleets") or []
-        slim_items = []
-        if isinstance(items, list):
-            for item in items:
-                if not isinstance(item, dict):
-                    continue
-                slim_items.append(
-                    {
-                        "id": item.get("movement_id") or item.get("id"),
-                        "status": item.get("status"),
-                        "arrival_at": int(float(item.get("arrival_at") or 0)),
-                        "return_at": int(float(item.get("return_at") or 0)),
-                    }
-                )
-        return {
-            "count": fleets.get("count") or fleets.get("active_fleet_count"),
-            "items": slim_items,
+def probe_poll_version(player_id: int, conn) -> Optional[int]:
+    """
+    GC-PERF-STATE-004: cheap HUD fingerprint matching ``compute_poll_version``.
+
+    Reads queue/fleet/unread/energy/score/nav owners without diet payload assembly.
+    Returns None on error so callers fall back to a full diet build.
+    """
+    try:
+        uid = int(player_id)
+        from game.buildings import get_build_queue_status_for_planet
+        from game.fleet import build_active_fleets_payload, fleet_schema_ready
+        from game.logic import _read_player_live_state_no_writes
+        from game.models import get_player_rank, load_player
+        from game.planet_evolution.repository import get_context_planet
+        from game.ranking import get_player_score_cached
+        from game.research import get_research_status
+
+        planet = get_context_planet(uid, conn=conn)
+        if not planet:
+            return None
+        player = load_player(uid, conn=conn)
+        if not player:
+            return None
+
+        _player_view, buildings, _ratio, energy_total, energy_used, _storage = (
+            _read_player_live_state_no_writes(uid, conn, player, planet)
+        )
+        build_queue = get_build_queue_status_for_planet(
+            int(planet["id"]), conn=conn, skip_finish=True
+        )
+        research = get_research_status(
+            user_id=uid,
+            buildings=buildings,
+            skip_finish=True,
+            conn=conn,
+        )
+        fleets: Dict[str, Any] = {}
+        if fleet_schema_ready(conn):
+            fleets = active_fleets_poll_slice(build_active_fleets_payload(uid, conn=conn))
+
+        notif = notification_summary_for_client(uid, conn=conn)
+        score_raw = get_player_score_cached(uid, read_only=True) or {
+            "total": 0,
+            "buildings": 0,
+            "research": 0,
         }
+        rank, total_players = get_player_rank(uid)
+        score = {
+            "total": int(score_raw.get("total", 0) or 0),
+            "buildings": int(score_raw.get("buildings", 0) or 0),
+            "research": int(score_raw.get("research", 0) or 0),
+            "rank": int(rank) if rank else None,
+            "total_players": int(total_players) if total_players else None,
+        }
+        # Match diet fingerprint: active_planet poll slice historically omits last_update.
+        stub = {
+            "notification_revision": notif.get("notification_revision"),
+            "unread_messages_count": notif.get("unread_messages_count"),
+            "build_queue": build_queue,
+            "research": research_poll_slice(research),
+            "active_fleets": fleets,
+            "energy": {"used": int(energy_used), "total": int(energy_total)},
+            "active_planet": {
+                "planet_id": int(planet["id"]),
+                "last_update": 0,
+            },
+            "score": score,
+            "nav_badges": nav_badges_for_game_state(uid, conn=conn),
+        }
+        return compute_poll_version(stub)
+    except Exception:
+        logger.debug("probe_poll_version failed player_id=%s", player_id, exc_info=True)
+        return None
 
-    energy = payload.get("energy") if isinstance(payload.get("energy"), dict) else {}
-    active = payload.get("active_planet") if isinstance(payload.get("active_planet"), dict) else {}
-    research = payload.get("research") if isinstance(payload.get("research"), dict) else {}
 
-    slim = {
-        "notification_revision": payload.get("notification_revision"),
-        "unread_messages_count": payload.get("unread_messages_count"),
-        "build_queue": _queue_fp(payload.get("build_queue")),
-        "research_queue": _queue_fp(research.get("queue")),
-        "active_fleets": _fleet_fp(payload.get("active_fleets")),
-        "energy_used": int(energy.get("used") or 0),
-        "energy_total": int(energy.get("total") or 0),
-        "planet_id": active.get("id") or active.get("planet_id"),
-        "last_update": int(float(active.get("last_update") or 0)),
-        "score": payload.get("score"),
-        "nav_badges": payload.get("nav_badges"),
-    }
-    raw = json.dumps(slim, sort_keys=True, separators=(",", ":"), default=str)
-    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()
-    return int(digest[:12], 16)
+def try_diet_poll_early_unchanged(
+    player_id: int,
+    since: int,
+    *,
+    conn=None,
+) -> Optional[Dict[str, Any]]:
+    """
+    GC-PERF-STATE-004: tiny ``{unchanged:true}`` before ``_build_game_state_payload``.
+
+    Due queue/fleet work always forces a full build so finish stays on the poll owner path.
+    """
+    from game.logic import attach_canonical_server_time
+    from game.models import db as _db
+    from game.queue_poll import player_fleet_is_dirty, player_has_due_queue_work
+
+    owns_conn = conn is None
+    if owns_conn:
+        conn = _db()
+    try:
+        now = time.time()
+        uid = int(player_id)
+        if player_has_due_queue_work(uid, conn=conn, now=now) or player_fleet_is_dirty(
+            uid, conn=conn, now=now
+        ):
+            set_request_perf_meta("diet_early_exit", 0)
+            return None
+        ver = probe_poll_version(uid, conn)
+        if ver is None or int(ver) != int(since):
+            set_request_perf_meta("diet_early_exit", 0)
+            return None
+        set_request_perf_meta("diet_early_exit", 1)
+        envelope: Dict[str, Any] = {
+            "ok": True,
+            "unchanged": True,
+            "since": int(since),
+            "version": int(ver),
+            "poll_version": int(ver),
+            "diet_early_exit": 1,
+        }
+        return attach_canonical_server_time(envelope)
+    except Exception:
+        logger.debug("try_diet_poll_early_unchanged failed", exc_info=True)
+        set_request_perf_meta("diet_early_exit", 0)
+        return None
+    finally:
+        if owns_conn and conn is not None:
+            conn.close()
 
 
 def build_delta_game_state(
