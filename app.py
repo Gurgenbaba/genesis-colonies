@@ -860,6 +860,12 @@ def _teardown_queue_finish_dedup(_exc=None):
 
     clear_request_finish_dedup()
     try:
+        from game.effects import clear_effect_resolver_cache
+
+        clear_effect_resolver_cache()
+    except Exception:
+        pass
+    try:
         from game.live_state import finish_request_perf_teardown
 
         finish_request_perf_teardown(_exc)

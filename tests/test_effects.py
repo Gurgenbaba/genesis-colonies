@@ -1053,3 +1053,55 @@ class TestGalacticDiplomacyEffectResolver:
         assert mods["metal_prod_factor"] == pytest.approx(1.20)
         assert mods["weapon_bonus"] == pytest.approx(0.05)
         assert mods["shipyard_time_speed"] == pytest.approx(1.05)
+
+
+class TestEffectResolverRequestCache:
+    """GC-PERF-EFFECT-CACHE-001: request-scoped identity reuse."""
+
+    def test_same_inputs_return_same_instance(self):
+        pid = _create_player("er_cache_hit")
+        planet = get_homeworld(player_id=pid)
+        b = _set_buildings(pid, {"solar_plant": 3, "metal_mine": 2})
+        r = get_research_levels(pid)
+        clear_effect_resolver_cache()
+        a = get_effect_resolver(pid, buildings=b, research=r, planet=planet)
+        b_res = get_effect_resolver(pid, buildings=b, research=r, planet=planet)
+        assert a is b_res
+
+    def test_building_level_change_misses_cache(self):
+        pid = _create_player("er_cache_miss")
+        planet = get_homeworld(player_id=pid)
+        b1 = _set_buildings(pid, {"solar_plant": 3})
+        r = get_research_levels(pid)
+        clear_effect_resolver_cache()
+        a = get_effect_resolver(pid, buildings=dict(b1), research=r, planet=planet)
+        b2 = dict(b1)
+        b2["solar_plant"] = 4
+        c = get_effect_resolver(pid, buildings=b2, research=r, planet=planet)
+        assert a is not c
+
+    def test_force_refresh_bypasses_cached_instance(self):
+        pid = _create_player("er_cache_refresh")
+        planet = get_homeworld(player_id=pid)
+        b = _set_buildings(pid, {"solar_plant": 2})
+        r = get_research_levels(pid)
+        clear_effect_resolver_cache()
+        a = get_effect_resolver(pid, buildings=b, research=r, planet=planet)
+        c = get_effect_resolver(
+            pid, buildings=b, research=r, planet=planet, force_refresh=True
+        )
+        assert a is not c
+        # After refresh, subsequent reads reuse the new instance.
+        d = get_effect_resolver(pid, buildings=b, research=r, planet=planet)
+        assert d is c
+
+    def test_clear_effect_resolver_cache_drops_player(self):
+        pid = _create_player("er_cache_clear")
+        planet = get_homeworld(player_id=pid)
+        b = _set_buildings(pid, {"solar_plant": 1})
+        r = get_research_levels(pid)
+        clear_effect_resolver_cache()
+        a = get_effect_resolver(pid, buildings=b, research=r, planet=planet)
+        clear_effect_resolver_cache(pid)
+        c = get_effect_resolver(pid, buildings=b, research=r, planet=planet)
+        assert a is not c

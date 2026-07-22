@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import os
+from contextvars import ContextVar
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..economy_balance import STORAGE_BASE_CAPACITY
@@ -25,6 +26,11 @@ logger = logging.getLogger(__name__)
 
 EFFECT_DEBUG = os.environ.get("GC_EFFECT_DEBUG", "").strip().lower() in ("1", "true", "yes")
 
+# GC-PERF-EFFECT-CACHE-001: request-scoped resolver reuse (no process TTL).
+_RESOLVER_CACHE: ContextVar[Optional[Dict[tuple, "EffectResolver"]]] = ContextVar(
+    "gc_effect_resolver_cache",
+    default=None,
+)
 # Isolate optional DB probes so a failure cannot abort an outer write TX (PARITY-001).
 _ER_SAVEPOINT_SEQ = 0
 
@@ -1307,13 +1313,17 @@ def get_effect_resolver(
     settings: Optional[Dict[str, Any]] = None,
     force_refresh: bool = False,
     planet: Optional[Dict[str, Any]] = None,
+    skip_inventory_boosters: bool = False,
 ) -> EffectResolver:
     """
-    Build a fresh EffectResolver (no cross-request cache).
-    force_refresh kept for API compatibility; always loads current DB state.
-    Pass ``planet`` when resolving a specific colony (not only context planet).
+    Build an EffectResolver, reusing a request-scoped instance when inputs match
+    (GC-PERF-EFFECT-CACHE-001).
+
+    ``force_refresh=True`` bypasses the cache read, builds fresh, and stores the
+    new instance. Pass ``planet`` when resolving a specific colony.
     """
-    del force_refresh  # no cache layer — always authoritative from DB inputs
+    uid = int(player_id)
+    skip_boosters = bool(skip_inventory_boosters)
 
     if buildings is not None and research is not None:
         planet_id = None
@@ -1322,7 +1332,7 @@ def get_effect_resolver(
         planet_row = planet
         if planet_row is None:
             try:
-                planet_row = get_context_planet(player_id=int(player_id), conn=conn)
+                planet_row = get_context_planet(player_id=uid, conn=conn)
             except Exception:
                 planet_row = None
         if planet_row is not None:
@@ -1340,20 +1350,130 @@ def get_effect_resolver(
                     galaxy_id = int(coords["galaxy"])
             except Exception:
                 pass
-        return EffectResolver(
+
+        key = _resolver_cache_key(
+            uid,
+            planet_id,
+            buildings,
+            research,
+            galaxy_id,
+            planet_position,
+            skip_boosters,
+        )
+        if not force_refresh:
+            hit = _resolver_cache_get(key)
+            if hit is not None:
+                return hit
+
+        resolver = EffectResolver(
             buildings,
             research,
             settings=settings,
-            player_id=int(player_id),
+            player_id=uid,
             planet_id=planet_id,
             planet_position=planet_position,
             galaxy_id=galaxy_id,
             conn=conn,
+            skip_inventory_boosters=skip_boosters,
         )
+        _resolver_cache_put(key, resolver)
+        return resolver
 
-    return EffectResolver.for_player(int(player_id), conn=conn)
+    # for_player path: load inputs, then same identity cache.
+    planet_row = get_context_planet(player_id=uid, conn=conn)
+    loaded_buildings = get_planet_buildings(int(planet_row["id"]), conn=conn)
+    loaded_research = get_research_levels(uid, conn=conn)
+    galaxy_raw = planet_row.get("galaxy")
+    galaxy_id = int(galaxy_raw) if galaxy_raw is not None else None
+    position_raw = planet_row.get("position")
+    planet_position = int(position_raw) if position_raw not in (None, "") else None
+    planet_id = int(planet_row["id"])
+
+    key = _resolver_cache_key(
+        uid,
+        planet_id,
+        loaded_buildings,
+        loaded_research,
+        galaxy_id,
+        planet_position,
+        skip_boosters,
+    )
+    if not force_refresh:
+        hit = _resolver_cache_get(key)
+        if hit is not None:
+            return hit
+
+    try:
+        loaded_settings = get_game_settings(conn=conn) if settings is None else settings
+    except TypeError:
+        loaded_settings = get_game_settings() if settings is None else settings
+
+    resolver = EffectResolver(
+        loaded_buildings,
+        loaded_research,
+        settings=loaded_settings,
+        player_id=uid,
+        planet_id=planet_id,
+        planet_position=planet_position,
+        galaxy_id=galaxy_id,
+        conn=conn,
+        skip_inventory_boosters=skip_boosters,
+    )
+    _resolver_cache_put(key, resolver)
+    return resolver
+
+
+def _levels_fp(levels: Optional[Dict[str, int]]) -> Tuple[Tuple[str, int], ...]:
+    if not levels:
+        return ()
+    return tuple(sorted((str(k), int(v or 0)) for k, v in levels.items()))
+
+
+def _resolver_cache_key(
+    player_id: int,
+    planet_id: Optional[int],
+    buildings: Optional[Dict[str, int]],
+    research: Optional[Dict[str, int]],
+    galaxy_id: Optional[int],
+    planet_position: Optional[int],
+    skip_inventory_boosters: bool,
+) -> tuple:
+    return (
+        int(player_id),
+        int(planet_id) if planet_id is not None else None,
+        _levels_fp(buildings),
+        _levels_fp(research),
+        int(galaxy_id) if galaxy_id is not None else None,
+        int(planet_position) if planet_position is not None else None,
+        bool(skip_inventory_boosters),
+    )
+
+
+def _resolver_cache_map() -> Dict[tuple, EffectResolver]:
+    cache = _RESOLVER_CACHE.get()
+    if cache is None:
+        cache = {}
+        _RESOLVER_CACHE.set(cache)
+    return cache
+
+
+def _resolver_cache_get(key: tuple) -> Optional[EffectResolver]:
+    return _resolver_cache_map().get(key)
+
+
+def _resolver_cache_put(key: tuple, resolver: EffectResolver) -> None:
+    _resolver_cache_map()[key] = resolver
 
 
 def clear_effect_resolver_cache(player_id: Optional[int] = None) -> None:
-    """No-op: resolver cache removed; kept for call-site compatibility."""
-    del player_id
+    """Drop request-scoped resolver entries (all, or one player)."""
+    cache = _RESOLVER_CACHE.get()
+    if not cache:
+        return
+    if player_id is None:
+        cache.clear()
+        return
+    pid = int(player_id)
+    for key in list(cache.keys()):
+        if key and key[0] == pid:
+            del cache[key]

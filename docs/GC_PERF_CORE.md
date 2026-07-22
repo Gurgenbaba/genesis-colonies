@@ -25,7 +25,7 @@
 | Railway Staging + Smoke + Baseline | ❌ |
 | Production-Cutover | ❌ |
 | Vollständiger `main.js`-Split | 🔄 Scaffold → GC-PERF-JS-002 |
-| EffectResolver-Cache | 📋 nach Messung → GC-PERF-EFFECT-CACHE-001 |
+| EffectResolver-Cache | ✅ request-scoped (**GC-PERF-EFFECT-CACHE-001**) |
 | Diet early-exit vor Payload-Build | ✅ **GC-PERF-STATE-004** |
 
 ## Zielarchitektur
@@ -72,7 +72,7 @@ Schema-Port
 | **GC-PERF-PG-BASELINE-001** | SQLite vs PG Staging Metriken | 📋 |
 | **GC-PERF-PG-CUTOVER-001** | Wartungsfenster, Import, Rollback-Plan | 📋 |
 | **GC-PERF-JS-002** | Echter `main.js`-Split (Symbole löschen) | 📋 |
-| **GC-PERF-EFFECT-CACHE-001** | EffectResolver-Cache nach Messung | 📋 |
+| **GC-PERF-EFFECT-CACHE-001** | EffectResolver request-scoped Cache | ✅ |
 | **GC-PERF-LIVE-001** | Client diet `?since=` + Busy-Poll Fleet/Defense | ✅ |
 | **GC-PERF-STATE-004** | Early exit vor diet payload build | ✅ |
 

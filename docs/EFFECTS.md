@@ -26,6 +26,8 @@ Combat and fleet modifiers are **active** where documented in [COMBAT_SYSTEM.md]
 
 Build time: `get_build_time_seconds()` delegates to `economy_balance.power_build_seconds()` before player/admin speed modifiers (GC-850A).
 
+`get_effect_resolver` reuses a **request-scoped** instance when player/planet/buildings/research fingerprints match (**GC-PERF-EFFECT-CACHE-001**). `force_refresh=True` bypasses the cache read; `clear_effect_resolver_cache` clears entries. No process TTL (stale energy risk).
+
 ### Build duration (`get_build_time_seconds`)
 
 ```text
