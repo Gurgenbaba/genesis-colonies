@@ -7,7 +7,7 @@ from typing import Any, Mapping, Optional
 
 logger = logging.getLogger(__name__)
 
-from .db import begin_write_transaction, commit, db, in_transaction, rollback, table_exists
+from .db import begin_write_transaction, commit, db, get_db_backend, in_transaction, rollback, table_exists
 
 _MESSAGE_COMMANDER_PREFIX = "Commander "
 
@@ -356,6 +356,14 @@ def create_message(
     return _ok({"message_id": message_id})
 
 
+def _json_text_path_sql(column: str, key: str) -> str:
+    """Portable JSON object text extract (SQLite json_extract / PG jsonb ->>)."""
+    safe_key = str(key).replace("'", "")
+    if get_db_backend() == "postgres":
+        return f"({column}::jsonb ->> '{safe_key}')"
+    return f"json_extract({column}, '$.{safe_key}')"
+
+
 def _fleet_report_exists(
     conn,
     recipient_player_id: int,
@@ -368,10 +376,11 @@ def _fleet_report_exists(
     if not _table_ready(conn):
         return False
     cur = conn.cursor()
+    fleet_sql = _json_text_path_sql("metadata_json", "fleet_id")
     phase_sql = ""
-    params: list[Any] = [int(recipient_player_id), str(category), int(fleet_id)]
+    params: list[Any] = [int(recipient_player_id), str(category), str(int(fleet_id))]
     if report_phase:
-        phase_sql = " AND json_extract(metadata_json, '$.report_phase') = ?"
+        phase_sql = f" AND {_json_text_path_sql('metadata_json', 'report_phase')} = ?"
         params.append(str(report_phase))
     cur.execute(
         f"""
@@ -379,7 +388,7 @@ def _fleet_report_exists(
         WHERE recipient_player_id = ?
           AND category = ?
           AND {_not_deleted_sql()}
-          AND json_extract(metadata_json, '$.fleet_id') = ?{phase_sql}
+          AND CAST({fleet_sql} AS TEXT) = ?{phase_sql}
         LIMIT 1;
         """,
         params,

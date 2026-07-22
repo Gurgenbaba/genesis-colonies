@@ -590,3 +590,341 @@ def test_parity_c_queues_sqlite(sqlite_parity_db):
 @requires_postgres
 def test_parity_c_queues_postgres(pg_parity_db):
     _assert_queue_parity()
+
+
+# ---------------------------------------------------------------------------
+# Block D — Fleet + Combat + Expedition
+# ---------------------------------------------------------------------------
+
+
+def _parity_d_username(prefix: str) -> str:
+    from game.name_policy import validate_player_name
+
+    for i in range(128):
+        candidate = f"{prefix}{uuid.uuid4().hex[:8]}{i:02d}"
+        ok, _ = validate_player_name(candidate)
+        if ok:
+            return candidate
+    raise AssertionError("could not allocate policy-safe username")
+
+
+def _parity_d_fund(cur, planet_id: int, *, metal=50000, crystal=50000, fuel_cells=50000) -> None:
+    cur.execute(
+        "UPDATE planets SET metal = ?, crystal = ?, fuel_cells = ? WHERE id = ?;",
+        (metal, crystal, fuel_cells, int(planet_id)),
+    )
+
+
+def _parity_d_seed_ships(conn, planet_id: int, player_id: int, ships: dict) -> None:
+    from game.fleet import add_planet_ships
+
+    add_planet_ships(planet_id, player_id, ships, conn=conn)
+
+
+def _parity_d_coords(conn, planet_id: int) -> tuple[int, int, int]:
+    row = conn.execute(
+        "SELECT galaxy, system, position FROM planets WHERE id = ?;",
+        (int(planet_id),),
+    ).fetchone()
+    return (int(row["galaxy"]), int(row["system"]), int(row["position"]))
+
+
+def _parity_d_unlock_expansion(conn, uid: int, home_id: int) -> None:
+    from game.planet_evolution.expansion_protocol import INTERSTELLAR_EXPANSION_TECH
+
+    conn.execute("UPDATE planets SET planet_level = 25 WHERE id = ?;", (int(home_id),))
+    conn.execute(
+        """
+        INSERT INTO research_levels (user_id, tech_key, level)
+        VALUES (?, ?, ?)
+        ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;
+        """,
+        (int(uid), INTERSTELLAR_EXPANSION_TECH, 6),
+    )
+
+
+def _parity_d_second_colony(conn, uid: int, home_id: int) -> int:
+    from game.planet_evolution.service import colonize_planet
+
+    _parity_d_unlock_expansion(conn, uid, home_id)
+    ok, reason, extra = colonize_planet(
+        uid,
+        name="Parity Colony",
+        galaxy=1,
+        system=310,
+        position=5,
+        conn=conn,
+        allow_legacy_coordinates=True,
+        source="parity_d",
+    )
+    assert ok, reason
+    return int(extra["planet_id"])
+
+
+def _parity_d_foreign_planet() -> tuple[int, int, tuple[int, int, int]]:
+    from game.db import begin_write_transaction, commit, db
+    from game.models import create_user, ensure_player_and_homeworld, get_planets_by_player
+
+    ok, err, user = create_user(_parity_d_username("frgn"), "test-pass-123")
+    assert ok, err
+    uid = int(user["id"])
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ensure_player_and_homeworld(uid, player_name="Foreign", conn=conn)
+        pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+        coords = _parity_d_coords(conn, pid)
+        commit(conn)
+    finally:
+        conn.close()
+    return uid, pid, coords
+
+
+def _assert_fleet_combat_parity() -> None:
+    import json
+    import time
+
+    from game.db import begin_write_transaction, commit, db
+    from game.fleet import get_planet_ships, process_fleet_tick, send_fleet
+    from game.fleet_calc import loaded_resource_total
+    from game.fleet_defs import EXPEDITION_POSITION
+    from game.messages import get_message, list_messages
+    from game.models import (
+        add_planet_defense,
+        create_user,
+        ensure_player_and_homeworld,
+        get_homeworld,
+        get_planet_defense,
+        get_planets_by_player,
+    )
+
+    ok, err, user = create_user(_parity_d_username("fld"), "test-pass-123")
+    assert ok, err
+    uid = int(user["id"])
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ensure_player_and_homeworld(uid, player_name="FleetAdmiral", conn=conn)
+        home = get_homeworld(uid, conn=conn)
+        assert home is not None
+        pid = int(home["id"])
+        cur = conn.cursor()
+        _parity_d_fund(cur, pid)
+        colony2 = _parity_d_second_colony(conn, uid, pid)
+        g2, s2, p2 = _parity_d_coords(conn, colony2)
+        cur.execute("SELECT metal, crystal FROM planets WHERE id = ?;", (colony2,))
+        before_colony = dict(cur.fetchone())
+        _parity_d_seed_ships(conn, pid, uid, {"mule_courier": 5, "solar_skiff": 2, "ironclad_frigate": 12})
+        commit(conn)
+
+        # 1) Transport send → arrival credit → return ships home
+        ok, reason, result = send_fleet(
+            player_id=uid,
+            origin_planet_id=pid,
+            target_galaxy=g2,
+            target_system=s2,
+            target_position=p2,
+            mission_type="transport",
+            ships={"mule_courier": 1},
+            resources={"metal": 2000, "crystal": 500},
+            conn=conn,
+        )
+        assert ok, reason
+        fleet_id = int(result["fleet"]["id"])
+        assert fleet_id > 0
+        cur.execute(
+            "UPDATE fleet_movements SET arrival_at = ? WHERE id = ?;",
+            (time.time() - 1, fleet_id),
+        )
+        commit(conn)
+        tick1 = process_fleet_tick(player_id=uid, conn=conn)
+        commit(conn)
+        assert int(tick1.get("processed_arrivals") or 0) == 1
+        cur.execute("SELECT status FROM fleet_movements WHERE id = ?;", (fleet_id,))
+        assert cur.fetchone()["status"] == "returning"
+        cur.execute("SELECT metal, crystal FROM planets WHERE id = ?;", (colony2,))
+        after_colony = dict(cur.fetchone())
+        assert int(after_colony["metal"]) == int(before_colony["metal"]) + 2000
+        assert int(after_colony["crystal"]) == int(before_colony["crystal"]) + 500
+
+        # 2) Double-tick idempotent on transport arrival
+        tick2 = process_fleet_tick(player_id=uid, conn=conn)
+        commit(conn)
+        assert int(tick2.get("processed_arrivals") or 0) == 0
+        cur.execute("SELECT metal FROM planets WHERE id = ?;", (colony2,))
+        assert int(cur.fetchone()["metal"]) == int(after_colony["metal"])
+
+        ships_before_return = int(get_planet_ships(pid, conn=conn).get("mule_courier") or 0)
+        cur.execute(
+            "UPDATE fleet_movements SET return_at = ? WHERE id = ?;",
+            (time.time() - 1, fleet_id),
+        )
+        commit(conn)
+        process_fleet_tick(player_id=uid, conn=conn)
+        commit(conn)
+        assert int(get_planet_ships(pid, conn=conn).get("mule_courier") or 0) == ships_before_return + 1
+    finally:
+        conn.close()
+
+    # 3–5) Attack → combat messages + loot return + debris
+    foreign_uid, foreign_pid, (fg, fs, fp) = _parity_d_foreign_planet()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        cur = conn.cursor()
+        _parity_d_fund(cur, pid)
+        _parity_d_fund(cur, foreign_pid, metal=80000, crystal=40000, fuel_cells=20000)
+        _parity_d_seed_ships(
+            conn, pid, uid, {"ironclad_frigate": 12, "mule_courier": 1}
+        )
+        add_planet_defense(foreign_pid, {"sentinel_turret": 8}, conn=conn)
+        commit(conn)
+
+        ok, reason, result = send_fleet(
+            player_id=uid,
+            origin_planet_id=pid,
+            target_galaxy=fg,
+            target_system=fs,
+            target_position=fp,
+            mission_type="attack",
+            ships={"ironclad_frigate": 12, "mule_courier": 1},
+            conn=conn,
+        )
+        assert ok, reason
+        attack_id = int(result["fleet"]["id"])
+        cur.execute(
+            "UPDATE fleet_movements SET arrival_at = ? WHERE id = ?;",
+            (time.time() - 1, attack_id),
+        )
+        commit(conn)
+        process_fleet_tick(player_id=uid, conn=conn)
+        commit(conn)
+
+        msgs = list_messages(uid, category="combat")
+        messages = msgs["data"]["messages"]
+        assert len(messages) >= 1
+        detail = get_message(uid, messages[0]["id"], mark_read=False)
+        meta = detail["data"]["message"].get("metadata") or {}
+        assert meta.get("result") in ("attacker", "defender", "draw")
+        assert int(meta.get("rounds_fought") or 0) >= 1
+        defender_msgs = list_messages(foreign_uid, category="combat")
+        assert len(defender_msgs["data"]["messages"]) >= 1
+
+        cur.execute(
+            "SELECT status, resources_json, ships_json FROM fleet_movements WHERE id = ?;",
+            (attack_id,),
+        )
+        row = cur.fetchone()
+        assert row["status"] == "returning"
+        loaded = json.loads(row["resources_json"] or "{}")
+        loot_total = loaded_resource_total(loaded)
+        assert loot_total > 0
+        assert sum(get_planet_defense(foreign_pid, conn=conn).values()) < 8
+
+        cur.execute(
+            "SELECT metal, crystal FROM debris_fields WHERE galaxy = ? AND system = ? AND position = ?;",
+            (fg, fs, fp),
+        )
+        debris = cur.fetchone()
+        assert debris is not None
+        assert float(debris["metal"]) > 0 or float(debris["crystal"]) > 0
+
+        cur.execute(
+            "SELECT metal FROM planets WHERE id = ?;",
+            (pid,),
+        )
+        home_before = float(cur.fetchone()["metal"])
+        cur.execute(
+            "UPDATE fleet_movements SET return_at = ? WHERE id = ?;",
+            (time.time() - 1, attack_id),
+        )
+        commit(conn)
+        process_fleet_tick(player_id=uid, conn=conn)
+        commit(conn)
+        cur.execute("SELECT metal FROM planets WHERE id = ?;", (pid,))
+        home_after = float(cur.fetchone()["metal"])
+        assert home_after >= home_before + float(loaded.get("metal") or 0)
+
+        # Attack arrival double-tick: no second processed arrival
+        tick_again = process_fleet_tick(player_id=uid, conn=conn)
+        commit(conn)
+        assert int(tick_again.get("processed_arrivals") or 0) == 0
+    finally:
+        conn.close()
+
+    # 6) Expedition send → hold → return loot path idempotent
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        cur = conn.cursor()
+        _parity_d_fund(cur, pid)
+        _parity_d_seed_ships(conn, pid, uid, {"solar_skiff": 2})
+        g, s, _ = _parity_d_coords(conn, pid)
+        commit(conn)
+        ok, reason, result = send_fleet(
+            player_id=uid,
+            origin_planet_id=pid,
+            target_galaxy=g,
+            target_system=s,
+            target_position=EXPEDITION_POSITION,
+            mission_type="expedition",
+            ships={"solar_skiff": 1},
+            conn=conn,
+        )
+        assert ok, reason
+        exp_id = int(result["fleet"]["id"])
+        cur.execute(
+            "UPDATE fleet_movements SET arrival_at = ? WHERE id = ?;",
+            (time.time() - 1, exp_id),
+        )
+        commit(conn)
+        t_arr = process_fleet_tick(player_id=uid, conn=conn)
+        commit(conn)
+        assert int(t_arr.get("processed_arrivals") or 0) == 1
+        cur.execute("SELECT status FROM fleet_movements WHERE id = ?;", (exp_id,))
+        assert cur.fetchone()["status"] == "holding"
+        cur.execute(
+            "UPDATE fleet_movements SET holding_until = ? WHERE id = ? AND status = 'holding';",
+            (time.time() - 1, exp_id),
+        )
+        commit(conn)
+        t_hold = process_fleet_tick(player_id=uid, conn=conn)
+        commit(conn)
+        assert int(t_hold.get("processed_holding") or 0) >= 1 or int(
+            t_hold.get("processed_arrivals") or 0
+        ) >= 1
+        cur.execute(
+            "SELECT status, resources_json FROM fleet_movements WHERE id = ?;",
+            (exp_id,),
+        )
+        row_once = dict(cur.fetchone())
+        assert row_once["status"] == "returning"
+        rewards_once = json.loads(row_once["resources_json"] or "{}")
+        t_dup = process_fleet_tick(player_id=uid, conn=conn)
+        commit(conn)
+        assert int(t_dup.get("processed_holding") or 0) == 0
+        assert int(t_dup.get("processed_arrivals") or 0) == 0
+        cur.execute("SELECT resources_json FROM fleet_movements WHERE id = ?;", (exp_id,))
+        rewards_twice = json.loads(dict(cur.fetchone())["resources_json"] or "{}")
+        assert rewards_once == rewards_twice
+        cur.execute(
+            "UPDATE fleet_movements SET return_at = ? WHERE id = ?;",
+            (time.time() - 1, exp_id),
+        )
+        commit(conn)
+        process_fleet_tick(player_id=uid, conn=conn)
+        commit(conn)
+        cur.execute("SELECT status FROM fleet_movements WHERE id = ?;", (exp_id,))
+        done = cur.fetchone()
+        assert done is None or done["status"] not in ("outbound", "holding", "returning")
+    finally:
+        conn.close()
+
+
+def test_parity_d_fleet_combat_sqlite(sqlite_parity_db):
+    _assert_fleet_combat_parity()
+
+
+@requires_postgres
+def test_parity_d_fleet_combat_postgres(pg_parity_db):
+    _assert_fleet_combat_parity()

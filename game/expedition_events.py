@@ -429,11 +429,9 @@ def expedition_daily_day_bucket(ts: float | None = None) -> int:
 
 
 def _expedition_daily_tables_ready(conn) -> bool:
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'expedition_daily_value' LIMIT 1;"
-    )
-    return cur.fetchone() is not None
+    from .models import table_exists
+
+    return bool(table_exists(conn, "expedition_daily_value"))
 
 
 def get_expedition_daily_expo_value(player_id: int, *, conn, ts: float | None = None) -> int:

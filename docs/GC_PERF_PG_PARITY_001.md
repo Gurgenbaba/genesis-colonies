@@ -1,6 +1,6 @@
 # GC-PERF-PG-PARITY-001 — Backend-Parität auf leerer PostgreSQL-DB
 
-> Status: ✅ Block A/B/C · 📋 D–F offen  
+> Status: ✅ Block A/B/C/D · 📋 E–F offen  
 > Epic: EPIC-19 Performance Core · [GC_PERF_CORE.md](GC_PERF_CORE.md)  
 > Vorbedingung: ✅ [GC-PERF-PG-SCHEMA-001](GC_PERF_PG_SCHEMA_001.md)  
 > **Kein Livedaten-Import · kein Production-Cutover · kein produktiver Worker gegen Postgres.**  
@@ -22,7 +22,7 @@ Schema-Port ist grün, aber Verhaltensparität (Auth, Queues, Fleet, …) zwisch
 | **A** | Auth + Bootstrap + Homeworld | ✅ SQLite + PG |
 | **B** | Economy + Planet Scope | ✅ SQLite + PG |
 | **C** | Unit Queues (Build/Research/Shipyard/Defense) | ✅ SQLite + PG |
-| **D** | Fleet + Combat | 📋 |
+| **D** | Fleet + Combat | ✅ |
 | **E** | Evolution + Meta | 📋 |
 | **F** | Race + Restart / Tick-Idempotenz | 📋 |
 
@@ -67,9 +67,9 @@ python -m pytest tests/test_gc_perf_pg_parity_001.py -v -s
 - [x] Gebäude-/Research-Queues grün
 - [x] Shipyard-/Defense-Queues grün
 - [x] Refund und Reschedule identisch
-- [ ] Fleet send/arrival/return grün
-- [ ] Combat/Loot/Debris grün
-- [ ] Expedition grün
+- [x] Fleet send/arrival/return grün
+- [x] Combat/Loot/Debris grün
+- [x] Expedition grün
 - [ ] Planet Evolution grün
 - [ ] Poll-State und Actions grün
 - [ ] parallele Enqueues ohne Duplicate/Overflow
@@ -114,6 +114,19 @@ python -m pytest tests/test_gc_perf_pg_parity_001.py -v -s
 - [x] PG Staging (`test_parity_c_queues_postgres`) — nested `COMMIT` in GDP personality ensure + `sqlite_master` schema probes fixed
 - [ ] Planet Research / Ascension (optional follow-up in C or E)
 
+### Block D
+
+- [x] Transport send → arrival credit → return ships
+- [x] Double-tick idempotent (arrivals / holding)
+- [x] Attack → combat report messages (attacker + defender)
+- [x] Loot loaded on return + credited at home
+- [x] Debris spawned at target coords
+- [x] Expedition hold → returning loot idempotent
+- [x] Portable `json_extract` for fleet report idempotency (`messages.py`)
+- [x] `expedition_daily_value` readiness via `table_exists` (no `sqlite_master`)
+- [x] SQLite (`test_parity_d_fleet_combat_sqlite`)
+- [ ] PG Staging (`test_parity_d_fleet_combat_postgres`) — run when `GC_TEST_POSTGRES_URL` set
+
 ---
 
 ## Paritäts-Matrix
@@ -126,8 +139,8 @@ python -m pytest tests/test_gc_perf_pg_parity_001.py -v -s
 | Research   |   grün |       grün | — |
 | Shipyard   |   grün |       grün | — |
 | Defense    |   grün |       grün | — |
-| Fleet      |    —   |        —   | Block D    |
-| Combat     |    —   |        —   | Block D    |
+| Fleet      |   grün |       📋* | Block D — SQLite ✅; PG via staging URL |
+| Combat     |   grün |       📋* | Block D — SQLite ✅; PG via staging URL |
 | Evolution  |    —   |        —   | Block E    |
 | Race tests |    —   |        —   | Block F    |
 
