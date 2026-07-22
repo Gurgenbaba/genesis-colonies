@@ -1026,6 +1026,15 @@
     applyPlanetHeroThemeFromState(data);
   }
 
+  /** After light PJAX / soft reload: keep shell landscape visible (GC-548 + PJAX shell contract). */
+  function ensurePlanetLandscapeAfterSoftNav() {
+    if (GC.lastState && GC.lastState.ok !== false) {
+      applyPlanetLandscapeFromState(GC.lastState);
+      return;
+    }
+    bootstrapPlanetLandscapeFromBoot();
+  }
+
   function applyPlanetHeroThemeFromState(data) {
     const hero = document.getElementById("overview-planet-hero");
     if (!hero) return;
@@ -5360,6 +5369,34 @@
       return;
     }
 
+    if (btn.dataset.planetResearchCancelId) {
+      if (btn.dataset.busy === "1") return;
+      setProgressionActionBusy(btn, true);
+      try {
+        const planetId = Math.floor(
+          Number(
+            GC.lastState?.active_planet_id
+              || (typeof GC.getDomPlanetId === "function" ? GC.getDomPlanetId() : 0)
+              || document.querySelector(".planet-evolution-page")?.dataset?.planetId
+              || 0
+          )
+        );
+        const json = await GC.fetchGameAction(`/api/planets/${planetId}/research/cancel`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ job_id: Number(btn.dataset.planetResearchCancelId || 0) }),
+        });
+        applyActionState(json, json.ok ? "planet_research_cancel_success" : "planet_research_cancel_error");
+        if (!json.ok) showNotify(mapActionError(json.reason, json.payload), "error");
+      } catch (err) {
+        console.error("Global planet research cancel failed:", err);
+        showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
+      } finally {
+        setProgressionActionBusy(btn, false);
+      }
+      return;
+    }
+
     if (btn.dataset.shipyardQueueCancel) {
       btn.dataset.busy = "1";
       try {
@@ -5372,12 +5409,12 @@
           }),
         });
         if (res?.ok) {
-          applyActionState(res, "shipyard_cancel");
+          // GC-512D — state-first; optional data for page-local stocks/labels
+          if (res.state) applyActionState(res, "shipyard_cancel");
           const syPage = document.getElementById("shipyard-page");
           if (syPage?.dataset.ready === "1" && res.data) {
             applyShipyardState(syPage, res.data);
-          }
-          if (!res.state && typeof GC.refreshGameState === "function") {
+          } else if (!res.state && typeof GC.refreshGameState === "function") {
             await GC.refreshGameState("shipyard_cancel");
           }
         } else {
@@ -7266,32 +7303,6 @@
     cardEl.classList.toggle(`${cardPrefix}--queue-pending`, !hasActive);
   }
 
-  function reorderCardQueueBlocks(cardEl) {
-    if (!cardEl) return;
-    const blocks = Array.from(cardEl.querySelectorAll("[data-gc-card-queue]"));
-    if (blocks.length < 2) return;
-    blocks.sort((a, b) => {
-      const pa = Math.floor(Number(a.dataset.queuePosition || 0));
-      const pb = Math.floor(Number(b.dataset.queuePosition || 0));
-      if (pa !== pb) return pa - pb;
-      const ja = Math.floor(Number(a.dataset.jobId || 0));
-      const jb = Math.floor(Number(b.dataset.jobId || 0));
-      return ja - jb;
-    });
-    const slot = cardEl.querySelector(".gc-bld-card-queue-slot");
-    if (slot) {
-      blocks.forEach((block) => slot.appendChild(block));
-      return;
-    }
-    const anchor = cardEl.querySelector(".gc-bld-card-meta, .gc-prog-main");
-    blocks.forEach((block) => {
-      if (anchor) cardEl.insertBefore(block, anchor);
-      else cardEl.appendChild(block);
-    });
-  }
-
-  GC.clearBuildingCardQueue = GC.clearCardQueueBlock;
-
   function _cardQueueDomain(queueJob, opts) {
     const fromOpts = opts && opts.domain ? String(opts.domain) : "";
     if (fromOpts) return fromOpts;
@@ -7997,13 +8008,14 @@
       block.appendChild(bar);
     }
 
-    if (jobId > 0 && domain !== "planet_research" && domain !== "ascension") {
+    if (jobId > 0 && domain !== "ascension") {
       const cancelBtn = document.createElement("button");
       cancelBtn.type = "button";
       cancelBtn.className = "gc-btn gc-btn-ghost gc-btn-xs gc-card-queue-cancel";
       if (domain === "research") cancelBtn.dataset.researchCancelId = String(jobId);
       else if (domain === "shipyard") cancelBtn.dataset.shipyardQueueCancel = String(jobId);
       else if (domain === "defense") cancelBtn.dataset.defenseQueueCancel = String(jobId);
+      else if (domain === "planet_research") cancelBtn.dataset.planetResearchCancelId = String(jobId);
       else cancelBtn.dataset.buildCancelId = String(jobId);
       cancelBtn.textContent =
         domain === "shipyard" || domain === "defense"
@@ -8180,10 +8192,6 @@
       icon: job.icon,
       cancelable: true,
     }));
-  }
-
-  function _updateMiniQueueSlots() {
-    /* queue slot badge removed from mini strips */
   }
 
   function _resolveMiniQueueLabel(job, domain) {
@@ -8784,7 +8792,6 @@
       planetId: opts.planetId,
       limit: Math.floor(Number(queueRaw?.summary?.limit || opts.limit || 0)),
     });
-    _updateMiniQueueSlots(host, domain, queueRaw);
   }
 
   function _resolveQueueJobDisplayName(job, domain) {
@@ -8815,208 +8822,20 @@
     return ownerKey;
   }
 
-  function _pageQueueCompactJobLabel(job, domain) {
-    const ownerKey = String(job.owner_key || job.ship_key || job.defense_key || job.tech_key || job.key || "");
-    if (domain === "shipyard") {
-      const name = _resolveQueueJobDisplayName(job, domain);
-      const amount = Math.floor(Number(job.target_amount || job.amount || 0));
-      const levelStr = amount > 1 ? `×${fmtNumber(amount)}` : "";
-      return { name, levelStr, level: amount, usesAmount: true };
-    }
-    if (domain === "defense") {
-      const name = _resolveQueueJobDisplayName(job, domain);
-      const amount = Math.floor(Number(job.target_amount || job.amount || 0));
-      const levelStr = amount > 1 ? `×${fmtNumber(amount)}` : "";
-      return { name, levelStr, level: amount, usesAmount: true };
-    }
-    const name = _resolveQueueJobDisplayName(job, domain);
-    const level = Math.floor(Number(job.target_level || 0));
-    const levelStr =
-      level > 0 ? tf("build_queue_compact_level", { level }, `Lv.${level}`) : "";
-    return { name, levelStr, level, usesAmount: false };
-  }
-
-  function _appendPageQueueCompactTimer(parent, job, isActive, timerKind) {
-    parent.appendChild(document.createTextNode(" · "));
-    const timerEl = document.createElement("span");
-    timerEl.className = "gc-card-queue-timer gc-mono gc-page-queue-compact-timer";
-    const waitTarget = cardQueueTimerTarget(job, isActive);
-    if (waitTarget > 0) {
-      const displayRemaining = queueJobRemainingSeconds(
-        waitTarget,
-        getTimerServerNow(),
-        resolveQueueJobRemaining(job)
-      );
-      applyQueueJobTimerAttrs(timerEl, waitTarget, timerKind, "game-state", displayRemaining);
-      timerEl.textContent = formatEta(queueTimerDisplaySeconds(displayRemaining));
-    } else {
-      timerEl.textContent = formatEta(Math.max(0, Math.floor(Number(job.remaining_seconds || 0))));
-    }
-    parent.appendChild(timerEl);
-  }
-
-  function _pageQueueSlotsLabelKey(domain) {
-    const d = String(domain || "");
-    if (d === "build" || d === "building") return "build_queue_slots";
-    if (d === "research") return "research_queue_slots";
-    if (d === "shipyard") return "shipyard_queue_slots";
-    if (d === "defense") return "defense_queue_slots";
-    return "queue_compact_slots";
-  }
-
-  function _updatePageQueueCompactSlots(compactId, domain, queueRaw) {
-    const summary = queueRaw?.summary || {};
-    const count = Math.floor(Number(summary.count) || 0);
-    const limit = Math.floor(Number(summary.limit) || 0);
-    const slotsEl = document.getElementById(`${compactId}-slots`);
-    if (!slotsEl) return;
-    if (limit <= 0) {
-      slotsEl.hidden = true;
-      return;
-    }
-    slotsEl.hidden = false;
-    const text = `${fmtNumber(count)}/${fmtNumber(limit)}`;
-    _setIfChanged(slotsEl, text);
-    const labelKey = _pageQueueSlotsLabelKey(domain);
-    const aria = tf(labelKey, { count, limit }, `${fmtNumber(count)} / ${fmtNumber(limit)}`);
-    if (slotsEl.getAttribute("title") !== aria) slotsEl.setAttribute("title", aria);
-    if (slotsEl.getAttribute("aria-label") !== aria) slotsEl.setAttribute("aria-label", aria);
-  }
-
-  function _updatePageQueueCompact(cfg) {
-    const compact = document.getElementById(cfg.compactId);
-    if (!compact) return;
-
-    _updatePageQueueCompactSlots(cfg.compactId, cfg.domain, cfg.queueRaw);
-
-    const bodyEl = compact.querySelector("[data-page-queue-compact-body]");
-    if (!bodyEl) return;
-
-    const jobs = cfg.collectJobs(cfg.queueRaw);
-    const sig = jobs.map((j) => cardQueueJobSignature(j)).join("|");
-    if (sig === compact.dataset.compactSig) return;
-    compact.dataset.compactSig = sig;
-
-    let cancelBtn = compact.querySelector("[data-page-queue-compact-cancel]");
-    bodyEl.replaceChildren();
-
-    if (!jobs.length) {
-      const idleEl = document.createElement("span");
-      idleEl.className = "gc-page-queue-compact-label";
-      idleEl.id = `${cfg.compactId}-label`;
-      idleEl.textContent = t(cfg.idleKey, cfg.idleFallback);
-      bodyEl.appendChild(idleEl);
-      if (cancelBtn) cancelBtn.hidden = true;
-      return;
-    }
-
-    const active = jobs[0];
-    const next = jobs.length > 1 ? jobs[1] : null;
-    const isActive = String(active.status || "") === "active";
-    const activePart = _pageQueueCompactJobLabel(active, cfg.domain);
-
-    const activeEl = document.createElement("span");
-    activeEl.className = "gc-page-queue-compact-active";
-    activeEl.id = `${cfg.compactId}-label`;
-
-    if (jobs.length === 1) {
-      const verbName = `${activePart.name}${activePart.usesAmount ? activePart.levelStr : ""}`;
-      activeEl.appendChild(
-        document.createTextNode(
-          tf(cfg.activeVerbKey, { name: verbName }, cfg.activeVerbFallback)
-        )
-      );
-    } else {
-      activeEl.appendChild(document.createTextNode(`${activePart.name}${activePart.usesAmount ? activePart.levelStr : ""}`));
-    }
-
-    if (!activePart.usesAmount && activePart.levelStr) {
-      activeEl.appendChild(document.createTextNode(" · "));
-      const lvlEl = document.createElement("span");
-      lvlEl.className = "gc-mono";
-      lvlEl.textContent = activePart.levelStr;
-      activeEl.appendChild(lvlEl);
-    } else if (activePart.usesAmount && activePart.levelStr && jobs.length > 1) {
-      activeEl.appendChild(document.createTextNode(" · "));
-      const amtEl = document.createElement("span");
-      amtEl.className = "gc-mono";
-      amtEl.textContent = activePart.levelStr;
-      activeEl.appendChild(amtEl);
-    }
-
-    _appendPageQueueCompactTimer(activeEl, active, isActive, cfg.timerKind);
-    bodyEl.appendChild(activeEl);
-
-    if (next) {
-      const sepEl = document.createElement("span");
-      sepEl.className = "gc-page-queue-compact-sep";
-      sepEl.setAttribute("aria-hidden", "true");
-      sepEl.textContent = "|";
-      bodyEl.appendChild(sepEl);
-
-      const nextPart = _pageQueueCompactJobLabel(next, cfg.domain);
-      const nextEl = document.createElement("span");
-      nextEl.className = "gc-page-queue-compact-next";
-      nextEl.id = `${cfg.compactId}-next`;
-      if (nextPart.usesAmount) {
-        nextEl.textContent = tf(
-          "queue_compact_next_amount",
-          { name: nextPart.name, amount: nextPart.levelStr },
-          `Nächster: ${nextPart.name}${nextPart.levelStr}`
-        );
-      } else {
-        nextEl.textContent = tf(
-          cfg.nextKey,
-          { name: nextPart.name, level: nextPart.level },
-          `Nächster: ${nextPart.name} · ${nextPart.levelStr}`
-        );
-      }
-      bodyEl.appendChild(nextEl);
-    }
-
-    const activeJobId = Math.floor(Number(active.job_id || active.id || 0));
-    if (activeJobId > 0) {
-      if (!cancelBtn) {
-        cancelBtn = document.createElement("button");
-        cancelBtn.type = "button";
-        cancelBtn.className = "gc-page-queue-compact-cancel";
-        cancelBtn.dataset.pageQueueCompactCancel = "1";
-        cancelBtn.innerHTML = '<span aria-hidden="true">×</span>';
-        cancelBtn.setAttribute("aria-label", t("action_cancel", "Abbrechen"));
-        cancelBtn.title = t("action_cancel", "Abbrechen");
-        const anchor = document.getElementById(`${cfg.compactId}-slots`) || null;
-        if (anchor) compact.insertBefore(cancelBtn, anchor);
-        else compact.appendChild(cancelBtn);
-      }
-      delete cancelBtn.dataset.buildCancelId;
-      delete cancelBtn.dataset.researchCancelId;
-      delete cancelBtn.dataset.shipyardQueueCancel;
-      delete cancelBtn.dataset.defenseQueueCancel;
-      cancelBtn.dataset[cfg.cancelDataset] = String(activeJobId);
-      cancelBtn.hidden = false;
-    } else if (cancelBtn) {
-      cancelBtn.hidden = true;
-    }
-  }
-
   function _bootstrapPageQueueCompactLiveFromDom() {
     const boots = [
-      { compactId: "build-mini-queue", live: BUILDQ, mini: true },
-      { compactId: "research-mini-queue", live: RESEARCHQ, mini: true },
-      { compactId: "shipyard-mini-queue", live: SHIPYARDQ, mini: true },
-      { compactId: "defense-mini-queue", live: DEFENSEQ, mini: true },
+      { compactId: "build-mini-queue", live: BUILDQ },
+      { compactId: "research-mini-queue", live: RESEARCHQ },
+      { compactId: "shipyard-mini-queue", live: SHIPYARDQ },
+      { compactId: "defense-mini-queue", live: DEFENSEQ },
     ];
     const now = getTimerServerNow();
-    boots.forEach(({ compactId, live, mini }) => {
+    boots.forEach(({ compactId, live }) => {
       const root = document.getElementById(compactId);
       if (!root) return;
-      const timerEl = mini
-        ? root.querySelector(
-          ".gc-mini-queue-card--active .gc-mini-queue-card__timer[data-countdown-at], .gc-mini-queue-card__timer[data-countdown-at]"
-        )
-        : root.querySelector(
-          ".gc-page-queue-compact-timer[data-countdown-at], .gc-page-queue-compact-active [data-countdown-at]"
-        );
+      const timerEl = root.querySelector(
+        ".gc-mini-queue-card--active .gc-mini-queue-card__timer[data-countdown-at], .gc-mini-queue-card__timer[data-countdown-at]"
+      );
       if (!timerEl) return;
       syncTimerElement(timerEl);
       const finish = parseTimerTarget(timerEl.dataset.timerTarget || timerEl.dataset.countdownAt || 0);
@@ -9056,70 +8875,6 @@
     });
     _bootstrapPageQueueCompactLiveFromDom();
     GC.startProgressTicker();
-  }
-
-  function _updateBuildQueueCompact(buildQueueRaw) {
-    _updatePageQueueCompact({
-      compactId: "build-queue-compact",
-      domain: "building",
-      timerKind: "build",
-      cancelDataset: "buildCancelId",
-      idleKey: "build_queue_compact_idle",
-      idleFallback: "Keine Bauaufträge",
-      activeVerbKey: "build_queue_compact_building",
-      activeVerbFallback: "%(name)s wird gebaut",
-      nextKey: "build_queue_compact_next",
-      collectJobs: _collectBuildQueueCardJobs,
-      queueRaw: buildQueueRaw,
-    });
-  }
-
-  function _updateResearchQueueCompact(researchRaw) {
-    _updatePageQueueCompact({
-      compactId: "research-queue-compact",
-      domain: "research",
-      timerKind: "research",
-      cancelDataset: "researchCancelId",
-      idleKey: "research_queue_compact_idle",
-      idleFallback: "Keine Forschungen aktiv",
-      activeVerbKey: "research_queue_compact_building",
-      activeVerbFallback: "%(name)s wird erforscht",
-      nextKey: "build_queue_compact_next",
-      collectJobs: _collectResearchQueueCardJobs,
-      queueRaw: researchRaw,
-    });
-  }
-
-  function _updateShipyardQueueCompact(queueRaw) {
-    _updatePageQueueCompact({
-      compactId: "shipyard-queue-compact",
-      domain: "shipyard",
-      timerKind: "shipyard",
-      cancelDataset: "shipyardQueueCancel",
-      idleKey: "shipyard_queue_compact_idle",
-      idleFallback: "Keine Werftaufträge",
-      activeVerbKey: "shipyard_queue_compact_building",
-      activeVerbFallback: "%(name)s in Produktion",
-      nextKey: "build_queue_compact_next",
-      collectJobs: _collectShipyardQueueCardJobs,
-      queueRaw,
-    });
-  }
-
-  function _updateDefenseQueueCompact(queueRaw) {
-    _updatePageQueueCompact({
-      compactId: "defense-queue-compact",
-      domain: "defense",
-      timerKind: "defense",
-      cancelDataset: "defenseQueueCancel",
-      idleKey: "defense_queue_compact_idle",
-      idleFallback: "Keine Verteidigungsaufträge",
-      activeVerbKey: "defense_queue_compact_building",
-      activeVerbFallback: "%(name)s in Produktion",
-      nextKey: "build_queue_compact_next",
-      collectJobs: _collectDefenseQueueCardJobs,
-      queueRaw,
-    });
   }
 
   function renderBuildQueue(buildQueueRaw) {
@@ -9280,9 +9035,29 @@
     if (!document.querySelector(".planet-evolution-page")) return false;
     const r = String(reasonStr || "");
     if (r === "timekeeper_apply") return true;
-    if (r === "planet_research_start") return true;
+    if (r === "planet_research_start" || r === "planet_research_cancel" || r === "planet_research_cancel_success") return true;
     if (r.startsWith("planet_research")) return true;
+    if (r === "pe_spec_pick" || r === "pe_spec_upgrade") return true;
+    if (r === "pe_policy_activate" || r === "pe_event_resolve" || r === "pe_research_choose") return true;
     return false;
+  }
+
+  /** Soft PE content swap after structural mutations (spec/policy/events/choice). HUD already patched via applyActionState. */
+  async function _softReloadPlanetEvolutionContent() {
+    if (!document.querySelector(".planet-evolution-page")) return;
+    if (typeof GC.reloadCurrentPage !== "function") return;
+    const anyActive = typeof hasBusyLiveActivity === "function" ? hasBusyLiveActivity() : false;
+    await GC.reloadCurrentPage({
+      force: true,
+      skipGameState: true,
+      skipHydrate: true,
+      skipPolling: true,
+    });
+    ensurePlanetLandscapeAfterSoftNav();
+    if (typeof GC.startPolling === "function") {
+      GC.startPolling(anyActive || (typeof hasBusyLiveActivity === "function" && hasBusyLiveActivity()));
+    }
+    if (typeof GC.startProgressTicker === "function") GC.startProgressTicker();
   }
 
   function _schedulePlanetEvolutionRefreshAfterAction(reasonStr) {
@@ -10389,10 +10164,6 @@
       if (bar) bar.setAttribute("aria-valuenow", String(Math.round(pct)));
       _applyProgressFill(fill, pct);
     });
-  }
-
-  function updateBuildQueueLive() {
-    updateAllProgressBars();
   }
 
   // =========================
@@ -16779,6 +16550,21 @@
     void reason;
   }
 
+  /** In-hub field updates: allianceAction already applied state + patchAllianceDom. */
+  const ALLIANCE_PATCH_ONLY = new Set([
+    "alliance_profile",
+    "alliance_project_start",
+    "alliance_recruitment",
+    "alliance_diplomacy",
+  ]);
+
+  async function allianceFinalizeSuccess(reason, out) {
+    if (ALLIANCE_PATCH_ONLY.has(String(reason || "")) && out?.alliance) {
+      return;
+    }
+    await allianceReloadHub(reason);
+  }
+
   async function allianceAction(url, body, reason) {
     if (_allianceActionInFlight) return { ok: false, error: "in_flight" };
     _allianceActionInFlight = true;
@@ -16828,7 +16614,7 @@
       "alliance_create"
     );
     if (out?.ok && out?.alliance?.in_alliance) {
-      await allianceReloadHub("alliance_create");
+      await allianceFinalizeSuccess("alliance_create", out);
       showNotify(t("alliance_create_success", "Allianz gegründet."), "success");
       return;
     }
@@ -16843,7 +16629,7 @@
       "alliance_join"
     );
     if (out?.ok && out?.alliance?.in_alliance) {
-      await allianceReloadHub("alliance_join");
+      await allianceFinalizeSuccess("alliance_join", out);
       showNotify(t("alliance_join_success", "Allianz beigetreten."), "success");
       return;
     }
@@ -17201,7 +16987,7 @@
           );
           if (out?.ok) {
             showNotify(t("alliance_saved", "Gespeichert."), "success");
-            await allianceReloadHub("alliance_profile");
+            await allianceFinalizeSuccess("alliance_profile", out);
           } else {
             showNotify(allianceErrorMessage(out, "Speichern fehlgeschlagen"), "error");
           }
@@ -17217,7 +17003,7 @@
             },
             "alliance_diplomacy"
           );
-          if (out?.ok) await allianceReloadHub("alliance_diplomacy");
+          if (out?.ok) await allianceFinalizeSuccess("alliance_diplomacy", out);
           else showNotify(allianceErrorMessage(out, "Diplomatie fehlgeschlagen"), "error");
           return;
         }
@@ -17250,7 +17036,7 @@
           { kind: parts[0], key: parts[1] },
           "alliance_project_start"
         );
-        if (out?.ok) await allianceReloadHub("alliance_project_start");
+        if (out?.ok) await allianceFinalizeSuccess("alliance_project_start", out);
         else showNotify(allianceErrorMessage(out, "Projektstart fehlgeschlagen"), "error");
         return;
       }
@@ -17259,7 +17045,7 @@
       if (leaveBtn) {
         ev.preventDefault();
         const out = await allianceAction("/api/alliance/leave", {}, "alliance_leave");
-        if (out?.ok) await allianceReloadHub("alliance_leave");
+        if (out?.ok) await allianceFinalizeSuccess("alliance_leave", out);
         else showNotify(allianceErrorMessage(out, "Verlassen fehlgeschlagen"), "error");
         return;
       }
@@ -17272,7 +17058,7 @@
         );
         if (!ok) return;
         const out = await allianceAction("/api/alliance/disband", {}, "alliance_disband");
-        if (out?.ok) await allianceReloadHub("alliance_disband");
+        if (out?.ok) await allianceFinalizeSuccess("alliance_disband", out);
         else showNotify(allianceErrorMessage(out, "Auflösen fehlgeschlagen"), "error");
         return;
       }
@@ -17284,7 +17070,7 @@
         const out = await allianceAction("/api/alliance/recruitment", { mode }, "alliance_recruitment");
         if (out?.ok) {
           showNotify(t("alliance_saved", "Gespeichert."), "success");
-          await allianceReloadHub("alliance_recruitment");
+          await allianceFinalizeSuccess("alliance_recruitment", out);
         } else {
           showNotify(allianceErrorMessage(out, "Speichern fehlgeschlagen"), "error");
         }
@@ -17306,7 +17092,7 @@
           { player_id: pid, role },
           "alliance_member_role"
         );
-        if (out?.ok) await allianceReloadHub("alliance_member_role");
+        if (out?.ok) await allianceFinalizeSuccess("alliance_member_role", out);
         else showNotify(allianceErrorMessage(out, "Aktion fehlgeschlagen"), "error");
         return;
       }
@@ -17321,7 +17107,7 @@
           { player_id: pid },
           "alliance_member_kick"
         );
-        if (out?.ok) await allianceReloadHub("alliance_member_kick");
+        if (out?.ok) await allianceFinalizeSuccess("alliance_member_kick", out);
         else showNotify(allianceErrorMessage(out, "Aktion fehlgeschlagen"), "error");
         return;
       }
@@ -17340,7 +17126,7 @@
           { player_id: pid },
           "alliance_leader_transfer"
         );
-        if (out?.ok) await allianceReloadHub("alliance_leader_transfer");
+        if (out?.ok) await allianceFinalizeSuccess("alliance_leader_transfer", out);
         else showNotify(allianceErrorMessage(out, "Aktion fehlgeschlagen"), "error");
         return;
       }
@@ -17375,7 +17161,7 @@
           return;
         }
         showNotify(t("alliance_apply_sent", "Bewerbung gesendet."), "success");
-        await allianceReloadHub("alliance_apply");
+        await allianceFinalizeSuccess("alliance_apply", out);
         return;
       }
 
@@ -17386,7 +17172,7 @@
         if (!tag) return;
         const out = await allianceAction("/api/alliance/join", { tag }, "alliance_join");
         if (out?.ok && out?.alliance?.in_alliance) {
-          await allianceReloadHub("alliance_join");
+          await allianceFinalizeSuccess("alliance_join", out);
           showNotify(t("alliance_join_success", "Allianz beigetreten."), "success");
         } else {
           showNotify(allianceErrorMessage(out, "Beitritt fehlgeschlagen"), "error");
@@ -17407,7 +17193,7 @@
           return;
         }
         showNotify(t("alliance_withdraw_ok", "Bewerbung zurückgezogen."), "success");
-        await allianceReloadHub("alliance_withdraw");
+        await allianceFinalizeSuccess("alliance_withdraw", out);
         return;
       }
 
@@ -17420,7 +17206,7 @@
         if (!out?.ok) showNotify(allianceErrorMessage(out, "Bewerbung fehlgeschlagen"), "error");
         else {
           showNotify(t("alliance_apply_sent", "Bewerbung gesendet."), "success");
-          await allianceReloadHub("alliance_apply");
+          await allianceFinalizeSuccess("alliance_apply", out);
         }
         return;
       }
@@ -17429,24 +17215,24 @@
       if (appAccept) {
         ev.preventDefault();
         const id = parseInt(appAccept.dataset.appAccept || "0", 10);
-        await allianceAction(
+        const out = await allianceAction(
           "/api/alliance/application/respond",
           { application_id: id, accept: true },
           "alliance_application"
         );
-        await allianceReloadHub("alliance_application");
+        await allianceFinalizeSuccess("alliance_application", out);
         return;
       }
       const appDecline = ev.target.closest("[data-app-decline]");
       if (appDecline) {
         ev.preventDefault();
         const id = parseInt(appDecline.dataset.appDecline || "0", 10);
-        await allianceAction(
+        const out = await allianceAction(
           "/api/alliance/application/respond",
           { application_id: id, accept: false },
           "alliance_application"
         );
-        await allianceReloadHub("alliance_application");
+        await allianceFinalizeSuccess("alliance_application", out);
         return;
       }
 
@@ -17454,24 +17240,24 @@
       if (dipAccept) {
         ev.preventDefault();
         const id = parseInt(dipAccept.dataset.dipAccept || "0", 10);
-        await allianceAction(
+        const out = await allianceAction(
           "/api/alliance/diplomacy/respond",
           { request_id: id, accept: true },
           "alliance_diplomacy_respond"
         );
-        await allianceReloadHub("alliance_diplomacy_respond");
+        await allianceFinalizeSuccess("alliance_diplomacy_respond", out);
         return;
       }
       const dipDecline = ev.target.closest("[data-dip-decline]");
       if (dipDecline) {
         ev.preventDefault();
         const id = parseInt(dipDecline.dataset.dipDecline || "0", 10);
-        await allianceAction(
+        const out = await allianceAction(
           "/api/alliance/diplomacy/respond",
           { request_id: id, accept: false },
           "alliance_diplomacy_respond"
         );
-        await allianceReloadHub("alliance_diplomacy_respond");
+        await allianceFinalizeSuccess("alliance_diplomacy_respond", out);
         return;
       }
 
@@ -21016,7 +20802,7 @@
           );
           applyLogisticsActionState(page, res);
           try {
-            // Collapse mobile fleet sheet before PJAX reload so bottom nav stays usable.
+            // Collapse mobile fleet sheet so bottom nav stays usable (no full PJAX).
             if (typeof setFleetDrawerShowAll === "function") setFleetDrawerShowAll(false);
             document.body.classList.remove("gc-fleet-sheet-open");
             const backdrop = document.getElementById("gc-fleet-sheet-backdrop");
@@ -21032,9 +20818,6 @@
               }
             }
             await refreshLogisticsLiveState(page);
-            if (typeof GC.reloadCurrentPage === "function") {
-              await GC.reloadCurrentPage({ force: true });
-            }
           } catch (err) {
             console.warn("[GC] logistics post-success refresh failed", err);
           }
@@ -21302,7 +21085,6 @@
     }, delay);
   }
 
-  let _shipyardBound = false;
   let _shipyardPollIntervalId = null;
   let _lastShipyardQueueSignature = "";
 
@@ -21861,163 +21643,24 @@
     return _shipyardApiInFlight;
   }
 
-  function bindShipyardOnce() {
-    if (_shipyardBound) return;
-    _shipyardBound = true;
-    const tt = (key, fallback) => t(key, fallback);
-    const apiError = (res) => (res && (res.error || res.reason)) || "cancel_failed";
-    const reasonText = shipyardActionReasonText;
+  // GC-PERF-JS-002 — page binder lives in static/js/pages/shipyard.js (no duplicate body).
+  GC.applyShipyardState = applyShipyardState;
+  GC.parseShipyardPageData = parseShipyardPageData;
+  GC.refreshShipyardState = refreshShipyardState;
+  GC.startShipyardTimers = startShipyardTimers;
+  GC.stopShipyardTimers = stopShipyardTimers;
+  GC.shipyardActionReasonText = shipyardActionReasonText;
+  GC.militaryPageResources = militaryPageResources;
+  GC.syncUnitCardCostPreview = syncUnitCardCostPreview;
+  GC.clearShipyardQueueSignature = function clearShipyardQueueSignature() {
+    _lastShipyardQueueSignature = "";
+  };
 
-    document.addEventListener("click", async (e) => {
-      const page = document.getElementById("shipyard-page");
-      if (!page || page.dataset.ready !== "1") return;
-
-      const maxBtn = e.target.closest("[data-shipyard-max]");
-      if (maxBtn && page.contains(maxBtn)) {
-        e.preventDefault();
-        const shipKey = maxBtn.getAttribute("data-shipyard-max");
-        const qtyInp = page.querySelector(`[data-shipyard-qty="${shipKey}"]`);
-        const maxQty = parseIntNumber(
-          maxBtn.dataset.maxQty || maxBtn.getAttribute("data-max-qty") || "0"
-        );
-        if (qtyInp && maxQty > 0) {
-          qtyInp.dataset.inputMax = String(maxQty);
-          setNumberInputValue(qtyInp, maxQty);
-          const card = maxBtn.closest("[data-ship-card]");
-          if (card) syncUnitCardCostPreview(card, militaryPageResources(page));
-        }
-        return;
-      }
-
-      const cancelBtn = e.target.closest("[data-shipyard-queue-cancel]");
-      if (cancelBtn && page.contains(cancelBtn)) {
-        e.preventDefault();
-        e.stopPropagation();
-        const jobId = parseInt(cancelBtn.getAttribute("data-shipyard-queue-cancel") || "0", 10);
-        const planetId = parseInt(page.dataset.planetId || "0", 10);
-        if (!jobId || cancelBtn.dataset.busy === "1") return;
-        cancelBtn.dataset.busy = "1";
-        cancelBtn.disabled = true;
-        try {
-          const res = await GC.fetchGameAction("/api/shipyard/queue/cancel", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ job_id: jobId, planet_id: planetId || undefined }),
-          });
-          if (res?.ok) {
-            _lastShipyardQueueSignature = "";
-            if (res.state) {
-              applyActionState(res, "shipyard_cancel");
-            }
-            if (res.data) {
-              applyShipyardState(page, res.data);
-            } else if (!res.state) {
-              await refreshShipyardState(page);
-            }
-            if (typeof GC.refreshGameState === "function") await GC.refreshGameState("shipyard_cancel");
-          } else {
-            showNotify(reasonText(res?.error || apiError(res)), "error");
-          }
-        } catch (_) {
-          showNotify(reasonText("cancel_failed"), "error");
-        } finally {
-          delete cancelBtn.dataset.busy;
-          cancelBtn.disabled = false;
-        }
-        return;
-      }
-
-      const moveUp = e.target.closest("[data-shipyard-queue-up]");
-      const moveDown = e.target.closest("[data-shipyard-queue-down]");
-      const moveBtn = moveUp || moveDown;
-      if (moveBtn && page.contains(moveBtn)) {
-        e.preventDefault();
-        const jobId = parseInt(
-          moveBtn.getAttribute("data-shipyard-queue-up") ||
-          moveBtn.getAttribute("data-shipyard-queue-down") || "0",
-          10
-        );
-        const planetId = parseInt(page.dataset.planetId || "0", 10);
-        if (!jobId) return;
-        moveBtn.disabled = true;
-        try {
-          const res = await GC.fetchGameAction("/api/shipyard/queue/move", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              job_id: jobId,
-              direction: moveUp ? "up" : "down",
-              planet_id: planetId || undefined,
-            }),
-          });
-          if (res?.ok) {
-            _lastShipyardQueueSignature = "";
-            if (res.data) applyShipyardState(page, res.data);
-            else await refreshShipyardState(page);
-          } else {
-            showNotify(reasonText(res?.error || apiError(res)), "error");
-          }
-        } catch (_) {
-          showNotify(reasonText("generic"), "error");
-        } finally {
-          moveBtn.disabled = false;
-        }
-        return;
-      }
-
-      const buildBtn = e.target.closest("[data-shipyard-build]");
-      if (!buildBtn || !page.contains(buildBtn) || buildBtn.disabled) return;
-      if (buildBtn.dataset.building === "1" || buildBtn.dataset.canBuild === "0") return;
-      e.preventDefault();
-      const shipKey = buildBtn.getAttribute("data-shipyard-build");
-      const qtyInp = page.querySelector(`[data-shipyard-qty="${shipKey}"]`);
-      const amount = readNumberInput(qtyInp) || 1;
-      const planetId = parseInt(page.dataset.planetId || "0", 10);
-      buildBtn.dataset.building = "1";
-      buildBtn.disabled = true;
-      buildBtn.classList.add("is-loading");
-      try {
-        const res = await GC.fetchGameAction("/api/shipyard/build", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ship_key: shipKey, amount, planet_id: planetId || undefined }),
-        });
-        if (res?.ok) {
-          _lastShipyardQueueSignature = "";
-          if (res.state) {
-            applyActionState(res, "shipyard_build");
-          }
-          if (res.data) {
-            applyShipyardState(page, res.data);
-          } else if (!res.state) {
-            await refreshShipyardState(page);
-          } else if (typeof GC.refreshGameState === "function") {
-            await GC.refreshGameState("shipyard_build");
-          }
-        } else {
-          const errKey = res?.error || apiError(res);
-          showNotify(reasonText(errKey), "error");
-        }
-      } catch (_) {
-        showNotify(reasonText("generic"), "error");
-      } finally {
-        delete buildBtn.dataset.building;
-        buildBtn.classList.remove("is-loading");
-        buildBtn.disabled = buildBtn.dataset.canBuild !== "1";
-      }
-    });
-  }
-
+  /** Thin delegate — real bind/init in GC.pages.shipyard (shipyard.js). */
   function initShipyard() {
-    bindShipyardOnce();
-    const page = document.getElementById("shipyard-page");
-    if (!page || page.dataset.ready !== "1") return;
-    const data = parseShipyardPageData(page);
-    if (!data) return;
-    applyShipyardState(page, data);
-    startShipyardTimers();
-    GC.registerCleanup(stopShipyardTimers);
-    GC.startProgressTicker();
+    if (GC.pages && typeof GC.pages.shipyard?.init === "function") {
+      return GC.pages.shipyard.init();
+    }
   }
 
   let _defenseRefreshTimer = null;
@@ -24395,7 +24038,9 @@
 
       const toggle = e.target.closest(".gc-nav-section-toggle");
       sidebar = toggle?.closest(".gc-sidebar-desktop, .gc-sidebar-mobile-drawer");
-      if (!toggle || !sidebar) return;
+      if (!toggle || !sidebar) {
+        return;
+      }
       e.preventDefault();
       const section = toggle.closest("[data-nav-section]");
       if (!section || section.hidden) return;
@@ -24697,10 +24342,21 @@
             if (!el || !name) return;
             el.textContent = name;
           });
-          // Admin shell: never PJAX-reload /admin — keep switch live (HUD + state only).
-          const onAdmin =
-            typeof GC.detectPage === "function" && GC.detectPage() === "admin";
-          if (!onAdmin) {
+          // Admin / planet-agnostic pages: HUD-only (no SSR). Fleet refreshes its own API.
+          // Planet-scoped pages still soft-PJAX with skipGameState (content must match active planet).
+          const pageName =
+            typeof GC.detectPage === "function" ? GC.detectPage() : "";
+          const onAdmin = pageName === "admin";
+          const PLANET_SWITCH_SKIP_SSR = new Set([
+            "admin",
+            "fleet",
+            "messages",
+            "alliance",
+            "ranking",
+            "options",
+          ]);
+          const skipSsr = PLANET_SWITCH_SKIP_SSR.has(pageName);
+          if (!onAdmin && !skipSsr) {
             await GC.reloadCurrentPage({
               force: true,
               skipHydrate: true,
@@ -24708,6 +24364,7 @@
               skipPolling: true,
             });
           }
+          ensurePlanetLandscapeAfterSoftNav();
           syncScopedPlanetIds(planetId);
           bootstrapResourceLiveFromDom();
           bootstrapHeaderBoostersFromDom();
@@ -24777,6 +24434,21 @@
         headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
         body: JSON.stringify(body || {}),
       });
+    };
+
+    /** GC-CLEAN-002 — always patch state first; soft content only for structural PE SSR. */
+    const finalizePeMutationSuccess = async (res, reason, { softContent = false } = {}) => {
+      if (res?.state && typeof applyActionState === "function") {
+        applyActionState(res, reason);
+      } else if (typeof GC.refreshGameState === "function") {
+        await GC.refreshGameState(reason);
+      }
+      if (softContent) await _softReloadPlanetEvolutionContent();
+    };
+
+    const peMutationFailed = (btn, res) => {
+      if (btn) btn.disabled = false;
+      showNotify(reasonText(res?.reason), "error");
     };
 
     const scrollTargets = {
@@ -25081,10 +24753,9 @@
         });
         if (res?.ok) {
           closePeChoiceConfirmModal();
-          await GC.reloadCurrentPage();
+          await finalizePeMutationSuccess(res, "pe_research_choose", { softContent: true });
         } else {
-          choiceBtn.disabled = false;
-          alert(reasonText(res?.reason));
+          peMutationFailed(choiceBtn, res);
         }
       } finally {
         if (submitBtn) submitBtn.disabled = false;
@@ -25266,13 +24937,8 @@
         let res;
         try {
           res = await postAction(`/api/planets/${planetId}/research/start`, { tech_key: techKey, request_id: requestId });
-          if (res?.ok) {
-            if (res.state && typeof applyActionState === "function") {
-              applyActionState(res, "planet_research_start");
-            } else if (typeof GC.refreshGameState === "function") {
-              await GC.refreshGameState("planet_research_start");
-            }
-          } else showNotify(reasonText(res?.reason), "error");
+          if (res?.ok) await finalizePeMutationSuccess(res, "planet_research_start", { softContent: false });
+          else peMutationFailed(researchBtn, res);
         } finally {
           if (!res?.ok) researchBtn.disabled = false;
         }
@@ -25294,11 +24960,8 @@
         specBtn.disabled = true;
         const planetId = parseInt(picker.dataset.planetId || "0", 10);
         const res = await postAction(`/api/planets/${planetId}/specialization/pick`, { spec_key: specBtn.dataset.specKey });
-        if (res?.ok) await GC.reloadCurrentPage();
-        else {
-          specBtn.disabled = false;
-          alert(reasonText(res?.reason));
-        }
+        if (res?.ok) await finalizePeMutationSuccess(res, "pe_spec_pick", { softContent: true });
+        else peMutationFailed(specBtn, res);
         return;
       }
 
@@ -25307,11 +24970,8 @@
         specUpgradeBtn.disabled = true;
         const planetId = parseInt(specUpgradeBtn.dataset.planetId || "0", 10);
         const res = await postAction(`/api/planets/${planetId}/specialization/upgrade`, {});
-        if (res?.ok) await GC.reloadCurrentPage();
-        else {
-          specUpgradeBtn.disabled = false;
-          alert(reasonText(res?.reason));
-        }
+        if (res?.ok) await finalizePeMutationSuccess(res, "pe_spec_upgrade", { softContent: true });
+        else peMutationFailed(specUpgradeBtn, res);
         return;
       }
 
@@ -25325,11 +24985,8 @@
           slot,
           policy_key: policyBtn.dataset.policyKey,
         });
-        if (res?.ok) await GC.reloadCurrentPage();
-        else {
-          policyBtn.disabled = false;
-          alert(reasonText(res?.reason));
-        }
+        if (res?.ok) await finalizePeMutationSuccess(res, "pe_policy_activate", { softContent: true });
+        else peMutationFailed(policyBtn, res);
         return;
       }
 
@@ -25343,11 +25000,8 @@
           event_id: eventId,
           choice_key: eventChoiceBtn.dataset.choiceKey,
         });
-        if (res?.ok) await GC.reloadCurrentPage();
-        else {
-          eventChoiceBtn.disabled = false;
-          alert(reasonText(res?.reason));
-        }
+        if (res?.ok) await finalizePeMutationSuccess(res, "pe_event_resolve", { softContent: true });
+        else peMutationFailed(eventChoiceBtn, res);
         return;
       }
 
@@ -31650,9 +31304,9 @@
         document.body.style.removeProperty("--planet-landscape-webp");
       }
     } else {
-      document.body.classList.remove("gc-has-planet-landscape");
-      document.body.style.removeProperty("--planet-landscape");
-      document.body.style.removeProperty("--planet-landscape-webp");
+      // Lightweight PJAX omits shell landscape SSR — "not provided", never clear.
+      // Restore from lastState / existing body vars so gc-perf-idle does not hide .gc-bg.
+      ensurePlanetLandscapeAfterSoftNav();
     }
     if (typeof GC.syncSidebarSticky === "function") GC.syncSidebarSticky();
     if (push) history.pushState({ gcPjax: true }, "", url);

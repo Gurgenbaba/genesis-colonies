@@ -24,7 +24,7 @@ QUEUE_PAGES = {
         "compact_id": "research-mini-queue",
         "compact_label": "research-mini-queue",
         "card_attr": "data-research-card",
-        "card_queue": "render_research_card_queue",
+        "card_queue": "render_hero_queue",
         "mini_queue": True,
     },
     "shipyard": {
@@ -80,9 +80,9 @@ def _compact_sections(html: str, compact_id: str) -> str:
 
 
 def test_all_queue_pages_have_compact_status():
-    macro = _read("templates/partials/page_queue_compact.html")
-    assert "gc-page-queue-compact" in macro
-    assert "data-page-queue-compact-body" in macro
+    macro = _read("templates/partials/page_mini_queue_strip.html")
+    assert "gc-mini-queue-strip" in macro
+    assert "gc-mini-queue-card" in macro
     for page, cfg in QUEUE_PAGES.items():
         html = _read(cfg["template"])
         if cfg.get("queue_list_ids"):
@@ -92,7 +92,9 @@ def test_all_queue_pages_have_compact_status():
             continue
         compact_ids = cfg.get("compact_ids") or ([cfg["compact_id"]] if cfg.get("compact_id") else [])
         if cfg.get("skip_compact") or not compact_ids:
-            assert "render_page_queue_compact" in html, f"{page}: missing render_page_queue_compact"
+            assert "render_page_mini_queue_strip" in html or "gc-card-queue-list" in html, (
+                f"{page}: missing mini queue or card queue list"
+            )
             continue
         for compact_id in compact_ids:
             assert compact_id in html, f"{page}: missing compact id {compact_id}"
@@ -103,11 +105,11 @@ def test_all_queue_pages_have_compact_status():
                         f"{page}: #{compact_id} must use gc-mini-queue-strip"
                     )
                 else:
-                    assert "gc-queue-compact" in section, (
-                        f"{page}: #{compact_id} must use gc-queue-compact"
+                    assert "render_page_mini_queue_strip" in html, (
+                        f"{page}: #{compact_id} must use mini queue strip"
                     )
             else:
-                assert "render_page_queue_compact" in html or "render_page_mini_queue_strip" in html
+                assert "render_page_mini_queue_strip" in html
 
 
 def test_buildings_uses_page_compact_header_only():
@@ -213,9 +215,9 @@ def test_main_js_no_legacy_queue_panel_roots():
 
 def test_style_unified_queue_compact_and_reduced_motion():
     css = _read("static/style.css")
-    assert ".gc-queue-compact{" in css
     assert ".gc-mini-queue-strip{" in css
     assert ".gc-mini-queue-card--active{" in css
+    assert ".gc-page-queue-compact" not in css
     assert ".gc-card-queue-block--queued{" in css
     assert ".gc-card-queue-bar{" in css
     assert "@media (prefers-reduced-motion: reduce)" in css

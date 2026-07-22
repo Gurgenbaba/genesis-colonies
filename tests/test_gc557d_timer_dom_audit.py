@@ -30,9 +30,7 @@ def test_gc557d_scoped_pages_have_planet_id():
 
 def test_gc557d_queue_partials_use_canonical_timer_attrs():
     for path in (
-        "templates/partials/build_queue.html",
-        "templates/partials/research_queue.html",
-        "templates/partials/shipyard_queue.html",
+        "templates/partials/page_mini_queue_strip.html",
         "templates/partials/card_queue_macros.html",
     ):
         body = _read(path)

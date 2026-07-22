@@ -16,6 +16,15 @@ def _read(rel: str) -> str:
 
 
 def test_fetch_game_action_not_cleanup_abortable():
+    """
+    GC-835 — mutation fetches must survive PJAX cleanup.
+
+    Why updated: fetchGameAction may forward an optional caller AbortSignal
+    (`signal: externalSignal`) for intentional cancel. That is not pageLifecycle wiring.
+
+    Still required: no registration with pageLifecycle.abortControllers / registerCleanup,
+    and no local AbortController owned by the helper.
+    """
     src = _read("static/main.js")
     block = src.split("/** GC-835 — mutation fetches must not register with pageLifecycle")[1].split(
         "function newRequestId"
@@ -24,7 +33,9 @@ def test_fetch_game_action_not_cleanup_abortable():
     assert "pageLifecycle.abortControllers" not in block
     assert "GC.registerCleanup" not in block
     assert "AbortController" not in block
-    assert "signal:" not in block
+    assert "const externalSignal = fetchOpts.signal" in block
+    assert "signal: externalSignal" in block
+    assert "pageLifecycle.abortControllers.push" not in block
 
 
 def test_cancel_clears_hero_time_chip_timer():
@@ -122,7 +133,7 @@ def test_no_duplicate_listeners_after_pjax():
 
 
 def test_gc_clean_002_pe_immediate_patch_and_action_state():
-    """GC-CLEAN-002 — PE queues patch immediately; research start uses applyActionState."""
+    """GC-CLEAN-002 — PE queues patch immediately; mutations use applyActionState first."""
     src = _read("static/main.js")
 
     patch_immediate = src.split("function patchQueuePanelsImmediate(data)")[1].split(
@@ -149,8 +160,24 @@ def test_gc_clean_002_pe_immediate_patch_and_action_state():
     )[0]
     assert "_schedulePlanetEvolutionRefreshAfterAction" in apply_action
 
+    assert "const finalizePeMutationSuccess = async" in src
+    assert 'await finalizePeMutationSuccess(res, "planet_research_start"' in src
+    assert 'await finalizePeMutationSuccess(res, "pe_spec_pick"' in src
+    assert 'await finalizePeMutationSuccess(res, "pe_spec_upgrade"' in src
+    assert 'await finalizePeMutationSuccess(res, "pe_policy_activate"' in src
+    assert 'await finalizePeMutationSuccess(res, "pe_event_resolve"' in src
+    assert 'await finalizePeMutationSuccess(res, "pe_research_choose"' in src
+
     pe_bind = src.split("const researchBtn = e.target.closest(\".pe-research-btn\")")[1].split(
         "const choiceBtn = e.target.closest(\".pe-choice-btn\")"
     )[0]
-    assert "applyActionState(res, \"planet_research_start\")" in pe_bind
+    assert "finalizePeMutationSuccess(res, \"planet_research_start\"" in pe_bind
     assert "reloadCurrentPage" not in pe_bind
+    assert "softContent: false" in pe_bind
+
+    soft = src.split("async function _softReloadPlanetEvolutionContent()")[1].split(
+        "function _schedulePlanetEvolutionRefreshAfterAction"
+    )[0]
+    assert "skipGameState: true" in soft
+    assert "skipHydrate: true" in soft
+    assert "skipPolling: true" in soft

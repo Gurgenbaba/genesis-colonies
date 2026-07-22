@@ -90,7 +90,7 @@ Neue Ausnahmen nur mit Eintrag in `tests/test_core_architecture_enforcement.py` 
 
 `state` = vollständiger oder panel-relevanter game-state payload (wie nach `POST` Build/Research).
 
-**Ausnahme (GC-512D):** Shipyard `POST /api/shipyard/build` und `/api/shipyard/queue/cancel` liefern `{ ok, data }` via `fleet_ok()` — Client nutzt `applyShipyardState`, nicht `applyActionState`. Siehe [STATE_AJAX.md](STATE_AJAX.md).
+**Shipyard (GC-512D):** `POST /api/shipyard/build` und `/api/shipyard/queue/cancel` liefern `{ ok, state }` via `fleet_ok()` + `body["state"]` (optional zusätzlich `data`). Client: **state-first** — `applyActionState(res)` wenn `res.state`; `applyShipyardState(page, res.data)` nur wenn `res.data` (Stocks/Labels). Siehe [STATE_AJAX.md](STATE_AJAX.md).
 
 ### Client
 

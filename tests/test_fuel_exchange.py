@@ -8,8 +8,7 @@ import pytest
 
 from game import db as gdb
 from game.db import db
-from game.exchange import get_exchange_status
-from game.fuel_exchange import buy_fuel_cells, preview_fuel_purchase
+from game.exchange import execute_exchange, get_exchange_config, get_exchange_status
 from game.models import create_user, ensure_player_and_homeworld, init_db
 
 
@@ -44,20 +43,28 @@ def test_buy_fuel_cells_costs_metal_and_crystal(fuel_ex_db):
         )
         conn.commit()
 
-        prev = preview_fuel_purchase(100, conn=conn)
-        assert prev["metal_cost"] > 0 and prev["crystal_cost"] > 0
+        cfg = get_exchange_config(conn=conn)
+        metal_per = max(1, int(cfg["fuel_metal_per_unit"]))
+        crystal_per = max(1, int(cfg["fuel_crystal_per_unit"]))
+        units = 100
+        assert metal_per > 0 and crystal_per > 0
 
-        ok_b, reason, result = buy_fuel_cells(
-            player_id=uid, planet_id=planet_id, units=100, conn=conn
+        ok_b, reason, result = execute_exchange(
+            player_id=uid,
+            planet_id=planet_id,
+            from_resource="metal",
+            to_resource="fuel_cells",
+            amount=units * metal_per,
+            conn=conn,
         )
         assert ok_b, reason
         assert result is not None
-        assert result["to"] == "fuel_cells"
-        assert int(result["receive_amount"]) >= 100
+        assert result.get("receive_resource") == "fuel_cells"
+        assert int(result.get("receive_amount") or 0) >= units
 
         cur.execute("SELECT metal, crystal, fuel_cells FROM planets WHERE id = ?;", (planet_id,))
         after = dict(cur.fetchone())
-        assert float(after["fuel_cells"]) >= float(row["fuel_cells"]) + 100
+        assert float(after["fuel_cells"]) >= float(row["fuel_cells"]) + units
         assert float(after["metal"]) < 50000.0
     finally:
         conn.close()

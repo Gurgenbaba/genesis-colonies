@@ -7526,10 +7526,10 @@ def api_fuel_exchange_buy():
         return jsonify({"ok": False, "reason": "not_logged_in"}), 401
 
     data = request.get_json(silent=True) or {}
-    from game.fuel_exchange import buy_fuel_cells, fuel_exchange_schema_ready
+    from game.exchange import execute_exchange, exchange_schema_ready, get_exchange_config
     from game.planet_evolution.repository import get_context_planet
 
-    if not fuel_exchange_schema_ready(db()):
+    if not exchange_schema_ready(db()):
         state, _ = _build_game_state_payload(include_panel=True, finish_source="api_fuel_exchange")
         return jsonify({"ok": False, "reason": "fuel_exchange_unavailable", "state": state}), 503
 
@@ -7542,10 +7542,14 @@ def api_fuel_exchange_buy():
     conn = db()
     try:
         planet = get_context_planet(user_id, conn=conn)
-        ok, reason, result = buy_fuel_cells(
+        cfg = get_exchange_config(conn=conn)
+        metal_amount = units * max(1, int(cfg["fuel_metal_per_unit"]))
+        ok, reason, result = execute_exchange(
             player_id=user_id,
             planet_id=int(planet["id"]),
-            units=units,
+            from_resource="metal",
+            to_resource="fuel_cells",
+            amount=metal_amount,
             conn=conn,
         )
     finally:
@@ -9653,6 +9657,26 @@ def api_planet_research_start(planet_id: int):
     if request_id:
         save_idempotent_action(user_id, request_id, resp.get_json())
     return resp
+
+
+@app.route("/api/planets/<int:planet_id>/research/cancel", methods=["POST"])
+@require_login
+def api_planet_research_cancel(planet_id: int):
+    """GC-PE-CANCEL-001 — cancel planet research job with refund (owner: cancel_planet_research_job)."""
+    data = request.get_json(silent=True) or {}
+    try:
+        job_id = int(data.get("job_id") or 0)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "reason": "missing_job_id"}), 400
+    if job_id <= 0:
+        return jsonify({"ok": False, "reason": "missing_job_id"}), 400
+    from game.planet_evolution.planet_research import cancel_planet_research_job
+    from game.models import get_planet_owner_id
+
+    if get_planet_owner_id(planet_id) != int(session["user_id"]):
+        return jsonify({"ok": False, "reason": "forbidden"}), 403
+    ok, reason = cancel_planet_research_job(planet_id, job_id)
+    return _action_json_response(ok, reason, finish_source="api_planet_research_cancel")
 
 
 @app.route("/api/planets/<int:planet_id>/research/choose", methods=["POST"])

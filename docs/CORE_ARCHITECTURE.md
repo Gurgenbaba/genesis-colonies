@@ -120,7 +120,7 @@ Zentraler Finisher: `game/queue_engine.py` — `finish_due_work_once()` / `finis
 
 Jede Spieler-Mutation liefert `{ "ok": true, "state": { … } }` (game-state payload). Frontend: **`applyActionState()`** — kein Reload nach Action.
 
-**Bekannte Ausnahmen (GC-512D):** Shipyard build/cancel und Teile der Fleet-GET-APIs nutzen `{ ok, data }` via `fleet_ok()` — Client: `applyShipyardState`. Siehe [STATE_AJAX.md](STATE_AJAX.md).
+**Shipyard (GC-512D):** build/cancel nutzen `fleet_ok()` + `body["state"]` → `{ ok, state }` (+ optional `data` für Stocks/Labels). Client ist **state-first**: `applyActionState` wenn `res.state`; `applyShipyardState` nur bei `res.data`. Fleet-GET-APIs können weiter `{ ok, data }` sein. Siehe [STATE_AJAX.md](STATE_AJAX.md).
 
 ---
 

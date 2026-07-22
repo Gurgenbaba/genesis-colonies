@@ -50,52 +50,6 @@
   {% endif %}
 {% endmacro %}
 
-{% macro render_research_card_queue(qj) %}
-  {% if qj is defined and qj %}
-  <div class="gc-card-queue-block gc-card-queue-block--research gc-card-queue-block--{{ qj.status }}"
-       data-gc-card-queue="1"
-       data-queue-active="{{ '1' if qj.status == 'active' else '0' }}"
-       data-timer-domain="research"
-       data-job-id="{{ qj.job_id|int }}"{{ render_card_queue_data_attrs(qj) }}>
-    <div class="gc-card-queue-head">
-      <span class="gc-card-queue-glyph gc-card-queue-glyph--research" aria-hidden="true"></span>
-      <span class="gc-card-queue-status">
-        {% if qj.status == 'active' %}
-          {{ T('queue_card_status_active', 'AKTIV') }}
-        {% else %}
-          {{ T('queue_card_status_queued', 'QUEUE #%(n)s', n=qj.queue_position|int) }}
-        {% endif %}
-      </span>
-    </div>
-    {% if qj.target_level is defined %}
-    <div class="gc-card-queue-level gc-mono">
-      {{ T('label_level_short', 'L') }}{{ (qj.current_level if qj.current_level is defined else (qj.target_level|int - 1))|int }}
-      →
-      {{ T('label_level_short', 'L') }}{{ qj.target_level|int }}
-    </div>
-    {% endif %}
-    <div class="gc-card-queue-time-row">
-      {{ render_timekeeper_apply_btn('research', qj) }}
-      {{ render_card_queue_timer(qj, 'research', 'game-state') }}
-    </div>
-    {% if qj.status == 'active' %}
-    <div class="gc-card-queue-bar" role="progressbar"
-         aria-valuemin="0" aria-valuemax="100"
-         aria-valuenow="{{ qj.progress_pct|default(0)|int }}">
-      <div class="gc-card-queue-bar-fill gc-progress-smooth"
-           style="width: {{ qj.progress_pct|default(0)|int }}%;"></div>
-      <div class="gc-card-queue-scanline gc-card-queue-scanline--research" aria-hidden="true"></div>
-    </div>
-    {% endif %}
-    <button type="button"
-            class="gc-btn gc-btn-ghost gc-btn-xs gc-card-queue-cancel"
-            data-research-cancel-id="{{ qj.job_id|int }}">
-      {{ T('action_cancel', 'Abbrechen') }}
-    </button>
-  </div>
-  {% endif %}
-{% endmacro %}
-
 {% macro render_hero_time_chip(qj, idle_seconds, timer_kind, idle_title) %}
   <span class="gc-bld-hero-time-chip gc-card-timer bcell-duration gc-mono" data-hero-time-chip title="{{ idle_title }}">
     {% if qj and qj.status == 'active' %}

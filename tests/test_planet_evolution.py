@@ -648,6 +648,55 @@ def test_api_spec_pick_route(evo_db):
         data = r.get_json()
         assert data.get('ok') is True, data.get('reason')
 
+
+def test_api_planet_research_cancel_route(evo_db):
+    """GC-PE-CANCEL-001 — cancel returns {ok, state} and removes the job."""
+    from game.planet_evolution.planet_research import cancel_planet_research_job, get_planet_research_queue
+
+    conn = db()
+    uid = _ensure_test_player(32, conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    ensure_planet_evolution(pid, conn)
+    cur = conn.cursor()
+    cur.execute("UPDATE planets SET metal = 999999, crystal = 999999 WHERE id = ?;", (pid,))
+    cur.execute("UPDATE planet_buildings SET research_lab = 5 WHERE planet_id = ?;", (pid,))
+    conn.commit()
+    ok, reason, extra = queue_planet_research(pid, "industry_t1_automation", player_id=uid, conn=conn)
+    assert ok is True, reason
+    job_id = int(extra["job_id"])
+    conn.close()
+
+    from app import app
+
+    with app.test_client() as client:
+        with client.session_transaction() as sess:
+            sess["user_id"] = uid
+        r = client.post(f"/api/planets/{pid}/research/cancel", json={"job_id": job_id})
+        assert r.status_code == 200, r.data
+        data = r.get_json()
+        assert data.get("ok") is True, data.get("reason")
+        assert "state" in data
+
+    conn = db()
+    assert get_planet_research_queue(pid, conn=conn) == []
+    # Service still owns cancel (route is thin)
+    ok2, reason2 = cancel_planet_research_job(pid, job_id, conn=conn)
+    assert ok2 is False
+    assert reason2 == "job_not_found"
+    conn.close()
+
+
+def test_main_js_planet_research_cancel_ui():
+    """GC-PE-CANCEL-001 — cancel button + handler for planet_research domain."""
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parents[1] / "static" / "main.js").read_text(encoding="utf-8")
+    assert 'cancelBtn.dataset.planetResearchCancelId = String(jobId)' in src
+    assert "domain !== \"ascension\"" in src
+    assert "/research/cancel" in src
+    assert "planetResearchCancelId" in src
+    assert 'applyActionState(json, json.ok ? "planet_research_cancel_success"' in src
+
 def test_policy_activate_route(evo_db):
     conn = db()
     uid = _ensure_test_player(33, conn=conn)

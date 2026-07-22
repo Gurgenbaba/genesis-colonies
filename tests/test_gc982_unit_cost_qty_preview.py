@@ -26,8 +26,11 @@ def test_main_js_unit_cost_qty_preview_helpers():
     assert "function resolveUnitCardPreviewQty(qtyInp)" in src
     assert "function storeUnitCardUnitCosts(costWrap, unitCosts)" in src
     assert "initMilitaryUnitCostPreviewDelegation()" in src
-    bind_sy = src.split("function bindShipyardOnce()")[1].split("function initShipyard")[0]
-    assert "syncUnitCardCostPreview(card, militaryPageResources(page))" in bind_sy
+    # GC-PERF-JS-002 — shipyard binder in pages/shipyard.js
+    bind_sy = _read("static/js/pages/shipyard.js").split("function bindShipyardOnce()")[1].split(
+        "function initShipyard"
+    )[0]
+    assert "syncUnitCardCostPreview(cardMax, militaryPageResources(page))" in bind_sy
     bind_def = src.split("function bindDefenseOnce()")[1].split("function initDefense")[0]
     assert "syncUnitCardCostPreview(card, militaryPageResources(page))" in bind_def
 

@@ -8,5 +8,5 @@
   var GC = (global.GC = global.GC || {});
   GC.core = GC.core || {};
   GC.pages = GC.pages || {};
-  GC.core.perfJsSplit = { version: 1, ticket: "GC-PERF-JS-001" };
+  GC.core.perfJsSplit = { version: 2, ticket: "GC-PERF-JS-002" };
 })(typeof window !== "undefined" ? window : globalThis);

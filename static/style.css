@@ -5658,7 +5658,8 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 }
 
 /* Trader Hub — layout & controls (panels use shared gc-panel) */
-.visually-hidden{
+.visually-hidden,
+.gc-sr-only{
   position: absolute !important;
   width: 1px !important;
   height: 1px !important;
@@ -9317,131 +9318,6 @@ a.gc-bld-head-action-btn--go:focus-visible{
   display: none;
 }
 
-/* GC-536F — unified compact queue headers (count only, no timers) */
-.gc-queue-compact{
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-  padding: 8px 12px 6px;
-  border-bottom: none;
-  min-width: 0;
-  max-width: 100%;
-}
-
-/* GC-536B / GC-644C — unified page queue compact header */
-.gc-page-queue-compact,
-.build-queue-compact,
-.research-queue-compact,
-.shipyard-queue-compact,
-.defense-queue-compact{
-  gap: 8px 10px;
-  padding: 8px 12px;
-  min-height: 38px;
-}
-
-.gc-page-queue-compact-icon,
-.build-queue-compact-icon,
-.research-queue-compact-icon,
-.shipyard-queue-compact-icon,
-.defense-queue-compact-icon{
-  flex: 0 0 auto;
-  font-size: 1rem;
-  line-height: 1;
-  opacity: 0.92;
-}
-
-.gc-page-queue-compact-body,
-.build-queue-compact-body{
-  display: flex;
-  flex: 1 1 auto;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 10px;
-  min-width: 0;
-}
-
-.gc-page-queue-compact-label,
-.gc-page-queue-compact-active,
-.build-queue-compact-label,
-.build-queue-compact-active{
-  min-width: 0;
-  font-size: 0.82rem;
-  line-height: 1.35;
-  color: var(--gc-text-soft);
-}
-
-.gc-page-queue-compact-active,
-.build-queue-compact-active{
-  color: var(--gc-text);
-}
-
-.gc-page-queue-compact-active .gc-card-queue-timer,
-.gc-page-queue-compact-timer,
-.build-queue-compact-timer{
-  color: var(--gc-primary-2);
-}
-
-.gc-page-queue-compact-sep,
-.build-queue-compact-sep{
-  flex: 0 0 auto;
-  color: rgba(127, 255, 217, 0.28);
-  font-size: 0.78rem;
-}
-
-.gc-page-queue-compact-next,
-.build-queue-compact-next{
-  min-width: 0;
-  font-size: 0.78rem;
-  color: var(--gc-text-dim);
-}
-
-.gc-page-queue-compact-cancel,
-.build-queue-compact-cancel{
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.35rem;
-  height: 1.35rem;
-  padding: 0;
-  margin: 0;
-  border-radius: 2px;
-  border: 1px solid rgba(255, 90, 90, 0.45);
-  background: rgba(255, 60, 60, 0.12);
-  color: rgba(255, 130, 130, 0.95);
-  font-size: 0.9rem;
-  line-height: 1;
-  cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
-}
-
-.gc-page-queue-compact-cancel:hover,
-.gc-page-queue-compact-cancel:focus-visible,
-.build-queue-compact-cancel:hover,
-.build-queue-compact-cancel:focus-visible{
-  color: #ffd0d0;
-  border-color: rgba(255, 120, 120, 0.65);
-  background: rgba(255, 70, 70, 0.22);
-}
-
-.gc-page-queue-compact-cancel[hidden],
-.build-queue-compact-cancel[hidden]{
-  display: none !important;
-}
-
-.gc-page-queue-compact-slots,
-.gc-page-queue-compact-planet,
-.build-queue-planet-chip{
-  flex: 0 0 auto;
-  margin-left: auto;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: rgba(180, 245, 255, 0.82);
-  white-space: nowrap;
-}
-
 /* GC-QUEUE-MINI-CARDS — compact horizontal jobs in one row */
 .gc-mini-queue-host{
   display: block;
@@ -9924,10 +9800,6 @@ a.gc-bld-head-action-btn--go:focus-visible{
 }
 
 /* GC-536C — research card queue accents */
-.research-queue-compact{
-  /* extends .gc-page-queue-compact */
-}
-
 .gc-research-card--in-queue{
   border-color: rgba(168, 120, 255, 0.28);
   box-shadow:

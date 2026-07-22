@@ -2,7 +2,7 @@
 
 **Epic:** Performance / Alpha UX  
 **Priorität:** P1 — Regression aus GC-547C  
-**Status:** ✅ Implementiert (2026-06-05)
+**Status:** ✅ Implementiert (2026-06-05) · **PJAX-Preserve** ✅ (2026-07-22)
 
 ---
 
@@ -10,9 +10,13 @@
 
 Planet-Landscapes erschienen nicht beim ersten Seitenaufruf — erst nach Build-Action / `applyGameStateData()`, wenn `gc-perf-idle` kurz entfiel.
 
+**Folgeregression (PJAX):** Nach Light-PJAX / Soft-Reload verschwand die Shell-Landschaft dauerhaft. Lightweight-Fragment-SSR liefert kein `--planet-landscape`; `applyPjaxPayload` interpretierte das als Clear. Mit `skipGameState` / Diet-`unchanged` kam kein Restore — und `gc-perf-idle:not(.gc-has-planet-landscape)` blendete `.gc-bg` aus.
+
 ## Root Cause
 
 GC-547C setzte `body.gc-perf-idle .gc-bg { display: none }` global. Landscape wird auf `.gc-bg` gerendert (SSR: `gc-has-planet-landscape` + `--planet-landscape`). Im Idle blieb der Layer ausgeblendet, obwohl Body-Klasse und CSS-Variable korrekt waren.
+
+PJAX: leere Payload-Landscape ≠ „kein Planet“ — Shell-Contract (GC-PERF-PJAX-CTX-SHELL-001): Landscape gehört zur Shell und bleibt im DOM.
 
 ## Fix
 
@@ -25,7 +29,9 @@ GC-547C setzte `body.gc-perf-idle .gc-bg { display: none }` global. Landscape wi
 ### `static/main.js`
 
 - `bootstrapPlanetLandscapeFromBoot()` in `initShellOnce()` — SSR `--planet-landscape` oder `GC.lastState`
-- `applyPlanetLandscapeFromState()` entfernt Landscape bei fehlender URL (Planetwechsel)
+- `applyPlanetLandscapeFromState()` entfernt Landscape nur bei explizit leerer `landscape_url` im State
+- `applyPjaxPayload`: leere PJAX-Landscape → **nicht clearen**; `ensurePlanetLandscapeAfterSoftNav()` (lastState / boot)
+- Soft-Reload PE + Planet-Switch: Guard `ensurePlanetLandscapeAfterSoftNav()` nach PJAX
 
 ---
 
@@ -33,11 +39,12 @@ GC-547C setzte `body.gc-perf-idle .gc-bg { display: none }` global. Landscape wi
 
 - [x] CSS: Landscape bei `gc-perf-idle` sichtbar
 - [x] Boot: `bootstrapPlanetLandscapeFromBoot()` vor `syncPerfBodyClasses`
+- [x] PJAX ohne Landscape-SSR clear’t Shell nicht
 - [ ] `/overview`, `/buildings` — Landscape sofort sichtbar (Browser)
 - [ ] Planetwechsel aktualisiert Landscape
 - [ ] Login/Landing GPU-schonend (`.gc-bg` weiter aus)
 - [ ] `runningAnims: 0` idle
-- [x] `pytest tests/test_static_live_updates.py -v` grün
+- [x] `pytest tests/test_static_live_updates.py -k landscape -q` grün
 
 ---
 

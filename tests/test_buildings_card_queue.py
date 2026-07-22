@@ -232,6 +232,11 @@ def test_main_js_updates_page_queue_compact():
 
 
 def test_main_js_excludes_building_queue_from_global_hud():
+    """Buildings use mini-queue strip; retired page-compact updater must stay gone."""
     js = (ROOT / "static/main.js").read_text(encoding="utf-8")
-    assert '_globalQueueHudDomain(j) !== "building"' in js
-    assert "_updatePageQueueCompact" in js
+    assert "_updatePageQueueCompact" not in js
+    assert "_renderProductionMiniQueue" in js
+    assert "build-mini-queue" in js
+    assert "GC.renderMiniQueueStrip" in js
+    base = (ROOT / "templates/base.html").read_text(encoding="utf-8")
+    assert "data-global-queue-hud" not in base

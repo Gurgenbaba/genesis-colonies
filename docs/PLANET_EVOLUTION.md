@@ -231,6 +231,7 @@ Template: `templates/planet_evolution.html` (Traits, Spec, Research, Events, Pol
 | `/api/planets/<id>/state` | GET | Voller Evolution-Payload |
 | `/api/planets/<id>/research` | GET | Planet-Tech Status |
 | `/api/planets/<id>/research/start` | POST | Queue Planet-Tech |
+| `/api/planets/<id>/research/cancel` | POST | Cancel Planet-Tech (+ Refund) |
 | `/api/planets/<id>/research/choose` | POST | Locked choice |
 | `/api/planets/<id>/specialization/pick` | POST | Spec wählen (Level ≥ 8) |
 | `/api/planets/<id>/specialization/upgrade` | POST | Spec-Tier |

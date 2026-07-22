@@ -123,24 +123,37 @@ def test_api_ship_detail_atlas_and_mule_return_200(ship_assets_db, monkeypatch):
 
 
 def test_main_js_shipyard_polling_idempotent_and_cleanup():
+    """
+    Shipyard timers stay in main.js; cleanup registration moved with init (GC-PERF-JS-002).
+
+    Why updated: shipyard page uses mini-queue strip (not inline render_card_queue_timer).
+    Still required: start/stop timer helpers + cleanup + central updatePageTimers.
+    """
     src = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
     assert "stopShipyardTimers" in src
     assert "startShipyardTimers" in src
-    assert "GC.registerCleanup(stopShipyardTimers)" in src
+    assert "GC.stopShipyardTimers = stopShipyardTimers" in src
+    assert "GC.startShipyardTimers = startShipyardTimers" in src
+    sy_page = (ROOT / "static" / "js" / "pages" / "shipyard.js").read_text(encoding="utf-8")
+    assert "GC.registerCleanup(GC.stopShipyardTimers)" in sy_page
     assert "function updatePageTimers(serverNow)" in src
     assert "_pageTimerLoopRunning" in src
     shipyard_tpl = (ROOT / "templates" / "shipyard.html").read_text(encoding="utf-8")
     queue_macros = (ROOT / "templates" / "partials" / "card_queue_macros.html").read_text(encoding="utf-8")
-    assert "render_card_queue_timer" in shipyard_tpl
-    assert "data-timer-target" in queue_macros
+    mini_strip = (ROOT / "templates" / "partials" / "page_mini_queue_strip.html").read_text(encoding="utf-8")
+    assert "render_page_mini_queue_strip" in shipyard_tpl
+    assert "shipyard-mini-queue" in shipyard_tpl
+    assert "data-timer-target" in queue_macros or "data-timer-target" in mini_strip
     assert "queuePollBound" not in src
 
 
 def test_main_js_shipyard_build_button_loading_guard():
-    src = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
-    idx = src.index('const buildBtn = e.target.closest("[data-shipyard-build]")')
+    """Build loading guard lives in pages/shipyard.js after GC-PERF-JS-002."""
+    src = (ROOT / "static" / "js" / "pages" / "shipyard.js").read_text(encoding="utf-8")
+    idx = src.index('e.target.closest("[data-shipyard-build]")')
     block = src[idx : idx + 2200]
     assert "buildBtn.dataset.building" in block
     assert "is-loading" in block
     assert "dataset.canBuild" in block
     assert "reasonText(errKey)" in block
+    assert 'applyActionState(res, "shipyard_build")' in block

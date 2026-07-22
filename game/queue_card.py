@@ -8,7 +8,7 @@ Does not mutate DB, schedule jobs, or replace queue_engine / *_for_client owners
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, List, Mapping, MutableMapping, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 OWNER_BUILDING = "building"
 OWNER_RESEARCH = "research"
@@ -692,18 +692,3 @@ def enrich_mini_queue_jobs_batch_size(
             job["batch_size"] = _batch_capacity_for_defense(owner_key, lvl)
         out.append(job)
     return out
-
-
-def attach_card_jobs_by_owner(
-    payload: MutableMapping[str, Any],
-    card_jobs: Sequence[Mapping[str, Any]],
-    *,
-    field_name: str = "card_jobs_by_owner",
-) -> Dict[str, List[Dict[str, Any]]]:
-    """
-    Optional helper for future game-state enrichment (536B+).
-    Does not remove legacy queue fields.
-    """
-    grouped = group_card_jobs_by_owner_key(card_jobs)
-    payload[field_name] = grouped
-    return grouped

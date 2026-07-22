@@ -243,7 +243,7 @@ def test_main_js_progress_ticker_uses_server_time_and_interval():
     assert "_progressTickerDelayMs" in ticker_section
     assert "setTimeout(tick, _progressTickerDelayMs(getTimerServerNow()))" in ticker_section
     assert "requestAnimationFrame(tick)" not in ticker_section
-    update_all = src.split("function updateAllProgressBars(serverNow)")[1].split("function updateBuildQueueLive")[0]
+    update_all = src.split("function updateAllProgressBars(serverNow)")[1].split("let lastHadActiveJob = false")[0]
     assert "[data-gc-card-queue][data-queue-active='1']" in update_all
     assert "planet_research" in update_all
     assert "updatePlanetEvolutionResearchProgress" not in update_all
@@ -552,10 +552,11 @@ def test_main_js_gc802_planet_switch_state_sync():
     assert "syncScopedPlanetIds" in src
     assert '"logistics-page"' in src.split("function syncScopedPlanetIds")[1].split("function abortInFlight")[0]
     assert "abortInFlightGameStateFetches" in src
-    switch_section = src.split('applyActionState(res, "planet_switch")')[1][:1400]
+    switch_section = src.split('applyActionState(res, "planet_switch")')[1][:1800]
     planet_switch_apply = src.split("const isPlanetSwitch = reason === \"planet_switch\"")[1].split("function logStatusPollErrorOnce")[0]
     assert "GC.stopPolling()" in planet_switch_apply
     assert "hudOnly: isPlanetSwitch" in planet_switch_apply
+    assert "PLANET_SWITCH_SKIP_SSR" in switch_section
     assert "skipHydrate: true" in switch_section
     assert "skipGameState: true" in switch_section
     assert "preserveGameLoop" in src.split("GC.reloadCurrentPage = function reloadCurrentPage")[1].split("function hydratePageFromLastState", 1)[0]
@@ -569,6 +570,19 @@ def test_main_js_gc802_planet_switch_state_sync():
     overview = _read("templates/overview.html")
     assert "overview-wrapper" in overview
     assert 'data-planet-id="{{ planet.planet_id or 0 }}"' in overview
+
+
+def test_main_js_reload_purge_logistics_alliance():
+    """Wave2 — logistics/alliance success paths avoid redundant full PJAX when patched."""
+    src = _read("static/main.js")
+    success = src.split('mode === "collect" ? "logistics_collect_success"')[1].split("function initLogistics")[0]
+    assert "applyLogisticsActionState(page, res)" in success
+    assert "await refreshLogisticsLiveState(page)" in success
+    assert "reloadCurrentPage" not in success
+    assert "async function allianceFinalizeSuccess" in src
+    assert "ALLIANCE_PATCH_ONLY" in src
+    assert 'await allianceFinalizeSuccess("alliance_profile", out)' in src
+    assert 'await allianceFinalizeSuccess("alliance_create", out)' in src
 
 
 def test_main_js_gc742_ssr_skip_init_game_state():
@@ -1123,7 +1137,11 @@ def test_main_js_gc540_unified_page_timers():
     assert "id=\"resource-bar\"" in base or "data-countdown-scope" in base
     shipyard = _read("templates/shipyard.html")
     card_queue_macros = _read("templates/partials/card_queue_macros.html")
-    assert "render_card_queue_timer(qj, 'shipyard', 'shipyard')" in shipyard
+    mini_strip = _read("templates/partials/page_mini_queue_strip.html")
+    assert "render_page_mini_queue_strip" in shipyard
+    assert "shipyard-mini-queue" in shipyard
+    assert "data-timer-target" in mini_strip
+    assert "data-timer-kind" in mini_strip
     assert "data-timer-kind" in card_queue_macros
     logic = _read("game/logic.py")
     assert "live_server_timestamp" in logic
@@ -1161,19 +1179,18 @@ def test_main_js_gc541_queue_timer_hotfix():
     apply = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function refreshPageAfterQueueEvent")[0]
     assert "GC.startProgressTicker();" in apply
     assert "syncServerClockFromState(data)" in apply
-    build_partial = _read("templates/partials/build_queue.html")
-    assert 'data-timer-target' in build_partial
-    assert 'id="build-eta-live"' in build_partial
-    research_partial = _read("templates/partials/research_queue.html")
-    assert 'data-timer-target' in research_partial
-    shipyard_partial = _read("templates/partials/shipyard_queue.html")
-    assert 'data-timer-target' in shipyard_partial
+    mini_partial = _read("templates/partials/page_mini_queue_strip.html")
+    card_macros = _read("templates/partials/card_queue_macros.html")
+    assert 'data-timer-target' in mini_partial
+    assert 'data-countdown-at' in mini_partial
+    assert 'data-timer-target' in card_macros
+    assert 'data-countdown-at' in card_macros
     render_card_queue = src.split("GC.renderCardQueueBlock = function renderCardQueueBlock")[1].split("function _syncBuildQueueLiveState")[0]
     assert "applyQueueJobTimerAttrs" in render_card_queue
     assert "dataset.queueSig" in render_card_queue
     render_research = src.split("function renderResearchQueue(researchRaw)")[1].split("function _applyProgressFill")[0]
     assert "GC.startProgressTicker();" in render_research
-    update_all = src.split("function updateAllProgressBars(serverNow)")[1].split("function updateBuildQueueLive")[0]
+    update_all = src.split("function updateAllProgressBars(serverNow)")[1].split("let lastHadActiveJob = false")[0]
     assert "parseTimerTarget" in update_all
     assert "queueJobRemainingSeconds" in update_all.split("const buildActive")[1].split("const researchActive")[0]
 
@@ -1207,25 +1224,26 @@ def test_main_js_gc542_research_shipyard_queue_timer_parity():
     assert 'domain === "shipyard" || domain === "defense"' in src.split("GC.renderCardQueueBlock = function renderCardQueueBlock")[1].split("const sig = cardQueueJobSignature")[0]
     parse_section = src.split("function parseTimerTarget(raw)")[1].split("function resolveQueueJobFinishTime")[0]
     assert r"/^\d+(\.\d+)?$/" in parse_section
-    research_partial = _read("templates/partials/research_queue.html")
-    shipyard_partial = _read("templates/partials/shipyard_queue.html")
-    assert 'data-timer-target' in research_partial
-    assert 'data-countdown-at' in research_partial
-    assert 'data-timer-kind="research"' in research_partial
-    assert 'data-timer-target' in shipyard_partial
-    assert 'data-countdown-at' in shipyard_partial
-    assert 'data-timer-kind="shipyard"' in shipyard_partial
-    render_card_queue = src.split("GC.renderCardQueueBlock = function renderCardQueueBlock")[1].split("GC.clearBuildingCardQueue")[0]
+    mini_partial = _read("templates/partials/page_mini_queue_strip.html")
+    card_macros = _read("templates/partials/card_queue_macros.html")
+    assert 'data-timer-target' in mini_partial
+    assert 'data-countdown-at' in mini_partial
+    assert 'data-timer-kind="{{ domain }}"' in mini_partial
+    assert 'data-timer-target' in card_macros
+    assert 'data-countdown-at' in card_macros
+    assert 'data-timer-kind="{{ timer_kind }}"' in card_macros
+    render_card_queue = src.split("GC.renderCardQueueBlock = function renderCardQueueBlock")[1].split("function _syncBuildQueueLiveState")[0]
     assert "applyQueueJobTimerAttrs" in render_card_queue
-    assert "data-countdown-at" in _read("templates/partials/page_mini_queue_strip.html") or "countdown-at" in render_card_queue
+    assert "data-countdown-at" in mini_partial or "countdown-at" in render_card_queue
     render_shipyard = src.split("function renderShipyardQueue(page, queueData)")[1].split("function parseShipyardPageData")[0]
     assert "_renderProductionMiniQueue" in render_shipyard
-    assert "_updateShipyardQueueCompact" not in render_shipyard
+    assert "_updateShipyardQueueCompact" not in src
+    assert "_updatePageQueueCompact" not in src
     apply = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function refreshPageAfterQueueEvent")[0]
     assert "patchResearchPanelFromState(data)" in apply
     assert "patchShipyardPanelFromState(data, activePlanetId)" in apply
     assert "lastHadActiveShipyard" in apply
-    progress = src.split("function updateAllProgressBars(serverNow)")[1].split("function updateBuildQueueLive")[0]
+    progress = src.split("function updateAllProgressBars(serverNow)")[1].split("let lastHadActiveJob = false")[0]
     assert "RESEARCHQ.active.finishTime" in progress
     assert "SHIPYARDQ.active.finishTime" in progress
     assert "DEFENSEQ.active.finishTime" in progress
@@ -1256,7 +1274,10 @@ def test_main_js_gc631_formatted_unit_inputs_and_queue_clear():
     parse_fn = src.split("function parseIntNumber(n)")[1].split("function formatNumber")[0]
     assert r"^-?\d{1,3}(\.\d{3})+$" in parse_fn
     assert "GC.readNumberInput = readNumberInput" in src
-    shipyard_bind = src.split("function bindShipyardOnce()")[1].split("function initShipyard")[0]
+    # GC-PERF-JS-002 — binder extracted to pages/shipyard.js
+    shipyard_bind = _read("static/js/pages/shipyard.js").split("function bindShipyardOnce()")[1].split(
+        "function initShipyard"
+    )[0]
     assert "readNumberInput(qtyInp)" in shipyard_bind
     assert "maxBtn.dataset.maxQty" in shipyard_bind
     assert "parseIntNumber(" in shipyard_bind
@@ -1704,7 +1725,7 @@ def test_main_js_gc546d_production_completion_poll_storm_guards():
     assert "patchDefensePanelFromGameState(data, activePlanetId)" in sync_prod
     assert "completionReason" in sync_prod
 
-    progress = src.split("function updateAllProgressBars(serverNow)")[1].split("function updateBuildQueueLive")[0]
+    progress = src.split("function updateAllProgressBars(serverNow)")[1].split("let lastHadActiveJob = false")[0]
     assert 'document.getElementById("shipyard-page")?.querySelector(".shipyard-job.shipyard-job-active")' in progress
     assert 'document.getElementById("defense-page")?.querySelector(".shipyard-job.shipyard-job-active")' in progress
     assert "requestProductionCompletionSync" in progress
@@ -1777,7 +1798,7 @@ def test_main_js_gc546b_building_requirements_live_patch():
     assert "patchBuildingRequirements(row, b)" in patch
     assert "applyBuildingRowState(row, b)" in patch
     assert "syncBuildingHeadAction(actionCell, b, summary, bqQueueFull)" in patch
-    progress = src.split("function updateAllProgressBars(serverNow)")[1].split("function updateBuildQueueLive")[0]
+    progress = src.split("function updateAllProgressBars(serverNow)")[1].split("let lastHadActiveJob = false")[0]
     assert "_buildZeroHandled" in progress
     buildings_html = _read("templates/buildings.html")
     assert "data-building-req" in buildings_html
@@ -1905,15 +1926,37 @@ def test_main_js_gc548_landscape_visible_on_perf_idle_boot():
     css = _read("static/style.css")
 
     assert "function bootstrapPlanetLandscapeFromBoot()" in src
-    assert "bootstrapPlanetLandscapeFromBoot()" in src.split("function initShellOnce()")[1][:600]
+    # Requirement unchanged: on the ingame boot path, landscape before final syncPerfBodyClasses.
+    shell = src.split("function initShellOnce()")[1].split("// =========================\n  // Boot")[0]
+    boot_at = shell.find("bootstrapPlanetLandscapeFromBoot()")
+    assert boot_at >= 0
+    assert shell.find("syncPerfBodyClasses()", boot_at) > boot_at
     assert "applyPlanetLandscapeFromState(GC.lastState)" in src
 
-    clear = src.split("function applyPlanetLandscapeFromState(data)")[1].split("function bootstrapPlanetLandscapeFromBoot")[0]
+    clear = src.split("function applyPlanetLandscapeFromState(data)")[1].split("function ensurePlanetLandscapeAfterSoftNav")[0]
     assert 'classList.remove("gc-has-planet-landscape")' in clear
 
     block = css.split("GC-547C")[1][:900]
     assert "gc-has-planet-landscape" in block
     assert "body.gc-perf-idle.gc-has-planet-landscape .gc-bg" in block
+
+
+def test_main_js_pjax_preserves_shell_landscape_when_payload_empty():
+    """PJAX lightweight SSR omits landscape — must not clear shell; restore from lastState/boot."""
+    src = _read("static/main.js")
+    assert "function ensurePlanetLandscapeAfterSoftNav()" in src
+    pjax = src.split("async function applyPjaxPayload(url, payload, doc, opts = {})")[1].split(
+        "function pjaxPayloadFromDoc"
+    )[0]
+    assert "ensurePlanetLandscapeAfterSoftNav()" in pjax
+    assert 'classList.remove("gc-has-planet-landscape")' not in pjax
+    assert 'removeProperty("--planet-landscape")' not in pjax
+    soft_pe = src.split("async function _softReloadPlanetEvolutionContent()")[1].split(
+        "function _schedulePlanetEvolutionRefreshAfterAction"
+    )[0]
+    assert "ensurePlanetLandscapeAfterSoftNav()" in soft_pe
+    switch = src.split('applyActionState(res, "planet_switch")')[1][:2200]
+    assert "ensurePlanetLandscapeAfterSoftNav()" in switch
 
 
 def test_main_js_gc549_ship_defense_icons_use_png():
@@ -2047,7 +2090,8 @@ def test_main_js_gc539_same_type_queue_patch_and_timer_zero():
     src = _read("static/main.js")
 
     assert "function findCardQueueBlockByJobId(cardEl, jobId)" in src
-    assert "function reorderCardQueueBlocks(cardEl)" in src
+    assert "function reorderCardQueueBlocks(cardEl)" not in src
+    assert "GC.clearBuildingCardQueue" not in src
     assert "function syncCardQueueOwnerClassesFromBlocks(cardEl, fallbackDomain)" in src
     assert "function requestQueueTimerZeroRefresh(meta)" in src
     assert "forceCanonicalGameStateRefresh(\"queue_timer_zero\")" in src
@@ -2086,11 +2130,14 @@ def test_main_js_gc539_same_type_queue_patch_and_timer_zero():
     clear_block = src.split("GC.clearCardQueueBlock = function clearCardQueueBlock(cardEl)")[1].split("function findCardQueueBlockByJobId")[0]
     assert 'querySelectorAll("[data-gc-card-queue], [data-hero-queue]")' in clear_block
 
-    can_patch = src.split("function canPatchCardQueueInPlace(existing, queueJob)")[1].split("function syncCardQueueOwnerClasses")[0]
+    can_patch = src.split("function canPatchCardQueueInPlace(existing, queueJob)")[1].split(
+        "function _patchCardQueueTimingDatasets"
+    )[0]
     assert "jobId !== prevJobId" in can_patch
-    assert "finishAt !== prevFinish" in can_patch
+    assert "wasActive !== isActive" in can_patch
+    assert "function _patchCardQueueTimingDatasets(block, queueJob)" in src
 
-    progress = src.split("function updateAllProgressBars(serverNow)")[1].split("function updateBuildQueueLive")[0]
+    progress = src.split("function updateAllProgressBars(serverNow)")[1].split("let lastHadActiveJob = false")[0]
     assert "requestQueueTimerZeroRefresh" in progress
 
 

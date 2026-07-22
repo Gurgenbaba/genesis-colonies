@@ -14,8 +14,10 @@ Siehe auch: [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md), [AJAX_PJAX_CONTRACT.md
 | `POST /api/buildings/cancel` | Cancel build job → `{ ok, reason, state }` |
 | `POST /api/research/start` | Queue research → `{ ok, reason, state }` |
 | `POST /api/research/cancel` | Cancel research job → `{ ok, reason, state }` |
+| `POST /api/shipyard/build` | Queue ships → `{ ok, state }` (+ optional `data` for page-local stocks/labels; GC-512D) |
+| `POST /api/shipyard/queue/cancel` | Cancel shipyard job → `{ ok, state }` (+ optional `data`; GC-512D) |
 
-Weitere `{ ok, state }` Mutationen: defense, exchange, inventory, vote, auction, planet APIs — siehe [PROJECT_INVENTORY.md](PROJECT_INVENTORY.md). **Ausnahme (GC-512D):** Shipyard → `{ ok, data }`.
+Weitere `{ ok, state }` Mutationen: defense, exchange, inventory, vote, auction, planet APIs — siehe [PROJECT_INVENTORY.md](PROJECT_INVENTORY.md). Shipyard mutations are **state-first** on the client: `applyActionState(res)` when `res.state` is present; `applyShipyardState(page, res.data)` only when `res.data` is present (stocks / card labels). Queue/HUD come from `state` via `patchShipyardPanelFromState` — no parallel shipyard-only envelope.
 
 Actions use `_player_context_for_action()` (read-only DB) then **one** `refresh_player_live_state` inside `_build_game_state_payload` after the mutation.
 

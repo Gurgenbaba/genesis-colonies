@@ -378,6 +378,7 @@ Wave 7              CSS/template duplication cleanup
 
 ### GC-CLEAN-002 — PE action state + timekeeper patch (P0 hotfix)
 
+**Status:** ✅ (2026-07-22) — `finalizePeMutationSuccess` + soft content PJAX for structural PE; research start stays patch-only.  
 **Scope:** `static/main.js` only (+ tests).  
 **Do:**
 - Extend `patchQueuePanelsImmediate` + `_syncTimekeeperButtonsFromState` for `planet_evolution` / `planet_research` when `.planet-evolution-page` active.

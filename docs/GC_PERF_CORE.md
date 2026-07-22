@@ -21,7 +21,7 @@
 | Lazy-Persistierung / Cache / Lasttest-Tool | ✅ Basis |
 | PostgreSQL-Schema (alle Tabellen/Migrationen) | ✅ **GC-PERF-PG-SCHEMA-001** |
 | Backend-Parität auf leerer PG-DB | ✅ A–F SQLite (**GC-PERF-PG-PARITY-001**); PG Staging wenn URL gesetzt |
-| SQLite→Postgres Datenimport | ❌ → GC-PERF-PG-MIGRATE-001 |
+| SQLite→Postgres Datenimport | 🔄 Script+Spec (**GC-PERF-PG-MIGRATE-001**) — kein Cutover |
 | Railway Staging + Smoke + Baseline | ❌ |
 | Production-Cutover | ❌ |
 | Vollständiger `main.js`-Split | 🔄 Scaffold → GC-PERF-JS-002 |
@@ -72,11 +72,11 @@ Schema-Port
 |--------|--------|--------|
 | **[GC-PERF-PG-SCHEMA-001](GC_PERF_PG_SCHEMA_001.md)** | PostgreSQL-Schema & Migration Parity | ✅ |
 | **[GC-PERF-PG-PARITY-001](GC_PERF_PG_PARITY_001.md)** | Backend-Parität auf leerer PG-DB (kritische Systeme) | ✅ A–F (SQLite); PG opt-in |
-| **GC-PERF-PG-MIGRATE-001** | SQLite→Postgres Importer + Invarianten | 📋 |
+| **[GC-PERF-PG-MIGRATE-001](GC_PERF_PG_MIGRATE_001.md)** | SQLite→Postgres Importer + Invarianten (Script+Doc; kein Cutover) | 🔄 |
 | **GC-PERF-PG-STAGING-001** | Railway Staging + Worker + Smoke | 📋 |
 | **GC-PERF-PG-BASELINE-001** | SQLite vs PG Staging Metriken | 📋 |
 | **GC-PERF-PG-CUTOVER-001** | Wartungsfenster, Import, Rollback-Plan | 📋 |
-| **GC-PERF-JS-002** | Echter `main.js`-Split (Symbole löschen) | 📋 |
+| **GC-PERF-JS-002** | Echter `main.js`-Split (Symbole löschen) | ✅ erste Slice: `pages/shipyard.js` |
 | **GC-PERF-EFFECT-CACHE-001** | EffectResolver request-scoped Cache | ✅ |
 | **GC-PERF-LIVE-001** | Client diet `?since=` + Busy-Poll Fleet/Defense | ✅ |
 | **GC-PERF-STATE-004** | Early exit vor diet payload build | ✅ |
