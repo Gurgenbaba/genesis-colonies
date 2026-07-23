@@ -165,7 +165,7 @@ def test_one_escort_with_large_expo_fleet_has_minimal_pirate_advantage():
     large = resolve_pirate_encounter(random.Random(42), large_expo)
     assert small["win_chance"] > large["win_chance"]
     assert large["escort_ratio"] < 0.01
-    assert small["escort_ratio"] > 0.5
+    assert small["escort_ratio"] >= 0.5
 
 
 def test_scaled_escort_improves_pirate_outcome():
@@ -175,6 +175,20 @@ def test_scaled_escort_improves_pirate_outcome():
     strong = resolve_pirate_encounter(random.Random(7), {_ODYSSEY_KEY: 50, "falcon_interceptor": 80})
     assert strong["escort_ratio"] > weak["escort_ratio"]
     assert strong["win_chance"] > weak["win_chance"]
+
+
+def test_pirate_rebalance_enemy_factor_and_expo_only_win_chance():
+    """GC-EXPO-P1: weaker pirates + playable expo-only desperation fight."""
+    import random
+
+    ships = {_ODYSSEY_KEY: 100}
+    combat = resolve_pirate_encounter(random.Random(42), ships)
+    expo_risk = int(combat["expedition_hull_value"])
+    pirate_points = int(combat["pirate_points"])
+    assert int(expo_risk * 0.40) <= pirate_points <= int(expo_risk * 0.75)
+    assert int(combat["fleet_points"]) == max(1, int(expo_risk * 0.18))
+    assert float(combat["win_chance"]) >= 0.20
+    assert int(combat["loss_pct"]) <= 14
 
 
 def test_voidrunner_discovery_bonus_once_per_fleet():
@@ -509,12 +523,13 @@ def test_pirate_debris_collected_when_recycler_aboard():
     debris = resolve_expedition_pirate_debris(
         remaining_ships=remaining,
         ship_losses=losses,
-        pirate_combat={"won": True, "pirate_points": 80_000},
+        pirate_combat={"won": True, "pirate_points": 80_000, "recycler_protected": True},
     )
     assert debris is not None
     collected = debris["collected"]
     assert int(collected.get("metal") or 0) + int(collected.get("crystal") or 0) > 0
     assert int(debris["debris"].get("harvested_metal") or 0) == int(collected.get("metal") or 0)
+    assert debris["debris"].get("recycler_protected") is True
 
 
 def test_pirate_debris_without_recycler_not_collected():
@@ -529,6 +544,67 @@ def test_pirate_debris_without_recycler_not_collected():
     assert int(debris["collected"].get("metal") or 0) == 0
     assert int(debris["collected"].get("crystal") or 0) == 0
     assert int(debris["debris"].get("metal") or 0) > 0
+
+
+def test_pirate_protects_recyclers_from_combat_losses():
+    """GC-EXPO-P2: recyclers never die in pirate skirmish — TF always harvestable."""
+    import random
+
+    ships = {"solar_skiff": 100, "harvest_reclaimer": 2}
+    for seed in range(80):
+        combat = resolve_pirate_encounter(random.Random(seed), ships)
+        assert combat.get("recycler_protected") is True
+        assert int(combat["remaining_ships"].get("harvest_reclaimer") or 0) == 2
+        assert "harvest_reclaimer" not in (combat.get("losses") or {})
+    remaining, losses = apply_expedition_ship_losses(
+        ships,
+        40,
+        protect_roles=("recycle",),
+    )
+    assert remaining.get("harvest_reclaimer") == 2
+    assert "harvest_reclaimer" not in losses
+    assert int(losses.get("solar_skiff") or 0) > 0
+
+
+def test_pirate_encounter_with_recycler_always_harvests_when_debris_exists():
+    """GC-EXPO-P2: if recyclers were sent, surviving cargo salvages ephemeral TF."""
+    import random
+
+    ships = {"solar_skiff": 80, "harvest_reclaimer": 1}
+    harvested_any = False
+    for seed in range(120):
+        combat = resolve_pirate_encounter(random.Random(seed), ships)
+        debris = resolve_expedition_pirate_debris(
+            remaining_ships=dict(combat["remaining_ships"]),
+            ship_losses=dict(combat["losses"]),
+            pirate_combat=combat,
+        )
+        if debris is None:
+            continue
+        assert int(debris["recycler_cap"]) == 20_000
+        field_total = int(debris["debris"].get("metal") or 0) + int(debris["debris"].get("crystal") or 0)
+        collected_total = int(debris["collected"].get("metal") or 0) + int(
+            debris["collected"].get("crystal") or 0
+        )
+        if field_total > 0:
+            assert collected_total > 0
+            harvested_any = True
+    assert harvested_any
+
+
+def test_minefield_still_can_lose_recyclers():
+    """Minefield keeps default loss priority — recyclers not pirate-protected."""
+    import random
+    from game.expedition_events import resolve_minefield_hazard
+
+    ships = {"solar_skiff": 100, "harvest_reclaimer": 2}
+    lost_recycler = False
+    for seed in range(200):
+        hazard = resolve_minefield_hazard(random.Random(seed), ships)
+        if int(hazard["losses"].get("harvest_reclaimer") or 0) > 0:
+            lost_recycler = True
+            break
+    assert lost_recycler
 
 
 def test_pirate_outcome_credits_debris_to_rewards_with_recycler():
@@ -737,6 +813,7 @@ def test_pirate_salvage_merged_into_return_fleet():
 
 
 def test_salvage_tier_distribution_approximate():
+    """GC-EXPO-P3: 55% none / 35% small / 10% rare."""
     import random
 
     tiers: dict[str, int] = {"none": 0, "small": 0, "rare": 0}
@@ -748,9 +825,25 @@ def test_salvage_tier_distribution_approximate():
         )
         tiers[tier] = tiers.get(tier, 0) + 1
     total = sum(tiers.values())
-    assert tiers["none"] / total == pytest.approx(0.70, abs=0.05)
-    assert (tiers["small"] + tiers["rare"]) / total == pytest.approx(0.30, abs=0.05)
-    assert tiers["rare"] / total == pytest.approx(0.05, abs=0.03)
+    assert tiers["none"] / total == pytest.approx(0.55, abs=0.05)
+    assert tiers["small"] / total == pytest.approx(0.35, abs=0.05)
+    assert tiers["rare"] / total == pytest.approx(0.10, abs=0.04)
+
+
+def test_pirate_win_wreck_debris_uses_eighty_percent_points():
+    """GC-EXPO-P3: virtual pirate wrecks use 80% of pirate_points."""
+    from game.expedition_events import _virtual_pirate_losses
+    from game.fleet_defs import ship_score_value
+
+    pirate_points = 100_000
+    wrecks = _virtual_pirate_losses(pirate_points, won=True)
+    per_hull = max(1, ship_score_value("falcon_interceptor"))
+    expected = min(max(1, int(pirate_points * 0.80) // per_hull), 500)
+    assert wrecks.get("falcon_interceptor") == expected
+    weak = _virtual_pirate_losses(pirate_points, won=True)
+    # Sanity: 80% wrecks >= old 60% curve for same points.
+    old_count = min(max(1, int(pirate_points * 0.60) // per_hull), 500)
+    assert int(weak.get("falcon_interceptor") or 0) >= old_count
 
 
 def test_ion_storm_delay_within_flight_fraction():

@@ -30,7 +30,7 @@ _EXPEDITION_COMBAT_ROLES = _EXPEDITION_HULL_ROLES | _EXPEDITION_ESCORT_ROLES
 
 # Escort effectiveness — ratio-based, diminishing returns (GC-SHIP escort balance).
 _ESCORT_EFFECTIVENESS_CAP = 0.50
-_EXPO_ONLY_FIGHT_FACTOR = 0.08  # desperation fight when no combat escorts aboard
+_EXPO_ONLY_FIGHT_FACTOR = 0.18  # desperation fight when no combat escorts aboard (GC-EXPO-P1)
 
 # Voidrunner discovery bonus — once per fleet, server-side (GC-SHIP-1).
 _VOIDRUNNER_KEY = "eclipse_runner"
@@ -125,16 +125,19 @@ _EXPEDITION_LOOTBOX_DROPS: Dict[str, Dict[str, Any]] = {
 _ION_STORM_DELAY_MULT_RANGE = (0.20, 0.60)
 _MINEFIELD_LOSS_RANGE = (2, 8)
 
-# Pirate encounter — lightweight ratio combat (no combat.py resolver).
-_PIRATE_ENEMY_FACTOR_RANGE = (0.70, 1.25)
-_PIRATE_WIN_CHANCE_BASE = 0.18
+# Pirate encounter — lightweight ratio combat (no combat.py resolver). GC-EXPO-P1/P2/P3.
+_PIRATE_ENEMY_FACTOR_RANGE = (0.40, 0.75)
+_PIRATE_WIN_CHANCE_BASE = 0.28
 _PIRATE_WIN_CHANCE_SCALE = 0.70
 _PIRATE_WIN_CHANCE_CLAMP = (0.10, 0.90)
-_PIRATE_LOSS_WIN_RANGE = (2, 10)
-_PIRATE_LOSS_CLOSE_RANGE = (4, 14)
-_PIRATE_LOSS_DEFEAT_RANGE = (8, 20)
+_PIRATE_LOSS_WIN_RANGE = (1, 6)
+_PIRATE_LOSS_CLOSE_RANGE = (3, 10)
+_PIRATE_LOSS_DEFEAT_RANGE = (5, 14)
+_PIRATE_WRECK_POINTS_RATIO = 0.80  # virtual pirate wrecks for ephemeral TF on win
+_PIRATE_PROTECT_ROLES: Tuple[str, ...] = ("recycle",)
 
-# Combat escorts absorb expedition losses first (combat → recycle → expedition → cargo → …).
+# Default loss order for hazards (minefield): combat → recycle → expedition → …
+# Pirate encounters pass protect_roles=_PIRATE_PROTECT_ROLES so recyclers always salvage TF.
 _LOSS_ROLE_PRIORITY: Tuple[str, ...] = (
     "combat",
     "recycle",
@@ -147,8 +150,8 @@ _LOSS_ROLE_PRIORITY: Tuple[str, ...] = (
 )
 
 # Pirate salvage on win — light/mid hulls only; never beats shipyard cadence.
-_PIRATE_SALVAGE_NONE_CHANCE = 0.70
-_PIRATE_SALVAGE_SMALL_CHANCE = 0.25
+_PIRATE_SALVAGE_NONE_CHANCE = 0.55
+_PIRATE_SALVAGE_SMALL_CHANCE = 0.35
 _PIRATE_SALVAGE_SCORE_CAP_RATIO = 0.12
 _PIRATE_SALVAGE_SHIP_LIGHT: Sequence[str] = ("spark_drone", "mule_courier", "veil_probe")
 _PIRATE_SALVAGE_SHIP_MID: Sequence[str] = ("mule_courier", "solar_skiff", "falcon_interceptor")
@@ -977,13 +980,24 @@ def _loss_role_priority(ship_key: str) -> int:
     return best
 
 
+def _ship_has_protected_role(ship_key: str, protect_roles: Sequence[str] | None) -> bool:
+    if not protect_roles:
+        return False
+    protected = frozenset(str(r) for r in protect_roles)
+    return any(role in protected for role in ship_roles(str(ship_key)))
+
+
 def apply_expedition_ship_losses(
     ships: Mapping[str, int],
     loss_pct: int,
     *,
     min_remaining: int = 1,
+    protect_roles: Sequence[str] | None = None,
 ) -> Tuple[Dict[str, int], Dict[str, int]]:
-    """Apply hull losses; combat escorts absorb before expedition hulls. Never wipe fleet."""
+    """Apply hull losses; combat escorts absorb before expedition hulls. Never wipe fleet.
+
+    ``protect_roles`` — hulls with any listed role are skipped (pirates: recyclers stand off to salvage TF).
+    """
     loss_pct = max(0, min(100, int(loss_pct)))
     cleaned = {str(k): int(v) for k, v in (ships or {}).items() if int(v or 0) > 0}
     if loss_pct <= 0 or not cleaned:
@@ -1004,6 +1018,8 @@ def apply_expedition_ship_losses(
     for key in ordered_keys:
         if loss_budget <= 0:
             break
+        if _ship_has_protected_role(key, protect_roles):
+            continue
         take = min(int(remaining[key]), loss_budget)
         if take <= 0:
             continue
@@ -1036,7 +1052,7 @@ def roll_pirate_salvage_rewards(
     pirate_points: int,
     fleet_points: int,
 ) -> Tuple[Dict[str, int], str]:
-    """Salvage/capture roll on pirate victory — 70% none, 25% small, 5% rare."""
+    """Salvage/capture roll on pirate victory — 55% none, 35% small, 10% rare."""
     roll = rng.random()
     if roll < _PIRATE_SALVAGE_NONE_CHANCE:
         return {}, "none"
@@ -1388,7 +1404,11 @@ def resolve_pirate_encounter(
     if escort_eff > 0 and won:
         loss_pct = max(1, int(loss_pct * (1.0 - escort_eff * 0.35)))
 
-    remaining, losses = apply_expedition_ship_losses(ships, loss_pct)
+    remaining, losses = apply_expedition_ship_losses(
+        ships,
+        loss_pct,
+        protect_roles=_PIRATE_PROTECT_ROLES,
+    )
     return {
         "won": bool(won),
         "pirate_points": int(pirate_points),
@@ -1403,6 +1423,7 @@ def resolve_pirate_encounter(
         "remaining_ships": remaining,
         "losses": losses,
         "losses_total": int(sum(losses.values())),
+        "recycler_protected": True,
     }
 
 
@@ -1429,7 +1450,7 @@ def _virtual_pirate_losses(pirate_points: int, *, won: bool) -> Dict[str, int]:
     pts = max(0, int(pirate_points))
     if pts <= 0:
         return {}
-    wreck_pts = int(pts * 0.60)
+    wreck_pts = int(pts * _PIRATE_WRECK_POINTS_RATIO)
     per_hull = max(1, ship_score_value("falcon_interceptor"))
     count = max(1, wreck_pts // per_hull)
     return {"falcon_interceptor": min(count, 500)}
@@ -1478,6 +1499,7 @@ def resolve_expedition_pirate_debris(
 
     debris_meta = dict(build_combat_debris_metadata(player_losses, pirate_losses) or {})
     debris_meta["expedition_field"] = True
+    debris_meta["recycler_protected"] = bool(pirate_combat.get("recycler_protected"))
     debris_meta["harvested_metal"] = int(collected.get("metal") or 0)
     debris_meta["harvested_crystal"] = int(collected.get("crystal") or 0)
     return {
