@@ -16845,12 +16845,16 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 }
 .gc-combat-teaser--expedition[data-event="spatial_rift"]::before,
 .gc-combat-teaser--expedition[data-event="time_anomaly"]::before,
-.gc-combat-teaser--expedition[data-event="ancient_beacon"]::before{
+.gc-combat-teaser--expedition[data-event="ancient_beacon"]::before,
+.gc-combat-teaser--expedition[data-event="lost_colony"]::before,
+.gc-combat-teaser--expedition[data-event="rogue_ai"]::before{
   background: rgba(232, 121, 249, 0.75);
 }
 .gc-combat-teaser--expedition[data-event="spatial_rift"] .gc-combat-teaser-badge,
 .gc-combat-teaser--expedition[data-event="time_anomaly"] .gc-combat-teaser-badge,
-.gc-combat-teaser--expedition[data-event="ancient_beacon"] .gc-combat-teaser-badge{
+.gc-combat-teaser--expedition[data-event="ancient_beacon"] .gc-combat-teaser-badge,
+.gc-combat-teaser--expedition[data-event="lost_colony"] .gc-combat-teaser-badge,
+.gc-combat-teaser--expedition[data-event="rogue_ai"] .gc-combat-teaser-badge{
   border-color: rgba(232, 121, 249, 0.42);
   color: #f0abfc;
 }

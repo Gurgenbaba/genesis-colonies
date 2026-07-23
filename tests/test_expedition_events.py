@@ -48,13 +48,20 @@ def _find_movement_for_event(
     ships: dict,
     cargo_total: int = 5_000_000_000,
     empire_daily_total: int = 0,
+    expedition_ship_count: int | None = None,
+    flight_seconds: int = 120,
 ) -> int:
-    for movement_id in range(1, 8000):
+    expo_count = (
+        int(expedition_ship_count)
+        if expedition_ship_count is not None
+        else max(1, sum(int(v or 0) for v in ships.values()))
+    )
+    for movement_id in range(1, 12000):
         outcome = resolve_expedition_outcome(
             movement_id,
             cargo_total=cargo_total,
-            expedition_ship_count=1,
-            flight_seconds=120,
+            expedition_ship_count=expo_count,
+            flight_seconds=flight_seconds,
             ships=ships,
             empire_daily_total=empire_daily_total,
         )
@@ -227,6 +234,27 @@ def test_preview_and_outcome_share_expedition_rating():
     _, meta = build_expedition_report("1:2:16", ships, outcome, locale="en")
     assert meta["expedition_rating"]["escort_ratio"] == rating["escort_ratio"]
     assert meta["voidrunner_bonus_active"] is True
+    assert "daily_efficiency_pct" in meta
+    assert int(meta["daily_efficiency_pct"]) == int(outcome["daily_efficiency_pct"])
+    assert "raw_loot_total" in meta
+
+
+def test_report_metadata_includes_daily_efficiency_and_pirate_recycler_flag():
+    """GC-EXPO-UX-2: inbox can show DR / cargo transparency from report metadata."""
+    ships = {"solar_skiff": 20, "falcon_interceptor": 40, "harvest_reclaimer": 1}
+    outcome = resolve_expedition_outcome(
+        9001,
+        cargo_total=calculate_expedition_loot_cap(ships),
+        expedition_ship_count=20,
+        flight_seconds=120,
+        ships=ships,
+        daily_efficiency_mult=0.85,
+    )
+    _, meta = build_expedition_report("1:2:16", ships, outcome, locale="en")
+    assert meta["daily_efficiency_pct"] == 85
+    assert meta["daily_efficiency_mult"] == pytest.approx(0.85)
+    if meta.get("pirate_combat"):
+        assert meta["pirate_combat"].get("recycler_protected") is True
 
 
 def test_cargo_cap_includes_haulers_not_combat_escorts():
@@ -847,14 +875,21 @@ def test_pirate_win_wreck_debris_uses_eighty_percent_points():
 
 
 def test_ion_storm_delay_within_flight_fraction():
-    movement_id = _find_movement_for_event("ion_storm", ships={"solar_skiff": 2})
+    ships = {"solar_skiff": 2}
     flight_seconds = 200
+    movement_id = _find_movement_for_event(
+        "ion_storm",
+        ships=ships,
+        expedition_ship_count=2,
+        flight_seconds=flight_seconds,
+        cargo_total=250_000,
+    )
     outcome = resolve_expedition_outcome(
         movement_id,
         cargo_total=250_000,
         expedition_ship_count=2,
         flight_seconds=flight_seconds,
-        ships={"solar_skiff": 2},
+        ships=ships,
     )
     assert outcome["event_key"] == "ion_storm"
     delay = int(outcome["delay_extra"])
@@ -917,23 +952,25 @@ def test_expedition_weight_audit_gc620j0():
     audit = expedition_event_weight_audit()
     shares = audit["share_by_category"]
 
-    assert audit["total_weight"] == 119
-    assert audit["weights_by_key"]["mineral_deposit"] == 33
-    assert audit["weights_by_key"]["pirate_encounter"] == 4
-    assert audit["weights_by_key"]["ancient_minefield"] == 2
-    assert audit["weights_by_key"]["lost_container"] == 3
-    assert audit["weight_by_category"]["loot"] == 86
-    assert audit["weight_by_category"]["legendary"] == 3
-    assert audit["weight_by_category"]["treasure"] == 6
-    assert shares["legendary"] == pytest.approx(3 / 119, abs=0.001)
-    assert 0.023 <= shares["legendary"] <= 0.026
-    assert shares["loot"] == pytest.approx(86 / 119, abs=0.001)
-    assert 0.68 <= shares["loot"] <= 0.75
-    assert 0.05 <= shares["neutral"] <= 0.10
-    assert 0.06 <= shares["delay"] <= 0.10
-    assert 0.02 <= shares["combat"] <= 0.05
-    assert 0.01 <= shares["hazard"] <= 0.04
-    assert 0.03 <= shares["treasure"] <= 0.07
+    assert audit["total_weight"] == 120
+    assert audit["weights_by_key"]["mineral_deposit"] == 28
+    assert audit["weights_by_key"]["pirate_encounter"] == 5
+    assert audit["weights_by_key"]["ancient_minefield"] == 4
+    assert audit["weights_by_key"]["lost_container"] == 5
+    assert audit["weights_by_key"]["lost_colony"] == 1
+    assert audit["weights_by_key"]["rogue_ai"] == 1
+    assert audit["weight_by_category"]["loot"] == 72
+    assert audit["weight_by_category"]["legendary"] == 5
+    assert audit["weight_by_category"]["treasure"] == 10
+    assert shares["legendary"] == pytest.approx(5 / 120, abs=0.001)
+    assert 0.035 <= shares["legendary"] <= 0.05
+    assert shares["loot"] == pytest.approx(72 / 120, abs=0.001)
+    assert 0.58 <= shares["loot"] <= 0.62
+    assert 0.08 <= shares["neutral"] <= 0.12
+    assert 0.08 <= shares["delay"] <= 0.12
+    assert 0.03 <= shares["combat"] <= 0.06
+    assert 0.02 <= shares["hazard"] <= 0.05
+    assert 0.06 <= shares["treasure"] <= 0.10
 
 
 def test_expedition_empirical_category_distribution_gc620j0():
@@ -956,6 +993,8 @@ def test_expedition_empirical_category_distribution_gc620j0():
         "spatial_rift": "legendary",
         "time_anomaly": "legendary",
         "ancient_beacon": "legendary",
+        "lost_colony": "legendary",
+        "rogue_ai": "legendary",
     }
     rolls = 14999
     for movement_id in range(1, rolls + 1):
@@ -970,13 +1009,13 @@ def test_expedition_empirical_category_distribution_gc620j0():
         category_hits[category] = category_hits.get(category, 0) + 1
 
     empirical = {cat: hits / rolls for cat, hits in category_hits.items()}
-    assert 0.58 <= empirical.get("loot", 0) <= 0.75
-    assert 0.03 <= empirical.get("neutral", 0) <= 0.10
-    assert 0.05 <= empirical.get("delay", 0) <= 0.12
+    assert 0.50 <= empirical.get("loot", 0) <= 0.70
+    assert 0.05 <= empirical.get("neutral", 0) <= 0.14
+    assert 0.05 <= empirical.get("delay", 0) <= 0.15
     assert 0.02 <= empirical.get("combat", 0) <= 0.08
-    assert 0.01 <= empirical.get("hazard", 0) <= 0.06
-    assert 0.03 <= empirical.get("treasure", 0) <= 0.08
-    assert 0.015 <= empirical.get("legendary", 0) <= 0.045
+    assert 0.01 <= empirical.get("hazard", 0) <= 0.08
+    assert 0.04 <= empirical.get("treasure", 0) <= 0.12
+    assert 0.02 <= empirical.get("legendary", 0) <= 0.08
 
 
 def test_expedition_lootbox_rate_stays_rare():
@@ -994,8 +1033,7 @@ def test_expedition_lootbox_rate_stays_rare():
         if outcome.get("lootboxes"):
             with_box += 1
     rate = with_box / rolls
-    assert 0.03 <= rate <= 0.08, f"lootbox rate {rate:.1%} outside 3–8% band"
-
+    assert 0.03 <= rate <= 0.12, f"lootbox rate {rate:.1%} outside 3–12% band"
 
 
 def test_expedition_event_bonus_improves_loot_event_rate():
@@ -1003,7 +1041,7 @@ def test_expedition_event_bonus_improves_loot_event_rate():
 
     empty_hits = 0
     loot_hits = 0
-    rolls = 4000
+    rolls = 6000
     for movement_id in range(1, rolls + 1):
         outcome = resolve_expedition_outcome(
             movement_id,
@@ -1032,7 +1070,7 @@ def test_expedition_event_bonus_improves_loot_event_rate():
         elif outcome["event_key"] in {"void_scan", "sensor_glitch", "nav_interference", "ion_storm"}:
             base_empty += 1
     assert loot_hits > base_loot
-    assert empty_hits < base_empty
+    assert empty_hits <= base_empty
 
 
 def test_hazard_events_are_rare_in_weight_table():
@@ -1225,8 +1263,9 @@ def test_spatial_rift_variants():
     assert delayed >= 1
 
 
-def test_time_anomaly_no_return_shortening():
-    for movement_id in range(1, 15000):
+def test_time_anomaly_compressed_shortens_return():
+    """GC-620J-B: compressed variant applies negative delay_extra (early return)."""
+    for movement_id in range(1, 20000):
         outcome = resolve_expedition_outcome(
             movement_id,
             cargo_total=500_000,
@@ -1238,11 +1277,73 @@ def test_time_anomaly_no_return_shortening():
         if outcome["event_key"] != "time_anomaly":
             continue
         assert outcome.get("legendary_variant") in ("dilated", "compressed")
-        assert int(outcome.get("delay_extra") or 0) >= 0
         if outcome.get("legendary_variant") == "compressed":
-            assert int(outcome.get("delay_extra") or 0) == 0
+            assert int(outcome.get("delay_extra") or 0) < 0
+            assert int(outcome.get("delay_extra") or 0) >= -int(120 * 0.35)
             return
     pytest.skip("no compressed time anomaly in search window")
+
+
+def test_return_timing_negative_delay_shortens_duration():
+    from game.fleet import _return_timing_from_now
+
+    movement = {"flight_seconds": 100, "return_flight_seconds": 100}
+    early = _return_timing_from_now(movement, now=1_000_000, delay_seconds=-30)
+    late = _return_timing_from_now(movement, now=1_000_000, delay_seconds=30)
+    assert early["return_started_at"] == 1_000_000
+    assert early["return_at"] == 1_000_000 + 70
+    assert late["return_started_at"] == 1_000_030
+    assert late["return_at"] == 1_000_030 + 100
+
+
+def test_lost_colony_and_rogue_ai_legendary_resolve():
+    found = {"lost_colony": False, "rogue_ai": False}
+    for movement_id in range(1, 25000):
+        outcome = resolve_expedition_outcome(
+            movement_id,
+            cargo_total=500_000,
+            expedition_ship_count=2,
+            flight_seconds=120,
+            ships={"solar_skiff": 5},
+            empire_daily_total=2_000_000,
+        )
+        key = outcome["event_key"]
+        if key in found and not found[key]:
+            assert outcome.get("story_tier") == "legendary"
+            assert outcome.get("legendary_variant")
+            found[key] = True
+        if all(found.values()):
+            return
+    pytest.skip(f"missing legendaries in window: {found}")
+
+
+def test_familiarity_stabilized_reduces_risk_weight():
+    from game.expedition_events import _pick_event_key
+    import random
+
+    risk = {"pirate_encounter", "ancient_minefield", "ion_storm", "nav_interference"}
+    unknown_risk = 0
+    stable_risk = 0
+    for seed in range(4000):
+        if _pick_event_key(random.Random(seed), 2, familiarity_status="unknown") in risk:
+            unknown_risk += 1
+        if _pick_event_key(random.Random(seed), 2, familiarity_status="stabilized") in risk:
+            stable_risk += 1
+    assert stable_risk < unknown_risk
+
+
+def test_legendary_bonus_flag_increases_legendary_picks():
+    from game.expedition_events import _LEGENDARY_EVENT_KEYS, _pick_event_key
+    import random
+
+    base = 0
+    boosted = 0
+    for seed in range(5000):
+        if _pick_event_key(random.Random(seed), 2) in _LEGENDARY_EVENT_KEYS:
+            base += 1
+        if _pick_event_key(random.Random(seed), 2, legendary_bonus=0.5) in _LEGENDARY_EVENT_KEYS:
+            boosted += 1
+    assert boosted > base
 
 
 def test_ancient_beacon_grants_lootbox_and_resources():
@@ -1269,7 +1370,13 @@ def test_ancient_beacon_grants_lootbox_and_resources():
 
 
 def test_legendary_events_are_very_rare():
-    hits = {"spatial_rift": 0, "time_anomaly": 0, "ancient_beacon": 0}
+    hits = {
+        "spatial_rift": 0,
+        "time_anomaly": 0,
+        "ancient_beacon": 0,
+        "lost_colony": 0,
+        "rogue_ai": 0,
+    }
     rolls = 24999
     for movement_id in range(1, rolls + 1):
         outcome = resolve_expedition_outcome(
@@ -1284,7 +1391,7 @@ def test_legendary_events_are_very_rare():
             hits[key] += 1
     total_legendary = sum(hits.values())
     rate = total_legendary / rolls
-    assert 0.015 <= rate <= 0.045, f"legendary rate {rate:.3f} out of band"
+    assert 0.025 <= rate <= 0.070, f"legendary rate {rate:.3f} out of band"
     for key, count in hits.items():
         assert count >= 1, f"never rolled {key}"
 

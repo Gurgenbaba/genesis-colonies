@@ -18853,7 +18853,20 @@
 
       if (mission === "expedition") {
         const expoShips = countShipsByRole(page, ships, "expedition");
+        const combatShips = countShipsByRole(page, ships, "combat");
+        const recycleShips = countShipsByRole(page, ships, "recycle");
         const cargoTotal = parseInt(preview?.cargo_total || "0", 10) || 0;
+        const rating = preview?.expedition_rating && typeof preview.expedition_rating === "object"
+          ? preview.expedition_rating
+          : {};
+        const escortRatioPct = Math.max(
+          0,
+          Math.round((Number(rating.escort_ratio) || 0) * 100)
+        );
+        const escortCoverPct = Math.max(
+          0,
+          Math.round((Number(rating.escort_effectiveness) || 0) * 100)
+        );
         const validTarget = target.target_type === "expedition_slot"
           || target.target_type === "strategic_world";
         if (target.target_type && !validTarget) {
@@ -18868,6 +18881,44 @@
             tone: "ok",
             text: formatMissionHint("fleet_expedition_hint_ready", { ships: expoShips, cargo: cargoTotal }),
           });
+        }
+        if (Object.keys(ships || {}).length) {
+          let escortHintKey = "fleet_expedition_hint_escort_none";
+          let escortTone = "warn";
+          if (combatShips > 0 && escortCoverPct >= 35) {
+            escortHintKey = "fleet_expedition_hint_escort_high";
+            escortTone = "ok";
+          } else if (combatShips > 0 && escortCoverPct >= 15) {
+            escortHintKey = "fleet_expedition_hint_escort_mid";
+            escortTone = "info";
+          } else if (combatShips > 0) {
+            escortHintKey = "fleet_expedition_hint_escort_low";
+            escortTone = "warn";
+          }
+          hints.push({
+            tone: escortTone,
+            text: formatMissionHint(escortHintKey, {
+              ships: combatShips,
+              ratio: escortRatioPct,
+              cover: escortCoverPct,
+            }),
+          });
+          if (recycleShips > 0) {
+            hints.push({
+              tone: "ok",
+              text: formatMissionHint("fleet_expedition_hint_recycler_aboard", { ships: recycleShips }),
+            });
+          } else {
+            hints.push({ tone: "info", text: formatMissionHint("fleet_expedition_hint_recycler_tip") });
+          }
+          if (rating.voidrunner_bonus_active) {
+            hints.push({
+              tone: "ok",
+              text: formatMissionHint("fleet_expedition_hint_voidrunner", {
+                pct: parseInt(rating.voidrunner_bonus_pct, 10) || 25,
+              }),
+            });
+          }
         }
         hints.push({ tone: "info", text: formatMissionHint("fleet_expedition_hint_events") });
         hints.push({ tone: "info", text: formatMissionHint("fleet_expedition_hint_jackpot") });
@@ -19652,6 +19703,8 @@
       const panel = page?.querySelector("[data-fleet-mass-expo-split]");
       if (!panel) return;
       const freeEl = panel.querySelector("[data-fleet-mass-expo-free-slots]");
+      const usableEl = panel.querySelector("[data-fleet-mass-expo-usable-slots]");
+      const reservedEl = panel.querySelector("[data-fleet-mass-expo-reserved-slots]");
       const perFleetEl = panel.querySelector("[data-fleet-mass-expo-per-fleet]");
       const leftoverEl = panel.querySelector("[data-fleet-mass-expo-leftover]");
       const statusEl = panel.querySelector("[data-fleet-mass-expo-split-status]");
@@ -19664,10 +19717,16 @@
         statusEl.hidden = hidden || !msg;
       };
 
-      if (!Object.keys(ships).length) {
+      const clearSlotPreview = () => {
         if (freeEl) freeEl.textContent = "—";
+        if (usableEl) usableEl.textContent = "—";
+        if (reservedEl) reservedEl.textContent = "—";
         if (perFleetEl) perFleetEl.textContent = "—";
         if (leftoverEl) leftoverEl.textContent = "—";
+      };
+
+      if (!Object.keys(ships).length) {
+        clearSlotPreview();
         setStatus("", { hidden: true });
         if (submitBtn) submitBtn.disabled = true;
         return;
@@ -19683,7 +19742,13 @@
         const data = fleetPayload(res);
         const preview = data && typeof data === "object" ? data : {};
         const freeSlots = parseInt(preview.free_slots, 10);
+        const usableSlots = parseInt(preview.usable_slots, 10);
+        const reservedSlots = parseInt(preview.reserved_slots, 10);
         if (freeEl) freeEl.textContent = Number.isFinite(freeSlots) ? String(freeSlots) : "0";
+        if (usableEl) usableEl.textContent = Number.isFinite(usableSlots) ? String(usableSlots) : "0";
+        if (reservedEl) {
+          reservedEl.textContent = Number.isFinite(reservedSlots) ? String(reservedSlots) : "3";
+        }
         if (perFleetEl) perFleetEl.textContent = formatMassExpoShipLine(preview.per_fleet_ships);
         if (leftoverEl) leftoverEl.textContent = formatMassExpoShipLine(preview.leftover_ships);
 
@@ -19698,6 +19763,11 @@
         let msg = reasonText(reason);
         if (reason === "fleet_slots_full") {
           msg = tt("fleet_mass_expo_split_no_slots", "No free fleet slots available.");
+        } else if (reason === "mass_expo_slots_reserved") {
+          msg = tt(
+            "fleet_mass_expo_split_slots_reserved",
+            "Usable mass-expedition slots are 0 — %(reserved)s slots stay reserved."
+          ).replace("%(reserved)s", Number.isFinite(reservedSlots) ? String(reservedSlots) : "3");
         } else if (reason === "mass_expo_split_too_small" || reason === "mass_expo_no_expedition_ships") {
           msg = tt(
             "fleet_mass_expo_split_too_small",
@@ -19762,6 +19832,11 @@
           let msg = reasonText(reason);
           if (reason === "fleet_slots_full") {
             msg = tt("fleet_mass_expo_split_no_slots", "No free fleet slots available.");
+          } else if (reason === "mass_expo_slots_reserved") {
+            msg = tt(
+              "fleet_mass_expo_split_slots_reserved",
+              "Usable mass-expedition slots are 0 — %(reserved)s slots stay reserved."
+            ).replace("%(reserved)s", "3");
           } else if (reason === "mass_expo_split_too_small" || reason === "mass_expo_no_expedition_ships") {
             msg = tt(
               "fleet_mass_expo_split_too_small",

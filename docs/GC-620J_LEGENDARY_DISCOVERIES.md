@@ -1,9 +1,9 @@
 # GC-620J — Expedition Legendary Discoveries
 
-**Status:** 📋 Spec — **GC-620J-0 ✅ erledigt** · J-A noch offen  
+**Status:** ✅ GC-620J-0 + J-A + J-B live (`lost_colony` / `rogue_ai`, Time-Anomaly-Kompression)  
 **Epic:** EPIC-02 Fleet System  
 **Voraussetzung:** [GC-620I](FLEET_SYSTEM.md) (Hazards + Treasure) auf `main`  
-**Gate:** ~~GC-620J-0~~ — `mineral_deposit` 29, Total **121** Weight-Points  
+**Gate:** Weight-Tabelle aktuell **120** Punkte, Loot **60 %** (GC-EXPO-W1)  
 **Owner:** `game/expedition_events.py`
 
 ---

@@ -319,9 +319,10 @@ Wie `planet_evolution/mechanics.py`, konsumiert von:
 |--------------|----------|
 | `unlock_queue: {"research": 1}` | `game/research.py` |
 | `unlock_queue: {"planet_research": 1}` | `game/planet_evolution/planet_research.py` |
-| `expedition_loot_mult` | Expedition-Resolver |
-| `expedition_slot_bonus` | `game/galaxy.py` / Fleet |
-| `expedition_event_bonus` | Expedition loot tables |
+| `expedition_loot_mult` | Expedition-Resolver (`expedition_events.py`) |
+| `expedition_slot_bonus` | `get_max_fleet_slots` / `get_fleet_slot_status` in `game/fleet.py` |
+| `expedition_event_bonus` | Expedition event pick (`_pick_event_key`) |
+| `expedition_legendary_bonus` | Legendary weight boost in `_pick_event_key` |
 | `max_colonies_bonus` | Kolonisierungs-Limit |
 | `colonize_cost_mult` | `world_colonization.py` / Fleet |
 | `planet_xp_mult_cap_level` | `planet_level.py` (z. B. bis Level 10) |

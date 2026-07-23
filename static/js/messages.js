@@ -688,11 +688,15 @@
       if (harvestedCrystal > 0) {
         harvestedBits.push(`${esc(t("resource_crystal", "Crytite"))} ${esc(formatInt(harvestedCrystal))}`);
       }
+      const harvestedLabel = isExpeditionField
+        ? t(
+            "expedition_report_debris_recycler_salvaged",
+            "Reclaimers salvaged during the expedition"
+          )
+        : t("combat_report_debris_harvested", "Already harvested");
       footerParts.push(
         `<div class="gc-combat-debris-harvested">` +
-          `<span class="gc-combat-debris-harvested-label">${esc(
-            t("combat_report_debris_harvested", "Already harvested")
-          )}</span>` +
+          `<span class="gc-combat-debris-harvested-label">${esc(harvestedLabel)}</span>` +
           `<span class="gc-combat-debris-harvested-value">${harvestedBits.join(" · ")}</span>` +
         `</div>`
       );
@@ -1515,6 +1519,8 @@
       spatial_rift: { theme: "legendary", icon: "◈" },
       time_anomaly: { theme: "legendary", icon: "⧖" },
       ancient_beacon: { theme: "legendary", icon: "✶" },
+      lost_colony: { theme: "legendary", icon: "⌂" },
+      rogue_ai: { theme: "legendary", icon: "⬡" },
       pirate_encounter: { theme: "combat", icon: "☠" },
     };
     return map[eventKey] || { theme: "anomaly", icon: "◎" };
@@ -1535,6 +1541,8 @@
       spatial_rift: "fleet_expedition_badge_legendary",
       time_anomaly: "fleet_expedition_badge_legendary",
       ancient_beacon: "fleet_expedition_badge_legendary",
+      lost_colony: "fleet_expedition_badge_legendary",
+      rogue_ai: "fleet_expedition_badge_legendary",
       pirate_encounter: "fleet_expedition_badge_combat",
     };
     const key = badges[eventKey] || `fleet_expedition_badge_${severity || "normal"}`;
@@ -1542,7 +1550,7 @@
   }
 
   function expeditionRiskLabel(eventKey) {
-    const high = new Set(["distress_beacon", "ancient_stash", "pirate_encounter", "ancient_minefield", "ancient_derelict", "abandoned_convoy", "spatial_rift", "time_anomaly", "ancient_beacon"]);
+    const high = new Set(["distress_beacon", "ancient_stash", "pirate_encounter", "ancient_minefield", "ancient_derelict", "abandoned_convoy", "spatial_rift", "time_anomaly", "ancient_beacon", "lost_colony", "rogue_ai"]);
     const medium = new Set(["nav_interference", "ion_storm", "lost_container"]);
     if (high.has(eventKey)) return t("fleet_expedition_report_risk_high", "elevated");
     if (medium.has(eventKey)) return t("fleet_expedition_report_risk_medium", "moderate");
@@ -1577,12 +1585,21 @@
         formatInt(delay)
       );
     }
+    if (delay < 0) {
+      return t("fleet_expedition_report_return_early", "Return −%(seconds)s").replace(
+        "%(seconds)s",
+        formatInt(Math.abs(delay))
+      );
+    }
     return t("fleet_expedition_report_return_nominal", "Return nominal");
   }
 
   function expeditionFleetStatus(delayExtra, rewardTotal) {
     if (Number(delayExtra || 0) > 0) {
       return t("fleet_expedition_report_fleet_status_delayed", "Return delayed");
+    }
+    if (Number(delayExtra || 0) < 0) {
+      return t("fleet_expedition_report_fleet_status_early", "Return shortened");
     }
     if (Number(rewardTotal || 0) > 0) {
       return t("fleet_expedition_report_fleet_status_loaded", "Cargo secured");
@@ -1759,6 +1776,12 @@
       `</header>`
     );
 
+    const dailyPct = Math.max(
+      0,
+      Math.min(100, parseInt(meta.daily_efficiency_pct, 10) || 100)
+    );
+    const rawLootTotal = Math.max(0, Number(meta.raw_loot_total) || 0);
+
     sections.push(
       `<div class="gc-player-card-stats gc-combat-report-stats">` +
         `<div class="gc-player-card-stat">` +
@@ -1770,6 +1793,12 @@
           renderExpeditionCargoStatHtml(lootTotal, meta) +
         `</div>` +
         `<div class="gc-player-card-stat">` +
+          `<span class="gc-player-card-stat-label">${esc(
+            t("expedition_report_stat_efficiency", "Daily efficiency")
+          )}</span>` +
+          `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(dailyPct))}%</span>` +
+        `</div>` +
+        `<div class="gc-player-card-stat">` +
           `<span class="gc-player-card-stat-label">${esc(t("expedition_report_stat_delay", "Delay"))}</span>` +
           `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(delayExtra))}</span>` +
         `</div>` +
@@ -1779,6 +1808,29 @@
         `</div>` +
       `</div>`
     );
+
+    if (dailyPct < 100) {
+      sections.push(
+        `<p class="gc-expedition-report-efficiency-notice" role="note">${esc(
+          t(
+            "expedition_report_efficiency_notice",
+            "Daily expedition efficiency was %(pct)s%% for this run."
+          ).replace("%(pct)s", formatInt(dailyPct))
+        )}</p>`
+      );
+    }
+    if (rawLootTotal > lootTotal && lootTotal >= 0) {
+      sections.push(
+        `<p class="gc-expedition-report-cargo-cap-notice" role="note">${esc(
+          t(
+            "expedition_report_cargo_cap_notice",
+            "Raw find %(raw)s capped by cargo to %(loaded)s."
+          )
+            .replace("%(raw)s", formatInt(rawLootTotal))
+            .replace("%(loaded)s", formatInt(lootTotal))
+        )}</p>`
+      );
+    }
 
     if (lootTotal > 0) {
       sections.push(
@@ -1815,7 +1867,23 @@
                 `<span class="gc-player-card-stat-label">${esc(t("expedition_report_stat_loss_rate", "Loss rate"))}</span>` +
                 `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(pirateCombat.loss_pct || 0))}%</span>` +
               `</div>` +
-            `</div>`,
+              `<div class="gc-player-card-stat">` +
+                `<span class="gc-player-card-stat-label">${esc(
+                  t("expedition_report_stat_escort_cover", "Escort cover")
+                )}</span>` +
+                `<span class="gc-player-card-stat-value gc-mono">${esc(
+                  formatInt(Math.round((Number(pirateCombat.escort_effectiveness) || 0) * 100))
+                )}%</span>` +
+              `</div>` +
+            `</div>` +
+            (pirateCombat.recycler_protected
+              ? `<p class="gc-expedition-pirate-recycler-note">${esc(
+                  t(
+                    "expedition_report_pirate_recycler_safe",
+                    "Reclaimers stood off the fight and remained available to salvage debris."
+                  )
+                )}</p>`
+              : ""),
           "gc-combat-report-panel--pirate"
         )
       );
@@ -1846,14 +1914,18 @@
     }
 
     const legendaryVariant = meta.legendary_variant || "";
-    if (legendaryVariant && ["spatial_rift", "time_anomaly", "ancient_beacon"].includes(eventKey)) {
+    if (legendaryVariant && ["spatial_rift", "time_anomaly", "ancient_beacon", "lost_colony", "rogue_ai"].includes(eventKey)) {
       const variantKey = `expedition_report_legendary_${eventKey}_${legendaryVariant}`;
       const variantDefaults = {
         spatial_rift_amplified: "Spatial distortion amplified recovered cargo.",
         spatial_rift_delayed: "The rift collapsed — return delayed.",
         time_anomaly_dilated: "Time dilation stretched the expedition.",
-        time_anomaly_compressed: "Chrono compression registered — no return gain in this phase.",
+        time_anomaly_compressed: "Chrono compression shortened the return flight.",
         ancient_beacon_beacon: "The beacon unlocked a sealed cache from a forgotten age.",
+        lost_colony_supplies: "Abandoned colony stores yielded usable supplies.",
+        lost_colony_echo: "Colony echoes delayed the fleet — no usable stores remained.",
+        rogue_ai_captured: "Rogue AI core captured — research cache secured.",
+        rogue_ai_hostile: "Hostile AI pursuit forced a longer return path.",
       };
       const defaultText =
         variantDefaults[`${eventKey}_${legendaryVariant}`] || "Legendary discovery logged.";

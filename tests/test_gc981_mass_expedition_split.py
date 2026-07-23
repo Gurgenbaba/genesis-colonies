@@ -399,6 +399,8 @@ def test_fleet_page_mass_expo_split_ui_contract(fleet_db, monkeypatch):
     assert "data-fleet-expedition-daily" in html
     assert "data-preview-expedition-daily-row" in html
     assert "data-fleet-mass-expo-legacy" in html
+    assert "data-fleet-mass-expo-usable-slots" in html
+    assert "data-fleet-mass-expo-reserved-slots" in html
 
 
 def test_main_js_mass_expo_split_contract():
@@ -406,6 +408,13 @@ def test_main_js_mass_expo_split_contract():
     assert "mass-expedition/preview" in js
     assert "submitMassExpeditionSplit" in js
     assert "data-fleet-mass-expo-split-submit" in js
+    assert "data-fleet-mass-expo-usable-slots" in js
+    assert "data-fleet-mass-expo-reserved-slots" in js
+    assert "usable_slots" in js
+    assert "reserved_slots" in js
+    assert "fleet_expedition_hint_escort_none" in js
+    assert "fleet_expedition_hint_recycler_tip" in js
+    assert "expedition_rating" in js
 
 
 def test_main_js_ship_max_selection_triggers_mass_expo_preview():

@@ -53,7 +53,9 @@ return max(int(seconds), 1)   # 1-second floor (GC-858)
 
 **Expedition flags:** `get_directive_flags_for_galaxy()` → `expedition_events.resolve_expedition_outcome()`.
 
-**Still deferred:** colonize/trader/command-map unlock flags, `expedition_slot_bonus`, `expedition_legendary_bonus`.
+**Still deferred:** colonize/trader/command-map unlock flags.
+
+**Wired expedition flags:** `expedition_loot_mult`, `expedition_event_bonus`, `expedition_wreckage_bonus`, `expedition_event_factor`, `expedition_legendary_bonus` (weight boost in `_pick_event_key`), `expedition_slot_bonus` (extra fleet slots via `get_max_fleet_slots`).
 
 Owner: `game/galactic_directives/` · [GALACTIC_DIRECTIVES.md](GALACTIC_DIRECTIVES.md)
 

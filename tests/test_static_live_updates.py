@@ -156,6 +156,13 @@ def test_gc620e_expedition_report_delivery_and_effective_cargo():
     assert "expedition_report_delivery_notice" in src
     assert "cargo_jackpot_mult" in src
     assert "Math.pow" not in src.split("function renderExpeditionReportFull(meta)")[1].split("function renderInboxReportTeaser")[0]
+    # GC-EXPO-UX-2: daily efficiency + cargo-cap transparency (display-only).
+    assert "expedition_report_stat_efficiency" in src
+    assert "daily_efficiency_pct" in src
+    assert "raw_loot_total" in src
+    assert "expedition_report_cargo_cap_notice" in src
+    assert "expedition_report_debris_recycler_salvaged" in src
+    assert "expedition_report_pirate_recycler_safe" in src
     de = json.loads(_read("locales/de.json"))
     en = json.loads(_read("locales/en.json"))
     for key in (

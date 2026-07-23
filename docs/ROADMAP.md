@@ -115,9 +115,9 @@ Docs: [PLANET_SCOPE.md](PLANET_SCOPE.md), [PLANET_EVOLUTION.md](PLANET_EVOLUTION
 | Fleet Logistics (collect/distribute) | ✅ | GC-526–531: Bulk API, `/logistics` UI, Reports (`report_phase`) — [FLEET_SYSTEM.md](FLEET_SYSTEM.md) |
 | Recycler-Mission | ✅ | GC-800A Backend + GC-800B UI; GC-800C UX optional |
 | Espionage (beyond probe report) | ✅ | GC-401 tiered intel + inbox UI |
-| Expedition event engine | ✅ | GC-402 weighted events + structured metadata |
-| Expedition fleet mission feedback | ✅ | GC-402B preview hints, status, auto-position 16 |
-| Expedition report visual upgrade | ✅ | GC-402C sci-fi event-card inbox UI |
+| Expedition event engine | ✅ | GC-402 + GC-620I/J + GC-EXPO-W1/DIR/J-B (weights ~60% loot, directives, compression, Lost Colony / Rogue AI) |
+| Expedition fleet mission feedback | ✅ | GC-402B + GC-EXPO-UX preview rating / mass slots |
+| Expedition report visual upgrade | ✅ | GC-402C + GC-EXPO-UX transparency |
 
 Docs: [FLEET_SYSTEM.md](FLEET_SYSTEM.md), [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md)
 

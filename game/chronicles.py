@@ -76,10 +76,13 @@ _EXPO_EVENT_CATEGORIES: Dict[str, str] = {
     "spatial_rift": "legendary",
     "time_anomaly": "legendary",
     "ancient_beacon": "legendary",
+    "lost_colony": "legendary",
+    "rogue_ai": "legendary",
 }
 _EXPO_HAZARD_EVENT_KEYS = frozenset({"ancient_minefield", "ion_storm", "nav_interference"})
-_EXPO_LEGENDARY_EVENT_KEYS = frozenset({"spatial_rift", "time_anomaly", "ancient_beacon"})
-
+_EXPO_LEGENDARY_EVENT_KEYS = frozenset(
+    {"spatial_rift", "time_anomaly", "ancient_beacon", "lost_colony", "rogue_ai"}
+)
 PVP_TAB_OVERVIEW = "overview"
 PVP_TAB_RECENT = "recent"
 PVP_TAB_WINS = "wins"

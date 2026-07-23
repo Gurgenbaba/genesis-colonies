@@ -315,10 +315,35 @@ def get_max_fleet_slots(player_id: int, *, conn=None) -> int:
 
         levels = get_research_levels(user_id=int(player_id), conn=conn)
         nav_level = int(levels.get(NAVIGATION_TECH_KEY, 0) or 0)
-        return fleet_slots_for_navigation_level(nav_level)
+        base = fleet_slots_for_navigation_level(nav_level)
+        return base + _directive_expedition_slot_bonus(int(player_id), conn=conn)
     finally:
         if own and conn is not None:
             conn.close()
+
+
+def _directive_expedition_slot_bonus(player_id: int, *, conn) -> int:
+    """GC-EXPO-DIR: exploration directive may grant extra fleet slots."""
+    try:
+        from .galactic_directives.mechanics import get_directive_flags_for_galaxy
+        from .models import get_homeworld
+
+        hw = get_homeworld(int(player_id), conn=conn) or {}
+        galaxy = int(hw.get("galaxy") or 0)
+        if galaxy <= 0:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT galaxy FROM planets WHERE player_id = ? ORDER BY id ASC LIMIT 1;",
+                (int(player_id),),
+            )
+            row = cur.fetchone()
+            galaxy = int(row["galaxy"]) if row and row["galaxy"] is not None else 0
+        if galaxy <= 0:
+            return 0
+        flags = get_directive_flags_for_galaxy(galaxy, conn=conn) or {}
+        return max(0, int(flags.get("expedition_slot_bonus") or 0))
+    except Exception:
+        return 0
 
 
 def count_active_fleet_slots(player_id: int, *, conn=None) -> int:
@@ -353,7 +378,9 @@ def get_fleet_slot_status(player_id: int, *, conn=None) -> Dict[str, Any]:
         active = count_active_fleet_slots(player_id, conn=conn)
         levels = get_research_levels(user_id=int(player_id), conn=conn)
         nav_level = int(levels.get(NAVIGATION_TECH_KEY, 0) or 0)
-        maximum = fleet_slots_for_navigation_level(nav_level)
+        maximum = fleet_slots_for_navigation_level(nav_level) + _directive_expedition_slot_bonus(
+            int(player_id), conn=conn
+        )
         status: Dict[str, Any] = {
             "active": active,
             "max": maximum,
@@ -2861,8 +2888,17 @@ def _return_timing_from_now(
     delay_seconds: int = 0,
     duration_seconds: int | None = None,
 ) -> Dict[str, int]:
-    started = int(now) + max(0, int(delay_seconds))
-    duration = max(1, int(duration_seconds if duration_seconds is not None else _return_leg_seconds(movement)))
+    """Build return timing. Positive delay defers start; negative delay shortens duration (GC-620J-B)."""
+    delay = int(delay_seconds)
+    base_duration = max(
+        1, int(duration_seconds if duration_seconds is not None else _return_leg_seconds(movement))
+    )
+    if delay < 0:
+        duration = max(1, base_duration + delay)
+        started = int(now)
+    else:
+        started = int(now) + delay
+        duration = base_duration
     return build_return_timing(return_started_at=started, duration_seconds=duration)
 
 
@@ -4482,6 +4518,19 @@ def _handle_expedition_holding_end(movement: Dict[str, Any], *, conn, now: float
     empire_daily_total = int(empire_prod.get("total_per_day") or 0)
     daily_expedition_count = get_expedition_daily_count(player_id, conn=conn, ts=now)
     daily_efficiency_mult = expedition_daily_efficiency_multiplier(daily_expedition_count)
+    familiarity_status = None
+    if world_key:
+        try:
+            from .planet_evolution.world_progress import (
+                familiarity_from_count,
+                get_world_progress_row,
+            )
+
+            progress_row = get_world_progress_row(player_id, world_key, conn=conn)
+            count = int((progress_row or {}).get("expedition_count") or 0)
+            familiarity_status, _ = familiarity_from_count(count)
+        except Exception:
+            familiarity_status = None
     outcome = resolve_expedition_outcome(
         movement_id,
         cargo_total=cargo_total,
@@ -4492,6 +4541,7 @@ def _handle_expedition_holding_end(movement: Dict[str, Any], *, conn, now: float
         world_type=str(world_context.get("world_type") or "") if world_context else None,
         directive_flags=directive_flags,
         daily_efficiency_mult=daily_efficiency_mult,
+        familiarity_status=familiarity_status,
     )
     rewards = dict(outcome["rewards"])
     if world_key:

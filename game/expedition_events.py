@@ -36,67 +36,63 @@ _EXPO_ONLY_FIGHT_FACTOR = 0.18  # desperation fight when no combat escorts aboar
 _VOIDRUNNER_KEY = "eclipse_runner"
 _VOIDRUNNER_DISCOVERY_BONUS = 0.25
 
-# Per-event multiplier band, economy-day share, and resource split (shares sum to 1.0).
+# Per-event multiplier band and resource split (shares sum to 1.0).
 _EVENT_LOOT_PROFILES: Dict[str, Dict[str, Any]] = {
     "mineral_deposit": {
         "mult_range": (1.00, 1.35),
-        "economy_day_range": (0.0050, 0.0200),
         "split": {"metal": 0.62, "crystal": 0.38},
     },
     "fuel_cache": {
         "mult_range": (0.85, 1.15),
-        "economy_day_range": (0.0050, 0.0200),
         "split": {"fuel_cells": 1.0},
     },
     "debris_salvage": {
         "mult_range": (1.10, 1.60),
-        "economy_day_range": (0.0200, 0.0800),
         "split": {"metal": 0.70, "crystal": 0.25, "fuel_cells": 0.05},
     },
     "ancient_stash": {
         "mult_range": (1.80, 3.00),
-        "economy_day_range": (0.0500, 0.2000),
         "split": {"metal": 0.50, "crystal": 0.35, "fuel_cells": 0.15},
     },
     "distress_beacon": {
         "mult_range": (0.90, 1.25),
-        "economy_day_range": (0.0100, 0.0400),
         "split": {"metal": 0.45, "crystal": 0.30, "fuel_cells": 0.25},
     },
     "pirate_encounter": {
         "mult_range": (0.45, 0.80),
-        "economy_day_range": (0.0020, 0.0080),
         "split": {"metal": 0.55, "crystal": 0.30, "fuel_cells": 0.15},
     },
     "lost_container": {
         "mult_range": (0.35, 0.65),
-        "economy_day_range": (0.0010, 0.0050),
         "split": {"metal": 0.50, "crystal": 0.35, "fuel_cells": 0.15},
     },
     "abandoned_convoy": {
         "mult_range": (0.55, 0.95),
-        "economy_day_range": (0.0030, 0.0120),
         "split": {"metal": 0.40, "crystal": 0.45, "fuel_cells": 0.15},
     },
     "ancient_derelict": {
         "mult_range": (0.20, 0.40),
-        "economy_day_range": (0.0020, 0.0080),
         "split": {"metal": 0.45, "crystal": 0.35, "fuel_cells": 0.20},
     },
     "spatial_rift": {
         "mult_range": (0.70, 1.00),
-        "economy_day_range": (0.0040, 0.0150),
         "split": {"metal": 0.50, "crystal": 0.35, "fuel_cells": 0.15},
     },
     "time_anomaly": {
         "mult_range": (0.35, 0.65),
-        "economy_day_range": (0.0010, 0.0050),
         "split": {"metal": 0.50, "crystal": 0.35, "fuel_cells": 0.15},
     },
     "ancient_beacon": {
         "mult_range": (0.15, 0.30),
-        "economy_day_range": (0.0010, 0.0040),
         "split": {"metal": 0.45, "crystal": 0.35, "fuel_cells": 0.20},
+    },
+    "lost_colony": {
+        "mult_range": (0.90, 1.40),
+        "split": {"metal": 0.40, "crystal": 0.35, "fuel_cells": 0.25},
+    },
+    "rogue_ai": {
+        "mult_range": (0.40, 0.75),
+        "split": {"metal": 0.35, "crystal": 0.45, "fuel_cells": 0.20},
     },
 }
 
@@ -119,6 +115,8 @@ _EXPEDITION_LOOTBOX_DROPS: Dict[str, Dict[str, Any]] = {
     "spatial_rift": {"chance": 0.0, "boxes": ()},
     "time_anomaly": {"chance": 0.0, "boxes": ()},
     "ancient_beacon": {"chance": 0.0, "boxes": ()},
+    "lost_colony": {"chance": 0.0, "boxes": ()},
+    "rogue_ai": {"chance": 0.0, "boxes": ()},
 }
 
 # Hazard events — non-combat risk (GC-620I-A).
@@ -169,17 +167,43 @@ _CONVoy_SHIPS_ONLY_CHANCE = 0.45
 _CONVoy_BOTH_BONUS_BOX_CHANCE = 0.25
 _CONVoy_SALVAGE_SCORE_CAP_RATIO = 0.10
 
-# Legendary discoveries (GC-620J-A).
+# Legendary discoveries (GC-620J-A / GC-620J-B).
 _LEGENDARY_EVENT_KEYS: frozenset[str] = frozenset(
-    {"spatial_rift", "time_anomaly", "ancient_beacon"}
+    {"spatial_rift", "time_anomaly", "ancient_beacon", "lost_colony", "rogue_ai"}
 )
 _SPATIAL_RIFT_AMPLIFIED_CHANCE = 0.60
 _SPATIAL_RIFT_AMPL_MULT_RANGE = (1.40, 1.80)
 _SPATIAL_RIFT_DELAY_MULT_RANGE = (0.25, 0.55)
 _TIME_ANOMALY_BONUS_CHANCE = 0.30
 _TIME_ANOMALY_DILATED_DELAY_RANGE = (0.20, 0.40)
+_TIME_ANOMALY_COMPRESSED_SHORTEN_RANGE = (0.15, 0.35)  # GC-620J-B: real early return
 _TIME_ANOMALY_BONUS_LOOT_SCALE = 0.50
+_LOST_COLONY_SUPPLIES_CHANCE = 0.55
+_ROGUE_AI_CAPTURED_CHANCE = 0.50
+_ROGUE_AI_HOSTILE_DELAY_RANGE = (0.20, 0.45)
 
+# World familiarity → small loot / risk bias (GC-583D-D2). Display tiers from world_progress.
+_FAMILIARITY_LOOT_MULT: Dict[str, float] = {
+    "unknown": 1.0,
+    "mapped": 1.04,
+    "stabilized": 1.08,
+    "outpost_prepared": 1.10,
+}
+_FAMILIARITY_RISK_WEIGHT_MULT: Dict[str, float] = {
+    "unknown": 1.0,
+    "mapped": 0.92,
+    "stabilized": 0.85,
+    "outpost_prepared": 0.80,
+}
+_FAMILIARITY_LEGENDARY_WEIGHT_MULT: Dict[str, float] = {
+    "unknown": 1.0,
+    "mapped": 1.05,
+    "stabilized": 1.12,
+    "outpost_prepared": 1.18,
+}
+_RISK_EVENT_KEYS: frozenset[str] = frozenset(
+    {"pirate_encounter", "ancient_minefield", "ion_storm", "nav_interference"}
+)
 _EXPEDITION_ALLOWED_BOX_KEYS = frozenset(
     {
         "generic_supply_container",
@@ -202,11 +226,11 @@ _EXPEDITION_JACKPOT_DROPS: Sequence[tuple[float, str]] = (
     (0.00050, "mythic_container"),
 )
 
-# Weighted event table (sum = 100). Server-authoritative; extend here only.
+# Weighted event table (GC-EXPO-W1: ~60% loot, total 120). Server-authoritative; extend here only.
 _EXPEDITION_EVENTS: Sequence[Dict[str, Any]] = (
     {
         "key": "void_scan",
-        "weight": 6,
+        "weight": 8,
         "label_key": "expedition_event_void_scan",
         "desc_key": "expedition_event_void_scan_desc",
         "severity": "minor",
@@ -214,28 +238,28 @@ _EXPEDITION_EVENTS: Sequence[Dict[str, Any]] = (
     },
     {
         "key": "mineral_deposit",
-        "weight": 33,
+        "weight": 28,
         "label_key": "expedition_event_mineral_deposit",
         "desc_key": "expedition_event_mineral_deposit_desc",
         "severity": "normal",
     },
     {
         "key": "fuel_cache",
-        "weight": 18,
+        "weight": 14,
         "label_key": "expedition_event_fuel_cache",
         "desc_key": "expedition_event_fuel_cache_desc",
         "severity": "normal",
     },
     {
         "key": "debris_salvage",
-        "weight": 14,
+        "weight": 12,
         "label_key": "expedition_event_debris_salvage",
         "desc_key": "expedition_event_debris_salvage_desc",
         "severity": "minor",
     },
     {
         "key": "nav_interference",
-        "weight": 6,
+        "weight": 8,
         "label_key": "expedition_event_nav_interference",
         "desc_key": "expedition_event_nav_interference_desc",
         "severity": "minor",
@@ -244,7 +268,7 @@ _EXPEDITION_EVENTS: Sequence[Dict[str, Any]] = (
     },
     {
         "key": "distress_beacon",
-        "weight": 11,
+        "weight": 10,
         "label_key": "expedition_event_distress_beacon",
         "desc_key": "expedition_event_distress_beacon_desc",
         "severity": "normal",
@@ -252,7 +276,7 @@ _EXPEDITION_EVENTS: Sequence[Dict[str, Any]] = (
     },
     {
         "key": "sensor_glitch",
-        "weight": 3,
+        "weight": 4,
         "label_key": "expedition_event_sensor_glitch",
         "desc_key": "expedition_event_sensor_glitch_desc",
         "severity": "minor",
@@ -260,21 +284,21 @@ _EXPEDITION_EVENTS: Sequence[Dict[str, Any]] = (
     },
     {
         "key": "ancient_stash",
-        "weight": 10,
+        "weight": 8,
         "label_key": "expedition_event_ancient_stash",
         "desc_key": "expedition_event_ancient_stash_desc",
         "severity": "major",
     },
     {
         "key": "pirate_encounter",
-        "weight": 4,
+        "weight": 5,
         "label_key": "expedition_event_pirate_encounter",
         "desc_key": "expedition_event_pirate_encounter_desc",
         "severity": "major",
     },
     {
         "key": "ion_storm",
-        "weight": 3,
+        "weight": 4,
         "label_key": "expedition_event_ion_storm",
         "desc_key": "expedition_event_ion_storm_desc",
         "severity": "minor",
@@ -284,7 +308,7 @@ _EXPEDITION_EVENTS: Sequence[Dict[str, Any]] = (
     },
     {
         "key": "ancient_minefield",
-        "weight": 2,
+        "weight": 4,
         "label_key": "expedition_event_ancient_minefield",
         "desc_key": "expedition_event_ancient_minefield_desc",
         "severity": "major",
@@ -292,21 +316,21 @@ _EXPEDITION_EVENTS: Sequence[Dict[str, Any]] = (
     },
     {
         "key": "lost_container",
-        "weight": 3,
+        "weight": 5,
         "label_key": "expedition_event_lost_container",
         "desc_key": "expedition_event_lost_container_desc",
         "severity": "normal",
     },
     {
         "key": "abandoned_convoy",
-        "weight": 2,
+        "weight": 3,
         "label_key": "expedition_event_abandoned_convoy",
         "desc_key": "expedition_event_abandoned_convoy_desc",
         "severity": "major",
     },
     {
         "key": "ancient_derelict",
-        "weight": 1,
+        "weight": 2,
         "label_key": "expedition_event_ancient_derelict",
         "desc_key": "expedition_event_ancient_derelict_desc",
         "severity": "major",
@@ -333,6 +357,22 @@ _EXPEDITION_EVENTS: Sequence[Dict[str, Any]] = (
         "weight": 1,
         "label_key": "expedition_event_ancient_beacon",
         "desc_key": "expedition_event_ancient_beacon_desc",
+        "severity": "major",
+        "story_tier": "legendary",
+    },
+    {
+        "key": "lost_colony",
+        "weight": 1,
+        "label_key": "expedition_event_lost_colony",
+        "desc_key": "expedition_event_lost_colony_desc",
+        "severity": "major",
+        "story_tier": "legendary",
+    },
+    {
+        "key": "rogue_ai",
+        "weight": 1,
+        "label_key": "expedition_event_rogue_ai",
+        "desc_key": "expedition_event_rogue_ai_desc",
         "severity": "major",
         "story_tier": "legendary",
     },
@@ -363,6 +403,8 @@ _EXPEDITION_EVENT_CATEGORIES: Dict[str, str] = {
     "spatial_rift": "legendary",
     "time_anomaly": "legendary",
     "ancient_beacon": "legendary",
+    "lost_colony": "legendary",
+    "rogue_ai": "legendary",
 }
 
 
@@ -734,10 +776,16 @@ def _pick_event_key(
     salvage: bool = False,
     event_bonus: float = 0.0,
     voidrunner_bonus: float = 0.0,
+    legendary_bonus: float = 0.0,
+    familiarity_status: str | None = None,
 ) -> str:
     """Pick event; extra expedition hulls shift weight away from empty outcomes."""
     bonus = min(0.12, max(0, int(expedition_ship_count)) * 0.03) + max(0.0, float(event_bonus))
     discovery_bonus = max(0.0, float(voidrunner_bonus))
+    legendary_boost = max(0.0, float(legendary_bonus))
+    fam = str(familiarity_status or "unknown")
+    risk_mult = float(_FAMILIARITY_RISK_WEIGHT_MULT.get(fam, 1.0))
+    legendary_fam_mult = float(_FAMILIARITY_LEGENDARY_WEIGHT_MULT.get(fam, 1.0))
     empty_keys = {"void_scan", "sensor_glitch", "ion_storm", "ancient_minefield", "nav_interference"}
     adjusted: list[tuple[str, float]] = []
     for event in _EXPEDITION_EVENTS:
@@ -749,6 +797,10 @@ def _pick_event_key(
             weight = max(1.0, weight * (1.0 - bonus))
         elif _event_has_loot(key):
             weight = weight * (1.0 + bonus + discovery_bonus)
+        if key in _LEGENDARY_EVENT_KEYS:
+            weight = weight * (1.0 + legendary_boost) * legendary_fam_mult
+        if key in _RISK_EVENT_KEYS:
+            weight = max(0.5, weight * risk_mult)
         adjusted.append((key, weight))
     if not adjusted:
         adjusted = [(str(_EXPEDITION_EVENTS[0]["key"]), 1.0)]
@@ -1234,7 +1286,7 @@ def resolve_time_anomaly_legendary(
     flight_seconds: int,
     event_factor: float = DEFAULT_EVENT_FACTOR,
 ) -> Dict[str, Any]:
-    """Time anomaly — dilated delay or compressed flavor with optional mini bonus."""
+    """Time anomaly — dilated delay or compressed early return (GC-620J-B) with optional mini bonus."""
     base_flight = max(1, int(flight_seconds or 60))
     compressed = rng.random() < 0.50
     rewards = _empty_rewards()
@@ -1242,6 +1294,12 @@ def resolve_time_anomaly_legendary(
     delay_extra = 0
     if compressed:
         variant = "compressed"
+        shorten = rng.uniform(
+            _TIME_ANOMALY_COMPRESSED_SHORTEN_RANGE[0],
+            _TIME_ANOMALY_COMPRESSED_SHORTEN_RANGE[1],
+        )
+        # Negative delay shortens return duration in fleet._return_timing_from_now.
+        delay_extra = -max(1, int(base_flight * shorten))
         if rng.random() < _TIME_ANOMALY_BONUS_CHANCE:
             loot_rng = _legendary_loot_rng(movement_id, 144881)
             rewards, loot_debug = _compute_event_loot(
@@ -1279,6 +1337,91 @@ def resolve_time_anomaly_legendary(
         "loot_debug": loot_debug,
         "delay_extra": int(delay_extra),
         "lootboxes": [],
+    }
+
+
+def resolve_lost_colony_legendary(
+    rng: random.Random,
+    *,
+    movement_id: int,
+    expo_value: int,
+    cargo_total: int,
+    flight_seconds: int,
+    event_factor: float = DEFAULT_EVENT_FACTOR,
+) -> Dict[str, Any]:
+    """Lost colony — supply cache or haunted echo delay (GC-620J-B)."""
+    base_flight = max(1, int(flight_seconds or 60))
+    if rng.random() < _LOST_COLONY_SUPPLIES_CHANCE:
+        loot_rng = _legendary_loot_rng(movement_id, 166001)
+        rewards, loot_debug = _compute_event_loot(
+            loot_rng,
+            "lost_colony",
+            expo_value,
+            cargo_total=int(cargo_total),
+            event_factor=event_factor,
+        )
+        boxes = [{"key": "resource_cache", "amount": 1, "jackpot": False}]
+        if rng.random() < 0.35:
+            boxes.append({"key": "research_capsule", "amount": 1, "jackpot": False})
+        return {
+            "variant": "supplies",
+            "rewards": rewards,
+            "loot_debug": loot_debug,
+            "delay_extra": 0,
+            "lootboxes": boxes,
+        }
+    delay_mult = rng.uniform(0.20, 0.40)
+    return {
+        "variant": "echo",
+        "rewards": _empty_rewards(),
+        "loot_debug": {"expo_value": 0, "raw_loot_total": 0},
+        "delay_extra": max(1, int(base_flight * delay_mult)),
+        "lootboxes": [],
+    }
+
+
+def resolve_rogue_ai_legendary(
+    rng: random.Random,
+    *,
+    movement_id: int,
+    expo_value: int,
+    cargo_total: int,
+    flight_seconds: int,
+    event_factor: float = DEFAULT_EVENT_FACTOR,
+) -> Dict[str, Any]:
+    """Rogue AI station — captured intel cache or hostile chase delay (GC-620J-B)."""
+    base_flight = max(1, int(flight_seconds or 60))
+    if rng.random() < _ROGUE_AI_CAPTURED_CHANCE:
+        loot_rng = _legendary_loot_rng(movement_id, 177101)
+        rewards, loot_debug = _compute_event_loot(
+            loot_rng,
+            "rogue_ai",
+            expo_value,
+            cargo_total=int(cargo_total),
+            event_factor=event_factor,
+        )
+        return {
+            "variant": "captured",
+            "rewards": rewards,
+            "loot_debug": loot_debug,
+            "delay_extra": 0,
+            "lootboxes": [{"key": "research_capsule", "amount": 1, "jackpot": True}],
+        }
+    delay_mult = rng.uniform(
+        _ROGUE_AI_HOSTILE_DELAY_RANGE[0],
+        _ROGUE_AI_HOSTILE_DELAY_RANGE[1],
+    )
+    lootboxes: list[Dict[str, Any]] = []
+    rewards = _empty_rewards()
+    loot_debug: Dict[str, Any] = {"expo_value": 0, "raw_loot_total": 0}
+    if rng.random() < 0.25:
+        lootboxes = [{"key": "military_cache", "amount": 1, "jackpot": False}]
+    return {
+        "variant": "hostile",
+        "rewards": rewards,
+        "loot_debug": loot_debug,
+        "delay_extra": max(1, int(base_flight * delay_mult)),
+        "lootboxes": lootboxes,
     }
 
 
@@ -1520,6 +1663,7 @@ def resolve_expedition_outcome(
     world_type: str | None = None,
     directive_flags: Mapping[str, Any] | None = None,
     daily_efficiency_mult: float = 1.0,
+    familiarity_status: str | None = None,
 ) -> Dict[str, Any]:
     """Idempotent expedition resolution keyed by movement id."""
     flags = dict(directive_flags or {})
@@ -1527,7 +1671,10 @@ def resolve_expedition_outcome(
     event_bonus = float(flags.get("expedition_event_bonus") or 0.0)
     loot_mult = float(flags.get("expedition_loot_mult") or 1.0)
     wreckage_bonus = float(flags.get("expedition_wreckage_bonus") or 0.0)
+    legendary_bonus = float(flags.get("expedition_legendary_bonus") or 0.0)
     global_event_factor = float(flags.get("expedition_event_factor") or DEFAULT_EVENT_FACTOR)
+    fam_status = str(familiarity_status or "unknown")
+    fam_loot_mult = float(_FAMILIARITY_LOOT_MULT.get(fam_status, 1.0))
     expo_value = _expo_value_for_outcome(ships, expedition_ship_count)
     fleet_value = _fleet_value_for_outcome(ships, expedition_ship_count)
     fleet_rating = build_expedition_fleet_rating(ships or {})
@@ -1541,6 +1688,8 @@ def resolve_expedition_outcome(
         salvage=salvage,
         event_bonus=event_bonus,
         voidrunner_bonus=voidrunner_bonus,
+        legendary_bonus=legendary_bonus,
+        familiarity_status=fam_status,
     )
     event = _EVENT_BY_KEY[event_key]
     pirate_combat: Dict[str, Any] | None = None
@@ -1613,9 +1762,29 @@ def resolve_expedition_outcome(
                 cargo_total=int(cargo_total),
                 event_factor=global_event_factor,
             )
-        story_tier = "legendary"
-        legendary_variant = str(legendary_outcome.get("variant") or "")
-        delay_extra_preset = int(legendary_outcome.get("delay_extra") or 0)
+        elif event_key == "lost_colony":
+            legendary_outcome = resolve_lost_colony_legendary(
+                leg_rng,
+                movement_id=movement_id,
+                expo_value=expo_value,
+                cargo_total=int(cargo_total),
+                flight_seconds=int(flight_seconds or 60),
+                event_factor=global_event_factor,
+            )
+        elif event_key == "rogue_ai":
+            legendary_outcome = resolve_rogue_ai_legendary(
+                leg_rng,
+                movement_id=movement_id,
+                expo_value=expo_value,
+                cargo_total=int(cargo_total),
+                flight_seconds=int(flight_seconds or 60),
+                event_factor=global_event_factor,
+            )
+        if legendary_outcome is not None:
+            story_tier = "legendary"
+            legendary_variant = str(legendary_outcome.get("variant") or "")
+            raw_delay = legendary_outcome.get("delay_extra")
+            delay_extra_preset = int(raw_delay) if raw_delay is not None else 0
 
     if legendary_outcome is not None:
         rewards = dict(legendary_outcome.get("rewards") or _empty_rewards())
@@ -1662,6 +1831,8 @@ def resolve_expedition_outcome(
         rewards = _empty_rewards()
         loot_debug = {"expo_value": int(expo_value), "raw_loot_total": 0}
     daily_eff = max(EXPEDITION_DAILY_EFFICIENCY_FLOOR, min(1.0, float(daily_efficiency_mult)))
+    if fam_loot_mult != 1.0:
+        _scale_resource_rewards(rewards, fam_loot_mult)
     _scale_resource_rewards(rewards, daily_eff)
     _apply_directive_reward_modifiers(
         rewards,
@@ -1711,6 +1882,7 @@ def resolve_expedition_outcome(
         "cargo_total": int(cargo_total),
         "losses": ship_losses,
         "losses_total": int(sum(ship_losses.values())),
+        "familiarity_status": fam_status,
     }
     if pirate_combat is not None:
         result["pirate_combat"] = pirate_combat
@@ -2062,6 +2234,12 @@ def build_expedition_report(
         "empire_daily_total": int(outcome.get("empire_daily_total") or 0),
         "expo_value": int(outcome.get("expo_value") or 0),
         "raw_loot_total": int(outcome.get("raw_loot_total") or 0),
+        "daily_efficiency_mult": float(outcome.get("daily_efficiency_mult") or 1.0),
+        "daily_efficiency_pct": int(
+            outcome.get("daily_efficiency_pct")
+            if outcome.get("daily_efficiency_pct") is not None
+            else round(float(outcome.get("daily_efficiency_mult") or 1.0) * 100)
+        ),
         "losses": {str(k): int(v) for k, v in ship_losses.items() if int(v or 0) > 0},
         "losses_total": losses_total,
         "salvaged_ships": {str(k): int(v) for k, v in salvaged_ships.items() if int(v or 0) > 0},
@@ -2090,6 +2268,7 @@ def build_expedition_report(
             "win_chance": float(pirate_combat.get("win_chance") or 0),
             "loss_pct": int(pirate_combat.get("loss_pct") or 0),
             "salvage_tier": str(pirate_combat.get("salvage_tier") or "none"),
+            "recycler_protected": bool(pirate_combat.get("recycler_protected")),
         }
         metadata["pirate_won"] = bool(pirate_combat.get("won"))
     rating = dict(outcome.get("expedition_rating") or {})

@@ -61,7 +61,7 @@ Trader limit still: `empire_day_total × pct / 100` (auto-scales with GC-820 pro
 | `LOOT_RESOURCE_FLOOR_MAX` | 10 000 | 30 000 |
 
 Mine-scaled loot still uses `empire_resource_production_per_hour()` → GC-820.  
-Expedition `economy_day_range` % bands unchanged (already empire-relative).
+Expedition loot uses expo-value formula (`mult_range` profiles). Legacy `economy_day_range` profile fields were removed (dead / unused — Regel 19).
 
 ---
 
