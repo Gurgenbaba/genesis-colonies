@@ -628,6 +628,51 @@ def test_main_js_gc742_ssr_skip_init_game_state():
     assert "GC.refreshInFlight = null" in abort_fn
 
 
+def test_resource_live_rates_survive_soft_nav_and_unchanged_poll():
+    """Soft-nav / skipGameState must restore production rates; unchanged polls must not leave ticker at 0."""
+    src = _read("static/main.js")
+    boot_fn = src.split("function bootstrapResourceLiveFromDom()")[1].split("const GC_DEFER_CHAT_BOOT_MS")[0]
+    assert "resolveBootstrapProductionRates(planetId)" in boot_fn
+    # Must not hardcode zero rates as the only bootstrap source.
+    assert "prodMetal: 0,\n      prodCrystal: 0,\n      prodFuelCells: 0," not in boot_fn
+    assert "prodMetal: rates.prodMetal" in boot_fn
+    assert "prodCrystal: rates.prodCrystal" in boot_fn
+    assert "prodFuelCells: rates.prodFuelCells" in boot_fn
+
+    resolve_fn = src.split("function resolveBootstrapProductionRates(planetId)")[1].split(
+        "function bootstrapResourceLiveFromDom()"
+    )[0]
+    assert "productionRatesFromState(GC.lastState)" in resolve_fn
+    assert 'parseDomResRate("metal")' in resolve_fn
+    assert 'parseDomResRate("crystal")' in resolve_fn
+    assert 'parseDomResRate("fuel_cells")' in resolve_fn
+    assert "_resourceLive.prodMetal" in resolve_fn
+
+    # Soft-nav / skipGameState path still bootstraps after cleanup (rate restore).
+    init_body = src.split("const afterInit = async () => {")[1].split("if (page === \"messages\")")[0]
+    assert "shouldSkipInitGameStateAfterSsr(page, opts)" in init_body
+    assert "bootstrapResourceLiveFromDom()" in init_body
+
+    safety_fn = src.split("function maybeRestoreResourceRatesAfterUnchangedPoll()")[1].split(
+        "function projectLiveResourceAmount"
+    )[0]
+    assert "resourceLiveRatesAreZero()" in safety_fn
+    assert "productionRatesFromState(GC.lastState)" in safety_fn
+    assert 'refreshGameState("resource_rates_missing")' in safety_fn
+    assert "_lastPollVersion = 0" in safety_fn
+    assert "RESOURCE_RATES_MISSING_FORCE_COOLDOWN_MS" in src
+
+    # Call must sit on the unchanged branch before resolveFlight.
+    assert "maybeRestoreResourceRatesAfterUnchangedPoll()" in src.split(
+        "if (data.unchanged === true)"
+    )[1].split("resolveFlight(data)")[0]
+
+    hud_only = src.split("function isHudOnlyGameStateReason(reason)")[1].split(
+        "function isPageReloadGameStateReason"
+    )[0]
+    assert 'r === "resource_rates_missing"' in hud_only
+
+
 def test_app_gc745_pjax_server_fastpath():
     """GC-745: PJAX requests skip heavy shell globals and use poll live path."""
     app_py = _read("app.py")

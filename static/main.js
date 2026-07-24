@@ -1215,6 +1215,51 @@
     return pageHasSsrLiveBoot();
   }
 
+  function productionRatesFromState(state) {
+    const prod = (state && state.production_per_hour) || {};
+    return {
+      prodMetal: Math.floor(Number(prod.metal_mine ?? prod.metal ?? 0)),
+      prodCrystal: Math.floor(Number(prod.crystal_mine ?? prod.crystal ?? 0)),
+      prodFuelCells: Math.floor(Number(prod.fuel_cell_plant ?? prod.fuel_cells ?? 0)),
+    };
+  }
+
+  function parseDomResRate(key) {
+    const el = document.querySelector(`#resource-bar [data-res-rate="${key}"]`);
+    if (!el) return 0;
+    const text = String(el.textContent || "").replace(/\s/g, "");
+    const m = text.match(/([+-]?\d[\d.,]*)/);
+    if (!m) return 0;
+    return Math.max(0, parseIntNumber(m[1]));
+  }
+
+  function resolveBootstrapProductionRates(planetId) {
+    const fromState = productionRatesFromState(GC.lastState);
+    if (fromState.prodMetal || fromState.prodCrystal || fromState.prodFuelCells) {
+      return fromState;
+    }
+    const fromDom = {
+      prodMetal: parseDomResRate("metal"),
+      prodCrystal: parseDomResRate("crystal"),
+      prodFuelCells: parseDomResRate("fuel_cells"),
+    };
+    if (fromDom.prodMetal || fromDom.prodCrystal || fromDom.prodFuelCells) {
+      return fromDom;
+    }
+    if (
+      _resourceLive
+      && Number(_resourceLive.planetId || 0) === Number(planetId || 0)
+      && (_resourceLive.prodMetal || _resourceLive.prodCrystal || _resourceLive.prodFuelCells)
+    ) {
+      return {
+        prodMetal: Math.floor(Number(_resourceLive.prodMetal || 0)),
+        prodCrystal: Math.floor(Number(_resourceLive.prodCrystal || 0)),
+        prodFuelCells: Math.floor(Number(_resourceLive.prodFuelCells || 0)),
+      };
+    }
+    return { prodMetal: 0, prodCrystal: 0, prodFuelCells: 0 };
+  }
+
   function bootstrapResourceLiveFromDom() {
     const planetId = getDomPlanetId();
     if (!planetId) return false;
@@ -1223,6 +1268,7 @@
       if (!el) return 0;
       return parseIntNumber(el.textContent);
     };
+    const rates = resolveBootstrapProductionRates(planetId);
     syncResourceLiveBaseline({
       planetId,
       metal: readVal("#resource-bar .res-value.metal"),
@@ -1233,9 +1279,9 @@
       storageFuelCells: readVal("#resource-bar .res-cap.fuel_cells"),
       energyUsed: readVal("#resource-bar .res-value.energy[data-energy-used], #resource-bar [data-energy-used]"),
       energyTotal: readVal("#resource-bar .res-cap.energy[data-energy-total], #resource-bar [data-energy-total]"),
-      prodMetal: 0,
-      prodCrystal: 0,
-      prodFuelCells: 0,
+      prodMetal: rates.prodMetal,
+      prodCrystal: rates.prodCrystal,
+      prodFuelCells: rates.prodFuelCells,
     });
     return true;
   }
@@ -10320,6 +10366,51 @@
     startResourceTicker();
   }
 
+  let _resourceRatesMissingForceAt = 0;
+  const RESOURCE_RATES_MISSING_FORCE_COOLDOWN_MS = 15000;
+
+  function resourceLiveRatesAreZero() {
+    return !(
+      _resourceLive.prodMetal
+      || _resourceLive.prodCrystal
+      || _resourceLive.prodFuelCells
+    );
+  }
+
+  /** After diet `{unchanged:true}`, restore ticker rates or force one full diet. */
+  function maybeRestoreResourceRatesAfterUnchangedPoll() {
+    if (!resourceLiveRatesAreZero()) return;
+    const fromState = productionRatesFromState(GC.lastState);
+    if (fromState.prodMetal || fromState.prodCrystal || fromState.prodFuelCells) {
+      const planetId = Number(_resourceLive.planetId || getDomPlanetId() || 0);
+      if (!planetId) return;
+      syncResourceLiveBaseline({
+        planetId,
+        metal: _resourceLive.metal,
+        crystal: _resourceLive.crystal,
+        fuelCells: _resourceLive.fuelCells,
+        storageMetal: _resourceLive.capMetal,
+        storageCrystal: _resourceLive.capCrystal,
+        storageFuelCells: _resourceLive.capFuelCells,
+        energyUsed: _resourceLive.energyUsed,
+        energyTotal: _resourceLive.energyTotal,
+        prodMetal: fromState.prodMetal,
+        prodCrystal: fromState.prodCrystal,
+        prodFuelCells: fromState.prodFuelCells,
+      });
+      return;
+    }
+    const now = Date.now();
+    if (now - _resourceRatesMissingForceAt < RESOURCE_RATES_MISSING_FORCE_COOLDOWN_MS) return;
+    _resourceRatesMissingForceAt = now;
+    _lastPollVersion = 0;
+    queueMicrotask(() => {
+      if (!shouldRunGameLoop() || _authLoopAborted) return;
+      if (!resourceLiveRatesAreZero()) return;
+      refreshGameState("resource_rates_missing");
+    });
+  }
+
   function projectLiveResourceAmount(current, prodPerHour, cap, hours) {
     const cur = Math.max(0, Math.floor(Number(current) || 0));
     const prod = Math.max(0, Math.floor(Number(prodPerHour) || 0));
@@ -13009,6 +13100,7 @@
       || r === "pjax_nav"
       || r === "fleet_countdown_expired"
       || r === "fleet_drawer_boot"
+      || r === "resource_rates_missing"
     );
   }
 
@@ -13658,6 +13750,7 @@
 
         if (data.unchanged === true) {
           rememberPollVersion(data);
+          maybeRestoreResourceRatesAfterUnchangedPoll();
           const wantPolling = hasBusyLiveActivity();
           // Cadence is owned by gameStatePollTick (active/idle/hidden). Do not
           // stop+start here — when hidden, lastInterval is always > active and
