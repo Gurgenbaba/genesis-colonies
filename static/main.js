@@ -1975,13 +1975,16 @@
     lc.intervals = [];
     lc.timeouts = [];
     lc.abortControllers = [];
-    // Soft ingame PJAX keeps the progress ticker so fleet ETAs do not freeze/reset.
+    // Soft-Nav (GC-PERF-PJAX-TICKER-001): always pause progress ticker during page
+    // tear-down so queue DOM walks / finish-refresh cannot contend with PJAX HTML.
+    // Resource ticker stays alive so shell rates are not wiped.
+    GC.stopProgressTicker();
     if (!preserveGameLoop) {
-      GC.stopProgressTicker();
       stopResourceTicker();
+      // Soft-Nav keeps lastState queue timers; clearing zero-keys re-arms finish refresh mid-nav.
+      _resetQueueLiveStates();
+      GC.stopPolling();
     }
-    _resetQueueLiveStates();
-    if (!preserveGameLoop) GC.stopPolling();
     if (typeof GC.hideCardReqTooltip === "function") GC.hideCardReqTooltip();
     // Important: clear any stuck PJAX/link blockers (e.g. after leaving admin).
     // This also closes HUD portals/menus and resets nav animation state.
@@ -4100,6 +4103,8 @@
 
   function requestFinishRefresh(type) {
     if (!shouldRunGameLoop() || _authLoopAborted) return;
+    // Soft-Nav: never arm game-state storms while PJAX HTML is in flight.
+    if (GC.pjaxInFlight) return;
     if (type === "shipyard" || type === "defense" || type === "buildings" || type === "research") {
       requestQueueTimerZeroRefresh({ domain: type, jobId: 0, finishAt: 0 });
       return;
@@ -9492,6 +9497,7 @@
 
   function requestQueueTimerZeroRefresh(meta) {
     if (!shouldRunGameLoop() || _authLoopAborted) return;
+    if (GC.pjaxInFlight) return;
     const o = meta && typeof meta === "object" ? meta : {};
     const domain = String(o.domain || "");
     const jobId = Math.floor(Number(o.jobId || 0));

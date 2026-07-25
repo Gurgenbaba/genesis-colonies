@@ -30,6 +30,7 @@ Light-PJAX und SSR-Skip (Owner: `static/main.js`, Details in [STATE_AJAX.md](STA
 | `pageHasSsrLiveBoot()` / `shouldSkipInitGameStateAfterSsr` | Kein sofortiger Full-`/api/game-state` nach frischem SSR (GC-742) |
 | Ingame-Shell / Buildings-Tab Light-PJAX | `skipGameState` (+ ggf. `preserveGameLoop` / `skipPolling`) |
 | Hung diet-poll before PJAX | Always `abortInFlightGameStateFetches()` even on light-nav — avoids SQLite worker starvation after long idle |
+| Soft-Nav tickers (**GC-PERF-PJAX-TICKER-001**) | Progress-Ticker pausiert während Apply (`cleanupPage` → `initPage`); Resource-Ticker bleibt; `requestFinishRefresh` / queue-timer-zero no-op solange `GC.pjaxInFlight` |
 | PJAX fetch failure | Hard-load fallback (`location.assign`) so the shell does not stay toast-only |
 | Shell-HUD nach Login | `#gc-hud-boot-state` → `bootstrapHudFromDom()` vor Fleet-Drawer (GC-INSTANT-UX-001A) |
 | Fleet-Seite mit `#fleet-page-state` `ready: true` | `initFleet` skippt sofortiges `refreshFleetState` (GC-INSTANT-UX-001C) |

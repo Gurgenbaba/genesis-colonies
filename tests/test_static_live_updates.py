@@ -2028,14 +2028,28 @@ def test_main_js_pjax_preserves_shell_landscape_when_payload_empty():
     assert "ensurePlanetLandscapeAfterSoftNav()" in switch
 
 
-def test_main_js_pjax_keeps_progress_ticker_on_soft_nav():
-    """Ingame PJAX with preserveGameLoop must not stop fleet ETA ticker (mission flash)."""
+def test_main_js_pjax_soft_nav_ticker_contract():
+    """GC-PERF-PJAX-TICKER-001: soft-nav pauses progress ticker; keeps resource ticker; gates finish refresh."""
     src = _read("static/main.js")
     cleanup = src.split("GC.cleanupPage = function cleanupPage(")[1].split("GC.requestFrame = function")[0]
-    assert "if (!preserveGameLoop)" in cleanup
+    # Progress ticker always stopped on cleanup (including soft-nav).
     assert "GC.stopProgressTicker()" in cleanup
-    # stopProgressTicker only inside the preserveGameLoop guard, not bare on soft nav.
-    assert cleanup.index("if (!preserveGameLoop)") < cleanup.index("GC.stopProgressTicker()")
+    stop_pos = cleanup.index("GC.stopProgressTicker()")
+    # Soft-nav body is the preserveGameLoop guard AFTER stopProgressTicker.
+    soft_tail = cleanup[stop_pos:]
+    assert "if (!preserveGameLoop)" in soft_tail
+    soft_body = soft_tail.split("if (!preserveGameLoop)")[1].split("}")[0]
+    assert "stopResourceTicker()" in soft_body
+    assert "_resetQueueLiveStates()" in soft_body
+    assert "GC.stopPolling()" in soft_body
+
+    finish = src.split("function requestFinishRefresh(type)")[1].split("function ")[0]
+    assert "if (GC.pjaxInFlight) return;" in finish
+    zero = src.split("function requestQueueTimerZeroRefresh(meta)")[1].split("function ")[0]
+    assert "if (GC.pjaxInFlight) return;" in zero
+    # Soft-nav still restarts progress ticker after apply/init.
+    init_page = src.split("GC.initPage = function initPage")[1].split("GC.cleanupPage = function")[0]
+    assert "GC.startProgressTicker()" in init_page
 
 
 def test_main_js_gc549_ship_defense_icons_use_png():
