@@ -115,6 +115,7 @@
       <button type="button" class="admin-tab-btn" data-admin-tab="server" role="tab">{{ T("admin_server_title", "Server") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="diplomacy" role="tab">{{ T("admin_diplomacy_title", "Galaktische Diplomatie") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="world_boss" role="tab">{{ T("admin_wb_title", "World Boss") }}</button>
+      <button type="button" class="admin-tab-btn" data-admin-tab="pirates" role="tab">{{ T("admin_pirates_title", "Pirate Bot-Log") }}</button>
     </nav>
 
     <section id="admin-tab-health" class="admin-panel admin-tab-panel is-active" data-admin-panel="health" role="tabpanel">
@@ -1093,6 +1094,32 @@
         </div>
         <div id="admin-wb-spawn-result" class="admin-small-hint" aria-live="polite"></div>
       </section>
+    </section>
+
+    <section id="admin-tab-pirates" class="admin-panel admin-tab-panel gc-overflow-visible" data-admin-panel="pirates" role="tabpanel" hidden>
+      <div class="admin-action-row">
+        <h2 class="admin-panel-title">{{ T("admin_pirates_title", "Pirate Bot-Log") }}</h2>
+        <div class="admin-toolbar">
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="pirates-refresh">
+            {{ T("admin_btn_refresh", "Aktualisieren") }}
+          </button>
+          <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="pirates-ai-off" id="admin-pirates-ai-off">
+            {{ T("admin_pirates_ai_toggle_off", "AI Soft-Off") }}
+          </button>
+          <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="pirates-ai-hard-off" id="admin-pirates-ai-hard-off">
+            {{ T("admin_pirates_ai_hard_off", "AI Hard-Off") }}
+          </button>
+          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="pirates-ai-on" id="admin-pirates-ai-on">
+            {{ T("admin_pirates_ai_toggle_on", "AI Soft-On") }}
+          </button>
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="pirates-force-spawn" id="admin-pirates-force-spawn">
+            {{ T("admin_pirates_force_spawn", "Force Spawn") }}
+          </button>
+        </div>
+      </div>
+      <p class="admin-tab-hint admin-small-hint">{{ T("admin_pirates_hint", "Kill-Switch + Action-Log für EPIC-21 Pirate AI. Default: AI aus.") }}</p>
+      <div id="admin-pirates-status" class="admin-small-hint" aria-live="polite"></div>
+      <div id="admin-pirates-output" class="admin-panel-body" aria-live="polite"></div>
     </section>
 
   </div>

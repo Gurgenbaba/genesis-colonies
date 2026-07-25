@@ -1339,8 +1339,6 @@ def get_sorted_ranking_entries(
         (int(limit), int(offset)),
     )
     rows = cur.fetchall()
-    if owns_conn:
-        conn.close()
 
     out: List[Dict[str, Any]] = []
     base_rank = int(offset)
@@ -1372,6 +1370,29 @@ def get_sorted_ranking_entries(
                 **social,
             }
         )
+    try:
+        from .pirates.accounts import pirate_ai_profiles_by_ids
+
+        profiles = pirate_ai_profiles_by_ids([e["player_id"] for e in out], conn=conn)
+    except Exception:
+        profiles = {}
+    for e in out:
+        ai = profiles.get(int(e["player_id"]))
+        if not ai:
+            e["is_ai"] = False
+            continue
+        e["is_ai"] = True
+        e["inactive"] = False
+        e["player_mode"] = ai.get("player_mode")
+        e["ai_kind"] = ai.get("ai_kind")
+        e["ai_faction_key"] = ai.get("faction_key")
+        e["ai_personality"] = ai.get("personality")
+        e["ai_mode_key"] = ai.get("mode_key")
+        e["ai_badge_key"] = ai.get("badge_key")
+        e["ai_badge_title_key"] = ai.get("badge_title_key")
+        e["title"] = e.get("title") or "AI"
+    if owns_conn:
+        conn.close()
     return out
 
 

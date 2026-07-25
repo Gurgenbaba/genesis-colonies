@@ -4765,6 +4765,104 @@ def api_admin_world_boss_spawn():
         conn.close()
 
 
+@app.route("/api/admin/pirates", methods=["GET"])
+@require_admin_api
+def api_admin_pirates():
+    """Admin Bot-Log + KPIs + kill-switch status (EPIC-21 / GC-P08)."""
+    try:
+        from game.pirates.admin import build_admin_pirates_payload
+
+        limit_raw = request.args.get("limit", "80")
+        try:
+            limit = max(1, min(200, int(limit_raw)))
+        except (TypeError, ValueError):
+            limit = 80
+        conn = db()
+        try:
+            payload = build_admin_pirates_payload(conn, log_limit=limit)
+        finally:
+            conn.close()
+        return jsonify(payload)
+    except Exception:
+        return jsonify({"ok": False, "error": "pirates_admin_unavailable"}), 500
+
+
+@app.route("/api/admin/pirates/ai", methods=["POST"])
+@require_admin_api
+def api_admin_pirates_ai():
+    """Kill-switch: soft on/off, or hard-off (recall pirate outbound fleets)."""
+    data = request.get_json(silent=True) or {}
+    mode = str(data.get("mode") or "soft").strip().lower()
+    from game.db import begin_write_transaction, commit, rollback
+    from game.pirates.admin import admin_hard_disable_ai, admin_set_ai
+
+    if mode == "hard":
+        conn = db()
+        try:
+            begin_write_transaction(conn)
+            try:
+                result = admin_hard_disable_ai(conn)
+                commit(conn)
+            except Exception:
+                rollback(conn)
+                raise
+            return jsonify(result)
+        except Exception:
+            return jsonify({"ok": False, "error": "pirates_ai_hard_off_failed"}), 500
+        finally:
+            conn.close()
+
+    if "enabled" not in data:
+        return jsonify({"ok": False, "error": "enabled_required"}), 400
+    enabled = bool(data.get("enabled"))
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        try:
+            result = admin_set_ai(conn, enabled)
+            commit(conn)
+        except Exception:
+            rollback(conn)
+            raise
+        return jsonify(result)
+    except Exception:
+        return jsonify({"ok": False, "error": "pirates_ai_toggle_failed"}), 500
+    finally:
+        conn.close()
+
+
+@app.route("/api/admin/pirates/force-spawn", methods=["POST"])
+@require_admin_api
+def api_admin_pirates_force_spawn():
+    """LiveOps: force-spawn a pirate base in hottest (or given) galaxy (GC-P19)."""
+    data = request.get_json(silent=True) or {}
+    galaxy_raw = data.get("galaxy_id")
+    galaxy_id = None
+    if galaxy_raw is not None and str(galaxy_raw).strip() != "":
+        try:
+            galaxy_id = int(galaxy_raw)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "invalid_galaxy_id"}), 400
+    from game.db import begin_write_transaction, commit, rollback
+    from game.pirates.admin import admin_force_spawn_hottest
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        try:
+            result = admin_force_spawn_hottest(conn, galaxy_id=galaxy_id)
+            commit(conn)
+        except Exception:
+            rollback(conn)
+            raise
+        status = 200 if result.get("ok") else 400
+        return jsonify(result), status
+    except Exception:
+        return jsonify({"ok": False, "error": "pirates_force_spawn_failed"}), 500
+    finally:
+        conn.close()
+
+
 @app.route("/chronicles")
 @require_login
 def chronicles_view():

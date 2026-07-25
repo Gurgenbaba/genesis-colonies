@@ -13214,6 +13214,31 @@ body.gc-techtree-media-zoom-open{
   color: var(--gc-primary-2);
   flex-shrink: 0;
 }
+.galaxy-heat-badge{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid rgba(70, 229, 255, 0.28);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(8, 18, 32, 0.95);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: var(--gc-text-muted, #9db0c4);
+  flex-shrink: 0;
+}
+.galaxy-heat-badge .galaxy-heat-value{
+  color: var(--gc-primary-2, #46e5ff);
+  font-weight: 700;
+}
+.galaxy-heat-badge.band-patrol{ border-color: rgba(120, 200, 80, 0.45); }
+.galaxy-heat-badge.band-raids{ border-color: rgba(230, 180, 60, 0.55); }
+.galaxy-heat-badge.band-elite{ border-color: rgba(230, 120, 40, 0.6); }
+.galaxy-heat-badge.band-crisis,
+.galaxy-heat-badge.band-war{
+  border-color: rgba(230, 70, 70, 0.7);
+  color: #f0a0a0;
+}
 .galaxy-hud-controls{
   display: flex;
   align-items: center;
@@ -13763,6 +13788,11 @@ body.gc-techtree-media-zoom-open{
   color: rgba(180, 200, 220, 0.9);
   background: rgba(80, 96, 120, 0.22);
   border-color: rgba(140, 160, 190, 0.38);
+}
+.galaxy-ring-status-chip--ai{
+  color: rgba(120, 220, 200, 0.96);
+  background: rgba(20, 90, 80, 0.28);
+  border-color: rgba(80, 200, 170, 0.5);
 }
 .galaxy-ring-status-chip--strong{
   color: rgba(255, 150, 120, 0.96);
@@ -18801,6 +18831,13 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.28);
 }
 
+.gc-ranking-status-badge--ai{
+  color: rgba(120, 220, 200, 0.96);
+  background: rgba(20, 90, 80, 0.22);
+  border: 1px solid rgba(80, 200, 170, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.28);
+}
+
 .gc-ranking-status-badge-icon,
 .gc-ranking-vacation-badge-icon{
   font-size: 0.62rem;
@@ -23084,6 +23121,37 @@ body.gc-combat-report-open { overflow: hidden; }
   color: var(--gc-neon-cyan, #46e5ff);
   opacity: 0.85;
 }
+.gc-player-card-ai-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  border: 1px solid rgba(80, 200, 170, 0.4);
+  background: rgba(12, 40, 36, 0.45);
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.gc-player-card-ai-badge {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 1px 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(120, 220, 200, 0.98);
+  border: 1px solid rgba(80, 200, 170, 0.5);
+  background: rgba(20, 90, 80, 0.3);
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.gc-player-card-ai-mode,
+.gc-player-card-ai-faction {
+  font-size: 0.82rem;
+  color: var(--gc-text, #d7e6f5);
+}
+.gc-player-card-ai-desc {
+  margin: 2px 0 0;
+}
 
 /* --- Stats --- */
 .gc-player-card-stats {
@@ -27088,6 +27156,34 @@ button.pe-hero-planet-hint:focus-visible {
   border-color: rgba(160, 180, 210, 0.55);
   background: rgba(16, 20, 28, 0.88);
   color: rgba(190, 210, 235, 0.95);
+}
+.galaxy-ring-slot-owner-label--pirate {
+  border-color: rgba(230, 90, 90, 0.6);
+  background: rgba(40, 10, 12, 0.9);
+  color: rgba(255, 170, 160, 0.95);
+}
+.galaxy-pirate-block {
+  margin-top: 0.65rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid rgba(230, 90, 90, 0.4);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(28, 8, 10, 0.55);
+}
+.galaxy-pirate-block-title {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 170, 160, 0.9);
+}
+.galaxy-pirate-hp {
+  height: 6px;
+  margin: 0.4rem 0 0.25rem;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(230, 90, 90, 0.25);
+}
+.galaxy-pirate-hp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #a33, #e66);
 }
 .galaxy-wb-block {
   margin-top: 0.65rem;

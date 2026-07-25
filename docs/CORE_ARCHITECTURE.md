@@ -307,6 +307,7 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | Imperium Timekeeper (Zeitkonto, manuelles Einsetzen) | `game/timekeeper.py` | [TIMEKEEPER_SYSTEM.md](TIMEKEEPER_SYSTEM.md) |
 | World Boss Events (shared HP PvE, contribution, LiveOps) | `game/world_boss.py` | [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) |
 | Galaxy Asteroid Belt (temporary harvest fields) | `game/asteroids.py` | [ASTEROID_SYSTEM.md](ASTEROID_SYSTEM.md) |
+| Pirate Ecosystem (Heat, bases, player-like AI, Bot-Log) | `game/pirates/` | [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md) |
 
 **Ticket-Check:** Domäne identifizieren → nur Owner-Modul (+ Routes/`app.py`) ändern → kein zweites Modul für dieselbe Wahrheit.
 

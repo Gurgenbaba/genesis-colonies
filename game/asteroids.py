@@ -1059,6 +1059,13 @@ def try_claim_harvest(
             "asteroid_id": aid,
         }
 
+    try:
+        from .pirates.hooks import safe_record_heat
+
+        safe_record_heat(conn, int(row["galaxy"]), "asteroid")
+    except Exception:
+        logger.exception("pirate heat asteroid hook failed asteroid_id=%s", aid)
+
     asteroid = _row_to_asteroid(row)
     asteroid["status"] = STATUS_CLAIMED
     asteroid["metal"] = 0

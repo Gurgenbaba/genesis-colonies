@@ -509,6 +509,7 @@ def test_admin_balance_save_skips_blocking_game_state():
 def test_admin_pjax_exit_hard_load_entry():
     """Admin entry is full page; leaving admin uses PJAX like other ingame nav."""
     src = _read("static/main.js")
+    admin_src = _read("static/admin.js")
     pjax_fn = src.split("function isPjaxEligibleLink(link)")[1].split("function normalizePjaxUrl")[0]
     assert "isAdminRoutePath(dest.pathname)" in pjax_fn
     assert 'GC.detectPage() === "admin"' not in pjax_fn
@@ -521,11 +522,18 @@ def test_admin_pjax_exit_hard_load_entry():
     assert "teardownHudSelectPortals" in nav
     assert "quiesceLiveClientFetches" in nav
     # Safety: ensure stale nav blockers cannot survive admin → ingame PJAX.
-    assert "releaseShellNavigationBlockers" in src.split("GC.cleanupPage = function cleanupPage()")[1][:2500]
+    cleanup_fn = src.split("GC.cleanupPage = function cleanupPage")[1][:2500]
+    assert "releaseShellNavigationBlockers" in cleanup_fn
     assert "beginPjaxNavigation" in nav
     assert "shouldPjaxHardLoad" in nav
-    assert "shouldPjaxHardLoad" in nav
-
+    # Admin must tear down body-portaled HUD menus (not wrap.querySelector close).
+    sync_fn = admin_src.split("function syncAdminHudSelects")[1].split("function adminLeaveShellCleanup")[0]
+    assert "teardownHudSelectPortals" in sync_fn
+    assert 'wrap.querySelector(".gc-hud-select-menu")' not in sync_fn
+    leave_fn = admin_src.split("function adminLeaveShellCleanup")[1].split("function playerNameLink")[0]
+    assert "releaseShellNavigationBlockers" in leave_fn
+    assert "adminLeaveShellCleanup" in admin_src.split("GC.teardownAdminPanel")[1][:400]
+    assert "adminLeaveShellCleanup" in admin_src.split("adminPanelCleanup")[1][:200]
 
 def test_pjax_navigation_owner_clears_stale_timeouts():
     """PJAX nav ID guard — stale timeouts must not hard-load superseded destinations."""

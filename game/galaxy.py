@@ -437,8 +437,29 @@ def _attach_player_status_flags(
     last_seen = int(slot.pop("_last_seen", slot.get("last_seen", 0)) or 0)
     slot["inactive"] = ranking_inactive_from_last_seen(last_seen)
 
-    strength: Optional[str] = None
     target_player_id = int(slot.get("player_id") or 0)
+    try:
+        from .pirates.accounts import get_pirate_ai_profile
+
+        ai = get_pirate_ai_profile(target_player_id, conn=conn) if target_player_id > 0 else None
+    except Exception:
+        ai = None
+    if ai:
+        slot["is_ai"] = True
+        slot["inactive"] = False
+        slot["player_mode"] = ai.get("player_mode")
+        slot["ai_kind"] = ai.get("ai_kind")
+        slot["ai_faction_key"] = ai.get("faction_key")
+        slot["ai_personality"] = ai.get("personality")
+        slot["ai_mode_key"] = ai.get("mode_key")
+        slot["ai_badge_key"] = ai.get("badge_key")
+        slot["ai_badge_title_key"] = ai.get("badge_title_key")
+        slot["ai_name_key"] = ai.get("name_key")
+        slot["ai_commander_key"] = ai.get("commander_key")
+    else:
+        slot["is_ai"] = False
+
+    strength: Optional[str] = None
     viewer_id = int(viewer_player_id or 0)
     if (
         viewer_id > 0
@@ -446,6 +467,7 @@ def _attach_player_status_flags(
         and target_player_id != viewer_id
         and not slot.get("is_ally_planet")
         and not slot.get("is_own_planet")
+        and not slot.get("is_ai")
     ):
         from .fleet import get_noob_protection_status
 
@@ -748,6 +770,48 @@ def _attach_asteroid_to_slot(
     slot["has_asteroid"] = True
 
 
+def _attach_pirate_base_to_slot(
+    slot: Dict[str, Any],
+    base: Mapping[str, Any] | None,
+    *,
+    viewer_player_id: Optional[int] = None,
+    conn: Optional[sqlite3.Connection] = None,
+) -> None:
+    """EPIC-21 — stamp active pirate base onto a galaxy slot."""
+    if not base:
+        slot["pirate_base"] = None
+        slot["has_pirate_base"] = False
+        return
+    payload = dict(base)
+    if viewer_player_id is not None and conn is not None and payload.get("base_id"):
+        try:
+            from .pirates.bases import can_player_attack_base
+
+            ok_atk, reason, meta = can_player_attack_base(
+                int(viewer_player_id), int(payload["base_id"]), conn=conn
+            )
+            payload["viewer_can_attack"] = bool(ok_atk)
+            payload["viewer_attack_block_reason"] = reason if not ok_atk else ""
+            payload["viewer_attack_meta"] = dict(meta or {})
+        except Exception:
+            payload["viewer_can_attack"] = None
+            payload["viewer_attack_block_reason"] = ""
+            payload["viewer_attack_meta"] = {}
+        try:
+            from .pirates.bounty import get_player_bounty
+
+            fk = str(payload.get("faction_key") or "")
+            if fk:
+                bounty = get_player_bounty(int(viewer_player_id), fk, conn=conn)
+                payload["viewer_bounty_credits"] = int(bounty.get("credits") or 0)
+                payload["viewer_bounty_kills"] = int(bounty.get("kills") or 0)
+        except Exception:
+            payload["viewer_bounty_credits"] = 0
+            payload["viewer_bounty_kills"] = 0
+    slot["pirate_base"] = payload
+    slot["has_pirate_base"] = True
+
+
 def list_system(
     galaxy: int,
     system: int,
@@ -863,6 +927,14 @@ def list_system(
         )
     except Exception:
         asteroids_by_position = {}
+    try:
+        from .pirates.bases import get_bases_for_system
+
+        pirate_bases_by_position = get_bases_for_system(
+            int(galaxy), int(system), conn=conn
+        )
+    except Exception:
+        pirate_bases_by_position = {}
 
     from .planet_visuals import temperature_range_for_position
 
@@ -884,6 +956,12 @@ def list_system(
                 conn=conn,
             )
             _attach_asteroid_to_slot(slot, asteroids_by_position.get(pos))
+            _attach_pirate_base_to_slot(
+                slot,
+                pirate_bases_by_position.get(pos),
+                viewer_player_id=viewer_player_id,
+                conn=conn,
+            )
             _attach_slot_presentation(slot, pos, planet_row={"position": pos}, occupied=True)
             _attach_player_status_flags(
                 slot,
@@ -932,6 +1010,12 @@ def list_system(
                 conn=conn,
             )
             _attach_asteroid_to_slot(slot, asteroids_by_position.get(pos))
+            _attach_pirate_base_to_slot(
+                slot,
+                pirate_bases_by_position.get(pos),
+                viewer_player_id=viewer_player_id,
+                conn=conn,
+            )
             _attach_slot_presentation(slot, pos, occupied=False)
             slots.append(slot)
 
@@ -961,6 +1045,19 @@ def list_system(
         active_asteroid_board = []
         asteroid_schedule = {}
 
+    galaxy_heat: Dict[str, Any] = {
+        "galaxy_id": int(galaxy),
+        "heat": 0,
+        "band": "calm",
+        "thresholds": {},
+    }
+    try:
+        from .pirates import get_galaxy_heat
+
+        galaxy_heat = get_galaxy_heat(conn, int(galaxy))
+    except Exception:
+        pass
+
     result = {
         "galaxy": int(galaxy),
         "system": int(system),
@@ -970,6 +1067,7 @@ def list_system(
         "available_reclaimers": available_reclaimers,
         "active_asteroid_board": active_asteroid_board,
         "asteroid_schedule": asteroid_schedule,
+        "galaxy_heat": galaxy_heat,
     }
 
     if own:

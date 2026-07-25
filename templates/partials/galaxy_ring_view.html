@@ -17,6 +17,17 @@
   <section class="galaxy-hud-module" data-galaxy-hud-module>
     <header class="galaxy-hud-header" aria-label="{{ T('galaxy_nav_label') }}">
       <span class="galaxy-hud-title">{{ T("nav_galaxy", "Galaxie") }}</span>
+      {% set gh = galaxy_heat if galaxy_heat is defined else (system_data.galaxy_heat if system_data is defined and system_data.galaxy_heat is defined else none) %}
+      {% if gh %}
+      <span class="galaxy-heat-badge band-{{ gh.band or 'calm' }}"
+            title="{{ T('galaxy_heat_title', 'Galaxy Heat') }}: {{ gh.heat | default(0) }}/1000"
+            data-galaxy-heat="{{ gh.heat | default(0) }}"
+            data-galaxy-heat-band="{{ gh.band or 'calm' }}">
+        <span class="galaxy-heat-label">{{ T('galaxy_heat_short', 'Heat') }}</span>
+        <span class="galaxy-heat-value gc-mono">{{ gh.heat | default(0) }}</span>
+        <span class="galaxy-heat-band">{{ T('galaxy_heat_band_' ~ (gh.band or 'calm'), gh.band or 'calm') }}</span>
+      </span>
+      {% endif %}
       <div class="galaxy-hud-controls">
         <div class="galaxy-hud-group">
           <span class="galaxy-hud-label">{{ T("galaxy_label_galaxy") }}</span>
@@ -125,14 +136,19 @@
                         {% if slot.is_highlighted %}is-highlighted{% endif %}
                         {% if slot.has_debris %}has-debris{% endif %}
                         {% if slot.has_world_boss %}has-world-boss{% endif %}
-                        {% if slot.has_asteroid %}has-asteroid{% endif %}"
+                        {% if slot.has_asteroid %}has-asteroid{% endif %}
+                        {% if slot.has_pirate_base %}has-pirate-base{% endif %}"
                       id="galaxy-ring-slot-{{ slot.position }}"
                       data-galaxy-ring-slot="{{ slot.position }}"
-                      data-slot-title="{% if slot.has_world_boss and slot.world_boss %}{{ T(slot.world_boss.name_key, slot.world_boss.boss_key) }}{% elif slot.has_asteroid and slot.asteroid %}{{ T(slot.asteroid.name_key, slot.asteroid.asteroid_key) }}{% elif slot.occupied %}{{ slot.planet_name }}{% else %}{{ T('galaxy_empty_slot') }}{% endif %}"
-                      aria-label="{{ T('galaxy_slot_position', 'Pos') }} {{ slot.position }}{% if slot.has_world_boss and slot.world_boss %}: {{ T('galaxy_wb_field', 'World Boss') }} {{ T(slot.world_boss.name_key, slot.world_boss.boss_key) }}{% elif slot.has_asteroid and slot.asteroid %}: {{ T(slot.asteroid.name_key, slot.asteroid.asteroid_key) }}{% elif slot.occupied %}: {{ slot.planet_name }}{% if slot.commander_name %} — {{ slot.commander_name }}{% endif %}{% else %}: {{ T('galaxy_empty_slot') }}{% endif %}"
+                      data-slot-title="{% if slot.has_pirate_base and slot.pirate_base %}{{ T(slot.pirate_base.name_key, slot.pirate_base.faction_key) }}{% elif slot.has_world_boss and slot.world_boss %}{{ T(slot.world_boss.name_key, slot.world_boss.boss_key) }}{% elif slot.has_asteroid and slot.asteroid %}{{ T(slot.asteroid.name_key, slot.asteroid.asteroid_key) }}{% elif slot.occupied %}{{ slot.planet_name }}{% else %}{{ T('galaxy_empty_slot') }}{% endif %}"
+                      aria-label="{{ T('galaxy_slot_position', 'Pos') }} {{ slot.position }}{% if slot.has_pirate_base and slot.pirate_base %}: {{ T('galaxy_pirate_base_short', 'Pirate') }} {{ T(slot.pirate_base.name_key, slot.pirate_base.faction_key) }}{% elif slot.has_world_boss and slot.world_boss %}: {{ T('galaxy_wb_field', 'World Boss') }} {{ T(slot.world_boss.name_key, slot.world_boss.boss_key) }}{% elif slot.has_asteroid and slot.asteroid %}: {{ T(slot.asteroid.name_key, slot.asteroid.asteroid_key) }}{% elif slot.occupied %}: {{ slot.planet_name }}{% if slot.commander_name %} — {{ slot.commander_name }}{% endif %}{% else %}: {{ T('galaxy_empty_slot') }}{% endif %}"
                       aria-controls="galaxy-ring-inspector-{{ slot.position }}"
                       aria-expanded="false">
-                {% if slot.has_world_boss and slot.world_boss %}
+                {% if slot.has_pirate_base and slot.pirate_base %}
+                <span class="galaxy-ring-slot-owner-label galaxy-ring-slot-owner-label--pirate"
+                      aria-hidden="true"
+                      title="{{ T(slot.pirate_base.name_key, slot.pirate_base.faction_key) }}">{{ T('galaxy_pirate_base_short', 'Pirate') }}</span>
+                {% elif slot.has_world_boss and slot.world_boss %}
                 <span class="galaxy-ring-slot-owner-label galaxy-ring-slot-owner-label--world-boss"
                       aria-hidden="true"
                       title="{{ T(slot.world_boss.name_key, slot.world_boss.boss_key) }}">{{ T('galaxy_wb_short', 'Boss') }}</span>
@@ -243,6 +259,9 @@
             {% if slot.has_world_boss %}
             {% include "partials/galaxy_world_boss_block.html" %}
             {% endif %}
+            {% if slot.has_pirate_base %}
+            {% include "partials/galaxy_pirate_base_block.html" %}
+            {% endif %}
             <div class="galaxy-ring-inspector-actions">
               {% if slot.is_own_planet %}
               <button type="button"
@@ -293,6 +312,7 @@
         <span class="gl-item"><span class="galaxy-ring-legend-asteroid" aria-hidden="true"></span>{{ T("galaxy_legend_asteroids") }}</span>
         <span class="gl-item"><span class="galaxy-ring-status-chip galaxy-ring-status-chip--vacation galaxy-ring-legend-chip"></span>{{ T("galaxy_legend_vacation") }}</span>
         <span class="gl-item"><span class="galaxy-ring-status-chip galaxy-ring-status-chip--inactive galaxy-ring-legend-chip"></span>{{ T("galaxy_legend_inactive") }}</span>
+        <span class="gl-item"><span class="galaxy-ring-status-chip galaxy-ring-status-chip--ai galaxy-ring-legend-chip"></span>{{ T("galaxy_legend_ai", "AI") }}</span>
         <span class="gl-item"><span class="galaxy-ring-status-chip galaxy-ring-status-chip--strong galaxy-ring-legend-chip"></span>{{ T("galaxy_legend_too_strong") }}</span>
         <span class="gl-item"><span class="galaxy-ring-status-chip galaxy-ring-status-chip--weak galaxy-ring-legend-chip"></span>{{ T("galaxy_legend_too_weak") }}</span>
         <span class="gl-item"><span class="galaxy-ring-legend-swatch galaxy-ring-legend-swatch--expedition"></span>{{ T("galaxy_expedition_slot_badge") }}</span>

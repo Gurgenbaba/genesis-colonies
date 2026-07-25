@@ -26,6 +26,7 @@ Status: v1.5.9.2 (2026-06-24)
 | EPIC-16 | Genesis Knowledge Base (Knowledge Pipeline) | 📋 | [GC-950_KNOWLEDGE_PIPELINE.md](GC-950_KNOWLEDGE_PIPELINE.md) |
 | EPIC-18 | Collector Exchange (Sammler-Markt) | 📋 | [COLLECTOR_EXCHANGE.md](COLLECTOR_EXCHANGE.md) |
 | EPIC-20 | World Boss Events | 🔄 | [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) |
+| EPIC-21 | Pirate Ecosystem (Living Threat) | ✅ | [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md) |
 
 ---
 
@@ -155,3 +156,19 @@ Details: [GC-950_KNOWLEDGE_PIPELINE.md](GC-950_KNOWLEDGE_PIPELINE.md)
 | GC-969B | Loot-Reveal Toast + Codex Player Block |
 
 Details: [COLLECTOR_EXCHANGE.md](COLLECTOR_EXCHANGE.md)
+
+**EPIC-21 Pirate Ecosystem** → nicht als Ganzes implementieren:
+
+| Ticket | Fokus |
+|--------|-------|
+| GC-P00 | Master-Doc + CORE/EPICS/ROADMAP |
+| GC-P01 | Schema + `game/pirates/` + AI flag |
+| GC-P02 | Heat-Hooks + Galaxy Heat UI + News |
+| GC-P03–P05 | Basen spawn / destroy / escalate |
+| GC-P06–P08 | Spy→Intel→Attack Brain + Admin Bot-Log |
+| GC-P09–P10 | Fraktionen + Bounty |
+| GC-P11–P12 | `pirate_war` Emergency + Diplomacy |
+| GC-P13–P15 | Hinterhalt, Infiltration, Schmuggler, Fleet-Save |
+| GC-P16–P18 | Directives, LiveOps, E2E Ship-Gate |
+
+Details: [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md)

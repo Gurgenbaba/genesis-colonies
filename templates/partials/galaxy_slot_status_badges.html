@@ -1,12 +1,16 @@
-{# Player status chips — vacation / inactive / attack strength (galaxy ring) #}
-{% if slot.occupied and (slot.vacation_active or slot.inactive or slot.attack_strength) %}
+{# Player status chips — vacation / inactive / AI / attack strength (galaxy ring) #}
+{% if slot.occupied and (slot.vacation_active or slot.inactive or slot.is_ai or slot.attack_strength) %}
 <div class="galaxy-ring-slot-status{% if status_ctx is defined and status_ctx == 'inspector' %} galaxy-ring-slot-status--inspector{% endif %}"
-     aria-label="{% if slot.vacation_active %}{{ T('ranking_vacation_mode') }}. {% endif %}{% if slot.inactive %}{{ T('ranking_inactive_mode') }}. {% endif %}{% if slot.attack_strength == 'too_strong' %}{{ T('galaxy_status_too_strong_hint') }}. {% elif slot.attack_strength == 'too_weak' %}{{ T('galaxy_status_too_weak_hint') }}.{% endif %}">
+     aria-label="{% if slot.is_ai %}{{ T('pirate_ai_badge_title', 'Pirate AI') }}. {% endif %}{% if slot.vacation_active %}{{ T('ranking_vacation_mode') }}. {% endif %}{% if slot.inactive %}{{ T('ranking_inactive_mode') }}. {% endif %}{% if slot.attack_strength == 'too_strong' %}{{ T('galaxy_status_too_strong_hint') }}. {% elif slot.attack_strength == 'too_weak' %}{{ T('galaxy_status_too_weak_hint') }}.{% endif %}">
+  {% if slot.is_ai %}
+  <span class="galaxy-ring-status-chip galaxy-ring-status-chip--ai"
+        title="{{ T(slot.ai_badge_title_key or 'pirate_ai_badge_title', 'Pirate AI') }} — {{ T(slot.ai_mode_key or 'pirate_ai_mode_aggressive', slot.ai_personality or 'AI') }}">{{ T(slot.ai_badge_key or 'pirate_ai_badge', 'AI') }}</span>
+  {% endif %}
   {% if slot.vacation_active %}
   <span class="galaxy-ring-status-chip galaxy-ring-status-chip--vacation"
         title="{{ T('ranking_vacation_mode') }}">{{ T('ranking_vacation_badge') }}</span>
   {% endif %}
-  {% if slot.inactive %}
+  {% if slot.inactive and not slot.is_ai %}
   <span class="galaxy-ring-status-chip galaxy-ring-status-chip--inactive"
         title="{{ T('ranking_inactive_mode') }}">{{ T('ranking_inactive_badge') }}</span>
   {% endif %}

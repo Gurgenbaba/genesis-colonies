@@ -45,7 +45,27 @@
       <div class="gc-player-card-identity">
         {% set name = card.get('commander_name', '—') %}
         <h3 class="gc-player-card-commander">{% include "partials/commander_name.html" %}</h3>
-        {% if card.get('title') %}
+        {% if card.get('is_ai') %}
+        <div class="gc-player-card-ai-banner" role="status">
+          <span class="gc-player-card-ai-badge"
+                title="{{ T(card.get('ai_badge_title_key', 'pirate_ai_badge_title'), 'Pirate AI') }}">
+            {{ T(card.get('ai_badge_key', 'pirate_ai_badge'), 'AI') }}
+          </span>
+          <span class="gc-player-card-ai-mode">
+            {{ T(card.get('ai_player_mode_label_key', 'pirate_ai_player_mode'), 'AI Commander') }}
+            · {{ T(card.get('ai_mode_key', 'pirate_ai_mode_aggressive'), card.get('ai_personality', 'AI')) }}
+          </span>
+          {% if card.get('ai_name_key') %}
+          <span class="gc-player-card-ai-faction">{{ T(card.get('ai_name_key'), card.get('ai_faction_key', '')) }}</span>
+          {% endif %}
+          {% if card.get('ai_commander_key') %}
+          <span class="hint gc-mono">{{ T(card.get('ai_commander_key'), '') }}</span>
+          {% endif %}
+          {% if card.get('ai_desc_key') %}
+          <p class="gc-player-card-ai-desc hint">{{ T(card.get('ai_desc_key'), '') }}</p>
+          {% endif %}
+        </div>
+        {% elif card.get('title') %}
           <p class="gc-player-card-title-text">{{ card.get('title') }}</p>
         {% endif %}
         <p class="gc-player-card-activity">
@@ -55,7 +75,7 @@
     </div>
 
     <div class="gc-player-card-hero-actions">
-      {% if card.get('player_id') and not card.get('is_self') %}
+      {% if card.get('player_id') and not card.get('is_self') and not card.get('is_ai') %}
       <button type="button"
               class="gc-btn gc-btn-outline gc-btn-sm"
               data-chat-whisper
@@ -70,7 +90,7 @@
         {{ T("playercard_message_btn") }}
       </button>
       {% endif %}
-      {% if card.get('can_edit') %}
+      {% if card.get('can_edit') and not card.get('is_ai') %}
       <button type="button"
               class="gc-btn gc-btn-outline gc-btn-sm gc-player-card-edit-btn"
               data-pc-edit

@@ -30414,6 +30414,21 @@
     return `<span class="you-pill" aria-label="${you}">${you}</span>`;
   }
 
+  function rankingAiBadgeHtml(row) {
+    if (!row?.is_ai) return "";
+    const label = rankingEscapeHtml(
+      rankingT(row.ai_badge_title_key || "pirate_ai_badge_title", "Pirate AI") +
+        " — " +
+        rankingT(row.ai_mode_key || "pirate_ai_mode_aggressive", row.ai_personality || "AI"),
+    );
+    const short = rankingEscapeHtml(rankingT(row.ai_badge_key || "pirate_ai_badge", "AI"));
+    return (
+      `<span class="gc-ranking-status-badge gc-ranking-status-badge--ai" title="${label}" aria-label="${label}">` +
+      `<span class="gc-ranking-status-badge-text">${short}</span>` +
+      `</span>`
+    );
+  }
+
   function rankingVacationBadgeHtml(row) {
     if (!row?.vacation_active) return "";
     const label = rankingEscapeHtml(rankingT("ranking_vacation_mode", "Vacation mode"));
@@ -30426,7 +30441,7 @@
   }
 
   function rankingInactiveBadgeHtml(row) {
-    if (!row?.inactive) return "";
+    if (!row?.inactive || row?.is_ai) return "";
     const label = rankingEscapeHtml(rankingT("ranking_inactive_mode", "Inactive — not online for 3+ days"));
     const short = rankingEscapeHtml(rankingT("ranking_inactive_badge", "Inaktiv"));
     return (
@@ -30437,7 +30452,11 @@
   }
 
   function rankingStatusBadgesHtml(row) {
-    const badges = [rankingVacationBadgeHtml(row), rankingInactiveBadgeHtml(row)].filter(Boolean);
+    const badges = [
+      rankingAiBadgeHtml(row),
+      rankingVacationBadgeHtml(row),
+      rankingInactiveBadgeHtml(row),
+    ].filter(Boolean);
     if (!badges.length) return "";
     return `<span class="gc-ranking-status-badges">${badges.join("")}</span>`;
   }

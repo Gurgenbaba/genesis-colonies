@@ -82,6 +82,20 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
                     f"spawned={len(ast_tick.get('spawned') or [])}"
                 )
 
+            from .pirates.bases import maybe_tick_pirate_bases
+
+            pirate_tick = maybe_tick_pirate_bases(conn=conn)
+            if (
+                pirate_tick.get("expired_ids")
+                or pirate_tick.get("escalated_ids")
+                or pirate_tick.get("spawned")
+            ):
+                _worker_log(
+                    f"pirates expired={pirate_tick.get('expired_ids')} "
+                    f"escalated={pirate_tick.get('escalated_ids')} "
+                    f"spawned={pirate_tick.get('spawned')}"
+                )
+
             from .combat import expire_due_debris_fields
 
             debris_expired = expire_due_debris_fields(conn=conn)

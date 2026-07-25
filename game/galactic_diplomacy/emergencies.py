@@ -18,6 +18,7 @@ _EMERGENCY_CACHE: Dict[str, Any] = {"loaded": False}
 EMERGENCY_KEYS = frozenset({
     "alien_invasion",
     "galaxy_war",
+    "pirate_war",
     "resource_crisis",
     "hyperstorm",
     "frontier_collapse",

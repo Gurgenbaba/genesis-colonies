@@ -193,6 +193,7 @@ Master-Doc: **[GC_PERF_CORE.md](GC_PERF_CORE.md)** (EPIC Performance Core — Ma
 | Tutorial / Onboarding | 💡 |
 | Season / Universe-Reset | 💡 |
 | **World Boss Events (EPIC-20)** | 🔄 | GC-W01…W08 — [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) |
+| **Pirate Ecosystem (EPIC-21)** | ✅ | GC-P00…P18 ship-gate — [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md) |
 | CI Pipeline | 💡 |
 | Automated Backups | 📋 Operator-intern |
 

@@ -1037,6 +1037,36 @@ def _build_public_card_payload(
             "colonies": colonies,
         },
     }
+    try:
+        from .pirates.accounts import get_pirate_ai_profile
+
+        ai = get_pirate_ai_profile(tid, conn=conn)
+    except Exception:
+        ai = None
+    if ai:
+        payload["is_ai"] = True
+        payload["player_mode"] = ai.get("player_mode")
+        payload["ai_kind"] = ai.get("ai_kind")
+        payload["ai_faction_key"] = ai.get("faction_key")
+        payload["ai_personality"] = ai.get("personality")
+        payload["ai_mode_key"] = ai.get("mode_key")
+        payload["ai_name_key"] = ai.get("name_key")
+        payload["ai_commander_key"] = ai.get("commander_key")
+        payload["ai_desc_key"] = ai.get("desc_key")
+        payload["ai_badge_key"] = ai.get("badge_key")
+        payload["ai_badge_title_key"] = ai.get("badge_title_key")
+        payload["ai_player_mode_label_key"] = ai.get("player_mode_label_key")
+        payload["can_edit"] = False
+        payload["allows_chat"] = False
+        payload["allows_messages"] = False
+        payload["activity_key"] = "pirate_ai_activity"
+        # Fallback title/bio if empty — UI prefers i18n keys above.
+        if not str(payload.get("title") or "").strip():
+            payload["title"] = "AI"
+        if not str(payload.get("bio") or "").strip():
+            payload["bio"] = ""
+    else:
+        payload["is_ai"] = False
     return payload, None
 
 

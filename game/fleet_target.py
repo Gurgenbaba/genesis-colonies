@@ -19,6 +19,7 @@ WORLD_NATIVE_TARGET_TYPES = frozenset(
         "enemy_colony",
         "world_boss",
         "asteroid",
+        "pirate_base",
     }
 )
 
@@ -118,6 +119,8 @@ def infer_world_native_target_type(
         return "world_boss"
     if legacy == "asteroid":
         return "asteroid"
+    if legacy == "pirate_base":
+        return "pirate_base"
     if legacy == "strategic_world":
         if wt and is_salvage_world_type(wt):
             return "wreckage"

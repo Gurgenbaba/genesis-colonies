@@ -1284,6 +1284,13 @@ def resolve_attack_arrival(
         ),
     )
 
+    try:
+        from .pirates.hooks import safe_record_heat
+
+        safe_record_heat(conn, int(event.get("galaxy") or 0) or None, "world_boss")
+    except Exception:
+        logger.exception("pirate heat world_boss hook failed event_id=%s", event.get("id"))
+
     alliance_id = None
     try:
         from .alliance import get_player_alliance

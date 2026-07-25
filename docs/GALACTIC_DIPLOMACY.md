@@ -313,6 +313,7 @@ EMERGENCY SESSION — Galaxy 2
 | `emergency_key` | Trigger (Beispiel) | Primary-Fokus |
 |-----------------|-------------------|---------------|
 | `alien_invasion` | World-Event / Admin | Combat + Defense |
+| `pirate_war` | Galaxy Heat ≥700 / Pirate Ecosystem | Combat + Defense + fleet pressure |
 | `galaxy_war` | Resolution / PvP-Metrik | Military mobilization |
 | `resource_crisis` | Economy-Event, Trader-Engpass | Industrial + Logistics |
 | `hyperstorm` | Map-Event | Defensive + reduced fleet speed |

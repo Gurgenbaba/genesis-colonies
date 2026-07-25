@@ -1029,6 +1029,14 @@ def send_chat_message(
         viewer = load_player(player_id, conn=conn) or {}
         viewer_name = str(viewer.get("name") or "")
 
+        try:
+            from .pirates.accounts import is_pirate_bot_player
+
+            if is_pirate_bot_player(int(player_id), conn=conn):
+                return _json_error("pirate_bot_chat_forbidden")
+        except Exception:
+            pass
+
         target_room: Optional[Dict[str, Any]] = None
         msg_type = "normal"
         target_uid: Optional[int] = None

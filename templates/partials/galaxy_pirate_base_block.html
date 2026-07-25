@@ -1,0 +1,65 @@
+{# EPIC-21 — inspector block for active pirate base on a galaxy slot #}
+{% if slot.has_pirate_base and slot.pirate_base %}
+{% set pb = slot.pirate_base %}
+{% set g = slot.coordinates.galaxy if slot.coordinates is defined else (nav.galaxy or 1) %}
+{% set s = slot.coordinates.system if slot.coordinates is defined else (nav.system or 1) %}
+{% set p = slot.coordinates.position if slot.coordinates is defined else slot.position %}
+{% set hp_pct = ((pb.hp_ratio or 0) * 100)|round(1) %}
+{% set attack_href = pb.fleet_deep_link if pb.fleet_deep_link else (url_for('fleet_view') ~ '?mission=attack&target_galaxy=' ~ g ~ '&target_system=' ~ s ~ '&target_position=' ~ p) %}
+<div class="galaxy-pirate-block">
+  <div class="galaxy-pirate-block-head">
+    <div class="galaxy-pirate-block-meta">
+      <div class="galaxy-pirate-block-title">{{ T('galaxy_pirate_base_field', 'Pirate Base') }}</div>
+      <strong>{{ T(pb.name_key, pb.faction_key) }}</strong>
+      {% if pb.commander_key %}
+      <span class="hint">{{ T(pb.commander_key, '') }}</span>
+      {% endif %}
+      <span class="hint gc-mono">{{ pb.coords or ('[' ~ g ~ ':' ~ s ~ ':' ~ p ~ ']') }}</span>
+      <span class="hint">{{ T('galaxy_pirate_strength', 'Strength') }}: {{ pb.strength_stars or pb.strength }}</span>
+      {% if pb.description_key %}
+      <p class="hint galaxy-pirate-desc">{{ T(pb.description_key, '') }}</p>
+      {% endif %}
+      {% if pb.viewer_bounty_credits is defined and pb.viewer_bounty_credits > 0 %}
+      <p class="hint galaxy-pirate-bounty" role="status">
+        {{ T('pirate_bounty_label', 'Your bounty with this faction') }}:
+        <span class="gc-mono">{{ pb.viewer_bounty_credits|fmt_int }}</span>
+        {% if pb.viewer_bounty_kills is defined and pb.viewer_bounty_kills > 0 %}
+        · {{ T('pirate_bounty_kills', 'Kills') }}: {{ pb.viewer_bounty_kills|fmt_int }}
+        {% endif %}
+      </p>
+      {% endif %}
+    </div>
+  </div>
+  <div class="galaxy-pirate-hp" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ hp_pct|int }}"
+       aria-label="{{ T('pirate_base_hp', 'HP') }} {{ hp_pct }}%">
+    <div class="galaxy-pirate-hp-fill" style="width: {{ hp_pct }}%;"></div>
+  </div>
+  <p class="galaxy-pirate-hp-text hint gc-mono">
+    {{ T('pirate_base_hp', 'HP') }}: {{ (pb.current_hp or 0)|fmt_int }} / {{ (pb.max_hp or 0)|fmt_int }} ({{ hp_pct }}%)
+  </p>
+  {% if pb.expires_at is defined and pb.expires_at %}
+  <p class="hint">
+    {{ T('pirate_base_expires_in', 'Expires in') }}:
+    <span class="gc-mono" data-countdown-at="{{ pb.expires_at|int }}" data-countdown-format="eta">—</span>
+  </p>
+  {% endif %}
+  {% set vmeta = pb.viewer_attack_meta if pb.viewer_attack_meta is defined and pb.viewer_attack_meta else {} %}
+  {% if pb.viewer_attack_block_reason is defined and pb.viewer_attack_block_reason == 'pirate_base_cooldown' and vmeta.next_attack_at %}
+  <p class="galaxy-pirate-cooldown" role="status">
+    {{ T('pirate_base_attack_cooldown', 'Next attack in') }}:
+    <span class="gc-mono" data-countdown-at="{{ vmeta.next_attack_at|int }}" data-countdown-format="eta">—</span>
+  </p>
+  {% elif pb.viewer_attack_block_reason is defined and pb.viewer_attack_block_reason == 'pirate_base_wave_limit' %}
+  <p class="galaxy-pirate-cooldown" role="status">{{ T('pirate_base_wave_limit', 'Wave limit reached for this base.') }}</p>
+  {% endif %}
+  {% if pb.viewer_can_attack is defined and pb.viewer_can_attack == false and pb.viewer_attack_block_reason == 'pirate_base_wave_limit' %}
+  <span class="gc-btn gc-btn-primary gc-btn-sm is-disabled" aria-disabled="true">
+    {{ T('pirate_base_attack', 'Attack') }}
+  </span>
+  {% else %}
+  <a class="gc-btn gc-btn-primary gc-btn-sm" href="{{ attack_href }}">
+    {{ T('pirate_base_attack', 'Attack') }}
+  </a>
+  {% endif %}
+</div>
+{% endif %}

@@ -119,6 +119,7 @@ TARGET_TYPES = frozenset(
         "planet",
         "world_boss",
         "asteroid",
+        "pirate_base",
     }
 )
 
@@ -138,6 +139,7 @@ _BASE_ALLOWED_MISSIONS: Dict[str, Set[str]] = {
     "planet": {"transport", "collect", "deploy", "spy"},
     "world_boss": {"attack"},
     "asteroid": {"recycle"},
+    "pirate_base": {"attack"},
 }
 
 _MISSIONS_REQUIRING_PLANET = frozenset(
@@ -206,6 +208,16 @@ _MISSION_BLOCK_REASONS: Dict[str, Dict[str, str]] = {
         "expedition": "mission_blocked_not_expedition_slot",
         "colonize": "mission_blocked_asteroid",
     },
+    "pirate_base": {
+        "transport": "mission_blocked_pirate_base",
+        "deploy": "mission_blocked_pirate_base",
+        "spy": "mission_blocked_pirate_base",
+        "hold": "mission_blocked_pirate_base",
+        "collect": "mission_blocked_pirate_base",
+        "expedition": "mission_blocked_not_expedition_slot",
+        "colonize": "mission_blocked_pirate_base",
+        "recycle": "mission_blocked_pirate_base",
+    },
 }
 
 
@@ -266,6 +278,45 @@ def _maybe_world_boss_target(
     return out
 
 
+def _maybe_pirate_base_target(
+    info: Dict[str, Any],
+    galaxy: int,
+    system: int,
+    position: int,
+    *,
+    conn,
+) -> Dict[str, Any]:
+    """Override empty slot to pirate_base when an active hideout sits here."""
+    if str(info.get("target_type") or "") == "world_boss":
+        return info
+    try:
+        from .pirates.bases import get_active_base_at
+
+        base = get_active_base_at(int(galaxy), int(system), int(position), conn=conn)
+    except Exception:
+        return info
+    if not base:
+        return info
+    out = dict(info)
+    out["target_type"] = "pirate_base"
+    out["target_planet_id"] = None
+    out["target_player_id"] = None
+    out["target_owner_name"] = str(base.get("faction_key") or "Pirate Base")
+    out["allowed_missions"] = sorted(_BASE_ALLOWED_MISSIONS["pirate_base"])
+    out["reason_if_blocked"] = None
+    out["pirate_base"] = {
+        "base_id": int(base["id"]),
+        "faction_key": base.get("faction_key"),
+        "name_key": base.get("name_key"),
+        "current_hp": int(base["current_hp"]),
+        "max_hp": int(base["max_hp"]),
+        "strength": int(base.get("strength") or 1),
+        "activity": int(base.get("activity") or 0),
+        "expires_at": base.get("expires_at"),
+    }
+    return out
+
+
 def _maybe_asteroid_target(
     info: Dict[str, Any],
     galaxy: int,
@@ -275,7 +326,7 @@ def _maybe_asteroid_target(
     conn,
 ) -> Dict[str, Any]:
     """Override slot to asteroid when an active belt field sits here (before debris)."""
-    if str(info.get("target_type") or "") == "world_boss":
+    if str(info.get("target_type") or "") in ("world_boss", "pirate_base"):
         return info
     try:
         from .asteroids import get_active_asteroid_at
@@ -1000,17 +1051,23 @@ def resolve_fleet_target(
         planet_id = _resolve_planet_at_coords(g, s, p, conn=conn)
         if planet_id is None:
             return _maybe_world_boss_target(
-                _maybe_asteroid_target(
-                    _target_with_debris_recycle(
-                        {
-                            "target_type": "empty_slot",
-                            "target_planet_id": None,
-                            "target_player_id": None,
-                            "target_owner_name": None,
-                            "coords": coords,
-                            "allowed_missions": sorted(_BASE_ALLOWED_MISSIONS["empty_slot"]),
-                            "reason_if_blocked": None,
-                        },
+                _maybe_pirate_base_target(
+                    _maybe_asteroid_target(
+                        _target_with_debris_recycle(
+                            {
+                                "target_type": "empty_slot",
+                                "target_planet_id": None,
+                                "target_player_id": None,
+                                "target_owner_name": None,
+                                "coords": coords,
+                                "allowed_missions": sorted(_BASE_ALLOWED_MISSIONS["empty_slot"]),
+                                "reason_if_blocked": None,
+                            },
+                            g,
+                            s,
+                            p,
+                            conn=conn,
+                        ),
                         g,
                         s,
                         p,
@@ -1147,7 +1204,7 @@ def evaluate_fleet_mission_target(
 
     if m in _MISSIONS_REQUIRING_PLANET and not target_info.get("target_planet_id"):
         ttype = str(target_info.get("target_type") or "")
-        if ttype not in ("world_boss", "asteroid"):
+        if ttype not in ("world_boss", "asteroid", "pirate_base"):
             return False, "invalid_target", target_info
 
     return True, "", target_info
@@ -1364,6 +1421,22 @@ def validate_fleet_send(
             )
             if not ok_wb:
                 return False, wb_reason, {"target": target_info, **(wb_meta or {})}
+        elif str(target_info.get("target_type") or "") == "pirate_base":
+            from .pirates.bases import can_player_attack_base
+
+            pb = target_info.get("pirate_base") or {}
+            base_id = int(pb.get("base_id") or 0)
+            if base_id <= 0:
+                return False, "pirate_base_inactive", {"target": target_info}
+            ok_pb, pb_reason, pb_meta = can_player_attack_base(
+                int(player_id),
+                base_id,
+                conn=conn,
+                enforce_cooldown=True,
+                check_inflight=True,
+            )
+            if not ok_pb:
+                return False, pb_reason, {"target": target_info, **(pb_meta or {})}
         else:
             target_planet_id = target_info.get("target_planet_id")
             target_player_id = target_info.get("target_player_id")
@@ -2971,6 +3044,19 @@ def send_fleet(
                     now=now,
                 )
 
+        if str(target_info.get("target_type") or "") == "pirate_base" and mission == "attack":
+            from .pirates.bases import note_attack_dispatched as note_pirate_attack
+
+            pb = target_info.get("pirate_base") or {}
+            pb_id = int(pb.get("base_id") or 0)
+            if pb_id > 0:
+                note_pirate_attack(
+                    int(player_id),
+                    pb_id,
+                    conn=conn,
+                    now=now,
+                )
+
         if own:
             commit(conn)
 
@@ -3269,6 +3355,48 @@ def _apply_attack_combat_to_planet(
     return remaining_ships
 
 
+def _handle_pirate_base_attack_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
+    """Resolve EPIC-21 pirate-base attack arrival via ``pirates.bases.resolve_attack_arrival``."""
+    movement_id = int(movement["id"])
+    player_id = int(movement["player_id"])
+    ships = movement.get("ships") or {}
+    try:
+        from .pirates.bases import resolve_attack_arrival
+
+        result = resolve_attack_arrival(
+            movement=movement,
+            ships=ships,
+            player_id=player_id,
+            conn=conn,
+            now=float(now),
+        )
+        return_ships = {
+            k: v
+            for k, v in dict(result.get("return_ships") or ships).items()
+            if int(v or 0) > 0
+        }
+        resources = dict(movement.get("resources") or {})
+        timing = _return_timing_from_now(movement, now=now)
+        return_at = timing["return_at"]
+        claimed = _claim_movement_status(
+            conn,
+            movement_id,
+            ("outbound",),
+            "returning",
+            now,
+            extra_sql=", return_at = ?, ships_json = ?, resources_json = ?",
+            extra_params=(return_at, _json_dumps(return_ships), _json_dumps(resources)),
+        )
+        return bool(claimed)
+    except Exception:
+        logger.exception("pirate_base attack arrival failed movement_id=%s", movement_id)
+        try:
+            _claim_movement_status(conn, movement_id, ("outbound",), "failed", now)
+        except Exception:
+            pass
+        return False
+
+
 def _handle_world_boss_attack_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
     """Resolve EPIC-20 world-boss attack arrival via ``world_boss.resolve_attack_arrival``."""
     movement_id = int(movement["id"])
@@ -3346,6 +3474,22 @@ def _handle_attack_arrival(movement: Dict[str, Any], *, conn, now: float) -> boo
         return _handle_world_boss_attack_arrival(movement, conn=conn, now=now)
 
     try:
+        from .pirates.bases import get_active_base_at
+
+        pirate_base = get_active_base_at(
+            int(movement.get("target_galaxy") or 0),
+            int(movement.get("target_system") or 0),
+            int(movement.get("target_position") or 0),
+            conn=conn,
+            now=float(now),
+        )
+    except Exception:
+        pirate_base = None
+
+    if pirate_base and not target_id:
+        return _handle_pirate_base_attack_arrival(movement, conn=conn, now=now)
+
+    try:
         snapshot = _target_planet_snapshot(int(target_id), conn=conn) if target_id else {}
         defender_id = int(snapshot.get("owner_id") or 0)
         if defender_id > 0:
@@ -3396,6 +3540,17 @@ def _handle_attack_arrival(movement: Dict[str, Any], *, conn, now: float) -> boo
                 )
             except Exception:
                 logger.exception("combat destruction score failed movement_id=%s", movement_id)
+
+            try:
+                from .pirates.hooks import safe_record_heat
+
+                safe_record_heat(
+                    conn,
+                    int(movement.get("target_galaxy") or 0) or None,
+                    "combat",
+                )
+            except Exception:
+                logger.exception("pirate heat combat hook failed movement_id=%s", movement_id)
 
             score_players = {int(player_id)}
             if defender_id > 0:
@@ -4538,6 +4693,22 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
             conn=conn,
         )
         try:
+            from .pirates.accounts import is_pirate_bot_player
+            from .pirates.brain import ingest_spy_report_for_intel
+
+            if is_pirate_bot_player(int(player_id), conn=conn):
+                ingest_spy_report_for_intel(
+                    conn,
+                    bot_player_id=int(player_id),
+                    meta=meta,
+                    snapshot=snapshot,
+                    now=float(now),
+                )
+        except Exception:
+            logger.exception(
+                "pirate spy intel ingest failed movement_id=%s", movement_id
+            )
+        try:
             from .activity_xp import SOURCE_SPY, grant_fleet_activity_xp
 
             grant_fleet_activity_xp(
@@ -4859,6 +5030,16 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
                 locale=sender_locale,
                 conn=conn,
             )
+        try:
+            from .pirates.hooks import safe_record_heat
+
+            safe_record_heat(
+                conn,
+                int(movement.get("target_galaxy") or 0) or None,
+                "colonize",
+            )
+        except Exception:
+            logger.exception("pirate heat colonize hook failed movement_id=%s", movement_id)
         return True
 
     return False
@@ -4969,6 +5150,33 @@ def _handle_expedition_holding_end(movement: Dict[str, Any], *, conn, now: float
         conn=conn,
         ts=now,
     )
+    try:
+        from .pirates.hooks import safe_record_heat
+
+        safe_record_heat(
+            conn,
+            int(movement.get("target_galaxy") or 0) or None,
+            "expedition",
+        )
+    except Exception:
+        logger.exception("pirate heat expedition hook failed movement_id=%s", movement_id)
+    if outcome.get("event_key") == "pirate_encounter":
+        try:
+            from .pirates.ambush import on_expedition_pirate_ambush
+
+            pc = outcome.get("pirate_combat") or {}
+            on_expedition_pirate_ambush(
+                conn,
+                galaxy_id=int(movement.get("target_galaxy") or 0) or None,
+                player_id=player_id,
+                planet_id=int(movement.get("origin_planet_id") or 0) or None,
+                won=bool(pc.get("won")),
+                movement_id=movement_id,
+            )
+        except Exception:
+            logger.exception(
+                "pirate ambush hook failed movement_id=%s", movement_id
+            )
     grant_expedition_lootboxes(
         player_id,
         outcome.get("lootboxes") or [],

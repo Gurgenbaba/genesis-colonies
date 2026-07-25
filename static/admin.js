@@ -61,19 +61,29 @@
   function syncAdminHudSelects(root) {
     const scope = root && root.querySelectorAll ? root : adminRoot();
     if (!scope || typeof GC.initHudSelects !== "function") return;
-    scope.querySelectorAll(".gc-hud-select.is-open").forEach((wrap) => {
-      wrap.classList.remove("is-open");
-      const menu = wrap.querySelector(".gc-hud-select-menu");
-      if (menu) menu.hidden = true;
-      const trigger = wrap.querySelector(".gc-hud-select-trigger");
-      if (trigger) trigger.setAttribute("aria-expanded", "false");
-    });
+    // Portaled menus live on document.body — wrap.querySelector misses them and
+    // leaves pointer-events:auto orphans that freeze the shell after Admin.
+    if (typeof GC.teardownHudSelectPortals === "function") {
+      GC.teardownHudSelectPortals();
+    } else if (typeof GC.closeAllHudSelects === "function") {
+      GC.closeAllHudSelects();
+    }
     GC.initHudSelects(scope);
     if (typeof GC.rebuildHudSelect === "function") {
       scope.querySelectorAll("select[data-gc-hud-select]").forEach((sel) => {
         if (sel._gcHudSelect) GC.rebuildHudSelect(sel);
         else if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(sel);
       });
+    }
+  }
+
+  function adminLeaveShellCleanup() {
+    _activeTab = "health";
+    _adminPanelBootstrapped = false;
+    if (typeof GC.releaseShellNavigationBlockers === "function") {
+      GC.releaseShellNavigationBlockers("admin_panel_cleanup");
+    } else if (typeof GC.teardownHudSelectPortals === "function") {
+      GC.teardownHudSelectPortals();
     }
   }
 
@@ -324,6 +334,9 @@
         break;
       case "world_boss":
         result = await loadWorldBossAdmin();
+        break;
+      case "pirates":
+        result = await loadPiratesAdmin();
         break;
       default:
         result = null;
@@ -1759,6 +1772,169 @@
       spawnOut.textContent = `${t("admin_wb_spawned", "World Boss gespawnt.")} ${coords}`;
     }
     await loadWorldBossAdmin();
+    return res;
+  }
+
+  function setPiratesStatus(msg) {
+    const el = qs("#admin-pirates-status");
+    if (el) el.textContent = msg || "";
+  }
+
+  function renderPiratesAdmin(data) {
+    const out = qs("#admin-pirates-output");
+    if (!out) return;
+    if (!data || !data.ok) {
+      out.innerHTML = `<p class="admin-small-hint">${esc(data?.error || t("admin_action_failed", "Aktion fehlgeschlagen"))}</p>`;
+      return;
+    }
+    const aiOn = !!data.ai_enabled;
+    const aiLabel = aiOn
+      ? t("admin_pirates_ai_on", "AI: AN")
+      : t("admin_pirates_ai_off", "AI: AUS");
+    const kpis = data.kpis || {};
+    const heatRows = (data.heat_top || [])
+      .map(
+        (h) =>
+          `<tr><td>G${esc(String(h.galaxy_id))}</td><td>${esc(String(h.heat))}</td></tr>`,
+      )
+      .join("");
+    const botRows = (data.bots || [])
+      .map((b) => {
+        const coords =
+          b.exists && b.galaxy != null
+            ? `${esc(String(b.galaxy))}:${esc(String(b.system))}:${esc(String(b.position))}`
+            : "—";
+        return (
+          `<tr><td>${esc(b.faction_key || "")}</td><td>${esc(b.display_name || "")}</td>` +
+          `<td>${coords}</td><td>${esc(String(b.ship_count || 0))}</td>` +
+          `<td>${esc(String(b.outbound_fleets || 0))}</td>` +
+          `<td>${b.exists ? "✓" : "—"}</td></tr>`
+        );
+      })
+      .join("");
+    const baseRows = (data.bases || [])
+      .map(
+        (b) =>
+          `<tr><td>#${esc(String(b.id))}</td><td>${esc(b.faction_key || "")}</td>` +
+          `<td>${esc(String(b.galaxy))}:${esc(String(b.system))}:${esc(String(b.position))}</td>` +
+          `<td>${esc(String(b.strength))}</td><td>${esc(b.status || "")}</td>` +
+          `<td>${esc(String(b.current_hp))}/${esc(String(b.max_hp))}</td></tr>`,
+      )
+      .join("");
+    const logRows = (data.log || [])
+      .map((row) => {
+        const ts = row.ts ? new Date(Number(row.ts) * 1000).toISOString().slice(11, 19) : "";
+        return (
+          `<tr><td>${esc(ts)}</td><td>${esc(row.severity || "")}</td>` +
+          `<td>${esc(row.kind || "")}</td><td>${esc(row.message || "")}</td>` +
+          `<td>${esc(row.faction_key || "")}</td></tr>`
+        );
+      })
+      .join("");
+    out.innerHTML = `
+      <div class="admin-card">
+        <h3 class="admin-card-title">${esc(aiLabel)}</h3>
+        <table class="admin-table admin-table-compact"><tbody>
+          <tr><th>${esc(t("admin_pirates_kpi_bots", "Bots online"))}</th><td>${esc(String(kpis.bots_online || 0))}</td></tr>
+          <tr><th>${esc(t("admin_pirates_live_bases", "Live bases"))}</th><td>${esc(String(data.live_bases || 0))}</td></tr>
+          <tr><th>${esc(t("admin_pirates_kpi_raids", "Raid dispatches (log window)"))}</th><td>${esc(String(kpis.raid_dispatch_in_log || 0))}</td></tr>
+          <tr><th>${esc(t("admin_pirates_kpi_spies", "Spy dispatches (log window)"))}</th><td>${esc(String(kpis.spy_dispatch_in_log || 0))}</td></tr>
+          <tr><th>${esc(t("admin_pirates_kpi_spawns", "Base spawns (log window)"))}</th><td>${esc(String(kpis.base_spawn_in_log || 0))}</td></tr>
+          <tr><th>${esc(t("admin_pirates_kpi_wars", "Pirate wars (log window)"))}</th><td>${esc(String(kpis.pirate_war_in_log || 0))}</td></tr>
+          <tr><th>${esc(t("admin_pirates_kpi_infil", "Live infiltrations"))}</th><td>${esc(String(kpis.live_infiltrations || 0))}</td></tr>
+          <tr><th>${esc(t("admin_pirates_kpi_smugglers", "Live smugglers"))}</th><td>${esc(String(kpis.live_smugglers || 0))}</td></tr>
+          <tr><th>${esc(t("admin_pirates_kpi_log", "Log rows"))}</th><td>${esc(String(kpis.log_rows || 0))}</td></tr>
+        </tbody></table>
+      </div>
+      <div class="admin-section-title"><span class="admin-section-title-text">${esc(t("admin_pirates_bots", "Faction bots"))}</span></div>
+      <table class="admin-table admin-table-compact"><thead><tr>
+        <th>Faction</th><th>Name</th><th>Coords</th><th>Ships</th><th>Fleets</th><th>OK</th>
+      </tr></thead><tbody>${botRows || "<tr><td colspan=6>—</td></tr>"}</tbody></table>
+      ${(data.pirate_wars || []).length
+        ? `<div class="admin-section-title"><span class="admin-section-title-text">${esc(t("admin_pirates_wars", "Active pirate_war"))}</span></div>
+      <table class="admin-table admin-table-compact"><thead><tr><th>G</th><th>Heat</th><th>Ends</th></tr></thead><tbody>
+      ${(data.pirate_wars || []).map((w) => `<tr><td>G${esc(String(w.galaxy_id))}</td><td>${esc(String(w.heat))}</td><td>${esc(String(w.ends_at || "—"))}</td></tr>`).join("")}
+      </tbody></table>`
+        : ""}
+      <div class="admin-section-title"><span class="admin-section-title-text">${esc(t("admin_pirates_heat_top", "Galaxy heat (top)"))}</span></div>
+      <table class="admin-table admin-table-compact"><thead><tr><th>G</th><th>Heat</th></tr></thead><tbody>${heatRows || "<tr><td colspan=2>—</td></tr>"}</tbody></table>
+      <div class="admin-section-title"><span class="admin-section-title-text">${esc(t("admin_pirates_bases", "Live bases"))}</span></div>
+      <table class="admin-table admin-table-compact"><thead><tr><th>ID</th><th>Faction</th><th>Coords</th><th>Str</th><th>Status</th><th>HP</th></tr></thead><tbody>${baseRows || "<tr><td colspan=6>—</td></tr>"}</tbody></table>
+      <div class="admin-section-title"><span class="admin-section-title-text">${esc(t("admin_pirates_log", "Action log"))}</span></div>
+      <table class="admin-table admin-table-compact"><thead><tr><th>UTC</th><th>Sev</th><th>Kind</th><th>Message</th><th>Faction</th></tr></thead><tbody>${logRows || "<tr><td colspan=5>—</td></tr>"}</tbody></table>`;
+  }
+
+  async function loadPiratesAdmin() {
+    setPiratesStatus(t("admin_pirates_loading", "Lade Pirate Bot-Log…"));
+    const data = await adminGet("/api/admin/pirates");
+    if (!data.ok) {
+      showAlert(data.message || data.error || t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+      renderPiratesAdmin(data);
+      setPiratesStatus("");
+      return data;
+    }
+    renderPiratesAdmin(data);
+    setPiratesStatus(t("admin_pirates_loaded", "Bot-Log geladen."));
+    return data;
+  }
+
+  async function setPiratesAiAdmin(enabled) {
+    setPiratesStatus(
+      enabled
+        ? t("admin_pirates_enabling", "Aktiviere Pirate AI…")
+        : t("admin_pirates_disabling", "Deaktiviere Pirate AI…"),
+    );
+    const res = await adminPost("/api/admin/pirates/ai", { enabled: !!enabled });
+    if (!res.ok) {
+      showAlert(res.message || res.error || t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+      setPiratesStatus("");
+      return res;
+    }
+    notify(
+      t("admin_pirates_ai_updated", "Pirate AI Kill-Switch aktualisiert."),
+      "success",
+    );
+    await loadPiratesAdmin();
+    return res;
+  }
+
+  async function hardOffPiratesAiAdmin() {
+    if (
+      !adminDestructiveConfirmed(
+        "admin_pirates_hard_off_confirm",
+        "Pirate AI Hard-Off: Soft-Off + Recall aller Pirate-Flotten?",
+      )
+    ) {
+      return null;
+    }
+    setPiratesStatus(t("admin_pirates_hard_off_running", "Hard-Off läuft…"));
+    const res = await adminPost("/api/admin/pirates/ai", { mode: "hard", enabled: false });
+    if (!res.ok) {
+      showAlert(res.message || res.error || t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+      setPiratesStatus("");
+      return res;
+    }
+    notify(
+      t("admin_pirates_hard_off_done", "Pirate AI Hard-Off ausgeführt."),
+      "success",
+    );
+    await loadPiratesAdmin();
+    return res;
+  }
+
+  async function forceSpawnPiratesAdmin() {
+    setPiratesStatus(t("admin_pirates_force_spawn_running", "Force-Spawn läuft…"));
+    const res = await adminPost("/api/admin/pirates/force-spawn", {});
+    if (!res.ok) {
+      showAlert(res.message || res.error || t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+      setPiratesStatus("");
+      return res;
+    }
+    notify(
+      t("admin_pirates_force_spawn_done", "Pirate base force-spawned."),
+      "success",
+    );
+    await loadPiratesAdmin();
     return res;
   }
 
@@ -3477,6 +3653,11 @@
     if (act === "diplomacy-clear-emergency") return applyAdminDiplomacyLayer("emergency", true);
     if (act === "world-boss-refresh") return loadWorldBossAdmin();
     if (act === "world-boss-spawn") return spawnWorldBossAdmin();
+    if (act === "pirates-refresh") return loadPiratesAdmin();
+    if (act === "pirates-ai-on") return setPiratesAiAdmin(true);
+    if (act === "pirates-ai-off") return setPiratesAiAdmin(false);
+    if (act === "pirates-ai-hard-off") return hardOffPiratesAiAdmin();
+    if (act === "pirates-force-spawn") return forceSpawnPiratesAdmin();
     if (act === "server-universe-reset") return resetAdminUniverseKeepInventory();
     if (act === "run-queue-tick") return runQueueTick(btn);
     if (act === "queue-cancel") return cancelQueueJob(btn.dataset.queueType, btn.dataset.jobId);
@@ -4038,8 +4219,7 @@
   }
 
   GC.teardownAdminPanel = function teardownAdminPanel() {
-    _activeTab = "health";
-    _adminPanelBootstrapped = false;
+    adminLeaveShellCleanup();
   };
 
   GC.modules = GC.modules || {};
@@ -4057,8 +4237,7 @@
 
   if (typeof GC.registerCleanup === "function") {
     GC.registerCleanup(function adminPanelCleanup() {
-      _activeTab = "health";
-      _adminPanelBootstrapped = false;
+      adminLeaveShellCleanup();
     }, { persistent: true });
   }
 
