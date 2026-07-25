@@ -322,6 +322,9 @@
       case "diplomacy":
         result = await loadAdminDiplomacy();
         break;
+      case "world_boss":
+        result = await loadWorldBossAdmin();
+        break;
       default:
         result = null;
     }
@@ -1639,6 +1642,123 @@
         ? t("admin_diplomacy_cleared", "Diplomatie-Ebene gelöscht.")
         : t("admin_diplomacy_saved", "Diplomatie-Ebene gesetzt."),
     );
+    return res;
+  }
+
+  function setWorldBossStatus(msg) {
+    const el = qs("#admin-wb-status");
+    if (el) el.textContent = msg || "";
+  }
+
+  function populateWorldBossSelect(definitions, selectedKey) {
+    const sel = qs("#admin-wb-boss-key");
+    if (!sel) return;
+    const placeholder = t("admin_wb_select_placeholder", "— Boss wählen —");
+    const rows = Array.isArray(definitions) ? definitions : [];
+    const prev = selectedKey != null ? String(selectedKey) : String(sel.value || "");
+    sel.innerHTML =
+      `<option value="">${esc(placeholder)}</option>` +
+      rows
+        .map((row) => {
+          const key = String(row.boss_key || "");
+          const label = t(row.name_key || key, key);
+          const selected = key && key === prev ? " selected" : "";
+          return `<option value="${esc(key)}"${selected}>${esc(label)} (${esc(key)})</option>`;
+        })
+        .join("");
+    syncAdminHudSelects(sel.parentElement || adminRoot());
+  }
+
+  function renderWorldBossAdmin(data) {
+    const out = qs("#admin-wb-output");
+    if (!out) return;
+    if (!data || !data.ok) {
+      out.innerHTML = errorCard(data || { error: "unknown" });
+      return;
+    }
+
+    const ev = data.event || null;
+    const schedule = data.schedule || {};
+    let statusRows = "";
+    if (ev && ev.status === "active") {
+      const name = t(ev.name_key || ev.boss_key, ev.boss_key || "—");
+      const statusLabel = t(`wb_status_${ev.status || "active"}`, ev.status || "active");
+      const coords = `${ev.galaxy || "?"}:${ev.system || "?"}:${ev.position || "?"}`;
+      statusRows = `
+        <tr><th>${esc(t("admin_wb_status_active", "Aktiver Boss"))}</th>
+            <td><strong>${esc(name)}</strong> <span class="admin-small-hint">(${esc(statusLabel)})</span></td></tr>
+        <tr><th>${esc(t("admin_wb_coords", "Koordinaten"))}</th><td>${esc(coords)}</td></tr>
+        <tr><th>${esc(t("admin_wb_hp", "HP"))}</th>
+            <td>${esc(String(ev.current_hp ?? "—"))} / ${esc(String(ev.max_hp ?? "—"))}</td></tr>
+        <tr><th>${esc(t("admin_wb_ends", "Ende"))}</th><td>${esc(ev.ends_at ? fmtTs(ev.ends_at) : "—")}</td></tr>`;
+    } else {
+      const eta = schedule.next_eligible_at ? fmtTs(schedule.next_eligible_at) : "—";
+      const ready = schedule.spawn_ready
+        ? t("admin_wb_spawn_ready", "Spawn bereit (nächster Cron-Tick)")
+        : t("admin_wb_idle_eta", "Nächster Spawn frühestens");
+      statusRows = `
+        <tr><th>${esc(t("admin_wb_status_idle", "Status"))}</th>
+            <td>${esc(t("admin_wb_idle", "Kein aktiver Boss"))}</td></tr>
+        <tr><th>${esc(ready)}</th><td>${esc(eta)}</td></tr>`;
+    }
+
+    out.innerHTML = `
+      <div class="admin-card">
+        <h3 class="admin-card-title">${esc(t("admin_wb_state_title", "World-Boss-Status"))}</h3>
+        <table class="admin-table admin-table-compact"><tbody>${statusRows}</tbody></table>
+      </div>`;
+    populateWorldBossSelect(data.definitions, ev && ev.boss_key);
+  }
+
+  async function loadWorldBossAdmin() {
+    setWorldBossStatus(t("admin_wb_loading", "Lade World-Boss-Status…"));
+    const data = await adminGet("/api/admin/world-boss");
+    if (!data.ok) {
+      showAlert(data.message || data.error || t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+      renderWorldBossAdmin(data);
+      setWorldBossStatus("");
+      return data;
+    }
+    renderWorldBossAdmin(data);
+    setWorldBossStatus(t("admin_wb_loaded", "Status geladen."));
+    return data;
+  }
+
+  async function spawnWorldBossAdmin() {
+    const bossKey = (qs("#admin-wb-boss-key")?.value || "").trim();
+    if (!bossKey) {
+      showAlert(t("admin_wb_boss_required", "Bitte zuerst einen Boss auswählen."), "error");
+      return null;
+    }
+    const gRaw = (qs("#admin-wb-galaxy")?.value || "").trim();
+    const sRaw = (qs("#admin-wb-system")?.value || "").trim();
+    const pRaw = (qs("#admin-wb-position")?.value || "").trim();
+    const payload = {
+      boss_key: bossKey,
+      force: !!qs("#admin-wb-force")?.checked,
+      announce: !!qs("#admin-wb-announce")?.checked,
+    };
+    if (gRaw !== "") payload.galaxy = parseInt(gRaw, 10);
+    if (sRaw !== "") payload.system = parseInt(sRaw, 10);
+    if (pRaw !== "") payload.position = parseInt(pRaw, 10);
+
+    setWorldBossStatus(t("admin_wb_spawning", "Spawne Boss…"));
+    const spawnOut = qs("#admin-wb-spawn-result");
+    if (spawnOut) spawnOut.textContent = "";
+    const res = await adminPost("/api/admin/world-boss/spawn", payload);
+    if (!res.ok) {
+      showAlert(res.message || res.error || t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+      setWorldBossStatus("");
+      if (spawnOut) spawnOut.textContent = res.message || res.error || "";
+      return res;
+    }
+    notify(t("admin_wb_spawned", "World Boss gespawnt."), "success");
+    if (spawnOut) {
+      const ev = res.event || {};
+      const coords = `${ev.galaxy || "?"}:${ev.system || "?"}:${ev.position || "?"}`;
+      spawnOut.textContent = `${t("admin_wb_spawned", "World Boss gespawnt.")} ${coords}`;
+    }
+    await loadWorldBossAdmin();
     return res;
   }
 
@@ -3355,6 +3475,8 @@
     if (act === "diplomacy-clear-resolution") return applyAdminDiplomacyLayer("resolution", true);
     if (act === "diplomacy-set-emergency") return applyAdminDiplomacyLayer("emergency", false);
     if (act === "diplomacy-clear-emergency") return applyAdminDiplomacyLayer("emergency", true);
+    if (act === "world-boss-refresh") return loadWorldBossAdmin();
+    if (act === "world-boss-spawn") return spawnWorldBossAdmin();
     if (act === "server-universe-reset") return resetAdminUniverseKeepInventory();
     if (act === "run-queue-tick") return runQueueTick(btn);
     if (act === "queue-cancel") return cancelQueueJob(btn.dataset.queueType, btn.dataset.jobId);

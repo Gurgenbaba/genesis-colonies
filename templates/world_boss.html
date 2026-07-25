@@ -1,0 +1,288 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% set wb = world_boss_payload if world_boss_payload is defined and world_boss_payload else {'ready': false, 'event': none, 'contributions': [], 'alliance_board': [], 'player': none, 'schedule': {}} %}
+{% set event = wb.event if wb.event is defined else none %}
+{% set contribs = wb.contributions if wb.contributions is defined else [] %}
+{% set alliance_board = wb.alliance_board if wb.alliance_board is defined else [] %}
+{% set player_info = wb.player if wb.player is defined else none %}
+{% set schedule = wb.schedule if wb.schedule is defined and wb.schedule else {} %}
+{% set is_active = event and event.status == 'active' %}
+{% set is_ended = event and event.status in ('defeated', 'expired') %}
+
+<div class="gc-page gc-world-boss-page" id="world-boss-page"
+     data-wb-ready="{{ '1' if wb.ready else '0' }}"
+     data-wb-event-id="{{ event.id if event else '' }}"
+     data-wb-active="{{ '1' if is_active else '0' }}">
+
+  <header class="section-header">
+    <h1 class="section-title">{{ T("wb_title", "World Boss") }}</h1>
+    <p class="section-hint hint">{{ T("wb_subtitle", "Serverweite PvE-Ereignisse — gemeinsamer Schaden, gemeinsame Belohnungen") }}</p>
+  </header>
+
+  <section class="gc-panel" aria-labelledby="wb-event-title">
+    <div class="gc-panel-header gc-world-boss-panel-head">
+      <span class="gc-panel-title" id="wb-event-title">{{ T("wb_event_panel", "Aktives Ereignis") }}</span>
+      <button type="button"
+              class="gc-btn gc-btn-ghost gc-btn-xs gc-world-boss-help-btn"
+              id="wb-help-open"
+              aria-haspopup="dialog"
+              aria-controls="wb-help-modal"
+              aria-expanded="false"
+              title="{{ T('wb_help_btn', 'Boss-Fight Hilfe') }}"
+              aria-label="{{ T('wb_help_btn', 'Boss-Fight Hilfe') }}">?</button>
+    </div>
+    <div class="gc-panel-body">
+      {% if not wb.ready %}
+      <p class="hint">{{ T("wb_unavailable", "World Boss ist derzeit nicht verfügbar.") }}</p>
+      {% elif is_active %}
+      {% set hp_pct = ((event.hp_ratio or 0) * 100)|round(1) %}
+      <div class="gc-world-boss-hero gc-world-boss-hero--active">
+        <header class="gc-world-boss-hero-head">
+          <p class="gc-world-boss-name">
+            <strong>{{ T(event.name_key, event.boss_key) }}</strong>
+            <span class="gc-world-boss-status-badge gc-world-boss-status-badge--{{ event.status }}">
+              {{ T('wb_status_' ~ event.status, event.status) }}
+            </span>
+          </p>
+          <p class="gc-world-boss-coords hint gc-mono">{{ event.coords }}</p>
+          {% if event.description_key %}
+          <p class="gc-world-boss-desc hint">{{ T(event.description_key, '') }}</p>
+          {% endif %}
+        </header>
+
+        <div class="gc-world-boss-stage">
+          <div class="gc-world-boss-hero-art gc-wb-glow" aria-hidden="false">
+            <img class="gc-world-boss-portrait"
+                 src="{{ url_for('static', filename='img/bosses/' ~ event.boss_key ~ '.png', v=GC_ASSET_VERSION) }}"
+                 alt="{{ T(event.name_key, event.boss_key) }}"
+                 width="320"
+                 height="320"
+                 loading="lazy"
+                 decoding="async"
+                 onerror="this.onerror=null;this.src='{{ url_for('static', filename='img/bosses/_placeholder.png', v=GC_ASSET_VERSION) }}';">
+          </div>
+          <div class="gc-world-boss-hp-wrap">
+            <div class="gc-world-boss-hp" role="meter" aria-valuemin="0" aria-valuemax="100"
+                 aria-valuenow="{{ hp_pct|int }}"
+                 aria-label="{{ T('wb_hp', 'HP') }} {{ hp_pct }}%">
+              <div class="gc-world-boss-hp-fill" style="width: {{ hp_pct }}%;"></div>
+            </div>
+            <p class="gc-world-boss-hp-text hint gc-mono">
+              {{ T("wb_hp", "HP") }}: {{ event.current_hp|fmt_int }} / {{ event.max_hp|fmt_int }} ({{ hp_pct }}%)
+            </p>
+          </div>
+        </div>
+
+        <div class="gc-world-boss-hero-meta">
+          <p class="gc-world-boss-eta hint">
+            {{ T("wb_ends_in", "Endet in") }}:
+            <span class="gc-mono"
+                  data-countdown-at="{{ event.ends_at|int }}"
+                  data-countdown-format="eta">—</span>
+          </p>
+          {% set atk_meta = player_info.attack_meta if player_info and player_info.attack_meta is defined and player_info.attack_meta else {} %}
+          {% set waves_done = (player_info.contribution.waves if player_info and player_info.contribution else (atk_meta.waves if atk_meta.waves is defined else 0))|int %}
+          {% set waves_max = (atk_meta.max_waves if atk_meta.max_waves is defined else 40)|int %}
+          {% set cool_sec = (atk_meta.wave_cooldown_sec if atk_meta.wave_cooldown_sec is defined else 300)|int %}
+          <p class="gc-world-boss-waves hint">
+            {{ T("wb_your_waves", "Wellen") }}:
+            <span class="gc-mono">{{ waves_done }} / {{ waves_max }}</span>
+            <span class="hint">· {{ T("wb_wave_cooldown_rule", "Cooldown zwischen Wellen") }}:
+              <span class="gc-mono">{{ (cool_sec / 60)|int }}m</span></span>
+          </p>
+          {% if player_info and player_info.attack_block_reason == 'world_boss_cooldown' and atk_meta.next_attack_at %}
+          <p class="gc-world-boss-cooldown" role="status" data-wb-attack-cooldown>
+            {{ T("wb_attack_cooldown", "Nächster Angriff in") }}:
+            <span class="gc-mono"
+                  data-countdown-at="{{ atk_meta.next_attack_at|int }}"
+                  data-countdown-format="eta"
+                  data-wb-cooldown-at="{{ atk_meta.next_attack_at|int }}">—</span>
+          </p>
+          {% elif player_info and player_info.attack_block_reason == 'world_boss_wave_limit' %}
+          <p class="gc-world-boss-cooldown" role="status">
+            {{ T("wb_attack_wave_limit", "Wellenlimit für dieses Ereignis erreicht.") }}
+          </p>
+          {% elif player_info and player_info.can_attack %}
+          <p class="gc-world-boss-ready hint" role="status" data-wb-attack-ready>
+            {{ T("wb_attack_ready", "Angriff bereit.") }}
+          </p>
+          {% endif %}
+          <p class="gc-world-boss-actions">
+            {% set attack_href = url_for('fleet_view') ~ '?mission=attack&target_galaxy=' ~ event.galaxy ~ '&target_system=' ~ event.system ~ '&target_position=' ~ event.position %}
+            {% if player_info and player_info.attack_block_reason == 'world_boss_wave_limit' %}
+            <span class="gc-btn gc-btn-primary is-disabled"
+                  aria-disabled="true"
+                  title="{{ T('wb_attack_wave_limit', 'Wellenlimit für dieses Ereignis erreicht.') }}">
+              {{ T("wb_attack", "Angreifen") }}
+            </span>
+            {% elif player_info and player_info.attack_block_reason == 'world_boss_cooldown' and atk_meta.next_attack_at %}
+            <a class="gc-btn gc-btn-primary is-disabled"
+               id="wb-attack-btn"
+               href="{{ attack_href }}"
+               aria-disabled="true"
+               tabindex="-1"
+               data-wb-locked-until="{{ atk_meta.next_attack_at|int }}"
+               title="{{ T('wb_attack_cooldown', 'Nächster Angriff in') }}">
+              {{ T("wb_attack", "Angreifen") }}
+            </a>
+            {% else %}
+            <a class="gc-btn gc-btn-primary"
+               id="wb-attack-btn"
+               href="{{ attack_href }}">
+              {{ T("wb_attack", "Angreifen") }}
+            </a>
+            {% endif %}
+            <a class="gc-btn"
+               href="{{ url_for('galaxy_view') }}?galaxy={{ event.galaxy }}&system={{ event.system }}">
+              {{ T("wb_galaxy", "Zur Galaxie") }}
+            </a>
+          </p>
+          {% if player_info and player_info.contribution %}
+          <p class="hint">{{ T("wb_your_damage", "Dein Schaden") }}: <span class="gc-mono">{{ player_info.contribution.damage|fmt_int }}</span></p>
+          {% endif %}
+        </div>
+      </div>
+      {% else %}
+      <div class="gc-world-boss-idle">
+        <p class="hint">{{ T("wb_no_event", "Kein World Boss aktiv. Das nächste Ereignis erscheint automatisch.") }}</p>
+        {% if schedule.spawn_ready %}
+        <p class="gc-world-boss-eta">{{ T("wb_next_spawn_ready", "Spawn möglich — erscheint mit dem nächsten Server-Tick.") }}</p>
+        {% elif schedule.next_eligible_at %}
+        <p class="gc-world-boss-eta">
+          {{ T("wb_next_spawn_in", "Nächster Spawn frühestens in") }}:
+          <span class="gc-mono"
+                data-countdown-at="{{ schedule.next_eligible_at|int }}"
+                data-countdown-format="eta">—</span>
+        </p>
+        {% endif %}
+        {% if is_ended %}
+        <div class="gc-world-boss-status gc-world-boss-ended">
+          <p class="hint">{{ T("wb_last_event", "Letztes Ereignis") }}:
+            <strong>{{ T(event.name_key, event.boss_key) }}</strong>
+            <span class="gc-world-boss-status-badge gc-world-boss-status-badge--{{ event.status }}">
+              {{ T('wb_status_' ~ event.status, event.status) }}
+            </span>
+            <span class="hint gc-mono">{{ event.coords }}</span></p>
+          {% if player_info and player_info.can_claim %}
+          <p>
+            <button type="button" class="gc-btn gc-btn-primary" id="wb-claim-btn"
+                    data-event-id="{{ event.id }}">
+              {{ T("wb_claim", "Belohnung abholen") }}
+            </button>
+          </p>
+          {% elif player_info and player_info.claim %}
+          <p class="hint">{{ T("wb_claimed", "Belohnung bereits abgeholt.") }}</p>
+          {% endif %}
+          {% if player_info and player_info.contribution %}
+          <p class="hint">{{ T("wb_your_damage", "Dein Schaden") }}: {{ player_info.contribution.damage }}
+            · {{ T("wb_your_waves", "Wellen") }}: {{ player_info.contribution.waves }}</p>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </section>
+
+  {% if event %}
+  <section class="gc-panel" aria-labelledby="wb-board-title">
+    <div class="gc-panel-header">
+      <span class="gc-panel-title" id="wb-board-title">{{ T("wb_board_title", "Schadens-Rangliste") }}</span>
+    </div>
+    <div class="gc-panel-body ranking-table-wrapper">
+      {% if not contribs %}
+      <p class="hint">{{ T("wb_board_empty", "Noch kein Schaden verzeichnet.") }}</p>
+      {% else %}
+      <table class="gc-ranking-table">
+        <thead>
+          <tr>
+            <th>{{ T("wb_col_rank", "Rang") }}</th>
+            <th>{{ T("wb_col_player", "Spieler") }}</th>
+            <th>{{ T("wb_col_alliance", "Allianz") }}</th>
+            <th>{{ T("wb_col_damage", "Schaden") }}</th>
+            <th>{{ T("wb_col_waves", "Wellen") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in contribs %}
+          <tr>
+            <td>#{{ row.rank }}</td>
+            <td>{{ row.player_name }}</td>
+            <td>{{ row.alliance_tag or "—" }}</td>
+            <td>{{ row.damage|fmt_int }}</td>
+            <td>{{ row.waves }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="gc-panel" aria-labelledby="wb-alliance-title">
+    <div class="gc-panel-header">
+      <span class="gc-panel-title" id="wb-alliance-title">{{ T("wb_alliance_board", "Allianz-Schaden") }}</span>
+    </div>
+    <div class="gc-panel-body ranking-table-wrapper">
+      {% if not alliance_board %}
+      <p class="hint">{{ T("wb_alliance_empty", "Noch keine Allianz-Beiträge.") }}</p>
+      {% else %}
+      <table class="gc-ranking-table">
+        <thead>
+          <tr>
+            <th>{{ T("wb_col_rank", "Rang") }}</th>
+            <th>{{ T("wb_col_alliance", "Allianz") }}</th>
+            <th>{{ T("wb_col_damage", "Schaden") }}</th>
+            <th>{{ T("wb_col_members", "Mitglieder") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in alliance_board %}
+          <tr>
+            <td>#{{ row.rank }}</td>
+            <td>[{{ row.alliance_tag }}] {{ row.alliance_name }}</td>
+            <td>{{ row.damage|fmt_int }}</td>
+            <td>{{ row.members }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </div>
+  </section>
+  {% endif %}
+
+  <div id="wb-help-modal"
+       class="gc-player-card-modal gc-world-boss-help-modal"
+       hidden
+       aria-hidden="true">
+    <div class="gc-player-card-overlay" data-wb-help-close tabindex="-1"></div>
+    <div class="gc-player-card-dialog gc-world-boss-help-dialog"
+         role="dialog"
+         aria-modal="true"
+         aria-labelledby="wb-help-modal-title">
+      <header class="gc-player-card-head">
+        <h2 id="wb-help-modal-title" class="gc-player-card-head-title">
+          {{ T("wb_help_title", "Boss-Fights — Überblick") }}
+        </h2>
+        <button type="button"
+                class="gc-btn gc-btn-ghost gc-btn-xs gc-player-card-close"
+                data-wb-help-close
+                aria-label="{{ T('close', 'Schließen') }}">×</button>
+      </header>
+      <div class="gc-player-card-body gc-world-boss-help-body">
+        <p class="gc-world-boss-help-lead">{{ T("wb_help_lead", "World Bosses sind serverweite PvE-Ziele. Alle Spieler kämpfen gemeinsam gegen einen Boss mit geteilten Lebenspunkten.") }}</p>
+        <ul class="gc-world-boss-help-list">
+          <li>{{ T("wb_help_hp", "Geteilte HP: Jeder Angriff reduziert den Boss-HP. Ein voller Wellen-Wipe macht etwa 3 % der Boss-HP (max. 5 % pro Welle).") }}</li>
+          <li>{{ T("wb_help_attack", "Angriff: Schicke eine Flotte mit Mission Angriff auf die Boss-Koordinaten (auch über Galaxie).") }}</li>
+          <li>{{ T("wb_help_board", "Rangliste: Verursachter Schaden wird pro Spieler und Allianz gezählt.") }}</li>
+          <li>{{ T("wb_help_rewards", "Belohnungen: Nach Defeat oder Ablauf kannst du Meta-Container je nach Beitragstier abholen (Teilnahme, Top 10 %, Platz 1, Top-Allianz).") }}</li>
+          <li>{{ T("wb_help_limits", "Limits: Cooldown zwischen Wellen (z. B. 5 Min.) und maximale Wellenzahl pro Spieler und Ereignis.") }}</li>
+          <li>{{ T("wb_help_schedule", "Zeitplan: Nach jedem Ereignis folgt eine Pause, danach erscheint der nächste Boss automatisch.") }}</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

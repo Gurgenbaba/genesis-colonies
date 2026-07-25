@@ -230,6 +230,8 @@ def _event_applies(definition: Mapping[str, Any], event: Mapping[str, Any]) -> b
         return kind == "defense_built"
     if key == "defeat_pirates":
         return kind == "pirate_defeated" and bool(event.get("won"))
+    if key == "deal_world_boss_damage":
+        return kind == "world_boss_damage"
     if key == "trigger_expedition_events":
         return kind == "expedition_event"
     if key == "find_rare_loot":
@@ -538,6 +540,28 @@ def emit_combat_directive_events(
             }
         )
     return apply_directive_events(int(player_id), events, conn=conn, now=now)
+
+
+def emit_world_boss_damage_event(
+    player_id: int,
+    *,
+    movement_id: int,
+    damage: int,
+    event_id: int,
+    conn: sqlite3.Connection,
+    now: float | None = None,
+) -> Dict[str, Any]:
+    """EPIC-20 — progress Imperial Directive ``deal_world_boss_damage``."""
+    amount = max(0, int(damage or 0))
+    if amount <= 0:
+        return {"ok": True, "applied": 0}
+    event = {
+        "kind": "world_boss_damage",
+        "amount": amount,
+        "event_id": int(event_id),
+        "source_event_id": f"world_boss_damage:{int(event_id)}:{int(movement_id)}",
+    }
+    return apply_directive_events(int(player_id), [event], conn=conn, now=now)
 
 
 def emit_ship_built_events(

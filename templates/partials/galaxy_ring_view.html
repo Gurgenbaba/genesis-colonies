@@ -115,11 +115,12 @@
                         {% if slot.is_own_planet %}is-own{% elif slot.is_ally_planet %}is-ally{% elif slot.occupied %}is-foreign{% endif %}
                         {% if slot.is_active_planet %}is-active-planet{% endif %}
                         {% if slot.is_highlighted %}is-highlighted{% endif %}
-                        {% if slot.has_debris %}has-debris{% endif %}"
+                        {% if slot.has_debris %}has-debris{% endif %}
+                        {% if slot.has_world_boss %}has-world-boss{% endif %}"
                       id="galaxy-ring-slot-{{ slot.position }}"
                       data-galaxy-ring-slot="{{ slot.position }}"
-                      data-slot-title="{% if slot.occupied %}{{ slot.planet_name }}{% else %}{{ T('galaxy_empty_slot') }}{% endif %}"
-                      aria-label="{{ T('galaxy_slot_position', 'Pos') }} {{ slot.position }}{% if slot.occupied %}: {{ slot.planet_name }}{% if slot.commander_name %} — {{ slot.commander_name }}{% endif %}{% else %}: {{ T('galaxy_empty_slot') }}{% endif %}"
+                      data-slot-title="{% if slot.has_world_boss and slot.world_boss %}{{ T(slot.world_boss.name_key, slot.world_boss.boss_key) }}{% elif slot.occupied %}{{ slot.planet_name }}{% else %}{{ T('galaxy_empty_slot') }}{% endif %}"
+                      aria-label="{{ T('galaxy_slot_position', 'Pos') }} {{ slot.position }}{% if slot.has_world_boss and slot.world_boss %}: {{ T('galaxy_wb_field', 'World Boss') }} {{ T(slot.world_boss.name_key, slot.world_boss.boss_key) }}{% elif slot.occupied %}: {{ slot.planet_name }}{% if slot.commander_name %} — {{ slot.commander_name }}{% endif %}{% else %}: {{ T('galaxy_empty_slot') }}{% endif %}"
                       aria-controls="galaxy-ring-inspector-{{ slot.position }}"
                       aria-expanded="false">
                 {% if slot.occupied and slot.commander_name %}
@@ -129,6 +130,10 @@
                       {% else %}galaxy-ring-slot-owner-label--foreign{% endif %}"
                       aria-hidden="true"
                       title="{{ slot.commander_name }}">{{ slot.commander_name }}</span>
+                {% elif slot.has_world_boss and slot.world_boss %}
+                <span class="galaxy-ring-slot-owner-label galaxy-ring-slot-owner-label--world-boss"
+                      aria-hidden="true"
+                      title="{{ T(slot.world_boss.name_key, slot.world_boss.boss_key) }}">{{ T('galaxy_wb_short', 'Boss') }}</span>
                 {% endif %}
                 <span class="galaxy-ring-slot-body
                       galaxy-ring-slot-body--{{ effect }}
@@ -136,12 +141,13 @@
                       {% if img_rel %}
                       style="--gr-planet-image: url('{{ url_for('static', filename=img_rel, v=GC_ASSET_VERSION) }}');{% if img_webp %} --gr-planet-image-webp: url('{{ url_for('static', filename=img_webp, v=GC_ASSET_VERSION) }}');{% endif %}"
                       {% endif %}
-                      title="{% if slot.occupied %}{{ T(slot.planet_class_label_key, slot.planet_class) }}{% else %}{{ slot.temperature_display }}{% endif %}">
+                      title="{% if slot.has_world_boss and slot.world_boss %}{{ T(slot.world_boss.name_key, slot.world_boss.boss_key) }}{% elif slot.occupied %}{{ T(slot.planet_class_label_key, slot.planet_class) }}{% else %}{{ slot.temperature_display }}{% endif %}">
                   <span class="galaxy-ring-slot-pos gc-mono" aria-hidden="true">{{ slot.position }}</span>
                 </span>
                 {% include "partials/galaxy_slot_status_badges.html" %}
               </button>
               {% include "partials/galaxy_ring_debris_marker.html" %}
+              {% include "partials/galaxy_ring_world_boss_marker.html" %}
             </div>
             {% endfor %}
 
@@ -215,6 +221,9 @@
             {% endif %}
             {% if slot.has_debris %}
             {% include "partials/galaxy_debris_block.html" %}
+            {% endif %}
+            {% if slot.has_world_boss %}
+            {% include "partials/galaxy_world_boss_block.html" %}
             {% endif %}
             <div class="galaxy-ring-inspector-actions">
               {% if slot.is_own_planet %}

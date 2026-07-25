@@ -690,6 +690,37 @@ def _attach_debris_to_slot(
     slot["has_debris"] = False
 
 
+def _attach_world_boss_to_slot(
+    slot: Dict[str, Any],
+    boss: Mapping[str, Any] | None,
+    *,
+    viewer_player_id: Optional[int] = None,
+    conn: Optional[sqlite3.Connection] = None,
+) -> None:
+    """EPIC-20 — stamp active world boss metadata onto a galaxy slot."""
+    if not boss:
+        slot["world_boss"] = None
+        slot["has_world_boss"] = False
+        return
+    payload = dict(boss)
+    if viewer_player_id is not None and conn is not None and payload.get("event_id"):
+        try:
+            from .world_boss import can_player_attack_boss
+
+            ok_atk, reason, meta = can_player_attack_boss(
+                int(viewer_player_id), int(payload["event_id"]), conn=conn
+            )
+            payload["viewer_can_attack"] = bool(ok_atk)
+            payload["viewer_attack_block_reason"] = reason if not ok_atk else ""
+            payload["viewer_attack_meta"] = dict(meta or {})
+        except Exception:
+            payload["viewer_can_attack"] = None
+            payload["viewer_attack_block_reason"] = ""
+            payload["viewer_attack_meta"] = {}
+    slot["world_boss"] = payload
+    slot["has_world_boss"] = True
+
+
 def list_system(
     galaxy: int,
     system: int,
@@ -788,6 +819,12 @@ def list_system(
             }
 
     debris_by_position = get_debris_for_system(int(galaxy), int(system), conn)
+    try:
+        from .world_boss import get_bosses_for_system
+
+        bosses_by_position = get_bosses_for_system(int(galaxy), int(system), conn=conn)
+    except Exception:
+        bosses_by_position = {}
 
     from .planet_visuals import temperature_range_for_position
 
@@ -801,6 +838,12 @@ def list_system(
                 galaxy=int(galaxy),
                 system=int(system),
                 position=pos,
+            )
+            _attach_world_boss_to_slot(
+                slot,
+                bosses_by_position.get(pos),
+                viewer_player_id=viewer_player_id,
+                conn=conn,
             )
             _attach_slot_presentation(slot, pos, planet_row={"position": pos}, occupied=True)
             _attach_player_status_flags(
@@ -842,6 +885,12 @@ def list_system(
                 galaxy=int(galaxy),
                 system=int(system),
                 position=pos,
+            )
+            _attach_world_boss_to_slot(
+                slot,
+                bosses_by_position.get(pos),
+                viewer_player_id=viewer_player_id,
+                conn=conn,
             )
             _attach_slot_presentation(slot, pos, occupied=False)
             slots.append(slot)

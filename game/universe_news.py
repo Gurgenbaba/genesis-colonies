@@ -540,7 +540,7 @@ def list_news(
             """,
             tuple(params),
         )
-        return [_row_to_entry(row) for row in cur.fetchall()]
+        return [_maybe_localize_entry(_row_to_entry(row), conn=conn) for row in cur.fetchall()]
     finally:
         if own:
             conn.close()
@@ -561,10 +561,28 @@ def get_news_entry(news_id: int, *, conn: sqlite3.Connection | None = None) -> O
             (int(news_id),),
         )
         row = cur.fetchone()
-        return _row_to_entry(row) if row else None
+        return _maybe_localize_entry(_row_to_entry(row), conn=conn) if row else None
     finally:
         if own:
             conn.close()
+
+
+def _maybe_localize_entry(
+    entry: Optional[Dict[str, Any]],
+    *,
+    conn: sqlite3.Connection | None = None,
+) -> Optional[Dict[str, Any]]:
+    if not entry:
+        return entry
+    ref = str(entry.get("source_ref") or "")
+    if not ref.startswith("world_boss:"):
+        return entry
+    try:
+        from game.world_boss import localize_world_boss_news_entry
+
+        return localize_world_boss_news_entry(entry, conn=conn)
+    except Exception:
+        return entry
 
 
 def get_banner_entry(*, conn: sqlite3.Connection | None = None) -> Optional[Dict[str, Any]]:
@@ -585,7 +603,7 @@ def get_banner_entry(*, conn: sqlite3.Connection | None = None) -> Optional[Dict
         )
         row = cur.fetchone()
         if row:
-            return _row_to_entry(row)
+            return _maybe_localize_entry(_row_to_entry(row), conn=conn)
         cur.execute(
             f"""
             SELECT {_SELECT_COLS}
@@ -596,7 +614,7 @@ def get_banner_entry(*, conn: sqlite3.Connection | None = None) -> Optional[Dict
             """
         )
         row = cur.fetchone()
-        return _row_to_entry(row) if row else None
+        return _maybe_localize_entry(_row_to_entry(row), conn=conn) if row else None
     finally:
         if own:
             conn.close()

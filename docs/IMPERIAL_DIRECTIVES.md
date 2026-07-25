@@ -114,6 +114,7 @@ Exploration ist Phase 1 Teil von **Fleet**; eigene Kategorie optional in Phase 2
 | `build_defense` | Defense queue finish |
 | `build_combat_ships` | Shipyard finish, combat hull filter |
 | `defeat_pirates` | Expedition/combat, NPC tag |
+| `deal_world_boss_damage` | World Boss contribution damage (EPIC-20) |
 
 ### Exploration (Fleet-Subphase 1)
 

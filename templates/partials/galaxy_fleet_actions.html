@@ -17,6 +17,14 @@
     <span class="galaxy-fleet-action-label">{{ T('fleet_mission_recycle') }}</span>
   </a>
   {% endif %}
+  {% if slot.has_world_boss %}
+  <a href="{{ base }}&mission=attack"
+     class="galaxy-fleet-action galaxy-fleet-action--attack galaxy-fleet-action--world-boss"
+     title="{{ T('galaxy_wb_attack_title', 'World Boss angreifen') }}">
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M2 20 22 4l-2 16-8-4-8 4z"/></svg>
+    <span class="galaxy-fleet-action-label">{{ T('wb_attack', 'Angreifen') }}</span>
+  </a>
+  {% endif %}
   {% if slot.is_expedition_slot is defined and slot.is_expedition_slot %}
   <a href="{{ base }}&mission=expedition"
      class="galaxy-fleet-action galaxy-fleet-action--expedition"

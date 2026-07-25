@@ -469,6 +469,20 @@ def inject_globals():
         motd_text = ""
         motd_banner = None
 
+    world_boss_active = False
+    try:
+        if not simple_layout:
+            from game.db import db as _wb_db
+            from game.world_boss import get_active_event
+
+            _wb_conn = _wb_db()
+            try:
+                world_boss_active = get_active_event(conn=_wb_conn) is not None
+            finally:
+                _wb_conn.close()
+    except Exception:
+        world_boss_active = False
+
     sidebar_release = {"label": "Genesis", "url": "/news", "href": "/news", "anchor_id": "", "has_dev_stream": False}
     try:
         if not simple_layout:
@@ -749,6 +763,7 @@ def inject_globals():
         motd_enabled=motd_enabled,
         motd_text=motd_text,
         motd_banner=motd_banner,
+        WORLD_BOSS_ACTIVE=world_boss_active,
         SIDEBAR_RELEASE=sidebar_release,
 
         PLAYER_STATS=player_stats,
@@ -4578,6 +4593,163 @@ def api_hall_of_fame():
         return jsonify(payload)
     except Exception:
         return jsonify({"ok": False, "error": "hall_of_fame_unavailable"}), 500
+
+
+@app.route("/world-boss")
+@require_login
+def world_boss_view():
+    player_view, buildings, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
+    if player_view is None:
+        return redirect(url_for("login"))
+
+    from game.world_boss import build_world_boss_payload
+
+    player_id = _current_player_id()
+    conn = db()
+    try:
+        wb_payload = build_world_boss_payload(player_id, conn=conn)
+    finally:
+        conn.close()
+
+    return render_template(
+        "world_boss.html",
+        player=player_view,
+        buildings=buildings,
+        energy_total=energy_total,
+        energy_used=energy_used,
+        storage_caps=storage_caps,
+        world_boss_payload=wb_payload,
+    )
+
+
+@app.route("/api/world-boss")
+@require_login_api
+def api_world_boss():
+    player_id = _current_player_id()
+    if player_id is None:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+    try:
+        from game.world_boss import build_world_boss_payload
+
+        event_id = request.args.get("event_id", type=int)
+        conn = db()
+        try:
+            payload = build_world_boss_payload(player_id, conn=conn, event_id=event_id)
+        finally:
+            conn.close()
+        return jsonify(payload)
+    except Exception:
+        return jsonify({"ok": False, "error": "world_boss_unavailable"}), 500
+
+
+@app.route("/api/world-boss/claim", methods=["POST"])
+@require_login_api
+def api_world_boss_claim():
+    player_id = _current_player_id()
+    if player_id is None:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+    data = request.get_json(silent=True) or {}
+    try:
+        event_id = int(data.get("event_id") or 0)
+    except (TypeError, ValueError):
+        event_id = 0
+    if event_id <= 0:
+        return jsonify({"ok": False, "error": "invalid_event"}), 400
+
+    from game.db import begin_write_transaction, commit, rollback
+    from game.world_boss import claim_world_boss_rewards
+
+    conn = db()
+    result: Dict[str, Any] = {"ok": False}
+    try:
+        begin_write_transaction(conn)
+        try:
+            result = claim_world_boss_rewards(int(player_id), event_id, conn=conn)
+            if result.get("ok"):
+                commit(conn)
+            else:
+                rollback(conn)
+        except Exception:
+            rollback(conn)
+            raise
+    except Exception:
+        return jsonify({"ok": False, "error": "world_boss_claim_failed"}), 500
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(
+        include_panel=True,
+        finish_source="api_world_boss_claim",
+    )
+    status = 200 if result.get("ok") else 400
+    return jsonify({"ok": bool(result.get("ok")), "claim": result, "state": state}), status
+
+
+@app.route("/api/admin/world-boss", methods=["GET"])
+@require_admin_api
+def api_admin_world_boss():
+    """Admin status + catalog for World Boss LiveOps tab."""
+    try:
+        from game.world_boss import build_world_boss_payload, list_definitions
+
+        conn = db()
+        try:
+            payload = build_world_boss_payload(None, conn=conn)
+            defs = list_definitions(conn=conn, active_only=True)
+        finally:
+            conn.close()
+        return jsonify(
+            {
+                "ok": True,
+                "ready": bool(payload.get("ready")),
+                "event": payload.get("event"),
+                "schedule": payload.get("schedule") or {},
+                "definitions": defs,
+                "server_now": payload.get("server_now"),
+            }
+        )
+    except Exception:
+        return jsonify({"ok": False, "error": "world_boss_unavailable"}), 500
+
+
+@app.route("/api/admin/world-boss/spawn", methods=["POST"])
+@require_admin_api
+def api_admin_world_boss_spawn():
+    data = request.get_json(silent=True) or {}
+    boss_key = str(data.get("boss_key") or "").strip()
+    if not boss_key:
+        return jsonify({"ok": False, "error": "boss_key_required"}), 400
+    from game.db import begin_write_transaction, commit, rollback
+    from game.world_boss import spawn_world_boss
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        try:
+            g = data.get("galaxy")
+            s = data.get("system")
+            p = data.get("position")
+            result = spawn_world_boss(
+                boss_key,
+                conn=conn,
+                galaxy=int(g) if g is not None and str(g).strip() != "" else None,
+                system=int(s) if s is not None and str(s).strip() != "" else None,
+                position=int(p) if p is not None and str(p).strip() != "" else None,
+                force=bool(data.get("force")),
+                announce=bool(data.get("announce", True)),
+            )
+            if not result.get("ok"):
+                rollback(conn)
+                return jsonify(result), 400
+            commit(conn)
+        except Exception:
+            rollback(conn)
+            raise
+        return jsonify(result)
+    except Exception:
+        return jsonify({"ok": False, "error": "world_boss_spawn_failed"}), 500
+    finally:
+        conn.close()
 
 
 @app.route("/chronicles")

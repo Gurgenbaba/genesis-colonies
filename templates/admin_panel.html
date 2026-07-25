@@ -114,6 +114,7 @@
       <button type="button" class="admin-tab-btn" data-admin-tab="balance" role="tab">{{ T("admin_balance_title", "Balance") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="server" role="tab">{{ T("admin_server_title", "Server") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="diplomacy" role="tab">{{ T("admin_diplomacy_title", "Galaktische Diplomatie") }}</button>
+      <button type="button" class="admin-tab-btn" data-admin-tab="world_boss" role="tab">{{ T("admin_wb_title", "World Boss") }}</button>
     </nav>
 
     <section id="admin-tab-health" class="admin-panel admin-tab-panel is-active" data-admin-panel="health" role="tabpanel">
@@ -1037,6 +1038,60 @@
             {{ T("admin_diplomacy_btn_clear", "Löschen") }}
           </button>
         </div>
+      </section>
+    </section>
+
+    <section id="admin-tab-world-boss" class="admin-panel admin-tab-panel gc-overflow-visible" data-admin-panel="world_boss" role="tabpanel" hidden>
+      <div class="admin-action-row">
+        <h2 class="admin-panel-title">{{ T("admin_wb_title", "World Boss") }}</h2>
+        <div class="admin-toolbar">
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="world-boss-refresh">
+            {{ T("admin_btn_refresh", "Aktualisieren") }}
+          </button>
+        </div>
+      </div>
+      <p class="admin-tab-hint admin-small-hint">{{ T("admin_wb_hint", "LiveOps: aktiven Boss anzeigen oder manuell spawnen (Force ersetzt ein laufendes Event).") }}</p>
+      <div id="admin-wb-status" class="admin-small-hint" aria-live="polite"></div>
+      <div id="admin-wb-output" class="admin-panel-body" aria-live="polite"></div>
+
+      <div class="admin-section-title">
+        <span class="admin-section-title-text">{{ T("admin_wb_spawn_section", "Boss spawnen") }}</span>
+      </div>
+      <section class="admin-section admin-card">
+        <div class="admin-form-grid-3">
+          <div class="admin-field">
+            <label class="admin-label" for="admin-wb-boss-key">{{ T("admin_wb_boss_key", "Boss") }}</label>
+            <select id="admin-wb-boss-key" class="admin-input admin-select" data-gc-hud-select>
+              <option value="">{{ T("admin_wb_select_placeholder", "— Boss wählen —") }}</option>
+            </select>
+          </div>
+          <div class="admin-field">
+            <label class="admin-label" for="admin-wb-galaxy">{{ T("admin_wb_galaxy", "Galaxie (optional)") }}</label>
+            <input type="number" id="admin-wb-galaxy" class="admin-input" min="1" step="1" placeholder="auto">
+          </div>
+          <div class="admin-field">
+            <label class="admin-label" for="admin-wb-system">{{ T("admin_wb_system", "System (optional)") }}</label>
+            <input type="number" id="admin-wb-system" class="admin-input" min="1" step="1" placeholder="auto">
+          </div>
+          <div class="admin-field">
+            <label class="admin-label" for="admin-wb-position">{{ T("admin_wb_position", "Position (optional)") }}</label>
+            <input type="number" id="admin-wb-position" class="admin-input" min="1" max="15" step="1" placeholder="auto">
+          </div>
+        </div>
+        <div class="admin-toolbar admin-action-row-wrap" style="margin-top:0.65rem;">
+          <label class="admin-label" style="display:inline-flex;align-items:center;gap:0.35rem;">
+            <input type="checkbox" id="admin-wb-force" checked>
+            {{ T("admin_wb_force", "Force (aktives Event ersetzen)") }}
+          </label>
+          <label class="admin-label" style="display:inline-flex;align-items:center;gap:0.35rem;">
+            <input type="checkbox" id="admin-wb-announce" checked>
+            {{ T("admin_wb_announce", "Universe-News ankündigen") }}
+          </label>
+          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="world-boss-spawn">
+            {{ T("admin_wb_spawn_btn", "Boss spawnen") }}
+          </button>
+        </div>
+        <div id="admin-wb-spawn-result" class="admin-small-hint" aria-live="polite"></div>
       </section>
     </section>
 

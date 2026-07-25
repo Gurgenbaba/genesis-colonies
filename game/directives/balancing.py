@@ -32,6 +32,7 @@ DIRECTIVE_TARGET_CAPS: Dict[str, Tuple[int, int]] = {
     "upgrade_navigation_tech": (2, 4),
     "win_battles": (3, 8),
     "defeat_pirates": (3, 8),
+    "deal_world_boss_damage": (100000, 500000),
     "destroy_enemy_defense": (30, 80),
     "build_defense": (40, 100),
     "build_combat_ships": (30, 80),

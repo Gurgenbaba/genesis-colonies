@@ -83,7 +83,7 @@ Technische Architektur-Dokumentation (Stand: **v1.5.9.2**, Reality-Sync **2026-0
                              │
 ┌────────────────────────────▼─────────────────────────────────────┐
 │ SQLite (WAL) — game/game.db                                       │
-│  migration_history + migrations/*.sql (006–076)                   │
+│  migration_history + migrations/*.sql (006–100)                   │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -421,7 +421,7 @@ Audit: [GC_PERF_DB_001_POSTGRES_AUDIT.md](GC_PERF_DB_001_POSTGRES_AUDIT.md) · E
 
 ## Test-Suite
 
-**2213 pytest-Tests** (Stand v1.5.9.2 — `python -m pytest --collect-only -q`), u. a.:
+**3806 pytest-Tests** (Stand v1.5.9.2 — `python -m pytest --collect-only -q`), u. a.:
 
 - `test_persistence.py`, `test_race_conditions.py` — DB/Queues
 - `test_game_state_live.py`, `test_effects.py`, `test_queue_engine.py` — Live pipeline

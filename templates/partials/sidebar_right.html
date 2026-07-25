@@ -113,6 +113,15 @@
          {% if not module_in_section(_sn, 'hall_of_fame', 'administration') %}hidden{% endif %}>
         {{ T("nav_hall_of_fame", "Hall of Fame") }}
       </a>
+      <a href="{{ url_for('world_boss_view') }}"
+         data-nav-module="world_boss"
+         data-nav-key="world_boss"
+         class="gc-nav-sub-link gc-nav-module--secondary {% if request.endpoint == 'world_boss_view' %}active{% endif %}{% if WORLD_BOSS_ACTIVE %} gc-nav-sub-link--wb-live{% endif %}">
+        <span class="gc-nav-link-label">{{ T("nav_world_boss", "World Boss") }}</span>
+        <span class="gc-nav-badge gc-nav-badge--wb-live {% if not WORLD_BOSS_ACTIVE %}hidden{% endif %}"
+              data-nav-badge="world_boss"
+              {% if not WORLD_BOSS_ACTIVE %}hidden aria-hidden="true"{% else %}aria-hidden="false"{% endif %}>{% if WORLD_BOSS_ACTIVE %}LIVE{% endif %}</span>
+      </a>
       <a href="{{ url_for('imperial_directives_view') }}"
          data-nav-module="imperial_directives"
          data-nav-key="imperial_directives"

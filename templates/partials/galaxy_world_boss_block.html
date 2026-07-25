@@ -1,0 +1,69 @@
+{# EPIC-20 — inspector block for active world boss on a galaxy slot #}
+{% if slot.has_world_boss and slot.world_boss %}
+{% set wb = slot.world_boss %}
+{% set g = slot.coordinates.galaxy if slot.coordinates is defined else (nav.galaxy or 1) %}
+{% set s = slot.coordinates.system if slot.coordinates is defined else (nav.system or 1) %}
+{% set p = slot.coordinates.position if slot.coordinates is defined else slot.position %}
+{% set hp_pct = ((wb.hp_ratio or 0) * 100)|round(1) %}
+{% set attack_href = wb.fleet_deep_link if wb.fleet_deep_link else (url_for('fleet_view') ~ '?mission=attack&target_galaxy=' ~ g ~ '&target_system=' ~ s ~ '&target_position=' ~ p) %}
+<div class="galaxy-wb-block">
+  <div class="galaxy-wb-block-head">
+    <img class="galaxy-wb-block-art"
+         src="{{ url_for('static', filename='img/bosses/' ~ (wb.boss_key or '_placeholder') ~ '.png', v=GC_ASSET_VERSION) }}"
+         alt=""
+         width="48"
+         height="48"
+         loading="lazy"
+         onerror="this.onerror=null;this.src='{{ url_for('static', filename='img/bosses/_placeholder.png', v=GC_ASSET_VERSION) }}';">
+    <div class="galaxy-wb-block-meta">
+      <div class="galaxy-wb-block-title">{{ T('galaxy_wb_field', 'World Boss') }}</div>
+      <strong>{{ T(wb.name_key, wb.boss_key) }}</strong>
+      <span class="hint gc-mono">{{ wb.coords or ('[' ~ g ~ ':' ~ s ~ ':' ~ p ~ ']') }}</span>
+    </div>
+  </div>
+  <div class="galaxy-wb-hp" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ hp_pct|int }}"
+       aria-label="{{ T('wb_hp', 'HP') }} {{ hp_pct }}%">
+    <div class="galaxy-wb-hp-fill" style="width: {{ hp_pct }}%;"></div>
+  </div>
+  <p class="galaxy-wb-hp-text hint gc-mono">
+    {{ T('wb_hp', 'HP') }}: {{ (wb.current_hp or 0)|fmt_int }} / {{ (wb.max_hp or 0)|fmt_int }} ({{ hp_pct }}%)
+  </p>
+  {% if wb.ends_at is defined and wb.ends_at %}
+  <p class="hint">
+    {{ T('wb_ends_in', 'Endet in') }}:
+    <span class="gc-mono" data-countdown-at="{{ wb.ends_at|int }}" data-countdown-format="eta">—</span>
+  </p>
+  {% endif %}
+  {% set vmeta = wb.viewer_attack_meta if wb.viewer_attack_meta is defined and wb.viewer_attack_meta else {} %}
+  {% if wb.viewer_attack_block_reason is defined and wb.viewer_attack_block_reason == 'world_boss_cooldown' and vmeta.next_attack_at %}
+  <p class="galaxy-wb-cooldown" role="status" data-wb-attack-cooldown>
+    {{ T('wb_attack_cooldown', 'Nächster Angriff in') }}:
+    <span class="gc-mono" data-countdown-at="{{ vmeta.next_attack_at|int }}" data-countdown-format="eta">—</span>
+  </p>
+  {% elif wb.viewer_attack_block_reason is defined and wb.viewer_attack_block_reason == 'world_boss_wave_limit' %}
+  <p class="galaxy-wb-cooldown" role="status">{{ T('wb_attack_wave_limit', 'Wellenlimit für dieses Ereignis erreicht.') }}</p>
+  {% elif wb.wave_cooldown_sec is defined %}
+  <p class="hint">{{ T('wb_wave_cooldown_rule', 'Cooldown zwischen Wellen') }}:
+    <span class="gc-mono">{{ (wb.wave_cooldown_sec / 60)|int }}m</span></p>
+  {% endif %}
+  {% if wb.viewer_can_attack is defined and wb.viewer_can_attack == false and wb.viewer_attack_block_reason == 'world_boss_wave_limit' %}
+  <span class="gc-btn gc-btn-primary gc-btn-sm is-disabled" aria-disabled="true">
+    {{ T('wb_attack', 'Angreifen') }}
+  </span>
+  {% elif wb.viewer_can_attack is defined and wb.viewer_can_attack == false and wb.viewer_attack_block_reason == 'world_boss_cooldown' and vmeta.next_attack_at %}
+  <a class="gc-btn gc-btn-primary gc-btn-sm is-disabled"
+     id="wb-attack-btn"
+     href="{{ attack_href }}"
+     aria-disabled="true"
+     tabindex="-1"
+     data-wb-locked-until="{{ vmeta.next_attack_at|int }}"
+     title="{{ T('wb_attack_cooldown', 'Nächster Angriff in') }}">
+    {{ T('wb_attack', 'Angreifen') }}
+  </a>
+  {% else %}
+  <a class="gc-btn gc-btn-primary gc-btn-sm" id="wb-attack-btn" href="{{ attack_href }}">
+    {{ T('wb_attack', 'Angreifen') }}
+  </a>
+  {% endif %}
+</div>
+{% endif %}

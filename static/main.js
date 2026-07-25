@@ -2123,6 +2123,7 @@
     if (path.endsWith("/overview") || path === "/") return "overview";
     if (path.endsWith("/ranking")) return "ranking";
     if (path.endsWith("/hall-of-fame")) return "hall_of_fame";
+    if (path.endsWith("/world-boss")) return "world_boss";
     if (path.endsWith("/chronicles")) return "chronicles";
     if (path.endsWith("/records")) return "records";
     if (path.endsWith("/messages")) return "messages";
@@ -10899,6 +10900,12 @@
       const key = el.getAttribute("data-nav-badge");
       if (!key) return;
       const entry = badges[key];
+      const link = el.closest(".gc-nav-sub-link, a[data-nav-module]");
+      if (key === "world_boss" && link) {
+        const live = !!(entry && entry.active);
+        link.classList.toggle("gc-nav-sub-link--wb-live", live);
+        el.classList.toggle("gc-nav-badge--wb-live", live);
+      }
       if (!entry || !entry.active) {
         el.textContent = "";
         el.hidden = true;
@@ -10923,6 +10930,8 @@
             ? "nav_badge_referrals_aria"
             : key === "imperial_directives"
               ? "nav_badge_imperial_directives_aria"
+              : key === "world_boss"
+                ? "nav_badge_world_boss_aria"
               : key === "community"
               ? "nav_badge_community_aria"
               : "";
@@ -10935,9 +10944,17 @@
               ? "Referral-Belohnung verfügbar"
               : key === "imperial_directives"
                 ? "Imperial Directive abholbereit"
+                : key === "world_boss"
+                  ? "World Boss aktiv"
                 : "Abstimmung offen")
         );
       }
+    });
+    // Ensure world_boss live class clears even if badge node missing.
+    document.querySelectorAll('[data-nav-module="world_boss"]').forEach((link) => {
+      const entry = badges.world_boss;
+      const live = !!(entry && entry.active);
+      link.classList.toggle("gc-nav-sub-link--wb-live", live);
     });
   }
   GC.updateNavBadges = updateNavBadges;
@@ -23703,7 +23720,7 @@
   let _leftmenuRouteCtxCache = null;
   const INFRA_NAV_SECTION_ANIM_MS = 220;
   const COMMUNITY_ADMIN_MODULES = new Set([
-    "ranking", "hall_of_fame", "vote_center", "referrals", "alliance", "records",
+    "ranking", "hall_of_fame", "vote_center", "referrals", "alliance", "records", "world_boss",
   ]);
 
   function navStorageKeyForSidebar(sidebar) {
@@ -23811,6 +23828,7 @@
       path.endsWith("/alliance")
       || path.endsWith("/ranking")
       || path.endsWith("/hall-of-fame")
+      || path.endsWith("/world-boss")
       || path.endsWith("/chronicles")
       || path.endsWith("/records")
       || path.endsWith("/referrals")
@@ -30030,6 +30048,7 @@
     initGalaxyRingView();
     initGalacticDirectiveBanner();
     prefetchGalaxyAdjacent();
+    bindWorldBossAttackCooldownUnlock(document.getElementById("galaxy-page-root") || document);
   }
 
   // =========================
@@ -30715,6 +30734,162 @@
         GC.openCombatReportModal({ category: "combat", metadata: meta });
       });
     });
+  };
+  function bindWorldBossAttackCooldownUnlock(root) {
+    if (!root) return;
+    const attackBtn = root.querySelector("#wb-attack-btn");
+    if (!attackBtn || attackBtn.dataset.wbCdBound === "1") return;
+    attackBtn.dataset.wbCdBound = "1";
+    attackBtn.addEventListener("click", (ev) => {
+      if (
+        attackBtn.classList.contains("is-disabled") ||
+        attackBtn.getAttribute("aria-disabled") === "true"
+      ) {
+        ev.preventDefault();
+        ev.stopPropagation();
+      }
+    });
+
+    const unlockAttack = () => {
+      const btn = root.querySelector("#wb-attack-btn");
+      if (!btn) return false;
+      const until = Number(btn.getAttribute("data-wb-locked-until") || 0);
+      if (!until) return true;
+      const now =
+        typeof GC.getServerNow === "function"
+          ? Number(GC.getServerNow())
+          : Date.now() / 1000;
+      // Match floor-based "0s" display (formatCountdownRemain) — unlock in the last second.
+      if (until - now > 1) return false;
+
+      btn.classList.remove("is-disabled");
+      btn.removeAttribute("aria-disabled");
+      btn.removeAttribute("tabindex");
+      btn.removeAttribute("data-wb-locked-until");
+      btn.removeAttribute("title");
+
+      const cdBlock = root.querySelector("[data-wb-attack-cooldown]");
+      if (cdBlock) {
+        const ready = document.createElement("p");
+        ready.className = cdBlock.classList.contains("galaxy-wb-cooldown")
+          ? "galaxy-wb-cooldown hint"
+          : "gc-world-boss-ready hint";
+        ready.setAttribute("role", "status");
+        ready.setAttribute("data-wb-attack-ready", "");
+        ready.textContent = t("wb_attack_ready", "Angriff bereit.");
+        cdBlock.replaceWith(ready);
+      }
+      return true;
+    };
+
+    if (!unlockAttack()) {
+      const tickId =
+        typeof GC.setSafeInterval === "function"
+          ? GC.setSafeInterval(() => {
+              if (unlockAttack()) {
+                if (typeof GC.clearSafeInterval === "function") GC.clearSafeInterval(tickId);
+                else clearInterval(tickId);
+              }
+            }, 250)
+          : setInterval(() => {
+              if (unlockAttack()) clearInterval(tickId);
+            }, 250);
+      if (typeof GC.registerCleanup === "function") {
+        GC.registerCleanup(() => {
+          if (typeof GC.clearSafeInterval === "function") GC.clearSafeInterval(tickId);
+          else clearInterval(tickId);
+        });
+      }
+    }
+  }
+
+  GC.modules.world_boss = function initWorldBossPage() {
+    const root = document.getElementById("world-boss-page");
+    if (!root) return;
+
+    let wbHelpOpen = false;
+    let wbHelpLastFocus = null;
+
+    const closeWbHelpModal = () => {
+      const modal = document.getElementById("wb-help-modal");
+      if (!modal || modal.hidden) return;
+      modal.hidden = true;
+      modal.setAttribute("aria-hidden", "true");
+      modal.classList.remove("is-open");
+      document.body.classList.remove("gc-player-card-open");
+      const openBtn = root.querySelector("#wb-help-open");
+      if (openBtn) openBtn.setAttribute("aria-expanded", "false");
+      wbHelpOpen = false;
+      if (wbHelpLastFocus && typeof wbHelpLastFocus.focus === "function") wbHelpLastFocus.focus();
+      wbHelpLastFocus = null;
+    };
+
+    const openWbHelpModal = (trigger) => {
+      const modal = document.getElementById("wb-help-modal");
+      if (!modal) return;
+      wbHelpLastFocus = trigger || document.activeElement;
+      modal.hidden = false;
+      modal.setAttribute("aria-hidden", "false");
+      modal.classList.add("is-open");
+      document.body.classList.add("gc-player-card-open");
+      const openBtn = root.querySelector("#wb-help-open");
+      if (openBtn) openBtn.setAttribute("aria-expanded", "true");
+      wbHelpOpen = true;
+      modal.querySelector("[data-wb-help-close].gc-player-card-close")?.focus();
+    };
+
+    if (root.dataset.wbHelpBound !== "1") {
+      root.dataset.wbHelpBound = "1";
+      const helpOpen = root.querySelector("#wb-help-open");
+      if (helpOpen) {
+        helpOpen.addEventListener("click", () => {
+          if (wbHelpOpen) closeWbHelpModal();
+          else openWbHelpModal(helpOpen);
+        });
+      }
+      root.querySelectorAll("[data-wb-help-close]").forEach((el) => {
+        el.addEventListener("click", () => closeWbHelpModal());
+      });
+      document.addEventListener("keydown", (ev) => {
+        if (!wbHelpOpen) return;
+        if (ev.key === "Escape") {
+          ev.preventDefault();
+          closeWbHelpModal();
+        }
+      });
+      if (typeof GC.registerCleanup === "function") {
+        GC.registerCleanup(() => {
+          closeWbHelpModal();
+        });
+      }
+    }
+
+    const claimBtn = root.querySelector("#wb-claim-btn");
+    if (claimBtn && claimBtn.dataset.wbBound !== "1") {
+      claimBtn.dataset.wbBound = "1";
+      claimBtn.addEventListener("click", async () => {
+        const eventId = Number(claimBtn.getAttribute("data-event-id") || 0);
+        if (!eventId) return;
+        claimBtn.disabled = true;
+        try {
+          const res = await GC.fetchGameAction("/api/world-boss/claim", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ event_id: eventId }),
+          });
+          if (res && res.state && typeof GC.applyActionState === "function") {
+            GC.applyActionState(res, "world_boss_claim");
+          }
+          if (typeof GC.reloadCurrentPage === "function") {
+            GC.reloadCurrentPage();
+          }
+        } catch (_err) {
+          claimBtn.disabled = false;
+        }
+      });
+    }
+
+    bindWorldBossAttackCooldownUnlock(root);
   };
   GC.modules.chronicles = function initChroniclesPage() {
     const root = document.getElementById("chronicles-page");

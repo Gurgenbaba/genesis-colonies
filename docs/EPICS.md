@@ -25,6 +25,7 @@ Status: v1.5.9.2 (2026-06-24)
 | EPIC-17 | Imperial Directives (High Command) | 📋 | [IMPERIAL_DIRECTIVES.md](IMPERIAL_DIRECTIVES.md) |
 | EPIC-16 | Genesis Knowledge Base (Knowledge Pipeline) | 📋 | [GC-950_KNOWLEDGE_PIPELINE.md](GC-950_KNOWLEDGE_PIPELINE.md) |
 | EPIC-18 | Collector Exchange (Sammler-Markt) | 📋 | [COLLECTOR_EXCHANGE.md](COLLECTOR_EXCHANGE.md) |
+| EPIC-20 | World Boss Events | 🔄 | [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) |
 
 ---
 

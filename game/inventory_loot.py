@@ -112,6 +112,19 @@ LOOT_POOLS: Dict[str, List[LootEntry]] = {
         {"weight": 12, "reward_type": "item", "reward_key": "artifact_core_fragment", "min_amount": 1, "max_amount": 2},
         {"weight": 8, "reward_type": "item", "reward_key": "fragment_quantum", "min_amount": 1, "max_amount": 2},
     ],
+    # EPIC-20 — participation / top-tier world boss loot (containers open via inventory).
+    "world_boss_participation": [
+        {"weight": 40, "reward_type": "item", "reward_key": "container_event_special", "min_amount": 1, "max_amount": 1},
+        {"weight": 25, "reward_type": "booster", "reward_key": "booster_shipyard_1h", "min_amount": 1, "max_amount": 1},
+        {"weight": 20, "reward_type": "item", "reward_key": "fragment_dna_epic", "min_amount": 1, "max_amount": 2},
+        {"weight": 15, "reward_type": "item", "reward_key": "expo_alien_relic", "min_amount": 1, "max_amount": 1},
+    ],
+    "world_boss_top": [
+        {"weight": 35, "reward_type": "item", "reward_key": "container_void_artifact", "min_amount": 1, "max_amount": 1},
+        {"weight": 25, "reward_type": "item", "reward_key": "container_mythic", "min_amount": 1, "max_amount": 1},
+        {"weight": 20, "reward_type": "item", "reward_key": "container_ancient_relic", "min_amount": 1, "max_amount": 1},
+        {"weight": 20, "reward_type": "booster", "reward_key": "booster_build_24h", "min_amount": 1, "max_amount": 1},
+    ],
 }
 
 

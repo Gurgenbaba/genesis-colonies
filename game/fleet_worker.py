@@ -63,6 +63,15 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
                     f"combat-bots scenario={bot_result.get('scenario_key')} "
                     f"fleet={bot_result.get('fleet_movement_id')}"
                 )
+
+            from .world_boss import maybe_tick_world_boss_schedule
+
+            wb_tick = maybe_tick_world_boss_schedule(conn=conn)
+            if wb_tick.get("expired_ids") or wb_tick.get("spawned_event_id"):
+                _worker_log(
+                    f"world-boss expired={wb_tick.get('expired_ids')} "
+                    f"spawned={wb_tick.get('spawned_event_id')}"
+                )
             commit(conn)
         except Exception:
             rollback(conn)

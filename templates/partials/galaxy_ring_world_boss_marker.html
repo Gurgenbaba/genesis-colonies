@@ -1,0 +1,31 @@
+{# EPIC-20 — world boss marker on ring slot: HP tooltip, click = attack deep-link #}
+{% if slot.has_world_boss and slot.world_boss %}
+{% set wb = slot.world_boss %}
+{% set g = slot.coordinates.galaxy if slot.coordinates is defined else (nav.galaxy or 1) %}
+{% set s = slot.coordinates.system if slot.coordinates is defined else (nav.system or 1) %}
+{% set p = slot.coordinates.position if slot.coordinates is defined else slot.position %}
+{% set hp_pct = ((wb.hp_ratio or 0) * 100)|round(1) %}
+{% set attack_href = wb.fleet_deep_link if wb.fleet_deep_link else (url_for('fleet_view') ~ '?mission=attack&target_galaxy=' ~ g ~ '&target_system=' ~ s ~ '&target_position=' ~ p) %}
+<div class="galaxy-ring-wb-wrap"
+     data-galaxy-ring-wb-wrap
+     data-target-galaxy="{{ g }}"
+     data-target-system="{{ s }}"
+     data-target-position="{{ p }}">
+  <a href="{{ attack_href }}"
+     class="galaxy-ring-wb-marker"
+     title="{{ T('galaxy_wb_attack_title', 'World Boss angreifen') }}"
+     aria-label="{{ T('galaxy_wb_field', 'World Boss') }} {{ T(wb.name_key, wb.boss_key) }} — {{ T('wb_attack', 'Angreifen') }}">
+    <span class="galaxy-ring-wb-marker-img" aria-hidden="true"
+          style="--gc-galaxy-wb-img: url('{{ url_for('static', filename='img/bosses/' ~ (wb.boss_key or '_placeholder') ~ '.png', v=GC_ASSET_VERSION) }}');"></span>
+  </a>
+  <div class="galaxy-ring-wb-tooltip" role="tooltip">
+    <div class="galaxy-ring-wb-tooltip-title">{{ T(wb.name_key, wb.boss_key) }}</div>
+    <dl class="galaxy-ring-wb-tooltip-stats">
+      <div><dt>{{ T('wb_hp', 'HP') }}</dt><dd class="gc-mono">{{ (wb.current_hp or 0)|fmt_int }} / {{ (wb.max_hp or 0)|fmt_int }} ({{ hp_pct }}%)</dd></div>
+      {% if wb.ends_at is defined and wb.ends_at %}
+      <div><dt>{{ T('wb_ends_in', 'Endet in') }}</dt><dd class="gc-mono" data-countdown-at="{{ wb.ends_at|int }}" data-countdown-format="eta">—</dd></div>
+      {% endif %}
+    </dl>
+  </div>
+</div>
+{% endif %}

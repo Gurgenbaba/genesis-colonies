@@ -24,12 +24,12 @@ Status-Legende:
 | Flask + SQLite + Jinja2 | ✅ |
 | Installer (`scripts/install.py`) | ✅ |
 | Environment & Config Guards | ✅ |
-| SQL-Migrationen (`006`–`076`) | ✅ |
+| SQL-Migrationen (`006`–`100`) | ✅ |
 | Health Endpoint (`/health`) | ✅ |
 | Docker + Gunicorn Deployment | ✅ |
 | DB-Abstraction (`game/db.py`) | ✅ |
 | Bootstrap & Migration Guard | ✅ |
-| pytest-Suite (**2213** Tests) | ✅ |
+| pytest-Suite (**3806** Tests) | ✅ |
 
 ---
 
@@ -192,6 +192,7 @@ Master-Doc: **[GC_PERF_CORE.md](GC_PERF_CORE.md)** (EPIC Performance Core — Ma
 | Balancing-Tooling (Admin) | 🔄 teilweise |
 | Tutorial / Onboarding | 💡 |
 | Season / Universe-Reset | 💡 |
+| **World Boss Events (EPIC-20)** | 🔄 | GC-W01…W08 — [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) |
 | CI Pipeline | 💡 |
 | Automated Backups | 📋 Operator-intern |
 

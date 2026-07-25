@@ -117,6 +117,7 @@ TARGET_TYPES = frozenset(
         "anomaly",
         "wreckage",
         "planet",
+        "world_boss",
     }
 )
 
@@ -134,6 +135,7 @@ _BASE_ALLOWED_MISSIONS: Dict[str, Set[str]] = {
     "anomaly": {"expedition"},
     "wreckage": {"recycle", "expedition"},
     "planet": {"transport", "collect", "deploy", "spy"},
+    "world_boss": {"attack"},
 }
 
 _MISSIONS_REQUIRING_PLANET = frozenset(
@@ -182,6 +184,16 @@ _MISSION_BLOCK_REASONS: Dict[str, Dict[str, str]] = {
         "colonize": "mission_blocked_expedition_slot",
         "recycle": "mission_blocked_expedition_slot",
     },
+    "world_boss": {
+        "transport": "mission_blocked_world_boss",
+        "deploy": "mission_blocked_world_boss",
+        "spy": "mission_blocked_world_boss",
+        "hold": "mission_blocked_world_boss",
+        "collect": "mission_blocked_world_boss",
+        "expedition": "mission_blocked_not_expedition_slot",
+        "colonize": "mission_blocked_world_boss",
+        "recycle": "mission_blocked_world_boss",
+    },
 }
 
 
@@ -204,6 +216,41 @@ def _target_with_debris_recycle(
         allowed = set(out.get("allowed_missions") or [])
         allowed.add("recycle")
         out["allowed_missions"] = sorted(allowed)
+    return out
+
+
+def _maybe_world_boss_target(
+    info: Dict[str, Any],
+    galaxy: int,
+    system: int,
+    position: int,
+    *,
+    conn,
+) -> Dict[str, Any]:
+    """Override empty/occupied slot to world_boss when an active event sits here."""
+    try:
+        from .world_boss import get_active_event_at
+
+        event = get_active_event_at(int(galaxy), int(system), int(position), conn=conn)
+    except Exception:
+        return info
+    if not event:
+        return info
+    out = dict(info)
+    out["target_type"] = "world_boss"
+    out["target_planet_id"] = None
+    out["target_player_id"] = None
+    out["target_owner_name"] = str(event.get("boss_key") or "World Boss")
+    out["allowed_missions"] = sorted(_BASE_ALLOWED_MISSIONS["world_boss"])
+    out["reason_if_blocked"] = None
+    out["world_boss"] = {
+        "event_id": int(event["id"]),
+        "boss_key": event["boss_key"],
+        "current_hp": int(event["current_hp"]),
+        "max_hp": int(event["max_hp"]),
+        "hp_ratio": event.get("hp_ratio"),
+        "ends_at": event.get("ends_at"),
+    }
     return out
 
 
@@ -883,16 +930,22 @@ def resolve_fleet_target(
 
         planet_id = _resolve_planet_at_coords(g, s, p, conn=conn)
         if planet_id is None:
-            return _target_with_debris_recycle(
-                {
-                    "target_type": "empty_slot",
-                    "target_planet_id": None,
-                    "target_player_id": None,
-                    "target_owner_name": None,
-                    "coords": coords,
-                    "allowed_missions": sorted(_BASE_ALLOWED_MISSIONS["empty_slot"]),
-                    "reason_if_blocked": None,
-                },
+            return _maybe_world_boss_target(
+                _target_with_debris_recycle(
+                    {
+                        "target_type": "empty_slot",
+                        "target_planet_id": None,
+                        "target_player_id": None,
+                        "target_owner_name": None,
+                        "coords": coords,
+                        "allowed_missions": sorted(_BASE_ALLOWED_MISSIONS["empty_slot"]),
+                        "reason_if_blocked": None,
+                    },
+                    g,
+                    s,
+                    p,
+                    conn=conn,
+                ),
                 g,
                 s,
                 p,
@@ -1008,7 +1061,8 @@ def evaluate_fleet_mission_target(
         return False, m_reason, target_info
 
     if m in _MISSIONS_REQUIRING_PLANET and not target_info.get("target_planet_id"):
-        return False, "invalid_target", target_info
+        if str(target_info.get("target_type") or "") != "world_boss":
+            return False, "invalid_target", target_info
 
     return True, "", target_info
 
@@ -1208,43 +1262,56 @@ def validate_fleet_send(
     attack_limit_info: Optional[Dict[str, Any]] = None
     noob_protection_info: Optional[Dict[str, Any]] = None
     if mission == "attack" and target_info:
-        target_planet_id = target_info.get("target_planet_id")
-        target_player_id = target_info.get("target_player_id")
-        bot_fight = False
-        if target_player_id:
-            from .combat_balance_bots import is_bot_versus_bot_fight, is_combat_balance_bot_player
+        if str(target_info.get("target_type") or "") == "world_boss":
+            from .world_boss import can_player_attack_boss
 
-            atk_bot = is_combat_balance_bot_player(int(player_id), conn=conn)
-            def_bot = is_combat_balance_bot_player(int(target_player_id), conn=conn)
-            if atk_bot and not def_bot:
-                return False, "combat_bot_target_forbidden", {"target": target_info}
-            if def_bot and not atk_bot:
-                return False, "combat_bot_attacker_forbidden", {"target": target_info}
-            bot_fight = is_bot_versus_bot_fight(
-                int(player_id), int(target_player_id), conn=conn
+            wb = target_info.get("world_boss") or {}
+            event_id = int(wb.get("event_id") or 0)
+            if event_id <= 0:
+                return False, "world_boss_inactive", {"target": target_info}
+            ok_wb, wb_reason, wb_meta = can_player_attack_boss(
+                int(player_id), event_id, conn=conn
             )
-        if target_player_id and not bot_fight:
-            ok_np, noob_protection_info = check_noob_protection(
-                int(player_id),
-                int(target_player_id),
-                conn=conn,
-            )
-            if not ok_np:
-                return False, "noob_protection_blocked", {
-                    "target": target_info,
-                    "noob_protection": noob_protection_info,
-                }
-        if target_planet_id and not bot_fight:
-            ok_limit, attack_limit_info = check_attack_limit(
-                int(player_id),
-                int(target_planet_id),
-                conn=conn,
-            )
-            if not ok_limit:
-                return False, "attack_limit_reached", {
-                    "target": target_info,
-                    "attack_limit": attack_limit_info,
-                }
+            if not ok_wb:
+                return False, wb_reason, {"target": target_info, **(wb_meta or {})}
+        else:
+            target_planet_id = target_info.get("target_planet_id")
+            target_player_id = target_info.get("target_player_id")
+            bot_fight = False
+            if target_player_id:
+                from .combat_balance_bots import is_bot_versus_bot_fight, is_combat_balance_bot_player
+
+                atk_bot = is_combat_balance_bot_player(int(player_id), conn=conn)
+                def_bot = is_combat_balance_bot_player(int(target_player_id), conn=conn)
+                if atk_bot and not def_bot:
+                    return False, "combat_bot_target_forbidden", {"target": target_info}
+                if def_bot and not atk_bot:
+                    return False, "combat_bot_attacker_forbidden", {"target": target_info}
+                bot_fight = is_bot_versus_bot_fight(
+                    int(player_id), int(target_player_id), conn=conn
+                )
+            if target_player_id and not bot_fight:
+                ok_np, noob_protection_info = check_noob_protection(
+                    int(player_id),
+                    int(target_player_id),
+                    conn=conn,
+                )
+                if not ok_np:
+                    return False, "noob_protection_blocked", {
+                        "target": target_info,
+                        "noob_protection": noob_protection_info,
+                    }
+            if target_planet_id and not bot_fight:
+                ok_limit, attack_limit_info = check_attack_limit(
+                    int(player_id),
+                    int(target_planet_id),
+                    conn=conn,
+                )
+                if not ok_limit:
+                    return False, "attack_limit_reached", {
+                        "target": target_info,
+                        "attack_limit": attack_limit_info,
+                    }
 
     if mission == "expedition":
         target = (int(target_galaxy), int(target_system), EXPEDITION_POSITION)
@@ -3068,6 +3135,48 @@ def _apply_attack_combat_to_planet(
     return remaining_ships
 
 
+def _handle_world_boss_attack_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
+    """Resolve EPIC-20 world-boss attack arrival via ``world_boss.resolve_attack_arrival``."""
+    movement_id = int(movement["id"])
+    player_id = int(movement["player_id"])
+    ships = movement.get("ships") or {}
+    try:
+        from .world_boss import resolve_attack_arrival
+
+        result = resolve_attack_arrival(
+            movement=movement,
+            ships=ships,
+            player_id=player_id,
+            conn=conn,
+            now=float(now),
+        )
+        return_ships = {
+            k: v
+            for k, v in dict(result.get("return_ships") or ships).items()
+            if int(v or 0) > 0
+        }
+        resources = dict(movement.get("resources") or {})
+        timing = _return_timing_from_now(movement, now=now)
+        return_at = timing["return_at"]
+        claimed = _claim_movement_status(
+            conn,
+            movement_id,
+            ("outbound",),
+            "returning",
+            now,
+            extra_sql=", return_at = ?, ships_json = ?, resources_json = ?",
+            extra_params=(return_at, _json_dumps(return_ships), _json_dumps(resources)),
+        )
+        return bool(claimed)
+    except Exception:
+        logger.exception("world_boss attack arrival failed movement_id=%s", movement_id)
+        try:
+            _claim_movement_status(conn, movement_id, ("outbound",), "failed", now)
+        except Exception:
+            pass
+        return False
+
+
 def _handle_attack_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
     """
     Resolve attack combat, loot, debris, ranking, and return flight.
@@ -3084,6 +3193,23 @@ def _handle_attack_arrival(movement: Dict[str, Any], *, conn, now: float) -> boo
 
     sender_locale = get_player_locale(player_id, conn=conn)
     combat_applied = False
+
+    # EPIC-20: world boss attack (no planet target).
+    try:
+        from .world_boss import get_active_event_at
+
+        wb_event = get_active_event_at(
+            int(movement.get("target_galaxy") or 0),
+            int(movement.get("target_system") or 0),
+            int(movement.get("target_position") or 0),
+            conn=conn,
+            now=float(now),
+        )
+    except Exception:
+        wb_event = None
+
+    if wb_event and not target_id:
+        return _handle_world_boss_attack_arrival(movement, conn=conn, now=now)
 
     try:
         snapshot = _target_planet_snapshot(int(target_id), conn=conn) if target_id else {}

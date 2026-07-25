@@ -21,6 +21,7 @@ Epics beschreiben nur das Ziel. **Niemals direkt implementieren.**
 | EPIC-15 | Imperium & Expansion (Genesis 2.0) | [IMPERIUM_VISION.md](IMPERIUM_VISION.md) |
 | EPIC-17 | Imperial Directives (High Command) | [IMPERIAL_DIRECTIVES.md](IMPERIAL_DIRECTIVES.md) |
 | EPIC-19 | Performance Core (Maximum Speed Stack) | [GC_PERF_CORE.md](GC_PERF_CORE.md) |
+| EPIC-20 | World Boss Events (serverweite PvE-Bosse) | [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) |
 
 Epic → in **3–5 Tickets** zerlegen (große Epics: Phasen in Master-Doc). Siehe [EPICS.md](EPICS.md).
 
@@ -57,6 +58,7 @@ Vor jeder Änderung die relevanten Docs lesen:
 | [IMPERIUM_VISION.md](IMPERIUM_VISION.md) | Genesis 2.0 — Empire Screen, Command Map, EPIC-15 |
 | [EFFECTS.md](EFFECTS.md) | EffectResolver, Formeln |
 | [STATE_AJAX.md](STATE_AJAX.md) | Polling, PJAX, Live-State |
+| [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) | Serverweite PvE-Bosse, Contribution, LiveOps |
 
 **Regel:** Architektur-Entscheidungen aus Docs respektieren. Bei Änderung → Doc mit aktualisieren.
 
@@ -124,7 +126,7 @@ Kurz. Keine Projektzusammenfassung.
 ## Tests
 
 ```bash
-python -m pytest tests/ -v          # gesamt (2213 Tests)
+python -m pytest tests/ -v          # gesamt (3806 Tests)
 python -m pytest tests/test_fleet.py -v   # domänenspezifisch
 ```
 
