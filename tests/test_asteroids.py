@@ -11,10 +11,12 @@ import pytest
 
 from game import db as gdb
 from game.asteroids import (
+    INTER_WAVE_COOLDOWN_SEC,
     SPAWN_RUNTIME_KEY,
     TTL_SECONDS,
     asteroid_schema_ready,
     build_asteroid_board_entries,
+    build_schedule_info,
     expire_due_asteroids,
     get_active_asteroid_at,
     get_asteroids_for_system,
@@ -569,6 +571,29 @@ def test_asteroid_board_entries_and_list_system(ast_db):
 def test_asteroid_board_empty_when_none(ast_db):
     data = list_system(1, 1)
     assert data.get("active_asteroid_board") == []
+    schedule = data.get("asteroid_schedule") or {}
+    assert "next_eligible_at" in schedule
+    assert "max_concurrent" in schedule
+
+
+def test_asteroid_schedule_countdown_after_spawn(ast_db):
+    """After a wave, next_eligible_at is last_spawn + cooldown (server-authoritative)."""
+    now = time.time()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        set_runtime_value(SPAWN_RUNTIME_KEY, str(now), conn=conn)
+        commit(conn)
+        info = build_schedule_info(conn=conn, now=now + 60)
+        assert info["spawn_ready"] is False
+        assert abs(float(info["next_eligible_at"]) - (now + INTER_WAVE_COOLDOWN_SEC)) < 1.0
+        assert int(info["seconds_until_next"]) > 0
+        later = build_schedule_info(conn=conn, now=now + INTER_WAVE_COOLDOWN_SEC + 5)
+        # No active fields → under cap; cooldown elapsed → ready.
+        assert later["spawn_ready"] is True
+        assert int(later["seconds_until_next"]) == 0
+    finally:
+        conn.close()
 
 
 def test_asteroid_board_hides_own_outbound_harvest(ast_db):
@@ -753,6 +778,10 @@ def test_galaxy_asteroid_board_template_contract():
     assert "galaxy-asteroid-help-modal" in board
     assert "data-galaxy-asteroid-board-toggle" in board
     assert "is-collapsed" in board
+    assert "asteroid_schedule" in board
+    assert "data-galaxy-asteroid-next-spawn" in board
+    assert "galaxy_asteroid_next_spawn_in" in board
+    assert "data-next-spawn-at" in board
     # Must match World Boss modal shell (dialog + overlay), not broken aliases.
     assert "gc-player-card-dialog" in board
     assert "gc-player-card-overlay" in board

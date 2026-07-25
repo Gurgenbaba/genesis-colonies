@@ -1,9 +1,11 @@
 {# GC-AST-UX-01 — Galaxy asteroid board: collapsed by default, expand for list #}
 {% set board = sys.active_asteroid_board if sys.active_asteroid_board is defined else [] %}
 {% set board_count = board|length if board else 0 %}
+{% set schedule = sys.asteroid_schedule if sys.asteroid_schedule is defined and sys.asteroid_schedule else {} %}
 <aside class="galaxy-asteroid-board is-collapsed{% if board_count == 0 %} is-empty{% endif %}"
        data-galaxy-asteroid-board
        data-asteroid-count="{{ board_count }}"
+       {% if schedule.next_eligible_at is defined and schedule.next_eligible_at %}data-next-spawn-at="{{ schedule.next_eligible_at|int }}"{% endif %}
        aria-label="{{ T('galaxy_asteroid_board_title', 'Asteroidengürtel') }}">
   <header class="galaxy-asteroid-board-head">
     <button type="button"
@@ -16,6 +18,21 @@
       {% if board_count > 0 %}
       <span class="galaxy-asteroid-board-count gc-mono" data-galaxy-asteroid-board-count>{{ board_count }}</span>
       {% endif %}
+      <span class="galaxy-asteroid-board-next gc-mono"
+            data-galaxy-asteroid-next-spawn
+            title="{{ T('galaxy_asteroid_next_spawn_title', 'Nächste Asteroiden-Welle') }}">
+        {% if schedule.spawn_ready and schedule.under_cap %}
+        <span class="galaxy-asteroid-board-next-label">{{ T('galaxy_asteroid_next_spawn_ready_short', 'Spawn bereit') }}</span>
+        {% elif schedule.under_cap is defined and not schedule.under_cap %}
+        <span class="galaxy-asteroid-board-next-label">{{ T('galaxy_asteroid_cap_full_short', 'Cap voll') }}</span>
+        <span class="galaxy-asteroid-board-cap">{{ schedule.active_count|default(0) }}/{{ schedule.max_concurrent|default(15) }}</span>
+        {% elif schedule.next_eligible_at %}
+        <span class="galaxy-asteroid-board-next-label">{{ T('galaxy_asteroid_next_spawn_short', 'Welle') }}</span>
+        <span class="galaxy-asteroid-board-next-eta"
+              data-countdown-at="{{ schedule.next_eligible_at|int }}"
+              data-countdown-format="eta">—</span>
+        {% endif %}
+      </span>
     </button>
     <button type="button"
             class="gc-btn gc-btn-ghost gc-btn-xs galaxy-asteroid-help-btn"
@@ -30,6 +47,22 @@
        class="galaxy-asteroid-board-panel"
        data-galaxy-asteroid-board-panel
        hidden>
+    {% if schedule.max_concurrent is defined %}
+    <p class="galaxy-asteroid-board-schedule hint" data-galaxy-asteroid-schedule>
+      {{ T('galaxy_asteroid_active_cap', 'Aktiv') }}:
+      <span class="gc-mono">{{ schedule.active_count|default(0) }} / {{ schedule.max_concurrent }}</span>
+      {% if schedule.spawn_ready and schedule.under_cap %}
+      · {{ T('galaxy_asteroid_next_spawn_ready', 'Nächste Welle möglich — erscheint mit dem nächsten Server-Tick.') }}
+      {% elif not schedule.under_cap %}
+      · {{ T('galaxy_asteroid_cap_full', 'Cap erreicht — neue Felder, sobald Platz frei wird und der Cooldown abgelaufen ist.') }}
+      {% elif schedule.next_eligible_at %}
+      · {{ T('galaxy_asteroid_next_spawn_in', 'Nächste Welle frühestens in') }}:
+      <span class="gc-mono"
+            data-countdown-at="{{ schedule.next_eligible_at|int }}"
+            data-countdown-format="eta">—</span>
+      {% endif %}
+    </p>
+    {% endif %}
     {% if board_count > 0 %}
     <p class="galaxy-asteroid-board-subtitle hint">{{ T('galaxy_asteroid_board_subtitle', 'Aktive Felder im Universum — springe hin und ernte mit Harvest Reclaimern.') }}</p>
     <ul class="galaxy-asteroid-board-list">
@@ -85,7 +118,7 @@
       <p class="galaxy-asteroid-help-lead">{{ T('galaxy_asteroid_help_lead', 'Temporäre Asteroidenfelder erscheinen in dicht besiedelten Systemen. Ernte mit Mission Recycling und Harvest Reclaimern.') }}</p>
       <ul class="galaxy-asteroid-help-list">
         <li>{{ T('galaxy_asteroid_help_ttl', 'TTL: Felder bleiben etwa 2 Stunden — danach verfallen sie.') }}</li>
-        <li>{{ T('galaxy_asteroid_help_spawn', 'Spawn: Wellen in den dichtesten Systemen (alle ~45 Minuten, Cap 15 Felder).') }}</li>
+        <li>{{ T('galaxy_asteroid_help_spawn', 'Spawn: Wellen in den dichtesten Systemen (alle ~45 Minuten, Cap 15 Felder). Der Timer im Board zeigt die nächste Welle.') }}</li>
         <li>{{ T('galaxy_asteroid_help_ships', 'Schiffe: Nur Harvest Reclaimer (Mission Recycling).') }}</li>
         <li>{{ T('galaxy_asteroid_help_race', 'Wettkampf: Mehrere Flotten möglich — wer zuerst ankommt, claimt das Feld.') }}</li>
         <li>{{ T('galaxy_asteroid_help_board', 'Board: Liste aller aktiven Felder mit Sprung zur Galaxie-Position.') }}</li>

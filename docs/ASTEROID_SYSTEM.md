@@ -40,14 +40,14 @@ Temporary asteroid belts in densely settled classic galaxy systems. Harvest with
 
 ## Galaxy board (GC-AST-UX-01)
 
-`list_system` → `active_asteroid_board` via `build_asteroid_board_entries` (active fields, TTL-sorted, `galaxy_href` jump).
+`list_system` → `active_asteroid_board` via `build_asteroid_board_entries` (active fields, TTL-sorted, `galaxy_href` jump) plus `asteroid_schedule` from `build_schedule_info` (`next_eligible_at`, cap, spawn_ready).
 
 Viewer filter: once the player has committed a ``recycle`` flight to an active field
 (``outbound`` / ``returning`` / ``completed``, departure ≥ field ``spawned_at``), that
 field is omitted from *their* board for the rest of its life. Cancelled/failed do not
 count. A later spawn at the same slot shows again. Ring marker stays until claim.
 
-UI: `templates/partials/galaxy_asteroid_board.html` in the Galaxy HUD — collapsed bar by default (count badge), expand for list + Jump + `?` help modal. No dedicated `/asteroids` page.
+UI: `templates/partials/galaxy_asteroid_board.html` in the Galaxy HUD — collapsed bar by default (count badge + **next-wave countdown**), expand for schedule line + list + Jump + `?` help modal. No dedicated `/asteroids` page.
 
 ---
 

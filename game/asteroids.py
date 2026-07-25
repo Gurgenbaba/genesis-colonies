@@ -652,13 +652,15 @@ def build_schedule_info(*, conn, now: Optional[float] = None) -> Dict[str, Any]:
         next_eligible_at = ts
     under_cap = len(active) < int(MAX_ACTIVE_ASTEROIDS)
     spawn_ready = bool(under_cap and ts >= next_eligible_at)
+    seconds_until_next = max(0, int(next_eligible_at - ts)) if not spawn_ready else 0
     return {
         "inter_wave_cooldown_sec": int(INTER_WAVE_COOLDOWN_SEC),
         "max_concurrent": int(MAX_ACTIVE_ASTEROIDS),
         "ttl_seconds": int(TTL_SECONDS),
         "active_count": len(active),
         "last_spawn_at": last_spawn,
-        "next_eligible_at": next_eligible_at,
+        "next_eligible_at": float(next_eligible_at),
+        "seconds_until_next": int(seconds_until_next),
         "spawn_ready": spawn_ready,
         "under_cap": under_cap,
     }

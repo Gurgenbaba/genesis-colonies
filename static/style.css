@@ -27171,6 +27171,31 @@ button.pe-hero-planet-hint:focus-visible {
   font-size: 0.68rem;
   color: rgba(160, 230, 255, 0.95);
 }
+.galaxy-asteroid-board-next {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding-left: 8px;
+  color: var(--gc-text-soft, rgba(180, 210, 230, 0.72));
+  font-size: 0.68rem;
+  white-space: nowrap;
+  min-width: 0;
+}
+.galaxy-asteroid-board-next-label {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.85;
+}
+.galaxy-asteroid-board-next-eta,
+.galaxy-asteroid-board-cap {
+  color: rgba(160, 230, 255, 0.95);
+}
+.galaxy-asteroid-board-schedule {
+  margin: 0 0 8px;
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
 .galaxy-asteroid-board-panel {
   margin-top: 8px;
 }

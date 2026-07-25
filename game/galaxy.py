@@ -943,8 +943,9 @@ def list_system(
             available_reclaimers = 0
 
     active_asteroid_board: List[Dict[str, Any]] = []
+    asteroid_schedule: Dict[str, Any] = {}
     try:
-        from .asteroids import build_asteroid_board_entries
+        from .asteroids import build_asteroid_board_entries, build_schedule_info
 
         active_asteroid_board = build_asteroid_board_entries(
             conn=conn,
@@ -952,8 +953,10 @@ def list_system(
             current_system=int(system),
             viewer_player_id=viewer_player_id,
         )
+        asteroid_schedule = build_schedule_info(conn=conn)
     except Exception:
         active_asteroid_board = []
+        asteroid_schedule = {}
 
     result = {
         "galaxy": int(galaxy),
@@ -963,6 +966,7 @@ def list_system(
         "highlight_position": highlight_position,
         "available_reclaimers": available_reclaimers,
         "active_asteroid_board": active_asteroid_board,
+        "asteroid_schedule": asteroid_schedule,
     }
 
     if own:
