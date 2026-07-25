@@ -36,7 +36,7 @@ SPAWN_RUNTIME_KEY = "asteroid_belt_last_spawn_at"
 
 # Catalog: weighted types with resource split hints.
 # Each resource (metal / crystal / fuel_cells) rolls independently in this band.
-ASTEROID_RESOURCE_RANGE = (10_000_000, 150_000_000)
+ASTEROID_RESOURCE_RANGE = (500_000, 5_000_000)
 
 ASTEROID_CATALOG: Dict[str, Dict[str, Any]] = {
     "ferronite_rock": {

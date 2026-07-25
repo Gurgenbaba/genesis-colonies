@@ -94,8 +94,8 @@ def _fund(planet_id: int):
 
 def test_asteroid_loot_rolls_each_resource_in_band():
     lo, hi = ASTEROID_RESOURCE_RANGE
-    assert lo == 10_000_000
-    assert hi == 150_000_000
+    assert lo == 500_000
+    assert hi == 5_000_000
     for key in ASTEROID_CATALOG:
         for seed in range(40):
             loot = _roll_loot(key, rng=random.Random(seed))

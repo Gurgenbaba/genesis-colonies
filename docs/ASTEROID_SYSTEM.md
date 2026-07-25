@@ -59,12 +59,12 @@ Expire-on-view: `expire_due_asteroids` runs from board build / system attach (de
 
 | Key | Split bias (approx) | Per-resource range |
 |-----|---------------------|--------------------|
-| `ferronite_rock` | 70/25/5 M/C/F | 10M–150M each |
-| `crytite_shard` | 25/70/5 | 10M–150M each |
-| `fuel_ice` | 15/15/70 | 10M–150M each |
-| `mixed_belt` | 40/40/20 | 10M–150M each |
+| `ferronite_rock` | 70/25/5 M/C/F | 0.5M–5M each |
+| `crytite_shard` | 25/70/5 | 0.5M–5M each |
+| `fuel_ice` | 15/15/70 | 0.5M–5M each |
+| `mixed_belt` | 40/40/20 | 0.5M–5M each |
 
-Each resource rolls independently inside the band; catalog split only biases toward the high end for preferred resources.
+Each resource rolls independently inside the band; catalog split only biases toward the high end for preferred resources. Total field ≈ 1.5M–15M (contested prize vs large expos, not empire-breaker).
 
 Cargo take = `min(fleet_cargo, pool)`; asteroid is fully claimed and removed even if leftover cargo capacity is insufficient (remainder lost).
 
