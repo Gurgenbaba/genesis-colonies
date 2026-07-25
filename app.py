@@ -530,8 +530,12 @@ def inject_globals():
         user_id = session.get("user_id")
         if user_id is not None and not simple_layout:
             from game.planet_evolution.service import list_player_planets_for_switcher
+            from game.planet_visuals import apply_herocard_urls_to_switcher_planets
 
-            header_planets = list_player_planets_for_switcher(int(user_id))
+            header_planets = apply_herocard_urls_to_switcher_planets(
+                list_player_planets_for_switcher(int(user_id)),
+                url_for,
+            )
             for row in header_planets:
                 if row.get("is_active"):
                     header_active_planet = row
@@ -7214,8 +7218,12 @@ def _payload_from_live_context(
 
     try:
         from game.planet_evolution.service import list_player_planets_for_switcher
+        from game.planet_visuals import apply_herocard_urls_to_switcher_planets
 
-        payload["planets"] = list_player_planets_for_switcher(user_id, conn=conn)
+        payload["planets"] = apply_herocard_urls_to_switcher_planets(
+            list_player_planets_for_switcher(user_id, conn=conn),
+            url_for,
+        )
     except Exception:
         payload["planets"] = []
 
@@ -9882,8 +9890,15 @@ def planet_evolution_view():
 def api_planets_list():
     user_id = int(session["user_id"])
     from game.planet_evolution.service import list_player_planets_for_switcher
+    from game.planet_visuals import apply_herocard_urls_to_switcher_planets
 
-    return jsonify({"ok": True, "planets": list_player_planets_for_switcher(user_id)})
+    return jsonify({
+        "ok": True,
+        "planets": apply_herocard_urls_to_switcher_planets(
+            list_player_planets_for_switcher(user_id),
+            url_for,
+        ),
+    })
 
 
 @app.route("/api/planets/active", methods=["POST"])
@@ -9910,8 +9925,12 @@ def api_planets_set_active():
 
         sync_galaxy_view_session_for_planet(session, get_context_planet(user_id))
         from game.planet_evolution.service import list_player_planets_for_switcher
+        from game.planet_visuals import apply_herocard_urls_to_switcher_planets
 
-        planets = list_player_planets_for_switcher(user_id)
+        planets = apply_herocard_urls_to_switcher_planets(
+            list_player_planets_for_switcher(user_id),
+            url_for,
+        )
     return jsonify({"ok": ok, "reason": reason, "state": state, "planets": planets})
 
 

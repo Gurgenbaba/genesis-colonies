@@ -23548,36 +23548,46 @@
         btn.dataset.planetRoleLabelKey = p.empire_role_label_key || "";
         btn.dataset.planetRoleIcon = p.empire_role_icon || "";
         btn.dataset.planetIdentityKey = empireIdentityLabelKey(p);
+        const herocardUrl = String(p.herocard_url || "").trim();
+        const herocardWebp = String(p.herocard_webp_url || "").trim();
+        btn.dataset.planetHerocard = herocardUrl;
+        btn.dataset.planetHerocardWebp = herocardWebp;
 
-        const nameRow = document.createElement("span");
-        nameRow.className = "gc-planet-registry-card-name-row";
-        if (p.empire_role_icon) {
-          const iconSpan = document.createElement("span");
-          iconSpan.className = "gc-planet-registry-card-icon";
-          iconSpan.setAttribute("aria-hidden", "true");
-          iconSpan.textContent = p.empire_role_icon;
-          nameRow.appendChild(iconSpan);
+        const main = document.createElement("span");
+        main.className = "gc-planet-registry-card-main";
+        if (herocardUrl) {
+          const thumb = document.createElement("span");
+          thumb.className = "gc-planet-registry-card-thumb has-planet-image";
+          thumb.setAttribute("aria-hidden", "true");
+          thumb.style.setProperty("--gr-planet-image", `url('${herocardUrl}')`);
+          if (herocardWebp) {
+            thumb.style.setProperty("--gr-planet-image-webp", `url('${herocardWebp}')`);
+          }
+          main.appendChild(thumb);
         }
+        const copy = document.createElement("span");
+        copy.className = "gc-planet-registry-card-copy";
         const nameSpan = document.createElement("span");
         nameSpan.className = "gc-planet-registry-card-name";
         nameSpan.textContent = p.name || "";
-        nameRow.appendChild(nameSpan);
-        btn.appendChild(nameRow);
+        copy.appendChild(nameSpan);
 
         const identityKey = empireIdentityLabelKey(p);
         if (identityKey) {
           const roleSpan = document.createElement("span");
           roleSpan.className = "gc-planet-registry-card-role";
           roleSpan.textContent = t(identityKey, identityKey);
-          btn.appendChild(roleSpan);
+          copy.appendChild(roleSpan);
         }
         const coord = p.coordinates_formatted || "";
         if (coord) {
           const coordSpan = document.createElement("span");
           coordSpan.className = "gc-planet-registry-card-coord gc-mono";
           coordSpan.innerHTML = GC.coordLinkHtml(coord, { label: coord });
-          btn.appendChild(coordSpan);
+          copy.appendChild(coordSpan);
         }
+        main.appendChild(copy);
+        btn.appendChild(main);
 
         list.appendChild(btn);
       });

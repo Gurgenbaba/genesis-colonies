@@ -74,7 +74,17 @@ def _planet_switcher_row(
     except (TypeError, ValueError):
         position_i = None
 
+    from ..planet_visuals import (
+        DEFAULT_HEROCARD,
+        herocard_static_relpath,
+        raster_webp_relpath,
+    )
     from .empire_identity import empire_identity_for_planet
+
+    if position_i:
+        herocard_rel = herocard_static_relpath(position_i)
+    else:
+        herocard_rel = f"img/herocards/{DEFAULT_HEROCARD}"
 
     row = {
         "planet_id": pid,
@@ -89,6 +99,8 @@ def _planet_switcher_row(
         "planet_class_label_key": planet_class_label_key(planet_class),
         "coordinates_formatted": coords_formatted,
         "position": position_i,
+        "herocard_relpath": herocard_rel,
+        "herocard_webp_relpath": raster_webp_relpath(herocard_rel),
     }
     row.update(empire_identity_for_planet(planet_row, conn=conn))
     return row

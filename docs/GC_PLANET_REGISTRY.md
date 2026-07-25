@@ -65,7 +65,7 @@ Header: kein Planet-Switcher
 
 ## GC-575A MVP — In Scope
 
-- Permanente Mini-Karten: Icon, Name, Identity/Rolle, Koordinaten, `is-active`
+- Permanente Mini-Karten: runder Herocard-Thumb (wie Galaxy-Ring), Name, Identity/Rolle, Koordinaten, `is-active`
 - 1-Klick-Wechsel inkl. soft PJAX (bestehender Switch-Flow)
 - Header-Switcher-Template/CSS/JS entfernen
 - Meta-Nav als eigene Spalte (nicht unter Registry gestapelt)

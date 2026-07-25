@@ -28245,11 +28245,11 @@ button.pe-hero-planet-hint:focus-visible {
 .gc-planet-registry-card{
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+  align-items: stretch;
+  gap: 0;
   width: 100%;
   margin: 0;
-  padding: 7px 8px;
+  padding: 6px 7px;
   border: 1px solid rgba(70, 229, 255, 0.14);
   border-radius: var(--gc-radius-xs, 0);
   background: rgba(4, 12, 24, 0.72);
@@ -28271,18 +28271,65 @@ button.pe-hero-planet-hint:focus-visible {
   box-shadow: inset 2px 0 0 rgba(127, 255, 217, 0.75);
 }
 
+.gc-planet-registry-card-main{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+}
+
+.gc-planet-registry-card-thumb{
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid rgba(70, 229, 255, 0.38);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.45),
+    inset 0 0 6px rgba(0, 0, 0, 0.35);
+  background-color: rgba(6, 14, 28, 0.9);
+  background-size: cover;
+  background-position: center;
+}
+
+.gc-planet-registry-card-thumb.has-planet-image{
+  background-image: var(--gr-planet-image);
+}
+
+@supports (background-image: image-set(url("x") type("image/webp"))){
+  .gc-planet-registry-card-thumb.has-planet-image{
+    background-image: image-set(
+      var(--gr-planet-image-webp, var(--gr-planet-image)) type("image/webp"),
+      var(--gr-planet-image) type("image/png"),
+      var(--gr-planet-image) type("image/jpeg")
+    );
+  }
+}
+
+.gc-planet-registry-card.is-active .gc-planet-registry-card-thumb{
+  border-color: rgba(127, 255, 217, 0.65);
+  box-shadow:
+    0 0 0 1px rgba(127, 255, 217, 0.25),
+    inset 0 0 6px rgba(0, 0, 0, 0.35);
+}
+
+.gc-planet-registry-card-copy{
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .gc-planet-registry-card-name-row{
   display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
   max-width: 100%;
-}
-
-.gc-planet-registry-card-icon{
-  flex: 0 0 auto;
-  font-size: 0.88rem;
-  line-height: 1;
 }
 
 .gc-planet-registry-card-name{
@@ -28293,6 +28340,7 @@ button.pe-hero-planet-hint:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+  max-width: 100%;
 }
 
 .gc-planet-registry-card-role{
@@ -28308,12 +28356,16 @@ button.pe-hero-planet-hint:focus-visible {
 
 .gc-planet-registry-card-coord{
   display: block;
-  margin-top: 2px;
+  margin-top: 1px;
   padding-top: 2px;
   border-top: 1px solid rgba(127, 255, 217, 0.1);
   font-size: 0.6rem;
   color: rgba(127, 255, 217, 0.48);
   letter-spacing: 0.04em;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .gc-planet-registry-card-coord a.gc-galaxy-coord-link{

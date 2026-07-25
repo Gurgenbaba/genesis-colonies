@@ -127,6 +127,16 @@ def test_switcher_payload_includes_empire_identity(switcher_db):
     assert colony["empire_role_icon"] == "⛏"
 
 
+def test_switcher_payload_includes_herocard_relpath(switcher_db):
+    player_id, _ = _create_player()
+    _second_planet(player_id)
+    planets = list_player_planets_for_switcher(player_id)
+    assert planets
+    for p in planets:
+        assert p.get("herocard_relpath", "").startswith("img/herocards/")
+        assert p.get("herocard_webp_relpath", "").startswith("img/herocards/")
+
+
 def test_registry_shows_role_and_coords(switcher_db, monkeypatch):
     player_id, uname = _create_player()
     colony_id = _second_planet(player_id)
@@ -137,13 +147,17 @@ def test_registry_shows_role_and_coords(switcher_db, monkeypatch):
     for needle in (
         "gc-planet-registry",
         "gc-planet-registry-card",
+        "gc-planet-registry-card-thumb",
         "gc-planet-registry-card-role",
         "gc-planet-registry-card-coord",
         "data-planet-role-key",
         "data-planet-identity-key",
+        "data-planet-herocard",
         "data-gc-planet-registry",
+        "img/herocards/",
     ):
         assert needle in body, f"missing registry marker: {needle}"
+    assert "gc-planet-registry-card-icon" not in body
     assert "gc-planet-switcher" not in body
     assert 'include "partials/header_planet_switcher.html"' not in (ROOT / "templates" / "base.html").read_text(encoding="utf-8")
     assert "empire_role_homeworld" in body or "Genesis Ark" in body
@@ -153,10 +167,10 @@ def test_main_js_registry_role_contract():
     src = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
     assert "empireIdentityLabelKey" in src
     assert "gc-planet-registry-card-role" in src
-    assert "gc-planet-registry-card-icon" in src
+    assert "gc-planet-registry-card-thumb" in src
+    assert "herocard_url" in src.split("function rebuildPlanetRegistry")[1].split("function updatePlanetRegistryFromPlanets")[0]
     assert "planetRoleKey" in src
     assert "planetIdentityKey" in src
-    assert "planetRoleIcon" in src
     assert "empire_identity_key" in src.split("function empireIdentityLabelKey")[1].split("function planetRegistryRoots")[0]
     assert "initHeaderPlanetSwitcher" not in src
     assert "GC.updateHeaderPlanetSwitcherFromState" not in src
@@ -172,6 +186,8 @@ def test_diet_poll_planets_keep_identity_label_keys():
         "empire_role_label_key",
         "empire_subtitle_key",
         "identity_title_key",
+        "herocard_url",
+        "herocard_webp_url",
     ):
         assert f'"{key}"' in block, f"missing diet planet key: {key}"
 
@@ -179,11 +195,12 @@ def test_diet_poll_planets_keep_identity_label_keys():
 def test_registry_css_role_hierarchy():
     css = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
     assert ".gc-planet-registry-card-role" in css
+    assert ".gc-planet-registry-card-thumb" in css
     assert ".gc-planet-registry-card-coord" in css
     assert ".gc-sidebar-right-rails" in css
     assert "display: contents" in css
     assert ".gc-planet-switcher" not in css
-
+    assert ".gc-planet-registry-card-icon" not in css
 
 def test_four_column_shell_order(switcher_db, monkeypatch):
     """Left | Main | Meta | Imperium — registry is sibling after meta, not stacked above it."""

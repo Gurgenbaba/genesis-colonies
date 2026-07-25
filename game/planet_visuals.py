@@ -447,6 +447,24 @@ def herocard_webp_relpath(position: int) -> str:
     return raster_webp_relpath(herocard_static_relpath(position))
 
 
+def apply_herocard_urls_to_switcher_planets(planets: list, static_url) -> list:
+    """Attach absolute herocard URLs for registry thumbs (same assets as galaxy ring)."""
+    enriched: list = []
+    for row in planets or []:
+        r = dict(row)
+        rel = str(r.get("herocard_relpath") or "").strip()
+        if not rel:
+            pos = _normalize_position(r.get("position")) or 0
+            rel = herocard_static_relpath(pos) if pos else f"img/herocards/{DEFAULT_HEROCARD}"
+            r["herocard_relpath"] = rel
+            r["herocard_webp_relpath"] = raster_webp_relpath(rel)
+        webp = str(r.get("herocard_webp_relpath") or raster_webp_relpath(rel)).strip()
+        r["herocard_url"] = static_url("static", filename=rel)
+        r["herocard_webp_url"] = static_url("static", filename=webp)
+        enriched.append(r)
+    return enriched
+
+
 # GC-860B/C — responsive overview hero variants (widths match compress_p0_assets.py)
 HEROCARD_WEBP_VARIANTS: tuple[str, ...] = ("sm", "md", "lg")
 HEROCARD_WEBP_WIDTHS: dict[str, int] = {"sm": 320, "md": 560, "lg": 840}
