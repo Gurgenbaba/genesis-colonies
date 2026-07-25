@@ -139,7 +139,7 @@ python -m pytest tests/test_fleet.py -v   # domänenspezifisch
 | GC-512 Architecture Validation | [GC-512_ARCHITECTURE_VALIDATION.md](GC-512_ARCHITECTURE_VALIDATION.md) |
 | Queue manual QA (Teil von GC-512) | [GC-512_QUEUE_MANUAL_QA.md](GC-512_QUEUE_MANUAL_QA.md) |
 | Live-State | `test_game_state_live.py`, `test_static_live_updates.py` |
-| Planet Scope | `test_planet_instancing.py`, `test_header_planet_switcher.py` |
+| Planet Scope | `test_planet_instancing.py`, `test_planet_registry.py` |
 | Evolution | `test_planet_evolution*.py` |
 | Fleet / Galaxy | `test_fleet.py`, `test_galaxy.py` |
 | Economy | `test_exchange.py`, `test_fuel_exchange.py`, `test_trader_hub.py` |

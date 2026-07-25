@@ -92,6 +92,7 @@ Die **Genesis Command Map** ist die visuelle Darstellung des Imperiums — nicht
 
 | Seite | Zweck | Status |
 |-------|-------|--------|
+| **Planet Registry (rechts)** | Permanente Imperiumsübersicht + 1-Klick-Wechsel — [GC_PLANET_REGISTRY.md](GC_PLANET_REGISTRY.md) | **GC-575 / 575A** |
 | **`/empire`** | Wirtschaft, Produktion, Ressourcen-Matrix | **Nicht anfassen** |
 | **`/galaxy`** / **`/galaxy?view=system`** | **Haupt-Galaxy** — klassische Systemansicht, Slots, Fleet-Prefill | **Spieler-Default** |
 | **`/galaxy?view=command_map`** | Weltkarte / Command Map | **Dev-Preview only** (`?dev=1` oder Env-Flag) |

@@ -6145,5 +6145,10 @@
   "admin_pirates_force_spawn_done": "Korsan üssü zorla spawn edildi.",
   "admin_pirates_bots": "Fraksiyon botları",
   "admin_pirates_kpi_bots": "Botlar çevrimiçi",
-  "admin_pirates_kpi_spies": "Casus sevkleri (log)"
+  "admin_pirates_kpi_spies": "Casus sevkleri (log)",
+  "planet_registry_title": "İmparatorluk",
+  "planet_registry_aria": "İmparatorluk özeti",
+  "planet_registry_empty": "Koloni yok",
+  "planet_registry_meta_toggle": "Meta",
+  "planet_registry_meta_toggle_title": "Mesajlar, ekonomi, topluluk"
 }

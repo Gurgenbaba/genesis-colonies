@@ -6145,5 +6145,10 @@
   "admin_pirates_force_spawn_done": "Pirate base force-spawned.",
   "admin_pirates_bots": "Faction bots",
   "admin_pirates_kpi_bots": "Bots online",
-  "admin_pirates_kpi_spies": "Spy dispatches (log window)"
+  "admin_pirates_kpi_spies": "Spy dispatches (log window)",
+  "planet_registry_title": "Empire",
+  "planet_registry_aria": "Empire overview",
+  "planet_registry_empty": "No colonies",
+  "planet_registry_meta_toggle": "Meta",
+  "planet_registry_meta_toggle_title": "Messages, economy, community"
 }

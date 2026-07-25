@@ -58,7 +58,7 @@ Pflicht-APIs: `GC.navigateTo()`, `GC.reloadCurrentPage()`, `GC.fetchGameAction()
 Ingame-Desktop-Shell — Layout **immer**:
 
 ```text
-Left Sidebar (Gameplay) | Main (#main-content) | Right Sidebar (Meta)
+Left Sidebar (Gameplay) | Main (#main-content) | Meta | Planet Registry
 ```
 
 Zusätzlich: Header, Resource Bar, Bottom Utility Dock (Support, Tickets, legal, Discord, Wiki, Tchat, Version).

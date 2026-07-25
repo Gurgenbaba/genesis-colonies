@@ -6145,5 +6145,10 @@
   "admin_pirates_force_spawn_done": "База пиратов заспавнена.",
   "admin_pirates_bots": "Боты фракций",
   "admin_pirates_kpi_bots": "Боты онлайн",
-  "admin_pirates_kpi_spies": "Шпионаж (окно лога)"
+  "admin_pirates_kpi_spies": "Шпионаж (окно лога)",
+  "planet_registry_title": "Империя",
+  "planet_registry_aria": "Обзор империи",
+  "planet_registry_empty": "Нет колоний",
+  "planet_registry_meta_toggle": "Мета",
+  "planet_registry_meta_toggle_title": "Сообщения, экономика, сообщество"
 }

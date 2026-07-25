@@ -28,7 +28,7 @@ Actions use `_player_context_for_action()` (read-only DB) then **one** `refresh_
 - `?include_panel=1` is for explicit action responses / legacy callers only — **not** used by normal client polling.
 - Single SQLite connection per request
 - No `buildings_panel`, full exchange/scrapyard panels, or teaser on diet polls
-- Shell HUD on diet polls: `planet_limit`, `planets[]` (switcher), `active_planet` (+ `sidebar_nav`); no `research.techs[]`
+- Shell HUD on diet polls: `planet_limit`, `planets[]` (Planet Registry), `active_planet` (role/visual shell fields; `sidebar_nav` via SSR / full panel); no `research.techs[]`
 - No `overview.status` (shipyard/fleet activity queries skipped)
 - Inbox unread count read-only (`prepare=False`)
 - Resource persist writes throttled (`GC_RESOURCE_PERSIST_SEC`, default ≥600 s since last planet update; GC-PERF-RES-001)

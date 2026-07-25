@@ -170,14 +170,14 @@ Client (`static/main.js`): Singleton-Polling, `applyGameStateData()`, `applyActi
 Seit **GC-804–806C** nutzt die Ingame-Shell in `templates/base.html` ein festes **Dual-Sidebar-Layout** plus **Bottom Utility Dock**. PJAX ersetzt weiterhin nur `#main-content`; Sidebars und Dock bleiben in der Shell erhalten ([AJAX_PJAX_CONTRACT.md](AJAX_PJAX_CONTRACT.md)).
 
 ```
-Header (Brand, HUD, Planet Switcher, Account)
+Header (Brand, HUD, Account) — kein Planet-Switcher
 ├─ Resource Bar (sticky)
 ├─ .gc-layout--dual  (max-width: --gc-shell-max-width, default 1360px)
 │   ├─ Left Sidebar — Gameplay   (#gc-sidebar-nav, sidebar.html)
 │   │     Kommando · Infrastruktur · Militär
 │   ├─ Main Content              (#main-content)
-│   └─ Right Sidebar — Meta      (#gc-sidebar-nav-right, sidebar_right.html)
-│         Nachrichten · Wirtschaft · Community · System
+│   └─ Right rails (.gc-sidebar-right-rails, display:contents on desktop)
+│         Meta (#gc-sidebar-nav-right) · Planet Registry (#gc-planet-registry)
 └─ Bottom Utility Dock           (bottom_utility_bar.html)
       Support · Tickets · Impressum · Regeln · Discord · Wiki · Tchat · Version
 ```
@@ -185,7 +185,8 @@ Header (Brand, HUD, Planet Switcher, Account)
 | Partial | Rolle |
 |---------|--------|
 | `templates/partials/sidebar.html` | Linke Gameplay-Navigation |
-| `templates/partials/sidebar_right.html` | Rechte Meta-/Community-Navigation |
+| `templates/partials/planet_registry.html` | Rechte Imperiumsübersicht / Planet-Wechsel (GC-575) |
+| `templates/partials/sidebar_right.html` | Rechte Rail: Registry + Meta compact |
 | `templates/partials/bottom_utility_bar.html` | Utility-Links + Versions-Chip |
 | `templates/partials/special_panel.html` | Support/Wiki/Tchat-Fenster (vom Dock geöffnet) |
 
@@ -193,13 +194,13 @@ Header (Brand, HUD, Planet Switcher, Account)
 
 | Viewport | Verhalten |
 |----------|-----------|
-| Desktop ≥1280px | Beide Sidebars immer sichtbar — **kein Wide-Mode** |
+| Desktop ≥1280px | Beide Sidebars + Registry immer sichtbar — **kein Wide-Mode**; Shell zentriert (`--gc-shell-max-width`) |
 | Tablet 992–1279px | Rechte Sidebar als Drawer (Meta-Toggle im Bottom Dock) |
 | Mobile <768px | Bottom Dock aus; bestehende Bottom-Nav + Drawer unverändert |
 
-**Client-UI-State (kein Game-State):** Accordion-Sektionen in `localStorage` (`gc_sidebar_state`, `gc_sidebar_right_state`); Role-Sync aus `active_planet.sidebar_nav` via `GC.syncRoleBasedSidebar()`.
+**Client-UI-State (kein Game-State):** Accordion-Sektionen in `localStorage` (`gc_sidebar_state`, `gc_sidebar_right_state`, `gc_planet_registry_meta_open`); Role-Sync aus `active_planet.sidebar_nav` via `GC.syncRoleBasedSidebar()`.
 
-**Content-Regel:** Breite Seiten (Fleet, Galaxy, Ranking, Buildings) scrollen **intern** (`min-width: 0`, Tabellen-/Card-Wrapper). Navigation wird auf Desktop nicht ausgeblendet, um Breite zu gewinnen — siehe [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) §3.
+**Content-Regel:** Breite Seiten (Fleet, Galaxy, Ranking, Buildings) scrollen **intern** (`min-width: 0`, Tabellen-/Card-Wrapper). Navigation wird auf Desktop nicht ausgeblendet, um Breite zu gewinnen — siehe [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) §3. Rechte Rail: `--gc-registry-rail-w` (Planet Registry + Meta compact).
 
 ---
 

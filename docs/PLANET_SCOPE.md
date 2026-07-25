@@ -61,26 +61,27 @@ Antwort enthält vollständigen `state` (game-state payload) + `planets[]`.
 
 ## Frontend
 
-### Header Planet Switcher
+### Planet Registry (GC-575 / GC-575A)
 
-- Template: `templates/partials/header_planet_switcher.html`
-- `data-multi="0"` bei einer Kolonie (disabled)
-- `data-multi="1"` bei 2+ — Dropdown mit allen Kolonien
+- Template: `templates/partials/planet_registry.html` — rechte Sidebar (oben), Meta-Nav compact darunter
+- Kein Header-Planet-Switcher — Wechsel nur über Registry (Desktop + Mobile-Drawer)
+- Mini-Cards: Name, Empire-Rolle/Identity, Koordinaten, `is-active`
+- Spec: [GC_PLANET_REGISTRY.md](GC_PLANET_REGISTRY.md)
 
-### Header Planet Limit (GC-532)
+### Planet Limit (GC-532)
 
-- Anzeige in der Ressourcenzeile (`templates/base.html`), Panel `hud-res-planet-limit` direkt nach Brennzellen
-- Format: `Planeten X / Y` (`X` = besessene Planeten, `Y` = `game_settings.max_colonies_per_player`, Fallback `9`)
+- Anzeige im Registry-Header (`data-planet-limit-value`)
+- Format: `Planeten X / Y` (`X` = besessene Planeten, `Y` = Limit-Block / Settings)
 - Live-State: `/api/game-state` liefert `planet_limit: { current, max }` (Owner: `game/logic.py` → `get_planet_limit_block`)
 - Frontend: `patchHeaderPlanetLimitFromState` in `static/main.js` (Polling, Planetwechsel, Kolonisierung via `applyActionState`)
 
 ### Switch-Flow (`static/main.js`)
 
 ```
-Klick Kolonie
+Klick Kolonie (Registry-Card)
   → POST /api/planets/active
   → applyActionState(res, "planet_switch")
-  → rebuildHeaderPlanetSwitcher / updateHeaderPlanetSwitcherFromState
+  → rebuildPlanetRegistry / updatePlanetRegistryFromState
   → applyPlanetLandscapeFromState (CSS --planet-landscape)
   → GC.reloadCurrentPage({ force: true })
 ```
@@ -132,7 +133,7 @@ Details: Tabellen und APIs in [PLANET_EVOLUTION.md](PLANET_EVOLUTION.md).
 ## Tests
 
 ```bash
-python -m pytest tests/test_planet_instancing.py tests/test_header_planet_switcher.py tests/test_planet_state_scoping.py -v
+python -m pytest tests/test_planet_instancing.py tests/test_planet_registry.py tests/test_planet_state_scoping.py -v
 ```
 
 ---

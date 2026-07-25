@@ -31,16 +31,31 @@ def test_gc806_dual_sidebar_layout_contract():
     utility = _read("templates/partials/bottom_utility_bar.html")
 
     assert "gc-app-shell" in base
+    assert "fonts.googleapis.com" in base
+    assert "preconnect" in base
+    assert "@import url('https://fonts.googleapis.com" not in css
     assert "gc-layout--dual" in base
     assert "gc-layout--wide" not in base
     assert 'include "partials/sidebar_right.html"' in base
     assert 'include "partials/bottom_utility_bar.html"' in base
     assert 'include "partials/header_utility_bar.html"' not in base
-    assert 'id="gc-sidebar-nav-right"' in _read("templates/partials/sidebar_right.html")
+    assert 'id="gc-sidebar-nav-right"' in _read("templates/partials/sidebar_right.html") or (
+        "_nav_id = 'gc-sidebar-nav-right'" in _read("templates/partials/sidebar_right.html")
+    )
+    assert "gc-sidebar-right-rails" in _read("templates/partials/sidebar_right.html")
+    assert 'id="gc-sidebar-right-stack"' in _read("templates/partials/sidebar_right.html") or (
+        "_stack_id = 'gc-sidebar-right-stack'" in _read("templates/partials/sidebar_right.html")
+    )
+    assert "planet_registry.html" in _read("templates/partials/sidebar_right.html")
     assert "gc-layout--dual" in css
     assert "gc-layout--wide" not in css
     assert "--gc-shell-max-width" in css
     assert "var(--gc-sidebar-rail-w" in css
+    assert "--gc-registry-rail-w" in css
+    assert "--gc-shell-max-width: 1500px" in css
+    assert "--gc-registry-rail-w: 196px" in css
+    assert "gc-body-ingame .gc-layout.gc-layout--dual" not in css
+    assert "display: contents" in css
     assert "repeat(4, minmax(0, 1fr))" in css
     assert "gc-sidebar--right" in css
     assert "gc-bottom-util-link" in css

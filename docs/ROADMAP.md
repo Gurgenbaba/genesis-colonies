@@ -207,7 +207,8 @@ Design Manifest: [IMPERIUM_VISION.md](IMPERIUM_VISION.md) · Epic: **EPIC-15**
 
 | Ticket | Fokus | Status |
 |--------|-------|--------|
-| **GC-560** | Empire Identity Layer — [Spec](GC-560_EMPIRE_IDENTITY_LAYER.md) | 📋 |
+| **GC-560** | Empire Identity Layer — [Spec](GC-560_EMPIRE_IDENTITY_LAYER.md) | ✅ |
+| **GC-575** | Planet Registry — Imperiumsübersicht rechts — [Spec](GC_PLANET_REGISTRY.md) | ✅ 575A MVP |
 | **GC-561** | Colony Roles Extended (PlayerCard, Surfaces) | 📋 |
 | **GC-562** | Evolution Unlock Gates — Level → Expansion Sites ([Spec](GC-562_EVOLUTION_UNLOCK_GATES.md)) | ✅ |
 | **GC-562A** | Expansion Gates Polish ([Spec](GC-562A_EXPANSION_GATES_POLISH.md)) | ✅ |

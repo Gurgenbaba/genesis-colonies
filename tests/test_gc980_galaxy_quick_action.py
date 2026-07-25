@@ -32,7 +32,7 @@ def test_galaxy_quick_action_shared_fleet_send_contract():
 def test_galaxy_quick_action_origin_planet_fallbacks():
     """PJAX Galaxy may omit HEADER_ACTIVE_PLANET; origin must still resolve."""
     js = _read_js()
-    assert "gc-planet-switcher" in js
+    assert "data-gc-planet-registry" in js
     assert "lastState?.active_planet_id" in js
     assert "galaxy-page-root" in js
     assert "galaxy_asteroid_harvest_bad_target" in js

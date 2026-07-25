@@ -6145,5 +6145,10 @@
   "admin_pirates_force_spawn_done": "Wymuszono bazę piratów.",
   "admin_pirates_bots": "Boty frakcji",
   "admin_pirates_kpi_bots": "Boty online",
-  "admin_pirates_kpi_spies": "Szpiegostwo (okno logu)"
+  "admin_pirates_kpi_spies": "Szpiegostwo (okno logu)",
+  "planet_registry_title": "Imperium",
+  "planet_registry_aria": "Przegląd imperium",
+  "planet_registry_empty": "Brak kolonii",
+  "planet_registry_meta_toggle": "Meta",
+  "planet_registry_meta_toggle_title": "Wiadomości, ekonomia, społeczność"
 }

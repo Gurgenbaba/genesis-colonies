@@ -46,13 +46,13 @@
 
     getOriginPlanetId(root) {
       // PJAX galaxy SSR skips HEADER_ACTIVE_PLANET — prefer explicit page attrs,
-      // then shell switcher / lastState, then getDomPlanetId.
+      // then planet registry / lastState, then getDomPlanetId.
       const pageRoot = document.getElementById("galaxy-page-root");
-      const switcher = document.getElementById("gc-planet-switcher");
+      const registry = document.querySelector("[data-gc-planet-registry]");
       const candidates = [
         root?.dataset?.activePlanetId,
         pageRoot?.dataset?.activePlanetId,
-        switcher?.dataset?.activePlanetId,
+        registry?.dataset?.activePlanetId,
         window.GC?.lastState?.active_planet_id,
       ];
       for (const raw of candidates) {

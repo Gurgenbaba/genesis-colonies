@@ -6145,5 +6145,10 @@
   "admin_pirates_force_spawn_done": "Base pirata forçada.",
   "admin_pirates_bots": "Bots de facção",
   "admin_pirates_kpi_bots": "Bots online",
-  "admin_pirates_kpi_spies": "Spies (janela de log)"
+  "admin_pirates_kpi_spies": "Spies (janela de log)",
+  "planet_registry_title": "Império",
+  "planet_registry_aria": "Visão do império",
+  "planet_registry_empty": "Sem colônias",
+  "planet_registry_meta_toggle": "Meta",
+  "planet_registry_meta_toggle_title": "Mensagens, economia, comunidade"
 }

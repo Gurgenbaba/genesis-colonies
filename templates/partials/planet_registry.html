@@ -1,0 +1,67 @@
+{% set pr_planets = HEADER_PLANETS if HEADER_PLANETS is defined else [] %}
+{% set pr_pl = HEADER_PLANET_LIMIT if HEADER_PLANET_LIMIT is defined and HEADER_PLANET_LIMIT else none %}
+{% set pr_pl_current = (pr_planets|length) if pr_planets else 1 %}
+{% set pr_gs_pl = (GAME_SETTINGS if GAME_SETTINGS is defined and GAME_SETTINGS else {}) %}
+{% set pr_pl_owned = (pr_pl.owned_worlds|default(pr_pl_current))|int if pr_pl else pr_pl_current %}
+{% if not (pr_pl and pr_pl.max is none) %}
+{% set pr_pl_max = ((pr_pl.max if pr_pl else none) or (pr_gs_pl.max_colonies_per_player|default(9)))|int %}
+{% endif %}
+{% set _shell = NAV_SHELL | default('desktop') %}
+{% if _shell == 'mobile-drawer-right' %}
+  {% set _pr_id = 'gc-mnav-planet-registry' %}
+  {% set _pr_list_id = 'gc-mnav-planet-registry-list' %}
+{% else %}
+  {% set _pr_id = 'gc-planet-registry' %}
+  {% set _pr_list_id = 'gc-planet-registry-list' %}
+{% endif %}
+{% if AUTH_USER and pr_planets is defined %}
+<section class="gc-planet-registry"
+         id="{{ _pr_id }}"
+         data-gc-planet-registry
+         data-active-planet-id="{{ (HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET is defined and HEADER_ACTIVE_PLANET else '') }}"
+         aria-label="{{ T('planet_registry_aria', 'Imperiumsübersicht') }}">
+  <header class="gc-planet-registry-head">
+    <h2 class="gc-planet-registry-title">{{ T('planet_registry_title', 'Imperium') }}</h2>
+    <span class="gc-planet-registry-limit gc-mono"
+          data-planet-limit-value
+          title="{{ T('header_planet_limit', 'Planeten') }}">{% if pr_pl and pr_pl.max is none %}{{ pr_pl_owned|fmt_int }}{% else %}{{ pr_pl_owned|fmt_int }}/{{ pr_pl_max|fmt_int }}{% endif %}</span>
+  </header>
+  <div class="gc-planet-registry-list"
+       id="{{ _pr_list_id }}"
+       role="list"
+       data-gc-planet-registry-list>
+    {% for p in pr_planets %}
+    {% set p_identity_key = p.identity_title_key or p.empire_subtitle_key or p.empire_role_label_key %}
+    <button type="button"
+            class="gc-planet-registry-card{% if p.is_active %} is-active{% endif %}"
+            role="listitem"
+            aria-current="{{ 'true' if p.is_active else 'false' }}"
+            data-planet-id="{{ p.planet_id }}"
+            data-planet-name="{{ p.name|e }}"
+            data-planet-coord="{{ p.coordinates_formatted|e }}"
+            data-planet-class-key="{{ p.planet_class_label_key|e }}"
+            data-planet-class="{{ p.planet_class|e }}"
+            data-planet-homeworld="{{ '1' if p.is_homeworld else '0' }}"
+            data-planet-role-key="{{ p.empire_role_key|e }}"
+            data-planet-role-label-key="{{ p.empire_role_label_key|e }}"
+            data-planet-role-icon="{{ p.empire_role_icon|e }}"
+            data-planet-identity-key="{{ p_identity_key|e }}">
+      <span class="gc-planet-registry-card-name-row">
+        {% if p.empire_role_icon %}
+        <span class="gc-planet-registry-card-icon" aria-hidden="true">{{ p.empire_role_icon }}</span>
+        {% endif %}
+        <span class="gc-planet-registry-card-name">{{ p.name }}</span>
+      </span>
+      {% if p_identity_key %}
+      <span class="gc-planet-registry-card-role">{{ T(p_identity_key) }}</span>
+      {% endif %}
+      {% if p.coordinates_formatted %}
+      <span class="gc-planet-registry-card-coord gc-mono">{{ galaxy_coord_link(p.coordinates_formatted) }}</span>
+      {% endif %}
+    </button>
+    {% else %}
+    <p class="gc-planet-registry-empty">{{ T('planet_registry_empty', 'Keine Kolonien') }}</p>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}

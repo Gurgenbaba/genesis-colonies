@@ -2,14 +2,18 @@
 {% set _shell = NAV_SHELL | default('desktop') %}
 {% if _shell == 'mobile-drawer-right' %}
   {% set _nav_id = 'gc-mnav-sidebar-nav-right' %}
+  {% set _stack_id = 'gc-mnav-sidebar-right-stack' %}
   {% set _id_p = 'gc-mnav-r-' %}
   {% set _nav_placement = 'mobile-drawer-right' %}
   {% set _nav_shell_class = 'gc-sidebar-mobile-drawer' %}
+  {% set _stack_drawer_class = '' %}
 {% else %}
   {% set _nav_id = 'gc-sidebar-nav-right' %}
+  {% set _stack_id = 'gc-sidebar-right-stack' %}
   {% set _id_p = 'gc-' %}
   {% set _nav_placement = 'right' %}
   {% set _nav_shell_class = 'gc-sidebar-desktop' %}
+  {% set _stack_drawer_class = 'gc-sidebar-right' %}
 {% endif %}
 {% set _eco_open = request.endpoint in (
   'trader_hub_view', 'inventory_view', 'auction_house_view', 'empire_view', 'techtree_view'
@@ -18,146 +22,154 @@
   'alliance_view', 'ranking_view', 'chronicles_view', 'hall_of_fame_view', 'records_view',
   'referrals_view', 'vote_center_view', 'imperial_directives_view'
 ) %}
-<nav class="gc-sidebar {{ _nav_shell_class }} gc-sidebar--right gc-sidebar-right{% if _sn.full_nav %} gc-sidebar--full-nav{% else %} gc-sidebar--role-nav{% endif %}"
-     id="{{ _nav_id }}"
-     aria-label="{{ T('nav_meta', 'Meta-Navigation') }}"
-     data-nav-role="{{ _sn.empire_role_key | default('general') }}"
-     data-nav-full="{{ '1' if _sn.full_nav else '0' }}"
+{# GC-575: Meta + Registry are siblings. Desktop uses display:contents → 4-column grid
+   (Left | Main | Meta | Imperium). Tablet drawer stacks both. #}
+<div class="gc-sidebar-right-rails {{ _stack_drawer_class }}"
+     id="{{ _stack_id }}"
      data-nav-placement="{{ _nav_placement }}">
+  <nav class="gc-sidebar {{ _nav_shell_class }} gc-sidebar--right{% if _sn.full_nav %} gc-sidebar--full-nav{% else %} gc-sidebar--role-nav{% endif %}"
+       id="{{ _nav_id }}"
+       aria-label="{{ T('nav_meta', 'Meta-Navigation') }}"
+       data-nav-role="{{ _sn.empire_role_key | default('general') }}"
+       data-nav-full="{{ '1' if _sn.full_nav else '0' }}"
+       data-nav-placement="{{ _nav_placement }}">
 
-  <div class="gc-nav-section gc-nav-section--standalone"
-       data-nav-section="messages"
-       {% if not sidebar_section_visible(_sn, 'messages') %}hidden{% endif %}>
-    <a href="{{ url_for('messages_view') }}"
-       data-nav-module="messages"
-       class="gc-nav-link gc-nav-module--{{ nav_module_tier(_sn, 'messages') }} {% if request.endpoint == 'messages_view' %}active{% endif %}"
-       {% if not module_in_section(_sn, 'messages', 'messages') %}hidden{% endif %}>
-      <span class="gc-nav-link-label">{{ T("nav_messages", "Nachrichten") }}</span>
-      <span class="gc-messages-nav-badge hidden" data-messages-unread-badge hidden aria-hidden="true"></span>
-    </a>
-  </div>
-
-  <div class="gc-nav-section gc-nav-submenu-group gc-nav-section--economy{% if _eco_open %} is-expanded{% endif %}"
-       data-nav-section="economy"
-       {% if not sidebar_section_visible(_sn, 'economy') %}hidden{% endif %}>
-    <button type="button"
-            class="gc-nav-link gc-nav-section-toggle gc-nav-link--has-sub"
-            id="{{ _id_p }}nav-section-economy-toggle"
-            aria-expanded="{{ 'true' if _eco_open else 'false' }}"
-            aria-controls="{{ _id_p }}nav-section-economy">
-      <span class="gc-nav-link-label">{{ T("nav_section_economy", "Wirtschaft") }}</span>
-      <span class="gc-nav-chevron" aria-hidden="true"></span>
-    </button>
-    <div class="gc-nav-section-body"
-         id="{{ _id_p }}nav-section-economy">
-      <a href="{{ url_for('trader_hub_view') }}"
-         data-nav-module="trading"
-         data-trading-nav="trader_hub"
-         class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'trading') }} {% if request.endpoint == 'trader_hub_view' %}active{% endif %}"
-         {% if not module_in_section(_sn, 'trading', 'economy') %}hidden{% endif %}>
-        {{ T("nav_trader_hub", "Trader Hub") }}
-      </a>
-      <a href="{{ url_for('auction_house_view') }}"
-         class="gc-nav-sub-link {% if request.endpoint == 'auction_house_view' %}active{% endif %}"
-         data-trading-nav="auction_house">
-        {{ T("nav_auction_house", "Auktionshaus") }}
-      </a>
-      <a href="{{ url_for('inventory_view') }}"
-         class="gc-nav-sub-link {% if request.endpoint == 'inventory_view' %}active{% endif %}"
-         data-trading-nav="inventory">
-        {{ T("nav_inventory", "Inventar") }}
-      </a>
-      <a href="{{ url_for('empire_view') }}"
-         data-nav-module="empire"
-         class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'empire') }} {% if request.endpoint == 'empire_view' %}active{% endif %}"
-         {% if not module_in_section(_sn, 'empire', 'economy') %}hidden{% endif %}>
-        {{ T("nav_empire", "Empire") }}
-      </a>
-      <a href="{{ url_for('techtree_view') }}"
-         data-nav-module="techtree"
-         class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'techtree') }} {% if request.endpoint == 'techtree_view' %}active{% endif %}"
-         {% if not module_in_section(_sn, 'techtree', 'economy') %}hidden{% endif %}>
-        {{ T("nav_techtree", "Tech-Tree") }}
+    <div class="gc-nav-section gc-nav-section--standalone"
+         data-nav-section="messages"
+         {% if not sidebar_section_visible(_sn, 'messages') %}hidden{% endif %}>
+      <a href="{{ url_for('messages_view') }}"
+         data-nav-module="messages"
+         class="gc-nav-link gc-nav-module--{{ nav_module_tier(_sn, 'messages') }} {% if request.endpoint == 'messages_view' %}active{% endif %}"
+         {% if not module_in_section(_sn, 'messages', 'messages') %}hidden{% endif %}>
+        <span class="gc-nav-link-label">{{ T("nav_messages", "Nachrichten") }}</span>
+        <span class="gc-messages-nav-badge hidden" data-messages-unread-badge hidden aria-hidden="true"></span>
       </a>
     </div>
-  </div>
 
-  <div class="gc-nav-section gc-nav-submenu-group gc-nav-section--community{% if _comm_open %} is-expanded{% endif %}"
-       data-nav-section="community"
-       {% if not sidebar_section_visible(_sn, 'administration') %}hidden{% endif %}>
-    <button type="button"
-            class="gc-nav-link gc-nav-section-toggle gc-nav-link--has-sub"
-            id="{{ _id_p }}nav-section-community-toggle"
-            aria-expanded="{{ 'true' if _comm_open else 'false' }}"
-            aria-controls="{{ _id_p }}nav-section-community">
-      <span class="gc-nav-link-label">{{ T("nav_section_community", "Community") }}</span>
-      <span class="gc-nav-chevron" aria-hidden="true"></span>
-    </button>
-    <div class="gc-nav-section-body"
-         id="{{ _id_p }}nav-section-community">
-      <a href="{{ url_for('ranking_view') }}"
-         data-nav-module="ranking"
-         class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'ranking') }} {% if request.endpoint == 'ranking_view' %}active{% endif %}"
-         {% if not module_in_section(_sn, 'ranking', 'administration') %}hidden{% endif %}>
-        {{ T("nav_ranking", "Ranking") }}
-      </a>
-      <a href="{{ url_for('chronicles_view') }}"
-         data-nav-module="chronicles"
-         class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'chronicles') }} {% if request.endpoint == 'chronicles_view' %}active{% endif %}"
-         {% if not module_in_section(_sn, 'chronicles', 'administration') %}hidden{% endif %}>
-        {{ T("nav_chronicles", "Chroniken") }}
-      </a>
-      <a href="{{ url_for('hall_of_fame_view') }}"
-         data-nav-module="hall_of_fame"
-         class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'hall_of_fame') }} {% if request.endpoint == 'hall_of_fame_view' %}active{% endif %}"
-         {% if not module_in_section(_sn, 'hall_of_fame', 'administration') %}hidden{% endif %}>
-        {{ T("nav_hall_of_fame", "Hall of Fame") }}
-      </a>
-      <a href="{{ url_for('world_boss_view') }}"
-         data-nav-module="world_boss"
-         data-nav-key="world_boss"
-         class="gc-nav-sub-link gc-nav-module--secondary {% if request.endpoint == 'world_boss_view' %}active{% endif %}{% if WORLD_BOSS_ACTIVE %} gc-nav-sub-link--wb-live{% endif %}">
-        <span class="gc-nav-link-label">{{ T("nav_world_boss", "World Boss") }}</span>
-        <span class="gc-nav-badge gc-nav-badge--wb-live {% if not WORLD_BOSS_ACTIVE %}hidden{% endif %}"
-              data-nav-badge="world_boss"
-              {% if not WORLD_BOSS_ACTIVE %}hidden aria-hidden="true"{% else %}aria-hidden="false"{% endif %}>{% if WORLD_BOSS_ACTIVE %}LIVE{% endif %}</span>
-      </a>
-      <a href="{{ url_for('imperial_directives_view') }}"
-         data-nav-module="imperial_directives"
-         data-nav-key="imperial_directives"
-         class="gc-nav-sub-link gc-nav-module--secondary {% if request.endpoint == 'imperial_directives_view' %}active{% endif %}">
-        <span class="gc-nav-link-label">{{ T("nav_imperial_directives", "Imperial Directives") }}</span>
-        <span class="gc-nav-badge hidden" data-nav-badge="imperial_directives" hidden aria-hidden="true"></span>
-      </a>
-      <a href="{{ url_for('vote_center_view') }}"
-         data-nav-module="vote_center"
-         data-nav-key="vote_center"
-         data-trading-nav="vote_center"
-         class="gc-nav-sub-link gc-nav-module--secondary {% if request.endpoint == 'vote_center_view' %}active{% endif %}">
-        <span class="gc-nav-link-label">{{ T("nav_vote_center", "Vote Center") }}</span>
-        <span class="gc-nav-badge hidden" data-nav-badge="vote_center" hidden aria-hidden="true"></span>
-      </a>
-      <a href="{{ url_for('referrals_view') }}"
-         data-nav-module="referrals"
-         data-nav-key="referrals"
-         class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'referrals') }} {% if request.endpoint == 'referrals_view' %}active{% endif %}"
-         {% if not module_in_section(_sn, 'referrals', 'administration') %}hidden{% endif %}>
-        <span class="gc-nav-link-label">{{ T("nav_referrals", "Referral") }}</span>
-        <span class="gc-nav-badge gc-nav-badge--alert hidden" data-nav-badge="referrals" hidden aria-hidden="true"></span>
-      </a>
-      <a href="{{ url_for('alliance_view') }}"
-         data-nav-module="alliance"
-         class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'alliance') }} {% if request.endpoint == 'alliance_view' %}active{% endif %}"
-         {% if not module_in_section(_sn, 'alliance', 'administration') %}hidden{% endif %}>
-        <span>{{ T("nav_alliance") }}</span>
-      </a>
-      <a href="{{ url_for('records_view') }}"
-         data-nav-module="records"
-         class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'records') }} {% if request.endpoint == 'records_view' %}active{% endif %}"
-         {% if not module_in_section(_sn, 'records', 'administration') %}hidden{% endif %}>
-        {{ T("nav_records", "Rekorde") }}
-      </a>
+    <div class="gc-nav-section gc-nav-submenu-group gc-nav-section--economy{% if _eco_open %} is-expanded{% endif %}"
+         data-nav-section="economy"
+         {% if not sidebar_section_visible(_sn, 'economy') %}hidden{% endif %}>
+      <button type="button"
+              class="gc-nav-link gc-nav-section-toggle gc-nav-link--has-sub"
+              id="{{ _id_p }}nav-section-economy-toggle"
+              aria-expanded="{{ 'true' if _eco_open else 'false' }}"
+              aria-controls="{{ _id_p }}nav-section-economy">
+        <span class="gc-nav-link-label">{{ T("nav_section_economy", "Wirtschaft") }}</span>
+        <span class="gc-nav-chevron" aria-hidden="true"></span>
+      </button>
+      <div class="gc-nav-section-body"
+           id="{{ _id_p }}nav-section-economy">
+        <a href="{{ url_for('trader_hub_view') }}"
+           data-nav-module="trading"
+           data-trading-nav="trader_hub"
+           class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'trading') }} {% if request.endpoint == 'trader_hub_view' %}active{% endif %}"
+           {% if not module_in_section(_sn, 'trading', 'economy') %}hidden{% endif %}>
+          {{ T("nav_trader_hub", "Trader Hub") }}
+        </a>
+        <a href="{{ url_for('auction_house_view') }}"
+           class="gc-nav-sub-link {% if request.endpoint == 'auction_house_view' %}active{% endif %}"
+           data-trading-nav="auction_house">
+          {{ T("nav_auction_house", "Auktionshaus") }}
+        </a>
+        <a href="{{ url_for('inventory_view') }}"
+           class="gc-nav-sub-link {% if request.endpoint == 'inventory_view' %}active{% endif %}"
+           data-trading-nav="inventory">
+          {{ T("nav_inventory", "Inventar") }}
+        </a>
+        <a href="{{ url_for('empire_view') }}"
+           data-nav-module="empire"
+           class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'empire') }} {% if request.endpoint == 'empire_view' %}active{% endif %}"
+           {% if not module_in_section(_sn, 'empire', 'economy') %}hidden{% endif %}>
+          {{ T("nav_empire", "Empire") }}
+        </a>
+        <a href="{{ url_for('techtree_view') }}"
+           data-nav-module="techtree"
+           class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'techtree') }} {% if request.endpoint == 'techtree_view' %}active{% endif %}"
+           {% if not module_in_section(_sn, 'techtree', 'economy') %}hidden{% endif %}>
+          {{ T("nav_techtree", "Tech-Tree") }}
+        </a>
+      </div>
     </div>
-  </div>
 
-</nav>
+    <div class="gc-nav-section gc-nav-submenu-group gc-nav-section--community{% if _comm_open %} is-expanded{% endif %}"
+         data-nav-section="community"
+         {% if not sidebar_section_visible(_sn, 'administration') %}hidden{% endif %}>
+      <button type="button"
+              class="gc-nav-link gc-nav-section-toggle gc-nav-link--has-sub"
+              id="{{ _id_p }}nav-section-community-toggle"
+              aria-expanded="{{ 'true' if _comm_open else 'false' }}"
+              aria-controls="{{ _id_p }}nav-section-community">
+        <span class="gc-nav-link-label">{{ T("nav_section_community", "Community") }}</span>
+        <span class="gc-nav-chevron" aria-hidden="true"></span>
+      </button>
+      <div class="gc-nav-section-body"
+           id="{{ _id_p }}nav-section-community">
+        <a href="{{ url_for('ranking_view') }}"
+           data-nav-module="ranking"
+           class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'ranking') }} {% if request.endpoint == 'ranking_view' %}active{% endif %}"
+           {% if not module_in_section(_sn, 'ranking', 'administration') %}hidden{% endif %}>
+          {{ T("nav_ranking", "Ranking") }}
+        </a>
+        <a href="{{ url_for('chronicles_view') }}"
+           data-nav-module="chronicles"
+           class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'chronicles') }} {% if request.endpoint == 'chronicles_view' %}active{% endif %}"
+           {% if not module_in_section(_sn, 'chronicles', 'administration') %}hidden{% endif %}>
+          {{ T("nav_chronicles", "Chroniken") }}
+        </a>
+        <a href="{{ url_for('hall_of_fame_view') }}"
+           data-nav-module="hall_of_fame"
+           class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'hall_of_fame') }} {% if request.endpoint == 'hall_of_fame_view' %}active{% endif %}"
+           {% if not module_in_section(_sn, 'hall_of_fame', 'administration') %}hidden{% endif %}>
+          {{ T("nav_hall_of_fame", "Hall of Fame") }}
+        </a>
+        <a href="{{ url_for('world_boss_view') }}"
+           data-nav-module="world_boss"
+           data-nav-key="world_boss"
+           class="gc-nav-sub-link gc-nav-module--secondary {% if request.endpoint == 'world_boss_view' %}active{% endif %}{% if WORLD_BOSS_ACTIVE %} gc-nav-sub-link--wb-live{% endif %}">
+          <span class="gc-nav-link-label">{{ T("nav_world_boss", "World Boss") }}</span>
+          <span class="gc-nav-badge gc-nav-badge--wb-live {% if not WORLD_BOSS_ACTIVE %}hidden{% endif %}"
+                data-nav-badge="world_boss"
+                {% if not WORLD_BOSS_ACTIVE %}hidden aria-hidden="true"{% else %}aria-hidden="false"{% endif %}>{% if WORLD_BOSS_ACTIVE %}LIVE{% endif %}</span>
+        </a>
+        <a href="{{ url_for('imperial_directives_view') }}"
+           data-nav-module="imperial_directives"
+           data-nav-key="imperial_directives"
+           class="gc-nav-sub-link gc-nav-module--secondary {% if request.endpoint == 'imperial_directives_view' %}active{% endif %}">
+          <span class="gc-nav-link-label">{{ T("nav_imperial_directives", "Imperial Directives") }}</span>
+          <span class="gc-nav-badge hidden" data-nav-badge="imperial_directives" hidden aria-hidden="true"></span>
+        </a>
+        <a href="{{ url_for('vote_center_view') }}"
+           data-nav-module="vote_center"
+           data-nav-key="vote_center"
+           data-trading-nav="vote_center"
+           class="gc-nav-sub-link gc-nav-module--secondary {% if request.endpoint == 'vote_center_view' %}active{% endif %}">
+          <span class="gc-nav-link-label">{{ T("nav_vote_center", "Vote Center") }}</span>
+          <span class="gc-nav-badge hidden" data-nav-badge="vote_center" hidden aria-hidden="true"></span>
+        </a>
+        <a href="{{ url_for('referrals_view') }}"
+           data-nav-module="referrals"
+           data-nav-key="referrals"
+           class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'referrals') }} {% if request.endpoint == 'referrals_view' %}active{% endif %}"
+           {% if not module_in_section(_sn, 'referrals', 'administration') %}hidden{% endif %}>
+          <span class="gc-nav-link-label">{{ T("nav_referrals", "Referral") }}</span>
+          <span class="gc-nav-badge gc-nav-badge--alert hidden" data-nav-badge="referrals" hidden aria-hidden="true"></span>
+        </a>
+        <a href="{{ url_for('alliance_view') }}"
+           data-nav-module="alliance"
+           class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'alliance') }} {% if request.endpoint == 'alliance_view' %}active{% endif %}"
+           {% if not module_in_section(_sn, 'alliance', 'administration') %}hidden{% endif %}>
+          <span>{{ T("nav_alliance") }}</span>
+        </a>
+        <a href="{{ url_for('records_view') }}"
+           data-nav-module="records"
+           class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'records') }} {% if request.endpoint == 'records_view' %}active{% endif %}"
+           {% if not module_in_section(_sn, 'records', 'administration') %}hidden{% endif %}>
+          {{ T("nav_records", "Rekorde") }}
+        </a>
+      </div>
+    </div>
+
+  </nav>
+
+  {% include "partials/planet_registry.html" %}
+</div>

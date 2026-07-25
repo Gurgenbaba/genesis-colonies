@@ -6145,5 +6145,10 @@
   "admin_pirates_force_spawn_done": "Piratenbasis per Force-Spawn erzeugt.",
   "admin_pirates_bots": "Fraktions-Bots",
   "admin_pirates_kpi_bots": "Bots online",
-  "admin_pirates_kpi_spies": "Spy-Dispatches (Log-Fenster)"
+  "admin_pirates_kpi_spies": "Spy-Dispatches (Log-Fenster)",
+  "planet_registry_title": "Imperium",
+  "planet_registry_aria": "Imperiumsübersicht",
+  "planet_registry_empty": "Keine Kolonien",
+  "planet_registry_meta_toggle": "Meta",
+  "planet_registry_meta_toggle_title": "Nachrichten, Wirtschaft, Community"
 }

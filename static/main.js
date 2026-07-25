@@ -13344,8 +13344,8 @@
     const skipMessagesUnread = Boolean(opts && opts.skipMessagesUnread);
     const activePlanetId = Number(data.active_planet_id || data.build_queue?.planet_id || 0);
 
-    if (typeof GC.updateHeaderPlanetSwitcherFromState === "function") {
-      GC.updateHeaderPlanetSwitcherFromState(data);
+    if (typeof GC.updatePlanetRegistryFromState === "function") {
+      GC.updatePlanetRegistryFromState(data);
     }
     if (typeof GC.syncRoleBasedSidebar === "function" && shouldSyncRoleSidebarFromHudData(data, reason)) {
       GC.syncRoleBasedSidebar(data);
@@ -13465,8 +13465,8 @@
           reloadPageForActivePlanet(activePlanetId, _reason || "state");
         }
 
-        if (typeof GC.updateHeaderPlanetSwitcherFromState === "function") {
-          GC.updateHeaderPlanetSwitcherFromState(data);
+        if (typeof GC.updatePlanetRegistryFromState === "function") {
+          GC.updatePlanetRegistryFromState(data);
         }
 
         if (typeof GC.syncRoleBasedSidebar === "function") {
@@ -23359,18 +23359,12 @@
         section._gcNavAnimTimer = null;
       }
     });
-    const switcher = document.getElementById("gc-planet-switcher");
-    if (switcher) {
-      switcher.classList.remove("is-busy", "is-open");
-      switcher.querySelectorAll(".gc-planet-switcher-item").forEach((btn) => {
+    document.querySelectorAll("[data-gc-planet-registry]").forEach((root) => {
+      root.classList.remove("is-busy");
+      root.querySelectorAll(".gc-planet-registry-card").forEach((btn) => {
         btn.disabled = false;
       });
-      const menu = document.getElementById("gc-planet-switcher-menu");
-      if (menu) menu.hidden = true;
-      const trigger = document.getElementById("gc-planet-switcher-trigger");
-      if (trigger) trigger.setAttribute("aria-expanded", "false");
-      document.querySelector(".gc-header-cmd")?.classList.remove("gc-header-planet-menu-open");
-    }
+    });
     if (reason) console.debug("[GC] releaseShellNavigationBlockers", reason);
   }
 
@@ -23520,137 +23514,77 @@
     );
   }
 
-  function rebuildHeaderPlanetSwitcher(planets) {
-    const root = document.getElementById("gc-planet-switcher");
-    if (!root || !Array.isArray(planets) || !planets.length) return;
+  function planetRegistryRoots() {
+    return Array.from(document.querySelectorAll("[data-gc-planet-registry]"));
+  }
+
+  function rebuildPlanetRegistry(planets) {
+    const roots = planetRegistryRoots();
+    if (!roots.length || !Array.isArray(planets) || !planets.length) return;
 
     const active = planets.find((p) => p.is_active) || planets[0];
-    const multi = planets.length > 1;
+    const activeId = String(active.planet_id || "");
 
-    root.dataset.multi = multi ? "1" : "0";
-    root.dataset.activePlanetId = String(active.planet_id || "");
+    roots.forEach((root) => {
+      root.dataset.activePlanetId = activeId;
+      const list = root.querySelector("[data-gc-planet-registry-list]");
+      if (!list) return;
+      list.replaceChildren();
 
-    const trigger = document.getElementById("gc-planet-switcher-trigger");
-    const nameEl = root.querySelector("[data-planet-switcher-name]");
-    const roleEl = root.querySelector("[data-planet-switcher-role]");
-    const iconEl = root.querySelector("[data-planet-switcher-icon]");
-    const coordEl = root.querySelector("[data-planet-switcher-coord]");
-    if (nameEl) nameEl.textContent = active.name || "";
-    if (iconEl) {
-      iconEl.textContent = active.empire_role_icon || "";
-      iconEl.hidden = !active.empire_role_icon;
-    }
-    if (roleEl) {
-      const roleKey = empireIdentityLabelKey(active);
-      const roleText = roleKey ? t(roleKey, roleKey) : "";
-      roleEl.textContent = roleText;
-      roleEl.hidden = !roleText;
-    }
-    if (coordEl) {
-      const coord = active.coordinates_formatted || "";
-      coordEl.hidden = !coord;
-      coordEl.innerHTML = coord ? GC.coordLinkHtml(coord, { label: coord }) : "";
-    }
+      planets.forEach((p) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "gc-planet-registry-card" + (p.is_active ? " is-active" : "");
+        btn.setAttribute("role", "listitem");
+        btn.setAttribute("aria-current", p.is_active ? "true" : "false");
+        btn.dataset.planetId = String(p.planet_id || "");
+        btn.dataset.planetName = p.name || "";
+        btn.dataset.planetCoord = p.coordinates_formatted || "";
+        btn.dataset.planetClassKey = p.planet_class_label_key || "";
+        btn.dataset.planetClass = p.planet_class || "";
+        btn.dataset.planetHomeworld = p.is_homeworld ? "1" : "0";
+        btn.dataset.planetRoleKey = p.empire_role_key || "";
+        btn.dataset.planetRoleLabelKey = p.empire_role_label_key || "";
+        btn.dataset.planetRoleIcon = p.empire_role_icon || "";
+        btn.dataset.planetIdentityKey = empireIdentityLabelKey(p);
 
-    if (trigger) {
-      trigger.setAttribute("aria-haspopup", multi ? "listbox" : "false");
-      if (multi) {
-        trigger.removeAttribute("aria-disabled");
-        trigger.setAttribute("aria-controls", "gc-planet-switcher-menu");
-      } else {
-        trigger.setAttribute("aria-disabled", "true");
-        trigger.removeAttribute("aria-controls");
-      }
-    }
+        const nameRow = document.createElement("span");
+        nameRow.className = "gc-planet-registry-card-name-row";
+        if (p.empire_role_icon) {
+          const iconSpan = document.createElement("span");
+          iconSpan.className = "gc-planet-registry-card-icon";
+          iconSpan.setAttribute("aria-hidden", "true");
+          iconSpan.textContent = p.empire_role_icon;
+          nameRow.appendChild(iconSpan);
+        }
+        const nameSpan = document.createElement("span");
+        nameSpan.className = "gc-planet-registry-card-name";
+        nameSpan.textContent = p.name || "";
+        nameRow.appendChild(nameSpan);
+        btn.appendChild(nameRow);
 
-    let chevron = root.querySelector(".gc-planet-switcher-chevron");
-    if (multi && !chevron && trigger) {
-      chevron = document.createElement("span");
-      chevron.className = "gc-planet-switcher-chevron";
-      chevron.setAttribute("aria-hidden", "true");
-      chevron.textContent = "▾";
-      trigger.appendChild(chevron);
-    } else if (!multi && chevron) {
-      chevron.remove();
-    }
+        const identityKey = empireIdentityLabelKey(p);
+        if (identityKey) {
+          const roleSpan = document.createElement("span");
+          roleSpan.className = "gc-planet-registry-card-role";
+          roleSpan.textContent = t(identityKey, identityKey);
+          btn.appendChild(roleSpan);
+        }
+        const coord = p.coordinates_formatted || "";
+        if (coord) {
+          const coordSpan = document.createElement("span");
+          coordSpan.className = "gc-planet-registry-card-coord gc-mono";
+          coordSpan.innerHTML = GC.coordLinkHtml(coord, { label: coord });
+          btn.appendChild(coordSpan);
+        }
 
-    let menu = document.getElementById("gc-planet-switcher-menu");
-    if (!multi) {
-      if (menu) menu.remove();
-      root.classList.remove("is-open");
-      document.querySelector(".gc-header-cmd")?.classList.remove("gc-header-planet-menu-open");
-      if (trigger) trigger.setAttribute("aria-expanded", "false");
-      return;
-    }
-
-    if (!menu) {
-      menu = document.createElement("div");
-      menu.id = "gc-planet-switcher-menu";
-      menu.className = "gc-planet-switcher-menu";
-      menu.setAttribute("role", "listbox");
-      menu.setAttribute("aria-label", t("header_planet_switcher_menu", "Deine Kolonien"));
-      menu.hidden = true;
-      root.appendChild(menu);
-    }
-
-    menu.replaceChildren();
-
-    planets.forEach((p) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "gc-planet-switcher-item" + (p.is_active ? " is-active" : "");
-      btn.setAttribute("role", "option");
-      btn.setAttribute("aria-selected", p.is_active ? "true" : "false");
-      btn.dataset.planetId = String(p.planet_id || "");
-      btn.dataset.planetName = p.name || "";
-      btn.dataset.planetCoord = p.coordinates_formatted || "";
-      btn.dataset.planetClassKey = p.planet_class_label_key || "";
-      btn.dataset.planetClass = p.planet_class || "";
-      btn.dataset.planetHomeworld = p.is_homeworld ? "1" : "0";
-      btn.dataset.planetRoleKey = p.empire_role_key || "";
-      btn.dataset.planetRoleLabelKey = p.empire_role_label_key || "";
-      btn.dataset.planetRoleIcon = p.empire_role_icon || "";
-      btn.dataset.planetIdentityKey = empireIdentityLabelKey(p);
-
-      const nameRow = document.createElement("span");
-      nameRow.className = "gc-planet-switcher-item-name-row";
-      if (p.empire_role_icon) {
-        const iconSpan = document.createElement("span");
-        iconSpan.className = "gc-planet-switcher-item-icon";
-        iconSpan.setAttribute("aria-hidden", "true");
-        iconSpan.textContent = p.empire_role_icon;
-        nameRow.appendChild(iconSpan);
-      }
-      const nameSpan = document.createElement("span");
-      nameSpan.className = "gc-planet-switcher-item-name";
-      nameSpan.textContent = p.name || "";
-      nameRow.appendChild(nameSpan);
-
-      const metaSpan = document.createElement("span");
-      metaSpan.className = "gc-planet-switcher-item-meta";
-      const identityKey = empireIdentityLabelKey(p);
-      if (identityKey) {
-        const roleSpan = document.createElement("span");
-        roleSpan.className = "gc-planet-switcher-item-role";
-        roleSpan.textContent = t(identityKey, identityKey);
-        metaSpan.appendChild(roleSpan);
-      }
-      const coord = p.coordinates_formatted || "";
-      if (coord) {
-        const coordSpan = document.createElement("span");
-        coordSpan.className = "gc-planet-switcher-item-coord gc-mono";
-        coordSpan.innerHTML = GC.coordLinkHtml(coord, { label: coord });
-        metaSpan.appendChild(coordSpan);
-      }
-
-      btn.appendChild(nameRow);
-      btn.appendChild(metaSpan);
-      menu.appendChild(btn);
+        list.appendChild(btn);
+      });
     });
   }
 
-  function updateHeaderPlanetSwitcherFromPlanets(planets) {
-    rebuildHeaderPlanetSwitcher(planets);
+  function updatePlanetRegistryFromPlanets(planets) {
+    rebuildPlanetRegistry(planets);
   }
 
   function buildSidebarNavFromRole(empireRoleKey, isHomeworld) {
@@ -24340,7 +24274,8 @@
 
   function initSidebarRightDrawer() {
     const toggle = document.getElementById("gc-sidebar-right-toggle");
-    const sidebar = document.getElementById("gc-sidebar-nav-right");
+    const sidebar = document.getElementById("gc-sidebar-right-stack")
+      || document.getElementById("gc-sidebar-nav-right");
     if (!toggle || !sidebar || GC._sidebarRightDrawerBound) return;
     GC._sidebarRightDrawerBound = true;
 
@@ -24394,7 +24329,7 @@
     }
   }
 
-  GC.updateHeaderPlanetSwitcherFromState = function updateHeaderPlanetSwitcherFromState(data) {
+  GC.updatePlanetRegistryFromState = function updatePlanetRegistryFromState(data) {
     if (!data) return;
 
     const activeId = Number(
@@ -24418,41 +24353,19 @@
           is_active: Number(p.planet_id) === activeId,
         }));
       }
-      rebuildHeaderPlanetSwitcher(planets);
+      rebuildPlanetRegistry(planets);
       return;
     }
 
     if (!activeId) return;
-    const root = document.getElementById("gc-planet-switcher");
-    if (!root) return;
-    root.dataset.activePlanetId = String(activeId);
-    root.querySelectorAll(".gc-planet-switcher-item").forEach((btn) => {
-      const pid = Number(btn.dataset.planetId || 0);
-      const on = pid === activeId;
-      btn.classList.toggle("is-active", on);
-      btn.setAttribute("aria-selected", on ? "true" : "false");
-      if (on && btn.dataset.planetName) {
-        const nameEl = root.querySelector("[data-planet-switcher-name]");
-        if (nameEl) nameEl.textContent = btn.dataset.planetName;
-        const roleEl = root.querySelector("[data-planet-switcher-role]");
-        if (roleEl) {
-          const identityKey = btn.dataset.planetIdentityKey || "";
-          const roleText = identityKey ? t(identityKey, identityKey) : "";
-          roleEl.textContent = roleText;
-          roleEl.hidden = !roleText;
-        }
-        const iconEl = root.querySelector("[data-planet-switcher-icon]");
-        if (iconEl) {
-          iconEl.textContent = btn.dataset.planetRoleIcon || "";
-          iconEl.hidden = !btn.dataset.planetRoleIcon;
-        }
-        const coordEl = root.querySelector("[data-planet-switcher-coord]");
-        if (coordEl) {
-          const coord = btn.dataset.planetCoord || "";
-          coordEl.hidden = !coord;
-          coordEl.innerHTML = coord ? GC.coordLinkHtml(coord, { label: coord }) : "";
-        }
-      }
+    planetRegistryRoots().forEach((root) => {
+      root.dataset.activePlanetId = String(activeId);
+      root.querySelectorAll(".gc-planet-registry-card").forEach((btn) => {
+        const pid = Number(btn.dataset.planetId || 0);
+        const on = pid === activeId;
+        btn.classList.toggle("is-active", on);
+        btn.setAttribute("aria-current", on ? "true" : "false");
+      });
     });
   };
 
@@ -24539,72 +24452,30 @@
     });
   }
 
-  function initHeaderPlanetSwitcher() {
-    const root = document.getElementById("gc-planet-switcher");
-    if (!root) return;
-    if (GC._headerPlanetSwitcherBound) return;
-    GC._headerPlanetSwitcherBound = true;
+  function initPlanetRegistry() {
+    if (GC._planetRegistryBound) return;
+    GC._planetRegistryBound = true;
 
-    const trigger = document.getElementById("gc-planet-switcher-trigger");
-    const headerEl = document.querySelector(".gc-header-cmd");
-    const getMenu = () => document.getElementById("gc-planet-switcher-menu");
-    const isMulti = () => root.dataset.multi === "1";
-
-    const closeMenu = () => {
-      const menu = getMenu();
-      if (!menu) return;
-      menu.hidden = true;
-      root.classList.remove("is-open");
-      headerEl?.classList.remove("gc-header-planet-menu-open");
-      if (trigger) trigger.setAttribute("aria-expanded", "false");
-    };
-
-    const openMenu = () => {
-      const menu = getMenu();
-      if (!menu || !isMulti()) return;
-      menu.hidden = false;
-      root.classList.add("is-open");
-      headerEl?.classList.add("gc-header-planet-menu-open");
-      if (trigger) trigger.setAttribute("aria-expanded", "true");
-    };
-
-    if (trigger) {
-      trigger.addEventListener("click", (e) => {
-        if (e.target.closest("a.gc-galaxy-coord-link")) return;
-        if (!isMulti()) return;
-        e.stopPropagation();
-        const menu = getMenu();
-        if (menu && menu.hidden) openMenu();
-        else closeMenu();
-      });
-    }
-
-    document.addEventListener("click", (e) => {
-      if (!root.contains(e.target)) closeMenu();
-    });
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") closeMenu();
-    });
-
-    root.addEventListener("click", async (e) => {
+    document.addEventListener("click", async (e) => {
       if (e.target.closest("a.gc-galaxy-coord-link")) return;
+      const item = e.target.closest(".gc-planet-registry-card");
+      if (!item) return;
+      const root = item.closest("[data-gc-planet-registry]");
+      if (!root) return;
       if (root.classList.contains("is-busy")) return;
-      const item = e.target.closest(".gc-planet-switcher-item");
-      if (!item || !root.contains(item)) return;
-      if (item.classList.contains("is-active")) {
-        closeMenu();
-        return;
-      }
+      if (item.classList.contains("is-active")) return;
+
       const planetId = parseInt(item.dataset.planetId || "0", 10);
       if (!planetId) return;
 
-      root.classList.add("is-busy");
+      planetRegistryRoots().forEach((r) => r.classList.add("is-busy"));
       item.disabled = true;
-      closeMenu();
       const releaseBusy = () => {
-        root.classList.remove("is-busy");
-        root.querySelectorAll(".gc-planet-switcher-item").forEach((btn) => {
-          btn.disabled = false;
+        planetRegistryRoots().forEach((r) => {
+          r.classList.remove("is-busy");
+          r.querySelectorAll(".gc-planet-registry-card").forEach((btn) => {
+            btn.disabled = false;
+          });
         });
       };
       const busyGuard = typeof GC.setSafeTimeout === "function"
@@ -24620,9 +24491,9 @@
         if (res?.ok) {
           const anyActive = applyActionState(res, "planet_switch");
           if (Array.isArray(res.planets)) {
-            updateHeaderPlanetSwitcherFromPlanets(res.planets);
+            updatePlanetRegistryFromPlanets(res.planets);
           } else if (res.state) {
-            GC.updateHeaderPlanetSwitcherFromState(res.state);
+            GC.updatePlanetRegistryFromState(res.state);
           }
           const name = item.dataset.planetName || "";
           ["research-planet-label"].forEach((id) => {
@@ -24630,8 +24501,6 @@
             if (!el || !name) return;
             el.textContent = name;
           });
-          // Admin / planet-agnostic pages: HUD-only (no SSR). Fleet refreshes its own API.
-          // Planet-scoped pages still soft-PJAX with skipGameState (content must match active planet).
           const pageName =
             typeof GC.detectPage === "function" ? GC.detectPage() : "";
           const onAdmin = pageName === "admin";
@@ -25934,9 +25803,9 @@
         if (res?.ok) {
           applyActionState(res, "planet_switch");
           if (Array.isArray(res.planets)) {
-            updateHeaderPlanetSwitcherFromPlanets(res.planets);
+            updatePlanetRegistryFromPlanets(res.planets);
           } else if (res.state) {
-            GC.updateHeaderPlanetSwitcherFromState(res.state);
+            GC.updatePlanetRegistryFromState(res.state);
           }
           root.querySelectorAll("[data-empire-identity-switch]").forEach((item) => {
             const pid = parseInt(item.dataset.empireIdentitySwitch || item.dataset.planetId || "0", 10);
@@ -33667,6 +33536,9 @@
       ro.observe(header);
       GC.registerCleanup(() => ro.disconnect());
     }
+    if (document.fonts && typeof document.fonts.ready?.then === "function") {
+      document.fonts.ready.then(schedule).catch(() => {});
+    }
     GC.syncSidebarSticky = syncSidebarSticky;
   }
 
@@ -34839,7 +34711,7 @@
     initGlobalFleetDrawer();
     bindPlanetEvolutionOnce();
     bindFleetOnce();
-    initHeaderPlanetSwitcher();
+    initPlanetRegistry();
     initGcPopoversOnce();
     initCardRequirementsHoverOnce();
     initMaxQueueHoverOnce();

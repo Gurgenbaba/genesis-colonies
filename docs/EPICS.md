@@ -71,6 +71,7 @@ Details: [GC-557_MEGABUNKER_UX_FEEDBACK_POLISH.md](GC-557_MEGABUNKER_UX_FEEDBACK
 | Ticket | Fokus |
 |--------|-------|
 | GC-560 | Empire Identity Layer — [Spec](GC-560_EMPIRE_IDENTITY_LAYER.md) |
+| GC-575 | Planet Registry — Imperiumsübersicht rechts — [Spec](GC_PLANET_REGISTRY.md) (575A MVP → 575E) |
 | GC-561 | Colony Roles Extended (PlayerCard, Surfaces, v2) |
 | GC-562 | Evolution Unlock Gates ([Spec](GC-562_EVOLUTION_UNLOCK_GATES.md)) |
 | GC-563 | Command Map MVP ✅ ([Spec](GC-563_COMMAND_MAP_MVP.md)) |

@@ -152,5 +152,5 @@ Chat: `GC.resumeChatPolling()` nach PJAX (eigenes Intervall, kein game-state).
 ## Tests
 
 ```bash
-python -m pytest tests/test_core_architecture_enforcement.py tests/test_game_state_live.py tests/test_header_planet_switcher.py -v
+python -m pytest tests/test_core_architecture_enforcement.py tests/test_game_state_live.py tests/test_planet_registry.py -v
 ```
