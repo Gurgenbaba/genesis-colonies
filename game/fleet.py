@@ -142,8 +142,9 @@ _BASE_ALLOWED_MISSIONS: Dict[str, Set[str]] = {
     "pirate_base": {"attack"},
 }
 
+# Recycle is intentionally excluded: it targets debris/asteroid slots, not planets.
 _MISSIONS_REQUIRING_PLANET = frozenset(
-    {"transport", "deploy", "spy", "attack", "hold", "collect", "recycle"}
+    {"transport", "deploy", "spy", "attack", "hold", "collect"}
 )
 
 _MISSION_BLOCK_REASONS: Dict[str, Dict[str, str]] = {
@@ -4236,20 +4237,19 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
                     "asteroid_key": claim.get("asteroid_key") or asteroid_stamp_key,
                     "pool": claim.get("pool") or {},
                 }
-            elif status == "missed":
-                asteroid_missed = True
-                asteroid_meta = {
-                    "asteroid_id": claim.get("asteroid_id") or asteroid_stamp_id,
-                    "asteroid_key": asteroid_stamp_key,
-                }
-            elif status == "expired" or asteroid_stamp_id > 0:
-                # Asteroid-stamped flight: never fall through to debris.
-                asteroid_expired = status == "expired" or asteroid_stamp_id > 0
+            elif asteroid_stamp_id > 0:
+                # Explicit asteroid hunt — never fall through to combat/world-boss debris.
+                if status == "missed":
+                    asteroid_missed = True
+                else:
+                    asteroid_expired = True
                 asteroid_meta = {
                     "asteroid_id": claim.get("asteroid_id") or asteroid_stamp_id,
                     "asteroid_key": asteroid_stamp_key,
                 }
             else:
+                # Unstamped recycle (combat / world-boss debris): ignore asteroid history
+                # at the same coords so WB debris is not reported as asteroid miss/expire.
                 from .combat import get_debris_at_field, harvest_debris_at_field
 
                 debris = get_debris_at_field(tg, ts, tp, conn=conn)

@@ -405,3 +405,109 @@ def test_full_recycle_second_send_fails_no_debris(recycler_db):
     assert not ok2
     assert reason2 == "no_debris_at_target"
     conn.close()
+
+
+def test_unstamped_debris_harvest_ignores_expired_asteroid_history(recycler_db):
+    """World-boss / combat debris must not be treated as asteroid miss/expire."""
+    import random
+
+    from game.asteroids import insert_asteroid
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    g, s, _home_p = _coords(pid, conn)
+    occupied = {
+        int(r["position"])
+        for r in conn.execute(
+            """
+            SELECT position FROM planets
+            WHERE galaxy = ? AND system = ? AND position BETWEEN 1 AND 15;
+            """,
+            (g, s),
+        ).fetchall()
+    }
+    pos = next((p for p in range(1, 16) if p not in occupied), None)
+    assert pos is not None
+    now = time.time()
+    ins = insert_asteroid(
+        conn=conn,
+        galaxy=g,
+        system=s,
+        position=pos,
+        asteroid_key="fuel_ice",
+        now=now - 3600,
+        ttl_seconds=60,
+        rng=random.Random(42),
+    )
+    assert ins["ok"]
+    # Expire asteroid but keep history in lookback window.
+    conn.execute(
+        "UPDATE asteroid_fields SET status='expired', expires_at=? WHERE id=?;",
+        (now - 10, int(ins["asteroid"]["id"])),
+    )
+    add_debris_field(g, s, pos, metal=8000, crystal=4000, conn=conn)
+    conn.execute(
+        "UPDATE planets SET metal = 50000, crystal = 50000, fuel_cells = 20000 WHERE id = ?;",
+        (pid,),
+    )
+    _seed_ships(pid, uid, {"harvest_reclaimer": 5}, conn)
+    conn.commit()
+
+    ok, err, res = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        mission_type="recycle",
+        target_galaxy=g,
+        target_system=s,
+        target_position=pos,
+        ships={"harvest_reclaimer": 2},
+        resources={},
+        speed_percent=100,
+        conn=conn,
+    )
+    assert ok, err
+    fleet_id = int((res.get("fleet") or {}).get("id") or 0)
+    payload = json.loads(
+        (
+            conn.execute(
+                "SELECT resources_json FROM fleet_movements WHERE id=?;",
+                (fleet_id,),
+            ).fetchone()["resources_json"]
+            or "{}"
+        )
+    )
+    assert int(payload.get("asteroid_id") or 0) == 0
+    conn.execute(
+        "UPDATE fleet_movements SET arrival_at=? WHERE id=?;",
+        (now + 1, fleet_id),
+    )
+    conn.commit()
+    process_fleet_tick(player_id=uid, now=now + 2, conn=conn)
+    conn.commit()
+
+    mv = conn.execute(
+        "SELECT status, resources_json FROM fleet_movements WHERE id=?;",
+        (fleet_id,),
+    ).fetchone()
+    assert str(mv["status"]) == "returning"
+    loaded = json.loads(mv["resources_json"] or "{}")
+    assert int(loaded.get("metal") or 0) + int(loaded.get("crystal") or 0) > 0
+    assert int(loaded.get("asteroid_id") or 0) == 0
+    debris_after = get_debris_at_field(g, s, pos, conn=conn)
+    assert int(debris_after["metal"]) + int(debris_after["crystal"]) < 12000
+    msg = conn.execute(
+        """
+        SELECT metadata_json FROM player_messages
+        WHERE recipient_player_id = ?
+        ORDER BY id DESC
+        LIMIT 1;
+        """,
+        (uid,),
+    ).fetchone()
+    assert msg is not None
+    meta = json.loads(msg["metadata_json"] or "{}")
+    assert meta.get("asteroid_expired") is False
+    assert meta.get("asteroid_missed") is False
+    assert meta.get("asteroid_harvested") is False
+    conn.close()
