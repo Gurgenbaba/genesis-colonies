@@ -139,24 +139,55 @@
       .join(" ");
   }
 
+  /** Resolve stored combat actor/place labels — boss keys → wb_boss_* i18n. */
+  function combatActorLabel(raw) {
+    const s = String(raw || "").trim();
+    if (!s) return "";
+    if (/^[a-z][a-z0-9_]*$/i.test(s)) {
+      const boss = t(`wb_boss_${s}`, "");
+      if (boss && boss !== `wb_boss_${s}`) return boss;
+      if (s.includes("_")) return keyFallbackLabel(s);
+    }
+    return s;
+  }
+
+  function formatMessageSubject(subject) {
+    const raw = String(subject || "");
+    const m = raw.match(/^(.*?(?:—|-)\s*)([a-z][a-z0-9_]+)\s*$/i);
+    if (m) {
+      const label = combatActorLabel(m[2]);
+      if (label && label !== m[2]) return m[1] + label;
+    }
+    return raw;
+  }
+
   function shipLabel(key) {
-    const k = String(key || "");
+    const k = String(key || "").trim();
+    if (!k) return "—";
     if (typeof GC !== "undefined" && typeof GC.shipDisplayName === "function") {
-      return GC.shipDisplayName(k);
+      const name = GC.shipDisplayName(k);
+      if (name && name !== k) return name;
     }
     return t(`fleet_ship_${k}`, keyFallbackLabel(k));
   }
 
   function defenseLabel(key) {
-    const k = String(key || "");
+    const k = String(key || "").trim();
+    if (!k) return "—";
     if (typeof GC !== "undefined" && typeof GC.defenseDisplayName === "function") {
-      return GC.defenseDisplayName(k);
+      const name = GC.defenseDisplayName(k);
+      if (name && name !== k) return name;
     }
     return t(`defense_${k}`, keyFallbackLabel(k));
   }
 
   function unitLabel(key, defenseStock) {
-    const k = String(key || "");
+    const k = String(key || "").trim();
+    if (!k) return "—";
+    if (typeof GC !== "undefined" && typeof GC.unitDisplayName === "function") {
+      const name = GC.unitDisplayName(k, defenseStock);
+      if (name && name !== k) return name;
+    }
     if (defenseStock && Object.prototype.hasOwnProperty.call(defenseStock, k)) {
       return defenseLabel(k);
     }
@@ -372,6 +403,20 @@
     armor_tech: "tech_armor_tech",
     shield_tech: "tech_shield_tech",
   };
+  const COMBAT_RESEARCH_FALLBACKS = {
+    weapon_tech: "Weapons Tech",
+    armor_tech: "Armor Tech",
+    shield_tech: "Shield Tech",
+  };
+
+  function combatResearchLabel(key) {
+    const k = String(key || "");
+    const i18nKey = COMBAT_RESEARCH_LABEL_KEYS[k] || k;
+    const fallback = COMBAT_RESEARCH_FALLBACKS[k] || keyFallbackLabel(k);
+    const label = t(i18nKey, fallback);
+    if (!label || label === k || label === i18nKey) return fallback;
+    return label;
+  }
 
   function renderCombatResearchSide(research, roleClass) {
     const snap = research && typeof research === "object" ? research : {};
@@ -379,7 +424,7 @@
       const entry = snap[key] || {};
       const level = formatInt(entry.level || 0);
       const pct = formatInt(entry.bonus_pct || 0);
-      const label = t(COMBAT_RESEARCH_LABEL_KEYS[key] || key, key);
+      const label = combatResearchLabel(key);
       return (
         `<div class="gc-combat-research-row">` +
           `<span class="gc-combat-research-tech">${esc(label)}</span>` +
@@ -404,11 +449,11 @@
       `<p class="gc-combat-report-research-hint">${esc(hint)}</p>` +
         `<div class="gc-combat-research-columns">` +
           `<div class="gc-combat-research-col">` +
-            `<h5 class="gc-combat-research-col-title">${esc(meta.attacker_name || t("combat_report_section_attacker", "Attacker"))}</h5>` +
+            `<h5 class="gc-combat-research-col-title">${esc(combatActorLabel(meta.attacker_name) || t("combat_report_section_attacker", "Attacker"))}</h5>` +
             renderCombatResearchSide(atk, "attacker") +
           `</div>` +
           `<div class="gc-combat-research-col">` +
-            `<h5 class="gc-combat-research-col-title">${esc(meta.defender_name || t("combat_report_section_defender", "Defender"))}</h5>` +
+            `<h5 class="gc-combat-research-col-title">${esc(combatActorLabel(meta.defender_name) || t("combat_report_section_defender", "Defender"))}</h5>` +
             renderCombatResearchSide(def, "defender") +
           `</div>` +
         `</div>`,
@@ -416,11 +461,13 @@
     );
   }
 
-  function combatCoordsPlain(meta) {
-    const from = String(meta?.origin_coords || "").trim();
-    const to = String(meta?.target_coords || "").trim();
-    if (from && to) return `${from} → ${to}`;
-    return to || from || "—";
+  function combatBattlefieldLabel(meta) {
+    const origin = combatActorLabel(meta?.origin_planet_name);
+    const target = combatActorLabel(meta?.target_planet_name);
+    if (origin && target && origin !== target) return `${origin} → ${target}`;
+    if (target) return target;
+    if (origin) return origin;
+    return "";
   }
 
   function unitCountTotal(stock) {
@@ -612,13 +659,6 @@
     );
   }
 
-  function combatCoordsRoute(meta) {
-    const from = String(meta?.origin_coords || "").trim();
-    const to = String(meta?.target_coords || "").trim();
-    if (from && to) return coordRoute(from, to);
-    return coordLink(to || from, to || from);
-  }
-
   function combatWinnerSide(meta) {
     const winner = String(meta?.result || meta?.winner || "undecided");
     if (winner === "attacker" || winner === "defender" || winner === "draw") return winner;
@@ -735,11 +775,11 @@
     const winClass = winner === role ? " gc-combat-side-card--winner" : "";
     const loseClass =
       winner !== "draw" && winner !== "undecided" && winner !== role ? " gc-combat-side-card--loser" : "";
-    const name = isAttacker ? meta.attacker_name : meta.defender_name;
-    const planet = String((isAttacker ? meta.origin_planet_name : meta.target_planet_name) || "").trim();
-    const coords = isAttacker ? meta.origin_coords : meta.target_coords;
-    const coordsLabelKey = isAttacker ? "combat_report_origin_coords" : "combat_report_target_coords";
-    const coordsFallback = isAttacker ? "Launched from: %(coords)s" : "Target planet: %(coords)s";
+    const name = combatActorLabel(isAttacker ? meta.attacker_name : meta.defender_name) || "—";
+    const planetRaw = combatActorLabel(
+      isAttacker ? meta.origin_planet_name : meta.target_planet_name
+    );
+    const planet = planetRaw && planetRaw !== name ? planetRaw : "";
     let unitsHtml;
     let unitTotal;
     if (isAttacker) {
@@ -765,13 +805,8 @@
             )}</span>` +
             badgeHtml +
           `</div>` +
-          `<strong class="gc-combat-side-card-name">${esc(name || "—")}</strong>` +
+          `<strong class="gc-combat-side-card-name">${esc(name)}</strong>` +
           (planet ? `<span class="gc-combat-side-card-planet">${esc(planet)}</span>` : "") +
-          `<span class="gc-combat-side-card-coords gc-mono">${coordLabelLink(
-            coordsLabelKey,
-            coordsFallback,
-            coords || "—"
-          )}</span>` +
           `<span class="gc-combat-side-card-total gc-mono" title="${esc(
             t("combat_report_side_ships", "%(count)s ships").replace("%(count)s", formatInt(unitTotal))
           )}">${esc(formatInt(unitTotal))}</span>` +
@@ -791,50 +826,47 @@
   }
 
   function renderCombatBattleOverview(meta) {
-    const targetCoords = meta.target_coords || "—";
-    const originCoords = meta.origin_coords || "—";
-    const targetPlanet = String(meta.target_planet_name || "").trim();
-    const originPlanet = String(meta.origin_planet_name || "").trim();
+    const targetPlanet = combatActorLabel(meta.target_planet_name);
+    const originPlanet = combatActorLabel(meta.origin_planet_name);
+    const atkName = combatActorLabel(meta.attacker_name) || "—";
+    const defName = combatActorLabel(meta.defender_name) || "—";
     const atkShips = unitCountTotal(meta.attacking_ships);
     const defFleet = unitCountTotal(meta.defending_ships);
     const defStruct = unitCountTotal(meta.defending_defense || {});
     const defUnitsLine = t("combat_report_side_defense", "%(fleet)s fleet · %(def)s defense")
       .replace("%(fleet)s", formatInt(defFleet))
       .replace("%(def)s", formatInt(defStruct));
-    const originPlanetLine = originPlanet
-      ? `<span class="gc-combat-report-side-planet">${esc(originPlanet)}</span>`
-      : "";
-    const targetPlanetLine = targetPlanet
-      ? `<span class="gc-combat-report-side-planet">${esc(targetPlanet)}</span>`
-      : "";
+    const originPlanetLine =
+      originPlanet && originPlanet !== atkName
+        ? `<span class="gc-combat-report-side-planet">${esc(originPlanet)}</span>`
+        : "";
+    const targetPlanetLine =
+      targetPlanet && targetPlanet !== defName
+        ? `<span class="gc-combat-report-side-planet">${esc(targetPlanet)}</span>`
+        : "";
 
     return (
       `<section class="gc-combat-report-overview">` +
         `<h4 class="gc-combat-report-panel-title">${esc(t("combat_report_battlefield", "Battlefield"))}</h4>` +
-        `<div class="gc-combat-report-battlefield gc-mono">${combatCoordsRoute(meta)}</div>` +
+        `<div class="gc-combat-report-battlefield">${esc(
+          combatBattlefieldLabel(meta) ||
+            t("combat_report_vs", "%(attacker)s vs %(defender)s")
+              .replace("%(attacker)s", atkName)
+              .replace("%(defender)s", defName)
+        )}</div>` +
         `<div class="gc-combat-report-sides">` +
           `<div class="gc-combat-report-side gc-combat-report-side--attacker">` +
             `<span class="gc-combat-report-side-role">${esc(t("combat_report_section_attacker", "Attacker"))}</span>` +
-            `<strong class="gc-combat-report-side-name">${esc(meta.attacker_name || "—")}</strong>` +
+            `<strong class="gc-combat-report-side-name">${esc(atkName)}</strong>` +
             originPlanetLine +
-            `<span class="gc-combat-report-side-coords gc-mono">${coordLabelLink(
-              "combat_report_origin_coords",
-              "Launched from: %(coords)s",
-              originCoords
-            )}</span>` +
             `<span class="gc-combat-report-side-units">${esc(
               t("combat_report_side_ships", "%(count)s ships").replace("%(count)s", formatInt(atkShips))
             )}</span>` +
           `</div>` +
           `<div class="gc-combat-report-side gc-combat-report-side--defender">` +
             `<span class="gc-combat-report-side-role">${esc(t("combat_report_section_defender", "Defender"))}</span>` +
-            `<strong class="gc-combat-report-side-name">${esc(meta.defender_name || "—")}</strong>` +
+            `<strong class="gc-combat-report-side-name">${esc(defName)}</strong>` +
             targetPlanetLine +
-            `<span class="gc-combat-report-side-coords gc-mono">${coordLabelLink(
-              "combat_report_target_coords",
-              "Target planet: %(coords)s",
-              targetCoords
-            )}</span>` +
             `<span class="gc-combat-report-side-units">${esc(defUnitsLine)}</span>` +
           `</div>` +
         `</div>` +
@@ -853,22 +885,20 @@
     const loot = meta.loot || {};
     const lootTotal = expeditionLootTotal(loot);
     const vsLine = t("combat_report_vs", "%(attacker)s vs %(defender)s")
-      .replace("%(attacker)s", meta.attacker_name || "—")
-      .replace("%(defender)s", meta.defender_name || "—");
+      .replace("%(attacker)s", combatActorLabel(meta.attacker_name) || "—")
+      .replace("%(defender)s", combatActorLabel(meta.defender_name) || "—");
     const lootHint =
       lootTotal > 0
         ? `${formatInt(loot.metal || 0)} / ${formatInt(loot.crystal || 0)} / ${formatInt(loot.fuel_cells || 0)}`
         : t("combat_report_loot_none", "No plunder");
-    const coordsLine = compact
-      ? coordLink(meta.target_coords, meta.target_coords || "—")
-      : combatCoordsRoute(meta);
+    const placeLine = combatBattlefieldLabel(meta) || vsLine;
 
     return (
       `<div class="gc-combat-teaser gc-combat-teaser--${esc(visual.badge)}${compact ? " gc-combat-teaser--compact" : ""}" data-result="${esc(resultKey)}">` +
         `<div class="gc-combat-teaser-top">` +
           `<span class="gc-combat-teaser-icon" aria-hidden="true">${esc(visual.icon)}</span>` +
           `<div class="gc-combat-teaser-headings">` +
-            `<span class="gc-combat-teaser-coords gc-mono">${coordsLine}</span>` +
+            `<span class="gc-combat-teaser-place">${esc(placeLine)}</span>` +
             `<span class="gc-combat-teaser-vs">${esc(compact ? resultLabel : vsLine)}</span>` +
           `</div>` +
           `<span class="gc-combat-teaser-badge">${esc(resultLabel)}` +
@@ -902,10 +932,10 @@
     const defLossTotal = unitCountTotal(safeMeta.defender_losses);
     const loot = safeMeta.loot || {};
     const lootTotal = expeditionLootTotal(loot);
-    const routeBits = [safeMeta.origin_planet_name, safeMeta.target_planet_name]
-      .map((name) => String(name || "").trim())
-      .filter(Boolean);
-    const routeSub = routeBits.join(" · ");
+    const placeLine = combatBattlefieldLabel(safeMeta);
+    const vsLine = t("combat_report_vs", "%(attacker)s vs %(defender)s")
+      .replace("%(attacker)s", combatActorLabel(safeMeta.attacker_name) || "—")
+      .replace("%(defender)s", combatActorLabel(safeMeta.defender_name) || "—");
 
     const sections = [];
 
@@ -914,13 +944,8 @@
         `<div class="gc-combat-report-hero-top">` +
           `<span class="gc-combat-report-hero-icon" aria-hidden="true">${esc(visual.icon)}</span>` +
           `<div class="gc-combat-report-hero-text">` +
-            `<div class="gc-combat-report-coords gc-mono">${combatCoordsRoute(safeMeta)}</div>` +
-            (routeSub ? `<div class="gc-combat-report-route-sub">${esc(routeSub)}</div>` : "") +
-            `<div class="gc-combat-report-vs">${esc(
-              t("combat_report_vs", "%(attacker)s vs %(defender)s")
-                .replace("%(attacker)s", safeMeta.attacker_name || "—")
-                .replace("%(defender)s", safeMeta.defender_name || "—")
-            )}</div>` +
+            (placeLine ? `<div class="gc-combat-report-place">${esc(placeLine)}</div>` : "") +
+            `<div class="gc-combat-report-vs">${esc(vsLine)}</div>` +
           `</div>` +
           `<span class="gc-combat-report-result-badge">` +
             `<span class="gc-combat-report-result-main">${esc(resultLabel)}</span>` +
@@ -1064,7 +1089,8 @@
       const prefix = meta.dev_simulated
         ? t("combat_report_dev_sim_title", "DEV combat simulation")
         : t("combat_report_modal_title", "Combat report");
-      return `${prefix} — ${combatCoordsPlain(meta)}`;
+      const place = combatBattlefieldLabel(meta);
+      return place ? `${prefix} — ${place}` : prefix;
     }
     if (kind === "spy") {
       return `${t("spy_report_modal_title", "Spy report")} — ${coords}`;
@@ -2931,7 +2957,7 @@
             `<div role="button" tabindex="0" class="gc-messages-item${active}${unreadCls}${reportCls}" data-id="${m.id}">` +
             checkHtml +
             `<span class="gc-messages-item-content">` +
-            `<span class="gc-messages-item-subject">${linkifyCoordsText(m.subject)}</span>` +
+            `<span class="gc-messages-item-subject">${linkifyCoordsText(formatMessageSubject(m.subject))}</span>` +
             (teaser ? `<span class="gc-messages-item-teaser">${teaser}</span>` : "") +
             `<span class="gc-messages-item-meta">${esc(categoryLabel(m.category))} · ${esc(formatTime(m.created_at))}</span>` +
             `</span>` +
@@ -2973,7 +2999,7 @@
       if (!dom) return;
       setDetailVisible(true);
       if (dom.detailSubject) {
-        dom.detailSubject.innerHTML = linkifyCoordsText(msg.subject || "");
+        dom.detailSubject.innerHTML = linkifyCoordsText(formatMessageSubject(msg.subject || ""));
       }
       const sender = msg.sender_name || categoryLabel(msg.category);
       if (dom.detailMeta) {

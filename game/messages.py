@@ -584,6 +584,60 @@ def notify_combat(
     )
 
 
+def _combat_report_subject(
+    *,
+    locale: str | None,
+    metadata: Mapping[str, Any],
+    defender_perspective: bool = False,
+) -> str:
+    """Player-facing combat subject: planet / VS names — never coordinates."""
+    from .i18n import tr
+
+    planet = str(metadata.get("target_planet_name") or "").strip()
+    if planet:
+        if defender_perspective:
+            return tr(
+                "fleet_report_combat_subject_defender_planet",
+                "Attack report — %(planet)s",
+                locale=locale,
+                planet=planet,
+            )
+        return tr(
+            "fleet_report_combat_subject_planet",
+            "Combat report — %(planet)s",
+            locale=locale,
+            planet=planet,
+        )
+
+    attacker = str(metadata.get("attacker_name") or "").strip()
+    defender = str(metadata.get("defender_name") or "").strip()
+    if attacker or defender:
+        vs = tr(
+            "combat_report_vs",
+            "%(attacker)s vs %(defender)s",
+            locale=locale,
+            attacker=attacker or "—",
+            defender=defender or "—",
+        )
+        if defender_perspective:
+            return tr(
+                "fleet_report_combat_subject_defender_vs",
+                "Attack report — %(vs)s",
+                locale=locale,
+                vs=vs,
+            )
+        return tr(
+            "fleet_report_combat_subject_vs",
+            "Combat report — %(vs)s",
+            locale=locale,
+            vs=vs,
+        )
+
+    if defender_perspective:
+        return tr("fleet_report_combat_subject_defender_plain", "Attack report", locale=locale)
+    return tr("fleet_report_combat_subject", "Combat report", locale=locale)
+
+
 def dispatch_combat_reports(
     *,
     attacker_id: int,
@@ -596,16 +650,11 @@ def dispatch_combat_reports(
     defender_locale: str | None = None,
 ) -> dict[str, Any]:
     """Persist combat inbox messages for attacker and defender (``player_messages``)."""
-    from .i18n import tr
-
     meta = normalize_combat_metadata(metadata)
     out: dict[str, Any] = {"attacker": None, "defender": None}
-    atk_subject = tr(
-        "fleet_report_combat_subject_coords",
-        "Combat report — %(coords)s",
-        locale=attacker_locale,
-        coords=coords,
-    )
+    # ``coords`` kept for call-site compatibility; subjects use names only.
+    _ = coords
+    atk_subject = _combat_report_subject(locale=attacker_locale, metadata=meta)
     atk_meta = {**meta, "perspective": "attacker"}
     out["attacker"] = notify_combat(
         int(attacker_id),
@@ -617,11 +666,10 @@ def dispatch_combat_reports(
     )
     def_id = int(defender_id)
     if def_id > 0 and def_id != int(attacker_id):
-        def_subject = tr(
-            "fleet_report_combat_subject_defender",
-            "Attack report — %(coords)s",
+        def_subject = _combat_report_subject(
             locale=defender_locale,
-            coords=coords,
+            metadata=meta,
+            defender_perspective=True,
         )
         def_meta = {**meta, "perspective": "defender"}
         out["defender"] = notify_combat(

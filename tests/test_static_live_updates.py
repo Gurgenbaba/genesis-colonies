@@ -891,6 +891,9 @@ def test_gc700a_combat_report_v2_presentation():
     assert "function combatDebrisPayload" in js
     assert "renderCombatForcesDuel(safeMeta, defenseStock)" in full_fn
     assert "renderCombatBattleOverview(meta)" not in full_fn
+    assert "combatBattlefieldLabel(safeMeta)" in full_fn
+    assert "combatCoordsRoute" not in full_fn
+    assert "gc-combat-report-place" in full_fn
     assert "lootTotal > 0" in full_fn
     assert "renderCombatDebrisPanel(safeMeta)" in full_fn
     assert "renderCombatResearchPanel(safeMeta)" in full_fn

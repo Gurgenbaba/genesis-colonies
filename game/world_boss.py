@@ -1338,7 +1338,8 @@ def resolve_attack_arrival(
     from .i18n import get_player_locale
 
     attacker_name = _player_name(int(player_id), conn=conn)
-    boss_label = str(event.get("boss_key") or "World Boss")
+    attacker_locale = get_player_locale(int(player_id), conn=conn)
+    boss_label = _boss_display_name(event, locale=attacker_locale)
     try:
         publish_attack_combat_report(
             attacker_id=int(player_id),
@@ -1355,11 +1356,11 @@ def resolve_attack_arrival(
             fleet_id=movement_id,
             origin_coords=None,
             origin_planet_name=None,
-            target_planet_name=boss_label,
+            target_planet_name="",
             attacker_planet_id=int(movement.get("origin_planet_id") or 0) or None,
             defender_planet_id=None,
             conn=conn,
-            attacker_locale=get_player_locale(int(player_id), conn=conn),
+            attacker_locale=attacker_locale,
             defender_locale=None,
         )
     except Exception:

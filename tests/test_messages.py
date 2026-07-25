@@ -1195,6 +1195,11 @@ def test_dispatch_combat_reports_persists_for_both_players(temp_db):
     def_msg = def_detail["data"]["message"]
     assert atk_msg["category"] == "combat"
     assert def_msg["category"] == "combat"
+    assert "Beta" in atk_msg["subject"]
+    assert "Beta" in def_msg["subject"]
+    assert "2:3:4" not in atk_msg["subject"]
+    assert "2:3:4" not in def_msg["subject"]
+    assert "1:2:3" not in atk_msg["subject"]
     assert atk_msg["metadata"]["perspective"] == "attacker"
     assert def_msg["metadata"]["perspective"] == "defender"
     assert atk_msg["metadata"]["rounds_fought"] == 2

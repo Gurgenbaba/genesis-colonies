@@ -28066,7 +28066,7 @@ body > .gc-hud-select-menu.gc-popover-layer:not([hidden]){
   flex-direction: column;
   flex: 1 1 auto;
   gap: 0;
-  padding: 12px var(--gc-panel-pad) var(--gc-panel-pad);
+  padding: 16px var(--gc-panel-pad) var(--gc-panel-pad);
   min-width: 0;
   min-height: 0;
   max-width: 100%;
@@ -28167,7 +28167,7 @@ body > .gc-hud-select-menu.gc-popover-layer:not([hidden]){
   overflow: hidden;
   box-sizing: border-box;
   text-align: left;
-  padding: 12px 14px;
+  padding: 14px 16px;
   border: 0;
   border-bottom: 1px solid rgba(120, 190, 255, 0.08);
   background: transparent;
@@ -28201,7 +28201,7 @@ body > .gc-hud-select-menu.gc-popover-layer:not([hidden]){
 
 .gc-messages-item-content {
   display: grid;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -28217,11 +28217,11 @@ body > .gc-hud-select-menu.gc-popover-layer:not([hidden]){
 
 .gc-messages-layout {
   display: grid;
-  grid-template-columns: minmax(0, 30%) minmax(0, 1fr);
-  gap: 12px;
+  grid-template-columns: minmax(280px, 36%) minmax(0, 1fr);
+  gap: 16px;
   flex: 1 1 auto;
-  min-height: 480px;
-  height: clamp(480px, 58vh, calc(100vh - 220px));
+  min-height: 520px;
+  height: clamp(520px, 62vh, calc(100vh - 200px));
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
@@ -28306,7 +28306,7 @@ body > .gc-hud-select-menu.gc-popover-layer:not([hidden]){
 }
 
 .gc-messages-item-subject {
-  font-size: 0.9rem;
+  font-size: 0.98rem;
   padding-right: 14px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -28333,7 +28333,7 @@ body > .gc-hud-select-menu.gc-popover-layer:not([hidden]){
 }
 
 .gc-messages-item-meta {
-  font-size: 0.74rem;
+  font-size: 0.8rem;
   color: var(--gc-text-soft);
   font-family: var(--gc-mono);
 }
@@ -28387,8 +28387,8 @@ body > .gc-hud-select-menu.gc-popover-layer:not([hidden]){
 .gc-messages-detail {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 14px 16px;
+  gap: 14px;
+  padding: 16px 18px;
   flex: 1 1 0;
   min-height: 0;
   overflow: hidden;
@@ -28396,28 +28396,28 @@ body > .gc-hud-select-menu.gc-popover-layer:not([hidden]){
 
 .gc-messages-detail-subject {
   margin: 0;
-  font-size: 1.08rem;
+  font-size: 1.15rem;
   color: var(--gc-primary-2);
   letter-spacing: 0.02em;
 }
 
 .gc-messages-detail-meta {
   margin: 0;
-  font-size: 0.78rem;
+  font-size: 0.84rem;
   color: var(--gc-text-soft);
   font-family: var(--gc-mono);
 }
 
 .gc-messages-detail-body {
   white-space: pre-wrap;
-  line-height: 1.5;
-  font-size: 0.9rem;
+  line-height: 1.55;
+  font-size: 0.95rem;
   flex: 1;
   min-width: 0;
   max-width: 100%;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 12px;
+  padding: 14px;
   border: 1px solid var(--gc-panel-border);
   border-radius: var(--gc-radius-sm);
   background: rgba(5, 10, 22, 0.55);
@@ -28541,14 +28541,14 @@ body > .gc-hud-select-menu.gc-popover-layer:not([hidden]){
 .gc-combat-report-shell {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 4px 2px 8px;
+  gap: 16px;
+  padding: 6px 4px 10px;
 }
 
 .gc-combat-report-hero {
   position: relative;
   overflow: hidden;
-  padding: 14px 16px 14px 18px;
+  padding: 16px 18px 16px 20px;
   border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(70, 229, 255, 0.22);
   background: linear-gradient(135deg, rgba(8, 16, 32, 0.9), rgba(4, 8, 18, 0.85));
@@ -28724,16 +28724,18 @@ body > .gc-hud-select-menu.gc-popover-layer:not([hidden]){
   min-width: 0;
 }
 
-.gc-combat-report-coords {
-  font-size: 1.05rem;
+.gc-combat-report-coords,
+.gc-combat-report-place {
+  font-size: 1.08rem;
   color: var(--gc-neon-cyan);
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
+  font-weight: 600;
 }
 
 .gc-combat-report-vs {
-  margin-top: 4px;
+  margin-top: 6px;
   font-weight: 700;
-  font-size: 0.92rem;
+  font-size: 0.96rem;
 }
 
 .gc-combat-report-route-sub {
@@ -28750,15 +28752,15 @@ body > .gc-hud-select-menu.gc-popover-layer:not([hidden]){
 .gc-combat-report-columns--duel {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 14px;
 }
 
 .gc-combat-side-card {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
-  padding: 12px 14px;
+  padding: 14px 16px;
   border: 1px solid rgba(70, 229, 255, 0.16);
   border-radius: var(--gc-radius-sm);
   background: linear-gradient(180deg, rgba(8, 14, 28, 0.92), rgba(4, 8, 18, 0.88));
@@ -28793,7 +28795,7 @@ body > .gc-hud-select-menu.gc-popover-layer:not([hidden]){
 
 .gc-combat-side-card-head {
   display: grid;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -28832,13 +28834,13 @@ body > .gc-hud-select-menu.gc-popover-layer:not([hidden]){
 }
 
 .gc-combat-side-card-name {
-  font-size: 1rem;
-  line-height: 1.2;
+  font-size: 1.05rem;
+  line-height: 1.25;
   color: var(--gc-text);
 }
 
 .gc-combat-side-card-planet {
-  font-size: 0.78rem;
+  font-size: 0.84rem;
   color: var(--gc-text-soft);
 }
 
@@ -28963,7 +28965,7 @@ body > .gc-hud-select-menu.gc-popover-layer:not([hidden]){
 }
 
 .gc-combat-report-result-main {
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   line-height: 1.2;
 }
 
@@ -29292,24 +29294,24 @@ body > .gc-hud-select-menu.gc-popover-layer:not([hidden]){
 .gc-combat-unit-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 
 .gc-combat-unit-chip {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 10px 5px 8px;
+  padding: 6px 12px 6px 8px;
   border-radius: 0;
   border: 1px solid rgba(120, 190, 255, 0.18);
   border-left: 2px solid rgba(70, 229, 255, 0.45);
   background: rgba(8, 14, 28, 0.65);
-  font-size: 0.8rem;
+  font-size: 0.86rem;
 }
 
 .gc-combat-unit-chip-img {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   object-fit: contain;
   flex-shrink: 0;
   border-radius: 2px;
@@ -29488,6 +29490,7 @@ body > .gc-hud-select-menu.gc-popover-layer:not([hidden]){
 }
 
 .gc-combat-teaser--compact .gc-combat-teaser-coords,
+.gc-combat-teaser--compact .gc-combat-teaser-place,
 .gc-combat-teaser--compact .gc-combat-teaser-vs {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -29512,16 +29515,18 @@ body > .gc-hud-select-menu.gc-popover-layer:not([hidden]){
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
-.gc-combat-teaser-coords {
-  font-size: 0.82rem;
+.gc-combat-teaser-coords,
+.gc-combat-teaser-place {
+  font-size: 0.88rem;
   color: var(--gc-neon-cyan);
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-weight: 600;
 }
 
 /* Clickable coordinate links → galaxy view */
