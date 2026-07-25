@@ -6,16 +6,26 @@
 {% set active_tab = chronicles_tab if chronicles_tab is defined else (chron.tab if chron.tab is defined else 'overview') %}
 {% set pvp_data = chron.pvp if chron.pvp is defined else chron %}
 {% set exp_data = chron.expeditions if chron.expeditions is defined else {'ready': false, 'events': [], 'count': 0, 'stats': {}, 'tab': 'overview'} %}
+{% set boss_data = chron.world_boss if chron.world_boss is defined else {'ready': false, 'hits': [], 'events': [], 'count': 0, 'stats': {}, 'tab': 'overview'} %}
+{% set asteroid_data = chron.asteroids if chron.asteroids is defined else {'ready': false, 'runs': [], 'events': [], 'count': 0, 'stats': {}, 'tab': 'overview'} %}
 {% set rec_data = chron.records if chron.records is defined else {'ready': false, 'cards': [], 'count': 0} %}
 {% set battles = pvp_data.battles if pvp_data.battles is defined else (chron.battles if chron.battles is defined else []) %}
 {% set exp_events = exp_data.events if exp_data.events is defined else (chron.events if chron.events is defined else []) %}
+{% set boss_hits = boss_data.hits if boss_data.hits is defined else (boss_data.events if boss_data.events is defined else []) %}
+{% set asteroid_runs = asteroid_data.runs if asteroid_data.runs is defined else (asteroid_data.events if asteroid_data.events is defined else []) %}
 {% set record_cards = rec_data.cards if rec_data.cards is defined else (chron.cards if chron.cards is defined else []) %}
 {% set pvp_tab = pvp_data.tab if pvp_data.tab is defined else active_tab %}
 {% set exp_tab = exp_data.tab if exp_data.tab is defined else active_tab %}
+{% set boss_tab = boss_data.tab if boss_data.tab is defined else active_tab %}
+{% set asteroid_tab = asteroid_data.tab if asteroid_data.tab is defined else active_tab %}
 {% if active_section == 'pvp' %}
   {% set stats = pvp_data.stats if pvp_data.stats is defined else {} %}
 {% elif active_section == 'expeditions' %}
   {% set stats = exp_data.stats if exp_data.stats is defined else {} %}
+{% elif active_section == 'world_boss' %}
+  {% set stats = boss_data.stats if boss_data.stats is defined else {} %}
+{% elif active_section == 'asteroids' %}
+  {% set stats = asteroid_data.stats if asteroid_data.stats is defined else {} %}
 {% else %}
   {% set stats = {} %}
 {% endif %}
@@ -31,6 +41,10 @@
       <span class="gc-chronicles-kicker" aria-hidden="true">
         {% if active_section == 'expeditions' %}
           {{ T("chronicles_section_expeditions", "Expeditionen") }}
+        {% elif active_section == 'world_boss' %}
+          {{ T("chronicles_section_world_boss", "World Boss") }}
+        {% elif active_section == 'asteroids' %}
+          {{ T("chronicles_section_asteroids", "Asteroiden") }}
         {% elif active_section == 'records' %}
           {{ T("chronicles_section_records", "Rekorde") }}
         {% else %}
@@ -59,6 +73,22 @@
          {% if active_section == 'expeditions' %}aria-current="page"{% endif %}
          data-chronicles-section="expeditions">
         {{ T("chronicles_section_expeditions", "Expeditionen") }}
+      </a>
+      <a href="{{ url_for('chronicles_view', section='world_boss', tab=boss_tab if active_section == 'world_boss' else 'overview') }}"
+         class="tab-btn gc-nav-link gc-hof-tab{% if active_section == 'world_boss' %} active{% endif %}"
+         role="tab"
+         aria-selected="{{ 'true' if active_section == 'world_boss' else 'false' }}"
+         {% if active_section == 'world_boss' %}aria-current="page"{% endif %}
+         data-chronicles-section="world_boss">
+        {{ T("chronicles_section_world_boss", "World Boss") }}
+      </a>
+      <a href="{{ url_for('chronicles_view', section='asteroids', tab=asteroid_tab if active_section == 'asteroids' else 'overview') }}"
+         class="tab-btn gc-nav-link gc-hof-tab{% if active_section == 'asteroids' %} active{% endif %}"
+         role="tab"
+         aria-selected="{{ 'true' if active_section == 'asteroids' else 'false' }}"
+         {% if active_section == 'asteroids' %}aria-current="page"{% endif %}
+         data-chronicles-section="asteroids">
+        {{ T("chronicles_section_asteroids", "Asteroiden") }}
       </a>
       <a href="{{ url_for('chronicles_view', section='records') }}"
          class="tab-btn gc-nav-link gc-hof-tab{% if active_section == 'records' %} active{% endif %}"
@@ -393,6 +423,173 @@
               {% endif %}
             </article>
             {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  {% elif active_section == 'world_boss' %}
+    <div class="gc-panel-header gc-ranking-panel-head">
+      <div class="gc-ranking-panel-head-text">
+        <span class="gc-panel-title" id="chronicles-panel-title">{{ T("chronicles_boss_panel_title", "World-Boss-Historie") }}</span>
+        <span class="gc-panel-subtitle">
+          {% if boss_tab == 'recent' %}
+            {{ T("chronicles_boss_subtitle_recent", "Alle Boss-Angriffe chronologisch") }}
+          {% else %}
+            {{ T("chronicles_boss_subtitle_overview", "Zusammenfassung deiner Boss-Kämpfe") }}
+          {% endif %}
+        </span>
+      </div>
+    </div>
+    <div class="gc-ranking-body gc-hof-body-wrap">
+      {% if stats %}
+      <div class="gc-chronicles-stats gc-pvp-stats" aria-label="{{ T('chronicles_boss_stats_label', 'Boss Statistik') }}">
+        <div class="gc-chronicles-stat gc-pvp-stat">
+          <span class="gc-chronicles-stat-label gc-pvp-stat-label">{{ T("chronicles_boss_stat_hits", "Angriffe") }}</span>
+          <span class="gc-chronicles-stat-value gc-pvp-stat-value gc-mono">{{ stats.total_hits or 0 }}</span>
+        </div>
+        <div class="gc-chronicles-stat gc-pvp-stat gc-chronicles-stat--destroyed">
+          <span class="gc-chronicles-stat-label gc-pvp-stat-label">{{ T("chronicles_boss_stat_damage", "Schaden") }}</span>
+          <span class="gc-chronicles-stat-value gc-pvp-stat-value gc-mono" title="{{ stats.damage_total_fmt or '0' }}">{{ stats.damage_total_compact or '0' }}</span>
+        </div>
+        <div class="gc-chronicles-stat gc-pvp-stat gc-chronicles-stat--biggest">
+          <span class="gc-chronicles-stat-label gc-pvp-stat-label">{{ T("chronicles_boss_stat_biggest", "Größter Hit") }}</span>
+          <span class="gc-chronicles-stat-value gc-pvp-stat-value gc-mono" title="{{ stats.biggest_hit_fmt or '0' }}">{{ stats.biggest_hit_compact or '0' }}</span>
+        </div>
+        <div class="gc-chronicles-stat gc-pvp-stat gc-chronicles-stat--win">
+          <span class="gc-chronicles-stat-label gc-pvp-stat-label">{{ T("chronicles_boss_stat_victories", "Siege") }}</span>
+          <span class="gc-chronicles-stat-value gc-pvp-stat-value gc-mono">{{ stats.victories or 0 }}</span>
+        </div>
+      </div>
+      {% endif %}
+      <nav class="gc-hof-tabs gc-pvp-tabs" role="tablist" aria-label="{{ T('chronicles_boss_tabs_label', 'Boss Kategorien') }}">
+        {% for tab in [('overview', 'chronicles_ops_tab_overview', 'Übersicht'), ('recent', 'chronicles_ops_tab_recent', 'Alle')] %}
+        <a href="{{ url_for('chronicles_view', section='world_boss', tab=tab[0]) }}"
+           class="tab-btn gc-nav-link gc-hof-tab gc-pvp-tab{% if boss_tab == tab[0] %} active{% endif %}"
+           role="tab"
+           aria-selected="{{ 'true' if boss_tab == tab[0] else 'false' }}"
+           {% if boss_tab == tab[0] %}aria-current="page"{% endif %}>
+          {{ T(tab[1], tab[2]) }}
+        </a>
+        {% endfor %}
+      </nav>
+      <div class="gc-hof-body gc-pvp-body ranking-table-wrapper">
+        {% if not boss_data.ready %}
+        <p class="gc-hof-empty ranking-empty">{{ T("chronicles_unavailable", "Chroniken sind derzeit nicht verfügbar.") }}</p>
+        {% elif not boss_hits %}
+        <p class="gc-hof-empty ranking-empty">{{ T("chronicles_boss_empty", "Noch keine World-Boss-Angriffe in deiner Historie.") }}</p>
+        {% else %}
+        <div class="gc-hof-list gc-ranking">
+          <div class="gc-hof-desktop gc-ranking-desktop ranking-table-wrapper">
+            <table class="gc-ranking-table gc-hof-table gc-pvp-table">
+              <thead>
+                <tr>
+                  <th class="gc-pvp-col-date">{{ T("chronicles_boss_col_date", "Datum") }}</th>
+                  <th class="gc-hof-col-name">{{ T("chronicles_boss_col_boss", "Boss") }}</th>
+                  <th class="gc-hof-col-num">{{ T("chronicles_boss_col_damage", "Schaden") }}</th>
+                  <th class="gc-pvp-col-outcome">{{ T("chronicles_boss_col_outcome", "Ergebnis") }}</th>
+                  <th class="gc-hof-col-action">{{ T("hof_view_report_short", "Bericht") }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for hit in boss_hits %}
+                <tr class="gc-ranking-row gc-hof-row gc-pvp-row">
+                  <td class="gc-pvp-col-date gc-mono">{{ hit.created_at_short or '—' }}</td>
+                  <td class="gc-hof-col-name">{{ hit.boss_name or '—' }}</td>
+                  <td class="gc-hof-col-num gc-mono" title="{{ hit.damage_fmt or '' }}">{{ hit.damage_compact or '0' }}</td>
+                  <td class="gc-pvp-col-outcome">{{ T(hit.outcome_label_key, hit.outcome) }}</td>
+                  <td class="gc-hof-col-action">
+                    {% if hit.report_metadata %}
+                    <button type="button" class="gc-btn gc-btn-sm"
+                            data-chronicles-report
+                            data-chronicles-report-category="combat"
+                            data-chronicles-report='{{ hit.report_metadata | tojson }}'>
+                      {{ T("hof_view_report_short", "Bericht") }}
+                    </button>
+                    {% else %}—{% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  {% elif active_section == 'asteroids' %}
+    <div class="gc-panel-header gc-ranking-panel-head">
+      <div class="gc-ranking-panel-head-text">
+        <span class="gc-panel-title" id="chronicles-panel-title">{{ T("chronicles_asteroid_panel_title", "Asteroiden-Historie") }}</span>
+        <span class="gc-panel-subtitle">
+          {% if asteroid_tab == 'recent' %}
+            {{ T("chronicles_asteroid_subtitle_recent", "Alle Asteroiden-Einsätze chronologisch") }}
+          {% else %}
+            {{ T("chronicles_asteroid_subtitle_overview", "Zusammenfassung deiner Asteroiden-Ernten") }}
+          {% endif %}
+        </span>
+      </div>
+    </div>
+    <div class="gc-ranking-body gc-hof-body-wrap">
+      {% if stats %}
+      <div class="gc-chronicles-stats gc-pvp-stats" aria-label="{{ T('chronicles_asteroid_stats_label', 'Asteroiden Statistik') }}">
+        <div class="gc-chronicles-stat gc-pvp-stat">
+          <span class="gc-chronicles-stat-label gc-pvp-stat-label">{{ T("chronicles_asteroid_stat_runs", "Einsätze") }}</span>
+          <span class="gc-chronicles-stat-value gc-pvp-stat-value gc-mono">{{ stats.total_runs or 0 }}</span>
+        </div>
+        <div class="gc-chronicles-stat gc-pvp-stat gc-chronicles-stat--loot">
+          <span class="gc-chronicles-stat-label gc-pvp-stat-label">{{ T("chronicles_asteroid_stat_loot", "Beute") }}</span>
+          <span class="gc-chronicles-stat-value gc-pvp-stat-value gc-mono" title="{{ stats.loot_total_fmt or '0' }}">{{ stats.loot_total_compact or '0' }}</span>
+        </div>
+        <div class="gc-chronicles-stat gc-pvp-stat gc-chronicles-stat--biggest">
+          <span class="gc-chronicles-stat-label gc-pvp-stat-label">{{ T("chronicles_asteroid_stat_biggest", "Größte Ernte") }}</span>
+          <span class="gc-chronicles-stat-value gc-pvp-stat-value gc-mono" title="{{ stats.biggest_haul_fmt or '0' }}">{{ stats.biggest_haul_compact or '0' }}</span>
+        </div>
+        <div class="gc-chronicles-stat gc-pvp-stat gc-chronicles-stat--win">
+          <span class="gc-chronicles-stat-label gc-pvp-stat-label">{{ T("chronicles_asteroid_stat_harvested", "Ernten") }}</span>
+          <span class="gc-chronicles-stat-value gc-pvp-stat-value gc-mono">{{ stats.harvested or 0 }}</span>
+        </div>
+      </div>
+      {% endif %}
+      <nav class="gc-hof-tabs gc-pvp-tabs" role="tablist" aria-label="{{ T('chronicles_asteroid_tabs_label', 'Asteroiden Kategorien') }}">
+        {% for tab in [('overview', 'chronicles_ops_tab_overview', 'Übersicht'), ('recent', 'chronicles_ops_tab_recent', 'Alle')] %}
+        <a href="{{ url_for('chronicles_view', section='asteroids', tab=tab[0]) }}"
+           class="tab-btn gc-nav-link gc-hof-tab gc-pvp-tab{% if asteroid_tab == tab[0] %} active{% endif %}"
+           role="tab"
+           aria-selected="{{ 'true' if asteroid_tab == tab[0] else 'false' }}"
+           {% if asteroid_tab == tab[0] %}aria-current="page"{% endif %}>
+          {{ T(tab[1], tab[2]) }}
+        </a>
+        {% endfor %}
+      </nav>
+      <div class="gc-hof-body gc-pvp-body ranking-table-wrapper">
+        {% if not asteroid_data.ready %}
+        <p class="gc-hof-empty ranking-empty">{{ T("chronicles_unavailable", "Chroniken sind derzeit nicht verfügbar.") }}</p>
+        {% elif not asteroid_runs %}
+        <p class="gc-hof-empty ranking-empty">{{ T("chronicles_asteroid_empty", "Noch keine Asteroiden-Einsätze in deiner Historie.") }}</p>
+        {% else %}
+        <div class="gc-hof-list gc-ranking">
+          <div class="gc-hof-desktop gc-ranking-desktop ranking-table-wrapper">
+            <table class="gc-ranking-table gc-hof-table gc-pvp-table">
+              <thead>
+                <tr>
+                  <th class="gc-pvp-col-date">{{ T("chronicles_asteroid_col_date", "Datum") }}</th>
+                  <th class="gc-hof-col-name">{{ T("chronicles_asteroid_col_coords", "Koordinaten") }}</th>
+                  <th class="gc-hof-col-num">{{ T("chronicles_asteroid_col_loot", "Beute") }}</th>
+                  <th class="gc-pvp-col-outcome">{{ T("chronicles_asteroid_col_status", "Status") }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for run in asteroid_runs %}
+                <tr class="gc-ranking-row gc-hof-row gc-pvp-row">
+                  <td class="gc-pvp-col-date gc-mono">{{ run.created_at_short or '—' }}</td>
+                  <td class="gc-hof-col-name gc-mono">{{ run.target_coords or '—' }}</td>
+                  <td class="gc-hof-col-num gc-mono" title="{{ run.loot_total_fmt or '' }}">{% if run.loot_total > 0 %}{{ run.loot_total_compact }}{% else %}—{% endif %}</td>
+                  <td class="gc-pvp-col-outcome">{{ T(run.status_label_key, run.status) }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
           </div>
         </div>
         {% endif %}

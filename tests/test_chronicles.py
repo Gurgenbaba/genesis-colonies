@@ -251,10 +251,12 @@ def test_chronicles_records_aggregation(temp_db):
     assert payload["ok"] is True
     assert payload["section"] == "records"
     cards = payload["cards"]
-    assert len(cards) == 6
+    assert len(cards) == 8
     keys = {card["key"] for card in cards}
     assert "biggest_battle" in keys
     assert "biggest_expo_find" in keys
+    assert "biggest_boss_hit" in keys
+    assert "biggest_asteroid_haul" in keys
     assert cards[0]["has_record"] or any(c["has_record"] for c in cards)
 
 

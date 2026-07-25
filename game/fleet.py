@@ -4155,25 +4155,52 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
                 locale=sender_locale,
                 coords=coords,
             )
-        notify_transport(
+        asteroid_report_meta = {
+            "fleet_id": movement_id,
+            "mission_type": "recycle",
+            "target_coords": coords,
+            "collected": calculate_loaded_resources(collected),
+            "resources": final_resources,
+            "direction": "outbound",
+            "asteroid_missed": asteroid_missed,
+            "asteroid_harvested": asteroid_harvested,
+            "asteroid_expired": asteroid_expired,
+            **({"asteroid": asteroid_meta} if asteroid_meta else {}),
+        }
+        transport_res = notify_transport(
             player_id,
             subject,
             body,
-            metadata={
-                "fleet_id": movement_id,
-                "mission_type": "recycle",
-                "target_coords": coords,
-                "collected": calculate_loaded_resources(collected),
-                "resources": final_resources,
-                "direction": "outbound",
-                "asteroid_missed": asteroid_missed,
-                "asteroid_harvested": asteroid_harvested,
-                "asteroid_expired": asteroid_expired,
-                **({"asteroid": asteroid_meta} if asteroid_meta else {}),
-            },
+            metadata=asteroid_report_meta,
             locale=sender_locale,
             conn=conn,
         )
+        if asteroid_harvested or asteroid_missed or asteroid_expired:
+            try:
+                from .chronicle_entries import (
+                    ENTRY_TYPE_ASTEROID,
+                    record_chronicle_for_fleet_report,
+                )
+
+                msg_id = None
+                if isinstance(transport_res, dict) and transport_res.get("ok"):
+                    data = transport_res.get("data") or {}
+                    if data.get("message_id") is not None:
+                        msg_id = int(data["message_id"])
+                record_chronicle_for_fleet_report(
+                    player_id=int(player_id),
+                    entry_type=ENTRY_TYPE_ASTEROID,
+                    subject=subject,
+                    metadata=asteroid_report_meta,
+                    source_message_id=msg_id,
+                    occurred_at=int(now),
+                    conn=conn,
+                )
+            except Exception:
+                logger.exception(
+                    "asteroid chronicle persist failed movement_id=%s",
+                    movement_id,
+                )
         try:
             from .directives.progress import emit_recycle_complete_event
 

@@ -22,6 +22,9 @@ BODY_MIN = 3
 BODY_MAX = 5000
 SEND_COOLDOWN_SEC = 30
 DEFAULT_LIST_LIMIT = 50
+INBOX_RETENTION_DAYS = 7
+INBOX_RETENTION_KEEP_CATEGORIES = frozenset({"player"})
+INBOX_RETENTION_BATCH_LIMIT = 2000
 
 
 def _message_recipient_name_candidates(name: str) -> list[str]:
@@ -325,17 +328,22 @@ def create_message(
         message_id = int(cur.lastrowid)
         if cat in ("combat", "expedition"):
             try:
-                from .chronicle_entries import record_chronicle_for_fleet_report
-
-                record_chronicle_for_fleet_report(
-                    player_id=int(recipient_player_id),
-                    entry_type=cat,
-                    subject=subject_n,
-                    metadata=metadata,
-                    source_message_id=message_id,
-                    occurred_at=now,
-                    conn=conn,
+                from .chronicle_entries import (
+                    record_chronicle_for_fleet_report,
+                    resolve_chronicle_entry_type,
                 )
+
+                entry_type = resolve_chronicle_entry_type(cat, metadata)
+                if entry_type:
+                    record_chronicle_for_fleet_report(
+                        player_id=int(recipient_player_id),
+                        entry_type=entry_type,
+                        subject=subject_n,
+                        metadata=metadata,
+                        source_message_id=message_id,
+                        occurred_at=now,
+                        conn=conn,
+                    )
             except Exception:
                 logger.exception(
                     "chronicle entry persist failed player_id=%s category=%s message_id=%s",
@@ -1142,6 +1150,83 @@ def bulk_update_messages(
         raise
     finally:
         conn.close()
+
+
+def purge_expired_inbox_messages(
+    *,
+    now: Optional[float] = None,
+    conn=None,
+    batch_limit: int = INBOX_RETENTION_BATCH_LIMIT,
+    retention_days: int = INBOX_RETENTION_DAYS,
+) -> int:
+    """
+    Soft-delete non-player inbox rows older than retention_days.
+
+    Keeps category ``player``. Does not touch chronicle_entries.
+    Returns number of rows soft-deleted in this batch.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = db()
+    try:
+        if not _table_ready(conn):
+            return 0
+        ts = int(now if now is not None else time.time())
+        days = max(1, int(retention_days))
+        cutoff = ts - (days * 86400)
+        keep = sorted(INBOX_RETENTION_KEEP_CATEGORIES)
+        placeholders = ", ".join("?" for _ in keep) or "'__none__'"
+        lim = max(1, int(batch_limit))
+        if own_conn:
+            begin_write_transaction(conn)
+        cur = conn.cursor()
+        # SQLite/PG: update a limited set of expired non-player rows.
+        if get_db_backend() == "postgres":
+            cur.execute(
+                f"""
+                UPDATE player_messages AS pm
+                SET deleted_at = ?
+                FROM (
+                    SELECT id
+                    FROM player_messages
+                    WHERE (deleted_at IS NULL OR deleted_at = 0)
+                      AND category NOT IN ({placeholders})
+                      AND created_at < ?
+                    ORDER BY created_at ASC, id ASC
+                    LIMIT ?
+                ) AS expired
+                WHERE pm.id = expired.id;
+                """,
+                (ts, *keep, int(cutoff), lim),
+            )
+        else:
+            cur.execute(
+                f"""
+                UPDATE player_messages
+                SET deleted_at = ?
+                WHERE id IN (
+                    SELECT id
+                    FROM player_messages
+                    WHERE (deleted_at IS NULL OR deleted_at = 0)
+                      AND category NOT IN ({placeholders})
+                      AND created_at < ?
+                    ORDER BY created_at ASC, id ASC
+                    LIMIT ?
+                );
+                """,
+                (ts, *keep, int(cutoff), lim),
+            )
+        purged = int(cur.rowcount or 0)
+        if own_conn:
+            commit(conn)
+        return max(0, purged)
+    except Exception:
+        if own_conn:
+            rollback(conn)
+        raise
+    finally:
+        if own_conn:
+            conn.close()
 
 
 def delete_message(player_id: int, message_id: int) -> dict[str, Any]:

@@ -972,7 +972,11 @@ def test_gc700c_chronicles_pvp_overview():
     assert "gc-pvp-outcome--victory" in css
     assert '"chronicles_title"' in de
     assert '"chronicles_section_pvp"' in de
+    assert '"chronicles_section_world_boss"' in de
+    assert '"chronicles_section_asteroids"' in de
     assert '"pvp_tab_wins"' in de
+    assert 'data-chronicles-section="world_boss"' in html
+    assert 'data-chronicles-section="asteroids"' in html
 
 
 def test_gc700cb_chronicles_expeditions_and_records():
@@ -2014,12 +2018,24 @@ def test_main_js_pjax_preserves_shell_landscape_when_payload_empty():
     assert "ensurePlanetLandscapeAfterSoftNav()" in pjax
     assert 'classList.remove("gc-has-planet-landscape")' not in pjax
     assert 'removeProperty("--planet-landscape")' not in pjax
+    # Asteroid board SSR is always collapsed — restore open state before init/paint.
+    assert "initAsteroidBoardToggle" in pjax
     soft_pe = src.split("async function _softReloadPlanetEvolutionContent()")[1].split(
         "function _schedulePlanetEvolutionRefreshAfterAction"
     )[0]
     assert "ensurePlanetLandscapeAfterSoftNav()" in soft_pe
     switch = src.split('applyActionState(res, "planet_switch")')[1][:2200]
     assert "ensurePlanetLandscapeAfterSoftNav()" in switch
+
+
+def test_main_js_pjax_keeps_progress_ticker_on_soft_nav():
+    """Ingame PJAX with preserveGameLoop must not stop fleet ETA ticker (mission flash)."""
+    src = _read("static/main.js")
+    cleanup = src.split("GC.cleanupPage = function cleanupPage(")[1].split("GC.requestFrame = function")[0]
+    assert "if (!preserveGameLoop)" in cleanup
+    assert "GC.stopProgressTicker()" in cleanup
+    # stopProgressTicker only inside the preserveGameLoop guard, not bare on soft nav.
+    assert cleanup.index("if (!preserveGameLoop)") < cleanup.index("GC.stopProgressTicker()")
 
 
 def test_main_js_gc549_ship_defense_icons_use_png():

@@ -1,6 +1,6 @@
 """Chronicles hub — personal history sections (GC-700C, read-only).
 
-Sections: PvP (combat inbox), Expeditionen (expedition inbox), Rekorde (aggregated).
+Sections: PvP, Expeditionen, World Boss, Asteroiden, Rekorde.
 """
 
 from __future__ import annotations
@@ -12,6 +12,10 @@ from typing import Any, Dict, List, Mapping, Optional
 
 from .chronicle_entries import (
     CHRONICLE_ENTRIES_TABLE,
+    ENTRY_TYPE_ASTEROID,
+    ENTRY_TYPE_COMBAT,
+    ENTRY_TYPE_EXPEDITION,
+    ENTRY_TYPE_WORLD_BOSS,
     chronicle_row_metadata,
     chronicle_row_subject,
     chronicle_schema_ready,
@@ -23,11 +27,15 @@ from .scoring import compute_destroyed_raw_from_losses
 
 CHRONICLES_SECTION_PVP = "pvp"
 CHRONICLES_SECTION_EXPEDITIONS = "expeditions"
+CHRONICLES_SECTION_WORLD_BOSS = "world_boss"
+CHRONICLES_SECTION_ASTEROIDS = "asteroids"
 CHRONICLES_SECTION_RECORDS = "records"
 CHRONICLES_SECTION_KEYS = frozenset(
     {
         CHRONICLES_SECTION_PVP,
         CHRONICLES_SECTION_EXPEDITIONS,
+        CHRONICLES_SECTION_WORLD_BOSS,
+        CHRONICLES_SECTION_ASTEROIDS,
         CHRONICLES_SECTION_RECORDS,
     }
 )
@@ -53,7 +61,6 @@ EXPEDITION_TAB_KEYS = frozenset(
     }
 )
 EXPEDITION_TAB_DEFAULT = EXPEDITION_TAB_OVERVIEW
-EXPEDITION_STATS_SCAN_LIMIT = 500
 EXPEDITION_DISPLAY_LIMIT = 50
 EXPEDITION_OVERVIEW_RECENT_LIMIT = 10
 
@@ -100,9 +107,15 @@ PVP_TAB_KEYS = frozenset(
     }
 )
 PVP_TAB_DEFAULT = PVP_TAB_OVERVIEW
-PVP_STATS_SCAN_LIMIT = 500
 PVP_DISPLAY_LIMIT = 50
 PVP_OVERVIEW_RECENT_LIMIT = 10
+
+OPS_TAB_OVERVIEW = "overview"
+OPS_TAB_RECENT = "recent"
+OPS_TAB_KEYS = frozenset({OPS_TAB_OVERVIEW, OPS_TAB_RECENT})
+OPS_TAB_DEFAULT = OPS_TAB_OVERVIEW
+OPS_DISPLAY_LIMIT = 50
+OPS_OVERVIEW_RECENT_LIMIT = 10
 
 
 def _normalize_section(raw: str | None) -> str:
@@ -120,12 +133,19 @@ def _normalize_expedition_tab(raw: str | None) -> str:
     return key if key in EXPEDITION_TAB_KEYS else EXPEDITION_TAB_DEFAULT
 
 
+def _normalize_ops_tab(raw: str | None) -> str:
+    key = str(raw or OPS_TAB_DEFAULT).strip().lower()
+    return key if key in OPS_TAB_KEYS else OPS_TAB_DEFAULT
+
+
 def _normalize_section_tab(section: str, raw: str | None) -> str:
     section_key = _normalize_section(section)
     if section_key == CHRONICLES_SECTION_PVP:
         return _normalize_pvp_tab(raw)
     if section_key == CHRONICLES_SECTION_EXPEDITIONS:
         return _normalize_expedition_tab(raw)
+    if section_key in (CHRONICLES_SECTION_WORLD_BOSS, CHRONICLES_SECTION_ASTEROIDS):
+        return _normalize_ops_tab(raw)
     return ""
 
 
@@ -295,20 +315,57 @@ def _matches_pvp_tab(battle: Mapping[str, Any], tab: str) -> bool:
     return True
 
 
-def _fetch_combat_rows(player_id: int, *, limit: int, conn: sqlite3.Connection) -> List[Any]:
+def _fetch_entry_rows(
+    player_id: int,
+    *,
+    entry_type: str,
+    conn: sqlite3.Connection,
+    limit: Optional[int] = None,
+) -> List[Any]:
     cur = conn.cursor()
-    cur.execute(
-        f"""
-        SELECT id, source_message_id, body_json, occurred_at
+    sql = f"""
+        SELECT id, source_message_id, body_json, occurred_at, score_value
         FROM {CHRONICLE_ENTRIES_TABLE}
         WHERE player_id = ?
-          AND entry_type = 'combat'
+          AND entry_type = ?
         ORDER BY occurred_at DESC, id DESC
-        LIMIT ?;
-        """,
-        (int(player_id), max(1, int(limit))),
-    )
+    """
+    params: list[Any] = [int(player_id), str(entry_type)]
+    if limit is not None:
+        sql += "\n        LIMIT ?;"
+        params.append(max(1, int(limit)))
+    else:
+        sql += ";"
+    cur.execute(sql, params)
     return cur.fetchall()
+
+
+def _fetch_combat_rows(
+    player_id: int,
+    *,
+    limit: Optional[int] = None,
+    conn: sqlite3.Connection,
+) -> List[Any]:
+    return _fetch_entry_rows(
+        int(player_id),
+        entry_type=ENTRY_TYPE_COMBAT,
+        conn=conn,
+        limit=limit,
+    )
+
+
+def _fetch_expedition_rows(
+    player_id: int,
+    *,
+    limit: Optional[int] = None,
+    conn: sqlite3.Connection,
+) -> List[Any]:
+    return _fetch_entry_rows(
+        int(player_id),
+        entry_type=ENTRY_TYPE_EXPEDITION,
+        conn=conn,
+        limit=limit,
+    )
 
 
 def _build_pvp_stats(battles: List[Mapping[str, Any]]) -> Dict[str, Any]:
@@ -385,7 +442,7 @@ def list_pvp_battles(
     display_limit: int = PVP_DISPLAY_LIMIT,
 ) -> List[Dict[str, Any]]:
     tab_key = _normalize_pvp_tab(tab)
-    rows = _fetch_combat_rows(int(player_id), limit=PVP_STATS_SCAN_LIMIT, conn=conn)
+    rows = _fetch_combat_rows(int(player_id), limit=None, conn=conn)
     battles = [_battle_from_row(row, player_id=int(player_id)) for row in rows]
     filtered = [b for b in battles if _matches_pvp_tab(b, tab_key)]
     lim = PVP_OVERVIEW_RECENT_LIMIT if tab_key == PVP_TAB_OVERVIEW else max(1, int(display_limit))
@@ -393,7 +450,7 @@ def list_pvp_battles(
 
 
 def build_pvp_stats(player_id: int, *, conn: sqlite3.Connection) -> Dict[str, Any]:
-    rows = _fetch_combat_rows(int(player_id), limit=PVP_STATS_SCAN_LIMIT, conn=conn)
+    rows = _fetch_combat_rows(int(player_id), limit=None, conn=conn)
     battles = [_battle_from_row(row, player_id=int(player_id)) for row in rows]
     stats = _build_pvp_stats(battles)
     stats["combat_rank"] = _combat_rank(int(player_id), conn=conn)
@@ -520,22 +577,6 @@ def _matches_expedition_tab(event: Mapping[str, Any], tab: str) -> bool:
     return True
 
 
-def _fetch_expedition_rows(player_id: int, *, limit: int, conn: sqlite3.Connection) -> List[Any]:
-    cur = conn.cursor()
-    cur.execute(
-        f"""
-        SELECT id, source_message_id, body_json, occurred_at
-        FROM {CHRONICLE_ENTRIES_TABLE}
-        WHERE player_id = ?
-          AND entry_type = 'expedition'
-        ORDER BY occurred_at DESC, id DESC
-        LIMIT ?;
-        """,
-        (int(player_id), max(1, int(limit))),
-    )
-    return cur.fetchall()
-
-
 def _build_expedition_stats(events: List[Mapping[str, Any]]) -> Dict[str, Any]:
     stats = {
         "total_expeditions": len(events),
@@ -579,7 +620,7 @@ def list_expedition_events(
     display_limit: int = EXPEDITION_DISPLAY_LIMIT,
 ) -> List[Dict[str, Any]]:
     tab_key = _normalize_expedition_tab(tab)
-    rows = _fetch_expedition_rows(int(player_id), limit=EXPEDITION_STATS_SCAN_LIMIT, conn=conn)
+    rows = _fetch_expedition_rows(int(player_id), limit=None, conn=conn)
     events = [_expedition_from_row(row) for row in rows]
     filtered = [e for e in events if _matches_expedition_tab(e, tab_key)]
     lim = (
@@ -591,7 +632,7 @@ def list_expedition_events(
 
 
 def build_expedition_stats(player_id: int, *, conn: sqlite3.Connection) -> Dict[str, Any]:
-    rows = _fetch_expedition_rows(int(player_id), limit=EXPEDITION_STATS_SCAN_LIMIT, conn=conn)
+    rows = _fetch_expedition_rows(int(player_id), limit=None, conn=conn)
     events = [_expedition_from_row(row) for row in rows]
     return _build_expedition_stats(events)
 
@@ -648,14 +689,21 @@ def _record_card(
 def _build_records_cards(
     battles: List[Mapping[str, Any]],
     expeditions: List[Mapping[str, Any]],
+    *,
+    boss_hits: Optional[List[Mapping[str, Any]]] = None,
+    asteroid_runs: Optional[List[Mapping[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
     weights = expedition_event_weight_audit().get("weights_by_key") or {}
+    boss_hits = list(boss_hits or [])
+    asteroid_runs = list(asteroid_runs or [])
 
     best_battle = max(battles, key=lambda b: int(b.get("destroyed_total") or 0), default=None)
     best_expo = max(expeditions, key=lambda e: int(e.get("loot_total") or 0), default=None)
     best_debris = max(battles, key=lambda b: int(b.get("debris_total") or 0), default=None)
     loot_battles = [b for b in battles if int(b.get("loot_total") or 0) > 0]
     best_loot = max(loot_battles, key=lambda b: int(b.get("loot_total") or 0), default=None)
+    best_boss = max(boss_hits, key=lambda b: int(b.get("damage") or 0), default=None)
+    best_asteroid = max(asteroid_runs, key=lambda a: int(a.get("loot_total") or 0), default=None)
 
     rarest: Mapping[str, Any] | None = None
     if expeditions:
@@ -712,6 +760,49 @@ def _build_records_cards(
     else:
         cards.append(
             _record_card(key="biggest_expo_find", label_key="chronicles_record_biggest_expo")
+        )
+
+    if best_boss and int(best_boss.get("damage") or 0) > 0:
+        cards.append(
+            _record_card(
+                key="biggest_boss_hit",
+                label_key="chronicles_record_biggest_boss",
+                value_compact=str(best_boss.get("damage_compact") or "—"),
+                value_fmt=str(best_boss.get("damage") or ""),
+                subtitle=str(best_boss.get("boss_name") or "—"),
+                created_at_fmt=str(best_boss.get("created_at_fmt") or "—"),
+                message_id=int(best_boss.get("message_id") or 0) or None,
+                report_category="combat",
+                report_metadata=best_boss.get("report_metadata"),
+                detail_label_key="chronicles_record_detail_boss",
+            )
+        )
+    else:
+        cards.append(
+            _record_card(key="biggest_boss_hit", label_key="chronicles_record_biggest_boss")
+        )
+
+    if best_asteroid and int(best_asteroid.get("loot_total") or 0) > 0:
+        cards.append(
+            _record_card(
+                key="biggest_asteroid_haul",
+                label_key="chronicles_record_biggest_asteroid",
+                value_compact=str(best_asteroid.get("loot_total_compact") or "—"),
+                value_fmt=str(best_asteroid.get("loot_total_fmt") or ""),
+                subtitle=str(best_asteroid.get("target_coords") or "—"),
+                created_at_fmt=str(best_asteroid.get("created_at_fmt") or "—"),
+                message_id=int(best_asteroid.get("message_id") or 0) or None,
+                report_category="system",
+                report_metadata=best_asteroid.get("report_metadata"),
+                detail_label_key="chronicles_record_detail_asteroid",
+            )
+        )
+    else:
+        cards.append(
+            _record_card(
+                key="biggest_asteroid_haul",
+                label_key="chronicles_record_biggest_asteroid",
+            )
         )
 
     if best_debris and int(best_debris.get("debris_total") or 0) > 0:
@@ -803,6 +894,229 @@ def _build_records_cards(
     return cards
 
 
+def _world_boss_from_row(row: Any, *, player_id: int) -> Dict[str, Any]:
+    meta = normalize_combat_metadata(chronicle_row_metadata(row["body_json"]))
+    damage = 0
+    for key in ("world_boss_damage", "damage"):
+        try:
+            damage = max(damage, int(meta.get(key) or 0))
+        except (TypeError, ValueError):
+            pass
+    if damage <= 0:
+        try:
+            damage = int(row["score_value"] or 0)
+        except (TypeError, ValueError, KeyError):
+            damage = 0
+    created_ts = int(row["occurred_at"] or 0)
+    source_message_id = row["source_message_id"]
+    outcome = _viewer_outcome(meta, player_id)
+    return {
+        "message_id": int(source_message_id) if source_message_id else int(row["id"]),
+        "chronicle_id": int(row["id"]),
+        "subject": chronicle_row_subject(row["body_json"]),
+        "created_at": created_ts,
+        "created_at_fmt": _format_created_at(created_ts),
+        "created_at_short": _format_created_at_short(created_ts),
+        "boss_name": str(meta.get("defender_name") or "—"),
+        "target_coords": str(meta.get("target_coords") or ""),
+        "damage": damage,
+        "damage_compact": fmt_int_compact(damage),
+        "damage_fmt": fmt_int(damage),
+        "outcome": outcome,
+        "outcome_label_key": _outcome_label_key(outcome),
+        "is_read": True,
+        "report_metadata": meta,
+    }
+
+
+def _asteroid_from_row(row: Any) -> Dict[str, Any]:
+    meta = chronicle_row_metadata(row["body_json"])
+    collected = meta.get("collected") if isinstance(meta.get("collected"), Mapping) else {}
+    loot_total = _loot_total(collected)
+    if loot_total <= 0:
+        try:
+            loot_total = int(row["score_value"] or 0)
+        except (TypeError, ValueError, KeyError):
+            loot_total = 0
+    created_ts = int(row["occurred_at"] or 0)
+    source_message_id = row["source_message_id"]
+    status = "harvested"
+    if meta.get("asteroid_missed"):
+        status = "missed"
+    elif meta.get("asteroid_expired"):
+        status = "expired"
+    return {
+        "message_id": int(source_message_id) if source_message_id else int(row["id"]),
+        "chronicle_id": int(row["id"]),
+        "subject": chronicle_row_subject(row["body_json"]),
+        "created_at": created_ts,
+        "created_at_fmt": _format_created_at(created_ts),
+        "created_at_short": _format_created_at_short(created_ts),
+        "target_coords": str(meta.get("target_coords") or ""),
+        "loot_total": loot_total,
+        "loot_total_compact": fmt_int_compact(loot_total),
+        "loot_total_fmt": fmt_int(loot_total),
+        "status": status,
+        "status_label_key": f"chronicles_asteroid_status_{status}",
+        "is_read": True,
+        "report_metadata": meta,
+    }
+
+
+def _build_world_boss_stats(hits: List[Mapping[str, Any]]) -> Dict[str, Any]:
+    stats = {
+        "total_hits": len(hits),
+        "damage_total": 0,
+        "biggest_hit": 0,
+        "victories": 0,
+    }
+    for hit in hits:
+        dmg = max(0, int(hit.get("damage") or 0))
+        stats["damage_total"] += dmg
+        if dmg > int(stats["biggest_hit"]):
+            stats["biggest_hit"] = dmg
+        if str(hit.get("outcome") or "") == "victory":
+            stats["victories"] += 1
+    damage_total = int(stats["damage_total"])
+    biggest = int(stats["biggest_hit"])
+    stats["damage_total"] = damage_total
+    stats["damage_total_compact"] = fmt_int_compact(damage_total)
+    stats["damage_total_fmt"] = fmt_int(damage_total)
+    stats["biggest_hit"] = biggest
+    stats["biggest_hit_compact"] = fmt_int_compact(biggest)
+    stats["biggest_hit_fmt"] = fmt_int(biggest)
+    return stats
+
+
+def _build_asteroid_stats(runs: List[Mapping[str, Any]]) -> Dict[str, Any]:
+    stats = {
+        "total_runs": len(runs),
+        "loot_total": 0,
+        "biggest_haul": 0,
+        "harvested": 0,
+        "missed": 0,
+    }
+    for run in runs:
+        loot = max(0, int(run.get("loot_total") or 0))
+        stats["loot_total"] += loot
+        if loot > int(stats["biggest_haul"]):
+            stats["biggest_haul"] = loot
+        status = str(run.get("status") or "")
+        if status == "harvested":
+            stats["harvested"] += 1
+        elif status == "missed":
+            stats["missed"] += 1
+    loot_total = int(stats["loot_total"])
+    biggest = int(stats["biggest_haul"])
+    stats["loot_total"] = loot_total
+    stats["loot_total_compact"] = fmt_int_compact(loot_total)
+    stats["loot_total_fmt"] = fmt_int(loot_total)
+    stats["biggest_haul"] = biggest
+    stats["biggest_haul_compact"] = fmt_int_compact(biggest)
+    stats["biggest_haul_fmt"] = fmt_int(biggest)
+    return stats
+
+
+def list_world_boss_hits(
+    player_id: int,
+    *,
+    tab: str = OPS_TAB_DEFAULT,
+    conn: sqlite3.Connection,
+    display_limit: int = OPS_DISPLAY_LIMIT,
+) -> List[Dict[str, Any]]:
+    tab_key = _normalize_ops_tab(tab)
+    rows = _fetch_entry_rows(
+        int(player_id),
+        entry_type=ENTRY_TYPE_WORLD_BOSS,
+        conn=conn,
+        limit=None,
+    )
+    hits = [_world_boss_from_row(row, player_id=int(player_id)) for row in rows]
+    lim = OPS_OVERVIEW_RECENT_LIMIT if tab_key == OPS_TAB_OVERVIEW else max(1, int(display_limit))
+    return hits[:lim]
+
+
+def build_world_boss_stats(player_id: int, *, conn: sqlite3.Connection) -> Dict[str, Any]:
+    rows = _fetch_entry_rows(
+        int(player_id),
+        entry_type=ENTRY_TYPE_WORLD_BOSS,
+        conn=conn,
+        limit=None,
+    )
+    hits = [_world_boss_from_row(row, player_id=int(player_id)) for row in rows]
+    return _build_world_boss_stats(hits)
+
+
+def list_asteroid_runs(
+    player_id: int,
+    *,
+    tab: str = OPS_TAB_DEFAULT,
+    conn: sqlite3.Connection,
+    display_limit: int = OPS_DISPLAY_LIMIT,
+) -> List[Dict[str, Any]]:
+    tab_key = _normalize_ops_tab(tab)
+    rows = _fetch_entry_rows(
+        int(player_id),
+        entry_type=ENTRY_TYPE_ASTEROID,
+        conn=conn,
+        limit=None,
+    )
+    runs = [_asteroid_from_row(row) for row in rows]
+    lim = OPS_OVERVIEW_RECENT_LIMIT if tab_key == OPS_TAB_OVERVIEW else max(1, int(display_limit))
+    return runs[:lim]
+
+
+def build_asteroid_stats(player_id: int, *, conn: sqlite3.Connection) -> Dict[str, Any]:
+    rows = _fetch_entry_rows(
+        int(player_id),
+        entry_type=ENTRY_TYPE_ASTEROID,
+        conn=conn,
+        limit=None,
+    )
+    runs = [_asteroid_from_row(row) for row in rows]
+    return _build_asteroid_stats(runs)
+
+
+def _build_world_boss_section_payload(
+    *,
+    player_id: int,
+    tab: str,
+    conn: sqlite3.Connection,
+) -> Dict[str, Any]:
+    tab_key = _normalize_ops_tab(tab)
+    ready = chronicles_schema_ready(conn)
+    stats = build_world_boss_stats(int(player_id), conn=conn) if ready else _build_world_boss_stats([])
+    hits = list_world_boss_hits(int(player_id), tab=tab_key, conn=conn) if ready else []
+    return {
+        "ready": ready,
+        "tab": tab_key,
+        "stats": stats,
+        "hits": hits,
+        "events": hits,
+        "count": len(hits),
+    }
+
+
+def _build_asteroid_section_payload(
+    *,
+    player_id: int,
+    tab: str,
+    conn: sqlite3.Connection,
+) -> Dict[str, Any]:
+    tab_key = _normalize_ops_tab(tab)
+    ready = chronicles_schema_ready(conn)
+    stats = build_asteroid_stats(int(player_id), conn=conn) if ready else _build_asteroid_stats([])
+    runs = list_asteroid_runs(int(player_id), tab=tab_key, conn=conn) if ready else []
+    return {
+        "ready": ready,
+        "tab": tab_key,
+        "stats": stats,
+        "runs": runs,
+        "events": runs,
+        "count": len(runs),
+    }
+
+
 def _build_records_section_payload(
     *,
     player_id: int,
@@ -813,11 +1127,24 @@ def _build_records_section_payload(
         empty_cards = _build_records_cards([], [])
         return {"ready": False, "cards": empty_cards, "count": 0}
 
-    combat_rows = _fetch_combat_rows(int(player_id), limit=EXPEDITION_STATS_SCAN_LIMIT, conn=conn)
-    expo_rows = _fetch_expedition_rows(int(player_id), limit=EXPEDITION_STATS_SCAN_LIMIT, conn=conn)
+    combat_rows = _fetch_combat_rows(int(player_id), limit=None, conn=conn)
+    expo_rows = _fetch_expedition_rows(int(player_id), limit=None, conn=conn)
+    boss_rows = _fetch_entry_rows(
+        int(player_id), entry_type=ENTRY_TYPE_WORLD_BOSS, conn=conn, limit=None
+    )
+    asteroid_rows = _fetch_entry_rows(
+        int(player_id), entry_type=ENTRY_TYPE_ASTEROID, conn=conn, limit=None
+    )
     battles = [_battle_from_row(row, player_id=int(player_id)) for row in combat_rows]
     expeditions = [_expedition_from_row(row) for row in expo_rows]
-    cards = _build_records_cards(battles, expeditions)
+    boss_hits = [_world_boss_from_row(row, player_id=int(player_id)) for row in boss_rows]
+    asteroid_runs = [_asteroid_from_row(row) for row in asteroid_rows]
+    cards = _build_records_cards(
+        battles,
+        expeditions,
+        boss_hits=boss_hits,
+        asteroid_runs=asteroid_runs,
+    )
     populated = sum(1 for card in cards if card.get("has_record"))
     return {"ready": True, "cards": cards, "count": populated}
 
@@ -847,6 +1174,22 @@ def build_chronicles_api_payload(
         "events": [],
         "count": 0,
     }
+    world_boss_payload: Dict[str, Any] = {
+        "ready": False,
+        "tab": OPS_TAB_DEFAULT,
+        "stats": _build_world_boss_stats([]),
+        "hits": [],
+        "events": [],
+        "count": 0,
+    }
+    asteroids_payload: Dict[str, Any] = {
+        "ready": False,
+        "tab": OPS_TAB_DEFAULT,
+        "stats": _build_asteroid_stats([]),
+        "runs": [],
+        "events": [],
+        "count": 0,
+    }
     records_payload: Dict[str, Any] = {
         "ready": False,
         "cards": _build_records_cards([], []),
@@ -866,6 +1209,18 @@ def build_chronicles_api_payload(
                 tab=tab_key,
                 conn=conn,
             )
+        elif section_key == CHRONICLES_SECTION_WORLD_BOSS:
+            world_boss_payload = _build_world_boss_section_payload(
+                player_id=int(player_id),
+                tab=tab_key,
+                conn=conn,
+            )
+        elif section_key == CHRONICLES_SECTION_ASTEROIDS:
+            asteroids_payload = _build_asteroid_section_payload(
+                player_id=int(player_id),
+                tab=tab_key,
+                conn=conn,
+            )
         elif section_key == CHRONICLES_SECTION_RECORDS:
             records_payload = _build_records_section_payload(
                 player_id=int(player_id),
@@ -875,6 +1230,10 @@ def build_chronicles_api_payload(
     active: Dict[str, Any]
     if section_key == CHRONICLES_SECTION_EXPEDITIONS:
         active = expeditions_payload
+    elif section_key == CHRONICLES_SECTION_WORLD_BOSS:
+        active = world_boss_payload
+    elif section_key == CHRONICLES_SECTION_ASTEROIDS:
+        active = asteroids_payload
     elif section_key == CHRONICLES_SECTION_RECORDS:
         active = records_payload
     else:
@@ -888,10 +1247,12 @@ def build_chronicles_api_payload(
         "tab": tab_key,
         "stats": active.get("stats") or {},
         "battles": active.get("battles") or [],
-        "events": active.get("events") or [],
+        "events": active.get("events") or active.get("hits") or active.get("runs") or [],
         "cards": active.get("cards") or [],
         "count": int(active.get("count") or 0),
         "pvp": pvp_payload,
         "expeditions": expeditions_payload,
+        "world_boss": world_boss_payload,
+        "asteroids": asteroids_payload,
         "records": records_payload,
     }

@@ -15,6 +15,16 @@ logger = logging.getLogger(__name__)
 CHRONICLE_ENTRIES_TABLE = "chronicle_entries"
 ENTRY_TYPE_COMBAT = "combat"
 ENTRY_TYPE_EXPEDITION = "expedition"
+ENTRY_TYPE_WORLD_BOSS = "world_boss"
+ENTRY_TYPE_ASTEROID = "asteroid"
+VALID_ENTRY_TYPES = frozenset(
+    {
+        ENTRY_TYPE_COMBAT,
+        ENTRY_TYPE_EXPEDITION,
+        ENTRY_TYPE_WORLD_BOSS,
+        ENTRY_TYPE_ASTEROID,
+    }
+)
 
 
 def chronicle_schema_ready(conn) -> bool:
@@ -53,6 +63,26 @@ def _combat_score_value(meta: Mapping[str, Any]) -> int:
 
 def _expedition_score_value(meta: Mapping[str, Any]) -> int:
     return _loot_total(dict(meta.get("rewards") or {}))
+
+
+def _world_boss_score_value(meta: Mapping[str, Any]) -> int:
+    for key in ("world_boss_damage", "damage"):
+        try:
+            dmg = int(meta.get(key) or 0)
+        except (TypeError, ValueError):
+            dmg = 0
+        if dmg > 0:
+            return dmg
+    return _combat_score_value(meta)
+
+
+def _asteroid_score_value(meta: Mapping[str, Any]) -> int:
+    collected = meta.get("collected")
+    if isinstance(collected, Mapping):
+        total = _loot_total(collected)
+        if total > 0:
+            return total
+    return _loot_total(dict(meta.get("resources") or {}))
 
 
 def _related_player_id(entry_type: str, meta: Mapping[str, Any]) -> int | None:
@@ -104,8 +134,28 @@ def _source_event_id(
             if phase:
                 return f"expedition:{fleet_id}:{phase}"
             return f"expedition:{fleet_id}"
+        if entry_type == ENTRY_TYPE_WORLD_BOSS:
+            return f"world_boss:{fleet_id}"
+        if entry_type == ENTRY_TYPE_ASTEROID:
+            return f"asteroid:{fleet_id}"
     if source_message_id:
         return f"{entry_type}:msg:{int(source_message_id)}"
+    return None
+
+
+def resolve_chronicle_entry_type(
+    category: str,
+    metadata: Mapping[str, Any] | None = None,
+) -> str | None:
+    """Map inbox category (+ metadata) to chronicle entry_type, or None if not archived."""
+    cat = str(category or "").strip().lower()
+    meta = dict(metadata or {})
+    if cat == "combat":
+        if str(meta.get("combat_kind") or "").strip().lower() == "world_boss":
+            return ENTRY_TYPE_WORLD_BOSS
+        return ENTRY_TYPE_COMBAT
+    if cat == "expedition":
+        return ENTRY_TYPE_EXPEDITION
     return None
 
 
@@ -120,7 +170,7 @@ def record_chronicle_for_fleet_report(
     conn,
 ) -> bool:
     """
-    Persist one chronicle snapshot for a combat or expedition fleet report.
+    Persist one chronicle snapshot for a fleet / combat / asteroid report.
 
     Idempotent per (player_id, entry_type, source_event_id). No FK to messages.
     """
@@ -128,7 +178,7 @@ def record_chronicle_for_fleet_report(
         return False
 
     etype = str(entry_type or "").strip().lower()
-    if etype not in (ENTRY_TYPE_COMBAT, ENTRY_TYPE_EXPEDITION):
+    if etype not in VALID_ENTRY_TYPES:
         return False
 
     pid = int(player_id)
@@ -139,6 +189,10 @@ def record_chronicle_for_fleet_report(
     event_id = _source_event_id(etype, meta, source_message_id=source_message_id)
     if etype == ENTRY_TYPE_COMBAT:
         score = _combat_score_value(meta)
+    elif etype == ENTRY_TYPE_WORLD_BOSS:
+        score = _world_boss_score_value(meta)
+    elif etype == ENTRY_TYPE_ASTEROID:
+        score = _asteroid_score_value(meta)
     else:
         score = _expedition_score_value(meta)
 

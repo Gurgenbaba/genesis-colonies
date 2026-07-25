@@ -1571,6 +1571,8 @@ def publish_attack_combat_report(
     conn=None,
     attacker_locale: str | None = None,
     defender_locale: str | None = None,
+    combat_kind: str | None = None,
+    extra_metadata: Mapping[str, Any] | None = None,
 ) -> Dict[str, Any]:
     """Build report and deliver permanent inbox messages to attacker and defender."""
     body, metadata = build_combat_report(
@@ -1595,6 +1597,13 @@ def publish_attack_combat_report(
     )
     if fleet_id is not None:
         metadata["fleet_id"] = int(fleet_id)
+    kind = str(combat_kind or "").strip().lower()
+    if kind:
+        metadata["combat_kind"] = kind
+    if extra_metadata:
+        for key, value in dict(extra_metadata).items():
+            if key not in metadata or metadata.get(key) in (None, "", 0, {}):
+                metadata[key] = value
     from .messages import dispatch_combat_reports
 
     out = dispatch_combat_reports(

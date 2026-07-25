@@ -31,6 +31,7 @@ def _empty_tick_result(source: str, scope: str) -> Dict[str, Any]:
             "fleet_arrivals": 0,
             "fleet_returns": 0,
             "fleet_holding": 0,
+            "inbox_purged": 0,
         },
         "affected_players": [],
         "affected_planets": [],
@@ -154,6 +155,16 @@ def run_tick(
             result["errors"].append(f"fleet tick: {exc}")
             logger.exception("queue tick fleet worker failed source=%s", source)
 
+        try:
+            from .messages import purge_expired_inbox_messages
+
+            purged = purge_expired_inbox_messages(now=now)
+            result["finished"]["inbox_purged"] = int(purged)
+        except Exception as exc:
+            result["ok"] = False
+            result["errors"].append(f"inbox retention: {exc}")
+            logger.exception("queue tick inbox retention failed source=%s", source)
+
         result["tick_elapsed_ms"] = int((time.perf_counter() - started) * 1000)
         result["duration_ms"] = result["tick_elapsed_ms"]
         if persist:
@@ -191,6 +202,16 @@ def run_tick(
     result["tick_elapsed_ms"] = int((time.perf_counter() - started) * 1000)
     if result["duration_ms"] <= 0:
         result["duration_ms"] = result["tick_elapsed_ms"]
+
+    try:
+        from .messages import purge_expired_inbox_messages
+
+        purged = purge_expired_inbox_messages(now=now)
+        result["finished"]["inbox_purged"] = int(purged)
+    except Exception as exc:
+        result["ok"] = False
+        result["errors"].append(f"inbox retention: {exc}")
+        logger.exception("queue tick inbox retention failed source=%s", source)
 
     logger.info(
         "queue tick done source=%s finished=%s players=%s batches=%s duration_ms=%s errors=%s",

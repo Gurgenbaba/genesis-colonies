@@ -1362,6 +1362,12 @@ def resolve_attack_arrival(
             conn=conn,
             attacker_locale=attacker_locale,
             defender_locale=None,
+            combat_kind="world_boss",
+            extra_metadata={
+                "world_boss_event_id": int(event["id"]),
+                "world_boss_damage": int(damage),
+                "boss_key": str(event.get("boss_key") or ""),
+            },
         )
     except Exception:
         logger.exception("world_boss combat report failed movement=%s", movement_id)
