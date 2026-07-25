@@ -151,6 +151,26 @@
                 </a>
               </p>
               {% endif %}
+
+              {% set rewards_preview = card.rewards_preview if card.rewards_preview is defined else [] %}
+              {% if rewards_preview %}
+              <section class="gc-world-boss-rewards" aria-label="{{ T('wb_rewards_title', 'Belohnungen') }}">
+                <h3 class="gc-world-boss-rewards-title">{{ T("wb_rewards_title", "Belohnungen") }}</h3>
+                <ul class="gc-world-boss-rewards-list">
+                  {% for row in rewards_preview %}
+                  <li class="gc-world-boss-reward-row" data-wb-reward-tier="{{ row.tier }}">
+                    <span class="gc-world-boss-reward-tier">{{ T(row.label_key, row.tier) }}</span>
+                    <span class="gc-world-boss-reward-grants">
+                      {% for g in row.grants %}
+                      <span class="gc-mono">{{ T(g.name_key, g.item_key) }} ×{{ g.amount }}</span>{% if not loop.last %}<span class="gc-world-boss-reward-sep" aria-hidden="true"> · </span>{% endif %}
+                      {% endfor %}
+                    </span>
+                  </li>
+                  {% endfor %}
+                </ul>
+              </section>
+              {% endif %}
+
               {% if is_ended and player_info and player_info.can_claim %}
               <p>
                 <button type="button" class="gc-btn gc-btn-primary wb-claim-btn" data-event-id="{{ event.id }}">
@@ -159,6 +179,13 @@
               </p>
               {% elif is_ended and player_info and player_info.claim %}
               <p class="hint">{{ T("wb_claimed", "Belohnung bereits abgeholt.") }}</p>
+              {% if player_info.claim.rewards %}
+              <ul class="gc-world-boss-claimed-list" aria-label="{{ T('wb_claimed_rewards', 'Abgeholt') }}">
+                {% for r in player_info.claim.rewards %}
+                <li class="gc-mono">{{ T(r.name_key if r.name_key is defined else ('inv_' ~ r.item_key), r.item_key) }} ×{{ r.amount }}</li>
+                {% endfor %}
+              </ul>
+              {% endif %}
               {% endif %}
               {% if player_info and player_info.contribution %}
               <p class="hint">{{ T("wb_your_damage", "Dein Schaden") }}:
@@ -285,7 +312,7 @@
           <li>{{ T("wb_help_hp", "Geteilte HP: Schaden skaliert mit Overkill; Mega-Flotten brauchen etwa 10–20 Wellen solo.") }}</li>
           <li>{{ T("wb_help_attack", "Angriff: Schicke eine Flotte mit Mission Angriff — Cooldown startet beim Absenden.") }}</li>
           <li>{{ T("wb_help_board", "Rangliste: Pro Boss-Card einklappbar; Schaden pro Spieler und Allianz.") }}</li>
-          <li>{{ T("wb_help_rewards", "Belohnungen: Nach Defeat oder Ablauf Meta-Container je nach Beitragstier.") }}</li>
+          <li>{{ T("wb_help_rewards", "Belohnungen: Pro Boss eigene Teilnahme-Container (loot_pool); Top 10 % Void + Boss-Loot; Platz 1 Mythic; Top-Allianz Relic; Expo-Entdecker +1 Boss-Loot.") }}</li>
           <li>{{ T("wb_help_limits", "Limits: Cooldown und Wellenlimit gelten pro Boss-Ereignis.") }}</li>
           <li>{{ T("wb_help_schedule", "Zeitplan: Bis zu 3 parallele Bosse; Spawn alle paar Stunden oder selten per Expedition.") }}</li>
         </ul>

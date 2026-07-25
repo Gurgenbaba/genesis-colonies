@@ -5897,7 +5897,7 @@
   "wb_help_hp": "PV partagés : les dégâts scalent avec l'overkill ; les méga-flottes ont besoin d'environ 10–20 vagues en solo.",
   "wb_help_attack": "Attaque : envoyez une flotte en Attaque — le cooldown démarre à l'envoi.",
   "wb_help_board": "Classement : les dégâts sont comptés par joueur et alliance.",
-  "wb_help_rewards": "Récompenses : participation 2× conteneurs d'événement ; top 10 % void+événement ; rang 1 mythic ; alliance top relic ; découvreur +1 événement (avec dégâts).",
+  "wb_help_rewards": "Récompenses : chaque boss a son conteneur de participation ; top 10 % void + butin du boss ; rang 1 mythic ; alliance top relic ; découvreur +1 butin (avec dégâts).",
   "wb_help_limits": "Limites : cooldown entre vagues et nombre max de vagues par joueur et événement.",
   "wb_help_schedule": "Planning : jusqu'à 3 boss en parallèle ; spawn toutes les quelques heures ou rarement via expédition.",
   "admin_wb_announce": "Annoncer dans les news univers",
@@ -5945,5 +5945,12 @@
   "wb_active_cap": "Actif",
   "wb_expo_discovery_report": "World Boss découvert à %(coords)s — attaquez via World Boss / Galaxie.",
   "wb_discovered_by": "Découvert par",
-  "wb_news_spawn_body_discovered": "%(player)s a découvert un World Boss à %(coords)s (expédition). PV %(hp)s/%(max_hp)s — attaquable par tous."
+  "wb_news_spawn_body_discovered": "%(player)s a découvert un World Boss à %(coords)s (expédition). PV %(hp)s/%(max_hp)s — attaquable par tous.",
+  "wb_rewards_title": "Récompenses",
+  "wb_reward_tier_participate": "Participation",
+  "wb_reward_tier_top10": "Top 10 %",
+  "wb_reward_tier_top1": "Rang 1",
+  "wb_reward_tier_alliance_top": "Alliance top",
+  "wb_reward_tier_discoverer": "Découvreur",
+  "wb_claimed_rewards": "Récupéré"
 }

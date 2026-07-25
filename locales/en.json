@@ -5897,7 +5897,7 @@
   "wb_help_hp": "Shared HP: damage scales with overkill; mega fleets need roughly 10–20 waves solo.",
   "wb_help_attack": "Attack: send a fleet on Attack — cooldown starts when you launch.",
   "wb_help_board": "Ranking: Dealt damage is tracked per player and alliance.",
-  "wb_help_rewards": "Rewards: participate 2× event containers; top 10% void+event; rank 1 mythic; top alliance relic; expo discoverer +1 event (if you dealt damage).",
+  "wb_help_rewards": "Rewards: each boss has its own participate container; top 10% void + boss loot; rank 1 mythic; top alliance relic; expo discoverer +1 boss loot (if you dealt damage).",
   "wb_help_limits": "Limits: Cooldown between waves and a max wave count per player per event.",
   "wb_help_schedule": "Schedule: up to 3 parallel bosses; spawn every few hours or rarely via expedition.",
   "admin_wb_announce": "Announce in universe news",
@@ -5945,5 +5945,12 @@
   "wb_active_cap": "Active",
   "wb_expo_discovery_report": "World Boss discovered at %(coords)s — attack via World Boss / Galaxy.",
   "wb_discovered_by": "Discovered by",
-  "wb_news_spawn_body_discovered": "%(player)s discovered a World Boss at %(coords)s (expedition). HP %(hp)s/%(max_hp)s — attackable by everyone."
+  "wb_news_spawn_body_discovered": "%(player)s discovered a World Boss at %(coords)s (expedition). HP %(hp)s/%(max_hp)s — attackable by everyone.",
+  "wb_rewards_title": "Rewards",
+  "wb_reward_tier_participate": "Participation",
+  "wb_reward_tier_top10": "Top 10%",
+  "wb_reward_tier_top1": "Rank 1",
+  "wb_reward_tier_alliance_top": "Top alliance",
+  "wb_reward_tier_discoverer": "Discoverer",
+  "wb_claimed_rewards": "Claimed"
 }

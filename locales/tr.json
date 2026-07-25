@@ -5897,7 +5897,7 @@
   "wb_help_hp": "Paylaşılan HP: hasar overkill ile ölçeklenir; mega filolar solo için yaklaşık 10–20 dalga gerekir.",
   "wb_help_attack": "Saldırı: Saldırı göreviyle filo gönderin — bekleme süresi gönderimde başlar.",
   "wb_help_board": "Sıralama: Verilen hasar oyuncu ve ittifak bazında sayılır.",
-  "wb_help_rewards": "Ödüller: katılım 2× event konteyner; top %10 void+event; 1. mythic; top ittifak relic; keşfeden +1 event (hasar verdiyse).",
+  "wb_help_rewards": "Ödüller: her patronun kendi katılım konteyneri var; ilk %10 void + patron ganimeti; 1. mythic; en iyi ittifak relic; keşfeden +1 ganimet (hasar verdiyse).",
   "wb_help_limits": "Limitler: Dalgalar arası bekleme ve etkinlik başına oyuncu dalga sınırı.",
   "wb_help_schedule": "Takvim: en fazla 3 paralel boss; birkaç saatte bir spawn veya nadiren keşif ile.",
   "admin_wb_announce": "Evren haberlerinde duyur",
@@ -5945,5 +5945,12 @@
   "wb_active_cap": "Aktif",
   "wb_expo_discovery_report": "%(coords)s konumunda World Boss keşfedildi — World Boss / Galaksi üzerinden saldırın.",
   "wb_discovered_by": "Keşfeden",
-  "wb_news_spawn_body_discovered": "%(player)s bir World Boss keşfetti (%(coords)s, keşif). HP %(hp)s/%(max_hp)s — herkes saldırabilir."
+  "wb_news_spawn_body_discovered": "%(player)s bir World Boss keşfetti (%(coords)s, keşif). HP %(hp)s/%(max_hp)s — herkes saldırabilir.",
+  "wb_rewards_title": "Ödüller",
+  "wb_reward_tier_participate": "Katılım",
+  "wb_reward_tier_top10": "İlk %10",
+  "wb_reward_tier_top1": "1. sıra",
+  "wb_reward_tier_alliance_top": "En iyi ittifak",
+  "wb_reward_tier_discoverer": "Keşfeden",
+  "wb_claimed_rewards": "Alındı"
 }

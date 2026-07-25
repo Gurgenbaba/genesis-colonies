@@ -11,7 +11,7 @@ import json
 import logging
 import math
 import time
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Set, Tuple
 
 from .db import table_exists
 from .runtime_state import get_runtime_value, set_runtime_value
@@ -49,19 +49,72 @@ MAX_WAVE_HP_FRACTION = 0.08
 
 # Reward tiers → inventory container keys (meta-only, known catalog).
 # Amounts are tuned “good but not OP”: participate solid, top tiers rare containers.
+# Participate / discoverer / top10-bonus use the boss definition `loot_pool_key`.
 REWARD_PARTICIPATE = "container_event_special"
 REWARD_TOP10 = "container_void_artifact"
 REWARD_TOP1 = "container_mythic"
 REWARD_ALLIANCE_TOP = "container_ancient_relic"
-# (tier, item_key, amount) — stacked grants, same key sums.
-REWARD_TIER_GRANTS: Tuple[Tuple[str, str, int], ...] = (
-    ("top1", REWARD_TOP1, 1),
-    ("top10", REWARD_TOP10, 1),
-    ("top10", REWARD_PARTICIPATE, 1),
-    ("alliance_top", REWARD_ALLIANCE_TOP, 1),
-    ("discoverer", REWARD_PARTICIPATE, 1),
-    ("participate", REWARD_PARTICIPATE, 2),
+REWARD_TIER_ORDER: Tuple[str, ...] = (
+    "participate",
+    "top10",
+    "top1",
+    "alliance_top",
+    "discoverer",
 )
+
+
+def normalize_loot_pool_key(raw: Any) -> str:
+    key = str(raw or REWARD_PARTICIPATE).strip()
+    return key or REWARD_PARTICIPATE
+
+
+def build_reward_tier_grants(
+    loot_pool_key: Optional[str] = None,
+) -> Tuple[Tuple[str, str, int], ...]:
+    """(tier, item_key, amount) — same key stacks within a claim."""
+    pool = normalize_loot_pool_key(loot_pool_key)
+    return (
+        ("top1", REWARD_TOP1, 1),
+        ("top10", REWARD_TOP10, 1),
+        ("top10", pool, 1),
+        ("alliance_top", REWARD_ALLIANCE_TOP, 1),
+        ("discoverer", pool, 1),
+        ("participate", pool, 2),
+    )
+
+
+# Default catalog (event-special pool) — used by tests / fallbacks.
+REWARD_TIER_GRANTS: Tuple[Tuple[str, str, int], ...] = build_reward_tier_grants(
+    REWARD_PARTICIPATE
+)
+
+
+def build_rewards_preview(loot_pool_key: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Server-authored per-boss reward table for World Boss cards."""
+    by_tier: Dict[str, Dict[str, int]] = {}
+    for tier, item_key, amount in build_reward_tier_grants(loot_pool_key):
+        bucket = by_tier.setdefault(str(tier), {})
+        bucket[str(item_key)] = bucket.get(str(item_key), 0) + int(amount)
+    rows: List[Dict[str, Any]] = []
+    for tier in REWARD_TIER_ORDER:
+        grants_map = by_tier.get(tier)
+        if not grants_map:
+            continue
+        rows.append(
+            {
+                "tier": tier,
+                "label_key": f"wb_reward_tier_{tier}",
+                "grants": [
+                    {
+                        "item_key": item_key,
+                        "amount": int(amount),
+                        "name_key": f"inv_{item_key}",
+                    }
+                    for item_key, amount in grants_map.items()
+                ],
+            }
+        )
+    return rows
 
 
 def _now() -> float:
@@ -310,13 +363,83 @@ def get_bosses_for_system(
     return out
 
 
-def _pick_spawn_coords(conn, *, prefer_dense: bool = False) -> Tuple[int, int, int]:
-    """Pick an empty classic slot (1–15). Prefer denser systems for planet_eater."""
+def _active_boss_coords(
+    conn,
+    *,
+    now: Optional[float] = None,
+) -> Set[Tuple[int, int, int]]:
+    """Active world-boss slots — must stay unique across concurrent events."""
+    return {
+        (int(e["galaxy"]), int(e["system"]), int(e["position"]))
+        for e in list_active_events(conn=conn, now=now, limit=MAX_CONCURRENT_EVENTS + 20)
+        if e.get("galaxy") is not None and e.get("system") is not None and e.get("position") is not None
+    }
+
+
+def _planet_positions_in_system(
+    conn,
+    galaxy: int,
+    system: int,
+    *,
+    position_min: int,
+    position_max: int,
+) -> Set[int]:
+    return {
+        int(r["position"])
+        for r in conn.execute(
+            """
+            SELECT position FROM planets
+            WHERE galaxy = ? AND system = ?
+              AND position BETWEEN ? AND ?;
+            """,
+            (int(galaxy), int(system), int(position_min), int(position_max)),
+        ).fetchall()
+    }
+
+
+def _first_free_classic_slot(
+    conn,
+    galaxy: int,
+    system: int,
+    *,
+    blocked: Set[Tuple[int, int, int]],
+    position_min: int,
+    position_max: int,
+) -> Optional[int]:
+    occupied = _planet_positions_in_system(
+        conn,
+        galaxy,
+        system,
+        position_min=position_min,
+        position_max=position_max,
+    )
+    for pos in range(int(position_min), int(position_max) + 1):
+        if pos in occupied:
+            continue
+        if (int(galaxy), int(system), int(pos)) in blocked:
+            continue
+        return int(pos)
+    return None
+
+
+def _pick_spawn_coords(
+    conn,
+    *,
+    prefer_dense: bool = False,
+    blocked: Optional[Set[Tuple[int, int, int]]] = None,
+    now: Optional[float] = None,
+) -> Tuple[int, int, int]:
+    """Pick an empty classic slot (1–15), never overlapping an active boss."""
     from .galaxy import POSITION_MAX, POSITION_MIN
 
+    blocked_slots: Set[Tuple[int, int, int]] = set(blocked or ())
+    blocked_slots |= _active_boss_coords(conn, now=now)
     cur = conn.cursor()
+    candidates: List[Tuple[int, int]] = []
+
     if prefer_dense:
-        row = cur.execute(
+        # Prefer densest systems first, then a few runners-up.
+        dense_rows = cur.execute(
             """
             SELECT galaxy, system, COUNT(*) AS n
             FROM planets
@@ -324,28 +447,13 @@ def _pick_spawn_coords(conn, *, prefer_dense: bool = False) -> Tuple[int, int, i
               AND position BETWEEN ? AND ?
             GROUP BY galaxy, system
             ORDER BY n DESC
-            LIMIT 1;
+            LIMIT 8;
             """,
             (POSITION_MIN, POSITION_MAX),
-        ).fetchone()
-        if row:
-            g, s = int(row["galaxy"]), int(row["system"])
-            occupied = {
-                int(r["position"])
-                for r in cur.execute(
-                    """
-                    SELECT position FROM planets
-                    WHERE galaxy = ? AND system = ?
-                      AND position BETWEEN ? AND ?;
-                    """,
-                    (g, s, POSITION_MIN, POSITION_MAX),
-                ).fetchall()
-            }
-            for pos in range(POSITION_MIN, POSITION_MAX + 1):
-                if pos not in occupied:
-                    return g, s, pos
+        ).fetchall()
+        for drow in dense_rows:
+            candidates.append((int(drow["galaxy"]), int(drow["system"])))
 
-    # Fallback: first empty-ish homeworld neighborhood or 1:1:empty
     home = cur.execute(
         """
         SELECT galaxy, system, position FROM planets
@@ -355,23 +463,54 @@ def _pick_spawn_coords(conn, *, prefer_dense: bool = False) -> Tuple[int, int, i
         """
     ).fetchone()
     if home:
-        g, s = int(home["galaxy"]), int(home["system"])
-        occupied = {
-            int(r["position"])
-            for r in cur.execute(
-                """
-                SELECT position FROM planets
-                WHERE galaxy = ? AND system = ?
-                  AND position BETWEEN ? AND ?;
-                """,
-                (g, s, POSITION_MIN, POSITION_MAX),
-            ).fetchall()
-        }
-        for pos in range(POSITION_MIN, POSITION_MAX + 1):
-            if pos not in occupied:
-                return g, s, pos
-        # All full — use next system empty slot 8
-        return g, min(s + 1, 499), 8
+        hg, hs = int(home["galaxy"]), int(home["system"])
+        candidates.append((hg, hs))
+        for delta in range(1, 12):
+            candidates.append((hg, min(hs + delta, 499)))
+            if hs - delta >= 1:
+                candidates.append((hg, hs - delta))
+
+    candidates.extend([(1, 1), (1, 2), (1, 3), (2, 1), (2, 2)])
+
+    seen: Set[Tuple[int, int]] = set()
+    for g, s in candidates:
+        key = (int(g), int(s))
+        if key in seen:
+            continue
+        seen.add(key)
+        free = _first_free_classic_slot(
+            conn,
+            g,
+            s,
+            blocked=blocked_slots,
+            position_min=POSITION_MIN,
+            position_max=POSITION_MAX,
+        )
+        if free is not None:
+            return int(g), int(s), int(free)
+
+    # Last resort: walk systems until a free classic slot exists.
+    for g in range(1, 6):
+        for s in range(1, 50):
+            if (g, s) in seen:
+                continue
+            free = _first_free_classic_slot(
+                conn,
+                g,
+                s,
+                blocked=blocked_slots,
+                position_min=POSITION_MIN,
+                position_max=POSITION_MAX,
+            )
+            if free is not None:
+                return int(g), int(s), int(free)
+
+    # Extremely constrained map: still avoid active bosses even if planets fill slots.
+    for g in range(1, 10):
+        for s in range(1, 100):
+            for pos in range(int(POSITION_MIN), int(POSITION_MAX) + 1):
+                if (g, s, pos) not in blocked_slots:
+                    return int(g), int(s), int(pos)
     return 1, 1, 8
 
 
@@ -512,14 +651,19 @@ def spawn_world_boss(
         }
 
     prefer_dense = str(boss_key) == "planet_eater"
+    blocked = _active_boss_coords(conn, now=ts)
     if galaxy is None or system is None or position is None:
-        g, s, p = _pick_spawn_coords(conn, prefer_dense=prefer_dense)
+        g, s, p = _pick_spawn_coords(
+            conn, prefer_dense=prefer_dense, blocked=blocked, now=ts
+        )
     else:
         g, s, p = int(galaxy), int(system), int(position)
-
-    # Avoid stacking on an already-occupied boss slot.
-    if get_active_event_at(g, s, p, conn=conn, now=ts) and not force:
-        g, s, p = _pick_spawn_coords(conn, prefer_dense=prefer_dense)
+        if (g, s, p) in blocked:
+            return {
+                "ok": False,
+                "error": "coords_occupied",
+                "coords": f"[{g}:{s}:{p}]",
+            }
 
     duration = int(definition["duration_seconds"] or DEFAULT_EVENT_DURATION_SEC)
     stacks = {
@@ -1243,10 +1387,17 @@ def _player_claim_row(event_id: int, player_id: int, *, conn) -> Optional[Dict[s
     ).fetchone()
     if not row:
         return None
+    rewards = list(_json_loads(row["rewards_json"], []) or [])
+    for entry in rewards:
+        if not isinstance(entry, dict):
+            continue
+        item_key = str(entry.get("item_key") or "").strip()
+        if item_key and not entry.get("name_key"):
+            entry["name_key"] = f"inv_{item_key}"
     return {
         "id": int(row["id"]),
         "tiers": list(_json_loads(row["tiers_json"], []) or []),
-        "rewards": list(_json_loads(row["rewards_json"], []) or []),
+        "rewards": rewards,
         "claimed_at": float(row["claimed_at"]),
     }
 
@@ -1312,10 +1463,10 @@ def claim_world_boss_rewards(
 
     from .inventory import grant_inventory_item
 
-    # Aggregate amounts per item_key across earned tiers.
+    # Aggregate amounts per item_key across earned tiers (boss loot_pool_key).
     amounts: Dict[str, int] = {}
     tier_for_key: Dict[str, str] = {}
-    for tier, item_key, amount in REWARD_TIER_GRANTS:
+    for tier, item_key, amount in build_reward_tier_grants(event.get("loot_pool_key")):
         if tier not in tiers:
             continue
         amounts[item_key] = amounts.get(item_key, 0) + int(amount)
@@ -1340,6 +1491,7 @@ def claim_world_boss_rewards(
                     "tier": tier_for_key.get(item_key, "participate"),
                     "item_key": item_key,
                     "amount": int(amount),
+                    "name_key": f"inv_{item_key}",
                 }
             )
 
@@ -1516,6 +1668,7 @@ def _event_card_for_player(
         "alliance_board": alliance_board,
         "player": player_info,
         "discoverer_name": discoverer_name,
+        "rewards_preview": build_rewards_preview(event.get("loot_pool_key")),
     }
 
 

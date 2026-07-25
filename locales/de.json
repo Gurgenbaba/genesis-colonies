@@ -5897,7 +5897,7 @@
   "wb_help_hp": "Geteilte HP: Schaden skaliert mit Overkill; Mega-Flotten brauchen etwa 10–20 Wellen solo.",
   "wb_help_attack": "Angriff: Schicke eine Flotte mit Mission Angriff — Cooldown startet beim Absenden.",
   "wb_help_board": "Rangliste: Verursachter Schaden wird pro Spieler und Allianz gezählt.",
-  "wb_help_rewards": "Belohnungen: Teilnahme 2× Event-Container; Top 10 % Void+Event; Platz 1 Mythic; Top-Allianz Relic; Expo-Entdecker +1 Event (bei Schaden).",
+  "wb_help_rewards": "Belohnungen: Pro Boss eigene Teilnahme-Container; Top 10 % Void + Boss-Loot; Platz 1 Mythic; Top-Allianz Relic; Expo-Entdecker +1 Boss-Loot (bei Schaden).",
   "wb_help_limits": "Limits: Cooldown zwischen Wellen und maximale Wellenzahl pro Spieler und Ereignis.",
   "wb_help_schedule": "Zeitplan: Bis zu 3 parallele Bosse; Spawn alle paar Stunden oder selten per Expedition.",
   "admin_wb_announce": "Universe-News ankündigen",
@@ -5945,5 +5945,12 @@
   "wb_active_cap": "Aktiv",
   "wb_expo_discovery_report": "World Boss entdeckt bei %(coords)s — angreifbar über World Boss / Galaxie.",
   "wb_discovered_by": "Entdeckt von",
-  "wb_news_spawn_body_discovered": "%(player)s hat einen World Boss bei %(coords)s entdeckt (Expedition). HP %(hp)s/%(max_hp)s — für alle angreifbar."
+  "wb_news_spawn_body_discovered": "%(player)s hat einen World Boss bei %(coords)s entdeckt (Expedition). HP %(hp)s/%(max_hp)s — für alle angreifbar.",
+  "wb_rewards_title": "Belohnungen",
+  "wb_reward_tier_participate": "Teilnahme",
+  "wb_reward_tier_top10": "Top 10 %",
+  "wb_reward_tier_top1": "Platz 1",
+  "wb_reward_tier_alliance_top": "Top-Allianz",
+  "wb_reward_tier_discoverer": "Entdecker",
+  "wb_claimed_rewards": "Abgeholt"
 }

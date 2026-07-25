@@ -5897,7 +5897,7 @@
   "wb_help_hp": "Wspólne HP: obrażenia skalują się z overkillem; mega floty potrzebują ok. 10–20 fal solo.",
   "wb_help_attack": "Atak: wyślij flotę na Atak — cooldown zaczyna się przy wysłaniu.",
   "wb_help_board": "Ranking: zadane obrażenia liczone są per gracz i sojusz.",
-  "wb_help_rewards": "Nagrody: udział 2× kontenery eventu; top 10% void+event; miejsce 1 mythic; top sojusz relic; odkrywca +1 event (przy obrażeniach).",
+  "wb_help_rewards": "Nagrody: każdy boss ma własny kontener udziału; top 10% void + łup bossa; miejsce 1 mythic; top sojusz relic; odkrywca +1 łup (przy obrażeniach).",
   "wb_help_limits": "Limity: cooldown między falami i max fal na gracza na wydarzenie.",
   "wb_help_schedule": "Harmonogram: do 3 bossów jednocześnie; spawn co kilka godzin lub rzadko z ekspedycji.",
   "admin_wb_announce": "Ogłoś w newsach uniwersum",
@@ -5945,5 +5945,12 @@
   "wb_active_cap": "Aktywne",
   "wb_expo_discovery_report": "Odkryto World Bossa w %(coords)s — atakuj przez World Boss / Galaktykę.",
   "wb_discovered_by": "Odkryty przez",
-  "wb_news_spawn_body_discovered": "%(player)s odkrył World Bossa w %(coords)s (ekspedycja). HP %(hp)s/%(max_hp)s — atakowalny przez wszystkich."
+  "wb_news_spawn_body_discovered": "%(player)s odkrył World Bossa w %(coords)s (ekspedycja). HP %(hp)s/%(max_hp)s — atakowalny przez wszystkich.",
+  "wb_rewards_title": "Nagrody",
+  "wb_reward_tier_participate": "Udział",
+  "wb_reward_tier_top10": "Top 10%",
+  "wb_reward_tier_top1": "Miejsce 1",
+  "wb_reward_tier_alliance_top": "Top sojusz",
+  "wb_reward_tier_discoverer": "Odkrywca",
+  "wb_claimed_rewards": "Odebrane"
 }

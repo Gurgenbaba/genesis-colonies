@@ -186,6 +186,8 @@ def test_world_boss_galaxy_ui_contracts():
     assert "wb-attack-btn" in page
     assert "data-wb-locked-until" in page
     assert "data-wb-attack-cooldown" in page
+    assert "gc-world-boss-rewards" in page
+    assert "rewards_preview" in page or "wb_rewards_title" in page
 
     css = Path("static/style.css").read_text(encoding="utf-8")
     assert "object-fit: contain" in css
@@ -373,12 +375,13 @@ def test_claim_rewards_after_defeat(wb_db):
         assert claim["ok"], claim
         assert "participate" in claim["tiers"]
         assert claim["rewards"]
-        event_special = next(
-            (r for r in claim["rewards"] if r["item_key"] == "container_event_special"),
+        # void_titan loot_pool_key → container_void_artifact
+        pool_loot = next(
+            (r for r in claim["rewards"] if r["item_key"] == "container_void_artifact"),
             None,
         )
-        assert event_special is not None
-        assert int(event_special["amount"]) >= 2
+        assert pool_loot is not None
+        assert int(pool_loot["amount"]) >= 2
         again = claim_world_boss_rewards(uid, event_id, conn=conn, now=now)
         assert not again["ok"]
         assert again["error"] == "already_claimed"
@@ -651,6 +654,50 @@ def test_send_starts_cooldown_without_prior_contribution(wb_db):
         conn.close()
 
 
+def test_spawn_coords_unique_across_active_bosses(wb_db):
+    from game.world_boss import list_active_events
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        first = spawn_world_boss(
+            "ancient_leviathan",
+            conn=conn,
+            galaxy=4,
+            system=4,
+            position=8,
+            announce=False,
+        )
+        assert first["ok"], first
+        # Explicit same coords must fail — no overlap.
+        clash = spawn_world_boss(
+            "void_titan",
+            conn=conn,
+            galaxy=4,
+            system=4,
+            position=8,
+            announce=False,
+        )
+        assert not clash["ok"]
+        assert clash["error"] == "coords_occupied"
+        # Auto-pick must land on a free slot.
+        second = spawn_world_boss("void_titan", conn=conn, announce=False)
+        assert second["ok"], second
+        e1 = first["event"]
+        e2 = second["event"]
+        assert (e1["galaxy"], e1["system"], e1["position"]) != (
+            e2["galaxy"],
+            e2["system"],
+            e2["position"],
+        )
+        active = list_active_events(conn=conn)
+        coords = {(e["galaxy"], e["system"], e["position"]) for e in active}
+        assert len(coords) == len(active)
+        commit(conn)
+    finally:
+        conn.close()
+
+
 def test_multi_concurrent_spawn_cap(wb_db):
     from game.world_boss import MAX_CONCURRENT_EVENTS, list_active_events
 
@@ -712,6 +759,44 @@ def test_expo_discovery_spawns_when_under_cap(wb_db):
         conn.close()
 
 
+def test_rewards_preview_uses_boss_loot_pool(wb_db):
+    from game.world_boss import build_rewards_preview, build_world_boss_payload
+
+    preview_void = build_rewards_preview("container_void_artifact")
+    participate = next(r for r in preview_void if r["tier"] == "participate")
+    assert participate["grants"][0]["item_key"] == "container_void_artifact"
+    assert int(participate["grants"][0]["amount"]) == 2
+
+    preview_nexus = build_rewards_preview("container_ancient_relic")
+    participate_nx = next(r for r in preview_nexus if r["tier"] == "participate")
+    assert participate_nx["grants"][0]["item_key"] == "container_ancient_relic"
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        spawn = spawn_world_boss(
+            "rogue_ai_nexus",
+            conn=conn,
+            galaxy=2,
+            system=2,
+            position=2,
+            announce=False,
+        )
+        assert spawn["ok"], spawn
+        payload = build_world_boss_payload(None, conn=conn)
+        card = next(
+            c
+            for c in (payload.get("events") or [])
+            if (c.get("event") or {}).get("boss_key") == "rogue_ai_nexus"
+        )
+        assert card.get("rewards_preview")
+        part = next(r for r in card["rewards_preview"] if r["tier"] == "participate")
+        assert part["grants"][0]["item_key"] == "container_ancient_relic"
+        commit(conn)
+    finally:
+        conn.close()
+
+
 def test_discoverer_tier_extra_reward(wb_db):
     from game.world_boss import claim_world_boss_rewards
 
@@ -747,13 +832,13 @@ def test_discoverer_tier_extra_reward(wb_db):
         claim = claim_world_boss_rewards(uid, event_id, conn=conn, now=now)
         assert claim["ok"], claim
         assert "discoverer" in claim["tiers"]
-        event_special = next(
-            (r for r in claim["rewards"] if r["item_key"] == "container_event_special"),
+        # void_titan pool: participate 2 + discoverer 1
+        pool_loot = next(
+            (r for r in claim["rewards"] if r["item_key"] == "container_void_artifact"),
             None,
         )
-        assert event_special is not None
-        # participate 2 + discoverer 1
-        assert int(event_special["amount"]) >= 3
+        assert pool_loot is not None
+        assert int(pool_loot["amount"]) >= 3
         commit(conn)
     finally:
         conn.close()

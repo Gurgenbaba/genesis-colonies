@@ -5897,7 +5897,7 @@
   "wb_help_hp": "HP partilhado: o dano escala com overkill; mega frotas precisam de cerca de 10–20 ondas a solo.",
   "wb_help_attack": "Ataque: envie uma frota em Ataque — o cooldown começa ao enviar.",
   "wb_help_board": "Ranking: o dano é contabilizado por jogador e aliança.",
-  "wb_help_rewards": "Recompensas: participação 2× contentores de evento; top 10% void+evento; 1.º mythic; aliança top relic; descobridor +1 evento (com dano).",
+  "wb_help_rewards": "Recompensas: cada chefe tem o seu contentor de participação; top 10% void + loot do chefe; 1.º mythic; aliança top relic; descobridor +1 loot (com dano).",
   "wb_help_limits": "Limites: cooldown entre ondas e máximo de ondas por jogador e evento.",
   "wb_help_schedule": "Agenda: até 3 chefes em paralelo; spawn a cada poucas horas ou raramente via expedição.",
   "admin_wb_announce": "Anunciar nas notícias do universo",
@@ -5945,5 +5945,12 @@
   "wb_active_cap": "Ativo",
   "wb_expo_discovery_report": "World Boss descoberto em %(coords)s — ataque via World Boss / Galáxia.",
   "wb_discovered_by": "Descoberto por",
-  "wb_news_spawn_body_discovered": "%(player)s descobriu um World Boss em %(coords)s (expedição). HP %(hp)s/%(max_hp)s — atacável por todos."
+  "wb_news_spawn_body_discovered": "%(player)s descobriu um World Boss em %(coords)s (expedição). HP %(hp)s/%(max_hp)s — atacável por todos.",
+  "wb_rewards_title": "Recompensas",
+  "wb_reward_tier_participate": "Participação",
+  "wb_reward_tier_top10": "Top 10%",
+  "wb_reward_tier_top1": "1.º lugar",
+  "wb_reward_tier_alliance_top": "Aliança top",
+  "wb_reward_tier_discoverer": "Descobridor",
+  "wb_claimed_rewards": "Recebido"
 }

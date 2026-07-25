@@ -26602,6 +26602,47 @@ button.pe-hero-planet-hint:focus-visible {
 .gc-world-boss-page .gc-world-boss-cap {
   margin: 0 0 0.65rem;
 }
+.gc-world-boss-page .gc-world-boss-rewards {
+  margin-top: 0.7rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid rgba(90, 200, 255, 0.28);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(4, 14, 24, 0.55);
+}
+.gc-world-boss-page .gc-world-boss-rewards-title {
+  margin: 0 0 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(180, 230, 255, 0.92);
+}
+.gc-world-boss-page .gc-world-boss-rewards-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.35rem;
+}
+.gc-world-boss-page .gc-world-boss-reward-row {
+  display: grid;
+  grid-template-columns: minmax(7rem, 38%) 1fr;
+  gap: 0.45rem 0.65rem;
+  align-items: baseline;
+  font-size: 0.78rem;
+}
+.gc-world-boss-page .gc-world-boss-reward-tier {
+  color: var(--gc-text-soft);
+  font-weight: 600;
+}
+.gc-world-boss-page .gc-world-boss-reward-grants {
+  color: var(--gc-text);
+}
+.gc-world-boss-page .gc-world-boss-claimed-list {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.78rem;
+}
 @media (max-width: 640px) {
   .gc-world-boss-page .gc-world-boss-card-body {
     grid-template-columns: 1fr;

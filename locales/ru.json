@@ -5897,7 +5897,7 @@
   "wb_help_hp": "Общие HP: урон масштабируется с оверкиллом; мега-флотам нужно около 10–20 волн соло.",
   "wb_help_attack": "Атака: отправьте флот на Атаку — кулдаун начинается при отправке.",
   "wb_help_board": "Рейтинг: нанесённый урон учитывается по игроку и альянсу.",
-  "wb_help_rewards": "Награды: участие 2× event-контейнера; топ 10% void+event; 1 место mythic; топ альянс relic; первооткрыватель +1 event (при уроне).",
+  "wb_help_rewards": "Награды: у каждого босса свой контейнер участия; топ 10% void + лут босса; 1 место mythic; топ альянс relic; первооткрыватель +1 лут (при уроне).",
   "wb_help_limits": "Лимиты: кулдаун между волнами и максимум волн на игрока за событие.",
   "wb_help_schedule": "Расписание: до 3 боссов параллельно; спавн каждые несколько часов или редко с экспедиции.",
   "admin_wb_announce": "Объявить в новостях вселенной",
@@ -5945,5 +5945,12 @@
   "wb_active_cap": "Активно",
   "wb_expo_discovery_report": "Обнаружен World Boss в %(coords)s — атакуйте через World Boss / Галактику.",
   "wb_discovered_by": "Обнаружен",
-  "wb_news_spawn_body_discovered": "%(player)s обнаружил World Boss в %(coords)s (экспедиция). HP %(hp)s/%(max_hp)s — доступен всем."
+  "wb_news_spawn_body_discovered": "%(player)s обнаружил World Boss в %(coords)s (экспедиция). HP %(hp)s/%(max_hp)s — доступен всем.",
+  "wb_rewards_title": "Награды",
+  "wb_reward_tier_participate": "Участие",
+  "wb_reward_tier_top10": "Топ 10%",
+  "wb_reward_tier_top1": "1 место",
+  "wb_reward_tier_alliance_top": "Топ альянс",
+  "wb_reward_tier_discoverer": "Первооткрыватель",
+  "wb_claimed_rewards": "Получено"
 }

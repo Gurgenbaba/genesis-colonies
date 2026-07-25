@@ -68,17 +68,19 @@ Server-wide PvE bosses: shared HP, multi-player contribution, exclusive meta rew
 
 ## Rewards
 
-Claim once per player after `defeated` or `expired` (if contribution > 0):
+Claim once per player after `defeated` or `expired` (if contribution > 0).
+Participate / discoverer / top10 bonus use the boss definition `loot_pool_key`
+(e.g. Leviathan → Event-Container, Void Titan → Void-Artefakt, Nexus → Antikes Relikt).
 
 | Tier | Condition | Grant |
 |------|-----------|--------|
-| `participate` | any contribution | `container_event_special` ×2 |
-| `top10` | top 10% by damage | `container_void_artifact` ×1 + `container_event_special` ×1 |
+| `participate` | any contribution | `loot_pool_key` ×2 |
+| `top10` | top 10% by damage | `container_void_artifact` ×1 + `loot_pool_key` ×1 |
 | `top1` | rank 1 | `container_mythic` ×1 |
 | `alliance_top` | member of #1 alliance by sum damage | `container_ancient_relic` ×1 |
-| `discoverer` | Expo-Finder (must also deal damage) | `container_event_special` ×1 extra |
+| `discoverer` | Expo-Finder (must also deal damage) | `loot_pool_key` ×1 extra |
 
-Same item keys stack (e.g. participate + discoverer = 3× event special). Auction/vote remain free of event inflation.
+Same item keys stack. Each World Boss card shows `rewards_preview` from the server (no client math). Auction/vote remain free of event inflation.
 
 Expo discovery ≈ **5.5%** per expedition resolve when under the concurrent cap; spawn is server-wide for everyone.
 
@@ -87,6 +89,7 @@ Expo discovery ≈ **5.5%** per expedition resolve when under the concurrent cap
 ## Schedule
 
 - Up to **3** concurrent `active` events (distinct `boss_key`).
+- Active bosses never share the same `[G:S:P]` — auto-pick skips occupied boss slots; explicit coords return `coords_occupied`.
 - Cron (`fleet_worker`): expire due events; if `active < 3` and ≥ **4 h** since last spawn, weighted spawn (`spawn_weight`).
 - Rare **expedition discovery** (~3%) may spawn when under cap.
 - Admin: `POST /api/admin/world-boss/spawn` (`force` may exceed cap / replace same key).
