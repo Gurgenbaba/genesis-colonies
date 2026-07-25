@@ -5957,5 +5957,13 @@
   "wb_your_alliance_xp": "Ваш XP альянса",
   "wb_col_alliance_xp": "Ally XP",
   "wb_help_alliance_xp": "XP альянса: растёт с уроном ваших волн — больше урона, больше XP (лимит за волну).",
-  "alliance_xp_source_world_boss": "Урон World Boss"
+  "alliance_xp_source_world_boss": "Урон World Boss",
+  "wb_your_rewards_title": "Ваши награды",
+  "wb_your_rewards_claimable": "При получении вы получите:",
+  "wb_your_rewards_claimed": "Вы получили:",
+  "wb_your_rewards_projected": "Сейчас разблокировано:",
+  "wb_rewards_catalog_title": "Уровни наград",
+  "wb_rewards_inventory_hint": "Контейнеры попадают в инвентарь и открываются там.",
+  "wb_reward_tier_earned": "Получено",
+  "wb_your_rank": "Ранг"
 }

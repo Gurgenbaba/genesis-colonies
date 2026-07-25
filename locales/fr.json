@@ -5957,5 +5957,13 @@
   "wb_your_alliance_xp": "Votre XP d'alliance",
   "wb_col_alliance_xp": "XP allié",
   "wb_help_alliance_xp": "XP d'alliance : évolue avec les dégâts de vos vagues — plus de dégâts, plus d'XP (plafond par vague).",
-  "alliance_xp_source_world_boss": "Dégâts World Boss"
+  "alliance_xp_source_world_boss": "Dégâts World Boss",
+  "wb_your_rewards_title": "Vos récompenses",
+  "wb_your_rewards_claimable": "À la récupération vous obtenez :",
+  "wb_your_rewards_claimed": "Vous avez reçu :",
+  "wb_your_rewards_projected": "Débloqué actuellement :",
+  "wb_rewards_catalog_title": "Palier de récompenses",
+  "wb_rewards_inventory_hint": "Les conteneurs vont dans l’inventaire et s’ouvrent là-bas.",
+  "wb_reward_tier_earned": "Obtenu",
+  "wb_your_rank": "Rang"
 }

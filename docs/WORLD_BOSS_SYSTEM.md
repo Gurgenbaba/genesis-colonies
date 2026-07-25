@@ -82,7 +82,11 @@ Participate / discoverer / top10 bonus use the boss definition `loot_pool_key`
 | `alliance_top` | member of #1 alliance by sum damage | `container_ancient_relic` ×1 |
 | `discoverer` | Expo-Finder (must also deal damage) | `loot_pool_key` ×1 extra |
 
-Same item keys stack. Each World Boss card shows `rewards_preview` from the server (no client math), including the Ally-XP rule (`+1 / 40k damage`, max 40 / wave) and the player’s earned Ally XP for the event. Auction/vote remain free of event inflation.
+Same item keys stack. Each World Boss card shows:
+- **`reward_outlook`** — concrete grants for this player (`claimable` / `projected` / `claimed`) so UI can show “Deine Belohnung”
+- **`rewards_preview`** — full tier catalog with `earned` flags for reached tiers, including the Ally-XP rule (`+1 / 40k damage`, max 40 / wave)
+
+Auction/vote remain free of event inflation.
 
 Expo discovery ≈ **5.5%** per expedition resolve when under the concurrent cap; spawn is server-wide for everyone.
 

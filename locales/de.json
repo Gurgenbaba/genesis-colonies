@@ -5957,5 +5957,13 @@
   "wb_your_alliance_xp": "Dein Allianz-XP",
   "wb_col_alliance_xp": "Ally-XP",
   "wb_help_alliance_xp": "Allianz-XP: Skaliert mit dem Schaden deiner Wellen — mehr Schaden, mehr Ally-XP (mit Cap pro Welle).",
-  "alliance_xp_source_world_boss": "World-Boss-Schaden"
+  "alliance_xp_source_world_boss": "World-Boss-Schaden",
+  "wb_your_rewards_title": "Deine Belohnung",
+  "wb_your_rewards_claimable": "Beim Abholen erhältst du:",
+  "wb_your_rewards_claimed": "Du hast erhalten:",
+  "wb_your_rewards_projected": "Aktuell freigeschaltet (Stand jetzt):",
+  "wb_rewards_catalog_title": "Belohnungsstufen",
+  "wb_rewards_inventory_hint": "Container landen im Inventar und können dort geöffnet werden.",
+  "wb_reward_tier_earned": "Erreicht",
+  "wb_your_rank": "Rang"
 }

@@ -153,13 +153,50 @@
               {% endif %}
 
               {% set rewards_preview = card.rewards_preview if card.rewards_preview is defined else [] %}
+              {% set outlook = card.reward_outlook if card.reward_outlook is defined else (player_info.reward_outlook if player_info and player_info.reward_outlook is defined else none) %}
+              {% if outlook and outlook.grants %}
+              <section class="gc-world-boss-payout" data-wb-payout-mode="{{ outlook.mode }}" aria-label="{{ T('wb_your_rewards_title', 'Deine Belohnung') }}">
+                <h3 class="gc-world-boss-payout-title">{{ T("wb_your_rewards_title", "Deine Belohnung") }}</h3>
+                {% if outlook.mode == 'claimable' %}
+                <p class="gc-world-boss-payout-lead hint">{{ T("wb_your_rewards_claimable", "Beim Abholen erhältst du:") }}</p>
+                {% elif outlook.mode == 'claimed' %}
+                <p class="gc-world-boss-payout-lead hint">{{ T("wb_your_rewards_claimed", "Du hast erhalten:") }}</p>
+                {% else %}
+                <p class="gc-world-boss-payout-lead hint">{{ T("wb_your_rewards_projected", "Aktuell freigeschaltet (Stand jetzt):") }}</p>
+                {% endif %}
+                <ul class="gc-world-boss-payout-list">
+                  {% for g in outlook.grants %}
+                  <li class="gc-world-boss-payout-item">
+                    <span class="gc-mono gc-world-boss-payout-amount">×{{ g.amount }}</span>
+                    <span class="gc-world-boss-payout-name">{{ T(g.name_key if g.name_key is defined else ('inv_' ~ g.item_key), g.item_key) }}</span>
+                  </li>
+                  {% endfor %}
+                  {% if (outlook.alliance_xp_earned|default(0)|int) > 0 %}
+                  <li class="gc-world-boss-payout-item gc-world-boss-payout-item--ally">
+                    <span class="gc-mono gc-world-boss-payout-amount">+{{ outlook.alliance_xp_earned|fmt_int }}</span>
+                    <span class="gc-world-boss-payout-name">{{ T("wb_col_alliance_xp", "Ally-XP") }}</span>
+                  </li>
+                  {% endif %}
+                </ul>
+                <p class="gc-world-boss-payout-hint hint">{{ T("wb_rewards_inventory_hint", "Container landen im Inventar und können dort geöffnet werden.") }}</p>
+              </section>
+              {% endif %}
+
               {% if rewards_preview %}
-              <section class="gc-world-boss-rewards" aria-label="{{ T('wb_rewards_title', 'Belohnungen') }}">
-                <h3 class="gc-world-boss-rewards-title">{{ T("wb_rewards_title", "Belohnungen") }}</h3>
+              <section class="gc-world-boss-rewards" aria-label="{{ T('wb_rewards_catalog_title', 'Belohnungsstufen') }}">
+                <h3 class="gc-world-boss-rewards-title">{{ T("wb_rewards_catalog_title", "Belohnungsstufen") }}</h3>
                 <ul class="gc-world-boss-rewards-list">
                   {% for row in rewards_preview %}
-                  <li class="gc-world-boss-reward-row" data-wb-reward-tier="{{ row.tier }}">
-                    <span class="gc-world-boss-reward-tier">{{ T(row.label_key, row.tier) }}</span>
+                  {% set row_earned = row.earned if row.earned is defined else false %}
+                  <li class="gc-world-boss-reward-row{% if row_earned %} is-earned{% elif outlook and outlook.mode != 'none' %} is-locked{% endif %}"
+                      data-wb-reward-tier="{{ row.tier }}"
+                      data-wb-earned="{{ 1 if row_earned else 0 }}">
+                    <span class="gc-world-boss-reward-tier">
+                      {{ T(row.label_key, row.tier) }}
+                      {% if row_earned %}
+                      <span class="gc-world-boss-reward-badge" aria-label="{{ T('wb_reward_tier_earned', 'Erreicht') }}">✓</span>
+                      {% endif %}
+                    </span>
                     <span class="gc-world-boss-reward-grants">
                       {% if row.tier == 'alliance_xp' %}
                       {% set g0 = row.grants[0] if row.grants else none %}
@@ -189,19 +226,17 @@
               </p>
               {% elif is_ended and player_info and player_info.claim %}
               <p class="hint">{{ T("wb_claimed", "Belohnung bereits abgeholt.") }}</p>
-              {% if player_info.claim.rewards %}
-              <ul class="gc-world-boss-claimed-list" aria-label="{{ T('wb_claimed_rewards', 'Abgeholt') }}">
-                {% for r in player_info.claim.rewards %}
-                <li class="gc-mono">{{ T(r.name_key if r.name_key is defined else ('inv_' ~ r.item_key), r.item_key) }} ×{{ r.amount }}</li>
-                {% endfor %}
-              </ul>
-              {% endif %}
               {% endif %}
               {% if player_info and player_info.contribution %}
               <p class="hint">{{ T("wb_your_damage", "Dein Schaden") }}:
-                <span class="gc-mono">{{ player_info.contribution.damage|fmt_int }}</span></p>
+                <span class="gc-mono">{{ player_info.contribution.damage|fmt_int }}</span>
+                {% if outlook and outlook.rank %}
+                · {{ T("wb_your_rank", "Rang") }}:
+                <span class="gc-mono">#{{ outlook.rank }}{% if outlook.total_players %}/{{ outlook.total_players }}{% endif %}</span>
+                {% endif %}
+              </p>
               {% endif %}
-              {% if player_info and (player_info.alliance_xp_earned|default(0)|int) > 0 %}
+              {% if player_info and (player_info.alliance_xp_earned|default(0)|int) > 0 and not (outlook and outlook.grants) %}
               <p class="hint gc-world-boss-ally-xp">{{ T("wb_your_alliance_xp", "Dein Allianz-XP") }}:
                 <span class="gc-mono">+{{ player_info.alliance_xp_earned|fmt_int }}</span></p>
               {% endif %}

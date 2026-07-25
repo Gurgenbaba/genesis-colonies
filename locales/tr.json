@@ -5957,5 +5957,13 @@
   "wb_your_alliance_xp": "İttifak XP'n",
   "wb_col_alliance_xp": "Ally XP",
   "wb_help_alliance_xp": "İttifak XP: dalga hasarınla ölçeklenir — daha fazla hasar, daha fazla XP (dalga limiti var).",
-  "alliance_xp_source_world_boss": "World Boss hasarı"
+  "alliance_xp_source_world_boss": "World Boss hasarı",
+  "wb_your_rewards_title": "Ödüllerin",
+  "wb_your_rewards_claimable": "Topladığında alacaksın:",
+  "wb_your_rewards_claimed": "Aldın:",
+  "wb_your_rewards_projected": "Şu an açık olanlar:",
+  "wb_rewards_catalog_title": "Ödül kademeleri",
+  "wb_rewards_inventory_hint": "Konteynerler envantere gider ve orada açılır.",
+  "wb_reward_tier_earned": "Kazanıldı",
+  "wb_your_rank": "Sıra"
 }

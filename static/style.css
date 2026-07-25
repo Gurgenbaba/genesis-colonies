@@ -26609,6 +26609,47 @@ button.pe-hero-planet-hint:focus-visible {
   border-radius: var(--gc-radius-sm, 2px);
   background: rgba(4, 14, 24, 0.55);
 }
+.gc-world-boss-page .gc-world-boss-payout {
+  margin-top: 0.7rem;
+  padding: 0.65rem 0.7rem;
+  border: 1px solid rgba(120, 210, 160, 0.45);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(8, 28, 18, 0.55);
+}
+.gc-world-boss-page .gc-world-boss-payout-title {
+  margin: 0 0 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(170, 240, 200, 0.95);
+}
+.gc-world-boss-page .gc-world-boss-payout-lead {
+  margin: 0 0 0.4rem;
+}
+.gc-world-boss-page .gc-world-boss-payout-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.3rem;
+}
+.gc-world-boss-page .gc-world-boss-payout-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--gc-text);
+}
+.gc-world-boss-page .gc-world-boss-payout-amount {
+  min-width: 2.4rem;
+  color: rgba(170, 240, 200, 0.95);
+}
+.gc-world-boss-page .gc-world-boss-payout-hint {
+  margin: 0.45rem 0 0;
+  font-size: 0.72rem;
+}
 .gc-world-boss-page .gc-world-boss-rewards-title {
   margin: 0 0 0.4rem;
   font-size: 0.72rem;
@@ -26630,6 +26671,21 @@ button.pe-hero-planet-hint:focus-visible {
   gap: 0.45rem 0.65rem;
   align-items: baseline;
   font-size: 0.78rem;
+}
+.gc-world-boss-page .gc-world-boss-reward-row.is-locked {
+  opacity: 0.55;
+}
+.gc-world-boss-page .gc-world-boss-reward-row.is-earned {
+  opacity: 1;
+}
+.gc-world-boss-page .gc-world-boss-reward-row.is-earned .gc-world-boss-reward-tier {
+  color: rgba(170, 240, 200, 0.95);
+}
+.gc-world-boss-page .gc-world-boss-reward-badge {
+  display: inline-block;
+  margin-left: 0.3rem;
+  color: rgba(140, 230, 170, 0.95);
+  font-weight: 800;
 }
 .gc-world-boss-page .gc-world-boss-reward-tier {
   color: var(--gc-text-soft);

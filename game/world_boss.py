@@ -121,12 +121,18 @@ REWARD_TIER_GRANTS: Tuple[Tuple[str, str, int], ...] = build_reward_tier_grants(
 )
 
 
-def build_rewards_preview(loot_pool_key: Optional[str] = None) -> List[Dict[str, Any]]:
+def build_rewards_preview(
+    loot_pool_key: Optional[str] = None,
+    *,
+    earned_tiers: Optional[Set[str]] = None,
+    alliance_xp_earned: int = 0,
+) -> List[Dict[str, Any]]:
     """Server-authored per-boss reward table for World Boss cards."""
     by_tier: Dict[str, Dict[str, int]] = {}
     for tier, item_key, amount in build_reward_tier_grants(loot_pool_key):
         bucket = by_tier.setdefault(str(tier), {})
         bucket[str(item_key)] = bucket.get(str(item_key), 0) + int(amount)
+    earned = {str(t) for t in (earned_tiers or set())}
     rows: List[Dict[str, Any]] = []
     for tier in REWARD_TIER_ORDER:
         grants_map = by_tier.get(tier)
@@ -136,6 +142,7 @@ def build_rewards_preview(loot_pool_key: Optional[str] = None) -> List[Dict[str,
             {
                 "tier": tier,
                 "label_key": f"wb_reward_tier_{tier}",
+                "earned": tier in earned,
                 "grants": [
                     {
                         "item_key": item_key,
@@ -146,8 +153,89 @@ def build_rewards_preview(loot_pool_key: Optional[str] = None) -> List[Dict[str,
                 ],
             }
         )
-    rows.append(alliance_xp_reward_preview_row())
+    ally_row = alliance_xp_reward_preview_row()
+    ally_row["earned"] = int(alliance_xp_earned or 0) > 0
+    rows.append(ally_row)
     return rows
+
+
+def aggregate_reward_grants_for_tiers(
+    loot_pool_key: Optional[str],
+    tiers: List[str],
+) -> List[Dict[str, Any]]:
+    """Aggregate inventory grants for the given earned tiers (claim payout shape)."""
+    tier_set = {str(t) for t in (tiers or [])}
+    amounts: Dict[str, int] = {}
+    for tier, item_key, amount in build_reward_tier_grants(loot_pool_key):
+        if tier not in tier_set:
+            continue
+        amounts[item_key] = amounts.get(item_key, 0) + int(amount)
+    return [
+        {
+            "item_key": item_key,
+            "amount": int(amount),
+            "name_key": f"inv_{item_key}",
+        }
+        for item_key, amount in amounts.items()
+    ]
+
+
+def build_player_reward_outlook(
+    event: Dict[str, Any],
+    player_id: Optional[int],
+    *,
+    conn,
+) -> Dict[str, Any]:
+    """What this player gets / has unlocked — concrete grants, not just the catalog."""
+    empty: Dict[str, Any] = {
+        "mode": "none",
+        "earned_tiers": [],
+        "grants": [],
+        "alliance_xp_earned": 0,
+        "rank": None,
+        "total_players": 0,
+    }
+    if player_id is None:
+        return empty
+
+    claim = _player_claim_row(int(event["id"]), int(player_id), conn=conn)
+    ally_xp = 0
+    contribs = list_contributions(int(event["id"]), conn=conn, limit=10000)
+    mine = next((c for c in contribs if int(c["player_id"]) == int(player_id)), None)
+    if mine:
+        ally_xp = int(mine.get("alliance_xp") or 0)
+
+    if claim:
+        grants = list(claim.get("rewards") or [])
+        for entry in grants:
+            if isinstance(entry, dict) and entry.get("item_key") and not entry.get("name_key"):
+                entry["name_key"] = f"inv_{entry['item_key']}"
+        return {
+            "mode": "claimed",
+            "earned_tiers": list(claim.get("tiers") or []),
+            "grants": grants,
+            "alliance_xp_earned": ally_xp,
+            "rank": None,
+            "total_players": len(contribs),
+        }
+
+    if not mine or int(mine.get("damage") or 0) <= 0:
+        return empty
+
+    tiers, meta = compute_claim_tiers(int(event["id"]), int(player_id), conn=conn)
+    if not tiers:
+        return empty
+
+    status = str(event.get("status") or "")
+    mode = "claimable" if status in (STATUS_DEFEATED, STATUS_EXPIRED) else "projected"
+    return {
+        "mode": mode,
+        "earned_tiers": list(tiers),
+        "grants": aggregate_reward_grants_for_tiers(event.get("loot_pool_key"), tiers),
+        "alliance_xp_earned": ally_xp,
+        "rank": int(meta.get("rank") or 0) or None,
+        "total_players": int(meta.get("total_players") or len(contribs)),
+    }
 
 
 def _now() -> float:
@@ -1736,6 +1824,14 @@ def _event_card_for_player(
     if disc_id:
         discoverer_name = _player_name(int(disc_id), conn=conn)
     player_info = None
+    outlook: Dict[str, Any] = {
+        "mode": "none",
+        "earned_tiers": [],
+        "grants": [],
+        "alliance_xp_earned": 0,
+        "rank": None,
+        "total_players": 0,
+    }
     if player_id is not None:
         mine = next((c for c in contribs if int(c["player_id"]) == int(player_id)), None)
         claim = _player_claim_row(int(event["id"]), int(player_id), conn=conn)
@@ -1750,6 +1846,7 @@ def _event_card_for_player(
             ok_atk, atk_reason, atk_meta = can_player_attack_boss(
                 int(player_id), int(event["id"]), conn=conn, now=now
             )
+        outlook = build_player_reward_outlook(event, int(player_id), conn=conn)
         player_info = {
             "contribution": mine,
             "claim": claim,
@@ -1759,14 +1856,21 @@ def _event_card_for_player(
             "attack_meta": atk_meta,
             "is_discoverer": bool(disc_id and int(disc_id) == int(player_id)),
             "alliance_xp_earned": int((mine or {}).get("alliance_xp") or 0),
+            "reward_outlook": outlook,
         }
+    earned_tiers = set(outlook.get("earned_tiers") or [])
     return {
         "event": event,
         "contributions": contribs,
         "alliance_board": alliance_board,
         "player": player_info,
         "discoverer_name": discoverer_name,
-        "rewards_preview": build_rewards_preview(event.get("loot_pool_key")),
+        "rewards_preview": build_rewards_preview(
+            event.get("loot_pool_key"),
+            earned_tiers=earned_tiers,
+            alliance_xp_earned=int(outlook.get("alliance_xp_earned") or 0),
+        ),
+        "reward_outlook": outlook,
     }
 
 

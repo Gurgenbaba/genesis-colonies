@@ -5957,5 +5957,13 @@
   "wb_your_alliance_xp": "Your Alliance XP",
   "wb_col_alliance_xp": "Ally XP",
   "wb_help_alliance_xp": "Alliance XP: Scales with your wave damage — more damage means more Ally XP (capped per wave).",
-  "alliance_xp_source_world_boss": "World Boss damage"
+  "alliance_xp_source_world_boss": "World Boss damage",
+  "wb_your_rewards_title": "Your rewards",
+  "wb_your_rewards_claimable": "When you claim, you receive:",
+  "wb_your_rewards_claimed": "You received:",
+  "wb_your_rewards_projected": "Currently unlocked (as of now):",
+  "wb_rewards_catalog_title": "Reward tiers",
+  "wb_rewards_inventory_hint": "Containers go to your inventory and can be opened there.",
+  "wb_reward_tier_earned": "Earned",
+  "wb_your_rank": "Rank"
 }

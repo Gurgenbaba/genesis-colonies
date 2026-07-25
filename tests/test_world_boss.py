@@ -187,11 +187,15 @@ def test_world_boss_galaxy_ui_contracts():
     assert "data-wb-locked-until" in page
     assert "data-wb-attack-cooldown" in page
     assert "gc-world-boss-rewards" in page
+    assert "gc-world-boss-payout" in page
+    assert "wb_your_rewards_title" in page
+    assert "wb_rewards_catalog_title" in page
     assert "rewards_preview" in page or "wb_rewards_title" in page
     assert "wb_reward_tier_alliance_xp" in page or "alliance_xp" in page
     assert "wb_your_alliance_xp" in page
     assert "wb_col_alliance_xp" in page
     assert "wb_help_alliance_xp" in page
+    assert "wb_rewards_inventory_hint" in page
 
     alliance_page = Path("templates/alliance.html").read_text(encoding="utf-8")
     assert "alliance_xp_source_world_boss" in alliance_page
@@ -207,6 +211,8 @@ def test_world_boss_galaxy_ui_contracts():
     assert "galaxy-ring-hover-card--debris" in css
     assert "gc-world-boss-cards" in css
     assert "gc-nav-wb-live-pulse" in css
+    assert "gc-world-boss-payout" in css
+    assert "is-earned" in css
     assert "gc-nav-sub-link--wb-live" in css
 
     sidebar = Path("templates/partials/sidebar_right.html").read_text(encoding="utf-8")
@@ -480,6 +486,66 @@ def test_claim_rewards_after_defeat(wb_db):
         again = claim_world_boss_rewards(uid, event_id, conn=conn, now=now)
         assert not again["ok"]
         assert again["error"] == "already_claimed"
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_reward_outlook_payout_clarity(wb_db):
+    """Players see concrete grants for earned tiers, not only the catalog."""
+    from game.world_boss import build_player_reward_outlook, build_world_boss_payload
+
+    uid = _player()
+    other = _player("wb_other")
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        spawn = spawn_world_boss(
+            "planet_eater",
+            conn=conn,
+            galaxy=1,
+            system=1,
+            position=1,
+            announce=False,
+        )
+        event_id = int(spawn["event"]["id"])
+        now = time.time()
+        for pid, dmg in ((uid, 9_700_000), (other, 100)):
+            conn.execute(
+                """
+                INSERT INTO world_boss_contributions (
+                    event_id, player_id, alliance_id, damage, waves,
+                    last_attack_at, created_at, updated_at, alliance_xp
+                ) VALUES (?, ?, NULL, ?, 2, ?, ?, ?, ?);
+                """,
+                (event_id, pid, dmg, now, now, now, 65 if pid == uid else 0),
+            )
+        conn.execute(
+            "UPDATE world_boss_events SET status = 'defeated', current_hp = 0, defeated_at = ? WHERE id = ?;",
+            (now, event_id),
+        )
+        payload = build_world_boss_payload(uid, conn=conn)
+        card = next(
+            c
+            for c in (payload.get("events") or [])
+            if int((c.get("event") or {}).get("id") or 0) == event_id
+        )
+        outlook = card["reward_outlook"]
+        assert outlook["mode"] == "claimable"
+        assert "participate" in outlook["earned_tiers"]
+        assert "top1" in outlook["earned_tiers"]
+        keys = {g["item_key"] for g in outlook["grants"]}
+        assert "container_mythic" in keys
+        assert any(r.get("earned") for r in card["rewards_preview"] if r["tier"] == "top1")
+        assert not any(r.get("earned") for r in card["rewards_preview"] if r["tier"] == "alliance_top")
+        direct = build_player_reward_outlook(card["event"], uid, conn=conn)
+        assert direct["mode"] == "claimable"
+        assert direct["grants"]
+        page = (Path(__file__).resolve().parent.parent / "templates" / "world_boss.html").read_text(
+            encoding="utf-8"
+        )
+        assert "gc-world-boss-payout" in page
+        assert "wb_your_rewards_title" in page
         commit(conn)
     finally:
         conn.close()

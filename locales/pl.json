@@ -5957,5 +5957,13 @@
   "wb_your_alliance_xp": "Twoje XP sojuszu",
   "wb_col_alliance_xp": "XP sojuszu",
   "wb_help_alliance_xp": "XP sojuszu: skaluje się z obrażeniami fal — więcej obrażeń, więcej XP (limit na falę).",
-  "alliance_xp_source_world_boss": "Obrażenia World Boss"
+  "alliance_xp_source_world_boss": "Obrażenia World Boss",
+  "wb_your_rewards_title": "Twoje nagrody",
+  "wb_your_rewards_claimable": "Po odebraniu otrzymasz:",
+  "wb_your_rewards_claimed": "Otrzymałeś:",
+  "wb_your_rewards_projected": "Aktualnie odblokowane:",
+  "wb_rewards_catalog_title": "Progi nagród",
+  "wb_rewards_inventory_hint": "Kontenery trafiają do ekwipunku i tam je otwierasz.",
+  "wb_reward_tier_earned": "Zdobyte",
+  "wb_your_rank": "Ranga"
 }

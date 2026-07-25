@@ -5957,5 +5957,13 @@
   "wb_your_alliance_xp": "Tu XP de alianza",
   "wb_col_alliance_xp": "XP aliado",
   "wb_help_alliance_xp": "XP de alianza: escala con el daño de tus oleadas — más daño, más XP (con tope por oleada).",
-  "alliance_xp_source_world_boss": "Daño de World Boss"
+  "alliance_xp_source_world_boss": "Daño de World Boss",
+  "wb_your_rewards_title": "Tus recompensas",
+  "wb_your_rewards_claimable": "Al reclamar recibes:",
+  "wb_your_rewards_claimed": "Has recibido:",
+  "wb_your_rewards_projected": "Desbloqueado actualmente:",
+  "wb_rewards_catalog_title": "Niveles de recompensa",
+  "wb_rewards_inventory_hint": "Los contenedores van al inventario y se abren allí.",
+  "wb_reward_tier_earned": "Conseguido",
+  "wb_your_rank": "Rango"
 }
