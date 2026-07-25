@@ -63,9 +63,12 @@ def test_gc845_planet_switch_payload_smaller_than_full_panel(game_client):
 
 
 def test_gc845_main_js_planet_switch_skips_panel_patch():
+    """Planet switch must not run queue page patches (PJAX reload owns panels)."""
     src = _read("static/main.js")
     block = src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]
     assert "if (!isPlanetSwitch)" in block
-    assert "patchQueuePanelsImmediate(state)" in block
+    # Queue patch is gated behind !isPlanetSwitch via syncMountedQueuePagesFromState.
+    assert "syncMountedQueuePagesFromState(state, reasonStr)" in block
+    assert block.index("if (!isPlanetSwitch)") < block.index("syncMountedQueuePagesFromState(state, reasonStr)")
     assert "skipGameState: true" in src
     assert "skipPolling: true" in src

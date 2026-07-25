@@ -2438,15 +2438,67 @@ def test_main_js_timekeeper_research_card_selector():
     assert '[data-research-card][data-tech-key="' in src
     assert "function _syncActiveMiniQueueTimekeeperButtons()" in src
     sync_state = src.split("function _syncTimekeeperButtonsFromState(state)")[1].split("function _refreshDomTimekeeperApplyBtns", 1)[0]
-    assert '_findResearchCard(ownerKey)' in sync_state
-    assert "querySelectorAll(\"[data-tech-key]\")" not in sync_state
-    # GC-UNIT-QUEUE-DEDUP-001: unit-queue TK only via mini strip, never unit cards.
+    # One ⚡ per job: build/research/shipyard/defense only via mini strip; PE via queue lists.
+    assert "_syncMiniQueueTimekeeperFromState(state)" in sync_state
+    assert "_syncPeQueueListTimekeeperFromDom" in sync_state
+    assert "_syncTimekeeperFromCardJobsByOwner" not in sync_state
     assert 'data-ship-key="${shipKey}"' not in sync_state
     assert 'data-defense-card="${defKey}"' not in sync_state
-    assert "_syncMiniQueueTimekeeperFromState(state)" in sync_state
     finalize = src.split("function _finalizeTimekeeperQueueButtons(state)")[1].split("function _queueJobTimekeeperRemaining")[0]
     assert "_syncActiveMiniQueueTimekeeperButtons()" in finalize
     assert "_syncTimekeeperButtonsFromState(state)" in finalize
+
+
+def test_main_js_timekeeper_one_boost_per_job_mini_strip_only():
+    """Buildings/Research hero and PE tech cards must not host a second ⚡."""
+    src = _read("static/main.js")
+    buildings = _read("templates/buildings.html")
+    research = _read("templates/research.html")
+    assert "render_timekeeper_apply_btn" not in buildings
+    assert "render_timekeeper_apply_btn" not in research
+    assert "gc-bld-hero-action-slot--timekeeper" not in buildings
+    assert "gc-bld-hero-action-slot--timekeeper" not in research
+    resolve = src.split("function _resolveTimekeeperBtnHost(parent, queueJob)")[1].split(
+        "function _insertTimekeeperBtn"
+    )[0]
+    assert "return null" in resolve
+    assert "gc-bld-hero-queue" in resolve
+    prune = src.split("function _pruneInactiveTimekeeperApplyBtns()")[1].split(
+        "function _syncTimekeeperButtonsFromState"
+    )[0]
+    assert "gc-bld-hero-action-slot--timekeeper" in prune
+    assert "data-planet-tech-card" in prune
+    assert "function _ensureHeroTimekeeperSlot" not in src
+    # Mini strip still wires TK.
+    assert "function _syncMiniQueueTimekeeperFromState(state)" in src
+    mini = _read("templates/partials/page_mini_queue_strip.html")
+    assert "render_timekeeper_apply_btn" in mini
+
+
+def test_main_js_queue_page_sync_bridge():
+    """Mounted queue pages stay live after actions and diet polls."""
+    src = _read("static/main.js")
+    assert "function syncMountedQueuePagesFromState(state, reason)" in src
+    assert "function hasMountedQueuePage()" in src
+    bridge = src.split("function syncMountedQueuePagesFromState(state, reason)")[1].split(
+        "let _finishRefreshTimer"
+    )[0]
+    assert "patchQueuePanelsImmediate(state)" in bridge
+    apply = src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]
+    assert "syncMountedQueuePagesFromState(state, reasonStr)" in apply
+    assert 'reasonStr === "queue_timer_zero"' in apply
+    hud = src.split("function applyHudOnlyGameState(data, reason, opts)")[1].split(
+        "function applyGameStateData"
+    )[0]
+    assert "syncMountedQueuePagesFromState(data, reason)" in hud
+    pe = src.split("function _shouldRefreshPlanetEvolutionAfterAction(reasonStr)")[1].split(
+        "async function _softReloadPlanetEvolutionContent"
+    )[0]
+    assert 'r === "queue_timer_zero"' in pe
+    boost = src.split("function patchShellHudBoosters(data, opts)")[1].split(
+        "function bootstrapHeaderBoostersFromDom"
+    )[0]
+    assert 'hasOwnProperty.call(data, "active_boosters")' in boost
 
 
 def test_main_js_timekeeper_buttons_sync_immediately_after_action_state():
@@ -2455,11 +2507,9 @@ def test_main_js_timekeeper_buttons_sync_immediately_after_action_state():
     apply = src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]
     assert "_primeActionStateTimekeeper(state)" in apply
     assert "_finalizeTimekeeperQueueButtons(state)" in apply
-    assert "patchQueuePanelsImmediate(state)" in apply
+    assert "syncMountedQueuePagesFromState(state, reasonStr)" in apply
     assert "resetQueueRenderSignaturesForImmediatePatch()" in apply
     assert "function _finalizeTimekeeperQueueButtons(state)" in src
-    assert "function _findGlobalActiveCardJob(queueRaw)" in src
-    assert "function _iterActiveCardJobsByOwner(queueRaw)" in src
     assert "function _refreshDomTimekeeperApplyBtns(serverNowTs)" in src
     assert "function _syncMiniQueueTimekeeperFromState(state)" in src
     assert "function _syncTimekeeperButtonsFromState(state)" in src
@@ -2469,10 +2519,11 @@ def test_main_js_timekeeper_buttons_sync_immediately_after_action_state():
     assert "patchShipyardPanelFromState(data, activePlanetId)" in patch_immediate
     assert "patchDefensePanelFromGameState(data, activePlanetId)" in patch_immediate
     assert "patchResearchPanel(researchRaw.techs, researchRaw)" in patch_immediate
+    assert "function syncMountedQueuePagesFromState(state, reason)" in src
     finalize = src.split("function _finalizeTimekeeperQueueButtons(state)")[1].split("function _queueJobTimekeeperRemaining")[0]
-    assert "_clearScopeTimekeeperApplyBtns(document)" not in finalize
     assert "_syncTimekeeperButtonsFromState(state)" in finalize
     assert "_refreshDomTimekeeperApplyBtns(getTimerServerNow())" in finalize
+    assert "_pruneInactiveTimekeeperApplyBtns()" in finalize
     can_patch = src.split("function canPatchCardQueueInPlace(existing, queueJob)")[1].split("function _patchCardQueueTimingDatasets")[0]
     assert "finishAt !== prevFinish" not in can_patch
     ticker = src.split("function updateAllProgressBars(serverNow)")[1].split("function updateMiniQueueProgressBars", 1)[0]
@@ -2487,6 +2538,7 @@ def test_main_js_timekeeper_buttons_sync_immediately_after_action_state():
     assert "function syncFleetUiAfterMutation(reason)" in src
     apply_fn = src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]
     assert "syncFleetUiAfterMutation(reasonStr)" in apply_fn
+    assert "syncMountedQueuePagesFromState" in apply_fn
 
 
 def test_main_js_fleet_drawer_offdom_expiry_and_expand_refresh():

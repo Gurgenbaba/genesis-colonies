@@ -1525,7 +1525,7 @@
       if (reasonStr === "timekeeper_apply") {
         resetQueueRenderSignaturesForImmediatePatch();
       }
-      patchQueuePanelsImmediate(state);
+      syncMountedQueuePagesFromState(state, reasonStr);
     }
 
     const anyActive = applyGameStateData(state, reason, {
@@ -1545,6 +1545,14 @@
 
     if (!isPlanetSwitch) {
       _finalizeTimekeeperQueueButtons(state);
+      if (
+        reasonStr === "queue_timer_zero"
+        || reasonStr === "timer_done"
+        || reasonStr === "timekeeper_apply"
+        || reasonStr.endsWith("_finished")
+      ) {
+        syncMountedQueuePagesFromState(state, reasonStr);
+      }
       _schedulePlanetEvolutionRefreshAfterAction(reasonStr);
       syncFleetUiAfterMutation(reasonStr);
       if (shouldPollGameState()) {
@@ -3930,6 +3938,23 @@
       });
     }
     return patched;
+  }
+
+  function hasMountedQueuePage() {
+    return !!(
+      document.querySelector(".buildings-prog-list")
+      || document.querySelector(".research-prog-list")
+      || document.getElementById("shipyard-page")?.dataset.ready === "1"
+      || document.getElementById("defense-page")?.dataset.ready === "1"
+      || document.querySelector(".planet-evolution-page")
+    );
+  }
+
+  /** Bridge: keep mounted queue pages live after actions and diet polls (analog fleet sync). */
+  function syncMountedQueuePagesFromState(state, reason) {
+    if (!state || state.ok === false) return false;
+    if (!hasMountedQueuePage()) return false;
+    return patchQueuePanelsImmediate(state);
   }
 
   let _finishRefreshTimer = null;
@@ -8286,47 +8311,19 @@
     ).forEach((btn) => btn.remove());
   }
 
-  function _findGlobalActiveCardJob(queueRaw) {
-    const byOwner = resolveCardJobsByOwner(queueRaw);
-    let found = null;
-    Object.values(byOwner).forEach((jobs) => {
-      const list = (Array.isArray(jobs) ? jobs : []).filter((job) => job && typeof job === "object");
-      list.forEach((job) => {
-        if (String(job.status || "") !== "active") return;
-        const pos = Math.floor(Number(job.queue_position || 9999));
-        const curPos = found ? Math.floor(Number(found.queue_position || 9999)) : 9999;
-        if (!found || pos < curPos) found = job;
-      });
-    });
-    return found;
-  }
-
-  function _iterActiveCardJobsByOwner(queueRaw) {
-    const byOwner = resolveCardJobsByOwner(queueRaw);
-    const out = [];
-    Object.entries(byOwner).forEach(([ownerKey, jobs]) => {
-      const list = (Array.isArray(jobs) ? jobs : []).filter((job) => job && typeof job === "object");
-      const activeJob = list.find((job) => String(job.status || "") === "active");
-      if (!activeJob) return;
-      out.push({ ownerKey: String(ownerKey || activeJob.owner_key || ""), job: activeJob });
-    });
-    if (!out.length) {
-      const fallback = _findGlobalActiveCardJob(queueRaw);
-      if (fallback && String(fallback.status || "") === "active") {
-        out.push({ ownerKey: String(fallback.owner_key || ""), job: fallback });
-      }
-    }
-    return out;
-  }
-
-  function _clearScopeTimekeeperApplyBtns(scope) {
-    const root = scope && scope.querySelectorAll ? scope : document;
-    root.querySelectorAll(
-      "[data-building-row] [data-gc-timekeeper-apply], [data-research-card] [data-gc-timekeeper-apply], [data-gc-card-queue] [data-gc-timekeeper-apply], [data-mini-queue-card] [data-gc-timekeeper-apply], .gc-bld-hero-action-slot--timekeeper [data-gc-timekeeper-apply]"
-    ).forEach((btn) => btn.remove());
-  }
-
   function _pruneInactiveTimekeeperApplyBtns() {
+    // Hero cards never host ⚡ — strip any leftover SSR/JS injects.
+    document.querySelectorAll(
+      ".gc-bld-hero-action-slot--timekeeper [data-gc-timekeeper-apply], [data-building-row] .gc-bld-hero-action-row [data-gc-timekeeper-apply], [data-research-card] .gc-bld-hero-action-row [data-gc-timekeeper-apply]"
+    ).forEach((btn) => btn.remove());
+    // PE tech cards must not host ⚡ (list-only).
+    document.querySelectorAll(
+      "[data-planet-tech-card] [data-gc-timekeeper-apply]"
+    ).forEach((btn) => {
+      if (!btn.closest("[data-pe-queue-list], .gc-card-queue-list, #pe-planet-tech-queue-list, #pe-ascension-queue-list")) {
+        btn.remove();
+      }
+    });
     document.querySelectorAll("[data-gc-timekeeper-apply]").forEach((btn) => {
       if (_timekeeperApplying) return;
       const miniCard = btn.closest("[data-mini-queue-card]");
@@ -8334,42 +8331,23 @@
         if (miniCard.dataset.queueActive !== "1") btn.remove();
         return;
       }
-      const block = btn.closest("[data-gc-card-queue], [data-hero-queue]");
-      if (block && block.dataset.queueActive !== "1") {
-        btn.remove();
+      const peList = btn.closest("#pe-planet-tech-queue-list, #pe-ascension-queue-list, [data-pe-queue-list]");
+      if (peList) {
+        const block = btn.closest("[data-gc-card-queue]");
+        if (block && block.dataset.queueActive !== "1") btn.remove();
+        return;
       }
+      // Build/research/shipyard/defense: TK only on mini strip — remove stray card buttons.
+      const block = btn.closest("[data-gc-card-queue], [data-hero-queue]");
+      if (block) btn.remove();
     });
   }
 
   function _syncTimekeeperButtonsFromState(state) {
     if (!state || state.ok === false) return;
-    if (state.build_queue && document.querySelector(".buildings-prog-list")) {
-      _syncTimekeeperFromCardJobsByOwner(
-        state.build_queue,
-        (ownerKey) => document.querySelector(`[data-building-row="${ownerKey}"]`),
-        "building"
-      );
-    }
-    if (state.research && document.querySelector(".research-prog-list")) {
-      _syncTimekeeperFromCardJobsByOwner(
-        state.research,
-        (ownerKey) => _findResearchCard(ownerKey),
-        "research"
-      );
-    }
-    // Shipyard/defense TK lives only on #shipyard-mini-queue / #defense-mini-queue
-    // (see _syncMiniQueueTimekeeperFromState) — never inject into unit cards.
+    // Build/research/shipyard/defense: ⚡ only via mini strip (_syncMiniQueueTimekeeperFromState).
+    // PE: ⚡ only on queue lists — never inject onto tech cards.
     if (document.querySelector(".planet-evolution-page")) {
-      const peResearchRaw = _normalizePePlanetTechQueueRaw(
-        state.planet_research ?? state.planet_evolution?.research_ux ?? null
-      );
-      if (peResearchRaw) {
-        _syncTimekeeperFromCardJobsByOwner(
-          peResearchRaw,
-          (ownerKey) => document.querySelector(`[data-planet-tech-card][data-tech-key="${ownerKey}"]`),
-          "planet_research"
-        );
-      }
       _syncPeQueueListTimekeeperFromDom("pe-planet-tech-queue-list", "planet_research");
       _syncPeQueueListTimekeeperFromDom("pe-ascension-queue-list", "ascension");
     }
@@ -8415,28 +8393,6 @@
   function _listResearchCards(root) {
     const scope = root && root.querySelectorAll ? root : document;
     return scope.querySelectorAll("[data-research-card][data-tech-key]");
-  }
-
-  function _syncTimekeeperOnCard(card, activeJob, domain) {
-    if (!card || !activeJob) return;
-    let block =
-      findHeroQueue(card)
-      || card.querySelector("[data-gc-card-queue][data-queue-active='1']")
-      || card.querySelector("[data-gc-card-queue]");
-    if (!block && typeof GC.renderCardQueueBlock === "function") {
-      block = GC.renderCardQueueBlock(card, activeJob, { domain });
-    }
-    if (block) _syncTimekeeperApplyBtn(block, domain, activeJob);
-  }
-
-  function _syncTimekeeperFromCardJobsByOwner(queueRaw, findCard, domain) {
-    _iterActiveCardJobsByOwner(queueRaw).forEach(({ ownerKey, job }) => {
-      const key = String(ownerKey || job.owner_key || "").trim();
-      if (!key) return;
-      const card = findCard(key);
-      if (!card) return;
-      _syncTimekeeperOnCard(card, job, domain);
-    });
   }
 
   function _syncMiniQueueTimekeeperFromState(state) {
@@ -8533,29 +8489,6 @@
     btn.disabled = bal <= 0 || rem <= 0;
   }
 
-  function _ensureHeroTimekeeperSlot(cardEl) {
-    if (!cardEl) return null;
-    const stack = cardEl.querySelector(".gc-bld-hero-right-stack");
-    if (!stack) return null;
-    let row = stack.querySelector(".gc-bld-hero-action-row");
-    const timeSlot = stack.querySelector(".gc-bld-hero-action-slot--time");
-    if (!row && timeSlot) {
-      row = document.createElement("div");
-      row.className = "gc-bld-hero-action-row";
-      stack.insertBefore(row, timeSlot);
-      row.appendChild(timeSlot);
-    }
-    row = row || stack;
-    let tkSlot = stack.querySelector(".gc-bld-hero-action-slot--timekeeper");
-    if (!tkSlot) {
-      tkSlot = document.createElement("span");
-      tkSlot.className = "gc-bld-hero-action-slot gc-bld-hero-action-slot--timekeeper";
-      if (timeSlot && row.contains(timeSlot)) row.insertBefore(tkSlot, timeSlot);
-      else row.appendChild(tkSlot);
-    }
-    return tkSlot;
-  }
-
   function _ensureCardQueueTimeRow(block) {
     if (!block) return null;
     let row = block.querySelector(".gc-card-queue-time-row");
@@ -8574,18 +8507,27 @@
 
   function _resolveTimekeeperBtnHost(parent, queueJob) {
     if (!parent) return null;
+    // Build/research hero overlays never host ⚡ — mini strip only.
     if (parent.dataset?.heroQueue === "1" || parent.classList?.contains("gc-bld-hero-queue")) {
-      const cardEl = parent.closest("[data-building-row], [data-research-card], [data-building-card]");
-      return _ensureHeroTimekeeperSlot(cardEl);
+      return null;
     }
     if (parent.dataset?.miniQueueCard !== undefined || parent.hasAttribute("data-mini-queue-card")) {
       return parent;
     }
     if (parent.dataset?.gcCardQueue === "1" || parent.classList?.contains("gc-card-queue-block")) {
+      const onPeList = Boolean(
+        parent.closest("#pe-planet-tech-queue-list, #pe-ascension-queue-list, [data-pe-queue-list]")
+      );
+      if (!onPeList) return null;
       return _ensureCardQueueTimeRow(parent);
     }
-    if (parent.classList?.contains("gc-card-queue-time-row")) return parent;
-    if (parent.classList?.contains("gc-bld-hero-action-slot--timekeeper")) return parent;
+    if (parent.classList?.contains("gc-card-queue-time-row")) {
+      const onPeList = Boolean(
+        parent.closest("#pe-planet-tech-queue-list, #pe-ascension-queue-list, [data-pe-queue-list]")
+      );
+      return onPeList ? parent : null;
+    }
+    if (parent.classList?.contains("gc-bld-hero-action-slot--timekeeper")) return null;
     return parent;
   }
 
@@ -9104,6 +9046,7 @@
     if (!document.querySelector(".planet-evolution-page")) return false;
     const r = String(reasonStr || "");
     if (r === "timekeeper_apply") return true;
+    if (r === "queue_timer_zero" || r === "timer_done" || r.endsWith("_finished")) return true;
     if (r === "planet_research_start" || r === "planet_research_cancel" || r === "planet_research_cancel_success") return true;
     if (r.startsWith("planet_research")) return true;
     if (r === "pe_spec_pick" || r === "pe_spec_upgrade") return true;
@@ -12542,6 +12485,32 @@
   }
 
   function patchShellHudBoosters(data, opts) {
+    // Mutation payloads that omit active_boosters must not re-hydrate from stale cache.
+    if (data && typeof data === "object" && !Object.prototype.hasOwnProperty.call(data, "active_boosters")) {
+      const stillActive = _boostHudState.effects.filter(
+        (item) => _boostHudRemainingSeconds(item.remaining_seconds) > 0
+      );
+      if (stillActive.length !== _boostHudState.effects.length) {
+        _boostHudState.effects = stillActive;
+      }
+      const barOmit = document.getElementById("resource-bar");
+      if (!barOmit) return;
+      ["metal", "crystal", "fuel_cells", "energy"].forEach((resKey) => {
+        const chip = barOmit.querySelector(`[data-res-boost="${resKey}"]`);
+        if (!chip) return;
+        const effect = _boostEffectForResKey(resKey, _boostHudState.effects);
+        const text = _formatResBoostChip(effect, resKey);
+        if (!text) {
+          chip.hidden = true;
+          chip.textContent = "";
+          return;
+        }
+        chip.hidden = false;
+        _setIfChanged(chip, text);
+      });
+      return;
+    }
+
     const incoming = _resolveBoostEffectsFromState(data);
     const serverEffects = data?.active_boosters?.active_effects;
     const resyncClock = !(opts && opts.resync === false);
@@ -13331,6 +13300,7 @@
     let anyActive = false;
     if (shouldRunGameLoop()) {
       anyActive = syncHudQueueLiveStatesFromPoll(data);
+      syncMountedQueuePagesFromState(data, reason);
       GC.startProgressTicker();
     }
     patchHudLastState(data, reason);

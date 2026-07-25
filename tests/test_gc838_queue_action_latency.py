@@ -98,13 +98,14 @@ def test_gc838_cancel_uses_single_action_state_patch():
 def test_gc838_immediate_action_patch_no_poll_wait():
     src = _read("static/main.js")
     assert "function patchQueuePanelsImmediate(data)" in src
+    assert "function syncMountedQueuePagesFromState(state, reason)" in src
     assert "function isMutationStatePatchReason(reason)" in src
-    assert "forcePanel: !isPlanetSwitch" in src.split("function applyActionState(json, reason)")[1].split(
+    apply_action = src.split("function applyActionState(json, reason)")[1].split(
         "function logStatusPollErrorOnce"
     )[0]
-    assert "patchQueuePanelsImmediate(state)" in src.split("function applyActionState(json, reason)")[1].split(
-        "function logStatusPollErrorOnce"
-    )[0]
+    assert "forcePanel: !isPlanetSwitch" in apply_action
+    # Immediate patch still required — owned by syncMountedQueuePagesFromState → patchQueuePanelsImmediate.
+    assert "syncMountedQueuePagesFromState(state, reasonStr)" in apply_action
     assert "logActionStatePatch(" in src
     skip_fn = src.split("function shouldSkipInitGameStateAfterSsr(page, opts)")[1].split(
         "function bootstrapResourceLiveFromDom"

@@ -68,12 +68,14 @@ Verbindlich für **alle** Queue-Systeme (Gebäude, Forschung, Werft, Verteidigun
 
 ### Sofort sichtbar
 
-Jeder Auftrag erscheint **unmittelbar nach Start** in der jeweiligen Bauschleife — ohne manuellen Reload. Actions liefern `{ ok, state }`; `applyActionState()` patcht alle betroffenen Panels.
+Jeder Auftrag erscheint **unmittelbar nach Start** in der jeweiligen Bauschleife — ohne manuellen Reload. Actions liefern `{ ok, state }`; `applyActionState()` → `syncMountedQueuePagesFromState` / `patchQueuePanelsImmediate` patcht alle betroffenen Panels. Diet-Polls aktualisieren ebenfalls gemountete Queue-Pages (analog Fleet-Sync).
 
 | Queue-Art | Presentation |
 |-----------|----------------|
 | Gebäude / Forschung / Planet Evolution | Job in zugehöriger Item-Card (+ Mini-Strip oben wo vorhanden) |
 | **Unit-Queues** (Shipyard, Defense) | **Nur** zentrale Mini-Bauschleife oben (`#shipyard-mini-queue` / `#defense-mini-queue`) — **keine** Queue-UI in Unit-Cards (GC-UNIT-QUEUE-DEDUP-001) |
+
+**Timekeeper ⚡ (eine pro Job):** nur Mini-Bauschleife (Build/Research/Shipyard/Defense) bzw. PE-Queue-Listen — **kein** zweites Boost auf Hero/Tech-Card.
 
 ### Timer pro Position
 
@@ -147,6 +149,8 @@ Queue-**Logik** bleibt in `game/queue_engine.py` und den Domänen-Ownern. Presen
 
 - Gebäude / Forschung / PE: Jobs in Item-Cards (+ Mini-Strip)
 - **Unit-Queues (Shipyard / Defense):** ausschließlich zentrale Mini-Bauschleife; `renderCardQueueBlock` liefert für `shipyard`/`defense` `null`; TK/Cancel nur im Strip
+- **TK-Boost Dedup:** eine ⚡ pro aktivem Job — Mini-Strip (Build/Research/Shipyard/Defense) bzw. PE-Queue-List; Hero-/Tech-Cards hosten keinen Apply-Button
+- **Live-Sync:** `syncMountedQueuePagesFromState` nach Actions und Diet-Polls; Finish → `queue_timer_zero` / `*_finished` + include_panel aktualisiert Levels/Stock
 - Serializer (`map_*_queue_to_card_jobs`, `mini_queue_jobs`) bleiben für Strip/HUD — nicht für Unit-Card-DOM
 
 ---
