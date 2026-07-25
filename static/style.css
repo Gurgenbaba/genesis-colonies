@@ -27196,6 +27196,63 @@ button.pe-hero-planet-hint:focus-visible {
   font-size: 0.7rem;
   line-height: 1.35;
 }
+.galaxy-asteroid-board-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 5px;
+  border: 1px solid rgba(70, 229, 255, 0.28);
+  border-radius: var(--gc-radius-sm, 2px);
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(180, 210, 230, 0.9);
+  background: rgba(12, 28, 42, 0.85);
+}
+.galaxy-asteroid-board-badge--en-route {
+  border-color: rgba(255, 190, 80, 0.45);
+  color: rgba(255, 210, 140, 0.95);
+}
+.galaxy-asteroid-board-row.is-en-route {
+  border-color: rgba(255, 190, 80, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(255, 190, 80, 0.12);
+}
+.galaxy-asteroid-board-row.is-engaged {
+  opacity: 0.88;
+}
+.galaxy-asteroid-board-slots {
+  color: rgba(160, 230, 255, 0.85);
+  font-size: 0.68rem;
+}
+.galaxy-asteroid-board-empty-wrap {
+  display: grid;
+  gap: 6px;
+}
+.galaxy-asteroid-board-empty-timer {
+  margin: 0;
+}
+.galaxy-ring-asteroid-wrap.is-en-route .galaxy-ring-asteroid-marker,
+.galaxy-ring-asteroid-marker.is-en-route {
+  opacity: 0.85;
+  filter: saturate(1.15);
+}
+.galaxy-ring-asteroid-en-route-badge {
+  position: absolute;
+  right: -2px;
+  top: -2px;
+  font-size: 0.65rem;
+  color: rgba(255, 210, 140, 0.95);
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+}
+.galaxy-asteroid-block.is-en-route {
+  border-color: rgba(255, 190, 80, 0.35);
+}
+.galaxy-asteroid-block-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
 .galaxy-asteroid-board-panel {
   margin-top: 8px;
 }

@@ -2907,6 +2907,16 @@ def send_fleet(
             if aid > 0:
                 resources_store["asteroid_id"] = aid
                 resources_store["asteroid_key"] = str(ast.get("asteroid_key") or "")
+                try:
+                    from .asteroids import record_asteroid_engagement
+
+                    record_asteroid_engagement(int(player_id), aid, conn=conn)
+                except Exception:
+                    logger.exception(
+                        "asteroid engagement record failed player=%s asteroid=%s",
+                        player_id,
+                        aid,
+                    )
 
         now = _now()
         flight_seconds = int(preview["flight_seconds"])
@@ -3168,6 +3178,12 @@ def _start_return(
         duration_seconds=duration,
     )
     return_at = timing["return_at"]
+    from .asteroids import merge_asteroid_resource_meta
+
+    stored = merge_asteroid_resource_meta(
+        calculate_loaded_resources(resources),
+        resources if isinstance(resources, Mapping) else {},
+    )
     return _claim_movement_status(
         conn,
         int(movement["id"]),
@@ -3175,7 +3191,7 @@ def _start_return(
         "returning",
         now,
         extra_sql=", return_at = ?, resources_json = ?",
-        extra_params=(return_at, _json_dumps(calculate_loaded_resources(resources))),
+        extra_params=(return_at, _json_dumps(stored)),
     )
 
 
@@ -3673,10 +3689,19 @@ def _format_asteroid_report(
     origin_name: str,
     collected: Mapping[str, Any],
     missed: bool = False,
+    expired: bool = False,
     locale: str | None = None,
 ) -> str:
     from .i18n import tr
 
+    if expired:
+        return tr(
+            "fleet_asteroid_report_expired",
+            "Asteroid at %(coords)s expired before arrival. Fleet returning empty to %(origin)s.",
+            locale=locale,
+            coords=coords,
+            origin=origin_name,
+        )
     if missed:
         return tr(
             "fleet_asteroid_report_missed",
@@ -4012,9 +4037,17 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
         tp = int(movement.get("target_position") or 0)
         asteroid_missed = False
         asteroid_harvested = False
+        asteroid_expired = False
         asteroid_meta: Dict[str, Any] = {}
+        prev_resources = movement.get("resources") or {}
+        if not isinstance(prev_resources, Mapping):
+            prev_resources = {}
+        asteroid_stamp_id = int(prev_resources.get("asteroid_id") or 0)
+        asteroid_stamp_key = str(prev_resources.get("asteroid_key") or "")
+        from .asteroids import merge_asteroid_resource_meta
 
-        # Claim movement first (idempotent), then resolve asteroid or debris.
+        # Claim movement first (idempotent), preserve hunt stamp in resources_json.
+        stamp_seed = merge_asteroid_resource_meta({}, prev_resources)
         claimed = _claim_movement_status(
             conn,
             movement_id,
@@ -4022,7 +4055,7 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
             "returning",
             now,
             extra_sql=", return_at = ?, resources_json = ?",
-            extra_params=(return_at, _json_dumps({})),
+            extra_params=(return_at, _json_dumps(stamp_seed)),
         )
         if not claimed:
             return False
@@ -4044,13 +4077,23 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
                 collected = dict(claim.get("harvested") or {})
                 asteroid_harvested = True
                 asteroid_meta = {
-                    "asteroid_id": claim.get("asteroid_id"),
-                    "asteroid_key": claim.get("asteroid_key"),
+                    "asteroid_id": claim.get("asteroid_id") or asteroid_stamp_id,
+                    "asteroid_key": claim.get("asteroid_key") or asteroid_stamp_key,
                     "pool": claim.get("pool") or {},
                 }
             elif status == "missed":
                 asteroid_missed = True
-                asteroid_meta = {"asteroid_id": claim.get("asteroid_id")}
+                asteroid_meta = {
+                    "asteroid_id": claim.get("asteroid_id") or asteroid_stamp_id,
+                    "asteroid_key": asteroid_stamp_key,
+                }
+            elif status == "expired" or asteroid_stamp_id > 0:
+                # Asteroid-stamped flight: never fall through to debris.
+                asteroid_expired = status == "expired" or asteroid_stamp_id > 0
+                asteroid_meta = {
+                    "asteroid_id": claim.get("asteroid_id") or asteroid_stamp_id,
+                    "asteroid_key": asteroid_stamp_key,
+                }
             else:
                 from .combat import get_debris_at_field, harvest_debris_at_field
 
@@ -4066,7 +4109,10 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
                 ):
                     collected = {"metal": 0, "crystal": 0, "fuel_cells": 0}
 
-        final_resources = calculate_loaded_resources(collected)
+        final_resources = merge_asteroid_resource_meta(
+            calculate_loaded_resources(collected),
+            asteroid_meta or prev_resources,
+        )
         conn.execute(
             """
             UPDATE fleet_movements
@@ -4081,12 +4127,13 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
         cur.execute("SELECT name FROM planets WHERE id = ? LIMIT 1;", (origin_id,))
         orow = cur.fetchone()
         origin_name = str(orow["name"] if orow else "")
-        if asteroid_harvested or asteroid_missed:
+        if asteroid_harvested or asteroid_missed or asteroid_expired:
             body = _format_asteroid_report(
                 coords=coords,
                 origin_name=origin_name,
                 collected=collected,
                 missed=asteroid_missed,
+                expired=asteroid_expired,
                 locale=sender_locale,
             )
             subject = tr(
@@ -4121,6 +4168,7 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
                 "direction": "outbound",
                 "asteroid_missed": asteroid_missed,
                 "asteroid_harvested": asteroid_harvested,
+                "asteroid_expired": asteroid_expired,
                 **({"asteroid": asteroid_meta} if asteroid_meta else {}),
             },
             locale=sender_locale,

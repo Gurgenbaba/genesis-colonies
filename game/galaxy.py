@@ -856,7 +856,10 @@ def list_system(
         from .asteroids import get_asteroids_for_system
 
         asteroids_by_position = get_asteroids_for_system(
-            int(galaxy), int(system), conn=conn
+            int(galaxy),
+            int(system),
+            conn=conn,
+            viewer_player_id=viewer_player_id,
         )
     except Exception:
         asteroids_by_position = {}

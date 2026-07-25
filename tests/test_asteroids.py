@@ -258,7 +258,8 @@ def test_ttl_expire_not_harvestable(ast_db):
         claim = try_claim_harvest(
             g, s, pos, player_id=uid, cargo_capacity=20000, conn=conn, now=now
         )
-        assert claim["status"] == "none"
+        # Recently expired fields report `expired` (not silent `none`) for hunt clarity.
+        assert claim["status"] == "expired"
     finally:
         conn.close()
 
@@ -596,8 +597,10 @@ def test_asteroid_schedule_countdown_after_spawn(ast_db):
         conn.close()
 
 
-def test_asteroid_board_hides_own_outbound_harvest(ast_db):
-    """Once the viewer has sent reclaimers, that asteroid drops from their board."""
+def test_asteroid_board_marks_own_outbound_en_route(ast_db):
+    """Send stamps engagement; board keeps the row with en-route lock."""
+    from game.asteroids import player_engaged_asteroid_ids
+
     uid = _player("Hunter")
     other = _player("Spectator")
     home_id, g, s, _ = _home(uid)
@@ -618,13 +621,9 @@ def test_asteroid_board_hides_own_outbound_harvest(ast_db):
             rng=random.Random(11),
         )
         assert ins["ok"]
+        aid = int(ins["asteroid"]["id"])
         add_planet_ships(home_id, uid, {"harvest_reclaimer": 30}, conn=conn)
         commit(conn)
-
-        board_before = build_asteroid_board_entries(
-            conn=conn, now=now, viewer_player_id=uid
-        )
-        assert any(int(e["position"]) == pos for e in board_before)
 
         begin_write_transaction(conn)
         ok, err, res = send_fleet(
@@ -643,80 +642,110 @@ def test_asteroid_board_hides_own_outbound_harvest(ast_db):
         assert ok, err
         fleet_id = int((res.get("fleet") or {}).get("id") or 0)
         assert fleet_id > 0
-        # Send stamps asteroid_id for audit / future filters.
+        assert aid in player_engaged_asteroid_ids(uid, conn=conn)
         mv = conn.execute(
             "SELECT resources_json, status FROM fleet_movements WHERE id = ?;",
             (fleet_id,),
         ).fetchone()
         payload = json.loads(mv["resources_json"] or "{}")
-        assert int(payload.get("asteroid_id") or 0) == int(ins["asteroid"]["id"])
+        assert int(payload.get("asteroid_id") or 0) == aid
 
         board_self = build_asteroid_board_entries(
             conn=conn, now=now, viewer_player_id=uid
         )
-        assert not any(int(e["position"]) == pos for e in board_self)
+        row = next(e for e in board_self if int(e["position"]) == pos)
+        assert row["viewer_en_route"] is True
+        assert row["viewer_harvest_locked"] is True
 
         board_other = build_asteroid_board_entries(
             conn=conn, now=now, viewer_player_id=other
         )
-        assert any(int(e["position"]) == pos for e in board_other)
+        other_row = next(e for e in board_other if int(e["position"]) == pos)
+        assert other_row.get("viewer_en_route") is False
 
-        via_list = list_system(g, s, viewer_player_id=uid)
-        assert not any(
-            int(e["position"]) == pos for e in via_list.get("active_asteroid_board") or []
-        )
-
-        # Still hidden after outbound → returning (recall / arrival without removing field).
         begin_write_transaction(conn)
         conn.execute(
-            "UPDATE fleet_movements SET status = 'returning', return_at = ? WHERE id = ?;",
-            (now + 60, fleet_id),
+            "UPDATE fleet_movements SET arrival_at = ? WHERE id = ?;",
+            (now - 1, fleet_id),
         )
         commit(conn)
-        board_returning = build_asteroid_board_entries(
-            conn=conn, now=now, viewer_player_id=uid
-        )
-        assert not any(int(e["position"]) == pos for e in board_returning)
-
         begin_write_transaction(conn)
-        conn.execute(
-            "UPDATE fleet_movements SET status = 'completed' WHERE id = ?;",
+        process_fleet_tick(player_id=uid, now=now, conn=conn)
+        commit(conn)
+        mv2 = conn.execute(
+            "SELECT resources_json, status FROM fleet_movements WHERE id = ?;",
             (fleet_id,),
-        )
-        commit(conn)
-        board_done = build_asteroid_board_entries(
-            conn=conn, now=now, viewer_player_id=uid
-        )
-        assert not any(int(e["position"]) == pos for e in board_done)
+        ).fetchone()
+        assert str(mv2["status"]) == "returning"
+        payload2 = json.loads(mv2["resources_json"] or "{}")
+        assert int(payload2.get("asteroid_id") or 0) == aid
+        assert aid in player_engaged_asteroid_ids(uid, conn=conn)
+        assert get_active_asteroid_at(g, s, pos, conn=conn) is None
     finally:
         conn.close()
 
 
-def test_asteroid_board_shows_again_after_new_spawn_at_same_slot(ast_db):
-    """A later belt at the same coords is a new field — show it again."""
-    uid = _player("Respawn")
-    home_id, g, s, _ = _home(uid)
+def test_asteroid_anti_pop_blocks_same_slot_until_expires(ast_db):
+    from game.asteroids import _blocked_spawn_coords, spawn_asteroid_belt
+
+    uid = _player("Claimer")
+    _home_id, g, s, _ = _home(uid)
     pos = _free_slot_near(g, s)
-    _fund(home_id)
-    t0 = time.time()
+    now = time.time()
     conn = db()
     try:
         begin_write_transaction(conn)
-        ins1 = insert_asteroid(
+        ins = insert_asteroid(
             conn=conn,
             galaxy=g,
             system=s,
             position=pos,
             asteroid_key="ferronite_rock",
-            now=t0,
+            now=now,
             ttl_seconds=TTL_SECONDS,
             rng=random.Random(3),
         )
-        assert ins1["ok"]
-        add_planet_ships(home_id, uid, {"harvest_reclaimer": 5}, conn=conn)
+        assert ins["ok"]
+        expires = float(ins["asteroid"]["expires_at"])
+        claim = try_claim_harvest(
+            g, s, pos, player_id=uid, cargo_capacity=50_000_000, conn=conn, now=now + 10
+        )
+        assert claim["status"] == "claimed"
         commit(conn)
-
+        blocked = _blocked_spawn_coords(conn, now=now + 10)
+        assert (g, s, pos) in blocked
         begin_write_transaction(conn)
+        set_runtime_value(SPAWN_RUNTIME_KEY, str(now - INTER_WAVE_COOLDOWN_SEC - 10), conn=conn)
+        spawn_asteroid_belt(conn=conn, now=now + 20)
+        commit(conn)
+        assert get_active_asteroid_at(g, s, pos, conn=conn, now=now + 20) is None
+        blocked_later = _blocked_spawn_coords(conn, now=expires + 5)
+        assert (g, s, pos) not in blocked_later
+    finally:
+        conn.close()
+
+
+def test_asteroid_stamped_expire_skips_debris(ast_db):
+    uid = _player("Late")
+    home_id, g, s, _ = _home(uid)
+    pos = _free_slot_near(g, s)
+    _fund(home_id)
+    now = time.time()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ins = insert_asteroid(
+            conn=conn,
+            galaxy=g,
+            system=s,
+            position=pos,
+            asteroid_key="fuel_ice",
+            now=now,
+            ttl_seconds=30,
+            rng=random.Random(9),
+        )
+        assert ins["ok"]
+        add_planet_ships(home_id, uid, {"harvest_reclaimer": 5}, conn=conn)
         ok, err, res = send_fleet(
             player_id=uid,
             origin_planet_id=home_id,
@@ -729,20 +758,58 @@ def test_asteroid_board_shows_again_after_new_spawn_at_same_slot(ast_db):
             speed_percent=100,
             conn=conn,
         )
-        commit(conn)
         assert ok, err
         fleet_id = int((res.get("fleet") or {}).get("id") or 0)
+        conn.execute(
+            "UPDATE asteroid_fields SET status = 'expired', expires_at = ? WHERE id = ?;",
+            (now + 1, int(ins["asteroid"]["id"])),
+        )
+        conn.execute(
+            "UPDATE fleet_movements SET arrival_at = ? WHERE id = ?;",
+            (now + 5, fleet_id),
+        )
+        commit(conn)
         begin_write_transaction(conn)
-        conn.execute(
-            "UPDATE fleet_movements SET status = 'completed' WHERE id = ?;",
+        process_fleet_tick(player_id=uid, now=now + 6, conn=conn)
+        commit(conn)
+        mv = conn.execute(
+            "SELECT status, resources_json FROM fleet_movements WHERE id = ?;",
             (fleet_id,),
+        ).fetchone()
+        assert str(mv["status"]) == "returning"
+        payload = json.loads(mv["resources_json"] or "{}")
+        assert int(payload.get("metal") or 0) == 0
+        assert int(payload.get("asteroid_id") or 0) == int(ins["asteroid"]["id"])
+    finally:
+        conn.close()
+
+
+def test_asteroid_board_shows_again_after_ttl_reserve(ast_db):
+    """After TTL reserve ends, a later belt at the same coords is a new field."""
+    uid = _player("Respawn")
+    _home_id, g, s, _ = _home(uid)
+    pos = _free_slot_near(g, s)
+    t0 = time.time()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ins1 = insert_asteroid(
+            conn=conn,
+            galaxy=g,
+            system=s,
+            position=pos,
+            asteroid_key="ferronite_rock",
+            now=t0,
+            ttl_seconds=60,
+            rng=random.Random(3),
         )
-        # Expire / remove first field, spawn a fresh one later at same slot.
+        assert ins1["ok"]
+        expires = float(ins1["asteroid"]["expires_at"])
         conn.execute(
-            "UPDATE asteroid_fields SET status = 'expired' WHERE id = ?;",
-            (int(ins1["asteroid"]["id"]),),
+            "UPDATE asteroid_fields SET status = 'claimed', claimed_at = ?, claimed_by_player_id = ? WHERE id = ?;",
+            (t0 + 1, uid, int(ins1["asteroid"]["id"])),
         )
-        t1 = t0 + 100
+        t1 = expires + 10
         ins2 = insert_asteroid(
             conn=conn,
             galaxy=g,
@@ -755,10 +822,7 @@ def test_asteroid_board_shows_again_after_new_spawn_at_same_slot(ast_db):
         )
         commit(conn)
         assert ins2["ok"]
-        board = build_asteroid_board_entries(
-            conn=conn, now=t1, viewer_player_id=uid
-        )
-        assert any(int(e["position"]) == pos for e in board)
+        board = build_asteroid_board_entries(conn=conn, now=t1, viewer_player_id=uid)
         assert any(int(e["id"]) == int(ins2["asteroid"]["id"]) for e in board)
     finally:
         conn.close()
@@ -782,6 +846,9 @@ def test_galaxy_asteroid_board_template_contract():
     assert "data-galaxy-asteroid-next-spawn" in board
     assert "galaxy_asteroid_next_spawn_in" in board
     assert "data-next-spawn-at" in board
+    assert "galaxy_asteroid_en_route" in board
+    assert "galaxy_asteroid_reclaimers_needed" in board or "recycler_slots_needed" in board
+    assert "data-refresh-on-zero" in board
     # Must match World Boss modal shell (dialog + overlay), not broken aliases.
     assert "gc-player-card-dialog" in board
     assert "gc-player-card-overlay" in board

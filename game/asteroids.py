@@ -17,6 +17,7 @@ from .runtime_state import get_runtime_value, set_runtime_value
 logger = logging.getLogger(__name__)
 
 ASTEROID_TABLE = "asteroid_fields"
+ENGAGEMENT_TABLE = "asteroid_engagements"
 
 STATUS_ACTIVE = "active"
 STATUS_CLAIMED = "claimed"
@@ -72,6 +73,246 @@ def _now() -> float:
 
 def asteroid_schema_ready(conn) -> bool:
     return table_exists(conn, ASTEROID_TABLE)
+
+
+def engagement_schema_ready(conn) -> bool:
+    return table_exists(conn, ENGAGEMENT_TABLE)
+
+
+def merge_asteroid_resource_meta(
+    base: Mapping[str, Any] | None,
+    meta_src: Mapping[str, Any] | None,
+) -> Dict[str, Any]:
+    """Keep asteroid hunt stamps when rewriting fleet resources_json."""
+    out: Dict[str, Any] = dict(base or {})
+    src = meta_src or {}
+    aid = int(src.get("asteroid_id") or out.get("asteroid_id") or 0)
+    if aid > 0:
+        out["asteroid_id"] = aid
+    key = str(src.get("asteroid_key") or out.get("asteroid_key") or "").strip()
+    if key:
+        out["asteroid_key"] = key
+    return out
+
+
+def record_asteroid_engagement(
+    player_id: int,
+    asteroid_id: int,
+    *,
+    conn,
+    now: Optional[float] = None,
+) -> bool:
+    """Durable hunt lock — survives arrival/recall resources_json wipes."""
+    if not player_id or not asteroid_id or not engagement_schema_ready(conn):
+        return False
+    ts = float(now if now is not None else _now())
+    conn.execute(
+        """
+        INSERT INTO asteroid_engagements (player_id, asteroid_id, engaged_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(player_id, asteroid_id) DO NOTHING;
+        """,
+        (int(player_id), int(asteroid_id), ts),
+    )
+    return True
+
+
+def player_engaged_asteroid_ids(
+    player_id: int,
+    *,
+    conn,
+) -> Set[int]:
+    if not player_id or not engagement_schema_ready(conn):
+        return set()
+    rows = conn.execute(
+        """
+        SELECT asteroid_id FROM asteroid_engagements
+        WHERE player_id = ?;
+        """,
+        (int(player_id),),
+    ).fetchall()
+    out: Set[int] = set()
+    for row in rows:
+        try:
+            aid = int(row["asteroid_id"])
+            if aid > 0:
+                out.add(aid)
+        except (TypeError, ValueError, KeyError):
+            continue
+    return out
+
+
+def viewer_asteroid_fleet_status_map(
+    player_id: int,
+    *,
+    conn,
+    now: Optional[float] = None,
+) -> Dict[int, Dict[str, Any]]:
+    """Map asteroid_id → outbound/returning fleet ETA for this viewer."""
+    if not player_id or not table_exists(conn, "fleet_movements"):
+        return {}
+    ts = float(now if now is not None else _now())
+    rows = conn.execute(
+        """
+        SELECT id, status, arrival_at, resources_json,
+               target_galaxy, target_system, target_position
+        FROM fleet_movements
+        WHERE player_id = ?
+          AND mission_type = 'recycle'
+          AND status IN ('outbound', 'returning');
+        """,
+        (int(player_id),),
+    ).fetchall()
+    by_id: Dict[int, Dict[str, Any]] = {}
+    for row in rows:
+        status = str(row["status"] or "").strip().lower()
+        aid = 0
+        try:
+            import json
+
+            raw = row["resources_json"]
+            payload = json.loads(raw) if isinstance(raw, str) else (raw or {})
+            aid = int((payload or {}).get("asteroid_id") or 0)
+        except Exception:
+            aid = 0
+        if aid <= 0:
+            # Coords fallback against active fields.
+            try:
+                g, s, p = (
+                    int(row["target_galaxy"]),
+                    int(row["target_system"]),
+                    int(row["target_position"]),
+                )
+            except (TypeError, ValueError, KeyError):
+                continue
+            ast = get_active_asteroid_at(g, s, p, conn=conn, now=ts)
+            if not ast:
+                continue
+            aid = int(ast["id"])
+        if aid <= 0:
+            continue
+        arrival = row["arrival_at"]
+        try:
+            arrival_f = float(arrival) if arrival is not None else None
+        except (TypeError, ValueError):
+            arrival_f = None
+        prev = by_id.get(aid)
+        # Prefer outbound over returning; earliest arrival wins.
+        if prev and prev.get("fleet_status") == "outbound" and status != "outbound":
+            continue
+        if prev and status == prev.get("fleet_status"):
+            prev_arr = prev.get("arrival_at")
+            if (
+                prev_arr is not None
+                and arrival_f is not None
+                and float(prev_arr) <= arrival_f
+            ):
+                continue
+        by_id[aid] = {
+            "fleet_status": status,
+            "arrival_at": arrival_f,
+            "movement_id": int(row["id"]),
+            "engaged": True,
+        }
+    return by_id
+
+
+def enrich_asteroid_viewer_state(
+    asteroid: Mapping[str, Any],
+    *,
+    engaged_ids: Set[int],
+    fleet_map: Mapping[int, Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Attach viewer hunt flags onto an asteroid payload."""
+    out = dict(asteroid)
+    aid = int(out.get("id") or 0)
+    fleet = dict(fleet_map.get(aid) or {})
+    engaged = bool(aid and (aid in engaged_ids or fleet.get("engaged")))
+    status = str(fleet.get("fleet_status") or "")
+    out["viewer_engaged"] = engaged
+    out["viewer_fleet_status"] = status if engaged else ""
+    out["viewer_arrival_at"] = fleet.get("arrival_at")
+    out["viewer_en_route"] = bool(status == "outbound")
+    out["viewer_harvest_locked"] = bool(status == "outbound")
+    return out
+
+
+def build_asteroid_board_entries(
+    *,
+    conn,
+    now: Optional[float] = None,
+    current_galaxy: Optional[int] = None,
+    current_system: Optional[int] = None,
+    viewer_player_id: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    """UI rows for the Galaxy asteroid board (jump links + TTL sort)."""
+    from .galaxy import format_coordinates, galaxy_view_href
+
+    ts = float(now if now is not None else _now())
+    expire_due_asteroids(conn=conn, now=ts)
+    engaged_ids: Set[int] = set()
+    fleet_map: Dict[int, Dict[str, Any]] = {}
+    if viewer_player_id is not None and int(viewer_player_id) > 0:
+        vid = int(viewer_player_id)
+        engaged_ids = player_engaged_asteroid_ids(vid, conn=conn)
+        fleet_map = viewer_asteroid_fleet_status_map(vid, conn=conn, now=ts)
+        # Coords engagement without id still marks engaged via enrich when fleet matches.
+        for aid, meta in fleet_map.items():
+            if meta.get("engaged"):
+                engaged_ids.add(int(aid))
+    entries: List[Dict[str, Any]] = []
+    for row in list_active_asteroids(conn=conn, now=ts, limit=MAX_ACTIVE_ASTEROIDS + 5):
+        enriched = enrich_asteroid_viewer_state(
+            row, engaged_ids=engaged_ids, fleet_map=fleet_map
+        )
+        # Keep engaged hunts visible with en-route state (no silent vanish).
+        g = int(enriched["galaxy"])
+        s = int(enriched["system"])
+        p = int(enriched["position"])
+        coords = format_coordinates(g, s, p)
+        href = galaxy_view_href(coords) or f"/galaxy?q={coords}"
+        remaining = max(0, int(float(enriched.get("expires_at") or 0) - ts))
+        entries.append(
+            {
+                "id": int(enriched["id"]),
+                "asteroid_key": enriched["asteroid_key"],
+                "name_key": enriched["name_key"],
+                "desc_key": enriched.get("desc_key") or "",
+                "galaxy": g,
+                "system": s,
+                "position": p,
+                "coords": coords,
+                "metal": int(enriched.get("metal") or 0),
+                "crystal": int(enriched.get("crystal") or 0),
+                "fuel_cells": int(enriched.get("fuel_cells") or 0),
+                "total": int(enriched.get("total") or 0),
+                "expires_at": float(enriched.get("expires_at") or 0),
+                "ttl_remaining_seconds": remaining,
+                "recycler_slots_needed": int(enriched.get("recycler_slots_needed") or 0),
+                "galaxy_href": href,
+                "is_current_system": (
+                    current_galaxy is not None
+                    and current_system is not None
+                    and g == int(current_galaxy)
+                    and s == int(current_system)
+                ),
+                "viewer_engaged": bool(enriched.get("viewer_engaged")),
+                "viewer_fleet_status": str(enriched.get("viewer_fleet_status") or ""),
+                "viewer_arrival_at": enriched.get("viewer_arrival_at"),
+                "viewer_en_route": bool(enriched.get("viewer_en_route")),
+                "viewer_harvest_locked": bool(enriched.get("viewer_harvest_locked")),
+            }
+        )
+    entries.sort(
+        key=lambda e: (
+            0 if e.get("viewer_en_route") else 1 if e.get("viewer_engaged") else 2,
+            int(e["expires_at"]),
+            int(e["galaxy"]),
+            int(e["system"]),
+            int(e["position"]),
+        )
+    )
+    return entries
 
 
 def _reclaimer_cargo() -> int:
@@ -177,133 +418,6 @@ def list_active_asteroids(
     return [_row_to_asteroid(r) for r in rows]
 
 
-def player_engaged_active_asteroid_coords(
-    player_id: int,
-    *,
-    conn,
-    now: Optional[float] = None,
-) -> Set[Tuple[int, int, int]]:
-    """Coords of *active* asteroids this player has already committed a harvest to.
-
-    Hides a belt from the viewer's board for the lifetime of that field once they
-    have any recycle flight to those coords after the field spawned — outbound,
-    returning, or completed. Cancelled/failed fleets do not count. A later spawn
-    at the same slot (newer ``spawned_at``) shows again.
-    """
-    if not player_id or not asteroid_schema_ready(conn):
-        return set()
-    if not table_exists(conn, "fleet_movements"):
-        return set()
-    ts = float(now if now is not None else _now())
-    rows = conn.execute(
-        """
-        SELECT DISTINCT a.galaxy, a.system, a.position
-        FROM asteroid_fields a
-        WHERE a.status = ?
-          AND a.expires_at > ?
-          AND EXISTS (
-            SELECT 1
-            FROM fleet_movements fm
-            WHERE fm.player_id = ?
-              AND fm.mission_type = 'recycle'
-              AND fm.status IN ('outbound', 'returning', 'completed')
-              AND (
-                json_extract(fm.resources_json, '$.asteroid_id') = a.id
-                OR (
-                  fm.target_galaxy = a.galaxy
-                  AND fm.target_system = a.system
-                  AND fm.target_position = a.position
-                  -- departure_at is stored as int seconds; spawned_at is float.
-                  AND COALESCE(fm.departure_at, fm.created_at)
-                      >= CAST(a.spawned_at AS INTEGER)
-                )
-              )
-          );
-        """,
-        (STATUS_ACTIVE, ts, int(player_id)),
-    ).fetchall()
-    out: Set[Tuple[int, int, int]] = set()
-    for row in rows:
-        try:
-            out.add(
-                (
-                    int(row["galaxy"]),
-                    int(row["system"]),
-                    int(row["position"]),
-                )
-            )
-        except (TypeError, ValueError, KeyError):
-            continue
-    return out
-
-
-# Engagement filter: outbound|returning|completed (+ asteroid_id stamp / second-safe spawned_at).
-
-
-def build_asteroid_board_entries(
-    *,
-    conn,
-    now: Optional[float] = None,
-    current_galaxy: Optional[int] = None,
-    current_system: Optional[int] = None,
-    viewer_player_id: Optional[int] = None,
-) -> List[Dict[str, Any]]:
-    """UI rows for the Galaxy asteroid board (jump links + TTL sort)."""
-    from .galaxy import format_coordinates, galaxy_view_href
-
-    ts = float(now if now is not None else _now())
-    hide_coords: Set[Tuple[int, int, int]] = set()
-    if viewer_player_id is not None and int(viewer_player_id) > 0:
-        hide_coords = player_engaged_active_asteroid_coords(
-            int(viewer_player_id), conn=conn, now=ts
-        )
-    entries: List[Dict[str, Any]] = []
-    for row in list_active_asteroids(conn=conn, now=ts, limit=MAX_ACTIVE_ASTEROIDS + 5):
-        g = int(row["galaxy"])
-        s = int(row["system"])
-        p = int(row["position"])
-        if (g, s, p) in hide_coords:
-            continue
-        coords = format_coordinates(g, s, p)
-        href = galaxy_view_href(coords) or f"/galaxy?q={coords}"
-        remaining = max(0, int(float(row.get("expires_at") or 0) - ts))
-        entries.append(
-            {
-                "id": int(row["id"]),
-                "asteroid_key": row["asteroid_key"],
-                "name_key": row["name_key"],
-                "desc_key": row.get("desc_key") or "",
-                "galaxy": g,
-                "system": s,
-                "position": p,
-                "coords": coords,
-                "metal": int(row.get("metal") or 0),
-                "crystal": int(row.get("crystal") or 0),
-                "fuel_cells": int(row.get("fuel_cells") or 0),
-                "total": int(row.get("total") or 0),
-                "expires_at": float(row.get("expires_at") or 0),
-                "ttl_remaining_seconds": remaining,
-                "recycler_slots_needed": int(row.get("recycler_slots_needed") or 0),
-                "galaxy_href": href,
-                "is_current_system": (
-                    current_galaxy is not None
-                    and current_system is not None
-                    and g == int(current_galaxy)
-                    and s == int(current_system)
-                ),
-            }
-        )
-    entries.sort(
-        key=lambda e: (
-            int(e["expires_at"]),
-            int(e["galaxy"]),
-            int(e["system"]),
-            int(e["position"]),
-        )
-    )
-    return entries
-
-
 def get_active_asteroid_at(
     galaxy: int,
     system: int,
@@ -337,11 +451,13 @@ def get_asteroids_for_system(
     *,
     conn,
     now: Optional[float] = None,
+    viewer_player_id: Optional[int] = None,
 ) -> Dict[int, Dict[str, Any]]:
     """Map position → compact asteroid payload for galaxy slot attach."""
     if not asteroid_schema_ready(conn):
         return {}
     ts = float(now if now is not None else _now())
+    expire_due_asteroids(conn=conn, now=ts)
     rows = conn.execute(
         """
         SELECT * FROM asteroid_fields
@@ -352,9 +468,20 @@ def get_asteroids_for_system(
         """,
         (STATUS_ACTIVE, ts, int(galaxy), int(system)),
     ).fetchall()
+    engaged_ids: Set[int] = set()
+    fleet_map: Dict[int, Dict[str, Any]] = {}
+    if viewer_player_id is not None and int(viewer_player_id) > 0:
+        vid = int(viewer_player_id)
+        engaged_ids = player_engaged_asteroid_ids(vid, conn=conn)
+        fleet_map = viewer_asteroid_fleet_status_map(vid, conn=conn, now=ts)
+        for aid, meta in fleet_map.items():
+            if meta.get("engaged"):
+                engaged_ids.add(int(aid))
     out: Dict[int, Dict[str, Any]] = {}
     for row in rows:
-        payload = _row_to_asteroid(row)
+        payload = enrich_asteroid_viewer_state(
+            _row_to_asteroid(row), engaged_ids=engaged_ids, fleet_map=fleet_map
+        )
         out[int(payload["position"])] = payload
     return out
 
@@ -370,8 +497,32 @@ def _active_asteroid_coords(
     }
 
 
+def _ttl_reserved_spawn_coords(conn, *, now: Optional[float] = None) -> Set[Tuple[int, int, int]]:
+    """Coords still reserved until original field expires_at (anti-pop after claim)."""
+    if not asteroid_schema_ready(conn):
+        return set()
+    ts = float(now if now is not None else _now())
+    rows = conn.execute(
+        """
+        SELECT galaxy, system, position
+        FROM asteroid_fields
+        WHERE expires_at > ?
+          AND status IN (?, ?);
+        """,
+        (ts, STATUS_CLAIMED, STATUS_EXPIRED),
+    ).fetchall()
+    out: Set[Tuple[int, int, int]] = set()
+    for row in rows:
+        try:
+            out.add((int(row["galaxy"]), int(row["system"]), int(row["position"])))
+        except (TypeError, ValueError, KeyError):
+            continue
+    return out
+
+
 def _blocked_spawn_coords(conn, *, now: Optional[float] = None) -> Set[Tuple[int, int, int]]:
     blocked = set(_active_asteroid_coords(conn, now=now))
+    blocked |= _ttl_reserved_spawn_coords(conn, now=now)
     try:
         from .world_boss import _active_boss_coords
 
@@ -775,9 +926,10 @@ def try_claim_harvest(
     """Atomically claim an active asteroid and return harvestable cargo.
 
     Returns ``status``:
-    - ``none`` — no active asteroid at coords
+    - ``none`` — no asteroid activity at coords
     - ``claimed`` — this player won; ``harvested`` is min(pool, cargo)
     - ``missed`` — asteroid was present but already taken / race lost
+    - ``expired`` — field timed out while fleet was en route
     """
     if not asteroid_schema_ready(conn):
         return {"status": "none", "harvested": {"metal": 0, "crystal": 0, "fuel_cells": 0}}
@@ -815,6 +967,24 @@ def try_claim_harvest(
                 "status": "missed",
                 "harvested": {"metal": 0, "crystal": 0, "fuel_cells": 0},
                 "asteroid_id": int(recent["id"]),
+            }
+        # Field expired while fleet was en route.
+        expired = conn.execute(
+            """
+            SELECT id FROM asteroid_fields
+            WHERE galaxy = ? AND system = ? AND position = ?
+              AND status = ?
+              AND expires_at >= ?
+            ORDER BY expires_at DESC
+            LIMIT 1;
+            """,
+            (g, s, p, STATUS_EXPIRED, ts - float(TTL_SECONDS)),
+        ).fetchone()
+        if expired:
+            return {
+                "status": "expired",
+                "harvested": {"metal": 0, "crystal": 0, "fuel_cells": 0},
+                "asteroid_id": int(expired["id"]),
             }
         return {"status": "none", "harvested": {"metal": 0, "crystal": 0, "fuel_cells": 0}}
 

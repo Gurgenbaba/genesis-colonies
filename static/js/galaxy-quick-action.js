@@ -638,6 +638,14 @@
       ev.stopPropagation();
       const wrap = btn.closest("[data-galaxy-ring-asteroid-wrap]");
       if (!wrap) return;
+      if (wrap.dataset.harvestLocked === "1" || btn.disabled) {
+        const { t, showNotify } = deps();
+        showNotify(
+          t("galaxy_asteroid_en_route_title", "Harvest fleet already en route."),
+          "info"
+        );
+        return;
+      }
 
       const { t, showNotify } = deps();
       const targetGalaxy = parseInt(wrap.dataset.targetGalaxy || "0", 10);

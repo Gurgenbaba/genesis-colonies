@@ -157,7 +157,7 @@ Owner: `game/combat.py` (`debris_fields`)
 
 Owner: `game/asteroids.py` — [ASTEROID_SYSTEM.md](ASTEROID_SYSTEM.md)
 
-Temporary fields on free classic slots in dense systems (TTL 2 h). Slot flags: `has_asteroid` / `asteroid`. Harvest via Fleet mission `recycle` + `harvest_reclaimer` (first arrival claims). Galaxy board lists all active fields with jump links (GC-AST-UX-01).
+Temporary fields on free classic slots in dense systems (TTL 2 h). Slot flags: `has_asteroid` / `asteroid`. Harvest via Fleet mission `recycle` + `harvest_reclaimer` (first arrival claims). Galaxy board lists active fields with jump links; own outbound hunts show en-route ETA (durable `asteroid_engagements`). Same-slot respawn blocked until field `expires_at`. Details: [ASTEROID_SYSTEM.md](ASTEROID_SYSTEM.md).
 
 ---
 

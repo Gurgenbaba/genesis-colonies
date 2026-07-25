@@ -4,17 +4,31 @@
 {% set g = slot.coordinates.galaxy if slot.coordinates is defined else (nav.galaxy or 1) %}
 {% set s = slot.coordinates.system if slot.coordinates is defined else (nav.system or 1) %}
 {% set p = slot.coordinates.position if slot.coordinates is defined else slot.position %}
-<div class="galaxy-slot-asteroid galaxy-asteroid-block"
+{% set en_route = asteroid.viewer_en_route if asteroid.viewer_en_route is defined else false %}
+{% set harvest_locked = asteroid.viewer_harvest_locked if asteroid.viewer_harvest_locked is defined else false %}
+<div class="galaxy-slot-asteroid galaxy-asteroid-block{% if en_route %} is-en-route{% endif %}"
      role="group"
      aria-label="{{ T(asteroid.name_key, asteroid.asteroid_key) }}"
      data-galaxy-ring-asteroid-wrap
      data-target-galaxy="{{ g }}"
      data-target-system="{{ s }}"
      data-target-position="{{ p }}"
-     data-recycler-slots="{{ asteroid.recycler_slots_needed or 0 }}">
+     data-recycler-slots="{{ asteroid.recycler_slots_needed or 0 }}"
+     {% if harvest_locked %}data-harvest-locked="1"{% endif %}>
   <div class="galaxy-asteroid-block-head">
     <span class="galaxy-asteroid-icon" aria-hidden="true">◆</span>
     <span class="galaxy-asteroid-title">{{ T(asteroid.name_key, asteroid.asteroid_key) }}</span>
+    {% if en_route %}
+    <span class="galaxy-asteroid-board-badge galaxy-asteroid-board-badge--en-route">
+      {{ T('galaxy_asteroid_en_route', 'Unterwegs') }}
+      {% if asteroid.viewer_arrival_at %}
+      <span class="gc-mono"
+            data-countdown-at="{{ asteroid.viewer_arrival_at|int }}"
+            data-countdown-format="eta"
+            data-refresh-on-zero="galaxy">—</span>
+      {% endif %}
+    </span>
+    {% endif %}
   </div>
   {% if asteroid.desc_key %}
   <p class="galaxy-asteroid-desc hint">{{ T(asteroid.desc_key, '') }}</p>
@@ -23,12 +37,18 @@
     <div><dt>{{ T('resource_metal', 'Ferronit') }}</dt><dd class="gc-mono">{{ (asteroid.metal or 0)|fmt_int }}</dd></div>
     <div><dt>{{ T('resource_crystal', 'Crytite') }}</dt><dd class="gc-mono">{{ (asteroid.crystal or 0)|fmt_int }}</dd></div>
     <div><dt>{{ T('resource_fuel_cells', 'Brennzellen') }}</dt><dd class="gc-mono">{{ (asteroid.fuel_cells or 0)|fmt_int }}</dd></div>
+    {% if asteroid.recycler_slots_needed %}
+    <div><dt>{{ T('galaxy_asteroid_reclaimers_needed', 'Harvest Reclaimer benötigt') }}</dt><dd class="gc-mono">{{ asteroid.recycler_slots_needed|int }}</dd></div>
+    {% endif %}
     {% if asteroid.expires_at is defined and asteroid.expires_at %}
-    <div><dt>{{ T('galaxy_asteroid_ttl_remaining', 'Verbleibend') }}</dt><dd class="gc-mono" data-countdown-at="{{ asteroid.expires_at|int }}" data-countdown-format="eta">—</dd></div>
+    <div><dt>{{ T('galaxy_asteroid_ttl_remaining', 'Verbleibend') }}</dt><dd class="gc-mono" data-countdown-at="{{ asteroid.expires_at|int }}" data-countdown-format="eta" data-refresh-on-zero="galaxy">—</dd></div>
     {% endif %}
   </dl>
   <button type="button"
-          class="gc-btn gc-btn-sm gc-btn-primary galaxy-asteroid-harvest-btn"
-          data-galaxy-ring-asteroid-recycle>{{ T('galaxy_asteroid_harvest', 'Einsammeln') }}</button>
+          class="gc-btn gc-btn-sm {% if harvest_locked %}gc-btn-outline{% else %}gc-btn-primary{% endif %} galaxy-asteroid-harvest-btn"
+          data-galaxy-ring-asteroid-recycle
+          {% if harvest_locked %}disabled aria-disabled="true"{% endif %}>
+    {% if en_route %}{{ T('galaxy_asteroid_en_route', 'Unterwegs') }}{% else %}{{ T('galaxy_asteroid_harvest', 'Einsammeln') }}{% endif %}
+  </button>
 </div>
 {% endif %}

@@ -9524,6 +9524,12 @@
       requestMovementCountdownRefresh("fleet");
       return;
     }
+    if (kind === "galaxy") {
+      if (typeof GC.reloadCurrentPage === "function") {
+        GC.reloadCurrentPage({ force: true });
+      }
+      return;
+    }
     if (kind === "shipyard" || kind === "defense") {
       if (o.jobId != null || o.finishAt != null || o.domain) {
         requestQueueTimerZeroRefresh({
