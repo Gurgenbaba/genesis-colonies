@@ -602,7 +602,7 @@ def test_asteroid_board_hides_own_outbound_harvest(ast_db):
         assert any(int(e["position"]) == pos for e in board_before)
 
         begin_write_transaction(conn)
-        ok, err, _res = send_fleet(
+        ok, err, res = send_fleet(
             player_id=uid,
             origin_planet_id=home_id,
             mission_type="recycle",
@@ -616,6 +616,15 @@ def test_asteroid_board_hides_own_outbound_harvest(ast_db):
         )
         commit(conn)
         assert ok, err
+        fleet_id = int((res.get("fleet") or {}).get("id") or 0)
+        assert fleet_id > 0
+        # Send stamps asteroid_id for audit / future filters.
+        mv = conn.execute(
+            "SELECT resources_json, status FROM fleet_movements WHERE id = ?;",
+            (fleet_id,),
+        ).fetchone()
+        payload = json.loads(mv["resources_json"] or "{}")
+        assert int(payload.get("asteroid_id") or 0) == int(ins["asteroid"]["id"])
 
         board_self = build_asteroid_board_entries(
             conn=conn, now=now, viewer_player_id=uid
@@ -631,6 +640,101 @@ def test_asteroid_board_hides_own_outbound_harvest(ast_db):
         assert not any(
             int(e["position"]) == pos for e in via_list.get("active_asteroid_board") or []
         )
+
+        # Still hidden after outbound → returning (recall / arrival without removing field).
+        begin_write_transaction(conn)
+        conn.execute(
+            "UPDATE fleet_movements SET status = 'returning', return_at = ? WHERE id = ?;",
+            (now + 60, fleet_id),
+        )
+        commit(conn)
+        board_returning = build_asteroid_board_entries(
+            conn=conn, now=now, viewer_player_id=uid
+        )
+        assert not any(int(e["position"]) == pos for e in board_returning)
+
+        begin_write_transaction(conn)
+        conn.execute(
+            "UPDATE fleet_movements SET status = 'completed' WHERE id = ?;",
+            (fleet_id,),
+        )
+        commit(conn)
+        board_done = build_asteroid_board_entries(
+            conn=conn, now=now, viewer_player_id=uid
+        )
+        assert not any(int(e["position"]) == pos for e in board_done)
+    finally:
+        conn.close()
+
+
+def test_asteroid_board_shows_again_after_new_spawn_at_same_slot(ast_db):
+    """A later belt at the same coords is a new field — show it again."""
+    uid = _player("Respawn")
+    home_id, g, s, _ = _home(uid)
+    pos = _free_slot_near(g, s)
+    _fund(home_id)
+    t0 = time.time()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ins1 = insert_asteroid(
+            conn=conn,
+            galaxy=g,
+            system=s,
+            position=pos,
+            asteroid_key="ferronite_rock",
+            now=t0,
+            ttl_seconds=TTL_SECONDS,
+            rng=random.Random(3),
+        )
+        assert ins1["ok"]
+        add_planet_ships(home_id, uid, {"harvest_reclaimer": 5}, conn=conn)
+        commit(conn)
+
+        begin_write_transaction(conn)
+        ok, err, res = send_fleet(
+            player_id=uid,
+            origin_planet_id=home_id,
+            mission_type="recycle",
+            target_galaxy=g,
+            target_system=s,
+            target_position=pos,
+            ships={"harvest_reclaimer": 1},
+            resources={},
+            speed_percent=100,
+            conn=conn,
+        )
+        commit(conn)
+        assert ok, err
+        fleet_id = int((res.get("fleet") or {}).get("id") or 0)
+        begin_write_transaction(conn)
+        conn.execute(
+            "UPDATE fleet_movements SET status = 'completed' WHERE id = ?;",
+            (fleet_id,),
+        )
+        # Expire / remove first field, spawn a fresh one later at same slot.
+        conn.execute(
+            "UPDATE asteroid_fields SET status = 'expired' WHERE id = ?;",
+            (int(ins1["asteroid"]["id"]),),
+        )
+        t1 = t0 + 100
+        ins2 = insert_asteroid(
+            conn=conn,
+            galaxy=g,
+            system=s,
+            position=pos,
+            asteroid_key="crytite_shard",
+            now=t1,
+            ttl_seconds=TTL_SECONDS,
+            rng=random.Random(4),
+        )
+        commit(conn)
+        assert ins2["ok"]
+        board = build_asteroid_board_entries(
+            conn=conn, now=t1, viewer_player_id=uid
+        )
+        assert any(int(e["position"]) == pos for e in board)
+        assert any(int(e["id"]) == int(ins2["asteroid"]["id"]) for e in board)
     finally:
         conn.close()
 

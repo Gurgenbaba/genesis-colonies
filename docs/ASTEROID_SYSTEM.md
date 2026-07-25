@@ -42,7 +42,10 @@ Temporary asteroid belts in densely settled classic galaxy systems. Harvest with
 
 `list_system` → `active_asteroid_board` via `build_asteroid_board_entries` (active fields, TTL-sorted, `galaxy_href` jump).
 
-Viewer filter: asteroids the player already has an **outbound** `recycle` fleet flying to are omitted from *their* board (still visible to others; ring marker stays until claim).
+Viewer filter: once the player has committed a ``recycle`` flight to an active field
+(``outbound`` / ``returning`` / ``completed``, departure ≥ field ``spawned_at``), that
+field is omitted from *their* board for the rest of its life. Cancelled/failed do not
+count. A later spawn at the same slot shows again. Ring marker stays until claim.
 
 UI: `templates/partials/galaxy_asteroid_board.html` in the Galaxy HUD — collapsed bar by default (count badge), expand for list + Jump + `?` help modal. No dedicated `/asteroids` page.
 

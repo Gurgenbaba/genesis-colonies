@@ -177,44 +177,67 @@ def list_active_asteroids(
     return [_row_to_asteroid(r) for r in rows]
 
 
-def player_outbound_recycle_coords(
+def player_engaged_active_asteroid_coords(
     player_id: int,
     *,
     conn,
+    now: Optional[float] = None,
 ) -> Set[Tuple[int, int, int]]:
-    """Coords where this player already has an outbound recycle fleet en route.
+    """Coords of *active* asteroids this player has already committed a harvest to.
 
-    Used to hide asteroids from the viewer's Galaxy board once they have committed
-    a harvest flight (still visible to other players / on the ring until claimed).
+    Hides a belt from the viewer's board for the lifetime of that field once they
+    have any recycle flight to those coords after the field spawned — outbound,
+    returning, or completed. Cancelled/failed fleets do not count. A later spawn
+    at the same slot (newer ``spawned_at``) shows again.
     """
-    if not player_id or not table_exists(conn, "fleet_movements"):
+    if not player_id or not asteroid_schema_ready(conn):
         return set()
+    if not table_exists(conn, "fleet_movements"):
+        return set()
+    ts = float(now if now is not None else _now())
     rows = conn.execute(
         """
-        SELECT target_galaxy, target_system, target_position
-        FROM fleet_movements
-        WHERE player_id = ?
-          AND mission_type = 'recycle'
-          AND status = 'outbound'
-          AND target_galaxy IS NOT NULL
-          AND target_system IS NOT NULL
-          AND target_position IS NOT NULL;
+        SELECT DISTINCT a.galaxy, a.system, a.position
+        FROM asteroid_fields a
+        WHERE a.status = ?
+          AND a.expires_at > ?
+          AND EXISTS (
+            SELECT 1
+            FROM fleet_movements fm
+            WHERE fm.player_id = ?
+              AND fm.mission_type = 'recycle'
+              AND fm.status IN ('outbound', 'returning', 'completed')
+              AND (
+                json_extract(fm.resources_json, '$.asteroid_id') = a.id
+                OR (
+                  fm.target_galaxy = a.galaxy
+                  AND fm.target_system = a.system
+                  AND fm.target_position = a.position
+                  -- departure_at is stored as int seconds; spawned_at is float.
+                  AND COALESCE(fm.departure_at, fm.created_at)
+                      >= CAST(a.spawned_at AS INTEGER)
+                )
+              )
+          );
         """,
-        (int(player_id),),
+        (STATUS_ACTIVE, ts, int(player_id)),
     ).fetchall()
     out: Set[Tuple[int, int, int]] = set()
     for row in rows:
         try:
             out.add(
                 (
-                    int(row["target_galaxy"]),
-                    int(row["target_system"]),
-                    int(row["target_position"]),
+                    int(row["galaxy"]),
+                    int(row["system"]),
+                    int(row["position"]),
                 )
             )
         except (TypeError, ValueError, KeyError):
             continue
     return out
+
+
+# Engagement filter: outbound|returning|completed (+ asteroid_id stamp / second-safe spawned_at).
 
 
 def build_asteroid_board_entries(
@@ -231,7 +254,9 @@ def build_asteroid_board_entries(
     ts = float(now if now is not None else _now())
     hide_coords: Set[Tuple[int, int, int]] = set()
     if viewer_player_id is not None and int(viewer_player_id) > 0:
-        hide_coords = player_outbound_recycle_coords(int(viewer_player_id), conn=conn)
+        hide_coords = player_engaged_active_asteroid_coords(
+            int(viewer_player_id), conn=conn, now=ts
+        )
     entries: List[Dict[str, Any]] = []
     for row in list_active_asteroids(conn=conn, now=ts, limit=MAX_ACTIVE_ASTEROIDS + 5):
         g = int(row["galaxy"])

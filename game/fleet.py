@@ -2898,6 +2898,15 @@ def send_fleet(
             resources_store["world_key"] = wk
         if mission == "expedition":
             resources_store["expedition_hours"] = normalize_expedition_hours(expedition_hours)
+        if (
+            mission == "recycle"
+            and str(target_info.get("target_type") or "") == "asteroid"
+        ):
+            ast = target_info.get("asteroid") or {}
+            aid = int(ast.get("id") or 0)
+            if aid > 0:
+                resources_store["asteroid_id"] = aid
+                resources_store["asteroid_key"] = str(ast.get("asteroid_key") or "")
 
         now = _now()
         flight_seconds = int(preview["flight_seconds"])
