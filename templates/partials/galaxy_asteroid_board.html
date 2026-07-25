@@ -1,17 +1,22 @@
-{# GC-AST-UX-01 — Galaxy asteroid board: list + jump + help modal #}
+{# GC-AST-UX-01 — Galaxy asteroid board: collapsed by default, expand for list #}
 {% set board = sys.active_asteroid_board if sys.active_asteroid_board is defined else [] %}
-<aside class="galaxy-asteroid-board{% if not board or board|length == 0 %} is-empty{% endif %}"
+{% set board_count = board|length if board else 0 %}
+<aside class="galaxy-asteroid-board is-collapsed{% if board_count == 0 %} is-empty{% endif %}"
        data-galaxy-asteroid-board
+       data-asteroid-count="{{ board_count }}"
        aria-label="{{ T('galaxy_asteroid_board_title', 'Asteroidengürtel') }}">
   <header class="galaxy-asteroid-board-head">
-    <div class="galaxy-asteroid-board-titles">
-      <h3 class="galaxy-asteroid-board-title">{{ T('galaxy_asteroid_board_title', 'Asteroidengürtel') }}</h3>
-      {% if board and board|length > 0 %}
-      <p class="galaxy-asteroid-board-subtitle hint">{{ T('galaxy_asteroid_board_subtitle', 'Aktive Felder im Universum — springe hin und ernte mit Harvest Reclaimern.') }}</p>
-      {% else %}
-      <p class="galaxy-asteroid-board-empty hint">{{ T('galaxy_asteroid_board_empty', 'Aktuell keine aktiven Asteroidenfelder.') }}</p>
+    <button type="button"
+            class="galaxy-asteroid-board-toggle"
+            data-galaxy-asteroid-board-toggle
+            aria-expanded="false"
+            aria-controls="galaxy-asteroid-board-panel">
+      <span class="galaxy-asteroid-board-chevron" aria-hidden="true">▸</span>
+      <span class="galaxy-asteroid-board-title">{{ T('galaxy_asteroid_board_title', 'Asteroidengürtel') }}</span>
+      {% if board_count > 0 %}
+      <span class="galaxy-asteroid-board-count gc-mono" data-galaxy-asteroid-board-count>{{ board_count }}</span>
       {% endif %}
-    </div>
+    </button>
     <button type="button"
             class="gc-btn gc-btn-ghost gc-btn-xs galaxy-asteroid-help-btn"
             data-galaxy-asteroid-help-open
@@ -21,31 +26,39 @@
             aria-label="{{ T('galaxy_asteroid_help_btn', 'Asteroiden-Hilfe') }}">?</button>
   </header>
 
-  {% if board and board|length > 0 %}
-  <ul class="galaxy-asteroid-board-list">
-    {% for entry in board %}
-    <li class="galaxy-asteroid-board-row{% if entry.is_current_system %} is-current-system{% endif %}">
-      <div class="galaxy-asteroid-board-row-main">
-        <span class="galaxy-asteroid-board-type">{{ T(entry.name_key, entry.asteroid_key) }}</span>
-        <span class="galaxy-asteroid-board-coords gc-mono">{{ entry.coords }}</span>
-      </div>
-      <div class="galaxy-asteroid-board-row-meta">
-        <span class="galaxy-asteroid-board-loot gc-mono" title="{{ T('resource_metal', 'Ferronit') }} / {{ T('resource_crystal', 'Crytite') }} / {{ T('resource_fuel_cells', 'Brennzellen') }}">
-          {{ (entry.metal or 0)|fmt_int_compact }} / {{ (entry.crystal or 0)|fmt_int_compact }} / {{ (entry.fuel_cells or 0)|fmt_int_compact }}
-        </span>
-        {% if entry.expires_at %}
-        <span class="galaxy-asteroid-board-ttl gc-mono"
-              data-countdown-at="{{ entry.expires_at|int }}"
-              data-countdown-format="eta">—</span>
-        {% endif %}
-        <a href="{{ entry.galaxy_href }}"
-           class="gc-btn gc-btn-sm gc-btn-outline galaxy-asteroid-board-jump"
-           data-pjax>{{ T('galaxy_asteroid_board_jump', 'Springen') }}</a>
-      </div>
-    </li>
-    {% endfor %}
-  </ul>
-  {% endif %}
+  <div id="galaxy-asteroid-board-panel"
+       class="galaxy-asteroid-board-panel"
+       data-galaxy-asteroid-board-panel
+       hidden>
+    {% if board_count > 0 %}
+    <p class="galaxy-asteroid-board-subtitle hint">{{ T('galaxy_asteroid_board_subtitle', 'Aktive Felder im Universum — springe hin und ernte mit Harvest Reclaimern.') }}</p>
+    <ul class="galaxy-asteroid-board-list">
+      {% for entry in board %}
+      <li class="galaxy-asteroid-board-row{% if entry.is_current_system %} is-current-system{% endif %}">
+        <div class="galaxy-asteroid-board-row-main">
+          <span class="galaxy-asteroid-board-type">{{ T(entry.name_key, entry.asteroid_key) }}</span>
+          <span class="galaxy-asteroid-board-coords gc-mono">{{ entry.coords }}</span>
+        </div>
+        <div class="galaxy-asteroid-board-row-meta">
+          <span class="galaxy-asteroid-board-loot gc-mono" title="{{ T('resource_metal', 'Ferronit') }} / {{ T('resource_crystal', 'Crytite') }} / {{ T('resource_fuel_cells', 'Brennzellen') }}">
+            {{ (entry.metal or 0)|fmt_int_compact }} / {{ (entry.crystal or 0)|fmt_int_compact }} / {{ (entry.fuel_cells or 0)|fmt_int_compact }}
+          </span>
+          {% if entry.expires_at %}
+          <span class="galaxy-asteroid-board-ttl gc-mono"
+                data-countdown-at="{{ entry.expires_at|int }}"
+                data-countdown-format="eta">—</span>
+          {% endif %}
+          <a href="{{ entry.galaxy_href }}"
+             class="gc-btn gc-btn-sm gc-btn-outline galaxy-asteroid-board-jump"
+             data-pjax>{{ T('galaxy_asteroid_board_jump', 'Springen') }}</a>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="galaxy-asteroid-board-empty hint">{{ T('galaxy_asteroid_board_empty', 'Aktuell keine aktiven Asteroidenfelder.') }}</p>
+    {% endif %}
+  </div>
 </aside>
 
 {# Same shell as World Boss help — dialog/overlay class names are required for modal CSS #}

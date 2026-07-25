@@ -42,7 +42,7 @@ Temporary asteroid belts in densely settled classic galaxy systems. Harvest with
 
 `list_system` → `active_asteroid_board` via `build_asteroid_board_entries` (all `active` fields, TTL-sorted, `galaxy_href` jump).
 
-UI: `templates/partials/galaxy_asteroid_board.html` in the Galaxy HUD — list + Jump + `?` help modal (WB-style clarity). No dedicated `/asteroids` page.
+UI: `templates/partials/galaxy_asteroid_board.html` in the Galaxy HUD — collapsed bar by default (count badge), expand for list + Jump + `?` help modal. No dedicated `/asteroids` page.
 
 ---
 
@@ -50,10 +50,10 @@ UI: `templates/partials/galaxy_asteroid_board.html` in the Galaxy HUD — list +
 
 | Key | Split (approx) | Total range |
 |-----|----------------|-------------|
-| `ferronite_rock` | 70/25/5 M/C/F | 80k–350k |
-| `crytite_shard` | 25/70/5 | 80k–350k |
-| `fuel_ice` | 15/15/70 | 60k–280k |
-| `mixed_belt` | 40/40/20 | 100k–450k |
+| `ferronite_rock` | 70/25/5 M/C/F | 600k–3.0M |
+| `crytite_shard` | 25/70/5 | 600k–3.0M |
+| `fuel_ice` | 15/15/70 | 500k–2.5M |
+| `mixed_belt` | 40/40/20 | 800k–4.5M |
 
 Cargo take = `min(fleet_cargo, pool)`; asteroid is fully claimed and removed even if leftover cargo capacity is insufficient (remainder lost).
 

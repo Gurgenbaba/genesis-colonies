@@ -40,28 +40,28 @@ ASTEROID_CATALOG: Dict[str, Dict[str, Any]] = {
         "desc_key": "asteroid_type_ferronite_rock_desc",
         "spawn_weight": 35,
         "split": {"metal": 0.70, "crystal": 0.25, "fuel_cells": 0.05},
-        "total_range": (80_000, 350_000),
+        "total_range": (600_000, 3_000_000),
     },
     "crytite_shard": {
         "name_key": "asteroid_type_crytite_shard",
         "desc_key": "asteroid_type_crytite_shard_desc",
         "spawn_weight": 30,
         "split": {"metal": 0.25, "crystal": 0.70, "fuel_cells": 0.05},
-        "total_range": (80_000, 350_000),
+        "total_range": (600_000, 3_000_000),
     },
     "fuel_ice": {
         "name_key": "asteroid_type_fuel_ice",
         "desc_key": "asteroid_type_fuel_ice_desc",
         "spawn_weight": 20,
         "split": {"metal": 0.15, "crystal": 0.15, "fuel_cells": 0.70},
-        "total_range": (60_000, 280_000),
+        "total_range": (500_000, 2_500_000),
     },
     "mixed_belt": {
         "name_key": "asteroid_type_mixed_belt",
         "desc_key": "asteroid_type_mixed_belt_desc",
         "spawn_weight": 15,
         "split": {"metal": 0.40, "crystal": 0.40, "fuel_cells": 0.20},
-        "total_range": (100_000, 450_000),
+        "total_range": (800_000, 4_500_000),
     },
 }
 

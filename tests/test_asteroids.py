@@ -583,9 +583,12 @@ def test_galaxy_asteroid_board_template_contract():
     assert "galaxy_asteroid_board.html" in ring
     assert "data-galaxy-asteroid-board" in board
     assert "galaxy-asteroid-help-modal" in board
+    assert "data-galaxy-asteroid-board-toggle" in board
+    assert "is-collapsed" in board
     # Must match World Boss modal shell (dialog + overlay), not broken aliases.
     assert "gc-player-card-dialog" in board
     assert "gc-player-card-overlay" in board
     assert "gc-player-card-modal-dialog" not in board
     assert "openAsteroidHelp" in qa
+    assert "initAsteroidBoardToggle" in qa
     assert "document.body.appendChild(modal)" in qa

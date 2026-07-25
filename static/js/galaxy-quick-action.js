@@ -723,6 +723,39 @@
       }
     },
 
+    setAsteroidBoardExpanded(board, expanded) {
+      if (!board) return;
+      const panel = board.querySelector("[data-galaxy-asteroid-board-panel]");
+      const toggle = board.querySelector("[data-galaxy-asteroid-board-toggle]");
+      const open = Boolean(expanded);
+      board.classList.toggle("is-collapsed", !open);
+      if (panel) panel.hidden = !open;
+      if (toggle) toggle.setAttribute("aria-expanded", open ? "true" : "false");
+      try {
+        localStorage.setItem("gc_galaxy_asteroid_board_open", open ? "1" : "0");
+      } catch (_) {}
+    },
+
+    initAsteroidBoardToggle(root) {
+      const board = root?.querySelector?.("[data-galaxy-asteroid-board]");
+      if (!board) return;
+      let preferOpen = false;
+      try {
+        preferOpen = localStorage.getItem("gc_galaxy_asteroid_board_open") === "1";
+      } catch (_) {}
+      this.setAsteroidBoardExpanded(board, preferOpen);
+    },
+
+    handleAsteroidBoardToggle(ev, root) {
+      const btn = ev.target.closest("[data-galaxy-asteroid-board-toggle]");
+      if (!btn || !root.contains(btn)) return;
+      ev.preventDefault();
+      const board = btn.closest("[data-galaxy-asteroid-board]");
+      if (!board) return;
+      const open = board.classList.contains("is-collapsed");
+      this.setAsteroidBoardExpanded(board, open);
+    },
+
     async handleRelocationClick(ev, root) {
       const btn = ev.target.closest("[data-galaxy-relocation-start]");
       if (!btn || !root.contains(btn)) return;
@@ -775,6 +808,7 @@
       const onDebris = (ev) => this.handleDebrisRecycleClick(ev, root);
       const onAsteroid = (ev) => this.handleAsteroidRecycleClick(ev, root);
       const onAsteroidHelp = (ev) => this.handleAsteroidHelpClick(ev);
+      const onBoardToggle = (ev) => this.handleAsteroidBoardToggle(ev, root);
       const onRelocate = (ev) => this.handleRelocationClick(ev, root);
       const onEscape = (ev) => {
         if (ev.key === "Escape") this.handleEscape();
@@ -788,9 +822,11 @@
       root.addEventListener("click", onAsteroid);
       root.addEventListener("click", onAsteroidHelp);
       document.addEventListener("click", onAsteroidHelp);
+      root.addEventListener("click", onBoardToggle);
       root.addEventListener("click", onRelocate);
       document.addEventListener("keydown", onEscape);
       this.watchRecycleArrivals();
+      this.initAsteroidBoardToggle(root);
 
       return () => {
         root.removeEventListener("click", onSpy);
@@ -801,6 +837,7 @@
         root.removeEventListener("click", onAsteroid);
         root.removeEventListener("click", onAsteroidHelp);
         document.removeEventListener("click", onAsteroidHelp);
+        root.removeEventListener("click", onBoardToggle);
         root.removeEventListener("click", onRelocate);
         document.removeEventListener("keydown", onEscape);
         this.stopWatchRecycleArrivals();

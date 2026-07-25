@@ -27109,22 +27109,46 @@ button.pe-hero-planet-hint:focus-visible {
 }
 .galaxy-asteroid-board {
   margin: 0;
-  padding: 8px 14px 10px;
+  padding: 6px 14px;
   border-bottom: 1px solid rgba(70, 229, 255, 0.14);
   background: rgba(4, 10, 18, 0.72);
 }
 .galaxy-asteroid-board.is-empty {
-  padding: 6px 14px 8px;
+  padding: 5px 14px;
 }
 .galaxy-asteroid-board-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   margin-bottom: 0;
 }
-.galaxy-asteroid-board:not(.is-empty) .galaxy-asteroid-board-head {
-  margin-bottom: 8px;
+.galaxy-asteroid-board-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+  flex: 1;
+}
+.galaxy-asteroid-board-toggle:hover .galaxy-asteroid-board-title {
+  color: var(--gc-primary-2, rgba(120, 230, 255, 0.95));
+}
+.galaxy-asteroid-board-chevron {
+  display: inline-block;
+  width: 0.85rem;
+  font-size: 0.7rem;
+  color: var(--gc-text-soft);
+  transition: transform 0.12s ease;
+}
+.galaxy-asteroid-board:not(.is-collapsed) .galaxy-asteroid-board-chevron {
+  transform: rotate(90deg);
 }
 .galaxy-asteroid-board-title {
   margin: 0;
@@ -27135,8 +27159,27 @@ button.pe-hero-planet-hint:focus-visible {
   text-transform: uppercase;
   color: rgba(190, 210, 235, 0.95);
 }
+.galaxy-asteroid-board-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.35rem;
+  padding: 0 5px;
+  border: 1px solid rgba(70, 229, 255, 0.35);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(20, 40, 60, 0.7);
+  font-size: 0.68rem;
+  color: rgba(160, 230, 255, 0.95);
+}
+.galaxy-asteroid-board-panel {
+  margin-top: 8px;
+}
+.galaxy-asteroid-board.is-collapsed .galaxy-asteroid-board-panel,
+.galaxy-asteroid-board-panel[hidden] {
+  display: none !important;
+}
 .galaxy-asteroid-board-subtitle {
-  margin: 4px 0 0;
+  margin: 0 0 8px;
   font-size: 0.7rem;
   line-height: 1.35;
 }
@@ -27187,7 +27230,7 @@ button.pe-hero-planet-hint:focus-visible {
   color: var(--gc-text-soft);
 }
 .galaxy-asteroid-board-empty {
-  margin: 4px 0 0;
+  margin: 0;
   font-size: 0.7rem;
   line-height: 1.35;
 }
