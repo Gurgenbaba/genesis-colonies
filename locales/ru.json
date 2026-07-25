@@ -2410,6 +2410,7 @@
   "fleet_drawer_show_all": "Посмотреть все",
   "fleet_drawer_show_less": "Показать меньше",
   "fleet_drawer_show_more": "Показать больше (%(count)s)",
+  "fleet_drawer_expand": "Открыть флоты",
   "fleet_drawer_summary": "Действующие автопарки · %(count)s в пути · следующее прибытие %(next)s",
   "fleet_drawer_tooltip_cargo": "Груз",
   "fleet_drawer_tooltip_no_ships": "Нет кораблей",

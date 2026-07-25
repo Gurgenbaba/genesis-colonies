@@ -58,18 +58,22 @@ Every brain decision (spy, intel score, attack, skip reason, destroy, AI disable
 
 Owner helpers: `game/pirates/admin.py` (`build_admin_pirates_payload`, `admin_set_ai`, `admin_hard_disable_ai`, `admin_force_spawn_hottest`).
 
-### Living bots (GC-P19)
+### Living bots (GC-P19 / GC-P20)
 
 When AI is on, faction bots participate via canonical fleets:
 
 | Heat | Behavior |
 |------|----------|
-| Soft-On (any heat) | 4 bots exist in Ranking/Galaxy/PlayerCard with home hangars |
+| Soft-On (any heat) | 4 bots exist in Ranking/Galaxy/PlayerCard with home hangars (+ Seed Ark) |
 | ≥150 Patrol | Real `spy` missions from homeworlds → arrival writes `pirate_intel` |
+| ≥150 Colonize | Real `colonize` with `seed_ark` to free classic slots (soft cap 3 planets/bot) |
 | ≥300 Raids | Attacks from live bases **and** homeworlds (budget fill) |
 | ≥150 + debris | Opportunistic `recycle` (max 1/tick) |
+| Planet floor | Always ≥1 planet; restore homeworld if wiped (`bot_planet_floor`) |
 
 Force Spawn (admin) bypasses heat gate for LiveOps testing without changing threshold design.
+
+**Temporary pirate bases** (Galaxy `PIRATENBASIS`) still expire/destroy — that is not the bot vanishing.
 
 ---
 
@@ -139,7 +143,7 @@ Faction bots (`gc_pirate_*`) are **real player rows** and appear in:
 - Galaxy (homeworlds in belt `1:490–491`, AI status chip)
 - PlayerCard (`player_mode=ai_pirate`, personality/mode keys, no whisper/message/edit)
 
-Identity owner: `game/pirates/accounts.py` (`get_pirate_ai_profile`, `pirate_ai_profiles_by_ids`).
+Identity owner: `game/pirates/accounts.py` (`get_pirate_ai_profile`, `pirate_ai_profiles_by_ids`, `ensure_bot_planet_floor`).
 
 ---
 
@@ -157,6 +161,7 @@ Identity owner: `game/pirates/accounts.py` (`get_pirate_ai_profile`, `pirate_ai_
 | GC-P13–P15 | Ambush, infiltration, smugglers, fleet-save | **done** |
 | GC-P16–P18 | Directives, LiveOps dashboard, E2E ship-gate | **done** |
 | GC-P19 | Living bots: Soft-On bootstrap, patrol spy, home raids, recycle, force-spawn | **done** |
+| GC-P20 | Colonize via Seed Ark + planet floor (≥1) | **done** |
 
 ---
 
@@ -172,5 +177,6 @@ Feature is live for players **and**:
 6. Heat ≥700 can start `pirate_war` (does not stomp other emergencies)  
 7. Expo pirate loss can plant timed infiltration; smugglers spawn in hot galaxies  
 8. Soft-On bootstraps 4 AI commanders with hangars; patrol spies at Heat ≥150; home raids at ≥300  
+9. Soft-On stocks Seed Ark; colonize at Heat ≥150; planet floor restores ≥1 colony if wiped  
 
 **LiveOps enable:** run migrations through `108_pirate_war_emergency.sql`, then Soft-On AI in Admin → Pirate Bot-Log. Use **Force Spawn** if Heat is still below 150.

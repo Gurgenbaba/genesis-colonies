@@ -64,7 +64,7 @@ def test_galaxy_quick_action_debris_recycle_handler():
 
 
 def test_galaxy_quick_action_debris_live_sync_contract():
-    """GC-DEBRIS-LIVE-01: arrival reload + stale-target self-heal."""
+    """GC-DEBRIS-LIVE-01 / GC-GAL-TFS-01: arrival reload + stale-target self-heal."""
     js = _read_js()
     main_js = Path("static/main.js").read_text(encoding="utf-8")
     assert "watchRecycleArrivals" in js
@@ -74,6 +74,19 @@ def test_galaxy_quick_action_debris_live_sync_contract():
     assert "no_debris_at_target" in js
     assert "registerActiveFleetsListener" in main_js
     assert "notifyActiveFleetsListeners" in main_js
+    # Arrival path invalidates + force reload; send-success must not reload debris HTML.
+    reload_fn = js.split("async reloadGalaxyAfterRecycle()")[1].split("scheduleGalaxyReloadAfterRecycleArrival")[0]
+    assert "invalidateGalaxyPjaxCache" in reload_fn
+    assert "reloadCurrentPage" in reload_fn
+    debris_handler = js.split("async handleDebrisRecycleClick")[1].split("async handleAsteroidRecycleClick")[0]
+    assert "await this.reloadGalaxyAfterRecycle()" not in debris_handler
+    post = js.split("async postFleetSend")[1].split("async handleStaleRecycleTargetError")[0]
+    if "async handleStaleRecycleTargetError" not in js:
+        post = js.split("async postFleetSend")[1][:2500]
+    apply_idx = post.find("applyActionState(res, applyReason)")
+    success_idx = post.find("onSuccess(res)")
+    assert apply_idx != -1 and success_idx != -1
+    assert apply_idx < success_idx
 
 
 def test_galaxy_quick_action_relocation_handler():

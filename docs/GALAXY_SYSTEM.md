@@ -149,7 +149,7 @@ Owner: `game/combat.py` (`debris_fields`)
 | TTL | `DEBRIS_FIELD_TTL_SECONDS` (7d from `updated_at`) — **hard expire** via `expire_due_debris_fields` |
 | Cron | Fleet-worker piggyback + defensive purge in `get_debris_for_system` / `get_debris_at_field` |
 | Galaxy | Slot `has_debris` / `debris` only while amount > 0 and TTL remaining |
-| Live sync | On Galaxy page: recycle outbound→returning (via `active_fleets` delta) triggers soft `reloadCurrentPage` — no module-owned poll (GC-DEBRIS-LIVE-01) |
+| Live sync | On Galaxy page: recycle outbound→returning (via `active_fleets` delta) triggers soft `reloadCurrentPage({ force: true })` with `invalidateGalaxyPjaxCache` + HTTP `no-store` — no module-owned poll (GC-DEBRIS-LIVE-01 / GC-GAL-TFS-01). Send-success does **not** reload (would cache pre-harvest SSR). |
 
 ---
 

@@ -30,7 +30,8 @@ def test_galaxy_perf_main_js_contract():
     nav = src.split("GC.navigateTo = async function navigateTo", 1)[1]
     nav = nav.split("function initPjax", 1)[0]
     assert "getGalaxyPjaxCached(target)" in nav
-    assert 'cache: isGalaxySystemPjaxUrl(target) ? "default" : "no-store"' in nav
+    assert 'cache: isGalaxySystemPjaxUrl(target) && !opts.force ? "default" : "no-store"' in nav
+    assert "invalidateGalaxyPjaxCache" in nav
 
 
 def test_galaxy_ring_template_versions_static_images(tmp_path, monkeypatch):

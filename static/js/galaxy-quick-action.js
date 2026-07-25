@@ -80,6 +80,9 @@
     },
 
     async reloadGalaxyAfterRecycle() {
+      if (typeof window.GC?.invalidateGalaxyPjaxCache === "function") {
+        window.GC.invalidateGalaxyPjaxCache();
+      }
       if (typeof window.GC?.reloadCurrentPage === "function") {
         await window.GC.reloadCurrentPage({ force: true });
       }
@@ -266,8 +269,8 @@
           body: JSON.stringify(payload),
         });
         if (res?.ok) {
-          if (typeof onSuccess === "function") onSuccess(res);
           applyActionState(res, applyReason);
+          if (typeof onSuccess === "function") onSuccess(res);
         } else if (typeof onError === "function") {
           onError(res?.error || res?.reason || "generic", res);
         }
@@ -621,7 +624,7 @@
             } else {
               showNotify(t("fleet_send_success", "Fleet dispatched."), "success");
             }
-            await this.reloadGalaxyAfterRecycle();
+            // Arrival watcher reloads Galaxy after harvest (avoid caching pre-harvest HTML).
           },
           onError: async (reason, res) => {
             if (await this.handleStaleRecycleTargetError(reason)) return;

@@ -1102,6 +1102,14 @@ def delete_active_planet(
         from .models import get_homeworld
         from .planet_evolution.repository import get_context_planet, set_active_planet_id
 
+        try:
+            from .pirates.accounts import is_pirate_bot_player
+
+            if is_pirate_bot_player(int(player_id), conn=conn):
+                return False, "planet_error_ai_protected", {}
+        except Exception:
+            pass
+
         planet = get_context_planet(int(player_id), conn=conn)
         if not planet or not planet.get("id"):
             return False, "planet_error_not_found", {}

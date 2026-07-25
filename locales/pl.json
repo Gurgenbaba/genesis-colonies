@@ -2410,6 +2410,7 @@
   "fleet_drawer_show_all": "Zobacz wszystkie",
   "fleet_drawer_show_less": "Pokaż mniej",
   "fleet_drawer_show_more": "Pokaż więcej (%(count)s)",
+  "fleet_drawer_expand": "Otwórz floty",
   "fleet_drawer_summary": "Aktywne floty · %(count)s w trasie · następny przyjazd %(next)s",
   "fleet_drawer_tooltip_cargo": "Ładunek",
   "fleet_drawer_tooltip_no_ships": "Żadnych statków",

@@ -1050,13 +1050,112 @@ def test_pirate_ai_visible_in_ranking_galaxy_playercard(pirate_db):
     assert card["can_edit"] is False
     assert card["allows_chat"] is False
     assert "pirate_ai_mode" in (card.get("ai_mode_key") or "")
+    assert not (card.get("bio") or "").strip()
+    assert "iron_collective" not in str(card.get("bio") or "")
+    assert "Autonomous pirate AI" not in str(card.get("bio") or "")
+    assert "(" not in str(card.get("bio") or "")
 
     view = (ROOT / "templates/partials/player_card_view.html").read_text(encoding="utf-8")
     assert "gc-player-card-ai-banner" in view
     assert "is_ai" in view
+    assert "not card.get('is_ai')" in view or "not card.get(\"is_ai\")" in view
     js = (ROOT / "static/main.js").read_text(encoding="utf-8")
     assert "rankingAiBadgeHtml" in js
     badges = (ROOT / "templates/partials/galaxy_slot_status_badges.html").read_text(
         encoding="utf-8"
     )
     assert "galaxy-ring-status-chip--ai" in badges
+
+
+def test_bot_hangar_includes_seed_ark(pirate_db):
+    from game.db import begin_write_transaction, commit
+    from game.fleet import get_planet_ships
+    from game.pirates.admin import admin_set_ai
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        res = admin_set_ai(conn, True)
+        assert res["bots_bootstrapped"] == 4
+        for bot in res["bots"]:
+            ships = get_planet_ships(int(bot["planet_id"]), conn=conn)
+            assert int(ships.get("seed_ark") or 0) >= 1
+            assert int(ships.get("veil_probe") or 0) >= 8
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_colonize_dispatch_at_heat_150(pirate_db):
+    from game.db import begin_write_transaction, commit
+    from game.pirates import record_heat_event, set_pirates_ai_enabled
+    from game.pirates.accounts import bootstrap_faction_bots
+    from game.pirates.brain import dispatch_colonize_from_home
+    import time
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        set_pirates_ai_enabled(True, conn=conn)
+        record_heat_event(conn, 1, "combat", amount=160)
+        bots = bootstrap_faction_bots(conn=conn)
+        bot = next(b for b in bots if b["faction_key"] == "nomad_swarm")
+        res = dispatch_colonize_from_home(conn, bot, now=time.time(), force_playtime=True)
+        assert res.get("ok"), res
+        assert int(res.get("fleet_id") or 0) > 0
+        logs = recent_action_log(conn, kind="colonize_dispatch", limit=5)
+        assert any(l.get("bot_player_id") == bot["player_id"] for l in logs)
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_bot_planet_floor_restores_after_wipe(pirate_db):
+    from game.db import begin_write_transaction, commit
+    from game.models import get_planets_by_player
+    from game.pirates.accounts import bootstrap_faction_bots, ensure_bot_planet_floor
+    from game.pirates.admin import admin_set_ai
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        admin_set_ai(conn, True)
+        bots = bootstrap_faction_bots(conn=conn)
+        bot = bots[0]
+        pid = int(bot["player_id"])
+        planets = get_planets_by_player(pid, conn=conn) or []
+        assert planets
+        for p in planets:
+            conn.execute("DELETE FROM planets WHERE id = ?;", (int(p["id"]),))
+        assert not (get_planets_by_player(pid, conn=conn) or [])
+        floor = ensure_bot_planet_floor(conn, bot)
+        assert floor.get("ok") and floor.get("restored")
+        restored = get_planets_by_player(pid, conn=conn) or []
+        assert len(restored) >= 1
+        logs = recent_action_log(conn, kind="bot_planet_floor", limit=5)
+        assert any(l.get("bot_player_id") == pid for l in logs)
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_kill_switch_blocks_colonize(pirate_db):
+    from game.db import begin_write_transaction, commit
+    from game.pirates.accounts import bootstrap_faction_bots
+    from game.pirates.admin import admin_set_ai
+    from game.pirates.brain import dispatch_colonize_from_home
+    import time
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        admin_set_ai(conn, True)
+        bots = bootstrap_faction_bots(conn=conn)
+        bot = bots[0]
+        admin_set_ai(conn, False)
+        res = dispatch_colonize_from_home(conn, bot, now=time.time(), force_playtime=True)
+        assert res.get("ok") is False
+        assert res.get("error") == "ai_disabled"
+        commit(conn)
+    finally:
+        conn.close()

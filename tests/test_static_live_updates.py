@@ -830,6 +830,25 @@ def test_codex_shell_init_before_game_loop_gate():
     after = init_shell[early:]
     assert "initSpecialPanel();" not in after
     assert "initCodex();" not in after
+    # PlayerCard / ship / building overlays must also bind before Admin early-return.
+    for needle in (
+        "initPlayerCardOnce();",
+        "initShipDetailOnce();",
+        "initBuildingTechnicalDataOnce();",
+    ):
+        assert needle in init_shell
+        assert init_shell.index(needle) < early
+        assert needle not in after
+
+
+def test_alliance_project_start_reloads_hub():
+    """Bauauftrag start must PJAX-reload hub (panel missing on idle → patch-only is a no-op)."""
+    src = _read("static/main.js")
+    patch_only = src.split("const ALLIANCE_PATCH_ONLY = new Set([")[1].split("]);")[0]
+    assert "alliance_project_start" not in patch_only
+    assert "alliance_profile" in patch_only
+    finalize = src.split("async function allianceFinalizeSuccess")[1].split("async function allianceAction")[0]
+    assert "allianceReloadHub" in finalize
 
 
 def test_gc807b_hud_capacity_polish():
@@ -1475,6 +1494,10 @@ def test_main_js_gc640_global_fleet_hud():
     assert "syncMobileFleetSheetLayout" in src
     assert "gc-fleet-sheet-backdrop" in src
     assert "gc-fleet-sheet-portal" in src
+    assert "canExpandFleetDrawer" in src
+    assert "fleet_drawer_expand" in src
+    assert "_fleetSheetHomeEl" in src
+    assert "Always resync portal/backdrop" in src
     assert ".gc-bottom-nav-item[hidden]" in css
     pe = _read("templates/planet_evolution.html")
     assert "pe_establishment_scope_hint" in pe

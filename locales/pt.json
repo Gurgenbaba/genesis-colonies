@@ -2410,6 +2410,7 @@
   "fleet_drawer_show_all": "Ver tudo",
   "fleet_drawer_show_less": "Mostrar menos",
   "fleet_drawer_show_more": "Mostrar mais (%(count)s)",
+  "fleet_drawer_expand": "Abrir frotas",
   "fleet_drawer_summary": "Frotas ativas · %(count)s em rota · próxima chegada %(next)s",
   "fleet_drawer_tooltip_cargo": "Carga",
   "fleet_drawer_tooltip_no_ships": "Sem navios",

@@ -2410,6 +2410,7 @@
   "fleet_drawer_show_all": "Tümünü görüntüle",
   "fleet_drawer_show_less": "Daha az göster",
   "fleet_drawer_show_more": "Daha fazlasını göster (%(count)s)",
+  "fleet_drawer_expand": "Filoları aç",
   "fleet_drawer_summary": "Aktif filolar · %(count)s yolda · sonraki varış %(next)s",
   "fleet_drawer_tooltip_cargo": "Kargo",
   "fleet_drawer_tooltip_no_ships": "Gemi yok",

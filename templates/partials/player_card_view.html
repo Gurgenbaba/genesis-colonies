@@ -141,7 +141,7 @@
     </div>
   </div>
 
-  {% if card.get('bio') %}
+  {% if card.get('bio') and not card.get('is_ai') %}
     <div class="gc-player-card-bio">
       <span class="gc-player-card-stat-label">{{ T("playercard_bio") }}</span>
       <p>{{ card.get('bio') }}</p>

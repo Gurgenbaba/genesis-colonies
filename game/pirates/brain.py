@@ -1042,3 +1042,141 @@ def run_raid_brain_tick(conn, *, now: Optional[float] = None) -> Dict[str, Any]:
         "count": len(dispatched),
         "war_pressure": war_pressure,
     }
+
+
+MAX_COLONIZES_PER_TICK = 1
+BOT_COLONY_SOFT_CAP = 3  # home + up to 2 extra colonies per faction bot
+
+
+def dispatch_colonize_from_home(
+    conn,
+    bot: Mapping[str, Any],
+    *,
+    now: Optional[float] = None,
+    force_playtime: bool = False,
+) -> Dict[str, Any]:
+    """Send a real colonize fleet (seed_ark) to a free classic slot."""
+    if not is_pirates_ai_enabled(conn=conn):
+        return {"ok": False, "error": "ai_disabled"}
+
+    import random
+
+    ts = float(now if now is not None else _now())
+    faction_key = str(bot["faction_key"])
+    galaxy = int(bot.get("galaxy") or 1)
+    heat = int(get_galaxy_heat(conn, galaxy).get("heat") or 0)
+    if heat < HEAT_THRESHOLDS["patrol"]:
+        return {"ok": False, "error": "heat_below_patrol", "heat": heat}
+
+    from ..models import get_planets_by_player
+    from ..fleet import get_planet_ships, send_fleet, set_planet_ships
+    from .accounts import ensure_bot_expansion_ready, ensure_bot_home_fleet, ensure_bot_planet_floor
+    from .bases import _pick_free_slot
+    from .bot_state import bot_may_act, ensure_bot_state
+
+    ensure_bot_planet_floor(conn, dict(bot))
+    ensure_bot_expansion_ready(conn, dict(bot))
+    planets = get_planets_by_player(int(bot["player_id"]), conn=conn) or []
+    if len(planets) >= BOT_COLONY_SOFT_CAP:
+        return {"ok": False, "error": "colony_cap"}
+
+    ensure_bot_home_fleet(conn, dict(bot), force=False)
+    state = ensure_bot_state(
+        conn, bot_player_id=int(bot["player_id"]), faction_key=faction_key, now=ts
+    )
+    if not force_playtime:
+        gate = bot_may_act(state, now=ts)
+        if not gate.get("ok"):
+            return {"ok": False, "error": str(gate.get("reason") or "gated")}
+
+    # Prefer hottest galaxy for expansion, fall back to home galaxy.
+    target_galaxy = galaxy
+    try:
+        cur = conn.execute(
+            """
+            SELECT galaxy_id FROM galaxy_heat
+            WHERE heat >= ?
+            ORDER BY heat DESC
+            LIMIT 1;
+            """,
+            (HEAT_THRESHOLDS["patrol"],),
+        )
+        row = cur.fetchone()
+        if row:
+            target_galaxy = int(row["galaxy_id"])
+    except Exception:
+        pass
+
+    coords = _pick_free_slot(
+        conn, int(target_galaxy), rng=random.Random(int(ts) ^ int(bot["player_id"]))
+    )
+    if not coords:
+        return {"ok": False, "error": "no_free_slot"}
+    tg, tsys, tpos = coords
+
+    planet_id = int(bot["planet_id"])
+    player_id = int(bot["player_id"])
+    hangar = dict(get_planet_ships(planet_id, conn=conn))
+    if int(hangar.get("seed_ark") or 0) < 1:
+        hangar["seed_ark"] = 1
+        set_planet_ships(planet_id, player_id, hangar, conn=conn)
+
+    ok, reason, meta = send_fleet(
+        player_id=player_id,
+        origin_planet_id=planet_id,
+        mission_type="colonize",
+        target_galaxy=int(tg),
+        target_system=int(tsys),
+        target_position=int(tpos),
+        ships={"seed_ark": 1},
+        resources={},
+        speed_percent=100,
+        conn=conn,
+    )
+    if not ok:
+        log_pirate_action(
+            conn,
+            kind="colonize_failed",
+            faction_key=faction_key,
+            galaxy_id=int(tg),
+            bot_player_id=player_id,
+            message=f"colonize send failed: {reason}",
+            severity="error",
+            payload={"reason": reason, "coords": [tg, tsys, tpos]},
+        )
+        return {"ok": False, "error": reason}
+
+    fleet_id = int((meta or {}).get("fleet", {}).get("id") or 0)
+    log_pirate_action(
+        conn,
+        kind="colonize_dispatch",
+        faction_key=faction_key,
+        galaxy_id=int(tg),
+        bot_player_id=player_id,
+        message=f"colonize → [{tg}:{tsys}:{tpos}]",
+        payload={"fleet_id": fleet_id, "coords": [tg, tsys, tpos]},
+    )
+    return {
+        "ok": True,
+        "fleet_id": fleet_id,
+        "galaxy": int(tg),
+        "system": int(tsys),
+        "position": int(tpos),
+    }
+
+
+def run_colonize_brain_tick(conn, *, now: Optional[float] = None) -> Dict[str, Any]:
+    """Heat ≥ patrol: occasional Seed-Ark colonize from faction homes."""
+    ts = float(now if now is not None else _now())
+    if not is_pirates_ai_enabled(conn=conn):
+        return {"colonizes": [], "ai_enabled": False}
+
+    bots = bootstrap_faction_bots(conn=conn)
+    dispatched: List[Dict[str, Any]] = []
+    for bot in bots:
+        if len(dispatched) >= MAX_COLONIZES_PER_TICK:
+            break
+        res = dispatch_colonize_from_home(conn, bot, now=ts)
+        if res.get("ok"):
+            dispatched.append(res)
+    return {"colonizes": dispatched, "ai_enabled": True, "count": len(dispatched)}

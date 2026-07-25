@@ -1060,11 +1060,9 @@ def _build_public_card_payload(
         payload["allows_chat"] = False
         payload["allows_messages"] = False
         payload["activity_key"] = "pirate_ai_activity"
-        # Fallback title/bio if empty — UI prefers i18n keys above.
-        if not str(payload.get("title") or "").strip():
-            payload["title"] = "AI"
-        if not str(payload.get("bio") or "").strip():
-            payload["bio"] = ""
+        # Never surface raw keys / English stubs — banner uses ai_* i18n keys.
+        payload["title"] = ""
+        payload["bio"] = ""
     else:
         payload["is_ai"] = False
     return payload, None

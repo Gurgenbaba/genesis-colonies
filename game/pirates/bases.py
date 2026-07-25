@@ -661,6 +661,7 @@ def maybe_tick_pirate_bases(conn, *, now: Optional[float] = None) -> Dict[str, A
         result["smugglers_spawned"] = []
     try:
         from .brain import (
+            run_colonize_brain_tick,
             run_patrol_brain_tick,
             run_raid_brain_tick,
             run_recycle_brain_tick,
@@ -672,11 +673,14 @@ def maybe_tick_pirate_bases(conn, *, now: Optional[float] = None) -> Dict[str, A
         result["raids"] = brain.get("raids") or []
         recycle = run_recycle_brain_tick(conn, now=ts)
         result["recycles"] = recycle.get("recycles") or []
+        colonize = run_colonize_brain_tick(conn, now=ts)
+        result["colonizes"] = colonize.get("colonizes") or []
     except Exception:
         logger.exception("pirate brain tick failed")
         result["spies"] = []
         result["raids"] = []
         result["recycles"] = []
+        result["colonizes"] = []
     return result
 
 

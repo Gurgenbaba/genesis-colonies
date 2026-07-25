@@ -11240,6 +11240,14 @@
     return window.matchMedia("(max-width: 768px)").matches;
   }
 
+  /** Mobile sheet is the fleet window — expand with ≥1 fleet; desktop only needs overflow. */
+  function canExpandFleetDrawer(count, visibleLimit) {
+    const n = Math.max(0, Number(count) || 0);
+    if (n <= 0) return false;
+    if (isMobileFleetSheetViewport()) return true;
+    return n > Math.max(1, Number(visibleLimit) || FLEET_DRAWER_VISIBLE_LIMIT_DEFAULT);
+  }
+
   function getFleetSheetBackdrop() {
     let backdrop = document.getElementById("gc-fleet-sheet-backdrop");
     if (!backdrop) {
@@ -11267,17 +11275,35 @@
 
   function _ensureFleetSheetAnchor(root) {
     if (!root || _fleetSheetAnchor?.parentNode) return;
+    const parent = root.parentNode;
+    if (!parent || parent === document.body) return;
     _fleetSheetAnchor = document.createComment("gc-fleet-sheet-anchor");
-    root.parentNode?.insertBefore(_fleetSheetAnchor, root);
+    parent.insertBefore(_fleetSheetAnchor, root);
+  }
+
+  function _fleetSheetHomeEl() {
+    return document.querySelector(".gc-header-cmd .resource-bar.resource-bar-cmd")
+      || document.querySelector(".gc-header-cmd .gc-header-row-resources")
+      || document.querySelector(".gc-resource-sticky");
   }
 
   function _restoreFleetSheetPortal(root) {
     if (!root) return;
     root.classList.remove("gc-fleet-sheet-portal");
-    if (root.parentNode !== document.body) return;
-    const home = (_fleetSheetAnchor?.parentNode)
-      || document.querySelector(".gc-header-cmd .resource-bar.resource-bar-cmd");
+    const home = _fleetSheetHomeEl()
+      || (
+        _fleetSheetAnchor?.parentNode
+        && _fleetSheetAnchor.parentNode !== document.body
+          ? _fleetSheetAnchor.parentNode
+          : null
+      );
     if (!home) return;
+    if (root.parentNode === home) {
+      if (_fleetSheetAnchor?.parentNode === home) {
+        home.insertBefore(root, _fleetSheetAnchor.nextSibling);
+      }
+      return;
+    }
     if (_fleetSheetAnchor?.parentNode === home) {
       home.insertBefore(root, _fleetSheetAnchor.nextSibling);
       return;
@@ -12142,13 +12168,14 @@
     const listEl = root.querySelector("[data-fleet-drawer-list]");
     const moreBtn = root.querySelector("[data-fleet-drawer-more]");
     rememberFleetDrawerMovements(list);
-    const wasShowAll = root.classList.contains("is-show-all");
-    const nowShowAll = showAll && count > visibleLimit;
+    const canExpand = canExpandFleetDrawer(count, visibleLimit);
+    const nowShowAll = showAll && canExpand;
     if (listEl) {
-      const expandedList = nowShowAll;
-      listEl.classList.toggle("is-show-all", expandedList);
-      root.classList.toggle("is-show-all", expandedList);
-      const visibleItems = showAll || count <= visibleLimit ? list : list.slice(0, visibleLimit);
+      listEl.classList.toggle("is-show-all", nowShowAll);
+      root.classList.toggle("is-show-all", nowShowAll);
+      const visibleItems = showAll || count <= visibleLimit || isMobileFleetSheetViewport()
+        ? list
+        : list.slice(0, visibleLimit);
       const prevCount = Number(listEl.dataset.fleetDrawerCount || 0);
       const countChanged = prevCount !== count;
       if (countChanged) {
@@ -12161,15 +12188,17 @@
       });
 
       if (moreBtn) {
-        if (count > visibleLimit) {
+        if (canExpand) {
           moreBtn.hidden = false;
           if (showAll) {
             _setIfChanged(moreBtn, t("fleet_drawer_show_less", "Weniger anzeigen"));
-          } else {
+          } else if (count > visibleLimit) {
             _setIfChanged(
               moreBtn,
               tf("fleet_drawer_show_more", { count: count - visibleLimit }, `Weitere anzeigen (${count - visibleLimit})`)
             );
+          } else {
+            _setIfChanged(moreBtn, t("fleet_drawer_expand", "Flotten öffnen"));
           }
         } else {
           moreBtn.hidden = true;
@@ -12178,10 +12207,9 @@
       }
     }
 
-    if (wasShowAll !== nowShowAll || !root.dataset.fleetSheetSynced) {
-      syncMobileFleetSheetLayout(root);
-      root.dataset.fleetSheetSynced = "1";
-    }
+    // Always resync portal/backdrop — stuck open backdrop blocks expand after fleet send.
+    syncMobileFleetSheetLayout(root);
+    root.dataset.fleetSheetSynced = "1";
     GC.startProgressTicker();
   }
 
@@ -12270,38 +12298,40 @@
 
     document.addEventListener("click", (e) => {
       const recallBtn = e.target.closest("[data-fleet-drawer-recall]");
-      if (!recallBtn) return;
+      if (recallBtn) {
+        const drawerRoot = document.getElementById("global-fleet-drawer-root")
+          || document.querySelector("[data-global-fleet-drawer]");
+        if (!drawerRoot || !drawerRoot.contains(recallBtn)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        handleFleetDrawerRecall(recallBtn);
+        return;
+      }
+
+      const moreBtn = e.target.closest("[data-fleet-drawer-more]");
+      if (!moreBtn) return;
       const drawerRoot = document.getElementById("global-fleet-drawer-root")
         || document.querySelector("[data-global-fleet-drawer]");
-      if (!drawerRoot || !drawerRoot.contains(recallBtn)) return;
+      if (!drawerRoot || !drawerRoot.contains(moreBtn)) return;
       e.preventDefault();
       e.stopPropagation();
-      handleFleetDrawerRecall(recallBtn);
+      const willExpand = !isFleetDrawerShowAll();
+      setFleetDrawerShowAll(willExpand);
+      if (GC.lastState?.active_fleets) {
+        renderGlobalFleetHud(GC.lastState.active_fleets);
+      }
+      if (willExpand) {
+        if (typeof GC.refreshGameState === "function") {
+          void GC.refreshGameState("fleet_drawer_expand");
+        }
+        if (typeof GC.scheduleFleetStateRefresh === "function") {
+          GC.scheduleFleetStateRefresh("fleet_drawer_expand", { immediate: true });
+        }
+      }
     });
 
     const root = document.getElementById("global-fleet-drawer-root") || document.querySelector("[data-global-fleet-drawer]");
     if (!root) return;
-
-    root.addEventListener("click", (e) => {
-      const moreBtn = e.target.closest("[data-fleet-drawer-more]");
-      if (moreBtn) {
-        e.preventDefault();
-        e.stopPropagation();
-        const willExpand = !isFleetDrawerShowAll();
-        setFleetDrawerShowAll(willExpand);
-        if (GC.lastState?.active_fleets) {
-          renderGlobalFleetHud(GC.lastState.active_fleets);
-        }
-        if (willExpand) {
-          if (typeof GC.refreshGameState === "function") {
-            void GC.refreshGameState("fleet_drawer_expand");
-          }
-          if (typeof GC.scheduleFleetStateRefresh === "function") {
-            GC.scheduleFleetStateRefresh("fleet_drawer_expand", { immediate: true });
-          }
-        }
-      }
-    });
 
     if (fleetDrawerHoverTooltipsEnabled()) {
       root.addEventListener("mouseover", (e) => {
@@ -16732,7 +16762,6 @@
   /** In-hub field updates: allianceAction already applied state + patchAllianceDom. */
   const ALLIANCE_PATCH_ONLY = new Set([
     "alliance_profile",
-    "alliance_project_start",
     "alliance_recruitment",
     "alliance_diplomacy",
   ]);
@@ -32015,6 +32044,10 @@
           return;
         }
 
+        if (opts.force && isGalaxySystemPjaxUrl(target) && typeof invalidateGalaxyPjaxCache === "function") {
+          invalidateGalaxyPjaxCache();
+        }
+
         fetchTimeout = new AbortController();
         nav.fetchTimeout = fetchTimeout;
         fetchTimeoutId = setTimeout(() => {
@@ -32029,7 +32062,8 @@
         if (_navPerfSession) _navPerfSession.fetchStartAt = performance.now();
         const res = await fetch(url, {
           credentials: "same-origin",
-          cache: isGalaxySystemPjaxUrl(target) ? "default" : "no-store",
+          // Force reloads (debris arrival, asteroid zero) must bypass HTTP cache.
+          cache: isGalaxySystemPjaxUrl(target) && !opts.force ? "default" : "no-store",
           signal: fetchSignal,
           headers: {
             "X-PJAX": "true",
@@ -34778,6 +34812,10 @@
     initMobileNav();
     initPjax();
     initShellChrome();
+    // Shell overlays must bind even on Admin hard-load (PJAX leave never re-runs shell init).
+    initShipDetailOnce();
+    initBuildingTechnicalDataOnce();
+    initPlayerCardOnce();
 
     if (!shouldRunGameLoop()) {
       syncPerfBodyClasses();
@@ -34808,9 +34846,6 @@
     bootstrapPlanetLandscapeFromBoot();
     initStickyResourceBar();
     initSidebarSticky();
-    initShipDetailOnce();
-    initBuildingTechnicalDataOnce();
-    initPlayerCardOnce();
     initTimekeeperOnce();
 
     document.addEventListener("click", (e) => {
