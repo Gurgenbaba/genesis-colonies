@@ -331,6 +331,9 @@ _FLEET_TICK_SKIP_ENDPOINTS = frozenset(
         "static",
         "api_game_state",
         "api_notifications_summary",
+        # GC-PERF-FLEET-SEND: mutation RTT must not wait on global fleet tick
+        "api_fleet_send",
+        "api_fleet_recall",
     }
 )
 _FLEET_TICK_SKIP_PREFIXES = ("api_admin_", "api_chat_")
@@ -1109,9 +1112,19 @@ def _is_game_state_poll_source(finish_source: str) -> bool:
     return str(finish_source or "") == "game_state"
 
 
+_FLEET_MUTATION_LIVE_SOURCES = frozenset(
+    {
+        "api_fleet_send",
+        "api_fleet_recall",
+    }
+)
+
+
 def _use_poll_live_path(finish_source: str) -> bool:
-    """Poll path only for /api/game-state and PJAX — full SSR loads use refresh_player_live_state."""
+    """Poll path for /api/game-state, PJAX, and fleet mutation responses (no finish_due_work)."""
     src = str(finish_source or "")
+    if src in _FLEET_MUTATION_LIVE_SOURCES:
+        return True
     return src == "game_state" or _is_pjax_request()
 
 
@@ -7448,7 +7461,19 @@ def _uses_action_state_diet(finish_source: str) -> bool:
         "api_buildings_cancel",
         "game_state_buildings_finish",
         "api_planets_active",
+        "api_fleet_send",
+        "api_fleet_recall",
     )
+
+
+def _fleet_mutation_game_state(finish_source: str) -> dict:
+    """Slim post-mutation state for fleet send/recall (GC-PERF-FLEET-SEND)."""
+    state, _ = _build_game_state_payload(
+        include_panel=False,
+        finish_source=finish_source,
+        action_slim=True,
+    )
+    return state
 
 
 def _is_buildings_queue_action_source(finish_source: str) -> bool:
@@ -8069,7 +8094,7 @@ def api_fleet_send():
     if not user_id:
         return jsonify(fleet_err("not_logged_in")), 401
     if not fleet_schema_ready(db()):
-        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_fleet_send")
+        state = _fleet_mutation_game_state("api_fleet_send")
         body = fleet_err("fleet_unavailable", data={"state": state})
         return jsonify(body), 503
 
@@ -8167,7 +8192,7 @@ def api_fleet_send():
     ok, reason, result = _fleet_write_transaction(_send)
 
     if ok and result:
-        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_fleet_send")
+        state = _fleet_mutation_game_state("api_fleet_send")
         live = {
             "fleet": result.get("fleet"),
             "updated_ships": result.get("updated_ships"),
@@ -8183,7 +8208,7 @@ def api_fleet_send():
         body["state"] = state
         return jsonify(body)
 
-    state, _ = _build_game_state_payload(include_panel=True, finish_source="api_fleet_send")
+    state = _fleet_mutation_game_state("api_fleet_send")
     err_data: Dict[str, Any] = {"state": state}
     if isinstance(result, dict) and result.get("attack_limit"):
         err_data["attack_limit"] = result["attack_limit"]
@@ -8200,7 +8225,7 @@ def api_fleet_recall():
     if not user_id:
         return jsonify(fleet_err("not_logged_in")), 401
     if not fleet_schema_ready(db()):
-        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_fleet_recall")
+        state = _fleet_mutation_game_state("api_fleet_recall")
         return jsonify(fleet_err("fleet_unavailable", data={"state": state})), 503
 
     data = request.get_json(silent=True) or {}
@@ -8209,7 +8234,7 @@ def api_fleet_recall():
     except (TypeError, ValueError):
         movement_id = 0
     if movement_id <= 0:
-        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_fleet_recall")
+        state = _fleet_mutation_game_state("api_fleet_recall")
         body = fleet_err("fleet_not_found", data={"state": state})
         body["state"] = state
         return jsonify(body), 400
@@ -8218,7 +8243,7 @@ def api_fleet_recall():
         return fleet_recall_movement(user_id, movement_id, conn=conn)
 
     ok, reason, result = _fleet_write_transaction(_recall)
-    state, _ = _build_game_state_payload(include_panel=True, finish_source="api_fleet_recall")
+    state = _fleet_mutation_game_state("api_fleet_recall")
     if ok:
         body = fleet_ok(result or {}, message_key="fleet_recall_success")
         body["state"] = state

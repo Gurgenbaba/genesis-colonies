@@ -44,11 +44,18 @@ def test_gc557_fleet_preview_static_arrival_not_live_countdown():
     assert "GC.startProgressTicker();" not in preview_block.split("if (previewArrival)")[1].split("if (sendBtn)")[0]
 
 
-def test_gc557_fleet_send_always_refreshes_state():
+def test_gc557_fleet_send_applies_action_state_without_await_refresh():
+    """
+    GC-557 originally required await refreshFleetState after send so timers/list stayed
+    authoritative. GC-PERF-FLEET-SEND moved that off the critical path: live payload +
+    applyActionState patch UI instantly; syncFleetUiAfterMutation schedules deferred coalesce.
+    Still verifies: success applies action state (HUD/resources) after send.
+    """
     src = _read("static/main.js")
     send_ok = src.split('const sendForm = e.target.closest ? e.target.closest("#fleet-send-form")')[1][:5000]
     assert 'applyActionState(res, "fleet_send_success")' in send_ok
-    assert "await refreshFleetState(page)" in send_ok
+    assert "await refreshFleetState(page)" not in send_ok
+    assert "mergeFleetMovementIntoHud(payload.fleet" in send_ok
 
 
 def test_gc557_debug_perf_timer_scope_counters():

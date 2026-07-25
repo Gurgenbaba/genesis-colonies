@@ -308,7 +308,7 @@ Aufgerufen von:
 | `/api/fleet/preview` | POST | Send preview |
 | `/api/fleet/resolve-target` | GET/POST | Target type validation |
 | `/api/fleet/state` | GET | Live ships + movements |
-| `/api/fleet/send` | POST | Send fleet |
+| `/api/fleet/send` | POST | Send fleet — response: live slices + **slim** action state (no full panels / no finish_due on critical path; GC-PERF-FLEET-SEND) |
 | `/api/fleet/presets` | GET/POST | List/create presets |
 | `/api/fleet/presets/<id>` | PUT/PATCH/DELETE | CRUD |
 | `/api/fleet/mass-expedition` | POST | Wave expeditions (GC-981 split; **reserves 3 fleet slots** — uses `free − 3` only) |
@@ -329,6 +329,7 @@ Response envelope: `{ ok, error, message_key, data }` via `fleet_api.py`.
 - `scheduleFleetStateRefresh()` / `refreshFleetState()` — coalesced (ein In-Flight-Request); nach Actions und Countdown-Zero
 - `applyLiveState` → `renderActiveFleets` patched die aktive Liste (Signatur); kein erneutes `initFleet()` nur wegen State
 - **Fleet UI Sync:** Action → Drawer/HUD via `state.active_fleets` (`patchFleetHudFromActionPayload`); Fleet-Page via `syncFleetUiAfterMutation` → coalesced `/api/fleet/state`. Reasons `fleet_recall` / `logistics_action` sind Mutation-Reasons. Collapsed Drawer-Rows tickern über `_fleetDrawerMovementById` (off-DOM expiry). Expand („Weitere anzeigen“) triggert `fleet_drawer_expand` Game-State (+ Fleet-State wenn Page mounted).
+- **GC-PERF-FLEET-SEND:** Send-Success patched sofort aus Live-Payload (`updated_ships` / `fleet` / HUD merge) + slim `applyActionState`; **kein** `await refreshFleetState` auf dem Critical Path. `fleet_send_success` → deferred coalesce (`immediate: false`) nur zur Konsistenz.
 - Countdown-Zero: kein Reload pro Zeile — debounce + ein Game-State-Refresh (`fleet_countdown_expired`)
 - Mobile Fleet-Drawer: `is-show-all` / „Weniger anzeigen“ bleibt; Sheet-Layout nur bei Expand-Änderung
 - Realigns `planet_id` from `GC.lastState.active_planet_id`

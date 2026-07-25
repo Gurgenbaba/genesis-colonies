@@ -690,7 +690,13 @@
     if (typeof GC.scheduleFleetStateRefresh !== "function") return;
     const fleetPage = document.getElementById("fleet-page");
     if (!fleetPage || fleetPage.dataset.ready !== "1") return;
-    GC.scheduleFleetStateRefresh(String(reason || "fleet_mutation"), { immediate: true });
+    const r = String(reason || "fleet_mutation");
+    // GC-PERF-FLEET-SEND: send already patched list+HUD from live payload — deferred coalesce only
+    if (r === "fleet_send_success") {
+      GC.scheduleFleetStateRefresh(r, { immediate: false });
+      return;
+    }
+    GC.scheduleFleetStateRefresh(r, { immediate: true });
   }
 
   function resetQueueRenderSignaturesForImmediatePatch() {
@@ -20446,7 +20452,7 @@
             if (res.state) {
               applyActionState(res, "fleet_send_success");
             }
-            await refreshFleetState(page);
+            // GC-PERF-FLEET-SEND: live payload + slim state are enough; deferred fleet-state via syncFleetUiAfterMutation
             page.querySelectorAll("[data-ship-input]").forEach((inp) => { inp.value = "0"; });
             const mInp = page.querySelector("[data-fleet-res-metal]");
             const cInp = page.querySelector("[data-fleet-res-crystal]");
