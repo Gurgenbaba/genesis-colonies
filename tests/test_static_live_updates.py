@@ -1498,6 +1498,11 @@ def test_main_js_gc640_global_fleet_hud():
     assert "fleet_drawer_expand" in src
     assert "_fleetSheetHomeEl" in src
     assert "Always resync portal/backdrop" in src
+    assert "gc-resource-sticky" in src.split("function _fleetSheetHomeEl()")[1].split("function _restoreFleetSheetPortal")[0]
+    assert "resource-bar.resource-bar-cmd" not in src.split("function _fleetSheetHomeEl()")[1].split("function _restoreFleetSheetPortal")[0]
+    assert "insideResourceBar" in src
+    assert ".gc-resource-sticky > .gc-fleet-drawer-root" in css
+    assert "Safety: drawer must span full resource row" in css
     assert ".gc-bottom-nav-item[hidden]" in css
     pe = _read("templates/planet_evolution.html")
     assert "pe_establishment_scope_hint" in pe

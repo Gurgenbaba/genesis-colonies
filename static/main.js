@@ -11282,33 +11282,31 @@
   }
 
   function _fleetSheetHomeEl() {
-    return document.querySelector(".gc-header-cmd .resource-bar.resource-bar-cmd")
-      || document.querySelector(".gc-header-cmd .gc-header-row-resources")
+    // Must be .gc-resource-sticky — never .resource-bar (CSS grid squeezes drawer to 1 col).
+    return document.querySelector(".gc-header-cmd .gc-resource-sticky")
+      || document.querySelector(".gc-header-row-resources .gc-resource-sticky")
       || document.querySelector(".gc-resource-sticky");
   }
 
   function _restoreFleetSheetPortal(root) {
     if (!root) return;
     root.classList.remove("gc-fleet-sheet-portal");
-    const home = _fleetSheetHomeEl()
-      || (
-        _fleetSheetAnchor?.parentNode
-        && _fleetSheetAnchor.parentNode !== document.body
-          ? _fleetSheetAnchor.parentNode
-          : null
-      );
-    if (!home) return;
-    if (root.parentNode === home) {
-      if (_fleetSheetAnchor?.parentNode === home) {
-        home.insertBefore(root, _fleetSheetAnchor.nextSibling);
-      }
+    const sticky = _fleetSheetHomeEl();
+    if (!sticky) return;
+    const parent = root.parentNode;
+    const insideResourceBar = !!(parent && parent.classList && parent.classList.contains("resource-bar"));
+    const needsMove = parent === document.body || insideResourceBar || parent !== sticky;
+    if (!needsMove) return;
+    if (_fleetSheetAnchor?.parentNode === sticky) {
+      sticky.insertBefore(root, _fleetSheetAnchor.nextSibling);
       return;
     }
-    if (_fleetSheetAnchor?.parentNode === home) {
-      home.insertBefore(root, _fleetSheetAnchor.nextSibling);
+    const bar = sticky.querySelector("#resource-bar, .resource-bar.resource-bar-cmd");
+    if (bar) {
+      sticky.insertBefore(root, bar.nextSibling);
       return;
     }
-    home.appendChild(root);
+    sticky.appendChild(root);
   }
 
   function syncMobileFleetSheetTop() {

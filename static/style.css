@@ -20797,6 +20797,17 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   z-index: calc(var(--gc-z-sticky, 40) - 1);
 }
 
+/* Safety: drawer must span full resource row if ever nested in the HUD grid. */
+.gc-header-cmd .resource-bar.resource-bar-cmd > .gc-fleet-drawer-root,
+.gc-header-cmd .resource-bar.resource-bar-cmd > .gc-fleet-hud-root,
+.gc-resource-sticky > .gc-fleet-drawer-root,
+.gc-resource-sticky > .gc-fleet-hud-root{
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .gc-fleet-hud-empty{
   margin: 0;
   padding: 4px 10px;
