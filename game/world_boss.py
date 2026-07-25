@@ -31,21 +31,37 @@ STATUS_SCHEDULED = "scheduled"
 WAVE_COOLDOWN_SEC = 300
 MAX_WAVES_PER_PLAYER = 40
 DEFAULT_EVENT_DURATION_SEC = 48 * 3600
-INTER_EVENT_COOLDOWN_SEC = 24 * 3600
+# Gap between successive spawns when under the concurrent cap (GC-W13).
+INTER_EVENT_COOLDOWN_SEC = 4 * 3600
+MAX_CONCURRENT_EVENTS = 3
+EXPO_DISCOVERY_CHANCE = 0.055
 SCHEDULE_RUNTIME_KEY = "world_boss_last_ended_at"
+SPAWN_RUNTIME_KEY = "world_boss_last_spawn_at"
 ROTATION_RUNTIME_KEY = "world_boss_rotation_index"
 
 # Raid HP mapping (combat still uses simulate_battle; HP is not raw prestige).
-# Even fight full wipe ≈ WAVE_HP_FRACTION of max_hp; mega fleets scale via log2 overkill.
-WAVE_HP_FRACTION = 0.03
-# Cap allows a single mega-wave to finish the bar; typical huge overkill lands ~40–60%.
-MAX_WAVE_HP_FRACTION = 1.0
+# Even fight full wipe ≈ WAVE_HP_FRACTION of max_hp.
+WAVE_HP_FRACTION = 0.02
+# Soft overkill: 1 + scale * log2(1 + force_ratio). Mega fleets approach the cap.
+OVERKILL_LOG_SCALE = 0.15
+# Cap ≈ 8% → solo mega fleet needs ~13 waves (target band 10–20 hits).
+MAX_WAVE_HP_FRACTION = 0.08
 
 # Reward tiers → inventory container keys (meta-only, known catalog).
+# Amounts are tuned “good but not OP”: participate solid, top tiers rare containers.
 REWARD_PARTICIPATE = "container_event_special"
 REWARD_TOP10 = "container_void_artifact"
 REWARD_TOP1 = "container_mythic"
 REWARD_ALLIANCE_TOP = "container_ancient_relic"
+# (tier, item_key, amount) — stacked grants, same key sums.
+REWARD_TIER_GRANTS: Tuple[Tuple[str, str, int], ...] = (
+    ("top1", REWARD_TOP1, 1),
+    ("top10", REWARD_TOP10, 1),
+    ("top10", REWARD_PARTICIPATE, 1),
+    ("alliance_top", REWARD_ALLIANCE_TOP, 1),
+    ("discoverer", REWARD_PARTICIPATE, 1),
+    ("participate", REWARD_PARTICIPATE, 2),
+)
 
 
 def _now() -> float:
@@ -130,6 +146,13 @@ def _event_from_row(row, *, definition: Optional[Dict[str, Any]] = None) -> Dict
     hp_ratio = (float(current_hp) / float(max_hp)) if max_hp > 0 else 0.0
     boss_key = str(row["boss_key"])
     defn = definition or {}
+    discovered_by = None
+    try:
+        keys = row.keys() if hasattr(row, "keys") else ()
+        if "discovered_by_player_id" in keys and row["discovered_by_player_id"] is not None:
+            discovered_by = int(row["discovered_by_player_id"])
+    except (TypeError, ValueError, KeyError):
+        discovered_by = None
     return {
         "id": int(row["id"]),
         "boss_key": boss_key,
@@ -148,17 +171,19 @@ def _event_from_row(row, *, definition: Optional[Dict[str, Any]] = None) -> Dict
         "defeated_at": float(row["defeated_at"]) if row["defeated_at"] is not None else None,
         "created_at": float(row["created_at"]),
         "updated_at": float(row["updated_at"]),
+        "discovered_by_player_id": discovered_by,
         "name_key": str(defn.get("name_key") or f"wb_boss_{boss_key}"),
         "description_key": str(defn.get("description_key") or ""),
         "loot_pool_key": str(defn.get("loot_pool_key") or REWARD_PARTICIPATE),
     }
 
 
-def get_active_event(*, conn, now: Optional[float] = None) -> Optional[Dict[str, Any]]:
+def list_active_events(*, conn, now: Optional[float] = None, limit: int = 50) -> List[Dict[str, Any]]:
+    """All currently active world boss events (newest first)."""
     if not world_boss_schema_ready(conn):
-        return None
+        return []
     ts = float(now if now is not None else _now())
-    row = conn.execute(
+    rows = conn.execute(
         """
         SELECT e.*, d.name_key, d.description_key, d.loot_pool_key, d.phases_json AS def_phases_json
         FROM world_boss_events e
@@ -167,19 +192,26 @@ def get_active_event(*, conn, now: Optional[float] = None) -> Optional[Dict[str,
           AND e.starts_at <= ?
           AND e.ends_at > ?
         ORDER BY e.id DESC
-        LIMIT 1;
+        LIMIT ?;
         """,
-        (STATUS_ACTIVE, ts, ts),
-    ).fetchone()
-    if not row:
-        return None
-    defn = {
-        "name_key": row["name_key"],
-        "description_key": row["description_key"],
-        "loot_pool_key": row["loot_pool_key"],
-        "phases": _json_loads(row["def_phases_json"], []),
-    }
-    return _event_from_row(row, definition=defn)
+        (STATUS_ACTIVE, ts, ts, max(1, int(limit))),
+    ).fetchall()
+    out: List[Dict[str, Any]] = []
+    for row in rows:
+        defn = {
+            "name_key": row["name_key"],
+            "description_key": row["description_key"],
+            "loot_pool_key": row["loot_pool_key"],
+            "phases": _json_loads(row["def_phases_json"], []),
+        }
+        out.append(_event_from_row(row, definition=defn))
+    return out
+
+
+def get_active_event(*, conn, now: Optional[float] = None) -> Optional[Dict[str, Any]]:
+    """Primary active event (newest). Prefer ``list_active_events`` for multi-boss."""
+    events = list_active_events(conn=conn, now=now, limit=1)
+    return events[0] if events else None
 
 
 def get_event_by_id(event_id: int, *, conn) -> Optional[Dict[str, Any]]:
@@ -215,16 +247,32 @@ def get_active_event_at(
     conn,
     now: Optional[float] = None,
 ) -> Optional[Dict[str, Any]]:
-    event = get_active_event(conn=conn, now=now)
-    if not event:
+    if not world_boss_schema_ready(conn):
         return None
-    if (
-        int(event["galaxy"]) == int(galaxy)
-        and int(event["system"]) == int(system)
-        and int(event["position"]) == int(position)
-    ):
-        return event
-    return None
+    ts = float(now if now is not None else _now())
+    row = conn.execute(
+        """
+        SELECT e.*, d.name_key, d.description_key, d.loot_pool_key, d.phases_json AS def_phases_json
+        FROM world_boss_events e
+        LEFT JOIN world_boss_definitions d ON d.boss_key = e.boss_key
+        WHERE e.status = ?
+          AND e.starts_at <= ?
+          AND e.ends_at > ?
+          AND e.galaxy = ? AND e.system = ? AND e.position = ?
+        ORDER BY e.id DESC
+        LIMIT 1;
+        """,
+        (STATUS_ACTIVE, ts, ts, int(galaxy), int(system), int(position)),
+    ).fetchone()
+    if not row:
+        return None
+    defn = {
+        "name_key": row["name_key"],
+        "description_key": row["description_key"],
+        "loot_pool_key": row["loot_pool_key"],
+        "phases": _json_loads(row["def_phases_json"], []),
+    }
+    return _event_from_row(row, definition=defn)
 
 
 def get_bosses_for_system(
@@ -235,13 +283,12 @@ def get_bosses_for_system(
     now: Optional[float] = None,
 ) -> Dict[int, Dict[str, Any]]:
     """Map position → compact boss payload for galaxy slot attach."""
-    event = get_active_event(conn=conn, now=now)
-    if not event:
-        return {}
-    if int(event["galaxy"]) != int(galaxy) or int(event["system"]) != int(system):
-        return {}
-    return {
-        int(event["position"]): {
+    events = list_active_events(conn=conn, now=now, limit=MAX_CONCURRENT_EVENTS + 5)
+    out: Dict[int, Dict[str, Any]] = {}
+    for event in events:
+        if int(event["galaxy"]) != int(galaxy) or int(event["system"]) != int(system):
+            continue
+        out[int(event["position"])] = {
             "event_id": int(event["id"]),
             "boss_key": event["boss_key"],
             "name_key": event["name_key"],
@@ -260,7 +307,7 @@ def get_bosses_for_system(
             "wave_cooldown_sec": int(WAVE_COOLDOWN_SEC),
             "max_waves": int(MAX_WAVES_PER_PLAYER),
         }
-    }
+    return out
 
 
 def _pick_spawn_coords(conn, *, prefer_dense: bool = False) -> Tuple[int, int, int]:
@@ -371,8 +418,8 @@ def compute_world_boss_hp_damage(
     Map battle defender losses → shared boss HP damage.
 
     Wipe fraction uses combat prestige scores of the wave. Overkill multiplies by
-    ``log2(1 + attacker_score / wave_score)`` so mega fleets scale while even fights
-    stay near ``WAVE_HP_FRACTION`` of ``max_hp`` (capped at ``MAX_WAVE_HP_FRACTION``).
+    ``1 + OVERKILL_LOG_SCALE * log2(max(1, attacker_score / wave_score))`` so mega fleets
+    deal more than even fights but stay near ``MAX_WAVE_HP_FRACTION`` (≈10–20 solo waves).
     """
     from .scoring import compute_destroyed_raw_from_losses
 
@@ -406,7 +453,11 @@ def compute_world_boss_hp_damage(
     }
     attacker_score = int(compute_destroyed_raw_from_losses(atk)) if atk else 0
     force_ratio = float(attacker_score) / float(max(full_score, 1))
-    overkill_mult = max(1.0, math.log2(1.0 + force_ratio))
+    # Even fight (ratio≈1) stays at 1.0; only larger fleets gain soft overkill.
+    overkill_mult = max(
+        1.0,
+        1.0 + float(OVERKILL_LOG_SCALE) * math.log2(max(1.0, force_ratio)),
+    )
     base = float(hp_budget) * float(WAVE_HP_FRACTION) * fraction * overkill_mult
     cap = float(hp_budget) * float(MAX_WAVE_HP_FRACTION)
     damage = int(min(cap, max(0.0, base)))
@@ -425,8 +476,16 @@ def spawn_world_boss(
     position: Optional[int] = None,
     announce: bool = True,
     force: bool = False,
+    discovered_by: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Create an active world boss event. Fails if another active event exists (unless force)."""
+    """Create an active world boss event.
+
+    Without ``force``: refuses when concurrent cap is reached or the same
+    ``boss_key`` is already active. With ``force``: expires same-key actives
+    and may exceed the soft concurrent cap.
+    """
+    from .db import column_exists
+
     if not world_boss_schema_ready(conn):
         return {"ok": False, "error": "schema_not_ready"}
 
@@ -435,17 +494,32 @@ def spawn_world_boss(
     if not definition or not definition.get("active"):
         return {"ok": False, "error": "unknown_boss"}
 
-    existing = get_active_event(conn=conn, now=ts)
-    if existing and not force:
-        return {"ok": False, "error": "event_already_active", "event": existing}
-    if existing and force:
-        _expire_event(int(existing["id"]), conn=conn, now=ts, status=STATUS_EXPIRED)
+    active = list_active_events(conn=conn, now=ts, limit=MAX_CONCURRENT_EVENTS + 10)
+    same_key = [e for e in active if str(e.get("boss_key")) == str(boss_key)]
+    if same_key and not force:
+        return {"ok": False, "error": "boss_key_already_active", "event": same_key[0]}
+    if same_key and force:
+        for ev in same_key:
+            _expire_event(int(ev["id"]), conn=conn, now=ts, status=STATUS_EXPIRED)
+        active = list_active_events(conn=conn, now=ts, limit=MAX_CONCURRENT_EVENTS + 10)
+
+    if len(active) >= int(MAX_CONCURRENT_EVENTS) and not force:
+        return {
+            "ok": False,
+            "error": "concurrent_cap",
+            "active_count": len(active),
+            "max_concurrent": int(MAX_CONCURRENT_EVENTS),
+        }
 
     prefer_dense = str(boss_key) == "planet_eater"
     if galaxy is None or system is None or position is None:
         g, s, p = _pick_spawn_coords(conn, prefer_dense=prefer_dense)
     else:
         g, s, p = int(galaxy), int(system), int(position)
+
+    # Avoid stacking on an already-occupied boss slot.
+    if get_active_event_at(g, s, p, conn=conn, now=ts) and not force:
+        g, s, p = _pick_spawn_coords(conn, prefer_dense=prefer_dense)
 
     duration = int(definition["duration_seconds"] or DEFAULT_EVENT_DURATION_SEC)
     stacks = {
@@ -454,32 +528,62 @@ def spawn_world_boss(
         if int(v or 0) > 0
     }
     max_hp = int(definition["max_hp"])
+    disc_id = int(discovered_by) if discovered_by is not None and int(discovered_by) > 0 else None
+    has_disc_col = column_exists(conn, WORLD_BOSS_EVENT_TABLE, "discovered_by_player_id")
     cur = conn.cursor()
-    cur.execute(
-        """
-        INSERT INTO world_boss_events (
-            boss_key, status, galaxy, system, position,
-            max_hp, current_hp, phase_index, fleet_stacks_json,
-            starts_at, ends_at, defeated_at, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, NULL, ?, ?);
-        """,
-        (
-            str(boss_key),
-            STATUS_ACTIVE,
-            g,
-            s,
-            p,
-            max_hp,
-            max_hp,
-            _json_dumps(stacks),
-            ts,
-            ts + duration,
-            ts,
-            ts,
-        ),
-    )
+    if has_disc_col:
+        cur.execute(
+            """
+            INSERT INTO world_boss_events (
+                boss_key, status, galaxy, system, position,
+                max_hp, current_hp, phase_index, fleet_stacks_json,
+                starts_at, ends_at, defeated_at, created_at, updated_at,
+                discovered_by_player_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, NULL, ?, ?, ?);
+            """,
+            (
+                str(boss_key),
+                STATUS_ACTIVE,
+                g,
+                s,
+                p,
+                max_hp,
+                max_hp,
+                _json_dumps(stacks),
+                ts,
+                ts + duration,
+                ts,
+                ts,
+                disc_id,
+            ),
+        )
+    else:
+        cur.execute(
+            """
+            INSERT INTO world_boss_events (
+                boss_key, status, galaxy, system, position,
+                max_hp, current_hp, phase_index, fleet_stacks_json,
+                starts_at, ends_at, defeated_at, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, NULL, ?, ?);
+            """,
+            (
+                str(boss_key),
+                STATUS_ACTIVE,
+                g,
+                s,
+                p,
+                max_hp,
+                max_hp,
+                _json_dumps(stacks),
+                ts,
+                ts + duration,
+                ts,
+                ts,
+            ),
+        )
     event_id = int(cur.lastrowid)
     event = get_event_by_id(event_id, conn=conn)
+    set_runtime_value(SPAWN_RUNTIME_KEY, str(ts), conn=conn)
 
     if announce and event:
         try:
@@ -502,6 +606,7 @@ def format_world_boss_news(
     *,
     kind: str,
     locale: Optional[str] = None,
+    discoverer_name: Optional[str] = None,
 ) -> Dict[str, str]:
     """Build localized title/body for spawn or defeat news (display + persist)."""
     from .i18n import DEFAULT_LOCALE, fmt_int, normalize_locale, tr
@@ -522,6 +627,24 @@ def format_world_boss_news(
                 "Der World Boss bei %(coords)s wurde besiegt. Belohnungen auf dem World-Boss-Board abholen.",
                 locale=loc,
                 coords=coords,
+            ),
+        }
+    if discoverer_name:
+        return {
+            "title": tr(
+                "wb_news_spawn_title",
+                "World Boss: %(boss)s",
+                locale=loc,
+                boss=boss_name,
+            ),
+            "body": tr(
+                "wb_news_spawn_body_discovered",
+                "%(player)s hat einen World Boss bei %(coords)s entdeckt (Expedition). HP %(hp)s/%(max_hp)s — für alle angreifbar.",
+                locale=loc,
+                player=str(discoverer_name),
+                coords=coords,
+                hp=fmt_int(event.get("current_hp") or 0),
+                max_hp=fmt_int(event.get("max_hp") or 0),
             ),
         }
     return {
@@ -588,7 +711,16 @@ def _announce_spawn(event: Mapping[str, Any], *, conn) -> None:
     from .i18n import DEFAULT_LOCALE
     from .universe_news import create_news
 
-    copy = format_world_boss_news(event, kind="spawn", locale=DEFAULT_LOCALE)
+    discoverer_name = None
+    disc_id = event.get("discovered_by_player_id")
+    if disc_id:
+        discoverer_name = _player_name(int(disc_id), conn=conn)
+    copy = format_world_boss_news(
+        event,
+        kind="spawn",
+        locale=DEFAULT_LOCALE,
+        discoverer_name=discoverer_name,
+    )
     create_news(
         title=copy["title"],
         body=copy["body"],
@@ -635,12 +767,95 @@ def _expire_event(
     set_runtime_value(SCHEDULE_RUNTIME_KEY, str(float(now)), conn=conn)
 
 
+def has_inflight_world_boss_attack(
+    player_id: int,
+    event: Mapping[str, Any],
+    *,
+    conn,
+    exclude_movement_id: Optional[int] = None,
+) -> bool:
+    """True if player already has an outbound attack en route to this boss slot."""
+    from .db import table_exists
+
+    if not table_exists(conn, "fleet_movements"):
+        return False
+    params: List[Any] = [
+        int(player_id),
+        int(event["galaxy"]),
+        int(event["system"]),
+        int(event["position"]),
+    ]
+    exclude_sql = ""
+    if exclude_movement_id is not None and int(exclude_movement_id) > 0:
+        exclude_sql = " AND id != ?"
+        params.append(int(exclude_movement_id))
+    row = conn.execute(
+        f"""
+        SELECT id FROM fleet_movements
+        WHERE player_id = ?
+          AND mission_type = 'attack'
+          AND status = 'outbound'
+          AND target_galaxy = ?
+          AND target_system = ?
+          AND target_position = ?
+          {exclude_sql}
+        LIMIT 1;
+        """,
+        tuple(params),
+    ).fetchone()
+    return row is not None
+
+
+def note_attack_dispatched(
+    player_id: int,
+    event_id: int,
+    *,
+    conn,
+    now: Optional[float] = None,
+    alliance_id: Optional[int] = None,
+) -> None:
+    """Start wave cooldown at fleet send (no wave/damage yet)."""
+    ts = float(now if now is not None else _now())
+    if alliance_id is None:
+        try:
+            from .alliance import get_player_alliance
+
+            membership = get_player_alliance(int(player_id), conn=conn)
+            if membership:
+                alliance_id = int(membership["alliance_id"])
+        except Exception:
+            alliance_id = None
+    conn.execute(
+        """
+        INSERT INTO world_boss_contributions (
+            event_id, player_id, alliance_id, damage, waves,
+            last_attack_at, created_at, updated_at
+        ) VALUES (?, ?, ?, 0, 0, ?, ?, ?)
+        ON CONFLICT(event_id, player_id) DO UPDATE SET
+            last_attack_at = excluded.last_attack_at,
+            alliance_id = COALESCE(excluded.alliance_id, alliance_id),
+            updated_at = excluded.updated_at;
+        """,
+        (
+            int(event_id),
+            int(player_id),
+            int(alliance_id) if alliance_id is not None else None,
+            ts,
+            ts,
+            ts,
+        ),
+    )
+
+
 def can_player_attack_boss(
     player_id: int,
     event_id: int,
     *,
     conn,
     now: Optional[float] = None,
+    enforce_cooldown: bool = True,
+    check_inflight: bool = True,
+    exclude_movement_id: Optional[int] = None,
 ) -> Tuple[bool, str, Dict[str, Any]]:
     ts = float(now if now is not None else _now())
     event = get_event_by_id(int(event_id), conn=conn)
@@ -671,7 +886,14 @@ def can_player_attack_boss(
     }
     if waves >= MAX_WAVES_PER_PLAYER:
         return False, "world_boss_wave_limit", base_meta
-    if last_at > 0 and (ts - last_at) < WAVE_COOLDOWN_SEC:
+    if check_inflight and has_inflight_world_boss_attack(
+        int(player_id),
+        event,
+        conn=conn,
+        exclude_movement_id=exclude_movement_id,
+    ):
+        return False, "world_boss_inflight", base_meta
+    if enforce_cooldown and last_at > 0 and (ts - last_at) < WAVE_COOLDOWN_SEC:
         remaining = max(0, int(WAVE_COOLDOWN_SEC - (ts - last_at)))
         base_meta["cooldown_remaining"] = remaining
         base_meta["next_attack_at"] = float(last_at + WAVE_COOLDOWN_SEC)
@@ -720,7 +942,13 @@ def resolve_attack_arrival(
         }
 
     ok_atk, reason, meta = can_player_attack_boss(
-        int(player_id), int(event["id"]), conn=conn, now=ts
+        int(player_id),
+        int(event["id"]),
+        conn=conn,
+        now=ts,
+        enforce_cooldown=False,
+        check_inflight=False,
+        exclude_movement_id=movement_id,
     )
     if not ok_atk:
         return {
@@ -903,6 +1131,7 @@ def _upsert_contribution(
     now: float,
     conn,
 ) -> None:
+    """Apply arrival damage/waves. Preserves ``last_attack_at`` from send-time CD."""
     dmg = max(0, int(damage))
     conn.execute(
         """
@@ -914,7 +1143,6 @@ def _upsert_contribution(
             damage = damage + excluded.damage,
             waves = waves + 1,
             alliance_id = COALESCE(excluded.alliance_id, alliance_id),
-            last_attack_at = excluded.last_attack_at,
             updated_at = excluded.updated_at;
         """,
         (
@@ -1049,6 +1277,11 @@ def compute_claim_tiers(
         if player_row.get("alliance_id") is not None and int(player_row["alliance_id"]) == top_aid:
             tiers.append("alliance_top")
 
+    event = get_event_by_id(int(event_id), conn=conn)
+    disc = event.get("discovered_by_player_id") if event else None
+    if disc is not None and int(disc) == int(player_id):
+        tiers.append("discoverer")
+
     return tiers, {"rank": rank, "damage": int(player_row["damage"]), "total_players": total}
 
 
@@ -1079,30 +1312,36 @@ def claim_world_boss_rewards(
 
     from .inventory import grant_inventory_item
 
-    reward_map = {
-        "participate": REWARD_PARTICIPATE,
-        "top10": REWARD_TOP10,
-        "top1": REWARD_TOP1,
-        "alliance_top": REWARD_ALLIANCE_TOP,
-    }
-    # Prefer unique containers; skip duplicate keys across tiers.
-    ordered_tiers = [t for t in ("top1", "top10", "alliance_top", "participate") if t in tiers]
-    granted: List[Dict[str, Any]] = []
-    seen_keys = set()
-    for tier in ordered_tiers:
-        item_key = reward_map.get(tier)
-        if not item_key or item_key in seen_keys:
+    # Aggregate amounts per item_key across earned tiers.
+    amounts: Dict[str, int] = {}
+    tier_for_key: Dict[str, str] = {}
+    for tier, item_key, amount in REWARD_TIER_GRANTS:
+        if tier not in tiers:
             continue
+        amounts[item_key] = amounts.get(item_key, 0) + int(amount)
+        tier_for_key.setdefault(item_key, tier)
+
+    granted: List[Dict[str, Any]] = []
+    for item_key, amount in amounts.items():
         ok = grant_inventory_item(
             int(player_id),
             item_key,
-            1,
+            int(amount),
             conn=conn,
-            metadata={"source": "world_boss", "event_id": int(event_id), "tier": tier},
+            metadata={
+                "source": "world_boss",
+                "event_id": int(event_id),
+                "tier": tier_for_key.get(item_key, "participate"),
+            },
         )
         if ok:
-            seen_keys.add(item_key)
-            granted.append({"tier": tier, "item_key": item_key, "amount": 1})
+            granted.append(
+                {
+                    "tier": tier_for_key.get(item_key, "participate"),
+                    "item_key": item_key,
+                    "amount": int(amount),
+                }
+            )
 
     if not granted:
         return {"ok": False, "error": "grant_failed", "tiers": tiers}
@@ -1129,88 +1368,124 @@ def claim_world_boss_rewards(
     }
 
 
-def build_schedule_info(*, conn, now: Optional[float] = None) -> Dict[str, Any]:
-    """Server-side spawn ETA for the World Boss idle panel."""
+def _pick_weighted_boss_key(
+    definitions: List[Dict[str, Any]],
+    *,
+    exclude_keys: set[str],
+) -> Optional[str]:
+    import random
+
+    pool = [
+        d
+        for d in definitions
+        if str(d.get("boss_key") or "") not in exclude_keys and int(d.get("spawn_weight") or 0) > 0
+    ]
+    if not pool:
+        return None
+    weights = [max(1, int(d.get("spawn_weight") or 1)) for d in pool]
+    pick = random.choices(pool, weights=weights, k=1)[0]
+    return str(pick["boss_key"])
+
+
+def try_discover_world_boss_from_expedition(
+    player_id: int,
+    *,
+    conn,
+    now: Optional[float] = None,
+    rng: Any = None,
+) -> Dict[str, Any]:
+    """Rare expo discovery → spawn one boss if under concurrent cap."""
+    import random as _random
+
     ts = float(now if now is not None else _now())
-    active = get_active_event(conn=conn, now=ts) if world_boss_schema_ready(conn) else None
-    last_ended: Optional[float] = None
-    if world_boss_schema_ready(conn):
-        raw = get_runtime_value(SCHEDULE_RUNTIME_KEY, conn=conn)
-        if raw not in (None, ""):
-            try:
-                last_ended = float(raw)
-            except (TypeError, ValueError):
-                last_ended = None
-    if last_ended is not None and last_ended > 0:
-        next_eligible_at = float(last_ended) + float(INTER_EVENT_COOLDOWN_SEC)
-    else:
-        next_eligible_at = ts
-    spawn_ready = bool(active is None and ts >= next_eligible_at)
+    roller = rng if rng is not None else _random.Random()
+    if float(roller.random()) >= float(EXPO_DISCOVERY_CHANCE):
+        return {"ok": False, "error": "no_roll"}
+    active = list_active_events(conn=conn, now=ts, limit=MAX_CONCURRENT_EVENTS + 5)
+    if len(active) >= int(MAX_CONCURRENT_EVENTS):
+        return {"ok": False, "error": "concurrent_cap"}
+    exclude = {str(e.get("boss_key") or "") for e in active}
+    defs = list_definitions(conn=conn, active_only=True)
+    boss_key = _pick_weighted_boss_key(defs, exclude_keys=exclude)
+    if not boss_key:
+        return {"ok": False, "error": "no_boss_available"}
+    result = spawn_world_boss(
+        boss_key,
+        conn=conn,
+        now=ts,
+        announce=True,
+        force=False,
+        discovered_by=int(player_id),
+    )
+    if not result.get("ok"):
+        return {"ok": False, "error": result.get("error") or "spawn_failed"}
+    event = result.get("event") or {}
     return {
-        "inter_event_cooldown_sec": int(INTER_EVENT_COOLDOWN_SEC),
-        "last_ended_at": last_ended,
-        "next_eligible_at": float(next_eligible_at),
-        "spawn_ready": spawn_ready,
-        "has_active": bool(active is not None),
+        "ok": True,
+        "event_id": int(event.get("id") or 0),
+        "boss_key": str(event.get("boss_key") or boss_key),
+        "coords": str(event.get("coords") or ""),
+        "galaxy": int(event.get("galaxy") or 0),
+        "system": int(event.get("system") or 0),
+        "position": int(event.get("position") or 0),
+        "discovered_by": int(player_id),
     }
 
 
-def build_world_boss_payload(
-    player_id: Optional[int] = None,
+def build_schedule_info(*, conn, now: Optional[float] = None) -> Dict[str, Any]:
+    """Server-side spawn ETA for the World Boss panel."""
+    ts = float(now if now is not None else _now())
+    active = list_active_events(conn=conn, now=ts) if world_boss_schema_ready(conn) else []
+    last_spawn: Optional[float] = None
+    last_ended: Optional[float] = None
+    if world_boss_schema_ready(conn):
+        for key, dest in (
+            (SPAWN_RUNTIME_KEY, "spawn"),
+            (SCHEDULE_RUNTIME_KEY, "ended"),
+        ):
+            raw = get_runtime_value(key, conn=conn)
+            if raw in (None, ""):
+                continue
+            try:
+                val = float(raw)
+            except (TypeError, ValueError):
+                continue
+            if dest == "spawn":
+                last_spawn = val
+            else:
+                last_ended = val
+    anchor = last_spawn if last_spawn is not None and last_spawn > 0 else last_ended
+    if anchor is not None and anchor > 0:
+        next_eligible_at = float(anchor) + float(INTER_EVENT_COOLDOWN_SEC)
+    else:
+        next_eligible_at = ts
+    under_cap = len(active) < int(MAX_CONCURRENT_EVENTS)
+    spawn_ready = bool(under_cap and ts >= next_eligible_at)
+    return {
+        "inter_event_cooldown_sec": int(INTER_EVENT_COOLDOWN_SEC),
+        "max_concurrent": int(MAX_CONCURRENT_EVENTS),
+        "active_count": len(active),
+        "last_ended_at": last_ended,
+        "last_spawn_at": last_spawn,
+        "next_eligible_at": float(next_eligible_at),
+        "spawn_ready": spawn_ready,
+        "has_active": bool(active),
+    }
+
+
+def _event_card_for_player(
+    event: Dict[str, Any],
+    player_id: Optional[int],
     *,
     conn,
-    event_id: Optional[int] = None,
-    now: Optional[float] = None,
+    now: float,
 ) -> Dict[str, Any]:
-    ts = float(now if now is not None else _now())
-    if not world_boss_schema_ready(conn):
-        return {
-            "ok": True,
-            "ready": False,
-            "event": None,
-            "contributions": [],
-            "alliance_board": [],
-            "player": None,
-            "definitions": [],
-            "schedule": build_schedule_info(conn=conn, now=ts),
-            "server_now": ts,
-        }
-
-    schedule = build_schedule_info(conn=conn, now=ts)
-    event = None
-    if event_id is not None:
-        event = get_event_by_id(int(event_id), conn=conn)
-    if event is None:
-        event = get_active_event(conn=conn, now=ts)
-    if event is None:
-        # Fall back to most recent ended event for board/claim.
-        row = conn.execute(
-            """
-            SELECT id FROM world_boss_events
-            WHERE status IN (?, ?)
-            ORDER BY updated_at DESC
-            LIMIT 1;
-            """,
-            (STATUS_DEFEATED, STATUS_EXPIRED),
-        ).fetchone()
-        if row:
-            event = get_event_by_id(int(row["id"]), conn=conn)
-
-    if not event:
-        return {
-            "ok": True,
-            "ready": True,
-            "event": None,
-            "contributions": [],
-            "alliance_board": [],
-            "player": None,
-            "definitions": list_definitions(conn=conn),
-            "schedule": schedule,
-            "server_now": ts,
-        }
-
     contribs = list_contributions(int(event["id"]), conn=conn, limit=100)
     alliance_board = list_alliance_contributions(int(event["id"]), conn=conn, limit=50)
+    discoverer_name = None
+    disc_id = event.get("discovered_by_player_id")
+    if disc_id:
+        discoverer_name = _player_name(int(disc_id), conn=conn)
     player_info = None
     if player_id is not None:
         mine = next((c for c in contribs if int(c["player_id"]) == int(player_id)), None)
@@ -1224,7 +1499,7 @@ def build_world_boss_payload(
         ok_atk, atk_reason, atk_meta = (False, "inactive", {})
         if event["status"] == STATUS_ACTIVE:
             ok_atk, atk_reason, atk_meta = can_player_attack_boss(
-                int(player_id), int(event["id"]), conn=conn, now=ts
+                int(player_id), int(event["id"]), conn=conn, now=now
             )
         player_info = {
             "contribution": mine,
@@ -1233,15 +1508,88 @@ def build_world_boss_payload(
             "can_attack": ok_atk,
             "attack_block_reason": atk_reason if not ok_atk else "",
             "attack_meta": atk_meta,
+            "is_discoverer": bool(disc_id and int(disc_id) == int(player_id)),
         }
-
     return {
-        "ok": True,
-        "ready": True,
         "event": event,
         "contributions": contribs,
         "alliance_board": alliance_board,
         "player": player_info,
+        "discoverer_name": discoverer_name,
+    }
+
+
+def build_world_boss_payload(
+    player_id: Optional[int] = None,
+    *,
+    conn,
+    event_id: Optional[int] = None,
+    now: Optional[float] = None,
+) -> Dict[str, Any]:
+    ts = float(now if now is not None else _now())
+    empty = {
+        "ok": True,
+        "ready": False,
+        "event": None,
+        "events": [],
+        "contributions": [],
+        "alliance_board": [],
+        "player": None,
+        "definitions": [],
+        "schedule": build_schedule_info(conn=conn, now=ts),
+        "server_now": ts,
+    }
+    if not world_boss_schema_ready(conn):
+        return empty
+
+    schedule = build_schedule_info(conn=conn, now=ts)
+    active = list_active_events(conn=conn, now=ts, limit=MAX_CONCURRENT_EVENTS + 5)
+    cards: List[Dict[str, Any]] = []
+    for ev in active:
+        cards.append(_event_card_for_player(ev, player_id, conn=conn, now=ts))
+
+    # Recently ended claimable for this player (or latest ended for browse).
+    ended_rows = conn.execute(
+        """
+        SELECT id FROM world_boss_events
+        WHERE status IN (?, ?)
+        ORDER BY updated_at DESC
+        LIMIT 8;
+        """,
+        (STATUS_DEFEATED, STATUS_EXPIRED),
+    ).fetchall()
+    active_ids = {int(c["event"]["id"]) for c in cards}
+    for row in ended_rows:
+        eid = int(row["id"])
+        if eid in active_ids:
+            continue
+        ev = get_event_by_id(eid, conn=conn)
+        if not ev:
+            continue
+        card = _event_card_for_player(ev, player_id, conn=conn, now=ts)
+        # Keep ended cards that the player can claim, or when browsing a specific id.
+        if player_id is not None and not (card.get("player") or {}).get("can_claim"):
+            if event_id is None or int(event_id) != eid:
+                continue
+        cards.append(card)
+
+    if event_id is not None:
+        preferred = next((c for c in cards if int(c["event"]["id"]) == int(event_id)), None)
+        if preferred is None:
+            ev = get_event_by_id(int(event_id), conn=conn)
+            if ev:
+                preferred = _event_card_for_player(ev, player_id, conn=conn, now=ts)
+                cards.insert(0, preferred)
+
+    primary = cards[0] if cards else None
+    return {
+        "ok": True,
+        "ready": True,
+        "event": primary["event"] if primary else None,
+        "events": cards,
+        "contributions": primary["contributions"] if primary else [],
+        "alliance_board": primary["alliance_board"] if primary else [],
+        "player": primary["player"] if primary else None,
         "definitions": list_definitions(conn=conn),
         "schedule": schedule,
         "server_now": ts,
@@ -1267,32 +1615,25 @@ def tick_world_boss_schedule(*, conn, now: Optional[float] = None) -> Dict[str, 
         _expire_event(eid, conn=conn, now=ts, status=STATUS_EXPIRED)
         expired_ids.append(eid)
 
-    active = get_active_event(conn=conn, now=ts)
+    active = list_active_events(conn=conn, now=ts, limit=MAX_CONCURRENT_EVENTS + 5)
     spawned = None
-    if active is None:
-        last_ended_raw = get_runtime_value(SCHEDULE_RUNTIME_KEY, conn=conn)
-        last_ended = float(last_ended_raw) if last_ended_raw not in (None, "") else 0.0
-        # First-ever spawn: allow immediately when no history.
-        cooldown_ok = last_ended <= 0 or (ts - last_ended) >= INTER_EVENT_COOLDOWN_SEC
-        if cooldown_ok:
+    if len(active) < int(MAX_CONCURRENT_EVENTS):
+        schedule = build_schedule_info(conn=conn, now=ts)
+        if schedule.get("spawn_ready"):
+            exclude = {str(e.get("boss_key") or "") for e in active}
             defs = list_definitions(conn=conn, active_only=True)
-            if defs:
-                rot_raw = get_runtime_value(ROTATION_RUNTIME_KEY, conn=conn)
-                try:
-                    rot = int(rot_raw or 0)
-                except (TypeError, ValueError):
-                    rot = 0
-                boss = defs[rot % len(defs)]
-                result = spawn_world_boss(boss["boss_key"], conn=conn, now=ts, announce=True)
+            boss_key = _pick_weighted_boss_key(defs, exclude_keys=exclude)
+            if boss_key:
+                result = spawn_world_boss(boss_key, conn=conn, now=ts, announce=True)
                 if result.get("ok"):
                     spawned = result.get("event")
-                    set_runtime_value(ROTATION_RUNTIME_KEY, str(rot + 1), conn=conn)
 
     return {
         "ok": True,
         "expired_ids": expired_ids,
         "spawned_event_id": int(spawned["id"]) if spawned else None,
-        "active_event_id": int(active["id"]) if active else (int(spawned["id"]) if spawned else None),
+        "active_count": len(list_active_events(conn=conn, now=ts)),
+        "active_event_id": int(spawned["id"]) if spawned else (int(active[0]["id"]) if active else None),
     }
 
 

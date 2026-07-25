@@ -1,4 +1,4 @@
-{# GC-594 — debris marker on ring slot: hover stats, click = send recyclers #}
+{# GC-594 — debris marker on ring slot: click = send recyclers (hover stats → slot hover stack) #}
 {% if slot.has_debris and slot.debris and (slot.debris.metal or 0) + (slot.debris.crystal or 0) > 0 %}
 {% set debris = slot.debris %}
 {% set g = slot.coordinates.galaxy if slot.coordinates is defined else (nav.galaxy or 1) %}
@@ -17,17 +17,5 @@
           aria-label="{{ T('galaxy_debris_field', 'Trümmerfeld') }} {{ p }} — {{ T('combat_report_send_recycler', 'Recycler senden') }}">
     <span class="galaxy-ring-debris-marker-img" aria-hidden="true"></span>
   </button>
-  <div class="galaxy-ring-debris-tooltip" role="tooltip">
-    <div class="galaxy-ring-debris-tooltip-title">{{ T('galaxy_debris_field', 'Trümmerfeld') }}</div>
-    <dl class="galaxy-ring-debris-tooltip-stats">
-      <div><dt>{{ T('resource_metal', 'Ferronit') }}</dt><dd class="gc-mono">{{ (debris.metal or 0)|fmt_int }}</dd></div>
-      <div><dt>{{ T('resource_crystal', 'Crytite') }}</dt><dd class="gc-mono">{{ (debris.crystal or 0)|fmt_int }}</dd></div>
-      <div><dt>{{ T('galaxy_debris_total', 'Gesamt') }}</dt><dd class="gc-mono">{{ (debris.total or 0)|fmt_int }}</dd></div>
-      {% if debris.recycler_slots_needed %}
-      <div><dt>{{ T('galaxy_debris_recyclers_needed', 'Recycler') }}</dt><dd class="gc-mono">{{ debris.recycler_slots_needed|int }}</dd></div>
-      {% endif %}
-      <div><dt>{{ T('galaxy_debris_ttl_remaining', 'Verbleibend') }}</dt><dd class="gc-mono galaxy-debris-ttl"{% if debris.ttl_expires_at is defined %} data-countdown-at="{{ debris.ttl_expires_at|int }}" data-countdown-format="eta"{% endif %}>{{ debris.ttl_display or '—' }}</dd></div>
-    </dl>
-  </div>
 </div>
 {% endif %}

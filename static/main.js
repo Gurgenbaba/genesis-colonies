@@ -30737,70 +30737,69 @@
   };
   function bindWorldBossAttackCooldownUnlock(root) {
     if (!root) return;
-    const attackBtn = root.querySelector("#wb-attack-btn");
-    if (!attackBtn || attackBtn.dataset.wbCdBound === "1") return;
-    attackBtn.dataset.wbCdBound = "1";
-    attackBtn.addEventListener("click", (ev) => {
-      if (
-        attackBtn.classList.contains("is-disabled") ||
-        attackBtn.getAttribute("aria-disabled") === "true"
-      ) {
-        ev.preventDefault();
-        ev.stopPropagation();
+    root.querySelectorAll(".wb-attack-btn[data-wb-locked-until]").forEach((attackBtn) => {
+      if (attackBtn.dataset.wbCdBound === "1") return;
+      attackBtn.dataset.wbCdBound = "1";
+      attackBtn.addEventListener("click", (ev) => {
+        if (
+          attackBtn.classList.contains("is-disabled") ||
+          attackBtn.getAttribute("aria-disabled") === "true"
+        ) {
+          ev.preventDefault();
+          ev.stopPropagation();
+        }
+      });
+
+      const unlockAttack = () => {
+        const btn = attackBtn;
+        if (!btn || !btn.isConnected) return true;
+        const until = Number(btn.getAttribute("data-wb-locked-until") || 0);
+        if (!until) return true;
+        const now =
+          typeof GC.getServerNow === "function"
+            ? Number(GC.getServerNow())
+            : Date.now() / 1000;
+        if (until - now > 1) return false;
+
+        btn.classList.remove("is-disabled");
+        btn.removeAttribute("aria-disabled");
+        btn.removeAttribute("tabindex");
+        btn.removeAttribute("data-wb-locked-until");
+        btn.removeAttribute("title");
+
+        const card = btn.closest(".gc-world-boss-card") || root;
+        const cdBlock = card.querySelector("[data-wb-attack-cooldown]");
+        if (cdBlock) {
+          const ready = document.createElement("p");
+          ready.className = "gc-world-boss-ready hint";
+          ready.setAttribute("role", "status");
+          ready.setAttribute("data-wb-attack-ready", "");
+          ready.textContent = t("wb_attack_ready", "Angriff bereit.");
+          cdBlock.replaceWith(ready);
+        }
+        return true;
+      };
+
+      if (!unlockAttack()) {
+        const tickId =
+          typeof GC.setSafeInterval === "function"
+            ? GC.setSafeInterval(() => {
+                if (unlockAttack()) {
+                  if (typeof GC.clearSafeInterval === "function") GC.clearSafeInterval(tickId);
+                  else clearInterval(tickId);
+                }
+              }, 250)
+            : setInterval(() => {
+                if (unlockAttack()) clearInterval(tickId);
+              }, 250);
+        if (typeof GC.registerCleanup === "function") {
+          GC.registerCleanup(() => {
+            if (typeof GC.clearSafeInterval === "function") GC.clearSafeInterval(tickId);
+            else clearInterval(tickId);
+          });
+        }
       }
     });
-
-    const unlockAttack = () => {
-      const btn = root.querySelector("#wb-attack-btn");
-      if (!btn) return false;
-      const until = Number(btn.getAttribute("data-wb-locked-until") || 0);
-      if (!until) return true;
-      const now =
-        typeof GC.getServerNow === "function"
-          ? Number(GC.getServerNow())
-          : Date.now() / 1000;
-      // Match floor-based "0s" display (formatCountdownRemain) — unlock in the last second.
-      if (until - now > 1) return false;
-
-      btn.classList.remove("is-disabled");
-      btn.removeAttribute("aria-disabled");
-      btn.removeAttribute("tabindex");
-      btn.removeAttribute("data-wb-locked-until");
-      btn.removeAttribute("title");
-
-      const cdBlock = root.querySelector("[data-wb-attack-cooldown]");
-      if (cdBlock) {
-        const ready = document.createElement("p");
-        ready.className = cdBlock.classList.contains("galaxy-wb-cooldown")
-          ? "galaxy-wb-cooldown hint"
-          : "gc-world-boss-ready hint";
-        ready.setAttribute("role", "status");
-        ready.setAttribute("data-wb-attack-ready", "");
-        ready.textContent = t("wb_attack_ready", "Angriff bereit.");
-        cdBlock.replaceWith(ready);
-      }
-      return true;
-    };
-
-    if (!unlockAttack()) {
-      const tickId =
-        typeof GC.setSafeInterval === "function"
-          ? GC.setSafeInterval(() => {
-              if (unlockAttack()) {
-                if (typeof GC.clearSafeInterval === "function") GC.clearSafeInterval(tickId);
-                else clearInterval(tickId);
-              }
-            }, 250)
-          : setInterval(() => {
-              if (unlockAttack()) clearInterval(tickId);
-            }, 250);
-      if (typeof GC.registerCleanup === "function") {
-        GC.registerCleanup(() => {
-          if (typeof GC.clearSafeInterval === "function") GC.clearSafeInterval(tickId);
-          else clearInterval(tickId);
-        });
-      }
-    }
   }
 
   GC.modules.world_boss = function initWorldBossPage() {
@@ -30864,8 +30863,8 @@
       }
     }
 
-    const claimBtn = root.querySelector("#wb-claim-btn");
-    if (claimBtn && claimBtn.dataset.wbBound !== "1") {
+    root.querySelectorAll(".wb-claim-btn").forEach((claimBtn) => {
+      if (claimBtn.dataset.wbBound === "1") return;
       claimBtn.dataset.wbBound = "1";
       claimBtn.addEventListener("click", async () => {
         const eventId = Number(claimBtn.getAttribute("data-event-id") || 0);
@@ -30887,7 +30886,7 @@
           claimBtn.disabled = false;
         }
       });
-    }
+    });
 
     bindWorldBossAttackCooldownUnlock(root);
   };

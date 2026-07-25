@@ -419,12 +419,16 @@ def nav_badges_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
 
     directive_count = count_claimable_directives(uid, conn=conn)
     wb_active = False
+    wb_count = 0
     try:
-        from game.world_boss import get_active_event
+        from game.world_boss import list_active_events
 
-        wb_active = get_active_event(conn=conn) is not None
+        active_events = list_active_events(conn=conn, limit=10)
+        wb_count = len(active_events)
+        wb_active = wb_count > 0
     except Exception:
         wb_active = False
+        wb_count = 0
     return {
         "vote_center": _nav_badge_entry(
             active=vote_count > 0,
@@ -448,8 +452,8 @@ def nav_badges_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
         ),
         "world_boss": _nav_badge_entry(
             active=wb_active,
-            count=1 if wb_active else 0,
-            label="LIVE" if wb_active else "",
+            count=wb_count,
+            label=str(wb_count) if wb_count > 1 else ("LIVE" if wb_active else ""),
         ),
     }
 

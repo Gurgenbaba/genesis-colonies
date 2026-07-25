@@ -13963,52 +13963,80 @@ body.gc-techtree-media-zoom-open{
   transform: translate(-50%, -50%) scale(1.1);
   outline: none;
 }
-.galaxy-ring-debris-tooltip{
+/* Slot hover stack: World Boss + debris cards (never overlap) */
+.galaxy-ring-slot-hover-stack{
   position: absolute;
   left: 50%;
-  bottom: calc(100% + 8px);
+  bottom: calc(100% + 22px);
   transform: translateX(-50%);
   z-index: var(--gc-z-popover);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
   min-width: 168px;
-  max-width: 220px;
-  padding: 8px 10px;
-  border: 1px solid rgba(255, 186, 72, 0.45);
-  border-radius: var(--gc-radius-sm);
-  background: rgba(12, 8, 4, 0.97);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+  max-width: min(240px, 70vw);
   pointer-events: none;
   opacity: 0;
   visibility: hidden;
   transition: opacity .12s ease, visibility .12s ease;
 }
-.galaxy-ring-debris-wrap:hover .galaxy-ring-debris-tooltip,
-.galaxy-ring-debris-wrap:focus-within .galaxy-ring-debris-tooltip{
+.galaxy-ring-slot-wrap:hover .galaxy-ring-slot-hover-stack,
+.galaxy-ring-slot-wrap:focus-within .galaxy-ring-slot-hover-stack{
   opacity: 1;
   visibility: visible;
 }
-.galaxy-ring-debris-tooltip-title{
-  margin-bottom: 6px;
+.galaxy-ring-slot-wrap:hover,
+.galaxy-ring-slot-wrap:focus-within{
+  z-index: 24;
+}
+.galaxy-ring-hover-card{
+  padding: 8px 10px;
+  border-radius: var(--gc-radius-sm, 2px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+  background: rgba(8, 12, 18, 0.97);
+}
+.galaxy-ring-hover-card--wb{
+  border: 1px solid rgba(90, 200, 255, 0.45);
+  background: rgba(6, 12, 20, 0.97);
+}
+.galaxy-ring-hover-card--debris{
+  border: 1px solid rgba(255, 186, 72, 0.45);
+  background: rgba(12, 8, 4, 0.97);
+}
+.galaxy-ring-hover-card-title{
+  margin: 0 0 6px;
   font-size: 0.68rem;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+.galaxy-ring-hover-card--wb .galaxy-ring-hover-card-title{
+  color: rgba(180, 230, 255, 0.95);
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  font-weight: 700;
+}
+.galaxy-ring-hover-card--debris .galaxy-ring-hover-card-title{
   color: rgba(255, 210, 140, 0.95);
 }
-.galaxy-ring-debris-tooltip-stats{
+.galaxy-ring-hover-card-stats{
   margin: 0;
   display: grid;
   gap: 4px;
 }
-.galaxy-ring-debris-tooltip-stats > div{
+.galaxy-ring-hover-card-stats > div{
   display: flex;
   justify-content: space-between;
   gap: 8px;
   font-size: 0.72rem;
 }
-.galaxy-ring-debris-tooltip-stats dt{
+.galaxy-ring-hover-card-stats dt{
+  margin: 0;
   color: var(--gc-text-soft);
 }
-.galaxy-ring-debris-tooltip-stats dd{
+.galaxy-ring-hover-card-stats dd{
   margin: 0;
   color: var(--gc-text);
 }
@@ -26519,6 +26547,66 @@ button.pe-hero-planet-hint:focus-visible {
 }
 
 /* EPIC-20 World Boss — spawn ETA + help (scoped) */
+.gc-world-boss-page .gc-world-boss-cards {
+  display: grid;
+  gap: 0.85rem;
+}
+.gc-world-boss-page .gc-world-boss-card {
+  border: 1px solid rgba(90, 200, 255, 0.28);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(6, 14, 24, 0.55);
+  padding: 0.75rem 0.85rem;
+}
+.gc-world-boss-page .gc-world-boss-card--active {
+  box-shadow: 0 0 16px rgba(60, 180, 255, 0.18);
+}
+.gc-world-boss-page .gc-world-boss-card-body {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 0.75rem;
+  align-items: start;
+  margin-top: 0.45rem;
+}
+.gc-world-boss-page .gc-world-boss-card-art .gc-world-boss-portrait {
+  width: 120px;
+  height: 120px;
+  object-fit: contain;
+  display: block;
+  border: 1px solid rgba(90, 200, 255, 0.35);
+  background: rgba(4, 10, 18, 0.9);
+}
+.gc-world-boss-page .gc-world-boss-board-details {
+  margin-top: 0.65rem;
+  border-top: 1px solid rgba(90, 200, 255, 0.18);
+  padding-top: 0.45rem;
+}
+.gc-world-boss-page .gc-world-boss-board-details > summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: rgba(180, 230, 255, 0.9);
+  list-style: none;
+}
+.gc-world-boss-page .gc-world-boss-board-details > summary::-webkit-details-marker {
+  display: none;
+}
+.gc-world-boss-page .gc-world-boss-board-panels {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.55rem;
+}
+.gc-world-boss-page .gc-world-boss-board-sub {
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+  color: var(--gc-text-soft);
+}
+.gc-world-boss-page .gc-world-boss-cap {
+  margin: 0 0 0.65rem;
+}
+@media (max-width: 640px) {
+  .gc-world-boss-page .gc-world-boss-card-body {
+    grid-template-columns: 1fr;
+  }
+}
 .gc-world-boss-page .gc-world-boss-panel-head {
   display: flex;
   align-items: center;
@@ -26795,93 +26883,35 @@ button.pe-hero-planet-hint:focus-visible {
   }
 }
 
-/* EPIC-20 World Boss — galaxy ring marker + inspector (scoped) */
+/* EPIC-20 World Boss — galaxy ring portrait slot + inspector (scoped) */
+.galaxy-ring-slot-wrap.has-world-boss-wrap {
+  z-index: 8;
+}
+.galaxy-ring-slot-body.has-boss-image {
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-color: rgba(4, 12, 22, 0.92);
+  box-shadow: inset 0 0 0 1px rgba(90, 200, 255, 0.35), 0 0 14px rgba(60, 180, 255, 0.35);
+}
 .galaxy-ring-wb-wrap {
   position: absolute;
-  top: -6px;
-  left: -8px;
+  inset: 0;
   z-index: 9;
-  width: 0;
-  height: 0;
+  width: auto;
+  height: auto;
+  pointer-events: none;
 }
 .galaxy-ring-wb-marker {
   position: absolute;
-  left: 0;
-  top: 0;
-  width: 22px;
-  height: 22px;
+  width: 1px;
+  height: 1px;
   padding: 0;
-  border: 1px solid rgba(90, 200, 255, 0.7);
-  border-radius: var(--gc-radius-sm, 2px);
-  background: rgba(6, 16, 28, 0.95);
-  cursor: pointer;
-  transform: translate(-50%, -50%);
-  box-shadow: 0 0 10px rgba(60, 180, 255, 0.45);
-  transition: border-color 0.14s ease, box-shadow 0.14s ease, transform 0.14s ease;
-  display: block;
+  margin: -1px;
   overflow: hidden;
-}
-.galaxy-ring-wb-marker-img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  background-image: var(--gc-galaxy-wb-img, url("img/bosses/_placeholder.png"));
-  background-size: cover;
-  background-position: center;
-}
-.galaxy-ring-wb-marker:hover,
-.galaxy-ring-wb-marker:focus-visible {
-  border-color: rgba(140, 230, 255, 0.95);
-  box-shadow: 0 0 14px rgba(80, 210, 255, 0.7);
-  transform: translate(-50%, -50%) scale(1.1);
-  outline: none;
-}
-.galaxy-ring-wb-tooltip {
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + 8px);
-  transform: translateX(-50%);
-  z-index: var(--gc-z-popover);
-  min-width: 168px;
-  max-width: 240px;
-  padding: 8px 10px;
-  border: 1px solid rgba(90, 200, 255, 0.45);
-  border-radius: var(--gc-radius-sm, 2px);
-  background: rgba(6, 12, 20, 0.97);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
-  pointer-events: none;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.12s ease, visibility 0.12s ease;
-}
-.galaxy-ring-wb-wrap:hover .galaxy-ring-wb-tooltip,
-.galaxy-ring-wb-wrap:focus-within .galaxy-ring-wb-tooltip {
-  opacity: 1;
-  visibility: visible;
-}
-.galaxy-ring-wb-tooltip-title {
-  margin: 0 0 6px;
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: rgba(180, 230, 255, 0.95);
-}
-.galaxy-ring-wb-tooltip-stats {
-  margin: 0;
-  display: grid;
-  gap: 4px;
-  font-size: 0.72rem;
-}
-.galaxy-ring-wb-tooltip-stats > div {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-.galaxy-ring-wb-tooltip-stats dt {
-  margin: 0;
-  color: var(--gc-text-soft);
-}
-.galaxy-ring-wb-tooltip-stats dd {
-  margin: 0;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+  white-space: nowrap;
 }
 .galaxy-ring-slot.has-world-boss {
   box-shadow: 0 0 12px rgba(60, 180, 255, 0.35);

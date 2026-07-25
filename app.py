@@ -470,18 +470,22 @@ def inject_globals():
         motd_banner = None
 
     world_boss_active = False
+    world_boss_count = 0
     try:
         if not simple_layout:
             from game.db import db as _wb_db
-            from game.world_boss import get_active_event
+            from game.world_boss import list_active_events
 
             _wb_conn = _wb_db()
             try:
-                world_boss_active = get_active_event(conn=_wb_conn) is not None
+                _wb_list = list_active_events(conn=_wb_conn, limit=10)
+                world_boss_count = len(_wb_list)
+                world_boss_active = world_boss_count > 0
             finally:
                 _wb_conn.close()
     except Exception:
         world_boss_active = False
+        world_boss_count = 0
 
     sidebar_release = {"label": "Genesis", "url": "/news", "href": "/news", "anchor_id": "", "has_dev_stream": False}
     try:
@@ -764,6 +768,7 @@ def inject_globals():
         motd_text=motd_text,
         motd_banner=motd_banner,
         WORLD_BOSS_ACTIVE=world_boss_active,
+        WORLD_BOSS_COUNT=world_boss_count,
         SIDEBAR_RELEASE=sidebar_release,
 
         PLAYER_STATS=player_stats,

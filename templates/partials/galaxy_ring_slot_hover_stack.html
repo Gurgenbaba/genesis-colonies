@@ -1,0 +1,37 @@
+{# Shared hover cards above a ring slot — stacks World Boss + debris so they never overlap #}
+{% set _show_wb = slot.has_world_boss and slot.world_boss %}
+{% set _debris = slot.debris if slot.has_debris and slot.debris else none %}
+{% set _show_debris = _debris and ((_debris.metal or 0) + (_debris.crystal or 0) > 0) %}
+{% if _show_wb or _show_debris %}
+<div class="galaxy-ring-slot-hover-stack{% if _show_wb and _show_debris %} is-stacked{% endif %}"
+     aria-hidden="true">
+  {% if _show_wb %}
+  {% set wb = slot.world_boss %}
+  {% set hp_pct = ((wb.hp_ratio or 0) * 100)|round(1) %}
+  <div class="galaxy-ring-hover-card galaxy-ring-hover-card--wb" role="tooltip">
+    <div class="galaxy-ring-hover-card-title">{{ T(wb.name_key, wb.boss_key) }}</div>
+    <dl class="galaxy-ring-hover-card-stats">
+      <div><dt>{{ T('wb_hp', 'HP') }}</dt><dd class="gc-mono">{{ (wb.current_hp or 0)|fmt_int }} / {{ (wb.max_hp or 0)|fmt_int }} ({{ hp_pct }}%)</dd></div>
+      {% if wb.ends_at is defined and wb.ends_at %}
+      <div><dt>{{ T('wb_ends_in', 'Endet in') }}</dt><dd class="gc-mono" data-countdown-at="{{ wb.ends_at|int }}" data-countdown-format="eta">—</dd></div>
+      {% endif %}
+    </dl>
+  </div>
+  {% endif %}
+  {% if _show_debris %}
+  {% set debris = _debris %}
+  <div class="galaxy-ring-hover-card galaxy-ring-hover-card--debris" role="tooltip">
+    <div class="galaxy-ring-hover-card-title">{{ T('galaxy_debris_field', 'Trümmerfeld') }}</div>
+    <dl class="galaxy-ring-hover-card-stats">
+      <div><dt>{{ T('resource_metal', 'Ferronit') }}</dt><dd class="gc-mono">{{ (debris.metal or 0)|fmt_int }}</dd></div>
+      <div><dt>{{ T('resource_crystal', 'Crytite') }}</dt><dd class="gc-mono">{{ (debris.crystal or 0)|fmt_int }}</dd></div>
+      <div><dt>{{ T('galaxy_debris_total', 'Gesamt') }}</dt><dd class="gc-mono">{{ (debris.total or 0)|fmt_int }}</dd></div>
+      {% if debris.recycler_slots_needed %}
+      <div><dt>{{ T('galaxy_debris_recyclers_needed', 'Recycler') }}</dt><dd class="gc-mono">{{ debris.recycler_slots_needed|int }}</dd></div>
+      {% endif %}
+      <div><dt>{{ T('galaxy_debris_ttl_remaining', 'Verbleibend') }}</dt><dd class="gc-mono galaxy-debris-ttl"{% if debris.ttl_expires_at is defined %} data-countdown-at="{{ debris.ttl_expires_at|int }}" data-countdown-format="eta"{% endif %}>{{ debris.ttl_display or '—' }}</dd></div>
+    </dl>
+  </div>
+  {% endif %}
+</div>
+{% endif %}

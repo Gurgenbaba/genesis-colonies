@@ -105,7 +105,12 @@
             {% set img_rel = slot.planet_image_relpath if slot.planet_image_relpath is defined else '' %}
             {% set img_webp = slot.planet_image_webp_relpath if slot.planet_image_webp_relpath is defined else '' %}
             {% set effect = slot.visual_effect if slot.visual_effect is defined else (slot.planet_class or 'temperate') %}
-            <div class="galaxy-ring-slot-wrap"
+            {% if slot.has_world_boss and slot.world_boss %}
+            {% set img_rel = 'img/bosses/' ~ ((slot.world_boss.boss_key or '_placeholder')|string) ~ '.png' %}
+            {% set img_webp = '' %}
+            {% endif %}
+            <div class="galaxy-ring-slot-wrap
+                 {% if slot.has_world_boss %}has-world-boss-wrap{% endif %}"
                  data-galaxy-ring-slot-wrap="{{ slot.position }}"
                  data-orbit-band="{{ layout_band }}"
                  data-orbit-angle="{{ angle }}">
@@ -123,21 +128,21 @@
                       aria-label="{{ T('galaxy_slot_position', 'Pos') }} {{ slot.position }}{% if slot.has_world_boss and slot.world_boss %}: {{ T('galaxy_wb_field', 'World Boss') }} {{ T(slot.world_boss.name_key, slot.world_boss.boss_key) }}{% elif slot.occupied %}: {{ slot.planet_name }}{% if slot.commander_name %} — {{ slot.commander_name }}{% endif %}{% else %}: {{ T('galaxy_empty_slot') }}{% endif %}"
                       aria-controls="galaxy-ring-inspector-{{ slot.position }}"
                       aria-expanded="false">
-                {% if slot.occupied and slot.commander_name %}
+                {% if slot.has_world_boss and slot.world_boss %}
+                <span class="galaxy-ring-slot-owner-label galaxy-ring-slot-owner-label--world-boss"
+                      aria-hidden="true"
+                      title="{{ T(slot.world_boss.name_key, slot.world_boss.boss_key) }}">{{ T('galaxy_wb_short', 'Boss') }}</span>
+                {% elif slot.occupied and slot.commander_name %}
                 <span class="galaxy-ring-slot-owner-label
                       {% if slot.is_own_planet %}galaxy-ring-slot-owner-label--own
                       {% elif slot.is_ally_planet %}galaxy-ring-slot-owner-label--ally
                       {% else %}galaxy-ring-slot-owner-label--foreign{% endif %}"
                       aria-hidden="true"
                       title="{{ slot.commander_name }}">{{ slot.commander_name }}</span>
-                {% elif slot.has_world_boss and slot.world_boss %}
-                <span class="galaxy-ring-slot-owner-label galaxy-ring-slot-owner-label--world-boss"
-                      aria-hidden="true"
-                      title="{{ T(slot.world_boss.name_key, slot.world_boss.boss_key) }}">{{ T('galaxy_wb_short', 'Boss') }}</span>
                 {% endif %}
                 <span class="galaxy-ring-slot-body
                       galaxy-ring-slot-body--{{ effect }}
-                      {% if slot.occupied %}has-planet-image{% else %}is-climate-preview{% endif %}"
+                      {% if slot.has_world_boss %}has-planet-image has-boss-image{% elif slot.occupied %}has-planet-image{% else %}is-climate-preview{% endif %}"
                       {% if img_rel %}
                       style="--gr-planet-image: url('{{ url_for('static', filename=img_rel, v=GC_ASSET_VERSION) }}');{% if img_webp %} --gr-planet-image-webp: url('{{ url_for('static', filename=img_webp, v=GC_ASSET_VERSION) }}');{% endif %}"
                       {% endif %}
@@ -148,6 +153,7 @@
               </button>
               {% include "partials/galaxy_ring_debris_marker.html" %}
               {% include "partials/galaxy_ring_world_boss_marker.html" %}
+              {% include "partials/galaxy_ring_slot_hover_stack.html" %}
             </div>
             {% endfor %}
 

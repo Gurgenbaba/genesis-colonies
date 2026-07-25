@@ -154,12 +154,21 @@ def test_spawn_and_galaxy_attach(wb_db):
 def test_world_boss_galaxy_ui_contracts():
     ring = Path("templates/partials/galaxy_ring_view.html").read_text(encoding="utf-8")
     assert "has-world-boss" in ring
+    assert "has-boss-image" in ring
+    assert "img/bosses/" in ring
     assert "galaxy_ring_world_boss_marker.html" in ring
+    assert "galaxy_ring_slot_hover_stack.html" in ring
     assert "galaxy_world_boss_block.html" in ring
 
     marker = Path("templates/partials/galaxy_ring_world_boss_marker.html").read_text(encoding="utf-8")
     assert "galaxy-ring-wb-marker" in marker
     assert "fleet_deep_link" in marker
+
+    hover_stack = Path("templates/partials/galaxy_ring_slot_hover_stack.html").read_text(encoding="utf-8")
+    assert "galaxy-ring-slot-hover-stack" in hover_stack
+    assert "galaxy-ring-hover-card--wb" in hover_stack
+    assert "galaxy-ring-hover-card--debris" in hover_stack
+    assert "is-stacked" in hover_stack
 
     actions = Path("templates/partials/galaxy_fleet_actions.html").read_text(encoding="utf-8")
     assert "has_world_boss" in actions
@@ -170,18 +179,23 @@ def test_world_boss_galaxy_ui_contracts():
     assert "target_system=" in page
     assert "target_position=" in page
     assert "img/bosses/" in page
-    assert "gc-world-boss-hero" in page
-    assert "gc-world-boss-hero--active" in page
-    assert "gc-world-boss-stage" in page
-    assert "gc-wb-glow" in page
+    assert "gc-world-boss-cards" in page
+    assert "gc-world-boss-card" in page
+    assert "gc-world-boss-board-details" in page
     assert "gc-world-boss-hp-fill" in page
-    assert 'id="wb-attack-btn"' in page
+    assert "wb-attack-btn" in page
     assert "data-wb-locked-until" in page
     assert "data-wb-attack-cooldown" in page
 
     css = Path("static/style.css").read_text(encoding="utf-8")
     assert "object-fit: contain" in css
-    assert "gc-wb-glow-pulse" in css
+    assert "gc-wb-glow-pulse" in css or "gc-world-boss-cards" in css
+    assert "has-boss-image" in css
+    assert "has-world-boss-wrap" in css
+    assert "galaxy-ring-slot-hover-stack" in css
+    assert "galaxy-ring-hover-card--wb" in css
+    assert "galaxy-ring-hover-card--debris" in css
+    assert "gc-world-boss-cards" in css
     assert "gc-nav-wb-live-pulse" in css
     assert "gc-nav-sub-link--wb-live" in css
 
@@ -279,7 +293,7 @@ def test_attack_contribution_and_defeat(wb_db):
 
 
 def test_full_wipe_deals_wave_hp_fraction(wb_db):
-    """Even fight full wipe ≈ WAVE_HP_FRACTION; mega fleet scales via overkill."""
+    """Even fight full wipe ≈ WAVE_HP_FRACTION; mega fleet hits soft overkill cap (~10–20 waves)."""
     from game.world_boss import (
         MAX_WAVE_HP_FRACTION,
         WAVE_HP_FRACTION,
@@ -298,7 +312,7 @@ def test_full_wipe_deals_wave_hp_fraction(wb_db):
     expected = int(max_hp * WAVE_HP_FRACTION)
     cap = int(max_hp * MAX_WAVE_HP_FRACTION)
     assert damage == min(expected, cap)
-    assert damage == 150_000
+    assert damage == 100_000
     assert damage > 50_000
 
     half = compute_world_boss_hp_damage(
@@ -307,7 +321,7 @@ def test_full_wipe_deals_wave_hp_fraction(wb_db):
         max_hp=max_hp,
         attacker_ships_before=stacks,
     )
-    assert 60_000 <= half <= 90_000
+    assert 40_000 <= half <= 60_000
 
     mega = {
         "falcon_interceptor": 1_000_000,
@@ -320,9 +334,11 @@ def test_full_wipe_deals_wave_hp_fraction(wb_db):
         max_hp=max_hp,
         attacker_ships_before=mega,
     )
-    assert mega_damage >= int(max_hp * 0.40)
-    assert mega_damage <= cap
     assert mega_damage > damage
+    assert mega_damage <= cap
+    # Solo mega: at least 10 waves, at most ~20 waves to clear the bar.
+    assert mega_damage * 10 <= max_hp
+    assert mega_damage * 20 >= max_hp
 
 
 def test_claim_rewards_after_defeat(wb_db):
@@ -357,6 +373,12 @@ def test_claim_rewards_after_defeat(wb_db):
         assert claim["ok"], claim
         assert "participate" in claim["tiers"]
         assert claim["rewards"]
+        event_special = next(
+            (r for r in claim["rewards"] if r["item_key"] == "container_event_special"),
+            None,
+        )
+        assert event_special is not None
+        assert int(event_special["amount"]) >= 2
         again = claim_world_boss_rewards(uid, event_id, conn=conn, now=now)
         assert not again["ok"]
         assert again["error"] == "already_claimed"
@@ -392,9 +414,16 @@ def test_schedule_expire_and_spawn(wb_db):
         assert event_id in tick1["expired_ids"]
         assert tick1.get("spawned_event_id") is None
 
-        # After inter-event cooldown, next tick spawns rotation boss.
+        # After inter-event cooldown, next tick spawns weighted boss.
+        from game.world_boss import SPAWN_RUNTIME_KEY
+
         set_runtime_value(
             SCHEDULE_RUNTIME_KEY,
+            str(time.time() - INTER_EVENT_COOLDOWN_SEC - 1),
+            conn=conn,
+        )
+        set_runtime_value(
+            SPAWN_RUNTIME_KEY,
             str(time.time() - INTER_EVENT_COOLDOWN_SEC - 1),
             conn=conn,
         )
@@ -528,6 +557,203 @@ def test_attack_cooldown_blocks_send(wb_db):
             conn=conn,
         )
         assert ok2, err2
+        # Send starts cooldown immediately.
+        row = conn.execute(
+            "SELECT last_attack_at, waves, damage FROM world_boss_contributions "
+            "WHERE event_id = ? AND player_id = ?;",
+            (event_id, uid),
+        ).fetchone()
+        assert row is not None
+        assert float(row["last_attack_at"] or 0) > 0
+        assert int(row["waves"] or 0) == 1  # prior seeded wave
+        # Second send while outbound / on CD fails.
+        ok3, err3, _ = send_fleet(
+            player_id=uid,
+            origin_planet_id=pid,
+            target_galaxy=hg,
+            target_system=hs,
+            target_position=boss_pos,
+            mission_type="attack",
+            ships={"falcon_interceptor": 5},
+            resources={},
+            speed_percent=100,
+            conn=conn,
+        )
+        assert not ok3
+        assert err3 in ("world_boss_cooldown", "world_boss_inflight")
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_send_starts_cooldown_without_prior_contribution(wb_db):
+    uid = _player()
+    pid = _home(uid)
+    _fund(pid)
+    _seed_combat_fleet(pid, uid)
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        home = conn.execute(
+            "SELECT galaxy, system, position FROM planets WHERE id = ?;",
+            (pid,),
+        ).fetchone()
+        hg, hs, hp = int(home["galaxy"]), int(home["system"]), int(home["position"])
+        boss_pos = 6 if hp != 6 else 7
+        spawn = spawn_world_boss(
+            "planet_eater",
+            conn=conn,
+            galaxy=hg,
+            system=hs,
+            position=boss_pos,
+            announce=False,
+        )
+        assert spawn["ok"], spawn
+        event_id = int(spawn["event"]["id"])
+        ok, err, _ = send_fleet(
+            player_id=uid,
+            origin_planet_id=pid,
+            target_galaxy=hg,
+            target_system=hs,
+            target_position=boss_pos,
+            mission_type="attack",
+            ships={"falcon_interceptor": 10},
+            resources={},
+            speed_percent=100,
+            conn=conn,
+        )
+        assert ok, err
+        row = conn.execute(
+            "SELECT last_attack_at, waves, damage FROM world_boss_contributions "
+            "WHERE event_id = ? AND player_id = ?;",
+            (event_id, uid),
+        ).fetchone()
+        assert row is not None
+        assert float(row["last_attack_at"] or 0) > 0
+        assert int(row["waves"] or 0) == 0
+        assert int(row["damage"] or 0) == 0
+        ok2, err2, _ = send_fleet(
+            player_id=uid,
+            origin_planet_id=pid,
+            target_galaxy=hg,
+            target_system=hs,
+            target_position=boss_pos,
+            mission_type="attack",
+            ships={"falcon_interceptor": 5},
+            resources={},
+            speed_percent=100,
+            conn=conn,
+        )
+        assert not ok2
+        assert err2 in ("world_boss_cooldown", "world_boss_inflight")
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_multi_concurrent_spawn_cap(wb_db):
+    from game.world_boss import MAX_CONCURRENT_EVENTS, list_active_events
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        keys = ["ancient_leviathan", "void_titan", "planet_eater", "rogue_ai_nexus"]
+        for i, key in enumerate(keys[:MAX_CONCURRENT_EVENTS]):
+            r = spawn_world_boss(
+                key, conn=conn, galaxy=2, system=10 + i, position=3, announce=False
+            )
+            assert r["ok"], r
+        blocked = spawn_world_boss(
+            "rogue_ai_nexus", conn=conn, galaxy=2, system=20, position=3, announce=False
+        )
+        assert not blocked["ok"]
+        assert blocked["error"] == "concurrent_cap"
+        active = list_active_events(conn=conn)
+        assert len(active) == MAX_CONCURRENT_EVENTS
+        forced = spawn_world_boss(
+            "rogue_ai_nexus",
+            conn=conn,
+            galaxy=2,
+            system=21,
+            position=4,
+            announce=False,
+            force=True,
+        )
+        assert forced["ok"], forced
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_expo_discovery_spawns_when_under_cap(wb_db):
+    from game.world_boss import try_discover_world_boss_from_expedition
+
+    class Always:
+        def random(self):
+            return 0.0
+
+    uid = _player(name="Scout")
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        result = try_discover_world_boss_from_expedition(
+            uid, conn=conn, rng=Always()
+        )
+        assert result["ok"], result
+        assert result.get("coords")
+        assert int(result.get("discovered_by") or 0) == uid
+        from game.world_boss import get_event_by_id
+
+        event = get_event_by_id(int(result["event_id"]), conn=conn)
+        assert event is not None
+        assert int(event.get("discovered_by_player_id") or 0) == uid
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_discoverer_tier_extra_reward(wb_db):
+    from game.world_boss import claim_world_boss_rewards
+
+    uid = _player(name="Finder")
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        spawn = spawn_world_boss(
+            "void_titan",
+            conn=conn,
+            galaxy=3,
+            system=3,
+            position=3,
+            announce=False,
+            discovered_by=uid,
+        )
+        assert spawn["ok"], spawn
+        event_id = int(spawn["event"]["id"])
+        now = time.time()
+        conn.execute(
+            """
+            INSERT INTO world_boss_contributions (
+                event_id, player_id, alliance_id, damage, waves,
+                last_attack_at, created_at, updated_at
+            ) VALUES (?, ?, NULL, 500, 1, ?, ?, ?);
+            """,
+            (event_id, uid, now, now, now),
+        )
+        conn.execute(
+            "UPDATE world_boss_events SET status = 'defeated', current_hp = 0, defeated_at = ? WHERE id = ?;",
+            (now, event_id),
+        )
+        claim = claim_world_boss_rewards(uid, event_id, conn=conn, now=now)
+        assert claim["ok"], claim
+        assert "discoverer" in claim["tiers"]
+        event_special = next(
+            (r for r in claim["rewards"] if r["item_key"] == "container_event_special"),
+            None,
+        )
+        assert event_special is not None
+        # participate 2 + discoverer 1
+        assert int(event_special["amount"]) >= 3
         commit(conn)
     finally:
         conn.close()
@@ -535,7 +761,7 @@ def test_attack_cooldown_blocks_send(wb_db):
 
 def test_schedule_payload_next_eligible(wb_db):
     from game.runtime_state import set_runtime_value
-    from game.world_boss import INTER_EVENT_COOLDOWN_SEC, SCHEDULE_RUNTIME_KEY
+    from game.world_boss import INTER_EVENT_COOLDOWN_SEC, SCHEDULE_RUNTIME_KEY, SPAWN_RUNTIME_KEY
 
     conn = db()
     try:
@@ -543,6 +769,7 @@ def test_schedule_payload_next_eligible(wb_db):
         now = time.time()
         last_ended = now - 3600
         set_runtime_value(SCHEDULE_RUNTIME_KEY, str(last_ended), conn=conn)
+        set_runtime_value(SPAWN_RUNTIME_KEY, str(last_ended), conn=conn)
         payload = build_world_boss_payload(None, conn=conn, now=now)
         schedule = payload.get("schedule") or {}
         assert schedule.get("has_active") is False
@@ -550,6 +777,7 @@ def test_schedule_payload_next_eligible(wb_db):
         expected = last_ended + INTER_EVENT_COOLDOWN_SEC
         assert abs(float(schedule["next_eligible_at"]) - expected) < 1.0
         assert int(schedule["inter_event_cooldown_sec"]) == int(INTER_EVENT_COOLDOWN_SEC)
+        assert int(schedule["max_concurrent"]) == 3
 
         # After cooldown elapsed → spawn ready (no active event).
         payload2 = build_world_boss_payload(

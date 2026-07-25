@@ -42,25 +42,26 @@ Server-wide PvE bosses: shared HP, multi-player contribution, exclusive meta rew
 ## Combat contract
 
 1. Player sends `attack` to boss coordinates (`target_type=world_boss`, no `target_planet_id`).
-2. On arrival, `world_boss.resolve_attack_arrival` builds defender stacks from event `fleet_stacks_json` (scaled by remaining HP phase).
-3. `simulate_battle` runs; attacker losses apply to return fleet.
-4. Boss HP damage = `wipe_fraction × WAVE_HP_FRACTION × max_hp × overkill_mult`, capped at `MAX_WAVE_HP_FRACTION × max_hp`.
+2. On **send**, `note_attack_dispatched` sets `last_attack_at` (wave cooldown starts). In-flight outbound attacks to the same slot are blocked (`world_boss_inflight`).
+3. On arrival, `world_boss.resolve_attack_arrival` builds defender stacks; arrival does **not** reset `last_attack_at`.
+4. `simulate_battle` runs; attacker losses apply to return fleet.
+5. Boss HP damage = `wipe_fraction × WAVE_HP_FRACTION × max_hp × overkill_mult`, capped at `MAX_WAVE_HP_FRACTION × max_hp`.
    - `wipe_fraction = defender_losses_score / wave_stack_score` (0..1)
-   - `overkill_mult = max(1, log2(1 + attacker_fleet_score / wave_stack_score))` (combat prestige scores; not raw HP)
-   - Defaults: base 3% (`WAVE_HP_FRACTION`), cap 100% (`MAX_WAVE_HP_FRACTION`); even fights stay near 3%, mega fleets scale toward ~40–60%+ per wipe
-5. Stacks persist for subsequent waves; debris may spawn; combat report uses defender name = boss label, `defender_id=0`.
-6. When HP ≤ 0 → status `defeated`; rewards unlock. On `ends_at` with HP > 0 → `expired`.
+   - `overkill_mult = max(1, 1 + OVERKILL_LOG_SCALE × log2(max(1, attacker_fleet_score / wave_stack_score)))`
+   - Defaults: base 2%, soft overkill `0.15`, cap **8%** → solo mega fleets need ~10–20 waves
+6. Stacks persist for subsequent waves; debris may spawn; combat report uses defender name = boss label, `defender_id=0`.
+7. When HP ≤ 0 → status `defeated`; rewards unlock. On `ends_at` with HP > 0 → `expired`.
 
 ### Anti-farm
 
 | Rule | Default |
 |------|---------|
-| Account cooldown between waves | 300 s |
+| Account cooldown between waves | 300 s — starts on **fleet send** |
+| In-flight lock | one outbound attack per player per boss slot |
 | Max waves per player per event | 40 |
-| Even-fight full wipe HP | ~3% of `max_hp` (`WAVE_HP_FRACTION`) |
-| Overkill scaling | `log2(1 + attacker_score / wave_score)` |
-| Cap HP per wave | 100% of `max_hp` (`MAX_WAVE_HP_FRACTION`) |
-| Min ships for attack | ≥ 1 combat-capable unit (fleet mission rules) |
+| Even-fight full wipe HP | ~2% of `max_hp` (`WAVE_HP_FRACTION`) |
+| Overkill scaling | `1 + 0.15 × log2(max(1, attacker_score / wave_score))` |
+| Cap HP per wave | 8% of `max_hp` (`MAX_WAVE_HP_FRACTION`) |
 | Contribution | Server-only from battle → HP mapping; never client-reported |
 
 ---
@@ -71,22 +72,26 @@ Claim once per player after `defeated` or `expired` (if contribution > 0):
 
 | Tier | Condition | Grant |
 |------|-----------|--------|
-| `participate` | any contribution | `container_event_special` ×1 |
-| `top10` | top 10% by damage (min rank 1–10) | `container_void_artifact` ×1 |
+| `participate` | any contribution | `container_event_special` ×2 |
+| `top10` | top 10% by damage | `container_void_artifact` ×1 + `container_event_special` ×1 |
 | `top1` | rank 1 | `container_mythic` ×1 |
 | `alliance_top` | member of #1 alliance by sum damage | `container_ancient_relic` ×1 |
+| `discoverer` | Expo-Finder (must also deal damage) | `container_event_special` ×1 extra |
 
-Tiers stack (player may receive multiple containers in one claim). Auction/vote remain free of event inflation.
+Same item keys stack (e.g. participate + discoverer = 3× event special). Auction/vote remain free of event inflation.
+
+Expo discovery ≈ **5.5%** per expedition resolve when under the concurrent cap; spawn is server-wide for everyone.
 
 ---
 
 ## Schedule
 
-- At most **one** `active` event universe-wide.
-- Cron (`fleet_worker` post-maintenance): expire due events; if none active and cooldown elapsed, spawn next catalog boss (rotation order).
-- Admin: `POST /api/admin/world-boss/spawn` force-spawns; Admin UI tab uses `GET /api/admin/world-boss` for status/definitions.
+- Up to **3** concurrent `active` events (distinct `boss_key`).
+- Cron (`fleet_worker`): expire due events; if `active < 3` and ≥ **4 h** since last spawn, weighted spawn (`spawn_weight`).
+- Rare **expedition discovery** (~3%) may spawn when under cap.
+- Admin: `POST /api/admin/world-boss/spawn` (`force` may exceed cap / replace same key).
 
-Default window: **48 h**; inter-event cooldown: **24 h**.
+Default window: **48 h**; inter-spawn gap: **4 h**.
 
 ---
 

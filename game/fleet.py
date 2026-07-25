@@ -1270,7 +1270,11 @@ def validate_fleet_send(
             if event_id <= 0:
                 return False, "world_boss_inactive", {"target": target_info}
             ok_wb, wb_reason, wb_meta = can_player_attack_boss(
-                int(player_id), event_id, conn=conn
+                int(player_id),
+                event_id,
+                conn=conn,
+                enforce_cooldown=True,
+                check_inflight=True,
             )
             if not ok_wb:
                 return False, wb_reason, {"target": target_info, **(wb_meta or {})}
@@ -2842,6 +2846,19 @@ def send_fleet(
             ),
         )
         fleet_id = int(cur.lastrowid)
+
+        if str(target_info.get("target_type") or "") == "world_boss" and mission == "attack":
+            from .world_boss import note_attack_dispatched
+
+            wb = target_info.get("world_boss") or {}
+            wb_event_id = int(wb.get("event_id") or 0)
+            if wb_event_id > 0:
+                note_attack_dispatched(
+                    int(player_id),
+                    wb_event_id,
+                    conn=conn,
+                    now=now,
+                )
 
         if own:
             commit(conn)
@@ -4726,6 +4743,31 @@ def _handle_expedition_holding_end(movement: Dict[str, Any], *, conn, now: float
     meta["fleet_id"] = movement_id
     if world_key:
         meta["world_key"] = world_key
+
+    try:
+        from .world_boss import try_discover_world_boss_from_expedition
+        import random as _wb_random
+
+        discovery = try_discover_world_boss_from_expedition(
+            int(player_id),
+            conn=conn,
+            now=now,
+            rng=_wb_random.Random(int(movement_id) * 9176 + 424242),
+        )
+        if discovery.get("ok"):
+            meta["world_boss_discovery"] = discovery
+            coords = str(discovery.get("coords") or "")
+            body = (
+                f"{body}\n\n"
+                + tr(
+                    "wb_expo_discovery_report",
+                    "World Boss entdeckt bei %(coords)s — angreifbar über World Boss / Galaxie.",
+                    locale=sender_locale,
+                    coords=coords,
+                )
+            )
+    except Exception:
+        logger.exception("world_boss expo discovery failed movement=%s", movement_id)
 
     if world_context and world_context.get("name_key"):
         is_salvage = str(world_context.get("world_type") or "") == "wreckage_field"
