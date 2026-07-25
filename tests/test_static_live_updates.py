@@ -1794,9 +1794,11 @@ def test_main_js_gc546d_production_completion_poll_storm_guards():
     assert "scheduleShipyardRefreshFromState(true)" not in progress
     assert "scheduleDefenseRefreshFromState(true)" not in progress
 
-    finish = src.split("function requestFinishRefresh(type)")[1].split("function releaseFinishRefreshLock")[0]
+    finish = src.split("function requestFinishRefresh(type)")[1].split("let _overviewWidgetsPlanetId")[0]
     assert 'type === "shipyard"' in finish
+    assert 'type === "research"' in finish
     assert "requestQueueTimerZeroRefresh" in finish
+    assert 'type === "research" || type === "planet_evolution"' not in finish
 
     defense_timers = src.split("function startDefenseTimers()")[1].split("function bindDefenseOnce")[0]
     assert "setInterval" not in defense_timers

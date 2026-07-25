@@ -233,10 +233,11 @@ def _find_cached_result(
     return None
 
 
-def _due_epsilon() -> float:
-    from .queue_poll import DUE_TIME_EPSILON_SEC
+def _due_cutoff(now: float) -> float:
+    """Finish cutoff aligned with UI remaining=int(finish−now) truncation."""
+    from .queue_poll import due_cutoff_ts
 
-    return float(DUE_TIME_EPSILON_SEC)
+    return float(due_cutoff_ts(now))
 
 
 def finish_active_planet_due_work(
@@ -433,7 +434,7 @@ def finish_planet_build_jobs(
     Does not update scores (engine handles batch score/rank).
     """
     cur = conn.cursor()
-    due_cutoff = float(now) + _due_epsilon()
+    due_cutoff = _due_cutoff(now)
     completed = 0
     build_completions: list[dict] = []
 
@@ -580,7 +581,7 @@ def finish_player_research_jobs(
     Does not update scores.
     """
     cur = conn.cursor()
-    due_cutoff = float(now) + _due_epsilon()
+    due_cutoff = _due_cutoff(now)
     completed = 0
     research_completions: list[dict] = []
 

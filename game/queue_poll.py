@@ -19,6 +19,16 @@ POLL_FINISH_INTERVAL_SEC = float(os.environ.get("GC_POLL_FINISH_INTERVAL_SEC", "
 # Sub-second tolerance so jobs with 1s duration are not stuck between float ticks.
 DUE_TIME_EPSILON_SEC = float(os.environ.get("GC_DUE_TIME_EPSILON_SEC", "0.05"))
 
+# Align finish/due detection with UI remaining = int(finish_at - now):
+# when remaining displays as 0, the job is treated as due (≤ ~1s early).
+DISPLAY_DUE_WINDOW_SEC = float(os.environ.get("GC_DISPLAY_DUE_WINDOW_SEC", "1.0"))
+
+
+def due_cutoff_ts(now: Optional[float] = None) -> float:
+    """Timestamp at/below which a queue job finish_at is considered due."""
+    ts = float(now if now is not None else time.time())
+    return ts + max(float(DUE_TIME_EPSILON_SEC), float(DISPLAY_DUE_WINDOW_SEC))
+
 
 def player_fleet_is_dirty(
     player_id: int,
@@ -71,7 +81,7 @@ def player_has_due_queue_work(
     owns_conn = conn is None
     if owns_conn:
         conn = db()
-    ts = float(now if now is not None else time.time()) + DUE_TIME_EPSILON_SEC
+    ts = due_cutoff_ts(now)
     pid_filter = int(planet_id) if planet_id is not None else None
     try:
         cur = conn.cursor()

@@ -126,6 +126,10 @@ Referenz: `order_total_seconds` / `order_remaining` in `game/shipyard_queue.py`,
 
 Card adapter: `is_queue_job_client_visible()` in `game/queue_card.py` filters due jobs from `card_jobs` / HUD slices.
 
+**Buildings + Research payload parity:** `get_build_queue_status_for_planet` and `get_research_status` strip rows with `remaining <= 0` from `queue` / `summary.count` / free-slot math (GC-833). Finish cutoff uses `due_cutoff_ts()` (`max(ε, 1.0s)`) so jobs that the UI would show as `0s` are deleted before they can occupy a slot. Recalculate must never revive a due head to a full new duration.
+
+Client: Research timer-zero uses the same `requestQueueTimerZeroRefresh` path as Buildings / Shipyard / Defense (not the slower `FINISH_REFRESH_MIN_MS` branch).
+
 ---
 
 ## Single Finish Pass pro Request

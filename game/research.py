@@ -551,6 +551,9 @@ def recalculate_research_queue_finish_times(
     cur = conn.cursor()
     schedule_at = ts
     queued_counts: Dict[str, int] = {}
+    from .queue_poll import due_cutoff_ts
+
+    finish_cutoff = due_cutoff_ts(ts)
 
     for idx, row in enumerate(rows):
         tech = str(row["tech_key"])
@@ -562,6 +565,11 @@ def recalculate_research_queue_finish_times(
         if idx == 0:
             start_existing = float(row["start_at"] or 0)
             finish_existing = float(row["finish_at"] or 0)
+            # Due / display-zero head: never revive to a full duration; leave for finish.
+            if finish_existing <= finish_cutoff:
+                queued_counts[tech] = queued_same + 1
+                schedule_at = ts
+                continue
             if start_existing <= ts < finish_existing:
                 queued_counts[tech] = queued_same + 1
                 schedule_at = finish_existing
@@ -1214,12 +1222,15 @@ def get_research_status(
     levels = get_research_levels(uid, conn=conn)
     queue = get_research_queue_rows(uid, conn=conn)
     now = time.time()
+    from .queue_poll import due_cutoff_ts
+
+    finish_cutoff = due_cutoff_ts(now)
 
     if not skip_finish:
         for _ in range(3):
             if not queue:
                 break
-            if float(queue[0]["finish_at"]) > now:
+            if float(queue[0]["finish_at"]) > finish_cutoff:
                 break
             if conn is not None:
                 from .queue_engine import finish_active_planet_due_work
@@ -1286,6 +1297,9 @@ def get_research_status(
             "position": i + 1,
             **timer_fields,
         })
+
+    # GC-833: due rows must never appear in client payloads (finish above should remove them)
+    queue_list = [q for q in queue_list if int(q.get("remaining") or 0) > 0]
 
     active = queue_list[0] if queue_list else None
 

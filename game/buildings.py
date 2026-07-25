@@ -428,6 +428,9 @@ def recalculate_build_queue_finish_times(
     cur = conn.cursor()
     schedule_at = ts
     queued_counts: Dict[str, int] = {}
+    from .queue_poll import due_cutoff_ts
+
+    finish_cutoff = due_cutoff_ts(ts)
 
     for idx, row in enumerate(rows):
         btype = str(row["building_type"])
@@ -439,6 +442,11 @@ def recalculate_build_queue_finish_times(
         if idx == 0:
             start_existing = float(row["start_time"] or 0)
             finish_existing = float(row["finish_time"] or 0)
+            # Due / display-zero head: never revive to a full duration; leave for finish.
+            if finish_existing <= finish_cutoff:
+                queued_counts[btype] = queued_same + 1
+                schedule_at = ts
+                continue
             if start_existing <= ts < finish_existing:
                 queued_counts[btype] = queued_same + 1
                 schedule_at = finish_existing

@@ -4086,11 +4086,11 @@
 
   function requestFinishRefresh(type) {
     if (!shouldRunGameLoop() || _authLoopAborted) return;
-    if (type === "shipyard" || type === "defense" || type === "buildings") {
+    if (type === "shipyard" || type === "defense" || type === "buildings" || type === "research") {
       requestQueueTimerZeroRefresh({ domain: type, jobId: 0, finishAt: 0 });
       return;
     }
-    const key = type === "research" || type === "planet_evolution" ? type : "buildings";
+    const key = type === "planet_evolution" ? type : "buildings";
     const stale = _hasStaleActiveCardQueue();
     const nowMs = Date.now();
     if (!stale && nowMs - (_finishRefreshLastAt[key] || 0) < FINISH_REFRESH_MIN_MS) return;
