@@ -377,18 +377,18 @@
       <header class="alliance-hub-section-head">
         <span class="alliance-hub-section-title alliance-hub-section-title--with-tip">
           {{ T("alliance_xp_label", "Allianz-XP") }}
-          {{ render_info_popover_trigger(T("alliance_xp_tooltip", "Allianz-XP steigert die Stufe eures Bündnisses. Höhere Stufen schalten Gebäude, Technologien und mehr Mitgliederplätze frei. XP erhaltet ihr durch Spenden und abgeschlossene Projekte.")) }}
+          {{ render_info_popover_trigger(T("alliance_xp_tooltip", "Allianz-XP steigert die Stufe eures Bündnisses. Höhere Stufen schalten Gebäude, Technologien und mehr Mitgliederplätze frei. XP erhaltet ihr durch Spenden, abgeschlossene Projekte und World-Boss-Schaden.")) }}
         </span>
         <span class="alliance-hub-section-sub gc-mono">{{ st.alliance_xp|fmt_int }} / {{ st.alliance_xp_next|fmt_int }}</span>
       </header>
       <div class="alliance-hub-xp-bar-wrap">
         <div class="alliance-hub-xp-bar" style="width: {{ xp_pct }}%"></div>
       </div>
-      <p class="alliance-hub-xp-hint">{{ T("alliance_xp_hint", "XP durch Ressourcenspenden und abgeschlossene Allianz-Projekte.") }}</p>
+      <p class="alliance-hub-xp-hint">{{ T("alliance_xp_hint", "XP durch Ressourcenspenden, abgeschlossene Allianz-Projekte und World-Boss-Schaden.") }}</p>
       <ul class="alliance-hub-xp-sources">
         <li>{{ T("alliance_xp_source_donate", "Ressourcenspenden") }}</li>
         <li>{{ T("alliance_xp_source_projects", "Projektabschlüsse") }}</li>
-        <li>{{ T("alliance_xp_source_future", "Gemeinsame Aktionen (demnächst)") }}</li>
+        <li>{{ T("alliance_xp_source_world_boss", "World-Boss-Schaden") }}</li>
       </ul>
       {% if st.last_donation_xp %}
       <p class="alliance-hub-xp-recent gc-mono">{{ T("alliance_xp_last_donation", "Letzte Spende: +%(xp)s XP", xp=st.last_donation_xp|fmt_int) }}</p>

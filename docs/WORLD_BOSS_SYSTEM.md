@@ -13,7 +13,7 @@ Server-wide PvE bosses: shared HP, multi-player contribution, exclusive meta rew
 | Concern | Owner | Notes |
 |---------|--------|--------|
 | Event state, HP, schedule, contribution, claims | `game/world_boss.py` | Single domain owner |
-| Fleet send / attack arrival | `game/fleet.py` | Mission stays `attack`; target type `world_boss` |
+| Fleet send / attack arrival | `game/fleet.py` | Mission stays `attack`; target type `world_boss`; slot-cap bypass (not mass-expo reserve) |
 | World-native target type | `game/fleet_target.py` | `world_boss` in `WORLD_NATIVE_TARGET_TYPES` |
 | Battle math | `game/combat.py` | `simulate_battle()` only — no second combat engine |
 | Galaxy visibility | `game/galaxy.py` | Slot attach like debris |
@@ -42,16 +42,17 @@ Server-wide PvE bosses: shared HP, multi-player contribution, exclusive meta rew
 ## Combat contract
 
 1. Player sends `attack` to boss coordinates (`target_type=world_boss`, no `target_planet_id`).
-2. On **send**, `note_attack_dispatched` sets `last_attack_at` (wave cooldown starts). In-flight outbound attacks to the same slot are blocked (`world_boss_inflight`).
-3. On arrival, `world_boss.resolve_attack_arrival` builds defender stacks; arrival does **not** reset `last_attack_at`.
-4. `simulate_battle` runs; attacker losses apply to return fleet.
-5. Boss HP damage = `wipe_fraction × WAVE_HP_FRACTION × max_hp × overkill_mult`, capped at `MAX_WAVE_HP_FRACTION × max_hp`.
+2. World Boss attacks **do not consume normal fleet slots** and are not blocked by `fleet_slots_full` (independent of the 3 slots mass-expedition reserves).
+3. On **send**, `note_attack_dispatched` sets `last_attack_at` (wave cooldown starts). In-flight outbound attacks to the same slot are blocked (`world_boss_inflight`).
+4. On arrival, `world_boss.resolve_attack_arrival` builds defender stacks; arrival does **not** reset `last_attack_at`.
+5. `simulate_battle` runs; attacker losses apply to return fleet.
+6. Boss HP damage = `wipe_fraction × WAVE_HP_FRACTION × max_hp × overkill_mult`, capped at `MAX_WAVE_HP_FRACTION × max_hp`.
    - `wipe_fraction = defender_losses_score / wave_stack_score` (0..1)
    - `overkill_mult = max(1, 1 + OVERKILL_LOG_SCALE × log2(max(1, attacker_fleet_score / wave_stack_score)))`
    - Defaults: base 2%, soft overkill `0.15`, cap **8%** → solo mega fleets need ~10–20 waves
-6. If the attacker is in an alliance: Ally XP = `min(20, damage // 75_000)` via `grant_alliance_xp` (owner `game/alliance.py`).
-7. Stacks persist for subsequent waves; debris may spawn; combat report uses defender name = boss label, `defender_id=0`.
-8. When HP ≤ 0 → status `defeated`; rewards unlock. On `ends_at` with HP > 0 → `expired`.
+7. If the attacker is in an alliance: Ally XP = `min(40, damage // 40_000)` via `grant_alliance_xp` (owner `game/alliance.py`); stored on `world_boss_contributions.alliance_xp`.
+8. Stacks persist for subsequent waves; debris may spawn; combat report uses defender name = boss label, `defender_id=0`.
+9. When HP ≤ 0 → status `defeated`; rewards unlock. On `ends_at` with HP > 0 → `expired`.
 
 ### Anti-farm
 
@@ -81,7 +82,7 @@ Participate / discoverer / top10 bonus use the boss definition `loot_pool_key`
 | `alliance_top` | member of #1 alliance by sum damage | `container_ancient_relic` ×1 |
 | `discoverer` | Expo-Finder (must also deal damage) | `loot_pool_key` ×1 extra |
 
-Same item keys stack. Each World Boss card shows `rewards_preview` from the server (no client math). Auction/vote remain free of event inflation.
+Same item keys stack. Each World Boss card shows `rewards_preview` from the server (no client math), including the Ally-XP rule (`+1 / 40k damage`, max 40 / wave) and the player’s earned Ally XP for the event. Auction/vote remain free of event inflation.
 
 Expo discovery ≈ **5.5%** per expedition resolve when under the concurrent cap; spawn is server-wide for everyone.
 

@@ -5617,7 +5617,7 @@
   "alliance_effect_archive_on": "Unlocked",
   "alliance_effect_archive_off": "Locked",
   "alliance_effect_level": "Level %(level)s",
-  "alliance_xp_tooltip": "Alliance XP raises your pact's level. Higher levels unlock buildings, technologies, and more member slots. Earn XP through donations and completed projects.",
+  "alliance_xp_tooltip": "İttifak XP, pakt seviyesini yükseltir. Yüksek seviyeler bina, teknoloji ve üye slotu açar. XP bağış, proje ve World Boss hasarından gelir.",
   "alliance_tooltip_locked": "Requirements not yet met.",
   "alliance_diplomacy_locked_headline": "Diplomacy locked",
   "alliance_diplomacy_unlock_desc": "Build the Diplomacy Center as an alliance project first to manage alliances, NAPs, and war declarations.",
@@ -5719,10 +5719,9 @@
   "alliance_management_title": "Yonetim",
   "alliance_edit_profile_btn": "Profili duzenle",
   "alliance_no_description": "Aciklama yok.",
-  "alliance_xp_hint": "Kaynak bagislari ve tamamlanan projelerle ittifak XP.",
+  "alliance_xp_hint": "Kaynak bağışları, tamamlanan projeler ve World Boss hasarıyla ittifak XP.",
   "alliance_xp_source_donate": "Kaynak bagislari",
   "alliance_xp_source_projects": "Tamamlanan projeler",
-  "alliance_xp_source_future": "Ortak operasyonlar (yakinda)",
   "alliance_xp_last_donation": "Son bagis: +%(xp)s XP",
   "alliance_effect_current": "Su an",
   "alliance_effect_next": "Yukseltme sonrasi",
@@ -5952,5 +5951,11 @@
   "wb_reward_tier_top1": "1. sıra",
   "wb_reward_tier_alliance_top": "En iyi ittifak",
   "wb_reward_tier_discoverer": "Keşfeden",
-  "wb_claimed_rewards": "Alındı"
+  "wb_claimed_rewards": "Alındı",
+  "wb_reward_tier_alliance_xp": "İttifak XP",
+  "wb_reward_alliance_xp_rule": "%(divisor)s hasar başına +1 ittifak XP (maks. %(cap)s / dalga)",
+  "wb_your_alliance_xp": "İttifak XP'n",
+  "wb_col_alliance_xp": "Ally XP",
+  "wb_help_alliance_xp": "İttifak XP: dalga hasarınla ölçeklenir — daha fazla hasar, daha fazla XP (dalga limiti var).",
+  "alliance_xp_source_world_boss": "World Boss hasarı"
 }

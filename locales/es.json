@@ -5617,7 +5617,7 @@
   "alliance_effect_archive_on": "Unlocked",
   "alliance_effect_archive_off": "Locked",
   "alliance_effect_level": "Level %(level)s",
-  "alliance_xp_tooltip": "Alliance XP raises your pact's level. Higher levels unlock buildings, technologies, and more member slots. Earn XP through donations and completed projects.",
+  "alliance_xp_tooltip": "El XP de alianza sube el nivel del pacto. Niveles altos desbloquean edificios, tecnologías y más plazas. Ganas XP con donaciones, proyectos y daño de World Boss.",
   "alliance_tooltip_locked": "Requirements not yet met.",
   "alliance_diplomacy_locked_headline": "Diplomacy locked",
   "alliance_diplomacy_unlock_desc": "Build the Diplomacy Center as an alliance project first to manage alliances, NAPs, and war declarations.",
@@ -5719,10 +5719,9 @@
   "alliance_management_title": "Administracion",
   "alliance_edit_profile_btn": "Editar perfil",
   "alliance_no_description": "Sin descripcion.",
-  "alliance_xp_hint": "XP de la alianza por donaciones y proyectos completados.",
+  "alliance_xp_hint": "XP de alianza por donaciones, proyectos completados y daño de World Boss.",
   "alliance_xp_source_donate": "Donaciones de recursos",
   "alliance_xp_source_projects": "Proyectos completados",
-  "alliance_xp_source_future": "Acciones conjuntas (proximamente)",
   "alliance_xp_last_donation": "Ultima donacion: +%(xp)s XP",
   "alliance_effect_current": "Actual",
   "alliance_effect_next": "Tras mejora",
@@ -5952,5 +5951,11 @@
   "wb_reward_tier_top1": "Puesto 1",
   "wb_reward_tier_alliance_top": "Alianza top",
   "wb_reward_tier_discoverer": "Descubridor",
-  "wb_claimed_rewards": "Reclamado"
+  "wb_claimed_rewards": "Reclamado",
+  "wb_reward_tier_alliance_xp": "XP de alianza",
+  "wb_reward_alliance_xp_rule": "+1 XP de alianza por %(divisor)s de daño (máx. %(cap)s / oleada)",
+  "wb_your_alliance_xp": "Tu XP de alianza",
+  "wb_col_alliance_xp": "XP aliado",
+  "wb_help_alliance_xp": "XP de alianza: escala con el daño de tus oleadas — más daño, más XP (con tope por oleada).",
+  "alliance_xp_source_world_boss": "Daño de World Boss"
 }

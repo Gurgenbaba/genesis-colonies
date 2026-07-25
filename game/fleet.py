@@ -402,10 +402,25 @@ def count_active_fleet_slots(player_id: int, *, conn=None) -> int:
             return 0
         placeholders = ",".join("?" for _ in ACTIVE_FLEET_STATUSES)
         cur = conn.cursor()
+        # World Boss attacks do not consume normal fleet slots (mass-expo reserve stays usable).
+        wb_exclude = ""
+        if table_exists(conn, "world_boss_events"):
+            wb_exclude = """
+              AND NOT (
+                mission_type = 'attack'
+                AND EXISTS (
+                  SELECT 1 FROM world_boss_events e
+                  WHERE e.galaxy = fleet_movements.target_galaxy
+                    AND e.system = fleet_movements.target_system
+                    AND e.position = fleet_movements.target_position
+                )
+              )
+            """
         cur.execute(
             f"""
             SELECT COUNT(*) AS c FROM fleet_movements
-            WHERE player_id = ? AND status IN ({placeholders});
+            WHERE player_id = ? AND status IN ({placeholders})
+            {wb_exclude};
             """,
             (int(player_id), *ACTIVE_FLEET_STATUSES),
         )
@@ -1353,7 +1368,13 @@ def validate_fleet_send(
         return False, bal_reason, {"target": target_info, "preview": preview}
 
     slots = get_fleet_slot_status(player_id, conn=conn)
-    if slots["free"] <= 0:
+    # World Boss attacks are event overflow: never blocked by fleet_slots_full /
+    # the 3 slots mass-expedition reserves for normal ops.
+    is_world_boss_attack = (
+        mission == "attack"
+        and str((target_info or {}).get("target_type") or "") == "world_boss"
+    )
+    if slots["free"] <= 0 and not is_world_boss_attack:
         return False, "fleet_slots_full", {"target": target_info, "preview": preview}
 
     if mission == "colonize" and int(ships_n.get("seed_ark") or 0) < 1:

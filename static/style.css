@@ -26643,6 +26643,12 @@ button.pe-hero-planet-hint:focus-visible {
   padding-left: 1.1rem;
   font-size: 0.78rem;
 }
+.gc-world-boss-page .gc-world-boss-ally-xp {
+  color: rgba(180, 230, 255, 0.92);
+}
+.gc-world-boss-page .gc-world-boss-reward-row[data-wb-reward-tier="alliance_xp"] .gc-world-boss-reward-tier {
+  color: rgba(160, 220, 255, 0.95);
+}
 @media (max-width: 640px) {
   .gc-world-boss-page .gc-world-boss-card-body {
     grid-template-columns: 1fr;

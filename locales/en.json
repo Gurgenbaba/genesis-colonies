@@ -5617,7 +5617,7 @@
   "alliance_effect_archive_on": "Unlocked",
   "alliance_effect_archive_off": "Locked",
   "alliance_effect_level": "Level %(level)s",
-  "alliance_xp_tooltip": "Alliance XP raises your pact's level. Higher levels unlock buildings, technologies, and more member slots. Earn XP through donations and completed projects.",
+  "alliance_xp_tooltip": "Alliance XP raises your pact level. Higher levels unlock buildings, technologies, and more member slots. Earn XP through donations, completed projects, and World Boss damage.",
   "alliance_tooltip_locked": "Requirements not yet met.",
   "alliance_diplomacy_locked_headline": "Diplomacy locked",
   "alliance_diplomacy_unlock_desc": "Build the Diplomacy Center as an alliance project first to manage alliances, NAPs, and war declarations.",
@@ -5719,10 +5719,9 @@
   "alliance_management_title": "Management",
   "alliance_edit_profile_btn": "Edit profile",
   "alliance_no_description": "No description provided.",
-  "alliance_xp_hint": "Alliance XP from resource donations and completed alliance projects.",
+  "alliance_xp_hint": "Alliance XP from resource donations, completed projects, and World Boss damage.",
   "alliance_xp_source_donate": "Resource donations",
   "alliance_xp_source_projects": "Completed projects",
-  "alliance_xp_source_future": "Joint operations (coming soon)",
   "alliance_xp_last_donation": "Latest donation: +%(xp)s XP",
   "alliance_effect_current": "Current",
   "alliance_effect_next": "After upgrade",
@@ -5952,5 +5951,11 @@
   "wb_reward_tier_top1": "Rank 1",
   "wb_reward_tier_alliance_top": "Top alliance",
   "wb_reward_tier_discoverer": "Discoverer",
-  "wb_claimed_rewards": "Claimed"
+  "wb_claimed_rewards": "Claimed",
+  "wb_reward_tier_alliance_xp": "Alliance XP",
+  "wb_reward_alliance_xp_rule": "+1 Alliance XP per %(divisor)s damage (max %(cap)s / wave)",
+  "wb_your_alliance_xp": "Your Alliance XP",
+  "wb_col_alliance_xp": "Ally XP",
+  "wb_help_alliance_xp": "Alliance XP: Scales with your wave damage — more damage means more Ally XP (capped per wave).",
+  "alliance_xp_source_world_boss": "World Boss damage"
 }

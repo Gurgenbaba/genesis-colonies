@@ -241,7 +241,7 @@ Multi-Kolonie-Ressourcenbewegung über **`/logistics`** und `collect_resources` 
 
 ### Slot-Regeln
 
-- `get_fleet_slot_status(player_id)` → `free` muss **> 0** sein; pro Leg ein Slot. Logistik nutzt **alle** freien Slots (kein `MASS_EXPEDITION_SLOT_RESERVE` — Reserve nur bei Mass-Expedition). Mehr gewählte Kolonien als freie Slots → Route auf **`free`** gekappt (deterministische Sortierung; Equal-Split erst danach); übersprungene Ziele in Preview (`targets_skipped`). Bei **0** freien Slots: `fleet_slots_full`.
+- `get_fleet_slot_status(player_id)` → `free` muss **> 0** sein; pro Leg ein Slot. **Ausnahme:** World-Boss-`attack` (target_type `world_boss`) — kein `fleet_slots_full`, zählt nicht gegen den Slot-Pool (unabhängig von `MASS_EXPEDITION_SLOT_RESERVE`). Logistik nutzt **alle** freien Slots (kein `MASS_EXPEDITION_SLOT_RESERVE` — Reserve nur bei Mass-Expedition). Mehr gewählte Kolonien als freie Slots → Route auf **`free`** gekappt (deterministische Sortierung; Equal-Split erst danach); übersprungene Ziele in Preview (`targets_skipped`). Bei **0** freien Slots: `fleet_slots_full` (außer World Boss).
 - Basis-Slots: **`navigation_tech`**-Tiers (Fallback 3) — identisch zu Einzel-`send_fleet`; siehe `fleet_slots_for_navigation_level()` in `game/research.py`.
 - Bulk-Job blockiert atomisch: zu wenig Schiffe auf dem Hub → Rollback des gesamten Collect/Distribute-POST.
 

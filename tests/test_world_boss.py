@@ -188,6 +188,14 @@ def test_world_boss_galaxy_ui_contracts():
     assert "data-wb-attack-cooldown" in page
     assert "gc-world-boss-rewards" in page
     assert "rewards_preview" in page or "wb_rewards_title" in page
+    assert "wb_reward_tier_alliance_xp" in page or "alliance_xp" in page
+    assert "wb_your_alliance_xp" in page
+    assert "wb_col_alliance_xp" in page
+    assert "wb_help_alliance_xp" in page
+
+    alliance_page = Path("templates/alliance.html").read_text(encoding="utf-8")
+    assert "alliance_xp_source_world_boss" in alliance_page
+    assert "alliance_xp_source_future" not in alliance_page
 
     css = Path("static/style.css").read_text(encoding="utf-8")
     assert "object-fit: contain" in css
@@ -246,12 +254,12 @@ def test_nav_badges_world_boss_live(wb_db):
 
 def test_attack_grants_alliance_xp(wb_db):
     from game.alliance import create_alliance, get_player_alliance
-    from game.world_boss import alliance_xp_from_boss_damage
+    from game.world_boss import alliance_xp_from_boss_damage, build_world_boss_payload
 
     assert alliance_xp_from_boss_damage(0) == 0
-    assert alliance_xp_from_boss_damage(74_999) == 0
-    assert alliance_xp_from_boss_damage(75_000) == 1
-    assert alliance_xp_from_boss_damage(1_500_000) == 20  # capped
+    assert alliance_xp_from_boss_damage(39_999) == 0
+    assert alliance_xp_from_boss_damage(40_000) == 1
+    assert alliance_xp_from_boss_damage(1_600_000) == 40  # capped
 
     uid = _player(name="AllyBoss")
     conn = db()
@@ -312,6 +320,20 @@ def test_attack_grants_alliance_xp(wb_db):
         )
         assert after == before + expected
         assert after > before
+        # Ledger on contribution
+        from game.world_boss import list_contributions
+
+        rows = list_contributions(int(event["id"]), conn=conn)
+        mine = next(r for r in rows if int(r["player_id"]) == uid)
+        assert int(mine["alliance_xp"]) == expected
+        payload = build_world_boss_payload(uid, conn=conn, event_id=int(event["id"]))
+        card = next(
+            c
+            for c in (payload.get("events") or [])
+            if int((c.get("event") or {}).get("id") or 0) == int(event["id"])
+        )
+        assert int((card.get("player") or {}).get("alliance_xp_earned") or 0) == expected
+        assert any(r.get("tier") == "alliance_xp" for r in (card.get("rewards_preview") or []))
         commit(conn)
     finally:
         conn.close()
@@ -562,6 +584,85 @@ def test_alliance_board(wb_db):
         assert board[0]["damage"] == 5000
         payload = build_world_boss_payload(uid, conn=conn, event_id=event_id)
         assert payload["alliance_board"]
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_world_boss_attack_ignores_fleet_slot_cap(wb_db):
+    """WB attacks must work when all normal slots are full (mass-expo reserve independent)."""
+    from game.fleet import get_fleet_slot_status
+    from game.models import get_planets_by_player
+
+    uid = _player(name="SlotFull")
+    pid = _home(uid)
+    _fund(pid)
+    _seed_combat_fleet(pid, uid)
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        # Ensure baseline 3 slots (nav 0).
+        conn.execute(
+            """
+            INSERT INTO research_levels (user_id, tech_key, level)
+            VALUES (?, 'navigation_tech', 0)
+            ON CONFLICT(user_id, tech_key) DO UPDATE SET level = 0;
+            """,
+            (uid,),
+        )
+        slots0 = get_fleet_slot_status(uid, conn=conn)
+        assert int(slots0["max"]) == 3
+        # Fill all slots with expedition fleets.
+        home = conn.execute(
+            "SELECT galaxy, system, position FROM planets WHERE id = ?;",
+            (pid,),
+        ).fetchone()
+        hg, hs = int(home["galaxy"]), int(home["system"])
+        for i in range(3):
+            ok, err, _ = send_fleet(
+                player_id=uid,
+                origin_planet_id=pid,
+                target_galaxy=hg,
+                target_system=hs,
+                target_position=16,
+                mission_type="expedition",
+                ships={"falcon_interceptor": 1},
+                resources={},
+                speed_percent=100,
+                conn=conn,
+            )
+            assert ok, (i, err)
+        slots_full = get_fleet_slot_status(uid, conn=conn)
+        assert int(slots_full["free"]) == 0
+
+        boss_pos = 8 if int(home["position"]) != 8 else 9
+        spawn = spawn_world_boss(
+            "ancient_leviathan",
+            conn=conn,
+            galaxy=hg,
+            system=hs,
+            position=boss_pos,
+            announce=False,
+        )
+        assert spawn["ok"], spawn
+        ok_wb, err_wb, res_wb = send_fleet(
+            player_id=uid,
+            origin_planet_id=pid,
+            target_galaxy=hg,
+            target_system=hs,
+            target_position=boss_pos,
+            mission_type="attack",
+            ships={"falcon_interceptor": 5},
+            resources={},
+            speed_percent=100,
+            conn=conn,
+        )
+        assert ok_wb, err_wb
+        assert res_wb
+        # WB must not consume the normal slot pool.
+        slots_after = get_fleet_slot_status(uid, conn=conn)
+        assert int(slots_after["free"]) == 0
+        assert int(slots_after["active"]) == 3
         commit(conn)
     finally:
         conn.close()
@@ -839,6 +940,9 @@ def test_rewards_preview_uses_boss_loot_pool(wb_db):
     participate = next(r for r in preview_void if r["tier"] == "participate")
     assert participate["grants"][0]["item_key"] == "container_void_artifact"
     assert int(participate["grants"][0]["amount"]) == 2
+    ally = next(r for r in preview_void if r["tier"] == "alliance_xp")
+    assert int(ally["divisor"]) == 40_000
+    assert int(ally["wave_cap"]) == 40
 
     preview_nexus = build_rewards_preview("container_ancient_relic")
     participate_nx = next(r for r in preview_nexus if r["tier"] == "participate")

@@ -161,9 +161,19 @@
                   <li class="gc-world-boss-reward-row" data-wb-reward-tier="{{ row.tier }}">
                     <span class="gc-world-boss-reward-tier">{{ T(row.label_key, row.tier) }}</span>
                     <span class="gc-world-boss-reward-grants">
+                      {% if row.tier == 'alliance_xp' %}
+                      {% set g0 = row.grants[0] if row.grants else none %}
+                      <span class="gc-mono">{{ T(
+                        (g0.name_key if g0 and g0.name_key is defined else 'wb_reward_alliance_xp_rule'),
+                        '+1 Allianz-XP je %(divisor)s Schaden (max %(cap)s / Welle)',
+                        divisor=((g0.divisor if g0 and g0.divisor is defined else row.divisor)|default(40000)|fmt_int),
+                        cap=((g0.wave_cap if g0 and g0.wave_cap is defined else row.wave_cap)|default(40)|int)
+                      ) }}</span>
+                      {% else %}
                       {% for g in row.grants %}
                       <span class="gc-mono">{{ T(g.name_key, g.item_key) }} ×{{ g.amount }}</span>{% if not loop.last %}<span class="gc-world-boss-reward-sep" aria-hidden="true"> · </span>{% endif %}
                       {% endfor %}
+                      {% endif %}
                     </span>
                   </li>
                   {% endfor %}
@@ -190,6 +200,10 @@
               {% if player_info and player_info.contribution %}
               <p class="hint">{{ T("wb_your_damage", "Dein Schaden") }}:
                 <span class="gc-mono">{{ player_info.contribution.damage|fmt_int }}</span></p>
+              {% endif %}
+              {% if player_info and (player_info.alliance_xp_earned|default(0)|int) > 0 %}
+              <p class="hint gc-world-boss-ally-xp">{{ T("wb_your_alliance_xp", "Dein Allianz-XP") }}:
+                <span class="gc-mono">+{{ player_info.alliance_xp_earned|fmt_int }}</span></p>
               {% endif %}
             </div>
           </div>
@@ -252,6 +266,7 @@
                       <th>{{ T("wb_col_rank", "Rang") }}</th>
                       <th>{{ T("wb_col_alliance", "Allianz") }}</th>
                       <th>{{ T("wb_col_damage", "Schaden") }}</th>
+                      <th>{{ T("wb_col_alliance_xp", "Ally-XP") }}</th>
                       <th>{{ T("wb_col_members", "Mitglieder") }}</th>
                     </tr>
                   </thead>
@@ -261,6 +276,7 @@
                       <td>#{{ row.rank }}</td>
                       <td>[{{ row.alliance_tag }}] {{ row.alliance_name }}</td>
                       <td>{{ row.damage|fmt_int }}</td>
+                      <td class="gc-mono">+{{ (row.alliance_xp|default(0))|fmt_int }}</td>
                       <td>{{ row.members }}</td>
                     </tr>
                     {% endfor %}
@@ -270,6 +286,7 @@
                       <td>#{{ row.rank }}</td>
                       <td>[{{ row.alliance_tag }}] {{ row.alliance_name }}</td>
                       <td>{{ row.damage|fmt_int }}</td>
+                      <td class="gc-mono">+{{ (row.alliance_xp|default(0))|fmt_int }}</td>
                       <td>{{ row.members }}</td>
                     </tr>
                     {% endfor %}
@@ -312,7 +329,8 @@
           <li>{{ T("wb_help_hp", "Geteilte HP: Schaden skaliert mit Overkill; Mega-Flotten brauchen etwa 10–20 Wellen solo.") }}</li>
           <li>{{ T("wb_help_attack", "Angriff: Schicke eine Flotte mit Mission Angriff — Cooldown startet beim Absenden.") }}</li>
           <li>{{ T("wb_help_board", "Rangliste: Pro Boss-Card einklappbar; Schaden pro Spieler und Allianz.") }}</li>
-          <li>{{ T("wb_help_rewards", "Belohnungen: Pro Boss eigene Teilnahme-Container (loot_pool); Top 10 % Void + Boss-Loot; Platz 1 Mythic; Top-Allianz Relic; Expo-Entdecker +1 Boss-Loot.") }}</li>
+          <li>{{ T("wb_help_rewards", "Belohnungen: Pro Boss eigene Teilnahme-Container; Top 10 % Void + Boss-Loot; Platz 1 Mythic; Top-Allianz Relic; Expo-Entdecker +1 Boss-Loot.") }}</li>
+          <li>{{ T("wb_help_alliance_xp", "Allianz-XP: Skaliert mit dem Schaden deiner Wellen — mehr Schaden, mehr Ally-XP (mit Cap pro Welle).") }}</li>
           <li>{{ T("wb_help_limits", "Limits: Cooldown und Wellenlimit gelten pro Boss-Ereignis.") }}</li>
           <li>{{ T("wb_help_schedule", "Zeitplan: Bis zu 3 parallele Bosse; Spawn alle paar Stunden oder selten per Expedition.") }}</li>
         </ul>

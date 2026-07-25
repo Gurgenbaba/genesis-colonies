@@ -48,9 +48,9 @@ OVERKILL_LOG_SCALE = 0.15
 MAX_WAVE_HP_FRACTION = 0.08
 
 # Alliance XP from world-boss damage (good, not OP vs donation daily ~150).
-# ~1 XP per 75k damage; hard cap per wave so mega fleets cannot dump levels.
-ALLIANCE_XP_DAMAGE_DIVISOR = 75_000
-ALLIANCE_XP_PER_WAVE_CAP = 20
+# ~1 XP per 40k damage; hard cap per wave so mega fleets cannot dump levels.
+ALLIANCE_XP_DAMAGE_DIVISOR = 40_000
+ALLIANCE_XP_PER_WAVE_CAP = 40
 
 
 def alliance_xp_from_boss_damage(damage: int) -> int:
@@ -59,6 +59,24 @@ def alliance_xp_from_boss_damage(damage: int) -> int:
     if dmg <= 0:
         return 0
     return min(int(ALLIANCE_XP_PER_WAVE_CAP), dmg // int(ALLIANCE_XP_DAMAGE_DIVISOR))
+
+
+def alliance_xp_reward_preview_row() -> Dict[str, Any]:
+    """Server-authored Ally-XP rule for World Boss reward cards."""
+    return {
+        "tier": "alliance_xp",
+        "label_key": "wb_reward_tier_alliance_xp",
+        "divisor": int(ALLIANCE_XP_DAMAGE_DIVISOR),
+        "wave_cap": int(ALLIANCE_XP_PER_WAVE_CAP),
+        "grants": [
+            {
+                "kind": "alliance_xp",
+                "name_key": "wb_reward_alliance_xp_rule",
+                "divisor": int(ALLIANCE_XP_DAMAGE_DIVISOR),
+                "wave_cap": int(ALLIANCE_XP_PER_WAVE_CAP),
+            }
+        ],
+    }
 
 
 # Reward tiers → inventory container keys (meta-only, known catalog).
@@ -128,6 +146,7 @@ def build_rewards_preview(loot_pool_key: Optional[str] = None) -> List[Dict[str,
                 ],
             }
         )
+    rows.append(alliance_xp_reward_preview_row())
     return rows
 
 
@@ -1187,26 +1206,27 @@ def resolve_attack_arrival(
     except Exception:
         logger.exception("world_boss alliance lookup failed player=%s", player_id)
 
+    alliance_xp_granted = 0
+    wave_xp = 0
+    if alliance_id is not None and int(damage) > 0:
+        wave_xp = alliance_xp_from_boss_damage(int(damage))
+
     _upsert_contribution(
         event_id=int(event["id"]),
         player_id=int(player_id),
         alliance_id=alliance_id,
         damage=damage,
+        alliance_xp=wave_xp,
         now=ts,
         conn=conn,
     )
 
-    alliance_xp_granted = 0
-    if alliance_id is not None and int(damage) > 0:
+    if alliance_id is not None and wave_xp > 0:
         try:
             from .alliance import grant_alliance_xp
 
             alliance_xp_granted = int(
-                grant_alliance_xp(
-                    int(alliance_id),
-                    alliance_xp_from_boss_damage(int(damage)),
-                    conn=conn,
-                )
+                grant_alliance_xp(int(alliance_id), wave_xp, conn=conn)
             )
         except Exception:
             logger.exception(
@@ -1309,9 +1329,40 @@ def _upsert_contribution(
     damage: int,
     now: float,
     conn,
+    alliance_xp: int = 0,
 ) -> None:
     """Apply arrival damage/waves. Preserves ``last_attack_at`` from send-time CD."""
+    from .db import column_exists
+
     dmg = max(0, int(damage))
+    xp = max(0, int(alliance_xp))
+    has_xp_col = column_exists(conn, WORLD_BOSS_CONTRIB_TABLE, "alliance_xp")
+    if has_xp_col:
+        conn.execute(
+            """
+            INSERT INTO world_boss_contributions (
+                event_id, player_id, alliance_id, damage, waves, alliance_xp,
+                last_attack_at, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)
+            ON CONFLICT(event_id, player_id) DO UPDATE SET
+                damage = damage + excluded.damage,
+                waves = waves + 1,
+                alliance_xp = alliance_xp + excluded.alliance_xp,
+                alliance_id = COALESCE(excluded.alliance_id, alliance_id),
+                updated_at = excluded.updated_at;
+            """,
+            (
+                int(event_id),
+                int(player_id),
+                int(alliance_id) if alliance_id is not None else None,
+                dmg,
+                xp,
+                float(now),
+                float(now),
+                float(now),
+            ),
+        )
+        return
     conn.execute(
         """
         INSERT INTO world_boss_contributions (
@@ -1344,9 +1395,13 @@ def list_contributions(
 ) -> List[Dict[str, Any]]:
     if not world_boss_schema_ready(conn):
         return []
+    from .db import column_exists
+
+    has_xp_col = column_exists(conn, WORLD_BOSS_CONTRIB_TABLE, "alliance_xp")
+    xp_select = "c.alliance_xp" if has_xp_col else "0 AS alliance_xp"
     rows = conn.execute(
-        """
-        SELECT c.player_id, c.alliance_id, c.damage, c.waves, c.last_attack_at,
+        f"""
+        SELECT c.player_id, c.alliance_id, c.damage, c.waves, {xp_select}, c.last_attack_at,
                p.name AS player_name, a.tag AS alliance_tag
         FROM world_boss_contributions c
         LEFT JOIN players p ON p.id = c.player_id
@@ -1368,6 +1423,7 @@ def list_contributions(
                 "alliance_tag": str(row["alliance_tag"] or "") or None,
                 "damage": int(row["damage"] or 0),
                 "waves": int(row["waves"] or 0),
+                "alliance_xp": int(row["alliance_xp"] or 0),
                 "last_attack_at": float(row["last_attack_at"]) if row["last_attack_at"] else None,
             }
         )
@@ -1382,9 +1438,14 @@ def list_alliance_contributions(
 ) -> List[Dict[str, Any]]:
     if not world_boss_schema_ready(conn):
         return []
+    from .db import column_exists
+
+    has_xp_col = column_exists(conn, WORLD_BOSS_CONTRIB_TABLE, "alliance_xp")
+    xp_sum = "COALESCE(SUM(c.alliance_xp), 0)" if has_xp_col else "0"
     rows = conn.execute(
-        """
+        f"""
         SELECT c.alliance_id, SUM(c.damage) AS damage, COUNT(*) AS members,
+               {xp_sum} AS alliance_xp,
                a.tag AS alliance_tag, a.name AS alliance_name
         FROM world_boss_contributions c
         LEFT JOIN alliances a ON a.id = c.alliance_id
@@ -1404,6 +1465,7 @@ def list_alliance_contributions(
                 "alliance_tag": str(row["alliance_tag"] or ""),
                 "alliance_name": str(row["alliance_name"] or ""),
                 "damage": int(row["damage"] or 0),
+                "alliance_xp": int(row["alliance_xp"] or 0),
                 "members": int(row["members"] or 0),
             }
         )
@@ -1696,6 +1758,7 @@ def _event_card_for_player(
             "attack_block_reason": atk_reason if not ok_atk else "",
             "attack_meta": atk_meta,
             "is_discoverer": bool(disc_id and int(disc_id) == int(player_id)),
+            "alliance_xp_earned": int((mine or {}).get("alliance_xp") or 0),
         }
     return {
         "event": event,

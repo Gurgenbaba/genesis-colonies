@@ -118,7 +118,7 @@ Keine Überfüllung: Spende schlägt fehl mit `pool_cap_exceeded`. Officer erhal
 
 ## Progression
 
-- **XP:** Spenden (klein, `DONATION_XP_DAILY_CAP` pro Spieler/Tag) + Projektabschluss (`cost_sum / PROJECT_XP_DIVISOR`) + World-Boss-Schaden (`grant_alliance_xp`, Formel in `world_boss.alliance_xp_from_boss_damage`).
+- **XP:** Spenden (klein, `DONATION_XP_DAILY_CAP` pro Spieler/Tag) + Projektabschluss (`cost_sum / PROJECT_XP_DIVISOR`) + World-Boss-Schaden (`grant_alliance_xp`, Formel `min(40, damage // 40_000)` in `world_boss.alliance_xp_from_boss_damage`, Ledger auf `world_boss_contributions.alliance_xp`).
 - **Level:** `alliance_level_from_xp()` — schaltet Gebäude/Tech-Voraussetzungen frei, keine Pflicht-Mega-Boni.
 
 ## Technologien (serverseitig)
