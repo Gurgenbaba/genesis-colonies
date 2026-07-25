@@ -57,12 +57,14 @@ Expire-on-view: `expire_due_asteroids` runs from board build / system attach (de
 
 ## Types (catalog in `asteroids.py`)
 
-| Key | Split (approx) | Total range |
-|-----|----------------|-------------|
-| `ferronite_rock` | 70/25/5 M/C/F | 600k–3.0M |
-| `crytite_shard` | 25/70/5 | 600k–3.0M |
-| `fuel_ice` | 15/15/70 | 500k–2.5M |
-| `mixed_belt` | 40/40/20 | 800k–4.5M |
+| Key | Split bias (approx) | Per-resource range |
+|-----|---------------------|--------------------|
+| `ferronite_rock` | 70/25/5 M/C/F | 10M–150M each |
+| `crytite_shard` | 25/70/5 | 10M–150M each |
+| `fuel_ice` | 15/15/70 | 10M–150M each |
+| `mixed_belt` | 40/40/20 | 10M–150M each |
+
+Each resource rolls independently inside the band; catalog split only biases toward the high end for preferred resources.
 
 Cargo take = `min(fleet_cargo, pool)`; asteroid is fully claimed and removed even if leftover cargo capacity is insufficient (remainder lost).
 

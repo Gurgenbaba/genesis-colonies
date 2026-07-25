@@ -34,35 +34,38 @@ SPAWN_SEARCH_SYSTEM_LIMIT = 64
 
 SPAWN_RUNTIME_KEY = "asteroid_belt_last_spawn_at"
 
-# Catalog: weighted types with resource split hints and worthwhile total ranges.
+# Catalog: weighted types with resource split hints.
+# Each resource (metal / crystal / fuel_cells) rolls independently in this band.
+ASTEROID_RESOURCE_RANGE = (10_000_000, 150_000_000)
+
 ASTEROID_CATALOG: Dict[str, Dict[str, Any]] = {
     "ferronite_rock": {
         "name_key": "asteroid_type_ferronite_rock",
         "desc_key": "asteroid_type_ferronite_rock_desc",
         "spawn_weight": 35,
         "split": {"metal": 0.70, "crystal": 0.25, "fuel_cells": 0.05},
-        "total_range": (600_000, 3_000_000),
+        "resource_range": ASTEROID_RESOURCE_RANGE,
     },
     "crytite_shard": {
         "name_key": "asteroid_type_crytite_shard",
         "desc_key": "asteroid_type_crytite_shard_desc",
         "spawn_weight": 30,
         "split": {"metal": 0.25, "crystal": 0.70, "fuel_cells": 0.05},
-        "total_range": (600_000, 3_000_000),
+        "resource_range": ASTEROID_RESOURCE_RANGE,
     },
     "fuel_ice": {
         "name_key": "asteroid_type_fuel_ice",
         "desc_key": "asteroid_type_fuel_ice_desc",
         "spawn_weight": 20,
         "split": {"metal": 0.15, "crystal": 0.15, "fuel_cells": 0.70},
-        "total_range": (500_000, 2_500_000),
+        "resource_range": ASTEROID_RESOURCE_RANGE,
     },
     "mixed_belt": {
         "name_key": "asteroid_type_mixed_belt",
         "desc_key": "asteroid_type_mixed_belt_desc",
         "spawn_weight": 15,
         "split": {"metal": 0.40, "crystal": 0.40, "fuel_cells": 0.20},
-        "total_range": (800_000, 4_500_000),
+        "resource_range": ASTEROID_RESOURCE_RANGE,
     },
 }
 
@@ -360,21 +363,30 @@ def estimate_reclaimer_slots_needed(
 
 
 def _roll_loot(asteroid_key: str, *, rng: Optional[random.Random] = None) -> Dict[str, int]:
+    """Roll metal/crystal/fuel independently in the catalog resource band.
+
+    Type ``split`` biases which resources land toward the high end of the band
+    (still every resource stays within ``resource_range``).
+    """
     catalog = ASTEROID_CATALOG.get(str(asteroid_key)) or ASTEROID_CATALOG["mixed_belt"]
     roll = rng or random
-    lo, hi = catalog["total_range"]
-    total = int(roll.randint(int(lo), int(hi)))
-    split = dict(catalog["split"])
-    # Light per-resource jitter (±8%) then renormalize.
-    jittered: Dict[str, float] = {}
-    for key, share in split.items():
-        jitter = 1.0 + roll.uniform(-0.08, 0.08)
-        jittered[key] = max(0.01, float(share) * jitter)
-    ssum = sum(jittered.values()) or 1.0
-    metal = int(round(total * jittered["metal"] / ssum))
-    crystal = int(round(total * jittered["crystal"] / ssum))
-    fuel = max(0, total - metal - crystal)
-    return {"metal": max(0, metal), "crystal": max(0, crystal), "fuel_cells": max(0, fuel)}
+    lo, hi = catalog.get("resource_range") or ASTEROID_RESOURCE_RANGE
+    lo_i, hi_i = int(lo), int(hi)
+    if hi_i < lo_i:
+        lo_i, hi_i = hi_i, lo_i
+    split = dict(catalog.get("split") or {})
+    equal = 1.0 / 3.0
+    out: Dict[str, int] = {}
+    for key in ("metal", "crystal", "fuel_cells"):
+        share = float(split.get(key) or equal)
+        # Map share vs equal into [0, 1] bias toward hi for preferred resources.
+        bias = max(0.0, min(1.0, 0.5 + (share - equal) * 1.25))
+        jitter = roll.uniform(-0.08, 0.08)
+        t = max(0.0, min(1.0, bias + jitter))
+        span = hi_i - lo_i
+        out[key] = int(lo_i + round(span * t))
+        out[key] = max(lo_i, min(hi_i, out[key]))
+    return out
 
 
 def _pick_weighted_key(*, rng: Optional[random.Random] = None) -> str:

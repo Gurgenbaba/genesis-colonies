@@ -11,9 +11,12 @@ import pytest
 
 from game import db as gdb
 from game.asteroids import (
+    ASTEROID_CATALOG,
+    ASTEROID_RESOURCE_RANGE,
     INTER_WAVE_COOLDOWN_SEC,
     SPAWN_RUNTIME_KEY,
     TTL_SECONDS,
+    _roll_loot,
     asteroid_schema_ready,
     build_asteroid_board_entries,
     build_schedule_info,
@@ -87,6 +90,17 @@ def _fund(planet_id: int):
         commit(conn)
     finally:
         conn.close()
+
+
+def test_asteroid_loot_rolls_each_resource_in_band():
+    lo, hi = ASTEROID_RESOURCE_RANGE
+    assert lo == 10_000_000
+    assert hi == 150_000_000
+    for key in ASTEROID_CATALOG:
+        for seed in range(40):
+            loot = _roll_loot(key, rng=random.Random(seed))
+            for res in ("metal", "crystal", "fuel_cells"):
+                assert lo <= int(loot[res]) <= hi, (key, seed, res, loot)
 
 
 def _free_slot_near(galaxy: int, system: int) -> int:
