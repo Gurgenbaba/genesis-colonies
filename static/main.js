@@ -669,7 +669,28 @@
       || r === "timer_done"
       || r === "shipyard_build"
       || r === "defense_build"
+      || r === "fleet_recall"
+      || r === "logistics_action"
     );
+  }
+
+  function isFleetMutationSyncReason(reason) {
+    const r = String(reason || "");
+    if (!r || r.endsWith("_error")) return false;
+    return (
+      r === "fleet_recall"
+      || r === "logistics_action"
+      || (r.startsWith("fleet_") && isMutationStatePatchReason(r))
+    );
+  }
+
+  /** Bridge fleet-page live list after HUD-facing fleet mutations (coalesced). */
+  function syncFleetUiAfterMutation(reason) {
+    if (!isFleetMutationSyncReason(reason)) return;
+    if (typeof GC.scheduleFleetStateRefresh !== "function") return;
+    const fleetPage = document.getElementById("fleet-page");
+    if (!fleetPage || fleetPage.dataset.ready !== "1") return;
+    GC.scheduleFleetStateRefresh(String(reason || "fleet_mutation"), { immediate: true });
   }
 
   function resetQueueRenderSignaturesForImmediatePatch() {
@@ -1525,6 +1546,7 @@
     if (!isPlanetSwitch) {
       _finalizeTimekeeperQueueButtons(state);
       _schedulePlanetEvolutionRefreshAfterAction(reasonStr);
+      syncFleetUiAfterMutation(reasonStr);
       if (shouldPollGameState()) {
         GC.startPolling(anyActive || hasBusyLiveActivity());
       }
@@ -9641,6 +9663,9 @@
       const at = Number(el.dataset.countdownAt || 0);
       if (at && Math.ceil(at - now) <= 0) return true;
     }
+    if (typeof hasExpiredFleetDrawerMovement === "function" && hasExpiredFleetDrawerMovement(now)) {
+      return true;
+    }
     return false;
   }
 
@@ -11432,6 +11457,19 @@
       cdEl.classList.toggle("is-urgent", urgent);
       if (mv) patchFleetHudFlightTrack(row, mv, remaining);
     });
+    // Collapsed rows are not in the DOM — still expire from the remembered map.
+    if (hasExpiredFleetDrawerMovement(now)) {
+      requestMovementCountdownRefresh("fleet");
+    }
+  }
+
+  function hasExpiredFleetDrawerMovement(serverNow) {
+    const now = Number.isFinite(serverNow) ? serverNow : getTimerServerNow();
+    for (const mv of _fleetDrawerMovementById.values()) {
+      const remaining = fleetDrawerRemainingSeconds(mv, now);
+      if (remaining <= 0 && fleetDrawerCountdownAt(mv) > 0) return true;
+    }
+    return false;
   }
 
   function rememberFleetDrawerMovements(items) {
@@ -12280,9 +12318,18 @@
       if (moreBtn) {
         e.preventDefault();
         e.stopPropagation();
-        setFleetDrawerShowAll(!isFleetDrawerShowAll());
+        const willExpand = !isFleetDrawerShowAll();
+        setFleetDrawerShowAll(willExpand);
         if (GC.lastState?.active_fleets) {
           renderGlobalFleetHud(GC.lastState.active_fleets);
+        }
+        if (willExpand) {
+          if (typeof GC.refreshGameState === "function") {
+            void GC.refreshGameState("fleet_drawer_expand");
+          }
+          if (typeof GC.scheduleFleetStateRefresh === "function") {
+            GC.scheduleFleetStateRefresh("fleet_drawer_expand", { immediate: true });
+          }
         }
       }
     });

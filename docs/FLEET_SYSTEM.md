@@ -328,6 +328,7 @@ Response envelope: `{ ok, error, message_key, data }` via `fleet_api.py`.
 - Forms: `data-no-pjax` (fetch-only send)
 - `scheduleFleetStateRefresh()` / `refreshFleetState()` — coalesced (ein In-Flight-Request); nach Actions und Countdown-Zero
 - `applyLiveState` → `renderActiveFleets` patched die aktive Liste (Signatur); kein erneutes `initFleet()` nur wegen State
+- **Fleet UI Sync:** Action → Drawer/HUD via `state.active_fleets` (`patchFleetHudFromActionPayload`); Fleet-Page via `syncFleetUiAfterMutation` → coalesced `/api/fleet/state`. Reasons `fleet_recall` / `logistics_action` sind Mutation-Reasons. Collapsed Drawer-Rows tickern über `_fleetDrawerMovementById` (off-DOM expiry). Expand („Weitere anzeigen“) triggert `fleet_drawer_expand` Game-State (+ Fleet-State wenn Page mounted).
 - Countdown-Zero: kein Reload pro Zeile — debounce + ein Game-State-Refresh (`fleet_countdown_expired`)
 - Mobile Fleet-Drawer: `is-show-all` / „Weniger anzeigen“ bleibt; Sheet-Layout nur bei Expand-Änderung
 - Realigns `planet_id` from `GC.lastState.active_planet_id`

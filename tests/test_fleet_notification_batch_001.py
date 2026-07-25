@@ -99,6 +99,27 @@ def test_locale_batch_keys_present_all_languages():
             assert f'"{key}"' in text, f"missing {key} in {lang}"
 
 
+def test_sync_fleet_ui_after_mutation_bridge():
+    """Fleet mutations must refresh the fleet page list when mounted (HUD already via applyActionState)."""
+    src = _read("static/main.js")
+    assert "function syncFleetUiAfterMutation(reason)" in src
+    assert "function isFleetMutationSyncReason(reason)" in src
+    bridge = src.split("function syncFleetUiAfterMutation(reason)")[1].split(
+        "function resetQueueRenderSignaturesForImmediatePatch"
+    )[0]
+    assert "scheduleFleetStateRefresh" in bridge
+    assert 'fleetPage.dataset.ready !== "1"' in bridge or 'dataset.ready !== "1"' in bridge
+    mutation = src.split("function isMutationStatePatchReason(reason)")[1].split(
+        "function isFleetMutationSyncReason"
+    )[0]
+    assert 'r === "fleet_recall"' in mutation
+    assert 'r === "logistics_action"' in mutation
+    apply = src.split("function applyActionState(json, reason)")[1].split(
+        "function logStatusPollErrorOnce"
+    )[0]
+    assert "syncFleetUiAfterMutation(reasonStr)" in apply
+
+
 def test_docs_mention_batch_rule():
     state = _read("docs/STATE_AJAX.md")
     assert "GC-FLEET-NOTIFICATION-BATCH-001" in state

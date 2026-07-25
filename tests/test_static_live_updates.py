@@ -2481,6 +2481,36 @@ def test_main_js_timekeeper_buttons_sync_immediately_after_action_state():
     assert "_finalizeTimekeeperQueueButtons(GC.lastState)" in tab
     mutation = src.split("function isMutationStatePatchReason(reason)")[1].split("function resetQueueRenderSignaturesForImmediatePatch")[0]
     assert 'r.endsWith("_apply")' in mutation
+    assert 'r === "fleet_recall"' in mutation
+    assert 'r === "logistics_action"' in mutation
+    assert "function isFleetMutationSyncReason(reason)" in src
+    assert "function syncFleetUiAfterMutation(reason)" in src
+    apply_fn = src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]
+    assert "syncFleetUiAfterMutation(reasonStr)" in apply_fn
+
+
+def test_main_js_fleet_drawer_offdom_expiry_and_expand_refresh():
+    """Collapsed drawer fleets must expire via movement map; expand refreshes state."""
+    src = _read("static/main.js")
+    assert "function hasExpiredFleetDrawerMovement(serverNow)" in src
+    timers = src.split("function updateFleetDrawerRowTimers(serverNow)")[1].split(
+        "function rememberFleetDrawerMovements(items)"
+    )[0]
+    assert "hasExpiredFleetDrawerMovement(now)" in timers
+    assert 'requestMovementCountdownRefresh("fleet")' in timers
+    expired = src.split("function hasExpiredFleetDrawerMovement(serverNow)")[1].split(
+        "function rememberFleetDrawerMovements(items)"
+    )[0]
+    assert "_fleetDrawerMovementById.values()" in expired
+    stale = src.split("function _anyStaleMovementCountdownDom()")[1].split(
+        "function _noteMovementCountdownStillStale"
+    )[0]
+    assert "hasExpiredFleetDrawerMovement" in stale
+    init = src.split("function initGlobalFleetDrawer()")[1].split(
+        "GC.initGlobalFleetDrawer = initGlobalFleetDrawer"
+    )[0]
+    assert 'refreshGameState("fleet_drawer_expand")' in init
+    assert 'scheduleFleetStateRefresh("fleet_drawer_expand"' in init
 
 
 def test_main_js_inventory_tk_chip_deposits_without_scroll_jump():
