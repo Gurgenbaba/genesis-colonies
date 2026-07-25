@@ -950,6 +950,7 @@ def list_system(
             conn=conn,
             current_galaxy=int(galaxy),
             current_system=int(system),
+            viewer_player_id=viewer_player_id,
         )
     except Exception:
         active_asteroid_board = []

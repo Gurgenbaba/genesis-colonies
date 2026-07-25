@@ -45,14 +45,29 @@
     },
 
     getOriginPlanetId(root) {
-      const fromRoot = parseInt(root?.dataset?.activePlanetId || "0", 10);
-      if (fromRoot > 0) return fromRoot;
+      // PJAX galaxy SSR skips HEADER_ACTIVE_PLANET — prefer explicit page attrs,
+      // then shell switcher / lastState, then getDomPlanetId.
+      const pageRoot = document.getElementById("galaxy-page-root");
+      const switcher = document.getElementById("gc-planet-switcher");
+      const candidates = [
+        root?.dataset?.activePlanetId,
+        pageRoot?.dataset?.activePlanetId,
+        switcher?.dataset?.activePlanetId,
+        window.GC?.lastState?.active_planet_id,
+      ];
+      for (const raw of candidates) {
+        const id = parseInt(raw || "0", 10);
+        if (id > 0) return id;
+      }
       const { getDomPlanetId } = deps();
       return parseInt(getDomPlanetId() || "0", 10) || 0;
     },
 
     getAvailableReclaimers(root) {
-      return Math.max(0, parseInt(root?.dataset?.availableReclaimers || "0", 10) || 0);
+      const pageRoot = document.getElementById("galaxy-page-root");
+      const fromRoot = Math.max(0, parseInt(root?.dataset?.availableReclaimers || "0", 10) || 0);
+      if (fromRoot > 0) return fromRoot;
+      return Math.max(0, parseInt(pageRoot?.dataset?.availableReclaimers || "0", 10) || 0);
     },
 
     resolveRecycleSendCount(root, needed) {
@@ -557,9 +572,14 @@
       const targetPosition = parseInt(wrap.dataset.targetPosition || "0", 10);
       const needed = parseInt(wrap.dataset.recyclerSlots || "0", 10);
       const sendCount = this.resolveRecycleSendCount(root, needed);
+      const originPlanetId = this.getOriginPlanetId(root);
 
-      if (!this.getOriginPlanetId(root) || !targetGalaxy || !targetSystem || !targetPosition) {
+      if (!originPlanetId) {
         showNotify(t("galaxy_debris_recycle_no_origin", "No active colony for recycler launch."), "error");
+        return;
+      }
+      if (!targetGalaxy || !targetSystem || !targetPosition) {
+        showNotify(t("galaxy_debris_recycle_bad_target", "Invalid debris coordinates."), "error");
         return;
       }
       if (needed < 1) {
@@ -625,9 +645,14 @@
       const targetPosition = parseInt(wrap.dataset.targetPosition || "0", 10);
       const needed = parseInt(wrap.dataset.recyclerSlots || "0", 10);
       const sendCount = this.resolveRecycleSendCount(root, needed);
+      const originPlanetId = this.getOriginPlanetId(root);
 
-      if (!this.getOriginPlanetId(root) || !targetGalaxy || !targetSystem || !targetPosition) {
+      if (!originPlanetId) {
         showNotify(t("galaxy_asteroid_harvest_no_origin", "No active colony for asteroid harvest."), "error");
+        return;
+      }
+      if (!targetGalaxy || !targetSystem || !targetPosition) {
+        showNotify(t("galaxy_asteroid_harvest_bad_target", "Invalid asteroid coordinates."), "error");
         return;
       }
       if (needed < 1) {

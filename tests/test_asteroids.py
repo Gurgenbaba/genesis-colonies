@@ -571,6 +571,70 @@ def test_asteroid_board_empty_when_none(ast_db):
     assert data.get("active_asteroid_board") == []
 
 
+def test_asteroid_board_hides_own_outbound_harvest(ast_db):
+    """Once the viewer has sent reclaimers, that asteroid drops from their board."""
+    uid = _player("Hunter")
+    other = _player("Spectator")
+    home_id, g, s, _ = _home(uid)
+    pos = _free_slot_near(g, s)
+    _fund(home_id)
+    now = time.time()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ins = insert_asteroid(
+            conn=conn,
+            galaxy=g,
+            system=s,
+            position=pos,
+            asteroid_key="mixed_belt",
+            now=now,
+            ttl_seconds=TTL_SECONDS,
+            rng=random.Random(11),
+        )
+        assert ins["ok"]
+        add_planet_ships(home_id, uid, {"harvest_reclaimer": 30}, conn=conn)
+        commit(conn)
+
+        board_before = build_asteroid_board_entries(
+            conn=conn, now=now, viewer_player_id=uid
+        )
+        assert any(int(e["position"]) == pos for e in board_before)
+
+        begin_write_transaction(conn)
+        ok, err, _res = send_fleet(
+            player_id=uid,
+            origin_planet_id=home_id,
+            mission_type="recycle",
+            target_galaxy=g,
+            target_system=s,
+            target_position=pos,
+            ships={"harvest_reclaimer": 10},
+            resources={},
+            speed_percent=100,
+            conn=conn,
+        )
+        commit(conn)
+        assert ok, err
+
+        board_self = build_asteroid_board_entries(
+            conn=conn, now=now, viewer_player_id=uid
+        )
+        assert not any(int(e["position"]) == pos for e in board_self)
+
+        board_other = build_asteroid_board_entries(
+            conn=conn, now=now, viewer_player_id=other
+        )
+        assert any(int(e["position"]) == pos for e in board_other)
+
+        via_list = list_system(g, s, viewer_player_id=uid)
+        assert not any(
+            int(e["position"]) == pos for e in via_list.get("active_asteroid_board") or []
+        )
+    finally:
+        conn.close()
+
+
 def test_galaxy_asteroid_board_template_contract():
     from pathlib import Path
 

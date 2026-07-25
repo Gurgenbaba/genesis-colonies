@@ -10,7 +10,7 @@
      data-galaxy-max="{{ nav.galaxy_max if nav.galaxy_max is defined else 1 }}"
      data-system-min="{{ nav.system_min if nav.system_min is defined else 1 }}"
      data-system-max="{{ nav.system_max if nav.system_max is defined else 499 }}"
-     data-active-planet-id="{{ (HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET is defined and HEADER_ACTIVE_PLANET else (active_planet_id if active_planet_id is defined else 0))|int }}"
+     data-active-planet-id="{{ (active_planet_id if active_planet_id is defined and active_planet_id else (HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET is defined and HEADER_ACTIVE_PLANET else 0))|int }}"
      data-available-reclaimers="{{ (sys.available_reclaimers if sys.available_reclaimers is defined else 0)|int }}"
      data-has-seed-ark="{{ '1' if has_seed_ark is defined and has_seed_ark else '0' }}"
      style="--gc-galaxy-map-tile: url('{{ url_for('static', filename='img/map.webp', v=GC_ASSET_VERSION) }}'); --gc-galaxy-map-tile-fallback: url('{{ url_for('static', filename='img/map.png', v=GC_ASSET_VERSION) }}'); --gc-galaxy-debris-img: url('{{ url_for('static', filename='img/debris/debris.jpg', v=GC_ASSET_VERSION) }}');">

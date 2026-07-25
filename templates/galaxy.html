@@ -9,11 +9,14 @@
 {% set is_command_map = (gview == 'command_map') %}
 {% set cmd_map_available = command_map_available if command_map_available is defined else false %}
 
+{% set galaxy_active_planet_id = (active_planet_id if active_planet_id is defined and active_planet_id else (HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET is defined and HEADER_ACTIVE_PLANET else 0))|int %}
 <div class="gc-page galaxy-page"
      id="galaxy-page-root"
      data-galaxy-view="{{ gview }}"
      data-galaxy="{{ nav.galaxy or 1 }}"
      data-system="{{ nav.system or 1 }}"
+     data-active-planet-id="{{ galaxy_active_planet_id }}"
+     data-available-reclaimers="{{ (sys.available_reclaimers if sys.available_reclaimers is defined else 0)|int }}"
      {% if nav.has_prev and not is_command_map %}data-prev-url="{{ url_for('galaxy_view', view='system', galaxy=nav.galaxy, system=nav.prev_system) }}"{% endif %}
      {% if nav.has_next and not is_command_map %}data-next-url="{{ url_for('galaxy_view', view='system', galaxy=nav.galaxy, system=nav.next_system) }}"{% endif %}>
 

@@ -177,22 +177,68 @@ def list_active_asteroids(
     return [_row_to_asteroid(r) for r in rows]
 
 
+def player_outbound_recycle_coords(
+    player_id: int,
+    *,
+    conn,
+) -> Set[Tuple[int, int, int]]:
+    """Coords where this player already has an outbound recycle fleet en route.
+
+    Used to hide asteroids from the viewer's Galaxy board once they have committed
+    a harvest flight (still visible to other players / on the ring until claimed).
+    """
+    if not player_id or not table_exists(conn, "fleet_movements"):
+        return set()
+    rows = conn.execute(
+        """
+        SELECT target_galaxy, target_system, target_position
+        FROM fleet_movements
+        WHERE player_id = ?
+          AND mission_type = 'recycle'
+          AND status = 'outbound'
+          AND target_galaxy IS NOT NULL
+          AND target_system IS NOT NULL
+          AND target_position IS NOT NULL;
+        """,
+        (int(player_id),),
+    ).fetchall()
+    out: Set[Tuple[int, int, int]] = set()
+    for row in rows:
+        try:
+            out.add(
+                (
+                    int(row["target_galaxy"]),
+                    int(row["target_system"]),
+                    int(row["target_position"]),
+                )
+            )
+        except (TypeError, ValueError, KeyError):
+            continue
+    return out
+
+
 def build_asteroid_board_entries(
     *,
     conn,
     now: Optional[float] = None,
     current_galaxy: Optional[int] = None,
     current_system: Optional[int] = None,
+    viewer_player_id: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """UI rows for the Galaxy asteroid board (jump links + TTL sort)."""
     from .galaxy import format_coordinates, galaxy_view_href
 
     ts = float(now if now is not None else _now())
+    hide_coords: Set[Tuple[int, int, int]] = set()
+    if viewer_player_id is not None and int(viewer_player_id) > 0:
+        hide_coords = player_outbound_recycle_coords(int(viewer_player_id), conn=conn)
     entries: List[Dict[str, Any]] = []
     for row in list_active_asteroids(conn=conn, now=ts, limit=MAX_ACTIVE_ASTEROIDS + 5):
         g = int(row["galaxy"])
         s = int(row["system"])
         p = int(row["position"])
+        if (g, s, p) in hide_coords:
+            continue
         coords = format_coordinates(g, s, p)
         href = galaxy_view_href(coords) or f"/galaxy?q={coords}"
         remaining = max(0, int(float(row.get("expires_at") or 0) - ts))

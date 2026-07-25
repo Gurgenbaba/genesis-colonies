@@ -1853,6 +1853,8 @@ def galaxy_view():
         galaxy_nav=galaxy_nav,
         system_data=system_data,
         viewer_player_id=user_id,
+        # Required for PJAX: inject_globals skips HEADER_ACTIVE_PLANET on X-PJAX.
+        active_planet_id=active_planet_id,
         expedition_slot=build_expedition_slot(galaxy, system) if view != "command_map" else None,
         orbit_radii=galaxy_ring_orbit_radii_payload() if view != "command_map" else None,
         hold_mission_enabled=hold_mission_enabled,

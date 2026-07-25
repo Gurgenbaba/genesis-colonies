@@ -677,6 +677,17 @@ def test_galaxy_pjax_renders_without_template_error(galaxy_db, monkeypatch):
     assert "res-value metal" in body
 
 
+def test_galaxy_pjax_includes_active_planet_id_for_fleet_origin(galaxy_db, monkeypatch):
+    """PJAX skips HEADER_ACTIVE_PLANET — Galaxy must still expose origin planet id."""
+    client, uid = _galaxy_client(monkeypatch)
+    planet = get_planets_by_player(uid)[0]
+    pid = int(planet["id"])
+    resp = client.get("/galaxy?view=system", headers={"X-PJAX": "true"})
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert f'data-active-planet-id="{pid}"' in body
+    assert 'data-active-planet-id="0"' not in body
+
 def test_galaxy_empty_slot_shows_colonize_fleet_shortcut(galaxy_db, monkeypatch):
     from game.db import commit
     from game.fleet import add_planet_ships
