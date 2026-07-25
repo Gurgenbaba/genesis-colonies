@@ -16,7 +16,7 @@
      data-recycler-slots="{{ asteroid.recycler_slots_needed or 0 }}"
      {% if harvest_locked %}data-harvest-locked="1"{% endif %}>
   <div class="galaxy-asteroid-block-head">
-    <span class="galaxy-asteroid-icon" aria-hidden="true">◆</span>
+    <span class="galaxy-asteroid-icon" aria-hidden="true"></span>
     <span class="galaxy-asteroid-title">{{ T(asteroid.name_key, asteroid.asteroid_key) }}</span>
     {% if en_route %}
     <span class="galaxy-asteroid-board-badge galaxy-asteroid-board-badge--en-route">

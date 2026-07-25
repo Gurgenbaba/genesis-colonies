@@ -1477,6 +1477,17 @@
     dismissProgressionTooltipsOnStatePatch();
 
     patchFleetHudFromActionPayload(json, reasonStr);
+    if (
+      reasonStr === "fleet_send_success"
+      || reasonStr === "fleet_recall"
+      || reasonStr === "fleet_recall_success"
+    ) {
+      try {
+        if (typeof GC.invalidateGalaxyPjaxCache === "function") {
+          GC.invalidateGalaxyPjaxCache();
+        }
+      } catch (_) {}
+    }
 
     const isPlanetSwitch = reason === "planet_switch";
     if (isPlanetSwitch) {
@@ -1964,8 +1975,11 @@
     lc.intervals = [];
     lc.timeouts = [];
     lc.abortControllers = [];
-    GC.stopProgressTicker();
-    stopResourceTicker();
+    // Soft ingame PJAX keeps the progress ticker so fleet ETAs do not freeze/reset.
+    if (!preserveGameLoop) {
+      GC.stopProgressTicker();
+      stopResourceTicker();
+    }
     _resetQueueLiveStates();
     if (!preserveGameLoop) GC.stopPolling();
     if (typeof GC.hideCardReqTooltip === "function") GC.hideCardReqTooltip();
@@ -31672,6 +31686,10 @@
     if (!main) throw new Error("main-content missing");
     const swapT0 = navPerf ? performance.now() : 0;
     main.innerHTML = payload.mainHtml;
+    // Restore asteroid board open state before paint/init (SSR always ships collapsed).
+    try {
+      GC.GalaxyQuickAction?.initAsteroidBoardToggle?.(main);
+    } catch (_) {}
     if (navPerf) navPerf.swapEndAt = performance.now();
     if (!opts.skipLcpPreload) {
       syncLcpHeroPreload(resolveLcpHeroImageUrl(main));

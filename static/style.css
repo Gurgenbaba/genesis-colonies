@@ -13980,26 +13980,28 @@ body.gc-techtree-media-zoom-open{
   width: 20px;
   height: 20px;
   padding: 0;
-  border: 1px solid rgba(180, 200, 220, 0.7);
-  border-radius: var(--gc-radius-sm, 2px);
-  background: rgba(10, 14, 22, 0.94);
+  border: 1px solid rgba(140, 200, 230, 0.7);
+  border-radius: 50%;
+  background: rgba(8, 12, 20, 0.94);
   cursor: pointer;
-  transform: translate(-50%, -50%) rotate(45deg);
-  box-shadow: 0 0 10px rgba(140, 170, 200, 0.4);
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 10px rgba(90, 170, 220, 0.4);
   transition: border-color .14s ease, box-shadow .14s ease, transform .14s ease;
 }
 .galaxy-ring-asteroid-marker-img{
   display: block;
   width: 100%;
   height: 100%;
-  background:
-    linear-gradient(135deg, rgba(90, 100, 120, 0.9) 0%, rgba(40, 48, 60, 0.95) 55%, rgba(160, 170, 180, 0.55) 100%);
+  border-radius: 50%;
+  background-image: var(--gc-galaxy-asteroid-img, url("img/debris/asteroid.jpg"));
+  background-size: cover;
+  background-position: center;
 }
 .galaxy-ring-asteroid-marker:hover,
 .galaxy-ring-asteroid-marker:focus-visible{
-  border-color: rgba(220, 230, 245, 0.95);
-  box-shadow: 0 0 14px rgba(180, 200, 230, 0.6);
-  transform: translate(-50%, -50%) rotate(45deg) scale(1.1);
+  border-color: rgba(180, 230, 255, 0.95);
+  box-shadow: 0 0 14px rgba(110, 200, 255, 0.6);
+  transform: translate(-50%, -50%) scale(1.1);
   outline: none;
 }
 /* Slot hover stack: World Boss + debris cards (never overlap) */
@@ -14097,12 +14099,11 @@ body.gc-techtree-media-zoom-open{
 }
 .galaxy-ring-legend-asteroid{
   display: inline-block;
-  width: 12px;
-  height: 12px;
-  border-radius: var(--gc-radius-sm, 2px);
-  border: 1px solid rgba(160, 180, 210, 0.65);
-  background: linear-gradient(135deg, rgba(90, 100, 120, 0.9), rgba(40, 48, 60, 0.95));
-  transform: rotate(45deg);
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid rgba(140, 200, 230, 0.55);
+  background: var(--gc-galaxy-asteroid-img, url("img/debris/asteroid.jpg")) center/cover no-repeat;
   vertical-align: middle;
 }
 .galaxy-ring-inspector{
@@ -27299,6 +27300,28 @@ button.pe-hero-planet-hint:focus-visible {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+}
+.galaxy-asteroid-board-title-icon,
+.galaxy-asteroid-board-thumb,
+.galaxy-asteroid-icon {
+  display: inline-block;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(140, 200, 230, 0.45);
+  background: var(--gc-galaxy-asteroid-img, url("img/debris/asteroid.jpg")) center/cover no-repeat;
+  box-shadow: 0 0 6px rgba(70, 140, 190, 0.25);
+}
+.galaxy-asteroid-board-title-icon {
+  width: 16px;
+  height: 16px;
+}
+.galaxy-asteroid-board-thumb {
+  width: 18px;
+  height: 18px;
+}
+.galaxy-asteroid-icon {
+  width: 20px;
+  height: 20px;
 }
 .galaxy-asteroid-board-type {
   font-size: 0.74rem;

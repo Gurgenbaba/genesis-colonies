@@ -16,6 +16,7 @@
             aria-expanded="false"
             aria-controls="galaxy-asteroid-board-panel">
       <span class="galaxy-asteroid-board-chevron" aria-hidden="true">▸</span>
+      <span class="galaxy-asteroid-board-title-icon" aria-hidden="true"></span>
       <span class="galaxy-asteroid-board-title">{{ T('galaxy_asteroid_board_title', 'Asteroidengürtel') }}</span>
       {% if board_count > 0 %}
       <span class="galaxy-asteroid-board-count gc-mono" data-galaxy-asteroid-board-count>{{ board_count }}</span>
@@ -74,6 +75,7 @@
       {% for entry in board %}
       <li class="galaxy-asteroid-board-row{% if entry.is_current_system %} is-current-system{% endif %}{% if entry.viewer_en_route or entry.viewer_engaged %} is-en-route{% endif %}">
         <div class="galaxy-asteroid-board-row-main">
+          <span class="galaxy-asteroid-board-thumb" aria-hidden="true"></span>
           <span class="galaxy-asteroid-board-type">{{ T(entry.name_key, entry.asteroid_key) }}</span>
           <span class="galaxy-asteroid-board-coords gc-mono">{{ entry.coords }}</span>
           {% if entry.viewer_en_route %}

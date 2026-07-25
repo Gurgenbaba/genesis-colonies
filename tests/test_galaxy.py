@@ -443,6 +443,9 @@ def test_galaxy_page_loads(galaxy_db, monkeypatch):
     ring_css = Path(__file__).resolve().parents[1].joinpath("static", "style.css").read_text(encoding="utf-8")
     assert "galaxy-ring-debris-marker" in ring_css or "galaxy-ring-debris-marker-img" in ring_css
     assert "img/debris/debris.jpg" in ring_css
+    assert "galaxy-ring-asteroid-marker" in ring_css or "galaxy-ring-asteroid-marker-img" in ring_css
+    assert "img/debris/asteroid.jpg" in ring_css
+    assert "img/debris/asteroid.jpg" in body
     assert "galaxy-ring-inspector--card" in body
     assert "galaxy-ring-slot-owner-label" in body
     assert uname in body

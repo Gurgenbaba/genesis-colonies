@@ -927,3 +927,11 @@ def test_galaxy_asteroid_board_template_contract():
     assert "openAsteroidHelp" in qa
     assert "initAsteroidBoardToggle" in qa
     assert "document.body.appendChild(modal)" in qa
+    main_js = (root / "static/main.js").read_text(encoding="utf-8")
+    pjax = main_js.split("async function applyPjaxPayload(url, payload, doc, opts = {})")[1].split(
+        "function pjaxPayloadFromDoc"
+    )[0]
+    assert "initAsteroidBoardToggle" in pjax
+    assert "invalidateGalaxyPjaxCache" in main_js.split("function applyActionState(json, reason)")[1].split(
+        "function logStatusPollErrorOnce"
+    )[0] or "invalidateGalaxyPjaxCache" in main_js.split("function applyActionState(json, reason)")[1][:2500]
