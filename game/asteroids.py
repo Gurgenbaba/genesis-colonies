@@ -148,7 +148,11 @@ def viewer_asteroid_fleet_status_map(
     conn,
     now: Optional[float] = None,
 ) -> Dict[int, Dict[str, Any]]:
-    """Map asteroid_id → outbound/returning fleet ETA for this viewer."""
+    """Map asteroid_id → outbound/returning fleet ETA for this viewer.
+
+    Prefer coords of the live field at the fleet target; stamped ``asteroid_id``
+    is only used when that field is still active (avoids stale-id miss).
+    """
     if not player_id or not table_exists(conn, "fleet_movements"):
         return {}
     ts = float(now if now is not None else _now())
@@ -164,31 +168,44 @@ def viewer_asteroid_fleet_status_map(
         (int(player_id),),
     ).fetchall()
     by_id: Dict[int, Dict[str, Any]] = {}
+    active_ids: Optional[Set[int]] = None
     for row in rows:
         status = str(row["status"] or "").strip().lower()
-        aid = 0
+        stamped_id = 0
         try:
             import json
 
             raw = row["resources_json"]
             payload = json.loads(raw) if isinstance(raw, str) else (raw or {})
-            aid = int((payload or {}).get("asteroid_id") or 0)
+            stamped_id = int((payload or {}).get("asteroid_id") or 0)
         except Exception:
-            aid = 0
-        if aid <= 0:
-            # Coords fallback against active fields.
-            try:
-                g, s, p = (
-                    int(row["target_galaxy"]),
-                    int(row["target_system"]),
-                    int(row["target_position"]),
-                )
-            except (TypeError, ValueError, KeyError):
-                continue
+            stamped_id = 0
+
+        aid = 0
+        # Always resolve against the active field at target coords first —
+        # stamped ids go stale after TTL respawn at the same slot.
+        try:
+            g, s, p = (
+                int(row["target_galaxy"]),
+                int(row["target_system"]),
+                int(row["target_position"]),
+            )
+        except (TypeError, ValueError, KeyError):
+            g = s = p = 0
+        if g > 0 and s > 0 and p > 0:
             ast = get_active_asteroid_at(g, s, p, conn=conn, now=ts)
-            if not ast:
-                continue
-            aid = int(ast["id"])
+            if ast:
+                aid = int(ast["id"])
+        if aid <= 0 and stamped_id > 0:
+            if active_ids is None:
+                active_ids = {
+                    int(a["id"])
+                    for a in list_active_asteroids(
+                        conn=conn, now=ts, limit=MAX_ACTIVE_ASTEROIDS + 5
+                    )
+                }
+            if stamped_id in active_ids:
+                aid = stamped_id
         if aid <= 0:
             continue
         arrival = row["arrival_at"]
@@ -222,6 +239,7 @@ def enrich_asteroid_viewer_state(
     *,
     engaged_ids: Set[int],
     fleet_map: Mapping[int, Mapping[str, Any]],
+    now: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Attach viewer hunt flags onto an asteroid payload."""
     out = dict(asteroid)
@@ -229,11 +247,21 @@ def enrich_asteroid_viewer_state(
     fleet = dict(fleet_map.get(aid) or {})
     engaged = bool(aid and (aid in engaged_ids or fleet.get("engaged")))
     status = str(fleet.get("fleet_status") or "")
+    arrival = fleet.get("arrival_at")
+    try:
+        arrival_f = float(arrival) if arrival is not None else None
+    except (TypeError, ValueError):
+        arrival_f = None
+    ts = float(now if now is not None else _now())
+    # Consistent "Unterwegs": any outbound hunt, including ETA still in the future.
+    en_route = bool(status == "outbound")
+    if not en_route and engaged and arrival_f is not None and arrival_f > ts:
+        en_route = True
     out["viewer_engaged"] = engaged
     out["viewer_fleet_status"] = status if engaged else ""
-    out["viewer_arrival_at"] = fleet.get("arrival_at")
-    out["viewer_en_route"] = bool(status == "outbound")
-    out["viewer_harvest_locked"] = bool(status == "outbound")
+    out["viewer_arrival_at"] = arrival_f
+    out["viewer_en_route"] = en_route
+    out["viewer_harvest_locked"] = en_route
     return out
 
 
@@ -263,7 +291,7 @@ def build_asteroid_board_entries(
     entries: List[Dict[str, Any]] = []
     for row in list_active_asteroids(conn=conn, now=ts, limit=MAX_ACTIVE_ASTEROIDS + 5):
         enriched = enrich_asteroid_viewer_state(
-            row, engaged_ids=engaged_ids, fleet_map=fleet_map
+            row, engaged_ids=engaged_ids, fleet_map=fleet_map, now=ts
         )
         # Keep engaged hunts visible with en-route state (no silent vanish).
         g = int(enriched["galaxy"])
@@ -480,7 +508,10 @@ def get_asteroids_for_system(
     out: Dict[int, Dict[str, Any]] = {}
     for row in rows:
         payload = enrich_asteroid_viewer_state(
-            _row_to_asteroid(row), engaged_ids=engaged_ids, fleet_map=fleet_map
+            _row_to_asteroid(row),
+            engaged_ids=engaged_ids,
+            fleet_map=fleet_map,
+            now=ts,
         )
         out[int(payload["position"])] = payload
     return out

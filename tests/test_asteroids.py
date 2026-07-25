@@ -685,6 +685,77 @@ def test_asteroid_board_marks_own_outbound_en_route(ast_db):
         conn.close()
 
 
+def test_asteroid_board_en_route_via_target_coords_when_stamped_id_stale(ast_db):
+    """Outbound recycle must map to the live field at target coords (stale asteroid_id)."""
+    from game.asteroids import viewer_asteroid_fleet_status_map
+
+    uid = _player("CoordHunter")
+    home_id, g, s, _ = _home(uid)
+    pos = _free_slot_near(g, s)
+    _fund(home_id)
+    now = time.time()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ins = insert_asteroid(
+            conn=conn,
+            galaxy=g,
+            system=s,
+            position=pos,
+            asteroid_key="crytite_shard",
+            now=now,
+            ttl_seconds=TTL_SECONDS,
+            rng=random.Random(42),
+        )
+        assert ins["ok"]
+        live_aid = int(ins["asteroid"]["id"])
+        add_planet_ships(home_id, uid, {"harvest_reclaimer": 20}, conn=conn)
+        commit(conn)
+
+        begin_write_transaction(conn)
+        ok, err, res = send_fleet(
+            player_id=uid,
+            origin_planet_id=home_id,
+            mission_type="recycle",
+            target_galaxy=g,
+            target_system=s,
+            target_position=pos,
+            ships={"harvest_reclaimer": 5},
+            resources={},
+            speed_percent=100,
+            conn=conn,
+        )
+        commit(conn)
+        assert ok, err
+        fleet_id = int((res.get("fleet") or {}).get("id") or 0)
+        assert fleet_id > 0
+
+        # Stamp a dead asteroid_id (respawn / TTL swap) while coords stay valid.
+        begin_write_transaction(conn)
+        raw = conn.execute(
+            "SELECT resources_json FROM fleet_movements WHERE id = ?;",
+            (fleet_id,),
+        ).fetchone()["resources_json"]
+        payload = json.loads(raw or "{}")
+        payload["asteroid_id"] = live_aid + 99999
+        conn.execute(
+            "UPDATE fleet_movements SET resources_json = ? WHERE id = ?;",
+            (json.dumps(payload), fleet_id),
+        )
+        commit(conn)
+
+        fleet_map = viewer_asteroid_fleet_status_map(uid, conn=conn, now=now)
+        assert live_aid in fleet_map
+        assert fleet_map[live_aid]["fleet_status"] == "outbound"
+
+        board = build_asteroid_board_entries(conn=conn, now=now, viewer_player_id=uid)
+        row = next(e for e in board if int(e["id"]) == live_aid)
+        assert row["viewer_en_route"] is True
+        assert row["viewer_harvest_locked"] is True
+    finally:
+        conn.close()
+
+
 def test_asteroid_anti_pop_blocks_same_slot_until_expires(ast_db):
     from game.asteroids import _blocked_spawn_coords, spawn_asteroid_belt
 
