@@ -932,7 +932,9 @@ def test_gc700d_combat_debris_recycler_ux():
 def test_gc700db_galaxy_debris_ux():
     """GC-700D-B: debris visible in galaxy + command map inspector."""
     html = _read("templates/partials/galaxy_debris_block.html")
-    galaxy = _read("templates/galaxy.html")
+    ring = _read("templates/partials/galaxy_ring_view.html")
+    marker = _read("templates/partials/galaxy_ring_debris_marker.html")
+    qa = _read("static/js/galaxy-quick-action.js")
     js = _read("static/main.js")
     css = _read("static/style.css")
     de = _read("locales/de.json")
@@ -940,13 +942,17 @@ def test_gc700db_galaxy_debris_ux():
     assert "galaxy-debris-block" in html
     assert "☄" in html
     assert "galaxy-debris-recycle-btn" in html
-    assert "mission=recycle" in html
-    assert "galaxy-orbit-debris-marker" in galaxy
+    assert "data-galaxy-ring-debris-recycle" in html
+    assert "data-available-reclaimers" in ring
+    assert "data-galaxy-ring-debris-recycle" in marker
+    assert "resolveRecycleSendCount" in qa
+    assert "galaxy_debris_recycle_partial" in qa
     assert "initGalaxyDebrisUx" in js
     assert "worldInspectorDebrisHtml" in js
     assert "gc-world-inspector-debris" in css
     assert '"galaxy_debris_total"' in de
     assert '"galaxy_debris_ttl_remaining"' in de
+    assert '"galaxy_debris_recycle_no_ships"' in de
 
 
 def test_gc700c_chronicles_pvp_overview():

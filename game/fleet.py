@@ -118,6 +118,7 @@ TARGET_TYPES = frozenset(
         "wreckage",
         "planet",
         "world_boss",
+        "asteroid",
     }
 )
 
@@ -136,6 +137,7 @@ _BASE_ALLOWED_MISSIONS: Dict[str, Set[str]] = {
     "wreckage": {"recycle", "expedition"},
     "planet": {"transport", "collect", "deploy", "spy"},
     "world_boss": {"attack"},
+    "asteroid": {"recycle"},
 }
 
 _MISSIONS_REQUIRING_PLANET = frozenset(
@@ -194,6 +196,16 @@ _MISSION_BLOCK_REASONS: Dict[str, Dict[str, str]] = {
         "colonize": "mission_blocked_world_boss",
         "recycle": "mission_blocked_world_boss",
     },
+    "asteroid": {
+        "transport": "mission_blocked_asteroid",
+        "deploy": "mission_blocked_asteroid",
+        "spy": "mission_blocked_asteroid",
+        "attack": "mission_blocked_asteroid",
+        "hold": "mission_blocked_asteroid",
+        "collect": "mission_blocked_asteroid",
+        "expedition": "mission_blocked_not_expedition_slot",
+        "colonize": "mission_blocked_asteroid",
+    },
 }
 
 
@@ -250,6 +262,48 @@ def _maybe_world_boss_target(
         "max_hp": int(event["max_hp"]),
         "hp_ratio": event.get("hp_ratio"),
         "ends_at": event.get("ends_at"),
+    }
+    return out
+
+
+def _maybe_asteroid_target(
+    info: Dict[str, Any],
+    galaxy: int,
+    system: int,
+    position: int,
+    *,
+    conn,
+) -> Dict[str, Any]:
+    """Override slot to asteroid when an active belt field sits here (before debris)."""
+    if str(info.get("target_type") or "") == "world_boss":
+        return info
+    try:
+        from .asteroids import get_active_asteroid_at
+
+        asteroid = get_active_asteroid_at(
+            int(galaxy), int(system), int(position), conn=conn
+        )
+    except Exception:
+        return info
+    if not asteroid:
+        return info
+    out = dict(info)
+    out["target_type"] = "asteroid"
+    out["target_planet_id"] = None
+    out["target_player_id"] = None
+    out["target_owner_name"] = str(asteroid.get("asteroid_key") or "asteroid")
+    out["allowed_missions"] = sorted(_BASE_ALLOWED_MISSIONS["asteroid"])
+    out["reason_if_blocked"] = None
+    out["asteroid"] = {
+        "id": int(asteroid["id"]),
+        "asteroid_key": asteroid.get("asteroid_key"),
+        "name_key": asteroid.get("name_key"),
+        "metal": int(asteroid.get("metal") or 0),
+        "crystal": int(asteroid.get("crystal") or 0),
+        "fuel_cells": int(asteroid.get("fuel_cells") or 0),
+        "total": int(asteroid.get("total") or 0),
+        "expires_at": asteroid.get("expires_at"),
+        "recycler_slots_needed": int(asteroid.get("recycler_slots_needed") or 0),
     }
     return out
 
@@ -946,16 +1000,22 @@ def resolve_fleet_target(
         planet_id = _resolve_planet_at_coords(g, s, p, conn=conn)
         if planet_id is None:
             return _maybe_world_boss_target(
-                _target_with_debris_recycle(
-                    {
-                        "target_type": "empty_slot",
-                        "target_planet_id": None,
-                        "target_player_id": None,
-                        "target_owner_name": None,
-                        "coords": coords,
-                        "allowed_missions": sorted(_BASE_ALLOWED_MISSIONS["empty_slot"]),
-                        "reason_if_blocked": None,
-                    },
+                _maybe_asteroid_target(
+                    _target_with_debris_recycle(
+                        {
+                            "target_type": "empty_slot",
+                            "target_planet_id": None,
+                            "target_player_id": None,
+                            "target_owner_name": None,
+                            "coords": coords,
+                            "allowed_missions": sorted(_BASE_ALLOWED_MISSIONS["empty_slot"]),
+                            "reason_if_blocked": None,
+                        },
+                        g,
+                        s,
+                        p,
+                        conn=conn,
+                    ),
                     g,
                     s,
                     p,
@@ -1033,6 +1093,16 @@ def mission_allowed_for_target(mission: str, target: Mapping[str, Any]) -> Tuple
     if target_type not in TARGET_TYPES:
         return False, "invalid_target"
     if m == "recycle":
+        if str(target.get("target_type") or "") == "asteroid":
+            asteroid = target.get("asteroid") or {}
+            total = (
+                int(asteroid.get("metal") or 0)
+                + int(asteroid.get("crystal") or 0)
+                + int(asteroid.get("fuel_cells") or 0)
+            )
+            if total <= 0:
+                return False, "no_asteroid_at_target"
+            return True, ""
         debris = target.get("debris") or {}
         if int(debris.get("metal") or 0) + int(debris.get("crystal") or 0) <= 0:
             return False, "no_debris_at_target"
@@ -1076,7 +1146,8 @@ def evaluate_fleet_mission_target(
         return False, m_reason, target_info
 
     if m in _MISSIONS_REQUIRING_PLANET and not target_info.get("target_planet_id"):
-        if str(target_info.get("target_type") or "") != "world_boss":
+        ttype = str(target_info.get("target_type") or "")
+        if ttype not in ("world_boss", "asteroid"):
             return False, "invalid_target", target_info
 
     return True, "", target_info
@@ -3587,6 +3658,43 @@ def _format_recycle_report(
     )
 
 
+def _format_asteroid_report(
+    *,
+    coords: str,
+    origin_name: str,
+    collected: Mapping[str, Any],
+    missed: bool = False,
+    locale: str | None = None,
+) -> str:
+    from .i18n import tr
+
+    if missed:
+        return tr(
+            "fleet_asteroid_report_missed",
+            "Asteroid at %(coords)s already harvested. Fleet returning empty to %(origin)s.",
+            locale=locale,
+            coords=coords,
+            origin=origin_name,
+        )
+    cargo_txt = _format_transport_cargo(collected, locale=locale)
+    if loaded_resource_total(collected) <= 0:
+        return tr(
+            "fleet_asteroid_report_empty",
+            "Asteroid at %(coords)s yielded nothing. Fleet returning to %(origin)s.",
+            locale=locale,
+            coords=coords,
+            origin=origin_name,
+        )
+    return tr(
+        "fleet_asteroid_report",
+        "Asteroid harvest at %(coords)s: %(cargo)s loaded. Fleet returning to %(origin)s.",
+        locale=locale,
+        coords=coords,
+        origin=origin_name,
+        cargo=cargo_txt,
+    )
+
+
 def _format_collect_report(
     *,
     coords: str,
@@ -3893,17 +4001,11 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
         tg = int(movement.get("target_galaxy") or 0)
         ts = int(movement.get("target_system") or 0)
         tp = int(movement.get("target_position") or 0)
-        if cargo_total > 0:
-            from .combat import get_debris_at_field, harvest_debris_at_field
+        asteroid_missed = False
+        asteroid_harvested = False
+        asteroid_meta: Dict[str, Any] = {}
 
-            debris = get_debris_at_field(tg, ts, tp, conn=conn)
-            pool = {
-                "metal": int(debris.get("metal") or 0),
-                "crystal": int(debris.get("crystal") or 0),
-                "fuel_cells": 0,
-            }
-            collected = _calculate_collect_load(pool, cargo_total)
-        final_resources = calculate_loaded_resources(collected)
+        # Claim movement first (idempotent), then resolve asteroid or debris.
         claimed = _claim_movement_status(
             conn,
             movement_id,
@@ -3911,33 +4013,95 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
             "returning",
             now,
             extra_sql=", return_at = ?, resources_json = ?",
-            extra_params=(return_at, _json_dumps(final_resources)),
+            extra_params=(return_at, _json_dumps({})),
         )
         if not claimed:
             return False
-        if loaded_resource_total(collected) > 0 and not harvest_debris_at_field(
-            tg, ts, tp, harvested=collected, conn=conn
-        ):
-            collected = {"metal": 0, "crystal": 0, "fuel_cells": 0}
+
+        if cargo_total > 0:
+            from .asteroids import try_claim_harvest
+
+            claim = try_claim_harvest(
+                tg,
+                ts,
+                tp,
+                player_id=int(player_id),
+                cargo_capacity=int(cargo_total),
+                conn=conn,
+                now=float(now),
+            )
+            status = str(claim.get("status") or "none")
+            if status == "claimed":
+                collected = dict(claim.get("harvested") or {})
+                asteroid_harvested = True
+                asteroid_meta = {
+                    "asteroid_id": claim.get("asteroid_id"),
+                    "asteroid_key": claim.get("asteroid_key"),
+                    "pool": claim.get("pool") or {},
+                }
+            elif status == "missed":
+                asteroid_missed = True
+                asteroid_meta = {"asteroid_id": claim.get("asteroid_id")}
+            else:
+                from .combat import get_debris_at_field, harvest_debris_at_field
+
+                debris = get_debris_at_field(tg, ts, tp, conn=conn)
+                pool = {
+                    "metal": int(debris.get("metal") or 0),
+                    "crystal": int(debris.get("crystal") or 0),
+                    "fuel_cells": 0,
+                }
+                collected = _calculate_collect_load(pool, cargo_total)
+                if loaded_resource_total(collected) > 0 and not harvest_debris_at_field(
+                    tg, ts, tp, harvested=collected, conn=conn
+                ):
+                    collected = {"metal": 0, "crystal": 0, "fuel_cells": 0}
+
+        final_resources = calculate_loaded_resources(collected)
+        conn.execute(
+            """
+            UPDATE fleet_movements
+            SET resources_json = ?
+            WHERE id = ?;
+            """,
+            (_json_dumps(final_resources), int(movement_id)),
+        )
+
         origin_id = int(movement["origin_planet_id"])
         cur = conn.cursor()
         cur.execute("SELECT name FROM planets WHERE id = ? LIMIT 1;", (origin_id,))
         orow = cur.fetchone()
         origin_name = str(orow["name"] if orow else "")
-        body = _format_recycle_report(
-            coords=coords,
-            origin_name=origin_name,
-            collected=collected,
-            locale=sender_locale,
-        )
-        notify_transport(
-            player_id,
-            tr(
+        if asteroid_harvested or asteroid_missed:
+            body = _format_asteroid_report(
+                coords=coords,
+                origin_name=origin_name,
+                collected=collected,
+                missed=asteroid_missed,
+                locale=sender_locale,
+            )
+            subject = tr(
+                "fleet_asteroid_report_subject",
+                "Asteroid report %(coords)s",
+                locale=sender_locale,
+                coords=coords,
+            )
+        else:
+            body = _format_recycle_report(
+                coords=coords,
+                origin_name=origin_name,
+                collected=collected,
+                locale=sender_locale,
+            )
+            subject = tr(
                 "fleet_recycle_report_subject",
                 "Recycle report %(coords)s",
                 locale=sender_locale,
                 coords=coords,
-            ),
+            )
+        notify_transport(
+            player_id,
+            subject,
             body,
             metadata={
                 "fleet_id": movement_id,
@@ -3946,6 +4110,9 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
                 "collected": calculate_loaded_resources(collected),
                 "resources": final_resources,
                 "direction": "outbound",
+                "asteroid_missed": asteroid_missed,
+                "asteroid_harvested": asteroid_harvested,
+                **({"asteroid": asteroid_meta} if asteroid_meta else {}),
             },
             locale=sender_locale,
             conn=conn,

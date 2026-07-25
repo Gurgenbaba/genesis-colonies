@@ -1,0 +1,21 @@
+{# GC-AST — asteroid marker on ring slot: click = send reclaimers #}
+{% if slot.has_asteroid and slot.asteroid and (slot.asteroid.total or 0) > 0 %}
+{% set asteroid = slot.asteroid %}
+{% set g = slot.coordinates.galaxy if slot.coordinates is defined else (nav.galaxy or 1) %}
+{% set s = slot.coordinates.system if slot.coordinates is defined else (nav.system or 1) %}
+{% set p = slot.coordinates.position if slot.coordinates is defined else slot.position %}
+<div class="galaxy-ring-asteroid-wrap"
+     data-galaxy-ring-asteroid-wrap
+     data-target-galaxy="{{ g }}"
+     data-target-system="{{ s }}"
+     data-target-position="{{ p }}"
+     data-recycler-slots="{{ asteroid.recycler_slots_needed or 0 }}">
+  <button type="button"
+          class="galaxy-ring-asteroid-marker"
+          data-galaxy-ring-asteroid-recycle
+          title="{{ T('galaxy_asteroid_harvest_click', 'Harvest Reclaimer zum Asteroiden senden') }}"
+          aria-label="{{ T(asteroid.name_key, asteroid.asteroid_key) }} {{ p }} — {{ T('galaxy_asteroid_harvest', 'Einsammeln') }}">
+    <span class="galaxy-ring-asteroid-marker-img" aria-hidden="true"></span>
+  </button>
+</div>
+{% endif %}

@@ -1,0 +1,34 @@
+{# GC-AST / GC-RECYCLE-QA-01: asteroid inspector + one-click harvest #}
+{% if slot.has_asteroid and slot.asteroid and (slot.asteroid.total or 0) > 0 %}
+{% set asteroid = slot.asteroid %}
+{% set g = slot.coordinates.galaxy if slot.coordinates is defined else (nav.galaxy or 1) %}
+{% set s = slot.coordinates.system if slot.coordinates is defined else (nav.system or 1) %}
+{% set p = slot.coordinates.position if slot.coordinates is defined else slot.position %}
+<div class="galaxy-slot-asteroid galaxy-asteroid-block"
+     role="group"
+     aria-label="{{ T(asteroid.name_key, asteroid.asteroid_key) }}"
+     data-galaxy-ring-asteroid-wrap
+     data-target-galaxy="{{ g }}"
+     data-target-system="{{ s }}"
+     data-target-position="{{ p }}"
+     data-recycler-slots="{{ asteroid.recycler_slots_needed or 0 }}">
+  <div class="galaxy-asteroid-block-head">
+    <span class="galaxy-asteroid-icon" aria-hidden="true">◆</span>
+    <span class="galaxy-asteroid-title">{{ T(asteroid.name_key, asteroid.asteroid_key) }}</span>
+  </div>
+  {% if asteroid.desc_key %}
+  <p class="galaxy-asteroid-desc hint">{{ T(asteroid.desc_key, '') }}</p>
+  {% endif %}
+  <dl class="galaxy-asteroid-stats">
+    <div><dt>{{ T('resource_metal', 'Ferronit') }}</dt><dd class="gc-mono">{{ (asteroid.metal or 0)|fmt_int }}</dd></div>
+    <div><dt>{{ T('resource_crystal', 'Crytite') }}</dt><dd class="gc-mono">{{ (asteroid.crystal or 0)|fmt_int }}</dd></div>
+    <div><dt>{{ T('resource_fuel_cells', 'Brennzellen') }}</dt><dd class="gc-mono">{{ (asteroid.fuel_cells or 0)|fmt_int }}</dd></div>
+    {% if asteroid.expires_at is defined and asteroid.expires_at %}
+    <div><dt>{{ T('galaxy_asteroid_ttl_remaining', 'Verbleibend') }}</dt><dd class="gc-mono" data-countdown-at="{{ asteroid.expires_at|int }}" data-countdown-format="eta">—</dd></div>
+    {% endif %}
+  </dl>
+  <button type="button"
+          class="gc-btn gc-btn-sm gc-btn-primary galaxy-asteroid-harvest-btn"
+          data-galaxy-ring-asteroid-recycle>{{ T('galaxy_asteroid_harvest', 'Einsammeln') }}</button>
+</div>
+{% endif %}

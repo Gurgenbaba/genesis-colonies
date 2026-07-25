@@ -306,6 +306,7 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | Alliance Hub (identity, pool, projects, diplomacy) | `game/alliance.py`, `game/alliance_catalog.py` | [ALLIANCE_SYSTEM.md](ALLIANCE_SYSTEM.md) |
 | Imperium Timekeeper (Zeitkonto, manuelles Einsetzen) | `game/timekeeper.py` | [TIMEKEEPER_SYSTEM.md](TIMEKEEPER_SYSTEM.md) |
 | World Boss Events (shared HP PvE, contribution, LiveOps) | `game/world_boss.py` | [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) |
+| Galaxy Asteroid Belt (temporary harvest fields) | `game/asteroids.py` | [ASTEROID_SYSTEM.md](ASTEROID_SYSTEM.md) |
 
 **Ticket-Check:** Domäne identifizieren → nur Owner-Modul (+ Routes/`app.py`) ändern → kein zweites Modul für dieselbe Wahrheit.
 

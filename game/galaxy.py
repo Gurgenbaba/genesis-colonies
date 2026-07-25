@@ -635,13 +635,17 @@ def get_debris_for_system(
     galaxy: int,
     system: int,
     conn: sqlite3.Connection,
+    *,
+    now: Optional[float] = None,
 ) -> Dict[int, Dict[str, Any]]:
     """Map position → debris row for one system (amounts + ``updated_at`` for TTL)."""
-    from .combat import debris_schema_ready
+    from .combat import debris_schema_ready, expire_due_debris_fields
 
     out: Dict[int, Dict[str, Any]] = {}
     if not debris_schema_ready(conn):
         return out
+    # Hard-expire past-TTL fields before attach (same owner as harvest DELETE).
+    expire_due_debris_fields(conn=conn, now=now)
     cur = conn.cursor()
     cur.execute(
         """
@@ -719,6 +723,29 @@ def _attach_world_boss_to_slot(
             payload["viewer_attack_meta"] = {}
     slot["world_boss"] = payload
     slot["has_world_boss"] = True
+
+
+def _attach_asteroid_to_slot(
+    slot: Dict[str, Any],
+    asteroid: Mapping[str, Any] | None,
+) -> None:
+    """GC-AST — stamp active asteroid field metadata onto a galaxy slot."""
+    if not asteroid:
+        slot["asteroid"] = None
+        slot["has_asteroid"] = False
+        return
+    payload = dict(asteroid)
+    total = (
+        int(payload.get("metal") or 0)
+        + int(payload.get("crystal") or 0)
+        + int(payload.get("fuel_cells") or 0)
+    )
+    if total <= 0:
+        slot["asteroid"] = None
+        slot["has_asteroid"] = False
+        return
+    slot["asteroid"] = payload
+    slot["has_asteroid"] = True
 
 
 def list_system(
@@ -825,6 +852,14 @@ def list_system(
         bosses_by_position = get_bosses_for_system(int(galaxy), int(system), conn=conn)
     except Exception:
         bosses_by_position = {}
+    try:
+        from .asteroids import get_asteroids_for_system
+
+        asteroids_by_position = get_asteroids_for_system(
+            int(galaxy), int(system), conn=conn
+        )
+    except Exception:
+        asteroids_by_position = {}
 
     from .planet_visuals import temperature_range_for_position
 
@@ -845,6 +880,7 @@ def list_system(
                 viewer_player_id=viewer_player_id,
                 conn=conn,
             )
+            _attach_asteroid_to_slot(slot, asteroids_by_position.get(pos))
             _attach_slot_presentation(slot, pos, planet_row={"position": pos}, occupied=True)
             _attach_player_status_flags(
                 slot,
@@ -892,8 +928,31 @@ def list_system(
                 viewer_player_id=viewer_player_id,
                 conn=conn,
             )
+            _attach_asteroid_to_slot(slot, asteroids_by_position.get(pos))
             _attach_slot_presentation(slot, pos, occupied=False)
             slots.append(slot)
+
+    available_reclaimers = 0
+    if active_planet_id is not None and int(active_planet_id) > 0:
+        try:
+            from .fleet import get_planet_ships
+
+            ships = get_planet_ships(int(active_planet_id), conn=conn)
+            available_reclaimers = max(0, int(ships.get("harvest_reclaimer") or 0))
+        except Exception:
+            available_reclaimers = 0
+
+    active_asteroid_board: List[Dict[str, Any]] = []
+    try:
+        from .asteroids import build_asteroid_board_entries
+
+        active_asteroid_board = build_asteroid_board_entries(
+            conn=conn,
+            current_galaxy=int(galaxy),
+            current_system=int(system),
+        )
+    except Exception:
+        active_asteroid_board = []
 
     result = {
         "galaxy": int(galaxy),
@@ -901,6 +960,8 @@ def list_system(
         "slots": slots,
         "slot_count": POSITION_MAX,
         "highlight_position": highlight_position,
+        "available_reclaimers": available_reclaimers,
+        "active_asteroid_board": active_asteroid_board,
     }
 
     if own:

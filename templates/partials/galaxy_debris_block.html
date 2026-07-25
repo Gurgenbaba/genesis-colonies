@@ -1,11 +1,17 @@
-{# GC-700D-B: debris field badge, hover stats, recycler CTA #}
+{# GC-700D-B / GC-RECYCLE-QA-01: debris inspector + one-click recycle #}
 {% if slot.has_debris and slot.debris and (slot.debris.metal or 0) + (slot.debris.crystal or 0) > 0 %}
 {% set debris = slot.debris %}
 {% set g = slot.coordinates.galaxy if slot.coordinates is defined else (nav.galaxy or 1) %}
 {% set s = slot.coordinates.system if slot.coordinates is defined else (nav.system or 1) %}
 {% set p = slot.coordinates.position if slot.coordinates is defined else slot.position %}
-{% set recycle_href = debris.recycle_href if debris.recycle_href is defined else (url_for('fleet_view') ~ '?mission=recycle&target_galaxy=' ~ g ~ '&target_system=' ~ s ~ '&target_position=' ~ p) %}
-<div class="galaxy-slot-debris galaxy-debris-block" role="group" aria-label="{{ T('galaxy_debris_field', 'Trümmerfeld') }}">
+<div class="galaxy-slot-debris galaxy-debris-block"
+     role="group"
+     aria-label="{{ T('galaxy_debris_field', 'Trümmerfeld') }}"
+     data-galaxy-ring-debris-wrap
+     data-target-galaxy="{{ g }}"
+     data-target-system="{{ s }}"
+     data-target-position="{{ p }}"
+     data-recycler-slots="{{ debris.recycler_slots_needed or 0 }}">
   <div class="galaxy-debris-badge-wrap">
     <button type="button"
             class="galaxy-debris-badge gs-pill gs-pill-debris"
@@ -26,8 +32,8 @@
       </dl>
     </div>
   </div>
-  <a href="{{ recycle_href }}"
-     class="gc-btn gc-btn-sm gc-btn-primary galaxy-debris-recycle-btn"
-     data-galaxy-debris-recycle>{{ T('combat_report_send_recycler', 'Recycler senden') }}</a>
+  <button type="button"
+          class="gc-btn gc-btn-sm gc-btn-primary galaxy-debris-recycle-btn"
+          data-galaxy-ring-debris-recycle>{{ T('combat_report_send_recycler', 'Recycler senden') }}</button>
 </div>
 {% endif %}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import time
 import uuid
 
 import pytest
@@ -298,6 +299,88 @@ def test_list_system_shows_debris_field(galaxy_db):
     assert slot["debris"]["recycler_slots_needed"] >= 1
     assert "mission=recycle" in slot["debris"]["recycle_href"]
     assert f"target_position={coords['position']}" in slot["debris"]["recycle_href"]
+
+
+def test_list_system_reports_available_reclaimers(galaxy_db):
+    from game.fleet import add_planet_ships
+
+    uid = _create_player()
+    planet = get_planets_by_player(uid)[0]
+    pid = int(planet["id"])
+    coords = get_planet_coordinates(planet)
+    conn = db()
+    try:
+        add_planet_ships(pid, uid, {"harvest_reclaimer": 7}, conn=conn)
+        conn.commit()
+    finally:
+        conn.close()
+
+    data = list_system(
+        coords["galaxy"],
+        coords["system"],
+        viewer_player_id=uid,
+        active_planet_id=pid,
+    )
+    assert data["available_reclaimers"] == 7
+
+
+def test_list_system_hides_expired_debris_field(galaxy_db):
+    """GC-DEBRIS-TTL-01: past-TTL debris is deleted and not attached to galaxy slots."""
+    from game.combat import DEBRIS_FIELD_TTL_SECONDS, add_debris_field, expire_due_debris_fields
+
+    uid = _create_player()
+    planet = get_planets_by_player(uid)[0]
+    coords = get_planet_coordinates(planet)
+    g, s, p = coords["galaxy"], coords["system"], coords["position"]
+    conn = db()
+    try:
+        add_debris_field(g, s, p, 9_000, 1_000, conn=conn)
+        now = time.time()
+        stale_at = int(now - DEBRIS_FIELD_TTL_SECONDS - 60)
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE debris_fields
+            SET updated_at = ?
+            WHERE galaxy = ? AND system = ? AND position = ?;
+            """,
+            (stale_at, g, s, p),
+        )
+        conn.commit()
+        deleted = expire_due_debris_fields(conn=conn, now=now)
+        assert deleted == 1
+        conn.commit()
+    finally:
+        conn.close()
+
+    data = list_system(g, s)
+    slot = next(slot_row for slot_row in data["slots"] if slot_row["position"] == p)
+    assert slot["has_debris"] is False
+    assert not (slot.get("debris") or {}).get("has_debris")
+
+
+def test_fresh_debris_survives_expire_tick(galaxy_db):
+    from game.combat import add_debris_field, expire_due_debris_fields, get_debris_at_field
+
+    uid = _create_player()
+    planet = get_planets_by_player(uid)[0]
+    coords = get_planet_coordinates(planet)
+    g, s, p = coords["galaxy"], coords["system"], coords["position"]
+    conn = db()
+    try:
+        add_debris_field(g, s, p, 500, 200, conn=conn)
+        assert expire_due_debris_fields(conn=conn) == 0
+        field = get_debris_at_field(g, s, p, conn=conn)
+        assert field["metal"] == 500
+        assert field["crystal"] == 200
+        conn.commit()
+    finally:
+        conn.close()
+
+    data = list_system(g, s)
+    slot = next(slot_row for slot_row in data["slots"] if slot_row["position"] == p)
+    assert slot["has_debris"] is True
+    assert slot["debris"]["metal"] == 500
 
 
 def test_overview_uses_real_coordinates(galaxy_db):

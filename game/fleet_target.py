@@ -18,6 +18,7 @@ WORLD_NATIVE_TARGET_TYPES = frozenset(
         "wreckage",
         "enemy_colony",
         "world_boss",
+        "asteroid",
     }
 )
 
@@ -115,6 +116,8 @@ def infer_world_native_target_type(
     legacy = str(legacy_target_type or "").strip()
     if legacy == "world_boss":
         return "world_boss"
+    if legacy == "asteroid":
+        return "asteroid"
     if legacy == "strategic_world":
         if wt and is_salvage_world_type(wt):
             return "wreckage"

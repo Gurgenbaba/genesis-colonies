@@ -274,3 +274,134 @@ def test_harvest_debris_atomic(recycler_db):
     ok2 = harvest_debris_at_field(1, 100, 5, harvested={"metal": 9999, "crystal": 0}, conn=conn)
     assert not ok2
     conn.close()
+
+
+def test_partial_recycle_allows_second_trip(recycler_db):
+    """GC-DEBRIS-LIVE-01: remainder stays harvestable after a partial first trip."""
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    g, s, p = _coords(pid, conn)
+    # One reclaimer cargo = 20k → leaves remainder for a second trip.
+    add_debris_field(g, s, p, metal=50_000, crystal=0, conn=conn)
+    conn.execute(
+        "UPDATE planets SET metal = 50000, crystal = 50000, fuel_cells = 20000 WHERE id = ?;",
+        (pid,),
+    )
+    _seed_ships(pid, uid, {"harvest_reclaimer": 2}, conn)
+    conn.commit()
+
+    ok, reason, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="recycle",
+        ships={"harvest_reclaimer": 1},
+        resources={},
+        speed_percent=100,
+        conn=conn,
+    )
+    assert ok, reason
+    movement_id = int(result["fleet"]["id"])
+    conn.execute(
+        "UPDATE fleet_movements SET arrival_at = ? WHERE id = ?;",
+        (time.time() - 1, movement_id),
+    )
+    conn.commit()
+    process_fleet_tick(player_id=uid, now=time.time(), conn=conn)
+    conn.commit()
+
+    debris_mid = get_debris_at_field(g, s, p, conn=conn)
+    assert int(debris_mid["metal"]) == 30_000
+    assert int(debris_mid["crystal"]) == 0
+
+    # Return ships so a second outbound can launch.
+    conn.execute(
+        "UPDATE fleet_movements SET return_at = ? WHERE id = ?;",
+        (time.time() - 1, movement_id),
+    )
+    conn.commit()
+    process_fleet_tick(player_id=uid, now=time.time(), conn=conn)
+    conn.commit()
+
+    ok2, reason2, _ = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="recycle",
+        ships={"harvest_reclaimer": 1},
+        resources={},
+        speed_percent=100,
+        conn=conn,
+    )
+    assert ok2, reason2
+    conn.close()
+
+
+def test_full_recycle_second_send_fails_no_debris(recycler_db):
+    """After full harvest, a second recycle is rejected with no_debris_at_target."""
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    g, s, p = _coords(pid, conn)
+    add_debris_field(g, s, p, metal=8_000, crystal=2_000, conn=conn)
+    conn.execute(
+        "UPDATE planets SET metal = 50000, crystal = 50000, fuel_cells = 20000 WHERE id = ?;",
+        (pid,),
+    )
+    _seed_ships(pid, uid, {"harvest_reclaimer": 2}, conn)
+    conn.commit()
+
+    ok, reason, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="recycle",
+        ships={"harvest_reclaimer": 1},
+        resources={},
+        speed_percent=100,
+        conn=conn,
+    )
+    assert ok, reason
+    movement_id = int(result["fleet"]["id"])
+    conn.execute(
+        "UPDATE fleet_movements SET arrival_at = ? WHERE id = ?;",
+        (time.time() - 1, movement_id),
+    )
+    conn.commit()
+    process_fleet_tick(player_id=uid, now=time.time(), conn=conn)
+    conn.commit()
+
+    debris_after = get_debris_at_field(g, s, p, conn=conn)
+    assert int(debris_after["metal"]) == 0
+    assert int(debris_after["crystal"]) == 0
+
+    conn.execute(
+        "UPDATE fleet_movements SET return_at = ? WHERE id = ?;",
+        (time.time() - 1, movement_id),
+    )
+    conn.commit()
+    process_fleet_tick(player_id=uid, now=time.time(), conn=conn)
+    conn.commit()
+
+    ok2, reason2, _ = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="recycle",
+        ships={"harvest_reclaimer": 1},
+        resources={},
+        speed_percent=100,
+        conn=conn,
+    )
+    assert not ok2
+    assert reason2 == "no_debris_at_target"
+    conn.close()

@@ -1825,6 +1825,12 @@ def galaxy_view():
 
         galaxy_nav = build_galaxy_nav(galaxy, system, conn=conn)
         if view != "command_map":
+            from game.asteroids import ensure_asteroids_present
+            from game.db import commit as db_commit
+
+            # Deploy bootstrap: first Galaxy open seeds belts if the universe is empty.
+            ensure_asteroids_present(conn=conn)
+            db_commit(conn)
             system_data = list_system(
                 galaxy,
                 system,

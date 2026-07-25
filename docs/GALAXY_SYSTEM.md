@@ -138,6 +138,29 @@ Live-State: `planet_relocation` + `has_seed_ark` in `/api/game-state`.
 
 ---
 
+## Debris Fields (Trümmer)
+
+Owner: `game/combat.py` (`debris_fields`)
+
+| Rule | Value |
+|------|-------|
+| Create | Combat losses → `spawn_combat_debris_*` / `add_debris_field` |
+| Harvest | Mission `recycle` arrival → `harvest_debris_at_field` (DELETE when M/C ≤ 0) |
+| TTL | `DEBRIS_FIELD_TTL_SECONDS` (7d from `updated_at`) — **hard expire** via `expire_due_debris_fields` |
+| Cron | Fleet-worker piggyback + defensive purge in `get_debris_for_system` / `get_debris_at_field` |
+| Galaxy | Slot `has_debris` / `debris` only while amount > 0 and TTL remaining |
+| Live sync | On Galaxy page: recycle outbound→returning (via `active_fleets` delta) triggers soft `reloadCurrentPage` — no module-owned poll (GC-DEBRIS-LIVE-01) |
+
+---
+
+## Asteroid Belt (GC-AST)
+
+Owner: `game/asteroids.py` — [ASTEROID_SYSTEM.md](ASTEROID_SYSTEM.md)
+
+Temporary fields on free classic slots in dense systems (TTL 2 h). Slot flags: `has_asteroid` / `asteroid`. Harvest via Fleet mission `recycle` + `harvest_reclaimer` (first arrival claims). Galaxy board lists all active fields with jump links (GC-AST-UX-01).
+
+---
+
 ## Planet Scope
 
 - `active_planet_id` markiert aktiven Slot in Systemansicht

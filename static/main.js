@@ -12954,6 +12954,11 @@
           stateContext: data,
         });
       }
+      if (typeof GC.notifyActiveFleetsListeners === "function") {
+        GC.notifyActiveFleetsListeners(data.active_fleets, {
+          reason: (opts && opts.reason) || "",
+        });
+      }
     }
 
     if (data.fleet_alerts !== undefined) {
@@ -12982,6 +12987,27 @@
   }
 
   GC.patchShellHudFromState = patchShellHudFromState;
+
+  /** GC-DEBRIS-LIVE-01 — page listeners for active_fleets deltas (Galaxy recycle arrival sync). */
+  GC._activeFleetsListeners = GC._activeFleetsListeners || [];
+  GC.registerActiveFleetsListener = function registerActiveFleetsListener(fn) {
+    if (typeof fn !== "function") return () => {};
+    GC._activeFleetsListeners.push(fn);
+    return () => {
+      GC._activeFleetsListeners = (GC._activeFleetsListeners || []).filter((cb) => cb !== fn);
+    };
+  };
+  GC.notifyActiveFleetsListeners = function notifyActiveFleetsListeners(fleetsRaw, meta) {
+    const list = GC._activeFleetsListeners || [];
+    if (!list.length) return;
+    for (const fn of list) {
+      try {
+        fn(fleetsRaw, meta || {});
+      } catch (e) {
+        console.error("[GC] activeFleets listener error", e);
+      }
+    }
+  };
 
   GC.mergeLastState = function mergeLastState(partial, reason) {
     if (!partial || typeof partial !== "object") return GC.lastState;

@@ -5444,7 +5444,9 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .galaxy-fleet-action.galaxy-quick-action--busy,
 .galaxy-fleet-action[data-submitting="1"],
 [data-galaxy-ring-debris-recycle].galaxy-quick-action--busy,
-[data-galaxy-ring-debris-recycle][data-submitting="1"]{
+[data-galaxy-ring-debris-recycle][data-submitting="1"],
+[data-galaxy-ring-asteroid-recycle].galaxy-quick-action--busy,
+[data-galaxy-ring-asteroid-recycle][data-submitting="1"]{
   opacity: 0.55;
   pointer-events: none;
 }
@@ -13963,6 +13965,43 @@ body.gc-techtree-media-zoom-open{
   transform: translate(-50%, -50%) scale(1.1);
   outline: none;
 }
+.galaxy-ring-asteroid-wrap{
+  position: absolute;
+  top: -6px;
+  left: -8px;
+  z-index: 9;
+  width: 0;
+  height: 0;
+}
+.galaxy-ring-asteroid-marker{
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid rgba(180, 200, 220, 0.7);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(10, 14, 22, 0.94);
+  cursor: pointer;
+  transform: translate(-50%, -50%) rotate(45deg);
+  box-shadow: 0 0 10px rgba(140, 170, 200, 0.4);
+  transition: border-color .14s ease, box-shadow .14s ease, transform .14s ease;
+}
+.galaxy-ring-asteroid-marker-img{
+  display: block;
+  width: 100%;
+  height: 100%;
+  background:
+    linear-gradient(135deg, rgba(90, 100, 120, 0.9) 0%, rgba(40, 48, 60, 0.95) 55%, rgba(160, 170, 180, 0.55) 100%);
+}
+.galaxy-ring-asteroid-marker:hover,
+.galaxy-ring-asteroid-marker:focus-visible{
+  border-color: rgba(220, 230, 245, 0.95);
+  box-shadow: 0 0 14px rgba(180, 200, 230, 0.6);
+  transform: translate(-50%, -50%) rotate(45deg) scale(1.1);
+  outline: none;
+}
 /* Slot hover stack: World Boss + debris cards (never overlap) */
 .galaxy-ring-slot-hover-stack{
   position: absolute;
@@ -14004,6 +14043,10 @@ body.gc-techtree-media-zoom-open{
   border: 1px solid rgba(255, 186, 72, 0.45);
   background: rgba(12, 8, 4, 0.97);
 }
+.galaxy-ring-hover-card--asteroid{
+  border: 1px solid rgba(160, 180, 210, 0.5);
+  background: rgba(8, 12, 18, 0.97);
+}
 .galaxy-ring-hover-card-title{
   margin: 0 0 6px;
   font-size: 0.68rem;
@@ -14020,6 +14063,9 @@ body.gc-techtree-media-zoom-open{
 }
 .galaxy-ring-hover-card--debris .galaxy-ring-hover-card-title{
   color: rgba(255, 210, 140, 0.95);
+}
+.galaxy-ring-hover-card--asteroid .galaxy-ring-hover-card-title{
+  color: rgba(190, 210, 235, 0.95);
 }
 .galaxy-ring-hover-card-stats{
   margin: 0;
@@ -14047,6 +14093,16 @@ body.gc-techtree-media-zoom-open{
   border-radius: 50%;
   border: 1px solid rgba(255, 186, 72, 0.55);
   background: var(--gc-galaxy-debris-img, url("img/debris/debris.jpg")) center/cover no-repeat;
+  vertical-align: middle;
+}
+.galaxy-ring-legend-asteroid{
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--gc-radius-sm, 2px);
+  border: 1px solid rgba(160, 180, 210, 0.65);
+  background: linear-gradient(135deg, rgba(90, 100, 120, 0.9), rgba(40, 48, 60, 0.95));
+  transform: rotate(45deg);
   vertical-align: middle;
 }
 .galaxy-ring-inspector{
@@ -27019,10 +27075,18 @@ button.pe-hero-planet-hint:focus-visible {
 .galaxy-ring-slot.has-world-boss {
   box-shadow: 0 0 12px rgba(60, 180, 255, 0.35);
 }
+.galaxy-ring-slot.has-asteroid {
+  box-shadow: 0 0 10px rgba(140, 160, 190, 0.3);
+}
 .galaxy-ring-slot-owner-label--world-boss {
   border-color: rgba(90, 200, 255, 0.55);
   background: rgba(8, 28, 44, 0.85);
   color: rgba(160, 230, 255, 0.95);
+}
+.galaxy-ring-slot-owner-label--asteroid {
+  border-color: rgba(160, 180, 210, 0.55);
+  background: rgba(16, 20, 28, 0.88);
+  color: rgba(190, 210, 235, 0.95);
 }
 .galaxy-wb-block {
   margin-top: 0.65rem;
@@ -27030,6 +27094,151 @@ button.pe-hero-planet-hint:focus-visible {
   border: 1px solid rgba(90, 200, 255, 0.35);
   border-radius: var(--gc-radius-sm, 2px);
   background: rgba(6, 16, 28, 0.55);
+}
+.galaxy-asteroid-block {
+  margin-top: 0.65rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid rgba(160, 180, 210, 0.4);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(10, 14, 22, 0.55);
+}
+.galaxy-asteroid-desc {
+  margin: 0 0 0.45rem;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+.galaxy-asteroid-board {
+  margin: 0;
+  padding: 8px 14px 10px;
+  border-bottom: 1px solid rgba(70, 229, 255, 0.14);
+  background: rgba(4, 10, 18, 0.72);
+}
+.galaxy-asteroid-board.is-empty {
+  padding: 6px 14px 8px;
+}
+.galaxy-asteroid-board-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 0;
+}
+.galaxy-asteroid-board:not(.is-empty) .galaxy-asteroid-board-head {
+  margin-bottom: 8px;
+}
+.galaxy-asteroid-board-title {
+  margin: 0;
+  font-family: Orbitron, Inter, system-ui, sans-serif;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(190, 210, 235, 0.95);
+}
+.galaxy-asteroid-board-subtitle {
+  margin: 4px 0 0;
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+.galaxy-asteroid-help-btn {
+  flex-shrink: 0;
+  min-width: 28px;
+}
+.galaxy-asteroid-board-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  max-height: 180px;
+  overflow: auto;
+}
+.galaxy-asteroid-board-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid rgba(120, 150, 180, 0.28);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(8, 14, 22, 0.65);
+}
+.galaxy-asteroid-board-row.is-current-system {
+  border-color: rgba(70, 229, 255, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(70, 229, 255, 0.12);
+}
+.galaxy-asteroid-board-row-main,
+.galaxy-asteroid-board-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.galaxy-asteroid-board-type {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: rgba(210, 225, 240, 0.95);
+}
+.galaxy-asteroid-board-coords,
+.galaxy-asteroid-board-loot,
+.galaxy-asteroid-board-ttl {
+  font-size: 0.7rem;
+  color: var(--gc-text-soft);
+}
+.galaxy-asteroid-board-empty {
+  margin: 4px 0 0;
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+.galaxy-asteroid-help-modal {
+  z-index: var(--gc-z-modal, 13000);
+}
+.galaxy-asteroid-help-modal .galaxy-asteroid-help-dialog {
+  width: min(460px, 100%);
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.galaxy-asteroid-help-modal .galaxy-asteroid-help-lead {
+  margin: 0 0 0.65rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--gc-text-soft);
+}
+.galaxy-asteroid-help-modal .galaxy-asteroid-help-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: var(--gc-text-soft);
+}
+.galaxy-asteroid-block-head {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+  margin-bottom: 0.4rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: rgba(190, 210, 235, 0.95);
+}
+.galaxy-asteroid-stats {
+  margin: 0 0 0.5rem;
+  display: grid;
+  gap: 4px;
+}
+.galaxy-asteroid-stats > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.72rem;
+}
+.galaxy-asteroid-stats dt {
+  margin: 0;
+  color: var(--gc-text-soft);
+}
+.galaxy-asteroid-stats dd {
+  margin: 0;
 }
 .galaxy-wb-block-head {
   display: flex;

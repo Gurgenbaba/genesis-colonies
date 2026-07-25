@@ -72,6 +72,21 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
                     f"world-boss expired={wb_tick.get('expired_ids')} "
                     f"spawned={wb_tick.get('spawned_event_id')}"
                 )
+
+            from .asteroids import maybe_tick_asteroid_schedule
+
+            ast_tick = maybe_tick_asteroid_schedule(conn=conn)
+            if ast_tick.get("expired_ids") or ast_tick.get("spawned"):
+                _worker_log(
+                    f"asteroids expired={ast_tick.get('expired_ids')} "
+                    f"spawned={len(ast_tick.get('spawned') or [])}"
+                )
+
+            from .combat import expire_due_debris_fields
+
+            debris_expired = expire_due_debris_fields(conn=conn)
+            if debris_expired:
+                _worker_log(f"debris expired={debris_expired}")
             commit(conn)
         except Exception:
             rollback(conn)

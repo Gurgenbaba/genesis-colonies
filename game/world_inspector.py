@@ -67,6 +67,10 @@ def build_debris_field_payload(
         return None
 
     ttl_remaining = debris_remaining_seconds(updated_at, now=now)
+    # TTL is hard — do not expose expired fields in Galaxy / inspector UI.
+    if ttl_remaining <= 0 and updated_at is not None:
+        return None
+
     payload: Dict[str, Any] = {
         "metal": m,
         "crystal": c,

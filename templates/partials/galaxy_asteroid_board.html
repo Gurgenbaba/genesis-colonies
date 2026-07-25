@@ -1,0 +1,83 @@
+{# GC-AST-UX-01 — Galaxy asteroid board: list + jump + help modal #}
+{% set board = sys.active_asteroid_board if sys.active_asteroid_board is defined else [] %}
+<aside class="galaxy-asteroid-board{% if not board or board|length == 0 %} is-empty{% endif %}"
+       data-galaxy-asteroid-board
+       aria-label="{{ T('galaxy_asteroid_board_title', 'Asteroidengürtel') }}">
+  <header class="galaxy-asteroid-board-head">
+    <div class="galaxy-asteroid-board-titles">
+      <h3 class="galaxy-asteroid-board-title">{{ T('galaxy_asteroid_board_title', 'Asteroidengürtel') }}</h3>
+      {% if board and board|length > 0 %}
+      <p class="galaxy-asteroid-board-subtitle hint">{{ T('galaxy_asteroid_board_subtitle', 'Aktive Felder im Universum — springe hin und ernte mit Harvest Reclaimern.') }}</p>
+      {% else %}
+      <p class="galaxy-asteroid-board-empty hint">{{ T('galaxy_asteroid_board_empty', 'Aktuell keine aktiven Asteroidenfelder.') }}</p>
+      {% endif %}
+    </div>
+    <button type="button"
+            class="gc-btn gc-btn-ghost gc-btn-xs galaxy-asteroid-help-btn"
+            data-galaxy-asteroid-help-open
+            aria-haspopup="dialog"
+            aria-controls="galaxy-asteroid-help-modal"
+            title="{{ T('galaxy_asteroid_help_btn', 'Asteroiden-Hilfe') }}"
+            aria-label="{{ T('galaxy_asteroid_help_btn', 'Asteroiden-Hilfe') }}">?</button>
+  </header>
+
+  {% if board and board|length > 0 %}
+  <ul class="galaxy-asteroid-board-list">
+    {% for entry in board %}
+    <li class="galaxy-asteroid-board-row{% if entry.is_current_system %} is-current-system{% endif %}">
+      <div class="galaxy-asteroid-board-row-main">
+        <span class="galaxy-asteroid-board-type">{{ T(entry.name_key, entry.asteroid_key) }}</span>
+        <span class="galaxy-asteroid-board-coords gc-mono">{{ entry.coords }}</span>
+      </div>
+      <div class="galaxy-asteroid-board-row-meta">
+        <span class="galaxy-asteroid-board-loot gc-mono" title="{{ T('resource_metal', 'Ferronit') }} / {{ T('resource_crystal', 'Crytite') }} / {{ T('resource_fuel_cells', 'Brennzellen') }}">
+          {{ (entry.metal or 0)|fmt_int_compact }} / {{ (entry.crystal or 0)|fmt_int_compact }} / {{ (entry.fuel_cells or 0)|fmt_int_compact }}
+        </span>
+        {% if entry.expires_at %}
+        <span class="galaxy-asteroid-board-ttl gc-mono"
+              data-countdown-at="{{ entry.expires_at|int }}"
+              data-countdown-format="eta">—</span>
+        {% endif %}
+        <a href="{{ entry.galaxy_href }}"
+           class="gc-btn gc-btn-sm gc-btn-outline galaxy-asteroid-board-jump"
+           data-pjax>{{ T('galaxy_asteroid_board_jump', 'Springen') }}</a>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</aside>
+
+{# Same shell as World Boss help — dialog/overlay class names are required for modal CSS #}
+<div id="galaxy-asteroid-help-modal"
+     class="gc-player-card-modal galaxy-asteroid-help-modal"
+     hidden
+     aria-hidden="true"
+     data-galaxy-asteroid-help-modal>
+  <div class="gc-player-card-overlay" data-galaxy-asteroid-help-close tabindex="-1"></div>
+  <div class="gc-player-card-dialog galaxy-asteroid-help-dialog"
+       role="dialog"
+       aria-modal="true"
+       aria-labelledby="galaxy-asteroid-help-modal-title">
+    <header class="gc-player-card-head">
+      <h2 id="galaxy-asteroid-help-modal-title" class="gc-player-card-head-title">
+        {{ T('galaxy_asteroid_help_title', 'Asteroidengürtel — Überblick') }}
+      </h2>
+      <button type="button"
+              class="gc-btn gc-btn-ghost gc-btn-xs gc-player-card-close"
+              data-galaxy-asteroid-help-close
+              aria-label="{{ T('close', 'Schließen') }}">×</button>
+    </header>
+    <div class="gc-player-card-body galaxy-asteroid-help-body">
+      <p class="galaxy-asteroid-help-lead">{{ T('galaxy_asteroid_help_lead', 'Temporäre Asteroidenfelder erscheinen in dicht besiedelten Systemen. Ernte mit Mission Recycling und Harvest Reclaimern.') }}</p>
+      <ul class="galaxy-asteroid-help-list">
+        <li>{{ T('galaxy_asteroid_help_ttl', 'TTL: Felder bleiben etwa 2 Stunden — danach verfallen sie.') }}</li>
+        <li>{{ T('galaxy_asteroid_help_spawn', 'Spawn: Wellen in den dichtesten Systemen (alle ~45 Minuten, Cap 15 Felder).') }}</li>
+        <li>{{ T('galaxy_asteroid_help_ships', 'Schiffe: Nur Harvest Reclaimer (Mission Recycling).') }}</li>
+        <li>{{ T('galaxy_asteroid_help_race', 'Wettkampf: Mehrere Flotten möglich — wer zuerst ankommt, claimt das Feld.') }}</li>
+        <li>{{ T('galaxy_asteroid_help_board', 'Board: Liste aller aktiven Felder mit Sprung zur Galaxie-Position.') }}</li>
+        <li>{{ T('galaxy_asteroid_help_partial', 'Fracht: Zu wenige Reclaimer bergen nur teilweise — Rest kann verloren gehen.') }}</li>
+      </ul>
+    </div>
+  </div>
+</div>

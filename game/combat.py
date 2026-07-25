@@ -907,6 +907,30 @@ def debris_schema_ready(conn) -> bool:
     return table_exists(conn, "debris_fields")
 
 
+def expire_due_debris_fields(
+    *,
+    conn,
+    now: Optional[float] = None,
+) -> int:
+    """Hard-delete debris rows past ``DEBRIS_FIELD_TTL_SECONDS`` (from ``updated_at``).
+
+    Returns the number of deleted rows.
+    """
+    if not debris_schema_ready(conn):
+        return 0
+    ts = float(now if now is not None else time.time())
+    cutoff = ts - float(DEBRIS_FIELD_TTL_SECONDS)
+    cur = conn.cursor()
+    cur.execute(
+        """
+        DELETE FROM debris_fields
+        WHERE updated_at <= ?;
+        """,
+        (cutoff,),
+    )
+    return max(0, int(cur.rowcount or 0))
+
+
 def add_debris_field(
     galaxy: int,
     system: int,
@@ -993,11 +1017,15 @@ def get_debris_at_field(
     position: int,
     *,
     conn,
+    now: Optional[float] = None,
 ) -> Dict[str, int]:
-    """Return metal/crystal at galaxy coordinates (0 if no field)."""
+    """Return metal/crystal at galaxy coordinates (0 if no field or TTL expired)."""
     if not debris_schema_ready(conn):
         return {"metal": 0, "crystal": 0}
     from .galaxy import validate_coordinates
+
+    # Purge expired rows so harvest / fleet gates never see stale debris.
+    expire_due_debris_fields(conn=conn, now=now)
 
     g, s, p = int(galaxy), int(system), int(position)
     validate_coordinates(g, s, p)

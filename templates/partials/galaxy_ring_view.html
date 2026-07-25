@@ -11,6 +11,7 @@
      data-system-min="{{ nav.system_min if nav.system_min is defined else 1 }}"
      data-system-max="{{ nav.system_max if nav.system_max is defined else 499 }}"
      data-active-planet-id="{{ (HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET is defined and HEADER_ACTIVE_PLANET else (active_planet_id if active_planet_id is defined else 0))|int }}"
+     data-available-reclaimers="{{ (sys.available_reclaimers if sys.available_reclaimers is defined else 0)|int }}"
      data-has-seed-ark="{{ '1' if has_seed_ark is defined and has_seed_ark else '0' }}"
      style="--gc-galaxy-map-tile: url('{{ url_for('static', filename='img/map.webp', v=GC_ASSET_VERSION) }}'); --gc-galaxy-map-tile-fallback: url('{{ url_for('static', filename='img/map.png', v=GC_ASSET_VERSION) }}'); --gc-galaxy-debris-img: url('{{ url_for('static', filename='img/debris/debris.jpg', v=GC_ASSET_VERSION) }}');">
   <section class="galaxy-hud-module" data-galaxy-hud-module>
@@ -79,6 +80,8 @@
       </div>
     </header>
 
+    {% include "partials/galaxy_asteroid_board.html" %}
+
     <div class="galaxy-hud-body" data-galaxy-hud-body>
       <div class="galaxy-ring-stage-col">
         <div class="galaxy-ring-stage-wrap" data-galaxy-ring-stage-wrap>
@@ -121,17 +124,22 @@
                         {% if slot.is_active_planet %}is-active-planet{% endif %}
                         {% if slot.is_highlighted %}is-highlighted{% endif %}
                         {% if slot.has_debris %}has-debris{% endif %}
-                        {% if slot.has_world_boss %}has-world-boss{% endif %}"
+                        {% if slot.has_world_boss %}has-world-boss{% endif %}
+                        {% if slot.has_asteroid %}has-asteroid{% endif %}"
                       id="galaxy-ring-slot-{{ slot.position }}"
                       data-galaxy-ring-slot="{{ slot.position }}"
-                      data-slot-title="{% if slot.has_world_boss and slot.world_boss %}{{ T(slot.world_boss.name_key, slot.world_boss.boss_key) }}{% elif slot.occupied %}{{ slot.planet_name }}{% else %}{{ T('galaxy_empty_slot') }}{% endif %}"
-                      aria-label="{{ T('galaxy_slot_position', 'Pos') }} {{ slot.position }}{% if slot.has_world_boss and slot.world_boss %}: {{ T('galaxy_wb_field', 'World Boss') }} {{ T(slot.world_boss.name_key, slot.world_boss.boss_key) }}{% elif slot.occupied %}: {{ slot.planet_name }}{% if slot.commander_name %} — {{ slot.commander_name }}{% endif %}{% else %}: {{ T('galaxy_empty_slot') }}{% endif %}"
+                      data-slot-title="{% if slot.has_world_boss and slot.world_boss %}{{ T(slot.world_boss.name_key, slot.world_boss.boss_key) }}{% elif slot.has_asteroid and slot.asteroid %}{{ T(slot.asteroid.name_key, slot.asteroid.asteroid_key) }}{% elif slot.occupied %}{{ slot.planet_name }}{% else %}{{ T('galaxy_empty_slot') }}{% endif %}"
+                      aria-label="{{ T('galaxy_slot_position', 'Pos') }} {{ slot.position }}{% if slot.has_world_boss and slot.world_boss %}: {{ T('galaxy_wb_field', 'World Boss') }} {{ T(slot.world_boss.name_key, slot.world_boss.boss_key) }}{% elif slot.has_asteroid and slot.asteroid %}: {{ T(slot.asteroid.name_key, slot.asteroid.asteroid_key) }}{% elif slot.occupied %}: {{ slot.planet_name }}{% if slot.commander_name %} — {{ slot.commander_name }}{% endif %}{% else %}: {{ T('galaxy_empty_slot') }}{% endif %}"
                       aria-controls="galaxy-ring-inspector-{{ slot.position }}"
                       aria-expanded="false">
                 {% if slot.has_world_boss and slot.world_boss %}
                 <span class="galaxy-ring-slot-owner-label galaxy-ring-slot-owner-label--world-boss"
                       aria-hidden="true"
                       title="{{ T(slot.world_boss.name_key, slot.world_boss.boss_key) }}">{{ T('galaxy_wb_short', 'Boss') }}</span>
+                {% elif slot.has_asteroid and slot.asteroid %}
+                <span class="galaxy-ring-slot-owner-label galaxy-ring-slot-owner-label--asteroid"
+                      aria-hidden="true"
+                      title="{{ T(slot.asteroid.name_key, slot.asteroid.asteroid_key) }}">{{ T('galaxy_asteroid_short', 'Ast') }}</span>
                 {% elif slot.occupied and slot.commander_name %}
                 <span class="galaxy-ring-slot-owner-label
                       {% if slot.is_own_planet %}galaxy-ring-slot-owner-label--own
@@ -146,12 +154,13 @@
                       {% if img_rel %}
                       style="--gr-planet-image: url('{{ url_for('static', filename=img_rel, v=GC_ASSET_VERSION) }}');{% if img_webp %} --gr-planet-image-webp: url('{{ url_for('static', filename=img_webp, v=GC_ASSET_VERSION) }}');{% endif %}"
                       {% endif %}
-                      title="{% if slot.has_world_boss and slot.world_boss %}{{ T(slot.world_boss.name_key, slot.world_boss.boss_key) }}{% elif slot.occupied %}{{ T(slot.planet_class_label_key, slot.planet_class) }}{% else %}{{ slot.temperature_display }}{% endif %}">
+                      title="{% if slot.has_world_boss and slot.world_boss %}{{ T(slot.world_boss.name_key, slot.world_boss.boss_key) }}{% elif slot.has_asteroid and slot.asteroid %}{{ T(slot.asteroid.name_key, slot.asteroid.asteroid_key) }}{% elif slot.occupied %}{{ T(slot.planet_class_label_key, slot.planet_class) }}{% else %}{{ slot.temperature_display }}{% endif %}">
                   <span class="galaxy-ring-slot-pos gc-mono" aria-hidden="true">{{ slot.position }}</span>
                 </span>
                 {% include "partials/galaxy_slot_status_badges.html" %}
               </button>
               {% include "partials/galaxy_ring_debris_marker.html" %}
+              {% include "partials/galaxy_ring_asteroid_marker.html" %}
               {% include "partials/galaxy_ring_world_boss_marker.html" %}
               {% include "partials/galaxy_ring_slot_hover_stack.html" %}
             </div>
@@ -228,6 +237,9 @@
             {% if slot.has_debris %}
             {% include "partials/galaxy_debris_block.html" %}
             {% endif %}
+            {% if slot.has_asteroid %}
+            {% include "partials/galaxy_asteroid_block.html" %}
+            {% endif %}
             {% if slot.has_world_boss %}
             {% include "partials/galaxy_world_boss_block.html" %}
             {% endif %}
@@ -278,6 +290,7 @@
         <span class="gl-item"><span class="galaxy-ring-legend-swatch galaxy-ring-legend-swatch--foreign"></span>{{ T("galaxy_legend_occupied") }}</span>
         <span class="gl-item"><span class="galaxy-ring-legend-swatch galaxy-ring-legend-swatch--empty"></span>{{ T("galaxy_legend_colonizable") }}</span>
         <span class="gl-item"><span class="galaxy-ring-legend-debris" aria-hidden="true"></span>{{ T("galaxy_legend_debris") }}</span>
+        <span class="gl-item"><span class="galaxy-ring-legend-asteroid" aria-hidden="true"></span>{{ T("galaxy_legend_asteroids") }}</span>
         <span class="gl-item"><span class="galaxy-ring-status-chip galaxy-ring-status-chip--vacation galaxy-ring-legend-chip"></span>{{ T("galaxy_legend_vacation") }}</span>
         <span class="gl-item"><span class="galaxy-ring-status-chip galaxy-ring-status-chip--inactive galaxy-ring-legend-chip"></span>{{ T("galaxy_legend_inactive") }}</span>
         <span class="gl-item"><span class="galaxy-ring-status-chip galaxy-ring-status-chip--strong galaxy-ring-legend-chip"></span>{{ T("galaxy_legend_too_strong") }}</span>

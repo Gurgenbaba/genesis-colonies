@@ -65,6 +65,21 @@ def test_build_debris_field_payload_includes_ttl_and_recycle_href():
     assert "mission=recycle" in payload["recycle_href"]
 
 
+def test_build_debris_field_payload_hides_expired_ttl():
+    now = 1_700_000_000.0
+    updated_at = now - float(DEBRIS_FIELD_TTL_SECONDS) - 1.0
+    payload = build_debris_field_payload(
+        5000,
+        1200,
+        updated_at=updated_at,
+        now=now,
+        galaxy=1,
+        system=42,
+        position=7,
+    )
+    assert payload is None
+
+
 def test_get_debris_field_payload_reads_db(galaxy_db):
     uid = _create_player()
     planet = get_planets_by_player(uid)[0]

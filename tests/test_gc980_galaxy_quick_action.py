@@ -53,6 +53,19 @@ def test_galaxy_quick_action_debris_recycle_handler():
     assert 'mission_type: "recycle"' in js
 
 
+def test_galaxy_quick_action_debris_live_sync_contract():
+    """GC-DEBRIS-LIVE-01: arrival reload + stale-target self-heal."""
+    js = _read_js()
+    main_js = Path("static/main.js").read_text(encoding="utf-8")
+    assert "watchRecycleArrivals" in js
+    assert "onActiveFleetsForRecycleSync" in js
+    assert "handleStaleRecycleTargetError" in js
+    assert "galaxy_debris_gone_reload" in js
+    assert "no_debris_at_target" in js
+    assert "registerActiveFleetsListener" in main_js
+    assert "notifyActiveFleetsListeners" in main_js
+
+
 def test_galaxy_quick_action_relocation_handler():
     js = _read_js()
     assert "handleRelocationClick" in js

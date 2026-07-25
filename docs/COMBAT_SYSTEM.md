@@ -103,7 +103,7 @@ process_fleet_tick → attack arrival
 
 Loot: winner loads plunder up to **returning fleet cargo** (metal → crystal → fuel_cells). Credited on return tick at home planet.
 
-Debris: stored in `debris_fields` at target coordinates; shown in galaxy system view ([GALAXY_SYSTEM.md](GALAXY_SYSTEM.md)).
+Debris: stored in `debris_fields` at target coordinates; shown in galaxy system view ([GALAXY_SYSTEM.md](GALAXY_SYSTEM.md)). TTL (`DEBRIS_FIELD_TTL_SECONDS`, 7 days from `updated_at`) is **hard expire** via `expire_due_debris_fields` (fleet-worker piggyback + defensive purge on galaxy/harvest reads). Zero-amount rows are deleted on harvest.
 
 ---
 

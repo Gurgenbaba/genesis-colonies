@@ -4,6 +4,7 @@
 
   const BUSY_CLASS = "galaxy-quick-action--busy";
   const SUBMIT_COOLDOWN_MS = 600;
+  const RECYCLE_ARRIVAL_RELOAD_DEBOUNCE_MS = 400;
 
   function deps() {
     const GC = window.GC || {};
@@ -23,6 +24,10 @@
     _attackTrigger: null,
     _attackPresetsCache: null,
     _attackPresetsLoading: false,
+    _recycleFleetStatuses: null,
+    _recycleArrivalReloadTimer: null,
+    _unwatchRecycleArrivals: null,
+    _asteroidHelpHome: null,
 
     escapeHtml(value) {
       return String(value || "")
@@ -46,8 +51,126 @@
       return parseInt(getDomPlanetId() || "0", 10) || 0;
     },
 
+    getAvailableReclaimers(root) {
+      return Math.max(0, parseInt(root?.dataset?.availableReclaimers || "0", 10) || 0);
+    },
+
+    resolveRecycleSendCount(root, needed) {
+      const need = Math.max(0, parseInt(needed || "0", 10) || 0);
+      return Math.min(this.getAvailableReclaimers(root), need);
+    },
+
     coordsLabel(galaxy, system, position) {
       return `[${galaxy}:${system}:${position}]`;
+    },
+
+    async reloadGalaxyAfterRecycle() {
+      if (typeof window.GC?.reloadCurrentPage === "function") {
+        await window.GC.reloadCurrentPage({ force: true });
+      }
+    },
+
+    scheduleGalaxyReloadAfterRecycleArrival() {
+      if (this._recycleArrivalReloadTimer) {
+        window.clearTimeout(this._recycleArrivalReloadTimer);
+      }
+      this._recycleArrivalReloadTimer = window.setTimeout(() => {
+        this._recycleArrivalReloadTimer = null;
+        this.reloadGalaxyAfterRecycle();
+      }, RECYCLE_ARRIVAL_RELOAD_DEBOUNCE_MS);
+    },
+
+    recycleFleetStatusMap(fleetsRaw) {
+      const GC = window.GC || {};
+      const normalize =
+        typeof GC.normalizeActiveFleetsPayload === "function"
+          ? GC.normalizeActiveFleetsPayload.bind(GC)
+          : null;
+      const items = normalize
+        ? normalize(fleetsRaw).items || []
+        : Array.isArray(fleetsRaw?.items)
+          ? fleetsRaw.items
+          : Array.isArray(fleetsRaw)
+            ? fleetsRaw
+            : [];
+      const map = new Map();
+      for (const it of items) {
+        if (!it || typeof it !== "object") continue;
+        const mission = String(it.mission || it.mission_type || "").trim().toLowerCase();
+        if (mission !== "recycle") continue;
+        const id = Number(it.movement_id || it.id || 0);
+        if (!id) continue;
+        map.set(id, String(it.status || "").trim().toLowerCase());
+      }
+      return map;
+    },
+
+    onActiveFleetsForRecycleSync(fleetsRaw) {
+      const next = this.recycleFleetStatusMap(fleetsRaw);
+      const prev = this._recycleFleetStatuses;
+      this._recycleFleetStatuses = next;
+      if (!prev) return;
+      let arrived = false;
+      for (const [id, status] of prev.entries()) {
+        if (status !== "outbound") continue;
+        const nextStatus = next.get(id);
+        // Harvest runs on outbound→returning; item may also drop from the list briefly.
+        if (!nextStatus || nextStatus === "returning" || nextStatus === "completed") {
+          arrived = true;
+          break;
+        }
+      }
+      if (arrived) this.scheduleGalaxyReloadAfterRecycleArrival();
+    },
+
+    watchRecycleArrivals() {
+      this.stopWatchRecycleArrivals();
+      const GC = window.GC || {};
+      this._recycleFleetStatuses = this.recycleFleetStatusMap(GC.lastState?.active_fleets);
+      if (typeof GC.registerActiveFleetsListener !== "function") return;
+      this._unwatchRecycleArrivals = GC.registerActiveFleetsListener((fleetsRaw) => {
+        this.onActiveFleetsForRecycleSync(fleetsRaw);
+      });
+    },
+
+    stopWatchRecycleArrivals() {
+      if (typeof this._unwatchRecycleArrivals === "function") {
+        this._unwatchRecycleArrivals();
+        this._unwatchRecycleArrivals = null;
+      }
+      if (this._recycleArrivalReloadTimer) {
+        window.clearTimeout(this._recycleArrivalReloadTimer);
+        this._recycleArrivalReloadTimer = null;
+      }
+      this._recycleFleetStatuses = null;
+    },
+
+    async handleStaleRecycleTargetError(reason) {
+      const { t, showNotify } = deps();
+      const key = String(reason || "");
+      if (key === "no_debris_at_target") {
+        showNotify(
+          t(
+            "galaxy_debris_gone_reload",
+            "Debris field is gone or already harvested — refreshing galaxy."
+          ),
+          "error"
+        );
+        await this.reloadGalaxyAfterRecycle();
+        return true;
+      }
+      if (key === "no_asteroid_at_target") {
+        showNotify(
+          t(
+            "galaxy_asteroid_gone_reload",
+            "Asteroid is gone or already claimed — refreshing galaxy."
+          ),
+          "error"
+        );
+        await this.reloadGalaxyAfterRecycle();
+        return true;
+      }
+      return false;
     },
 
     parseTargetCoords(el) {
@@ -432,14 +555,25 @@
       const targetGalaxy = parseInt(wrap.dataset.targetGalaxy || "0", 10);
       const targetSystem = parseInt(wrap.dataset.targetSystem || "0", 10);
       const targetPosition = parseInt(wrap.dataset.targetPosition || "0", 10);
-      const recyclerSlots = parseInt(wrap.dataset.recyclerSlots || "0", 10);
+      const needed = parseInt(wrap.dataset.recyclerSlots || "0", 10);
+      const sendCount = this.resolveRecycleSendCount(root, needed);
 
       if (!this.getOriginPlanetId(root) || !targetGalaxy || !targetSystem || !targetPosition) {
         showNotify(t("galaxy_debris_recycle_no_origin", "No active colony for recycler launch."), "error");
         return;
       }
-      if (recyclerSlots < 1) {
+      if (needed < 1) {
         showNotify(t("galaxy_debris_recycle_empty", "No harvestable debris."), "error");
+        return;
+      }
+      if (sendCount < 1) {
+        showNotify(
+          t(
+            "galaxy_debris_recycle_no_ships",
+            "No Harvest Reclaimers free — wait for return or build more."
+          ),
+          "error"
+        );
         return;
       }
 
@@ -451,14 +585,94 @@
             target_galaxy: targetGalaxy,
             target_system: targetSystem,
             target_position: targetPosition,
-            ships: { harvest_reclaimer: recyclerSlots },
+            ships: { harvest_reclaimer: sendCount },
             resources: {},
             speed_percent: 100,
           },
-          onSuccess: () => {
-            showNotify(t("fleet_send_success", "Fleet dispatched."), "success");
+          onSuccess: async () => {
+            if (sendCount < needed) {
+              showNotify(
+                t(
+                  "galaxy_debris_recycle_partial",
+                  "Fleet dispatched with available reclaimers (partial harvest)."
+                ),
+                "success"
+              );
+            } else {
+              showNotify(t("fleet_send_success", "Fleet dispatched."), "success");
+            }
+            await this.reloadGalaxyAfterRecycle();
           },
-          onError: (reason, res) => {
+          onError: async (reason, res) => {
+            if (await this.handleStaleRecycleTargetError(reason)) return;
+            this.notifyFleetError(reason, res, null);
+          },
+        });
+      });
+    },
+
+    async handleAsteroidRecycleClick(ev, root) {
+      const btn = ev.target.closest("[data-galaxy-ring-asteroid-recycle]");
+      if (!btn || !root.contains(btn)) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      const wrap = btn.closest("[data-galaxy-ring-asteroid-wrap]");
+      if (!wrap) return;
+
+      const { t, showNotify } = deps();
+      const targetGalaxy = parseInt(wrap.dataset.targetGalaxy || "0", 10);
+      const targetSystem = parseInt(wrap.dataset.targetSystem || "0", 10);
+      const targetPosition = parseInt(wrap.dataset.targetPosition || "0", 10);
+      const needed = parseInt(wrap.dataset.recyclerSlots || "0", 10);
+      const sendCount = this.resolveRecycleSendCount(root, needed);
+
+      if (!this.getOriginPlanetId(root) || !targetGalaxy || !targetSystem || !targetPosition) {
+        showNotify(t("galaxy_asteroid_harvest_no_origin", "No active colony for asteroid harvest."), "error");
+        return;
+      }
+      if (needed < 1) {
+        showNotify(t("galaxy_asteroid_harvest_empty", "No harvestable asteroid."), "error");
+        return;
+      }
+      if (sendCount < 1) {
+        showNotify(
+          t(
+            "galaxy_asteroid_harvest_no_ships",
+            "No Harvest Reclaimers free — wait for return or build more."
+          ),
+          "error"
+        );
+        return;
+      }
+
+      await this.runGuarded(btn, async () => {
+        await this.postFleetSend(root, btn, {
+          skipGuard: true,
+          body: {
+            mission_type: "recycle",
+            target_galaxy: targetGalaxy,
+            target_system: targetSystem,
+            target_position: targetPosition,
+            ships: { harvest_reclaimer: sendCount },
+            resources: {},
+            speed_percent: 100,
+          },
+          onSuccess: async () => {
+            if (sendCount < needed) {
+              showNotify(
+                t(
+                  "galaxy_asteroid_harvest_partial",
+                  "Fleet dispatched with available reclaimers (partial harvest)."
+                ),
+                "success"
+              );
+            } else {
+              showNotify(t("fleet_send_success", "Fleet dispatched."), "success");
+            }
+            await this.reloadGalaxyAfterRecycle();
+          },
+          onError: async (reason, res) => {
+            if (await this.handleStaleRecycleTargetError(reason)) return;
             this.notifyFleetError(reason, res, null);
           },
         });
@@ -467,6 +681,46 @@
 
     handleEscape() {
       if (this._attackMenu) this.closeAttackMenu();
+      this.closeAsteroidHelp();
+    },
+
+    openAsteroidHelp() {
+      const modal = document.getElementById("galaxy-asteroid-help-modal");
+      if (!modal) return;
+      // Portal to body so fixed overlay is not trapped by galaxy stacking contexts.
+      if (modal.parentElement !== document.body) {
+        this._asteroidHelpHome = modal.parentElement;
+        document.body.appendChild(modal);
+      }
+      modal.hidden = false;
+      modal.setAttribute("aria-hidden", "false");
+      modal.querySelector("[data-galaxy-asteroid-help-close].gc-player-card-close")?.focus();
+    },
+
+    closeAsteroidHelp() {
+      const modal = document.getElementById("galaxy-asteroid-help-modal");
+      if (!modal || modal.hidden) return;
+      modal.hidden = true;
+      modal.setAttribute("aria-hidden", "true");
+      if (this._asteroidHelpHome && modal.parentElement === document.body) {
+        this._asteroidHelpHome.appendChild(modal);
+        this._asteroidHelpHome = null;
+      }
+      document.querySelector("[data-galaxy-asteroid-help-open]")?.focus();
+    },
+
+    handleAsteroidHelpClick(ev) {
+      const openBtn = ev.target.closest("[data-galaxy-asteroid-help-open]");
+      if (openBtn) {
+        ev.preventDefault();
+        this.openAsteroidHelp();
+        return;
+      }
+      const closeEl = ev.target.closest("[data-galaxy-asteroid-help-close]");
+      if (closeEl) {
+        ev.preventDefault();
+        this.closeAsteroidHelp();
+      }
     },
 
     async handleRelocationClick(ev, root) {
@@ -519,14 +773,24 @@
       const onAttackMenu = (ev) => this.handleAttackMenuClick(ev);
       const onAttackOutside = (ev) => this.handleAttackOutsideClick(ev);
       const onDebris = (ev) => this.handleDebrisRecycleClick(ev, root);
+      const onAsteroid = (ev) => this.handleAsteroidRecycleClick(ev, root);
+      const onAsteroidHelp = (ev) => this.handleAsteroidHelpClick(ev);
       const onRelocate = (ev) => this.handleRelocationClick(ev, root);
+      const onEscape = (ev) => {
+        if (ev.key === "Escape") this.handleEscape();
+      };
 
       root.addEventListener("click", onSpy);
       root.addEventListener("click", onAttack);
       document.addEventListener("click", onAttackMenu);
       document.addEventListener("click", onAttackOutside);
       root.addEventListener("click", onDebris);
+      root.addEventListener("click", onAsteroid);
+      root.addEventListener("click", onAsteroidHelp);
+      document.addEventListener("click", onAsteroidHelp);
       root.addEventListener("click", onRelocate);
+      document.addEventListener("keydown", onEscape);
+      this.watchRecycleArrivals();
 
       return () => {
         root.removeEventListener("click", onSpy);
@@ -534,8 +798,14 @@
         document.removeEventListener("click", onAttackMenu);
         document.removeEventListener("click", onAttackOutside);
         root.removeEventListener("click", onDebris);
+        root.removeEventListener("click", onAsteroid);
+        root.removeEventListener("click", onAsteroidHelp);
+        document.removeEventListener("click", onAsteroidHelp);
         root.removeEventListener("click", onRelocate);
+        document.removeEventListener("keydown", onEscape);
+        this.stopWatchRecycleArrivals();
         this.closeAttackMenu();
+        this.closeAsteroidHelp();
         this.resetAttackPresetCache();
       };
     },
