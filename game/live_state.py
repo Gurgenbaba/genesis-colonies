@@ -738,6 +738,9 @@ _PLANET_SWITCHER_POLL_KEYS = (
     "position",
     "empire_role_key",
     "empire_role_icon",
+    "empire_role_label_key",
+    "empire_subtitle_key",
+    "identity_title_key",
     "empire_identity_key",
 )
 

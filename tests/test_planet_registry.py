@@ -157,8 +157,23 @@ def test_main_js_registry_role_contract():
     assert "planetRoleKey" in src
     assert "planetIdentityKey" in src
     assert "planetRoleIcon" in src
+    assert "empire_identity_key" in src.split("function empireIdentityLabelKey")[1].split("function planetRegistryRoots")[0]
     assert "initHeaderPlanetSwitcher" not in src
     assert "GC.updateHeaderPlanetSwitcherFromState" not in src
+
+
+def test_diet_poll_planets_keep_identity_label_keys():
+    """GC-575: diet poll must not strip role subtitle keys — otherwise registry roles flash then vanish."""
+    live = (ROOT / "game" / "live_state.py").read_text(encoding="utf-8")
+    block = live.split("_PLANET_SWITCHER_POLL_KEYS = (")[1].split(")", 1)[0]
+    for key in (
+        "empire_role_key",
+        "empire_role_icon",
+        "empire_role_label_key",
+        "empire_subtitle_key",
+        "identity_title_key",
+    ):
+        assert f'"{key}"' in block, f"missing diet planet key: {key}"
 
 
 def test_registry_css_role_hierarchy():

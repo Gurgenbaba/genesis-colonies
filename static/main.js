@@ -23510,6 +23510,7 @@
       planet.identity_title_key ||
       planet.empire_subtitle_key ||
       planet.empire_role_label_key ||
+      planet.empire_identity_key ||
       ""
     );
   }
