@@ -1996,6 +1996,16 @@ def _grant_alliance_xp(conn, alliance_id: int, xp: int) -> None:
     )
 
 
+def grant_alliance_xp(alliance_id: int, xp: int, *, conn) -> int:
+    """Public XP grant path (donations, projects, world boss). Returns granted amount."""
+    amount = max(0, int(xp))
+    aid = int(alliance_id)
+    if amount <= 0 or aid <= 0:
+        return 0
+    _grant_alliance_xp(conn, aid, amount)
+    return amount
+
+
 def _deduct_pool(conn, alliance_id: int, cost: Mapping[str, int]) -> None:
     cur = conn.cursor()
     cur.execute(

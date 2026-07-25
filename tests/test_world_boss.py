@@ -244,6 +244,79 @@ def test_nav_badges_world_boss_live(wb_db):
         conn.close()
 
 
+def test_attack_grants_alliance_xp(wb_db):
+    from game.alliance import create_alliance, get_player_alliance
+    from game.world_boss import alliance_xp_from_boss_damage
+
+    assert alliance_xp_from_boss_damage(0) == 0
+    assert alliance_xp_from_boss_damage(74_999) == 0
+    assert alliance_xp_from_boss_damage(75_000) == 1
+    assert alliance_xp_from_boss_damage(1_500_000) == 20  # capped
+
+    uid = _player(name="AllyBoss")
+    conn = db()
+    try:
+        create_alliance("WBX", "World Boss XP", uid, conn=conn)
+        membership = get_player_alliance(uid, conn=conn)
+        assert membership
+        aid = int(membership["alliance_id"])
+        before = int(
+            conn.execute(
+                "SELECT alliance_xp FROM alliances WHERE id = ?;",
+                (aid,),
+            ).fetchone()["alliance_xp"]
+            or 0
+        )
+
+        begin_write_transaction(conn)
+        spawn = spawn_world_boss(
+            "void_titan",
+            conn=conn,
+            galaxy=5,
+            system=5,
+            position=5,
+            announce=False,
+        )
+        assert spawn["ok"], spawn
+        event = spawn["event"]
+        conn.execute(
+            "UPDATE world_boss_events SET max_hp = 5000000, current_hp = 5000000, "
+            "fleet_stacks_json = ? WHERE id = ?;",
+            ('{"falcon_interceptor":5}', int(event["id"])),
+        )
+        result = resolve_attack_arrival(
+            movement={
+                "id": 900777,
+                "player_id": uid,
+                "origin_planet_id": 0,
+                "target_galaxy": 5,
+                "target_system": 5,
+                "target_position": 5,
+                "resources": {},
+            },
+            ships={"falcon_interceptor": 500, "ironclad_frigate": 100},
+            player_id=uid,
+            conn=conn,
+        )
+        assert result["ok"], result
+        assert int(result["damage"]) > 0
+        assert int(result.get("alliance_id") or 0) == aid
+        expected = alliance_xp_from_boss_damage(int(result["damage"]))
+        assert int(result.get("alliance_xp_granted") or 0) == expected
+        after = int(
+            conn.execute(
+                "SELECT alliance_xp FROM alliances WHERE id = ?;",
+                (aid,),
+            ).fetchone()["alliance_xp"]
+            or 0
+        )
+        assert after == before + expected
+        assert after > before
+        commit(conn)
+    finally:
+        conn.close()
+
+
 def test_attack_contribution_and_defeat(wb_db):
     uid = _player()
     conn = db()

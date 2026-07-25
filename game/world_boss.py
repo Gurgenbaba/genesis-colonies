@@ -47,6 +47,20 @@ OVERKILL_LOG_SCALE = 0.15
 # Cap ≈ 8% → solo mega fleet needs ~13 waves (target band 10–20 hits).
 MAX_WAVE_HP_FRACTION = 0.08
 
+# Alliance XP from world-boss damage (good, not OP vs donation daily ~150).
+# ~1 XP per 75k damage; hard cap per wave so mega fleets cannot dump levels.
+ALLIANCE_XP_DAMAGE_DIVISOR = 75_000
+ALLIANCE_XP_PER_WAVE_CAP = 20
+
+
+def alliance_xp_from_boss_damage(damage: int) -> int:
+    """Convert one wave's HP damage into alliance XP (0 if below threshold)."""
+    dmg = max(0, int(damage))
+    if dmg <= 0:
+        return 0
+    return min(int(ALLIANCE_XP_PER_WAVE_CAP), dmg // int(ALLIANCE_XP_DAMAGE_DIVISOR))
+
+
 # Reward tiers → inventory container keys (meta-only, known catalog).
 # Amounts are tuned “good but not OP”: participate solid, top tiers rare containers.
 # Participate / discoverer / top10-bonus use the boss definition `loot_pool_key`.
@@ -1182,6 +1196,25 @@ def resolve_attack_arrival(
         conn=conn,
     )
 
+    alliance_xp_granted = 0
+    if alliance_id is not None and int(damage) > 0:
+        try:
+            from .alliance import grant_alliance_xp
+
+            alliance_xp_granted = int(
+                grant_alliance_xp(
+                    int(alliance_id),
+                    alliance_xp_from_boss_damage(int(damage)),
+                    conn=conn,
+                )
+            )
+        except Exception:
+            logger.exception(
+                "world_boss alliance xp failed player=%s alliance=%s",
+                player_id,
+                alliance_id,
+            )
+
     try:
         spawn_combat_debris_field(
             galaxy=tg,
@@ -1255,6 +1288,8 @@ def resolve_attack_arrival(
         "damage": damage,
         "defeated": defeated,
         "defender_ships_before": defender_ships,
+        "alliance_id": int(alliance_id) if alliance_id is not None else None,
+        "alliance_xp_granted": int(alliance_xp_granted),
     }
 
 

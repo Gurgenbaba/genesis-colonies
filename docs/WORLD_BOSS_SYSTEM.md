@@ -22,7 +22,7 @@ Server-wide PvE bosses: shared HP, multi-player contribution, exclusive meta rew
 | Cron spawn/expire | `game/fleet_worker.py` piggyback | No module-owned polling |
 | Directives | `game/directives/progress.py` | Event kind `world_boss_damage` |
 | News | `game/universe_news.py` | `category="EVENT"` |
-| Alliance aggregation | `game/alliance.py` + world_boss | Contribution `alliance_id` |
+| Alliance aggregation | `game/alliance.py` + world_boss | Contribution `alliance_id`; Ally XP via `grant_alliance_xp` |
 
 **Forbidden:** expedition pirate ratio combat for bosses; Command Map as live gate; frontend HP math; parallel fleet/combat modules; resource/ship loot boxes.
 
@@ -49,8 +49,9 @@ Server-wide PvE bosses: shared HP, multi-player contribution, exclusive meta rew
    - `wipe_fraction = defender_losses_score / wave_stack_score` (0..1)
    - `overkill_mult = max(1, 1 + OVERKILL_LOG_SCALE × log2(max(1, attacker_fleet_score / wave_stack_score)))`
    - Defaults: base 2%, soft overkill `0.15`, cap **8%** → solo mega fleets need ~10–20 waves
-6. Stacks persist for subsequent waves; debris may spawn; combat report uses defender name = boss label, `defender_id=0`.
-7. When HP ≤ 0 → status `defeated`; rewards unlock. On `ends_at` with HP > 0 → `expired`.
+6. If the attacker is in an alliance: Ally XP = `min(20, damage // 75_000)` via `grant_alliance_xp` (owner `game/alliance.py`).
+7. Stacks persist for subsequent waves; debris may spawn; combat report uses defender name = boss label, `defender_id=0`.
+8. When HP ≤ 0 → status `defeated`; rewards unlock. On `ends_at` with HP > 0 → `expired`.
 
 ### Anti-farm
 
