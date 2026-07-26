@@ -38771,14 +38771,72 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
 .shop-card {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.75rem;
+  padding: 0;
+  overflow: hidden;
   border: 1px solid rgba(120, 140, 170, 0.35);
   border-radius: var(--gc-radius-sm, 2px);
-  background: rgba(8, 12, 20, 0.35);
+  background: rgba(8, 12, 20, 0.55);
 }
 .shop-card.is-owned { opacity: 0.75; }
+.shop-card-art {
+  position: relative;
+  margin: 0;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: #05080f;
+  border-bottom: 1px solid rgba(120, 140, 170, 0.28);
+}
+.shop-card-art::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 28%;
+  pointer-events: none;
+  background: linear-gradient(to top, rgba(5, 8, 15, 0.72), transparent);
+}
+.shop-card-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  opacity: 0;
+  transform: scale(1.02);
+  transition: transform 0.45s ease, opacity 0.4s ease;
+  animation: shop-art-in 0.5s ease forwards;
+}
+.shop-card:hover .shop-card-art img,
+.shop-card:focus-within .shop-card-art img {
+  transform: scale(1.045);
+}
+@keyframes shop-art-in {
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shop-card-art img {
+    opacity: 1;
+    transform: none;
+    animation: none;
+    transition: none;
+  }
+  .shop-card:hover .shop-card-art img,
+  .shop-card:focus-within .shop-card-art img {
+    transform: none;
+  }
+}
+.shop-card-body {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex: 1;
+  padding: 0.75rem;
+}
 .shop-card-title {
   margin: 0 0 0.35rem;
   font-size: 1rem;

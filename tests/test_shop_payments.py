@@ -444,6 +444,12 @@ def test_serialize_hides_payload(shop_db):
     state = serialize_catalog_for_client(conn=conn, player_id=uid)
     assert "payload" not in state["products"][0]
     assert "display" in state["products"][0]
+    skus = {p["sku"] for p in state["products"]}
+    from game.shop import SHOP_SKU_IMAGES
+
+    assert skus == set(SHOP_SKU_IMAGES.keys())
+    for p in state["products"]:
+        assert p.get("image") == SHOP_SKU_IMAGES[p["sku"]]
     conn.close()
 
 

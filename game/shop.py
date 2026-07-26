@@ -33,6 +33,17 @@ CATALOG_VERSION = 3
 
 # Free-Baseline Value Balance (GC-2310…2313):
 # Paid sells scarce flexible TK + dense high-tier packs; domain boosters must beat ~2× login-month skip.
+# Static art under static/img/shop/ — relative path for url_for('static', …).
+SHOP_SKU_IMAGES: Dict[str, str] = {
+    SKU_SEASON_PASS: "img/shop/pass.jpg",
+    "tk_pack_s": "img/shop/time_s.jpg",
+    "tk_pack_m": "img/shop/time_m.jpg",
+    "tk_pack_l": "img/shop/time_l.jpg",
+    "booster_pack_starter": "img/shop/booster.jpg",
+    "container_pack_rare": "img/shop/rare.jpg",
+    "commander_supply_pack": "img/shop/commander.jpg",
+}
+
 DEFAULT_CATALOG: Tuple[Dict[str, Any], ...] = (
     {
         "sku": SKU_SEASON_PASS,
@@ -131,6 +142,11 @@ DEFAULT_CATALOG: Tuple[Dict[str, Any], ...] = (
         },
     },
 )
+
+
+def shop_image_for_sku(sku: str) -> Optional[str]:
+    path = SHOP_SKU_IMAGES.get(str(sku or "").strip())
+    return str(path) if path else None
 
 
 def schema_ready(conn) -> bool:
@@ -824,6 +840,7 @@ def serialize_catalog_for_client(*, conn, player_id: Optional[int] = None) -> Di
     for p in products:
         entry = dict(p)
         entry["owned"] = bool(season_owned) if p["sku"] == SKU_SEASON_PASS else False
+        entry["image"] = shop_image_for_sku(str(p["sku"]))
         # Do not expose raw payload grant math beyond display-safe fields.
         payload = p.get("payload") or {}
         entry["display"] = {
