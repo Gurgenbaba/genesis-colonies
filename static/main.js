@@ -17179,8 +17179,10 @@
                 class="gc-input gc-num-input alliance-hub-donate-input"
                 data-donate-amount="${res}" data-input-max="${maxVal}"
                 placeholder="${escapeHtml(t("alliance_donate_max_hint", "Max. %(max)s").replace("%(max)s", fmt(maxVal)))}">
-              <button type="button" class="gc-btn gc-btn-xs gc-btn-ghost" data-donate-max="${res}">${escapeHtml(t("alliance_donate_max_btn", "Max"))}</button>
-              <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-donate-btn="${res}">${escapeHtml(t("alliance_donate_btn", "Spenden"))}</button>`;
+              <div class="alliance-hub-pool-action-btns">
+                <button type="button" class="gc-btn gc-btn-xs gc-btn-ghost" data-donate-max="${res}">${escapeHtml(t("alliance_donate_max_btn", "Max"))}</button>
+                <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-donate-btn="${res}">${escapeHtml(t("alliance_donate_btn", "Spenden"))}</button>
+              </div>`;
             input = actions.querySelector(`[data-donate-amount="${res}"]`);
             if (typeof bindFormattedNumberInputs === "function") bindFormattedNumberInputs(actions);
           } else {

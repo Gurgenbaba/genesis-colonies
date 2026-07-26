@@ -36936,7 +36936,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   justify-content: flex-end;
   align-items: center;
   gap: 6px;
-  flex: 0 1 auto;
+  flex: 1 1 100%;
   max-width: 100%;
   z-index: 1;
 }
@@ -36944,6 +36944,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   margin: 0;
   min-height: 28px;
   white-space: nowrap;
+  flex: 0 1 auto;
 }
 .alliance-hub-hero-body,
 .alliance-hub-hero-meta {
@@ -36988,7 +36989,16 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
 }
 @media (min-width: 900px) {
   .alliance-hub-ops:has(.alliance-hub-project-active) {
-    grid-template-columns: minmax(200px, 0.85fr) minmax(0, 1.5fr);
+    grid-template-columns: minmax(180px, 0.7fr) minmax(0, 1.6fr);
+  }
+}
+@media (min-width: 900px) and (max-width: 1180px) {
+  .alliance-hub-ops:has(.alliance-hub-project-active) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .alliance-hub-ops .alliance-hub-project-active {
+    border-right: none;
+    border-bottom: 1px solid var(--gc-border-subtle, #222);
   }
 }
 .alliance-hub-ops .alliance-hub-project-active,
@@ -37016,11 +37026,25 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   opacity: 0.75;
 }
 .alliance-hub-pool-actions {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 4px;
-  min-height: 30px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+.alliance-hub-pool-action-btns {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+.alliance-hub-pool-action-btns .gc-btn {
+  min-width: 0;
+}
+.alliance-hub-pool-action-btns [data-donate-btn] {
+  width: 100%;
 }
 .alliance-hub-pool-full-badge {
   display: inline-flex;
@@ -37599,7 +37623,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
 /* GC-AL layout contract ? scoped under module to survive global resets */
 .alliance-hub-module .alliance-hub-pool-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(11.5rem, 1fr));
   gap: 8px;
 }
 .alliance-hub-module .alliance-hub-pool-tile {
@@ -37607,16 +37631,20 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   flex-direction: column;
   gap: 8px;
   min-width: 0;
+  overflow: hidden;
 }
 .alliance-hub-module .alliance-hub-pool-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
-  align-items: center;
+  width: 100%;
+  min-width: 0;
 }
 .alliance-hub-module .alliance-hub-donate-input {
-  flex: 1;
+  width: 100%;
   min-width: 0;
   max-width: 100%;
+  box-sizing: border-box;
 }
 .alliance-hub-module .alliance-hub-tab-bar {
   display: flex;
@@ -38006,7 +38034,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
 }
 .alliance-hub-pool-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(11.5rem, 1fr));
   gap: 8px;
 }
 .alliance-hub-pool-tile {
@@ -38017,6 +38045,8 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   border: 1px solid var(--gc-border, #334);
   border-radius: var(--gc-radius-sm, 2px);
   background: var(--gc-bg-inset, #111);
+  min-width: 0;
+  overflow: hidden;
 }
 .alliance-hub-pool-tile-head {
   display: flex;
@@ -38059,13 +38089,17 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
 .alliance-hub-pool-tile--crystal .alliance-hub-pool-cap-fill { background: #6ec8ff; }
 .alliance-hub-pool-tile--fuel_cells .alliance-hub-pool-cap-fill { background: #7fd4a0; }
 .alliance-hub-pool-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
-  align-items: center;
+  width: 100%;
+  min-width: 0;
 }
 .alliance-hub-donate-input {
-  flex: 1;
+  width: 100%;
   min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   font-size: 0.8rem;
 }
 

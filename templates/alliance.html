@@ -538,8 +538,10 @@
               data-donate-amount="{{ res }}"
               data-input-max="{{ donate_max }}"
               placeholder="{{ T('alliance_donate_max_hint', 'Max. %(max)s', max=donate_max|fmt_int) }}">
-            <button type="button" class="gc-btn gc-btn-xs gc-btn-ghost" data-donate-max="{{ res }}">{{ T("alliance_donate_max_btn", "Max") }}</button>
-            <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-donate-btn="{{ res }}">{{ T("alliance_donate_btn", "Spenden") }}</button>
+            <div class="alliance-hub-pool-action-btns">
+              <button type="button" class="gc-btn gc-btn-xs gc-btn-ghost" data-donate-max="{{ res }}">{{ T("alliance_donate_max_btn", "Max") }}</button>
+              <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-donate-btn="{{ res }}">{{ T("alliance_donate_btn", "Spenden") }}</button>
+            </div>
             {% else %}
             <span class="alliance-hub-pool-full-badge" data-pool-full="{{ res }}">{{ T("alliance_donate_complete", "Vollständig") }}</span>
             {% endif %}
