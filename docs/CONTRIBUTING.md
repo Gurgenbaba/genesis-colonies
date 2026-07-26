@@ -65,7 +65,7 @@ Arbeit erfolgt als **Tickets** (GC-XXX), nicht als Epic-Direct-Implementierung.
 | `hospitable-abundance - genesis-colonies` | **Railway Deploy** — maßgeblich für Production |
 | `pages build and deployment` / `deploy` | **GitHub Pages** — nicht Production; kann ignoriert werden |
 
-**Wait for CI:** In Railway **Enable**, damit Deploys erst nach grünen GitHub-Checks starten. Required Checks dürfen **nicht** Pages-Jobs sein.
+**Wait for CI:** GitHub Actions Smoke-CI liegt unter `.github/workflows/ci.yml`. In Railway **einmal Enable** — dann warten Deploys auf grüne Checks. Required Checks = `CI / smoke`, **nicht** Pages-Jobs.
 
 **GitHub Pages deaktivieren (empfohlen):** Repo → **Settings → Pages → Build and deployment → Source: None**. Damit entfällt der automatische `pages-build-deployment`-Workflow und rote Deploy-Checks ohne Production-Impact.
 

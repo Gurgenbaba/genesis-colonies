@@ -863,6 +863,14 @@ def inject_globals():
 
 _skip_mig = os.environ.get("GC_SKIP_MIGRATION_CHECK", "0").strip().lower() in ("1", "true", "yes")
 bootstrap_application(skip_migration_check=_skip_mig)
+
+try:
+    from game.internal_cron import start_embedded_cron_if_enabled
+
+    start_embedded_cron_if_enabled()
+except Exception:
+    logger.exception("embedded maintenance cron failed to start")
+
 _secret = get_secret_key()
 if not _secret:
     # Dev fallback only — rotating keys invalidate every cookie on restart.

@@ -20,17 +20,15 @@ watchPatterns = [
 healthcheckPath = "/health"
 healthcheckTimeout = 60
 restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10
 # Migrations run automatically in scripts/docker-entrypoint.sh (main container + /data volume).
-# Includes 020_player_messages.sql and all pending *.sql — no manual shell needed.
 # Do NOT use preDeployCommand — that container cannot mount Railway volumes.
-#
-# Optional: Ranking batch (10 min) — HTTP cron on the web service (same SQLite volume).
-#   POST /api/internal/cron/ranking
+# Do NOT set cronSchedule on this web service — Railway cron expects the process to exit.
+# Production maintenance (ranking/fleet/vote/backup) = embedded cron in game/internal_cron.py
+#   GC_EMBEDDED_CRON=1 (default when APP_ENV=production), interval GC_EMBEDDED_CRON_SEC=60
+# Optional manual/force HTTP: POST /api/internal/cron/ranking
 #   Authorization: Bearer $GC_INTERNAL_CRON_TOKEN
-#   Schedule: external HTTP cron every 10 min (e.g. cron-job.org, UptimeRobot).
-# Vote re-engagement piggybacks on the same call (30 min interval guard, no extra cron).
-#   GC_VOTE_REENGAGEMENT_BATCH=12 (default), GC_VOTE_REENGAGEMENT_ENABLED=0 to disable.
-# Optional dedicated endpoint: POST /api/internal/cron/vote-reengagement (same token).
 # Do NOT run scripts/run_ranking_worker.py as a separate Railway service on SQLite.
 #
-# Operator checklist (DNS, Wait for CI, env, cron, CDN, backups): docs/RAILWAY_OPERATOR.md
+# One-time: enable Wait for CI in Railway UI (needs .github/workflows/ci.yml).
+# Operator checklist: docs/RAILWAY_OPERATOR.md

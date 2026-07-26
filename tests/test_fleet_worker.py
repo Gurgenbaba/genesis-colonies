@@ -39,6 +39,7 @@ def fleet_worker_env(tmp_path, monkeypatch):
     monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
     monkeypatch.setenv("GC_INTERNAL_CRON_TOKEN", TOKEN)
     monkeypatch.setenv("GC_FLEET_WORKER_INTERVAL_SEC", "120")
+    monkeypatch.setenv("GC_EMBEDDED_CRON", "0")
     return db_file
 
 

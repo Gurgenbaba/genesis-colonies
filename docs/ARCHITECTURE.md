@@ -238,7 +238,9 @@ Worker: `scripts/run_queue_tick.py`, Admin: `POST /api/admin/queue-tick`.
 
 **Ranking batch (scores + ranks, 10 min):** `game/ranking_worker.run_ranking_worker()` — gameplay paths do not call `compute_player_scores()`. Admin: `POST /api/admin/rankings/recalculate`.
 
-**Railway SQLite:** use HTTP cron on the **web service** (same `/data/game.db` volume), not a separate worker service. Operator checklist: [RAILWAY_OPERATOR.md](RAILWAY_OPERATOR.md).
+**Railway SQLite:** maintenance runs **inside the web process** (embedded cron, default in production) on the same `/data/game.db` volume — not a separate worker service. Operator checklist: [RAILWAY_OPERATOR.md](RAILWAY_OPERATOR.md).
+
+Optional manual/force HTTP cron (same bag):
 
 ```text
 POST /api/internal/cron/ranking

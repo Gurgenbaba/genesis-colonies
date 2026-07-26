@@ -5,6 +5,24 @@ Not a public self-hosting guide. Code deploy path: [`railway.toml`](../railway.t
 
 ---
 
+## What is automatic (no external cron)
+
+| Concern | How it runs |
+|---------|-------------|
+| Migrations | Entrypoint `python migrate.py` on every deploy start |
+| Ranking / fleet / vote / account deletions | **Embedded cron** inside the web process (`GC_EMBEDDED_CRON`, default on in production) |
+| SQLite backups | Daily online copy to `/data/backups/game-YYYYMMDD.db` (keep 7) |
+| Health gate on deploy | `/health` via `railway.toml` |
+| Noise deploys | `watchPatterns` skip docs/tests/.cursor |
+| CI gate | GitHub Actions workflow `.github/workflows/ci.yml` — enable **Wait for CI** once in Railway UI |
+
+**Do not** set Railway `cronSchedule` on the web service (that model expects the process to exit).  
+**Do not** add a second Railway service for SQLite workers (volume is service-bound).
+
+HTTP endpoints `POST /api/internal/cron/*` remain for manual/force runs (`GC_INTERNAL_CRON_TOKEN`).
+
+---
+
 ## Architecture constraints (do not override in UI)
 
 | Setting | Required value | Why |
@@ -13,98 +31,61 @@ Not a public self-hosting guide. Code deploy path: [`railway.toml`](../railway.t
 | Healthcheck | `/health`, timeout 60s | Deploy gate |
 | Start | Dockerfile `CMD` → entrypoint | Migrate-on-start needs volume |
 | `preDeployCommand` | **Unset** | Pre-deploy container has **no** volume mount |
+| `cronSchedule` | **Unset** on web | Would break the always-on gunicorn process |
 | Replicas | **1** | Volume + SQLite single-writer |
-| Serverless / scale-to-zero | **Off** | Game + HTTP cron must stay warm |
+| Serverless / scale-to-zero | **Off** | Game + embedded cron must stay warm |
 | `GUNICORN_WORKERS` | **1** (SQLite) | Multi-worker only after Postgres cutover |
 | Separate ranking worker service | **Do not create** | Volume is service-bound |
 
-Migrations run in the main container on every start (`python migrate.py` in the entrypoint).
-
 ---
 
-## Priority 1 — Railway UI / Ops checklist
+## One-time Railway / DNS checklist
 
-Complete these in the Railway dashboard (and DNS registrar). Mark each item when verified.
+Still manual (platform/registrar) — do once, then push-to-deploy is enough:
 
 ### 1. DNS & domains
 
-- [ ] `www.genesis-colonies.de` → Railway custom domain, port **8080** (or Railway-assigned `$PORT`), status healthy
-- [ ] Apex `genesis-colonies.de` — finish registrar DNS (Railway shows **Waiting for DNS update** until records propagate). Prefer Railway-documented CNAME/ALIAS/ANAME for apex; avoid guessing bare A records
-- [ ] Canonical public URL: **`PUBLIC_BASE_URL=https://www.genesis-colonies.de`** (PayPal webhooks, OAuth, emails). Keep apex as redirect-or-dual-host, but do not point live payment callbacks at an unresolved apex
-- [ ] TLS certificates issued for both hosts once DNS is green
+- [ ] `www.genesis-colonies.de` healthy on Railway
+- [ ] Apex `genesis-colonies.de` DNS finished (CNAME/ALIAS/ANAME per Railway)
+- [ ] `PUBLIC_BASE_URL=https://www.genesis-colonies.de`
+- [ ] TLS green for both hosts
 
-### 2. Wait for CI
+### 2. Wait for CI (one toggle)
 
-- [ ] Railway service → **Wait for CI → Enable**
-- [ ] GitHub branch protection: Required checks = **app CI / Railway**, **not** GitHub Pages (`pages build and deployment` / `deploy`)
-- [ ] Prefer disabling GitHub Pages (Settings → Pages → Source: None) so Pages timeouts cannot confuse deploy status — see [CONTRIBUTING.md](CONTRIBUTING.md)
+Repo ships [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) (smoke on `push` to `main`).
 
-### 3. Environment variables (production)
+- [ ] Railway → **Wait for CI → Enable** (not available in `railway.toml`)
+- [ ] GitHub Required Checks = app CI (`CI / smoke`), **not** GitHub Pages
+- [ ] Prefer Pages Source: None — see [CONTRIBUTING.md](CONTRIBUTING.md)
 
-Verify in Railway Variables (never commit secrets):
+### 3. Environment variables
 
 | Variable | Expected |
 |----------|----------|
 | `APP_ENV` / `FLASK_ENV` | `production` |
 | `FLASK_DEBUG` | `0` |
-| `SECRET_KEY` | Strong random (not `change-me-*`) |
-| `GC_DB_BACKEND` | `sqlite` until intentional cutover |
+| `SECRET_KEY` | Strong random |
+| `GC_DB_BACKEND` | `sqlite` until cutover |
 | `GC_DB_PATH` | `/data/game.db` |
-| `DATABASE_URL` | **Unset** or sqlite only — do **not** point at Postgres until cutover |
-| `GC_ALLOW_POSTGRES_PROD` | Unset / `0` until cutover ticket |
 | `GUNICORN_WORKERS` | `1` |
 | `PUBLIC_BASE_URL` | `https://www.genesis-colonies.de` |
-| `GC_INTERNAL_CRON_TOKEN` | Set; used by HTTP cron |
-| Shop / Discord / SMTP / Vote keys | Live values if those features are on |
+| `GC_EMBEDDED_CRON` | unset or `1` (default on in production) |
+| `GC_EMBEDDED_CRON_SEC` | unset → `60` |
+| `GC_EMBEDDED_BACKUP` | unset or `1` |
+| `GC_EMBEDDED_BACKUP_KEEP` | unset → `7` |
+| `GC_INTERNAL_CRON_TOKEN` | Optional but recommended for manual force HTTP cron |
+| `GC_ALLOW_POSTGRES_PROD` | unset / `0` |
+| Shop / Discord / SMTP / Vote | Live keys if features on |
 
-Volume: mount persistent volume at **`/data`** on the **web** service only.
+Volume: mount **`/data`** on the **web** service only.
 
-Optional short perf window (then lower sample):
+Disable embedded cron only if you intentionally use an external HTTP scheduler: `GC_EMBEDDED_CRON=0`.
 
-```env
-GC_REQUEST_PERF_DEBUG=1
-GC_REQUEST_PERF_SLOW_MS=500
-GC_REQUEST_PERF_SAMPLE=1.0
-```
+### 4. CDN / Attack / Outbound IPs
 
-### 4. HTTP cron + uptime
-
-Ranking / fleet / vote piggyback on the **web** service (same SQLite file):
-
-```http
-POST https://www.genesis-colonies.de/api/internal/cron/ranking
-Authorization: Bearer <GC_INTERNAL_CRON_TOKEN>
-```
-
-- [ ] External scheduler every **~10 minutes** (cron-job.org, UptimeRobot, or Railway Cron hitting the same POST)
-- [ ] Optional `?force=1` only for manual recovery
-- [ ] Separate **uptime** monitor on `GET https://www.genesis-colonies.de/health` (Railway healthcheck covers deploy only, not continuous uptime)
-
-Do **not** run `scripts/run_ranking_worker.py` as a second Railway service on SQLite.
-
-### 5. Backups
-
-SQLite lives on the Railway volume — there is no automated in-repo backup.
-
-- [ ] Periodic volume snapshot and/or copy of `/data/game.db` to off-platform storage
-- [ ] Document restore: stop traffic → restore file → `python migrate.py` (entrypoint) → `/health` ok
-
-Automated backups remain a roadmap item until Postgres cutover.
-
-### 6. CDN Caching (Railway Edge) — cautious
-
-App already serves `/static/` with cache-bust `?v=` (`GC_ASSET_VERSION` / `VERSION`) and strong Cache-Control when versioned.
-
-If enabling Railway CDN:
-
-- [ ] Cache **static assets** (`/static/*`) only
-- [ ] **Do not** aggressively cache HTML, PJAX fragments, or `/api/*` (stale game state / auth)
-- [ ] Prefer static-only; if HTML is cached at all, use a very short TTL or exclude it
-
-### 7. Under Attack Mode / Static Outbound IPs
-
-- **Under Attack Mode:** only during active DDoS/bot flood (browser challenge in front of login/API)
-- **Static Outbound IPs:** only if Discord / PayPal / SMTP require IP allowlisting
+- CDN: static `/static/*` only — never aggressive HTML/API cache
+- Under Attack Mode: only during active floods
+- Static Outbound IPs: only if a provider requires allowlisting
 
 ---
 
@@ -112,45 +93,35 @@ If enabling Railway CDN:
 
 | File | Role |
 |------|------|
-| [`railway.toml`](../railway.toml) | Dockerfile builder, healthcheck, restart, **watchPatterns** |
-| [`.dockerignore`](../.dockerignore) | Smaller build context (tests/docs/.git excluded) |
-| Entrypoint | Migrate + changelog seed + codex check + gunicorn |
-
-Watch paths skip noise deploys (docs-only, `.cursor`, tests, etc.). App-relevant paths still trigger builds.
-
----
-
-## Priority 3 — Postgres / scaling (later — not UI toggles)
-
-Current production is **SQLite + volume + 1 worker**. Horizontal replicas and multi-worker are blocked until cutover.
-
-Canonical path (see [GC_PERF_CORE.md](GC_PERF_CORE.md)):
-
-1. **GC-PERF-PG-STAGING-001** — Railway staging + worker + smoke
-2. **GC-PERF-PG-MIGRATE-001** — data import (already scripted; not live cutover)
-3. **GC-PERF-PG-CUTOVER-001** — maintenance window, import, DNS/env switch, rollback drill
-4. Set `GC_DB_BACKEND=postgres`, `DATABASE_URL=postgresql://…`, and only then `GC_ALLOW_POSTGRES_PROD=1`
-5. Raise `GUNICORN_WORKERS` (>1); optional Redis; remove SQLite volume dependency → replicas become possible
-6. Separate worker service only after shared Postgres (never share a SQLite file across services)
-
-Until that epic lands: keep Replicas = 1 and workers = 1.
+| [`railway.toml`](../railway.toml) | Dockerfile, healthcheck, restart, watchPatterns |
+| [`.dockerignore`](../.dockerignore) | Smaller build context |
+| [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | Smoke CI for Wait for CI |
+| Entrypoint | Migrate + seed + gunicorn |
+| `game/internal_cron.py` | Embedded maintenance + backup + HTTP cron |
 
 ---
 
-## Smoke after every deploy
+## Postgres / scaling (later)
+
+See [GC_PERF_CORE.md](GC_PERF_CORE.md). Until cutover: Replicas = 1, workers = 1, embedded cron on web.  
+After Postgres: optional `scripts/run_game_worker.py` + `GC_EMBEDDED_CRON=0` on web if the worker owns ticks.
+
+---
+
+## Smoke after deploy
 
 ```bash
 curl -sS https://www.genesis-colonies.de/health
 ```
 
-Expect HTTP 200 and `"status":"ok"`. Then spot-check login + one in-game page (Buildings or Overview).
+Expect HTTP 200 and `"status":"ok"`. Check Railway logs for `[embedded-cron] started`.
 
 ---
 
 ## Related
 
-- [CONTRIBUTING.md](CONTRIBUTING.md) — Production & CI, Pages vs Railway
-- [ARCHITECTURE.md](ARCHITECTURE.md) — HTTP cron, request perf
-- [SECURITY.md](SECURITY.md) — `/health` public surface
-- [PAYMENT_SHOP.md](PAYMENT_SHOP.md) — `PUBLIC_BASE_URL` + PayPal webhooks
-- [GC_PERF_CORE.md](GC_PERF_CORE.md) — Postgres staging / cutover
+- [CONTRIBUTING.md](CONTRIBUTING.md) — Production & CI
+- [ARCHITECTURE.md](ARCHITECTURE.md) — HTTP cron / embedded bag
+- [SECURITY.md](SECURITY.md) — `/health`
+- [PAYMENT_SHOP.md](PAYMENT_SHOP.md) — `PUBLIC_BASE_URL`
+- [GC_PERF_CORE.md](GC_PERF_CORE.md) — Postgres cutover

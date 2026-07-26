@@ -34,6 +34,7 @@ def cron_env(tmp_path, monkeypatch):
     monkeypatch.setenv("APP_ENV", "development")
     monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
     monkeypatch.setenv("GC_INTERNAL_CRON_TOKEN", TOKEN)
+    monkeypatch.setenv("GC_EMBEDDED_CRON", "0")
     return db_file
 
 
@@ -96,6 +97,11 @@ def test_internal_cron_unauthorized_wrong_token(cron_client):
 
 def test_internal_cron_recomputes_ranking(cron_client):
     pid = _create_player_with_building()
+    # Live paths may already write score rows; cron must still recompute ranks.
+    conn = db()
+    conn.execute("DELETE FROM player_scores WHERE player_id = ?;", (pid,))
+    conn.commit()
+    conn.close()
     row_before = get_player_score_row(pid)
     assert row_before is None or int(row_before.get("score_buildings") or 0) == 0
 
@@ -107,6 +113,7 @@ def test_internal_cron_recomputes_ranking(cron_client):
     assert int(data.get("ranks_assigned") or 0) >= 1
     assert "duration_ms" in data
     assert data.get("skipped_interval") is False
+    assert "sqlite_backup" in data
 
     row_after = get_player_score_row(pid)
     assert row_after is not None

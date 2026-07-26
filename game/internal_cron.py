@@ -1,29 +1,50 @@
 """
 Internal HTTP cron handlers — run inside the web process (same SQLite volume by default).
 
-Railway SQLite deployments must not use a separate worker service; external schedulers
-call POST /api/internal/cron/* with GC_INTERNAL_CRON_TOKEN.
+Railway SQLite deployments must not use a separate worker service (volume is service-bound).
+Maintenance runs via:
+
+1. **Embedded cron** (default in production) — in-process loop, no external scheduler
+2. Optional HTTP: POST /api/internal/cron/* with GC_INTERNAL_CRON_TOKEN (manual / force)
 
 Endpoints:
   - ranking, fleet-tick, vote-reengagement, queue-tick (GC-PERF-WORKER-001)
   - galactic-directives (GC-720I monthly mandate resolve)
 
 With GC_DB_BACKEND=postgres, a dedicated ``scripts/run_game_worker.py`` process is supported.
-Vote re-engagement piggybacks on the ranking cron (30-minute interval guard).
+Vote re-engagement piggybacks on the ranking maintenance bag (30-minute interval guard).
+
+Do NOT set Railway ``cronSchedule`` on the web service — that expects the process to exit.
 """
 
 from __future__ import annotations
 
 import logging
+import os
+import threading
+import time
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 from flask import Request
 
-from game.config import get_internal_cron_token
-from game.fleet_worker import maybe_run_global_fleet_tick, run_fleet_worker
+from game.config import (
+    get_embedded_backup_keep,
+    get_embedded_cron_interval_sec,
+    get_internal_cron_token,
+    is_embedded_backup_enabled,
+    is_embedded_cron_enabled,
+)
+from game.fleet_worker import run_fleet_worker
 from game.ranking_worker import run_ranking_worker
 
 logger = logging.getLogger(__name__)
+
+_EMBEDDED_THREAD: Optional[threading.Thread] = None
+_EMBEDDED_STOP = threading.Event()
+_EMBEDDED_LOCK_FH: Any = None
+_EMBEDDED_STARTED = False
 
 
 def _recompute_log(prefix: str, msg: str) -> None:
@@ -310,18 +331,40 @@ def handle_internal_cron_ranking(request: Request) -> Tuple[Dict[str, Any], int]
     force = parse_force_flag(request)
     _recompute_log("ranking-http-cron", f"request_received force={str(force).lower()}")
     try:
-        payload = execute_ranking_recompute(force=force, source="http_cron")
+        payload = run_maintenance_bag(force=force, source="http_cron")
     except Exception as exc:
         logger.exception("internal cron ranking failed")
         _recompute_log("ranking-http-cron", f"error={exc}")
         return {"ok": False, "error": str(exc)}, 500
 
-    log_ranking_recompute_result(payload, log_prefix="ranking-http-cron", source_label="http")
+    status = 200 if payload.get("ok") else 500
+    return payload, status
 
-    fleet_payload = _maybe_run_fleet_tick(force=False, source="http_cron")
+
+def run_maintenance_bag(*, force: bool = False, source: str = "embedded_cron") -> Dict[str, Any]:
+    """
+    Canonical web-service maintenance bag (ranking + fleet + vote + deletions + backup).
+
+    Shared by HTTP cron and the embedded in-process scheduler. Interval guards inside
+    ranking/fleet/vote keep frequent ticks cheap.
+    """
+    try:
+        payload = execute_ranking_recompute(force=force, source=source)
+    except Exception as exc:
+        logger.exception("maintenance bag ranking failed")
+        _recompute_log("maintenance-bag", f"source={source} ranking_error={exc}")
+        return {"ok": False, "error": str(exc)}
+
+    log_ranking_recompute_result(
+        payload,
+        log_prefix="ranking-http-cron" if source == "http_cron" else "ranking-embedded-cron",
+        source_label="http" if source == "http_cron" else source,
+    )
+
+    fleet_payload = _maybe_run_fleet_tick(force=False, source=source)
     payload["fleet_tick"] = fleet_payload
 
-    vote_payload = _maybe_run_vote_reengagement(force=False, source="http_cron")
+    vote_payload = _maybe_run_vote_reengagement(force=False, source=source)
     payload["vote_reengagement"] = vote_payload
 
     try:
@@ -329,14 +372,213 @@ def handle_internal_cron_ranking(request: Request) -> Tuple[Dict[str, Any], int]
 
         payload["account_deletions"] = maybe_run_due_account_deletions(
             force=force,
-            source="http_cron",
+            source=source,
         )
     except Exception as exc:
-        logger.exception("internal cron account deletion worker failed")
+        logger.exception("maintenance bag account deletion worker failed")
         payload["account_deletions"] = {"ok": False, "error": str(exc)}
 
-    status = 200 if payload["ok"] else 500
-    return payload, status
+    try:
+        payload["sqlite_backup"] = maybe_sqlite_volume_backup(force=force)
+    except Exception as exc:
+        logger.exception("maintenance bag sqlite backup failed")
+        payload["sqlite_backup"] = {"ok": False, "error": str(exc)}
+
+    return payload
+
+
+def maybe_sqlite_volume_backup(*, force: bool = False) -> Dict[str, Any]:
+    """
+    Online SQLite backup into <db-parent>/backups/game-YYYYMMDD.db (Railway /data volume).
+
+    Skips when disabled, non-sqlite, or today's file already exists (unless force).
+    """
+    if not is_embedded_backup_enabled():
+        return {"ok": True, "skipped": "disabled"}
+
+    from game.db import get_db_backend, resolve_db_path
+
+    if get_db_backend() != "sqlite":
+        return {"ok": True, "skipped": "not_sqlite"}
+
+    src = resolve_db_path()
+    if not src.is_file():
+        return {"ok": False, "error": "db_missing", "path": str(src)}
+
+    day = datetime.now(timezone.utc).strftime("%Y%m%d")
+    backup_dir = src.parent / "backups"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    dst = backup_dir / f"game-{day}.db"
+    if dst.exists() and not force:
+        return {"ok": True, "skipped": "already_today", "path": str(dst)}
+
+    import sqlite3
+
+    tmp = backup_dir / f"game-{day}.db.tmp"
+    try:
+        if tmp.exists():
+            tmp.unlink()
+        source_conn = sqlite3.connect(str(src), timeout=30.0)
+        try:
+            dest_conn = sqlite3.connect(str(tmp), timeout=30.0)
+            try:
+                source_conn.backup(dest_conn)
+                dest_conn.commit()
+            finally:
+                dest_conn.close()
+        finally:
+            source_conn.close()
+        # Windows needs handles closed before replace/rename.
+        if dst.exists():
+            dst.unlink()
+        os.replace(str(tmp), str(dst))
+    except Exception:
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+        raise
+
+    keep = get_embedded_backup_keep()
+    pruned = _prune_sqlite_backups(backup_dir, keep=keep)
+    return {
+        "ok": True,
+        "path": str(dst),
+        "bytes": int(dst.stat().st_size),
+        "pruned": pruned,
+    }
+
+
+def _prune_sqlite_backups(backup_dir: Path, *, keep: int) -> int:
+    files = sorted(
+        (p for p in backup_dir.glob("game-*.db") if p.is_file()),
+        key=lambda p: p.name,
+        reverse=True,
+    )
+    pruned = 0
+    for old in files[keep:]:
+        try:
+            old.unlink()
+            pruned += 1
+        except OSError:
+            logger.warning("could not prune backup %s", old)
+    return pruned
+
+
+def _acquire_embedded_leader_lock() -> bool:
+    """Single leader across gunicorn workers (file lock next to SQLite DB)."""
+    global _EMBEDDED_LOCK_FH
+    from game.db import get_db_backend, resolve_db_path
+
+    if get_db_backend() == "sqlite":
+        lock_path = resolve_db_path().parent / ".gc_embedded_cron.lock"
+    else:
+        lock_path = Path(os.environ.get("TMPDIR") or os.environ.get("TEMP") or "/tmp") / (
+            "gc_embedded_cron.lock"
+        )
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        fh = open(lock_path, "a+", encoding="utf-8")
+        if os.name == "nt":
+            import msvcrt
+
+            if fh.tell() == 0:
+                fh.write("0")
+                fh.flush()
+            try:
+                fh.seek(0)
+                msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+            except OSError:
+                fh.close()
+                return False
+        else:
+            import fcntl
+
+            try:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                fh.close()
+                return False
+        fh.seek(0)
+        fh.truncate()
+        fh.write(str(os.getpid()))
+        fh.flush()
+        _EMBEDDED_LOCK_FH = fh
+        return True
+    except OSError as exc:
+        logger.warning("embedded cron leader lock failed: %s", exc)
+        return False
+
+
+def _embedded_cron_loop() -> None:
+    interval = get_embedded_cron_interval_sec()
+    _recompute_log(
+        "embedded-cron",
+        f"started interval_sec={interval} backup={str(is_embedded_backup_enabled()).lower()}",
+    )
+    # Small delay so gunicorn/healthcheck can finish boot before first heavy tick.
+    _EMBEDDED_STOP.wait(min(15.0, interval))
+    while not _EMBEDDED_STOP.is_set():
+        started = time.monotonic()
+        try:
+            run_maintenance_bag(force=False, source="embedded_cron")
+        except Exception:
+            logger.exception("embedded cron tick failed")
+        elapsed = time.monotonic() - started
+        wait_for = max(1.0, interval - elapsed)
+        _EMBEDDED_STOP.wait(wait_for)
+    _recompute_log("embedded-cron", "stopped")
+
+
+def start_embedded_cron_if_enabled() -> bool:
+    """
+    Start daemon maintenance thread when enabled (production default).
+
+    Returns True if the thread was started in this process.
+    """
+    global _EMBEDDED_THREAD, _EMBEDDED_STARTED
+    if _EMBEDDED_STARTED:
+        return False
+    _EMBEDDED_STARTED = True
+
+    # Flask debug reloader parent process
+    if os.environ.get("WERKZEUG_RUN_MAIN") == "false":
+        return False
+    if not is_embedded_cron_enabled():
+        _recompute_log("embedded-cron", "disabled")
+        return False
+    if not _acquire_embedded_leader_lock():
+        _recompute_log("embedded-cron", "skipped_not_leader")
+        return False
+
+    _EMBEDDED_STOP.clear()
+    thread = threading.Thread(
+        target=_embedded_cron_loop,
+        name="gc-embedded-cron",
+        daemon=True,
+    )
+    _EMBEDDED_THREAD = thread
+    thread.start()
+    return True
+
+
+def stop_embedded_cron_for_tests() -> None:
+    """Test helper — stop the daemon thread and release the leader lock."""
+    global _EMBEDDED_THREAD, _EMBEDDED_LOCK_FH, _EMBEDDED_STARTED
+    _EMBEDDED_STOP.set()
+    thread = _EMBEDDED_THREAD
+    if thread is not None and thread.is_alive():
+        thread.join(timeout=2.0)
+    _EMBEDDED_THREAD = None
+    if _EMBEDDED_LOCK_FH is not None:
+        try:
+            _EMBEDDED_LOCK_FH.close()
+        except Exception:
+            pass
+        _EMBEDDED_LOCK_FH = None
+    _EMBEDDED_STARTED = False
+    _EMBEDDED_STOP.clear()
 
 
 def handle_internal_cron_fleet_tick(request: Request) -> Tuple[Dict[str, Any], int]:

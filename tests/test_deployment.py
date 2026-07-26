@@ -223,22 +223,29 @@ def test_env_example_exists():
 
 
 def test_railway_infra_files_exist():
-    """Operator deploy uses railway.toml + Dockerfile + operator runbook."""
+    """Operator deploy uses railway.toml + Dockerfile + operator runbook + smoke CI."""
     railway = ROOT / "railway.toml"
     dockerfile = ROOT / "Dockerfile"
     entrypoint = ROOT / "scripts" / "docker-entrypoint.sh"
     dockerignore = ROOT / ".dockerignore"
     operator_doc = ROOT / "docs" / "RAILWAY_OPERATOR.md"
+    ci_workflow = ROOT / ".github" / "workflows" / "ci.yml"
     assert railway.exists()
     assert dockerfile.exists()
     assert entrypoint.exists()
     assert dockerignore.exists()
     assert operator_doc.exists()
+    assert ci_workflow.exists()
     railway_text = railway.read_text(encoding="utf-8")
     assert "dockerfile" in railway_text.lower()
     assert "/health" in railway_text
     assert "watchPatterns" in railway_text
     assert "/CHANGELOG.md" in railway_text
+    assert "GC_EMBEDDED_CRON" in railway_text
+    assert not any(
+        line.strip().startswith("cronSchedule")
+        for line in railway_text.splitlines()
+    )
     dockerignore_text = dockerignore.read_text(encoding="utf-8")
     assert "tests/" in dockerignore_text
     assert "docs/" in dockerignore_text
@@ -246,5 +253,8 @@ def test_railway_infra_files_exist():
     operator_text = operator_doc.read_text(encoding="utf-8")
     assert "Wait for CI" in operator_text
     assert "PUBLIC_BASE_URL" in operator_text
-    assert "/api/internal/cron/ranking" in operator_text
+    assert "GC_EMBEDDED_CRON" in operator_text
     assert "GC_ALLOW_POSTGRES_PROD" in operator_text
+    ci_text = ci_workflow.read_text(encoding="utf-8")
+    assert "test_deployment.py" in ci_text
+    assert "test_embedded_cron.py" in ci_text

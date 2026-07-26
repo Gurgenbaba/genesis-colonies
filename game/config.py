@@ -103,6 +103,40 @@ def get_internal_cron_token() -> str:
     return _env_str("GC_INTERNAL_CRON_TOKEN")
 
 
+def is_embedded_cron_enabled() -> bool:
+    """
+    In-process maintenance loop on the web service (Railway SQLite — no external cron).
+
+    Default: on in production, off otherwise. Override with GC_EMBEDDED_CRON=0|1.
+    """
+    raw = os.environ.get("GC_EMBEDDED_CRON", "").strip().lower()
+    if raw in ("0", "false", "no", "off"):
+        return False
+    if raw in ("1", "true", "yes", "on"):
+        return True
+    return is_production()
+
+
+def get_embedded_cron_interval_sec() -> float:
+    """Seconds between embedded maintenance ticks (fleet ~60s; ranking/vote self-throttle)."""
+    return _env_float("GC_EMBEDDED_CRON_SEC", 60.0, minimum=15.0, maximum=3600.0)
+
+
+def is_embedded_backup_enabled() -> bool:
+    """Daily SQLite copy under <db-parent>/backups/ — default on with embedded cron in production."""
+    raw = os.environ.get("GC_EMBEDDED_BACKUP", "").strip().lower()
+    if raw in ("0", "false", "no", "off"):
+        return False
+    if raw in ("1", "true", "yes", "on"):
+        return True
+    return is_embedded_cron_enabled()
+
+
+def get_embedded_backup_keep() -> int:
+    """How many dated SQLite backup files to retain."""
+    return _env_int("GC_EMBEDDED_BACKUP_KEEP", 7, minimum=1)
+
+
 def is_game_worker_primary() -> bool:
     """
     GC-PERF-WORKER-001: when true, periodic poll queue-finish is disabled.
