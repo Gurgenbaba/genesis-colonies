@@ -153,13 +153,14 @@
   </section>
 
   {% set ops = bp.ops if bp.ops is defined and bp.ops else {'daily': [], 'weekly': []} %}
-  <section class="gc-panel battle-pass-ops-panel" data-bp-ops>
+  <section class="gc-panel battle-pass-ops-panel" data-bp-ops
+           data-bp-daily-period="{{ ops.daily_period_key or '' }}">
     <div class="gc-panel-header battle-pass-ops-header">
       <span class="gc-panel-title">{{ T("bp_ops_title", "Season Ops") }}</span>
       <span class="battle-pass-ops-pace gc-mono">{{ T("bp_ops_pace", "Daily → Pass ~30 Tage") }}</span>
     </div>
     <p class="hint battle-pass-ops-hint">
-      {{ T("bp_ops_hint", "Tägliche Ops + Drip: Season Pass in ca. 30 Tagen. Weekly Op als Bonus. Imperial Directives bleiben separat.") }}
+      {{ T("bp_ops_hint", "Tägliche Ops + Drip: Season Pass in ca. 30 Tagen. Weekly Op als Bonus. Reset: 00:00 UTC. Imperial Directives bleiben separat.") }}
     </p>
     <div class="battle-pass-ops-drip" data-bp-ops-drip>
       <div class="battle-pass-ops-drip-main">

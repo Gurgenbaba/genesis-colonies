@@ -414,6 +414,7 @@ def test_battle_pass_ops_claim_and_no_double(liveops_db):
     state = bp_serialize(uid, conn=conn)
     build = next(o for o in state["ops"]["daily"] if o["op_key"] == OP_BUILD)
     assert build["claimable"] is True
+    assert int(state["claimable_count"]) >= 1  # completed op counts toward badge
     before_xp = int(state["xp"])
     ok, reason, result = claim_op(uid, OP_BUILD, conn=conn)
     assert ok, reason
@@ -422,6 +423,51 @@ def test_battle_pass_ops_claim_and_no_double(liveops_db):
     ok2, reason2, _ = claim_op(uid, OP_BUILD, conn=conn)
     assert not ok2
     assert reason2 == "already_claimed"
+    conn.commit()
+    conn.close()
+
+
+def test_battle_pass_daily_ops_reset_next_utc_day(liveops_db):
+    """Daily ops must be completable + claimable again after UTC day rollover."""
+    from game.battle_pass import daily_period_key
+
+    uid = _player()
+    conn = db()
+    t0 = 1_700_000_000.0  # fixed UTC anchor
+    apply_op_progress(uid, SOURCE_BUILDING_FINISH, conn=conn, now=t0)
+    ok, reason, _ = claim_op(uid, OP_BUILD, conn=conn, now=t0)
+    assert ok, reason
+    # Stale client period must not reopen yesterday's claim.
+    ok_stale, reason_stale, _ = claim_op(
+        uid,
+        OP_BUILD,
+        conn=conn,
+        now=t0,
+        period_key="daily:1999-01-01",
+    )
+    assert not ok_stale
+    assert reason_stale == "already_claimed"
+
+    t1 = t0 + 86400
+    assert daily_period_key(t1) != daily_period_key(t0)
+    state = bp_serialize(uid, conn=conn, now=t1)
+    build = next(o for o in state["ops"]["daily"] if o["op_key"] == OP_BUILD)
+    assert build["claimed"] is False
+    assert build["progress"] == 0
+    assert build["period_key"] == daily_period_key(t1)
+
+    apply_op_progress(uid, SOURCE_BUILDING_FINISH, conn=conn, now=t1)
+    state2 = bp_serialize(uid, conn=conn, now=t1)
+    build2 = next(o for o in state2["ops"]["daily"] if o["op_key"] == OP_BUILD)
+    assert build2["claimable"] is True
+    assert int(state2["claimable_count"]) >= 1
+
+    ok2, reason2, result2 = claim_op(uid, OP_BUILD, conn=conn, now=t1)
+    assert ok2, reason2
+    assert int(result2["xp_reward"]) == 40
+    ok3, reason3, _ = claim_op(uid, OP_BUILD, conn=conn, now=t1)
+    assert not ok3
+    assert reason3 == "already_claimed"
     conn.commit()
     conn.close()
 

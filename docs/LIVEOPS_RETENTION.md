@@ -120,6 +120,8 @@ Belohnungs-Tracks on `/premium` use a Fortnite-style horizontal board in Genesis
 
 Daily Ops render as a **3-card grid** (icons, XP chip, claim CTA); Weekly as a wide card; drip as a compact progress strip. Markers: `battle-pass-op-card`, `data-bp-ops-drip`.
 
+Ops panel carries `data-bp-daily-period`; game-state polls soft-reload `/premium` when the UTC `daily_period_key` changes. Login Rewards live-patch claim availability + cooldown from the same poll. `claim_op` always uses the server period (client `period_key` ignored). `claimable_count` includes completed unclaimed ops (nav badge).
+
 ## Phase 3 — EPIC-23 Payment / Shop
 
 Canonical doc: [PAYMENT_SHOP.md](PAYMENT_SHOP.md).

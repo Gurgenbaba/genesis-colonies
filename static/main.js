@@ -13786,6 +13786,10 @@
         _patchImperialDirectivesFromGameStateSummary(data.imperial_directives, reason);
       }
 
+      if (typeof syncLiveOpsFromGameState === "function") {
+        syncLiveOpsFromGameState(data, reason);
+      }
+
       commitGameStateCache(data, reason, opts);
       GC.startProgressTicker();
       _maybeRefreshStaleMovementCountdowns();
@@ -16645,6 +16649,39 @@
     }
   }
 
+  let _loginRewardsCooldownTimer = null;
+  let _loginRewardsUnlockAt = 0;
+
+  function _stopLoginRewardsCooldown() {
+    if (_loginRewardsCooldownTimer) {
+      clearInterval(_loginRewardsCooldownTimer);
+      _loginRewardsCooldownTimer = null;
+    }
+  }
+
+  function _tickLoginRewardsCooldown() {
+    const page = document.getElementById("login-rewards-page");
+    if (!page) {
+      _stopLoginRewardsCooldown();
+      return;
+    }
+    const cooldown = page.querySelector("[data-lr-cooldown]");
+    const secEl = page.querySelector("[data-lr-cooldown-sec]");
+    if (!cooldown || !secEl) return;
+    const now =
+      typeof serverNow === "function"
+        ? Number(serverNow())
+        : typeof GC.getServerNow === "function"
+          ? Number(GC.getServerNow())
+          : Date.now() / 1000;
+    const rem = Math.max(0, Math.floor(_loginRewardsUnlockAt - now));
+    secEl.textContent = formatDurationHuman(rem, 3);
+    if (rem <= 0) {
+      cooldown.hidden = true;
+      _stopLoginRewardsCooldown();
+    }
+  }
+
   function patchLoginRewardsDom(state) {
     const page = document.getElementById("login-rewards-page");
     if (!page || !state) return;
@@ -16657,8 +16694,47 @@
       btn.disabled = disabled;
       btn.setAttribute("aria-disabled", disabled ? "true" : "false");
     });
+    const cooldown = page.querySelector("[data-lr-cooldown]");
+    const unlockIn = Math.max(0, Math.floor(Number(state.next_unlock_in_sec) || 0));
+    if (cooldown) {
+      const showCd = !state.available && unlockIn > 0;
+      cooldown.hidden = !showCd;
+      if (showCd) {
+        const now =
+          typeof serverNow === "function"
+            ? Number(serverNow())
+            : typeof GC.getServerNow === "function"
+              ? Number(GC.getServerNow())
+              : Date.now() / 1000;
+        _loginRewardsUnlockAt = now + unlockIn;
+        _tickLoginRewardsCooldown();
+        if (!_loginRewardsCooldownTimer) {
+          _loginRewardsCooldownTimer = setInterval(_tickLoginRewardsCooldown, 1000);
+        }
+      } else {
+        _stopLoginRewardsCooldown();
+      }
+    }
     const script = document.getElementById("login-rewards-page-state");
     if (script) script.textContent = JSON.stringify(state);
+  }
+
+  function syncLiveOpsFromGameState(data, reason) {
+    if (!data) return;
+    const reasonStr = String(reason || "");
+    if (data.login_rewards && document.getElementById("login-rewards-page")) {
+      patchLoginRewardsDom(data.login_rewards);
+    }
+    if (reasonStr === "page_hydrate") return;
+    const opsPanel = document.querySelector("[data-bp-ops][data-bp-daily-period]");
+    if (!opsPanel || !document.getElementById("premium-page")) return;
+    const serverKey = String(data.battle_pass?.ops?.daily_period_key || "").trim();
+    const domKey = String(opsPanel.getAttribute("data-bp-daily-period") || "").trim();
+    if (serverKey && domKey && serverKey !== domKey) {
+      if (typeof GC.reloadCurrentPage === "function") {
+        GC.reloadCurrentPage({ skipPolling: true, reason: "bp_daily_period_rollover" });
+      }
+    }
   }
 
   function bindLoginRewardsOnce() {
@@ -16697,6 +16773,9 @@
     if (!page || page.dataset.ready !== "1") return;
     const state = parseLoginRewardsPageState();
     if (state) patchLoginRewardsDom(state);
+    if (typeof GC.registerCleanup === "function") {
+      GC.registerCleanup(_stopLoginRewardsCooldown);
+    }
   }
 
   let _battlePassBound = false;
@@ -16719,14 +16798,13 @@
         const page = document.getElementById("premium-page");
         if (!page) return;
         const opKey = String(opBtn.getAttribute("data-bp-claim-op") || "").trim();
-        const periodKey = String(opBtn.getAttribute("data-bp-op-period") || "").trim();
         if (!opKey) return;
+        // Server owns period_key (UTC day); do not send stale DOM period.
         const res = await GC.fetchGameAction("/api/battle-pass/claim-op", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             op_key: opKey,
-            period_key: periodKey || undefined,
             request_id: newRequestId(),
           }),
         });

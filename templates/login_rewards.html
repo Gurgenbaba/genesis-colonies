@@ -16,7 +16,7 @@
     <p class="login-rewards-eyebrow">{{ T("login_rewards_eyebrow", "HIGH COMMAND") }}</p>
     <h1 class="section-title">{{ T("login_rewards_title", "30-Tage Login-Belohnungen") }}</h1>
     <p class="section-hint hint login-rewards-hint">
-      {{ T("login_rewards_hint", "Melde dich jeden Tag an und hole Timekeeper, Boxen und Booster ab. Verpasste Tage setzen die Kette zurück.") }}
+      {{ T("login_rewards_hint", "Melde dich jeden Tag an und hole Timekeeper, Boxen und Booster ab. Verpasste Tage setzen die Kette zurück. Reset: 00:00 UTC.") }}
     </p>
   </header>
 
@@ -52,9 +52,9 @@
         </a>
       </div>
     </div>
-    <p class="login-rewards-cooldown hint" data-lr-cooldown hidden>
+    <p class="login-rewards-cooldown hint" data-lr-cooldown{% if lr.available or not (lr.next_unlock_in_sec or 0) %} hidden{% endif %}>
       {{ T("login_rewards_next_in", "Nächster Claim in") }}
-      <span class="gc-mono" data-lr-cooldown-sec>{{ lr.next_unlock_in_sec or 0 }}</span>s
+      <span class="gc-mono" data-lr-cooldown-sec>{{ lr.next_unlock_in_sec or 0 }}</span>
     </p>
   </section>
 

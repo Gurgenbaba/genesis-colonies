@@ -731,7 +731,11 @@ def claim_op(
     period_key: Optional[str] = None,
     now: Optional[float] = None,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
-    """Claim XP for a completed Season Op."""
+    """Claim XP for a completed Season Op.
+
+    Always claims the current server period for the op cadence.
+    Client ``period_key`` is ignored (stale DOM after UTC midnight).
+    """
     if not schema_ready(conn):
         return False, "battle_pass_unavailable", None
     key = str(op_key or "").strip()
@@ -748,7 +752,9 @@ def claim_op(
     _ensure_player_row(pid, sid, conn=conn, now=ts)
     ensure_ops_for_period(pid, sid, conn=conn, now=ts)
 
-    period = str(period_key or "").strip() or _ops_period_key(str(meta["cadence"]), ts)
+    # Server owns the period; ignore client period_key (UTC rollover safety).
+    _ = period_key
+    period = _ops_period_key(str(meta["cadence"]), ts)
     row = _get_op_row(pid, sid, period, key, conn=conn)
     if not row:
         return False, "op_missing", None
@@ -1169,6 +1175,11 @@ def serialize_for_client(
         if progress["premium_unlocked"] and (level, TRACK_PREMIUM) not in claimed:
             claimable += 1
 
+    ops = serialize_ops(int(player_id), int(season["id"]), conn=conn, now=ts)
+    for op in list(ops.get("daily") or []) + list(ops.get("weekly") or []):
+        if op.get("claimable"):
+            claimable += 1
+
     out: Dict[str, Any] = {
         "ready": True,
         "season": season,
@@ -1178,7 +1189,7 @@ def serialize_for_client(
         "xp_per_level": xp_per,
         "premium_unlocked": bool(progress["premium_unlocked"]),
         "claimable_count": claimable,
-        "ops": serialize_ops(int(player_id), int(season["id"]), conn=conn, now=ts),
+        "ops": ops,
     }
 
     if include_tracks:
