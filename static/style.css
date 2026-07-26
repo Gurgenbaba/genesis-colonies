@@ -1,5 +1,5 @@
 /* ==========================================================================
-   GENESIS COLONIES — GLOBAL style.css v1.7
+   GENESIS COLONIES ? GLOBAL style.css v1.7
    Dark Sci-Fi Neon / Premium Glow / Hard Shadows
    Targets: base.html + all templates
 
@@ -15,16 +15,16 @@
    8) Flash + MOTD
    9) Grids
    10) Tables / Lists
-   11+) Page-specific (Overview, Buildings, Research, …)
-   23) Mobile Breakpoints (360–430px first)
+   11+) Page-specific (Overview, Buildings, Research, ?)
+   23) Mobile Breakpoints (360?430px first)
    24) Desktop Enhancements (981px+)
    25) Mobile Polish v1.3 (sticky resources, clamp type, safe-area)
    ========================================================================== */
 
 /* =========================
    0) Fonts & Reset
-   Fonts load from base.html <link> (not @import) — @import blocked style.css
-   and caused a large→small layout flash on every reload.
+   Fonts load from base.html <link> (not @import) ? @import blocked style.css
+   and caused a large?small layout flash on every reload.
    ========================= */
 
 *,
@@ -97,7 +97,7 @@ button, input, textarea { font: inherit; }
   --gc-border-glow: 0 0 0 1px rgba(70, 229, 255, 0.22);
   --gc-border-glow-strong: 0 0 0 1px rgba(70, 229, 255, 0.45), 0 0 8px rgba(70, 229, 255, 0.12);
 
-  /* Layer stack — dropdowns/menus must escape panel overflow (GC-721J-FIX) */
+  /* Layer stack ? dropdowns/menus must escape panel overflow (GC-721J-FIX) */
   --gc-z-sticky: 200;
   --gc-z-dropdown: 12000;
   --gc-z-popover: 12050;
@@ -123,7 +123,7 @@ button, input, textarea { font: inherit; }
     radial-gradient(700px 400px at 85% 15%, rgba(255,154,26,0.04), transparent 50%),
     linear-gradient(180deg, #040810 0%, #020508 100%);
 
-  /* Layout — auto height; resource row is single-line (4 cols) */
+  /* Layout ? auto height; resource row is single-line (4 cols) */
   --gc-header-h: auto;
   --gc-page-pad-y: 22px;
   --gc-sidebar-top: 136px;
@@ -143,7 +143,7 @@ button, input, textarea { font: inherit; }
   --gc-safe-bottom: env(safe-area-inset-bottom, 0px);
   --gc-safe-left: env(safe-area-inset-left, 0px);
 
-  /* Responsive typography (desktop max = bisherige Größen) */
+  /* Responsive typography (desktop max = bisherige Gr??en) */
   --gc-font-body: clamp(0.875rem, 0.84rem + 0.22vw, 1rem);
   --gc-font-small: clamp(0.75rem, 0.72rem + 0.14vw, 0.86rem);
   --gc-font-title: clamp(1rem, 0.92rem + 0.55vw, 1.28rem);
@@ -189,11 +189,11 @@ button, input, textarea { font: inherit; }
   color-scheme: dark;
 }
 
-/* Planet landscape — rendered on .gc-bg (above body fill, below UI) */
+/* Planet landscape ? rendered on .gc-bg (above body fill, below UI) */
 body.gc-body-ingame.gc-has-planet-landscape {
   background-color: transparent;
   background-image: none;
-  /* Panels: leicht transparent, aber über Landscape gut lesbar */
+  /* Panels: leicht transparent, aber ?ber Landscape gut lesbar */
   --gc-panel: rgba(2, 10, 20, 0.97);
   --gc-panel-strong: rgba(2, 8, 16, 0.98);
   --gc-panel-bg: rgba(2, 10, 20, 0.97);
@@ -331,7 +331,7 @@ body.gc-body-ingame.gc-has-planet-landscape .gc-header-cmd .resource-bar.resourc
   gap: 6px;
 }
 
-/* Sticky resource wrapper — enhanced on mobile in §25 */
+/* Sticky resource wrapper ? enhanced on mobile in ?25 */
 .gc-resource-sticky{
   width: 100%;
   min-width: 0;
@@ -352,7 +352,7 @@ body.gc-body-ingame.gc-has-planet-landscape .gc-header-cmd .resource-bar.resourc
   opacity: 0.88;
 }
 
-/* Subtle static nebula layer (no animation — GC-547 GPU) */
+/* Subtle static nebula layer (no animation ? GC-547 GPU) */
 .gc-bg::after{
   content:"";
   position:absolute;
@@ -364,7 +364,7 @@ body.gc-body-ingame.gc-has-planet-landscape .gc-header-cmd .resource-bar.resourc
   opacity: 0.75;
 }
 
-/* GC-547B — Landing/Login/Register: flat compositor, no shell GPU cost */
+/* GC-547B ? Landing/Login/Register: flat compositor, no shell GPU cost */
 body.gc-body-simple {
   background: #060b16;
 }
@@ -523,7 +523,7 @@ body.gc-body-simple .auth-error {
 }
 .gc-skip-link:focus { left: 10px; }
 
-/* Popover / dropdown layer — menus portaled to body must not clip in panels (GC-721J-FIX) */
+/* Popover / dropdown layer ? menus portaled to body must not clip in panels (GC-721J-FIX) */
 .gc-overflow-visible{
   overflow: visible !important;
 }
@@ -542,7 +542,7 @@ body.gc-has-open-popover .admin-card:has(.gc-hud-select.is-open){
    ========================= */
 
 /* -------------------------
-   HEADER — Premium Holo + Vertical Strip
+   HEADER ? Premium Holo + Vertical Strip
    ------------------------- */
 .gc-header{
   position: sticky;
@@ -755,7 +755,7 @@ body.gc-has-open-popover .admin-card:has(.gc-hud-select.is-open){
   text-shadow: 0 0 16px rgba(120,255,220,0.22);
 }
 
-/* Resource bar (center) — HUD command strip */
+/* Resource bar (center) ? HUD command strip */
 .resource-bar{
   display:flex;
   align-items:stretch;
@@ -905,7 +905,7 @@ body.gc-has-open-popover .admin-card:has(.gc-hud-select.is-open){
   justify-content: flex-start;
 }
 
-/* Sidebar — GC-621C accordion + Genesis cyan glow */
+/* Sidebar ? GC-621C accordion + Genesis cyan glow */
 .gc-sidebar{
   position: sticky;
   top: var(--gc-sidebar-top, 136px);
@@ -1013,7 +1013,7 @@ body.gc-has-open-popover .admin-card:has(.gc-hud-select.is-open){
   pointer-events: auto;
 }
 
-/* GC-849 — infrastructure: one section transition; nested buildings toggles instantly (no max-height chain). */
+/* GC-849 ? infrastructure: one section transition; nested buildings toggles instantly (no max-height chain). */
 .gc-nav-section[data-nav-section="infrastructure"] > .gc-nav-section-body{
   max-height: none;
   display: grid;
@@ -1170,7 +1170,7 @@ body.gc-has-open-popover .admin-card:has(.gc-hud-select.is-open){
   text-shadow: 0 0 12px rgba(0, 234, 255, 0.32);
 }
 
-/* Sidebar submenu groups (Gebäude, Kommando, Militärproduktion, Flotte) */
+/* Sidebar submenu groups (Geb?ude, Kommando, Milit?rproduktion, Flotte) */
 .gc-nav-buildings-group,
 .gc-nav-trading-group,
 .gc-nav-military-group,
@@ -1749,7 +1749,7 @@ body.gc-body-ingame.gc-has-planet-landscape button.gc-nav-link.gc-nav-submenu-to
   box-shadow: var(--gc-border-glow), inset 0 0 0 1px rgba(0, 0, 0, 0.42);
 }
 
-/* GC-806E — page title bands removed; side nav carries page context */
+/* GC-806E ? page title bands removed; side nav carries page context */
 .gc-page > header.section-header,
 .gc-page .admin-wrapper > header.section-header {
   display: none;
@@ -1801,7 +1801,7 @@ body.gc-body-ingame.gc-has-planet-landscape button.gc-nav-link.gc-nav-submenu-to
 }
 
 /* =========================
-   6) Panels — Tactical Command Panels
+   6) Panels ? Tactical Command Panels
    ========================= */
 .gc-panel{
   position: relative;
@@ -1875,7 +1875,7 @@ body.gc-body-ingame.gc-has-planet-landscape button.gc-nav-link.gc-nav-submenu-to
 }
 
 /* =========================
-   7) Buttons — Tactical / Armed
+   7) Buttons ? Tactical / Armed
    ========================= */
 .gc-btn{
   position: relative;
@@ -1993,7 +1993,7 @@ body.gc-body-ingame.gc-has-planet-landscape button.gc-nav-link.gc-nav-submenu-to
 .gc-btn-lg { padding: 10px 16px; font-size: 0.88rem; }
 .gc-btn-xs { padding: 4px 8px; font-size: 0.72rem; }
 
-/* Logout button — segmented, not pill */
+/* Logout button ? segmented, not pill */
 .logout-btn{
   white-space: nowrap;
   border-radius: var(--gc-radius-sm);
@@ -2042,7 +2042,7 @@ body.gc-body-ingame.gc-has-planet-landscape button.gc-nav-link.gc-nav-submenu-to
 
 .gc-flash-text{ color: var(--gc-text-soft); font-size: 0.88rem; }
 
-/* GC-978 — Global toast stack (fixed shell layer) */
+/* GC-978 ? Global toast stack (fixed shell layer) */
 .gc-toast-stack{
   position: fixed;
   z-index: var(--gc-z-toast);
@@ -2337,7 +2337,7 @@ body.gc-body-simple .gc-toast-stack{
   white-space: normal;
 }
 
-/* ── Universe News / Genesis Timeline (GC-642 / GC-650) ─────────────────── */
+/* ?? Universe News / Genesis Timeline (GC-642 / GC-650) ??????????????????? */
 
 .gc-news-page{
   display: flex;
@@ -2926,7 +2926,7 @@ body.gc-body-simple .gc-toast-stack{
   font-size: 0.92rem;
 }
 .gc-whats-new-list li::before{
-  content: "✓";
+  content: "?";
   position: absolute;
   left: 0;
   color: #7dffb2;
@@ -3202,7 +3202,7 @@ body.gc-body-simple .gc-toast-stack{
 hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 
 /* =========================
-   12) Admin Panel (legacy fallback — .admin-shell uses static/admin.css)
+   12) Admin Panel (legacy fallback ? .admin-shell uses static/admin.css)
    ========================= */
 .admin-page:not(.admin-shell){ padding-top: 4px; }
 .admin-page:not(.admin-shell) .admin-wrapper{ max-width: 950px; margin: 0 auto; }
@@ -5031,7 +5031,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .trader-hub-shell.gc-panel{
   padding: 10px;
 }
-/* GC-TRADER-HUB-CONTRAST — no global wash-out; disabled only on individual controls */
+/* GC-TRADER-HUB-CONTRAST ? no global wash-out; disabled only on individual controls */
 .trader-hub-shell.gc-panel::before{
   opacity: 0.1;
 }
@@ -5152,7 +5152,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   line-height: 1.4;
 }
 
-/* GC-966 — Collector Exchange (Sammler-Markt) in Trader Hub */
+/* GC-966 ? Collector Exchange (Sammler-Markt) in Trader Hub */
 .trader-hub-collector-panel{
   margin-top: 0;
   min-width: 0;
@@ -5689,7 +5689,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   justify-self: start;
 }
 
-/* Trader Hub — layout & controls (panels use shared gc-panel) */
+/* Trader Hub ? layout & controls (panels use shared gc-panel) */
 .visually-hidden,
 .gc-sr-only{
   position: absolute !important;
@@ -6067,17 +6067,17 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   aspect-ratio: 1536 / 1024;
   min-height: 420px;
   height: auto;
-  /* frame.png — HUD layout */
+  /* frame.png ? HUD layout */
   --hero-hole-top: 11.72%;
   --hero-hole-right: 7.16%;
   --hero-hole-bottom: 7.23%;
   --hero-hole-left: 6.84%;
-  /* herocard — midpoint: hole insets ↔ full-bleed (under frame PNG) */
+  /* herocard ? midpoint: hole insets ? full-bleed (under frame PNG) */
   --hero-bg-top: 5.9%;
   --hero-bg-right: 3.6%;
   --hero-bg-bottom: 3.6%;
   --hero-bg-left: 3.4%;
-  /* HUD corners — frame rails (full hero stage) */
+  /* HUD corners ? frame rails (full hero stage) */
   --hero-corner-tl-top: 5.5%;
   --hero-corner-tl-left: 8%;
   --hero-corner-tr-top: 5.5%;
@@ -6104,7 +6104,7 @@ body.gc-body-ingame .overview-hero.overview-hero--themed.gc-planet-hero.gc-panel
   background: transparent;
   padding: 0;
 }
-/* gc-panel scanlines would steal pseudo-elements — planet HUD uses real layers */
+/* gc-panel scanlines would steal pseudo-elements ? planet HUD uses real layers */
 .gc-planet-hero.gc-panel::before,
 .gc-planet-hero.gc-panel::after{
   display: none;
@@ -6158,7 +6158,7 @@ body.gc-body-ingame .overview-hero.overview-hero--themed.gc-planet-hero.gc-panel
 }
 .overview-hero--themed.gc-planet-hero{
   --hero-line: color-mix(in srgb, var(--planet-accent, #46e5ff) 22%, rgba(255, 255, 255, 0.08));
-  /* frame HUD — slot 1–15 palette via planet theme tokens */
+  /* frame HUD ? slot 1?15 palette via planet theme tokens */
   --hero-frame-top-name: color-mix(in srgb, var(--planet-accent-secondary, #7fffd9) 90%, #fff 10%);
   --hero-frame-top-coords: color-mix(in srgb, var(--planet-accent-secondary, #7fffd9) 72%, var(--gc-text-soft, #a8c8d8) 28%);
   --hero-frame-top-badge: color-mix(in srgb, var(--planet-accent-secondary, #7fffd9) 88%, #fff 12%);
@@ -6166,7 +6166,7 @@ body.gc-body-ingame .overview-hero.overview-hero--themed.gc-planet-hero.gc-panel
   --hero-frame-bottom-value: color-mix(in srgb, var(--planet-accent-secondary, #7fffd9) 84%, #fff 16%);
   --hero-frame-bottom-temp: color-mix(in srgb, var(--planet-accent, #46e5ff) 80%, #fff 20%);
   --hero-frame-bottom-muted: color-mix(in srgb, var(--planet-accent, #46e5ff) 54%, #a8c0d0 46%);
-  /* center HUD — planet-themed activity typography */
+  /* center HUD ? planet-themed activity typography */
   --hero-activity-label: color-mix(in srgb, var(--planet-accent-secondary, #7fffd9) 78%, #fff 22%);
   --hero-activity-status: #eef6ff;
   --hero-activity-idle: rgba(210, 228, 246, 0.94);
@@ -6672,7 +6672,7 @@ body.gc-body-ingame.gc-has-planet-landscape .overview-hero--themed.gc-planet-her
     linear-gradient(90deg, rgba(16, 4, 0, 0.88) 0%, rgba(20, 6, 0, 0.45) 36%, transparent 66%),
     linear-gradient(to top, rgba(20, 6, 0, 0.94) 0%, rgba(14, 4, 0, 0.55) 26%, transparent 54%);
 }
-/* Theme frame — PNG only, no extra glow layer */
+/* Theme frame ? PNG only, no extra glow layer */
 .gc-planet-hero.gc-planet-theme-group--hot .overview-hero-slot-badge{
   background: transparent;
   box-shadow: none;
@@ -6763,7 +6763,7 @@ body.gc-body-ingame.gc-has-planet-landscape .overview-hero--themed.gc-planet-her
     grid-row: 3;
   }
 }
-/* Planet hero HUD: flat type directly on herocard — no boxes */
+/* Planet hero HUD: flat type directly on herocard ? no boxes */
 .overview-hero--themed.gc-planet-hero .overview-hero-title-plate,
 .overview-hero--themed.gc-planet-hero .overview-hero-corner-meta,
 .overview-hero--themed.gc-planet-hero .overview-hero-slot-badge,
@@ -6977,7 +6977,7 @@ body.gc-reduced-motion .overview-hero-border::after{
 .overview-hero--themed.gc-planet-hero .overview-hero-title-plate .overview-hero-name-btn[aria-expanded="true"] .overview-hero-name{
   text-shadow: none;
 }
-/* Frame HUD — planet slot palette (1–15 via --planet-accent*) */
+/* Frame HUD ? planet slot palette (1?15 via --planet-accent*) */
 .overview-hero--themed.gc-planet-hero .overview-hero-title-plate .overview-hero-name{
   color: var(--hero-frame-top-name);
 }
@@ -7556,7 +7556,7 @@ body.gc-perf-idle .overview-hero-fx::before{
   box-shadow: 0 0 20px rgba(70,229,255,0.18);
 }
 
-/* Smooth progress fills — will-change only while timers active (GC-547) */
+/* Smooth progress fills ? will-change only while timers active (GC-547) */
 .gc-progress-smooth,
 .build-bar-fill,
 .build-progress-fill,
@@ -7599,7 +7599,7 @@ body:not(.gc-perf-idle) .research-bar-fill{
 .research-item-cost{ margin-top: 6px; color: var(--gc-text-dim); font-size: 0.84rem; }
 
 /* =========================
-   16) Buildings + Research — compact progression cards
+   16) Buildings + Research ? compact progression cards
    ========================= */
 .buildings-shell{ padding: 10px; }
 
@@ -7620,7 +7620,7 @@ body:not(.gc-perf-idle) .research-bar-fill{
   margin-top: 4px;
 }
 
-/* Genesis building/research/shipyard cards — compact grid */
+/* Genesis building/research/shipyard cards ? compact grid */
 .gc-building-grid.buildings-prog-list,
 .gc-building-grid.research-prog-list,
 .gc-building-grid.shipyard-ship-grid{
@@ -7645,7 +7645,7 @@ body:not(.gc-perf-idle) .research-bar-fill{
   transform: translateY(-2px);
 }
 
-/* Hero image — Megabunker-style building recognition */
+/* Hero image ? Megabunker-style building recognition */
 .gc-bld-card-hero{
   position: relative;
   width: 100%;
@@ -7667,7 +7667,7 @@ body:not(.gc-perf-idle) .research-bar-fill{
   aspect-ratio: 16 / 9;
 }
 
-/* GC-555 — picture wrapper fills hero slots */
+/* GC-555 ? picture wrapper fills hero slots */
 .gc-bld-card-hero > picture,
 .gc-bld-hero-img-stack > picture{
   position: absolute;
@@ -7704,7 +7704,7 @@ body:not(.gc-perf-idle) .research-bar-fill{
   z-index: 2;
 }
 
-/* GC-550C — hero queue status (no dark overlay layer) */
+/* GC-550C ? hero queue status (no dark overlay layer) */
 .gc-bld-hero-queue{
   position: absolute;
   inset: 0;
@@ -7909,7 +7909,7 @@ body:not(.gc-perf-idle) .research-bar-fill{
   z-index: 6;
 }
 
-/* GC-557G — hero right stack: floating level + timer badges (buildings/research) */
+/* GC-557G ? hero right stack: floating level + timer badges (buildings/research) */
 .gc-bld-hero-right-stack{
   position: absolute;
   top: 5px;
@@ -8031,7 +8031,7 @@ body:not(.gc-perf-idle) .research-bar-fill{
   line-height: 1;
 }
 
-/* GC-557E — timer/button slots (stable poll layout) */
+/* GC-557E ? timer/button slots (stable poll layout) */
 .gc-bld-hero-level{
   position: static;
   top: auto;
@@ -8098,7 +8098,7 @@ body:not(.gc-perf-idle) .research-bar-fill{
   text-overflow: ellipsis;
 }
 
-/* GC-557F — building technical data modal */
+/* GC-557F ? building technical data modal */
 .gc-building-tech-body{
   padding: 0 0 12px;
   max-height: min(72vh, 640px);
@@ -8303,7 +8303,7 @@ body:not(.gc-perf-idle) .research-bar-fill{
   padding: 2px 0;
 }
 
-/* GC-TECHCARD-UX-001 — impact summary (scoped; not global card/queue) */
+/* GC-TECHCARD-UX-001 ? impact summary (scoped; not global card/queue) */
 .gc-tech-impact{
   display: flex;
   flex-direction: column;
@@ -8836,7 +8836,7 @@ a.gc-bld-head-action-btn--go:focus-visible{
   flex-shrink: 0;
 }
 
-/* GC-827B — Genesis card freeze (benefit → costs → footer) */
+/* GC-827B ? Genesis card freeze (benefit ? costs ? footer) */
 .gc-card-benefit-block,
 .gc-card-costs-block{
   display: flex;
@@ -8943,7 +8943,7 @@ a.gc-bld-head-action-btn--go:focus-visible{
   color: rgba(180, 245, 255, 0.88);
 }
 
-/* GC-827B — build-time footer: label left, value right */
+/* GC-827B ? build-time footer: label left, value right */
 .gc-card-lr-row.gc-card-footer-row--time{
   justify-content: space-between;
   padding: 4px 6px 2px;
@@ -9006,7 +9006,7 @@ a.gc-bld-head-action-btn--go:focus-visible{
   margin-top: 4px;
 }
 
-/* GC-827 — compact card benefits (details in Technical Data modal) */
+/* GC-827 ? compact card benefits (details in Technical Data modal) */
 .gc-compact-benefits-row,
 .gc-compact-stat-row{
   display: flex;
@@ -9116,7 +9116,7 @@ a.gc-bld-head-action-btn--go:focus-visible{
   opacity: 0.9;
 }
 
-/* Building cards — larger resource icons (GC-557) */
+/* Building cards ? larger resource icons (GC-557) */
 .gc-building-card .gc-res-icon,
 .gc-research-card .gc-res-icon{
   width: 24px;
@@ -9350,7 +9350,7 @@ a.gc-bld-head-action-btn--go:focus-visible{
   display: none;
 }
 
-/* GC-QUEUE-MINI-CARDS — compact horizontal jobs in one row */
+/* GC-QUEUE-MINI-CARDS ? compact horizontal jobs in one row */
 .gc-mini-queue-host{
   display: block;
   padding: 4px 10px 6px;
@@ -9831,7 +9831,7 @@ a.gc-bld-head-action-btn--go:focus-visible{
   line-height: 1.1;
 }
 
-/* GC-536C — research card queue accents */
+/* GC-536C ? research card queue accents */
 .gc-research-card--in-queue{
   border-color: rgba(168, 120, 255, 0.28);
   box-shadow:
@@ -9880,7 +9880,7 @@ a.gc-bld-head-action-btn--go:focus-visible{
 
 /* GC-UNIT-QUEUE-DEDUP-001: shipyard/defense queue UI only in .gc-mini-queue-strip */
 
-/* GC-536E — planet-tech + ascension card queue accents */
+/* GC-536E ? planet-tech + ascension card queue accents */
 .pe-queue-compact{
   /* extends .gc-queue-compact */
 }
@@ -10673,7 +10673,7 @@ a.gc-bld-head-action-btn--go:focus-visible{
   color: rgba(215,246,255,0.72);
 }
 
-/* Canonical resource icons — WebP (GC-747B) */
+/* Canonical resource icons ? WebP (GC-747B) */
 :root{
   --gc-icon-ferronit: url("/static/img/res/Ferronit.webp");
   --gc-icon-crytite: url("/static/img/res/Crytite.webp");
@@ -11036,7 +11036,7 @@ img.gc-res-icon.gc-res-timekeeper,
 .tech-req-missing{ color: rgba(255, 196, 0, 0.90); }
 .tech-req-current{ color: var(--gc-text-dim); margin-left: 6px; }
 
-/* Tech-Tree board (GC-555) — solid command-panel look */
+/* Tech-Tree board (GC-555) ? solid command-panel look */
 .techtree-page{
   display: grid;
   gap: 14px;
@@ -12360,7 +12360,7 @@ body.gc-techtree-media-zoom-open{
 .galaxy-command-map-node--expansion{
   max-width: 10rem;
 }
-/* GC-571E — compact map markers; labels live in the right panel only */
+/* GC-571E ? compact map markers; labels live in the right panel only */
 .galaxy-command-map-nodes--markers .galaxy-command-map-node{
   min-width: 0;
   max-width: none;
@@ -13197,7 +13197,7 @@ body.gc-techtree-media-zoom-open{
   font-size: 0.82rem;
 }
 
-/* GC-594D — Galaxy HUD ring module */
+/* GC-594D ? Galaxy HUD ring module */
 .galaxy-ring-view{
   width: 100%;
   min-width: 0;
@@ -13766,7 +13766,7 @@ body.gc-techtree-media-zoom-open{
   white-space: nowrap;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.28);
 }
-/* Planet overlay chips — opaque panel + saturated text for nebula readability */
+/* Planet overlay chips ? opaque panel + saturated text for nebula readability */
 .galaxy-ring-slot-status:not(.galaxy-ring-slot-status--inspector) .galaxy-ring-status-chip{
   font-size: 0.5rem;
   padding: 1px 5px;
@@ -14946,7 +14946,7 @@ body.gc-techtree-media-zoom-open{
   box-shadow: 0 18px 44px rgba(0,0,0,0.40);
 }
 
-/* Fleet page — command center (GC-640B) */
+/* Fleet page ? command center (GC-640B) */
 .fleet-page .fleet-command-head,
 .fleet-page .fleet-headline-row{
   display: flex;
@@ -15522,7 +15522,7 @@ body.gc-techtree-media-zoom-open{
   display: grid;
   gap: 6px;
 }
-/* Label+MAX on top, full-width amount below — billions stay readable. */
+/* Label+MAX on top, full-width amount below ? billions stay readable. */
 .fleet-send-compact .fleet-resource-row{
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
@@ -16152,7 +16152,7 @@ body.gc-techtree-media-zoom-open{
   color: var(--gc-text-soft);
 }
 
-/* Shared ingame form controls — Genesis HUD (fleet, logistics, gc-input) */
+/* Shared ingame form controls ? Genesis HUD (fleet, logistics, gc-input) */
 body.gc-body-ingame .gc-input,
 body.gc-body-ingame input.gc-input,
 body.gc-body-ingame textarea.gc-input,
@@ -17260,7 +17260,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 }
 .fleet-logistics-actions{ display: flex; gap: 8px; flex-wrap: wrap; }
 
-/* Logistics page (Genesis HUD — aligned with fleet / buildings) */
+/* Logistics page (Genesis HUD ? aligned with fleet / buildings) */
 .logistics-page .logistics-tabs{
   margin: 0 0 12px;
 }
@@ -17736,7 +17736,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   transform: translateY(-1px);
 }
 
-/* ── Hall of Fame (GC-700B ranking layout) ──────────────────────────────── */
+/* ?? Hall of Fame (GC-700B ranking layout) ???????????????????????????????? */
 
 .gc-hof-page{
   display: flex;
@@ -17977,7 +17977,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   }
 }
 
-/* ── Chronicles hub (GC-700C-D — Genesis design) ──────────────────────── */
+/* ?? Chronicles hub (GC-700C-D ? Genesis design) ???????????????????????? */
 
 .gc-chronicles-page{
   display: flex;
@@ -18286,11 +18286,11 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   }
 }
 
-/* ── Expeditions + Records (Chronicles) — legacy aliases ──────────────── */
+/* ?? Expeditions + Records (Chronicles) ? legacy aliases ???????????????? */
 
 .gc-chronicles-expo-tabs .gc-pvp-tab{ min-width: 0; }
 
-/* ── PvP section (Chronicles) ─────────────────────────────────────────── */
+/* ?? PvP section (Chronicles) ??????????????????????????????????????????? */
 
 .gc-pvp-panel .gc-ranking-panel-head{
   flex-wrap: wrap;
@@ -18367,7 +18367,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   }
 }
 
-/* ── Universe Records (GC-701) ─────────────────────────────────────────── */
+/* ?? Universe Records (GC-701) ??????????????????????????????????????????? */
 
 .gc-records-page{
   display: flex;
@@ -18909,7 +18909,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   100% { transform: translateZ(0) scale(1); filter: brightness(1); }
 }
 
-/* delta chip — single global node (GC-546A2); removed from DOM after animation */
+/* delta chip ? single global node (GC-546A2); removed from DOM after animation */
 .gc-score-pill .gc-score-delta{
   position: absolute;
   top: -10px;
@@ -18977,7 +18977,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 }
 
 /* ===========================
-   BUILD QUEUE (Buildings) – Premium Block wie Research
+   BUILD QUEUE (Buildings) ? Premium Block wie Research
    =========================== */
 
 .active-build-wrapper{
@@ -19171,7 +19171,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   font-size: 0.88rem;
 }
 
-/* Horizontal table scroll — no page overflow */
+/* Horizontal table scroll ? no page overflow */
 .gc-table-scroll{
   width: 100%;
   max-width: 100%;
@@ -19181,7 +19181,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 }
 .gc-table-scroll .table-std{ min-width: 520px; }
 
-/* Bottom nav — hidden on desktop */
+/* Bottom nav ? hidden on desktop */
 .gc-bottom-nav,
 .gc-nav-drawer{ display: none; }
 
@@ -19395,7 +19395,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   display: none !important;
 }
 
-/* GC-806C desktop: bottom utility dock entry — must stack above dock (after base .gc-special-* rules) */
+/* GC-806C desktop: bottom utility dock entry ? must stack above dock (after base .gc-special-* rules) */
 @media (min-width: 769px){
   .gc-special-root{
     z-index: calc(var(--gc-z-sticky, 200) + 2);
@@ -19993,7 +19993,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
     display: inline;
   }
 
-  /* Cards & panels — mehr vertikaler Abstand */
+  /* Cards & panels ? mehr vertikaler Abstand */
   .gc-panel{ padding: 14px; margin-bottom: 4px; }
   .gc-panel + .gc-panel{ margin-top: 2px; }
 
@@ -20152,7 +20152,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
     color: var(--gc-primary);
   }
 
-  /* Drawer (More menu) — class .is-open for smooth animation */
+  /* Drawer (More menu) ? class .is-open for smooth animation */
   .gc-nav-drawer{
     display: block;
     position: fixed;
@@ -20380,7 +20380,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 
   body.gc-nav-drawer-open{ overflow: hidden; }
 
-  /* Mobile: no floating special dock over gameplay — utilities live in META drawer */
+  /* Mobile: no floating special dock over gameplay ? utilities live in META drawer */
   .gc-special-root > .gc-special-bar{
     display: none !important;
   }
@@ -20414,7 +20414,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   }
 }
 
-/* Narrow phones: 360–390px */
+/* Narrow phones: 360?390px */
 @media (max-width: 390px){
   .gc-header-pill-label{ display: none; }
   .gc-header-pill .res-sep{ display: none; }
@@ -20530,7 +20530,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   flex-wrap: wrap;
 }
 
-/* GC-642 / GC-643 — queue row under resources (full width) */
+/* GC-642 / GC-643 ? queue row under resources (full width) */
 .gc-header-row-queues{
   width: 100%;
   min-width: 0;
@@ -20573,7 +20573,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   min-width: 0;
 }
 
-/* GC-642 / GC-643 — universal global queue HUD (horizontal chips) */
+/* GC-642 / GC-643 ? universal global queue HUD (horizontal chips) */
 .gc-global-queue-hud{
   display: flex;
   flex: 1 1 auto;
@@ -21100,7 +21100,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 }
 
 .gc-fleet-hud-ships::before{
-  content: "⌁";
+  content: "?";
   margin-right: 3px;
   opacity: 0.45;
   font-size: 0.62rem;
@@ -21424,7 +21424,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   animation: gc-fleet-drawer-timer-pulse 1s ease-in-out infinite;
 }
 
-/* GC-640A — legacy fleet HUD chip styles (fleet page / badges) */
+/* GC-640A ? legacy fleet HUD chip styles (fleet page / badges) */
 .gc-fleet-global-hud{
   display: inline-flex;
   align-items: center;
@@ -21726,7 +21726,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   font-size: 0.68rem;
 }
 
-/* Resource HUD panels (row 2) — GC-557A scannable command strip */
+/* Resource HUD panels (row 2) ? GC-557A scannable command strip */
 .gc-header-cmd .resource-bar.resource-bar-cmd{
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -21771,7 +21771,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   border-color: color-mix(in srgb, rgba(255, 120, 80, 0.8) 50%, var(--hud-res-accent) 50%);
 }
 
-/* GC-807A — segmented storage / usage capacity bar (inline in amount column) */
+/* GC-807A ? segmented storage / usage capacity bar (inline in amount column) */
 .gc-header-cmd .hud-res-amount .hud-res-capacity{
   width: 100%;
   margin: 0;
@@ -22518,7 +22518,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 }
 
 /* ==========================================================================
-   TACTICAL COMMAND UI v2 — Global Overrides
+   TACTICAL COMMAND UI v2 ? Global Overrides
    Sci-Fi Industrial / Sharp / Terminal
    ========================================================================== */
 
@@ -22641,7 +22641,7 @@ body.gc-body-ingame {
   }
 }
 
-/* GC-547 — idle / hidden tab: stop compositor-heavy effects */
+/* GC-547 ? idle / hidden tab: stop compositor-heavy effects */
 body.gc-tab-hidden .gc-bg::after {
   opacity: 0;
 }
@@ -22660,7 +22660,7 @@ body.gc-perf-idle .research-bar-fill {
   will-change: auto;
 }
 
-/* GC-547C — idle: hide decorative bg stack; GC-548 keep static planet landscape */
+/* GC-547C ? idle: hide decorative bg stack; GC-548 keep static planet landscape */
 body.gc-perf-idle:not(.gc-has-planet-landscape) .gc-bg {
   display: none;
 }
@@ -22704,7 +22704,7 @@ body.gc-perf-idle .gc-header::after {
   display: none;
 }
 
-/* GC-553 — pause decorative queue loops when idle or tab hidden */
+/* GC-553 ? pause decorative queue loops when idle or tab hidden */
 body.gc-perf-idle .gc-card-queue-glyph,
 body.gc-perf-idle .gc-card-queue-scanline,
 body.gc-perf-idle .gc-card-queue-glyph--research,
@@ -22816,32 +22816,282 @@ body.gc-combat-report-open { overflow: hidden; }
   max-height: min(92vh, 880px);
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--gc-border-bright, rgba(70, 229, 255, 0.35));
-  border-radius: var(--gc-radius-md, 10px);
+  border: 1px solid rgba(70, 229, 255, 0.22);
+  border-radius: var(--gc-radius-sm, 2px);
   background: linear-gradient(160deg, rgba(12, 20, 36, 0.98), rgba(6, 10, 20, 0.98));
-  box-shadow: 0 0 40px rgba(70, 229, 255, 0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  box-shadow:
+    0 0 48px rgba(70, 229, 255, 0.06),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03);
   animation: gc-pc-in 0.22s ease-out;
   overflow: hidden;
 }
 .gc-player-card-dialog[data-theme="cyan"] {
-  border-color: rgba(70, 229, 255, 0.4);
-  box-shadow: 0 0 36px rgba(70, 229, 255, 0.14);
+  border-color: rgba(70, 229, 255, 0.26);
+  box-shadow: 0 0 52px rgba(70, 229, 255, 0.07), inset 0 0 0 1px rgba(255, 255, 255, 0.03);
 }
 .gc-player-card-dialog[data-theme="violet"] {
-  border-color: rgba(168, 120, 255, 0.45);
-  box-shadow: 0 0 40px rgba(168, 120, 255, 0.15);
+  border-color: rgba(168, 120, 255, 0.28);
+  box-shadow: 0 0 52px rgba(168, 120, 255, 0.08), inset 0 0 0 1px rgba(255, 255, 255, 0.03);
 }
 .gc-player-card-dialog[data-theme="amber"] {
-  border-color: rgba(255, 190, 80, 0.45);
-  box-shadow: 0 0 40px rgba(255, 190, 80, 0.12);
+  border-color: rgba(255, 190, 80, 0.28);
+  box-shadow: 0 0 52px rgba(255, 190, 80, 0.07), inset 0 0 0 1px rgba(255, 255, 255, 0.03);
 }
 .gc-player-card-dialog[data-theme="emerald"] {
-  border-color: rgba(80, 220, 140, 0.4);
-  box-shadow: 0 0 40px rgba(80, 220, 140, 0.12);
+  border-color: rgba(80, 220, 140, 0.26);
+  box-shadow: 0 0 52px rgba(80, 220, 140, 0.07), inset 0 0 0 1px rgba(255, 255, 255, 0.03);
 }
 .gc-player-card-dialog[data-theme="rose"] {
-  border-color: rgba(255, 120, 160, 0.4);
-  box-shadow: 0 0 40px rgba(255, 120, 160, 0.12);
+  border-color: rgba(255, 120, 160, 0.26);
+  box-shadow: 0 0 52px rgba(255, 120, 160, 0.07), inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+.gc-player-card-dialog[data-theme="ash"] {
+  border-color: rgba(140, 148, 160, 0.3);
+  box-shadow: 0 0 40px rgba(120, 128, 140, 0.06), inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+.gc-player-card-dialog[data-theme="steel"] {
+  border-color: rgba(160, 176, 196, 0.32);
+  box-shadow: 0 0 44px rgba(140, 160, 190, 0.07), inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+.gc-player-card-dialog[data-theme="gold"] {
+  border-color: rgba(255, 200, 72, 0.42);
+  background: linear-gradient(160deg, rgba(24, 20, 12, 0.98), rgba(8, 8, 14, 0.98));
+  box-shadow:
+    0 0 56px rgba(255, 190, 60, 0.14),
+    inset 0 0 0 1px rgba(255, 220, 120, 0.08);
+}
+.gc-player-card-dialog[data-theme="void"] {
+  border-color: rgba(140, 90, 255, 0.42);
+  background: linear-gradient(160deg, rgba(16, 10, 30, 0.98), rgba(4, 4, 12, 0.98));
+  box-shadow:
+    0 0 56px rgba(90, 40, 220, 0.16),
+    0 0 28px rgba(180, 120, 255, 0.08),
+    inset 0 0 0 1px rgba(180, 120, 255, 0.06);
+}
+.gc-player-card-dialog[data-theme="plasma"] {
+  border-color: rgba(0, 255, 220, 0.4);
+  background: linear-gradient(160deg, rgba(6, 22, 26, 0.98), rgba(4, 10, 18, 0.98));
+  box-shadow:
+    0 0 56px rgba(0, 230, 200, 0.14),
+    0 0 24px rgba(80, 180, 255, 0.06),
+    inset 0 0 0 1px rgba(0, 255, 210, 0.06);
+}
+
+/* Prestige layer: aura + title flair ? ONLY view + live preview (never edit shell) */
+.gc-player-card-view[data-aura],
+.gc-player-card-preview[data-aura] {
+  position: relative;
+  --pc-rim: rgba(160, 168, 180, 0.7);
+  --pc-aura-color: rgba(255, 200, 72, 0.75);
+  --pc-aura-glow: rgba(255, 190, 60, 0.32);
+  --pc-aura-fill: transparent;
+}
+.gc-player-card-edit::before,
+.gc-player-card-edit::after {
+  content: none !important;
+  display: none !important;
+}
+
+/* Free rims: visible L-corner brackets + scanline */
+.gc-player-card-view[data-aura^="rim_"]::before,
+.gc-player-card-preview[data-aura^="rim_"]::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 6px;
+  z-index: 3;
+  border-radius: var(--gc-radius-sm, 2px);
+  background:
+    linear-gradient(var(--pc-rim), var(--pc-rim)) top left / 14px 1px no-repeat,
+    linear-gradient(var(--pc-rim), var(--pc-rim)) top left / 1px 14px no-repeat,
+    linear-gradient(var(--pc-rim), var(--pc-rim)) top right / 14px 1px no-repeat,
+    linear-gradient(var(--pc-rim), var(--pc-rim)) top right / 1px 14px no-repeat,
+    linear-gradient(var(--pc-rim), var(--pc-rim)) bottom left / 14px 1px no-repeat,
+    linear-gradient(var(--pc-rim), var(--pc-rim)) bottom left / 1px 14px no-repeat,
+    linear-gradient(var(--pc-rim), var(--pc-rim)) bottom right / 14px 1px no-repeat,
+    linear-gradient(var(--pc-rim), var(--pc-rim)) bottom right / 1px 14px no-repeat;
+  opacity: 0.72;
+}
+.gc-player-card-view[data-aura="rim_ash"],
+.gc-player-card-preview[data-aura="rim_ash"] {
+  --pc-rim: rgba(170, 178, 190, 0.75);
+}
+.gc-player-card-view[data-aura="rim_steel"],
+.gc-player-card-preview[data-aura="rim_steel"] {
+  --pc-rim: rgba(190, 210, 235, 0.8);
+}
+.gc-player-card-view[data-aura^="rim_"]::after,
+.gc-player-card-preview[data-aura^="rim_"]::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  background: repeating-linear-gradient(
+    180deg,
+    transparent 0,
+    transparent 5px,
+    rgba(180, 190, 200, 0.035) 5px,
+    rgba(180, 190, 200, 0.035) 6px
+  );
+  opacity: 0.55;
+  box-shadow: inset 0 0 0 1px rgba(160, 170, 185, 0.12);
+}
+
+/* Premium auras: circuit border + soft glow + tint */
+.gc-player-card-view[data-aura^="aura_"],
+.gc-player-card-preview[data-aura^="aura_"] {
+  isolation: isolate;
+  background-image:
+    linear-gradient(var(--pc-aura-fill), var(--pc-aura-fill)),
+    linear-gradient(165deg, rgba(10, 14, 24, 0.96), rgba(4, 8, 16, 0.98));
+}
+.gc-player-card-view[data-aura^="aura_"]::before,
+.gc-player-card-preview[data-aura^="aura_"]::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: var(--gc-radius-sm, 2px);
+  padding: 2px;
+  background:
+    linear-gradient(
+      115deg,
+      transparent 18%,
+      var(--pc-aura-color) 42%,
+      transparent 58%,
+      var(--pc-aura-color) 82%,
+      transparent 94%
+    );
+  background-size: 280% 280%;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: gc-pc-aura-circuit 3.6s linear infinite;
+  z-index: 3;
+  opacity: 0.85;
+}
+.gc-player-card-view[data-aura^="aura_"]::after,
+.gc-player-card-preview[data-aura^="aura_"]::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: -2px;
+  border-radius: var(--gc-radius-sm, 2px);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--pc-aura-color) 28%, transparent),
+    0 0 18px var(--pc-aura-glow),
+    0 0 36px var(--pc-aura-glow);
+  opacity: 0.7;
+  z-index: 0;
+  animation: gc-pc-aura-pulse 3.5s ease-in-out infinite;
+}
+.gc-player-card-view[data-aura="aura_gold"],
+.gc-player-card-preview[data-aura="aura_gold"] {
+  --pc-aura-color: rgba(255, 214, 90, 0.85);
+  --pc-aura-glow: rgba(255, 190, 50, 0.32);
+  --pc-aura-fill: rgba(255, 190, 60, 0.045);
+}
+.gc-player-card-view[data-aura="aura_plasma"],
+.gc-player-card-preview[data-aura="aura_plasma"] {
+  --pc-aura-color: rgba(0, 255, 220, 0.85);
+  --pc-aura-glow: rgba(0, 230, 200, 0.3);
+  --pc-aura-fill: rgba(0, 230, 200, 0.05);
+}
+.gc-player-card-view[data-aura="aura_void"],
+.gc-player-card-preview[data-aura="aura_void"] {
+  --pc-aura-color: rgba(170, 110, 255, 0.88);
+  --pc-aura-glow: rgba(120, 50, 255, 0.34);
+  --pc-aura-fill: rgba(110, 50, 220, 0.06);
+}
+.gc-player-card-view[data-aura^="aura_"] .gc-player-card-avatar,
+.gc-player-card-preview[data-aura^="aura_"] .gc-player-card-avatar,
+.gc-player-card-view[data-aura^="aura_"] .gc-player-card-avatar-placeholder,
+.gc-player-card-preview[data-aura^="aura_"] .gc-player-card-avatar-placeholder {
+  box-shadow:
+    0 0 0 1px rgba(6, 10, 18, 0.9),
+    0 0 0 2px color-mix(in srgb, var(--pc-aura-color) 70%, transparent),
+    0 0 14px var(--pc-aura-glow);
+  border-radius: var(--gc-radius-sm, 2px);
+}
+
+@keyframes gc-pc-aura-circuit {
+  0% { background-position: 0% 40%; }
+  100% { background-position: 220% 60%; }
+}
+@keyframes gc-pc-aura-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.78; }
+}
+
+/* Title flair ? CSS shapes only (no Unicode glyphs) */
+.gc-player-card-title-text {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+}
+.gc-player-card-view[data-flair="etched"] .gc-player-card-title-text,
+.gc-player-card-preview[data-flair="etched"] .gc-player-card-title-text {
+  letter-spacing: 0.06em;
+  padding: 0 0 2px 7px;
+  border-left: 2px solid rgba(180, 190, 200, 0.35);
+  border-bottom: 1px solid rgba(180, 190, 200, 0.28);
+  color: rgba(200, 210, 220, 0.88);
+}
+.gc-player-card-view[data-flair="signal"] .gc-player-card-title-text,
+.gc-player-card-preview[data-flair="signal"] .gc-player-card-title-text {
+  letter-spacing: 0.1em;
+  padding: 0 0 2px 8px;
+  border-left: 2px solid rgba(70, 229, 255, 0.65);
+  color: rgba(140, 220, 235, 0.95);
+  text-shadow: 0 0 8px rgba(70, 229, 255, 0.28);
+  animation: gc-pc-flair-signal 3.4s ease-in-out infinite;
+  box-shadow: inset 0 -1px 0 rgba(70, 229, 255, 0.2);
+}
+.gc-player-card-view[data-flair="imperial"] .gc-player-card-title-text,
+.gc-player-card-preview[data-flair="imperial"] .gc-player-card-title-text {
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 700;
+  padding: 1px 2px 3px 8px;
+  border-left: 2px solid rgba(255, 200, 72, 0.75);
+  border-bottom: 1px solid rgba(255, 200, 80, 0.35);
+  color: rgba(255, 214, 140, 0.96);
+  text-shadow: 0 0 10px rgba(255, 190, 60, 0.28);
+  background: linear-gradient(90deg, rgba(255, 190, 60, 0.06), transparent 65%);
+}
+
+.gc-player-card-badge-legendary,
+.gc-player-card-badge-mythic,
+.gc-player-card-badge-epic {
+  box-shadow: 0 0 10px rgba(255, 200, 72, 0.16);
+}
+.gc-player-card-badge-legendary {
+  box-shadow: 0 0 12px rgba(255, 190, 60, 0.22), inset 0 0 0 1px rgba(255, 220, 120, 0.16);
+}
+.gc-player-card-badge-mythic {
+  box-shadow: 0 0 12px rgba(180, 100, 255, 0.24), inset 0 0 0 1px rgba(200, 140, 255, 0.18);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gc-player-card-view[data-aura^="aura_"]::before,
+  .gc-player-card-preview[data-aura^="aura_"]::before,
+  .gc-player-card-view[data-aura^="aura_"]::after,
+  .gc-player-card-preview[data-aura^="aura_"]::after,
+  .gc-player-card-view[data-flair="signal"] .gc-player-card-title-text,
+  .gc-player-card-preview[data-flair="signal"] .gc-player-card-title-text {
+    animation: none;
+  }
+}
+@keyframes gc-pc-flair-signal {
+  0%, 100% { opacity: 0.9; text-shadow: 0 0 6px rgba(70, 229, 255, 0.18); }
+  50% { opacity: 1; text-shadow: 0 0 10px rgba(70, 229, 255, 0.38); }
 }
 
 @keyframes gc-pc-in {
@@ -22884,7 +23134,7 @@ body.gc-combat-report-open { overflow: hidden; }
   display: none;
 }
 
-/* CRITICAL: [hidden] must win over display:flex (fixes stuck "Lade Profil…") */
+/* CRITICAL: [hidden] must win over display:flex (fixes stuck "Lade Profil?") */
 .gc-player-card-loading[hidden],
 .gc-player-card-error[hidden] {
   display: none !important;
@@ -22979,13 +23229,13 @@ body.gc-combat-report-open { overflow: hidden; }
   line-height: 0;
 }
 .gc-player-card-avatar-btn:focus-visible {
-  outline: 2px solid rgba(70, 229, 255, 0.75);
+  outline: 2px solid rgba(70, 229, 255, 0.45);
   outline-offset: 2px;
 }
 .gc-player-card-avatar-btn:hover .gc-player-card-avatar,
 .gc-player-card-avatar-btn:focus-visible .gc-player-card-avatar {
-  border-color: rgba(70, 229, 255, 0.75);
-  box-shadow: 0 0 14px rgba(70, 229, 255, 0.22);
+  border-color: rgba(70, 229, 255, 0.42);
+  box-shadow: 0 0 16px rgba(70, 229, 255, 0.12);
 }
 
 .gc-player-card-avatar-zoom {
@@ -23119,9 +23369,9 @@ body.gc-combat-report-open { overflow: hidden; }
   width: 72px;
   height: 72px;
   max-width: 100%;
-  border-radius: var(--gc-radius-xl);
+  border-radius: var(--gc-radius-sm, 2px);
   object-fit: cover;
-  border: 1px solid rgba(70, 229, 255, 0.35);
+  border: 1px solid rgba(70, 229, 255, 0.24);
   background: rgba(0, 0, 0, 0.35);
 }
 .gc-player-card-avatar-placeholder {
@@ -23132,9 +23382,9 @@ body.gc-combat-report-open { overflow: hidden; }
   height: 72px;
   font-family: var(--gc-font-display, Orbitron, sans-serif);
   font-size: 1.6rem;
-  color: var(--gc-neon-cyan, #46e5ff);
-  border-radius: var(--gc-radius-xl);
-  border: 1px solid rgba(70, 229, 255, 0.25);
+  color: rgba(120, 210, 230, 0.85);
+  border-radius: var(--gc-radius-sm, 2px);
+  border: 1px solid rgba(70, 229, 255, 0.2);
   background: rgba(0, 0, 0, 0.35);
 }
 
@@ -23155,8 +23405,8 @@ body.gc-combat-report-open { overflow: hidden; }
 .gc-player-card-activity {
   margin: 0;
   font-size: 0.78rem;
-  color: var(--gc-neon-cyan, #46e5ff);
-  opacity: 0.85;
+  color: rgba(140, 200, 215, 0.82);
+  opacity: 1;
 }
 .gc-player-card-ai-banner {
   display: flex;
@@ -23199,9 +23449,10 @@ body.gc-combat-report-open { overflow: hidden; }
 }
 .gc-player-card-stat {
   padding: 10px 12px;
-  border: 1px solid var(--gc-border, rgba(255, 255, 255, 0.08));
-  border-radius: var(--gc-radius-sm, 6px);
-  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(70, 229, 255, 0.14);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(0, 0, 0, 0.2);
+  box-shadow: none;
   min-width: 0;
 }
 .gc-player-card-stat-label {
@@ -23381,37 +23632,117 @@ body.gc-combat-report-open { overflow: hidden; }
 }
 
 .gc-player-card-preview {
-  padding: 14px;
-  border: 1px dashed rgba(70, 229, 255, 0.28);
-  border-radius: var(--gc-radius-sm, 6px);
-  background: rgba(0, 0, 0, 0.22);
+  position: relative;
+  overflow: visible;
+  padding: 14px 14px 12px;
+  border: 1px solid rgba(70, 229, 255, 0.24);
+  border-radius: var(--gc-radius-sm, 2px);
+  background:
+    linear-gradient(165deg, rgba(12, 22, 36, 0.96), rgba(5, 10, 18, 0.98));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03),
+    0 0 28px rgba(70, 229, 255, 0.05);
   min-width: 0;
 }
-.gc-player-card-preview[data-theme="violet"] { border-color: rgba(168, 120, 255, 0.35); }
-.gc-player-card-preview[data-theme="amber"] { border-color: rgba(255, 190, 80, 0.35); }
-.gc-player-card-preview[data-theme="emerald"] { border-color: rgba(80, 220, 140, 0.35); }
-.gc-player-card-preview[data-theme="rose"] { border-color: rgba(255, 120, 160, 0.35); }
+.gc-player-card-preview[data-theme="cyan"] {
+  border-color: rgba(70, 229, 255, 0.28);
+  box-shadow: inset 0 0 0 1px rgba(70, 229, 255, 0.05), 0 0 28px rgba(70, 229, 255, 0.06);
+}
+.gc-player-card-preview[data-theme="violet"] {
+  border-color: rgba(168, 120, 255, 0.3);
+  background: linear-gradient(165deg, rgba(20, 14, 32, 0.96), rgba(6, 8, 18, 0.98));
+  box-shadow: inset 0 0 0 1px rgba(168, 120, 255, 0.05), 0 0 28px rgba(168, 120, 255, 0.07);
+}
+.gc-player-card-preview[data-theme="amber"] {
+  border-color: rgba(255, 190, 80, 0.3);
+  background: linear-gradient(165deg, rgba(26, 20, 12, 0.96), rgba(8, 8, 14, 0.98));
+  box-shadow: inset 0 0 0 1px rgba(255, 190, 80, 0.05), 0 0 28px rgba(255, 190, 80, 0.06);
+}
+.gc-player-card-preview[data-theme="emerald"] {
+  border-color: rgba(80, 220, 140, 0.28);
+  background: linear-gradient(165deg, rgba(10, 26, 20, 0.96), rgba(5, 12, 14, 0.98));
+  box-shadow: inset 0 0 0 1px rgba(80, 220, 140, 0.05), 0 0 28px rgba(80, 220, 140, 0.06);
+}
+.gc-player-card-preview[data-theme="rose"] {
+  border-color: rgba(255, 120, 160, 0.28);
+  background: linear-gradient(165deg, rgba(26, 12, 20, 0.96), rgba(8, 6, 14, 0.98));
+  box-shadow: inset 0 0 0 1px rgba(255, 120, 160, 0.05), 0 0 28px rgba(255, 120, 160, 0.06);
+}
+.gc-player-card-preview[data-theme="ash"] {
+  border-color: rgba(140, 148, 160, 0.32);
+  background: linear-gradient(165deg, rgba(18, 20, 24, 0.96), rgba(8, 10, 14, 0.98));
+  box-shadow: inset 0 0 0 1px rgba(140, 148, 160, 0.06), 0 0 24px rgba(120, 128, 140, 0.05);
+}
+.gc-player-card-preview[data-theme="steel"] {
+  border-color: rgba(160, 176, 196, 0.34);
+  background: linear-gradient(165deg, rgba(16, 22, 30, 0.96), rgba(6, 10, 16, 0.98));
+  box-shadow: inset 0 0 0 1px rgba(160, 176, 196, 0.06), 0 0 26px rgba(140, 160, 190, 0.06);
+}
+.gc-player-card-preview[data-theme="gold"] {
+  border-color: rgba(255, 200, 72, 0.4);
+  background: linear-gradient(165deg, rgba(26, 22, 12, 0.97), rgba(8, 8, 14, 0.98));
+  box-shadow: inset 0 0 0 1px rgba(255, 220, 120, 0.08), 0 0 32px rgba(255, 190, 60, 0.1);
+}
+.gc-player-card-preview[data-theme="void"] {
+  border-color: rgba(140, 90, 255, 0.4);
+  background: linear-gradient(165deg, rgba(16, 10, 32, 0.97), rgba(4, 4, 12, 0.98));
+  box-shadow: inset 0 0 0 1px rgba(180, 120, 255, 0.07), 0 0 32px rgba(90, 40, 220, 0.12);
+}
+.gc-player-card-preview[data-theme="plasma"] {
+  border-color: rgba(0, 255, 220, 0.38);
+  background: linear-gradient(165deg, rgba(6, 22, 26, 0.97), rgba(4, 10, 18, 0.98));
+  box-shadow: inset 0 0 0 1px rgba(0, 255, 210, 0.07), 0 0 32px rgba(0, 230, 200, 0.1);
+}
 
 .gc-player-card-preview-label {
-  font-size: 0.7rem;
+  position: relative;
+  z-index: 2;
+  font-size: 0.68rem;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   color: var(--gc-text-muted, #9aa8c4);
-  margin-bottom: 10px;
+  margin-bottom: 8px;
+  opacity: 0.85;
+}
+.gc-player-card-preview .gc-player-card-hero {
+  position: relative;
+  z-index: 2;
+  gap: 12px;
+}
+.gc-player-card-preview .gc-player-card-identity {
+  min-width: 0;
+}
+.gc-player-card-preview .gc-player-card-commander {
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+  line-height: 1.25;
+}
+.gc-player-card-preview .gc-player-card-title-text {
+  margin: 0 0 4px;
+  font-size: 0.82rem;
 }
 .gc-player-card-bio-preview {
   margin: 0;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   color: var(--gc-text-muted, #9aa8c4);
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: anywhere;
-  max-height: 6em;
+  max-height: 4.5em;
   overflow: hidden;
+}
+.gc-player-card-preview .gc-player-card-badges-preview {
+  position: relative;
+  z-index: 2;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  gap: 8px;
 }
 
 .gc-player-card-fields {
   min-width: 0;
+  padding-bottom: 8px;
 }
 
 .gc-player-card-field {
@@ -23552,9 +23883,9 @@ body.gc-combat-report-open { overflow: hidden; }
 
 .gc-player-card-badges-picker {
   border: 1px solid var(--gc-border, rgba(255, 255, 255, 0.08));
-  border-radius: var(--gc-radius-sm, 6px);
+  border-radius: var(--gc-radius-sm, 2px);
   padding: 10px 12px;
-  margin: 0 0 12px;
+  margin: 0 0 16px;
 }
 .gc-player-card-badges-picker legend {
   font-size: 0.78rem;
@@ -23618,12 +23949,12 @@ body.gc-combat-report-open { overflow: hidden; }
   flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
-  padding-top: 4px;
   position: sticky;
   bottom: 0;
-  background: linear-gradient(180deg, transparent, rgba(6, 10, 20, 0.95) 24%);
+  z-index: 4;
   margin: 0 -4px;
-  padding-bottom: 4px;
+  padding: 12px 4px 8px;
+  background: linear-gradient(180deg, rgba(6, 10, 20, 0) 0%, rgba(6, 10, 20, 0.92) 28%, rgba(6, 10, 20, 0.98) 100%);
 }
 .gc-player-card-form-msg {
   margin: 8px 0 0;
@@ -24652,7 +24983,7 @@ body.gc-combat-report-open { overflow: hidden; }
   background: rgba(255, 80, 80, 0.08);
 }
 
-/* Planet Evolution — gameplay-first layout */
+/* Planet Evolution ? gameplay-first layout */
 .planet-evolution-page .pe-hero {
   margin-bottom: 1rem;
   padding: 1.15rem 1.25rem;
@@ -25326,7 +25657,7 @@ body.gc-combat-report-open { overflow: hidden; }
   }
 }
 
-/* Planet Evolution — compact card dashboard */
+/* Planet Evolution ? compact card dashboard */
 .planet-evolution-page.pe-dashboard,
 .planet-evolution-page .pe-dashboard-grid {
   min-width: 0;
@@ -25571,7 +25902,7 @@ body.gc-combat-report-open { overflow: hidden; }
   }
 }
 
-/* Planet Evolution — progression journey layout */
+/* Planet Evolution ? progression journey layout */
 .planet-evolution-page.pe-journey {
   overflow-x: clip;
 }
@@ -26216,7 +26547,7 @@ button.pe-hero-planet-hint:focus-visible {
   box-shadow: 0 0 10px rgba(95, 214, 122, 0.25);
 }
 .planet-evolution-page .pe-rail-step--done .pe-rail-step-node::after {
-  content: "✓";
+  content: "?";
   display: flex;
   align-items: center;
   justify-content: center;
@@ -26697,7 +27028,7 @@ button.pe-hero-planet-hint:focus-visible {
   color: var(--gc-text-soft);
 }
 
-/* EPIC-20 World Boss — spawn ETA + help (scoped) */
+/* EPIC-20 World Boss ? spawn ETA + help (scoped) */
 .gc-world-boss-page .gc-world-boss-cards {
   display: grid;
   gap: 0.85rem;
@@ -27137,7 +27468,7 @@ button.pe-hero-planet-hint:focus-visible {
   }
 }
 
-/* EPIC-20 World Boss — galaxy ring portrait slot + inspector (scoped) */
+/* EPIC-20 World Boss ? galaxy ring portrait slot + inspector (scoped) */
 .galaxy-ring-slot-wrap.has-world-boss-wrap {
   z-index: 8;
 }
@@ -27667,7 +27998,7 @@ button.pe-hero-planet-hint:focus-visible {
   text-overflow: clip;
 }
 
-/* Legacy compact footer — removed from template */
+/* Legacy compact footer ? removed from template */
 .planet-evolution-page .pe-compact-footer {
   display: none;
 }
@@ -28044,7 +28375,7 @@ button.pe-hero-planet-hint:focus-visible {
 }
 
 /* ==========================================================================
-   Player messages (inbox) — Genesis Colonies panel language
+   Player messages (inbox) ? Genesis Colonies panel language
    ========================================================================== */
 
 .gc-messages-nav-badge,
@@ -28154,7 +28485,7 @@ button.pe-hero-planet-hint:focus-visible {
   box-shadow: var(--gc-border-glow);
 }
 
-/* GC-575 — Planet Registry (far-right rail) */
+/* GC-575 ? Planet Registry (far-right rail) */
 .gc-sidebar-right-rails{
   min-width: 0;
   min-height: 0;
@@ -28368,7 +28699,7 @@ button.pe-hero-planet-hint:focus-visible {
   }
 }
 
-/* Shared HUD select — same pattern as former header planet switcher */
+/* Shared HUD select ? same pattern as former header planet switcher */
 
 .gc-hud-select{
   position: relative;
@@ -30011,7 +30342,7 @@ body > .gc-hud-select-menu.gc-popover-layer:not([hidden]){
   font-weight: 600;
 }
 
-/* Clickable coordinate links → galaxy view */
+/* Clickable coordinate links ? galaxy view */
 a.gc-galaxy-coord-link {
   color: var(--gc-neon-cyan);
   text-decoration: none;
@@ -30100,7 +30431,7 @@ a.gc-galaxy-coord-link:focus-visible {
   margin-top: 4px;
 }
 
-/* Loot chips inside combat modal — square panels, no pills */
+/* Loot chips inside combat modal ? square panels, no pills */
 .gc-combat-report-shell .gc-expedition-loot-chip {
   border-radius: 0;
   border-left-width: 2px;
@@ -30275,7 +30606,7 @@ a.gc-galaxy-coord-link:focus-visible {
 }
 
 /* =========================
-   Account options page — compact control module (GC-952)
+   Account options page ? compact control module (GC-952)
    ========================= */
 .gc-options-page {
   max-width: 980px;
@@ -30560,7 +30891,7 @@ a.gc-galaxy-coord-link:focus-visible {
 }
 
 .gc-options-form-kicker::before {
-  content: "▸";
+  content: "?";
   color: var(--gc-neon-cyan);
   font-size: 0.62rem;
 }
@@ -31086,7 +31417,7 @@ a.gc-galaxy-coord-link:focus-visible {
   margin: 0;
 }
 
-/* GC-632 — production stat chips (Shipyard + Defense cards) */
+/* GC-632 ? production stat chips (Shipyard + Defense cards) */
 .gc-prod-stat-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -32041,7 +32372,7 @@ a.gc-galaxy-coord-link:focus-visible {
   }
 }
 
-/* GC-540 — Inventory / Container loot */
+/* GC-540 ? Inventory / Container loot */
 .inventory-page {
   --inv-hub-pad: 10px;
 }
@@ -32751,7 +33082,7 @@ a.gc-galaxy-coord-link:focus-visible {
   }
 }
 
-/* GC-543 / GC-543B — Lootbox opening modal (Genesis HUD) */
+/* GC-543 / GC-543B ? Lootbox opening modal (Genesis HUD) */
 .gc-loot-modal-root {
   position: relative;
   z-index: 1200;
@@ -33228,7 +33559,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   }
 }
 
-/* GC-550 / GC-550B — Auction House Terminal */
+/* GC-550 / GC-550B ? Auction House Terminal */
 .auction-page,
 .auction-house-page {
   max-width: 100%;
@@ -34465,7 +34796,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   letter-spacing: 0.03em;
 }
 
-/* Command strip — meta + claim-all */
+/* Command strip ? meta + claim-all */
 .id-directives-command-strip {
   padding: 0;
   overflow: hidden;
@@ -34569,7 +34900,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
 }
 
-/* Directive cards — inventory loot card DNA */
+/* Directive cards ? inventory loot card DNA */
 .id-directives-page .id-directive-card.inventory-loot-card {
   gap: 0;
   min-height: 100%;
@@ -34904,7 +35235,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   border-radius: 0;
 }
 
-/* GC-700A/D — Combat Simulator one-window */
+/* GC-700A/D ? Combat Simulator one-window */
 .combat-simulator-page {
   max-width: 100%;
   overflow-x: hidden;
@@ -36507,7 +36838,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   background: rgba(0, 0, 0, 0.15);
 }
 .alliance-hub-project-affects-tag::before {
-  content: "✔ ";
+  content: "? ";
   opacity: 0.75;
 }
 .alliance-hub-project-card--highlight {
@@ -36615,7 +36946,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   display: none;
 }
 
-/* GC-AL layout contract — scoped under module to survive global resets */
+/* GC-AL layout contract ? scoped under module to survive global resets */
 .alliance-hub-module .alliance-hub-pool-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -37729,7 +38060,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   }
 }
 
-/* GC-MOBILE-RESCUE — global small-screen usability pass.
+/* GC-MOBILE-RESCUE ? global small-screen usability pass.
    Keep the command shell inside the viewport and turn dense desktop HUD rows
    into touch-sized, scroll-safe mobile surfaces. */
 @media (max-width: 768px){
@@ -38044,7 +38375,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
     overflow: hidden;
   }
 
-  /* Bottom nav must stay above the sheet backdrop (popover z ≈ 12k). */
+  /* Bottom nav must stay above the sheet backdrop (popover z ? 12k). */
   body.gc-fleet-sheet-open .gc-bottom-nav{
     z-index: calc(var(--gc-z-popover, 12050) + 5);
   }

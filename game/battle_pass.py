@@ -30,10 +30,12 @@ DEFAULT_SEASON_DAYS = 60
 TRACK_FREE = "free"
 TRACK_PREMIUM = "premium"
 # Bump when reward tables change — ensure_default_season reseeds levels if stale.
-REWARD_CATALOG_VERSION = 3
+REWARD_CATALOG_VERSION = 5
 _CATALOG_MARKER_ITEM = "container_void_artifact"
 # L50 premium must credit at least this much direct Timekeeper (catalog v3+).
 _CATALOG_MIN_L50_TK_SEC = 48 * 3600
+_CATALOG_V4_BADGE_MARKER = "bp_s1_legend"
+_CATALOG_V5_FLAIR_MARKER = "imperial"
 
 # Soft-capped passive BP XP from activity_xp (planet XP stays uncapped).
 PASSIVE_DRIP_DAILY_CAP = 40
@@ -133,12 +135,73 @@ def _item(item_key: str, amount: int = 1) -> Dict[str, Any]:
     return {"item_key": str(item_key), "amount": int(amount)}
 
 
-def _bundle(*items: Dict[str, Any], timekeeper_sec: int = 0) -> Dict[str, Any]:
-    return {"items": list(items), "timekeeper_sec": max(0, int(timekeeper_sec or 0))}
+def _bundle(
+    *items: Dict[str, Any],
+    timekeeper_sec: int = 0,
+    themes: Optional[List[str]] = None,
+    badges: Optional[List[str]] = None,
+    auras: Optional[List[str]] = None,
+    title_flairs: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    out: Dict[str, Any] = {
+        "items": list(items),
+        "timekeeper_sec": max(0, int(timekeeper_sec or 0)),
+    }
+    if themes:
+        out["themes"] = [str(t).strip().lower() for t in themes if str(t).strip()]
+    if badges:
+        out["badges"] = [str(b).strip().lower() for b in badges if str(b).strip()]
+    if auras:
+        out["auras"] = [str(a).strip().lower() for a in auras if str(a).strip()]
+    if title_flairs:
+        out["title_flairs"] = [
+            str(f).strip().lower() for f in title_flairs if str(f).strip()
+        ]
+    return out
+
+
+def _with_cosmetics(
+    bundle: Dict[str, Any],
+    *,
+    themes: Optional[List[str]] = None,
+    badges: Optional[List[str]] = None,
+    auras: Optional[List[str]] = None,
+    title_flairs: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    out = dict(bundle)
+    if themes:
+        merged = list(out.get("themes") or [])
+        for t in themes:
+            key = str(t).strip().lower()
+            if key and key not in merged:
+                merged.append(key)
+        out["themes"] = merged
+    if badges:
+        merged_b = list(out.get("badges") or [])
+        for b in badges:
+            key = str(b).strip().lower()
+            if key and key not in merged_b:
+                merged_b.append(key)
+        out["badges"] = merged_b
+    if auras:
+        merged_a = list(out.get("auras") or [])
+        for a in auras:
+            key = str(a).strip().lower()
+            if key and key not in merged_a:
+                merged_a.append(key)
+        out["auras"] = merged_a
+    if title_flairs:
+        merged_f = list(out.get("title_flairs") or [])
+        for f in title_flairs:
+            key = str(f).strip().lower()
+            if key and key not in merged_f:
+                merged_f.append(key)
+        out["title_flairs"] = merged_f
+    return out
 
 
 def _default_level_rewards(level: int) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    """Free stays solid; Premium is the FOMO jackpot (meta only — GC-864)."""
+    """Free stays solid; Premium is the FOMO jackpot (meta + season cosmetics)."""
     lv = int(level)
 
     # --- Free: steady drip, real milestones, never matches Premium density ---
@@ -229,6 +292,32 @@ def _default_level_rewards(level: int) -> Tuple[Dict[str, Any], Dict[str, Any]]:
             _item("booster_production_25"),
             timekeeper_sec=(2 * 3600) if lv >= 20 else 3600,
         )
+
+    # Season cosmetics (own layer — never gates base themes cyan/violet/…)
+    if lv == 10:
+        free = _with_cosmetics(free, themes=["ash"], auras=["rim_ash"])
+    elif lv == 20:
+        free = _with_cosmetics(free, badges=["bp_s1_attendee"], title_flairs=["etched"])
+    elif lv == 40:
+        free = _with_cosmetics(free, themes=["steel"], auras=["rim_steel"])
+
+    if lv == 15:
+        premium = _with_cosmetics(premium, themes=["gold"], auras=["aura_gold"])
+    elif lv == 20:
+        premium = _with_cosmetics(premium, themes=["plasma"], auras=["aura_plasma"])
+    elif lv == 25:
+        premium = _with_cosmetics(
+            premium, badges=["bp_s1_operative"], title_flairs=["signal"]
+        )
+    elif lv == 40:
+        premium = _with_cosmetics(
+            premium, themes=["void"], badges=["bp_s1_elite"], auras=["aura_void"]
+        )
+    elif lv == DEFAULT_MAX_LEVEL:
+        premium = _with_cosmetics(
+            premium, badges=["bp_s1_legend"], title_flairs=["imperial"]
+        )
+
     return free, premium
 
 
@@ -261,6 +350,12 @@ def _season_levels_stale(conn, season_id: int) -> bool:
         _CATALOG_MARKER_ITEM not in keys
         or void_amt < 2
         or tk < _CATALOG_MIN_L50_TK_SEC
+        or _CATALOG_V4_BADGE_MARKER not in {
+            str(b).strip().lower() for b in (payload.get("badges") or []) if b
+        }
+        or _CATALOG_V5_FLAIR_MARKER not in {
+            str(f).strip().lower() for f in (payload.get("title_flairs") or []) if f
+        }
     )
 
 
@@ -857,6 +952,26 @@ def _reward_preview(payload: Mapping[str, Any]) -> Dict[str, Any]:
     return {
         "items": items_out,
         "timekeeper_sec": max(0, int(payload.get("timekeeper_sec") or 0)),
+        "themes": [
+            str(t).strip().lower()
+            for t in (payload.get("themes") or [])
+            if str(t).strip()
+        ],
+        "badges": [
+            str(b).strip().lower()
+            for b in (payload.get("badges") or [])
+            if str(b).strip()
+        ],
+        "auras": [
+            str(a).strip().lower()
+            for a in (payload.get("auras") or [])
+            if str(a).strip()
+        ],
+        "title_flairs": [
+            str(f).strip().lower()
+            for f in (payload.get("title_flairs") or [])
+            if str(f).strip()
+        ],
     }
 
 
@@ -896,6 +1011,35 @@ def _grant_bundle(
         if tk_ready(conn):
             credit(int(player_id), tk_sec, source, conn=conn)
             granted.append(f"timekeeper:{tk_sec}")
+
+    from .playercard import unlock_aura, unlock_badge, unlock_theme, unlock_title_flair
+
+    for theme_key in reward.get("themes") or []:
+        tok, _treason = unlock_theme(
+            int(player_id), str(theme_key), conn=conn, source=source
+        )
+        if not tok:
+            return False, granted
+        granted.append(f"theme:{theme_key}")
+    for badge_key in reward.get("badges") or []:
+        bok, _breason = unlock_badge(int(player_id), str(badge_key), conn=conn)
+        if not bok:
+            return False, granted
+        granted.append(f"badge:{badge_key}")
+    for aura_key in reward.get("auras") or []:
+        aok, _areason = unlock_aura(
+            int(player_id), str(aura_key), conn=conn, source=source
+        )
+        if not aok:
+            return False, granted
+        granted.append(f"aura:{aura_key}")
+    for flair_key in reward.get("title_flairs") or []:
+        fok, _freason = unlock_title_flair(
+            int(player_id), str(flair_key), conn=conn, source=source
+        )
+        if not fok:
+            return False, granted
+        granted.append(f"title_flair:{flair_key}")
     return True, granted
 
 

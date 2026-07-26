@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 
-from .db import begin_write_transaction, commit, db, rollback, table_exists
+from .db import begin_write_transaction, column_exists, commit, db, rollback, table_exists
 from . import image_assets
 from .models import (
     get_homeworld,
@@ -44,7 +44,46 @@ SAVE_COOLDOWN_SEC = 2
 # In-process save throttle (per player_id); complements DB updated_at check
 _LAST_SAVE_TS: Dict[int, int] = {}
 
-ALLOWED_THEMES = frozenset({"cyan", "violet", "amber", "emerald", "rose"})
+ALLOWED_THEMES = frozenset({
+    # Base — always free for every player (never paid/gated).
+    "cyan",
+    "violet",
+    "amber",
+    "emerald",
+    "rose",
+    # Season-exclusive (unlock via battle pass / grants only).
+    "ash",
+    "steel",
+    "gold",
+    "void",
+    "plasma",
+})
+BASE_FREE_THEMES = frozenset({"cyan", "violet", "amber", "emerald", "rose"})
+SEASON_THEMES = frozenset({"ash", "steel", "gold", "void", "plasma"})
+
+# Prestige layer (Season Pass) — separate from themes; CSS data-aura / data-flair.
+ALLOWED_AURAS = frozenset({
+    "none",
+    "rim_ash",
+    "rim_steel",
+    "aura_gold",
+    "aura_plasma",
+    "aura_void",
+})
+FREE_AURAS = frozenset({"none"})
+SEASON_AURAS = frozenset({"rim_ash", "rim_steel", "aura_gold", "aura_plasma", "aura_void"})
+
+ALLOWED_TITLE_FLAIRS = frozenset({
+    "none",
+    "etched",
+    "signal",
+    "imperial",
+})
+FREE_TITLE_FLAIRS = frozenset({"none"})
+SEASON_TITLE_FLAIRS = frozenset({"etched", "signal", "imperial"})
+
+COSMETIC_KIND_AURA = "aura"
+COSMETIC_KIND_TITLE_FLAIR = "title_flair"
 
 # badge_key → static/img/badges/<stem>.png (central asset mapping)
 BADGE_IMAGE_BY_KEY: Dict[str, str] = {
@@ -59,6 +98,10 @@ BADGE_IMAGE_BY_KEY: Dict[str, str] = {
     "community_hero": "community",
     "galactic_legend": "galactic_legend",
     "genesis": "genesis",
+    "bp_s1_attendee": "default",
+    "bp_s1_operative": "community",
+    "bp_s1_elite": "commander",
+    "bp_s1_legend": "genesis",
 }
 BADGE_IMAGE_DEFAULT = "default"
 _BADGE_IMAGE_DIR = Path("static") / "img" / "badges"
@@ -202,6 +245,38 @@ def ensure_player_card_tables(conn=None) -> None:
         """
     )
     _seed_default_badges(cur)
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS player_card_unlocked_themes (
+            player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+            theme_key TEXT NOT NULL,
+            unlocked_at INTEGER NOT NULL DEFAULT 0,
+            source TEXT NOT NULL DEFAULT 'battle_pass',
+            PRIMARY KEY (player_id, theme_key)
+        );
+        """
+    )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS player_card_unlocked_cosmetics (
+            player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+            kind TEXT NOT NULL CHECK (kind IN ('aura', 'title_flair')),
+            item_key TEXT NOT NULL,
+            unlocked_at INTEGER NOT NULL DEFAULT 0,
+            source TEXT NOT NULL DEFAULT 'battle_pass',
+            PRIMARY KEY (player_id, kind, item_key)
+        );
+        """
+    )
+    if table_exists(c, "player_cards"):
+        if not column_exists(c, "player_cards", "aura_key"):
+            cur.execute(
+                "ALTER TABLE player_cards ADD COLUMN aura_key TEXT NOT NULL DEFAULT 'none';"
+            )
+        if not column_exists(c, "player_cards", "title_flair"):
+            cur.execute(
+                "ALTER TABLE player_cards ADD COLUMN title_flair TEXT NOT NULL DEFAULT 'none';"
+            )
     if own:
         c.close()
 
@@ -219,6 +294,10 @@ def _seed_default_badges(cur) -> None:
         ("galactic_legend", "", "mythic", "playercard_badge_galactic_legend", "playercard_badge_galactic_legend_desc", "score_total", 100000),
         ("bug_hunter", "", "epic", "playercard_badge_bug_hunter", "playercard_badge_bug_hunter_desc", "score_defense", 25000),
         ("community_hero", "", "rare", "playercard_badge_community_hero", "playercard_badge_community_hero_desc", "score_fleet", 15000),
+        ("bp_s1_attendee", "", "common", "playercard_badge_bp_s1_attendee", "playercard_badge_bp_s1_attendee_desc", None, None),
+        ("bp_s1_operative", "", "rare", "playercard_badge_bp_s1_operative", "playercard_badge_bp_s1_operative_desc", None, None),
+        ("bp_s1_elite", "", "epic", "playercard_badge_bp_s1_elite", "playercard_badge_bp_s1_elite_desc", None, None),
+        ("bp_s1_legend", "", "legendary", "playercard_badge_bp_s1_legend", "playercard_badge_bp_s1_legend_desc", None, None),
     ]
     for row in seeds:
         cur.execute(
@@ -262,6 +341,320 @@ def _tables_ready(conn=None) -> bool:
             and table_exists(c, "player_card_badges")
             and table_exists(c, "player_card_unlocked_badges")
         )
+    finally:
+        if own:
+            c.close()
+
+
+def themes_unlock_schema_ready(conn=None) -> bool:
+    own = conn is None
+    c = conn or db()
+    try:
+        return bool(table_exists(c, "player_card_unlocked_themes"))
+    finally:
+        if own:
+            c.close()
+
+
+def _player_is_admin(player_id: int, conn) -> bool:
+    """Reuse chat.is_admin (users.is_admin OR players.is_admin)."""
+    from .chat import is_admin as chat_is_admin
+
+    try:
+        return bool(chat_is_admin(int(player_id), conn))
+    except Exception:
+        return False
+
+
+def list_unlocked_themes(player_id: int, conn=None) -> List[str]:
+    """Base themes + any season themes unlocked for the player. Admins: all themes."""
+    own = conn is None
+    c = conn or db()
+    try:
+        if _player_is_admin(int(player_id), c):
+            return sorted(BASE_FREE_THEMES) + sorted(SEASON_THEMES)
+        unlocked = sorted(BASE_FREE_THEMES)
+        if not themes_unlock_schema_ready(c):
+            return unlocked
+        rows = c.execute(
+            """
+            SELECT theme_key FROM player_card_unlocked_themes
+            WHERE player_id = ?
+            ORDER BY theme_key ASC;
+            """,
+            (int(player_id),),
+        ).fetchall()
+        season: List[str] = []
+        for row in rows:
+            key = str(row["theme_key"] or "").strip().lower()
+            if key in SEASON_THEMES and key not in season:
+                season.append(key)
+        return unlocked + season
+    finally:
+        if own:
+            c.close()
+
+
+def player_has_theme(player_id: int, theme_key: str, conn=None) -> bool:
+    key = validate_theme(theme_key)
+    if key in BASE_FREE_THEMES:
+        return True
+    if key not in SEASON_THEMES:
+        return False
+    own = conn is None
+    c = conn or db()
+    try:
+        if _player_is_admin(int(player_id), c):
+            return True
+        return key in set(list_unlocked_themes(player_id, conn=c))
+    finally:
+        if own:
+            c.close()
+
+
+def unlock_theme(
+    player_id: int,
+    theme_key: str,
+    *,
+    conn,
+    source: str = "battle_pass",
+    now: Optional[int] = None,
+) -> Tuple[bool, str]:
+    """Grant a season theme. Base themes are always free — unlock is a no-op success."""
+    key = str(theme_key or "").strip().lower()
+    if key in BASE_FREE_THEMES:
+        return True, "base_theme"
+    if key not in SEASON_THEMES:
+        return False, "unknown_theme"
+    if not themes_unlock_schema_ready(conn):
+        return False, "themes_table_missing"
+    ts = int(now if now is not None else _now_ts())
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO player_card_unlocked_themes
+            (player_id, theme_key, unlocked_at, source)
+        VALUES (?, ?, ?, ?);
+        """,
+        (int(player_id), key, ts, str(source or "battle_pass")[:120]),
+    )
+    return True, "ok"
+
+
+def unlock_badge(
+    player_id: int,
+    badge_key: str,
+    *,
+    conn,
+    now: Optional[int] = None,
+) -> Tuple[bool, str]:
+    """Grant a badge by key (INSERT OR IGNORE into unlocked)."""
+    if not _tables_ready(conn):
+        return False, "badges_unavailable"
+    key = str(badge_key or "").strip().lower()
+    if not key:
+        return False, "invalid_badge"
+    row = conn.execute(
+        """
+        SELECT id FROM player_card_badges
+        WHERE badge_key = ? AND is_active = 1
+        LIMIT 1;
+        """,
+        (key,),
+    ).fetchone()
+    if not row:
+        return False, "unknown_badge"
+    ts = int(now if now is not None else _now_ts())
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO player_card_unlocked_badges (player_id, badge_id, unlocked_at)
+        VALUES (?, ?, ?);
+        """,
+        (int(player_id), int(row["id"]), ts),
+    )
+    return True, "ok"
+
+
+def cosmetics_unlock_schema_ready(conn=None) -> bool:
+    own = conn is None
+    c = conn or db()
+    try:
+        return bool(table_exists(c, "player_card_unlocked_cosmetics"))
+    finally:
+        if own:
+            c.close()
+
+
+def validate_aura(raw: Any) -> str:
+    key = str(raw or "none").strip().lower()
+    return key if key in ALLOWED_AURAS else "none"
+
+
+def validate_title_flair(raw: Any) -> str:
+    key = str(raw or "none").strip().lower()
+    return key if key in ALLOWED_TITLE_FLAIRS else "none"
+
+
+def unlock_cosmetic(
+    player_id: int,
+    kind: str,
+    item_key: str,
+    *,
+    conn,
+    source: str = "battle_pass",
+    now: Optional[int] = None,
+) -> Tuple[bool, str]:
+    """Grant aura or title_flair. Free defaults (none) are always available."""
+    k = str(kind or "").strip().lower()
+    key = str(item_key or "").strip().lower()
+    if k == COSMETIC_KIND_AURA:
+        if key in FREE_AURAS:
+            return True, "free_aura"
+        if key not in SEASON_AURAS:
+            return False, "unknown_aura"
+    elif k == COSMETIC_KIND_TITLE_FLAIR:
+        if key in FREE_TITLE_FLAIRS:
+            return True, "free_flair"
+        if key not in SEASON_TITLE_FLAIRS:
+            return False, "unknown_flair"
+    else:
+        return False, "invalid_cosmetic_kind"
+    if not cosmetics_unlock_schema_ready(conn):
+        return False, "cosmetics_table_missing"
+    ts = int(now if now is not None else _now_ts())
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO player_card_unlocked_cosmetics
+            (player_id, kind, item_key, unlocked_at, source)
+        VALUES (?, ?, ?, ?, ?);
+        """,
+        (int(player_id), k, key, ts, str(source or "battle_pass")[:120]),
+    )
+    return True, "ok"
+
+
+def unlock_aura(
+    player_id: int,
+    aura_key: str,
+    *,
+    conn,
+    source: str = "battle_pass",
+    now: Optional[int] = None,
+) -> Tuple[bool, str]:
+    return unlock_cosmetic(
+        player_id,
+        COSMETIC_KIND_AURA,
+        aura_key,
+        conn=conn,
+        source=source,
+        now=now,
+    )
+
+
+def unlock_title_flair(
+    player_id: int,
+    flair_key: str,
+    *,
+    conn,
+    source: str = "battle_pass",
+    now: Optional[int] = None,
+) -> Tuple[bool, str]:
+    return unlock_cosmetic(
+        player_id,
+        COSMETIC_KIND_TITLE_FLAIR,
+        flair_key,
+        conn=conn,
+        source=source,
+        now=now,
+    )
+
+
+def player_has_aura(player_id: int, aura_key: str, *, conn=None) -> bool:
+    key = validate_aura(aura_key)
+    if key in FREE_AURAS:
+        return True
+    if key not in SEASON_AURAS:
+        return False
+    own = conn is None
+    c = conn or db()
+    try:
+        if _player_is_admin(int(player_id), c):
+            return True
+        return key in set(list_unlocked_auras(player_id, conn=c))
+    finally:
+        if own:
+            c.close()
+
+
+def player_has_title_flair(player_id: int, flair_key: str, *, conn=None) -> bool:
+    key = validate_title_flair(flair_key)
+    if key in FREE_TITLE_FLAIRS:
+        return True
+    if key not in SEASON_TITLE_FLAIRS:
+        return False
+    own = conn is None
+    c = conn or db()
+    try:
+        if _player_is_admin(int(player_id), c):
+            return True
+        return key in set(list_unlocked_title_flairs(player_id, conn=c))
+    finally:
+        if own:
+            c.close()
+
+
+def list_unlocked_auras(player_id: int, *, conn=None) -> List[str]:
+    order = ("none", "rim_ash", "rim_steel", "aura_gold", "aura_plasma", "aura_void")
+    own = conn is None
+    c = conn or db()
+    try:
+        if _player_is_admin(int(player_id), c):
+            return list(order)
+        unlocked = ["none"]
+        if not cosmetics_unlock_schema_ready(c):
+            return unlocked
+        rows = c.execute(
+            """
+            SELECT item_key FROM player_card_unlocked_cosmetics
+            WHERE player_id = ? AND kind = ?
+            ORDER BY item_key ASC;
+            """,
+            (int(player_id), COSMETIC_KIND_AURA),
+        ).fetchall()
+        season: List[str] = []
+        for row in rows:
+            key = str(row["item_key"] or "").strip().lower()
+            if key in SEASON_AURAS and key not in season:
+                season.append(key)
+        return unlocked + [k for k in order[1:] if k in season]
+    finally:
+        if own:
+            c.close()
+
+
+def list_unlocked_title_flairs(player_id: int, *, conn=None) -> List[str]:
+    order = ("none", "etched", "signal", "imperial")
+    own = conn is None
+    c = conn or db()
+    try:
+        if _player_is_admin(int(player_id), c):
+            return list(order)
+        unlocked = ["none"]
+        if not cosmetics_unlock_schema_ready(c):
+            return unlocked
+        rows = c.execute(
+            """
+            SELECT item_key FROM player_card_unlocked_cosmetics
+            WHERE player_id = ? AND kind = ?
+            ORDER BY item_key ASC;
+            """,
+            (int(player_id), COSMETIC_KIND_TITLE_FLAIR),
+        ).fetchall()
+        season: List[str] = []
+        for row in rows:
+            key = str(row["item_key"] or "").strip().lower()
+            if key in SEASON_TITLE_FLAIRS and key not in season:
+                season.append(key)
+        return unlocked + [k for k in order[1:] if k in season]
     finally:
         if own:
             c.close()
@@ -721,6 +1114,8 @@ def _synthetic_player_card(player_id: int) -> Dict[str, Any]:
         "title": "",
         "bio": "",
         "theme": "cyan",
+        "aura_key": "none",
+        "title_flair": "none",
         "is_public": 1,
         "selected_badge_1": None,
         "selected_badge_2": None,
@@ -1004,6 +1399,8 @@ def _build_public_card_payload(
         "title": escape(sanitize_text_field(card.get("title"), TITLE_MAX)),
         "bio": escape(sanitize_text_field(card.get("bio"), BIO_MAX)),
         "theme": validate_theme(card.get("theme")),
+        "aura_key": validate_aura(card.get("aura_key")),
+        "title_flair": validate_title_flair(card.get("title_flair")),
         "is_public": is_public,
         "is_private": False,
         "is_self": is_self,
@@ -1089,12 +1486,16 @@ def build_edit_card(player_id: int, conn=None) -> Tuple[Optional[Dict[str, Any]]
         "title": sanitize_text_field(card.get("title"), TITLE_MAX),
         "bio": sanitize_text_field(card.get("bio"), BIO_MAX),
         "theme": validate_theme(card.get("theme")),
+        "aura_key": validate_aura(card.get("aura_key")),
+        "title_flair": validate_title_flair(card.get("title_flair")),
         "is_public": bool(int(card.get("is_public", 1) or 0)),
         "selected_badge_1": card.get("selected_badge_1"),
         "selected_badge_2": card.get("selected_badge_2"),
         "selected_badge_3": card.get("selected_badge_3"),
     }
-    view["themes"] = sorted(ALLOWED_THEMES)
+    view["themes"] = list_unlocked_themes(int(player_id), conn=conn)
+    view["auras"] = list_unlocked_auras(int(player_id), conn=conn)
+    view["title_flairs"] = list_unlocked_title_flairs(int(player_id), conn=conn)
     return view, None
 
 
@@ -1134,6 +1535,8 @@ def save_own_card(player_id: int, data: Dict[str, Any]) -> Tuple[bool, str, Opti
                 avatar_url = existing_url
 
     theme = validate_theme(data.get("theme"))
+    aura_key = validate_aura(data.get("aura_key"))
+    title_flair = validate_title_flair(data.get("title_flair"))
     is_public = 1 if str(data.get("is_public", "1")).lower() in ("1", "true", "yes", "on") else 0
 
     selected: List[Optional[int]] = [None, None, None]
@@ -1146,6 +1549,15 @@ def save_own_card(player_id: int, data: Dict[str, Any]) -> Tuple[bool, str, Opti
     c = db()
     try:
         begin_write_transaction(c)
+        if not player_has_theme(pid, theme, conn=c):
+            rollback(c)
+            return False, "playercard_theme_locked", None
+        if not player_has_aura(pid, aura_key, conn=c):
+            rollback(c)
+            return False, "playercard_aura_locked", None
+        if not player_has_title_flair(pid, title_flair, conn=c):
+            rollback(c)
+            return False, "playercard_flair_locked", None
         _sync_badge_unlocks(pid, conn=c)
         unlocked_ids = {int(b["id"]) for b in _list_unlocked_badges(pid, conn=c)}
         seen: set[int] = set()
@@ -1161,33 +1573,68 @@ def save_own_card(player_id: int, data: Dict[str, Any]) -> Tuple[bool, str, Opti
             seen.add(bid)
             selected[i] = bid
         cur = c.cursor()
-        cur.execute(
-            """
-            UPDATE player_cards SET
-                avatar_url = ?,
-                title = ?,
-                bio = ?,
-                theme = ?,
-                is_public = ?,
-                selected_badge_1 = ?,
-                selected_badge_2 = ?,
-                selected_badge_3 = ?,
-                updated_at = ?
-            WHERE player_id = ?;
-            """,
-            (
-                avatar_url,
-                title,
-                bio,
-                theme,
-                is_public,
-                selected[0],
-                selected[1],
-                selected[2],
-                now,
-                pid,
-            ),
-        )
+        if column_exists(c, "player_cards", "aura_key") and column_exists(
+            c, "player_cards", "title_flair"
+        ):
+            cur.execute(
+                """
+                UPDATE player_cards SET
+                    avatar_url = ?,
+                    title = ?,
+                    bio = ?,
+                    theme = ?,
+                    aura_key = ?,
+                    title_flair = ?,
+                    is_public = ?,
+                    selected_badge_1 = ?,
+                    selected_badge_2 = ?,
+                    selected_badge_3 = ?,
+                    updated_at = ?
+                WHERE player_id = ?;
+                """,
+                (
+                    avatar_url,
+                    title,
+                    bio,
+                    theme,
+                    aura_key,
+                    title_flair,
+                    is_public,
+                    selected[0],
+                    selected[1],
+                    selected[2],
+                    now,
+                    pid,
+                ),
+            )
+        else:
+            cur.execute(
+                """
+                UPDATE player_cards SET
+                    avatar_url = ?,
+                    title = ?,
+                    bio = ?,
+                    theme = ?,
+                    is_public = ?,
+                    selected_badge_1 = ?,
+                    selected_badge_2 = ?,
+                    selected_badge_3 = ?,
+                    updated_at = ?
+                WHERE player_id = ?;
+                """,
+                (
+                    avatar_url,
+                    title,
+                    bio,
+                    theme,
+                    is_public,
+                    selected[0],
+                    selected[1],
+                    selected[2],
+                    now,
+                    pid,
+                ),
+            )
         commit(c)
     except Exception:
         rollback(c)

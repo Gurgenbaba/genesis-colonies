@@ -15,8 +15,11 @@
 ## Philosophy
 
 - **F2P first:** Login-Kurve fühlt sich wie High-Command-Willkommen an.
-- **Premium:** FOMO-dicht (Katalog v3) — Stacks statt 1×, Timekeeper in Stunden (Normallevel 1–2h, Meilensteine 6–24h, L50 **48h** + Void×2). Free bleibt spielbar; Premium muss sich „unvermeidlich“ anfühlen. Kein Combat-P2W (GC-864).
-- Katalog-Version: `REWARD_CATALOG_VERSION` in `battle_pass.py` — stale Levels werden bei `ensure_default_season` reseeds.
+- **Premium:** FOMO-dicht (Katalog **v5**) — Stacks + Stunden-TK; Season-Themes + **Auras** + **Title-Flairs** + Badges. Base-Themes (`cyan`…`rose`) bleiben für alle frei.
+- **Free-Kosmetik (schwach):** Themes `ash`/`steel`, Auras `rim_ash`/`rim_steel`, Flair `etched`, Badge `bp_s1_attendee` — nie bestehende Farben gate’n.
+- **Prestige-Layer:** `aura_key` + `title_flair` auf `player_cards` (CSS `data-aura` / `data-flair`); Unlock in `player_card_unlocked_cosmetics`.
+- **Admins:** alle Themes / Auras / Title-Flairs frei wählbar (kein Unlock nötig); normale Spieler weiter gated.
+- Katalog-Version: `REWARD_CATALOG_VERSION` in `battle_pass.py` — stale Levels werden bei `ensure_default_season` reseeds (v5-Marker: L50 `imperial` flair).
 - **Erlaubt:** Timekeeper-Sekunden, Container (meta-only, GC-864), %/Time-Boosters, Cosmetics/QoL.
 - **Verboten:** Schiffe, Defense, Rohstoff-Stacks als Paid/Login-Reward; parallele Grant-Engines; Frontend-Reward-Math.
 - **Abgrenzung:** Imperial Directives, Vote Center, Free Basic Container bleiben eigene Daily-Loops.

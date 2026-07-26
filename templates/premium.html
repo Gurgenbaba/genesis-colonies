@@ -186,8 +186,20 @@
             <li>{{ item.icon or '📦' }} {{ T(item.name_key, item.item_key) }} ×{{ item.amount }}</li>
             {% endfor %}
             {% if row.free.timekeeper_sec %}
-            <li>⚡ {{ row.free.timekeeper_sec }}s</li>
+            <li>⚡ {{ row.free.timekeeper_sec|fmt_duration }}</li>
             {% endif %}
+            {% for theme in row.free.themes or [] %}
+            <li>🎨 {{ T('playercard_theme_' ~ theme, theme) }}</li>
+            {% endfor %}
+            {% for aura in row.free.auras or [] %}
+            <li>◇ {{ T('playercard_aura_' ~ aura, aura) }}</li>
+            {% endfor %}
+            {% for flair in row.free.title_flairs or [] %}
+            <li>◈ {{ T('playercard_flair_' ~ flair, flair) }}</li>
+            {% endfor %}
+            {% for badge in row.free.badges or [] %}
+            <li>🏅 {{ T('playercard_badge_' ~ badge, badge) }}</li>
+            {% endfor %}
           </ul>
           {% if row.free.claimable %}
           <button type="button" class="gc-btn gc-btn-sm gc-btn-primary" data-bp-claim="free" data-bp-level="{{ row.level }}">
@@ -208,8 +220,20 @@
             <li>{{ item.icon or '📦' }} {{ T(item.name_key, item.item_key) }} ×{{ item.amount }}</li>
             {% endfor %}
             {% if row.premium.timekeeper_sec %}
-            <li>⚡ {{ row.premium.timekeeper_sec }}s</li>
+            <li>⚡ {{ row.premium.timekeeper_sec|fmt_duration }}</li>
             {% endif %}
+            {% for theme in row.premium.themes or [] %}
+            <li>🎨 {{ T('playercard_theme_' ~ theme, theme) }}</li>
+            {% endfor %}
+            {% for aura in row.premium.auras or [] %}
+            <li>◇ {{ T('playercard_aura_' ~ aura, aura) }}</li>
+            {% endfor %}
+            {% for flair in row.premium.title_flairs or [] %}
+            <li>◈ {{ T('playercard_flair_' ~ flair, flair) }}</li>
+            {% endfor %}
+            {% for badge in row.premium.badges or [] %}
+            <li>🏅 {{ T('playercard_badge_' ~ badge, badge) }}</li>
+            {% endfor %}
           </ul>
           {% if row.premium.claimable %}
           <button type="button" class="gc-btn gc-btn-sm gc-btn-primary" data-bp-claim="premium" data-bp-level="{{ row.level }}">

@@ -6,6 +6,8 @@
 <div class="gc-player-card-shell gc-player-card-view"
      data-player-id="{{ card.get('player_id', '') }}"
      data-theme="{{ card.get('theme', 'cyan') }}"
+     data-aura="{{ card.get('aura_key', 'none') }}"
+     data-flair="{{ card.get('title_flair', 'none') }}"
      data-can-edit="{{ '1' if card.get('can_edit') else '0' }}">
 
   {% if is_private %}

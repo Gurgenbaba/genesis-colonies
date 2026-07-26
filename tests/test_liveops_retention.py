@@ -176,8 +176,8 @@ def test_battle_pass_premium_gate_and_unlock(liveops_db):
 
 
 def test_battle_pass_premium_catalog_cracks(liveops_db):
-    """Premium must dwarf Free so paying feels inevitable (catalog v3+)."""
-    assert REWARD_CATALOG_VERSION >= 3
+    """Premium must dwarf Free so paying feels inevitable (catalog v5+)."""
+    assert REWARD_CATALOG_VERSION >= 5
     free1, prem1 = _default_level_rewards(1)
     assert int(prem1["timekeeper_sec"]) >= 3600
     assert sum(int(i["amount"]) for i in prem1["items"]) >= 5
@@ -190,6 +190,22 @@ def test_battle_pass_premium_catalog_cracks(liveops_db):
     assert sum(int(i["amount"]) for i in prem10["items"]) > sum(
         int(i["amount"]) for i in free10["items"]
     )
+    assert "ash" in (free10.get("themes") or [])
+    assert "rim_ash" in (free10.get("auras") or [])
+
+    free20, prem20 = _default_level_rewards(20)
+    assert "bp_s1_attendee" in (free20.get("badges") or [])
+    assert "etched" in (free20.get("title_flairs") or [])
+    assert "plasma" in (prem20.get("themes") or [])
+    assert "aura_plasma" in (prem20.get("auras") or [])
+
+    _, prem15 = _default_level_rewards(15)
+    assert "aura_gold" in (prem15.get("auras") or [])
+
+    _, prem40 = _default_level_rewards(40)
+    assert "void" in (prem40.get("themes") or [])
+    assert "bp_s1_elite" in (prem40.get("badges") or [])
+    assert "aura_void" in (prem40.get("auras") or [])
 
     _, prem50 = _default_level_rewards(50)
     prem50_keys = {i["item_key"] for i in prem50["items"]}
@@ -198,6 +214,8 @@ def test_battle_pass_premium_catalog_cracks(liveops_db):
     void_amt = next(i["amount"] for i in prem50["items"] if i["item_key"] == "container_void_artifact")
     assert int(void_amt) >= 2
     assert int(prem50["timekeeper_sec"]) >= 48 * 3600
+    assert "bp_s1_legend" in (prem50.get("badges") or [])
+    assert "imperial" in (prem50.get("title_flairs") or [])
 
     conn = db()
     sid = ensure_default_season(conn)
@@ -217,8 +235,110 @@ def test_battle_pass_premium_catalog_cracks(liveops_db):
         (sid,),
     ).fetchone()
     assert "container_void_artifact" in str(row["premium_reward_json"])
+    assert "bp_s1_legend" in str(row["premium_reward_json"])
+    assert "imperial" in str(row["premium_reward_json"])
     conn.commit()
     conn.close()
+
+
+def test_battle_pass_cosmetics_unlock_without_gating_base_themes(liveops_db):
+    from game.playercard import (
+        BASE_FREE_THEMES,
+        list_unlocked_auras,
+        list_unlocked_themes,
+        player_has_aura,
+        player_has_theme,
+        player_has_title_flair,
+        save_own_card,
+    )
+
+    uid = _player()
+    conn = db()
+    # Base themes stay free without unlocks
+    for theme in BASE_FREE_THEMES:
+        assert player_has_theme(uid, theme, conn=conn) is True
+    assert "violet" in list_unlocked_themes(uid, conn=conn)
+    assert "gold" not in list_unlocked_themes(uid, conn=conn)
+    assert player_has_aura(uid, "none", conn=conn) is True
+    assert player_has_aura(uid, "aura_gold", conn=conn) is False
+    assert "aura_gold" not in list_unlocked_auras(uid, conn=conn)
+
+    season = get_active_season(conn)
+    credit_xp(uid, int(season["xp_per_level"]) * 50, conn=conn)
+    ok, reason, result = claim_battle_pass_reward(uid, 10, "free", conn=conn)
+    assert ok, reason
+    assert any(g.startswith("theme:ash") for g in (result.get("granted") or []))
+    assert any(g.startswith("aura:rim_ash") for g in (result.get("granted") or []))
+    assert player_has_theme(uid, "ash", conn=conn) is True
+    assert player_has_aura(uid, "rim_ash", conn=conn) is True
+    # Still did not lock base themes
+    assert player_has_theme(uid, "cyan", conn=conn) is True
+
+    unlock_premium(uid, conn=conn, source="test")
+    ok2, reason2, result2 = claim_battle_pass_reward(uid, 15, "premium", conn=conn)
+    assert ok2, reason2
+    assert player_has_theme(uid, "gold", conn=conn) is True
+    assert any(g.startswith("aura:aura_gold") for g in (result2.get("granted") or []))
+    assert player_has_aura(uid, "aura_gold", conn=conn) is True
+
+    # Locked prestige save rejected; unlocked equip works
+    conn.commit()
+    conn.close()
+    from game import playercard as pc_mod
+
+    pc_mod._LAST_SAVE_TS.pop(uid, None)
+    ok_lock, reason_lock, _ = save_own_card(uid, {"theme": "cyan", "aura_key": "aura_void", "title_flair": "none"})
+    assert ok_lock is False
+    assert reason_lock == "playercard_aura_locked"
+
+    pc_mod._LAST_SAVE_TS.pop(uid, None)
+    ok_ok, reason_ok, _ = save_own_card(uid, {"theme": "cyan", "aura_key": "aura_gold", "title_flair": "none"})
+    assert ok_ok is True, reason_ok
+
+    conn = db()
+    ok3, reason3, result3 = claim_battle_pass_reward(uid, 50, "premium", conn=conn)
+    assert ok3, reason3
+    assert any(g.startswith("badge:bp_s1_legend") for g in (result3.get("granted") or []))
+    assert any(g.startswith("title_flair:imperial") for g in (result3.get("granted") or []))
+    assert player_has_title_flair(uid, "imperial", conn=conn) is True
+    conn.commit()
+    conn.close()
+
+
+def test_admin_playercard_cosmetics_all_unlocked(liveops_db):
+    """Admins can equip any theme/aura/flair without Season Pass unlocks."""
+    from game.playercard import (
+        list_unlocked_auras,
+        list_unlocked_themes,
+        list_unlocked_title_flairs,
+        player_has_aura,
+        player_has_theme,
+        player_has_title_flair,
+        save_own_card,
+    )
+
+    uid = _player()
+    conn = db()
+    conn.execute("UPDATE users SET is_admin = 1 WHERE id = ?;", (uid,))
+    conn.execute("UPDATE players SET is_admin = 1 WHERE id = ?;", (uid,))
+    conn.commit()
+
+    assert "void" in list_unlocked_themes(uid, conn=conn)
+    assert "aura_void" in list_unlocked_auras(uid, conn=conn)
+    assert "imperial" in list_unlocked_title_flairs(uid, conn=conn)
+    assert player_has_theme(uid, "plasma", conn=conn) is True
+    assert player_has_aura(uid, "aura_gold", conn=conn) is True
+    assert player_has_title_flair(uid, "signal", conn=conn) is True
+    conn.close()
+
+    from game import playercard as pc_mod
+
+    pc_mod._LAST_SAVE_TS.pop(uid, None)
+    ok, reason, _ = save_own_card(
+        uid,
+        {"theme": "void", "aura_key": "aura_void", "title_flair": "imperial"},
+    )
+    assert ok is True, reason
 
 
 def test_activity_xp_hooks_battle_pass(liveops_db):

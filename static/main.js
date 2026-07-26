@@ -33975,6 +33975,13 @@
     PLAYER_CARD.dialog.setAttribute("data-theme", th);
   }
 
+  function applyPlayerCardPrestige(shell) {
+    cachePlayerCardElements();
+    if (!PLAYER_CARD.dialog || !shell) return;
+    PLAYER_CARD.dialog.setAttribute("data-aura", shell.getAttribute("data-aura") || "none");
+    PLAYER_CARD.dialog.setAttribute("data-flair", shell.getAttribute("data-flair") || "none");
+  }
+
   async function fetchPlayerCardHtml(url, reqToken) {
     pcAbortFetch();
     const ctrl = new AbortController();
@@ -34024,6 +34031,7 @@
     if (shell) {
       PLAYER_CARD.content.appendChild(shell);
       applyPlayerCardTheme(shell.getAttribute("data-theme"));
+      applyPlayerCardPrestige(shell);
     } else {
       PLAYER_CARD.content.appendChild(wrap);
     }
@@ -34100,6 +34108,8 @@
     const titleEl = form.querySelector("#pc-preview-title");
     const bioEl = form.querySelector("#pc-preview-bio");
     const themeSel = form.querySelector('[data-pc-field="theme"]');
+    const auraSel = form.querySelector('[data-pc-field="aura_key"]');
+    const flairSel = form.querySelector('[data-pc-field="title_flair"]');
 
     function syncBadgePreview() {
       const host = form.querySelector("#pc-preview-badges");
@@ -34166,8 +34176,21 @@
       if (titleEl) titleEl.textContent = form.querySelector('[data-pc-field="title"]')?.value || "";
       if (bioEl) bioEl.textContent = form.querySelector('[data-pc-field="bio"]')?.value || "";
       const th = themeSel?.value || "cyan";
-      if (preview) preview.setAttribute("data-theme", th);
+      const aura = auraSel?.value || "none";
+      const flair = flairSel?.value || "none";
+      if (preview) {
+        preview.setAttribute("data-theme", th);
+        preview.setAttribute("data-aura", aura);
+        preview.setAttribute("data-flair", flair);
+      }
+      const shell = form.closest(".gc-player-card-shell");
+      if (shell) {
+        shell.setAttribute("data-theme", th);
+        shell.setAttribute("data-aura", aura);
+        shell.setAttribute("data-flair", flair);
+      }
       applyPlayerCardTheme(th);
+      applyPlayerCardPrestige(shell || preview);
       syncBadgePreview();
     }
 
@@ -34260,6 +34283,8 @@
       title: form.querySelector('[name="title"]')?.value || "",
       bio: form.querySelector('[name="bio"]')?.value || "",
       theme: form.querySelector('[name="theme"]')?.value || "cyan",
+      aura_key: form.querySelector('[name="aura_key"]')?.value || "none",
+      title_flair: form.querySelector('[name="title_flair"]')?.value || "none",
       is_public: form.querySelector('[name="is_public"]')?.checked ? "1" : "0",
       selected_badge_1: badges[0] || null,
       selected_badge_2: badges[1] || null,
