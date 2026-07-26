@@ -6316,5 +6316,15 @@
   "shop_kind_timekeeper": "TIMEKEEPER",
   "shop_kind_supply": "SUPPLY",
   "shop_featured_tag": "FEATURED",
-  "shop_packs_title": "Supply Packs"
+  "shop_packs_title": "Supply Packs",
+  "fleet_ship_planet_breaker": "Planet Breaker",
+  "fleet_ship_planet_breaker_desc": "Siege hull that can shatter an AI colony after a total military wipe. Consumed on successful destruction.",
+  "fleet_role_siege": "Siege",
+  "combat_ai_colony_destroyed": "AI colony destroyed",
+  "pirate_faction_ash_raiders": "Ash Raiders",
+  "pirate_faction_ash_raiders_desc": "Elite raiders — heavy fleets and hard strikes.",
+  "pirate_commander_ash": "Ash Lord",
+  "pirate_faction_salt_cartel": "Salt Cartel",
+  "pirate_faction_salt_cartel_desc": "Trade cartel — defensive and economy-focused.",
+  "pirate_commander_salt": "Salt Baron"
 }

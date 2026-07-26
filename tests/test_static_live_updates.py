@@ -559,7 +559,9 @@ def test_pjax_navigation_owner_clears_stale_timeouts():
     assert "normalizeLcpPreloadHref" in preload
     assert "removeLcpHeroPreloadLinks" in preload
     version = _read("VERSION").strip()
-    assert version == "0.5.9.16"
+    assert version == "0.5.9.17"
+    assert "GAME_STATE_FETCH_TIMEOUT_MS" in src
+    assert "NOTIFICATION_POLL_TIMEOUT_MS" in src
 
 
 def test_main_js_gc802_planet_switch_state_sync():

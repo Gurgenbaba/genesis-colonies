@@ -173,5 +173,8 @@ Details: [COLLECTOR_EXCHANGE.md](COLLECTOR_EXCHANGE.md)
 | GC-P11–P12 | `pirate_war` Emergency + Diplomacy |
 | GC-P13–P15 | Hinterhalt, Infiltration, Schmuggler, Fleet-Save |
 | GC-P16–P18 | Directives, LiveOps, E2E Ship-Gate |
+| GC-P19–P20 | Living bots + Seed Ark colonize / planet floor |
+| GC-P21–P25 | Living economy + defense fleet-save + AI colony destroy |
+| GC-P26–P31 | Player-loop brain, cheat teardown, 6 factions, human colony wipe |
 
 Details: [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md)

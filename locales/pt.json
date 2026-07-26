@@ -6316,5 +6316,15 @@
   "shop_kind_timekeeper": "TIMEKEEPER",
   "shop_kind_supply": "SUPPLY",
   "shop_featured_tag": "DESTAQUE",
-  "shop_packs_title": "Packs de suprimento"
+  "shop_packs_title": "Packs de suprimento",
+  "fleet_ship_planet_breaker": "Quebra-Planetas",
+  "fleet_ship_planet_breaker_desc": "Casco de cerco que pode destruir uma colônia IA após wipe militar total. Consumido no sucesso.",
+  "fleet_role_siege": "Cerco",
+  "combat_ai_colony_destroyed": "Colônia IA destruída",
+  "pirate_faction_ash_raiders": "Ash Raiders",
+  "pirate_faction_ash_raiders_desc": "Saqueadores de elite — frotas pesadas.",
+  "pirate_commander_ash": "Senhor das Cinzas",
+  "pirate_faction_salt_cartel": "Salt Cartel",
+  "pirate_faction_salt_cartel_desc": "Cartel comercial — defensivo e econômico.",
+  "pirate_commander_salt": "Barão do Sal"
 }

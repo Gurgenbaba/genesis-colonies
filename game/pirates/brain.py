@@ -23,8 +23,8 @@ from .threat import get_player_threat, recompute_player_threat
 
 logger = logging.getLogger(__name__)
 
-MAX_RAIDS_PER_TICK = 2
-MAX_RAIDS_PER_TICK_WAR = 4
+MAX_RAIDS_PER_TICK = 3
+MAX_RAIDS_PER_TICK_WAR = 5
 MAX_SPIES_PER_TICK = 3
 MAX_RECYCLES_PER_TICK = 1
 SPY_PROBE_COUNT = 5
@@ -33,6 +33,9 @@ RAID_FLEET_FRACTION = 0.55
 MIN_OPPORTUNITY = 35
 ANTI_PILE_ON_SEC = 24 * 3600
 HOME_RAID_STACK_FRACTION = 0.45
+BOT_COLONY_SOFT_CAP = 4  # home + up to 3 extra colonies per faction bot
+COMBAT_VS_BOT_BOUNTY = 150
+COLONIZE_WIPE_COOLDOWN_SEC = 6 * 3600
 
 
 def _now() -> float:
@@ -189,24 +192,33 @@ def _recently_raided(conn, target_player_id: int, *, now: float) -> bool:
     return cur.fetchone() is not None
 
 
-def _stock_raid_fleet(
+def _raid_fleet_from_hangar(
     conn,
     *,
     planet_id: int,
-    player_id: int,
-    stacks: Mapping[str, Any],
     fraction: float = RAID_FLEET_FRACTION,
+    reserve_fraction: float = 0.30,
+    reserve_keys: Optional[Tuple[str, ...]] = ("veil_probe", "seed_ark", "harvest_reclaimer"),
 ) -> Dict[str, int]:
-    from ..fleet import set_planet_ships
+    """Take a fraction of the real hangar for a raid — keep personality reserve at home."""
+    from ..fleet import get_planet_ships
 
+    reserve_keys_set = set(reserve_keys or ())
+    ships = get_planet_ships(int(planet_id), conn=conn)
     fleet: Dict[str, int] = {}
-    for k, v in dict(stacks or {}).items():
-        n = int(max(0, round(int(v or 0) * float(fraction))))
+    keep_ratio = max(0.0, min(0.75, float(reserve_fraction)))
+    for k, v in ships.items():
+        key = str(k)
+        if key in reserve_keys_set:
+            continue
+        total = int(v or 0)
+        if total <= 0:
+            continue
+        keep = int(max(0, round(total * keep_ratio)))
+        available = max(0, total - keep)
+        n = int(max(0, round(available * float(fraction))))
         if n > 0:
-            fleet[str(k)] = n
-    if not fleet:
-        return {}
-    set_planet_ships(int(planet_id), int(player_id), fleet, conn=conn)
+            fleet[key] = n
     return fleet
 
 
@@ -540,12 +552,14 @@ def dispatch_raid_from_base(
     if heat >= HEAT_THRESHOLDS["elite"] and int(target.get("bounty_credits") or 0) >= 2000:
         fleet_fraction = min(0.9, fleet_fraction + 0.1)
 
-    fleet = _stock_raid_fleet(
+    from .play_loop import reserve_fraction_for_personality
+
+    reserve = reserve_fraction_for_personality(str(state.get("personality") or "aggressive"))
+    fleet = _raid_fleet_from_hangar(
         conn,
         planet_id=int(bot["planet_id"]),
-        player_id=int(bot["player_id"]),
-        stacks=base.get("fleet_stacks") or {},
         fraction=fleet_fraction,
+        reserve_fraction=reserve,
     )
     if not fleet:
         return {"ok": False, "error": "empty_fleet"}
@@ -646,9 +660,8 @@ def dispatch_raid_from_home(
 
     from .bases import list_faction_defs
     from .bot_state import bot_may_act, ensure_bot_state, personality_raid_modifiers
-    from .accounts import ensure_bot_home_fleet
+    from .play_loop import reserve_fraction_for_personality
 
-    ensure_bot_home_fleet(conn, dict(bot), force=False)
     state = ensure_bot_state(
         conn, bot_player_id=int(bot["player_id"]), faction_key=faction_key, now=ts
     )
@@ -691,15 +704,12 @@ def dispatch_raid_from_home(
     if not target:
         return {"ok": False, "error": "no_target"}
 
-    stacks = dict((faction or {}).get("fleet_stacks") or {})
-    # Keep probes at home for patrol; strip them from attack wing.
-    stacks.pop("veil_probe", None)
-    fleet = _stock_raid_fleet(
+    reserve = reserve_fraction_for_personality(str(state.get("personality") or "aggressive"))
+    fleet = _raid_fleet_from_hangar(
         conn,
         planet_id=int(bot["planet_id"]),
-        player_id=int(bot["player_id"]),
-        stacks=stacks,
         fraction=fleet_fraction,
+        reserve_fraction=reserve,
     )
     if not fleet:
         return {"ok": False, "error": "empty_fleet"}
@@ -782,11 +792,9 @@ def dispatch_spy_from_home(
     if heat < HEAT_THRESHOLDS["patrol"]:
         return {"ok": False, "error": "heat_below_patrol", "heat": heat}
 
-    from .accounts import ensure_bot_home_fleet
     from .bot_state import bot_may_act, ensure_bot_state
-    from ..fleet import get_planet_ships, send_fleet, set_planet_ships
+    from ..fleet import get_planet_ships, send_fleet
 
-    ensure_bot_home_fleet(conn, dict(bot), force=False)
     state = ensure_bot_state(
         conn, bot_player_id=int(bot["player_id"]), faction_key=faction_key, now=ts
     )
@@ -814,7 +822,6 @@ def dispatch_spy_from_home(
         target = cand
         break
     if not target and candidates:
-        # Fallback: richest non-bot planet even with intel (refresh).
         for cand in candidates:
             pid = int(cand["player_id"])
             if pid == int(bot["player_id"]) or is_pirate_bot_player(pid, conn=conn):
@@ -829,9 +836,16 @@ def dispatch_spy_from_home(
     hangar = get_planet_ships(planet_id, conn=conn)
     probes = int(hangar.get("veil_probe") or 0)
     if probes < SPY_PROBE_COUNT:
-        hangar = dict(hangar)
-        hangar["veil_probe"] = SPY_PROBE_COUNT
-        set_planet_ships(planet_id, player_id, hangar, conn=conn)
+        log_pirate_action(
+            conn,
+            kind="spy_skip",
+            faction_key=faction_key,
+            galaxy_id=galaxy,
+            bot_player_id=player_id,
+            message="need_ships: veil_probe",
+            payload={"probes": probes, "need": SPY_PROBE_COUNT},
+        )
+        return {"ok": False, "error": "need_ships"}
 
     ok, reason, meta = send_fleet(
         player_id=player_id,
@@ -910,8 +924,7 @@ def run_recycle_brain_tick(conn, *, now: Optional[float] = None) -> Dict[str, An
 
     from ..combat import debris_schema_ready
     from ..db import table_exists
-    from ..fleet import get_planet_ships, send_fleet, set_planet_ships
-    from .accounts import ensure_bot_home_fleet
+    from ..fleet import get_planet_ships, send_fleet
 
     if not debris_schema_ready(conn) or not table_exists(conn, "debris_fields"):
         return {"recycles": [], "ai_enabled": True, "count": 0}
@@ -938,21 +951,24 @@ def run_recycle_brain_tick(conn, *, now: Optional[float] = None) -> Dict[str, An
         heat = int(get_galaxy_heat(conn, g).get("heat") or 0)
         if heat < HEAT_THRESHOLDS["patrol"]:
             continue
-        # Prefer a bot whose home is in the same galaxy.
         bot = next((b for b in bots if int(b.get("galaxy") or 0) == g), None) or (
             bots[0] if bots else None
         )
         if not bot:
             break
-        ensure_bot_home_fleet(conn, bot, force=False)
         planet_id = int(bot["planet_id"])
         player_id = int(bot["player_id"])
-        hangar = dict(get_planet_ships(planet_id, conn=conn))
-        if int(hangar.get("harvest_reclaimer") or 0) < 1:
-            hangar["harvest_reclaimer"] = 2
-        if int(hangar.get("atlas_hauler") or 0) < 1:
-            hangar["atlas_hauler"] = 2
-        set_planet_ships(planet_id, player_id, hangar, conn=conn)
+        hangar = get_planet_ships(planet_id, conn=conn)
+        if int(hangar.get("harvest_reclaimer") or 0) < 1 or int(hangar.get("atlas_hauler") or 0) < 1:
+            log_pirate_action(
+                conn,
+                kind="recycle_skip",
+                faction_key=str(bot["faction_key"]),
+                galaxy_id=g,
+                bot_player_id=player_id,
+                message="need_ships: reclaimers",
+            )
+            continue
         ships = {"harvest_reclaimer": 1, "atlas_hauler": 1}
         ok, reason, meta = send_fleet(
             player_id=player_id,
@@ -991,8 +1007,13 @@ def run_recycle_brain_tick(conn, *, now: Optional[float] = None) -> Dict[str, An
     return {"recycles": dispatched, "ai_enabled": True, "count": len(dispatched)}
 
 
-def run_raid_brain_tick(conn, *, now: Optional[float] = None) -> Dict[str, Any]:
-    """fleet_worker piggyback: base raids first, then homeworld raids to fill budget."""
+def run_raid_brain_tick(
+    conn,
+    *,
+    now: Optional[float] = None,
+    skip_home_raids: bool = False,
+) -> Dict[str, Any]:
+    """Base raids first; optional homeworld fill (skipped when play_loop already raided)."""
     ts = float(now if now is not None else _now())
     if not is_pirates_ai_enabled(conn=conn):
         return {"raids": [], "ai_enabled": False}
@@ -1011,7 +1032,6 @@ def run_raid_brain_tick(conn, *, now: Optional[float] = None) -> Dict[str, Any]:
         for b in bases
         if b.get("status") in LIVE_STATUSES
     )
-    # Also detect war on bot home galaxies.
     bots = bootstrap_faction_bots(conn=conn)
     if not war_pressure:
         war_pressure = any(
@@ -1027,8 +1047,7 @@ def run_raid_brain_tick(conn, *, now: Optional[float] = None) -> Dict[str, Any]:
         if res.get("ok"):
             dispatched.append({**res, "origin": "base"})
 
-    # Fill remaining raid budget from homeworlds (no base required).
-    if len(dispatched) < raid_cap:
+    if not skip_home_raids and len(dispatched) < raid_cap:
         for bot in bots:
             if len(dispatched) >= raid_cap:
                 break
@@ -1045,7 +1064,6 @@ def run_raid_brain_tick(conn, *, now: Optional[float] = None) -> Dict[str, Any]:
 
 
 MAX_COLONIZES_PER_TICK = 1
-BOT_COLONY_SOFT_CAP = 3  # home + up to 2 extra colonies per faction bot
 
 
 def dispatch_colonize_from_home(
@@ -1069,8 +1087,8 @@ def dispatch_colonize_from_home(
         return {"ok": False, "error": "heat_below_patrol", "heat": heat}
 
     from ..models import get_planets_by_player
-    from ..fleet import get_planet_ships, send_fleet, set_planet_ships
-    from .accounts import ensure_bot_expansion_ready, ensure_bot_home_fleet, ensure_bot_planet_floor
+    from ..fleet import get_planet_ships, send_fleet
+    from .accounts import ensure_bot_expansion_ready, ensure_bot_planet_floor
     from .bases import _pick_free_slot
     from .bot_state import bot_may_act, ensure_bot_state
 
@@ -1080,10 +1098,17 @@ def dispatch_colonize_from_home(
     if len(planets) >= BOT_COLONY_SOFT_CAP:
         return {"ok": False, "error": "colony_cap"}
 
-    ensure_bot_home_fleet(conn, dict(bot), force=False)
     state = ensure_bot_state(
         conn, bot_player_id=int(bot["player_id"]), faction_key=faction_key, now=ts
     )
+    mood = dict(state.get("mood") or {})
+    cool_until = mood.get("colony_wipe_cooldown_until")
+    if cool_until is not None:
+        try:
+            if float(cool_until) > ts:
+                return {"ok": False, "error": "wipe_cooldown"}
+        except (TypeError, ValueError):
+            pass
     if not force_playtime:
         gate = bot_may_act(state, now=ts)
         if not gate.get("ok"):
@@ -1116,10 +1141,17 @@ def dispatch_colonize_from_home(
 
     planet_id = int(bot["planet_id"])
     player_id = int(bot["player_id"])
-    hangar = dict(get_planet_ships(planet_id, conn=conn))
+    hangar = get_planet_ships(planet_id, conn=conn)
     if int(hangar.get("seed_ark") or 0) < 1:
-        hangar["seed_ark"] = 1
-        set_planet_ships(planet_id, player_id, hangar, conn=conn)
+        log_pirate_action(
+            conn,
+            kind="colonize_skip",
+            faction_key=faction_key,
+            galaxy_id=int(tg),
+            bot_player_id=player_id,
+            message="need_ships: seed_ark",
+        )
+        return {"ok": False, "error": "need_ships"}
 
     ok, reason, meta = send_fleet(
         player_id=player_id,

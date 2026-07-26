@@ -16,12 +16,14 @@ logger = logging.getLogger(__name__)
 PLAYER_MODE_AI_PIRATE = "ai_pirate"
 AI_KIND_PIRATE_FACTION = "pirate_faction"
 
-# Discoverable homeworlds (Galaxy 1 — pirate belt).
+# Discoverable homeworlds (Galaxy 1 — distributed, not one campable belt).
 FACTION_HOMEWORLDS: Dict[str, Tuple[int, int, int]] = {
-    "crimson_corsairs": (1, 490, 8),
-    "iron_collective": (1, 490, 9),
-    "void_cult": (1, 491, 8),
-    "nomad_swarm": (1, 491, 9),
+    "crimson_corsairs": (1, 100, 8),
+    "iron_collective": (1, 200, 9),
+    "void_cult": (1, 300, 8),
+    "nomad_swarm": (1, 400, 9),
+    "ash_raiders": (1, 450, 7),
+    "salt_cartel": (1, 480, 6),
 }
 
 FACTION_BOTS: Dict[str, Dict[str, str]] = {
@@ -60,6 +62,24 @@ FACTION_BOTS: Dict[str, Dict[str, str]] = {
         "desc_key": "pirate_faction_nomad_swarm_desc",
         "personality": "swarm",
         "mode_key": "pirate_ai_mode_swarm",
+    },
+    "ash_raiders": {
+        "username": "gc_pirate_ash",
+        "display_name": "Ash Raiders",
+        "name_key": "pirate_faction_ash_raiders",
+        "commander_key": "pirate_commander_ash",
+        "desc_key": "pirate_faction_ash_raiders_desc",
+        "personality": "elite",
+        "mode_key": "pirate_ai_mode_aggressive",
+    },
+    "salt_cartel": {
+        "username": "gc_pirate_salt",
+        "display_name": "Salt Cartel",
+        "name_key": "pirate_faction_salt_cartel",
+        "commander_key": "pirate_commander_salt",
+        "desc_key": "pirate_faction_salt_cartel_desc",
+        "personality": "economy",
+        "mode_key": "pirate_ai_mode_turtle",
     },
 }
 
@@ -134,6 +154,8 @@ def pirate_ai_profiles_by_ids(
             "turtle": "pirate_ai_mode_turtle",
             "spy": "pirate_ai_mode_spy",
             "swarm": "pirate_ai_mode_swarm",
+            "elite": "pirate_ai_mode_aggressive",
+            "economy": "pirate_ai_mode_turtle",
         }.get(personality, meta["mode_key"])
         out[int(row["player_id"])] = {
             "is_ai": True,
@@ -269,17 +291,31 @@ def ensure_faction_bot(faction_key: str, *, conn) -> Optional[Dict[str, Any]]:
     # Reload coords after possible move.
     planets = get_planets_by_player(player_id, conn=conn) or planets
     home = planets[0]
-    # Keep fuel topped for raid flights.
-    cur = conn.execute(
-        "SELECT COALESCE(fuel_cells, 0) AS fuel_cells FROM planets WHERE id = ?;",
-        (int(home["id"]),),
-    )
-    fuel = int((cur.fetchone() or {"fuel_cells": 0})["fuel_cells"] or 0)
-    if fuel < 2_000_000:
-        conn.execute(
-            "UPDATE planets SET fuel_cells = ? WHERE id = ?;",
-            (2_000_000, int(home["id"])),
-        )
+    # One-time Soft-On fuel seed only (GC-P27) — later fuel comes from production.
+    try:
+        from .bot_state import ensure_bot_state
+        import json
+
+        state = ensure_bot_state(conn, bot_player_id=player_id, faction_key=faction_key)
+        mood = dict(state.get("mood") or {})
+        if not mood.get("fuel_seeded"):
+            cur = conn.execute(
+                "SELECT COALESCE(fuel_cells, 0) AS fuel_cells FROM planets WHERE id = ?;",
+                (int(home["id"]),),
+            )
+            fuel = int((cur.fetchone() or {"fuel_cells": 0})["fuel_cells"] or 0)
+            if fuel < 500_000:
+                conn.execute(
+                    "UPDATE planets SET fuel_cells = ? WHERE id = ?;",
+                    (500_000, int(home["id"])),
+                )
+            mood["fuel_seeded"] = True
+            conn.execute(
+                "UPDATE pirate_bot_state SET mood_json = ?, updated_at = ? WHERE bot_player_id = ?;",
+                (json.dumps(mood), time.time(), player_id),
+            )
+    except Exception:
+        logger.exception("pirate fuel seed failed player=%s", player_id)
     _touch_bot_presence(conn, player_id)
     _ensure_public_ai_card(conn, player_id, faction_key)
     ensure_player_score_row(player_id, conn=conn)
@@ -306,13 +342,11 @@ def ensure_all_faction_bots(*, conn) -> List[Dict[str, Any]]:
     return out
 
 
-# Baseline home hangar so Soft-On bots show fleet score + can spy/raid/recycle.
-HOME_FLEET_MIN_UNITS = 20
+# Utility floor only (GC-P21+). Combat ships come from shipyard economy — no cheat restock.
 HOME_PROBE_MIN = 8
 HOME_RECLAIMER_MIN = 2
 HOME_HAULER_MIN = 2
 HOME_SEED_ARK_MIN = 1
-HOME_FLEET_STRENGTH = 1  # same scale as weak base (_scale_stacks strength=1)
 # HW PE level 10 unlocks 2 colony slots → soft cap home+2 (GC-P20).
 BOT_HOMEWORLD_LEVEL_FLOOR = 10
 
@@ -363,28 +397,62 @@ def _home_ship_count(conn, planet_id: int) -> Dict[str, int]:
     return {str(r["ship_key"]): int(r["amount"] or 0) for r in cur.fetchall()}
 
 
-def _faction_home_stacks(conn, faction_key: str) -> Dict[str, int]:
-    """Faction template stacks scaled for home presence (+ probe/reclaimer floors)."""
-    from .bases import list_faction_defs
+def _utility_home_stacks() -> Dict[str, int]:
+    """Spy / recycle / colonize utility floor only — no combat template restock."""
+    return {
+        "veil_probe": HOME_PROBE_MIN,
+        "harvest_reclaimer": HOME_RECLAIMER_MIN,
+        "atlas_hauler": HOME_HAULER_MIN,
+        "seed_ark": HOME_SEED_ARK_MIN,
+    }
 
-    stacks: Dict[str, int] = {}
-    for f in list_faction_defs(conn):
-        if f["faction_key"] == str(faction_key):
-            # Match bases._scale_stacks(strength=1) without importing private helper.
-            mult = 0.5 + 0.5 * max(1, HOME_FLEET_STRENGTH)
-            for k, v in dict(f.get("fleet_stacks") or {}).items():
-                n = int(max(0, round(int(v or 0) * mult)))
-                if n > 0:
-                    stacks[str(k)] = n
-            break
-    # Always keep spy/recycle/colonize capability on homeworlds.
-    stacks["veil_probe"] = max(int(stacks.get("veil_probe") or 0), HOME_PROBE_MIN)
-    stacks["harvest_reclaimer"] = max(
-        int(stacks.get("harvest_reclaimer") or 0), HOME_RECLAIMER_MIN
-    )
-    stacks["atlas_hauler"] = max(int(stacks.get("atlas_hauler") or 0), HOME_HAULER_MIN)
-    stacks["seed_ark"] = max(int(stacks.get("seed_ark") or 0), HOME_SEED_ARK_MIN)
-    return {k: v for k, v in stacks.items() if int(v) > 0}
+
+def ensure_bot_utility_fleet(
+    conn,
+    bot: Dict[str, Any],
+    *,
+    force: bool = False,
+) -> Dict[str, Any]:
+    """One-time Soft-On utility seed only (GC-P27). Never restocks every tick."""
+    import json
+
+    from .bot_state import ensure_bot_state
+
+    player_id = int(bot["player_id"])
+    faction_key = str(bot.get("faction_key") or "")
+    state = ensure_bot_state(conn, bot_player_id=player_id, faction_key=faction_key)
+    mood = dict(state.get("mood") or {})
+    if mood.get("utility_seeded") and not force:
+        return {"ok": True, "skipped": "already_seeded", "stocked": False}
+
+    planet_id = int(bot["planet_id"])
+    if not force and _bot_has_active_fleets(conn, player_id):
+        return {"ok": True, "skipped": "fleets_active", "stocked": False}
+
+    current = _home_ship_count(conn, planet_id)
+    from ..fleet import set_planet_ships
+    from ..ranking import recompute_and_upsert_score
+
+    stacks = _utility_home_stacks()
+    merged: Dict[str, int] = dict(current)
+    for k, v in stacks.items():
+        merged[k] = max(int(merged.get(k) or 0), int(v))
+    set_planet_ships(planet_id, player_id, merged, conn=conn)
+    mood["utility_seeded"] = True
+    mood["utility_seeded_at"] = time.time()
+    try:
+        conn.execute(
+            "UPDATE pirate_bot_state SET mood_json = ?, updated_at = ? WHERE bot_player_id = ?;",
+            (json.dumps(mood), time.time(), player_id),
+        )
+    except Exception:
+        pass
+    try:
+        recompute_and_upsert_score(player_id, conn=conn)
+    except Exception:
+        logger.exception("pirate utility fleet score refresh failed player=%s", player_id)
+    _touch_bot_presence(conn, player_id)
+    return {"ok": True, "stocked": True, "ships": merged}
 
 
 def ensure_bot_home_fleet(
@@ -393,46 +461,8 @@ def ensure_bot_home_fleet(
     *,
     force: bool = False,
 ) -> Dict[str, Any]:
-    """Stock or refresh a thin home hangar when idle / under-strength.
-
-    Does not replace hangars while fleets are in flight (unless ``force``).
-    """
-    planet_id = int(bot["planet_id"])
-    player_id = int(bot["player_id"])
-    faction_key = str(bot["faction_key"])
-    if not force and _bot_has_active_fleets(conn, player_id):
-        return {"ok": True, "skipped": "fleets_active", "stocked": False}
-
-    current = _home_ship_count(conn, planet_id)
-    total = sum(current.values())
-    probes = int(current.get("veil_probe") or 0)
-    reclaimers = int(current.get("harvest_reclaimer") or 0)
-    arks = int(current.get("seed_ark") or 0)
-    needs = (
-        force
-        or total < HOME_FLEET_MIN_UNITS
-        or probes < HOME_PROBE_MIN
-        or reclaimers < HOME_RECLAIMER_MIN
-        or arks < HOME_SEED_ARK_MIN
-    )
-    if not needs:
-        return {"ok": True, "skipped": "adequate", "stocked": False}
-
-    from ..fleet import set_planet_ships
-    from ..ranking import recompute_and_upsert_score
-
-    stacks = _faction_home_stacks(conn, faction_key)
-    # Merge: never shrink below current when refreshing lightly.
-    merged: Dict[str, int] = dict(current)
-    for k, v in stacks.items():
-        merged[k] = max(int(merged.get(k) or 0), int(v))
-    set_planet_ships(planet_id, player_id, merged, conn=conn)
-    try:
-        recompute_and_upsert_score(player_id, conn=conn)
-    except Exception:
-        logger.exception("pirate home fleet score refresh failed player=%s", player_id)
-    _touch_bot_presence(conn, player_id)
-    return {"ok": True, "stocked": True, "ships": merged}
+    """Backward-compatible alias → utility floor only (GC-P21)."""
+    return ensure_bot_utility_fleet(conn, bot, force=force)
 
 
 def ensure_bot_planet_floor(conn, bot: Dict[str, Any]) -> Dict[str, Any]:
@@ -466,9 +496,9 @@ def ensure_bot_planet_floor(conn, bot: Dict[str, Any]) -> Dict[str, Any]:
     bot["position"] = int(home.get("position") or 1)
     _touch_bot_presence(conn, player_id)
     try:
-        ensure_bot_home_fleet(conn, bot, force=True)
+        ensure_bot_utility_fleet(conn, bot, force=True)
     except Exception:
-        logger.exception("floor hangar restock failed faction=%s", faction_key)
+        logger.exception("floor utility fleet restock failed faction=%s", faction_key)
     log_pirate_action(
         conn,
         kind="bot_planet_floor",
@@ -482,7 +512,7 @@ def ensure_bot_planet_floor(conn, bot: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def bootstrap_faction_bots(*, conn) -> List[Dict[str, Any]]:
-    """Ensure all faction bots exist with home fleets (Soft-On / tick)."""
+    """Ensure all faction bots exist with utility fleets + economy seed (Soft-On / tick)."""
     bots = ensure_all_faction_bots(conn=conn)
     out: List[Dict[str, Any]] = []
     for bot in bots:
@@ -499,10 +529,18 @@ def bootstrap_faction_bots(*, conn) -> List[Dict[str, Any]]:
                 "ensure_bot_expansion_ready failed faction=%s", bot.get("faction_key")
             )
         try:
-            ensure_bot_home_fleet(conn, bot, force=False)
+            from .economy import ensure_bot_resource_seed
+
+            ensure_bot_resource_seed(conn, bot)
         except Exception:
             logger.exception(
-                "ensure_bot_home_fleet failed faction=%s", bot.get("faction_key")
+                "ensure_bot_resource_seed failed faction=%s", bot.get("faction_key")
+            )
+        try:
+            ensure_bot_utility_fleet(conn, bot, force=False)
+        except Exception:
+            logger.exception(
+                "ensure_bot_utility_fleet failed faction=%s", bot.get("faction_key")
             )
         out.append(bot)
     return out

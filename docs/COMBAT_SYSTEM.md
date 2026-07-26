@@ -86,9 +86,11 @@ process_fleet_tick → attack arrival
   → apply_combat_loot()              # if attacker wins
   → apply_score_updates_for_players()
   → publish_attack_combat_report()   # both players, COMBAT_REPORT_VERSION=2
+  → maybe colony destroy (GC-P24/P31) # non-homeworld + breaker + full wipe (AI or human)
   → return flight with surviving ships (+ resources_json if loot)
 ```
 
+Colony destroy (owner `game/pirates/destroy.py`): any **non-homeworld** colony after attacker win, empty defender hangar+defense, and at least one surviving `planet_breaker` (consumed). AI wipe raises faction bounty + heat + recolonize cooldown; human wipe raises attacker threat and logs `colony_destroyed`. Homeworlds are never destroyable.
 ---
 
 ## Balance constants

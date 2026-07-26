@@ -6316,5 +6316,15 @@
   "shop_kind_timekeeper": "TIMEKEEPER",
   "shop_kind_supply": "SUPPLY",
   "shop_featured_tag": "VEDETTE",
-  "shop_packs_title": "Packs ravitaillement"
+  "shop_packs_title": "Packs ravitaillement",
+  "fleet_ship_planet_breaker": "Briseur de Planète",
+  "fleet_ship_planet_breaker_desc": "Coque de siège capable de détruire une colonie IA après un wipe militaire total. Consommée en cas de succès.",
+  "fleet_role_siege": "Siège",
+  "combat_ai_colony_destroyed": "Colonie IA détruite",
+  "pirate_faction_ash_raiders": "Ash Raiders",
+  "pirate_faction_ash_raiders_desc": "Raiders d'élite — flottes lourdes.",
+  "pirate_commander_ash": "Seigneur des Cendres",
+  "pirate_faction_salt_cartel": "Salt Cartel",
+  "pirate_faction_salt_cartel_desc": "Cartel marchand — défensif et économique.",
+  "pirate_commander_salt": "Baron du Sel"
 }

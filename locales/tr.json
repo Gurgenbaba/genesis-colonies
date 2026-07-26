@@ -6316,5 +6316,15 @@
   "shop_kind_timekeeper": "TIMEKEEPER",
   "shop_kind_supply": "SUPPLY",
   "shop_featured_tag": "ONE CIKAN",
-  "shop_packs_title": "Ikmal Paketleri"
+  "shop_packs_title": "Ikmal Paketleri",
+  "fleet_ship_planet_breaker": "Gezegen Kırıcı",
+  "fleet_ship_planet_breaker_desc": "Tam askeri wipe sonrası bir YA kolonisini yok edebilen kuşatma gemisi. Başarıda tüketilir.",
+  "fleet_role_siege": "Kuşatma",
+  "combat_ai_colony_destroyed": "YA kolonisi yok edildi",
+  "pirate_faction_ash_raiders": "Ash Raiders",
+  "pirate_faction_ash_raiders_desc": "Elit yağmacılar — ağır filolar.",
+  "pirate_commander_ash": "Kül Lordu",
+  "pirate_faction_salt_cartel": "Salt Cartel",
+  "pirate_faction_salt_cartel_desc": "Ticaret karteli — savunmacı ve ekonomik.",
+  "pirate_commander_salt": "Tuz Baronu"
 }

@@ -660,27 +660,26 @@ def maybe_tick_pirate_bases(conn, *, now: Optional[float] = None) -> Dict[str, A
         result["smugglers_expired"] = []
         result["smugglers_spawned"] = []
     try:
-        from .brain import (
-            run_colonize_brain_tick,
-            run_patrol_brain_tick,
-            run_raid_brain_tick,
-            run_recycle_brain_tick,
-        )
+        from .play_loop import run_play_loop_tick
 
-        patrol = run_patrol_brain_tick(conn, now=ts)
-        result["spies"] = patrol.get("spies") or []
-        brain = run_raid_brain_tick(conn, now=ts)
-        result["raids"] = brain.get("raids") or []
-        recycle = run_recycle_brain_tick(conn, now=ts)
-        result["recycles"] = recycle.get("recycles") or []
-        colonize = run_colonize_brain_tick(conn, now=ts)
-        result["colonizes"] = colonize.get("colonizes") or []
+        play = run_play_loop_tick(conn, now=ts, bots=result_bots or None)
+        result["play_loop"] = play
+        result["spies"] = play.get("spies") or []
+        result["raids"] = play.get("raids") or []
+        result["recycles"] = play.get("recycles") or []
+        result["colonizes"] = play.get("colonizes") or []
+        result["economy"] = {
+            "ok": True,
+            "steps": play.get("steps") or [],
+            "count": play.get("count") or 0,
+        }
     except Exception:
-        logger.exception("pirate brain tick failed")
+        logger.exception("pirate play loop tick failed")
         result["spies"] = []
         result["raids"] = []
         result["recycles"] = []
         result["colonizes"] = []
+        result["economy"] = {"ok": False, "error": "exception"}
     return result
 
 

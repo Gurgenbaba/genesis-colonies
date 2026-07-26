@@ -103,7 +103,7 @@ def test_faction_seed_and_schema(pirate_db):
     conn = db()
     try:
         cur = conn.execute("SELECT COUNT(*) AS c FROM pirate_faction_defs WHERE active = 1;")
-        assert int(cur.fetchone()["c"]) == 4
+        assert int(cur.fetchone()["c"]) == 6
         cur = conn.execute(
             "SELECT faction_key FROM pirate_faction_defs ORDER BY sort_order;"
         )
@@ -113,6 +113,8 @@ def test_faction_seed_and_schema(pirate_db):
             "iron_collective",
             "void_cult",
             "nomad_swarm",
+            "ash_raiders",
+            "salt_cartel",
         ]
     finally:
         conn.close()
@@ -416,6 +418,14 @@ def test_raid_brain_dispatch_and_intel(pirate_db):
         assert spawned["ok"], spawned
         full = get_base_by_id(int(spawned["base"]["base_id"]), conn=conn)
         assert full and full.get("fleet_stacks")
+        from game.fleet import get_planet_ships, set_planet_ships
+        from game.pirates.accounts import ensure_faction_bot
+
+        bot = ensure_faction_bot("crimson_corsairs", conn=conn)
+        hangar = get_planet_ships(int(bot["planet_id"]), conn=conn)
+        hangar["falcon_interceptor"] = max(int(hangar.get("falcon_interceptor") or 0), 25)
+        hangar["ironclad_frigate"] = max(int(hangar.get("ironclad_frigate") or 0), 10)
+        set_planet_ships(int(bot["planet_id"]), int(bot["player_id"]), hangar, conn=conn)
         res = dispatch_raid_from_base(conn, full, now=time.time(), force_playtime=True)
         assert res.get("ok"), res
         assert int(res.get("fleet_id") or 0) > 0
@@ -522,13 +532,13 @@ def test_admin_pirates_api_and_ai_toggle(pirate_admin_client):
     assert on.status_code == 200
     on_data = on.get_json()
     assert on_data["ai_enabled"] is True
-    assert int(on_data.get("bots_bootstrapped") or 0) == 4
+    assert int(on_data.get("bots_bootstrapped") or 0) == 6
 
     r2 = client.get("/api/admin/pirates")
     payload = r2.get_json()
     assert payload["ai_enabled"] is True
-    assert int(payload["kpis"].get("bots_online") or 0) == 4
-    assert len(payload.get("bots") or []) == 4
+    assert int(payload["kpis"].get("bots_online") or 0) == 6
+    assert len(payload.get("bots") or []) == 6
     assert all(b.get("exists") for b in payload["bots"])
     assert all(int(b.get("ship_count") or 0) > 0 for b in payload["bots"])
 
@@ -557,19 +567,31 @@ def test_soft_on_bootstraps_hangars_without_http(pirate_db):
     from game.db import begin_write_transaction, commit
     from game.fleet import get_planet_ships
     from game.pirates.admin import admin_set_ai
-    from game.pirates.accounts import FACTION_BOTS
+    from game.pirates.accounts import FACTION_BOTS, HOME_PROBE_MIN, HOME_SEED_ARK_MIN
 
     conn = db()
     try:
         begin_write_transaction(conn)
         res = admin_set_ai(conn, True)
         assert res["ai_enabled"] is True
-        assert res["bots_bootstrapped"] == 4
+        assert res["bots_bootstrapped"] == 6
         for bot in res["bots"]:
             ships = get_planet_ships(int(bot["planet_id"]), conn=conn)
-            assert sum(ships.values()) >= 20
-            assert int(ships.get("veil_probe") or 0) >= 8
+            # GC-P27: one-time utility seed — combat ships from economy/shipyard.
+            assert int(ships.get("veil_probe") or 0) >= HOME_PROBE_MIN
+            assert int(ships.get("seed_ark") or 0) >= HOME_SEED_ARK_MIN
+            cur = conn.execute(
+                "SELECT metal FROM planets WHERE id = ?;",
+                (int(bot["planet_id"]),),
+            )
+            assert float((cur.fetchone() or {"metal": 0})["metal"] or 0) >= 1_000_000
         assert set(b["faction_key"] for b in res["bots"]) == set(FACTION_BOTS)
+        # Second Soft-On must not restock utility again (player-like).
+        from game.pirates.accounts import ensure_bot_utility_fleet
+
+        bot0 = res["bots"][0]
+        again = ensure_bot_utility_fleet(conn, dict(bot0), force=False)
+        assert again.get("skipped") == "already_seeded"
         commit(conn)
     finally:
         conn.close()
@@ -647,6 +669,13 @@ def test_home_raid_without_base_at_heat_300(pirate_db):
         record_heat_event(conn, g, "combat", amount=350)
         bots = bootstrap_faction_bots(conn=conn)
         bot = next(b for b in bots if b["faction_key"] == "crimson_corsairs")
+        # GC-P22: raids use real hangar — seed combat wing for the test (no template overwrite).
+        from game.fleet import get_planet_ships, set_planet_ships
+
+        hangar = get_planet_ships(int(bot["planet_id"]), conn=conn)
+        hangar["falcon_interceptor"] = max(int(hangar.get("falcon_interceptor") or 0), 20)
+        hangar["ironclad_frigate"] = max(int(hangar.get("ironclad_frigate") or 0), 8)
+        set_planet_ships(int(bot["planet_id"]), int(bot["player_id"]), hangar, conn=conn)
         # No pirate base — home raid only.
         res = dispatch_raid_from_home(conn, bot, now=time.time(), force_playtime=True)
         assert res.get("ok"), res
@@ -862,6 +891,13 @@ def test_bounty_biases_raid_target(pirate_db):
         )
         assert spawned["ok"], spawned
         full = get_base_by_id(int(spawned["base"]["base_id"]), conn=conn)
+        from game.fleet import get_planet_ships, set_planet_ships
+        from game.pirates.accounts import ensure_faction_bot
+
+        bot = ensure_faction_bot("crimson_corsairs", conn=conn)
+        hangar = get_planet_ships(int(bot["planet_id"]), conn=conn)
+        hangar["falcon_interceptor"] = max(int(hangar.get("falcon_interceptor") or 0), 25)
+        set_planet_ships(int(bot["planet_id"]), int(bot["player_id"]), hangar, conn=conn)
         res = dispatch_raid_from_base(conn, full, now=time.time(), force_playtime=True)
         assert res.get("ok"), res
         assert int(res["target_player_id"]) == victims[1]
@@ -999,6 +1035,7 @@ def test_ship_gate_contracts():
         assert "gdp_emergency_pirate_war_title" in data
         assert "pirate_ai_badge" in data
         assert "pirate_ai_mode_aggressive" in data
+        assert "fleet_ship_planet_breaker" in data
 
 
 def test_pirate_ai_visible_in_ranking_galaxy_playercard(pirate_db):
@@ -1076,7 +1113,7 @@ def test_bot_hangar_includes_seed_ark(pirate_db):
     try:
         begin_write_transaction(conn)
         res = admin_set_ai(conn, True)
-        assert res["bots_bootstrapped"] == 4
+        assert res["bots_bootstrapped"] == 6
         for bot in res["bots"]:
             ships = get_planet_ships(int(bot["planet_id"]), conn=conn)
             assert int(ships.get("seed_ark") or 0) >= 1
@@ -1159,3 +1196,401 @@ def test_kill_switch_blocks_colonize(pirate_db):
         commit(conn)
     finally:
         conn.close()
+
+
+def test_bot_economy_enqueues_building(pirate_db):
+    """GC-P21: Soft-On bots enqueue real build jobs and spend resources."""
+    from game.db import begin_write_transaction, commit
+    from game.models import get_planet_buildings
+    from game.pirates.admin import admin_set_ai
+    from game.pirates.economy import run_economy_brain_tick
+    from game.queue_engine import finish_due_work_once
+    import time
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        res = admin_set_ai(conn, True)
+        bot = next(b for b in res["bots"] if b["faction_key"] == "iron_collective")
+        planet_id = int(bot["planet_id"])
+        cur = conn.execute(
+            "SELECT metal, crystal FROM planets WHERE id = ?;",
+            (planet_id,),
+        )
+        before = cur.fetchone()
+        metal_before = float(before["metal"] or 0)
+        econ = run_economy_brain_tick(conn, now=time.time(), bots=[bot])
+        assert econ.get("ok")
+        cur = conn.execute(
+            "SELECT COUNT(*) AS c FROM build_queue WHERE planet_id = ?;",
+            (planet_id,),
+        )
+        queued = int((cur.fetchone() or {"c": 0})["c"] or 0)
+        assert queued >= 1
+        cur = conn.execute(
+            "SELECT metal FROM planets WHERE id = ?;",
+            (planet_id,),
+        )
+        metal_after = float((cur.fetchone() or {"metal": 0})["metal"] or 0)
+        assert metal_after < metal_before
+        # Fast-forward job and finish via owner queue engine.
+        conn.execute(
+            "UPDATE build_queue SET finish_time = ? WHERE planet_id = ?;",
+            (time.time() - 10, planet_id),
+        )
+        finish_due_work_once(
+            player_id=int(bot["player_id"]),
+            planet_id=planet_id,
+            now=time.time(),
+            conn=conn,
+            source="test",
+            manage_transaction=False,
+            dedup=False,
+        )
+        buildings = get_planet_buildings(planet_id, conn=conn)
+        assert int(buildings.get("metal_mine") or 0) >= 1 or int(
+            buildings.get("crystal_mine") or 0
+        ) >= 1 or int(buildings.get("solar_plant") or 0) >= 1
+        logs = recent_action_log(conn, kind="bot_economy_tick", limit=5)
+        assert any(l.get("bot_player_id") == bot["player_id"] for l in logs)
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_raid_does_not_overwrite_hangar_template(pirate_db):
+    """GC-P22: home raid sends a hangar fraction without set_planet_ships wipe."""
+    from game.db import begin_write_transaction, commit
+    from game.fleet import get_planet_ships, set_planet_ships
+    from game.models import create_user, ensure_player_and_homeworld, get_planets_by_player
+    from game.pirates import record_heat_event, set_pirates_ai_enabled
+    from game.pirates.accounts import bootstrap_faction_bots
+    from game.pirates.brain import dispatch_raid_from_home
+    import time
+    import uuid
+
+    ok, err, user = create_user(f"hangar_{uuid.uuid4().hex[:10]}", "test-pass-123")
+    assert ok, err
+    uid = int(user["id"])
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ensure_player_and_homeworld(uid, player_name="HangarVictim", conn=conn)
+        home = get_planets_by_player(uid, conn=conn)[0]
+        conn.execute(
+            """
+            UPDATE planets
+            SET galaxy = 1, system = 12, position = 3,
+                metal = 4000000, crystal = 4000000
+            WHERE id = ?;
+            """,
+            (int(home["id"]),),
+        )
+        conn.execute(
+            "UPDATE players SET last_seen = ? WHERE id = ?;",
+            (time.time() - 72 * 3600, uid),
+        )
+        set_pirates_ai_enabled(True, conn=conn)
+        record_heat_event(conn, 1, "combat", amount=350)
+        bots = bootstrap_faction_bots(conn=conn)
+        bot = next(b for b in bots if b["faction_key"] == "crimson_corsairs")
+        hangar = get_planet_ships(int(bot["planet_id"]), conn=conn)
+        hangar["falcon_interceptor"] = 40
+        hangar["spark_drone"] = 30
+        set_planet_ships(int(bot["planet_id"]), int(bot["player_id"]), hangar, conn=conn)
+        before = get_planet_ships(int(bot["planet_id"]), conn=conn)
+        res = dispatch_raid_from_home(conn, bot, now=time.time(), force_playtime=True)
+        assert res.get("ok"), res
+        after = get_planet_ships(int(bot["planet_id"]), conn=conn)
+        # Remaining hangar should be lower by the sent wing, not replaced by a template.
+        assert int(after.get("falcon_interceptor") or 0) < int(before.get("falcon_interceptor") or 0)
+        assert int(after.get("spark_drone") or 0) <= int(before.get("spark_drone") or 0)
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_inbound_attack_triggers_fleet_save(pirate_db):
+    """GC-P23: attacking an AI planet panic-recalls outbound bot fleets."""
+    from game.db import begin_write_transaction, commit
+    from game.fleet import get_planet_ships, send_fleet, set_planet_ships
+    from game.models import create_user, ensure_player_and_homeworld, get_planets_by_player
+    from game.pirates.accounts import bootstrap_faction_bots
+    from game.pirates.admin import admin_set_ai
+    from game.pirates.ambush import maybe_fleet_save_on_inbound_attack
+    from game.ranking import ensure_player_score_row
+    import time
+    import uuid
+
+    ok, err, user = create_user(f"fsave_{uuid.uuid4().hex[:10]}", "test-pass-123")
+    assert ok, err
+    uid = int(user["id"])
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        admin_set_ai(conn, True)
+        bots = bootstrap_faction_bots(conn=conn)
+        bot = next(b for b in bots if b["faction_key"] == "void_cult")
+        ensure_player_and_homeworld(uid, player_name="Saver", conn=conn)
+        attacker_home = get_planets_by_player(uid, conn=conn)[0]
+        # Align scores so noob corridor allows the attack path if used.
+        ensure_player_score_row(uid, conn=conn)
+        ensure_player_score_row(int(bot["player_id"]), conn=conn)
+        conn.execute(
+            "UPDATE player_scores SET score_total = 100000 WHERE player_id IN (?, ?);",
+            (uid, int(bot["player_id"])),
+        )
+        set_planet_ships(
+            int(attacker_home["id"]),
+            uid,
+            {"falcon_interceptor": 5},
+            conn=conn,
+        )
+        hangar = get_planet_ships(int(bot["planet_id"]), conn=conn)
+        hangar["falcon_interceptor"] = 20
+        set_planet_ships(int(bot["planet_id"]), int(bot["player_id"]), hangar, conn=conn)
+        ok_s, reason, meta = send_fleet(
+            player_id=int(bot["player_id"]),
+            origin_planet_id=int(bot["planet_id"]),
+            mission_type="attack",
+            target_galaxy=int(attacker_home["galaxy"]),
+            target_system=int(attacker_home["system"]),
+            target_position=int(attacker_home["position"]),
+            ships={"falcon_interceptor": 5},
+            resources={},
+            speed_percent=100,
+            conn=conn,
+        )
+        assert ok_s, reason
+        fleet_id = int((meta or {}).get("fleet", {}).get("id") or 0)
+
+        # Direct owner hook (same as send_fleet inbound path).
+        save = maybe_fleet_save_on_inbound_attack(
+            conn,
+            attacker_id=uid,
+            target_planet_id=int(bot["planet_id"]),
+            now=time.time(),
+        )
+        assert save.get("ok"), save
+        assert int(save.get("recalled") or 0) >= 1
+        cur = conn.execute(
+            "SELECT status FROM fleet_movements WHERE id = ?;",
+            (fleet_id,),
+        )
+        status = str((cur.fetchone() or {"status": ""})["status"])
+        assert status == "returning"
+        logs = recent_action_log(conn, kind="fleet_save", limit=5)
+        assert any(l.get("bot_player_id") == bot["player_id"] for l in logs)
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_ai_colony_destroy_requires_breaker_and_spares_homeworld(pirate_db):
+    """GC-P24: wipe AI colony with breaker after full military wipe; homeworld blocked."""
+    from game.db import begin_write_transaction, commit
+    from game.models import create_user, get_planets_by_player
+    from game.pirates.accounts import bootstrap_faction_bots
+    from game.pirates.admin import admin_set_ai
+    from game.pirates.bounty import get_player_bounty
+    from game.pirates.destroy import (
+        destroy_colony_planet,
+        maybe_destroy_colony_after_combat,
+    )
+    import time
+    import uuid
+
+    ok, err, user = create_user(f"brk_{uuid.uuid4().hex[:10]}", "test-pass-123")
+    assert ok, err
+    attacker_id = int(user["id"])
+
+    class _FakeCombat:
+        winner = "attacker"
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        admin_set_ai(conn, True)
+        bots = bootstrap_faction_bots(conn=conn)
+        bot = next(b for b in bots if b["faction_key"] == "nomad_swarm")
+        pid = int(bot["player_id"])
+        home = get_planets_by_player(pid, conn=conn)[0]
+        cur = conn.execute(
+            """
+            INSERT INTO planets (
+                player_id, name, galaxy, system, position, is_homeworld,
+                metal, crystal, fuel_cells, last_update
+            ) VALUES (?, 'AI Outpost', 1, 20, 4, 0, 1000, 1000, 1000, ?);
+            """,
+            (pid, time.time()),
+        )
+        colony_id = int(cur.lastrowid)
+        hw_wipe = destroy_colony_planet(
+            conn, planet_id=int(home["id"]), owner_player_id=pid
+        )
+        assert hw_wipe.get("ok") is False
+        assert hw_wipe.get("error") == "homeworld_protected"
+
+        no_breaker = maybe_destroy_colony_after_combat(
+            conn,
+            attacker_id=attacker_id,
+            defender_id=pid,
+            target_planet_id=colony_id,
+            combat_result=_FakeCombat(),
+            return_ships={"falcon_interceptor": 10},
+            now=time.time(),
+        )
+        assert no_breaker.get("ok") is False
+        assert no_breaker.get("error") == "breaker_required"
+
+        wiped = maybe_destroy_colony_after_combat(
+            conn,
+            attacker_id=attacker_id,
+            defender_id=pid,
+            target_planet_id=colony_id,
+            combat_result=_FakeCombat(),
+            return_ships={"planet_breaker": 1, "falcon_interceptor": 5},
+            now=time.time(),
+        )
+        assert wiped.get("ok"), wiped
+        assert wiped.get("return_ships", {}).get("planet_breaker") in (None, 0)
+        planets = get_planets_by_player(pid, conn=conn) or []
+        assert all(int(p["id"]) != colony_id for p in planets)
+        assert any(int(p.get("is_homeworld") or 0) == 1 for p in planets)
+        bounty = get_player_bounty(attacker_id, "nomad_swarm", conn=conn)
+        assert int(bounty.get("credits") or 0) >= 5000
+        logs = recent_action_log(conn, kind="bot_colony_destroyed", limit=5)
+        assert any(l.get("bot_player_id") == pid for l in logs)
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_play_loop_prefers_economy_when_weak(pirate_db):
+    """GC-P26: weak bot chooses economy over raid."""
+    from game.db import begin_write_transaction, commit
+    from game.pirates.admin import admin_set_ai
+    from game.pirates.play_loop import decide_bot_action
+    import time
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        res = admin_set_ai(conn, True)
+        bot = next(b for b in res["bots"] if b["faction_key"] == "salt_cartel")
+        # Fresh bots have level-0 buildings → economy.
+        action = decide_bot_action(conn, bot, now=time.time())
+        assert action in ("economy", "rebuild")
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_play_loop_round_robin_budget(pirate_db):
+    """Cron must not process all 6 bots every tick (Railway hang guard)."""
+    from game.db import begin_write_transaction, commit
+    from game.pirates.admin import admin_set_ai
+    from game.pirates.play_loop import PLAY_BOTS_PER_TICK, run_play_loop_tick
+    import time
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        res = admin_set_ai(conn, True)
+        bots = res["bots"]
+        assert len(bots) == 6
+        first = run_play_loop_tick(conn, now=time.time(), bots=bots)
+        assert first.get("ok")
+        assert int(first.get("active") or 0) == min(PLAY_BOTS_PER_TICK, 6)
+        assert int(first.get("roster") or 0) == 6
+        second = run_play_loop_tick(conn, now=time.time(), bots=bots)
+        first_factions = {s.get("faction_key") for s in (first.get("steps") or [])}
+        second_factions = {s.get("faction_key") for s in (second.get("steps") or [])}
+        # Cursor advances — second slice should differ when budget < roster.
+        if PLAY_BOTS_PER_TICK < 6:
+            assert first_factions != second_factions
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_human_colony_destroy_path(pirate_db):
+    """GC-P31: human colony can be wiped with breaker; homeworld blocked."""
+    from game.db import begin_write_transaction, commit
+    from game.models import create_user, ensure_player_and_homeworld, get_planets_by_player
+    from game.pirates.destroy import destroy_colony_planet, maybe_destroy_colony_after_combat
+    import time
+    import uuid
+
+    class _FakeCombat:
+        winner = "attacker"
+
+    ok, err, user = create_user(f"hwipe_{uuid.uuid4().hex[:10]}", "test-pass-123")
+    assert ok, err
+    victim = int(user["id"])
+    ok2, err2, atk = create_user(f"hatk_{uuid.uuid4().hex[:10]}", "test-pass-123")
+    assert ok2, err2
+    attacker = int(atk["id"])
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ensure_player_and_homeworld(victim, player_name="Victim", conn=conn)
+        home = get_planets_by_player(victim, conn=conn)[0]
+        cur = conn.execute(
+            """
+            INSERT INTO planets (
+                player_id, name, galaxy, system, position, is_homeworld,
+                metal, crystal, fuel_cells, last_update
+            ) VALUES (?, 'Human Outpost', 1, 33, 4, 0, 1000, 1000, 1000, ?);
+            """,
+            (victim, time.time()),
+        )
+        colony_id = int(cur.lastrowid)
+        assert destroy_colony_planet(
+            conn, planet_id=int(home["id"]), owner_player_id=victim
+        ).get("error") == "homeworld_protected"
+        wiped = maybe_destroy_colony_after_combat(
+            conn,
+            attacker_id=attacker,
+            defender_id=victim,
+            target_planet_id=colony_id,
+            combat_result=_FakeCombat(),
+            return_ships={"planet_breaker": 1},
+            now=time.time(),
+        )
+        assert wiped.get("ok"), wiped
+        assert wiped.get("defender_is_ai") is False
+        planets = get_planets_by_player(victim, conn=conn) or []
+        assert all(int(p["id"]) != colony_id for p in planets)
+        logs = recent_action_log(conn, kind="colony_destroyed", limit=5)
+        assert logs
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_planet_breaker_locale_and_def():
+    from game.fleet_defs import ACTIVE_SHIP_KEYS, get_ship
+
+    assert "planet_breaker" in ACTIVE_SHIP_KEYS
+    spec = get_ship("planet_breaker")
+    assert spec and spec.get("role") == "siege"
+    for loc in ("de", "en", "es", "fr", "pl", "pt", "ru", "tr"):
+        data = json.loads((ROOT / "locales" / f"{loc}.json").read_text(encoding="utf-8"))
+        assert "fleet_ship_planet_breaker" in data
+        assert "fleet_ship_planet_breaker_desc" in data
+        assert "pirate_faction_ash_raiders" in data
+        assert "pirate_faction_salt_cartel" in data
+
+
+def test_faction_homes_distributed(pirate_db):
+    """GC-P30: six faction homes are spread, not camped in 490–491."""
+    from game.pirates.accounts import FACTION_BOTS, FACTION_HOMEWORLDS
+
+    assert len(FACTION_BOTS) == 6
+    assert len(FACTION_HOMEWORLDS) == 6
+    systems = [coords[1] for coords in FACTION_HOMEWORLDS.values()]
+    assert len(set(systems)) == 6
+    assert all(s < 490 for s in systems)
+    assert max(systems) - min(systems) >= 300

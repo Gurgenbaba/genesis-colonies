@@ -1100,7 +1100,7 @@ def delete_active_planet(
     conn = db()
     try:
         from .models import get_homeworld
-        from .planet_evolution.repository import get_context_planet, set_active_planet_id
+        from .planet_evolution.repository import get_context_planet
 
         try:
             from .pirates.accounts import is_pirate_bot_player
@@ -1118,27 +1118,26 @@ def delete_active_planet(
         if int(planet.get("is_homeworld") or 0):
             return False, "planet_error_cannot_delete_homeworld", {}
 
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT COUNT(*) AS c FROM planets WHERE player_id = ?;",
-            (int(player_id),),
-        )
-        if int(cur.fetchone()["c"]) <= 1:
-            return False, "planet_error_last_planet", {}
-
-        homeworld = get_homeworld(int(player_id), conn=conn)
-        hw_id = int(homeworld["id"])
-
         begin_write_transaction(conn)
-        set_active_planet_id(int(player_id), hw_id, conn)
-        cur.execute(
-            "DELETE FROM planets WHERE id = ? AND player_id = ? AND is_homeworld = 0;",
-            (planet_id, int(player_id)),
+        from .pirates.destroy import destroy_colony_planet
+
+        wipe = destroy_colony_planet(
+            conn,
+            planet_id=planet_id,
+            owner_player_id=int(player_id),
+            reason="voluntary_delete",
         )
-        if int(cur.rowcount or 0) <= 0:
+        if not wipe.get("ok"):
             rollback(conn)
+            err = str(wipe.get("error") or "delete_failed")
+            if err == "homeworld_protected":
+                return False, "planet_error_cannot_delete_homeworld", {}
+            if err == "last_planet":
+                return False, "planet_error_last_planet", {}
             return False, "planet_error_delete_failed", {}
 
+        homeworld = get_homeworld(int(player_id), conn=conn)
+        hw_id = int(wipe.get("active_planet_id") or (homeworld or {}).get("id") or 0)
         write_account_audit(
             player_id,
             "planet_deleted",
@@ -1155,7 +1154,7 @@ def delete_active_planet(
         return True, "planet_deleted", {
             "deleted_planet_id": planet_id,
             "active_planet_id": hw_id,
-            "active_planet_name": str(homeworld.get("name") or ""),
+            "active_planet_name": str((homeworld or {}).get("name") or ""),
         }
     except Exception:
         rollback(conn)

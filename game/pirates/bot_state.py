@@ -37,6 +37,18 @@ FACTION_PLAYTIME: Dict[str, Dict[str, Any]] = {
         "skip_chance_pct": 15,
         "personality": "swarm",
     },
+    "ash_raiders": {
+        "playtime_start_min": 0,
+        "playtime_end_min": 1440,
+        "skip_chance_pct": 10,
+        "personality": "elite",
+    },
+    "salt_cartel": {
+        "playtime_start_min": 300,
+        "playtime_end_min": 1260,
+        "skip_chance_pct": 14,
+        "personality": "economy",
+    },
 }
 
 

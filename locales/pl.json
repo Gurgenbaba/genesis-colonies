@@ -6316,5 +6316,15 @@
   "shop_kind_timekeeper": "TIMEKEEPER",
   "shop_kind_supply": "SUPPLY",
   "shop_featured_tag": "WYROZNIONE",
-  "shop_packs_title": "Paczki zaopatrzenia"
+  "shop_packs_title": "Paczki zaopatrzenia",
+  "fleet_ship_planet_breaker": "Łamacz Planet",
+  "fleet_ship_planet_breaker_desc": "Kadłub oblężniczy niszczący kolonię AI po całkowitym wipe wojskowym. Zużywany przy sukcesie.",
+  "fleet_role_siege": "Oblężenie",
+  "combat_ai_colony_destroyed": "Kolonia AI zniszczona",
+  "pirate_faction_ash_raiders": "Ash Raiders",
+  "pirate_faction_ash_raiders_desc": "Elitarni najeźdźcy — ciężkie floty.",
+  "pirate_commander_ash": "Władca Popiołu",
+  "pirate_faction_salt_cartel": "Salt Cartel",
+  "pirate_faction_salt_cartel_desc": "Kartel handlowy — defensywny i gospodarczy.",
+  "pirate_commander_salt": "Baron Soli"
 }

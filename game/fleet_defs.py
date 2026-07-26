@@ -103,6 +103,7 @@ ACTIVE_SHIP_KEYS: FrozenSet[str] = frozenset(
         "seed_ark",
         "deep_vault_ark",
         "eclipse_runner",
+        "planet_breaker",
     }
 )
 
@@ -112,6 +113,7 @@ SHIP_ROLE_DISPLAY_ORDER: Tuple[str, ...] = (
     "expedition",
     "expedition_combat",
     "combat",
+    "siege",
     "scout",
     "spy",
     "recycle",
@@ -340,6 +342,26 @@ SHIPS: Dict[str, Dict[str, Any]] = {
             "buildings": {"orbital_shipyard": 7},
             "research": {"engine_tech": 7, "shield_tech": 5},
         },
+    },
+    "planet_breaker": {
+        "name_key": "fleet_ship_planet_breaker",
+        "description_key": "fleet_ship_planet_breaker_desc",
+        "role": "siege",
+        "required_shipyard_level": 8,
+        "requirements": {
+            "buildings": {"orbital_shipyard": 8, "command_center": 6, "barracks": 4},
+            "research": {"weapon_tech": 8, "engine_tech": 6, "energy_tech": 6},
+        },
+        "build_cost": {"metal": 250000, "crystal": 150000, "fuel_cells": 80000},
+        "build_seconds": 260,
+        "speed": 800,
+        "cargo": 500,
+        "fuel": 500,
+        "attack": 120,
+        "shield": 80,
+        "hull": 12000,
+        "rapid_fire_targets": {},
+        "crew": 80,
     },
 }
 

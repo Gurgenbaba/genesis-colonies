@@ -6316,5 +6316,15 @@
   "shop_kind_timekeeper": "TIMEKEEPER",
   "shop_kind_supply": "SUPPLY",
   "shop_featured_tag": "DESTACADO",
-  "shop_packs_title": "Packs de suministro"
+  "shop_packs_title": "Packs de suministro",
+  "fleet_ship_planet_breaker": "Destructor Planetario",
+  "fleet_ship_planet_breaker_desc": "Casco de asedio que puede destruir una colonia IA tras un wipe militar total. Se consume al destruir.",
+  "fleet_role_siege": "Asedio",
+  "combat_ai_colony_destroyed": "Colonia IA destruida",
+  "pirate_faction_ash_raiders": "Ash Raiders",
+  "pirate_faction_ash_raiders_desc": "Asaltantes de élite — flotas pesadas.",
+  "pirate_commander_ash": "Señor de la Ceniza",
+  "pirate_faction_salt_cartel": "Salt Cartel",
+  "pirate_faction_salt_cartel_desc": "Cártel comercial — defensivo y económico.",
+  "pirate_commander_salt": "Barón de la Sal"
 }

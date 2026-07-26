@@ -3058,6 +3058,23 @@ def send_fleet(
                     now=now,
                 )
 
+        # GC-P23: inbound attack on living AI → panic fleet-save.
+        if mission == "attack" and target_planet_id:
+            try:
+                from .pirates.ambush import maybe_fleet_save_on_inbound_attack
+
+                maybe_fleet_save_on_inbound_attack(
+                    conn,
+                    attacker_id=int(player_id),
+                    target_planet_id=int(target_planet_id),
+                    now=now,
+                )
+            except Exception:
+                logger.exception(
+                    "pirate fleet-save inbound hook failed target_planet=%s",
+                    target_planet_id,
+                )
+
         if own:
             commit(conn)
 
@@ -3672,6 +3689,45 @@ def _handle_attack_arrival(movement: Dict[str, Any], *, conn, now: float) -> boo
                 )
             except Exception:
                 logger.exception("combat hall of fame record failed movement_id=%s", movement_id)
+
+            # GC-P24/P31: colony destroy (breaker + full wipe + non-homeworld).
+            if target_id and not bot_fight:
+                try:
+                    from .pirates.destroy import (
+                        maybe_destroy_colony_after_combat,
+                        note_combat_vs_bot_bounty,
+                    )
+
+                    try:
+                        note_combat_vs_bot_bounty(
+                            conn,
+                            attacker_id=int(player_id),
+                            defender_id=int(defender_id),
+                            now=float(now),
+                        )
+                    except Exception:
+                        logger.exception("combat vs bot bounty failed")
+
+                    wipe = maybe_destroy_colony_after_combat(
+                        conn,
+                        attacker_id=int(player_id),
+                        defender_id=int(defender_id),
+                        target_planet_id=int(target_id),
+                        combat_result=combat_result,
+                        return_ships=return_ships,
+                        movement_id=movement_id,
+                        now=float(now),
+                    )
+                    if wipe.get("ok") and wipe.get("return_ships") is not None:
+                        return_ships = dict(wipe["return_ships"])
+                        conn.execute(
+                            "UPDATE fleet_movements SET ships_json = ?, updated_at = ? WHERE id = ?;",
+                            (_json_dumps(return_ships), float(now), int(movement_id)),
+                        )
+                except Exception:
+                    logger.exception(
+                        "ai colony destroy hook failed movement_id=%s", movement_id
+                    )
 
             if bot_fight:
                 try:

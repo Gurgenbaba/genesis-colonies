@@ -2363,6 +2363,9 @@
   const NOTIFICATION_POLL_MS = 12000;
   const NOTIFICATION_POLL_HIDDEN_MS = 20000;
   const NOTIFICATION_GAME_STATE_DEDUP_MS = 5500;
+  /** Bound hung polls so a blocked Railway/SQLite worker cannot freeze the tab forever. */
+  const GAME_STATE_FETCH_TIMEOUT_MS = 15000;
+  const NOTIFICATION_POLL_TIMEOUT_MS = 12000;
   const _notificationPoll = {
     running: false,
     timeoutId: null,
@@ -2491,6 +2494,9 @@
       const ctrl = new AbortController();
       n.abort = ctrl;
       n.inFlight = true;
+      const fetchTimeoutId = setTimeout(() => {
+        try { ctrl.abort(); } catch (_) {}
+      }, NOTIFICATION_POLL_TIMEOUT_MS);
       try {
         const data = await GC.fetchJSON("/api/notifications/summary", {
           cache: "no-store",
@@ -2502,6 +2508,7 @@
           console.debug("[GC] notification poll failed", err);
         }
       } finally {
+        clearTimeout(fetchTimeoutId);
         n.inFlight = false;
         n.abort = null;
         if (n.running && shouldPollGameState() && !_authLoopAborted) {
@@ -13908,6 +13915,9 @@
     p.abort = ctrl;
     const stateGenAtStart = _clientStateGen;
     const fetchSeq = ++_gameStateFetchSeq;
+    const fetchTimeoutId = setTimeout(() => {
+      try { ctrl.abort(); } catch (_) {}
+    }, GAME_STATE_FETCH_TIMEOUT_MS);
 
     let resolveFlight;
     const flight = new Promise((resolve) => {
@@ -13995,6 +14005,7 @@
         resolveFlight(null);
         return null;
       } finally {
+        clearTimeout(fetchTimeoutId);
         p.inFlight = false;
         p.abort = null;
         if (_activeRefreshFlightResolve === resolveFlight) {

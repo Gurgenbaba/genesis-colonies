@@ -43,18 +43,43 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
 
     Runs only on cron sources with the fleet worker connection — never opens a
     second writer during live page loads (SQLite lock safety).
+
+    Stages commit separately so one long pirate play-loop cannot hold
+    BEGIN IMMEDIATE across the entire maintenance bag (Railway hang after idle).
     """
     if not _is_background_maintenance_source(source):
         return
-    try:
-        begin_write_transaction(conn)
+
+    budget_sec = float(os.environ.get("GC_POST_FLEET_MAINTENANCE_BUDGET_SEC", "25"))
+    started = time.perf_counter()
+
+    def _over_budget() -> bool:
+        return (time.perf_counter() - started) >= budget_sec
+
+    def _run_stage(name: str, fn) -> None:
+        if _over_budget():
+            _worker_log(f"post-maint skip={name} budget_sec={budget_sec}")
+            return
         try:
+            begin_write_transaction(conn)
+            try:
+                fn()
+                commit(conn)
+            except Exception:
+                rollback(conn)
+                raise
+        except Exception:
+            logger.exception("post fleet maintenance stage failed source=%s stage=%s", source, name)
+
+    try:
+        def _hof() -> None:
             from .combat_hof import maybe_sync_combat_hof_incremental
 
             hof_sync = maybe_sync_combat_hof_incremental(conn=conn)
             if hof_sync.get("inserted"):
                 _worker_log(f"hof-sync inserted={hof_sync.get('inserted')}")
 
+        def _combat_bots() -> None:
             from .combat_balance_bots import maybe_run_next_scheduled_scenario
 
             bot_result = maybe_run_next_scheduled_scenario(conn=conn)
@@ -64,6 +89,7 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
                     f"fleet={bot_result.get('fleet_movement_id')}"
                 )
 
+        def _world_boss() -> None:
             from .world_boss import maybe_tick_world_boss_schedule
 
             wb_tick = maybe_tick_world_boss_schedule(conn=conn)
@@ -73,6 +99,7 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
                     f"spawned={wb_tick.get('spawned_event_id')}"
                 )
 
+        def _asteroids() -> None:
             from .asteroids import maybe_tick_asteroid_schedule
 
             ast_tick = maybe_tick_asteroid_schedule(conn=conn)
@@ -82,29 +109,38 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
                     f"spawned={len(ast_tick.get('spawned') or [])}"
                 )
 
+        def _pirates() -> None:
             from .pirates.bases import maybe_tick_pirate_bases
 
             pirate_tick = maybe_tick_pirate_bases(conn=conn)
+            play = pirate_tick.get("play_loop") or {}
             if (
                 pirate_tick.get("expired_ids")
                 or pirate_tick.get("escalated_ids")
                 or pirate_tick.get("spawned")
+                or play.get("count")
             ):
                 _worker_log(
                     f"pirates expired={pirate_tick.get('expired_ids')} "
                     f"escalated={pirate_tick.get('escalated_ids')} "
-                    f"spawned={pirate_tick.get('spawned')}"
+                    f"spawned={pirate_tick.get('spawned')} "
+                    f"play_steps={play.get('count')} "
+                    f"play_active={play.get('active')}"
                 )
 
+        def _debris() -> None:
             from .combat import expire_due_debris_fields
 
             debris_expired = expire_due_debris_fields(conn=conn)
             if debris_expired:
                 _worker_log(f"debris expired={debris_expired}")
-            commit(conn)
-        except Exception:
-            rollback(conn)
-            raise
+
+        _run_stage("hof", _hof)
+        _run_stage("combat_bots", _combat_bots)
+        _run_stage("world_boss", _world_boss)
+        _run_stage("asteroids", _asteroids)
+        _run_stage("pirates", _pirates)
+        _run_stage("debris", _debris)
     except Exception:
         logger.exception("post fleet maintenance failed source=%s", source)
 

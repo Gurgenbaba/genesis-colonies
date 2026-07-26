@@ -6316,5 +6316,15 @@
   "shop_kind_timekeeper": "TIMEKEEPER",
   "shop_kind_supply": "SUPPLY",
   "shop_featured_tag": "FEATURED",
-  "shop_packs_title": "Supply Packs"
+  "shop_packs_title": "Supply Packs",
+  "fleet_ship_planet_breaker": "Planetenbrecher",
+  "fleet_ship_planet_breaker_desc": "Belagerungsschiff, das eine KI-Kolonie nach totalem Militär-Wipe zerstören kann. Wird bei Erfolg verbraucht.",
+  "fleet_role_siege": "Belagerung",
+  "combat_ai_colony_destroyed": "KI-Kolonie zerstört",
+  "pirate_faction_ash_raiders": "Ash Raiders",
+  "pirate_faction_ash_raiders_desc": "Elite-Raider — schwere Flotten, harte Angriffe.",
+  "pirate_commander_ash": "Aschenfürst",
+  "pirate_faction_salt_cartel": "Salt Cartel",
+  "pirate_faction_salt_cartel_desc": "Handelskartell — defensiv, wirtschaftsstark.",
+  "pirate_commander_salt": "Salzbaron"
 }

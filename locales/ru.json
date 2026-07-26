@@ -6316,5 +6316,15 @@
   "shop_kind_timekeeper": "TIMEKEEPER",
   "shop_kind_supply": "SUPPLY",
   "shop_featured_tag": "ИЗБРАННОЕ",
-  "shop_packs_title": "Снабжение"
+  "shop_packs_title": "Снабжение",
+  "fleet_ship_planet_breaker": "Разрушитель Планет",
+  "fleet_ship_planet_breaker_desc": "Осадный корабль, уничтожающий колонию ИИ после полного военного вайпа. Расходуется при успехе.",
+  "fleet_role_siege": "Осада",
+  "combat_ai_colony_destroyed": "Колония ИИ уничтожена",
+  "pirate_faction_ash_raiders": "Ash Raiders",
+  "pirate_faction_ash_raiders_desc": "Элитные рейдеры — тяжёлые флоты.",
+  "pirate_commander_ash": "Повелитель Пепла",
+  "pirate_faction_salt_cartel": "Salt Cartel",
+  "pirate_faction_salt_cartel_desc": "Торговый картель — оборона и экономика.",
+  "pirate_commander_salt": "Соляной Барон"
 }

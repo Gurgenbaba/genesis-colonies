@@ -2,7 +2,7 @@
 
 Galaxy Heat, pirate factions/bases, player-like AI raids (Spy→Intel→Attack), Threat/Bounty, galaxy crises, Admin Bot-Log + Kill-Switch.
 
-**Status:** ✅ EPIC-21 shipped (GC-P00…GC-P19 living bots)  
+**Status:** ✅ EPIC-21 shipped (GC-P00…GC-P20) · Phase 2 in progress (GC-P21…GC-P25 living economy + colony destroy)  
 **Owner:** `game/pirates/`  
 **Epic:** EPIC-21 — Pirate Ecosystem (Living Threat)
 
@@ -36,7 +36,7 @@ Pirates act through canonical player actions only: spy/scout, attack, recycle, h
 
 ### Fairness
 
-Outbound fleets come from **base strength templates + home hangar caps**. Flight times use `fleet_calc`. No instant jumps, no ignore-defense. Soft-On stocks a thin home hangar (faction stacks + probes/reclaimers) so bots appear in ranking with fleet score — not unlimited cheat hangars.
+Outbound fleets come from **base opportunity targeting + real home hangar fractions** (living economy). Flight times use `fleet_calc`. No instant jumps, no ignore-defense. Soft-On stocks a **utility** hangar (probes/reclaimers/Seed Ark) plus a one-time resource seed — combat ships are produced via shipyard queues, not unlimited cheat restock.
 
 ### Destroy
 
@@ -64,12 +64,28 @@ When AI is on, faction bots participate via canonical fleets:
 
 | Heat | Behavior |
 |------|----------|
-| Soft-On (any heat) | 4 bots exist in Ranking/Galaxy/PlayerCard with home hangars (+ Seed Ark) |
+| Soft-On (any heat) | 4 bots exist in Ranking/Galaxy/PlayerCard with utility hangars (+ Seed Ark) + resource seed |
 | ≥150 Patrol | Real `spy` missions from homeworlds → arrival writes `pirate_intel` |
 | ≥150 Colonize | Real `colonize` with `seed_ark` to free classic slots (soft cap 3 planets/bot) |
-| ≥300 Raids | Attacks from live bases **and** homeworlds (budget fill) |
+| ≥300 Raids | Attacks from live bases **and** homeworlds using **real hangar fractions** (no template overwrite) |
 | ≥150 + debris | Opportunistic `recycle` (max 1/tick) |
 | Planet floor | Always ≥1 planet; restore homeworld if wiped (`bot_planet_floor`) |
+
+### Living economy (GC-P21–P23) + player loop (GC-P26–P28)
+
+Owner: `game/pirates/economy.py` + `game/pirates/play_loop.py` — Soft-On tick runs `run_play_loop_tick` (one player-like step per bot), then secondary base raids / recycle.
+
+| Concern | Behavior |
+|---------|----------|
+| Bootstrap | One-time resource + fuel seed; **one-time** utility fleet seed (`utility_seeded`) — never per-tick combat restock |
+| Tick | Priority: economy → rebuild → spy → raid → colonize (personality reserves); **round-robin ≤2 bots/tick** (`GC_PIRATE_PLAY_BOTS_PER_TICK`) so HTTP cron cannot starve Railway’s single SQLite worker |
+| Progress | Mines → CC/Lab → OS/Barracks/DF → research gates → ships/defense by personality |
+| Raids | `_raid_fleet_from_hangar` — never `set_planet_ships` template wipe; home raids via play loop |
+| Fleet-save | Inbound human attack on AI planet → `panic_recall_faction_fleets` (`inbound_attack`) |
+
+### Colony destroy (GC-P24 / GC-P31)
+
+Moon-analog (no moons in GC): after attacker win + hangar/defense fully wiped + `planet_breaker` in returning fleet + target is **non-homeworld** → `destroy_colony_planet`. Works for **AI and human** colonies. Consumes breaker; AI wipe raises bounty + heat + recolonize cooldown; human wipe logs `colony_destroyed` + threat. Homeworld never destroyable; planet floor keeps AI ≥1 planet.
 
 Force Spawn (admin) bypasses heat gate for LiveOps testing without changing threshold design.
 
@@ -123,7 +139,7 @@ Heat sources: combat, expedition finish, asteroid harvest, world-boss damage, co
 
 ---
 
-## Factions (v1)
+## Factions (v1 + Phase 3)
 
 | Key | Role |
 |-----|------|
@@ -131,16 +147,20 @@ Heat sources: combat, expedition finish, asteroid harvest, world-boss damage, co
 | `iron_collective` | Armor, slow, strong base, low loot |
 | `void_cult` | Spy/infiltration bias |
 | `nomad_swarm` | Many small ships |
+| `ash_raiders` | Elite heavy strikes |
+| `salt_cartel` | Economy / turtle cartel |
+
+Homes are **distributed** across Galaxy 1 systems `100 / 200 / 300 / 400 / 450 / 480` (not a single campable belt).
 
 Personality + playtime live in `pirate_faction_defs.personality_json` and `pirate_bot_state` (GC-P09).  
-Bounty: `player_bounty` rises on base damage/destroy; raid brain prefers high-bounty revenge targets (GC-P10). Galaxy inspector shows viewer bounty for the base’s faction.
+Bounty: `player_bounty` rises on base damage/destroy and AI colony wipe; raid brain prefers high-bounty revenge targets (GC-P10 / GC-P29). Galaxy inspector shows viewer bounty for the base’s faction.
 
 ### AI visibility (human-facing)
 
 Faction bots (`gc_pirate_*`) are **real player rows** and appear in:
 
 - Ranking (with `is_ai` + AI badge; never shown as inactive)
-- Galaxy (homeworlds in belt `1:490–491`, AI status chip)
+- Galaxy (distributed homeworlds, AI status chip)
 - PlayerCard (`player_mode=ai_pirate`, personality/mode keys, no whisper/message/edit)
 
 Identity owner: `game/pirates/accounts.py` (`get_pirate_ai_profile`, `pirate_ai_profiles_by_ids`, `ensure_bot_planet_floor`).
@@ -162,6 +182,17 @@ Identity owner: `game/pirates/accounts.py` (`get_pirate_ai_profile`, `pirate_ai_
 | GC-P16–P18 | Directives, LiveOps dashboard, E2E ship-gate | **done** |
 | GC-P19 | Living bots: Soft-On bootstrap, patrol spy, home raids, recycle, force-spawn | **done** |
 | GC-P20 | Colonize via Seed Ark + planet floor (≥1) | **done** |
+| GC-P21 | Living economy planner + bootstrap resource seed; utility hangar only | **done** |
+| GC-P22 | Research + shipyard progress; hangar-fraction raids (no template overwrite) | **done** |
+| GC-P23 | Defense build + inbound fleet-save | **done** |
+| GC-P24 | AI colony destroy (`planet_breaker`) + bounty/heat | **done** |
+| GC-P25 | Balance / LiveOps / ship-gate doc pass | **done** |
+| GC-P26 | Player-loop brain (`play_loop`: economy→rebuild→spy→raid→colonize) | **done** |
+| GC-P27 | Cheat teardown: utility/fuel one-time seed only | **done** |
+| GC-P28 | Economy depth + personality reserves / colony parity | **done** |
+| GC-P29 | Anti-farm bounty/heat + wipe recolonize cooldown | **done** |
+| GC-P30 | Ash Raiders + Salt Cartel; distributed homes | **done** |
+| GC-P31 | Human colony destroy + docs/tests/ship-gate | **done** |
 
 ---
 
@@ -176,7 +207,8 @@ Feature is live for players **and**:
 5. All raids use `simulate_battle` + visible ETA  
 6. Heat ≥700 can start `pirate_war` (does not stomp other emergencies)  
 7. Expo pirate loss can plant timed infiltration; smugglers spawn in hot galaxies  
-8. Soft-On bootstraps 4 AI commanders with hangars; patrol spies at Heat ≥150; home raids at ≥300  
-9. Soft-On stocks Seed Ark; colonize at Heat ≥150; planet floor restores ≥1 colony if wiped  
+8. Soft-On bootstraps **6** AI commanders with **one-time utility** hangars + resource/fuel seed; play-loop tick builds/researches/ships/defense then spies/raids/colonizes; patrol spies at Heat ≥150; home raids at ≥300 from real hangars  
+9. Soft-On stocks Seed Ark; colonize at Heat ≥150; planet floor restores ≥1 colony if wiped; colony soft-cap per bot  
+10. Inbound attack on AI → fleet-save recall; colony wipe (AI **or** human non-homeworld) requires `planet_breaker` + full military wipe (homeworld protected) 
 
-**LiveOps enable:** run migrations through `108_pirate_war_emergency.sql`, then Soft-On AI in Admin → Pirate Bot-Log. Use **Force Spawn** if Heat is still below 150.
+**LiveOps enable:** run migrations through `114_pirate_phase3_factions.sql`, then Soft-On AI in Admin → Pirate Bot-Log. Use **Force Spawn** if Heat is still below 150.

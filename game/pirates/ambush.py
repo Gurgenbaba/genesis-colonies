@@ -94,3 +94,40 @@ def panic_recall_faction_fleets(
         payload={"recalled": recalled, "failed": failed, "reason": reason},
     )
     return {"ok": True, "recalled": recalled, "failed": failed, "player_id": pid}
+
+
+def maybe_fleet_save_on_inbound_attack(
+    conn,
+    *,
+    attacker_id: int,
+    target_planet_id: int,
+    now: Optional[float] = None,
+) -> Dict[str, Any]:
+    """When a human attacks a living AI planet, panic-recall the bot's outbound fleets."""
+    from .accounts import FACTION_BOTS, faction_key_for_username, is_pirate_bot_player
+
+    _ = now
+    cur = conn.execute(
+        "SELECT player_id FROM planets WHERE id = ? LIMIT 1;",
+        (int(target_planet_id),),
+    )
+    row = cur.fetchone()
+    if not row:
+        return {"ok": False, "error": "planet_missing"}
+    defender_id = int(row["player_id"])
+    if defender_id == int(attacker_id):
+        return {"ok": False, "error": "self"}
+    if not is_pirate_bot_player(defender_id, conn=conn):
+        return {"ok": False, "error": "not_ai"}
+
+    cur = conn.execute("SELECT username FROM users WHERE id = ? LIMIT 1;", (defender_id,))
+    urow = cur.fetchone()
+    faction_key = faction_key_for_username(str((urow or {"username": ""})["username"] or ""))
+    if not faction_key or faction_key not in FACTION_BOTS:
+        return {"ok": False, "error": "faction_missing"}
+
+    return panic_recall_faction_fleets(
+        conn,
+        faction_key=faction_key,
+        reason="inbound_attack",
+    )
