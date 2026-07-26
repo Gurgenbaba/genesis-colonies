@@ -267,7 +267,7 @@ body.gc-body-ingame.gc-has-planet-landscape .gc-nav-sub-link.active {
   background: linear-gradient(90deg, rgba(70, 229, 255, 0.18) 0%, rgba(70, 229, 255, 0.07) 100%);
 }
 
-body.gc-body-ingame.gc-has-planet-landscape .gc-panel,
+body.gc-body-ingame.gc-has-planet-landscape .gc-panel:not(.gc-planet-hero),
 body.gc-body-ingame.gc-has-planet-landscape .section-header {
   background: var(--gc-panel-bg);
   box-shadow:
@@ -276,7 +276,7 @@ body.gc-body-ingame.gc-has-planet-landscape .section-header {
     0 10px 30px rgba(0, 0, 0, 0.38);
 }
 
-body.gc-body-ingame.gc-has-planet-landscape .gc-panel::before {
+body.gc-body-ingame.gc-has-planet-landscape .gc-panel:not(.gc-planet-hero)::before {
   opacity: 0.1;
 }
 
@@ -5908,7 +5908,8 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   outline: none;
   border-radius: 0;
   box-shadow: none;
-  background: transparent;
+  /* Opaque void behind frame PNG ? never show page landscape / panel fill past the bezel */
+  background: #020810;
   padding: 0;
   width: 100%;
   margin-left: auto;
@@ -5942,7 +5943,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 }
 .overview-hero--themed.gc-planet-hero{
   border-color: transparent;
-  background: transparent;
+  background: #020810;
 }
 body.gc-body-ingame.gc-has-planet-landscape .gc-planet-hero.gc-panel,
 body.gc-body-ingame.gc-has-planet-landscape .overview-hero--themed.gc-planet-hero,
@@ -5950,8 +5951,9 @@ body.gc-body-ingame .overview-hero.overview-hero--themed.gc-planet-hero.gc-panel
   border: none;
   outline: none;
   box-shadow: none;
-  background: transparent;
+  background: #020810;
   padding: 0;
+  animation: none;
 }
 /* gc-panel scanlines would steal pseudo-elements ? planet HUD uses real layers */
 .gc-planet-hero.gc-panel::before,
@@ -22956,7 +22958,7 @@ body.gc-body-ingame.gc-has-planet-landscape[data-identity-theme]:not([data-ident
     inset -3px 0 0 rgb(var(--gc-id-rgb)),
     0 0 22px rgba(var(--gc-id-rgb), 0.12);
 }
-body.gc-body-ingame.gc-has-planet-landscape[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-panel,
+body.gc-body-ingame.gc-has-planet-landscape[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-panel:not(.gc-planet-hero),
 body.gc-body-ingame.gc-has-planet-landscape[data-identity-theme]:not([data-identity-theme="cyan"]) .section-header {
   background: var(--gc-panel-bg);
   border-color: rgba(var(--gc-id-rgb), 0.55);
@@ -23051,7 +23053,7 @@ body.gc-body-ingame.gc-has-planet-landscape[data-identity-theme]:not([data-ident
   box-shadow: 0 0 16px rgba(var(--gc-id-rgb), 0.45);
   font-weight: 700;
 }
-.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-panel,
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-panel:not(.gc-planet-hero),
 .gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .section-header {
   border: 1px solid rgba(var(--gc-id-rgb), 0.55);
   background: linear-gradient(
@@ -23065,7 +23067,7 @@ body.gc-body-ingame.gc-has-planet-landscape[data-identity-theme]:not([data-ident
     0 0 0 1px rgba(0, 0, 0, 0.35),
     0 0 28px rgba(var(--gc-id-rgb), 0.16);
 }
-.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-panel::before {
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-panel:not(.gc-planet-hero)::before {
   border-color: rgb(var(--gc-id-rgb));
   opacity: 1;
   box-shadow: 0 0 12px rgba(var(--gc-id-rgb), 0.35);
@@ -23114,8 +23116,8 @@ body.gc-body-ingame.gc-has-planet-landscape[data-identity-theme]:not([data-ident
   box-shadow: 0 0 12px rgb(var(--gc-id-rgb));
 }
 
-/* Identity Aura FX — prestige layer on own UI (color stays theme; aura adds glow/rim).
-   Source: equipped player_cards.aura_key → body[data-identity-aura].
+/* Identity Aura FX ? prestige layer on own UI (color stays theme; aura adds glow/rim).
+   Source: equipped player_cards.aura_key ? body[data-identity-aura].
    Specificity: match/beat Identity Theme shell rules so FX stack after color remap. */
 .gc-body-ingame[data-identity-aura="rim_ash"] { --gc-aura-rgb: 170, 178, 190; }
 .gc-body-ingame[data-identity-aura="rim_steel"] { --gc-aura-rgb: 190, 210, 235; }
@@ -23134,7 +23136,7 @@ body.gc-body-ingame.gc-has-planet-landscape[data-identity-theme]:not([data-ident
     inset 3px 0 0 rgba(var(--gc-aura-rgb), 0.55),
     inset 6px 0 0 rgba(var(--gc-aura-rgb), 0.18);
 }
-.gc-body-ingame[data-identity-aura^="rim_"]:not([data-identity-aura="none"]) .gc-panel,
+.gc-body-ingame[data-identity-aura^="rim_"]:not([data-identity-aura="none"]) .gc-panel:not(.gc-planet-hero),
 .gc-body-ingame[data-identity-aura^="rim_"]:not([data-identity-aura="none"]) .section-header {
   border-color: rgba(var(--gc-aura-rgb), 0.38);
   box-shadow:
@@ -23161,7 +23163,7 @@ body.gc-body-ingame.gc-has-planet-landscape[data-identity-theme]:not([data-ident
     inset 4px 0 24px rgba(var(--gc-aura-rgb), 0.22);
   border-right-color: rgba(var(--gc-aura-rgb), 0.35);
 }
-.gc-body-ingame[data-identity-aura^="aura_"]:not([data-identity-aura="none"]) .gc-panel,
+.gc-body-ingame[data-identity-aura^="aura_"]:not([data-identity-aura="none"]) .gc-panel:not(.gc-planet-hero),
 .gc-body-ingame[data-identity-aura^="aura_"]:not([data-identity-aura="none"]) .section-header {
   border-color: rgba(var(--gc-aura-rgb), 0.42);
   box-shadow:
@@ -23189,7 +23191,7 @@ body.gc-body-ingame.gc-has-planet-landscape[data-identity-theme]:not([data-ident
   box-shadow: 0 0 16px rgba(var(--gc-aura-rgb), 0.16);
 }
 @media (prefers-reduced-motion: no-preference) {
-  .gc-body-ingame[data-identity-aura^="aura_"]:not([data-identity-aura="none"]) .gc-panel,
+  .gc-body-ingame[data-identity-aura^="aura_"]:not([data-identity-aura="none"]) .gc-panel:not(.gc-planet-hero),
   .gc-body-ingame[data-identity-aura^="aura_"]:not([data-identity-aura="none"]) .section-header {
     animation: gc-id-aura-pulse 3.6s ease-in-out infinite;
   }
@@ -23197,6 +23199,15 @@ body.gc-body-ingame.gc-has-planet-landscape[data-identity-theme]:not([data-ident
 @keyframes gc-id-aura-pulse {
   0%, 100% { box-shadow: 0 0 0 1px rgba(var(--gc-aura-rgb), 0.28), 0 0 18px rgba(var(--gc-aura-rgb), 0.14); }
   50% { box-shadow: 0 0 0 1px rgba(var(--gc-aura-rgb), 0.42), 0 0 28px rgba(var(--gc-aura-rgb), 0.28); }
+}
+
+/* Overview planet display: never inherit Identity/Aura panel chrome behind the frame */
+.gc-body-ingame .overview-hero.gc-planet-hero.gc-panel,
+.gc-body-ingame .gc-planet-hero.gc-panel {
+  background: #020810;
+  border: none;
+  box-shadow: none;
+  animation: none;
 }
 
 body.gc-player-card-open,
