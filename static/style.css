@@ -36895,6 +36895,18 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   gap: 0;
   padding: 0;
   overflow: hidden;
+  position: relative;
+}
+/* Scanline/raster overlay would sit on top of the alliance logo image */
+.alliance-hub-module.gc-panel::before,
+.alliance-hub-module.gc-panel::after,
+.alliance-hub-visitor.gc-panel::before,
+.alliance-hub-visitor.gc-panel::after,
+.alliance-hub-directory.gc-panel::before,
+.alliance-hub-directory.gc-panel::after,
+.alliance-hub-panel.gc-panel::before,
+.alliance-hub-panel.gc-panel::after {
+  display: none;
 }
 
 /* Profile-first hero ? compact identity strip */
@@ -37840,31 +37852,22 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
 .alliance-hub-logo-frame--md { width: 40px; height: 40px; }
 .alliance-hub-logo-frame--lg { width: 56px; height: 56px; }
 .alliance-hub-logo-frame--hero {
-  /* PE-style visual: larger emblem, framed, not a full-bleed banner */
+  /* Emblem frame: solid plate, image edge-to-edge (no scanline/gradient peek) */
   width: 8.5rem;
   height: 8.5rem;
   max-width: 8.5rem;
   max-height: 8.5rem;
   min-height: 0;
-  padding: 3px;
+  padding: 0;
   border: 1px solid rgba(110, 200, 255, 0.42);
   border-radius: var(--gc-radius-sm, 2px);
-  background:
-    radial-gradient(ellipse at 50% 35%, rgba(110, 200, 255, 0.14) 0%, transparent 62%),
-    linear-gradient(180deg, rgba(18, 28, 40, 0.95) 0%, rgba(0, 0, 0, 0.55) 100%);
+  background: #0a1018;
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.55) inset,
-    0 0 18px rgba(110, 200, 255, 0.12),
-    0 0 2px rgba(110, 200, 255, 0.25);
+    0 0 16px rgba(110, 200, 255, 0.1);
   position: relative;
-}
-.alliance-hub-logo-frame--hero::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  border: 1px solid rgba(110, 200, 255, 0.12);
-  box-shadow: inset 0 0 16px rgba(0, 0, 0, 0.35);
+  isolation: isolate;
+  z-index: 1;
 }
 .alliance-hub-logo-frame--hero .alliance-hub-logo {
   width: 100%;
@@ -37872,12 +37875,17 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   max-width: 100%;
   max-height: 100%;
   object-fit: cover;
+  object-position: center;
   display: block;
+  position: relative;
+  z-index: 1;
 }
 .alliance-hub-logo-frame--hero .alliance-hub-logo-ph {
   width: 100%;
   height: 100%;
   font-size: 1.45rem;
+  position: relative;
+  z-index: 1;
 }
 .alliance-hub-logo {
   display: block;
