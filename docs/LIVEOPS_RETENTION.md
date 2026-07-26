@@ -70,7 +70,7 @@ Default: Inventory time items; direct `timekeeper.credit` only for day-1 welcome
 ### Rules
 
 - Season: configurable length (default 60d), levels 1–50, XP per level (default 100 → **5000 XP** to finish).
-- **Pace target:** normal play finishes around day **45–55**; sweat ~30–35; casual still completable within the season.
+- **Pace target:** daily Ops + drip + weekly → finish around day **28–30**; casual/missed days still completable within the 60d season.
 - XP sources:
   1. **Season Ops** (primary, visible tasks) — claim grants BP XP.
   2. **Passive activity drip** from `activity_xp` — soft-capped at **40 XP/day** (planet XP uncapped).
@@ -83,12 +83,15 @@ Default: Inventory time items; direct `timekeeper.credit` only for day-1 welcome
 
 | Op | Cadence | Target | XP |
 |----|---------|--------|----|
-| `op_build_1` | daily | 1 building finish | 30 |
-| `op_research_1` | daily | 1 account research | 35 |
-| `op_fleet_1` | daily | 1 expedition / spy / recycle | 40 |
-| `op_week_active` | weekly | 8 build/research/expedition | 120 |
+| `op_build_1` | daily | 1 building finish | 40 |
+| `op_research_1` | daily | 1 account research | 45 |
+| `op_fleet_1` | daily | 1 expedition / spy / recycle | 50 |
+| `op_week_active` | weekly | 8 build/research/expedition | 160 |
+
+Daily Ops total **135 XP** + drip **40** + weekly ≈ **23 XP/day** ≈ **~198 XP/day** → Level 50 in ~**28 Tage** bei täglicher Anwesenheit.
 
 Progress hooks from `activity_xp` after a successful grant. Claim via `POST /api/battle-pass/claim-op`.
+Unclaimed op rows sync catalog `xp_reward`/`target` on `ensure_ops_for_period` (pace retunes without waiting for a new period).
 
 ### Schema
 
@@ -102,7 +105,20 @@ Progress hooks from `activity_xp` after a successful grant. Claim via `POST /api
 - `POST /api/battle-pass/claim` → `{ ok, reason, state, battle_pass }`
 - `POST /api/battle-pass/claim-op` → `{ ok, reason, state, battle_pass }`
 - Admin: grant premium entitlement
-- Page: `/premium` (Season Ops panel + tracks)
+- Page: `/premium` (Season Ops panel + **horizontal trackboard**)
+
+### UI — Trackboard (GC-BPUI)
+
+Belohnungs-Tracks on `/premium` use a Fortnite-style horizontal board in Genesis industrial chrome:
+
+- Columns = levels (paged, 6 per page); rows = **Free** (top) + **Premium** (bottom)
+- Card selection updates a detail preview (server-rendered reward HTML cloned client-side)
+- Claim still via `POST /api/battle-pass/claim` (`data-bp-claim`); no client XP/claim math
+- Markers: `data-bp-trackboard`, `data-bp-card`, `data-bp-preview`
+
+### UI — Season Ops cards
+
+Daily Ops render as a **3-card grid** (icons, XP chip, claim CTA); Weekly as a wide card; drip as a compact progress strip. Markers: `battle-pass-op-card`, `data-bp-ops-drip`.
 
 ## Phase 3 — EPIC-23 Payment / Shop
 

@@ -22,66 +22,93 @@
     </p>
   </header>
 
-  {% if lt.ready %}
-  <section class="gc-panel premium-login-teaser">
-    <div class="premium-login-teaser-row">
-      <div>
-        <strong>{{ T("bp_login_teaser_title", "Tägliche Login-Belohnungen") }}</strong>
-        <p class="hint">{{ T("bp_login_teaser_hint", "Separater 30-Tage-Kalender mit Timekeeper & Boxen.") }}</p>
-      </div>
-      <a href="{{ url_for('login_rewards_view') }}" class="gc-btn gc-btn-ghost" data-pjax-link
-         {% if lt.available %}data-lr-available="1"{% endif %}>
-        {% if lt.available %}
-          {{ T("bp_login_teaser_claim", "Claim bereit") }}
-        {% else %}
-          {{ T("bp_login_teaser_open", "Kalender öffnen") }}
-        {% endif %}
-      </a>
-    </div>
-  </section>
-  {% endif %}
-
   {% if not bp.ready %}
   <section class="gc-panel">
     <p>{{ T("bp_unavailable", "Season Pass ist derzeit nicht verfügbar.") }}</p>
   </section>
+  {% if lt.ready %}
+  <section class="gc-panel battle-pass-command-panel battle-pass-command-panel--login-only">
+    <aside class="battle-pass-login-rail{% if lt.available %} is-claimable{% endif %}" data-bp-login-rail>
+      <div class="battle-pass-login-rail-art" aria-hidden="true">📅</div>
+      <div class="battle-pass-login-rail-body">
+        <strong class="battle-pass-login-rail-title">{{ T("bp_login_teaser_title", "Tägliche Login-Belohnungen") }}</strong>
+        <p class="hint battle-pass-login-rail-hint">{{ T("bp_login_teaser_hint", "30-Tage-Kalender · Timekeeper & Boxen") }}</p>
+      </div>
+      <a href="{{ url_for('login_rewards_view') }}"
+         class="gc-btn gc-btn-sm {% if lt.available %}gc-btn-primary{% else %}gc-btn-ghost{% endif %}"
+         data-pjax-link
+         {% if lt.available %}data-lr-available="1"{% endif %}>
+        {% if lt.available %}
+          {{ T("bp_login_teaser_claim", "Claim bereit") }}
+        {% else %}
+          {{ T("bp_login_teaser_open", "Kalender") }}
+        {% endif %}
+      </a>
+    </aside>
+  </section>
+  {% endif %}
   {% else %}
 
-  <section class="gc-panel battle-pass-status-panel">
-    <div class="battle-pass-status-row">
-      <div class="battle-pass-stat">
-        <span class="battle-pass-stat-label">{{ T("bp_level_label", "Level") }}</span>
-        <strong class="gc-mono" data-bp-level>{{ bp.level }}/{{ season.max_level or 50 }}</strong>
-      </div>
-      <div class="battle-pass-stat battle-pass-stat--xp">
-        <span class="battle-pass-stat-label">{{ T("bp_xp_label", "XP") }}</span>
-        <div class="battle-pass-xp-bar" role="progressbar"
-             aria-valuenow="{{ bp.xp_into_level or 0 }}"
-             aria-valuemax="{{ bp.xp_per_level or 100 }}">
-          <span class="battle-pass-xp-fill" data-bp-xp-fill
-                style="width: {% if bp.xp_per_level %}{{ ((bp.xp_into_level or 0) / bp.xp_per_level * 100)|round(1) }}{% else %}0{% endif %}%;"></span>
+  <section class="gc-panel battle-pass-command-panel" data-bp-command>
+    <div class="battle-pass-command">
+      <div class="battle-pass-hud" data-bp-hud>
+        <div class="battle-pass-hud-tile battle-pass-hud-tile--level">
+          <span class="battle-pass-stat-label">{{ T("bp_level_label", "Level") }}</span>
+          <strong class="gc-mono battle-pass-hud-value" data-bp-level>{{ bp.level }}/{{ season.max_level or 50 }}</strong>
         </div>
-        <span class="gc-mono battle-pass-xp-text" data-bp-xp-text>
-          {{ bp.xp_into_level or 0 }}/{{ bp.xp_per_level or 100 }}
-        </span>
+        <div class="battle-pass-hud-tile battle-pass-hud-tile--xp">
+          <div class="battle-pass-hud-xp-head">
+            <span class="battle-pass-stat-label">{{ T("bp_xp_label", "XP") }}</span>
+            <span class="gc-mono battle-pass-xp-text" data-bp-xp-text>
+              {{ bp.xp_into_level or 0 }}/{{ bp.xp_per_level or 100 }}
+            </span>
+          </div>
+          <div class="battle-pass-xp-bar" role="progressbar"
+               aria-valuenow="{{ bp.xp_into_level or 0 }}"
+               aria-valuemax="{{ bp.xp_per_level or 100 }}">
+            <span class="battle-pass-xp-fill" data-bp-xp-fill
+                  style="width: {% if bp.xp_per_level %}{{ ((bp.xp_into_level or 0) / bp.xp_per_level * 100)|round(1) }}{% else %}0{% endif %}%;"></span>
+          </div>
+        </div>
+        <div class="battle-pass-hud-tile battle-pass-hud-tile--track{% if bp.premium_unlocked %} is-premium{% endif %}">
+          <span class="battle-pass-stat-label">{{ T("bp_track_label", "Track") }}</span>
+          <strong class="battle-pass-hud-value" data-bp-premium-label>
+            {% if bp.premium_unlocked %}
+              {{ T("bp_premium_active", "Premium aktiv") }}
+            {% else %}
+              {{ T("bp_free_track", "Free Track") }}
+            {% endif %}
+          </strong>
+        </div>
+        <div class="battle-pass-hud-tile battle-pass-hud-tile--season">
+          <span class="battle-pass-stat-label">{{ T("bp_season_remaining", "Season") }}</span>
+          <strong class="gc-mono battle-pass-hud-value" data-bp-remaining data-remaining-seconds="{{ season.seconds_remaining or 0 }}">
+            {{ season.remaining_label or ((season.seconds_remaining or 0)|fmt_duration) }}
+          </strong>
+        </div>
       </div>
-      <div class="battle-pass-stat">
-        <span class="battle-pass-stat-label">{{ T("bp_track_label", "Track") }}</span>
-        <strong data-bp-premium-label>
-          {% if bp.premium_unlocked %}
-            {{ T("bp_premium_active", "Premium aktiv") }}
+
+      {% if lt.ready %}
+      <aside class="battle-pass-login-rail{% if lt.available %} is-claimable{% endif %}" data-bp-login-rail>
+        <div class="battle-pass-login-rail-art" aria-hidden="true">📅</div>
+        <div class="battle-pass-login-rail-body">
+          <strong class="battle-pass-login-rail-title">{{ T("bp_login_teaser_title", "Tägliche Login-Belohnungen") }}</strong>
+          <p class="hint battle-pass-login-rail-hint">{{ T("bp_login_teaser_hint", "30-Tage-Kalender · Timekeeper & Boxen") }}</p>
+        </div>
+        <a href="{{ url_for('login_rewards_view') }}"
+           class="gc-btn gc-btn-sm {% if lt.available %}gc-btn-primary{% else %}gc-btn-ghost{% endif %}"
+           data-pjax-link
+           {% if lt.available %}data-lr-available="1"{% endif %}>
+          {% if lt.available %}
+            {{ T("bp_login_teaser_claim", "Claim bereit") }}
           {% else %}
-            {{ T("bp_free_track", "Free Track") }}
+            {{ T("bp_login_teaser_open", "Kalender") }}
           {% endif %}
-        </strong>
-      </div>
-      <div class="battle-pass-stat">
-        <span class="battle-pass-stat-label">{{ T("bp_season_remaining", "Season") }}</span>
-        <strong class="gc-mono" data-bp-remaining data-remaining-seconds="{{ season.seconds_remaining or 0 }}">
-          {{ season.remaining_label or ((season.seconds_remaining or 0)|fmt_duration) }}
-        </strong>
-      </div>
+        </a>
+      </aside>
+      {% endif %}
     </div>
+
     {% if not bp.premium_unlocked %}
     {% set sc = shop_checkout if shop_checkout is defined and shop_checkout else {'enabled': false, 'providers': []} %}
     {% set shop_providers = sc.providers if sc.providers is defined else [] %}
@@ -123,43 +150,57 @@
 
   {% set ops = bp.ops if bp.ops is defined and bp.ops else {'daily': [], 'weekly': []} %}
   <section class="gc-panel battle-pass-ops-panel" data-bp-ops>
-    <div class="gc-panel-header">
+    <div class="gc-panel-header battle-pass-ops-header">
       <span class="gc-panel-title">{{ T("bp_ops_title", "Season Ops") }}</span>
+      <span class="battle-pass-ops-pace gc-mono">{{ T("bp_ops_pace", "Daily → Pass ~30 Tage") }}</span>
     </div>
     <p class="hint battle-pass-ops-hint">
-      {{ T("bp_ops_hint", "Machbare Tages- und Wochenziele. Claim gibt Pass-XP — Imperial Directives bleiben separat.") }}
+      {{ T("bp_ops_hint", "Tägliche Ops + Drip: Season Pass in ca. 30 Tagen. Weekly Op als Bonus. Imperial Directives bleiben separat.") }}
     </p>
-    <p class="hint battle-pass-ops-drip gc-mono">
-      {{ T("bp_ops_drip_label", "Passive Pass-XP heute") }}:
-      {{ ops.drip_today or 0 }}/{{ ops.drip_cap or 40 }}
-    </p>
+    <div class="battle-pass-ops-drip" data-bp-ops-drip>
+      <div class="battle-pass-ops-drip-main">
+        <span class="battle-pass-ops-drip-label">{{ T("bp_ops_drip_label", "Passive Pass-XP heute") }}</span>
+        <span class="gc-mono battle-pass-ops-drip-val">{{ ops.drip_today or 0 }}/{{ ops.drip_cap or 40 }}</span>
+      </div>
+      <div class="battle-pass-op-bar battle-pass-ops-drip-bar" role="progressbar"
+           aria-valuenow="{{ ops.drip_today or 0 }}" aria-valuemax="{{ ops.drip_cap or 40 }}">
+        <span class="battle-pass-op-fill"
+              style="width: {% if ops.drip_cap %}{{ ((ops.drip_today or 0) / ops.drip_cap * 100)|round(1) }}{% else %}0{% endif %}%;"></span>
+      </div>
+    </div>
 
     <div class="battle-pass-ops-group">
       <h3 class="battle-pass-ops-group-title">{{ T("bp_ops_daily", "Daily Ops") }}</h3>
-      <div class="battle-pass-ops-list" data-bp-ops-daily>
+      <div class="battle-pass-ops-grid" data-bp-ops-daily>
         {% for op in ops.daily or [] %}
-        <article class="battle-pass-op{% if op.claimable %} is-claimable{% elif op.claimed %} is-claimed{% endif %}"
+        <article class="battle-pass-op-card{% if op.claimable %} is-claimable{% elif op.claimed %} is-claimed{% elif op.complete %} is-complete{% endif %}"
                  data-bp-op="{{ op.op_key }}" data-bp-op-period="{{ op.period_key }}">
-          <div class="battle-pass-op-main">
-            <strong>{{ T(op.title_key, op.op_key) }}</strong>
-            <p class="hint">{{ T(op.hint_key, "") }}</p>
+          <div class="battle-pass-op-card-art" aria-hidden="true">{{ op.icon or '◆' }}</div>
+          <div class="battle-pass-op-card-body">
+            <strong class="battle-pass-op-card-title">{{ T(op.title_key, op.op_key) }}</strong>
+            <p class="hint battle-pass-op-card-hint">{{ T(op.hint_key, "") }}</p>
             <div class="battle-pass-op-bar" role="progressbar"
                  aria-valuenow="{{ op.progress }}" aria-valuemax="{{ op.target }}">
               <span class="battle-pass-op-fill"
                     style="width: {% if op.target %}{{ ((op.progress or 0) / op.target * 100)|round(1) }}{% else %}0{% endif %}%;"></span>
             </div>
-            <span class="gc-mono battle-pass-op-progress">{{ op.progress }}/{{ op.target }} · +{{ op.xp_reward }} XP</span>
+            <div class="battle-pass-op-card-meta">
+              <span class="gc-mono battle-pass-op-progress">{{ op.progress }}/{{ op.target }}</span>
+              <span class="battle-pass-op-xp gc-mono">+{{ op.xp_reward }} XP</span>
+            </div>
           </div>
-          {% if op.claimable %}
-          <button type="button" class="gc-btn gc-btn-sm gc-btn-primary"
-                  data-bp-claim-op="{{ op.op_key }}" data-bp-op-period="{{ op.period_key }}">
-            {{ T("bp_op_claim", "XP claimen") }}
-          </button>
-          {% elif op.claimed %}
-          <span class="battle-pass-claimed">{{ T("bp_claimed", "Abgeholt") }}</span>
-          {% else %}
-          <span class="battle-pass-locked">{{ T("bp_op_in_progress", "In Arbeit") }}</span>
-          {% endif %}
+          <div class="battle-pass-op-card-action">
+            {% if op.claimable %}
+            <button type="button" class="gc-btn gc-btn-sm gc-btn-primary"
+                    data-bp-claim-op="{{ op.op_key }}" data-bp-op-period="{{ op.period_key }}">
+              {{ T("bp_op_claim", "XP claimen") }}
+            </button>
+            {% elif op.claimed %}
+            <span class="battle-pass-claimed">{{ T("bp_claimed", "Abgeholt") }}</span>
+            {% else %}
+            <span class="battle-pass-locked">{{ T("bp_op_in_progress", "In Arbeit") }}</span>
+            {% endif %}
+          </div>
         </article>
         {% else %}
         <p class="hint">{{ T("bp_ops_empty", "Keine Ops aktiv.") }}</p>
@@ -169,30 +210,36 @@
 
     <div class="battle-pass-ops-group">
       <h3 class="battle-pass-ops-group-title">{{ T("bp_ops_weekly", "Weekly Op") }}</h3>
-      <div class="battle-pass-ops-list" data-bp-ops-weekly>
+      <div class="battle-pass-ops-grid battle-pass-ops-grid--weekly" data-bp-ops-weekly>
         {% for op in ops.weekly or [] %}
-        <article class="battle-pass-op{% if op.claimable %} is-claimable{% elif op.claimed %} is-claimed{% endif %}"
+        <article class="battle-pass-op-card battle-pass-op-card--weekly{% if op.claimable %} is-claimable{% elif op.claimed %} is-claimed{% elif op.complete %} is-complete{% endif %}"
                  data-bp-op="{{ op.op_key }}" data-bp-op-period="{{ op.period_key }}">
-          <div class="battle-pass-op-main">
-            <strong>{{ T(op.title_key, op.op_key) }}</strong>
-            <p class="hint">{{ T(op.hint_key, "") }}</p>
+          <div class="battle-pass-op-card-art" aria-hidden="true">{{ op.icon or '★' }}</div>
+          <div class="battle-pass-op-card-body">
+            <strong class="battle-pass-op-card-title">{{ T(op.title_key, op.op_key) }}</strong>
+            <p class="hint battle-pass-op-card-hint">{{ T(op.hint_key, "") }}</p>
             <div class="battle-pass-op-bar" role="progressbar"
                  aria-valuenow="{{ op.progress }}" aria-valuemax="{{ op.target }}">
               <span class="battle-pass-op-fill"
                     style="width: {% if op.target %}{{ ((op.progress or 0) / op.target * 100)|round(1) }}{% else %}0{% endif %}%;"></span>
             </div>
-            <span class="gc-mono battle-pass-op-progress">{{ op.progress }}/{{ op.target }} · +{{ op.xp_reward }} XP</span>
+            <div class="battle-pass-op-card-meta">
+              <span class="gc-mono battle-pass-op-progress">{{ op.progress }}/{{ op.target }}</span>
+              <span class="battle-pass-op-xp gc-mono">+{{ op.xp_reward }} XP</span>
+            </div>
           </div>
-          {% if op.claimable %}
-          <button type="button" class="gc-btn gc-btn-sm gc-btn-primary"
-                  data-bp-claim-op="{{ op.op_key }}" data-bp-op-period="{{ op.period_key }}">
-            {{ T("bp_op_claim", "XP claimen") }}
-          </button>
-          {% elif op.claimed %}
-          <span class="battle-pass-claimed">{{ T("bp_claimed", "Abgeholt") }}</span>
-          {% else %}
-          <span class="battle-pass-locked">{{ T("bp_op_in_progress", "In Arbeit") }}</span>
-          {% endif %}
+          <div class="battle-pass-op-card-action">
+            {% if op.claimable %}
+            <button type="button" class="gc-btn gc-btn-sm gc-btn-primary"
+                    data-bp-claim-op="{{ op.op_key }}" data-bp-op-period="{{ op.period_key }}">
+              {{ T("bp_op_claim", "XP claimen") }}
+            </button>
+            {% elif op.claimed %}
+            <span class="battle-pass-claimed">{{ T("bp_claimed", "Abgeholt") }}</span>
+            {% else %}
+            <span class="battle-pass-locked">{{ T("bp_op_in_progress", "In Arbeit") }}</span>
+            {% endif %}
+          </div>
         </article>
         {% else %}
         <p class="hint">{{ T("bp_ops_empty", "Keine Ops aktiv.") }}</p>
@@ -201,86 +248,222 @@
     </div>
   </section>
 
-  <section class="gc-panel">
+  {# --- Trackboard helpers (Free/Premium reward cards) --- #}
+  {% macro bp_reward_count(bundle) -%}
+    {{- (
+      (bundle['items'] or [])|length
+      + (1 if bundle.timekeeper_sec else 0)
+      + (bundle.themes or [])|length
+      + (bundle.auras or [])|length
+      + (bundle.title_flairs or [])|length
+      + (bundle.badges or [])|length
+    ) -}}
+  {%- endmacro %}
+
+  {% macro bp_primary_label(bundle) -%}
+    {%- if bundle['items'] and bundle['items']|length > 0 -%}
+      {{- T(bundle['items'][0].name_key, bundle['items'][0].item_key) -}}
+      {%- if bundle['items'][0].amount and bundle['items'][0].amount > 1 %} ×{{ bundle['items'][0].amount }}{% endif -%}
+    {%- elif bundle.timekeeper_sec -%}
+      {{- T("bp_preview_timekeeper", "Timekeeper") }} · {{ bundle.timekeeper_sec|fmt_duration -}}
+    {%- elif bundle.themes and bundle.themes|length > 0 -%}
+      {{- T('playercard_theme_' ~ bundle.themes[0], bundle.themes[0]) -}}
+    {%- elif bundle.auras and bundle.auras|length > 0 -%}
+      {{- T('playercard_aura_' ~ bundle.auras[0], bundle.auras[0]) -}}
+    {%- elif bundle.title_flairs and bundle.title_flairs|length > 0 -%}
+      {{- T('playercard_flair_' ~ bundle.title_flairs[0], bundle.title_flairs[0]) -}}
+    {%- elif bundle.badges and bundle.badges|length > 0 -%}
+      {{- T('playercard_badge_' ~ bundle.badges[0], bundle.badges[0]) -}}
+    {%- else -%}
+      {{- T("bp_preview_empty_reward", "Belohnung") -}}
+    {%- endif -%}
+  {%- endmacro %}
+
+  {% macro bp_reward_list(bundle) %}
+  <ul class="battle-pass-reward-list">
+    {% for item in bundle['items'] or [] %}
+    <li class="battle-pass-reward-item" data-rarity="{{ item.rarity or 'common' }}">
+      {% if item.image %}
+      <img class="battle-pass-reward-img" src="{{ item.image }}" alt="" loading="lazy">
+      {% else %}
+      <span class="battle-pass-reward-icon" aria-hidden="true">{{ item.icon or '📦' }}</span>
+      {% endif %}
+      <span class="battle-pass-reward-name">{{ T(item.name_key, item.item_key) }}</span>
+      <span class="battle-pass-reward-amt gc-mono">×{{ item.amount }}</span>
+    </li>
+    {% endfor %}
+    {% if bundle.timekeeper_sec %}
+    <li class="battle-pass-reward-item battle-pass-reward-item--tk">
+      <span class="battle-pass-reward-icon" aria-hidden="true">⚡</span>
+      <span class="battle-pass-reward-name">{{ T("bp_preview_timekeeper", "Timekeeper") }}</span>
+      <span class="battle-pass-reward-amt gc-mono">{{ bundle.timekeeper_sec|fmt_duration }}</span>
+    </li>
+    {% endif %}
+    {% for theme in bundle.themes or [] %}
+    <li class="battle-pass-reward-item">
+      <span class="battle-pass-reward-icon" aria-hidden="true">🎨</span>
+      <span class="battle-pass-reward-name">{{ T('playercard_theme_' ~ theme, theme) }}</span>
+    </li>
+    {% endfor %}
+    {% for aura in bundle.auras or [] %}
+    <li class="battle-pass-reward-item">
+      <span class="battle-pass-reward-icon" aria-hidden="true">◇</span>
+      <span class="battle-pass-reward-name">{{ T('playercard_aura_' ~ aura, aura) }}</span>
+    </li>
+    {% endfor %}
+    {% for flair in bundle.title_flairs or [] %}
+    <li class="battle-pass-reward-item">
+      <span class="battle-pass-reward-icon" aria-hidden="true">◈</span>
+      <span class="battle-pass-reward-name">{{ T('playercard_flair_' ~ flair, flair) }}</span>
+    </li>
+    {% endfor %}
+    {% for badge in bundle.badges or [] %}
+    <li class="battle-pass-reward-item">
+      <span class="battle-pass-reward-icon" aria-hidden="true">🏅</span>
+      <span class="battle-pass-reward-name">{{ T('playercard_badge_' ~ badge, badge) }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endmacro %}
+
+  {% macro bp_card(track, level, bundle, reached, is_current) %}
+  {% set claimable = bundle.claimable %}
+  {% set claimed = bundle.claimed %}
+  {% set locked = bundle.locked if bundle.locked is defined else (not reached) %}
+  {% set count = bp_reward_count(bundle)|int %}
+  {% set rarity = (bundle['items'][0].rarity if bundle['items'] and bundle['items']|length > 0 else 'common') %}
+  <article class="battle-pass-card battle-pass-card--{{ track }}{% if reached %} is-reached{% endif %}{% if claimable %} is-claimable{% endif %}{% if claimed %} is-claimed{% endif %}{% if locked and not claimable and not claimed %} is-locked{% endif %}{% if is_current %} is-current{% endif %}"
+           data-bp-card
+           data-bp-track="{{ track }}"
+           data-bp-level="{{ level }}"
+           data-bp-claimable="{{ '1' if claimable else '0' }}"
+           data-bp-claimed="{{ '1' if claimed else '0' }}"
+           data-bp-locked="{{ '1' if locked and not claimable and not claimed else '0' }}"
+           data-rarity="{{ rarity }}"
+           tabindex="0"
+           role="button"
+           aria-pressed="false"
+           aria-label="{{ T('bp_card_aria', 'Level {n} {track}').replace('{n}', level|string).replace('{track}', T('bp_' ~ track, track)) }}">
+    <span class="battle-pass-card-art" aria-hidden="true">
+      {% if bundle['items'] and bundle['items']|length > 0 and bundle['items'][0].image %}
+      <img src="{{ bundle['items'][0].image }}" alt="" loading="lazy">
+      {% elif bundle['items'] and bundle['items']|length > 0 %}
+      <span class="battle-pass-card-icon">{{ bundle['items'][0].icon or '📦' }}</span>
+      {% elif bundle.timekeeper_sec %}
+      <span class="battle-pass-card-icon">⚡</span>
+      {% elif bundle.themes and bundle.themes|length > 0 %}
+      <span class="battle-pass-card-icon">🎨</span>
+      {% elif bundle.auras and bundle.auras|length > 0 %}
+      <span class="battle-pass-card-icon">◇</span>
+      {% elif bundle.title_flairs and bundle.title_flairs|length > 0 %}
+      <span class="battle-pass-card-icon">◈</span>
+      {% elif bundle.badges and bundle.badges|length > 0 %}
+      <span class="battle-pass-card-icon">🏅</span>
+      {% else %}
+      <span class="battle-pass-card-icon">📦</span>
+      {% endif %}
+      {% if count > 1 %}
+      <span class="battle-pass-card-count gc-mono">+{{ count - 1 }}</span>
+      {% endif %}
+    </span>
+    <span class="battle-pass-card-title">{{ bp_primary_label(bundle) }}</span>
+    <span class="battle-pass-card-state">
+      {% if claimable %}
+        {{ T("bp_claimable", "Bereit") }}
+      {% elif claimed %}
+        {{ T("bp_claimed", "Abgeholt") }}
+      {% elif locked and track == 'premium' and bundle.locked %}
+        {{ T("bp_premium_locked", "Premium nötig") }}
+      {% else %}
+        {{ T("bp_locked", "Gesperrt") }}
+      {% endif %}
+    </span>
+    {% if claimed %}
+    <span class="battle-pass-card-check" aria-hidden="true">✓</span>
+    {% elif locked and not claimable %}
+    <span class="battle-pass-card-lock" aria-hidden="true">⌁</span>
+    {% endif %}
+    <div class="battle-pass-card-detail" hidden data-bp-card-detail>
+      <header class="battle-pass-preview-head">
+        <span class="battle-pass-preview-meta gc-mono">
+          {{ T("bp_preview_level", "Level {n}").replace("{n}", level|string) }}
+          · {{ T("bp_" ~ track, track) }}
+        </span>
+        <strong class="battle-pass-preview-title">{{ bp_primary_label(bundle) }}</strong>
+        {% if rarity and rarity != 'common' %}
+        <span class="battle-pass-preview-rarity" data-rarity="{{ rarity }}">{{ rarity|upper }}</span>
+        {% endif %}
+      </header>
+      {{ bp_reward_list(bundle) }}
+      <footer class="battle-pass-preview-actions">
+        {% if claimable %}
+        <button type="button" class="gc-btn gc-btn-sm gc-btn-primary"
+                data-bp-claim="{{ track }}" data-bp-level="{{ level }}">
+          {{ T("bp_claim", "Claim") }}
+        </button>
+        {% elif claimed %}
+        <span class="battle-pass-claimed">{{ T("bp_claimed", "Abgeholt") }}</span>
+        {% elif locked and track == 'premium' and bundle.locked %}
+        <span class="battle-pass-locked">{{ T("bp_premium_locked", "Premium nötig") }}</span>
+        {% else %}
+        <span class="battle-pass-locked">{{ T("bp_locked", "Gesperrt") }}</span>
+        {% endif %}
+      </footer>
+    </div>
+  </article>
+  {% endmacro %}
+
+  <section class="gc-panel battle-pass-tracks-panel">
     <div class="gc-panel-header">
       <span class="gc-panel-title">{{ T("bp_tracks_title", "Belohnungs-Tracks") }}</span>
     </div>
-    <div class="battle-pass-tracks" data-bp-tracks>
-      {% for row in levels %}
-      <article class="battle-pass-level{% if row.reached %} is-reached{% endif %}" data-bp-level-row="{{ row.level }}">
-        <div class="battle-pass-level-num gc-mono">{{ row.level }}</div>
-        <div class="battle-pass-track battle-pass-track--free"
-             data-bp-track="free"
-             data-bp-level="{{ row.level }}">
-          <span class="battle-pass-track-label">{{ T("bp_free", "Free") }}</span>
-          <ul class="battle-pass-reward-list">
-            {% for item in row.free['items'] %}
-            <li>{{ item.icon or '📦' }} {{ T(item.name_key, item.item_key) }} ×{{ item.amount }}</li>
+    <div class="battle-pass-trackboard-layout" data-bp-tracks>
+      <div class="battle-pass-trackboard"
+           data-bp-trackboard
+           data-page-size="6"
+           data-player-level="{{ bp.level or 1 }}">
+        <button type="button"
+                class="gc-btn gc-btn-ghost battle-pass-page-btn"
+                data-bp-page-prev
+                aria-label="{{ T('bp_page_prev', 'Vorherige Seite') }}">‹</button>
+        <div class="battle-pass-trackboard-stage">
+          <div class="battle-pass-row-labels" aria-hidden="true">
+            <span class="battle-pass-row-spacer"></span>
+            <span class="battle-pass-row-label battle-pass-row-label--free">{{ T("bp_free", "Free") }}</span>
+            <span class="battle-pass-row-label battle-pass-row-label--premium">{{ T("bp_premium", "Premium") }}</span>
+          </div>
+          <div class="battle-pass-trackboard-viewport" data-bp-viewport>
+            {% for row in levels %}
+            {% set is_current = (bp.level or 1) == row.level %}
+            <div class="battle-pass-tier{% if row.reached %} is-reached{% endif %}{% if is_current %} is-current{% endif %}"
+                 data-bp-tier
+                 data-bp-level="{{ row.level }}"
+                 data-bp-reached="{{ '1' if row.reached else '0' }}"
+                 hidden>
+              <div class="battle-pass-tier-num gc-mono">{{ row.level }}</div>
+              {{ bp_card('free', row.level, row.free, row.reached, is_current) }}
+              {{ bp_card('premium', row.level, row.premium, row.reached, is_current) }}
+            </div>
             {% endfor %}
-            {% if row.free.timekeeper_sec %}
-            <li>⚡ {{ row.free.timekeeper_sec|fmt_duration }}</li>
-            {% endif %}
-            {% for theme in row.free.themes or [] %}
-            <li>🎨 {{ T('playercard_theme_' ~ theme, theme) }}</li>
-            {% endfor %}
-            {% for aura in row.free.auras or [] %}
-            <li>◇ {{ T('playercard_aura_' ~ aura, aura) }}</li>
-            {% endfor %}
-            {% for flair in row.free.title_flairs or [] %}
-            <li>◈ {{ T('playercard_flair_' ~ flair, flair) }}</li>
-            {% endfor %}
-            {% for badge in row.free.badges or [] %}
-            <li>🏅 {{ T('playercard_badge_' ~ badge, badge) }}</li>
-            {% endfor %}
-          </ul>
-          {% if row.free.claimable %}
-          <button type="button" class="gc-btn gc-btn-sm gc-btn-primary" data-bp-claim="free" data-bp-level="{{ row.level }}">
-            {{ T("bp_claim", "Claim") }}
-          </button>
-          {% elif row.free.claimed %}
-          <span class="battle-pass-claimed">{{ T("bp_claimed", "Abgeholt") }}</span>
-          {% else %}
-          <span class="battle-pass-locked">{{ T("bp_locked", "Gesperrt") }}</span>
-          {% endif %}
+          </div>
         </div>
-        <div class="battle-pass-track battle-pass-track--premium{% if row.premium.locked %} is-locked{% endif %}"
-             data-bp-track="premium"
-             data-bp-level="{{ row.level }}">
-          <span class="battle-pass-track-label">{{ T("bp_premium", "Premium") }}</span>
-          <ul class="battle-pass-reward-list">
-            {% for item in row.premium['items'] %}
-            <li>{{ item.icon or '📦' }} {{ T(item.name_key, item.item_key) }} ×{{ item.amount }}</li>
-            {% endfor %}
-            {% if row.premium.timekeeper_sec %}
-            <li>⚡ {{ row.premium.timekeeper_sec|fmt_duration }}</li>
-            {% endif %}
-            {% for theme in row.premium.themes or [] %}
-            <li>🎨 {{ T('playercard_theme_' ~ theme, theme) }}</li>
-            {% endfor %}
-            {% for aura in row.premium.auras or [] %}
-            <li>◇ {{ T('playercard_aura_' ~ aura, aura) }}</li>
-            {% endfor %}
-            {% for flair in row.premium.title_flairs or [] %}
-            <li>◈ {{ T('playercard_flair_' ~ flair, flair) }}</li>
-            {% endfor %}
-            {% for badge in row.premium.badges or [] %}
-            <li>🏅 {{ T('playercard_badge_' ~ badge, badge) }}</li>
-            {% endfor %}
-          </ul>
-          {% if row.premium.claimable %}
-          <button type="button" class="gc-btn gc-btn-sm gc-btn-primary" data-bp-claim="premium" data-bp-level="{{ row.level }}">
-            {{ T("bp_claim", "Claim") }}
-          </button>
-          {% elif row.premium.claimed %}
-          <span class="battle-pass-claimed">{{ T("bp_claimed", "Abgeholt") }}</span>
-          {% elif row.premium.locked %}
-          <span class="battle-pass-locked">{{ T("bp_premium_locked", "Premium nötig") }}</span>
-          {% else %}
-          <span class="battle-pass-locked">{{ T("bp_locked", "Gesperrt") }}</span>
-          {% endif %}
+        <button type="button"
+                class="gc-btn gc-btn-ghost battle-pass-page-btn"
+                data-bp-page-next
+                aria-label="{{ T('bp_page_next', 'Nächste Seite') }}">›</button>
+      </div>
+      <div class="battle-pass-page-meta">
+        <span class="battle-pass-page-label gc-mono" data-bp-page-label>PAGE 1 / 1</span>
+        <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm" data-bp-jump-current>
+          {{ T("bp_jump_current", "Zum aktuellen Level") }}
+        </button>
+      </div>
+      <aside class="battle-pass-preview" data-bp-preview>
+        <div class="battle-pass-preview-empty" data-bp-preview-empty>
+          <p class="hint">{{ T("bp_preview_hint", "Wähle eine Belohnungskarte, um Details zu sehen.") }}</p>
         </div>
-      </article>
-      {% endfor %}
+        <div class="battle-pass-preview-body" data-bp-preview-body hidden></div>
+      </aside>
     </div>
   </section>
 

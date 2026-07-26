@@ -46,12 +46,15 @@ OP_RESEARCH = "op_research_1"
 OP_FLEET = "op_fleet_1"
 OP_WEEK_ACTIVE = "op_week_active"
 
-# Fixed Season Ops catalog — easy targets, intentional XP pace.
+# Pace (GC-BPUI): 50 levels × 100 XP = 5000.
+# Full daily Ops + drip + weekly ≈ finish in ~28–30 calendar days.
+# Season length stays 60d so missed days still complete in-season.
 OPS_CATALOG: Dict[str, Dict[str, Any]] = {
     OP_BUILD: {
         "cadence": "daily",
         "target": 1,
-        "xp_reward": 30,
+        "xp_reward": 40,
+        "icon": "⚒",
         "title_key": "bp_op_build_title",
         "hint_key": "bp_op_build_hint",
         "sources": frozenset({"building_finish"}),
@@ -59,7 +62,8 @@ OPS_CATALOG: Dict[str, Dict[str, Any]] = {
     OP_RESEARCH: {
         "cadence": "daily",
         "target": 1,
-        "xp_reward": 35,
+        "xp_reward": 45,
+        "icon": "◈",
         "title_key": "bp_op_research_title",
         "hint_key": "bp_op_research_hint",
         "sources": frozenset({"account_research_finish"}),
@@ -67,7 +71,8 @@ OPS_CATALOG: Dict[str, Dict[str, Any]] = {
     OP_FLEET: {
         "cadence": "daily",
         "target": 1,
-        "xp_reward": 40,
+        "xp_reward": 50,
+        "icon": "🚀",
         "title_key": "bp_op_fleet_title",
         "hint_key": "bp_op_fleet_hint",
         "sources": frozenset({"expedition", "spy", "recycle"}),
@@ -75,7 +80,8 @@ OPS_CATALOG: Dict[str, Dict[str, Any]] = {
     OP_WEEK_ACTIVE: {
         "cadence": "weekly",
         "target": 8,
-        "xp_reward": 120,
+        "xp_reward": 160,
+        "icon": "★",
         "title_key": "bp_op_week_title",
         "hint_key": "bp_op_week_hint",
         "sources": frozenset({"building_finish", "account_research_finish", "expedition"}),
@@ -546,6 +552,8 @@ def ensure_ops_for_period(
     sid = int(season_id)
     for op_key, meta in OPS_CATALOG.items():
         period = _ops_period_key(str(meta["cadence"]), ts)
+        target = int(meta["target"])
+        xp_reward = int(meta["xp_reward"])
         conn.execute(
             """
             INSERT OR IGNORE INTO battle_pass_ops_progress (
@@ -553,15 +561,17 @@ def ensure_ops_for_period(
                 progress, target, xp_reward, claimed_at, updated_at
             ) VALUES (?, ?, ?, ?, 0, ?, ?, NULL, ?);
             """,
-            (
-                pid,
-                sid,
-                period,
-                op_key,
-                int(meta["target"]),
-                int(meta["xp_reward"]),
-                ts,
-            ),
+            (pid, sid, period, op_key, target, xp_reward, ts),
+        )
+        # Unclaimed rows pick up catalog XP/target changes (pace retunes without a new period).
+        conn.execute(
+            """
+            UPDATE battle_pass_ops_progress
+            SET target = ?, xp_reward = ?, updated_at = ?
+            WHERE player_id = ? AND season_id = ? AND period_key = ? AND op_key = ?
+              AND claimed_at IS NULL;
+            """,
+            (target, xp_reward, ts, pid, sid, period, op_key),
         )
 
 
@@ -778,6 +788,7 @@ def _serialize_op_row(row: Mapping[str, Any], meta: Mapping[str, Any]) -> Dict[s
         "cadence": str(meta.get("cadence") or "daily"),
         "title_key": str(meta.get("title_key") or ""),
         "hint_key": str(meta.get("hint_key") or ""),
+        "icon": str(meta.get("icon") or "◆"),
         "progress": progress,
         "target": target,
         "xp_reward": int(row.get("xp_reward") or meta.get("xp_reward") or 0),

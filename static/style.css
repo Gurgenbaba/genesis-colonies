@@ -38384,17 +38384,14 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   text-transform: uppercase;
   color: var(--gc-text-muted, #8a93a3);
 }
-.login-rewards-status-row,
-.battle-pass-status-row,
-.premium-login-teaser-row {
+.login-rewards-status-row {
   display: flex;
   flex-wrap: wrap;
   gap: 1rem;
   align-items: center;
   justify-content: space-between;
 }
-.login-rewards-status-block,
-.battle-pass-stat {
+.login-rewards-status-block {
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
@@ -38402,7 +38399,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
 }
 .login-rewards-status-label,
 .battle-pass-stat-label {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   color: var(--gc-text-muted, #8a93a3);
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -38469,9 +38466,56 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
-.battle-pass-stat--xp { flex: 1; min-width: 12rem; }
+.battle-pass-command-panel { margin-bottom: 0.75rem; }
+.battle-pass-command {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(14rem, 17rem);
+  gap: 0.65rem;
+  align-items: stretch;
+}
+.battle-pass-command-panel--login-only .battle-pass-login-rail {
+  width: 100%;
+}
+.battle-pass-hud {
+  display: grid;
+  grid-template-columns: minmax(5.5rem, 0.7fr) minmax(10rem, 1.6fr) minmax(7rem, 1fr) minmax(7rem, 1fr);
+  gap: 0.45rem;
+  min-width: 0;
+}
+.battle-pass-hud-tile {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0.65rem 0.7rem;
+  border: 1px solid rgba(94, 200, 255, 0.22);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(8, 12, 20, 0.45);
+  min-height: 4.25rem;
+}
+.battle-pass-hud-tile--xp {
+  justify-content: space-between;
+}
+.battle-pass-hud-tile--track.is-premium {
+  border-color: rgba(212, 160, 23, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(212, 160, 23, 0.15);
+}
+.battle-pass-hud-tile--track.is-premium .battle-pass-hud-value {
+  color: rgba(212, 160, 23, 0.98);
+}
+.battle-pass-hud-value {
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+}
+.battle-pass-hud-xp-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: baseline;
+}
 .battle-pass-xp-bar {
-  height: 0.45rem;
+  height: 0.5rem;
   background: rgba(255,255,255,0.08);
   border: 1px solid var(--gc-border, #2a3344);
   border-radius: var(--gc-radius-sm, 2px);
@@ -38482,67 +38526,401 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   height: 100%;
   background: var(--gc-accent, #5ec8ff);
 }
-.battle-pass-xp-text { font-size: 0.75rem; color: var(--gc-text-muted, #8a93a3); }
-.battle-pass-tracks {
+.battle-pass-xp-text {
+  font-size: 0.72rem;
+  color: var(--gc-text-muted, #8a93a3);
+}
+.battle-pass-login-rail {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  max-height: 70vh;
-  overflow: auto;
-}
-.battle-pass-level {
-  display: grid;
-  grid-template-columns: 2.5rem 1fr 1fr;
-  gap: 0.5rem;
-  border: 1px solid var(--gc-border, #2a3344);
+  gap: 0.45rem;
+  padding: 0.65rem 0.7rem;
+  border: 1px solid rgba(94, 200, 255, 0.28);
   border-radius: var(--gc-radius-sm, 2px);
-  padding: 0.5rem;
+  background: linear-gradient(180deg, rgba(12, 22, 36, 0.9), rgba(8, 12, 20, 0.55));
+  min-height: 100%;
+}
+.battle-pass-login-rail.is-claimable {
+  border-color: rgba(94, 200, 255, 0.65);
+  box-shadow: inset 0 0 0 1px rgba(94, 200, 255, 0.2);
+}
+.battle-pass-login-rail-art {
+  width: 2.2rem;
+  height: 2.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(94, 200, 255, 0.2);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(0, 0, 0, 0.35);
+  font-size: 1.1rem;
+}
+.battle-pass-login-rail-title {
+  font-size: 0.86rem;
+  letter-spacing: 0.02em;
+  display: block;
+}
+.battle-pass-login-rail-hint {
+  margin: 0.15rem 0 0;
+  font-size: 0.72rem;
+}
+.battle-pass-login-rail .gc-btn {
+  margin-top: auto;
+  align-self: stretch;
+  text-align: center;
+}
+@media (max-width: 980px) {
+  .battle-pass-command {
+    grid-template-columns: 1fr;
+  }
+  .battle-pass-hud {
+    grid-template-columns: 1fr 1fr;
+  }
+  .battle-pass-hud-tile--xp {
+    grid-column: 1 / -1;
+  }
+  .battle-pass-login-rail {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    min-height: 0;
+  }
+  .battle-pass-login-rail-body { flex: 1; min-width: 10rem; }
+  .battle-pass-login-rail .gc-btn {
+    margin-top: 0;
+    align-self: center;
+  }
+}
+@media (max-width: 560px) {
+  .battle-pass-hud {
+    grid-template-columns: 1fr;
+  }
+  .battle-pass-hud-tile--xp { grid-column: auto; }
+}
+
+/* Season Pass trackboard (horizontal Free/Premium cards + preview) */
+.battle-pass-tracks-panel { margin-top: 0.25rem; }
+.battle-pass-trackboard-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(14rem, 18rem);
+  grid-template-areas:
+    "board board"
+    "meta preview"
+    "meta preview";
+  gap: 0.75rem 1rem;
+  align-items: start;
+}
+.battle-pass-trackboard {
+  grid-area: board;
+  display: flex;
+  align-items: stretch;
+  gap: 0.45rem;
+  min-width: 0;
+}
+.battle-pass-trackboard-stage {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 0.45rem;
+  border: 1px solid var(--gc-border, #2a3344);
+  background: rgba(0, 0, 0, 0.22);
+  padding: 0.55rem;
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.battle-pass-row-labels {
+  display: grid;
+  grid-template-rows: 1.4rem minmax(5.5rem, 1fr) minmax(6.5rem, 1.15fr);
+  gap: 0.4rem;
+  flex: 0 0 4.2rem;
   align-items: stretch;
 }
-.battle-pass-level.is-reached { border-color: rgba(94,200,255,0.35); }
-.battle-pass-level-num {
+.battle-pass-row-spacer { min-height: 1.4rem; }
+.battle-pass-row-label {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 0.35rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gc-text-muted, #8a93a3);
+  border-right: 1px solid rgba(94, 200, 255, 0.2);
+}
+.battle-pass-row-label--premium {
+  color: rgba(212, 160, 23, 0.95);
+  border-right-color: rgba(212, 160, 23, 0.35);
+}
+.battle-pass-trackboard-viewport {
+  display: flex;
+  gap: 0.45rem;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.battle-pass-tier {
+  flex: 1 1 0;
+  min-width: 5.5rem;
+  max-width: 7.5rem;
+  display: grid;
+  grid-template-rows: 1.4rem minmax(5.5rem, 1fr) minmax(6.5rem, 1.15fr);
+  gap: 0.4rem;
+}
+.battle-pass-tier[hidden] { display: none !important; }
+.battle-pass-tier-num {
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 700;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  color: var(--gc-text-muted, #8a93a3);
+  border-bottom: 1px solid rgba(94, 200, 255, 0.15);
 }
-.battle-pass-track {
-  border: 1px solid var(--gc-border, #2a3344);
-  border-radius: var(--gc-radius-sm, 2px);
-  padding: 0.45rem;
+.battle-pass-tier.is-current .battle-pass-tier-num,
+.battle-pass-tier.is-reached .battle-pass-tier-num {
+  color: var(--gc-accent, #5ec8ff);
+}
+.battle-pass-card {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  background: rgba(0,0,0,0.18);
+  align-items: stretch;
+  gap: 0.3rem;
+  padding: 0.4rem;
+  margin: 0;
+  border: 1px solid var(--gc-border, #2a3344);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(8, 12, 20, 0.55);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-height: 0;
+  outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
-.battle-pass-track--premium { border-color: rgba(212,160,23,0.45); }
-.battle-pass-track.is-locked { opacity: 0.65; }
-.battle-pass-track-label {
+.battle-pass-card--free { border-color: rgba(94, 200, 255, 0.28); }
+.battle-pass-card--premium { border-color: rgba(212, 160, 23, 0.42); }
+.battle-pass-card.is-claimable {
+  border-color: rgba(94, 200, 255, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(94, 200, 255, 0.22);
+}
+.battle-pass-card--premium.is-claimable {
+  border-color: rgba(212, 160, 23, 0.85);
+  box-shadow: inset 0 0 0 1px rgba(212, 160, 23, 0.28);
+}
+.battle-pass-card.is-claimed { opacity: 0.72; }
+.battle-pass-card.is-locked { opacity: 0.55; }
+.battle-pass-card.is-selected,
+.battle-pass-card:focus-visible {
+  border-color: var(--gc-accent, #5ec8ff);
+  box-shadow:
+    inset 0 0 0 1px rgba(94, 200, 255, 0.35),
+    0 0 0 1px rgba(94, 200, 255, 0.25);
+}
+.battle-pass-card--premium.is-selected,
+.battle-pass-card--premium:focus-visible {
+  border-color: rgba(212, 160, 23, 0.95);
+  box-shadow:
+    inset 0 0 0 1px rgba(212, 160, 23, 0.35),
+    0 0 0 1px rgba(212, 160, 23, 0.22);
+}
+.battle-pass-card-art {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 2.6rem;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.battle-pass-card-art img {
+  max-width: 100%;
+  max-height: 3.2rem;
+  object-fit: contain;
+}
+.battle-pass-card-icon {
+  font-size: 1.45rem;
+  line-height: 1;
+}
+.battle-pass-card-count {
+  position: absolute;
+  right: 0.2rem;
+  bottom: 0.15rem;
+  font-size: 0.62rem;
+  padding: 0.05rem 0.22rem;
+  background: rgba(0, 0, 0, 0.65);
+  border: 1px solid rgba(94, 200, 255, 0.35);
+  border-radius: var(--gc-radius-sm, 2px);
+  color: var(--gc-accent, #5ec8ff);
+}
+.battle-pass-card-title {
+  font-size: 0.68rem;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 1.7em;
+}
+.battle-pass-card-state {
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gc-text-muted, #8a93a3);
+}
+.battle-pass-card.is-claimable .battle-pass-card-state {
+  color: var(--gc-accent, #5ec8ff);
+}
+.battle-pass-card--premium.is-claimable .battle-pass-card-state {
+  color: rgba(212, 160, 23, 0.95);
+}
+.battle-pass-card-check,
+.battle-pass-card-lock {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.3rem;
+  font-size: 0.75rem;
+  line-height: 1;
+  color: var(--gc-accent, #5ec8ff);
+}
+.battle-pass-card-lock { color: var(--gc-text-muted, #8a93a3); }
+.battle-pass-page-btn {
+  flex: 0 0 2.2rem;
+  min-width: 2.2rem;
+  padding: 0;
+  font-size: 1.4rem;
+  line-height: 1;
+  align-self: stretch;
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.battle-pass-page-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.battle-pass-page-meta {
+  grid-area: meta;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+.battle-pass-page-label {
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gc-text-muted, #8a93a3);
+}
+.battle-pass-preview {
+  grid-area: preview;
+  border: 1px solid var(--gc-border, #2a3344);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(0, 0, 0, 0.28);
+  padding: 0.75rem;
+  min-height: 12rem;
+}
+.battle-pass-preview-empty .hint { margin: 0; }
+.battle-pass-preview-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.65rem;
+}
+.battle-pass-preview-meta {
   font-size: 0.68rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--gc-text-muted, #8a93a3);
 }
+.battle-pass-preview-title {
+  font-size: 1rem;
+  letter-spacing: 0.02em;
+}
+.battle-pass-preview-rarity {
+  align-self: flex-start;
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.1rem 0.35rem;
+  border: 1px solid currentColor;
+  border-radius: var(--gc-radius-sm, 2px);
+  color: var(--gc-accent, #5ec8ff);
+}
+.battle-pass-preview-rarity[data-rarity="rare"] { color: #5b9dff; }
+.battle-pass-preview-rarity[data-rarity="epic"] { color: #b57bff; }
+.battle-pass-preview-rarity[data-rarity="legendary"] { color: rgba(212, 160, 23, 0.98); }
 .battle-pass-reward-list {
   list-style: none;
   margin: 0;
   padding: 0;
-  font-size: 0.78rem;
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
-  flex: 1;
+  gap: 0.35rem;
 }
+.battle-pass-reward-item {
+  display: grid;
+  grid-template-columns: 1.25rem 1fr auto;
+  gap: 0.4rem;
+  align-items: center;
+  font-size: 0.8rem;
+}
+.battle-pass-reward-icon { text-align: center; }
+.battle-pass-reward-img {
+  width: 1.15rem;
+  height: 1.15rem;
+  object-fit: contain;
+}
+.battle-pass-reward-amt { color: var(--gc-text-muted, #8a93a3); }
+.battle-pass-preview-actions { margin-top: 0.75rem; }
 .battle-pass-claimed,
 .battle-pass-locked {
   font-size: 0.72rem;
   color: var(--gc-text-muted, #8a93a3);
   text-transform: uppercase;
 }
-.premium-login-teaser { margin-bottom: 0.75rem; }
 .battle-pass-ops-panel { margin-bottom: 0.75rem; }
-.battle-pass-ops-hint,
-.battle-pass-ops-drip { margin: 0.35rem 0 0.75rem; }
+.battle-pass-ops-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+.battle-pass-ops-pace {
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gc-accent, #5ec8ff);
+}
+.battle-pass-ops-hint { margin: 0.35rem 0 0.65rem; }
+.battle-pass-ops-drip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0 0 0.85rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid rgba(94, 200, 255, 0.22);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(8, 12, 20, 0.4);
+}
+.battle-pass-ops-drip-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: baseline;
+}
+.battle-pass-ops-drip-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gc-text-muted, #8a93a3);
+}
+.battle-pass-ops-drip-val {
+  font-size: 0.78rem;
+  color: var(--gc-accent, #5ec8ff);
+}
+.battle-pass-ops-drip-bar { max-width: 100%; }
 .battle-pass-ops-group { margin-bottom: 0.85rem; }
 .battle-pass-ops-group-title {
   margin: 0 0 0.45rem;
@@ -38551,38 +38929,93 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   text-transform: uppercase;
   color: var(--gc-text-muted, #8a93a3);
 }
-.battle-pass-ops-list {
+.battle-pass-ops-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+.battle-pass-ops-grid--weekly {
+  grid-template-columns: 1fr;
+}
+.battle-pass-op-card {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-}
-.battle-pass-op {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.65rem;
-  padding: 0.55rem 0.65rem;
+  gap: 0.45rem;
+  padding: 0.65rem;
   border: 1px solid rgba(120, 140, 170, 0.35);
   border-radius: var(--gc-radius-sm, 2px);
-  background: rgba(8, 12, 20, 0.35);
+  background: rgba(8, 12, 20, 0.45);
+  min-height: 9.5rem;
 }
-.battle-pass-op.is-claimable {
-  border-color: rgba(94, 200, 255, 0.45);
+.battle-pass-op-card--weekly {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: stretch;
+  min-height: 0;
+  gap: 0.75rem;
 }
-.battle-pass-op-main {
+.battle-pass-op-card.is-claimable {
+  border-color: rgba(94, 200, 255, 0.65);
+  box-shadow: inset 0 0 0 1px rgba(94, 200, 255, 0.2);
+}
+.battle-pass-op-card.is-claimed { opacity: 0.72; }
+.battle-pass-op-card-art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  font-size: 1.25rem;
+  border: 1px solid rgba(94, 200, 255, 0.2);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(0, 0, 0, 0.35);
+  flex: 0 0 auto;
+}
+.battle-pass-op-card--weekly .battle-pass-op-card-art {
+  width: 3rem;
+  height: 3rem;
+  font-size: 1.45rem;
+  align-self: center;
+}
+.battle-pass-op-card-body {
   flex: 1;
-  min-width: 12rem;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.3rem;
 }
-.battle-pass-op-main .hint { margin: 0; }
+.battle-pass-op-card-title {
+  font-size: 0.86rem;
+  letter-spacing: 0.02em;
+}
+.battle-pass-op-card-hint {
+  margin: 0;
+  font-size: 0.72rem;
+  flex: 1;
+}
+.battle-pass-op-card-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+.battle-pass-op-xp {
+  color: var(--gc-accent, #5ec8ff);
+  font-size: 0.78rem;
+}
+.battle-pass-op-card-action {
+  margin-top: auto;
+}
+.battle-pass-op-card--weekly .battle-pass-op-card-action {
+  align-self: center;
+  margin-top: 0;
+}
 .battle-pass-op-bar {
   height: 0.35rem;
   background: rgba(40, 50, 70, 0.9);
   border: 1px solid rgba(90, 110, 140, 0.35);
   overflow: hidden;
+  border-radius: var(--gc-radius-sm, 2px);
 }
 .battle-pass-op-fill {
   display: block;
@@ -38593,9 +39026,44 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   font-size: 0.72rem;
   color: var(--gc-text-muted, #8a93a3);
 }
+@media (max-width: 900px) {
+  .battle-pass-ops-grid {
+    grid-template-columns: 1fr;
+  }
+  .battle-pass-op-card--weekly {
+    flex-direction: column;
+  }
+  .battle-pass-op-card--weekly .battle-pass-op-card-action {
+    align-self: stretch;
+  }
+}
+@media (min-width: 981px) {
+  .battle-pass-trackboard-layout {
+    grid-template-areas:
+      "board preview"
+      "meta preview";
+    grid-template-columns: minmax(0, 1fr) minmax(15rem, 19rem);
+  }
+  .battle-pass-preview {
+    align-self: stretch;
+  }
+}
+@media (max-width: 980px) {
+  .battle-pass-trackboard-layout {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "board"
+      "meta"
+      "preview";
+  }
+}
 @media (max-width: 800px) {
-  .battle-pass-level { grid-template-columns: 2rem 1fr; }
-  .battle-pass-track--premium { grid-column: 1 / -1; }
+  .battle-pass-row-labels { flex-basis: 3.2rem; }
+  .battle-pass-tier {
+    min-width: 4.8rem;
+    max-width: 6.2rem;
+  }
+  .battle-pass-card-title { font-size: 0.64rem; }
 }
 
 /* EPIC-23 Shop ? premium command-supply bay (scoped) */

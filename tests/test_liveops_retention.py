@@ -375,6 +375,29 @@ def test_battle_pass_op_key_lists_are_iterable_keys(liveops_db):
         assert key in OPS_CATALOG
 
 
+def test_battle_pass_daily_pace_finishes_near_30_days(liveops_db):
+    """Dedicated daily Ops + drip + weekly ≈ Level 50 within ~30 days (5000 XP)."""
+    from game.battle_pass import (
+        DAILY_OP_KEYS,
+        DEFAULT_MAX_LEVEL,
+        DEFAULT_XP_PER_LEVEL,
+        OPS_CATALOG,
+        PASSIVE_DRIP_DAILY_CAP,
+        WEEKLY_OP_KEYS,
+    )
+
+    daily_xp = sum(int(OPS_CATALOG[k]["xp_reward"]) for k in DAILY_OP_KEYS)
+    weekly_xp = sum(int(OPS_CATALOG[k]["xp_reward"]) for k in WEEKLY_OP_KEYS)
+    need = int(DEFAULT_MAX_LEVEL) * int(DEFAULT_XP_PER_LEVEL)
+    # 30 days ≈ 4 weekly claims; drip soft-cap every day.
+    earned_30 = (daily_xp * 30) + (weekly_xp * 4) + (PASSIVE_DRIP_DAILY_CAP * 30)
+    assert earned_30 >= need
+    # Not absurdly front-loaded: still takes more than ~20 full days of daily XP alone.
+    assert (daily_xp + PASSIVE_DRIP_DAILY_CAP) * 20 < need
+    days_est = need / float(daily_xp + PASSIVE_DRIP_DAILY_CAP + (weekly_xp / 7.0))
+    assert 25.0 <= days_est <= 32.0
+
+
 def test_battle_pass_ops_claim_and_no_double(liveops_db):
     uid = _player()
     conn = db()
@@ -385,8 +408,8 @@ def test_battle_pass_ops_claim_and_no_double(liveops_db):
     before_xp = int(state["xp"])
     ok, reason, result = claim_op(uid, OP_BUILD, conn=conn)
     assert ok, reason
-    assert int(result["xp_reward"]) == 30
-    assert int(result["xp"]) == before_xp + 30
+    assert int(result["xp_reward"]) == 40
+    assert int(result["xp"]) == before_xp + 40
     ok2, reason2, _ = claim_op(uid, OP_BUILD, conn=conn)
     assert not ok2
     assert reason2 == "already_claimed"
@@ -445,6 +468,21 @@ def test_login_and_battle_pass_http_claim(liveops_db):
     assert "battle-pass-page" in prem_html or "premium-page" in prem_html
     assert "battle-pass-ops-panel" in prem_html
     assert "data-bp-claim-op" in prem_html or "bp_ops" in prem_html or "Season Ops" in prem_html
+    assert "battle-pass-op-card" in prem_html
+    assert "battle-pass-ops-grid" in prem_html
+    assert "data-bp-ops-drip" in prem_html
+    assert 'data-bp-trackboard' in prem_html
+    assert 'data-bp-card' in prem_html
+    assert 'data-bp-preview' in prem_html
+    assert "battle-pass-card--free" in prem_html
+    assert "battle-pass-card--premium" in prem_html
+    assert "data-bp-card-detail" in prem_html
+    assert "battle-pass-level" not in prem_html  # old vertical rows removed
+    assert "data-bp-page-prev" in prem_html
+    assert "data-bp-page-next" in prem_html
+    assert "data-bp-command" in prem_html
+    assert "battle-pass-hud" in prem_html
+    assert "data-bp-login-rail" in prem_html or "bp_login" in prem_html
 
     lr = client.post(
         "/api/login-rewards/claim",
@@ -490,6 +528,6 @@ def test_login_and_battle_pass_http_claim(liveops_db):
     op_body = op.get_json()
     assert op_body["ok"] is True
     assert op_body["op_key"] == OP_BUILD
-    assert int(op_body["xp_reward"]) == 30
+    assert int(op_body["xp_reward"]) == 40
     assert "battle_pass" in op_body
     assert "state" in op_body

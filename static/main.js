@@ -16777,11 +16777,179 @@
     });
   }
 
+  function initBattlePassTrackboard(page) {
+    const board = page.querySelector("[data-bp-trackboard]");
+    if (!board) return;
+    const tiers = Array.from(board.querySelectorAll("[data-bp-tier]"));
+    if (!tiers.length) return;
+
+    const pageSize = Math.max(1, Number(board.getAttribute("data-page-size") || 6) || 6);
+    const playerLevel = Math.max(
+      1,
+      Number(board.getAttribute("data-player-level") || 1) || 1
+    );
+    const pageCount = Math.max(1, Math.ceil(tiers.length / pageSize));
+    let pageIndex = 0;
+
+    const prevBtn = board.querySelector("[data-bp-page-prev]");
+    const nextBtn = board.querySelector("[data-bp-page-next]");
+    const labelEl = page.querySelector("[data-bp-page-label]");
+    const jumpBtn = page.querySelector("[data-bp-jump-current]");
+    const previewEmpty = page.querySelector("[data-bp-preview-empty]");
+    const previewBody = page.querySelector("[data-bp-preview-body]");
+
+    function pageForLevel(level) {
+      const idx = tiers.findIndex((el) => Number(el.getAttribute("data-bp-level") || 0) === level);
+      if (idx < 0) return 0;
+      return Math.floor(idx / pageSize);
+    }
+
+    function renderPage() {
+      const start = pageIndex * pageSize;
+      const end = start + pageSize;
+      tiers.forEach((tier, i) => {
+        const show = i >= start && i < end;
+        if (show) tier.removeAttribute("hidden");
+        else tier.setAttribute("hidden", "");
+      });
+      if (labelEl) {
+        const tpl = t("bp_page_label", "PAGE {n} / {m}");
+        labelEl.textContent = tpl
+          .replace("{n}", String(pageIndex + 1))
+          .replace("{m}", String(pageCount));
+      }
+      if (prevBtn) prevBtn.disabled = pageIndex <= 0;
+      if (nextBtn) nextBtn.disabled = pageIndex >= pageCount - 1;
+    }
+
+    function clearSelection() {
+      board.querySelectorAll("[data-bp-card].is-selected").forEach((card) => {
+        card.classList.remove("is-selected");
+        card.setAttribute("aria-pressed", "false");
+      });
+    }
+
+    function selectCard(card, opts) {
+      if (!card) return;
+      const ensureVisible = !opts || opts.ensureVisible !== false;
+      const level = Number(card.getAttribute("data-bp-level") || 0);
+      if (ensureVisible && level > 0) {
+        const targetPage = pageForLevel(level);
+        if (targetPage !== pageIndex) {
+          pageIndex = targetPage;
+          renderPage();
+        }
+      }
+      clearSelection();
+      card.classList.add("is-selected");
+      card.setAttribute("aria-pressed", "true");
+      const detail = card.querySelector("[data-bp-card-detail]");
+      if (previewBody && detail) {
+        previewBody.innerHTML = detail.innerHTML;
+        previewBody.hidden = false;
+        if (previewEmpty) previewEmpty.hidden = true;
+      }
+    }
+
+    function pickDefaultCard() {
+      const claimable = board.querySelector("[data-bp-card].is-claimable");
+      if (claimable) return claimable;
+      const currentTier = tiers.find(
+        (el) => Number(el.getAttribute("data-bp-level") || 0) === playerLevel
+      );
+      if (currentTier) {
+        const free = currentTier.querySelector('[data-bp-card][data-bp-track="free"]');
+        if (free) return free;
+      }
+      return board.querySelector("[data-bp-card]");
+    }
+
+    function goToCurrent() {
+      pageIndex = pageForLevel(playerLevel);
+      renderPage();
+      const card = pickDefaultCard();
+      if (card) selectCard(card, { ensureVisible: true });
+    }
+
+    const onBoardClick = (ev) => {
+      if (ev.target.closest("[data-bp-claim]")) return;
+      const card = ev.target.closest("[data-bp-card]");
+      if (!card || !board.contains(card)) return;
+      selectCard(card, { ensureVisible: false });
+    };
+
+    const onBoardKeydown = (ev) => {
+      const card = ev.target.closest("[data-bp-card]");
+      if (!card || !board.contains(card)) return;
+      if (ev.key === "Enter" || ev.key === " ") {
+        ev.preventDefault();
+        selectCard(card, { ensureVisible: false });
+      }
+    };
+
+    const onDocKeydown = (ev) => {
+      if (!document.getElementById("premium-page")) return;
+      if (ev.target && (ev.target.tagName === "INPUT" || ev.target.tagName === "TEXTAREA")) {
+        return;
+      }
+      if (ev.key === "ArrowLeft") {
+        if (pageIndex <= 0) return;
+        ev.preventDefault();
+        pageIndex -= 1;
+        renderPage();
+      } else if (ev.key === "ArrowRight") {
+        if (pageIndex >= pageCount - 1) return;
+        ev.preventDefault();
+        pageIndex += 1;
+        renderPage();
+      }
+    };
+
+    board.addEventListener("click", onBoardClick);
+    board.addEventListener("keydown", onBoardKeydown);
+    document.addEventListener("keydown", onDocKeydown);
+
+    if (prevBtn) {
+      prevBtn.addEventListener("click", () => {
+        if (pageIndex <= 0) return;
+        pageIndex -= 1;
+        renderPage();
+      });
+    }
+    if (nextBtn) {
+      nextBtn.addEventListener("click", () => {
+        if (pageIndex >= pageCount - 1) return;
+        pageIndex += 1;
+        renderPage();
+      });
+    }
+    if (jumpBtn) {
+      jumpBtn.addEventListener("click", () => goToCurrent());
+    }
+
+    pageIndex = pageForLevel(playerLevel);
+    renderPage();
+    const initial = pickDefaultCard();
+    if (initial) selectCard(initial, { ensureVisible: true });
+
+    if (typeof GC.registerCleanup === "function") {
+      GC.registerCleanup(() => {
+        board.removeEventListener("click", onBoardClick);
+        board.removeEventListener("keydown", onBoardKeydown);
+        document.removeEventListener("keydown", onDocKeydown);
+      });
+    }
+  }
+
   function initBattlePass() {
     bindBattlePassOnce();
     bindShopBuyOnce();
+    const page = document.getElementById("premium-page");
+    if (!page) return;
+    initBattlePassTrackboard(page);
+
     const state = parseBattlePassPageState();
-    const remEl = document.querySelector("[data-bp-remaining]");
+    const remEl = page.querySelector("[data-bp-remaining]");
     if (!remEl) return;
     const fromState = Number(state?.season?.seconds_remaining);
     const fromAttr = Number(remEl.getAttribute("data-remaining-seconds") || 0);

@@ -155,7 +155,7 @@ Erkennung: IP-/Verhaltensanalyse, Support-Meldungen, Admin-Tools. Kein automatis
 
 `[Policy]` Offizielle Kanäle (Login-Kalender, Battle Pass, **Shop**) dürfen **Convenience** verkaufen oder vergeben: Timekeeper-Zeit, Container (meta-only), Boosters, Cosmetics/QoL, Season-Pass-Entitlement.
 
-Battle-Pass-XP: sichtbare **Season Ops** (daily/weekly) + soft-capped Activity-Drip; Pace zielt auf Season-Abschluss bei normalem Spiel (~45–55 Tage), ohne zweite Quest-Engine neben Imperial Directives.
+Battle-Pass-XP: sichtbare **Season Ops** (daily/weekly) + soft-capped Activity-Drip; Pace zielt auf Season-Abschluss bei täglicher Anwesenheit (~28–30 Tage), ohne zweite Quest-Engine neben Imperial Directives.
 
 Shop (Stripe/PayPal): erfüllt über denselben Entitlement-/Grant-Pfad — kein paralleles Unlock-System, keine Hard-Currency-Wallet im MVP. Doc: [PAYMENT_SHOP.md](PAYMENT_SHOP.md), [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md).
 
