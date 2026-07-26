@@ -38403,7 +38403,16 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   border-bottom: 1px solid var(--gc-border-subtle, #222);
 }
 .alliance-hub-donation-amount { margin-left: auto; }
-.alliance-hub-donation-res { opacity: 0.9; }
+.alliance-hub-donation-res {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  opacity: 0.9;
+}
+.alliance-hub-donation-res-name {
+  font-size: 0.85em;
+  letter-spacing: 0.02em;
+}
 
 /* Guest / browse */
 .alliance-hub-guest {

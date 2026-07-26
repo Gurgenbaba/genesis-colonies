@@ -17221,12 +17221,24 @@
     if (logWrap && logList && Array.isArray(state.recent_donations)) {
       const rows = state.recent_donations.slice(0, 12);
       logWrap.hidden = rows.length === 0;
+      const resLabel = (key) => {
+        if (key === "metal") return t("resource_metal", "Ferronit");
+        if (key === "crystal") return t("resource_crystal", "Crytite");
+        if (key === "fuel_cells") return t("resource_fuel_cells", "Brennzellen");
+        return key;
+      };
+      const resIcon = (key) => {
+        if (key !== "metal" && key !== "crystal" && key !== "fuel_cells") return "";
+        const mod = `gc-res-${key.replace(/_/g, "-")}`;
+        return `<span class="gc-res-icon gc-res-icon--sm ${mod}" aria-hidden="true"></span>`;
+      };
       logList.innerHTML = rows
         .map((d) => {
           const name = escapeHtml(String(d.player_name || ""));
           const amt = fmt(Number(d.amount || 0));
-          const res = escapeHtml(String(d.resource || ""));
-          return `<li class="alliance-hub-donation-row"><span>${name}</span><span class="alliance-hub-donation-amount gc-mono">${amt}</span><span class="alliance-hub-donation-res">${res}</span></li>`;
+          const resKey = String(d.resource || "");
+          const label = escapeHtml(resLabel(resKey));
+          return `<li class="alliance-hub-donation-row"><span>${name}</span><span class="alliance-hub-donation-amount gc-mono">${amt}</span><span class="alliance-hub-donation-res">${resIcon(resKey)}<span class="alliance-hub-donation-res-name">${label}</span></span></li>`;
         })
         .join("");
     }

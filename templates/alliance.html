@@ -893,7 +893,10 @@
         <li class="alliance-hub-donation-row">
           {{ player_name_link(d.player_id, d.player_name) }}
           <span class="alliance-hub-donation-amount gc-mono">{{ d.amount|fmt_int }}</span>
-          <span class="alliance-hub-donation-res">{{ render_resource_icon(d.resource, 'sm') }}</span>
+          <span class="alliance-hub-donation-res">
+            {{ render_resource_icon(d.resource, 'sm') }}
+            <span class="alliance-hub-donation-res-name">{{ T('resource_' ~ d.resource) }}</span>
+          </span>
         </li>
         {% endfor %}
       </ul>
