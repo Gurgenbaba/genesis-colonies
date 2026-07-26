@@ -19,8 +19,9 @@
   'trader_hub_view', 'inventory_view', 'auction_house_view', 'empire_view', 'techtree_view'
 ) %}
 {% set _comm_open = request.endpoint in (
-  'alliance_view', 'ranking_view', 'chronicles_view', 'hall_of_fame_view', 'records_view',
-  'referrals_view', 'vote_center_view', 'imperial_directives_view', 'galactic_politics_view'
+  'alliance_view', 'hall_of_fame_view',
+  'referrals_view', 'vote_center_view', 'imperial_directives_view', 'galactic_politics_view',
+  'world_boss_view'
 ) %}
 {# GC-575: Meta + Registry are siblings. Desktop uses display:contents → 4-column grid
    (Left | Main | Meta | Imperium). Tablet drawer stacks both. #}
@@ -104,18 +105,6 @@
       </button>
       <div class="gc-nav-section-body"
            id="{{ _id_p }}nav-section-community">
-        <a href="{{ url_for('ranking_view') }}"
-           data-nav-module="ranking"
-           class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'ranking') }} {% if request.endpoint == 'ranking_view' %}active{% endif %}"
-           {% if not module_in_section(_sn, 'ranking', 'administration') %}hidden{% endif %}>
-          {{ T("nav_ranking", "Ranking") }}
-        </a>
-        <a href="{{ url_for('chronicles_view') }}"
-           data-nav-module="chronicles"
-           class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'chronicles') }} {% if request.endpoint == 'chronicles_view' %}active{% endif %}"
-           {% if not module_in_section(_sn, 'chronicles', 'administration') %}hidden{% endif %}>
-          {{ T("nav_chronicles", "Chroniken") }}
-        </a>
         <a href="{{ url_for('hall_of_fame_view') }}"
            data-nav-module="hall_of_fame"
            class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'hall_of_fame') }} {% if request.endpoint == 'hall_of_fame_view' %}active{% endif %}"
@@ -166,12 +155,6 @@
            class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'alliance') }} {% if request.endpoint == 'alliance_view' %}active{% endif %}"
            {% if not module_in_section(_sn, 'alliance', 'administration') %}hidden{% endif %}>
           <span>{{ T("nav_alliance") }}</span>
-        </a>
-        <a href="{{ url_for('records_view') }}"
-           data-nav-module="records"
-           class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'records') }} {% if request.endpoint == 'records_view' %}active{% endif %}"
-           {% if not module_in_section(_sn, 'records', 'administration') %}hidden{% endif %}>
-          {{ T("nav_records", "Rekorde") }}
         </a>
       </div>
     </div>

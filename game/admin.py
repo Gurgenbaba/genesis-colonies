@@ -480,6 +480,26 @@ def unban_player(form: Dict[str, Any]) -> None:
         conn.close()
 
 
+def get_public_ban_list() -> List[Dict[str, Any]]:
+    """
+    Player-facing ban board — same source as get_ban_list(), stripped of account/login identifiers.
+    """
+    out: List[Dict[str, Any]] = []
+    for row in get_ban_list():
+        out.append(
+            {
+                "player_id": int(row.get("player_id") or 0),
+                "player_name": str(row.get("player_name") or "").strip() or "—",
+                "reason": str(row.get("reason") or "").strip(),
+                "banned_until": row.get("banned_until"),
+                "expires_text": str(row.get("expires_text") or ""),
+                "is_permanent": bool(row.get("is_permanent")),
+                "created_text": str(row.get("created_text") or ""),
+            }
+        )
+    return out
+
+
 def get_ban_list() -> List[Dict[str, Any]]:
     """
     Liefert alle aktuell gebannten Spieler (players.banned_until > now).

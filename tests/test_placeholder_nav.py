@@ -44,21 +44,24 @@ def test_placeholder_modules_registered():
     assert keys == {
         "auction-house",
         "skilltree",
-        "premium",
     }
-    assert len(PLACEHOLDER_MODULES) == 3
+    assert len(PLACEHOLDER_MODULES) == 2
+    assert "premium" not in PLACEHOLDER_MODULES
     assert "galactic_politics" not in PLACEHOLDER_MODULES
 
 
 def test_sidebar_has_military_and_trading_hub_nav():
     sidebar = _read("templates/partials/sidebar.html")
     sidebar_right = _read("templates/partials/sidebar_right.html")
+    bottom = _read("templates/partials/bottom_utility_bar.html")
     assert 'data-nav-section="military"' in sidebar
     assert 'data-nav-module="shipyard"' in sidebar
     assert 'data-nav-module="defense"' in sidebar
     assert 'data-nav-module="fleet"' in sidebar
     assert 'data-nav-module="logistics"' not in sidebar
     assert "nav_logistics" not in sidebar
+    assert 'data-nav-module="login_rewards"' in sidebar
+    assert 'data-nav-module="premium"' in sidebar
     assert 'data-nav-section="economy"' in sidebar_right
     assert 'data-nav-module="trading"' in sidebar_right
     assert "url_for('trader_hub_view')" in sidebar_right
@@ -66,44 +69,59 @@ def test_sidebar_has_military_and_trading_hub_nav():
     assert "url_for('alliance_view')" in sidebar_right
     assert "url_for('hall_of_fame_view')" in sidebar_right
     assert 'data-nav-module="hall_of_fame"' in sidebar_right
-    assert "url_for('records_view')" in sidebar_right
-    assert 'data-nav-module="records"' in sidebar_right
     assert "url_for('galactic_politics_view')" in sidebar_right
     assert 'data-nav-module="galactic_politics"' in sidebar_right
     assert 'data-nav-badge="government"' in sidebar_right
+    # LiveOps + scoreboard moved out of the crowded right rail
+    assert 'data-nav-module="login_rewards"' not in sidebar_right
+    assert 'data-nav-module="ranking"' not in sidebar_right
+    assert 'data-nav-module="records"' not in sidebar_right
+    assert "url_for('ranking_view')" in bottom
+    assert "url_for('chronicles_view')" in bottom
+    assert "url_for('records_view')" in bottom
+    assert "url_for('banned_players_view')" in bottom
     assert "gc-nav-wip-section" not in sidebar
     assert "gc-nav-wip-section" not in sidebar_right
 
 
 def test_base_mobile_drawer_has_hall_of_fame_near_ranking():
+    """HoF stays on the right community rail; Ranking lives in the bottom utility bar."""
     sidebar_right = _read("templates/partials/sidebar_right.html")
-    ranking_idx = sidebar_right.find('data-nav-module="ranking"')
-    hof_idx = sidebar_right.find('data-nav-module="hall_of_fame"')
-    assert ranking_idx >= 0
-    assert hof_idx >= 0
-    assert hof_idx > ranking_idx
+    bottom = _read("templates/partials/bottom_utility_bar.html")
+    assert 'data-nav-module="hall_of_fame"' in sidebar_right
     assert "url_for('hall_of_fame_view')" in sidebar_right
+    assert "url_for('ranking_view')" in bottom
     assert 'include "partials/sidebar_right.html"' in _read("templates/base.html")
 
 
 def test_main_js_syncs_military_subnav():
+    """Why old assert failed: subnav DOM ids are templated (`{{ _id_p }}nav-buildings-sub`), not literal in main.js.
+    Still verifies JS accordion/sync owners and that the sidebar template wires the buildings subnav id."""
     src = _read("static/main.js")
     assert "tryHandleSubnavParentClick" in src
     assert "syncNavSectionAccordionState" in src
     assert "syncMilitarySubnav" in src
     assert "syncTradingSubnav" in src
-    assert "gc-nav-buildings-sub" in src
+    sidebar = _read("templates/partials/sidebar.html")
+    assert "nav-buildings-sub" in sidebar
 
 
 def test_placeholder_routes_render(placeholder_db):
     import importlib
     import app as app_mod
 
+    from game.models import ensure_player_and_homeworld
+    from game.db import db
+
     importlib.reload(app_mod)
     client = app_mod.app.test_client()
     uname = f"ph_{uuid.uuid4().hex[:8]}"
     ok, err, user = create_user(uname, "test-pass-123")
     assert ok and user, err
+    conn = db()
+    ensure_player_and_homeworld(int(user["id"]), player_name="PhTester", conn=conn)
+    conn.commit()
+    conn.close()
 
     with client.session_transaction() as sess:
         sess["user_id"] = int(user["id"])
@@ -112,12 +130,27 @@ def test_placeholder_routes_render(placeholder_db):
     assert inv.status_code == 200
     assert "inventory-page" in inv.get_data(as_text=True)
 
-    for slug in ("skilltree", "premium"):
+    for slug in ("skilltree",):
         res = client.get(f"/{slug}")
         body = res.get_data(as_text=True)
         assert res.status_code == 200, slug
         assert "gc-placeholder-page" in body
         assert "gc-nav-wip-badge" in body or "gc-placeholder-badge" in body
+
+    premium = client.get("/premium")
+    assert premium.status_code == 200
+    prem_body = premium.get_data(as_text=True)
+    assert "battle-pass-page" in prem_body or "premium-page" in prem_body
+    assert "gc-placeholder-page" not in prem_body
+
+    login_rewards = client.get("/login-rewards")
+    assert login_rewards.status_code == 200
+    lr_body = login_rewards.get_data(as_text=True)
+    assert "login-rewards-page" in lr_body
+
+    banned = client.get("/banned-players")
+    assert banned.status_code == 200
+    assert "banned-players-page" in banned.get_data(as_text=True)
 
     politics = client.get("/galactic-politics")
     assert politics.status_code == 200

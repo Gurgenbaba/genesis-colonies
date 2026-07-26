@@ -38192,3 +38192,256 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
     font-size: 0.68rem;
   }
 }
+
+/* EPIC-22 LiveOps Retention - Login Rewards + Battle Pass */
+.login-rewards-page,
+.battle-pass-page { width: 100%; }
+.login-rewards-eyebrow,
+.premium-eyebrow {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gc-text-muted, #8a93a3);
+}
+.login-rewards-status-row,
+.battle-pass-status-row,
+.premium-login-teaser-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+}
+.login-rewards-status-block,
+.battle-pass-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 5rem;
+}
+.login-rewards-status-label,
+.battle-pass-stat-label {
+  font-size: 0.75rem;
+  color: var(--gc-text-muted, #8a93a3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.login-rewards-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.login-rewards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.65rem;
+}
+.login-rewards-day {
+  border: 1px solid var(--gc-border, #2a3344);
+  background: var(--gc-panel-bg, rgba(0,0,0,0.25));
+  border-radius: var(--gc-radius-sm, 2px);
+  padding: 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-height: 9rem;
+}
+.login-rewards-day--claimable {
+  border-color: var(--gc-accent, #5ec8ff);
+  box-shadow: inset 0 0 0 1px rgba(94,200,255,0.25);
+}
+.login-rewards-day--claimed { opacity: 0.72; }
+.login-rewards-day--locked { opacity: 0.55; }
+.login-rewards-day--milestone {
+  border-color: var(--gc-warn, #d4a017);
+}
+.login-rewards-day-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.35rem;
+  align-items: baseline;
+}
+.login-rewards-day-badge {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--gc-warn, #d4a017);
+  border: 1px solid currentColor;
+  padding: 0.05rem 0.3rem;
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.login-rewards-day-rewards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
+}
+.login-rewards-reward-item {
+  display: grid;
+  grid-template-columns: 1.1rem 1fr auto;
+  gap: 0.35rem;
+  align-items: center;
+  font-size: 0.78rem;
+}
+.login-rewards-day-state {
+  font-size: 0.72rem;
+  color: var(--gc-text-muted, #8a93a3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.battle-pass-stat--xp { flex: 1; min-width: 12rem; }
+.battle-pass-xp-bar {
+  height: 0.45rem;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid var(--gc-border, #2a3344);
+  border-radius: var(--gc-radius-sm, 2px);
+  overflow: hidden;
+}
+.battle-pass-xp-fill {
+  display: block;
+  height: 100%;
+  background: var(--gc-accent, #5ec8ff);
+}
+.battle-pass-xp-text { font-size: 0.75rem; color: var(--gc-text-muted, #8a93a3); }
+.battle-pass-tracks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 70vh;
+  overflow: auto;
+}
+.battle-pass-level {
+  display: grid;
+  grid-template-columns: 2.5rem 1fr 1fr;
+  gap: 0.5rem;
+  border: 1px solid var(--gc-border, #2a3344);
+  border-radius: var(--gc-radius-sm, 2px);
+  padding: 0.5rem;
+  align-items: stretch;
+}
+.battle-pass-level.is-reached { border-color: rgba(94,200,255,0.35); }
+.battle-pass-level-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+.battle-pass-track {
+  border: 1px solid var(--gc-border, #2a3344);
+  border-radius: var(--gc-radius-sm, 2px);
+  padding: 0.45rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  background: rgba(0,0,0,0.18);
+}
+.battle-pass-track--premium { border-color: rgba(212,160,23,0.45); }
+.battle-pass-track.is-locked { opacity: 0.65; }
+.battle-pass-track-label {
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gc-text-muted, #8a93a3);
+}
+.battle-pass-reward-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.78rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex: 1;
+}
+.battle-pass-claimed,
+.battle-pass-locked {
+  font-size: 0.72rem;
+  color: var(--gc-text-muted, #8a93a3);
+  text-transform: uppercase;
+}
+.premium-login-teaser { margin-bottom: 0.75rem; }
+.battle-pass-ops-panel { margin-bottom: 0.75rem; }
+.battle-pass-ops-hint,
+.battle-pass-ops-drip { margin: 0.35rem 0 0.75rem; }
+.battle-pass-ops-group { margin-bottom: 0.85rem; }
+.battle-pass-ops-group-title {
+  margin: 0 0 0.45rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gc-text-muted, #8a93a3);
+}
+.battle-pass-ops-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.battle-pass-op {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid rgba(120, 140, 170, 0.35);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(8, 12, 20, 0.35);
+}
+.battle-pass-op.is-claimable {
+  border-color: rgba(94, 200, 255, 0.45);
+}
+.battle-pass-op-main {
+  flex: 1;
+  min-width: 12rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.battle-pass-op-main .hint { margin: 0; }
+.battle-pass-op-bar {
+  height: 0.35rem;
+  background: rgba(40, 50, 70, 0.9);
+  border: 1px solid rgba(90, 110, 140, 0.35);
+  overflow: hidden;
+}
+.battle-pass-op-fill {
+  display: block;
+  height: 100%;
+  background: rgba(94, 200, 255, 0.75);
+}
+.battle-pass-op-progress {
+  font-size: 0.72rem;
+  color: var(--gc-text-muted, #8a93a3);
+}
+@media (max-width: 800px) {
+  .battle-pass-level { grid-template-columns: 2rem 1fr; }
+  .battle-pass-track--premium { grid-column: 1 / -1; }
+}
+
+/* Public banned players board */
+.banned-players-eyebrow {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gc-text-muted, #8a93a3);
+}
+.banned-players-table-wrap { overflow-x: auto; }
+.banned-players-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.banned-players-table th,
+.banned-players-table td {
+  border: 1px solid var(--gc-border, #2a3344);
+  padding: 0.45rem 0.6rem;
+  text-align: left;
+}
+.banned-players-table th {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.72rem;
+  color: var(--gc-text-muted, #8a93a3);
+}
+.banned-players-empty { margin: 0; color: var(--gc-text-muted, #8a93a3); }

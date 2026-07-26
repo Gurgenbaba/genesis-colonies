@@ -41,13 +41,20 @@ def test_sidebar_section_bodies_use_css_collapse_not_hidden():
 
 def test_sidebar_verwaltung_has_no_support_or_overflow():
     sidebar = _read("templates/partials/sidebar_right.html")
+    bottom = _read("templates/partials/bottom_utility_bar.html")
     assert "secondary_overflow_modules" not in sidebar
     assert 'data-nav-overflow="1"' not in sidebar
     assert 'data-nav-module="support"' not in sidebar
     assert 'data-special-open-window="support"' not in sidebar
     community = sidebar.split('data-nav-section="community"', 1)[1]
-    for module in ("alliance", "ranking", "hall_of_fame", "records"):
+    for module in ("alliance", "hall_of_fame"):
         assert f'data-nav-module="{module}"' in community
+    # Ranking / Records / Chronicles are bottom-utility links (declutter right rail).
+    assert 'data-nav-module="ranking"' not in community
+    assert 'data-nav-module="records"' not in community
+    assert "url_for('ranking_view')" in bottom
+    assert "url_for('records_view')" in bottom
+    assert "url_for('chronicles_view')" in bottom
     assert 'data-nav-section="system"' not in sidebar
 
 

@@ -308,6 +308,9 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | World Boss Events (shared HP PvE, contribution, LiveOps) | `game/world_boss.py` | [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) |
 | Galaxy Asteroid Belt (temporary harvest fields) | `game/asteroids.py` | [ASTEROID_SYSTEM.md](ASTEROID_SYSTEM.md) |
 | Pirate Ecosystem (Heat, bases, player-like AI, Bot-Log) | `game/pirates/` | [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md) |
+| Login Attendance (30-day calendar) | `game/login_rewards.py` | [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) |
+| Battle Pass Season (Free/Premium tracks) | `game/battle_pass.py` | [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) |
+| Premium Entitlement (stub → Payment Epic) | `game/premium_entitlements.py` | [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) |
 
 **Ticket-Check:** Domäne identifizieren → nur Owner-Modul (+ Routes/`app.py`) ändern → kein zweites Modul für dieselbe Wahrheit.
 

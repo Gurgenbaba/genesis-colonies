@@ -2165,6 +2165,8 @@
     if (path.endsWith("/auction-house")) return "auction_house";
     if (path.endsWith("/vote-center")) return "vote_center";
     if (path.endsWith("/referrals")) return "referrals";
+    if (path.endsWith("/login-rewards")) return "login_rewards";
+    if (path.endsWith("/banned-players")) return "banned_players";
     if (path.endsWith("/imperial-directives")) return "imperial_directives";
     if (path.endsWith("/galactic-politics")) return "galactic_politics";
     if (path.endsWith("/skilltree")) return "skilltree";
@@ -16542,6 +16544,157 @@
     if (state) patchReferralsDom(state);
   }
 
+  let _loginRewardsBound = false;
+  function parseLoginRewardsPageState() {
+    const el = document.getElementById("login-rewards-page-state");
+    if (!el) return null;
+    try {
+      return JSON.parse(el.textContent || "{}");
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function patchLoginRewardsDom(state) {
+    const page = document.getElementById("login-rewards-page");
+    if (!page || !state) return;
+    const cur = page.querySelector("[data-lr-current-day]");
+    if (cur) cur.textContent = `${Number(state.current_day || 0)}/30`;
+    const next = page.querySelector("[data-lr-next-day]");
+    if (next) next.textContent = state.available ? String(state.next_day || "—") : "—";
+    page.querySelectorAll("[data-lr-claim]").forEach((btn) => {
+      const disabled = !state.available;
+      btn.disabled = disabled;
+      btn.setAttribute("aria-disabled", disabled ? "true" : "false");
+    });
+    const script = document.getElementById("login-rewards-page-state");
+    if (script) script.textContent = JSON.stringify(state);
+  }
+
+  function bindLoginRewardsOnce() {
+    if (_loginRewardsBound) return;
+    _loginRewardsBound = true;
+    document.addEventListener("click", async (ev) => {
+      const btn = ev.target.closest("[data-lr-claim]");
+      if (!btn) return;
+      const page = document.getElementById("login-rewards-page");
+      if (!page) return;
+      if (btn.disabled || btn.getAttribute("aria-disabled") === "true") return;
+      const res = await GC.fetchGameAction("/api/login-rewards/claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ request_id: newRequestId() }),
+      });
+      if (res?.state) applyActionState(res, "login_reward_claim");
+      if (res?.login_rewards) {
+        if (res.login_rewards.days) {
+          GC.reloadCurrentPage({ skipPolling: true });
+          return;
+        }
+        patchLoginRewardsDom(res.login_rewards);
+      }
+      if (res?.ok) {
+        showNotify(t("login_rewards_claim_ok", "Login-Belohnung gutgeschrieben."), "success");
+      } else {
+        showNotify(t("login_rewards_claim_fail", "Belohnung konnte nicht abgeholt werden."), "error");
+      }
+    });
+  }
+
+  function initLoginRewards() {
+    bindLoginRewardsOnce();
+    const page = document.getElementById("login-rewards-page");
+    if (!page || page.dataset.ready !== "1") return;
+    const state = parseLoginRewardsPageState();
+    if (state) patchLoginRewardsDom(state);
+  }
+
+  let _battlePassBound = false;
+  function parseBattlePassPageState() {
+    const el = document.getElementById("battle-pass-page-state");
+    if (!el) return null;
+    try {
+      return JSON.parse(el.textContent || "{}");
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function bindBattlePassOnce() {
+    if (_battlePassBound) return;
+    _battlePassBound = true;
+    document.addEventListener("click", async (ev) => {
+      const opBtn = ev.target.closest("[data-bp-claim-op]");
+      if (opBtn) {
+        const page = document.getElementById("premium-page");
+        if (!page) return;
+        const opKey = String(opBtn.getAttribute("data-bp-claim-op") || "").trim();
+        const periodKey = String(opBtn.getAttribute("data-bp-op-period") || "").trim();
+        if (!opKey) return;
+        const res = await GC.fetchGameAction("/api/battle-pass/claim-op", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            op_key: opKey,
+            period_key: periodKey || undefined,
+            request_id: newRequestId(),
+          }),
+        });
+        if (res?.state) applyActionState(res, "battle_pass_claim_op");
+        if (res?.ok) {
+          showNotify(t("bp_op_claim_ok", "Season-Op XP gutgeschrieben."), "success");
+          GC.reloadCurrentPage({ skipPolling: true });
+        } else {
+          const reason = String(res?.reason || "");
+          const msg =
+            reason === "incomplete"
+              ? t("bp_op_err_incomplete", "Op noch nicht erfüllt.")
+              : reason === "already_claimed"
+                ? t("bp_op_err_claimed", "Op bereits abgeholt.")
+                : t("bp_op_claim_fail", "Op-XP konnte nicht abgeholt werden.");
+          showNotify(msg, "error");
+        }
+        return;
+      }
+
+      const btn = ev.target.closest("[data-bp-claim]");
+      if (!btn) return;
+      const page = document.getElementById("premium-page");
+      if (!page) return;
+      const track = String(btn.getAttribute("data-bp-claim") || "").trim();
+      const level = Number(btn.getAttribute("data-bp-level") || 0);
+      if (!track || level <= 0) return;
+      const res = await GC.fetchGameAction("/api/battle-pass/claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          track,
+          level,
+          request_id: newRequestId(),
+        }),
+      });
+      if (res?.state) applyActionState(res, "battle_pass_claim");
+      if (res?.ok) {
+        showNotify(t("bp_claim_ok", "Pass-Belohnung gutgeschrieben."), "success");
+        GC.reloadCurrentPage({ skipPolling: true });
+      } else {
+        const reason = String(res?.reason || "");
+        const msg =
+          reason === "premium_required"
+            ? t("bp_err_premium", "Premium-Track ist noch nicht freigeschaltet.")
+            : reason === "level_not_reached"
+              ? t("bp_err_level", "Level noch nicht erreicht.")
+              : t("bp_claim_fail", "Belohnung konnte nicht abgeholt werden.");
+        showNotify(msg, "error");
+      }
+    });
+  }
+
+  function initBattlePass() {
+    bindBattlePassOnce();
+    parseBattlePassPageState();
+  }
+
   function parseAlliancePageState() {
     const el = document.getElementById("alliance-page-state");
     if (!el) return null;
@@ -23863,9 +24016,11 @@
       || path.endsWith("/auction-house")
       || path.endsWith("/galactic-politics")
       || path.endsWith("/skilltree")
-      || path.endsWith("/premium")
     ) {
       sections.add("economy");
+    }
+    if (path.endsWith("/login-rewards") || path.endsWith("/premium")) {
+      sections.add("command");
     }
     if (path.endsWith("/empire") || path.endsWith("/techtree")) sections.add("economy");
     if (path.endsWith("/vote-center")) {
@@ -30655,6 +30810,8 @@
   GC.modules.auction_house = initAuctionHouse;
   GC.modules.vote_center = initVoteCenter;
   GC.modules.referrals = initReferrals;
+  GC.modules.login_rewards = initLoginRewards;
+  GC.modules.premium = initBattlePass;
   GC.modules.alliance = initAlliance;
   bindAllianceOnce();
   GC.modules.imperial_directives = initImperialDirectives;

@@ -14,6 +14,22 @@
       <span class="gc-bottom-util-sep" aria-hidden="true">|</span>
       <button type="button" class="gc-bottom-util-link" data-special-open-window="rules">{{ T("rules_short", "Regeln") }}</button>
       <span class="gc-bottom-util-sep" aria-hidden="true">|</span>
+      <a href="{{ url_for('ranking_view') }}"
+         class="gc-bottom-util-link{% if request.endpoint == 'ranking_view' %} is-active{% endif %}"
+         data-pjax-link>{{ T("nav_ranking_short", "Ranking") }}</a>
+      <span class="gc-bottom-util-sep" aria-hidden="true">|</span>
+      <a href="{{ url_for('chronicles_view') }}"
+         class="gc-bottom-util-link{% if request.endpoint == 'chronicles_view' %} is-active{% endif %}"
+         data-pjax-link>{{ T("nav_chronicles_short", "Chroniken") }}</a>
+      <span class="gc-bottom-util-sep" aria-hidden="true">|</span>
+      <a href="{{ url_for('records_view') }}"
+         class="gc-bottom-util-link{% if request.endpoint == 'records_view' %} is-active{% endif %}"
+         data-pjax-link>{{ T("nav_records_short", "Rekorde") }}</a>
+      <span class="gc-bottom-util-sep" aria-hidden="true">|</span>
+      <a href="{{ url_for('banned_players_view') }}"
+         class="gc-bottom-util-link{% if request.endpoint == 'banned_players_view' %} is-active{% endif %}"
+         data-pjax-link>{{ T("nav_banned_short", "Gebannte") }}</a>
+      <span class="gc-bottom-util-sep" aria-hidden="true">|</span>
       <a href="https://discord.gg/CYP8qWE7VM"
          class="gc-bottom-util-link gc-bottom-util-link--discord"
          target="_blank"

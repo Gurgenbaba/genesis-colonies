@@ -97,9 +97,27 @@ def _apply_planet_xp(planet_id: int, amount: int, conn: sqlite3.Connection, *, r
     return add_planet_xp(int(planet_id), int(amount), conn, reason=reason, skip_diversity=True)
 
 
-def _apply_account_xp(_player_id: int, _amount: int, *, conn: sqlite3.Connection) -> None:
-    """Future hook: players.account_xp / battlepass_xp."""
-    del _player_id, _amount, conn
+def _apply_account_xp(
+    player_id: int,
+    amount: int,
+    *,
+    conn: sqlite3.Connection,
+    source_key: Optional[str] = None,
+) -> None:
+    """Credit soft-capped battle-pass drip XP and advance Season Ops."""
+    try:
+        from .battle_pass import (
+            apply_op_progress,
+            credit_activity_drip_xp,
+            schema_ready as bp_ready,
+        )
+
+        if bp_ready(conn):
+            credit_activity_drip_xp(int(player_id), int(amount), conn=conn)
+            if source_key:
+                apply_op_progress(int(player_id), str(source_key), conn=conn)
+    except Exception:
+        pass
 
 
 def grant_activity_xp(
@@ -180,7 +198,7 @@ def grant_activity_xp(
 
     reason = f"activity_xp:{src}"
     planet_result = _apply_planet_xp(plid, grant_amount, conn, reason=reason)
-    _apply_account_xp(pid, grant_amount, conn=conn)
+    _apply_account_xp(pid, grant_amount, conn=conn, source_key=src)
 
     meta_json = json.dumps(meta, separators=(",", ":"), sort_keys=True) if meta else None
     cur.execute(

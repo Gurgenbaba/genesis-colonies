@@ -4087,10 +4087,297 @@ def skilltree_view():
     return _render_placeholder_module("skilltree")
 
 
+@app.route("/login-rewards")
+@require_login
+def login_rewards_view():
+    ctx = _load_page_live_context(finish_source="login_rewards")
+    if ctx is None:
+        return redirect(url_for("login"))
+
+    from game.login_rewards import serialize_for_client
+
+    login_state = {"ready": False}
+    conn = db()
+    try:
+        login_state = serialize_for_client(
+            int(session["user_id"]),
+            conn=conn,
+            include_calendar=True,
+        )
+    finally:
+        conn.close()
+
+    return render_template(
+        "login_rewards.html",
+        player=ctx["player_view"],
+        storage_caps=ctx["storage_caps"],
+        login_rewards=login_state,
+    )
+
+
+@app.route("/api/login-rewards/claim", methods=["POST"])
+@require_login
+def api_login_rewards_claim():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    from game.login_rewards import claim_login_reward, serialize_for_client
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ok, reason, claim_result = claim_login_reward(user_id, conn=conn)
+        if ok:
+            commit(conn)
+        else:
+            rollback(conn)
+    except Exception:
+        rollback(conn)
+        logger.exception("login reward claim failed user_id=%s", user_id)
+        state, _ = _build_game_state_payload(
+            include_panel=True, finish_source="api_login_rewards_claim"
+        )
+        return jsonify({"ok": False, "reason": "claim_failed", "state": state}), 500
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(
+        include_panel=True, finish_source="api_login_rewards_claim"
+    )
+    conn2 = db()
+    try:
+        login_rewards = (
+            (claim_result or {}).get("login_rewards")
+            if ok
+            else serialize_for_client(user_id, conn=conn2, include_calendar=True)
+        )
+    finally:
+        conn2.close()
+
+    resp = {
+        "ok": bool(ok),
+        "reason": reason,
+        "state": state,
+        "login_rewards": login_rewards,
+    }
+    if ok and claim_result:
+        resp["day"] = claim_result.get("day")
+        resp["reward"] = claim_result.get("reward")
+        resp["granted"] = claim_result.get("granted")
+    if request_id and ok:
+        save_idempotent_action(user_id, request_id, resp)
+    return jsonify(resp)
+
+
 @app.route("/premium")
 @require_login
 def premium_view():
-    return _render_placeholder_module("premium")
+    ctx = _load_page_live_context(finish_source="premium")
+    if ctx is None:
+        return redirect(url_for("login"))
+
+    from game.battle_pass import serialize_for_client as bp_serialize
+    from game.login_rewards import serialize_for_client as lr_serialize
+
+    battle_pass = {"ready": False}
+    login_teaser = {"ready": False}
+    conn = db()
+    try:
+        uid = int(session["user_id"])
+        battle_pass = bp_serialize(uid, conn=conn, include_tracks=True)
+        login_teaser = lr_serialize(uid, conn=conn, include_calendar=False)
+    finally:
+        conn.close()
+
+    return render_template(
+        "premium.html",
+        player=ctx["player_view"],
+        storage_caps=ctx["storage_caps"],
+        battle_pass=battle_pass,
+        login_teaser=login_teaser,
+    )
+
+
+@app.route("/api/battle-pass/claim", methods=["POST"])
+@require_login
+def api_battle_pass_claim():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    level = int(data.get("level") or 0)
+    track = str(data.get("track") or "").strip().lower()
+    from game.battle_pass import claim_battle_pass_reward, serialize_for_client
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ok, reason, claim_result = claim_battle_pass_reward(
+            user_id, level, track, conn=conn
+        )
+        if ok:
+            commit(conn)
+        else:
+            rollback(conn)
+    except Exception:
+        rollback(conn)
+        logger.exception(
+            "battle pass claim failed user_id=%s level=%s track=%s",
+            user_id,
+            level,
+            track,
+        )
+        state, _ = _build_game_state_payload(
+            include_panel=True, finish_source="api_battle_pass_claim"
+        )
+        return jsonify({"ok": False, "reason": "claim_failed", "state": state}), 500
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(
+        include_panel=True, finish_source="api_battle_pass_claim"
+    )
+    conn2 = db()
+    try:
+        battle_pass = (
+            (claim_result or {}).get("battle_pass")
+            if ok
+            else serialize_for_client(user_id, conn=conn2, include_tracks=True)
+        )
+    finally:
+        conn2.close()
+
+    resp = {
+        "ok": bool(ok),
+        "reason": reason,
+        "state": state,
+        "battle_pass": battle_pass,
+    }
+    if ok and claim_result:
+        resp["level"] = claim_result.get("level")
+        resp["track"] = claim_result.get("track")
+        resp["reward"] = claim_result.get("reward")
+        resp["granted"] = claim_result.get("granted")
+    if request_id and ok:
+        save_idempotent_action(user_id, request_id, resp)
+    return jsonify(resp)
+
+
+@app.route("/api/battle-pass/claim-op", methods=["POST"])
+@require_login
+def api_battle_pass_claim_op():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    op_key = str(data.get("op_key") or "").strip()
+    period_key = str(data.get("period_key") or "").strip() or None
+    from game.battle_pass import claim_op, serialize_for_client
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ok, reason, claim_result = claim_op(
+            user_id, op_key, conn=conn, period_key=period_key
+        )
+        if ok:
+            commit(conn)
+        else:
+            rollback(conn)
+    except Exception:
+        rollback(conn)
+        logger.exception(
+            "battle pass claim-op failed user_id=%s op_key=%s",
+            user_id,
+            op_key,
+        )
+        state, _ = _build_game_state_payload(
+            include_panel=True, finish_source="api_battle_pass_claim_op"
+        )
+        return jsonify({"ok": False, "reason": "claim_failed", "state": state}), 500
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(
+        include_panel=True, finish_source="api_battle_pass_claim_op"
+    )
+    conn2 = db()
+    try:
+        battle_pass = (
+            (claim_result or {}).get("battle_pass")
+            if ok
+            else serialize_for_client(user_id, conn=conn2, include_tracks=True)
+        )
+    finally:
+        conn2.close()
+
+    resp = {
+        "ok": bool(ok),
+        "reason": reason,
+        "state": state,
+        "battle_pass": battle_pass,
+    }
+    if ok and claim_result:
+        resp["op_key"] = claim_result.get("op_key")
+        resp["period_key"] = claim_result.get("period_key")
+        resp["xp_reward"] = claim_result.get("xp_reward")
+    if request_id and ok:
+        save_idempotent_action(user_id, request_id, resp)
+    return jsonify(resp)
+
+
+@app.route("/api/admin/battle-pass/unlock-premium", methods=["POST"])
+@require_admin_api
+def api_admin_battle_pass_unlock_premium():
+    data = request.get_json(silent=True) or {}
+    player_id = int(data.get("player_id") or 0)
+    if player_id <= 0:
+        return jsonify({"ok": False, "reason": "invalid_player"}), 400
+
+    from game.battle_pass import unlock_premium
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ok, reason, result = unlock_premium(
+            player_id,
+            conn=conn,
+            source=f"admin:{int(session.get('user_id') or 0)}",
+        )
+        if ok:
+            commit(conn)
+        else:
+            rollback(conn)
+    except Exception:
+        rollback(conn)
+        logger.exception("admin battle pass unlock failed player_id=%s", player_id)
+        return jsonify({"ok": False, "reason": "unlock_failed"}), 500
+    finally:
+        conn.close()
+
+    return jsonify({"ok": bool(ok), "reason": reason, "result": result})
 
 
 # --------------------------------------------------------------------------
@@ -4507,6 +4794,22 @@ def records_view():
         energy_used=energy_used,
         storage_caps=storage_caps,
         records_payload=records_payload,
+    )
+
+
+@app.route("/banned-players")
+@require_login
+def banned_players_view():
+    ctx = _load_page_live_context(finish_source="banned_players")
+    if ctx is None:
+        return redirect(url_for("login"))
+
+    banned_players = admin_logic.get_public_ban_list()
+    return render_template(
+        "banned_players.html",
+        player=ctx["player_view"],
+        storage_caps=ctx["storage_caps"],
+        banned_players=banned_players,
     )
 
 
@@ -7230,6 +7533,20 @@ def _payload_from_live_context(
         )
     except Exception:
         payload["active_boosters"] = {"ready": False, "active": [], "active_effects": []}
+
+    try:
+        from game.login_rewards import serialize_for_client as lr_serialize
+
+        payload["login_rewards"] = lr_serialize(int(user_id), conn=conn)
+    except Exception:
+        payload["login_rewards"] = {"ready": False, "available": False}
+
+    try:
+        from game.battle_pass import serialize_for_client as bp_serialize
+
+        payload["battle_pass"] = bp_serialize(int(user_id), conn=conn)
+    except Exception:
+        payload["battle_pass"] = {"ready": False}
 
     if include_panel:
         try:

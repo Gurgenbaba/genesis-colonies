@@ -151,6 +151,14 @@ Erkennung: IP-/Verhaltensanalyse, Support-Meldungen, Admin-Tools. Kein automatis
 
 `[Policy]` Verboten: Handel von Accounts, Ressourcen, Flotten, Dienstleistungen oder Schutz gegen **Echtgeld** oder externe Zahlungsmittel außerhalb autorisierter Kanäle.
 
+### 3.3a Official LiveOps / Premium (EPIC-22)
+
+`[Policy]` Offizielle Kanäle (Login-Kalender, Battle Pass, künftiger Shop) dürfen **Convenience** verkaufen oder vergeben: Timekeeper-Zeit, Container (meta-only), Boosters, Cosmetics/QoL.
+
+Battle-Pass-XP: sichtbare **Season Ops** (daily/weekly) + soft-capped Activity-Drip; Pace zielt auf Season-Abschluss bei normalem Spiel (~45–55 Tage), ohne zweite Quest-Engine neben Imperial Directives.
+
+**Nicht** über Premium/Login: Kampf-Power (Schiffe, Defense) oder Rohstoff-Stacks, die Ranking verzerren. Doc: [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md).
+
 ### 3.4 Bots, Makros, Scripts, Automation
 
 `[Policy]`

@@ -429,6 +429,24 @@ def nav_badges_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
     except Exception:
         wb_active = False
         wb_count = 0
+
+    login_available = False
+    bp_claimable = 0
+    try:
+        from game.login_rewards import serialize_for_client as lr_serialize
+
+        lr = lr_serialize(uid, conn=conn)
+        login_available = bool(lr.get("ready") and lr.get("available"))
+    except Exception:
+        login_available = False
+    try:
+        from game.battle_pass import serialize_for_client as bp_serialize
+
+        bp = bp_serialize(uid, conn=conn)
+        bp_claimable = int(bp.get("claimable_count") or 0) if bp.get("ready") else 0
+    except Exception:
+        bp_claimable = 0
+
     return {
         "vote_center": _nav_badge_entry(
             active=vote_count > 0,
@@ -454,6 +472,16 @@ def nav_badges_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
             active=wb_active,
             count=wb_count,
             label=str(wb_count) if wb_count > 1 else ("LIVE" if wb_active else ""),
+        ),
+        "login_rewards": _nav_badge_entry(
+            active=login_available,
+            count=1 if login_available else 0,
+            label="!" if login_available else "",
+        ),
+        "premium": _nav_badge_entry(
+            active=bp_claimable > 0,
+            count=bp_claimable,
+            label=str(bp_claimable) if bp_claimable > 0 else "",
         ),
     }
 

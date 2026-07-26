@@ -23,6 +23,7 @@ Epics beschreiben nur das Ziel. **Niemals direkt implementieren.**
 | EPIC-19 | Performance Core (Maximum Speed Stack) | [GC_PERF_CORE.md](GC_PERF_CORE.md) |
 | EPIC-20 | World Boss Events (serverweite PvE-Bosse) | [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) |
 | EPIC-21 | Pirate Ecosystem (Living Threat) | [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md) |
+| EPIC-22 | LiveOps Retention (Login + Battle Pass) | [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) |
 
 Epic → in **3–5 Tickets** zerlegen (große Epics: Phasen in Master-Doc). Siehe [EPICS.md](EPICS.md).
 
@@ -61,6 +62,7 @@ Vor jeder Änderung die relevanten Docs lesen:
 | [STATE_AJAX.md](STATE_AJAX.md) | Polling, PJAX, Live-State |
 | [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) | Serverweite PvE-Bosse, Contribution, LiveOps |
 | [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md) | Galaxy Heat, Piratenbasen, player-like AI, Bot-Log |
+| [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) | 30-Tage Login + Battle Pass (EPIC-22) |
 
 **Regel:** Architektur-Entscheidungen aus Docs respektieren. Bei Änderung → Doc mit aktualisieren.
 

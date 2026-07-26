@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% set bans = banned_players if banned_players is defined and banned_players else [] %}
+
+<div class="gc-page banned-players-page" id="banned-players-page">
+  <header class="gc-page-header section-header">
+    <p class="banned-players-eyebrow">{{ T("banned_players_eyebrow", "MODERATION") }}</p>
+    <h1 class="section-title">{{ T("banned_players_title", "Gebannte Spieler") }}</h1>
+    <p class="section-hint hint">
+      {{ T("banned_players_hint", "Öffentliche Übersicht aktiver Account-Sperren. Fair Play bleibt verbindlich.") }}
+    </p>
+  </header>
+
+  <section class="gc-panel">
+    {% if not bans %}
+    <p class="banned-players-empty">{{ T("banned_players_empty", "Derzeit sind keine Spieler gebannt.") }}</p>
+    {% else %}
+    <div class="banned-players-table-wrap">
+      <table class="banned-players-table">
+        <thead>
+          <tr>
+            <th>{{ T("banned_players_col_name", "Commander") }}</th>
+            <th>{{ T("banned_players_col_reason", "Grund") }}</th>
+            <th>{{ T("banned_players_col_expires", "Bis") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ban in bans %}
+          <tr>
+            <td class="gc-mono">{{ ban.player_name }}</td>
+            <td>{% if ban.reason %}{{ ban.reason }}{% else %}{{ T("banned_players_reason_none", "—") }}{% endif %}</td>
+            <td class="gc-mono">
+              {% if ban.is_permanent %}
+                {{ T("banned_players_permanent", "Permanent") }}
+              {% else %}
+                {{ ban.expires_text }}
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

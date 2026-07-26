@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% set lr = login_rewards if login_rewards is defined and login_rewards else {'ready': false} %}
+{% set days = lr.days if lr.days is defined else [] %}
+
+<div class="gc-page login-rewards-page" id="login-rewards-page"
+     data-login-rewards
+     data-ready="{{ '1' if lr.ready else '0' }}">
+
+  {% if lr.ready %}
+  <script type="application/json" id="login-rewards-page-state">{{ lr | tojson }}</script>
+  {% endif %}
+
+  <header class="gc-page-header section-header login-rewards-header">
+    <p class="login-rewards-eyebrow">{{ T("login_rewards_eyebrow", "HIGH COMMAND") }}</p>
+    <h1 class="section-title">{{ T("login_rewards_title", "30-Tage Login-Belohnungen") }}</h1>
+    <p class="section-hint hint login-rewards-hint">
+      {{ T("login_rewards_hint", "Melde dich jeden Tag an und hole Timekeeper, Boxen und Booster ab. Verpasste Tage setzen die Kette zurück.") }}
+    </p>
+  </header>
+
+  {% if not lr.ready %}
+  <section class="gc-panel login-rewards-panel">
+    <p class="login-rewards-empty">{{ T("login_rewards_unavailable", "Login-Belohnungen sind derzeit nicht verfügbar.") }}</p>
+  </section>
+  {% else %}
+
+  <section class="gc-panel login-rewards-panel login-rewards-status-panel">
+    <div class="login-rewards-status-row">
+      <div class="login-rewards-status-block">
+        <span class="login-rewards-status-label">{{ T("login_rewards_progress_label", "Fortschritt") }}</span>
+        <strong class="login-rewards-status-value gc-mono" data-lr-current-day>
+          {{ lr.current_day }}/30
+        </strong>
+      </div>
+      <div class="login-rewards-status-block">
+        <span class="login-rewards-status-label">{{ T("login_rewards_next_label", "Nächster Tag") }}</span>
+        <strong class="login-rewards-status-value gc-mono" data-lr-next-day>
+          {% if lr.available %}{{ lr.next_day }}{% else %}—{% endif %}
+        </strong>
+      </div>
+      <div class="login-rewards-actions">
+        <button type="button"
+                class="gc-btn gc-btn-primary"
+                data-lr-claim
+                {% if not lr.available %}disabled aria-disabled="true"{% endif %}>
+          {{ T("login_rewards_claim", "Heutige Belohnung holen") }}
+        </button>
+        <a href="{{ url_for('premium_view') }}" class="gc-btn gc-btn-ghost" data-pjax-link>
+          {{ T("login_rewards_to_pass", "Zum Season Pass") }}
+        </a>
+      </div>
+    </div>
+    <p class="login-rewards-cooldown hint" data-lr-cooldown hidden>
+      {{ T("login_rewards_next_in", "Nächster Claim in") }}
+      <span class="gc-mono" data-lr-cooldown-sec>{{ lr.next_unlock_in_sec or 0 }}</span>s
+    </p>
+  </section>
+
+  <section class="gc-panel login-rewards-panel">
+    <div class="gc-panel-header">
+      <span class="gc-panel-title">{{ T("login_rewards_calendar_title", "Attendance-Kalender") }}</span>
+    </div>
+    <div class="login-rewards-grid" data-lr-grid>
+      {% for day in days %}
+      <article class="login-rewards-day login-rewards-day--{{ day.status }}{% if day.milestone %} login-rewards-day--milestone{% endif %}"
+               data-lr-day="{{ day.day }}"
+               data-lr-status="{{ day.status }}">
+        <header class="login-rewards-day-head">
+          <span class="login-rewards-day-num gc-mono">{{ T("login_rewards_day_n", "Tag {n}").replace("{n}", day.day|string) }}</span>
+          {% if day.milestone %}
+          <span class="login-rewards-day-badge">{{ T("login_rewards_milestone", "Meilenstein") }}</span>
+          {% endif %}
+        </header>
+        <ul class="login-rewards-day-rewards">
+          {% for item in day['items'] %}
+          <li class="login-rewards-reward-item">
+            <span class="login-rewards-reward-icon" aria-hidden="true">{{ item.icon or '📦' }}</span>
+            <span class="login-rewards-reward-name">{{ T(item.name_key, item.item_key) }}</span>
+            <span class="login-rewards-reward-amt gc-mono">×{{ item.amount }}</span>
+          </li>
+          {% endfor %}
+          {% if day.timekeeper_sec and day.timekeeper_sec > 0 %}
+          <li class="login-rewards-reward-item login-rewards-reward-item--tk">
+            <span class="login-rewards-reward-icon" aria-hidden="true">⚡</span>
+            <span class="login-rewards-reward-name">{{ T("login_rewards_tk", "Timekeeper") }}</span>
+            <span class="login-rewards-reward-amt gc-mono">{{ day.timekeeper_sec }}s</span>
+          </li>
+          {% endif %}
+        </ul>
+        {% if day.status == 'claimable' %}
+        <button type="button" class="gc-btn gc-btn-sm gc-btn-primary login-rewards-day-claim" data-lr-claim>
+          {{ T("login_rewards_claim_short", "Claim") }}
+        </button>
+        {% elif day.status == 'claimed' %}
+        <span class="login-rewards-day-state">{{ T("login_rewards_claimed", "Abgeholt") }}</span>
+        {% else %}
+        <span class="login-rewards-day-state">{{ T("login_rewards_locked", "Gesperrt") }}</span>
+        {% endif %}
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+
+  {% endif %}
+</div>
+{% endblock %}

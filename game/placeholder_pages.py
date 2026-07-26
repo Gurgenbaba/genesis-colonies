@@ -45,24 +45,6 @@ PLACEHOLDER_MODULES: Dict[str, Dict[str, Any]] = {
             "placeholder_skilltree_pill_3",
         ],
     },
-    "premium": {
-        "slug": "premium",
-        "endpoint": "premium_view",
-        "title_key": "nav_premium",
-        "hint_key": "placeholder_premium_hint",
-        "intro_key": "placeholder_premium_intro",
-        "note_key": "placeholder_premium_note",
-        "features": [
-            ("placeholder_premium_f1_title", "placeholder_premium_f1_desc"),
-            ("placeholder_premium_f2_title", "placeholder_premium_f2_desc"),
-            ("placeholder_premium_f3_title", "placeholder_premium_f3_desc"),
-        ],
-        "pills": [
-            "placeholder_premium_pill_1",
-            "placeholder_premium_pill_2",
-            "placeholder_premium_pill_3",
-        ],
-    },
 }
 
 

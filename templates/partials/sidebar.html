@@ -11,7 +11,9 @@
   {% set _nav_placement = 'left' %}
   {% set _nav_shell_class = 'gc-sidebar-desktop' %}
 {% endif %}
-{% set _cmd_open = request.endpoint in ('overview', 'galaxy_view', 'planet_evolution_view') %}
+{% set _cmd_open = request.endpoint in (
+  'overview', 'galaxy_view', 'planet_evolution_view', 'login_rewards_view', 'premium_view'
+) %}
 {% set _infra_open = request.endpoint in ('buildings_view', 'research_view') %}
 {% set _mil_open = request.endpoint in ('shipyard_view', 'defense_view', 'fleet_view', 'combat_simulator_view') %}
 <nav class="gc-sidebar {{ _nav_shell_class }} gc-sidebar--left gc-sidebar-left{% if _sn.full_nav %} gc-sidebar--full-nav{% else %} gc-sidebar--role-nav{% endif %}"
@@ -51,6 +53,20 @@
          class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'planet_evolution') }} {% if request.endpoint == 'planet_evolution_view' %}active{% endif %}"
          {% if not module_in_section(_sn, 'planet_evolution', 'command') %}hidden{% endif %}>
         {{ T("nav_planet_evolution", "Planet Evolution") }}
+      </a>
+      <a href="{{ url_for('login_rewards_view') }}"
+         data-nav-module="login_rewards"
+         data-nav-key="login_rewards"
+         class="gc-nav-sub-link gc-nav-module--secondary {% if request.endpoint == 'login_rewards_view' %}active{% endif %}">
+        <span class="gc-nav-link-label">{{ T("nav_login_rewards", "Login Rewards") }}</span>
+        <span class="gc-nav-badge gc-nav-badge--alert hidden" data-nav-badge="login_rewards" hidden aria-hidden="true"></span>
+      </a>
+      <a href="{{ url_for('premium_view') }}"
+         data-nav-module="premium"
+         data-nav-key="premium"
+         class="gc-nav-sub-link gc-nav-module--secondary {% if request.endpoint == 'premium_view' %}active{% endif %}">
+        <span class="gc-nav-link-label">{{ T("nav_premium", "Season Pass") }}</span>
+        <span class="gc-nav-badge gc-nav-badge--alert hidden" data-nav-badge="premium" hidden aria-hidden="true"></span>
       </a>
     </div>
   </div>

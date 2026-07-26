@@ -27,6 +27,8 @@ Status: v1.5.9.2 (2026-06-24)
 | EPIC-18 | Collector Exchange (Sammler-Markt) | 📋 | [COLLECTOR_EXCHANGE.md](COLLECTOR_EXCHANGE.md) |
 | EPIC-20 | World Boss Events | 🔄 | [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) |
 | EPIC-21 | Pirate Ecosystem (Living Threat) | ✅ | [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md) |
+| EPIC-22 | LiveOps Retention (Login + Battle Pass) | ✅ | [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) |
+| EPIC-23 | Payment / Shop | 📋 | [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) (Phase 3) |
 
 ---
 
