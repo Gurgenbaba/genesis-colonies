@@ -428,7 +428,11 @@ def _gd_vote_open_now(year: int = 2026, month: int = 6) -> int:
     return int(stamps["vote_start_at"]) + 3600
 
 
-def test_get_vote_phase_boundaries(gd_db):
+def test_galactic_politics_js_formats_galaxy_title():
+    src = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+    assert 'tf("gd_politics_galaxy_title"' in src or "tf('gd_politics_galaxy_title'" in src
+    assert 't("gd_politics_galaxy_title", "Galaxie %(galaxy)s", { galaxy })' not in src
+
     stamps = _cycle_timestamps(2026, 6)
     cycle = {"vote_end_at": stamps["vote_end_at"], "effect_end_at": stamps["effect_end_at"]}
     assert get_vote_phase(cycle, stamps["vote_start_at"]) == PHASE_VOTE_OPEN

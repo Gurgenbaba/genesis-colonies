@@ -18010,7 +18010,7 @@
                data-gd-galaxy-card
                data-galaxy="${galaxy}">
         <div class="gc-panel-header galactic-politics-galaxy-head">
-          <span class="gc-panel-title">${escapeHtml(t("gd_politics_galaxy_title", "Galaxie %(galaxy)s", { galaxy }))}</span>
+          <span class="gc-panel-title">${escapeHtml(tf("gd_politics_galaxy_title", { galaxy }, "Galaxie %(galaxy)s"))}</span>
           <span class="galactic-politics-phase gc-mono" data-gd-phase-label data-phase="${escapeHtml(phase)}">${escapeHtml(_gdPhaseLabel(phase))}</span>
         </div>
         <div class="galactic-politics-active" data-gd-active-row>
