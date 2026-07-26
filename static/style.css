@@ -18528,7 +18528,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   align-items: center;
   max-width: 100%;
   padding: 4px 10px;
-  border-radius: var(--gc-radius-pill);
+  border-radius: var(--gc-radius-sm, 2px);
   border: 1px solid rgba(120, 190, 255, 0.22);
   background: rgba(8, 16, 34, 0.72);
   color: var(--gc-text-soft);
@@ -18536,6 +18536,12 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-decoration: none;
+}
+
+a.gc-ranking-alliance:hover{
+  border-color: var(--gc-accent, #6ec8ff);
+  color: var(--gc-text);
 }
 
 .gc-ranking-alliance--none{
@@ -36891,80 +36897,236 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   overflow: hidden;
 }
 
-/* Profile-first hero */
+/* Profile-first hero ? compact identity strip */
 .alliance-hub-hero {
-  padding: 16px 18px 18px;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--gc-border-subtle, #222);
   background:
-    linear-gradient(135deg, rgba(110, 200, 255, 0.06) 0%, transparent 55%),
-    linear-gradient(180deg, rgba(0, 0, 0, 0.22) 0%, rgba(0, 0, 0, 0.08) 100%);
+    linear-gradient(135deg, rgba(110, 200, 255, 0.05) 0%, transparent 50%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.06) 100%);
 }
 .alliance-hub-hero-top {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 14px;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px 16px;
 }
 .alliance-hub-hero-logo-row {
   display: flex;
   justify-content: center;
   align-items: center;
-  width: 100%;
-  padding: 4px 0 2px;
+  width: auto;
+  flex: 0 0 auto;
+  padding: 0;
+  position: relative;
 }
 .alliance-hub-hero-main {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px 16px;
+  gap: 10px 14px;
+  flex: 1 1 0;
+  min-width: 0;
 }
 .alliance-hub-hero-actions {
   position: static;
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  align-items: stretch;
-  gap: 8px;
-  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 auto;
   max-width: 100%;
   z-index: 1;
 }
 .alliance-hub-hero-action {
   margin: 0;
-  min-height: 32px;
+  min-height: 28px;
   white-space: nowrap;
 }
 .alliance-hub-hero-body,
 .alliance-hub-hero-meta {
-  flex: 1 1 240px;
+  flex: 1 1 200px;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px;
 }
 .alliance-hub-hero-logo-wrap {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   min-width: 0;
-  max-width: 100%;
+  max-width: none;
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
-  margin: 0 auto;
+  margin: 0;
 }
 .alliance-hub-hero-identity {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
 }
 .alliance-hub-hero-identity .alliance-hub-name {
   margin: 0;
-  font-size: 1.35rem;
+  font-size: 1.15rem;
   font-weight: 600;
   line-height: 1.2;
   letter-spacing: 0.02em;
 }
 .alliance-hub-xp--hero { margin-top: 0; }
+
+/* Ops band: active project + donation pool */
+.alliance-hub-ops {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  border-bottom: 1px solid var(--gc-border-subtle, #222);
+  background: rgba(0, 0, 0, 0.1);
+}
+@media (min-width: 900px) {
+  .alliance-hub-ops:has(.alliance-hub-project-active) {
+    grid-template-columns: minmax(200px, 0.85fr) minmax(0, 1.5fr);
+  }
+}
+.alliance-hub-ops .alliance-hub-project-active,
+.alliance-hub-ops .alliance-hub-pool {
+  border-bottom: none;
+  padding: 12px 14px;
+}
+.alliance-hub-ops .alliance-hub-project-active {
+  border-right: 1px solid var(--gc-border-subtle, #222);
+}
+.alliance-hub-xp-card--inline {
+  margin-top: 2px;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+.alliance-hub-pool-need {
+  margin: 2px 0 0;
+  font-size: 0.68rem;
+  opacity: 0.72;
+}
+.alliance-hub-pool-hint {
+  margin: 0 0 8px;
+  font-size: 0.74rem;
+  opacity: 0.75;
+}
+.alliance-hub-pool-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  min-height: 30px;
+}
+.alliance-hub-pool-full-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gc-success, #7fd4a0);
+  border: 1px solid rgba(127, 212, 160, 0.35);
+  background: rgba(127, 212, 160, 0.08);
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.alliance-hub-pool-tile.is-full {
+  opacity: 0.88;
+  border-color: rgba(127, 212, 160, 0.28);
+}
+
+/* Public visitor page */
+.alliance-hub-visitor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 14px 16px;
+}
+.alliance-hub-visitor-hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px 16px;
+  align-items: center;
+}
+.alliance-hub-visitor-identity {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.alliance-hub-visitor-xp {
+  max-width: 100%;
+}
+.alliance-hub-visitor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.alliance-hub-visitor-actions--hero {
+  grid-column: 1 / -1;
+  padding-top: 8px;
+  border-top: 1px solid var(--gc-border-subtle, #222);
+}
+.alliance-hub-visitor-apply {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 420px;
+  padding: 10px 12px;
+  border: 1px solid var(--gc-border-subtle, #222);
+  background: rgba(0, 0, 0, 0.16);
+}
+.alliance-hub-detail-member-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--gc-border-subtle, #222);
+}
+.alliance-hub-detail-member-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--gc-border-subtle, #222);
+}
+.alliance-hub-detail-member-row:last-child {
+  border-bottom: none;
+}
+.alliance-hub-detail-member-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.alliance-hub-detail-member-pts {
+  text-align: right;
+  opacity: 0.9;
+  font-size: 0.85rem;
+}
+.gc-player-card-alliance {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+}
+.gc-player-card-alliance-link,
+.gc-world-boss-alliance-link {
+  color: var(--gc-accent, #6ec8ff);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+.gc-player-card-alliance-link:hover,
+.gc-world-boss-alliance-link:hover {
+  border-bottom-color: currentColor;
+}
 
 .alliance-hub-stats {
   display: grid;
@@ -37650,31 +37812,44 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
 .alliance-hub-logo-frame--md { width: 40px; height: 40px; }
 .alliance-hub-logo-frame--lg { width: 56px; height: 56px; }
 .alliance-hub-logo-frame--hero {
-  width: min(100%, 520px);
-  max-width: 520px;
-  height: min(52vw, 300px);
-  max-height: 300px;
-  min-height: 160px;
-  padding: 10px;
-  border: 1px solid rgba(110, 200, 255, 0.35);
+  /* PE-style visual: larger emblem, framed, not a full-bleed banner */
+  width: 8.5rem;
+  height: 8.5rem;
+  max-width: 8.5rem;
+  max-height: 8.5rem;
+  min-height: 0;
+  padding: 3px;
+  border: 1px solid rgba(110, 200, 255, 0.42);
   border-radius: var(--gc-radius-sm, 2px);
   background:
-    linear-gradient(180deg, rgba(110, 200, 255, 0.08) 0%, rgba(0, 0, 0, 0.35) 100%);
+    radial-gradient(ellipse at 50% 35%, rgba(110, 200, 255, 0.14) 0%, transparent 62%),
+    linear-gradient(180deg, rgba(18, 28, 40, 0.95) 0%, rgba(0, 0, 0, 0.55) 100%);
   box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.45) inset,
-    0 0 24px rgba(110, 200, 255, 0.08);
+    0 0 0 1px rgba(0, 0, 0, 0.55) inset,
+    0 0 18px rgba(110, 200, 255, 0.12),
+    0 0 2px rgba(110, 200, 255, 0.25);
+  position: relative;
+}
+.alliance-hub-logo-frame--hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border: 1px solid rgba(110, 200, 255, 0.12);
+  box-shadow: inset 0 0 16px rgba(0, 0, 0, 0.35);
 }
 .alliance-hub-logo-frame--hero .alliance-hub-logo {
   width: 100%;
   height: 100%;
   max-width: 100%;
   max-height: 100%;
-  object-fit: contain;
+  object-fit: cover;
+  display: block;
 }
 .alliance-hub-logo-frame--hero .alliance-hub-logo-ph {
   width: 100%;
   height: 100%;
-  font-size: clamp(1.5rem, 6vw, 2.4rem);
+  font-size: 1.45rem;
 }
 .alliance-hub-logo {
   display: block;
@@ -38236,7 +38411,9 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   cursor: pointer;
   color: inherit;
   font: inherit;
+  text-decoration: none;
 }
+a.alliance-hub-browse-card:hover,
 .alliance-hub-browse-card:hover,
 .alliance-hub-browse-card.is-active {
   border-color: var(--gc-accent, #6ec8ff);
@@ -38396,8 +38573,15 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
     padding: 8px 4px;
   }
   .alliance-hub-hero-top {
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .alliance-hub-hero-logo-row .alliance-hub-logo-frame--hero {
+    width: 6.5rem;
+    height: 6.5rem;
+    max-width: 6.5rem;
+    max-height: 6.5rem;
   }
   .alliance-hub-hero-main {
     flex-direction: column;
@@ -38410,6 +38594,9 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   .alliance-hub-hero-action {
     flex: 1 1 auto;
     min-width: 0;
+  }
+  .alliance-hub-visitor-hero {
+    grid-template-columns: auto minmax(0, 1fr);
   }
   .alliance-hub-member-table--roster th:nth-child(5),
   .alliance-hub-member-table--roster td:nth-child(5),

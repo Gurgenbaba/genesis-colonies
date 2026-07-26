@@ -74,6 +74,17 @@
         <p class="gc-player-card-activity">
           {{ T(card.get('activity_key', 'playercard_recently_active')) }}
         </p>
+        {% if card.get('alliance') and card.alliance.get('id') %}
+        <p class="gc-player-card-alliance">
+          <a href="{{ url_for('alliance_visitor_view', alliance_id=card.alliance.id) }}"
+             class="gc-player-card-alliance-link">
+            {% if card.alliance.tag %}[{{ card.alliance.tag }}]{% endif %}
+            {{ card.alliance.name }}
+          </a>
+        </p>
+        {% elif card.get('alliance_label') %}
+        <p class="gc-player-card-alliance">{{ card.alliance_label }}</p>
+        {% endif %}
       </div>
     </div>
 

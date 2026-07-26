@@ -2174,7 +2174,7 @@
     if (path.endsWith("/skilltree")) return "skilltree";
     if (path.endsWith("/premium")) return "premium";
     if (path.endsWith("/shop") || path.endsWith("/shop/return")) return "shop";
-    if (path.endsWith("/alliance")) return "alliance";
+    if (path === "/alliance" || /^\/alliance\/\d+$/.test(path)) return "alliance";
     if (path.endsWith("/shipyard")) return "shipyard";
     if (path.endsWith("/defense")) return "defense";
     if (path.endsWith("/empire")) return "empire";
@@ -17110,9 +17110,6 @@
     if (key === "pool_cap_exceeded") {
       return t("alliance_err_pool_cap_exceeded", "Allianzkasse ist voll.");
     }
-    if (key === "donation_exceeds_need") {
-      return t("alliance_err_donation_exceeds_need", "Spende übersteigt den noch benötigten Betrag.");
-    }
     if (key === "invalid_broadcast") {
       return t("alliance_err_invalid_broadcast", "Betreff und Nachricht sind erforderlich.");
     }
@@ -17143,39 +17140,107 @@
       const val = Number(state.pool?.[res] ?? 0);
       const cap = Number(state.pool_cap?.[res] ?? 0);
       const maxVal = Number(state.donation_limits?.[res] ?? Math.max(0, cap - val));
+      const needRem = Number(state.project_need_remaining?.[res] ?? 0);
+      const tile = page.querySelector(`.alliance-hub-pool-tile[data-resource="${res}"]`);
       const valEl = page.querySelector(`[data-pool-val="${res}"]`);
       const capEl = page.querySelector(`[data-pool-cap="${res}"]`);
       const fillEl = page.querySelector(`[data-pool-fill="${res}"]`);
-      const input = page.querySelector(`[data-donate-amount="${res}"]`);
-      const btn = page.querySelector(`[data-donate-btn="${res}"]`);
+      const needEl = page.querySelector(`[data-pool-need="${res}"]`);
+      const actions = page.querySelector(`[data-pool-actions="${res}"]`);
+      if (tile) tile.classList.toggle("is-full", maxVal <= 0);
       if (valEl) valEl.textContent = fmt(val);
       if (capEl) capEl.textContent = fmt(cap);
       if (fillEl) {
         const pct = cap > 0 ? Math.min(100, (val / cap) * 100) : 0;
         fillEl.style.width = `${pct}%`;
       }
-      if (input) {
-        input.dataset.inputMax = String(maxVal);
-        input.disabled = maxVal <= 0;
-        let hint;
-        if (maxVal > 0) {
-          hint = t("alliance_donate_max_hint", "Max. %(max)s").replace("%(max)s", fmt(maxVal));
-        } else if (cap > 0 && val >= cap) {
-          hint = t("alliance_donate_complete", "Vollständig");
+      if (needEl) {
+        if (state.active_project) {
+          needEl.textContent = t("alliance_donate_need_active", "Projekt aktiv");
+        } else if (needRem > 0) {
+          needEl.textContent = t("alliance_donate_need_remaining", "Projekt braucht noch %(amt)s").replace(
+            "%(amt)s",
+            fmt(needRem)
+          );
         } else {
-          hint = t("alliance_donate_need_met", "Bedarf gedeckt");
-        }
-        input.placeholder = hint;
-        if (!input.matches(":focus") && readNumberInput(input) > maxVal) {
-          setNumberInputValue(input, maxVal);
+          needEl.textContent = t("alliance_donate_need_ready", "Projektbedarf gedeckt");
         }
       }
-      if (btn) btn.disabled = maxVal <= 0;
+      if (actions) {
+        if (maxVal <= 0) {
+          actions.innerHTML = `<span class="alliance-hub-pool-full-badge" data-pool-full="${res}">${escapeHtml(
+            t("alliance_donate_complete", "Vollständig")
+          )}</span>`;
+        } else {
+          let input = actions.querySelector(`[data-donate-amount="${res}"]`);
+          if (!input) {
+            actions.innerHTML = `
+              <input type="text" inputmode="numeric" autocomplete="off" maxlength="20"
+                class="gc-input gc-num-input alliance-hub-donate-input"
+                data-donate-amount="${res}" data-input-max="${maxVal}"
+                placeholder="${escapeHtml(t("alliance_donate_max_hint", "Max. %(max)s").replace("%(max)s", fmt(maxVal)))}">
+              <button type="button" class="gc-btn gc-btn-xs gc-btn-ghost" data-donate-max="${res}">${escapeHtml(t("alliance_donate_max_btn", "Max"))}</button>
+              <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-donate-btn="${res}">${escapeHtml(t("alliance_donate_btn", "Spenden"))}</button>`;
+            input = actions.querySelector(`[data-donate-amount="${res}"]`);
+            if (typeof bindFormattedNumberInputs === "function") bindFormattedNumberInputs(actions);
+          } else {
+            input.dataset.inputMax = String(maxVal);
+            input.disabled = false;
+            input.placeholder = t("alliance_donate_max_hint", "Max. %(max)s").replace("%(max)s", fmt(maxVal));
+            if (!input.matches(":focus") && readNumberInput(input) > maxVal) {
+              setNumberInputValue(input, maxVal);
+            }
+            const btn = actions.querySelector(`[data-donate-btn="${res}"]`);
+            const maxBtn = actions.querySelector(`[data-donate-max="${res}"]`);
+            if (btn) btn.disabled = false;
+            if (maxBtn) maxBtn.disabled = false;
+          }
+        }
+      }
     });
     const summary = page.querySelector("[data-alliance-summary]");
     if (summary && state.alliance_level != null) {
       const lvl = summary.querySelector("[data-alliance-level], .alliance-level-badge");
       if (lvl) lvl.textContent = "L" + state.alliance_level;
+    }
+    const lastXp = page.querySelector("[data-alliance-last-donation-xp]");
+    if (lastXp) {
+      const xp = Number(state.last_donation_xp || 0);
+      if (xp > 0) {
+        lastXp.hidden = false;
+        lastXp.textContent = t("alliance_xp_last_donation", "Letzte Spende: +%(xp)s XP").replace(
+          "%(xp)s",
+          fmt(xp)
+        );
+      }
+    }
+    const logWrap = page.querySelector("[data-alliance-donations-log]");
+    const logList = page.querySelector("[data-alliance-donation-list]");
+    if (logWrap && logList && Array.isArray(state.recent_donations)) {
+      const rows = state.recent_donations.slice(0, 12);
+      logWrap.hidden = rows.length === 0;
+      logList.innerHTML = rows
+        .map((d) => {
+          const name = escapeHtml(String(d.player_name || ""));
+          const amt = fmt(Number(d.amount || 0));
+          const res = escapeHtml(String(d.resource || ""));
+          return `<li class="alliance-hub-donation-row"><span>${name}</span><span class="alliance-hub-donation-amount gc-mono">${amt}</span><span class="alliance-hub-donation-res">${res}</span></li>`;
+        })
+        .join("");
+    }
+    if (Array.isArray(state.members)) {
+      state.members.forEach((m) => {
+        const row = page.querySelector(`[data-member-id="${m.player_id}"]`);
+        if (!row) return;
+        const cells = row.querySelectorAll("td.gc-mono");
+        if (cells.length >= 2 && m.donation_points != null) {
+          const compact =
+            typeof GC.fmtIntCompact === "function"
+              ? GC.fmtIntCompact(Number(m.donation_points || 0))
+              : fmt(Number(m.donation_points || 0));
+          cells[1].textContent = compact;
+        }
+      });
     }
     if (state.show_logo && state.logo_url_client && state.alliance_id != null) {
       const aid = String(state.alliance_id);
@@ -17261,6 +17326,7 @@
     "alliance_profile",
     "alliance_recruitment",
     "alliance_diplomacy",
+    "alliance_donate",
   ]);
 
   async function allianceFinalizeSuccess(reason, out) {
@@ -17357,175 +17423,6 @@
     if (!page || !page.contains(form)) return;
     ev.preventDefault();
     ev.stopPropagation();
-  }
-
-  function allianceRoleLabel(role) {
-    const r = String(role || "member").toLowerCase();
-    if (r === "leader" || r === "owner") return t("alliance_role_leader", "Leader");
-    if (r === "officer") return t("alliance_role_officer", "Offizier");
-    return t("alliance_role_member", "Mitglied");
-  }
-
-  function allianceRecruitBadgeHtml(mode) {
-    if (mode === "open") {
-      return `<span class="alliance-hub-recruit-badge alliance-hub-recruit-badge--open">${escapeHtml(t("alliance_recruit_open", "Offen"))}</span>`;
-    }
-    if (mode === "application_only") {
-      return `<span class="alliance-hub-recruit-badge alliance-hub-recruit-badge--application">${escapeHtml(t("alliance_recruit_application_only", "Bewerbung"))}</span>`;
-    }
-    return `<span class="alliance-hub-recruit-badge alliance-hub-recruit-badge--closed">${escapeHtml(t("alliance_recruit_closed", "Geschlossen"))}</span>`;
-  }
-
-  function allianceLogoHtml(profile, sizeClass) {
-    const aid = profile.id;
-    const sz = sizeClass || "lg";
-    if (profile.show_logo && profile.logo_url_client) {
-      return `<span class="alliance-hub-logo-frame alliance-hub-logo-frame--${sz}" data-alliance-logo-frame="${aid}"><img class="alliance-hub-logo" data-alliance-logo-img="${aid}" src="${escapeHtml(profile.logo_url_client)}" alt=""></span>`;
-    }
-    const ph = escapeHtml(String(profile.tag || "?").slice(0, 2));
-    return `<span class="alliance-hub-logo-frame alliance-hub-logo-frame--${sz}"><span class="alliance-hub-logo-ph">${ph}</span></span>`;
-  }
-
-  let _allianceDetailAid = 0;
-  let _allianceProfileFetch = null;
-
-  function setAllianceBrowseActive(aid) {
-    const page = document.getElementById("alliance-page");
-    if (!page) return;
-    page.querySelectorAll("[data-alliance-browse-open]").forEach((btn) => {
-      const on = parseInt(btn.dataset.allianceBrowseOpen || "0", 10) === aid;
-      btn.classList.toggle("is-active", on);
-      btn.setAttribute("aria-pressed", on ? "true" : "false");
-    });
-  }
-
-  function renderAllianceDetailPanel(profile, guestState) {
-    const page = document.getElementById("alliance-page");
-    const panel = page?.querySelector("[data-alliance-detail]");
-    if (!panel || !profile) return;
-    const fmt = typeof GC.fmtIntFull === "function" ? GC.fmtIntFull : (n) => String(n ?? 0);
-    const xp = Number(profile.alliance_xp || 0);
-    const nextXp = Number(profile.alliance_xp_next || 0);
-    const xpPct = nextXp > 0 ? Math.min(100, (xp / nextXp) * 100) : 100;
-    const pending = guestState?.has_pending_application === true;
-    const desc = String(profile.description || "").trim();
-    const members = Array.isArray(profile.members) ? profile.members : [];
-    const bonusChips = Array.isArray(profile.bonus_chips) ? profile.bonus_chips : [];
-
-    let actions = "";
-    if (!pending) {
-      if (profile.allows_applications) {
-        actions += `
-          <div class="alliance-hub-detail-apply">
-            <label class="alliance-hub-field">
-              <span>${escapeHtml(t("alliance_apply_btn", "Bewerben"))}</span>
-              <textarea class="gc-input alliance-hub-apply-message"
-                        data-alliance-detail-message
-                        maxlength="256"
-                        rows="3"
-                        placeholder="${escapeHtml(t("alliance_apply_message_placeholder", "Kurze Nachricht an die Allianz"))}"
-                        required></textarea>
-            </label>
-            <button type="button" class="gc-btn gc-btn-primary" data-alliance-detail-apply="${profile.id}">${escapeHtml(t("alliance_apply_send_btn", "Bewerbung senden"))}</button>
-          </div>`;
-      } else if (profile.allows_direct_join) {
-        actions += `<button type="button" class="gc-btn gc-btn-secondary" data-alliance-detail-join="${escapeHtml(profile.tag || "")}">${escapeHtml(t("alliance_join_btn", "Beitreten"))}</button>`;
-      } else {
-        actions += `<p class="alliance-hub-detail-closed">${escapeHtml(t("alliance_detail_recruitment_closed", "Diese Allianz nimmt derzeit keine neuen Mitglieder auf."))}</p>`;
-      }
-    } else {
-      actions += `<p class="alliance-hub-detail-pending">${escapeHtml(t("alliance_detail_pending_hint", "Du hast bereits eine offene Bewerbung."))}</p>`;
-    }
-
-    const memberRows = members
-      .map((m) => {
-        const pts = fmt(Number(m.donation_points || 0));
-        return `<li class="alliance-hub-detail-member">
-          <span class="alliance-hub-detail-member-name">${escapeHtml(m.player_name || "?")}</span>
-          <span class="alliance-hub-detail-member-role">${escapeHtml(allianceRoleLabel(m.role))}</span>
-          <span class="alliance-hub-detail-member-pts gc-mono" title="${escapeHtml(t("alliance_member_points", "Spendenpunkte"))}">${pts}</span>
-        </li>`;
-      })
-      .join("");
-
-    const bonusHtml = bonusChips.length
-      ? `<ul class="alliance-hub-bonus-grid alliance-hub-detail-bonus">${bonusChips
-          .map(
-            (b) =>
-              `<li class="alliance-hub-bonus-tile"><span class="alliance-hub-bonus-pct gc-mono">+${escapeHtml(String(b.bonus_pct ?? b.pct ?? 0))}%</span><span class="alliance-hub-bonus-name">${escapeHtml(b.label || b.label_key || b.tech_key || "")}</span></li>`
-          )
-          .join("")}</ul>`
-      : "";
-
-    panel.hidden = false;
-    panel.innerHTML = `
-      <header class="alliance-hub-detail-head">
-        ${allianceLogoHtml(profile, "lg")}
-        <div class="alliance-hub-detail-identity">
-          <span class="alliance-hub-tag">[${escapeHtml(profile.tag || "")}]</span>
-          <h3 class="alliance-hub-name">${escapeHtml(profile.name || "")}</h3>
-          <div class="alliance-hub-chip-row">
-            <span class="alliance-hub-chip alliance-hub-chip--level gc-mono">L${profile.alliance_level || 1}</span>
-            <span class="alliance-hub-chip alliance-hub-chip--members gc-mono">${profile.member_count || 0}/${profile.member_limit || 0}</span>
-            ${allianceRecruitBadgeHtml(profile.recruitment_mode)}
-          </div>
-        </div>
-      </header>
-      ${desc ? `<p class="alliance-hub-detail-desc">${escapeHtml(desc)}</p>` : ""}
-      <div class="alliance-hub-xp">
-        <div class="alliance-hub-xp-head">
-          <span class="alliance-hub-xp-label">${escapeHtml(t("alliance_xp_label", "Allianz-XP"))}</span>
-          <span class="alliance-hub-xp-val gc-mono">${fmt(xp)} / ${fmt(nextXp)}</span>
-        </div>
-        <div class="alliance-hub-xp-bar-wrap">
-          <div class="alliance-hub-xp-bar" style="width:${xpPct}%"></div>
-        </div>
-      </div>
-      ${bonusHtml}
-      <section class="alliance-hub-detail-members">
-        <header class="alliance-hub-section-head">
-          <span class="alliance-hub-section-title">${escapeHtml(t("alliance_tab_members", "Mitglieder"))}</span>
-          <span class="alliance-hub-section-sub">${escapeHtml(t("alliance_detail_members_sub", "Mit Spendenpunkten"))}</span>
-        </header>
-        <ul class="alliance-hub-detail-member-list">${memberRows || `<li class="alliance-hub-empty">${escapeHtml(t("alliance_detail_no_members", "Keine Mitglieder."))}</li>`}</ul>
-      </section>
-      <footer class="alliance-hub-detail-actions">${actions}</footer>`;
-  }
-
-  async function openAllianceBrowseDetail(aid) {
-    const page = document.getElementById("alliance-page");
-    const panel = page?.querySelector("[data-alliance-detail]");
-    if (!page || !panel || !aid) return;
-    _allianceDetailAid = aid;
-    setAllianceBrowseActive(aid);
-    panel.hidden = false;
-    panel.innerHTML = `<p class="alliance-hub-detail-loading">${escapeHtml(t("alliance_detail_loading", "Profil wird geladen…"))}</p>`;
-    if (_allianceProfileFetch) _allianceProfileFetch.abort?.();
-    const ctrl = new AbortController();
-    _allianceProfileFetch = ctrl;
-    try {
-      const res = await fetch(`/api/alliance/profile/${aid}`, {
-        credentials: "same-origin",
-        headers: { "X-Requested-With": "XMLHttpRequest" },
-        signal: ctrl.signal,
-      });
-      const out = await res.json();
-      if (_allianceDetailAid !== aid) return;
-      if (!out?.ok || !out.profile) {
-        panel.innerHTML = `<p class="alliance-hub-detail-error">${escapeHtml(allianceErrorMessage(out, t("alliance_action_failed", "Aktion fehlgeschlagen.")))}</p>`;
-        return;
-      }
-      if (out.alliance) {
-        const stateEl = document.getElementById("alliance-page-state");
-        if (stateEl) stateEl.textContent = JSON.stringify(out.alliance);
-      }
-      renderAllianceDetailPanel(out.profile, out.alliance || parseAlliancePageState());
-    } catch (err) {
-      if (err?.name === "AbortError") return;
-      panel.innerHTML = `<p class="alliance-hub-detail-error">${escapeHtml(t("alliance_action_failed", "Aktion fehlgeschlagen."))}</p>`;
-    } finally {
-      if (_allianceProfileFetch === ctrl) _allianceProfileFetch = null;
-    }
   }
 
   let _allianceBound = false;
@@ -17654,6 +17551,16 @@
         return;
       }
 
+      const applyFocus = ev.target.closest("[data-alliance-visitor-apply-focus]");
+      if (applyFocus) {
+        ev.preventDefault();
+        const box = document.getElementById("alliance-visitor-apply");
+        const ta = box?.querySelector("[data-alliance-detail-message]");
+        box?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        ta?.focus?.();
+        return;
+      }
+
       const submitBtn = ev.target.closest("[data-alliance-submit]");
       if (submitBtn) {
         ev.preventDefault();
@@ -17714,6 +17621,17 @@
         }
       }
 
+      const donateMaxBtn = ev.target.closest("[data-donate-max]");
+      if (donateMaxBtn) {
+        ev.preventDefault();
+        const res = donateMaxBtn.dataset.donateMax;
+        const input = page.querySelector(`[data-donate-amount="${res}"]`);
+        if (!input || input.disabled) return;
+        const maxVal = Number(input.dataset.inputMax || 0);
+        if (maxVal > 0) setNumberInputValue(input, maxVal);
+        return;
+      }
+
       const donateBtn = ev.target.closest("[data-donate-btn]");
       if (donateBtn) {
         ev.preventDefault();
@@ -17727,7 +17645,10 @@
           "alliance_donate"
         );
         if (!out?.ok) showNotify(allianceErrorMessage(out, "Spende fehlgeschlagen"), "error");
-        else if (input) setNumberInputValue(input, 0);
+        else {
+          if (input) setNumberInputValue(input, 0);
+          showNotify(t("alliance_donate_ok", "Spende eingegangen."), "success");
+        }
         return;
       }
 
@@ -17838,10 +17759,11 @@
 
       const browseOpen = ev.target.closest("[data-alliance-browse-open]");
       if (browseOpen) {
-        ev.preventDefault();
-        const aid = parseInt(browseOpen.dataset.allianceBrowseOpen || "0", 10);
-        if (!aid) return;
-        await openAllianceBrowseDetail(aid);
+        const href = browseOpen.getAttribute("href");
+        if (href && typeof GC.navigateTo === "function") {
+          ev.preventDefault();
+          await GC.navigateTo(href, { push: true });
+        }
         return;
       }
 
@@ -18002,22 +17924,14 @@
     const page = document.getElementById("alliance-page");
     if (!page || page.dataset.ready !== "1") return;
     bindFormattedNumberInputs(page);
-    if (window.history?.replaceState && window.location.search) {
+    const path = (window.location.pathname || "").replace(/\/$/, "") || "/";
+    const onVisitor = page.hasAttribute("data-alliance-visitor") || /^\/alliance\/\d+$/.test(path);
+    if (!onVisitor && window.history?.replaceState && window.location.search) {
       window.history.replaceState(null, "", "/alliance");
     }
     const state = parseAlliancePageState();
     if (state) patchAllianceDom(state);
-    const firstBrowse = page.querySelector("[data-alliance-browse-open]");
-    if (firstBrowse && page.querySelector("[data-alliance-guest]")) {
-      const aid = parseInt(firstBrowse.dataset.allianceBrowseOpen || "0", 10);
-      if (aid) openAllianceBrowseDetail(aid);
-    }
     GC.registerCleanup(() => {
-      if (_allianceProfileFetch) {
-        _allianceProfileFetch.abort?.();
-        _allianceProfileFetch = null;
-      }
-      _allianceDetailAid = 0;
       const manageDlg = document.getElementById("alliance-manage-modal");
       if (manageDlg?.open) manageDlg.close();
       const broadcastDlg = document.getElementById("alliance-broadcast-modal");
@@ -24367,7 +24281,8 @@
       sections.add("community");
     }
     if (
-      path.endsWith("/alliance")
+      path === "/alliance"
+      || /^\/alliance\/\d+$/.test(path)
       || path.endsWith("/ranking")
       || path.endsWith("/hall-of-fame")
       || path.endsWith("/world-boss")
@@ -30760,7 +30675,8 @@
       const tag = row.alliance_tag ? `[${rankingEscapeHtml(row.alliance_tag)}]` : "";
       const name = row.alliance_name ? ` ${rankingEscapeHtml(row.alliance_name)}` : "";
       const label = `${tag}${name}`.trim();
-      return `<span class="gc-ranking-alliance" title="${label}">${label}</span>`;
+      const href = `/alliance/${encodeURIComponent(String(row.alliance_id))}`;
+      return `<a href="${href}" class="gc-ranking-alliance" title="${label}" data-alliance-ranking-link="${rankingEscapeHtml(String(row.alliance_id))}">${label}</a>`;
     }
     return `<span class="gc-ranking-alliance gc-ranking-alliance--none">${noAlliance}</span>`;
   }
@@ -31943,7 +31859,13 @@
       } catch (_) {
         return;
       }
-      if (linkPath !== path) return;
+      if (linkPath === path) {
+        /* exact */
+      } else if (linkPath === "/alliance" && /^\/alliance\/\d+$/.test(path)) {
+        /* visitor pages keep hub nav active */
+      } else {
+        return;
+      }
       const depth = link.classList.contains("gc-nav-sub-link--nested") ? 2 : 1;
       if (depth > bestDepth) {
         bestDepth = depth;

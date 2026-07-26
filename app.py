@@ -2397,6 +2397,42 @@ def alliance_view():
     )
 
 
+@app.route("/alliance/<int:alliance_id>")
+@require_login
+def alliance_visitor_view(alliance_id: int):
+    ctx = _load_page_live_context(finish_source="alliance_visitor")
+    if ctx is None:
+        return redirect(url_for("login"))
+
+    from game.alliance import get_alliance_state, get_alliance_visitor_page
+
+    user_id = int(session["user_id"])
+    visitor = None
+    alliance_state = {"ready": False}
+    conn = db()
+    try:
+        visitor = get_alliance_visitor_page(user_id, int(alliance_id), conn=conn)
+        alliance_state = get_alliance_state(user_id, conn=conn)
+    except ValueError as exc:
+        err = str(exc)
+        if err == "alliance_not_found":
+            abort(404)
+        alliance_state = {"ready": False, "error": err}
+        visitor = None
+    finally:
+        conn.close()
+
+    return render_template(
+        "alliance.html",
+        player=ctx["player_view"],
+        energy_total=ctx.get("energy_total"),
+        energy_used=ctx.get("energy_used"),
+        storage_caps=ctx["storage_caps"],
+        alliance_state=alliance_state,
+        alliance_visitor=visitor,
+    )
+
+
 def _alliance_action_json(user_id: int, alliance_state: Dict[str, Any], finish_source: str):
     state, _ = _build_game_state_payload(include_panel=True, finish_source=finish_source)
     return jsonify({"ok": True, "state": state, "alliance": alliance_state})

@@ -521,27 +521,115 @@ def _pool_snapshot(alliance_row: Mapping[str, Any], conn) -> Dict[str, Any]:
 def donation_limits_for_pool(
     pool: Mapping[str, int],
     cap: Mapping[str, int],
-    available_projects: List[Dict[str, Any]],
+    available_projects: Optional[List[Dict[str, Any]]] = None,
     *,
     active_project: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, int]:
-    """Max donate per resource: pool headroom, capped by next project need when idle."""
+    """Max donate per resource: pool headroom only (project need is UI hint, not a hard cap)."""
+    _ = (available_projects, active_project)
     limits: Dict[str, int] = {}
     for res in VALID_DONATION_RESOURCES:
         pool_val = int(pool.get(res) or 0)
         cap_val = int(cap.get(res) or 0)
-        room = max(0, cap_val - pool_val)
-        if active_project:
-            limits[res] = room
-            continue
-        if available_projects:
-            target = available_projects[0]
-            need = int((target.get("cost") or {}).get(res) or 0)
-            project_room = max(0, need - pool_val)
-            limits[res] = room if project_room <= 0 else min(room, project_room)
-        else:
-            limits[res] = room
+        limits[res] = max(0, cap_val - pool_val)
     return limits
+
+
+def project_need_remaining(
+    pool: Mapping[str, int],
+    available_projects: List[Dict[str, Any]],
+    *,
+    active_project: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, int]:
+    """Resources still needed for the next available project (0 while a project is active)."""
+    remaining: Dict[str, int] = {res: 0 for res in VALID_DONATION_RESOURCES}
+    if active_project or not available_projects:
+        return remaining
+    target = available_projects[0]
+    cost = target.get("cost") or {}
+    for res in VALID_DONATION_RESOURCES:
+        need = int(cost.get(res) or 0)
+        pool_val = int(pool.get(res) or 0)
+        remaining[res] = max(0, need - pool_val)
+    return remaining
+
+
+def _list_alliance_browse(conn, *, limit: int = 50) -> List[Dict[str, Any]]:
+    """Top alliances by XP for directory / discover tab."""
+    has_recruitment_col = _recruitment_mode_column_ready(conn)
+    recruit_sel = (
+        "recruitment_mode" if has_recruitment_col else f"'{DEFAULT_RECRUITMENT_MODE}' AS recruitment_mode"
+    )
+    logo_sel = "logo_url" if _logo_url_column_ready(conn) else "'' AS logo_url"
+    cur = conn.cursor()
+    cur.execute(
+        f"""
+        SELECT id, tag, name, description, member_limit, alliance_level, alliance_xp,
+               {recruit_sel}, {logo_sel},
+               (SELECT COUNT(*) FROM alliance_members am WHERE am.alliance_id = alliances.id) AS member_count
+        FROM alliances
+        ORDER BY alliance_xp DESC, name ASC
+        LIMIT ?;
+        """,
+        (max(1, int(limit)),),
+    )
+    browse: List[Dict[str, Any]] = []
+    for row in cur.fetchall():
+        d = dict(row)
+        mode = _alliance_recruitment_mode(d)
+        d["recruitment_mode"] = mode
+        d["allows_direct_join"] = allows_direct_join(mode)
+        d["allows_applications"] = allows_applications(mode)
+        d["alliance_level"] = alliance_level_from_xp(int(d.get("alliance_xp") or 0))
+        d.update(_alliance_logo_payload(int(d["id"]), d.get("logo_url"), conn))
+        browse.append(d)
+    return browse
+
+
+def get_alliance_visitor_page(player_id: int, alliance_id: int, conn=None) -> Dict[str, Any]:
+    """Public visitor payload for GET /alliance/<id> (no officer-only data)."""
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        if not alliance_hub_schema_ready(conn):
+            raise ValueError("alliance_unavailable")
+        profile = get_alliance_public_profile(int(alliance_id), conn=conn)
+        membership = get_player_alliance(int(player_id), conn=conn)
+        pending = _player_pending_application(int(player_id), conn)
+        viewer_aid = int(membership["alliance_id"]) if membership else None
+        is_member = viewer_aid is not None and viewer_aid == int(profile["id"])
+        in_any = membership is not None
+        mode = str(profile.get("recruitment_mode") or DEFAULT_RECRUITMENT_MODE)
+        pending_for_this = bool(
+            pending and int(pending.get("alliance_id") or 0) == int(profile["id"])
+        )
+        can_join = (
+            not in_any
+            and not pending
+            and bool(profile.get("allows_direct_join"))
+        )
+        can_apply = (
+            not in_any
+            and not pending
+            and bool(profile.get("allows_applications"))
+        )
+        return {
+            "ready": True,
+            "mode": "visitor",
+            "profile": profile,
+            "is_member": is_member,
+            "in_alliance": in_any,
+            "viewer_alliance_id": viewer_aid,
+            "can_join": can_join,
+            "can_apply": can_apply,
+            "has_pending_application": pending is not None,
+            "pending_application": pending,
+            "pending_for_this": pending_for_this,
+        }
+    finally:
+        if own:
+            conn.close()
 
 
 def _active_project(alliance_id: int, conn) -> Optional[Dict[str, Any]]:
@@ -915,34 +1003,10 @@ def get_alliance_state(player_id: int, conn=None) -> Dict[str, Any]:
 
         membership = get_player_alliance(player_id, conn=conn)
         if not membership:
-            has_recruitment_col = _recruitment_mode_column_ready(conn)
-            recruit_sel = "recruitment_mode" if has_recruitment_col else f"'{DEFAULT_RECRUITMENT_MODE}' AS recruitment_mode"
-            logo_sel = "logo_url" if _logo_url_column_ready(conn) else "'' AS logo_url"
-            cur = conn.cursor()
-            cur.execute(
-                f"""
-                SELECT id, tag, name, description, member_limit, alliance_level, alliance_xp,
-                       {recruit_sel}, {logo_sel},
-                       (SELECT COUNT(*) FROM alliance_members am WHERE am.alliance_id = alliances.id) AS member_count
-                FROM alliances
-                ORDER BY alliance_xp DESC, name ASC
-                LIMIT 50;
-                """
-            )
-            browse = []
-            for row in cur.fetchall():
-                d = dict(row)
-                mode = _alliance_recruitment_mode(d)
-                d["recruitment_mode"] = mode
-                d["allows_direct_join"] = allows_direct_join(mode)
-                d["allows_applications"] = allows_applications(mode)
-                d["alliance_level"] = alliance_level_from_xp(int(d.get("alliance_xp") or 0))
-                d.update(_alliance_logo_payload(int(d["id"]), d.get("logo_url"), conn))
-                browse.append(d)
             pending = _player_pending_application(player_id, conn)
             base.update(
                 {
-                    "browse": browse,
+                    "browse": _list_alliance_browse(conn),
                     "pending_application": pending,
                     "has_pending_application": pending is not None,
                 }
@@ -998,6 +1062,28 @@ def get_alliance_state(player_id: int, conn=None) -> Dict[str, Any]:
             techs=techs,
             trade_coord_level=trade_lvl,
         )
+        need_remaining = project_need_remaining(
+            pool_data["pool"],
+            projects_avail,
+            active_project=active,
+        )
+        next_project_key = None
+        next_project_label_key = None
+        if not active and projects_avail:
+            next_project_key = str(projects_avail[0].get("key") or "")
+            next_project_label_key = str(projects_avail[0].get("label_key") or "")
+        donate_planet = None
+        try:
+            planet = get_context_planet(player_id=int(player_id), conn=conn)
+            donate_planet = {
+                "id": int(planet["id"]),
+                "name": str(planet.get("name") or ""),
+                "galaxy": planet.get("galaxy"),
+                "system": planet.get("system"),
+                "position": planet.get("position"),
+            }
+        except Exception:
+            donate_planet = None
         diplomacy_unlock_project = None
         if not diplomacy_unlocked:
             for src in (projects_avail, locked_projects):
@@ -1037,6 +1123,10 @@ def get_alliance_state(player_id: int, conn=None) -> Dict[str, Any]:
                     projects_avail,
                     active_project=active,
                 ),
+                "project_need_remaining": need_remaining,
+                "next_project_key": next_project_key,
+                "next_project_label_key": next_project_label_key,
+                "donate_planet": donate_planet,
                 "my_donations": _player_donation_totals(player_id, aid, conn),
                 "recent_donations": recent_donations,
                 "last_donation_xp": last_donation_xp,
@@ -1046,6 +1136,7 @@ def get_alliance_state(player_id: int, conn=None) -> Dict[str, Any]:
                 "available_projects": projects_avail,
                 "locked_projects": locked_projects,
                 "active_project": active,
+                "browse": _list_alliance_browse(conn),
                 "applications": _pending_applications(aid, conn) if can_manage_applications(role) else [],
                 "diplomacy_unlocked": diplomacy_unlocked,
                 "diplomacy_unlock_project": diplomacy_unlock_project,
@@ -1932,7 +2023,7 @@ def donate_to_alliance(player_id: int, resource: str, amount: int, conn=None) ->
             or 0
         )
         if amt > max_donate:
-            raise ValueError("donation_exceeds_need")
+            raise ValueError("pool_cap_exceeded")
 
         xp_today = _donation_xp_today(player_id, conn)
         xp_room = max(0, DONATION_XP_DAILY_CAP - xp_today)

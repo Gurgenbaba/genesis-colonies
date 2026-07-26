@@ -1,9 +1,9 @@
 # Alliance System — Genesis Colonies (EPIC-09)
 
-**Status:** ✅ **MVP complete** (GC-AL-MVP-01 … GC-AL-MVP-09) — Beta Gate item erfüllt. Combat-/Diplomatie-Deep-Hooks (Kriegs-Meta, Bündnis-Transport) bewusst post-Beta.
+**Status:** ✅ **MVP complete** (GC-AL-MVP-01 … GC-AL-MVP-09) + **UX-Pass** (GC-AL-UX-01…03: Visitor-Seite, Spenden-Klarheit, Hub-IA). Combat-/Diplomatie-Deep-Hooks (Kriegs-Meta, Bündnis-Transport) bewusst post-Beta.
 
 **Owner:** `game/alliance.py` · Catalog: `game/alliance_catalog.py`  
-**UI:** `/alliance` · `GC.modules.alliance` · `templates/alliance.html`  
+**UI:** `/alliance` (Hub) · `/alliance/<id>` (öffentliche Besucherseite) · `GC.modules.alliance` · `templates/alliance.html`  
 **API:** `POST /api/alliance/*` → `{ ok, state, alliance }` (errors via `_alliance_error_json` with `state` + `alliance`)
 
 ## Scope (GC-AL-001 … GC-AL-009 + GC-AL-MVP)
@@ -24,13 +24,18 @@
 | GC-AL-MVP-07 | Boni via EffectResolver + Expedition-Hook + Same-Alliance-Hold | ✅ |
 | GC-AL-MVP-08 | UI/PJAX: `GC.fetchGameAction`, `applyActionState`, kein Full Reload | ✅ |
 | GC-AL-MVP-09 | Tests + Doc Reality Sync | ✅ |
+| GC-AL-UX-01 | Public visitor `/alliance/<id>`, Ranking/Playercard/World-Boss links, Directory → navigate | ✅ |
+| GC-AL-UX-02 | Spenden: Pool-Headroom only, `project_need_remaining` Hinweis, Toast + Log-Sync | ✅ |
+| GC-AL-UX-03 | Hub-IA (Ops-Band, Entdecken-Tab), Design-Auffrischung, Docs | ✅ |
 
 ## API routes (canonical)
 
 | Method | Route | Notes |
 |--------|-------|-------|
+| GET | `/alliance` | Own hub (member) or guest onboarding + directory |
+| GET | `/alliance/<id>` | Public visitor page (all players) |
 | GET | `/api/alliance/state` | Hub payload |
-| GET | `/api/alliance/profile/<id>` | Public profile |
+| GET | `/api/alliance/profile/<id>` | Public profile JSON |
 | GET | `/api/alliance-logo/<id>` | Logo blob |
 | POST | `/api/alliance/create` | Founder → leader |
 | POST | `/api/alliance/join` | Direct join (`open` mode) |
@@ -107,7 +112,9 @@ pool_cap[resource] = sum(2 günstigste verfügbare Projekt-Kosten[resource])
                    × (1 + logistics_depot% + trade_coordination%)
 ```
 
-Keine Überfüllung: Spende schlägt fehl mit `pool_cap_exceeded`. Officer erhalten System-Nachricht bei Spende.
+Keine Überfüllung: Spende schlägt fehl mit `pool_cap_exceeded`.
+Spendenlimit = Pool-Headroom (`cap − pool`). Der Bedarf des nächsten Projekts ist nur UI-Hinweis (`project_need_remaining`), kein Hard-Block.
+Officer erhalten System-Nachricht bei Spende.
 
 ## Allianz-Projekte
 

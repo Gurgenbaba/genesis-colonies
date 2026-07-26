@@ -270,7 +270,7 @@
                     <tr>
                       <td>#{{ row.rank }}</td>
                       <td>{{ row.player_name }}</td>
-                      <td>{{ row.alliance_tag or "—" }}</td>
+                      <td>{% if row.alliance_id and row.alliance_tag %}<a href="{{ url_for('alliance_visitor_view', alliance_id=row.alliance_id) }}" class="gc-world-boss-alliance-link">[{{ row.alliance_tag }}]</a>{% else %}{{ row.alliance_tag or "—" }}{% endif %}</td>
                       <td>{{ row.damage|fmt_int }}</td>
                       <td>{{ row.waves }}</td>
                     </tr>
@@ -280,7 +280,7 @@
                     <tr class="gc-world-boss-board-more">
                       <td>#{{ row.rank }}</td>
                       <td>{{ row.player_name }}</td>
-                      <td>{{ row.alliance_tag or "—" }}</td>
+                      <td>{% if row.alliance_id and row.alliance_tag %}<a href="{{ url_for('alliance_visitor_view', alliance_id=row.alliance_id) }}" class="gc-world-boss-alliance-link">[{{ row.alliance_tag }}]</a>{% else %}{{ row.alliance_tag or "—" }}{% endif %}</td>
                       <td>{{ row.damage|fmt_int }}</td>
                       <td>{{ row.waves }}</td>
                     </tr>
@@ -309,7 +309,7 @@
                     {% for row in alliance_board[:3] %}
                     <tr>
                       <td>#{{ row.rank }}</td>
-                      <td>[{{ row.alliance_tag }}] {{ row.alliance_name }}</td>
+                      <td>{% if row.alliance_id %}<a href="{{ url_for('alliance_visitor_view', alliance_id=row.alliance_id) }}" class="gc-world-boss-alliance-link">[{{ row.alliance_tag }}] {{ row.alliance_name }}</a>{% else %}[{{ row.alliance_tag }}] {{ row.alliance_name }}{% endif %}</td>
                       <td>{{ row.damage|fmt_int }}</td>
                       <td class="gc-mono">+{{ (row.alliance_xp|default(0))|fmt_int }}</td>
                       <td>{{ row.members }}</td>
@@ -319,7 +319,7 @@
                     {% for row in alliance_board[3:] %}
                     <tr>
                       <td>#{{ row.rank }}</td>
-                      <td>[{{ row.alliance_tag }}] {{ row.alliance_name }}</td>
+                      <td>{% if row.alliance_id %}<a href="{{ url_for('alliance_visitor_view', alliance_id=row.alliance_id) }}" class="gc-world-boss-alliance-link">[{{ row.alliance_tag }}] {{ row.alliance_name }}</a>{% else %}[{{ row.alliance_tag }}] {{ row.alliance_name }}{% endif %}</td>
                       <td>{{ row.damage|fmt_int }}</td>
                       <td class="gc-mono">+{{ (row.alliance_xp|default(0))|fmt_int }}</td>
                       <td>{{ row.members }}</td>

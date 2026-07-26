@@ -23,6 +23,7 @@ from game.alliance import (
     get_alliance_expedition_loot_multiplier,
     get_alliance_members,
     get_alliance_public_profile,
+    get_alliance_visitor_page,
     get_alliance_state,
     get_player_alliance,
     join_alliance_by_tag,
@@ -650,7 +651,7 @@ def test_alliance_member_hub_module(alliance_db):
     assert "alliance-hub-hero" in body
     assert "alliance-hub-hero-top" in body
     assert "alliance-hub-logo-frame--hero" in body
-    assert "alliance-hub-stats" in body
+    assert "alliance-hub-ops" in body
     assert "alliance-hub-xp-card" in body
     assert "alliance-hub-hero-desc" in body
     assert "data-alliance-manage-modal" in body
@@ -945,7 +946,8 @@ def test_alliance_guest_directory_markup(alliance_db):
     assert "alliance-hub-directory" in body
     assert "alliance-hub-browse-grid" in body
     assert f'data-alliance-browse-open="{aid}"' in body
-    assert "data-alliance-detail" in body
+    assert f"/alliance/{aid}" in body
+    assert "data-alliance-detail" not in body
     assert "data-alliance-apply-toggle" not in body
 
 
@@ -1925,7 +1927,8 @@ def test_api_project_start_forbidden_includes_envelope(alliance_db):
     assert "alliance" in data
 
 
-def test_donation_limits_cap_by_cheapest_project(alliance_db):
+def test_donation_limits_use_pool_headroom(alliance_db):
+    """GC-AL-UX-02: donation max is pool room; project need is advisory only."""
     uid = _player()
     conn = db()
     try:
@@ -1940,14 +1943,14 @@ def test_donation_limits_cap_by_cheapest_project(alliance_db):
         conn.commit()
         state = get_alliance_state(uid, conn=conn)
         cap_room = max(0, int(state["pool_cap"]["metal"]) - pool_metal)
-        expected = min(max(0, need_metal - pool_metal), cap_room)
-        assert state["donation_limits"]["metal"] == expected
-        assert expected > 0
+        assert state["donation_limits"]["metal"] == cap_room
+        assert int(state["project_need_remaining"]["metal"]) == max(0, need_metal - pool_metal)
+        assert cap_room > int(state["project_need_remaining"]["metal"])
     finally:
         conn.close()
 
 
-def test_donation_rejects_exceeds_project_need(alliance_db):
+def test_donation_allows_above_project_need_within_pool_cap(alliance_db):
     uid = _player()
     conn = db()
     try:
@@ -1955,10 +1958,13 @@ def test_donation_rejects_exceeds_project_need(alliance_db):
         conn.commit()
         _fund_planet(uid, conn)
         state = get_alliance_state(uid, conn=conn)
+        need = int(state["project_need_remaining"]["metal"])
         max_metal = int(state["donation_limits"]["metal"])
-        assert max_metal > 0
-        with pytest.raises(ValueError, match="donation_exceeds_need"):
-            donate_to_alliance(uid, "metal", max_metal + 1, conn=conn)
+        assert max_metal > need > 0
+        donate_to_alliance(uid, "metal", need + 1, conn=conn)
+        conn.commit()
+        state = get_alliance_state(uid, conn=conn)
+        assert int(state["pool"]["metal"]) == need + 1
     finally:
         conn.close()
 
@@ -1967,15 +1973,14 @@ def test_donation_rejects_exceeds_project_need(alliance_db):
         sess["user_id"] = uid
     resp = client.post(
         "/api/alliance/donate",
-        json={"resource": "metal", "amount": max_metal + 1},
+        json={"resource": "metal", "amount": 1},
         headers={"Content-Type": "application/json"},
     )
-    assert resp.status_code == 400
+    assert resp.status_code == 200
     data = resp.get_json()
-    assert data["ok"] is False
-    assert data["reason"] == "donation_exceeds_need"
-    assert "state" in data
+    assert data["ok"] is True
     assert "alliance" in data
+    assert "state" in data
 
 
 def test_donation_limit_zero_when_pool_full(alliance_db):
@@ -2023,6 +2028,7 @@ def test_donation_limits_allow_pool_stockpile_when_project_need_met(alliance_db)
         state = get_alliance_state(uid, conn=conn)
         cap_room = max(0, int(state["pool_cap"]["metal"]) - need_metal)
         assert state["donation_limits"]["metal"] == cap_room
+        assert state["project_need_remaining"]["metal"] == 0
         assert cap_room > 0
     finally:
         conn.close()
@@ -2055,6 +2061,7 @@ def test_donation_limits_active_project_uses_pool_cap_only(alliance_db):
         pool_metal = int(state["pool"]["metal"])
         cap_metal = int(state["pool_cap"]["metal"])
         assert state["donation_limits"]["metal"] == max(0, cap_metal - pool_metal)
+        assert state["project_need_remaining"]["metal"] == 0
     finally:
         conn.close()
 
@@ -2387,3 +2394,71 @@ def test_all_alliance_technologies_apply_at_runtime(alliance_db):
         assert combat.shield_bonus > 0.0
     finally:
         conn.close()
+
+def test_alliance_visitor_page_route(alliance_db):
+    leader = _player()
+    guest = _player()
+    conn = db()
+    try:
+        create_alliance("VIS", "Visitor Ally", leader, description="Hello visitor", conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(leader, conn=conn)["alliance_id"])
+        page = get_alliance_visitor_page(guest, aid, conn=conn)
+        assert page["mode"] == "visitor"
+        assert page["can_join"] is True
+        assert page["profile"]["tag"] == "VIS"
+        assert page["is_member"] is False
+    finally:
+        conn.close()
+
+    client = _app_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = guest
+    resp = client.get(f"/alliance/{aid}", headers={"X-Requested-With": "XMLHttpRequest"})
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert 'data-alliance-visitor="1"' in body
+    assert "Visitor Ally" in body
+    assert "data-alliance-detail-join" in body
+
+
+def test_alliance_visitor_own_shows_manage_cta(alliance_db):
+    leader = _player()
+    conn = db()
+    try:
+        create_alliance("OWN", "Own Ally", leader, conn=conn)
+        conn.commit()
+        aid = int(get_player_alliance(leader, conn=conn)["alliance_id"])
+    finally:
+        conn.close()
+    client = _app_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = leader
+    resp = client.get(f"/alliance/{aid}", headers={"X-Requested-With": "XMLHttpRequest"})
+    body = resp.get_data(as_text=True)
+    assert 'data-alliance-visitor="1"' in body
+    assert 'href="/alliance"' in body
+
+
+def test_alliance_member_hub_has_discover_tab(alliance_db):
+    body = _alliance_member_hub_html(alliance_db)
+    assert 'data-alliance-tab="discover"' in body
+    assert "alliance-hub-ops" in body
+    assert "data-donate-max" in body
+
+
+def test_ranking_alliance_html_links_to_visitor():
+    src = Path("static/main.js").read_text(encoding="utf-8")
+    start = src.find("function rankingAllianceHtml")
+    end = src.find("\n  function rankingTopClass", start)
+    block = src[start:end]
+    assert "data-alliance-ranking-link" in block
+    assert "/alliance/" in block
+    assert "<a href=" in block
+
+
+def test_detect_page_treats_alliance_visitor_as_alliance():
+    src = Path("static/main.js").read_text(encoding="utf-8")
+    assert 'path === "/alliance"' in src
+    assert r"\/alliance\/\d+" in src
+

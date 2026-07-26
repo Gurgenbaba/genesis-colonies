@@ -1573,6 +1573,7 @@ def _build_public_card_payload(
         ally = get_player_alliance(tid, conn=conn)
         if ally:
             alliance_info = {
+                "id": int(ally.get("alliance_id") or 0),
                 "tag": str(ally.get("tag") or ""),
                 "name": str(ally.get("name") or ""),
                 "role": str(ally.get("role") or ""),
