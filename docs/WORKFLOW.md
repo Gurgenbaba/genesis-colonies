@@ -24,6 +24,7 @@ Epics beschreiben nur das Ziel. **Niemals direkt implementieren.**
 | EPIC-20 | World Boss Events (serverweite PvE-Bosse) | [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) |
 | EPIC-21 | Pirate Ecosystem (Living Threat) | [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md) |
 | EPIC-22 | LiveOps Retention (Login + Battle Pass) | [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) |
+| EPIC-23 | Payment / Shop (Cash Grab MVP) | [PAYMENT_SHOP.md](PAYMENT_SHOP.md) |
 
 Epic → in **3–5 Tickets** zerlegen (große Epics: Phasen in Master-Doc). Siehe [EPICS.md](EPICS.md).
 
@@ -63,6 +64,7 @@ Vor jeder Änderung die relevanten Docs lesen:
 | [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) | Serverweite PvE-Bosse, Contribution, LiveOps |
 | [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md) | Galaxy Heat, Piratenbasen, player-like AI, Bot-Log |
 | [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) | 30-Tage Login + Battle Pass (EPIC-22) |
+| [PAYMENT_SHOP.md](PAYMENT_SHOP.md) | Shop + Stripe/PayPal (EPIC-23) |
 
 **Regel:** Architektur-Entscheidungen aus Docs respektieren. Bei Änderung → Doc mit aktualisieren.
 
@@ -130,7 +132,7 @@ Kurz. Keine Projektzusammenfassung.
 ## Tests
 
 ```bash
-python -m pytest tests/ -v          # gesamt (3806 Tests)
+python -m pytest tests/ -v          # gesamt (3952 Tests)
 python -m pytest tests/test_fleet.py -v   # domänenspezifisch
 ```
 

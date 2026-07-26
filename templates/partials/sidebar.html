@@ -12,7 +12,7 @@
   {% set _nav_shell_class = 'gc-sidebar-desktop' %}
 {% endif %}
 {% set _cmd_open = request.endpoint in (
-  'overview', 'galaxy_view', 'planet_evolution_view', 'login_rewards_view', 'premium_view'
+  'overview', 'galaxy_view', 'planet_evolution_view', 'login_rewards_view', 'premium_view', 'shop_view'
 ) %}
 {% set _infra_open = request.endpoint in ('buildings_view', 'research_view') %}
 {% set _mil_open = request.endpoint in ('shipyard_view', 'defense_view', 'fleet_view', 'combat_simulator_view') %}
@@ -67,6 +67,13 @@
          class="gc-nav-sub-link gc-nav-module--secondary {% if request.endpoint == 'premium_view' %}active{% endif %}">
         <span class="gc-nav-link-label">{{ T("nav_premium", "Season Pass") }}</span>
         <span class="gc-nav-badge gc-nav-badge--alert hidden" data-nav-badge="premium" hidden aria-hidden="true"></span>
+      </a>
+      <a href="{{ url_for('shop_view') }}"
+         data-nav-module="shop"
+         data-nav-key="shop"
+         class="gc-nav-sub-link gc-nav-module--secondary {% if request.endpoint in ('shop_view', 'shop_return_view') %}active{% endif %}">
+        <span class="gc-nav-link-label">{{ T("nav_shop", "Shop") }}</span>
+        <span class="gc-nav-badge gc-nav-badge--alert hidden" data-nav-badge="shop" hidden aria-hidden="true"></span>
       </a>
     </div>
   </div>

@@ -4194,14 +4194,22 @@ def premium_view():
 
     from game.battle_pass import serialize_for_client as bp_serialize
     from game.login_rewards import serialize_for_client as lr_serialize
+    from game.shop import serialize_catalog_for_client
 
     battle_pass = {"ready": False}
     login_teaser = {"ready": False}
+    shop_checkout = {"enabled": False, "providers": []}
     conn = db()
     try:
         uid = int(session["user_id"])
         battle_pass = bp_serialize(uid, conn=conn, include_tracks=True)
         login_teaser = lr_serialize(uid, conn=conn, include_calendar=False)
+        shop_state = serialize_catalog_for_client(conn=conn, player_id=uid)
+        conn.commit()
+        shop_checkout = {
+            "enabled": bool(shop_state.get("enabled")),
+            "providers": list(shop_state.get("providers") or []),
+        }
     finally:
         conn.close()
 
@@ -4211,6 +4219,7 @@ def premium_view():
         storage_caps=ctx["storage_caps"],
         battle_pass=battle_pass,
         login_teaser=login_teaser,
+        shop_checkout=shop_checkout,
     )
 
 
@@ -4386,6 +4395,326 @@ def api_admin_battle_pass_unlock_premium():
         conn.close()
 
     return jsonify({"ok": bool(ok), "reason": reason, "result": result})
+
+
+# --------------------------------------------------------------------------
+# SHOP / PAYMENTS (EPIC-23)
+# --------------------------------------------------------------------------
+
+def _shop_absolute_url(path: str) -> str:
+    """Stripe/PayPal require absolute https/http return URLs."""
+    from game.config import get_public_base_url, shop_cancel_url, shop_success_url
+
+    if path == "success":
+        configured = shop_success_url()
+    elif path == "cancel":
+        configured = shop_cancel_url()
+    else:
+        configured = path
+    if configured.startswith("http://") or configured.startswith("https://"):
+        return configured
+    base = (get_public_base_url() or request.url_root.rstrip("/")).rstrip("/")
+    if not base.startswith("http://") and not base.startswith("https://"):
+        base = request.url_root.rstrip("/")
+    suffix = configured if configured.startswith("/") else f"/{configured}"
+    return f"{base}{suffix}"
+
+
+@app.route("/shop")
+@require_login
+def shop_view():
+    ctx = _load_page_live_context(finish_source="shop")
+    if ctx is None:
+        return redirect(url_for("login"))
+
+    from game.shop import serialize_catalog_for_client
+
+    shop_state = {"ready": False, "enabled": False, "products": [], "providers": []}
+    conn = db()
+    try:
+        shop_state = serialize_catalog_for_client(
+            conn=conn, player_id=int(session["user_id"])
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    return render_template(
+        "shop.html",
+        player=ctx["player_view"],
+        storage_caps=ctx["storage_caps"],
+        shop=shop_state,
+        shop_cancelled=bool(request.args.get("cancelled")),
+    )
+
+
+@app.route("/shop/return")
+@require_login
+def shop_return_view():
+    """Post-checkout return. PayPal: capture+fulfill here if still pending (webhook backup)."""
+    order_id = int(request.args.get("order_id") or 0)
+    session_id = str(request.args.get("session_id") or "").strip()
+    token = str(request.args.get("token") or "").strip()
+    user_id = int(session.get("user_id") or 0)
+    order = None
+    conn = db()
+    try:
+        from game.payment_providers import paypal_capture_order
+        from game.shop import find_order_by_session, get_order, process_paid_event
+
+        if order_id > 0:
+            order = get_order(order_id, conn=conn)
+        elif session_id:
+            order = find_order_by_session("stripe", session_id, conn=conn)
+            if order is None:
+                order = find_order_by_session("paypal", session_id, conn=conn)
+        elif token:
+            order = find_order_by_session("paypal", token, conn=conn)
+
+        if order and int(order["player_id"]) != user_id:
+            order = None
+
+        # PayPal browser return — capture & fulfill if webhook has not landed yet.
+        if (
+            order
+            and str(order.get("provider") or "") == "paypal"
+            and str(order.get("status") or "") in ("pending", "paid")
+            and (token or order.get("provider_session_id"))
+        ):
+            paypal_oid = token or str(order.get("provider_session_id") or "")
+            begin_write_transaction(conn)
+            try:
+                cok, creason, cap = paypal_capture_order(paypal_oid)
+                payment_id = paypal_oid
+                if isinstance(cap, dict):
+                    # Prefer capture id when present
+                    units = cap.get("purchase_units") or []
+                    if units and isinstance(units[0], dict):
+                        payments = (units[0].get("payments") or {}).get("captures") or []
+                        if payments and isinstance(payments[0], dict):
+                            payment_id = str(payments[0].get("id") or payment_id)
+                if cok:
+                    process_paid_event(
+                        provider="paypal",
+                        event_id=f"return_capture:{paypal_oid}:{int(order['id'])}",
+                        order_id=int(order["id"]),
+                        provider_session_id=paypal_oid,
+                        provider_payment_id=payment_id,
+                        conn=conn,
+                        payload={"source": "shop_return", "capture_ok": True},
+                    )
+                    commit(conn)
+                else:
+                    rollback(conn)
+                    logger.warning(
+                        "paypal return capture failed order_id=%s reason=%s",
+                        order.get("id"),
+                        creason,
+                    )
+            except Exception:
+                rollback(conn)
+                logger.exception(
+                    "paypal return fulfill failed order_id=%s", order.get("id")
+                )
+            order = get_order(int(order["id"]), conn=conn)
+    finally:
+        conn.close()
+
+    ctx = _load_page_live_context(finish_source="shop_return")
+    if ctx is None:
+        return redirect(url_for("login"))
+
+    return render_template(
+        "shop_return.html",
+        player=ctx["player_view"],
+        storage_caps=ctx["storage_caps"],
+        order=order,
+    )
+
+
+@app.route("/api/shop/catalog", methods=["GET"])
+@require_login
+def api_shop_catalog():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+    from game.shop import serialize_catalog_for_client
+
+    conn = db()
+    try:
+        shop = serialize_catalog_for_client(conn=conn, player_id=user_id)
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({"ok": True, "reason": "ok", "shop": shop})
+
+
+@app.route("/api/shop/checkout", methods=["POST"])
+@require_login
+def api_shop_checkout():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    sku = str(data.get("sku") or "").strip()
+    provider = str(data.get("provider") or "").strip().lower()
+    from game.shop import start_checkout
+
+    success_url = _shop_absolute_url("success")
+    cancel_url = _shop_absolute_url("cancel")
+    # Attach order_id placeholder after create — Stripe uses {CHECKOUT_SESSION_ID};
+    # for PayPal we append order_id after we know it (below).
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ok, reason, result = start_checkout(
+            user_id,
+            sku,
+            provider,
+            conn=conn,
+            success_url=success_url,
+            cancel_url=cancel_url,
+        )
+        if ok:
+            # Rewrite success URL with concrete order_id for non-Stripe flows.
+            if result and result.get("order_id") and provider != "stripe":
+                oid = int(result["order_id"])
+                # PayPal already created with generic success; return page resolves session.
+                result = dict(result)
+                result["return_hint"] = f"/shop/return?order_id={oid}"
+            commit(conn)
+        else:
+            rollback(conn)
+    except Exception:
+        rollback(conn)
+        logger.exception(
+            "shop checkout failed user_id=%s sku=%s provider=%s",
+            user_id,
+            sku,
+            provider,
+        )
+        return jsonify({"ok": False, "reason": "checkout_failed"}), 500
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(
+        include_panel=True, finish_source="api_shop_checkout"
+    )
+    resp = {
+        "ok": bool(ok),
+        "reason": reason,
+        "state": state,
+        "order_id": (result or {}).get("order_id") if result else None,
+        "checkout_url": (result or {}).get("checkout_url") if result else None,
+        "fulfilled": bool((result or {}).get("fulfilled")) if result else False,
+    }
+    if request_id and ok:
+        save_idempotent_action(user_id, request_id, resp)
+    status = 200 if ok else 400
+    if reason in ("not_logged_in",):
+        status = 401
+    return jsonify(resp), status
+
+
+@app.route("/api/webhooks/stripe", methods=["POST"])
+def api_webhook_stripe():
+    from game.payment_providers import (
+        stripe_extract_checkout_completed,
+        stripe_verify_and_parse_event,
+    )
+    from game.shop import process_paid_event
+
+    payload = request.get_data()
+    sig = request.headers.get("Stripe-Signature") or ""
+    ok, reason, event = stripe_verify_and_parse_event(payload, sig)
+    if not ok or not event:
+        return jsonify({"ok": False, "reason": reason}), 400
+
+    extracted = stripe_extract_checkout_completed(event)
+    if not extracted:
+        # Acknowledge irrelevant event types.
+        return jsonify({"ok": True, "reason": "ignored"}), 200
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        fok, freason, _order = process_paid_event(
+            provider="stripe",
+            event_id=str(extracted["event_id"]),
+            order_id=extracted.get("order_id"),
+            provider_session_id=extracted.get("provider_session_id"),
+            provider_payment_id=extracted.get("provider_payment_id"),
+            conn=conn,
+            payload=event if isinstance(event, dict) else {"raw": True},
+        )
+        if fok or freason == "duplicate":
+            commit(conn)
+            return jsonify({"ok": True, "reason": freason}), 200
+        rollback(conn)
+        return jsonify({"ok": False, "reason": freason}), 400
+    except Exception:
+        rollback(conn)
+        logger.exception("stripe webhook fulfill failed")
+        return jsonify({"ok": False, "reason": "webhook_failed"}), 500
+    finally:
+        conn.close()
+
+
+@app.route("/api/webhooks/paypal", methods=["POST"])
+def api_webhook_paypal():
+    from game.payment_providers import (
+        paypal_capture_order,
+        paypal_extract_payment_completed,
+        paypal_verify_webhook,
+    )
+    from game.shop import process_paid_event
+
+    payload = request.get_data()
+    headers = {k: v for k, v in request.headers.items()}
+    ok, reason, event = paypal_verify_webhook(headers=headers, body=payload)
+    if not ok or not event:
+        return jsonify({"ok": False, "reason": reason}), 400
+
+    extracted = paypal_extract_payment_completed(event)
+    if not extracted:
+        return jsonify({"ok": True, "reason": "ignored"}), 200
+
+    if extracted.get("needs_capture") and extracted.get("provider_session_id"):
+        cok, creason, _cap = paypal_capture_order(str(extracted["provider_session_id"]))
+        if not cok:
+            return jsonify({"ok": False, "reason": creason}), 400
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        fok, freason, _order = process_paid_event(
+            provider="paypal",
+            event_id=str(extracted["event_id"]),
+            order_id=extracted.get("order_id"),
+            provider_session_id=extracted.get("provider_session_id"),
+            provider_payment_id=extracted.get("provider_payment_id"),
+            conn=conn,
+            payload=event if isinstance(event, dict) else {"raw": True},
+        )
+        if fok or freason == "duplicate":
+            commit(conn)
+            return jsonify({"ok": True, "reason": freason}), 200
+        rollback(conn)
+        return jsonify({"ok": False, "reason": freason}), 400
+    except Exception:
+        rollback(conn)
+        logger.exception("paypal webhook fulfill failed")
+        return jsonify({"ok": False, "reason": "webhook_failed"}), 500
+    finally:
+        conn.close()
 
 
 # --------------------------------------------------------------------------

@@ -212,6 +212,28 @@ def get_public_base_url() -> str:
     return base.rstrip("/")
 
 
+def is_shop_enabled() -> bool:
+    """EPIC-23 kill-switch for real-money shop checkout."""
+    val = os.environ.get("SHOP_ENABLED", "0")
+    return str(val).strip().lower() in ("1", "true", "yes", "on")
+
+
+def shop_success_url() -> str:
+    explicit = _env_str("SHOP_SUCCESS_URL")
+    if explicit:
+        return explicit
+    base = get_public_base_url()
+    return f"{base}/shop/return" if base else "/shop/return"
+
+
+def shop_cancel_url() -> str:
+    explicit = _env_str("SHOP_CANCEL_URL")
+    if explicit:
+        return explicit
+    base = get_public_base_url()
+    return f"{base}/shop?cancelled=1" if base else "/shop?cancelled=1"
+
+
 def is_action_perf_debug_enabled() -> bool:
     """GC-841: optional action latency profiling (server logs + client console)."""
     val = os.environ.get("GC_PERF_DEBUG", "0")

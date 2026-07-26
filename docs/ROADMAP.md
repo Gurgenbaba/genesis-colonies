@@ -24,12 +24,12 @@ Status-Legende:
 | Flask + SQLite + Jinja2 | ✅ |
 | Installer (`scripts/install.py`) | ✅ |
 | Environment & Config Guards | ✅ |
-| SQL-Migrationen (`006`–`100`) | ✅ |
+| SQL-Migrationen (`006`–`113`) | ✅ |
 | Health Endpoint (`/health`) | ✅ |
 | Docker + Gunicorn Deployment | ✅ |
 | DB-Abstraction (`game/db.py`) | ✅ |
 | Bootstrap & Migration Guard | ✅ |
-| pytest-Suite (**3806** Tests) | ✅ |
+| pytest-Suite (**3952** Tests) | ✅ |
 
 ---
 
@@ -195,7 +195,7 @@ Master-Doc: **[GC_PERF_CORE.md](GC_PERF_CORE.md)** (EPIC Performance Core — Ma
 | **World Boss Events (EPIC-20)** | 🔄 | GC-W01…W08 — [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) |
 | **Pirate Ecosystem (EPIC-21)** | ✅ | GC-P00…P18 ship-gate — [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md) |
 | **LiveOps Retention (EPIC-22)** | ✅ | Login calendar + Battle Pass — [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) |
-| Payment / Shop (EPIC-23) | 📋 | Entitlement hook only until payment ready |
+| **Payment / Shop (EPIC-23)** | ✅ | Stripe + PayPal convenience shop — [PAYMENT_SHOP.md](PAYMENT_SHOP.md) |
 | CI Pipeline | 💡 |
 | Automated Backups | 📋 Operator-intern |
 

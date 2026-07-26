@@ -311,7 +311,9 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | Pirate Ecosystem (Heat, bases, player-like AI, Bot-Log) | `game/pirates/` | [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md) |
 | Login Attendance (30-day calendar) | `game/login_rewards.py` | [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) |
 | Battle Pass Season (Free/Premium tracks) | `game/battle_pass.py` | [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) |
-| Premium Entitlement (stub → Payment Epic) | `game/premium_entitlements.py` | [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) |
+| Premium Entitlement | `game/premium_entitlements.py` | [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) / [PAYMENT_SHOP.md](PAYMENT_SHOP.md) |
+| Shop Catalog + Fulfill | `game/shop.py` | [PAYMENT_SHOP.md](PAYMENT_SHOP.md) |
+| Payment Providers (Stripe/PayPal) | `game/payment_providers.py` | [PAYMENT_SHOP.md](PAYMENT_SHOP.md) |
 | Player-card season cosmetics (themes/badges/auras/flairs) | `game/playercard.py` unlock APIs | Base themes always free; Season keys via BP |
 
 **Ticket-Check:** Domäne identifizieren → nur Owner-Modul (+ Routes/`app.py`) ändern → kein zweites Modul für dieselbe Wahrheit.

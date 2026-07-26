@@ -38749,6 +38749,73 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   .battle-pass-track--premium { grid-column: 1 / -1; }
 }
 
+/* EPIC-23 Shop */
+.shop-page { width: 100%; }
+.shop-eyebrow {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gc-text-muted, #8a93a3);
+}
+.shop-banner {
+  margin-bottom: 0.75rem;
+}
+.shop-banner--cancel { border-color: rgba(200, 160, 80, 0.45); }
+.shop-banner--ok { border-color: rgba(80, 180, 120, 0.45); }
+.shop-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 0.75rem;
+}
+.shop-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(120, 140, 170, 0.35);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(8, 12, 20, 0.35);
+}
+.shop-card.is-owned { opacity: 0.75; }
+.shop-card-title {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+}
+.shop-card-hint { margin: 0 0 0.5rem; }
+.shop-card-price {
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--gc-accent, #5ec8ff);
+}
+.shop-provider-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.shop-owned,
+.shop-locked {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--gc-text-muted, #8a93a3);
+}
+.shop-policy-panel { margin-top: 0.75rem; }
+.shop-return-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+.battle-pass-premium-cta { margin-top: 0.65rem; }
+.battle-pass-premium-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.45rem;
+}
+
 /* Public banned players board */
 .banned-players-eyebrow {
   margin: 0 0 0.35rem;

@@ -2173,6 +2173,7 @@
     if (path.endsWith("/galactic-politics")) return "galactic_politics";
     if (path.endsWith("/skilltree")) return "skilltree";
     if (path.endsWith("/premium")) return "premium";
+    if (path.endsWith("/shop") || path.endsWith("/shop/return")) return "shop";
     if (path.endsWith("/alliance")) return "alliance";
     if (path.endsWith("/shipyard")) return "shipyard";
     if (path.endsWith("/defense")) return "defense";
@@ -16767,6 +16768,7 @@
 
   function initBattlePass() {
     bindBattlePassOnce();
+    bindShopBuyOnce();
     const state = parseBattlePassPageState();
     const remEl = document.querySelector("[data-bp-remaining]");
     if (!remEl) return;
@@ -16792,6 +16794,63 @@
       remEl.textContent = formatDurationHuman(rem, 3);
     };
     tick();
+  }
+
+  let _shopBuyBound = false;
+  function bindShopBuyOnce() {
+    if (_shopBuyBound) return;
+    _shopBuyBound = true;
+    document.addEventListener("click", async (ev) => {
+      const btn = ev.target && ev.target.closest ? ev.target.closest("[data-shop-buy]") : null;
+      if (!btn) return;
+      if (!document.getElementById("shop-page") && !document.getElementById("premium-page")) {
+        return;
+      }
+      ev.preventDefault();
+      if (btn.disabled) return;
+      const sku = String(btn.getAttribute("data-sku") || "").trim();
+      const provider = String(btn.getAttribute("data-provider") || "").trim();
+      if (!sku || !provider) return;
+      btn.disabled = true;
+      try {
+        const res = await GC.fetchGameAction("/api/shop/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sku, provider }),
+        });
+        if (res?.state && typeof GC.applyActionState === "function") {
+          GC.applyActionState(res, "shop_checkout");
+        }
+        if (res?.ok && res.fulfilled) {
+          showNotify(t("shop_fulfill_ok", "Kauf gutgeschrieben."), "success");
+          if (typeof GC.reloadCurrentPage === "function") {
+            GC.reloadCurrentPage({ reason: "shop_fulfilled" });
+          }
+          return;
+        }
+        if (res?.ok && res.checkout_url) {
+          // External provider checkout — allowed navigation exception.
+          window.location.assign(String(res.checkout_url));
+          return;
+        }
+        const reason = String(res?.reason || "");
+        let msg = t("shop_checkout_fail", "Kauf konnte nicht gestartet werden.");
+        if (reason === "shop_disabled") msg = t("shop_disabled", "Shop ist derzeit deaktiviert.");
+        else if (reason === "already_owned") msg = t("shop_owned", "Bereits freigeschaltet");
+        else if (reason === "provider_unconfigured") {
+          msg = t("shop_no_providers", "Zahlungsanbieter sind noch nicht konfiguriert.");
+        }
+        showNotify(msg, "error");
+      } catch (_) {
+        showNotify(t("shop_checkout_fail", "Kauf konnte nicht gestartet werden."), "error");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }
+
+  function initShop() {
+    bindShopBuyOnce();
   }
 
   function parseAlliancePageState() {
@@ -24118,7 +24177,7 @@
     ) {
       sections.add("economy");
     }
-    if (path.endsWith("/login-rewards") || path.endsWith("/premium")) {
+    if (path.endsWith("/login-rewards") || path.endsWith("/premium") || path.endsWith("/shop") || path.endsWith("/shop/return")) {
       sections.add("command");
     }
     if (path.endsWith("/empire") || path.endsWith("/techtree")) sections.add("economy");
@@ -30911,6 +30970,7 @@
   GC.modules.referrals = initReferrals;
   GC.modules.login_rewards = initLoginRewards;
   GC.modules.premium = initBattlePass;
+  GC.modules.shop = initShop;
   GC.modules.alliance = initAlliance;
   bindAllianceOnce();
   GC.modules.imperial_directives = initImperialDirectives;

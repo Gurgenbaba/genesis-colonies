@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="gc-page shop-page shop-return-page" id="shop-return-page">
+  <header class="gc-page-header section-header">
+    <h1 class="section-title">{{ T("shop_return_title", "Kaufstatus") }}</h1>
+    <p class="section-hint hint">
+      {{ T("shop_return_hint", "Freischaltungen erfolgen nach Zahlungsbestätigung (Webhook). Kurz warten, dann Shop oder Season Pass prüfen.") }}
+    </p>
+  </header>
+
+  <section class="gc-panel">
+    {% if order %}
+      <p class="gc-mono">
+        {{ T("shop_return_order", "Bestellung") }} #{{ order.id }}
+        · {{ order.sku }}
+        · {{ order.status }}
+      </p>
+      {% if order.status == 'fulfilled' %}
+        <p class="shop-banner shop-banner--ok">{{ T("shop_return_fulfilled", "Kauf gutgeschrieben.") }}</p>
+      {% elif order.status == 'paid' %}
+        <p>{{ T("shop_return_paid", "Zahlung erkannt — Freischaltung läuft.") }}</p>
+      {% else %}
+        <p>{{ T("shop_return_pending", "Noch ausstehend. Wenn du bezahlt hast, aktualisiere in Kürze.") }}</p>
+      {% endif %}
+    {% else %}
+      <p>{{ T("shop_return_unknown", "Keine Bestellung gefunden. Prüfe den Shop oder Support.") }}</p>
+    {% endif %}
+
+    <div class="shop-return-actions">
+      <a href="{{ url_for('shop_view') }}" class="gc-btn gc-btn-primary" data-pjax-link>
+        {{ T("shop_back", "Zurück zum Shop") }}
+      </a>
+      <a href="{{ url_for('premium_view') }}" class="gc-btn gc-btn-ghost" data-pjax-link>
+        {{ T("shop_goto_premium", "Season Pass öffnen") }}
+      </a>
+    </div>
+  </section>
+</div>
+{% endblock %}

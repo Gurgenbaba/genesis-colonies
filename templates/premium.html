@@ -83,9 +83,41 @@
       </div>
     </div>
     {% if not bp.premium_unlocked %}
-    <p class="hint battle-pass-premium-note">
-      {{ T("bp_premium_note", "Premium-Track wird später über den Shop freigeschaltet. Admin kann Entitlements für Tests setzen.") }}
-    </p>
+    {% set sc = shop_checkout if shop_checkout is defined and shop_checkout else {'enabled': false, 'providers': []} %}
+    {% set shop_providers = sc.providers if sc.providers is defined else [] %}
+    <div class="battle-pass-premium-cta">
+      <p class="hint battle-pass-premium-note">
+        {{ T("bp_premium_note", "Premium-Track über den Shop freischalten — Convenience & Season-Kosmetik, kein Pay-to-Win.") }}
+      </p>
+      <div class="battle-pass-premium-actions" data-bp-shop-buy>
+        {% if sc.enabled and shop_providers %}
+          {% for prov in shop_providers %}
+            {% if prov != 'test' %}
+            <button type="button"
+                    class="gc-btn gc-btn-sm {% if loop.first %}gc-btn-primary{% else %}gc-btn-ghost{% endif %}"
+                    data-shop-buy
+                    data-sku="season_pass_current"
+                    data-provider="{{ prov }}">
+              {% if prov == 'paypal' %}
+                {{ T("bp_buy_premium_paypal", "Premium mit PayPal") }}
+              {% elif prov == 'stripe' %}
+                {{ T("bp_buy_premium_stripe", "Premium mit Stripe") }}
+              {% else %}
+                {{ T("shop_pay_test", "Test") }}
+              {% endif %}
+            </button>
+            {% endif %}
+          {% endfor %}
+        {% elif not sc.enabled %}
+          <span class="hint">{{ T("shop_disabled", "Shop ist derzeit deaktiviert.") }}</span>
+        {% else %}
+          <span class="hint">{{ T("shop_no_providers", "Zahlungsanbieter sind noch nicht konfiguriert.") }}</span>
+        {% endif %}
+        <a href="{{ url_for('shop_view') }}" class="gc-btn gc-btn-ghost" data-pjax-link>
+          {{ T("bp_open_shop", "Shop öffnen") }}
+        </a>
+      </div>
+    </div>
     {% endif %}
   </section>
 

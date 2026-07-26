@@ -1,5 +1,5 @@
 """
-EPIC-22 / GC-993 — Premium entitlements stub (Payment Epic writes the same flag).
+EPIC-22 / GC-993 — Premium entitlements (Payment Epic writes the same flag).
 """
 
 from __future__ import annotations

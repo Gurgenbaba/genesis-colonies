@@ -10,7 +10,7 @@
 | 0 | Master-Doc + Owner-Registrierung | GC-980 | ✅ |
 | 1 | 30-Tage Login-Kalender | GC-981…984 | ✅ |
 | 2 | Battle Pass Free/Premium (ohne Payment) | GC-990…995 | ✅ |
-| 3 | Payment / Shop | EPIC-23 | 📋 Out of scope |
+| 3 | Payment / Shop | EPIC-23 | ✅ [PAYMENT_SHOP.md](PAYMENT_SHOP.md) |
 
 ## Philosophy
 
@@ -30,7 +30,7 @@
 |--------|--------|-------|
 | Login Attendance | `game/login_rewards.py` | Progress, claim, 30-day catalog |
 | Battle Pass Season | `game/battle_pass.py` | Season, XP, tracks, claims |
-| Premium Entitlement | `game/premium_entitlements.py` | Stub; Payment-Epic schreibt denselben Flag |
+| Premium Entitlement | `game/premium_entitlements.py` | Flag; Shop schreibt denselben via `unlock_premium` |
 
 **Grant path (canonical):** `grant_inventory_item` + `timekeeper.credit` — keine zweite Inventory-/Loot-Engine.
 
@@ -104,9 +104,11 @@ Progress hooks from `activity_xp` after a successful grant. Claim via `POST /api
 - Admin: grant premium entitlement
 - Page: `/premium` (Season Ops panel + tracks)
 
-## Phase 3 — EPIC-23 Payment (later)
+## Phase 3 — EPIC-23 Payment / Shop
 
-Stripe (or equivalent) sets the **same** entitlement flag. No second unlock system. No direct resource/ship shop.
+Canonical doc: [PAYMENT_SHOP.md](PAYMENT_SHOP.md).
+
+Stripe + PayPal Checkout set the **same** entitlement flag via `battle_pass.unlock_premium`. No second unlock system. No direct resource/ship shop. Convenience packs (Timekeeper / boosters / meta containers) fulfill through `timekeeper.credit` + `grant_inventory_item`.
 
 ## Ticket map
 

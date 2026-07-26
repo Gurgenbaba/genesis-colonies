@@ -1,0 +1,424 @@
+"""
+EPIC-23 — Stripe + PayPal checkout adapters (thin).
+
+Owner: provider session create + webhook signature verify.
+Order lifecycle / fulfill lives in game.shop.
+"""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import hmac
+import json
+import os
+import urllib.error
+import urllib.parse
+import urllib.request
+from typing import Any, Dict, Mapping, Optional, Tuple
+
+
+def _env(name: str) -> str:
+    return str(os.environ.get(name) or "").strip()
+
+
+def stripe_configured() -> bool:
+    return bool(_env("STRIPE_SECRET_KEY"))
+
+
+def paypal_configured() -> bool:
+    return bool(_env("PAYPAL_CLIENT_ID") and _env("PAYPAL_CLIENT_SECRET"))
+
+
+def stripe_webhook_secret() -> str:
+    return _env("STRIPE_WEBHOOK_SECRET")
+
+
+def paypal_mode() -> str:
+    mode = _env("PAYPAL_MODE").lower() or "sandbox"
+    return "live" if mode == "live" else "sandbox"
+
+
+def paypal_api_base() -> str:
+    if paypal_mode() == "live":
+        return "https://api-m.paypal.com"
+    return "https://api-m.sandbox.paypal.com"
+
+
+def stripe_create_checkout_session(
+    *,
+    order: Mapping[str, Any],
+    product: Mapping[str, Any],
+    success_url: str,
+    cancel_url: str,
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    if not stripe_configured():
+        return False, "provider_unconfigured", None
+    try:
+        import stripe  # type: ignore
+    except ImportError:
+        return False, "stripe_sdk_missing", None
+
+    stripe.api_key = _env("STRIPE_SECRET_KEY")
+    currency = str(product.get("currency") or "eur").lower()
+    amount = int(product.get("price_cents") or 0)
+    if amount <= 0:
+        return False, "invalid_amount", None
+
+    success = str(success_url)
+    cancel = str(cancel_url)
+    if not success.startswith("http://") and not success.startswith("https://"):
+        return False, "invalid_return_url", None
+    if not cancel.startswith("http://") and not cancel.startswith("https://"):
+        return False, "invalid_return_url", None
+    if "{CHECKOUT_SESSION_ID}" not in success:
+        sep = "&" if "?" in success else "?"
+        success = f"{success}{sep}session_id={{CHECKOUT_SESSION_ID}}"
+
+    display_name = str(product.get("sku") or "Genesis Colonies")
+    title_key = str(product.get("title_key") or "").strip()
+    if title_key:
+        display_name = title_key.replace("shop_sku_", "").replace("_", " ").title()
+
+    try:
+        session = stripe.checkout.Session.create(
+            mode="payment",
+            success_url=success,
+            cancel_url=cancel,
+            client_reference_id=str(order["id"]),
+            metadata={
+                "order_id": str(order["id"]),
+                "player_id": str(order["player_id"]),
+                "sku": str(order["sku"]),
+            },
+            line_items=[
+                {
+                    "quantity": 1,
+                    "price_data": {
+                        "currency": currency,
+                        "unit_amount": amount,
+                        "product_data": {
+                            "name": f"Genesis Colonies — {display_name}",
+                            "metadata": {"sku": str(product.get("sku") or "")},
+                        },
+                    },
+                }
+            ],
+        )
+    except Exception:
+        return False, "stripe_session_failed", None
+
+    return True, "ok", {
+        "session_id": str(session.get("id") or ""),
+        "checkout_url": str(session.get("url") or ""),
+    }
+
+
+def stripe_verify_and_parse_event(
+    payload: bytes,
+    sig_header: str,
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    secret = stripe_webhook_secret()
+    if not secret:
+        return False, "webhook_unconfigured", None
+    try:
+        import stripe  # type: ignore
+    except ImportError:
+        return False, "stripe_sdk_missing", None
+
+    try:
+        event = stripe.Webhook.construct_event(payload, sig_header, secret)
+    except Exception:
+        return False, "invalid_signature", None
+
+    if hasattr(event, "to_dict"):
+        data = event.to_dict()
+    elif isinstance(event, dict):
+        data = event
+    else:
+        data = {
+            "id": getattr(event, "id", None),
+            "type": getattr(event, "type", None),
+            "data": {"object": getattr(getattr(event, "data", None), "object", None)},
+        }
+    return True, "ok", data
+
+
+def stripe_extract_checkout_completed(
+    event: Mapping[str, Any],
+) -> Optional[Dict[str, Any]]:
+    if str(event.get("type") or "") != "checkout.session.completed":
+        return None
+    obj = (event.get("data") or {}).get("object") or {}
+    if not isinstance(obj, dict):
+        return None
+    meta = obj.get("metadata") or {}
+    order_id = None
+    try:
+        order_id = int(meta.get("order_id") or obj.get("client_reference_id") or 0) or None
+    except Exception:
+        order_id = None
+    return {
+        "event_id": str(event.get("id") or ""),
+        "order_id": order_id,
+        "provider_session_id": str(obj.get("id") or "") or None,
+        "provider_payment_id": str(obj.get("payment_intent") or obj.get("id") or "") or None,
+    }
+
+
+def paypal_create_checkout_order(
+    *,
+    order: Mapping[str, Any],
+    product: Mapping[str, Any],
+    success_url: str,
+    cancel_url: str,
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    if not paypal_configured():
+        return False, "provider_unconfigured", None
+    success = str(success_url)
+    cancel = str(cancel_url)
+    if not success.startswith("http://") and not success.startswith("https://"):
+        return False, "invalid_return_url", None
+    if not cancel.startswith("http://") and not cancel.startswith("https://"):
+        return False, "invalid_return_url", None
+    # Ensure return URL carries our shop order id for reliable lookup.
+    oid = int(order.get("id") or 0)
+    if oid > 0 and "order_id=" not in success:
+        sep = "&" if "?" in success else "?"
+        success = f"{success}{sep}order_id={oid}"
+    token = _paypal_access_token()
+    if not token:
+        return False, "paypal_auth_failed", None
+
+    currency = str(product.get("currency") or "eur").upper()
+    amount = max(0, int(product.get("price_cents") or 0)) / 100.0
+    value = f"{amount:.2f}"
+    body = {
+        "intent": "CAPTURE",
+        "purchase_units": [
+            {
+                "reference_id": str(order["id"]),
+                "custom_id": str(order["id"]),
+                "amount": {
+                    "currency_code": currency,
+                    "value": value,
+                },
+                "description": str(product.get("sku") or "Genesis Colonies"),
+            }
+        ],
+        "application_context": {
+            "return_url": success,
+            "cancel_url": cancel,
+            "user_action": "PAY_NOW",
+            "shipping_preference": "NO_SHIPPING",
+        },
+    }
+    try:
+        data = _paypal_request(
+            "POST",
+            "/v2/checkout/orders",
+            token=token,
+            body=body,
+        )
+    except Exception:
+        return False, "paypal_session_failed", None
+
+    order_id = str(data.get("id") or "")
+    approve = None
+    for link in data.get("links") or []:
+        if isinstance(link, dict) and link.get("rel") == "approve":
+            approve = link.get("href")
+            break
+    if not order_id or not approve:
+        return False, "paypal_session_failed", None
+    return True, "ok", {
+        "session_id": order_id,
+        "checkout_url": str(approve),
+    }
+
+
+def paypal_capture_order(paypal_order_id: str) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    token = _paypal_access_token()
+    if not token:
+        return False, "paypal_auth_failed", None
+    try:
+        data = _paypal_request(
+            "POST",
+            f"/v2/checkout/orders/{urllib.parse.quote(str(paypal_order_id))}/capture",
+            token=token,
+            body={},
+        )
+    except Exception:
+        return False, "paypal_capture_failed", None
+    return True, "ok", data
+
+
+def paypal_verify_webhook(
+    *,
+    headers: Mapping[str, str],
+    body: bytes,
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """
+    Verify PayPal webhook signature via PayPal verify-webhook-signature API.
+    """
+    webhook_id = _env("PAYPAL_WEBHOOK_ID")
+    if not webhook_id:
+        return False, "webhook_unconfigured", None
+    token = _paypal_access_token()
+    if not token:
+        return False, "paypal_auth_failed", None
+
+    try:
+        event = json.loads(body.decode("utf-8"))
+    except Exception:
+        return False, "invalid_payload", None
+
+    transmission_id = _header(headers, "PAYPAL-TRANSMISSION-ID")
+    timestamp = _header(headers, "PAYPAL-TRANSMISSION-TIME")
+    cert_url = _header(headers, "PAYPAL-CERT-URL")
+    auth_algo = _header(headers, "PAYPAL-AUTH-ALGO")
+    transmission_sig = _header(headers, "PAYPAL-TRANSMISSION-SIG")
+    if not all([transmission_id, timestamp, cert_url, auth_algo, transmission_sig]):
+        return False, "invalid_signature", None
+
+    verify_body = {
+        "transmission_id": transmission_id,
+        "transmission_time": timestamp,
+        "cert_url": cert_url,
+        "auth_algo": auth_algo,
+        "transmission_sig": transmission_sig,
+        "webhook_id": webhook_id,
+        "webhook_event": event,
+    }
+    try:
+        result = _paypal_request(
+            "POST",
+            "/v1/notifications/verify-webhook-signature",
+            token=token,
+            body=verify_body,
+        )
+    except Exception:
+        return False, "invalid_signature", None
+
+    status = str(result.get("verification_status") or "").upper()
+    if status != "SUCCESS":
+        return False, "invalid_signature", None
+    return True, "ok", event
+
+
+def paypal_extract_payment_completed(
+    event: Mapping[str, Any],
+) -> Optional[Dict[str, Any]]:
+    etype = str(event.get("event_type") or "")
+    resource = event.get("resource") or {}
+    if not isinstance(resource, dict):
+        return None
+
+    if etype in ("CHECKOUT.ORDER.APPROVED", "CHECKOUT.ORDER.COMPLETED"):
+        custom = resource.get("purchase_units") or []
+        order_id = None
+        if custom and isinstance(custom[0], dict):
+            try:
+                order_id = int(custom[0].get("custom_id") or custom[0].get("reference_id") or 0) or None
+            except Exception:
+                order_id = None
+        if order_id is None:
+            try:
+                order_id = int(resource.get("custom_id") or 0) or None
+            except Exception:
+                order_id = None
+        return {
+            "event_id": str(event.get("id") or ""),
+            "order_id": order_id,
+            "provider_session_id": str(resource.get("id") or "") or None,
+            "provider_payment_id": str(resource.get("id") or "") or None,
+            "needs_capture": etype == "CHECKOUT.ORDER.APPROVED",
+        }
+
+    if etype == "PAYMENT.CAPTURE.COMPLETED":
+        custom_id = resource.get("custom_id")
+        order_id = None
+        try:
+            order_id = int(custom_id or 0) or None
+        except Exception:
+            order_id = None
+        supplementary = resource.get("supplementary_data") or {}
+        related = supplementary.get("related_ids") or {}
+        session_id = related.get("order_id")
+        return {
+            "event_id": str(event.get("id") or ""),
+            "order_id": order_id,
+            "provider_session_id": str(session_id or "") or None,
+            "provider_payment_id": str(resource.get("id") or "") or None,
+            "needs_capture": False,
+        }
+    return None
+
+
+def _header(headers: Mapping[str, str], name: str) -> str:
+    # Case-insensitive header lookup
+    want = name.lower()
+    for k, v in headers.items():
+        if str(k).lower() == want:
+            return str(v or "").strip()
+    return ""
+
+
+def _paypal_access_token() -> Optional[str]:
+    client_id = _env("PAYPAL_CLIENT_ID")
+    secret = _env("PAYPAL_CLIENT_SECRET")
+    if not client_id or not secret:
+        return None
+    basic = base64.b64encode(f"{client_id}:{secret}".encode("utf-8")).decode("ascii")
+    data = urllib.parse.urlencode({"grant_type": "client_credentials"}).encode("utf-8")
+    req = urllib.request.Request(
+        f"{paypal_api_base()}/v1/oauth2/token",
+        data=data,
+        headers={
+            "Authorization": f"Basic {basic}",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, ValueError):
+        return None
+    token = str(payload.get("access_token") or "").strip()
+    return token or None
+
+
+def _paypal_request(
+    method: str,
+    path: str,
+    *,
+    token: str,
+    body: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, Any]:
+    raw = json.dumps(body if body is not None else {}).encode("utf-8")
+    req = urllib.request.Request(
+        f"{paypal_api_base()}{path}",
+        data=raw if method.upper() != "GET" else None,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        method=method.upper(),
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        text = resp.read().decode("utf-8")
+    if not text:
+        return {}
+    data = json.loads(text)
+    return data if isinstance(data, dict) else {}
+
+
+def fake_stripe_signature_for_tests(payload: bytes, secret: str) -> str:
+    """Test helper: Stripe-compatible signed header (t=…,v1=…)."""
+    ts = str(int(__import__("time").time()))
+    signed = f"{ts}.".encode("utf-8") + payload
+    digest = hmac.new(secret.encode("utf-8"), signed, hashlib.sha256).hexdigest()
+    return f"t={ts},v1={digest}"

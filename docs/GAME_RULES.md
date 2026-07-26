@@ -151,13 +151,15 @@ Erkennung: IP-/Verhaltensanalyse, Support-Meldungen, Admin-Tools. Kein automatis
 
 `[Policy]` Verboten: Handel von Accounts, Ressourcen, Flotten, Dienstleistungen oder Schutz gegen **Echtgeld** oder externe Zahlungsmittel außerhalb autorisierter Kanäle.
 
-### 3.3a Official LiveOps / Premium (EPIC-22)
+### 3.3a Official LiveOps / Premium / Shop (EPIC-22 / EPIC-23)
 
-`[Policy]` Offizielle Kanäle (Login-Kalender, Battle Pass, künftiger Shop) dürfen **Convenience** verkaufen oder vergeben: Timekeeper-Zeit, Container (meta-only), Boosters, Cosmetics/QoL.
+`[Policy]` Offizielle Kanäle (Login-Kalender, Battle Pass, **Shop**) dürfen **Convenience** verkaufen oder vergeben: Timekeeper-Zeit, Container (meta-only), Boosters, Cosmetics/QoL, Season-Pass-Entitlement.
 
 Battle-Pass-XP: sichtbare **Season Ops** (daily/weekly) + soft-capped Activity-Drip; Pace zielt auf Season-Abschluss bei normalem Spiel (~45–55 Tage), ohne zweite Quest-Engine neben Imperial Directives.
 
-**Nicht** über Premium/Login: Kampf-Power (Schiffe, Defense) oder Rohstoff-Stacks, die Ranking verzerren. Doc: [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md).
+Shop (Stripe/PayPal): erfüllt über denselben Entitlement-/Grant-Pfad — kein paralleles Unlock-System, keine Hard-Currency-Wallet im MVP. Doc: [PAYMENT_SHOP.md](PAYMENT_SHOP.md), [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md).
+
+**Nicht** über Premium/Login/Shop: Kampf-Power (Schiffe, Defense) oder Rohstoff-Stacks, die Ranking verzerren.
 
 ### 3.4 Bots, Makros, Scripts, Automation
 

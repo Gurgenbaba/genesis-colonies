@@ -62,6 +62,7 @@ def test_sidebar_has_military_and_trading_hub_nav():
     assert "nav_logistics" not in sidebar
     assert 'data-nav-module="login_rewards"' in sidebar
     assert 'data-nav-module="premium"' in sidebar
+    assert 'data-nav-module="shop"' in sidebar
     assert 'data-nav-section="economy"' in sidebar_right
     assert 'data-nav-module="trading"' in sidebar_right
     assert "url_for('trader_hub_view')" in sidebar_right
@@ -142,6 +143,12 @@ def test_placeholder_routes_render(placeholder_db):
     prem_body = premium.get_data(as_text=True)
     assert "battle-pass-page" in prem_body or "premium-page" in prem_body
     assert "gc-placeholder-page" not in prem_body
+
+    shop = client.get("/shop")
+    assert shop.status_code == 200
+    shop_body = shop.get_data(as_text=True)
+    assert "shop-page" in shop_body
+    assert "gc-placeholder-page" not in shop_body
 
     login_rewards = client.get("/login-rewards")
     assert login_rewards.status_code == 200

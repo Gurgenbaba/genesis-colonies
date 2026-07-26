@@ -13,3 +13,6 @@ argon2-cffi>=23.1.0,<26.0.0
 # Optional — required only when GC_DB_BACKEND=postgres (GC-PERF-DB-002)
 psycopg[binary]>=3.1.0,<4.0.0
 psycopg_pool>=3.1.0,<4.0.0
+
+# Optional — EPIC-23 Payment / Shop (Stripe Checkout); PayPal uses stdlib urllib
+stripe>=11.0.0,<14.0.0
