@@ -66,6 +66,7 @@ Vor jeder Änderung die relevanten Docs lesen:
 | [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md) | Galaxy Heat, Piratenbasen, player-like AI, Bot-Log |
 | [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) | 30-Tage Login + Battle Pass (EPIC-22) |
 | [PAYMENT_SHOP.md](PAYMENT_SHOP.md) | Shop + Stripe/PayPal (EPIC-23) |
+| [RAILWAY_OPERATOR.md](RAILWAY_OPERATOR.md) | Production Railway — DNS, CI-Wait, Cron, CDN, Cutover |
 
 **Regel:** Architektur-Entscheidungen aus Docs respektieren. Bei Änderung → Doc mit aktualisieren.
 

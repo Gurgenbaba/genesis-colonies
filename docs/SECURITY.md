@@ -153,7 +153,9 @@ APP_ENV=production
 FLASK_ENV=production
 FLASK_DEBUG=0
 SECRET_KEY=<64-char-random-hex>
-GC_DB_PATH=game/game.db
+# Local / non-volume: GC_DB_PATH=game/game.db
+# Railway volume: GC_DB_PATH=/data/game.db  (see docs/RAILWAY_OPERATOR.md)
+GC_DB_PATH=/data/game.db
 ```
 
 Secret generieren:

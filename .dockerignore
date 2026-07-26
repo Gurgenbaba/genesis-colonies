@@ -1,0 +1,73 @@
+# Railway / Docker build context — keep runtime + install inputs; drop noise.
+# Entrypoint still needs: app.py, migrate.py, game/, static/, templates/,
+# locales/, migrations/, scripts/, requirements*.txt, VERSION, CHANGELOG.md
+
+.git
+.github
+.cursor
+.vscode
+.vs
+.idea
+
+# Secrets / local env (runtime secrets come from Railway Variables)
+.env
+.env.*
+!.env.example
+
+# Python caches / venvs
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+ENV/
+env/
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Tests & tooling (not needed in the prod image)
+tests/
+tools/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.ruff_cache/
+.tmp_gc547_audit/
+
+# Docs / editor / agent noise (CHANGELOG kept for timeline seed)
+docs/
+*.md
+!CHANGELOG.md
+!LICENSE
+
+# Local SQLite / DB artifacts — production uses volume /data/game.db
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+game/game.db
+game/*.db
+tmp_*.db
+instance/
+
+# OS / logs / archives
+.DS_Store
+Thumbs.db
+*.log
+*.zip
+*.rar
+*.7z
+*.tar
+*.gz
+*.bz2
+*.xz
+node_modules/

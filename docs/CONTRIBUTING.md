@@ -13,7 +13,7 @@ Richtlinien für Entwickler, die am Projekt mitarbeiten. Ziel: konsistente, revi
 | pytest | separat installieren (`pip install pytest`) |
 | Git | optional |
 
-Kein Node.js. Docker nur für internen Operator-Deploy — keine öffentliche Hosting-Anleitung im Repo.
+Kein Node.js. Docker nur für internen Operator-Deploy — siehe [RAILWAY_OPERATOR.md](RAILWAY_OPERATOR.md). Keine öffentliche Self-Hosting-Anleitung.
 
 ---
 
@@ -58,18 +58,22 @@ Arbeit erfolgt als **Tickets** (GC-XXX), nicht als Epic-Direct-Implementierung.
 
 **Production** läuft über **Railway** (`www.genesis-colonies.de`). GitHub Pages wird **nicht** für Production genutzt.
 
+**Operator runbook:** [RAILWAY_OPERATOR.md](RAILWAY_OPERATOR.md) — DNS, Wait for CI, Env/Volume, HTTP-Cron, Backups, CDN (static-only), Postgres-Cutover-Pfad.
+
 | Check | Bedeutung |
 |-------|-----------|
 | `hospitable-abundance - genesis-colonies` | **Railway Deploy** — maßgeblich für Production |
 | `pages build and deployment` / `deploy` | **GitHub Pages** — nicht Production; kann ignoriert werden |
 
+**Wait for CI:** In Railway **Enable**, damit Deploys erst nach grünen GitHub-Checks starten. Required Checks dürfen **nicht** Pages-Jobs sein.
+
 **GitHub Pages deaktivieren (empfohlen):** Repo → **Settings → Pages → Build and deployment → Source: None**. Damit entfällt der automatische `pages-build-deployment`-Workflow und rote Deploy-Checks ohne Production-Impact.
 
-**Branch Protection:** Falls `deploy` oder `pages build and deployment` als Required Check gesetzt ist → entfernen. Required bleiben nur Checks, die Production betreffen (z. B. Railway).
+**Branch Protection:** Falls `deploy` oder `pages build and deployment` als Required Check gesetzt ist → entfernen. Required bleiben nur Checks, die Production betreffen (z. B. App-CI / Railway).
 
 **Bekannter Fehlerfall (2026-07):** Commit `088eb12` — GitHub Actions zeigte `deploy` failure (`Timeout reached, aborting!` nach ~10 Minuten im Pages-Deploy-Job). **Railway deploy war erfolgreich** (combined commit status: success). Ursache: GitHub Pages Infrastruktur-Timeout, kein App-/Migrations-/Railway-Problem.
 
-Cron/Background auf Railway (gleiche SQLite-Volume wie Web): `POST /api/internal/cron/ranking` mit `GC_INTERNAL_CRON_TOKEN` — siehe [ARCHITECTURE.md](ARCHITECTURE.md).
+Cron/Background auf Railway (gleiche SQLite-Volume wie Web): `POST /api/internal/cron/ranking` mit `GC_INTERNAL_CRON_TOKEN` — siehe [ARCHITECTURE.md](ARCHITECTURE.md) und [RAILWAY_OPERATOR.md](RAILWAY_OPERATOR.md).
 
 ---
 

@@ -223,12 +223,28 @@ def test_env_example_exists():
 
 
 def test_railway_infra_files_exist():
-    """Operator deploy uses railway.toml + Dockerfile (no public deploy guide in repo)."""
+    """Operator deploy uses railway.toml + Dockerfile + operator runbook."""
     railway = ROOT / "railway.toml"
     dockerfile = ROOT / "Dockerfile"
     entrypoint = ROOT / "scripts" / "docker-entrypoint.sh"
+    dockerignore = ROOT / ".dockerignore"
+    operator_doc = ROOT / "docs" / "RAILWAY_OPERATOR.md"
     assert railway.exists()
     assert dockerfile.exists()
     assert entrypoint.exists()
-    assert "dockerfile" in railway.read_text(encoding="utf-8").lower()
-    assert "/health" in railway.read_text(encoding="utf-8")
+    assert dockerignore.exists()
+    assert operator_doc.exists()
+    railway_text = railway.read_text(encoding="utf-8")
+    assert "dockerfile" in railway_text.lower()
+    assert "/health" in railway_text
+    assert "watchPatterns" in railway_text
+    assert "/CHANGELOG.md" in railway_text
+    dockerignore_text = dockerignore.read_text(encoding="utf-8")
+    assert "tests/" in dockerignore_text
+    assert "docs/" in dockerignore_text
+    assert "!CHANGELOG.md" in dockerignore_text
+    operator_text = operator_doc.read_text(encoding="utf-8")
+    assert "Wait for CI" in operator_text
+    assert "PUBLIC_BASE_URL" in operator_text
+    assert "/api/internal/cron/ranking" in operator_text
+    assert "GC_ALLOW_POSTGRES_PROD" in operator_text
