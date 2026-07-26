@@ -75,11 +75,11 @@ def _login_client(inventory_db, monkeypatch):
 
     conn = db()
     uid = _player(conn=conn)
-    uname = conn.execute("SELECT username FROM users WHERE id = ?;", (uid,)).fetchone()["username"]
     conn.close()
 
     client = app_module.app.test_client()
-    client.post("/login", data={"username": uname, "password": "test-pass-123"})
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
     return client, uid, app_module
 
 
@@ -337,7 +337,7 @@ def test_inventory_page_loads(inventory_db, monkeypatch):
     assert res.status_code == 200
     assert "inventory-page" in body
     assert "inventory-loot-card" in body
-    assert "lootboxes/Basic_Container.png" in body
+    assert "pass/stan_container.webp" in body
     assert 'data-inventory-container="container_basic"' in body
 
 
@@ -345,7 +345,14 @@ def test_container_catalog_shows_all_with_zero_by_default(inventory_db):
     catalog = build_container_catalog()
     assert len(catalog) == len(CONTAINER_KEYS)
     assert all(c["amount"] == 0 and not c["owned"] for c in catalog)
-    assert all(c.get("image", "").startswith("img/lootboxes/") for c in catalog)
+    by_key = {c["item_key"]: c.get("image", "") for c in catalog}
+    assert by_key["container_basic"] == "img/pass/stan_container.webp"
+    assert by_key["container_rare"] == "img/pass/rare_container.webp"
+    assert by_key["container_epic"] == "img/pass/epic_container.webp"
+    assert by_key["container_mythic"] == "img/pass/myth_container.webp"
+    assert by_key["container_relic"] == "img/pass/relic_container.webp"
+    assert by_key["container_wreckage"].startswith("img/lootboxes/")
+    assert all(img.startswith("img/") for img in by_key.values())
 
 
 def test_all_container_keys_have_pools():
@@ -600,7 +607,7 @@ def test_open_container_returns_roll_preview(inventory_db, monkeypatch):
     data = res.get_json()
     assert data["ok"] is True
     assert "roll_preview" in data
-    assert data.get("container_image", "").startswith("img/lootboxes/")
+    assert data.get("container_image", "") == "img/pass/rare_container.webp"
     assert len(data["roll_preview"]) >= 30
 
 

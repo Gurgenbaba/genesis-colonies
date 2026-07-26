@@ -32656,6 +32656,17 @@ a.gc-galaxy-coord-link:focus-visible {
 .inventory-reward-icon {
   font-size: 1.28rem;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 1.6rem;
+  height: 1.6rem;
+}
+.inventory-item-img {
+  width: 1.55rem;
+  height: 1.55rem;
+  object-fit: contain;
 }
 
 .inventory-item-name,
@@ -38512,7 +38523,16 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   display: flex;
   justify-content: space-between;
   gap: 0.5rem;
-  align-items: baseline;
+  align-items: center;
+}
+.battle-pass-hud-xp-icon {
+  width: 1.35rem;
+  height: 1.35rem;
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+.battle-pass-hud-xp-head .battle-pass-stat-label {
+  margin-right: auto;
 }
 .battle-pass-xp-bar {
   height: 0.5rem;
@@ -38867,8 +38887,8 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
 }
 .battle-pass-reward-icon { text-align: center; }
 .battle-pass-reward-img {
-  width: 1.15rem;
-  height: 1.15rem;
+  width: 1.35rem;
+  height: 1.35rem;
   object-fit: contain;
 }
 .battle-pass-reward-amt { color: var(--gc-text-muted, #8a93a3); }
@@ -38970,6 +38990,12 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   border-radius: var(--gc-radius-sm, 2px);
   background: rgba(0, 0, 0, 0.35);
   flex: 0 0 auto;
+}
+.battle-pass-op-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 0.15rem;
 }
 .battle-pass-op-card--weekly .battle-pass-op-card-art {
   width: 3rem;
@@ -39280,7 +39306,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   object-position: center;
   opacity: 0;
   transform: scale(1.04);
@@ -39413,7 +39439,26 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
     border-bottom: 1px solid rgba(212, 175, 55, 0.22);
   }
 }
-.battle-pass-premium-cta { margin-top: 0.65rem; }
+.battle-pass-premium-cta {
+  margin-top: 0.65rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+.battle-pass-premium-cta-art {
+  width: 3.5rem;
+  height: 3.5rem;
+  object-fit: contain;
+  flex: 0 0 auto;
+  border: 1px solid rgba(212, 160, 23, 0.35);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(0, 0, 0, 0.35);
+  padding: 0.2rem;
+}
+.battle-pass-premium-cta-body {
+  flex: 1;
+  min-width: 0;
+}
 .battle-pass-premium-actions {
   display: flex;
   flex-wrap: wrap;

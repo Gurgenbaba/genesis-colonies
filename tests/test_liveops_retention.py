@@ -531,3 +531,57 @@ def test_login_and_battle_pass_http_claim(liveops_db):
     assert int(op_body["xp_reward"]) == 40
     assert "battle_pass" in op_body
     assert "state" in op_body
+
+
+def test_pass_relic_images_wired_in_catalog_and_ops():
+    from game.inventory_catalog import item_catalog_entry
+    from game.battle_pass import OPS_CATALOG, OP_BUILD, OP_FLEET, OP_RESEARCH, OP_WEEK_ACTIVE
+    from game.shop import SKU_SEASON_PASS, shop_image_for_sku
+
+    assert item_catalog_entry("booster_build_5m")["image"] == "img/pass/build_boost.webp"
+    assert item_catalog_entry("booster_research_1h")["image"] == "img/pass/research_booster.webp"
+    assert item_catalog_entry("booster_production_50")["image"] == "img/pass/prod_boost.webp"
+    assert item_catalog_entry("container_basic")["image"] == "img/pass/stan_container.webp"
+    assert item_catalog_entry("container_mythic")["image"] == "img/pass/myth_container.webp"
+
+    assert OPS_CATALOG[OP_BUILD]["image"].endswith("build_boost.webp")
+    assert OPS_CATALOG[OP_RESEARCH]["image"].endswith("research_booster.webp")
+    assert OPS_CATALOG[OP_FLEET]["image"].endswith("expedition_ticket.webp")
+    assert OPS_CATALOG[OP_WEEK_ACTIVE]["image"].endswith("xp.webp")
+
+    assert shop_image_for_sku(SKU_SEASON_PASS) == "img/pass/season_pass.webp"
+    assert shop_image_for_sku("tk_pack_s") == "img/pass/timekeeper.webp"
+
+
+def test_premium_page_serves_pass_relic_art(liveops_db):
+    import importlib
+
+    import app as app_mod
+    from game.inventory_catalog import item_catalog_entry
+    from game.models import ensure_player_and_homeworld
+
+    importlib.reload(app_mod)
+    client = app_mod.app.test_client()
+    ok, err, user = create_user(f"art_{uuid.uuid4().hex[:8]}", "test-pass-123")
+    assert ok, err
+    uid = int(user["id"])
+    conn = db()
+    ensure_player_and_homeworld(uid, player_name="ArtOps", conn=conn)
+    conn.commit()
+    conn.close()
+
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+
+    page = client.get("/premium")
+    assert page.status_code == 200
+    html = page.get_data(as_text=True)
+    assert "/static/img/pass/xp.webp" in html
+    assert "/static/img/pass/build_boost.webp" in html
+    assert "/static/img/pass/timekeeper.webp" in html
+    assert "battle-pass-op-card-img" in html
+    free_l1 = _default_level_rewards(1)[0]
+    assert any(
+        item_catalog_entry(i["item_key"]).get("image", "").startswith("img/pass/")
+        for i in free_l1.get("items") or []
+    )

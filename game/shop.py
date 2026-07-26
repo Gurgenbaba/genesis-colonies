@@ -35,13 +35,13 @@ CATALOG_VERSION = 3
 # Paid sells scarce flexible TK + dense high-tier packs; domain boosters must beat ~2× login-month skip.
 # Static art under static/img/shop/ — relative path for url_for('static', …).
 SHOP_SKU_IMAGES: Dict[str, str] = {
-    SKU_SEASON_PASS: "img/shop/pass.jpg",
-    "tk_pack_s": "img/shop/time_s.jpg",
-    "tk_pack_m": "img/shop/time_m.jpg",
-    "tk_pack_l": "img/shop/time_l.jpg",
-    "booster_pack_starter": "img/shop/booster.jpg",
-    "container_pack_rare": "img/shop/rare.jpg",
-    "commander_supply_pack": "img/shop/commander.jpg",
+    SKU_SEASON_PASS: "img/pass/season_pass.webp",
+    "tk_pack_s": "img/pass/timekeeper.webp",
+    "tk_pack_m": "img/pass/timekeeper.webp",
+    "tk_pack_l": "img/pass/timekeeper.webp",
+    "booster_pack_starter": "img/pass/build_boost.webp",
+    "container_pack_rare": "img/pass/rare_container.webp",
+    "commander_supply_pack": "img/pass/relic_container.webp",
 }
 
 DEFAULT_CATALOG: Tuple[Dict[str, Any], ...] = (

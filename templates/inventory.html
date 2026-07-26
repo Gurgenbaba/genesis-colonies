@@ -229,7 +229,13 @@
           data-collectible="{{ '1' if item.collectible is defined and item.collectible else '0' }}"
           data-can-craft="{{ '1' if item.can_craft is defined and item.can_craft else '0' }}"
           data-can-exchange="{{ '1' if item.can_exchange is defined and item.can_exchange else '0' }}">
+        {% if item.image is defined and item.image %}
+        <span class="inventory-item-icon" aria-hidden="true">
+          <img class="inventory-item-img" src="{{ url_for('static', filename=item.image) }}" alt="" width="28" height="28" loading="lazy">
+        </span>
+        {% else %}
         <span class="inventory-item-icon" aria-hidden="true">{{ item.icon }}</span>
+        {% endif %}
         <div class="inventory-item-body">
           <span class="inventory-item-name">{{ T(item.name_key, item.item_key) }}</span>
           {% if item.craft_progress is defined and item.craft_progress %}

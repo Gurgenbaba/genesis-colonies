@@ -14803,7 +14803,10 @@
           `<button type="button" class="gc-btn gc-btn-secondary gc-btn-xs inventory-exchange-btn" data-inventory-exchange="${escapeHtml(ep.recipe_key)}">${escapeHtml(t("inv_upgrade_btn", "Upgrade"))}</button>`
       )
       .join("");
-    return `<span class="inventory-item-icon" aria-hidden="true">${item.icon || "📦"}</span><div class="inventory-item-body"><span class="inventory-item-name">${escapeHtml(name)}</span>${craftProgress}${exchangeProgress}${endgameHint}${roleHint}</div><span class="inventory-rarity-badge inventory-rarity-badge--${escapeHtml(rarity)}">${escapeHtml(t(`inv_rarity_${rarity}`, rarity))}</span>${collectibleBadge}<span class="inventory-item-amount gc-mono" data-inventory-item-amount="${escapeHtml(item.item_key)}">×${formatNumber(amount)}</span>${useBtn}${craftBtns}${exchangeBtns}`;
+    const iconHtml = item.image
+      ? `<span class="inventory-item-icon" aria-hidden="true"><img class="inventory-item-img" src="/static/${escapeHtml(String(item.image).replace(/^\/+/, ""))}" alt="" width="28" height="28" loading="lazy"></span>`
+      : `<span class="inventory-item-icon" aria-hidden="true">${item.icon || "📦"}</span>`;
+    return `${iconHtml}<div class="inventory-item-body"><span class="inventory-item-name">${escapeHtml(name)}</span>${craftProgress}${exchangeProgress}${endgameHint}${roleHint}</div><span class="inventory-rarity-badge inventory-rarity-badge--${escapeHtml(rarity)}">${escapeHtml(t(`inv_rarity_${rarity}`, rarity))}</span>${collectibleBadge}<span class="inventory-item-amount gc-mono" data-inventory-item-amount="${escapeHtml(item.item_key)}">×${formatNumber(amount)}</span>${useBtn}${craftBtns}${exchangeBtns}`;
   }
 
   function patchInventoryActiveBoosters(inventory) {
