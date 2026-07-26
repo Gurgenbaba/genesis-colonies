@@ -1011,3 +1011,62 @@ def test_playercard_view_includes_badge_zoom_markers(temp_db, app_client):
     assert "gc-badge-icon" in body
     assert "/static/img/badges/founder.png" in body
     assert "onerror" in body
+
+
+def test_identity_shell_css_theme_rgb_not_overridden_by_shared_block():
+    """Regression: shared :not(cyan) must not set --gc-id-rgb (higher specificity than
+    [data-identity-theme=violet] would lock the shell to cyan)."""
+    css = (Path(__file__).resolve().parents[1] / "static" / "style.css").read_text(
+        encoding="utf-8"
+    )
+    marker = ".gc-body-ingame[data-identity-theme]:not([data-identity-theme=\"cyan\"]) {"
+    idx = css.find(marker)
+    assert idx >= 0, "Identity Shell shared block missing"
+    # First shared block after theme RGB list — grab until its closing brace at indent 0
+    block_start = idx
+    brace = css.find("{", block_start)
+    depth = 0
+    end = brace
+    for i, ch in enumerate(css[brace:], start=brace):
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                end = i
+                break
+    shared = css[block_start : end + 1]
+    assert "--gc-id-rgb:" not in shared, (
+        "shared Identity Shell block must not declare --gc-id-rgb "
+        "(specificity would override per-theme RGB)"
+    )
+    assert '[data-identity-theme="violet"] { --gc-id-rgb:' in css
+    assert '[data-identity-theme="amber"] { --gc-id-rgb:' in css
+    assert '[data-identity-theme="gold"] { --gc-id-rgb:' in css
+    assert "data-identity-aura" in (
+        Path(__file__).resolve().parents[1] / "templates" / "base.html"
+    ).read_text(encoding="utf-8")
+    assert '[data-identity-aura="aura_gold"] { --gc-aura-rgb:' in css
+    assert '[data-identity-aura="aura_void"] { --gc-aura-rgb:' in css
+    assert "gc-id-aura-pulse" in css
+
+
+def test_get_equipped_identity_returns_theme_and_aura(temp_db):
+    init_db()
+    _close_db_conn()
+    from game.playercard import get_equipped_identity
+
+    pid, _ = _create_player("id_shell_user")
+    ensure_player_card(pid)
+    conn = db()
+    try:
+        conn.execute(
+            "UPDATE player_cards SET theme = ?, aura_key = ? WHERE player_id = ?",
+            ("violet", "aura_gold", int(pid)),
+        )
+        commit(conn)
+    finally:
+        conn.close()
+    theme, aura = get_equipped_identity(pid)
+    assert theme == "violet"
+    assert aura == "aura_gold"

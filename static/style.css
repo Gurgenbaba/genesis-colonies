@@ -22582,6 +22582,623 @@ body.gc-tab-hidden .gc-card-queue-glyph--research {
   outline: none;
 }
 
+/* --- Name Styles (Identity) ? loud, cheap CSS --- */
+.gc-player-name[data-name-style="ash"],
+.gc-chat-msg-sender[data-name-style="ash"] {
+  color: #d5dde8;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-decoration: none;
+  border-bottom: 2px solid rgba(180, 190, 200, 0.7);
+  text-shadow: 0 0 8px rgba(200, 210, 220, 0.35);
+}
+.gc-player-name[data-name-style="signal"],
+.gc-chat-msg-sender[data-name-style="signal"] {
+  color: #7af0ff;
+  font-weight: 800;
+  text-decoration: none;
+  padding: 0 3px;
+  border: 1px solid rgba(70, 229, 255, 0.55);
+  background: rgba(70, 229, 255, 0.12);
+  box-shadow: 0 0 12px rgba(70, 229, 255, 0.35);
+}
+.gc-player-name[data-name-style="etched"],
+.gc-chat-msg-sender[data-name-style="etched"] {
+  color: #e8eef6;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-decoration: none;
+  text-shadow:
+    0 1px 0 #1a2230,
+    0 -1px 0 rgba(255, 255, 255, 0.35),
+    0 0 10px rgba(200, 210, 230, 0.25);
+  border-bottom: 2px solid #9aa8bc;
+}
+.gc-player-name[data-name-style="relic"],
+.gc-chat-msg-sender[data-name-style="relic"] {
+  color: #5dff9a;
+  font-family: var(--gc-mono);
+  font-weight: 800;
+  text-decoration: none;
+  padding: 0 3px;
+  background: rgba(0, 40, 20, 0.55);
+  border: 1px solid rgba(80, 255, 150, 0.55);
+  text-shadow: 0 0 10px rgba(80, 255, 150, 0.55);
+  box-shadow: 0 0 14px rgba(40, 220, 120, 0.3);
+}
+.gc-player-name[data-name-style="imperial"],
+.gc-chat-msg-sender[data-name-style="imperial"] {
+  color: #ffe07a;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-decoration: none;
+  padding: 0 4px 1px;
+  border: 1px solid rgba(255, 200, 72, 0.7);
+  background: rgba(255, 180, 40, 0.12);
+  text-shadow: 0 0 12px rgba(255, 200, 72, 0.55);
+  box-shadow: 0 0 16px rgba(255, 190, 60, 0.35);
+}
+.gc-player-name[data-name-style="plasma"],
+.gc-chat-msg-sender[data-name-style="plasma"] {
+  color: #00ffe8;
+  font-weight: 900;
+  text-decoration: none;
+  padding: 0 4px;
+  border: 1px solid rgba(0, 255, 230, 0.7);
+  background: linear-gradient(90deg, rgba(0, 255, 220, 0.18), rgba(80, 180, 255, 0.18));
+  text-shadow: 0 0 14px rgba(0, 255, 220, 0.65);
+  box-shadow: 0 0 18px rgba(0, 255, 220, 0.4);
+}
+.gc-player-name[data-name-style="void"],
+.gc-chat-msg-sender[data-name-style="void"] {
+  color: #e0c4ff;
+  font-weight: 900;
+  text-decoration: none;
+  padding: 0 4px;
+  border: 1px solid rgba(160, 100, 255, 0.75);
+  background: rgba(90, 40, 200, 0.22);
+  text-shadow:
+    0 0 8px rgba(180, 120, 255, 0.8),
+    0 0 18px rgba(120, 40, 255, 0.55);
+  box-shadow: 0 0 20px rgba(120, 60, 255, 0.45);
+}
+
+/* Shop identity preview ? before/after + unlock chips */
+.shop-card-art--identity {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  min-height: 168px;
+  padding: 1rem 0.85rem 1.15rem;
+  background:
+    linear-gradient(160deg, rgba(10, 18, 32, 0.98), rgba(4, 8, 16, 0.99)),
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 3px,
+      rgba(70, 229, 255, 0.03) 3px,
+      rgba(70, 229, 255, 0.03) 4px
+    );
+  border-bottom: 1px solid rgba(70, 229, 255, 0.14);
+  position: relative;
+}
+.shop-card--identity .shop-card-kind {
+  position: absolute;
+  left: 0.55rem;
+  top: 0.55rem;
+  bottom: auto;
+}
+.shop-identity-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-top: 0.35rem;
+}
+.shop-identity-preview-caption {
+  margin: 0;
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gc-text-dim, rgba(200, 232, 244, 0.48));
+  font-family: var(--gc-mono);
+}
+.shop-identity-compare {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 0.45rem;
+  align-items: end;
+}
+.shop-identity-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  min-width: 0;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid rgba(120, 160, 190, 0.18);
+  background: rgba(0, 0, 0, 0.28);
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.shop-identity-col--after {
+  border-color: rgba(70, 229, 255, 0.32);
+  background: rgba(70, 229, 255, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(70, 229, 255, 0.08);
+}
+.shop-identity-col-label {
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gc-text-dim, rgba(200, 232, 244, 0.48));
+  font-family: var(--gc-mono);
+}
+.shop-identity-arrow {
+  align-self: center;
+  color: rgba(70, 229, 255, 0.55);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  padding-bottom: 0.35rem;
+}
+.shop-name-preview {
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: default;
+  pointer-events: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.shop-name-preview--before {
+  opacity: 0.72;
+}
+.shop-identity-surfaces {
+  margin: 0;
+  font-size: 0.72rem;
+  color: rgba(160, 200, 220, 0.62);
+  letter-spacing: 0.04em;
+}
+.shop-identity-section-hint {
+  margin: 0 0 0.85rem;
+  max-width: 42rem;
+}
+.shop-unlock-list {
+  margin-top: 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.shop-unlock-list-label {
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gc-text-dim, rgba(200, 232, 244, 0.48));
+  font-family: var(--gc-mono);
+}
+.shop-unlock-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.shop-unlock-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  padding: 0.22rem 0.45rem;
+  border: 1px solid rgba(70, 229, 255, 0.22);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(70, 229, 255, 0.06);
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+.shop-unlock-chip-k {
+  color: var(--gc-text-dim, rgba(200, 232, 244, 0.55));
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-family: var(--gc-mono);
+}
+.shop-unlock-chip-v {
+  color: var(--gc-primary, #46e5ff);
+  font-weight: 600;
+}
+.shop-unlock-chip[data-unlock-kind="title_flair"] {
+  border-color: rgba(255, 200, 72, 0.28);
+  background: rgba(255, 200, 72, 0.06);
+}
+.shop-unlock-chip[data-unlock-kind="title_flair"] .shop-unlock-chip-v {
+  color: #ffd056;
+}
+.shop-grid--identity {
+  grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
+}
+
+/* --- Identity Shell (WILD look, cheap: color/border/shadow only) --- */
+/* Identity Shell: UI tint from equipped PlayerCard theme only (body[data-identity-theme]).
+   Not driven by name_style / aura / flair. See docs/PAYMENT_SHOP.md Identity Shell.
+   IMPORTANT: never set --gc-id-rgb on the shared :not(cyan) block ? that selector is
+   more specific than [data-identity-theme="violet"] and would lock the shell to cyan. */
+.gc-body-ingame[data-identity-theme="violet"] { --gc-id-rgb: 168, 120, 255; }
+.gc-body-ingame[data-identity-theme="amber"] { --gc-id-rgb: 255, 190, 80; }
+.gc-body-ingame[data-identity-theme="emerald"] { --gc-id-rgb: 80, 220, 140; }
+.gc-body-ingame[data-identity-theme="rose"] { --gc-id-rgb: 255, 120, 160; }
+.gc-body-ingame[data-identity-theme="ash"] { --gc-id-rgb: 154, 164, 176; }
+.gc-body-ingame[data-identity-theme="steel"] { --gc-id-rgb: 160, 176, 196; }
+.gc-body-ingame[data-identity-theme="gold"] { --gc-id-rgb: 255, 200, 72; }
+.gc-body-ingame[data-identity-theme="void"] { --gc-id-rgb: 140, 90, 255; }
+.gc-body-ingame[data-identity-theme="plasma"] { --gc-id-rgb: 0, 255, 220; }
+
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) {
+  --gc-primary: rgb(var(--gc-id-rgb));
+  --gc-primary-2: color-mix(in srgb, rgb(var(--gc-id-rgb)) 65%, #ffffff);
+  --gc-neon-cyan: rgb(var(--gc-id-rgb));
+  --gc-accent: rgb(var(--gc-id-rgb));
+  --gc-accent-cyan: rgb(var(--gc-id-rgb));
+  --gc-panel-border: rgba(var(--gc-id-rgb), 0.42);
+  --gc-panel-border-strong: rgba(var(--gc-id-rgb), 0.7);
+  --gc-border: rgba(var(--gc-id-rgb), 0.36);
+  --gc-border-bright: rgba(var(--gc-id-rgb), 0.72);
+  --gc-border-glow: 0 0 0 1px rgba(var(--gc-id-rgb), 0.45);
+  --gc-border-glow-strong:
+    0 0 0 1px rgba(var(--gc-id-rgb), 0.7),
+    0 0 18px rgba(var(--gc-id-rgb), 0.35);
+  --gc-scanline: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(var(--gc-id-rgb), 0.05) 2px,
+    rgba(var(--gc-id-rgb), 0.05) 4px
+  );
+  --gc-bg-img:
+    linear-gradient(90deg, rgba(var(--gc-id-rgb), 0.09) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(var(--gc-id-rgb), 0.06) 1px, transparent 1px),
+    radial-gradient(1100px 620px at 10% 0%, rgba(var(--gc-id-rgb), 0.28), transparent 55%),
+    radial-gradient(900px 520px at 100% 8%, rgba(var(--gc-id-rgb), 0.18), transparent 50%),
+    radial-gradient(700px 420px at 50% 100%, rgba(var(--gc-id-rgb), 0.1), transparent 55%),
+    linear-gradient(180deg, #040810 0%, #020508 100%);
+  box-shadow: inset 4px 0 0 rgb(var(--gc-id-rgb));
+}
+
+.gc-body-ingame[data-identity-theme="gold"] {
+  --gc-bg: #120e06;
+  --gc-bg2: #0a0804;
+  --gc-panel: rgba(28, 20, 8, 0.95);
+  --gc-panel-bg: rgba(28, 20, 8, 0.95);
+  --gc-panel-bg-2: rgba(36, 26, 10, 0.92);
+}
+.gc-body-ingame[data-identity-theme="void"] {
+  --gc-bg: #0a0618;
+  --gc-bg2: #05030e;
+  --gc-panel: rgba(14, 8, 28, 0.96);
+  --gc-panel-bg: rgba(14, 8, 28, 0.96);
+  --gc-panel-bg-2: rgba(20, 10, 36, 0.92);
+}
+.gc-body-ingame[data-identity-theme="plasma"] {
+  --gc-bg: #031416;
+  --gc-bg2: #020c0e;
+  --gc-panel: rgba(2, 22, 26, 0.96);
+  --gc-panel-bg: rgba(2, 22, 26, 0.96);
+  --gc-panel-bg-2: rgba(4, 30, 34, 0.92);
+}
+
+/* Grid bg only without planet landscape ? never wipe --planet-landscape */
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]):not(.gc-has-planet-landscape) .gc-bg {
+  background-image: var(--gc-bg-img);
+  background-color: var(--gc-bg, #040810);
+}
+
+/* Landscape + identity: keep planet art, colorize wash with theme RGB */
+body.gc-body-ingame.gc-has-planet-landscape[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-bg {
+  opacity: 1;
+  display: block;
+  background-image:
+    linear-gradient(
+      rgba(var(--gc-id-rgb), 0.38),
+      rgba(0, 8, 18, 0.78)
+    ),
+    var(--planet-landscape);
+  background-image:
+    linear-gradient(
+      rgba(var(--gc-id-rgb), 0.38),
+      rgba(0, 8, 18, 0.78)
+    ),
+    image-set(
+      var(--planet-landscape-webp) type("image/webp"),
+      var(--planet-landscape) type("image/jpeg")
+    );
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+  filter: saturate(0.72);
+}
+body.gc-body-ingame.gc-has-planet-landscape[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-bg::after {
+  content: "";
+  display: block;
+  background:
+    radial-gradient(circle at center, transparent 38%, rgba(0, 0, 0, 0.4) 100%),
+    radial-gradient(circle at 50% 12%, rgba(var(--gc-id-rgb), 0.22), transparent 48%),
+    linear-gradient(
+      90deg,
+      rgba(0, 8, 18, 0.5),
+      rgba(0, 8, 18, 0.16) 24%,
+      rgba(0, 8, 18, 0.16) 76%,
+      rgba(0, 8, 18, 0.5)
+    );
+  opacity: 0.96;
+}
+
+/* Landscape panels: theme border/glow, keep translucent landscape panel vars */
+body.gc-body-ingame.gc-has-planet-landscape[data-identity-theme]:not([data-identity-theme="cyan"]) {
+  --gc-panel: rgba(2, 10, 20, 0.94);
+  --gc-panel-strong: rgba(2, 8, 16, 0.96);
+  --gc-panel-bg: color-mix(in srgb, rgb(var(--gc-id-rgb)) 12%, rgba(2, 10, 20, 0.94));
+  --gc-panel-bg-2: color-mix(in srgb, rgb(var(--gc-id-rgb)) 10%, rgba(4, 12, 24, 0.92));
+  --gc-hdr-bg-1: color-mix(in srgb, rgb(var(--gc-id-rgb)) 14%, rgba(4, 10, 20, 0.94));
+  --gc-hdr-bg-2: color-mix(in srgb, rgb(var(--gc-id-rgb)) 10%, rgba(6, 12, 24, 0.9));
+}
+body.gc-body-ingame.gc-has-planet-landscape[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-header,
+body.gc-body-ingame.gc-has-planet-landscape[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-header-cmd {
+  background: linear-gradient(
+    180deg,
+    rgba(var(--gc-id-rgb), 0.22) 0%,
+    rgba(4, 10, 20, 0.9) 78%
+  );
+}
+body.gc-body-ingame.gc-has-planet-landscape[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-sidebar {
+  background: linear-gradient(
+    180deg,
+    rgba(var(--gc-id-rgb), 0.14) 0%,
+    rgba(2, 10, 20, 0.96) 28%
+  );
+  border-color: rgba(var(--gc-id-rgb), 0.5);
+  box-shadow:
+    inset -3px 0 0 rgb(var(--gc-id-rgb)),
+    0 0 22px rgba(var(--gc-id-rgb), 0.12);
+}
+body.gc-body-ingame.gc-has-planet-landscape[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-panel,
+body.gc-body-ingame.gc-has-planet-landscape[data-identity-theme]:not([data-identity-theme="cyan"]) .section-header {
+  background: var(--gc-panel-bg);
+  border-color: rgba(var(--gc-id-rgb), 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(var(--gc-id-rgb), 0.2),
+    0 0 0 1px rgba(0, 0, 0, 0.4),
+    0 0 24px rgba(var(--gc-id-rgb), 0.14);
+}
+body.gc-body-ingame.gc-has-planet-landscape[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-nav-link.active,
+body.gc-body-ingame.gc-has-planet-landscape[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-nav-sub-link.active,
+body.gc-body-ingame.gc-has-planet-landscape[data-identity-theme]:not([data-identity-theme="cyan"]) button.gc-nav-link.gc-nav-submenu-toggle.active {
+  color: #061018;
+  background: rgb(var(--gc-id-rgb));
+  border-left-color: rgb(var(--gc-id-rgb));
+  box-shadow: 0 0 14px rgba(var(--gc-id-rgb), 0.4);
+}
+
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-header,
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-header-cmd {
+  border-bottom: 2px solid rgba(var(--gc-id-rgb), 0.65);
+  background: linear-gradient(
+    180deg,
+    rgba(var(--gc-id-rgb), 0.18) 0%,
+    rgba(4, 8, 16, 0.94) 78%
+  );
+  box-shadow:
+    0 0 0 1px rgba(var(--gc-id-rgb), 0.2),
+    0 16px 40px rgba(0, 0, 0, 0.4),
+    0 8px 28px rgba(var(--gc-id-rgb), 0.18);
+}
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-header::after,
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-header-cmd::after {
+  content: "";
+  display: block;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(var(--gc-id-rgb), 0.15) 15%,
+    rgb(var(--gc-id-rgb)) 50%,
+    rgba(var(--gc-id-rgb), 0.15) 85%,
+    transparent 100%
+  );
+  opacity: 1;
+  transform-origin: center;
+  animation: gc-id-scan 2.8s linear infinite;
+}
+@keyframes gc-id-scan {
+  0% { opacity: 0.45; transform: scaleX(0.55); }
+  50% { opacity: 1; transform: scaleX(1); }
+  100% { opacity: 0.45; transform: scaleX(0.55); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-header::after,
+  .gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-header-cmd::after {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .resource-bar,
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-header-cmd .resource-bar.resource-bar-cmd {
+  border: 1px solid rgba(var(--gc-id-rgb), 0.7);
+  background: rgba(var(--gc-id-rgb), 0.08);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(var(--gc-id-rgb), 0.25),
+    0 0 22px rgba(var(--gc-id-rgb), 0.28);
+}
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-sidebar {
+  border-color: rgba(var(--gc-id-rgb), 0.45);
+  background: linear-gradient(
+    180deg,
+    rgba(var(--gc-id-rgb), 0.1) 0%,
+    rgba(4, 8, 16, 0.94) 30%
+  );
+  box-shadow: inset -3px 0 0 rgb(var(--gc-id-rgb));
+}
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-nav-link:hover,
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-nav-sub-link:hover {
+  color: rgb(var(--gc-id-rgb));
+  border-left-color: rgb(var(--gc-id-rgb));
+  background: rgba(var(--gc-id-rgb), 0.14);
+}
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-nav-link.active,
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-nav-sub-link.active,
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) button.gc-nav-link.gc-nav-submenu-toggle.active,
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) button.gc-nav-link.gc-nav-submenu-toggle.active:hover {
+  color: #061018;
+  border-left-color: rgb(var(--gc-id-rgb));
+  background: rgb(var(--gc-id-rgb));
+  box-shadow: 0 0 16px rgba(var(--gc-id-rgb), 0.45);
+  font-weight: 700;
+}
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-panel,
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .section-header {
+  border: 1px solid rgba(var(--gc-id-rgb), 0.55);
+  background: linear-gradient(
+    165deg,
+    rgba(var(--gc-id-rgb), 0.14) 0%,
+    var(--gc-panel-bg, rgba(4, 10, 22, 0.94)) 38%,
+    var(--gc-panel-bg-2, rgba(6, 14, 28, 0.9)) 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(var(--gc-id-rgb), 0.22),
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 0 28px rgba(var(--gc-id-rgb), 0.16);
+}
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-panel::before {
+  border-color: rgb(var(--gc-id-rgb));
+  opacity: 1;
+  box-shadow: 0 0 12px rgba(var(--gc-id-rgb), 0.35);
+}
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-btn-primary {
+  background: rgb(var(--gc-id-rgb));
+  border-color: color-mix(in srgb, rgb(var(--gc-id-rgb)) 70%, #ffffff);
+  color: #061018;
+  font-weight: 700;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 0 20px rgba(var(--gc-id-rgb), 0.4);
+}
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-btn-primary:hover {
+  filter: brightness(1.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    0 0 28px rgba(var(--gc-id-rgb), 0.55);
+}
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-btn-ghost {
+  border-color: rgba(var(--gc-id-rgb), 0.45);
+}
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-btn-ghost:hover,
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-btn-ghost:focus-visible {
+  border-color: rgb(var(--gc-id-rgb));
+  color: rgb(var(--gc-id-rgb));
+  background: rgba(var(--gc-id-rgb), 0.1);
+}
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) :focus-visible {
+  outline-color: rgb(var(--gc-id-rgb));
+}
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .section-title,
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-panel-title {
+  color: rgb(var(--gc-id-rgb));
+  text-shadow: 0 0 18px rgba(var(--gc-id-rgb), 0.45);
+}
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-bottom-nav {
+  border-top: 2px solid rgba(var(--gc-id-rgb), 0.55);
+  background: linear-gradient(180deg, rgba(var(--gc-id-rgb), 0.12), rgba(4, 8, 16, 0.96));
+}
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-bottom-nav-item.active {
+  color: rgb(var(--gc-id-rgb));
+}
+.gc-body-ingame[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-bottom-nav-item.active::before {
+  background: rgb(var(--gc-id-rgb));
+  box-shadow: 0 0 12px rgb(var(--gc-id-rgb));
+}
+
+/* Identity Aura FX — prestige layer on own UI (color stays theme; aura adds glow/rim).
+   Source: equipped player_cards.aura_key → body[data-identity-aura].
+   Specificity: match/beat Identity Theme shell rules so FX stack after color remap. */
+.gc-body-ingame[data-identity-aura="rim_ash"] { --gc-aura-rgb: 170, 178, 190; }
+.gc-body-ingame[data-identity-aura="rim_steel"] { --gc-aura-rgb: 190, 210, 235; }
+.gc-body-ingame[data-identity-aura="aura_gold"] { --gc-aura-rgb: 255, 214, 90; }
+.gc-body-ingame[data-identity-aura="aura_plasma"] { --gc-aura-rgb: 0, 255, 220; }
+.gc-body-ingame[data-identity-aura="aura_void"] { --gc-aura-rgb: 170, 110, 255; }
+
+.gc-body-ingame[data-identity-aura^="rim_"]:not([data-identity-aura="none"]) .gc-header,
+.gc-body-ingame[data-identity-aura^="rim_"]:not([data-identity-aura="none"]) .gc-header-cmd {
+  box-shadow:
+    inset 0 -1px 0 rgba(var(--gc-aura-rgb), 0.45),
+    0 8px 24px rgba(var(--gc-aura-rgb), 0.08);
+}
+.gc-body-ingame[data-identity-aura^="rim_"]:not([data-identity-aura="none"]) .gc-sidebar {
+  box-shadow:
+    inset 3px 0 0 rgba(var(--gc-aura-rgb), 0.55),
+    inset 6px 0 0 rgba(var(--gc-aura-rgb), 0.18);
+}
+.gc-body-ingame[data-identity-aura^="rim_"]:not([data-identity-aura="none"]) .gc-panel,
+.gc-body-ingame[data-identity-aura^="rim_"]:not([data-identity-aura="none"]) .section-header {
+  border-color: rgba(var(--gc-aura-rgb), 0.38);
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--gc-aura-rgb), 0.22),
+    0 0 14px rgba(var(--gc-aura-rgb), 0.1);
+}
+.gc-body-ingame[data-identity-aura^="rim_"]:not([data-identity-aura="none"]) .gc-nav-link.active,
+.gc-body-ingame[data-identity-aura^="rim_"]:not([data-identity-aura="none"]) .gc-nav-sub-link.active {
+  box-shadow: inset 2px 0 0 rgba(var(--gc-aura-rgb), 0.75);
+}
+
+.gc-body-ingame[data-identity-aura^="aura_"]:not([data-identity-aura="none"]) {
+  box-shadow: inset 4px 0 22px rgba(var(--gc-aura-rgb), 0.16);
+}
+.gc-body-ingame[data-identity-aura^="aura_"]:not([data-identity-aura="none"]) .gc-header,
+.gc-body-ingame[data-identity-aura^="aura_"]:not([data-identity-aura="none"]) .gc-header-cmd {
+  box-shadow:
+    0 0 28px rgba(var(--gc-aura-rgb), 0.22),
+    inset 0 -1px 0 rgba(var(--gc-aura-rgb), 0.5);
+}
+.gc-body-ingame[data-identity-aura^="aura_"]:not([data-identity-aura="none"]) .gc-sidebar {
+  box-shadow:
+    inset 4px 0 0 rgb(var(--gc-aura-rgb)),
+    inset 4px 0 24px rgba(var(--gc-aura-rgb), 0.22);
+  border-right-color: rgba(var(--gc-aura-rgb), 0.35);
+}
+.gc-body-ingame[data-identity-aura^="aura_"]:not([data-identity-aura="none"]) .gc-panel,
+.gc-body-ingame[data-identity-aura^="aura_"]:not([data-identity-aura="none"]) .section-header {
+  border-color: rgba(var(--gc-aura-rgb), 0.42);
+  box-shadow:
+    0 0 0 1px rgba(var(--gc-aura-rgb), 0.28),
+    0 0 22px rgba(var(--gc-aura-rgb), 0.18);
+}
+.gc-body-ingame[data-identity-aura^="aura_"]:not([data-identity-aura="none"]) .gc-btn-primary {
+  box-shadow:
+    0 0 0 1px rgba(var(--gc-aura-rgb), 0.45),
+    0 0 18px rgba(var(--gc-aura-rgb), 0.4);
+}
+.gc-body-ingame[data-identity-aura^="aura_"]:not([data-identity-aura="none"]) .gc-nav-link.active,
+.gc-body-ingame[data-identity-aura^="aura_"]:not([data-identity-aura="none"]) .gc-nav-sub-link.active,
+.gc-body-ingame[data-identity-aura^="aura_"]:not([data-identity-aura="none"]) button.gc-nav-link.gc-nav-submenu-toggle.active {
+  box-shadow:
+    inset 3px 0 0 rgb(var(--gc-aura-rgb)),
+    0 0 16px rgba(var(--gc-aura-rgb), 0.25);
+}
+.gc-body-ingame[data-identity-aura^="aura_"]:not([data-identity-aura="none"]) .gc-bottom-nav {
+  box-shadow: 0 -8px 28px rgba(var(--gc-aura-rgb), 0.14);
+  border-top-color: rgba(var(--gc-aura-rgb), 0.45);
+}
+.gc-body-ingame[data-identity-aura^="aura_"]:not([data-identity-aura="none"]) .resource-bar,
+.gc-body-ingame[data-identity-aura^="aura_"]:not([data-identity-aura="none"]) .gc-header-cmd .resource-bar.resource-bar-cmd {
+  box-shadow: 0 0 16px rgba(var(--gc-aura-rgb), 0.16);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .gc-body-ingame[data-identity-aura^="aura_"]:not([data-identity-aura="none"]) .gc-panel,
+  .gc-body-ingame[data-identity-aura^="aura_"]:not([data-identity-aura="none"]) .section-header {
+    animation: gc-id-aura-pulse 3.6s ease-in-out infinite;
+  }
+}
+@keyframes gc-id-aura-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(var(--gc-aura-rgb), 0.28), 0 0 18px rgba(var(--gc-aura-rgb), 0.14); }
+  50% { box-shadow: 0 0 0 1px rgba(var(--gc-aura-rgb), 0.42), 0 0 28px rgba(var(--gc-aura-rgb), 0.28); }
+}
+
 body.gc-player-card-open,
 body.gc-ship-detail-open,
 body.gc-planet-manage-open,

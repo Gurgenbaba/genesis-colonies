@@ -594,10 +594,12 @@
       if (m.sender_id && !m.is_deleted) {
         const sender = document.createElement("button");
         sender.type = "button";
-        sender.className = "gc-chat-msg-sender";
+        sender.className = "gc-chat-msg-sender gc-player-name";
         sender.textContent = m.sender_name || "?";
         sender.dataset.playerId = String(m.sender_id);
         sender.dataset.playerName = m.sender_name || "";
+        sender.dataset.nameStyle = m.sender_name_style || "none";
+        sender.setAttribute("data-name-style", m.sender_name_style || "none");
         sender.title = t("chat_whisper_to", "Flüstern");
         meta.appendChild(sender);
       } else {

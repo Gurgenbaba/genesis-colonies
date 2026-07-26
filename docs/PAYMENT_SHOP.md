@@ -20,9 +20,9 @@
 ## Philosophy
 
 - **F2P first:** Free Track / Login bleiben wertvoll; Shop verkauft Convenience.
-- **Erlaubt:** Timekeeper-Sekunden, meta-only Container, %/Time-Boosters, Season-Pass-Entitlement (Cosmetics/QoL über BP Premium Track).
+- **Erlaubt:** Timekeeper-Sekunden, meta-only Container, %/Time-Boosters, Season-Pass-Entitlement, **Name-Styles / Identity** (ala-carte über Shop → `playercard.unlock_*`).
 - **Verboten:** Schiffe, Defense, Rohstoff-Stacks; Gem-Wallet; parallele Unlock-/Grant-Engines; Frontend-Preis-Math.
-- **Unlock:** Nur `battle_pass.unlock_premium` → `premium_entitlements.grant_entitlement` (`source=stripe|paypal`).
+- **Unlock:** `battle_pass.unlock_premium` → `premium_entitlements`; Cosmetics → `playercard.unlock_name_style` / `unlock_title_flair` (kein zweites Cosmetics-Modul).
 
 ## Free-Baseline (Messlatte)
 
@@ -160,10 +160,37 @@ Webhook: `…/api/webhooks/stripe` Event `checkout.session.completed`.
 6. Kauf → Order `fulfilled`
 7. Orphan-Recovery: `/shop/return?token=<PAYPAL_ORDER_ID>` gutschreibt COMPLETED-Zahlungen auch ohne lokale Order-Zeile
 
-## Non-goals (MVP)
+## Non-goals (MVP+)
 
-- Gem wallet, subscriptions, mobile IAP, auto refund-revoke, cosmetics ala-carte, resource/ship shop.
+- Gem wallet, subscriptions, mobile IAP, auto refund-revoke, resource/ship shop.
+- Avatar-Frames / Fleet-Skins (später).
 - Free Login/Directives nerfen (Paid wird wertiger, Free bleibt stark).
+
+## Identity Cosmetics (Catalog v5 — Impulse)
+
+| SKU | Kind | Preis | Grant |
+|-----|------|------:|-------|
+| `name_style_ash/signal/etched` | `cosmetic_unlock` | **0,99** | `unlock_name_style` |
+| `name_style_relic` | `cosmetic_unlock` | **1,49** | `unlock_name_style` |
+| `name_style_imperial/plasma/void` | `cosmetic_unlock` | **1,99** | `unlock_name_style` |
+| `identity_pack_signal` | `cosmetic_unlock` | **2,49** | signal + etched + flair etched |
+
+Catchy Impulse-Preise (unter 3 €). Admin: alle Styles/Themes frei.
+
+### Identity Shell — woran hängt UI-Farbe und Aura?
+
+| Signal | Quelle | Wirkung |
+|--------|--------|---------|
+| **UI-Farbe** | Equipped **PlayerCard Theme** (`player_cards.theme`) | Header, Nav, Panels, Buttons, Landscape-Wash. Attribut: `body[data-identity-theme]` |
+| **UI-Aura (Prestige-FX)** | Equipped **PlayerCard Aura** (`player_cards.aura_key`) | Glow/Rim auf Shell (Header, Sidebar, Panels, Nav). Attribut: `body[data-identity-aura]` |
+| **Name-Style** | Equipped `player_cards.name_style` (Shop-Unlock) | Nur sichtbarer Name (Galaxy/Chat/Ranking/…). **Keine** UI-Farbe/Aura |
+| Title-Flair | Equipped Card-Feld | Nur PlayerCard-Ansicht |
+
+Server-Owner: `game/playercard.get_equipped_identity()` → Context `IDENTITY_THEME` + `IDENTITY_AURA` → `templates/base.html`. Live-Preview im PlayerCard-Editor setzt beide Attribute clientseitig.
+
+**Nicht:** Name-Style, Title-Flair oder Shop-SKU allein.
+
+Themes/Auras freischalten: Basis-Themes immer frei; Season-Themes/Auras via Battle Pass; Admin = alle.
 
 ## Related
 

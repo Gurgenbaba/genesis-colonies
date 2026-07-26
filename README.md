@@ -38,7 +38,7 @@ Genesis Colonies ist ein persistentes Browser-Strategiespiel, in dem Spieler ein
 | Audit Logging | `admin_audit_log` für privilegierte Aktionen |
 | Frontend-Architektur | SPA/PJAX, Singleton-Polling, Lifecycle-Cleanup |
 | Queue-Hardening | Atomare Transaktionen, Idempotenz, Parallel-Tests |
-| Test-Suite | **3952** pytest-Tests (`python -m pytest --collect-only -q`) |
+| Test-Suite | **3972** pytest-Tests (`python -m pytest --collect-only -q`) |
 
 ### Spielbar (Mechanik)
 
@@ -296,7 +296,7 @@ Genesis Colonies/
 │   ├── chat.py, messages.py, alliance.py, …
 │   └── admin*.py           # Admin Control Center
 │
-├── migrations/             # SQL-Migrationen (006–113)
+├── migrations/             # SQL-Migrationen (006–115)
 ├── templates/              # Jinja2 (base.html = SPA-Shell)
 ├── static/
 │   ├── main.js             # PJAX, Polling, Fleet, Planet Scope

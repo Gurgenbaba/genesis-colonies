@@ -9,6 +9,7 @@
      data-theme="{{ form.get('theme', card.get('theme', 'cyan')) }}"
      data-aura="{{ form.get('aura_key', card.get('aura_key', 'none')) }}"
      data-flair="{{ form.get('title_flair', card.get('title_flair', 'none')) }}"
+     data-name-style="{{ form.get('name_style', card.get('name_style', 'none')) }}"
      data-mode="edit">
 
   <form class="gc-player-card-form" id="gc-player-card-form" novalidate
@@ -24,6 +25,7 @@
                data-theme="{{ form.get('theme', 'cyan') }}"
                data-aura="{{ form.get('aura_key', 'none') }}"
                data-flair="{{ form.get('title_flair', 'none') }}"
+               data-name-style="{{ form.get('name_style', 'none') }}"
                aria-label="{{ T('playercard_preview') }}">
         <div class="gc-player-card-preview-label">{{ T("playercard_preview") }}</div>
         <div class="gc-player-card-hero gc-player-card-hero-compact">
@@ -41,7 +43,9 @@
           </div>
           <div class="gc-player-card-identity">
             {% set name = card.get('commander_name', '—') %}
-            <h3 class="gc-player-card-commander" id="pc-preview-name">{% include "partials/commander_name.html" %}</h3>
+            <h3 class="gc-player-card-commander gc-player-name"
+                id="pc-preview-name"
+                data-name-style="{{ form.get('name_style', 'none') }}">{% include "partials/commander_name.html" %}</h3>
             <p class="gc-player-card-title-text" id="pc-preview-title">{{ form.get('title') or '' }}</p>
             <p class="gc-player-card-bio-preview" id="pc-preview-bio">{{ form.get('bio') or '' }}</p>
           </div>
@@ -88,6 +92,7 @@
               <option value="{{ th }}" {% if form.get('theme', 'cyan') == th %}selected{% endif %}>{{ T("playercard_theme_" ~ th) }}</option>
             {% endfor %}
           </select>
+          <span class="gc-player-card-field-hint">{{ T("playercard_theme_hint") }}</span>
         </label>
 
         <label class="gc-player-card-field">
@@ -108,6 +113,16 @@
             {% endfor %}
           </select>
           <span class="gc-player-card-field-hint">{{ T("playercard_title_flair_hint") }}</span>
+        </label>
+
+        <label class="gc-player-card-field">
+          <span class="gc-player-card-field-label">{{ T("playercard_name_style") }}</span>
+          <select name="name_style" class="gc-input" data-pc-field="name_style">
+            {% for ns in card.get('name_styles', ['none']) %}
+              <option value="{{ ns }}" {% if form.get('name_style', 'none') == ns %}selected{% endif %}>{{ T("playercard_name_style_" ~ ns) }}</option>
+            {% endfor %}
+          </select>
+          <span class="gc-player-card-field-hint">{{ T("playercard_name_style_hint") }}</span>
         </label>
 
         <label class="gc-player-card-field gc-player-card-field-check">

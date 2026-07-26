@@ -461,16 +461,35 @@ def _sender_alliance_tag(sender_id: Optional[int], conn) -> str:
     return str(ally.get("tag") or "") if ally else ""
 
 
-def serialize_message(row: Dict[str, Any], viewer_id: int, viewer_name: str, conn) -> Dict[str, Any]:
+def serialize_message(
+    row: Dict[str, Any],
+    viewer_id: int,
+    viewer_name: str,
+    conn,
+    *,
+    name_styles: Optional[Dict[int, str]] = None,
+) -> Dict[str, Any]:
     body = str(row.get("body") or "")
     deleted = row.get("deleted_at") is not None
     if deleted:
         body = ""
+    sender_id = int(row["sender_id"]) if row.get("sender_id") is not None else None
+    style = "none"
+    if sender_id and name_styles is not None:
+        style = str(name_styles.get(sender_id) or "none")
+    elif sender_id:
+        try:
+            from .playercard import get_equipped_name_style
+
+            style = get_equipped_name_style(sender_id, conn=conn)
+        except Exception:
+            style = "none"
     return {
         "id": int(row["id"]),
         "room_id": int(row["room_id"]),
-        "sender_id": int(row["sender_id"]) if row.get("sender_id") is not None else None,
+        "sender_id": sender_id,
         "sender_name": str(row.get("sender_name") or "System"),
+        "sender_name_style": style,
         "sender_alliance_tag": str(row.get("sender_alliance_tag") or ""),
         "target_user_id": int(row["target_user_id"]) if row.get("target_user_id") is not None else None,
         "alliance_id": int(row["alliance_id"]) if row.get("alliance_id") is not None else None,
@@ -531,19 +550,49 @@ def fetch_messages(
             )
             rows = list(cur.fetchall())
             rows.reverse()
+            sender_ids = [
+                int(r["sender_id"])
+                for r in rows
+                if r["sender_id"] is not None
+            ]
+            try:
+                from .playercard import map_equipped_name_styles
+
+                styles = map_equipped_name_styles(sender_ids, conn=conn)
+            except Exception:
+                styles = {}
             out = []
             for r in rows:
                 d = dict(r)
                 d["sender_alliance_tag"] = _sender_alliance_tag(d.get("sender_id"), conn)
-                out.append(serialize_message(d, player_id, viewer_name, conn))
+                out.append(
+                    serialize_message(
+                        d, player_id, viewer_name, conn, name_styles=styles
+                    )
+                )
             return out, None
 
         rows = cur.fetchall()
+        sender_ids = [
+            int(r["sender_id"])
+            for r in rows
+            if r["sender_id"] is not None
+        ]
+        try:
+            from .playercard import map_equipped_name_styles
+
+            styles = map_equipped_name_styles(sender_ids, conn=conn)
+        except Exception:
+            styles = {}
         out = []
         for r in rows:
             d = dict(r)
             d["sender_alliance_tag"] = _sender_alliance_tag(d.get("sender_id"), conn)
-            out.append(serialize_message(d, player_id, viewer_name, conn))
+            out.append(
+                serialize_message(
+                    d, player_id, viewer_name, conn, name_styles=styles
+                )
+            )
         return out, None
     finally:
         if own:

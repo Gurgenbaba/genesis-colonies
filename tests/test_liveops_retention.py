@@ -306,12 +306,14 @@ def test_battle_pass_cosmetics_unlock_without_gating_base_themes(liveops_db):
 
 
 def test_admin_playercard_cosmetics_all_unlocked(liveops_db):
-    """Admins can equip any theme/aura/flair without Season Pass unlocks."""
+    """Admins can equip any theme/aura/flair/name_style without unlocks."""
     from game.playercard import (
         list_unlocked_auras,
+        list_unlocked_name_styles,
         list_unlocked_themes,
         list_unlocked_title_flairs,
         player_has_aura,
+        player_has_name_style,
         player_has_theme,
         player_has_title_flair,
         save_own_card,
@@ -326,9 +328,11 @@ def test_admin_playercard_cosmetics_all_unlocked(liveops_db):
     assert "void" in list_unlocked_themes(uid, conn=conn)
     assert "aura_void" in list_unlocked_auras(uid, conn=conn)
     assert "imperial" in list_unlocked_title_flairs(uid, conn=conn)
+    assert "plasma" in list_unlocked_name_styles(uid, conn=conn)
     assert player_has_theme(uid, "plasma", conn=conn) is True
     assert player_has_aura(uid, "aura_gold", conn=conn) is True
     assert player_has_title_flair(uid, "signal", conn=conn) is True
+    assert player_has_name_style(uid, "void", conn=conn) is True
     conn.close()
 
     from game import playercard as pc_mod
@@ -336,7 +340,12 @@ def test_admin_playercard_cosmetics_all_unlocked(liveops_db):
     pc_mod._LAST_SAVE_TS.pop(uid, None)
     ok, reason, _ = save_own_card(
         uid,
-        {"theme": "void", "aura_key": "aura_void", "title_flair": "imperial"},
+        {
+            "theme": "void",
+            "aura_key": "aura_void",
+            "title_flair": "imperial",
+            "name_style": "void",
+        },
     )
     assert ok is True, reason
 

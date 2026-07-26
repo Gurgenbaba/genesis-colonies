@@ -34352,6 +34352,8 @@
     const themeSel = form.querySelector('[data-pc-field="theme"]');
     const auraSel = form.querySelector('[data-pc-field="aura_key"]');
     const flairSel = form.querySelector('[data-pc-field="title_flair"]');
+    const nameStyleSel = form.querySelector('[data-pc-field="name_style"]');
+    const previewName = form.querySelector("#pc-preview-name");
 
     function syncBadgePreview() {
       const host = form.querySelector("#pc-preview-badges");
@@ -34420,19 +34422,29 @@
       const th = themeSel?.value || "cyan";
       const aura = auraSel?.value || "none";
       const flair = flairSel?.value || "none";
+      const nstyle = nameStyleSel?.value || "none";
       if (preview) {
         preview.setAttribute("data-theme", th);
         preview.setAttribute("data-aura", aura);
         preview.setAttribute("data-flair", flair);
+        preview.setAttribute("data-name-style", nstyle);
+      }
+      if (previewName) {
+        previewName.setAttribute("data-name-style", nstyle);
       }
       const shell = form.closest(".gc-player-card-shell");
       if (shell) {
         shell.setAttribute("data-theme", th);
         shell.setAttribute("data-aura", aura);
         shell.setAttribute("data-flair", flair);
+        shell.setAttribute("data-name-style", nstyle);
       }
       applyPlayerCardTheme(th);
       applyPlayerCardPrestige(shell || preview);
+      try {
+        document.body.setAttribute("data-identity-theme", th);
+        document.body.setAttribute("data-identity-aura", aura || "none");
+      } catch (_) {}
       syncBadgePreview();
     }
 
@@ -34527,6 +34539,7 @@
       theme: form.querySelector('[name="theme"]')?.value || "cyan",
       aura_key: form.querySelector('[name="aura_key"]')?.value || "none",
       title_flair: form.querySelector('[name="title_flair"]')?.value || "none",
+      name_style: form.querySelector('[name="name_style"]')?.value || "none",
       is_public: form.querySelector('[name="is_public"]')?.checked ? "1" : "0",
       selected_badge_1: badges[0] || null,
       selected_badge_2: badges[1] || null,
@@ -34559,6 +34572,12 @@
       if (data.card && typeof GC.syncPlayerAvatarVisuals === "function") {
         GC.syncPlayerAvatarVisuals(data.card);
       }
+      try {
+        const th = (data.card && data.card.theme) || payload.theme || "cyan";
+        const aura = (data.card && data.card.aura_key) || payload.aura_key || "none";
+        document.body.setAttribute("data-identity-theme", th);
+        document.body.setAttribute("data-identity-aura", aura);
+      } catch (_) {}
     } catch (_) {
       pcSetLoading(false);
       const txt = t("playercard_save_error", "Speichern fehlgeschlagen.");

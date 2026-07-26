@@ -8,6 +8,7 @@
      data-theme="{{ card.get('theme', 'cyan') }}"
      data-aura="{{ card.get('aura_key', 'none') }}"
      data-flair="{{ card.get('title_flair', 'none') }}"
+     data-name-style="{{ card.get('name_style', 'none') }}"
      data-can-edit="{{ '1' if card.get('can_edit') else '0' }}">
 
   {% if is_private %}
@@ -15,7 +16,7 @@
       <div class="gc-player-card-avatar gc-player-card-avatar-placeholder" aria-hidden="true">?</div>
       <div class="gc-player-card-private-text">
         {% set name = card.get('commander_name', '—') %}
-        <h3 class="gc-player-card-commander">{% include "partials/commander_name.html" %}</h3>
+        <h3 class="gc-player-card-commander gc-player-name" data-name-style="{{ card.get('name_style', 'none') }}">{% include "partials/commander_name.html" %}</h3>
         <p class="gc-player-card-private-msg">{{ T("playercard_private_profile") }}</p>
       </div>
     </div>
@@ -46,7 +47,7 @@
 
       <div class="gc-player-card-identity">
         {% set name = card.get('commander_name', '—') %}
-        <h3 class="gc-player-card-commander">{% include "partials/commander_name.html" %}</h3>
+        <h3 class="gc-player-card-commander gc-player-name" data-name-style="{{ card.get('name_style', 'none') }}">{% include "partials/commander_name.html" %}</h3>
         {% if card.get('is_ai') %}
         <div class="gc-player-card-ai-banner" role="status">
           <span class="gc-player-card-ai-badge"

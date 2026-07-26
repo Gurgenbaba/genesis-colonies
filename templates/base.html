@@ -28,6 +28,7 @@
 
 <body class="gc-body gc-theme-dark gc-perf-idle {{ body_bg|default('') }} {% if SIMPLE_LAYOUT %}gc-body-simple{% else %}gc-body-ingame{% endif %}{% if current_planet_landscape_url %} gc-has-planet-landscape{% endif %}"
       data-theme="dark"
+      {% if not SIMPLE_LAYOUT %}data-identity-theme="{{ IDENTITY_THEME|default('cyan') }}" data-identity-aura="{{ IDENTITY_AURA|default('none') }}"{% endif %}
       data-endpoint="{{ request.endpoint or '' }}"
       data-auth-page="{{ '1' if SIMPLE_LAYOUT else '0' }}"
       {% if not SIMPLE_LAYOUT and CURRENT_PLAYER_ID %}data-player-id="{{ CURRENT_PLAYER_ID }}"{% endif %}

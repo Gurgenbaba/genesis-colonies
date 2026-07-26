@@ -5,21 +5,64 @@
 {% set products = shop_state.products if shop_state.products is defined else [] %}
 {% set providers = shop_state.providers if shop_state.providers is defined else [] %}
 {% set featured = products | selectattr('sku', 'equalto', 'season_pass_current') | list %}
-{% set packs = products | rejectattr('sku', 'equalto', 'season_pass_current') | list %}
+{% set identity = products | selectattr('kind', 'equalto', 'cosmetic_unlock') | list %}
+{% set packs = products
+     | rejectattr('sku', 'equalto', 'season_pass_current')
+     | rejectattr('kind', 'equalto', 'cosmetic_unlock')
+     | list %}
+{% set preview_name = (AUTH_USER.player_name if AUTH_USER and AUTH_USER.player_name else none)
+     or (AUTH_USER.name if AUTH_USER and AUTH_USER.name else none)
+     or T("shop_identity_sample_name", "Commander") %}
 
 {% macro shop_kind_label(kind) -%}
   {%- if kind == 'entitlement' -%}{{ T("shop_kind_pass", "PASS") }}
   {%- elif kind == 'timekeeper' -%}{{ T("shop_kind_timekeeper", "TIMEKEEPER") }}
+  {%- elif kind == 'cosmetic_unlock' -%}{{ T("shop_kind_identity", "IDENTITY") }}
   {%- else -%}{{ T("shop_kind_supply", "SUPPLY") }}
   {%- endif -%}
 {%- endmacro %}
 
+{% macro unlock_chip(u) -%}
+  {%- if u.kind == 'name_style' -%}
+    <span class="shop-unlock-chip" data-unlock-kind="name_style">
+      <span class="shop-unlock-chip-k">{{ T("shop_unlock_name_style", "Name-Style") }}</span>
+      <span class="shop-unlock-chip-v">{{ T("playercard_name_style_" ~ u.key, u.key) }}</span>
+    </span>
+  {%- elif u.kind == 'title_flair' -%}
+    <span class="shop-unlock-chip" data-unlock-kind="title_flair">
+      <span class="shop-unlock-chip-k">{{ T("shop_unlock_title_flair", "Title-Flair") }}</span>
+      <span class="shop-unlock-chip-v">{{ T("playercard_flair_" ~ u.key, u.key) }}</span>
+    </span>
+  {%- endif -%}
+{%- endmacro %}
+
 {% macro shop_card(p, featured=false) %}
-<article class="shop-card{% if featured %} shop-card--featured{% endif %}{% if p.owned %} is-owned{% endif %}"
+<article class="shop-card{% if featured %} shop-card--featured{% endif %}{% if p.owned %} is-owned{% endif %}{% if p.kind == 'cosmetic_unlock' %} shop-card--identity{% endif %}"
          data-shop-sku="{{ p.sku }}"
          data-shop-kind="{{ p.kind }}">
   <div class="shop-card-frame" aria-hidden="true"></div>
-  {% if p.image %}
+  {% if p.kind == 'cosmetic_unlock' and p.display and p.display.preview_style %}
+  <figure class="shop-card-art shop-card-art--identity">
+    <span class="shop-card-kind">{{ shop_kind_label(p.kind) }}</span>
+    <div class="shop-identity-preview" aria-label="{{ T('shop_identity_preview_label', 'Vorschau') }}">
+      <p class="shop-identity-preview-caption">{{ T("shop_identity_preview_caption", "So erscheint dein Name") }}</p>
+      <div class="shop-identity-compare">
+        <div class="shop-identity-col">
+          <span class="shop-identity-col-label">{{ T("shop_identity_before", "Jetzt") }}</span>
+          <span class="gc-player-name shop-name-preview shop-name-preview--before"
+                data-name-style="none">{{ preview_name }}</span>
+        </div>
+        <span class="shop-identity-arrow" aria-hidden="true">→</span>
+        <div class="shop-identity-col shop-identity-col--after">
+          <span class="shop-identity-col-label">{{ T("shop_identity_after", "Nach Kauf") }}</span>
+          <span class="gc-player-name shop-name-preview shop-name-preview--after"
+                data-name-style="{{ p.display.preview_style }}">{{ preview_name }}</span>
+        </div>
+      </div>
+      <p class="shop-identity-surfaces">{{ T("shop_identity_surfaces", "Galaxy · Chat · Ranking · Alliance") }}</p>
+    </div>
+  </figure>
+  {% elif p.image %}
   <figure class="shop-card-art">
     <img src="{{ url_for('static', filename=p.image, v=GC_ASSET_VERSION) }}"
          alt=""
@@ -37,6 +80,16 @@
     <div class="shop-card-main">
       <h2 class="shop-card-title">{{ T(p.title_key, p.sku) }}</h2>
       <p class="hint shop-card-hint">{{ T(p.hint_key, "") }}</p>
+      {% if p.kind == 'cosmetic_unlock' and p.display and p.display.unlocks %}
+      <div class="shop-unlock-list" aria-label="{{ T('shop_unlock_contains', 'Enthält') }}">
+        <span class="shop-unlock-list-label">{{ T("shop_unlock_contains", "Enthält") }}</span>
+        <div class="shop-unlock-chips">
+          {% for u in p.display.unlocks %}
+            {{ unlock_chip(u) }}
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
     </div>
     <div class="shop-card-footer">
       <p class="shop-card-price gc-mono">{{ p.price_label }}</p>
@@ -80,7 +133,7 @@
     <p class="shop-eyebrow">{{ T("shop_eyebrow", "COMMAND SUPPLY") }}</p>
     <h1 class="section-title">{{ T("shop_title", "Imperium Shop") }}</h1>
     <p class="section-hint hint shop-hint">
-      {{ T("shop_hint", "Season Pass und Convenience-Packs — keine Schiffe, keine Rohstoffe, kein Pay-to-Win.") }}
+      {{ T("shop_hint", "Season Pass, Convenience-Packs und Commander-Identity — keine Schiffe, keine Rohstoffe, kein Pay-to-Win.") }}
     </p>
   </header>
 
@@ -116,6 +169,21 @@
       </div>
       {% endif %}
 
+      {% if identity %}
+      <div class="shop-packs-head">
+        <span class="shop-packs-title">{{ T("shop_identity_title", "Commander Identity") }}</span>
+        <span class="shop-packs-rail" aria-hidden="true"></span>
+      </div>
+      <p class="hint shop-identity-section-hint">
+        {{ T("shop_identity_section_hint", "Name-Styles ändern nur deinen sichtbaren Namen. Die UI-Farbe setzt du auf der PlayerCard unter UI-Farbe (Shell).") }}
+      </p>
+      <div class="shop-grid shop-grid--identity">
+        {% for p in identity %}
+          {{ shop_card(p) }}
+        {% endfor %}
+      </div>
+      {% endif %}
+
       {% if packs %}
       <div class="shop-packs-head">
         <span class="shop-packs-title">{{ T("shop_packs_title", "Supply Packs") }}</span>
@@ -133,7 +201,7 @@
 
   <section class="gc-panel shop-policy-panel">
     <p class="hint">
-      {{ T("shop_policy", "Offizieller Shop: Timekeeper, Boosters, Container (meta) und Season Pass. Kampf-Power und Rohstoff-Stacks werden nicht verkauft.") }}
+      {{ T("shop_policy", "Offizieller Shop: Timekeeper, Boosters, Container (meta), Season Pass und Name-Styles. Kampf-Power und Rohstoff-Stacks werden nicht verkauft.") }}
       <a href="{{ url_for('premium_view') }}" class="gc-btn gc-btn-ghost gc-btn-sm" data-pjax-link>
         {{ T("shop_goto_premium", "Season Pass öffnen") }}
       </a>

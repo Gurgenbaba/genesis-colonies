@@ -2,7 +2,8 @@
 EPIC-23 / GC-2301–2302 — Shop catalog, orders, fulfillment.
 
 Owner: shop catalog + order lifecycle. Providers live in payment_providers.py.
-Grants use battle_pass.unlock_premium / grant_inventory_item / timekeeper.credit only.
+Grants use battle_pass.unlock_premium / grant_inventory_item / timekeeper.credit /
+playercard.unlock_* only.
 """
 
 from __future__ import annotations
@@ -18,7 +19,10 @@ PROVIDERS = frozenset({"stripe", "paypal", "test"})
 KIND_ENTITLEMENT = "entitlement"
 KIND_TIMEKEEPER = "timekeeper"
 KIND_INVENTORY_BUNDLE = "inventory_bundle"
-ALLOWED_KINDS = frozenset({KIND_ENTITLEMENT, KIND_TIMEKEEPER, KIND_INVENTORY_BUNDLE})
+KIND_COSMETIC_UNLOCK = "cosmetic_unlock"
+ALLOWED_KINDS = frozenset(
+    {KIND_ENTITLEMENT, KIND_TIMEKEEPER, KIND_INVENTORY_BUNDLE, KIND_COSMETIC_UNLOCK}
+)
 
 SKU_SEASON_PASS = "season_pass_current"
 
@@ -29,7 +33,7 @@ STATUS_FAILED = "failed"
 STATUS_REFUNDED = "refunded"
 
 # Bump when reseeding prices/payloads into existing DBs (upsert).
-CATALOG_VERSION = 3
+CATALOG_VERSION = 5
 
 # Free-Baseline Value Balance (GC-2310…2313):
 # Paid sells scarce flexible TK + dense high-tier packs; domain boosters must beat ~2× login-month skip.
@@ -42,6 +46,14 @@ SHOP_SKU_IMAGES: Dict[str, str] = {
     "booster_pack_starter": "img/pass/build_boost.webp",
     "container_pack_rare": "img/pass/rare_container.webp",
     "commander_supply_pack": "img/pass/relic_container.webp",
+    "name_style_ash": "img/pass/premium.webp",
+    "name_style_signal": "img/pass/premium.webp",
+    "name_style_etched": "img/pass/premium.webp",
+    "name_style_relic": "img/pass/premium.webp",
+    "name_style_imperial": "img/pass/premium.webp",
+    "name_style_plasma": "img/pass/premium.webp",
+    "name_style_void": "img/pass/premium.webp",
+    "identity_pack_signal": "img/pass/season_pass.webp",
 }
 
 DEFAULT_CATALOG: Tuple[Dict[str, Any], ...] = (
@@ -141,6 +153,114 @@ DEFAULT_CATALOG: Tuple[Dict[str, Any], ...] = (
             ],
         },
     },
+    {
+        "sku": "name_style_ash",
+        "kind": KIND_COSMETIC_UNLOCK,
+        "title_key": "shop_sku_name_ash",
+        "hint_key": "shop_sku_name_ash_hint",
+        "price_cents": 99,
+        "currency": "eur",
+        "sort_order": 100,
+        "payload": {
+            "unlocks": [{"kind": "name_style", "key": "ash"}],
+            "preview_style": "ash",
+        },
+    },
+    {
+        "sku": "name_style_signal",
+        "kind": KIND_COSMETIC_UNLOCK,
+        "title_key": "shop_sku_name_signal",
+        "hint_key": "shop_sku_name_signal_hint",
+        "price_cents": 99,
+        "currency": "eur",
+        "sort_order": 110,
+        "payload": {
+            "unlocks": [{"kind": "name_style", "key": "signal"}],
+            "preview_style": "signal",
+        },
+    },
+    {
+        "sku": "name_style_etched",
+        "kind": KIND_COSMETIC_UNLOCK,
+        "title_key": "shop_sku_name_etched",
+        "hint_key": "shop_sku_name_etched_hint",
+        "price_cents": 99,
+        "currency": "eur",
+        "sort_order": 120,
+        "payload": {
+            "unlocks": [{"kind": "name_style", "key": "etched"}],
+            "preview_style": "etched",
+        },
+    },
+    {
+        "sku": "name_style_relic",
+        "kind": KIND_COSMETIC_UNLOCK,
+        "title_key": "shop_sku_name_relic",
+        "hint_key": "shop_sku_name_relic_hint",
+        "price_cents": 149,
+        "currency": "eur",
+        "sort_order": 130,
+        "payload": {
+            "unlocks": [{"kind": "name_style", "key": "relic"}],
+            "preview_style": "relic",
+        },
+    },
+    {
+        "sku": "name_style_imperial",
+        "kind": KIND_COSMETIC_UNLOCK,
+        "title_key": "shop_sku_name_imperial",
+        "hint_key": "shop_sku_name_imperial_hint",
+        "price_cents": 199,
+        "currency": "eur",
+        "sort_order": 140,
+        "payload": {
+            "unlocks": [{"kind": "name_style", "key": "imperial"}],
+            "preview_style": "imperial",
+        },
+    },
+    {
+        "sku": "name_style_plasma",
+        "kind": KIND_COSMETIC_UNLOCK,
+        "title_key": "shop_sku_name_plasma",
+        "hint_key": "shop_sku_name_plasma_hint",
+        "price_cents": 199,
+        "currency": "eur",
+        "sort_order": 150,
+        "payload": {
+            "unlocks": [{"kind": "name_style", "key": "plasma"}],
+            "preview_style": "plasma",
+        },
+    },
+    {
+        "sku": "name_style_void",
+        "kind": KIND_COSMETIC_UNLOCK,
+        "title_key": "shop_sku_name_void",
+        "hint_key": "shop_sku_name_void_hint",
+        "price_cents": 199,
+        "currency": "eur",
+        "sort_order": 160,
+        "payload": {
+            "unlocks": [{"kind": "name_style", "key": "void"}],
+            "preview_style": "void",
+        },
+    },
+    {
+        "sku": "identity_pack_signal",
+        "kind": KIND_COSMETIC_UNLOCK,
+        "title_key": "shop_sku_identity_pack",
+        "hint_key": "shop_sku_identity_pack_hint",
+        "price_cents": 249,
+        "currency": "eur",
+        "sort_order": 170,
+        "payload": {
+            "unlocks": [
+                {"kind": "name_style", "key": "signal"},
+                {"kind": "name_style", "key": "etched"},
+                {"kind": "title_flair", "key": "etched"},
+            ],
+            "preview_style": "signal",
+        },
+    },
 )
 
 
@@ -155,6 +275,66 @@ def schema_ready(conn) -> bool:
         and table_exists(conn, "shop_orders")
         and table_exists(conn, "shop_payment_events")
     )
+
+
+def _shop_products_allows_cosmetic_unlock(conn) -> bool:
+    """True when shop_products.kind CHECK includes cosmetic_unlock (migration 115)."""
+    from .db import get_db_backend
+
+    if get_db_backend() == "postgres":
+        # PG: try a savepoint probe instead of parsing pg_constraint.
+        return True
+    try:
+        row = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'shop_products' LIMIT 1;"
+        ).fetchone()
+    except Exception:
+        return False
+    if not row:
+        return False
+    sql = str(row["sql"] if hasattr(row, "keys") else row[0] or "")
+    return "cosmetic_unlock" in sql.lower()
+
+
+def ensure_shop_products_kind_schema(conn) -> bool:
+    """
+    Rebuild shop_products if kind CHECK predates cosmetic_unlock.
+    Idempotent; needed when migration 115 was skipped/partial on a live DB.
+    """
+    if not table_exists(conn, "shop_products"):
+        return False
+    if _shop_products_allows_cosmetic_unlock(conn):
+        return False
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS shop_products__kind_v4 (
+            sku TEXT NOT NULL PRIMARY KEY,
+            kind TEXT NOT NULL CHECK (kind IN ('entitlement', 'timekeeper', 'inventory_bundle', 'cosmetic_unlock')),
+            title_key TEXT NOT NULL DEFAULT '',
+            hint_key TEXT NOT NULL DEFAULT '',
+            price_cents INTEGER NOT NULL CHECK (price_cents > 0),
+            currency TEXT NOT NULL DEFAULT 'eur',
+            active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+            payload_json TEXT NOT NULL DEFAULT '{}',
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            created_at REAL NOT NULL DEFAULT 0,
+            updated_at REAL NOT NULL DEFAULT 0
+        );
+        """
+    )
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO shop_products__kind_v4
+            (sku, kind, title_key, hint_key, price_cents, currency, active,
+             payload_json, sort_order, created_at, updated_at)
+        SELECT sku, kind, title_key, hint_key, price_cents, currency, active,
+               payload_json, sort_order, created_at, updated_at
+        FROM shop_products;
+        """
+    )
+    conn.execute("DROP TABLE IF EXISTS shop_products;")
+    conn.execute("ALTER TABLE shop_products__kind_v4 RENAME TO shop_products;")
+    return True
 
 
 def is_shop_enabled() -> bool:
@@ -182,6 +362,7 @@ def ensure_catalog_seeded(conn, *, now: Optional[float] = None) -> int:
     """Upsert default SKUs from code (server truth). Returns rows touched."""
     if not schema_ready(conn):
         return 0
+    ensure_shop_products_kind_schema(conn)
     ts = float(now if now is not None else time.time())
     touched = 0
     for entry in DEFAULT_CATALOG:
@@ -511,6 +692,13 @@ def create_pending_order(
         if own_reason == "no_season":
             return False, "no_season", None
 
+    if (
+        str(product.get("kind")) == KIND_COSMETIC_UNLOCK
+        and not allow_owned
+        and _cosmetic_payload_owned(pid, product.get("payload") or {}, conn=conn)
+    ):
+        return False, "already_owned", None
+
     ts = float(now if now is not None else time.time())
     cur = conn.execute(
         """
@@ -687,6 +875,68 @@ def fulfill_order(
             bal = credit(pid, tk_sec, source, conn=conn)
             granted["timekeeper_sec"] = tk_sec
             granted["balance_sec"] = bal
+    elif kind == KIND_COSMETIC_UNLOCK:
+        from .playercard import (
+            COSMETIC_KIND_NAME_STYLE,
+            COSMETIC_KIND_TITLE_FLAIR,
+            player_has_name_style,
+            player_has_title_flair,
+            unlock_name_style,
+            unlock_title_flair,
+        )
+
+        unlocks = payload.get("unlocks") or []
+        if not isinstance(unlocks, list) or not unlocks:
+            return False, "invalid_payload", order
+        granted_unlocks: List[str] = []
+        all_already = True
+        for entry in unlocks:
+            if not isinstance(entry, Mapping):
+                continue
+            ukind = str(entry.get("kind") or "").strip().lower()
+            ukey = str(entry.get("key") or "").strip().lower()
+            if not ukind or not ukey:
+                continue
+            if ukind == COSMETIC_KIND_NAME_STYLE:
+                if player_has_name_style(pid, ukey, conn=conn):
+                    granted_unlocks.append(f"name_style:{ukey}:owned")
+                    continue
+                all_already = False
+                ok_u, reason_u = unlock_name_style(
+                    pid, ukey, conn=conn, source=source, now=int(ts)
+                )
+                if not ok_u:
+                    conn.execute(
+                        """
+                        UPDATE shop_orders SET status = ?, fulfill_reason = ? WHERE id = ?;
+                        """,
+                        (STATUS_FAILED, str(reason_u), int(order_id)),
+                    )
+                    return False, reason_u, get_order(int(order_id), conn=conn)
+                granted_unlocks.append(f"name_style:{ukey}")
+            elif ukind == COSMETIC_KIND_TITLE_FLAIR:
+                if player_has_title_flair(pid, ukey, conn=conn):
+                    granted_unlocks.append(f"title_flair:{ukey}:owned")
+                    continue
+                all_already = False
+                ok_u, reason_u = unlock_title_flair(
+                    pid, ukey, conn=conn, source=source, now=int(ts)
+                )
+                if not ok_u:
+                    conn.execute(
+                        """
+                        UPDATE shop_orders SET status = ?, fulfill_reason = ? WHERE id = ?;
+                        """,
+                        (STATUS_FAILED, str(reason_u), int(order_id)),
+                    )
+                    return False, reason_u, get_order(int(order_id), conn=conn)
+                granted_unlocks.append(f"title_flair:{ukey}")
+            else:
+                return False, "forbidden_grant", order
+        if not granted_unlocks:
+            return False, "invalid_payload", order
+        grant_reason = "already_owned" if all_already else "ok"
+        granted = {"unlocks": granted_unlocks}
     else:
         return False, "forbidden_sku", order
 
@@ -831,6 +1081,34 @@ def _season_pass_owned(player_id: int, *, conn) -> Tuple[bool, str]:
     return False, "ok"
 
 
+def _cosmetic_payload_owned(player_id: int, payload: Mapping[str, Any], *, conn) -> bool:
+    """True when every unlock in a cosmetic SKU payload is already owned."""
+    from .playercard import (
+        COSMETIC_KIND_NAME_STYLE,
+        COSMETIC_KIND_TITLE_FLAIR,
+        player_has_name_style,
+        player_has_title_flair,
+    )
+
+    unlocks = payload.get("unlocks") or []
+    if not isinstance(unlocks, list) or not unlocks:
+        return False
+    for entry in unlocks:
+        if not isinstance(entry, Mapping):
+            return False
+        ukind = str(entry.get("kind") or "").strip().lower()
+        ukey = str(entry.get("key") or "").strip().lower()
+        if ukind == COSMETIC_KIND_NAME_STYLE:
+            if not player_has_name_style(int(player_id), ukey, conn=conn):
+                return False
+        elif ukind == COSMETIC_KIND_TITLE_FLAIR:
+            if not player_has_title_flair(int(player_id), ukey, conn=conn):
+                return False
+        else:
+            return False
+    return True
+
+
 def serialize_catalog_for_client(*, conn, player_id: Optional[int] = None) -> Dict[str, Any]:
     products = list_catalog(conn=conn)
     season_owned = False
@@ -839,16 +1117,35 @@ def serialize_catalog_for_client(*, conn, player_id: Optional[int] = None) -> Di
     out = []
     for p in products:
         entry = dict(p)
-        entry["owned"] = bool(season_owned) if p["sku"] == SKU_SEASON_PASS else False
+        payload = p.get("payload") or {}
+        owned = False
+        if p["sku"] == SKU_SEASON_PASS:
+            owned = bool(season_owned)
+        elif str(p.get("kind")) == KIND_COSMETIC_UNLOCK and player_id:
+            owned = _cosmetic_payload_owned(int(player_id), payload, conn=conn)
+        entry["owned"] = owned
         entry["image"] = shop_image_for_sku(str(p["sku"]))
         # Do not expose raw payload grant math beyond display-safe fields.
-        payload = p.get("payload") or {}
+        unlocks_raw = payload.get("unlocks") or []
+        unlocks_display: List[Dict[str, str]] = []
+        if isinstance(unlocks_raw, list):
+            for u in unlocks_raw:
+                if not isinstance(u, Mapping):
+                    continue
+                ukind = str(u.get("kind") or "").strip().lower()
+                ukey = str(u.get("key") or "").strip().lower()
+                if not ukind or not ukey:
+                    continue
+                unlocks_display.append({"kind": ukind, "key": ukey})
         entry["display"] = {
             "timekeeper_sec": int(payload.get("timekeeper_sec") or 0),
             "item_count": len(payload.get("items") or [])
             if isinstance(payload.get("items"), list)
             else 0,
             "entitlement": str(payload.get("entitlement") or "") or None,
+            "preview_style": str(payload.get("preview_style") or "") or None,
+            "unlock_count": len(unlocks_display),
+            "unlocks": unlocks_display,
         }
         entry.pop("payload", None)
         out.append(entry)

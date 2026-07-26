@@ -71,7 +71,7 @@ def _player():
 def test_catalog_kinds_policy_only(shop_db):
     conn = db()
     assert schema_ready(conn)
-    assert CATALOG_VERSION >= 3
+    assert CATALOG_VERSION >= 5
     products = list_catalog(conn=conn)
     assert products
     skus = {p["sku"] for p in products}
@@ -450,6 +450,11 @@ def test_serialize_hides_payload(shop_db):
     assert skus == set(SHOP_SKU_IMAGES.keys())
     for p in state["products"]:
         assert p.get("image") == SHOP_SKU_IMAGES[p["sku"]]
+    signal = next(p for p in state["products"] if p["sku"] == "name_style_signal")
+    assert signal["display"]["preview_style"] == "signal"
+    assert signal["display"]["unlocks"] == [{"kind": "name_style", "key": "signal"}]
+    pack = next(p for p in state["products"] if p["sku"] == "identity_pack_signal")
+    assert len(pack["display"]["unlocks"]) == 3
     conn.close()
 
 
@@ -502,6 +507,48 @@ def test_recover_paypal_return_creates_and_fulfills(shop_db, monkeypatch):
     conn.close()
 
 
+def test_shop_products_kind_schema_rebuild(shop_db):
+    """Old CHECK without cosmetic_unlock is rebuilt before catalog seed."""
+    from game.shop import (
+        _shop_products_allows_cosmetic_unlock,
+        ensure_catalog_seeded,
+        ensure_shop_products_kind_schema,
+    )
+
+    conn = db()
+    # Force legacy CHECK (pre-115).
+    conn.execute("DROP TABLE IF EXISTS shop_products;")
+    conn.execute(
+        """
+        CREATE TABLE shop_products (
+            sku TEXT NOT NULL PRIMARY KEY,
+            kind TEXT NOT NULL CHECK (kind IN ('entitlement', 'timekeeper', 'inventory_bundle')),
+            title_key TEXT NOT NULL DEFAULT '',
+            hint_key TEXT NOT NULL DEFAULT '',
+            price_cents INTEGER NOT NULL CHECK (price_cents > 0),
+            currency TEXT NOT NULL DEFAULT 'eur',
+            active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+            payload_json TEXT NOT NULL DEFAULT '{}',
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            created_at REAL NOT NULL DEFAULT 0,
+            updated_at REAL NOT NULL DEFAULT 0
+        );
+        """
+    )
+    conn.commit()
+    assert _shop_products_allows_cosmetic_unlock(conn) is False
+    assert ensure_shop_products_kind_schema(conn) is True
+    assert _shop_products_allows_cosmetic_unlock(conn) is True
+    n = ensure_catalog_seeded(conn)
+    assert n >= 8
+    row = conn.execute(
+        "SELECT kind FROM shop_products WHERE sku = 'name_style_signal' LIMIT 1;"
+    ).fetchone()
+    assert row and str(row["kind"]) == "cosmetic_unlock"
+    conn.commit()
+    conn.close()
+
+
 def test_admin_unlock_still_works(shop_db):
     uid = _player()
     conn = db()
@@ -509,3 +556,76 @@ def test_admin_unlock_still_works(shop_db):
     assert ok, reason
     conn.commit()
     conn.close()
+
+
+def test_fulfill_name_style_cosmetic(shop_db):
+    from game.playercard import (
+        get_equipped_name_style,
+        player_has_name_style,
+        player_has_title_flair,
+        save_own_card,
+    )
+    from game import playercard as pc_mod
+
+    uid = _player()
+    conn = db()
+    assert player_has_name_style(uid, "signal", conn=conn) is False
+    ok, reason, out = start_checkout(
+        uid,
+        "name_style_signal",
+        "test",
+        conn=conn,
+        success_url="http://localhost/shop/return",
+        cancel_url="http://localhost/shop?cancelled=1",
+    )
+    assert ok, reason
+    assert player_has_name_style(uid, "signal", conn=conn) is True
+    assert out and (out.get("fulfilled") is True or (out.get("order") or {}).get("status") == "fulfilled")
+
+    # Already owned → checkout rejected
+    ok2, reason2, _ = start_checkout(
+        uid,
+        "name_style_signal",
+        "test",
+        conn=conn,
+        success_url="http://localhost/shop/return",
+        cancel_url="http://localhost/shop?cancelled=1",
+    )
+    assert ok2 is False
+    assert reason2 == "already_owned"
+
+    ok3, reason3, out3 = start_checkout(
+        uid,
+        "identity_pack_signal",
+        "test",
+        conn=conn,
+        success_url="http://localhost/shop/return",
+        cancel_url="http://localhost/shop?cancelled=1",
+    )
+    assert ok3, reason3
+    assert player_has_name_style(uid, "etched", conn=conn) is True
+    assert player_has_title_flair(uid, "etched", conn=conn) is True
+    conn.commit()
+    conn.close()
+
+    pc_mod._LAST_SAVE_TS.pop(uid, None)
+    ok_save, reason_save, _ = save_own_card(
+        uid,
+        {"theme": "cyan", "aura_key": "none", "title_flair": "etched", "name_style": "signal"},
+    )
+    assert ok_save is True, reason_save
+    assert get_equipped_name_style(uid) == "signal"
+
+
+def test_name_style_locked_without_unlock(shop_db):
+    from game.playercard import save_own_card
+    from game import playercard as pc_mod
+
+    uid = _player()
+    pc_mod._LAST_SAVE_TS.pop(uid, None)
+    ok, reason, _ = save_own_card(
+        uid,
+        {"theme": "cyan", "aura_key": "none", "title_flair": "none", "name_style": "void"},
+    )
+    assert ok is False
+    assert reason == "playercard_name_style_locked"

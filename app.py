@@ -242,11 +242,13 @@ def player_name_link(
     name=None,
     extra_class: str = "",
     enable_card: bool = True,
+    name_style=None,
 ) -> Markup:
     """
     Standard clickable player name for PlayerCard (PJAX-safe markup).
 
     Usage: {{ player_name_link(row.player_id, row.nickname) }}
+    Optional name_style: equipped style key, or None to look up.
     """
     try:
         pid = int(player_id)
@@ -258,6 +260,16 @@ def player_name_link(
     raw = str(name or "").strip()
     display = escape(raw or "—")
     lookup_attr = escape(raw)
+    style_key = "none"
+    try:
+        from game.playercard import get_equipped_name_style, validate_name_style
+
+        if name_style is None:
+            style_key = get_equipped_name_style(pid)
+        else:
+            style_key = validate_name_style(name_style)
+    except Exception:
+        style_key = "none"
     classes = ["gc-player-name"]
     if extra_class:
         classes.append(str(extra_class).strip())
@@ -265,6 +277,7 @@ def player_name_link(
         f'class="{" ".join(classes)}"',
         f'data-player-id="{pid}"',
         f'data-player-name="{lookup_attr}"',
+        f'data-name-style="{escape(style_key)}"',
     ]
     if enable_card:
         attrs.append('data-player-card="1"')
@@ -763,6 +776,18 @@ def inject_globals():
     except Exception:
         pass
 
+    identity_theme = "cyan"
+    identity_aura = "none"
+    try:
+        user_id = session.get("user_id")
+        if user_id is not None and not simple_layout:
+            from game.playercard import get_equipped_identity
+
+            identity_theme, identity_aura = get_equipped_identity(int(user_id))
+    except Exception:
+        identity_theme = "cyan"
+        identity_aura = "none"
+
     return dict(
         T=T,
         T_DATA=get_locale_dict(active_locale),
@@ -772,6 +797,8 @@ def inject_globals():
         GC_CLIENT_CONFIG=client_runtime_config,
         player_name_link=player_name_link,
         CURRENT_PLAYER_ID=_current_player_id(),
+        IDENTITY_THEME=identity_theme,
+        IDENTITY_AURA=identity_aura,
 
         AUTH_USER=auth_user,
         AUTH_ADMIN=auth_admin,
