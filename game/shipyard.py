@@ -363,14 +363,43 @@ def unit_build_seconds(
     )
 
 
-def _unit_build_cost(ship_key: str) -> Dict[str, int]:
+def _unit_build_cost(
+    ship_key: str,
+    *,
+    planet_id: int | None = None,
+    conn=None,
+) -> Dict[str, int]:
     spec = get_ship(ship_key) or {}
     raw = spec.get("build_cost") or {}
-    return {
+    cost = {
         "metal": max(0, int(raw.get("metal") or 0)),
         "crystal": max(0, int(raw.get("crystal") or 0)),
         "fuel_cells": max(0, int(raw.get("fuel_cells") or 0)),
     }
+    # GC-720J: expansion directive reduces Seed Ark (colonize) build cost.
+    if str(ship_key) == "seed_ark" and planet_id is not None:
+        try:
+            from .galactic_directives.mechanics import get_directive_flags_for_galaxy
+
+            row = None
+            if conn is not None:
+                row = conn.execute(
+                    "SELECT galaxy FROM planets WHERE id = ? LIMIT 1;",
+                    (int(planet_id),),
+                ).fetchone()
+            galaxy = int(row["galaxy"]) if row and row["galaxy"] is not None else 0
+            if galaxy > 0:
+                flags = get_directive_flags_for_galaxy(galaxy, conn=conn) or {}
+                mult = float(flags.get("colonize_cost_mult") or 1.0)
+                if mult != 1.0:
+                    cost = {
+                        "metal": max(0, int(cost["metal"] * mult)),
+                        "crystal": max(0, int(cost["crystal"] * mult)),
+                        "fuel_cells": max(0, int(cost["fuel_cells"] * mult)),
+                    }
+        except Exception:
+            pass
+    return cost
 
 
 def ship_unlocked(
@@ -407,7 +436,7 @@ def _ship_catalog_entry(
     conn=None,
 ) -> Dict[str, Any]:
     spec = get_ship(ship_key) or {}
-    cost = _unit_build_cost(ship_key)
+    cost = _unit_build_cost(ship_key, planet_id=planet_id, conn=conn)
     unlocked = ship_unlocked(
         ship_key,
         shipyard_level,
@@ -602,7 +631,7 @@ def max_build_amount_for_planet(
         sk, shipyard_level, player_id=player_id, planet_id=planet_id, conn=conn
     ):
         return 0
-    cost = _unit_build_cost(sk)
+    cost = _unit_build_cost(sk, planet_id=planet_id, conn=conn)
     if cost["metal"] <= 0 and cost["crystal"] <= 0 and cost["fuel_cells"] <= 0:
         return 0
     limits: List[int] = []
@@ -762,7 +791,7 @@ def build_ships(
     qty = parse_int_number(amount, default=0)
     if qty <= 0:
         return False, "invalid_amount", None
-    unit = _unit_build_cost(sk)
+    unit = _unit_build_cost(sk, planet_id=int(planet_id), conn=conn)
     total_m = unit["metal"] * qty
     total_c = unit["crystal"] * qty
     total_f = unit["fuel_cells"] * qty

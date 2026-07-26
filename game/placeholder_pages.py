@@ -27,24 +27,6 @@ PLACEHOLDER_MODULES: Dict[str, Dict[str, Any]] = {
             "placeholder_auction_pill_3",
         ],
     },
-    "galactic_politics": {
-        "slug": "galactic-politics",
-        "endpoint": "galactic_politics_view",
-        "title_key": "nav_galactic_politics",
-        "hint_key": "placeholder_politics_hint",
-        "intro_key": "placeholder_politics_intro",
-        "note_key": "placeholder_politics_note",
-        "features": [
-            ("placeholder_politics_f1_title", "placeholder_politics_f1_desc"),
-            ("placeholder_politics_f2_title", "placeholder_politics_f2_desc"),
-            ("placeholder_politics_f3_title", "placeholder_politics_f3_desc"),
-        ],
-        "pills": [
-            "placeholder_politics_pill_1",
-            "placeholder_politics_pill_2",
-            "placeholder_politics_pill_3",
-        ],
-    },
     "skilltree": {
         "slug": "skilltree",
         "endpoint": "skilltree_view",

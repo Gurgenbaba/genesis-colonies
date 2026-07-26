@@ -75,6 +75,19 @@ def add_planet_xp(
     xp = int(planet.get("planet_xp") or 0)
 
     bonus = 1.0 if skip_diversity else _diversity_bonus(planet_id, conn)
+    # GC-720J: expansion directive planet XP multiplier (optional level cap).
+    try:
+        from game.galactic_directives.mechanics import get_directive_flags_for_galaxy
+
+        galaxy = int(planet.get("galaxy") or 0)
+        if galaxy > 0:
+            flags = get_directive_flags_for_galaxy(galaxy, conn=conn) or {}
+            xp_mult = float(flags.get("planet_xp_mult") or 1.0)
+            cap_level = int(flags.get("planet_xp_mult_cap_level") or 0)
+            if xp_mult != 1.0 and (cap_level <= 0 or level < cap_level):
+                bonus *= xp_mult
+    except Exception:
+        pass
     gained = max(0, int(math.floor(int(base_xp) * bonus)))
     xp += gained
 

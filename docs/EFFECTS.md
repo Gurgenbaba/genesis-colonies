@@ -53,7 +53,9 @@ return max(int(seconds), 1)   # 1-second floor (GC-858)
 
 **Expedition flags:** `get_directive_flags_for_galaxy()` → `expedition_events.resolve_expedition_outcome()`.
 
-**Still deferred:** colonize/trader/command-map unlock flags.
+**Wired domain flags (GC-720J):** `max_colonies_bonus` / `colonize_cost_mult` (expansion + seed_ark cost), `trader_daily_limit_mult`, `scrapyard_yield_mult`, `defense_combat_mult` (defender defense units), `queue_limits.research` via `get_directive_queue_limit_bonus`, `planet_xp_mult` (+ optional cap).
+
+**Still deferred:** `unlock:world:*` / `unlock:expansion_site:*`, `trade_route_speed_mult`.
 
 **Wired expedition flags:** `expedition_loot_mult`, `expedition_event_bonus`, `expedition_wreckage_bonus`, `expedition_event_factor`, `expedition_legendary_bonus` (weight boost in `_pick_event_key`), `expedition_slot_bonus` (extra fleet slots via `get_max_fleet_slots`).
 

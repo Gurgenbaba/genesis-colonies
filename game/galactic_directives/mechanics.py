@@ -230,6 +230,25 @@ def get_directive_flags_for_galaxy(
     return out
 
 
+def get_directive_queue_limit_bonus(
+    galaxy: Any,
+    queue_key: str,
+    *,
+    conn: Optional[sqlite3.Connection] = None,
+) -> int:
+    """Extra queue slots from ``mechanics.queue_limits`` (e.g. research +1)."""
+    payload = get_galaxy_directive_mechanics(galaxy, conn=conn)
+    if not payload:
+        return 0
+    limits = (payload.get("mechanics") or {}).get("queue_limits") or {}
+    if not isinstance(limits, dict):
+        return 0
+    try:
+        return max(0, int(limits.get(str(queue_key)) or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
 def get_planet_directive_er_modifiers(
     planet_id: Any,
     *,

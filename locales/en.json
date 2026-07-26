@@ -6150,5 +6150,10 @@
   "planet_registry_aria": "Empire overview",
   "planet_registry_empty": "No colonies",
   "planet_registry_meta_toggle": "Meta",
-  "planet_registry_meta_toggle_title": "Messages, economy, community"
+  "planet_registry_meta_toggle_title": "Messages, economy, community",
+  "gd_results_subject": "Galactic Directives — Results %(year)s-%(month)02d",
+  "gd_results_intro": "The galactic vote for %(year)s-%(month)02d is complete.",
+  "gd_results_galaxy_line": "Galaxy %(galaxy)s — Primary: %(primary)s (%(primary_votes)s), Secondary: %(secondary)s (%(secondary_votes)s), total votes: %(total)s",
+  "gd_results_tie_primary": "Note: Primary directive tie — random selection.",
+  "gd_results_link": "Open Galactic Politics"
 }

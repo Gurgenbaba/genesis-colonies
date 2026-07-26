@@ -806,7 +806,18 @@ def _resolve_research_queue_limit(
     if player_id is not None:
         lab = get_player_research_lab_level(int(player_id), conn=conn)
         if lab >= RESEARCH_QUEUE_LAB_LEVEL_FOR_BONUS:
-            return max(base, RESEARCH_QUEUE_LIMIT_AT_LAB4)
+            base = max(base, RESEARCH_QUEUE_LIMIT_AT_LAB4)
+        # GC-720J: scientific directive may grant extra research queue slots.
+        try:
+            from .galactic_directives.mechanics import get_directive_queue_limit_bonus
+            from .models import get_homeworld
+
+            hw = get_homeworld(int(player_id), conn=conn) or {}
+            galaxy = int(hw.get("galaxy") or 0)
+            if galaxy > 0:
+                base += get_directive_queue_limit_bonus(galaxy, "research", conn=conn)
+        except Exception:
+            pass
     return base
 
 

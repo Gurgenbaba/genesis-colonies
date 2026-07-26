@@ -386,6 +386,20 @@ def resolve_exchange_daily_limit(player_id: int, *, conn=None) -> Dict[str, Any]
         empire_day_total = int(prod["total_per_day"])
         scaled = int(empire_day_total * pct / 100.0)
         final = max(min_lim, scaled) if min_lim > 0 else scaled
+        # GC-720J: logistics directive may raise trader daily volume.
+        try:
+            from .galactic_directives.mechanics import get_directive_flags_for_galaxy
+            from .models import get_homeworld
+
+            hw = get_homeworld(int(player_id), conn=conn) or {}
+            galaxy = int(hw.get("galaxy") or 0)
+            if galaxy > 0:
+                flags = get_directive_flags_for_galaxy(galaxy, conn=conn) or {}
+                mult = float(flags.get("trader_daily_limit_mult") or 1.0)
+                if mult > 0:
+                    final = int(final * mult)
+        except Exception:
+            pass
         return {
             "daily_limit": int(final),
             "daily_limit_scaled": int(scaled),

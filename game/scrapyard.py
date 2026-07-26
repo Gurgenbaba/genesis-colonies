@@ -20,16 +20,41 @@ def scrap_refund_ratio(*, seed: int | None = None) -> float:
     return SCRAP_REFUND_MIN + (SCRAP_REFUND_MAX - SCRAP_REFUND_MIN) * rng.random()
 
 
-def scrap_value_for_ship(ship_key: str, amount: int, *, ratio: float) -> Dict[str, int]:
+def scrap_value_for_ship(
+    ship_key: str,
+    amount: int,
+    *,
+    ratio: float,
+    yield_mult: float = 1.0,
+) -> Dict[str, int]:
     sk = canonical_ship_key(ship_key)
     cost = _unit_build_cost(sk)
     qty = max(0, int(amount))
     r = max(SCRAP_REFUND_MIN, min(SCRAP_REFUND_MAX, float(ratio)))
+    mult = max(0.0, float(yield_mult or 1.0))
     return {
-        "metal": int(cost["metal"] * qty * r),
-        "crystal": int(cost["crystal"] * qty * r),
-        "fuel_cells": int(cost["fuel_cells"] * qty * r),
+        "metal": int(cost["metal"] * qty * r * mult),
+        "crystal": int(cost["crystal"] * qty * r * mult),
+        "fuel_cells": int(cost["fuel_cells"] * qty * r * mult),
     }
+
+
+def _scrapyard_yield_mult(planet_id: int, *, conn) -> float:
+    """GC-720J: logistics directive scrapyard yield multiplier."""
+    try:
+        from .galactic_directives.mechanics import get_directive_flags_for_galaxy
+
+        row = conn.execute(
+            "SELECT galaxy FROM planets WHERE id = ? LIMIT 1;",
+            (int(planet_id),),
+        ).fetchone()
+        galaxy = int(row["galaxy"]) if row and row["galaxy"] is not None else 0
+        if galaxy <= 0:
+            return 1.0
+        flags = get_directive_flags_for_galaxy(galaxy, conn=conn) or {}
+        return max(0.0, float(flags.get("scrapyard_yield_mult") or 1.0))
+    except Exception:
+        return 1.0
 
 
 def list_scrapyard_ships(player_id: int, planet_id: int, *, conn=None) -> List[Dict[str, Any]]:
@@ -45,6 +70,7 @@ def list_scrapyard_ships(player_id: int, planet_id: int, *, conn=None) -> List[D
         if not cur.fetchone():
             return []
         ships = get_planet_ships(int(planet_id), conn=conn)
+        yield_mult = _scrapyard_yield_mult(int(planet_id), conn=conn)
         out: List[Dict[str, Any]] = []
         for key, qty in sorted(ships.items()):
             if int(qty) <= 0:
@@ -58,15 +84,18 @@ def list_scrapyard_ships(player_id: int, planet_id: int, *, conn=None) -> List[D
                     "amount": int(qty),
                     "role": spec.get("role"),
                     "build_cost": cost,
-                    "preview_refund_min": scrap_value_for_ship(key, int(qty), ratio=SCRAP_REFUND_MIN),
-                    "preview_refund_max": scrap_value_for_ship(key, int(qty), ratio=SCRAP_REFUND_MAX),
+                    "preview_refund_min": scrap_value_for_ship(
+                        key, int(qty), ratio=SCRAP_REFUND_MIN, yield_mult=yield_mult
+                    ),
+                    "preview_refund_max": scrap_value_for_ship(
+                        key, int(qty), ratio=SCRAP_REFUND_MAX, yield_mult=yield_mult
+                    ),
                 }
             )
         return out
     finally:
         if own and conn is not None:
             conn.close()
-
 
 def recycle_ships(
     *,
@@ -107,7 +136,8 @@ def recycle_ships(
             return False, "not_enough_ships", None
 
         ratio = scrap_refund_ratio()
-        refund = scrap_value_for_ship(sk, qty, ratio=ratio)
+        yield_mult = _scrapyard_yield_mult(int(planet_id), conn=conn)
+        refund = scrap_value_for_ship(sk, qty, ratio=ratio, yield_mult=yield_mult)
         ok, reason = deduct_planet_ships(int(planet_id), {sk: qty}, conn=conn)
         if not ok:
             rollback(conn)

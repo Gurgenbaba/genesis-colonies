@@ -6,6 +6,7 @@ call POST /api/internal/cron/* with GC_INTERNAL_CRON_TOKEN.
 
 Endpoints:
   - ranking, fleet-tick, vote-reengagement, queue-tick (GC-PERF-WORKER-001)
+  - galactic-directives (GC-720I monthly mandate resolve)
 
 With GC_DB_BACKEND=postgres, a dedicated ``scripts/run_game_worker.py`` process is supported.
 Vote re-engagement piggybacks on the ranking cron (30-minute interval guard).
@@ -428,6 +429,65 @@ def handle_internal_cron_vote_reengagement(request: Request) -> Tuple[Dict[str, 
     log_vote_reengagement_result(
         payload,
         log_prefix="vote-reengagement-http-cron",
+        source_label="http",
+    )
+    status = 200 if payload.get("ok") else 500
+    return payload, status
+
+
+def execute_galactic_directives_resolve(*, force: bool, source: str) -> Dict[str, Any]:
+    """GC-720I: resolve overdue galactic directive cycles for all galaxies."""
+    from game.galactic_directives import resolve_due_cycles
+
+    _ = force  # reserved for interval-guard symmetry with other cron jobs
+    result = resolve_due_cycles()
+    payload = {
+        "ok": bool(result.get("ok")),
+        "resolved_count": len(result.get("resolved") or []),
+        "synced": int(result.get("synced") or 0),
+        "galaxies": int(result.get("galaxies") or 0),
+        "server_time": int(result.get("server_time") or 0),
+        "source": str(source or "http_cron"),
+    }
+    if result.get("resolved"):
+        payload["resolved"] = list(result["resolved"])
+    return payload
+
+
+def log_galactic_directives_resolve_result(
+    payload: Dict[str, Any],
+    *,
+    log_prefix: str,
+    source_label: str,
+) -> None:
+    _recompute_log(
+        log_prefix,
+        f"source={source_label} ok={str(bool(payload.get('ok'))).lower()} "
+        f"resolved={payload.get('resolved_count', 0)} "
+        f"synced={payload.get('synced', 0)} "
+        f"galaxies={payload.get('galaxies', 0)}",
+    )
+
+
+def handle_internal_cron_galactic_directives(request: Request) -> Tuple[Dict[str, Any], int]:
+    """Token-gated galactic directive mandate resolve (GC-720I)."""
+    authorized, auth_err = verify_internal_cron_request(request)
+    if not authorized:
+        _recompute_log("gd-http-cron", "unauthorized")
+        return {"ok": False, "error": auth_err or "unauthorized"}, 401
+
+    force = parse_force_flag(request)
+    _recompute_log("gd-http-cron", f"request_received force={str(force).lower()}")
+    try:
+        payload = execute_galactic_directives_resolve(force=force, source="http_cron")
+    except Exception as exc:
+        logger.exception("internal cron galactic directives resolve failed")
+        _recompute_log("gd-http-cron", f"error={exc}")
+        return {"ok": False, "error": str(exc)}, 500
+
+    log_galactic_directives_resolve_result(
+        payload,
+        log_prefix="gd-http-cron",
         source_label="http",
     )
     status = 200 if payload.get("ok") else 500

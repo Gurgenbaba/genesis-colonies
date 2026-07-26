@@ -49,17 +49,117 @@ def _ym_key(year: int, month: int) -> str:
 
 
 def _cycle_timestamps(year: int, month: int) -> Dict[str, int]:
+    """
+    Monthly politics schedule (GC-720 launch):
+
+    - Vote open for the **entire calendar month** (day 1 → last day).
+    - After vote_end, resolve winners; mandate is active for the **following** month.
+    """
     last_day = calendar.monthrange(int(year), int(month))[1]
+    next_year, next_month = _next_month(int(year), int(month))
+    next_last = calendar.monthrange(next_year, next_month)[1]
     return {
         "vote_start_at": _utc_ts(year, month, 1, 0, 0, 0),
-        "vote_end_at": _utc_ts(year, month, 5, 23, 59, 59),
-        "effect_start_at": _utc_ts(year, month, 6, 0, 0, 0),
-        "effect_end_at": _utc_ts(year, month, last_day, 23, 59, 59),
+        "vote_end_at": _utc_ts(year, month, last_day, 23, 59, 59),
+        "effect_start_at": _utc_ts(next_year, next_month, 1, 0, 0, 0),
+        "effect_end_at": _utc_ts(next_year, next_month, next_last, 23, 59, 59),
     }
 
 
 def _row_to_cycle(row: sqlite3.Row | Dict[str, Any]) -> Dict[str, Any]:
     return dict(row) if not isinstance(row, dict) else dict(row)
+
+
+def _sync_open_cycle_timestamps(
+    cycle: Dict[str, Any],
+    *,
+    conn: sqlite3.Connection,
+    now: int,
+) -> Dict[str, Any]:
+    """
+    Keep unfinished current-month cycles on the full-month vote window.
+
+    Also re-opens auto-resolved zero-vote cycles so players can vote immediately
+    after the schedule change (mid-month launch).
+    """
+    stamps = _cycle_timestamps(int(cycle["year"]), int(cycle["month"]))
+    total_votes = int(cycle.get("total_votes") or 0)
+    has_winner = bool(cycle.get("winning_primary"))
+    needs_stamp_sync = (
+        int(cycle.get("vote_end_at") or 0) != int(stamps["vote_end_at"])
+        or int(cycle.get("effect_start_at") or 0) != int(stamps["effect_start_at"])
+        or int(cycle.get("effect_end_at") or 0) != int(stamps["effect_end_at"])
+    )
+    reopen_empty = has_winner and total_votes == 0 and int(stamps["vote_end_at"]) >= int(now)
+    if not needs_stamp_sync and not reopen_empty:
+        return cycle
+
+    begin_write_transaction(conn)
+    if reopen_empty:
+        conn.execute(
+            """
+            UPDATE gd_cycles
+            SET vote_start_at = ?,
+                vote_end_at = ?,
+                effect_start_at = ?,
+                effect_end_at = ?,
+                winning_primary = NULL,
+                winning_secondary = NULL,
+                winning_primary_votes = 0,
+                winning_secondary_votes = 0,
+                total_votes = 0,
+                total_voters = 0,
+                is_tie_primary = 0,
+                is_tie_secondary = 0,
+                results_sent = 0,
+                status = ?,
+                updated_at = ?
+            WHERE id = ?;
+            """,
+            (
+                stamps["vote_start_at"],
+                stamps["vote_end_at"],
+                stamps["effect_start_at"],
+                stamps["effect_end_at"],
+                PHASE_VOTE_OPEN,
+                now,
+                int(cycle["id"]),
+            ),
+        )
+    else:
+        phase = get_vote_phase(
+            {
+                "vote_end_at": stamps["vote_end_at"],
+                "effect_end_at": stamps["effect_end_at"],
+            },
+            now,
+        )
+        # Real winners stay resolved/active; only unfinished cycles follow new phase.
+        status = str(cycle.get("status") or phase) if has_winner else phase
+        conn.execute(
+            """
+            UPDATE gd_cycles
+            SET vote_start_at = ?,
+                vote_end_at = ?,
+                effect_start_at = ?,
+                effect_end_at = ?,
+                status = ?,
+                updated_at = ?
+            WHERE id = ?;
+            """,
+            (
+                stamps["vote_start_at"],
+                stamps["vote_end_at"],
+                stamps["effect_start_at"],
+                stamps["effect_end_at"],
+                status,
+                now,
+                int(cycle["id"]),
+            ),
+        )
+    commit(conn)
+    refreshed = _fetch_cycle(int(cycle["galaxy"]), int(cycle["year"]), int(cycle["month"]), conn)
+    return refreshed or cycle
 
 
 def get_vote_phase(cycle: Dict[str, Any], now: Optional[int] = None) -> str:
@@ -188,6 +288,9 @@ def get_or_create_current_cycle(
 
         if cycle is None:
             return None
+
+        # Mid-month launch / schedule migration: keep unfinished cycles vote_open.
+        cycle = _sync_open_cycle_timestamps(cycle, conn=conn, now=ts)
 
         if int(cycle.get("vote_end_at") or 0) < ts and not cycle.get("winning_primary"):
             resolve_directive_cycle(galaxy_id, int(cycle["year"]), int(cycle["month"]), conn=conn, now=ts)
@@ -392,7 +495,14 @@ def resolve_directive_cycle(
             ),
         )
         commit(conn)
-        return _fetch_cycle(galaxy_id, int(year), int(month), conn)
+        refreshed = _fetch_cycle(galaxy_id, int(year), int(month), conn)
+        try:
+            from .results import maybe_broadcast_cycle_results
+
+            maybe_broadcast_cycle_results(int(year), int(month), conn=conn, now=ts)
+        except Exception:
+            pass
+        return refreshed
     finally:
         if own_conn:
             conn.close()
@@ -612,6 +722,317 @@ def get_galactic_politics_state(
             for galaxy_id in galaxies
         ]
         return {"ready": True, "galaxies": entries, "server_time": ts}
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def resolve_due_cycles(
+    *,
+    conn: Optional[sqlite3.Connection] = None,
+    now: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Batch-resolve overdue galactic directive cycles for all playable galaxies (GC-720I).
+
+    Safe to call from cron or request paths. Lazy per-galaxy resolve remains as defense.
+    """
+    from ..galaxy import get_galaxy_max
+
+    own_conn = conn is None
+    if own_conn:
+        conn = db()
+    ts = int(now if now is not None else time.time())
+    resolved: List[Dict[str, Any]] = []
+    synced = 0
+    try:
+        if not schema_ready(conn=conn):
+            return {"ok": True, "resolved": [], "synced": 0, "galaxies": 0, "server_time": ts}
+
+        galaxy_max = int(get_galaxy_max(conn) or 1)
+        for galaxy_id in range(1, galaxy_max + 1):
+            before = conn.execute(
+                """
+                SELECT id, year, month, winning_primary, status
+                FROM gd_cycles
+                WHERE galaxy = ?
+                  AND (
+                    (status != ? AND effect_end_at < ?)
+                    OR (status = ? AND vote_end_at < ? AND winning_primary IS NULL)
+                    OR (status = ? AND vote_end_at < ? AND effect_end_at >= ?)
+                  );
+                """,
+                (
+                    galaxy_id,
+                    PHASE_RESOLVED,
+                    ts,
+                    PHASE_VOTE_OPEN,
+                    ts,
+                    PHASE_VOTE_OPEN,
+                    ts,
+                    ts,
+                ),
+            ).fetchall()
+            _resolve_overdue_cycles(galaxy_id, conn=conn, now=ts)
+            # Ensure current calendar month exists so vote windows stay available.
+            get_or_create_current_cycle(galaxy_id, now=ts, conn=conn)
+            for row in before:
+                cycle = _row_to_cycle(row)
+                if not cycle.get("winning_primary"):
+                    after = _fetch_cycle(galaxy_id, int(cycle["year"]), int(cycle["month"]), conn)
+                    if after and after.get("winning_primary"):
+                        resolved.append(
+                            {
+                                "galaxy": galaxy_id,
+                                "year": int(after["year"]),
+                                "month": int(after["month"]),
+                                "primary": after.get("winning_primary"),
+                                "secondary": after.get("winning_secondary"),
+                            }
+                        )
+                else:
+                    synced += 1
+
+        # After batch resolve, try results broadcast for calendar months touched.
+        try:
+            from .results import maybe_broadcast_cycle_results
+
+            year, month = _calendar_parts(ts)
+            maybe_broadcast_cycle_results(year, month, conn=conn, now=ts)
+            # Also previous month near month boundaries.
+            prev_year, prev_month = (year - 1, 12) if month == 1 else (year, month - 1)
+            maybe_broadcast_cycle_results(prev_year, prev_month, conn=conn, now=ts)
+        except Exception:
+            pass
+
+        return {
+            "ok": True,
+            "resolved": resolved,
+            "synced": synced,
+            "galaxies": galaxy_max,
+            "server_time": ts,
+        }
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def admin_force_directive(
+    galaxy: Any,
+    primary_key: str,
+    secondary_key: Optional[str] = None,
+    *,
+    conn: Optional[sqlite3.Connection] = None,
+    now: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Close the current vote immediately and set Primary (optional Secondary) for a galaxy.
+    """
+    galaxy_id = normalize_galaxy(galaxy, conn=conn)
+    primary = normalize_directive_key(primary_key)
+    secondary = normalize_directive_key(secondary_key) if secondary_key not in (None, "") else None
+    if galaxy_id is None:
+        return {"ok": False, "reason": "invalid_galaxy"}
+    if not primary:
+        return {"ok": False, "reason": "invalid_directive"}
+    if secondary_key not in (None, "") and not secondary:
+        return {"ok": False, "reason": "invalid_secondary"}
+    if secondary and secondary == primary:
+        return {"ok": False, "reason": "secondary_equals_primary"}
+
+    own_conn = conn is None
+    if own_conn:
+        conn = db()
+    ts = int(now if now is not None else time.time())
+    try:
+        if not schema_ready(conn=conn):
+            return {"ok": False, "reason": "not_ready"}
+
+        if get_directive_definition(primary, conn=conn) is None:
+            return {"ok": False, "reason": "invalid_directive"}
+        if secondary is not None and get_directive_definition(secondary, conn=conn) is None:
+            return {"ok": False, "reason": "invalid_secondary"}
+
+        cycle = get_or_create_current_cycle(galaxy_id, now=ts, conn=conn)
+        if cycle is None:
+            return {"ok": False, "reason": "cycle_unavailable"}
+
+        state = ensure_galaxy_state(galaxy_id, conn=conn)
+        old_primary = normalize_directive_key(state.get("primary_directive")) or FALLBACK_PRIMARY
+        consecutive = int(state.get("consecutive_primary_wins") or 0)
+        if primary == old_primary:
+            consecutive += 1
+        else:
+            consecutive = 1
+
+        cooldown_directive = state.get("cooldown_directive")
+        cooldown_until_ym = state.get("cooldown_until_ym")
+        if consecutive >= 2:
+            next_year, next_month = _next_month(int(cycle["year"]), int(cycle["month"]))
+            cooldown_directive = primary
+            cooldown_until_ym = _ym_key(next_year, next_month)
+            consecutive = 0
+
+        # Close voting immediately so the mandate is active now.
+        vote_end_at = min(int(cycle.get("vote_end_at") or ts), ts)
+        effect_start_at = min(int(cycle.get("effect_start_at") or ts), ts)
+        forced_cycle = {
+            **cycle,
+            "vote_end_at": vote_end_at,
+            "effect_start_at": effect_start_at,
+            "winning_primary": primary,
+        }
+        phase = get_vote_phase(forced_cycle, ts)
+
+        begin_write_transaction(conn)
+        conn.execute(
+            """
+            UPDATE gd_cycles
+            SET vote_end_at = ?,
+                effect_start_at = ?,
+                winning_primary = ?,
+                winning_secondary = ?,
+                winning_primary_votes = COALESCE(winning_primary_votes, 0),
+                winning_secondary_votes = COALESCE(winning_secondary_votes, 0),
+                status = ?,
+                updated_at = ?
+            WHERE id = ?;
+            """,
+            (
+                vote_end_at,
+                effect_start_at,
+                primary,
+                secondary,
+                phase,
+                ts,
+                int(cycle["id"]),
+            ),
+        )
+        conn.execute(
+            """
+            UPDATE gd_galaxy_state
+            SET primary_directive = ?,
+                secondary_directive = ?,
+                primary_since = ?,
+                consecutive_primary_wins = ?,
+                cooldown_directive = ?,
+                cooldown_until_ym = ?,
+                last_cycle_id = ?,
+                updated_at = ?
+            WHERE galaxy = ?;
+            """,
+            (
+                primary,
+                secondary,
+                ts,
+                int(consecutive),
+                cooldown_directive,
+                cooldown_until_ym,
+                int(cycle["id"]),
+                ts,
+                galaxy_id,
+            ),
+        )
+        commit(conn)
+        refreshed = _fetch_cycle(galaxy_id, int(cycle["year"]), int(cycle["month"]), conn)
+        return {
+            "ok": True,
+            "galaxy": galaxy_id,
+            "primary": primary,
+            "secondary": secondary,
+            "cycle": refreshed,
+        }
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def admin_unforce_directive(
+    galaxy: Any,
+    *,
+    reset_state: bool = False,
+    conn: Optional[sqlite3.Connection] = None,
+    now: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Re-open the current cycle for voting and clear winner fields (GC-720I).
+
+    When ``reset_state`` is True, galaxy mandate falls back to defensive / no secondary.
+    """
+    galaxy_id = normalize_galaxy(galaxy, conn=conn)
+    if galaxy_id is None:
+        return {"ok": False, "reason": "invalid_galaxy"}
+
+    own_conn = conn is None
+    if own_conn:
+        conn = db()
+    ts = int(now if now is not None else time.time())
+    try:
+        if not schema_ready(conn=conn):
+            return {"ok": False, "reason": "not_ready"}
+
+        cycle = get_or_create_current_cycle(galaxy_id, now=ts, conn=conn)
+        if cycle is None:
+            return {"ok": False, "reason": "cycle_unavailable"}
+
+        stamps = _cycle_timestamps(int(cycle["year"]), int(cycle["month"]))
+        # Keep vote_open relative to ``now`` so overdue resolution does not instantly re-close.
+        vote_end_at = max(int(stamps["vote_end_at"]), ts)
+        effect_start_at = max(int(stamps["effect_start_at"]), vote_end_at + 1)
+        effect_end_at = max(int(stamps["effect_end_at"]), effect_start_at)
+        begin_write_transaction(conn)
+        conn.execute(
+            """
+            UPDATE gd_cycles
+            SET vote_start_at = ?,
+                vote_end_at = ?,
+                effect_start_at = ?,
+                effect_end_at = ?,
+                winning_primary = NULL,
+                winning_secondary = NULL,
+                winning_primary_votes = 0,
+                winning_secondary_votes = 0,
+                total_votes = 0,
+                total_voters = 0,
+                is_tie_primary = 0,
+                is_tie_secondary = 0,
+                status = ?,
+                updated_at = ?
+            WHERE id = ?;
+            """,
+            (
+                stamps["vote_start_at"],
+                vote_end_at,
+                effect_start_at,
+                effect_end_at,
+                PHASE_VOTE_OPEN,
+                ts,
+                int(cycle["id"]),
+            ),
+        )
+        if reset_state:
+            conn.execute(
+                """
+                UPDATE gd_galaxy_state
+                SET primary_directive = ?,
+                    secondary_directive = NULL,
+                    consecutive_primary_wins = 0,
+                    cooldown_directive = NULL,
+                    cooldown_until_ym = NULL,
+                    last_cycle_id = NULL,
+                    updated_at = ?
+                WHERE galaxy = ?;
+                """,
+                (FALLBACK_PRIMARY, ts, galaxy_id),
+            )
+        commit(conn)
+        refreshed = _fetch_cycle(galaxy_id, int(cycle["year"]), int(cycle["month"]), conn)
+        return {
+            "ok": True,
+            "galaxy": galaxy_id,
+            "reset_state": bool(reset_state),
+            "cycle": refreshed,
+        }
     finally:
         if own_conn:
             conn.close()

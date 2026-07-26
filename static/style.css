@@ -23892,6 +23892,10 @@ body.gc-combat-report-open { overflow: hidden; }
   margin-top: 0.35rem;
   opacity: 0.9;
 }
+.gc-gd-banner-cta{
+  display: inline-flex;
+  margin-top: 0.55rem;
+}
 .gd-banner--industrial,
 .gd-chip--industrial{ border-color: rgba(255, 176, 72, 0.45); }
 .gd-banner--scientific,

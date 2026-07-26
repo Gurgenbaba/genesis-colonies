@@ -43,11 +43,11 @@ def test_placeholder_modules_registered():
     keys = {m["slug"] for m in list_placeholder_modules()}
     assert keys == {
         "auction-house",
-        "galactic-politics",
         "skilltree",
         "premium",
     }
-    assert len(PLACEHOLDER_MODULES) == 4
+    assert len(PLACEHOLDER_MODULES) == 3
+    assert "galactic_politics" not in PLACEHOLDER_MODULES
 
 
 def test_sidebar_has_military_and_trading_hub_nav():
@@ -68,6 +68,9 @@ def test_sidebar_has_military_and_trading_hub_nav():
     assert 'data-nav-module="hall_of_fame"' in sidebar_right
     assert "url_for('records_view')" in sidebar_right
     assert 'data-nav-module="records"' in sidebar_right
+    assert "url_for('galactic_politics_view')" in sidebar_right
+    assert 'data-nav-module="galactic_politics"' in sidebar_right
+    assert 'data-nav-badge="government"' in sidebar_right
     assert "gc-nav-wip-section" not in sidebar
     assert "gc-nav-wip-section" not in sidebar_right
 

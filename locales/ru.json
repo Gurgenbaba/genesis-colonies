@@ -6150,5 +6150,10 @@
   "planet_registry_aria": "Обзор империи",
   "planet_registry_empty": "Нет колоний",
   "planet_registry_meta_toggle": "Мета",
-  "planet_registry_meta_toggle_title": "Сообщения, экономика, сообщество"
+  "planet_registry_meta_toggle_title": "Сообщения, экономика, сообщество",
+  "gd_results_subject": "Галактические директивы — Итоги %(year)s-%(month)02d",
+  "gd_results_intro": "Галактическое голосование за %(year)s-%(month)02d завершено.",
+  "gd_results_galaxy_line": "Галактика %(galaxy)s — Основная: %(primary)s (%(primary_votes)s), Вторичная: %(secondary)s (%(secondary_votes)s), всего голосов: %(total)s",
+  "gd_results_tie_primary": "Примечание: ничья по основной директиве — случайный выбор.",
+  "gd_results_link": "Открыть Галактическую политику"
 }

@@ -6150,5 +6150,10 @@
   "planet_registry_aria": "Vista del imperio",
   "planet_registry_empty": "Sin colonias",
   "planet_registry_meta_toggle": "Meta",
-  "planet_registry_meta_toggle_title": "Mensajes, economía, comunidad"
+  "planet_registry_meta_toggle_title": "Mensajes, economía, comunidad",
+  "gd_results_subject": "Directivas galácticas — Resultados %(year)s-%(month)02d",
+  "gd_results_intro": "La votación galáctica de %(year)s-%(month)02d ha terminado.",
+  "gd_results_galaxy_line": "Galaxia %(galaxy)s — Primaria: %(primary)s (%(primary_votes)s), Secundaria: %(secondary)s (%(secondary_votes)s), votos totales: %(total)s",
+  "gd_results_tie_primary": "Nota: Empate en la directiva primaria — selección aleatoria.",
+  "gd_results_link": "Abrir Política Galáctica"
 }

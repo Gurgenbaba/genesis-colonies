@@ -414,6 +414,15 @@ def _gd_player_galaxy(uid: int, conn) -> int:
     return int(planets[0]["galaxy"])
 
 
+def _gd_place_in_galaxy(uid: int, galaxy: int, conn) -> None:
+    """Ensure the player's colonies count for votes in ``galaxy`` (test fixture)."""
+    conn.execute(
+        "UPDATE planets SET galaxy = ? WHERE player_id = ?;",
+        (int(galaxy), int(uid)),
+    )
+    conn.commit()
+
+
 def _gd_vote_open_now(year: int = 2026, month: int = 6) -> int:
     stamps = _cycle_timestamps(year, month)
     return int(stamps["vote_start_at"]) + 3600
@@ -427,6 +436,44 @@ def test_get_vote_phase_boundaries(gd_db):
     assert get_vote_phase(cycle, stamps["effect_start_at"]) == PHASE_ACTIVE
     assert get_vote_phase(cycle, stamps["effect_end_at"]) == PHASE_ACTIVE
     assert get_vote_phase(cycle, stamps["effect_end_at"] + 1) == PHASE_RESOLVED
+    # Mid-month (e.g. launch day) must still be vote_open under full-month schedule.
+    mid = stamps["vote_start_at"] + 20 * 86400
+    assert mid < stamps["vote_end_at"]
+    assert get_vote_phase(cycle, mid) == PHASE_VOTE_OPEN
+
+
+def test_get_or_create_reopens_empty_mid_month_cycle(gd_db):
+    conn = db()
+    try:
+        stamps = _cycle_timestamps(2026, 7)
+        mid = stamps["vote_start_at"] + 25 * 86400
+        # Legacy day-5 schedule already auto-resolved with zero votes.
+        conn.execute(
+            """
+            INSERT INTO gd_cycles (
+                galaxy, year, month,
+                vote_start_at, vote_end_at, effect_start_at, effect_end_at,
+                status, winning_primary, total_votes, total_voters,
+                created_at, updated_at
+            ) VALUES (1, 2026, 7, ?, ?, ?, ?, 'active', 'defensive', 0, 0, ?, ?);
+            """,
+            (
+                stamps["vote_start_at"],
+                stamps["vote_start_at"] + 4 * 86400,
+                stamps["vote_start_at"] + 5 * 86400,
+                stamps["vote_end_at"],
+                mid,
+                mid,
+            ),
+        )
+        conn.commit()
+        cycle = get_or_create_current_cycle(1, now=mid, conn=conn)
+        assert cycle is not None
+        assert cycle.get("winning_primary") in (None, "")
+        assert get_vote_phase(cycle, mid) == PHASE_VOTE_OPEN
+        assert int(cycle["vote_end_at"]) == int(stamps["vote_end_at"])
+    finally:
+        conn.close()
 
 
 def test_get_or_create_current_cycle_inserts_row(gd_db):
@@ -503,11 +550,13 @@ def test_resolve_directive_cycle_writes_winners(gd_db):
         uid_b = _gd_player(conn)
         uid_c = _gd_player(conn)
         galaxy = _gd_player_galaxy(uid_a, conn)
+        _gd_place_in_galaxy(uid_b, galaxy, conn)
+        _gd_place_in_galaxy(uid_c, galaxy, conn)
         now = _gd_vote_open_now()
         cycle = get_or_create_current_cycle(galaxy, now=now, conn=conn)
-        submit_directive_vote(uid_a, galaxy, "industrial", conn=conn, now=now)
-        submit_directive_vote(uid_b, galaxy, "industrial", conn=conn, now=now)
-        submit_directive_vote(uid_c, galaxy, "scientific", conn=conn, now=now)
+        assert submit_directive_vote(uid_a, galaxy, "industrial", conn=conn, now=now)["ok"]
+        assert submit_directive_vote(uid_b, galaxy, "industrial", conn=conn, now=now)["ok"]
+        assert submit_directive_vote(uid_c, galaxy, "scientific", conn=conn, now=now)["ok"]
 
         after_vote = int(cycle["vote_end_at"]) + 1
         resolved = resolve_directive_cycle(galaxy, 2026, 6, conn=conn, now=after_vote)
@@ -598,10 +647,11 @@ def test_resolve_directive_cycle_tie_breaks_primary(gd_db, monkeypatch):
         uid_a = _gd_player(conn)
         uid_b = _gd_player(conn)
         galaxy = _gd_player_galaxy(uid_a, conn)
+        _gd_place_in_galaxy(uid_b, galaxy, conn)
         now = _gd_vote_open_now()
         get_or_create_current_cycle(galaxy, now=now, conn=conn)
-        submit_directive_vote(uid_a, galaxy, "industrial", conn=conn, now=now)
-        submit_directive_vote(uid_b, galaxy, "scientific", conn=conn, now=now)
+        assert submit_directive_vote(uid_a, galaxy, "industrial", conn=conn, now=now)["ok"]
+        assert submit_directive_vote(uid_b, galaxy, "scientific", conn=conn, now=now)["ok"]
         monkeypatch.setattr("game.galactic_directives.voting.random.choice", lambda xs: xs[0])
         after_vote = int(_cycle_timestamps(2026, 6)["vote_end_at"]) + 1
         resolved = resolve_directive_cycle(galaxy, 2026, 6, conn=conn, now=after_vote)
@@ -624,6 +674,226 @@ def test_get_galaxy_directive_mechanics_after_resolution(gd_db):
         payload = get_galaxy_directive_mechanics(galaxy, conn=conn)
         assert payload is not None
         assert payload["primary"] == "scientific"
+    finally:
+        conn.close()
+
+
+# --- GC-720I cron resolve + admin force ---
+
+from game.galactic_directives.voting import (
+    admin_force_directive,
+    admin_unforce_directive,
+    resolve_due_cycles,
+)
+
+
+def test_resolve_due_cycles_resolves_overdue_without_votes(gd_db):
+    conn = db()
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO game_settings (key, value) VALUES ('galaxy_count', '1');"
+        )
+        conn.commit()
+        now = _gd_vote_open_now()
+        cycle = get_or_create_current_cycle(1, now=now, conn=conn)
+        after_vote = int(cycle["vote_end_at"]) + 1
+        result = resolve_due_cycles(conn=conn, now=after_vote)
+        assert result["ok"] is True
+        assert result["galaxies"] == 1
+        state = conn.execute(
+            "SELECT primary_directive FROM gd_galaxy_state WHERE galaxy = 1;"
+        ).fetchone()
+        assert state is not None
+        assert state["primary_directive"] == FALLBACK_PRIMARY
+        refreshed = conn.execute(
+            "SELECT winning_primary FROM gd_cycles WHERE id = ?;",
+            (int(cycle["id"]),),
+        ).fetchone()
+        assert refreshed["winning_primary"] == FALLBACK_PRIMARY
+    finally:
+        conn.close()
+
+
+def test_admin_force_and_unforce_directive(gd_db):
+    conn = db()
+    try:
+        now = _gd_vote_open_now()
+        get_or_create_current_cycle(1, now=now, conn=conn)
+
+        forced = admin_force_directive(
+            1, "military", "logistics", conn=conn, now=now
+        )
+        assert forced["ok"] is True
+        assert forced["primary"] == "military"
+        assert forced["secondary"] == "logistics"
+        state = conn.execute(
+            "SELECT primary_directive, secondary_directive FROM gd_galaxy_state WHERE galaxy = 1;"
+        ).fetchone()
+        assert state["primary_directive"] == "military"
+        assert state["secondary_directive"] == "logistics"
+        cycle = conn.execute(
+            "SELECT winning_primary, status, vote_end_at FROM gd_cycles WHERE galaxy = 1 AND year = 2026 AND month = 6;"
+        ).fetchone()
+        assert cycle["winning_primary"] == "military"
+        assert int(cycle["vote_end_at"]) <= now
+
+        opened = admin_unforce_directive(1, reset_state=True, conn=conn, now=now)
+        assert opened["ok"] is True
+        cycle2 = conn.execute(
+            "SELECT winning_primary, status FROM gd_cycles WHERE galaxy = 1 AND year = 2026 AND month = 6;"
+        ).fetchone()
+        assert cycle2["winning_primary"] is None
+        assert cycle2["status"] == PHASE_VOTE_OPEN
+        state2 = conn.execute(
+            "SELECT primary_directive, secondary_directive FROM gd_galaxy_state WHERE galaxy = 1;"
+        ).fetchone()
+        assert state2["primary_directive"] == FALLBACK_PRIMARY
+        assert state2["secondary_directive"] is None
+    finally:
+        conn.close()
+
+
+# --- GC-720G results messages ---
+
+from game.galactic_directives.results import maybe_broadcast_cycle_results
+
+
+def test_maybe_broadcast_cycle_results_idempotent(gd_db):
+    conn = db()
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO game_settings (key, value) VALUES ('galaxy_count', '1');"
+        )
+        conn.commit()
+        uid = _gd_player(conn)
+        now = _gd_vote_open_now()
+        get_or_create_current_cycle(1, now=now, conn=conn)
+        submit_directive_vote(uid, 1, "industrial", conn=conn, now=now)
+        after_vote = int(_cycle_timestamps(2026, 6)["vote_end_at"]) + 1
+        resolve_directive_cycle(1, 2026, 6, conn=conn, now=after_vote)
+
+        first = maybe_broadcast_cycle_results(2026, 6, conn=conn, now=after_vote)
+        # resolve_directive_cycle may already have sent; accept either first send or already_sent
+        assert first["ok"] is True
+        if first.get("sent"):
+            assert int(first.get("delivered") or 0) >= 1
+        else:
+            assert first.get("reason") == "already_sent"
+
+        second = maybe_broadcast_cycle_results(2026, 6, conn=conn, now=after_vote)
+        assert second["ok"] is True
+        assert second.get("sent") is False
+        assert second.get("reason") == "already_sent"
+
+        sent_flag = conn.execute(
+            "SELECT results_sent FROM gd_cycles WHERE galaxy = 1 AND year = 2026 AND month = 6;"
+        ).fetchone()["results_sent"]
+        assert int(sent_flag) == 1
+
+        msgs = conn.execute(
+            """
+            SELECT subject, metadata_json FROM player_messages
+            WHERE recipient_player_id = ? AND metadata_json LIKE '%gd_results%';
+            """,
+            (uid,),
+        ).fetchall()
+        assert len(msgs) == 1
+        assert "2026" in msgs[0]["subject"]
+    finally:
+        conn.close()
+
+
+# --- GC-720J domain flags ---
+
+from game.galactic_directives.mechanics import get_directive_queue_limit_bonus
+from game.research import _resolve_research_queue_limit
+from game.scrapyard import scrap_value_for_ship
+
+
+def test_directive_queue_limit_and_flags_wired(gd_db):
+    conn = db()
+    try:
+        ensure_galaxy_state(1, conn=conn)
+        conn.execute(
+            """
+            UPDATE gd_galaxy_state
+            SET primary_directive = 'scientific', secondary_directive = NULL
+            WHERE galaxy = 1;
+            """
+        )
+        conn.commit()
+        assert get_directive_queue_limit_bonus(1, "research", conn=conn) == 1
+
+        conn.execute(
+            """
+            UPDATE gd_galaxy_state
+            SET primary_directive = 'expansion', secondary_directive = NULL
+            WHERE galaxy = 1;
+            """
+        )
+        conn.commit()
+        from game.galactic_directives.mechanics import get_directive_flags_for_galaxy
+
+        flags = get_directive_flags_for_galaxy(1, conn=conn)
+        assert int(flags.get("max_colonies_bonus") or 0) == 1
+        assert float(flags.get("colonize_cost_mult") or 1.0) == 0.70
+
+        conn.execute(
+            """
+            UPDATE gd_galaxy_state
+            SET primary_directive = 'logistics', secondary_directive = NULL
+            WHERE galaxy = 1;
+            """
+        )
+        conn.commit()
+        flags = get_directive_flags_for_galaxy(1, conn=conn)
+        assert float(flags.get("trader_daily_limit_mult") or 1.0) == 1.50
+        assert float(flags.get("scrapyard_yield_mult") or 1.0) == 1.20
+        base = scrap_value_for_ship("light_fighter", 10, ratio=0.5, yield_mult=1.0)
+        boosted = scrap_value_for_ship("light_fighter", 10, ratio=0.5, yield_mult=1.20)
+        assert boosted["metal"] >= base["metal"]
+
+        conn.execute(
+            """
+            UPDATE gd_galaxy_state
+            SET primary_directive = 'defensive', secondary_directive = NULL
+            WHERE galaxy = 1;
+            """
+        )
+        conn.commit()
+        flags = get_directive_flags_for_galaxy(1, conn=conn)
+        assert float(flags.get("defense_combat_mult") or 0.0) == 0.10
+    finally:
+        conn.close()
+
+
+def test_research_queue_limit_includes_directive_bonus(gd_db):
+    conn = db()
+    try:
+        uid = _gd_player(conn)
+        galaxy = _gd_player_galaxy(uid, conn)
+        conn.execute(
+            """
+            UPDATE gd_galaxy_state
+            SET primary_directive = 'scientific', secondary_directive = NULL
+            WHERE galaxy = ?;
+            """,
+            (galaxy,),
+        )
+        conn.commit()
+        ensure_galaxy_state(galaxy, conn=conn)
+        conn.execute(
+            """
+            UPDATE gd_galaxy_state
+            SET primary_directive = 'scientific', secondary_directive = NULL
+            WHERE galaxy = ?;
+            """,
+            (galaxy,),
+        )
+        conn.commit()
+        base = _resolve_research_queue_limit(player_id=None, conn=conn)
+        with_bonus = _resolve_research_queue_limit(player_id=uid, conn=conn)
+        assert with_bonus >= base + 1
     finally:
         conn.close()
 

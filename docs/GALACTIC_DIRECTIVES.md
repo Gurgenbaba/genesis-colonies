@@ -3,7 +3,7 @@
 > **Galactic Directives sind die Macro-Politik-Schicht über Planet Policies.**  
 > Planet Policies = Mikro (pro Kolonie, Spieler wählt). Galactic Directives = Makro (pro Galaxie, Community-Abstimmung).
 
-Epic: **EPIC-16 Galactic Politics** (Vorschlag) · Ticket: **GC-720A** (dieses Dokument) · Status: 📋 Design / Master-Doc · Stand: v1.0
+Epic: **Galactic Politics** · Ticket: **GC-720A** (dieses Dokument) · Status: ✅ Implementiert (ohne Premium) · Stand: v1.1
 
 Referenz (historisch, **nicht** 1:1 portieren):
 
@@ -136,9 +136,11 @@ Kalenderbasiert (Server-Zeit, UTC empfohlen):
 
 | Phase | Zeitraum | `gd_cycles.status` | Verhalten |
 |-------|----------|-------------------|-----------|
-| Abstimmung | Tag 1, 00:00 — Tag 5, 23:59 | `vote_open` | Stimmen abgeben/ändern/zurückziehen |
-| Mandat | Tag 6, 00:00 — Monatsende 23:59 | `active` | Primary + Secondary in Kraft |
-| Abgeschlossen | nach Monatsende | `resolved` | Archiv; nächster Monat erzeugt neuen Cycle |
+| Abstimmung | Tag 1, 00:00 — Monatsende 23:59 | `vote_open` | Stimmen abgeben/ändern (ganzer Kalendermonat) |
+| Mandat | Folgemonat Tag 1 — Folgemonatsende | `active` | Primary + Secondary in Kraft (`gd_galaxy_state`) |
+| Abgeschlossen | nach Folgemonatsende | `resolved` | Archiv; nächster Monat erzeugt neuen Cycle |
+
+**Launch-Hinweis:** Bestehende Zyklen ohne echte Stimmen werden auf das Vollmonats-Fenster zurückgesetzt, damit die Abstimmung sofort nutzbar ist.
 
 **Resolution-Trigger:** Cron/Request-Hook `resolve_due_cycles()` (Port: `GovController::resolveDueCycles()`):
 
@@ -690,19 +692,21 @@ Port aus `Gov_resultsController::buildBodyStatic()` — HTML-Body serverseitig, 
 
 ## Ticket-Kette (nach GC-720A)
 
-| Ticket | Fokus | Dateien (Richtwert) |
-|--------|-------|---------------------|
-| **GC-720A** | Dieses Master-Doc | `docs/GALACTIC_DIRECTIVES.md` |
-| **GC-720B** | Migration + `gd_directive_definitions` Seed + `definitions.py` | migration, `game/galactic_directives/` |
-| **GC-720C** | Active Directive Resolver + `get_active_directives_for_galaxy()` | `resolver.py`, `repository.py`, `cycles.py` |
-| **GC-720D** | `EffectResolver`-Hook + Domain-Flag-Consumer (minimal: economy + research) | `effect_resolver.py`, `galactic_directives/resolver.py` |
-| **GC-720E** | Banner/UI Preview (read-only, Admin-set directives) | `templates/`, `static/main.js`, route |
-| **GC-720F** | Voting Cycle + Submit/Cancel + Resolution + Cooldown | `service.py`, `resolution.py`, `app.py` |
-| **GC-720G** | Results Messages + Results-Page | `messages.py`, template partial |
+| Ticket | Fokus | Status |
+|--------|-------|--------|
+| **GC-720A** | Master-Doc | ✅ |
+| **GC-720B** | Migration + Definitions Seed | ✅ |
+| **GC-720C** | Active Directive Resolver | ✅ |
+| **GC-720D/E** | EffectResolver + Banner | ✅ |
+| **GC-720F** | Voting Cycle + Submit + Resolution + Cooldown | ✅ |
+| **GC-720G** | Results Messages (`results_sent`, inbox `gd_results`) | ✅ |
+| **GC-720H** | Community-Nav, government-Badge, Banner-CTA, Placeholder-Cleanup | ✅ |
+| **GC-720I** | `resolve_due_cycles` Cron + Admin Force/Unforce | ✅ |
+| **GC-720J** | Domain-Flag-Consumer (Kolonie, Trader, Scrapyard, Defense, Research-Queue, Planet-XP) | ✅ |
 
-**Reihenfolge:** 720B → 720C → 720D → 720E (spielbar sichtbar) → 720F → 720G
+**Owner-Layout (live):** `game/galactic_directives/{definitions,state,mechanics,voting,results,banner}.py` · Routes `/galactic-politics`, `/api/galactic-politics/*`, `/api/internal/cron/galactic-directives`, `/api/admin/galactic-directives/*`
 
-**Abhängigkeit Imperium:** Command-Map-Banner (720E) profitiert von GC-570+; Blocker ist kein Hard-Dependency.
+**Defer:** `unlock:world:*` / `unlock:expansion_site:*` — kein Unlock-Pipeline-Consumer; `trade_route_speed_mult` — kein Trade-Route-Owner.
 
 ---
 
@@ -710,7 +714,7 @@ Port aus `Gov_resultsController::buildBodyStatic()` — HTML-Body serverseitig, 
 
 | Thema | Beschreibung |
 |-------|--------------|
-| Commander / Premium | Gewichtete Stimme oder garantiertes Secondary-Pick — **nicht** zwei Stimmen im selben Wahlgang |
+| **Commander / Premium** | Entscheidung: **gewichtete Stimme** oder **garantiertes Secondary-Pick** — **nicht** zwei Stimmen im selben Wahlgang. Kein Premium-Owner im MVP; Free behält 1 Stimme. |
 | Allianz-Bloc-Voting | EPIC-09 — Stimmen aggregieren, Owner bleibt `galactic_directives` |
 | 20–30 Direktiven | `tier: variant | event` in Definitions; Pools pro Galaxie-Region |
 | DiplomacyController | Allianz-PNA/Krieg — separates System, keine Directive |
@@ -718,14 +722,13 @@ Port aus `Gov_resultsController::buildBodyStatic()` — HTML-Body serverseitig, 
 
 ---
 
-## Tests (für spätere Tickets)
+## Tests
 
 | Bereich | Datei |
 |---------|-------|
-| Resolution / Tie / Cooldown | `tests/test_galactic_directives_resolution.py` |
-| EffectResolver merge | `tests/test_effects.py` |
-| Vote permissions | `tests/test_galactic_directives_vote.py` |
-| Messages broadcast | `tests/test_messages.py` |
+| Definitions, Resolver, Mechanics, Voting, Cron, Admin, Results, Flags | `tests/test_galactic_directives.py` |
+| Government Nav-Badge | `tests/test_nav_badges.py` |
+| Politics Nav (kein Placeholder) | `tests/test_placeholder_nav.py` |
 
 ---
 
@@ -746,4 +749,5 @@ Port aus `Gov_resultsController::buildBodyStatic()` — HTML-Body serverseitig, 
 
 | Version | Datum | Änderung |
 |---------|-------|----------|
+| v1.1 | 2026-07-26 | GC-720G/H/I/J — Politics fertig ohne Premium: Nav, Cron/Admin, Results, Domain-Flags |
 | v1.0 | 2026-06-17 | GC-720A — Initial Master-Doc aus OGX Gov-Port + Primary/Secondary-Design |

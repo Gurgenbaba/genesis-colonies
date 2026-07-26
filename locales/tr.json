@@ -6150,5 +6150,10 @@
   "planet_registry_aria": "İmparatorluk özeti",
   "planet_registry_empty": "Koloni yok",
   "planet_registry_meta_toggle": "Meta",
-  "planet_registry_meta_toggle_title": "Mesajlar, ekonomi, topluluk"
+  "planet_registry_meta_toggle_title": "Mesajlar, ekonomi, topluluk",
+  "gd_results_subject": "Galaktik Direktifler — Sonuçlar %(year)s-%(month)02d",
+  "gd_results_intro": "%(year)s-%(month)02d galaktik oylaması tamamlandı.",
+  "gd_results_galaxy_line": "Galaksi %(galaxy)s — Birincil: %(primary)s (%(primary_votes)s), İkincil: %(secondary)s (%(secondary_votes)s), toplam oy: %(total)s",
+  "gd_results_tie_primary": "Not: Birincil direktifte beraberlik — rastgele seçim.",
+  "gd_results_link": "Galaktik Politikayı Aç"
 }

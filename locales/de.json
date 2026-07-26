@@ -6150,5 +6150,10 @@
   "planet_registry_aria": "Imperiumsübersicht",
   "planet_registry_empty": "Keine Kolonien",
   "planet_registry_meta_toggle": "Meta",
-  "planet_registry_meta_toggle_title": "Nachrichten, Wirtschaft, Community"
+  "planet_registry_meta_toggle_title": "Nachrichten, Wirtschaft, Community",
+  "gd_results_subject": "Galaktische Direktiven — Ergebnis %(year)s-%(month)02d",
+  "gd_results_intro": "Die galaktische Abstimmung für %(year)s-%(month)02d ist abgeschlossen.",
+  "gd_results_galaxy_line": "Galaxie %(galaxy)s — Primär: %(primary)s (%(primary_votes)s), Sekundär: %(secondary)s (%(secondary_votes)s), Stimmen gesamt: %(total)s",
+  "gd_results_tie_primary": "Hinweis: Gleichstand bei der Primärdirektive — Zufallsentscheid.",
+  "gd_results_link": "Zur Galaktischen Politik"
 }

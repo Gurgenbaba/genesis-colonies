@@ -149,6 +149,17 @@ def expansion_gameplay_cap(player_id: int, *, conn: sqlite3.Connection) -> Dict[
     hw_level = get_homeworld_level(uid, conn=conn)
     slots = expansion_slots_unlocked(hw_level)
     effective = effective_max_worlds_for_homeworld_level(hw_level)
+    # GC-720J: expansion directive may grant extra colony slots (galaxy of homeworld).
+    try:
+        from game.galactic_directives.mechanics import get_directive_flags_for_galaxy
+
+        hw = get_homeworld(uid, conn=conn) or {}
+        galaxy = int(hw.get("galaxy") or 0)
+        if galaxy > 0:
+            flags = get_directive_flags_for_galaxy(galaxy, conn=conn) or {}
+            effective += max(0, int(flags.get("max_colonies_bonus") or 0))
+    except Exception:
+        pass
     admin = int(get_max_planets_per_player(conn=conn))
     return {
         "homeworld_level": int(hw_level),

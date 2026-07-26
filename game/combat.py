@@ -201,20 +201,32 @@ def _side_from_stacks(
     stacks: Sequence[CombatStack],
     *,
     mods: CombatModifiers,
+    defense_combat_mult: float = 0.0,
 ) -> List[_UnitState]:
     units: List[_UnitState] = []
+    defense_factor = 1.0 + max(0.0, float(defense_combat_mult or 0.0))
     for stack in stacks:
         qty = max(0, int(stack.amount))
         if qty <= 0:
             continue
-        shield = _effective_shield(stack.stats, mods)
-        hull = _effective_hull(stack.stats, mods)
+        stats = stack.stats
+        if defense_factor != 1.0 and str(stack.unit_type) == "defense":
+            from dataclasses import replace
+
+            stats = replace(
+                stats,
+                attack=max(0, int(round(int(stats.attack) * defense_factor))),
+                shield=max(0, int(round(int(stats.shield) * defense_factor))),
+                hull=max(0, int(round(int(stats.hull) * defense_factor))),
+            )
+        shield = _effective_shield(stats, mods)
+        hull = _effective_hull(stats, mods)
         units.append(
             _UnitState(
                 unit_key=str(stack.unit_key),
                 unit_type=str(stack.unit_type),
                 amount=qty,
-                stats=stack.stats,
+                stats=stats,
                 current_shield=shield,
                 current_hull=hull,
             )
@@ -762,8 +774,30 @@ def simulate_battle(
     )
     battle_rng = rng if rng is not None else random.Random()
 
+    defense_combat_mult = 0.0
+    if defender_planet_id is not None:
+        try:
+            from .galactic_directives.mechanics import get_directive_flags_for_galaxy
+
+            row = None
+            if conn is not None:
+                row = conn.execute(
+                    "SELECT galaxy FROM planets WHERE id = ? LIMIT 1;",
+                    (int(defender_planet_id),),
+                ).fetchone()
+            galaxy = int(row["galaxy"]) if row and row["galaxy"] is not None else 0
+            if galaxy > 0:
+                flags = get_directive_flags_for_galaxy(galaxy, conn=conn) or {}
+                defense_combat_mult = float(flags.get("defense_combat_mult") or 0.0)
+        except Exception:
+            defense_combat_mult = 0.0
+
     atk_units = _side_from_stacks(atk_side.stacks, mods=atk_mods)
-    def_units = _side_from_stacks(def_side.stacks, mods=def_mods)
+    def_units = _side_from_stacks(
+        def_side.stacks,
+        mods=def_mods,
+        defense_combat_mult=defense_combat_mult,
+    )
 
     if _total_units(atk_units) <= 0 and _total_units(def_units) <= 0:
         return CombatResult(

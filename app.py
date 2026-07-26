@@ -949,6 +949,15 @@ def api_internal_cron_queue_tick():
     return jsonify(payload), status
 
 
+@app.route("/api/internal/cron/galactic-directives", methods=["POST"])
+def api_internal_cron_galactic_directives():
+    """Token-gated galactic directive cycle resolve — GC-720I."""
+    from game.internal_cron import handle_internal_cron_galactic_directives
+
+    payload, status = handle_internal_cron_galactic_directives(request)
+    return jsonify(payload), status
+
+
 # --------------------------------------------------------------------------
 # HELPER: Spieler-View + Ressourcen laden (conn-safe)
 # --------------------------------------------------------------------------
@@ -4878,6 +4887,42 @@ def api_admin_pirates_force_spawn():
         return jsonify({"ok": False, "error": "pirates_force_spawn_failed"}), 500
     finally:
         conn.close()
+
+
+@app.route("/api/admin/galactic-directives/force", methods=["POST"])
+@require_admin_api
+def api_admin_galactic_directives_force():
+    """LiveOps: force-set galactic directive mandate for a galaxy (GC-720I)."""
+    data = request.get_json(silent=True) or {}
+    try:
+        galaxy_id = int(data.get("galaxy_id") or data.get("galaxy") or 0)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "invalid_galaxy_id"}), 400
+    primary = str(data.get("primary") or data.get("primary_key") or "").strip()
+    secondary_raw = data.get("secondary", data.get("secondary_key"))
+    secondary = None if secondary_raw in (None, "") else str(secondary_raw).strip()
+    from game.galactic_directives import admin_force_directive
+
+    result = admin_force_directive(galaxy_id, primary, secondary)
+    status = 200 if result.get("ok") else 400
+    return jsonify(result), status
+
+
+@app.route("/api/admin/galactic-directives/unforce", methods=["POST"])
+@require_admin_api
+def api_admin_galactic_directives_unforce():
+    """LiveOps: re-open galactic directive voting for a galaxy (GC-720I)."""
+    data = request.get_json(silent=True) or {}
+    try:
+        galaxy_id = int(data.get("galaxy_id") or data.get("galaxy") or 0)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "invalid_galaxy_id"}), 400
+    reset_state = bool(data.get("reset_state") or False)
+    from game.galactic_directives import admin_unforce_directive
+
+    result = admin_unforce_directive(galaxy_id, reset_state=reset_state)
+    status = 200 if result.get("ok") else 400
+    return jsonify(result), status
 
 
 @app.route("/chronicles")

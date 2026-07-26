@@ -20,7 +20,7 @@
 ) %}
 {% set _comm_open = request.endpoint in (
   'alliance_view', 'ranking_view', 'chronicles_view', 'hall_of_fame_view', 'records_view',
-  'referrals_view', 'vote_center_view', 'imperial_directives_view'
+  'referrals_view', 'vote_center_view', 'imperial_directives_view', 'galactic_politics_view'
 ) %}
 {# GC-575: Meta + Registry are siblings. Desktop uses display:contents → 4-column grid
    (Left | Main | Meta | Imperium). Tablet drawer stacks both. #}
@@ -137,6 +137,13 @@
            class="gc-nav-sub-link gc-nav-module--secondary {% if request.endpoint == 'imperial_directives_view' %}active{% endif %}">
           <span class="gc-nav-link-label">{{ T("nav_imperial_directives", "Imperial Directives") }}</span>
           <span class="gc-nav-badge hidden" data-nav-badge="imperial_directives" hidden aria-hidden="true"></span>
+        </a>
+        <a href="{{ url_for('galactic_politics_view') }}"
+           data-nav-module="galactic_politics"
+           data-nav-key="government"
+           class="gc-nav-sub-link gc-nav-module--secondary {% if request.endpoint == 'galactic_politics_view' %}active{% endif %}">
+          <span class="gc-nav-link-label">{{ T("nav_galactic_politics", "Galaktische Politik") }}</span>
+          <span class="gc-nav-badge hidden" data-nav-badge="government" hidden aria-hidden="true"></span>
         </a>
         <a href="{{ url_for('vote_center_view') }}"
            data-nav-module="vote_center"

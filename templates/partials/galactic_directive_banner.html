@@ -45,6 +45,11 @@
       {{ T(gdb.secondary.description_key, '') }}
     </p>
     {% endif %}
+    <a href="{{ url_for('galactic_politics_view') }}"
+       class="gc-btn gc-btn-ghost gc-btn-sm gc-gd-banner-cta gc-nav-link"
+       data-pjax-link>
+      {{ T('gd_banner_cta', 'Galaktische Politik') }}
+    </a>
   </div>
 </aside>
 {% endif %}
