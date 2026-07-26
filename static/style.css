@@ -5908,8 +5908,8 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   outline: none;
   border-radius: 0;
   box-shadow: none;
-  /* Opaque void behind frame PNG ? never show page landscape / panel fill past the bezel */
-  background: #020810;
+  /* No plate behind the frame ? page landscape shows through PNG margins seamlessly */
+  background: transparent;
   padding: 0;
   width: 100%;
   margin-left: auto;
@@ -5922,11 +5922,11 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   --hero-hole-right: 7.16%;
   --hero-hole-bottom: 7.23%;
   --hero-hole-left: 6.84%;
-  /* herocard ? midpoint: hole insets ? full-bleed (under frame PNG) */
-  --hero-bg-top: 5.9%;
-  --hero-bg-right: 3.6%;
-  --hero-bg-bottom: 3.6%;
-  --hero-bg-left: 3.4%;
+  /* Landscape only in the frame hole (+ slight tuck under inner bezel) ? no outer plate past the metal */
+  --hero-bg-top: 10.2%;
+  --hero-bg-right: 6.2%;
+  --hero-bg-bottom: 6.3%;
+  --hero-bg-left: 5.9%;
   /* HUD corners ? frame rails (full hero stage) */
   --hero-corner-tl-top: 5.5%;
   --hero-corner-tl-left: 8%;
@@ -5943,7 +5943,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 }
 .overview-hero--themed.gc-planet-hero{
   border-color: transparent;
-  background: #020810;
+  background: transparent;
 }
 body.gc-body-ingame.gc-has-planet-landscape .gc-planet-hero.gc-panel,
 body.gc-body-ingame.gc-has-planet-landscape .overview-hero--themed.gc-planet-hero,
@@ -5951,7 +5951,7 @@ body.gc-body-ingame .overview-hero.overview-hero--themed.gc-planet-hero.gc-panel
   border: none;
   outline: none;
   box-shadow: none;
-  background: #020810;
+  background: transparent;
   padding: 0;
   animation: none;
 }
@@ -23201,10 +23201,10 @@ body.gc-body-ingame.gc-has-planet-landscape[data-identity-theme]:not([data-ident
   50% { box-shadow: 0 0 0 1px rgba(var(--gc-aura-rgb), 0.42), 0 0 28px rgba(var(--gc-aura-rgb), 0.28); }
 }
 
-/* Overview planet display: never inherit Identity/Aura panel chrome behind the frame */
+/* Overview planet display: no panel plate / aura chrome behind the frame */
 .gc-body-ingame .overview-hero.gc-planet-hero.gc-panel,
 .gc-body-ingame .gc-planet-hero.gc-panel {
-  background: #020810;
+  background: transparent;
   border: none;
   box-shadow: none;
   animation: none;

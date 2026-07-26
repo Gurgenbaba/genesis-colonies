@@ -1099,16 +1099,17 @@ def test_main_js_apply_planet_hero_theme_border_fx():
     assert "overview-hero-frame-glow" not in overview
     assert "width: 100%" in css.split(".overview-hero.gc-planet-hero")[1].split("aspect-ratio")[0]
     assert "--hero-hole-left: 6.84%" in css
-    assert "--hero-bg-left: 3.4%" in css
+    assert "--hero-bg-left: 5.9%" in css
     hero_bg = css.split(".overview-hero--themed.gc-planet-hero .overview-hero-bg,")[1].split(".overview-hero--themed.gc-planet-hero .overview-hero-atmo")[0]
     assert "var(--hero-bg-top" in hero_bg
     assert "herocardsframe/frame.webp" in overview
-    assert "background: #020810" in css.split(".overview-hero.gc-planet-hero")[1].split("body.gc-body-ingame")[0]
+    assert "background: transparent" in css.split(".overview-hero.gc-planet-hero")[1].split("body.gc-body-ingame")[0]
     assert "aspect-ratio: 1536 / 1024" in css
     assert ".overview-hero--themed.gc-planet-hero .overview-hero-hud" in css
     assert "border: none" in css.split(".gc-planet-hero.gc-panel")[1].split("body.gc-body-ingame")[0]
     assert ".gc-panel:not(.gc-planet-hero)" in css
-    assert "Overview planet display: never inherit Identity/Aura panel chrome" in css
+    assert "no panel plate / aura chrome behind the frame" in css
+    assert "#020810" not in css.split(".overview-hero--themed.gc-planet-hero,")[1].split(".overview-hero-atmo")[0]
     assert "z-index: 4" in css.split(".overview-hero-hud-frame,")[1].split(".overview-hero-frame-glow")[0]
     assert "overview-hero-activity-panel" in overview
     assert 'id="overview-activities"' in overview
