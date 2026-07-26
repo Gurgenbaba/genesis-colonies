@@ -515,8 +515,8 @@ Body: serverseitig HTML/Text — **kein** Client-Template für Zahlen.
 | Surface | Inhalt |
 |---------|--------|
 | `/galactic-politics` | Bloc-Übersicht, offene Resolutionen, Trait, Emergency-Banner |
-| Galaxy-Seite | Kompakt: Trait + Bloc + Emergency-Chip |
-| Overview | Context-Banner wenn Emergency oder Trait kolonie-relevante Keys hat |
+| Galaxy-Seite | Unified Status-Card: Direktive + Diplomatie (Trait/Resolution/Emergency), ein CTA |
+| Overview | Kein Diplomatie-Banner (kein Doppel mit Galaxy) |
 | Command Map | Region-Control-Badge, Bloc-Farben (dezent) |
 | Messages | Resolution/Emergency/Trait-Reports |
 

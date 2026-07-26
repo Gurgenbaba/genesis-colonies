@@ -29966,50 +29966,6 @@
     });
   }
 
-  function initGalacticDirectiveBanner() {
-    const banners = document.querySelectorAll("[data-gd-banner]");
-    if (!banners.length) return;
-
-    let collapsed = true;
-    try {
-      const stored = localStorage.getItem("gc_gd_banner_collapsed_v1");
-      collapsed = stored !== "0";
-    } catch (_) {}
-
-    banners.forEach((banner) => {
-      banner.classList.toggle("is-collapsed", collapsed);
-      const toggle = banner.querySelector("[data-gd-banner-toggle]");
-      const body = banner.querySelector("[data-gd-banner-body]");
-      if (toggle) toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
-      if (body) {
-        if (collapsed) body.setAttribute("hidden", "");
-        else body.removeAttribute("hidden");
-      }
-    });
-
-    if (GC._gdBannerBound) return;
-    GC._gdBannerBound = true;
-
-    document.addEventListener("click", (ev) => {
-      const toggle = ev.target.closest("[data-gd-banner-toggle]");
-      if (!toggle) return;
-      const banner = toggle.closest("[data-gd-banner]");
-      if (!banner) return;
-      ev.preventDefault();
-      const willCollapse = !banner.classList.contains("is-collapsed");
-      banner.classList.toggle("is-collapsed", willCollapse);
-      toggle.setAttribute("aria-expanded", willCollapse ? "false" : "true");
-      const body = banner.querySelector("[data-gd-banner-body]");
-      if (body) {
-        if (willCollapse) body.setAttribute("hidden", "");
-        else body.removeAttribute("hidden");
-      }
-      try {
-        localStorage.setItem("gc_gd_banner_collapsed_v1", willCollapse ? "1" : "0");
-      } catch (_) {}
-    });
-  }
-
   function initGalaxy() {
     if (!document.querySelector(".galaxy-page")) return;
     persistGalaxyViewFromPage();
@@ -30028,7 +29984,6 @@
     initCommandMapColonizeMode();
     initGalaxyDebrisUx();
     initGalaxyRingView();
-    initGalacticDirectiveBanner();
     prefetchGalaxyAdjacent();
     bindWorldBossAttackCooldownUnlock(document.getElementById("galaxy-page-root") || document);
   }

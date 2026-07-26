@@ -634,17 +634,18 @@ from game.galactic_directives import get_directive_flags_for_galaxy
 
 ---
 
-## UI & Präsentation (GC-720F — Banner Preview)
+## UI & Präsentation (GC-720F — Galaxy Status Card)
 
-Read-only Banner auf **Overview** und **Galaxie** (PJAX-safe, serverseitig):
+Read-only **Status-Card** auf der **Galaxie**-Seite (PJAX-safe, serverseitig): Direktive + Diplomatie in einer neutralen Card, ein CTA.
 
 | Surface | Verhalten |
 |---------|-----------|
-| Overview | Banner für `planet.galaxy` via `build_galactic_directive_banner()` |
-| Galaxy (system + command_map) | Banner für aktuelle Nav-Galaxie |
-| CTA | Link zu `/galactic-politics` (Placeholder bis Voting-UI) |
+| Overview | Kein Banner (kein Doppel mit Galaxy) |
+| Galaxy (system + command_map) | Unified Status-Card für aktuelle Nav-Galaxie |
+| CTA | Ein Link zu `/galactic-politics` |
 
-Owner: `game/galactic_directives/banner.py`, Partial `templates/partials/galactic_directive_banner.html`
+Daten-Owner: `game/galactic_directives/banner.py`, `game/galactic_diplomacy/banner.py`  
+Presentation: `templates/partials/galactic_status_banner.html`
 
 Weitere Surfaces (Buildings, Research, Command-Map-Badges) folgen in späteren Tickets.
 

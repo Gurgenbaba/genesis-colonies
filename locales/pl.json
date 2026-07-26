@@ -6155,5 +6155,10 @@
   "gd_results_intro": "Głosowanie galaktyczne za %(year)s-%(month)02d zakończone.",
   "gd_results_galaxy_line": "Galaktyka %(galaxy)s — Pierwotna: %(primary)s (%(primary_votes)s), Drugorzędna: %(secondary)s (%(secondary_votes)s), głosy łącznie: %(total)s",
   "gd_results_tie_primary": "Uwaga: remis dyrektywy głównej — wybór losowy.",
-  "gd_results_link": "Otwórz Politykę Galaktyczną"
+  "gd_results_link": "Otwórz Politykę Galaktyczną",
+  "gc_galaxy_status_aria": "Aktywna polityka galaktyczna",
+  "gc_galaxy_status_title": "Aktywna polityka galaktyczna",
+  "gc_galaxy_status_kicker": "Galaktyka %(galaxy)s",
+  "gc_galaxy_status_directive": "Dyrektywa",
+  "gc_galaxy_status_diplomacy": "Dyplomacja"
 }

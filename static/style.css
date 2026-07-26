@@ -23781,87 +23781,184 @@ body.gc-combat-report-open { overflow: hidden; }
 }
 
 /* --- Galactic Directives banner (GC-720F) --- */
-.gc-gd-banner{
+/* --- Galactic status card (unified directive + diplomacy on Galaxy) --- */
+.gc-galaxy-status{
+  --gc-galaxy-status-accent: var(--gc-accent, #46e5ff);
+  position: relative;
   margin-bottom: 1rem;
-  padding: 0.65rem 0.85rem;
-  border: 1px solid var(--gc-panel-border-strong);
-  background: linear-gradient(
-    135deg,
-    rgba(70, 229, 255, 0.06) 0%,
-    rgba(4, 10, 22, 0.92) 55%
-  );
-}
-.gc-gd-banner-toggle{
-  display: flex;
-  align-items: flex-start;
-  gap: 0.55rem;
-  width: 100%;
-  margin: 0;
   padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
+  overflow: hidden;
+  border: 1px solid rgba(70, 229, 255, 0.28);
+  border-left: 3px solid var(--gc-galaxy-status-accent);
+  border-radius: var(--gc-radius-xs, 0);
+  background:
+    linear-gradient(135deg, rgba(70, 229, 255, 0.07) 0%, transparent 42%),
+    linear-gradient(180deg, rgba(10, 18, 32, 0.98) 0%, rgba(4, 10, 22, 0.96) 100%);
+  box-shadow: inset 0 1px 0 rgba(70, 229, 255, 0.08);
 }
-.gc-gd-banner-toggle:focus-visible{
-  outline: 2px solid var(--gc-accent, #46e5ff);
-  outline-offset: 2px;
+.gc-galaxy-status::before,
+.gc-galaxy-status::after{
+  content: "";
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  pointer-events: none;
+  border-color: rgba(70, 229, 255, 0.55);
+  border-style: solid;
 }
-.gc-gd-banner-chevron{
-  width: 8px;
-  height: 8px;
-  margin-top: 0.35rem;
-  border-right: 2px solid var(--gc-neon-cyan);
-  border-bottom: 2px solid var(--gc-neon-cyan);
-  transform: rotate(45deg);
-  transition: transform .15s ease;
-  flex-shrink: 0;
-  filter: drop-shadow(0 0 4px rgba(70, 229, 255, 0.3));
+.gc-galaxy-status::before{
+  top: 0;
+  right: 0;
+  border-width: 1px 1px 0 0;
 }
-.gc-gd-banner.is-collapsed .gc-gd-banner-chevron{
-  transform: rotate(-45deg);
+.gc-galaxy-status::after{
+  bottom: 0;
+  right: 0;
+  border-width: 0 1px 1px 0;
 }
-.gc-gd-banner-toggle-copy{
+.gc-galaxy-status--alert{
+  --gc-galaxy-status-accent: rgba(255, 96, 96, 0.9);
+  border-color: rgba(255, 96, 96, 0.35);
+  background:
+    linear-gradient(135deg, rgba(255, 96, 96, 0.08) 0%, transparent 42%),
+    linear-gradient(180deg, rgba(22, 10, 12, 0.98) 0%, rgba(4, 10, 22, 0.96) 100%);
+}
+.gc-galaxy-status-head{
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.2rem 0.55rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem 1rem;
+  padding: 0.75rem 0.95rem 0.7rem;
+  border-bottom: 1px solid rgba(70, 229, 255, 0.14);
+  background: rgba(0, 0, 0, 0.22);
+}
+.gc-galaxy-status-head-copy{
   min-width: 0;
   flex: 1 1 auto;
 }
-.gc-gd-banner-kicker{
-  margin: 0;
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  flex: 0 0 auto;
-}
-.gc-gd-banner-title{
-  margin: 0;
-  font-size: 0.92rem;
-  font-weight: 700;
-  color: var(--gc-accent, #46e5ff);
-  flex: 0 0 auto;
-}
-.gc-gd-banner-chips{
+.gc-galaxy-status-kicker{
   display: inline-flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  flex: 1 1 100%;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.2rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--gc-text-dim);
 }
-.gc-gd-banner.is-collapsed .gc-gd-banner-chips{
-  flex: 1 1 auto;
-  margin-left: 0;
+.gc-galaxy-status-live{
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--gc-galaxy-status-accent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--gc-galaxy-status-accent) 70%, transparent);
+  flex-shrink: 0;
 }
+.gc-galaxy-status-title{
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--gc-text, #e8f0ff);
+}
+.gc-galaxy-status-cta{
+  flex: 0 0 auto;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.gc-galaxy-status-body{
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+.gc-galaxy-status--cols-2 .gc-galaxy-status-body{
+  grid-template-columns: 1fr 1fr;
+}
+.gc-galaxy-status-section{
+  padding: 0.8rem 0.95rem 0.9rem;
+  min-width: 0;
+}
+.gc-galaxy-status--cols-2 .gc-galaxy-status-section--directive{
+  border-right: 1px solid rgba(70, 229, 255, 0.12);
+}
+.gc-galaxy-status-section-title{
+  margin: 0 0 0.55rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: color-mix(in srgb, var(--gc-galaxy-status-accent) 75%, var(--gc-text-dim));
+}
+.gc-galaxy-status-layers{
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.gc-galaxy-status-layer{
+  padding: 0.55rem 0.65rem;
+  border: 1px solid rgba(70, 229, 255, 0.16);
+  border-left: 2px solid rgba(70, 229, 255, 0.45);
+  background: rgba(3, 8, 18, 0.55);
+}
+.gc-galaxy-status-layer--secondary{
+  border-left-style: dashed;
+  opacity: 0.95;
+}
+.gc-galaxy-status-layer--emergency{
+  border-color: rgba(255, 96, 96, 0.35);
+  border-left-color: rgba(255, 96, 96, 0.75);
+  background: rgba(40, 8, 12, 0.45);
+}
+.gc-galaxy-status-layer-label{
+  display: block;
+  margin-bottom: 0.15rem;
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--gc-text-dim);
+}
+.gc-galaxy-status-layer-value{
+  display: block;
+  font-size: 0.98rem;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  color: var(--gc-text, #e8f0ff);
+}
+.gc-galaxy-status-layer-desc{
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--gc-text-dim);
+}
+@media (max-width: 720px){
+  .gc-galaxy-status--cols-2 .gc-galaxy-status-body{
+    grid-template-columns: 1fr;
+  }
+  .gc-galaxy-status--cols-2 .gc-galaxy-status-section--directive{
+    border-right: 0;
+    border-bottom: 1px solid rgba(70, 229, 255, 0.12);
+  }
+  .gc-galaxy-status-head{
+    align-items: stretch;
+  }
+  .gc-galaxy-status-cta{
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* Neutral chips shared with galactic-politics active row */
 .gc-gd-chip{
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
   padding: 0.15rem 0.5rem;
   border-radius: var(--gc-radius-sm);
-  border: 1px solid rgba(70, 229, 255, 0.28);
+  border: 1px solid var(--gc-panel-border-strong);
   background: rgba(3, 8, 18, 0.65);
   font-size: 0.76rem;
 }
@@ -23873,124 +23970,12 @@ body.gc-combat-report-open { overflow: hidden; }
 }
 .gc-gd-chip-value{
   font-weight: 700;
-  color: var(--gc-primary-2);
+  color: var(--gc-text, #e8f0ff);
 }
 .gc-gd-chip--secondary{
   opacity: 0.92;
   border-style: dashed;
 }
-.gc-gd-banner-body{
-  padding: 0.55rem 0 0 1.35rem;
-}
-.gc-gd-banner-desc{
-  margin: 0;
-  max-width: 42rem;
-  font-size: 0.84rem;
-  line-height: 1.45;
-}
-.gc-gd-banner-desc--secondary{
-  margin-top: 0.35rem;
-  opacity: 0.9;
-}
-.gc-gd-banner-cta{
-  display: inline-flex;
-  margin-top: 0.55rem;
-}
-.gd-banner--industrial,
-.gd-chip--industrial{ border-color: rgba(255, 176, 72, 0.45); }
-.gd-banner--scientific,
-.gd-chip--scientific{ border-color: rgba(70, 229, 255, 0.5); }
-.gd-banner--military,
-.gd-chip--military{ border-color: rgba(255, 96, 96, 0.45); }
-.gd-banner--logistics,
-.gd-chip--logistics{ border-color: rgba(255, 214, 96, 0.45); }
-.gd-banner--defensive,
-.gd-chip--defensive{ border-color: rgba(96, 160, 255, 0.45); }
-.gd-banner--expansion,
-.gd-chip--expansion{ border-color: rgba(127, 255, 180, 0.45); }
-.gd-banner--exploration,
-.gd-chip--exploration{ border-color: rgba(180, 140, 255, 0.45); }
-
-/* --- Galactic Diplomacy banner (GC-721I) --- */
-.gc-gdp-banner{
-  margin-bottom: 1rem;
-  padding: 0.85rem 1rem;
-  border: 1px solid var(--gc-panel-border-strong);
-  background: linear-gradient(
-    135deg,
-    rgba(180, 140, 255, 0.07) 0%,
-    rgba(4, 10, 22, 0.92) 55%
-  );
-}
-.gc-gdp-banner-head{
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem 1rem;
-}
-.gc-gdp-banner-kicker{
-  margin: 0 0 0.2rem;
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.gc-gdp-banner-title{
-  margin: 0 0 0.45rem;
-  font-size: 1rem;
-  color: rgba(180, 140, 255, 0.95);
-}
-.gc-gdp-banner-chips{
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  margin-bottom: 0.45rem;
-}
-.gc-gdp-chip{
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.2rem 0.55rem;
-  border-radius: var(--gc-radius-pill);
-  border: 1px solid rgba(180, 140, 255, 0.28);
-  background: rgba(3, 8, 18, 0.65);
-  font-size: 0.78rem;
-}
-.gc-gdp-chip-label{
-  color: var(--gc-text-dim);
-  font-size: 0.68rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.gc-gdp-chip-value{
-  font-weight: 700;
-  color: var(--gc-primary-2);
-}
-.gc-gdp-banner-desc{
-  margin: 0;
-  max-width: 42rem;
-  font-size: 0.84rem;
-  line-height: 1.45;
-}
-.gc-gdp-banner-cta{
-  flex: 0 0 auto;
-  align-self: center;
-}
-.gc-gdp-chip--personality,
-.gdp-banner--personality{ border-color: rgba(140, 180, 255, 0.45); }
-.gc-gdp-chip--resolution,
-.gdp-banner--resolution{ border-color: rgba(255, 214, 96, 0.45); }
-.gc-gdp-chip--emergency,
-.gdp-banner--emergency{
-  border-color: rgba(255, 96, 96, 0.5);
-  background: rgba(48, 8, 12, 0.55);
-}
-.gdp-banner--galaxy_war,
-.gdp-chip--emergency--galaxy_war{ border-color: rgba(255, 72, 72, 0.55); }
-.gdp-banner--alien_invasion,
-.gdp-chip--emergency--alien_invasion{ border-color: rgba(255, 120, 72, 0.55); }
-.gdp-banner--hyperstorm,
-.gdp-chip--emergency--hyperstorm{ border-color: rgba(96, 180, 255, 0.55); }
 
 /* --- Planet Evolution --- */
 .planet-evolution-page .pe-intro{

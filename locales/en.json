@@ -6155,5 +6155,10 @@
   "gd_results_intro": "The galactic vote for %(year)s-%(month)02d is complete.",
   "gd_results_galaxy_line": "Galaxy %(galaxy)s — Primary: %(primary)s (%(primary_votes)s), Secondary: %(secondary)s (%(secondary_votes)s), total votes: %(total)s",
   "gd_results_tie_primary": "Note: Primary directive tie — random selection.",
-  "gd_results_link": "Open Galactic Politics"
+  "gd_results_link": "Open Galactic Politics",
+  "gc_galaxy_status_aria": "Active galaxy politics",
+  "gc_galaxy_status_title": "Active galaxy politics",
+  "gc_galaxy_status_kicker": "Galaxy %(galaxy)s",
+  "gc_galaxy_status_directive": "Directive",
+  "gc_galaxy_status_diplomacy": "Diplomacy"
 }

@@ -28,7 +28,7 @@ def build_galactic_directive_banner(
     conn=None,
 ) -> Dict[str, Any]:
     """
-    Server-side banner context for overview / galaxy templates.
+    Server-side banner context for galaxy status templates.
 
     Returns ``{"visible": False}`` when schema is missing or galaxy is invalid.
     """

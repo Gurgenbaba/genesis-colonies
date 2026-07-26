@@ -6155,5 +6155,10 @@
   "gd_results_intro": "Die galaktische Abstimmung für %(year)s-%(month)02d ist abgeschlossen.",
   "gd_results_galaxy_line": "Galaxie %(galaxy)s — Primär: %(primary)s (%(primary_votes)s), Sekundär: %(secondary)s (%(secondary_votes)s), Stimmen gesamt: %(total)s",
   "gd_results_tie_primary": "Hinweis: Gleichstand bei der Primärdirektive — Zufallsentscheid.",
-  "gd_results_link": "Zur Galaktischen Politik"
+  "gd_results_link": "Zur Galaktischen Politik",
+  "gc_galaxy_status_aria": "Aktive Galaxie-Politik",
+  "gc_galaxy_status_title": "Aktive Galaxie-Politik",
+  "gc_galaxy_status_kicker": "Galaxie %(galaxy)s",
+  "gc_galaxy_status_directive": "Direktive",
+  "gc_galaxy_status_diplomacy": "Diplomatie"
 }

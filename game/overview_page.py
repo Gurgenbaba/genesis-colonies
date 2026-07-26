@@ -582,18 +582,4 @@ def build_overview_page_context(
         include_log=False,
         conn=conn,
     )
-    galaxy_id = _safe_int((status.get("planet") or {}).get("coordinates", {}).get("galaxy"))
-    if galaxy_id <= 0:
-        galaxy_id = _safe_int(planet.get("galaxy"))
-    from .galactic_directives.banner import build_galactic_directive_banner
-    from .galactic_diplomacy.banner import build_galactic_diplomacy_banner
-
-    status["galactic_directive_banner"] = build_galactic_directive_banner(
-        galaxy_id,
-        conn=conn,
-    )
-    status["galactic_diplomacy_banner"] = build_galactic_diplomacy_banner(
-        galaxy_id,
-        conn=conn,
-    )
     return status

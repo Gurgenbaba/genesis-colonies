@@ -1,0 +1,74 @@
+{# Unified read-only galaxy status: directives + diplomacy, one CTA #}
+{% set gdb = galactic_directive_banner if galactic_directive_banner is defined and galactic_directive_banner else {} %}
+{% set gdpb = galactic_diplomacy_banner if galactic_diplomacy_banner is defined and galactic_diplomacy_banner else {} %}
+{% set gdb_visible = gdb.visible if gdb.visible is defined else false %}
+{% set gdpb_visible = gdpb.visible if gdpb.visible is defined else false %}
+{% if gdb_visible or gdpb_visible %}
+{% set status_galaxy = gdb.galaxy if gdb_visible else gdpb.galaxy %}
+{% set status_cols = 2 if (gdb_visible and gdpb_visible) else 1 %}
+<aside class="gc-galaxy-status gc-panel gc-galaxy-status--cols-{{ status_cols }}{% if gdpb.emergency %} gc-galaxy-status--alert{% endif %}"
+       role="region"
+       aria-label="{{ T('gc_galaxy_status_aria', 'Aktive Galaxie-Politik') }}">
+  <header class="gc-galaxy-status-head">
+    <div class="gc-galaxy-status-head-copy">
+      <p class="gc-galaxy-status-kicker">
+        <span class="gc-galaxy-status-live" aria-hidden="true"></span>
+        {{ T('gc_galaxy_status_kicker', 'Galaxie %(galaxy)s', galaxy=status_galaxy) }}
+      </p>
+      <h3 class="gc-galaxy-status-title">
+        {{ T('gc_galaxy_status_title', 'Aktive Galaxie-Politik') }}
+      </h3>
+    </div>
+    <a href="{{ url_for('galactic_politics_view') }}"
+       class="gc-btn gc-btn-secondary gc-btn-sm gc-galaxy-status-cta gc-nav-link"
+       data-pjax-link>
+      {{ T('gd_banner_cta', 'Galaktische Politik') }}
+    </a>
+  </header>
+
+  <div class="gc-galaxy-status-body">
+    {% if gdb_visible %}
+    <section class="gc-galaxy-status-section gc-galaxy-status-section--directive"
+             aria-label="{{ T('gc_galaxy_status_directive', 'Direktive') }}">
+      <h4 class="gc-galaxy-status-section-title">{{ T('gc_galaxy_status_directive', 'Direktive') }}</h4>
+      <div class="gc-galaxy-status-layers" aria-label="{{ T('gd_banner_chips_aria', 'Aktive Direktiven') }}">
+        <div class="gc-galaxy-status-layer">
+          <span class="gc-galaxy-status-layer-label">{{ T('gd_banner_primary_label', 'Primär') }}</span>
+          <span class="gc-galaxy-status-layer-value">{{ T(gdb.primary.label_key, gdb.primary.key) }}</span>
+          {% if gdb.primary.description_key %}
+          <p class="gc-galaxy-status-layer-desc">{{ T(gdb.primary.description_key, '') }}</p>
+          {% endif %}
+        </div>
+        {% if gdb.secondary %}
+        <div class="gc-galaxy-status-layer gc-galaxy-status-layer--secondary">
+          <span class="gc-galaxy-status-layer-label">{{ T('gd_banner_secondary_label', 'Sekundär') }}</span>
+          <span class="gc-galaxy-status-layer-value">{{ T(gdb.secondary.label_key, gdb.secondary.key) }}</span>
+          {% if gdb.secondary.description_key %}
+          <p class="gc-galaxy-status-layer-desc">{{ T(gdb.secondary.description_key, '') }}</p>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+    </section>
+    {% endif %}
+
+    {% if gdpb_visible %}
+    <section class="gc-galaxy-status-section gc-galaxy-status-section--diplomacy"
+             aria-label="{{ T('gc_galaxy_status_diplomacy', 'Diplomatie') }}">
+      <h4 class="gc-galaxy-status-section-title">{{ T('gc_galaxy_status_diplomacy', 'Diplomatie') }}</h4>
+      <div class="gc-galaxy-status-layers" aria-label="{{ T('gdp_banner_chips_aria', 'Aktive Diplomatie-Ebenen') }}">
+        {% for chip in gdpb.chips %}
+        <div class="gc-galaxy-status-layer{% if chip.type == 'emergency' %} gc-galaxy-status-layer--emergency{% endif %}">
+          <span class="gc-galaxy-status-layer-label">{{ T(chip.chip_label_key, chip.type) }}</span>
+          <span class="gc-galaxy-status-layer-value">{{ T(chip.label_key, chip.key) }}</span>
+          {% if loop.first and gdpb.description_key %}
+          <p class="gc-galaxy-status-layer-desc">{{ T(gdpb.description_key, '') }}</p>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+  </div>
+</aside>
+{% endif %}

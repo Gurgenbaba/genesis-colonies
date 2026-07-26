@@ -1112,6 +1112,9 @@ def test_main_js_apply_planet_hero_theme_border_fx():
     assert "overview-hero-corner--tl" in overview
     assert "overview-hero-corner--br" in overview
     assert "galactic_directive_banner" not in overview
+    assert "galactic_diplomacy_banner" not in overview
+    assert "galactic_status_banner" not in overview
+    assert "gc-galaxy-status" not in overview
     assert ".overview-hero-corner--bl" in css
     assert ".overview-hero-activity-panel" in css
     assert 'getElementById("overview-activities")' in src
@@ -1130,6 +1133,37 @@ def test_main_js_apply_planet_hero_theme_border_fx():
     assert ".overview-hero--themed.gc-planet-hero:hover .overview-hero-activity-panel" in css
     assert "--hero-frame-top-name: color-mix" in css
     assert "var(--planet-accent-secondary" in css.split("--hero-frame-top-name")[1].split("--hero-frame-top-coords")[0]
+
+
+def test_galaxy_unified_status_banner_contract():
+    """Galaxy shows one status card (directive + diplomacy); no rainbow dual banners."""
+    galaxy = _read("templates/galaxy.html")
+    status = _read("templates/partials/galactic_status_banner.html")
+    css = _read("static/style.css")
+    src = _read("static/main.js")
+    overview = _read("templates/overview.html")
+
+    assert 'partials/galactic_status_banner.html' in galaxy
+    assert "galactic_directive_banner.html" not in galaxy
+    assert "galactic_diplomacy_banner.html" not in galaxy
+    assert "galactic_diplomacy_banner.html" not in overview
+
+    assert "gc-galaxy-status" in status
+    assert "gc-galaxy-status-cta" in status
+    assert status.count("gc-galaxy-status-cta") == 1
+    assert "gc_galaxy_status_directive" in status
+    assert "gc_galaxy_status_diplomacy" in status
+    assert "gc-galaxy-status-layer" in status
+    assert "gc-galaxy-status-foot" not in status
+    assert "gc-galaxy-status-chip" not in status
+
+    assert ".gc-galaxy-status{" in css
+    assert ".gd-banner--industrial" not in css
+    assert ".gc-gdp-banner{" not in css
+    assert ".gc-gd-banner{" not in css
+
+    assert "initGalacticDirectiveBanner" not in src
+    assert "data-gd-banner" not in status
 
 
 def test_main_js_gc743_deferred_chat_and_news_boot():

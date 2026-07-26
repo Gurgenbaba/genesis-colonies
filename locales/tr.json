@@ -6155,5 +6155,10 @@
   "gd_results_intro": "%(year)s-%(month)02d galaktik oylaması tamamlandı.",
   "gd_results_galaxy_line": "Galaksi %(galaxy)s — Birincil: %(primary)s (%(primary_votes)s), İkincil: %(secondary)s (%(secondary_votes)s), toplam oy: %(total)s",
   "gd_results_tie_primary": "Not: Birincil direktifte beraberlik — rastgele seçim.",
-  "gd_results_link": "Galaktik Politikayı Aç"
+  "gd_results_link": "Galaktik Politikayı Aç",
+  "gc_galaxy_status_aria": "Aktif galaktik politika",
+  "gc_galaxy_status_title": "Aktif galaktik politika",
+  "gc_galaxy_status_kicker": "Galaksi %(galaxy)s",
+  "gc_galaxy_status_directive": "Direktif",
+  "gc_galaxy_status_diplomacy": "Diplomasi"
 }
