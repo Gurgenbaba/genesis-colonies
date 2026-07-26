@@ -77,7 +77,7 @@ Owner: `game/pirates/economy.py` + `game/pirates/play_loop.py` — Soft-On tick 
 
 | Concern | Behavior |
 |---------|----------|
-| Bootstrap | One-time resource + fuel seed; **one-time** utility fleet seed (`utility_seeded`) — never per-tick combat restock |
+| Bootstrap | One-time resource + fuel seed; **one-time** utility fleet seed (`utility_seeded`); **one-time building floor** (mines/lab/OS) so Soft-On bots produce + score immediately |
 | Tick | Priority: economy → rebuild → spy → raid → colonize (personality reserves); **round-robin ≤2 bots/tick** (`GC_PIRATE_PLAY_BOTS_PER_TICK`) so HTTP cron cannot starve Railway’s single SQLite worker |
 | Progress | Mines → CC/Lab → OS/Barracks/DF → research gates → ships/defense by personality |
 | Raids | `_raid_fleet_from_hangar` — never `set_planet_ships` template wipe; home raids via play loop |

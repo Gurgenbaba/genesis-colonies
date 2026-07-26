@@ -10897,8 +10897,12 @@ def admin_panel():
 @require_login
 @require_admin
 def admin_update():
-    admin_logic.update_admin_settings(request.form)
-    flash(T("msg_settings_saved") or "Einstellungen gespeichert.", "success")
+    """Deprecated — use Control Center JSON APIs (`/api/admin/*`)."""
+    flash(
+        T("admin_legacy_post_deprecated")
+        or "Legacy Admin-POST ist deaktiviert. Bitte das Control Center (AJAX) nutzen.",
+        "error",
+    )
     return redirect(url_for("admin_panel"))
 
 
@@ -10906,12 +10910,12 @@ def admin_update():
 @require_login
 @require_admin
 def admin_resources():
-    current_user_id = session.get("user_id")
-    admin_logic.handle_resource_tools(
-        request.form,
-        current_user_id=int(current_user_id) if current_user_id is not None else None,
+    """Deprecated — use POST /api/admin/resources."""
+    flash(
+        T("admin_legacy_post_deprecated")
+        or "Legacy Admin-POST ist deaktiviert. Bitte das Control Center (AJAX) nutzen.",
+        "error",
     )
-    flash(T("msg_admin_resources_updated") or "Ressourcen angepasst.", "success")
     return redirect(url_for("admin_panel"))
 
 
@@ -10919,24 +10923,12 @@ def admin_resources():
 @require_login
 @require_admin
 def admin_wipe_universe():
-    if is_production():
-        flash(
-            T("admin_wipe_deprecated")
-            or "Legacy-Wipe ist in Production deaktiviert. Nutze „Universum resetten“ im Admin Panel.",
-            "error",
-        )
-        return redirect(url_for("admin_panel"))
-    admin_logic.wipe_universe(request.form)
-    flash(T("msg_admin_wipe") or "Universum wurde zurückgesetzt.", "success")
-
-    # Wipe kann Score/Ranking massiv ändern -> Cache leeren (sicher)
-    try:
-        uid = session.get("user_id")
-        if uid is not None:
-            invalidate_player_score_cache(int(uid))
-    except Exception:
-        pass
-
+    """Deprecated — use universe reset in Control Center."""
+    flash(
+        T("admin_wipe_deprecated")
+        or "Legacy-Wipe ist deaktiviert. Nutze „Universum resetten“ im Admin Panel.",
+        "error",
+    )
     return redirect(url_for("admin_panel"))
 
 
@@ -10944,8 +10936,12 @@ def admin_wipe_universe():
 @require_login
 @require_admin
 def admin_ban_user():
-    admin_logic.ban_player(request.form)
-    flash(T("msg_admin_ban") or "Spieler wurde gebannt.", "success")
+    """Deprecated — use Players tab /api/admin/players ban actions."""
+    flash(
+        T("admin_legacy_post_deprecated")
+        or "Legacy Admin-POST ist deaktiviert. Bitte das Control Center (AJAX) nutzen.",
+        "error",
+    )
     return redirect(url_for("admin_panel"))
 
 
@@ -10953,8 +10949,12 @@ def admin_ban_user():
 @require_login
 @require_admin
 def admin_unban_user():
-    admin_logic.unban_player(request.form)
-    flash(T("msg_admin_unban") or "Bann wurde aufgehoben.", "success")
+    """Deprecated — use Players tab /api/admin unban actions."""
+    flash(
+        T("admin_legacy_post_deprecated")
+        or "Legacy Admin-POST ist deaktiviert. Bitte das Control Center (AJAX) nutzen.",
+        "error",
+    )
     return redirect(url_for("admin_panel"))
 
 

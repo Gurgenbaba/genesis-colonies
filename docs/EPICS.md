@@ -29,6 +29,7 @@ Status: v1.5.9.2 (2026-06-24)
 | EPIC-21 | Pirate Ecosystem (Living Threat) | ✅ | [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md) |
 | EPIC-22 | LiveOps Retention (Login + Battle Pass) | ✅ | [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) |
 | EPIC-23 | Payment / Shop | ✅ | [PAYMENT_SHOP.md](PAYMENT_SHOP.md) · GC-2300…2306 |
+| EPIC-24 | Admin Control Center UX | ✅ | [ADMIN_CONTROL_CENTER.md](ADMIN_CONTROL_CENTER.md) · GC-A01–A07 |
 
 ---
 

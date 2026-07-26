@@ -350,6 +350,70 @@ HOME_SEED_ARK_MIN = 1
 # HW PE level 10 unlocks 2 colony slots → soft cap home+2 (GC-P20).
 BOT_HOMEWORLD_LEVEL_FLOOR = 10
 
+# Soft-On building floor so bots immediately produce + score (still real levels).
+BOT_BUILDING_FLOOR: Dict[str, int] = {
+    "metal_mine": 4,
+    "crystal_mine": 4,
+    "solar_plant": 4,
+    "command_center": 3,
+    "research_lab": 2,
+    "orbital_shipyard": 2,
+    "defense_factory": 1,
+    "barracks": 1,
+}
+
+
+def ensure_bot_building_floor(conn, bot: Dict[str, Any]) -> Dict[str, Any]:
+    """One-time Soft-On building floor (mines/lab/OS) — not a per-tick cheat."""
+    import json
+
+    from ..models import get_planet_buildings
+    from ..ranking import recompute_and_upsert_score
+    from .bot_state import ensure_bot_state
+
+    player_id = int(bot["player_id"])
+    faction_key = str(bot.get("faction_key") or "")
+    planet_id = int(bot.get("planet_id") or 0)
+    if planet_id <= 0:
+        return {"ok": False, "error": "no_planet"}
+
+    state = ensure_bot_state(conn, bot_player_id=player_id, faction_key=faction_key)
+    mood = dict(state.get("mood") or {})
+    if mood.get("building_floor_seeded"):
+        return {"ok": True, "skipped": "already_seeded", "raised": False}
+
+    current = get_planet_buildings(planet_id, conn=conn)
+    raised: Dict[str, int] = {}
+    for key, floor in BOT_BUILDING_FLOOR.items():
+        if key not in current:
+            continue
+        cur_lv = int(current.get(key) or 0)
+        if cur_lv < int(floor):
+            current[key] = int(floor)
+            raised[key] = int(floor)
+
+    if raised:
+        sets = ", ".join(f"{k} = ?" for k in raised)
+        conn.execute(
+            f"UPDATE planet_buildings SET {sets} WHERE planet_id = ?;",
+            [*raised.values(), planet_id],
+        )
+        try:
+            recompute_and_upsert_score(player_id, conn=conn)
+        except Exception:
+            logger.exception("building floor score refresh failed player=%s", player_id)
+
+    mood["building_floor_seeded"] = True
+    mood["building_floor_seeded_at"] = time.time()
+    try:
+        conn.execute(
+            "UPDATE pirate_bot_state SET mood_json = ?, updated_at = ? WHERE bot_player_id = ?;",
+            (json.dumps(mood), time.time(), player_id),
+        )
+    except Exception:
+        pass
+    return {"ok": True, "raised": bool(raised), "levels": raised}
+
 
 def ensure_bot_expansion_ready(conn, bot: Dict[str, Any]) -> Dict[str, Any]:
     """Raise homeworld PE level so classic colonize slots unlock (Expansion Protocol)."""
@@ -537,6 +601,12 @@ def bootstrap_faction_bots(*, conn) -> List[Dict[str, Any]]:
                 "ensure_bot_resource_seed failed faction=%s", bot.get("faction_key")
             )
         try:
+            ensure_bot_building_floor(conn, bot)
+        except Exception:
+            logger.exception(
+                "ensure_bot_building_floor failed faction=%s", bot.get("faction_key")
+            )
+        try:
             ensure_bot_utility_fleet(conn, bot, force=False)
         except Exception:
             logger.exception(
@@ -547,7 +617,7 @@ def bootstrap_faction_bots(*, conn) -> List[Dict[str, Any]]:
 
 
 def list_bot_roster(*, conn) -> List[Dict[str, Any]]:
-    """Admin Bot-Log roster: presence + outbound fleets."""
+    """Admin Bot-Log roster: presence, buildings, score, outbound fleets."""
     out: List[Dict[str, Any]] = []
     for key in FACTION_BOTS:
         meta = FACTION_BOTS[key]
@@ -563,32 +633,45 @@ def list_bot_roster(*, conn) -> List[Dict[str, Any]]:
             (meta["username"],),
         )
         row = cur.fetchone()
+        empty = {
+            "faction_key": key,
+            "username": meta["username"],
+            "display_name": meta["display_name"],
+            "exists": False,
+            "player_id": None,
+            "planet_id": None,
+            "galaxy": None,
+            "system": None,
+            "position": None,
+            "last_seen": None,
+            "ship_count": 0,
+            "outbound_fleets": 0,
+            "planet_count": 0,
+            "metal_mine": 0,
+            "research_lab": 0,
+            "orbital_shipyard": 0,
+            "score_total": 0,
+        }
         if not row:
-            out.append(
-                {
-                    "faction_key": key,
-                    "username": meta["username"],
-                    "display_name": meta["display_name"],
-                    "exists": False,
-                    "player_id": None,
-                    "planet_id": None,
-                    "galaxy": None,
-                    "system": None,
-                    "position": None,
-                    "last_seen": None,
-                    "ship_count": 0,
-                    "outbound_fleets": 0,
-                    "planet_count": 0,
-                }
-            )
+            out.append(empty)
             continue
         player_id = int(row["player_id"])
-        from ..models import get_planets_by_player
+        from ..models import get_planet_buildings, get_planets_by_player
 
         planets = get_planets_by_player(player_id, conn=conn) or []
         home = planets[0] if planets else None
         planet_id = int(home["id"]) if home else None
         ships = _home_ship_count(conn, planet_id) if planet_id else {}
+        buildings = get_planet_buildings(planet_id, conn=conn) if planet_id else {}
+        score_total = 0
+        try:
+            scor = conn.execute(
+                "SELECT COALESCE(score_total, 0) AS s FROM player_scores WHERE player_id = ? LIMIT 1;",
+                (player_id,),
+            ).fetchone()
+            score_total = int((scor or {"s": 0})["s"] or 0)
+        except Exception:
+            score_total = 0
         cur2 = conn.execute(
             """
             SELECT COUNT(*) AS c FROM fleet_movements
@@ -612,6 +695,10 @@ def list_bot_roster(*, conn) -> List[Dict[str, Any]]:
                 "ship_count": sum(ships.values()),
                 "outbound_fleets": fleets,
                 "planet_count": len(planets),
+                "metal_mine": int(buildings.get("metal_mine") or 0),
+                "research_lab": int(buildings.get("research_lab") or 0),
+                "orbital_shipyard": int(buildings.get("orbital_shipyard") or 0),
+                "score_total": score_total,
             }
         )
     return out

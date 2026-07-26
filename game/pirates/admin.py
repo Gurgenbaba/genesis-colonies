@@ -23,6 +23,7 @@ def build_admin_pirates_payload(conn, *, log_limit: int = 80) -> Dict[str, Any]:
     spy_count = sum(1 for row in logs if row.get("kind") == "spy_dispatch")
     spawn_count = sum(1 for row in logs if row.get("kind") == "base_spawn")
     war_count = sum(1 for row in logs if row.get("kind") == "pirate_war_started")
+    play_loop_in_log = sum(1 for row in logs if row.get("kind") == "bot_play_loop")
     heat_rows: List[Dict[str, Any]] = []
     try:
         cur = conn.execute(
@@ -104,6 +105,7 @@ def build_admin_pirates_payload(conn, *, log_limit: int = 80) -> Dict[str, Any]:
             "spy_dispatch_in_log": spy_count,
             "base_spawn_in_log": spawn_count,
             "pirate_war_in_log": war_count,
+            "play_loop_in_log": play_loop_in_log,
             "live_infiltrations": len(infiltrations),
             "live_smugglers": len(smugglers),
             "log_rows": len(logs),

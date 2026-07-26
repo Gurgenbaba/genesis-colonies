@@ -22,9 +22,9 @@ from .settings import is_pirates_ai_enabled
 
 logger = logging.getLogger(__name__)
 
-VIABLE_MINE = 4
-VIABLE_LAB = 2
-VIABLE_SHIPYARD = 2
+VIABLE_MINE = 6
+VIABLE_LAB = 4
+VIABLE_SHIPYARD = 3
 VIABLE_COMBAT_SHIPS = 8
 RESERVE_COMBAT_SHIPS = {
     "aggressive": 0.25,
@@ -37,7 +37,7 @@ RESERVE_COMBAT_SHIPS = {
 
 # Keep HTTP cron responsive on 1 sync worker + SQLite (Railway default).
 PLAY_LOOP_CURSOR_KEY = "pirate_play_loop_cursor"
-PLAY_BOTS_PER_TICK = max(1, int(os.environ.get("GC_PIRATE_PLAY_BOTS_PER_TICK", "2")))
+PLAY_BOTS_PER_TICK = max(1, int(os.environ.get("GC_PIRATE_PLAY_BOTS_PER_TICK", "3")))
 
 
 def _now() -> float:
@@ -196,7 +196,7 @@ def run_bot_play_step(
     now: Optional[float] = None,
     force_playtime: bool = False,
 ) -> Dict[str, Any]:
-    """Finish/enqueue economy lightly, then one strategic mission."""
+    """Always light-enqueue economy, then one strategic mission when ready."""
     from ..models import get_planets_by_player
     from .economy import plan_bot_planet_tick
 
@@ -214,46 +214,29 @@ def run_bot_play_step(
     home_id = int(bot.get("planet_id") or 0)
     econ_results: List[Dict[str, Any]] = []
 
-    if action in ("economy", "rebuild"):
-        for planet in planets:
-            is_home = int(planet["id"]) == home_id or bool(planet.get("is_homeworld"))
-            try:
-                econ_results.append(
-                    plan_bot_planet_tick(
-                        conn, bot, planet, now=ts, is_home=is_home
-                    )
+    # Every turn: finish + enqueue on home (+ one colony). Missions used to skip
+    # enqueue and bots looked idle in ranking for long stretches.
+    for planet in planets:
+        is_home = int(planet["id"]) == home_id or bool(planet.get("is_homeworld"))
+        if not is_home and action not in ("economy", "rebuild"):
+            # Mission turns: home only (keep cron light).
+            continue
+        try:
+            econ_results.append(
+                plan_bot_planet_tick(
+                    conn, bot, planet, now=ts, is_home=is_home
                 )
-            except Exception:
-                logger.exception("play_loop economy failed planet=%s", planet.get("id"))
-            if len(econ_results) >= 2:
-                break
-    else:
-        # Finish due work on home before missions (player-like).
-        for planet in planets:
-            if int(planet["id"]) != home_id and not planet.get("is_homeworld"):
-                continue
-            try:
-                from ..queue_engine import finish_due_work_once
-
-                finish_due_work_once(
-                    player_id=int(bot["player_id"]),
-                    planet_id=int(planet["id"]),
-                    now=ts,
-                    conn=conn,
-                    source="pirates",
-                    update_scores=False,
-                    recalc_ranks=False,
-                    manage_transaction=False,
-                    dedup=False,
-                )
-            except Exception:
-                logger.exception("play_loop finish failed")
+            )
+        except Exception:
+            logger.exception("play_loop economy failed planet=%s", planet.get("id"))
+        if len(econ_results) >= (2 if action in ("economy", "rebuild") else 1):
             break
 
     out["economy"] = econ_results
     if action in ("economy", "rebuild"):
         out["ok"] = any(
             r.get("build") or r.get("research") or r.get("ships") or r.get("defense")
+            or (r.get("finished") or {})
             for r in econ_results
         ) or bool(econ_results)
         log_pirate_action(
@@ -298,7 +281,11 @@ def run_bot_play_step(
         faction_key=faction_key,
         bot_player_id=int(bot["player_id"]),
         message=f"action={action} ok={out['ok']}",
-        payload={"action": action, "result": out.get("result")},
+        payload={
+            "action": action,
+            "result": out.get("result"),
+            "economy": bool(econ_results),
+        },
     )
     return out
 

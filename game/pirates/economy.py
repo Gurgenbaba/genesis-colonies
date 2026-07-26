@@ -510,13 +510,27 @@ def plan_bot_planet_tick(
     }
 
     try:
+        try:
+            from ..resources import update_planet_resources
+
+            cur = conn.execute(
+                "SELECT * FROM planets WHERE id = ? LIMIT 1;", (planet_id,)
+            )
+            row = cur.fetchone()
+            if row:
+                update_planet_resources(
+                    dict(row), conn=conn, skip_queue_finish=True
+                )
+        except Exception:
+            logger.exception("bot resource sync failed planet=%s", planet_id)
+
         finished = finish_due_work_once(
             player_id=player_id,
             planet_id=planet_id,
             now=ts,
             conn=conn,
             source="pirates",
-            update_scores=False,
+            update_scores=True,
             recalc_ranks=False,
             manage_transaction=False,
             dedup=False,

@@ -298,10 +298,14 @@ Header für Idempotenz: `X-Request-Id` oder JSON-Feld `request_id`.
 
 ## Admin Control Center
 
+Owner doc: [ADMIN_CONTROL_CENTER.md](ADMIN_CONTROL_CENTER.md).
+
 | Schicht | Dateien | Transport |
 |---------|---------|-----------|
-| **Legacy Forms** | `game/admin.py`, `/admin/*` POST | HTML Redirect + Flash |
-| **Control Center** | `game/admin_api.py`, `static/admin.js` | JSON `/api/admin/*` |
+| **Control Center** | `templates/admin_panel.html`, `static/admin.js`, `static/admin.css`, `game/admin_api.py` | Hard-load `/admin` + JSON `/api/admin/*` |
+| **Legacy HTML POST** | `/admin/update|resources|wipe|ban|unban` | **Deprecated stubs** (flash + redirect, no mutation) |
+
+Grouped nav (LiveOps / Players / Economy / Moderation / System). Assets load only on `/admin`.
 
 Jede privilegierte API-Aktion ruft `audit()` → `admin_audit_log`.
 

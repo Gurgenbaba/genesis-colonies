@@ -537,6 +537,22 @@ def test_api_admin_queue_tick_error_response_shape(app_client):
     assert "message" in data
 
 
+def test_admin_js_ux_contract_helpers():
+    """GC-A01/A02: grouped nav helpers + pirates metric render."""
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parents[1] / "static" / "admin.js").read_text(
+        encoding="utf-8"
+    )
+    assert "ADMIN_TAB_GROUPS" in src
+    assert "function switchGroup" in src
+    assert "function renderMetricGrid" in src
+    assert "function renderAdminTable" in src
+    assert "function adminConfirmDanger" in src
+    assert "play_loop_in_log" in src
+    assert "admin_pirates_soft_off_confirm" in src
+
+
 def test_admin_page_smoke_html(app_client):
     """Smoke: /admin shell markup for JS/CSS bindings."""
     client, _, _ = app_client
@@ -551,6 +567,11 @@ def test_admin_page_smoke_html(app_client):
     assert 'data-admin-panel="health"' in html
     assert 'data-admin-tab="lootboxes"' in html
     assert 'data-admin-panel="lootboxes"' in html
+    assert 'class="admin-group-rail"' in html
+    assert 'data-admin-group="liveops"' in html
+    assert 'data-admin-group="system"' in html
+    assert "admin-toolbar--danger" in html
+    assert 'data-admin-tab="pirates"' in html
     assert "admin.js" in html
     assert "admin.css" in html
     assert 'data-admin-action="run-queue-tick"' in html

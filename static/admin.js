@@ -19,6 +19,21 @@
   let _lootboxSelectedContainer = null;
   let _diplomacyOptions = null;
 
+  const ADMIN_TAB_GROUPS = {
+    liveops: ["world_boss", "pirates", "diplomacy", "votes"],
+    players: ["players", "planets"],
+    economy: ["balance", "lootboxes", "queues", "fleets"],
+    moderation: ["chat", "support", "messages"],
+    system: ["health", "server", "runtime", "migrations", "audit"],
+  };
+  const ADMIN_TAB_TO_GROUP = {};
+  Object.keys(ADMIN_TAB_GROUPS).forEach((group) => {
+    ADMIN_TAB_GROUPS[group].forEach((tab) => {
+      ADMIN_TAB_TO_GROUP[tab] = group;
+    });
+  });
+  const ADMIN_LAST_TAB_KEY = "gc_admin_last_tab";
+
   function t(key, fallback) {
     return LOCALE[key] || fallback || key;
   }
@@ -255,6 +270,33 @@
     return `<div class="admin-empty">${esc(msg || t("admin_empty", "Keine Daten"))}</div>`;
   }
 
+  function renderMetricGrid(cards) {
+    const list = Array.isArray(cards) ? cards : [];
+    return (
+      `<div class="admin-metrics-grid">` +
+      list
+        .map(
+          (c) =>
+            `<div class="admin-metric-card"><span class="admin-metric-label">${esc(c.label)}</span><strong class="admin-metric-value gc-mono">${c.value}</strong>${
+              c.sub ? `<span class="admin-metric-sub">${esc(c.sub)}</span>` : ""
+            }</div>`
+        )
+        .join("") +
+      `</div>`
+    );
+  }
+
+  function renderAdminTable(headers, rowsHtml) {
+    const cols = Array.isArray(headers) ? headers : [];
+    return `<div class="admin-table-wrap"><table class="admin-table admin-table-compact"><thead><tr>${cols
+      .map((h) => `<th>${esc(h)}</th>`)
+      .join("")}</tr></thead><tbody>${rowsHtml || `<tr><td colspan="${cols.length}">—</td></tr>`}</tbody></table></div>`;
+  }
+
+  function adminConfirmDanger(message) {
+    return window.confirm(String(message || ""));
+  }
+
   function errorCard(data) {
     return `<div class="admin-card admin-error-card">
       <h3>${t("admin_error_title", "Fehler")}</h3>
@@ -263,8 +305,59 @@
     </div>`;
   }
 
+  function persistAdminLastTab(name) {
+    try {
+      sessionStorage.setItem(ADMIN_LAST_TAB_KEY, name);
+      const group = ADMIN_TAB_TO_GROUP[name];
+      if (group) sessionStorage.setItem(ADMIN_LAST_TAB_KEY + "_" + group, name);
+    } catch (_) {}
+  }
+
+  function readAdminLastTab() {
+    try {
+      return sessionStorage.getItem(ADMIN_LAST_TAB_KEY);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function readAdminLastTabForGroup(group) {
+    try {
+      return sessionStorage.getItem(ADMIN_LAST_TAB_KEY + "_" + group);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function applyGroupVisibility(group) {
+    const tabs = ADMIN_TAB_GROUPS[group] || [];
+    qsa(".admin-group-btn").forEach((btn) => {
+      const on = btn.dataset.adminGroup === group;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    qsa(".admin-tab-btn, .admin-cc-tab").forEach((btn) => {
+      const tab = btn.dataset.adminTab;
+      const show = !tab || tabs.includes(tab);
+      btn.hidden = !show;
+    });
+  }
+
+  function resolveInitialTab() {
+    try {
+      const fromUrl = new URLSearchParams(window.location.search).get("tab");
+      if (fromUrl && ADMIN_TAB_TO_GROUP[fromUrl]) return fromUrl;
+    } catch (_) {}
+    const fromSession = readAdminLastTab();
+    if (fromSession && ADMIN_TAB_TO_GROUP[fromSession]) return fromSession;
+    return "health";
+  }
+
   function switchTab(name) {
+    if (!name || !ADMIN_TAB_TO_GROUP[name]) name = "health";
     _activeTab = name;
+    persistAdminLastTab(name);
+    applyGroupVisibility(ADMIN_TAB_TO_GROUP[name] || "system");
     qsa(".admin-tab-btn, .admin-cc-tab").forEach((btn) => {
       const on = btn.dataset.adminTab === name;
       btn.classList.toggle("is-active", on);
@@ -276,6 +369,21 @@
       panel.classList.toggle("is-active", on);
       panel.hidden = !on;
     });
+  }
+
+  async function switchGroup(group) {
+    const tabs = ADMIN_TAB_GROUPS[group] || [];
+    if (!tabs.length) return;
+    const groupLast = readAdminLastTabForGroup(group);
+    const globalLast = readAdminLastTab();
+    const name =
+      groupLast && tabs.includes(groupLast)
+        ? groupLast
+        : globalLast && tabs.includes(globalLast)
+          ? globalLast
+          : tabs[0];
+    switchTab(name);
+    await loadTab(name);
   }
 
   async function loadTab(name) {
@@ -1806,7 +1914,10 @@
             : "—";
         return (
           `<tr><td>${esc(b.faction_key || "")}</td><td>${esc(b.display_name || "")}</td>` +
-          `<td>${coords}</td><td>${esc(String(b.ship_count || 0))}</td>` +
+          `<td>${coords}</td>` +
+          `<td>${esc(String(b.metal_mine || 0))}/${esc(String(b.research_lab || 0))}/${esc(String(b.orbital_shipyard || 0))}</td>` +
+          `<td>${esc(fmtInt(b.score_total || 0))}</td>` +
+          `<td>${esc(String(b.ship_count || 0))}</td>` +
           `<td>${esc(String(b.outbound_fleets || 0))}</td>` +
           `<td>${b.exists ? "✓" : "—"}</td></tr>`
         );
@@ -1821,6 +1932,12 @@
           `<td>${esc(String(b.current_hp))}/${esc(String(b.max_hp))}</td></tr>`,
       )
       .join("");
+    const warRows = (data.pirate_wars || [])
+      .map(
+        (w) =>
+          `<tr><td>G${esc(String(w.galaxy_id))}</td><td>${esc(String(w.heat))}</td><td>${esc(String(w.ends_at || "—"))}</td></tr>`,
+      )
+      .join("");
     const logRows = (data.log || [])
       .map((row) => {
         const ts = row.ts ? new Date(Number(row.ts) * 1000).toISOString().slice(11, 19) : "";
@@ -1831,37 +1948,74 @@
         );
       })
       .join("");
-    out.innerHTML = `
-      <div class="admin-card">
-        <h3 class="admin-card-title">${esc(aiLabel)}</h3>
-        <table class="admin-table admin-table-compact"><tbody>
-          <tr><th>${esc(t("admin_pirates_kpi_bots", "Bots online"))}</th><td>${esc(String(kpis.bots_online || 0))}</td></tr>
-          <tr><th>${esc(t("admin_pirates_live_bases", "Live bases"))}</th><td>${esc(String(data.live_bases || 0))}</td></tr>
-          <tr><th>${esc(t("admin_pirates_kpi_raids", "Raid dispatches (log window)"))}</th><td>${esc(String(kpis.raid_dispatch_in_log || 0))}</td></tr>
-          <tr><th>${esc(t("admin_pirates_kpi_spies", "Spy dispatches (log window)"))}</th><td>${esc(String(kpis.spy_dispatch_in_log || 0))}</td></tr>
-          <tr><th>${esc(t("admin_pirates_kpi_spawns", "Base spawns (log window)"))}</th><td>${esc(String(kpis.base_spawn_in_log || 0))}</td></tr>
-          <tr><th>${esc(t("admin_pirates_kpi_wars", "Pirate wars (log window)"))}</th><td>${esc(String(kpis.pirate_war_in_log || 0))}</td></tr>
-          <tr><th>${esc(t("admin_pirates_kpi_infil", "Live infiltrations"))}</th><td>${esc(String(kpis.live_infiltrations || 0))}</td></tr>
-          <tr><th>${esc(t("admin_pirates_kpi_smugglers", "Live smugglers"))}</th><td>${esc(String(kpis.live_smugglers || 0))}</td></tr>
-          <tr><th>${esc(t("admin_pirates_kpi_log", "Log rows"))}</th><td>${esc(String(kpis.log_rows || 0))}</td></tr>
-        </tbody></table>
-      </div>
-      <div class="admin-section-title"><span class="admin-section-title-text">${esc(t("admin_pirates_bots", "Faction bots"))}</span></div>
-      <table class="admin-table admin-table-compact"><thead><tr>
-        <th>Faction</th><th>Name</th><th>Coords</th><th>Ships</th><th>Fleets</th><th>OK</th>
-      </tr></thead><tbody>${botRows || "<tr><td colspan=6>—</td></tr>"}</tbody></table>
-      ${(data.pirate_wars || []).length
-        ? `<div class="admin-section-title"><span class="admin-section-title-text">${esc(t("admin_pirates_wars", "Active pirate_war"))}</span></div>
-      <table class="admin-table admin-table-compact"><thead><tr><th>G</th><th>Heat</th><th>Ends</th></tr></thead><tbody>
-      ${(data.pirate_wars || []).map((w) => `<tr><td>G${esc(String(w.galaxy_id))}</td><td>${esc(String(w.heat))}</td><td>${esc(String(w.ends_at || "—"))}</td></tr>`).join("")}
-      </tbody></table>`
-        : ""}
-      <div class="admin-section-title"><span class="admin-section-title-text">${esc(t("admin_pirates_heat_top", "Galaxy heat (top)"))}</span></div>
-      <table class="admin-table admin-table-compact"><thead><tr><th>G</th><th>Heat</th></tr></thead><tbody>${heatRows || "<tr><td colspan=2>—</td></tr>"}</tbody></table>
-      <div class="admin-section-title"><span class="admin-section-title-text">${esc(t("admin_pirates_bases", "Live bases"))}</span></div>
-      <table class="admin-table admin-table-compact"><thead><tr><th>ID</th><th>Faction</th><th>Coords</th><th>Str</th><th>Status</th><th>HP</th></tr></thead><tbody>${baseRows || "<tr><td colspan=6>—</td></tr>"}</tbody></table>
-      <div class="admin-section-title"><span class="admin-section-title-text">${esc(t("admin_pirates_log", "Action log"))}</span></div>
-      <table class="admin-table admin-table-compact"><thead><tr><th>UTC</th><th>Sev</th><th>Kind</th><th>Message</th><th>Faction</th></tr></thead><tbody>${logRows || "<tr><td colspan=5>—</td></tr>"}</tbody></table>`;
+    const metrics = renderMetricGrid([
+      { label: t("admin_pirates_kpi_bots", "Bots online"), value: esc(String(kpis.bots_online || 0)) },
+      { label: t("admin_pirates_live_bases", "Live bases"), value: esc(String(data.live_bases || 0)) },
+      { label: t("admin_pirates_kpi_raids", "Raid dispatches (log window)"), value: esc(String(kpis.raid_dispatch_in_log || 0)) },
+      { label: t("admin_pirates_kpi_spies", "Spy dispatches (log window)"), value: esc(String(kpis.spy_dispatch_in_log || 0)) },
+      { label: t("admin_pirates_kpi_spawns", "Base spawns (log window)"), value: esc(String(kpis.base_spawn_in_log || 0)) },
+      { label: t("admin_pirates_kpi_play_loop", "Play-loop (log window)"), value: esc(String(kpis.play_loop_in_log || 0)) },
+      { label: t("admin_pirates_kpi_wars", "Pirate wars (log window)"), value: esc(String(kpis.pirate_war_in_log || 0)) },
+      { label: t("admin_pirates_kpi_infil", "Live infiltrations"), value: esc(String(kpis.live_infiltrations || 0)) },
+      { label: t("admin_pirates_kpi_smugglers", "Live smugglers"), value: esc(String(kpis.live_smugglers || 0)) },
+    ]);
+    out.innerHTML =
+      `<div class="admin-card">` +
+      `<h3 class="admin-card-title">${esc(t("admin_pirates_section_status", "Status"))} ` +
+      `${statusBadge(aiOn ? "ok" : "warn", aiLabel)}</h3>` +
+      `</div>` +
+      metrics +
+      `<div class="admin-section-title"><span class="admin-section-title-text">${esc(t("admin_pirates_bots", "Faction bots"))}</span></div>` +
+      renderAdminTable(
+        [
+          t("admin_pirates_col_faction", "Faction"),
+          t("admin_col_name", "Name"),
+          t("admin_pirates_col_coords", "Coords"),
+          t("admin_pirates_col_buildings", "Mine/Lab/OS"),
+          t("admin_pirates_col_score", "Score"),
+          t("admin_pirates_col_ships", "Ships"),
+          t("admin_pirates_col_fleets", "Fleets"),
+          t("admin_pirates_col_ok", "OK"),
+        ],
+        botRows,
+      ) +
+      `<div class="admin-section-title"><span class="admin-section-title-text">${esc(t("admin_pirates_bases", "Live bases"))}</span></div>` +
+      renderAdminTable(
+        [
+          t("admin_col_id", "ID"),
+          t("admin_pirates_col_faction", "Faction"),
+          t("admin_pirates_col_coords", "Coords"),
+          t("admin_pirates_col_strength", "Str"),
+          t("admin_col_status", "Status"),
+          t("admin_pirates_col_hp", "HP"),
+        ],
+        baseRows,
+      ) +
+      `<div class="admin-section-title"><span class="admin-section-title-text">${esc(t("admin_pirates_heat_top", "Galaxy heat (top)"))}</span></div>` +
+      renderAdminTable(
+        [t("admin_pirates_col_galaxy", "G"), t("admin_pirates_col_heat", "Heat")],
+        heatRows,
+      ) +
+      `<div class="admin-section-title"><span class="admin-section-title-text">${esc(t("admin_pirates_wars", "Active pirate_war"))}</span></div>` +
+      renderAdminTable(
+        [
+          t("admin_pirates_col_galaxy", "G"),
+          t("admin_pirates_col_heat", "Heat"),
+          t("admin_pirates_col_ends", "Ends"),
+        ],
+        warRows,
+      ) +
+      `<div class="admin-section-title"><span class="admin-section-title-text">${esc(t("admin_pirates_log", "Action log"))}</span></div>` +
+      renderAdminTable(
+        [
+          t("admin_pirates_col_utc", "UTC"),
+          t("admin_pirates_col_severity", "Sev"),
+          t("admin_pirates_col_kind", "Kind"),
+          t("admin_pirates_col_message", "Message"),
+          t("admin_pirates_col_faction", "Faction"),
+        ],
+        logRows,
+      );
   }
 
   async function loadPiratesAdmin() {
@@ -1879,6 +2033,15 @@
   }
 
   async function setPiratesAiAdmin(enabled) {
+    if (
+      enabled === false &&
+      !adminDestructiveConfirmed(
+        "admin_pirates_soft_off_confirm",
+        "Pirate AI Soft-Off: disable pirate AI without recalling fleets?",
+      )
+    ) {
+      return null;
+    }
     setPiratesStatus(
       enabled
         ? t("admin_pirates_enabling", "Aktiviere Pirate AI…")
@@ -4107,6 +4270,12 @@
     document.addEventListener("click", async (e) => {
       if (!isAdminEvent(e)) return;
 
+      const groupBtn = e.target.closest(".admin-group-btn");
+      if (groupBtn && groupBtn.dataset.adminGroup) {
+        await switchGroup(groupBtn.dataset.adminGroup);
+        return;
+      }
+
       const tab = e.target.closest(".admin-tab-btn, .admin-cc-tab");
       if (tab && tab.dataset.adminTab) {
         switchTab(tab.dataset.adminTab);
@@ -4208,10 +4377,11 @@
     if (!_adminPanelBootstrapped) {
       _adminPanelBootstrapped = true;
       showAlert("");
+      const initial = resolveInitialTab();
       const healthOut = qs("#admin-health-output");
-      if (healthOut) healthOut.innerHTML = loadingHtml();
-      switchTab("health");
-      loadAdminRuntime().then(() => loadTab("health"));
+      if (healthOut && initial === "health") healthOut.innerHTML = loadingHtml();
+      switchTab(initial);
+      loadAdminRuntime().then(() => loadTab(initial));
     }
 
     syncAdminHudSelects(adminRoot());
@@ -4225,6 +4395,7 @@
   GC.modules = GC.modules || {};
   GC.modules.admin = initAdminPanel;
   GC.initAdminPanel = initAdminPanel;
+  GC.adminConfirmDanger = adminConfirmDanger;
   GC.loadAdminHealth = loadAdminHealth;
   GC.loadAdminMigrations = loadAdminMigrations;
   GC.searchAdminPlayers = searchAdminPlayers;

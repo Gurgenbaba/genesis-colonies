@@ -14,10 +14,6 @@
 
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ GC_ASSET_VERSION }}">
 
-  {% if AUTH_ADMIN %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}?v={{ GC_ASSET_VERSION }}">
-  {% endif %}
-
   {% block extra_head %}{% endblock %}
 </head>
 
@@ -668,9 +664,6 @@
   <script src="{{ url_for('static', filename='js/chat.js') }}?v={{ GC_ASSET_VERSION }}"></script>
   <script src="{{ url_for('static', filename='js/messages.js') }}?v={{ GC_ASSET_VERSION }}"></script>
   <script src="{{ url_for('static', filename='js/options.js') }}?v={{ GC_ASSET_VERSION }}"></script>
-  {% endif %}
-  {% if AUTH_ADMIN %}
-  <script src="{{ url_for('static', filename='admin.js') }}?v={{ GC_ASSET_VERSION }}"></script>
   {% endif %}
   {% block extra_scripts %}{% endblock %}
 </body>

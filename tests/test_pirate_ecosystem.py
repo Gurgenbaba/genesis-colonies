@@ -1478,9 +1478,33 @@ def test_play_loop_prefers_economy_when_weak(pirate_db):
         begin_write_transaction(conn)
         res = admin_set_ai(conn, True)
         bot = next(b for b in res["bots"] if b["faction_key"] == "salt_cartel")
-        # Fresh bots have level-0 buildings → economy.
+        # Soft-On floor < VIABLE targets → still economy/rebuild.
         action = decide_bot_action(conn, bot, now=time.time())
         assert action in ("economy", "rebuild")
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_soft_on_building_floor_scores(pirate_db):
+    """Soft-On building floor raises levels and player_scores."""
+    from game.db import begin_write_transaction, commit
+    from game.models import get_planet_buildings
+    from game.pirates.admin import admin_set_ai
+    from game.pirates.accounts import list_bot_roster
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        res = admin_set_ai(conn, True)
+        bot = res["bots"][0]
+        b = get_planet_buildings(int(bot["planet_id"]), conn=conn)
+        assert int(b.get("metal_mine") or 0) >= 4
+        assert int(b.get("orbital_shipyard") or 0) >= 2
+        roster = list_bot_roster(conn=conn)
+        row = next(r for r in roster if r["faction_key"] == bot["faction_key"])
+        assert int(row.get("score_total") or 0) > 0
+        assert int(row.get("metal_mine") or 0) >= 4
         commit(conn)
     finally:
         conn.close()
