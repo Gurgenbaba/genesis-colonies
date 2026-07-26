@@ -6311,5 +6311,10 @@
   "bp_buy_premium_paypal": "Premium con PayPal",
   "bp_open_shop": "Abrir tienda",
   "shop_sku_commander_supply": "Pack Suministro Comandante",
-  "shop_sku_commander_supply_hint": "48h Timekeeper + 6x construccion/investigacion 24h + Epic/Mythic/Ancient/Relic — pack ballena, no un mes de login caro."
+  "shop_sku_commander_supply_hint": "48h Timekeeper + 6x construccion/investigacion 24h + Epic/Mythic/Ancient/Relic — pack ballena, no un mes de login caro.",
+  "shop_kind_pass": "PASE",
+  "shop_kind_timekeeper": "TIMEKEEPER",
+  "shop_kind_supply": "SUPPLY",
+  "shop_featured_tag": "DESTACADO",
+  "shop_packs_title": "Packs de suministro"
 }

@@ -6311,5 +6311,10 @@
   "bp_buy_premium_paypal": "Premium через PayPal",
   "bp_open_shop": "Открыть магазин",
   "shop_sku_commander_supply": "Пакет снабжения командира",
-  "shop_sku_commander_supply_hint": "48ч Timekeeper + 6x стройка/исследования 24ч + Epic/Mythic/Ancient/Relic — whale-пак, не дорогой месяц логина."
+  "shop_sku_commander_supply_hint": "48ч Timekeeper + 6x стройка/исследования 24ч + Epic/Mythic/Ancient/Relic — whale-пак, не дорогой месяц логина.",
+  "shop_kind_pass": "PASS",
+  "shop_kind_timekeeper": "TIMEKEEPER",
+  "shop_kind_supply": "SUPPLY",
+  "shop_featured_tag": "ИЗБРАННОЕ",
+  "shop_packs_title": "Снабжение"
 }

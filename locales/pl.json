@@ -6311,5 +6311,10 @@
   "bp_buy_premium_paypal": "Premium przez PayPal",
   "bp_open_shop": "Otworz sklep",
   "shop_sku_commander_supply": "Pakiet Zasobow Dowodcy",
-  "shop_sku_commander_supply_hint": "48h Timekeeper + 6x budowa/badania 24h + Epic/Mythic/Ancient/Relic — pakiet whale, nie drogi miesiac loginu."
+  "shop_sku_commander_supply_hint": "48h Timekeeper + 6x budowa/badania 24h + Epic/Mythic/Ancient/Relic — pakiet whale, nie drogi miesiac loginu.",
+  "shop_kind_pass": "PASS",
+  "shop_kind_timekeeper": "TIMEKEEPER",
+  "shop_kind_supply": "SUPPLY",
+  "shop_featured_tag": "WYROZNIONE",
+  "shop_packs_title": "Paczki zaopatrzenia"
 }

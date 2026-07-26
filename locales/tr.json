@@ -6311,5 +6311,10 @@
   "bp_buy_premium_paypal": "PayPal ile Premium",
   "bp_open_shop": "Magazayi ac",
   "shop_sku_commander_supply": "Komutan Ikmal Paketi",
-  "shop_sku_commander_supply_hint": "48s Timekeeper + 6x insa/arastirma 24s + Epic/Mythic/Ancient/Relic — whale paketi, pahali login ayi degil."
+  "shop_sku_commander_supply_hint": "48s Timekeeper + 6x insa/arastirma 24s + Epic/Mythic/Ancient/Relic — whale paketi, pahali login ayi degil.",
+  "shop_kind_pass": "PASS",
+  "shop_kind_timekeeper": "TIMEKEEPER",
+  "shop_kind_supply": "SUPPLY",
+  "shop_featured_tag": "ONE CIKAN",
+  "shop_packs_title": "Ikmal Paketleri"
 }

@@ -6311,5 +6311,10 @@
   "bp_buy_premium_paypal": "Premium avec PayPal",
   "bp_open_shop": "Ouvrir boutique",
   "shop_sku_commander_supply": "Pack Ravitaillement Commandant",
-  "shop_sku_commander_supply_hint": "48h Timekeeper + 6x construction/recherche 24h + Epic/Mythic/Ancient/Relic — pack whale, pas un mois de login cher."
+  "shop_sku_commander_supply_hint": "48h Timekeeper + 6x construction/recherche 24h + Epic/Mythic/Ancient/Relic — pack whale, pas un mois de login cher.",
+  "shop_kind_pass": "PASS",
+  "shop_kind_timekeeper": "TIMEKEEPER",
+  "shop_kind_supply": "SUPPLY",
+  "shop_featured_tag": "VEDETTE",
+  "shop_packs_title": "Packs ravitaillement"
 }

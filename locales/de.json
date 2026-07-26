@@ -6311,5 +6311,10 @@
   "bp_buy_premium_paypal": "Premium mit PayPal",
   "bp_open_shop": "Shop öffnen",
   "shop_sku_commander_supply": "Commander Supply Pack",
-  "shop_sku_commander_supply_hint": "48h Timekeeper + 6x Bau/Forschung 24h + Epic/Mythic/Ancient/Relic — Wal-Pack, kein teurer Login-Monat."
+  "shop_sku_commander_supply_hint": "48h Timekeeper + 6x Bau/Forschung 24h + Epic/Mythic/Ancient/Relic — Wal-Pack, kein teurer Login-Monat.",
+  "shop_kind_pass": "PASS",
+  "shop_kind_timekeeper": "TIMEKEEPER",
+  "shop_kind_supply": "SUPPLY",
+  "shop_featured_tag": "FEATURED",
+  "shop_packs_title": "Supply Packs"
 }

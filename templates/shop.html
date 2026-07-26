@@ -4,6 +4,71 @@
 {% set shop_state = shop if shop is defined and shop else {'ready': false, 'enabled': false, 'products': [], 'providers': []} %}
 {% set products = shop_state.products if shop_state.products is defined else [] %}
 {% set providers = shop_state.providers if shop_state.providers is defined else [] %}
+{% set featured = products | selectattr('sku', 'equalto', 'season_pass_current') | list %}
+{% set packs = products | rejectattr('sku', 'equalto', 'season_pass_current') | list %}
+
+{% macro shop_kind_label(kind) -%}
+  {%- if kind == 'entitlement' -%}{{ T("shop_kind_pass", "PASS") }}
+  {%- elif kind == 'timekeeper' -%}{{ T("shop_kind_timekeeper", "TIMEKEEPER") }}
+  {%- else -%}{{ T("shop_kind_supply", "SUPPLY") }}
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro shop_card(p, featured=false) %}
+<article class="shop-card{% if featured %} shop-card--featured{% endif %}{% if p.owned %} is-owned{% endif %}"
+         data-shop-sku="{{ p.sku }}"
+         data-shop-kind="{{ p.kind }}">
+  <div class="shop-card-frame" aria-hidden="true"></div>
+  {% if p.image %}
+  <figure class="shop-card-art">
+    <img src="{{ url_for('static', filename=p.image, v=GC_ASSET_VERSION) }}"
+         alt=""
+         width="{% if featured %}960{% else %}640{% endif %}"
+         height="{% if featured %}540{% else %}400{% endif %}"
+         {% if featured %}fetchpriority="high"{% else %}loading="lazy"{% endif %}
+         decoding="async">
+    <span class="shop-card-kind">{{ shop_kind_label(p.kind) }}</span>
+    {% if featured %}
+    <span class="shop-card-featured-tag">{{ T("shop_featured_tag", "FEATURED") }}</span>
+    {% endif %}
+  </figure>
+  {% endif %}
+  <div class="shop-card-body">
+    <div class="shop-card-main">
+      <h2 class="shop-card-title">{{ T(p.title_key, p.sku) }}</h2>
+      <p class="hint shop-card-hint">{{ T(p.hint_key, "") }}</p>
+    </div>
+    <div class="shop-card-footer">
+      <p class="shop-card-price gc-mono">{{ p.price_label }}</p>
+      <div class="shop-card-actions">
+        {% if p.owned %}
+        <span class="shop-owned">{{ T("shop_owned", "Bereits freigeschaltet") }}</span>
+        {% elif not shop_state.enabled or not providers %}
+        <span class="shop-locked">{{ T("shop_unavailable_short", "Nicht verfügbar") }}</span>
+        {% else %}
+        <div class="shop-provider-row" data-shop-providers>
+          {% for prov in providers %}
+          <button type="button"
+                  class="gc-btn gc-btn-sm shop-buy-btn {% if loop.first %}gc-btn-primary{% else %}gc-btn-ghost{% endif %}"
+                  data-shop-buy
+                  data-sku="{{ p.sku }}"
+                  data-provider="{{ prov }}">
+            {% if prov == 'paypal' %}
+              {{ T("shop_pay_paypal", "Mit PayPal bezahlen") }}
+            {% elif prov == 'stripe' %}
+              {{ T("shop_pay_stripe", "Stripe") }}
+            {% else %}
+              {{ T("shop_pay_test", "Test") }}
+            {% endif %}
+          </button>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</article>
+{% endmacro %}
 
 <div class="gc-page shop-page" id="shop-page" data-shop
      data-ready="{{ '1' if shop_state.ready else '0' }}"
@@ -36,60 +101,32 @@
   {% endif %}
 
   <section class="gc-panel shop-catalog-panel">
-    <div class="gc-panel-header">
+    <div class="gc-panel-header shop-catalog-header">
       <span class="gc-panel-title">{{ T("shop_catalog_title", "Angebote") }}</span>
+      <span class="shop-catalog-rail" aria-hidden="true"></span>
     </div>
 
     {% if not products %}
     <p class="hint">{{ T("shop_empty", "Keine Produkte verfügbar.") }}</p>
     {% else %}
-    <div class="shop-grid" data-shop-grid>
-      {% for p in products %}
-      <article class="shop-card{% if p.owned %} is-owned{% endif %}" data-shop-sku="{{ p.sku }}" data-shop-kind="{{ p.kind }}">
-        {% if p.image %}
-        <figure class="shop-card-art">
-          <img src="{{ url_for('static', filename=p.image, v=GC_ASSET_VERSION) }}"
-               alt=""
-               width="640"
-               height="400"
-               loading="lazy"
-               decoding="async">
-        </figure>
-        {% endif %}
-        <div class="shop-card-body">
-          <div class="shop-card-main">
-            <h2 class="shop-card-title">{{ T(p.title_key, p.sku) }}</h2>
-            <p class="hint shop-card-hint">{{ T(p.hint_key, "") }}</p>
-            <p class="shop-card-price gc-mono">{{ p.price_label }}</p>
-          </div>
-          <div class="shop-card-actions">
-            {% if p.owned %}
-            <span class="shop-owned">{{ T("shop_owned", "Bereits freigeschaltet") }}</span>
-            {% elif not shop_state.enabled or not providers %}
-            <span class="shop-locked">{{ T("shop_unavailable_short", "Nicht verfügbar") }}</span>
-            {% else %}
-            <div class="shop-provider-row" data-shop-providers>
-              {% for prov in providers %}
-              <button type="button"
-                      class="gc-btn gc-btn-sm {% if loop.first %}gc-btn-primary{% else %}gc-btn-ghost{% endif %}"
-                      data-shop-buy
-                      data-sku="{{ p.sku }}"
-                      data-provider="{{ prov }}">
-                {% if prov == 'paypal' %}
-                  {{ T("shop_pay_paypal", "Mit PayPal bezahlen") }}
-                {% elif prov == 'stripe' %}
-                  {{ T("shop_pay_stripe", "Stripe") }}
-                {% else %}
-                  {{ T("shop_pay_test", "Test") }}
-                {% endif %}
-              </button>
-              {% endfor %}
-            </div>
-            {% endif %}
-          </div>
-        </div>
-      </article>
-      {% endfor %}
+    <div class="shop-bay" data-shop-grid>
+      {% if featured %}
+      <div class="shop-featured">
+        {{ shop_card(featured[0], featured=true) }}
+      </div>
+      {% endif %}
+
+      {% if packs %}
+      <div class="shop-packs-head">
+        <span class="shop-packs-title">{{ T("shop_packs_title", "Supply Packs") }}</span>
+        <span class="shop-packs-rail" aria-hidden="true"></span>
+      </div>
+      <div class="shop-grid">
+        {% for p in packs %}
+          {{ shop_card(p) }}
+        {% endfor %}
+      </div>
+      {% endif %}
     </div>
     {% endif %}
   </section>
