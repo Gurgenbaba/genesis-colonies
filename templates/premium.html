@@ -77,7 +77,9 @@
       </div>
       <div class="battle-pass-stat">
         <span class="battle-pass-stat-label">{{ T("bp_season_remaining", "Season") }}</span>
-        <strong class="gc-mono" data-bp-remaining>{{ season.seconds_remaining or 0 }}s</strong>
+        <strong class="gc-mono" data-bp-remaining data-remaining-seconds="{{ season.seconds_remaining or 0 }}">
+          {{ season.remaining_label or ((season.seconds_remaining or 0)|fmt_duration) }}
+        </strong>
       </div>
     </div>
     {% if not bp.premium_unlocked %}

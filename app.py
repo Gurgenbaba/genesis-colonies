@@ -200,6 +200,14 @@ def fmt_int_compact_filter(value):
     return _fmt_int_compact_canonical(value)
 
 
+@app.template_filter("fmt_duration")
+def fmt_duration_filter(value, max_parts: int = 3):
+    """Human duration: y / mo / w / d / h / min / s (canonical game calendar)."""
+    from game.time_format import format_duration_human
+
+    return format_duration_human(value, max_parts=int(max_parts or 3))
+
+
 @app.template_filter("webp_static")
 def webp_static_filter(url: str) -> str:
     """GC-555 — sibling WebP URL for a static raster asset URL."""

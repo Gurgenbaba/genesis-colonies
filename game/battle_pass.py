@@ -349,6 +349,9 @@ def get_active_season(conn, *, now: Optional[float] = None) -> Optional[Dict[str
     ).fetchone()
     if not row:
         return None
+    remaining = max(0, int(float(row["ends_at"] or 0) - ts))
+    from .time_format import format_duration_human
+
     return {
         "id": int(row["id"]),
         "slug": str(row["slug"]),
@@ -358,7 +361,8 @@ def get_active_season(conn, *, now: Optional[float] = None) -> Optional[Dict[str
         "xp_per_level": int(row["xp_per_level"] or DEFAULT_XP_PER_LEVEL),
         "max_level": int(row["max_level"] or DEFAULT_MAX_LEVEL),
         "active": bool(row["active"]),
-        "seconds_remaining": max(0, int(float(row["ends_at"] or 0) - ts)),
+        "seconds_remaining": remaining,
+        "remaining_label": format_duration_human(remaining, max_parts=3),
     }
 
 

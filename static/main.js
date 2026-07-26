@@ -356,16 +356,10 @@
 
   // UI-style ETA: "3m 12s" etc
   function formatEta(seconds) {
-    seconds = Math.max(0, Math.floor(Number(seconds) || 0));
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
-    if (h > 0) return `${h}h ${m}m ${s}s`;
-    if (m > 0) return `${m}m ${s}s`;
-    return `${s}s`;
+    return formatDurationHuman(seconds, 3);
   }
 
-  // robust parsing for text like "3m 12s", "1h 02m 01s", "75s", "02:15", "1:02:03"
+  // robust parsing for text like "3m 12s", "1h 02m 01s", "75s", "02:15", "1:02:03", "1mo 4w 1d"
   function parseDurationToSeconds(text) {
     if (!text) return NaN;
     const s = String(text).trim();
@@ -379,12 +373,20 @@
     let total = 0;
     let matched = false;
 
-    const h = s.match(/(\d+)\s*h/);
-    const m = s.match(/(\d+)\s*m/);
-    const sec = s.match(/(\d+)\s*s/);
+    const y = s.match(/(\d+)\s*y\b/);
+    const mo = s.match(/(\d+)\s*mo\b/);
+    const w = s.match(/(\d+)\s*w\b/);
+    const d = s.match(/(\d+)\s*d\b/);
+    const h = s.match(/(\d+)\s*h\b/);
+    const min = s.match(/(\d+)\s*min\b/) || s.match(/(\d+)\s*m\b/);
+    const sec = s.match(/(\d+)\s*s\b/);
 
+    if (y) { total += parseInt(y[1], 10) * 365 * 86400; matched = true; }
+    if (mo) { total += parseInt(mo[1], 10) * 30 * 86400; matched = true; }
+    if (w) { total += parseInt(w[1], 10) * 7 * 86400; matched = true; }
+    if (d) { total += parseInt(d[1], 10) * 86400; matched = true; }
     if (h) { total += parseInt(h[1], 10) * 3600; matched = true; }
-    if (m) { total += parseInt(m[1], 10) * 60; matched = true; }
+    if (min) { total += parseInt(min[1], 10) * 60; matched = true; }
     if (sec) { total += parseInt(sec[1], 10); matched = true; }
 
     if (matched) return total;
@@ -2722,14 +2724,93 @@
     return afterInit();
   };
 
+  function formatDurationHuman(seconds, maxParts) {
+    const s0 = Math.max(0, Math.floor(Number(seconds) || 0));
+    if (s0 <= 0) return "0s";
+    const limit = Math.max(1, Math.floor(Number(maxParts) || 3));
+    const SEC_DAY = 86400;
+    const SEC_WEEK = 7 * SEC_DAY;
+    const SEC_MONTH = 30 * SEC_DAY;
+    const SEC_YEAR = 365 * SEC_DAY;
+    let units;
+    if (s0 >= SEC_YEAR) {
+      units = [
+        ["y", SEC_YEAR],
+        ["mo", SEC_MONTH],
+        ["d", SEC_DAY],
+        ["h", 3600],
+        ["min", 60],
+        ["s", 1],
+      ];
+    } else if (s0 >= 90 * SEC_DAY) {
+      units = [
+        ["mo", SEC_MONTH],
+        ["d", SEC_DAY],
+        ["h", 3600],
+        ["min", 60],
+        ["s", 1],
+      ];
+    } else if (s0 >= 30 * SEC_DAY) {
+      units = [
+        ["d", SEC_DAY],
+        ["h", 3600],
+        ["min", 60],
+        ["s", 1],
+      ];
+    } else if (s0 >= SEC_WEEK) {
+      units = [
+        ["w", SEC_WEEK],
+        ["d", SEC_DAY],
+        ["h", 3600],
+        ["min", 60],
+        ["s", 1],
+      ];
+    } else if (s0 >= SEC_DAY) {
+      units = [
+        ["d", SEC_DAY],
+        ["h", 3600],
+        ["min", 60],
+        ["s", 1],
+      ];
+    } else if (s0 >= 3600) {
+      units = [
+        ["h", 3600],
+        ["min", 60],
+        ["s", 1],
+      ];
+    } else {
+      units = [
+        ["min", 60],
+        ["s", 1],
+      ];
+    }
+    let rem = s0;
+    const parts = [];
+    for (let i = 0; i < units.length; i++) {
+      const label = units[i][0];
+      const size = units[i][1];
+      if (rem < size && parts.length === 0) continue;
+      const qty = Math.floor(rem / size);
+      rem = rem % size;
+      if (qty <= 0) continue;
+      parts.push(`${qty}${label}`);
+      if (parts.length >= limit) break;
+    }
+    return parts.length ? parts.join(" ") : `${s0}s`;
+  }
+  GC.formatDurationHuman = formatDurationHuman;
+
   function formatDuration(seconds) {
+    // Compact timer style for short queue ETAs; human calendar units for longer spans.
     const s = Math.max(0, Math.floor(Number(seconds) || 0));
+    if (s >= 86400) return formatDurationHuman(s, 3);
     const h = Math.floor(s / 3600);
     const m = Math.floor((s % 3600) / 60);
     const sec = s % 60;
     if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
     return `${m}:${String(sec).padStart(2, "0")}`;
   }
+  GC.formatDuration = formatDuration;
 
   /** Unix seconds (or ms) → locale date + time for messages, chat, support. */
   function formatLocaleDateTime(ts) {
@@ -2757,13 +2838,7 @@
   GC.formatLocaleDateTime = formatLocaleDateTime;
 
   function formatCountdownRemain(seconds) {
-    const s = Math.max(0, Math.floor(Number(seconds) || 0));
-    const h = Math.floor(s / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    const secR = s % 60;
-    if (h > 0) return `${h}h ${m}m`;
-    if (m > 0) return `${m}m ${secR}s`;
-    return `${secR}s`;
+    return formatDurationHuman(seconds, 3);
   }
   GC.formatCountdownRemain = formatCountdownRemain;
 
@@ -16692,7 +16767,31 @@
 
   function initBattlePass() {
     bindBattlePassOnce();
-    parseBattlePassPageState();
+    const state = parseBattlePassPageState();
+    const remEl = document.querySelector("[data-bp-remaining]");
+    if (!remEl) return;
+    const fromState = Number(state?.season?.seconds_remaining);
+    const fromAttr = Number(remEl.getAttribute("data-remaining-seconds") || 0);
+    const endsAt = Number(state?.season?.ends_at || 0);
+    const tick = () => {
+      let rem = 0;
+      if (endsAt > 0) {
+        const now =
+          typeof serverNow === "function"
+            ? serverNow()
+            : typeof GC.getServerNow === "function"
+              ? GC.getServerNow()
+              : Date.now() / 1000;
+        rem = Math.max(0, Math.floor(endsAt - Number(now)));
+      } else if (Number.isFinite(fromState) && fromState > 0) {
+        rem = Math.max(0, Math.floor(fromState));
+      } else {
+        rem = Math.max(0, Math.floor(fromAttr || 0));
+      }
+      remEl.setAttribute("data-remaining-seconds", String(rem));
+      remEl.textContent = formatDurationHuman(rem, 3);
+    };
+    tick();
   }
 
   function parseAlliancePageState() {

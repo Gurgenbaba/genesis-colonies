@@ -69,18 +69,17 @@ def get_balance(player_id: int, *, conn) -> int:
 
 
 def format_balance_label(balance_sec: int) -> str:
+    from .time_format import format_duration_human
+
     sec = max(0, int(balance_sec or 0))
     if sec <= 0:
         return "0min"
-    hours, rem = divmod(sec, 3600)
-    minutes = rem // 60
-    if hours > 0 and minutes > 0:
-        return f"{hours}h {minutes}min"
-    if hours > 0:
-        return f"{hours}h"
-    if minutes > 0:
-        return f"{minutes}min"
-    return f"{sec}s"
+    # TK HUD: prefer compact h/min (skip calendar units for typical balances).
+    return format_duration_human(
+        sec,
+        max_parts=2,
+        units=(("h", 3600), ("min", 60), ("s", 1)),
+    )
 
 
 def serialize_for_client(player_id: int, *, conn) -> Dict[str, Any]:

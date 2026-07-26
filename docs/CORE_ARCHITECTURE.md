@@ -305,6 +305,7 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | Collector Prestige (Milestones, Titles) | `game/collector_prestige.py` | [COLLECTOR_EXCHANGE.md](COLLECTOR_EXCHANGE.md) |
 | Alliance Hub (identity, pool, projects, diplomacy) | `game/alliance.py`, `game/alliance_catalog.py` | [ALLIANCE_SYSTEM.md](ALLIANCE_SYSTEM.md) |
 | Imperium Timekeeper (Zeitkonto, manuelles Einsetzen) | `game/timekeeper.py` | [TIMEKEEPER_SYSTEM.md](TIMEKEEPER_SYSTEM.md) |
+| Human duration labels (y/mo/w/d/h/min/s) | `game/time_format.py` → Jinja `fmt_duration`, `GC.formatDurationHuman` | Adaptive ladders; never `mo`+`w`; season-scale uses days |
 | World Boss Events (shared HP PvE, contribution, LiveOps) | `game/world_boss.py` | [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) |
 | Galaxy Asteroid Belt (temporary harvest fields) | `game/asteroids.py` | [ASTEROID_SYSTEM.md](ASTEROID_SYSTEM.md) |
 | Pirate Ecosystem (Heat, bases, player-like AI, Bot-Log) | `game/pirates/` | [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md) |
