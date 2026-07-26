@@ -324,6 +324,125 @@ def find_order_by_session(
     return _order_from_row(row) if row else None
 
 
+def find_order_by_payment(
+    provider: str, payment_id: str, *, conn
+) -> Optional[Dict[str, Any]]:
+    if not schema_ready(conn) or not str(payment_id or "").strip():
+        return None
+    row = conn.execute(
+        """
+        SELECT id, player_id, sku, provider, provider_session_id, provider_payment_id,
+               amount_cents, currency, status, fulfill_reason, created_at, paid_at,
+               fulfilled_at, metadata_json
+        FROM shop_orders
+        WHERE provider = ? AND provider_payment_id = ?
+        LIMIT 1;
+        """,
+        (str(provider), str(payment_id).strip()),
+    ).fetchone()
+    return _order_from_row(row) if row else None
+
+
+def recover_paypal_return_for_player(
+    player_id: int,
+    paypal_order_id: str,
+    *,
+    conn,
+    now: Optional[float] = None,
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """
+    Idempotent recovery when PayPal charged but shop_orders row is missing
+    (e.g. local checkout + production return URL).
+    Creates a pending order for the logged-in player from the PayPal order,
+    then mark_paid + fulfill.
+    """
+    from . import payment_providers as pp
+
+    pid = int(player_id)
+    token = str(paypal_order_id or "").strip()
+    if pid <= 0 or not token:
+        return False, "invalid_recover", None
+    if not schema_ready(conn) or not is_shop_enabled():
+        return False, "shop_unavailable", None
+
+    existing = find_order_by_session("paypal", token, conn=conn)
+    if existing and int(existing["player_id"]) != pid:
+        return False, "order_owner_mismatch", None
+    if existing and existing["status"] == STATUS_FULFILLED:
+        return True, "already_fulfilled", existing
+
+    ok_get, get_reason, pdata = pp.paypal_fetch_order(token)
+    if not ok_get or not isinstance(pdata, dict):
+        return False, get_reason or "paypal_fetch_failed", existing
+    summary = pp.paypal_order_capture_summary(pdata)
+    status = str(summary.get("status") or "")
+    if status == "APPROVED":
+        cok, creason, cap = pp.paypal_capture_order(token)
+        if not cok:
+            return False, creason or "paypal_capture_failed", existing
+        if isinstance(cap, dict):
+            summary = pp.paypal_order_capture_summary(cap)
+            status = str(summary.get("status") or status)
+    if status != "COMPLETED":
+        return False, "paypal_not_paid", existing
+
+    sku = str(summary.get("sku") or "").strip()
+    amount_cents = int(summary.get("amount_cents") or 0)
+    capture_id = str(summary.get("capture_id") or "").strip() or token
+    if not sku:
+        return False, "unknown_sku", existing
+
+    by_pay = find_order_by_payment("paypal", capture_id, conn=conn)
+    if by_pay:
+        if int(by_pay["player_id"]) != pid:
+            return False, "order_owner_mismatch", None
+        if by_pay["status"] == STATUS_FULFILLED:
+            return True, "already_fulfilled", by_pay
+        existing = by_pay
+
+    product = get_product(sku, conn=conn, active_only=False)
+    if not product:
+        return False, "unknown_sku", existing
+    if int(product["price_cents"]) != amount_cents:
+        return False, "amount_mismatch", existing
+    if str(product.get("currency") or "eur").lower() != str(
+        summary.get("currency") or "eur"
+    ).lower():
+        return False, "currency_mismatch", existing
+
+    order = existing
+    if order is None:
+        ok_c, reason_c, created = create_pending_order(
+            pid,
+            sku,
+            "paypal",
+            conn=conn,
+            now=now,
+            metadata={"recovered_from": "paypal_return", "paypal_order_id": token},
+            allow_owned=True,
+        )
+        if not ok_c or not created:
+            return False, reason_c, None
+        order = created["order"]
+        attach_provider_session(
+            int(order["id"]),
+            token,
+            conn=conn,
+            metadata={"recovered_from": "paypal_return"},
+        )
+
+    return process_paid_event(
+        provider="paypal",
+        event_id=f"return_recover:{token}:{int(order['id'])}",
+        order_id=int(order["id"]),
+        provider_session_id=token,
+        provider_payment_id=capture_id,
+        conn=conn,
+        payload={"source": "paypal_return_recover", "summary": summary},
+        now=now,
+    )
+
+
 def _order_from_row(row) -> Dict[str, Any]:
     return {
         "id": int(row["id"]),
@@ -351,6 +470,7 @@ def create_pending_order(
     conn,
     now: Optional[float] = None,
     metadata: Optional[Mapping[str, Any]] = None,
+    allow_owned: bool = False,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     if not schema_ready(conn):
         return False, "shop_unavailable", None
@@ -368,7 +488,7 @@ def create_pending_order(
     if product["kind"] not in ALLOWED_KINDS:
         return False, "forbidden_sku", None
 
-    if product["sku"] == SKU_SEASON_PASS:
+    if product["sku"] == SKU_SEASON_PASS and not allow_owned:
         owned, own_reason = _season_pass_owned(pid, conn=conn)
         if owned:
             return False, "already_owned", None

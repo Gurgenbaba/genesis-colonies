@@ -156,8 +156,9 @@ Webhook: `…/api/webhooks/stripe` Event `checkout.session.completed`.
 1. Migration `113` applied (`python migrate.py`)
 2. PayPal-Keys + Webhook auf Railway
 3. `SHOP_ENABLED=1`, Redeploy
-4. `/shop` zeigt PayPal-Button
-5. Sandbox-Kauf → Order `fulfilled`
+5. `/shop` zeigt PayPal-Button (nur über `PUBLIC_BASE_URL`-Host bei `PAYPAL_MODE=live`)
+6. Kauf → Order `fulfilled`
+7. Orphan-Recovery: `/shop/return?token=<PAYPAL_ORDER_ID>` gutschreibt COMPLETED-Zahlungen auch ohne lokale Order-Zeile
 
 ## Non-goals (MVP)
 

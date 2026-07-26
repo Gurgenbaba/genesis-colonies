@@ -237,17 +237,87 @@ def paypal_create_checkout_order(
     }
 
 
+def paypal_fetch_order(
+    paypal_order_id: str,
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """GET /v2/checkout/orders/{id} — used for return recovery after capture."""
+    token = _paypal_access_token()
+    if not token:
+        return False, "paypal_auth_failed", None
+    oid = urllib.parse.quote(str(paypal_order_id or "").strip())
+    if not oid:
+        return False, "invalid_paypal_order", None
+    try:
+        data = _paypal_request("GET", f"/v2/checkout/orders/{oid}", token=token)
+    except urllib.error.HTTPError as exc:
+        return False, f"paypal_http_{int(exc.code)}", None
+    except Exception:
+        return False, "paypal_fetch_failed", None
+    if not isinstance(data, dict) or not data.get("id"):
+        return False, "paypal_fetch_failed", None
+    return True, "ok", data
+
+
+def paypal_order_capture_summary(
+    data: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """Normalize PayPal order payload for shop recovery (sku, cents, capture id)."""
+    status = str(data.get("status") or "").upper()
+    sku = ""
+    currency = "eur"
+    amount_cents = 0
+    capture_id = ""
+    units = data.get("purchase_units") or []
+    if units and isinstance(units[0], dict):
+        pu = units[0]
+        sku = str(pu.get("description") or "").strip()
+        amount = pu.get("amount") or {}
+        if isinstance(amount, dict):
+            currency = str(amount.get("currency_code") or "eur").lower()
+            try:
+                amount_cents = int(round(float(amount.get("value") or 0) * 100))
+            except (TypeError, ValueError):
+                amount_cents = 0
+        caps = ((pu.get("payments") or {}).get("captures")) or []
+        if caps and isinstance(caps[0], dict):
+            capture_id = str(caps[0].get("id") or "").strip()
+    return {
+        "status": status,
+        "sku": sku,
+        "currency": currency,
+        "amount_cents": amount_cents,
+        "capture_id": capture_id,
+        "paypal_order_id": str(data.get("id") or ""),
+    }
+
+
 def paypal_capture_order(paypal_order_id: str) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     token = _paypal_access_token()
     if not token:
         return False, "paypal_auth_failed", None
+    oid = str(paypal_order_id or "").strip()
+    # Already captured (browser return after webhook / orphaned local checkout).
+    ok_get, _, existing = paypal_fetch_order(oid)
+    if ok_get and isinstance(existing, dict):
+        summary = paypal_order_capture_summary(existing)
+        if summary.get("status") == "COMPLETED":
+            return True, "already_captured", existing
     try:
         data = _paypal_request(
             "POST",
-            f"/v2/checkout/orders/{urllib.parse.quote(str(paypal_order_id))}/capture",
+            f"/v2/checkout/orders/{urllib.parse.quote(oid)}/capture",
             token=token,
             body={},
         )
+    except urllib.error.HTTPError as exc:
+        # Race: capture completed between GET and POST.
+        if int(exc.code) in (422, 400):
+            ok2, _, again = paypal_fetch_order(oid)
+            if ok2 and isinstance(again, dict):
+                summary = paypal_order_capture_summary(again)
+                if summary.get("status") == "COMPLETED":
+                    return True, "already_captured", again
+        return False, "paypal_capture_failed", None
     except Exception:
         return False, "paypal_capture_failed", None
     return True, "ok", data

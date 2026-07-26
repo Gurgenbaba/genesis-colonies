@@ -447,6 +447,55 @@ def test_serialize_hides_payload(shop_db):
     conn.close()
 
 
+def test_recover_paypal_return_creates_and_fulfills(shop_db, monkeypatch):
+    """Orphaned PayPal COMPLETED order → grant for logged-in player (local→prod fix)."""
+    from game.shop import recover_paypal_return_for_player
+    from game import payment_providers as pp
+
+    uid = _player()
+    paypal_oid = "PAYPAL_ORPHAN_TK_S"
+
+    def fake_fetch(_oid):
+        return True, "ok", {
+            "id": paypal_oid,
+            "status": "COMPLETED",
+            "purchase_units": [
+                {
+                    "description": "tk_pack_s",
+                    "amount": {"currency_code": "EUR", "value": "0.99"},
+                    "payments": {
+                        "captures": [
+                            {
+                                "id": "CAP_ORPHAN_1",
+                                "status": "COMPLETED",
+                                "amount": {"currency_code": "EUR", "value": "0.99"},
+                            }
+                        ]
+                    },
+                }
+            ],
+        }
+
+    monkeypatch.setattr(pp, "paypal_fetch_order", fake_fetch)
+
+    conn = db()
+    before = get_balance(uid, conn=conn)
+    ok, reason, order = recover_paypal_return_for_player(uid, paypal_oid, conn=conn)
+    assert ok, reason
+    assert order and order["status"] == "fulfilled"
+    assert order["sku"] == "tk_pack_s"
+    assert order["provider_session_id"] == paypal_oid
+    after = get_balance(uid, conn=conn)
+    assert after > before
+    # Idempotent
+    ok2, reason2, order2 = recover_paypal_return_for_player(uid, paypal_oid, conn=conn)
+    assert ok2, reason2
+    assert reason2 in ("already_fulfilled", "duplicate")
+    assert get_balance(uid, conn=conn) == after
+    conn.commit()
+    conn.close()
+
+
 def test_admin_unlock_still_works(shop_db):
     uid = _player()
     conn = db()

@@ -4459,20 +4459,51 @@ def shop_return_view():
     order = None
     conn = db()
     try:
-        from game.payment_providers import paypal_capture_order
-        from game.shop import find_order_by_session, get_order, process_paid_event
+        from game.payment_providers import paypal_capture_order, paypal_order_capture_summary
+        from game.shop import (
+            find_order_by_session,
+            get_order,
+            process_paid_event,
+            recover_paypal_return_for_player,
+        )
 
+        # Fall through: wrong/local order_id must not block PayPal token recovery.
         if order_id > 0:
             order = get_order(order_id, conn=conn)
-        elif session_id:
+            if order and int(order["player_id"]) != user_id:
+                order = None
+        if order is None and session_id:
             order = find_order_by_session("stripe", session_id, conn=conn)
             if order is None:
                 order = find_order_by_session("paypal", session_id, conn=conn)
-        elif token:
+            if order and int(order["player_id"]) != user_id:
+                order = None
+        if order is None and token:
             order = find_order_by_session("paypal", token, conn=conn)
+            if order and int(order["player_id"]) != user_id:
+                order = None
 
-        if order and int(order["player_id"]) != user_id:
-            order = None
+        # Orphaned live payment: order exists only on another DB (local→prod).
+        if order is None and token and user_id > 0:
+            begin_write_transaction(conn)
+            try:
+                rok, rreason, recovered = recover_paypal_return_for_player(
+                    user_id, token, conn=conn
+                )
+                if rok and recovered:
+                    commit(conn)
+                    order = recovered
+                else:
+                    rollback(conn)
+                    if rreason not in ("paypal_not_paid", "paypal_http_404"):
+                        logger.warning(
+                            "paypal return recover failed token=%s reason=%s",
+                            token,
+                            rreason,
+                        )
+            except Exception:
+                rollback(conn)
+                logger.exception("paypal return recover crashed token=%s", token)
 
         # PayPal browser return — capture & fulfill if webhook has not landed yet.
         if (
@@ -4487,12 +4518,9 @@ def shop_return_view():
                 cok, creason, cap = paypal_capture_order(paypal_oid)
                 payment_id = paypal_oid
                 if isinstance(cap, dict):
-                    # Prefer capture id when present
-                    units = cap.get("purchase_units") or []
-                    if units and isinstance(units[0], dict):
-                        payments = (units[0].get("payments") or {}).get("captures") or []
-                        if payments and isinstance(payments[0], dict):
-                            payment_id = str(payments[0].get("id") or payment_id)
+                    summary = paypal_order_capture_summary(cap)
+                    if summary.get("capture_id"):
+                        payment_id = str(summary["capture_id"])
                 if cok:
                     process_paid_event(
                         provider="paypal",
@@ -4566,6 +4594,23 @@ def api_shop_checkout():
     sku = str(data.get("sku") or "").strip()
     provider = str(data.get("provider") or "").strip().lower()
     from game.shop import start_checkout
+    from urllib.parse import urlparse
+    from game.config import get_public_base_url
+    from game.payment_providers import paypal_mode
+
+    # Block local→live PayPal: PUBLIC_BASE_URL host must match this request host.
+    if provider == "paypal" and paypal_mode() == "live":
+        pub = urlparse((get_public_base_url() or "").strip()).netloc.lower()
+        req_host = (request.host or "").split(":")[0].lower()
+        pub_host = pub.split(":")[0] if pub else ""
+        if pub_host and req_host and pub_host != req_host:
+            return jsonify(
+                {
+                    "ok": False,
+                    "reason": "public_host_mismatch",
+                    "detail": "Live PayPal nur über die Produktions-URL.",
+                }
+            ), 400
 
     success_url = _shop_absolute_url("success")
     cancel_url = _shop_absolute_url("cancel")
