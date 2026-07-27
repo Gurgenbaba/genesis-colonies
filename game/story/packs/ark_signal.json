@@ -1,0 +1,351 @@
+{
+  "pack_id": "ark_signal",
+  "version": 4,
+  "arcs": [
+    {
+      "arc_id": "main",
+      "kind": "main",
+      "contact_key": "ark",
+      "title_key": "story_ark_main_title",
+      "start_when": {
+        "always": true
+      },
+      "chapters": [
+        {
+          "chapter_id": "awakening",
+          "title_key": "story_ch_awakening_title",
+          "beats": [
+            {
+              "beat_id": "awake_1",
+              "type": "transmission",
+              "title_key": "story_ch1_b1_title",
+              "body_key": "story_ch1_b1_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "awake_2",
+              "type": "transmission",
+              "title_key": "story_ch1_b2_title",
+              "body_key": "story_ch1_b2_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "awake_imperium",
+              "type": "transmission",
+              "title_key": "story_ch1_imp_title",
+              "body_key": "story_ch1_imp_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "awake_3",
+              "type": "transmission",
+              "title_key": "story_ch1_b3_title",
+              "body_key": "story_ch1_b3_body",
+              "cta_key": "story_cta_chapter_done"
+            }
+          ]
+        },
+        {
+          "chapter_id": "lexicon",
+          "title_key": "story_ch_lexicon_title",
+          "beats": [
+            {
+              "beat_id": "lex_fn",
+              "type": "transmission",
+              "title_key": "story_ch_lex_fn_title",
+              "body_key": "story_ch_lex_fn_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "lex_ct",
+              "type": "transmission",
+              "title_key": "story_ch_lex_ct_title",
+              "body_key": "story_ch_lex_ct_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "lex_fuel_en",
+              "type": "transmission",
+              "title_key": "story_ch_lex_fuel_title",
+              "body_key": "story_ch_lex_fuel_body",
+              "cta_key": "story_cta_chapter_done"
+            }
+          ]
+        },
+        {
+          "chapter_id": "spine",
+          "title_key": "story_ch_spine_title",
+          "beats": [
+            {
+              "beat_id": "spine_lore",
+              "type": "transmission",
+              "title_key": "story_ch2_b1_title",
+              "body_key": "story_ch2_b1_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "spine_build",
+              "type": "objective",
+              "objective_key": "upgrade_buildings",
+              "objective_kind": "count",
+              "target": 5,
+              "filters": {},
+              "title_key": "story_ch2_obj_title",
+              "body_key": "story_ch2_obj_body"
+            },
+            {
+              "beat_id": "spine_close",
+              "type": "transmission",
+              "title_key": "story_ch2_b2_title",
+              "body_key": "story_ch2_b2_body",
+              "cta_key": "story_cta_chapter_done"
+            }
+          ]
+        },
+        {
+          "chapter_id": "coordinates",
+          "title_key": "story_ch_coords_title",
+          "beats": [
+            {
+              "beat_id": "coords_gsp",
+              "type": "transmission",
+              "title_key": "story_ch_coords_gsp_title",
+              "body_key": "story_ch_coords_gsp_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "coords_expo",
+              "type": "transmission",
+              "title_key": "story_ch_coords_expo_title",
+              "body_key": "story_ch_coords_expo_body",
+              "cta_key": "story_cta_chapter_done"
+            }
+          ]
+        },
+        {
+          "chapter_id": "void_mark",
+          "title_key": "story_ch_void_title",
+          "beats": [
+            {
+              "beat_id": "void_lore",
+              "type": "transmission",
+              "title_key": "story_ch3_b1_title",
+              "body_key": "story_ch3_b1_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "void_fleet",
+              "type": "objective",
+              "objective_key": "send_fleet_missions",
+              "objective_kind": "count",
+              "target": 5,
+              "filters": {},
+              "title_key": "story_ch3_obj_title",
+              "body_key": "story_ch3_obj_body"
+            },
+            {
+              "beat_id": "void_reveal",
+              "type": "transmission",
+              "title_key": "story_ch3_b2_title",
+              "body_key": "story_ch3_b2_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "main_reward",
+              "type": "reward",
+              "grants": [
+                {
+                  "kind": "inventory",
+                  "item_key": "story_scrap_token",
+                  "amount": 6
+                },
+                {
+                  "kind": "flag",
+                  "flag": "ark_signal_main_done"
+                },
+                {
+                  "kind": "codex_flag",
+                  "flag": "codex_ark_signal"
+                },
+                {
+                  "kind": "inventory",
+                  "item_key": "container_basic",
+                  "amount": 1
+                },
+                {
+                  "kind": "notify",
+                  "subject_key": "story_ark_main_notify_subject",
+                  "body_key": "story_ark_main_notify_body"
+                }
+              ]
+            },
+            {
+              "beat_id": "main_epilogue",
+              "type": "transmission",
+              "title_key": "story_ch3_epi_title",
+              "body_key": "story_ch3_epi_body",
+              "cta_key": "story_cta_saga_continue"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "arc_id": "androgyn_echo",
+      "kind": "side",
+      "contact_key": "androgyn",
+      "title_key": "story_androgyn_title",
+      "start_when": {
+        "flags_all": [
+          "ark_signal_main_done"
+        ]
+      },
+      "chapters": [
+        {
+          "chapter_id": "echo",
+          "title_key": "story_ch_echo_title",
+          "beats": [
+            {
+              "beat_id": "echo_1",
+              "type": "transmission",
+              "title_key": "story_androgyn_contact_title",
+              "body_key": "story_androgyn_contact_body",
+              "cta_key": "story_cta_listen"
+            },
+            {
+              "beat_id": "echo_2",
+              "type": "transmission",
+              "title_key": "story_echo_b2_title",
+              "body_key": "story_echo_b2_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "branch",
+              "type": "choice",
+              "title_key": "story_androgyn_choice_title",
+              "body_key": "story_androgyn_choice_body",
+              "choices": [
+                {
+                  "id": "pursue",
+                  "label_key": "story_androgyn_choice_pursue",
+                  "set_flags": [
+                    "androgyn_pursue"
+                  ]
+                },
+                {
+                  "id": "archive",
+                  "label_key": "story_androgyn_choice_archive",
+                  "set_flags": [
+                    "androgyn_archive"
+                  ]
+                }
+              ]
+            },
+            {
+              "beat_id": "echo_reward",
+              "type": "reward",
+              "grants": [
+                {
+                  "kind": "codex_flag",
+                  "flag": "codex_androgyn_echo"
+                },
+                {
+                  "kind": "flag",
+                  "flag": "androgyn_echo_done"
+                },
+                {
+                  "kind": "notify",
+                  "subject_key": "story_androgyn_notify_subject",
+                  "body_key": "story_androgyn_notify_body"
+                }
+              ]
+            },
+            {
+              "beat_id": "echo_aftermath",
+              "type": "transmission",
+              "title_key": "story_echo_b3_title",
+              "body_key": "story_echo_b3_body",
+              "cta_key": "story_cta_continue"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "arc_id": "void_patrol",
+      "kind": "side",
+      "contact_key": "ark",
+      "title_key": "story_void_patrol_title",
+      "start_when": {
+        "flags_all": [
+          "ark_signal_main_done"
+        ]
+      },
+      "chapters": [
+        {
+          "chapter_id": "patrol",
+          "title_key": "story_ch_patrol_title",
+          "beats": [
+            {
+              "beat_id": "briefing",
+              "type": "transmission",
+              "title_key": "story_void_patrol_brief_title",
+              "body_key": "story_void_patrol_brief_body",
+              "cta_key": "story_cta_accept"
+            },
+            {
+              "beat_id": "patrol_lore",
+              "type": "transmission",
+              "title_key": "story_patrol_b2_title",
+              "body_key": "story_patrol_b2_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "expedition",
+              "type": "objective",
+              "objective_key": "launch_expeditions",
+              "objective_kind": "count",
+              "target": 1,
+              "filters": {},
+              "title_key": "story_void_patrol_obj_title",
+              "body_key": "story_void_patrol_obj_body"
+            },
+            {
+              "beat_id": "patrol_close",
+              "type": "transmission",
+              "title_key": "story_patrol_b3_title",
+              "body_key": "story_patrol_b3_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "patrol_reward",
+              "type": "reward",
+              "grants": [
+                {
+                  "kind": "flag",
+                  "flag": "void_patrol_done"
+                },
+                {
+                  "kind": "codex_flag",
+                  "flag": "codex_void_patrol"
+                },
+                {
+                  "kind": "inventory",
+                  "item_key": "container_basic",
+                  "amount": 1
+                },
+                {
+                  "kind": "notify",
+                  "subject_key": "story_void_patrol_notify_subject",
+                  "body_key": "story_void_patrol_notify_body"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "season_code": "Q1",
+  "season_key": "story_season_q1"
+}

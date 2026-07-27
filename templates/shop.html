@@ -2,6 +2,7 @@
 
 {% block content %}
 {% set shop_state = shop if shop is defined and shop else {'ready': false, 'enabled': false, 'products': [], 'providers': []} %}
+{% set free_shop_state = free_shop if free_shop is defined and free_shop else {'balance': 0, 'label': 'Ark-Token', 'offers': []} %}
 {% set products = shop_state.products if shop_state.products is defined else [] %}
 {% set providers = shop_state.providers if shop_state.providers is defined else [] %}
 {% set featured = products | selectattr('sku', 'equalto', 'season_pass_current') | list %}
@@ -123,11 +124,51 @@
 </article>
 {% endmacro %}
 
+{% macro free_shop_card(offer) %}
+<article class="shop-card free-shop-card{% if not offer.affordable %} is-locked{% endif %}"
+         data-free-shop-offer="{{ offer.offer_id }}"
+         data-shop-kind="{{ offer.kind }}">
+  <div class="shop-card-frame" aria-hidden="true"></div>
+  {% if offer.image %}
+  <figure class="shop-card-art">
+    <img src="{{ url_for('static', filename=offer.image, v=GC_ASSET_VERSION) }}"
+         alt=""
+         width="640"
+         height="400"
+         loading="lazy"
+         decoding="async">
+    <span class="shop-card-kind">{{ shop_kind_label(offer.kind) }}</span>
+  </figure>
+  {% endif %}
+  <div class="shop-card-body">
+    <div class="shop-card-main">
+      <h2 class="shop-card-title">{{ offer.title }}</h2>
+      <p class="hint shop-card-hint">{{ offer.hint }}</p>
+    </div>
+    <div class="shop-card-footer">
+      <p class="shop-card-price gc-mono" data-free-shop-cost>
+        {{ offer.cost }} {{ free_shop_state.label or T("inv_ark_token", "Ark-Token") }}
+      </p>
+      <div class="shop-card-actions">
+        <button type="button"
+                class="gc-btn gc-btn-sm gc-btn-primary"
+                data-free-shop-redeem
+                data-offer-id="{{ offer.offer_id }}"
+                {% if not offer.affordable %}disabled{% endif %}>
+          {{ T("free_shop_redeem", "Einlösen") }}
+        </button>
+      </div>
+    </div>
+  </div>
+</article>
+{% endmacro %}
+
 <div class="gc-page shop-page" id="shop-page" data-shop
      data-ready="{{ '1' if shop_state.ready else '0' }}"
      data-enabled="{{ '1' if shop_state.enabled else '0' }}">
 
   <script type="application/json" id="shop-page-state">{{ shop_state | tojson }}</script>
+  <script type="application/json" id="free-shop-page-state">{{ free_shop_state | tojson }}</script>
 
   <header class="gc-page-header section-header shop-header">
     <p class="shop-eyebrow">{{ T("shop_eyebrow", "COMMAND SUPPLY") }}</p>
@@ -137,75 +178,122 @@
     </p>
   </header>
 
+  <nav class="shop-tabs" data-shop-tabs role="tablist" aria-label="{{ T('shop_tabs_label', 'Shop-Bereiche') }}">
+    <button type="button"
+            class="shop-tab is-active"
+            role="tab"
+            aria-selected="true"
+            data-shop-tab="premium"
+            id="shop-tab-premium">{{ T("shop_tab_premium", "Premium") }}</button>
+    <button type="button"
+            class="shop-tab"
+            role="tab"
+            aria-selected="false"
+            data-shop-tab="free"
+            id="shop-tab-free">{{ T("shop_tab_free", "Free Shop") }}</button>
+  </nav>
+
   {% if shop_cancelled is defined and shop_cancelled %}
-  <section class="gc-panel shop-banner shop-banner--cancel">
+  <section class="gc-panel shop-banner shop-banner--cancel" data-shop-panel="premium">
     <p>{{ T("shop_cancelled", "Kauf abgebrochen. Es wurde nichts belastet.") }}</p>
   </section>
   {% endif %}
 
-  {% if not shop_state.enabled %}
-  <section class="gc-panel shop-banner">
-    <p>{{ T("shop_disabled", "Shop ist derzeit deaktiviert.") }}</p>
-  </section>
-  {% elif not providers %}
-  <section class="gc-panel shop-banner">
-    <p>{{ T("shop_no_providers", "Zahlungsanbieter sind noch nicht konfiguriert.") }}</p>
-  </section>
-  {% endif %}
-
-  <section class="gc-panel shop-catalog-panel">
-    <div class="gc-panel-header shop-catalog-header">
-      <span class="gc-panel-title">{{ T("shop_catalog_title", "Angebote") }}</span>
-      <span class="shop-catalog-rail" aria-hidden="true"></span>
-    </div>
-
-    {% if not products %}
-    <p class="hint">{{ T("shop_empty", "Keine Produkte verfügbar.") }}</p>
-    {% else %}
-    <div class="shop-bay" data-shop-grid>
-      {% if featured %}
-      <div class="shop-featured">
-        {{ shop_card(featured[0], featured=true) }}
-      </div>
-      {% endif %}
-
-      {% if identity %}
-      <div class="shop-packs-head">
-        <span class="shop-packs-title">{{ T("shop_identity_title", "Commander Identity") }}</span>
-        <span class="shop-packs-rail" aria-hidden="true"></span>
-      </div>
-      <p class="hint shop-identity-section-hint">
-        {{ T("shop_identity_section_hint", "Name-Styles ändern nur deinen sichtbaren Namen. Die UI-Farbe setzt du auf der PlayerCard unter UI-Farbe (Shell).") }}
-      </p>
-      <div class="shop-grid shop-grid--identity">
-        {% for p in identity %}
-          {{ shop_card(p) }}
-        {% endfor %}
-      </div>
-      {% endif %}
-
-      {% if packs %}
-      <div class="shop-packs-head">
-        <span class="shop-packs-title">{{ T("shop_packs_title", "Supply Packs") }}</span>
-        <span class="shop-packs-rail" aria-hidden="true"></span>
-      </div>
-      <div class="shop-grid">
-        {% for p in packs %}
-          {{ shop_card(p) }}
-        {% endfor %}
-      </div>
-      {% endif %}
-    </div>
+  <div class="shop-panel is-active" data-shop-panel="premium" role="tabpanel" aria-labelledby="shop-tab-premium">
+    {% if not shop_state.enabled %}
+    <section class="gc-panel shop-banner">
+      <p>{{ T("shop_disabled", "Shop ist derzeit deaktiviert.") }}</p>
+    </section>
+    {% elif not providers %}
+    <section class="gc-panel shop-banner">
+      <p>{{ T("shop_no_providers", "Zahlungsanbieter sind noch nicht konfiguriert.") }}</p>
+    </section>
     {% endif %}
-  </section>
 
-  <section class="gc-panel shop-policy-panel">
-    <p class="hint">
-      {{ T("shop_policy", "Offizieller Shop: Timekeeper, Boosters, Container (meta), Season Pass und Name-Styles. Kampf-Power und Rohstoff-Stacks werden nicht verkauft.") }}
-      <a href="{{ url_for('premium_view') }}" class="gc-btn gc-btn-ghost gc-btn-sm" data-pjax-link>
-        {{ T("shop_goto_premium", "Season Pass öffnen") }}
-      </a>
-    </p>
-  </section>
+    <section class="gc-panel shop-catalog-panel">
+      <div class="gc-panel-header shop-catalog-header">
+        <span class="gc-panel-title">{{ T("shop_catalog_title", "Angebote") }}</span>
+        <span class="shop-catalog-rail" aria-hidden="true"></span>
+      </div>
+
+      {% if not products %}
+      <p class="hint">{{ T("shop_empty", "Keine Produkte verfügbar.") }}</p>
+      {% else %}
+      <div class="shop-bay" data-shop-grid>
+        {% if featured %}
+        <div class="shop-featured">
+          {{ shop_card(featured[0], featured=true) }}
+        </div>
+        {% endif %}
+
+        {% if identity %}
+        <div class="shop-packs-head">
+          <span class="shop-packs-title">{{ T("shop_identity_title", "Commander Identity") }}</span>
+          <span class="shop-packs-rail" aria-hidden="true"></span>
+        </div>
+        <p class="hint shop-identity-section-hint">
+          {{ T("shop_identity_section_hint", "Name-Styles ändern nur deinen sichtbaren Namen. Die UI-Farbe setzt du auf der PlayerCard unter UI-Farbe (Shell).") }}
+        </p>
+        <div class="shop-grid shop-grid--identity">
+          {% for p in identity %}
+            {{ shop_card(p) }}
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if packs %}
+        <div class="shop-packs-head">
+          <span class="shop-packs-title">{{ T("shop_packs_title", "Supply Packs") }}</span>
+          <span class="shop-packs-rail" aria-hidden="true"></span>
+        </div>
+        <div class="shop-grid">
+          {% for p in packs %}
+            {{ shop_card(p) }}
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+    </section>
+
+    <section class="gc-panel shop-policy-panel">
+      <p class="hint">
+        {{ T("shop_policy", "Offizieller Shop: Timekeeper, Boosters, Container (meta), Season Pass und Name-Styles. Kampf-Power und Rohstoff-Stacks werden nicht verkauft.") }}
+        <a href="{{ url_for('premium_view') }}" class="gc-btn gc-btn-ghost gc-btn-sm" data-pjax-link>
+          {{ T("shop_goto_premium", "Season Pass öffnen") }}
+        </a>
+      </p>
+    </section>
+  </div>
+
+  <div class="shop-panel" data-shop-panel="free" role="tabpanel" aria-labelledby="shop-tab-free" hidden>
+    <section class="gc-panel free-shop-panel" data-free-shop>
+      <div class="gc-panel-header shop-catalog-header">
+        <span class="gc-panel-title">{{ T("free_shop_title", "Free Shop") }}</span>
+        <span class="shop-catalog-rail" aria-hidden="true"></span>
+      </div>
+      <p class="hint free-shop-hint">{{ T("free_shop_hint", "Ark-Tokens aus Story Ops gegen Convenience-Meta eintauschen — unter dem EUR-Shop, kein Combat-P2W.") }}</p>
+      <p class="free-shop-balance gc-mono" data-free-shop-balance>
+        {{ T("free_shop_balance", "Bestand") }}:
+        <strong>{{ (free_shop_state.balance or 0)|int }}</strong>
+        {{ free_shop_state.label or T("inv_ark_token", "Ark-Token") }}
+      </p>
+      {% if free_shop_state.offers %}
+      <div class="shop-grid free-shop-grid" data-free-shop-grid>
+        {% for offer in free_shop_state.offers %}
+          {{ free_shop_card(offer) }}
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="hint">{{ T("free_shop_empty", "Keine Free-Shop-Angebote verfügbar.") }}</p>
+      {% endif %}
+      <p class="hint free-shop-story-link">
+        {{ T("free_shop_earn_hint", "Ark-Tokens verdienst du in Story Ops.") }}
+        <a href="{{ url_for('story_view') }}" class="gc-btn gc-btn-ghost gc-btn-sm" data-pjax-link>
+          {{ T("free_shop_goto_story", "Story Ops öffnen") }}
+        </a>
+      </p>
+    </section>
+  </div>
 </div>
 {% endblock %}

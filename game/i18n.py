@@ -47,6 +47,23 @@ def _load_locale(locale: str) -> dict[str, str]:
         return {}
 
 
+_locale_mtimes: dict[str, float] = {}
+
+
+def clear_locale_cache() -> None:
+    """Drop cached locale JSON (hot-reload after locales/*.json edits)."""
+    _load_locale.cache_clear()
+    _locale_mtimes.clear()
+
+
+def _locale_mtime(locale: str) -> float:
+    path = _LOCALES_DIR / f"{locale}.json"
+    try:
+        return float(path.stat().st_mtime)
+    except OSError:
+        return 0.0
+
+
 def normalize_locale(locale: str | None) -> str:
     loc = str(locale or DEFAULT_LOCALE).strip().lower()
     return loc if loc in SUPPORTED_LOCALES else DEFAULT_LOCALE
@@ -54,6 +71,13 @@ def normalize_locale(locale: str | None) -> str:
 
 def get_locale_dict(locale: str | None = None) -> dict[str, str]:
     loc = normalize_locale(locale)
+    mtime = _locale_mtime(loc)
+    if _locale_mtimes.get(loc) != mtime:
+        # File changed on disk — invalidate this locale (+ en fallback for merges).
+        _load_locale.cache_clear()
+        _locale_mtimes.clear()
+        _locale_mtimes[loc] = mtime
+        _locale_mtimes[FALLBACK_LOCALE] = _locale_mtime(FALLBACK_LOCALE)
     primary = _load_locale(loc)
     if loc in (DEFAULT_LOCALE, FALLBACK_LOCALE):
         return primary

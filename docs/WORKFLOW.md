@@ -26,6 +26,7 @@ Epics beschreiben nur das Ziel. **Niemals direkt implementieren.**
 | EPIC-22 | LiveOps Retention (Login + Battle Pass) | [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) |
 | EPIC-23 | Payment / Shop (Cash Grab MVP) | [PAYMENT_SHOP.md](PAYMENT_SHOP.md) |
 | EPIC-24 | Admin Control Center UX | [ADMIN_CONTROL_CENTER.md](ADMIN_CONTROL_CENTER.md) |
+| EPIC-25 | Genesis Story Ops (Lore / Side Ops) | [GENESIS_STORY_OPS.md](GENESIS_STORY_OPS.md) |
 
 Epic → in **3–5 Tickets** zerlegen (große Epics: Phasen in Master-Doc). Siehe [EPICS.md](EPICS.md).
 
@@ -134,7 +135,7 @@ Kurz. Keine Projektzusammenfassung.
 ## Tests
 
 ```bash
-python -m pytest tests/ -v          # gesamt (3972 Tests)
+python -m pytest tests/ -v          # gesamt (3992 Tests)
 python -m pytest tests/test_fleet.py -v   # domänenspezifisch
 ```
 

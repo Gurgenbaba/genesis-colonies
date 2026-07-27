@@ -40,13 +40,14 @@ POST claim → inventory (Container + Booster)
 | **Chronicles** (`game/chronicle_entries.py`) | Archiv / Historie | Kein Fortschritt, kein Claim |
 | **Vote Rewards** (`game/vote_rewards.py`) | Externe Vote-Postbacks | Kein Gameplay-Tracking |
 | **Planet Evolution Quests** | Planet-Scope, DNA-Slots | Account-weite Imperiums-Befehle ≠ PE-Queue |
+| **Genesis Story Ops** (`game/story/`) | Persistente Lore-Arcs / Side Ops, Transmission-UI | **Anderer Owner** — teilt nur den Gameplay-Event-Bus (Fan-out); kein Daily-Ops-Duplikat — [GENESIS_STORY_OPS.md](GENESIS_STORY_OPS.md) |
 
 **Verboten:**
 
 - `Accept` / `Track` / `Start`-Buttons — Direktiven sind immer aktiv
 - Frontend-Zielberechnung oder Skalierung (Regel 16)
 - Eigenes Polling/Tick für Directive-Fortschritt
-- Paralleles Quest-Modul neben `game/directives/`
+- Paralleles Daily-Quest-Modul neben `game/directives/` (Story Ops = eigene Domäne EPIC-25, nicht Daily-Ops)
 - Änderungen an Queue-Engine oder parallele Queue-Typen
 - Verwechslung mit `galactic_directives` in UI-Texten (i18n: `imperial_directives_*` vs. `galactic_directives_*`)
 

@@ -1,0 +1,95 @@
+{
+  "pack_id": "anomaly_protocol",
+  "version": 1,
+  "arcs": [
+    {
+      "arc_id": "main",
+      "kind": "main",
+      "contact_key": "ark",
+      "title_key": "story_ap_title",
+      "start_when": {
+        "flags_all": [
+          "heat_and_shadow_done"
+        ]
+      },
+      "chapters": [
+        {
+          "chapter_id": "brief",
+          "title_key": "story_ap_ch_brief_title",
+          "beats": [
+            {
+              "beat_id": "a1",
+              "type": "transmission",
+              "title_key": "story_ap_a1_title",
+              "body_key": "story_ap_a1_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "a2",
+              "type": "transmission",
+              "title_key": "story_ap_a2_title",
+              "body_key": "story_ap_a2_body",
+              "cta_key": "story_cta_chapter_done"
+            }
+          ]
+        },
+        {
+          "chapter_id": "strike",
+          "title_key": "story_ap_ch_strike_title",
+          "beats": [
+            {
+              "beat_id": "b1",
+              "type": "transmission",
+              "title_key": "story_ap_b1_title",
+              "body_key": "story_ap_b1_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "bobj",
+              "type": "objective",
+              "objective_key": "deal_world_boss_damage",
+              "objective_kind": "accumulate",
+              "target": 50000,
+              "filters": {},
+              "title_key": "story_ap_bobj_title",
+              "body_key": "story_ap_bobj_body"
+            },
+            {
+              "beat_id": "breward",
+              "type": "reward",
+              "grants": [
+                {
+                  "kind": "inventory",
+                  "item_key": "story_scrap_token",
+                  "amount": 8
+                },
+                {
+                  "kind": "flag",
+                  "flag": "anomaly_protocol_done"
+                },
+                {
+                  "kind": "codex_flag",
+                  "flag": "codex_anomaly_protocol"
+                },
+                {
+                  "kind": "notify",
+                  "subject_key": "story_ap_notify_subject",
+                  "body_key": "story_ap_notify_body"
+                }
+              ]
+            },
+            {
+              "beat_id": "bepi",
+              "type": "transmission",
+              "title_key": "story_ap_epi_title",
+              "body_key": "story_ap_epi_body",
+              "cta_key": "story_cta_saga_continue"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "season_code": "Q4",
+  "season_key": "story_season_q4"
+}

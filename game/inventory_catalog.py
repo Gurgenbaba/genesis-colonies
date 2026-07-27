@@ -159,6 +159,15 @@ ITEM_CATALOG: Dict[str, Dict[str, Any]] = {
     "fragment_genesis": {"item_type": "fragment", "category": "mythic", "rarity": "legendary", "name_key": "inv_fragment_genesis", "icon": "🌌"},
     "fragment_wreck_reactor": {"item_type": "fragment", "category": "expedition", "rarity": "uncommon", "name_key": "inv_fragment_wreck_reactor", "icon": "🔩"},
     "fragment_wreck_hull": {"item_type": "fragment", "category": "expedition", "rarity": "uncommon", "name_key": "inv_fragment_wreck_hull", "icon": "🛡️"},
+    # EPIC-25 — Ark-Token (Story Ops currency; redeem in Free Shop on /shop)
+    "story_scrap_token": {
+        "item_type": "fragment",
+        "category": "story",
+        "rarity": "uncommon",
+        "name_key": "inv_ark_token",
+        "icon": "⬡",
+        "use_role": "collectible",
+    },
     # --- Planet evolution consumables (inventory; effect later) ---
     "evo_planet_xp_250": {
         "item_type": "consumable",

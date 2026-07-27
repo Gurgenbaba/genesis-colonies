@@ -196,3 +196,4 @@ Themes/Auras freischalten: Basis-Themes immer frei; Season-Themes/Auras via Batt
 
 - [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) — EPIC-22 entitlement hook
 - [GAME_RULES.md](GAME_RULES.md) §3.3a — official premium policy
+- [GENESIS_STORY_OPS.md](GENESIS_STORY_OPS.md) — **Free Shop** (Ark-Token) ist Story-Owner auf `/shop` Tab, **nicht** Teil des EUR-Catalogs in `game/shop.py`

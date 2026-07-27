@@ -1,0 +1,516 @@
+{
+  "pack_id": "side_ops_year",
+  "version": 2,
+  "arcs": [
+    {
+      "arc_id": "debris_choir",
+      "kind": "side",
+      "contact_key": "ark",
+      "title_key": "story_side_debris_title",
+      "start_when": {
+        "flags_all": [
+          "ark_signal_main_done"
+        ]
+      },
+      "chapters": [
+        {
+          "chapter_id": "debris",
+          "title_key": "story_side_debris_ch",
+          "beats": [
+            {
+              "beat_id": "d1",
+              "type": "transmission",
+              "title_key": "story_side_debris_t1",
+              "body_key": "story_side_debris_b1",
+              "cta_key": "story_cta_accept"
+            },
+            {
+              "beat_id": "t2",
+              "type": "transmission",
+              "title_key": "story_side_debris_t2",
+              "body_key": "story_side_debris_b2",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "dobj",
+              "type": "objective",
+              "objective_key": "recycle_debris",
+              "objective_kind": "count",
+              "target": 5,
+              "filters": {},
+              "title_key": "story_side_debris_obj_t",
+              "body_key": "story_side_debris_obj_b"
+            },
+            {
+              "beat_id": "drew",
+              "type": "reward",
+              "grants": [
+                {
+                  "kind": "inventory",
+                  "item_key": "story_scrap_token",
+                  "amount": 4
+                },
+                {
+                  "kind": "flag",
+                  "flag": "side_debris_done"
+                },
+                {
+                  "kind": "codex_flag",
+                  "flag": "codex_side_debris"
+                }
+              ]
+            },
+            {
+              "beat_id": "close",
+              "type": "transmission",
+              "title_key": "story_side_debris_close_t",
+              "body_key": "story_side_debris_close_b",
+              "cta_key": "story_cta_continue"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "arc_id": "steel_ledger",
+      "kind": "side",
+      "contact_key": "ark",
+      "title_key": "story_side_steel_title",
+      "start_when": {
+        "flags_all": [
+          "living_lattice_done"
+        ]
+      },
+      "chapters": [
+        {
+          "chapter_id": "steel",
+          "title_key": "story_side_steel_ch",
+          "beats": [
+            {
+              "beat_id": "s1",
+              "type": "transmission",
+              "title_key": "story_side_steel_t1",
+              "body_key": "story_side_steel_b1",
+              "cta_key": "story_cta_accept"
+            },
+            {
+              "beat_id": "t2",
+              "type": "transmission",
+              "title_key": "story_side_steel_t2",
+              "body_key": "story_side_steel_b2",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "sobj",
+              "type": "objective",
+              "objective_key": "build_ships",
+              "objective_kind": "count",
+              "target": 20,
+              "filters": {},
+              "title_key": "story_side_steel_obj_t",
+              "body_key": "story_side_steel_obj_b"
+            },
+            {
+              "beat_id": "srew",
+              "type": "reward",
+              "grants": [
+                {
+                  "kind": "inventory",
+                  "item_key": "story_scrap_token",
+                  "amount": 4
+                },
+                {
+                  "kind": "flag",
+                  "flag": "side_steel_done"
+                },
+                {
+                  "kind": "codex_flag",
+                  "flag": "codex_side_steel"
+                }
+              ]
+            },
+            {
+              "beat_id": "close",
+              "type": "transmission",
+              "title_key": "story_side_steel_close_t",
+              "body_key": "story_side_steel_close_b",
+              "cta_key": "story_cta_continue"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "arc_id": "fortress_line",
+      "kind": "side",
+      "contact_key": "ark",
+      "title_key": "story_side_fort_title",
+      "start_when": {
+        "flags_all": [
+          "birth_of_worlds_done"
+        ]
+      },
+      "chapters": [
+        {
+          "chapter_id": "fortress_line",
+          "title_key": "story_side_fort_ch",
+          "beats": [
+            {
+              "beat_id": "t1",
+              "type": "transmission",
+              "title_key": "story_side_fort_t1",
+              "body_key": "story_side_fort_b1",
+              "cta_key": "story_cta_accept"
+            },
+            {
+              "beat_id": "t2",
+              "type": "transmission",
+              "title_key": "story_side_fort_t1_b",
+              "body_key": "story_side_fort_b1_deep",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "obj",
+              "type": "objective",
+              "objective_key": "build_defense",
+              "objective_kind": "count",
+              "target": 12,
+              "filters": {},
+              "title_key": "story_side_fort_obj_t",
+              "body_key": "story_side_fort_obj_b"
+            },
+            {
+              "beat_id": "rew",
+              "type": "reward",
+              "grants": [
+                {
+                  "kind": "inventory",
+                  "item_key": "story_scrap_token",
+                  "amount": 4
+                },
+                {
+                  "kind": "flag",
+                  "flag": "side_fort_done"
+                },
+                {
+                  "kind": "codex_flag",
+                  "flag": "codex_side_fort"
+                },
+                {
+                  "kind": "notify",
+                  "subject_key": "side_fort_done_subj",
+                  "body_key": "side_fort_done_body"
+                }
+              ]
+            },
+            {
+              "beat_id": "close",
+              "type": "transmission",
+              "title_key": "story_side_fort_t1_close",
+              "body_key": "story_side_fort_b1_close",
+              "cta_key": "story_cta_continue"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "arc_id": "expo_return",
+      "kind": "side",
+      "contact_key": "ark",
+      "title_key": "story_side_expo_title",
+      "start_when": {
+        "flags_all": [
+          "birth_of_worlds_done"
+        ]
+      },
+      "chapters": [
+        {
+          "chapter_id": "expo_return",
+          "title_key": "story_side_expo_ch",
+          "beats": [
+            {
+              "beat_id": "t1",
+              "type": "transmission",
+              "title_key": "story_side_expo_t1",
+              "body_key": "story_side_expo_b1",
+              "cta_key": "story_cta_accept"
+            },
+            {
+              "beat_id": "t2",
+              "type": "transmission",
+              "title_key": "story_side_expo_t1_b",
+              "body_key": "story_side_expo_b1_deep",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "obj",
+              "type": "objective",
+              "objective_key": "complete_expeditions",
+              "objective_kind": "count",
+              "target": 4,
+              "filters": {},
+              "title_key": "story_side_expo_obj_t",
+              "body_key": "story_side_expo_obj_b"
+            },
+            {
+              "beat_id": "rew",
+              "type": "reward",
+              "grants": [
+                {
+                  "kind": "inventory",
+                  "item_key": "story_scrap_token",
+                  "amount": 4
+                },
+                {
+                  "kind": "flag",
+                  "flag": "side_expo_done"
+                },
+                {
+                  "kind": "codex_flag",
+                  "flag": "codex_side_expo"
+                },
+                {
+                  "kind": "notify",
+                  "subject_key": "side_expo_done_subj",
+                  "body_key": "side_expo_done_body"
+                }
+              ]
+            },
+            {
+              "beat_id": "close",
+              "type": "transmission",
+              "title_key": "story_side_expo_t1_close",
+              "body_key": "story_side_expo_b1_close",
+              "cta_key": "story_cta_continue"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "arc_id": "rare_ash",
+      "kind": "side",
+      "contact_key": "ark",
+      "title_key": "story_side_rare_title",
+      "start_when": {
+        "flags_all": [
+          "heat_and_shadow_done"
+        ]
+      },
+      "chapters": [
+        {
+          "chapter_id": "rare_ash",
+          "title_key": "story_side_rare_ch",
+          "beats": [
+            {
+              "beat_id": "t1",
+              "type": "transmission",
+              "title_key": "story_side_rare_t1",
+              "body_key": "story_side_rare_b1",
+              "cta_key": "story_cta_accept"
+            },
+            {
+              "beat_id": "t2",
+              "type": "transmission",
+              "title_key": "story_side_rare_t1_b",
+              "body_key": "story_side_rare_b1_deep",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "obj",
+              "type": "objective",
+              "objective_key": "find_rare_loot",
+              "objective_kind": "count",
+              "target": 2,
+              "filters": {},
+              "title_key": "story_side_rare_obj_t",
+              "body_key": "story_side_rare_obj_b"
+            },
+            {
+              "beat_id": "rew",
+              "type": "reward",
+              "grants": [
+                {
+                  "kind": "inventory",
+                  "item_key": "story_scrap_token",
+                  "amount": 5
+                },
+                {
+                  "kind": "flag",
+                  "flag": "side_rare_done"
+                },
+                {
+                  "kind": "codex_flag",
+                  "flag": "codex_side_rare"
+                },
+                {
+                  "kind": "notify",
+                  "subject_key": "side_rare_done_subj",
+                  "body_key": "side_rare_done_body"
+                }
+              ]
+            },
+            {
+              "beat_id": "close",
+              "type": "transmission",
+              "title_key": "story_side_rare_t1_close",
+              "body_key": "story_side_rare_b1_close",
+              "cta_key": "story_cta_continue"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "arc_id": "void_teeth",
+      "kind": "side",
+      "contact_key": "ark",
+      "title_key": "story_side_teeth_title",
+      "start_when": {
+        "flags_all": [
+          "heat_and_shadow_done"
+        ]
+      },
+      "chapters": [
+        {
+          "chapter_id": "void_teeth",
+          "title_key": "story_side_teeth_ch",
+          "beats": [
+            {
+              "beat_id": "t1",
+              "type": "transmission",
+              "title_key": "story_side_teeth_t1",
+              "body_key": "story_side_teeth_b1",
+              "cta_key": "story_cta_accept"
+            },
+            {
+              "beat_id": "t2",
+              "type": "transmission",
+              "title_key": "story_side_teeth_t1_b",
+              "body_key": "story_side_teeth_b1_deep",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "obj",
+              "type": "objective",
+              "objective_key": "destroy_enemy_ships",
+              "objective_kind": "count",
+              "target": 50,
+              "filters": {},
+              "title_key": "story_side_teeth_obj_t",
+              "body_key": "story_side_teeth_obj_b"
+            },
+            {
+              "beat_id": "rew",
+              "type": "reward",
+              "grants": [
+                {
+                  "kind": "inventory",
+                  "item_key": "story_scrap_token",
+                  "amount": 5
+                },
+                {
+                  "kind": "flag",
+                  "flag": "side_teeth_done"
+                },
+                {
+                  "kind": "codex_flag",
+                  "flag": "codex_side_teeth"
+                },
+                {
+                  "kind": "notify",
+                  "subject_key": "side_teeth_done_subj",
+                  "body_key": "side_teeth_done_body"
+                }
+              ]
+            },
+            {
+              "beat_id": "close",
+              "type": "transmission",
+              "title_key": "story_side_teeth_t1_close",
+              "body_key": "story_side_teeth_b1_close",
+              "cta_key": "story_cta_continue"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "arc_id": "salt_watch",
+      "kind": "side",
+      "contact_key": "ark",
+      "title_key": "story_side_salt_title",
+      "start_when": {
+        "flags_all": [
+          "anomaly_protocol_done"
+        ]
+      },
+      "chapters": [
+        {
+          "chapter_id": "salt_watch",
+          "title_key": "story_side_salt_ch",
+          "beats": [
+            {
+              "beat_id": "t1",
+              "type": "transmission",
+              "title_key": "story_side_salt_t1",
+              "body_key": "story_side_salt_b1",
+              "cta_key": "story_cta_accept"
+            },
+            {
+              "beat_id": "t2",
+              "type": "transmission",
+              "title_key": "story_side_salt_t1_b",
+              "body_key": "story_side_salt_b1_deep",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "obj",
+              "type": "objective",
+              "objective_key": "defeat_pirates",
+              "objective_kind": "count",
+              "target": 8,
+              "filters": {},
+              "title_key": "story_side_salt_obj_t",
+              "body_key": "story_side_salt_obj_b"
+            },
+            {
+              "beat_id": "rew",
+              "type": "reward",
+              "grants": [
+                {
+                  "kind": "inventory",
+                  "item_key": "story_scrap_token",
+                  "amount": 5
+                },
+                {
+                  "kind": "flag",
+                  "flag": "side_salt_done"
+                },
+                {
+                  "kind": "codex_flag",
+                  "flag": "codex_side_salt"
+                },
+                {
+                  "kind": "notify",
+                  "subject_key": "side_salt_done_subj",
+                  "body_key": "side_salt_done_body"
+                }
+              ]
+            },
+            {
+              "beat_id": "close",
+              "type": "transmission",
+              "title_key": "story_side_salt_t1_close",
+              "body_key": "story_side_salt_b1_close",
+              "cta_key": "story_cta_continue"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "season_code": "Y1",
+  "season_key": "story_season_side"
+}

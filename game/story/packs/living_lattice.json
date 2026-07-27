@@ -1,0 +1,174 @@
+{
+  "pack_id": "living_lattice",
+  "version": 3,
+  "arcs": [
+    {
+      "arc_id": "main",
+      "kind": "main",
+      "contact_key": "ark",
+      "title_key": "story_ll_main_title",
+      "start_when": {
+        "flags_all": [
+          "ark_signal_main_done"
+        ]
+      },
+      "chapters": [
+        {
+          "chapter_id": "pe_truth",
+          "title_key": "story_ll_ch_pe_title",
+          "beats": [
+            {
+              "beat_id": "pe_1",
+              "type": "transmission",
+              "title_key": "story_ll_pe1_title",
+              "body_key": "story_ll_pe1_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "pe_2",
+              "type": "transmission",
+              "title_key": "story_ll_pe2_title",
+              "body_key": "story_ll_pe2_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "pe_3",
+              "type": "transmission",
+              "title_key": "story_ll_pe3_title",
+              "body_key": "story_ll_pe3_body",
+              "cta_key": "story_cta_chapter_done"
+            }
+          ]
+        },
+        {
+          "chapter_id": "identity",
+          "title_key": "story_ll_ch_id_title",
+          "beats": [
+            {
+              "beat_id": "id1",
+              "type": "transmission",
+              "title_key": "story_ll_id1_title",
+              "body_key": "story_ll_id1_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "id2",
+              "type": "transmission",
+              "title_key": "story_ll_id2_title",
+              "body_key": "story_ll_id2_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "idobj",
+              "type": "objective",
+              "objective_key": "upgrade_buildings",
+              "objective_kind": "count",
+              "target": 8,
+              "filters": {},
+              "title_key": "story_ll_idobj_title",
+              "body_key": "story_ll_idobj_body"
+            },
+            {
+              "beat_id": "id3",
+              "type": "transmission",
+              "title_key": "story_ll_id3_title",
+              "body_key": "story_ll_id3_body",
+              "cta_key": "story_cta_chapter_done"
+            }
+          ]
+        },
+        {
+          "chapter_id": "tech_split",
+          "title_key": "story_ll_ch_tech_title",
+          "beats": [
+            {
+              "beat_id": "tech_lore",
+              "type": "transmission",
+              "title_key": "story_ll_tech_title",
+              "body_key": "story_ll_tech_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "tech_obj",
+              "type": "objective",
+              "objective_key": "complete_research",
+              "objective_kind": "count",
+              "target": 2,
+              "filters": {},
+              "title_key": "story_ll_tech_obj_title",
+              "body_key": "story_ll_tech_obj_body"
+            },
+            {
+              "beat_id": "tech_close",
+              "type": "transmission",
+              "title_key": "story_ll_tech_close_title",
+              "body_key": "story_ll_tech_close_body",
+              "cta_key": "story_cta_chapter_done"
+            }
+          ]
+        },
+        {
+          "chapter_id": "energy_spine",
+          "title_key": "story_ll_ch_energy_title",
+          "beats": [
+            {
+              "beat_id": "en_lore",
+              "type": "transmission",
+              "title_key": "story_ll_en_title",
+              "body_key": "story_ll_en_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "en_obj",
+              "type": "objective",
+              "objective_key": "upgrade_buildings",
+              "objective_kind": "count",
+              "target": 5,
+              "filters": {},
+              "title_key": "story_ll_en_obj_title",
+              "body_key": "story_ll_en_obj_body"
+            },
+            {
+              "beat_id": "ll_reward",
+              "type": "reward",
+              "grants": [
+                {
+                  "kind": "inventory",
+                  "item_key": "story_scrap_token",
+                  "amount": 8
+                },
+                {
+                  "kind": "flag",
+                  "flag": "living_lattice_done"
+                },
+                {
+                  "kind": "codex_flag",
+                  "flag": "codex_living_lattice"
+                },
+                {
+                  "kind": "inventory",
+                  "item_key": "container_basic",
+                  "amount": 1
+                },
+                {
+                  "kind": "notify",
+                  "subject_key": "story_ll_notify_subject",
+                  "body_key": "story_ll_notify_body"
+                }
+              ]
+            },
+            {
+              "beat_id": "ll_epi",
+              "type": "transmission",
+              "title_key": "story_ll_epi_title",
+              "body_key": "story_ll_epi_body",
+              "cta_key": "story_cta_saga_continue"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "season_code": "Q1",
+  "season_key": "story_season_q1"
+}

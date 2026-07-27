@@ -38,72 +38,88 @@ def apply_directive_events(
     if pid <= 0 or not events:
         return {"updated": 0, "completed": 0}
 
-    if not directives_schema_ready(conn):
-        return {"updated": 0, "completed": 0}
-
     ts = float(now if now is not None else time.time())
-    ensure_player_directives(pid, conn=conn, now=ts)
-
-    active_rows = _load_active_directives(pid, conn=conn, now=ts)
-    if not active_rows:
-        return {"updated": 0, "completed": 0}
-
     updated = 0
     completed = 0
-    now_i = int(ts)
 
-    for event in events:
-        if not event:
-            continue
-        for row in active_rows:
-            if str(row.get("status") or "") not in (STATUS_ACTIVE,):
-                continue
-            definition = get_definition(str(row["definition_key"]), conn=conn)
-            if not definition:
-                continue
-            delta = _event_delta(definition, event)
-            if delta <= 0:
-                continue
-            source_event_id = str(event.get("source_event_id") or "").strip()
-            if not source_event_id:
-                continue
-            if not _record_progress_delta(
-                int(row["id"]),
-                source_event_id=source_event_id,
-                delta=delta,
-                conn=conn,
-                now=now_i,
-            ):
-                continue
-            new_progress = int(row.get("progress_value") or 0) + delta
-            target = int(row.get("target_value") or 1)
-            new_status = STATUS_ACTIVE
-            completed_at: Optional[int] = None
-            if new_progress >= target:
-                new_progress = target
-                new_status = STATUS_COMPLETED
-                completed_at = now_i
-                completed += 1
+    if directives_schema_ready(conn):
+        ensure_player_directives(pid, conn=conn, now=ts)
+        active_rows = _load_active_directives(pid, conn=conn, now=ts)
+        now_i = int(ts)
 
-            conn.execute(
-                """
-                UPDATE player_directives
-                SET progress_value = ?, status = ?, completed_at = COALESCE(completed_at, ?)
-                WHERE id = ? AND status = ?;
-                """,
-                (
-                    int(new_progress),
-                    str(new_status),
-                    completed_at,
+        for event in events:
+            if not event:
+                continue
+            for row in active_rows:
+                if str(row.get("status") or "") not in (STATUS_ACTIVE,):
+                    continue
+                definition = get_definition(str(row["definition_key"]), conn=conn)
+                if not definition:
+                    continue
+                delta = _event_delta(definition, event)
+                if delta <= 0:
+                    continue
+                source_event_id = str(event.get("source_event_id") or "").strip()
+                if not source_event_id:
+                    continue
+                if not _record_progress_delta(
                     int(row["id"]),
-                    STATUS_ACTIVE,
-                ),
-            )
-            row["progress_value"] = new_progress
-            row["status"] = new_status
-            updated += 1
+                    source_event_id=source_event_id,
+                    delta=delta,
+                    conn=conn,
+                    now=now_i,
+                ):
+                    continue
+                new_progress = int(row.get("progress_value") or 0) + delta
+                target = int(row.get("target_value") or 1)
+                new_status = STATUS_ACTIVE
+                completed_at: Optional[int] = None
+                if new_progress >= target:
+                    new_progress = target
+                    new_status = STATUS_COMPLETED
+                    completed_at = now_i
+                    completed += 1
 
+                conn.execute(
+                    """
+                    UPDATE player_directives
+                    SET progress_value = ?, status = ?, completed_at = COALESCE(completed_at, ?)
+                    WHERE id = ? AND status = ?;
+                    """,
+                    (
+                        int(new_progress),
+                        str(new_status),
+                        completed_at,
+                        int(row["id"]),
+                        STATUS_ACTIVE,
+                    ),
+                )
+                row["progress_value"] = new_progress
+                row["status"] = new_status
+                updated += 1
+
+    _fanout_story_events(pid, events, conn=conn, now=ts)
     return {"updated": updated, "completed": completed}
+
+
+def _fanout_story_events(
+    player_id: int,
+    events: Sequence[Mapping[str, Any]],
+    *,
+    conn: sqlite3.Connection,
+    now: float | None = None,
+) -> None:
+    """GC-2501: Story Ops shares the directive gameplay event bus (Regel 19)."""
+    try:
+        from ..story.progress import apply_gameplay_events
+
+        apply_gameplay_events(int(player_id), events, conn=conn, now=now)
+    except Exception:
+        logger.exception(
+            "story fan-out failed player=%s events=%s",
+            player_id,
+            len(events or []),
+        )
 
 
 def _load_active_directives(
@@ -161,6 +177,22 @@ def _record_progress_delta(
         if is_integrity_error(exc):
             return False
         raise
+
+
+def gameplay_event_delta(
+    objective_key: str,
+    event: Mapping[str, Any],
+    *,
+    objective_kind: str = OBJECTIVE_COUNT,
+    filters: Mapping[str, Any] | None = None,
+) -> int:
+    """Public helper for Story Ops (and others) to reuse directive objective matching."""
+    definition = {
+        "key": str(objective_key or ""),
+        "objective_kind": str(objective_kind or OBJECTIVE_COUNT),
+        "filters": dict(filters or {}),
+    }
+    return _event_delta(definition, event)
 
 
 def _event_delta(definition: Mapping[str, Any], event: Mapping[str, Any]) -> int:

@@ -4499,13 +4499,20 @@ def shop_view():
         return redirect(url_for("login"))
 
     from game.shop import serialize_catalog_for_client
+    from game.story.free_shop import get_free_shop_state
 
     shop_state = {"ready": False, "enabled": False, "products": [], "providers": []}
+    free_shop_state: Dict[str, Any] = {
+        "balance": 0,
+        "token_key": "story_scrap_token",
+        "label": "Ark-Token",
+        "offers": [],
+    }
     conn = db()
     try:
-        shop_state = serialize_catalog_for_client(
-            conn=conn, player_id=int(session["user_id"])
-        )
+        uid = int(session["user_id"])
+        shop_state = serialize_catalog_for_client(conn=conn, player_id=uid)
+        free_shop_state = get_free_shop_state(uid, conn=conn)
         conn.commit()
     finally:
         conn.close()
@@ -4515,6 +4522,7 @@ def shop_view():
         player=ctx["player_view"],
         storage_caps=ctx["storage_caps"],
         shop=shop_state,
+        free_shop=free_shop_state,
         shop_cancelled=bool(request.args.get("cancelled")),
     )
 
@@ -5187,6 +5195,285 @@ def imperial_directives_view():
     )
 
 
+@app.route("/api/story/state")
+@require_login
+def api_story_state():
+    user_id = int(session["user_id"])
+    from game.story.service import get_story_state
+
+    focus_pack = str(request.args.get("pack_id") or "").strip() or None
+    focus_arc = str(request.args.get("arc_id") or "").strip() or None
+    conn = db()
+    try:
+        story = get_story_state(
+            user_id,
+            conn=conn,
+            focus_pack_id=focus_pack,
+            focus_arc_id=focus_arc,
+        )
+    finally:
+        conn.close()
+    return jsonify({"ok": True, "story": story})
+
+
+@app.route("/api/story/tts", methods=["POST"])
+@require_login
+def api_story_tts():
+    """Neural story voice (edge-tts) — returns audio/mpeg."""
+    body = request.get_json(silent=True) or {}
+    text = str(body.get("text") or "").strip()
+    if not text:
+        return jsonify({"ok": False, "error": "empty"}), 400
+
+    from game.i18n import current_locale
+    from game.story.tts import synthesize_mp3
+
+    audio, mime, err = synthesize_mp3(text, locale=current_locale())
+    if err or not audio:
+        code = 503 if err == "edge_tts_missing" else 400
+        return jsonify({"ok": False, "error": err or "tts_failed"}), code
+    return Response(audio, mimetype=mime, headers={"Cache-Control": "private, max-age=3600"})
+
+
+@app.route("/api/story/advance", methods=["POST"])
+@require_login
+def api_story_advance():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+
+    body = request.get_json(silent=True) or {}
+    pack_id = str(body.get("pack_id") or "").strip()
+    arc_id = str(body.get("arc_id") or "").strip()
+    if not pack_id or not arc_id:
+        return jsonify({"ok": False, "error": "missing_arc"}), 400
+
+    from game.queue_engine import finish_due_work_once
+    from game.story.engine import advance_active_beat
+    from game.story.service import get_story_state
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        finish_due_work_once(
+            player_id=user_id,
+            conn=conn,
+            source="api_story_advance",
+            manage_transaction=False,
+        )
+        result = advance_active_beat(
+            user_id, pack_id=pack_id, arc_id=arc_id, conn=conn
+        )
+        if result.get("ok"):
+            commit(conn)
+        else:
+            rollback(conn)
+    except Exception:
+        rollback(conn)
+        logger.exception("story advance failed user_id=%s", user_id)
+        state, _ = _build_game_state_payload(
+            include_panel=True,
+            finish_source="api_story_advance",
+        )
+        return jsonify({"ok": False, "error": "advance_failed", "state": state}), 500
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(
+        include_panel=True,
+        finish_source="api_story_advance",
+    )
+    story: Dict[str, Any] = {}
+    conn2 = db()
+    try:
+        story = get_story_state(
+            user_id,
+            conn=conn2,
+            focus_pack_id=pack_id,
+            focus_arc_id=arc_id,
+        )
+    finally:
+        conn2.close()
+
+    ok = bool(result.get("ok"))
+    return jsonify(
+        {
+            "ok": ok,
+            "error": result.get("error"),
+            "story": story,
+            "state": state,
+        }
+    ), (200 if ok else 400)
+
+
+@app.route("/api/story/free-shop/redeem", methods=["POST"])
+@require_login
+def api_story_free_shop_redeem():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+
+    body = request.get_json(silent=True) or {}
+    offer_id = str(body.get("offer_id") or "").strip()
+    request_id = str(body.get("request_id") or request.headers.get("X-Request-Id") or "").strip()
+    if not offer_id:
+        return jsonify({"ok": False, "error": "missing_offer"}), 400
+
+    from game.queue_engine import finish_due_work_once
+    from game.story.free_shop import get_free_shop_state, redeem_free_shop_offer
+    from game.story.service import get_story_state
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        finish_due_work_once(
+            player_id=user_id,
+            conn=conn,
+            source="api_story_free_shop_redeem",
+            manage_transaction=False,
+        )
+        result = redeem_free_shop_offer(
+            user_id, offer_id=offer_id, conn=conn, request_id=request_id or None
+        )
+        if result.get("ok"):
+            commit(conn)
+        else:
+            rollback(conn)
+        free_shop = get_free_shop_state(user_id, conn=conn)
+    except Exception:
+        rollback(conn)
+        logger.exception("story free shop redeem failed user_id=%s", user_id)
+        state, _ = _build_game_state_payload(
+            include_panel=True,
+            finish_source="api_story_free_shop_redeem",
+        )
+        return jsonify({"ok": False, "error": "redeem_failed", "state": state}), 500
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(
+        include_panel=True,
+        finish_source="api_story_free_shop_redeem",
+    )
+    story: Dict[str, Any] = {}
+    conn2 = db()
+    try:
+        story = get_story_state(user_id, conn=conn2)
+    finally:
+        conn2.close()
+
+    ok = bool(result.get("ok"))
+    return jsonify(
+        {
+            "ok": ok,
+            "error": result.get("error"),
+            "free_shop": free_shop,
+            "story": story,
+            "state": state,
+        }
+    ), (200 if ok else 400)
+
+
+@app.route("/api/story/choice", methods=["POST"])
+@require_login
+def api_story_choice():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+
+    body = request.get_json(silent=True) or {}
+    pack_id = str(body.get("pack_id") or "").strip()
+    arc_id = str(body.get("arc_id") or "").strip()
+    choice_id = str(body.get("choice_id") or "").strip()
+    if not pack_id or not arc_id or not choice_id:
+        return jsonify({"ok": False, "error": "missing_fields"}), 400
+
+    from game.queue_engine import finish_due_work_once
+    from game.story.engine import apply_choice
+    from game.story.service import get_story_state
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        finish_due_work_once(
+            player_id=user_id,
+            conn=conn,
+            source="api_story_choice",
+            manage_transaction=False,
+        )
+        result = apply_choice(
+            user_id,
+            pack_id=pack_id,
+            arc_id=arc_id,
+            choice_id=choice_id,
+            conn=conn,
+        )
+        if result.get("ok"):
+            commit(conn)
+        else:
+            rollback(conn)
+    except Exception:
+        rollback(conn)
+        logger.exception("story choice failed user_id=%s", user_id)
+        state, _ = _build_game_state_payload(
+            include_panel=True,
+            finish_source="api_story_choice",
+        )
+        return jsonify({"ok": False, "error": "choice_failed", "state": state}), 500
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(
+        include_panel=True,
+        finish_source="api_story_choice",
+    )
+    story: Dict[str, Any] = {}
+    conn2 = db()
+    try:
+        story = get_story_state(
+            user_id,
+            conn=conn2,
+            focus_pack_id=pack_id,
+            focus_arc_id=arc_id,
+        )
+    finally:
+        conn2.close()
+
+    ok = bool(result.get("ok"))
+    return jsonify(
+        {
+            "ok": ok,
+            "error": result.get("error"),
+            "story": story,
+            "state": state,
+        }
+    ), (200 if ok else 400)
+
+
+@app.route("/story")
+@require_login
+def story_view():
+    ctx = _load_page_live_context(finish_source="story")
+    if ctx is None:
+        return redirect(url_for("login"))
+
+    from game.story.service import get_story_state
+
+    story = {"ready": False, "arcs": [], "focus": None, "lore_fragments": []}
+    conn = db()
+    try:
+        story = get_story_state(int(session["user_id"]), conn=conn)
+    finally:
+        conn.close()
+
+    return render_template(
+        "story.html",
+        player=ctx["player_view"],
+        storage_caps=ctx["storage_caps"],
+        story=story,
+    )
+
+
 # RANKING PAGE
 # --------------------------------------------------------------------------
 
@@ -5505,6 +5792,19 @@ def api_admin_world_boss():
         )
     except Exception:
         return jsonify({"ok": False, "error": "world_boss_unavailable"}), 500
+
+
+@app.route("/api/admin/story/packs", methods=["GET"])
+@require_admin_api
+def api_admin_story_packs():
+    """GC-2505: read-only Story Ops pack preview."""
+    try:
+        from game.story.service import admin_preview_packs
+
+        return jsonify({"ok": True, **admin_preview_packs()})
+    except Exception:
+        logger.exception("admin story packs preview failed")
+        return jsonify({"ok": False, "error": "story_packs_failed"}), 500
 
 
 @app.route("/api/admin/world-boss/spawn", methods=["POST"])

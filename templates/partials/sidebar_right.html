@@ -21,7 +21,7 @@
 {% set _comm_open = request.endpoint in (
   'alliance_view', 'hall_of_fame_view',
   'referrals_view', 'vote_center_view', 'imperial_directives_view', 'galactic_politics_view',
-  'world_boss_view'
+  'world_boss_view', 'story_view'
 ) %}
 {# GC-575: Meta + Registry are siblings. Desktop uses display:contents → 4-column grid
    (Left | Main | Meta | Imperium). Tablet drawer stacks both. #}
@@ -119,6 +119,15 @@
           <span class="gc-nav-badge gc-nav-badge--wb-live {% if not WORLD_BOSS_ACTIVE %}hidden{% endif %}"
                 data-nav-badge="world_boss"
                 {% if not WORLD_BOSS_ACTIVE %}hidden aria-hidden="true"{% else %}aria-hidden="false"{% endif %}>{% if WORLD_BOSS_ACTIVE %}LIVE{% endif %}</span>
+        </a>
+        <a href="{{ url_for('story_view') }}"
+           data-nav-module="story"
+           data-nav-key="story"
+           class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'story') }} {% if request.endpoint == 'story_view' %}active{% endif %}"
+           {% if not module_in_section(_sn, 'story', 'administration') %}hidden{% endif %}>
+          <span class="gc-nav-link-label">{{ T("nav_story", "Story Ops") }}</span>
+          <span class="gc-nav-badge gc-nav-badge--alert hidden" data-nav-badge="story" hidden aria-hidden="true"
+                aria-label="{{ T('nav_badge_story_aria', 'Story transmission awaiting response') }}"></span>
         </a>
         <a href="{{ url_for('imperial_directives_view') }}"
            data-nav-module="imperial_directives"

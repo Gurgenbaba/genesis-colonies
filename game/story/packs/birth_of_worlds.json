@@ -1,0 +1,174 @@
+{
+  "pack_id": "birth_of_worlds",
+  "version": 2,
+  "arcs": [
+    {
+      "arc_id": "main",
+      "kind": "main",
+      "contact_key": "ark",
+      "title_key": "story_bow_title",
+      "start_when": {
+        "flags_all": [
+          "living_lattice_done"
+        ]
+      },
+      "chapters": [
+        {
+          "chapter_id": "seed_law",
+          "title_key": "story_bow_ch_seed_title",
+          "beats": [
+            {
+              "beat_id": "s1",
+              "type": "transmission",
+              "title_key": "story_bow_s1_title",
+              "body_key": "story_bow_s1_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "s2",
+              "type": "transmission",
+              "title_key": "story_bow_s2_title",
+              "body_key": "story_bow_s2_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "s3",
+              "type": "transmission",
+              "title_key": "story_bow_s3_title",
+              "body_key": "story_bow_s3_body",
+              "cta_key": "story_cta_chapter_done"
+            }
+          ]
+        },
+        {
+          "chapter_id": "probe",
+          "title_key": "story_bow_ch_probe_title",
+          "beats": [
+            {
+              "beat_id": "p1",
+              "type": "transmission",
+              "title_key": "story_bow_p1_title",
+              "body_key": "story_bow_p1_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "pobj",
+              "type": "objective",
+              "objective_key": "launch_expeditions",
+              "objective_kind": "count",
+              "target": 5,
+              "filters": {},
+              "title_key": "story_bow_pobj_title",
+              "body_key": "story_bow_pobj_body"
+            },
+            {
+              "beat_id": "p2",
+              "type": "transmission",
+              "title_key": "story_bow_p2_title",
+              "body_key": "story_bow_p2_body",
+              "cta_key": "story_cta_chapter_done"
+            }
+          ]
+        },
+        {
+          "chapter_id": "roles",
+          "title_key": "story_bow_ch_roles_title",
+          "beats": [
+            {
+              "beat_id": "ro1",
+              "type": "transmission",
+              "title_key": "story_bow_ro1_title",
+              "body_key": "story_bow_ro1_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "ro2",
+              "type": "transmission",
+              "title_key": "story_bow_ro2_title",
+              "body_key": "story_bow_ro2_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "roobj",
+              "type": "objective",
+              "objective_key": "complete_expeditions",
+              "objective_kind": "count",
+              "target": 3,
+              "filters": {},
+              "title_key": "story_bow_roobj_title",
+              "body_key": "story_bow_roobj_body"
+            },
+            {
+              "beat_id": "ro3",
+              "type": "transmission",
+              "title_key": "story_bow_ro3_title",
+              "body_key": "story_bow_ro3_body",
+              "cta_key": "story_cta_chapter_done"
+            }
+          ]
+        },
+        {
+          "chapter_id": "claim_pulse",
+          "title_key": "story_bow_ch_claim_title",
+          "beats": [
+            {
+              "beat_id": "c1",
+              "type": "transmission",
+              "title_key": "story_bow_c1_title",
+              "body_key": "story_bow_c1_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "cobj",
+              "type": "objective",
+              "objective_key": "send_fleet_missions",
+              "objective_kind": "count",
+              "target": 8,
+              "filters": {},
+              "title_key": "story_bow_cobj_title",
+              "body_key": "story_bow_cobj_body"
+            },
+            {
+              "beat_id": "creward",
+              "type": "reward",
+              "grants": [
+                {
+                  "kind": "inventory",
+                  "item_key": "story_scrap_token",
+                  "amount": 8
+                },
+                {
+                  "kind": "flag",
+                  "flag": "birth_of_worlds_done"
+                },
+                {
+                  "kind": "codex_flag",
+                  "flag": "codex_birth_of_worlds"
+                },
+                {
+                  "kind": "inventory",
+                  "item_key": "container_basic",
+                  "amount": 1
+                },
+                {
+                  "kind": "notify",
+                  "subject_key": "story_bow_notify_subject",
+                  "body_key": "story_bow_notify_body"
+                }
+              ]
+            },
+            {
+              "beat_id": "cepi",
+              "type": "transmission",
+              "title_key": "story_bow_epi_title",
+              "body_key": "story_bow_epi_body",
+              "cta_key": "story_cta_saga_continue"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "season_code": "Q2",
+  "season_key": "story_season_q2"
+}

@@ -1,0 +1,174 @@
+{
+  "pack_id": "heat_and_shadow",
+  "version": 2,
+  "arcs": [
+    {
+      "arc_id": "main",
+      "kind": "main",
+      "contact_key": "ark",
+      "title_key": "story_has_title",
+      "start_when": {
+        "flags_all": [
+          "birth_of_worlds_done"
+        ]
+      },
+      "chapters": [
+        {
+          "chapter_id": "heat_law",
+          "title_key": "story_has_ch_heat_title",
+          "beats": [
+            {
+              "beat_id": "h1",
+              "type": "transmission",
+              "title_key": "story_has_h1_title",
+              "body_key": "story_has_h1_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "h2",
+              "type": "transmission",
+              "title_key": "story_has_h2_title",
+              "body_key": "story_has_h2_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "h3",
+              "type": "transmission",
+              "title_key": "story_has_h3_title",
+              "body_key": "story_has_h3_body",
+              "cta_key": "story_cta_chapter_done"
+            }
+          ]
+        },
+        {
+          "chapter_id": "dossier",
+          "title_key": "story_has_ch_dossier_title",
+          "beats": [
+            {
+              "beat_id": "do1",
+              "type": "transmission",
+              "title_key": "story_has_do1_title",
+              "body_key": "story_has_do1_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "do2",
+              "type": "transmission",
+              "title_key": "story_has_do2_title",
+              "body_key": "story_has_do2_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "doobj",
+              "type": "objective",
+              "objective_key": "launch_expeditions",
+              "objective_kind": "count",
+              "target": 6,
+              "filters": {},
+              "title_key": "story_has_doobj_title",
+              "body_key": "story_has_doobj_body"
+            },
+            {
+              "beat_id": "do3",
+              "type": "transmission",
+              "title_key": "story_has_do3_title",
+              "body_key": "story_has_do3_body",
+              "cta_key": "story_cta_chapter_done"
+            }
+          ]
+        },
+        {
+          "chapter_id": "hunt",
+          "title_key": "story_has_ch_hunt_title",
+          "beats": [
+            {
+              "beat_id": "u1",
+              "type": "transmission",
+              "title_key": "story_has_u1_title",
+              "body_key": "story_has_u1_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "uobj",
+              "type": "objective",
+              "objective_key": "defeat_pirates",
+              "objective_kind": "count",
+              "target": 5,
+              "filters": {},
+              "title_key": "story_has_uobj_title",
+              "body_key": "story_has_uobj_body"
+            },
+            {
+              "beat_id": "u2",
+              "type": "transmission",
+              "title_key": "story_has_u2_title",
+              "body_key": "story_has_u2_body",
+              "cta_key": "story_cta_chapter_done"
+            }
+          ]
+        },
+        {
+          "chapter_id": "steel",
+          "title_key": "story_has_ch_steel_title",
+          "beats": [
+            {
+              "beat_id": "st1",
+              "type": "transmission",
+              "title_key": "story_has_st1_title",
+              "body_key": "story_has_st1_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "stobj",
+              "type": "objective",
+              "objective_key": "build_combat_ships",
+              "objective_kind": "count",
+              "target": 15,
+              "filters": {},
+              "title_key": "story_has_stobj_title",
+              "body_key": "story_has_stobj_body"
+            },
+            {
+              "beat_id": "streward",
+              "type": "reward",
+              "grants": [
+                {
+                  "kind": "inventory",
+                  "item_key": "story_scrap_token",
+                  "amount": 8
+                },
+                {
+                  "kind": "flag",
+                  "flag": "heat_and_shadow_done"
+                },
+                {
+                  "kind": "codex_flag",
+                  "flag": "codex_heat_and_shadow"
+                },
+                {
+                  "kind": "inventory",
+                  "item_key": "container_basic",
+                  "amount": 1
+                },
+                {
+                  "kind": "notify",
+                  "subject_key": "story_has_notify_subject",
+                  "body_key": "story_has_notify_body"
+                }
+              ]
+            },
+            {
+              "beat_id": "stepi",
+              "type": "transmission",
+              "title_key": "story_has_epi_title",
+              "body_key": "story_has_epi_body",
+              "cta_key": "story_cta_saga_continue"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "season_code": "Q3",
+  "season_key": "story_season_q3"
+}

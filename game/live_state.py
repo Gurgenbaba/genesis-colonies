@@ -432,6 +432,7 @@ def nav_badges_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
 
     login_available = False
     bp_claimable = 0
+    story_attention = 0
     try:
         from game.login_rewards import serialize_for_client as lr_serialize
 
@@ -446,6 +447,12 @@ def nav_badges_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
         bp_claimable = int(bp.get("claimable_count") or 0) if bp.get("ready") else 0
     except Exception:
         bp_claimable = 0
+    try:
+        from game.story.service import count_story_attention
+
+        story_attention = count_story_attention(uid, conn=conn)
+    except Exception:
+        story_attention = 0
 
     return {
         "vote_center": _nav_badge_entry(
@@ -467,6 +474,11 @@ def nav_badges_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
             active=directive_count > 0,
             count=directive_count,
             label=str(directive_count) if directive_count > 0 else "",
+        ),
+        "story": _nav_badge_entry(
+            active=story_attention > 0,
+            count=story_attention,
+            label=str(story_attention) if story_attention > 0 else "",
         ),
         "world_boss": _nav_badge_entry(
             active=wb_active,

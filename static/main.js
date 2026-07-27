@@ -2170,6 +2170,7 @@
     if (path.endsWith("/login-rewards")) return "login_rewards";
     if (path.endsWith("/banned-players")) return "banned_players";
     if (path.endsWith("/imperial-directives")) return "imperial_directives";
+    if (path.endsWith("/story")) return "story";
     if (path.endsWith("/galactic-politics")) return "galactic_politics";
     if (path.endsWith("/skilltree")) return "skilltree";
     if (path.endsWith("/premium")) return "premium";
@@ -17057,10 +17058,115 @@
   }
 
   let _shopBuyBound = false;
+
+  function _shopSelectTab(page, tabKey) {
+    const key = tabKey === "free" ? "free" : "premium";
+    page.querySelectorAll("[data-shop-tab]").forEach((btn) => {
+      const on = btn.getAttribute("data-shop-tab") === key;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    page.querySelectorAll("[data-shop-panel]").forEach((panel) => {
+      const on = panel.getAttribute("data-shop-panel") === key;
+      panel.classList.toggle("is-active", on);
+      if (on) panel.removeAttribute("hidden");
+      else panel.setAttribute("hidden", "");
+    });
+    try {
+      if (key === "free" && window.location.hash !== "#free") {
+        history.replaceState(null, "", `${window.location.pathname}${window.location.search}#free`);
+      } else if (key !== "free" && window.location.hash === "#free") {
+        history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+      }
+    } catch (_) { /* ignore */ }
+  }
+
+  function _freeShopKindLabel(kind) {
+    if (kind === "timekeeper") return t("shop_kind_timekeeper", "TIMEKEEPER");
+    if (kind === "entitlement") return t("shop_kind_pass", "PASS");
+    return t("shop_kind_supply", "SUPPLY");
+  }
+
+  function _renderFreeShopState(page, freeShop) {
+    if (!page || !freeShop) return;
+    const label = freeShop.label || t("inv_ark_token", "Ark-Token");
+    const bal = Number(freeShop.balance) || 0;
+    const balEl = page.querySelector("[data-free-shop-balance]");
+    if (balEl) {
+      balEl.innerHTML = `${escapeHtml(t("free_shop_balance", "Bestand"))}: <strong>${fmtNumber(bal)}</strong> ${escapeHtml(label)}`;
+    }
+    const grid = page.querySelector("[data-free-shop-grid]");
+    if (!grid || !Array.isArray(freeShop.offers)) return;
+    const assetV = (typeof GC !== "undefined" && GC.assetVersion) ? String(GC.assetVersion) : "";
+    grid.innerHTML = freeShop.offers.map((offer) => {
+      const affordable = !!offer.affordable;
+      const img = offer.image
+        ? `<figure class="shop-card-art"><img src="/static/${escapeHtml(offer.image)}${assetV ? `?v=${escapeHtml(assetV)}` : ""}" alt="" width="640" height="400" loading="lazy" decoding="async"><span class="shop-card-kind">${escapeHtml(_freeShopKindLabel(offer.kind))}</span></figure>`
+        : "";
+      return (
+        `<article class="shop-card free-shop-card${affordable ? "" : " is-locked"}" data-free-shop-offer="${escapeHtml(offer.offer_id || "")}" data-shop-kind="${escapeHtml(offer.kind || "")}">`
+        + `<div class="shop-card-frame" aria-hidden="true"></div>${img}`
+        + `<div class="shop-card-body"><div class="shop-card-main">`
+        + `<h2 class="shop-card-title">${escapeHtml(offer.title || offer.offer_id || "")}</h2>`
+        + `<p class="hint shop-card-hint">${escapeHtml(offer.hint || "")}</p></div>`
+        + `<div class="shop-card-footer"><p class="shop-card-price gc-mono">${fmtNumber(offer.cost || 0)} ${escapeHtml(label)}</p>`
+        + `<div class="shop-card-actions"><button type="button" class="gc-btn gc-btn-sm gc-btn-primary" data-free-shop-redeem data-offer-id="${escapeHtml(offer.offer_id || "")}" ${affordable ? "" : "disabled"}>`
+        + `${escapeHtml(t("free_shop_redeem", "Einlösen"))}</button></div></div></div></article>`
+      );
+    }).join("");
+  }
+
   function bindShopBuyOnce() {
     if (_shopBuyBound) return;
     _shopBuyBound = true;
     document.addEventListener("click", async (ev) => {
+      const tabBtn = ev.target && ev.target.closest ? ev.target.closest("[data-shop-tab]") : null;
+      if (tabBtn) {
+        const page = document.getElementById("shop-page");
+        if (!page) return;
+        ev.preventDefault();
+        _shopSelectTab(page, tabBtn.getAttribute("data-shop-tab") || "premium");
+        return;
+      }
+
+      const redeemBtn = ev.target && ev.target.closest ? ev.target.closest("[data-free-shop-redeem]") : null;
+      if (redeemBtn) {
+        const page = document.getElementById("shop-page");
+        if (!page) return;
+        ev.preventDefault();
+        if (redeemBtn.disabled) return;
+        const offerId = redeemBtn.getAttribute("data-offer-id") || "";
+        if (!offerId) return;
+        redeemBtn.disabled = true;
+        try {
+          const res = await GC.fetchGameAction("/api/story/free-shop/redeem", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ offer_id: offerId }),
+          });
+          if (res && typeof GC.applyActionState === "function") {
+            GC.applyActionState(res, "story_free_shop_redeem");
+          }
+          if (res && res.ok && res.free_shop) {
+            _renderFreeShopState(page, res.free_shop);
+            showNotify(t("free_shop_redeem_ok", "Eingelöst."), "success");
+          } else {
+            const err = (res && res.error) || "";
+            showNotify(
+              err === "insufficient_tokens"
+                ? t("free_shop_need", "Nicht genug Ark-Tokens.")
+                : t("free_shop_fail", "Einlösen fehlgeschlagen."),
+              "error"
+            );
+          }
+        } catch (_) {
+          showNotify(t("free_shop_fail", "Einlösen fehlgeschlagen."), "error");
+        } finally {
+          redeemBtn.disabled = false;
+        }
+        return;
+      }
+
       const btn = ev.target && ev.target.closest ? ev.target.closest("[data-shop-buy]") : null;
       if (!btn) return;
       if (!document.getElementById("shop-page") && !document.getElementById("premium-page")) {
@@ -17111,6 +17217,17 @@
 
   function initShop() {
     bindShopBuyOnce();
+    const page = document.getElementById("shop-page");
+    if (!page) return;
+    const wantFree = (window.location.hash || "") === "#free";
+    _shopSelectTab(page, wantFree ? "free" : "premium");
+    try {
+      const el = document.getElementById("free-shop-page-state");
+      if (el) {
+        const fs = JSON.parse(el.textContent || "{}");
+        if (fs && typeof fs === "object") _renderFreeShopState(page, fs);
+      }
+    } catch (_) { /* ignore */ }
   }
 
   function parseAlliancePageState() {
@@ -18422,6 +18539,542 @@
         clearInterval(_idCountdownTimer);
         _idCountdownTimer = null;
       }
+    });
+  }
+
+  function parseStoryOpsPageState() {
+    const el = document.getElementById("story-ops-page-state");
+    if (el && el.textContent) {
+      try { return JSON.parse(el.textContent); } catch (_) {}
+    }
+    return null;
+  }
+
+  function _storyContactLabel(key) {
+    if (key === "androgyn") return t("story_contact_androgyn", "Androgyn Echo");
+    return t("story_contact_ark", "Genesis Ark");
+  }
+
+  const STORY_TTS_LS_KEY = "gc_story_tts_v1";
+  const STORY_FOCUS_KEY = "gc_story_focus_v1";
+  let _storyTtsUtterance = null;
+  let _storyTtsLastFingerprint = "";
+  let _storyAudio = null;
+  let _storyAudioUrl = null;
+  let _storyTtsSpeakTimer = null;
+  let _storyFocus = { pack_id: "", arc_id: "" };
+
+  function _storyFocusLoad() {
+    try {
+      const raw = localStorage.getItem(STORY_FOCUS_KEY);
+      if (!raw) return { pack_id: "", arc_id: "" };
+      const p = JSON.parse(raw);
+      return { pack_id: String(p.pack_id || ""), arc_id: String(p.arc_id || "") };
+    } catch (_) {
+      return { pack_id: "", arc_id: "" };
+    }
+  }
+
+  function _storyFocusSave(packId, arcId) {
+    _storyFocus = { pack_id: String(packId || ""), arc_id: String(arcId || "") };
+    try { localStorage.setItem(STORY_FOCUS_KEY, JSON.stringify(_storyFocus)); } catch (_) {}
+  }
+
+  function _storyTtsLoadPrefs() {
+    try {
+      const raw = localStorage.getItem(STORY_TTS_LS_KEY);
+      if (!raw) return { volume: 0.85, auto: false };
+      const parsed = JSON.parse(raw);
+      return {
+        volume: Math.max(0, Math.min(1, Number(parsed.volume) || 0.85)),
+        auto: parsed.auto === true,
+      };
+    } catch (_) {
+      return { volume: 0.85, auto: false };
+    }
+  }
+
+  function _storyTtsSavePrefs(prefs) {
+    try { localStorage.setItem(STORY_TTS_LS_KEY, JSON.stringify(prefs)); } catch (_) {}
+  }
+
+  function _storyNeuralEnabled(page) {
+    const el = page || document.getElementById("story-ops-page");
+    if (el && el.dataset.ttsNeural === "1") return true;
+    try {
+      const st = parseStoryOpsPageState();
+      return !!(st && st.tts && st.tts.neural);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function _storyOrbEl() {
+    return document.querySelector("#story-ops-page [data-story-orb]");
+  }
+
+  function _storyOrbSetState(state) {
+    const orb = _storyOrbEl();
+    if (!orb) return;
+    orb.classList.toggle("is-speaking", state === "speaking");
+    orb.classList.toggle("is-paused", state === "paused");
+  }
+
+  function _storyTtsStop() {
+    if (_storyTtsSpeakTimer) {
+      clearTimeout(_storyTtsSpeakTimer);
+      _storyTtsSpeakTimer = null;
+    }
+    if (_storyAudio) {
+      try { _storyAudio.pause(); } catch (_) {}
+      try { _storyAudio.src = ""; } catch (_) {}
+      _storyAudio = null;
+    }
+    if (_storyAudioUrl) {
+      try { URL.revokeObjectURL(_storyAudioUrl); } catch (_) {}
+      _storyAudioUrl = null;
+    }
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      try { window.speechSynthesis.cancel(); } catch (_) {}
+    }
+    _storyTtsUtterance = null;
+    _storyOrbSetState("idle");
+  }
+
+  function _storyTtsPause() {
+    if (_storyAudio) {
+      try { _storyAudio.pause(); } catch (_) {}
+      _storyOrbSetState("paused");
+      return;
+    }
+    if ("speechSynthesis" in window) {
+      try { if (window.speechSynthesis.speaking) window.speechSynthesis.pause(); } catch (_) {}
+      _storyOrbSetState("paused");
+    }
+  }
+
+  function _storyTtsResume() {
+    if (_storyAudio) {
+      try { _storyAudio.play(); } catch (_) {}
+      _storyOrbSetState("speaking");
+      return;
+    }
+    if ("speechSynthesis" in window) {
+      try { if (window.speechSynthesis.paused) window.speechSynthesis.resume(); } catch (_) {}
+      _storyOrbSetState("speaking");
+    }
+  }
+
+  async function _storyTtsSpeakNeural(text, volume) {
+    const res = await fetch("/api/story/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "audio/mpeg,application/json" },
+      body: JSON.stringify({ text }),
+      credentials: "same-origin",
+    });
+    const ctype = String(res.headers.get("content-type") || "");
+    if (!res.ok || !ctype.includes("audio")) {
+      let err = "tts_failed";
+      try {
+        const j = await res.json();
+        err = j.error || err;
+      } catch (_) {}
+      throw new Error(err);
+    }
+    const blob = await res.blob();
+    if (_storyAudioUrl) {
+      try { URL.revokeObjectURL(_storyAudioUrl); } catch (_) {}
+    }
+    _storyAudioUrl = URL.createObjectURL(blob);
+    _storyAudio = new Audio(_storyAudioUrl);
+    _storyAudio.volume = Math.max(0, Math.min(1, Number(volume) || 0.85));
+    _storyAudio.onended = () => { _storyOrbSetState("idle"); };
+    _storyAudio.onpause = () => {
+      if (_storyAudio && !_storyAudio.ended && _storyAudio.currentTime > 0) {
+        _storyOrbSetState("paused");
+      }
+    };
+    _storyAudio.onplay = () => { _storyOrbSetState("speaking"); };
+    _storyOrbSetState("speaking");
+    await _storyAudio.play();
+  }
+
+  function _storyTtsSpeakBrowser(text, volume) {
+    if (!("speechSynthesis" in window) || typeof window.SpeechSynthesisUtterance !== "function") {
+      throw new Error("unsupported");
+    }
+    try { window.speechSynthesis.cancel(); } catch (_) {}
+    const u = new window.SpeechSynthesisUtterance(text);
+    const lang = String(document.documentElement.lang || "de").toLowerCase();
+    u.lang = lang.startsWith("de") ? "de-DE" : "en-US";
+    u.rate = 0.92;
+    u.pitch = 0.7;
+    u.volume = Math.max(0, Math.min(1, Number(volume) || 0.85));
+    u.onstart = () => { _storyOrbSetState("speaking"); };
+    u.onend = () => { _storyOrbSetState("idle"); };
+    u.onerror = () => { _storyOrbSetState("idle"); };
+    _storyTtsUtterance = u;
+    _storyOrbSetState("speaking");
+    window.speechSynthesis.speak(u);
+    try { window.speechSynthesis.resume(); } catch (_) {}
+  }
+
+  async function _storyTtsSpeakText(text) {
+    const body = String(text || "").replace(/\s+/g, " ").trim();
+    if (!body) {
+      showNotify(t("story_tts_empty", "Kein Übertragungstext zum Vorlesen."), "error");
+      return;
+    }
+    const prefs = _storyTtsLoadPrefs();
+    _storyTtsStop();
+    try {
+      if (_storyNeuralEnabled()) {
+        await _storyTtsSpeakNeural(body, prefs.volume);
+        return;
+      }
+    } catch (err) {
+      const code = String((err && err.message) || "");
+      if (code === "edge_tts_missing" || code === "tts_timeout" || code.indexOf("tts_failed") === 0) {
+        // Soft fallback — no error toast unless browser also fails.
+      } else {
+        // keep going to browser fallback
+      }
+    }
+    try {
+      _storyTtsSpeakBrowser(body, prefs.volume);
+    } catch (_) {
+      showNotify(
+        t("story_tts_unsupported", "Vorlesen fehlgeschlagen. Neural-TTS braucht Netzwerk; Browser-TTS ist optional."),
+        "error"
+      );
+    }
+  }
+
+  function _storyTtsCurrentScript() {
+    const page = document.getElementById("story-ops-page");
+    if (!page) return "";
+    const title = (page.querySelector("[data-story-title]") || {}).textContent || "";
+    const body = (page.querySelector("[data-story-text]") || {}).textContent || "";
+    return `${String(title).trim()}. ${String(body).trim()}`.trim();
+  }
+
+  function _storyTtsFingerprint(state) {
+    const focus = state && state.focus;
+    const beat = focus && focus.beat;
+    if (!beat) return "idle";
+    return `${focus.pack_id || ""}:${focus.arc_id || ""}:${beat.beat_id || ""}:${beat.type || ""}`;
+  }
+
+  function _storyTtsSyncControls(page) {
+    if (!page) return;
+    const prefs = _storyTtsLoadPrefs();
+    const vol = page.querySelector("[data-story-tts-volume]");
+    const volVal = page.querySelector("[data-story-tts-volume-val]");
+    const auto = page.querySelector("[data-story-tts-auto]");
+    if (vol) vol.value = String(Math.round(prefs.volume * 100));
+    if (volVal) volVal.textContent = `${Math.round(prefs.volume * 100)}%`;
+    if (auto) auto.checked = !!prefs.auto;
+    const label = page.querySelector(".story-tts__label");
+    if (label) label.textContent = t("story_tts_bender_label", "Neural Contact Voice");
+    [
+      ["[data-story-tts-play]", "story_tts_play", "Abspielen"],
+      ["[data-story-tts-pause]", "story_tts_pause", "Pause"],
+      ["[data-story-tts-resume]", "story_tts_resume", "Weiter"],
+      ["[data-story-tts-stop]", "story_tts_stop", "Stop"],
+    ].forEach(([sel, key, fb]) => {
+      const btn = page.querySelector(sel);
+      if (btn) btn.textContent = t(key, fb);
+    });
+    const volLabel = page.querySelector(".story-tts__vol-label");
+    if (volLabel) volLabel.textContent = t("story_tts_volume", "Lautstärke");
+    const autoSpan = page.querySelector(".story-tts__auto span");
+    if (autoSpan) autoSpan.textContent = t("story_tts_auto", "Neue Übertragungen automatisch vorlesen");
+    const hint = page.querySelector("[data-story-tts-hint]");
+    if (hint) {
+      hint.textContent = _storyNeuralEnabled(page)
+        ? t("story_tts_hint_neural", "Neurale Kontaktstimme (Edge TTS). Pause, Weiter und Lautstärke steuern die Wiedergabe.")
+        : t("story_tts_hint_missing", "Neural-TTS nicht installiert (pip install edge-tts). Fallback: Browser-Stimme.");
+    }
+  }
+
+  function _renderStoryOpsState(state, opts = {}) {
+    const page = document.getElementById("story-ops-page");
+    if (!page || !state) return;
+    const scriptEl = document.getElementById("story-ops-page-state");
+    if (scriptEl) {
+      try { scriptEl.textContent = JSON.stringify(state); } catch (_) {}
+    }
+    page.dataset.ttsNeural = (state.tts && state.tts.neural) ? "1" : "0";
+
+    let focus = state.focus || null;
+    if (_storyFocus.pack_id && _storyFocus.arc_id && Array.isArray(state.arcs)) {
+      const found = state.arcs.find((a) => (
+        a.pack_id === _storyFocus.pack_id
+        && a.arc_id === _storyFocus.arc_id
+        && a.status === "active"
+      ));
+      if (found) focus = found;
+    }
+    if (focus && focus.pack_id && focus.arc_id) {
+      _storyFocusSave(focus.pack_id, focus.arc_id);
+    }
+
+    const beat = focus && focus.beat ? focus.beat : null;
+    const contact = (focus && focus.contact_key) || "ark";
+    const tx = page.querySelector("[data-story-tx]");
+    if (tx) tx.setAttribute("data-contact", contact);
+    const portrait = page.querySelector("[data-story-orb]");
+    if (portrait) {
+      portrait.className = `story-orb story-orb--${contact}`;
+      if (_storyAudio && !_storyAudio.paused && !_storyAudio.ended) {
+        portrait.classList.add("is-speaking");
+      }
+    }
+    const contactLabel = page.querySelector("[data-story-contact-label]");
+    if (contactLabel) contactLabel.textContent = _storyContactLabel(contact);
+    const chapterLabel = page.querySelector("[data-story-chapter-label]");
+    if (chapterLabel) chapterLabel.textContent = (focus && focus.chapter_title) || "";
+
+    const titleEl = page.querySelector("[data-story-title]");
+    const textEl = page.querySelector("[data-story-text]");
+    const idle = state.idle || null;
+    if (titleEl) {
+      titleEl.textContent = beat
+        ? (beat.title || "")
+        : ((idle && idle.title) || t("story_idle_title", "Kanal ruhig"));
+    }
+    if (textEl) {
+      textEl.textContent = beat
+        ? (beat.body || "")
+        : ((idle && idle.body)
+          || t("story_idle_body", "Keine aktive Übertragung. Side Ops öffnen sich, wenn dein Imperium wächst."));
+    }
+
+    const progWrap = page.querySelector("[data-story-progress-wrap]");
+    const prog = page.querySelector("[data-story-progress-fill]");
+    const progBar = page.querySelector("[data-story-progress]");
+    const progLabel = page.querySelector("[data-story-progress-label]");
+    if (beat && beat.type === "objective") {
+      const target = Math.max(1, Number(beat.target) || 1);
+      const progress = Math.max(0, Number(beat.progress) || 0);
+      if (progWrap) progWrap.hidden = false;
+      if (prog) prog.style.width = `${Math.min(100, Math.floor((progress / target) * 100))}%`;
+      if (progBar) {
+        progBar.setAttribute("aria-valuemax", String(target));
+        progBar.setAttribute("aria-valuenow", String(progress));
+      }
+      if (progLabel) progLabel.textContent = `${fmtNumber(progress)} / ${fmtNumber(target)}`;
+    } else if (progWrap) {
+      progWrap.hidden = true;
+    }
+
+    const actions = page.querySelector("[data-story-actions]");
+    if (actions) {
+      actions.innerHTML = "";
+      if (beat && beat.type === "transmission" && focus) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "gc-btn gc-btn-primary";
+        btn.setAttribute("data-story-advance", "");
+        btn.setAttribute("data-pack-id", focus.pack_id || "");
+        btn.setAttribute("data-arc-id", focus.arc_id || "");
+        btn.textContent = beat.cta || t("story_cta_continue", "Weiter");
+        actions.appendChild(btn);
+      } else if (beat && beat.type === "choice" && Array.isArray(beat.choices) && focus) {
+        beat.choices.forEach((ch) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "gc-btn gc-btn-secondary";
+          btn.setAttribute("data-story-choice", "");
+          btn.setAttribute("data-pack-id", focus.pack_id || "");
+          btn.setAttribute("data-arc-id", focus.arc_id || "");
+          btn.setAttribute("data-choice-id", ch.id || "");
+          btn.textContent = ch.label || ch.id || "";
+          actions.appendChild(btn);
+        });
+      } else if (beat && beat.type === "objective") {
+        const p = document.createElement("p");
+        p.className = "story-tx__waiting hint";
+        p.textContent = beat.objective_hint
+          || t("story_waiting_gameplay", "Erfülle das Ziel durch normales Spielen.");
+        actions.appendChild(p);
+      }
+    }
+
+    const list = page.querySelector("[data-story-arc-list]");
+    if (list && Array.isArray(state.arcs)) {
+      list.innerHTML = "";
+      if (!state.arcs.length) {
+        const li = document.createElement("li");
+        li.className = "story-ops-arc story-ops-arc--empty";
+        li.textContent = t("story_no_arcs", "Noch keine Arcs.");
+        list.appendChild(li);
+      } else {
+        state.arcs.forEach((arc) => {
+          const li = document.createElement("li");
+          const isFocus = focus && focus.pack_id === arc.pack_id && focus.arc_id === arc.arc_id;
+          li.className = `story-ops-arc story-ops-arc--${arc.status || ""}${isFocus ? " is-focus" : ""}`;
+          li.setAttribute("data-story-focus-arc", "");
+          li.setAttribute("data-pack-id", arc.pack_id || "");
+          li.setAttribute("data-arc-id", arc.arc_id || "");
+          let chaptersHtml = "";
+          if (Array.isArray(arc.chapters) && arc.chapters.length) {
+            chaptersHtml = `<ol class="story-ops-arc__chapters">${arc.chapters.map((ch) => (
+              `<li class="story-ops-ch story-ops-ch--${escapeHtml(ch.status || "")}">`
+              + `<span class="story-ops-ch__mark" aria-hidden="true"></span>`
+              + `<span class="story-ops-ch__title">${escapeHtml(ch.title || "")}</span></li>`
+            )).join("")}</ol>`;
+          }
+          const seasonCode = arc.season_code || "";
+          const seasonLabel = arc.season_label || seasonCode;
+          const seasonHtml = seasonCode || seasonLabel
+            ? `<span class="story-ops-arc__season" title="${escapeHtml(seasonLabel)}">${escapeHtml(seasonCode || seasonLabel)}</span>`
+            : "";
+          li.innerHTML = (
+            `<div class="story-ops-arc__head">`
+            + `<span class="story-ops-arc__kind">${escapeHtml(arc.kind_label || arc.kind || "")}</span>`
+            + seasonHtml
+            + `<span class="story-ops-arc__status">${escapeHtml(arc.status_label || arc.status || "")}</span>`
+            + `</div><strong class="story-ops-arc__title">${escapeHtml(arc.title || "")}</strong>${chaptersHtml}`
+          );
+          list.appendChild(li);
+        });
+      }
+    }
+
+    _storyTtsSyncControls(page);
+
+    const freeShop = state.free_shop || null;
+    const arkBal = page.querySelector("[data-story-ark-balance]");
+    if (arkBal) {
+      const label = (freeShop && freeShop.label) || t("inv_ark_token", "Ark-Token");
+      const bal = freeShop ? Number(freeShop.balance) || 0 : 0;
+      arkBal.innerHTML = `${escapeHtml(t("free_shop_balance", "Bestand"))}: <strong>${fmtNumber(bal)}</strong> ${escapeHtml(label)}`;
+    }
+
+    const fp = _storyTtsFingerprint({ focus });
+    const prefs = _storyTtsLoadPrefs();
+    const shouldAuto = opts.forceSpeak
+      || (prefs.auto && beat && (beat.type === "transmission" || beat.type === "choice")
+        && fp !== _storyTtsLastFingerprint);
+    _storyTtsLastFingerprint = fp;
+    if (shouldAuto) {
+      const script = `${beat.title || ""}. ${beat.body || ""}`.trim();
+      void _storyTtsSpeakText(script);
+    }
+  }
+
+  let _storyOpsBound = false;
+  function bindStoryOpsOnce() {
+    if (_storyOpsBound) return;
+    _storyOpsBound = true;
+    document.addEventListener("click", async (ev) => {
+      const page = document.getElementById("story-ops-page");
+      if (!page) return;
+
+      const focusArc = ev.target.closest("[data-story-focus-arc]");
+      if (focusArc && !ev.target.closest("[data-story-advance],[data-story-choice]")) {
+        const packId = focusArc.getAttribute("data-pack-id") || "";
+        const arcId = focusArc.getAttribute("data-arc-id") || "";
+        if (packId && arcId) {
+          _storyFocusSave(packId, arcId);
+          try {
+            const q = `pack_id=${encodeURIComponent(packId)}&arc_id=${encodeURIComponent(arcId)}`;
+            const data = await GC.fetchJSON(`/api/story/state?${q}`, { cache: "no-store" });
+            if (data && data.story) _renderStoryOpsState(data.story, { forceSpeak: false });
+          } catch (_) {}
+        }
+        return;
+      }
+
+      if (ev.target.closest("[data-story-tts-play]")) {
+        ev.preventDefault();
+        void _storyTtsSpeakText(_storyTtsCurrentScript());
+        return;
+      }
+      if (ev.target.closest("[data-story-tts-pause]")) { ev.preventDefault(); _storyTtsPause(); return; }
+      if (ev.target.closest("[data-story-tts-resume]")) { ev.preventDefault(); _storyTtsResume(); return; }
+      if (ev.target.closest("[data-story-tts-stop]")) { ev.preventDefault(); _storyTtsStop(); return; }
+
+      const advanceBtn = ev.target.closest("[data-story-advance]");
+      const choiceBtn = ev.target.closest("[data-story-choice]");
+      if (!advanceBtn && !choiceBtn) return;
+      ev.preventDefault();
+      const btn = advanceBtn || choiceBtn;
+      const packId = btn.getAttribute("data-pack-id") || "";
+      const arcId = btn.getAttribute("data-arc-id") || "";
+      _storyFocusSave(packId, arcId);
+      btn.disabled = true;
+      try {
+        let res;
+        if (advanceBtn) {
+          res = await GC.fetchGameAction("/api/story/advance", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pack_id: packId, arc_id: arcId }),
+          });
+        } else {
+          res = await GC.fetchGameAction("/api/story/choice", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              pack_id: packId,
+              arc_id: arcId,
+              choice_id: btn.getAttribute("data-choice-id") || "",
+            }),
+          });
+        }
+        if (res && typeof GC.applyActionState === "function") {
+          GC.applyActionState(res, advanceBtn ? "story_advance" : "story_choice");
+        }
+        if (res && res.story) {
+          _renderStoryOpsState(res.story);
+        } else if (res && res.ok) {
+          const q = `pack_id=${encodeURIComponent(packId)}&arc_id=${encodeURIComponent(arcId)}`;
+          const data = await GC.fetchJSON(`/api/story/state?${q}`, { cache: "no-store" });
+          if (data && data.story) _renderStoryOpsState(data.story);
+        } else {
+          showNotify(t("story_action_fail", "Übertragung fehlgeschlagen."), "error");
+        }
+      } catch (_) {
+        showNotify(t("story_action_fail", "Übertragung fehlgeschlagen."), "error");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    document.addEventListener("input", (ev) => {
+      const vol = ev.target.closest("[data-story-tts-volume]");
+      if (!vol || !document.getElementById("story-ops-page")) return;
+      const prefs = _storyTtsLoadPrefs();
+      prefs.volume = Math.max(0, Math.min(1, (Number(vol.value) || 0) / 100));
+      _storyTtsSavePrefs(prefs);
+      const val = document.querySelector("[data-story-tts-volume-val]");
+      if (val) val.textContent = `${Math.round(prefs.volume * 100)}%`;
+      if (_storyAudio) _storyAudio.volume = prefs.volume;
+      if (_storyTtsUtterance) _storyTtsUtterance.volume = prefs.volume;
+    });
+
+    document.addEventListener("change", (ev) => {
+      const auto = ev.target.closest("[data-story-tts-auto]");
+      if (!auto || !document.getElementById("story-ops-page")) return;
+      const prefs = _storyTtsLoadPrefs();
+      prefs.auto = !!auto.checked;
+      _storyTtsSavePrefs(prefs);
+    });
+  }
+
+  function initStoryOps() {
+    bindStoryOpsOnce();
+    const page = document.getElementById("story-ops-page");
+    if (!page || page.dataset.ready !== "1") return;
+    _storyFocus = _storyFocusLoad();
+    _storyTtsSyncControls(page);
+    const state = parseStoryOpsPageState();
+    if (state) _renderStoryOpsState(state);
+    GC.registerCleanup(() => {
+      _storyTtsStop();
+      _storyTtsLastFingerprint = "";
     });
   }
 
@@ -24382,6 +25035,7 @@
       || path.endsWith("/records")
       || path.endsWith("/referrals")
       || path.endsWith("/imperial-directives")
+      || path.endsWith("/story")
     ) {
       sections.add("community");
     }
@@ -31164,6 +31818,7 @@
   GC.modules.alliance = initAlliance;
   bindAllianceOnce();
   GC.modules.imperial_directives = initImperialDirectives;
+  GC.modules.story = initStoryOps;
   GC.modules.galactic_politics = initGalacticPolitics;
   GC.modules.trader_hub = initTraderHub;
   GC.modules.fleet = initFleet;

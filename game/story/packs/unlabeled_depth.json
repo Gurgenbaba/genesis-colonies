@@ -1,0 +1,111 @@
+{
+  "pack_id": "unlabeled_depth",
+  "version": 1,
+  "arcs": [
+    {
+      "arc_id": "main",
+      "kind": "main",
+      "contact_key": "androgyn",
+      "title_key": "story_ud_title",
+      "start_when": {
+        "flags_all": [
+          "anomaly_protocol_done"
+        ]
+      },
+      "chapters": [
+        {
+          "chapter_id": "return",
+          "title_key": "story_ud_ch_return_title",
+          "beats": [
+            {
+              "beat_id": "r1",
+              "type": "transmission",
+              "title_key": "story_ud_r1_title",
+              "body_key": "story_ud_r1_body",
+              "cta_key": "story_cta_listen"
+            },
+            {
+              "beat_id": "r2",
+              "type": "transmission",
+              "title_key": "story_ud_r2_title",
+              "body_key": "story_ud_r2_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "rchoice",
+              "type": "choice",
+              "title_key": "story_ud_choice_title",
+              "body_key": "story_ud_choice_body",
+              "choices": [
+                {
+                  "id": "bind",
+                  "label_key": "story_ud_choice_bind",
+                  "set_flags": [
+                    "androgyn_bind"
+                  ]
+                },
+                {
+                  "id": "sever",
+                  "label_key": "story_ud_choice_sever",
+                  "set_flags": [
+                    "androgyn_sever"
+                  ]
+                }
+              ]
+            },
+            {
+              "beat_id": "r3",
+              "type": "transmission",
+              "title_key": "story_ud_r3_title",
+              "body_key": "story_ud_r3_body",
+              "cta_key": "story_cta_continue"
+            },
+            {
+              "beat_id": "robj",
+              "type": "objective",
+              "objective_key": "complete_research",
+              "objective_kind": "count",
+              "target": 3,
+              "filters": {},
+              "title_key": "story_ud_robj_title",
+              "body_key": "story_ud_robj_body"
+            },
+            {
+              "beat_id": "rreward",
+              "type": "reward",
+              "grants": [
+                {
+                  "kind": "inventory",
+                  "item_key": "story_scrap_token",
+                  "amount": 10
+                },
+                {
+                  "kind": "flag",
+                  "flag": "unlabeled_depth_done"
+                },
+                {
+                  "kind": "codex_flag",
+                  "flag": "codex_unlabeled_depth"
+                },
+                {
+                  "kind": "notify",
+                  "subject_key": "story_ud_notify_subject",
+                  "body_key": "story_ud_notify_body"
+                }
+              ]
+            },
+            {
+              "beat_id": "repi",
+              "type": "transmission",
+              "title_key": "story_ud_epi_title",
+              "body_key": "story_ud_epi_body",
+              "cta_key": "story_cta_saga_continue"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "season_code": "Q4",
+  "season_key": "story_season_q4"
+}

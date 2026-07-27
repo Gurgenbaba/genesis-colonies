@@ -231,6 +231,13 @@ def is_codex_unlocked(
             if flag == "first_fleet_sent":
                 return _player_has_fleet_movement(uid, conn=c)
             return _has_route_visit(uid, flag, conn=c)
+        if utype == "story_flag":
+            flag = str(unlock.get("flag") or "").strip()
+            if not flag:
+                return False
+            from .story.delivery import player_has_codex_story_flag
+
+            return player_has_codex_story_flag(uid, flag, conn=c)
         return True
     finally:
         if own:
@@ -404,6 +411,12 @@ def _codex_unlock_label(article: Dict[str, Any], *, locale: str | None = None) -
         return _codex_locale_text(
             "codex_unlock_first_fleet",
             "Send your first fleet to unlock this topic.",
+            locale=locale,
+        )
+    if utype == "story_flag":
+        return _codex_locale_text(
+            "codex_unlock_story_flag",
+            "Complete the related Story Ops transmission to unlock this topic.",
             locale=locale,
         )
     if utype in ("homeworld_level", "expansion_site"):
