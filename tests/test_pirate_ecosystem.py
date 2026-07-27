@@ -1594,7 +1594,53 @@ def test_human_colony_destroy_path(pirate_db):
         conn.close()
 
 
-def test_planet_breaker_locale_and_def():
+def test_bot_expedition_dispatch(pirate_db):
+    """GC-2602: Soft-On bots send real expeditions via send_fleet."""
+    from game.db import begin_write_transaction, commit
+    from game.fleet import get_planet_ships, set_planet_ships
+    from game.pirates import record_heat_event, set_pirates_ai_enabled
+    from game.pirates.accounts import bootstrap_faction_bots
+    from game.pirates.brain import dispatch_expedition_from_home
+    from game.pirates.heat import HEAT_THRESHOLDS
+    import time
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        set_pirates_ai_enabled(True, conn=conn)
+        bots = bootstrap_faction_bots(conn=conn)
+        bot = bots[0]
+        g = int(bot["galaxy"])
+        record_heat_event(
+            conn, g, "combat", amount=int(HEAT_THRESHOLDS["patrol"]) + 10
+        )
+        hangar = get_planet_ships(int(bot["planet_id"]), conn=conn)
+        hangar["solar_skiff"] = max(int(hangar.get("solar_skiff") or 0), 2)
+        set_planet_ships(
+            int(bot["planet_id"]), int(bot["player_id"]), hangar, conn=conn
+        )
+        # Fuel for outbound
+        conn.execute(
+            """
+            UPDATE planets
+            SET metal = max(COALESCE(metal, 0), 500000),
+                crystal = max(COALESCE(crystal, 0), 500000),
+                fuel_cells = max(COALESCE(fuel_cells, 0), 200000)
+            WHERE id = ?;
+            """,
+            (int(bot["planet_id"]),),
+        )
+        res = dispatch_expedition_from_home(
+            conn, bot, now=time.time(), force_playtime=True
+        )
+        assert res.get("ok"), res
+        assert int(res.get("fleet_id") or 0) > 0
+        logs = recent_action_log(conn, kind="expedition_dispatch", limit=5)
+        assert any(l.get("bot_player_id") == bot["player_id"] for l in logs)
+        commit(conn)
+    finally:
+        conn.close()
+
     from game.fleet_defs import ACTIVE_SHIP_KEYS, get_ship
 
     assert "planet_breaker" in ACTIVE_SHIP_KEYS
@@ -1618,3 +1664,50 @@ def test_faction_homes_distributed(pirate_db):
     assert len(set(systems)) == 6
     assert all(s < 490 for s in systems)
     assert max(systems) - min(systems) >= 300
+
+
+def test_bot_expedition_dispatch(pirate_db):
+    """GC-2602: Soft-On bots send real expeditions via send_fleet."""
+    from game.db import begin_write_transaction, commit
+    from game.fleet import get_planet_ships, set_planet_ships
+    from game.pirates import record_heat_event, set_pirates_ai_enabled
+    from game.pirates.accounts import bootstrap_faction_bots
+    from game.pirates.brain import dispatch_expedition_from_home
+    from game.pirates.heat import HEAT_THRESHOLDS
+    import time
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        set_pirates_ai_enabled(True, conn=conn)
+        bots = bootstrap_faction_bots(conn=conn)
+        bot = bots[0]
+        g = int(bot["galaxy"])
+        record_heat_event(
+            conn, g, "combat", amount=int(HEAT_THRESHOLDS["patrol"]) + 10
+        )
+        hangar = get_planet_ships(int(bot["planet_id"]), conn=conn)
+        hangar["solar_skiff"] = max(int(hangar.get("solar_skiff") or 0), 2)
+        set_planet_ships(
+            int(bot["planet_id"]), int(bot["player_id"]), hangar, conn=conn
+        )
+        conn.execute(
+            """
+            UPDATE planets
+            SET metal = max(COALESCE(metal, 0), 500000),
+                crystal = max(COALESCE(crystal, 0), 500000),
+                fuel_cells = max(COALESCE(fuel_cells, 0), 200000)
+            WHERE id = ?;
+            """,
+            (int(bot["planet_id"]),),
+        )
+        res = dispatch_expedition_from_home(
+            conn, bot, now=time.time(), force_playtime=True
+        )
+        assert res.get("ok"), res
+        assert int(res.get("fleet_id") or 0) > 0
+        logs = recent_action_log(conn, kind="expedition_dispatch", limit=5)
+        assert any(l.get("bot_player_id") == bot["player_id"] for l in logs)
+        commit(conn)
+    finally:
+        conn.close()

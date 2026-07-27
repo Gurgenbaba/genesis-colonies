@@ -24,6 +24,7 @@ Epics beschreiben nur das Ziel. **Niemals direkt implementieren.**
 | EPIC-20 | World Boss Events (serverweite PvE-Bosse) | [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) |
 | EPIC-21 | Pirate Ecosystem (Living Threat) | [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md) |
 | EPIC-22 | LiveOps Retention (Login + Battle Pass) | [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) |
+| EPIC-26 | Living Inactives + AI Expeditions | [INACTIVE_AUTOPLAY.md](INACTIVE_AUTOPLAY.md) |
 | EPIC-23 | Payment / Shop (Cash Grab MVP) | [PAYMENT_SHOP.md](PAYMENT_SHOP.md) |
 | EPIC-24 | Admin Control Center UX | [ADMIN_CONTROL_CENTER.md](ADMIN_CONTROL_CENTER.md) |
 | EPIC-25 | Genesis Story Ops (Lore / Side Ops) | [GENESIS_STORY_OPS.md](GENESIS_STORY_OPS.md) |
@@ -65,6 +66,7 @@ Vor jeder Änderung die relevanten Docs lesen:
 | [STATE_AJAX.md](STATE_AJAX.md) | Polling, PJAX, Live-State |
 | [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) | Serverweite PvE-Bosse, Contribution, LiveOps |
 | [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md) | Galaxy Heat, Piratenbasen, player-like AI, Bot-Log |
+| [INACTIVE_AUTOPLAY.md](INACTIVE_AUTOPLAY.md) | Dormante Konten: Round-Robin Wake, Presence, Economy (keine Expeditionen) |
 | [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) | 30-Tage Login + Battle Pass (EPIC-22) |
 | [PAYMENT_SHOP.md](PAYMENT_SHOP.md) | Shop + Stripe/PayPal (EPIC-23) |
 | [RAILWAY_OPERATOR.md](RAILWAY_OPERATOR.md) | Production Railway — DNS, CI-Wait, Cron, CDN, Cutover |

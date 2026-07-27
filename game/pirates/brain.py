@@ -33,6 +33,10 @@ RAID_FLEET_FRACTION = 0.55
 MIN_OPPORTUNITY = 35
 ANTI_PILE_ON_SEC = 24 * 3600
 HOME_RAID_STACK_FRACTION = 0.45
+MAX_COLONIZES_PER_TICK = 1
+MAX_EXPEDITIONS_PER_TICK = 2
+EXPEDITION_SHIP_PREFERENCE = ("solar_skiff", "eclipse_runner")
+EXPEDITION_HOURS_DEFAULT = 1
 BOT_COLONY_SOFT_CAP = 4  # home + up to 3 extra colonies per faction bot
 COMBAT_VS_BOT_BOUNTY = 150
 COLONIZE_WIPE_COOLDOWN_SEC = 6 * 3600
@@ -1063,9 +1067,6 @@ def run_raid_brain_tick(
     }
 
 
-MAX_COLONIZES_PER_TICK = 1
-
-
 def dispatch_colonize_from_home(
     conn,
     bot: Mapping[str, Any],
@@ -1212,3 +1213,114 @@ def run_colonize_brain_tick(conn, *, now: Optional[float] = None) -> Dict[str, A
         if res.get("ok"):
             dispatched.append(res)
     return {"colonizes": dispatched, "ai_enabled": True, "count": len(dispatched)}
+
+
+def _pick_expedition_ships(hangar: Mapping[str, int]) -> Dict[str, int]:
+    for key in EXPEDITION_SHIP_PREFERENCE:
+        have = int(hangar.get(key) or 0)
+        if have >= 1:
+            return {key: 1}
+    return {}
+
+
+def dispatch_expedition_from_home(
+    conn,
+    bot: Mapping[str, Any],
+    *,
+    now: Optional[float] = None,
+    force_playtime: bool = False,
+) -> Dict[str, Any]:
+    """Send a real expedition fleet from the faction homeworld (GC-2602)."""
+    if not is_pirates_ai_enabled(conn=conn):
+        return {"ok": False, "error": "ai_disabled"}
+
+    ts = float(now if now is not None else _now())
+    faction_key = str(bot["faction_key"])
+    galaxy = int(bot.get("galaxy") or 1)
+    heat = int(get_galaxy_heat(conn, galaxy).get("heat") or 0)
+    if heat < HEAT_THRESHOLDS["patrol"]:
+        return {"ok": False, "error": "heat_below_patrol", "heat": heat}
+
+    from .bot_state import bot_may_act, ensure_bot_state
+    from ..fleet import get_planet_ships, send_fleet
+    from ..fleet_defs import EXPEDITION_POSITION
+
+    state = ensure_bot_state(
+        conn, bot_player_id=int(bot["player_id"]), faction_key=faction_key, now=ts
+    )
+    if not force_playtime:
+        gate = bot_may_act(state, now=ts)
+        if not gate.get("ok"):
+            return {"ok": False, "error": str(gate.get("reason") or "gated")}
+
+    planet_id = int(bot["planet_id"])
+    player_id = int(bot["player_id"])
+    hangar = get_planet_ships(planet_id, conn=conn)
+    ships = _pick_expedition_ships(hangar)
+    if not ships:
+        log_pirate_action(
+            conn,
+            kind="expedition_skip",
+            faction_key=faction_key,
+            galaxy_id=galaxy,
+            bot_player_id=player_id,
+            message="need_ships: solar_skiff|eclipse_runner",
+            payload={
+                "hangar_expo": {
+                    k: int(hangar.get(k) or 0) for k in EXPEDITION_SHIP_PREFERENCE
+                }
+            },
+        )
+        return {"ok": False, "error": "need_ships"}
+
+    system = int(bot.get("system") or 1)
+    ok, reason, meta = send_fleet(
+        player_id=player_id,
+        origin_planet_id=planet_id,
+        mission_type="expedition",
+        target_galaxy=galaxy,
+        target_system=system,
+        target_position=int(EXPEDITION_POSITION),
+        ships=ships,
+        resources={},
+        speed_percent=100,
+        expedition_hours=EXPEDITION_HOURS_DEFAULT,
+        conn=conn,
+    )
+    if not ok:
+        log_pirate_action(
+            conn,
+            kind="expedition_failed",
+            faction_key=faction_key,
+            galaxy_id=galaxy,
+            bot_player_id=player_id,
+            message=f"expedition send failed: {reason}",
+            severity="error",
+            payload={"reason": reason, "ships": ships},
+        )
+        return {"ok": False, "error": reason}
+
+    fleet_id = int((meta or {}).get("fleet", {}).get("id") or 0)
+    log_pirate_action(
+        conn,
+        kind="expedition_dispatch",
+        faction_key=faction_key,
+        galaxy_id=galaxy,
+        bot_player_id=player_id,
+        message=f"expedition → [{galaxy}:{system}:{EXPEDITION_POSITION}] ships={ships}",
+        payload={
+            "fleet_id": fleet_id,
+            "ships": ships,
+            "expedition_hours": EXPEDITION_HOURS_DEFAULT,
+        },
+    )
+    return {
+        "ok": True,
+        "fleet_id": fleet_id,
+        "ships": ships,
+        "target": {
+            "galaxy": galaxy,
+            "system": system,
+            "position": int(EXPEDITION_POSITION),
+        },
+    }

@@ -128,6 +128,18 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
                     f"play_active={play.get('active')}"
                 )
 
+        def _inactive_autoplay() -> None:
+            from .inactive_autoplay import maybe_tick_inactive_autoplay
+
+            ia = maybe_tick_inactive_autoplay(conn, source="fleet_worker")
+            if ia.get("woke_count") or ia.get("enqueued") or ia.get("session_ticks"):
+                _worker_log(
+                    f"inactive_autoplay woke={ia.get('woke_count')} "
+                    f"roster={ia.get('roster_size') or ia.get('active_sessions')} "
+                    f"enqueued={ia.get('enqueued')} "
+                    f"ticks={ia.get('session_ticks')}"
+                )
+
         def _debris() -> None:
             from .combat import expire_due_debris_fields
 
@@ -140,6 +152,7 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
         _run_stage("world_boss", _world_boss)
         _run_stage("asteroids", _asteroids)
         _run_stage("pirates", _pirates)
+        _run_stage("inactive_autoplay", _inactive_autoplay)
         _run_stage("debris", _debris)
     except Exception:
         logger.exception("post fleet maintenance failed source=%s", source)

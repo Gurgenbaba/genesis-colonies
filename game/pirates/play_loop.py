@@ -1,10 +1,9 @@
 """Player-like action loop for living pirate AIs (EPIC-21 Phase 3 / GC-P26).
 
-One primary strategic action per bot per tick after finishing due work / economy enqueue.
-Canonical missions only — no hangar cheat restock in the loop.
+Economy runs for ALL faction bots every Soft-On tick; strategic missions stay
+round-robin so HTTP cron cannot monopolize SQLite.
 
-Cron safety (Railway / single Gunicorn worker): only a round-robin slice of bots
-runs per tick so ranking/fleet HTTP cron cannot monopolize SQLite for minutes.
+Canonical missions only — no hangar cheat restock in the loop.
 """
 
 from __future__ import annotations
@@ -156,7 +155,7 @@ def decide_bot_action(
     *,
     now: Optional[float] = None,
 ) -> str:
-    """Return one of: economy, rebuild, spy, raid, colonize, recycle, idle."""
+    """Return one of: economy, rebuild, spy, raid, colonize, recycle, expedition, idle."""
     ts = float(now if now is not None else _now())
     planet_id = int(bot["planet_id"])
     galaxy = int(bot.get("galaxy") or 1)
@@ -186,7 +185,50 @@ def decide_bot_action(
         return "colonize"
     if heat >= HEAT_THRESHOLDS["patrol"] and int(ships.get("harvest_reclaimer") or 0) >= 1:
         return "recycle"
+    if heat >= HEAT_THRESHOLDS["patrol"] and (
+        int(ships.get("solar_skiff") or 0) >= 1
+        or int(ships.get("eclipse_runner") or 0) >= 1
+    ):
+        return "expedition"
     return "economy"
+
+
+def _run_bot_economy_only(
+    conn,
+    bot: Mapping[str, Any],
+    *,
+    now: float,
+) -> Dict[str, Any]:
+    """Always progress buildings/research/ships/defense for every faction bot."""
+    from ..models import get_planets_by_player
+    from .economy import plan_bot_planet_tick
+
+    planets = get_planets_by_player(int(bot["player_id"]), conn=conn) or []
+    home_id = int(bot.get("planet_id") or 0)
+    results: List[Dict[str, Any]] = []
+    for planet in planets:
+        is_home = int(planet["id"]) == home_id or bool(planet.get("is_homeworld"))
+        try:
+            results.append(
+                plan_bot_planet_tick(conn, bot, planet, now=now, is_home=is_home)
+            )
+        except Exception:
+            logger.exception("play_loop economy-only failed planet=%s", planet.get("id"))
+        if len(results) >= 2:
+            break
+    return {
+        "faction_key": bot.get("faction_key"),
+        "player_id": int(bot["player_id"]),
+        "economy": results,
+        "ok": any(
+            r.get("build")
+            or r.get("research")
+            or r.get("ships")
+            or r.get("defense")
+            or r.get("builds")
+            for r in results
+        ),
+    }
 
 
 def run_bot_play_step(
@@ -195,8 +237,9 @@ def run_bot_play_step(
     *,
     now: Optional[float] = None,
     force_playtime: bool = False,
+    do_economy: bool = True,
 ) -> Dict[str, Any]:
-    """Always light-enqueue economy, then one strategic mission when ready."""
+    """Enqueue economy (optional) then one strategic mission when ready."""
     from ..models import get_planets_by_player
     from .economy import plan_bot_planet_tick
 
@@ -214,29 +257,31 @@ def run_bot_play_step(
     home_id = int(bot.get("planet_id") or 0)
     econ_results: List[Dict[str, Any]] = []
 
-    # Every turn: finish + enqueue on home (+ one colony). Missions used to skip
-    # enqueue and bots looked idle in ranking for long stretches.
-    for planet in planets:
-        is_home = int(planet["id"]) == home_id or bool(planet.get("is_homeworld"))
-        if not is_home and action not in ("economy", "rebuild"):
-            # Mission turns: home only (keep cron light).
-            continue
-        try:
-            econ_results.append(
-                plan_bot_planet_tick(
-                    conn, bot, planet, now=ts, is_home=is_home
+    if do_economy:
+        for planet in planets:
+            is_home = int(planet["id"]) == home_id or bool(planet.get("is_homeworld"))
+            if not is_home and action not in ("economy", "rebuild"):
+                continue
+            try:
+                econ_results.append(
+                    plan_bot_planet_tick(
+                        conn, bot, planet, now=ts, is_home=is_home
+                    )
                 )
-            )
-        except Exception:
-            logger.exception("play_loop economy failed planet=%s", planet.get("id"))
-        if len(econ_results) >= (2 if action in ("economy", "rebuild") else 1):
-            break
+            except Exception:
+                logger.exception("play_loop economy failed planet=%s", planet.get("id"))
+            if len(econ_results) >= (2 if action in ("economy", "rebuild") else 1):
+                break
 
     out["economy"] = econ_results
     if action in ("economy", "rebuild"):
         out["ok"] = any(
-            r.get("build") or r.get("research") or r.get("ships") or r.get("defense")
+            r.get("build")
+            or r.get("research")
+            or r.get("ships")
+            or r.get("defense")
             or (r.get("finished") or {})
+            or r.get("builds")
             for r in econ_results
         ) or bool(econ_results)
         log_pirate_action(
@@ -265,6 +310,14 @@ def run_bot_play_step(
         from .brain import dispatch_colonize_from_home
 
         res = dispatch_colonize_from_home(
+            conn, bot, now=ts, force_playtime=force_playtime
+        )
+        out["result"] = res
+        out["ok"] = bool(res.get("ok"))
+    elif action == "expedition":
+        from .brain import dispatch_expedition_from_home
+
+        res = dispatch_expedition_from_home(
             conn, bot, now=ts, force_playtime=force_playtime
         )
         out["result"] = res
@@ -329,12 +382,22 @@ def run_play_loop_tick(
     max_bots: Optional[int] = None,
     process_all: bool = False,
 ) -> Dict[str, Any]:
-    """Soft-On tick: round-robin bot steps; base raids + recycle as secondary."""
+    """Soft-On: economy for ALL bots, then round-robin strategic missions."""
     if not is_pirates_ai_enabled(conn=conn):
         return {"ok": False, "error": "ai_disabled", "steps": []}
 
     ts = float(now if now is not None else _now())
     roster = list(bots) if bots is not None else bootstrap_faction_bots(conn=conn)
+
+    economy_steps: List[Dict[str, Any]] = []
+    for bot in roster:
+        try:
+            economy_steps.append(_run_bot_economy_only(conn, bot, now=ts))
+        except Exception:
+            logger.exception(
+                "play_loop economy-all failed faction=%s", bot.get("faction_key")
+            )
+
     limit = int(max_bots) if max_bots is not None else PLAY_BOTS_PER_TICK
     active = _round_robin_bots(
         conn, roster, max_bots=limit, process_all=bool(process_all)
@@ -344,7 +407,11 @@ def run_play_loop_tick(
         try:
             steps.append(
                 run_bot_play_step(
-                    conn, bot, now=ts, force_playtime=force_playtime
+                    conn,
+                    bot,
+                    now=ts,
+                    force_playtime=force_playtime,
+                    do_economy=False,
                 )
             )
         except Exception:
@@ -361,16 +428,20 @@ def run_play_loop_tick(
 
     from .brain import run_raid_brain_tick, run_recycle_brain_tick
 
-    # Home raids already happen in play steps; base raids fill remaining budget.
     raids = run_raid_brain_tick(conn, now=ts, skip_home_raids=True)
     recycles = run_recycle_brain_tick(conn, now=ts)
     return {
         "ok": True,
         "steps": steps,
+        "economy_all": economy_steps,
+        "economy_ok": sum(1 for e in economy_steps if e.get("ok")),
         "raids": raids.get("raids") or [],
         "recycles": recycles.get("recycles") or [],
         "spies": [s for s in steps if s.get("action") == "spy" and s.get("ok")],
         "colonizes": [s for s in steps if s.get("action") == "colonize" and s.get("ok")],
+        "expeditions": [
+            s for s in steps if s.get("action") == "expedition" and s.get("ok")
+        ],
         "count": len(steps),
         "roster": len(roster),
         "active": len(active),

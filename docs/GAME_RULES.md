@@ -232,6 +232,7 @@ UI: `fleet_attack_limit_remaining` / `fleet_error_attack_limit_reached`.
 
 - Angriff nur erlaubt, wenn das Verteidiger-Imperium im **Schutzbereich** liegt (Faktor **5×** auf `score_total`) **oder** der Verteidiger **inaktiv** ist.
 - **Inaktiv:** kein `last_seen` innerhalb von **3 Tagen** (`RANKING_INACTIVE_AFTER_SEC`).
+- **Inactive Autoplay (EPIC-26):** Gestaffelte Sessions wecken dormante Menschen-Konten (Gebäude/Forschung/Defense + `last_seen`-Refresh). Ranking/Galaxy wirken lebendig; Autoplay startet **keine** Flotten/Expeditionen. Details: [INACTIVE_AUTOPLAY.md](INACTIVE_AUTOPLAY.md).
 - Inaktive Imperien können **außerhalb** des Punkte-Schutzes angegriffen werden — beabsichtigt für Inaktiven-Räumung, nicht für Push auf aktive Alt-Accounts.
 
 UI: `noob_protection_blocked` in Fleet-Preview/Send.

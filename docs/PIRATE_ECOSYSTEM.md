@@ -73,12 +73,12 @@ When AI is on, faction bots participate via canonical fleets:
 
 ### Living economy (GC-P21–P23) + player loop (GC-P26–P28)
 
-Owner: `game/pirates/economy.py` + `game/pirates/play_loop.py` — Soft-On tick runs `run_play_loop_tick` (one player-like step per bot), then secondary base raids / recycle.
+Owner: `game/auto_empire.py` (enqueue) · `game/pirates/economy.py` (Soft-On seed + wrapper) · `game/pirates/play_loop.py` — Soft-On tick runs `run_play_loop_tick` (one player-like step per bot), then secondary base raids / recycle. Expeditions: `dispatch_expedition_from_home` (canonical `send_fleet`).
 
 | Concern | Behavior |
 |---------|----------|
 | Bootstrap | One-time resource + fuel seed; **one-time** utility fleet seed (`utility_seeded`); **one-time building floor** (mines/lab/OS) so Soft-On bots produce + score immediately |
-| Tick | Priority: economy → rebuild → spy → raid → colonize (personality reserves); **round-robin ≤2 bots/tick** (`GC_PIRATE_PLAY_BOTS_PER_TICK`) so HTTP cron cannot starve Railway’s single SQLite worker |
+| Tick | **Economy for ALL bots every Soft-On tick** (chain enqueue); then Priority missions: spy → raid → colonize → recycle → **expedition** on round-robin ≤3 bots/tick (`GC_PIRATE_PLAY_BOTS_PER_TICK`) |
 | Progress | Mines → CC/Lab → OS/Barracks/DF → research gates → ships/defense by personality |
 | Raids | `_raid_fleet_from_hangar` — never `set_planet_ships` template wipe; home raids via play loop |
 | Fleet-save | Inbound human attack on AI planet → `panic_recall_faction_fleets` (`inbound_attack`) |
@@ -187,7 +187,7 @@ Identity owner: `game/pirates/accounts.py` (`get_pirate_ai_profile`, `pirate_ai_
 | GC-P23 | Defense build + inbound fleet-save | **done** |
 | GC-P24 | AI colony destroy (`planet_breaker`) + bounty/heat | **done** |
 | GC-P25 | Balance / LiveOps / ship-gate doc pass | **done** |
-| GC-P26 | Player-loop brain (`play_loop`: economy→rebuild→spy→raid→colonize) | **done** |
+| GC-P26 | Player-loop brain (`play_loop`: economy→rebuild→spy→raid→colonize→expedition) | **done** |
 | GC-P27 | Cheat teardown: utility/fuel one-time seed only | **done** |
 | GC-P28 | Economy depth + personality reserves / colony parity | **done** |
 | GC-P29 | Anti-farm bounty/heat + wipe recolonize cooldown | **done** |

@@ -310,6 +310,8 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | World Boss Events (shared HP PvE, contribution, LiveOps) | `game/world_boss.py` | [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) |
 | Galaxy Asteroid Belt (temporary harvest fields) | `game/asteroids.py` | [ASTEROID_SYSTEM.md](ASTEROID_SYSTEM.md) |
 | Pirate Ecosystem (Heat, bases, player-like AI, Bot-Log) | `game/pirates/` | [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md) |
+| Passive empire planner (buildings/research/defense/ships enqueue) | `game/auto_empire.py` | [INACTIVE_AUTOPLAY.md](INACTIVE_AUTOPLAY.md) · Pirate wrapper: `game/pirates/economy.py` |
+| Inactive autoplay (round-robin wake, presence, economy sessions) | `game/inactive_autoplay.py` | [INACTIVE_AUTOPLAY.md](INACTIVE_AUTOPLAY.md) · fleet-worker post-maint |
 | Login Attendance (30-day calendar) | `game/login_rewards.py` | [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) |
 | Battle Pass Season (Free/Premium tracks) | `game/battle_pass.py` | [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) |
 | Premium Entitlement | `game/premium_entitlements.py` | [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) / [PAYMENT_SHOP.md](PAYMENT_SHOP.md) |
