@@ -107,6 +107,7 @@ def grant_chapter_ark_tokens(
                     "arc_id": str(arc_id),
                     "chapter_index": cid,
                 },
+                conn=conn,
             )
         except Exception:
             logger.exception("story chapter ark notify failed player=%s", pid)

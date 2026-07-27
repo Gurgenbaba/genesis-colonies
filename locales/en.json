@@ -6493,7 +6493,7 @@
   "story_beat_type_gate": "Gate",
   "story_cta_chapter_done": "Complete chapter",
   "story_cta_saga_continue": "Continue saga",
-  "story_tts_hint_neural": "Neural contact voice. Paragraph pauses — not flat or sluggish.",
+  "story_tts_hint_neural": "Neural contact voice (Killian/Christopher). Natural pace, paragraph pauses — contact channel, not flat.",
   "story_tts_hint_missing": "Neural TTS not installed (pip install edge-tts). Fallback: browser voice.",
   "story_ch_awakening_title": "Chapter I — Awakening",
   "story_ch_spine_title": "Chapter II — Colony Spine",

@@ -168,7 +168,7 @@ Default: narrative Rewards **auto-grant** beim Reward-Beat (kein Claim-UI wie Di
 - **Nav:** rechte Meta-Leiste unter **Community** (nicht KOMMANDO links — Platz)
 - Sidebar-Badge bei aktiver Transmission/Choice
 - Kontakt: **sprechender Kreis-Orb** (Wellen-Ringe + EQ bei TTS `is-speaking`)
-- **Neural Contact Voice:** `edge-tts` (DE: **KillianNeural**, EN: ChristopherNeural) via `POST /api/story/tts` → MP3-Cache. Prosody v3: Absatz-Pausen, leichte Rate/Pitch, kein Flatten zu Otto-Monoton. Override: `STORY_TTS_VOICE`. Fallback Browser-TTS.
+- **Neural Contact Voice:** `edge-tts` (DE: **KillianNeural**, EN: ChristopherNeural) via `POST /api/story/tts` → MP3-Cache. Prosody **v5**: Plain-Text, Absatz-Pausen via `…`, Rate/Pitch `-6%`/`-3Hz`. Client: **AbortController + Session-Token** (Stop/Tabben killt in-flight Fetch), Auto-Speak Debounce 350ms. Override: `STORY_TTS_VOICE` / `STORY_TTS_RATE` / `STORY_TTS_PITCH`. Fallback Browser-TTS.
 - PJAX: `GC.fetchGameAction` → `{ ok, state, story }` → `applyActionState` + lokales `_renderStoryOpsState`; TTS stoppt in `cleanupPage`
 - Kein `location.reload()`
 
@@ -206,6 +206,7 @@ Siehe [GENESIS_LORE_BIBLE.md](GENESIS_LORE_BIBLE.md). Packs: `ark_signal`, `livi
 - `tests/test_story_ark_chapter_tokens.py` — Kapitel-Drip Ark-Token
 - Nav badge: `count_story_attention` is **read-only** — never on the `/api/game-state` write path
 - Ensure/Backfill/Auto-Advance only on Story-APIs, Story-Page und Directive-Fan-out
+- Reward/chapter `notify` must reuse the open write `conn` (no nested `db()` — SQLite deadlock)
 
 ---
 

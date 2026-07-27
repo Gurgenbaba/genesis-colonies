@@ -6493,7 +6493,7 @@
   "story_beat_type_gate": "Tor",
   "story_cta_chapter_done": "Kapitel abschließen",
   "story_cta_saga_continue": "Saga fortsetzen",
-  "story_tts_hint_neural": "Neurale Kontaktstimme (Killian). Absätze mit Pause — nicht platt und langsam.",
+  "story_tts_hint_neural": "Neurale Kontaktstimme (Killian). Absätze mit Pause — Kontaktkanal.",
   "story_tts_hint_missing": "Neural-TTS nicht installiert (pip install edge-tts). Fallback: Browser-Stimme.",
   "story_ch_awakening_title": "Kapitel I — Erwachen",
   "story_ch_spine_title": "Kapitel II — Kolonie-Rückgrat",

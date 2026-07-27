@@ -494,9 +494,17 @@ def notify_system(
     subject: str,
     body: str,
     metadata: dict[str, Any] | None = None,
+    *,
+    conn=None,
 ) -> dict[str, Any]:
     return notify_player(
-        player_id, subject, body, category="system", metadata=metadata, sender_name="System"
+        player_id,
+        subject,
+        body,
+        category="system",
+        metadata=metadata,
+        sender_name="System",
+        conn=conn,
     )
 
 
@@ -505,6 +513,8 @@ def notify_admin(
     subject: str,
     body: str,
     metadata: dict[str, Any] | None = None,
+    *,
+    conn=None,
 ) -> dict[str, Any]:
     return notify_player(
         player_id,
@@ -513,6 +523,7 @@ def notify_admin(
         category="admin",
         metadata=metadata,
         sender_name="Administration",
+        conn=conn,
     )
 
 

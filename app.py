@@ -5286,9 +5286,11 @@ def api_story_advance():
     story: Dict[str, Any] = {}
     conn2 = db()
     try:
+        # Mutation already ran ensure_player_story — avoid a second write lock.
         story = get_story_state(
             user_id,
             conn=conn2,
+            ensure=False,
             focus_pack_id=pack_id,
             focus_arc_id=arc_id,
         )
@@ -5434,6 +5436,7 @@ def api_story_choice():
         story = get_story_state(
             user_id,
             conn=conn2,
+            ensure=False,
             focus_pack_id=pack_id,
             focus_arc_id=arc_id,
         )

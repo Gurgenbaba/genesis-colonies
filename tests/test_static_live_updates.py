@@ -2804,3 +2804,24 @@ def test_main_js_unread_increase_plays_sound_without_inbox():
     notif = src.split("function applyNotificationSummary(data, reason)")[1].split("function scheduleNotificationPoll")[0]
     assert "_processUnreadMessagesPoll(hudSlice, reasonStr, {})" in notif
     assert "notifications: data.notifications" in notif
+
+
+def test_main_js_story_tts_abort_and_stop_on_focus():
+    """Story TTS must abort in-flight neural fetch and stop immediately on arc tab."""
+    src = _read("static/main.js")
+    assert "let _storyTtsAbort = null" in src
+    assert "let _storyTtsSession = 0" in src
+    assert "STORY_TTS_AUTO_DEBOUNCE_MS = 350" in src
+    assert "new AbortController()" in src
+    assert "signal: controller.signal" in src
+    assert "_storyTtsScheduleAutoSpeak" in src
+    stop_fn = src.split("function _storyTtsStop()")[1].split("function _storyTtsPause()")[0]
+    assert "_storyTtsSession += 1" in stop_fn
+    assert "_storyTtsAbort.abort()" in stop_fn
+    focus = src.split('closest("[data-story-focus-arc]")')[1].split("data-story-tts-play")[0]
+    assert "_storyTtsStop()" in focus
+    assert "_storyFocusSave" in focus
+    render_tail = src.split("const fp = _storyTtsFingerprint({ focus })")[1].split("function bindStoryOpsOnce")[0]
+    assert "fpChanged" in render_tail
+    assert "_storyTtsStop()" in render_tail
+    assert "_storyTtsScheduleAutoSpeak" in render_tail

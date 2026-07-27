@@ -1,7 +1,7 @@
 """Neural story TTS via Microsoft Edge voices (edge-tts).
 
 Contact-channel narration: preserve paragraph rhythm, light cinematic prosody,
-modern neural voices (not muddy slow-Otto).
+modern neural voices (plain text — no SSML wrapping that mangled Killian).
 """
 
 from __future__ import annotations
@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 _APP_ROOT = Path(__file__).resolve().parents[2]
 _TTS_CACHE = _APP_ROOT / "static" / "uploads" / "story_tts"
 
-# Cache/prosody revision — bump to invalidate muddy v1 Otto caches.
-_STYLE_VERSION = "v3"
+# Cache/prosody revision — bump to invalidate broken v4 SSML caches.
+_STYLE_VERSION = "v5"
 
 # Modern contact voices — clear, cinematic; avoid over-slow/deep mud.
 _VOICE_BY_LANG = {
@@ -37,25 +37,27 @@ _VOICE_BY_LANG = {
 
 _DEFAULT_VOICE = "de-DE-KillianNeural"
 
-# Subtle cinematic — still natural. Heavy -14%/-10Hz made Conrad sound drunk/Otto.
-_RATE = "-6%"
-_PITCH = "-3Hz"
-_VOLUME = "+0%"
+# Proven Killian settings (v3) — plain Communicate rate/pitch, no SSML.
+_DEFAULT_RATE = "-6%"
+_DEFAULT_PITCH = "-3Hz"
+_DEFAULT_VOLUME = "+0%"
 
 _SYNTH_TIMEOUT_S = 18.0
 _executor = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="story-tts")
 _synth_lock = threading.Lock()
 
-# Lore terms German TTS often mangles into grocery-Otto readings.
+# Lore terms German TTS often mangles — longer phrases first.
 _DE_PRONUNCE = (
+    (re.compile(r"\bSeed[\s-]?Ark\b", re.I), "Seed-Ark"),
+    (re.compile(r"\bGenesis[\s-]?Ark\b", re.I), "Genesis-Ark"),
+    (re.compile(r"\bLiving[\s-]?Lattice\b", re.I), "Living Lättis"),
+    (re.compile(r"\bFree[\s-]?Shop\b", re.I), "Free Shop"),
+    (re.compile(r"\bStory[\s-]?Ops\b", re.I), "Story Ops"),
     (re.compile(r"\bLattice\b", re.I), "Lättis"),
     (re.compile(r"\bArk\b"), "Ark"),
-    (re.compile(r"\bSeed[\s-]?Ark\b", re.I), "Seed-Ark"),
     (re.compile(r"\bAndrogyn\b", re.I), "Androgyn"),
     (re.compile(r"\bImperium\b", re.I), "Imperium"),
     (re.compile(r"\bTimekeeper\b", re.I), "Timekeeper"),
-    (re.compile(r"\bFree Shop\b", re.I), "Free Shop"),
-    (re.compile(r"\bStory Ops\b", re.I), "Story Ops"),
     (re.compile(r"\bDNA\b"), "D N A"),
     (re.compile(r"\bPE\b"), "Planet Evolution"),
     (re.compile(r"\bROI\b"), "R O I"),
@@ -79,26 +81,34 @@ def resolve_voice(locale: str | None = None) -> str:
     return _VOICE_BY_LANG.get(lang, _DEFAULT_VOICE)
 
 
+def _prosody_params() -> tuple[str, str, str]:
+    rate = str(os.environ.get("STORY_TTS_RATE") or _DEFAULT_RATE).strip() or _DEFAULT_RATE
+    pitch = str(os.environ.get("STORY_TTS_PITCH") or _DEFAULT_PITCH).strip() or _DEFAULT_PITCH
+    volume = str(os.environ.get("STORY_TTS_VOLUME") or _DEFAULT_VOLUME).strip() or _DEFAULT_VOLUME
+    return rate, pitch, volume
+
+
 def prepare_contact_script(text: str, *, locale: str | None = None) -> str:
     """Shape lore text for natural neural narration (pauses, pronunciation)."""
     raw = str(text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
     if not raw:
         return ""
 
-    # Normalize fancy dashes / bullets that TTS reads as "Bindestrich".
-    raw = raw.replace("—", " – ").replace("–", " – ").replace("•", "")
+    # Normalize fancy dashes / bullets — keep as short pause via spaced en-dash,
+    # which Killian handles better than reading "Gedankenstrich".
+    raw = raw.replace("—", ", ").replace("–", ", ").replace("•", "")
     raw = re.sub(r"[ \t]+", " ", raw)
 
     paragraphs = [p.strip() for p in re.split(r"\n\s*\n+", raw) if p.strip()]
     chunks: list[str] = []
     for para in paragraphs:
-        # Soft line breaks inside a paragraph → breathing commas / periods.
         lines = [ln.strip() for ln in para.split("\n") if ln.strip()]
         joined = " ".join(lines)
         joined = re.sub(r"\s{2,}", " ", joined).strip()
         if joined:
             chunks.append(joined)
 
+    # Paragraph pause: ellipsis works reliably with plain edge-tts (no SSML).
     body = " … ".join(chunks)
     body = re.sub(r"\s+([,.;:!?])", r"\1", body)
     body = re.sub(r"([.!?])\s*\1+", r"\1", body)
@@ -111,16 +121,15 @@ def prepare_contact_script(text: str, *, locale: str | None = None) -> str:
 
     if len(body) > 2500:
         cut = body[:2500]
-        # Prefer cutting at sentence end.
         m = re.search(r"^(.*[.!?…])\s", cut)
         body = (m.group(1) if m else cut).rstrip() + " …"
 
     return body
 
 
-def _cache_path(voice: str, text: str) -> Path:
+def _cache_path(voice: str, text: str, rate: str, pitch: str, volume: str) -> Path:
     digest = hashlib.sha256(
-        f"{_STYLE_VERSION}|{voice}|{_RATE}|{_PITCH}|{_VOLUME}\n{text}".encode("utf-8")
+        f"{_STYLE_VERSION}|{voice}|{rate}|{pitch}|{volume}\n{text}".encode("utf-8")
     ).hexdigest()
     return _TTS_CACHE / f"{digest}.mp3"
 
@@ -144,7 +153,8 @@ def synthesize_mp3(
         return None, "audio/mpeg", "edge_tts_missing"
 
     chosen = str(voice or "").strip() or resolve_voice(locale)
-    path = _cache_path(chosen, body)
+    rate, pitch, volume = _prosody_params()
+    path = _cache_path(chosen, body, rate, pitch, volume)
     try:
         if path.is_file() and path.stat().st_size > 64:
             return path.read_bytes(), "audio/mpeg", None
@@ -152,7 +162,7 @@ def synthesize_mp3(
         pass
 
     try:
-        fut = _executor.submit(_edge_synthesize_sync, body, chosen)
+        fut = _executor.submit(_edge_synthesize_sync, body, chosen, rate, pitch, volume)
         audio = fut.result(timeout=_SYNTH_TIMEOUT_S)
     except concurrent.futures.TimeoutError:
         logger.warning("story tts timeout voice=%s", chosen)
@@ -175,7 +185,7 @@ def synthesize_mp3(
     return audio, "audio/mpeg", None
 
 
-def _edge_synthesize_sync(text: str, voice: str) -> bytes:
+def _edge_synthesize_sync(text: str, voice: str, rate: str, pitch: str, volume: str) -> bytes:
     import asyncio
 
     async def _run() -> bytes:
@@ -184,9 +194,9 @@ def _edge_synthesize_sync(text: str, voice: str) -> bytes:
         communicate = edge_tts.Communicate(
             text,
             voice=voice,
-            rate=_RATE,
-            pitch=_PITCH,
-            volume=_VOLUME,
+            rate=rate,
+            pitch=pitch,
+            volume=volume,
         )
         chunks: list[bytes] = []
         async for item in communicate.stream():

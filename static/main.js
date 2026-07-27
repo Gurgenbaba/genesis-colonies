@@ -18557,11 +18557,14 @@
 
   const STORY_TTS_LS_KEY = "gc_story_tts_v1";
   const STORY_FOCUS_KEY = "gc_story_focus_v1";
+  const STORY_TTS_AUTO_DEBOUNCE_MS = 350;
   let _storyTtsUtterance = null;
   let _storyTtsLastFingerprint = "";
   let _storyAudio = null;
   let _storyAudioUrl = null;
   let _storyTtsSpeakTimer = null;
+  let _storyTtsSession = 0;
+  let _storyTtsAbort = null;
   let _storyFocus = { pack_id: "", arc_id: "" };
 
   function _storyFocusLoad() {
@@ -18621,9 +18624,14 @@
   }
 
   function _storyTtsStop() {
+    _storyTtsSession += 1;
     if (_storyTtsSpeakTimer) {
       clearTimeout(_storyTtsSpeakTimer);
       _storyTtsSpeakTimer = null;
+    }
+    if (_storyTtsAbort) {
+      try { _storyTtsAbort.abort(); } catch (_) {}
+      _storyTtsAbort = null;
     }
     if (_storyAudio) {
       try { _storyAudio.pause(); } catch (_) {}
@@ -18665,13 +18673,24 @@
     }
   }
 
-  async function _storyTtsSpeakNeural(text, volume) {
+  function _storyTtsIsAbortError(err) {
+    if (!err) return false;
+    if (err.name === "AbortError") return true;
+    const msg = String(err.message || err || "");
+    return msg === "AbortError" || /aborted/i.test(msg);
+  }
+
+  async function _storyTtsSpeakNeural(text, volume, session) {
+    const controller = new AbortController();
+    _storyTtsAbort = controller;
     const res = await fetch("/api/story/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Accept": "audio/mpeg,application/json" },
       body: JSON.stringify({ text }),
       credentials: "same-origin",
+      signal: controller.signal,
     });
+    if (session !== _storyTtsSession) return;
     const ctype = String(res.headers.get("content-type") || "");
     if (!res.ok || !ctype.includes("audio")) {
       let err = "tts_failed";
@@ -18682,27 +18701,40 @@
       throw new Error(err);
     }
     const blob = await res.blob();
+    if (session !== _storyTtsSession) return;
     if (_storyAudioUrl) {
       try { URL.revokeObjectURL(_storyAudioUrl); } catch (_) {}
     }
     _storyAudioUrl = URL.createObjectURL(blob);
-    _storyAudio = new Audio(_storyAudioUrl);
-    _storyAudio.volume = Math.max(0, Math.min(1, Number(volume) || 0.85));
-    _storyAudio.onended = () => { _storyOrbSetState("idle"); };
-    _storyAudio.onpause = () => {
+    const audio = new Audio(_storyAudioUrl);
+    audio.volume = Math.max(0, Math.min(1, Number(volume) || 0.85));
+    audio.onended = () => {
+      if (session === _storyTtsSession) _storyOrbSetState("idle");
+    };
+    audio.onpause = () => {
+      if (session !== _storyTtsSession) return;
       if (_storyAudio && !_storyAudio.ended && _storyAudio.currentTime > 0) {
         _storyOrbSetState("paused");
       }
     };
-    _storyAudio.onplay = () => { _storyOrbSetState("speaking"); };
+    audio.onplay = () => {
+      if (session === _storyTtsSession) _storyOrbSetState("speaking");
+    };
+    if (session !== _storyTtsSession) {
+      try { URL.revokeObjectURL(_storyAudioUrl); } catch (_) {}
+      _storyAudioUrl = null;
+      return;
+    }
+    _storyAudio = audio;
     _storyOrbSetState("speaking");
-    await _storyAudio.play();
+    await audio.play();
   }
 
-  function _storyTtsSpeakBrowser(text, volume) {
+  function _storyTtsSpeakBrowser(text, volume, session) {
     if (!("speechSynthesis" in window) || typeof window.SpeechSynthesisUtterance !== "function") {
       throw new Error("unsupported");
     }
+    if (session !== _storyTtsSession) return;
     try { window.speechSynthesis.cancel(); } catch (_) {}
     const u = new window.SpeechSynthesisUtterance(text);
     const lang = String(document.documentElement.lang || "de").toLowerCase();
@@ -18710,9 +18742,16 @@
     u.rate = 0.96;
     u.pitch = 0.92;
     u.volume = Math.max(0, Math.min(1, Number(volume) || 0.85));
-    u.onstart = () => { _storyOrbSetState("speaking"); };
-    u.onend = () => { _storyOrbSetState("idle"); };
-    u.onerror = () => { _storyOrbSetState("idle"); };
+    u.onstart = () => {
+      if (session === _storyTtsSession) _storyOrbSetState("speaking");
+    };
+    u.onend = () => {
+      if (session === _storyTtsSession) _storyOrbSetState("idle");
+    };
+    u.onerror = () => {
+      if (session === _storyTtsSession) _storyOrbSetState("idle");
+    };
+    if (session !== _storyTtsSession) return;
     _storyTtsUtterance = u;
     _storyOrbSetState("speaking");
     window.speechSynthesis.speak(u);
@@ -18727,13 +18766,15 @@
     }
     const prefs = _storyTtsLoadPrefs();
     _storyTtsStop();
+    const session = _storyTtsSession;
     try {
       if (_storyNeuralEnabled()) {
         // Keep paragraph breaks for server prosody — do not flatten to Otto-monotone.
-        await _storyTtsSpeakNeural(raw, prefs.volume);
+        await _storyTtsSpeakNeural(raw, prefs.volume, session);
         return;
       }
     } catch (err) {
+      if (_storyTtsIsAbortError(err) || session !== _storyTtsSession) return;
       const code = String((err && err.message) || "");
       if (code === "edge_tts_missing" || code === "tts_timeout" || code.indexOf("tts_failed") === 0) {
         // Soft fallback — no error toast unless browser also fails.
@@ -18741,14 +18782,28 @@
         // keep going to browser fallback
       }
     }
+    if (session !== _storyTtsSession) return;
     try {
-      _storyTtsSpeakBrowser(raw.replace(/\s+/g, " ").trim(), prefs.volume);
+      _storyTtsSpeakBrowser(raw.replace(/\s+/g, " ").trim(), prefs.volume, session);
     } catch (_) {
+      if (session !== _storyTtsSession) return;
       showNotify(
         t("story_tts_unsupported", "Vorlesen fehlgeschlagen. Neural-TTS braucht Netzwerk; Browser-TTS ist optional."),
         "error"
       );
     }
+  }
+
+  function _storyTtsScheduleAutoSpeak(script) {
+    if (_storyTtsSpeakTimer) {
+      clearTimeout(_storyTtsSpeakTimer);
+      _storyTtsSpeakTimer = null;
+    }
+    const payload = String(script || "");
+    _storyTtsSpeakTimer = setTimeout(() => {
+      _storyTtsSpeakTimer = null;
+      void _storyTtsSpeakText(payload);
+    }, STORY_TTS_AUTO_DEBOUNCE_MS);
   }
 
   function _storyTtsBuildScript(title, body) {
@@ -18806,7 +18861,7 @@
     const hint = page.querySelector("[data-story-tts-hint]");
     if (hint) {
       hint.textContent = _storyNeuralEnabled(page)
-        ? t("story_tts_hint_neural", "Neurale Kontaktstimme (Edge TTS). Pause, Weiter und Lautstärke steuern die Wiedergabe.")
+        ? t("story_tts_hint_neural", "Neurale Kontaktstimme (Killian). Natürliches Tempo, Absätze mit Pause — Kontaktkanal, kein Otto.")
         : t("story_tts_hint_missing", "Neural-TTS nicht installiert (pip install edge-tts). Fallback: Browser-Stimme.");
     }
   }
@@ -18968,13 +19023,22 @@
 
     const fp = _storyTtsFingerprint({ focus });
     const prefs = _storyTtsLoadPrefs();
+    const fpChanged = fp !== _storyTtsLastFingerprint;
     const shouldAuto = opts.forceSpeak
       || (prefs.auto && beat && (beat.type === "transmission" || beat.type === "choice")
-        && fp !== _storyTtsLastFingerprint);
+        && fpChanged);
+    // Focus/beat change: kill leftover audio immediately (tabbing must not stack voices).
+    if (fpChanged) {
+      _storyTtsStop();
+    }
     _storyTtsLastFingerprint = fp;
     if (shouldAuto) {
       const script = _storyTtsBuildScript(beat.title, beat.body);
-      void _storyTtsSpeakText(script);
+      if (opts.forceSpeak) {
+        void _storyTtsSpeakText(script);
+      } else {
+        _storyTtsScheduleAutoSpeak(script);
+      }
     }
   }
 
@@ -18991,6 +19055,7 @@
         const packId = focusArc.getAttribute("data-pack-id") || "";
         const arcId = focusArc.getAttribute("data-arc-id") || "";
         if (packId && arcId) {
+          _storyTtsStop();
           _storyFocusSave(packId, arcId);
           try {
             const q = `pack_id=${encodeURIComponent(packId)}&arc_id=${encodeURIComponent(arcId)}`;

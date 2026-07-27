@@ -253,3 +253,51 @@ def test_story_no_raw_status_keys_in_state(story_db):
                 assert not str(beat.get("cta") or "").startswith("story_")
     finally:
         conn.close()
+
+
+def test_deliver_story_notify_passes_conn():
+    """Inbox notify must reuse the caller's connection (no nested write lock)."""
+    from unittest.mock import MagicMock, patch
+
+    from game.story.delivery import deliver_story_notify
+
+    sentinel = MagicMock(name="conn")
+    with patch("game.messages.notify_system") as ns:
+        ns.return_value = {"ok": True}
+        deliver_story_notify(
+            1,
+            subject_key="story_ark_main_notify_subject",
+            body_key="story_ark_main_notify_body",
+            conn=sentinel,
+        )
+        assert ns.call_args.kwargs.get("conn") is sentinel
+
+
+def test_reward_notify_does_not_open_nested_db(story_db):
+    """Regression: nested db() during story write deadlocks SQLite (Weiter freeze)."""
+    from unittest.mock import patch
+
+    from game.db import begin_write_transaction, commit
+    from game.story.rewards import apply_grants
+
+    conn = db()
+    try:
+        pid = _create_player()
+        begin_write_transaction(conn)
+        with patch("game.messages.db") as nested_db:
+            nested_db.side_effect = AssertionError("nested db() during story write")
+            applied = apply_grants(
+                pid,
+                [
+                    {
+                        "kind": "notify",
+                        "subject_key": "story_ark_main_notify_subject",
+                        "body_key": "story_ark_main_notify_body",
+                    }
+                ],
+                conn=conn,
+            )
+        commit(conn)
+        assert any(a.get("kind") == "notify" for a in applied)
+    finally:
+        conn.close()

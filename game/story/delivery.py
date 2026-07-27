@@ -26,6 +26,7 @@ def deliver_story_notify(
         subject or "Transmission",
         body or subject,
         metadata={"source": "story_ops", "subject_key": subject_key, "body_key": body_key},
+        conn=conn,
     )
 
 
