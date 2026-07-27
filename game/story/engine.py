@@ -8,14 +8,15 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from ..db import table_exists
 from .flags import flags_satisfy, get_player_flags, set_flags
-from .packs import get_arc, load_all_packs, next_beat_position, resolve_beat
-from .rewards import apply_grants
+from .packs import get_arc, get_pack, load_all_packs, next_beat_position, resolve_beat
+from .rewards import apply_grants, grant_chapter_ark_tokens
 
 logger = logging.getLogger(__name__)
 
 ARCS_TABLE = "player_story_arcs"
 STATUS_ACTIVE = "active"
 STATUS_COMPLETED = "completed"
+_MAX_AUTO_DEPTH = 24
 
 
 def story_schema_ready(conn) -> bool:
@@ -37,6 +38,7 @@ def ensure_player_story(
     _repair_false_completions(pid, conn=conn, now=ts)
     started = _start_eligible_arcs(pid, conn=conn, now=ts)
     _repair_out_of_range_arcs(pid, conn=conn, now=ts)
+    _backfill_chapter_ark_tokens(pid, conn=conn, now=ts)
     advanced = 0
     for row in _active_arc_rows(pid, conn=conn):
         for _ in range(12):
@@ -261,8 +263,18 @@ def try_auto_advance_arc(
     *,
     conn,
     now: float | None = None,
+    _depth: int = 0,
 ) -> Dict[str, Any]:
     """Auto-complete objective (if done), reward, and gate beats."""
+    if _depth >= _MAX_AUTO_DEPTH:
+        logger.warning(
+            "story auto-advance depth cap player=%s arc_row=%s depth=%s",
+            player_id,
+            arc_row_id,
+            _depth,
+        )
+        return {"advanced": False, "depth_capped": True}
+
     ts = float(now if now is not None else time.time())
     row = _load_arc_row(player_id, arc_row_id, conn=conn)
     if not row or str(row.get("status")) != STATUS_ACTIVE:
@@ -285,11 +297,11 @@ def try_auto_advance_arc(
         target = max(1, int(row.get("target_value") or beat.get("target") or 1))
         if int(row.get("progress_value") or 0) < target:
             return {"advanced": False}
-        return _advance_to_next(player_id, row, arc_def, conn=conn, now=ts)
+        return _advance_to_next(player_id, row, arc_def, conn=conn, now=ts, _depth=_depth)
 
     if btype == "reward":
         apply_grants(player_id, list(beat.get("grants") or []), conn=conn, now=ts)
-        return _advance_to_next(player_id, row, arc_def, conn=conn, now=ts)
+        return _advance_to_next(player_id, row, arc_def, conn=conn, now=ts, _depth=_depth)
 
     if btype == "gate":
         flags = get_player_flags(player_id, conn=conn)
@@ -299,7 +311,7 @@ def try_auto_advance_arc(
             require_any=beat.get("require_flags_any"),
         ):
             return {"advanced": False}
-        return _advance_to_next(player_id, row, arc_def, conn=conn, now=ts)
+        return _advance_to_next(player_id, row, arc_def, conn=conn, now=ts, _depth=_depth)
 
     # transmission / choice need player action
     return {"advanced": False}
@@ -402,6 +414,51 @@ def _find_active_arc(
     return dict(row) if row else None
 
 
+def _backfill_chapter_ark_tokens(player_id: int, *, conn, now: float) -> int:
+    """Catch-up: grant Ark-Tokens for chapters already completed (idempotent)."""
+    pid = int(player_id)
+    granted_total = 0
+    rows = conn.execute(
+        """
+        SELECT id, pack_id, arc_id, status, chapter_index
+        FROM player_story_arcs
+        WHERE player_id = ?;
+        """,
+        (pid,),
+    ).fetchall()
+    for row in rows:
+        pack_id = str(row["pack_id"])
+        arc_id = str(row["arc_id"])
+        arc_def = get_arc(pack_id, arc_id)
+        if not arc_def:
+            continue
+        pack = get_pack(pack_id) or {}
+        chapters = list(arc_def.get("chapters") or [])
+        if not chapters:
+            continue
+        status = str(row["status"] or "")
+        ci = int(row["chapter_index"] or 0)
+        if status == STATUS_COMPLETED:
+            done_through = len(chapters)  # exclusive end → all chapters
+        else:
+            # Active: chapters 0..ci-1 are finished.
+            done_through = max(0, ci)
+        for ch_i in range(done_through):
+            res = grant_chapter_ark_tokens(
+                pid,
+                pack_id=pack_id,
+                arc_id=arc_id,
+                chapter_index=ch_i,
+                arc_def=arc_def,
+                pack=pack,
+                conn=conn,
+                now=now,
+                notify=False,
+            )
+            granted_total += int(res.get("granted") or 0)
+    return granted_total
+
+
 def _advance_to_next(
     player_id: int,
     row: Mapping[str, Any],
@@ -409,17 +466,44 @@ def _advance_to_next(
     *,
     conn,
     now: float,
+    _depth: int = 0,
 ) -> Dict[str, Any]:
+    old_ci = int(row["chapter_index"] or 0)
+    pack_id = str(row["pack_id"])
+    arc_id = str(row["arc_id"])
+    pack = get_pack(pack_id) or {}
+    tokens_gained = 0
+
     nxt = next_beat_position(
         arc_def,
-        chapter_index=int(row["chapter_index"] or 0),
+        chapter_index=old_ci,
         beat_index=int(row["beat_index"] or 0),
     )
     now_i = int(now)
+
+    def _drip_chapter(ci: int) -> int:
+        res = grant_chapter_ark_tokens(
+            int(player_id),
+            pack_id=pack_id,
+            arc_id=arc_id,
+            chapter_index=ci,
+            arc_def=arc_def,
+            pack=pack,
+            conn=conn,
+            now=now,
+            notify=True,
+        )
+        return int(res.get("granted") or 0)
+
     if nxt is None:
-        return _complete_arc(player_id, int(row["id"]), conn=conn, now=now)
+        tokens_gained += _drip_chapter(old_ci)
+        done = _complete_arc(player_id, int(row["id"]), conn=conn, now=now)
+        return {**done, "ark_tokens_gained": tokens_gained}
 
     nci, nbi = nxt
+    if nci > old_ci:
+        tokens_gained += _drip_chapter(old_ci)
+
     next_beat = resolve_beat(arc_def, chapter_index=nci, beat_index=nbi) or {}
     target = 0
     progress = 0
@@ -434,9 +518,20 @@ def _advance_to_next(
         """,
         (nci, nbi, progress, target, now_i, int(row["id"]), STATUS_ACTIVE),
     )
-    # Immediately resolve reward/gate chains
-    auto = try_auto_advance_arc(player_id, int(row["id"]), conn=conn, now=now)
-    return {"advanced": True, "chapter_index": nci, "beat_index": nbi, **auto}
+    # Immediately resolve reward/gate chains (depth-capped)
+    auto = try_auto_advance_arc(
+        player_id, int(row["id"]), conn=conn, now=now, _depth=_depth + 1
+    )
+    tokens_gained += int(auto.get("ark_tokens_gained") or 0)
+    result: Dict[str, Any] = {
+        "advanced": True,
+        "chapter_index": int(auto["chapter_index"]) if "chapter_index" in auto else nci,
+        "beat_index": int(auto["beat_index"]) if "beat_index" in auto else nbi,
+        "ark_tokens_gained": tokens_gained,
+    }
+    if auto.get("completed"):
+        result["completed"] = True
+    return result
 
 
 def _complete_arc(

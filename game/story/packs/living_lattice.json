@@ -1,6 +1,6 @@
 {
   "pack_id": "living_lattice",
-  "version": 3,
+  "version": 4,
   "arcs": [
     {
       "arc_id": "main",
@@ -132,11 +132,6 @@
               "beat_id": "ll_reward",
               "type": "reward",
               "grants": [
-                {
-                  "kind": "inventory",
-                  "item_key": "story_scrap_token",
-                  "amount": 8
-                },
                 {
                   "kind": "flag",
                   "flag": "living_lattice_done"

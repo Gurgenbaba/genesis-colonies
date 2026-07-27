@@ -168,7 +168,7 @@ Default: narrative Rewards **auto-grant** beim Reward-Beat (kein Claim-UI wie Di
 - **Nav:** rechte Meta-Leiste unter **Community** (nicht KOMMANDO links — Platz)
 - Sidebar-Badge bei aktiver Transmission/Choice
 - Kontakt: **sprechender Kreis-Orb** (Wellen-Ringe + EQ bei TTS `is-speaking`)
-- **Neural Contact Voice:** `edge-tts` (DE: ConradNeural) via `POST /api/story/tts` → MP3-Cache. Fallback Browser-TTS.
+- **Neural Contact Voice:** `edge-tts` (DE: **KillianNeural**, EN: ChristopherNeural) via `POST /api/story/tts` → MP3-Cache. Prosody v3: Absatz-Pausen, leichte Rate/Pitch, kein Flatten zu Otto-Monoton. Override: `STORY_TTS_VOICE`. Fallback Browser-TTS.
 - PJAX: `GC.fetchGameAction` → `{ ok, state, story }` → `applyActionState` + lokales `_renderStoryOpsState`; TTS stoppt in `cleanupPage`
 - Kein `location.reload()`
 
@@ -190,18 +190,22 @@ Default: narrative Rewards **auto-grant** beim Reward-Beat (kein Claim-UI wie Di
 | **GC-2513…2515** | Birth / Heat / Anomaly+Unlabeled |
 | **GC-2516** | Ark-Token (storage: `story_scrap_token`) |
 | **GC-2517** | Free Shop (Ark-Token redeem on `/shop`) |
+| **GC-2519** | Kapitel-Drip Ark-Token (Engine-owned, idempotent) |
 | **GC-2518** | Side-Ops Year Band |
 
 ## Phase 2 — Imperium Chronicle (Jahres-Lore)
 
-Siehe [GENESIS_LORE_BIBLE.md](GENESIS_LORE_BIBLE.md). Packs: `ark_signal`, `living_lattice`, `birth_of_worlds`, `heat_and_shadow`, `anomaly_protocol`, `unlabeled_depth`, `side_ops_year` — je mit `season_code`/`season_key` (TOC-Badge). Side-Ops Year One: 7 Arcs. Contact-Orb + **Free Shop** (`/shop` Tab, Ark-Token → TK / Boosters / Container).
+Siehe [GENESIS_LORE_BIBLE.md](GENESIS_LORE_BIBLE.md). Packs: `ark_signal`, `living_lattice`, `birth_of_worlds`, `heat_and_shadow`, `anomaly_protocol`, `unlabeled_depth`, `side_ops_year` — je mit `season_code`/`season_key` (TOC-Badge). Side-Ops Year One: 7 Arcs. Contact-Orb + **Free Shop** (`/shop` Tab). **Ark-Token Kapitel-Drip:** Engine vergibt bei Kapitelabschluss (Main 2 / Finale 6 / Side 4), Catch-up in `ensure_player_story`.
 
 ---
 
 ## Tests
 
-- `tests/test_story_ops_engine.py` — fan-out, advance, choice, rewards, false-completion repair
+- `tests/test_story_ops_engine.py` — fan-out, advance, choice, rewards, false-completion repair, **badge read-only** (no `ensure` on poll)
 - `tests/test_story_packs_valid.py` — alle Packs gegen Schema
+- `tests/test_story_ark_chapter_tokens.py` — Kapitel-Drip Ark-Token
+- Nav badge: `count_story_attention` is **read-only** — never on the `/api/game-state` write path
+- Ensure/Backfill/Auto-Advance only on Story-APIs, Story-Page und Directive-Fan-out
 
 ---
 

@@ -218,6 +218,24 @@ def test_story_reopens_false_completion_without_flags(story_db):
         conn.close()
 
 
+def test_story_attention_badge_is_read_only(story_db):
+    """Nav badge must not run ensure_player_story (blocks SQLite on every poll)."""
+    from unittest.mock import patch
+
+    from game.story.service import count_story_attention
+
+    conn = db()
+    try:
+        pid = _create_player()
+        ensure_player_story(pid, conn=conn)
+        with patch("game.story.service.ensure_player_story") as ens:
+            n = count_story_attention(pid, conn=conn)
+            assert isinstance(n, int)
+            assert not ens.called
+    finally:
+        conn.close()
+
+
 def test_story_no_raw_status_keys_in_state(story_db):
     conn = db()
     try:

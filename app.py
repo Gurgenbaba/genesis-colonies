@@ -5300,6 +5300,7 @@ def api_story_advance():
         {
             "ok": ok,
             "error": result.get("error"),
+            "ark_tokens_gained": int(result.get("ark_tokens_gained") or 0) if ok else 0,
             "story": story,
             "state": state,
         }
@@ -5444,6 +5445,7 @@ def api_story_choice():
         {
             "ok": ok,
             "error": result.get("error"),
+            "ark_tokens_gained": int(result.get("ark_tokens_gained") or 0) if ok else 0,
             "story": story,
             "state": state,
         }

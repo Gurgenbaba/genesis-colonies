@@ -1,6 +1,6 @@
 {
   "pack_id": "birth_of_worlds",
-  "version": 2,
+  "version": 3,
   "arcs": [
     {
       "arc_id": "main",
@@ -132,11 +132,6 @@
               "beat_id": "creward",
               "type": "reward",
               "grants": [
-                {
-                  "kind": "inventory",
-                  "item_key": "story_scrap_token",
-                  "amount": 8
-                },
                 {
                   "kind": "flag",
                   "flag": "birth_of_worlds_done"

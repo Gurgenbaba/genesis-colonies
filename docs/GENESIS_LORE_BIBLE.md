@@ -68,9 +68,13 @@ Pack-Felder: `season_code` (`Q1`…`Q4`/`Y1`) + `season_key` → TOC-Badge in St
 ## Free Shop (Ark-Token)
 
 - Item key (storage): `story_scrap_token` — UI: **Ark-Token**
-- Drip: Story Ops Kapitel / Act-Finale / Side Ops
+- **Kapitel-Drip (Engine-Owner):** bei Kapitelabschluss in `game/story/engine.py` → `grant_chapter_ark_tokens`
+  - Main-Kapitel: **2** · Act-Finale (letztes Main-Kapitel): **6** · Side-Kapitel: **4**
+  - Idempotenz-Flag: `ark_ch:{pack}:{arc}:{chapter_index}`
+  - Catch-up in `ensure_player_story` für bereits gespielte Kapitel
+- Pack-`reward`-Beats: Flags / Codex / Notify / Container — **keine** Ark-Tokens mehr (Drip ist Engine-only)
 - Sink: **Free Shop** auf `/shop` (Tab neben Premium) — Owner `game/story/free_shop.py`
-- Grants: TK 45m, Boosters 5–15m, Basic + Wreckage Container (unter EUR-Packs)
+- Grants Free Shop: TK 45m, Boosters 5–15m, Basic + Wreckage Container (unter EUR-Packs)
 - Kein EUR-Checkout, kein Combat-P2W, kein zweiter Shop-Catalog
 
 ---

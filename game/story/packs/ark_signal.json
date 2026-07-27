@@ -1,6 +1,6 @@
 {
   "pack_id": "ark_signal",
-  "version": 4,
+  "version": 5,
   "arcs": [
     {
       "arc_id": "main",
@@ -154,11 +154,6 @@
               "beat_id": "main_reward",
               "type": "reward",
               "grants": [
-                {
-                  "kind": "inventory",
-                  "item_key": "story_scrap_token",
-                  "amount": 6
-                },
                 {
                   "kind": "flag",
                   "flag": "ark_signal_main_done"

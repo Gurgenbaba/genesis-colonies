@@ -18707,8 +18707,8 @@
     const u = new window.SpeechSynthesisUtterance(text);
     const lang = String(document.documentElement.lang || "de").toLowerCase();
     u.lang = lang.startsWith("de") ? "de-DE" : "en-US";
-    u.rate = 0.92;
-    u.pitch = 0.7;
+    u.rate = 0.96;
+    u.pitch = 0.92;
     u.volume = Math.max(0, Math.min(1, Number(volume) || 0.85));
     u.onstart = () => { _storyOrbSetState("speaking"); };
     u.onend = () => { _storyOrbSetState("idle"); };
@@ -18720,8 +18720,8 @@
   }
 
   async function _storyTtsSpeakText(text) {
-    const body = String(text || "").replace(/\s+/g, " ").trim();
-    if (!body) {
+    const raw = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+    if (!raw) {
       showNotify(t("story_tts_empty", "Kein Übertragungstext zum Vorlesen."), "error");
       return;
     }
@@ -18729,7 +18729,8 @@
     _storyTtsStop();
     try {
       if (_storyNeuralEnabled()) {
-        await _storyTtsSpeakNeural(body, prefs.volume);
+        // Keep paragraph breaks for server prosody — do not flatten to Otto-monotone.
+        await _storyTtsSpeakNeural(raw, prefs.volume);
         return;
       }
     } catch (err) {
@@ -18741,7 +18742,7 @@
       }
     }
     try {
-      _storyTtsSpeakBrowser(body, prefs.volume);
+      _storyTtsSpeakBrowser(raw.replace(/\s+/g, " ").trim(), prefs.volume);
     } catch (_) {
       showNotify(
         t("story_tts_unsupported", "Vorlesen fehlgeschlagen. Neural-TTS braucht Netzwerk; Browser-TTS ist optional."),
@@ -18750,12 +18751,25 @@
     }
   }
 
+  function _storyTtsBuildScript(title, body) {
+    const t0 = String(title || "").trim();
+    const b0 = String(body || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+    if (t0 && b0) return `${t0}.\n\n${b0}`;
+    return t0 || b0;
+  }
+
   function _storyTtsCurrentScript() {
     const page = document.getElementById("story-ops-page");
     if (!page) return "";
+    const st = parseStoryOpsPageState();
+    const beat = st && st.focus && st.focus.beat;
+    if (beat && (beat.title || beat.body)) {
+      return _storyTtsBuildScript(beat.title, beat.body);
+    }
     const title = (page.querySelector("[data-story-title]") || {}).textContent || "";
-    const body = (page.querySelector("[data-story-text]") || {}).textContent || "";
-    return `${String(title).trim()}. ${String(body).trim()}`.trim();
+    const bodyEl = page.querySelector("[data-story-text]");
+    const body = bodyEl ? (bodyEl.innerText || bodyEl.textContent || "") : "";
+    return _storyTtsBuildScript(title, body);
   }
 
   function _storyTtsFingerprint(state) {
@@ -18959,7 +18973,7 @@
         && fp !== _storyTtsLastFingerprint);
     _storyTtsLastFingerprint = fp;
     if (shouldAuto) {
-      const script = `${beat.title || ""}. ${beat.body || ""}`.trim();
+      const script = _storyTtsBuildScript(beat.title, beat.body);
       void _storyTtsSpeakText(script);
     }
   }
@@ -19026,6 +19040,16 @@
         }
         if (res && typeof GC.applyActionState === "function") {
           GC.applyActionState(res, advanceBtn ? "story_advance" : "story_choice");
+        }
+        if (res && res.ok) {
+          const gained = Number(res.ark_tokens_gained) || 0;
+          if (gained > 0) {
+            const tmpl = t("story_ark_token_toast", "+%(amount)s Ark-Token");
+            const msg = tmpl.includes("%(amount)s")
+              ? tmpl.replace("%(amount)s", String(gained))
+              : `+${gained} Ark-Token`;
+            showNotify(msg, "success");
+          }
         }
         if (res && res.story) {
           _renderStoryOpsState(res.story);

@@ -5938,7 +5938,7 @@
   "story_no_arcs": "No arcs yet.",
   "story_status_live": "LIVE CHANNEL",
   "story_tts_auto": "Auto-speak new transmissions",
-  "story_tts_bender_label": "Neural Contact Voice",
+  "story_tts_bender_label": "Contact Voice",
   "story_tts_empty": "No transmission text to speak.",
   "story_tts_hint": "Robotic contact voice (browser TTS). Not an official character voice — a Bender-style protocol for immersion.",
   "story_tts_pause": "Pause",
@@ -6493,7 +6493,7 @@
   "story_beat_type_gate": "Gate",
   "story_cta_chapter_done": "Complete chapter",
   "story_cta_saga_continue": "Continue saga",
-  "story_tts_hint_neural": "Neural contact voice (Edge TTS). Pause, resume, and volume control playback.",
+  "story_tts_hint_neural": "Neural contact voice. Paragraph pauses — not flat or sluggish.",
   "story_tts_hint_missing": "Neural TTS not installed (pip install edge-tts). Fallback: browser voice.",
   "story_ch_awakening_title": "Chapter I — Awakening",
   "story_ch_spine_title": "Chapter II — Colony Spine",
@@ -6830,5 +6830,8 @@
   "free_shop_offer_res15_title": "Research booster 15 min",
   "free_shop_offer_res15_hint": "Medium research skip.",
   "free_shop_offer_wreck_title": "Wreckage Container",
-  "free_shop_offer_wreck_hint": "Wreckage container from the lore Free Shop."
+  "free_shop_offer_wreck_hint": "Wreckage container from the lore Free Shop.",
+  "story_ark_token_chapter_subj": "Ark Token",
+  "story_ark_token_chapter_body": "+%(amount)s Ark Token — chapter complete.",
+  "story_ark_token_toast": "+%(amount)s Ark Token"
 }

@@ -1,6 +1,6 @@
 {
   "pack_id": "side_ops_year",
-  "version": 2,
+  "version": 3,
   "arcs": [
     {
       "arc_id": "debris_choir",
@@ -45,11 +45,6 @@
               "beat_id": "drew",
               "type": "reward",
               "grants": [
-                {
-                  "kind": "inventory",
-                  "item_key": "story_scrap_token",
-                  "amount": 4
-                },
                 {
                   "kind": "flag",
                   "flag": "side_debris_done"
@@ -115,11 +110,6 @@
               "type": "reward",
               "grants": [
                 {
-                  "kind": "inventory",
-                  "item_key": "story_scrap_token",
-                  "amount": 4
-                },
-                {
                   "kind": "flag",
                   "flag": "side_steel_done"
                 },
@@ -183,11 +173,6 @@
               "beat_id": "rew",
               "type": "reward",
               "grants": [
-                {
-                  "kind": "inventory",
-                  "item_key": "story_scrap_token",
-                  "amount": 4
-                },
                 {
                   "kind": "flag",
                   "flag": "side_fort_done"
@@ -258,11 +243,6 @@
               "type": "reward",
               "grants": [
                 {
-                  "kind": "inventory",
-                  "item_key": "story_scrap_token",
-                  "amount": 4
-                },
-                {
                   "kind": "flag",
                   "flag": "side_expo_done"
                 },
@@ -331,11 +311,6 @@
               "beat_id": "rew",
               "type": "reward",
               "grants": [
-                {
-                  "kind": "inventory",
-                  "item_key": "story_scrap_token",
-                  "amount": 5
-                },
                 {
                   "kind": "flag",
                   "flag": "side_rare_done"
@@ -406,11 +381,6 @@
               "type": "reward",
               "grants": [
                 {
-                  "kind": "inventory",
-                  "item_key": "story_scrap_token",
-                  "amount": 5
-                },
-                {
                   "kind": "flag",
                   "flag": "side_teeth_done"
                 },
@@ -479,11 +449,6 @@
               "beat_id": "rew",
               "type": "reward",
               "grants": [
-                {
-                  "kind": "inventory",
-                  "item_key": "story_scrap_token",
-                  "amount": 5
-                },
                 {
                   "kind": "flag",
                   "flag": "side_salt_done"

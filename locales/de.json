@@ -5938,7 +5938,7 @@
   "story_no_arcs": "Noch keine Arcs.",
   "story_status_live": "LIVE-KANAL",
   "story_tts_auto": "Neue Übertragungen automatisch vorlesen",
-  "story_tts_bender_label": "Neural Contact Voice",
+  "story_tts_bender_label": "Kontaktstimme Killian",
   "story_tts_empty": "Kein Übertragungstext zum Vorlesen.",
   "story_tts_hint": "Robotische Kontaktstimme (Browser-TTS). Keine offizielle Charakterstimme — Bender-Style-Protokoll für Immersion.",
   "story_tts_pause": "Pause",
@@ -6493,7 +6493,7 @@
   "story_beat_type_gate": "Tor",
   "story_cta_chapter_done": "Kapitel abschließen",
   "story_cta_saga_continue": "Saga fortsetzen",
-  "story_tts_hint_neural": "Neurale Kontaktstimme (Edge TTS). Pause, Weiter und Lautstärke steuern die Wiedergabe.",
+  "story_tts_hint_neural": "Neurale Kontaktstimme (Killian). Absätze mit Pause — nicht platt und langsam.",
   "story_tts_hint_missing": "Neural-TTS nicht installiert (pip install edge-tts). Fallback: Browser-Stimme.",
   "story_ch_awakening_title": "Kapitel I — Erwachen",
   "story_ch_spine_title": "Kapitel II — Kolonie-Rückgrat",
@@ -6830,5 +6830,8 @@
   "free_shop_offer_res15_title": "Forschungs-Booster 15 Min",
   "free_shop_offer_res15_hint": "Mittlerer Forschungs-Skip.",
   "free_shop_offer_wreck_title": "Wreckage Container",
-  "free_shop_offer_wreck_hint": "Wrack-Container aus dem Lore-Free-Shop."
+  "free_shop_offer_wreck_hint": "Wrack-Container aus dem Lore-Free-Shop.",
+  "story_ark_token_chapter_subj": "Ark-Token",
+  "story_ark_token_chapter_body": "+%(amount)s Ark-Token — Kapitel abgeschlossen.",
+  "story_ark_token_toast": "+%(amount)s Ark-Token"
 }

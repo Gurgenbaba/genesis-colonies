@@ -1,6 +1,6 @@
 {
   "pack_id": "anomaly_protocol",
-  "version": 1,
+  "version": 2,
   "arcs": [
     {
       "arc_id": "main",
@@ -58,11 +58,6 @@
               "beat_id": "breward",
               "type": "reward",
               "grants": [
-                {
-                  "kind": "inventory",
-                  "item_key": "story_scrap_token",
-                  "amount": 8
-                },
                 {
                   "kind": "flag",
                   "flag": "anomaly_protocol_done"

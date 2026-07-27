@@ -1,6 +1,6 @@
 {
   "pack_id": "unlabeled_depth",
-  "version": 1,
+  "version": 2,
   "arcs": [
     {
       "arc_id": "main",
@@ -74,11 +74,6 @@
               "beat_id": "rreward",
               "type": "reward",
               "grants": [
-                {
-                  "kind": "inventory",
-                  "item_key": "story_scrap_token",
-                  "amount": 10
-                },
                 {
                   "kind": "flag",
                   "flag": "unlabeled_depth_done"

@@ -33,17 +33,45 @@ def _t(key: str, fallback: str) -> str:
 
 
 def count_story_attention(player_id: int, *, conn) -> int:
+    """Read-only badge count — NEVER calls ensure_player_story (hot path / poll)."""
     if not story_schema_ready(conn):
         return 0
-    state = get_story_summary(int(player_id), conn=conn)
-    return int(state.get("attention_count") or 0)
+    rows = conn.execute(
+        """
+        SELECT pack_id, arc_id, chapter_index, beat_index
+        FROM player_story_arcs
+        WHERE player_id = ? AND status = ?;
+        """,
+        (int(player_id), STATUS_ACTIVE),
+    ).fetchall()
+    attention = 0
+    for row in rows:
+        arc_def = get_arc(str(row["pack_id"]), str(row["arc_id"]))
+        if not arc_def:
+            continue
+        beat = resolve_beat(
+            arc_def,
+            chapter_index=int(row["chapter_index"] or 0),
+            beat_index=int(row["beat_index"] or 0),
+        )
+        if beat and str(beat.get("type") or "") in ("transmission", "choice"):
+            attention += 1
+    return attention
 
 
-def get_story_summary(player_id: int, *, conn, now: float | None = None) -> Dict[str, Any]:
+def get_story_summary(
+    player_id: int,
+    *,
+    conn,
+    now: float | None = None,
+    ensure: bool = False,
+) -> Dict[str, Any]:
+    """Compact story summary. Default ensure=False — safe for poll/nav badges."""
     if not story_schema_ready(conn):
         return {"ready": False, "active_arcs": 0, "attention_count": 0}
     ts = float(now if now is not None else time.time())
-    ensure_player_story(int(player_id), conn=conn, now=ts)
+    if ensure:
+        ensure_player_story(int(player_id), conn=conn, now=ts)
     full = get_story_state(int(player_id), conn=conn, now=ts, ensure=False)
     attention = 0
     for arc in full.get("arcs") or []:
