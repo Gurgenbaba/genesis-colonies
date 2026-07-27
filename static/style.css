@@ -32969,6 +32969,11 @@ a.gc-galaxy-coord-link:focus-visible {
   box-shadow: 0 0 8px rgba(62, 200, 208, 0.14);
 }
 
+.inventory-tk-chip--all {
+  border-color: rgba(220, 245, 255, 0.42);
+  background: rgba(62, 200, 208, 0.12);
+  font-weight: 800;
+}
 .inventory-tk-chip--build { border-color: rgba(52, 232, 178, 0.35); }
 .inventory-tk-chip--research { border-color: rgba(118, 168, 255, 0.35); }
 .inventory-tk-chip--shipyard { border-color: rgba(255, 186, 56, 0.35); }

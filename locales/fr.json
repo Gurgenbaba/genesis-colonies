@@ -3600,6 +3600,8 @@
   "inv_timekeeper_deposit_btn": "Déposer",
   "inv_title": "Inventaire",
   "inv_tk_available": "disponible",
+  "inv_tk_chip_all": "Tous",
+  "inv_tk_chip_all_hint": "Déposer tous les boosters de temps",
   "inv_tk_chip_build": "Construction",
   "inv_tk_chip_build_hint": "Déposer tous les boosters de construction",
   "inv_tk_chip_research": "Recherche",

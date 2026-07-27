@@ -3600,6 +3600,8 @@
   "inv_timekeeper_deposit_btn": "Wpłać",
   "inv_title": "Spis",
   "inv_tk_available": "dostępne",
+  "inv_tk_chip_all": "Wszystkie",
+  "inv_tk_chip_all_hint": "Wpłać wszystkie boostery czasu",
   "inv_tk_chip_build": "Budowa",
   "inv_tk_chip_build_hint": "Wpłać wszystkie boostery budowy",
   "inv_tk_chip_research": "Badania",

@@ -2687,7 +2687,11 @@ def test_main_js_inventory_tk_chip_deposits_without_scroll_jump():
     assert "function listDepositableLegacyTimeItems(domain)" in src
     assert "function countDepositableLegacyTimeItems(domain)" in src
     assert "deposit_domain:" in src
+    assert 'dom === "all"' in src
+    assert 'reason !== "invalid_domain"' in src
     assert 'reason !== "invalid_item"' in src
+    assert 'data-inventory-tk-chip-domain="${dom}"' in src
+    assert "inv_tk_chip_all" in src
     inv = src.split("function bindInventoryOnce()")[1].split("function tickInventoryCooldowns")[0]
     assert "depositTimekeeperChip(tkChip" in inv
     assert "ev.preventDefault()" in inv.split("depositTimekeeperChip(tkChip")[0][-400:]

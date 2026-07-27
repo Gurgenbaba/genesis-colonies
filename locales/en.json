@@ -3600,6 +3600,8 @@
   "inv_timekeeper_deposit_btn": "Deposit",
   "inv_title": "Inventory",
   "inv_tk_available": "available",
+  "inv_tk_chip_all": "All",
+  "inv_tk_chip_all_hint": "Deposit all time boosters",
   "inv_tk_chip_build": "Build",
   "inv_tk_chip_build_hint": "Deposit all build boosters",
   "inv_tk_chip_research": "Research",

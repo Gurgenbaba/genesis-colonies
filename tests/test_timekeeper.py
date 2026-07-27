@@ -165,6 +165,38 @@ def test_deposit_legacy_domain_helper_rejects_empty(timekeeper_db):
         conn.close()
 
 
+def test_deposit_legacy_domain_all_credits_every_domain(timekeeper_db):
+    conn = db()
+    try:
+        uid = _player(conn=conn)
+        grant_inventory_item(uid, "booster_build_15m", 2, conn=conn)
+        grant_inventory_item(uid, "booster_research_1h", 1, conn=conn)
+        grant_inventory_item(uid, "booster_shipyard_15m", 3, conn=conn)
+        conn.commit()
+
+        begin_write_transaction(conn)
+        ok, reason, result = deposit_timekeeper_domain(uid, "all", conn=conn)
+        assert ok, reason
+        commit(conn)
+
+        expected = 2 * 15 * 60 + 1 * 3600 + 3 * 15 * 60
+        assert get_balance(uid, conn=conn) == expected
+        assert int((result or {}).get("consumed") or 0) == 6
+        effect = (result or {}).get("effect") or {}
+        assert effect.get("kind") == "timekeeper_credit"
+        assert effect.get("domain") == "all"
+        assert int(effect.get("seconds_credited") or 0) == expected
+        assert (result or {}).get("item_key") == "timekeeper_deposit:all"
+
+        from game.inventory import inventory_amount
+
+        assert inventory_amount(uid, "booster_build_15m", conn=conn) == 0
+        assert inventory_amount(uid, "booster_research_1h", conn=conn) == 0
+        assert inventory_amount(uid, "booster_shipyard_15m", conn=conn) == 0
+    finally:
+        conn.close()
+
+
 def test_timekeeper_apply_build_reduces_queue(timekeeper_db):
     conn = db()
     try:

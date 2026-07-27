@@ -41,7 +41,7 @@ Single **Imperium time account** — empire-wide, manual apply only, separate fr
 
 Response: `{ ok, reason, state, timekeeper, seconds_applied }`
 
-`POST /api/inventory/use` with `deposit_domain: "build"|"research"|"shipyard"` deposits **all** owned legacy time items for that domain into Timekeeper in one action (inventory Bau/Forschung/Werft chips).
+`POST /api/inventory/use` with `deposit_domain: "build"|"research"|"shipyard"|"all"` deposits **all** owned legacy time items for that domain (or every depositable domain when `"all"`) into Timekeeper in one action (inventory Alle / Bau / Forschung / Werft chips).
 
 ## Migration
 

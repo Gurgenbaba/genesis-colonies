@@ -3600,6 +3600,8 @@
   "inv_timekeeper_deposit_btn": "Einzahlen",
   "inv_title": "Inventar",
   "inv_tk_available": "verfügbar",
+  "inv_tk_chip_all": "Alle",
+  "inv_tk_chip_all_hint": "Alle Zeit-Booster einzahlen",
   "inv_tk_chip_build": "Bau",
   "inv_tk_chip_build_hint": "Alle Bau-Booster einzahlen",
   "inv_tk_chip_research": "Forschung",

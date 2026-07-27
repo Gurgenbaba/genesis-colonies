@@ -19,6 +19,12 @@
       {% set ns.shipyard = ns.shipyard + (item.amount|int) %}
     {% endif %}
   {% endfor %}
+  {% set ns_total = ns.build + ns.research + ns.shipyard %}
+  {% if ns_total > 0 %}
+  <button type="button" class="inventory-tk-chip inventory-tk-chip--all gc-mono" data-inventory-tk-chip-domain="all" title="{{ T('inv_tk_chip_all_hint', 'Alle Zeit-Booster einzahlen') }}">
+    {{ T('inv_tk_chip_all', 'Alle') }} +{{ ns_total|fmt_int }}
+  </button>
+  {% endif %}
   {% if ns.build > 0 %}
   <button type="button" class="inventory-tk-chip inventory-tk-chip--build gc-mono" data-inventory-tk-chip-domain="build" title="{{ T('inv_tk_chip_build_hint', 'Bau-Booster einzahlen') }}">
     {{ T('inv_tk_chip_build', 'Bau') }} +{{ ns.build|fmt_int }}

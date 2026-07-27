@@ -14568,8 +14568,15 @@
   function listDepositableLegacyTimeItems(domain) {
     const legacy = (_inventoryLastState || parseInventoryPageState())?.timekeeper?.legacy_time_items || [];
     const dom = String(domain || "");
+    const allDomains = dom === "all";
     return legacy.filter((item) => {
-      if (!item || legacyBoosterDomain(item.item_key) !== dom) return false;
+      if (!item) return false;
+      const itemDom = legacyBoosterDomain(item.item_key);
+      if (allDomains) {
+        if (itemDom !== "build" && itemDom !== "research" && itemDom !== "shipyard") return false;
+      } else if (itemDom !== dom) {
+        return false;
+      }
       if (item.usable === false) return false;
       return (parseInt(item.amount, 10) || 0) > 0;
     });
@@ -14636,7 +14643,9 @@
         return;
       }
       const reason = atomic?.reason || "generic";
-      if (reason !== "invalid_item" && reason !== "missing_item") {
+      // Old servers reject unknown deposit_domain ("all") as invalid_domain, or
+      // ignore deposit_domain and answer invalid_item / missing_item — fall back.
+      if (reason !== "invalid_item" && reason !== "missing_item" && reason !== "invalid_domain") {
         showNotify(atomic?.message || inventoryUseReasonText(reason), "error");
         scrollInventoryToFeedback();
         patchInventoryDom(_inventoryLastState || parseInventoryPageState());
@@ -15326,16 +15335,22 @@
       if (counts[dom] != null) counts[dom] += parseInt(item.amount, 10) || 0;
     });
     if (chipHost) {
-      const chips = [
-        ["build", "inv_tk_chip_build", "Bau"],
-        ["research", "inv_tk_chip_research", "Forschung"],
-        ["shipyard", "inv_tk_chip_shipyard", "Werft"],
-      ];
+      const total = (counts.build || 0) + (counts.research || 0) + (counts.shipyard || 0);
+      const chips = [];
+      if (total > 0) {
+        chips.push(["all", "inv_tk_chip_all", "Alle", "inv_tk_chip_all_hint", "Alle Zeit-Booster einzahlen", total]);
+      }
+      [
+        ["build", "inv_tk_chip_build", "Bau", "inv_tk_chip_build_hint", "Alle Bau-Booster einzahlen"],
+        ["research", "inv_tk_chip_research", "Forschung", "inv_tk_chip_research_hint", "Alle Forschungs-Booster einzahlen"],
+        ["shipyard", "inv_tk_chip_shipyard", "Werft", "inv_tk_chip_shipyard_hint", "Alle Werft-Booster einzahlen"],
+      ].forEach(([dom, key, fallback, hintKey, hintFb]) => {
+        if ((counts[dom] || 0) > 0) chips.push([dom, key, fallback, hintKey, hintFb, counts[dom]]);
+      });
       chipHost.innerHTML = chips
-        .filter(([dom]) => (counts[dom] || 0) > 0)
         .map(
-          ([dom, key, fallback]) =>
-            `<button type="button" class="inventory-tk-chip inventory-tk-chip--${dom} gc-mono" data-inventory-tk-chip-domain="${dom}">${escapeHtml(t(key, fallback))} +${formatNumber(counts[dom])}</button>`
+          ([dom, key, fallback, hintKey, hintFb, amt]) =>
+            `<button type="button" class="inventory-tk-chip inventory-tk-chip--${dom} gc-mono" data-inventory-tk-chip-domain="${dom}" title="${escapeHtml(t(hintKey, hintFb))}">${escapeHtml(t(key, fallback))} +${formatNumber(amt)}</button>`
         )
         .join("");
     }

@@ -3600,6 +3600,8 @@
   "inv_timekeeper_deposit_btn": "Внести",
   "inv_title": "Инвентарь",
   "inv_tk_available": "доступно",
+  "inv_tk_chip_all": "Все",
+  "inv_tk_chip_all_hint": "Внести все бустеры времени",
   "inv_tk_chip_build": "Стройка",
   "inv_tk_chip_build_hint": "Внести все строительные бустеры",
   "inv_tk_chip_research": "Наука",

@@ -14,6 +14,7 @@ from .db import table_exists
 from .inventory_catalog import BOOSTER_QUEUE_TARGET, BOOSTER_TIME_SECONDS
 
 DEPOSIT_DOMAINS = frozenset({"build", "research", "shipyard"})
+DEPOSIT_DOMAIN_ALL = "all"
 
 TIMEKEEPER_DOMAINS = frozenset(
     {
@@ -194,6 +195,8 @@ def is_legacy_time_booster_item(item_key: str) -> bool:
 
 def normalize_deposit_domain(domain: str) -> Optional[str]:
     raw = str(domain or "").strip().lower()
+    if raw == DEPOSIT_DOMAIN_ALL:
+        return DEPOSIT_DOMAIN_ALL
     dom = str(DOMAIN_ALIASES.get(raw, raw) or "")
     if dom in DEPOSIT_DOMAINS:
         return dom
@@ -209,14 +212,16 @@ def deposit_legacy_domain(
     """
     Deposit all owned legacy time boosters for one queue domain into Timekeeper.
 
-    One-click inventory chips (Bau / Forschung / Werft) call this so +N means
-    all N items, not a single SKU use.
+    One-click inventory chips (Bau / Forschung / Werft / Alle) call this so +N means
+    all N items, not a single SKU use. Domain ``all`` deposits every depositable
+    booster SKU into the shared balance.
     """
     from game.inventory import consume_inventory_item, inventory_amount, inventory_schema_ready
 
     dom = normalize_deposit_domain(domain)
     if not dom:
         return False, "invalid_domain", None
+    deposit_all = dom == DEPOSIT_DOMAIN_ALL
     if not schema_ready(conn):
         return False, "timekeeper_unavailable", None
     if not inventory_schema_ready(conn):
@@ -228,7 +233,10 @@ def deposit_legacy_domain(
     total_consumed = 0
 
     for key, unit_seconds in BOOSTER_TIME_SECONDS.items():
-        if str(BOOSTER_QUEUE_TARGET.get(key) or "") != dom:
+        item_dom = str(BOOSTER_QUEUE_TARGET.get(key) or "")
+        if not deposit_all and item_dom != dom:
+            continue
+        if deposit_all and item_dom not in DEPOSIT_DOMAINS:
             continue
         owned = int(inventory_amount(uid, key, conn=conn) or 0)
         if owned <= 0:

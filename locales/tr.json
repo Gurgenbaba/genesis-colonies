@@ -3600,6 +3600,8 @@
   "inv_timekeeper_deposit_btn": "Yatır",
   "inv_title": "Envanter",
   "inv_tk_available": "mevcut",
+  "inv_tk_chip_all": "Tümü",
+  "inv_tk_chip_all_hint": "Tüm zaman güçlendiricilerini yatır",
   "inv_tk_chip_build": "İnşa",
   "inv_tk_chip_build_hint": "Tüm inşa güçlendiricilerini yatır",
   "inv_tk_chip_research": "Araştırma",
