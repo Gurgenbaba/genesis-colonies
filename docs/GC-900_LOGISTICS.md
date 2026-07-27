@@ -12,8 +12,8 @@
 Spieler mit mehreren Kolonien brauchten Bulk-Collect/Distribute statt N× Einzel-`transport`/`collect`. MVP + UI sind implementiert; dieses Doc bleibt Spec/Referenz.
 
 ```text
-Live:  Hub ← (Plan: A+B+C, auto_cargo, Slot-Check) ← automatisiert
-UI:    Kolonien markieren → (Mengen bei Distribute) → Start
+Live:  Hub ← (Quellen mit eigenen Frachtern, Debit-at-send, transport)
+UI:    Kolonien markieren → Start (auto_cargo pro Quelle)
 ```
 
 ---
@@ -24,7 +24,7 @@ Logistics ermöglicht **planbare Ressourcenbewegungen zwischen eigenen Kolonien*
 
 | Flow | Spieler-Intent |
 |------|----------------|
-| **Collect** | Cargo-Flotten holen Ressourcen von mehreren **eigenen** Kolonien und bringen sie zum **Hub-Planeten** |
+| **Collect** | Frachter auf den **Quellen** laden Ressourcen und bringen sie zum **Hub** |
 | **Distribute** | Hub-Planet sendet gewählte Fracht auf mehrere **eigene** Kolonien; Schiffe kehren **leer** zurück |
 
 MVP-Constraints:
@@ -155,19 +155,18 @@ bestehende Collect-Tick-Logik + Return-Gutschrift am Hub
 ### Spielerbeispiel
 
 ```text
-Hub (target_planet_id): Hauptplanet
-Sources: Kolonie A, B, C
-Ships: 30× mule_courier (vom Hub)
+Hub (target_planet_id): Empfänger
+Sources: Kolonie A, B, C (je eigene Frachter)
 ```
 
 ### Ablauf (Server)
 
-1. Validierung: Ownership, ≥1 Source, Hub ∉ Sources (oder erlaubt skip), nur Cargo-Ships, genug Schiffe am Hub, `free_slots >= Anzahl geplanter Movements`.
-2. **Schiffverteilung (MVP):** Gleichmäßig auf Sources aufteilen (ganzzahlig pro Source); Rest auf letzte Source oder Ablehnung wenn nicht teilbar — **im Ticket festnageln**.
-3. Pro Source: `send_fleet(mission="collect", origin_planet_id=Hub, target_planet_id=Source, ships=Anteil, resources={}, batch_id=…)`.
-4. Ankunft am Source: bestehende `collect`-Tick-Logik — Beladung metal → crystal → fuel_cells bis Cargo-Cap.
-5. Return zum Hub: bestehendes `_handle_return` — Gutschrift auf **Hub** (`origin_planet_id`).
-6. Collect-Reports: bestehende `fleet_collect_report_*` (optional UX in GC-900E).
+1. Validierung: Ownership, ≥1 Source, Hub ∉ Sources, nur Cargo-Ships, `free_slots > 0`.
+2. **Pro Source:** Frachter aus `planet_ships` der Quelle; `auto_cargo` allokiert pro Quelle; Quellen ohne Schiffe/Ressourcen/Fuel → skip (Teilstart).
+3. Pro Source: Fracht aus Stock der Quelle bis Cargo-Cap (Flug-Fuel reserviert) → `send_fleet(mission="transport", origin=Source, target=Hub, resources=geladen, batch_id=…)`.
+4. Ankunft am Hub: Gutschrift der Fracht; Movement → `returning` leer.
+5. Return zur Quelle: Schiffe zurück auf die Quell-Kolonie.
+6. Reports: `logistics_collect_arrival` (Lieferung am Hub), `logistics_collect_return` (Schiffe zurück).
 
 ### Fehlerfälle
 
@@ -175,8 +174,9 @@ Ships: 30× mule_courier (vom Hub)
 |--------|-----------|
 | `planet_not_owned` | Fremder Planet in Liste |
 | `no_planets` | Leere Liste |
-| `not_enough_ships` | Hub hat nicht genug Cargo-Schiffe |
-| `fleet_slots_full` | `free_slots < needed_movements` |
+| `no_ships_on_sources` | Keine Frachter auf den Quellen |
+| `no_resources_on_sources` | Keine transportierbaren Ressourcen |
+| `fleet_slots_full` | Keine freien Slots |
 | `no_cargo_ships` | Auswahl enthält Non-Cargo |
 | `origin_not_found` | Ungültige Planet-IDs |
 

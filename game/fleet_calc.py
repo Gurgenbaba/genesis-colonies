@@ -390,11 +390,15 @@ def build_flight_preview_payload(
 
 
 class CollectRouteLeg(TypedDict):
+    """One collect transport leg: source → hub with cargo locked at send."""
+
+    origin_planet_id: int
     planet_id: int
     galaxy: int
     system: int
     position: int
     ships: Dict[str, int]
+    resources: Dict[str, int]
 
 
 def normalize_collect_source_planet_ids(
@@ -448,15 +452,26 @@ def validate_collect_source_planet(
     }
 
 
+def planet_resource_stock(planet_row: Mapping[str, Any] | None) -> Dict[str, int]:
+    """Metal / crystal / fuel_cells stock from a planet row."""
+    if not planet_row:
+        return {"metal": 0, "crystal": 0, "fuel_cells": 0}
+    return {
+        "metal": max(0, int(float(planet_row.get("metal") or 0))),
+        "crystal": max(0, int(float(planet_row.get("crystal") or 0))),
+        "fuel_cells": max(0, int(float(planet_row.get("fuel_cells") or 0))),
+    }
+
+
 def planet_resource_total(planet_row: Mapping[str, Any] | None) -> int:
     """Sum metal + crystal + fuel_cells on a planet row (collect auto-cargo demand)."""
-    if not planet_row:
-        return 0
-    return (
-        max(0, int(float(planet_row.get("metal") or 0)))
-        + max(0, int(float(planet_row.get("crystal") or 0)))
-        + max(0, int(float(planet_row.get("fuel_cells") or 0)))
-    )
+    stock = planet_resource_stock(planet_row)
+    return int(stock["metal"]) + int(stock["crystal"]) + int(stock["fuel_cells"])
+
+
+def cargo_ship_count(ships: Mapping[str, int] | None) -> int:
+    """Total units of cargo-role hulls in a ship map."""
+    return sum(int(v) for v in filter_available_cargo_ships(ships).values())
 
 
 def cargo_hulls_by_capacity_desc() -> List[str]:
@@ -564,24 +579,51 @@ def build_collect_route(
     origin_planet_id: int,
     source_planet_ids: Sequence[int],
     planet_rows_by_id: Mapping[int, Mapping[str, Any]],
-    ships: Mapping[str, int],
+    ships_stock_by_source: Mapping[int, Mapping[str, int]],
     free_fleet_slots: int,
     player_id: int,
-    source_weights: Mapping[int, int] | None = None,
+    ships_selection_mode: str = "auto_cargo",
+    manual_ships: Mapping[str, int] | None = None,
+    speed_percent: int = 100,
     skip_empty_ship_legs: bool = False,
     skip_invalid_planets: bool = False,
 ) -> Tuple[bool, str, Optional[List[CollectRouteLeg]]]:
-    """Validate collect targets, sort deterministically, split cargo ships, enforce slots."""
-    sources = normalize_collect_source_planet_ids(origin_planet_id, source_planet_ids)
+    """
+    Plan source→hub transport legs.
+
+    Freighters and cargo are taken from each **source** colony; hub is the
+    delivery target. Resources are locked at plan time (debit happens on send).
+    """
+    from .resources import load_resources_up_to_cargo
+
+    hub_id = int(origin_planet_id or 0)
+    sources = normalize_collect_source_planet_ids(hub_id, source_planet_ids)
     if not sources:
         return False, "no_planets", None
 
-    ships_n = normalize_ships(ships)
-    if not ships_n:
-        return False, "no_ships", None
-    ok_cargo, cargo_reason = fleet_ships_are_cargo_only(ships_n)
-    if not ok_cargo:
-        return False, cargo_reason, None
+    mode = str(ships_selection_mode or "").strip().lower() or "auto_cargo"
+    manual_n = normalize_ships(manual_ships)
+    if mode == "manual":
+        if not manual_n:
+            return False, "no_ships", None
+        ok_cargo, cargo_reason = fleet_ships_are_cargo_only(manual_n)
+        if not ok_cargo:
+            return False, cargo_reason, None
+
+    hub_row = planet_rows_by_id.get(hub_id)
+    ok_hub, hub_reason, hub_coords = validate_collect_source_planet(
+        hub_row,
+        player_id=int(player_id),
+    )
+    if not ok_hub or not hub_coords:
+        return False, hub_reason or "origin_not_found", None
+
+    hub_target = (
+        int(hub_coords["galaxy"]),
+        int(hub_coords["system"]),
+        int(hub_coords["position"]),
+    )
+    pct = max(10, min(100, int(speed_percent or 100)))
 
     entries: List[Dict[str, Any]] = []
     for pid in sources:
@@ -596,9 +638,9 @@ def build_collect_route(
         entries.append(
             {
                 "planet_id": int(pid),
-                "galaxy": coords["galaxy"],
-                "system": coords["system"],
-                "position": coords["position"],
+                "galaxy": int(coords["galaxy"]),
+                "system": int(coords["system"]),
+                "position": int(coords["position"]),
             }
         )
 
@@ -620,38 +662,76 @@ def build_collect_route(
     if len(entries) > slots_free:
         entries = entries[:slots_free]
 
-    total_units = sum(int(v) for v in ships_n.values())
-    if skip_empty_ship_legs and total_units > 0 and len(entries) > total_units:
-        entries = entries[:total_units]
-
-    weights: List[int] | None = None
-    if source_weights is not None and entries:
-        weights = [max(0, int(source_weights.get(int(e["planet_id"]), 0))) for e in entries]
-        if sum(weights) <= 0:
-            weights = None
-
-    if weights is not None:
-        allocations = split_ships_by_weights(ships_n, weights)
-    else:
-        allocations = split_ships_across_targets(ships_n, len(entries))
-
     legs: List[CollectRouteLeg] = []
-    for entry, alloc in zip(entries, allocations):
-        if not alloc or calculate_total_cargo(alloc) <= 0:
+    saw_no_ships = False
+    saw_no_resources = False
+
+    for entry in entries:
+        sid = int(entry["planet_id"])
+        source_row = planet_rows_by_id.get(sid)
+        stock = filter_available_cargo_ships(ships_stock_by_source.get(sid) or {})
+        res_stock = planet_resource_stock(source_row)
+        res_total = planet_resource_total(source_row)
+
+        if mode == "auto_cargo":
+            if res_total <= 0:
+                saw_no_resources = True
+                if skip_empty_ship_legs:
+                    continue
+                return False, "no_resources_on_sources", None
+            ships_n = allocate_auto_cargo_ships(stock, res_total)
+        else:
+            ships_n = {}
+            for key, need in manual_n.items():
+                have = int(stock.get(key, 0))
+                take = min(have, int(need))
+                if take > 0:
+                    ships_n[key] = take
+            ships_n = normalize_ships(ships_n)
+
+        if not ships_n or calculate_total_cargo(ships_n) <= 0:
+            saw_no_ships = True
             if skip_empty_ship_legs:
                 continue
-            return False, "not_enough_ships", None
+            return False, "no_ships_on_sources", None
+
+        origin_coords = (
+            int(entry["galaxy"]),
+            int(entry["system"]),
+            int(entry["position"]),
+        )
+        distance = calculate_distance(origin_coords, hub_target)
+        fuel_cost = calculate_fuel_cost(ships_n, distance, pct)
+        cargo_cap = calculate_total_cargo(ships_n)
+        loadable = {
+            "metal": int(res_stock["metal"]),
+            "crystal": int(res_stock["crystal"]),
+            "fuel_cells": max(0, int(res_stock["fuel_cells"]) - int(fuel_cost)),
+        }
+        resources = load_resources_up_to_cargo(loadable, cargo_cap)
+        if loaded_resource_total(resources) <= 0:
+            saw_no_resources = True
+            if skip_empty_ship_legs:
+                continue
+            return False, "no_deliverable_resources", None
+
         legs.append(
             {
-                "planet_id": int(entry["planet_id"]),
-                "galaxy": int(entry["galaxy"]),
-                "system": int(entry["system"]),
-                "position": int(entry["position"]),
-                "ships": dict(alloc),
+                "origin_planet_id": sid,
+                "planet_id": sid,
+                "galaxy": int(hub_target[0]),
+                "system": int(hub_target[1]),
+                "position": int(hub_target[2]),
+                "ships": dict(ships_n),
+                "resources": dict(resources),
             }
         )
 
     if not legs:
+        if saw_no_ships:
+            return False, "no_ships_on_sources", None
+        if saw_no_resources:
+            return False, "no_resources_on_sources", None
         return False, "no_deliverable_resources", None
 
     return True, "", legs

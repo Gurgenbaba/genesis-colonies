@@ -216,15 +216,16 @@ Weitere Expo-Schiffe (z. B. `eclipse_runner`) werden automatisch über `role: ex
 
 Multi-Kolonie-Ressourcenbewegung über **`/logistics`** und `collect_resources` / `distribute_resources` in `game/fleet.py`. Route-Math in `game/fleet_calc.py` (`build_collect_route`, `build_distribute_route`). Spec: [GC-900_LOGISTICS.md](GC-900_LOGISTICS.md).
 
-| Flow | Batch-Typ | Mission pro Leg | Origin (Hub) | Ziele |
-|------|-----------|-----------------|--------------|-------|
-| **Collect** | `collect_resources` | `collect` | `target_planet_id` (Hub, Rückkehrziel) | `source_planet_ids` — eigene Kolonien ≠ Hub |
-| **Distribute** | `distribute_resources` | `transport` | `origin_planet_id` (Hub, Abgang) | `target_planet_ids` — eigene Kolonien ≠ Hub |
+| Flow | Batch-Typ | Mission pro Leg | Origin | Ziel |
+|------|-----------|-----------------|--------|------|
+| **Collect** | `collect_resources` | `transport` | Quell-Kolonie (`source_planet_ids`) | Hub (`target_planet_id`) |
+| **Distribute** | `distribute_resources` | `transport` | Hub (`origin_planet_id`) | Ziel-Kolonien (`target_planet_ids`) |
 
 - Nur **eigene** Planeten (`validate_logistics_planets` / `validate_collect_source_planet`).
 - Deterministische Reihenfolge: Sortierung `galaxy → system → position → planet_id` (`collect_route_sort_key`).
 - Jede Leg = **eine** `fleet_movements`-Zeile + **ein** Fleet-Slot (kein Batch-Slot-Rabatt).
-- Schiffe werden vom **Hub**-`planet_ships` abgezogen; Fracht bei Distribute beim Send vom Hub debitiert.
+- **Collect:** Schiffe + Fracht von den **Quell**-`planet_ships` / Planet-Stock; Debit beim Send; Gutschrift am Hub bei Ankunft; Schiffe kehren leer zur Quelle zurück.
+- **Distribute:** Schiffe + Fracht vom **Hub**; Debit beim Send; Gutschrift am Ziel; Schiffe kehren leer zum Hub zurück.
 
 ### Cargo-Regeln
 
@@ -232,18 +233,17 @@ Multi-Kolonie-Ressourcenbewegung über **`/logistics`** und `collect_resources` 
 |-------|---------|------------|
 | Schiffstypen | Nur `role == cargo` (`fleet_ships_are_cargo_only`) | gleich |
 | Schiffs-Auswahl | UI: **`auto_cargo`** (Default); API: `manual` bleibt gültig | gleich |
-| Auto-Allokation | `allocate_auto_cargo_ships` — Bedarf = Summe Quellen-Ressourcen; bei Mangel **alle** freien Frachter, Teilstart | `allocate_auto_cargo_ships_for_targets` — genug Cargo pro Leg für Equal-Split; bei Mangel clamp |
-| Schiffs-Split | `auto_cargo`: `split_ships_by_weights` (Ressourcen pro Quelle); `manual`: `split_ships_across_targets` | `split_ships_across_targets` |
-| Ressourcen-Modus | `resources_mode`: nur **`all`** (alles Verfügbares am Quell-Planet bis Cargo-Cap) | **`equal`** (Gesamtmenge gleichmäßig) oder **`custom`** (`target_resources` pro Planet) |
-| Kapazität | Laden am Ziel bis `calculate_total_cargo(ships)` | `manual`: `not_enough_cargo` wenn Leg-Fracht > Leg-Cargo; `auto_cargo`: Mengen auf Leg-Cargo kappen (`load_resources_up_to_cargo`) |
-| Storage-Caps | — (Logistik ignoriert Ziel-Lager; Overflow erlaubt) | — (Logistik ignoriert Ziel-Lager; Overflow erlaubt) |
-| Leere Legs | `auto_cargo`: 0-Schiff-Legs → `skipped` | Ziele ohne lieferbare Menge werden übersprungen; `no_deliverable_resources`, wenn nichts übrig |
+| Auto-Allokation | Pro Quelle `allocate_auto_cargo_ships(source_stock, source_res)`; ohne Schiffe/Res → skip | `allocate_auto_cargo_ships_for_targets` am Hub |
+| Schiffs-Standort | Frachter müssen auf den **Quellen** stehen | Frachter am **Hub** |
+| Ressourcen-Modus | `resources_mode`: nur **`all`** (Stock der Quelle beim Start bis Cargo-Cap, Fuel reserviert) | **`equal`** oder **`custom`** |
+| Kapazität | Debit-at-send; Preview zeigt exakte Fracht | `manual` / `auto_cargo` clamp wie bisher |
+| Storage-Caps | Overflow am Hub erlaubt | Overflow am Ziel erlaubt |
+| Leere Legs | `auto_cargo`: Quellen ohne Schiffe/Res → `skipped` | Ziele ohne lieferbare Menge übersprungen |
 
 ### Slot-Regeln
 
-- `get_fleet_slot_status(player_id)` → `free` muss **> 0** sein; pro Leg ein Slot. **Ausnahme:** World-Boss-`attack` (target_type `world_boss`) — kein `fleet_slots_full`, zählt nicht gegen den Slot-Pool (unabhängig von `MASS_EXPEDITION_SLOT_RESERVE`). Logistik nutzt **alle** freien Slots (kein `MASS_EXPEDITION_SLOT_RESERVE` — Reserve nur bei Mass-Expedition). Mehr gewählte Kolonien als freie Slots → Route auf **`free`** gekappt (deterministische Sortierung; Equal-Split erst danach); übersprungene Ziele in Preview (`targets_skipped`). Bei **0** freien Slots: `fleet_slots_full` (außer World Boss).
-- Basis-Slots: **`navigation_tech`**-Tiers (Fallback 3) — identisch zu Einzel-`send_fleet`; siehe `fleet_slots_for_navigation_level()` in `game/research.py`.
-- Bulk-Job blockiert atomisch: zu wenig Schiffe auf dem Hub → Rollback des gesamten Collect/Distribute-POST.
+- `get_fleet_slot_status(player_id)` → `free` muss **> 0** sein; pro Leg ein Slot. Logistik nutzt **alle** freien Slots (kein Mass-Expo-Reserve). Mehr gewählte Kolonien als freie Slots → Route auf **`free`** gekappt.
+- Bei **0** freien Slots: `fleet_slots_full`.
 
 ### Nachrichten-Zeitpunkt (GC-530)
 
@@ -251,10 +251,10 @@ Idempotenz: pro `(recipient, category, fleet_id, report_phase)` — kein Doppelr
 
 | Flow | Phase | `report_phase` | Wann | Inhalt |
 |------|-------|----------------|------|--------|
-| Collect | Ziel-Ankunft (Quell-Kolonie) | `logistics_collect_arrival` | `outbound` → `returning` | Abholung abgeschlossen (geladene Menge) |
-| Collect | Rückkehr (Hub) | `logistics_collect_return` | `returning` → `completed` | Ressourcen auf Ursprung angekommen (nur wenn Fracht > 0) |
+| Collect | Ankunft am Hub | `logistics_collect_arrival` | `outbound` → `returning` | Lieferung am Hub |
+| Collect | Rückkehr an Quelle | `logistics_collect_return` | `returning` → `completed` | Schiffe zurück (leer) |
 | Distribute | Ziel-Ankunft | `logistics_distribute_arrival` | Ankunft `transport` | Liefermenge an Ziel |
-| Distribute | Rückkehr (Hub) | `logistics_distribute_return` | Rückkehr | Nur Schiffs-Rückkehr-Info; **keine** zweite Liefermeldung (`resources` leer in Metadata) |
+| Distribute | Rückkehr (Hub) | `logistics_distribute_return` | Rückkehr | Nur Schiffs-Rückkehr-Info |
 
 Metadata (alle Logistics-Reports): `origin_planet_id`, `origin_name`, `target_planet_id`, `target_name`, `target_coords`, `mission_type` (`collect` / `distribute`), `ships`, `resources` / `collected`, `timestamp`, `parent_batch_id` (Bulk), `fleet_id`.
 

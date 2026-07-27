@@ -2131,10 +2131,10 @@ def test_collect_route_three_colonies_three_movements(fleet_db):
     hub = int(get_planets_by_player(uid, conn=conn)[0]['id'])
     sources = _extra_colonies(uid, conn, [5, 6, 7])
     for cid in sources:
-        _fund_planet(conn.cursor(), cid, metal=10000, crystal=1000)
-    _seed_ships(hub, uid, {'mule_courier': 12}, conn=conn)
+        _fund_planet(conn.cursor(), cid, metal=10000, crystal=1000, fuel_cells=50000)
+        _seed_ships(cid, uid, {'mule_courier': 4}, conn=conn)
     conn.commit()
-    ok, reason, payload = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=sources, ships={'mule_courier': 12}, resources_mode='all', conn=conn)
+    ok, reason, payload = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=sources, ships={'mule_courier': 4}, resources_mode='all', conn=conn)
     assert ok, reason
     assert len(payload['started']) == 3
     assert len(payload['route']) == 3
@@ -2148,13 +2148,16 @@ def test_collect_route_ship_split_remainder(fleet_db):
     uid = _player(conn=conn)
     hub = int(get_planets_by_player(uid, conn=conn)[0]['id'])
     sources = _extra_colonies(uid, conn, [5, 6, 7])
-    _seed_ships(hub, uid, {'mule_courier': 30}, conn=conn)
+    for cid, qty in zip(sources, [1, 1, 3]):
+        _fund_planet(conn.cursor(), cid, metal=10000, crystal=1000, fuel_cells=50000)
+        _seed_ships(cid, uid, {'mule_courier': qty}, conn=conn)
     conn.commit()
-    ok, reason, payload = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=sources, ships={'mule_courier': 5}, resources_mode='all', conn=conn)
+    ok, reason, payload = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=sources, ships={'mule_courier': 10}, resources_mode='all', conn=conn)
     assert ok, reason
-    counts = [leg['ships']['mule_courier'] for leg in payload['route']]
-    assert counts == [1, 1, 3]
-    assert sum(counts) == 5
+    by_id = {int(leg['planet_id']): int(leg['ships']['mule_courier']) for leg in payload['route']}
+    assert by_id[sources[0]] == 1
+    assert by_id[sources[1]] == 1
+    assert by_id[sources[2]] == 3
     conn.close()
 
 def test_collect_route_excludes_origin_as_target(fleet_db):
@@ -2162,7 +2165,8 @@ def test_collect_route_excludes_origin_as_target(fleet_db):
     uid = _player(conn=conn)
     hub = int(get_planets_by_player(uid, conn=conn)[0]['id'])
     source = _second_colony(uid, conn=conn)
-    _seed_ships(hub, uid, {'mule_courier': 4}, conn=conn)
+    _fund_planet(conn.cursor(), source, metal=10000, crystal=1000, fuel_cells=50000)
+    _seed_ships(source, uid, {'mule_courier': 4}, conn=conn)
     conn.commit()
     assert normalize_collect_source_planet_ids(hub, [hub, source]) == [source]
     ok, reason, payload = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=[hub, source], ships={'mule_courier': 2}, resources_mode='all', conn=conn)
@@ -2188,13 +2192,14 @@ def test_collect_route_deterministic_galaxy_sort(fleet_db):
     uid = _player(conn=conn)
     hub = int(get_planets_by_player(uid, conn=conn)[0]['id'])
     c5, c7, c8 = _extra_colonies(uid, conn, [5, 7, 8])
-    _seed_ships(hub, uid, {'mule_courier': 6}, conn=conn)
+    for cid in (c5, c7, c8):
+        _fund_planet(conn.cursor(), cid, metal=8000, crystal=500, fuel_cells=50000)
+        _seed_ships(cid, uid, {'mule_courier': 2}, conn=conn)
     conn.commit()
-    ok, _, payload = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=[c8, c5, c7], ships={'mule_courier': 6}, resources_mode='all', conn=conn)
+    ok, _, payload = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=[c8, c5, c7], ships={'mule_courier': 2}, resources_mode='all', conn=conn)
     assert ok
-    route_positions = [leg['position'] for leg in payload['route']]
-    assert route_positions == [5, 7, 8]
     assert [leg['planet_id'] for leg in payload['route']] == [c5, c7, c8]
+    assert [leg['origin_planet_id'] for leg in payload['route']] == [c5, c7, c8]
     conn.close()
 
 def test_collect_route_return_credits_origin(fleet_db):
@@ -2204,10 +2209,10 @@ def test_collect_route_return_credits_origin(fleet_db):
     source = _second_colony(uid, conn=conn)
     cur = conn.cursor()
     _fund_planet(cur, hub, metal=5000, crystal=5000, fuel_cells=50000)
-    _fund_planet(cur, source, metal=9000, crystal=0, fuel_cells=0)
+    _fund_planet(cur, source, metal=9000, crystal=0, fuel_cells=50000)
     cur.execute('SELECT metal FROM planets WHERE id = ?;', (hub,))
     hub_before = int(cur.fetchone()['metal'])
-    _seed_ships(hub, uid, {'mule_courier': 2}, conn=conn)
+    _seed_ships(source, uid, {'mule_courier': 2}, conn=conn)
     conn.commit()
     ok, _, payload = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=[source], ships={'mule_courier': 1}, resources_mode='all', conn=conn)
     assert ok
@@ -2231,14 +2236,17 @@ def test_collect_route_not_enough_ships_for_all_targets(fleet_db):
     uid = _player(conn=conn)
     hub = int(get_planets_by_player(uid, conn=conn)[0]['id'])
     sources = _extra_colonies(uid, conn, [5, 6, 7])
-    _seed_ships(hub, uid, {'mule_courier': 2}, conn=conn)
+    for cid in sources:
+        _fund_planet(conn.cursor(), cid, metal=8000, crystal=500, fuel_cells=50000)
+    # Only first source has freighters — manual mode fails (no skip)
+    _seed_ships(sources[0], uid, {'mule_courier': 2}, conn=conn)
     conn.commit()
     ok, reason, payload = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=sources, ships={'mule_courier': 2}, resources_mode='all', conn=conn)
     assert not ok
-    assert reason == 'not_enough_ships'
+    assert reason == 'no_ships_on_sources'
     assert payload is None
     cur = conn.cursor()
-    cur.execute("SELECT COUNT(*) AS c FROM fleet_movements WHERE player_id = ? AND mission_type = 'collect';", (uid,))
+    cur.execute("SELECT COUNT(*) AS c FROM fleet_movements WHERE player_id = ? AND parent_batch_id IS NOT NULL;", (uid,))
     assert int(cur.fetchone()['c']) == 0
     conn.close()
 
@@ -2247,22 +2255,35 @@ def test_build_collect_route_pure_validation(fleet_db):
     uid = _player(conn=conn)
     hub = int(get_planets_by_player(uid, conn=conn)[0]['id'])
     source = _second_colony(uid, conn=conn)
+    _fund_planet(conn.cursor(), source, metal=15000, crystal=2000, fuel_cells=50000)
+    conn.commit()
     cur = conn.cursor()
     cur.execute('SELECT * FROM planets WHERE id IN (?, ?);', (hub, source))
     rows = {int(r['id']): dict(r) for r in cur.fetchall()}
     conn.close()
-    ok, reason, legs = build_collect_route(origin_planet_id=hub, source_planet_ids=[source], planet_rows_by_id=rows, ships={'mule_courier': 2}, free_fleet_slots=5, player_id=uid)
+    ok, reason, legs = build_collect_route(
+        origin_planet_id=hub,
+        source_planet_ids=[source],
+        planet_rows_by_id=rows,
+        ships_stock_by_source={source: {'mule_courier': 2}},
+        free_fleet_slots=5,
+        player_id=uid,
+        ships_selection_mode='manual',
+        manual_ships={'mule_courier': 2},
+    )
     assert ok, reason
     assert len(legs) == 1
     assert legs[0]['ships']['mule_courier'] == 2
+    assert legs[0]['origin_planet_id'] == source
+    assert int(legs[0]['resources'].get('metal') or 0) + int(legs[0]['resources'].get('crystal') or 0) > 0
 
 def test_logistics_collect_starts_batch(fleet_db):
     conn = db()
     uid = _player(conn=conn)
     hub = int(get_planets_by_player(uid, conn=conn)[0]['id'])
     source = _second_colony(uid, conn=conn)
-    _fund_planet(conn.cursor(), source, metal=15000, crystal=2000)
-    _seed_ships(hub, uid, {'mule_courier': 4}, conn=conn)
+    _fund_planet(conn.cursor(), source, metal=15000, crystal=2000, fuel_cells=50000)
+    _seed_ships(source, uid, {'mule_courier': 4}, conn=conn)
     conn.commit()
     ok, reason, payload = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=[source], ships={'mule_courier': 2}, resources_mode='all', ships_selection_mode='manual', conn=conn)
     assert ok, reason
@@ -2272,9 +2293,9 @@ def test_logistics_collect_starts_batch(fleet_db):
     cur = conn.cursor()
     cur.execute('SELECT mission_type, origin_planet_id, target_planet_id, parent_batch_id FROM fleet_movements WHERE id = ?;', (fleet_id,))
     mv = dict(cur.fetchone())
-    assert mv['mission_type'] == 'collect'
-    assert int(mv['origin_planet_id']) == hub
-    assert int(mv['target_planet_id']) == source
+    assert mv['mission_type'] == 'transport'
+    assert int(mv['origin_planet_id']) == source
+    assert int(mv['target_planet_id']) == hub
     assert int(mv['parent_batch_id']) == payload['batch']['id']
     conn.close()
 
@@ -2283,7 +2304,7 @@ def test_logistics_collect_rejects_non_cargo_ships(fleet_db):
     uid = _player(conn=conn)
     hub = int(get_planets_by_player(uid, conn=conn)[0]['id'])
     source = _second_colony(uid, conn=conn)
-    _seed_ships(hub, uid, {'falcon_interceptor': 5}, conn=conn)
+    _seed_ships(source, uid, {'falcon_interceptor': 5}, conn=conn)
     conn.commit()
     ok, reason, payload = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=[source], ships={'falcon_interceptor': 1}, resources_mode='all', conn=conn)
     assert not ok
@@ -2360,8 +2381,8 @@ def test_logistics_collect_arrival_report_idempotent(fleet_db):
     source = _second_colony(uid, conn=conn)
     cur = conn.cursor()
     _fund_planet(cur, hub, metal=50000, crystal=5000, fuel_cells=50000)
-    _fund_planet(cur, source, metal=12000, crystal=3000, fuel_cells=500)
-    _seed_ships(hub, uid, {'mule_courier': 2}, conn=conn)
+    _fund_planet(cur, source, metal=12000, crystal=3000, fuel_cells=50000)
+    _seed_ships(source, uid, {'mule_courier': 2}, conn=conn)
     conn.commit()
     ok, _, payload = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=[source], ships={'mule_courier': 1}, resources_mode='all', conn=conn)
     assert ok
@@ -2446,17 +2467,21 @@ def test_logistics_collect_arrival_double_tick_idempotent(fleet_db):
     source = _second_colony(uid, conn=conn)
     cur = conn.cursor()
     _fund_planet(cur, hub, metal=50000, crystal=5000, fuel_cells=50000)
-    _fund_planet(cur, source, metal=12000, crystal=3000, fuel_cells=500)
-    _seed_ships(hub, uid, {'mule_courier': 2}, conn=conn)
+    _fund_planet(cur, source, metal=12000, crystal=3000, fuel_cells=50000)
+    _seed_ships(source, uid, {'mule_courier': 2}, conn=conn)
     conn.commit()
     ok, _, payload = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=[source], ships={'mule_courier': 1}, resources_mode='all', conn=conn)
     assert ok
     fleet_id = int(payload['started'][0]['fleet_id'])
+    cur.execute('SELECT metal FROM planets WHERE id = ?;', (hub,))
+    hub_before = int(cur.fetchone()['metal'])
     cur.execute('SELECT metal, crystal, fuel_cells FROM planets WHERE id = ?;', (source,))
-    before = dict(cur.fetchone())
+    source_after_send = dict(cur.fetchone())
     _force_outbound_arrival(conn, fleet_id)
     tick1 = process_fleet_tick(player_id=uid, conn=conn)
     conn.commit()
+    cur.execute('SELECT metal FROM planets WHERE id = ?;', (hub,))
+    hub_after = int(cur.fetchone()['metal'])
     cur.execute('SELECT metal, crystal, fuel_cells FROM planets WHERE id = ?;', (source,))
     after_once = dict(cur.fetchone())
     tick2 = process_fleet_tick(player_id=uid, conn=conn)
@@ -2465,8 +2490,8 @@ def test_logistics_collect_arrival_double_tick_idempotent(fleet_db):
     after_twice = dict(cur.fetchone())
     assert int(tick1.get('processed_arrivals') or 0) == 1
     assert int(tick2.get('processed_arrivals') or 0) == 0
-    assert after_once == after_twice
-    assert int(after_twice['metal']) < int(before['metal'])
+    assert after_once == after_twice == source_after_send
+    assert hub_after > hub_before
     conn.close()
 
 
@@ -3265,8 +3290,8 @@ def test_api_fleet_state_five_calls_outbound_arrival_idempotent(fleet_db, monkey
     source = _second_colony(uid, conn=conn)
     cur = conn.cursor()
     _fund_planet(cur, hub, metal=50000, crystal=5000, fuel_cells=50000)
-    _fund_planet(cur, source, metal=15000, crystal=2000, fuel_cells=500)
-    _seed_ships(hub, uid, {'mule_courier': 2}, conn=conn)
+    _fund_planet(cur, source, metal=15000, crystal=2000, fuel_cells=50000)
+    _seed_ships(source, uid, {'mule_courier': 2}, conn=conn)
     conn.commit()
     ok, _, payload = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=[source], ships={'mule_courier': 1}, resources_mode='all', conn=conn)
     assert ok
@@ -3304,22 +3329,20 @@ def test_logistics_multi_collect_conserves_ship_total(fleet_db):
     cur = conn.cursor()
     _fund_planet(cur, hub, metal=50000, fuel_cells=50000)
     for sid in sources:
-        _fund_planet(cur, sid, metal=8000, crystal=1000)
-    _seed_ships(hub, uid, {'mule_courier': 6}, conn=conn)
+        _fund_planet(cur, sid, metal=8000, crystal=1000, fuel_cells=50000)
+        _seed_ships(sid, uid, {'mule_courier': 2}, conn=conn)
     conn.commit()
-    hub_before = int(get_planet_ships(hub, conn=conn).get('mule_courier', 0))
-    ok, _, payload = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=sources, ships={'mule_courier': 6}, resources_mode='all', conn=conn)
+    ok, _, payload = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=sources, ships={'mule_courier': 2}, resources_mode='all', conn=conn)
     assert ok
     assert len(payload['started']) == 2
-    hub_after_send = int(get_planet_ships(hub, conn=conn).get('mule_courier', 0))
-    assert hub_after_send == 0
-    assert hub_before == 6
+    for sid in sources:
+        assert int(get_planet_ships(sid, conn=conn).get('mule_courier', 0)) == 0
     in_flight = 0
     for leg in payload['started']:
         cur.execute('SELECT ships_json FROM fleet_movements WHERE id = ?;', (int(leg['fleet_id']),))
         ships = json.loads(cur.fetchone()['ships_json'])
         in_flight += int(ships.get('mule_courier', 0))
-    assert in_flight == 6
+    assert in_flight == 4
     conn.close()
 
 def test_logistics_collect_return_double_tick_no_hub_dup(fleet_db):
@@ -3329,10 +3352,10 @@ def test_logistics_collect_return_double_tick_no_hub_dup(fleet_db):
     source = _second_colony(uid, conn=conn)
     cur = conn.cursor()
     _fund_planet(cur, hub, metal=5000, crystal=5000, fuel_cells=50000)
-    _fund_planet(cur, source, metal=12000, crystal=0, fuel_cells=0)
+    _fund_planet(cur, source, metal=12000, crystal=0, fuel_cells=50000)
     cur.execute('SELECT metal FROM planets WHERE id = ?;', (hub,))
     hub_before = int(cur.fetchone()['metal'])
-    _seed_ships(hub, uid, {'mule_courier': 2}, conn=conn)
+    _seed_ships(source, uid, {'mule_courier': 2}, conn=conn)
     conn.commit()
     ok, _, payload = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=[source], ships={'mule_courier': 1}, resources_mode='all', conn=conn)
     assert ok
@@ -3445,8 +3468,8 @@ def test_get_fleet_live_state_non_active_planet_still_ticks(fleet_db):
     source = _second_colony(uid, conn=conn)
     cur = conn.cursor()
     _fund_planet(cur, hub, metal=50000, fuel_cells=50000)
-    _fund_planet(cur, source, metal=9000, crystal=0, fuel_cells=0)
-    _seed_ships(hub, uid, {'mule_courier': 2}, conn=conn)
+    _fund_planet(cur, source, metal=9000, crystal=0, fuel_cells=50000)
+    _seed_ships(source, uid, {'mule_courier': 2}, conn=conn)
     conn.commit()
     ok, _, payload = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=[source], ships={'mule_courier': 1}, resources_mode='all', conn=conn)
     assert ok
@@ -3482,29 +3505,36 @@ def test_collect_multi_leg_fuel_deducted_once_per_movement(fleet_db):
     cur = conn.cursor()
     _fund_planet(cur, hub, metal=50000, fuel_cells=100000)
     for sid in sources:
-        _fund_planet(cur, sid, metal=5000, crystal=500)
-    _seed_ships(hub, uid, {'mule_courier': 4}, conn=conn)
+        _fund_planet(cur, sid, metal=5000, crystal=500, fuel_cells=100000)
+        _seed_ships(sid, uid, {'mule_courier': 2}, conn=conn)
     conn.commit()
-    cur.execute('SELECT fuel_cells FROM planets WHERE id = ?;', (hub,))
-    fuel_before = float(cur.fetchone()['fuel_cells'])
-    ok, _, payload = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=sources, ships={'mule_courier': 4}, resources_mode='all', conn=conn)
+    fuel_before = 0.0
+    for sid in sources:
+        cur.execute('SELECT fuel_cells FROM planets WHERE id = ?;', (sid,))
+        fuel_before += float(cur.fetchone()['fuel_cells'])
+    ok, _, payload = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=sources, ships={'mule_courier': 2}, resources_mode='all', conn=conn)
     assert ok
     assert len(payload['started']) == 2
     conn.commit()
-    cur.execute('SELECT fuel_cells FROM planets WHERE id = ?;', (hub,))
-    fuel_after_send = float(cur.fetchone()['fuel_cells'])
+    fuel_after_send = 0.0
+    for sid in sources:
+        cur.execute('SELECT fuel_cells FROM planets WHERE id = ?;', (sid,))
+        fuel_after_send += float(cur.fetchone()['fuel_cells'])
     fuel_sum_legs = 0
     for leg in payload['started']:
         cur.execute('SELECT fuel_cost FROM fleet_movements WHERE id = ?;', (int(leg['fleet_id']),))
         fuel_sum_legs += int(cur.fetchone()['fuel_cost'] or 0)
-    assert fuel_after_send == fuel_before - fuel_sum_legs
+    # Cargo fuel_cells may also leave sources; total drop >= flight fuel.
+    assert fuel_before - fuel_after_send >= fuel_sum_legs
     assert fuel_sum_legs > 0
     for leg in payload['started']:
         _force_outbound_arrival(conn, int(leg['fleet_id']))
     process_fleet_tick(player_id=uid, conn=conn)
     conn.commit()
-    cur.execute('SELECT fuel_cells FROM planets WHERE id = ?;', (hub,))
-    fuel_after_tick = float(cur.fetchone()['fuel_cells'])
+    fuel_after_tick = 0.0
+    for sid in sources:
+        cur.execute('SELECT fuel_cells FROM planets WHERE id = ?;', (sid,))
+        fuel_after_tick += float(cur.fetchone()['fuel_cells'])
     assert fuel_after_tick == fuel_after_send
     conn.close()
 

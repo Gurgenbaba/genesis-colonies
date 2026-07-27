@@ -17159,6 +17159,50 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 .logistics-auto-cargo-hint{ margin: 0 0 12px; }
 .logistics-hub-row{ margin-bottom: 12px; }
 .logistics-hub-select{ width: 100%; max-width: 100%; }
+.logistics-toolbar{
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.logistics-toolbar-main{
+  flex: 1;
+  min-width: 0;
+}
+.logistics-hub-hint{
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+}
+.logistics-help-btn{
+  flex: 0 0 auto;
+  margin-top: 18px;
+  min-width: 28px;
+  border-radius: var(--gc-radius-sm);
+}
+.logistics-source-ships{
+  display: block;
+  font-size: 0.75rem;
+  opacity: 0.85;
+  margin-top: 2px;
+}
+.logistics-help-modal .logistics-help-dialog{
+  max-width: 520px;
+}
+.logistics-help-modal .logistics-help-lead{
+  margin: 0 0 10px;
+  font-size: 0.9rem;
+}
+.logistics-help-modal .logistics-help-list{
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 8px;
+  font-size: 0.86rem;
+}
+.logistics-help-modal .logistics-help-list li + li{
+  margin-top: 0;
+}
 .logistics-page--compact .fleet-ship-input{
   width: 64px;
   min-width: 64px;

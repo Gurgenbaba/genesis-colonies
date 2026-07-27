@@ -11,7 +11,6 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple, Typ
 
 from .db import begin_write_transaction, commit, db, lock_planet_for_update, rollback, table_exists
 from .fleet_calc import (
-    allocate_auto_cargo_ships,
     allocate_auto_cargo_ships_for_targets,
     apply_departure_deduction,
     build_collect_route,
@@ -30,7 +29,6 @@ from .fleet_calc import (
     collect_route_sort_key,
     normalize_collect_source_planet_ids,
     normalize_ships,
-    planet_resource_total,
     split_resources_evenly,
     split_ships_across_targets,
     validate_collect_source_planet,
@@ -4050,7 +4048,7 @@ def _format_logistics_collect_arrival_report(
     if loaded_resource_total(collected) <= 0:
         return tr(
             "fleet_logistics_collect_arrival_empty",
-            "Abholung bei %(coords)s (%(target)s) abgeschlossen — keine Ressourcen geladen. Rückflug nach %(origin)s.",
+            "Zusammenziehen bei %(coords)s (%(target)s) von %(origin)s — keine Ressourcen geliefert. Rückflug.",
             locale=locale,
             coords=coords,
             target=target_name,
@@ -4058,10 +4056,11 @@ def _format_logistics_collect_arrival_report(
         )
     return tr(
         "fleet_logistics_collect_arrival",
-        "Abholung bei %(coords)s (%(target)s) abgeschlossen: %(cargo)s.",
+        "Zusammenziehen geliefert bei %(coords)s (%(target)s) von %(origin)s: %(cargo)s.",
         locale=locale,
         coords=coords,
         target=target_name,
+        origin=origin_name,
         cargo=cargo_txt,
     )
 
@@ -4075,14 +4074,12 @@ def _format_logistics_collect_return_report(
 ) -> str:
     from .i18n import tr
 
-    cargo_txt = _format_transport_cargo(resources, locale=locale)
     ships_txt = _format_fleet_ship_summary(ships, locale=locale)
     return tr(
         "fleet_logistics_collect_return",
-        "Ressourcen auf %(origin)s angekommen: %(cargo)s. Schiffe: %(ships)s.",
+        "Zusammenzieh-Flotte zurück auf %(origin)s. Schiffe: %(ships)s.",
         locale=locale,
         origin=origin_name,
-        cargo=cargo_txt,
         ships=ships_txt,
     )
 
@@ -4470,7 +4467,8 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
             orow = cur.fetchone()
             origin_name = str(orow["name"] if orow else "")
             target_name = str(snapshot.get("planet_name") or "")
-            if _movement_batch_type(movement, conn=conn) == "distribute_resources":
+            batch_type = _movement_batch_type(movement, conn=conn)
+            if batch_type == "distribute_resources":
                 dist_body = _format_logistics_distribute_arrival_report(
                     coords=coords,
                     origin_name=origin_name,
@@ -4499,6 +4497,39 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
                     ships=ships,
                     resources=resources,
                     collected=None,
+                    now=now,
+                    locale=sender_locale,
+                    conn=conn,
+                )
+            elif batch_type == "collect_resources":
+                collect_body = _format_logistics_collect_arrival_report(
+                    coords=coords,
+                    origin_name=origin_name,
+                    target_name=target_name,
+                    collected=resources,
+                    locale=sender_locale,
+                )
+                _emit_logistics_fleet_report(
+                    player_id,
+                    subject=tr(
+                        "fleet_logistics_collect_arrival_subject",
+                        "Zusammenziehen %(coords)s",
+                        locale=sender_locale,
+                        coords=coords,
+                    ),
+                    body=collect_body,
+                    movement=movement,
+                    movement_id=movement_id,
+                    report_phase="logistics_collect_arrival",
+                    mission_type="collect",
+                    coords=coords,
+                    origin_planet_id=origin_id,
+                    origin_name=origin_name,
+                    target_planet_id=int(target_id),
+                    target_name=target_name,
+                    ships=ships,
+                    resources=resources,
+                    collected=calculate_loaded_resources(resources),
                     now=now,
                     locale=sender_locale,
                     conn=conn,
@@ -4535,7 +4566,7 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
             if (
                 target_owner
                 and target_owner != player_id
-                and _movement_batch_type(movement, conn=conn) != "distribute_resources"
+                and batch_type not in ("distribute_resources", "collect_resources")
             ):
                 target_locale = get_player_locale(target_owner, conn=conn)
                 incoming_body = _format_transport_report(
@@ -5404,7 +5435,7 @@ def _handle_return(movement: Dict[str, Any], *, conn, now: float) -> bool:
             player_id,
             subject=tr(
                 "fleet_logistics_collect_return_subject",
-                "Ressourcen am Ursprung angekommen",
+                "Zusammenzieh-Flotte zurück",
                 locale=sender_locale,
             ),
             body=return_body,
@@ -5419,6 +5450,37 @@ def _handle_return(movement: Dict[str, Any], *, conn, now: float) -> bool:
             target_name=target_name,
             ships=ships,
             resources=resources,
+            collected=None,
+            now=now,
+            locale=sender_locale,
+            conn=conn,
+        )
+    elif _movement_batch_type(movement, conn=conn) == "collect_resources":
+        return_body = _format_logistics_collect_return_report(
+            origin_name=origin_name,
+            resources={},
+            ships=ships,
+            locale=sender_locale,
+        )
+        _emit_logistics_fleet_report(
+            player_id,
+            subject=tr(
+                "fleet_logistics_collect_return_subject",
+                "Zusammenzieh-Flotte zurück",
+                locale=sender_locale,
+            ),
+            body=return_body,
+            movement=movement,
+            movement_id=movement_id,
+            report_phase="logistics_collect_return",
+            mission_type="collect",
+            coords=coords,
+            origin_planet_id=origin_id,
+            origin_name=origin_name,
+            target_planet_id=int(target_id) if target_id else None,
+            target_name=target_name,
+            ships=ships,
+            resources={},
             collected=None,
             now=now,
             locale=sender_locale,
@@ -6241,7 +6303,7 @@ def collect_resources(
     speed_percent: int = 100,
     conn=None,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
-    """Multi-colony collect: hub origin, N× send_fleet(mission=collect) under one batch (GC-527)."""
+    """Multi-colony collect: each source sends transport to hub under one batch."""
     hub_id = int(target_planet_id or 0)
     if hub_id <= 0:
         return False, "origin_not_found", None
@@ -6263,9 +6325,9 @@ def collect_resources(
     if not source_ids:
         return False, "no_planets", None
 
-    ships_n: Dict[str, int] = {}
+    manual_ships: Dict[str, int] = {}
     if mode == "manual":
-        ok_ships, ship_reason, ships_n = validate_logistics_manual_ships(ships)
+        ok_ships, ship_reason, manual_ships = validate_logistics_manual_ships(ships)
         if not ok_ships:
             return False, ship_reason, None
 
@@ -6281,42 +6343,30 @@ def collect_resources(
         if hub_row is None or int(hub_row.get("player_id") or 0) != int(player_id):
             return False, "origin_not_found", None
 
-        source_weights: Dict[int, int] = {}
-        if mode == "auto_cargo":
-            cargo_needed = 0
-            for sid in source_ids:
-                total = planet_resource_total(planet_rows.get(int(sid)))
-                source_weights[int(sid)] = total
-                cargo_needed += total
-            available_stock = get_planet_ships(hub_id, conn=conn)
-            ships_n = allocate_auto_cargo_ships(available_stock, cargo_needed)
-            if not ships_n:
-                return False, "no_ships", None
+        ships_stock_by_source: Dict[int, Dict[str, int]] = {}
+        for sid in source_ids:
+            ships_stock_by_source[int(sid)] = get_planet_ships(int(sid), conn=conn)
 
         slots = get_fleet_slot_status(player_id, conn=conn)
+        skip_empty = mode == "auto_cargo"
         ok_route, route_reason, legs = build_collect_route(
             origin_planet_id=hub_id,
             source_planet_ids=source_ids,
             planet_rows_by_id=planet_rows,
-            ships=ships_n,
+            ships_stock_by_source=ships_stock_by_source,
             free_fleet_slots=int(slots["free"]),
             player_id=int(player_id),
-            source_weights=source_weights if mode == "auto_cargo" else None,
-            skip_empty_ship_legs=(mode == "auto_cargo"),
-            skip_invalid_planets=(mode == "auto_cargo"),
+            ships_selection_mode=mode,
+            manual_ships=manual_ships if mode == "manual" else None,
+            speed_percent=pct,
+            skip_empty_ship_legs=skip_empty,
+            skip_invalid_planets=skip_empty,
         )
         if not ok_route or not legs:
             return False, route_reason or "no_planets", None
 
         if own:
             begin_write_transaction(conn)
-
-        available = get_planet_ships(hub_id, conn=conn)
-        for sk, need in ships_n.items():
-            if int(available.get(sk, 0)) < int(need):
-                if own:
-                    rollback(conn)
-                return False, "not_enough_ships", None
 
         now = _now()
         cur = conn.cursor()
@@ -6337,16 +6387,17 @@ def collect_resources(
 
         started: List[Dict[str, Any]] = []
         send_skipped: List[Dict[str, Any]] = []
+        ships_used: Dict[str, int] = {}
         for leg in legs:
             ok_send, send_reason, payload = send_fleet(
                 player_id=player_id,
-                origin_planet_id=hub_id,
+                origin_planet_id=int(leg["origin_planet_id"]),
                 target_galaxy=int(leg["galaxy"]),
                 target_system=int(leg["system"]),
                 target_position=int(leg["position"]),
-                mission_type="collect",
+                mission_type="transport",
                 ships=leg["ships"],
-                resources={},
+                resources=leg["resources"],
                 speed_percent=pct,
                 preset_id=preset_id,
                 batch_id=batch_id,
@@ -6370,6 +6421,8 @@ def collect_resources(
                     "fleet_id": int(payload["fleet"]["id"]),
                 }
             )
+            for sk, qty in (leg["ships"] or {}).items():
+                ships_used[str(sk)] = int(ships_used.get(str(sk), 0)) + int(qty)
 
         if not started:
             if own:
@@ -6403,17 +6456,19 @@ def collect_resources(
             "route": [
                 {
                     "planet_id": int(leg["planet_id"]),
+                    "origin_planet_id": int(leg["origin_planet_id"]),
                     "galaxy": int(leg["galaxy"]),
                     "system": int(leg["system"]),
                     "position": int(leg["position"]),
                     "ships": dict(leg["ships"]),
+                    "resources": dict(leg["resources"]),
                 }
                 for leg in legs
                 if int(leg["planet_id"]) in launched_ids
             ],
             "skipped": skipped,
             "send_skipped": send_skipped,
-            "ships_used": dict(ships_n),
+            "ships_used": ships_used,
             "ships_selection_mode": mode,
             "active_slots": get_fleet_slot_status(player_id, conn=conn),
         }
@@ -6689,6 +6744,8 @@ def build_logistics_page_context(
         _finish_due_shipyard_on_planet(conn, int(planet_id), int(player_id))
         process_fleet_tick(player_id=int(player_id), conn=conn)
 
+        from .fleet_calc import cargo_ship_count, filter_available_cargo_ships
+
         colonies: List[Dict[str, Any]] = []
         for p in get_planets_by_player(player_id, conn=conn):
             pid = int(p["id"])
@@ -6697,6 +6754,7 @@ def build_logistics_page_context(
             except GalaxyCoordinateError:
                 continue
             ships = get_planet_ships(pid, conn=conn)
+            cargo_ships = filter_available_cargo_ships(ships)
             colonies.append(
                 {
                     "planet_id": pid,
@@ -6704,6 +6762,8 @@ def build_logistics_page_context(
                     "coordinates": pc["formatted"],
                     "is_active": pid == int(planet_id),
                     "ships": ships,
+                    "cargo_ships": cargo_ships,
+                    "cargo_ship_count": cargo_ship_count(ships),
                     "resources": {
                         "metal": int(float(p.get("metal") or 0)),
                         "crystal": int(float(p.get("crystal") or 0)),

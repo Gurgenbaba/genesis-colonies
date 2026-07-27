@@ -37,11 +37,15 @@ def _hub_and_sources(uid: int, conn, *, sources: int=2):
         ok, reason, extra = colonize_planet(uid, name=f'Colony {pos}', galaxy=1, system=300, position=pos, conn=conn, allow_legacy_coordinates=True, source='test')
         assert ok, reason
         cid = int(extra['planet_id'])
-        _fund_planet(conn.cursor(), cid, metal=20000 + i * 1000, crystal=1000)
+        _fund_planet(conn.cursor(), cid, metal=20000 + i * 1000, crystal=1000, fuel_cells=50000)
         colony_ids.append(cid)
     return (hub, colony_ids)
 
-def _count_batches_and_movements(conn, player_id: int, *, batch_type: str='collect_resources', mission_type: str='collect') -> tuple[int, int]:
+def _seed_collect_ships(uid: int, sources, ships_per_source, conn):
+    for cid in sources:
+        _seed_ships(cid, uid, dict(ships_per_source), conn=conn)
+
+def _count_batches_and_movements(conn, player_id: int, *, batch_type: str='collect_resources', mission_type: str='transport') -> tuple[int, int]:
     cur = conn.cursor()
     cur.execute('SELECT COUNT(*) AS c FROM fleet_batches WHERE player_id = ? AND batch_type = ?;', (int(player_id), batch_type))
     batches = int(cur.fetchone()['c'])
@@ -55,11 +59,11 @@ def test_qa_happy_path_three_sources_batch_and_return(logistics_db):
     uid = _player(conn=conn)
     hub, sources = _hub_and_sources(uid, conn, sources=3)
     for cid in sources:
-        _fund_planet(conn.cursor(), cid, metal=25000, crystal=3000)
-    _seed_ships(hub, uid, {'mule_courier': 12}, conn=conn)
+        _fund_planet(conn.cursor(), cid, metal=25000, crystal=3000, fuel_cells=50000)
+    _seed_collect_ships(uid, sources, {'mule_courier': 4}, conn)
     slots_before = get_fleet_slot_status(uid, conn=conn)
     conn.commit()
-    ok, reason, payload = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=sources, ships={'mule_courier': 12}, conn=conn)
+    ok, reason, payload = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=sources, ships={'mule_courier': 4}, conn=conn)
     assert ok, reason
     assert len(payload['started']) == 3
     assert payload['batch']['batch_type'] == 'collect_resources'
@@ -69,12 +73,13 @@ def test_qa_happy_path_three_sources_batch_and_return(logistics_db):
     cur.execute('SELECT COUNT(*) AS c FROM fleet_movements WHERE parent_batch_id = ?;', (batch_id,))
     assert int(cur.fetchone()['c']) == 3
     for item in payload['started']:
-        cur.execute('SELECT mission_type, origin_planet_id, target_planet_id, status FROM fleet_movements WHERE id = ?;', (int(item['fleet_id']),))
+        cur.execute('SELECT mission_type, origin_planet_id, target_planet_id, status, resources_json FROM fleet_movements WHERE id = ?;', (int(item['fleet_id']),))
         row = dict(cur.fetchone())
-        assert row['mission_type'] == 'collect'
-        assert int(row['origin_planet_id']) == hub
-        assert int(row['target_planet_id']) == int(item['source_planet_id'])
+        assert row['mission_type'] == 'transport'
+        assert int(row['origin_planet_id']) == int(item['source_planet_id'])
+        assert int(row['target_planet_id']) == hub
         assert row['status'] == 'outbound'
+        assert json.loads(row['resources_json']).get('metal', 0) > 0
     slots_after_send = get_fleet_slot_status(uid, conn=conn)
     assert slots_after_send['active'] == slots_before['active'] + 3
     cur.execute('SELECT metal FROM planets WHERE id = ?;', (hub,))
@@ -105,6 +110,7 @@ def test_qa_fleet_slots_full_no_partial_batch(logistics_db):
     cur = conn.cursor()
     _fund_planet(cur, hub, metal=500000, crystal=500000, fuel_cells=500000)
     _seed_ships(hub, uid, {'mule_courier': 30}, conn=conn)
+    _seed_collect_ships(uid, sources, {'mule_courier': 2}, conn)
     max_slots = get_fleet_slot_status(uid, conn=conn)['max']
     for _ in range(max_slots):
         ok, _, _ = send_fleet(player_id=uid, origin_planet_id=hub, target_galaxy=g, target_system=s, target_position=p, mission_type='transport', ships={'mule_courier': 1}, resources={'metal': 1}, conn=conn)
@@ -128,8 +134,8 @@ def test_logistics_collect_caps_to_free_slots(logistics_db):
     hub, sources = _hub_and_sources(uid, conn, sources=4)
     cur = conn.cursor()
     for sid in sources:
-        _fund_planet(cur, sid, metal=5000, crystal=500)
-    _seed_ships(hub, uid, {'mule_courier': 20}, conn=conn)
+        _fund_planet(cur, sid, metal=5000, crystal=500, fuel_cells=50000)
+    _seed_collect_ships(uid, sources, {'mule_courier': 2}, conn)
     conn.commit()
     free = int(get_fleet_slot_status(uid, conn=conn)['free'])
     assert free >= 1
@@ -137,7 +143,7 @@ def test_logistics_collect_caps_to_free_slots(logistics_db):
     assert ok, reason
     assert payload is not None
     assert len(payload['started']) == min(len(sources), free)
-    cur.execute("SELECT COUNT(*) AS c FROM fleet_movements WHERE player_id = ? AND mission_type = 'collect';", (uid,))
+    cur.execute("SELECT COUNT(*) AS c FROM fleet_movements WHERE player_id = ? AND mission_type = 'transport' AND parent_batch_id IS NOT NULL;", (uid,))
     assert int(cur.fetchone()['c']) == min(len(sources), free)
     conn.close()
 
@@ -146,7 +152,7 @@ def test_qa_no_cargo_ships_no_batch(logistics_db):
     conn = db()
     uid = _player(conn=conn)
     hub, sources = _hub_and_sources(uid, conn, sources=2)
-    _seed_ships(hub, uid, {'falcon_interceptor': 5}, conn=conn)
+    _seed_collect_ships(uid, sources, {'falcon_interceptor': 5}, conn)
     batches_before, mv_before = _count_batches_and_movements(conn, uid)
     conn.commit()
     ok, reason, payload = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=sources, ships={'falcon_interceptor': 2}, conn=conn)
@@ -163,15 +169,17 @@ def test_qa_hub_in_source_list_filtered(logistics_db):
     conn = db()
     uid = _player(conn=conn)
     hub, sources = _hub_and_sources(uid, conn, sources=2)
-    _seed_ships(hub, uid, {'mule_courier': 6}, conn=conn)
+    _seed_collect_ships(uid, sources, {'mule_courier': 2}, conn)
     conn.commit()
-    ok, reason, payload = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=[hub, sources[0], sources[1], hub], ships={'mule_courier': 4}, conn=conn)
+    ok, reason, payload = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=[hub, sources[0], sources[1], hub], ships={'mule_courier': 2}, conn=conn)
     assert ok, reason
     assert len(payload['started']) == 2
     cur = conn.cursor()
     for item in payload['started']:
-        cur.execute('SELECT target_planet_id FROM fleet_movements WHERE id = ?;', (int(item['fleet_id']),))
-        assert int(cur.fetchone()['target_planet_id']) != hub
+        cur.execute('SELECT origin_planet_id, target_planet_id FROM fleet_movements WHERE id = ?;', (int(item['fleet_id']),))
+        row = dict(cur.fetchone())
+        assert int(row['origin_planet_id']) != hub
+        assert int(row['target_planet_id']) == hub
     ok2, reason2, _ = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=[hub], ships={'mule_courier': 1}, conn=conn)
     assert not ok2
     assert reason2 == 'no_planets'
@@ -181,7 +189,7 @@ def test_collect_logistics_requires_cargo_ships(logistics_db):
     conn = db()
     uid = _player(conn=conn)
     hub, sources = _hub_and_sources(uid, conn, sources=1)
-    _seed_ships(hub, uid, {'falcon_interceptor': 5}, conn=conn)
+    _seed_collect_ships(uid, sources, {'falcon_interceptor': 5}, conn)
     conn.commit()
     ok, reason, _ = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=sources, ships={'falcon_interceptor': 2}, conn=conn)
     assert not ok
@@ -192,9 +200,9 @@ def test_collect_logistics_ship_split(logistics_db):
     conn = db()
     uid = _player(conn=conn)
     hub, sources = _hub_and_sources(uid, conn, sources=3)
-    _seed_ships(hub, uid, {'mule_courier': 30}, conn=conn)
+    _seed_collect_ships(uid, sources, {'mule_courier': 10}, conn)
     conn.commit()
-    ok, reason, payload = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=sources, ships={'mule_courier': 30}, conn=conn)
+    ok, reason, payload = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=sources, ships={'mule_courier': 10}, conn=conn)
     assert ok, reason
     assert len(payload['started']) == 3
     cur = conn.cursor()
@@ -213,6 +221,7 @@ def test_collect_logistics_respects_fleet_slots(logistics_db):
     cur = conn.cursor()
     _fund_planet(cur, hub, metal=500000, crystal=500000, fuel_cells=500000)
     _seed_ships(hub, uid, {'mule_courier': 20}, conn=conn)
+    _seed_ships(source, uid, {'mule_courier': 2}, conn=conn)
     conn.commit()
     for _ in range(3):
         ok, reason, _ = send_fleet(player_id=uid, origin_planet_id=hub, target_galaxy=g, target_system=s, target_position=p, mission_type='transport', ships={'mule_courier': 1}, resources={'metal': 1}, conn=conn)
@@ -228,7 +237,7 @@ def test_collect_logistics_pickup_and_return(logistics_db):
     uid = _player(conn=conn)
     hub, sources = _hub_and_sources(uid, conn, sources=1)
     source = sources[0]
-    _seed_ships(hub, uid, {'mule_courier': 2}, conn=conn)
+    _seed_ships(source, uid, {'mule_courier': 2}, conn=conn)
     conn.commit()
     ok, reason, payload = collect_resources(player_id=uid, target_planet_id=hub, source_planet_ids=[source], ships={'mule_courier': 1}, conn=conn)
     assert ok, reason
@@ -236,18 +245,23 @@ def test_collect_logistics_pickup_and_return(logistics_db):
     cur = conn.cursor()
     cur.execute('SELECT metal FROM planets WHERE id = ?;', (hub,))
     hub_before = int(cur.fetchone()['metal'])
+    cur.execute('SELECT metal FROM planets WHERE id = ?;', (source,))
+    source_after_send = int(cur.fetchone()['metal'])
+    assert source_after_send < 20000  # resources debited at send
     now = time.time()
     cur.execute('UPDATE fleet_movements SET arrival_at = ? WHERE id = ?;', (now - 1, fleet_id))
     conn.commit()
     process_fleet_tick(player_id=uid, conn=conn)
     conn.commit()
+    cur.execute('SELECT metal FROM planets WHERE id = ?;', (hub,))
+    hub_after_arrival = int(cur.fetchone()['metal'])
+    assert hub_after_arrival > hub_before
     cur.execute('UPDATE fleet_movements SET return_at = ? WHERE id = ?;', (now - 1, fleet_id))
     conn.commit()
     process_fleet_tick(player_id=uid, conn=conn)
     conn.commit()
-    cur.execute('SELECT metal FROM planets WHERE id = ?;', (hub,))
-    hub_after = int(cur.fetchone()['metal'])
-    assert hub_after > hub_before
+    ships_back = __import__('game.fleet', fromlist=['get_planet_ships']).get_planet_ships(source, conn=conn)
+    assert int(ships_back.get('mule_courier') or 0) >= 1
     conn.close()
 
 def test_logistics_page_renders_collect_form(logistics_db, monkeypatch):
@@ -274,6 +288,8 @@ def test_logistics_page_renders_collect_form(logistics_db, monkeypatch):
     assert 'data-logistics-hub' in html
     assert 'data-logistics-select-all="collect"' in html
     assert 'logistics-auto-cargo-hint' in html
+    assert 'logistics-help-btn' in html
+    assert 'logistics-help-modal' in html
     assert 'data-logistics-ship-input' not in html
 
 def test_collect_logistics_api_returns_state(logistics_db):
@@ -281,7 +297,7 @@ def test_collect_logistics_api_returns_state(logistics_db):
     conn = db()
     uid = _player(conn=conn)
     hub, sources = _hub_and_sources(uid, conn, sources=1)
-    _seed_ships(hub, uid, {'mule_courier': 3}, conn=conn)
+    _seed_ships(sources[0], uid, {'mule_courier': 3}, conn=conn)
     conn.commit()
     conn.close()
     client = app_mod.app.test_client()
@@ -299,13 +315,13 @@ def test_logistics_preview_api_collect(logistics_db):
     conn = db()
     uid = _player(conn=conn)
     hub, sources = _hub_and_sources(uid, conn, sources=2)
-    _seed_ships(hub, uid, {'mule_courier': 4}, conn=conn)
+    _seed_collect_ships(uid, sources, {'mule_courier': 2}, conn)
     conn.commit()
     conn.close()
     client = app_mod.app.test_client()
     with client.session_transaction() as sess:
         sess['user_id'] = uid
-    res = client.post('/api/fleet/logistics/preview', json={'mode': 'collect', 'target_planet_id': hub, 'source_planet_ids': sources, 'ships': {'mule_courier': 4}, 'resources_mode': 'all', 'ships_selection_mode': 'manual'})
+    res = client.post('/api/fleet/logistics/preview', json={'mode': 'collect', 'target_planet_id': hub, 'source_planet_ids': sources, 'ships': {'mule_courier': 2}, 'resources_mode': 'all', 'ships_selection_mode': 'manual'})
     assert res.status_code == 200
     body = res.get_json()
     assert body['ok'] is True
@@ -313,6 +329,8 @@ def test_logistics_preview_api_collect(logistics_db):
     assert preview.get('mode') == 'collect'
     assert len(preview.get('legs') or []) == 2
     assert preview.get('can_launch') is True
+    assert (preview.get('legs') or [])[0].get('resources') is not None
+    assert int((preview.get('legs') or [])[0].get('cargo_used') or 0) > 0
 
 def test_logistics_preview_distribute_ships_only_shows_cargo_capacity(logistics_db):
     import app as app_mod
@@ -400,8 +418,8 @@ def test_logistics_collect_credits_hub_despite_full_storage(logistics_db):
     research = get_research_levels(user_id=uid, conn=conn)
     caps = get_storage_capacity(buildings, research=research, conn=conn)
     _fund_planet(cur, hub, metal=int(caps['metal']), crystal=int(caps['crystal']), fuel_cells=50000)
-    _fund_planet(cur, source, metal=8000, crystal=0, fuel_cells=0)
-    _seed_ships(hub, uid, {'mule_courier': 2}, conn=conn)
+    _fund_planet(cur, source, metal=8000, crystal=0, fuel_cells=50000)
+    _seed_ships(source, uid, {'mule_courier': 2}, conn=conn)
     conn.commit()
     ok, reason, payload = collect_resources(
         player_id=uid,
@@ -413,18 +431,14 @@ def test_logistics_collect_credits_hub_despite_full_storage(logistics_db):
     assert ok, reason
     fleet_id = int(payload['started'][0]['fleet_id'])
     cur.execute('SELECT metal FROM planets WHERE id = ?;', (hub,))
-    hub_before_return = int(cur.fetchone()['metal'])
+    hub_before_arrival = int(cur.fetchone()['metal'])
     now = time.time()
     cur.execute('UPDATE fleet_movements SET arrival_at = ? WHERE id = ?;', (now - 1, fleet_id))
     conn.commit()
     process_fleet_tick(player_id=uid, conn=conn)
     conn.commit()
-    cur.execute('UPDATE fleet_movements SET return_at = ? WHERE id = ?;', (now - 1, fleet_id))
-    conn.commit()
-    process_fleet_tick(player_id=uid, conn=conn)
-    conn.commit()
     cur.execute('SELECT metal FROM planets WHERE id = ?;', (hub,))
-    assert int(cur.fetchone()['metal']) > hub_before_return
+    assert int(cur.fetchone()['metal']) > hub_before_arrival
     conn.close()
 
 def test_distribute_happy_path_three_targets(logistics_db):
@@ -539,8 +553,10 @@ def test_distribute_hub_in_targets_filtered(logistics_db):
     assert len(payload['started']) == 2
     cur = conn.cursor()
     for item in payload['started']:
-        cur.execute('SELECT target_planet_id FROM fleet_movements WHERE id = ?;', (int(item['fleet_id']),))
-        assert int(cur.fetchone()['target_planet_id']) != hub
+        cur.execute('SELECT origin_planet_id, target_planet_id FROM fleet_movements WHERE id = ?;', (int(item['fleet_id']),))
+        row = dict(cur.fetchone())
+        assert int(row['origin_planet_id']) == hub
+        assert int(row['target_planet_id']) != hub
     conn.close()
 
 def test_distribute_ignores_storage_cap_and_debits_full_amount(logistics_db):
@@ -588,13 +604,13 @@ def test_distribute_api_returns_state(logistics_db):
     assert body.get('data', {}).get('batch', {}).get('batch_type') == 'distribute_resources'
 
 def test_collect_auto_cargo_happy_path(logistics_db):
-    """auto_cargo picks freighters from hub stock without client ships map."""
+    """auto_cargo picks freighters from each source stock without client ships map."""
     conn = db()
     uid = _player(conn=conn)
     hub, sources = _hub_and_sources(uid, conn, sources=2)
     for cid in sources:
-        _fund_planet(conn.cursor(), cid, metal=8000, crystal=1000)
-    _seed_ships(hub, uid, {'mule_courier': 6}, conn=conn)
+        _fund_planet(conn.cursor(), cid, metal=8000, crystal=1000, fuel_cells=50000)
+    _seed_collect_ships(uid, sources, {'mule_courier': 3}, conn)
     conn.commit()
     ok, reason, payload = collect_resources(
         player_id=uid,
@@ -613,13 +629,15 @@ def test_collect_auto_cargo_happy_path(logistics_db):
 
 
 def test_collect_auto_cargo_partial_when_few_freighters(logistics_db):
-    """Fewer freighters than sources → launch what fits, skip the rest."""
+    """Sources without freighters are skipped; others still launch."""
     conn = db()
     uid = _player(conn=conn)
     hub, sources = _hub_and_sources(uid, conn, sources=3)
     for cid in sources:
-        _fund_planet(conn.cursor(), cid, metal=20000, crystal=2000)
-    _seed_ships(hub, uid, {'mule_courier': 2}, conn=conn)
+        _fund_planet(conn.cursor(), cid, metal=20000, crystal=2000, fuel_cells=50000)
+    _seed_ships(sources[0], uid, {'mule_courier': 2}, conn=conn)
+    _seed_ships(sources[1], uid, {'mule_courier': 2}, conn=conn)
+    # sources[2] has no freighters → skipped
     conn.commit()
     ok, reason, payload = collect_resources(
         player_id=uid,
@@ -632,7 +650,7 @@ def test_collect_auto_cargo_partial_when_few_freighters(logistics_db):
     assert ok, reason
     assert len(payload['started']) == 2
     assert len(payload['skipped']) == 1
-    assert sum(payload['ships_used'].values()) == 2
+    assert sum(payload['ships_used'].values()) >= 2
     conn.close()
 
 
@@ -640,8 +658,8 @@ def test_collect_auto_cargo_no_ships(logistics_db):
     conn = db()
     uid = _player(conn=conn)
     hub, sources = _hub_and_sources(uid, conn, sources=1)
-    _fund_planet(conn.cursor(), sources[0], metal=5000, crystal=500)
-    _seed_ships(hub, uid, {'falcon_interceptor': 5}, conn=conn)
+    _fund_planet(conn.cursor(), sources[0], metal=5000, crystal=500, fuel_cells=50000)
+    _seed_ships(sources[0], uid, {'falcon_interceptor': 5}, conn=conn)
     conn.commit()
     ok, reason, payload = collect_resources(
         player_id=uid,
@@ -652,7 +670,7 @@ def test_collect_auto_cargo_no_ships(logistics_db):
         conn=conn,
     )
     assert ok is False
-    assert reason == 'no_ships'
+    assert reason == 'no_ships_on_sources'
     assert payload is None
     conn.close()
 
@@ -712,8 +730,8 @@ def test_collect_auto_cargo_api_preview_and_submit(logistics_db):
     uid = _player(conn=conn)
     hub, sources = _hub_and_sources(uid, conn, sources=2)
     for cid in sources:
-        _fund_planet(conn.cursor(), cid, metal=6000, crystal=500)
-    _seed_ships(hub, uid, {'mule_courier': 4}, conn=conn)
+        _fund_planet(conn.cursor(), cid, metal=6000, crystal=500, fuel_cells=50000)
+    _seed_collect_ships(uid, sources, {'mule_courier': 2}, conn)
     conn.commit()
     conn.close()
     client = app_mod.app.test_client()

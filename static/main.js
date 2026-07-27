@@ -22411,11 +22411,61 @@
     updateLogisticsOriginShips(page, data);
     resetLogisticsPreview(page);
     refreshLogisticsLiveState(page);
+    bindLogisticsHelp(page);
     GC.registerCleanup(() => {
       page._logisticsLivePending = false;
       const prev = _logisticsPreviewTimers.get(page);
       if (prev) clearTimeout(prev);
       _logisticsPreviewTimers.delete(page);
+      closeLogisticsHelpModal(page);
+    });
+  }
+
+  function closeLogisticsHelpModal(page) {
+    const modal = document.getElementById("logistics-help-modal");
+    if (!modal || modal.hidden) return;
+    modal.hidden = true;
+    modal.setAttribute("aria-hidden", "true");
+    modal.classList.remove("is-open");
+    document.body.classList.remove("gc-player-card-open");
+    const openBtn = (page || document).querySelector("#logistics-help-open");
+    if (openBtn) openBtn.setAttribute("aria-expanded", "false");
+    if (page) page._logisticsHelpOpen = false;
+  }
+
+  function openLogisticsHelpModal(page, trigger) {
+    const modal = document.getElementById("logistics-help-modal");
+    if (!modal) return;
+    page._logisticsHelpLastFocus = trigger || document.activeElement;
+    modal.hidden = false;
+    modal.setAttribute("aria-hidden", "false");
+    modal.classList.add("is-open");
+    document.body.classList.add("gc-player-card-open");
+    const openBtn = page.querySelector("#logistics-help-open");
+    if (openBtn) openBtn.setAttribute("aria-expanded", "true");
+    page._logisticsHelpOpen = true;
+    modal.querySelector("[data-logistics-help-close].gc-player-card-close")?.focus();
+  }
+
+  function bindLogisticsHelp(page) {
+    if (!page || page.dataset.logisticsHelpBound === "1") return;
+    page.dataset.logisticsHelpBound = "1";
+    const helpOpen = page.querySelector("#logistics-help-open") || document.getElementById("logistics-help-open");
+    if (helpOpen) {
+      helpOpen.addEventListener("click", () => {
+        if (page._logisticsHelpOpen) closeLogisticsHelpModal(page);
+        else openLogisticsHelpModal(page, helpOpen);
+      });
+    }
+    document.querySelectorAll("[data-logistics-help-close]").forEach((el) => {
+      el.addEventListener("click", () => closeLogisticsHelpModal(page));
+    });
+    document.addEventListener("keydown", (ev) => {
+      if (!page._logisticsHelpOpen) return;
+      if (ev.key === "Escape") {
+        ev.preventDefault();
+        closeLogisticsHelpModal(page);
+      }
     });
   }
 

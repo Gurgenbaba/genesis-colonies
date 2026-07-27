@@ -2,15 +2,26 @@
 
 <section class="gc-panel fleet-panel logistics-shell">
   <div class="logistics-toolbar">
-    <label class="fleet-form-label logistics-hub-label" for="logistics-origin">{{ T("logistics_hub_label") }}</label>
-    <select id="logistics-origin" class="fleet-control logistics-hub-select"
-            data-logistics-origin data-logistics-hub data-gc-hud-select>
-      {% for col in log_ctx.colonies %}
-      <option value="{{ col.planet_id }}" {% if col.is_active %}selected{% endif %}>
-        {{ col.name }} — {{ col.coordinates }}
-      </option>
-      {% endfor %}
-    </select>
+    <div class="logistics-toolbar-main">
+      <label class="fleet-form-label logistics-hub-label" for="logistics-origin">{{ T("logistics_hub_label") }}</label>
+      <select id="logistics-origin" class="fleet-control logistics-hub-select"
+              data-logistics-origin data-logistics-hub data-gc-hud-select>
+        {% for col in log_ctx.colonies %}
+        <option value="{{ col.planet_id }}" {% if col.is_active %}selected{% endif %}>
+          {{ col.name }} — {{ col.coordinates }}
+        </option>
+        {% endfor %}
+      </select>
+      <p class="hint logistics-hint logistics-hub-hint">{{ T("logistics_hub_hint") }}</p>
+    </div>
+    <button type="button"
+            class="gc-btn gc-btn-ghost gc-btn-xs logistics-help-btn"
+            id="logistics-help-open"
+            aria-haspopup="dialog"
+            aria-controls="logistics-help-modal"
+            aria-expanded="false"
+            title="{{ T('logistics_help_btn', 'Logistik-Hilfe') }}"
+            aria-label="{{ T('logistics_help_btn', 'Logistik-Hilfe') }}">?</button>
   </div>
 
   <div class="fleet-preview-hud logistics-preview-hud logistics-preview-hud--compact" data-logistics-preview aria-live="polite">
@@ -99,6 +110,9 @@
                     {% if col.is_active %}
                     <span class="gc-panel-tag logistics-source-active-tag">{{ T("logistics_active_colony") }}</span>
                     {% endif %}
+                    <span class="logistics-source-ships gc-mono" title="{{ T('logistics_source_ships_label') }}">
+                      {{ T("logistics_source_ships_short") }}: {{ col.cargo_ship_count|default(0)|fmt_int }}
+                    </span>
                     <span class="logistics-source-resources">
                       <span class="gc-resource-inline">{{ render_resource_icon('metal') }}{{ (res.metal or 0)|fmt_int }}</span>
                       <span class="gc-resource-inline">{{ render_resource_icon('crystal') }}{{ (res.crystal or 0)|fmt_int }}</span>
@@ -204,7 +218,7 @@
               </div>
             </div>
           </fieldset>
-          <p class="hint logistics-hint logistics-auto-cargo-hint">{{ T("logistics_auto_cargo_hint") }}</p>
+          <p class="hint logistics-hint logistics-auto-cargo-hint">{{ T("logistics_auto_cargo_hint_distribute") }}</p>
           <p class="logistics-error fleet-form-error" data-logistics-error="distribute" hidden role="alert"></p>
           <div class="fleet-logistics-actions logistics-actions">
             <button type="submit" class="gc-btn gc-btn-primary gc-btn-sm" data-logistics-submit="distribute" disabled>
@@ -216,3 +230,34 @@
     </form>
   </div>
 </section>
+
+<div id="logistics-help-modal"
+     class="gc-player-card-modal logistics-help-modal"
+     hidden
+     aria-hidden="true">
+  <div class="gc-player-card-overlay" data-logistics-help-close tabindex="-1"></div>
+  <div class="gc-player-card-dialog logistics-help-dialog"
+       role="dialog"
+       aria-modal="true"
+       aria-labelledby="logistics-help-modal-title">
+    <header class="gc-player-card-head">
+      <h2 id="logistics-help-modal-title" class="gc-player-card-head-title">
+        {{ T("logistics_help_title", "Logistik — Überblick") }}
+      </h2>
+      <button type="button"
+              class="gc-btn gc-btn-ghost gc-btn-xs gc-player-card-close"
+              data-logistics-help-close
+              aria-label="{{ T('close', 'Schließen') }}">×</button>
+    </header>
+    <div class="gc-player-card-body logistics-help-body">
+      <p class="logistics-help-lead">{{ T("logistics_help_lead") }}</p>
+      <ul class="logistics-help-list">
+        <li>{{ T("logistics_help_collect") }}</li>
+        <li>{{ T("logistics_help_distribute") }}</li>
+        <li>{{ T("logistics_help_ships") }}</li>
+        <li>{{ T("logistics_help_debit") }}</li>
+        <li>{{ T("logistics_help_return") }}</li>
+      </ul>
+    </div>
+  </div>
+</div>

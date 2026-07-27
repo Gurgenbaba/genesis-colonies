@@ -10222,13 +10222,11 @@ def _build_logistics_preview(
         get_planet_ships,
     )
     from game.fleet_calc import (
-        allocate_auto_cargo_ships,
         allocate_auto_cargo_ships_for_targets,
         calculate_loaded_resources,
         calculate_total_cargo,
         loaded_resource_total,
         normalize_ships,
-        planet_resource_total,
     )
     from game.galaxy import format_coordinates
     from game.planet_evolution.repository import get_context_planet
@@ -10275,44 +10273,45 @@ def _build_logistics_preview(
         hub_id = int(data.get("target_planet_id") or origin_id)
         source_ids = [int(x) for x in (data.get("source_planet_ids") or [])]
         planet_rows = _logistics_planet_rows(conn, [hub_id, *source_ids])
-        source_weights: Dict[int, int] | None = None
-        skip_empty = False
-        if ships_mode == "auto_cargo":
-            cargo_needed = 0
-            source_weights = {}
-            for sid in source_ids:
-                total = planet_resource_total(planet_rows.get(int(sid)))
-                source_weights[int(sid)] = total
-                cargo_needed += total
-            ships = allocate_auto_cargo_ships(get_planet_ships(hub_id, conn=conn), cargo_needed)
-            skip_empty = True
-        if not ships:
+        ships_stock_by_source: Dict[int, Dict[str, int]] = {}
+        for sid in source_ids:
+            ships_stock_by_source[int(sid)] = get_planet_ships(int(sid), conn=conn)
+        skip_empty = ships_mode == "auto_cargo"
+        manual_ships = ships if ships_mode == "manual" else None
+        if ships_mode == "manual" and not ships:
             base["block_reason"] = "no_ships"
             return base
-        base["ships_used"] = dict(ships)
         route_ok, route_reason, route_legs = build_collect_route(
             origin_planet_id=hub_id,
             source_planet_ids=source_ids,
             planet_rows_by_id=planet_rows,
-            ships=ships,
+            ships_stock_by_source=ships_stock_by_source,
             free_fleet_slots=int(slots["free"]),
             player_id=int(user_id),
-            source_weights=source_weights,
+            ships_selection_mode=ships_mode,
+            manual_ships=manual_ships,
+            speed_percent=speed_percent,
             skip_empty_ship_legs=skip_empty,
             skip_invalid_planets=skip_empty,
         )
         if route_ok and route_legs:
-            origin_row = planet_rows.get(hub_id) or dict(planet)
+            ships_used: Dict[str, int] = {}
             for leg in route_legs:
+                for sk, qty in (leg.get("ships") or {}).items():
+                    ships_used[str(sk)] = int(ships_used.get(str(sk), 0)) + int(qty)
+            base["ships_used"] = ships_used
+            for leg in route_legs:
+                origin_row = planet_rows.get(int(leg["origin_planet_id"])) or {}
+                cargo_deliverable = calculate_loaded_resources(leg.get("resources"))
                 leg_previews = build_fleet_send_preview(
                     player_id=int(user_id),
                     origin_planet=origin_row,
                     target_galaxy=int(leg["galaxy"]),
                     target_system=int(leg["system"]),
                     target_position=int(leg["position"]),
-                    mission_type="collect",
+                    mission_type="transport",
                     ships=leg["ships"],
-                    resources={},
+                    resources=cargo_deliverable,
                     speed_percent=speed_percent,
                     conn=conn,
                 )
@@ -10320,11 +10319,12 @@ def _build_logistics_preview(
                 legs.append(
                     {
                         "planet_id": int(leg["planet_id"]),
+                        "origin_planet_id": int(leg["origin_planet_id"]),
                         "name": str(prow.get("name") or ""),
                         "coordinates": format_coordinates(
-                            int(leg["galaxy"]),
-                            int(leg["system"]),
-                            int(leg["position"]),
+                            int(prow.get("galaxy") or 0),
+                            int(prow.get("system") or 0),
+                            int(prow.get("position") or 0),
                         ),
                         "flight_seconds": int(leg_previews.get("flight_seconds") or 0),
                         "cargo_total": int(leg_previews.get("cargo_total") or 0),
@@ -10333,7 +10333,8 @@ def _build_logistics_preview(
                         "fuel_cost": int(leg_previews.get("fuel_cost") or 0),
                         "can_send": bool(leg_previews.get("can_send")),
                         "block_reason": str(leg_previews.get("block_reason") or ""),
-                        "resources": None,
+                        "resources": cargo_deliverable,
+                        "ships": dict(leg["ships"]),
                     }
                 )
     elif mode == "distribute":
