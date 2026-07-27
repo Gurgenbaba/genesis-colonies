@@ -5198,6 +5198,7 @@ def imperial_directives_view():
 @app.route("/api/story/state")
 @require_login
 def api_story_state():
+    """Read-only story snapshot for UI focus — never ensure (write lock / hang on tab)."""
     user_id = int(session["user_id"])
     from game.story.service import get_story_state
 
@@ -5208,6 +5209,7 @@ def api_story_state():
         story = get_story_state(
             user_id,
             conn=conn,
+            ensure=False,
             focus_pack_id=focus_pack,
             focus_arc_id=focus_arc,
         )
@@ -5361,7 +5363,7 @@ def api_story_free_shop_redeem():
     story: Dict[str, Any] = {}
     conn2 = db()
     try:
-        story = get_story_state(user_id, conn=conn2)
+        story = get_story_state(user_id, conn=conn2, ensure=False)
     finally:
         conn2.close()
 

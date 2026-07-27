@@ -2821,7 +2821,18 @@ def test_main_js_story_tts_abort_and_stop_on_focus():
     focus = src.split('closest("[data-story-focus-arc]")')[1].split("data-story-tts-play")[0]
     assert "_storyTtsStop()" in focus
     assert "_storyFocusSave" in focus
+    assert "skipAutoSpeak: true" in focus
+    assert "parseStoryOpsPageState()" in focus
     render_tail = src.split("const fp = _storyTtsFingerprint({ focus })")[1].split("function bindStoryOpsOnce")[0]
     assert "fpChanged" in render_tail
+    assert "skipAutoSpeak" in render_tail
     assert "_storyTtsStop()" in render_tail
     assert "_storyTtsScheduleAutoSpeak" in render_tail
+
+
+def test_app_story_state_api_is_read_only_ensure():
+    """Arc/chapter tabbing must not run ensure_player_story (SQLite write hang)."""
+    src = _read("app.py")
+    fn = src.split("def api_story_state():")[1].split("def api_story_tts():")[0]
+    assert "ensure=False" in fn
+    assert "get_story_state(" in fn

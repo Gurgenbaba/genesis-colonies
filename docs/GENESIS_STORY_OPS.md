@@ -168,7 +168,7 @@ Default: narrative Rewards **auto-grant** beim Reward-Beat (kein Claim-UI wie Di
 - **Nav:** rechte Meta-Leiste unter **Community** (nicht KOMMANDO links — Platz)
 - Sidebar-Badge bei aktiver Transmission/Choice
 - Kontakt: **sprechender Kreis-Orb** (Wellen-Ringe + EQ bei TTS `is-speaking`)
-- **Neural Contact Voice:** `edge-tts` (DE: **KillianNeural**, EN: ChristopherNeural) via `POST /api/story/tts` → MP3-Cache. Prosody **v5**: Plain-Text, Absatz-Pausen via `…`, Rate/Pitch `-6%`/`-3Hz`. Client: **AbortController + Session-Token** (Stop/Tabben killt in-flight Fetch), Auto-Speak Debounce 350ms. Override: `STORY_TTS_VOICE` / `STORY_TTS_RATE` / `STORY_TTS_PITCH`. Fallback Browser-TTS.
+- **Neural Contact Voice:** `edge-tts` (DE: **KillianNeural**, EN: ChristopherNeural) via `POST /api/story/tts` → MP3-Cache. Prosody **v5**: Plain-Text, Absatz-Pausen via `…`, Rate/Pitch `-6%`/`-3Hz`. Client: **AbortController + Session-Token** (Stop/Tabben killt in-flight Fetch), Auto-Speak Debounce 350ms; **Arc-Tab lokal** (`skipAutoSpeak`, kein ensure). `/api/story/state` is **read-only** (`ensure=False`). Override: `STORY_TTS_VOICE` / `STORY_TTS_RATE` / `STORY_TTS_PITCH`. Fallback Browser-TTS.
 - PJAX: `GC.fetchGameAction` → `{ ok, state, story }` → `applyActionState` + lokales `_renderStoryOpsState`; TTS stoppt in `cleanupPage`
 - Kein `location.reload()`
 

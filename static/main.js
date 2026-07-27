@@ -19025,7 +19025,10 @@
     const prefs = _storyTtsLoadPrefs();
     const fpChanged = fp !== _storyTtsLastFingerprint;
     const shouldAuto = opts.forceSpeak
-      || (prefs.auto && beat && (beat.type === "transmission" || beat.type === "choice")
+      || (!opts.skipAutoSpeak
+        && prefs.auto
+        && beat
+        && (beat.type === "transmission" || beat.type === "choice")
         && fpChanged);
     // Focus/beat change: kill leftover audio immediately (tabbing must not stack voices).
     if (fpChanged) {
@@ -19055,12 +19058,27 @@
         const packId = focusArc.getAttribute("data-pack-id") || "";
         const arcId = focusArc.getAttribute("data-arc-id") || "";
         if (packId && arcId) {
+          // Stop TTS immediately — never wait on /api/story/state or neural synth while tabbing.
           _storyTtsStop();
           _storyFocusSave(packId, arcId);
+          const local = parseStoryOpsPageState();
+          if (local && Array.isArray(local.arcs)) {
+            const found = local.arcs.find((a) => (
+              a && a.pack_id === packId && a.arc_id === arcId
+            ));
+            if (found) {
+              const next = Object.assign({}, local, { focus: found });
+              // skipAutoSpeak: tabbing must not queue edge-tts and freeze the server/UI.
+              _renderStoryOpsState(next, { forceSpeak: false, skipAutoSpeak: true });
+              return;
+            }
+          }
           try {
             const q = `pack_id=${encodeURIComponent(packId)}&arc_id=${encodeURIComponent(arcId)}`;
             const data = await GC.fetchJSON(`/api/story/state?${q}`, { cache: "no-store" });
-            if (data && data.story) _renderStoryOpsState(data.story, { forceSpeak: false });
+            if (data && data.story) {
+              _renderStoryOpsState(data.story, { forceSpeak: false, skipAutoSpeak: true });
+            }
           } catch (_) {}
         }
         return;
