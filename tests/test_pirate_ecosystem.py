@@ -85,7 +85,9 @@ def test_heat_clamps_and_band_change(pirate_db):
         conn.close()
 
 
-def test_ai_kill_switch_default_off(pirate_db):
+def test_ai_kill_switch_admin_choice_always_wins(pirate_db, monkeypatch):
+    """Admin Soft-On/Off in runtime_state always wins, regardless of environment."""
+    monkeypatch.setenv("APP_ENV", "development")
     conn = db()
     try:
         assert is_pirates_ai_enabled(conn=conn) is False
@@ -94,6 +96,26 @@ def test_ai_kill_switch_default_off(pirate_db):
         assert is_pirates_ai_enabled(conn=conn) is True
         set_pirates_ai_enabled(False, conn=conn)
         conn.commit()
+        assert is_pirates_ai_enabled(conn=conn) is False
+    finally:
+        conn.close()
+
+
+def test_ai_default_follows_environment_when_admin_never_chose(pirate_db, monkeypatch):
+    """GC-2611: no admin choice yet → default follows is_production(), not a hard False."""
+    conn = db()
+    try:
+        monkeypatch.setenv("APP_ENV", "development")
+        assert is_pirates_ai_enabled(conn=conn) is False
+
+        monkeypatch.setenv("APP_ENV", "production")
+        assert is_pirates_ai_enabled(conn=conn) is True
+
+        # Once an admin has made an explicit choice, it wins regardless of env.
+        set_pirates_ai_enabled(False, conn=conn)
+        conn.commit()
+        assert is_pirates_ai_enabled(conn=conn) is False
+        monkeypatch.setenv("APP_ENV", "development")
         assert is_pirates_ai_enabled(conn=conn) is False
     finally:
         conn.close()
@@ -469,17 +491,24 @@ def test_admin_pirates_panel_contract():
     assert 'data-admin-panel="pirates"' in html
     assert "data-admin-action=\"pirates-refresh\"" in html
     assert "data-admin-action=\"pirates-force-spawn\"" in html
+    assert "data-admin-action=\"pirates-force-tick\"" in html
     js = (ROOT / "static/admin.js").read_text(encoding="utf-8")
     assert "loadPiratesAdmin" in js
     assert "/api/admin/pirates" in js
     assert "forceSpawnPiratesAdmin" in js
     assert "/api/admin/pirates/force-spawn" in js
+    assert "forceTickPiratesAdmin" in js
+    assert "/api/admin/pirates/force-tick" in js
     for loc in ("de", "en", "es", "fr", "pl", "pt", "ru", "tr"):
         data = json.loads((ROOT / "locales" / f"{loc}.json").read_text(encoding="utf-8"))
         assert "admin_pirates_title" in data
         assert "admin_pirates_force_spawn" in data
+        assert "admin_pirates_force_tick" in data
+        assert "admin_pirates_force_tick_done" in data
         assert "admin_pirates_kpi_bots" in data
         assert "admin_pirates_kpi_spies" in data
+        assert "admin_pirates_kpi_economy_tick" in data
+        assert "admin_pirates_kpi_builds_finished" in data
 
 
 @pytest.fixture()
@@ -551,9 +580,22 @@ def test_admin_pirates_api_and_ai_toggle(pirate_admin_client):
     r3 = client.get("/api/admin/pirates")
     assert int(r3.get_json().get("live_bases") or 0) >= 1
 
+    tick = client.post("/api/admin/pirates/force-tick", json={})
+    assert tick.status_code == 200
+    tick_data = tick.get_json()
+    assert tick_data["ok"] is True
+    assert tick_data["economy_steps"] == 6
+
+    r4 = client.get("/api/admin/pirates")
+    assert int(r4.get_json()["kpis"].get("bot_economy_tick_in_log") or 0) >= 6
+
     off = client.post("/api/admin/pirates/ai", json={"enabled": False})
     assert off.status_code == 200
     assert off.get_json()["ai_enabled"] is False
+
+    tick_off = client.post("/api/admin/pirates/force-tick", json={})
+    assert tick_off.status_code == 400
+    assert tick_off.get_json()["error"] == "ai_disabled"
 
     hard = client.post("/api/admin/pirates/ai", json={"mode": "hard"})
     assert hard.status_code == 200
@@ -1254,6 +1296,97 @@ def test_bot_economy_enqueues_building(pirate_db):
         logs = recent_action_log(conn, kind="bot_economy_tick", limit=5)
         assert any(l.get("bot_player_id") == player_id for l in logs)
         commit(conn)
+    finally:
+        conn.close()
+
+
+def test_bot_defense_boost_uses_real_timekeeper(pirate_db):
+    """GC-2616: pirate bots share `plan_passive_planet_tick` with inactive
+    autoplay, so the defense/shipyard Timekeeper auto-boost (auto-credit when
+    empty, then auto-apply) must fire for AI accounts too — same ledger, no
+    parallel speed mechanic per faction (Rule 16)."""
+    from game import timekeeper
+    from game.db import begin_write_transaction, commit
+    from game.pirates.admin import admin_set_ai
+    from game.pirates.economy import plan_bot_planet_tick
+    import time
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        res = admin_set_ai(conn, True)
+        bot = next(b for b in res["bots"] if b["faction_key"] == "iron_collective")
+        planet_id = int(bot["planet_id"])
+        player_id = int(bot["player_id"])
+        # Defense build requires an already-built Defense Factory (GC-039);
+        # raise it so `try_build_defense` actually succeeds this tick.
+        conn.execute(
+            "UPDATE planet_buildings SET defense_factory = 5 WHERE planet_id = ?;",
+            (planet_id,),
+        )
+        assert timekeeper.get_balance(player_id, conn=conn) == 0
+        planet = dict(
+            conn.execute(
+                "SELECT * FROM planets WHERE id = ? LIMIT 1;", (planet_id,)
+            ).fetchone()
+        )
+
+        out = plan_bot_planet_tick(conn, bot, planet, now=time.time(), is_home=True)
+        assert out.get("defense"), "defense job must have been enqueued"
+
+        # Balance was auto-refilled to 10h and then partially spent applying the boost.
+        balance_after = timekeeper.get_balance(player_id, conn=conn)
+        assert 0 <= balance_after < 36_000
+
+        tx = conn.execute(
+            """
+            SELECT source FROM timekeeper_transactions
+            WHERE player_id = ? ORDER BY id ASC;
+            """,
+            (player_id,),
+        ).fetchall()
+        sources = [str(r["source"]) for r in tx]
+        assert "autoplay_replenish" in sources
+        assert any(s.startswith("apply:defense") for s in sources)
+
+        # Boost should have force-finished the queued defense job in-tick.
+        built = conn.execute(
+            "SELECT COALESCE(SUM(amount), 0) AS n FROM planet_defense WHERE planet_id = ?;",
+            (planet_id,),
+        ).fetchone()
+        assert int(built["n"] or 0) > 0
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_admin_pirates_payload_economy_kpis(pirate_db):
+    """GC-2611: economy KPIs are derived from the existing pirate_action_log, no new log system."""
+    from game.db import begin_write_transaction, commit
+    from game.pirates.admin import admin_set_ai, build_admin_pirates_payload
+    from game.pirates.economy import plan_bot_planet_tick
+    import time
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        res = admin_set_ai(conn, True)
+        bot = next(b for b in res["bots"] if b["faction_key"] == "iron_collective")
+        planet_id = int(bot["planet_id"])
+        planet = dict(
+            conn.execute(
+                "SELECT * FROM planets WHERE id = ? LIMIT 1;", (planet_id,)
+            ).fetchone()
+        )
+        out = plan_bot_planet_tick(conn, bot, planet, now=time.time(), is_home=True)
+        commit(conn)
+
+        payload = build_admin_pirates_payload(conn, log_limit=80)
+        kpis = payload["kpis"]
+        assert kpis["bot_economy_tick_in_log"] >= 1
+        if out.get("build"):
+            assert kpis["builds_finished_in_log"] >= 1
+        assert kpis["builds_finished_in_log"] <= kpis["bot_economy_tick_in_log"]
     finally:
         conn.close()
 

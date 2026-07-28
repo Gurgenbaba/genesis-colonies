@@ -13638,6 +13638,11 @@ body.gc-techtree-media-zoom-open{
   border-color: rgba(70, 229, 255, 0.75);
   background: rgba(2, 12, 24, 0.97);
 }
+.galaxy-ring-slot-status:not(.galaxy-ring-slot-status--inspector) .galaxy-ring-status-chip--pulse{
+  color: #6dffb0;
+  border-color: rgba(90, 240, 160, 0.75);
+  background: rgba(2, 20, 12, 0.97);
+}
 .galaxy-ring-slot-status:not(.galaxy-ring-slot-status--inspector) .galaxy-ring-status-chip--strong{
   color: #ff7a58;
   border-color: rgba(255, 100, 64, 0.85);
@@ -13669,6 +13674,11 @@ body.gc-techtree-media-zoom-open{
   color: rgba(180, 200, 220, 0.9);
   background: rgba(80, 96, 120, 0.22);
   border-color: rgba(140, 160, 190, 0.38);
+}
+.galaxy-ring-status-chip--pulse{
+  color: rgba(120, 240, 170, 0.96);
+  background: rgba(30, 160, 100, 0.18);
+  border-color: rgba(90, 220, 150, 0.45);
 }
 .galaxy-ring-status-chip--ai{
   color: rgba(120, 220, 200, 0.96);

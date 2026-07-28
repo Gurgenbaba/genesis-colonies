@@ -26,6 +26,7 @@ ROSTER_KEY = "inactive_autoplay_roster"
 SESSIONS_KEY = "inactive_autoplay_sessions"  # legacy merge
 CURSOR_KEY = "inactive_autoplay_cursor"
 TICK_CURSOR_KEY = "inactive_autoplay_tick_cursor"
+PRESENCE_CURSOR_KEY = "inactive_autoplay_presence_cursor"
 
 # Soft caps so queues turn over on fleet-cron cadence (still slower than pirate 90s).
 INACTIVE_BUILD_DURATION_CAP = 900  # 15 min
@@ -43,8 +44,14 @@ INACTIVE_RESOURCE_FLOOR = {
 DEFAULT_REVISIT_SEC = 36 * 3600  # 36h — stay under 3-day inactive badge
 DEFAULT_WAKE_INTERVAL_SEC = 10 * 60
 DEFAULT_BATCH = 3
-DEFAULT_MAX_ROSTER = 40
+DEFAULT_MAX_ROSTER = 60
 DEFAULT_TICK_PER_CRON = 8
+# GC-2617: how many roster members may look "online" (fresh last_seen) at the
+# same instant, as a percent of the real registered player base — keeps a
+# small server from ever showing an implausible wall of simultaneous logins.
+DEFAULT_ONLINE_PERCENT = 15.0
+MIN_ONLINE_VISIBLE = 2
+MAX_ONLINE_VISIBLE = 40
 
 ENABLED_ENV = "GC_INACTIVE_AUTOPLAY_ENABLED"
 BATCH_ENV = "GC_INACTIVE_AUTOPLAY_BATCH"
@@ -52,6 +59,7 @@ INTERVAL_ENV = "GC_INACTIVE_AUTOPLAY_INTERVAL_SEC"
 REVISIT_ENV = "GC_INACTIVE_AUTOPLAY_REVISIT_SEC"
 MAX_ROSTER_ENV = "GC_INACTIVE_AUTOPLAY_MAX_SESSIONS"  # keep env name for ops
 TICK_ENV = "GC_INACTIVE_AUTOPLAY_TICK_PER_CRON"
+ONLINE_PERCENT_ENV = "GC_INACTIVE_AUTOPLAY_ONLINE_PERCENT"
 # Legacy env still accepted for docs; sessions are sticky now.
 SESSION_ENV = "GC_INACTIVE_AUTOPLAY_SESSION_SEC"
 
@@ -96,6 +104,35 @@ def tick_per_cron() -> int:
     return max(1, min(20, _env_int(TICK_ENV, DEFAULT_TICK_PER_CRON)))
 
 
+def online_percent() -> float:
+    """GC-2617: max share of the real registered player base that may look
+    'online' from inactive-autoplay presence at any single instant."""
+    raw = os.environ.get(ONLINE_PERCENT_ENV)
+    try:
+        val = float(raw) if raw not in (None, "") else DEFAULT_ONLINE_PERCENT
+    except (TypeError, ValueError):
+        val = DEFAULT_ONLINE_PERCENT
+    return max(1.0, min(50.0, val))
+
+
+def online_visible_cap(*, conn=None) -> int:
+    """GC-2617: how many sticky-roster accounts may be presence-touched (i.e.
+    look 'online') in the same tick. Scaled to the real registered player
+    count instead of the roster cap, so a small universe never shows an
+    implausible wall of simultaneous logins regardless of roster size.
+    """
+    if conn is None:
+        return MIN_ONLINE_VISIBLE
+    try:
+        from .models import get_registered_player_count
+
+        real = int(get_registered_player_count(conn=conn))
+    except Exception:
+        return MIN_ONLINE_VISIBLE
+    dynamic = int(round(real * online_percent() / 100.0))
+    return max(MIN_ONLINE_VISIBLE, min(MAX_ONLINE_VISIBLE, dynamic))
+
+
 def is_inactive_autoplay_enabled(*, conn=None) -> bool:
     """Soft-On via runtime_state; env GC_INACTIVE_AUTOPLAY_ENABLED=0 forces off."""
     env = os.environ.get(ENABLED_ENV)
@@ -127,14 +164,29 @@ def _save_json(key: str, value: Any, *, conn=None) -> None:
     set_runtime_value(key, json.dumps(value), conn=conn)
 
 
-def _touch_presence(conn, player_id: int, *, now: float) -> None:
+def _touch_presence_bulk(conn, player_ids: Sequence[int], *, now: float) -> None:
+    """Batched `last_seen` refresh for a set of roster members in one query.
+
+    GC-2614 originally touched the *entire* sticky roster here every cron tick
+    ("always online"), but that let the visible online count grow with the
+    roster cap (up to 60+) regardless of how many real players the universe
+    actually has — implausible on a small server. GC-2617: callers now pass a
+    small, dynamically-sized rotating subset (`online_visible_cap`, percent of
+    the real player base) instead of the whole roster, so only that bounded
+    subset ever looks "online" at once while the rest of the roster keeps
+    building silently in the background until its own turn comes up.
+    """
+    ids = sorted({int(pid) for pid in player_ids if int(pid) > 0})
+    if not ids:
+        return
+    placeholders = ",".join("?" * len(ids))
     try:
         conn.execute(
-            "UPDATE players SET last_seen = ? WHERE id = ?;",
-            (float(now), int(player_id)),
+            f"UPDATE players SET last_seen = ? WHERE id IN ({placeholders});",
+            [float(now), *ids],
         )
     except Exception:
-        logger.exception("inactive autoplay last_seen touch failed player=%s", player_id)
+        logger.exception("inactive autoplay bulk presence touch failed")
 
 
 def _is_excluded_ai(conn, player_id: int) -> bool:
@@ -267,7 +319,17 @@ def _load_roster(conn=None) -> List[Dict[str, Any]]:
             if pid <= 0 or pid in seen:
                 continue
             seen.add(pid)
-            roster.append({"player_id": pid, "joined_at": item.get("joined_at")})
+            roster.append(
+                {
+                    "player_id": pid,
+                    "joined_at": item.get("joined_at"),
+                    "last_ticked_at": item.get("last_ticked_at"),
+                    "last_action": item.get("last_action"),
+                    "builds_done": int(item.get("builds_done") or 0),
+                    "research_done": int(item.get("research_done") or 0),
+                    "defense_done": int(item.get("defense_done") or 0),
+                }
+            )
 
     # Migrate legacy short sessions into sticky roster once.
     legacy = _load_json(SESSIONS_KEY, conn=conn)
@@ -287,6 +349,11 @@ def _load_roster(conn=None) -> List[Dict[str, Any]]:
                 {
                     "player_id": pid,
                     "joined_at": item.get("started_at") or item.get("joined_at"),
+                    "last_ticked_at": None,
+                    "last_action": None,
+                    "builds_done": 0,
+                    "research_done": 0,
+                    "defense_done": 0,
                 }
             )
             changed = True
@@ -314,7 +381,17 @@ def _prune_roster(conn, roster: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         ).fetchone()
         if not row:
             continue
-        kept.append({"player_id": pid, "joined_at": item.get("joined_at")})
+        kept.append(
+            {
+                "player_id": pid,
+                "joined_at": item.get("joined_at"),
+                "last_ticked_at": item.get("last_ticked_at"),
+                "last_action": item.get("last_action"),
+                "builds_done": int(item.get("builds_done") or 0),
+                "research_done": int(item.get("research_done") or 0),
+                "defense_done": int(item.get("defense_done") or 0),
+            }
+        )
     return kept
 
 
@@ -356,6 +433,24 @@ def _ensure_resource_floor(conn, planet_id: int) -> Dict[str, int]:
     }
 
 
+def _describe_last_action(results: Sequence[Mapping[str, Any]]) -> Optional[str]:
+    """Human-readable summary of the most recent enqueue for admin/report display."""
+    for res in reversed(list(results)):
+        build = res.get("build")
+        if build:
+            return f"{build.get('building_type')} -> Lvl {build.get('target_level')}"
+        research = res.get("research")
+        if research:
+            return f"{research.get('tech_key')} -> Lvl {research.get('target_level')}"
+        defense = res.get("defense")
+        if defense:
+            return f"{defense.get('defense_key')} x{defense.get('amount')}"
+        ships = res.get("ships")
+        if ships:
+            return f"{ships.get('ship_key')} x{ships.get('amount')}"
+    return None
+
+
 def _run_player_economy(
     conn,
     player_id: int,
@@ -364,7 +459,6 @@ def _run_player_economy(
 ) -> Dict[str, Any]:
     from .models import get_homeworld, get_planets_by_player
 
-    _touch_presence(conn, player_id, now=now)
     home = get_homeworld(player_id, conn=conn)
     if not home:
         return {"ok": False, "error": "no_homeworld", "player_id": player_id}
@@ -415,14 +509,132 @@ def _run_player_economy(
         for r in results
     )
     finished_any = any((r.get("finished") or {}) for r in results)
+    finished_totals = {"buildings": 0, "research": 0, "defense": 0, "shipyard": 0}
+    for r in results:
+        fin = r.get("finished") or {}
+        for key in finished_totals:
+            try:
+                finished_totals[key] += int(fin.get(key) or 0)
+            except (TypeError, ValueError):
+                continue
     return {
         "ok": True,
         "player_id": player_id,
         "economy": results,
         "enqueued": enqueued,
         "finished": finished_any,
+        "finished_totals": finished_totals,
+        "last_action": _describe_last_action(results),
         "resource_floor": floor,
     }
+
+
+def get_roster_snapshot(*, conn=None) -> List[Dict[str, Any]]:
+    """Public accessor for admin/API surfaces (GC-2608) — do not mutate."""
+    return _load_roster(conn=conn)
+
+
+def get_last_worker_run(*, conn=None) -> Dict[str, Any]:
+    """Public accessor for the last `run_inactive_autoplay_tick` snapshot (GC-2608)."""
+    data = _load_json(WORKER_LAST_KEY, conn=conn)
+    return data if isinstance(data, dict) else {}
+
+
+def _apply_economy_result_to_roster_item(
+    item: Dict[str, Any], result: Mapping[str, Any]
+) -> None:
+    """GC-2615: accumulate what a roster member actually did while sticky."""
+    totals = result.get("finished_totals") or {}
+    item["builds_done"] = int(item.get("builds_done") or 0) + int(
+        totals.get("buildings") or 0
+    )
+    item["research_done"] = int(item.get("research_done") or 0) + int(
+        totals.get("research") or 0
+    )
+    item["defense_done"] = int(item.get("defense_done") or 0) + int(
+        totals.get("defense") or 0
+    )
+    action = result.get("last_action")
+    if action:
+        item["last_action"] = action
+
+
+def _send_autoplay_report(conn, item: Mapping[str, Any]) -> None:
+    """GC-2615: one inbox message per roster session — visible activity instead
+    of a silent tick. Reuses the canonical Inbox owner (`messages.create_message`,
+    same pattern as `alliance._notify_alliance_members`); no parallel feed.
+    """
+    pid = int(item.get("player_id") or 0)
+    builds = int(item.get("builds_done") or 0)
+    research = int(item.get("research_done") or 0)
+    defense = int(item.get("defense_done") or 0)
+    if pid <= 0 or (builds <= 0 and research <= 0 and defense <= 0):
+        return
+    try:
+        from .i18n import get_player_locale, tr
+        from .messages import create_message
+
+        loc = get_player_locale(pid, conn=conn)
+        lines = []
+        if builds > 0:
+            lines.append(
+                tr(
+                    "inactive_autoplay_report_line_builds",
+                    "- %(count)s Gebäude-Ausbauten abgeschlossen",
+                    locale=loc,
+                    count=builds,
+                )
+            )
+        if research > 0:
+            lines.append(
+                tr(
+                    "inactive_autoplay_report_line_research",
+                    "- %(count)s Forschungen abgeschlossen",
+                    locale=loc,
+                    count=research,
+                )
+            )
+        if defense > 0:
+            lines.append(
+                tr(
+                    "inactive_autoplay_report_line_defense",
+                    "- %(count)s Verteidigungsanlagen gebaut",
+                    locale=loc,
+                    count=defense,
+                )
+            )
+        intro = tr(
+            "inactive_autoplay_report_intro",
+            "Während du offline warst, hat die Kolonieverwaltung deine Kolonie automatisch weitergeführt:",
+            locale=loc,
+        )
+        subject = tr(
+            "inactive_autoplay_report_subject",
+            "Automatisierter Betriebsbericht",
+            locale=loc,
+        )
+        sender = tr(
+            "inactive_autoplay_report_sender",
+            "Kolonieverwaltung",
+            locale=loc,
+        )
+        body = intro + "\n\n" + "\n".join(lines)
+        create_message(
+            pid,
+            subject,
+            body,
+            category="system",
+            sender_name=sender,
+            metadata={
+                "kind": "inactive_autoplay_report",
+                "builds_done": builds,
+                "research_done": research,
+                "defense_done": defense,
+            },
+            conn=conn,
+        )
+    except Exception:
+        logger.exception("inactive autoplay report send failed player=%s", pid)
 
 
 def seconds_until_wake_allowed(*, now: Optional[float] = None, conn=None) -> float:
@@ -448,36 +660,75 @@ def run_inactive_autoplay_tick(
     force: bool = False,
     source: str = "fleet_worker",
 ) -> Dict[str, Any]:
-    """Grow sticky roster; round-robin economy+presence every fleet cron."""
+    """Grow sticky roster; round-robin economy+presence every fleet cron.
+
+    GC-2609: once the roster hits its cap, the `batch`-oldest members (by
+    `last_ticked_at`) are evicted back to the dormant pool before new accounts
+    join (LRU rotation) — so coverage cycles through the *entire* dormant
+    pool over time instead of the first N accounts holding the roster forever.
+    """
     ts = float(now if now is not None else _now())
     if not is_inactive_autoplay_enabled(conn=conn):
         return {"ok": False, "error": "disabled", "woke": [], "sessions": []}
 
     roster = _prune_roster(conn, _load_roster(conn=conn))
     woke: List[Dict[str, Any]] = []
+    evicted_count = 0
     wait = 0.0 if force else seconds_until_wake_allowed(now=ts, conn=conn)
-    room = max_concurrent_sessions() - len(roster)
 
-    if wait <= 0 and room > 0:
-        batch = min(wake_batch_size(), room)
-        active_ids = {int(s["player_id"]) for s in roster}
-        candidates = list_dormant_candidates(
-            conn, now=ts, exclude_ids=active_ids, limit=400
-        )
-        picks = _round_robin_pick(conn, candidates, count=batch, cursor_key=CURSOR_KEY)
-        for cand in picks:
-            pid = int(cand["player_id"])
-            roster.append({"player_id": pid, "joined_at": ts})
-            try:
-                res = _run_player_economy(conn, pid, now=ts)
-                woke.append(res)
-            except Exception:
-                logger.exception("inactive autoplay wake failed player=%s", pid)
-        _save_json(
-            WORKER_LAST_KEY,
-            {"ok": True, "at": ts, "source": source, "woke": len(woke)},
-            conn=conn,
-        )
+    if wait <= 0:
+        batch = wake_batch_size()
+        room = max_concurrent_sessions() - len(roster)
+        if room <= 0:
+            evict_n = min(batch, len(roster))
+            if evict_n > 0:
+                roster.sort(
+                    key=lambda item: float(
+                        item.get("last_ticked_at") or item.get("joined_at") or 0
+                    )
+                )
+                to_evict = roster[:evict_n]
+                roster = roster[evict_n:]
+                evicted_count = evict_n
+                room = evict_n
+                for evicted_item in to_evict:
+                    _send_autoplay_report(conn, evicted_item)
+        if room > 0:
+            batch = min(batch, room)
+            active_ids = {int(s["player_id"]) for s in roster}
+            candidates = list_dormant_candidates(
+                conn, now=ts, exclude_ids=active_ids, limit=400
+            )
+            picks = _round_robin_pick(conn, candidates, count=batch, cursor_key=CURSOR_KEY)
+            for cand in picks:
+                pid = int(cand["player_id"])
+                new_item: Dict[str, Any] = {
+                    "player_id": pid,
+                    "joined_at": ts,
+                    "last_ticked_at": ts,
+                    "last_action": None,
+                    "builds_done": 0,
+                    "research_done": 0,
+                    "defense_done": 0,
+                }
+                roster.append(new_item)
+                try:
+                    res = _run_player_economy(conn, pid, now=ts)
+                    woke.append(res)
+                    _apply_economy_result_to_roster_item(new_item, res)
+                except Exception:
+                    logger.exception("inactive autoplay wake failed player=%s", pid)
+            _save_json(
+                WORKER_LAST_KEY,
+                {
+                    "ok": True,
+                    "at": ts,
+                    "source": source,
+                    "woke": len(woke),
+                    "evicted": evicted_count,
+                },
+                conn=conn,
+            )
 
     # Always tick a RR slice of the sticky roster (autonomous building).
     tick_n = min(tick_per_cron(), len(roster))
@@ -487,14 +738,46 @@ def run_inactive_autoplay_tick(
     # Avoid double-running just-woke players in the same tick.
     woke_ids = {int(w["player_id"]) for w in woke}
     session_results: List[Dict[str, Any]] = list(woke)
+    ticked_ids: Set[int] = set(woke_ids)
     for item in to_tick:
         pid = int(item["player_id"])
         if pid in woke_ids:
             continue
         try:
-            session_results.append(_run_player_economy(conn, pid, now=ts))
+            res = _run_player_economy(conn, pid, now=ts)
+            session_results.append(res)
+            _apply_economy_result_to_roster_item(item, res)
+            ticked_ids.add(pid)
         except Exception:
             logger.exception("inactive autoplay roster tick failed player=%s", pid)
+
+    if ticked_ids:
+        for item in roster:
+            if int(item["player_id"]) in ticked_ids:
+                item["last_ticked_at"] = ts
+
+    # GC-2617: presence ("online") is bounded independently of roster size,
+    # but freshly-woken accounts are always touched immediately — that one
+    # exception is required so a just-woken account instantly clears the
+    # multi-day ranking-inactive flag (`RANKING_INACTIVE_AFTER_SEC`) instead
+    # of waiting for its turn in the rotation. Ongoing RR economy ticks
+    # (`ticked_ids`) do NOT force a presence touch — the whole roster keeps
+    # building in the background regardless of who currently "looks online".
+    # On top of the wake exception, a small, independently-rotating subset of
+    # the roster (its own cursor, sized by `online_visible_cap` = percent of
+    # the *real* player base) gets touched each tick — that rotation is what
+    # actually bounds the simultaneous "online" count on a small server,
+    # instead of it scaling with the roster cap (which can be much larger,
+    # e.g. 60), and it still cycles every standing member through "online"
+    # often enough to stay well under the multi-day ranking threshold.
+    presence_ids: Set[int] = set(woke_ids)
+    online_room = online_visible_cap(conn=conn) - len(presence_ids)
+    if online_room > 0 and roster:
+        extra = _round_robin_pick(
+            conn, roster, count=online_room, cursor_key=PRESENCE_CURSOR_KEY
+        )
+        presence_ids.update(int(item["player_id"]) for item in extra)
+    _touch_presence_bulk(conn, presence_ids, now=ts)
 
     _save_roster(roster, conn=conn)
 
@@ -503,11 +786,14 @@ def run_inactive_autoplay_tick(
         "source": source,
         "woke": woke,
         "woke_count": len(woke),
+        "evicted_count": evicted_count,
         "expired_count": 0,
         "active_sessions": len(roster),
         "roster_size": len(roster),
         "session_ticks": len(session_results),
         "enqueued": sum(1 for r in session_results if r.get("enqueued")),
+        "presence_visible_now": len(presence_ids),
+        "online_visible_cap": online_visible_cap(conn=conn),
         "wait_sec": wait,
         "revisit_sec": revisit_sec(),
         "tick_per_cron": tick_per_cron(),

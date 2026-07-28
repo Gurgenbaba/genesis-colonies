@@ -15,6 +15,7 @@ from game.fleet_worker import (
     FLEET_WORKER_INTERVAL_SEC,
     FLEET_WORKER_KEY,
     any_due_fleet_movements,
+    get_stage_skip_streak,
     _is_background_maintenance_source,
     _maybe_run_post_fleet_maintenance,
     run_fleet_worker,
@@ -129,6 +130,73 @@ def test_post_fleet_maintenance_runs_on_embedded_cron(fleet_db, monkeypatch):
     assert called["hof"] is True
     assert called["inactive"] is True
     conn.close()
+
+
+def test_post_fleet_maintenance_stage_order_inactive_before_pirates(fleet_db, monkeypatch):
+    """GC-2610: inactive_autoplay must run before the costlier pirates stage."""
+    order: list = []
+
+    def fake_inactive(conn, **kw):
+        order.append("inactive_autoplay")
+        return {"ok": True, "woke_count": 0, "enqueued": 0, "session_ticks": 0}
+
+    def fake_pirates(**kw):
+        order.append("pirates")
+        return {}
+
+    monkeypatch.setattr("game.combat_hof.maybe_sync_combat_hof_incremental", lambda **kw: {"inserted": 0})
+    monkeypatch.setattr(
+        "game.combat_balance_bots.maybe_run_next_scheduled_scenario",
+        lambda **kw: {"ok": True, "skipped": "disabled"},
+    )
+    monkeypatch.setattr("game.world_boss.maybe_tick_world_boss_schedule", lambda **kw: {})
+    monkeypatch.setattr("game.asteroids.maybe_tick_asteroid_schedule", lambda **kw: {})
+    monkeypatch.setattr("game.pirates.bases.maybe_tick_pirate_bases", fake_pirates)
+    monkeypatch.setattr("game.inactive_autoplay.maybe_tick_inactive_autoplay", fake_inactive)
+    monkeypatch.setattr("game.combat.expire_due_debris_fields", lambda **kw: 0)
+
+    conn = db()
+    _maybe_run_post_fleet_maintenance(conn, source="embedded_cron")
+    conn.close()
+
+    assert order == ["inactive_autoplay", "pirates"]
+
+
+def test_post_fleet_maintenance_skip_streak_counters(fleet_db, monkeypatch):
+    """GC-2610: budget skips increment a per-stage streak; a success resets it."""
+    monkeypatch.setenv("GC_POST_FLEET_MAINTENANCE_BUDGET_SEC", "0")
+
+    conn = db()
+    try:
+        assert get_stage_skip_streak("inactive_autoplay", conn=conn) == 0
+        _maybe_run_post_fleet_maintenance(conn, source="embedded_cron")
+        assert get_stage_skip_streak("inactive_autoplay", conn=conn) == 1
+        _maybe_run_post_fleet_maintenance(conn, source="embedded_cron")
+        assert get_stage_skip_streak("inactive_autoplay", conn=conn) == 2
+    finally:
+        conn.close()
+
+    monkeypatch.setenv("GC_POST_FLEET_MAINTENANCE_BUDGET_SEC", "25")
+    monkeypatch.setattr("game.combat_hof.maybe_sync_combat_hof_incremental", lambda **kw: {"inserted": 0})
+    monkeypatch.setattr(
+        "game.combat_balance_bots.maybe_run_next_scheduled_scenario",
+        lambda **kw: {"ok": True, "skipped": "disabled"},
+    )
+    monkeypatch.setattr("game.world_boss.maybe_tick_world_boss_schedule", lambda **kw: {})
+    monkeypatch.setattr("game.asteroids.maybe_tick_asteroid_schedule", lambda **kw: {})
+    monkeypatch.setattr("game.pirates.bases.maybe_tick_pirate_bases", lambda **kw: {})
+    monkeypatch.setattr(
+        "game.inactive_autoplay.maybe_tick_inactive_autoplay",
+        lambda conn, **kw: {"ok": True, "woke_count": 0, "enqueued": 0, "session_ticks": 0},
+    )
+    monkeypatch.setattr("game.combat.expire_due_debris_fields", lambda **kw: 0)
+
+    conn = db()
+    try:
+        _maybe_run_post_fleet_maintenance(conn, source="embedded_cron")
+        assert get_stage_skip_streak("inactive_autoplay", conn=conn) == 0
+    finally:
+        conn.close()
 
 
 def test_post_fleet_maintenance_skipped_on_page_load(fleet_db, monkeypatch):

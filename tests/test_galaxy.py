@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import time
 import uuid
+from pathlib import Path
 
 import pytest
 
@@ -27,6 +28,8 @@ from game.galaxy import (
 )
 from game.models import create_user, db, ensure_player_and_homeworld, get_planets_by_player, init_db
 from game.overview_page import build_planet_meta
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture()
@@ -579,6 +582,101 @@ def test_list_system_exposes_player_status_flags(galaxy_db):
             assert foreign_slot["attack_strength"] is None
     finally:
         conn.close()
+
+
+def test_list_system_recently_active_pulse_flag(galaxy_db):
+    """GC-2612: recently_active is independent of is_ai/inactive and off during vacation."""
+    import time
+
+    from game.db import column_exists
+
+    viewer_id = _create_player()
+    foreign_id = _create_player()
+    conn = db()
+    try:
+        if not column_exists(conn, "players", "last_seen"):
+            pytest.skip("players.last_seen column not present")
+
+        viewer_hw = next(
+            p for p in get_planets_by_player(viewer_id) if int(p.get("is_homeworld") or 0) == 1
+        )
+        foreign_hw = next(
+            p for p in get_planets_by_player(foreign_id) if int(p.get("is_homeworld") or 0) == 1
+        )
+        vcoords = get_planet_coordinates(viewer_hw)
+        g, s = int(vcoords["galaxy"]), int(vcoords["system"])
+        viewer_pos = int(vcoords["position"])
+        foreign_pos = next(p for p in range(1, 16) if p != viewer_pos)
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE planets SET galaxy = ?, system = ?, position = ? WHERE id = ?;",
+            (g, s, foreign_pos, int(foreign_hw["id"])),
+        )
+        cur.execute(
+            "UPDATE players SET last_seen = ? WHERE id = ?;",
+            (int(time.time()) - 300, foreign_id),
+        )
+        conn.commit()
+
+        data = list_system(g, s, conn=conn, viewer_player_id=viewer_id)
+        foreign_slot = next(
+            sl for sl in data["slots"] if int(sl.get("player_id") or 0) == foreign_id
+        )
+        assert foreign_slot["recently_active"] is True
+
+        # Vacation suppresses the pulse chip even while recently active.
+        if column_exists(conn, "players", "vacation_mode_active"):
+            cur.execute(
+                "UPDATE players SET vacation_mode_active = 1 WHERE id = ?;",
+                (foreign_id,),
+            )
+            conn.commit()
+            data = list_system(g, s, conn=conn, viewer_player_id=viewer_id)
+            foreign_slot = next(
+                sl for sl in data["slots"] if int(sl.get("player_id") or 0) == foreign_id
+            )
+            assert foreign_slot["recently_active"] is True
+            assert foreign_slot["vacation_active"] is True
+            cur.execute(
+                "UPDATE players SET vacation_mode_active = 0 WHERE id = ?;",
+                (foreign_id,),
+            )
+            conn.commit()
+
+        # Stale last_seen (beyond the pulse window) turns the flag off again.
+        cur.execute(
+            "UPDATE players SET last_seen = ? WHERE id = ?;",
+            (int(time.time()) - 3 * 3600, foreign_id),
+        )
+        conn.commit()
+        data = list_system(g, s, conn=conn, viewer_player_id=viewer_id)
+        foreign_slot = next(
+            sl for sl in data["slots"] if int(sl.get("player_id") or 0) == foreign_id
+        )
+        assert foreign_slot["recently_active"] is False
+    finally:
+        conn.close()
+
+
+def test_galaxy_pulse_chip_template_and_locale_contract():
+    """GC-2612: pulse chip template + i18n contract across all locales."""
+    import json as _json
+
+    html = (ROOT / "templates/partials/galaxy_slot_status_badges.html").read_text(encoding="utf-8")
+    assert "recently_active" in html
+    assert "galaxy-ring-status-chip--pulse" in html
+    assert "galaxy_status_pulse" in html
+    assert "not slot.vacation_active" in html
+
+    legend = (ROOT / "templates/partials/galaxy_ring_view.html").read_text(encoding="utf-8")
+    assert "galaxy-ring-status-chip--pulse" in legend
+    assert "galaxy_legend_pulse" in legend
+
+    for loc in ("de", "en", "es", "fr", "pl", "pt", "ru", "tr"):
+        data = _json.loads((ROOT / "locales" / f"{loc}.json").read_text(encoding="utf-8"))
+        assert "galaxy_status_pulse" in data
+        assert "galaxy_status_pulse_hint" in data
+        assert "galaxy_legend_pulse" in data
 
 
 def _galaxy_client(monkeypatch):

@@ -14,7 +14,8 @@ Single **Imperium time account** — empire-wide, manual apply only, separate fr
 
 ## Rules
 
-- Never auto-debit on poll or page load.
+- Never auto-debit on poll or page load **for a human-driven request** (HUD/⚡ flow below).
+- Exception — autoplay accounts (EPIC-26, GC-2616): `game/auto_empire.py::_auto_boost_timekeeper` auto-credits + auto-applies for **inactive sticky-roster** accounts (`game/inactive_autoplay.py`) and **pirate AI bots** (`game/pirates/economy.py`) only, never for a human player mid-session. Both share the one `plan_passive_planet_tick` owner — no parallel speed mechanic per faction (Rule 16).
 - Apply only via **⚡** on the **active mini-queue strip** (Build/Research/Shipyard/Defense) or PE queue list → `/api/timekeeper/apply` with `mode: max` (server clamps to `min(balance, active_job_remaining)`).
 - **One ⚡ per job** — no second Apply on building/research hero slots or PE tech cards.
 - Domains: `build`, `research`, `shipyard`, `defense`, `planet_research`, `ascension`.
@@ -42,6 +43,14 @@ Single **Imperium time account** — empire-wide, manual apply only, separate fr
 Response: `{ ok, reason, state, timekeeper, seconds_applied }`
 
 `POST /api/inventory/use` with `deposit_domain: "build"|"research"|"shipyard"|"all"` deposits **all** owned legacy time items for that domain (or every depositable domain when `"all"`) into Timekeeper in one action (inventory Alle / Bau / Forschung / Werft chips).
+
+## Autoplay auto-boost (GC-2616)
+
+Defense/Shipyard queues have no `duration_cap` in `plan_passive_planet_tick` (build/research already force-complete same-tick via `duration_cap` + `chain_limit`, so an auto-apply there would spend balance with no visible extra effect). For autoplay accounts only:
+
+1. After a successful `try_build_defense`/`try_build_ships` enqueue, `_auto_boost_timekeeper(conn, player_id, planet_id, domain)` runs.
+2. If `timekeeper.get_balance(player_id) <= 0`: `timekeeper.credit(player_id, 36_000, source="autoplay_replenish")` (10h refill).
+3. `timekeeper.apply_timekeeper(player_id, domain, planet_id=planet_id, mode="max")` — same ledger/API path a manually playing owner uses; if the account's human owner returns to active play, their own Timekeeper history shows these entries (`source="autoplay_replenish"` / `source` starting with `apply:<domain>`) — nothing hidden or fake.
 
 ## Migration
 

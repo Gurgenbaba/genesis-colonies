@@ -44,6 +44,8 @@ Destroying a pirate base sets status `destroyed`, frees the galaxy slot, recalls
 
 ### Kill-Switch
 
+**Default (GC-2611):** once an admin has ever toggled the kill-switch, that `runtime_state` choice always wins (Soft-Off stays available anytime). Before any admin choice, the default follows `is_production()` — a freshly deployed production universe ships with a living pirate AI without a manual admin click; dev/staging stays off by default.
+
 | Mode | Behavior |
 |------|----------|
 | Soft-Off (`pirates_ai_enabled=0`) | No new spawns, spies, or raids |
@@ -54,9 +56,11 @@ Stored in `runtime_state` key `pirates_ai_enabled` (default off until LiveOps en
 
 ### Admin Bot-Log
 
-Every brain decision (spy, intel score, attack, skip reason, destroy, AI disabled) writes `pirate_action_log`. Admin panel tab **Pirate Bot-Log** (`/api/admin/pirates`, Soft-On/Off via `/api/admin/pirates/ai`, Force Spawn via `/api/admin/pirates/force-spawn`): bot roster, live bases, heat top, KPIs (bots/raids/spies/spawns/wars/infiltrations/smugglers), `pirate_war` chips, action feed, kill-switch controls.
+Every brain decision (spy, intel score, attack, skip reason, destroy, AI disabled) writes `pirate_action_log`. Admin panel tab **Pirate Bot-Log** (`/api/admin/pirates`, Soft-On/Off via `/api/admin/pirates/ai`, Force Spawn via `/api/admin/pirates/force-spawn`, **Force Tick jetzt** via `/api/admin/pirates/force-tick`, GC-2613): bot roster, live bases, heat top, KPIs (bots/raids/spies/spawns/wars/infiltrations/smugglers/**economy ticks/builds finished**, GC-2611 — derived from existing `pirate_action_log`, no new log system), `pirate_war` chips, action feed, kill-switch controls.
 
-Owner helpers: `game/pirates/admin.py` (`build_admin_pirates_payload`, `admin_set_ai`, `admin_hard_disable_ai`, `admin_force_spawn_hottest`).
+Owner helpers: `game/pirates/admin.py` (`build_admin_pirates_payload`, `admin_set_ai`, `admin_hard_disable_ai`, `admin_force_spawn_hottest`, `admin_force_tick`).
+
+**Force Tick jetzt (GC-2613):** calls the same `maybe_tick_pirate_bases` owner the fleet-worker cron uses (`force=True` semantics via direct call, no cadence guard) — economy for ALL bots + one round-robin strategic-mission batch execute immediately. Needed because `embedded_cron` is off by default outside production (`game.config.is_embedded_cron_enabled`), so nothing ticks the bots locally without it.
 
 ### Living bots (GC-P19 / GC-P20)
 
@@ -80,6 +84,7 @@ Owner: `game/auto_empire.py` (enqueue) · `game/pirates/economy.py` (Soft-On see
 | Bootstrap | One-time resource + fuel seed; **one-time** utility fleet seed (`utility_seeded`); **one-time building floor** (mines/lab/OS) so Soft-On bots produce + score immediately |
 | Tick | **Economy for ALL bots every Soft-On tick** (chain enqueue); then Priority missions: spy → raid → colonize → recycle → **expedition** on round-robin ≤3 bots/tick (`GC_PIRATE_PLAY_BOTS_PER_TICK`) |
 | Progress | Mines → CC/Lab → OS/Barracks/DF → research gates → ships/defense by personality |
+| Timekeeper-Boost (GC-2616) | Defense/Shipyard have no `duration_cap` (real formula) → `_auto_boost_timekeeper` in `game/auto_empire.py` auto-credits 10h Timekeeper when the bot's balance is empty and auto-applies it `mode="max"` right after a successful enqueue — same shared owner as inactive-human autoplay ([INACTIVE_AUTOPLAY.md](INACTIVE_AUTOPLAY.md#live-universe-dauerpräsenz-sichtbare-aktivität-timekeeper-boost-gc-2614-2616)), no parallel speed mechanic |
 | Raids | `_raid_fleet_from_hangar` — never `set_planet_ships` template wipe; home raids via play loop |
 | Fleet-save | Inbound human attack on AI planet → `panic_recall_faction_fleets` (`inbound_attack`) |
 

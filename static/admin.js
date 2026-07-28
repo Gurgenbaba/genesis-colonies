@@ -20,7 +20,7 @@
   let _diplomacyOptions = null;
 
   const ADMIN_TAB_GROUPS = {
-    liveops: ["world_boss", "pirates", "diplomacy", "votes"],
+    liveops: ["world_boss", "pirates", "inactive_autoplay", "diplomacy", "votes"],
     players: ["players", "planets"],
     economy: ["balance", "lootboxes", "queues", "fleets"],
     moderation: ["chat", "support", "messages"],
@@ -445,6 +445,9 @@
         break;
       case "pirates":
         result = await loadPiratesAdmin();
+        break;
+      case "inactive_autoplay":
+        result = await loadInactiveAutoplayAdmin();
         break;
       default:
         result = null;
@@ -1955,6 +1958,8 @@
       { label: t("admin_pirates_kpi_spies", "Spy dispatches (log window)"), value: esc(String(kpis.spy_dispatch_in_log || 0)) },
       { label: t("admin_pirates_kpi_spawns", "Base spawns (log window)"), value: esc(String(kpis.base_spawn_in_log || 0)) },
       { label: t("admin_pirates_kpi_play_loop", "Play-loop (log window)"), value: esc(String(kpis.play_loop_in_log || 0)) },
+      { label: t("admin_pirates_kpi_economy_tick", "Economy ticks (log window)"), value: esc(String(kpis.bot_economy_tick_in_log || 0)) },
+      { label: t("admin_pirates_kpi_builds_finished", "Builds finished (log window)"), value: esc(String(kpis.builds_finished_in_log || 0)) },
       { label: t("admin_pirates_kpi_wars", "Pirate wars (log window)"), value: esc(String(kpis.pirate_war_in_log || 0)) },
       { label: t("admin_pirates_kpi_infil", "Live infiltrations"), value: esc(String(kpis.live_infiltrations || 0)) },
       { label: t("admin_pirates_kpi_smugglers", "Live smugglers"), value: esc(String(kpis.live_smugglers || 0)) },
@@ -2098,6 +2103,151 @@
       "success",
     );
     await loadPiratesAdmin();
+    return res;
+  }
+
+  async function forceTickPiratesAdmin() {
+    setPiratesStatus(t("admin_pirates_force_tick_running", "Force-Tick läuft…"));
+    const res = await adminPost("/api/admin/pirates/force-tick", {});
+    if (!res.ok) {
+      showAlert(res.message || res.error || t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+      setPiratesStatus("");
+      return res;
+    }
+    notify(
+      t("admin_pirates_force_tick_done", "Pirate-Tick ausgeführt: {n} Play-Steps.").replace(
+        "{n}",
+        String(res.play_steps || 0),
+      ),
+      "success",
+    );
+    await loadPiratesAdmin();
+    return res;
+  }
+
+  function setInactiveAutoplayStatus(msg) {
+    const el = qs("#admin-inactive-autoplay-status");
+    if (el) el.textContent = msg || "";
+  }
+
+  function renderInactiveAutoplayAdmin(data) {
+    const out = qs("#admin-inactive-autoplay-output");
+    if (!out) return;
+    if (!data || !data.ok) {
+      out.innerHTML = `<p class="admin-small-hint">${esc(data?.error || t("admin_action_failed", "Aktion fehlgeschlagen"))}</p>`;
+      return;
+    }
+    const on = !!data.enabled;
+    const onLabel = on
+      ? t("admin_inactive_autoplay_on", "Autoplay: AN")
+      : t("admin_inactive_autoplay_off", "Autoplay: AUS");
+    const kpis = data.kpis || {};
+    const cfg = data.config || {};
+    const last = data.worker_last || {};
+    const rosterRows = (data.roster || [])
+      .map((r) => {
+        const doneBits = [];
+        if (r.builds_done) doneBits.push(`${r.builds_done}x ${t("admin_inactive_autoplay_action_build", "Bau")}`);
+        if (r.research_done) doneBits.push(`${r.research_done}x ${t("admin_inactive_autoplay_action_research", "Forschung")}`);
+        if (r.defense_done) doneBits.push(`${r.defense_done}x ${t("admin_inactive_autoplay_action_defense", "Verteidigung")}`);
+        const lastAction = r.last_action
+          ? `${esc(r.last_action)}${doneBits.length ? " (" + esc(doneBits.join(", ")) + ")" : ""}`
+          : "–";
+        return (
+          `<tr><td>${esc(String(r.player_id))}</td><td>${esc(r.username || "–")}</td>` +
+          `<td>${esc(fmtTs(r.last_seen))}</td><td>${esc(fmtTs(r.joined_at))}</td>` +
+          `<td>${esc(fmtTs(r.last_ticked_at))}</td><td>${lastAction}</td></tr>`
+        );
+      })
+      .join("");
+    const metrics = renderMetricGrid([
+      { label: t("admin_inactive_autoplay_kpi_roster", "Roster-Größe"), value: esc(String(kpis.roster_size || 0)) },
+      { label: t("admin_inactive_autoplay_kpi_max_roster", "Roster-Cap"), value: esc(String(cfg.max_roster || 0)) },
+      { label: t("admin_inactive_autoplay_kpi_online_now", "Gerade \"online\" (Autoplay)"), value: esc(String(kpis.presence_visible_now || 0)) },
+      { label: t("admin_inactive_autoplay_kpi_online_cap", "Online-Cap (% echte Spieler)"), value: `${esc(String(cfg.online_visible_cap || 0))} (${esc(String(cfg.online_percent || 0))}% von ${esc(String(cfg.real_player_count || 0))})` },
+      { label: t("admin_inactive_autoplay_kpi_woke", "Geweckt (letzter Zyklus)"), value: esc(String(kpis.woke_last_cycle || 0)) },
+      { label: t("admin_inactive_autoplay_kpi_evicted", "Evicted (letzter Zyklus)"), value: esc(String(kpis.evicted_last_cycle || 0)) },
+      { label: t("admin_inactive_autoplay_kpi_wait", "Wartezeit bis nächstes Wecken (s)"), value: esc(String(kpis.wait_sec || 0)) },
+      { label: t("admin_inactive_autoplay_kpi_skip_streak", "Skips seit letztem Erfolg"), value: esc(String(kpis.post_maint_skip_streak || 0)) },
+      { label: t("admin_inactive_autoplay_kpi_interval", "Weck-Intervall (s)"), value: esc(String(cfg.interval_sec || 0)) },
+      { label: t("admin_inactive_autoplay_kpi_revisit", "Revisit-Fenster (s)"), value: esc(String(cfg.revisit_sec || 0)) },
+      { label: t("admin_inactive_autoplay_kpi_tick", "Roster-Ticks/Cron"), value: esc(String(cfg.tick_per_cron || 0)) },
+      { label: t("admin_inactive_autoplay_kpi_chain", "Chain-Limit"), value: esc(String(cfg.chain_limit || 0)) },
+    ]);
+    out.innerHTML =
+      `<div class="admin-card">` +
+      `<h3 class="admin-card-title">${esc(t("admin_inactive_autoplay_section_status", "Status"))} ` +
+      `${statusBadge(on ? "ok" : "warn", onLabel)}</h3>` +
+      `<p class="admin-small-hint">${esc(
+        t("admin_inactive_autoplay_last_run", "Letzter Lauf"),
+      )}: ${esc(fmtTs(last.at))} (${esc(last.source || "–")})</p>` +
+      `</div>` +
+      metrics +
+      `<div class="admin-section-title"><span class="admin-section-title-text">${esc(
+        t("admin_inactive_autoplay_roster", "Sticky-Roster"),
+      )}</span></div>` +
+      renderAdminTable(
+        [
+          t("admin_col_id", "ID"),
+          t("admin_col_name", "Name"),
+          t("admin_inactive_autoplay_col_last_seen", "Zuletzt gesehen"),
+          t("admin_inactive_autoplay_col_joined", "Im Roster seit"),
+          t("admin_inactive_autoplay_col_last_ticked", "Zuletzt getickt"),
+          t("admin_inactive_autoplay_col_last_action", "Letzte Aktion"),
+        ],
+        rosterRows,
+      );
+  }
+
+  async function loadInactiveAutoplayAdmin() {
+    setInactiveAutoplayStatus(t("admin_inactive_autoplay_loading", "Lade Inactive Autoplay…"));
+    const data = await adminGet("/api/admin/inactive-autoplay");
+    if (!data.ok) {
+      showAlert(data.message || data.error || t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+      setInactiveAutoplayStatus("");
+      return data;
+    }
+    renderInactiveAutoplayAdmin(data);
+    setInactiveAutoplayStatus(t("admin_inactive_autoplay_loaded", "Inactive Autoplay geladen."));
+    return data;
+  }
+
+  async function setInactiveAutoplayAdmin(enabled) {
+    setInactiveAutoplayStatus(
+      enabled
+        ? t("admin_inactive_autoplay_enabling", "Aktiviere Inactive Autoplay…")
+        : t("admin_inactive_autoplay_disabling", "Deaktiviere Inactive Autoplay…"),
+    );
+    const res = await adminPost("/api/admin/inactive-autoplay/toggle", { enabled: !!enabled });
+    if (!res.ok) {
+      showAlert(res.message || res.error || t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+      setInactiveAutoplayStatus("");
+      return res;
+    }
+    notify(
+      t("admin_inactive_autoplay_updated", "Inactive Autoplay Kill-Switch aktualisiert."),
+      "success",
+    );
+    await loadInactiveAutoplayAdmin();
+    return res;
+  }
+
+  async function forceTickInactiveAutoplayAdmin() {
+    setInactiveAutoplayStatus(t("admin_inactive_autoplay_force_tick_running", "Force-Tick läuft…"));
+    const res = await adminPost("/api/admin/inactive-autoplay/force-tick", {});
+    if (!res.ok) {
+      showAlert(res.message || res.error || t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+      setInactiveAutoplayStatus("");
+      return res;
+    }
+    notify(
+      t("admin_inactive_autoplay_force_tick_done", "Roster-Tick ausgeführt: {n} geweckt.").replace(
+        "{n}",
+        String(res.woke_count || 0),
+      ),
+      "success",
+    );
+    await loadInactiveAutoplayAdmin();
     return res;
   }
 
@@ -3821,6 +3971,11 @@
     if (act === "pirates-ai-off") return setPiratesAiAdmin(false);
     if (act === "pirates-ai-hard-off") return hardOffPiratesAiAdmin();
     if (act === "pirates-force-spawn") return forceSpawnPiratesAdmin();
+    if (act === "pirates-force-tick") return forceTickPiratesAdmin();
+    if (act === "inactive-autoplay-refresh") return loadInactiveAutoplayAdmin();
+    if (act === "inactive-autoplay-on") return setInactiveAutoplayAdmin(true);
+    if (act === "inactive-autoplay-off") return setInactiveAutoplayAdmin(false);
+    if (act === "inactive-autoplay-force-tick") return forceTickInactiveAutoplayAdmin();
     if (act === "server-universe-reset") return resetAdminUniverseKeepInventory();
     if (act === "run-queue-tick") return runQueueTick(btn);
     if (act === "queue-cancel") return cancelQueueJob(btn.dataset.queueType, btn.dataset.jobId);

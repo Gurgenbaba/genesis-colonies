@@ -40,6 +40,34 @@ def _is_background_maintenance_source(source: str) -> bool:
     return str(source or "").strip().lower() in _BACKGROUND_MAINTENANCE_SOURCES
 
 
+def _stage_skip_streak_key(stage: str) -> str:
+    return f"post_maint_skip_streak_{stage}"
+
+
+def get_stage_skip_streak(stage: str, *, conn=None) -> int:
+    """Consecutive budget-skips since the last successful run of `stage` (GC-2610)."""
+    try:
+        raw = get_runtime_value(_stage_skip_streak_key(stage), conn=conn)
+        return max(0, int(raw or 0))
+    except Exception:
+        return 0
+
+
+def _record_stage_skip(conn, stage: str) -> None:
+    try:
+        streak = get_stage_skip_streak(stage, conn=conn) + 1
+        set_runtime_value(_stage_skip_streak_key(stage), str(streak), conn=conn)
+    except Exception:
+        logger.exception("post-maint skip-streak persist failed stage=%s", stage)
+
+
+def _record_stage_success(conn, stage: str) -> None:
+    try:
+        set_runtime_value(_stage_skip_streak_key(stage), "0", conn=conn)
+    except Exception:
+        logger.exception("post-maint skip-streak reset failed stage=%s", stage)
+
+
 def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
     """
     HoF catch-up and combat-balance bot scheduler.
@@ -62,11 +90,24 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
     def _run_stage(name: str, fn) -> None:
         if _over_budget():
             _worker_log(f"post-maint skip={name} budget_sec={budget_sec}")
+            try:
+                begin_write_transaction(conn)
+                try:
+                    _record_stage_skip(conn, name)
+                    commit(conn)
+                except Exception:
+                    rollback(conn)
+                    raise
+            except Exception:
+                logger.exception(
+                    "post fleet maintenance skip-streak failed source=%s stage=%s", source, name
+                )
             return
         try:
             begin_write_transaction(conn)
             try:
                 fn()
+                _record_stage_success(conn, name)
                 commit(conn)
             except Exception:
                 rollback(conn)
@@ -154,8 +195,10 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
         _run_stage("combat_bots", _combat_bots)
         _run_stage("world_boss", _world_boss)
         _run_stage("asteroids", _asteroids)
-        _run_stage("pirates", _pirates)
+        # GC-2610: inactive_autoplay before pirates — pirate economy-for-all-bots is
+        # the most expensive stage and must not starve inactive accounts of budget.
         _run_stage("inactive_autoplay", _inactive_autoplay)
+        _run_stage("pirates", _pirates)
         _run_stage("debris", _debris)
     except Exception:
         logger.exception("post fleet maintenance failed source=%s", source)

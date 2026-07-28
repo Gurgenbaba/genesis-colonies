@@ -175,6 +175,10 @@ COLONY_BUILD_PRIORITY: List[str] = [
 PIRATE_BUILD_DURATION_CAP = 90
 PIRATE_RESEARCH_DURATION_CAP = 120
 
+# GC-2616: 10h auto-refill for autoplay/AI Timekeeper auto-boost (see
+# `_auto_boost_timekeeper` below).
+AUTOPLAY_TIMEKEEPER_REFILL_SEC = 36_000
+
 
 def _now() -> float:
     return time.time()
@@ -487,6 +491,39 @@ def _force_complete_job(
         logger.exception("auto_empire force-complete failed %s id=%s", table, job_id)
 
 
+def _auto_boost_timekeeper(
+    conn, *, player_id: int, planet_id: int, domain: str
+) -> None:
+    """GC-2616: keep defense/shipyard queues moving for autoplay accounts (inactive
+    humans *and* AI pirates) using the real Timekeeper ledger — no parallel speed
+    mechanic. Build/research are intentionally excluded here: they already
+    force-complete same-tick via `duration_cap` + `chain_limit` above, so an
+    auto-apply there would just spend balance with no visible extra effect.
+    Refills to `AUTOPLAY_TIMEKEEPER_REFILL_SEC` whenever the balance is empty,
+    same ledger (`timekeeper_balances`/`timekeeper_transactions`) a manually
+    playing owner would see if they returned.
+    """
+    from . import timekeeper
+
+    try:
+        if timekeeper.get_balance(int(player_id), conn=conn) <= 0:
+            timekeeper.credit(
+                int(player_id),
+                AUTOPLAY_TIMEKEEPER_REFILL_SEC,
+                "autoplay_replenish",
+                conn=conn,
+            )
+        timekeeper.apply_timekeeper(
+            int(player_id), domain, planet_id=int(planet_id), mode="max", conn=conn
+        )
+    except Exception:
+        logger.exception(
+            "auto_empire timekeeper auto-boost failed player=%s domain=%s",
+            player_id,
+            domain,
+        )
+
+
 def plan_passive_planet_tick(
     conn,
     *,
@@ -626,6 +663,9 @@ def plan_passive_planet_tick(
         )
         if ship_res.get("ok"):
             out["ships"] = ship_res
+            _auto_boost_timekeeper(
+                conn, player_id=int(player_id), planet_id=planet_id, domain="shipyard"
+            )
 
     if allow_defense:
         def_res = try_build_defense(
@@ -636,5 +676,27 @@ def plan_passive_planet_tick(
         )
         if def_res.get("ok"):
             out["defense"] = def_res
+            _auto_boost_timekeeper(
+                conn, player_id=int(player_id), planet_id=planet_id, domain="defense"
+            )
+
+    if out["ships"] or out["defense"]:
+        # Timekeeper auto-apply above may have just force-finished the
+        # shipyard/defense head job — sync so counts/levels are visible
+        # in-tick (matters for GC-2615 activity reporting).
+        boosted_finished = _finish_due(
+            conn,
+            player_id=int(player_id),
+            planet_id=planet_id,
+            now=ts,
+            source=str(source),
+            update_scores=bool(update_scores),
+        )
+        if boosted_finished:
+            for k, v in boosted_finished.items():
+                try:
+                    out["finished"][k] = int(out["finished"].get(k) or 0) + int(v or 0)
+                except Exception:
+                    out["finished"][k] = v
 
     return out

@@ -5952,6 +5952,98 @@ def api_admin_pirates_force_spawn():
         conn.close()
 
 
+@app.route("/api/admin/pirates/force-tick", methods=["POST"])
+@require_admin_api
+def api_admin_pirates_force_tick():
+    """LiveOps: run one bot-play-loop tick now (economy + missions) (GC-2613)."""
+    from game.db import begin_write_transaction, commit, rollback
+    from game.pirates.admin import admin_force_tick
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        try:
+            result = admin_force_tick(conn)
+            commit(conn)
+        except Exception:
+            rollback(conn)
+            raise
+        status = 200 if result.get("ok") else 400
+        return jsonify(result), status
+    except Exception:
+        return jsonify({"ok": False, "error": "pirates_force_tick_failed"}), 500
+    finally:
+        conn.close()
+
+
+@app.route("/api/admin/inactive-autoplay", methods=["GET"])
+@require_admin_api
+def api_admin_inactive_autoplay():
+    """Admin KPIs + kill-switch status for Inactive Autoplay (EPIC-26 / GC-2608)."""
+    try:
+        from game.inactive_autoplay_admin import build_admin_inactive_autoplay_payload
+
+        conn = db()
+        try:
+            payload = build_admin_inactive_autoplay_payload(conn)
+        finally:
+            conn.close()
+        return jsonify(payload)
+    except Exception:
+        return jsonify({"ok": False, "error": "inactive_autoplay_admin_unavailable"}), 500
+
+
+@app.route("/api/admin/inactive-autoplay/toggle", methods=["POST"])
+@require_admin_api
+def api_admin_inactive_autoplay_toggle():
+    """Kill-switch: Soft-On/Off for Inactive Autoplay (mirrors pirates AI toggle)."""
+    data = request.get_json(silent=True) or {}
+    if "enabled" not in data:
+        return jsonify({"ok": False, "error": "enabled_required"}), 400
+    enabled = bool(data.get("enabled"))
+    from game.db import begin_write_transaction, commit, rollback
+    from game.inactive_autoplay_admin import admin_set_inactive_autoplay
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        try:
+            result = admin_set_inactive_autoplay(conn, enabled)
+            commit(conn)
+        except Exception:
+            rollback(conn)
+            raise
+        return jsonify(result)
+    except Exception:
+        return jsonify({"ok": False, "error": "inactive_autoplay_toggle_failed"}), 500
+    finally:
+        conn.close()
+
+
+@app.route("/api/admin/inactive-autoplay/force-tick", methods=["POST"])
+@require_admin_api
+def api_admin_inactive_autoplay_force_tick():
+    """LiveOps: wake/tick the sticky roster now, bypassing the wake interval (GC-2613)."""
+    from game.db import begin_write_transaction, commit, rollback
+    from game.inactive_autoplay_admin import admin_force_tick_inactive_autoplay
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        try:
+            result = admin_force_tick_inactive_autoplay(conn)
+            commit(conn)
+        except Exception:
+            rollback(conn)
+            raise
+        status = 200 if result.get("ok") else 400
+        return jsonify(result), status
+    except Exception:
+        return jsonify({"ok": False, "error": "inactive_autoplay_force_tick_failed"}), 500
+    finally:
+        conn.close()
+
+
 @app.route("/api/admin/galactic-directives/force", methods=["POST"])
 @require_admin_api
 def api_admin_galactic_directives_force():

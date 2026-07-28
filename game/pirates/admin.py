@@ -10,7 +10,7 @@ from .accounts import (
     ensure_faction_bot,
     list_bot_roster,
 )
-from .bases import list_live_bases, spawn_pirate_base
+from .bases import list_live_bases, maybe_tick_pirate_bases, spawn_pirate_base
 from .log import log_pirate_action, recent_action_log
 from .settings import is_pirates_ai_enabled, set_pirates_ai_enabled
 
@@ -24,6 +24,11 @@ def build_admin_pirates_payload(conn, *, log_limit: int = 80) -> Dict[str, Any]:
     spawn_count = sum(1 for row in logs if row.get("kind") == "base_spawn")
     war_count = sum(1 for row in logs if row.get("kind") == "pirate_war_started")
     play_loop_in_log = sum(1 for row in logs if row.get("kind") == "bot_play_loop")
+    economy_tick_rows = [row for row in logs if row.get("kind") == "bot_economy_tick"]
+    bot_economy_tick_in_log = len(economy_tick_rows)
+    builds_finished_in_log = sum(
+        1 for row in economy_tick_rows if (row.get("payload") or {}).get("build")
+    )
     heat_rows: List[Dict[str, Any]] = []
     try:
         cur = conn.execute(
@@ -106,6 +111,8 @@ def build_admin_pirates_payload(conn, *, log_limit: int = 80) -> Dict[str, Any]:
             "base_spawn_in_log": spawn_count,
             "pirate_war_in_log": war_count,
             "play_loop_in_log": play_loop_in_log,
+            "bot_economy_tick_in_log": bot_economy_tick_in_log,
+            "builds_finished_in_log": builds_finished_in_log,
             "live_infiltrations": len(infiltrations),
             "live_smugglers": len(smugglers),
             "log_rows": len(logs),
@@ -210,6 +217,38 @@ def admin_force_spawn_hottest(
         "heat": heat,
         "spawn": res,
         "error": res.get("error"),
+    }
+
+
+def admin_force_tick(conn) -> Dict[str, Any]:
+    """GC-2613: LiveOps — run one bot-play-loop tick immediately (all bots' economy
+    + a round-robin strategic mission), bypassing the fleet-worker cron cadence.
+
+    Reuses the canonical `maybe_tick_pirate_bases` owner (same call the
+    fleet-worker post-fleet-maintenance stage makes) — no parallel tick logic.
+    Useful outside production where embedded cron is off by default
+    (`game.config.is_embedded_cron_enabled`) and admins want to see the AI act now.
+    """
+    if not is_pirates_ai_enabled(conn=conn):
+        return {"ok": False, "error": "ai_disabled"}
+    tick = maybe_tick_pirate_bases(conn=conn)
+    play = tick.get("play_loop") or {}
+    log_pirate_action(
+        conn,
+        kind="admin_force_tick",
+        message=f"admin force-tick: play_steps={play.get('count') or 0} spawned={tick.get('spawned')}",
+        severity="info",
+        payload={"tick": tick},
+    )
+    return {
+        "ok": True,
+        "spawned": tick.get("spawned") or [],
+        "expired_ids": tick.get("expired_ids") or [],
+        "escalated_ids": tick.get("escalated_ids") or [],
+        "play_steps": int(play.get("count") or 0),
+        "economy_steps": len(play.get("economy_all") or []),
+        "raids": tick.get("raids") or [],
+        "spies": tick.get("spies") or [],
     }
 
 

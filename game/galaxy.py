@@ -404,6 +404,11 @@ def _attach_slot_presentation(
     )
 
 
+# GC-2612: "recently active" pulse window for the galaxy ring badge — purely
+# visual (Living Universe Pulse), no ranking/PvP impact.
+RECENTLY_ACTIVE_WINDOW_SEC = 2 * 3600
+
+
 def _player_activity_select(conn: sqlite3.Connection, *, alias: str = "pl") -> str:
     """Optional vacation + last_seen columns for galaxy slot player flags."""
     parts: List[str] = []
@@ -428,6 +433,7 @@ def _attach_player_status_flags(
     if not slot.get("occupied"):
         slot["vacation_active"] = False
         slot["inactive"] = False
+        slot["recently_active"] = False
         slot["attack_strength"] = None
         return
 
@@ -436,6 +442,9 @@ def _attach_player_status_flags(
     slot["vacation_active"] = bool(int(slot.pop("_vacation_mode_active", slot.get("vacation_active", 0)) or 0))
     last_seen = int(slot.pop("_last_seen", slot.get("last_seen", 0)) or 0)
     slot["inactive"] = ranking_inactive_from_last_seen(last_seen)
+    # GC-2612: "living universe" pulse — independent of is_ai/inactive, so real
+    # players who dropped by recently also show the chip (not only AI/inactive).
+    slot["recently_active"] = bool(last_seen > 0 and (time.time() - last_seen) < RECENTLY_ACTIVE_WINDOW_SEC)
 
     target_player_id = int(slot.get("player_id") or 0)
     try:
