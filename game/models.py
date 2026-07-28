@@ -1,9 +1,12 @@
+import logging
 import sqlite3
 import time
 import hashlib
 import math
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, List, Mapping
+
+logger = logging.getLogger(__name__)
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
@@ -799,7 +802,17 @@ def create_user(username: str, password: str, is_admin: int = 0, email: str | No
 # ======================================================================
 
 def touch_player_online(player_id: int) -> None:
-    """Mark player online; throttled to at most once per 30s to reduce write contention."""
+    """Mark player online; throttled to at most once per 30s to reduce write contention.
+
+    GC-2619: this is the single canonical "a real authenticated request just
+    happened" signal (called from `require_login`/`require_admin`/
+    `require_login_api`). Whenever it actually fires (i.e. the throttle
+    allowed a write), also give a returning human instant full control back
+    if their account is currently on the inactive-autoplay sticky roster —
+    see `inactive_autoplay.release_active_player_from_roster` for why this
+    can't just be inferred from `last_seen` alone (autoplay writes that same
+    column for its own "online" presence, GC-2617).
+    """
     if not player_id:
         return
     now = _now_ts()
@@ -811,6 +824,15 @@ def touch_player_online(player_id: int) -> None:
             "UPDATE players SET last_seen = ? WHERE id = ? AND (last_seen IS NULL OR last_seen < ?)",
             (now, int(player_id), touch_before),
         )
+        if cur.rowcount > 0:
+            try:
+                from .inactive_autoplay import release_active_player_from_roster
+
+                release_active_player_from_roster(int(player_id), conn=conn)
+            except Exception:
+                logger.exception(
+                    "release_active_player_from_roster failed player=%s", player_id
+                )
         commit(conn)
     finally:
         conn.close()

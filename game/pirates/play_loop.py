@@ -200,6 +200,7 @@ def _run_bot_economy_only(
     now: float,
 ) -> Dict[str, Any]:
     """Always progress buildings/research/ships/defense for every faction bot."""
+    from ..auto_empire import AUTOPLAY_STANDING_IDLE_CHANCE
     from ..models import get_planets_by_player
     from .economy import plan_bot_planet_tick
 
@@ -210,7 +211,14 @@ def _run_bot_economy_only(
         is_home = int(planet["id"]) == home_id or bool(planet.get("is_homeworld"))
         try:
             results.append(
-                plan_bot_planet_tick(conn, bot, planet, now=now, is_home=is_home)
+                plan_bot_planet_tick(
+                    conn,
+                    bot,
+                    planet,
+                    now=now,
+                    is_home=is_home,
+                    idle_chance=AUTOPLAY_STANDING_IDLE_CHANCE,
+                )
             )
         except Exception:
             logger.exception("play_loop economy-only failed planet=%s", planet.get("id"))
@@ -240,6 +248,7 @@ def run_bot_play_step(
     do_economy: bool = True,
 ) -> Dict[str, Any]:
     """Enqueue economy (optional) then one strategic mission when ready."""
+    from ..auto_empire import AUTOPLAY_STANDING_IDLE_CHANCE
     from ..models import get_planets_by_player
     from .economy import plan_bot_planet_tick
 
@@ -265,7 +274,12 @@ def run_bot_play_step(
             try:
                 econ_results.append(
                     plan_bot_planet_tick(
-                        conn, bot, planet, now=ts, is_home=is_home
+                        conn,
+                        bot,
+                        planet,
+                        now=ts,
+                        is_home=is_home,
+                        idle_chance=AUTOPLAY_STANDING_IDLE_CHANCE,
                     )
                 )
             except Exception:

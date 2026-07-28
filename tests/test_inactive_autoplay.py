@@ -869,3 +869,363 @@ def test_admin_inactive_autoplay_force_tick_wakes_players_now(autoplay_admin_cli
     tick_off = client.post("/api/admin/inactive-autoplay/force-tick", json={})
     assert tick_off.status_code == 400
     assert tick_off.get_json()["error"] == "disabled"
+
+
+def test_personality_for_player_is_deterministic_and_varied():
+    """GC-2618: inactive accounts previously all hardcoded personality="economy",
+    making every dormant account build/research/defend in lockstep — a dead
+    giveaway that they're bots, not different players. `personality_for_player`
+    is the single owner both inactive autoplay and pirate bots (via their own
+    per-faction `_personality_for_bot`) can rely on for a *stable* pick:
+    same account always resolves to the same personality (no flip-flopping
+    build orders tick to tick), but different accounts should land on
+    different personalities.
+    """
+    from game.auto_empire import ALL_PERSONALITIES, personality_for_player
+
+    assert len(ALL_PERSONALITIES) >= 4
+
+    # Determinism: repeated calls for the same id always agree.
+    for pid in (1, 42, 12345):
+        first = personality_for_player(pid)
+        assert first in ALL_PERSONALITIES
+        assert personality_for_player(pid) == first
+
+    # Variety: across a spread of ids, more than one personality must appear —
+    # otherwise the hash is effectively constant and the "clone" problem
+    # remains.
+    picks = {personality_for_player(pid) for pid in range(1, 60)}
+    assert len(picks) >= 3, f"expected varied personalities, got {picks}"
+
+
+def test_stable_jitter_is_deterministic_and_bounded():
+    """GC-2618: BUILD_TARGETS/RESEARCH_TARGETS jitter must be reproducible per
+    (player, key) — not a fresh dice roll every tick (that would make target
+    levels flicker) — and must stay inside the configured spread.
+    """
+    from game.auto_empire import _stable_jitter
+
+    assert _stable_jitter(7, "metal_mine", 0) == 0
+
+    for pid in (1, 2, 999):
+        for key in ("metal_mine", "energy_tech"):
+            value = _stable_jitter(pid, key, 2)
+            assert -2 <= value <= 2
+            assert _stable_jitter(pid, key, 2) == value
+
+    # Different keys for the same player should not all collapse to the same
+    # offset (otherwise every building on one account jitters identically).
+    values = {_stable_jitter(3, k, 2) for k in ("metal_mine", "crystal_mine", "solar_plant", "command_center")}
+    assert len(values) >= 2
+
+
+def test_personality_build_and_research_orders_are_full_permutations():
+    """GC-2618: every per-personality reorder must contain exactly the same
+    building/tech keys as the base list — only the *order* may differ. A
+    missing/extra key would silently stop (or duplicate) progress on that
+    building/tech for accounts with that personality.
+    """
+    from game.auto_empire import (
+        ALL_PERSONALITIES,
+        BUILD_PRIORITY,
+        BUILD_PRIORITY_BY_PERSONALITY,
+        COLONY_BUILD_PRIORITY,
+        COLONY_BUILD_PRIORITY_BY_PERSONALITY,
+        RESEARCH_PRIORITY,
+        RESEARCH_PRIORITY_BY_PERSONALITY,
+    )
+
+    for personality in ALL_PERSONALITIES:
+        order = BUILD_PRIORITY_BY_PERSONALITY.get(personality, BUILD_PRIORITY)
+        assert len(order) == len(BUILD_PRIORITY)
+        assert set(order) == set(BUILD_PRIORITY), personality
+
+        colony_order = COLONY_BUILD_PRIORITY_BY_PERSONALITY.get(
+            personality, COLONY_BUILD_PRIORITY
+        )
+        assert len(colony_order) == len(COLONY_BUILD_PRIORITY)
+        assert set(colony_order) == set(COLONY_BUILD_PRIORITY), personality
+
+        research_order = RESEARCH_PRIORITY_BY_PERSONALITY.get(
+            personality, RESEARCH_PRIORITY
+        )
+        assert len(research_order) == len(RESEARCH_PRIORITY)
+        assert set(research_order) == set(RESEARCH_PRIORITY), personality
+
+    # At least one non-"economy" personality must actually differ in order —
+    # otherwise the whole variant table is dead weight that never changes
+    # behavior.
+    assert any(
+        BUILD_PRIORITY_BY_PERSONALITY[p] != BUILD_PRIORITY
+        for p in ALL_PERSONALITIES
+        if p != "economy"
+    )
+
+
+def test_plan_passive_planet_tick_idle_chance_default_zero_is_deterministic(autoplay_db):
+    """GC-2618: `idle_chance` must default to 0 so every direct/test caller of
+    `plan_passive_planet_tick` stays fully deterministic — only the autoplay
+    tick-loops opt in explicitly.
+    """
+    from game.auto_empire import plan_passive_planet_tick
+
+    uid = _register_user()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        player = _seed_dormant(conn, uid, days_inactive=0.1)
+        out = plan_passive_planet_tick(
+            conn,
+            player_id=uid,
+            planet=player["planet"],
+            now=time.time(),
+            is_home=True,
+            allow_ships=False,
+            allow_defense=True,
+            source="test",
+        )
+        assert out["idle"] is False
+        assert out.get("build") or out.get("research") or out.get("defense")
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_plan_passive_planet_tick_idle_chance_skips_new_work(autoplay_db, monkeypatch):
+    """GC-2618: a rolled idle tick must skip *new* build/research/ship/defense
+    attempts (so accounts don't all progress in a perfectly monotonic
+    lockstep) while still finishing any already-due work."""
+    from game import auto_empire
+    from game.auto_empire import plan_passive_planet_tick
+
+    monkeypatch.setattr(auto_empire.random, "random", lambda: 0.0)
+
+    uid = _register_user()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        player = _seed_dormant(conn, uid, days_inactive=0.1)
+        out = plan_passive_planet_tick(
+            conn,
+            player_id=uid,
+            planet=player["planet"],
+            now=time.time(),
+            is_home=True,
+            allow_ships=False,
+            allow_defense=True,
+            source="test",
+            idle_chance=1.0,
+        )
+        assert out["idle"] is True
+        assert out.get("build") is None
+        assert out.get("research") is None
+        assert out.get("defense") is None
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_inactive_autoplay_wake_is_never_idle(autoplay_db, monkeypatch):
+    """GC-2618: the exact tick a dormant account wakes must stay deterministic
+    (matches `test_inactive_autoplay_wake_touches_presence_and_enqueues`) even
+    though standing RR ticks may roll idle — a freshly-woken account always
+    acts immediately.
+    """
+    from game import auto_empire
+    from game.inactive_autoplay import _run_player_economy
+
+    # Force the "unluckiest" roll — if is_wake weren't forcing idle_chance=0,
+    # this would make the wake call idle too.
+    monkeypatch.setattr(auto_empire.random, "random", lambda: 0.0)
+
+    uid = _register_user()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        _seed_dormant(conn, uid, days_inactive=5.0)
+        res = _run_player_economy(conn, uid, now=time.time(), is_wake=True)
+        assert res.get("ok")
+        for leg in res.get("economy") or []:
+            assert leg.get("idle") is False
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def _seed_roster_item(uid: int, *, builds=2, research=1, defense=0) -> dict:
+    return {
+        "player_id": uid,
+        "joined_at": time.time() - 3600,
+        "last_ticked_at": time.time() - 60,
+        "last_action": "Metallmine -> Stufe 4",
+        "builds_done": builds,
+        "research_done": research,
+        "defense_done": defense,
+    }
+
+
+def test_release_active_player_from_roster_removes_and_reports(autoplay_db):
+    """GC-2619: a real human returning must get instant full control back —
+    removed from the sticky roster immediately (not waiting for LRU
+    eviction) — and receive the same "what happened while away" report used
+    on normal eviction (no parallel message owner).
+    """
+    from game.inactive_autoplay import (
+        ROSTER_KEY,
+        get_roster_snapshot,
+        release_active_player_from_roster,
+        set_inactive_autoplay_enabled,
+    )
+    from game.runtime_state import set_runtime_value
+
+    uid = _register_user()
+    other_uid = _register_user()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        set_inactive_autoplay_enabled(True, conn=conn)
+        _seed_dormant(conn, uid, days_inactive=5.0)
+        _seed_dormant(conn, other_uid, days_inactive=5.0)
+        set_runtime_value(
+            ROSTER_KEY,
+            json.dumps([_seed_roster_item(uid), _seed_roster_item(other_uid)]),
+            conn=conn,
+        )
+
+        released = release_active_player_from_roster(uid, conn=conn)
+        assert released is True
+
+        remaining_ids = {int(r["player_id"]) for r in get_roster_snapshot(conn=conn)}
+        assert remaining_ids == {other_uid}, "only the returning player leaves the roster"
+
+        msg = conn.execute(
+            "SELECT subject, body FROM player_messages WHERE recipient_player_id = ? AND category = 'system';",
+            (uid,),
+        ).fetchone()
+        assert msg is not None
+        assert msg["subject"]
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_release_active_player_from_roster_noop_cases(autoplay_db):
+    """GC-2619: releasing must be a safe no-op when the account was never on
+    the roster, or when autoplay itself is off — no accidental roster writes.
+    """
+    from game.inactive_autoplay import (
+        ROSTER_KEY,
+        get_roster_snapshot,
+        release_active_player_from_roster,
+        set_inactive_autoplay_enabled,
+    )
+    from game.runtime_state import set_runtime_value
+
+    uid = _register_user()
+    not_on_roster = _register_user()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        set_inactive_autoplay_enabled(True, conn=conn)
+        set_runtime_value(
+            ROSTER_KEY, json.dumps([_seed_roster_item(uid)]), conn=conn
+        )
+
+        assert release_active_player_from_roster(not_on_roster, conn=conn) is False
+        assert {int(r["player_id"]) for r in get_roster_snapshot(conn=conn)} == {uid}
+
+        set_inactive_autoplay_enabled(False, conn=conn)
+        assert release_active_player_from_roster(uid, conn=conn) is False
+        assert {int(r["player_id"]) for r in get_roster_snapshot(conn=conn)} == {uid}
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_touch_player_online_releases_roster_member(autoplay_db):
+    """GC-2619: `models.touch_player_online` is the single canonical "a real
+    authenticated request just happened" signal (require_login /
+    require_admin / require_login_api) — it must release a sticky-roster
+    account the moment it actually fires, proving the wiring end-to-end
+    (not just the standalone helper).
+    """
+    from game.inactive_autoplay import ROSTER_KEY, get_roster_snapshot, set_inactive_autoplay_enabled
+    from game.models import touch_player_online
+    from game.runtime_state import set_runtime_value
+
+    uid = _register_user()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        set_inactive_autoplay_enabled(True, conn=conn)
+        _seed_dormant(conn, uid, days_inactive=5.0)
+        # Force the 30s throttle open so the real touch actually writes.
+        conn.execute("UPDATE players SET last_seen = 0 WHERE id = ?;", (uid,))
+        set_runtime_value(
+            ROSTER_KEY, json.dumps([_seed_roster_item(uid)]), conn=conn
+        )
+        commit(conn)
+    finally:
+        conn.close()
+
+    touch_player_online(uid)
+
+    conn = db()
+    try:
+        remaining_ids = {int(r["player_id"]) for r in get_roster_snapshot(conn=conn)}
+        assert uid not in remaining_ids
+    finally:
+        conn.close()
+
+
+def test_run_inactive_autoplay_tick_never_touches_released_player(autoplay_db):
+    """GC-2619: once released (real login), the account must stay untouched by
+    autoplay going forward — no more builds/research/defense/presence touches
+    — until it goes dormant again and gets picked up through the normal
+    wake-candidate path, same as any other inactive account."""
+    from game.inactive_autoplay import (
+        ROSTER_KEY,
+        get_roster_snapshot,
+        release_active_player_from_roster,
+        run_inactive_autoplay_tick,
+        set_inactive_autoplay_enabled,
+    )
+    from game.runtime_state import set_runtime_value
+
+    uid = _register_user()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        set_inactive_autoplay_enabled(True, conn=conn)
+        _seed_dormant(conn, uid, days_inactive=5.0)
+        set_runtime_value(
+            ROSTER_KEY, json.dumps([_seed_roster_item(uid)]), conn=conn
+        )
+        assert release_active_player_from_roster(uid, conn=conn) is True
+        # Real return: last_seen reflects the human's own request, not autoplay.
+        real_login_seen = time.time()
+        conn.execute(
+            "UPDATE players SET last_seen = ? WHERE id = ?;", (real_login_seen, uid)
+        )
+        commit(conn)
+    finally:
+        conn.close()
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        result = run_inactive_autoplay_tick(
+            conn, now=time.time() + 5, force=True, source="test"
+        )
+        assert result.get("ok")
+        woke_ids = {int(w["player_id"]) for w in (result.get("woke") or [])}
+        assert uid not in woke_ids
+        assert uid not in {int(r["player_id"]) for r in get_roster_snapshot(conn=conn)}
+        row = conn.execute(
+            "SELECT last_seen FROM players WHERE id = ?;", (uid,)
+        ).fetchone()
+        # Autoplay must not have overwritten the human's own last_seen.
+        assert float(row["last_seen"]) == real_login_seen
+        commit(conn)
+    finally:
+        conn.close()

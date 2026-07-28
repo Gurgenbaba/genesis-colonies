@@ -134,8 +134,14 @@ def plan_bot_planet_tick(
     *,
     now: Optional[float] = None,
     is_home: bool = True,
+    idle_chance: float = 0.0,
 ) -> Dict[str, Any]:
-    """Finish due work then enqueue via shared auto_empire (ships + pirate caps)."""
+    """Finish due work then enqueue via shared auto_empire (ships + pirate caps).
+
+    `idle_chance` (GC-2618): default 0 keeps direct/test calls deterministic;
+    the standing play-loop passes `AUTOPLAY_STANDING_IDLE_CHANCE` so bots
+    occasionally do nothing new for a round instead of ticking in lockstep.
+    """
     ts = float(now if now is not None else _now())
     player_id = int(bot["player_id"])
     planet_id = int(planet["id"])
@@ -158,6 +164,7 @@ def plan_bot_planet_tick(
         source="pirates",
         update_scores=True,
         chain_limit=3,
+        idle_chance=idle_chance,
     )
 
     if any(out.get(k) for k in ("build", "research", "ships", "defense")):

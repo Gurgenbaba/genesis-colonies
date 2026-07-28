@@ -584,10 +584,30 @@ def test_admin_pirates_api_and_ai_toggle(pirate_admin_client):
     assert tick.status_code == 200
     tick_data = tick.get_json()
     assert tick_data["ok"] is True
+    # Every bot is attempted, unconditionally, on every single force-tick.
     assert tick_data["economy_steps"] == 6
 
-    r4 = client.get("/api/admin/pirates")
-    assert int(r4.get_json()["kpis"].get("bot_economy_tick_in_log") or 0) >= 6
+    # GC-2618: standing bot ticks now roll a small idle chance
+    # (`AUTOPLAY_STANDING_IDLE_CHANCE`) so bots don't all visibly *act* in
+    # perfect lockstep every tick (real players don't optimize every single
+    # check-in either) — one force-tick can no longer guarantee all 6 bots
+    # *logged* a `bot_economy_tick` action. Retry a few times instead:
+    # independent per-bot rolls make "still under 6 after 9 tries"
+    # astronomically unlikely (~0.25^9 per bot), while still proving the
+    # economy mechanism itself reaches every bot over time.
+    bot_economy_tick_in_log = 0
+    for _ in range(9):
+        bot_economy_tick_in_log = int(
+            client.get("/api/admin/pirates").get_json()["kpis"].get(
+                "bot_economy_tick_in_log"
+            )
+            or 0
+        )
+        if bot_economy_tick_in_log >= 6:
+            break
+        retry = client.post("/api/admin/pirates/force-tick", json={})
+        assert retry.status_code == 200
+    assert bot_economy_tick_in_log >= 6
 
     off = client.post("/api/admin/pirates/ai", json={"enabled": False})
     assert off.status_code == 200
@@ -1295,6 +1315,71 @@ def test_bot_economy_enqueues_building(pirate_db):
             assert int(score_row["total"] or 0) > 0
         logs = recent_action_log(conn, kind="bot_economy_tick", limit=5)
         assert any(l.get("bot_player_id") == player_id for l in logs)
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_plan_bot_planet_tick_idle_chance_skips_new_work(pirate_db, monkeypatch):
+    """GC-2618: `plan_bot_planet_tick` must forward `idle_chance` to the shared
+    `plan_passive_planet_tick` owner so the standing play-loop can make bots
+    occasionally skip new work — same anti-clone mechanism as inactive-human
+    autoplay. Default (unset) stays 0 for direct/test callers (see
+    `test_bot_economy_enqueues_building`, unaffected by this)."""
+    from game import auto_empire
+    from game.db import begin_write_transaction, commit
+    from game.pirates.admin import admin_set_ai
+    from game.pirates.economy import plan_bot_planet_tick
+    import time
+
+    monkeypatch.setattr(auto_empire.random, "random", lambda: 0.0)
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        res = admin_set_ai(conn, True)
+        bot = next(b for b in res["bots"] if b["faction_key"] == "iron_collective")
+        planet_id = int(bot["planet_id"])
+        planet = dict(
+            conn.execute(
+                "SELECT * FROM planets WHERE id = ? LIMIT 1;", (planet_id,)
+            ).fetchone()
+        )
+        out = plan_bot_planet_tick(
+            conn, bot, planet, now=time.time(), is_home=True, idle_chance=1.0
+        )
+        assert out.get("build") is None
+        assert out.get("research") is None
+        assert out.get("ships") is None
+        assert out.get("defense") is None
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_play_loop_economy_passes_standing_idle_chance(pirate_db, monkeypatch):
+    """GC-2618: the *standing* play-loop (all bots, every Soft-On tick) must opt
+    into `AUTOPLAY_STANDING_IDLE_CHANCE` — forcing the roll to "always idle"
+    here proves the wiring exists (`_run_bot_economy_only` -> `plan_bot_planet_tick`),
+    not just that `plan_bot_planet_tick` supports the parameter."""
+    from game import auto_empire
+    from game.db import begin_write_transaction, commit
+    from game.pirates.admin import admin_set_ai
+    from game.pirates.play_loop import run_play_loop_tick
+    import time
+
+    monkeypatch.setattr(auto_empire.random, "random", lambda: 0.0)
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        res = admin_set_ai(conn, True)
+        bots = res["bots"]
+        result = run_play_loop_tick(conn, now=time.time(), bots=bots)
+        assert result.get("ok")
+        for step in result.get("economy_all") or []:
+            for leg in step.get("economy") or []:
+                assert leg.get("idle") is True
         commit(conn)
     finally:
         conn.close()

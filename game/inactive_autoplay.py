@@ -13,7 +13,11 @@ import os
 import time
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
-from .auto_empire import plan_passive_planet_tick
+from .auto_empire import (
+    AUTOPLAY_STANDING_IDLE_CHANCE,
+    personality_for_player,
+    plan_passive_planet_tick,
+)
 from .db import column_exists
 from .ranking import RANKING_INACTIVE_AFTER_SEC
 from .runtime_state import get_runtime_value, set_runtime_value
@@ -456,7 +460,17 @@ def _run_player_economy(
     player_id: int,
     *,
     now: float,
+    is_wake: bool = False,
 ) -> Dict[str, Any]:
+    """Run one economy tick for a sticky-roster account.
+
+    `is_wake` (GC-2618): True only for the exact tick a dormant account joins
+    the roster — that tick must stay deterministic (a "just logged in" moment
+    always does something, matching `test_inactive_autoplay_wake_touches_...`).
+    Standing RR ticks (`is_wake=False`, the default) pass
+    `AUTOPLAY_STANDING_IDLE_CHANCE` so an established account occasionally
+    idles for a round instead of a perfectly monotonic staircase every cycle.
+    """
     from .models import get_homeworld, get_planets_by_player
 
     home = get_homeworld(player_id, conn=conn)
@@ -466,6 +480,8 @@ def _run_player_economy(
     home_id = int(home["id"])
     floor = _ensure_resource_floor(conn, home_id)
     planets = get_planets_by_player(player_id, conn=conn) or [home]
+    personality = personality_for_player(player_id)
+    idle_chance = 0.0 if is_wake else AUTOPLAY_STANDING_IDLE_CHANCE
     results: List[Dict[str, Any]] = []
     for planet in planets:
         is_home = int(planet["id"]) == home_id or bool(planet.get("is_homeworld"))
@@ -483,12 +499,13 @@ def _run_player_economy(
                     allow_research=True,
                     allow_ships=False,
                     allow_defense=True,
-                    personality="economy",
+                    personality=personality,
                     build_duration_cap=INACTIVE_BUILD_DURATION_CAP,
                     research_duration_cap=INACTIVE_RESEARCH_DURATION_CAP,
                     source="inactive_autoplay",
                     update_scores=True,
                     chain_limit=INACTIVE_CHAIN_LIMIT,
+                    idle_chance=idle_chance,
                 )
             )
         except Exception:
@@ -637,6 +654,41 @@ def _send_autoplay_report(conn, item: Mapping[str, Any]) -> None:
         logger.exception("inactive autoplay report send failed player=%s", pid)
 
 
+def release_active_player_from_roster(player_id: int, *, conn) -> bool:
+    """GC-2619: instant full control back the moment a real human is seen.
+
+    Called from `models.touch_player_online` — the single canonical signal
+    for "a real authenticated request just happened" (`require_login` /
+    `require_admin` / `require_login_api`) — whenever it actually touches a
+    player's `last_seen` (throttled to once/30s there). If that player is
+    currently on the inactive-autoplay sticky roster, they are removed
+    immediately instead of waiting for LRU eviction to eventually rotate
+    them off — the very next autoplay tick will no longer enqueue anything
+    on their account. They only rejoin the roster once they go dormant again
+    and get picked up by the normal wake-candidate selection
+    (`list_dormant_candidates`), same as any other inactive account.
+
+    Sends the same "what happened while you were away" report used on
+    eviction (`_send_autoplay_report`) — no separate message/feed owner.
+    No-op (single JSON read, no writes) when autoplay is off or the account
+    was never on the roster.
+    """
+    if not is_inactive_autoplay_enabled(conn=conn):
+        return False
+    pid = int(player_id)
+    roster = _load_roster(conn=conn)
+    match = next(
+        (item for item in roster if int(item.get("player_id") or 0) == pid), None
+    )
+    if match is None:
+        return False
+    remaining = [item for item in roster if int(item.get("player_id") or 0) != pid]
+    _save_roster(remaining, conn=conn)
+    _send_autoplay_report(conn, match)
+    logger.info("inactive autoplay released player=%s (real login)", pid)
+    return True
+
+
 def seconds_until_wake_allowed(*, now: Optional[float] = None, conn=None) -> float:
     data = _load_json(WORKER_LAST_KEY, conn=conn)
     if not isinstance(data, dict):
@@ -713,7 +765,7 @@ def run_inactive_autoplay_tick(
                 }
                 roster.append(new_item)
                 try:
-                    res = _run_player_economy(conn, pid, now=ts)
+                    res = _run_player_economy(conn, pid, now=ts, is_wake=True)
                     woke.append(res)
                     _apply_economy_result_to_roster_item(new_item, res)
                 except Exception:
