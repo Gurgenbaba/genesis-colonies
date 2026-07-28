@@ -21876,8 +21876,19 @@
       const show = panel.getAttribute("data-logistics-panel") === m;
       panel.hidden = !show;
     });
+    syncLogisticsPreviewTargetsLabel(page, m);
     clearLogisticsError(page);
     scheduleLogisticsPreview(page);
+  }
+
+  function syncLogisticsPreviewTargetsLabel(page, mode) {
+    const labelEl = page.querySelector("[data-logistics-preview-targets-label]");
+    if (!labelEl) return;
+    const m = mode || getLogisticsMode(page);
+    labelEl.textContent =
+      m === "distribute"
+        ? tt("logistics_preview_targets", "Target colonies")
+        : tt("logistics_preview_sources", "Sources");
   }
 
   function getLogisticsOriginId(page) {
@@ -21917,8 +21928,8 @@
     page.querySelectorAll("[data-colony-planet-id]").forEach((li) => {
       const pid = parseInt(li.getAttribute("data-colony-planet-id"), 10);
       const isHub = pid === hub;
-      // Keep hub visible so its stockpile is obvious after Collect; only disable selection.
-      li.hidden = false;
+      // Hub is chosen in the toolbar — hide it from source/target lists.
+      li.hidden = isHub;
       li.classList.toggle("is-hub", isHub);
       const cb = li.querySelector("[data-logistics-colony-cb]");
       if (cb) {
@@ -22102,6 +22113,7 @@
     }
 
     page._logisticsLastPreview = { ...preview, mode: getLogisticsMode(page) };
+    syncLogisticsPreviewTargetsLabel(page, getLogisticsMode(page));
 
     const canLaunch = !!preview.can_launch;
     const blockReason = preview.block_reason || "";
@@ -22144,7 +22156,11 @@
     }
     if (slotsEl) {
       const fs = preview.fleet_slots || {};
-      slotsEl.textContent = `${formatNumber(preview.slots_needed || 0)} ${tt("logistics_preview_slots_of")} ${formatNumber(fs.free ?? 0)} ${tt("logistics_slots_free")}`;
+      const needed = formatNumber(preview.slots_needed || 0);
+      const free = formatNumber(fs.free ?? 0);
+      slotsEl.textContent = tt("logistics_preview_slots_line", "%(needed)s needed · %(free)s free")
+        .replace("%(needed)s", needed)
+        .replace("%(free)s", free);
     }
     if (fuelEl) {
       fuelEl.textContent = formatNumber(preview.total_fuel_cost || 0);

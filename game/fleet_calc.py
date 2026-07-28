@@ -308,25 +308,30 @@ def validate_departure_balances(
     """Validate loaded cargo + fuel cells against planet balances."""
     loaded = calculate_loaded_resources(resources)
     fuel = max(0, int(fuel_cost))
+    # Same int truncation as planet_resource_stock / route planning — float dust
+    # must not flip loaded==stock into not_enough_resources.
+    metal_have_i = max(0, int(float(metal_have or 0)))
+    crystal_have_i = max(0, int(float(crystal_have or 0)))
+    fuel_cells_have_i = max(0, int(float(fuel_cells_have or 0)))
 
-    if loaded["metal"] > metal_have or loaded["crystal"] > crystal_have:
+    if loaded["metal"] > metal_have_i or loaded["crystal"] > crystal_have_i:
         return False, "not_enough_resources"
-    if loaded["fuel_cells"] > fuel_cells_have:
+    if loaded["fuel_cells"] > fuel_cells_have_i:
         return False, "not_enough_resources"
 
     if FLEET_FUEL_RESOURCE == "fuel_cells":
-        if loaded["fuel_cells"] + fuel > fuel_cells_have:
+        if loaded["fuel_cells"] + fuel > fuel_cells_have_i:
             return False, "not_enough_fuel"
     elif FLEET_FUEL_RESOURCE == "crystal":
         crystal_needed = loaded["crystal"] + fuel
-        if crystal_needed > crystal_have:
-            if loaded["crystal"] <= crystal_have and fuel > crystal_have - loaded["crystal"]:
+        if crystal_needed > crystal_have_i:
+            if loaded["crystal"] <= crystal_have_i and fuel > crystal_have_i - loaded["crystal"]:
                 return False, "not_enough_fuel"
             return False, "not_enough_resources"
     elif FLEET_FUEL_RESOURCE == "metal":
         metal_needed = loaded["metal"] + fuel
-        if metal_needed > metal_have:
-            if loaded["metal"] <= metal_have and fuel > metal_have - loaded["metal"]:
+        if metal_needed > metal_have_i:
+            if loaded["metal"] <= metal_have_i and fuel > metal_have_i - loaded["metal"]:
                 return False, "not_enough_fuel"
             return False, "not_enough_resources"
     else:

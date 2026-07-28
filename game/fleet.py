@@ -1351,7 +1351,14 @@ def validate_fleet_send(
     origin_row = cur.fetchone()
     if not origin_row:
         return False, "origin_not_found", None
-    origin_planet = dict(origin_row)
+    # Tick production so balance checks match accrued stock (logistics preview + send).
+    from .resources import update_planet_resources
+
+    origin_planet, *_rest = update_planet_resources(
+        dict(origin_row),
+        conn=conn,
+        skip_queue_finish=True,
+    )
 
     origin = _origin_coords(origin_planet)
     if mission == "colonize":
@@ -6265,6 +6272,15 @@ def _load_planet_rows_for_collect(
     *,
     conn,
 ) -> Dict[int, Dict[str, Any]]:
+    """
+    Load planets by id and tick production (shared owner for Preview + Collect/Distribute).
+
+    Returns ticked planet dicts so route planning matches accrued stock, not stale
+    ``last_update`` balances. Caller should hold a write transaction when send/debit
+    follows on the same connection.
+    """
+    from .resources import update_planet_resources
+
     ids = sorted({int(x) for x in planet_ids if int(x) > 0})
     if not ids:
         return {}
@@ -6274,7 +6290,15 @@ def _load_planet_rows_for_collect(
         f"SELECT * FROM planets WHERE id IN ({placeholders});",
         ids,
     )
-    return {int(row["id"]): dict(row) for row in cur.fetchall()}
+    out: Dict[int, Dict[str, Any]] = {}
+    for row in cur.fetchall():
+        planet_live, *_rest = update_planet_resources(
+            dict(row),
+            conn=conn,
+            skip_queue_finish=True,
+        )
+        out[int(planet_live["id"])] = dict(planet_live)
+    return out
 
 
 def validate_logistics_manual_ships(
@@ -6338,9 +6362,15 @@ def collect_resources(
         if not fleet_schema_ready(conn):
             return False, "fleet_unavailable", None
 
+        # Tick source stocks inside the write txn so send_fleet re-reads accrued balances.
+        if own:
+            begin_write_transaction(conn)
+
         planet_rows = _load_planet_rows_for_collect([hub_id, *source_ids], conn=conn)
         hub_row = planet_rows.get(hub_id)
         if hub_row is None or int(hub_row.get("player_id") or 0) != int(player_id):
+            if own:
+                rollback(conn)
             return False, "origin_not_found", None
 
         ships_stock_by_source: Dict[int, Dict[str, int]] = {}
@@ -6363,10 +6393,9 @@ def collect_resources(
             skip_invalid_planets=skip_empty,
         )
         if not ok_route or not legs:
+            if own:
+                rollback(conn)
             return False, route_reason or "no_planets", None
-
-        if own:
-            begin_write_transaction(conn)
 
         now = _now()
         cur = conn.cursor()
@@ -6541,9 +6570,15 @@ def distribute_resources(
         if not fleet_schema_ready(conn):
             return False, "fleet_unavailable", None
 
+        # Tick hub/target stocks inside the write txn so send_fleet sees accrued balances.
+        if own:
+            begin_write_transaction(conn)
+
         planet_rows = _load_planet_rows_for_collect([hub_id, *target_ids], conn=conn)
         hub_row = planet_rows.get(hub_id)
         if hub_row is None or int(hub_row.get("player_id") or 0) != int(player_id):
+            if own:
+                rollback(conn)
             return False, "origin_not_found", None
 
         if sel_mode == "auto_cargo":
@@ -6565,6 +6600,8 @@ def distribute_resources(
                 max(1, launchable),
             )
             if not ships_n:
+                if own:
+                    rollback(conn)
                 return False, "no_ships", None
         else:
             slots = get_fleet_slot_status(player_id, conn=conn)
@@ -6584,10 +6621,9 @@ def distribute_resources(
             skip_invalid_planets=(sel_mode == "auto_cargo"),
         )
         if not ok_route or not legs or not delivered_total:
+            if own:
+                rollback(conn)
             return False, route_reason or "no_deliverable_resources", None
-
-        if own:
-            begin_write_transaction(conn)
 
         cur = conn.cursor()
         lock_planet_for_update(conn, hub_id)

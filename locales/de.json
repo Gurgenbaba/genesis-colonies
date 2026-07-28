@@ -6850,5 +6850,7 @@
   "logistics_source_ships_label": "Frachter auf dieser Kolonie",
   "logistics_source_ships_short": "Frachter",
   "logistics_hub_stock_label": "Hub-Vorrat",
-  "logistics_hub_colony_tag": "Hub"
+  "logistics_hub_colony_tag": "Hub",
+  "logistics_preview_slots_line": "%(needed)s benötigt · %(free)s frei",
+  "logistics_preview_sources": "Quellen"
 }

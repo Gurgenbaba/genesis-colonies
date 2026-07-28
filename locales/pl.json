@@ -6850,5 +6850,7 @@
   "logistics_source_ships_label": "Frachtowce na tej kolonii",
   "logistics_source_ships_short": "Frachtowce",
   "logistics_hub_stock_label": "Zapas huba",
-  "logistics_hub_colony_tag": "Hub"
+  "logistics_hub_colony_tag": "Hub",
+  "logistics_preview_slots_line": "%(needed)s potrzebnych · %(free)s wolnych",
+  "logistics_preview_sources": "Źródła"
 }

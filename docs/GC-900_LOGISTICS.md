@@ -299,6 +299,10 @@ MVP-UI-Regeln:
 - Kein `location.reload`
 - Hub bleibt in der Colony-Liste sichtbar (Tag „Hub“, nicht wählbar) + **Hub-Vorrat** in der Toolbar — nach Collect liegen die Mengen am Hub, Quellen können 0 zeigen
 - Colony-Stocks in `build_logistics_page_context` werden per `update_planet_resources(..., skip_queue_finish=True)` getickt; Collect/Distribute-Response liefert `colony_resources` zum Live-Patch
+- Preview und Collect/Distribute laden Planeten über `_load_planet_rows_for_collect` **mit Resource-Tick** (sonst: Karten zeigen Bio-Mengen, Route sieht stale `0` → `no_resources_on_sources`)
+- Preview-Eligibility (`build_fleet_send_preview` → `validate_fleet_send`) tickt die Origin ebenfalls — sonst false `not_enough_resources` gegen ungetickte DB
+- `update_planet_resources` liest Balances **nach** Evolution/Trade erneut (sonst plant Collect Cargo gegen stale-high Dict → false `not_enough_resources`)
+- Hub erscheint **nicht** in der Quellen-/Zielliste (nur Hub-Dropdown + Hub-Vorrat)
 
 Ort: `templates/logistics.html` oder Fleet-Tab — Entscheidung **GC-900C** (Collect zuerst).
 

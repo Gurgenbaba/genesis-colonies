@@ -467,6 +467,11 @@ def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool 
                 "planet evolution tick failed planet_id=%s", planet_id
             )
 
+        # Evolution / trade / special-resource ticks may debit metal/crystal after
+        # save_planet. Re-read so callers (logistics route, fleet validate) never
+        # plan cargo against a stale-high in-memory snapshot.
+        _refresh_planet_resource_balances(planet, conn=conn, planet_id=planet_id)
+
         if own_conn:
             conn.commit()
 

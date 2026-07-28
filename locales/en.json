@@ -6850,5 +6850,7 @@
   "logistics_source_ships_label": "Freighters on this colony",
   "logistics_source_ships_short": "Freighters",
   "logistics_hub_stock_label": "Hub stock",
-  "logistics_hub_colony_tag": "Hub"
+  "logistics_hub_colony_tag": "Hub",
+  "logistics_preview_slots_line": "%(needed)s needed · %(free)s free",
+  "logistics_preview_sources": "Sources"
 }

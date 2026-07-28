@@ -10195,16 +10195,10 @@ def api_shipyard_queue_move():
 
 
 def _logistics_planet_rows(conn, planet_ids: Sequence[int]) -> Dict[int, Dict[str, Any]]:
-    ids = sorted({int(x) for x in planet_ids if int(x) > 0})
-    if not ids:
-        return {}
-    placeholders = ",".join("?" for _ in ids)
-    cur = conn.cursor()
-    cur.execute(
-        f"SELECT * FROM planets WHERE id IN ({placeholders});",
-        ids,
-    )
-    return {int(row["id"]): dict(row) for row in cur.fetchall()}
+    """Tick + load planet rows for logistics preview (delegates to fleet owner)."""
+    from game.fleet import _load_planet_rows_for_collect
+
+    return _load_planet_rows_for_collect(planet_ids, conn=conn)
 
 
 def _build_logistics_preview(

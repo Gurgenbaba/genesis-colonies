@@ -6850,5 +6850,7 @@
   "logistics_source_ships_label": "Bu kolonideki kargo gemileri",
   "logistics_source_ships_short": "Kargo",
   "logistics_hub_stock_label": "Merkez stoku",
-  "logistics_hub_colony_tag": "Merkez"
+  "logistics_hub_colony_tag": "Merkez",
+  "logistics_preview_slots_line": "%(needed)s gerekli · %(free)s boş",
+  "logistics_preview_sources": "Kaynaklar"
 }

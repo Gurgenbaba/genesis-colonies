@@ -387,6 +387,205 @@ def test_logistics_preview_api_collect(logistics_db):
     assert (preview.get('legs') or [])[0].get('resources') is not None
     assert int((preview.get('legs') or [])[0].get('cargo_used') or 0) > 0
 
+
+def test_logistics_preview_collect_full_cargo_storage_cap(logistics_db):
+    """700 mules + storage-capped stock must not false not_enough_resources (screenshot)."""
+    import app as app_mod
+
+    conn = db()
+    uid = _player(conn=conn)
+    hub, sources = _hub_and_sources(uid, conn, sources=1)
+    source = int(sources[0])
+    _seed_ships(source, uid, {'mule_courier': 700}, conn=conn)
+    # Exact stock like storage-capped UI (2.4M each) — cargo 3.5M fills metal then crystal.
+    _fund_planet(conn.cursor(), source, metal=2_400_000, crystal=2_400_000, fuel_cells=2_400_000)
+    conn.commit()
+    conn.close()
+
+    client = app_mod.app.test_client()
+    with client.session_transaction() as sess:
+        sess['user_id'] = uid
+    res = client.post(
+        '/api/fleet/logistics/preview',
+        json={
+            'mode': 'collect',
+            'target_planet_id': hub,
+            'source_planet_ids': [source],
+            'ships': {},
+            'resources_mode': 'all',
+            'ships_selection_mode': 'auto_cargo',
+        },
+    )
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body['ok'] is True
+    preview = body.get('data', {}).get('preview') or {}
+    assert preview.get('block_reason') != 'not_enough_resources', preview
+    assert preview.get('can_launch') is True, preview
+    assert int(preview.get('cargo_used') or 0) == 3_500_000
+    for leg in preview.get('legs') or []:
+        assert leg.get('block_reason') != 'not_enough_resources'
+        assert leg.get('can_send') is True
+        res_map = leg.get('resources') or {}
+        assert int(res_map.get('metal') or 0) == 2_400_000
+        assert int(res_map.get('crystal') or 0) == 1_100_000
+
+
+def test_update_planet_resources_matches_db_after_trade_debit(logistics_db):
+    """Evolution trade debit after save_planet must not leave a stale-high planet dict."""
+    from game.planet_evolution.service import create_trade_route
+    from game.resources import update_planet_resources
+
+    conn = db()
+    uid = _player(conn=conn)
+    hub, sources = _hub_and_sources(uid, conn, sources=1)
+    source = int(sources[0])
+    _fund_planet(conn.cursor(), source, metal=2_400_000, crystal=2_400_000, fuel_cells=2_400_000)
+    ok_tr, reason_tr, _ = create_trade_route(
+        uid, source, hub, 'metal', 100_000.0, conn=conn
+    )
+    assert ok_tr, reason_tr
+    # Force evolution window so process_trade_routes runs inside update_planet_resources.
+    stale_evo = time.time() - 7200.0
+    conn.execute(
+        "UPDATE planets SET last_evolution_tick = ?, last_update = ? WHERE id = ?;",
+        (stale_evo, time.time(), source),
+    )
+    conn.commit()
+
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM planets WHERE id = ?;", (source,))
+    row = dict(cur.fetchone())
+    planet_live, *_rest = update_planet_resources(row, conn=conn, skip_queue_finish=True)
+    cur.execute("SELECT metal, crystal, fuel_cells FROM planets WHERE id = ?;", (source,))
+    db_row = dict(cur.fetchone())
+    conn.close()
+
+    assert int(float(planet_live['metal'])) == int(float(db_row['metal']))
+    assert int(float(planet_live['crystal'])) == int(float(db_row['crystal']))
+    # Trade moved metal off the source — returned dict must reflect the debit.
+    assert int(float(planet_live['metal'])) < 2_400_000
+
+
+def test_logistics_preview_collect_ticks_stale_source_stock(logistics_db):
+    """SSR cards accrue production; preview must tick the same way or false no_resources_on_sources."""
+    import app as app_mod
+    from game.models import save_planet_buildings
+
+    conn = db()
+    uid = _player(conn=conn)
+    hub, sources = _hub_and_sources(uid, conn, sources=1)
+    source = int(sources[0])
+    _seed_ships(source, uid, {'mule_courier': 4}, conn=conn)
+    conn.commit()
+    conn.close()
+
+    save_planet_buildings(source, {'metal_mine': 12, 'solar_plant': 8})
+
+    conn = db()
+    stale_at = time.time() - 7200.0
+    conn.execute(
+        "UPDATE planets SET metal = ?, crystal = ?, fuel_cells = ?, last_update = ? WHERE id = ?;",
+        (200, 0, 50000, stale_at, source),
+    )
+    conn.commit()
+    conn.close()
+
+    client = app_mod.app.test_client()
+    with client.session_transaction() as sess:
+        sess['user_id'] = uid
+    res = client.post(
+        '/api/fleet/logistics/preview',
+        json={
+            'mode': 'collect',
+            'target_planet_id': hub,
+            'source_planet_ids': [source],
+            'ships': {},
+            'resources_mode': 'all',
+            'ships_selection_mode': 'auto_cargo',
+        },
+    )
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body['ok'] is True
+    preview = body.get('data', {}).get('preview') or {}
+    assert preview.get('block_reason') != 'no_resources_on_sources'
+    assert preview.get('block_reason') != 'not_enough_resources'
+    assert preview.get('can_launch') is True
+    assert int(preview.get('cargo_used') or 0) > 200
+    for leg in preview.get('legs') or []:
+        assert leg.get('block_reason') != 'not_enough_resources'
+        assert leg.get('can_send') is True
+
+    # Collect must debit accrued stock (tick inside write txn), not only the stale 200 metal.
+    res2 = client.post(
+        '/api/fleet/logistics/collect',
+        json={
+            'target_planet_id': hub,
+            'source_planet_ids': [source],
+            'ships': {},
+            'resources_mode': 'all',
+            'ships_selection_mode': 'auto_cargo',
+            'request_id': str(uuid.uuid4()),
+        },
+    )
+    assert res2.status_code == 200
+    body2 = res2.get_json()
+    assert body2['ok'] is True, body2
+    route = (body2.get('data') or {}).get('route') or []
+    assert route
+    loaded_metal = int((route[0].get('resources') or {}).get('metal') or 0)
+    assert loaded_metal > 200
+
+
+def test_logistics_preview_collect_after_trade_route_not_enough_false_positive(logistics_db):
+    """Trade debit during tick must not plan cargo above remaining stock (false not_enough_resources)."""
+    import app as app_mod
+    from game.planet_evolution.service import create_trade_route
+
+    conn = db()
+    uid = _player(conn=conn)
+    hub, sources = _hub_and_sources(uid, conn, sources=1)
+    source = int(sources[0])
+    _seed_ships(source, uid, {'mule_courier': 700}, conn=conn)
+    _fund_planet(conn.cursor(), source, metal=2_400_000, crystal=2_400_000, fuel_cells=2_400_000)
+    ok_tr, reason_tr, _ = create_trade_route(
+        uid, source, hub, 'metal', 50_000.0, conn=conn
+    )
+    assert ok_tr, reason_tr
+    stale_evo = time.time() - 3600.0
+    conn.execute(
+        "UPDATE planets SET last_evolution_tick = ?, last_update = ? WHERE id = ?;",
+        (stale_evo, time.time(), source),
+    )
+    conn.commit()
+    conn.close()
+
+    client = app_mod.app.test_client()
+    with client.session_transaction() as sess:
+        sess['user_id'] = uid
+    res = client.post(
+        '/api/fleet/logistics/preview',
+        json={
+            'mode': 'collect',
+            'target_planet_id': hub,
+            'source_planet_ids': [source],
+            'ships': {},
+            'resources_mode': 'all',
+            'ships_selection_mode': 'auto_cargo',
+        },
+    )
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body['ok'] is True
+    preview = body.get('data', {}).get('preview') or {}
+    assert preview.get('block_reason') != 'not_enough_resources', preview
+    assert preview.get('can_launch') is True, preview
+    for leg in preview.get('legs') or []:
+        assert leg.get('block_reason') != 'not_enough_resources', leg
+        assert leg.get('can_send') is True
+
+
 def test_logistics_preview_distribute_ships_only_shows_cargo_capacity(logistics_db):
     import app as app_mod
     conn = db()
