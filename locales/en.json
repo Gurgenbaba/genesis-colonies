@@ -6848,5 +6848,7 @@
   "logistics_help_debit": "Resources are deducted at launch — the preview shows the exact cargo.",
   "logistics_help_return": "After delivery, ships return empty to their departure planet.",
   "logistics_source_ships_label": "Freighters on this colony",
-  "logistics_source_ships_short": "Freighters"
+  "logistics_source_ships_short": "Freighters",
+  "logistics_hub_stock_label": "Hub stock",
+  "logistics_hub_colony_tag": "Hub"
 }

@@ -21898,6 +21898,7 @@
   function getLogisticsSelectedColonyIds(page, mode) {
     const ids = [];
     page.querySelectorAll(`[data-logistics-colony-cb="${mode}"]:checked`).forEach((cb) => {
+      if (cb.disabled) return;
       const card = cb.closest("[data-colony-planet-id]");
       if (card && !card.hidden) ids.push(parseInt(cb.value, 10));
     });
@@ -21916,13 +21917,72 @@
     page.querySelectorAll("[data-colony-planet-id]").forEach((li) => {
       const pid = parseInt(li.getAttribute("data-colony-planet-id"), 10);
       const isHub = pid === hub;
-      li.hidden = isHub;
-      if (isHub) {
-        const cb = li.querySelector("[data-logistics-colony-cb]");
-        if (cb) cb.checked = false;
-        li.classList.remove("is-selected");
+      // Keep hub visible so its stockpile is obvious after Collect; only disable selection.
+      li.hidden = false;
+      li.classList.toggle("is-hub", isHub);
+      const cb = li.querySelector("[data-logistics-colony-cb]");
+      if (cb) {
+        cb.disabled = isHub;
+        if (isHub) {
+          cb.checked = false;
+          li.classList.remove("is-selected");
+        }
       }
     });
+    updateLogisticsHubStock(page);
+  }
+
+  function updateLogisticsHubStock(page) {
+    if (!page) return;
+    const data = parseLogisticsPageData(page);
+    const originId = getLogisticsOriginId(page);
+    const hub = getLogisticsColonyById(data, originId);
+    const res = (hub && hub.resources) || data?.hub_resources || {};
+    ["metal", "crystal", "fuel_cells"].forEach((key) => {
+      const amount = Math.max(0, Math.floor(Number(res[key]) || 0));
+      page.querySelectorAll(`[data-logistics-hub-res="${key}"]`).forEach((el) => {
+        _setIfChanged(el, fmtNumber(amount));
+      });
+    });
+    if (data) {
+      data.hub_resources = {
+        metal: Math.max(0, Math.floor(Number(res.metal) || 0)),
+        crystal: Math.max(0, Math.floor(Number(res.crystal) || 0)),
+        fuel_cells: Math.max(0, Math.floor(Number(res.fuel_cells) || 0)),
+      };
+      const stateEl = page.querySelector("#logistics-page-state");
+      if (stateEl) stateEl.textContent = JSON.stringify(data);
+    }
+  }
+
+  function patchLogisticsColonyResources(page, colonyResources) {
+    if (!page || !colonyResources || typeof colonyResources !== "object") return;
+    const data = parseLogisticsPageData(page);
+    Object.keys(colonyResources).forEach((pidRaw) => {
+      const pid = parseInt(pidRaw, 10);
+      const res = colonyResources[pidRaw] || colonyResources[pid] || {};
+      const stock = {
+        metal: Math.max(0, Math.floor(Number(res.metal) || 0)),
+        crystal: Math.max(0, Math.floor(Number(res.crystal) || 0)),
+        fuel_cells: Math.max(0, Math.floor(Number(res.fuel_cells) || 0)),
+      };
+      page.querySelectorAll(`[data-colony-planet-id="${pid}"]`).forEach((card) => {
+        ["metal", "crystal", "fuel_cells"].forEach((key) => {
+          card.querySelectorAll(`[data-logistics-colony-res="${key}"]`).forEach((el) => {
+            _setIfChanged(el, fmtNumber(stock[key]));
+          });
+        });
+      });
+      if (data) {
+        const col = getLogisticsColonyById(data, pid);
+        if (col) col.resources = stock;
+      }
+    });
+    if (data) {
+      const stateEl = page.querySelector("#logistics-page-state");
+      if (stateEl) stateEl.textContent = JSON.stringify(data);
+    }
+    updateLogisticsHubStock(page);
   }
 
   function syncLogisticsColonySelected(page) {
@@ -21978,6 +22038,10 @@
 
   function setLogisticsColonySelection(page, mode, checked) {
     page.querySelectorAll(`[data-logistics-colony-cb="${mode}"]`).forEach((cb) => {
+      if (cb.disabled) {
+        cb.checked = false;
+        return;
+      }
       const card = cb.closest("[data-colony-planet-id]");
       if (card && card.hidden) {
         cb.checked = false;
@@ -22199,6 +22263,11 @@
     if (slots) updateLogisticsFleetSlotsBadge(page, slots);
     if (res?.state?.active_planet_id) {
       syncScopedPlanetIds(res.state.active_planet_id);
+    }
+    const colonyResources =
+      res?.data?.colony_resources || logisticsPayload(res).colony_resources;
+    if (colonyResources) {
+      patchLogisticsColonyResources(page, colonyResources);
     }
   }
 

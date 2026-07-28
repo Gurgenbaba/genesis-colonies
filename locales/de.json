@@ -6848,5 +6848,7 @@
   "logistics_help_debit": "Ressourcen werden beim Start abgebucht — die Preview zeigt die exakte Fracht.",
   "logistics_help_return": "Nach der Ablieferung kehren die Schiffe leer zum Startplaneten zurück.",
   "logistics_source_ships_label": "Frachter auf dieser Kolonie",
-  "logistics_source_ships_short": "Frachter"
+  "logistics_source_ships_short": "Frachter",
+  "logistics_hub_stock_label": "Hub-Vorrat",
+  "logistics_hub_colony_tag": "Hub"
 }

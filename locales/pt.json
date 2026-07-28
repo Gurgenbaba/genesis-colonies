@@ -6848,5 +6848,7 @@
   "logistics_help_debit": "Recursos são debitados no lançamento — a prévia mostra a carga exata.",
   "logistics_help_return": "Após a entrega, as naves voltam vazias ao planeta de partida.",
   "logistics_source_ships_label": "Cargueiros nesta colônia",
-  "logistics_source_ships_short": "Cargueiros"
+  "logistics_source_ships_short": "Cargueiros",
+  "logistics_hub_stock_label": "Estoque do hub",
+  "logistics_hub_colony_tag": "Hub"
 }

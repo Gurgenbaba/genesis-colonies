@@ -6444,6 +6444,13 @@ def collect_resources(
         launched_ids = {int(item["source_planet_id"]) for item in started}
         skipped = [int(sid) for sid in source_ids if int(sid) not in launched_ids]
 
+        from .fleet_calc import planet_resource_stock
+
+        fresh_rows = _load_planet_rows_for_collect([hub_id, *source_ids], conn=conn)
+        colony_resources = {
+            int(pid): planet_resource_stock(row) for pid, row in fresh_rows.items()
+        }
+
         return True, "", {
             "batch": {
                 "id": batch_id,
@@ -6466,6 +6473,7 @@ def collect_resources(
                 for leg in legs
                 if int(leg["planet_id"]) in launched_ids
             ],
+            "colony_resources": colony_resources,
             "skipped": skipped,
             "send_skipped": send_skipped,
             "ships_used": ships_used,
@@ -6684,6 +6692,13 @@ def distribute_resources(
             [item.get("resources") or {} for item in started]
         )
 
+        from .fleet_calc import planet_resource_stock
+
+        fresh_rows = _load_planet_rows_for_collect([hub_id, *target_ids], conn=conn)
+        colony_resources = {
+            int(pid): planet_resource_stock(row) for pid, row in fresh_rows.items()
+        }
+
         return True, "", {
             "batch": {
                 "id": batch_id,
@@ -6705,6 +6720,7 @@ def distribute_resources(
                 for leg in legs
                 if int(leg["planet_id"]) in launched_ids
             ],
+            "colony_resources": colony_resources,
             "skipped": skipped,
             "send_skipped": send_skipped,
             "delivered_total": delivered_started or delivered_total,
@@ -6744,31 +6760,39 @@ def build_logistics_page_context(
         _finish_due_shipyard_on_planet(conn, int(planet_id), int(player_id))
         process_fleet_tick(player_id=int(player_id), conn=conn)
 
-        from .fleet_calc import cargo_ship_count, filter_available_cargo_ships
+        from .fleet_calc import cargo_ship_count, filter_available_cargo_ships, planet_resource_stock
+        from .resources import update_planet_resources
 
         colonies: List[Dict[str, Any]] = []
+        hub_resources = {"metal": 0, "crystal": 0, "fuel_cells": 0}
         for p in get_planets_by_player(player_id, conn=conn):
             pid = int(p["id"])
             try:
                 pc = get_planet_coordinates(p)
             except GalaxyCoordinateError:
                 continue
+            # Tick production so Collect cards match live stock (not stale last_update).
+            planet_live, *_rest = update_planet_resources(
+                dict(p),
+                conn=conn,
+                skip_queue_finish=True,
+            )
+            stock = planet_resource_stock(planet_live)
             ships = get_planet_ships(pid, conn=conn)
             cargo_ships = filter_available_cargo_ships(ships)
+            is_hub = pid == int(planet_id)
+            if is_hub:
+                hub_resources = dict(stock)
             colonies.append(
                 {
                     "planet_id": pid,
                     "name": str(p.get("name") or ""),
                     "coordinates": pc["formatted"],
-                    "is_active": pid == int(planet_id),
+                    "is_active": is_hub,
                     "ships": ships,
                     "cargo_ships": cargo_ships,
                     "cargo_ship_count": cargo_ship_count(ships),
-                    "resources": {
-                        "metal": int(float(p.get("metal") or 0)),
-                        "crystal": int(float(p.get("crystal") or 0)),
-                        "fuel_cells": int(float(p.get("fuel_cells") or 0)),
-                    },
+                    "resources": dict(stock),
                 }
             )
 
@@ -6778,6 +6802,7 @@ def build_logistics_page_context(
             "ready": True,
             "planet_id": int(planet_id),
             "colonies": colonies,
+            "hub_resources": hub_resources,
             "cargo_ship_defs": cargo_defs,
             "ships": get_planet_ships(planet_id, conn=conn),
             "fleet_slots": get_fleet_slot_status(player_id, conn=conn),

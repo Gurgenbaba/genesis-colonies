@@ -17186,6 +17186,41 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   opacity: 0.85;
   margin-top: 2px;
 }
+.logistics-hub-stock{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-top: 6px;
+  font-size: 0.8rem;
+  color: var(--gc-text-soft);
+}
+.logistics-hub-stock-label{
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--gc-text-dim);
+}
+.logistics-hub-stock-values{
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.logistics-source-hub-tag{
+  display: none;
+  font-size: 0.62rem;
+}
+.logistics-colony-card.is-hub{
+  border-color: rgba(120, 190, 255, 0.35);
+  background: rgba(20, 40, 70, 0.35);
+}
+.logistics-colony-card.is-hub .logistics-source-hub-tag{
+  display: inline-flex;
+}
+.logistics-colony-card.is-hub .logistics-source-cb,
+.logistics-colony-card.is-hub .logistics-source-check{
+  opacity: 0.35;
+  pointer-events: none;
+}
 .logistics-help-modal .logistics-help-dialog{
   max-width: 520px;
 }

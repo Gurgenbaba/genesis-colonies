@@ -6848,5 +6848,7 @@
   "logistics_help_debit": "Les ressources sont débités au départ — l’aperçu montre la cargaison exacte.",
   "logistics_help_return": "Après livraison, les vaisseaux reviennent vides vers la planète de départ.",
   "logistics_source_ships_label": "Freighters sur cette colonie",
-  "logistics_source_ships_short": "Freighters"
+  "logistics_source_ships_short": "Freighters",
+  "logistics_hub_stock_label": "Stock du hub",
+  "logistics_hub_colony_tag": "Hub"
 }

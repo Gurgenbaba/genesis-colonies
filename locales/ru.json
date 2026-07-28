@@ -6848,5 +6848,7 @@
   "logistics_help_debit": "Ресурсы списываются при старте — превью показывает точный груз.",
   "logistics_help_return": "После доставки корабли возвращаются пустыми на планету вылета.",
   "logistics_source_ships_label": "Грузовики на этой колонии",
-  "logistics_source_ships_short": "Грузовики"
+  "logistics_source_ships_short": "Грузовики",
+  "logistics_hub_stock_label": "Запас хаба",
+  "logistics_hub_colony_tag": "Хаб"
 }

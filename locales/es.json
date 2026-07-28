@@ -6848,5 +6848,7 @@
   "logistics_help_debit": "Los recursos se descuentan al despegar — la vista previa muestra la carga exacta.",
   "logistics_help_return": "Tras la entrega, las naves regresan vacías al planeta de partida.",
   "logistics_source_ships_label": "Cargueros en esta colonia",
-  "logistics_source_ships_short": "Cargueros"
+  "logistics_source_ships_short": "Cargueros",
+  "logistics_hub_stock_label": "Stock del hub",
+  "logistics_hub_colony_tag": "Hub"
 }

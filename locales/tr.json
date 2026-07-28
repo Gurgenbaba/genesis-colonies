@@ -6848,5 +6848,7 @@
   "logistics_help_debit": "Kaynaklar kalkışta düşülür — önizleme tam yükü gösterir.",
   "logistics_help_return": "Teslimden sonra gemiler boş olarak kalkış gezegenine döner.",
   "logistics_source_ships_label": "Bu kolonideki kargo gemileri",
-  "logistics_source_ships_short": "Kargo"
+  "logistics_source_ships_short": "Kargo",
+  "logistics_hub_stock_label": "Merkez stoku",
+  "logistics_hub_colony_tag": "Merkez"
 }

@@ -290,7 +290,62 @@ def test_logistics_page_renders_collect_form(logistics_db, monkeypatch):
     assert 'logistics-auto-cargo-hint' in html
     assert 'logistics-help-btn' in html
     assert 'logistics-help-modal' in html
+    assert 'data-logistics-hub-stock' in html
+    assert 'data-logistics-colony-res="metal"' in html
     assert 'data-logistics-ship-input' not in html
+
+
+def test_logistics_page_context_shows_funded_colony_resources(logistics_db):
+    """Collect cards must expose live colony stock (not blank/zero for funded planets)."""
+    from game.fleet import build_logistics_page_context
+
+    conn = db()
+    uid = _player(conn=conn)
+    hub, sources = _hub_and_sources(uid, conn, sources=1)
+    planets = get_planets_by_player(uid, conn=conn)
+    hub_row = next(p for p in planets if int(p['id']) == hub)
+    ctx = build_logistics_page_context(
+        player_id=uid,
+        planet_id=hub,
+        planet=dict(hub_row),
+        conn=conn,
+    )
+    conn.close()
+    assert ctx.get('ready') is True
+    by_id = {int(c['planet_id']): c for c in (ctx.get('colonies') or [])}
+    assert sources[0] in by_id
+    assert int(by_id[sources[0]]['resources']['metal']) >= 20000
+    assert 'metal' in (ctx.get('hub_resources') or {})
+
+
+def test_collect_logistics_api_returns_colony_resources(logistics_db):
+    import app as app_mod
+    conn = db()
+    uid = _player(conn=conn)
+    hub, sources = _hub_and_sources(uid, conn, sources=1)
+    _seed_ships(sources[0], uid, {'mule_courier': 3}, conn=conn)
+    conn.commit()
+    conn.close()
+    client = app_mod.app.test_client()
+    with client.session_transaction() as sess:
+        sess['user_id'] = uid
+    res = client.post(
+        '/api/fleet/logistics/collect',
+        json={
+            'target_planet_id': hub,
+            'source_planet_ids': sources,
+            'ships': {'mule_courier': 2},
+            'resources_mode': 'all',
+            'request_id': str(uuid.uuid4()),
+        },
+    )
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body['ok'] is True
+    colony_resources = (body.get('data') or {}).get('colony_resources') or {}
+    assert str(sources[0]) in colony_resources or sources[0] in colony_resources
+    source_stock = colony_resources.get(str(sources[0])) or colony_resources.get(sources[0])
+    assert int(source_stock['metal']) < 20000
 
 def test_collect_logistics_api_returns_state(logistics_db):
     import app as app_mod

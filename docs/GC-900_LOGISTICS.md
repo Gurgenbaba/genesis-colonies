@@ -297,6 +297,8 @@ MVP-UI-Regeln:
 - `GC.fetchGameAction` + `applyActionState`
 - Planet-Liste aus Server (eigene Kolonien, nicht Homeworld-only)
 - Kein `location.reload`
+- Hub bleibt in der Colony-Liste sichtbar (Tag „Hub“, nicht wählbar) + **Hub-Vorrat** in der Toolbar — nach Collect liegen die Mengen am Hub, Quellen können 0 zeigen
+- Colony-Stocks in `build_logistics_page_context` werden per `update_planet_resources(..., skip_queue_finish=True)` getickt; Collect/Distribute-Response liefert `colony_resources` zum Live-Patch
 
 Ort: `templates/logistics.html` oder Fleet-Tab — Entscheidung **GC-900C** (Collect zuerst).
 

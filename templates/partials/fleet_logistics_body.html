@@ -12,6 +12,15 @@
         </option>
         {% endfor %}
       </select>
+      {% set hub_res = log_ctx.hub_resources if log_ctx.hub_resources is defined else {} %}
+      <div class="logistics-hub-stock" data-logistics-hub-stock aria-live="polite">
+        <span class="logistics-hub-stock-label">{{ T("logistics_hub_stock_label", "Hub-Vorrat") }}</span>
+        <span class="logistics-hub-stock-values">
+          <span class="gc-resource-inline">{{ render_resource_icon('metal') }}<span class="gc-mono" data-logistics-hub-res="metal">{{ (hub_res.metal or 0)|fmt_int }}</span></span>
+          <span class="gc-resource-inline">{{ render_resource_icon('crystal') }}<span class="gc-mono" data-logistics-hub-res="crystal">{{ (hub_res.crystal or 0)|fmt_int }}</span></span>
+          <span class="gc-resource-inline">{{ render_resource_icon('fuel_cells') }}<span class="gc-mono" data-logistics-hub-res="fuel_cells">{{ (hub_res.fuel_cells or 0)|fmt_int }}</span></span>
+        </span>
+      </div>
       <p class="hint logistics-hint logistics-hub-hint">{{ T("logistics_hub_hint") }}</p>
     </div>
     <button type="button"
@@ -98,15 +107,18 @@
             </div>
             <ul class="logistics-sources-list" data-logistics-colony-list="collect">
               {% for col in log_ctx.colonies %}
-              {% set res = col.resources if col.resources is defined else {} %}
-              <li class="logistics-source-card logistics-colony-card" data-colony-planet-id="{{ col.planet_id }}">
+              {% set res = col.resources if col.resources is mapping else {} %}
+              <li class="logistics-source-card logistics-colony-card{% if col.is_active %} is-hub{% endif %}"
+                  data-colony-planet-id="{{ col.planet_id }}">
                 <label class="logistics-source-label">
                   <input type="checkbox" class="logistics-source-cb" name="source_planet_ids"
-                         value="{{ col.planet_id }}" data-logistics-colony-cb="collect">
+                         value="{{ col.planet_id }}" data-logistics-colony-cb="collect"
+                         {% if col.is_active %}disabled{% endif %}>
                   <span class="logistics-source-check" aria-hidden="true"></span>
                   <span class="logistics-source-card-body">
                     <span class="logistics-source-name">{{ col.name }}</span>
                     <span class="logistics-source-coords gc-mono">{{ col.coordinates }}</span>
+                    <span class="gc-panel-tag logistics-source-hub-tag">{{ T("logistics_hub_colony_tag", "Hub") }}</span>
                     {% if col.is_active %}
                     <span class="gc-panel-tag logistics-source-active-tag">{{ T("logistics_active_colony") }}</span>
                     {% endif %}
@@ -114,9 +126,9 @@
                       {{ T("logistics_source_ships_short") }}: {{ col.cargo_ship_count|default(0)|fmt_int }}
                     </span>
                     <span class="logistics-source-resources">
-                      <span class="gc-resource-inline">{{ render_resource_icon('metal') }}{{ (res.metal or 0)|fmt_int }}</span>
-                      <span class="gc-resource-inline">{{ render_resource_icon('crystal') }}{{ (res.crystal or 0)|fmt_int }}</span>
-                      <span class="gc-resource-inline">{{ render_resource_icon('fuel_cells') }}{{ (res.fuel_cells or 0)|fmt_int }}</span>
+                      <span class="gc-resource-inline">{{ render_resource_icon('metal') }}<span class="gc-mono" data-logistics-colony-res="metal">{{ (res.metal or 0)|fmt_int }}</span></span>
+                      <span class="gc-resource-inline">{{ render_resource_icon('crystal') }}<span class="gc-mono" data-logistics-colony-res="crystal">{{ (res.crystal or 0)|fmt_int }}</span></span>
+                      <span class="gc-resource-inline">{{ render_resource_icon('fuel_cells') }}<span class="gc-mono" data-logistics-colony-res="fuel_cells">{{ (res.fuel_cells or 0)|fmt_int }}</span></span>
                     </span>
                   </span>
                 </label>
@@ -164,17 +176,26 @@
             </div>
             <ul class="logistics-sources-list" data-logistics-colony-list="distribute">
               {% for col in log_ctx.colonies %}
-              <li class="logistics-source-card logistics-colony-card" data-colony-planet-id="{{ col.planet_id }}">
+              {% set res = col.resources if col.resources is mapping else {} %}
+              <li class="logistics-source-card logistics-colony-card{% if col.is_active %} is-hub{% endif %}"
+                  data-colony-planet-id="{{ col.planet_id }}">
                 <label class="logistics-source-label">
                   <input type="checkbox" class="logistics-source-cb" name="target_planet_ids"
-                         value="{{ col.planet_id }}" data-logistics-colony-cb="distribute">
+                         value="{{ col.planet_id }}" data-logistics-colony-cb="distribute"
+                         {% if col.is_active %}disabled{% endif %}>
                   <span class="logistics-source-check" aria-hidden="true"></span>
                   <span class="logistics-source-card-body">
                     <span class="logistics-source-name">{{ col.name }}</span>
                     <span class="logistics-source-coords gc-mono">{{ col.coordinates }}</span>
+                    <span class="gc-panel-tag logistics-source-hub-tag">{{ T("logistics_hub_colony_tag", "Hub") }}</span>
                     {% if col.is_active %}
                     <span class="gc-panel-tag logistics-source-active-tag">{{ T("logistics_active_colony") }}</span>
                     {% endif %}
+                    <span class="logistics-source-resources">
+                      <span class="gc-resource-inline">{{ render_resource_icon('metal') }}<span class="gc-mono" data-logistics-colony-res="metal">{{ (res.metal or 0)|fmt_int }}</span></span>
+                      <span class="gc-resource-inline">{{ render_resource_icon('crystal') }}<span class="gc-mono" data-logistics-colony-res="crystal">{{ (res.crystal or 0)|fmt_int }}</span></span>
+                      <span class="gc-resource-inline">{{ render_resource_icon('fuel_cells') }}<span class="gc-mono" data-logistics-colony-res="fuel_cells">{{ (res.fuel_cells or 0)|fmt_int }}</span></span>
+                    </span>
                   </span>
                 </label>
               </li>

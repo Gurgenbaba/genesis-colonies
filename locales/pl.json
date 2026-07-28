@@ -6848,5 +6848,7 @@
   "logistics_help_debit": "Zasoby są pobierane przy starcie — podgląd pokazuje dokładny ładunek.",
   "logistics_help_return": "Po dostawie statki wracają puste na planetę startu.",
   "logistics_source_ships_label": "Frachtowce na tej kolonii",
-  "logistics_source_ships_short": "Frachtowce"
+  "logistics_source_ships_short": "Frachtowce",
+  "logistics_hub_stock_label": "Zapas huba",
+  "logistics_hub_colony_tag": "Hub"
 }
