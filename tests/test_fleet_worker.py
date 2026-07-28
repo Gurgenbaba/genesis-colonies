@@ -81,8 +81,54 @@ def _start_expedition(conn, uid: int, pid: int) -> int:
 def test_background_maintenance_source_gate():
     assert _is_background_maintenance_source("http_cron")
     assert _is_background_maintenance_source("cron")
+    assert _is_background_maintenance_source("embedded_cron")
+    assert _is_background_maintenance_source("game_worker")
     assert not _is_background_maintenance_source("overview")
     assert not _is_background_maintenance_source("game_state")
+
+
+def test_post_fleet_maintenance_runs_on_embedded_cron(fleet_db, monkeypatch):
+    """GC-2604: Railway embedded_cron must run pirate/inactive post-maint stages."""
+    called = {"hof": False, "inactive": False}
+
+    def fake_hof(**kw):
+        called["hof"] = True
+        return {"inserted": 0}
+
+    def fake_inactive(conn, **kw):
+        called["inactive"] = True
+        return {"ok": True, "woke_count": 0, "enqueued": 0, "session_ticks": 0}
+
+    monkeypatch.setattr("game.combat_hof.maybe_sync_combat_hof_incremental", fake_hof)
+    monkeypatch.setattr(
+        "game.combat_balance_bots.maybe_run_next_scheduled_scenario",
+        lambda **kw: {"ok": True, "skipped": "disabled"},
+    )
+    monkeypatch.setattr(
+        "game.world_boss.maybe_tick_world_boss_schedule",
+        lambda **kw: {},
+    )
+    monkeypatch.setattr(
+        "game.asteroids.maybe_tick_asteroid_schedule",
+        lambda **kw: {},
+    )
+    monkeypatch.setattr(
+        "game.pirates.bases.maybe_tick_pirate_bases",
+        lambda **kw: {},
+    )
+    monkeypatch.setattr(
+        "game.inactive_autoplay.maybe_tick_inactive_autoplay",
+        fake_inactive,
+    )
+    monkeypatch.setattr(
+        "game.combat.expire_due_debris_fields",
+        lambda **kw: 0,
+    )
+    conn = db()
+    _maybe_run_post_fleet_maintenance(conn, source="embedded_cron")
+    assert called["hof"] is True
+    assert called["inactive"] is True
+    conn.close()
 
 
 def test_post_fleet_maintenance_skipped_on_page_load(fleet_db, monkeypatch):

@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 FLEET_WORKER_KEY = "fleet_worker_last"
 FLEET_WORKER_INTERVAL_SEC = float(os.environ.get("GC_FLEET_WORKER_INTERVAL_SEC", "60"))
 # Bot scheduler + HoF catch-up only on dedicated cron ticks — never during page/game-state polls.
+# Railway production uses embedded_cron (maintenance bag); must be allowlisted or autoplay never runs.
 _BACKGROUND_MAINTENANCE_SOURCES = frozenset(
     {
         "cron",
@@ -29,6 +30,8 @@ _BACKGROUND_MAINTENANCE_SOURCES = frozenset(
         "fleet_cron",
         "internal_cron",
         "ranking_cron",
+        "embedded_cron",
+        "game_worker",
     }
 )
 

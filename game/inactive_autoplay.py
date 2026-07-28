@@ -32,6 +32,13 @@ INACTIVE_BUILD_DURATION_CAP = 900  # 15 min
 INACTIVE_RESEARCH_DURATION_CAP = 1200  # 20 min
 INACTIVE_CHAIN_LIMIT = 3
 
+# Soft floor so empty dormant empires can enqueue (far below pirate seed).
+INACTIVE_RESOURCE_FLOOR = {
+    "metal": 75_000,
+    "crystal": 50_000,
+    "fuel_cells": 15_000,
+}
+
 # Revisit: pull stale accounts onto sticky roster.
 DEFAULT_REVISIT_SEC = 36 * 3600  # 36h — stay under 3-day inactive badge
 DEFAULT_WAKE_INTERVAL_SEC = 10 * 60
@@ -311,6 +318,44 @@ def _prune_roster(conn, roster: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return kept
 
 
+def _ensure_resource_floor(conn, planet_id: int) -> Dict[str, int]:
+    """Raise home stockpile to a soft floor when empty (GC-2607)."""
+    row = conn.execute(
+        """
+        SELECT COALESCE(metal, 0) AS metal,
+               COALESCE(crystal, 0) AS crystal,
+               COALESCE(fuel_cells, 0) AS fuel_cells
+        FROM planets WHERE id = ? LIMIT 1;
+        """,
+        (int(planet_id),),
+    ).fetchone()
+    if not row:
+        return {}
+    metal = max(float(row["metal"] or 0), float(INACTIVE_RESOURCE_FLOOR["metal"]))
+    crystal = max(float(row["crystal"] or 0), float(INACTIVE_RESOURCE_FLOOR["crystal"]))
+    fuel = max(float(row["fuel_cells"] or 0), float(INACTIVE_RESOURCE_FLOOR["fuel_cells"]))
+    raised = (
+        metal > float(row["metal"] or 0)
+        or crystal > float(row["crystal"] or 0)
+        or fuel > float(row["fuel_cells"] or 0)
+    )
+    if raised:
+        conn.execute(
+            """
+            UPDATE planets
+            SET metal = ?, crystal = ?, fuel_cells = ?
+            WHERE id = ?;
+            """,
+            (metal, crystal, fuel, int(planet_id)),
+        )
+    return {
+        "metal": int(metal),
+        "crystal": int(crystal),
+        "fuel_cells": int(fuel),
+        "raised": int(raised),
+    }
+
+
 def _run_player_economy(
     conn,
     player_id: int,
@@ -324,8 +369,9 @@ def _run_player_economy(
     if not home:
         return {"ok": False, "error": "no_homeworld", "player_id": player_id}
 
-    planets = get_planets_by_player(player_id, conn=conn) or [home]
     home_id = int(home["id"])
+    floor = _ensure_resource_floor(conn, home_id)
+    planets = get_planets_by_player(player_id, conn=conn) or [home]
     results: List[Dict[str, Any]] = []
     for planet in planets:
         is_home = int(planet["id"]) == home_id or bool(planet.get("is_homeworld"))
@@ -368,11 +414,14 @@ def _run_player_economy(
         or r.get("researches")
         for r in results
     )
+    finished_any = any((r.get("finished") or {}) for r in results)
     return {
         "ok": True,
         "player_id": player_id,
         "economy": results,
         "enqueued": enqueued,
+        "finished": finished_any,
+        "resource_floor": floor,
     }
 
 

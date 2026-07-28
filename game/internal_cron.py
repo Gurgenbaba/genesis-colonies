@@ -227,11 +227,18 @@ def execute_queue_tick(*, force: bool, source: str) -> Dict[str, Any]:
     GC-PERF-WORKER-001: global due-queue finish via tick_runner (same engine as admin/CLI).
 
     ``force`` is accepted for API symmetry; queue tick always processes currently due work.
+    GC-2606: scores refresh on finish; ranks stay on ranking_worker.
     """
     from game.tick_runner import run_tick
 
     _ = force  # reserved for future interval guard parity with fleet/ranking
-    return run_tick(scope="due", source=str(source or "http_cron"), persist=True)
+    return run_tick(
+        scope="due",
+        source=str(source or "http_cron"),
+        persist=True,
+        update_scores=True,
+        recalc_ranks=False,
+    )
 
 
 def log_queue_tick_result(

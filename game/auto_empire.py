@@ -601,6 +601,22 @@ def plan_passive_planet_tick(
         if not progressed:
             break
 
+    # Always finish force-completed / due jobs so levels + scores apply in-tick.
+    final_finished = _finish_due(
+        conn,
+        player_id=int(player_id),
+        planet_id=planet_id,
+        now=ts,
+        source=str(source),
+        update_scores=bool(update_scores),
+    )
+    if final_finished:
+        for k, v in final_finished.items():
+            try:
+                out["finished"][k] = int(out["finished"].get(k) or 0) + int(v or 0)
+            except Exception:
+                out["finished"][k] = v
+
     if allow_ships:
         ship_res = try_build_ships(
             conn,

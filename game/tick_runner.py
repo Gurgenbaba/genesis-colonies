@@ -107,7 +107,7 @@ def run_tick(
     scope: str = "due",
     batch_size: int = 100,
     source: str = "cron",
-    update_scores: bool = False,
+    update_scores: bool = True,
     recalc_ranks: bool = False,
     persist: bool = True,
 ) -> Dict[str, Any]:
@@ -118,6 +118,8 @@ def run_tick(
         scope: Currently only ``due`` (players with overdue jobs).
         batch_size: Max players per finish_due_work batch.
         source: Label for logs/audit (cron, worker, cli, …).
+        update_scores: Refresh player_scores after finishes (GC-2606 default on).
+        recalc_ranks: Expensive; leave False — ranking_worker owns ranks.
         persist: Write summary to runtime_state for admin health.
     """
     if scope != "due":
@@ -233,7 +235,7 @@ def run_queue_tick(
     player_id: Optional[int] = None,
     planet_id: Optional[int] = None,
     source: str = "cron",
-    update_scores: bool = False,
+    update_scores: bool = True,
     recalc_ranks: bool = False,
     persist: bool = True,
 ) -> Dict[str, Any]:
@@ -278,7 +280,7 @@ def run_global_queue_tick(
     *,
     source: str = "cron",
     batch_size: int = 100,
-    update_scores: bool = False,
+    update_scores: bool = True,
     recalc_ranks: bool = False,
     persist: bool = True,
 ) -> Dict[str, Any]:

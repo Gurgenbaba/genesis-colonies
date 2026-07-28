@@ -220,3 +220,118 @@ def test_inactive_autoplay_disabled_skips(autoplay_db):
         commit(conn)
     finally:
         conn.close()
+
+
+def test_autoplay_chain_applies_levels_and_scores(autoplay_db):
+    """GC-2605: force-complete chain finishes in-tick → buildings + player_scores."""
+    from game.auto_empire import plan_passive_planet_tick
+    from game.models import get_planet_buildings
+
+    uid = _register_user()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        player = _seed_dormant(conn, uid, days_inactive=0.1)
+        # Start from empty mines so first upgrades clearly raise score.
+        conn.execute(
+            """
+            UPDATE planet_buildings
+            SET metal_mine = 0, crystal_mine = 0, solar_plant = 0
+            WHERE planet_id = ?;
+            """,
+            (int(player["planet_id"]),),
+        )
+        before_b = get_planet_buildings(int(player["planet_id"]), conn=conn)
+        before_score = conn.execute(
+            "SELECT COALESCE(score_total, 0) AS s FROM player_scores WHERE player_id = ?;",
+            (uid,),
+        ).fetchone()
+        score_before = int((before_score or {"s": 0})["s"] or 0)
+
+        out = plan_passive_planet_tick(
+            conn,
+            player_id=uid,
+            planet=player["planet"],
+            now=time.time(),
+            is_home=True,
+            allow_ships=False,
+            allow_defense=False,
+            build_duration_cap=90,
+            research_duration_cap=120,
+            chain_limit=3,
+            source="test",
+            update_scores=True,
+        )
+        assert out.get("builds") or out.get("build") or out.get("finished")
+        after_b = get_planet_buildings(int(player["planet_id"]), conn=conn)
+        mine_before = (
+            int(before_b.get("metal_mine") or 0)
+            + int(before_b.get("crystal_mine") or 0)
+            + int(before_b.get("solar_plant") or 0)
+        )
+        mine_after = (
+            int(after_b.get("metal_mine") or 0)
+            + int(after_b.get("crystal_mine") or 0)
+            + int(after_b.get("solar_plant") or 0)
+        )
+        assert mine_after > mine_before
+        # Due jobs should be cleared after final finish.
+        queued = int(
+            (
+                conn.execute(
+                    "SELECT COUNT(*) AS c FROM build_queue WHERE planet_id = ?;",
+                    (int(player["planet_id"]),),
+                ).fetchone()
+                or {"c": 0}
+            )["c"]
+            or 0
+        )
+        assert queued == 0
+        after_score = conn.execute(
+            "SELECT COALESCE(score_total, 0) AS s FROM player_scores WHERE player_id = ?;",
+            (uid,),
+        ).fetchone()
+        score_after = int((after_score or {"s": 0})["s"] or 0)
+        assert score_after > score_before
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_inactive_resource_floor_raises_empty_stockpile(autoplay_db):
+    """GC-2607: empty dormant home gets soft floor so enqueue can proceed."""
+    from game.inactive_autoplay import (
+        INACTIVE_RESOURCE_FLOOR,
+        _ensure_resource_floor,
+        run_inactive_autoplay_tick,
+        set_inactive_autoplay_enabled,
+    )
+
+    uid = _register_user()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        set_inactive_autoplay_enabled(True, conn=conn)
+        player = _seed_dormant(conn, uid, days_inactive=5.0)
+        conn.execute(
+            "UPDATE planets SET metal = 0, crystal = 0, fuel_cells = 0 WHERE id = ?;",
+            (int(player["planet_id"]),),
+        )
+        floor = _ensure_resource_floor(conn, int(player["planet_id"]))
+        assert floor.get("raised") == 1
+        row = conn.execute(
+            "SELECT metal, crystal, fuel_cells FROM planets WHERE id = ?;",
+            (int(player["planet_id"]),),
+        ).fetchone()
+        assert float(row["metal"]) >= INACTIVE_RESOURCE_FLOOR["metal"]
+        assert float(row["crystal"]) >= INACTIVE_RESOURCE_FLOOR["crystal"]
+        assert float(row["fuel_cells"]) >= INACTIVE_RESOURCE_FLOOR["fuel_cells"]
+
+        result = run_inactive_autoplay_tick(
+            conn, now=time.time(), force=True, source="test"
+        )
+        assert result.get("ok")
+        assert int(result.get("woke_count") or 0) >= 1
+        commit(conn)
+    finally:
+        conn.close()

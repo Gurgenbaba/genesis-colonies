@@ -17,6 +17,9 @@ Dormante Menschen-Konten werden gestaffelt auf einen **sticky Roster** geholt un
 | Revisit | ~36h — zieht Stale-Accounts wieder auf den Roster |
 | Exclude | Vacation, Pirate-Bots, Combat-Balance-Bots |
 | Soft-Off | `runtime_state.inactive_autoplay_enabled=0` oder `GC_INACTIVE_AUTOPLAY_ENABLED=0` |
+| Cron | Läuft über Fleet post-maint inkl. **`embedded_cron`** / `game_worker` (Railway) — nicht nur `http_cron` |
+| Scores | Finish schreibt `player_scores` (`update_scores=True`); Ränge via `ranking_worker` (~10 min) |
+| Resource Floor | Soft-Floor am Home (75k/50k/15k) wenn Lager leer — kein Pirate-Seed |
 
 ## Tickets
 
@@ -26,6 +29,10 @@ Dormante Menschen-Konten werden gestaffelt auf einen **sticky Roster** geholt un
 | GC-2601 | Sticky roster wake + Presence + autonomous economy | done |
 | GC-2602 | Pirate AI Expeditions (`dispatch_expedition_from_home`) | done |
 | GC-2603 | Autonomy pass: chain enqueue, economy-all pirates, sticky roster | done |
+| GC-2604 | `embedded_cron` / `game_worker` in post-fleet allowlist | done |
+| GC-2605 | Final chain finish + level/score contract | done |
+| GC-2606 | Offline queue tick `update_scores=True` | done |
+| GC-2607 | Inactive soft resource floor | done |
 
 ## Env
 
