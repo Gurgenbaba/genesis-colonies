@@ -87,6 +87,7 @@ Schema-Port
 | **GC-PERF-GALAXY-PREFETCH-GATE-001** | Galaxy prefetch concurrency=1 + pause | ✅ |
 | **GC-PERF-PJAX-BYTES-HEAVY-001** | PE SSR slim (locked info + history) + baseline | ✅ |
 | **[GC-PERF-FLEET-SEND-001](GC_PERF_FLEET_SEND_001.md)** | Instant fleet send/recall (slim state, no finish on RTT, deferred client refresh) | ✅ |
+| **[GC-PERF-PROD-001](GC_PERF_PROD_001.md)** | Production latency floor: `/healthz` liveness, readiness timings, request wall phases | 🔄 prove slice |
 
 ## Explizit nicht tun (jetzt)
 

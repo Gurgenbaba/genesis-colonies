@@ -40,6 +40,9 @@ def test_request_perf_phase_keys_include_nav_latency_fields():
     from game.live_state import _REQUEST_PERF_META_KEYS, _REQUEST_PERF_PHASE_KEYS
 
     for key in (
+        "before_request_ms",
+        "handler_ms",
+        "after_request_ms",
         "db_connection_ms",
         "page_context_ms",
         "template_render_ms",

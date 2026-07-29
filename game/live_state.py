@@ -14,6 +14,9 @@ logger = logging.getLogger(__name__)
 
 _REQUEST_PERF_PHASE_KEYS = frozenset(
     {
+        "before_request_ms",
+        "handler_ms",
+        "after_request_ms",
         "fleet_tick_ms",
         "account_deletion_worker_ms",
         "live_context_ms",
@@ -1350,6 +1353,8 @@ class RequestPerfState:
         "sql_write_count",
         "logged",
         "_write_tx_started_at",
+        "_handler_started_at",
+        "_after_started_at",
     )
 
     def __init__(self, *, sampled: bool) -> None:
@@ -1361,6 +1366,8 @@ class RequestPerfState:
         self.sql_write_count = 0
         self.logged = False
         self._write_tx_started_at: Optional[float] = None
+        self._handler_started_at: Optional[float] = None
+        self._after_started_at: Optional[float] = None
 
 
 def is_request_perf_debug_enabled() -> bool:
@@ -1416,6 +1423,38 @@ def start_request_perf(
             set_request_perf_meta("sample", 1)
     except Exception:
         logger.debug("start_request_perf failed", exc_info=True)
+
+
+def mark_request_perf_enter_handler() -> None:
+    """GC-PERF-PROD-001: end of before_request → start of view handler."""
+    state = _request_perf_state()
+    if state is None or not state.sampled or state._handler_started_at is not None:
+        return
+    try:
+        now = time.perf_counter()
+        record_request_perf_phase(
+            "before_request_ms", (now - float(state.started_at)) * 1000.0
+        )
+        state._handler_started_at = now
+    except Exception:
+        logger.debug("mark_request_perf_enter_handler failed", exc_info=True)
+
+
+def mark_request_perf_enter_after() -> None:
+    """GC-PERF-PROD-001: end of view handler → start of after_request."""
+    state = _request_perf_state()
+    if state is None or not state.sampled or state._after_started_at is not None:
+        return
+    try:
+        now = time.perf_counter()
+        started = state._handler_started_at
+        if started is not None:
+            record_request_perf_phase(
+                "handler_ms", (now - float(started)) * 1000.0
+            )
+        state._after_started_at = now
+    except Exception:
+        logger.debug("mark_request_perf_enter_after failed", exc_info=True)
 
 
 def record_request_perf_phase(name: str, duration_ms: float) -> None:
@@ -1631,6 +1670,12 @@ def finish_request_perf_after(response):
     if state is None or not state.sampled:
         return response
     try:
+        after_started = state._after_started_at
+        if after_started is not None and "after_request_ms" not in state.phases:
+            record_request_perf_phase(
+                "after_request_ms",
+                (time.perf_counter() - float(after_started)) * 1000.0,
+            )
         status = int(getattr(response, "status_code", 200) or 200)
         content_type = str(response.headers.get("Content-Type") or "")
         response_bytes = _response_byte_length(response)

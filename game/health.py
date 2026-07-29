@@ -1,10 +1,14 @@
 """
-Health check assembly for /health and install verification.
+Health check assembly for /health (readiness) and /healthz (liveness).
+
+GC-PERF-PROD-001: keep deep readiness on `/health`; liveness must stay cheap
+so Docker/LB probes do not monopolize the single gunicorn sync worker.
 """
 
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -16,6 +20,15 @@ from game.config import (
 )
 from game.db import db, resolve_db_path
 from game.migrations_util import migrations_are_current
+
+
+def build_liveness_report() -> Dict[str, Any]:
+    """Process-alive signal only — no DB, migrations, or volume probes."""
+    return {
+        "ok": True,
+        "status": "alive",
+        "version": get_app_version(),
+    }
 
 
 def writable_paths() -> List[Path]:
@@ -88,11 +101,26 @@ def check_config() -> Dict[str, Any]:
     }
 
 
+def _timed_check(fn) -> Dict[str, Any]:
+    t0 = time.perf_counter()
+    result = fn()
+    if isinstance(result, dict):
+        result = dict(result)
+        result["duration_ms"] = round((time.perf_counter() - t0) * 1000.0, 1)
+    return result
+
+
 def build_health_report() -> Dict[str, Any]:
-    db_check = check_database()
-    mig_check = check_migrations()
-    write_check = check_writable()
-    cfg_check = check_config()
+    """Deep readiness: DB + migrations + volume writability + config.
+
+    Includes per-check ``duration_ms`` (GC-PERF-PROD-001) so production can
+    separate slow volume/DB probes from worker-queue wait outside Flask.
+    """
+    t0 = time.perf_counter()
+    db_check = _timed_check(check_database)
+    mig_check = _timed_check(check_migrations)
+    write_check = _timed_check(check_writable)
+    cfg_check = _timed_check(check_config)
 
     critical_ok = db_check["ok"] and mig_check["ok"] and write_check["ok"]
     if is_production() and cfg_check.get("errors"):
@@ -107,6 +135,7 @@ def build_health_report() -> Dict[str, Any]:
     return {
         "status": status,
         "version": get_app_version(),
+        "total_ms": round((time.perf_counter() - t0) * 1000.0, 1),
         "checks": {
             "database": db_check,
             "migrations": mig_check,

@@ -111,10 +111,13 @@ After Postgres: optional `scripts/run_game_worker.py` + `GC_EMBEDDED_CRON=0` on 
 ## Smoke after deploy
 
 ```bash
+curl -sS https://www.genesis-colonies.de/healthz
 curl -sS https://www.genesis-colonies.de/health
 ```
 
-Expect HTTP 200 and `"status":"ok"`. Check Railway logs for `[embedded-cron] started`.
+Expect `/healthz` → HTTP 200 `"status":"alive"` (cheap liveness; Docker HEALTHCHECK).  
+Expect `/health` → HTTP 200 `"status":"ok"` (deep readiness; Railway deploy gate).  
+Check Railway logs for `[embedded-cron] started`. Latency root-cause notes: [GC_PERF_PROD_001.md](GC_PERF_PROD_001.md).
 
 ---
 

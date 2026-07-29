@@ -174,7 +174,7 @@ python -c "import secrets; print(secrets.token_hex(32))"
 | `SECRET_KEY` per Orchestrator | Docker: `${SECRET_KEY}` in compose |
 | DB-Datei-Berechtigungen | Nur App-User lesen/schreiben |
 | Debug aus | `FLASK_DEBUG=0` |
-| Health-Monitoring | `/health` ohne Auth — keine Credentials in Response |
+| Health-Monitoring | `/healthz` (liveness) + `/health` (readiness) ohne Auth — keine Credentials in Response |
 
 ### Docker
 

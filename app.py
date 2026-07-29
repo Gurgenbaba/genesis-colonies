@@ -373,29 +373,45 @@ def _should_run_fleet_tick_before_request() -> bool:
 @app.before_request
 def _fleet_tick_before_authenticated_request():
     """Isolated fleet tick before SSR routes open a long-lived page connection."""
-    if not _should_run_fleet_tick_before_request():
-        return None
-    ft0 = time.perf_counter()
     try:
-        from game.fleet_worker import maybe_run_global_fleet_tick
-        from game.live_state import record_request_perf_phase, set_request_perf_meta
+        if _should_run_fleet_tick_before_request():
+            ft0 = time.perf_counter()
+            try:
+                from game.fleet_worker import maybe_run_global_fleet_tick
+                from game.live_state import record_request_perf_phase, set_request_perf_meta
 
-        endpoint = str(request.endpoint or "request")
-        set_request_perf_meta("fleet_tick_source", endpoint)
-        result = maybe_run_global_fleet_tick(force=False, source=endpoint)
-        record_request_perf_phase("fleet_tick_ms", (time.perf_counter() - ft0) * 1000.0)
-        if isinstance(result, dict):
-            ran = 0 if result.get("skipped_interval") else 1
-            set_request_perf_meta("fleet_tick_ran", ran)
-        ad0 = time.perf_counter()
-        from game.options import maybe_run_due_account_deletions
+                endpoint = str(request.endpoint or "request")
+                set_request_perf_meta("fleet_tick_source", endpoint)
+                result = maybe_run_global_fleet_tick(force=False, source=endpoint)
+                record_request_perf_phase(
+                    "fleet_tick_ms", (time.perf_counter() - ft0) * 1000.0
+                )
+                if isinstance(result, dict):
+                    ran = 0 if result.get("skipped_interval") else 1
+                    set_request_perf_meta("fleet_tick_ran", ran)
+                ad0 = time.perf_counter()
+                from game.options import maybe_run_due_account_deletions
 
-        ad_result = maybe_run_due_account_deletions(force=False, source=endpoint)
-        record_request_perf_phase("account_deletion_worker_ms", (time.perf_counter() - ad0) * 1000.0)
-        if isinstance(ad_result, dict) and ad_result.get("count"):
-            set_request_perf_meta("account_deletions_ran", int(ad_result.get("count") or 0))
-    except Exception:
-        logger.exception("before_request fleet tick failed endpoint=%s", request.endpoint)
+                ad_result = maybe_run_due_account_deletions(force=False, source=endpoint)
+                record_request_perf_phase(
+                    "account_deletion_worker_ms", (time.perf_counter() - ad0) * 1000.0
+                )
+                if isinstance(ad_result, dict) and ad_result.get("count"):
+                    set_request_perf_meta(
+                        "account_deletions_ran", int(ad_result.get("count") or 0)
+                    )
+            except Exception:
+                logger.exception(
+                    "before_request fleet tick failed endpoint=%s", request.endpoint
+                )
+    finally:
+        # GC-PERF-PROD-001: wall split before_request → handler (even when tick skipped).
+        try:
+            from game.live_state import mark_request_perf_enter_handler
+
+            mark_request_perf_enter_handler()
+        except Exception:
+            pass
     return None
 
 
@@ -905,6 +921,12 @@ def _session_cookie_secure() -> bool:
 
 @app.after_request
 def _gc_security_headers(response):
+    try:
+        from game.live_state import mark_request_perf_enter_after
+
+        mark_request_perf_enter_after()
+    except Exception:
+        pass
     secure = _session_cookie_secure() or bool(request.is_secure)
     response = apply_security_headers(response, secure=secure)
     response = apply_static_image_cache_headers(response)
@@ -947,8 +969,17 @@ def _teardown_queue_finish_dedup(_exc=None):
 # HEALTH
 # --------------------------------------------------------------------------
 
+@app.route("/healthz")
+def healthz():
+    """GC-PERF-PROD-001: cheap liveness — no DB/FS. Docker HEALTHCHECK target."""
+    from game.health import build_liveness_report
+
+    return jsonify(build_liveness_report()), 200
+
+
 @app.route("/health")
 def health():
+    """Deep readiness (DB + migrations + volume). Railway deploy gate."""
     from game.health import build_health_report
 
     report = build_health_report()
