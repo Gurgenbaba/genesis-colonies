@@ -87,7 +87,14 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
     def _over_budget() -> bool:
         return (time.perf_counter() - started) >= budget_sec
 
-    def _run_stage(name: str, fn) -> None:
+    def _run_stage(name: str, fn, *, manage_tx: bool = True) -> None:
+        """Run one post-maint stage.
+
+        manage_tx=True (default): wrap fn in one BEGIN IMMEDIATE — fine for
+        short stages. manage_tx=False: fn owns short write transactions
+        (GC-PERF-AUTOPLAY-001 inactive_autoplay) so HTTP writers are not blocked
+        for the entire multi-player economy pass.
+        """
         if _over_budget():
             _worker_log(f"post-maint skip={name} budget_sec={budget_sec}")
             try:
@@ -103,15 +110,30 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
                     "post fleet maintenance skip-streak failed source=%s stage=%s", source, name
                 )
             return
+        stage_t0 = time.perf_counter()
         try:
-            begin_write_transaction(conn)
-            try:
+            if not manage_tx:
                 fn()
-                _record_stage_success(conn, name)
-                commit(conn)
-            except Exception:
-                rollback(conn)
-                raise
+                begin_write_transaction(conn)
+                try:
+                    _record_stage_success(conn, name)
+                    commit(conn)
+                except Exception:
+                    rollback(conn)
+                    raise
+            else:
+                begin_write_transaction(conn)
+                try:
+                    fn()
+                    _record_stage_success(conn, name)
+                    commit(conn)
+                except Exception:
+                    rollback(conn)
+                    raise
+            hold_ms = (time.perf_counter() - stage_t0) * 1000.0
+            _worker_log(
+                f"post-maint stage={name} hold_ms={hold_ms:.0f} manage_tx={int(manage_tx)}"
+            )
         except Exception:
             logger.exception("post fleet maintenance stage failed source=%s stage=%s", source, name)
 
@@ -176,12 +198,21 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
             from .inactive_autoplay import maybe_tick_inactive_autoplay
 
             ia = maybe_tick_inactive_autoplay(conn, source="fleet_worker")
-            if ia.get("woke_count") or ia.get("enqueued") or ia.get("session_ticks"):
+            if (
+                ia.get("woke_count")
+                or ia.get("enqueued")
+                or ia.get("session_ticks")
+                or ia.get("error")
+                or ia.get("hold_ms")
+            ):
                 _worker_log(
                     f"inactive_autoplay woke={ia.get('woke_count')} "
                     f"roster={ia.get('roster_size') or ia.get('active_sessions')} "
                     f"enqueued={ia.get('enqueued')} "
-                    f"ticks={ia.get('session_ticks')}"
+                    f"ticks={ia.get('session_ticks')} "
+                    f"hold_ms={ia.get('hold_ms')} "
+                    f"write_commits={ia.get('write_commits')} "
+                    f"error={ia.get('error')}"
                 )
 
         def _debris() -> None:
@@ -197,7 +228,8 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
         _run_stage("asteroids", _asteroids)
         # GC-2610: inactive_autoplay before pirates — pirate economy-for-all-bots is
         # the most expensive stage and must not starve inactive accounts of budget.
-        _run_stage("inactive_autoplay", _inactive_autoplay)
+        # GC-PERF-AUTOPLAY-001: autoplay manages short per-player write TXs itself.
+        _run_stage("inactive_autoplay", _inactive_autoplay, manage_tx=False)
         _run_stage("pirates", _pirates)
         _run_stage("debris", _debris)
     except Exception:

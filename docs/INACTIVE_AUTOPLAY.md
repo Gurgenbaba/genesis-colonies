@@ -22,7 +22,8 @@ Dormante Menschen-Konten werden gestaffelt auf einen **sticky Roster** geholt un
 | Exclude | Vacation, Pirate-Bots, Combat-Balance-Bots |
 | Soft-Off | `runtime_state.inactive_autoplay_enabled=0` oder `GC_INACTIVE_AUTOPLAY_ENABLED=0` |
 | Cron | Läuft über Fleet post-maint inkl. **`embedded_cron`** / `game_worker` (Railway) — nicht nur `http_cron` |
-| Scores | Finish schreibt `player_scores` (`update_scores=True`); Ränge via `ranking_worker` (~10 min) |
+| Scores | Finish markiert Score-Dirty (`update_scores=True` → GC-SCORE-PERF-001); Snapshot/Ränge via `ranking_worker` (~10 min) |
+| Write-TX | GC-PERF-AUTOPLAY-001: Stage ohne Outer-IMMEDIATE; kurze Write-TX pro Economy/Presence; Overlap-Guard `inactive_autoplay_busy` |
 | Resource Floor | Soft-Floor am Home (75k/50k/15k) wenn Lager leer — kein Pirate-Seed |
 | Admin | Tab "Inactive Autoplay" (mirror Pirate-Tab): KPIs, Roster-Tabelle, Soft-On/Off — `GET/POST /api/admin/inactive-autoplay[/toggle]` |
 | Budget-Fairness | Post-Maint Stage-Reihenfolge: `inactive_autoplay` **vor** `pirates` (teuerste Stage darf Inactive nicht verhungern lassen); Budget-Skip zählt `runtime_state.post_maint_skip_streak_<stage>` hoch, Erfolg setzt zurück auf 0 — sichtbar im Admin-Panel als KPI |
@@ -53,6 +54,7 @@ Dormante Menschen-Konten werden gestaffelt auf einen **sticky Roster** geholt un
 | GC-2618 | Anti-Klon-Varianz: personality-basierte Bau-/Forschungsreihenfolge + Ziel-Level-Jitter + Idle-Chance auf standing Ticks (Inactive + Pirate-AI) | done |
 | GC-2619 | Control Handback: echter Login entfernt Account sofort vom Sticky Roster statt auf LRU-Eviction zu warten | done |
 | GC-2620 | Concurrent Roster-Cap 5–8 (Default 6, Clamp 4–12), sticky slow wake (Batch 1), Deploy-Trim bei Übergröße (Alias: GC-INACTIVE-ROSTER-002) | done |
+| GC-PERF-AUTOPLAY-001 | Kurze Write-TXs + Busy-Lease; Stage `manage_tx=False`; hold_ms/write_commits Logging; Timekeeper/Nav A/B Canary | done |
 
 ## Env
 
@@ -125,6 +127,23 @@ Dormante Menschen-Konten werden gestaffelt auf einen **sticky Roster** geholt un
 5. Bereits laufende, von Autoplay eingereihte Jobs (Bau/Forschung) laufen reguär zu Ende — keine Job-Cancel-/Refund-Logik, das wäre unnötige Komplexität für einen bereits legitim mit echten Kosten eingereihten Job.
 
 **Ergebnis:** Ein Spieler, der sich einloggt, bekommt beim allerersten authentifizierten Request die volle Kontrolle über sein Konto zurück — Autoplay rührt seine Warteschlangen und seinen Timekeeper-Ledger ab diesem Moment nicht mehr an.
+
+## GC-PERF-AUTOPLAY-001 — Short write transactions
+
+Production symptom: PJAX `/ranking` ~10s, `/api/game-state` + chat `502`, Timekeeper apply returns but queue job does not finish — single gunicorn worker blocked behind a long SQLite `BEGIN IMMEDIATE` wrapping the entire inactive-autoplay stage.
+
+**Fix (same owners):**
+
+1. `fleet_worker._run_stage(..., manage_tx=False)` for `inactive_autoplay` — stage no longer holds one IMMEDIATE across all players.
+2. `run_inactive_autoplay_tick` opens a short write TX per economy / report / presence flush when the connection is not already in a transaction (fleet + admin force-tick). Nested test callers that already hold a TX keep single-TX behaviour.
+3. `runtime_state.inactive_autoplay_busy` rejects overlapping ticks (stale after 15 min), same pattern as `ranking_worker_busy`.
+4. Worker logs `hold_ms` / `write_commits` for ops A/B.
+
+**Ops A/B:** Soft-Off Inactive Autoplay → restart → measure ranking/nav/Timekeeper → Soft-On → compare. Soft-Off alone can confirm the culprit before deploy; the short-TX fix keeps Soft-On safe.
+
+**Not a fix:** reverting game-state poll from 8s→30s. An 8s `intervalActive` on Railway is almost certainly `GC_POLL_ACTIVE_MS` (code default is 5s); chat also uses 8s when open.
+
+---
 
 ## GC-2620 — Concurrent Roster-Cap (5–8 sticky builders)
 

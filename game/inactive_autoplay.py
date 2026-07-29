@@ -18,7 +18,7 @@ from .auto_empire import (
     personality_for_player,
     plan_passive_planet_tick,
 )
-from .db import column_exists
+from .db import begin_write_transaction, column_exists, commit, in_transaction, rollback
 from .ranking import RANKING_INACTIVE_AFTER_SEC
 from .runtime_state import get_runtime_value, set_runtime_value
 
@@ -31,6 +31,9 @@ SESSIONS_KEY = "inactive_autoplay_sessions"  # legacy merge
 CURSOR_KEY = "inactive_autoplay_cursor"
 TICK_CURSOR_KEY = "inactive_autoplay_tick_cursor"
 PRESENCE_CURSOR_KEY = "inactive_autoplay_presence_cursor"
+# GC-PERF-AUTOPLAY-001: cross-process overlap guard (same pattern as ranking_worker).
+BUSY_KEY = "inactive_autoplay_busy"
+BUSY_STALE_SEC = 900.0
 
 # Soft caps so queues turn over on fleet-cron cadence (still slower than pirate 90s).
 INACTIVE_BUILD_DURATION_CAP = 900  # 15 min
@@ -158,6 +161,43 @@ def set_inactive_autoplay_enabled(enabled: bool, *, conn=None) -> None:
     set_runtime_value(
         ENABLED_RUNTIME_KEY, "1" if enabled else "0", conn=conn
     )
+
+
+def _try_acquire_tick_busy(*, conn, now: float) -> bool:
+    """Cross-process overlap guard via runtime_state (stale after BUSY_STALE_SEC)."""
+    raw = get_runtime_value(BUSY_KEY, conn=conn)
+    if raw and str(raw).strip() not in {"", "0"}:
+        try:
+            started = float(raw)
+            if (now - started) < BUSY_STALE_SEC:
+                return False
+        except (TypeError, ValueError):
+            pass
+    set_runtime_value(BUSY_KEY, str(now), conn=conn)
+    return True
+
+
+def _release_tick_busy(*, conn) -> None:
+    set_runtime_value(BUSY_KEY, "0", conn=conn)
+
+
+def _write_step(conn, short_tx: bool, fn):
+    """Run ``fn`` under a short write TX when the tick owns transaction boundaries.
+
+    When ``short_tx`` is False the caller already holds BEGIN IMMEDIATE (tests /
+    legacy nested callers) — ``fn`` runs in that outer transaction without
+    mid-tick commits.
+    """
+    if not short_tx:
+        return fn()
+    begin_write_transaction(conn)
+    try:
+        out = fn()
+        commit(conn)
+        return out
+    except Exception:
+        rollback(conn)
+        raise
 
 
 def _load_json(key: str, *, conn=None) -> Any:
@@ -753,142 +793,215 @@ def run_inactive_autoplay_tick(
     GC-2620: after prune, immediately LRU-trim any stored oversize down to
     `max_concurrent_sessions()` so a deploy that lowers the cap does not keep
     a mass concurrent roster until many wake-wave batch replacements finish.
+
+    GC-PERF-AUTOPLAY-001: when the connection is *not* already in a write
+    transaction (fleet worker / admin force-tick), each player economy and
+    roster/presence flush runs in its own short BEGIN IMMEDIATE so live
+    Timekeeper/game-state writers are not blocked for the full multi-player
+    pass. Overlapping ticks are rejected via ``BUSY_KEY``.
     """
     ts = float(now if now is not None else _now())
+    tick_t0 = time.perf_counter()
+    write_commits = 0
     if not is_inactive_autoplay_enabled(conn=conn):
-        return {"ok": False, "error": "disabled", "woke": [], "sessions": []}
+        return {
+            "ok": False,
+            "error": "disabled",
+            "woke": [],
+            "sessions": [],
+            "hold_ms": 0,
+            "write_commits": 0,
+        }
 
-    roster = _prune_roster(conn, _load_roster(conn=conn))
-    roster, trimmed_count = _trim_roster_to_cap(conn, roster)
-    woke: List[Dict[str, Any]] = []
-    evicted_count = int(trimmed_count)
-    wait = 0.0 if force else seconds_until_wake_allowed(now=ts, conn=conn)
+    short_tx = not in_transaction(conn)
 
-    if wait <= 0:
-        batch = wake_batch_size()
-        room = max_concurrent_sessions() - len(roster)
-        if room <= 0:
-            evict_n = min(batch, len(roster))
-            if evict_n > 0:
-                roster.sort(
-                    key=lambda item: float(
-                        item.get("last_ticked_at") or item.get("joined_at") or 0
+    def _step(fn):
+        nonlocal write_commits
+        out = _write_step(conn, short_tx, fn)
+        if short_tx:
+            write_commits += 1
+        return out
+
+    acquired = _step(lambda: _try_acquire_tick_busy(conn=conn, now=ts))
+    if not acquired:
+        return {
+            "ok": False,
+            "error": "busy",
+            "woke": [],
+            "sessions": [],
+            "hold_ms": int((time.perf_counter() - tick_t0) * 1000),
+            "write_commits": write_commits,
+        }
+
+    try:
+        # Reads (and prune SELECTs) outside write lock when short_tx; mutations
+        # that touch runtime_state / players happen inside _step closures.
+        roster = _prune_roster(conn, _load_roster(conn=conn))
+
+        def _trim():
+            nonlocal roster
+            roster, trimmed = _trim_roster_to_cap(conn, roster)
+            return trimmed
+
+        trimmed_count = int(_step(_trim) or 0)
+        woke: List[Dict[str, Any]] = []
+        evicted_count = int(trimmed_count)
+        wait = 0.0 if force else seconds_until_wake_allowed(now=ts, conn=conn)
+
+        if wait <= 0:
+            batch = wake_batch_size()
+            room = max_concurrent_sessions() - len(roster)
+            if room <= 0:
+                evict_n = min(batch, len(roster))
+                if evict_n > 0:
+                    roster.sort(
+                        key=lambda item: float(
+                            item.get("last_ticked_at") or item.get("joined_at") or 0
+                        )
+                    )
+                    to_evict = roster[:evict_n]
+                    roster = roster[evict_n:]
+                    evicted_count += evict_n
+                    room = evict_n
+                    for evicted_item in to_evict:
+                        # Inbox report in its own short TX — never hold lock
+                        # across later player economies.
+                        _step(lambda item=evicted_item: _send_autoplay_report(conn, item))
+            if room > 0:
+                batch = min(batch, room)
+                active_ids = {int(s["player_id"]) for s in roster}
+                candidates = list_dormant_candidates(
+                    conn, now=ts, exclude_ids=active_ids, limit=400
+                )
+
+                def _pick_wake():
+                    return _round_robin_pick(
+                        conn, candidates, count=batch, cursor_key=CURSOR_KEY
+                    )
+
+                picks = _step(_pick_wake)
+                for cand in picks:
+                    pid = int(cand["player_id"])
+                    new_item: Dict[str, Any] = {
+                        "player_id": pid,
+                        "joined_at": ts,
+                        "last_ticked_at": ts,
+                        "last_action": None,
+                        "builds_done": 0,
+                        "research_done": 0,
+                        "defense_done": 0,
+                    }
+                    roster.append(new_item)
+
+                    def _wake_one(player_id=pid, item=new_item):
+                        res = _run_player_economy(
+                            conn, player_id, now=ts, is_wake=True
+                        )
+                        _apply_economy_result_to_roster_item(item, res)
+                        return res
+
+                    try:
+                        woke.append(_step(_wake_one))
+                    except Exception:
+                        logger.exception(
+                            "inactive autoplay wake failed player=%s", pid
+                        )
+                _step(
+                    lambda: _save_json(
+                        WORKER_LAST_KEY,
+                        {
+                            "ok": True,
+                            "at": ts,
+                            "source": source,
+                            "woke": len(woke),
+                            "evicted": evicted_count,
+                        },
+                        conn=conn,
                     )
                 )
-                to_evict = roster[:evict_n]
-                roster = roster[evict_n:]
-                evicted_count += evict_n
-                room = evict_n
-                for evicted_item in to_evict:
-                    _send_autoplay_report(conn, evicted_item)
-        if room > 0:
-            batch = min(batch, room)
-            active_ids = {int(s["player_id"]) for s in roster}
-            candidates = list_dormant_candidates(
-                conn, now=ts, exclude_ids=active_ids, limit=400
-            )
-            picks = _round_robin_pick(conn, candidates, count=batch, cursor_key=CURSOR_KEY)
-            for cand in picks:
-                pid = int(cand["player_id"])
-                new_item: Dict[str, Any] = {
-                    "player_id": pid,
-                    "joined_at": ts,
-                    "last_ticked_at": ts,
-                    "last_action": None,
-                    "builds_done": 0,
-                    "research_done": 0,
-                    "defense_done": 0,
-                }
-                roster.append(new_item)
-                try:
-                    res = _run_player_economy(conn, pid, now=ts, is_wake=True)
-                    woke.append(res)
-                    _apply_economy_result_to_roster_item(new_item, res)
-                except Exception:
-                    logger.exception("inactive autoplay wake failed player=%s", pid)
-            _save_json(
-                WORKER_LAST_KEY,
-                {
-                    "ok": True,
-                    "at": ts,
-                    "source": source,
-                    "woke": len(woke),
-                    "evicted": evicted_count,
-                },
-                conn=conn,
+
+        # Always tick a RR slice of the sticky roster (autonomous building).
+        tick_n = min(tick_per_cron(), len(roster))
+
+        def _pick_tick():
+            return _round_robin_pick(
+                conn, roster, count=tick_n, cursor_key=TICK_CURSOR_KEY
             )
 
-    # Always tick a RR slice of the sticky roster (autonomous building).
-    tick_n = min(tick_per_cron(), len(roster))
-    to_tick = _round_robin_pick(
-        conn, roster, count=tick_n, cursor_key=TICK_CURSOR_KEY
-    )
-    # Avoid double-running just-woke players in the same tick.
-    woke_ids = {int(w["player_id"]) for w in woke}
-    session_results: List[Dict[str, Any]] = list(woke)
-    ticked_ids: Set[int] = set(woke_ids)
-    for item in to_tick:
-        pid = int(item["player_id"])
-        if pid in woke_ids:
-            continue
+        to_tick = _step(_pick_tick) if tick_n > 0 else []
+        woke_ids = {int(w["player_id"]) for w in woke}
+        session_results: List[Dict[str, Any]] = list(woke)
+        ticked_ids: Set[int] = set(woke_ids)
+        for item in to_tick:
+            pid = int(item["player_id"])
+            if pid in woke_ids:
+                continue
+
+            def _tick_one(player_id=pid, roster_item=item):
+                res = _run_player_economy(conn, player_id, now=ts)
+                _apply_economy_result_to_roster_item(roster_item, res)
+                return res
+
+            try:
+                session_results.append(_step(_tick_one))
+                ticked_ids.add(pid)
+            except Exception:
+                logger.exception(
+                    "inactive autoplay roster tick failed player=%s", pid
+                )
+
+        if ticked_ids:
+            for item in roster:
+                if int(item["player_id"]) in ticked_ids:
+                    item["last_ticked_at"] = ts
+
+        presence_ids: Set[int] = set(woke_ids)
+        online_room = online_visible_cap(conn=conn) - len(presence_ids)
+        if online_room > 0 and roster:
+
+            def _pick_presence():
+                return _round_robin_pick(
+                    conn, roster, count=online_room, cursor_key=PRESENCE_CURSOR_KEY
+                )
+
+            extra = _step(_pick_presence)
+            presence_ids.update(int(item["player_id"]) for item in extra)
+
+        def _flush_roster_presence():
+            _touch_presence_bulk(conn, presence_ids, now=ts)
+            _save_roster(roster, conn=conn)
+
+        _step(_flush_roster_presence)
+
+        hold_ms = int((time.perf_counter() - tick_t0) * 1000)
+        return {
+            "ok": True,
+            "source": source,
+            "woke": woke,
+            "woke_count": len(woke),
+            "evicted_count": evicted_count,
+            "expired_count": 0,
+            "active_sessions": len(roster),
+            "roster_size": len(roster),
+            "session_ticks": len(session_results),
+            "enqueued": sum(1 for r in session_results if r.get("enqueued")),
+            "presence_visible_now": len(presence_ids),
+            "online_visible_cap": online_visible_cap(conn=conn),
+            "wait_sec": wait,
+            "revisit_sec": revisit_sec(),
+            "tick_per_cron": tick_per_cron(),
+            "inactive_threshold_sec": float(RANKING_INACTIVE_AFTER_SEC),
+            "build_duration_cap": INACTIVE_BUILD_DURATION_CAP,
+            "chain_limit": INACTIVE_CHAIN_LIMIT,
+            "hold_ms": hold_ms,
+            "write_commits": write_commits if short_tx else 0,
+            "short_tx": short_tx,
+        }
+    finally:
         try:
-            res = _run_player_economy(conn, pid, now=ts)
-            session_results.append(res)
-            _apply_economy_result_to_roster_item(item, res)
-            ticked_ids.add(pid)
+            _step(lambda: _release_tick_busy(conn=conn))
         except Exception:
-            logger.exception("inactive autoplay roster tick failed player=%s", pid)
-
-    if ticked_ids:
-        for item in roster:
-            if int(item["player_id"]) in ticked_ids:
-                item["last_ticked_at"] = ts
-
-    # GC-2617: presence ("online") is bounded independently of roster size,
-    # but freshly-woken accounts are always touched immediately — that one
-    # exception is required so a just-woken account instantly clears the
-    # multi-day ranking-inactive flag (`RANKING_INACTIVE_AFTER_SEC`) instead
-    # of waiting for its turn in the rotation. Ongoing RR economy ticks
-    # (`ticked_ids`) do NOT force a presence touch — the whole roster keeps
-    # building in the background regardless of who currently "looks online".
-    # On top of the wake exception, a small, independently-rotating subset of
-    # the roster (its own cursor, sized by `online_visible_cap` = percent of
-    # the *real* player base) gets touched each tick — that rotation is what
-    # actually bounds the simultaneous "online" count on a small server,
-    # instead of it scaling with the roster cap, and it still cycles every
-    # standing member through "online" often enough to stay well under the
-    # multi-day ranking threshold.
-    presence_ids: Set[int] = set(woke_ids)
-    online_room = online_visible_cap(conn=conn) - len(presence_ids)
-    if online_room > 0 and roster:
-        extra = _round_robin_pick(
-            conn, roster, count=online_room, cursor_key=PRESENCE_CURSOR_KEY
-        )
-        presence_ids.update(int(item["player_id"]) for item in extra)
-    _touch_presence_bulk(conn, presence_ids, now=ts)
-
-    _save_roster(roster, conn=conn)
-
-    return {
-        "ok": True,
-        "source": source,
-        "woke": woke,
-        "woke_count": len(woke),
-        "evicted_count": evicted_count,
-        "expired_count": 0,
-        "active_sessions": len(roster),
-        "roster_size": len(roster),
-        "session_ticks": len(session_results),
-        "enqueued": sum(1 for r in session_results if r.get("enqueued")),
-        "presence_visible_now": len(presence_ids),
-        "online_visible_cap": online_visible_cap(conn=conn),
-        "wait_sec": wait,
-        "revisit_sec": revisit_sec(),
-        "tick_per_cron": tick_per_cron(),
-        "inactive_threshold_sec": float(RANKING_INACTIVE_AFTER_SEC),
-        "build_duration_cap": INACTIVE_BUILD_DURATION_CAP,
-        "chain_limit": INACTIVE_CHAIN_LIMIT,
-    }
+            logger.exception("inactive autoplay busy release failed")
 
 
 def maybe_tick_inactive_autoplay(

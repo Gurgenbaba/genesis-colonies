@@ -1328,3 +1328,134 @@ def test_run_inactive_autoplay_tick_never_touches_released_player(autoplay_db):
         commit(conn)
     finally:
         conn.close()
+
+
+def test_inactive_autoplay_overlapping_tick_skipped(autoplay_db):
+    """GC-PERF-AUTOPLAY-001: concurrent ticks must not double-apply economy."""
+    from game.inactive_autoplay import (
+        BUSY_KEY,
+        run_inactive_autoplay_tick,
+        set_inactive_autoplay_enabled,
+    )
+    from game.runtime_state import set_runtime_value
+
+    uid = _register_user()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        set_inactive_autoplay_enabled(True, conn=conn)
+        _seed_dormant(conn, uid, days_inactive=5.0)
+        set_runtime_value(BUSY_KEY, str(time.time()), conn=conn)
+        commit(conn)
+    finally:
+        conn.close()
+
+    conn = db()
+    try:
+        result = run_inactive_autoplay_tick(
+            conn, now=time.time(), force=True, source="test_overlap"
+        )
+        assert result.get("ok") is False
+        assert result.get("error") == "busy"
+    finally:
+        conn.close()
+
+
+def test_inactive_autoplay_short_tx_commits_between_players(autoplay_db, monkeypatch):
+    """GC-PERF-AUTOPLAY-001: without an outer TX, the tick owns short writes."""
+    from game.inactive_autoplay import (
+        run_inactive_autoplay_tick,
+        set_inactive_autoplay_enabled,
+    )
+
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_BATCH", "2")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_TICK_PER_CRON", "2")
+    uids = [_register_user() for _ in range(3)]
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        set_inactive_autoplay_enabled(True, conn=conn)
+        for uid in uids:
+            _seed_dormant(conn, uid, days_inactive=5.0)
+        commit(conn)
+    finally:
+        conn.close()
+
+    conn = db()
+    try:
+        # No outer BEGIN — production fleet/admin path.
+        result = run_inactive_autoplay_tick(
+            conn, now=time.time(), force=True, source="test_short_tx"
+        )
+        assert result.get("ok") is True
+        assert result.get("short_tx") is True
+        # busy acquire + wake/pick/economy steps + presence + busy release
+        assert int(result.get("write_commits") or 0) >= 3
+        assert int(result.get("hold_ms") or 0) >= 0
+        assert int(result.get("roster_size") or 0) >= 1
+    finally:
+        conn.close()
+
+
+def test_inactive_autoplay_handback_still_works_after_short_tx(autoplay_db):
+    """GC-2619 still holds when ticks use short transactions."""
+    from game.inactive_autoplay import (
+        ROSTER_KEY,
+        get_roster_snapshot,
+        run_inactive_autoplay_tick,
+        set_inactive_autoplay_enabled,
+    )
+    from game.models import touch_player_online
+    from game.runtime_state import set_runtime_value
+
+    uid = _register_user()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        set_inactive_autoplay_enabled(True, conn=conn)
+        _seed_dormant(conn, uid, days_inactive=5.0)
+        set_runtime_value(
+            ROSTER_KEY,
+            json.dumps(
+                [
+                    {
+                        "player_id": uid,
+                        "joined_at": time.time() - 100,
+                        "last_ticked_at": time.time() - 50,
+                        "last_action": None,
+                        "builds_done": 0,
+                        "research_done": 0,
+                        "defense_done": 0,
+                    }
+                ]
+            ),
+            conn=conn,
+        )
+        commit(conn)
+    finally:
+        conn.close()
+
+    # Short-tx tick path (no outer write).
+    conn = db()
+    try:
+        result = run_inactive_autoplay_tick(
+            conn, now=time.time(), force=True, source="test"
+        )
+        assert result.get("ok") is True
+        assert result.get("short_tx") is True
+    finally:
+        conn.close()
+
+    # Presence from the tick may have refreshed last_seen; open the 30s throttle
+    # so touch_player_online actually writes and triggers GC-2619 handback.
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        conn.execute("UPDATE players SET last_seen = 0 WHERE id = ?;", (uid,))
+        commit(conn)
+    finally:
+        conn.close()
+
+    touch_player_online(uid)
+    remaining = {int(r["player_id"]) for r in get_roster_snapshot()}
+    assert uid not in remaining

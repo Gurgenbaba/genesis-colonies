@@ -6060,19 +6060,16 @@ def api_admin_inactive_autoplay_toggle():
 @app.route("/api/admin/inactive-autoplay/force-tick", methods=["POST"])
 @require_admin_api
 def api_admin_inactive_autoplay_force_tick():
-    """LiveOps: wake/tick the sticky roster now, bypassing the wake interval (GC-2613)."""
-    from game.db import begin_write_transaction, commit, rollback
+    """LiveOps: wake/tick the sticky roster now, bypassing the wake interval (GC-2613).
+
+    GC-PERF-AUTOPLAY-001: do not wrap the whole tick in one BEGIN IMMEDIATE —
+    `run_inactive_autoplay_tick` owns short per-player write transactions.
+    """
     from game.inactive_autoplay_admin import admin_force_tick_inactive_autoplay
 
     conn = db()
     try:
-        begin_write_transaction(conn)
-        try:
-            result = admin_force_tick_inactive_autoplay(conn)
-            commit(conn)
-        except Exception:
-            rollback(conn)
-            raise
+        result = admin_force_tick_inactive_autoplay(conn)
         status = 200 if result.get("ok") else 400
         return jsonify(result), status
     except Exception:

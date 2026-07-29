@@ -59,7 +59,8 @@ Then compare **client RTT** vs log `total_ms`:
 ## Ops notes
 
 - `GC_INACTIVE_AUTOPLAY_MAX_SESSIONS`: remove or set `6` (env `60` clamps to 12 after GC-2620)
-- Next slices (not this PR): move embedded cron off the web process, consider threads/workers after Postgres, auth/`touch_player_online` phase keys
+- Next slices: move embedded cron off the web process, consider threads/workers after Postgres, auth/`touch_player_online` phase keys
+- **GC-PERF-AUTOPLAY-001 (shipped):** inactive_autoplay stage no longer holds one SQLite IMMEDIATE across the full roster economy; short per-player commits + busy lease. Verify with Soft-Off A/B and Timekeeper boost on an active build queue. Check Railway `GC_POLL_ACTIVE_MS` if console shows game-state polling at 8000 ms (code default active is 5000).
 
 ## Smoke
 
