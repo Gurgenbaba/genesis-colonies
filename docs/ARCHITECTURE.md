@@ -236,7 +236,7 @@ Request-Dedup via Flask `g` + `live_state.coerce_skip_finish()`.
 
 Worker: `scripts/run_queue_tick.py`, Admin: `POST /api/admin/queue-tick`.
 
-**Ranking batch (scores + ranks, 10 min):** `game/ranking_worker.run_ranking_worker()` — gameplay paths do not call `compute_player_scores()`. Admin: `POST /api/admin/rankings/recalculate`.
+**Ranking batch (scores + ranks, 10 min):** `game/ranking_worker.run_ranking_worker()` — gameplay marks `player_score_dirty` only (`score_events`); ordinary worker runs refresh dirty players (GC-SCORE-PERF-001). Admin / daily safety-net: full reconcile. Admin: `POST /api/admin/ranking/recompute`.
 
 **Railway SQLite:** maintenance runs **inside the web process** (embedded cron, default in production) on the same `/data/game.db` volume — not a separate worker service. Operator checklist: [RAILWAY_OPERATOR.md](RAILWAY_OPERATOR.md).
 

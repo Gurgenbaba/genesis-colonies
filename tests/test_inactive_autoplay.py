@@ -6,6 +6,7 @@ import json
 import time
 import uuid
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -223,17 +224,18 @@ def test_inactive_autoplay_disabled_skips(autoplay_db):
         conn.close()
 
 
-def test_autoplay_chain_applies_levels_and_scores(autoplay_db):
-    """GC-2605: force-complete chain finishes in-tick → buildings + player_scores."""
+def test_autoplay_chain_applies_levels_and_marks_score_dirty(autoplay_db):
+    """GC-2605 + GC-SCORE-PERF-001: chain finishes buildings in-tick; scores only dirty."""
     from game.auto_empire import plan_passive_planet_tick
     from game.models import get_planet_buildings
+    from game.score_events import get_player_score_dirty
 
     uid = _register_user()
     conn = db()
     try:
         begin_write_transaction(conn)
         player = _seed_dormant(conn, uid, days_inactive=0.1)
-        # Start from empty mines so first upgrades clearly raise score.
+        # Start from empty mines so first upgrades clearly raise levels.
         conn.execute(
             """
             UPDATE planet_buildings
@@ -243,27 +245,26 @@ def test_autoplay_chain_applies_levels_and_scores(autoplay_db):
             (int(player["planet_id"]),),
         )
         before_b = get_planet_buildings(int(player["planet_id"]), conn=conn)
-        before_score = conn.execute(
-            "SELECT COALESCE(score_total, 0) AS s FROM player_scores WHERE player_id = ?;",
-            (uid,),
-        ).fetchone()
-        score_before = int((before_score or {"s": 0})["s"] or 0)
 
-        out = plan_passive_planet_tick(
-            conn,
-            player_id=uid,
-            planet=player["planet"],
-            now=time.time(),
-            is_home=True,
-            allow_ships=False,
-            allow_defense=False,
-            build_duration_cap=90,
-            research_duration_cap=120,
-            chain_limit=3,
-            source="test",
-            update_scores=True,
-        )
+        with patch("game.ranking.refresh_player_score") as mock_refresh:
+            with patch("game.ranking.compute_player_scores") as mock_compute:
+                out = plan_passive_planet_tick(
+                    conn,
+                    player_id=uid,
+                    planet=player["planet"],
+                    now=time.time(),
+                    is_home=True,
+                    allow_ships=False,
+                    allow_defense=False,
+                    build_duration_cap=90,
+                    research_duration_cap=120,
+                    chain_limit=3,
+                    source="test",
+                    update_scores=True,
+                )
         assert out.get("builds") or out.get("build") or out.get("finished")
+        assert mock_refresh.call_count == 0
+        assert mock_compute.call_count == 0
         after_b = get_planet_buildings(int(player["planet_id"]), conn=conn)
         mine_before = (
             int(before_b.get("metal_mine") or 0)
@@ -288,12 +289,7 @@ def test_autoplay_chain_applies_levels_and_scores(autoplay_db):
             or 0
         )
         assert queued == 0
-        after_score = conn.execute(
-            "SELECT COALESCE(score_total, 0) AS s FROM player_scores WHERE player_id = ?;",
-            (uid,),
-        ).fetchone()
-        score_after = int((after_score or {"s": 0})["s"] or 0)
-        assert score_after > score_before
+        assert get_player_score_dirty(uid, conn=conn) is not None
         commit(conn)
     finally:
         conn.close()

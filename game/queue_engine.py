@@ -902,15 +902,14 @@ def finish_due_work(
                     return
                 from .score_events import apply_score_updates_for_players
 
+                # GC-SCORE-PERF-001: finish TX only marks dirty; worker recomputes.
                 result["score_updates"] = apply_score_updates_for_players(
                     affected_players,
                     conn=conn,
-                    recalc_ranks=recalc_ranks,
+                    recalc_ranks=False,
                     reason=str(source or "queue_finish"),
                 )
-                result["rank_recalculated"] = bool(
-                    recalc_ranks and result["score_updates"] > 0
-                )
+                result["rank_recalculated"] = False
 
             _run_finish_step(conn, "scores", _scores)
         except Exception as exc:

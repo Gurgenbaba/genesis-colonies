@@ -1,8 +1,10 @@
 """
-Background ranking worker — batch score + rank refresh (cron / CLI).
+Background ranking worker — deferred dirty score + rank refresh (cron / CLI).
 
-Gameplay paths must not call compute_player_scores() directly; use score_events or admin
-force-recalc. The worker batch-refreshes all players on a schedule as a safety net.
+GC-SCORE-PERF-001: gameplay marks ``player_score_dirty`` only. This worker is the
+sole batch owner (embedded cron / HTTP cron / admin). Ordinary runs refresh a
+bounded dirty batch every 10 minutes; a low-frequency full reconcile remains as
+safety net. No second scheduler thread.
 """
 
 from __future__ import annotations
@@ -12,21 +14,29 @@ import logging
 import os
 import sys
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from .db import (
+    begin_write_transaction,
+    commit,
     count_table_rows,
     db,
     gather_db_startup_diagnostics,
     gather_score_stats,
+    rollback,
 )
-from .ranking import recalculate_all_rankings
+from .ranking import _RANKING_LOCK, recalculate_all_rankings, recalculate_ranks, refresh_player_score
 from .runtime_state import get_runtime_value, set_runtime_value
 
 logger = logging.getLogger(__name__)
 
 RANKING_WORKER_KEY = "ranking_worker_last"
 RANKING_WORKER_INTERVAL_SEC = 600  # 10 minutes
+FULL_RECONCILE_KEY = "ranking_full_reconcile_last"
+FULL_RECONCILE_INTERVAL_SEC = 24 * 3600  # daily safety net
+DEFAULT_DIRTY_BATCH = 50
+DIRTY_BATCH_ENV = "GC_SCORE_DIRTY_BATCH"
+BUSY_KEY = "ranking_worker_busy"
 
 
 def _empty_worker_status() -> Dict[str, Any]:
@@ -151,8 +161,20 @@ def record_ranking_worker_result(result: Dict[str, Any], *, source: str, conn=No
         "duration_ms": int(result.get("duration_ms") or 0),
         "errors": list(result.get("errors") or []),
         "skipped_interval": bool(result.get("skipped_interval")),
+        "mode": str(result.get("mode") or "dirty"),
+        "dirty_cleared": int(result.get("dirty_cleared") or 0),
+        "rank_rewrites": int(result.get("rank_rewrites") or 0),
     }
     set_runtime_value(RANKING_WORKER_KEY, json.dumps(payload, ensure_ascii=False), conn=conn)
+
+
+def dirty_batch_size() -> int:
+    raw = os.environ.get(DIRTY_BATCH_ENV)
+    try:
+        val = int(raw) if raw not in (None, "") else DEFAULT_DIRTY_BATCH
+    except (TypeError, ValueError):
+        val = DEFAULT_DIRTY_BATCH
+    return max(1, min(500, val))
 
 
 def _gather_counts(conn) -> Dict[str, int]:
@@ -162,34 +184,177 @@ def _gather_counts(conn) -> Dict[str, int]:
     }
 
 
+def _full_reconcile_due(*, conn=None, now: Optional[float] = None) -> bool:
+    raw = get_runtime_value(FULL_RECONCILE_KEY, conn=conn)
+    if not raw:
+        return True
+    try:
+        last_at = float(raw)
+    except (TypeError, ValueError):
+        return True
+    if last_at <= 0:
+        return True
+    ts = float(now if now is not None else time.time())
+    return (ts - last_at) >= float(FULL_RECONCILE_INTERVAL_SEC)
+
+
+def _mark_full_reconcile(*, conn=None, now: Optional[float] = None) -> None:
+    set_runtime_value(
+        FULL_RECONCILE_KEY,
+        str(float(now if now is not None else time.time())),
+        conn=conn,
+    )
+
+
+def _try_acquire_worker_busy(*, conn, now: float) -> bool:
+    """Cross-process overlap guard via runtime_state (stale after 15 minutes)."""
+    raw = get_runtime_value(BUSY_KEY, conn=conn)
+    if raw:
+        try:
+            started = float(raw)
+            if (now - started) < 900.0:
+                return False
+        except (TypeError, ValueError):
+            pass
+    set_runtime_value(BUSY_KEY, str(now), conn=conn)
+    return True
+
+
+def _release_worker_busy(*, conn) -> None:
+    set_runtime_value(BUSY_KEY, "0", conn=conn)
+
+
+def process_dirty_score_batch(
+    *,
+    conn,
+    limit: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Refresh a bounded dirty batch; rank rewrite at most once after successes."""
+    from .score_events import (
+        clear_player_score_dirty_if_version,
+        list_dirty_score_players,
+    )
+
+    started = time.perf_counter()
+    batch = list_dirty_score_players(conn=conn, limit=limit or dirty_batch_size())
+    errors: List[str] = []
+    cleared = 0
+    skipped_race = 0
+    updated = 0
+
+    for item in batch:
+        pid = int(item["player_id"])
+        version = int(item["dirty_version"])
+        try:
+            # Expensive formula outside the short clear/upsert write where possible:
+            # refresh_player_score still needs the connection for reads + upsert.
+            begin_write_transaction(conn)
+            try:
+                refresh_player_score(pid, conn=conn)
+                if clear_player_score_dirty_if_version(pid, version, conn=conn):
+                    cleared += 1
+                    updated += 1
+                    commit(conn)
+                else:
+                    # Concurrent mutation bumped version — keep dirty, keep new snapshot
+                    # only if we already wrote; leave dirty for retry with fresh state.
+                    skipped_race += 1
+                    commit(conn)
+            except Exception:
+                rollback(conn)
+                raise
+        except Exception as exc:
+            errors.append(f"player {pid}: {exc}")
+            logger.exception("dirty score refresh failed player=%s", pid)
+            try:
+                rollback(conn)
+            except Exception:
+                pass
+
+    rank_rewrites = 0
+    ranks_assigned = 0
+    if updated > 0:
+        try:
+            ranks_assigned = int(recalculate_ranks(conn=conn) or 0)
+            rank_rewrites = 1
+            conn.commit()
+        except Exception as exc:
+            errors.append(f"ranks: {exc}")
+            logger.exception("dirty batch rank rewrite failed")
+
+    return {
+        "ok": len(errors) == 0,
+        "mode": "dirty",
+        "players_updated": updated,
+        "dirty_seen": len(batch),
+        "dirty_cleared": cleared,
+        "dirty_race_kept": skipped_race,
+        "ranks_assigned": ranks_assigned,
+        "rank_rewrites": rank_rewrites,
+        "duration_ms": int((time.perf_counter() - started) * 1000),
+        "errors": errors,
+    }
+
+
+def run_full_score_reconcile(*, conn) -> Dict[str, Any]:
+    """Low-frequency / admin full-universe safety net."""
+    from .score_events import clear_all_player_score_dirty
+
+    result = recalculate_all_rankings(refresh_scores=True, conn=conn)
+    try:
+        conn.commit()
+    except Exception:
+        pass
+    begin_write_transaction(conn)
+    try:
+        cleared = clear_all_player_score_dirty(conn=conn)
+        _mark_full_reconcile(conn=conn)
+        commit(conn)
+    except Exception:
+        rollback(conn)
+        raise
+    result["mode"] = "full"
+    result["dirty_cleared"] = int(cleared)
+    result["rank_rewrites"] = 1 if int(result.get("ranks_assigned") or 0) >= 0 else 0
+    result["skipped_interval"] = False
+    return result
+
+
 def run_ranking_worker(
     *,
     source: str = "cron",
     force: bool = False,
     persist: bool = True,
     allow_empty: bool = False,
+    full_reconcile: bool = False,
 ) -> Dict[str, Any]:
     """
-    Recompute all player scores and rank columns. Intended for cron every 10 minutes.
+    Canonical score batch job (10-minute cadence).
 
-    When force=False, skips if the last successful run was within RANKING_WORKER_INTERVAL_SEC.
+    - Ordinary / forced cron: dirty-only batch (bounded).
+    - Admin source or ``full_reconcile=True`` or daily due: full-universe safety net.
     """
     started = time.perf_counter()
     conn = db()
+    acquired = False
     try:
         _log_startup_diagnostics(source, conn)
         counts = _gather_counts(conn)
         before_stats = gather_score_stats(conn)
         players = int(counts["players"])
         planets = int(counts["planets"])
+        now = time.time()
 
         if players == 0 and planets == 0 and not allow_empty:
             duration_ms = int((time.perf_counter() - started) * 1000)
             result = {
                 "ok": False,
                 "skipped_interval": False,
+                "mode": "empty",
                 "players_updated": 0,
                 "ranks_assigned": 0,
+                "rank_rewrites": 0,
+                "dirty_cleared": 0,
                 "duration_ms": duration_ms,
                 "errors": ["empty database: players=0 planets=0"],
                 "players_seen": 0,
@@ -217,8 +382,11 @@ def run_ranking_worker(
                 skipped = {
                     "ok": True,
                     "skipped_interval": True,
+                    "mode": "skip",
                     "players_updated": 0,
                     "ranks_assigned": 0,
+                    "rank_rewrites": 0,
+                    "dirty_cleared": 0,
                     "duration_ms": duration_ms,
                     "errors": [],
                     "next_run_in_sec": int(wait),
@@ -240,8 +408,39 @@ def run_ranking_worker(
                 )
                 return skipped
 
-        result = recalculate_all_rankings(refresh_scores=True, conn=conn)
+        if not _try_acquire_worker_busy(conn=conn, now=now):
+            duration_ms = int((time.perf_counter() - started) * 1000)
+            _log_worker_event("skip", reason="busy", duration_ms=duration_ms)
+            return {
+                "ok": True,
+                "skipped_interval": True,
+                "mode": "busy",
+                "players_updated": 0,
+                "ranks_assigned": 0,
+                "rank_rewrites": 0,
+                "dirty_cleared": 0,
+                "duration_ms": duration_ms,
+                "errors": [],
+                "players_seen": players,
+                "planets": planets,
+                "scores_before": before_stats["scores_rows"],
+                "scores_after": before_stats["scores_rows"],
+                "scores_updated": 0,
+                "top_score_before": before_stats["top_score"],
+                "top_score_after": before_stats["top_score"],
+            }
+        acquired = True
         conn.commit()
+
+        want_full = bool(full_reconcile) or str(source or "") == "admin" or _full_reconcile_due(
+            conn=conn, now=now
+        )
+
+        with _RANKING_LOCK:
+            if want_full:
+                result = run_full_score_reconcile(conn=conn)
+            else:
+                result = process_dirty_score_batch(conn=conn)
 
         after_stats = gather_score_stats(conn)
         result["skipped_interval"] = False
@@ -253,17 +452,22 @@ def run_ranking_worker(
         result["scores_updated"] = int(result.get("players_updated") or 0)
         result["top_score_before"] = before_stats["top_score"]
         result["top_score_after"] = after_stats["top_score"]
+        result["duration_ms"] = int((time.perf_counter() - started) * 1000)
 
         if result.get("ok"):
             _log_worker_event(
                 "success",
+                mode=str(result.get("mode") or ""),
                 updated_players=int(result.get("players_updated") or 0),
+                dirty_cleared=int(result.get("dirty_cleared") or 0),
+                rank_rewrites=int(result.get("rank_rewrites") or 0),
                 ranks_assigned=int(result.get("ranks_assigned") or 0),
                 duration_ms=int(result.get("duration_ms") or 0),
             )
         else:
             _log_worker_event(
                 "error",
+                mode=str(result.get("mode") or ""),
                 updated_players=int(result.get("players_updated") or 0),
                 duration_ms=int(result.get("duration_ms") or 0),
                 errors=";".join(result.get("errors") or []),
@@ -285,12 +489,21 @@ def run_ranking_worker(
         return {
             "ok": False,
             "skipped_interval": False,
+            "mode": "error",
             "players_updated": 0,
             "ranks_assigned": 0,
+            "rank_rewrites": 0,
+            "dirty_cleared": 0,
             "duration_ms": duration_ms,
             "errors": [str(exc)],
         }
     finally:
+        if acquired:
+            try:
+                _release_worker_busy(conn=conn)
+                conn.commit()
+            except Exception:
+                pass
         conn.close()
 
 
@@ -303,8 +516,7 @@ def worker_exit_code(result: Dict[str, Any], *, allow_empty: bool) -> int:
     planets = int(result.get("planets") or 0)
     if players == 0 and planets == 0 and not allow_empty:
         return 1
-    if players > 0 and int(result.get("scores_updated") or 0) == 0:
-        return 1
+    # Dirty-only runs may legitimately update zero players.
     return 0
 
 

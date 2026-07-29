@@ -152,7 +152,8 @@ def test_finish_research_job_once(temp_db):
     levels_after = get_research_levels(pid)
     assert int(levels_after.get('mining_tech', 0)) == lvl_before + 1
 
-def test_rank_recalculated_once_per_engine_run(temp_db):
+def test_rank_not_recalculated_on_finish_path(temp_db):
+    """GC-SCORE-PERF-001: ranks deferred to ranking_worker, not finish TX."""
     _run_migrate(temp_db)
     init_db()
     _close_db()
@@ -164,12 +165,22 @@ def test_rank_recalculated_once_per_engine_run(temp_db):
     add_build_job(planet_id, 'metal_mine', now - 10, now - 1, conn=conn)
     conn.commit()
     conn.close()
-    with patch('game.score_events.recalculate_ranks') as mock_ranks:
-        finish_due_work(player_id=pid, planet_id=planet_id, source='test', update_scores=True, recalc_ranks=True)
+    with patch('game.ranking.recalculate_ranks') as mock_ranks:
+        result = finish_due_work(
+            player_id=pid,
+            planet_id=planet_id,
+            source='test',
+            update_scores=True,
+            recalc_ranks=True,
+        )
         _close_db()
-        assert mock_ranks.call_count == 1
+        assert mock_ranks.call_count == 0
+        assert result.get('rank_recalculated') is False
 
-def test_score_updated_after_finish(temp_db):
+def test_score_marked_dirty_after_finish(temp_db):
+    """GC-SCORE-PERF-001: finish marks dirty; buildings apply immediately."""
+    from game.score_events import get_player_score_dirty
+
     _run_migrate(temp_db)
     init_db()
     _close_db()
@@ -185,9 +196,8 @@ def test_score_updated_after_finish(temp_db):
     result = finish_due_work(player_id=pid, planet_id=planet_id, source='test', update_scores=True, recalc_ranks=True)
     _close_db()
     assert result['score_updates'] >= 1
-    row = get_player_score_row(pid)
-    assert row is not None
-    assert int(row['score_buildings']) > 0
+    assert get_player_score_dirty(pid) is not None
+    assert int(get_planet_buildings(planet_id).get('metal_mine') or 0) >= 1
 
 def test_finish_due_work_once_dedup_same_scope_flask_g(temp_db):
     _run_migrate(temp_db)

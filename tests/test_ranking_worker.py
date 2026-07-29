@@ -72,9 +72,14 @@ def _create_player(username: str) -> int:
     return int(user["id"])
 
 
-def test_finish_due_work_updates_scores_by_default(temp_db):
+def test_finish_due_work_marks_score_dirty_by_default(temp_db):
+    """GC-SCORE-PERF-001: finish marks dirty; snapshot refresh is deferred to worker."""
+    from game.ranking_worker import FULL_RECONCILE_KEY
+    from game.score_events import get_player_score_dirty
+
     _run_migrate(temp_db)
     init_db()
+    set_runtime_value(FULL_RECONCILE_KEY, str(time.time()))
     _close_db()
 
     pid = _create_player("worker_live")
@@ -91,14 +96,13 @@ def test_finish_due_work_updates_scores_by_default(temp_db):
     _close_db()
     assert result["finished"]["buildings"] >= 1
     assert result["score_updates"] >= 1
+    assert result.get("rank_recalculated") is False
+    assert get_player_score_dirty(pid) is not None
+    assert int(get_planet_buildings(planet_id).get("metal_mine") or 0) >= 1
 
-    row = get_player_score_row(pid)
-    assert row is not None
-    assert int(row.get("score_buildings") or 0) > 0
 
-
-def test_apply_score_updates_throttles_rank_recalc(temp_db):
-    from game.score_events import apply_score_updates_for_players
+def test_apply_score_updates_marks_dirty_without_rank_rewrite(temp_db):
+    from game.score_events import apply_score_updates_for_players, get_player_score_dirty
 
     _run_migrate(temp_db)
     init_db()
@@ -108,26 +112,25 @@ def test_apply_score_updates_throttles_rank_recalc(temp_db):
     p2 = _create_player("throttle_b")
     conn = db()
 
-    with patch("game.score_events.recalculate_ranks") as mock_ranks:
+    with patch("game.ranking.recalculate_ranks") as mock_ranks:
         apply_score_updates_for_players([p1], conn=conn, reason="test_a")
         apply_score_updates_for_players([p2], conn=conn, reason="test_b")
-        assert mock_ranks.call_count == 1
-
-        apply_score_updates_for_players(
-            [p2],
-            conn=conn,
-            reason="test_force",
-            force_rank_recalc=True,
-        )
-        assert mock_ranks.call_count == 2
+        conn.commit()
+        assert mock_ranks.call_count == 0
+        assert get_player_score_dirty(p1) is not None
+        assert get_player_score_dirty(p2) is not None
 
     conn.close()
     _close_db()
 
 
 def test_ranking_worker_recomputes_after_queue_finish(temp_db):
+    from game.ranking_worker import FULL_RECONCILE_KEY
+    from game.score_events import get_player_score_dirty
+
     _run_migrate(temp_db)
     init_db()
+    set_runtime_value(FULL_RECONCILE_KEY, str(time.time()))
     _close_db()
 
     pid = _create_player("worker_run")
@@ -144,18 +147,17 @@ def test_ranking_worker_recomputes_after_queue_finish(temp_db):
     _close_db()
     assert finish_result["finished"]["buildings"] >= 1
     assert finish_result["score_updates"] >= 1
+    assert get_player_score_dirty(pid) is not None
 
     buildings = get_planet_buildings(planet_id)
     assert int(buildings.get("metal_mine") or 0) >= 1
 
-    row_before_worker = get_player_score_row(pid)
-    assert row_before_worker is not None
-    assert int(row_before_worker["score_buildings"]) > 0
-
     result = run_ranking_worker(source="test", force=True, persist=False)
     _close_db()
     assert result["ok"] is True
+    assert result.get("mode") == "dirty"
     assert int(result.get("players_updated") or 0) >= 1
+    assert get_player_score_dirty(pid) is None
 
     row = get_player_score_row(pid)
     assert row is not None
@@ -277,8 +279,11 @@ def test_ranking_worker_empty_db_allowed_with_flag(temp_db):
 
 
 def test_ranking_worker_commits_score_changes(temp_db):
+    from game.ranking_worker import FULL_RECONCILE_KEY
+
     _run_migrate(temp_db)
     init_db()
+    set_runtime_value(FULL_RECONCILE_KEY, str(time.time()))
     _close_db()
 
     pid = _create_player("worker_commit")
@@ -297,6 +302,7 @@ def test_ranking_worker_commits_score_changes(temp_db):
     result = run_ranking_worker(source="test", force=True, persist=False)
     _close_db()
     assert result["ok"] is True
+    assert result.get("mode") == "dirty"
     assert int(result.get("scores_updated") or 0) >= 1
 
     conn2 = db()

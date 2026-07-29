@@ -118,11 +118,11 @@ def destroy_colony_planet(
         return {"ok": False, "error": "delete_failed"}
 
     try:
-        from ..ranking import recompute_and_upsert_score
+        from ..score_events import mark_player_score_dirty
 
-        recompute_and_upsert_score(owner, conn=conn)
+        mark_player_score_dirty(owner, conn=conn, reason="pirate_colony_destroy")
     except Exception:
-        logger.exception("score refresh after colony destroy failed owner=%s", owner)
+        logger.exception("score dirty mark after colony destroy failed owner=%s", owner)
 
     return {
         "ok": True,

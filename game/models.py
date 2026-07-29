@@ -2030,9 +2030,9 @@ def finish_due_build_jobs(
         count = finish_planet_build_jobs(conn, int(planet_id), int(player_id), float(now))
 
         if count > 0 and update_score:
-            from .ranking import recompute_and_upsert_score
+            from .score_events import mark_player_score_dirty
 
-            recompute_and_upsert_score(int(player_id), conn=conn)
+            mark_player_score_dirty(int(player_id), conn=conn, reason="legacy_build_finish")
 
         if owns_conn:
             commit(conn)
@@ -2076,9 +2076,9 @@ def finish_due_research_jobs(
         count = finish_player_research_jobs(conn, int(user_id), float(now))
 
         if count > 0 and update_score:
-            from .ranking import recompute_and_upsert_score
+            from .score_events import mark_player_score_dirty
 
-            recompute_and_upsert_score(int(user_id), conn=conn)
+            mark_player_score_dirty(int(user_id), conn=conn, reason="legacy_research_finish")
 
         if owns_conn:
             commit(conn)
