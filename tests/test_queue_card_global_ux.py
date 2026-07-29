@@ -247,29 +247,49 @@ def test_queue_containers_use_horizontal_flex_row():
 
     list_idx = css.find("\n.gc-card-queue-list{")
     assert list_idx >= 0, "missing .gc-card-queue-list rule"
-    list_block = css[list_idx : list_idx + 420]
+    list_block = css[list_idx : list_idx + 480]
     assert "display: flex" in list_block
     assert "flex-direction: row" in list_block
+    assert "justify-content: flex-start" in list_block
     assert "flex-direction: column" not in list_block
 
     child_idx = css.find("\n.gc-card-queue-list > .gc-card-queue-block:not(.gc-bld-hero-queue){")
     assert child_idx >= 0, "missing horizontal queue card flex child rule"
-    child_block = css[child_idx : child_idx + 220]
-    assert "flex: 1 1 0" in child_block
-    assert "min-width: 120px" in child_block
+    child_block = css[child_idx : child_idx + 320]
+    # GC-QUEUE-SLOT-001: fixed slot width — do not stretch when the queue is short.
+    assert "flex: 0 0 var(--gc-queue-card-slot-w" in child_block
+    assert "flex: 1 1 0" not in child_block
+    assert "--gc-queue-card-slot-w" in css[list_idx : list_idx + 200] or "248px" in child_block
 
     strip_idx = css.find("\n.gc-mini-queue-strip{")
     assert strip_idx >= 0, "missing .gc-mini-queue-strip rule"
-    strip_block = css[strip_idx : strip_idx + 320]
+    strip_block = css[strip_idx : strip_idx + 420]
     assert "display: flex" in strip_block
     assert "flex-direction: row" in strip_block
+    assert "justify-content: flex-start" in strip_block
     assert "flex-direction: column" not in strip_block
 
     card_idx = css.find("\n.gc-mini-queue-card{")
     assert card_idx >= 0, "missing .gc-mini-queue-card rule"
-    card_block = css[card_idx : card_idx + 420]
-    assert "flex: 1 1 0" in card_block
-    assert "min-width: 120px" in card_block
+    card_block = css[card_idx : card_idx + 520]
+    assert "flex: 0 0 var(--gc-queue-card-slot-w" in card_block
+    assert "flex: 1 1 0" not in card_block
+
+
+def test_queue_cards_use_fixed_slot_width_no_stretch():
+    """GC-QUEUE-SLOT-001: equal-width left-aligned slots; short queues leave empty space on the right."""
+    css = _read("static/style.css")
+    assert "--gc-queue-card-slot-w: 248px" in css
+    assert "--gc-queue-card-slot-w: 220px" in css
+    assert "flex: 1 1 calc(50% - 6px)" not in css
+    assert css.count("flex: 0 0 var(--gc-queue-card-slot-w") >= 3
+
+    # Mobile queue override keeps horizontal nowrap (no 50%-stretch wrap).
+    mobile_queue_idx = css.find(".gc-card-queue-list,\n  .gc-mini-queue-strip{")
+    assert mobile_queue_idx >= 0
+    mobile_chunk = css[mobile_queue_idx : mobile_queue_idx + 280]
+    assert "flex-wrap: nowrap" in mobile_chunk
+    assert "--gc-queue-card-slot-w: 220px" in mobile_chunk
 
 
 def test_queue_engine_unchanged():

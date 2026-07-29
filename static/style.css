@@ -9158,15 +9158,17 @@ a.gc-bld-head-action-btn--go:focus-visible{
 }
 
 .gc-mini-queue-strip{
+  --gc-queue-card-slot-w: 248px;
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: stretch;
+  justify-content: flex-start;
   gap: 6px;
-  width: 100%;
-  min-width: 0;
+  width: max-content;
+  min-width: 100%;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .gc-mini-queue-empty{
@@ -9197,9 +9199,11 @@ a.gc-bld-head-action-btn--go:focus-visible{
   grid-template-rows: auto auto;
   align-items: center;
   gap: 2px 6px;
-  flex: 1 1 0;
-  min-width: 120px;
-  max-width: none;
+  /* Fixed slot width — never stretch when the queue is short (GC-QUEUE-SLOT-001). */
+  flex: 0 0 var(--gc-queue-card-slot-w, 248px);
+  width: var(--gc-queue-card-slot-w, 248px);
+  min-width: var(--gc-queue-card-slot-w, 248px);
+  max-width: var(--gc-queue-card-slot-w, 248px);
   padding: 4px 5px;
   border: 1px solid rgba(70, 229, 255, 0.18);
   border-radius: var(--gc-radius-xs);
@@ -9400,10 +9404,12 @@ a.gc-bld-head-action-btn--go:focus-visible{
 }
 
 .gc-card-queue-list{
+  --gc-queue-card-slot-w: 248px;
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: stretch;
+  justify-content: flex-start;
   gap: 6px;
   min-width: 0;
   max-width: 100%;
@@ -9416,9 +9422,11 @@ a.gc-bld-head-action-btn--go:focus-visible{
 }
 
 .gc-card-queue-list > .gc-card-queue-block:not(.gc-bld-hero-queue){
-  flex: 1 1 0;
-  min-width: 120px;
-  max-width: none;
+  /* Fixed slot width — left-aligned, no grow when fewer jobs are queued. */
+  flex: 0 0 var(--gc-queue-card-slot-w, 248px);
+  width: var(--gc-queue-card-slot-w, 248px);
+  min-width: var(--gc-queue-card-slot-w, 248px);
+  max-width: var(--gc-queue-card-slot-w, 248px);
 }
 
 .gc-card-queue-list::-webkit-scrollbar{
@@ -9794,7 +9802,9 @@ a.gc-bld-head-action-btn--go:focus-visible{
 @media (max-width: 720px){
   .gc-card-queue-list,
   .gc-mini-queue-strip{
-    flex-wrap: wrap;
+    --gc-queue-card-slot-w: 220px;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
     overflow-x: auto;
     overflow-y: hidden;
   }
@@ -9806,8 +9816,10 @@ a.gc-bld-head-action-btn--go:focus-visible{
 
   .gc-card-queue-list > .gc-card-queue-block:not(.gc-bld-hero-queue),
   .gc-mini-queue-card{
-    flex: 1 1 calc(50% - 6px);
-    min-width: min(120px, 100%);
+    flex: 0 0 var(--gc-queue-card-slot-w, 220px);
+    width: var(--gc-queue-card-slot-w, 220px);
+    min-width: var(--gc-queue-card-slot-w, 220px);
+    max-width: var(--gc-queue-card-slot-w, 220px);
   }
 
   .gc-card-queue-block:not(.gc-bld-hero-queue){
