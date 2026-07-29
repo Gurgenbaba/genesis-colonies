@@ -123,7 +123,10 @@ def test_api_game_state_energy_after_energy_tech_finish(game_client):
 
     finish_due_work(player_id=pid, source="test_api")
 
-    r1 = client.get("/api/game-state")
+    # Bare /api/game-state is the lightweight poll path and diets "buildings"
+    # out of the payload; include_panel=1 requests the full panel refresh
+    # (GC-STABILIZE-002; app.py api_game_state / _is_game_state_poll_source).
+    r1 = client.get("/api/game-state?include_panel=1")
     assert r1.status_code == 200
     data = r1.get_json()
     assert data["ok"] is True

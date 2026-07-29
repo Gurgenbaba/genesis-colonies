@@ -38,25 +38,20 @@ def _create_player() -> int:
     return int(user["id"])
 
 
-def _unlock_expansion(conn, player_id: int, *, hw_level: int = 25, tech: int = 6) -> None:
+def _unlock_expansion(conn, player_id: int, *, slots: int = 1) -> None:
+    # colonize_planet()/send_fleet(mission_type='colonize') — including the
+    # world_key-bound expansion path exercised in this file — only gates on
+    # homeworld level (can_found_colony); the interstellar_expansion tech
+    # level this used to also set is only checked by the separate world-map
+    # expansion-site gate (evaluate_expansion_gates), never exercised here —
+    # dropped as dead setup in favor of the canonical conftest helper
+    # (GC-STABILIZE-002, cluster21-colony-unlock-dedup).
     from game.models import get_homeworld
-    from game.planet_evolution.expansion_protocol import INTERSTELLAR_EXPANSION_TECH
+    from conftest import unlock_colony_slots
 
     hw = get_homeworld(player_id, conn=conn)
     assert hw
-    conn.execute(
-        "UPDATE planets SET planet_level = ? WHERE id = ?;",
-        (int(hw_level), int(hw["id"])),
-    )
-    conn.execute(
-        """
-        INSERT INTO research_levels (user_id, tech_key, level)
-        VALUES (?, ?, ?)
-        ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;
-        """,
-        (int(player_id), INTERSTELLAR_EXPANSION_TECH, int(tech)),
-    )
-    conn.commit()
+    unlock_colony_slots(conn, int(hw["id"]), slots=slots)
 
 def test_migration_idempotent(world_colonization_db, monkeypatch):
     env = os.environ.copy()

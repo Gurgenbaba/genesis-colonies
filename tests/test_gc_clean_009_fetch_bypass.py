@@ -84,6 +84,10 @@ def test_no_undocumented_mutation_fetch_bypasses_in_main_js():
         "/api/support/tickets",
         "fetchGalaxyPjaxIntoCache",
         "/api/command-map/telemetry",
+        # Story narration TTS returns an audio/mpeg blob (res.blob() for
+        # playback), not JSON — GC.fetchGameAction/fetchJSON are JSON-only
+        # and would break audio playback if used here.
+        "/api/story/tts",
     )
     hits = []
     for pat in mutation_patterns:

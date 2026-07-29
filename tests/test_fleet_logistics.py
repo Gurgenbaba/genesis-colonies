@@ -11,7 +11,7 @@ from game.resources import get_storage_capacity
 from game.models import get_planet_buildings, get_research_levels
 from game.models import create_user, ensure_player_and_homeworld, get_planets_by_player, init_db
 from game.planet_evolution.service import colonize_planet
-from tests.test_fleet import _fund_planet, _planet_coords, _player, _second_colony, _seed_ships, fleet_db
+from tests.test_fleet import _fund_planet, _planet_coords, _player, _second_colony, _seed_ships, _unlock_expansion_for_colonize, fleet_db
 
 @pytest.fixture
 def logistics_db(tmp_path, monkeypatch):
@@ -30,6 +30,9 @@ def _hub_and_sources(uid: int, conn, *, sources: int=2):
     colony_ids = []
     # Expansion Protocol gate: ensure colony slots are unlocked before colonizing.
     # Reuse the canonical helper from test_fleet (it unlocks then colonizes).
+    # Unlock enough slots up-front for "Colony Two" (_second_colony) plus every
+    # additional source/target colonized in the loop below (GC-STABILIZE-002).
+    _unlock_expansion_for_colonize(conn, uid, slots=1 + sources)
     _second_colony(uid, conn=conn)
     for i in range(sources):
         # Avoid coordinate collision with _second_colony (uses position=5).

@@ -149,7 +149,12 @@ def test_destroyed_prestige_not_in_total_score():
         )
         conn.commit()
         prestige = compute_destroyed_raw_from_losses({"plasma_arc": 4})
-        assert prestige == 8
+        # compute_destroyed_raw_from_losses now sums raw metal/crystal/fuel_cells
+        # across all destroyed units before flooring once (GC-STABILIZE-002 fix —
+        # was flooring each unit's own build cost individually then multiplying,
+        # which under-counted destroyed wealth). 4x plasma_arc (2500/625/750 each)
+        # -> 10000 metal + 2500 crystal + 3000 fuel_cells -> 6 + 2 + 6 = 14.
+        assert prestige == 14
 
         scores = refresh_player_score(attacker, conn=conn)
         conn.commit()

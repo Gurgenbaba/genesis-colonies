@@ -56,9 +56,16 @@ def test_lastval_savepoint_does_not_abort_marker():
 
     from game import db_pg
 
-    src = inspect.getsource(db_pg.PgCursor.execute)
+    # commit 1c17936 moved lastval() resolution out of execute() into a lazy
+    # PgCursor._resolve_lastrowid(), only run when .lastrowid is actually read
+    # (bulk INSERT seeds like game_settings skip the lastval() round-trip
+    # entirely) — the SAVEPOINT/ROLLBACK-guard behavior this test documents
+    # still lives there (GC-STABILIZE-002).
+    src = inspect.getsource(db_pg.PgCursor._resolve_lastrowid)
     assert "SAVEPOINT gc_lastval" in src
     assert "ROLLBACK TO SAVEPOINT gc_lastval" in src
+    exec_src = inspect.getsource(db_pg.PgCursor.execute)
+    assert "_lastrowid_pending = True" in exec_src
 
 
 def test_is_integrity_error_sqlite():

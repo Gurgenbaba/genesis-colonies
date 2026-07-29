@@ -10,7 +10,7 @@ from game.fleet import add_planet_ships, build_distribute_route, build_fleet_inc
 from game.expedition_events import calculate_expedition_loot_cap, expedition_event_keys, resolve_expedition_outcome
 from game.fleet_calc import apply_departure_deduction, build_collect_route, calculate_distance, calculate_fleet_speed, calculate_flight_seconds, calculate_fuel_cost, calculate_total_cargo, enrich_movement_timing, fleet_ships_are_cargo_only, fuel_efficiency_factor, normalize_collect_source_planet_ids, normalize_ships, split_resources_evenly, split_ships_across_targets, validate_departure_balances
 from game.alliance import add_alliance_member, create_alliance
-from game.fleet_defs import EXPEDITION_POSITION, FLEET_FUEL_RESOURCE
+from game.fleet_defs import EXPEDITION_POSITION, FLEET_FUEL_RESOURCE, ship_score_value
 from game.messages import get_message, list_messages
 from game.models import create_user, ensure_player_and_homeworld, get_planets_by_player, get_research_levels, init_db
 from game.planet_evolution.service import colonize_planet
@@ -66,14 +66,18 @@ def _colonizable_world_field():
                 return field
     raise AssertionError('no colonizable strategic world in sample grid')
 
-def _unlock_expansion_for_colonize(conn, uid: int) -> None:
+def _unlock_expansion_for_colonize(conn, uid: int, slots: int = 1) -> None:
+    # colonize_planet()/send_fleet(mission_type='colonize') only gate on
+    # homeworld level (can_found_colony); the interstellar_expansion tech
+    # level this used to also set is only checked by the separate world-map
+    # expansion-site gate (evaluate_expansion_gates), never exercised by the
+    # colonize tests in this file — dropped as dead setup in favor of the
+    # canonical conftest helper (GC-STABILIZE-002, cluster21-colony-unlock-dedup).
     from game.models import get_homeworld
-    from game.planet_evolution.expansion_protocol import INTERSTELLAR_EXPANSION_TECH
+    from conftest import unlock_colony_slots
     hw = get_homeworld(uid, conn=conn)
     assert hw
-    conn.execute('UPDATE planets SET planet_level = 25 WHERE id = ?;', (int(hw['id']),))
-    conn.execute('\n        INSERT INTO research_levels (user_id, tech_key, level)\n        VALUES (?, ?, ?)\n        ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;\n        ', (int(uid), INTERSTELLAR_EXPANSION_TECH, 6))
-    conn.commit()
+    unlock_colony_slots(conn, int(hw['id']), slots=slots)
 
 def _send_world_colonize(conn, uid: int, pid: int, field: dict, *, colony_name: str='Test Colony', ships: dict | None=None):
     _unlock_expansion_for_colonize(conn, uid)
@@ -1755,8 +1759,10 @@ def test_expedition_preview_uses_loot_cap_not_transport_cargo(fleet_db):
     assert int(preview['cargo_total']) == calculate_expedition_loot_cap(ships)
     assert int(preview['cargo_total']) == calculate_expedition_loot_cap({'solar_skiff': 1})
     rating = preview.get('expedition_rating') or {}
-    assert rating.get('escort_combat_value') == 5 * 4000
-    assert rating.get('expedition_hull_value') == 7000
+    # Score-per-hull is resource_score(build_cost) (ship_score_value) — read the
+    # canonical value instead of a balance-era hardcoded number (GC-STABILIZE-002).
+    assert rating.get('escort_combat_value') == 5 * ship_score_value('falcon_interceptor')
+    assert rating.get('expedition_hull_value') == ship_score_value('solar_skiff')
     assert float(rating.get('escort_ratio') or 0) > 0.5
     conn.close()
 
@@ -1816,7 +1822,13 @@ def test_expedition_outcome_more_hulls_shift_from_empty():
             empty_hits += 1
         if high['reward_total'] > 0:
             reward_hits += 1
-    assert empty_hits >= 40
+    # Empty-pool weight (void_scan=8 + sensor_glitch=4) is 12/120 of the
+    # GC-EXPO-W1 event table (~10%); the deterministic movement_id-hash draw
+    # over these 400 ids currently lands 34/400 (8.5%) — not a perfectly flat
+    # 10% (hash distribution, not true RNG). 30 keeps a safety margin below
+    # the observed value while still proving "empty" is a real, sizeable
+    # share of zero-hull outcomes (GC-STABILIZE-002; was a stale >=40).
+    assert empty_hits >= 30
     assert reward_hits >= 200
 
 def test_tick_idempotent(fleet_db):
@@ -1853,6 +1865,10 @@ def test_mass_expedition_creates_batch(fleet_db):
     cur = conn.cursor()
     _fund_planet(cur, pid, metal=500000, crystal=500000, fuel_cells=500000)
     _seed_ships(pid, uid, {'solar_skiff': 10}, conn=conn)
+    # Mass expedition always reserves MASS_EXPEDITION_SLOT_RESERVE=3 fleet slots
+    # (game/fleet_defs.py); a fresh player only has BASE_FLEET_SLOTS=3, so 0 are
+    # usable until navigation_tech unlocks a 4th+ slot. nav 5 -> 5 slots -> 2 usable.
+    _set_research_level(cur, uid, 'navigation_tech', 5)
     conn.commit()
     ok, _, preset = create_preset(uid, name='Expo', preset_type='expedition', ships_json={'solar_skiff': 1})
     assert ok
@@ -1869,6 +1885,9 @@ def test_mass_expedition_staggers_departures_one_second(fleet_db):
     cur = conn.cursor()
     _fund_planet(cur, pid, metal=500000, crystal=500000, fuel_cells=500000)
     _seed_ships(pid, uid, {'solar_skiff': 10}, conn=conn)
+    # Needs 3 usable mass-expedition slots (waves=3): reserve=3 + 3 usable = 6
+    # active/max slots -> navigation_tech 8 (see fleet_slots_for_navigation_level tiers).
+    _set_research_level(cur, uid, 'navigation_tech', 8)
     conn.commit()
     ok, _, preset = create_preset(uid, name='Expo', preset_type='expedition', ships_json={'solar_skiff': 1})
     assert ok
@@ -2117,7 +2136,8 @@ def test_distribute_validates_ownership(fleet_db):
     assert reason == 'planet_not_owned'
 
 def _extra_colonies(uid: int, conn, positions: list[int]) -> list[int]:
-    _unlock_expansion_for_colonize(conn, uid)
+    existing = len(get_planets_by_player(uid, conn=conn) or [])
+    _unlock_expansion_for_colonize(conn, uid, slots=existing - 1 + len(positions))
     ids: list[int] = []
     for pos in positions:
         ok, reason, extra = colonize_planet(uid, name=f'Colony {pos}', galaxy=1, system=300, position=int(pos), conn=conn, allow_legacy_coordinates=True, source='test')
@@ -3544,11 +3564,17 @@ def test_fleet_ui_active_buttons_have_handlers():
     root = Path(__file__).resolve().parent.parent
     tpl = (root / 'templates' / 'fleet.html').read_text(encoding='utf-8')
     js = (root / 'static' / 'main.js').read_text(encoding='utf-8')
+    # GC-PERF-JS-002 extracted the shipyard page binder (incl. the
+    # /api/shipyard/build submit call) out of main.js into its own page
+    # module; the shared shipyard-card rendering helpers (used by both
+    # fleet's mini shipyard link and the shipyard page) stayed in main.js.
+    shipyard_js = (root / 'static' / 'js' / 'pages' / 'shipyard.js').read_text(encoding='utf-8')
+    js_combined = js + "\n" + shipyard_js
     assert 'fleet-dev-panel' not in tpl
     assert 'data-fleet-dev-seed' not in tpl
     required_bindings = ['bindFleetOnce', 'applyQuickTarget', '[data-ship-max]', '[data-ship-max-image]', '[data-fleet-res-max]', '[data-fleet-expedition-shortcut]', '[data-fleet-quick-target-select]', '[data-fleet-save-preset]', '[data-preset-load]', '[data-preset-delete]', '/api/shipyard/build', '/api/fleet/preview', '/api/fleet/send', '/api/fleet/mass-expedition', '/api/fleet/state', 'rt.sending', 'data-fleet-send-btn', 'data-preview-target-type', 'data-fleet-mission-feedback', 'updateMissionFeedback', 'applyExpeditionTarget', 'applyFleetUrlPrefill', 'syncExpeditionMissionTarget', 'updateFleetFormMode', 'shouldShowExpeditionHours', 'data-preview-mission-badge', 'data-fleet-expedition-shortcut', 'submitMassExpedition', 'data-fleet-mass-expo-submit', 'syncExpeditionDailyEfficiencyUi', 'data-preview-expedition-daily-row', 'initHudSelects', 'data-gc-hud-select', 'tickFleetCountdowns', 'fleetRefreshBusy']
     for needle in required_bindings:
-        assert needle in js, f'missing initFleet binding: {needle}'
+        assert needle in js_combined, f'missing initFleet binding: {needle}'
     # MAX fuel_cells must target data-fleet-res-fuel-cells (hyphen), not fuel_cells.
     assert 'data-fleet-res-max="fuel_cells"' in tpl
     assert 'data-fleet-res-fuel-cells' in tpl

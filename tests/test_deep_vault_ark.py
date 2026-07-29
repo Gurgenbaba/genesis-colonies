@@ -134,11 +134,16 @@ def test_deep_vault_ark_cargo_and_slow_preview(save_ship_db):
     try:
         hw = get_homeworld(uid, conn=conn)
         origin = dict(hw)
+        # Use a guaranteed different in-system slot. Position 1 previously made
+        # target_position=max(1, pos-1) collapse to the same coords → distance 0
+        # and flight_seconds=0 under random homeworld placement.
+        origin_pos = int(origin["position"])
+        target_pos = 2 if origin_pos == 1 else origin_pos - 1
         preview = preview_fleet_flight(
             origin_planet=origin,
             target_galaxy=int(origin["galaxy"]),
             target_system=int(origin["system"]),
-            target_position=max(1, int(origin["position"]) - 1),
+            target_position=target_pos,
             ships={"deep_vault_ark": 1},
             resources={},
             speed_percent=100,

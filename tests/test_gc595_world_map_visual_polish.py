@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -108,12 +109,13 @@ def test_activity_feed_includes_feed_id(gc595_db):
         hw = get_homeworld(uid, conn=conn)
         planet_id = int(hw["id"])
         save_planet_buildings(planet_id, {"metal_mine": 1})
+        now = time.time()
         conn.execute(
             """
             INSERT INTO build_queue (planet_id, building_type, start_time, finish_time)
             VALUES (?, 'metal_mine', ?, ?);
             """,
-            (planet_id, 1_000_000.0, 1_000_600.0),
+            (planet_id, now, now + 600.0),
         )
         conn.commit()
         cc = build_colony_command_center(

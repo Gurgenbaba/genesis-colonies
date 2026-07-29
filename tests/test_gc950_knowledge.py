@@ -333,7 +333,10 @@ def test_game_state_includes_codex(gc950_db, monkeypatch):
     uid, _ = _create_player()
     with client.session_transaction() as sess:
         sess["user_id"] = uid
-    payload = client.get("/api/game-state").get_json()
+    # GC-PERF-005: the default (lightweight) /api/game-state poll diets out
+    # the codex block entirely; include_panel=1 matches how the codex panel
+    # actually gets hydrated (full refresh), not the periodic light poll.
+    payload = client.get("/api/game-state?include_panel=1").get_json()
     assert payload.get("ok") is True
     codex = payload.get("codex") or {}
     assert codex.get("ok") is True
@@ -410,7 +413,10 @@ def test_game_state_codex_ok_without_sidebar_commander_tip(gc950_db, monkeypatch
     html = client.get("/buildings").get_data(as_text=True)
     sidebar_right = html.split('id="gc-sidebar-nav-right"', 1)[1].split("</nav>", 1)[0]
     assert "data-codex-commander-tip" not in sidebar_right
-    payload = client.get("/api/game-state").get_json()
+    # GC-PERF-005: the default (lightweight) /api/game-state poll diets out
+    # the codex block entirely; include_panel=1 matches how the codex panel
+    # actually gets hydrated (full refresh), not the periodic light poll.
+    payload = client.get("/api/game-state?include_panel=1").get_json()
     assert payload.get("ok") is True
     codex = payload.get("codex") or {}
     assert codex.get("articles")

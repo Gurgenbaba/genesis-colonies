@@ -19,12 +19,23 @@ def _read(rel: str) -> str:
     return (ROOT / rel).read_text(encoding="utf-8")
 
 
-def test_gc861b_main_js_pjax_preload_before_swap():
+def test_gc861b_main_js_pjax_preload_after_swap():
+    # commit faf8ea5 ("... fixing LCP preload") intentionally moved the LCP
+    # hero preload from syncLcpHeroPreloadFromPjaxDoc(doc) (run on the parsed
+    # PJAX response *before* the DOM swap) to syncLcpHeroPreload(resolveLcp
+    # HeroImageUrl(main)) run on the *live* #main-content element right after
+    # `main.innerHTML = payload.mainHtml` — preloading against the actually
+    # rendered DOM instead of the detached parsed doc (GC-STABILIZE-002).
+    # syncLcpHeroPreloadFromPjaxDoc became dead code after that fix (no
+    # remaining call sites) and was removed from static/main.js in the same
+    # ticket per the no-dead-code rule.
     nav = _read("static/main.js").split("async function applyPjaxPayload(url, payload, doc, opts = {})", 1)[1]
     nav = nav.split("GC.navigateTo = async function navigateTo", 1)[0]
-    assert "syncLcpHeroPreloadFromPjaxDoc(doc)" in nav
     assert "main.innerHTML = payload.mainHtml" in nav
-    assert nav.index("syncLcpHeroPreloadFromPjaxDoc(doc)") < nav.index("main.innerHTML = payload.mainHtml")
+    assert "syncLcpHeroPreload(resolveLcpHeroImageUrl(main))" in nav
+    assert nav.index("main.innerHTML = payload.mainHtml") < nav.index(
+        "syncLcpHeroPreload(resolveLcpHeroImageUrl(main))"
+    )
 
 
 def test_gc861b_main_js_lcp_preload_contract():
@@ -36,7 +47,13 @@ def test_gc861b_main_js_lcp_preload_contract():
     assert 'GC_LCP_HERO_PRELOAD_ID = "gc-lcp-hero-preload"' in block
     assert 'link.rel = "preload"' in block
     assert 'link.as = "image"' in block
-    assert "syncLcpHeroPreload(\"\")" in block or 'syncLcpHeroPreload("")' in block
+    # "no hero on this page" reset used to be an explicit syncLcpHeroPreload("")
+    # call inside the now-removed syncLcpHeroPreloadFromPjaxDoc fallback; that
+    # behavior lives directly in resolveLcpHeroImageUrl (returns "" when no
+    # [data-gc-lcp-hero] is found) feeding syncLcpHeroPreload's own falsy-href
+    # removeLcpHeroPreloadLinks() branch (GC-STABILIZE-002).
+    assert 'if (!root) return "";' in block
+    assert "removeLcpHeroPreloadLinks()" in block
 
 
 @pytest.mark.parametrize(

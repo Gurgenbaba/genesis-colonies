@@ -54,7 +54,7 @@ def test_game_state_includes_fuel_storage_cap(fuel_db, monkeypatch):
     client = app_mod.app.test_client()
     with client.session_transaction() as sess:
         sess['user_id'] = uid
-    r = client.get('/api/game-state')
+    r = client.get('/api/game-state?include_panel=1')
     assert r.status_code == 200
     data = r.get_json()
     assert data['ok'] is True
@@ -82,7 +82,7 @@ def test_game_state_storage_caps_match_effect_resolver(fuel_db, monkeypatch):
     client = app_mod.app.test_client()
     with client.session_transaction() as sess:
         sess['user_id'] = uid
-    r = client.get('/api/game-state')
+    r = client.get('/api/game-state?include_panel=1')
     assert r.status_code == 200
     data = r.get_json()
     assert data['ok'] is True
@@ -149,7 +149,7 @@ def test_game_state_includes_base_fuel_cap_without_fuel_storage(fuel_db, monkeyp
     client = app_mod.app.test_client()
     with client.session_transaction() as sess:
         sess['user_id'] = uid
-    r = client.get('/api/game-state')
+    r = client.get('/api/game-state?include_panel=1')
     assert r.status_code == 200
     data = r.get_json()
     assert data['ok'] is True
@@ -255,16 +255,20 @@ def test_fleet_send_reduces_fuel_cells(fuel_db):
     assert after < before
 
 def test_shipyard_build_reduces_fuel_cells(fuel_db):
+    # NOTE: solar_skiff is intentionally fuel-free (solar propulsion, build_cost
+    # fuel_cells=0 in game/fleet_defs.py) — atlas_hauler is the smallest hull
+    # whose build_cost still consumes fuel_cells, so it exercises the same
+    # "shipyard build books fuel cells" invariant this test verifies.
     conn = db()
     uid = _player(conn=conn)
     pid = int(get_planets_by_player(uid, conn=conn)[0]['id'])
     cur = conn.cursor()
-    cur.execute('UPDATE planets SET metal = 200000, crystal = 200000, fuel_cells = 500 WHERE id = ?;', (pid,))
-    cur.execute('UPDATE planet_buildings SET orbital_shipyard = 2 WHERE planet_id = ?;', (pid,))
-    cur.executemany('INSERT OR REPLACE INTO research_levels (user_id, tech_key, level) VALUES (?, ?, ?);', [(uid, 'engine_tech', 3), (uid, 'navigation_tech', 3)])
+    cur.execute('UPDATE planets SET metal = 200000, crystal = 200000, fuel_cells = 5000 WHERE id = ?;', (pid,))
+    cur.execute('UPDATE planet_buildings SET orbital_shipyard = 4 WHERE planet_id = ?;', (pid,))
+    cur.executemany('INSERT OR REPLACE INTO research_levels (user_id, tech_key, level) VALUES (?, ?, ?);', [(uid, 'storage_tech', 5), (uid, 'mining_tech', 4)])
     conn.commit()
     before = float(cur.execute('SELECT fuel_cells FROM planets WHERE id = ?;', (pid,)).fetchone()['fuel_cells'])
-    ok, reason, _ = build_ship(player_id=uid, planet_id=pid, ship_key='solar_skiff', amount=1, conn=conn)
+    ok, reason, _ = build_ship(player_id=uid, planet_id=pid, ship_key='atlas_hauler', amount=1, conn=conn)
     assert ok, reason
     after = float(cur.execute('SELECT fuel_cells FROM planets WHERE id = ?;', (pid,)).fetchone()['fuel_cells'])
     conn.close()

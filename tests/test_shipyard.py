@@ -47,7 +47,8 @@ def _grant_ship_test_prereqs(cur, planet_id: int, user_id: int) -> None:
         cur.execute('\n            INSERT INTO research_levels (user_id, tech_key, level)\n            VALUES (?, ?, ?)\n            ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;\n            ', (int(user_id), tech, 10))
 
 def test_all_active_ship_types_exist():
-    assert len(ACTIVE_SHIP_KEYS) == 11
+    # 12 hulls incl. "planet_breaker" (siege-role capstone hull, GC roster).
+    assert len(ACTIVE_SHIP_KEYS) == 12
     for key in ACTIVE_SHIP_KEYS:
         assert key in SHIPS
         spec = SHIPS[key]

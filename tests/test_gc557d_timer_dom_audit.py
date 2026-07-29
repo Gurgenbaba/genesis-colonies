@@ -40,14 +40,19 @@ def test_gc557d_queue_partials_use_canonical_timer_attrs():
 
 
 def test_gc557d_fleet_active_timers_use_server_fields():
+    # Active fleet-movement countdown rows are built client-side in
+    # fleetCountdownHtml() (static/main.js) instead of server-rendered Jinja
+    # markup in fleet.html; check both sources combined (GC-STABILIZE-002).
     fleet = _read("templates/fleet.html")
-    assert "data-timer-target" in fleet
-    assert "data-timer-kind=\"fleet\"" in fleet
-    assert "data-refresh-on-zero=\"fleet\"" in fleet
-    assert "data-countdown-scope=\"fleet\"" in fleet
-    assert "data-server-remaining" in fleet
+    js = _read("static/main.js")
+    combined = fleet + "\n" + js
     assert "data-preview-arrival" in fleet
-    assert 'data-timer-kind="fleet"' in fleet
+    assert "data-timer-target" in combined
+    assert "data-timer-kind=\"fleet\"" in combined
+    assert "data-refresh-on-zero=\"fleet\"" in combined
+    assert 'data-countdown-scope="${scope}"' in js
+    assert 'buildTime(countdownAt, "fleet"' in js
+    assert "data-server-remaining" in combined
 
 
 def test_gc557d_overview_activities_use_timer_contract():

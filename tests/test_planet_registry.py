@@ -52,12 +52,15 @@ def _create_player() -> tuple[int, str]:
 
 def _unlock_first_expansion(uid: int) -> None:
     from game.planet_evolution.expansion_protocol import INTERSTELLAR_EXPANSION_TECH
+    from conftest import unlock_colony_slots
 
     conn = db()
     try:
         hw = get_homeworld(uid, conn=conn)
         assert hw
-        conn.execute("UPDATE planets SET planet_level = 5 WHERE id = ?;", (int(hw["id"]),))
+        unlock_colony_slots(conn, int(hw["id"]), slots=1)
+        # Registry / PE UI paths also exercise the interstellar tech gate
+        # (evaluate_expansion_gates), which unlock_colony_slots does not cover.
         conn.execute(
             """
             INSERT INTO research_levels (user_id, tech_key, level)

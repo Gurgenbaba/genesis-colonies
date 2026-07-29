@@ -40,15 +40,23 @@ def unlock_colony_slots(conn, homeworld_id: int, slots: int = 1) -> None:
     with `planet_evolution_colony_slot_required` unless the homeworld has
     reached the required level. Shared here (instead of duplicated per test
     file) since it's pure test setup, not game logic under test.
-    """
-    from game.planet_evolution.expansion_protocol import EXPANSION_SLOT_GATES
 
-    gate = next(
-        (g for g in EXPANSION_SLOT_GATES if int(g["expansion_index"]) == int(slots)),
-        EXPANSION_SLOT_GATES[-1],
-    )
+    `slots` beyond the hardcoded `EXPANSION_SLOT_GATES` table (currently up to
+    6) are resolved via the same extrapolation the production code uses for
+    later slots (`next_expansion_slot_homeworld_level`), instead of capping at
+    the last table entry — needed by tests that colonize more than 6 times.
+
+    Monotonic (`MAX(planet_level, required)`): a test that first unlocks 1
+    slot and later needs a 2nd (e.g. via a second helper call after already
+    founding a colony) must not have its homeworld's level *lowered* back
+    down to the 1-slot threshold, which would re-lock the slot it already
+    used.
+    """
+    from game.planet_evolution.expansion_protocol import next_expansion_slot_homeworld_level
+
+    required_level = next_expansion_slot_homeworld_level(int(slots) - 1)
     conn.execute(
-        "UPDATE planets SET planet_level = ? WHERE id = ?;",
-        (int(gate["homeworld_level"]), int(homeworld_id)),
+        "UPDATE planets SET planet_level = MAX(planet_level, ?) WHERE id = ?;",
+        (int(required_level), int(homeworld_id)),
     )
     conn.commit()

@@ -9,7 +9,13 @@ import pytest
 
 import game.db as dbmod
 import game.models as models
-from game.buildings import build_building_technical_data, get_build_time, BuildingsPanelContext
+from game.buildings import (
+    build_building_technical_data,
+    get_build_time,
+    BuildingsPanelContext,
+    command_center_nanofactory_build_bonus_pct,
+    COMMAND_CENTER_NANOFACTORY_BUILD_BONUS_PER_LEVEL,
+)
 from game.research import build_research_technical_data
 from game.db import db
 from game.effects import EffectResolver
@@ -298,9 +304,13 @@ def test_technical_data_nanofactory_flat_per_level_bonus(tech_db):
     current_row = next(r for r in data["levels"] if r["is_current"])
     next_row = next(r for r in data["levels"] if r["level"] == current_row["level"] + 1)
     assert current_row["effect_kind"] == "bonus_percent"
-    assert current_row["effect_value"] == 210
-    assert next_row["effect_value"] == 240
-    assert next_row["effect_value"] - current_row["effect_value"] == 30
+    # Nanofactory build-speed moved from a flat +30%/level bonus to a
+    # diminishing-returns curve (speed = 1 + 0.55 * level^0.8,
+    # EffectResolver.nanofactory_build_speed) — read the canonical value
+    # instead of a stale flat-rate snapshot (GC-STABILIZE-002).
+    assert current_row["effect_value"] == EffectResolver.nanofactory_build_speed_bonus_pct(7)
+    assert next_row["effect_value"] == EffectResolver.nanofactory_build_speed_bonus_pct(8)
+    assert next_row["effect_value"] > current_row["effect_value"]
     assert current_row["time_seconds"] == get_build_time("nanofactory", 7, user_id=uid)
 
 
@@ -317,6 +327,9 @@ def test_technical_data_command_center_flat_per_level_bonus(tech_db):
     current_row = next(r for r in data["levels"] if r["is_current"])
     next_row = next(r for r in data["levels"] if r["level"] == current_row["level"] + 1)
     assert current_row["effect_kind"] == "bonus_percent"
-    assert current_row["effect_value"] == 425
-    assert next_row["effect_value"] == 450
-    assert next_row["effect_value"] - current_row["effect_value"] == 25
+    # COMMAND_CENTER_NANOFACTORY_BUILD_BONUS_PER_LEVEL moved 25 -> 15 (GC-863 UI
+    # display rebalance); read the canonical helper instead of a stale
+    # flat-rate snapshot (GC-STABILIZE-002).
+    assert current_row["effect_value"] == command_center_nanofactory_build_bonus_pct(17)
+    assert next_row["effect_value"] == command_center_nanofactory_build_bonus_pct(18)
+    assert next_row["effect_value"] - current_row["effect_value"] == COMMAND_CENTER_NANOFACTORY_BUILD_BONUS_PER_LEVEL

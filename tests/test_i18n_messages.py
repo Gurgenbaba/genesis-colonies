@@ -72,11 +72,37 @@ def test_tr_brace_count_placeholder():
     assert "2" in text
 
 
-def test_en_locale_falls_back_to_en_for_new_languages():
-    from game.i18n import get_locale_dict
+def test_en_locale_falls_back_to_en_for_new_languages(monkeypatch):
+    """GC-900C: get_locale_dict() must still fall back to the English value
+    for any key a supported locale hasn't translated yet (its merge
+    contract). fr.json has since gained a real translation for
+    buildings_title ("Bâtiments" — see
+    test_gc900c_non_de_locales_differ_from_en_for_ui_sample and
+    test_gc900c_non_de_fallback_chain_uses_en, which assert non-de locales
+    now intentionally differ from en), so asserting fr == en for that key
+    no longer reflects canon. Simulate a not-yet-translated key instead to
+    keep exercising the actual fallback merge.
+    """
+    import game.i18n as i18n
 
-    fr = get_locale_dict("fr")
-    en = get_locale_dict("en")
+    cached_load_locale = i18n._load_locale
+    real_load_locale = cached_load_locale.__wrapped__
+
+    def fake_load_locale(locale):
+        data = dict(real_load_locale(locale))
+        if locale == "fr":
+            data.pop("buildings_title", None)
+        return data
+
+    # Warm the mtime cache with the real files first so get_locale_dict's
+    # change-detection branch (which calls _load_locale.cache_clear()) does
+    # not run against our monkeypatched loader below.
+    i18n.get_locale_dict("fr")
+    i18n.get_locale_dict("en")
+
+    monkeypatch.setattr(i18n, "_load_locale", fake_load_locale)
+    fr = i18n.get_locale_dict("fr")
+    en = i18n.get_locale_dict("en")
     assert fr.get("buildings_title") == en.get("buildings_title")
 
 

@@ -630,9 +630,19 @@ def _parity_d_coords(conn, planet_id: int) -> tuple[int, int, int]:
 
 
 def _parity_d_unlock_expansion(conn, uid: int, home_id: int) -> None:
-    from game.planet_evolution.expansion_protocol import INTERSTELLAR_EXPANSION_TECH
+    from game.planet_evolution.expansion_protocol import (
+        INTERSTELLAR_EXPANSION_TECH,
+        next_expansion_slot_homeworld_level,
+    )
 
-    conn.execute("UPDATE planets SET planet_level = 25 WHERE id = ?;", (int(home_id),))
+    # Intentionally does NOT call unlock_colony_slots(): that helper commits,
+    # but parity-D runs inside an open caller transaction that must stay open
+    # until colonize_planet finishes. Mirror the canonical level formula here.
+    required_level = next_expansion_slot_homeworld_level(5)  # slots=6 → index 5
+    conn.execute(
+        "UPDATE planets SET planet_level = MAX(planet_level, ?) WHERE id = ?;",
+        (int(required_level), int(home_id)),
+    )
     conn.execute(
         """
         INSERT INTO research_levels (user_id, tech_key, level)

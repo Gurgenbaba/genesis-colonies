@@ -1105,8 +1105,14 @@ def _load_page_live_context(
                 exc_info=True,
             )
             from game.logic import _read_player_live_state_no_writes
-            from game.live_state import get_request_context_planet
+            from game.live_state import get_request_context_planet, mark_request_live_refreshed
             from game.buildings import get_build_queue_status_for_planet
+
+            # We already gave up on finishing due work this request (lock above);
+            # mark refreshed so coerce_skip_finish() honors skip_finish=True below
+            # instead of retrying finish_due_work_once and hitting the same lock
+            # again (GC-STABILIZE-002; game/live_state.py coerce_skip_finish).
+            mark_request_live_refreshed()
 
             player = load_player(user_id, conn=conn)
             if not player:

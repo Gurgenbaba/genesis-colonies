@@ -128,6 +128,7 @@ def test_scrapyard_api_persists_recycle(scrap_db, tmp_path, monkeypatch):
     dbmod.DB_PATH = db_path
     models.DB_PATH = db_path
     importlib.reload(app_module)
+    app_module.app.config["TESTING"] = True
 
     conn = db()
     ok, err, user = create_user(f"scrap_api_{os.getpid()}", "test-pass-123")

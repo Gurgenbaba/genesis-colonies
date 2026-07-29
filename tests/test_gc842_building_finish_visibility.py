@@ -27,20 +27,38 @@ def _set_buildings(planet_id: int, levels: dict) -> None:
 
 
 def test_gc842_main_js_finish_uses_panel_delta_refresh():
+    """The panel_delta_buildings client path (refreshBuildingsFinishState)
+    was superseded by a canonical include_panel refresh for ALL timer-zero
+    completions (commit afd88f1, "Timer-zero queue completion now forces a
+    canonical include_panel refresh") and removed as dead code — nothing
+    called it anymore once requestBuildingsFinishRefresh started routing
+    through the shared requestQueueTimerZeroRefresh debounce below. The
+    server-side panel_delta_buildings capability itself is untouched (see
+    test_gc842_api_game_state_panel_delta_buildings /
+    test_gc842_finish_delta_smaller_than_full_panel). Assert the current
+    canonical path: building finish -> requestBuildingsFinishRefresh ->
+    requestQueueTimerZeroRefresh -> forceCanonicalGameStateRefresh
+    (include_panel=1), never a page reload.
+    """
     src = _read("static/main.js")
     assert "panel_delta_buildings=" in src
-    assert "function refreshBuildingsFinishState(reason)" in src
     assert "function requestBuildingsFinishRefresh(meta)" in src
-    fn = src.split("function refreshPageAfterQueueEvent(reason)")[1].split(
-        "/** Lightweight HUD refresh"
+    assert "function requestQueueTimerZeroRefresh(meta)" in src
+    finish_fn = src.split("function requestBuildingsFinishRefresh(meta)")[1].split(
+        "function clearFinishRefreshArmed"
     )[0]
-    assert 'reasonStr === "page_init"' in fn
-    assert "include_panel=1" in fn
-    assert "refreshBuildingsFinishState(reasonStr)" in fn
-    delta_fn = src.split("function refreshBuildingsFinishState(reason)")[1].split(
-        "function requestBuildingsFinishRefresh"
+    assert 'domain: "buildings"' in finish_fn
+    assert "requestQueueTimerZeroRefresh(" in finish_fn
+    timer_zero = src.split("function requestQueueTimerZeroRefresh(meta)")[1].split(
+        "function markCardQueueZeroRefresh"
     )[0]
-    assert "buildBuildingsFinishDeltaUrl(keys)" in delta_fn
+    assert 'forceCanonicalGameStateRefresh("queue_timer_zero")' in timer_zero
+    assert "reloadCurrentPage" not in timer_zero
+    canonical_refresh = src.split("async function forceCanonicalGameStateRefresh(reason, opts)")[1].split(
+        "\n  }\n", 1
+    )[0]
+    assert "include_panel=1" in canonical_refresh
+    assert "forcePanel: true" in canonical_refresh
 
 
 def test_gc842_api_game_state_panel_delta_buildings(game_client):

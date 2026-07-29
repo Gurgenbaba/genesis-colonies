@@ -372,7 +372,10 @@ def test_repo_root_honors_gc_repo_root_env(timeline_db, monkeypatch, tmp_path):
 
 
 def test_sidebar_template_has_release_fallback():
-    html = (Path(__file__).resolve().parents[1] / "templates/partials/sidebar.html").read_text(
+    # GC-806 moved the release/version link out of the sidebar into the
+    # bottom utility dock footer (templates/partials/bottom_utility_bar.html)
+    # shared by all shells — same fallback contract, different owner file.
+    html = (Path(__file__).resolve().parents[1] / "templates/partials/bottom_utility_bar.html").read_text(
         encoding="utf-8"
     )
     assert "SIDEBAR_RELEASE is defined" in html

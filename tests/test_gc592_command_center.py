@@ -186,6 +186,7 @@ def test_galaxy_template_renders_command_center_shell(gc592_db, monkeypatch):
     models.DB_PATH = gc592_db
     monkeypatch.setenv('GC_SKIP_MIGRATION_CHECK', '1')
     importlib.reload(app_module)
+    app_module.app.config['TESTING'] = True
     uname = f'gc592_ui_{uuid.uuid4().hex[:8]}'
     ok, err, user = create_user(uname, 'test-pass-123')
     assert ok and user, err
@@ -322,6 +323,7 @@ def test_galaxy_template_renders_world_field_command_center_source(gc592_db, mon
     models.DB_PATH = gc592_db
     monkeypatch.setenv('GC_SKIP_MIGRATION_CHECK', '1')
     importlib.reload(app_module)
+    app_module.app.config['TESTING'] = True
     uname = f'gc592b_ui_{uuid.uuid4().hex[:8]}'
     ok, err, user = create_user(uname, 'test-pass-123')
     assert ok and user, err

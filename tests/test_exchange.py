@@ -400,6 +400,7 @@ def test_exchange_api_route(exchange_db, tmp_path, monkeypatch):
     dbmod.DB_PATH = db_path
     models.DB_PATH = db_path
     importlib.reload(app_module)
+    app_module.app.config["TESTING"] = True
 
     conn = db()
     uid = _player(conn=conn)
@@ -410,6 +411,8 @@ def test_exchange_api_route(exchange_db, tmp_path, monkeypatch):
     login = client.post("/login", data={"username": uname, "password": "test-pass-123"})
     assert login.status_code in (200, 302)
 
+    expected_receive = _preview_receive("metal", "crystal", 500, get_exchange_config())
+
     res = client.post(
         "/api/exchange",
         json={"direction": "metal_to_crystal", "amount": 500},
@@ -418,7 +421,9 @@ def test_exchange_api_route(exchange_db, tmp_path, monkeypatch):
     assert res.status_code == 200
     data = res.get_json()
     assert data["ok"] is True
-    assert data["job"]["receive_amount"] == 250
+    # Derived from the canonical rate (GC-SCORE-F score-neutral rebalance),
+    # not a hardcoded value, so this doesn't go stale on future rate tuning.
+    assert data["job"]["receive_amount"] == expected_receive
 
 
 def test_trader_hub_page_includes_exchange_panel(exchange_db, tmp_path, monkeypatch):
@@ -436,6 +441,7 @@ def test_trader_hub_page_includes_exchange_panel(exchange_db, tmp_path, monkeypa
     dbmod.DB_PATH = db_path
     models.DB_PATH = db_path
     importlib.reload(app_module)
+    app_module.app.config["TESTING"] = True
 
     conn = db()
     uid = _player(conn=conn)
@@ -471,6 +477,7 @@ def test_overview_page_excludes_exchange_panel(exchange_db, tmp_path, monkeypatc
     dbmod.DB_PATH = db_path
     models.DB_PATH = db_path
     importlib.reload(app_module)
+    app_module.app.config["TESTING"] = True
 
     conn = db()
     uid = _player(conn=conn)
@@ -500,6 +507,7 @@ def test_overview_excludes_planet_teaser_widget(exchange_db, tmp_path, monkeypat
     dbmod.DB_PATH = db_path
     models.DB_PATH = db_path
     importlib.reload(app_module)
+    app_module.app.config["TESTING"] = True
 
     conn = dbmod.db()
     ok, err, user = models.create_user(f"ov_pe_{os.getpid()}", "test-pass-123")
@@ -645,6 +653,7 @@ def test_trader_hub_shows_limit_breakdown(exchange_db, tmp_path, monkeypatch):
     dbmod.DB_PATH = db_path
     models.DB_PATH = db_path
     importlib.reload(app_module)
+    app_module.app.config["TESTING"] = True
 
     conn = db()
     uid = _player(conn=conn)

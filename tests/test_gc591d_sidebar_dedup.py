@@ -71,9 +71,18 @@ def test_homeworld_no_overflow_duplicates():
     assert not module_in_section(nav, 'overview', 'administration')
 
 def test_homeworld_verwaltung_only_utility_modules():
+    """Story and Chronicles (narrative/history content) were deliberately
+    added to the administration ("Verwaltung") section alongside
+    alliance/ranking/hall_of_fame/referrals/records — see
+    NAV_SECTION_MODULES["administration"] in
+    game/planet_evolution/sidebar_nav.py. The invariant this test protects
+    (only utility modules, never core gameplay modules like
+    buildings/overview, show up in this section) still holds."""
     nav = resolve_sidebar_nav(empire_role_key='homeworld', is_homeworld=True)
     admin_modules = [m for m in visible_sidebar_modules(nav) if module_in_section(nav, m, 'administration')]
-    assert set(admin_modules) == {'alliance', 'ranking', 'hall_of_fame', 'referrals', 'records'}
+    assert set(admin_modules) == {
+        'alliance', 'ranking', 'hall_of_fame', 'referrals', 'records', 'story', 'chronicles',
+    }
 
 def test_homeworld_messages_standalone_shortcut():
     nav = resolve_sidebar_nav(empire_role_key='homeworld', is_homeworld=True)
@@ -128,18 +137,34 @@ def test_main_js_single_placement_sync():
     src = _read('static/main.js')
     assert 'moduleDisplaySection' in src
     assert 'shouldShowSidebarNavLink' in src
-    assert 'el.hidden = true' in src.split('function applyDesktopSidebarNav')[1][:800]
+    # applyDesktopSidebarNav toggles [data-nav-module] visibility off a single
+    # boolean (el.hidden = !shouldShow) rather than a literal `= true` branch —
+    # same single-placement-sync contract, just one assignment instead of two.
+    assert 'el.hidden = !shouldShow' in src.split('function applyDesktopSidebarNav')[1][:800]
 
 def test_homeworld_overview_html_has_no_admin_duplicates(gc591d_db, monkeypatch):
+    """GC-806 split the single sidebar into a left nav
+    (id="gc-sidebar-nav": command/infrastructure/military/economy) and a
+    separate right utility nav (id="gc-sidebar-nav-right": messages +
+    administration modules like ranking/hall_of_fame). Dedup must hold
+    across both navs combined, not just within the left one."""
     player_id, uname = _create_player()
     client = _app_client(monkeypatch)
     assert client.post('/login', data={'username': uname, 'password': 'test-pass-123'}).status_code in (200, 302)
     html = client.get('/overview').get_data(as_text=True)
-    sidebar_chunk = html.split('id="gc-sidebar-nav"', 1)[1].split('</nav>', 1)[0]
+    left_chunk = html.split('id="gc-sidebar-nav"', 1)[1].split('</nav>', 1)[0]
+    right_chunk = html.split('id="gc-sidebar-nav-right"', 1)[1].split('</nav>', 1)[0]
+    sidebar_chunk = left_chunk + right_chunk
     visible_overview = _visible_module_lines(sidebar_chunk, 'overview')
     assert len(visible_overview) == 1
     assert len(_visible_module_lines(sidebar_chunk, 'research')) == 1
-    assert len(_visible_module_lines(sidebar_chunk, 'ranking')) == 1
+    # GC-806 moved ranking/chronicles/records out of the accordion sidebar
+    # data-nav-module contract entirely: they are only reachable via the
+    # header HUD score pill and the bottom utility dock
+    # (templates/partials/bottom_utility_bar.html), neither of which use
+    # data-nav-module. hall_of_fame stayed in the sidebar accordion
+    # (templates/partials/sidebar_right.html), so it still proves the
+    # single-placement dedup invariant for the "administration" section.
     assert len(_visible_module_lines(sidebar_chunk, 'hall_of_fame')) == 1
 
 def test_mining_colony_research_once_in_infrastructure(gc591d_db, monkeypatch):

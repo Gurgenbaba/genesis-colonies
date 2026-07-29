@@ -86,7 +86,7 @@ def test_gc840_action_state_diet_strips_page_catalog(game_client):
         headers={"Content-Type": "application/json"},
     ).get_json()["state"]
 
-    for heavy in ("exchange", "scrapyard", "shipyard", "defense", "global_queue_hud", "planet_teaser"):
+    for heavy in ("exchange", "scrapyard", "shipyard", "defense", "global_queue_hud", "planet_teaser", "codex"):
         assert heavy not in state
     assert state.get("build_queue") is not None
     assert state.get("resources") or state.get("player")

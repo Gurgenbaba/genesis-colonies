@@ -139,7 +139,11 @@ def test_galaxy_template_gc582f_contract():
     assert 'command_map_badge_newly_colonized' in html
     assert 'data-foreign-world-colony-inspect' in html
     assert 'data-expedition-status' in html
-    assert 'gc-world-inspector-modal' in html
+    # world_inspector_modal was extracted into its own included partial
+    # (templates/partials/world_inspector_modal.html) — check both combined
+    # (GC-STABILIZE-002).
+    modal_html = (ROOT / 'templates' / 'partials' / 'world_inspector_modal.html').read_text(encoding='utf-8')
+    assert 'gc-world-inspector-modal' in html + modal_html
     js = (ROOT / 'static' / 'main.js').read_text(encoding='utf-8')
     assert 'openWorldInspectorFromNode' in js
     assert 'world_inspector_open_colony' in js

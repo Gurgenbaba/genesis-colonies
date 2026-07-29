@@ -211,7 +211,10 @@ class TestGc863NanofactoryCosts:
         assert power_upgrade_cost("nanofactory", level) == (metal, crystal)
 
     def test_benchmark_values(self):
-        assert nanofactory_upgrade_cost(1) == (13400, 6700)
-        assert nanofactory_upgrade_cost(10) == (186_659, 93_330)
-        assert nanofactory_upgrade_cost(25) == (15_052_893, 7_526_447)
-        assert nanofactory_upgrade_cost(50) == (22_658_957_156, 11_329_478_578)
+        # NANOFACTORY_COST_GROWTH moved 1.33 -> 1.34 -> 2.0 ("Alpha: doubles per
+        # target level (OGame-style steep investment)", game/economy_balance.py)
+        # since these benchmarks were written for the 1.34 curve (GC-STABILIZE-002).
+        assert nanofactory_upgrade_cost(1) == (20_000, 10_000)
+        assert nanofactory_upgrade_cost(10) == (10_240_000, 5_120_000)
+        assert nanofactory_upgrade_cost(25) == (335_544_320_000, 167_772_160_000)
+        assert nanofactory_upgrade_cost(50) == (11_258_999_068_426_240_000, 5_629_499_534_213_120_000)

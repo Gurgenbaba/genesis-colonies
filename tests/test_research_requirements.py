@@ -106,6 +106,7 @@ def test_research_page_renders_empire_lab_level_chip(research_db, monkeypatch):
     monkeypatch.setattr(dbmod, 'DB_PATH', research_db)
     monkeypatch.setattr(models, 'DB_PATH', research_db)
     importlib.reload(app_module)
+    app_module.app.config['TESTING'] = True
     player_id, uname = _create_player()
     hw_id = int(get_homeworld(player_id=player_id)['id'])
     colony_id = _second_planet(player_id)

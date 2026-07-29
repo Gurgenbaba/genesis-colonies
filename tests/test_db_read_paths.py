@@ -163,6 +163,7 @@ def test_api_player_card_without_score_row_returns_200(temp_db, monkeypatch):
     monkeypatch.setattr(dbmod, "DB_PATH", temp_db)
     monkeypatch.setattr(models, "DB_PATH", temp_db)
     importlib.reload(app_module)
+    app_module.app.config["TESTING"] = True
 
     target = _create_player("pc_api_target")
     viewer = _create_player("pc_api_viewer")

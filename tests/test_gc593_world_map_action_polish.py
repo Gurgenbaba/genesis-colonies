@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import uuid
 from pathlib import Path
 import pytest
@@ -93,7 +94,8 @@ def test_build_queue_marks_action_card_queue_active(gc593_db):
         hw = get_homeworld(player_id, conn=conn)
         planet_id = int(hw['id'])
         save_planet_buildings(planet_id, {'metal_mine': 1})
-        conn.execute("\n            INSERT INTO build_queue (planet_id, building_type, start_time, finish_time)\n            VALUES (?, 'metal_mine', ?, ?);\n            ", (planet_id, 1000000.0, 1000600.0))
+        now = time.time()
+        conn.execute("\n            INSERT INTO build_queue (planet_id, building_type, start_time, finish_time)\n            VALUES (?, 'metal_mine', ?, ?);\n            ", (planet_id, now, now + 600.0))
         conn.commit()
         cc = build_colony_command_center(planet_id, player_id, conn=conn, role_key='homeworld', is_homeworld=True)
         build_card = next((row for row in cc['quick_actions'] if row['action_key'] == 'buildings'))

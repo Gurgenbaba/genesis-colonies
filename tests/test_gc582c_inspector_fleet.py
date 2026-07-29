@@ -62,6 +62,18 @@ def _player(conn):
     assert ok and user, err
     uid = int(user["id"])
     ensure_player_and_homeworld(uid, player_name="Commander", conn=conn)
+    # GC-976A: colonize_planet()/colonize previews need an unlocked evolution slot.
+    from conftest import unlock_colony_slots
+    from game.models import get_homeworld
+
+    homeworld_id = int(get_homeworld(player_id=uid, conn=conn)["id"])
+    unlock_colony_slots(conn, homeworld_id, slots=1)
+    # The fleet-send form (coords row / world-target panel) only renders when
+    # the player has at least one ship (game/fleet.py has_ships gate) — seed a
+    # starter hull so page-render tests exercise the real send form.
+    from game.fleet import add_planet_ships
+
+    add_planet_ships(homeworld_id, uid, {"mule_courier": 1}, conn=conn)
     return uid
 
 
@@ -149,6 +161,7 @@ def test_api_worlds_colonize_preview(gc582c_db, monkeypatch):
     conn = db()
     try:
         player_id = _player(conn)
+        conn.commit()
     finally:
         conn.close()
 
@@ -177,6 +190,7 @@ def test_galaxy_template_colonize_inspector_and_fleet_panel(gc582c_db, monkeypat
     conn = db()
     try:
         player_id = _player(conn)
+        conn.commit()
     finally:
         conn.close()
 

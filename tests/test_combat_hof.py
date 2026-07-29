@@ -381,7 +381,14 @@ def test_prune_hof_entries_beyond_top_keeps_best_250(hof_db):
             """
         )
         min_kept = int(cur.fetchone()["min_score"])
-        assert min_kept >= 11
+        # sentinel_turret (250 metal/125 crystal) scores compute_destroyed_raw_from_losses
+        # per aggregate-then-floor (game/scoring.py); idx 1-5 all floor to 0, so the
+        # bottom 10 by (score DESC, created_at DESC) are exactly fleet_id 1-10, and the
+        # weakest surviving entry (fleet_id 11) sets the floor — read it from the
+        # canonical scorer instead of hardcoding a snapshot (GC-STABILIZE-002).
+        from game.scoring import compute_destroyed_raw_from_losses
+
+        assert min_kept == compute_destroyed_raw_from_losses({"sentinel_turret": 11})
 
         cur.execute("SELECT COUNT(*) AS c FROM combat_hall_of_fame WHERE fleet_id <= 10;")
         assert int(cur.fetchone()["c"]) == 0

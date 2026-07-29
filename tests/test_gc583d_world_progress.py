@@ -239,6 +239,17 @@ def test_fleet_world_expedition_increments_progress(gc583d_db):
             (time.time() - 1, fleet_id),
         )
         conn.commit()
+        # First tick only resolves outbound -> holding (expedition stays at the
+        # destination for a holding period); world_progress is recorded when
+        # holding -> returning resolves the outcome, so also fast-forward
+        # holding_until and tick again (GC-STABILIZE-002; game/fleet.py process_fleet_tick).
+        process_fleet_tick(player_id=player_id, conn=conn)
+        conn.commit()
+        conn.execute(
+            "UPDATE fleet_movements SET holding_until = ? WHERE id = ?;",
+            (time.time() - 1, fleet_id),
+        )
+        conn.commit()
         process_fleet_tick(player_id=player_id, conn=conn)
         conn.commit()
 

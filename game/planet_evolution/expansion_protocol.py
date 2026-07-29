@@ -121,12 +121,26 @@ def count_expansion_worlds(player_id: int, *, conn: sqlite3.Connection) -> int:
 
 
 def expansion_slots_unlocked(homeworld_level: int) -> int:
-    """Colony slots (excluding homeworld) unlocked at this Genesis Ark level (GC-976A)."""
+    """Colony slots (excluding homeworld) unlocked at this Genesis Ark level (GC-976A).
+
+    Beyond the last hardcoded `EXPANSION_SLOT_GATES` entry, slots keep
+    unlocking every +5 homeworld levels — the same linear extrapolation
+    `_slot_gate_for_next_expansion`/`next_expansion_slot_homeworld_level`
+    already use to compute the *next* required level. Without this, players
+    who kept leveling their homeworld past the table's top entry would be
+    permanently stuck at that many colonies even though the "next unlock
+    level" shown in the UI (`get_expansion_limit_block`) implies more are
+    still coming (GC-STABILIZE-002).
+    """
     hw = max(0, int(homeworld_level or 0))
     unlocked = 0
     for gate in EXPANSION_SLOT_GATES:
         if hw >= int(gate["homeworld_level"]):
             unlocked = int(gate["expansion_index"])
+    last = EXPANSION_SLOT_GATES[-1]
+    if hw >= int(last["homeworld_level"]):
+        extra = (hw - int(last["homeworld_level"])) // 5
+        unlocked = int(last["expansion_index"]) + extra
     return unlocked
 
 

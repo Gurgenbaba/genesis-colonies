@@ -142,6 +142,16 @@ def test_gc597_template_js_css_contract():
 
     css = (ROOT / "static/style.css").read_text(encoding="utf-8")
 
+    # The modal shell (gc-world-inspector-modal / data-world-inspector-modal /
+    # data-world-inspector-content) was extracted into its own include
+    # (partials/world_inspector_modal.html) so it can be reused outside the
+    # command map panel too — see the {% include %} below. The panel markup
+    # is checked as the union of both files, since that's what actually
+    # renders wherever this panel is included.
+    modal_partial = (ROOT / "templates/partials/world_inspector_modal.html").read_text(encoding="utf-8")
+    assert '{% include "partials/world_inspector_modal.html" %}' in tpl
+    combined = tpl + modal_partial
+
     for needle in (
 
         "data-colony-location-inspect",
@@ -164,7 +174,7 @@ def test_gc597_template_js_css_contract():
 
     ):
 
-        assert needle in tpl, f"missing template marker: {needle}"
+        assert needle in combined, f"missing template marker: {needle}"
 
     assert "map_inspector_title" not in tpl or "galaxy-command-map-legacy-shell" in tpl
 
@@ -258,7 +268,7 @@ def test_gc597_galaxy_renders_fullmap_and_modal(gc597_db, monkeypatch):
 
     importlib.reload(app_module)
 
-
+    app_module.app.config["TESTING"] = True
 
     uname = f"gc597_ui_{uuid.uuid4().hex[:8]}"
 

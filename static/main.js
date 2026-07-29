@@ -4071,103 +4071,22 @@
   const _finishRefreshLastAt = { buildings: 0, research: 0, planet_evolution: 0 };
   const FINISH_REFRESH_MIN_MS = 450;
   const FINISH_REFRESH_DEBOUNCE_MS = 80;
-  const _buildingsFinishDeltaKeys = new Set();
-  let _buildingsFinishRefreshTimer = null;
-  const BUILDINGS_FINISH_REFRESH_DEBOUNCE_MS = 40;
 
-  function trackBuildingsFinishDeltaKey(key) {
-    const k = String(key || "").trim();
-    if (k) _buildingsFinishDeltaKeys.add(k);
-  }
-
-  function collectBuildingsFinishDeltaKeys() {
-    const keys = new Set(_buildingsFinishDeltaKeys);
-    if (!keys.size) {
-      document.querySelectorAll("[data-building-row]").forEach((row) => {
-        const k = row.getAttribute("data-building-row") || "";
-        if (k) keys.add(k);
-      });
-    }
-    return Array.from(keys);
-  }
-
-  function buildBuildingsFinishDeltaUrl(keys) {
-    const list = (keys || []).filter(Boolean).join(",");
-    return `/api/game-state?panel_delta_buildings=${encodeURIComponent(list)}`;
-  }
-
-  let _finishPerfSession = null;
-
-  function beginFinishPerf(reason, keys) {
-    if (!isActionPerfDebug()) return;
-    _finishPerfSession = {
-      reason: String(reason || ""),
-      keys: Array.isArray(keys) ? keys.slice() : [],
-      finishAt: performance.now(),
-      responseAt: 0,
-      patchAt: 0,
-    };
-  }
-
-  function finishFinishPerfVisible(buildingKey) {
-    if (!_finishPerfSession) return;
-    const s = _finishPerfSession;
-    const rowSel = buildingKey ? `[data-building-row="${buildingKey}"]` : "[data-building-row]";
-    const row = document.querySelector(rowSel);
-    logActionPerfClient("finish_visible", {
-      reason: s.reason,
-      keys: s.keys,
-      finish_to_response_ms: s.responseAt ? Math.round(s.responseAt - s.finishAt) : null,
-      response_to_patch_ms: s.patchAt && s.responseAt ? Math.round(s.patchAt - s.responseAt) : null,
-      finish_to_visible_ms: Math.round(performance.now() - s.finishAt),
-      row_found: !!row,
-      row_in_queue: row?.classList.contains("gc-building-card--in-queue") ?? null,
-    });
-    _finishPerfSession = null;
-  }
-
-  async function refreshBuildingsFinishState(reason) {
-    if (!shouldRunGameLoop() || _authLoopAborted) return null;
-    const keys = collectBuildingsFinishDeltaKeys();
-    if (!keys.length) return null;
-    if (_queuePanelRefreshInFlight) return _queuePanelRefreshInFlight;
-    beginFinishPerf(reason, keys);
-    _queuePanelRefreshInFlight = (async () => {
-      try {
-        const data = await GC.fetchJSON(buildBuildingsFinishDeltaUrl(keys), { cache: "no-store" });
-        if (_finishPerfSession) _finishPerfSession.responseAt = performance.now();
-        if (!data || data.ok === false) return null;
-        syncServerClockFromState(data);
-        applyGameStateData(data, reason || "buildings_finished", {
-          forcePanel: true,
-          forceResourceBar: true,
-        });
-        if (_finishPerfSession) _finishPerfSession.patchAt = performance.now();
-        const primaryKey = keys[0] || "";
-        const defer =
-          typeof requestAnimationFrame === "function"
-            ? (fn) => requestAnimationFrame(() => requestAnimationFrame(fn))
-            : (fn) => setTimeout(fn, 32);
-        defer(() => finishFinishPerfVisible(primaryKey));
-        return data;
-      } catch (err) {
-        if (err?.name !== "AbortError") {
-          console.error("[GC] buildings finish delta refresh failed", err);
-        }
-        _finishPerfSession = null;
-        return null;
-      } finally {
-        _queuePanelRefreshInFlight = null;
-        _buildingsFinishDeltaKeys.clear();
-      }
-    })();
-    return _queuePanelRefreshInFlight;
-  }
-
+  // GC-STABILIZE-002 cluster6: the panel_delta_buildings client path
+  // (refreshBuildingsFinishState / buildBuildingsFinishDeltaUrl /
+  // collectBuildingsFinishDeltaKeys / trackBuildingsFinishDeltaKey / the
+  // finish-perf instrumentation pair) was superseded by the canonical
+  // include_panel refresh in commit afd88f1 ("Timer-zero queue completion
+  // now forces a canonical include_panel refresh") and had become dead
+  // code — nothing called refreshBuildingsFinishState anymore, only
+  // requestQueueTimerZeroRefresh's shared debounce below. Removed rather
+  // than left as an unreachable parallel path (server-side
+  // /api/game-state?panel_delta_buildings= support in game/*.py is
+  // untouched — see tests/test_gc842_building_finish_visibility.py's
+  // backend tests).
   function requestBuildingsFinishRefresh(meta) {
     if (!shouldRunGameLoop() || _authLoopAborted) return;
     const o = meta && typeof meta === "object" ? meta : {};
-    if (o.buildingKey) trackBuildingsFinishDeltaKey(o.buildingKey);
     requestQueueTimerZeroRefresh({
       domain: "buildings",
       jobId: Math.floor(Number(o.jobId || 0)),
@@ -10042,7 +9961,6 @@
           const zeroKey = `build-card:${finish}:${jobId}`;
           const cardEl = block.closest("[data-building-row]");
           const buildingKey = cardEl?.getAttribute("data-building-row") || "";
-          if (buildingKey) trackBuildingsFinishDeltaKey(buildingKey);
           if (_buildZeroHandled !== zeroKey) {
             _buildZeroHandled = zeroKey;
             requestBuildingsFinishRefresh({ buildingKey, jobId, finishAt: finish });
@@ -32982,17 +32900,7 @@
     else link.removeAttribute("type");
   }
 
-  function syncLcpHeroPreloadFromPjaxDoc(doc) {
-    const newMain = doc?.getElementById?.("main-content");
-    if (!newMain) {
-      syncLcpHeroPreload("");
-      return;
-    }
-    syncLcpHeroPreload(resolveLcpHeroImageUrl(newMain));
-  }
-
   GC.syncLcpHeroPreload = syncLcpHeroPreload;
-  GC.syncLcpHeroPreloadFromPjaxDoc = syncLcpHeroPreloadFromPjaxDoc;
 
   async function applyPjaxPayload(url, payload, doc, opts = {}) {
     const push = opts.push !== false;
@@ -33280,6 +33188,11 @@
       if (typeof GC.abortInFlightGameStateFetches === "function") {
         GC.abortInFlightGameStateFetches();
       }
+      // Same starvation class as game-state: chat message polls keep hitting
+      // SQLite during idle. Abort the in-flight request only (schedule stays).
+      if (typeof GC.abortInFlightChatFetches === "function") {
+        GC.abortInFlightChatFetches("pjax_nav");
+      }
       if (!opts.preserveGameLoop) {
         GC.stopPolling();
       }
@@ -33350,6 +33263,9 @@
         if (!payload) throw new Error("main-content missing");
         if (isGalaxySystemPjaxUrl(target)) cacheGalaxyPjaxFromDoc(url, doc);
         await applyPjaxPayload(url, payload, doc, { ...opts, push });
+        // Superseded mid-apply (rapid sidebar clicks): do not treat this nav
+        // as the active one in finally — finishPjaxNavigation is gated on id.
+        if (_activePjaxNavigation?.id !== navId) return;
       } catch (err) {
         if (err?.name === "AbortError") {
           const fetchTimedOut = !!(fetchTimeout?.signal?.aborted);
@@ -33358,6 +33274,28 @@
             console.warn("[GC] PJAX timeout, hard-loading", target);
             finishPjaxNavigation(nav);
             window.location.assign(url);
+            return;
+          }
+          // shouldPjaxHardLoad() intentionally refuses to hard-load when the
+          // target equals the current URL (avoids an assign()-to-self reload
+          // loop). But a same-URL PJAX reload (GC.reloadCurrentPage) can
+          // still time out on its own — e.g. the single SQLite worker
+          // starved after a long idle period. Previously this fell through
+          // to a bare `return`: no toast, no released nav blockers, nothing
+          // — the shell looked frozen ("click nothing works, must reload")
+          // until the user hard-refreshed manually. Surface the same
+          // recovery UX as the generic failure path below, minus the
+          // self-redirect.
+          if (fetchTimedOut && !userAborted && _activePjaxNavigation?.id === nav.id) {
+            console.warn("[GC] PJAX same-URL reload timed out", target);
+            finishPjaxNavigation(nav);
+            showNotify(
+              t("msg_status_refresh_failed", "Seite konnte nicht geladen werden. Bitte erneut versuchen."),
+              "error"
+            );
+            if (typeof GC.releaseShellNavigationBlockers === "function") {
+              GC.releaseShellNavigationBlockers("pjax_timeout_same_url");
+            }
           }
           return;
         }

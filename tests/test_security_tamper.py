@@ -16,6 +16,7 @@ from game.db import db
 from game.fleet import add_planet_ships, fleet_schema_ready
 from game.fleet_defs import get_ship
 from game.models import create_user, ensure_player_and_homeworld, get_homeworld, get_planets_by_player, init_db, save_planet_buildings
+from game.exchange import _preview_receive, get_exchange_config
 from game.planet_evolution.service import colonize_planet
 from game.research import get_research_cost
 
@@ -271,10 +272,15 @@ def test_exchange_ignores_client_receive_amount_and_rate(security_db, monkeypatc
     res = client.post('/api/exchange', json={'direction': 'metal_to_crystal', 'amount': 1000, 'receive_amount': 9999999, 'rate': 99.0})
     body = res.get_json()
     assert body['ok'] is True
-    assert body['job']['receive_amount'] == 850
+    # Score-neutral exchange (GC-SCORE-F) uses rate_metal_to_crystal=1.5, not the
+    # old flat 0.85; derive expectation from the canonical preview helper instead
+    # of a hardcoded rate (GC-STABILIZE-002). The point of this test — the
+    # server ignores the spoofed receive_amount/rate — still holds.
+    expected_receive = _preview_receive('metal', 'crystal', 1000, get_exchange_config())
+    assert body['job']['receive_amount'] == expected_receive
     after = _planet_row(pid)
     assert int(before['metal']) - int(after['metal']) == 1000
-    assert int(after['crystal']) == 850
+    assert int(after['crystal']) == expected_receive
 
 def test_exchange_rejects_negative_amount_even_with_spoofed_receive(security_db, monkeypatch):
     app_mod = _reload_app(monkeypatch, security_db)

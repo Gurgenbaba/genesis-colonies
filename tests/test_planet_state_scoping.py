@@ -156,13 +156,16 @@ def test_game_state_follows_active_planet_switch(scoped_db, monkeypatch):
     client.post('/login', data={'username': uname, 'password': 'test-pass-123'})
     ok, reason = set_active_planet(player_id, colony_id)
     assert ok, reason
-    r_colony = client.get('/api/game-state')
+    # Bare /api/game-state is the lightweight poll path and diets "buildings"
+    # out of the payload; include_panel=1 requests the full panel refresh
+    # (GC-STABILIZE-002; app.py api_game_state / _is_game_state_poll_source).
+    r_colony = client.get('/api/game-state?include_panel=1')
     assert r_colony.status_code == 200
     body_colony = r_colony.get_json()
     assert body_colony['active_planet_id'] == colony_id
     assert int(body_colony['buildings']['metal_mine']) == 8
     set_active_planet(player_id, hw_id)
-    r_hw = client.get('/api/game-state')
+    r_hw = client.get('/api/game-state?include_panel=1')
     body_hw = r_hw.get_json()
     assert body_hw['active_planet_id'] == hw_id
     assert int(body_hw['buildings']['metal_mine']) == 3

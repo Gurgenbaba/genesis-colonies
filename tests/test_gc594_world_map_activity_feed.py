@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -75,10 +76,15 @@ def test_gc594_locale_keys_present():
 
 def test_gc594_template_and_js_contract():
     tpl = (ROOT / "templates" / "partials" / "galaxy_command_map_panel.html").read_text(encoding="utf-8")
+    # world_inspector_modal was extracted into its own included partial
+    # (game/templates/partials/world_inspector_modal.html); check both files
+    # combined (GC-STABILIZE-002).
+    modal_tpl = (ROOT / "templates" / "partials" / "world_inspector_modal.html").read_text(encoding="utf-8")
+    tpl_combined = tpl + "\n" + modal_tpl
     js = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
     css = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
-    assert "gc-world-inspector-modal" in tpl
-    assert "data-world-inspector-content" in tpl
+    assert "gc-world-inspector-modal" in tpl_combined
+    assert "data-world-inspector-content" in tpl_combined
     assert "renderActivityFeed" in js
     assert "activity_feed" in js
     assert "command_center_section_activity" in js or "command_center_feed_" in js
@@ -125,12 +131,13 @@ def test_build_queue_appears_in_activity_feed(gc594_db):
         hw = get_homeworld(player_id, conn=conn)
         planet_id = int(hw["id"])
         save_planet_buildings(planet_id, {"metal_mine": 1})
+        now = time.time()
         conn.execute(
             """
             INSERT INTO build_queue (planet_id, building_type, start_time, finish_time)
             VALUES (?, 'metal_mine', ?, ?);
             """,
-            (planet_id, 1_000_000.0, 1_000_600.0),
+            (planet_id, now, now + 600.0),
         )
         conn.commit()
         cc = build_colony_command_center(

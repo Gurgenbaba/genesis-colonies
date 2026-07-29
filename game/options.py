@@ -17,6 +17,7 @@ from .db import (
     column_exists,
     commit,
     db,
+    ensure_column,
     rollback,
     table_columns,
     table_exists,
@@ -105,21 +106,16 @@ def ensure_account_options_schema(conn=None) -> None:
     c = conn or db()
     cur = c.cursor()
     try:
-        cols = table_columns(c, "users")
-        if "email" not in cols:
-            cur.execute("ALTER TABLE users ADD COLUMN email TEXT;")
-        if "notify_attack_sound" not in cols:
-            cur.execute(
-                "ALTER TABLE users ADD COLUMN notify_attack_sound TEXT NOT NULL DEFAULT 'normal';"
-            )
-        if "notify_message_sound" not in cols:
-            cur.execute(
-                "ALTER TABLE users ADD COLUMN notify_message_sound TEXT NOT NULL DEFAULT 'normal';"
-            )
-        if "default_spy_probes" not in cols:
-            cur.execute(
-                "ALTER TABLE users ADD COLUMN default_spy_probes INTEGER NOT NULL DEFAULT 5;"
-            )
+        ensure_column(c, "users", "email", "TEXT")
+        ensure_column(
+            c, "users", "notify_attack_sound", "TEXT NOT NULL DEFAULT 'normal'"
+        )
+        ensure_column(
+            c, "users", "notify_message_sound", "TEXT NOT NULL DEFAULT 'normal'"
+        )
+        ensure_column(
+            c, "users", "default_spy_probes", "INTEGER NOT NULL DEFAULT 5"
+        )
         cur.execute(
             """
             CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower
@@ -374,7 +370,6 @@ def ensure_account_safety_schema(conn=None) -> None:
     c = conn or db()
     cur = c.cursor()
     try:
-        cols = table_columns(c, "players")
         for col, typedef in (
             ("vacation_mode_active", "INTEGER NOT NULL DEFAULT 0"),
             ("vacation_locked_until", "INTEGER"),
@@ -382,8 +377,7 @@ def ensure_account_safety_schema(conn=None) -> None:
             ("account_deletion_due_at", "INTEGER"),
             ("account_deleted_at", "INTEGER"),
         ):
-            if col not in cols:
-                cur.execute(f"ALTER TABLE players ADD COLUMN {col} {typedef};")
+            ensure_column(c, "players", col, typedef)
         cur.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_players_account_deletion_due

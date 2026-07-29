@@ -1,6 +1,6 @@
 # Genesis Colonies — Roadmap
 
-Geplante Entwicklungsphasen und Meilensteine. Stand: **v0.5.9.18** (Alpha, Reality-Sync 2026-07-12).
+Geplante Entwicklungsphasen und Meilensteine. Stand: **v0.5.9.31** (Alpha, Reality-Sync 2026-07-12).
 
 Status-Legende:
 
@@ -29,7 +29,7 @@ Status-Legende:
 | Docker + Gunicorn Deployment | ✅ |
 | DB-Abstraction (`game/db.py`) | ✅ |
 | Bootstrap & Migration Guard | ✅ |
-| pytest-Suite (**3992** Tests) | ✅ |
+| pytest-Suite (**4065** Tests) | ✅ |
 
 ---
 

@@ -159,6 +159,7 @@ def test_galaxy_command_map_view_renders_colonies(empire_identity_db, monkeypatc
     models.DB_PATH = empire_identity_db
     import app as app_module
     importlib.reload(app_module)
+    app_module.app.config['TESTING'] = True
     uname = f'gal_imp_{uuid.uuid4().hex[:8]}'
     ok, err, user = create_user(uname, 'test-pass-123')
     assert ok and user, err
@@ -185,9 +186,11 @@ def test_galaxy_command_map_view_renders_colonies(empire_identity_db, monkeypatc
     assert 'Genesis Ark' in body
     assert 'Outpost Alpha' in body
     assert 'galaxy-slots' not in body
+    # Legacy `?view=imperium` bookmarks now alias to the classic system ring
+    # view (not Command Map) per app.py::galaxy_view — must still load, not 500.
     resp_legacy = client.get('/galaxy?view=imperium')
     assert resp_legacy.status_code == 200
-    assert 'galaxy-command-map-panel' in resp_legacy.get_data(as_text=True)
+    assert 'galaxy-ring-view' in resp_legacy.get_data(as_text=True)
 
 def test_empire_page_unchanged_without_identity_card(empire_identity_db, monkeypatch):
     import importlib
@@ -195,6 +198,7 @@ def test_empire_page_unchanged_without_identity_card(empire_identity_db, monkeyp
     models.DB_PATH = empire_identity_db
     import app as app_module
     importlib.reload(app_module)
+    app_module.app.config['TESTING'] = True
     uname = f'emp_chk_{uuid.uuid4().hex[:8]}'
     ok, err, user = create_user(uname, 'test-pass-123')
     assert ok and user, err

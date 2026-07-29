@@ -57,7 +57,13 @@ def _player(conn):
     # unlocked evolution slot.
     from game.models import get_homeworld
     from conftest import unlock_colony_slots
-    unlock_colony_slots(conn, int(get_homeworld(player_id=uid, conn=conn)["id"]), slots=1)
+    homeworld_id = int(get_homeworld(player_id=uid, conn=conn)["id"])
+    unlock_colony_slots(conn, homeworld_id, slots=1)
+    # The fleet-send form (coords row / world-target panel) only renders when
+    # the player has at least one ship (game/fleet.py has_ships gate) — seed a
+    # starter hull so page-render tests exercise the real send form.
+    from game.fleet import add_planet_ships
+    add_planet_ships(homeworld_id, uid, {"mule_courier": 1}, conn=conn)
     return uid
 
 
@@ -100,6 +106,7 @@ def test_fleet_page_world_key_prefill_shows_named_panel(gc590b_db, monkeypatch):
     conn = db()
     try:
         player_id = _player(conn)
+        conn.commit()
     finally:
         conn.close()
 
@@ -129,6 +136,7 @@ def test_classic_fleet_without_world_key_keeps_coords_row(gc590b_db, monkeypatch
     conn = db()
     try:
         player_id = _player(conn)
+        conn.commit()
     finally:
         conn.close()
 

@@ -32,6 +32,7 @@ from game.expedition_events import (
     roll_lost_container_lootboxes,
     roll_pirate_salvage_rewards,
 )
+from game.fleet_defs import ship_score_value
 
 _ODYSSEY_KEY = "solar_skiff"
 _ODYSSEY_FLEET_VALUE = expedition_ship_fleet_value(_ODYSSEY_KEY)
@@ -40,6 +41,15 @@ _SMALL_FLEET = {_ODYSSEY_KEY: 1}
 _MEDIUM_FLEET = {_ODYSSEY_KEY: 100}
 _LARGE_EXPO_FLEET = {_ODYSSEY_KEY: 1000}
 _ESCORT_FLEET = {_ODYSSEY_KEY: 10, "falcon_interceptor": 500, "atlas_hauler": 200}
+
+# Score-per-hull is resource_score(build_cost) (game.fleet_defs.ship_score_value) —
+# a wealth-score formula that moves whenever hull build costs are rebalanced.
+# Read the canonical value instead of hardcoding it, so these tests assert the
+# *relationship* (fleet value = sum(qty * ship_score_value)) rather than a
+# balance-era snapshot (GC-STABILIZE-002).
+_ODYSSEY_SCORE = ship_score_value(_ODYSSEY_KEY)
+_FALCON_SCORE = ship_score_value("falcon_interceptor")
+_HAULER_SCORE = ship_score_value("atlas_hauler")
 
 
 def _find_movement_for_event(
@@ -71,8 +81,8 @@ def _find_movement_for_event(
 
 
 def test_calculate_fleet_value_uses_ship_scores():
-    assert calculate_fleet_value(_ESCORT_FLEET) == 10 * 7000 + 500 * 4000 + 200 * 12000
-    assert calculate_fleet_value(_SMALL_FLEET) == 7000
+    assert calculate_fleet_value(_ESCORT_FLEET) == 10 * _ODYSSEY_SCORE + 500 * _FALCON_SCORE + 200 * _HAULER_SCORE
+    assert calculate_fleet_value(_SMALL_FLEET) == _ODYSSEY_SCORE
 
 
 def test_expo_value_uses_only_expedition_hulls():
@@ -150,16 +160,17 @@ def test_combat_value_is_escort_only_not_expo_hulls():
     with_escort = calculate_expedition_combat_value({_ODYSSEY_KEY: 1, "falcon_interceptor": 10})
     with_hauler = calculate_expedition_combat_value({_ODYSSEY_KEY: 1, "atlas_hauler": 5})
     assert solo == 0
-    assert with_escort == 10 * 4000
+    assert with_escort == 10 * _FALCON_SCORE
     assert with_hauler == 0
 
 
 def test_hull_and_escort_values_split_roles():
     fleet = {_ODYSSEY_KEY: 100, "falcon_interceptor": 1}
-    assert calculate_expedition_hull_value(fleet) == 100 * 7000
-    assert calculate_expedition_escort_value(fleet) == 4000
+    assert calculate_expedition_hull_value(fleet) == 100 * _ODYSSEY_SCORE
+    assert calculate_expedition_escort_value(fleet) == _FALCON_SCORE
     rating = build_expedition_fleet_rating(fleet)
-    assert rating["escort_ratio"] == pytest.approx(0.0057, abs=0.0001)
+    expected_ratio = round(_FALCON_SCORE / max(1, 100 * _ODYSSEY_SCORE), 4)
+    assert rating["escort_ratio"] == pytest.approx(expected_ratio, abs=0.0001)
     assert rating["escort_effectiveness"] < 0.05
 
 

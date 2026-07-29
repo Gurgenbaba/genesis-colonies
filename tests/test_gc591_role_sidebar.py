@@ -138,7 +138,12 @@ def test_game_state_active_planet_includes_sidebar_nav(gc591_db, monkeypatch):
     save_planet_buildings(colony_id, {'metal_mine': 10, 'crystal_mine': 8})
     client = _app_client(monkeypatch)
     assert client.post('/login', data={'username': uname, 'password': 'test-pass-123'}).status_code in (200, 302)
-    gs = client.get('/api/game-state').get_json()
+    # GC-PERF-005: the default (lightweight) /api/game-state poll diets the
+    # precomputed active_planet.sidebar_nav (client reconstructs it from the
+    # still-present empire_role_key/is_homeworld via buildSidebarNavFromRole).
+    # include_panel=1 opts out of that diet, matching how a full page-load /
+    # forced refresh actually fetches this payload.
+    gs = client.get('/api/game-state?include_panel=1').get_json()
     assert gs['ok'] is True
     hw_nav = gs['active_planet']['sidebar_nav']
     assert hw_nav['full_nav'] is True
@@ -151,8 +156,13 @@ def test_game_state_active_planet_includes_sidebar_nav(gc591_db, monkeypatch):
     assert nav['empire_role_key'] == 'mining'
     assert nav['modules']['research'] == 'secondary'
     assert nav['modules']['buildings'] == 'prominent'
-    gs2 = client.get('/api/game-state').get_json()
+    gs2 = client.get('/api/game-state?include_panel=1').get_json()
     assert gs2['active_planet']['sidebar_nav']['empire_role_key'] == 'mining'
+    # Diet poll (no include_panel) must still carry the smaller fields the
+    # client needs to rebuild an equivalent nav locally.
+    gs2_diet = client.get('/api/game-state').get_json()
+    assert gs2_diet['active_planet']['empire_role_key'] == 'mining'
+    assert gs2_diet['active_planet']['is_homeworld'] is False
     switch_back = client.post('/api/planets/active', json={'planet_id': gs['active_planet_id']}).get_json()
     assert switch_back['state']['active_planet']['sidebar_nav']['full_nav'] is True
 

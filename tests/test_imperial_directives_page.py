@@ -138,7 +138,10 @@ def test_api_imperial_directives_state_returns_full_cards(page_client):
 
 def test_api_game_state_includes_imperial_directives_summary_only(page_client):
     client, _pid = page_client
-    r = client.get("/api/game-state")
+    # Bare /api/game-state is the lightweight poll path and diets
+    # "imperial_directives" out of the payload; include_panel=1 requests the
+    # full panel refresh (GC-STABILIZE-002; app.py api_game_state).
+    r = client.get("/api/game-state?include_panel=1")
     assert r.status_code == 200
     state = r.get_json()
     assert state["ok"] is True

@@ -92,6 +92,18 @@ def _create_player(username: str) -> int:
     return int(user["id"])
 
 
+def _player_galaxy(player_id: int) -> int:
+    """Homeworld placement is random (create_user()'s default
+    homeworld_placement='random'), so galaxy-scoped fixtures (Galactic
+    Directives/Diplomacy) must target the player's actual galaxy instead of
+    assuming galaxy 1 — otherwise the directive/personality never applies and
+    EffectResolver silently returns neutral (1.0x) modifiers."""
+    from game.galaxy import get_planet_coordinates
+
+    hw = get_homeworld(player_id=player_id)
+    return int(get_planet_coordinates(hw)["galaxy"])
+
+
 def _set_buildings(player_id: int, levels: dict) -> dict:
     planet = get_homeworld(player_id=player_id)
     save_planet_buildings(int(planet["id"]), levels)
@@ -290,13 +302,18 @@ class TestBuildingEffects:
         assert t1 < t0
 
     def test_geothermal_boosts_solar_and_max_levels(self):
+        """Compare same homeworld before/after geo — do not baseline against a
+        forced solar_output_factor=1.0 while the boosted path uses
+        get_research_modifiers() (includes random slot climate). Cold slots
+        (solar factor ~0.5) made e1 < e0 intermittently despite a real geo boost.
+        """
         pid = _create_player("geo")
-        b = _set_buildings(pid, {"solar_plant": 5, "metal_mine": 1})
-        e0, _ = compute_energy(b, {}, mods={"solar_output_factor": 1.0, "mine_energy_factor": 1.0})
+        _set_buildings(pid, {"solar_plant": 5, "metal_mine": 1})
+        e0, _ = EffectResolver.for_player(pid).compute_energy()
 
         b2 = _set_buildings(pid, {"solar_plant": 5, "metal_mine": 1, "geothermal_nexus": 2})
-        mods = get_research_modifiers(pid)
-        e1, _ = compute_energy(b2, {}, mods=mods)
+        er = EffectResolver.for_player(pid)
+        e1, _ = er.compute_energy()
 
         assert e1 > e0
         assert get_max_level_for_building("metal_mine", b2) == 50 + 4
@@ -555,13 +572,26 @@ class TestLiveRefreshPipeline:
         assert energy_used < used_before
 
     def test_game_state_path_single_finish_pass(self):
+        """GC-833: get_research_status(skip_finish=True) only actually skips the
+        redundant finish pass when this request already ran
+        refresh_player_live_state (game.live_state.coerce_skip_finish() checks
+        the request-scoped `g` flag set by mark_request_live_refreshed(), not
+        the raw kwarg — intentionally, so a caller can't fake skip_finish and
+        show stale 0s/100% queue state). Needs a real Flask request context to
+        observe that dedup, same as the sibling
+        test_update_resources_then_status_no_second_finish below.
+        """
         pid = _create_player("single_finish")
         _set_buildings(pid, {"metal_mine": 2, "solar_plant": 1})
 
-        with patch("game.queue_engine.finish_due_work_once") as mock_finish:
-            refresh_player_live_state(pid, finish_source="game_state")
-            get_research_status(pid, skip_finish=True)
-            assert mock_finish.call_count == 1
+        from flask import Flask
+
+        app = Flask("single_finish_pass")
+        with app.test_request_context("/"):
+            with patch("game.queue_engine.finish_due_work_once") as mock_finish:
+                refresh_player_live_state(pid, finish_source="game_state")
+                get_research_status(pid, skip_finish=True)
+                assert mock_finish.call_count == 1
 
     def test_update_resources_then_status_no_second_finish(self):
         pid = _create_player("order_guard")
@@ -874,7 +904,7 @@ class TestGalacticDirectiveEffectResolver:
 
     def test_industrial_boosts_resource_production(self):
         pid = _create_player("gd_industrial")
-        self._set_galaxy_directive(1, "industrial")
+        self._set_galaxy_directive(_player_galaxy(pid), "industrial")
         b = _set_buildings(pid, {"metal_mine": 10, "crystal_mine": 10, "fuel_cell_plant": 5})
         er = EffectResolver.for_player(pid)
         mods = er.get_modifiers()
@@ -895,7 +925,8 @@ class TestGalacticDirectiveEffectResolver:
 
     def test_scientific_affects_research_and_build_speed(self):
         pid = _create_player("gd_scientific")
-        self._set_galaxy_directive(1, "scientific")
+        galaxy = _player_galaxy(pid)
+        self._set_galaxy_directive(galaxy, "scientific")
         _set_buildings(pid, {"research_lab": 1})
         er = EffectResolver.for_player(pid)
         mods = er.get_modifiers()
@@ -904,7 +935,7 @@ class TestGalacticDirectiveEffectResolver:
         assert mods.get("weapon_bonus", 0.0) == pytest.approx(-0.15)
 
         sci_time = er.get_research_time_seconds("energy_tech", 2)
-        self._set_galaxy_directive(1, "defensive")
+        self._set_galaxy_directive(galaxy, "defensive")
         clear_effect_resolver_cache(pid)
         def_time = EffectResolver.for_player(pid).get_research_time_seconds("energy_tech", 2)
         assert sci_time < def_time
@@ -918,14 +949,14 @@ class TestGalacticDirectiveEffectResolver:
 
     def test_invalid_directive_keys_do_not_crash(self):
         pid = _create_player("gd_invalid")
-        self._set_galaxy_directive(1, "not_a_real_directive")
+        self._set_galaxy_directive(_player_galaxy(pid), "not_a_real_directive")
         er = EffectResolver.for_player(pid)
         mods = er.get_modifiers()
         assert mods["metal_prod_factor"] == pytest.approx(1.0)
 
     def test_logistics_fleet_modifiers_applied(self):
         pid = _create_player("gd_logistics")
-        self._set_galaxy_directive(1, "logistics")
+        self._set_galaxy_directive(_player_galaxy(pid), "logistics")
         _set_buildings(pid, {"metal_mine": 5})
         er = EffectResolver.for_player(pid)
         mods = er.get_modifiers()
@@ -939,7 +970,7 @@ class TestGalacticDirectiveEffectResolver:
 
     def test_military_combat_and_shipyard_modifiers(self):
         pid = _create_player("gd_military")
-        self._set_galaxy_directive(1, "military")
+        self._set_galaxy_directive(_player_galaxy(pid), "military")
         mods = EffectResolver.for_player(pid).get_modifiers()
         assert mods["weapon_bonus"] == pytest.approx(0.20)
         assert mods["shield_bonus"] == pytest.approx(0.15)
@@ -980,7 +1011,7 @@ class TestGalacticDiplomacyEffectResolver:
         pid = _create_player("gdp_academia")
         conn = db()
         try:
-            set_galaxy_personality(1, "academia_prime", conn=conn)
+            set_galaxy_personality(_player_galaxy(pid), "academia_prime", conn=conn)
         finally:
             conn.close()
         clear_effect_resolver_cache(pid)
@@ -991,10 +1022,11 @@ class TestGalacticDiplomacyEffectResolver:
         from game.galactic_diplomacy import set_galaxy_personality
 
         pid = _create_player("gdp_stack")
+        galaxy = _player_galaxy(pid)
         conn = db()
         try:
-            self._set_galaxy_directive(1, "scientific")
-            set_galaxy_personality(1, "academia_prime", conn=conn)
+            self._set_galaxy_directive(galaxy, "scientific")
+            set_galaxy_personality(galaxy, "academia_prime", conn=conn)
         finally:
             conn.close()
         clear_effect_resolver_cache(pid)
@@ -1005,10 +1037,11 @@ class TestGalacticDiplomacyEffectResolver:
         from game.galactic_diplomacy import set_active_emergency
 
         pid = _create_player("gdp_emergency")
+        galaxy = _player_galaxy(pid)
         conn = db()
         try:
-            self._set_galaxy_directive(1, "logistics")
-            set_active_emergency(1, "alien_invasion", conn=conn)
+            self._set_galaxy_directive(galaxy, "logistics")
+            set_active_emergency(galaxy, "alien_invasion", conn=conn)
         finally:
             conn.close()
         clear_effect_resolver_cache(pid)
@@ -1021,10 +1054,11 @@ class TestGalacticDiplomacyEffectResolver:
         from game.galactic_diplomacy import set_active_resolution
 
         pid = _create_player("gdp_resolution")
+        galaxy = _player_galaxy(pid)
         conn = db()
         try:
-            self._set_galaxy_directive(1, "defensive")
-            set_active_resolution(1, "gate_control", conn=conn)
+            self._set_galaxy_directive(galaxy, "defensive")
+            set_active_resolution(galaxy, "gate_control", conn=conn)
         finally:
             conn.close()
         clear_effect_resolver_cache(pid)
@@ -1042,10 +1076,11 @@ class TestGalacticDiplomacyEffectResolver:
         from game.galactic_diplomacy import set_galaxy_personality
 
         pid = _create_player("gdp_directive_active")
+        galaxy = _player_galaxy(pid)
         conn = db()
         try:
-            self._set_galaxy_directive(1, "industrial")
-            set_galaxy_personality(1, "forge_of_war", conn=conn)
+            self._set_galaxy_directive(galaxy, "industrial")
+            set_galaxy_personality(galaxy, "forge_of_war", conn=conn)
         finally:
             conn.close()
         clear_effect_resolver_cache(pid)

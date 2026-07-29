@@ -108,6 +108,11 @@ def test_nanofactory_no_plus_on_absolute_effect(tech_db):
 
     row = next(r for r in data["levels"] if r["level"] == 3)
     d = row["display"]
-    assert d["layout"] == "effect_percent"
+    # Nanofactory now gets its own richer display block (build_nanofactory_time_display:
+    # build-time savings estimate, reference building, modifiers) instead of the
+    # generic effect_percent layout; table_layout stays "effect_percent" for
+    # column-rendering compatibility (GC-STABILIZE-002; game/technical_data.py).
+    assert d["layout"] == "nanofactory_build_time"
+    assert d["table_layout"] == "effect_percent"
     assert d["current"] >= 0
     assert d["next"] > d["current"]

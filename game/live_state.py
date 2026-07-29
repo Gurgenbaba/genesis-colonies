@@ -1322,6 +1322,7 @@ def apply_action_state_diet(payload: Dict[str, Any]) -> Dict[str, Any]:
         "global_queue_hud",
         "building_queue",
         "research_queue",
+        "codex",
     ):
         payload.pop(key, None)
     overview = payload.get("overview")

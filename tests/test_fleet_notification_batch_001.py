@@ -148,10 +148,17 @@ def test_render_active_fleets_preserves_scroll():
     assert "pageScrollY" in render or "scrollY" in render
 
 
-def test_mobile_sheet_layout_not_every_hud_render():
+def test_mobile_sheet_layout_resynced_every_hud_render():
+    # commit 45246d4 ("fix(ui): ... restore mobile fleet expand") deliberately
+    # removed the wasShowAll/nowShowAll diffing here: skipping the resync when
+    # show-all state didn't change left the mobile sheet backdrop stuck open
+    # after sending a fleet, blocking the drawer's expand button. The fix
+    # always resyncs the portal/backdrop on every render instead
+    # (GC-STABILIZE-002; static/main.js renderGlobalFleetHud).
     src = _read("static/main.js")
     hud = src.split("function renderGlobalFleetHud(fleetsRaw, opts)")[1].split(
         "function syncFleetVacationNotice"
     )[0]
-    assert "wasShowAll !== nowShowAll" in hud
+    assert "Always resync portal/backdrop" in hud
+    assert "syncMobileFleetSheetLayout(root)" in hud
     assert "fleetSheetSynced" in hud

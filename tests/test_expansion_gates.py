@@ -54,17 +54,18 @@ def _set_homeworld_level(player_id: int, level: int) -> int:
     finally:
         conn.close()
 
-def _unlock_expansion(conn, player_id: int, *, hw_level: int=25, tech: int=6) -> None:
-    from game.planet_evolution.expansion_protocol import INTERSTELLAR_EXPANSION_TECH
-    hw = get_homeworld(player_id, conn=conn)
-    assert hw
-    conn.execute('UPDATE planets SET planet_level = ? WHERE id = ?;', (int(hw_level), int(hw['id'])))
-    conn.execute('\n        INSERT INTO research_levels (user_id, tech_key, level)\n        VALUES (?, ?, ?)\n        ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;\n        ', (int(player_id), INTERSTELLAR_EXPANSION_TECH, int(tech)))
-    conn.commit()
-
 def test_homeworld_level_is_gate_source_not_context_planet(expansion_gates_db):
+    # GC-976A: colonize_planet() legacy-coordinate colonies now share the same
+    # EXPANSION_SLOT_GATES threshold as the first expansion site (both require
+    # homeworld_level 5), so the homeworld must sit at 5 (not 4) for the
+    # colonize call below to succeed. The "gate reads homeworld level, not
+    # context planet level" invariant this test verifies is preserved by
+    # checking a *later* site (ancient_relay, level 10) stays locked even
+    # though the newly founded colony is bumped to level 10 — if the gate
+    # mistakenly read the context planet's level instead of the homeworld's,
+    # ancient_relay would incorrectly appear unlocked.
     player_id = _create_player()
-    hw_id = _set_homeworld_level(player_id, 4)
+    hw_id = _set_homeworld_level(player_id, 5)
     from game.planet_evolution.service import colonize_planet
     from game.db import db
     conn = db()
@@ -83,13 +84,13 @@ def test_homeworld_level_is_gate_source_not_context_planet(expansion_gates_db):
         colony_id = int(colony['planet_id'])
         conn.execute('UPDATE planets SET planet_level = ? WHERE id = ?;', (10, colony_id))
         conn.commit()
-        assert get_homeworld_level(player_id, conn=conn) == 4
+        assert get_homeworld_level(player_id, conn=conn) == 5
         sites = list_expansion_sites_for_player(player_id, conn=conn)
     finally:
         conn.close()
-    frontier = next((s for s in sites if s['site_key'] == 'frontier_ix'))
-    assert frontier['is_locked'] is True
-    assert frontier['required_homeworld_level'] == 5
+    ancient_relay = next((s for s in sites if s['site_key'] == 'ancient_relay'))
+    assert ancient_relay['is_locked'] is True
+    assert ancient_relay['required_homeworld_level'] == 10
     assert hw_id != colony_id
 
 def test_level_4_shows_locked_frontier_ix_on_command_map(expansion_gates_db):
@@ -146,8 +147,11 @@ def test_newly_discovered_only_at_exact_unlock_level(expansion_gates_db):
     assert frontier['is_newly_discovered'] is False
 
 def test_command_map_expansion_nodes_have_no_planet_id(expansion_gates_db):
+    # GC-976A: colonize_planet() needs homeworld_level >= 5 (EXPANSION_SLOT_GATES
+    # slot 1) to found a 2nd colony — see test_homeworld_level_is_gate_source_
+    # not_context_planet for the full rationale.
     player_id = _create_player()
-    _set_homeworld_level(player_id, 4)
+    _set_homeworld_level(player_id, 5)
     from game.planet_evolution.service import colonize_planet
     from game.db import db
     conn = db()
@@ -194,8 +198,12 @@ def test_dashboard_shows_next_unlock_on_homeworld(expansion_gates_db):
     assert get_next_expansion_unlock(4)['levels_remaining'] == 1
 
 def test_dashboard_colony_shows_genesis_ark_hint(expansion_gates_db):
+    # GC-976A: colonize_planet() needs homeworld_level >= 5 (EXPANSION_SLOT_GATES
+    # slot 1) to found a 2nd colony — see test_homeworld_level_is_gate_source_
+    # not_context_planet for the full rationale. At level 5, frontier_ix is
+    # already unlocked, so the next locked site becomes ancient_relay (level 10).
     player_id = _create_player()
-    _set_homeworld_level(player_id, 4)
+    _set_homeworld_level(player_id, 5)
     from game.planet_evolution.service import colonize_planet
     from game.db import db
     conn = db()
@@ -222,7 +230,7 @@ def test_dashboard_colony_shows_genesis_ark_hint(expansion_gates_db):
     assert exp['visible'] is True
     assert exp['show_genesis_ark_hint'] is True
     assert exp['on_homeworld'] is False
-    assert exp['next_unlock']['site_key'] == 'frontier_ix'
+    assert exp['next_unlock']['site_key'] == 'ancient_relay'
 
 def test_galaxy_command_map_renders_locked_expansion_node(expansion_gates_db, monkeypatch):
     import importlib

@@ -840,6 +840,19 @@
     if (reason) chatDebug("[chat] quiesce", reason);
   }
 
+  /** Abort in-flight chat poll/bootstrap without stopping the schedule.
+   *  Used before HTML PJAX so a hung chat messages request cannot starve the
+   *  single SQLite writer the same way hung live-state diet polls did.
+   */
+  function abortInFlightChatFetches(reason) {
+    if (CHAT.polling.abort) {
+      try { CHAT.polling.abort.abort(); } catch (_) {}
+      CHAT.polling.abort = null;
+    }
+    abortBootstrapInFlight();
+    if (reason) chatDebug("[chat] abort in-flight", reason);
+  }
+
   async function refreshBootstrap() {
     abortBootstrapInFlight();
     const ctrl = new AbortController();
@@ -1777,6 +1790,7 @@
   GC.resumeChatPolling = resumeChatPolling;
   GC.stopChatPolling = stopPolling;
   GC.quiesceChat = quiesceChat;
+  GC.abortInFlightChatFetches = abortInFlightChatFetches;
   GC.TChat = CHAT;
   GC.whisperPlayer = whisperTo;
 

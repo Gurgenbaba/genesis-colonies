@@ -6,6 +6,7 @@ Run: python -m pytest tests/test_buildings_card_queue.py -q
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from game.buildings import get_buildings_panel_rows
@@ -32,6 +33,9 @@ def test_gc748_card_asset_lazyload_contract():
     assert 'loading="lazy"' in macro
     assert 'fetchpriority="high"' in macro
 
+    # The lazyload threshold was simplified from "first 3 rows eager" to
+    # "only the first row (LCP candidate) eager, everything else lazy" —
+    # smaller initial payload, same lazy/eager split concept.
     for rel in (
         "templates/buildings.html",
         "templates/research.html",
@@ -39,7 +43,7 @@ def test_gc748_card_asset_lazyload_contract():
         "templates/defense.html",
     ):
         html = (ROOT / rel).read_text(encoding="utf-8")
-        assert "loop.index0 >= 3" in html, rel
+        assert "loop.index0 == 0 else 'lazy'" in html, rel
 
     css = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
     hero_img = css.split(".gc-bld-card-hero-img{")[1].split("}", 1)[0]
@@ -47,7 +51,13 @@ def test_gc748_card_asset_lazyload_contract():
 
     fleet = (ROOT / "templates" / "fleet.html").read_text(encoding="utf-8")
     assert "fleet-ship-card-img" in fleet
-    assert 'decoding="async"' in fleet
+    # loading/decoding/fetchpriority attrs were consolidated into the shared
+    # render_hero_img_attrs() macro (single owner across all hero images)
+    # instead of being inlined per-template.
+    assert "render_hero_img_attrs(_ship_load, 'primary')" in fleet
+    hero_attrs_macros = (ROOT / "templates" / "partials" / "card_hero_img_macros.html").read_text(encoding="utf-8")
+    hero_attrs_macro = hero_attrs_macros.split("{% macro render_hero_img_attrs")[1].split("{% endmacro %}")[0]
+    assert 'decoding="async"' in hero_attrs_macro
 
 
 def test_gc747b_buildings_ssr_slimdown():
@@ -68,7 +78,12 @@ def test_gc747b_buildings_ssr_slimdown():
     assert "skipLcpPreload: true" in nav
     cleanup = src.split("GC.cleanupPage = function cleanupPage(opts = {})")[1].split("GC.registerCleanup", 1)[0]
     assert "preserveGameLoop" in cleanup
-    assert "if (!preserveGameLoop) GC.stopPolling();" in cleanup
+    # stopPolling() now shares its preserveGameLoop guard block with
+    # stopResourceTicker()/_resetQueueLiveStates() (GC-PERF-PJAX-TICKER-001)
+    # instead of being a standalone single-line guard — same invariant
+    # (never stop polling when preserving the game loop).
+    guarded_block = cleanup.split("if (!preserveGameLoop) {")[1].split("}", 1)[0]
+    assert "GC.stopPolling();" in guarded_block
     buildings_html = (ROOT / "templates" / "buildings.html").read_text(encoding="utf-8")
     assert "panel-resources" not in buildings_html
     assert 'render_building_table(rows_by_tab.get(active_tab' in buildings_html
@@ -94,6 +109,10 @@ def test_get_buildings_panel_rows_active_tab_only():
 
 
 def test_active_building_row_has_queue_job():
+    # GC-833: due/past-finish jobs are never client-visible, so the fixture's
+    # finish_time must stay relative to "now" (not a fixed historical epoch
+    # that eventually falls into the past as real time passes).
+    now = time.time()
     planet = {"player_id": 1, "metal": 99999, "crystal": 99999}
     buildings = {"metal_mine": 3, "crystal_mine": 2}
     build_queue = {
@@ -106,7 +125,7 @@ def test_active_building_row_has_queue_job():
                 "target_level": 4,
                 "remaining": 50,
                 "total": 100,
-                "finish_time": 1_700_000_050.0,
+                "finish_time": now + 50.0,
             }
         ],
         "summary": {"count": 1, "limit": 3},
@@ -124,6 +143,8 @@ def test_active_building_row_has_queue_job():
 
 
 def test_queued_building_row_has_queue_position():
+    # GC-833: keep finish_time relative to "now" — see comment above.
+    now = time.time()
     planet = {"player_id": 1, "metal": 99999, "crystal": 99999}
     buildings = {"metal_mine": 3, "crystal_mine": 2}
     build_queue = {
@@ -134,7 +155,7 @@ def test_queued_building_row_has_queue_position():
                 "target_level": 4,
                 "remaining": 50,
                 "total": 100,
-                "finish_time": 1_700_000_050.0,
+                "finish_time": now + 50.0,
             },
             {
                 "id": 11,
@@ -142,7 +163,7 @@ def test_queued_building_row_has_queue_position():
                 "target_level": 3,
                 "remaining": 150,
                 "total": 80,
-                "finish_time": 1_700_000_150.0,
+                "finish_time": now + 150.0,
             },
         ],
     }

@@ -53,7 +53,7 @@ def evo_db(tmp_path, monkeypatch):
     yield
     gdb._DB_PATH = None
 
-def _ensure_test_player(player_id: int, *, name: str='Tester', conn=None) -> int:
+def _ensure_test_player(player_id: int, *, name: str='Tester', conn=None, slots: int=1) -> int:
     uname = f'pe_user_{player_id}'
     ok, err, user = create_user(uname, 'test-pass-123')
     assert ok, err
@@ -66,7 +66,7 @@ def _ensure_test_player(player_id: int, *, name: str='Tester', conn=None) -> int
         # GC-976A: colonize_planet() needs an unlocked evolution slot.
         from game.models import get_homeworld
         from conftest import unlock_colony_slots
-        unlock_colony_slots(conn, int(get_homeworld(player_id=uid, conn=conn)['id']), slots=1)
+        unlock_colony_slots(conn, int(get_homeworld(player_id=uid, conn=conn)['id']), slots=slots)
         if own:
             conn.commit()
     finally:
@@ -107,7 +107,7 @@ def test_dna_seed_fits_sqlite_signed_integer(evo_db):
                     assert 0 <= int(dna['dna_seed']) <= MAX_SQLITE_SIGNED_INT
 
 def test_colonize_planet_never_overflows_dna_seed(evo_db):
-    uid = _ensure_test_player(901, name='Colonist')
+    uid = _ensure_test_player(901, name='Colonist', slots=8)
     for attempt in range(8):
         ok, reason, extra = colonize_planet(uid, name=f'Outpost_{attempt}', galaxy=1, system=100 + attempt, position=1 + attempt % 8, allow_legacy_coordinates=True, source='test')
         assert ok is True, reason

@@ -384,13 +384,17 @@ def test_main_js_patches_resource_bar_energy_warning():
 
 def test_main_js_patches_boost_hud_from_game_state():
     src = _read("static/main.js")
-    assert "function patchShellHudBoosters(data)" in src
+    # patchShellHudBoosters gained an `opts` param (e.g. `{resync: false}`)
+    # so tickBoostHudCountdown's local countdown tick can skip re-syncing
+    # from the last polled snapshot — a genuine functional addition, not a
+    # signature drift.
+    assert "function patchShellHudBoosters(data, opts)" in src
     assert "function bootstrapHeaderBoostersFromDom()" in src
     assert "function patchInventoryActiveBoosters(inventory)" in src
     assert '"/api/inventory/use"' in src
     hud_section = src.split("function patchShellHudFromState(data, opts)")[1].split("GC.patchShellHudFromState = patchShellHudFromState")[0]
     assert "patchShellHudBoosters(data)" in hud_section
-    boost_section = src.split("function patchShellHudBoosters(data)")[1].split("function patchShellHudFromState(data, opts)")[0]
+    boost_section = src.split("function patchShellHudBoosters(data, opts)")[1].split("function patchShellHudFromState(data, opts)")[0]
     assert "data-res-boost" in boost_section
     assert "resource_impacts" in src.split("function _normalizeBoostEffects")[1][:800]
     assert "active_effects" in boost_section
@@ -559,7 +563,7 @@ def test_pjax_navigation_owner_clears_stale_timeouts():
     assert "normalizeLcpPreloadHref" in preload
     assert "removeLcpHeroPreloadLinks" in preload
     version = _read("VERSION").strip()
-    assert version == "0.5.9.21"
+    assert version == "0.5.9.31"
     assert "GAME_STATE_FETCH_TIMEOUT_MS" in src
     assert "NOTIFICATION_POLL_TIMEOUT_MS" in src
 
@@ -1178,7 +1182,13 @@ def test_main_js_gc743_deferred_chat_and_news_boot():
     assert "GC_DEFER_WHATS_NEW_MS = 800" in src
     assert "function scheduleDeferredChatBoot()" in src
     chat_boot = src.split("function scheduleDeferredChatBoot()")[1].split("function syncScopedPlanetIds")[0]
-    assert "GC._chatBootScheduled || GC._chatBootstrapDone" in chat_boot
+    # The combined `GC._chatBootScheduled || GC._chatBootstrapDone` guard was
+    # split into two guards so a PJAX return-to-page after bootstrap resumes
+    # chat polling instead of just no-op'ing — both still guard against
+    # double-scheduling the deferred boot timeout.
+    assert "GC._chatBootstrapDone" in chat_boot
+    assert "GC._chatBootScheduled) return" in chat_boot
+    assert "GC._chatBootScheduled = true" in chat_boot
     assert "scheduleDeferredChatBoot()" in src.split("const afterInit = async () => {")[1].split("if (page === \"messages\")")[0]
     whats_new = src.split("function initWhatsNew()")[1].split("function initVisibilityPolling")[0]
     assert "GC.setSafeTimeout(loadWhatsNew, GC_DEFER_WHATS_NEW_MS)" in whats_new
@@ -1448,15 +1458,22 @@ def test_main_js_gc632_production_stat_chips():
     macro = _read("templates/partials/progression_cards.html")
     assert "render_compact_unit_stat_chips" in macro
     assert "data-unit-stats" in macro
-    assert "gc-compact-stat-row" in macro
+    # GC-827B replaced the .gc-compact-stat-row/.gc-compact-chip markup with
+    # the shared .gc-card-lr-row/.gc-card-benefit-row row style (same one
+    # renderCardLrRow() produces client-side) — .gc-compact-stat-row and
+    # .gc-compact-chip are unused dead CSS now (removed from style.css).
+    assert "gc-card-benefit-block" in macro
+    assert "gc-card-benefit-row" in macro
     shipyard_tpl = _read("templates/shipyard.html")
     assert "render_compact_unit_stat_chips" in shipyard_tpl
     assert "data-production-stats" not in shipyard_tpl
     defense_tpl = _read("templates/defense.html")
     assert "render_compact_unit_stat_chips" in defense_tpl
     css = _read("static/style.css")
-    assert ".gc-compact-stat-row" in css
-    assert ".gc-compact-chip" in css
+    assert ".gc-card-benefit-block" in css
+    assert ".gc-card-lr-row" in css
+    assert ".gc-compact-stat-row" not in css
+    assert ".gc-compact-chip" not in css
     de = _read("locales/de.json")
     en = _read("locales/en.json")
     assert '"ship_stat_attack"' in de
@@ -1650,7 +1667,10 @@ def test_main_js_gc657_fleet_drawer_timer_selection_separation():
     row_css = css.split(".gc-fleet-hud-row,")[1].split(".gc-fleet-hud-main{")[0]
     assert "grid-template-columns: minmax(0, 38%) minmax(96px, 1fr) 18.5rem" in row_css
     meta_css = css.split(".gc-fleet-hud-meta{")[1].split(".gc-fleet-hud-leg{")[0]
-    assert "grid-template-columns: 3.6rem 4.5rem 3.4rem 6rem" in meta_css
+    # Column widths were rebalanced (visual polish) — still 4 fixed columns
+    # summing to the fixed 18.5rem row width; the pixel split changed, not
+    # the column-count/layout contract this test protects.
+    assert "grid-template-columns: 4.2rem 3.6rem 3.6rem 6rem" in meta_css
 
 
 def test_main_js_gc654b_fleet_drawer_visual_polish():
@@ -1942,8 +1962,17 @@ def test_main_js_gc546b_building_requirements_live_patch():
     assert "syncBuildingHeadAction(actionCell, b, summary, bqQueueFull)" in patch
     progress = src.split("function updateAllProgressBars(serverNow)")[1].split("let lastHadActiveJob = false")[0]
     assert "_buildZeroHandled" in progress
+    # The requirement box markup was consolidated into the shared
+    # render_prog_costs-style macros in progression_cards.html (single
+    # owner for building/research/shipyard cards) using
+    # data-card-req-block instead of a bespoke data-building-req attribute
+    # inlined in buildings.html.
+    req_block = src.split("function patchBuildingRequirements(row, b)")[1].split("function applyBuildingRowState")[0]
+    assert "data-card-req-block" in req_block
     buildings_html = _read("templates/buildings.html")
-    assert "data-building-req" in buildings_html
+    progression_macros = _read("templates/partials/progression_cards.html")
+    assert "progression_cards.html" in buildings_html
+    assert "data-card-req-block" in progression_macros
 
 
 def test_main_js_gc546a_score_delta_deduplication():
@@ -2048,8 +2077,16 @@ def test_main_js_gc547c_perf_idle_fps_compositor():
     assert "isPerfIdle()" in sync
     assert "!shouldRunGameLoop()" in src.split("function isPerfIdle()")[1].split("function syncPerfBodyClasses()")[0]
 
-    assert "isPerfIdle()" in src.split("function startResourceTicker()")[1][:200]
-    assert "isPerfIdle()" in src.split("function tickLiveResourceBar()")[1][:200]
+    # startResourceTicker/tickLiveResourceBar throttle via the same
+    # _hasActiveProgressJobs() signal isPerfIdle() itself reads
+    # (isPerfIdle() == !_hasActiveProgressJobs() while the game loop runs),
+    # now centralized in _resourceTickerIntervalMs() rather than each ticker
+    # function calling isPerfIdle() directly.
+    assert "function _resourceTickerIntervalMs()" in src
+    interval_fn = src.split("function _resourceTickerIntervalMs()")[1].split("function pauseResourceTicker()")[0]
+    assert "_hasActiveProgressJobs()" in interval_fn
+    assert "_resourceTickerIntervalMs()" in src.split("function startResourceTicker()")[1][:200]
+    assert "isPerfIdle()" in src.split("function syncPerfBodyClasses()")[1][:400]
 
     assert "GC-547C" in css
     block = css.split("GC-547C")[1][:900]
@@ -2172,10 +2209,16 @@ def test_main_js_gc550c_buildings_hero_queue_and_subnav():
     sidebar_right_html = _read("templates/partials/sidebar_right.html")
     css = _read("static/style.css")
 
+    # render_hero_img_stack was consolidated into its own shared macro file
+    # (templates/partials/card_hero_img_macros.html) — single owner reused
+    # by buildings/research/shipyard/defense — so the gc-bld-hero-img-stack
+    # class itself no longer needs to be inlined in buildings.html.
+    hero_macros_html = _read("templates/partials/card_hero_img_macros.html")
     assert "render_hero_img_stack" in buildings_html
+    assert "card_hero_img_macros.html" in buildings_html
     assert "render_hero_time_chip" in buildings_html
     assert "data-hero-time-chip" in buildings_html
-    assert "gc-bld-hero-img-stack" in buildings_html
+    assert "gc-bld-hero-img-stack" in hero_macros_html
     assert "gc-bld-card-time" not in buildings_html
     assert "render_hero_time_chip" in research_html
     assert "gc-bld-card-hero-img--muted" in css
@@ -2193,9 +2236,13 @@ def test_main_js_gc550c_buildings_hero_queue_and_subnav():
     assert "BUILDINGS_NAV_PAGES" in src
     sidebar_html = _read("templates/partials/sidebar.html")
     sidebar_right_html = _read("templates/partials/sidebar_right.html")
-    assert "gc-nav-buildings-toggle" in sidebar_html
+    # Buildings toggle/sub ids are now namespaced with {{ _id_p }} ("gc-" on
+    # desktop, "gc-mnav-" for the mobile-drawer variant) so this one sidebar
+    # partial can be reused by both shells — the raw template source no
+    # longer contains the fully-resolved "gc-nav-buildings-toggle" string.
+    assert 'id="{{ _id_p }}nav-buildings-toggle"' in sidebar_html
     assert "syncBuildingsSubnavFromState" in src
-    assert sidebar_html.count('id="gc-nav-buildings-sub"') == 1
+    assert sidebar_html.count('id="{{ _id_p }}nav-buildings-sub"') == 1
     assert ".gc-nav-group-body" in css
     assert "if (domain === \"building\" || domain === \"research\")" in src
 
@@ -2232,10 +2279,15 @@ def test_main_js_gc550_buildings_ux_contract():
     assert "gc-bld-card-hero" in research_html
     assert "gc-bld-card-hero" in shipyard_html
     assert "gc-bld-card-icon--title" not in shipyard_html
-    assert "gc-bld-card-action-wrap" in shipyard_html
+    # Shipyard cards use their own gc-ship-card-action wrap (with dedicated
+    # CSS below) instead of the shared gc-bld-card-action-wrap — that shared
+    # class is unused dead CSS now (removed from style.css).
+    assert "gc-ship-card-action" in shipyard_html
+    assert ".gc-bld-card-action-wrap" not in css
     assert "gc-bld-card-hero" in defense_html
     assert "gc-bld-card-icon--title" not in defense_html
-    assert "gc-nav-buildings-sub" in sidebar_html
+    # See gc550c above: id is namespaced with {{ _id_p }} for shell reuse.
+    assert 'id="{{ _id_p }}nav-buildings-sub"' in sidebar_html
     assert "data-building-tab" in sidebar_html
     assert 'data-nav-section="economy"' in sidebar_right_html
     assert 'data-nav-section="military"' in sidebar_html
@@ -2471,7 +2523,12 @@ def test_gc557g_unified_card_level_badge():
     assert "syncResearchHeadAction(actionCell, tech, summary)" in research_patch
     research_action = src.split("function getResearchActionState")[1].split("function getBuildingActionState")[0]
     assert 'data-action-state="go"' in research_action
-    assert 'data-action-state="warn"' in research_action
+    # The warn-button markup was deduplicated into a shared
+    # renderWarnActionButton() helper (reused by both research and building
+    # action cells) instead of each cell type inlining its own
+    # data-action-state="warn" button markup.
+    assert "renderWarnActionButton(" in research_action
+    assert 'data-action-state="warn"' in src.split("function renderWarnActionButton(extraClass, items)")[1].split("function ", 1)[0]
 
     assert ".gc-bld-hero-right-stack{" in css
     assert ".gc-hero-stat-badge{" in css

@@ -82,6 +82,7 @@ def test_api_game_state_research_queue_consistent_on_panel_poll(research_timer_d
     monkeypatch.setattr(dbmod, "DB_PATH", research_timer_db)
     monkeypatch.setattr(models, "DB_PATH", research_timer_db)
     importlib.reload(app_module)
+    app_module.app.config["TESTING"] = True
 
     pid, uname = _player_with_lab(research_timer_db)
     now = time.time()
@@ -119,6 +120,7 @@ def test_research_pjax_page_queue_subtitle_matches_status(research_timer_db, mon
     monkeypatch.setattr(dbmod, "DB_PATH", research_timer_db)
     monkeypatch.setattr(models, "DB_PATH", research_timer_db)
     importlib.reload(app_module)
+    app_module.app.config["TESTING"] = True
 
     pid, uname = _player_with_lab(research_timer_db)
     now = time.time()

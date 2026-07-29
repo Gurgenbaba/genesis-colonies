@@ -273,7 +273,9 @@
                       </picture>
                     </button>
                     <span class="gc-hero-stat-badge fleet-ship-card-stock-badge fleet-ship-card-stock gc-mono" data-fleet-ship-stock>×{{ have|fmt_int }}</span>
-                    <span class="gc-hero-stat-badge fleet-ship-card-role-badge">{{ T("shipyard_role_" ~ ship.role) }}</span>
+                    <button type="button" class="gc-hero-stat-badge fleet-ship-card-role-badge"
+                            data-ship-detail="{{ ship.key }}"
+                            aria-label="{{ T('ship_detail_open') }}: {{ T(ship.name_key) }}">{{ T("shipyard_role_" ~ ship.role) }}</button>
                   </div>
                   <div class="fleet-ship-pick-value">
                     <input type="text" min="0" max="{{ have }}" value="0" inputmode="numeric"
@@ -369,10 +371,15 @@
             </div>
           </fieldset>
 
-          <div class="fleet-preview-hud fleet-preview-hud--inline" data-fleet-preview aria-live="polite">
+            <div class="fleet-preview-hud fleet-preview-hud--inline" data-fleet-preview aria-live="polite">
             <div class="fleet-preview-hud-head">
               <span class="gc-panel-tag fleet-preview-mission-badge" data-preview-mission-badge>{{ T("fleet_mission_transport") }}</span>
               <span class="fleet-preview-mission-status" data-preview-mission-status>–</span>
+            </div>
+            <div class="fleet-preview-target-hero is-empty" data-preview-target-hero>
+              <h4 class="fleet-preview-target-name" data-preview-target-name>–</h4>
+              <p class="fleet-preview-target-native-type" data-preview-target-native-type></p>
+              <p class="fleet-preview-target-coords gc-mono" data-preview-target-coords hidden></p>
             </div>
             <div class="fleet-preview-grid fleet-preview-grid--compact">
               <div class="fleet-preview-stat fleet-preview-stat--legacy" data-preview-legacy-target-type hidden>

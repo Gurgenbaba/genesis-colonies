@@ -1295,6 +1295,7 @@ def build_building_technical_data(
     max_level = panel_ctx.max_level(btype)
     from .technical_data import (
         build_building_technical_summary,
+        build_production_milestones,
         resolve_technical_table_layout,
         technical_preview_levels,
         technical_row_role,
@@ -1340,7 +1341,14 @@ def build_building_technical_data(
         "max_level": max_level,
         "table_layout": resolve_technical_table_layout(levels),
         "summary": summary,
-        "milestones": [],
+        "milestones": build_production_milestones(
+            building_type=btype,
+            buildings=buildings,
+            research_levels=research_levels,
+            ratio=ratio,
+            current=current,
+            max_level=max_level,
+        ),
         "levels": levels,
         "bulk_upgrade": _mine_bulk_upgrade_meta(
             btype,

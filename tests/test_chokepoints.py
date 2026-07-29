@@ -178,6 +178,7 @@ def test_galaxy_command_map_renders_chokepoint_nodes(chokepoints_db, monkeypatch
     import app as app_module
 
     importlib.reload(app_module)
+    app_module.app.config["TESTING"] = True
 
     uname = f"gate_ui_{uuid.uuid4().hex[:8]}"
     ok, err, user = create_user(uname, "test-pass-123")

@@ -6,12 +6,24 @@ from typing import Dict, Mapping
 
 
 def compute_destroyed_raw_from_losses(losses: Mapping[str, int]) -> int:
-    """Lifetime combat prestige points from eliminated units (canonical resource_score)."""
+    """Lifetime combat prestige points from eliminated units (canonical resource_score).
+
+    Sums raw metal/crystal/fuel_cells across *all* destroyed units first and
+    floors once at the end (same aggregate-then-floor approach as
+    ``add_score_from_cost_dicts``), instead of flooring each unit's own build
+    cost individually and multiplying by quantity. The per-unit-floor variant
+    silently scored 0 prestige for any unit whose cost sits below a single
+    divisor (e.g. sentinel_turret at 250 metal / 125 crystal) no matter how
+    many were destroyed — losing real "resource wealth destroyed" signal
+    (GC-STABILIZE-002).
+    """
     from .defense_defs import is_known_defense_key, unit_build_cost
     from .fleet_defs import canonical_ship_key, get_ship
-    from .resource_score import score_from_cost_dict
+    from .resource_score import normalize_cost_dict, score_from_resources
 
-    total = 0
+    total_metal = 0
+    total_crystal = 0
+    total_fuel = 0
     for raw_key, raw_qty in losses.items():
         lost = max(0, int(raw_qty))
         if lost <= 0:
@@ -22,11 +34,11 @@ def compute_destroyed_raw_from_losses(losses: Mapping[str, int]) -> int:
         else:
             spec = get_ship(canonical_ship_key(key)) or {}
             cost = spec.get("build_cost") or {}
-        unit_score = score_from_cost_dict(cost)
-        if unit_score <= 0:
-            continue
-        total += unit_score * lost
-    return max(0, int(total))
+        normalized = normalize_cost_dict(cost)
+        total_metal += normalized["metal"] * lost
+        total_crystal += normalized["crystal"] * lost
+        total_fuel += normalized["fuel_cells"] * lost
+    return max(0, int(score_from_resources(total_metal, total_crystal, total_fuel)))
 
 
 def get_destroyed_raw(player_id: int, *, conn) -> int:

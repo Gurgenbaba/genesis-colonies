@@ -302,8 +302,17 @@ def test_main_js_pe_research_uses_notify_not_raw_alert():
     idx = src.find(".pe-research-btn")
     assert idx >= 0
     block = src[idx : idx + 1200]
-    assert "showNotify(reasonText" in block
+    # Failure handling was consolidated into a shared peMutationFailed(btn, res)
+    # helper (used by every pe-*-btn handler: research/spec/spec-upgrade/policy/...)
+    # instead of a per-button-type showNotify(reasonText(...)) inline call —
+    # single Owner for "surface a PE mutation error", not duplicated per action.
+    assert "peMutationFailed(researchBtn, res)" in block
     assert 'alert(reasonText(res?.reason))' not in block
+    failed_helper_idx = src.find("const peMutationFailed = (btn, res) =>")
+    assert failed_helper_idx >= 0
+    assert failed_helper_idx < idx, "peMutationFailed must be defined before the research handler uses it"
+    helper_block = src[failed_helper_idx : failed_helper_idx + 200]
+    assert "showNotify(reasonText(res?.reason)" in helper_block
 
 
 def test_overview_planet_teaser_integration(evo_db):

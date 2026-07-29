@@ -55,6 +55,7 @@ def _login_client(temp_db, monkeypatch):
     monkeypatch.setattr(dbmod, "DB_PATH", temp_db)
     monkeypatch.setattr(models, "DB_PATH", temp_db)
     importlib.reload(app_module)
+    app_module.app.config["TESTING"] = True
     _, uname = _create_player("prog_ui")
     client = app_module.app.test_client()
     login = client.post("/login", data={"username": uname, "password": "test-pass-123"})
@@ -104,7 +105,12 @@ def test_templates_import_progression_macros_with_context():
     assert "data-research-tech-data" in research
     assert "render_info_popover_trigger" not in research
     assert "render_research_head_action" in research
-    assert "show_reqs" in research
+    # "show_reqs" (inline requirement-blocker list) was replaced by a compact
+    # hover-based requirements popover — see af1e334 "restore navigation
+    # stability after action-state rework". The "locked when requirements
+    # unmet" invariant now lives in render_req_hover_attrs(tech.requirements_items).
+    assert "render_req_hover_attrs" in research
+    assert "not tech.requirements_met" in research
     assert "render_hero_queue" in research
     assert "gc-bld-head-action-btn--busy" not in research
     assert "render_prog_identity" not in research

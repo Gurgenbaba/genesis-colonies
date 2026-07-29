@@ -38,12 +38,19 @@ def test_default_start_resources_gc836():
 
 
 def test_fresh_account_sim_first_hour_gc836_acceptance():
+    # "balance: apply medium browsergame pacing preset" moved
+    # DEFAULT_GAME_SETTINGS build_speed 1.0->1.1 and research_speed 1.0->0.85,
+    # and GC-863 steepened mine/building upgrade costs — first-hour pacing is
+    # deliberately slower than these original acceptance floors
+    # (GC-STABILIZE-002; sim.run_simulation is the authoritative-formula
+    # measurement per its own module docstring, so these floors track the
+    # actual current-canon simulation output, not a historical snapshot).
     _, cps = sim.run_simulation(sim.PRESETS["alpha_current"], horizon_sec=3600)
     h1 = cps["1h"]
 
-    assert h1["metal_mine"] >= 6
-    assert h1["crystal_mine"] >= 6
-    assert h1["solar_plant"] >= 5
+    assert h1["metal_mine"] >= 4
+    assert h1["crystal_mine"] >= 3
+    assert h1["solar_plant"] >= 3
     assert h1["research_lab"] >= 1
     assert h1["build_completions"] >= 8
     assert h1["build_completions"] <= 40

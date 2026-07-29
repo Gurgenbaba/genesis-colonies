@@ -61,21 +61,18 @@ def _player(conn=None):
 
 
 def _unlock_expansion(conn, uid: int) -> None:
+    # colonize_planet() only gates on homeworld level (can_found_colony); the
+    # interstellar_expansion tech level this helper used to also set is only
+    # checked by the separate world-map expansion-site gate
+    # (evaluate_expansion_gates), which this file never exercises — dropped
+    # as dead setup in favor of the canonical conftest helper
+    # (GC-STABILIZE-002, cluster21-colony-unlock-dedup).
     from game.models import get_homeworld
-    from game.planet_evolution.expansion_protocol import INTERSTELLAR_EXPANSION_TECH
+    from conftest import unlock_colony_slots
 
     hw = get_homeworld(uid, conn=conn)
     assert hw
-    conn.execute("UPDATE planets SET planet_level = 5 WHERE id = ?;", (int(hw["id"]),))
-    conn.execute(
-        """
-        INSERT INTO research_levels (user_id, tech_key, level)
-        VALUES (?, ?, ?)
-        ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;
-        """,
-        (int(uid), INTERSTELLAR_EXPANSION_TECH, 1),
-    )
-    conn.commit()
+    unlock_colony_slots(conn, int(hw["id"]), slots=1)
 
 
 def _colonizable_binding():

@@ -390,6 +390,30 @@ def column_exists(conn: DbConn, table_name: str, column_name: str) -> bool:
     return column_name in table_columns(conn, table_name)
 
 
+def ensure_column(conn: DbConn, table_name: str, column_name: str, typedef: str) -> None:
+    """Idempotent ``ALTER TABLE ... ADD COLUMN`` for lazy/self-heal schema ensures.
+
+    SQLite has no ``ADD COLUMN IF NOT EXISTS``, so callers historically did a
+    check-then-add (``if column_exists(...): ...``) which races under
+    concurrent requests: two threads can both see the column missing before
+    either commits its ALTER, and the loser gets
+    ``OperationalError: duplicate column name`` (GC-STABILIZE-002). Centralize
+    the add + swallow-if-lost-the-race handling here (single Owner for
+    "ensure_*_schema" helpers in game/options.py, game/account_email.py, ...)
+    instead of duplicating the race in every call site.
+    """
+    if column_exists(conn, table_name, column_name):
+        return
+    from game.sql_pg_rewrite import is_idempotent_postgres_error
+
+    cur = conn.cursor()
+    try:
+        cur.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {typedef};")
+    except Exception as exc:
+        if not is_idempotent_postgres_error(exc):
+            raise
+
+
 def is_integrity_error(exc: BaseException) -> bool:
     """
     True for unique/check/FK violations on SQLite or PostgreSQL.

@@ -6,6 +6,9 @@ Run: python -m pytest tests/test_placeholder_nav.py -v
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 import uuid
 from pathlib import Path
 
@@ -15,6 +18,7 @@ from game.models import create_user, init_db
 from game.placeholder_pages import PLACEHOLDER_MODULES, list_placeholder_modules
 
 ROOT = Path(__file__).resolve().parent.parent
+MIGRATE_SCRIPT = ROOT / "migrate.py"
 
 
 def _read(rel: str) -> str:
@@ -31,6 +35,24 @@ def placeholder_db(tmp_path, monkeypatch):
     from game import db as gdb
 
     gdb._DB_PATH = None
+    init_db()
+
+    # bootstrap_application(skip_migration_check=True) only skips the
+    # migrations-current *check* — it never applies migrations/*.sql itself.
+    # Without running migrate.py first, tables added by migrations (e.g.
+    # player_inventory_items, player_unlocks) don't exist, and routes like
+    # /inventory 500. Match the canonical test-db bootstrap used by every
+    # other command-map/expansion test fixture (see test_chokepoints.py).
+    env = os.environ.copy()
+    env["GC_DB_PATH"] = str(db_path)
+    result = subprocess.run(
+        [sys.executable, str(MIGRATE_SCRIPT)],
+        cwd=str(ROOT),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
     init_db()
 
     from game.bootstrap import bootstrap_application

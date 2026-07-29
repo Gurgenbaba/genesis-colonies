@@ -152,6 +152,7 @@ def test_galaxy_command_map_renders_graph_not_list(command_map_db, monkeypatch):
     models.DB_PATH = command_map_db
     import app as app_module
     importlib.reload(app_module)
+    app_module.app.config['TESTING'] = True
     uname = f'cmdmap_ui_{uuid.uuid4().hex[:8]}'
     ok, err, user = create_user(uname, 'test-pass-123')
     assert ok and user, err

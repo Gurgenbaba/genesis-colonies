@@ -16,7 +16,8 @@ def test_gc557_reset_queue_live_states_on_planet_switch():
     assert "function _resetQueueLiveStates()" in src
     switch = src.split('const isPlanetSwitch = reason === "planet_switch"')[1][:500]
     assert "_resetQueueLiveStates()" in switch
-    cleanup = src.split("GC.cleanupPage = function cleanupPage()")[1].split("function logStatusPollErrorOnce")[0]
+    # cleanupPage now takes an opts={} param (preserveGameLoop, GC-PERF-PJAX-TICKER-001)
+    cleanup = src.split("GC.cleanupPage = function cleanupPage(opts = {})")[1].split("function logStatusPollErrorOnce")[0]
     assert "_resetQueueLiveStates()" in cleanup
     apply = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function refreshPageAfterQueueEvent")[0]
     assert "_resetQueueLiveStates()" in apply

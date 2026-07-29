@@ -65,10 +65,11 @@ def _create_player() -> int:
     return int(user['id'])
 
 def _unlock_colony_slot(player_id: int) -> None:
+    from conftest import unlock_colony_slots
+
     conn = db()
     hw = get_homeworld(player_id=player_id, conn=conn)
-    conn.execute("UPDATE planets SET planet_level = 5 WHERE id = ?;", (int(hw["id"]),))
-    conn.commit()
+    unlock_colony_slots(conn, int(hw["id"]), slots=1)
     conn.close()
 
 
@@ -202,9 +203,15 @@ def test_empire_route_pjax_compatible(empire_db, monkeypatch):
     assert 'id="empire-page"' in html
 
 def test_empire_nav_link_in_base_template():
+    # The right-hand nav links (incl. Empire) were extracted into
+    # partials/sidebar_right.html, which base.html includes twice (desktop +
+    # mobile sidebar); check the partial since that is now the sole owner of
+    # this markup (GC-STABILIZE-002).
     tpl = BASE_TEMPLATE.read_text(encoding='utf-8')
-    assert "url_for('empire_view')" in tpl
-    assert '{{ T("nav_empire"' in tpl
+    sidebar_tpl = (ROOT / 'templates' / 'partials' / 'sidebar_right.html').read_text(encoding='utf-8')
+    assert '{% include "partials/sidebar_right.html" %}' in tpl
+    assert "url_for('empire_view')" in sidebar_tpl
+    assert '{{ T("nav_empire"' in sidebar_tpl
 
 def test_build_empire_context_includes_matrix(empire_db):
     player_id = _create_player()

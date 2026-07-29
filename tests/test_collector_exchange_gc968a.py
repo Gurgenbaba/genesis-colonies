@@ -176,9 +176,17 @@ def test_energy_surge_booster_increases_solar_output(gc968_db):
     commit(conn)
     assert ok, reason
 
-    resolver = EffectResolver.for_player(uid, conn=conn)
-    mods = resolver.get_modifiers()
-    assert float(mods.get("solar_output_factor") or 1.0) >= 1.09
+    # Compare relative booster effect on the same planet. Absolute
+    # solar_output_factor includes random homeworld slot climate, so a cold
+    # slot (e.g. 0.50x) would make 1.10 * climate fail a flat >= 1.09 check.
+    baseline = EffectResolver.for_player(
+        uid, conn=conn, skip_inventory_boosters=True
+    ).get_modifiers()
+    boosted = EffectResolver.for_player(uid, conn=conn).get_modifiers()
+    base_solar = float(baseline.get("solar_output_factor") or 1.0)
+    boost_solar = float(boosted.get("solar_output_factor") or 1.0)
+    assert base_solar > 0
+    assert boost_solar / base_solar >= 1.09
     conn.close()
 
 

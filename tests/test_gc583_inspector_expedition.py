@@ -54,6 +54,14 @@ def _player(conn):
     assert ok and user, err
     uid = int(user["id"])
     ensure_player_and_homeworld(uid, player_name="Commander", conn=conn)
+    # The fleet-send form (coords row / world-target panel) only renders when
+    # the player has at least one ship (game/fleet.py has_ships gate) — seed a
+    # starter hull so page-render tests exercise the real send form.
+    from game.models import get_homeworld
+    from game.fleet import add_planet_ships
+
+    homeworld_id = int(get_homeworld(player_id=uid, conn=conn)["id"])
+    add_planet_ships(homeworld_id, uid, {"mule_courier": 1}, conn=conn)
     return uid
 
 
@@ -104,6 +112,7 @@ def test_api_worlds_expedition_preview(gc583_db, monkeypatch):
     conn = db()
     try:
         player_id = _player(conn)
+        conn.commit()
     finally:
         conn.close()
 
@@ -132,6 +141,7 @@ def test_galaxy_template_expedition_inspector_and_fleet_panel(gc583_db, monkeypa
     conn = db()
     try:
         player_id = _player(conn)
+        conn.commit()
     finally:
         conn.close()
 

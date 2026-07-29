@@ -75,13 +75,11 @@ def _player(conn=None) -> int:
 
 
 def _unlock_first_colony_slot(conn, uid: int) -> None:
+    from conftest import unlock_colony_slots
+
     hw = get_homeworld(uid, conn=conn)
     assert hw
-    conn.execute(
-        "UPDATE planets SET planet_level = 5 WHERE id = ?;",
-        (int(hw["id"]),),
-    )
-    conn.commit()
+    unlock_colony_slots(conn, int(hw["id"]), slots=1)
 
 
 def _colonizable_binding() -> dict:

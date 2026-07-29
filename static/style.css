@@ -905,7 +905,7 @@ body.gc-has-open-popover .admin-card:has(.gc-hud-select.is-open){
   justify-content: flex-start;
 }
 
-/* Sidebar ? GC-621C accordion + Genesis cyan glow */
+/* Sidebar — GC-621C accordion + Genesis cyan glow */
 .gc-sidebar{
   position: sticky;
   top: var(--gc-sidebar-top, 136px);
@@ -8614,8 +8614,7 @@ a.gc-bld-head-action-btn--go:focus-visible{
 .gc-research-card .gc-bld-card-queue-zone,
 .gc-ship-card .gc-ship-card-subhead,
 .gc-ship-card .gc-bld-card-meta,
-.gc-ship-card .shipyard-blockers,
-.gc-ship-card .gc-bld-card-action-wrap{
+.gc-ship-card .shipyard-blockers{
   margin-left: 9px;
   margin-right: 9px;
 }
@@ -8857,70 +8856,12 @@ a.gc-bld-head-action-btn--go:focus-visible{
   margin-top: 4px;
 }
 
-/* GC-827 ? compact card benefits (details in Technical Data modal) */
-.gc-compact-benefits-row,
-.gc-compact-stat-row{
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 8px;
-  min-width: 0;
-}
-
 .gc-bld-effect-bundle{
   margin-top: 0;
 }
 
-.gc-compact-chip{
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 6px;
-  border-radius: calc(var(--gc-radius-sm) - 2px);
-  border: 1px solid rgba(120, 190, 255, 0.12);
-  background: rgba(0, 0, 0, 0.22);
-  font-size: 0.72rem;
-  line-height: 1.2;
-  min-width: 0;
-}
-
-.gc-compact-chip .gc-res-icon,
-.gc-compact-chip .gc-bld-effect-icon{
-  width: 16px;
-  height: 16px;
-}
-
-.gc-compact-chip-glyph{
-  font-size: 0.78rem;
-  line-height: 1;
-  opacity: 0.9;
-}
-
-.gc-compact-chip-label{
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: rgba(127, 255, 217, 0.72);
-}
-
-.gc-compact-chip-suffix{
-  font-size: 0.62rem;
-  color: var(--gc-text-dim);
-}
-
-.gc-compact-chip--energy-use{
-  border-color: rgba(251, 191, 36, 0.18);
-}
-
-.gc-compact-chip--production .gc-num-compact,
-.gc-prog-affordable .gc-compact-chip--production .gc-num-compact{
-  color: rgba(127, 255, 217, 0.95);
-}
-
 .gc-building-card .gc-bld-effect-bundle,
-.gc-research-card .gc-bld-effect-bundle,
-.gc-ship-card .gc-compact-stat-row{
+.gc-research-card .gc-bld-effect-bundle{
   margin-top: 4px;
 }
 
@@ -9123,14 +9064,6 @@ a.gc-bld-head-action-btn--go:focus-visible{
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.gc-bld-card-action-wrap{
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  margin-top: auto;
-  padding-top: 2px;
 }
 
 .gc-bld-card-queue-zone{
@@ -15809,6 +15742,19 @@ body.gc-techtree-media-zoom-open{
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* GC-STABILIZE-002: role badge doubles as the ship-detail trigger button
+   (data-ship-detail) — re-enable pointer events (the sibling rule above sets
+   pointer-events:none for the decorative <span> variant) + reset native
+   button chrome so it keeps the exact overlay look of the former <span>. */
+.fleet-ship-card-art-wrap button.fleet-ship-card-role-badge{
+  pointer-events: auto;
+  cursor: pointer;
+}
+.fleet-ship-card-art-wrap button.fleet-ship-card-role-badge:hover,
+.fleet-ship-card-art-wrap button.fleet-ship-card-role-badge:focus-visible{
+  color: var(--gc-accent-cyan, #5ee9ff);
+  outline: none;
 }
 .fleet-ship-card-art-wrap .fleet-ship-card-stock-badge{
   position: absolute;

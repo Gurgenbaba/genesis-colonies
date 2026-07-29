@@ -7,11 +7,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# (relative path, 1-based line number) — documented exceptions only
+# (relative path, 1-based line number) — documented exceptions only.
+# static/admin.js is out of scope here (see _iter_js_lines skip below); its
+# admin-shell reload sites live under the separate admin contract.
 ALLOWLIST_RELOAD = {
-    ("static/main.js", 1168),
-    ("static/admin.js", 1289),
-    ("static/admin.js", 1298),
+    ("static/main.js", 2203),  # GC.reloadCurrentPage fullDocument branch
+    ("static/main.js", 2215),  # GC.reloadCurrentPage navigateTo-undefined fallback
+    ("static/main.js", 25780),  # locale switch: GC.reloadCurrentPage-undefined fallback
 }
 
 ALLOWLIST_LOCATION_HREF_ASSIGN = {

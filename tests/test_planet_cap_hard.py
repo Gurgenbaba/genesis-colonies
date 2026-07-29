@@ -10,7 +10,6 @@ from game.admin_balance import save_balance_settings
 from game.db import db
 from game.logic import check_planet_cap_available, get_max_planets_per_player, get_planet_limit_block
 from game.models import create_user, ensure_player_and_homeworld, get_homeworld, get_planets_by_player, init_db
-from game.planet_evolution.expansion_protocol import INTERSTELLAR_EXPANSION_TECH
 from game.planet_evolution.service import colonize_planet
 
 @pytest.fixture
@@ -47,12 +46,17 @@ def _set_cap(value: int) -> None:
     assert settings is not None
     assert int(settings['max_colonies_per_player']) == int(value)
 
-def _unlock_expansion(conn, uid: int, *, hw_level: int=5, tech: int=1) -> None:
+def _unlock_expansion(conn, uid: int, *, slots: int = 1) -> None:
+    # colonize_planet() only gates on homeworld level (can_found_colony); the
+    # interstellar_expansion tech level this used to also set is only checked
+    # by the separate world-map expansion-site gate (evaluate_expansion_gates),
+    # never exercised in this file — dropped as dead setup in favor of the
+    # canonical conftest helper (GC-STABILIZE-002, cluster21-colony-unlock-dedup).
+    from conftest import unlock_colony_slots
+
     hw = get_homeworld(uid, conn=conn)
     assert hw
-    conn.execute('UPDATE planets SET planet_level = ? WHERE id = ?;', (int(hw_level), int(hw['id'])))
-    conn.execute('\n        INSERT INTO research_levels (user_id, tech_key, level)\n        VALUES (?, ?, ?)\n        ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;\n        ', (int(uid), INTERSTELLAR_EXPANSION_TECH, int(tech)))
-    conn.commit()
+    unlock_colony_slots(conn, int(hw['id']), slots=slots)
 
 def test_admin_setting_max_colonies_validated(cap_db):
     settings, err = save_balance_settings({'max_colonies_per_player': 2})
@@ -81,7 +85,7 @@ def test_colonize_allowed_below_ceiling_blocked_at_ceiling(cap_db):
     _set_cap(2)
     conn = db()
     try:
-        _unlock_expansion(conn, uid, hw_level=25, tech=6)
+        _unlock_expansion(conn, uid, slots=1)
         ok1, reason1, extra1 = colonize_planet(uid, name='Colony Alpha', galaxy=1, system=120, position=3, conn=conn, allow_legacy_coordinates=True, source='test')
         assert ok1, reason1
         assert extra1 and extra1.get('planet_id')
@@ -114,7 +118,7 @@ def test_player_over_ceiling_not_deleted_but_blocked(cap_db):
     uid = _player()
     conn = db()
     try:
-        _unlock_expansion(conn, uid, hw_level=25, tech=6)
+        _unlock_expansion(conn, uid, slots=2)
         for i in range(2):
             ok, reason, _ = colonize_planet(uid, name=f'Extra_{i}', galaxy=1, system=200 + i, position=1 + i, conn=conn, allow_legacy_coordinates=True, source='test')
             assert ok, reason
