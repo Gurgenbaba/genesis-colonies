@@ -37,7 +37,17 @@ def _create_player() -> tuple[int, str]:
     uname = f'emp_{uuid.uuid4().hex[:8]}'
     ok, err, user = create_user(uname, 'test-pass-123')
     assert ok and user, err
-    return (int(user['id']), uname)
+    uid = int(user['id'])
+    # GC-976A: colonize_planet() needs an unlocked evolution slot (up to 3
+    # additional colonies for test_foreign_empire_hub_has_presence_metadata).
+    from game.models import get_homeworld
+    from conftest import unlock_colony_slots
+    conn = dbmod.db()
+    try:
+        unlock_colony_slots(conn, int(get_homeworld(player_id=uid)['id']), slots=3)
+    finally:
+        conn.close()
+    return (uid, uname)
 
 def test_format_empire_display_name():
     assert format_empire_display_name('papa-fanti', 'Papa Prime') == 'PAPA FANTI'

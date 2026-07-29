@@ -49,8 +49,17 @@ def _create_player(username: str | None=None) -> tuple[int, str, str]:
     password = 'test-pass-123'
     ok, err, user = create_user(uname, password)
     assert ok and user and user.get('id'), err
+    uid = int(user['id'])
+    # GC-976A: colonize_planet() needs an unlocked evolution slot.
+    from game.models import get_homeworld
+    from conftest import unlock_colony_slots
+    conn = models.db()
+    try:
+        unlock_colony_slots(conn, int(get_homeworld(player_id=uid, conn=conn)['id']), slots=1)
+    finally:
+        conn.close()
     _close_db_conn()
-    return (int(user['id']), uname, password)
+    return (uid, uname, password)
 
 @pytest.fixture()
 def app_client(temp_db, monkeypatch):

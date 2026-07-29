@@ -35,6 +35,9 @@ def _player(conn=None):
     assert ok, err
     uid = int(user['id'])
     ensure_player_and_homeworld(uid, conn=conn)
+    # GC-976A: colonize_planet() needs an unlocked evolution slot.
+    from conftest import unlock_colony_slots
+    unlock_colony_slots(conn, int(get_homeworld(player_id=uid, conn=conn)['id']), slots=1)
     if own:
         conn.commit()
         conn.close()

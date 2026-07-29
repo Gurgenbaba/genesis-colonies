@@ -53,7 +53,15 @@ def _create_player() -> tuple[int, str]:
     uname = f'inst_{uuid.uuid4().hex[:8]}'
     ok, err, user = create_user(uname, 'test-pass-123')
     assert ok and user, err
-    return (int(user['id']), uname)
+    uid = int(user['id'])
+    # GC-976A: colonize_planet() needs an unlocked evolution slot.
+    from conftest import unlock_colony_slots
+    conn = db()
+    try:
+        unlock_colony_slots(conn, int(get_homeworld(player_id=uid)['id']), slots=1)
+    finally:
+        conn.close()
+    return (uid, uname)
 
 def _second_planet(player_id: int) -> int:
     last_reason = 'unknown'

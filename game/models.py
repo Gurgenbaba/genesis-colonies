@@ -819,6 +819,7 @@ def touch_player_online(player_id: int) -> None:
     touch_before = now - 30
     conn = db()
     try:
+        begin_write_transaction(conn)
         cur = conn.cursor()
         cur.execute(
             "UPDATE players SET last_seen = ? WHERE id = ? AND (last_seen IS NULL OR last_seen < ?)",
@@ -834,6 +835,9 @@ def touch_player_online(player_id: int) -> None:
                     "release_active_player_from_roster failed player=%s", player_id
                 )
         commit(conn)
+    except Exception:
+        rollback(conn)
+        raise
     finally:
         conn.close()
 
@@ -1504,9 +1508,16 @@ def get_planet_buildings(planet_id: int, conn: sqlite3.Connection | None = None)
     row = cur.fetchone()
 
     if not row:
-        cur.execute("INSERT INTO planet_buildings (planet_id) VALUES (?);", (int(planet_id),))
-        if own_conn:
-            commit(conn)
+        try:
+            if own_conn:
+                begin_write_transaction(conn)
+            cur.execute("INSERT INTO planet_buildings (planet_id) VALUES (?);", (int(planet_id),))
+            if own_conn:
+                commit(conn)
+        except Exception:
+            if own_conn:
+                rollback(conn)
+            raise
         cur.execute("SELECT * FROM planet_buildings WHERE planet_id = ?;", (int(planet_id),))
         row = cur.fetchone()
 
@@ -1519,14 +1530,25 @@ def get_planet_buildings(planet_id: int, conn: sqlite3.Connection | None = None)
     return {k: int(v) for k, v in data.items()}
 
 
-def save_planet_buildings(planet_id: int, buildings: Dict[str, int]) -> None:
-    conn = db()
+def save_planet_buildings(
+    planet_id: int,
+    buildings: Dict[str, int],
+    conn: sqlite3.Connection | None = None,
+) -> None:
+    """Persist building levels. Pass an existing `conn` to reuse a caller's
+    already-open write transaction — opening a second connection here while
+    the caller still holds one deadlocks against itself (GC-2618/2619 QA
+    pass: this is what broke the admin planet-buildings editor)."""
+    own_conn = conn is None
+    if own_conn:
+        conn = db()
     cur = conn.cursor()
 
     keys = list(BUILDING_KEYS)
 
     try:
-        begin_write_transaction(conn)
+        if own_conn:
+            begin_write_transaction(conn)
         cur.execute(
             f"""
             UPDATE planet_buildings SET
@@ -1535,12 +1557,15 @@ def save_planet_buildings(planet_id: int, buildings: Dict[str, int]) -> None:
             """,
             [int(buildings.get(k, 0)) for k in keys] + [int(planet_id)],
         )
-        commit(conn)
+        if own_conn:
+            commit(conn)
     except Exception:
-        rollback(conn)
+        if own_conn:
+            rollback(conn)
         raise
     finally:
-        conn.close()
+        if own_conn:
+            conn.close()
 
 
 # ======================================================================

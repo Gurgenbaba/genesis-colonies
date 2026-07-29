@@ -61,6 +61,10 @@ def test_fleet_origin_scope_mismatch_logs(caplog, gc557c_db):
         assert ok and user, err
         uid = int(user['id'])
         ensure_player_and_homeworld(uid, player_name='Cmd', conn=conn)
+        # GC-976A: colonize_planet() needs an unlocked evolution slot.
+        from game.models import get_homeworld
+        from conftest import unlock_colony_slots
+        unlock_colony_slots(conn, int(get_homeworld(player_id=uid, conn=conn)['id']), slots=1)
         colonize_planet(uid, name='Colony B', galaxy=1, system=400, position=3, conn=conn, allow_legacy_coordinates=True, source='test')
         context = get_context_planet(uid, conn=conn)
         colony = conn.execute('SELECT id FROM planets WHERE player_id = ? AND is_homeworld = 0 LIMIT 1;', (uid,)).fetchone()

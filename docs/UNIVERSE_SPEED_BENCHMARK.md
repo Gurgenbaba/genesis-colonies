@@ -7,7 +7,7 @@
 | Domäne | Owner | Formel |
 |--------|-------|--------|
 | Forschungszeit | `EffectResolver.get_research_time_seconds` | `anchor_hours × tier ÷ (build_speed × research_speed × lab_bonus × research_time_speed)` |
-| Bauzeit | `EffectResolver.get_build_time_seconds` | `power_build_seconds(level)` ÷ `build_speed_effective` (GC-850A) |
+| Bauzeit | `EffectResolver.get_build_time_seconds` | `BUILD_TIME_BASE × factor^(L-1) ÷ build_speed_effective` |
 | Produktion / ROI | `economy_balance.mine_upgrade_roi_hours` | `upgrade_cost ÷ Δprod/h × production_speed` |
 | Flugzeit | `fleet_calc.calculate_flight_seconds` | `(35000/speed) × √(dist/10) ÷ admin_fleet_speed` |
 
@@ -34,13 +34,13 @@
 
 | build_speed | Dauer metal_mine L20 | Stunden |
 | ---: | ---: | ---: |
-| 1 | 8h 27min | 8.47h |
-| 2 | 4h 13min | 4.23h |
-| 5 | 1h 41min | 1.69h |
-| 10 | 50:47 | 0.85h |
-| 25 | 20:19 | 0.34h |
-| 50 | 10:09 | 0.17h |
-| 100 | 5:04 | 0.08h |
+| 1 | 1h 48min | 1.81h |
+| 2 | 54:12 | 0.90h |
+| 5 | 21:41 | 0.36h |
+| 10 | 10:50 | 0.18h |
+| 25 | 4:20 | 0.07h |
+| 50 | 2:10 | 0.04h |
+| 100 | 1:05 | 0.02h |
 
 ### production_speed — Ferronitmine ROI L20 (Slot 9)
 
@@ -189,11 +189,11 @@ xychart-beta
 xychart-beta
     title "metal_mine — Bauzeit (Minuten)"
     x-axis [1, 5, 10, 20, 30, 40, 50]
-    y-axis "Minuten" 0 --> 12293985
-    line "build_speed 1" [0.85, 3.25, 17.55, 507.98, 14693.72, 425022.88, 12293984.85]
-    line "build_speed 10" [0.08, 0.32, 1.75, 50.78, 1469.37, 42502.28, 1229398.48]
-    line "build_speed 50" [0.02, 0.05, 0.35, 10.15, 293.87, 8500.45, 245879.68]
-    line "build_speed 100" [0.02, 0.02, 0.17, 5.07, 146.93, 4250.22, 122939.83]
+    y-axis "Minuten" 0 --> 374
+    line "build_speed 1" [1.9, 16.68, 42.53, 108.42, 187.43, 276.38, 373.55]
+    line "build_speed 10" [0.18, 1.67, 4.25, 10.83, 18.73, 27.63, 37.35]
+    line "build_speed 50" [0.03, 0.33, 0.85, 2.17, 3.73, 5.52, 7.47]
+    line "build_speed 100" [0.02, 0.17, 0.42, 1.08, 1.87, 2.75, 3.73]
 ```
 
 ### 3 — Mine-ROI nach Level
@@ -203,8 +203,8 @@ xychart-beta
     title "metal_mine — ROI Payback (h, Slot 9)"
     x-axis [1, 5, 10, 20, 30, 40, 50]
     y-axis "Stunden" 0 --> 142
-    line "production_speed 1" [50.0, 50.0, 50.01, 50.0, 70.71, 100.0, 141.42]
-    line "production_speed 1.5" [33.33, 33.34, 33.34, 33.34, 47.14, 66.67, 94.28]
+    line "production_speed 1" [50.0, 50.01, 50.0, 50.0, 70.71, 100.0, 141.42]
+    line "production_speed 1.5" [33.34, 33.34, 33.33, 33.33, 47.14, 66.67, 94.28]
     line "production_speed 2" [25.0, 25.0, 25.0, 25.0, 35.36, 50.0, 70.71]
     line "production_speed 3" [16.67, 16.67, 16.67, 16.67, 23.57, 33.33, 47.14]
 ```
@@ -241,7 +241,7 @@ Berechnet mit kanonischen Formeln (`EffectResolver`, GC-825/821). Referenzplanet
 |-------|------------|--------------|
 | Ist `research_speed = 1` spielbar? | Energie L30, Lab 20 → **8.3 h** (~0.3 d) | Technisch ja, für Alpha zu träge |
 | Ist `research_speed = 100` zu schnell? | Gleiches Szenario → **0.08 h** | Midgame-Forschung wird Trivialzeit — zu schnell für Progressionsgefühl |
-| Ist `build_speed = 10` sinnvoll? | `metal_mine` L20 → **50:47** | Gute Alpha-Fluidität ohne Instant-Bau |
+| Ist `build_speed = 10` sinnvoll? | `metal_mine` L20 → **10:50** | Gute Alpha-Fluidität ohne Instant-Bau |
 | Ist `production_speed = 1` zu langsam? | ROI L20 → **2.1d** | Passt zu GC-821 Mine-Balance — **nicht** anheben ohne Economy-Rebalance |
 | Flotte | siehe Flugtabelle | `fleet_speed` 3 → Distanz 2000 ~1:50 (speed 1500) |
 
@@ -266,7 +266,7 @@ fleet_speed      = 3   (peaceful / war / holding einheitlich)
 **Begründung**
 
 - **production_speed = 1** — GC-821 Mine-ROI ist darauf kalibriert; Erhöhung verkürzt Payback linear und entwertet Upgrades.
-- **build_speed = 8** — `metal_mine` L20 in ~1h 3min; L30 Gebäude bleiben spürbar, aber nicht frustrierend.
+- **build_speed = 8** — `metal_mine` L20 in ~13:33; L30 Gebäude bleiben spürbar, aber nicht frustrierend.
 - **research_speed = 50** — Energie L30 9:55; L10 1:17 — Alpha-taugliches Tempo ohne Instant-Forschung.
 - **fleet_speed = 3** — Distanz 2000 1:50; Distanz 8000 3:40 (Referenzschiff speed 1500).
 

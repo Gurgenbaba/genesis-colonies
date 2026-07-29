@@ -1409,6 +1409,28 @@ def test_expedition_daily_efficiency_steps():
     assert expedition_daily_efficiency_multiplier(400) == pytest.approx(0.45, abs=0.001)
 
 
+@pytest.fixture()
+def fleet_db(tmp_path, monkeypatch):
+    """Plain migrated temp DB for the daily-efficiency tests below — they
+    only need `expedition_daily_value` storage via `game.db.db()`, not a
+    player/homeworld."""
+    import game.db as gdb
+
+    db_path = tmp_path / "expedition_daily.db"
+    monkeypatch.setenv("GC_DB_PATH", str(db_path))
+    monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
+    monkeypatch.setenv("SECRET_KEY", "test-secret-key-not-default-value-32chars")
+    gdb._DB_PATH = None
+    from game.models import init_db
+
+    init_db()
+    import migrate
+
+    migrate.main()
+    yield db_path
+    gdb._DB_PATH = None
+
+
 def test_expedition_daily_efficiency_ignores_expo_value(fleet_db):
     from game.db import db
     from game.expedition_events import (

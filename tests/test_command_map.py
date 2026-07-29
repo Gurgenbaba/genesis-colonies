@@ -36,6 +36,19 @@ def _create_player() -> int:
     assert ok and user, err
     return int(user['id'])
 
+
+def _unlock_colony_slots(player_id: int, slots: int) -> None:
+    """GC-976A: colonize_planet() needs an unlocked evolution slot. Applied
+    per-test (not in `_create_player`) since `test_homeworld_is_hub_center`
+    relies on a fresh, un-leveled homeworld to assert `frontier_ix` is
+    still locked."""
+    from conftest import unlock_colony_slots
+    conn = dbmod.db()
+    try:
+        unlock_colony_slots(conn, int(get_homeworld(player_id=player_id)['id']), slots=slots)
+    finally:
+        conn.close()
+
 def test_homeworld_is_hub_center(command_map_db):
     player_id = _create_player()
     from game.db import db
@@ -64,6 +77,7 @@ def test_homeworld_is_hub_center(command_map_db):
 def test_colony_roles_get_spoke_slots(command_map_db):
     player_id = _create_player()
     hw_id = int(get_homeworld(player_id=player_id)['id'])
+    _unlock_colony_slots(player_id, slots=2)
     ok, reason, mining = colonize_planet(player_id, name='Vega Prime', galaxy=1, system=2, position=3, allow_legacy_coordinates=True, source='test')
     assert ok, reason
     ok, reason, research = colonize_planet(player_id, name='Helios Gate', galaxy=1, system=3, position=4, allow_legacy_coordinates=True, source='test')
@@ -98,6 +112,7 @@ def test_colony_roles_get_spoke_slots(command_map_db):
 def test_trade_route_creates_edge(command_map_db):
     player_id = _create_player()
     hw_id = int(get_homeworld(player_id=player_id)['id'])
+    _unlock_colony_slots(player_id, slots=1)
     ok, reason, mining = colonize_planet(player_id, name='Titan Forge', galaxy=1, system=4, position=5, allow_legacy_coordinates=True, source='test')
     assert ok, reason
     colony_id = int(mining['planet_id'])
@@ -119,6 +134,7 @@ def test_trade_route_creates_edge(command_map_db):
 
 def test_hub_link_for_unconnected_colony(command_map_db):
     player_id = _create_player()
+    _unlock_colony_slots(player_id, slots=1)
     ok, reason, _ = colonize_planet(player_id, name='Outpost', galaxy=1, system=5, position=6, allow_legacy_coordinates=True, source='test')
     assert ok, reason
     from game.db import db
@@ -140,6 +156,7 @@ def test_galaxy_command_map_renders_graph_not_list(command_map_db, monkeypatch):
     ok, err, user = create_user(uname, 'test-pass-123')
     assert ok and user, err
     player_id = int(user['id'])
+    _unlock_colony_slots(player_id, slots=1)
     ok, reason, _ = colonize_planet(player_id, name='Spoke', galaxy=1, system=6, position=7, allow_legacy_coordinates=True, source='test')
     assert ok, reason
     client = app_module.app.test_client()

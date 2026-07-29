@@ -35,7 +35,17 @@ def _create_player() -> int:
     uname = f'exphase_{uuid.uuid4().hex[:8]}'
     ok, err, user = create_user(uname, 'test-pass-123')
     assert ok and user, err
-    return int(user['id'])
+    uid = int(user['id'])
+    # GC-976A: colonize_planet()/send_fleet(mission_type='colonize') need an
+    # unlocked evolution slot.
+    from game.models import get_homeworld
+    from conftest import unlock_colony_slots
+    conn = dbmod.db()
+    try:
+        unlock_colony_slots(conn, int(get_homeworld(player_id=uid)['id']), slots=1)
+    finally:
+        conn.close()
+    return uid
 _colonizable_coord_cursor = 600
 
 def _colonizable_coords() -> tuple[float, float]:

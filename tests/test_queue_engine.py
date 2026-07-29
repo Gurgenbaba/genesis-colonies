@@ -50,8 +50,16 @@ def _create_player(username: str) -> int:
     uname = f'{username}_{uuid.uuid4().hex[:8]}'
     ok, err, user = create_user(uname, 'test-pass-123')
     assert ok and user, err
+    uid = int(user['id'])
+    # GC-976A: colonize_planet() needs an unlocked evolution slot.
+    from conftest import unlock_colony_slots
+    conn = db()
+    try:
+        unlock_colony_slots(conn, int(get_homeworld(uid, conn=conn)['id']), slots=1)
+    finally:
+        conn.close()
     _close_db()
-    return int(user['id'])
+    return uid
 
 def test_finish_building_job_once_idempotent(temp_db):
     _run_migrate(temp_db)

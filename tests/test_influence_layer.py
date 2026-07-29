@@ -36,7 +36,15 @@ def _create_player() -> int:
     uname = f'infl_{uuid.uuid4().hex[:8]}'
     ok, err, user = create_user(uname, 'test-pass-123')
     assert ok and user, err
-    return int(user['id'])
+    uid = int(user['id'])
+    # GC-976A: colonize_planet() needs an unlocked evolution slot.
+    from conftest import unlock_colony_slots
+    conn = dbmod.db()
+    try:
+        unlock_colony_slots(conn, int(get_homeworld(player_id=uid)['id']), slots=2)
+    finally:
+        conn.close()
+    return uid
 
 def test_influence_homeworld_only_blob(influence_db):
     player_id = _create_player()
@@ -99,6 +107,12 @@ def test_galaxy_command_map_renders_influence_layer(influence_db, monkeypatch):
     ok, err, user = create_user(uname, 'test-pass-123')
     assert ok and user, err
     player_id = int(user['id'])
+    from conftest import unlock_colony_slots
+    conn = dbmod.db()
+    try:
+        unlock_colony_slots(conn, int(get_homeworld(player_id=player_id)['id']), slots=1)
+    finally:
+        conn.close()
     ok, reason, _ = colonize_planet(player_id, name='Rim Outpost', galaxy=1, system=4, position=5, allow_legacy_coordinates=True, source='test')
     assert ok, reason
     client = app_module.app.test_client()

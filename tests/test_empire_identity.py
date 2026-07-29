@@ -34,7 +34,15 @@ def _create_player() -> int:
     uname = f'emp_id_{uuid.uuid4().hex[:8]}'
     ok, err, user = create_user(uname, 'test-pass-123')
     assert ok and user, err
-    return int(user['id'])
+    uid = int(user['id'])
+    # GC-976A: colonize_planet() needs an unlocked evolution slot.
+    from conftest import unlock_colony_slots
+    conn = dbmod.db()
+    try:
+        unlock_colony_slots(conn, int(get_homeworld(player_id=uid)['id']), slots=2)
+    finally:
+        conn.close()
+    return uid
 
 def test_new_homeworld_default_name_is_genesis_ark(empire_identity_db):
     player_id = _create_player()
@@ -155,6 +163,13 @@ def test_galaxy_command_map_view_renders_colonies(empire_identity_db, monkeypatc
     ok, err, user = create_user(uname, 'test-pass-123')
     assert ok and user, err
     player_id = int(user['id'])
+    # GC-976A: colonize_planet() needs an unlocked evolution slot.
+    from conftest import unlock_colony_slots
+    conn = dbmod.db()
+    try:
+        unlock_colony_slots(conn, int(get_homeworld(player_id=player_id)['id']), slots=1)
+    finally:
+        conn.close()
     ok, reason, _ = colonize_planet(player_id, name='Outpost Alpha', allow_legacy_coordinates=True, source='test')
     assert ok, reason
     client = app_module.app.test_client()

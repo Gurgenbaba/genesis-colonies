@@ -35,7 +35,15 @@ def _create_player() -> int:
     uname = f'loc_{uuid.uuid4().hex[:8]}'
     ok, err, user = create_user(uname, 'test-pass-123')
     assert ok and user, err
-    return int(user['id'])
+    uid = int(user['id'])
+    # GC-976A: colonize_planet() needs an unlocked evolution slot.
+    from conftest import unlock_colony_slots
+    conn = dbmod.db()
+    try:
+        unlock_colony_slots(conn, int(get_homeworld(player_id=uid)['id']), slots=1)
+    finally:
+        conn.close()
+    return uid
 
 def test_build_location_actions_mining_colony():
     actions = build_location_actions('mining')

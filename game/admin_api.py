@@ -777,7 +777,7 @@ def set_planet_buildings_bulk(admin_id: int, planet_id: int, body: Dict[str, Any
         player_id = int(row["player_id"])
         buildings = get_planet_buildings(int(planet_id), conn=conn)
         buildings.update(updates)
-        save_planet_buildings(int(planet_id), buildings)
+        save_planet_buildings(int(planet_id), buildings, conn=conn)
         recompute_and_upsert_score(player_id, conn=conn)
         try:
             from game.resources import sync_derived_state_after_queue_finish
