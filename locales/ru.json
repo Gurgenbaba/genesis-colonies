@@ -6920,5 +6920,9 @@
   "logistics_hub_stock_label": "Запас хаба",
   "logistics_hub_colony_tag": "Хаб",
   "logistics_preview_slots_line": "%(needed)s нужно · %(free)s свободно",
-  "logistics_preview_sources": "Источники"
+  "logistics_preview_sources": "Источники",
+  "planet_status_building_active": "Очередь строительства активна",
+  "planet_status_research_active": "Очередь исследований активна",
+  "planet_status_shipyard_active": "Очередь верфи активна",
+  "planet_status_defense_active": "Очередь обороны активна"
 }

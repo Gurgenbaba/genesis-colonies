@@ -1192,6 +1192,40 @@ def cancel_research_job(user_id: int, job_id: int):
 # STATUS FOR UI
 # ======================================================================
 
+def player_has_active_research_queue(
+    user_id: int,
+    conn=None,
+    *,
+    now: Optional[float] = None,
+) -> bool:
+    """
+    GC-PLANET-UI-001: True when account research_queue has a non-due job.
+
+    Research is account-scoped; callers attach the indicator to the context
+    planet (same as Command Center research_applies).
+    """
+    own = False
+    if conn is None:
+        conn = db()
+        own = True
+    try:
+        ts = float(time.time() if now is None else now)
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT 1 AS ok
+            FROM research_queue
+            WHERE user_id = ? AND finish_at > ?
+            LIMIT 1;
+            """,
+            (int(user_id), ts),
+        )
+        return cur.fetchone() is not None
+    finally:
+        if own and conn is not None:
+            conn.close()
+
+
 def get_research_status(
     user_id: int,
     buildings: Optional[Dict[str, int]] = None,

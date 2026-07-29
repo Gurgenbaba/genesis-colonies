@@ -12,7 +12,17 @@ import pytest
 
 import game.db as dbmod
 import game.models as models
-from game.models import create_user, db, get_homeworld, init_db, save_planet_buildings
+import time
+
+from game.models import (
+    add_build_job,
+    add_research_job,
+    create_user,
+    db,
+    get_homeworld,
+    init_db,
+    save_planet_buildings,
+)
 from game.planet_evolution.service import colonize_planet, list_player_planets_for_switcher, set_active_planet
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -140,6 +150,119 @@ def test_switcher_payload_includes_herocard_relpath(switcher_db):
         assert p.get("herocard_webp_relpath", "").startswith("img/herocards/")
 
 
+def test_switcher_payload_status_indicators_building_queue(switcher_db):
+    """GC-PLANET-UI-001: status_indicators reflects active build_queue per planet."""
+    player_id, _ = _create_player()
+    hw_id = int(get_homeworld(player_id=player_id)["id"])
+    colony_id = _second_planet(player_id)
+    now = time.time()
+    add_build_job(hw_id, "metal_mine", now - 10, now + 600)
+
+    planets = list_player_planets_for_switcher(player_id)
+    by_id = {int(p["planet_id"]): p for p in planets}
+
+    hw_inds = by_id[hw_id]["status_indicators"]
+    assert isinstance(hw_inds, list)
+    assert len(hw_inds) == 1
+    assert hw_inds[0]["key"] == "building"
+    assert hw_inds[0]["icon"] == "🏗"
+    assert hw_inds[0]["label_key"] == "planet_status_building_active"
+
+    assert by_id[colony_id]["status_indicators"] == []
+
+
+def test_switcher_payload_status_indicators_research_shipyard_defense(switcher_db):
+    """GC-PLANET-UI-001: research on active planet; shipyard/defense per colony."""
+    player_id, _ = _create_player()
+    hw_id = int(get_homeworld(player_id=player_id)["id"])
+    colony_id = _second_planet(player_id)
+    set_active_planet(player_id, hw_id)
+    now = time.time()
+    add_research_job(player_id, "energy_tech", now - 10, now + 900)
+
+    conn = db()
+    try:
+        conn.execute(
+            """
+            INSERT INTO shipyard_queue (
+                player_id, planet_id, ship_key, amount, status,
+                started_at, finish_at, created_at, queue_position,
+                cost_metal, cost_crystal, cost_fuel_cells
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """,
+            (
+                player_id,
+                colony_id,
+                "mule_courier",
+                1,
+                "queued",
+                now - 5,
+                now + 1800,
+                now,
+                0,
+                0,
+                0,
+                0,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO defense_queue (
+                player_id, planet_id, defense_key, amount, status,
+                started_at, finish_at, created_at, queue_position,
+                cost_metal, cost_crystal, cost_fuel_cells
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """,
+            (
+                player_id,
+                colony_id,
+                "sentinel_turret",
+                1,
+                "queued",
+                now - 5,
+                now + 1200,
+                now,
+                0,
+                0,
+                0,
+                0,
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    planets = list_player_planets_for_switcher(player_id)
+    by_id = {int(p["planet_id"]): p for p in planets}
+    hw_keys = [i["key"] for i in by_id[hw_id]["status_indicators"]]
+    colony_keys = [i["key"] for i in by_id[colony_id]["status_indicators"]]
+
+    assert hw_keys == ["research"]
+    assert by_id[hw_id]["status_indicators"][0]["icon"] == "🔬"
+    assert by_id[hw_id]["status_indicators"][0]["label_key"] == "planet_status_research_active"
+    assert colony_keys == ["shipyard", "defense"]
+    assert {i["key"]: i["icon"] for i in by_id[colony_id]["status_indicators"]} == {
+        "shipyard": "⚓",
+        "defense": "🛡",
+    }
+
+
+def test_registry_ssr_shows_building_status_indicator(switcher_db, monkeypatch):
+    player_id, uname = _create_player()
+    hw_id = int(get_homeworld(player_id=player_id)["id"])
+    now = time.time()
+    add_build_job(hw_id, "metal_mine", now - 10, now + 600)
+    add_research_job(player_id, "energy_tech", now - 10, now + 900)
+    client = _app_client(monkeypatch)
+    _login(client, player_id, uname)
+    body = client.get("/overview").get_data(as_text=True)
+    assert "gc-planet-registry-card-meta" in body
+    assert "gc-planet-registry-card-status" in body
+    assert 'data-status-key="building"' in body
+    assert 'data-status-key="research"' in body
+    assert "gc-planet-registry-status-icon" in body
+
+
 def test_registry_shows_role_and_coords(switcher_db, monkeypatch):
     player_id, uname = _create_player()
     colony_id = _second_planet(player_id)
@@ -171,7 +294,11 @@ def test_main_js_registry_role_contract():
     assert "empireIdentityLabelKey" in src
     assert "gc-planet-registry-card-role" in src
     assert "gc-planet-registry-card-thumb" in src
-    assert "herocard_url" in src.split("function rebuildPlanetRegistry")[1].split("function updatePlanetRegistryFromPlanets")[0]
+    rebuild = src.split("function rebuildPlanetRegistry")[1].split("function updatePlanetRegistryFromPlanets")[0]
+    assert "herocard_url" in rebuild
+    assert "status_indicators" in rebuild
+    assert "gc-planet-registry-card-status" in rebuild
+    assert "gc-planet-registry-status-icon" in rebuild
     assert "planetRoleKey" in src
     assert "planetIdentityKey" in src
     assert "empire_identity_key" in src.split("function empireIdentityLabelKey")[1].split("function planetRegistryRoots")[0]
@@ -191,6 +318,7 @@ def test_diet_poll_planets_keep_identity_label_keys():
         "identity_title_key",
         "herocard_url",
         "herocard_webp_url",
+        "status_indicators",
     ):
         assert f'"{key}"' in block, f"missing diet planet key: {key}"
 
@@ -200,6 +328,9 @@ def test_registry_css_role_hierarchy():
     assert ".gc-planet-registry-card-role" in css
     assert ".gc-planet-registry-card-thumb" in css
     assert ".gc-planet-registry-card-coord" in css
+    assert ".gc-planet-registry-card-meta" in css
+    assert ".gc-planet-registry-card-status" in css
+    assert ".gc-planet-registry-status-icon" in css
     assert ".gc-sidebar-right-rails" in css
     assert "display: contents" in css
     assert ".gc-planet-switcher" not in css

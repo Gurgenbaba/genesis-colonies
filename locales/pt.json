@@ -6920,5 +6920,9 @@
   "logistics_hub_stock_label": "Estoque do hub",
   "logistics_hub_colony_tag": "Hub",
   "logistics_preview_slots_line": "%(needed)s necessários · %(free)s livres",
-  "logistics_preview_sources": "Fontes"
+  "logistics_preview_sources": "Fontes",
+  "planet_status_building_active": "Fila de construção ativa",
+  "planet_status_research_active": "Fila de pesquisa ativa",
+  "planet_status_shipyard_active": "Fila do estaleiro ativa",
+  "planet_status_defense_active": "Fila de defesa ativa"
 }

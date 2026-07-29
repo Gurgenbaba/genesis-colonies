@@ -24907,11 +24907,34 @@
           copy.appendChild(roleSpan);
         }
         const coord = p.coordinates_formatted || "";
-        if (coord) {
-          const coordSpan = document.createElement("span");
-          coordSpan.className = "gc-planet-registry-card-coord gc-mono";
-          coordSpan.innerHTML = GC.coordLinkHtml(coord, { label: coord });
-          copy.appendChild(coordSpan);
+        const indicators = Array.isArray(p.status_indicators) ? p.status_indicators : [];
+        if (coord || indicators.length) {
+          const meta = document.createElement("span");
+          meta.className = "gc-planet-registry-card-meta";
+          if (coord) {
+            const coordSpan = document.createElement("span");
+            coordSpan.className = "gc-planet-registry-card-coord gc-mono";
+            coordSpan.innerHTML = GC.coordLinkHtml(coord, { label: coord });
+            meta.appendChild(coordSpan);
+          }
+          const statusSpan = document.createElement("span");
+          statusSpan.className = "gc-planet-registry-card-status";
+          indicators.forEach((ind) => {
+            if (!ind || !ind.key) return;
+            const icon = document.createElement("span");
+            icon.className = "gc-planet-registry-status-icon";
+            icon.dataset.statusKey = String(ind.key || "");
+            const labelKey = String(ind.label_key || "");
+            const label = labelKey ? t(labelKey, labelKey) : "";
+            if (label) {
+              icon.setAttribute("title", label);
+              icon.setAttribute("aria-label", label);
+            }
+            icon.textContent = String(ind.icon || "");
+            statusSpan.appendChild(icon);
+          });
+          meta.appendChild(statusSpan);
+          copy.appendChild(meta);
         }
         main.appendChild(copy);
         btn.appendChild(main);

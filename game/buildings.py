@@ -1836,6 +1836,46 @@ def _resolve_build_queue_limit(settings: Optional[Dict[str, Any]] = None) -> int
     return max(queue_limit, 1)
 
 
+def planet_ids_with_build_queue(
+    planet_ids: Sequence[int],
+    conn=None,
+    *,
+    now: Optional[float] = None,
+) -> set[int]:
+    """
+    GC-PLANET-UI-001: DISTINCT planet_ids with at least one non-due build_queue row.
+
+    Read-only — no finish/side effects. Callers that need accurate due cleanup
+    should run finish_due_work on the normal game-state / action path first.
+    """
+    ids = [int(pid) for pid in planet_ids if pid is not None]
+    if not ids:
+        return set()
+
+    own = False
+    if conn is None:
+        conn = db()
+        own = True
+
+    try:
+        ts = float(time.time() if now is None else now)
+        placeholders = ",".join("?" for _ in ids)
+        cur = conn.cursor()
+        cur.execute(
+            f"""
+            SELECT DISTINCT planet_id
+            FROM build_queue
+            WHERE planet_id IN ({placeholders})
+              AND finish_time > ?;
+            """,
+            (*ids, ts),
+        )
+        return {int(r["planet_id"]) for r in cur.fetchall()}
+    finally:
+        if own and conn is not None:
+            conn.close()
+
+
 def get_build_queue_status_for_planet(
     planet_id: int,
     conn=None,

@@ -2,8 +2,8 @@
 
 > **Epic:** [EPIC-15 Imperium & Expansion](IMPERIUM_VISION.md)  
 > **Priorität:** S — größter UX-Hebel für Multi-Kolonie  
-> **Status:** ✅ GC-575A MVP umgesetzt · Folge 575B–E Backlog  
-> **Stand:** 2026-07-26
+> **Status:** ✅ GC-575A MVP umgesetzt · ✅ GC-PLANET-UI-001 Status Indicators (Gebäude/Forschung/Werft/Verteidigung) · Folge 575B–E Backlog  
+> **Stand:** 2026-07-29
 
 Design-Richtung: OGameX-Prinzip (alle Welten sichtbar, 1 Klick) — **nicht** kopieren, sondern Genesis: Rollen, PE-Identität, Imperiumsgefühl.
 
@@ -43,7 +43,8 @@ Header: kein Planet-Switcher
 |--------|--------|--------|
 | **GC-575** | Spec + Shell-Vertrag (dieses Doc) | ✅ |
 | **GC-575A** | MVP: Mini-Cards + 1-Klick-Switch; Header-Switcher entfernen; 4-Spalten-Shell | ✅ |
-| **GC-575B** | Eine Server-Statuszeile (Warnung > Lager% > Energie) | 📋 |
+| **GC-PLANET-UI-001** | Planet Status Indicators neben Koordinaten (`status_indicators[]`: Gebäude, Forschung, Werft, Verteidigung) | ✅ |
+| **GC-575B** | Eine Server-Statuszeile (Warnung > Lager% > Energie) — separat von Aktivitäts-Indikatoren | 📋 |
 | **GC-575C** | Sortierung / Rollengruppen / Akzentfarben | 📋 |
 | **GC-575D** | Hover-Panel + Kontextmenü | 📋 |
 | **GC-575E** | Suche (30+) + PE-Klassen-/Herocard-Thumbs | 📋 |
@@ -56,10 +57,11 @@ Header: kein Planet-Switcher
 |-------|--------|
 | Rollen / Icons | `game/planet_evolution/empire_identity.py` |
 | List-Payload | `list_player_planets_for_switcher` / `_planet_switcher_row` |
+| Status Indicators | `list_player_planets` + Batch-Helper (`buildings` / `research` / `shipyard_queue` / `defense`) → `status_indicators[]` |
 | Switch API | `POST /api/planets/active` → `set_active_planet` |
 | UI Template | `templates/partials/planet_registry.html` + `sidebar_right.html` |
 | Client | `static/main.js` — `initPlanetRegistry`, `rebuildPlanetRegistry`, `GC.updatePlanetRegistryFromState` |
-| Poll slice | bestehende `planets[]` in diet `/api/game-state` |
+| Poll slice | bestehende `planets[]` in diet `/api/game-state` (inkl. `status_indicators`) |
 
 ---
 
@@ -74,6 +76,34 @@ Header: kein Planet-Switcher
 ## Explizit NICHT in GC-575A
 
 Hover-Tooltip, Kontextmenü, Suche, Rollenfarben, Warn-Icons, PE-Vorschaubilder, Sortierung nach Rolle, Produktions-/Lager-Zeile, Full-`empire_page`-Snapshots im diet poll.
+
+---
+
+## GC-PLANET-UI-001 — Planet Status Indicators
+
+Erweiterbare Aktivitäts-Icons **rechts neben den Koordinaten** (nicht die GC-575B Ressourcen-/Warn-Zeile).
+
+### Payload-Vertrag
+
+Jedes `planets[]` / `HEADER_PLANETS`-Row:
+
+```python
+"status_indicators": [
+  {"key": "building", "icon": "🏗", "label_key": "planet_status_building_active"},
+  {"key": "research", "icon": "🔬", "label_key": "planet_status_research_active"},
+  {"key": "shipyard", "icon": "⚓", "label_key": "planet_status_shipyard_active"},
+  {"key": "defense", "icon": "🛡", "label_key": "planet_status_defense_active"},
+]
+```
+
+- `[]` wenn nichts aktiv; Reihenfolge: building → research → shipyard → defense
+- Server authority: Client rendert nur `icon` + `T(label_key)` — keine Queue-Formel im Frontend
+- Diet-Poll: Key `status_indicators` in `_PLANET_SWITCHER_POLL_KEYS`
+- `building` / `shipyard` / `defense`: Planet hat nicht abgelaufenen Queue-Job
+- `research`: Account-Queue aktiv → Icon am **Kontext-/Aktiv-Planeten** (wie Command Center `research_applies`)
+- UI: `.gc-planet-registry-card-meta` → coord + `.gc-planet-registry-card-status` (mehrere Icons in Reihe)
+
+Spätere Keys (`fleet`, Attack, Mail, PE, …) hängen dieselbe Liste an — kein UI-Umbau.
 
 ---
 

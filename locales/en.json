@@ -6920,5 +6920,9 @@
   "logistics_hub_stock_label": "Hub stock",
   "logistics_hub_colony_tag": "Hub",
   "logistics_preview_slots_line": "%(needed)s needed · %(free)s free",
-  "logistics_preview_sources": "Sources"
+  "logistics_preview_sources": "Sources",
+  "planet_status_building_active": "Building queue active",
+  "planet_status_research_active": "Research queue active",
+  "planet_status_shipyard_active": "Shipyard queue active",
+  "planet_status_defense_active": "Defense queue active"
 }

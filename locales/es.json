@@ -6920,5 +6920,9 @@
   "logistics_hub_stock_label": "Stock del hub",
   "logistics_hub_colony_tag": "Hub",
   "logistics_preview_slots_line": "%(needed)s necesarios · %(free)s libres",
-  "logistics_preview_sources": "Orígenes"
+  "logistics_preview_sources": "Orígenes",
+  "planet_status_building_active": "Cola de construcción activa",
+  "planet_status_research_active": "Cola de investigación activa",
+  "planet_status_shipyard_active": "Cola del astillero activa",
+  "planet_status_defense_active": "Cola de defensa activa"
 }

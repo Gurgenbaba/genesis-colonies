@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .db import begin_write_transaction, commit, db, rollback, table_columns
 from .fleet_defs import canonical_ship_key, get_ship, is_known_ship_key
@@ -440,6 +440,47 @@ def queue_count(planet_id: int, *, conn) -> int:
     )
     row = cur.fetchone()
     return int(row["c"] if row else 0)
+
+
+def planet_ids_with_shipyard_queue(
+    planet_ids: Sequence[int],
+    conn=None,
+    *,
+    now: Optional[float] = None,
+) -> set[int]:
+    """
+    GC-PLANET-UI-001: DISTINCT planet_ids with at least one queued shipyard job
+    that is not yet due (finish_at > now). Read-only — no finish/side effects.
+    """
+    ids = [int(pid) for pid in planet_ids if pid is not None]
+    if not ids:
+        return set()
+
+    own = False
+    if conn is None:
+        conn = db()
+        own = True
+
+    try:
+        if not shipyard_queue_table_ready(conn):
+            return set()
+        ts = float(time.time() if now is None else now)
+        placeholders = ",".join("?" for _ in ids)
+        cur = conn.cursor()
+        cur.execute(
+            f"""
+            SELECT DISTINCT planet_id
+            FROM shipyard_queue
+            WHERE planet_id IN ({placeholders})
+              AND status = ?
+              AND finish_at > ?;
+            """,
+            (*ids, QUEUE_STATUS_QUEUED, ts),
+        )
+        return {int(r["planet_id"]) for r in cur.fetchall()}
+    finally:
+        if own and conn is not None:
+            conn.close()
 
 
 def enqueue_ship_build(

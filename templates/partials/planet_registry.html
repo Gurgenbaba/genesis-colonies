@@ -67,8 +67,20 @@
           {% if p_identity_key %}
           <span class="gc-planet-registry-card-role">{{ T(p_identity_key) }}</span>
           {% endif %}
-          {% if p.coordinates_formatted %}
-          <span class="gc-planet-registry-card-coord gc-mono">{{ galaxy_coord_link(p.coordinates_formatted) }}</span>
+          {% if p.coordinates_formatted or (p.status_indicators is defined and p.status_indicators) %}
+          <span class="gc-planet-registry-card-meta">
+            {% if p.coordinates_formatted %}
+            <span class="gc-planet-registry-card-coord gc-mono">{{ galaxy_coord_link(p.coordinates_formatted) }}</span>
+            {% endif %}
+            <span class="gc-planet-registry-card-status">
+              {% for ind in p.status_indicators or [] %}
+              <span class="gc-planet-registry-status-icon"
+                    data-status-key="{{ ind.key|e }}"
+                    title="{{ T(ind.label_key) }}"
+                    aria-label="{{ T(ind.label_key) }}">{{ ind.icon }}</span>
+              {% endfor %}
+            </span>
+          </span>
           {% endif %}
         </span>
       </span>

@@ -784,6 +784,7 @@ _PLANET_SWITCHER_POLL_KEYS = (
     "empire_identity_key",
     "herocard_url",
     "herocard_webp_url",
+    "status_indicators",
 )
 
 _FLEET_DRAWER_ITEM_POLL_KEYS = (

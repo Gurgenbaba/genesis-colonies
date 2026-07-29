@@ -6920,5 +6920,9 @@
   "logistics_hub_stock_label": "Zapas huba",
   "logistics_hub_colony_tag": "Hub",
   "logistics_preview_slots_line": "%(needed)s potrzebnych · %(free)s wolnych",
-  "logistics_preview_sources": "Źródła"
+  "logistics_preview_sources": "Źródła",
+  "planet_status_building_active": "Kolejka budowlana aktywna",
+  "planet_status_research_active": "Kolejka badań aktywna",
+  "planet_status_shipyard_active": "Kolejka stoczni aktywna",
+  "planet_status_defense_active": "Kolejka obrony aktywna"
 }

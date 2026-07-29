@@ -49,6 +49,50 @@ from .repository import (
 )
 
 
+# GC-PLANET-UI-001 — Planet Registry activity indicators (extensible catalog).
+# Icons aligned with location_actions / Command Center feed.
+_STATUS_INDICATOR_BUILDING = {
+    "key": "building",
+    "icon": "🏗",
+    "label_key": "planet_status_building_active",
+}
+_STATUS_INDICATOR_RESEARCH = {
+    "key": "research",
+    "icon": "🔬",
+    "label_key": "planet_status_research_active",
+}
+_STATUS_INDICATOR_SHIPYARD = {
+    "key": "shipyard",
+    "icon": "⚓",
+    "label_key": "planet_status_shipyard_active",
+}
+_STATUS_INDICATOR_DEFENSE = {
+    "key": "defense",
+    "icon": "🛡",
+    "label_key": "planet_status_defense_active",
+}
+
+
+def _status_indicators_for_planet(
+    *,
+    has_build_queue: bool,
+    has_research_queue: bool = False,
+    has_shipyard_queue: bool = False,
+    has_defense_queue: bool = False,
+) -> List[Dict[str, Any]]:
+    """Build the status_indicators list for one switcher/registry row."""
+    indicators: List[Dict[str, Any]] = []
+    if has_build_queue:
+        indicators.append(dict(_STATUS_INDICATOR_BUILDING))
+    if has_research_queue:
+        indicators.append(dict(_STATUS_INDICATOR_RESEARCH))
+    if has_shipyard_queue:
+        indicators.append(dict(_STATUS_INDICATOR_SHIPYARD))
+    if has_defense_queue:
+        indicators.append(dict(_STATUS_INDICATOR_DEFENSE))
+    return indicators
+
+
 def _planet_switcher_row(
     planet_row: Dict[str, Any],
     *,
@@ -101,6 +145,7 @@ def _planet_switcher_row(
         "position": position_i,
         "herocard_relpath": herocard_rel,
         "herocard_webp_relpath": raster_webp_relpath(herocard_rel),
+        "status_indicators": [],
     }
     row.update(empire_identity_for_planet(planet_row, conn=conn))
     return row
@@ -113,10 +158,34 @@ def list_player_planets(player_id: int, conn: Optional[sqlite3.Connection] = Non
     try:
         active = get_active_planet_id(int(player_id), conn=conn)
         planets = get_planets_by_player(int(player_id), conn=conn)
-        return [
+        rows = [
             _planet_switcher_row(p, active_id=active, conn=conn)
             for p in planets
         ]
+        from ..buildings import planet_ids_with_build_queue
+        from ..defense import planet_ids_with_defense_queue
+        from ..research import player_has_active_research_queue
+        from ..shipyard_queue import planet_ids_with_shipyard_queue
+
+        planet_ids = [int(r["planet_id"]) for r in rows]
+        active_build = planet_ids_with_build_queue(planet_ids, conn=conn)
+        active_shipyard = planet_ids_with_shipyard_queue(planet_ids, conn=conn)
+        active_defense = planet_ids_with_defense_queue(planet_ids, conn=conn)
+        # Account research attaches to the context/active planet (Command Center parity).
+        research_planet_id = (
+            int(active)
+            if player_has_active_research_queue(int(player_id), conn=conn)
+            else None
+        )
+        for r in rows:
+            pid = int(r["planet_id"])
+            r["status_indicators"] = _status_indicators_for_planet(
+                has_build_queue=pid in active_build,
+                has_research_queue=research_planet_id is not None and pid == research_planet_id,
+                has_shipyard_queue=pid in active_shipyard,
+                has_defense_queue=pid in active_defense,
+            )
+        return rows
     finally:
         if own and conn is not None:
             conn.close()

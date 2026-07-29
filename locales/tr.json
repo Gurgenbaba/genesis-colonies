@@ -6920,5 +6920,9 @@
   "logistics_hub_stock_label": "Merkez stoku",
   "logistics_hub_colony_tag": "Merkez",
   "logistics_preview_slots_line": "%(needed)s gerekli · %(free)s boş",
-  "logistics_preview_sources": "Kaynaklar"
+  "logistics_preview_sources": "Kaynaklar",
+  "planet_status_building_active": "İnşaat kuyruğu aktif",
+  "planet_status_research_active": "Araştırma kuyruğu aktif",
+  "planet_status_shipyard_active": "Tersane kuyruğu aktif",
+  "planet_status_defense_active": "Savunma kuyruğu aktif"
 }
