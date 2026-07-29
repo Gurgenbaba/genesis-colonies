@@ -31,7 +31,7 @@ Status: v1.5.9.2 (2026-06-24)
 | EPIC-23 | Payment / Shop | ✅ | [PAYMENT_SHOP.md](PAYMENT_SHOP.md) · GC-2300…2306 |
 | EPIC-24 | Admin Control Center UX | ✅ | [ADMIN_CONTROL_CENTER.md](ADMIN_CONTROL_CENTER.md) · GC-A01–A07 |
 | EPIC-25 | Genesis Story Ops (Lore / Side Ops) | 🔄 | [GENESIS_STORY_OPS.md](GENESIS_STORY_OPS.md) · [GENESIS_LORE_BIBLE.md](GENESIS_LORE_BIBLE.md) · GC-2500…2518 (Jahres-Lore + Free Shop / Ark-Token) |
-| EPIC-26 | Living Inactives + AI Expeditions | 🔄 | [INACTIVE_AUTOPLAY.md](INACTIVE_AUTOPLAY.md) · GC-2600…2619 |
+| EPIC-26 | Living Inactives + AI Expeditions | 🔄 | [INACTIVE_AUTOPLAY.md](INACTIVE_AUTOPLAY.md) · GC-2600…2620 |
 
 ---
 

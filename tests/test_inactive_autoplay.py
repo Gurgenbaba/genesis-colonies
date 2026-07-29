@@ -338,6 +338,100 @@ def test_inactive_resource_floor_raises_empty_stockpile(autoplay_db):
         conn.close()
 
 
+def test_max_concurrent_sessions_default_and_clamp(monkeypatch):
+    """GC-2620: default roster cap sits in the 5–8 band; ops cannot reopen mass concurrency."""
+    from game.inactive_autoplay import (
+        DEFAULT_MAX_ROSTER,
+        MAX_ROSTER_CAP,
+        MIN_ROSTER_CAP,
+        max_concurrent_sessions,
+    )
+
+    monkeypatch.delenv("GC_INACTIVE_AUTOPLAY_MAX_SESSIONS", raising=False)
+    assert DEFAULT_MAX_ROSTER == 6
+    assert 5 <= max_concurrent_sessions() <= 8
+    assert max_concurrent_sessions() == 6
+
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_MAX_SESSIONS", "60")
+    assert max_concurrent_sessions() == MAX_ROSTER_CAP == 12
+
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_MAX_SESSIONS", "2")
+    assert max_concurrent_sessions() == MIN_ROSTER_CAP == 4
+
+
+def test_inactive_autoplay_trims_oversize_roster_to_cap(autoplay_db, monkeypatch):
+    """GC-2620: a stored roster larger than the new cap must shrink immediately
+    on the next tick (deploy-safe), with the same inbox report as LRU eviction —
+    not wait for many wake-wave batch replacements.
+    """
+    from game.inactive_autoplay import (
+        ROSTER_KEY,
+        WORKER_LAST_KEY,
+        get_roster_snapshot,
+        max_concurrent_sessions,
+        run_inactive_autoplay_tick,
+        set_inactive_autoplay_enabled,
+    )
+    from game.runtime_state import set_runtime_value
+
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_MAX_SESSIONS", "6")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_BATCH", "1")
+
+    uids = [_register_user() for _ in range(10)]
+    now0 = time.time()
+    roster_seed = []
+    for i, uid in enumerate(uids):
+        item = _seed_roster_item(uid, builds=2, research=1, defense=0)
+        # Oldest last_ticked_at first — those must be the ones trimmed.
+        item["last_ticked_at"] = now0 - (1000 - i)
+        item["joined_at"] = now0 - 7200
+        roster_seed.append(item)
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        set_inactive_autoplay_enabled(True, conn=conn)
+        for uid in uids:
+            _seed_dormant(conn, uid, days_inactive=5.0)
+        set_runtime_value(ROSTER_KEY, json.dumps(roster_seed), conn=conn)
+        # Block wake wave so this tick only trims + standing economy.
+        set_runtime_value(
+            WORKER_LAST_KEY,
+            json.dumps({"ok": True, "at": now0, "source": "test", "woke": 0, "evicted": 0}),
+            conn=conn,
+        )
+        assert max_concurrent_sessions() == 6
+
+        result = run_inactive_autoplay_tick(
+            conn, now=now0 + 30, force=False, source="test"
+        )
+        assert result.get("ok") is True
+        assert int(result.get("roster_size") or 0) == 6
+        assert int(result.get("evicted_count") or 0) == 4
+        assert int(result.get("woke_count") or 0) == 0
+
+        remaining = {int(r["player_id"]) for r in get_roster_snapshot(conn=conn)}
+        expected_kept = set(uids[4:])  # highest last_ticked_at
+        assert remaining == expected_kept
+
+        trimmed = set(uids[:4])
+        placeholders = ",".join("?" for _ in trimmed)
+        msgs = conn.execute(
+            f"""
+            SELECT recipient_player_id
+            FROM player_messages
+            WHERE recipient_player_id IN ({placeholders})
+              AND category = 'system';
+            """,
+            tuple(trimmed),
+        ).fetchall()
+        recipients = {int(m["recipient_player_id"]) for m in msgs}
+        assert recipients == trimmed
+        commit(conn)
+    finally:
+        conn.close()
+
+
 def test_inactive_autoplay_roster_lru_rotation_covers_whole_pool(autoplay_db, monkeypatch):
     """GC-2609: full roster evicts oldest-ticked members instead of freezing forever."""
     from game.inactive_autoplay import (
@@ -389,6 +483,11 @@ def test_admin_inactive_autoplay_roster_shows_username_and_last_seen(autoplay_db
     """GC-2614: players.username doesn't exist (it's users.username / players.name);
     the admin payload must JOIN users so Name/Zuletzt gesehen actually render
     instead of silently swallowing the bad query and showing "-" for everyone.
+
+    GC-2620: default wake batch is 1 — mark unrelated seed players as recently
+    seen so this account is the only dormant wake candidate (same isolation as
+    other roster tests). Requirement under test is still JOIN-resolved
+    username/last_seen on the admin roster row.
     """
     from game.inactive_autoplay import run_inactive_autoplay_tick, set_inactive_autoplay_enabled
     from game.inactive_autoplay_admin import build_admin_inactive_autoplay_payload
@@ -398,6 +497,10 @@ def test_admin_inactive_autoplay_roster_shows_username_and_last_seen(autoplay_db
     try:
         begin_write_transaction(conn)
         set_inactive_autoplay_enabled(True, conn=conn)
+        conn.execute(
+            "UPDATE players SET last_seen = ? WHERE id != ?;",
+            (time.time(), uid),
+        )
         _seed_dormant(conn, uid, days_inactive=5.0)
         result = run_inactive_autoplay_tick(conn, now=time.time(), force=True, source="test")
         assert int(result.get("woke_count") or 0) >= 1
@@ -545,8 +648,8 @@ def test_inactive_autoplay_eviction_sends_activity_report(autoplay_db, monkeypat
 def test_online_visible_cap_scales_with_real_player_count(autoplay_db, monkeypatch):
     """GC-2617: the simultaneous-"online" cap must scale with the *real*
     registered player base, not be a static number lifted from the roster
-    cap — otherwise a small server with a big roster cap (default 60) shows
-    an implausible wall of logins ("40 Leute auf einmal online")."""
+    cap — otherwise a small server with a big roster cap shows an
+    implausible wall of logins ("40 Leute auf einmal online")."""
     from game.inactive_autoplay import (
         MAX_ONLINE_VISIBLE,
         MIN_ONLINE_VISIBLE,

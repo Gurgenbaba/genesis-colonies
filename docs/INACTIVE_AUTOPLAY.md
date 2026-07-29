@@ -17,7 +17,7 @@ Dormante Menschen-Konten werden gestaffelt auf einen **sticky Roster** geholt un
 | Timekeeper-Boost | Defense-/Shipyard-Queues (kein `duration_cap`, da echte Formel) werden nach erfolgreichem Enqueue automatisch per **echtem** Timekeeper-Ledger beschleunigt: Auto-Credit auf 10h wenn Balance leer, danach Auto-Apply `mode="max"` (GC-2616, `_auto_boost_timekeeper` in `game/auto_empire.py`) — gilt für Inactive **und** Pirate-AI gleichermaßen, da beide `plan_passive_planet_tick` teilen |
 | Ships | **nein** (Inactive) / ja (Pirate-AI, siehe unten) |
 | Fleets / Expeditionen | **nie** (Inactive) |
-| Stagger | Wake-Batches (default 3 / 10 min); Economy-Slice default 8/Cron |
+| Stagger | Wake-Batches (default 1 / 10 min); Economy-Slice default 3/Cron; Roster-Cap default 6 (Clamp 4–12, GC-2620) |
 | Revisit | ~36h — zieht Stale-Accounts wieder auf den Roster |
 | Exclude | Vacation, Pirate-Bots, Combat-Balance-Bots |
 | Soft-Off | `runtime_state.inactive_autoplay_enabled=0` oder `GC_INACTIVE_AUTOPLAY_ENABLED=0` |
@@ -52,17 +52,18 @@ Dormante Menschen-Konten werden gestaffelt auf einen **sticky Roster** geholt un
 | GC-2617 | Realistischer Online-Cap: sichtbare Online-Zahl skaliert mit % der echten Spielerbasis statt mit Roster-Cap (60) | done |
 | GC-2618 | Anti-Klon-Varianz: personality-basierte Bau-/Forschungsreihenfolge + Ziel-Level-Jitter + Idle-Chance auf standing Ticks (Inactive + Pirate-AI) | done |
 | GC-2619 | Control Handback: echter Login entfernt Account sofort vom Sticky Roster statt auf LRU-Eviction zu warten | done |
+| GC-2620 | Concurrent Roster-Cap 5–8 (Default 6, Clamp 4–12), sticky slow wake (Batch 1), Deploy-Trim bei Übergröße (Alias: GC-INACTIVE-ROSTER-002) | done |
 
 ## Env
 
 | Env | Default | Bedeutung |
 |-----|---------|-----------|
 | `GC_INACTIVE_AUTOPLAY_ENABLED` | on | `0` = hard off |
-| `GC_INACTIVE_AUTOPLAY_BATCH` | 3 | Neue Roster-Mitglieder pro Wake-Wave |
+| `GC_INACTIVE_AUTOPLAY_BATCH` | 1 | Neue Roster-Mitglieder pro Wake-Wave (sticky / slow rotation) |
 | `GC_INACTIVE_AUTOPLAY_INTERVAL_SEC` | 600 | Abstand zwischen Wake-Waves |
 | `GC_INACTIVE_AUTOPLAY_REVISIT_SEC` | 129600 | Stale-Cutoff (~36h) |
-| `GC_INACTIVE_AUTOPLAY_MAX_SESSIONS` | 60 | Max. Roster-Größe (Rotation statt Größe ist der eigentliche Skalierungsfix) |
-| `GC_INACTIVE_AUTOPLAY_TICK_PER_CRON` | 8 | Economy-Ticks pro Fleet-Cron (RR) |
+| `GC_INACTIVE_AUTOPLAY_MAX_SESSIONS` | 6 | Max. gleichzeitige Sticky-Builder (geclamped 4–12; ≠ Online-Cap GC-2617) |
+| `GC_INACTIVE_AUTOPLAY_TICK_PER_CRON` | 3 | Economy-Ticks pro Fleet-Cron (RR) |
 | `GC_INACTIVE_AUTOPLAY_ONLINE_PERCENT` | 15 | % der **echten** registrierten Spieler, die gleichzeitig als "online" (Autoplay) sichtbar sein dürfen (geclamped 1–50%, Ergebnis geclamped 2–40 Accounts) |
 
 ## Pirate AI (parallel)
@@ -124,6 +125,19 @@ Dormante Menschen-Konten werden gestaffelt auf einen **sticky Roster** geholt un
 5. Bereits laufende, von Autoplay eingereihte Jobs (Bau/Forschung) laufen reguär zu Ende — keine Job-Cancel-/Refund-Logik, das wäre unnötige Komplexität für einen bereits legitim mit echten Kosten eingereihten Job.
 
 **Ergebnis:** Ein Spieler, der sich einloggt, bekommt beim allerersten authentifizierten Request die volle Kontrolle über sein Konto zurück — Autoplay rührt seine Warteschlangen und seinen Timekeeper-Ledger ab diesem Moment nicht mehr an.
+
+## GC-2620 — Concurrent Roster-Cap (5–8 sticky builders)
+
+**Problem:** Sticky Roster + LRU/RR waren korrekt (GC-2609), aber der Default-Cap (`DEFAULT_MAX_ROSTER=60`, Clamp bis 80) ließ zu viele Inaktive gleichzeitig bauen. Gewünscht war nie Mass-Aktivierung, sondern etwa **5–8 concurrent** sticky Builder mit langsamer Rotation.
+
+**Fix (`game/inactive_autoplay.py`, einziger Roster-Owner):**
+
+1. `DEFAULT_MAX_ROSTER=6` (Mitte der 5–8-Bandbreite), `DEFAULT_BATCH=1`, `DEFAULT_TICK_PER_CRON=3`.
+2. `max_concurrent_sessions()` hard-clamp **4–12** — Ops kann über `GC_INACTIVE_AUTOPLAY_MAX_SESSIONS` nicht wieder auf 60 hochziehen.
+3. `_trim_roster_to_cap` nach `_prune_roster` in jedem Tick: gespeicherte Übergröße (z. B. nach Deploy 60→6) wird sofort per LRU evicted inkl. bestehendem `_send_autoplay_report` — kein stundenlanges Abwarten von Batch-Waves.
+4. Wake-Pfad (Batch-LRU nur wenn full) und Presence-Cap (GC-2617) bleiben unverändert; Roster-Cap ≠ `online_visible_cap`.
+
+**Ops:** Gesetztes Env `GC_INACTIVE_AUTOPLAY_MAX_SESSIONS=60` wird auf **12** geclampt. Für Target 6 Env entfernen oder auf 6 setzen.
 
 ## Living Universe Pulse (GC-2612)
 

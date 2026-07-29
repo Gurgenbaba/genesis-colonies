@@ -47,9 +47,12 @@ INACTIVE_RESOURCE_FLOOR = {
 # Revisit: pull stale accounts onto sticky roster.
 DEFAULT_REVISIT_SEC = 36 * 3600  # 36h — stay under 3-day inactive badge
 DEFAULT_WAKE_INTERVAL_SEC = 10 * 60
-DEFAULT_BATCH = 3
-DEFAULT_MAX_ROSTER = 60
-DEFAULT_TICK_PER_CRON = 8
+# GC-2620: small concurrent sticky roster (5–8 band); slow wake + economy cadence.
+DEFAULT_BATCH = 1
+DEFAULT_MAX_ROSTER = 6
+DEFAULT_TICK_PER_CRON = 3
+MIN_ROSTER_CAP = 4
+MAX_ROSTER_CAP = 12
 # GC-2617: how many roster members may look "online" (fresh last_seen) at the
 # same instant, as a percent of the real registered player base — keeps a
 # small server from ever showing an implausible wall of simultaneous logins.
@@ -100,8 +103,11 @@ def revisit_sec() -> float:
 
 
 def max_concurrent_sessions() -> int:
-    """Roster size cap (env name kept as MAX_SESSIONS for ops compatibility)."""
-    return max(4, min(80, _env_int(MAX_ROSTER_ENV, DEFAULT_MAX_ROSTER)))
+    """Roster size cap (env name kept as MAX_SESSIONS for ops compatibility).
+
+    GC-2620: hard clamp 4–12 so ops cannot reopen a mass concurrent roster.
+    """
+    return max(MIN_ROSTER_CAP, min(MAX_ROSTER_CAP, _env_int(MAX_ROSTER_ENV, DEFAULT_MAX_ROSTER)))
 
 
 def tick_per_cron() -> int:
@@ -397,6 +403,31 @@ def _prune_roster(conn, roster: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             }
         )
     return kept
+
+
+def _trim_roster_to_cap(
+    conn, roster: List[Dict[str, Any]]
+) -> Tuple[List[Dict[str, Any]], int]:
+    """GC-2620: immediately LRU-evict excess above max_concurrent_sessions.
+
+    Deploy-safe shrink when the stored roster still holds a pre-cap size
+    (e.g. 60 → 6). Uses the same inbox report owner as wake-wave LRU eviction.
+    """
+    cap = max_concurrent_sessions()
+    if len(roster) <= cap:
+        return roster, 0
+    roster = list(roster)
+    roster.sort(
+        key=lambda item: float(
+            item.get("last_ticked_at") or item.get("joined_at") or 0
+        )
+    )
+    excess = len(roster) - cap
+    to_evict = roster[:excess]
+    kept = roster[excess:]
+    for evicted_item in to_evict:
+        _send_autoplay_report(conn, evicted_item)
+    return kept, excess
 
 
 def _ensure_resource_floor(conn, planet_id: int) -> Dict[str, int]:
@@ -718,14 +749,19 @@ def run_inactive_autoplay_tick(
     `last_ticked_at`) are evicted back to the dormant pool before new accounts
     join (LRU rotation) — so coverage cycles through the *entire* dormant
     pool over time instead of the first N accounts holding the roster forever.
+
+    GC-2620: after prune, immediately LRU-trim any stored oversize down to
+    `max_concurrent_sessions()` so a deploy that lowers the cap does not keep
+    a mass concurrent roster until many wake-wave batch replacements finish.
     """
     ts = float(now if now is not None else _now())
     if not is_inactive_autoplay_enabled(conn=conn):
         return {"ok": False, "error": "disabled", "woke": [], "sessions": []}
 
     roster = _prune_roster(conn, _load_roster(conn=conn))
+    roster, trimmed_count = _trim_roster_to_cap(conn, roster)
     woke: List[Dict[str, Any]] = []
-    evicted_count = 0
+    evicted_count = int(trimmed_count)
     wait = 0.0 if force else seconds_until_wake_allowed(now=ts, conn=conn)
 
     if wait <= 0:
@@ -741,7 +777,7 @@ def run_inactive_autoplay_tick(
                 )
                 to_evict = roster[:evict_n]
                 roster = roster[evict_n:]
-                evicted_count = evict_n
+                evicted_count += evict_n
                 room = evict_n
                 for evicted_item in to_evict:
                     _send_autoplay_report(conn, evicted_item)
@@ -819,9 +855,9 @@ def run_inactive_autoplay_tick(
     # the roster (its own cursor, sized by `online_visible_cap` = percent of
     # the *real* player base) gets touched each tick — that rotation is what
     # actually bounds the simultaneous "online" count on a small server,
-    # instead of it scaling with the roster cap (which can be much larger,
-    # e.g. 60), and it still cycles every standing member through "online"
-    # often enough to stay well under the multi-day ranking threshold.
+    # instead of it scaling with the roster cap, and it still cycles every
+    # standing member through "online" often enough to stay well under the
+    # multi-day ranking threshold.
     presence_ids: Set[int] = set(woke_ids)
     online_room = online_visible_cap(conn=conn) - len(presence_ids)
     if online_room > 0 and roster:
