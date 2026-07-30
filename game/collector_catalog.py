@@ -23,8 +23,117 @@ PRESTIGE_ONLY_ITEM_KEYS: FrozenSet[str] = frozenset(
         "mythic_ancient_nexus",
         "artifact_core_fragment",
         "fragment_quantum",
+        "expo_alien_relic",
+        "placeholder_special_item",
     }
 )
+
+# GC-969B — lifetime badge milestones + one-time unlock loot (Player Card owner).
+# Keys match player_card_badges.badge_key. Threshold = lifetime_acquired.
+COLLECTOR_PRESTIGE_MILESTONES: Dict[str, Dict[str, Any]] = {
+    "alien_relic_archivist": {
+        "item_key": "expo_alien_relic",
+        "threshold": 15,
+        "rarity": "epic",
+        "badge_name_key": "playercard_badge_alien_relic_archivist",
+        "badge_desc_key": "playercard_badge_alien_relic_archivist_desc",
+        "unlock_reward": {
+            "reward_type": "booster",
+            "reward_key": "booster_expedition_loot_25_24h",
+            "amount": 1,
+        },
+    },
+    "event_chronicler": {
+        "item_key": "placeholder_special_item",
+        "threshold": 8,
+        "rarity": "legendary",
+        "badge_name_key": "playercard_badge_event_chronicler",
+        "badge_desc_key": "playercard_badge_event_chronicler_desc",
+        "unlock_reward": {
+            "reward_type": "container",
+            "reward_key": "container_event_special",
+            "amount": 1,
+        },
+    },
+    "ancient_nexus_keeper": {
+        "item_key": "mythic_ancient_nexus",
+        "threshold": 3,
+        "rarity": "legendary",
+        "badge_name_key": "playercard_badge_ancient_nexus_keeper",
+        "badge_desc_key": "playercard_badge_ancient_nexus_keeper_desc",
+        "unlock_reward": {
+            "reward_type": "container",
+            "reward_key": "container_relic",
+            "amount": 1,
+        },
+    },
+    "genesis_ascendant": {
+        "item_key": "mythic_genesis_core",
+        "threshold": 10,
+        "rarity": "legendary",
+        "badge_name_key": "playercard_badge_genesis_ascendant",
+        "badge_desc_key": "playercard_badge_genesis_ascendant_desc",
+        "unlock_reward": {
+            "reward_type": "container",
+            "reward_key": "container_mythic",
+            "amount": 1,
+        },
+    },
+    "quantum_architect": {
+        "item_key": "fragment_quantum",
+        "threshold": 5,
+        "rarity": "epic",
+        "badge_name_key": "playercard_badge_quantum_architect",
+        "badge_desc_key": "playercard_badge_quantum_architect_desc",
+        "unlock_reward": {
+            "reward_type": "booster",
+            "reward_key": "booster_research_24h",
+            "amount": 1,
+        },
+    },
+    "artifact_archivist": {
+        "item_key": "artifact_core_fragment",
+        "threshold": 10,
+        "rarity": "legendary",
+        "badge_name_key": "playercard_badge_artifact_archivist",
+        "badge_desc_key": "playercard_badge_artifact_archivist_desc",
+        "unlock_reward": {
+            "reward_type": "container",
+            "reward_key": "container_research_cache",
+            "amount": 1,
+        },
+    },
+    "genesis_curator": {
+        "item_key": "fragment_genesis",
+        "threshold": 25,
+        "rarity": "mythic",
+        "badge_name_key": "playercard_badge_genesis_curator",
+        "badge_desc_key": "playercard_badge_genesis_curator_desc",
+        "unlock_reward": {
+            "reward_type": "container",
+            "reward_key": "container_void_artifact",
+            "amount": 1,
+        },
+    },
+}
+
+
+def prestige_milestone_for_item(item_key: str) -> Optional[Dict[str, Any]]:
+    key = str(item_key or "").strip()
+    if not key:
+        return None
+    for badge_key, spec in COLLECTOR_PRESTIGE_MILESTONES.items():
+        if str(spec.get("item_key") or "") == key:
+            return {"badge_key": badge_key, **spec}
+    return None
+
+
+def prestige_milestone_for_badge(badge_key: str) -> Optional[Dict[str, Any]]:
+    key = str(badge_key or "").strip()
+    spec = COLLECTOR_PRESTIGE_MILESTONES.get(key)
+    if not spec:
+        return None
+    return {"badge_key": key, **spec}
 
 # Rewards without a gameplay use handler — not redeemable via Collector Exchange (GC-968A).
 COLLECTOR_LOCKED_REWARD_KEYS: FrozenSet[str] = frozenset(

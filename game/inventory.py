@@ -547,6 +547,14 @@ def grant_inventory_item(
         record_lifetime_acquired(int(user_id), key, amt, conn=conn)
     except Exception:
         pass
+    try:
+        from game.collector_catalog import is_prestige_only_item
+        from game.playercard import sync_collector_prestige_for_item
+
+        if is_prestige_only_item(key):
+            sync_collector_prestige_for_item(int(user_id), key, conn=conn)
+    except Exception:
+        pass
     if key == CONTAINER_BASIC_KEY:
         ensure_basic_container_timer_on_grant(int(user_id), conn=conn, now=now)
     return True

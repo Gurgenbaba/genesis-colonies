@@ -303,7 +303,7 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | Knowledge generator (Player Blocks → catalog/locales) | `scripts/generate_knowledge.py` | [GC-950_KNOWLEDGE_PIPELINE.md](GC-950_KNOWLEDGE_PIPELINE.md) |
 | Codex UI surfaces | `templates/partials/codex_*.html`, `special_panel.html` | [GC-950_KNOWLEDGE_PIPELINE.md](GC-950_KNOWLEDGE_PIPELINE.md) |
 | Collector Exchange (Offers, Redeem, Stats) | `game/collector_exchange.py`, `game/collector_catalog.py` | [COLLECTOR_EXCHANGE.md](COLLECTOR_EXCHANGE.md) |
-| Collector Prestige (Milestones, Titles) | `game/collector_prestige.py` | [COLLECTOR_EXCHANGE.md](COLLECTOR_EXCHANGE.md) |
+| Collector Prestige (Lifetime badges) | `game/playercard.py` (badge seeds + `_sync_badge_unlocks`; stats from `collector_lifetime_stats`) | [COLLECTOR_EXCHANGE.md](COLLECTOR_EXCHANGE.md) |
 | Alliance Hub (identity, pool, projects, diplomacy) | `game/alliance.py`, `game/alliance_catalog.py` | [ALLIANCE_SYSTEM.md](ALLIANCE_SYSTEM.md) |
 | Imperium Timekeeper (Zeitkonto, manuelles Einsetzen) | `game/timekeeper.py` | [TIMEKEEPER_SYSTEM.md](TIMEKEEPER_SYSTEM.md) |
 | Human duration labels (y/mo/w/d/h/min/s) | `game/time_format.py` → Jinja `fmt_duration`, `GC.formatDurationHuman` | Adaptive ladders; never `mo`+`w`; season-scale uses days |

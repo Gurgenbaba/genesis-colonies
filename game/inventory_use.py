@@ -535,6 +535,8 @@ def _use_fail_reason(item_key: str) -> str:
         return "timekeeper_unavailable"
     if is_research_datacore_item(item_key):
         return _datacore_fail_reason(item_key)
+    if resolve_item_use_kind(str(item_key or "")) == "research_instant":
+        return "no_research_queue"
     return "no_effect_target"
 
 
@@ -1163,5 +1165,43 @@ def enrich_inventory_item_row(
             )
         out["exchange_progress"] = ex_progress
         out["can_exchange"] = any(p["can_exchange"] for p in ex_progress)
+
+    if (
+        classification.get("prestige_only")
+        and user_id is not None
+        and conn is not None
+    ):
+        from game.collector_catalog import prestige_milestone_for_item
+        from game.collector_exchange import get_lifetime_stats
+
+        milestone = prestige_milestone_for_item(key)
+        if milestone:
+            lifetime = int(
+                (get_lifetime_stats(int(user_id), conn=conn).get(key) or {}).get(
+                    "lifetime_acquired"
+                )
+                or 0
+            )
+            required = int(milestone.get("threshold") or 0)
+            unlocked = lifetime >= required > 0
+            reward = milestone.get("unlock_reward") or {}
+            out["prestige_progress"] = {
+                "badge_key": str(milestone.get("badge_key") or ""),
+                "badge_name_key": str(
+                    milestone.get("badge_name_key")
+                    or f"playercard_badge_{milestone.get('badge_key')}"
+                ),
+                "owned": lifetime,
+                "required": required,
+                "unlocked": unlocked,
+                "progress_pct": min(100, int((lifetime * 100) // required)) if required > 0 else 0,
+                "reward_key": str(reward.get("reward_key") or ""),
+                "reward_amount": int(reward.get("amount") or 0),
+            }
+            out["use_hint_key"] = (
+                "inv_hint_collector_prestige_done"
+                if unlocked
+                else "inv_hint_collector_prestige"
+            )
 
     return out

@@ -167,6 +167,7 @@ ITEM_CATALOG: Dict[str, Dict[str, Any]] = {
         "name_key": "inv_ark_token",
         "icon": "⬡",
         "use_role": "collectible",
+        "redeem_hint_key": "inv_hint_free_shop",
     },
     # --- Planet evolution consumables (inventory; effect later) ---
     "evo_planet_xp_250": {

@@ -12,6 +12,7 @@ from game.collector_catalog import COLLECTOR_LOCKED_REWARD_KEYS, COLLECTOR_OFFER
 from game.inventory_catalog import (
     BOOSTER_TIME_SECONDS,
     CONTAINER_KEYS,
+    ITEM_CATALOG,
     is_known_item_key,
     resolve_item_use_kind,
     resolve_item_use_role,
@@ -131,11 +132,16 @@ def classify_inventory_item(item_key: str) -> Dict[str, Any]:
     if key in BOOSTER_TIME_SECONDS:
         effect_owner = "queue_engine"
 
+    catalog_hint = str((ITEM_CATALOG.get(key) or {}).get("redeem_hint_key") or "").strip()
     use_hint_key: Optional[str] = None
     if locked:
         use_hint_key = "inv_hint_locked_planned"
+    elif catalog_hint:
+        use_hint_key = catalog_hint
     elif trade_material and not usable:
         use_hint_key = "inv_hint_collector_trade"
+    elif prestige:
+        use_hint_key = "inv_hint_collector_prestige"
     elif collectible:
         use_hint_key = "inv_collectible_hint"
 

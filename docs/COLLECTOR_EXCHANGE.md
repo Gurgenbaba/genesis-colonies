@@ -1,8 +1,8 @@
 # Collector Exchange — Design-Charta
 
 > **Epic:** EPIC-18 Collector Exchange (Erweiterung EPIC-04 Economy)  
-> **Status:** 🔄 GC-965A/B + GC-966A/B implementiert · GC-967 Inventar-Hints · GC-969 Prestige 📋  
-> **Stand:** 2026-06-27  
+> **Status:** 🔄 GC-965A/B + GC-966A/B implementiert · GC-967 Inventar-Hints · GC-969 Prestige ✅ (Player-Card Lifetime-Badges)
+> **Stand:** 2026-07-30
 > **Vision:** Jeder Loot-Drop ist Fortschritt — sofort nutzbar oder sichtbar auf dem Weg zum nächsten Ziel.
 
 Verwandte Docs: [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) · [GC-864_LOOT_ECONOMY_REBALANCE.md](GC-864_LOOT_ECONOMY_REBALANCE.md) · [PLANET_EVOLUTION.md](PLANET_EVOLUTION.md) · [FLEET_SYSTEM.md](FLEET_SYSTEM.md) · [RESEARCH_SYSTEM.md](RESEARCH_SYSTEM.md)
@@ -89,7 +89,7 @@ Trader Hub
 | Inventar-Grant / -Consume | `game/inventory.py` | [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) |
 | Item-Metadaten | `game/inventory_catalog.py` | GC-540 |
 | Trader Hub UI | `templates/trader_hub.html`, `templates/partials/collector_*.html` | [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) |
-| Prestige-Titel / Rahmen | `game/collector_prestige.py` (Phase 3) | dieses Dokument |
+| Prestige (Lifetime-Badges) | `game/playercard.py` — Badges mit `requirement_type=collector_lifetime:<item_key>` | dieses Dokument |
 
 **Verboten:** Paralleles Tauschsystem außerhalb `collector_exchange.py`. DNA-Core-Craft/Upgrade bleibt in `inventory_use.py` — ergänzt, ersetzt nicht.
 
@@ -99,7 +99,7 @@ Trader Hub
 |-------|---------|----------|
 | Trader Hub Seite | `GET /trader-hub` | PJAX partial inkl. `collector_exchange` Block |
 | Redeem | `POST /api/collector-exchange/redeem` | `{ ok, state }` → `applyActionState()` |
-| Live-State | `GET /api/game-state` | `collector_exchange` + `collector_prestige` |
+| Live-State | `GET /api/game-state` | `collector_exchange` (Prestige-Badges über Player Card, nicht game-state) |
 
 **Redeem-Body:**
 
@@ -140,17 +140,12 @@ Idempotent via `request_id` / `X-Request-Id` (wie Exchange/Build).
         ]
       }
     ]
-  },
-  "collector_prestige": {
-    "lifetime_totals": {"fragment_wreck_hull": 247, "fragment_alien": 12},
-    "milestones": [
-      {"milestone_key": "scrap_dealer_bronze", "progress": 247, "target": 500, "unlocked": false}
-    ],
-    "active_title": null,
-    "active_frame": null
   }
 }
 ```
+
+> Prestige: Lifetime-Badges landen in der Player Card (`unlocked_badges`), nicht in `game-state.collector_prestige`.
+
 
 **Frontend:** Progress-Bars und `can_redeem` **nur** aus Server-Payload — keine Client-Math (GC-000 Regel 16).
 
@@ -331,33 +326,27 @@ Badge-Text **`inv_collectible_hint`** wird ersetzt durch dynamischen Hint aus n�
 
 ---
 
-## Prestige & Meilensteine (Phase 3)
+## Prestige & Meilensteine (GC-969)
 
-### Lifetime-Statistik
+**Owner:** `game/playercard.py` — keine parallele `collector_prestige.py`.
 
-Profil / Empire Screen / Ranking:
+Lifetime-Statistik bleibt in `collector_lifetime_stats` (Grant-Hook). Prestige-Belohnung = Player-Card-Badge mit `requirement_type = collector_lifetime:<item_key>`. Unlock läuft über `_sync_badge_unlocks()` (eigene Karte öffnen / speichern). Spieler wählt Badges in die 3 bestehenden Badge-Slots — kein separates Claim/Set-Title-API.
 
-- „1.247 Alien-Fragmente gefunden"
-- „Wrack-Hüllen gesammelt: 892 · eingelöst: 640"
+### Prestige-only Badges (Live)
 
-### Meilenstein-Tabelle (Auszug)
+Katalog: `COLLECTOR_PRESTIGE_MILESTONES` in `game/collector_catalog.py`.
 
-| Milestone-Key | Bedingung (`lifetime_acquired`) | Belohnung |
-|---------------|----------------------------------|-----------|
-| `dna_scholar_bronze` | `fragment_dna_common` ≥ 500 | Titel „DNA-Forscher" |
-| `dna_scholar_silver` | `fragment_dna_rare` ≥ 200 | Profil-Rahmen „Xeno-Lab" |
-| `scrap_dealer_bronze` | `fragment_wreck_hull` ≥ 500 | Titel „Galaktischer Schrotthändler" |
-| `scrap_dealer_gold` | `fragment_wreck_hull` ≥ 2000 | Rahmen „Wracklegende" |
-| `alien_archivist` | `fragment_alien` ≥ 100 | Titel „Xeno-Archivar" |
-| `hyper_engineer` | `fleet_hyperdrive_module` ≥ 50 | Titel „Hypertechniker" + `container_void_artifact` ×1 (einmalig) |
-| `genesis_curator` | `fragment_genesis` ≥ 25 | Prestige-only — **kein** Exchange, nur Anzeige |
+| Badge-Key | Bedingung | Einmalige Unlock-Belohnung |
+|-----------|-----------|----------------------------|
+| `alien_relic_archivist` | `expo_alien_relic` ≥ 15 | `booster_expedition_loot_25_24h` ×1 |
+| `event_chronicler` | `placeholder_special_item` ≥ 8 | `container_event_special` ×1 |
+| `ancient_nexus_keeper` | `mythic_ancient_nexus` ≥ 3 | `container_relic` ×1 |
+| `genesis_ascendant` | `mythic_genesis_core` ≥ 10 | `container_mythic` ×1 |
+| `quantum_architect` | `fragment_quantum` ≥ 5 | `booster_research_24h` ×1 |
+| `artifact_archivist` | `artifact_core_fragment` ≥ 10 | `container_research_cache` ×1 |
+| `genesis_curator` | `fragment_genesis` ≥ 25 | `container_void_artifact` ×1 |
 
-**Prestige-only Items** (nie einlösbar): `fragment_genesis`, `mythic_genesis_core`, `mythic_ancient_nexus`, `artifact_core_fragment` (Phase 1), `fragment_quantum` — maximieren Langzeit-Jagd.
-
-### Titel-Aktivierung
-
-`POST /api/collector-prestige/claim-milestone` → `{ ok, state }`  
-`POST /api/collector-prestige/set-title` — kosmetisch, kein Gameplay-Effekt.
+Unlock läuft beim Grant (Lifetime-Hook) und beim Öffnen der eigenen Player Card. Belohnung ist idempotent (nur beim ersten Badge-Unlock). Inventar zeigt `prestige_progress` (`12/25 → Genesis-Kurator` + Reward-Hint) und Inbox-Notify.
 
 ---
 
@@ -517,7 +506,7 @@ POST /api/collector-exchange/redeem
 | **GC-966C** | Energieingenieur + Hypertechniker Panels | partials, locales |
 | **GC-967** | Inventar-Hints + Progress deep-links | `inventory.html`, `inventory_use.py`, `main.js` |
 | **GC-968** | Neue Booster/Utility-Items + EffectResolver | `inventory_catalog.py`, `effects/`, `inventory_use.py` |
-| **GC-969** | Prestige — Milestones, Titles, Profile | `collector_prestige.py`, migration, empire UI |
+| **GC-969** | Prestige — Lifetime-Badges auf Player Card | `playercard.py`, `collector_catalog.py` PRESTIGE_ONLY, inventory hints |
 | **GC-969B** | Loot-Reveal Toast + Codex Player Block | `main.js`, ECONOMY_SYSTEM Player Block |
 
 Abhängigkeit: 965A → 965B → 966* → 967/968 parallel → 969.
@@ -533,7 +522,7 @@ Abhängigkeit: 965A → 965B → 966* → 967/968 parallel → 969.
 | `test_collector_insufficient` | 400 + kein Inventar-Change |
 | `test_collector_ship_reconstruction` | Schiffe auf context planet |
 | `test_collector_idempotent` | Gleiches `request_id` |
-| `test_collector_prestige_milestone` | Unlock bei Threshold |
+| `test_collector_prestige_badges` | Lifetime-Badge unlockt bei Threshold |
 | `test_collector_gc864_isolation` | Loot-Pools enthalten keine `ship`-Rewards |
 
 ---

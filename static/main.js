@@ -14761,12 +14761,48 @@
         )}</span>`;
       })
       .join("");
+    let prestigeProgress = "";
+    if (item.prestige_progress) {
+      const pp = item.prestige_progress;
+      const badgeName = t(pp.badge_name_key || `playercard_badge_${pp.badge_key}`, pp.badge_key || "");
+      if (pp.unlocked) {
+        prestigeProgress = `<span class="inventory-prestige-progress gc-mono">${escapeHtml(
+          tf("inv_prestige_progress_done", { badge: badgeName }, "%(badge)s freigeschaltet")
+        )}</span>`;
+      } else {
+        const rewardHint = pp.reward_key
+          ? `<span class="inventory-prestige-reward-hint">${escapeHtml(
+              tf(
+                "inv_prestige_reward_hint",
+                {
+                  amount: pp.reward_amount || 0,
+                  reward: t(`inv_${pp.reward_key}`, pp.reward_key),
+                },
+                "Belohnung: %(amount)s× %(reward)s"
+              )
+            )}</span>`
+          : "";
+        prestigeProgress = `<span class="inventory-prestige-progress gc-mono">${escapeHtml(
+          tf(
+            "inv_prestige_progress",
+            {
+              owned: formatNumber(pp.owned || 0),
+              required: formatNumber(pp.required || 0),
+              badge: badgeName,
+            },
+            "%(owned)s / %(required)s → %(badge)s"
+          )
+        )}${rewardHint}</span>`;
+      }
+    }
     const endgameHint = item.exchange_endgame
       ? `<span class="inventory-endgame-hint">${escapeHtml(t("inv_dna_core_epic_hint", "Endgame-Material — später nutzbar"))}</span>`
       : "";
     let roleHint = "";
     if (item.locked_planned) {
       roleHint = `<span class="inventory-locked-hint">${escapeHtml(t("inv_hint_locked_planned", "Bald verfügbar"))}</span>`;
+    } else if (item.prestige_progress) {
+      roleHint = "";
     } else if (item.use_hint_key && !item.usable) {
       roleHint = `<span class="inventory-use-hint">${escapeHtml(t(item.use_hint_key, item.use_hint_key))}</span>`;
     } else if (item.trade_material && !item.usable) {
@@ -14795,7 +14831,7 @@
     const iconHtml = item.image
       ? `<span class="inventory-item-icon" aria-hidden="true"><img class="inventory-item-img" src="/static/${escapeHtml(String(item.image).replace(/^\/+/, ""))}" alt="" width="28" height="28" loading="lazy"></span>`
       : `<span class="inventory-item-icon" aria-hidden="true">${item.icon || "📦"}</span>`;
-    return `${iconHtml}<div class="inventory-item-body"><span class="inventory-item-name">${escapeHtml(name)}</span>${craftProgress}${exchangeProgress}${endgameHint}${roleHint}</div><span class="inventory-rarity-badge inventory-rarity-badge--${escapeHtml(rarity)}">${escapeHtml(t(`inv_rarity_${rarity}`, rarity))}</span>${collectibleBadge}<span class="inventory-item-amount gc-mono" data-inventory-item-amount="${escapeHtml(item.item_key)}">×${formatNumber(amount)}</span>${useBtn}${craftBtns}${exchangeBtns}`;
+    return `${iconHtml}<div class="inventory-item-body"><span class="inventory-item-name">${escapeHtml(name)}</span>${craftProgress}${exchangeProgress}${prestigeProgress}${endgameHint}${roleHint}</div><span class="inventory-rarity-badge inventory-rarity-badge--${escapeHtml(rarity)}">${escapeHtml(t(`inv_rarity_${rarity}`, rarity))}</span>${collectibleBadge}<span class="inventory-item-amount gc-mono" data-inventory-item-amount="${escapeHtml(item.item_key)}">×${formatNumber(amount)}</span>${useBtn}${craftBtns}${exchangeBtns}`;
   }
 
   function patchInventoryActiveBoosters(inventory) {

@@ -117,3 +117,29 @@ def test_fleet_tick_skipped_for_admin_balance_and_chat_poll(app_client, monkeypa
     r = app_client.get("/api/game-state")
     assert r.status_code == 200
     assert calls == []
+
+
+def test_fleet_tick_skipped_when_maintenance_sidecar_owns_bag(app_client, monkeypatch):
+    """GC-PERF-PROD-003: sidecar owns fleet bag — HTTP must not race the writer."""
+    monkeypatch.setenv("GC_MAINTENANCE_WORKER", "1")
+    from game.config import init_config, is_maintenance_worker_sidecar_enabled
+
+    init_config()
+    assert is_maintenance_worker_sidecar_enabled() is True
+
+    calls: list[str] = []
+
+    def _track(*, force=False, source="request"):
+        calls.append(str(source))
+        return {"ok": True, "skipped_interval": True}
+
+    monkeypatch.setattr("game.fleet_worker.maybe_run_global_fleet_tick", _track)
+
+    uname = f"fleet_sidecar_{uuid.uuid4().hex[:8]}"
+    ok, err, user = create_user(uname, "test-pass-123")
+    assert ok and user, err
+
+    _login(app_client, uname)
+    resp = app_client.get("/research")
+    assert resp.status_code == 200
+    assert calls == []

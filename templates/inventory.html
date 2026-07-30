@@ -264,11 +264,32 @@
           </span>
           {% endfor %}
           {% endif %}
+          {% if item.prestige_progress is defined and item.prestige_progress %}
+          {% set pp = item.prestige_progress %}
+          <span class="inventory-prestige-progress gc-mono" data-prestige-progress="{{ item.item_key }}">
+            {% if pp.unlocked %}
+            {{ T("inv_prestige_progress_done", "%(badge)s freigeschaltet", badge=T(pp.badge_name_key, pp.badge_key)) }}
+            {% else %}
+            {{ T("inv_prestige_progress", "%(owned)s / %(required)s → %(badge)s",
+                 owned=pp.owned|fmt_int, required=pp.required|fmt_int,
+                 badge=T(pp.badge_name_key, pp.badge_key)) }}
+            {% if pp.reward_key %}
+            <span class="inventory-prestige-reward-hint">
+              {{ T("inv_prestige_reward_hint", "Belohnung: %(amount)s× %(reward)s",
+                   amount=pp.reward_amount|fmt_int,
+                   reward=T("inv_" ~ pp.reward_key, pp.reward_key)) }}
+            </span>
+            {% endif %}
+            {% endif %}
+          </span>
+          {% endif %}
           {% if item.exchange_endgame is defined and item.exchange_endgame %}
           <span class="inventory-endgame-hint">{{ T("inv_dna_core_epic_hint", "Endgame-Material — später nutzbar") }}</span>
           {% endif %}
           {% if item.locked_planned is defined and item.locked_planned %}
           <span class="inventory-locked-hint">{{ T("inv_hint_locked_planned", "Bald verfügbar") }}</span>
+          {% elif item.prestige_progress is defined and item.prestige_progress %}
+          {# progress line above replaces static prestige hint #}
           {% elif item.use_hint_key is defined and item.use_hint_key and not (item.usable is defined and item.usable) %}
           <span class="inventory-use-hint">{{ T(item.use_hint_key, item.use_hint_key) }}</span>
           {% elif item.trade_material is defined and item.trade_material and not (item.usable is defined and item.usable) %}

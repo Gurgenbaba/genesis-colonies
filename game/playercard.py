@@ -12,7 +12,7 @@ import re
 import time
 from html import escape
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 from urllib.parse import urlparse
 
 from PIL import Image, ImageOps, UnidentifiedImageError
@@ -135,6 +135,14 @@ BADGE_IMAGE_BY_KEY: Dict[str, str] = {
     "bp_s1_operative": "community",
     "bp_s1_elite": "commander",
     "bp_s1_legend": "genesis",
+    # GC-969 — collector lifetime prestige
+    "alien_relic_archivist": "bughunter",
+    "event_chronicler": "community",
+    "ancient_nexus_keeper": "scientist",
+    "genesis_ascendant": "genesis",
+    "quantum_architect": "researcher",
+    "artifact_archivist": "architect",
+    "genesis_curator": "galactic_legend",
 }
 BADGE_IMAGE_DEFAULT = "default"
 _BADGE_IMAGE_DIR = Path("static") / "img" / "badges"
@@ -151,16 +159,25 @@ BADGE_RARITY_ORDER: Dict[str, int] = {
 BADGE_KEY_TIER_ORDER: Dict[str, int] = {
     "genesis": 0,
     "galactic_legend": 1,
-    "founder": 2,
-    "commander_50k": 3,
-    "researcher_10k": 4,
-    "builder_10k": 5,
-    "bug_hunter": 6,
-    "community_hero": 7,
-    "commander_5k": 8,
-    "researcher_1k": 9,
-    "builder_1k": 10,
+    "genesis_curator": 2,
+    "founder": 3,
+    "genesis_ascendant": 4,
+    "ancient_nexus_keeper": 5,
+    "artifact_archivist": 6,
+    "commander_50k": 7,
+    "researcher_10k": 8,
+    "builder_10k": 9,
+    "bug_hunter": 10,
+    "alien_relic_archivist": 11,
+    "event_chronicler": 12,
+    "quantum_architect": 13,
+    "community_hero": 14,
+    "commander_5k": 15,
+    "researcher_1k": 16,
+    "builder_1k": 17,
 }
+
+COLLECTOR_LIFETIME_REQ_PREFIX = "collector_lifetime:"
 
 _AVATAR_SCHEMES = frozenset({"http", "https"})
 _LOCAL_AVATAR_RE = re.compile(r"^/static/uploads/avatars/avatar_(\d+)\.webp$")
@@ -344,6 +361,22 @@ def _seed_default_badges(cur) -> None:
         ("bp_s1_elite", "", "epic", "playercard_badge_bp_s1_elite", "playercard_badge_bp_s1_elite_desc", None, None),
         ("bp_s1_legend", "", "legendary", "playercard_badge_bp_s1_legend", "playercard_badge_bp_s1_legend_desc", None, None),
     ]
+    # GC-969 — collector lifetime prestige badges (catalog: COLLECTOR_PRESTIGE_MILESTONES)
+    from game.collector_catalog import COLLECTOR_PRESTIGE_MILESTONES
+
+    for badge_key, milestone in COLLECTOR_PRESTIGE_MILESTONES.items():
+        item_key = str(milestone.get("item_key") or "")
+        seeds.append(
+            (
+                badge_key,
+                "",
+                str(milestone.get("rarity") or "epic"),
+                str(milestone.get("badge_name_key") or f"playercard_badge_{badge_key}"),
+                str(milestone.get("badge_desc_key") or f"playercard_badge_{badge_key}_desc"),
+                f"{COLLECTOR_LIFETIME_REQ_PREFIX}{item_key}",
+                int(milestone.get("threshold") or 0),
+            )
+        )
     for row in seeds:
         cur.execute(
             """
@@ -1394,6 +1427,171 @@ def _read_player_score(player_id: int, conn) -> Dict[str, Any]:
     return dict(row) if row else {}
 
 
+def _collector_lifetime_acquired(player_id: int, item_key: str, conn) -> int:
+    """Lifetime acquired count for a collector item (GC-969 prestige badges)."""
+    key = str(item_key or "").strip()
+    if not key or not table_exists(conn, "collector_lifetime_stats"):
+        return 0
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT lifetime_acquired
+        FROM collector_lifetime_stats
+        WHERE user_id = ? AND item_key = ?
+        LIMIT 1;
+        """,
+        (int(player_id), key),
+    )
+    row = cur.fetchone()
+    if not row:
+        return 0
+    return max(0, int(row["lifetime_acquired"] or 0))
+
+
+def _badge_requirement_met(
+    player_id: int,
+    req_type: str,
+    req_val: int,
+    *,
+    metrics: Dict[str, int],
+    conn,
+) -> bool:
+    rtype = str(req_type or "")
+    if rtype.startswith(COLLECTOR_LIFETIME_REQ_PREFIX):
+        item_key = rtype[len(COLLECTOR_LIFETIME_REQ_PREFIX) :]
+        return _collector_lifetime_acquired(player_id, item_key, conn) >= int(req_val)
+    return int(metrics.get(rtype, 0) or 0) >= int(req_val)
+
+
+def _grant_collector_prestige_unlock_reward(
+    player_id: int,
+    badge_key: str,
+    *,
+    conn,
+) -> Optional[Dict[str, Any]]:
+    """One-time inventory grant when a collector prestige badge is newly unlocked."""
+    from game.collector_catalog import prestige_milestone_for_badge
+    from game.inventory import grant_inventory_item
+    from game.inventory_catalog import is_known_item_key
+
+    milestone = prestige_milestone_for_badge(badge_key)
+    if not milestone:
+        return None
+    reward = milestone.get("unlock_reward") or {}
+    reward_key = str(reward.get("reward_key") or "").strip()
+    amount = int(reward.get("amount") or 0)
+    if not reward_key or amount <= 0 or not is_known_item_key(reward_key):
+        return None
+    if not grant_inventory_item(int(player_id), reward_key, amount, conn=conn):
+        return None
+    return {
+        "reward_key": reward_key,
+        "amount": amount,
+        "reward_type": str(reward.get("reward_type") or "item"),
+        "badge_key": str(badge_key),
+    }
+
+
+def _notify_collector_prestige_unlock(
+    player_id: int,
+    badge_key: str,
+    reward: Mapping[str, Any],
+    *,
+    conn,
+) -> None:
+    try:
+        from game.collector_catalog import prestige_milestone_for_badge
+        from game.i18n import get_player_locale, tr
+        from game.messages import notify_system
+
+        milestone = prestige_milestone_for_badge(badge_key) or {}
+        locale = get_player_locale(int(player_id), conn=conn)
+        badge_name = tr(
+            str(milestone.get("badge_name_key") or f"playercard_badge_{badge_key}"),
+            str(badge_key),
+            locale=locale,
+        )
+        reward_key = str(reward.get("reward_key") or "")
+        reward_name = tr(f"inv_{reward_key}", reward_key, locale=locale)
+        subject = tr(
+            "collector_prestige_unlock_subject",
+            "Prestige freigeschaltet",
+            locale=locale,
+        )
+        body = tr(
+            "collector_prestige_unlock_body",
+            "%(badge)s freigeschaltet — Belohnung: %(amount)s× %(reward)s",
+            locale=locale,
+            badge=badge_name,
+            amount=int(reward.get("amount") or 0),
+            reward=reward_name,
+        )
+        notify_system(int(player_id), subject, body, conn=conn)
+    except Exception:
+        logger.exception(
+            "collector prestige unlock notify failed player_id=%s badge=%s",
+            player_id,
+            badge_key,
+        )
+
+
+def _try_unlock_badge_row(
+    player_id: int,
+    badge_row: Mapping[str, Any],
+    *,
+    metrics: Dict[str, int],
+    conn,
+    now: int,
+) -> Optional[str]:
+    """Insert unlock if requirements met. Returns badge_key when newly unlocked."""
+    req_type = str(badge_row.get("requirement_type") or "")
+    req_val = int(badge_row.get("requirement_value") or 0)
+    badge_id = int(badge_row["id"])
+    badge_key = str(badge_row.get("badge_key") or "")
+    if not badge_key:
+        return None
+    if not _badge_requirement_met(
+        int(player_id),
+        req_type,
+        req_val,
+        metrics=metrics,
+        conn=conn,
+    ):
+        return None
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT 1 FROM player_card_unlocked_badges
+        WHERE player_id = ? AND badge_id = ?
+        LIMIT 1;
+        """,
+        (int(player_id), badge_id),
+    )
+    if cur.fetchone():
+        return None
+    cur.execute(
+        """
+        INSERT INTO player_card_unlocked_badges (player_id, badge_id, unlocked_at)
+        VALUES (?, ?, ?);
+        """,
+        (int(player_id), badge_id, int(now)),
+    )
+    if req_type.startswith(COLLECTOR_LIFETIME_REQ_PREFIX):
+        reward = _grant_collector_prestige_unlock_reward(
+            int(player_id),
+            badge_key,
+            conn=conn,
+        )
+        if reward:
+            _notify_collector_prestige_unlock(
+                int(player_id),
+                badge_key,
+                reward,
+                conn=conn,
+            )
+    return badge_key
+
+
 def _sync_badge_unlocks(player_id: int, conn=None) -> None:
     if not _tables_ready(conn):
         return
@@ -1419,16 +1617,12 @@ def _sync_badge_unlocks(player_id: int, conn=None) -> None:
     badges = cur.fetchall()
     now = _now_ts()
     for b in badges:
-        req_type = b["requirement_type"]
-        req_val = int(b["requirement_value"] or 0)
-        if metrics.get(req_type, 0) < req_val:
-            continue
-        cur.execute(
-            """
-            INSERT OR IGNORE INTO player_card_unlocked_badges (player_id, badge_id, unlocked_at)
-            VALUES (?, ?, ?);
-            """,
-            (int(player_id), int(b["id"]), now),
+        _try_unlock_badge_row(
+            int(player_id),
+            dict(b),
+            metrics=metrics,
+            conn=c,
+            now=now,
         )
     # Founder badge for all existing players (one-time unlock)
     cur.execute("SELECT id FROM player_card_badges WHERE badge_key = 'founder' LIMIT 1;")
@@ -1443,6 +1637,45 @@ def _sync_badge_unlocks(player_id: int, conn=None) -> None:
         )
     if own:
         c.close()
+
+
+def sync_collector_prestige_for_item(player_id: int, item_key: str, *, conn) -> Optional[str]:
+    """Unlock collector prestige badge for one item if lifetime threshold is met.
+
+    Hot path (inventory grant TX): never call ``ensure_player_card_tables`` —
+    CREATE/ALTER + full badge seed under BEGIN IMMEDIATE freezes Railway SQLite.
+    Badge rows are seeded at boot / init_db / player-card view.
+    """
+    from game.collector_catalog import prestige_milestone_for_item
+
+    if not _tables_ready(conn):
+        return None
+    milestone = prestige_milestone_for_item(item_key)
+    if not milestone:
+        return None
+    badge_key = str(milestone.get("badge_key") or "")
+    if not badge_key:
+        return None
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT id, badge_key, requirement_type, requirement_value
+        FROM player_card_badges
+        WHERE badge_key = ? AND is_active = 1
+        LIMIT 1;
+        """,
+        (badge_key,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    return _try_unlock_badge_row(
+        int(player_id),
+        dict(row),
+        metrics={},
+        conn=conn,
+        now=_now_ts(),
+    )
 
 
 def _list_unlocked_badges(player_id: int, conn=None) -> List[Dict[str, Any]]:
@@ -1667,7 +1900,12 @@ def _build_public_card_payload(
 
 
 def build_edit_card(player_id: int, conn=None) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
-    view, err = build_public_card(player_id, viewer_id=player_id, conn=conn)
+    view, err = build_public_card(
+        player_id,
+        viewer_id=player_id,
+        conn=conn,
+        sync_badges=True,
+    )
     if err or not view:
         return view, err
     if not view.get("is_self"):

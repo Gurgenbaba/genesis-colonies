@@ -366,7 +366,19 @@ _FLEET_TICK_SKIP_PREFIXES = ("api_admin_", "api_chat_")
 
 
 def _should_run_fleet_tick_before_request() -> bool:
-    """Skip high-frequency polls and admin/chat APIs — avoids SQLite writer pile-up on local dev."""
+    """Skip high-frequency polls and admin/chat APIs — avoids SQLite writer pile-up on local dev.
+
+    GC-PERF-PROD-003: when the maintenance sidecar owns the bag
+    (``GC_MAINTENANCE_WORKER=1``), never piggyback fleet/account-deletion work
+    on HTTP — concurrent writers + ``busy_timeout=20000`` freeze navigation.
+    """
+    try:
+        from game.config import is_maintenance_worker_sidecar_enabled
+
+        if is_maintenance_worker_sidecar_enabled():
+            return False
+    except Exception:
+        pass
     endpoint = str(request.endpoint or "")
     if endpoint in _FLEET_TICK_SKIP_ENDPOINTS:
         return False
@@ -377,7 +389,11 @@ def _should_run_fleet_tick_before_request() -> bool:
 
 @app.before_request
 def _fleet_tick_before_authenticated_request():
-    """Isolated fleet tick before SSR routes open a long-lived page connection."""
+    """Isolated fleet tick before SSR routes open a long-lived page connection.
+
+    Legacy fallback when the maintenance sidecar is off; production docker
+    entrypoint keeps this path idle (GC-PERF-PROD-003).
+    """
     try:
         if _should_run_fleet_tick_before_request():
             ft0 = time.perf_counter()
@@ -6873,7 +6889,12 @@ def api_player_card_view(player_id: int):
     viewer_id = _playercard_viewer_id()
     wants_json = request.accept_mimetypes.best_match(["application/json", "text/html"]) == "application/json"
     try:
-        card, err = playercard_logic.build_public_card(player_id, viewer_id=viewer_id)
+        sync_badges = viewer_id is not None and int(viewer_id) == int(player_id)
+        card, err = playercard_logic.build_public_card(
+            player_id,
+            viewer_id=viewer_id,
+            sync_badges=sync_badges,
+        )
     except sqlite3.OperationalError:
         logger.warning("player-card view locked player_id=%s", player_id, exc_info=True)
         if wants_json:

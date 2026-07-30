@@ -92,6 +92,7 @@ Optional request wall: `GC_REQUEST_PERF_DEBUG=1`, `GC_REQUEST_PERF_SLOW_MS=0`, `
 - **GC-PERF-AUTOPLAY-002:** sticky roster defaults to `tick_per_cron=1`, `chain_limit=2`, 50ms yield between short-TX economies, 800ms tick budget (`budget_stopped`); Soft-On stays recommended
 - **GC-PERF-IMG-001…004:** compressed shell/card images (frame.webp ≤120KB, expedition.webp, landscapes, cards); WebP primary in galaxy/JS/catalog; Overview frame preload + `?v=` cache bust
 - **GC-PERF-PROD-002 (shipped):** docker-entrypoint starts `scripts/run_maintenance_worker.py` by default (`GC_MAINTENANCE_WORKER=1`) and forces `GC_EMBEDDED_CRON=0` on gunicorn — maintenance bag no longer shares the web process GIL. Opt out with `GC_MAINTENANCE_WORKER=0`
+- **GC-PERF-PROD-003 (shipped):** with sidecar on, authenticated `before_request` no longer runs global fleet tick / account-deletion piggyback — HTTP was racing the maintenance writer (`busy_timeout=20000` → multi-second “frozen” nav). Fleet ownership stays on the sidecar (~60s) + player-scoped ticks on fleet actions
 - **GC-RANK-CRON-001:** sidecar respawn + leader-lock retry so deploy handoff cannot kill automatic ranking; Admin Runtime shows ranking-worker last run
 - Check Railway `GC_POLL_ACTIVE_MS` if console shows game-state polling at 8000 ms (code default active is 5000)
 
