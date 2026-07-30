@@ -573,92 +573,132 @@ def destroy_base(conn, base_id: int, *, now: Optional[float] = None) -> Dict[str
 
 
 def maybe_tick_pirate_bases(conn, *, now: Optional[float] = None) -> Dict[str, Any]:
-    """fleet_worker piggyback: expire, escalate, spawn when heat + AI enabled."""
-    ts = float(now if now is not None else _now())
-    expired = expire_due_bases(conn, now=ts)
-    escalated = escalate_due_bases(conn, now=ts)
-    spawned: List[int] = []
+    """fleet_worker piggyback: expire, escalate, spawn when heat + AI enabled.
 
-    if not is_pirates_ai_enabled(conn=conn):
-        log_pirate_action(
-            conn,
-            kind="ai_disabled",
-            message="tick skipped — AI off",
-            severity="info",
-        )
-        return {
+    GC-PERF-TK-001: when called outside an outer write TX (fleet stage
+    ``manage_tx=False``), prelude work (expire/spawn/…) commits in one short
+    IMMEDIATE, then ``run_play_loop_tick`` owns per-bot short writes so live
+    Timekeeper can interleave.
+    """
+    from ..db import begin_write_transaction, commit, in_transaction, rollback
+
+    ts = float(now if now is not None else _now())
+    tick_t0 = time.perf_counter()
+    short_tx = not in_transaction(conn)
+    write_commits = 0
+
+    def _step(fn):
+        nonlocal write_commits
+        if not short_tx:
+            return fn()
+        begin_write_transaction(conn)
+        try:
+            out = fn()
+            commit(conn)
+            write_commits += 1
+            return out
+        except Exception:
+            rollback(conn)
+            raise
+
+    def _prelude() -> Dict[str, Any]:
+        expired = expire_due_bases(conn, now=ts)
+        escalated = escalate_due_bases(conn, now=ts)
+        spawned: List[int] = []
+
+        if not is_pirates_ai_enabled(conn=conn):
+            log_pirate_action(
+                conn,
+                kind="ai_disabled",
+                message="tick skipped — AI off",
+                severity="info",
+            )
+            return {
+                "expired_ids": expired,
+                "escalated_ids": escalated,
+                "spawned": spawned,
+                "ai_enabled": False,
+                "raids": [],
+                "spies": [],
+                "recycles": [],
+                "_bots": [],
+            }
+
+        try:
+            from .accounts import bootstrap_faction_bots
+
+            result_bots = bootstrap_faction_bots(conn=conn)
+        except Exception:
+            logger.exception("pirate bot bootstrap failed")
+            result_bots = []
+
+        raw = get_runtime_value(SPAWN_RUNTIME_KEY, conn=conn)
+        last = float(raw) if raw not in (None, "") else 0.0
+        on_cooldown = ts - last < SPAWN_COOLDOWN_SEC
+
+        if not on_cooldown:
+            if heat_schema_ready(conn):
+                cur = conn.execute(
+                    """
+                    SELECT galaxy_id, heat FROM galaxy_heat
+                    WHERE heat >= ?
+                    ORDER BY heat DESC
+                    LIMIT 12;
+                    """,
+                    (HEAT_SPAWN_MIN,),
+                )
+                for row in cur.fetchall():
+                    res = spawn_pirate_base(
+                        conn, galaxy=int(row["galaxy_id"]), now=ts, announce=True
+                    )
+                    if res.get("ok") and res.get("base_id"):
+                        spawned.append(int(res["base_id"]))
+                    if len(spawned) >= 2:
+                        break
+            set_runtime_value(SPAWN_RUNTIME_KEY, str(ts), conn=conn)
+
+        out: Dict[str, Any] = {
             "expired_ids": expired,
             "escalated_ids": escalated,
             "spawned": spawned,
-            "ai_enabled": False,
-            "raids": [],
-            "spies": [],
-            "recycles": [],
+            "ai_enabled": True,
+            "cooldown": on_cooldown,
+            "bots": len(result_bots),
+            "_bots": result_bots,
         }
+        try:
+            from .crisis import maybe_sync_pirate_war
 
-    try:
-        from .accounts import bootstrap_faction_bots
+            out["pirate_war"] = maybe_sync_pirate_war(conn, now=ts)
+        except Exception:
+            logger.exception("pirate_war sync failed")
+            out["pirate_war"] = {}
+        try:
+            from .infiltration import expire_due_infiltrations
 
-        result_bots = bootstrap_faction_bots(conn=conn)
-    except Exception:
-        logger.exception("pirate bot bootstrap failed")
-        result_bots = []
+            out["infiltrations_expired"] = expire_due_infiltrations(conn, now=ts)
+        except Exception:
+            logger.exception("infiltration expire failed")
+            out["infiltrations_expired"] = []
+        try:
+            from .smugglers import expire_due_smugglers, maybe_spawn_smugglers
 
-    raw = get_runtime_value(SPAWN_RUNTIME_KEY, conn=conn)
-    last = float(raw) if raw not in (None, "") else 0.0
-    on_cooldown = ts - last < SPAWN_COOLDOWN_SEC
+            out["smugglers_expired"] = expire_due_smugglers(conn, now=ts)
+            out["smugglers_spawned"] = maybe_spawn_smugglers(conn, now=ts)
+        except Exception:
+            logger.exception("smuggler tick failed")
+            out["smugglers_expired"] = []
+            out["smugglers_spawned"] = []
+        return out
 
-    if not on_cooldown:
-        # Spawn in galaxies with heat >= patrol and under cap.
-        if heat_schema_ready(conn):
-            cur = conn.execute(
-                """
-                SELECT galaxy_id, heat FROM galaxy_heat
-                WHERE heat >= ?
-                ORDER BY heat DESC
-                LIMIT 12;
-                """,
-                (HEAT_SPAWN_MIN,),
-            )
-            for row in cur.fetchall():
-                res = spawn_pirate_base(conn, galaxy=int(row["galaxy_id"]), now=ts, announce=True)
-                if res.get("ok") and res.get("base_id"):
-                    spawned.append(int(res["base_id"]))
-                if len(spawned) >= 2:
-                    break
-        set_runtime_value(SPAWN_RUNTIME_KEY, str(ts), conn=conn)
+    result = _step(_prelude)
+    result_bots = list(result.pop("_bots", []) or [])
 
-    result: Dict[str, Any] = {
-        "expired_ids": expired,
-        "escalated_ids": escalated,
-        "spawned": spawned,
-        "ai_enabled": True,
-        "cooldown": on_cooldown,
-        "bots": len(result_bots),
-    }
-    try:
-        from .crisis import maybe_sync_pirate_war
+    if not result.get("ai_enabled"):
+        result["hold_ms"] = int((time.perf_counter() - tick_t0) * 1000)
+        result["write_commits"] = write_commits
+        return result
 
-        result["pirate_war"] = maybe_sync_pirate_war(conn, now=ts)
-    except Exception:
-        logger.exception("pirate_war sync failed")
-        result["pirate_war"] = {}
-    try:
-        from .infiltration import expire_due_infiltrations
-
-        result["infiltrations_expired"] = expire_due_infiltrations(conn, now=ts)
-    except Exception:
-        logger.exception("infiltration expire failed")
-        result["infiltrations_expired"] = []
-    try:
-        from .smugglers import expire_due_smugglers, maybe_spawn_smugglers
-
-        result["smugglers_expired"] = expire_due_smugglers(conn, now=ts)
-        result["smugglers_spawned"] = maybe_spawn_smugglers(conn, now=ts)
-    except Exception:
-        logger.exception("smuggler tick failed")
-        result["smugglers_expired"] = []
-        result["smugglers_spawned"] = []
     try:
         from .play_loop import run_play_loop_tick
 
@@ -673,6 +713,8 @@ def maybe_tick_pirate_bases(conn, *, now: Optional[float] = None) -> Dict[str, A
             "steps": play.get("steps") or [],
             "count": play.get("count") or 0,
         }
+        result["write_commits"] = write_commits + int(play.get("write_commits") or 0)
+        result["hold_ms"] = int((time.perf_counter() - tick_t0) * 1000)
     except Exception:
         logger.exception("pirate play loop tick failed")
         result["spies"] = []
@@ -680,6 +722,8 @@ def maybe_tick_pirate_bases(conn, *, now: Optional[float] = None) -> Dict[str, A
         result["recycles"] = []
         result["colonizes"] = []
         result["economy"] = {"ok": False, "error": "exception"}
+        result["write_commits"] = write_commits
+        result["hold_ms"] = int((time.perf_counter() - tick_t0) * 1000)
     return result
 
 

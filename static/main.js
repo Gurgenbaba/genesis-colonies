@@ -12779,13 +12779,29 @@
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify(body),
       });
-      if (res && res.timekeeper && res.state && typeof res.state === "object") {
+      // GC-PERF-TK-001: do not rewrite queues from a failed/no-op apply payload.
+      if (!res || !res.ok) {
+        showNotify(mapActionError(res?.reason, res?.payload), "error");
+        if (res && res.timekeeper) {
+          patchShellHudTimekeeper({ timekeeper: res.timekeeper });
+        }
+        return;
+      }
+      const applied = Number(res.seconds_applied) || 0;
+      if (applied <= 0) {
+        showNotify(
+          mapActionError("no_effect", res?.payload) || t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."),
+          "error"
+        );
+        if (res.timekeeper) {
+          patchShellHudTimekeeper({ timekeeper: res.timekeeper });
+        }
+        return;
+      }
+      if (res.timekeeper && res.state && typeof res.state === "object") {
         res.state.timekeeper = res.state.timekeeper || res.timekeeper;
       }
       applyActionState(res, "timekeeper_apply");
-      if (!res || !res.ok) {
-        showNotify(mapActionError(res?.reason, res?.payload), "error");
-      }
     } catch (err) {
       console.error("[GC] timekeeper apply failed", err);
       showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");

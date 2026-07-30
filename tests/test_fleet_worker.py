@@ -88,6 +88,41 @@ def test_background_maintenance_source_gate():
     assert not _is_background_maintenance_source("game_state")
 
 
+def test_post_fleet_maintenance_pirates_runs_outside_outer_tx(fleet_db, monkeypatch):
+    """GC-PERF-TK-001: pirates stage must not sit inside one IMMEDIATE."""
+    from game.db import in_transaction
+
+    seen = {"outside_tx": False}
+
+    def fake_pirates(**kw):
+        conn = kw.get("conn")
+        seen["outside_tx"] = conn is not None and not in_transaction(conn)
+        return {
+            "expired_ids": [],
+            "escalated_ids": [],
+            "spawned": [],
+            "play_loop": {"count": 0, "economy_ok": 0, "write_commits": 2, "hold_ms": 1},
+            "write_commits": 2,
+            "hold_ms": 1,
+        }
+
+    monkeypatch.setattr("game.combat_hof.maybe_sync_combat_hof_incremental", lambda **kw: {"inserted": 0})
+    monkeypatch.setattr(
+        "game.combat_balance_bots.maybe_run_next_scheduled_scenario",
+        lambda **kw: {"ok": True, "skipped": "disabled"},
+    )
+    monkeypatch.setattr("game.world_boss.maybe_tick_world_boss_schedule", lambda **kw: {})
+    monkeypatch.setattr("game.asteroids.maybe_tick_asteroid_schedule", lambda **kw: {})
+    monkeypatch.setattr("game.inactive_autoplay.maybe_tick_inactive_autoplay", lambda conn, **kw: {"ok": True})
+    monkeypatch.setattr("game.pirates.bases.maybe_tick_pirate_bases", fake_pirates)
+    monkeypatch.setattr("game.combat.expire_due_debris_fields", lambda **kw: 0)
+
+    conn = db()
+    _maybe_run_post_fleet_maintenance(conn, source="embedded_cron")
+    conn.close()
+    assert seen["outside_tx"] is True
+
+
 def test_post_fleet_maintenance_inactive_runs_outside_outer_tx(fleet_db, monkeypatch):
     """GC-PERF-AUTOPLAY-001: inactive stage must not sit inside one IMMEDIATE."""
     from game.db import in_transaction

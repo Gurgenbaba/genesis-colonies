@@ -143,6 +143,15 @@ Production symptom: PJAX `/ranking` ~10s, `/api/game-state` + chat `502`, Timeke
 
 **Not a fix:** reverting game-state poll from 8s→30s. An 8s `intervalActive` on Railway is almost certainly `GC_POLL_ACTIVE_MS` (code default is 5s); chat also uses 8s when open.
 
+## GC-PERF-TK-001 — Timekeeper live + pirate short-TX
+
+Production Timekeeper boost returned without finishing/shortening the job because:
+
+1. Pirate Soft-On still held one long `BEGIN IMMEDIATE` (economy-for-all bots) after autoplay was fixed.
+2. Shipyard/defense Timekeeper only moved `finish_at`; client/`sync_*` remaining is derived from `started_at`, so boosts looked like no-ops.
+
+**Fix:** pirates stage `manage_tx=False`; per-bot short writes + busy lease in `play_loop`; head queue boost also shifts `started_at`; frontend only patches queues when `ok` and `seconds_applied > 0`.
+
 ---
 
 ## GC-2620 — Concurrent Roster-Cap (5–8 sticky builders)

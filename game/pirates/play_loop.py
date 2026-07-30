@@ -13,6 +13,8 @@ import os
 import time
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
+from ..db import begin_write_transaction, commit, in_transaction, rollback
+from ..runtime_state import get_runtime_value, set_runtime_value
 from .accounts import FACTION_BOTS, bootstrap_faction_bots
 from .bot_state import ensure_bot_state
 from .heat import HEAT_THRESHOLDS, get_galaxy_heat
@@ -37,6 +39,39 @@ RESERVE_COMBAT_SHIPS = {
 # Keep HTTP cron responsive on 1 sync worker + SQLite (Railway default).
 PLAY_LOOP_CURSOR_KEY = "pirate_play_loop_cursor"
 PLAY_BOTS_PER_TICK = max(1, int(os.environ.get("GC_PIRATE_PLAY_BOTS_PER_TICK", "3")))
+# GC-PERF-TK-001: overlap guard (same pattern as inactive_autoplay_busy).
+PLAY_LOOP_BUSY_KEY = "pirate_play_loop_busy"
+PLAY_LOOP_BUSY_STALE_SEC = 900.0
+
+
+def _try_acquire_play_loop_busy(*, conn, now: float) -> bool:
+    raw = get_runtime_value(PLAY_LOOP_BUSY_KEY, conn=conn)
+    if raw and str(raw).strip() not in {"", "0"}:
+        try:
+            started = float(raw)
+            if (now - started) < PLAY_LOOP_BUSY_STALE_SEC:
+                return False
+        except (TypeError, ValueError):
+            pass
+    set_runtime_value(PLAY_LOOP_BUSY_KEY, str(now), conn=conn)
+    return True
+
+
+def _release_play_loop_busy(*, conn) -> None:
+    set_runtime_value(PLAY_LOOP_BUSY_KEY, "0", conn=conn)
+
+
+def _write_step(conn, short_tx: bool, fn):
+    if not short_tx:
+        return fn()
+    begin_write_transaction(conn)
+    try:
+        out = fn()
+        commit(conn)
+        return out
+    except Exception:
+        rollback(conn)
+        raise
 
 
 def _now() -> float:
@@ -396,71 +431,123 @@ def run_play_loop_tick(
     max_bots: Optional[int] = None,
     process_all: bool = False,
 ) -> Dict[str, Any]:
-    """Soft-On: economy for ALL bots, then round-robin strategic missions."""
+    """Soft-On: economy for ALL bots, then round-robin strategic missions.
+
+    GC-PERF-TK-001: when the connection is not already in a write transaction
+    (fleet_worker pirates stage with manage_tx=False), each bot economy and
+    mission step runs in its own short BEGIN IMMEDIATE so live Timekeeper /
+    game-state writers can interleave. Overlapping ticks skip via busy lease.
+    """
     if not is_pirates_ai_enabled(conn=conn):
         return {"ok": False, "error": "ai_disabled", "steps": []}
 
     ts = float(now if now is not None else _now())
-    roster = list(bots) if bots is not None else bootstrap_faction_bots(conn=conn)
+    tick_t0 = time.perf_counter()
+    write_commits = 0
+    short_tx = not in_transaction(conn)
 
-    economy_steps: List[Dict[str, Any]] = []
-    for bot in roster:
-        try:
-            economy_steps.append(_run_bot_economy_only(conn, bot, now=ts))
-        except Exception:
-            logger.exception(
-                "play_loop economy-all failed faction=%s", bot.get("faction_key")
-            )
+    def _step(fn):
+        nonlocal write_commits
+        out = _write_step(conn, short_tx, fn)
+        if short_tx:
+            write_commits += 1
+        return out
 
-    limit = int(max_bots) if max_bots is not None else PLAY_BOTS_PER_TICK
-    active = _round_robin_bots(
-        conn, roster, max_bots=limit, process_all=bool(process_all)
-    )
-    steps: List[Dict[str, Any]] = []
-    for bot in active:
-        try:
-            steps.append(
-                run_bot_play_step(
-                    conn,
-                    bot,
-                    now=ts,
-                    force_playtime=force_playtime,
-                    do_economy=False,
+    acquired = _step(lambda: _try_acquire_play_loop_busy(conn=conn, now=ts))
+    if not acquired:
+        return {
+            "ok": False,
+            "error": "busy",
+            "steps": [],
+            "hold_ms": int((time.perf_counter() - tick_t0) * 1000),
+            "write_commits": write_commits,
+        }
+
+    try:
+        roster = list(bots) if bots is not None else bootstrap_faction_bots(conn=conn)
+
+        economy_steps: List[Dict[str, Any]] = []
+        for bot in roster:
+            try:
+                economy_steps.append(
+                    _step(lambda b=bot: _run_bot_economy_only(conn, b, now=ts))
                 )
+            except Exception:
+                logger.exception(
+                    "play_loop economy-all failed faction=%s", bot.get("faction_key")
+                )
+
+        limit = int(max_bots) if max_bots is not None else PLAY_BOTS_PER_TICK
+
+        def _pick_active():
+            return _round_robin_bots(
+                conn, roster, max_bots=limit, process_all=bool(process_all)
             )
+
+        active = _step(_pick_active)
+        steps: List[Dict[str, Any]] = []
+        for bot in active:
+            try:
+                steps.append(
+                    _step(
+                        lambda b=bot: run_bot_play_step(
+                            conn,
+                            b,
+                            now=ts,
+                            force_playtime=force_playtime,
+                            do_economy=False,
+                        )
+                    )
+                )
+            except Exception:
+                logger.exception(
+                    "play_loop step failed faction=%s", bot.get("faction_key")
+                )
+                steps.append(
+                    {
+                        "faction_key": bot.get("faction_key"),
+                        "ok": False,
+                        "error": "exception",
+                    }
+                )
+
+        def _brains():
+            from .brain import run_raid_brain_tick, run_recycle_brain_tick
+
+            return (
+                run_raid_brain_tick(conn, now=ts, skip_home_raids=True),
+                run_recycle_brain_tick(conn, now=ts),
+            )
+
+        raids, recycles = _step(_brains)
+        hold_ms = int((time.perf_counter() - tick_t0) * 1000)
+        return {
+            "ok": True,
+            "steps": steps,
+            "economy_all": economy_steps,
+            "economy_ok": sum(1 for e in economy_steps if e.get("ok")),
+            "raids": raids.get("raids") or [],
+            "recycles": recycles.get("recycles") or [],
+            "spies": [s for s in steps if s.get("action") == "spy" and s.get("ok")],
+            "colonizes": [
+                s for s in steps if s.get("action") == "colonize" and s.get("ok")
+            ],
+            "expeditions": [
+                s for s in steps if s.get("action") == "expedition" and s.get("ok")
+            ],
+            "count": len(steps),
+            "roster": len(roster),
+            "active": len(active),
+            "bots_per_tick": limit if not process_all else len(roster),
+            "hold_ms": hold_ms,
+            "write_commits": write_commits if short_tx else 0,
+            "short_tx": short_tx,
+        }
+    finally:
+        try:
+            _step(lambda: _release_play_loop_busy(conn=conn))
         except Exception:
-            logger.exception(
-                "play_loop step failed faction=%s", bot.get("faction_key")
-            )
-            steps.append(
-                {
-                    "faction_key": bot.get("faction_key"),
-                    "ok": False,
-                    "error": "exception",
-                }
-            )
-
-    from .brain import run_raid_brain_tick, run_recycle_brain_tick
-
-    raids = run_raid_brain_tick(conn, now=ts, skip_home_raids=True)
-    recycles = run_recycle_brain_tick(conn, now=ts)
-    return {
-        "ok": True,
-        "steps": steps,
-        "economy_all": economy_steps,
-        "economy_ok": sum(1 for e in economy_steps if e.get("ok")),
-        "raids": raids.get("raids") or [],
-        "recycles": recycles.get("recycles") or [],
-        "spies": [s for s in steps if s.get("action") == "spy" and s.get("ok")],
-        "colonizes": [s for s in steps if s.get("action") == "colonize" and s.get("ok")],
-        "expeditions": [
-            s for s in steps if s.get("action") == "expedition" and s.get("ok")
-        ],
-        "count": len(steps),
-        "roster": len(roster),
-        "active": len(active),
-        "bots_per_tick": limit if not process_all else len(roster),
-    }
+            logger.exception("pirate play_loop busy release failed")
 
 
 def reserve_fraction_for_personality(personality: str) -> float:

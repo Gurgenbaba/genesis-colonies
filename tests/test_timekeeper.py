@@ -570,3 +570,71 @@ def test_timekeeper_defense_debit_matches_batch_remaining_not_serial(timekeeper_
         assert applied < serial_remaining
     finally:
         conn.close()
+
+
+def test_timekeeper_shipyard_boost_shifts_started_at_and_survives_client(timekeeper_db):
+    """GC-PERF-TK-001: finish-only boosts were wiped by started_at-based remaining."""
+    from game.shipyard import build_ship
+    from game.shipyard_queue import shipyard_queue_for_client, sync_shipyard_queue_finish_times
+
+    conn = db()
+    try:
+        uid = _player(conn=conn)
+        planet = get_context_planet(uid, conn=conn)
+        pid = int(planet["id"])
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE planets SET metal = ?, crystal = ?, fuel_cells = ? WHERE id = ?;",
+            (5_000_000, 5_000_000, 500_000, pid),
+        )
+        _grant_shipyard_tk_prereqs(cur, pid, uid)
+        conn.commit()
+
+        ok, reason, _ = build_ship(
+            player_id=uid, planet_id=pid, ship_key="mule_courier", amount=20, conn=conn
+        )
+        assert ok, reason
+
+        row = conn.execute(
+            "SELECT id, started_at, finish_at FROM shipyard_queue WHERE planet_id = ? ORDER BY id LIMIT 1;",
+            (pid,),
+        ).fetchone()
+        assert row is not None
+        start_before = float(row["started_at"] or 0)
+        finish_before = float(row["finish_at"] or 0)
+        assert start_before > 0
+        rem_before = finish_before - time.time()
+        assert rem_before > 60
+
+        boost = 120
+        begin_write_transaction(conn)
+        credit(uid, boost + 60, "test", conn=conn)
+        ok, reason, result = apply_timekeeper(
+            uid, "shipyard", planet_id=pid, mode="max", conn=conn
+        )
+        assert ok, reason
+        applied = int(result.get("seconds_applied") or 0)
+        assert applied >= 60
+        commit(conn)
+
+        row2 = conn.execute(
+            "SELECT started_at, finish_at FROM shipyard_queue WHERE id = ?;",
+            (int(row["id"]),),
+        ).fetchone()
+        if row2 is None:
+            # Boost finished the whole batch — also success.
+            return
+        # Head start must move earlier so started_at-based remaining stays boosted
+        # (unless a unit boundary reset started_at to now after delivering).
+        start_after = float(row2["started_at"] or 0)
+        finish_after = float(row2["finish_at"] or 0)
+        assert finish_after < finish_before - 50 or start_after < start_before - 50
+
+        sync_shipyard_queue_finish_times(pid, 1, conn=conn, now=time.time())
+        client = shipyard_queue_for_client(uid, pid, 1, conn=conn, now=time.time())
+        jobs = client.get("jobs") or client.get("queue") or []
+        assert jobs
+        rem_after = int(jobs[0].get("remaining") or jobs[0].get("remaining_seconds") or 0)
+        assert rem_after < rem_before - 40
+    finally:
+        conn.close()

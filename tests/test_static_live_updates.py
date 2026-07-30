@@ -2599,6 +2599,8 @@ def test_main_js_timekeeper_one_click_apply_flow():
     assert "openTimekeeperModal" not in src
     assert "gc-timekeeper-modal" not in src
     assert 'applyActionState(res, "timekeeper_apply")' in src
+    assert "seconds_applied" in src
+    assert "GC-PERF-TK-001" in src or "do not rewrite queues from a failed" in src
     assert "_timekeeperApplying" in src
     assert "_timekeeperOpenContext(openBtn)" in src
     assert 'GC.fetchGameAction("/api/timekeeper/apply"' in src

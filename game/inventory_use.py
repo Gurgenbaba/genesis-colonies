@@ -191,10 +191,20 @@ def _shift_queue_times(
 
     cur = conn.cursor()
     new_finish = finish - actual
-    cur.execute(
-        f"UPDATE {table} SET {finish_col} = ? WHERE {id_col} = ?;",
-        (new_finish, int(first[id_col])),
-    )
+    # GC-PERF-TK-001: also shift the head start column. Shipyard/defense client
+    # remaining is derived from started_at (+ sync_* rewrites finish_at from that);
+    # finish-only boosts looked like no-ops after state rebuild.
+    old_start = float(first[start_col] or 0)
+    if old_start > 0:
+        cur.execute(
+            f"UPDATE {table} SET {start_col} = ?, {finish_col} = ? WHERE {id_col} = ?;",
+            (old_start - actual, new_finish, int(first[id_col])),
+        )
+    else:
+        cur.execute(
+            f"UPDATE {table} SET {finish_col} = ? WHERE {id_col} = ?;",
+            (new_finish, int(first[id_col])),
+        )
     for row in rows[1:]:
         old_start = float(row[start_col] or 0)
         old_finish = float(row[finish_col] or 0)
@@ -203,7 +213,6 @@ def _shift_queue_times(
             (old_start - actual, old_finish - actual, int(row[id_col])),
         )
     return actual
-
 
 def apply_active_head_queue_time_boost(
     conn,

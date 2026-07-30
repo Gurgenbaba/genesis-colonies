@@ -185,13 +185,19 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
                 or pirate_tick.get("escalated_ids")
                 or pirate_tick.get("spawned")
                 or play.get("count")
+                or play.get("economy_ok")
+                or pirate_tick.get("write_commits")
             ):
                 _worker_log(
                     f"pirates expired={pirate_tick.get('expired_ids')} "
                     f"escalated={pirate_tick.get('escalated_ids')} "
                     f"spawned={pirate_tick.get('spawned')} "
                     f"play_steps={play.get('count')} "
-                    f"play_active={play.get('active')}"
+                    f"play_active={play.get('active')} "
+                    f"economy_ok={play.get('economy_ok')} "
+                    f"write_commits={pirate_tick.get('write_commits') or play.get('write_commits')} "
+                    f"hold_ms={pirate_tick.get('hold_ms') or play.get('hold_ms')} "
+                    f"error={play.get('error')}"
                 )
 
         def _inactive_autoplay() -> None:
@@ -228,9 +234,10 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
         _run_stage("asteroids", _asteroids)
         # GC-2610: inactive_autoplay before pirates — pirate economy-for-all-bots is
         # the most expensive stage and must not starve inactive accounts of budget.
-        # GC-PERF-AUTOPLAY-001: autoplay manages short per-player write TXs itself.
+        # GC-PERF-AUTOPLAY-001 / GC-PERF-TK-001: both heavy stages manage short
+        # write transactions themselves so Timekeeper/live HTTP can interleave.
         _run_stage("inactive_autoplay", _inactive_autoplay, manage_tx=False)
-        _run_stage("pirates", _pirates)
+        _run_stage("pirates", _pirates, manage_tx=False)
         _run_stage("debris", _debris)
     except Exception:
         logger.exception("post fleet maintenance failed source=%s", source)
