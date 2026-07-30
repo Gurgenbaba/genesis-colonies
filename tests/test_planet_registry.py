@@ -634,7 +634,7 @@ def test_trader_hub_and_shipyard_render_active_planet_id(switcher_db, monkeypatc
 
 
 def test_planet_switch_hotfix_client_contract():
-    """GC-803 / GC-575A: planet switch is POST + PJAX reload; polls stay HUD-only."""
+    """GC-803 / GC-575A: planet switch is POST + soft panel / skip SSR; polls stay HUD-only."""
     src = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
     refresh = src.split("async function refreshGameState(reason)")[1].split("function refreshHudFromGameState")[0]
     assert "isPlanetSwitchReason" not in refresh
@@ -653,9 +653,14 @@ def test_planet_switch_hotfix_client_contract():
     assert 'reason: "planet_switch"' in registry
     assert "force: true" in registry
     assert "planetId," in registry or "planetId: planetId" in registry
+    # GC-PERF-PLANET-SWITCH-004: buildings etc soft-patch, no HTML tear-down
+    assert '"buildings"' in registry
+    assert "PLANET_SWITCH_SOFT_PANEL" in registry
+    assert 'forceCanonicalGameStateRefresh("planet_switch_panel"' in registry
     apply = src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]
     assert "GC.refreshInFlight = null" in apply
     assert "hudOnly: isPlanetSwitch" in apply
+    assert "staleMutationPlanet" in apply
     upd = src.split(
         "GC.updatePlanetRegistryFromState = function updatePlanetRegistryFromState(data)"
     )[1].split("function rebuildLanguageSelectMenu")[0]

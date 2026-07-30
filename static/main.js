@@ -1542,6 +1542,30 @@
       research_owners: Object.keys(resolveCardJobsByOwner(state.research)).length,
     });
     _primeActionStateTimekeeper(state);
+    // GC-PERF-PLANET-SWITCH-004: late upgrade/queue patches must not fight an in-flight switch
+    // (DOM already scoped to the new planet while mutation state is still the old one).
+    const actionPlanetId = Number(state.active_planet_id || state.build_queue?.planet_id || 0);
+    const domPlanetId = typeof getDomPlanetId === "function" ? getDomPlanetId() : 0;
+    const switchBusy =
+      !!GC._planetSwitchInFlight || Date.now() < Number(GC._planetSwitchCooldownUntil || 0);
+    const staleMutationPlanet =
+      !isPlanetSwitch
+      && actionPlanetId > 0
+      && domPlanetId > 0
+      && actionPlanetId !== domPlanetId
+      && (switchBusy || reasonStr.endsWith("_success") || reasonStr.endsWith("_error"));
+    if (staleMutationPlanet) {
+      // Drop late mutation for the previous planet — do not paint its resources/panels onto the new scope.
+      logActionStatePatch("skipped_stale_planet", reasonStr, {
+        actionPlanetId,
+        domPlanetId,
+        switchBusy: !!switchBusy,
+      });
+      if (_actionPerfSession && isMutationStatePatchReason(reasonStr)) {
+        finishActionPerfAfterApply(reasonStr);
+      }
+      return hasBusyLiveActivity();
+    }
     if (!isPlanetSwitch) {
       if (reasonStr === "timekeeper_apply") {
         resetQueueRenderSignaturesForImmediatePatch();
@@ -13795,6 +13819,18 @@
       try {
         const data = await GC.fetchJSON("/api/game-state?include_panel=1", { cache: "no-store" });
         if (!data || data.ok === false) return null;
+        const wantPlanet = Number(o.planetId || 0);
+        if (wantPlanet > 0) {
+          const gotPlanet = Number(data.active_planet_id || data.build_queue?.planet_id || 0);
+          if (gotPlanet > 0 && gotPlanet !== wantPlanet) {
+            console.debug("[GC] canonical state refresh stale planet", {
+              reason: reasonStr,
+              wantPlanet,
+              gotPlanet,
+            });
+            return null;
+          }
+        }
         syncServerClockFromState(data);
         applyGameStateData(data, reasonStr, {
           forcePanel: true,
@@ -26080,6 +26116,8 @@
           const pageName =
             typeof GC.detectPage === "function" ? GC.detectPage() : "";
           const onAdmin = pageName === "admin";
+          // GC-PERF-PLANET-SWITCH-004: progression pages soft-patch (no PJAX HTML tear-down).
+          // Full SSR after Bauleiste enqueue made switches look stuck/stuttery.
           const PLANET_SWITCH_SKIP_SSR = new Set([
             "admin",
             "fleet",
@@ -26087,9 +26125,27 @@
             "alliance",
             "ranking",
             "options",
+            "buildings",
+            "research",
+            "shipyard",
+            "defense",
+            "overview",
+            "planet_evolution",
+            "trader_hub",
+            "logistics",
+          ]);
+          const PLANET_SWITCH_SOFT_PANEL = new Set([
+            "buildings",
+            "research",
+            "shipyard",
+            "defense",
+            "overview",
+            "planet_evolution",
+            "trader_hub",
+            "logistics",
           ]);
           const skipSsr = PLANET_SWITCH_SKIP_SSR.has(pageName);
-          // Unlock before SSR so Imperium + sidebar stay clickable if reload stalls.
+          // Unlock before SSR/soft refresh so Imperium + sidebar stay clickable.
           unlockShellEarly("planet_switch_pre_reload");
           // Skip mid-flight registry rebuild when SSR reload replaces the rail anyway
           // (avoids pointer target shifting under a still-settling click).
@@ -26114,6 +26170,21 @@
           _bootstrapPageQueueCompactLiveFromDom();
           if (typeof GC.releaseShellNavigationBlockers === "function") {
             GC.releaseShellNavigationBlockers("planet_switch");
+          }
+          // Soft panel reconcile for buildings/research/… (planet-gated include_panel).
+          if (
+            !onAdmin
+            && PLANET_SWITCH_SOFT_PANEL.has(pageName)
+            && typeof GC.forceCanonicalGameStateRefresh === "function"
+          ) {
+            _lastQueueSignature = "";
+            _lastResearchQueueSignature = "";
+            _lastShipyardQueueSignature = "";
+            _lastDefenseQueueSignature = "";
+            await GC.forceCanonicalGameStateRefresh("planet_switch_panel", {
+              planetId,
+              forceResourceBar: true,
+            });
           }
           // GC-FLEET-PLANET-SWITCH-001: soft fleet refresh with explicit planet gate
           // (fleet stays in PLANET_SWITCH_SKIP_SSR to keep mission/coords draft).

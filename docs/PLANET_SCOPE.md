@@ -89,6 +89,8 @@ Klick Kolonie (Registry-Card)
 
 **GC-PERF-PLANET-SWITCH-003:** `POST /api/planets/active` does **not** run empire `finish_player_due_work` or the HTTP `before_request` fleet tick. State uses `read_player_live_state_for_planet_switch` (projected resources for the new active planet). Queue finish stays on poll / maintenance worker — Bauleiste must not block colony switching.
 
+**GC-PERF-PLANET-SWITCH-004:** On buildings / research / shipyard / defense / overview (and similar), planet switch **skips PJAX SSR** and soft-patches via `forceCanonicalGameStateRefresh("planet_switch_panel", { planetId })`. Late `upgrade_success` for the previous planet is HUD-only when DOM scope already moved — avoids stutter after enqueue→instant switch.
+
 ### DOM-Planet-ID
 
 Scoped Pages tragen `data-planet-id`:

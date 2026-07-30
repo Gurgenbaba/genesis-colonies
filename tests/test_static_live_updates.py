@@ -573,17 +573,28 @@ def test_main_js_gc802_planet_switch_state_sync():
     assert "syncScopedPlanetIds" in src
     assert '"logistics-page"' in src.split("function syncScopedPlanetIds")[1].split("function abortInFlight")[0]
     assert "abortInFlightGameStateFetches" in src
-    switch_section = src.split('applyActionState(res, "planet_switch")')[1][:2800]
+    switch_section = src.split('applyActionState(res, "planet_switch")')[1].split(
+        "function bindPlanetEvolutionOnce()"
+    )[0]
     planet_switch_apply = src.split("const isPlanetSwitch = reason === \"planet_switch\"")[1].split("function logStatusPollErrorOnce")[0]
     assert "GC.stopPolling()" in planet_switch_apply
     assert "hudOnly: isPlanetSwitch" in planet_switch_apply
+    assert "staleMutationPlanet" in planet_switch_apply
     assert "PLANET_SWITCH_SKIP_SSR" in switch_section
+    assert "PLANET_SWITCH_SOFT_PANEL" in switch_section
+    assert '"buildings"' in switch_section
+    assert 'forceCanonicalGameStateRefresh("planet_switch_panel"' in switch_section
     assert "skipHydrate: true" in switch_section
     assert "skipGameState: true" in switch_section
     # GC-FLEET-PLANET-SWITCH-001
     assert 'reason: "planet_switch"' in switch_section
     assert "force: true" in switch_section
     assert 'pageName === "fleet"' in switch_section
+    canonical = src.split("async function forceCanonicalGameStateRefresh(reason, opts)")[1].split(
+        "GC.forceCanonicalGameStateRefresh = forceCanonicalGameStateRefresh"
+    )[0]
+    assert "wantPlanet" in canonical
+    assert "o.planetId" in canonical
     apply_live = src.split("const applyLiveState = (page, state, opts) => {")[1].split(
         "const refreshFleetState = async (page, opts) => {"
     )[0]
