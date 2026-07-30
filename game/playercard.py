@@ -176,16 +176,24 @@ def badge_image_asset_stem(badge_key: str) -> str:
 
 
 def badge_image_default_path() -> str:
+    root = _project_root()
+    webp = _BADGE_IMAGE_DIR / f"{BADGE_IMAGE_DEFAULT}.webp"
+    if (root / webp).is_file():
+        return f"/static/img/badges/{BADGE_IMAGE_DEFAULT}.webp"
     return f"/static/img/badges/{BADGE_IMAGE_DEFAULT}.png"
 
 
 def badge_image_static_path(badge_key: str) -> str:
-    """Public badge art under static/img/badges/ with default.png fallback."""
+    """Public badge art under static/img/badges/ — WebP preferred (GC-PERF-IMG)."""
     stem = badge_image_asset_stem(badge_key)
-    rel = _BADGE_IMAGE_DIR / f"{stem}.png"
-    if not (_project_root() / rel).is_file():
-        return badge_image_default_path()
-    return f"/static/img/badges/{stem}.png"
+    root = _project_root()
+    webp = _BADGE_IMAGE_DIR / f"{stem}.webp"
+    png = _BADGE_IMAGE_DIR / f"{stem}.png"
+    if (root / webp).is_file():
+        return f"/static/img/badges/{stem}.webp"
+    if (root / png).is_file():
+        return f"/static/img/badges/{stem}.png"
+    return badge_image_default_path()
 
 
 def _badge_sort_key(badge: Dict[str, Any]) -> Tuple[int, int, int]:

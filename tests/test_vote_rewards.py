@@ -687,7 +687,7 @@ def test_reward_summary_display_items_use_canonical_labels(vote_db):
     assert summary["reward_type"] == "standard_box"
     assert summary["amount"] == 1
     assert summary["display_items"][0]["name_key"] == "inv_container_basic"
-    assert summary["display_items"][0]["image"].endswith("Basic_Container.png")
+    assert summary["display_items"][0]["image"].endswith("Basic_Container.webp")
 
     legacy_resources = _reward_summary(RESOURCE_PAYLOAD)
     assert legacy_resources["reward_type"] == "standard_box"

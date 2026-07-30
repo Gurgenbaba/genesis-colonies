@@ -4,15 +4,18 @@
 {% set planet = (os.planet if os.planet is defined else {}) %}
 {% set theme = (planet.theme if planet.theme is defined else {}) %}
 {% set herocard_rel = theme.herocard_relpath or 'img/herocards/herocard_08.png' %}
-{% set herocard_png_url = url_for('static', filename=herocard_rel) %}
+{% set herocard_png_url = url_for('static', filename=herocard_rel, v=GC_ASSET_VERSION) %}
 {% set herocard_webp_url = herocard_png_url|webp_static %}
 {% set _lcp_preload_href = herocard_webp_url %}
+{% set _frame_webp_url = url_for('static', filename='img/herocardsframe/frame.webp', v=GC_ASSET_VERSION) %}
+{% set _frame_png_url = url_for('static', filename='img/herocardsframe/frame.png', v=GC_ASSET_VERSION) %}
 
 {% block extra_head %}
 {{ super() }}
 {% if _lcp_preload_href %}
 <link id="gc-lcp-hero-preload" rel="preload" as="image" type="image/webp" href="{{ _lcp_preload_href }}" fetchpriority="high" data-gc-lcp-preload="1">
 {% endif %}
+<link rel="preload" as="image" type="image/webp" href="{{ _frame_webp_url }}" data-gc-frame-preload="1">
 {% endblock %}
 
 {% block content %}
@@ -31,10 +34,11 @@
 {% set hero_theme_group = theme.theme_group or 'living' %}
 {% set hero_label_key = theme.label_key or 'planet_slot_08' %}
 {% set herocard_srcset_parts = theme.herocard_webp_srcset_parts if theme.herocard_webp_srcset_parts is defined else [] %}
-{% set herocard_sizes = theme.herocard_webp_sizes or '(max-width: 768px) 100vw, (max-width: 1280px) 90vw, 1120px' %}
+{% set herocard_sizes = theme.herocard_webp_sizes or '(max-width: 768px) 100vw, (max-width: 1280px) 70vw, 840px' %}
 {% set herocard_w = theme.herocard_fallback_width|default(560) %}
 {% set herocard_h = theme.herocard_fallback_height|default(373) %}
 {% set hero_landscape_rel = theme.landscape_relpath or 'img/landscapes/normaltempplanet01-h.jpg' %}
+{% set hero_landscape_url = url_for('static', filename=hero_landscape_rel, v=GC_ASSET_VERSION) %}
 
 <div class="gc-page overview-wrapper overview-command" data-planet-id="{{ planet.planet_id or 0 }}">
 
@@ -61,7 +65,7 @@
   <section class="gc-panel overview-hero overview-hero--themed gc-planet-hero gc-planet-theme--{{ hero_theme_key }} gc-planet-theme-group--{{ hero_theme_group }} overview-hero--effect-{{ hero_effect }}"
            id="overview-planet-hero"
            aria-label="{{ T('overview_label_planet', 'Kolonie') }}"
-           style="--planet-accent: {{ hero_accent }}; --planet-secondary: {{ hero_secondary }}; --planet-accent-secondary: {{ hero_secondary }}; --planet-glow: {{ hero_glow }}; --planet-landscape: url('{{ url_for('static', filename=hero_landscape_rel) }}'); --hero-frame-url: image-set(url('{{ url_for('static', filename='img/herocardsframe/frame.webp') }}') type('image/webp'), url('{{ url_for('static', filename='img/herocardsframe/frame.png') }}') type('image/png'));"
+           style="--planet-accent: {{ hero_accent }}; --planet-secondary: {{ hero_secondary }}; --planet-accent-secondary: {{ hero_secondary }}; --planet-glow: {{ hero_glow }}; --planet-landscape: url('{{ hero_landscape_url }}'); --hero-frame-url: image-set(url('{{ _frame_webp_url }}') type('image/webp'), url('{{ _frame_png_url }}') type('image/png'));"
            data-planet-effect="{{ hero_effect }}"
            data-planet-theme-key="{{ hero_theme_key }}"
            data-planet-theme-group="{{ hero_theme_group }}"
@@ -70,7 +74,7 @@
     <div class="overview-hero-bg" data-overview-hero-bg aria-hidden="true">
       <picture>
         <source type="image/webp"
-                srcset="{% for rel, w in herocard_srcset_parts %}{{ url_for('static', filename=rel) }} {{ w }}w{% if not loop.last %}, {% endif %}{% endfor %}"
+                srcset="{% for rel, w in herocard_srcset_parts %}{{ url_for('static', filename=rel, v=GC_ASSET_VERSION) }} {{ w }}w{% if not loop.last %}, {% endif %}{% endfor %}"
                 sizes="{{ herocard_sizes }}">
         <img src="{{ herocard_png_url }}"
              alt=""

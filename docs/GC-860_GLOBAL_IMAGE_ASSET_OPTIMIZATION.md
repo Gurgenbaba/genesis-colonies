@@ -75,7 +75,7 @@ Related:
 ## Tests
 
 ```bash
-python -m pytest tests/test_gc860_image_asset_audit.py -v
+python -m pytest tests/test_gc860_image_asset_audit.py tests/test_gc_perf_img_budgets.py -v
 ```
 
 ## Related tickets
@@ -84,3 +84,4 @@ python -m pytest tests/test_gc860_image_asset_audit.py -v
 - GC-859 — building hero LCP (committed)
 - GC-860B — compress/generate assets
 - GC-860C — template rollout project-wide
+- **GC-PERF-IMG-001…004 (done)** — shell compress (frame/expedition/landscapes/debris), missing WebPs, card-folder budgets, JS/catalog `preferWebpStaticUrl`, Overview preload + `?v=`, `OVERVIEW_HEROCARD_SIZES` → 840px

@@ -210,14 +210,19 @@ def fmt_duration_filter(value, max_parts: int = 3):
 
 @app.template_filter("webp_static")
 def webp_static_filter(url: str) -> str:
-    """GC-555 — sibling WebP URL for a static raster asset URL."""
+    """GC-555 — sibling WebP URL for a static raster asset URL.
+
+    Preserves query strings (e.g. ``?v=`` cache bust) after the extension swap.
+    """
     text = str(url or "").strip()
     if not text or "." not in text:
         return text
-    base, dot, ext = text.rpartition(".")
-    if ext.lower() not in ("png", "jpg", "jpeg"):
+    path, sep, query = text.partition("?")
+    base, dot, ext = path.rpartition(".")
+    if not dot or ext.lower() not in ("png", "jpg", "jpeg"):
         return text
-    return f"{base}.webp"
+    out = f"{base}.webp"
+    return f"{out}?{query}" if sep else out
 
 
 @app.template_filter("rules_md")

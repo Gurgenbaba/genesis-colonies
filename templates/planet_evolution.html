@@ -193,7 +193,8 @@
          id="pe-research-card-{{ tech.tech_key }}"
          data-planet-tech-card data-tech-key="{{ tech.tech_key }}" role="listitem">
   <div class="pe-tech-card-body">
-    <img class="pe-tech-card-icon" src="{{ url_for('static', filename='img/research/' ~ (tech.icon or 'metallveredelung.png')) }}" alt="" loading="lazy" onerror="this.hidden=true;this.nextElementSibling.hidden=false;">
+    {% set _pe_png = url_for('static', filename='img/research/' ~ (tech.icon or 'metallveredelung.png'), v=GC_ASSET_VERSION) %}
+    <img class="pe-tech-card-icon" src="{{ _pe_png|webp_static }}" alt="" loading="lazy" onerror="this.onerror=null;this.src='{{ _pe_png }}';this.onerror=function(){this.hidden=true;if(this.nextElementSibling)this.nextElementSibling.hidden=false;};">
     <span class="pe-tech-card-fallback" hidden aria-hidden="true">{{ tech.icon_fallback or '🧬' }}</span>
     <div class="pe-tech-card-info">
       <div class="pe-tech-card-name-row">

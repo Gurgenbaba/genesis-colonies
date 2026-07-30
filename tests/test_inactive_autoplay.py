@@ -1277,6 +1277,58 @@ def test_touch_player_online_releases_roster_member(autoplay_db):
         conn.close()
 
 
+def test_touch_player_online_releases_even_when_throttled(autoplay_db):
+    """GC-PERF-LOCK-001: roster handback must not wait for the 30s last_seen throttle."""
+    from game.inactive_autoplay import ROSTER_KEY, get_roster_snapshot, set_inactive_autoplay_enabled
+    from game.models import touch_player_online
+    from game.runtime_state import set_runtime_value
+
+    uid = _register_user()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        set_inactive_autoplay_enabled(True, conn=conn)
+        _seed_dormant(conn, uid, days_inactive=5.0)
+        # Fresh last_seen → UPDATE rowcount 0 (throttled).
+        conn.execute(
+            "UPDATE players SET last_seen = ? WHERE id = ?;",
+            (time.time(), uid),
+        )
+        set_runtime_value(
+            ROSTER_KEY, json.dumps([_seed_roster_item(uid)]), conn=conn
+        )
+        commit(conn)
+    finally:
+        conn.close()
+
+    touch_player_online(uid)
+
+    conn = db()
+    try:
+        remaining_ids = {int(r["player_id"]) for r in get_roster_snapshot(conn=conn)}
+        assert uid not in remaining_ids
+    finally:
+        conn.close()
+
+
+def test_touch_player_online_swallows_sqlite_lock(autoplay_db, monkeypatch):
+    """GC-PERF-LOCK-001: SQLITE_BUSY must not raise out of touch_player_online."""
+    import sqlite3
+
+    from game.db import begin_write_transaction as real_begin
+    from game.models import touch_player_online
+
+    calls = {"n": 0}
+
+    def boom_begin(conn, *, retries=12):
+        calls["n"] += 1
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr("game.models.begin_write_transaction", boom_begin)
+    touch_player_online(1)  # must not raise
+    assert calls["n"] >= 1
+
+
 def test_run_inactive_autoplay_tick_never_touches_released_player(autoplay_db):
     """GC-2619: once released (real login), the account must stay untouched by
     autoplay going forward — no more builds/research/defense/presence touches
@@ -1459,3 +1511,141 @@ def test_inactive_autoplay_handback_still_works_after_short_tx(autoplay_db):
     touch_player_online(uid)
     remaining = {int(r["player_id"]) for r in get_roster_snapshot()}
     assert uid not in remaining
+
+
+def test_inactive_autoplay_default_tick_per_cron_is_one(monkeypatch):
+    """GC-PERF-AUTOPLAY-002: default cadence is one economy per cron."""
+    from game.inactive_autoplay import (
+        DEFAULT_TICK_PER_CRON,
+        INACTIVE_CHAIN_LIMIT,
+        tick_budget_ms,
+        tick_per_cron,
+        yield_ms,
+    )
+
+    monkeypatch.delenv("GC_INACTIVE_AUTOPLAY_TICK_PER_CRON", raising=False)
+    monkeypatch.delenv("GC_INACTIVE_AUTOPLAY_YIELD_MS", raising=False)
+    monkeypatch.delenv("GC_INACTIVE_AUTOPLAY_TICK_BUDGET_MS", raising=False)
+    assert DEFAULT_TICK_PER_CRON == 1
+    assert tick_per_cron() == 1
+    assert INACTIVE_CHAIN_LIMIT == 2
+    assert yield_ms() == 50
+    assert tick_budget_ms() == 800
+
+
+def test_inactive_autoplay_budget_stops_standing_rr(autoplay_db, monkeypatch):
+    """GC-PERF-AUTOPLAY-002: wall budget aborts further short-TX economies."""
+    from game import inactive_autoplay as mod
+    from game.inactive_autoplay import (
+        ROSTER_KEY,
+        WORKER_LAST_KEY,
+        run_inactive_autoplay_tick,
+        set_inactive_autoplay_enabled,
+    )
+    from game.runtime_state import set_runtime_value
+
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_TICK_PER_CRON", "3")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_TICK_BUDGET_MS", "200")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_YIELD_MS", "0")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_BATCH", "1")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_MAX_SESSIONS", "4")
+
+    uids = [_register_user() for _ in range(3)]
+    now = time.time()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        set_inactive_autoplay_enabled(True, conn=conn)
+        for uid in uids:
+            _seed_dormant(conn, uid, days_inactive=5.0)
+        roster = [_seed_roster_item(uid) for uid in uids]
+        set_runtime_value(ROSTER_KEY, json.dumps(roster), conn=conn)
+        # Recent wake stamp → no wake wave; only standing RR economies run.
+        set_runtime_value(
+            WORKER_LAST_KEY,
+            json.dumps({"ok": True, "at": now, "source": "test"}),
+            conn=conn,
+        )
+        commit(conn)
+    finally:
+        conn.close()
+
+    real_run = mod._run_player_economy
+
+    def _slow_economy(*args, **kwargs):
+        time.sleep(0.12)
+        return real_run(*args, **kwargs)
+
+    monkeypatch.setattr(mod, "_run_player_economy", _slow_economy)
+
+    conn = db()
+    try:
+        result = run_inactive_autoplay_tick(
+            conn, now=now + 1.0, force=False, source="test_budget"
+        )
+        assert result.get("ok") is True
+        assert result.get("short_tx") is True
+        assert result.get("budget_stopped") is True
+        assert int(result.get("session_ticks") or 0) < 3
+        assert int(result.get("session_ticks") or 0) >= 1
+    finally:
+        conn.close()
+
+
+def test_inactive_autoplay_yields_between_short_tx_economies(autoplay_db, monkeypatch):
+    """GC-PERF-AUTOPLAY-002: short-TX path sleeps between player economies."""
+    from game import inactive_autoplay as mod
+    from game.inactive_autoplay import (
+        ROSTER_KEY,
+        WORKER_LAST_KEY,
+        run_inactive_autoplay_tick,
+        set_inactive_autoplay_enabled,
+    )
+    from game.runtime_state import set_runtime_value
+
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_TICK_PER_CRON", "2")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_YIELD_MS", "40")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_TICK_BUDGET_MS", "5000")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_BATCH", "1")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_MAX_SESSIONS", "4")
+
+    sleeps: list[float] = []
+
+    def _record_sleep(sec):
+        sleeps.append(float(sec))
+        # Do not actually wait in tests.
+
+    monkeypatch.setattr(mod.time, "sleep", _record_sleep)
+
+    uids = [_register_user() for _ in range(2)]
+    now = time.time()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        set_inactive_autoplay_enabled(True, conn=conn)
+        for uid in uids:
+            _seed_dormant(conn, uid, days_inactive=5.0)
+        set_runtime_value(
+            ROSTER_KEY, json.dumps([_seed_roster_item(uid) for uid in uids]), conn=conn
+        )
+        set_runtime_value(
+            WORKER_LAST_KEY,
+            json.dumps({"ok": True, "at": now, "source": "test"}),
+            conn=conn,
+        )
+        commit(conn)
+    finally:
+        conn.close()
+
+    conn = db()
+    try:
+        result = run_inactive_autoplay_tick(
+            conn, now=now + 1.0, force=False, source="test_yield"
+        )
+        assert result.get("ok") is True
+        assert result.get("short_tx") is True
+        assert int(result.get("yield_ms") or 0) == 40
+        assert int(result.get("session_ticks") or 0) == 2
+        assert any(abs(s - 0.04) < 1e-9 for s in sleeps)
+    finally:
+        conn.close()

@@ -86,14 +86,20 @@
 
           <div class="gc-world-boss-card-body">
             <div class="gc-world-boss-card-art">
-              <img class="gc-world-boss-portrait"
-                   src="{{ url_for('static', filename='img/bosses/' ~ event.boss_key ~ '.png', v=GC_ASSET_VERSION) }}"
-                   alt="{{ T(event.name_key, event.boss_key) }}"
-                   width="160"
-                   height="160"
-                   loading="lazy"
-                   decoding="async"
-                   onerror="this.onerror=null;this.src='{{ url_for('static', filename='img/bosses/_placeholder.png', v=GC_ASSET_VERSION) }}';">
+              {% set _boss_png = url_for('static', filename='img/bosses/' ~ event.boss_key ~ '.png', v=GC_ASSET_VERSION) %}
+              {% set _boss_webp = _boss_png|webp_static %}
+              {% set _boss_ph = url_for('static', filename='img/bosses/_placeholder.png', v=GC_ASSET_VERSION) %}
+              <picture>
+                <source type="image/webp" srcset="{{ _boss_webp }}">
+                <img class="gc-world-boss-portrait"
+                     src="{{ _boss_png }}"
+                     alt="{{ T(event.name_key, event.boss_key) }}"
+                     width="160"
+                     height="160"
+                     loading="lazy"
+                     decoding="async"
+                     onerror="this.onerror=null;this.src='{{ _boss_ph }}';">
+              </picture>
             </div>
             <div class="gc-world-boss-card-meta">
               <div class="gc-world-boss-hp" role="meter" aria-valuemin="0" aria-valuemax="100"

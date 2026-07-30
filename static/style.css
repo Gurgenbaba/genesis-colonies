@@ -13821,6 +13821,10 @@ body.gc-techtree-media-zoom-open{
   height: 100%;
   border-radius: 50%;
   background-image: var(--gc-galaxy-debris-img, url("img/debris/debris.jpg"));
+  background-image: image-set(
+    var(--gc-galaxy-debris-img-webp, var(--gc-galaxy-debris-img, url("img/debris/debris.webp"))) type("image/webp"),
+    var(--gc-galaxy-debris-img, url("img/debris/debris.jpg")) type("image/jpeg")
+  );
   background-size: cover;
   background-position: center;
 }
@@ -13860,6 +13864,10 @@ body.gc-techtree-media-zoom-open{
   height: 100%;
   border-radius: 50%;
   background-image: var(--gc-galaxy-asteroid-img, url("img/debris/asteroid.jpg"));
+  background-image: image-set(
+    var(--gc-galaxy-asteroid-img-webp, var(--gc-galaxy-asteroid-img, url("img/debris/asteroid.webp"))) type("image/webp"),
+    var(--gc-galaxy-asteroid-img, url("img/debris/asteroid.jpg")) type("image/jpeg")
+  );
   background-size: cover;
   background-position: center;
 }

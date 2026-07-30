@@ -468,7 +468,7 @@ def apply_herocard_urls_to_switcher_planets(planets: list, static_url) -> list:
 # GC-860B/C — responsive overview hero variants (widths match compress_p0_assets.py)
 HEROCARD_WEBP_VARIANTS: tuple[str, ...] = ("sm", "md", "lg")
 HEROCARD_WEBP_WIDTHS: dict[str, int] = {"sm": 320, "md": 560, "lg": 840}
-OVERVIEW_HEROCARD_SIZES = "(max-width: 768px) 100vw, (max-width: 1280px) 90vw, 1120px"
+OVERVIEW_HEROCARD_SIZES = "(max-width: 768px) 100vw, (max-width: 1280px) 70vw, 840px"
 HEROCARD_FALLBACK_WIDTH = 560
 HEROCARD_FALLBACK_HEIGHT = 373
 

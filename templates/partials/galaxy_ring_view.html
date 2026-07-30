@@ -13,7 +13,7 @@
      data-active-planet-id="{{ (active_planet_id if active_planet_id is defined and active_planet_id else (HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET is defined and HEADER_ACTIVE_PLANET else 0))|int }}"
      data-available-reclaimers="{{ (sys.available_reclaimers if sys.available_reclaimers is defined else 0)|int }}"
      data-has-seed-ark="{{ '1' if has_seed_ark is defined and has_seed_ark else '0' }}"
-     style="--gc-galaxy-map-tile: url('{{ url_for('static', filename='img/map.webp', v=GC_ASSET_VERSION) }}'); --gc-galaxy-map-tile-fallback: url('{{ url_for('static', filename='img/map.png', v=GC_ASSET_VERSION) }}'); --gc-galaxy-debris-img: url('{{ url_for('static', filename='img/debris/debris.jpg', v=GC_ASSET_VERSION) }}'); --gc-galaxy-asteroid-img: url('{{ url_for('static', filename='img/debris/asteroid.jpg', v=GC_ASSET_VERSION) }}');">
+     style="--gc-galaxy-map-tile: url('{{ url_for('static', filename='img/map.webp', v=GC_ASSET_VERSION) }}'); --gc-galaxy-map-tile-fallback: url('{{ url_for('static', filename='img/map.png', v=GC_ASSET_VERSION) }}'); --gc-galaxy-debris-img: url('{{ url_for('static', filename='img/debris/debris.jpg', v=GC_ASSET_VERSION) }}'); --gc-galaxy-debris-img-webp: url('{{ url_for('static', filename='img/debris/debris.webp', v=GC_ASSET_VERSION) }}'); --gc-galaxy-asteroid-img: url('{{ url_for('static', filename='img/debris/asteroid.jpg', v=GC_ASSET_VERSION) }}'); --gc-galaxy-asteroid-img-webp: url('{{ url_for('static', filename='img/debris/asteroid.webp', v=GC_ASSET_VERSION) }}');">
   <section class="galaxy-hud-module" data-galaxy-hud-module>
     <header class="galaxy-hud-header" aria-label="{{ T('galaxy_nav_label') }}">
       <span class="galaxy-hud-title">{{ T("nav_galaxy", "Galaxie") }}</span>
@@ -121,7 +121,7 @@
             {% set effect = slot.visual_effect if slot.visual_effect is defined else (slot.planet_class or 'temperate') %}
             {% if slot.has_world_boss and slot.world_boss %}
             {% set img_rel = 'img/bosses/' ~ ((slot.world_boss.boss_key or '_placeholder')|string) ~ '.png' %}
-            {% set img_webp = '' %}
+            {% set img_webp = 'img/bosses/' ~ ((slot.world_boss.boss_key or '_placeholder')|string) ~ '.webp' %}
             {% endif %}
             <div class="galaxy-ring-slot-wrap
                  {% if slot.has_world_boss %}has-world-boss-wrap{% endif %}"
@@ -197,7 +197,7 @@
                       aria-controls="galaxy-ring-inspector-expedition"
                       aria-expanded="false">
                 <span class="galaxy-ring-slot-body galaxy-ring-slot-body--expedition has-planet-image"
-                      style="--gr-planet-image: url('{{ url_for('static', filename='img/expedition/expedition.png', v=GC_ASSET_VERSION) }}');">
+                      style="--gr-planet-image: url('{{ url_for('static', filename='img/expedition/expedition.png', v=GC_ASSET_VERSION) }}'); --gr-planet-image-webp: url('{{ url_for('static', filename='img/expedition/expedition.webp', v=GC_ASSET_VERSION) }}');">
                   <span class="galaxy-ring-slot-pos gc-mono" aria-hidden="true">{{ exp_slot.position }}</span>
                 </span>
               </button>

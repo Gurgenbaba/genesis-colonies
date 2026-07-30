@@ -8,13 +8,19 @@
 {% set attack_href = wb.fleet_deep_link if wb.fleet_deep_link else (url_for('fleet_view') ~ '?mission=attack&target_galaxy=' ~ g ~ '&target_system=' ~ s ~ '&target_position=' ~ p) %}
 <div class="galaxy-wb-block">
   <div class="galaxy-wb-block-head">
-    <img class="galaxy-wb-block-art"
-         src="{{ url_for('static', filename='img/bosses/' ~ (wb.boss_key or '_placeholder') ~ '.png', v=GC_ASSET_VERSION) }}"
-         alt=""
-         width="48"
-         height="48"
-         loading="lazy"
-         onerror="this.onerror=null;this.src='{{ url_for('static', filename='img/bosses/_placeholder.png', v=GC_ASSET_VERSION) }}';">
+    {% set _wb_png = url_for('static', filename='img/bosses/' ~ (wb.boss_key or '_placeholder') ~ '.png', v=GC_ASSET_VERSION) %}
+    {% set _wb_webp = _wb_png|webp_static %}
+    {% set _wb_ph = url_for('static', filename='img/bosses/_placeholder.png', v=GC_ASSET_VERSION) %}
+    <picture>
+      <source type="image/webp" srcset="{{ _wb_webp }}">
+      <img class="galaxy-wb-block-art"
+           src="{{ _wb_png }}"
+           alt=""
+           width="48"
+           height="48"
+           loading="lazy"
+           onerror="this.onerror=null;this.src='{{ _wb_ph }}';">
+    </picture>
     <div class="galaxy-wb-block-meta">
       <div class="galaxy-wb-block-title">{{ T('galaxy_wb_field', 'World Boss') }}</div>
       <strong>{{ T(wb.name_key, wb.boss_key) }}</strong>

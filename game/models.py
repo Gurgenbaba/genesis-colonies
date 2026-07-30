@@ -812,32 +812,75 @@ def touch_player_online(player_id: int) -> None:
     see `inactive_autoplay.release_active_player_from_roster` for why this
     can't just be inferred from `last_seen` alone (autoplay writes that same
     column for its own "online" presence, GC-2617).
+
+    GC-PERF-LOCK-001: SQLITE_BUSY after retries is swallowed (request continues).
+    Roster release runs even when the throttled ``last_seen`` UPDATE writes 0
+    rows, so humans regain control without waiting for the next 30s touch.
     """
     if not player_id:
         return
     now = _now_ts()
     touch_before = now - 30
+    pid = int(player_id)
     conn = db()
     try:
         begin_write_transaction(conn)
         cur = conn.cursor()
         cur.execute(
             "UPDATE players SET last_seen = ? WHERE id = ? AND (last_seen IS NULL OR last_seen < ?)",
-            (now, int(player_id), touch_before),
+            (now, pid, touch_before),
         )
-        if cur.rowcount > 0:
-            try:
-                from .inactive_autoplay import release_active_player_from_roster
+        touched = cur.rowcount > 0
+        try:
+            from .inactive_autoplay import release_active_player_from_roster
 
-                release_active_player_from_roster(int(player_id), conn=conn)
-            except Exception:
-                logger.exception(
-                    "release_active_player_from_roster failed player=%s", player_id
-                )
+            release_active_player_from_roster(pid, conn=conn)
+        except Exception:
+            logger.exception(
+                "release_active_player_from_roster failed player=%s", pid
+            )
+        commit(conn)
+        if not touched:
+            # Throttle skipped last_seen write; release above still ran in-TX.
+            pass
+    except Exception as exc:
+        try:
+            rollback(conn)
+        except Exception:
+            pass
+        from .db import is_sqlite_lock_error
+
+        if is_sqlite_lock_error(exc):
+            logger.warning(
+                "touch_player_online locked player=%s — best-effort skip", pid
+            )
+            _release_roster_best_effort(pid)
+            return
+        logger.exception("touch_player_online failed player=%s", pid)
+        raise
+    finally:
+        conn.close()
+
+
+def _release_roster_best_effort(player_id: int) -> None:
+    """GC-PERF-LOCK-001: try roster handback in a fresh short TX after a lock skip."""
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        from .inactive_autoplay import release_active_player_from_roster
+
+        release_active_player_from_roster(int(player_id), conn=conn)
         commit(conn)
     except Exception:
-        rollback(conn)
-        raise
+        try:
+            rollback(conn)
+        except Exception:
+            pass
+        logger.warning(
+            "release_active_player_from_roster best-effort failed player=%s",
+            player_id,
+            exc_info=True,
+        )
     finally:
         conn.close()
 

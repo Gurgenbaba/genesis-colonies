@@ -37,7 +37,7 @@ CATALOG_VERSION = 5
 
 # Free-Baseline Value Balance (GC-2310…2313):
 # Paid sells scarce flexible TK + dense high-tier packs; domain boosters must beat ~2× login-month skip.
-# Static art under static/img/shop/ — relative path for url_for('static', …).
+# Static art under static/img/pass/ (WebP) — legacy static/img/shop/*.jpg removed GC-PERF-IMG.
 SHOP_SKU_IMAGES: Dict[str, str] = {
     SKU_SEASON_PASS: "img/pass/season_pass.webp",
     "tk_pack_s": "img/pass/timekeeper.webp",

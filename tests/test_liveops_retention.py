@@ -596,8 +596,8 @@ def test_pass_relic_images_wired_in_catalog_and_ops():
     assert item_catalog_entry("booster_build_5m")["image"] == "img/pass/build_boost.webp"
     assert item_catalog_entry("booster_research_1h")["image"] == "img/pass/research_booster.webp"
     assert item_catalog_entry("booster_production_50")["image"] == "img/pass/prod_boost.webp"
-    assert item_catalog_entry("container_basic")["image"] == "img/lootboxes/Basic_Container.png"
-    assert item_catalog_entry("container_mythic")["image"] == "img/lootboxes/Epic_Container.png"
+    assert item_catalog_entry("container_basic")["image"] == "img/lootboxes/Basic_Container.webp"
+    assert item_catalog_entry("container_mythic")["image"] == "img/lootboxes/Epic_Container.webp"
 
     assert OPS_CATALOG[OP_BUILD]["image"].endswith("build_boost.webp")
     assert OPS_CATALOG[OP_RESEARCH]["image"].endswith("research_booster.webp")

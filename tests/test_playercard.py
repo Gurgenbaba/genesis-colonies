@@ -860,18 +860,20 @@ def test_badge_seed_idempotent_via_service(temp_db):
 
 
 def test_badge_image_static_paths():
-    assert badge_image_static_path("founder") == "/static/img/badges/founder.png"
-    assert badge_image_static_path("builder_1k") == "/static/img/badges/builder.png"
-    assert badge_image_static_path("builder_10k") == "/static/img/badges/architect.png"
-    assert badge_image_static_path("researcher_1k") == "/static/img/badges/researcher.png"
-    assert badge_image_static_path("researcher_10k") == "/static/img/badges/scientist.png"
-    assert badge_image_static_path("commander_5k") == "/static/img/badges/commander.png"
-    assert badge_image_static_path("commander_50k") == "/static/img/badges/legend.png"
-    assert badge_image_static_path("bug_hunter") == "/static/img/badges/bughunter.png"
-    assert badge_image_static_path("community_hero") == "/static/img/badges/community.png"
-    assert badge_image_static_path("galactic_legend") == "/static/img/badges/galactic_legend.png"
-    assert badge_image_static_path("genesis") == "/static/img/badges/genesis.png"
+    """GC-PERF-IMG: badge owner prefers WebP when the sibling exists on disk."""
+    assert badge_image_static_path("founder") == "/static/img/badges/founder.webp"
+    assert badge_image_static_path("builder_1k") == "/static/img/badges/builder.webp"
+    assert badge_image_static_path("builder_10k") == "/static/img/badges/architect.webp"
+    assert badge_image_static_path("researcher_1k") == "/static/img/badges/researcher.webp"
+    assert badge_image_static_path("researcher_10k") == "/static/img/badges/scientist.webp"
+    assert badge_image_static_path("commander_5k") == "/static/img/badges/commander.webp"
+    assert badge_image_static_path("commander_50k") == "/static/img/badges/legend.webp"
+    assert badge_image_static_path("bug_hunter") == "/static/img/badges/bughunter.webp"
+    assert badge_image_static_path("community_hero") == "/static/img/badges/community.webp"
+    assert badge_image_static_path("galactic_legend") == "/static/img/badges/galactic_legend.webp"
+    assert badge_image_static_path("genesis") == "/static/img/badges/genesis.webp"
     assert badge_image_static_path("unknown_badge_key") == badge_image_default_path()
+    assert badge_image_default_path().endswith((".webp", ".png"))
 
 
 def test_badge_image_static_path_missing_asset_fallback(monkeypatch):

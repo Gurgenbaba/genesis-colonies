@@ -26,14 +26,15 @@
 
     <div class="gc-records-list" role="list">
       {% for record in group.records %}
-      {% set _rec_icon = url_for('static', filename=record.icon) if record.icon else url_for('static', filename='img/buildings/default.png') %}
+      {% set _rec_icon_png = url_for('static', filename=record.icon, v=GC_ASSET_VERSION) if record.icon else url_for('static', filename='img/buildings/default.png', v=GC_ASSET_VERSION) %}
+      {% set _rec_icon = _rec_icon_png|webp_static %}
       <article class="gc-records-row{% if not record.has_holder %} gc-records-row--empty{% endif %}" role="listitem">
         <div class="gc-records-row-icon" aria-hidden="true">
           <img class="gc-prog-icon gc-records-icon"
                src="{{ _rec_icon }}"
                alt=""
                loading="lazy"
-               onerror="this.onerror=null;this.src='{{ url_for('static', filename='img/buildings/default.png') }}';">
+               onerror="this.onerror=null;this.src='{{ _rec_icon_png }}';">
         </div>
         <div class="gc-records-row-label">
           {{ T(record.label_key, record.key) }}

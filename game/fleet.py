@@ -9,7 +9,15 @@ import random
 import time
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple, TypedDict
 
-from .db import begin_write_transaction, commit, db, lock_planet_for_update, rollback, table_exists
+from .db import (
+    begin_write_transaction,
+    commit,
+    db,
+    is_sqlite_lock_error,
+    lock_planet_for_update,
+    rollback,
+    table_exists,
+)
 from .fleet_calc import (
     allocate_auto_cargo_ships_for_targets,
     apply_departure_deduction,
@@ -5537,118 +5545,311 @@ def process_fleet_tick(
     player_id: Optional[int] = None,
     now: Optional[float] = None,
     conn=None,
+    manage_transaction: Optional[bool] = None,
 ) -> Dict[str, Any]:
-    """Process due fleet arrivals and returns. Idempotent per movement status transition."""
+    """Process due fleet arrivals and returns. Idempotent per movement status transition.
+
+    GC-PERF-LOCK-001: when ``manage_transaction`` is True (fleet worker / own conn),
+    each due movement runs in its own short ``BEGIN IMMEDIATE`` so HTTP writers are
+    not blocked for the entire due set. Callers that already hold a write TX must
+    pass ``manage_transaction=False`` (nested / test paths).
+    """
     own = conn is None
     if own:
         conn = db()
     if now is None:
         now = _now()
 
-    result = {"processed_arrivals": 0, "processed_returns": 0, "processed_holding": 0, "errors": []}
+    result = {
+        "processed_arrivals": 0,
+        "processed_returns": 0,
+        "processed_holding": 0,
+        "errors": [],
+    }
 
     if not fleet_schema_ready(conn):
         if own and conn is not None:
             conn.close()
         return result
 
+    if manage_transaction is None:
+        manage_transaction = bool(own)
+
     try:
-        if own:
-            begin_write_transaction(conn)
-
-        cur = conn.cursor()
-        params: List[Any] = [now]
-        player_filter = ""
-        if player_id is not None:
-            player_filter = " AND player_id = ?"
-            params.append(int(player_id))
-
-        cur.execute(
-            f"""
-            SELECT * FROM fleet_movements
-            WHERE status = 'outbound' AND arrival_at <= ?{player_filter}
-            ORDER BY arrival_at ASC, id ASC;
-            """,
-            params,
-        )
-        for row in cur.fetchall():
-            mv = _row_to_movement(row)
-            try:
-                if _handle_arrival(mv, conn=conn, now=now):
-                    result["processed_arrivals"] += 1
-            except Exception as exc:
-                result["errors"].append(f"arrival fleet={mv['id']}: {exc}")
-                logger.exception("fleet arrival failed fleet=%s", mv["id"])
-                if mv.get("mission_type") in ("attack", "expedition"):
-                    try:
-                        _fail_outbound_movement(conn, int(mv["id"]), now)
-                    except Exception:
-                        logger.exception(
-                            "failed to mark %s movement failed fleet=%s",
-                            mv.get("mission_type"),
-                            mv["id"],
-                        )
-
-        hold_params: List[Any] = [now]
-        if player_id is not None:
-            hold_params.append(int(player_id))
-        cur.execute(
-            f"""
-            SELECT * FROM fleet_movements
-            WHERE status = 'holding' AND holding_until <= ?{player_filter}
-            ORDER BY holding_until ASC, id ASC;
-            """,
-            hold_params,
-        )
-        for row in cur.fetchall():
-            mv = _row_to_movement(row)
-            try:
-                if _handle_holding_end(mv, conn=conn, now=now):
-                    result["processed_holding"] += 1
-            except Exception as exc:
-                result["errors"].append(f"holding fleet={mv['id']}: {exc}")
-                logger.exception("fleet holding end failed fleet=%s", mv["id"])
-
-        ret_params: List[Any] = [now]
-        if player_id is not None:
-            ret_params.append(int(player_id))
-        cur.execute(
-            f"""
-            SELECT * FROM fleet_movements
-            WHERE status = 'returning' AND return_at <= ?{player_filter}
-            ORDER BY return_at ASC, id ASC;
-            """,
-            ret_params,
-        )
-        for row in cur.fetchall():
-            mv = _row_to_movement(row)
-            try:
-                if _handle_return(mv, conn=conn, now=now):
-                    result["processed_returns"] += 1
-            except Exception as exc:
-                result["errors"].append(f"return fleet={mv['id']}: {exc}")
-                logger.exception("fleet return failed fleet=%s", mv["id"])
-                try:
-                    _fail_returning_movement(conn, int(mv["id"]), now)
-                except Exception:
-                    logger.exception(
-                        "failed to mark returning movement failed fleet=%s",
-                        mv["id"],
-                    )
-
-        if own:
-            commit(conn)
+        if manage_transaction:
+            _process_fleet_tick_short_tx(
+                conn,
+                player_id=player_id,
+                now=float(now),
+                result=result,
+            )
+        else:
+            if own:
+                begin_write_transaction(conn)
+            _process_fleet_tick_shared_tx(
+                conn,
+                player_id=player_id,
+                now=float(now),
+                result=result,
+            )
+            if own:
+                commit(conn)
     except Exception as exc:
-        if own:
-            rollback(conn)
+        if own or manage_transaction:
+            try:
+                rollback(conn)
+            except Exception:
+                pass
         result["errors"].append(str(exc))
         logger.exception("process_fleet_tick failed")
-        raise
+        if not manage_transaction:
+            raise
     finally:
         if own and conn is not None:
             conn.close()
 
     return result
+
+
+def _fleet_due_ids(
+    conn,
+    *,
+    status: str,
+    time_col: str,
+    now: float,
+    player_id: Optional[int],
+) -> List[int]:
+    params: List[Any] = [str(status), float(now)]
+    player_filter = ""
+    if player_id is not None:
+        player_filter = " AND player_id = ?"
+        params.append(int(player_id))
+    cur = conn.cursor()
+    cur.execute(
+        f"""
+        SELECT id FROM fleet_movements
+        WHERE status = ? AND {time_col} <= ?{player_filter}
+        ORDER BY {time_col} ASC, id ASC;
+        """,
+        params,
+    )
+    return [int(r["id"]) for r in cur.fetchall()]
+
+
+def _load_movement_row(conn, movement_id: int) -> Optional[Dict[str, Any]]:
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM fleet_movements WHERE id = ? LIMIT 1;", (int(movement_id),))
+    row = cur.fetchone()
+    return _row_to_movement(row) if row else None
+
+
+def _process_fleet_tick_shared_tx(
+    conn,
+    *,
+    player_id: Optional[int],
+    now: float,
+    result: Dict[str, Any],
+) -> None:
+    """Legacy path: all due work on the caller's open write transaction."""
+    cur = conn.cursor()
+    params: List[Any] = [now]
+    player_filter = ""
+    if player_id is not None:
+        player_filter = " AND player_id = ?"
+        params.append(int(player_id))
+
+    cur.execute(
+        f"""
+        SELECT * FROM fleet_movements
+        WHERE status = 'outbound' AND arrival_at <= ?{player_filter}
+        ORDER BY arrival_at ASC, id ASC;
+        """,
+        params,
+    )
+    for row in cur.fetchall():
+        mv = _row_to_movement(row)
+        try:
+            if _handle_arrival(mv, conn=conn, now=now):
+                result["processed_arrivals"] += 1
+        except Exception as exc:
+            result["errors"].append(f"arrival fleet={mv['id']}: {exc}")
+            logger.exception("fleet arrival failed fleet=%s", mv["id"])
+            if mv.get("mission_type") in ("attack", "expedition"):
+                try:
+                    _fail_outbound_movement(conn, int(mv["id"]), now)
+                except Exception:
+                    logger.exception(
+                        "failed to mark %s movement failed fleet=%s",
+                        mv.get("mission_type"),
+                        mv["id"],
+                    )
+
+    hold_params: List[Any] = [now]
+    if player_id is not None:
+        hold_params.append(int(player_id))
+    cur.execute(
+        f"""
+        SELECT * FROM fleet_movements
+        WHERE status = 'holding' AND holding_until <= ?{player_filter}
+        ORDER BY holding_until ASC, id ASC;
+        """,
+        hold_params,
+    )
+    for row in cur.fetchall():
+        mv = _row_to_movement(row)
+        try:
+            if _handle_holding_end(mv, conn=conn, now=now):
+                result["processed_holding"] += 1
+        except Exception as exc:
+            result["errors"].append(f"holding fleet={mv['id']}: {exc}")
+            logger.exception("fleet holding end failed fleet=%s", mv["id"])
+
+    ret_params: List[Any] = [now]
+    if player_id is not None:
+        ret_params.append(int(player_id))
+    cur.execute(
+        f"""
+        SELECT * FROM fleet_movements
+        WHERE status = 'returning' AND return_at <= ?{player_filter}
+        ORDER BY return_at ASC, id ASC;
+        """,
+        ret_params,
+    )
+    for row in cur.fetchall():
+        mv = _row_to_movement(row)
+        try:
+            if _handle_return(mv, conn=conn, now=now):
+                result["processed_returns"] += 1
+        except Exception as exc:
+            result["errors"].append(f"return fleet={mv['id']}: {exc}")
+            logger.exception("fleet return failed fleet=%s", mv["id"])
+            try:
+                _fail_returning_movement(conn, int(mv["id"]), now)
+            except Exception:
+                logger.exception(
+                    "failed to mark returning movement failed fleet=%s",
+                    mv["id"],
+                )
+
+
+def _run_one_movement_short_tx(
+    conn,
+    *,
+    movement_id: int,
+    expect_status: str,
+    handler,
+    now: float,
+    fail_fn=None,
+    fail_missions: Optional[Set[str]] = None,
+) -> Tuple[bool, Optional[str]]:
+    """BEGIN → handle one movement → COMMIT. Returns (handled, error_message)."""
+    mid = int(movement_id)
+    try:
+        begin_write_transaction(conn)
+        mv = _load_movement_row(conn, mid)
+        if not mv or str(mv.get("status") or "") != expect_status:
+            rollback(conn)
+            return False, None
+        try:
+            ok = bool(handler(mv, conn=conn, now=now))
+            commit(conn)
+            return ok, None
+        except Exception as exc:
+            logger.exception("fleet %s failed fleet=%s", expect_status, mid)
+            try:
+                rollback(conn)
+            except Exception:
+                pass
+            if fail_fn is not None and (
+                not fail_missions or str(mv.get("mission_type") or "") in fail_missions
+            ):
+                try:
+                    begin_write_transaction(conn)
+                    fail_fn(conn, mid, now)
+                    commit(conn)
+                except Exception:
+                    try:
+                        rollback(conn)
+                    except Exception:
+                        pass
+                    logger.exception(
+                        "failed to mark %s movement failed fleet=%s",
+                        expect_status,
+                        mid,
+                    )
+            return False, f"{expect_status} fleet={mid}: {exc}"
+    except Exception as exc:
+        try:
+            rollback(conn)
+        except Exception:
+            pass
+        if is_sqlite_lock_error(exc):
+            logger.warning("fleet short-tx locked status=%s fleet=%s", expect_status, mid)
+            return False, f"{expect_status} fleet={mid}: database is locked"
+        logger.exception("fleet short-tx failed status=%s fleet=%s", expect_status, mid)
+        return False, f"{expect_status} fleet={mid}: {exc}"
+
+
+def _process_fleet_tick_short_tx(
+    conn,
+    *,
+    player_id: Optional[int],
+    now: float,
+    result: Dict[str, Any],
+) -> None:
+    """GC-PERF-LOCK-001: one short write TX per due movement."""
+    # Snapshot IDs without holding a write lock across the whole set.
+    outbound_ids = _fleet_due_ids(
+        conn, status="outbound", time_col="arrival_at", now=now, player_id=player_id
+    )
+    holding_ids = _fleet_due_ids(
+        conn, status="holding", time_col="holding_until", now=now, player_id=player_id
+    )
+    returning_ids = _fleet_due_ids(
+        conn, status="returning", time_col="return_at", now=now, player_id=player_id
+    )
+
+    for mid in outbound_ids:
+        handled, err = _run_one_movement_short_tx(
+            conn,
+            movement_id=mid,
+            expect_status="outbound",
+            handler=_handle_arrival,
+            now=now,
+            fail_fn=_fail_outbound_movement,
+            fail_missions={"attack", "expedition"},
+        )
+        if handled:
+            result["processed_arrivals"] += 1
+        if err:
+            result["errors"].append(err)
+
+    for mid in holding_ids:
+        handled, err = _run_one_movement_short_tx(
+            conn,
+            movement_id=mid,
+            expect_status="holding",
+            handler=_handle_holding_end,
+            now=now,
+        )
+        if handled:
+            result["processed_holding"] += 1
+        if err:
+            result["errors"].append(err)
+
+    for mid in returning_ids:
+        handled, err = _run_one_movement_short_tx(
+            conn,
+            movement_id=mid,
+            expect_status="returning",
+            handler=_handle_return,
+            now=now,
+            fail_fn=_fail_returning_movement,
+        )
+        if handled:
+            result["processed_returns"] += 1
+        if err:
+            result["errors"].append(err)
 
 
 def mass_expedition_available_slots(player_id: int, *, conn) -> int:

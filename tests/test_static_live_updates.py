@@ -581,6 +581,11 @@ def test_main_js_gc802_planet_switch_state_sync():
     assert "skipHydrate: true" in switch_section
     assert "skipGameState: true" in switch_section
     assert "preserveGameLoop" in src.split("GC.reloadCurrentPage = function reloadCurrentPage")[1].split("function hydratePageFromLastState", 1)[0]
+    reload_fn = src.split("GC.reloadCurrentPage = function reloadCurrentPage", 1)[1].split(
+        "function hydratePageFromLastState", 1
+    )[0]
+    assert "skip reloadCurrentPage; active PJAX away" in reload_fn
+    assert "activeTarget !== here" in reload_fn
     assert 'refreshGameState("planet_switch")' not in switch_section
     assert "bootstrapResourceLiveFromDom()" in switch_section
     action_body = src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]

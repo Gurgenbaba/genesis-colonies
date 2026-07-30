@@ -38,7 +38,8 @@ BUSY_STALE_SEC = 900.0
 # Soft caps so queues turn over on fleet-cron cadence (still slower than pirate 90s).
 INACTIVE_BUILD_DURATION_CAP = 900  # 15 min
 INACTIVE_RESEARCH_DURATION_CAP = 1200  # 20 min
-INACTIVE_CHAIN_LIMIT = 3
+# GC-PERF-AUTOPLAY-002: shorter same-tick chains → fewer writes per account.
+INACTIVE_CHAIN_LIMIT = 2
 
 # Soft floor so empty dormant empires can enqueue (far below pirate seed).
 INACTIVE_RESOURCE_FLOOR = {
@@ -53,7 +54,13 @@ DEFAULT_WAKE_INTERVAL_SEC = 10 * 60
 # GC-2620: small concurrent sticky roster (5–8 band); slow wake + economy cadence.
 DEFAULT_BATCH = 1
 DEFAULT_MAX_ROSTER = 6
-DEFAULT_TICK_PER_CRON = 3
+# GC-PERF-AUTOPLAY-002: one heavy economy per cron by default (was 3) so
+# sticky-roster bursts do not serialize SQLite against human HTTP writers.
+DEFAULT_TICK_PER_CRON = 1
+# Yield between short-TX player economies so gunicorn can grab the writer.
+DEFAULT_YIELD_MS = 50
+# Abort further standing RR economies once wall time exceeds this budget.
+DEFAULT_TICK_BUDGET_MS = 800
 MIN_ROSTER_CAP = 4
 MAX_ROSTER_CAP = 12
 # GC-2617: how many roster members may look "online" (fresh last_seen) at the
@@ -69,6 +76,8 @@ INTERVAL_ENV = "GC_INACTIVE_AUTOPLAY_INTERVAL_SEC"
 REVISIT_ENV = "GC_INACTIVE_AUTOPLAY_REVISIT_SEC"
 MAX_ROSTER_ENV = "GC_INACTIVE_AUTOPLAY_MAX_SESSIONS"  # keep env name for ops
 TICK_ENV = "GC_INACTIVE_AUTOPLAY_TICK_PER_CRON"
+YIELD_ENV = "GC_INACTIVE_AUTOPLAY_YIELD_MS"
+BUDGET_ENV = "GC_INACTIVE_AUTOPLAY_TICK_BUDGET_MS"
 ONLINE_PERCENT_ENV = "GC_INACTIVE_AUTOPLAY_ONLINE_PERCENT"
 # Legacy env still accepted for docs; sessions are sticky now.
 SESSION_ENV = "GC_INACTIVE_AUTOPLAY_SESSION_SEC"
@@ -115,6 +124,16 @@ def max_concurrent_sessions() -> int:
 
 def tick_per_cron() -> int:
     return max(1, min(20, _env_int(TICK_ENV, DEFAULT_TICK_PER_CRON)))
+
+
+def yield_ms() -> int:
+    """GC-PERF-AUTOPLAY-002: pause between short-TX player economies."""
+    return max(0, min(250, _env_int(YIELD_ENV, DEFAULT_YIELD_MS)))
+
+
+def tick_budget_ms() -> int:
+    """GC-PERF-AUTOPLAY-002: wall-time budget for standing RR economies."""
+    return max(200, min(5000, _env_int(BUDGET_ENV, DEFAULT_TICK_BUDGET_MS)))
 
 
 def online_percent() -> float:
@@ -730,9 +749,9 @@ def release_active_player_from_roster(player_id: int, *, conn) -> bool:
 
     Called from `models.touch_player_online` — the single canonical signal
     for "a real authenticated request just happened" (`require_login` /
-    `require_admin` / `require_login_api`) — whenever it actually touches a
-    player's `last_seen` (throttled to once/30s there). If that player is
-    currently on the inactive-autoplay sticky roster, they are removed
+    `require_admin` / `require_login_api`). GC-PERF-LOCK-001: release runs on
+    every successful touch TX, including when the throttled ``last_seen`` UPDATE
+    writes 0 rows (so humans regain control without waiting 30s).
     immediately instead of waiting for LRU eviction to eventually rotate
     them off — the very next autoplay tick will no longer enqueue anything
     on their account. They only rejoin the roster once they go dormant again
@@ -799,10 +818,15 @@ def run_inactive_autoplay_tick(
     roster/presence flush runs in its own short BEGIN IMMEDIATE so live
     Timekeeper/game-state writers are not blocked for the full multi-player
     pass. Overlapping ticks are rejected via ``BUSY_KEY``.
+
+    GC-PERF-AUTOPLAY-002: default ``tick_per_cron=1``, optional yield between
+    short-TX economies, and a wall-time budget that stops further standing RR
+    economies mid-tick so human HTTP can reclaim the SQLite writer.
     """
     ts = float(now if now is not None else _now())
     tick_t0 = time.perf_counter()
     write_commits = 0
+    budget_stopped = False
     if not is_inactive_autoplay_enabled(conn=conn):
         return {
             "ok": False,
@@ -811,9 +835,32 @@ def run_inactive_autoplay_tick(
             "sessions": [],
             "hold_ms": 0,
             "write_commits": 0,
+            "budget_stopped": False,
         }
 
     short_tx = not in_transaction(conn)
+    pause_ms = yield_ms() if short_tx else 0
+    budget_ms = tick_budget_ms()
+
+    def _hold_ms() -> int:
+        return int((time.perf_counter() - tick_t0) * 1000)
+
+    def _budget_exceeded() -> bool:
+        return short_tx and _hold_ms() >= budget_ms
+
+    def _yield_writer() -> None:
+        if pause_ms > 0:
+            time.sleep(pause_ms / 1000.0)
+
+    def _mark_budget_stop(*, phase: str, ticks: int) -> None:
+        nonlocal budget_stopped
+        budget_stopped = True
+        logger.info(
+            "inactive autoplay budget_stop hold_ms=%s ticks=%s phase=%s",
+            _hold_ms(),
+            ticks,
+            phase,
+        )
 
     def _step(fn):
         nonlocal write_commits
@@ -829,8 +876,9 @@ def run_inactive_autoplay_tick(
             "error": "busy",
             "woke": [],
             "sessions": [],
-            "hold_ms": int((time.perf_counter() - tick_t0) * 1000),
+            "hold_ms": _hold_ms(),
             "write_commits": write_commits,
+            "budget_stopped": False,
         }
 
     try:
@@ -881,6 +929,9 @@ def run_inactive_autoplay_tick(
 
                 picks = _step(_pick_wake)
                 for cand in picks:
+                    if _budget_exceeded():
+                        _mark_budget_stop(phase="wake", ticks=len(woke))
+                        break
                     pid = int(cand["player_id"])
                     new_item: Dict[str, Any] = {
                         "player_id": pid,
@@ -902,6 +953,7 @@ def run_inactive_autoplay_tick(
 
                     try:
                         woke.append(_step(_wake_one))
+                        _yield_writer()
                     except Exception:
                         logger.exception(
                             "inactive autoplay wake failed player=%s", pid
@@ -936,6 +988,9 @@ def run_inactive_autoplay_tick(
             pid = int(item["player_id"])
             if pid in woke_ids:
                 continue
+            if _budget_exceeded():
+                _mark_budget_stop(phase="standing", ticks=len(session_results))
+                break
 
             def _tick_one(player_id=pid, roster_item=item):
                 res = _run_player_economy(conn, player_id, now=ts)
@@ -945,6 +1000,7 @@ def run_inactive_autoplay_tick(
             try:
                 session_results.append(_step(_tick_one))
                 ticked_ids.add(pid)
+                _yield_writer()
             except Exception:
                 logger.exception(
                     "inactive autoplay roster tick failed player=%s", pid
@@ -973,7 +1029,7 @@ def run_inactive_autoplay_tick(
 
         _step(_flush_roster_presence)
 
-        hold_ms = int((time.perf_counter() - tick_t0) * 1000)
+        hold_ms = _hold_ms()
         return {
             "ok": True,
             "source": source,
@@ -996,6 +1052,9 @@ def run_inactive_autoplay_tick(
             "hold_ms": hold_ms,
             "write_commits": write_commits if short_tx else 0,
             "short_tx": short_tx,
+            "budget_stopped": budget_stopped,
+            "yield_ms": pause_ms,
+            "tick_budget_ms": budget_ms,
         }
     finally:
         try:

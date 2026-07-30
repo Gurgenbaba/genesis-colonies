@@ -48,17 +48,17 @@ CONTAINER_DISPLAY_ORDER: Tuple[str, ...] = (
 )
 
 CONTAINER_IMAGES: Dict[str, str] = {
-    "container_basic": "img/lootboxes/Basic_Container.png",
-    "container_rare": "img/lootboxes/Rare_Container.png",
-    "container_epic": "img/lootboxes/Epic_Container.png",
-    "container_relic": "img/lootboxes/Relic_Container.png",
-    "container_wreckage": "img/lootboxes/Wreckage_Container.png",
-    "container_research_cache": "img/lootboxes/Research_Cache.png",
-    "container_military_cache": "img/lootboxes/Military_Cache.png",
-    "container_event_special": "img/lootboxes/Event_Container.png",
-    "container_mythic": "img/lootboxes/Epic_Container.png",
-    "container_ancient_relic": "img/lootboxes/Relic_Container.png",
-    "container_void_artifact": "img/lootboxes/Event_Container.png",
+    "container_basic": "img/lootboxes/Basic_Container.webp",
+    "container_rare": "img/lootboxes/Rare_Container.webp",
+    "container_epic": "img/lootboxes/Epic_Container.webp",
+    "container_relic": "img/lootboxes/Relic_Container.webp",
+    "container_wreckage": "img/lootboxes/Wreckage_Container.webp",
+    "container_research_cache": "img/lootboxes/Research_Cache.webp",
+    "container_military_cache": "img/lootboxes/Military_Cache.webp",
+    "container_event_special": "img/lootboxes/Event_Container.webp",
+    "container_mythic": "img/lootboxes/Epic_Container.webp",
+    "container_ancient_relic": "img/lootboxes/Relic_Container.webp",
+    "container_void_artifact": "img/lootboxes/Event_Container.webp",
 }
 
 # Shared Genesis Relic art for inventory boosters (Battle Pass / Inventory / Shop preview).
@@ -71,17 +71,17 @@ PASS_BOOSTER_IMAGES: Dict[str, str] = {
 # All keys that may be stored in player_inventory_items or granted by admin.
 ITEM_CATALOG: Dict[str, Dict[str, Any]] = {
     # --- Containers ---
-    "container_basic": {"item_type": "container", "category": "container", "rarity": "common", "name_key": "inv_container_basic", "icon": "📦", "image": "img/lootboxes/Basic_Container.png"},
-    "container_rare": {"item_type": "container", "category": "container", "rarity": "uncommon", "name_key": "inv_container_rare", "icon": "🎁", "image": "img/lootboxes/Rare_Container.png"},
-    "container_epic": {"item_type": "container", "category": "container", "rarity": "epic", "name_key": "inv_container_epic", "icon": "💎", "image": "img/lootboxes/Epic_Container.png"},
-    "container_relic": {"item_type": "container", "category": "container", "rarity": "legendary", "name_key": "inv_container_relic", "icon": "🏺", "image": "img/lootboxes/Relic_Container.png"},
-    "container_wreckage": {"item_type": "container", "category": "container", "rarity": "uncommon", "name_key": "inv_container_wreckage", "icon": "🛸", "image": "img/lootboxes/Wreckage_Container.png"},
-    "container_research_cache": {"item_type": "container", "category": "container", "rarity": "rare", "name_key": "inv_container_research_cache", "icon": "🔬", "image": "img/lootboxes/Research_Cache.png"},
-    "container_military_cache": {"item_type": "container", "category": "container", "rarity": "rare", "name_key": "inv_container_military_cache", "icon": "⚔️", "image": "img/lootboxes/Military_Cache.png"},
-    "container_event_special": {"item_type": "container", "category": "container", "rarity": "epic", "name_key": "inv_container_event_special", "icon": "✨", "image": "img/lootboxes/Event_Container.png"},
-    "container_mythic": {"item_type": "container", "category": "container", "rarity": "legendary", "name_key": "inv_container_mythic", "icon": "🌟", "image": "img/lootboxes/Epic_Container.png"},
-    "container_ancient_relic": {"item_type": "container", "category": "container", "rarity": "legendary", "name_key": "inv_container_ancient_relic", "icon": "🏺", "image": "img/lootboxes/Relic_Container.png"},
-    "container_void_artifact": {"item_type": "container", "category": "container", "rarity": "legendary", "name_key": "inv_container_void_artifact", "icon": "🕳️", "image": "img/lootboxes/Event_Container.png"},
+    "container_basic": {"item_type": "container", "category": "container", "rarity": "common", "name_key": "inv_container_basic", "icon": "📦", "image": "img/lootboxes/Basic_Container.webp"},
+    "container_rare": {"item_type": "container", "category": "container", "rarity": "uncommon", "name_key": "inv_container_rare", "icon": "🎁", "image": "img/lootboxes/Rare_Container.webp"},
+    "container_epic": {"item_type": "container", "category": "container", "rarity": "epic", "name_key": "inv_container_epic", "icon": "💎", "image": "img/lootboxes/Epic_Container.webp"},
+    "container_relic": {"item_type": "container", "category": "container", "rarity": "legendary", "name_key": "inv_container_relic", "icon": "🏺", "image": "img/lootboxes/Relic_Container.webp"},
+    "container_wreckage": {"item_type": "container", "category": "container", "rarity": "uncommon", "name_key": "inv_container_wreckage", "icon": "🛸", "image": "img/lootboxes/Wreckage_Container.webp"},
+    "container_research_cache": {"item_type": "container", "category": "container", "rarity": "rare", "name_key": "inv_container_research_cache", "icon": "🔬", "image": "img/lootboxes/Research_Cache.webp"},
+    "container_military_cache": {"item_type": "container", "category": "container", "rarity": "rare", "name_key": "inv_container_military_cache", "icon": "⚔️", "image": "img/lootboxes/Military_Cache.webp"},
+    "container_event_special": {"item_type": "container", "category": "container", "rarity": "epic", "name_key": "inv_container_event_special", "icon": "✨", "image": "img/lootboxes/Event_Container.webp"},
+    "container_mythic": {"item_type": "container", "category": "container", "rarity": "legendary", "name_key": "inv_container_mythic", "icon": "🌟", "image": "img/lootboxes/Epic_Container.webp"},
+    "container_ancient_relic": {"item_type": "container", "category": "container", "rarity": "legendary", "name_key": "inv_container_ancient_relic", "icon": "🏺", "image": "img/lootboxes/Relic_Container.webp"},
+    "container_void_artifact": {"item_type": "container", "category": "container", "rarity": "legendary", "name_key": "inv_container_void_artifact", "icon": "🕳️", "image": "img/lootboxes/Event_Container.webp"},
     # --- Boosters (inventory only; activation later) ---
     "booster_build_5m": {"item_type": "booster", "category": "booster", "rarity": "common", "name_key": "inv_booster_build_5m", "icon": "🔧"},
     "booster_build_15m": {"item_type": "booster", "category": "booster", "rarity": "uncommon", "name_key": "inv_booster_build_15m", "icon": "🔧"},
@@ -530,7 +530,7 @@ def container_image_path(item_key: str) -> str:
     return str(
         CONTAINER_IMAGES.get(key)
         or (ITEM_CATALOG.get(key) or {}).get("image")
-        or "img/lootboxes/Generic_Supply_Container.png"
+        or "img/lootboxes/Generic_Supply_Container.webp"
     )
 
 

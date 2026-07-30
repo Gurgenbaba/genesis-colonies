@@ -10,7 +10,18 @@ static/img/map.*
 static/img/herocards/herocard_*.png + variants
 ```
 
-**Not in scope:** buildings, research, shipyard, defense (P1 / GC-860C).
+**Not in scope (original GC-860B):** buildings, research, shipyard, defense (P1).
+
+**GC-PERF-IMG-001 extended this tool** to also compress:
+
+```text
+static/img/herocardsframe/frame.{png,webp}
+static/img/expedition/expedition.{png,webp}
+static/img/landscapes/*-h.{jpg,webp}
+static/img/debris/{asteroid,debris}.{jpg,webp}
+```
+
+Card folders use `tools/optimize_images.py` (GC-PERF-IMG-003). Budget contracts: `tests/test_gc_perf_img_budgets.py`.
 
 ## Target budgets
 

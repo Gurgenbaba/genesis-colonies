@@ -55,6 +55,7 @@ Dormante Menschen-Konten werden gestaffelt auf einen **sticky Roster** geholt un
 | GC-2619 | Control Handback: echter Login entfernt Account sofort vom Sticky Roster statt auf LRU-Eviction zu warten | done |
 | GC-2620 | Concurrent Roster-Cap 5–8 (Default 6, Clamp 4–12), sticky slow wake (Batch 1), Deploy-Trim bei Übergröße (Alias: GC-INACTIVE-ROSTER-002) | done |
 | GC-PERF-AUTOPLAY-001 | Kurze Write-TXs + Busy-Lease; Stage `manage_tx=False`; hold_ms/write_commits Logging; Timekeeper/Nav A/B Canary | done |
+| GC-PERF-AUTOPLAY-002 | Entzerrung: `tick_per_cron` Default 1, Yield zwischen Short-TXs, Tick-Budget Circuit-Breaker, `chain_limit` 2 | done |
 
 ## Env
 
@@ -65,7 +66,9 @@ Dormante Menschen-Konten werden gestaffelt auf einen **sticky Roster** geholt un
 | `GC_INACTIVE_AUTOPLAY_INTERVAL_SEC` | 600 | Abstand zwischen Wake-Waves |
 | `GC_INACTIVE_AUTOPLAY_REVISIT_SEC` | 129600 | Stale-Cutoff (~36h) |
 | `GC_INACTIVE_AUTOPLAY_MAX_SESSIONS` | 6 | Max. gleichzeitige Sticky-Builder (geclamped 4–12; ≠ Online-Cap GC-2617) |
-| `GC_INACTIVE_AUTOPLAY_TICK_PER_CRON` | 3 | Economy-Ticks pro Fleet-Cron (RR) |
+| `GC_INACTIVE_AUTOPLAY_TICK_PER_CRON` | 1 | Economy-Ticks pro Fleet-Cron (RR); GC-PERF-AUTOPLAY-002 (war 3) |
+| `GC_INACTIVE_AUTOPLAY_YIELD_MS` | 50 | Pause zwischen Short-TX Economies (0–250); gibt HTTP den Writer |
+| `GC_INACTIVE_AUTOPLAY_TICK_BUDGET_MS` | 800 | Wall-Budget für weitere Economies im Tick (200–5000); danach `budget_stopped` |
 | `GC_INACTIVE_AUTOPLAY_ONLINE_PERCENT` | 15 | % der **echten** registrierten Spieler, die gleichzeitig als "online" (Autoplay) sichtbar sein dürfen (geclamped 1–50%, Ergebnis geclamped 2–40 Accounts) |
 
 ## Pirate AI (parallel)
@@ -152,6 +155,21 @@ Production Timekeeper boost returned without finishing/shortening the job becaus
 
 **Fix:** pirates stage `manage_tx=False`; per-bot short writes + busy lease in `play_loop`; head queue boost also shifts `started_at`; frontend only patches queues when `ok` and `seconds_applied > 0`.
 
+## GC-PERF-LOCK-001 — Fleet arrival Lock Storm
+
+Symptom (local + prod):
+
+```text
+process_fleet_tick → _claim_movement_status → database is locked
+touch_player_online → BEGIN IMMEDIATE → database is locked
+```
+
+**Cause:** `run_global_fleet_tick` held one `BEGIN IMMEDIATE` across **all** due fleet movements while Autoplay/Pirates added write chatter.
+
+**Fix:** `process_fleet_tick(..., manage_transaction=True)` uses one short write TX per movement (fleet worker path); `touch_player_online` best-effort on SQLITE_BUSY and always attempts sticky-roster release (even when the 30s `last_seen` throttle skips the UPDATE); SQLite `busy_timeout=20000`.
+
+**Ops:** Soft-Off Inactive Autoplay first (`GC_INACTIVE_AUTOPLAY_ENABLED=0` or LiveOps toggle), then Pirates if needed — see [GC_PERF_PROD_001.md](GC_PERF_PROD_001.md).
+
 ---
 
 ## GC-2620 — Concurrent Roster-Cap (5–8 sticky builders)
@@ -160,12 +178,25 @@ Production Timekeeper boost returned without finishing/shortening the job becaus
 
 **Fix (`game/inactive_autoplay.py`, einziger Roster-Owner):**
 
-1. `DEFAULT_MAX_ROSTER=6` (Mitte der 5–8-Bandbreite), `DEFAULT_BATCH=1`, `DEFAULT_TICK_PER_CRON=3`.
+1. `DEFAULT_MAX_ROSTER=6` (Mitte der 5–8-Bandbreite), `DEFAULT_BATCH=1`, `DEFAULT_TICK_PER_CRON=1` (GC-PERF-AUTOPLAY-002; war 3 unter GC-2620).
 2. `max_concurrent_sessions()` hard-clamp **4–12** — Ops kann über `GC_INACTIVE_AUTOPLAY_MAX_SESSIONS` nicht wieder auf 60 hochziehen.
 3. `_trim_roster_to_cap` nach `_prune_roster` in jedem Tick: gespeicherte Übergröße (z. B. nach Deploy 60→6) wird sofort per LRU evicted inkl. bestehendem `_send_autoplay_report` — kein stundenlanges Abwarten von Batch-Waves.
 4. Wake-Pfad (Batch-LRU nur wenn full) und Presence-Cap (GC-2617) bleiben unverändert; Roster-Cap ≠ `online_visible_cap`.
 
 **Ops:** Gesetztes Env `GC_INACTIVE_AUTOPLAY_MAX_SESSIONS=60` wird auf **12** geclampt. Für Target 6 Env entfernen oder auf 6 setzen.
+
+## GC-PERF-AUTOPLAY-002 — Sticky-Roster Write-Burst entzerren
+
+**Problem:** Admin Sticky-Roster zeigte mehrere Accounts mit **identischem** `last_seen` / dichtem `last_ticked` und schweren Bau-Ketten in derselben Sekunde. `DEFAULT_TICK_PER_CRON=3` plus Short-TX-Kette ohne Pause ließ SQLite gegen Human-HTTP konkurrieren (`database is locked`, zähe Nav/TK).
+
+**Fix (Owner `game/inactive_autoplay.py`):**
+
+1. `DEFAULT_TICK_PER_CRON=1` — typisch höchstens ein schwerer Economy-Pass pro ~60s Cron (Env Override bleibt).
+2. `INACTIVE_CHAIN_LIMIT=2` — weniger same-tick Force-Complete-Schritte pro Account.
+3. `yield_ms()` (`GC_INACTIVE_AUTOPLAY_YIELD_MS`, Default 50) — `time.sleep` zwischen Short-TX Economies, damit Gunicorn den Writer greifen kann.
+4. `tick_budget_ms()` (`GC_INACTIVE_AUTOPLAY_TICK_BUDGET_MS`, Default 800) — vor weiteren Wake-/Standing-Economies Abbruch mit `budget_stopped=true` im Tick-Payload.
+
+Presence-Bulk bleibt ein Flush am Tick-Ende (gleicher Timestamp in der Admin-UI ist erwartbar). Soft-On bleibt empfohlen; Soft-Off nur Notfall — siehe [GC_PERF_PROD_001.md](GC_PERF_PROD_001.md).
 
 ## Living Universe Pulse (GC-2612)
 

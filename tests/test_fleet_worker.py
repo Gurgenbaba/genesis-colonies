@@ -406,3 +406,68 @@ def test_ranking_cron_piggybacks_fleet_tick(fleet_worker_client):
     assert "fleet_tick" in data
     assert int(data["fleet_tick"]["processed_arrivals"]) == 3
     mock_fleet.assert_called_once_with(force=False, source="http_cron")
+
+
+def test_run_fleet_worker_passes_manage_transaction_true(fleet_db, monkeypatch):
+    """GC-PERF-LOCK-001: worker must request short per-movement TXs (no mega IMMEDIATE)."""
+    from game.db import in_transaction
+    import game.fleet as fleet_mod
+
+    seen = {"manage_transaction": None, "outside_outer_tx": False}
+    real = fleet_mod.process_fleet_tick
+
+    def wrapped(**kwargs):
+        seen["manage_transaction"] = kwargs.get("manage_transaction")
+        c = kwargs.get("conn")
+        seen["outside_outer_tx"] = c is not None and not in_transaction(c)
+        return real(**kwargs)
+
+    monkeypatch.setattr(fleet_mod, "process_fleet_tick", wrapped)
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, pid)
+    _seed_ships(pid, uid, {"solar_skiff": 2}, conn=conn)
+    conn.commit()
+    fleet_id = _start_expedition(conn, uid, pid)
+    _force_outbound_arrival(conn, fleet_id)
+    conn.commit()
+    conn.close()
+
+    result = run_fleet_worker(source="test", force=True, persist=False)
+    assert result.get("skipped_interval") is False
+    assert int(result.get("processed_arrivals") or 0) >= 1
+    assert seen["manage_transaction"] is True
+    assert seen["outside_outer_tx"] is True
+
+
+def test_process_fleet_tick_short_tx_commits_each_arrival(fleet_db):
+    """Per-movement TX: two due fleets both complete under manage_transaction=True."""
+    from game.fleet import process_fleet_tick
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, pid)
+    _seed_ships(pid, uid, {"solar_skiff": 4}, conn=conn)
+    conn.commit()
+    f1 = _start_expedition(conn, uid, pid)
+    f2 = _start_expedition(conn, uid, pid)
+    _force_outbound_arrival(conn, f1)
+    _force_outbound_arrival(conn, f2)
+    conn.commit()
+
+    result = process_fleet_tick(player_id=uid, conn=conn, manage_transaction=True)
+    assert int(result["processed_arrivals"]) >= 2
+    assert not result.get("errors")
+
+    rows = conn.execute(
+        "SELECT status FROM fleet_movements WHERE id IN (?, ?);",
+        (f1, f2),
+    ).fetchall()
+    statuses = {str(r["status"]) for r in rows}
+    assert "outbound" not in statuses
+    conn.close()

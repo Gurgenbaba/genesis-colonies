@@ -56,16 +56,17 @@ Then compare **client RTT** vs log `total_ms`:
 | Spikes align with `[embedded-cron]` | Cron/GIL/DB lock coupling |
 | `/healthz` client RTT still multi-second while `handler_ms` tiny | Confirms worker serialization / platform floor |
 
-## Ops Soft-Off A/B (slowdown / Timekeeper)
+## Ops Soft-Off A/B (slowdown / Timekeeper / Lock Storm)
 
-When navigation or Timekeeper feels stuck on Railway:
+When navigation, Timekeeper, or fleet arrivals feel stuck — or logs show
+`database is locked` on `process_fleet_tick` / `touch_player_online`:
 
-1. Admin → LiveOps → **Inactive Autoplay Soft-Off** → wait ~1 min → navigate `/overview`↔`/ranking` + Timekeeper on an active build (2–3 min).
-2. If still slow: Soft-Off **Pirates AI** → same checks.
+1. Admin → LiveOps → **Inactive Autoplay Soft-Off** (or env `GC_INACTIVE_AUTOPLAY_ENABLED=0`) → wait ~1 min → navigate `/overview`↔`/ranking` + Timekeeper + one fleet arrival (2–3 min).
+2. If still slow/locked: Soft-Off **Pirates AI** → same checks.
 3. Interpret:
    - Autoplay off alone fixes → autoplay tick cost / short-TX chatter
    - Pirates off fixes → pirate economy (check `hold_ms` / `write_commits`)
-   - Both off still slow → worker/cron architecture (sidecar / SQLite / 1 worker)
+   - Both off still locked → fleet mega-TX / worker (see GC-PERF-LOCK-001)
 
 **Measure in Railway logs before shipping further “perf” commits:**
 
@@ -85,6 +86,9 @@ Optional request wall: `GC_REQUEST_PERF_DEBUG=1`, `GC_REQUEST_PERF_SLOW_MS=0`, `
 - `GC_INACTIVE_AUTOPLAY_MAX_SESSIONS`: remove or set `6` (env `60` clamps to 12 after GC-2620)
 - **GC-PERF-AUTOPLAY-001 / GC-PERF-TK-001 (shipped):** autoplay + pirates stages use short write TXs (`manage_tx=False`) + busy leases; shipyard/defense Timekeeper also shifts `started_at`
 - **GC-PERF-TK-002:** `/api/timekeeper/apply` forces `state.timekeeper` from the apply ledger after commit; client prefers top-level `timekeeper` and clears monotonic `serverRemaining` before patch; bump `VERSION` + hard-refresh after deploy so `main.js` cache updates
+- **GC-PERF-LOCK-001:** fleet worker no longer holds one `BEGIN IMMEDIATE` across all due movements — `process_fleet_tick(..., manage_transaction=True)` commits per movement; `touch_player_online` swallows SQLITE_BUSY and always attempts roster release; `PRAGMA busy_timeout=20000`
+- **GC-PERF-AUTOPLAY-002:** sticky roster defaults to `tick_per_cron=1`, `chain_limit=2`, 50ms yield between short-TX economies, 800ms tick budget (`budget_stopped`); Soft-On stays recommended
+- **GC-PERF-IMG-001…004:** compressed shell/card images (frame.webp ≤120KB, expedition.webp, landscapes, cards); WebP primary in galaxy/JS/catalog; Overview frame preload + `?v=` cache bust
 - **GC-PERF-PROD-002 (shipped):** docker-entrypoint starts `scripts/run_maintenance_worker.py` by default (`GC_MAINTENANCE_WORKER=1`) and forces `GC_EMBEDDED_CRON=0` on gunicorn — maintenance bag no longer shares the web process GIL. Opt out with `GC_MAINTENANCE_WORKER=0`
 - Check Railway `GC_POLL_ACTIVE_MS` if console shows game-state polling at 8000 ms (code default active is 5000)
 

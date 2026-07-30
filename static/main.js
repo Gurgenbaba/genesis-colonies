@@ -2204,6 +2204,24 @@
       return Promise.resolve();
     }
     const target = `${window.location.pathname || "/"}${window.location.search || ""}`;
+    // GC-PERF-PJAX-NAV: galaxy timer-zero / recycle force-reloads must not cancel
+    // an in-flight sidebar navigation away from this page (e.g. Galaxy → Overview).
+    // location is still the old URL until applyPjaxPayload pushState — so a same-URL
+    // reload would supersede /overview and leave the player stuck on Galaxy.
+    try {
+      const active = typeof _activePjaxNavigation !== "undefined" ? _activePjaxNavigation : null;
+      const activeTarget = active && active.normalizedUrl ? String(active.normalizedUrl) : "";
+      const here = typeof normalizePjaxUrl === "function" ? normalizePjaxUrl(target) : target;
+      if (activeTarget && activeTarget !== here) {
+        console.debug(
+          "[GC] skip reloadCurrentPage; active PJAX away",
+          activeTarget,
+          "from",
+          here
+        );
+        return Promise.resolve();
+      }
+    } catch (_) {}
     const navOpts = { push: false, force: true, ...(opts || {}) };
     if (navOpts.skipPolling) {
       navOpts.preserveGameLoop = navOpts.preserveGameLoop !== false;
@@ -8268,10 +8286,10 @@
       }
     }
     if (!file && key) file = `${key}.png`;
-    if (!file) return "/static/img/research/energieeffizienz.png";
-    if (file.startsWith("/static/")) return file;
-    if (file.startsWith("img/")) return `/static/${file}`;
-    return `/static/img/research/${file}`;
+    if (!file) return GC.preferWebpStaticUrl("/static/img/research/energieeffizienz.png");
+    if (file.startsWith("/static/")) return GC.preferWebpStaticUrl(file);
+    if (file.startsWith("img/")) return GC.preferWebpStaticUrl(`/static/${file}`);
+    return GC.preferWebpStaticUrl(`/static/img/research/${file}`);
   }
 
   function _miniQueueIconUrl(job, domain) {
@@ -10576,7 +10594,7 @@
   function buildingIconUrl(buildingType) {
     const key = String(buildingType || "").trim();
     const file = BUILDING_ICON_FILE[key] || key;
-    return `/static/img/buildings/${file}.png`;
+    return GC.preferWebpStaticUrl(`/static/img/buildings/${file}.png`);
   }
   GC.buildingIconUrl = buildingIconUrl;
 
@@ -15115,7 +15133,7 @@
   }
 
   function lootContainerImageUrl(payload) {
-    const fallback = "/static/img/lootboxes/Generic_Supply_Container.png";
+    const fallback = "/static/img/lootboxes/Generic_Supply_Container.webp";
     const raw = String(payload.container_image || "").trim();
     if (!raw) return fallback;
     if (raw.startsWith("http://") || raw.startsWith("https://") || raw.startsWith("/")) return raw;
@@ -15154,7 +15172,7 @@
                src="${escapeHtml(crateImg)}"
                alt="${escapeHtml(containerName)}"
                decoding="async"
-               onerror="this.onerror=null;this.src='/static/img/lootboxes/Generic_Supply_Container.png';">
+               onerror="this.onerror=null;this.src='/static/img/lootboxes/Generic_Supply_Container.webp';">
         </div>
         <div class="gc-loot-roller">
           <div class="gc-loot-roller-rail" aria-hidden="true"></div>
@@ -16095,7 +16113,7 @@
     return map[String(r?.reward_type || "standard_box")] || map.standard_box;
   }
 
-  const VOTE_REWARD_IMG_FALLBACK = "/static/img/lootboxes/Generic_Supply_Container.png";
+  const VOTE_REWARD_IMG_FALLBACK = "/static/img/lootboxes/Generic_Supply_Container.webp";
 
   function _voteRewardDisplayHtml(r) {
     const items = Array.isArray(r?.display_items) ? r.display_items : [];
@@ -16421,7 +16439,7 @@
 
   function _referralTierCardHtml(tier, scope) {
     const display = tier.display || {};
-    const img = escapeHtml(String(display.image || "/static/img/lootboxes/Generic_Supply_Container.png"));
+    const img = escapeHtml(String(display.image || "/static/img/lootboxes/Generic_Supply_Container.webp"));
     const title = escapeHtml(t(tier.label_key, tier.reward_key || ""));
     const desc = tier.desc_key ? escapeHtml(t(tier.desc_key, "")) : "";
     const progress = escapeHtml(String(tier.progress_label || ""));
@@ -18276,7 +18294,7 @@
     const cardState = d.claimable || status === "completed" ? "completed" : status;
     const title = escapeHtml(t(d.title_key, d.definition_key || ""));
     const desc = escapeHtml(tf(d.description_key, { target: fmtNumber(target) }, d.definition_key || ""));
-    const fallback = "/static/img/lootboxes/Generic_Supply_Container.png";
+    const fallback = "/static/img/lootboxes/Generic_Supply_Container.webp";
     const hero = _idPrimaryReward(d.rewards_preview);
     const heroImg = hero?.image ? `/static/${String(hero.image).replace(/^\/+/, "")}` : fallback;
     const heroAlt = escapeHtml(t(hero?.name_key, hero?.item_key || ""));
@@ -22809,7 +22827,7 @@
 
   function shipyardIconUrl(shipKey) {
     const sk = String(shipKey || "").trim();
-    return `/static/img/ships/${sk}.png`;
+    return GC.preferWebpStaticUrl(`/static/img/ships/${sk}.png`);
   }
   GC.shipyardIconUrl = shipyardIconUrl;
 
@@ -23315,7 +23333,9 @@
   let _lastDefenseQueueSignature = "";
 
   function defenseIconUrl(defenseKey) {
-    return `/static/img/defense/${String(defenseKey || "").trim()}.png`;
+    return GC.preferWebpStaticUrl(
+      `/static/img/defense/${String(defenseKey || "").trim()}.png`
+    );
   }
   GC.defenseIconUrl = defenseIconUrl;
 
@@ -25852,18 +25872,23 @@
     if (GC._planetRegistryBound) return;
     GC._planetRegistryBound = true;
 
+    // GC-PERF-PLANET-SWITCH: PJAX reload replaces registry roots (dropping is-busy).
+    // A second click/ghost-click on the fresh DOM must not start another switch+reload.
+    let planetSwitchInFlight = false;
+
     document.addEventListener("click", async (e) => {
       if (e.target.closest("a.gc-galaxy-coord-link")) return;
       const item = e.target.closest(".gc-planet-registry-card");
       if (!item) return;
       const root = item.closest("[data-gc-planet-registry]");
       if (!root) return;
-      if (root.classList.contains("is-busy")) return;
+      if (planetSwitchInFlight || root.classList.contains("is-busy")) return;
       if (item.classList.contains("is-active")) return;
 
       const planetId = parseInt(item.dataset.planetId || "0", 10);
       if (!planetId) return;
 
+      planetSwitchInFlight = true;
       planetRegistryRoots().forEach((r) => r.classList.add("is-busy"));
       item.disabled = true;
       const releaseBusy = () => {
@@ -25897,6 +25922,8 @@
             if (!el || !name) return;
             el.textContent = name;
           });
+          // Align page scope before SSR reload so soft-nav/polls see the new planet.
+          syncScopedPlanetIds(planetId);
           const pageName =
             typeof GC.detectPage === "function" ? GC.detectPage() : "";
           const onAdmin = pageName === "admin";
@@ -25952,6 +25979,7 @@
         }
         clearTimeout(busyGuard);
         releaseBusy();
+        planetSwitchInFlight = false;
       }
     });
   }
@@ -31625,7 +31653,7 @@
   function rankingBadgesHtml(row) {
     const badges = Array.isArray(row.badges) ? row.badges : [];
     if (!badges.length) return "";
-    const badgeImgFallback = "/static/img/badges/default.png";
+    const badgeImgFallback = "/static/img/badges/default.webp";
     const chips = badges
       .map((badge) => {
         const label = rankingEscapeHtml(rankingT(badge.name_key, badge.badge_key || "Badge"));
@@ -35277,7 +35305,7 @@
       const host = form.querySelector("#pc-preview-badges");
       if (!host) return;
       host.innerHTML = "";
-      const badgeImgFallback = "/static/img/badges/default.png";
+      const badgeImgFallback = "/static/img/badges/default.webp";
       const checked = form.querySelectorAll('input[name="badge_slot"]:checked');
       let n = 0;
       checked.forEach((inp) => {

@@ -440,9 +440,11 @@ def run_fleet_worker(
                 "schema_not_ready": True,
             }
 
-        begin_write_transaction(conn)
-        tick_result = process_fleet_tick(player_id=None, conn=conn)
-        commit(conn)
+        # GC-PERF-LOCK-001: no mega-IMMEDIATE around all due fleets — process_fleet_tick
+        # owns short per-movement write TXs so HTTP (touch_player_online) can interleave.
+        tick_result = process_fleet_tick(
+            player_id=None, conn=conn, manage_transaction=True
+        )
 
         _maybe_run_post_fleet_maintenance(conn, source=source)
 
@@ -459,8 +461,14 @@ def run_fleet_worker(
 
         if persist:
             try:
+                begin_write_transaction(conn)
                 record_fleet_worker_result(result, source=source, conn=conn)
+                commit(conn)
             except Exception:
+                try:
+                    rollback(conn)
+                except Exception:
+                    pass
                 logger.exception("record_fleet_worker_result failed")
         _worker_log(
             f"source={source} arrivals={result['processed_arrivals']} "
@@ -469,7 +477,10 @@ def run_fleet_worker(
         )
         return result
     except Exception as exc:
-        rollback(conn)
+        try:
+            rollback(conn)
+        except Exception:
+            pass
         duration_ms = int((time.perf_counter() - started) * 1000)
         result = {
             "ok": False,
@@ -482,8 +493,14 @@ def run_fleet_worker(
         }
         if persist:
             try:
+                begin_write_transaction(conn)
                 record_fleet_worker_result(result, source=source, conn=conn)
+                commit(conn)
             except Exception:
+                try:
+                    rollback(conn)
+                except Exception:
+                    pass
                 logger.exception("record_fleet_worker_result failed")
         logger.exception("run_fleet_worker failed source=%s", source)
         return result

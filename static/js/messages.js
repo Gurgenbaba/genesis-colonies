@@ -197,22 +197,24 @@
   function unitIconUrl(key, defenseStock) {
     const k = String(key || "").trim();
     if (!k) return "";
+    const prefer = typeof GC.preferWebpStaticUrl === "function" ? GC.preferWebpStaticUrl : (u) => u;
     if (defenseStock && Object.prototype.hasOwnProperty.call(defenseStock, k)) {
       return typeof GC.defenseIconUrl === "function"
         ? GC.defenseIconUrl(k)
-        : `/static/img/defense/${k}.png`;
+        : prefer(`/static/img/defense/${k}.png`);
     }
     return typeof GC.shipyardIconUrl === "function"
       ? GC.shipyardIconUrl(k)
-      : `/static/img/ships/${k}.png`;
+      : prefer(`/static/img/ships/${k}.png`);
   }
 
   function reportBuildingIconUrl(key) {
     const k = String(key || "").trim();
     if (!k) return "";
+    const prefer = typeof GC.preferWebpStaticUrl === "function" ? GC.preferWebpStaticUrl : (u) => u;
     return typeof GC.buildingIconUrl === "function"
       ? GC.buildingIconUrl(k)
-      : `/static/img/buildings/${k}.png`;
+      : prefer(`/static/img/buildings/${k}.png`);
   }
 
   function reportUnitChipImg(key, defenseStock) {
@@ -528,25 +530,27 @@
     return `<div class="gc-expedition-loot-grid">${rows.join("")}</div>`;
   }
 
-  const EXPEDITION_LOOTBOX_IMG_FALLBACK = "/static/img/lootboxes/Generic_Supply_Container.png";
+  const EXPEDITION_LOOTBOX_IMG_FALLBACK = "/static/img/lootboxes/Generic_Supply_Container.webp";
 
   function expeditionLootboxImage(box) {
+    const prefer = typeof GC.preferWebpStaticUrl === "function" ? GC.preferWebpStaticUrl : (u) => u;
     const raw = String(box?.image || "").trim();
     if (raw) {
-      return raw.startsWith("/") ? raw : `/static/${raw.replace(/^\/+/, "")}`;
+      const abs = raw.startsWith("/") ? raw : `/static/${raw.replace(/^\/+/, "")}`;
+      return prefer(abs);
     }
     const key = String(box?.key || "");
     const byKey = {
-      generic_supply_container: "/static/img/lootboxes/Generic_Supply_Container.png",
-      resource_cache: "/static/img/lootboxes/Rare_Container.png",
-      research_capsule: "/static/img/lootboxes/Research_Cache.png",
-      wreckage_container: "/static/img/lootboxes/Wreckage_Container.png",
-      military_cache: "/static/img/lootboxes/Military_Cache.png",
-      alien_cache: "/static/img/lootboxes/Epic_Container.png",
-      premium_cache: "/static/img/lootboxes/Relic_Container.png",
-      mythic_container: "/static/img/lootboxes/Epic_Container.png",
-      ancient_relic: "/static/img/lootboxes/Relic_Container.png",
-      void_artifact: "/static/img/lootboxes/Event_Container.png",
+      generic_supply_container: "/static/img/lootboxes/Generic_Supply_Container.webp",
+      resource_cache: "/static/img/lootboxes/Rare_Container.webp",
+      research_capsule: "/static/img/lootboxes/Research_Cache.webp",
+      wreckage_container: "/static/img/lootboxes/Wreckage_Container.webp",
+      military_cache: "/static/img/lootboxes/Military_Cache.webp",
+      alien_cache: "/static/img/lootboxes/Epic_Container.webp",
+      premium_cache: "/static/img/lootboxes/Relic_Container.webp",
+      mythic_container: "/static/img/lootboxes/Epic_Container.webp",
+      ancient_relic: "/static/img/lootboxes/Relic_Container.webp",
+      void_artifact: "/static/img/lootboxes/Event_Container.webp",
     };
     return byKey[key] || EXPEDITION_LOOTBOX_IMG_FALLBACK;
   }

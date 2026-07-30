@@ -102,7 +102,7 @@ ALLOWLIST_HREF_ASSIGN = {
     # Galaxy/system quick-nav input: only reached if GC.navigateTo is somehow
     # undefined (defensive fallback), mirroring the reloadCurrentPage /
     # locale-switch reload() fallbacks below.
-    (31014, 'else window.location.href = href;'),
+    (31088, 'else window.location.href = href;'),
 }
 
 
@@ -128,8 +128,8 @@ def test_reload_fallback_is_allowlisted_only():
     ]
     allowed = {
         (2203, "window.location.reload();"),  # reloadCurrentPage fullDocument
-        (2215, "window.location.reload();"),  # reloadCurrentPage navigateTo fallback
-        (25780, "window.location.reload();"),  # locale switch fallback
+        (2233, "window.location.reload();"),  # reloadCurrentPage navigateTo fallback
+        (25854, "window.location.reload();"),  # locale switch fallback
     }
     assert reload_lines, "expected allowlisted location.reload() sites"
     assert set(reload_lines) == allowed, (

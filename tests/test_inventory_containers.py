@@ -337,7 +337,7 @@ def test_inventory_page_loads(inventory_db, monkeypatch):
     assert res.status_code == 200
     assert "inventory-page" in body
     assert "inventory-loot-card" in body
-    assert "lootboxes/Basic_Container.png" in body
+    assert "lootboxes/Basic_Container.webp" in body
     assert 'data-inventory-container="container_basic"' in body
 
 
@@ -346,11 +346,11 @@ def test_container_catalog_shows_all_with_zero_by_default(inventory_db):
     assert len(catalog) == len(CONTAINER_KEYS)
     assert all(c["amount"] == 0 and not c["owned"] for c in catalog)
     by_key = {c["item_key"]: c.get("image", "") for c in catalog}
-    assert by_key["container_basic"] == "img/lootboxes/Basic_Container.png"
-    assert by_key["container_rare"] == "img/lootboxes/Rare_Container.png"
-    assert by_key["container_epic"] == "img/lootboxes/Epic_Container.png"
-    assert by_key["container_mythic"] == "img/lootboxes/Epic_Container.png"
-    assert by_key["container_relic"] == "img/lootboxes/Relic_Container.png"
+    assert by_key["container_basic"] == "img/lootboxes/Basic_Container.webp"
+    assert by_key["container_rare"] == "img/lootboxes/Rare_Container.webp"
+    assert by_key["container_epic"] == "img/lootboxes/Epic_Container.webp"
+    assert by_key["container_mythic"] == "img/lootboxes/Epic_Container.webp"
+    assert by_key["container_relic"] == "img/lootboxes/Relic_Container.webp"
     assert by_key["container_wreckage"].startswith("img/lootboxes/")
     assert all(img.startswith("img/lootboxes/") for img in by_key.values())
 
@@ -607,7 +607,7 @@ def test_open_container_returns_roll_preview(inventory_db, monkeypatch):
     data = res.get_json()
     assert data["ok"] is True
     assert "roll_preview" in data
-    assert data.get("container_image", "") == "img/lootboxes/Rare_Container.png"
+    assert data.get("container_image", "") == "img/lootboxes/Rare_Container.webp"
     assert len(data["roll_preview"]) >= 30
 
 

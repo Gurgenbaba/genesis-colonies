@@ -62,6 +62,11 @@ def _is_sqlite_lock_error(exc: BaseException) -> bool:
     return "locked" in msg or "busy" in msg
 
 
+def is_sqlite_lock_error(exc: BaseException) -> bool:
+    """Public alias for SQLITE_BUSY / database is locked detection."""
+    return _is_sqlite_lock_error(exc)
+
+
 def format_sqlite_lock_startup_help() -> str:
     """Actionable hint when bootstrap cannot open the SQLite file for writing."""
     db_path = resolve_db_path()
@@ -173,7 +178,9 @@ def db() -> DbConn:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
-    conn.execute("PRAGMA busy_timeout=15000")
+    # GC-PERF-LOCK-001: wait for writers (fleet short-TX / autoplay) instead of
+    # immediate SQLITE_BUSY on HTTP touch / game-state paths.
+    conn.execute("PRAGMA busy_timeout=20000")
     conn.execute("PRAGMA synchronous=NORMAL")
     try:
         from game.live_state import attach_request_perf_sql_trace
@@ -215,7 +222,7 @@ def recover_aborted_transaction(conn: DbConn) -> None:
         rollback(conn)
 
 
-def begin_write_transaction(conn: DbConn, *, retries: int = 8) -> None:
+def begin_write_transaction(conn: DbConn, *, retries: int = 12) -> None:
     """
     Start a write transaction with appropriate locking.
 
@@ -223,6 +230,7 @@ def begin_write_transaction(conn: DbConn, *, retries: int = 8) -> None:
     Postgres: BEGIN — pair with lock_planet_for_update() / lock_player_for_update().
 
     Serializes writers within the process on SQLite to avoid SQLITE_BUSY under Flask threading.
+    GC-PERF-LOCK-001: default retries raised so HTTP can wait out fleet short-TXs.
     """
     if get_db_backend() == "postgres":
         recover_aborted_transaction(conn)
