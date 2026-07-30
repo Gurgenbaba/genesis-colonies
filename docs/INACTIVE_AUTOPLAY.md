@@ -2,23 +2,23 @@
 
 > Owner: `game/inactive_autoplay.py` · Shared economy: `game/auto_empire.py` · Tick: fleet worker post-maint
 
-Dormante Menschen-Konten werden gestaffelt auf einen **sticky Roster** geholt und bauen/forschen/Defense **dauerhaft** (Round-Robin pro Fleet-Cron). Ranking/Galaxy wirken lebendig.
+Dormante Menschen-Konten rotieren auf eine kleine **Day-Shift** (2–3 online). Ranking/Galaxy wirken lebendig, ohne SQLite-Lastspitzen.
 
 ## Regeln
 
 | Regel | Verhalten |
 |-------|-----------|
-| Presence | Zwei getrennte Uhren auf `players.last_seen`: (1) frisch geweckte Accounts werden **sofort** touched, damit sie augenblicklich den mehrtägigen Ranking-Inactive-Threshold verlassen; (2) ein kleiner, **dynamisch nach % der echten Spielerbasis gedeckelter**, rotierender Ausschnitt des Rosters gilt je Tick als "online" (`online_visible_cap`, GC-2617) — nicht der gesamte Roster. So bleibt die gleichzeitige Online-Zahl plausibel, egal wie groß der Roster-Cap ist |
-| Economy | `plan_passive_planet_tick` mit Soft-Caps (15/20 min) + Chain (bis 3 Jobs/Tick) |
+| Presence | Shift-Roster **ist** die Online-Menge: alle aktuellen Schicht-Mitglieder bekommen frisches `last_seen` (GC-INACTIVE-SHIFT-001). Tagsüber (Europe/Berlin 08–23) Target **3**, nachts **2**, gedeckelt durch Ops-Ceiling |
+| Economy | `plan_passive_planet_tick` mit Soft-Caps (15/20 min) + Chain (bis 2 Jobs/Tick) |
 | Anti-Klon-Varianz | Jeder Account (Inactive **und** Pirate-AI) bekommt eine deterministische `personality` (`auto_empire.personality_for_player`/`pirates._personality_for_bot`), die Bau-/Forschungsreihenfolge (`*_BY_PERSONALITY`), Ziel-Level-Jitter (`_stable_jitter`, ±2 Gebäude/±1 Forschung) und Defense-Bias steuert; standing Ticks (nicht Wake) rollen zusätzlich `AUTOPLAY_STANDING_IDLE_CHANCE` (25%) und lassen eine Runde aus (GC-2618) |
-| Sticky Roster | Einmal geweckt → bleibt auf Roster und baut weiter (kein 6h-Stop); zählt kumulativ `builds_done`/`research_done`/`defense_done` + `last_action` (GC-2615) |
-| Roster-Rotation | Voller Roster: `batch`-älteste (`last_ticked_at`) werden **evicted** bevor neue Dormants nachrücken (LRU) — Coverage rotiert durch den gesamten Dormant-Pool. Das ist das "Dreischicht"/rotierende Online-Verhalten: kein festes Zeitfenster, sondern ein kontinuierlich rotierender Ausschnitt des Dormant-Pools bleibt online |
+| Day Shift | Roster-Größe = sichtbare Online-Zahl (`shift_cap`); kein stiller Mass-Builder-Pool mehr |
+| Roster-Rotation | Nach **Tenure** (default 3h) Evict + Betriebsbericht; nächster Dormant rückt nach (batch 1). Evicted bleiben bis `revisit_sec` (12h) in der Queue hinten |
 | Sichtbare Aktivität | Beim Eviction bekommt der Account **eine** Inbox-Nachricht ("Automatisierter Betriebsbericht") mit den kumulierten Zahlen (GC-2615, `_send_autoplay_report` → `messages.create_message`) — kein stiller Tick |
 | Timekeeper-Boost | Defense-/Shipyard-Queues (kein `duration_cap`, da echte Formel) werden nach erfolgreichem Enqueue automatisch per **echtem** Timekeeper-Ledger beschleunigt: Auto-Credit auf 10h wenn Balance leer, danach Auto-Apply `mode="max"` (GC-2616, `_auto_boost_timekeeper` in `game/auto_empire.py`) — gilt für Inactive **und** Pirate-AI gleichermaßen, da beide `plan_passive_planet_tick` teilen |
 | Ships | **nein** (Inactive) / ja (Pirate-AI, siehe unten) |
 | Fleets / Expeditionen | **nie** (Inactive) |
-| Stagger | Wake-Batches (default 1 / 10 min); Economy-Slice default 3/Cron; Roster-Cap default 6 (Clamp 4–12, GC-2620) |
-| Revisit | ~36h — zieht Stale-Accounts wieder auf den Roster |
+| Stagger | Wake-Batches (default 1 / 15 min); Economy-Slice default 1/Cron; Shift-Cap default 3 (Clamp 2–4) |
+| Revisit | ~12h — Cooldown nach Schicht, bevor erneut wählbar |
 | Exclude | Vacation, Pirate-Bots, Combat-Balance-Bots |
 | Soft-Off | `runtime_state.inactive_autoplay_enabled=0` oder `GC_INACTIVE_AUTOPLAY_ENABLED=0` |
 | Cron | Fleet post-maint via **maintenance sidecar** (`scripts/run_maintenance_worker.py`, GC-PERF-PROD-002) or legacy in-process `embedded_cron` if `GC_MAINTENANCE_WORKER=0` |
@@ -56,20 +56,22 @@ Dormante Menschen-Konten werden gestaffelt auf einen **sticky Roster** geholt un
 | GC-2620 | Concurrent Roster-Cap 5–8 (Default 6, Clamp 4–12), sticky slow wake (Batch 1), Deploy-Trim bei Übergröße (Alias: GC-INACTIVE-ROSTER-002) | done |
 | GC-PERF-AUTOPLAY-001 | Kurze Write-TXs + Busy-Lease; Stage `manage_tx=False`; hold_ms/write_commits Logging; Timekeeper/Nav A/B Canary | done |
 | GC-PERF-AUTOPLAY-002 | Entzerrung: `tick_per_cron` Default 1, Yield zwischen Short-TXs, Tick-Budget Circuit-Breaker, `chain_limit` 2 | done |
+| GC-INACTIVE-SHIFT-001 | Day Shift: 2–3 online, 3h Tenure, 12h Revisit, Berlin day-band, Presence=Roster | done |
 
 ## Env
 
 | Env | Default | Bedeutung |
 |-----|---------|-----------|
 | `GC_INACTIVE_AUTOPLAY_ENABLED` | on | `0` = hard off |
-| `GC_INACTIVE_AUTOPLAY_BATCH` | 1 | Neue Roster-Mitglieder pro Wake-Wave (sticky / slow rotation) |
-| `GC_INACTIVE_AUTOPLAY_INTERVAL_SEC` | 600 | Abstand zwischen Wake-Waves |
-| `GC_INACTIVE_AUTOPLAY_REVISIT_SEC` | 129600 | Stale-Cutoff (~36h) |
-| `GC_INACTIVE_AUTOPLAY_MAX_SESSIONS` | 6 | Max. gleichzeitige Sticky-Builder (geclamped 4–12; ≠ Online-Cap GC-2617) |
-| `GC_INACTIVE_AUTOPLAY_TICK_PER_CRON` | 1 | Economy-Ticks pro Fleet-Cron (RR); GC-PERF-AUTOPLAY-002 (war 3) |
+| `GC_INACTIVE_AUTOPLAY_BATCH` | 1 | Neue Schicht-Mitglieder / Tenure-Evicts pro Wake-Wave |
+| `GC_INACTIVE_AUTOPLAY_INTERVAL_SEC` | 900 | Abstand zwischen Wake-Waves (15 min) |
+| `GC_INACTIVE_AUTOPLAY_REVISIT_SEC` | 43200 | Cooldown nach Evict (~12h) bevor erneut wählbar |
+| `GC_INACTIVE_AUTOPLAY_MAX_SESSIONS` | 3 | Ops-Ceiling für Shift-Größe (Clamp 2–4) |
+| `GC_INACTIVE_AUTOPLAY_SESSION_SEC` | 10800 | Schicht-Tenure (3h) — danach Evict + Queue |
+| `GC_INACTIVE_AUTOPLAY_TICK_PER_CRON` | 1 | Economy-Ticks pro Fleet-Cron (RR) |
 | `GC_INACTIVE_AUTOPLAY_YIELD_MS` | 50 | Pause zwischen Short-TX Economies (0–250); gibt HTTP den Writer |
 | `GC_INACTIVE_AUTOPLAY_TICK_BUDGET_MS` | 800 | Wall-Budget für weitere Economies im Tick (200–5000); danach `budget_stopped` |
-| `GC_INACTIVE_AUTOPLAY_ONLINE_PERCENT` | 15 | % der **echten** registrierten Spieler, die gleichzeitig als "online" (Autoplay) sichtbar sein dürfen (geclamped 1–50%, Ergebnis geclamped 2–40 Accounts) |
+| `GC_INACTIVE_AUTOPLAY_ONLINE_PERCENT` | — | **deprecated / ignored** (GC-INACTIVE-SHIFT-001); Online = `shift_cap` |
 
 ## Pirate AI (parallel)
 
@@ -197,6 +199,20 @@ touch_player_online → BEGIN IMMEDIATE → database is locked
 4. `tick_budget_ms()` (`GC_INACTIVE_AUTOPLAY_TICK_BUDGET_MS`, Default 800) — vor weiteren Wake-/Standing-Economies Abbruch mit `budget_stopped=true` im Tick-Payload.
 
 Presence-Bulk bleibt ein Flush am Tick-Ende (gleicher Timestamp in der Admin-UI ist erwartbar). Soft-On bleibt empfohlen; Soft-Off nur Notfall — siehe [GC_PERF_PROD_001.md](GC_PERF_PROD_001.md).
+
+## GC-INACTIVE-SHIFT-001 — Day Shift (2–3 online)
+
+**Problem:** Sticky Roster (Cap 6) + 15%-Online-Cap ließen bei ~62 echten Spielern bis ~9 Autoplay-Accounts gleichzeitig „online“ wirken und erzeugten Write-Last. Rotation nur bei vollem Roster (LRU) — kein natürliches „nach X Stunden raus, nächster rein“.
+
+**Fix (Owner `game/inactive_autoplay.py`):**
+
+1. Shift-Cap default **3** (Clamp **2–4**); `shift_cap = min(max_sessions, day_target)`.
+2. `day_target()`: Europe/Berlin **08:00–23:00 → 3**, sonst **2**.
+3. `session_tenure_sec` default **3h** (`GC_INACTIVE_AUTOPLAY_SESSION_SEC`) — Tenure-Evict (max batch 1) vor Fill.
+4. Revisit default **12h**; Wake-Interval **15 min**; Presence = gesamter Shift-Roster.
+5. `GC_INACTIVE_AUTOPLAY_ONLINE_PERCENT` deprecated/ignored.
+
+**Ops:** Soft-On Inactive Autoplay; Pirates vorerst Soft-Off. Sidecar `GC_MAINTENANCE_WORKER=1` muss laufen.
 
 ## Living Universe Pulse (GC-2612)
 

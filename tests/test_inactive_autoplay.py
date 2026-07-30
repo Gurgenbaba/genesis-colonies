@@ -335,7 +335,7 @@ def test_inactive_resource_floor_raises_empty_stockpile(autoplay_db):
 
 
 def test_max_concurrent_sessions_default_and_clamp(monkeypatch):
-    """GC-2620: default roster cap sits in the 5–8 band; ops cannot reopen mass concurrency."""
+    """GC-INACTIVE-SHIFT-001: ops ceiling clamps to 2–4 (default 3)."""
     from game.inactive_autoplay import (
         DEFAULT_MAX_ROSTER,
         MAX_ROSTER_CAP,
@@ -344,15 +344,16 @@ def test_max_concurrent_sessions_default_and_clamp(monkeypatch):
     )
 
     monkeypatch.delenv("GC_INACTIVE_AUTOPLAY_MAX_SESSIONS", raising=False)
-    assert DEFAULT_MAX_ROSTER == 6
-    assert 5 <= max_concurrent_sessions() <= 8
-    assert max_concurrent_sessions() == 6
+    assert DEFAULT_MAX_ROSTER == 3
+    assert max_concurrent_sessions() == 3
+    assert MIN_ROSTER_CAP == 2
+    assert MAX_ROSTER_CAP == 4
 
     monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_MAX_SESSIONS", "60")
-    assert max_concurrent_sessions() == MAX_ROSTER_CAP == 12
+    assert max_concurrent_sessions() == MAX_ROSTER_CAP == 4
 
-    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_MAX_SESSIONS", "2")
-    assert max_concurrent_sessions() == MIN_ROSTER_CAP == 4
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_MAX_SESSIONS", "1")
+    assert max_concurrent_sessions() == MIN_ROSTER_CAP == 2
 
 
 def test_inactive_autoplay_trims_oversize_roster_to_cap(autoplay_db, monkeypatch):
@@ -370,10 +371,11 @@ def test_inactive_autoplay_trims_oversize_roster_to_cap(autoplay_db, monkeypatch
     )
     from game.runtime_state import set_runtime_value
 
-    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_MAX_SESSIONS", "6")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_MAX_SESSIONS", "3")
     monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_BATCH", "1")
+    monkeypatch.setattr("game.inactive_autoplay.day_target", lambda now=None: 3)
 
-    uids = [_register_user() for _ in range(10)]
+    uids = [_register_user() for _ in range(8)]
     now0 = time.time()
     roster_seed = []
     for i, uid in enumerate(uids):
@@ -396,21 +398,21 @@ def test_inactive_autoplay_trims_oversize_roster_to_cap(autoplay_db, monkeypatch
             json.dumps({"ok": True, "at": now0, "source": "test", "woke": 0, "evicted": 0}),
             conn=conn,
         )
-        assert max_concurrent_sessions() == 6
+        assert max_concurrent_sessions() == 3
 
         result = run_inactive_autoplay_tick(
             conn, now=now0 + 30, force=False, source="test"
         )
         assert result.get("ok") is True
-        assert int(result.get("roster_size") or 0) == 6
-        assert int(result.get("evicted_count") or 0) == 4
+        assert int(result.get("roster_size") or 0) == 3
+        assert int(result.get("evicted_count") or 0) == 5
         assert int(result.get("woke_count") or 0) == 0
 
         remaining = {int(r["player_id"]) for r in get_roster_snapshot(conn=conn)}
-        expected_kept = set(uids[4:])  # highest last_ticked_at
+        expected_kept = set(uids[5:])  # highest last_ticked_at
         assert remaining == expected_kept
 
-        trimmed = set(uids[:4])
+        trimmed = set(uids[:5])
         placeholders = ",".join("?" for _ in trimmed)
         msgs = conn.execute(
             f"""
@@ -428,18 +430,21 @@ def test_inactive_autoplay_trims_oversize_roster_to_cap(autoplay_db, monkeypatch
         conn.close()
 
 
-def test_inactive_autoplay_roster_lru_rotation_covers_whole_pool(autoplay_db, monkeypatch):
-    """GC-2609: full roster evicts oldest-ticked members instead of freezing forever."""
+def test_inactive_autoplay_tenure_rotation_covers_whole_pool(autoplay_db, monkeypatch):
+    """GC-INACTIVE-SHIFT-001: tenure expiry rotates new faces through the shift."""
     from game.inactive_autoplay import (
         max_concurrent_sessions,
         run_inactive_autoplay_tick,
         set_inactive_autoplay_enabled,
     )
 
-    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_MAX_SESSIONS", "4")
-    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_BATCH", "2")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_MAX_SESSIONS", "3")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_BATCH", "1")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_SESSION_SEC", "3600")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_REVISIT_SEC", "3600")
+    monkeypatch.setattr("game.inactive_autoplay.day_target", lambda now=None: 3)
 
-    uids = [_register_user() for _ in range(10)]
+    uids = [_register_user() for _ in range(8)]
     conn = db()
     try:
         begin_write_transaction(conn)
@@ -450,22 +455,22 @@ def test_inactive_autoplay_roster_lru_rotation_covers_whole_pool(autoplay_db, mo
     finally:
         conn.close()
 
-    assert max_concurrent_sessions() == 4
+    assert max_concurrent_sessions() == 3
 
     distinct_woken: set = set()
     now0 = time.time()
-    for cycle in range(3):
+    for cycle in range(6):
         conn = db()
         try:
             begin_write_transaction(conn)
             result = run_inactive_autoplay_tick(
                 conn,
-                now=now0 + cycle * 2 * 24 * 3600,
+                now=now0 + cycle * 2 * 3600,
                 force=True,
                 source="test",
             )
             assert result.get("ok") is True
-            assert int(result.get("roster_size") or 0) <= 4
+            assert int(result.get("roster_size") or 0) <= 3
             for w in result.get("woke") or []:
                 distinct_woken.add(int(w["player_id"]))
             commit(conn)
@@ -514,20 +519,7 @@ def test_admin_inactive_autoplay_roster_shows_username_and_last_seen(autoplay_db
 
 
 def test_inactive_autoplay_bulk_presence_keeps_whole_roster_online(autoplay_db, monkeypatch):
-    """GC-2614 -> superseded by GC-2617: unconditionally touching the *entire*
-    sticky roster every tick let the visible "online" count grow with the
-    roster cap (up to 60+) regardless of the real player base — exactly the
-    "40 accounts online at once looks fake" problem flagged after Phase 3
-    shipped. GC-2617 bounds simultaneous presence to a small, independently
-    rotating subset (`online_visible_cap`, percent of real registered
-    players), with one deliberate exception: freshly-woken accounts are
-    always touched immediately, so a just-woken account instantly clears the
-    multi-day ranking-inactive flag instead of waiting for its rotation turn.
-    This test still proves that exact requirement: in one wake wave (batch ==
-    roster cap here, so "all woken" happens to mean "the whole roster"),
-    every newly woken account reads as online right away — not just whoever
-    got a full economy round-robin tick.
-    """
+    """GC-INACTIVE-SHIFT-001: full shift roster is presence-touched (online = shift)."""
     from game.inactive_autoplay import (
         run_inactive_autoplay_tick,
         set_inactive_autoplay_enabled,
@@ -535,18 +527,16 @@ def test_inactive_autoplay_bulk_presence_keeps_whole_roster_online(autoplay_db, 
     )
     from game.models import ONLINE_WINDOW_SEC
 
-    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_MAX_SESSIONS", "6")
-    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_BATCH", "6")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_MAX_SESSIONS", "3")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_BATCH", "3")
     monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_TICK_PER_CRON", "1")
+    monkeypatch.setattr("game.inactive_autoplay.day_target", lambda now=None: 3)
 
-    uids = [_register_user() for _ in range(6)]
+    uids = [_register_user() for _ in range(3)]
     conn = db()
     try:
         begin_write_transaction(conn)
         set_inactive_autoplay_enabled(True, conn=conn)
-        # Other pre-seeded players default last_seen=0 (never touched) — mark
-        # them "seen just now" so only our 6 freshly seeded dormant accounts
-        # are eligible wake candidates (mirrors the admin force-tick test).
         conn.execute(
             "UPDATE players SET last_seen = ? WHERE id NOT IN (%s);"
             % ",".join("?" * len(uids)),
@@ -556,17 +546,16 @@ def test_inactive_autoplay_bulk_presence_keeps_whole_roster_online(autoplay_db, 
             _seed_dormant(conn, uid, days_inactive=5.0)
         now = time.time()
         result = run_inactive_autoplay_tick(conn, now=now, force=True, source="test")
-        assert int(result.get("woke_count") or 0) == 6
+        assert int(result.get("woke_count") or 0) == 3
         assert tick_per_cron() == 1
+        assert int(result.get("presence_visible_now") or 0) == 3
 
-        # Only 1 of 6 gets a full economy round-robin tick, but *all six* must
-        # still read as online (bulk presence touch), not just that one.
         placeholders = ",".join("?" for _ in uids)
         rows = conn.execute(
             f"SELECT id, last_seen FROM players WHERE id IN ({placeholders});",
             tuple(uids),
         ).fetchall()
-        assert len(rows) == 6
+        assert len(rows) == 3
         for row in rows:
             assert float(row["last_seen"] or 0) >= now - ONLINE_WINDOW_SEC
         commit(conn)
@@ -575,23 +564,19 @@ def test_inactive_autoplay_bulk_presence_keeps_whole_roster_online(autoplay_db, 
 
 
 def test_inactive_autoplay_eviction_sends_activity_report(autoplay_db, monkeypatch):
-    """GC-2615: when the LRU evicts a roster member, they get exactly one inbox
-    message summarizing what autoplay actually built/researched/defended while
-    they were away — visible activity instead of a silent tick.
-    """
+    """GC-2615 / SHIFT-001: tenure eviction sends one inbox activity report."""
     from game.inactive_autoplay import run_inactive_autoplay_tick, set_inactive_autoplay_enabled
 
-    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_MAX_SESSIONS", "4")
-    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_BATCH", "4")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_MAX_SESSIONS", "3")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_BATCH", "3")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_SESSION_SEC", "3600")
+    monkeypatch.setattr("game.inactive_autoplay.day_target", lambda now=None: 3)
 
-    uids = [_register_user() for _ in range(8)]
+    uids = [_register_user() for _ in range(6)]
     conn = db()
     try:
         begin_write_transaction(conn)
         set_inactive_autoplay_enabled(True, conn=conn)
-        # Other pre-seeded players default last_seen=0 (never touched) — mark
-        # them "seen just now" so only our 8 freshly seeded dormant accounts
-        # are eligible wake candidates (mirrors the admin force-tick test).
         conn.execute(
             "UPDATE players SET last_seen = ? WHERE id NOT IN (%s);"
             % ",".join("?" * len(uids)),
@@ -601,22 +586,23 @@ def test_inactive_autoplay_eviction_sends_activity_report(autoplay_db, monkeypat
             _seed_dormant(conn, uid, days_inactive=10.0)
         now0 = time.time()
         first = run_inactive_autoplay_tick(conn, now=now0, force=True, source="test")
-        assert int(first.get("woke_count") or 0) == 4
+        assert int(first.get("woke_count") or 0) == 3
         first_ids = {int(w["player_id"]) for w in first["woke"]}
         assert first_ids.issubset(set(uids))
         commit(conn)
     finally:
         conn.close()
 
-    # Second wake cycle: roster is full, so the first batch gets evicted.
+    # Past tenure: batch=3 expires all three, then fills three new ones.
     conn = db()
     try:
         begin_write_transaction(conn)
         second = run_inactive_autoplay_tick(
-            conn, now=now0 + 24 * 3600, force=True, source="test"
+            conn, now=now0 + 2 * 3600, force=True, source="test"
         )
-        assert int(second.get("evicted_count") or 0) == 4
-        evicted_ids = set(first_ids)  # oldest-ticked == the ones woken first
+        assert int(second.get("expired_count") or 0) == 3
+        assert int(second.get("evicted_count") or 0) >= 3
+        evicted_ids = set(first_ids)
 
         placeholders = ",".join("?" for _ in evicted_ids)
         msgs = conn.execute(
@@ -628,8 +614,6 @@ def test_inactive_autoplay_eviction_sends_activity_report(autoplay_db, monkeypat
             """,
             tuple(evicted_ids),
         ).fetchall()
-        # Every evicted account did at least one real build/research this session,
-        # so each must have received exactly one report.
         recipients = [int(m["recipient_player_id"]) for m in msgs]
         assert set(recipients) == evicted_ids
         assert len(recipients) == len(set(recipients)), "must be exactly one report per session"
@@ -641,78 +625,61 @@ def test_inactive_autoplay_eviction_sends_activity_report(autoplay_db, monkeypat
         conn.close()
 
 
-def test_online_visible_cap_scales_with_real_player_count(autoplay_db, monkeypatch):
-    """GC-2617: the simultaneous-"online" cap must scale with the *real*
-    registered player base, not be a static number lifted from the roster
-    cap — otherwise a small server with a big roster cap shows an
-    implausible wall of logins ("40 Leute auf einmal online")."""
-    from game.inactive_autoplay import (
-        MAX_ONLINE_VISIBLE,
-        MIN_ONLINE_VISIBLE,
-        online_visible_cap,
-    )
+def test_day_target_day_vs_night(monkeypatch):
+    """GC-INACTIVE-SHIFT-001: Berlin day band → 3, night → 2."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
 
+    from game.inactive_autoplay import DAY_SHIFT_TZ, day_target
+
+    day_local = datetime(2026, 7, 31, 12, 0, tzinfo=ZoneInfo(DAY_SHIFT_TZ))
+    night_local = datetime(2026, 7, 31, 2, 0, tzinfo=ZoneInfo(DAY_SHIFT_TZ))
+    assert day_target(now=day_local.timestamp()) == 3
+    assert day_target(now=night_local.timestamp()) == 2
+
+
+def test_online_visible_cap_follows_shift_not_player_percent(autoplay_db, monkeypatch):
+    """GC-INACTIVE-SHIFT-001: online cap is shift_cap, not % of real players."""
+    from game.inactive_autoplay import online_visible_cap, shift_cap
+
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_MAX_SESSIONS", "3")
     monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_ONLINE_PERCENT", "50")
+    monkeypatch.setattr("game.inactive_autoplay.day_target", lambda now=None: 3)
 
-    # `_register_user` opens its own connection/transaction — must run before
-    # this test's own `begin_write_transaction`, else SQLite deadlocks. Each
-    # checkpoint is its own committed phase so `more_uids` are only created
-    # (and only count towards `get_registered_player_count`) *after* the
-    # small-base cap has actually been measured.
-    small_uids = [_register_user() for _ in range(3)]
+    # Growing the real player base must NOT inflate the online wall.
+    for _ in range(5):
+        _register_user()
     conn = db()
     try:
         begin_write_transaction(conn)
-        for uid in small_uids:
-            ensure_player_and_homeworld(uid, player_name=f"Real{uid}", conn=conn)
-        cap_small_base = online_visible_cap(conn=conn)
-        assert MIN_ONLINE_VISIBLE <= cap_small_base <= MAX_ONLINE_VISIBLE
-        commit(conn)
-    finally:
-        conn.close()
-
-    # Growing the real player base must raise the cap proportionally — proves
-    # it is percent-based, not a fixed constant.
-    more_uids = [_register_user() for _ in range(17)]
-    conn = db()
-    try:
-        begin_write_transaction(conn)
-        for uid in more_uids:
-            ensure_player_and_homeworld(uid, player_name=f"Real{uid}", conn=conn)
-        cap_big_base = online_visible_cap(conn=conn)
-        assert cap_big_base > cap_small_base
-        assert cap_big_base <= MAX_ONLINE_VISIBLE
+        for uid_row in conn.execute("SELECT id FROM players").fetchall():
+            ensure_player_and_homeworld(
+                int(uid_row["id"]), player_name=f"R{uid_row['id']}", conn=conn
+            )
+        assert online_visible_cap(conn=conn) == 3
+        assert shift_cap(conn=conn) == 3
         commit(conn)
     finally:
         conn.close()
 
 
-def test_inactive_autoplay_presence_rotation_bounds_online_count(autoplay_db, monkeypatch):
-    """GC-2617: presence visibility is decoupled from roster size — a full
-    roster of standing (already-woken, not freshly-woken this tick) accounts
-    must NOT all look "online" simultaneously; only a small, dynamically
-    capped rotating subset does, while the rest keep building silently.
-
-    The roster + `worker_last` are seeded directly (not via a wake tick) so
-    `seconds_until_wake_allowed` is still positive and the wake/evict block
-    is skipped entirely (`force=False`) — isolating exactly the presence
-    rotation behavior under test, independent of wake/evict mechanics.
-    """
+def test_inactive_autoplay_presence_equals_roster_size(autoplay_db, monkeypatch):
+    """GC-INACTIVE-SHIFT-001: presence_visible_now == roster size (<= shift_cap)."""
     from game.inactive_autoplay import (
         ROSTER_KEY,
         WORKER_LAST_KEY,
-        online_visible_cap,
         run_inactive_autoplay_tick,
         set_inactive_autoplay_enabled,
     )
     from game.models import ONLINE_WINDOW_SEC
     from game.runtime_state import set_runtime_value
 
-    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_ONLINE_PERCENT", "1")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_MAX_SESSIONS", "3")
     monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_TICK_PER_CRON", "1")
-    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_INTERVAL_SEC", "600")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_INTERVAL_SEC", "900")
+    monkeypatch.setattr("game.inactive_autoplay.day_target", lambda now=None: 3)
 
-    uids = [_register_user() for _ in range(10)]
+    uids = [_register_user() for _ in range(3)]
     conn = db()
     try:
         begin_write_transaction(conn)
@@ -724,8 +691,8 @@ def test_inactive_autoplay_presence_rotation_bounds_online_count(autoplay_db, mo
         roster = [
             {
                 "player_id": uid,
-                "joined_at": now - 3600,
-                "last_ticked_at": now - 3600,
+                "joined_at": now - 600,
+                "last_ticked_at": now - 600,
                 "last_action": None,
                 "builds_done": 0,
                 "research_done": 0,
@@ -740,13 +707,12 @@ def test_inactive_autoplay_presence_rotation_bounds_online_count(autoplay_db, mo
             conn=conn,
         )
 
-        cap = online_visible_cap(conn=conn)
-        assert cap < len(uids), "test setup needs a cap smaller than the roster to be meaningful"
-
         tick_now = now + 1
         result = run_inactive_autoplay_tick(conn, now=tick_now, force=False, source="test")
         assert result.get("ok")
-        assert int(result.get("woke_count") or 0) == 0, "wake/evict block must have been skipped"
+        assert int(result.get("woke_count") or 0) == 0
+        assert int(result.get("roster_size") or 0) == 3
+        assert int(result.get("presence_visible_now") or 0) == 3
 
         placeholders = ",".join("?" for _ in uids)
         rows = conn.execute(
@@ -756,8 +722,80 @@ def test_inactive_autoplay_presence_rotation_bounds_online_count(autoplay_db, mo
         online_now = sum(
             1 for r in rows if float(r["last_seen"] or 0) >= tick_now - ONLINE_WINDOW_SEC
         )
-        assert online_now <= cap
-        assert online_now < len(uids), "a big roster must not make everyone look online at once"
+        assert online_now == 3
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_inactive_autoplay_tenure_evict_then_fill(autoplay_db, monkeypatch):
+    """Tenure-expired account leaves; a new dormant fills the open slot."""
+    from game.inactive_autoplay import (
+        ROSTER_KEY,
+        get_roster_snapshot,
+        list_dormant_candidates,
+        run_inactive_autoplay_tick,
+        session_tenure_sec,
+        set_inactive_autoplay_enabled,
+    )
+    from game.runtime_state import set_runtime_value
+
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_MAX_SESSIONS", "2")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_BATCH", "1")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_SESSION_SEC", "3600")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_REVISIT_SEC", "7200")
+    monkeypatch.setattr("game.inactive_autoplay.day_target", lambda now=None: 2)
+    assert session_tenure_sec() == 3600
+
+    old_uid, new_uid = _register_user(), _register_user()
+    now0 = time.time()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        set_inactive_autoplay_enabled(True, conn=conn)
+        _seed_dormant(conn, old_uid, days_inactive=5.0)
+        _seed_dormant(conn, new_uid, days_inactive=5.0)
+        # Isolate wake candidates: everyone else looks freshly online.
+        conn.execute(
+            "UPDATE players SET last_seen = ? WHERE id NOT IN (?, ?);",
+            (now0, old_uid, new_uid),
+        )
+        # After eviction, old must stay non-candidate (fresh last_seen + revisit).
+        # Touch them *after* the tick via presence is skipped once off-roster —
+        # seed a mid-fresh value that survives eviction.
+        conn.execute(
+            "UPDATE players SET last_seen = ? WHERE id = ?;",
+            (now0 - 100, old_uid),
+        )
+        set_runtime_value(
+            ROSTER_KEY,
+            json.dumps(
+                [
+                    {
+                        "player_id": old_uid,
+                        "joined_at": now0 - 4000,
+                        "last_ticked_at": now0 - 100,
+                        "last_action": "build",
+                        "builds_done": 2,
+                        "research_done": 0,
+                        "defense_done": 0,
+                    }
+                ]
+            ),
+            conn=conn,
+        )
+        result = run_inactive_autoplay_tick(
+            conn, now=now0, force=True, source="test"
+        )
+        assert result.get("ok"), result
+        assert int(result.get("expired_count") or 0) == 1, result
+        assert int(result.get("woke_count") or 0) == 1, result
+        roster = get_roster_snapshot(conn=conn)
+        ids = {int(r["player_id"]) for r in roster}
+        assert old_uid not in ids
+        assert new_uid in ids
+        cands = list_dormant_candidates(conn, now=now0, exclude_ids=ids, limit=50)
+        assert old_uid not in {int(c["player_id"]) for c in cands}
         commit(conn)
     finally:
         conn.close()

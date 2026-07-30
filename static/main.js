@@ -26002,6 +26002,7 @@
       console.debug("[GC] planet_switch start", planetId);
       planetRegistryRoots().forEach((r) => r.classList.add("is-busy"));
       item.disabled = true;
+      let shellUnlocked = false;
       const releaseBusy = () => {
         planetRegistryRoots().forEach((r) => {
           r.classList.remove("is-busy");
@@ -26010,9 +26011,27 @@
           });
         });
       };
+      // GC-PERF-PLANET-SWITCH-002: unlock Imperium/shell before long SSR reload.
+      // Holding inFlight across reloadCurrentPage (up to PJAX 25s) made the rail
+      // and follow-up nav feel dead after Admin→game under SQLite pressure.
+      const unlockShellEarly = (reason) => {
+        if (shellUnlocked) return;
+        shellUnlocked = true;
+        if (typeof GC.setSafeTimeout === "function") {
+          const idx = GC.pageLifecycle.timeouts.indexOf(busyGuard);
+          if (idx >= 0) GC.pageLifecycle.timeouts.splice(idx, 1);
+        }
+        clearTimeout(busyGuard);
+        releaseBusy();
+        GC._planetSwitchCooldownUntil = Date.now() + PLANET_SWITCH_COOLDOWN_MS;
+        GC._planetSwitchInFlight = false;
+        if (typeof GC.releaseShellNavigationBlockers === "function") {
+          GC.releaseShellNavigationBlockers(reason || "planet_switch");
+        }
+      };
       const busyGuard = typeof GC.setSafeTimeout === "function"
-        ? GC.setSafeTimeout(releaseBusy, 45000)
-        : setTimeout(releaseBusy, 45000);
+        ? GC.setSafeTimeout(() => unlockShellEarly("planet_switch_watchdog"), 12000)
+        : setTimeout(() => unlockShellEarly("planet_switch_watchdog"), 12000);
 
       try {
         const res = await GC.fetchGameAction("/api/planets/active", {
@@ -26042,6 +26061,8 @@
             "options",
           ]);
           const skipSsr = PLANET_SWITCH_SKIP_SSR.has(pageName);
+          // Unlock before SSR so Imperium + sidebar stay clickable if reload stalls.
+          unlockShellEarly("planet_switch_pre_reload");
           // Skip mid-flight registry rebuild when SSR reload replaces the rail anyway
           // (avoids pointer target shifting under a still-settling click).
           if (onAdmin || skipSsr) {
@@ -26094,14 +26115,7 @@
           showNotify(t("pe_error_generic", "Aktion fehlgeschlagen."), "error");
         }
       } finally {
-        if (typeof GC.setSafeTimeout === "function") {
-          const idx = GC.pageLifecycle.timeouts.indexOf(busyGuard);
-          if (idx >= 0) GC.pageLifecycle.timeouts.splice(idx, 1);
-        }
-        clearTimeout(busyGuard);
-        releaseBusy();
-        GC._planetSwitchCooldownUntil = Date.now() + PLANET_SWITCH_COOLDOWN_MS;
-        GC._planetSwitchInFlight = false;
+        unlockShellEarly("planet_switch_finally");
       }
     });
   }

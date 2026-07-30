@@ -277,10 +277,10 @@
   "admin_inactive_autoplay_kpi_evicted": "Expulsados (último ciclo)",
   "admin_inactive_autoplay_kpi_interval": "Intervalo de despertar (s)",
   "admin_inactive_autoplay_kpi_max_roster": "Límite del roster",
-  "admin_inactive_autoplay_kpi_online_cap": "Límite en línea (% jugadores reales)",
+  "admin_inactive_autoplay_kpi_online_cap": "Online = turno",
   "admin_inactive_autoplay_kpi_online_now": "Actualmente \"en línea\" (autoplay)",
   "admin_inactive_autoplay_kpi_revisit": "Ventana de revisita (s)",
-  "admin_inactive_autoplay_kpi_roster": "Tamaño del roster",
+  "admin_inactive_autoplay_kpi_roster": "Tamaño del turno",
   "admin_inactive_autoplay_kpi_skip_streak": "Omisiones desde el último éxito",
   "admin_inactive_autoplay_kpi_tick": "Ticks de roster/cron",
   "admin_inactive_autoplay_kpi_wait": "Tiempo hasta el próximo despertar (s)",
@@ -290,7 +290,7 @@
   "admin_inactive_autoplay_loading": "Cargando Autoplay de inactivos…",
   "admin_inactive_autoplay_off": "Autoplay: DESACTIVADO",
   "admin_inactive_autoplay_on": "Autoplay: ACTIVADO",
-  "admin_inactive_autoplay_roster": "Roster fijo",
+  "admin_inactive_autoplay_roster": "Roster del turno",
   "admin_inactive_autoplay_section_status": "Estado",
   "admin_inactive_autoplay_title": "Autoplay de inactivos",
   "admin_inactive_autoplay_toggle_off": "Autoplay Soft-Off",
@@ -6957,5 +6957,9 @@
   "inv_prestige_progress_done": "%(badge)s desbloqueado",
   "inv_prestige_reward_hint": "Recompensa: %(amount)s× %(reward)s",
   "collector_prestige_unlock_subject": "Prestigio desbloqueado",
-  "collector_prestige_unlock_body": "%(badge)s desbloqueado — recompensa: %(amount)s× %(reward)s"
+  "collector_prestige_unlock_body": "%(badge)s desbloqueado — recompensa: %(amount)s× %(reward)s",
+  "admin_inactive_autoplay_kpi_shift_cap": "Tope de turno",
+  "admin_inactive_autoplay_kpi_day_target": "Objetivo diurno (Berlín)",
+  "admin_inactive_autoplay_kpi_tenure": "Duración del turno (s)",
+  "admin_inactive_autoplay_col_tenure_left": "Turno restante"
 }

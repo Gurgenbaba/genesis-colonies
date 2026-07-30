@@ -2153,18 +2153,26 @@
         const lastAction = r.last_action
           ? `${esc(r.last_action)}${doneBits.length ? " (" + esc(doneBits.join(", ")) + ")" : ""}`
           : "–";
+        const tenureLeft =
+          r.tenure_remaining_sec == null
+            ? "–"
+            : `${Math.round(Number(r.tenure_remaining_sec) / 60)} min`;
         return (
           `<tr><td>${esc(String(r.player_id))}</td><td>${esc(r.username || "–")}</td>` +
           `<td>${esc(fmtTs(r.last_seen))}</td><td>${esc(fmtTs(r.joined_at))}</td>` +
+          `<td>${esc(tenureLeft)}</td>` +
           `<td>${esc(fmtTs(r.last_ticked_at))}</td><td>${lastAction}</td></tr>`
         );
       })
       .join("");
     const metrics = renderMetricGrid([
-      { label: t("admin_inactive_autoplay_kpi_roster", "Roster-Größe"), value: esc(String(kpis.roster_size || 0)) },
-      { label: t("admin_inactive_autoplay_kpi_max_roster", "Roster-Cap"), value: esc(String(cfg.max_roster || 0)) },
+      { label: t("admin_inactive_autoplay_kpi_roster", "Schicht-Größe"), value: esc(String(kpis.roster_size || 0)) },
+      { label: t("admin_inactive_autoplay_kpi_shift_cap", "Shift-Cap"), value: esc(String(cfg.shift_cap || kpis.shift_cap || 0)) },
+      { label: t("admin_inactive_autoplay_kpi_day_target", "Day-Target (Berlin)"), value: esc(String(cfg.day_target || kpis.day_target || 0)) },
+      { label: t("admin_inactive_autoplay_kpi_max_roster", "Ops-Ceiling"), value: esc(String(cfg.max_roster || 0)) },
       { label: t("admin_inactive_autoplay_kpi_online_now", "Gerade \"online\" (Autoplay)"), value: esc(String(kpis.presence_visible_now || 0)) },
-      { label: t("admin_inactive_autoplay_kpi_online_cap", "Online-Cap (% echte Spieler)"), value: `${esc(String(cfg.online_visible_cap || 0))} (${esc(String(cfg.online_percent || 0))}% von ${esc(String(cfg.real_player_count || 0))})` },
+      { label: t("admin_inactive_autoplay_kpi_online_cap", "Online = Shift"), value: esc(String(cfg.online_visible_cap || 0)) },
+      { label: t("admin_inactive_autoplay_kpi_tenure", "Schicht-Dauer (s)"), value: esc(String(cfg.tenure_sec || kpis.tenure_sec || 0)) },
       { label: t("admin_inactive_autoplay_kpi_woke", "Geweckt (letzter Zyklus)"), value: esc(String(kpis.woke_last_cycle || 0)) },
       { label: t("admin_inactive_autoplay_kpi_evicted", "Evicted (letzter Zyklus)"), value: esc(String(kpis.evicted_last_cycle || 0)) },
       { label: t("admin_inactive_autoplay_kpi_wait", "Wartezeit bis nächstes Wecken (s)"), value: esc(String(kpis.wait_sec || 0)) },
@@ -2184,7 +2192,7 @@
       `</div>` +
       metrics +
       `<div class="admin-section-title"><span class="admin-section-title-text">${esc(
-        t("admin_inactive_autoplay_roster", "Sticky-Roster"),
+        t("admin_inactive_autoplay_roster", "Day-Shift Roster"),
       )}</span></div>` +
       renderAdminTable(
         [
@@ -2192,6 +2200,7 @@
           t("admin_col_name", "Name"),
           t("admin_inactive_autoplay_col_last_seen", "Zuletzt gesehen"),
           t("admin_inactive_autoplay_col_joined", "Im Roster seit"),
+          t("admin_inactive_autoplay_col_tenure_left", "Tenure rest"),
           t("admin_inactive_autoplay_col_last_ticked", "Zuletzt getickt"),
           t("admin_inactive_autoplay_col_last_action", "Letzte Aktion"),
         ],

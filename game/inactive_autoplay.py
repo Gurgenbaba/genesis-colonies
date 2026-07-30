@@ -1,8 +1,8 @@
 """Inactive autoplay — living dormant empires (EPIC-26 / GC-2601).
 
-Sticky roster: once woken, accounts keep building/researching/defense on every
-fleet-cron slice (not only during a short session window). Presence stays fresh
-so Ranking/Galaxy look alive. Never fleets or expeditions.
+GC-INACTIVE-SHIFT-001 — Day Shift: a small shift crew (2–3) stays visibly
+online; after a fixed tenure they rotate back to the dormant queue. Never
+fleets or expeditions.
 """
 
 from __future__ import annotations
@@ -11,7 +11,9 @@ import json
 import logging
 import os
 import time
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
+from zoneinfo import ZoneInfo
 
 from .auto_empire import (
     AUTOPLAY_STANDING_IDLE_CHANCE,
@@ -30,7 +32,6 @@ ROSTER_KEY = "inactive_autoplay_roster"
 SESSIONS_KEY = "inactive_autoplay_sessions"  # legacy merge
 CURSOR_KEY = "inactive_autoplay_cursor"
 TICK_CURSOR_KEY = "inactive_autoplay_tick_cursor"
-PRESENCE_CURSOR_KEY = "inactive_autoplay_presence_cursor"
 # GC-PERF-AUTOPLAY-001: cross-process overlap guard (same pattern as ranking_worker).
 BUSY_KEY = "inactive_autoplay_busy"
 BUSY_STALE_SEC = 900.0
@@ -48,12 +49,13 @@ INACTIVE_RESOURCE_FLOOR = {
     "fuel_cells": 15_000,
 }
 
-# Revisit: pull stale accounts onto sticky roster.
-DEFAULT_REVISIT_SEC = 36 * 3600  # 36h — stay under 3-day inactive badge
-DEFAULT_WAKE_INTERVAL_SEC = 10 * 60
-# GC-2620: small concurrent sticky roster (5–8 band); slow wake + economy cadence.
+# Revisit: cooldown after shift eviction before re-eligible (queue "back").
+DEFAULT_REVISIT_SEC = 12 * 3600  # GC-INACTIVE-SHIFT-001: 12h (was 36h)
+DEFAULT_WAKE_INTERVAL_SEC = 15 * 60  # GC-INACTIVE-SHIFT-001: 15 min
+# GC-INACTIVE-SHIFT-001: shift crew = visible online (2–3), not mass sticky builders.
 DEFAULT_BATCH = 1
-DEFAULT_MAX_ROSTER = 6
+DEFAULT_MAX_ROSTER = 3
+DEFAULT_SESSION_TENURE_SEC = 3 * 3600  # 3h on shift, then rotate out
 # GC-PERF-AUTOPLAY-002: one heavy economy per cron by default (was 3) so
 # sticky-roster bursts do not serialize SQLite against human HTTP writers.
 DEFAULT_TICK_PER_CRON = 1
@@ -61,14 +63,18 @@ DEFAULT_TICK_PER_CRON = 1
 DEFAULT_YIELD_MS = 50
 # Abort further standing RR economies once wall time exceeds this budget.
 DEFAULT_TICK_BUDGET_MS = 800
-MIN_ROSTER_CAP = 4
-MAX_ROSTER_CAP = 12
-# GC-2617: how many roster members may look "online" (fresh last_seen) at the
-# same instant, as a percent of the real registered player base — keeps a
-# small server from ever showing an implausible wall of simultaneous logins.
-DEFAULT_ONLINE_PERCENT = 15.0
+MIN_ROSTER_CAP = 2
+MAX_ROSTER_CAP = 4
+# Europe day band for natural "daytime" presence (GC-INACTIVE-SHIFT-001).
+DAY_SHIFT_TZ = "Europe/Berlin"
+DAY_SHIFT_START_HOUR = 8
+DAY_SHIFT_END_HOUR = 23  # exclusive — 23:00+ is night target
+DAY_TARGET_ONLINE = 3
+NIGHT_TARGET_ONLINE = 2
+# Deprecated GC-2617 percent wall — kept for import/compat only.
+DEFAULT_ONLINE_PERCENT = 0.0
 MIN_ONLINE_VISIBLE = 2
-MAX_ONLINE_VISIBLE = 40
+MAX_ONLINE_VISIBLE = 4
 
 ENABLED_ENV = "GC_INACTIVE_AUTOPLAY_ENABLED"
 BATCH_ENV = "GC_INACTIVE_AUTOPLAY_BATCH"
@@ -78,9 +84,8 @@ MAX_ROSTER_ENV = "GC_INACTIVE_AUTOPLAY_MAX_SESSIONS"  # keep env name for ops
 TICK_ENV = "GC_INACTIVE_AUTOPLAY_TICK_PER_CRON"
 YIELD_ENV = "GC_INACTIVE_AUTOPLAY_YIELD_MS"
 BUDGET_ENV = "GC_INACTIVE_AUTOPLAY_TICK_BUDGET_MS"
-ONLINE_PERCENT_ENV = "GC_INACTIVE_AUTOPLAY_ONLINE_PERCENT"
-# Legacy env still accepted for docs; sessions are sticky now.
-SESSION_ENV = "GC_INACTIVE_AUTOPLAY_SESSION_SEC"
+ONLINE_PERCENT_ENV = "GC_INACTIVE_AUTOPLAY_ONLINE_PERCENT"  # deprecated / ignored
+SESSION_ENV = "GC_INACTIVE_AUTOPLAY_SESSION_SEC"  # shift tenure (GC-INACTIVE-SHIFT-001)
 
 
 def _now() -> float:
@@ -105,9 +110,14 @@ def wake_interval_sec() -> float:
     return float(max(60, _env_int(INTERVAL_ENV, DEFAULT_WAKE_INTERVAL_SEC)))
 
 
+def session_tenure_sec() -> float:
+    """GC-INACTIVE-SHIFT-001: how long a player stays on the shift roster."""
+    return float(max(600, _env_int(SESSION_ENV, DEFAULT_SESSION_TENURE_SEC)))
+
+
 def session_duration_sec() -> float:
-    """Deprecated sticky model — kept for callers/tests."""
-    return float(max(600, _env_int(SESSION_ENV, 24 * 3600)))
+    """Alias for session_tenure_sec (legacy name kept for callers/tests)."""
+    return session_tenure_sec()
 
 
 def revisit_sec() -> float:
@@ -115,11 +125,34 @@ def revisit_sec() -> float:
 
 
 def max_concurrent_sessions() -> int:
-    """Roster size cap (env name kept as MAX_SESSIONS for ops compatibility).
+    """Ops hard ceiling for shift size (env name MAX_SESSIONS for compatibility).
 
-    GC-2620: hard clamp 4–12 so ops cannot reopen a mass concurrent roster.
+    GC-INACTIVE-SHIFT-001: clamp 2–4 (default 3). Live shift size is
+    ``shift_cap()`` = min(this, day_target()).
     """
     return max(MIN_ROSTER_CAP, min(MAX_ROSTER_CAP, _env_int(MAX_ROSTER_ENV, DEFAULT_MAX_ROSTER)))
+
+
+def day_target(*, now: Optional[float] = None) -> int:
+    """Visible shift size for Europe/Berlin day vs night (GC-INACTIVE-SHIFT-001)."""
+    ts = float(now if now is not None else _now())
+    try:
+        local = datetime.fromtimestamp(ts, tz=ZoneInfo(DAY_SHIFT_TZ))
+        hour = int(local.hour)
+    except Exception:
+        hour = datetime.fromtimestamp(ts, tz=timezone.utc).hour
+    if DAY_SHIFT_START_HOUR <= hour < DAY_SHIFT_END_HOUR:
+        return int(DAY_TARGET_ONLINE)
+    return int(NIGHT_TARGET_ONLINE)
+
+
+def shift_cap(*, now: Optional[float] = None, conn=None) -> int:
+    """Live roster/online size: day target capped by ops max sessions."""
+    del conn  # reserved for future knobs; keep signature stable for callers
+    return max(
+        MIN_ROSTER_CAP,
+        min(max_concurrent_sessions(), day_target(now=now)),
+    )
 
 
 def tick_per_cron() -> int:
@@ -137,32 +170,19 @@ def tick_budget_ms() -> int:
 
 
 def online_percent() -> float:
-    """GC-2617: max share of the real registered player base that may look
-    'online' from inactive-autoplay presence at any single instant."""
+    """Deprecated GC-INACTIVE-SHIFT-001 — percent wall ignored; use day_target()."""
     raw = os.environ.get(ONLINE_PERCENT_ENV)
-    try:
-        val = float(raw) if raw not in (None, "") else DEFAULT_ONLINE_PERCENT
-    except (TypeError, ValueError):
-        val = DEFAULT_ONLINE_PERCENT
-    return max(1.0, min(50.0, val))
+    if raw not in (None, ""):
+        try:
+            return max(0.0, min(50.0, float(raw)))
+        except (TypeError, ValueError):
+            pass
+    return float(DEFAULT_ONLINE_PERCENT)
 
 
-def online_visible_cap(*, conn=None) -> int:
-    """GC-2617: how many sticky-roster accounts may be presence-touched (i.e.
-    look 'online') in the same tick. Scaled to the real registered player
-    count instead of the roster cap, so a small universe never shows an
-    implausible wall of simultaneous logins regardless of roster size.
-    """
-    if conn is None:
-        return MIN_ONLINE_VISIBLE
-    try:
-        from .models import get_registered_player_count
-
-        real = int(get_registered_player_count(conn=conn))
-    except Exception:
-        return MIN_ONLINE_VISIBLE
-    dynamic = int(round(real * online_percent() / 100.0))
-    return max(MIN_ONLINE_VISIBLE, min(MAX_ONLINE_VISIBLE, dynamic))
+def online_visible_cap(*, conn=None, now: Optional[float] = None) -> int:
+    """GC-INACTIVE-SHIFT-001: shift size (== visible online)."""
+    return shift_cap(now=now, conn=conn)
 
 
 def is_inactive_autoplay_enabled(*, conn=None) -> bool:
@@ -234,16 +254,10 @@ def _save_json(key: str, value: Any, *, conn=None) -> None:
 
 
 def _touch_presence_bulk(conn, player_ids: Sequence[int], *, now: float) -> None:
-    """Batched `last_seen` refresh for a set of roster members in one query.
+    """Batched `last_seen` refresh for shift-roster members in one query.
 
-    GC-2614 originally touched the *entire* sticky roster here every cron tick
-    ("always online"), but that let the visible online count grow with the
-    roster cap (up to 60+) regardless of how many real players the universe
-    actually has — implausible on a small server. GC-2617: callers now pass a
-    small, dynamically-sized rotating subset (`online_visible_cap`, percent of
-    the real player base) instead of the whole roster, so only that bounded
-    subset ever looks "online" at once while the rest of the roster keeps
-    building silently in the background until its own turn comes up.
+    GC-INACTIVE-SHIFT-001: the shift roster *is* the visible online set
+    (2–3 accounts), so callers pass the full current roster.
     """
     ids = sorted({int(pid) for pid in player_ids if int(pid) > 0})
     if not ids:
@@ -465,14 +479,17 @@ def _prune_roster(conn, roster: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def _trim_roster_to_cap(
-    conn, roster: List[Dict[str, Any]]
+    conn,
+    roster: List[Dict[str, Any]],
+    *,
+    now: Optional[float] = None,
 ) -> Tuple[List[Dict[str, Any]], int]:
-    """GC-2620: immediately LRU-evict excess above max_concurrent_sessions.
+    """Immediately LRU-evict excess above live ``shift_cap``.
 
-    Deploy-safe shrink when the stored roster still holds a pre-cap size
-    (e.g. 60 → 6). Uses the same inbox report owner as wake-wave LRU eviction.
+    Deploy-safe shrink when the stored roster still holds a pre-shift size
+    (e.g. 6 → 3). Uses the same inbox report owner as tenure eviction.
     """
-    cap = max_concurrent_sessions()
+    cap = shift_cap(now=now, conn=conn)
     if len(roster) <= cap:
         return roster, 0
     roster = list(roster)
@@ -802,26 +819,16 @@ def run_inactive_autoplay_tick(
     force: bool = False,
     source: str = "fleet_worker",
 ) -> Dict[str, Any]:
-    """Grow sticky roster; round-robin economy+presence every fleet cron.
+    """Day-shift roster: tenure rotate, fill to shift_cap, RR economy + presence.
 
-    GC-2609: once the roster hits its cap, the `batch`-oldest members (by
-    `last_ticked_at`) are evicted back to the dormant pool before new accounts
-    join (LRU rotation) — so coverage cycles through the *entire* dormant
-    pool over time instead of the first N accounts holding the roster forever.
+    GC-INACTIVE-SHIFT-001:
+    1. Trim oversize to live ``shift_cap`` (deploy-safe).
+    2. On wake waves: evict at most one tenure-expired member, then fill
+       empty slots (batch default 1). Fresh ``last_seen`` + revisit window
+       parks evicted accounts at the back of the dormant queue.
+    3. Standing RR economy (``tick_per_cron=1``) + presence = full shift roster.
 
-    GC-2620: after prune, immediately LRU-trim any stored oversize down to
-    `max_concurrent_sessions()` so a deploy that lowers the cap does not keep
-    a mass concurrent roster until many wake-wave batch replacements finish.
-
-    GC-PERF-AUTOPLAY-001: when the connection is *not* already in a write
-    transaction (fleet worker / admin force-tick), each player economy and
-    roster/presence flush runs in its own short BEGIN IMMEDIATE so live
-    Timekeeper/game-state writers are not blocked for the full multi-player
-    pass. Overlapping ticks are rejected via ``BUSY_KEY``.
-
-    GC-PERF-AUTOPLAY-002: default ``tick_per_cron=1``, optional yield between
-    short-TX economies, and a wall-time budget that stops further standing RR
-    economies mid-tick so human HTTP can reclaim the SQLite writer.
+    GC-PERF-AUTOPLAY-001/002: short write TXs, busy lease, yield, budget.
     """
     ts = float(now if now is not None else _now())
     tick_t0 = time.perf_counter()
@@ -841,6 +848,8 @@ def run_inactive_autoplay_tick(
     short_tx = not in_transaction(conn)
     pause_ms = yield_ms() if short_tx else 0
     budget_ms = tick_budget_ms()
+    tenure_sec = session_tenure_sec()
+    live_cap = shift_cap(now=ts, conn=conn)
 
     def _hold_ms() -> int:
         return int((time.perf_counter() - tick_t0) * 1000)
@@ -882,41 +891,48 @@ def run_inactive_autoplay_tick(
         }
 
     try:
-        # Reads (and prune SELECTs) outside write lock when short_tx; mutations
-        # that touch runtime_state / players happen inside _step closures.
         roster = _prune_roster(conn, _load_roster(conn=conn))
 
         def _trim():
             nonlocal roster
-            roster, trimmed = _trim_roster_to_cap(conn, roster)
+            roster, trimmed = _trim_roster_to_cap(conn, roster, now=ts)
             return trimmed
 
         trimmed_count = int(_step(_trim) or 0)
         woke: List[Dict[str, Any]] = []
         evicted_count = int(trimmed_count)
+        expired_count = 0
         wait = 0.0 if force else seconds_until_wake_allowed(now=ts, conn=conn)
 
         if wait <= 0:
             batch = wake_batch_size()
-            room = max_concurrent_sessions() - len(roster)
-            if room <= 0:
-                evict_n = min(batch, len(roster))
-                if evict_n > 0:
-                    roster.sort(
-                        key=lambda item: float(
-                            item.get("last_ticked_at") or item.get("joined_at") or 0
-                        )
+            # Tenure-evict at most `batch` oldest-expired members (default 1).
+            expired = [
+                item
+                for item in roster
+                if (ts - float(item.get("joined_at") or ts)) >= tenure_sec
+            ]
+            if expired:
+                expired.sort(
+                    key=lambda item: float(
+                        item.get("joined_at") or item.get("last_ticked_at") or 0
                     )
-                    to_evict = roster[:evict_n]
-                    roster = roster[evict_n:]
-                    evicted_count += evict_n
-                    room = evict_n
-                    for evicted_item in to_evict:
-                        # Inbox report in its own short TX — never hold lock
-                        # across later player economies.
-                        _step(lambda item=evicted_item: _send_autoplay_report(conn, item))
+                )
+                to_evict = expired[: min(batch, len(expired))]
+                evict_ids = {int(item["player_id"]) for item in to_evict}
+                roster = [
+                    item
+                    for item in roster
+                    if int(item["player_id"]) not in evict_ids
+                ]
+                evicted_count += len(to_evict)
+                expired_count += len(to_evict)
+                for evicted_item in to_evict:
+                    _step(lambda item=evicted_item: _send_autoplay_report(conn, item))
+
+            room = max(0, live_cap - len(roster))
             if room > 0:
-                batch = min(batch, room)
+                wake_n = min(batch, room)
                 active_ids = {int(s["player_id"]) for s in roster}
                 candidates = list_dormant_candidates(
                     conn, now=ts, exclude_ids=active_ids, limit=400
@@ -924,7 +940,7 @@ def run_inactive_autoplay_tick(
 
                 def _pick_wake():
                     return _round_robin_pick(
-                        conn, candidates, count=batch, cursor_key=CURSOR_KEY
+                        conn, candidates, count=wake_n, cursor_key=CURSOR_KEY
                     )
 
                 picks = _step(_pick_wake)
@@ -958,21 +974,21 @@ def run_inactive_autoplay_tick(
                         logger.exception(
                             "inactive autoplay wake failed player=%s", pid
                         )
-                _step(
-                    lambda: _save_json(
-                        WORKER_LAST_KEY,
-                        {
-                            "ok": True,
-                            "at": ts,
-                            "source": source,
-                            "woke": len(woke),
-                            "evicted": evicted_count,
-                        },
-                        conn=conn,
-                    )
+            _step(
+                lambda: _save_json(
+                    WORKER_LAST_KEY,
+                    {
+                        "ok": True,
+                        "at": ts,
+                        "source": source,
+                        "woke": len(woke),
+                        "evicted": evicted_count,
+                    },
+                    conn=conn,
                 )
+            )
 
-        # Always tick a RR slice of the sticky roster (autonomous building).
+        # Always tick a RR slice of the shift roster (autonomous building).
         tick_n = min(tick_per_cron(), len(roster))
 
         def _pick_tick():
@@ -1011,17 +1027,8 @@ def run_inactive_autoplay_tick(
                 if int(item["player_id"]) in ticked_ids:
                     item["last_ticked_at"] = ts
 
-        presence_ids: Set[int] = set(woke_ids)
-        online_room = online_visible_cap(conn=conn) - len(presence_ids)
-        if online_room > 0 and roster:
-
-            def _pick_presence():
-                return _round_robin_pick(
-                    conn, roster, count=online_room, cursor_key=PRESENCE_CURSOR_KEY
-                )
-
-            extra = _step(_pick_presence)
-            presence_ids.update(int(item["player_id"]) for item in extra)
+        # Shift roster == visible online set.
+        presence_ids: Set[int] = {int(item["player_id"]) for item in roster}
 
         def _flush_roster_presence():
             _touch_presence_bulk(conn, presence_ids, now=ts)
@@ -1036,13 +1043,16 @@ def run_inactive_autoplay_tick(
             "woke": woke,
             "woke_count": len(woke),
             "evicted_count": evicted_count,
-            "expired_count": 0,
+            "expired_count": expired_count,
             "active_sessions": len(roster),
             "roster_size": len(roster),
             "session_ticks": len(session_results),
             "enqueued": sum(1 for r in session_results if r.get("enqueued")),
             "presence_visible_now": len(presence_ids),
-            "online_visible_cap": online_visible_cap(conn=conn),
+            "online_visible_cap": live_cap,
+            "day_target": day_target(now=ts),
+            "shift_cap": live_cap,
+            "tenure_sec": tenure_sec,
             "wait_sec": wait,
             "revisit_sec": revisit_sec(),
             "tick_per_cron": tick_per_cron(),

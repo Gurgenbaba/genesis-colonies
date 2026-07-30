@@ -642,6 +642,8 @@ def test_planet_switch_hotfix_client_contract():
     registry = src.split("function initPlanetRegistry()")[1].split("function bindPlanetEvolutionOnce()")[0]
     assert "skipPolling: true" in registry
     assert "releaseBusy" in registry
+    assert "unlockShellEarly" in registry
+    assert "planet_switch_pre_reload" in registry
     assert "GC._planetSwitchInFlight" in registry
     assert "GC._planetSwitchCooldownUntil" in registry
     assert "PLANET_SWITCH_COOLDOWN_MS" in registry

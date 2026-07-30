@@ -277,10 +277,10 @@
   "admin_inactive_autoplay_kpi_evicted": "Usunięci (ostatni cykl)",
   "admin_inactive_autoplay_kpi_interval": "Interwał budzenia (s)",
   "admin_inactive_autoplay_kpi_max_roster": "Limit rosteru",
-  "admin_inactive_autoplay_kpi_online_cap": "Limit online (% prawdziwych graczy)",
+  "admin_inactive_autoplay_kpi_online_cap": "Online = zmiana",
   "admin_inactive_autoplay_kpi_online_now": "Aktualnie \"online\" (autoplay)",
   "admin_inactive_autoplay_kpi_revisit": "Okno ponownej wizyty (s)",
-  "admin_inactive_autoplay_kpi_roster": "Rozmiar rosteru",
+  "admin_inactive_autoplay_kpi_roster": "Rozmiar zmiany",
   "admin_inactive_autoplay_kpi_skip_streak": "Pominięcia od ostatniego sukcesu",
   "admin_inactive_autoplay_kpi_tick": "Ticki rosteru/cron",
   "admin_inactive_autoplay_kpi_wait": "Czas do następnego wybudzenia (s)",
@@ -290,7 +290,7 @@
   "admin_inactive_autoplay_loading": "Ładowanie Autoplay nieaktywnych…",
   "admin_inactive_autoplay_off": "Autoplay: WYŁĄCZONY",
   "admin_inactive_autoplay_on": "Autoplay: WŁĄCZONY",
-  "admin_inactive_autoplay_roster": "Stały roster",
+  "admin_inactive_autoplay_roster": "Roster zmiany",
   "admin_inactive_autoplay_section_status": "Status",
   "admin_inactive_autoplay_title": "Autoplay nieaktywnych",
   "admin_inactive_autoplay_toggle_off": "Autoplay Soft-Off",
@@ -6957,5 +6957,9 @@
   "inv_prestige_progress_done": "%(badge)s odblokowane",
   "inv_prestige_reward_hint": "Nagroda: %(amount)s× %(reward)s",
   "collector_prestige_unlock_subject": "Odblokowano prestiż",
-  "collector_prestige_unlock_body": "%(badge)s odblokowane — nagroda: %(amount)s× %(reward)s"
+  "collector_prestige_unlock_body": "%(badge)s odblokowane — nagroda: %(amount)s× %(reward)s",
+  "admin_inactive_autoplay_kpi_shift_cap": "Limit zmiany",
+  "admin_inactive_autoplay_kpi_day_target": "Cel dzienny (Berlin)",
+  "admin_inactive_autoplay_kpi_tenure": "Czas zmiany (s)",
+  "admin_inactive_autoplay_col_tenure_left": "Pozostały czas"
 }

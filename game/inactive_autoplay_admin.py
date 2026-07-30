@@ -14,16 +14,18 @@ from .inactive_autoplay import (
     INACTIVE_BUILD_DURATION_CAP,
     INACTIVE_CHAIN_LIMIT,
     INACTIVE_RESEARCH_DURATION_CAP,
+    day_target,
     get_last_worker_run,
     get_roster_snapshot,
     is_inactive_autoplay_enabled,
     max_concurrent_sessions,
-    online_percent,
     online_visible_cap,
     revisit_sec,
     run_inactive_autoplay_tick,
     seconds_until_wake_allowed,
+    session_tenure_sec,
     set_inactive_autoplay_enabled,
+    shift_cap,
     tick_per_cron,
     wake_batch_size,
     wake_interval_sec,
@@ -60,6 +62,11 @@ def build_admin_inactive_autoplay_payload(conn) -> Dict[str, Any]:
         except Exception:
             presence_visible_now = 0
 
+    now_ts = time.time()
+    tenure = session_tenure_sec()
+    live_shift = shift_cap(now=now_ts, conn=conn)
+    live_day = day_target(now=now_ts)
+
     roster_rows: List[Dict[str, Any]] = []
     if roster:
         ids = [int(item["player_id"]) for item in roster[:100]]
@@ -85,6 +92,10 @@ def build_admin_inactive_autoplay_payload(conn) -> Dict[str, Any]:
         for item in roster[:100]:
             pid = int(item["player_id"])
             row = info_by_id.get(pid)
+            joined_at = float(item.get("joined_at") or 0) or None
+            remaining = None
+            if joined_at is not None:
+                remaining = max(0.0, tenure - (now_ts - joined_at))
             roster_rows.append(
                 {
                     "player_id": pid,
@@ -96,6 +107,9 @@ def build_admin_inactive_autoplay_payload(conn) -> Dict[str, Any]:
                     "builds_done": int(item.get("builds_done") or 0),
                     "research_done": int(item.get("research_done") or 0),
                     "defense_done": int(item.get("defense_done") or 0),
+                    "tenure_remaining_sec": (
+                        round(remaining, 1) if remaining is not None else None
+                    ),
                 }
             )
 
@@ -117,18 +131,23 @@ def build_admin_inactive_autoplay_payload(conn) -> Dict[str, Any]:
             "wait_sec": round(seconds_until_wake_allowed(conn=conn), 1),
             "post_maint_skip_streak": skip_streak,
             "presence_visible_now": presence_visible_now,
+            "shift_cap": live_shift,
+            "day_target": live_day,
+            "tenure_sec": tenure,
         },
         "config": {
             "batch": wake_batch_size(),
             "interval_sec": wake_interval_sec(),
             "revisit_sec": revisit_sec(),
             "max_roster": max_concurrent_sessions(),
+            "shift_cap": live_shift,
+            "day_target": live_day,
+            "tenure_sec": tenure,
             "tick_per_cron": tick_per_cron(),
             "build_duration_cap": INACTIVE_BUILD_DURATION_CAP,
             "research_duration_cap": INACTIVE_RESEARCH_DURATION_CAP,
             "chain_limit": INACTIVE_CHAIN_LIMIT,
-            "online_percent": online_percent(),
-            "online_visible_cap": online_visible_cap(conn=conn),
+            "online_visible_cap": online_visible_cap(conn=conn, now=now_ts),
             "real_player_count": int(get_registered_player_count(conn=conn)),
         },
     }

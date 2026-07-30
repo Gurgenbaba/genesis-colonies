@@ -277,10 +277,10 @@
   "admin_inactive_autoplay_kpi_evicted": "Evicted (last cycle)",
   "admin_inactive_autoplay_kpi_interval": "Wake interval (s)",
   "admin_inactive_autoplay_kpi_max_roster": "Roster cap",
-  "admin_inactive_autoplay_kpi_online_cap": "Online cap (% real players)",
+  "admin_inactive_autoplay_kpi_online_cap": "Online = shift",
   "admin_inactive_autoplay_kpi_online_now": "Currently \"online\" (autoplay)",
   "admin_inactive_autoplay_kpi_revisit": "Revisit window (s)",
-  "admin_inactive_autoplay_kpi_roster": "Roster size",
+  "admin_inactive_autoplay_kpi_roster": "Shift size",
   "admin_inactive_autoplay_kpi_skip_streak": "Skips since last success",
   "admin_inactive_autoplay_kpi_tick": "Roster ticks/cron",
   "admin_inactive_autoplay_kpi_wait": "Time until next wake (s)",
@@ -290,7 +290,7 @@
   "admin_inactive_autoplay_loading": "Loading Inactive Autoplay…",
   "admin_inactive_autoplay_off": "Autoplay: OFF",
   "admin_inactive_autoplay_on": "Autoplay: ON",
-  "admin_inactive_autoplay_roster": "Sticky roster",
+  "admin_inactive_autoplay_roster": "Day-shift roster",
   "admin_inactive_autoplay_section_status": "Status",
   "admin_inactive_autoplay_title": "Inactive Autoplay",
   "admin_inactive_autoplay_toggle_off": "Autoplay Soft-Off",
@@ -6957,5 +6957,9 @@
   "inv_prestige_progress_done": "%(badge)s unlocked",
   "inv_prestige_reward_hint": "Reward: %(amount)s× %(reward)s",
   "collector_prestige_unlock_subject": "Prestige unlocked",
-  "collector_prestige_unlock_body": "%(badge)s unlocked — reward: %(amount)s× %(reward)s"
+  "collector_prestige_unlock_body": "%(badge)s unlocked — reward: %(amount)s× %(reward)s",
+  "admin_inactive_autoplay_kpi_shift_cap": "Shift cap",
+  "admin_inactive_autoplay_kpi_day_target": "Day target (Berlin)",
+  "admin_inactive_autoplay_kpi_tenure": "Shift tenure (s)",
+  "admin_inactive_autoplay_col_tenure_left": "Tenure left"
 }
