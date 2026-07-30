@@ -93,6 +93,36 @@ def _read_player_live_state_no_writes(
     return player_view, buildings, ratio, int(energy_total), int(energy_used), storage_caps
 
 
+def read_player_live_state_for_planet_switch(
+    player_id: int,
+    conn=None,
+) -> Tuple[Any, Dict[str, int], float, int, int, Dict[str, int]]:
+    """
+    GC-PERF-PLANET-SWITCH-003 — planet switch must not wait on empire queue finish.
+
+    Active-planet identity was already written by ``set_active_planet``. Return projected
+    resources/energy for the new context planet with no ``finish_player_due_work`` and no
+    write transaction (Bauleiste / fleet tick stay on poll + worker).
+    """
+    from .models import db as _db, load_player
+
+    uid = int(player_id)
+    own_conn = conn is None
+    if own_conn:
+        conn = _db()
+    try:
+        from .planet_evolution.repository import get_context_planet
+
+        player = load_player(uid, conn=conn)
+        if not player:
+            raise RuntimeError(f"player {uid} not found")
+        planet = get_context_planet(uid, conn=conn)
+        return _read_player_live_state_no_writes(uid, conn, player, planet)
+    finally:
+        if own_conn and conn is not None:
+            conn.close()
+
+
 def read_player_live_state_for_poll(
     player_id: int,
     conn=None,

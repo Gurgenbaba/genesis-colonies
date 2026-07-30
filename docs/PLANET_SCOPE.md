@@ -81,10 +81,13 @@ Antwort enthält vollständigen `state` (game-state payload) + `planets[]`.
 Klick Kolonie (Registry-Card)
   → POST /api/planets/active
   → applyActionState(res, "planet_switch")
+  → unlockShellEarly (before SSR)
   → rebuildPlanetRegistry / updatePlanetRegistryFromState
   → applyPlanetLandscapeFromState (CSS --planet-landscape)
-  → GC.reloadCurrentPage({ force: true })
+  → GC.reloadCurrentPage({ force: true })  # skipped on fleet/admin/…
 ```
+
+**GC-PERF-PLANET-SWITCH-003:** `POST /api/planets/active` does **not** run empire `finish_player_due_work` or the HTTP `before_request` fleet tick. State uses `read_player_live_state_for_planet_switch` (projected resources for the new active planet). Queue finish stays on poll / maintenance worker — Bauleiste must not block colony switching.
 
 ### DOM-Planet-ID
 

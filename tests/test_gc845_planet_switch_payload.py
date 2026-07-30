@@ -72,3 +72,45 @@ def test_gc845_main_js_planet_switch_skips_panel_patch():
     assert block.index("if (!isPlanetSwitch)") < block.index("syncMountedQueuePagesFromState(state, reasonStr)")
     assert "skipGameState: true" in src
     assert "skipPolling: true" in src
+
+
+def test_gc_perf_planet_switch_003_skips_finish_and_fleet_tick():
+    """GC-PERF-PLANET-SWITCH-003 — switch must not empire-finish or HTTP fleet-tick."""
+    app_py = _read("app.py")
+    logic_py = _read("game/logic.py")
+    assert "def read_player_live_state_for_planet_switch(" in logic_py
+    assert 'src == "api_planets_active"' in app_py
+    assert "read_player_live_state_for_planet_switch" in app_py
+    skip = app_py.split("_FLEET_TICK_SKIP_ENDPOINTS = frozenset")[1].split(")", 1)[0]
+    assert "api_planets_set_active" in skip
+
+
+def test_api_planets_active_does_not_call_finish_player_due_work(game_client, monkeypatch):
+    """Pending Bauleiste must not force empire finish on planet switch."""
+    from game.models import get_homeworld
+    from game.planet_evolution.service import set_active_planet
+    from game import queue_engine
+
+    client, pid = game_client
+    planet = get_homeworld(player_id=pid)
+    planet_id = int(planet["id"])
+    ok, reason = set_active_planet(pid, planet_id)
+    assert ok, reason
+
+    calls: list[str] = []
+
+    def _boom(*_a, **_k):
+        calls.append("finish")
+        raise AssertionError("finish_player_due_work must not run on planet switch")
+
+    monkeypatch.setattr(queue_engine, "finish_player_due_work", _boom)
+    monkeypatch.setattr("game.logic.finish_player_due_work", _boom, raising=False)
+
+    body = client.post(
+        "/api/planets/active",
+        json={"planet_id": planet_id, "request_id": f"gc-ps003-{uuid.uuid4().hex}"},
+        headers={"Content-Type": "application/json"},
+    ).get_json()
+    assert body.get("ok") is True
+    assert body.get("state", {}).get("active_planet_id") == planet_id
+    assert calls == []

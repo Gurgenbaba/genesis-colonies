@@ -360,6 +360,8 @@ _FLEET_TICK_SKIP_ENDPOINTS = frozenset(
         # GC-PERF-FLEET-SEND: mutation RTT must not wait on global fleet tick
         "api_fleet_send",
         "api_fleet_recall",
+        # GC-PERF-PLANET-SWITCH-003: switch RTT must not wait on global fleet tick
+        "api_planets_set_active",
     }
 )
 _FLEET_TICK_SKIP_PREFIXES = ("api_admin_", "api_chat_")
@@ -1109,9 +1111,17 @@ def _load_page_live_context(
     if own_conn:
         conn = db()
     use_poll_live_path = _use_poll_live_path(src)
+    use_planet_switch_live_path = src == "api_planets_active"
     try:
         try:
-            if use_poll_live_path:
+            if use_planet_switch_live_path:
+                # GC-PERF-PLANET-SWITCH-003: no empire finish / write TX on switch.
+                from game.logic import read_player_live_state_for_planet_switch
+
+                player_view, buildings, ratio, energy_total, energy_used, storage_caps = (
+                    read_player_live_state_for_planet_switch(user_id, conn=conn)
+                )
+            elif use_poll_live_path:
                 from game.logic import read_player_live_state_for_poll
 
                 player_view, buildings, ratio, energy_total, energy_used, storage_caps = (
@@ -1148,7 +1158,7 @@ def _load_page_live_context(
             return None
         except sqlite3.OperationalError:
             rollback(conn)
-            if not use_poll_live_path:
+            if not use_poll_live_path and not use_planet_switch_live_path:
                 raise
             logger.warning(
                 "page live context locked, using read-only fallback user_id=%s source=%s",
