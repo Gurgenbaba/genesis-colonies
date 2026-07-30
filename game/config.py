@@ -103,12 +103,30 @@ def get_internal_cron_token() -> str:
     return _env_str("GC_INTERNAL_CRON_TOKEN")
 
 
+def is_maintenance_worker_sidecar_enabled() -> bool:
+    """
+    GC-PERF-PROD-002: run ``run_maintenance_bag`` in a sibling OS process.
+
+    Default off (dev / flask run keep in-process embedded cron when enabled).
+    Production docker-entrypoint sets ``GC_MAINTENANCE_WORKER=1`` unless ops
+    explicitly sets ``GC_MAINTENANCE_WORKER=0`` to keep the old in-thread cron.
+    """
+    raw = os.environ.get("GC_MAINTENANCE_WORKER", "").strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
 def is_embedded_cron_enabled() -> bool:
     """
     In-process maintenance loop on the web service (Railway SQLite — no external cron).
 
     Default: on in production, off otherwise. Override with GC_EMBEDDED_CRON=0|1.
+
+    GC-PERF-PROD-002: when the maintenance sidecar owns the bag
+    (``is_maintenance_worker_sidecar_enabled``), in-process cron stays off so
+    gunicorn does not share GIL/CPU with the maintenance loop.
     """
+    if is_maintenance_worker_sidecar_enabled():
+        return False
     raw = os.environ.get("GC_EMBEDDED_CRON", "").strip().lower()
     if raw in ("0", "false", "no", "off"):
         return False
@@ -123,13 +141,14 @@ def get_embedded_cron_interval_sec() -> float:
 
 
 def is_embedded_backup_enabled() -> bool:
-    """Daily SQLite copy under <db-parent>/backups/ — default on with embedded cron in production."""
+    """Daily SQLite copy under <db-parent>/backups/ — default on with maintenance in production."""
     raw = os.environ.get("GC_EMBEDDED_BACKUP", "").strip().lower()
     if raw in ("0", "false", "no", "off"):
         return False
     if raw in ("1", "true", "yes", "on"):
         return True
-    return is_embedded_cron_enabled()
+    # GC-PERF-PROD-002: sidecar owns the bag (incl. backup); treat like embedded cron.
+    return is_embedded_cron_enabled() or is_maintenance_worker_sidecar_enabled()
 
 
 def get_embedded_backup_keep() -> int:

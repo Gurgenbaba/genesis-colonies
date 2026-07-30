@@ -32,6 +32,7 @@ _BACKGROUND_MAINTENANCE_SOURCES = frozenset(
         "ranking_cron",
         "embedded_cron",
         "game_worker",
+        "maintenance_worker",  # GC-PERF-PROD-002 sidecar process
     }
 )
 

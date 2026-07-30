@@ -1,11 +1,13 @@
 """
 Internal HTTP cron handlers — run inside the web process (same SQLite volume by default).
 
-Railway SQLite deployments must not use a separate worker service (volume is service-bound).
+Railway SQLite deployments must not use a separate *Railway service* for the DB volume.
 Maintenance runs via:
 
-1. **Embedded cron** (default in production) — in-process loop, no external scheduler
-2. Optional HTTP: POST /api/internal/cron/* with GC_INTERNAL_CRON_TOKEN (manual / force)
+1. **Maintenance sidecar** (GC-PERF-PROD-002, production docker-entrypoint default) —
+   ``scripts/run_maintenance_worker.py`` sibling process; gunicorn has ``GC_EMBEDDED_CRON=0``
+2. **Embedded cron** (legacy) — in-process loop when ``GC_MAINTENANCE_WORKER=0``
+3. Optional HTTP: POST /api/internal/cron/* with GC_INTERNAL_CRON_TOKEN (manual / force)
 
 Endpoints:
   - ranking, fleet-tick, vote-reengagement, queue-tick (GC-PERF-WORKER-001)
@@ -35,6 +37,7 @@ from game.config import (
     get_internal_cron_token,
     is_embedded_backup_enabled,
     is_embedded_cron_enabled,
+    is_maintenance_worker_sidecar_enabled,
 )
 from game.fleet_worker import run_fleet_worker
 from game.ranking_worker import run_ranking_worker
@@ -543,6 +546,9 @@ def start_embedded_cron_if_enabled() -> bool:
     Start daemon maintenance thread when enabled (production default).
 
     Returns True if the thread was started in this process.
+
+    GC-PERF-PROD-002: skipped when ``GC_MAINTENANCE_WORKER=1`` — the sidecar
+    process owns ``run_maintenance_bag`` so gunicorn stays free for HTTP.
     """
     global _EMBEDDED_THREAD, _EMBEDDED_STARTED
     if _EMBEDDED_STARTED:
@@ -551,6 +557,9 @@ def start_embedded_cron_if_enabled() -> bool:
 
     # Flask debug reloader parent process
     if os.environ.get("WERKZEUG_RUN_MAIN") == "false":
+        return False
+    if is_maintenance_worker_sidecar_enabled():
+        _recompute_log("embedded-cron", "disabled_sidecar_owns_bag")
         return False
     if not is_embedded_cron_enabled():
         _recompute_log("embedded-cron", "disabled")
@@ -568,6 +577,37 @@ def start_embedded_cron_if_enabled() -> bool:
     _EMBEDDED_THREAD = thread
     thread.start()
     return True
+
+
+def run_maintenance_worker_loop(*, once: bool = False) -> None:
+    """
+    GC-PERF-PROD-002 — OS-process owner for the maintenance bag.
+
+    Same bag as the in-process embedded cron; uses the same leader lock file so
+    accidental double-start (thread + sidecar) cannot run two bags.
+    """
+    from game.config import get_embedded_cron_interval_sec, is_embedded_backup_enabled
+
+    interval = get_embedded_cron_interval_sec()
+    if not _acquire_embedded_leader_lock():
+        _recompute_log("maintenance-worker", "skipped_not_leader")
+        return
+    _recompute_log(
+        "maintenance-worker",
+        f"started interval_sec={interval} backup={str(is_embedded_backup_enabled()).lower()}",
+    )
+    # Match embedded boot delay so healthchecks win the first seconds.
+    time.sleep(min(15.0, interval))
+    while True:
+        started = time.monotonic()
+        try:
+            run_maintenance_bag(force=False, source="maintenance_worker")
+        except Exception:
+            logger.exception("maintenance worker tick failed")
+        if once:
+            break
+        elapsed = time.monotonic() - started
+        time.sleep(max(1.0, interval - elapsed))
 
 
 def stop_embedded_cron_for_tests() -> None:

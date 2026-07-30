@@ -87,7 +87,8 @@ Schema-Port
 | **GC-PERF-GALAXY-PREFETCH-GATE-001** | Galaxy prefetch concurrency=1 + pause | ✅ |
 | **GC-PERF-PJAX-BYTES-HEAVY-001** | PE SSR slim (locked info + history) + baseline | ✅ |
 | **[GC-PERF-FLEET-SEND-001](GC_PERF_FLEET_SEND_001.md)** | Instant fleet send/recall (slim state, no finish on RTT, deferred client refresh) | ✅ |
-| **[GC-PERF-PROD-001](GC_PERF_PROD_001.md)** | Production latency floor: `/healthz` liveness, readiness timings, request wall phases | 🔄 prove slice |
+| **[GC-PERF-PROD-001](GC_PERF_PROD_001.md)** | Production latency floor: `/healthz`, Soft-Off A/B, request wall | ✅ prove + ops |
+| **GC-PERF-PROD-002** | Maintenance bag in sidecar process (`run_maintenance_worker.py`); gunicorn free of Soft-On GIL | ✅ |
 
 ## Explizit nicht tun (jetzt)
 

@@ -84,6 +84,7 @@ def test_background_maintenance_source_gate():
     assert _is_background_maintenance_source("cron")
     assert _is_background_maintenance_source("embedded_cron")
     assert _is_background_maintenance_source("game_worker")
+    assert _is_background_maintenance_source("maintenance_worker")
     assert not _is_background_maintenance_source("overview")
     assert not _is_background_maintenance_source("game_state")
 

@@ -41,6 +41,22 @@ print(f\"[GC] Codex catalog OK ({result.get('article_count')} articles, {result.
 "
 
 WORKERS="${GUNICORN_WORKERS:-1}"
+
+# GC-PERF-PROD-002: run the maintenance bag in a sibling OS process so gunicorn
+# does not share GIL/CPU with Soft-On autoplay/pirate ticks. Opt out with
+# GC_MAINTENANCE_WORKER=0 (falls back to in-process embedded cron).
+MAINT_WORKER="${GC_MAINTENANCE_WORKER:-1}"
+if [ "${MAINT_WORKER}" = "1" ] || [ "${MAINT_WORKER}" = "true" ] || [ "${MAINT_WORKER}" = "yes" ] || [ "${MAINT_WORKER}" = "on" ]; then
+  export GC_MAINTENANCE_WORKER=1
+  export GC_EMBEDDED_CRON=0
+  echo "[GC] Starting maintenance worker sidecar (GC-PERF-PROD-002)..."
+  python scripts/run_maintenance_worker.py &
+  MAINT_PID=$!
+  echo "[GC] Maintenance worker pid=${MAINT_PID}"
+else
+  echo "[GC] Maintenance sidecar off (GC_MAINTENANCE_WORKER=${MAINT_WORKER}); embedded cron may run in-process."
+fi
+
 echo "[GC] Starting gunicorn on 0.0.0.0:${PORT} (workers=${WORKERS})..."
 exec gunicorn -w "${WORKERS}" -b "0.0.0.0:${PORT}" --timeout 120 \
   --access-logfile - --error-logfile - --log-level info \

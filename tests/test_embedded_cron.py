@@ -104,6 +104,36 @@ def test_embedded_cron_disabled_by_default_outside_production(embedded_env, monk
     assert start_embedded_cron_if_enabled() is False
 
 
+def test_maintenance_sidecar_disables_in_process_embedded_cron(embedded_env, monkeypatch):
+    """GC-PERF-PROD-002: sidecar owns the bag; gunicorn must not start the thread."""
+    monkeypatch.setenv("GC_MAINTENANCE_WORKER", "1")
+    monkeypatch.setenv("GC_EMBEDDED_CRON", "1")  # would enable thread if sidecar ignored
+
+    from game.config import (
+        init_config,
+        is_embedded_backup_enabled,
+        is_embedded_cron_enabled,
+        is_maintenance_worker_sidecar_enabled,
+    )
+    from game.internal_cron import start_embedded_cron_if_enabled, stop_embedded_cron_for_tests
+
+    init_config()
+    stop_embedded_cron_for_tests()
+    assert is_maintenance_worker_sidecar_enabled() is True
+    assert is_embedded_cron_enabled() is False
+    assert is_embedded_backup_enabled() is True  # backup still on with sidecar
+    assert start_embedded_cron_if_enabled() is False
+
+
+def test_docker_entrypoint_starts_maintenance_sidecar():
+    text = Path(__file__).resolve().parents[1].joinpath("scripts/docker-entrypoint.sh").read_text(
+        encoding="utf-8"
+    )
+    assert "run_maintenance_worker.py" in text
+    assert "GC_MAINTENANCE_WORKER" in text
+    assert "GC_EMBEDDED_CRON=0" in text
+
+
 def test_backup_file_is_valid_sqlite(embedded_env):
     from game.internal_cron import maybe_sqlite_volume_backup
 

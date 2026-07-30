@@ -103,8 +103,13 @@ Disable embedded cron only if you intentionally use an external HTTP scheduler: 
 
 ## Postgres / scaling (later)
 
-See [GC_PERF_CORE.md](GC_PERF_CORE.md). Until cutover: Replicas = 1, workers = 1, embedded cron on web.  
-After Postgres: optional `scripts/run_game_worker.py` + `GC_EMBEDDED_CRON=0` on web if the worker owns ticks.
+See [GC_PERF_CORE.md](GC_PERF_CORE.md). Until Postgres cutover: Replicas = 1, workers = 1.
+
+**GC-PERF-PROD-002:** docker-entrypoint starts `scripts/run_maintenance_worker.py` by default (`GC_MAINTENANCE_WORKER=1`) and sets `GC_EMBEDDED_CRON=0` on gunicorn so Soft-On ticks do not share the web GIL. Opt out: `GC_MAINTENANCE_WORKER=0` (legacy in-process `[embedded-cron]`).
+
+After Postgres: optional dedicated `scripts/run_game_worker.py` service + keep sidecar or HTTP cron.
+
+Soft-Off A/B + `hold_ms` measurement: [GC_PERF_PROD_001.md](GC_PERF_PROD_001.md).
 
 ---
 
@@ -117,7 +122,7 @@ curl -sS https://www.genesis-colonies.de/health
 
 Expect `/healthz` → HTTP 200 `"status":"alive"` (cheap liveness; Docker HEALTHCHECK).  
 Expect `/health` → HTTP 200 `"status":"ok"` (deep readiness; Railway deploy gate).  
-Check Railway logs for `[embedded-cron] started`. Latency root-cause notes: [GC_PERF_PROD_001.md](GC_PERF_PROD_001.md).
+Check Railway logs for `[maintenance-worker] started` (GC-PERF-PROD-002) or legacy `[embedded-cron] started`. Latency notes: [GC_PERF_PROD_001.md](GC_PERF_PROD_001.md).
 
 ---
 

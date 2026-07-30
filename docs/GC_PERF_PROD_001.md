@@ -56,11 +56,36 @@ Then compare **client RTT** vs log `total_ms`:
 | Spikes align with `[embedded-cron]` | Cron/GIL/DB lock coupling |
 | `/healthz` client RTT still multi-second while `handler_ms` tiny | Confirms worker serialization / platform floor |
 
+## Ops Soft-Off A/B (slowdown / Timekeeper)
+
+When navigation or Timekeeper feels stuck on Railway:
+
+1. Admin → LiveOps → **Inactive Autoplay Soft-Off** → wait ~1 min → navigate `/overview`↔`/ranking` + Timekeeper on an active build (2–3 min).
+2. If still slow: Soft-Off **Pirates AI** → same checks.
+3. Interpret:
+   - Autoplay off alone fixes → autoplay tick cost / short-TX chatter
+   - Pirates off fixes → pirate economy (check `hold_ms` / `write_commits`)
+   - Both off still slow → worker/cron architecture (sidecar / SQLite / 1 worker)
+
+**Measure in Railway logs before shipping further “perf” commits:**
+
+```text
+post-maint stage=inactive_autoplay hold_ms=… manage_tx=0
+post-maint stage=pirates hold_ms=… manage_tx=0
+inactive_autoplay … hold_ms=… write_commits=…
+pirates … hold_ms=… write_commits=…
+[maintenance-worker] started   ← GC-PERF-PROD-002 sidecar (preferred)
+[embedded-cron] started        ← legacy in-process (only if GC_MAINTENANCE_WORKER=0)
+```
+
+Optional request wall: `GC_REQUEST_PERF_DEBUG=1`, `GC_REQUEST_PERF_SLOW_MS=0`, `GC_REQUEST_PERF_SAMPLE=1.0`.
+
 ## Ops notes
 
 - `GC_INACTIVE_AUTOPLAY_MAX_SESSIONS`: remove or set `6` (env `60` clamps to 12 after GC-2620)
-- Next slices: move embedded cron off the web process, consider threads/workers after Postgres, auth/`touch_player_online` phase keys
-- **GC-PERF-AUTOPLAY-001 (shipped):** inactive_autoplay stage no longer holds one SQLite IMMEDIATE across the full roster economy; short per-player commits + busy lease. Verify with Soft-Off A/B and Timekeeper boost on an active build queue. Check Railway `GC_POLL_ACTIVE_MS` if console shows game-state polling at 8000 ms (code default active is 5000).
+- **GC-PERF-AUTOPLAY-001 / GC-PERF-TK-001 (shipped):** autoplay + pirates stages use short write TXs (`manage_tx=False`) + busy leases; shipyard/defense Timekeeper also shifts `started_at`
+- **GC-PERF-PROD-002 (shipped):** docker-entrypoint starts `scripts/run_maintenance_worker.py` by default (`GC_MAINTENANCE_WORKER=1`) and forces `GC_EMBEDDED_CRON=0` on gunicorn — maintenance bag no longer shares the web process GIL. Opt out with `GC_MAINTENANCE_WORKER=0`
+- Check Railway `GC_POLL_ACTIVE_MS` if console shows game-state polling at 8000 ms (code default active is 5000)
 
 ## Smoke
 
@@ -68,3 +93,7 @@ Then compare **client RTT** vs log `total_ms`:
 curl -sS https://www.genesis-colonies.de/healthz
 curl -sS https://www.genesis-colonies.de/health
 ```
+
+Expect `/healthz` → HTTP 200 `"status":"alive"` (cheap liveness; Docker HEALTHCHECK).  
+Expect `/health` → HTTP 200 `"status":"ok"` (deep readiness; Railway deploy gate).  
+Check Railway logs for `[maintenance-worker] started` (or legacy `[embedded-cron] started` if sidecar off).
