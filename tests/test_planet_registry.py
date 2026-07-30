@@ -646,6 +646,11 @@ def test_planet_switch_hotfix_client_contract():
     assert "GC._planetSwitchCooldownUntil" in registry
     assert "PLANET_SWITCH_COOLDOWN_MS" in registry
     assert 'refreshGameState("planet_switch")' not in registry
+    # GC-FLEET-PLANET-SWITCH-001: soft fleet refresh with explicit planet + force
+    assert 'pageName === "fleet"' in registry
+    assert 'reason: "planet_switch"' in registry
+    assert "force: true" in registry
+    assert "planetId," in registry or "planetId: planetId" in registry
     apply = src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]
     assert "GC.refreshInFlight = null" in apply
     assert "hudOnly: isPlanetSwitch" in apply

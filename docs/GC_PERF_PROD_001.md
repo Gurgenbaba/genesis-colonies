@@ -86,10 +86,13 @@ Optional request wall: `GC_REQUEST_PERF_DEBUG=1`, `GC_REQUEST_PERF_SLOW_MS=0`, `
 - `GC_INACTIVE_AUTOPLAY_MAX_SESSIONS`: remove or set `6` (env `60` clamps to 12 after GC-2620)
 - **GC-PERF-AUTOPLAY-001 / GC-PERF-TK-001 (shipped):** autoplay + pirates stages use short write TXs (`manage_tx=False`) + busy leases; shipyard/defense Timekeeper also shifts `started_at`
 - **GC-PERF-TK-002:** `/api/timekeeper/apply` forces `state.timekeeper` from the apply ledger after commit; client prefers top-level `timekeeper` and clears monotonic `serverRemaining` before patch; bump `VERSION` + hard-refresh after deploy so `main.js` cache updates
+- **GC-PERF-TK-003:** `/api/timekeeper/apply` returns slim action state (no full panel/codex) — cuts 2–3s live-boost latency from fat payload rebuild; logs `apply_ms`/`state_ms`
+- **GC-PERF-BOOST-001:** production boosters tier-stack additively across source items (25+50 → +75%); same item extends duration; HUD chip shows combined %; inventory lists each tier; non-production timed boosters still use max
 - **GC-PERF-LOCK-001:** fleet worker no longer holds one `BEGIN IMMEDIATE` across all due movements — `process_fleet_tick(..., manage_transaction=True)` commits per movement; `touch_player_online` swallows SQLITE_BUSY and always attempts roster release; `PRAGMA busy_timeout=20000`
 - **GC-PERF-AUTOPLAY-002:** sticky roster defaults to `tick_per_cron=1`, `chain_limit=2`, 50ms yield between short-TX economies, 800ms tick budget (`budget_stopped`); Soft-On stays recommended
 - **GC-PERF-IMG-001…004:** compressed shell/card images (frame.webp ≤120KB, expedition.webp, landscapes, cards); WebP primary in galaxy/JS/catalog; Overview frame preload + `?v=` cache bust
 - **GC-PERF-PROD-002 (shipped):** docker-entrypoint starts `scripts/run_maintenance_worker.py` by default (`GC_MAINTENANCE_WORKER=1`) and forces `GC_EMBEDDED_CRON=0` on gunicorn — maintenance bag no longer shares the web process GIL. Opt out with `GC_MAINTENANCE_WORKER=0`
+- **GC-RANK-CRON-001:** sidecar respawn + leader-lock retry so deploy handoff cannot kill automatic ranking; Admin Runtime shows ranking-worker last run
 - Check Railway `GC_POLL_ACTIVE_MS` if console shows game-state polling at 8000 ms (code default active is 5000)
 
 ## Smoke

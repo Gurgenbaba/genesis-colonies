@@ -191,6 +191,65 @@ def test_production_booster_duration_stacks_on_reuse(inv_vis_db):
     active = list_active_boosters(uid, conn=conn, now=mid)
     metal = next(r for r in active if r["effect_key"] == "metal_prod_factor")
     assert abs(float(metal["expires_at"]) - expected) < 1.0
+    assert float(metal["multiplier"]) == 1.25
+    conn.close()
+
+
+def test_production_booster_tier_ladder_25_then_50(inv_vis_db):
+    """GC-PERF-BOOST-001: 25%+50% stack to 75%; after 50% expires, 25% remains."""
+    import time as time_mod
+
+    conn = db()
+    uid = _uid(conn=conn)
+    # Use wall-clock base so HUD enrich (EffectResolver) purge does not wipe rows.
+    now = float(time_mod.time())
+    from game.inventory_boosters import (
+        activate_inventory_booster,
+        build_active_effects_for_hud,
+        get_active_booster_multipliers,
+        list_active_boosters,
+    )
+
+    begin_write_transaction(conn)
+    # 2×25% → 25% lasting 2h; then 50% for 1h alongside.
+    activate_inventory_booster(uid, "booster_production_25", conn=conn, now=now)
+    activate_inventory_booster(uid, "booster_production_25", conn=conn, now=now + 30 * 60)
+    activate_inventory_booster(uid, "booster_production_50", conn=conn, now=now)
+    commit(conn)
+
+    mults = get_active_booster_multipliers(uid, conn=conn, now=now)
+    assert abs(float(mults.get("metal_prod_factor") or 0) - 1.75) < 1e-9
+    assert abs(float(mults.get("crystal_prod_factor") or 0) - 1.75) < 1e-9
+    assert abs(float(mults.get("fuel_prod_factor") or 0) - 1.75) < 1e-9
+
+    active = list_active_boosters(uid, conn=conn, now=now)
+    metal_tiers = [r for r in active if r["effect_key"] == "metal_prod_factor"]
+    assert len(metal_tiers) == 2
+    by_src = {r["source_item_key"]: r for r in metal_tiers}
+    assert abs(float(by_src["booster_production_50"]["expires_at"]) - (now + 3600)) < 2.0
+    assert abs(float(by_src["booster_production_25"]["expires_at"]) - (now + 7200)) < 2.0
+
+    hud = build_active_effects_for_hud(uid, conn=conn, locale="en", now=now)
+    chip = next(e for e in hud if e.get("hud_chip_only") or e.get("key") == "production")
+    assert int(chip.get("effect_summary_params", {}).get("pct") or 0) == 75
+    assert chip.get("stack_aggregate") is True
+    list_rows = [e for e in hud if e.get("hud_list_only")]
+    assert len(list_rows) == 2
+    pcts = sorted(int(e.get("effect_summary_params", {}).get("pct") or 0) for e in list_rows)
+    assert pcts == [25, 50]
+    assert not any(e.get("tier_standby") for e in list_rows)
+    assert int(chip.get("remaining_seconds") or 0) <= 3600 + 2
+    assert int(chip.get("remaining_seconds") or 0) >= 3600 - 5
+
+    after_50 = now + 3600 + 5
+    mults_after = get_active_booster_multipliers(uid, conn=conn, now=after_50)
+    assert abs(float(mults_after.get("metal_prod_factor") or 0) - 1.25) < 1e-9
+    hud_after = build_active_effects_for_hud(uid, conn=conn, locale="en", now=after_50)
+    chip_after = next(
+        e for e in hud_after if e.get("hud_chip_only") or e.get("key") == "production"
+    )
+    assert int(chip_after.get("effect_summary_params", {}).get("pct") or 0) == 25
+    assert int(chip_after.get("remaining_seconds") or 0) >= 3500
     conn.close()
 
 

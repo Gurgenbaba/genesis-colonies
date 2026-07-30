@@ -326,8 +326,9 @@ Response envelope: `{ ok, error, message_key, data }` via `fleet_api.py`.
 
 - Module: `GC.modules.fleet` → `initFleet()`
 - Forms: `data-no-pjax` (fetch-only send)
-- `scheduleFleetStateRefresh()` / `refreshFleetState()` — coalesced (ein In-Flight-Request); nach Actions und Countdown-Zero
+- `scheduleFleetStateRefresh()` / `refreshFleetState(page, opts?)` — coalesced (ein In-Flight-Request); nach Actions und Countdown-Zero
 - `applyLiveState` → `renderActiveFleets` patched die aktive Liste (Signatur); kein erneutes `initFleet()` nur wegen State
+- **GC-FLEET-PLANET-SWITCH-001:** Auf `/fleet` skippt Planet-Switch den SSR-Reload (Form-Draft bleibt). Soft-Refresh via `refreshFleetState(page, { planetId, reason: "planet_switch", force: true })`. `applyLiveState` verwirft Payloads mit `planet_id ≠ #fleet-page[data-planet-id]`; queued Refresh trägt Ziel-`planetId` weiter.
 - **Fleet UI Sync:** Action → Drawer/HUD via `state.active_fleets` (`patchFleetHudFromActionPayload`); Fleet-Page via `syncFleetUiAfterMutation` → coalesced `/api/fleet/state`. Reasons `fleet_recall` / `logistics_action` sind Mutation-Reasons. Collapsed Drawer-Rows tickern über `_fleetDrawerMovementById` (off-DOM expiry). Expand („Weitere anzeigen“) triggert `fleet_drawer_expand` Game-State (+ Fleet-State wenn Page mounted).
 - **GC-PERF-FLEET-SEND:** Send-Success patched sofort aus Live-Payload (`updated_ships` / `fleet` / HUD merge) + slim `applyActionState`; **kein** `await refreshFleetState` auf dem Critical Path. `fleet_send_success` → deferred coalesce (`immediate: false`) nur zur Konsistenz.
 - Countdown-Zero: kein Reload pro Zeile — debounce + ein Game-State-Refresh (`fleet_countdown_expired`)

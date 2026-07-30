@@ -212,13 +212,16 @@
     </div>
     <ul class="inventory-active-boosters-list" data-inventory-active-boosters-list>
       {% for effect in (inv_data.active_boosters.active_effects if inv_data.active_boosters is defined else []) %}
+      {% if not (effect.hud_chip_only or effect.stack_aggregate) %}
       <li class="inventory-active-booster-row"
           data-boost-key="{{ effect.key }}"
           data-remaining-seconds="{{ effect.remaining_seconds|int }}">
         <span class="inventory-active-booster-label">{{ effect.label }}</span>
         <span class="inventory-active-booster-effect">{{ effect.effect_summary }}</span>
         <span class="inventory-active-booster-time gc-mono" data-boost-remaining>{{ effect.remaining_seconds|int }}s</span>
+        {% if effect.note %}<span class="inventory-active-booster-note">{{ effect.note }}</span>{% endif %}
       </li>
+      {% endif %}
       {% endfor %}
     </ul>
   </section>

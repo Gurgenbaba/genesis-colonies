@@ -3320,6 +3320,7 @@ def api_timekeeper_apply():
         ):
             planet = get_context_planet(user_id, conn=conn)
             planet_id = int(planet["id"])
+        t_apply0 = time.perf_counter()
         begin_write_transaction(conn)
         ok, reason, result = apply_timekeeper(
             user_id,
@@ -3333,7 +3334,7 @@ def api_timekeeper_apply():
             rollback(conn)
             conn.close()
             conn = None
-            state, _ = _build_game_state_payload(include_panel=True, finish_source="api_timekeeper_apply")
+            state = _timekeeper_apply_game_state()
             body = {"ok": False, "reason": reason, "state": state}
             if result.get("timekeeper"):
                 body["timekeeper"] = result["timekeeper"]
@@ -3345,6 +3346,7 @@ def api_timekeeper_apply():
             )
             return jsonify(body), 400
         commit(conn)
+        apply_ms = (time.perf_counter() - t_apply0) * 1000.0
 
         # GC-PERF-TK-002: verify debit persisted (read-only — avoid INSERT OR IGNORE
         # starting a new write TX on this conn that would block state rebuild).
@@ -3367,7 +3369,7 @@ def api_timekeeper_apply():
             )
             conn.close()
             conn = None
-            state, _ = _build_game_state_payload(include_panel=True, finish_source="api_timekeeper_apply")
+            state = _timekeeper_apply_game_state()
             if isinstance(state, dict) and tk_slice:
                 state["timekeeper"] = tk_slice
             return jsonify(
@@ -3384,16 +3386,21 @@ def api_timekeeper_apply():
         conn.close()
         conn = None
 
-        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_timekeeper_apply")
+        t_state0 = time.perf_counter()
+        state = _timekeeper_apply_game_state()
+        state_ms = (time.perf_counter() - t_state0) * 1000.0
         # Apply ledger wins over rebuild so HUD never keeps a stale balance.
         if isinstance(state, dict) and tk_slice:
             state["timekeeper"] = tk_slice
         logger.info(
-            "timekeeper_apply user_id=%s domain=%s ok=1 reason=ok seconds_applied=%s balance_after=%s",
+            "timekeeper_apply user_id=%s domain=%s ok=1 reason=ok seconds_applied=%s "
+            "balance_after=%s apply_ms=%.1f state_ms=%.1f",
             user_id,
             domain,
             applied,
             expected_bal,
+            apply_ms,
+            state_ms,
         )
         return jsonify(
             {
@@ -8783,6 +8790,7 @@ def _uses_action_state_diet(finish_source: str) -> bool:
         "api_planets_active",
         "api_fleet_send",
         "api_fleet_recall",
+        "api_timekeeper_apply",
     )
 
 
@@ -8791,6 +8799,16 @@ def _fleet_mutation_game_state(finish_source: str) -> dict:
     state, _ = _build_game_state_payload(
         include_panel=False,
         finish_source=finish_source,
+        action_slim=True,
+    )
+    return state
+
+
+def _timekeeper_apply_game_state() -> dict:
+    """GC-PERF-TK-003: HUD + queue slices only — no full buildings/codex panel."""
+    state, _ = _build_game_state_payload(
+        include_panel=False,
+        finish_source="api_timekeeper_apply",
         action_slim=True,
     )
     return state

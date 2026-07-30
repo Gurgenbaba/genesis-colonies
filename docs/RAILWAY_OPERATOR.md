@@ -107,6 +107,8 @@ See [GC_PERF_CORE.md](GC_PERF_CORE.md). Until Postgres cutover: Replicas = 1, wo
 
 **GC-PERF-PROD-002:** docker-entrypoint starts `scripts/run_maintenance_worker.py` by default (`GC_MAINTENANCE_WORKER=1`) and sets `GC_EMBEDDED_CRON=0` on gunicorn so Soft-On ticks do not share the web GIL. Opt out: `GC_MAINTENANCE_WORKER=0` (legacy in-process `[embedded-cron]`).
 
+**GC-RANK-CRON-001:** Sidecar uses a **respawn loop** + leader-lock **retry** so a deploy volume handoff (old container still holds `.gc_embedded_cron.lock`) cannot leave ranking/fleet without an owner. Admin → System → Runtime shows last ranking-worker run + dirty pending.
+
 After Postgres: optional dedicated `scripts/run_game_worker.py` service + keep sidecar or HTTP cron.
 
 Soft-Off A/B + `hold_ms` measurement: [GC_PERF_PROD_001.md](GC_PERF_PROD_001.md).

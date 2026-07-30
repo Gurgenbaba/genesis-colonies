@@ -184,10 +184,23 @@ def api_migrations() -> Dict[str, Any]:
 
 
 def api_runtime() -> Dict[str, Any]:
+    from game.config import (
+        is_embedded_cron_enabled,
+        is_maintenance_worker_sidecar_enabled,
+    )
+    from game.ranking_worker import get_ranking_worker_status
     from game.runtime_state import get_queue_tick_status
+    from game.score_events import count_dirty_score_players
 
     settings = get_game_settings() or {}
     queue_tick = get_queue_tick_status()
+    ranking_worker = get_ranking_worker_status()
+    try:
+        dirty_scores = int(count_dirty_score_players() or 0)
+    except Exception:
+        dirty_scores = 0
+    ranking_worker = dict(ranking_worker)
+    ranking_worker["dirty_pending"] = dirty_scores
     return _ok(
         runtime={
             "version": get_app_version(),
@@ -210,6 +223,13 @@ def api_runtime() -> Dict[str, Any]:
                 "research_queue_limit": settings.get("research_queue_limit"),
             },
             "queue_tick": queue_tick,
+            "ranking_worker": ranking_worker,
+            "maintenance": {
+                "sidecar_enabled": is_maintenance_worker_sidecar_enabled(),
+                "embedded_cron_enabled": is_embedded_cron_enabled(),
+                "gc_maintenance_worker": os.environ.get("GC_MAINTENANCE_WORKER", ""),
+                "gc_embedded_cron": os.environ.get("GC_EMBEDDED_CRON", ""),
+            },
         },
     )
 

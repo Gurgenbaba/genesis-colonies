@@ -132,6 +132,52 @@ def test_docker_entrypoint_starts_maintenance_sidecar():
     assert "run_maintenance_worker.py" in text
     assert "GC_MAINTENANCE_WORKER" in text
     assert "GC_EMBEDDED_CRON=0" in text
+    # GC-RANK-CRON-001: dead sidecar must not leave ranking without an owner.
+    assert "restarting in 5s" in text
+    assert "while true" in text
+
+
+def test_maintenance_worker_retries_leader_lock(embedded_env, monkeypatch):
+    """Deploy volume handoff: first lock miss must not exit permanently."""
+    from game import internal_cron
+
+    monkeypatch.setenv("GC_MAINTENANCE_WORKER", "1")
+    calls = {"lock": 0, "bag": 0, "sleep": []}
+
+    def fake_lock():
+        calls["lock"] += 1
+        return calls["lock"] >= 2
+
+    def fake_bag(**_kwargs):
+        calls["bag"] += 1
+
+    def fake_sleep(sec):
+        calls["sleep"].append(float(sec))
+        if calls["bag"] >= 1:
+            raise StopIteration("done")
+
+    with (
+        patch.object(internal_cron, "_acquire_embedded_leader_lock", side_effect=fake_lock),
+        patch.object(internal_cron, "run_maintenance_bag", side_effect=fake_bag),
+        patch.object(internal_cron.time, "sleep", side_effect=fake_sleep),
+    ):
+        with pytest.raises(StopIteration):
+            internal_cron.run_maintenance_worker_loop(once=False, lock_retry_sec=1.0)
+
+    assert calls["lock"] >= 2
+    assert calls["bag"] == 1
+    assert any(s == 1.0 for s in calls["sleep"])
+
+
+def test_maintenance_worker_once_still_exits_without_lock(embedded_env, monkeypatch):
+    from game import internal_cron
+
+    with (
+        patch.object(internal_cron, "_acquire_embedded_leader_lock", return_value=False),
+        patch.object(internal_cron, "run_maintenance_bag") as mock_bag,
+    ):
+        internal_cron.run_maintenance_worker_loop(once=True, lock_retry_sec=1.0)
+    mock_bag.assert_not_called()
 
 
 def test_backup_file_is_valid_sqlite(embedded_env):

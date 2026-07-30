@@ -579,19 +579,36 @@ def start_embedded_cron_if_enabled() -> bool:
     return True
 
 
-def run_maintenance_worker_loop(*, once: bool = False) -> None:
+def run_maintenance_worker_loop(
+    *,
+    once: bool = False,
+    lock_retry_sec: float = 5.0,
+) -> None:
     """
     GC-PERF-PROD-002 — OS-process owner for the maintenance bag.
 
     Same bag as the in-process embedded cron; uses the same leader lock file so
     accidental double-start (thread + sidecar) cannot run two bags.
+
+    Lock acquisition retries forever (unless ``once``): during Railway volume
+    handoff the previous container may still hold ``.gc_embedded_cron.lock``.
+    Exiting on first failure left gunicorn with ``GC_EMBEDDED_CRON=0`` and
+    **no** ranking/fleet bag until the next full redeploy.
     """
     from game.config import get_embedded_cron_interval_sec, is_embedded_backup_enabled
 
     interval = get_embedded_cron_interval_sec()
-    if not _acquire_embedded_leader_lock():
-        _recompute_log("maintenance-worker", "skipped_not_leader")
-        return
+    retry = max(1.0, float(lock_retry_sec))
+    while not _acquire_embedded_leader_lock():
+        _recompute_log(
+            "maintenance-worker",
+            f"waiting_for_leader_lock retry_sec={int(retry)}",
+        )
+        if once:
+            _recompute_log("maintenance-worker", "skipped_not_leader")
+            return
+        time.sleep(retry)
+
     _recompute_log(
         "maintenance-worker",
         f"started interval_sec={interval} backup={str(is_embedded_backup_enabled()).lower()}",

@@ -45,14 +45,24 @@ WORKERS="${GUNICORN_WORKERS:-1}"
 # GC-PERF-PROD-002: run the maintenance bag in a sibling OS process so gunicorn
 # does not share GIL/CPU with Soft-On autoplay/pirate ticks. Opt out with
 # GC_MAINTENANCE_WORKER=0 (falls back to in-process embedded cron).
+#
+# Respawn loop: a one-shot background process that exits (crash, deploy lock
+# race) would leave ranking/fleet with no owner because gunicorn has
+# GC_EMBEDDED_CRON=0. Retry forever while the container is alive.
 MAINT_WORKER="${GC_MAINTENANCE_WORKER:-1}"
 if [ "${MAINT_WORKER}" = "1" ] || [ "${MAINT_WORKER}" = "true" ] || [ "${MAINT_WORKER}" = "yes" ] || [ "${MAINT_WORKER}" = "on" ]; then
   export GC_MAINTENANCE_WORKER=1
   export GC_EMBEDDED_CRON=0
-  echo "[GC] Starting maintenance worker sidecar (GC-PERF-PROD-002)..."
-  python scripts/run_maintenance_worker.py &
+  echo "[GC] Starting maintenance worker sidecar with respawn (GC-PERF-PROD-002)..."
+  (
+    while true; do
+      python scripts/run_maintenance_worker.py || true
+      echo "[GC] Maintenance worker exited; restarting in 5s..."
+      sleep 5
+    done
+  ) &
   MAINT_PID=$!
-  echo "[GC] Maintenance worker pid=${MAINT_PID}"
+  echo "[GC] Maintenance worker supervisor pid=${MAINT_PID}"
 else
   echo "[GC] Maintenance sidecar off (GC_MAINTENANCE_WORKER=${MAINT_WORKER}); embedded cron may run in-process."
 fi

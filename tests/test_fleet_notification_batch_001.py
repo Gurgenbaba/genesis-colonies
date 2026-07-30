@@ -17,11 +17,12 @@ def test_schedule_fleet_state_refresh_coalesces():
     assert "FLEET_STATE_REFRESH_COALESCE_MS = 200" in src
     assert "_fleetStateRefreshPromise" in src
     assert "_fleetStateRefreshQueued" in src
-    refresh_fn = src.split("const refreshFleetState = async (page) => {")[1].split(
+    refresh_fn = src.split("const refreshFleetState = async (page, opts) => {")[1].split(
         "GC.refreshFleetState = refreshFleetState"
     )[0]
     assert "if (_fleetStateRefreshPromise)" in refresh_fn
     assert "_fleetStateRefreshQueued = true" in refresh_fn
+    assert "_fleetStateRefreshQueuedOpts" in refresh_fn
 
 
 def test_countdown_zero_uses_schedule_fleet_state_refresh():
@@ -39,12 +40,27 @@ def test_countdown_zero_uses_schedule_fleet_state_refresh():
 def test_apply_live_state_renders_active_fleets():
     src = _read("static/main.js")
     apply = src.split("const applyLiveState = (page, state, opts) => {")[1].split(
-        "const refreshFleetState = async (page) => {"
+        "const refreshFleetState = async (page, opts) => {"
     )[0]
     assert "renderActiveFleets(page, rt.data.active_fleets)" in apply
     assert "GC.renderActiveFleets = renderActiveFleets" in src
+    # GC-FLEET-PLANET-SWITCH-001: reject fleet state for a different planet
+    assert "fleet applyLiveState stale planet" in apply
+    assert "state.planet_id" in apply
     # initFleet must not be re-invoked from applyLiveState
     assert "initFleet(" not in apply
+
+
+def test_refresh_fleet_state_planet_switch_opts():
+    """GC-FLEET-PLANET-SWITCH-001: refresh accepts planetId/force and queues opts."""
+    src = _read("static/main.js")
+    refresh_fn = src.split("const refreshFleetState = async (page, opts) => {")[1].split(
+        "GC.refreshFleetState = refreshFleetState"
+    )[0]
+    assert "refreshOpts.planetId" in refresh_fn
+    assert 'reason === "planet_switch"' in refresh_fn
+    assert "_fleetStateRefreshQueuedOpts" in refresh_fn
+    assert "force: true" in refresh_fn
 
 
 def test_message_notify_batch_and_dedupe():

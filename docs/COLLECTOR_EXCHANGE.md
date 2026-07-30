@@ -383,6 +383,8 @@ Diese Keys werden in `inventory_catalog.py` ergänzt (Phase 1/2):
 
 Booster mit `%`-Effekt: Integration über `EffectResolver` + `player_active_boosters` (bestehendes Muster prüfen in `inventory_use.py` / `effects/`).
 
+**GC-PERF-BOOST-001 — Tier-Stacking:** Gleicher Item-Key verlängert nur die Dauer. Unterschiedliche %-Tiers (25/50/100) koexistieren als eigene Zeilen (`UNIQUE(user_id, effect_key, source_item_key)`) und **addieren** sich bei Produktion (25+50 → **+75 %** / Faktor 1.75). Ressourcen-Chip zeigt die Summe; Inventarliste die einzelnen Tiers. Nicht-Produktions-Booster bleiben bei `max(multiplier)` + optionalem Standby-Hinweis.
+
 ---
 
 ## Offer-Katalog-Format (`game/collector_catalog.py`)

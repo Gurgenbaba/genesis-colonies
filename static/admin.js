@@ -3410,6 +3410,26 @@
           : qt.ok === false
             ? t("admin_tick_error", "Fehler")
             : t("admin_tick_unknown", "—");
+      const rw = r.ranking_worker || {};
+      const maint = r.maintenance || {};
+      const rankAt = rw.last_run_at
+        ? new Date(Number(rw.last_run_at) * 1000).toLocaleString()
+        : t("admin_tick_never", "—");
+      const rankOk =
+        rw.ok === true
+          ? t("admin_tick_ok", "OK")
+          : rw.ok === false
+            ? t("admin_tick_error", "Fehler")
+            : t("admin_tick_unknown", "—");
+      const nextRank =
+        rw.next_run_in_sec != null
+          ? `${Math.max(0, Number(rw.next_run_in_sec) || 0)} s`
+          : "—";
+      const maintMode = maint.sidecar_enabled
+        ? t("admin_maint_mode_sidecar", "Sidecar")
+        : maint.embedded_cron_enabled
+          ? t("admin_maint_mode_embedded", "Embedded")
+          : t("admin_maint_mode_off", "AUS");
       out.innerHTML = `
         
         <div class="admin-kpi-grid">
@@ -3443,6 +3463,26 @@
             [t("admin_tick_affected_players", "Betroffene Spieler"), playersCount],
             [t("admin_tick_batches", "Batches"), qt.batches != null ? qt.batches : 0],
             [t("admin_tick_errors_count", "Fehler (Anzahl)"), errorsCount],
+          ]
+            .map(
+              ([k, v]) => `<div class="admin-kpi-card admin-card"><div class="admin-metric-label">${esc(k)}</div><div class="admin-metric-value">${esc(v)}</div></div>`
+            )
+            .join("")}
+        </div>
+        <div class="admin-section-title">
+          <span class="admin-section-title-text">${esc(t("admin_ranking_worker_title", "Ranking-Worker (alle 10 min)"))}</span>
+        </div>
+        <div class="admin-kpi-grid">
+          ${[
+            [t("admin_ranking_worker_last", "Letzter Ranking-Lauf"), rankAt],
+            [t("admin_tick_status", "Status"), rankOk],
+            [t("admin_tick_source", "Quelle"), rw.last_run_source || "—"],
+            [t("admin_tick_duration", "Dauer"), rw.duration_ms != null ? `${rw.duration_ms} ms` : "—"],
+            [t("admin_ranking_worker_players", "Spieler aktualisiert"), rw.players_updated != null ? rw.players_updated : 0],
+            [t("admin_ranking_worker_ranks", "Ränge"), rw.ranks_assigned != null ? rw.ranks_assigned : 0],
+            [t("admin_ranking_worker_dirty", "Dirty pending"), rw.dirty_pending != null ? rw.dirty_pending : 0],
+            [t("admin_ranking_worker_next", "Nächster Lauf in"), nextRank],
+            [t("admin_maint_mode", "Maintenance"), maintMode],
           ]
             .map(
               ([k, v]) => `<div class="admin-kpi-card admin-card"><div class="admin-metric-label">${esc(k)}</div><div class="admin-metric-value">${esc(v)}</div></div>`

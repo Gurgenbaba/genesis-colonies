@@ -44,6 +44,8 @@ Response: `{ ok, reason, state, timekeeper, seconds_applied }`
 
 **GC-PERF-TK-002:** After a successful apply, `state.timekeeper` is forced from the apply ledger (`result.timekeeper`), not only from the post-commit state rebuild — so the HUD cannot keep a stale balance. Client prefers `res.timekeeper` over `state.timekeeper` and only calls `applyActionState` when `ok` and `seconds_applied > 0`. After JS changes, bump `VERSION` and hard-refresh so `main.js?v=…` cache busts.
 
+**GC-PERF-TK-003:** Apply response uses slim action state (`include_panel=False`, `action_slim=True`) — HUD + queue slices only, no full `buildings_panel` / codex / shipyard catalog. Same diet pattern as GC-840 buildings upgrades. Logs `apply_ms` / `state_ms` on success.
+
 `POST /api/inventory/use` with `deposit_domain: "build"|"research"|"shipyard"|"all"` deposits **all** owned legacy time items for that domain (or every depositable domain when `"all"`) into Timekeeper in one action (inventory Alle / Bau / Forschung / Werft chips).
 
 ## Autoplay auto-boost (GC-2616)

@@ -216,6 +216,9 @@ def activate_inventory_booster(
 
     ts = float(now if now is not None else time.time())
     uid = int(user_id)
+    source_key = str(item_key or "").strip()
+    if not source_key:
+        return None
     _purge_expired(uid, conn=conn, now=ts)
 
     activated: List[Dict[str, Any]] = []
@@ -226,28 +229,29 @@ def activate_inventory_booster(
         duration = int(boost["duration_seconds"])
         new_expires = ts + duration
 
+        # GC-PERF-BOOST-001: same source_item_key extends duration only;
+        # different tiers (25 vs 50) coexist as separate rows.
         cur.execute(
             """
             SELECT multiplier, expires_at FROM player_active_boosters
-            WHERE user_id = ? AND effect_key = ? LIMIT 1;
+            WHERE user_id = ? AND effect_key = ? AND source_item_key = ?
+            LIMIT 1;
             """,
-            (uid, effect_key),
+            (uid, effect_key, source_key),
         )
         row = cur.fetchone()
         if row:
-            existing_mult = float(row["multiplier"] or 1.0)
             existing_expires = float(row["expires_at"] or 0)
-            multiplier = max(existing_mult, multiplier)
-            # Stack remaining duration: extend from the later of now / current expiry.
+            multiplier = float(row["multiplier"] or multiplier)
             base = max(existing_expires, ts)
             new_expires = base + duration
             cur.execute(
                 """
                 UPDATE player_active_boosters
-                SET multiplier = ?, expires_at = ?, source_item_key = ?, activated_at = ?
-                WHERE user_id = ? AND effect_key = ?;
+                SET expires_at = ?, activated_at = ?
+                WHERE user_id = ? AND effect_key = ? AND source_item_key = ?;
                 """,
-                (multiplier, new_expires, str(item_key), ts, uid, effect_key),
+                (new_expires, ts, uid, effect_key, source_key),
             )
         else:
             cur.execute(
@@ -256,13 +260,14 @@ def activate_inventory_booster(
                     user_id, effect_key, multiplier, expires_at, source_item_key, activated_at
                 ) VALUES (?, ?, ?, ?, ?, ?);
                 """,
-                (uid, effect_key, multiplier, new_expires, str(item_key), ts),
+                (uid, effect_key, multiplier, new_expires, source_key, ts),
             )
         activated.append(
             {
                 "effect_key": effect_key,
                 "multiplier": multiplier,
                 "expires_at": new_expires,
+                "source_item_key": source_key,
             }
         )
 
@@ -275,7 +280,7 @@ def activate_inventory_booster(
         "expires_at": float(primary["expires_at"]),
         "duration_seconds": int(specs[0]["duration_seconds"]),
         "remaining_seconds": remaining,
-        "source_item_key": str(item_key),
+        "source_item_key": source_key,
         "activated_effects": activated,
     }
 
@@ -308,13 +313,31 @@ def list_active_boosters(user_id: int, *, conn, now: Optional[float] = None) -> 
 
 
 def get_active_booster_multipliers(user_id: int, *, conn, now: Optional[float] = None) -> Dict[str, float]:
+    """Active effect_key → multiplier.
+
+    Production tiers from different ``source_item_key`` stack additively
+    (25%+50% → 1.75). Same source is one row (duration stack only).
+    Non-production timed boosters still use ``max`` across sources.
+    """
     rows = list_active_boosters(user_id, conn=conn, now=now)
-    out: Dict[str, float] = {}
+    # effect_key → source → best mult for that source
+    by_key_source: Dict[str, Dict[str, float]] = {}
     for row in rows:
         key = str(row.get("effect_key") or "")
         if not key:
             continue
-        out[key] = max(float(out.get(key, 1.0)), float(row.get("multiplier") or 1.0))
+        src = str(row.get("source_item_key") or "").strip() or "_default"
+        mult = float(row.get("multiplier") or 1.0)
+        bucket = by_key_source.setdefault(key, {})
+        bucket[src] = max(float(bucket.get(src, 1.0)), mult)
+
+    out: Dict[str, float] = {}
+    for key, by_source in by_key_source.items():
+        if key in PRODUCTION_EFFECT_KEYS:
+            bonus = sum(max(0.0, float(m) - 1.0) for m in by_source.values())
+            out[key] = 1.0 + bonus
+        else:
+            out[key] = max(by_source.values()) if by_source else 1.0
     return out
 
 
@@ -393,36 +416,103 @@ def build_active_effects_for_hud(
 
     out: List[Dict[str, Any]] = []
     if prod_rows:
-        mult = max(float(r.get("multiplier") or 1.0) for r in prod_rows)
-        expires = max(float(r.get("expires_at") or 0) for r in prod_rows)
-        source = str(prod_rows[0].get("source_item_key") or "")
-        if mult > 1.0 and expires > ts:
-            out.append(
-                _hud_row_from_effect(
-                    effect_key="production",
-                    multiplier=mult,
-                    expires_at=expires,
-                    source_item_key=source,
-                    now=ts,
-                    locale=locale,
-                )
-            )
+        # GC-PERF-BOOST-001: different production tiers coexist and stack additively
+        # (25%+50% → +75%). List each source; chip uses one aggregate row.
+        by_source: Dict[str, List[Dict[str, Any]]] = {}
+        for r in prod_rows:
+            src = str(r.get("source_item_key") or "").strip()
+            if not src:
+                src = f"mult:{float(r.get('multiplier') or 1.0):.4f}"
+            by_source.setdefault(src, []).append(r)
+        tier_specs: List[Tuple[float, float, str]] = []
+        for src, group in by_source.items():
+            mult = max(float(r.get("multiplier") or 1.0) for r in group)
+            expires = max(float(r.get("expires_at") or 0) for r in group)
+            if mult > 1.0 and expires > ts:
+                tier_specs.append((mult, expires, src))
+        tier_specs.sort(key=lambda t: (-t[0], -t[1], t[2]))
 
-    for row in other_rows:
-        mult = float(row.get("multiplier") or 1.0)
-        if mult <= 1.0:
-            continue
-        out.append(
-            _hud_row_from_effect(
-                effect_key=str(row.get("effect_key") or ""),
+        for mult, expires, src in tier_specs:
+            row = _hud_row_from_effect(
+                effect_key="production",
                 multiplier=mult,
-                expires_at=float(row.get("expires_at") or 0),
-                source_item_key=str(row.get("source_item_key") or ""),
+                expires_at=expires,
+                source_item_key=src,
                 now=ts,
                 locale=locale,
             )
+            row["key"] = f"production:{src}"
+            row["hud_list_only"] = True
+            out.append(row)
+
+        if tier_specs:
+            combined_mult = 1.0 + sum(max(0.0, float(m) - 1.0) for m, _e, _s in tier_specs)
+            # Chip timer: until the stacked total next changes (soonest expiry).
+            combined_expires = min(float(e) for _m, e, _s in tier_specs)
+            agg = _hud_row_from_effect(
+                effect_key="production",
+                multiplier=combined_mult,
+                expires_at=combined_expires,
+                source_item_key="",
+                now=ts,
+                locale=locale,
+            )
+            agg["key"] = "production"
+            agg["hud_chip_only"] = True
+            agg["stack_aggregate"] = True
+            out.insert(0, agg)
+
+    # Same winning-tier rule for non-production effect_keys (research, energy, …).
+    # Multiple source tiers: list all (standby note on lower).
+    other_by_key: Dict[str, List[Dict[str, Any]]] = {}
+    for row in other_rows:
+        key = str(row.get("effect_key") or "")
+        if not key:
+            continue
+        other_by_key.setdefault(key, []).append(row)
+    from game.i18n import tr as _tr_other
+
+    for effect_key, group in other_by_key.items():
+        by_source: Dict[str, List[Dict[str, Any]]] = {}
+        for r in group:
+            src = str(r.get("source_item_key") or "").strip() or f"mult:{float(r.get('multiplier') or 1.0):.4f}"
+            by_source.setdefault(src, []).append(r)
+        tier_specs = []
+        for src, src_group in by_source.items():
+            mult = max(float(r.get("multiplier") or 1.0) for r in src_group)
+            expires = max(float(r.get("expires_at") or 0) for r in src_group)
+            if mult > 1.0 and expires > ts:
+                tier_specs.append((mult, expires, src))
+        if not tier_specs:
+            continue
+        tier_specs.sort(key=lambda t: (-t[0], -t[1], t[2]))
+        top_mult = tier_specs[0][0]
+        for mult, expires, src in tier_specs:
+            row = _hud_row_from_effect(
+                effect_key=effect_key,
+                multiplier=mult,
+                expires_at=expires,
+                source_item_key=src,
+                now=ts,
+                locale=locale,
+            )
+            if len(tier_specs) > 1:
+                row["key"] = f"{effect_key}:{src}"
+            if mult + 1e-9 < top_mult:
+                row["tier_standby"] = True
+                row["note"] = _tr_other(
+                    "boost_hud_tier_standby",
+                    "Wirkt nach Ende des höheren Boosts.",
+                    locale=locale,
+                )
+            out.append(row)
+    out.sort(
+        key=lambda r: (
+            str(r.get("affected_domain") or ""),
+            -int(r.get("effect_summary_params", {}).get("pct") or 0),
+            str(r.get("key") or ""),
         )
-    out.sort(key=lambda r: (str(r.get("affected_domain") or ""), str(r.get("key") or "")))
+    )
     return enrich_active_effects_with_resource_impacts(
         user_id,
         conn=conn,
@@ -513,6 +603,9 @@ def enrich_active_effects_with_resource_impacts(
         impacts: Dict[str, Dict[str, Any]] = {}
 
         if domain == "production":
+            if row.get("tier_standby") or row.get("hud_list_only"):
+                enriched.append(row)
+                continue
             for res_key, delta in prod_deltas.items():
                 if delta <= 0:
                     continue
@@ -521,6 +614,9 @@ def enrich_active_effects_with_resource_impacts(
                     "impact_summary": _format_hourly_delta_summary(delta, locale=locale),
                 }
         elif domain == "energy" and energy_delta > 0:
+            if row.get("tier_standby") or row.get("hud_list_only"):
+                enriched.append(row)
+                continue
             impacts["energy"] = {
                 "delta_total": int(energy_delta),
                 "impact_summary": _format_energy_delta_summary(energy_delta, locale=locale),

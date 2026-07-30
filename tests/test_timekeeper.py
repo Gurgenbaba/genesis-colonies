@@ -313,6 +313,11 @@ def test_api_timekeeper_apply_returns_state(timekeeper_db, monkeypatch):
     state = payload.get("state") or {}
     assert state.get("timekeeper", {}).get("balance_sec") == 1800
     assert payload.get("timekeeper", {}).get("balance_sec") == 1800
+    # GC-PERF-TK-003: action diet — no full panel catalogs on apply response
+    assert "buildings_panel" not in state
+    assert "codex" not in state
+    assert "shipyard" not in state
+    assert "defense" not in state
 
     bq = state.get("build_queue") or {}
     queue = bq.get("queue") if isinstance(bq, dict) else None
@@ -368,6 +373,9 @@ def test_api_timekeeper_apply_max_mode_debits_and_shortens(timekeeper_db, monkey
     assert int(payload.get("seconds_applied") or 0) == 600
     assert payload.get("timekeeper", {}).get("balance_sec") == 0
     assert (payload.get("state") or {}).get("timekeeper", {}).get("balance_sec") == 0
+    state = payload.get("state") or {}
+    assert "buildings_panel" not in state
+    assert "codex" not in state
 
     conn = db()
     try:

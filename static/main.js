@@ -1415,6 +1415,8 @@
   let _fleetRefreshSeq = 0;
   let _fleetStateRefreshPromise = null;
   let _fleetStateRefreshQueued = false;
+  /** @type {null | { planetId?: number, force?: boolean, reason?: string }} */
+  let _fleetStateRefreshQueuedOpts = null;
   let _fleetStateRefreshTimer = null;
   let _fleetStateRefreshReasons = new Set();
   const FLEET_STATE_REFRESH_COALESCE_MS = 200;
@@ -1969,6 +1971,7 @@
       _fleetStateRefreshTimer = null;
     }
     _fleetStateRefreshQueued = false;
+    _fleetStateRefreshQueuedOpts = null;
     _fleetStateRefreshReasons.clear();
     const lc = GC.pageLifecycle;
     lc.rafIds.forEach((id) => { try { cancelAnimationFrame(id); } catch (_) {} });
@@ -12548,8 +12551,21 @@
     const key = String(resKey || "");
     for (const [domain, keys] of Object.entries(_BOOST_DOMAIN_RES_KEYS)) {
       if (!keys.includes(key)) continue;
-      const match = effects.find((e) => e.affected_domain === domain);
-      if (match) return match;
+      const matches = (effects || []).filter((e) => e && e.affected_domain === domain);
+      if (!matches.length) continue;
+      // Prefer server aggregate chip row (stacked production total).
+      const chipOnly = matches.find((e) => e.hud_chip_only || e.stack_aggregate);
+      if (chipOnly) return chipOnly;
+      const listable = matches.filter((e) => !e.hud_list_only);
+      const pool = listable.length ? listable : matches;
+      pool.sort((a, b) => {
+        const pa = Number(a.effect_summary_params?.pct || 0);
+        const pb = Number(b.effect_summary_params?.pct || 0);
+        if (a.tier_standby && !b.tier_standby) return 1;
+        if (!a.tier_standby && b.tier_standby) return -1;
+        return pb - pa;
+      });
+      return pool[0];
     }
     return null;
   }
@@ -14794,6 +14810,7 @@
     }
     panel.hidden = false;
     list.innerHTML = effects
+      .filter((effect) => !effect.hud_chip_only && !effect.stack_aggregate)
       .map((effect) => {
         const rem = Math.max(0, Math.floor(Number(effect.remaining_seconds) || 0));
         const domainKey = `inv_boost_domain_${effect.affected_domain || "general"}`;
@@ -14804,6 +14821,10 @@
         return `<li class="inventory-active-booster-row" data-boost-key="${escapeHtml(effect.key || "")}" data-remaining-seconds="${rem}"><span class="inventory-active-booster-label">${escapeHtml(effect.label || "")}</span><span class="inventory-active-booster-effect">${escapeHtml(effect.effect_summary || "")}</span><span class="inventory-active-booster-domain">${escapeHtml(domain)}</span><span class="inventory-active-booster-time gc-mono" data-boost-remaining>${escapeHtml(formatDuration(rem))}</span>${note}</li>`;
       })
       .join("");
+    if (!list.innerHTML) {
+      panel.hidden = true;
+      return;
+    }
   }
 
   let _lootModalState = null;
@@ -20627,6 +20648,13 @@
     const applyLiveState = (page, state, opts) => {
       const rt = getFleetRuntime(page);
       if (!state || typeof state !== "object") return;
+      // GC-FLEET-PLANET-SWITCH-001: drop stale /api/fleet/state for a previous planet.
+      const pagePid = Number(page.dataset.planetId || rt.data?.planet_id || 0);
+      const statePid = Number(state.planet_id || 0);
+      if (pagePid > 0 && statePid > 0 && pagePid !== statePid) {
+        console.debug("[GC] fleet applyLiveState stale planet", { pagePid, statePid });
+        return;
+      }
       const seq = Number(opts?.seq || 0);
       if (seq > 0) {
         const last = Number(page._fleetApplySeq || 0);
@@ -20638,6 +20666,10 @@
         const lastSt = Number(page._fleetLiveServerTime || 0);
         if (lastSt && st < lastSt - 1) return;
         page._fleetLiveServerTime = Math.max(lastSt, st);
+      }
+      if (statePid > 0) {
+        page.dataset.planetId = String(statePid);
+        rt.data.planet_id = statePid;
       }
       if (state.server_time) setServerTime(state.server_time);
       if (state.resources) {
@@ -20709,12 +20741,32 @@
       }
     };
 
-    const refreshFleetState = async (page) => {
+    const refreshFleetState = async (page, opts) => {
+      const refreshOpts = opts && typeof opts === "object" ? opts : {};
+      const force = !!(refreshOpts.force || refreshOpts.reason === "planet_switch");
+      const optPlanetId = Number(refreshOpts.planetId || 0);
+      const targetPage = page || document.getElementById("fleet-page");
+      if (targetPage && optPlanetId > 0) {
+        targetPage.dataset.planetId = String(optPlanetId);
+        if (targetPage._fleetRt?.data) {
+          targetPage._fleetRt.data.planet_id = optPlanetId;
+        }
+      }
       if (_fleetStateRefreshPromise) {
         _fleetStateRefreshQueued = true;
+        // Prefer the latest forced planet-switch target over a bare coalesce.
+        if (force || optPlanetId > 0) {
+          _fleetStateRefreshQueuedOpts = {
+            ...(_fleetStateRefreshQueuedOpts || {}),
+            ...refreshOpts,
+            ...(optPlanetId > 0 ? { planetId: optPlanetId } : {}),
+            ...(force ? { force: true, reason: refreshOpts.reason || "planet_switch" } : {}),
+          };
+        } else if (!_fleetStateRefreshQueuedOpts) {
+          _fleetStateRefreshQueuedOpts = refreshOpts;
+        }
         return _fleetStateRefreshPromise;
       }
-      const targetPage = page || document.getElementById("fleet-page");
       if (!targetPage || targetPage.dataset.ready !== "1") {
         return null;
       }
@@ -20723,7 +20775,10 @@
       _fleetStateRefreshPromise = (async () => {
         try {
           const rt = getFleetRuntime(targetPage);
-          let planetId = parseInt(targetPage.dataset.planetId || rt.data?.planet_id || "0", 10);
+          let planetId = Number(optPlanetId || 0);
+          if (!planetId) {
+            planetId = parseInt(targetPage.dataset.planetId || rt.data?.planet_id || "0", 10);
+          }
           if (!planetId) {
             planetId = Number(GC.lastState?.active_planet_id || 0);
           }
@@ -20740,9 +20795,11 @@
         _fleetStateRefreshPromise = null;
         if (_fleetStateRefreshQueued) {
           _fleetStateRefreshQueued = false;
+          const queuedOpts = _fleetStateRefreshQueuedOpts;
+          _fleetStateRefreshQueuedOpts = null;
           const live = document.getElementById("fleet-page");
           if (live && live.dataset.ready === "1") {
-            void refreshFleetState(live);
+            void refreshFleetState(live, queuedOpts || undefined);
           }
         }
       });
@@ -25973,14 +26030,21 @@
           if (typeof GC.releaseShellNavigationBlockers === "function") {
             GC.releaseShellNavigationBlockers("planet_switch");
           }
+          // GC-FLEET-PLANET-SWITCH-001: soft fleet refresh with explicit planet gate
+          // (fleet stays in PLANET_SWITCH_SKIP_SSR to keep mission/coords draft).
           const fleetPage = document.getElementById("fleet-page");
           if (
             !onAdmin
+            && pageName === "fleet"
             && fleetPage
             && fleetPage.dataset.ready === "1"
             && typeof GC.refreshFleetState === "function"
           ) {
-            await GC.refreshFleetState(fleetPage);
+            await GC.refreshFleetState(fleetPage, {
+              planetId,
+              reason: "planet_switch",
+              force: true,
+            });
           }
           if (!onAdmin) {
             GC.startPolling(anyActive || hasBusyLiveActivity());
