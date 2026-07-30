@@ -97,3 +97,15 @@ def test_gc583e_send_enforces_mission_lock():
     submit = js.split('e.target.closest("#fleet-send-form")', 1)[1]
     submit = submit.split("page.querySelectorAll(\"[data-ship-input]\")", 1)[0]
     assert "enforceFleetUrlMissionLock(page)" in submit
+
+
+def test_gc_wb_fleet_prefill_combat_max_select():
+    """GC-WB-FLEET-PREFILL-001 — world_boss attack URL prefill uses setFleetShipInputValue."""
+    js = _fleet_js()
+    body = js.split("function applyFleetUrlPrefill(page)", 1)[1]
+    assert 'prefillMission === "attack"' in body
+    assert 'prefillTargetType === "world_boss"' in body
+    assert "setFleetShipInputValue" in body
+    assert "eclipse_runner" in body
+    assert 'data-ship-role' in body or 'data-ship-role' in js
+    assert 'role !== "combat"' in body

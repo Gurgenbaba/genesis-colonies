@@ -6961,5 +6961,9 @@
   "admin_inactive_autoplay_kpi_shift_cap": "Shift cap",
   "admin_inactive_autoplay_kpi_day_target": "Day target (Berlin)",
   "admin_inactive_autoplay_kpi_tenure": "Shift tenure (s)",
-  "admin_inactive_autoplay_col_tenure_left": "Tenure left"
+  "admin_inactive_autoplay_col_tenure_left": "Tenure left",
+  "wb_auto_attack": "Auto-Attack",
+  "wb_auto_attack_success": "Combat fleet sent to %(coords)s (%(count)s ships).",
+  "wb_auto_attack_no_ships": "No combat ships available on the active planet.",
+  "fleet_error_no_combat_ships_available": "No combat ships available on the active planet."
 }

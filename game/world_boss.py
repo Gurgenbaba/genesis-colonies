@@ -477,6 +477,7 @@ def get_bosses_for_system(
                 f"&target_galaxy={int(event['galaxy'])}"
                 f"&target_system={int(event['system'])}"
                 f"&target_position={int(event['position'])}"
+                f"&target_type=world_boss"
             ),
             "wave_cooldown_sec": int(WAVE_COOLDOWN_SEC),
             "max_waves": int(MAX_WAVES_PER_PLAYER),
@@ -665,6 +666,187 @@ def _resolve_phase_stacks(
     for key, qty in chosen_stacks.items():
         scaled[key] = max(0, int(round(int(qty) * max(0.05, ratio))))
     return phase_index, scaled
+
+
+def combat_ships_from_hangar(hangar: Mapping[str, int] | None) -> Dict[str, int]:
+    """Combat-role hulls (+ eclipse hybrid) available for WB auto-attack / prefill parity."""
+    from .fleet_defs import ship_has_role
+
+    out: Dict[str, int] = {}
+    for key, amount in dict(hangar or {}).items():
+        qty = int(amount or 0)
+        if qty <= 0:
+            continue
+        sk = str(key)
+        if ship_has_role(sk, "combat") or sk == "eclipse_runner":
+            out[sk] = qty
+    return out
+
+
+def defender_ships_for_event(event: Mapping[str, Any], *, conn=None) -> Dict[str, int]:
+    """Current phase defender stacks for an active world-boss event."""
+    definition = get_definition(str(event.get("boss_key") or ""), conn=conn) or {}
+    _phase, defender_ships = _resolve_phase_stacks(
+        definition,
+        current_hp=int(event.get("current_hp") or 0),
+        max_hp=int(event.get("max_hp") or 0),
+        current_stacks=event.get("fleet_stacks") or {},
+    )
+    return dict(defender_ships or {})
+
+
+def _scale_ship_counts(ships: Mapping[str, int], parts: int, *, total_parts: int = 10_000) -> Dict[str, int]:
+    """Integer scale ``parts/total_parts`` of each ship count (floor, drop zeros)."""
+    p = max(0, int(parts))
+    denom = max(1, int(total_parts))
+    out: Dict[str, int] = {}
+    for key, amount in dict(ships or {}).items():
+        qty = int(amount or 0)
+        if qty <= 0:
+            continue
+        scaled = (qty * p) // denom
+        if scaled > 0:
+            out[str(key)] = int(scaled)
+    return out
+
+
+def estimate_world_boss_wave_damage(
+    attacker_ships: Mapping[str, int],
+    defender_ships: Mapping[str, int],
+    max_hp: int,
+    *,
+    rng_seed: int,
+    conn=None,
+) -> int:
+    """Deterministic HP-damage estimate for auto-attack trim (plan seed ≠ arrival seed)."""
+    import random
+
+    from .combat import attacker_stacks_from_fleet, simulate_battle
+    from .combat_models import COMBAT_UNIT_SHIP, stacks_from_counts
+
+    atk = {
+        str(k): max(0, int(v or 0))
+        for k, v in dict(attacker_ships or {}).items()
+        if int(v or 0) > 0
+    }
+    if not atk:
+        return 0
+    def_ships = {
+        str(k): max(0, int(v or 0))
+        for k, v in dict(defender_ships or {}).items()
+        if int(v or 0) > 0
+    }
+    result = simulate_battle(
+        attacker_stacks_from_fleet(atk),
+        stacks_from_counts(def_ships, unit_type=COMBAT_UNIT_SHIP),
+        rng=random.Random(int(rng_seed)),
+        attacker_player_id=None,
+        defender_player_id=None,
+        conn=conn,
+    )
+    return int(
+        compute_world_boss_hp_damage(
+            defender_ships_before=def_ships,
+            defender_losses=result.defender_losses or {},
+            max_hp=int(max_hp),
+            attacker_ships_before=atk,
+        )
+    )
+
+
+def select_world_boss_auto_attack_ships(
+    hangar: Mapping[str, int],
+    *,
+    defender_ships: Mapping[str, int],
+    max_hp: int,
+    event_id: int = 0,
+    conn=None,
+    safety_parts: int = 1_500,
+) -> Tuple[Dict[str, int], Dict[str, Any]]:
+    """
+    GC-WB-AUTO-ATTACK-001 — smallest proportional combat fleet matching full-hangar max HP damage.
+
+    Binary-searches a scale of the combat pool so Auto-Attack does not dump the entire hangar
+    when a fraction already reaches the player's achievable wave damage (incl. soft overkill cap).
+    A small safety margin covers arrival RNG differing from the plan seed.
+    """
+    pool = combat_ships_from_hangar(hangar)
+    pool_count = int(sum(pool.values()))
+    meta: Dict[str, Any] = {
+        "pool_ships": dict(pool),
+        "pool_sent_count": pool_count,
+        "ships": {},
+        "sent_count": 0,
+        "ship_types": 0,
+        "trimmed": False,
+        "scale_parts": 10_000,
+        "damage_full": 0,
+        "damage_estimate": 0,
+    }
+    if pool_count <= 0:
+        return {}, meta
+
+    seed = 900_000_000 + int(event_id or 0)
+    d_full = estimate_world_boss_wave_damage(
+        pool, defender_ships, max_hp, rng_seed=seed, conn=conn
+    )
+    hp_budget = max(0, int(max_hp))
+    damage_cap = int(float(hp_budget) * float(MAX_WAVE_HP_FRACTION)) if hp_budget > 0 else 0
+    # Target = boss wave max HP damage (8% cap) when hangar can reach it; else best effort.
+    target = int(min(d_full, damage_cap)) if damage_cap > 0 else int(d_full)
+    meta["damage_full"] = int(d_full)
+    meta["damage_cap"] = int(damage_cap)
+    meta["damage_target"] = int(target)
+    if d_full <= 0 or target <= 0:
+        # Cannot score with the plan seed — still send the combat pool (real arrival may differ).
+        meta["ships"] = dict(pool)
+        meta["sent_count"] = pool_count
+        meta["ship_types"] = len(pool)
+        return dict(pool), meta
+
+    total_parts = 10_000
+    lo, hi = 1, total_parts
+    best_parts = total_parts
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        candidate = _scale_ship_counts(pool, mid, total_parts=total_parts)
+        if not candidate:
+            lo = mid + 1
+            continue
+        dmg = estimate_world_boss_wave_damage(
+            candidate, defender_ships, max_hp, rng_seed=seed, conn=conn
+        )
+        if dmg >= target:
+            best_parts = mid
+            hi = mid - 1
+        else:
+            lo = mid + 1
+
+    # Buffer against arrival RNG / phase drift (capped at full pool).
+    buffered_parts = min(total_parts, int(best_parts) + max(0, int(safety_parts)))
+    selected = _scale_ship_counts(pool, buffered_parts, total_parts=total_parts)
+    if not selected:
+        selected = dict(pool)
+        buffered_parts = total_parts
+    d_sel = estimate_world_boss_wave_damage(
+        selected, defender_ships, max_hp, rng_seed=seed, conn=conn
+    )
+    if d_sel < target:
+        selected = dict(pool)
+        buffered_parts = total_parts
+        d_sel = d_full
+
+    meta.update(
+        {
+            "ships": dict(selected),
+            "sent_count": int(sum(selected.values())),
+            "ship_types": len(selected),
+            "trimmed": int(sum(selected.values())) < pool_count,
+            "scale_parts": int(buffered_parts),
+            "damage_estimate": int(d_sel),
+        }
+    )
+    return dict(selected), meta
 
 
 def compute_world_boss_hp_damage(

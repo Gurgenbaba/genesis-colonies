@@ -65,7 +65,7 @@
         {% set waves_done = (player_info.contribution.waves if player_info and player_info.contribution else (atk_meta.waves if atk_meta.waves is defined else 0))|int %}
         {% set waves_max = (atk_meta.max_waves if atk_meta.max_waves is defined else 40)|int %}
         {% set cool_sec = (atk_meta.wave_cooldown_sec if atk_meta.wave_cooldown_sec is defined else 300)|int %}
-        {% set attack_href = url_for('fleet_view') ~ '?mission=attack&target_galaxy=' ~ event.galaxy ~ '&target_system=' ~ event.system ~ '&target_position=' ~ event.position %}
+        {% set attack_href = url_for('fleet_view') ~ '?mission=attack&target_galaxy=' ~ event.galaxy ~ '&target_system=' ~ event.system ~ '&target_position=' ~ event.position ~ '&target_type=world_boss' %}
         <article class="gc-world-boss-card {% if is_active %}gc-world-boss-card--active{% endif %}"
                  data-wb-event-id="{{ event.id }}">
           <header class="gc-world-boss-card-head">
@@ -141,16 +141,33 @@
               <p class="gc-world-boss-actions">
                 {% if player_info and player_info.attack_block_reason == 'world_boss_wave_limit' %}
                 <span class="gc-btn gc-btn-primary is-disabled" aria-disabled="true">{{ T("wb_attack", "Angreifen") }}</span>
+                <span class="gc-btn gc-btn-primary is-disabled" aria-disabled="true">{{ T("wb_auto_attack", "Auto-Angriff") }}</span>
                 {% elif player_info and player_info.attack_block_reason in ('world_boss_cooldown', 'world_boss_inflight') and atk_meta.next_attack_at %}
                 <a class="gc-btn gc-btn-primary is-disabled wb-attack-btn"
                    href="{{ attack_href }}"
                    aria-disabled="true"
                    tabindex="-1"
                    data-wb-locked-until="{{ atk_meta.next_attack_at|int }}">{{ T("wb_attack", "Angreifen") }}</a>
+                <button type="button"
+                        class="gc-btn gc-btn-primary is-disabled wb-auto-attack-btn"
+                        aria-disabled="true"
+                        tabindex="-1"
+                        data-wb-auto-attack
+                        data-wb-locked-until="{{ atk_meta.next_attack_at|int }}"
+                        data-target-galaxy="{{ event.galaxy }}"
+                        data-target-system="{{ event.system }}"
+                        data-target-position="{{ event.position }}">{{ T("wb_auto_attack", "Auto-Angriff") }}</button>
                 {% elif player_info and player_info.attack_block_reason == 'world_boss_inflight' %}
                 <span class="gc-btn gc-btn-primary is-disabled" aria-disabled="true">{{ T("wb_attack", "Angreifen") }}</span>
+                <span class="gc-btn gc-btn-primary is-disabled" aria-disabled="true">{{ T("wb_auto_attack", "Auto-Angriff") }}</span>
                 {% else %}
                 <a class="gc-btn gc-btn-primary wb-attack-btn" href="{{ attack_href }}">{{ T("wb_attack", "Angreifen") }}</a>
+                <button type="button"
+                        class="gc-btn gc-btn-primary wb-auto-attack-btn"
+                        data-wb-auto-attack
+                        data-target-galaxy="{{ event.galaxy }}"
+                        data-target-system="{{ event.system }}"
+                        data-target-position="{{ event.position }}">{{ T("wb_auto_attack", "Auto-Angriff") }}</button>
                 {% endif %}
                 <a class="gc-btn" href="{{ url_for('galaxy_view') }}?galaxy={{ event.galaxy }}&system={{ event.system }}">
                   {{ T("wb_galaxy", "Zur Galaxie") }}

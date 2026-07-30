@@ -134,7 +134,11 @@ Admin panel tab **World Boss** (`templates/admin_panel.html` + `static/admin.js`
 - Spawn form posts to existing `POST /api/admin/world-boss/spawn` (`boss_key`, optional G/S/P, `force`, `announce`)
 - No second spawn owner — same `spawn_world_boss` path as cron/admin API
 
-Fleet deep-link: `/fleet?mission=attack&target_galaxy=G&target_system=S&target_position=P`
+Fleet deep-link: `/fleet?mission=attack&target_galaxy=G&target_system=S&target_position=P&target_type=world_boss`
+
+Prefill (GC-WB-FLEET-PREFILL-001): with `mission=attack` and `target_type=world_boss`, the fleet UI max-selects combat hulls (`data-ship-role=combat`) plus `eclipse_runner` on the active planet via `applyFleetUrlPrefill` / `setFleetShipInputValue`. Normal PvP attack links without `target_type=world_boss` are unchanged.
+
+Auto-Attack (GC-WB-AUTO-ATTACK-001): World Boss page button `data-wb-auto-attack` posts `POST /api/fleet/send` with `world_boss_auto_attack: true`. Server picks combat hulls (`select_world_boss_auto_attack_ships`: combat role + `eclipse_runner`) and **trims** the proportional fleet to the smallest scale that still deals the player's max achievable wave HP damage vs the current boss phase (soft overkill cap). Sends via existing `send_fleet`. Deep-link Prefill (full max-select) remains for manual adjust.
 
 Boss art: `static/img/bosses/{boss_key}.png` with fallback `_placeholder.png`.
 

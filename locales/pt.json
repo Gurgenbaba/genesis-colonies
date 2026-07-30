@@ -6961,5 +6961,9 @@
   "admin_inactive_autoplay_kpi_shift_cap": "Teto do turno",
   "admin_inactive_autoplay_kpi_day_target": "Alvo diurno (Berlim)",
   "admin_inactive_autoplay_kpi_tenure": "Duração do turno (s)",
-  "admin_inactive_autoplay_col_tenure_left": "Turno restante"
+  "admin_inactive_autoplay_col_tenure_left": "Turno restante",
+  "wb_auto_attack": "Ataque automático",
+  "wb_auto_attack_success": "Frota de combate enviada para %(coords)s (%(count)s naves).",
+  "wb_auto_attack_no_ships": "Sem naves de combate no planeta ativo.",
+  "fleet_error_no_combat_ships_available": "Sem naves de combate no planeta ativo."
 }

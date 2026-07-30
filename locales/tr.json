@@ -6961,5 +6961,9 @@
   "admin_inactive_autoplay_kpi_shift_cap": "Vardiya tavanı",
   "admin_inactive_autoplay_kpi_day_target": "Gündüz hedefi (Berlin)",
   "admin_inactive_autoplay_kpi_tenure": "Vardiya süresi (s)",
-  "admin_inactive_autoplay_col_tenure_left": "Kalan vardiya"
+  "admin_inactive_autoplay_col_tenure_left": "Kalan vardiya",
+  "wb_auto_attack": "Otomatik Saldırı",
+  "wb_auto_attack_success": "Savaş filosu %(coords)s konumuna gönderildi (%(count)s gemi).",
+  "wb_auto_attack_no_ships": "Aktif gezegende savaş gemisi yok.",
+  "fleet_error_no_combat_ships_available": "Aktif gezegende savaş gemisi yok."
 }

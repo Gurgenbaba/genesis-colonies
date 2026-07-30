@@ -9460,15 +9460,19 @@ def api_fleet_send():
     data = request.get_json(silent=True) or {}
     galaxy_quick_spy = bool(data.get("galaxy_quick_spy"))
     galaxy_quick_attack = bool(data.get("galaxy_quick_attack"))
-    if galaxy_quick_spy and galaxy_quick_attack:
+    world_boss_auto_attack = bool(data.get("world_boss_auto_attack"))
+    quick_flags = sum(1 for f in (galaxy_quick_spy, galaxy_quick_attack, world_boss_auto_attack) if f)
+    if quick_flags > 1:
         return jsonify(fleet_err("invalid_request")), 400
     mission_raw = str(data.get("mission_type") or "").strip().lower()
     if galaxy_quick_spy and mission_raw != "spy":
         return jsonify(fleet_err("invalid_mission")), 400
     if galaxy_quick_attack and mission_raw != "attack":
         return jsonify(fleet_err("invalid_mission")), 400
+    if world_boss_auto_attack and mission_raw != "attack":
+        return jsonify(fleet_err("invalid_mission")), 400
     ships = {}
-    if not galaxy_quick_spy and not galaxy_quick_attack:
+    if not galaxy_quick_spy and not galaxy_quick_attack and not world_boss_auto_attack:
         ships = normalize_ships(data.get("ships") or {})
         if not ships and data.get("ships"):
             return jsonify(fleet_err("unknown_ship")), 400
@@ -9493,6 +9497,7 @@ def api_fleet_send():
         preset_id_send = int(data["preset_id"]) if data.get("preset_id") else None
         quick_spy_meta = None
         quick_attack_meta = None
+        wb_auto_meta = None
         if galaxy_quick_attack:
             from game.fleet import resolve_galaxy_quick_attack
 
@@ -9517,6 +9522,21 @@ def api_fleet_send():
                 return False, spy_reason, spy_ctx
             send_ships = spy_ctx.get("ships") or {}
             quick_spy_meta = spy_ctx
+        elif world_boss_auto_attack:
+            from game.fleet import resolve_world_boss_auto_attack_ships
+
+            ok_wb, wb_reason, wb_ctx = resolve_world_boss_auto_attack_ships(
+                user_id,
+                int(origin_id),
+                target_galaxy=int(data.get("target_galaxy") or 0),
+                target_system=int(data.get("target_system") or 0),
+                target_position=int(data.get("target_position") or 0),
+                conn=conn,
+            )
+            if not ok_wb:
+                return False, wb_reason, wb_ctx
+            send_ships = wb_ctx.get("ships") or {}
+            wb_auto_meta = wb_ctx
         ok, reason, result = send_fleet(
             player_id=user_id,
             origin_planet_id=origin_id,
@@ -9546,6 +9566,10 @@ def api_fleet_send():
             merged = dict(result)
             merged["galaxy_quick_attack"] = quick_attack_meta
             return True, reason, merged
+        if ok and result and wb_auto_meta:
+            merged = dict(result)
+            merged["world_boss_auto_attack"] = wb_auto_meta
+            return True, reason, merged
         return ok, reason, result
 
     ok, reason, result = _fleet_write_transaction(_send)
@@ -9563,6 +9587,8 @@ def api_fleet_send():
             live["galaxy_quick_spy"] = result["galaxy_quick_spy"]
         if result.get("galaxy_quick_attack"):
             live["galaxy_quick_attack"] = result["galaxy_quick_attack"]
+        if result.get("world_boss_auto_attack"):
+            live["world_boss_auto_attack"] = result["world_boss_auto_attack"]
         body = fleet_ok(live, message_key="fleet_send_success")
         body["state"] = state
         return jsonify(body)

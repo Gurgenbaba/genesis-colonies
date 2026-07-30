@@ -6961,5 +6961,9 @@
   "admin_inactive_autoplay_kpi_shift_cap": "Лимит смены",
   "admin_inactive_autoplay_kpi_day_target": "Дневная цель (Берлин)",
   "admin_inactive_autoplay_kpi_tenure": "Длительность смены (с)",
-  "admin_inactive_autoplay_col_tenure_left": "Осталось в смене"
+  "admin_inactive_autoplay_col_tenure_left": "Осталось в смене",
+  "wb_auto_attack": "Автоатака",
+  "wb_auto_attack_success": "Боевой флот отправлен на %(coords)s (%(count)s кораблей).",
+  "wb_auto_attack_no_ships": "На активной планете нет боевых кораблей.",
+  "fleet_error_no_combat_ships_available": "На активной планете нет боевых кораблей."
 }

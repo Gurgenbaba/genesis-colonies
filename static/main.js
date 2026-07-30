@@ -21207,6 +21207,7 @@
     GC.refreshFleetState = refreshFleetState;
     GC.runFleetPreview = runPreview;
     GC.applyFleetUrlPrefill = applyFleetUrlPrefill;
+    GC.setFleetShipInputValue = setFleetShipInputValue;
     GC.pickDefaultFleetTargetIfNeeded = pickDefaultFleetTargetIfNeeded;
     GC.getFleetWorldKey = getFleetWorldKey;
     GC.clearFleetWorldKey = clearFleetWorldKey;
@@ -22785,6 +22786,10 @@
     } else if (typeof GC.clearFleetWorldKey === "function") {
       GC.clearFleetWorldKey(page);
     }
+    // GC-WB-FLEET-PREFILL-001: target_type from URL even without world_key (WB attack deep-link).
+    if (targetTypeRaw) {
+      page.dataset.fleetTargetType = targetTypeRaw;
+    }
 
     const colonyName = params.get("colony_name");
     if (colonyName) {
@@ -22807,6 +22812,29 @@
     if (typeof GC.syncFleetWorldTargetUi === "function") GC.syncFleetWorldTargetUi(page);
     if (typeof GC.enforceFleetUrlMissionLock === "function") GC.enforceFleetUrlMissionLock(page);
     if (typeof GC.syncFleetMissionLockUi === "function") GC.syncFleetMissionLockUi(page);
+
+    // GC-WB-FLEET-PREFILL-001: max-select combat hulls (+ Eclipse Runner) for WB attack only.
+    const prefillMission = (page.dataset.fleetUrlMission || missionRaw || "").trim().toLowerCase();
+    const prefillTargetType = (page.dataset.fleetTargetType || targetTypeRaw || "").trim().toLowerCase();
+    if (prefillMission === "attack" && prefillTargetType === "world_boss") {
+      page.querySelectorAll("[data-ship-key][data-ship-have]").forEach((row) => {
+        const role = (row.getAttribute("data-ship-role") || "").trim().toLowerCase();
+        const key = (row.getAttribute("data-ship-key") || "").trim();
+        if (role !== "combat" && key !== "eclipse_runner") return;
+        const have = parseInt(row.getAttribute("data-ship-have") || "0", 10) || 0;
+        if (have <= 0) return;
+        const inp = form.querySelector(`[data-ship-input="${key}"]`);
+        if (!inp) return;
+        if (typeof GC.setFleetShipInputValue === "function") {
+          GC.setFleetShipInputValue(page, inp, have);
+        } else {
+          setNumberInputValue(inp, have);
+          inp.dispatchEvent(new Event("input", { bubbles: true }));
+          inp.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      });
+    }
+
     if (typeof GC.runFleetPreview === "function") {
       GC.runFleetPreview(page);
     }
@@ -32247,13 +32275,16 @@
   };
   function bindWorldBossAttackCooldownUnlock(root) {
     if (!root) return;
-    root.querySelectorAll(".wb-attack-btn[data-wb-locked-until]").forEach((attackBtn) => {
+    root
+      .querySelectorAll(".wb-attack-btn[data-wb-locked-until], [data-wb-auto-attack][data-wb-locked-until]")
+      .forEach((attackBtn) => {
       if (attackBtn.dataset.wbCdBound === "1") return;
       attackBtn.dataset.wbCdBound = "1";
       attackBtn.addEventListener("click", (ev) => {
         if (
           attackBtn.classList.contains("is-disabled") ||
-          attackBtn.getAttribute("aria-disabled") === "true"
+          attackBtn.getAttribute("aria-disabled") === "true" ||
+          attackBtn.disabled
         ) {
           ev.preventDefault();
           ev.stopPropagation();
@@ -32276,6 +32307,7 @@
         btn.removeAttribute("tabindex");
         btn.removeAttribute("data-wb-locked-until");
         btn.removeAttribute("title");
+        if (btn.tagName === "BUTTON") btn.disabled = false;
 
         const card = btn.closest(".gc-world-boss-card") || root;
         const cdBlock = card.querySelector("[data-wb-attack-cooldown]");
@@ -32394,6 +32426,91 @@
           }
         } catch (_err) {
           claimBtn.disabled = false;
+        }
+      });
+    });
+
+    // GC-WB-AUTO-ATTACK-001 — one-click combat fleet via existing /api/fleet/send
+    root.querySelectorAll("[data-wb-auto-attack]").forEach((autoBtn) => {
+      if (autoBtn.dataset.wbAutoBound === "1") return;
+      autoBtn.dataset.wbAutoBound = "1";
+      autoBtn.addEventListener("click", async (ev) => {
+        if (
+          autoBtn.disabled ||
+          autoBtn.classList.contains("is-disabled") ||
+          autoBtn.getAttribute("aria-disabled") === "true" ||
+          autoBtn.dataset.submitting === "1"
+        ) {
+          ev.preventDefault();
+          return;
+        }
+        const g = parseInt(autoBtn.getAttribute("data-target-galaxy") || "0", 10);
+        const s = parseInt(autoBtn.getAttribute("data-target-system") || "0", 10);
+        const p = parseInt(autoBtn.getAttribute("data-target-position") || "0", 10);
+        if (!(g > 0 && s > 0 && p > 0)) return;
+        const coords = `${g}:${s}:${p}`;
+        autoBtn.disabled = true;
+        autoBtn.dataset.submitting = "1";
+        try {
+          const res = await GC.fetchGameAction("/api/fleet/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({
+              mission_type: "attack",
+              target_galaxy: g,
+              target_system: s,
+              target_position: p,
+              target_type: "world_boss",
+              world_boss_auto_attack: true,
+              resources: {},
+              speed_percent: 100,
+            }),
+          });
+          if (res && res.state && typeof GC.applyActionState === "function") {
+            GC.applyActionState(res, res.ok ? "world_boss_auto_attack" : "world_boss_auto_attack_error");
+          }
+          if (res && res.ok) {
+            const payload = res.data && typeof res.data === "object" ? res.data : res;
+            const meta = payload.world_boss_auto_attack || {};
+            const sent = parseInt(meta.sent_count, 10) || 0;
+            const tpl = t(
+              "wb_auto_attack_success",
+              "Kampfflotte nach %(coords)s gesendet (%(count)s Schiffe)."
+            );
+            showNotify(
+              tpl.replace("%(coords)s", coords).replace("%(count)s", String(sent)),
+              "success"
+            );
+            if (typeof GC.reloadCurrentPage === "function") {
+              GC.reloadCurrentPage();
+            }
+          } else {
+            const reason = String(res?.error || res?.reason || "generic");
+            let msg;
+            if (reason === "no_combat_ships_available" || reason === "not_enough_ships") {
+              msg = t(
+                "wb_auto_attack_no_ships",
+                "Keine Kampfschiffe auf dem aktiven Planeten."
+              );
+            } else if (reason === "world_boss_cooldown") {
+              msg = t("wb_attack_cooldown", "Nächster Angriff in") + "…";
+            } else if (reason === "world_boss_inflight") {
+              msg = t("wb_attack_inflight", "Angriffsflotte bereits unterwegs.");
+            } else if (reason === "world_boss_wave_limit") {
+              msg = t("wb_attack_wave_limit", "Wellenlimit für dieses Ereignis erreicht.");
+            } else if (typeof mapActionError === "function") {
+              msg = mapActionError(reason, res);
+            } else {
+              msg = t(`fleet_error_${reason}`, t("msg_action_failed", "Aktion fehlgeschlagen."));
+            }
+            showNotify(msg, "error");
+            autoBtn.disabled = false;
+            delete autoBtn.dataset.submitting;
+          }
+        } catch (_err) {
+          showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
+          autoBtn.disabled = false;
+          delete autoBtn.dataset.submitting;
         }
       });
     });

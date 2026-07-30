@@ -27881,6 +27881,11 @@ button.pe-hero-planet-hint:focus-visible {
   margin: 0.55rem 0 0.35rem;
   justify-content: center;
 }
+/* Match attack / auto-attack visuals (button vs <a> font + primary fill). */
+.gc-world-boss-page .gc-world-boss-actions .wb-attack-btn,
+.gc-world-boss-page .gc-world-boss-actions .wb-auto-attack-btn {
+  font-family: inherit;
+}
 .gc-world-boss-page .gc-world-boss-waves {
   margin: 0.15rem 0;
   font-size: 0.8rem;

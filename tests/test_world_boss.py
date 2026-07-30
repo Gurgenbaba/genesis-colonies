@@ -10,7 +10,13 @@ import pytest
 
 from game import db as gdb
 from game.db import begin_write_transaction, commit, db
-from game.fleet import add_planet_ships, resolve_fleet_target, send_fleet
+from game.fleet import (
+    add_planet_ships,
+    get_planet_ships,
+    resolve_fleet_target,
+    resolve_world_boss_auto_attack_ships,
+    send_fleet,
+)
 from game.models import create_user, ensure_player_and_homeworld, get_planets_by_player, init_db
 from game.world_boss import (
     WAVE_COOLDOWN_SEC,
@@ -22,6 +28,7 @@ from game.world_boss import (
     list_alliance_contributions,
     list_contributions,
     resolve_attack_arrival,
+    select_world_boss_auto_attack_ships,
     spawn_world_boss,
     tick_world_boss_schedule,
     world_boss_schema_ready,
@@ -132,6 +139,7 @@ def test_spawn_and_galaxy_attach(wb_db):
         assert "target_system=1" in link
         assert "target_position=8" in link
         assert "mission=attack" in link
+        assert "target_type=world_boss" in link
         assert "&galaxy=" not in link.replace("target_galaxy=", "")
         at = get_active_event_at(1, 1, 8, conn=conn)
         assert at and at["id"] == event["id"]
@@ -163,6 +171,19 @@ def test_world_boss_galaxy_ui_contracts():
     marker = Path("templates/partials/galaxy_ring_world_boss_marker.html").read_text(encoding="utf-8")
     assert "galaxy-ring-wb-marker" in marker
     assert "fleet_deep_link" in marker
+    assert "target_type=world_boss" in marker
+
+    wb_page = Path("templates/world_boss.html").read_text(encoding="utf-8")
+    assert "target_type=world_boss" in wb_page
+    assert "data-wb-auto-attack" in wb_page
+    assert "wb_auto_attack" in wb_page
+
+    wb_block = Path("templates/partials/galaxy_world_boss_block.html").read_text(encoding="utf-8")
+    assert "target_type=world_boss" in wb_block
+
+    main_js = Path("static/main.js").read_text(encoding="utf-8")
+    assert "world_boss_auto_attack: true" in main_js
+    assert "resolve_world_boss_auto_attack_ships" not in main_js  # server-owned ship pick
 
     hover_stack = Path("templates/partials/galaxy_ring_slot_hover_stack.html").read_text(encoding="utf-8")
     assert "galaxy-ring-slot-hover-stack" in hover_stack
@@ -1260,3 +1281,282 @@ def test_payload_exposes_attack_cooldown(wb_db):
         commit(conn)
     finally:
         conn.close()
+
+
+def test_select_world_boss_auto_attack_ships_trims_overkill(wb_db):
+    """Hangar past the 8% wave HP cap → send only what is needed for the cap."""
+    hangar = {
+        "ironclad_frigate": 2_000_000,
+        "falcon_interceptor": 10_000,
+        "mule_courier": 99_000,
+    }
+    defender = {"falcon_interceptor": 20}
+    selected, meta = select_world_boss_auto_attack_ships(
+        hangar,
+        defender_ships=defender,
+        max_hp=5_000_000,
+        event_id=42,
+        safety_parts=500,
+    )
+    assert meta["damage_full"] >= meta["damage_cap"] > 0
+    assert meta["trimmed"] is True
+    assert meta["sent_count"] < meta["pool_sent_count"]
+    assert meta["sent_count"] == sum(selected.values())
+    assert "mule_courier" not in selected
+    assert selected
+    # Trimmed fleet still hits the boss wave damage cap.
+    assert meta["damage_estimate"] >= meta["damage_target"]
+    assert meta["damage_estimate"] >= meta["damage_cap"]
+
+
+def test_resolve_world_boss_auto_attack_ships_combat_only(wb_db):
+    """GC-WB-AUTO-ATTACK-001 — only combat role + eclipse_runner; cargo ignored."""
+    uid = _player(name="AutoPick")
+    pid = _home(uid)
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        add_planet_ships(
+            pid,
+            uid,
+            {
+                "falcon_interceptor": 10,
+                "ironclad_frigate": 2,
+                "eclipse_runner": 3,
+                "mule_courier": 50,
+                "veil_probe": 5,
+            },
+            conn=conn,
+        )
+        home = conn.execute(
+            "SELECT galaxy, system, position FROM planets WHERE id = ?;",
+            (pid,),
+        ).fetchone()
+        hg, hs, hp = int(home["galaxy"]), int(home["system"]), int(home["position"])
+        boss_pos = 8 if hp != 8 else 9
+        spawn = spawn_world_boss(
+            "ancient_leviathan",
+            conn=conn,
+            galaxy=hg,
+            system=hs,
+            position=boss_pos,
+            announce=False,
+        )
+        assert spawn["ok"], spawn
+        commit(conn)
+        ok, reason, meta = resolve_world_boss_auto_attack_ships(
+            uid,
+            pid,
+            target_galaxy=hg,
+            target_system=hs,
+            target_position=boss_pos,
+            conn=conn,
+        )
+        assert ok is True
+        assert reason == ""
+        assert "mule_courier" not in meta["ships"]
+        assert "veil_probe" not in meta["ships"]
+        assert set(meta["ships"]).issubset(
+            {"falcon_interceptor", "ironclad_frigate", "eclipse_runner"}
+        )
+        assert meta["sent_count"] > 0
+        assert meta["sent_count"] <= 15
+    finally:
+        conn.close()
+
+
+def test_resolve_world_boss_auto_attack_ships_empty(wb_db):
+    uid = _player(name="AutoEmpty")
+    pid = _home(uid)
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        add_planet_ships(pid, uid, {"mule_courier": 20}, conn=conn)
+        home = conn.execute(
+            "SELECT galaxy, system, position FROM planets WHERE id = ?;",
+            (pid,),
+        ).fetchone()
+        hg, hs, hp = int(home["galaxy"]), int(home["system"]), int(home["position"])
+        boss_pos = 5 if hp != 5 else 6
+        spawn = spawn_world_boss(
+            "void_titan",
+            conn=conn,
+            galaxy=hg,
+            system=hs,
+            position=boss_pos,
+            announce=False,
+        )
+        assert spawn["ok"], spawn
+        commit(conn)
+        ok, reason, meta = resolve_world_boss_auto_attack_ships(
+            uid,
+            pid,
+            target_galaxy=hg,
+            target_system=hs,
+            target_position=boss_pos,
+            conn=conn,
+        )
+        assert ok is False
+        assert reason == "no_combat_ships_available"
+        assert meta["sent_count"] == 0
+    finally:
+        conn.close()
+
+
+def test_api_world_boss_auto_attack_send(wb_db, monkeypatch):
+    """GC-WB-AUTO-ATTACK-001 — flag fills/trims ships and uses send_fleet."""
+    import importlib
+
+    import app as app_module
+
+    monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
+    importlib.reload(app_module)
+
+    uid = _player(name="AutoSend")
+    pid = _home(uid)
+    _fund(pid)
+    _seed_combat_fleet(pid, uid)
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        add_planet_ships(pid, uid, {"mule_courier": 40, "eclipse_runner": 7}, conn=conn)
+        home = conn.execute(
+            "SELECT galaxy, system, position FROM planets WHERE id = ?;",
+            (pid,),
+        ).fetchone()
+        hg, hs, hp = int(home["galaxy"]), int(home["system"]), int(home["position"])
+        boss_pos = 8 if hp != 8 else 9
+        spawn = spawn_world_boss(
+            "ancient_leviathan",
+            conn=conn,
+            galaxy=hg,
+            system=hs,
+            position=boss_pos,
+            announce=False,
+        )
+        assert spawn["ok"], spawn
+        commit(conn)
+    finally:
+        conn.close()
+
+    client = app_module.app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+
+    before = get_planet_ships(pid)
+    pool = (
+        int(before.get("falcon_interceptor", 0))
+        + int(before.get("ironclad_frigate", 0))
+        + int(before.get("eclipse_runner", 0))
+    )
+
+    res = client.post(
+        "/api/fleet/send",
+        json={
+            "mission_type": "attack",
+            "target_galaxy": hg,
+            "target_system": hs,
+            "target_position": boss_pos,
+            "target_type": "world_boss",
+            "world_boss_auto_attack": True,
+            "resources": {},
+            "speed_percent": 100,
+        },
+        headers={"Accept": "application/json"},
+    )
+    assert res.status_code == 200, res.get_data(as_text=True)
+    body = res.get_json()
+    assert body["ok"] is True
+    meta = body["data"]["world_boss_auto_attack"]
+    assert "mule_courier" not in meta["ships"]
+    assert meta["sent_count"] > 0
+    assert meta["sent_count"] <= pool
+    assert meta["pool_sent_count"] == pool
+
+    ships_left = get_planet_ships(pid)
+    sent = meta["ships"]
+    assert int(ships_left.get("falcon_interceptor", 0)) == int(before.get("falcon_interceptor", 0)) - int(
+        sent.get("falcon_interceptor", 0)
+    )
+    assert int(ships_left.get("mule_courier", 0)) == 40
+
+    # Second auto-attack while in-flight / cooldown must fail.
+    res2 = client.post(
+        "/api/fleet/send",
+        json={
+            "mission_type": "attack",
+            "target_galaxy": hg,
+            "target_system": hs,
+            "target_position": boss_pos,
+            "target_type": "world_boss",
+            "world_boss_auto_attack": True,
+            "resources": {},
+            "speed_percent": 100,
+        },
+        headers={"Accept": "application/json"},
+    )
+    assert res2.status_code == 400
+    err = res2.get_json()
+    assert err["ok"] is False
+    assert err["error"] in (
+        "world_boss_inflight",
+        "world_boss_cooldown",
+        "no_combat_ships_available",
+        "not_enough_ships",
+    )
+
+
+def test_api_world_boss_auto_attack_no_ships(wb_db, monkeypatch):
+    import importlib
+
+    import app as app_module
+
+    monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
+    importlib.reload(app_module)
+
+    uid = _player(name="AutoNone")
+    pid = _home(uid)
+    _fund(pid)
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        home = conn.execute(
+            "SELECT galaxy, system, position FROM planets WHERE id = ?;",
+            (pid,),
+        ).fetchone()
+        hg, hs, hp = int(home["galaxy"]), int(home["system"]), int(home["position"])
+        boss_pos = 7 if hp != 7 else 6
+        spawn = spawn_world_boss(
+            "void_titan",
+            conn=conn,
+            galaxy=hg,
+            system=hs,
+            position=boss_pos,
+            announce=False,
+        )
+        assert spawn["ok"], spawn
+        commit(conn)
+    finally:
+        conn.close()
+
+    client = app_module.app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+    res = client.post(
+        "/api/fleet/send",
+        json={
+            "mission_type": "attack",
+            "target_galaxy": hg,
+            "target_system": hs,
+            "target_position": boss_pos,
+            "target_type": "world_boss",
+            "world_boss_auto_attack": True,
+            "resources": {},
+            "speed_percent": 100,
+        },
+        headers={"Accept": "application/json"},
+    )
+    assert res.status_code == 400
+    body = res.get_json()
+    assert body["ok"] is False
+    assert body["error"] == "no_combat_ships_available"

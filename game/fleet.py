@@ -624,6 +624,59 @@ def resolve_galaxy_quick_spy_ships(
             conn.close()
 
 
+def resolve_world_boss_auto_attack_ships(
+    player_id: int,
+    origin_planet_id: int,
+    *,
+    target_galaxy: int,
+    target_system: int,
+    target_position: int,
+    conn=None,
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """GC-WB-AUTO-ATTACK-001 — trim combat hangar to max achievable WB wave HP damage."""
+    from .world_boss import (
+        defender_ships_for_event,
+        get_active_event_at,
+        select_world_boss_auto_attack_ships,
+    )
+
+    pid = int(player_id or 0)
+    origin_id = int(origin_planet_id or 0)
+    if pid <= 0 or origin_id <= 0:
+        return False, "origin_not_found", None
+
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        event = get_active_event_at(
+            int(target_galaxy),
+            int(target_system),
+            int(target_position),
+            conn=conn,
+        )
+        if not event:
+            return False, "world_boss_inactive", None
+
+        defender_ships = defender_ships_for_event(event, conn=conn)
+        hangar = get_planet_ships(origin_id, conn=conn)
+        ships, meta = select_world_boss_auto_attack_ships(
+            hangar,
+            defender_ships=defender_ships,
+            max_hp=int(event.get("max_hp") or 0),
+            event_id=int(event.get("id") or 0),
+            conn=conn,
+        )
+        meta = dict(meta or {})
+        meta["event_id"] = int(event.get("id") or 0)
+        if int(meta.get("sent_count") or 0) <= 0 or not ships:
+            return False, "no_combat_ships_available", meta
+        return True, "", meta
+    finally:
+        if own and conn is not None:
+            conn.close()
+
+
 def is_galaxy_attack_preset(preset: Mapping[str, Any] | None) -> bool:
     """GC-977B — preset eligible for Galaxy quick attack (raid/farm or explicit attack)."""
     if not preset:

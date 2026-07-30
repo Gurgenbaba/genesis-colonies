@@ -918,6 +918,14 @@ def test_fleet_url_prefill_contract_in_main_js(galaxy_db):
     )[0]
     assert 'missionSel.value = "expedition"' not in sync_expo
     assert "const preserveMission = !locked" in js
+    # GC-WB-FLEET-PREFILL-001 — WB attack deep-link max-selects combat + eclipse_runner
+    prefill = js.split("function applyFleetUrlPrefill(page)", 1)[1].split("let _shipyardRefreshTimer", 1)[0]
+    assert 'prefillTargetType === "world_boss"' in prefill
+    assert 'prefillMission === "attack"' in prefill
+    assert 'role !== "combat"' in prefill
+    assert 'key !== "eclipse_runner"' in prefill
+    assert "GC.setFleetShipInputValue" in prefill
+    assert "GC.setFleetShipInputValue = setFleetShipInputValue" in js
 
 
 def test_fleet_url_with_coords_only_does_not_lock_mission(galaxy_db, monkeypatch):
