@@ -280,6 +280,7 @@ def _api_client(timekeeper_db, monkeypatch):
 
 
 def test_api_timekeeper_apply_returns_state(timekeeper_db, monkeypatch):
+    """GC-PERF-TK-002: HTTP apply must debit TK and shorten build queue in state + DB."""
     client, uid = _api_client(timekeeper_db, monkeypatch)
     conn = db()
     try:
@@ -290,21 +291,96 @@ def test_api_timekeeper_apply_returns_state(timekeeper_db, monkeypatch):
         begin_write_transaction(conn)
         credit(uid, 3600, "test", conn=conn)
         commit(conn)
+        finish_before = float(
+            conn.execute(
+                "SELECT finish_time FROM build_queue WHERE planet_id = ? ORDER BY finish_time ASC LIMIT 1;",
+                (pid,),
+            ).fetchone()["finish_time"]
+        )
     finally:
         conn.close()
 
     res = client.post(
         "/api/timekeeper/apply",
-        json={"domain": "build", "mode": "partial", "seconds": 1800},
+        json={"domain": "build", "mode": "partial", "seconds": 1800, "planet_id": pid},
         headers={"Accept": "application/json", "Content-Type": "application/json"},
     )
     assert res.status_code == 200
     payload = res.get_json()
     assert payload["ok"] is True
-    assert int(payload.get("seconds_applied") or 0) >= 1700
+    applied = int(payload.get("seconds_applied") or 0)
+    assert applied >= 1700
     state = payload.get("state") or {}
     assert state.get("timekeeper", {}).get("balance_sec") == 1800
     assert payload.get("timekeeper", {}).get("balance_sec") == 1800
+
+    bq = state.get("build_queue") or {}
+    queue = bq.get("queue") if isinstance(bq, dict) else None
+    assert isinstance(queue, list) and queue, "build_queue.queue must be present after partial boost"
+    head_finish = float(queue[0].get("finish_time") or queue[0].get("finish_at") or 0)
+    head_remaining = int(queue[0].get("remaining") or queue[0].get("remaining_seconds") or 0)
+    assert head_finish <= finish_before - 1700
+    assert head_remaining <= 7200 - 1700
+
+    conn = db()
+    try:
+        assert get_balance(uid, conn=conn) == 1800
+        finish_after = float(
+            conn.execute(
+                "SELECT finish_time FROM build_queue WHERE planet_id = ? ORDER BY finish_time ASC LIMIT 1;",
+                (pid,),
+            ).fetchone()["finish_time"]
+        )
+        assert finish_after <= finish_before - 1700
+    finally:
+        conn.close()
+
+
+def test_api_timekeeper_apply_max_mode_debits_and_shortens(timekeeper_db, monkeypatch):
+    """GC-PERF-TK-002: client one-click path uses mode=max — same persistence contract."""
+    client, uid = _api_client(timekeeper_db, monkeypatch)
+    conn = db()
+    try:
+        planet = get_context_planet(uid, conn=conn)
+        pid = int(planet["id"])
+        now = time.time()
+        add_build_job(pid, "metal_mine", now - 5, now + 3600, conn=conn)
+        begin_write_transaction(conn)
+        credit(uid, 600, "test", conn=conn)
+        commit(conn)
+        finish_before = float(
+            conn.execute(
+                "SELECT finish_time FROM build_queue WHERE planet_id = ? ORDER BY finish_time ASC LIMIT 1;",
+                (pid,),
+            ).fetchone()["finish_time"]
+        )
+    finally:
+        conn.close()
+
+    res = client.post(
+        "/api/timekeeper/apply",
+        json={"domain": "build", "mode": "max", "planet_id": pid},
+        headers={"Accept": "application/json", "Content-Type": "application/json"},
+    )
+    assert res.status_code == 200
+    payload = res.get_json()
+    assert payload["ok"] is True
+    assert int(payload.get("seconds_applied") or 0) == 600
+    assert payload.get("timekeeper", {}).get("balance_sec") == 0
+    assert (payload.get("state") or {}).get("timekeeper", {}).get("balance_sec") == 0
+
+    conn = db()
+    try:
+        assert get_balance(uid, conn=conn) == 0
+        finish_after = float(
+            conn.execute(
+                "SELECT finish_time FROM build_queue WHERE planet_id = ? ORDER BY finish_time ASC LIMIT 1;",
+                (pid,),
+            ).fetchone()["finish_time"]
+        )
+        assert finish_after <= finish_before - 500
+    finally:
+        conn.close()
 
 
 def test_timekeeper_finish_clamps_to_remaining(timekeeper_db):

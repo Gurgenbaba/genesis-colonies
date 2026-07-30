@@ -3326,27 +3326,86 @@ def api_timekeeper_apply():
         )
         if not ok:
             rollback(conn)
+            conn.close()
+            conn = None
             state, _ = _build_game_state_payload(include_panel=True, finish_source="api_timekeeper_apply")
             body = {"ok": False, "reason": reason, "state": state}
             if result.get("timekeeper"):
                 body["timekeeper"] = result["timekeeper"]
+            logger.info(
+                "timekeeper_apply user_id=%s domain=%s ok=0 reason=%s seconds_applied=0",
+                user_id,
+                domain,
+                reason,
+            )
             return jsonify(body), 400
         commit(conn)
+
+        # GC-PERF-TK-002: verify debit persisted (read-only — avoid INSERT OR IGNORE
+        # starting a new write TX on this conn that would block state rebuild).
+        applied = int(result.get("seconds_applied") or 0)
+        tk_slice = result.get("timekeeper") or {}
+        expected_bal = int(tk_slice.get("balance_sec") or 0)
+        row = conn.execute(
+            "SELECT balance_sec FROM timekeeper_balances WHERE player_id = ? LIMIT 1;",
+            (user_id,),
+        ).fetchone()
+        persisted_bal = int(row["balance_sec"] or 0) if row else -1
+        if applied > 0 and persisted_bal != expected_bal:
+            logger.error(
+                "timekeeper_apply not persisted user_id=%s domain=%s applied=%s expected_bal=%s got_bal=%s",
+                user_id,
+                domain,
+                applied,
+                expected_bal,
+                persisted_bal,
+            )
+            conn.close()
+            conn = None
+            state, _ = _build_game_state_payload(include_panel=True, finish_source="api_timekeeper_apply")
+            if isinstance(state, dict) and tk_slice:
+                state["timekeeper"] = tk_slice
+            return jsonify(
+                {
+                    "ok": False,
+                    "reason": "apply_not_persisted",
+                    "state": state,
+                    "timekeeper": tk_slice,
+                    "seconds_applied": 0,
+                }
+            ), 500
+
+        # Release apply conn before state rebuild (separate write TX).
+        conn.close()
+        conn = None
+
         state, _ = _build_game_state_payload(include_panel=True, finish_source="api_timekeeper_apply")
+        # Apply ledger wins over rebuild so HUD never keeps a stale balance.
+        if isinstance(state, dict) and tk_slice:
+            state["timekeeper"] = tk_slice
+        logger.info(
+            "timekeeper_apply user_id=%s domain=%s ok=1 reason=ok seconds_applied=%s balance_after=%s",
+            user_id,
+            domain,
+            applied,
+            expected_bal,
+        )
         return jsonify(
             {
                 "ok": True,
                 "reason": "ok",
                 "state": state,
-                "timekeeper": result.get("timekeeper"),
-                "seconds_applied": result.get("seconds_applied"),
+                "timekeeper": tk_slice,
+                "seconds_applied": applied,
             }
         )
     except Exception:
-        rollback(conn)
+        if conn is not None:
+            rollback(conn)
         raise
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
 
 
 @app.route("/api/inventory/craft", methods=["POST"])
@@ -10855,11 +10914,18 @@ def api_fleet_mass_expedition():
     ok, reason, result = _fleet_write_transaction(_mass_expo)
 
     if ok and result:
+        state = _fleet_mutation_game_state("api_fleet_mass_expedition")
         body = fleet_ok(result, message_key="fleet_mass_expo_success")
+        body["state"] = state
         if request_id:
             save_idempotent_action(user_id, request_id, body)
         return jsonify(body)
-    return jsonify(fleet_err(reason, data=result if isinstance(result, dict) else {})), 400
+
+    state = _fleet_mutation_game_state("api_fleet_mass_expedition")
+    err_data: Dict[str, Any] = {"state": state}
+    if isinstance(result, dict):
+        err_data.update(result)
+    return jsonify(fleet_err(reason, data=err_data)), 400
 
 
 @app.route("/api/admin/planet/<int:planet_id>/ships", methods=["POST"])

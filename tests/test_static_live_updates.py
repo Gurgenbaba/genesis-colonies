@@ -2595,12 +2595,17 @@ def test_main_js_timekeeper_one_click_apply_flow():
     src = _read("static/main.js")
     tk = src.split("function initTimekeeperOnce()")[1].split("function patchShellHudFromState")[0]
     assert "submitTimekeeperApplyFromBtn(openBtn)" in tk
-    assert 'mode: "max"' in src.split("function submitTimekeeperApplyFromBtn")[1].split("function initTimekeeperOnce")[0]
+    submit = src.split("function submitTimekeeperApplyFromBtn")[1].split("function initTimekeeperOnce")[0]
+    assert 'mode: "max"' in submit
     assert "openTimekeeperModal" not in src
     assert "gc-timekeeper-modal" not in src
     assert 'applyActionState(res, "timekeeper_apply")' in src
     assert "seconds_applied" in src
     assert "GC-PERF-TK-001" in src or "do not rewrite queues from a failed" in src
+    # GC-PERF-TK-002: apply ledger wins; clear monotonic remaining before patch
+    assert "res.state.timekeeper = res.timekeeper || res.state.timekeeper" in submit
+    assert "delete el.dataset.serverRemaining" in submit
+    assert "applied <= 0" in submit
     assert "_timekeeperApplying" in src
     assert "_timekeeperOpenContext(openBtn)" in src
     assert 'GC.fetchGameAction("/api/timekeeper/apply"' in src

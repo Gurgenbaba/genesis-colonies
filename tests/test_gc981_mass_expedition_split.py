@@ -375,6 +375,41 @@ def test_api_mass_expedition_split(fleet_db, monkeypatch):
     send_body = res.get_json()
     assert send_body["ok"] is True
     assert send_body["data"]["started_count"] == usable_before
+    assert isinstance(send_body.get("state"), dict)
+    assert send_body["state"].get("ok") is not False
+
+
+def test_mass_expedition_from_ships_fails_hard_when_no_fuel(fleet_db):
+    """Zero launched fleets must be ok=False (no soft-success)."""
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, pid, metal=500000, crystal=500000, fuel_cells=0)
+    _grant_navigation_for_mass_expo(cur, uid, min_usable=1)
+    usable = _usable_slots(uid, conn)
+    _seed_ships(pid, uid, {"solar_skiff": usable * 100}, conn=conn)
+    conn.commit()
+
+    ok_prev, reason_prev, _preview = preview_mass_expedition_slot_split(
+        player_id=uid,
+        origin_planet_id=pid,
+        ships={"solar_skiff": usable * 100},
+        conn=conn,
+    )
+    assert ok_prev is False
+    assert reason_prev in ("not_enough_resources", "not_enough_fuel")
+
+    ok, reason, result = mass_expedition_from_ships(
+        player_id=uid,
+        origin_planet_id=pid,
+        ships={"solar_skiff": usable * 100},
+        conn=conn,
+    )
+    assert ok is False
+    assert reason in ("not_enough_resources", "not_enough_fuel")
+    assert int((result or {}).get("started_count") or 0) == 0
+    conn.close()
 
 
 def test_fleet_page_mass_expo_split_ui_contract(fleet_db, monkeypatch):
@@ -415,6 +450,9 @@ def test_main_js_mass_expo_split_contract():
     assert "fleet_expedition_hint_escort_none" in js
     assert "fleet_expedition_hint_recycler_tip" in js
     assert "expedition_rating" in js
+    split_fn = js.split("const submitMassExpeditionSplit")[1].split("const submitMassExpedition")[0]
+    assert "!(started > 0)" in split_fn
+    assert 'applyActionState(res, "fleet_mass_expo_success")' in split_fn
 
 
 def test_main_js_ship_max_selection_triggers_mass_expo_preview():

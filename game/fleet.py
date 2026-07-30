@@ -5755,6 +5755,32 @@ def preview_mass_expedition_slot_split(
         ok_fleet, fleet_reason = validate_mass_expedition_per_slot_fleet(per_slot)
         if not ok_fleet:
             return False, fleet_reason, meta
+
+        # Fuel / send gates for one wave — keeps Start disabled when send would soft-fail.
+        cur.execute(
+            "SELECT * FROM planets WHERE id = ? AND player_id = ? LIMIT 1;",
+            (int(origin_planet_id), int(player_id)),
+        )
+        origin_row = cur.fetchone()
+        if origin_row:
+            origin_planet = dict(origin_row)
+            tg, ts, _ = _origin_coords(origin_planet)
+            ok_send, send_reason, _send_ctx = validate_fleet_send(
+                player_id=int(player_id),
+                origin_planet_id=int(origin_planet_id),
+                target_galaxy=int(tg),
+                target_system=int(ts),
+                target_position=int(EXPEDITION_POSITION),
+                mission_type="expedition",
+                ships=per_slot,
+                resources={},
+                speed_percent=100,
+                conn=conn,
+            )
+            if not ok_send:
+                meta["started_count"] = 0
+                return False, send_reason or "send_failed", meta
+
         return True, "", meta
     finally:
         if own and conn is not None:
@@ -5864,10 +5890,27 @@ def mass_expedition_from_ships(
             else:
                 skipped.append({"wave": wave + 1, "reason": send_reason or "send_failed"})
 
-        batch_status = "completed" if started else "failed"
+        if not started:
+            # Mirror logistics: never soft-succeed with zero fleets launched.
+            if own:
+                rollback(conn)
+            fail_reason = (
+                str((skipped[0] or {}).get("reason") or "")
+                if skipped
+                else "send_failed"
+            ) or "send_failed"
+            return False, fail_reason, {
+                "started": [],
+                "skipped": skipped,
+                "per_fleet_ships": per_slot,
+                "leftover_ships": leftover,
+                "started_count": 0,
+                "active_slots": get_fleet_slot_status(player_id, conn=conn),
+            }
+
         conn.execute(
             "UPDATE fleet_batches SET status = ?, total_fleets = ?, updated_at = ? WHERE id = ?;",
-            (batch_status, len(started), now, batch_id),
+            ("completed", len(started), now, batch_id),
         )
 
         if own:
@@ -5995,10 +6038,24 @@ def mass_expedition(
             else:
                 skipped.append({"wave": wave + 1, "reason": reason or "send_failed"})
 
-        batch_status = "completed" if started else "failed"
+        if not started:
+            if own:
+                rollback(conn)
+            fail_reason = (
+                str((skipped[0] or {}).get("reason") or "")
+                if skipped
+                else "send_failed"
+            ) or "send_failed"
+            return False, fail_reason, {
+                "started": [],
+                "skipped": skipped,
+                "started_count": 0,
+                "active_slots": get_fleet_slot_status(player_id, conn=conn),
+            }
+
         conn.execute(
             "UPDATE fleet_batches SET status = ?, total_fleets = ?, updated_at = ? WHERE id = ?;",
-            (batch_status, len(started), now, batch_id),
+            ("completed", len(started), now, batch_id),
         )
 
         if own:

@@ -12798,9 +12798,16 @@
         }
         return;
       }
+      // GC-PERF-TK-002: apply ledger wins over rebuild; clear monotonic remaining
+      // so a earlier finish_at is not held by stale dataset.serverRemaining.
       if (res.timekeeper && res.state && typeof res.state === "object") {
-        res.state.timekeeper = res.state.timekeeper || res.timekeeper;
+        res.state.timekeeper = res.timekeeper || res.state.timekeeper;
       }
+      document.querySelectorAll(
+        "[data-gc-card-queue], [data-hero-queue], [data-mini-queue-card], [data-server-remaining], [data-timer-target]"
+      ).forEach((el) => {
+        if (el && el.dataset) delete el.dataset.serverRemaining;
+      });
       applyActionState(res, "timekeeper_apply");
     } catch (err) {
       console.error("[GC] timekeeper apply failed", err);
@@ -21236,6 +21243,14 @@
         if (res?.ok) {
           const data = fleetPayload(res);
           const started = parseInt(data.started_count, 10) || (data.started || []).length;
+          // Soft-success with zero fleets is a failure (fuel/slots) — keep ship selection.
+          if (!(started > 0)) {
+            const skipped = Array.isArray(data.skipped) ? data.skipped : [];
+            const skipReason = skipped[0]?.reason || res?.error || res?.reason || "send_failed";
+            showNotify(reasonText(skipReason), "error");
+            scheduleMassExpoSplitPreview(page);
+            return;
+          }
           showNotify(
             tt("fleet_mass_expo_split_success", "%(count)s expeditions launched.")
               .replace("%(count)s", String(started)),
@@ -21303,19 +21318,19 @@
         });
         if (res?.ok) {
           const data = fleetPayload(res);
-          const started = (data.started || []).length;
+          const started = parseInt(data.started_count, 10) || (data.started || []).length;
           const skipped = (data.skipped || []).length;
           if (massResult) {
             massResult.textContent = tt("fleet_mass_expo_result", "Started %(started)s, skipped %(skipped)s.")
               .replace("%(started)s", String(started)).replace("%(skipped)s", String(skipped));
             massResult.hidden = false;
           }
-          if (started <= 0 && skipped > 0) {
-            const firstReason = String(data.skipped?.[0]?.reason || "generic");
+          if (!(started > 0)) {
+            const firstReason = String(data.skipped?.[0]?.reason || res?.error || res?.reason || "send_failed");
             showNotify(reasonText(firstReason), "error");
-          } else {
-            showNotify(tt("fleet_mass_expo_success", "Mass expedition launched."), "success");
+            return;
           }
+          showNotify(tt("fleet_mass_expo_success", "Mass expedition launched."), "success");
           if (res.state) applyActionState(res, "fleet_mass_expo_success");
           await refreshFleetState(page);
           schedulePreview(page);
