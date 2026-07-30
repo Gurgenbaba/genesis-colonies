@@ -25873,8 +25873,10 @@
     GC._planetRegistryBound = true;
 
     // GC-PERF-PLANET-SWITCH: PJAX reload replaces registry roots (dropping is-busy).
-    // A second click/ghost-click on the fresh DOM must not start another switch+reload.
-    let planetSwitchInFlight = false;
+    // Localhost switches finish so fast that a double/triple-click (or delayed
+    // ghost click after DOM replace) starts another full switch+reload cycle.
+    // Keep a short post-unlock cooldown so one intentional click = one switch.
+    const PLANET_SWITCH_COOLDOWN_MS = 700;
 
     document.addEventListener("click", async (e) => {
       if (e.target.closest("a.gc-galaxy-coord-link")) return;
@@ -25882,13 +25884,29 @@
       if (!item) return;
       const root = item.closest("[data-gc-planet-registry]");
       if (!root) return;
-      if (planetSwitchInFlight || root.classList.contains("is-busy")) return;
       if (item.classList.contains("is-active")) return;
 
       const planetId = parseInt(item.dataset.planetId || "0", 10);
       if (!planetId) return;
 
-      planetSwitchInFlight = true;
+      const now = Date.now();
+      if (
+        GC._planetSwitchInFlight
+        || root.classList.contains("is-busy")
+        || now < Number(GC._planetSwitchCooldownUntil || 0)
+      ) {
+        console.debug("[GC] planet_switch ignored", {
+          planetId,
+          inFlight: !!GC._planetSwitchInFlight,
+          busy: root.classList.contains("is-busy"),
+          cooldownMs: Math.max(0, Number(GC._planetSwitchCooldownUntil || 0) - now),
+        });
+        return;
+      }
+
+      e.preventDefault();
+      GC._planetSwitchInFlight = true;
+      console.debug("[GC] planet_switch start", planetId);
       planetRegistryRoots().forEach((r) => r.classList.add("is-busy"));
       item.disabled = true;
       const releaseBusy = () => {
@@ -25911,11 +25929,6 @@
         });
         if (res?.ok) {
           const anyActive = applyActionState(res, "planet_switch");
-          if (Array.isArray(res.planets)) {
-            updatePlanetRegistryFromPlanets(res.planets);
-          } else if (res.state) {
-            GC.updatePlanetRegistryFromState(res.state);
-          }
           const name = item.dataset.planetName || "";
           ["research-planet-label"].forEach((id) => {
             const el = document.getElementById(id);
@@ -25936,7 +25949,15 @@
             "options",
           ]);
           const skipSsr = PLANET_SWITCH_SKIP_SSR.has(pageName);
-          if (!onAdmin && !skipSsr) {
+          // Skip mid-flight registry rebuild when SSR reload replaces the rail anyway
+          // (avoids pointer target shifting under a still-settling click).
+          if (onAdmin || skipSsr) {
+            if (Array.isArray(res.planets)) {
+              updatePlanetRegistryFromPlanets(res.planets);
+            } else if (res.state) {
+              GC.updatePlanetRegistryFromState(res.state);
+            }
+          } else {
             await GC.reloadCurrentPage({
               force: true,
               skipHydrate: true,
@@ -25979,7 +26000,8 @@
         }
         clearTimeout(busyGuard);
         releaseBusy();
-        planetSwitchInFlight = false;
+        GC._planetSwitchCooldownUntil = Date.now() + PLANET_SWITCH_COOLDOWN_MS;
+        GC._planetSwitchInFlight = false;
       }
     });
   }

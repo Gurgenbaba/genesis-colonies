@@ -642,7 +642,9 @@ def test_planet_switch_hotfix_client_contract():
     registry = src.split("function initPlanetRegistry()")[1].split("function bindPlanetEvolutionOnce()")[0]
     assert "skipPolling: true" in registry
     assert "releaseBusy" in registry
-    assert "planetSwitchInFlight" in registry
+    assert "GC._planetSwitchInFlight" in registry
+    assert "GC._planetSwitchCooldownUntil" in registry
+    assert "PLANET_SWITCH_COOLDOWN_MS" in registry
     assert 'refreshGameState("planet_switch")' not in registry
     apply = src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]
     assert "GC.refreshInFlight = null" in apply
