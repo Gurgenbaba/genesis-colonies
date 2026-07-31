@@ -269,6 +269,9 @@ def test_world_boss_galaxy_ui_contracts():
     assert "flushed_attacks" in main_js
     assert "wbAutoPollTick" in main_js or "wbAutoPoll" in main_js
     assert "consumeWorldBossAutoPresentation" in main_js
+    assert "wbFlushAutoUntilFired" in main_js
+    assert "wbCdUntil" in main_js
+    assert "until - now > 0" in main_js
     assert "data-wb-ship-slot" in main_js
     assert "gc-world-boss-ship-count" in main_js
     assert "gc-wb-phase-2" in css

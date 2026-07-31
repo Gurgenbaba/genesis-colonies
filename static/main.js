@@ -32393,11 +32393,60 @@
   };
   function bindWorldBossAttackCooldownUnlock(root) {
     if (!root) return;
+
+    const wbFlushAutoUntilFired = (card, { attemptsLeft = 12 } = {}) => {
+      if (!card || !card.isConnected || attemptsLeft <= 0) return;
+      const autoOn = card.querySelector("[data-wb-auto-attack][data-wb-auto-enabled='1']");
+      if (!autoOn) return;
+      fetch("/api/world-boss", {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+      })
+        .then((r) => (r && r.ok ? r.json() : null))
+        .then((payload) => {
+          if (!payload || !card.isConnected) return;
+          let played = false;
+          if (typeof GC.consumeWorldBossAutoPresentation === "function") {
+            played = !!GC.consumeWorldBossAutoPresentation(card, payload);
+          }
+          if (played) return;
+          // CD may still be live by a second (client vs server). Keep trying while auto is on.
+          const stillAuto = card.querySelector("[data-wb-auto-attack][data-wb-auto-enabled='1']");
+          if (!stillAuto) return;
+          const locked = card.querySelector("[data-wb-locked-until]");
+          if (locked) return; // new CD applied — unlock watcher will resume
+          const id = setTimeout(() => wbFlushAutoUntilFired(card, { attemptsLeft: attemptsLeft - 1 }), 400);
+          if (typeof GC.registerCleanup === "function") {
+            GC.registerCleanup(() => clearTimeout(id));
+          }
+        })
+        .catch(() => {
+          const id = setTimeout(() => wbFlushAutoUntilFired(card, { attemptsLeft: attemptsLeft - 1 }), 600);
+          if (typeof GC.registerCleanup === "function") {
+            GC.registerCleanup(() => clearTimeout(id));
+          }
+        });
+    };
+    GC.wbFlushAutoUntilFired = wbFlushAutoUntilFired;
+
     root
       .querySelectorAll(".wb-attack-btn[data-wb-locked-until], [data-wb-auto-attack][data-wb-locked-until]")
       .forEach((attackBtn) => {
-      if (attackBtn.dataset.wbCdBound === "1") return;
+      const untilAttr = String(attackBtn.getAttribute("data-wb-locked-until") || "");
+      if (!untilAttr) return;
+      // Re-bind when a new cooldown window is applied (same button, new until).
+      if (attackBtn.dataset.wbCdBound === "1" && attackBtn.dataset.wbCdUntil === untilAttr) return;
+      if (typeof attackBtn._wbCdClear === "function") {
+        try {
+          attackBtn._wbCdClear();
+        } catch (_e) {
+          /* ignore */
+        }
+        attackBtn._wbCdClear = null;
+      }
       attackBtn.dataset.wbCdBound = "1";
+      attackBtn.dataset.wbCdUntil = untilAttr;
       attackBtn.addEventListener("click", (ev) => {
         if (
           attackBtn.classList.contains("is-disabled") ||
@@ -32409,6 +32458,15 @@
         }
       });
 
+      let tickId = null;
+      const clearTick = () => {
+        if (tickId == null) return;
+        if (typeof GC.clearSafeInterval === "function") GC.clearSafeInterval(tickId);
+        else clearInterval(tickId);
+        tickId = null;
+      };
+      attackBtn._wbCdClear = clearTick;
+
       const unlockAttack = () => {
         const btn = attackBtn;
         if (!btn || !btn.isConnected) return true;
@@ -32418,7 +32476,8 @@
           typeof GC.getServerNow === "function"
             ? Number(GC.getServerNow())
             : Date.now() / 1000;
-        if (until - now > 1) return false;
+        // Wait until cooldown is actually over (no early unlock — that skipped server fire).
+        if (until - now > 0) return false;
 
         btn.classList.remove("is-disabled");
         btn.removeAttribute("aria-disabled");
@@ -32426,6 +32485,7 @@
         btn.removeAttribute("data-wb-locked-until");
         btn.removeAttribute("title");
         if (btn.tagName === "BUTTON") btn.disabled = false;
+        delete btn.dataset.wbCdUntil;
 
         const card = btn.closest(".gc-world-boss-card") || root;
         const cdBlock = card.querySelector("[data-wb-attack-cooldown]");
@@ -32441,45 +32501,22 @@
             : t("wb_attack_ready", "Angriff bereit.");
           cdBlock.replaceWith(ready);
         }
-        // Server flush via WB API (opportunistic auto-fire). Play FX on-page —
-        // never PJAX-reload here (reload skips attack presentation).
-        if (autoOn) {
-          fetch("/api/world-boss", {
-            method: "GET",
-            credentials: "same-origin",
-            headers: { Accept: "application/json" },
-          })
-            .then((r) => (r && r.ok ? r.json() : null))
-            .then((payload) => {
-              if (!payload || !card || !card.isConnected) return;
-              if (typeof GC.consumeWorldBossAutoPresentation === "function") {
-                GC.consumeWorldBossAutoPresentation(card, payload);
-              }
-            })
-            .catch(() => {
-              /* stay on page — auto poll will retry */
-            });
-        }
+        if (autoOn) wbFlushAutoUntilFired(card);
+        clearTick();
         return true;
       };
 
       if (!unlockAttack()) {
-        const tickId =
+        tickId =
           typeof GC.setSafeInterval === "function"
             ? GC.setSafeInterval(() => {
-                if (unlockAttack()) {
-                  if (typeof GC.clearSafeInterval === "function") GC.clearSafeInterval(tickId);
-                  else clearInterval(tickId);
-                }
+                if (unlockAttack()) clearTick();
               }, 250)
             : setInterval(() => {
-                if (unlockAttack()) clearInterval(tickId);
+                if (unlockAttack()) clearTick();
               }, 250);
         if (typeof GC.registerCleanup === "function") {
-          GC.registerCleanup(() => {
-            if (typeof GC.clearSafeInterval === "function") GC.clearSafeInterval(tickId);
-            else clearInterval(tickId);
-          });
+          GC.registerCleanup(clearTick);
         }
       }
     });
@@ -32602,6 +32639,15 @@
         btn.setAttribute("data-wb-locked-until", String(until));
         if (btn.tagName === "BUTTON") btn.disabled = true;
         delete btn.dataset.wbCdBound;
+        delete btn.dataset.wbCdUntil;
+        if (typeof btn._wbCdClear === "function") {
+          try {
+            btn._wbCdClear();
+          } catch (_e) {
+            /* ignore */
+          }
+          btn._wbCdClear = null;
+        }
       });
       let cd = card.querySelector("[data-wb-attack-cooldown]");
       const ready = card.querySelector("[data-wb-attack-ready]");
@@ -32908,8 +32954,8 @@
     };
     const wbAutoPollId =
       typeof GC.setSafeInterval === "function"
-        ? GC.setSafeInterval(wbAutoPollTick, 2500)
-        : setInterval(wbAutoPollTick, 2500);
+        ? GC.setSafeInterval(wbAutoPollTick, 1000)
+        : setInterval(wbAutoPollTick, 1000);
     if (typeof GC.registerCleanup === "function") {
       GC.registerCleanup(() => {
         if (typeof GC.clearSafeInterval === "function") GC.clearSafeInterval(wbAutoPollId);
