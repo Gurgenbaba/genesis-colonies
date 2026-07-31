@@ -77,11 +77,23 @@ Owner: `game/galactic_diplomacy/` · [GALACTIC_DIPLOMACY.md](GALACTIC_DIPLOMACY.
 
 After inventory boosters, `EffectResolver` applies alliance tech modifiers via `get_alliance_effect_modifiers(player_id)` — **members only**.
 
-**Merge order:** Research/Buildings → Galactic Directives → Galactic Diplomacy → Inventory Boosters → **Alliance**.
+**Merge order:** Research/Buildings → Galactic Directives → Galactic Diplomacy → Inventory Boosters → Alliance → **Commander Class**.
 
 **Keys:** `research_time_speed`, production factors, `armor_bonus`, `shield_bonus`. Expedition: `expedition_loot_mult` and `expedition_event_bonus` via `get_alliance_effect_modifiers()` in `fleet.py` directive flags (not ER keys). Handelskoordination: pool cap % and project duration via `trade_coord_bonus_pct()` in `alliance_catalog.py` (alliance-level, not per-player ER).
 
 Owner: `game/alliance.py` · [ALLIANCE_SYSTEM.md](ALLIANCE_SYSTEM.md)
+
+### Commander Classes (EPIC-27)
+
+After alliance, `EffectResolver` applies account class skill modifiers via `get_commander_effect_modifiers(player_id)`.
+
+**Merge order:** … → Alliance → **Commander Class**.
+
+**Keys:** class-dependent subset of active ER keys (`weapon/armor/shield_bonus`, prod factors, build/research/shipyard time speeds, fleet/cargo/fuel, `storage_factor`) plus prepared `scan_range` for Envoy.
+
+**Source labels:** `class:<class_key>:<skill_key>`.
+
+Owner: `game/commander_classes.py` · [COMMANDER_CLASSES.md](COMMANDER_CLASSES.md)
 
 Use labels like **“prepared / not active”** in admin copy when showing `scan_range` and other deferred flags.
 

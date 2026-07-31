@@ -27,24 +27,6 @@ PLACEHOLDER_MODULES: Dict[str, Dict[str, Any]] = {
             "placeholder_auction_pill_3",
         ],
     },
-    "skilltree": {
-        "slug": "skilltree",
-        "endpoint": "skilltree_view",
-        "title_key": "nav_skilltree",
-        "hint_key": "placeholder_skilltree_hint",
-        "intro_key": "placeholder_skilltree_intro",
-        "note_key": "placeholder_skilltree_note",
-        "features": [
-            ("placeholder_skilltree_f1_title", "placeholder_skilltree_f1_desc"),
-            ("placeholder_skilltree_f2_title", "placeholder_skilltree_f2_desc"),
-            ("placeholder_skilltree_f3_title", "placeholder_skilltree_f3_desc"),
-        ],
-        "pills": [
-            "placeholder_skilltree_pill_1",
-            "placeholder_skilltree_pill_2",
-            "placeholder_skilltree_pill_3",
-        ],
-    },
 }
 
 

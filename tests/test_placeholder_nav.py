@@ -65,9 +65,9 @@ def test_placeholder_modules_registered():
     keys = {m["slug"] for m in list_placeholder_modules()}
     assert keys == {
         "auction-house",
-        "skilltree",
     }
-    assert len(PLACEHOLDER_MODULES) == 2
+    assert len(PLACEHOLDER_MODULES) == 1
+    assert "skilltree" not in PLACEHOLDER_MODULES
     assert "premium" not in PLACEHOLDER_MODULES
     assert "galactic_politics" not in PLACEHOLDER_MODULES
 
@@ -153,12 +153,11 @@ def test_placeholder_routes_render(placeholder_db):
     assert inv.status_code == 200
     assert "inventory-page" in inv.get_data(as_text=True)
 
-    for slug in ("skilltree",):
-        res = client.get(f"/{slug}")
-        body = res.get_data(as_text=True)
-        assert res.status_code == 200, slug
-        assert "gc-placeholder-page" in body
-        assert "gc-nav-wip-badge" in body or "gc-placeholder-badge" in body
+    skilltree = client.get("/skilltree")
+    assert skilltree.status_code == 200
+    st_body = skilltree.get_data(as_text=True)
+    assert "skilltree-page" in st_body
+    assert "gc-placeholder-page" not in st_body
 
     premium = client.get("/premium")
     assert premium.status_code == 200

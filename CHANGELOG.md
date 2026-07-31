@@ -23,6 +23,10 @@ Stand: **2026-07-31** · Alpha-Meilenstein **v0.9** (Build-Zähler: `VERSION`, n
 - **Convenience-Shop** (Stripe / PayPal)
 - **Story Ops / Lore** Sidequests mit Free-Shop Ark-Token Loop
 - **Universe News Release-Publisher** — kuratierte Spieler-Patchnotes ohne Git-Runtime
+- **Commander Classes (EPIC-27)** — 5 Klassen, linearer Skill-Trunk, Capstones, TK-Swap (`/skilltree`)
+- **Commander Pick UI (GC-CLASS-UI-001)** — Destiny-style Command Staff cards + Active Commander bar
+- **Living Focus (GC-CLASS-UI-002)** — WebP-slim portraits, role icons, focus overlay, parallax
+- **Compact Tree Skillmap (GC-CLASS-UI-006)** — GoF-inspired fork silhouette map, dock unlock, live patch (v0.5.9.66)
 
 ### Changed
 - Titanen größer und mit Aura (helle + dunkle Landscapes)
@@ -34,6 +38,11 @@ Stand: **2026-07-31** · Alpha-Meilenstein **v0.9** (Build-Zähler: `VERSION`, n
 - Diverse Sync-/PJAX-Themen
 - Timer- & Queue-Stabilität
 - Viele kleine Darstellungsfehler aus dem Alpha-Feedback
+- Commander Pick-Cards: Preview-Chips nicht mehr am Kartenfuß abgeschnitten; Role-Icons als transparente WebP (ohne schwarze Ecken)
+- Commander Pick: Session-Fehlalarm behoben (POST/JSON statt GET → kein Login-Redirect)
+- Commander Skilltree: linearer Listen-Trunk → visueller Pfad (Nodes + Connectors)
+- Commander Skilltree: Role-Icon-Art auf Path-Nodes (WebP Alpha) + cinematic Node-Treatment
+- Commander Skilltree: eigene Skill-Arts (`skills/{skill_key}.webp`) statt Role-Icons im Trunk
 
 ---
 

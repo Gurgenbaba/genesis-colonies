@@ -319,9 +319,32 @@ def _directive_time_speed(
     speed_key: str,
     *,
     conn=None,
+    player_id: int | None = None,
 ) -> float:
+    """Shipyard/defense time speed from full EffectResolver (directives + class + boosters)."""
     if not planet_id or not conn:
         return 1.0
+    uid = int(player_id) if player_id is not None else None
+    if uid is None:
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT player_id FROM planets WHERE id = ? LIMIT 1;",
+                (int(planet_id),),
+            )
+            row = cur.fetchone()
+            if row and row["player_id"] is not None:
+                uid = int(row["player_id"])
+        except Exception:
+            uid = None
+    if uid is not None:
+        try:
+            from .effects import get_effect_resolver
+
+            mods = get_effect_resolver(uid, conn=conn).get_modifiers()
+            return float(mods.get(speed_key, 1.0) or 1.0)
+        except Exception:
+            pass
     try:
         from .galactic_directives.mechanics import get_planet_directive_er_modifiers
 

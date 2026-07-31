@@ -1,6 +1,6 @@
 # Genesis Colonies — Roadmap
 
-Geplante Entwicklungsphasen und Meilensteine. Stand: **v0.5.9.58** (Alpha, Reality-Sync 2026-07-12).
+Geplante Entwicklungsphasen und Meilensteine. Stand: **v0.5.9.60** (Alpha, Reality-Sync 2026-07-12).
 
 Status-Legende:
 
@@ -24,12 +24,12 @@ Status-Legende:
 | Flask + SQLite + Jinja2 | ✅ |
 | Installer (`scripts/install.py`) | ✅ |
 | Environment & Config Guards | ✅ |
-| SQL-Migrationen (`006`–`122`) | ✅ |
+| SQL-Migrationen (`006`–`123`) | ✅ |
 | Health Endpoint (`/health`) | ✅ |
 | Docker + Gunicorn Deployment | ✅ |
 | DB-Abstraction (`game/db.py`) | ✅ |
 | Bootstrap & Migration Guard | ✅ |
-| pytest-Suite (**4166** Tests) | ✅ |
+| pytest-Suite (**4179** Tests) | ✅ |
 
 ---
 
@@ -197,6 +197,7 @@ Master-Doc: **[GC_PERF_CORE.md](GC_PERF_CORE.md)** (EPIC Performance Core).
 | **Pirate Ecosystem (EPIC-21)** | ✅ | GC-P00…P18 ship-gate — [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md) |
 | **LiveOps Retention (EPIC-22)** | ✅ | Login calendar + Battle Pass — [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) |
 | **Payment / Shop (EPIC-23)** | ✅ | Stripe + PayPal convenience shop — [PAYMENT_SHOP.md](PAYMENT_SHOP.md) |
+| **Commander Classes (EPIC-27)** | 🔄 | 5 Klassen, linearer Skill-Trunk, TK-Swap — [COMMANDER_CLASSES.md](COMMANDER_CLASSES.md) |
 | CI Pipeline | 💡 |
 | Automated Backups | 📋 Operator-intern |
 

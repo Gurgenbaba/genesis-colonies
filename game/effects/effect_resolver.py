@@ -536,6 +536,61 @@ class EffectResolver:
 
         return out
 
+    def _apply_commander_class_mods(
+        self,
+        values: Dict[str, float],
+        sources: List[Dict[str, Any]],
+    ) -> Dict[str, float]:
+        """Account commander class skill bonuses (EPIC-27)."""
+        try:
+            from ..commander_classes import (
+                get_commander_effect_modifiers,
+                iter_commander_effect_sources,
+                schema_ready as commander_schema_ready,
+            )
+
+            def _probe():
+                if not commander_schema_ready(self._conn):
+                    return None
+                return (
+                    get_commander_effect_modifiers(int(self.player_id), conn=self._conn),
+                    iter_commander_effect_sources(int(self.player_id), conn=self._conn),
+                )
+
+            probed = self._run_optional_conn_probe("commander_class", _probe)
+        except Exception as exc:
+            if EFFECT_DEBUG:
+                logger.warning("commander_class_modifiers_failed player=%s err=%s", self.player_id, exc)
+            return values
+
+        if not probed:
+            return values
+        cmods, csrc = probed
+        if not cmods:
+            return values
+
+        from ..commander_class_catalog import ADDITIVE_MOD_KEYS
+
+        out = dict(values)
+        for key, raw in cmods.items():
+            if key.startswith("_"):
+                continue
+            if key in ADDITIVE_MOD_KEYS:
+                out[key] = float(out.get(key, 0.0)) + float(raw)
+            else:
+                out[key] = float(out.get(key, 1.0)) * float(raw)
+        for mod_key, label, amount in csrc or []:
+            sources.append(
+                self._source_entry(
+                    mod_key,
+                    label,
+                    float(amount),
+                    0,
+                    prepared=(mod_key == "scan_range"),
+                )
+            )
+        return out
+
     def _apply_galactic_directive_modifiers(
         self,
         *,
@@ -910,6 +965,47 @@ class EffectResolver:
             fuel_prod_factor = alliance_state["fuel_prod_factor"]
             armor_bonus = alliance_state["armor_bonus"]
             shield_bonus = alliance_state["shield_bonus"]
+
+        if self.player_id is not None and self._conn is not None:
+            class_state = self._apply_commander_class_mods(
+                {
+                    "mine_energy_factor": mine_energy_factor,
+                    "metal_prod_factor": metal_prod_factor,
+                    "crystal_prod_factor": crystal_prod_factor,
+                    "fuel_prod_factor": fuel_prod_factor,
+                    "storage_factor": storage_factor,
+                    "build_time_speed": build_time_speed,
+                    "research_time_speed": research_time_speed,
+                    "solar_output_factor": solar_output_factor,
+                    "weapon_bonus": weapon_bonus,
+                    "armor_bonus": armor_bonus,
+                    "shield_bonus": shield_bonus,
+                    "scan_range": float(scan_range),
+                    "fleet_speed_multiplier": fleet_speed_multiplier,
+                    "cargo_multiplier": cargo_multiplier,
+                    "fuel_efficiency_factor": fuel_efficiency_factor,
+                    "shipyard_time_speed": shipyard_time_speed,
+                    "defense_time_speed": defense_time_speed,
+                },
+                sources,
+            )
+            mine_energy_factor = class_state.get("mine_energy_factor", mine_energy_factor)
+            metal_prod_factor = class_state["metal_prod_factor"]
+            crystal_prod_factor = class_state["crystal_prod_factor"]
+            fuel_prod_factor = class_state["fuel_prod_factor"]
+            storage_factor = class_state.get("storage_factor", storage_factor)
+            build_time_speed = class_state.get("build_time_speed", build_time_speed)
+            research_time_speed = class_state["research_time_speed"]
+            solar_output_factor = class_state.get("solar_output_factor", solar_output_factor)
+            weapon_bonus = class_state.get("weapon_bonus", weapon_bonus)
+            armor_bonus = class_state["armor_bonus"]
+            shield_bonus = class_state["shield_bonus"]
+            scan_range = int(class_state.get("scan_range", scan_range) or 0)
+            fleet_speed_multiplier = class_state.get("fleet_speed_multiplier", fleet_speed_multiplier)
+            cargo_multiplier = class_state.get("cargo_multiplier", cargo_multiplier)
+            fuel_efficiency_factor = class_state.get("fuel_efficiency_factor", fuel_efficiency_factor)
+            shipyard_time_speed = class_state.get("shipyard_time_speed", shipyard_time_speed)
+            defense_time_speed = class_state.get("defense_time_speed", defense_time_speed)
 
         self._mods = {
             "mine_energy_factor": float(mine_energy_factor),

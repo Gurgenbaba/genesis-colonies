@@ -16,7 +16,7 @@
   {% set _stack_drawer_class = 'gc-sidebar-right' %}
 {% endif %}
 {% set _eco_open = request.endpoint in (
-  'trader_hub_view', 'inventory_view', 'auction_house_view', 'empire_view', 'techtree_view'
+  'trader_hub_view', 'inventory_view', 'auction_house_view', 'empire_view', 'techtree_view', 'skilltree_view'
 ) %}
 {% set _comm_open = request.endpoint in (
   'alliance_view', 'hall_of_fame_view',
@@ -88,6 +88,12 @@
            class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'techtree') }} {% if request.endpoint == 'techtree_view' %}active{% endif %}"
            {% if not module_in_section(_sn, 'techtree', 'economy') %}hidden{% endif %}>
           {{ T("nav_techtree", "Tech-Tree") }}
+        </a>
+        <a href="{{ url_for('skilltree_view') }}"
+           data-nav-module="skilltree"
+           class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'skilltree') }} {% if request.endpoint == 'skilltree_view' %}active{% endif %}"
+           {% if not module_in_section(_sn, 'skilltree', 'economy') %}hidden{% endif %}>
+          {{ T("nav_skilltree", "Skill Tree") }}
         </a>
       </div>
     </div>

@@ -33986,6 +33986,424 @@
 
   GC.modules.techtree = initTechtree;
 
+  function _skilltreeToastReason(reason) {
+    const map = {
+      class_already_set: ["commander_err_already", "Klasse bereits gesetzt."],
+      invalid_class: ["commander_err_invalid", "Ungültige Klasse."],
+      insufficient_skill_points: ["commander_err_sp", "Nicht genug Skillpunkte."],
+      prereq_missing: ["commander_err_prereq", "Voraussetzung fehlt."],
+      insufficient_resources: ["commander_err_res", "Nicht genug Ressourcen."],
+      insufficient_timekeeper: ["commander_err_tk", "Nicht genug Imperiumszeit."],
+      confirm_required: ["commander_err_confirm", "Bestätigung erforderlich."],
+      no_class: ["commander_err_no_class", "Keine Klasse gewählt."],
+      already_maxed: ["commander_err_maxed", "Bereits maximal."],
+    };
+    const pair = map[String(reason || "")] || ["commander_err_generic", "Aktion fehlgeschlagen."];
+    return (typeof t === "function" ? t(pair[0], pair[1]) : pair[1]);
+  }
+
+  function initSkilltree() {
+    const root = document.getElementById("skilltree-page");
+    if (!root || root.dataset.skilltreeBound === "1") return;
+    root.dataset.skilltreeBound = "1";
+
+    const reloadPage = () => {
+      if (typeof GC.reloadCurrentPage === "function") GC.reloadCurrentPage();
+    };
+    const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const grid = root.querySelector("[data-cc-grid]");
+    const focusRoot = root.querySelector("[data-cc-focus-root]");
+    const stateEl = document.getElementById("skilltree-page-state");
+    let pageState = {};
+    try {
+      pageState = stateEl ? JSON.parse(stateEl.textContent || "{}") : {};
+    } catch (_) {
+      pageState = {};
+    }
+
+    const tFn = typeof t === "function" ? t : (k, f) => f || k;
+    const fmtInt = (n) => {
+      const v = Math.floor(Number(n) || 0);
+      try {
+        return v.toLocaleString();
+      } catch (_) {
+        return String(v);
+      }
+    };
+
+    let selectedKey = "";
+    const mapRoot = root.querySelector("[data-skilltree-map]");
+    const dock = root.querySelector("[data-skilltree-dock]");
+    const dockArt = root.querySelector("[data-skilltree-dock-art]");
+    const dockName = root.querySelector("[data-skilltree-dock-name]");
+    const dockRank = root.querySelector("[data-skilltree-dock-rank]");
+    const dockBadge = root.querySelector("[data-skilltree-dock-badge]");
+    const dockDesc = root.querySelector("[data-skilltree-dock-desc]");
+    const dockRankbar = root.querySelector("[data-skilltree-dock-rankbar]");
+    const dockCost = root.querySelector("[data-skilltree-dock-cost]");
+    const dockLocked = root.querySelector("[data-skilltree-dock-locked]");
+    const dockUnlock = root.querySelector("[data-skilltree-dock-unlock]");
+    const dockDone = root.querySelector("[data-skilltree-dock-done]");
+
+    const skillsList = () => (pageState && Array.isArray(pageState.skills) ? pageState.skills : []);
+
+    const findSkill = (key) => skillsList().find((s) => String(s.key) === String(key));
+
+    const firstAvailableKey = () => {
+      const hit = skillsList().find((s) => s.status === "available");
+      return hit ? String(hit.key) : "";
+    };
+
+    const stateLabel = (status) => {
+      if (status === "maxed") return tFn("commander_maxed", "Max");
+      if (status === "available") return tFn("commander_available_label", "Verfügbar");
+      return tFn("commander_locked", "Gesperrt");
+    };
+
+    const unlockLabelFor = (skill) => {
+      if (!skill) return tFn("commander_unlock", "Freischalten");
+      if (skill.is_capstone) return tFn("commander_unlock_capstone", "Capstone freischalten");
+      if ((skill.rank || 0) > 0) return tFn("commander_rank_up", "Rang erhöhen");
+      return tFn("commander_unlock", "Freischalten");
+    };
+
+    const costTextFor = (skill) => {
+      if (!skill || skill.status === "maxed") return "";
+      if (skill.is_capstone && skill.resource_cost) {
+        const rc = skill.resource_cost || {};
+        return (
+          tFn("commander_capstone_cost", "Kosten") +
+          ": " +
+          fmtInt(rc.metal) +
+          " Fe · " +
+          fmtInt(rc.crystal) +
+          " Cr · " +
+          fmtInt(rc.fuel_cells) +
+          " Br"
+        );
+      }
+      if (skill.sp_cost && skill.sp_cost > 0) return String(skill.sp_cost) + " SP";
+      return "";
+    };
+
+    const fillDock = (key) => {
+      if (!dock) return;
+      const skill = findSkill(key);
+      if (!skill) {
+        dock.hidden = true;
+        return;
+      }
+      selectedKey = String(skill.key);
+      dock.hidden = false;
+      if (dockArt) {
+        const img = skill.image ? "/static/" + String(skill.image).replace(/^\/+/, "") : "";
+        dockArt.src = img;
+        dockArt.alt = "";
+      }
+      if (dockName) dockName.textContent = tFn(skill.name_key, skill.key);
+      if (dockRank) dockRank.textContent = String(skill.rank || 0) + "/" + String(skill.max_rank || 1);
+      if (dockBadge) {
+        dockBadge.hidden = !skill.is_capstone;
+        if (skill.is_capstone) dockBadge.textContent = tFn("commander_capstone", "Capstone");
+      }
+      if (dockDesc) dockDesc.textContent = tFn(skill.desc_key, "");
+      if (dockRankbar) {
+        const maxR = Math.max(1, Number(skill.max_rank) || 1);
+        const pct = Math.min(100, Math.round(((Number(skill.rank) || 0) * 100) / maxR));
+        dockRankbar.style.width = pct + "%";
+      }
+      if (dockCost) dockCost.textContent = costTextFor(skill);
+      if (dockLocked) dockLocked.hidden = skill.status !== "locked";
+      if (dockDone) dockDone.hidden = skill.status !== "maxed";
+      if (dockUnlock) {
+        if (skill.status === "available") {
+          dockUnlock.hidden = false;
+          dockUnlock.setAttribute("data-skilltree-unlock", String(skill.key));
+          dockUnlock.textContent = unlockLabelFor(skill);
+        } else {
+          dockUnlock.hidden = true;
+          dockUnlock.setAttribute("data-skilltree-unlock", "");
+        }
+      }
+    };
+
+    const syncNodeSelection = () => {
+      root.querySelectorAll("[data-skilltree-select]").forEach((btn) => {
+        const key = btn.getAttribute("data-skilltree-select") || "";
+        const on = key && key === selectedKey;
+        btn.classList.toggle("is-selected", on);
+        btn.setAttribute("aria-selected", on ? "true" : "false");
+      });
+    };
+
+    const patchMapFromState = () => {
+      const skills = skillsList();
+      skills.forEach((skill, idx) => {
+        const btn = root.querySelector('[data-skill-key="' + String(skill.key).replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"]');
+        if (!btn) return;
+        btn.classList.remove("is-locked", "is-available", "is-maxed");
+        btn.classList.add("is-" + String(skill.status || "locked"));
+        btn.setAttribute("data-skill-status", String(skill.status || "locked"));
+        btn.setAttribute("data-skill-rank", String(skill.rank || 0));
+        btn.setAttribute("data-skill-max-rank", String(skill.max_rank || 1));
+        const rankEl = btn.querySelector(".skilltree-map-node__rank");
+        if (rankEl) rankEl.textContent = String(skill.rank || 0) + "/" + String(skill.max_rank || 1);
+        const stateElN = btn.querySelector(".skilltree-map-node__state");
+        if (stateElN) stateElN.textContent = stateLabel(skill.status);
+        const edgeTo = idx + 1; // edge N lit when predecessor (N-1) maxed; edges keyed 2..6
+        if (edgeTo >= 1 && idx >= 0) {
+          const edge = root.querySelector('[data-skilltree-edge="' + (idx + 2) + '"]');
+          // edge after this skill leads to next — lit when THIS skill is maxed
+          if (edge) {
+            const lit = skill.status === "maxed";
+            edge.classList.toggle("is-lit", lit);
+            edge.classList.toggle("is-dim", !lit);
+          }
+        }
+      });
+      const availableKey = firstAvailableKey();
+      root.querySelectorAll("[data-skilltree-select]").forEach((btn) => {
+        const key = btn.getAttribute("data-skill-key") || "";
+        if (availableKey && key === availableKey) btn.setAttribute("aria-current", "step");
+        else btn.removeAttribute("aria-current");
+      });
+      const spEl = root.querySelector("[data-skilltree-sp]");
+      if (spEl && pageState) spEl.textContent = String(pageState.skill_points_unspent || 0);
+      const scoreEl = root.querySelector("[data-skilltree-score]");
+      if (scoreEl && pageState) scoreEl.textContent = String(pageState.score_total || 0);
+      if (stateEl && pageState) {
+        try {
+          stateEl.textContent = JSON.stringify(pageState);
+        } catch (_) {}
+      }
+      syncNodeSelection();
+      if (selectedKey) fillDock(selectedKey);
+    };
+
+    const selectSkill = (key) => {
+      if (!key) return;
+      selectedKey = String(key);
+      syncNodeSelection();
+      fillDock(selectedKey);
+    };
+
+    // Initial selection: SSR selected node, else first available
+    const pre = root.querySelector('[data-skilltree-select][aria-selected="true"]');
+    selectedKey =
+      (pre && pre.getAttribute("data-skilltree-select")) ||
+      firstAvailableKey() ||
+      (skillsList()[0] && String(skillsList()[0].key)) ||
+      "";
+    if (selectedKey) {
+      syncNodeSelection();
+      fillDock(selectedKey);
+    }
+
+    const closeFocus = () => {
+      if (!focusRoot) return;
+      focusRoot.hidden = true;
+      root.classList.remove("is-cc-focus-open");
+    };
+
+    const openFocus = (classKey) => {
+      if (!focusRoot || !classKey) return;
+      const classes = pageState.classes || [];
+      const c = classes.find((x) => String(x.key) === String(classKey));
+      if (!c) return;
+      const portrait = focusRoot.querySelector("[data-cc-focus-portrait]");
+      const officer = focusRoot.querySelector("[data-cc-focus-officer]");
+      const title = focusRoot.querySelector("[data-cc-focus-title]");
+      const epithet = focusRoot.querySelector("[data-cc-focus-epithet]");
+      const desc = focusRoot.querySelector("[data-cc-focus-desc]");
+      const chips = focusRoot.querySelector("[data-cc-focus-chips]");
+      const icons = focusRoot.querySelector("[data-cc-focus-icons]");
+      const confirm = focusRoot.querySelector("[data-cc-focus-confirm]");
+      if (portrait && c.portrait) {
+        portrait.src = "/static/" + String(c.portrait).replace(/^\/+/, "");
+        portrait.alt = tFn(c.officer_key, c.key);
+      }
+      if (officer) officer.textContent = tFn(c.officer_key, c.key);
+      if (title) title.textContent = tFn(c.title_key, c.name_key || c.key);
+      if (epithet) epithet.textContent = tFn(c.epithet_key, "");
+      if (desc) desc.textContent = tFn(c.desc_key, "");
+      if (chips) {
+        chips.innerHTML = "";
+        (c.preview_chips || []).forEach((chip) => {
+          const li = document.createElement("li");
+          li.className = "cc-chip";
+          li.innerHTML =
+            `<span class="cc-chip-label"></span><span class="cc-chip-val gc-mono"></span>`;
+          li.querySelector(".cc-chip-label").textContent = tFn(chip.label_key, chip.key);
+          li.querySelector(".cc-chip-val").textContent = chip.display || "";
+          chips.appendChild(li);
+        });
+      }
+      if (icons) {
+        icons.innerHTML = "";
+        (c.icons || []).forEach((icon) => {
+          const li = document.createElement("li");
+          li.className = "cc-card-icon";
+          const label = tFn(icon.label_key || ("commander_icon_" + icon.key), icon.key);
+          li.title = label;
+          const img = document.createElement("img");
+          img.src = "/static/" + String(icon.path || "").replace(/^\/+/, "");
+          img.alt = label;
+          img.width = 18;
+          img.height = 18;
+          li.appendChild(img);
+          icons.appendChild(li);
+        });
+      }
+      if (confirm) confirm.setAttribute("data-skilltree-pick-class", String(c.key));
+      focusRoot.hidden = false;
+      root.classList.add("is-cc-focus-open");
+      const back = focusRoot.querySelector("[data-cc-focus-close]");
+      if (back && typeof back.focus === "function") back.focus();
+    };
+
+    const onCardEnter = (ev) => {
+      const card = ev.target.closest("[data-cc-card]");
+      if (!card || !root.contains(card)) return;
+      card.classList.add("is-cc-hover");
+      if (grid) grid.classList.add("is-cc-dimming");
+    };
+    const onCardLeave = (ev) => {
+      const card = ev.target.closest("[data-cc-card]");
+      if (card && root.contains(card)) {
+        card.classList.remove("is-cc-hover");
+        card.style.removeProperty("--cc-px");
+        card.style.removeProperty("--cc-py");
+        if (grid && !grid.querySelector(".cc-card.is-cc-hover:hover, .cc-card:hover, .cc-card:focus-within")) {
+          grid.classList.remove("is-cc-dimming");
+        }
+      }
+    };
+    const onCardMove = (ev) => {
+      if (reduceMotion) return;
+      const card = ev.target.closest("[data-cc-card]");
+      if (!card || !root.contains(card)) return;
+      const rect = card.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const nx = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+      const ny = ((ev.clientY - rect.top) / rect.height) * 2 - 1;
+      card.style.setProperty("--cc-px", (nx * 6).toFixed(2) + "px");
+      card.style.setProperty("--cc-py", (ny * 4).toFixed(2) + "px");
+    };
+
+    const onKeyDown = (ev) => {
+      if (ev.key === "Escape" && focusRoot && !focusRoot.hidden) {
+        ev.preventDefault();
+        closeFocus();
+        return;
+      }
+      if ((ev.key === "Enter" || ev.key === " ") && ev.target && ev.target.closest) {
+        const card = ev.target.closest("[data-cc-card]");
+        if (card && root.contains(card) && focusRoot && focusRoot.hidden) {
+          ev.preventDefault();
+          openFocus(card.getAttribute("data-class-key"));
+        }
+      }
+    };
+
+    const onClick = async (ev) => {
+      const closeBtn = ev.target.closest("[data-cc-focus-close]");
+      if (closeBtn) {
+        ev.preventDefault();
+        closeFocus();
+        return;
+      }
+
+      const card = ev.target.closest("[data-cc-card]");
+      if (card && !ev.target.closest("[data-skilltree-pick-class]") && focusRoot) {
+        ev.preventDefault();
+        openFocus(card.getAttribute("data-class-key"));
+        return;
+      }
+
+      const selectBtn = ev.target.closest("[data-skilltree-select]");
+      if (selectBtn && root.contains(selectBtn) && !ev.target.closest("[data-skilltree-unlock]")) {
+        ev.preventDefault();
+        selectSkill(selectBtn.getAttribute("data-skilltree-select"));
+        return;
+      }
+
+      const pickBtn = ev.target.closest("[data-skilltree-pick-class]");
+      const unlockBtn = ev.target.closest("[data-skilltree-dock-unlock], [data-skilltree-unlock]");
+      const claimBtn = ev.target.closest("[data-skilltree-claim-sp]");
+      const swapBtn = ev.target.closest("[data-skilltree-swap]");
+      if (!pickBtn && !unlockBtn && !claimBtn && !swapBtn) return;
+      if (unlockBtn && !unlockBtn.getAttribute("data-skilltree-unlock")) return;
+      ev.preventDefault();
+
+      let url = "";
+      let body = {};
+      let keepSelection = false;
+      if (pickBtn) {
+        url = "/api/commander/class/pick";
+        body = { class_key: pickBtn.getAttribute("data-skilltree-pick-class") };
+      } else if (unlockBtn) {
+        url = "/api/commander/skills/unlock";
+        body = { skill_key: unlockBtn.getAttribute("data-skilltree-unlock") };
+        keepSelection = true;
+      } else if (claimBtn) {
+        url = "/api/commander/sp/claim";
+        body = {};
+        keepSelection = true;
+      } else if (swapBtn) {
+        const costEl = root.querySelector("[data-skilltree-swap-cost]");
+        const costLabel = costEl ? costEl.textContent : "";
+        const msg = tFn(
+          "commander_swap_confirm",
+          "Klasse wechseln? Skills werden zurückgesetzt. Kosten: {cost}"
+        ).replace("{cost}", costLabel || "TK");
+        if (!window.confirm(msg)) return;
+        url = "/api/commander/class/swap";
+        body = { confirm: true };
+      }
+
+      try {
+        const res = await GC.fetchGameAction(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (res && res.ok) {
+          if (typeof GC.applyActionState === "function") GC.applyActionState(res, "commander");
+          if (keepSelection && res.commander && mapRoot) {
+            pageState = Object.assign({}, pageState, res.commander);
+            patchMapFromState();
+          } else {
+            reloadPage();
+          }
+        } else {
+          const reason = (res && (res.reason || res.error)) || "failed";
+          if (typeof GC.notify === "function") GC.notify(_skilltreeToastReason(reason), "error");
+          else if (typeof GC.toast === "function") GC.toast(_skilltreeToastReason(reason), "error");
+        }
+      } catch (err) {
+        if (err && err.authRedirect) return;
+        console.warn("[GC] skilltree action failed", err);
+      }
+    };
+
+    root.addEventListener("click", onClick);
+    root.addEventListener("pointerenter", onCardEnter, true);
+    root.addEventListener("pointerleave", onCardLeave, true);
+    root.addEventListener("pointermove", onCardMove, true);
+    document.addEventListener("keydown", onKeyDown);
+    GC.registerCleanup(() => {
+      root.removeEventListener("click", onClick);
+      root.removeEventListener("pointerenter", onCardEnter, true);
+      root.removeEventListener("pointerleave", onCardLeave, true);
+      root.removeEventListener("pointermove", onCardMove, true);
+      document.removeEventListener("keydown", onKeyDown);
+      closeFocus();
+      root.dataset.skilltreeBound = "";
+    });
+  }
+
+  GC.modules.skilltree = initSkilltree;
+
   function initCombatSimulator() {
     if (typeof GC.initCombatSimulatorPage === "function") {
       GC.initCombatSimulatorPage();

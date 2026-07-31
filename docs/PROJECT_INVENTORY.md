@@ -1,6 +1,6 @@
 # Genesis Colonies — Project Inventory
 
-**Stand:** v0.5.9.58 (2026-07-12) — Alliance MVP complete (GC-AL-MVP-09); siehe [BALANCE_ANCHORS.md](BALANCE_ANCHORS.md) für Economy-Anker.  
+**Stand:** v0.5.9.60 (2026-07-12) — Alliance MVP complete (GC-AL-MVP-09); siehe [BALANCE_ANCHORS.md](BALANCE_ANCHORS.md) für Economy-Anker.  
 **Capability-Überblick / nächste Prioritäten:** [CAPABILITY_STATUS.md](CAPABILITY_STATUS.md) (SQLite bleibt Produktions-DB; Postgres-Cutover nicht geplant).
 
 Audit-Methode: Module in `game/`, Routen in `app.py`, UI in `templates/` + `static/main.js`, pytest-Dateien, Master-Docs.

@@ -6,7 +6,7 @@ Browser-basiertes Sci-Fi-Strategiespiel (OGame-inspiriert) — entwickelt als pr
 
 | | |
 |---|---|
-| **Version** | `0.5.9.58` (siehe [`VERSION`](VERSION)) |
+| **Version** | `0.5.9.60` (siehe [`VERSION`](VERSION)) |
 | **Stack** | Python 3.10+ · Flask 3 · SQLite (WAL) · Vanilla JS |
 | **Status** | Alpha — Economy, Combat, Defense, Fleet, Alliance MVP, Imperium spielbar |
 | **Health** | `GET /health` |
@@ -38,7 +38,7 @@ Genesis Colonies ist ein persistentes Browser-Strategiespiel, in dem Spieler ein
 | Audit Logging | `admin_audit_log` für privilegierte Aktionen |
 | Frontend-Architektur | SPA/PJAX, Singleton-Polling, Lifecycle-Cleanup |
 | Queue-Hardening | Atomare Transaktionen, Idempotenz, Parallel-Tests |
-| Test-Suite | **4166** pytest-Tests (`python -m pytest --collect-only -q`) |
+| Test-Suite | **4179** pytest-Tests (`python -m pytest --collect-only -q`) |
 
 ### Spielbar (Mechanik)
 

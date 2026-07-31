@@ -28,6 +28,7 @@ Epics beschreiben nur das Ziel. **Niemals direkt implementieren.**
 | EPIC-23 | Payment / Shop (Cash Grab MVP) | [PAYMENT_SHOP.md](PAYMENT_SHOP.md) |
 | EPIC-24 | Admin Control Center UX | [ADMIN_CONTROL_CENTER.md](ADMIN_CONTROL_CENTER.md) |
 | EPIC-25 | Genesis Story Ops (Lore / Side Ops) | [GENESIS_STORY_OPS.md](GENESIS_STORY_OPS.md) |
+| EPIC-27 | Commander Classes & Skill Trees | [COMMANDER_CLASSES.md](COMMANDER_CLASSES.md) |
 
 Epic → in **3–5 Tickets** zerlegen (große Epics: Phasen in Master-Doc). Siehe [EPICS.md](EPICS.md).
 
@@ -67,6 +68,7 @@ Vor jeder Änderung die relevanten Docs lesen:
 | [STATE_AJAX.md](STATE_AJAX.md) | Polling, PJAX, Live-State |
 | [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) | Serverweite PvE-Bosse, Contribution, LiveOps |
 | [UNIVERSE_NEWS.md](UNIVERSE_NEWS.md) | Genesis Timeline / Spieler-Patchnotes |
+| [COMMANDER_CLASSES.md](COMMANDER_CLASSES.md) | Commander-Klassen, Skill-Trunk, TK-Swap (EPIC-27) |
 | [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md) | Galaxy Heat, Piratenbasen, player-like AI, Bot-Log |
 | [INACTIVE_AUTOPLAY.md](INACTIVE_AUTOPLAY.md) | Dormante Konten: Round-Robin Wake, Presence, Economy (keine Expeditionen) |
 | [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) | 30-Tage Login + Battle Pass (EPIC-22) |
@@ -139,7 +141,7 @@ Kurz. Keine Projektzusammenfassung.
 ## Tests
 
 ```bash
-python -m pytest tests/ -v          # gesamt (4166 Tests)
+python -m pytest tests/ -v          # gesamt (4179 Tests)
 python -m pytest tests/test_fleet.py -v   # domänenspezifisch
 ```
 

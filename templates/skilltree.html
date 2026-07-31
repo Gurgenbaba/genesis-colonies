@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% set cmd = commander if commander is defined else {} %}
+{% set active_meta = cmd.class_meta if cmd.class_meta is defined else none %}
+<div class="gc-page skilltree-page" id="skilltree-page" data-skilltree-page data-page-id="skilltree">
+  <script type="application/json" id="skilltree-page-state">{{ cmd | tojson }}</script>
+
+  <header class="section-header skilltree-header">
+    <p class="skilltree-kicker">{{ T("commander_staff_kicker", "Command Staff") }}</p>
+    <h2 class="section-title">{{ T("commander_staff_title", "Command Staff") }}</h2>
+    <p class="section-hint hint">{{ T("commander_staff_hint", "Choose the officer who will lead your empire.") }}</p>
+  </header>
+
+  <div class="skilltree-hud gc-panel">
+    <div class="skilltree-hud-row">
+      <span class="skilltree-hud-label">{{ T("commander_sp_unspent", "Skillpunkte") }}</span>
+      <strong class="skilltree-hud-value gc-mono" data-skilltree-sp>{{ cmd.skill_points_unspent or 0 }}</strong>
+    </div>
+    <div class="skilltree-hud-row">
+      <span class="skilltree-hud-label">{{ T("commander_score", "Score") }}</span>
+      <strong class="skilltree-hud-value gc-mono" data-skilltree-score>{{ cmd.score_total or 0 }}</strong>
+    </div>
+    {% if (cmd.pending_sp or 0) > 0 %}
+    <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-skilltree-claim-sp>
+      {{ T("commander_claim_sp", "Skillpunkte abholen") }} (+{{ cmd.pending_sp }})
+    </button>
+    {% endif %}
+  </div>
+
+  {% if not cmd.class_key %}
+  <section class="skilltree-pick" data-skilltree-pick>
+    <p class="skilltree-section-hint">{{ T("commander_pick_hint", "Die Wahl ist dauerhaft. Ein Wechsel kostet Imperiumszeit (Timekeeper) und setzt den Skillbaum zurück.") }}</p>
+    <div class="skilltree-class-grid" data-cc-grid>
+      {% for c in (cmd.classes or []) %}
+      {% set theme = c.theme or c.key %}
+      <article
+        class="cc-card cc-card--{{ theme }}"
+        data-cc-card
+        data-class-key="{{ c.key }}"
+        data-cc-theme="{{ theme }}"
+        tabindex="0"
+        role="button"
+        aria-label="{{ T(c.officer_key, c.key) }}">
+        <div class="cc-card-portrait-wrap">
+          <div class="cc-card-scanlines" aria-hidden="true"></div>
+          <div class="cc-card-holo" aria-hidden="true"></div>
+          {% if c.portrait %}
+          <img
+            class="cc-card-portrait"
+            src="{{ url_for('static', filename=c.portrait) }}"
+            alt=""
+            loading="lazy"
+            width="640"
+            height="360"
+            draggable="false">
+          {% endif %}
+        </div>
+        <div class="cc-card-body">
+          <h3 class="cc-card-officer">{{ T(c.officer_key, c.key) }}</h3>
+          <p class="cc-card-title">{{ T(c.title_key, c.name_key) }}</p>
+          <p class="cc-card-epithet">{{ T(c.epithet_key, "") }}</p>
+          <p class="cc-card-tag">{{ T(c.tagline_key, "") }}</p>
+          <ul class="cc-card-chips">
+            {% for chip in (c.preview_chips or []) %}
+            <li class="cc-chip">
+              <span class="cc-chip-label">{{ T(chip.label_key, chip.key) }}</span>
+              <span class="cc-chip-val gc-mono">{{ chip.display }}</span>
+            </li>
+            {% endfor %}
+          </ul>
+          <ul class="cc-card-icons">
+            {% for icon in (c.icons or []) %}
+            <li class="cc-card-icon" title="{{ T(icon.label_key, icon.key) }}">
+              <img
+                src="{{ url_for('static', filename=icon.path) }}"
+                alt="{{ T(icon.label_key, icon.key) }}"
+                width="18"
+                height="18"
+                loading="lazy">
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+
+    <div class="cc-focus" data-cc-focus-root hidden>
+      <button type="button" class="cc-focus-backdrop" data-cc-focus-close aria-label="{{ T('close', 'Schließen') }}"></button>
+      <div class="cc-focus-panel" role="dialog" aria-modal="true" aria-labelledby="cc-focus-officer">
+        <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs cc-focus-x" data-cc-focus-close aria-label="{{ T('close', 'Schließen') }}">✕</button>
+        <div class="cc-focus-layout">
+          <div class="cc-focus-art">
+            <img class="cc-focus-portrait" data-cc-focus-portrait src="" alt="" width="640" height="360">
+          </div>
+          <div class="cc-focus-meta">
+            <p class="cc-focus-kicker" data-cc-focus-title></p>
+            <h3 class="cc-focus-officer" id="cc-focus-officer" data-cc-focus-officer></h3>
+            <p class="cc-focus-epithet" data-cc-focus-epithet></p>
+            <p class="cc-focus-desc" data-cc-focus-desc></p>
+            <ul class="cc-card-chips" data-cc-focus-chips></ul>
+            <ul class="cc-card-icons" data-cc-focus-icons></ul>
+            <p class="cc-focus-warn">{{ T("commander_focus_warn", "Die Wahl ist dauerhaft. Wechsel kostet Timekeeper und setzt den Skillbaum zurück.") }}</p>
+            <div class="cc-focus-actions">
+              <button type="button" class="gc-btn gc-btn-outline" data-cc-focus-close>{{ T("commander_focus_back", "Zurück") }}</button>
+              <button type="button" class="gc-btn gc-btn-primary" data-skilltree-pick-class="" data-cc-focus-confirm>
+                {{ T("commander_focus_confirm", "Commander übernehmen") }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  {% else %}
+  {% set theme = (active_meta.theme if active_meta else cmd.class_key) or 'vanguard' %}
+  <section class="cc-active-bar cc-active-bar--{{ theme }}" data-cc-active>
+    {% if active_meta and active_meta.portrait %}
+    <img
+      class="cc-active-portrait"
+      src="{{ url_for('static', filename=active_meta.portrait) }}"
+      alt=""
+      width="72"
+      height="96">
+    {% endif %}
+    <div class="cc-active-meta">
+      <span class="cc-active-badge">{{ T("commander_active_badge", "ACTIVE COMMANDER") }}</span>
+      <h3 class="cc-active-officer">
+        {% if active_meta %}{{ T(active_meta.officer_key, cmd.class_key) }}{% else %}{{ cmd.class_key }}{% endif %}
+      </h3>
+      <p class="cc-active-title">
+        {% if active_meta %}{{ T(active_meta.title_key, cmd.class_key) }}{% endif %}
+        {% if active_meta and active_meta.epithet_key %}
+        <span class="cc-active-epithet">— {{ T(active_meta.epithet_key, "") }}</span>
+        {% endif %}
+      </p>
+    </div>
+    <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-skilltree-swap>
+      {{ T("commander_swap_btn", "Klasse wechseln") }}
+      <span class="gc-mono" data-skilltree-swap-cost>({{ ((cmd.swap_cost_sec or 0) / 3600)|int }}h TK)</span>
+    </button>
+  </section>
+
+  {% set skills = cmd.skills or [] %}
+  {% set ns = namespace(selected_key=none, current_key=none) %}
+  {% for s in skills %}
+    {% if ns.current_key is none and s.status == "available" %}
+      {% set ns.current_key = s.key %}
+    {% endif %}
+  {% endfor %}
+  {% for s in skills %}
+    {% if s.status == "maxed" %}
+      {% set ns.selected_key = s.key %}
+    {% endif %}
+  {% endfor %}
+  {% if ns.current_key %}
+    {% set ns.selected_key = ns.current_key %}
+  {% elif ns.selected_key is none and skills %}
+    {% set ns.selected_key = skills[0].key %}
+  {% endif %}
+  {% set ns_sel = namespace(skill=none) %}
+  {% for s in skills %}
+    {% if s.key == ns.selected_key %}
+      {% set ns_sel.skill = s %}
+    {% endif %}
+  {% endfor %}
+  {% set selected_skill = ns_sel.skill %}
+  {% set sel_max = (selected_skill.max_rank if selected_skill and selected_skill.max_rank else 1) %}
+  {% set sel_rank_pct = (((selected_skill.rank or 0) * 100 / sel_max)|int) if selected_skill else 0 %}
+
+  <section class="skilltree-trunk gc-panel skilltree-trunk--{{ theme }}" data-skilltree-trunk>
+    <div class="skilltree-trunk-head">
+      <div>
+        <h3 class="skilltree-section-title" id="skilltree-map-title">{{ T("commander_trunk_title", "Skill Trunk") }}</h3>
+        <p class="skilltree-section-hint">{{ T("commander_trunk_hint", "Knoten der Reihe nach freischalten. Kein Respec.") }}</p>
+      </div>
+    </div>
+
+    <div class="skilltree-map__viewport" data-skilltree-map-viewport>
+      <div
+        class="skilltree-map skilltree-map--{{ theme }}"
+        data-skilltree-map
+        role="group"
+        aria-labelledby="skilltree-map-title"
+      >
+        <svg
+          class="skilltree-map__edges"
+          viewBox="0 0 600 448"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          {# Sequential elbows 1→2→3→4→5→6 — fork silhouette, linear path #}
+          {% set edge_defs = [
+            {"to": 2, "d": "M300 100 V140 H180 V150"},
+            {"to": 3, "d": "M224 168 H376"},
+            {"to": 4, "d": "M420 212 V248 H300 V260"},
+            {"to": 5, "d": "M300 324 V356 H180 V370"},
+            {"to": 6, "d": "M224 392 H376"},
+          ] %}
+          {% for e in edge_defs %}
+          {% set prev = skills[e.to - 2] if skills|length >= e.to - 1 else none %}
+          {% set lit = prev is not none and prev.status == "maxed" %}
+          <path
+            class="skilltree-map-edge {{ 'is-lit' if lit else 'is-dim' }}"
+            data-skilltree-edge="{{ e.to }}"
+            d="{{ e.d }}"
+            fill="none"
+            stroke-width="3"
+            stroke-linecap="square"
+            stroke-linejoin="miter"
+          />
+          {% endfor %}
+        </svg>
+
+        <div class="skilltree-map__nodes">
+          {% for s in skills %}
+          {% set slot = loop.index %}
+          {% set is_current = (ns.current_key is not none and s.key == ns.current_key) %}
+          {% set is_selected = (s.key == ns.selected_key) %}
+          <button
+            type="button"
+            class="skilltree-map-node skilltree-map-node--slot-{{ slot }} is-{{ s.status }}{% if s.is_capstone %} skilltree-map-node--capstone{% endif %}{% if is_selected %} is-selected{% endif %}"
+            data-skilltree-select="{{ s.key }}"
+            data-skill-key="{{ s.key }}"
+            data-skill-status="{{ s.status }}"
+            data-skill-rank="{{ s.rank }}"
+            data-skill-max-rank="{{ s.max_rank }}"
+            aria-selected="{{ 'true' if is_selected else 'false' }}"
+            {% if is_current %}aria-current="step"{% endif %}
+          >
+            <span class="skilltree-map-node__art">
+              {% if s.image %}
+              <img
+                src="{{ url_for('static', filename=s.image) }}"
+                alt=""
+                width="96"
+                height="96"
+                loading="lazy"
+                draggable="false">
+              {% endif %}
+            </span>
+            <span class="skilltree-map-node__rank gc-mono">{{ s.rank }}/{{ s.max_rank }}</span>
+            {% if s.is_capstone %}
+            <span class="skilltree-map-node__cap">CAP</span>
+            {% endif %}
+            <span class="skilltree-map-node__state">
+              {% if s.status == "maxed" %}{{ T("commander_maxed", "Max") }}
+              {% elif s.status == "available" %}{{ T("commander_available_label", "Verfügbar") }}
+              {% else %}{{ T("commander_locked", "Gesperrt") }}
+              {% endif %}
+            </span>
+          </button>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <aside class="skilltree-map-dock" data-skilltree-dock{% if not selected_skill %} hidden{% endif %}>
+      <div class="skilltree-map-dock__art">
+        <img
+          data-skilltree-dock-art
+          src="{% if selected_skill and selected_skill.image %}{{ url_for('static', filename=selected_skill.image) }}{% endif %}"
+          alt=""
+          width="96"
+          height="96">
+      </div>
+      <div class="skilltree-map-dock__meta">
+        <div class="skilltree-map-dock__title-row">
+          <h4 class="skilltree-map-dock__name" data-skilltree-dock-name>
+            {% if selected_skill %}{{ T(selected_skill.name_key, selected_skill.key) }}{% endif %}
+          </h4>
+          <span class="skilltree-map-dock__rank gc-mono" data-skilltree-dock-rank>
+            {% if selected_skill %}{{ selected_skill.rank }}/{{ selected_skill.max_rank }}{% endif %}
+          </span>
+        </div>
+        <p class="skilltree-map-dock__badge" data-skilltree-dock-badge{% if not selected_skill or not selected_skill.is_capstone %} hidden{% endif %}>
+          {{ T("commander_capstone", "Capstone") }}
+        </p>
+        <p class="skilltree-map-dock__desc" data-skilltree-dock-desc>
+          {% if selected_skill %}{{ T(selected_skill.desc_key, "") }}{% endif %}
+        </p>
+        <div class="skilltree-map-dock__rankbar" aria-hidden="true">
+          <span class="skilltree-map-dock__rankbar-fill" data-skilltree-dock-rankbar style="width: {{ sel_rank_pct }}%;"></span>
+        </div>
+        <p class="skilltree-map-dock__cost gc-mono" data-skilltree-dock-cost>
+          {% if selected_skill and selected_skill.status != "maxed" %}
+            {% if selected_skill.is_capstone and selected_skill.resource_cost %}
+              {{ T("commander_capstone_cost", "Kosten") }}:
+              {{ (selected_skill.resource_cost.metal or 0)|fmt_int }} Fe ·
+              {{ (selected_skill.resource_cost.crystal or 0)|fmt_int }} Cr ·
+              {{ (selected_skill.resource_cost.fuel_cells or 0)|fmt_int }} Br
+            {% elif selected_skill.sp_cost and selected_skill.sp_cost > 0 %}
+              {{ selected_skill.sp_cost }} SP
+            {% endif %}
+          {% endif %}
+        </p>
+        <p class="skilltree-map-dock__locked" data-skilltree-dock-locked{% if not selected_skill or selected_skill.status != "locked" %} hidden{% endif %}>
+          {{ T("commander_map_locked_hint", "Gesperrt — vorherigen Knoten maximieren.") }}
+        </p>
+      </div>
+      <div class="skilltree-map-dock__actions">
+        {% set unlock_label = T("commander_unlock", "Freischalten") %}
+        {% if selected_skill and selected_skill.is_capstone %}
+          {% set unlock_label = T("commander_unlock_capstone", "Capstone freischalten") %}
+        {% elif selected_skill and (selected_skill.rank or 0) > 0 %}
+          {% set unlock_label = T("commander_rank_up", "Rang erhöhen") %}
+        {% endif %}
+        <button
+          type="button"
+          class="gc-btn gc-btn-primary gc-btn-sm"
+          data-skilltree-unlock="{{ selected_skill.key if selected_skill and selected_skill.status == 'available' else '' }}"
+          data-skilltree-dock-unlock
+          {% if not selected_skill or selected_skill.status != "available" %}hidden{% endif %}
+        >{{ unlock_label }}</button>
+        <span class="skilltree-map-dock__done" data-skilltree-dock-done{% if not selected_skill or selected_skill.status != "maxed" %} hidden{% endif %}>
+          {{ T("commander_maxed", "Max") }}
+        </span>
+      </div>
+    </aside>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

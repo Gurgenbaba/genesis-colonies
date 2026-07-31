@@ -4297,7 +4297,173 @@ def api_galactic_politics_vote():
 @app.route("/skilltree")
 @require_login
 def skilltree_view():
-    return _render_placeholder_module("skilltree")
+    ctx = _load_page_live_context(finish_source="skilltree")
+    if ctx is None:
+        return redirect(url_for("login"))
+
+    from game.commander_classes import get_skilltree_page_context
+    from game.db import begin_write_transaction, commit, rollback
+
+    commander = {"ready": False}
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        page = get_skilltree_page_context(int(session["user_id"]), conn=conn)
+        commander = page.get("commander") or {}
+        commit(conn)
+    except Exception:
+        rollback(conn)
+        logger.exception("skilltree page failed user_id=%s", session.get("user_id"))
+    finally:
+        conn.close()
+
+    return render_template(
+        "skilltree.html",
+        commander=commander,
+        **ctx,
+    )
+
+
+@app.route("/api/commander/class/pick", methods=["POST"])
+@require_login_api
+def api_commander_class_pick():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+    body = request.get_json(silent=True) or {}
+    class_key = str(body.get("class_key") or "").strip()
+    from game.commander_classes import pick_class
+    from game.queue_engine import finish_due_work_once
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        finish_due_work_once(
+            player_id=user_id, conn=conn, source="api_commander_pick", manage_transaction=False
+        )
+        ok, reason, commander = pick_class(user_id, class_key, conn=conn)
+        if ok:
+            commit(conn)
+        else:
+            rollback(conn)
+    except Exception:
+        rollback(conn)
+        logger.exception("commander pick failed user_id=%s", user_id)
+        return jsonify({"ok": False, "reason": "pick_failed"}), 500
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(include_panel=False, finish_source="api_commander_pick")
+    return jsonify({"ok": ok, "reason": reason, "commander": commander, "state": state}), (
+        200 if ok else 400
+    )
+
+
+@app.route("/api/commander/sp/claim", methods=["POST"])
+@require_login_api
+def api_commander_sp_claim():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+    from game.commander_classes import claim_skill_points
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ok, reason, commander = claim_skill_points(user_id, conn=conn)
+        if ok:
+            commit(conn)
+        else:
+            rollback(conn)
+    except Exception:
+        rollback(conn)
+        logger.exception("commander sp claim failed user_id=%s", user_id)
+        return jsonify({"ok": False, "reason": "claim_failed"}), 500
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(include_panel=False, finish_source="api_commander_sp_claim")
+    return jsonify({"ok": ok, "reason": reason, "commander": commander, "state": state}), (
+        200 if ok else 400
+    )
+
+
+@app.route("/api/commander/skills/unlock", methods=["POST"])
+@require_login_api
+def api_commander_skills_unlock():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+    body = request.get_json(silent=True) or {}
+    skill_key = str(body.get("skill_key") or "").strip()
+    planet_raw = body.get("planet_id")
+    planet_id = int(planet_raw) if planet_raw not in (None, "") else None
+    from game.commander_classes import unlock_skill
+    from game.queue_engine import finish_due_work_once
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        finish_due_work_once(
+            player_id=user_id,
+            conn=conn,
+            source="api_commander_unlock",
+            manage_transaction=False,
+        )
+        ok, reason, commander = unlock_skill(
+            user_id, skill_key, planet_id=planet_id, conn=conn
+        )
+        if ok:
+            commit(conn)
+        else:
+            rollback(conn)
+    except Exception:
+        rollback(conn)
+        logger.exception("commander unlock failed user_id=%s", user_id)
+        return jsonify({"ok": False, "reason": "unlock_failed"}), 500
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(include_panel=False, finish_source="api_commander_unlock")
+    return jsonify({"ok": ok, "reason": reason, "commander": commander, "state": state}), (
+        200 if ok else 400
+    )
+
+
+@app.route("/api/commander/class/swap", methods=["POST"])
+@require_login_api
+def api_commander_class_swap():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+    body = request.get_json(silent=True) or {}
+    if not body.get("confirm"):
+        return jsonify({"ok": False, "reason": "confirm_required"}), 400
+    from game.commander_classes import swap_class
+    from game.queue_engine import finish_due_work_once
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        finish_due_work_once(
+            player_id=user_id, conn=conn, source="api_commander_swap", manage_transaction=False
+        )
+        ok, reason, commander = swap_class(user_id, conn=conn)
+        if ok:
+            commit(conn)
+        else:
+            rollback(conn)
+    except Exception:
+        rollback(conn)
+        logger.exception("commander swap failed user_id=%s", user_id)
+        return jsonify({"ok": False, "reason": "swap_failed"}), 500
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(include_panel=False, finish_source="api_commander_swap")
+    return jsonify({"ok": ok, "reason": reason, "commander": commander, "state": state}), (
+        200 if ok else 400
+    )
 
 
 @app.route("/login-rewards")
@@ -8534,6 +8700,13 @@ def _payload_from_live_context(
         payload["timekeeper"] = serialize_for_client(int(user_id), conn=conn)
     except Exception:
         payload["timekeeper"] = {"ready": False, "balance_sec": 0, "label": "0min"}
+
+    try:
+        from game.commander_classes import serialize_for_client as serialize_commander
+
+        payload["commander"] = serialize_commander(int(user_id), conn=conn)
+    except Exception:
+        payload["commander"] = {"ready": False}
 
     if include_panel:
         from game.buildings import get_overview_building_rows
