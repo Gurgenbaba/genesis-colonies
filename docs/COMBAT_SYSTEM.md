@@ -112,8 +112,10 @@ Debris: stored in `debris_fields` at target coordinates; shown in galaxy system 
 ## Reports
 
 - `build_combat_report()` → structured metadata + localized body
-- Both attacker and defender receive inbox messages
-- UI: `static/js/messages.js` → `renderCombatReport()`
+- Both attacker and defender receive inbox messages (`dispatch_combat_reports`)
+- UI: `static/js/messages.js` → `renderCombatReportTeaser` / `renderCombatReportFull` (modal)
+- **GC-700E:** coord links + attack CTA, always-on loot panel (empty state), `combat_kind` badges (pirate / world boss), dead `renderCombatBattleOverview` removed
+- **Recycler CTA:** one-click send of `recycler_slots_needed` via `GC.GalaxyQuickAction.sendDebrisRecycle` (same owner as Galaxy debris)
 
 ---
 

@@ -1169,28 +1169,45 @@ def resolve_fleet_target(
 
         owner_id = int(row["player_id"])
         owner_name = str(row["owner_name"] or "")
+        diplomacy_relation = None
         if owner_id == int(player_id):
             target_type = "own_planet"
         elif are_players_allied(int(player_id), owner_id, conn=conn):
             target_type = "ally_planet"
+            diplomacy_relation = "alliance"
         else:
-            target_type = "foreign_planet"
+            # GC-AL-DIP-01: cross-alliance diplomacy (NAP / pact / war).
+            from .alliance import get_players_diplomacy_relation
+
+            rel = str(get_players_diplomacy_relation(int(player_id), owner_id, conn=conn) or "neutral")
+            if rel == "alliance":
+                target_type = "ally_planet"
+                diplomacy_relation = "alliance"
+            else:
+                target_type = "foreign_planet"
+                diplomacy_relation = rel if rel in ("nap", "war") else "neutral"
 
         allowed = allowed_missions_for_target_type(
             target_type,
             hold_enabled=_hold_mission_enabled(conn=conn),
         )
+        if diplomacy_relation == "nap":
+            allowed.discard("attack")
+
+        payload = {
+            "target_type": target_type,
+            "target_planet_id": int(planet_id),
+            "target_player_id": owner_id,
+            "target_owner_name": owner_name,
+            "coords": coords,
+            "allowed_missions": sorted(allowed),
+            "reason_if_blocked": None,
+        }
+        if diplomacy_relation:
+            payload["diplomacy_relation"] = diplomacy_relation
 
         return _target_with_debris_recycle(
-            {
-                "target_type": target_type,
-                "target_planet_id": int(planet_id),
-                "target_player_id": owner_id,
-                "target_owner_name": owner_name,
-                "coords": coords,
-                "allowed_missions": sorted(allowed),
-                "reason_if_blocked": None,
-            },
+            payload,
             g,
             s,
             p,
@@ -1227,6 +1244,8 @@ def mission_allowed_for_target(mission: str, target: Mapping[str, Any]) -> Tuple
     allowed = set(target.get("allowed_missions") or [])
     if m in allowed:
         return True, ""
+    if m == "attack" and str(target.get("diplomacy_relation") or "") == "nap":
+        return False, "mission_blocked_nap"
     block_map = _MISSION_BLOCK_REASONS.get(target_type, {})
     return False, block_map.get(m, "mission_not_allowed")
 

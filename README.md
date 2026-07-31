@@ -8,7 +8,7 @@ Browser-basiertes Sci-Fi-Strategiespiel (OGame-inspiriert) — entwickelt als pr
 |---|---|
 | **Version** | `0.5.9.48` (siehe [`VERSION`](VERSION)) |
 | **Stack** | Python 3.10+ · Flask 3 · SQLite (WAL) · Vanilla JS |
-| **Status** | Alpha — Economy, Combat, Defense, Fleet, Imperium-MVP spielbar |
+| **Status** | Alpha — Economy, Combat, Defense, Fleet, Alliance MVP, Imperium spielbar |
 | **Health** | `GET /health` |
 
 ---
@@ -64,17 +64,17 @@ Genesis Colonies ist ein persistentes Browser-Strategiespiel, in dem Spieler ein
 | Messages | `/messages` | ✅ |
 | Chat | Header-Widget | ✅ |
 | PlayerCard | `/player/<id>` | ✅ |
+| Allianz | `/alliance` | ✅ MVP (Hub, Spenden, Projekte, Tech, Boni) |
 | Options | `/options` | ✅ |
 | Admin | `/admin` | ✅ Control Center |
 
-### Teilweise / Placeholder
+### Tech debt / Placeholder
 
 | Modul | Route | Status |
 |-------|-------|--------|
-| Allianz | `/alliance` | 🔄 Hub teils, Backend minimal |
 | Shipyard API envelope | `/api/shipyard*` | ⚠️ `{ok,data}` statt `{ok,state}` (GC-512D) |
 
-Vollständiger Modul-Status: [docs/PROJECT_INVENTORY.md](docs/PROJECT_INVENTORY.md) · Balance-Anker: [docs/BALANCE_ANCHORS.md](docs/BALANCE_ANCHORS.md)
+Vollständiger Modul-Status: [docs/PROJECT_INVENTORY.md](docs/PROJECT_INVENTORY.md) · Capability-Überblick: [docs/CAPABILITY_STATUS.md](docs/CAPABILITY_STATUS.md) · Balance-Anker: [docs/BALANCE_ANCHORS.md](docs/BALANCE_ANCHORS.md)
 
 ---
 
@@ -165,9 +165,9 @@ Browser (PJAX + Poll) → Flask (app.py) → game/* → SQLite + migrations/
 | **Admin Audit** | Jede privilegierte Admin-API-Aktion → `admin_audit_log` |
 | **Production Guards** | Insecure `SECRET_KEY`, `FLASK_DEBUG=1`, pending Migrations → Exit |
 | **Legacy DB** | Migration `009_legacy_planets_hardening.sql` |
-| **Postgres-Richtung** | `GC_DB_BACKEND=postgres` reserviert; Row-Lock-Hooks in `game/db.py` |
+| **DB-Produktion** | **SQLite (WAL)** — Single-Writer; 1 Replica / 1 Gunicorn-Worker. Postgres-Cutover ist nicht geplant ([CAPABILITY_STATUS.md](docs/CAPABILITY_STATUS.md)) |
 
-> **Hinweis Auth:** Passwörter werden derzeit per SHA-256 gehasht — ausreichend für lokale Entwicklung, **nicht** für Production. Vor einem öffentlichen Launch sollte ein moderner KDF (z. B. bcrypt/argon2) eingeführt werden.
+> **Auth:** Neue Passwörter nutzen **Argon2id**; Legacy-SHA-256 wird bei Login re-gehasht (GC-SEC-P0). Details: [docs/SECURITY.md](docs/SECURITY.md).
 
 ---
 
@@ -322,9 +322,11 @@ Vollständige Phasen: [`docs/ROADMAP.md`](docs/ROADMAP.md).
 | Economy, Buildings, Research | ✅ |
 | Multi-Kolonie, Planet Evolution | ✅ |
 | Galaxy, Fleet, Shipyard, Trader Hub | ✅ |
-| Combat, Defense, Fleet Logistics | 📋 |
-| Alliance Hub (voll) | 🔄 |
-| Security Hardening, PostgreSQL | 📋 |
+| Combat, Defense, Fleet Logistics | ✅ |
+| Alliance MVP | ✅ (Kriegs-/Diplomatie-Hooks post-Beta) |
+| Security Hardening (GC-SEC-P0) | ✅ |
+| Beta Gate / First-30 / Combat polish | 📋 siehe [CAPABILITY_STATUS.md](docs/CAPABILITY_STATUS.md) |
+| Produktion DB | ✅ SQLite — Postgres-Cutover nicht geplant |
 
 ---
 
@@ -380,6 +382,7 @@ Unbefugtes Kopieren, Hosten, Deployen oder Weiterverbreiten ist untersagt. Genes
 
 | Dokument | Inhalt |
 |----------|--------|
+| [`docs/CAPABILITY_STATUS.md`](docs/CAPABILITY_STATUS.md) | Was es kann / was es noch verträgt |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Systemdesign, Module, APIs |
 | [`docs/PLANET_SCOPE.md`](docs/PLANET_SCOPE.md) | Aktiver Planet, Multi-Kolonie |
 | [`docs/PLANET_EVOLUTION.md`](docs/PLANET_EVOLUTION.md) | DNA, Planet-Tech, Events |

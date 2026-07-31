@@ -46,7 +46,8 @@ Vor jeder Änderung die relevanten Docs lesen:
 | [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md) | Queues: Finish, Cancel, Reschedule |
 | [GC-536_QUEUE_CARD_UX.md](GC-536_QUEUE_CARD_UX.md) | Queue-in-Card UX (Epic 536A–E) |
 | [ROADMAP.md](ROADMAP.md) | Status, Phasen, Schulden |
-| [GC_PERF_CORE.md](GC_PERF_CORE.md) | Performance Core — Budgets, PG, Worker, State |
+| [CAPABILITY_STATUS.md](CAPABILITY_STATUS.md) | Was es kann / Prioritäten (SQLite-first, ohne Postgres-Cutover) |
+| [GC_PERF_CORE.md](GC_PERF_CORE.md) | Performance Core — Budgets, State, optionaler PG-Code-Pfad |
 | [PLANET_SCOPE.md](PLANET_SCOPE.md) | Aktiver Planet, Switch, Scope |
 | [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) | Ressourcen, Exchange, Fuel |
 | [COLLECTOR_EXCHANGE.md](COLLECTOR_EXCHANGE.md) | Sammler-Markt, Collectibles, Prestige |

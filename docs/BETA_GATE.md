@@ -31,6 +31,8 @@ v0.9.x
 v1.0.0-beta.1
 ```
 
+Priorisierte Folgearbeit (ohne Postgres-Cutover): [CAPABILITY_STATUS.md](CAPABILITY_STATUS.md).
+
 ---
 
 ## 3. Core Architecture Freeze

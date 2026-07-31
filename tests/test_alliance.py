@@ -1144,6 +1144,101 @@ def test_diplomacy_war_and_duplicate_request(alliance_db):
         conn.close()
 
 
+def test_gc_al_dip_01_fleet_mission_hooks(alliance_db):
+    """GC-AL-DIP-01: NAP blocks attack; diplomatic alliance allows transport; war keeps attack."""
+    from game.alliance import get_players_diplomacy_relation, respond_diplomacy_request
+    from game.fleet import mission_allowed_for_target, resolve_fleet_target
+
+    leader_a = _player(name="DipA")
+    leader_b = _player(name="DipB")
+    conn = db()
+    try:
+        create_alliance("DAA", "DipAlpha", leader_a, conn=conn)
+        create_alliance("DBB", "DipBeta", leader_b, conn=conn)
+        conn.commit()
+        aid_a = int(get_player_alliance(leader_a, conn=conn)["alliance_id"])
+        planet_b = get_context_planet(leader_b, conn=conn)
+        assert planet_b is not None
+        g, s, p = int(planet_b["galaxy"]), int(planet_b["system"]), int(planet_b["position"])
+
+        # Neutral foreign: attack + spy, no transport.
+        target = resolve_fleet_target(leader_a, g, s, p, conn=conn)
+        assert target["target_type"] == "foreign_planet"
+        assert target.get("diplomacy_relation") == "neutral"
+        assert "attack" in target["allowed_missions"]
+        assert mission_allowed_for_target("transport", target)[0] is False
+
+        for aid in (aid_a, int(get_player_alliance(leader_b, conn=conn)["alliance_id"])):
+            conn.execute(
+                "INSERT INTO alliance_buildings (alliance_id, building_key, level) VALUES (?, 'diplomacy_center', 1);",
+                (aid,),
+            )
+        conn.commit()
+
+        # NAP accepted → attack blocked, spy still ok.
+        send_diplomacy_request(leader_a, "DBB", "nap", conn=conn)
+        conn.commit()
+        req_id = int(
+            conn.execute(
+                """
+                SELECT id FROM alliance_diplomacy_requests
+                WHERE from_alliance_id = ? AND to_alliance_id = ?
+                  AND request_type = 'nap' AND status = 'pending'
+                LIMIT 1;
+                """,
+                (aid_a, int(get_player_alliance(leader_b, conn=conn)["alliance_id"])),
+            ).fetchone()["id"]
+        )
+        respond_diplomacy_request(leader_b, req_id, accept=True, conn=conn)
+        conn.commit()
+        assert get_players_diplomacy_relation(leader_a, leader_b, conn=conn) == "nap"
+        nap_target = resolve_fleet_target(leader_a, g, s, p, conn=conn)
+        assert nap_target["target_type"] == "foreign_planet"
+        assert nap_target.get("diplomacy_relation") == "nap"
+        assert "attack" not in nap_target["allowed_missions"]
+        assert "spy" in nap_target["allowed_missions"]
+        ok_atk, reason_atk = mission_allowed_for_target("attack", nap_target)
+        assert ok_atk is False
+        assert reason_atk == "mission_blocked_nap"
+
+        # Diplomatic alliance → ally_planet + transport/hold.
+        send_diplomacy_request(leader_a, "DBB", "alliance", conn=conn)
+        conn.commit()
+        pact_req = int(
+            conn.execute(
+                """
+                SELECT id FROM alliance_diplomacy_requests
+                WHERE from_alliance_id = ? AND request_type = 'alliance' AND status = 'pending'
+                LIMIT 1;
+                """,
+                (aid_a,),
+            ).fetchone()["id"]
+        )
+        respond_diplomacy_request(leader_b, pact_req, accept=True, conn=conn)
+        conn.commit()
+        assert get_players_diplomacy_relation(leader_a, leader_b, conn=conn) == "alliance"
+        pact_target = resolve_fleet_target(leader_a, g, s, p, conn=conn)
+        assert pact_target["target_type"] == "ally_planet"
+        assert pact_target.get("diplomacy_relation") == "alliance"
+        assert "transport" in pact_target["allowed_missions"]
+        assert "hold" in pact_target["allowed_missions"]
+        assert mission_allowed_for_target("attack", pact_target)[0] is False
+        assert mission_allowed_for_target("transport", pact_target)[0] is True
+
+        # War → foreign attack allowed + relation flag.
+        send_diplomacy_request(leader_a, "DBB", "war", conn=conn)
+        conn.commit()
+        assert get_players_diplomacy_relation(leader_a, leader_b, conn=conn) == "war"
+        war_target = resolve_fleet_target(leader_a, g, s, p, conn=conn)
+        assert war_target["target_type"] == "foreign_planet"
+        assert war_target.get("diplomacy_relation") == "war"
+        assert "attack" in war_target["allowed_missions"]
+        assert mission_allowed_for_target("attack", war_target)[0] is True
+        assert mission_allowed_for_target("transport", war_target)[0] is False
+    finally:
+        conn.close()
+
+
 def test_application_accept_notifies_applicant(alliance_db):
     leader = _player(name="Leader")
     applicant = _player(name="Applicant")

@@ -1,6 +1,6 @@
 # Alliance System — Genesis Colonies (EPIC-09)
 
-**Status:** ✅ **MVP complete** (GC-AL-MVP-01 … GC-AL-MVP-09) + **UX-Pass** (GC-AL-UX-01…03: Visitor-Seite, Spenden-Klarheit, Hub-IA). Combat-/Diplomatie-Deep-Hooks (Kriegs-Meta, Bündnis-Transport) bewusst post-Beta.
+**Status:** ✅ **MVP complete** (GC-AL-MVP-01 … GC-AL-MVP-09) + **UX-Pass** (GC-AL-UX-01…03) + **GC-AL-DIP-01** (Fleet Mission Hooks). Kriegs-Meta / End-War UI bewusst später.
 
 **Owner:** `game/alliance.py` · Catalog: `game/alliance_catalog.py`  
 **UI:** `/alliance` (Hub) · `/alliance/<id>` (öffentliche Besucherseite) · `GC.modules.alliance` · `templates/alliance.html`  
@@ -15,7 +15,8 @@
 | GC-AL-003 | `alliance_level` / `alliance_xp`, XP aus Spenden + Projekten, Tagescap Spenden-XP | ✅ |
 | GC-AL-004 | 5 Allianz-Technologien, Pool-Kosten, ein aktives Projekt, Effekte via EffectResolver | ✅ |
 | GC-AL-005 | 5 Allianz-Gebäude, `alliance_buildings` / `alliance_projects` (kein planetarer build_queue) | ✅ |
-| GC-AL-006 | Diplomatie MVP: neutral/nap/alliance/war, Anfragen, UI (Deep-Gameplay-Hooks später) | ✅ |
+| GC-AL-006 | Diplomatie MVP: neutral/nap/alliance/war, Anfragen, UI | ✅ |
+| GC-AL-DIP-01 | Diplomatie → Fleet Mission Hooks (NAP-Attack-Lock, Bündnis-Transport, war-Flag) | ✅ |
 | GC-AL-008 | Bewerbungssystem: `recruitment_mode`, Pending-UI, Withdraw, Accept/Decline, Notifications | ✅ |
 | GC-AL-009 | Logo-Upload + Auslieferung | ✅ |
 | GC-AL-MVP-02–04 | Rollenverwaltung, Rekrutierung, Profil, einheitliche Error-Payloads | ✅ |
@@ -153,7 +154,11 @@ Officer erhalten System-Nachricht bei Spende.
 - Beziehungen: `neutral`, `nap`, `alliance`, `war`
 - Krieg: sofort aktiv; NAP/Bündnis: Anfrage + Annahme
 - Sichtbar auf Alliance-Tab und PlayerCard (`alliance_label`)
-- **Post-Beta:** Combat-Integration (Kriegs-Meta), Fleet-Transport auf Bündnis-Planeten, Diplomatie-basierte Mission-Locks
+- **GC-AL-DIP-01:** `get_players_diplomacy_relation` → `resolve_fleet_target`
+  - diplomatisches `alliance` → `ally_planet` (Transport/Hold wie Same-Alliance)
+  - `nap` → `foreign_planet` ohne `attack` (`mission_blocked_nap`)
+  - `war` → Attack erlaubt + `diplomacy_relation: "war"` am Target-Payload
+- **Follow-up:** Combat Kriegs-Meta (Reports/Score), End-War / Peace-UI
 
 ## Schema (Migration 088–092)
 

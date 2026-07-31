@@ -59,6 +59,7 @@ def test_galaxy_quick_action_attack_handler_with_preview():
 def test_galaxy_quick_action_debris_recycle_handler():
     js = _read_js()
     assert "handleDebrisRecycleClick" in js
+    assert "sendDebrisRecycle" in js
     assert "data-galaxy-ring-debris-recycle" in js
     assert 'mission_type: "recycle"' in js
 

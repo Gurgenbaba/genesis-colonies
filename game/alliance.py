@@ -1313,6 +1313,35 @@ def are_players_allied(player_id: int, other_player_id: int, *, conn=None) -> bo
             conn.close()
 
 
+def get_players_diplomacy_relation(player_a: int, player_b: int, *, conn=None) -> str:
+    """
+    GC-AL-DIP-01: cross-alliance diplomacy between two players.
+
+    Returns one of ``neutral`` / ``nap`` / ``alliance`` / ``war``.
+    Same membership resolves as ``alliance``. Missing alliance → ``neutral``.
+    """
+    a = int(player_a)
+    b = int(player_b)
+    if a <= 0 or b <= 0 or a == b:
+        return "neutral"
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        ma = get_player_alliance(a, conn=conn)
+        mb = get_player_alliance(b, conn=conn)
+        if not ma or not mb:
+            return "neutral"
+        aid_a = int(ma["alliance_id"])
+        aid_b = int(mb["alliance_id"])
+        if aid_a == aid_b:
+            return "alliance"
+        return get_alliance_relation(aid_a, aid_b, conn=conn)
+    finally:
+        if own and conn is not None:
+            conn.close()
+
+
 def add_alliance_member(alliance_id: int, player_id: int, role: str = "member", conn=None) -> None:
     own = conn is None
     if own:

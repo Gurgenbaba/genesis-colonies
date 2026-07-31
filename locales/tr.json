@@ -6970,5 +6970,9 @@
   "admin_maint_bag_source": "Bag kaynağı",
   "admin_maint_bag_stale_title": "Maintenance owner bayat",
   "admin_maint_bag_stale_hint": "Bag heartbeat yok — Sidecar/Embedded loglarını kontrol edin ([maintenance-worker] started). Otomatik ranking durmuş olabilir.",
-  "admin_ranking_worker_hint": "Otomatik yalnızca dirty oyuncuları günceller; Admin düğmesi = tam reconcile. Rütbeler dirty batch sonrası."
+  "admin_ranking_worker_hint": "Otomatik yalnızca dirty oyuncuları günceller; Admin düğmesi = tam reconcile. Rütbeler dirty batch sonrası.",
+  "combat_report_attack_btn": "Koordinatlara saldır",
+  "combat_report_kind_pirate_base": "Korsan üssü",
+  "combat_report_kind_world_boss": "Dünya Bossu",
+  "fleet_error_mission_blocked_nap": "Saldırı saldırmazlık paktı (NAP) nedeniyle engellendi."
 }

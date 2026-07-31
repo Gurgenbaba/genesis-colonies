@@ -11,9 +11,9 @@ ROOT = Path(__file__).resolve().parents[1]
 # static/admin.js is out of scope here (see _iter_js_lines skip below); its
 # admin-shell reload sites live under the separate admin contract.
 ALLOWLIST_RELOAD = {
-    ("static/main.js", 2203),  # GC.reloadCurrentPage fullDocument branch
-    ("static/main.js", 2233),  # GC.reloadCurrentPage navigateTo-undefined fallback
-    ("static/main.js", 25854),  # locale switch: GC.reloadCurrentPage-undefined fallback
+    ("static/main.js", 2243),  # GC.reloadCurrentPage fullDocument branch
+    ("static/main.js", 2273),  # GC.reloadCurrentPage navigateTo-undefined fallback
+    ("static/main.js", 26048),  # locale switch: GC.reloadCurrentPage-undefined fallback
 }
 
 ALLOWLIST_LOCATION_HREF_ASSIGN = {

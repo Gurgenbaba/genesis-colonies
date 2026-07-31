@@ -6970,5 +6970,9 @@
   "admin_maint_bag_source": "Źródło bag",
   "admin_maint_bag_stale_title": "Owner maintenance nieaktualny",
   "admin_maint_bag_stale_hint": "Brak heartbeat bag — sprawdź logi Sidecar/Embedded ([maintenance-worker] started). Auto ranking może nie działać.",
-  "admin_ranking_worker_hint": "Auto odświeża tylko dirty graczy; przycisk Admin = pełny reconcile. Rangi po dirty batch."
+  "admin_ranking_worker_hint": "Auto odświeża tylko dirty graczy; przycisk Admin = pełny reconcile. Rangi po dirty batch.",
+  "combat_report_attack_btn": "Atakuj współrzędne",
+  "combat_report_kind_pirate_base": "Baza piratów",
+  "combat_report_kind_world_boss": "World Boss",
+  "fleet_error_mission_blocked_nap": "Atak zablokowany przez pakt o nieagresji (NAP)."
 }

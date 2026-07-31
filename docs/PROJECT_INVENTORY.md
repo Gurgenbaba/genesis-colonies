@@ -1,6 +1,7 @@
 # Genesis Colonies — Project Inventory
 
-**Stand:** v0.5.9.48 (2026-07-12) — Alliance MVP complete (GC-AL-MVP-09); siehe [BALANCE_ANCHORS.md](BALANCE_ANCHORS.md) für Economy-Anker.
+**Stand:** v0.5.9.48 (2026-07-12) — Alliance MVP complete (GC-AL-MVP-09); siehe [BALANCE_ANCHORS.md](BALANCE_ANCHORS.md) für Economy-Anker.  
+**Capability-Überblick / nächste Prioritäten:** [CAPABILITY_STATUS.md](CAPABILITY_STATUS.md) (SQLite bleibt Produktions-DB; Postgres-Cutover nicht geplant).
 
 Audit-Methode: Module in `game/`, Routen in `app.py`, UI in `templates/` + `static/main.js`, pytest-Dateien, Master-Docs.
 
@@ -21,7 +22,7 @@ Audit-Methode: Module in `game/`, Routen in `app.py`, UI in `templates/` + `stat
 | **Logistics** | Collect ✅ / Distribute ✅ | `/logistics` (Collect + Distribute) | `…/collect`, `…/distribute` + `state` | `test_fleet_logistics.py` | ✅ | `auto_cargo` optional (Phase 2) |
 | **Messages** | `messages.py` | `/messages`, `messages.js` | `/api/messages/*` | `test_messages.py` | ✅ | ⚠️ `href`-Fallback (GC-512C) |
 | **Chat** | `chat.py` | Shell + `chat.js` | `/api/chat/*` (eigenes Poll) | `test_chat.py`, `test_chat_init` | ✅ | Ausnahme GC-000 dokumentiert |
-| **Alliance** | `alliance.py`, `alliance_catalog.py` | `/alliance`, `GC.modules.alliance` | `/api/alliance/*` + `state` | `test_alliance.py` (66+) | ✅ MVP complete | Combat-/Diplomatie-Deep-Hooks post-Beta |
+| **Alliance** | `alliance.py`, `alliance_catalog.py` | `/alliance`, `GC.modules.alliance` | `/api/alliance/*` + `state` | `test_alliance.py` (66+) | ✅ MVP complete | Deep-Hooks post-Beta — [CAPABILITY_STATUS.md](CAPABILITY_STATUS.md) P2 |
 | **Planet Evolution** | `planet_evolution/` | `/planet-evolution` | `/api/planets/<id>/*` + `state` | `test_planet_evolution*.py` | ✅ | ⚠️ Client `reloadCurrentPage` (GC-512A) |
 | **Ranking** | `ranking.py`, `scoring.py` | `/ranking` | `GET /api/ranking` | `test_ranking.py` | ✅ | — |
 | **Admin** | `admin.py`, `admin_api.py` | `/admin`, `admin.js` | `/api/admin/*` | `test_admin_*` | ✅ | ⚠️ Legacy Forms parallel |
@@ -49,6 +50,19 @@ Audit-Methode: Module in `game/`, Routen in `app.py`, UI in `templates/` + `stat
 | Owner-Module | ✅ siehe [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) §17 |
 
 Offene **Tech Debt** (kein Blocker): [GC-512_ARCHITECTURE_VALIDATION.md](GC-512_ARCHITECTURE_VALIDATION.md) Follow-ups GC-512A–D.
+
+---
+
+## Nächste Prioritäten (Capability)
+
+Aus [CAPABILITY_STATUS.md](CAPABILITY_STATUS.md) — Completion-First, ohne Postgres:
+
+| Prio | Item | Inventory-Bezug |
+|------|------|-----------------|
+| P0 | Combat polish (GC-700E) → P2 | ✅ GC-700E; P2 gestartet |
+| P0 | SQLite Ops Hygiene | [RAILWAY_OPERATOR.md](RAILWAY_OPERATOR.md) — 1 Worker/Replica |
+| P1 | Beta Gate, First-30, Collector, Megabunker, i18n | zurückgestellt |
+| P2 | Alliance DIP-01 ✅ · Kriegs-Meta · Imperium 566B/568 · Marketplace | aktiv |
 
 ---
 
@@ -88,7 +102,7 @@ Historisches GC-601 Audit: [GC-601B_DOCUMENTATION_CONSISTENCY_SYNC.md](GC-601B_D
 | Fleet Logistics Collect | — | ✅ GC-900B: `batch_type` + N× `mission=collect` |
 | Fleet Logistics Distribute | — | ✅ GC-900D/E |
 | Combat-Balancing / neue Missionen | P2 | Simulator ✅ — keine Resolver-Duplikate |
-| PvP-Randfälle / Report-UX | P2 | Messages UI vorhanden |
+| PvP-Randfälle / Report-UX | ✅ GC-700E | Coord CTAs, empty loot, combat_kind badges; colony-wipe-in-report optional follow-up |
 | Dedizierte Combat-Admin-Tools | P3 | Simulator Admin-Modus (Monte-Carlo, Effizienz-Tabelle) |
 
 ### Risiken
@@ -131,6 +145,7 @@ Historisches GC-601 Audit: [GC-601B_DOCUMENTATION_CONSISTENCY_SYNC.md](GC-601B_D
 
 ## Verwandte Dokumente
 
+- [CAPABILITY_STATUS.md](CAPABILITY_STATUS.md)
 - [ROADMAP.md](ROADMAP.md)
 - [ARCHITECTURE.md](ARCHITECTURE.md)
 - [GC-512_ARCHITECTURE_VALIDATION.md](GC-512_ARCHITECTURE_VALIDATION.md)

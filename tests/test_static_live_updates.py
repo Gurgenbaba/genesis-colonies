@@ -937,7 +937,7 @@ def test_gc807b_hud_capacity_polish():
 
 
 def test_gc700a_combat_report_v2_presentation():
-    """GC-700A: battle report layout — duel cards, conditional loot/debris, no combat math."""
+    """GC-700A: battle report layout — duel cards, loot/debris panels, no combat math."""
     js = _read("static/js/messages.js")
     css = _read("static/style.css")
     modal = _read("templates/partials/combat_report_modal.html")
@@ -947,11 +947,15 @@ def test_gc700a_combat_report_v2_presentation():
     assert "function renderCombatDebrisPanel" in js
     assert "function combatDebrisPayload" in js
     assert "renderCombatForcesDuel(safeMeta, defenseStock)" in full_fn
+    assert "function renderCombatBattleOverview" not in js
     assert "renderCombatBattleOverview(meta)" not in full_fn
     assert "combatBattlefieldLabel(safeMeta)" in full_fn
     assert "combatCoordsRoute" not in full_fn
     assert "gc-combat-report-place" in full_fn
-    assert "lootTotal > 0" in full_fn
+    assert "renderCombatLootChips(loot)" in full_fn
+    assert "gc-combat-report-panel--loot-empty" in full_fn
+    assert "renderCombatReportActionBar(safeMeta)" in full_fn
+    assert "combatCoordsHtml(safeMeta)" in full_fn
     assert "renderCombatDebrisPanel(safeMeta)" in full_fn
     assert "renderCombatResearchPanel(safeMeta)" in full_fn
     assert 'data-result="${esc(' in full_fn
@@ -959,6 +963,9 @@ def test_gc700a_combat_report_v2_presentation():
 
     assert ".gc-combat-side-card--winner" in css
     assert ".gc-combat-report-panel--loot-found" in css
+    assert ".gc-combat-report-panel--loot-empty" in css
+    assert ".gc-combat-report-actions" in css
+    assert ".gc-combat-kind-badge" in css
     assert ".gc-combat-report-panel--debris" in css
     assert "gc-combat-report-body" in modal
 
@@ -966,20 +973,45 @@ def test_gc700a_combat_report_v2_presentation():
     de = _read("locales/de.json")
     assert '"combat_report_section_debris"' in en
     assert '"combat_report_side_winner"' in de
+    assert '"combat_report_attack_btn"' in en
+    assert '"combat_report_kind_pirate_base"' in de
+    assert '"combat_report_kind_world_boss"' in en
 
 
-def test_gc700d_combat_debris_recycler_ux():
-    """GC-700D: debris metadata UX — recycler hint + fleet prefill CTA."""
+def test_gc700e_combat_report_ux_residuals():
+    """GC-700E: coord CTAs, always-on loot empty state, combat_kind badges; no dead overview."""
     js = _read("static/js/messages.js")
     css = _read("static/style.css")
+
+    assert "function renderCombatReportActionBar" in js
+    assert "function combatKindBadgeHtml" in js
+    assert "function combatCoordsHtml" in js
+    assert "function renderCombatBattleOverview" not in js
+    assert "mission=attack" in js.split("function fleetAttackHrefFromCoords")[1][:400]
+    assert "gc-combat-report-panel--loot-empty" in js
+    assert "combat_report_attack_btn" in js
+    assert "combat_report_kind_world_boss" in js
+    assert ".gc-combat-report-actions" in css
+    assert ".gc-combat-kind-badge--pirate" in css
+
+def test_gc700d_combat_debris_recycler_ux():
+    """GC-700D/E: debris metadata UX — recycler hint + one-click send CTA."""
+    js = _read("static/js/messages.js")
+    css = _read("static/style.css")
+    qa = _read("static/js/galaxy-quick-action.js")
     en = _read("locales/en.json")
     de = _read("locales/de.json")
 
     assert "function fleetRecycleHrefFromCoords" in js
-    assert "mission=recycle" in js
+    assert "data-combat-debris-recycle" in js
+    assert "sendDebrisRecycle" in js
+    assert "closeInboxReportModal()" in js.split("[data-combat-debris-recycle]")[1][:800]
     assert "combat_report_send_recycler" in js
     assert "recycler_slots_needed" in js
     assert "renderCombatDebrisPanel(safeMeta)" in js.split("function renderCombatReportFull")[1]
+    assert "function sendDebrisRecycle" in qa or "async sendDebrisRecycle" in qa
+    assert "mission_type: \"recycle\"" in qa or "mission_type: 'recycle'" in qa
+    assert "harvest_reclaimer" in qa
     assert "gc-combat-debris-footer" in css
     assert "gc-combat-debris-actions" in css
     assert '"combat_report_debris_recycler_needed"' in en

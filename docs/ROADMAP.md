@@ -111,7 +111,7 @@ Docs: [PLANET_SCOPE.md](PLANET_SCOPE.md), [PLANET_EVOLUTION.md](PLANET_EVOLUTION
 | **Kampf-Auflösung** — Resolver, Reports, Loot, Debris, Ranking | ✅ | [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md); `test_combat.py` |
 | **GC-700A** — Combat simulator (`/combat-simulator`, Monte-Carlo) | ✅ | [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) § GC-700A |
 | **GC-700B** — Smart import (auto-fill + spy reports) | ✅ | [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) § GC-700A |
-| **GC-700** — Combat polish / gaps (kein Resolver-Neubau) | 📋 | Report-UX, PvP-Randfälle — siehe [PROJECT_INVENTORY.md](PROJECT_INVENTORY.md) |
+| **GC-700** — Combat polish / gaps (kein Resolver-Neubau) | ✅ GC-700E | Report-UX residual: CTAs, empty loot, kind badges — [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) |
 | Fleet Logistics (collect/distribute) | ✅ | GC-526–531: Bulk API, `/logistics` UI, Reports (`report_phase`) — [FLEET_SYSTEM.md](FLEET_SYSTEM.md) |
 | Recycler-Mission | ✅ | GC-800A Backend + GC-800B UI; GC-800C UX optional |
 | Espionage (beyond probe report) | ✅ | GC-401 tiered intel + inbox UI |
@@ -138,7 +138,8 @@ GC-803 ✅ → GC-900A–900E / GC-526–531 Logistics ✅ → GC-806 Navigation
 | **Chat** — Rooms, DM, Alliance room | ✅ | Rate limit in-process |
 | Chat Admin (mute, ban, delete) | ✅ | |
 | **Allianz** — Hub UI (EPIC-09 MVP) | ✅ | GC-AL-MVP-01…09: Management, Spenden, Projekte, Tech, Boni, PJAX |
-| Allianz Combat-/Diplomatie-Deep-Hooks | 📋 | Kriegs-Meta, Bündnis-Transport (post-Beta) |
+| Allianz Diplomatie → Fleet Hooks | ✅ | GC-AL-DIP-01: NAP-Lock, Bündnis-Transport, war-Flag |
+| Allianz Combat-/Kriegs-Meta | 📋 | Report-Badges, Score, End-War UI (nach DIP-01) |
 | **Ranking** — Live API | ✅ | |
 | Marketplace (Spieler-Handel) | 💡 | |
 
@@ -155,7 +156,6 @@ Vor öffentlichem Production-Launch.
 | Session-Cookie Flags | P1 | ✅ GC-SEC-P0 |
 | CSRF HTML-Forms (Auth) | P1 | ✅ GC-SEC-P0 |
 | Security Headers | P2 | ✅ GC-SEC-P0 |
-| Security-Headers | P2 | 📋 |
 
 Details: [SECURITY.md](SECURITY.md)
 
@@ -163,25 +163,26 @@ Details: [SECURITY.md](SECURITY.md)
 
 ## Phase 7 — Platform & Scale 📋
 
-Master-Doc: **[GC_PERF_CORE.md](GC_PERF_CORE.md)** (EPIC Performance Core — Maximum Speed Stack).
+Master-Doc: **[GC_PERF_CORE.md](GC_PERF_CORE.md)** (EPIC Performance Core).  
+**Produktentscheidung (2026-07):** Produktion bleibt auf **SQLite**. Postgres-Schema/Driver-Arbeit bleibt optionaler Code-Pfad; **Cutover / Multi-Worker auf PG sind nicht geplant.** Scale = Ops-Disziplin (1 Replica, 1 Worker, Sidecar, Backups) — [CAPABILITY_STATUS.md](CAPABILITY_STATUS.md), [RAILWAY_OPERATOR.md](RAILWAY_OPERATOR.md).
 
 | Item | Status | Notizen |
 |------|--------|--------|
-| Performance Core Epic | ✅ Foundation | Cutover-Serie offen — [GC_PERF_CORE.md](GC_PERF_CORE.md) |
+| Performance Core Epic | ✅ Foundation | SQLite-first; PG-Cutover **deferred / not planned** |
 | Messbarkeit (GC-PERF-CORE-001) | ✅ | Request-/SQL-/Payload-Budgets auf RequestPerf |
-| PostgreSQL Backend (Driver/Pool) | ✅ | `game/db.py` + `game/db_pg.py` |
-| **PostgreSQL Schema-Port** | ✅ | **[GC-PERF-PG-SCHEMA-001](GC_PERF_PG_SCHEMA_001.md)** |
-| **PostgreSQL Backend-Parität** | 🔄 | **[GC-PERF-PG-PARITY-001](GC_PERF_PG_PARITY_001.md)** — Block A (Auth) |
-| PG Parität / Datenimport / Staging / Cutover | 📋 | PG-PARITY → MIGRATE → STAGING → CUTOVER |
-| Multi-Worker / Game-Worker | ✅ vorbereitet | Erst nach Schema + Staging produktiv nutzen |
+| PostgreSQL Backend (Driver/Pool) | ✅ optional | Code vorhanden; **nicht** Produktionsziel |
+| PostgreSQL Schema-Port | ✅ optional | Historisch; kein Cutover-Plan |
+| PostgreSQL Backend-Parität / Staging / Cutover | 💡 deferred | Bewusst nicht priorisiert — SQLite bleibt |
+| Multi-Worker / Game-Worker | 💡 deferred | Erst sinnvoll mit Multi-Writer-DB; unter SQLite = 1 Worker |
 | Diet/Delta State | ✅ | `poll_version` + `?since=` |
 | Lazy Resource Accrual | ✅ | `GC_RESOURCE_PERSIST_SEC` (default 600) |
 | `main.js` Modularisierung | 🔄 Scaffold | Echter Split → GC-PERF-JS-002 |
 | Redis / Definition Cache | ✅ Basis | EffectResolver-Cache → GC-PERF-EFFECT-CACHE-001 |
 | Lasttest-Werkzeug | ✅ | `scripts/perf_load_test.py` — Staging-Baseline später |
-| WebSocket Push (optional) | 💡 | Polling bleibt Fallback — erst nach State/DB |
-| i18n UI-Switch (DE/EN) | 🔄 | `game/i18n.py`, `en.json`; Default `de` |
+| WebSocket Push (optional) | 💡 | Polling bleibt Fallback |
+| i18n UI-Switch (DE/EN) | 🔄 | `game/i18n.py`, Locales; Default `de` — siehe CAPABILITY P1 |
 | CDN / Asset-Pipeline | 💡 | `VERSION` Cache-Bust |
+| SQLite Ops Hygiene | 🔄 | 1 Worker/Replica, embedded cron, daily backups |
 
 ---
 
@@ -293,7 +294,7 @@ Wartungs-Schulden sind kein Beta-Blocker, solange GC-000 eingehalten wird, CI gr
 | Chat rate limit in-process | Multi-worker | Redis |
 | Recycler UX polish (GC-800C) | Optional UX | GC-800A/B ✅ — [GC-800_RECYCLER.md](GC-800_RECYCLER.md) |
 | Legacy Admin Forms doppelt | Wartung | Cleanup |
-| SQLite Single-Writer | Scale | Phase 7 |
+| SQLite Single-Writer | Scale | Ops: 1 Worker/Replica — Cutover **nicht** geplant ([CAPABILITY_STATUS.md](CAPABILITY_STATUS.md)) |
 | README vs VERSION drift | Docs | README auf 1.5.3 |
 | `fleet_presets` CHECK ohne colonize | Schema | Migration fix |
 | Ressourcen als REAL statt INTEGER | Präzision ab ~9×10¹⁵ | [GC-622B](GC-622B_RESOURCE_INTEGER_MIGRATION.md) (Backlog) |
@@ -313,6 +314,19 @@ Wartungs-Schulden sind kein Beta-Blocker, solange GC-000 eingehalten wird, CI gr
 ---
 
 ## Priorisierung
+
+### Capability-Prioritäten (aktuell)
+
+Kanonisch: **[CAPABILITY_STATUS.md](CAPABILITY_STATUS.md)**. Kurz:
+
+| Prio | Fokus | Status |
+|------|-------|--------|
+| P0 | Combat polish (GC-700E) → dann P2 | ✅ GC-700E; GC-AL-DIP-01 ✅ |
+| P1 | Beta Gate, First-30, Collector, Megabunker, i18n | 💡 zurückgestellt |
+| P2 | Alliance Kriegs-Meta · Imperium Presence (566B/568) · Marketplace | 📋 aktiv |
+| P3 | Radar, Seasons, Contract-Schuld (GC-512D, …) | 💡 |
+
+**Nicht priorisieren:** Postgres-Cutover, WebSocket, parallele Engines.
 
 ### Completion-First (Alpha — ab GC-600)
 
@@ -375,12 +389,13 @@ Vor neuen Features: **vorhandene Kernsysteme auf 100 %** — messbar via [GC-6
 | Item | Notizen |
 |------|---------|
 | `test_messages_js_spy_report_and_category_label` | `renderSpyReport` nach Inbox-Refactor umbenannt/entfernt — Test anpassen |
-| `test_no_undocumented_location_reload_in_game_static` | `main.js:684` PJAX-Fallback — Allowlist oder `GC.reloadCurrentPage` only |
+| `test_no_undocumented_location_reload_in_game_static` | Allowlist-Zeilen an `main.js` Drift anpassen (GC-BETA-001) — ✅ 2026-07-31 |
 
 ---
 
 ## Verwandte Dokumente
 
+- [CAPABILITY_STATUS.md](CAPABILITY_STATUS.md) — Was es kann / was es noch verträgt (Prioritäten ohne Postgres)
 - [IMPERIUM_VISION.md](IMPERIUM_VISION.md) — Genesis 2.0 Design Manifest (EPIC-15)
 - [BETA_GATE.md](BETA_GATE.md) — Alpha-Exit, Core Architecture Freeze, Versionsstrategie
 - [GC-610_COMPLETE_DEFINITION_AUDIT.md](GC-610_COMPLETE_DEFINITION_AUDIT.md) — Definition of Complete / Reifegrade

@@ -34,7 +34,7 @@ HTTP endpoints `POST /api/internal/cron/*` remain for manual/force runs (`GC_INT
 | `cronSchedule` | **Unset** on web | Would break the always-on gunicorn process |
 | Replicas | **1** | Volume + SQLite single-writer |
 | Serverless / scale-to-zero | **Off** | Game + embedded cron must stay warm |
-| `GUNICORN_WORKERS` | **1** (SQLite) | Multi-worker only after Postgres cutover |
+| `GUNICORN_WORKERS` | **1** (SQLite) | Multi-worker not used on SQLite production |
 | Separate ranking worker service | **Do not create** | Volume is service-bound |
 
 ---
@@ -101,9 +101,11 @@ Disable embedded cron only if you intentionally use an external HTTP scheduler: 
 
 ---
 
-## Postgres / scaling (later)
+## Postgres / scaling (later — not planned)
 
-See [GC_PERF_CORE.md](GC_PERF_CORE.md). Until Postgres cutover: Replicas = 1, workers = 1.
+**Produktentscheidung:** Produktion bleibt auf **SQLite**. Siehe [CAPABILITY_STATUS.md](CAPABILITY_STATUS.md).
+
+Optionaler PG-Code-Pfad existiert in [GC_PERF_CORE.md](GC_PERF_CORE.md), ist aber **kein Cutover-Ziel**. Until further notice: Replicas = 1, workers = 1.
 
 **GC-PERF-PROD-002:** docker-entrypoint starts `scripts/run_maintenance_worker.py` by default (`GC_MAINTENANCE_WORKER=1`) and sets `GC_EMBEDDED_CRON=0` on gunicorn so Soft-On ticks do not share the web GIL. Opt out: `GC_MAINTENANCE_WORKER=0` (legacy in-process `[embedded-cron]`).
 
@@ -113,7 +115,7 @@ See [GC_PERF_CORE.md](GC_PERF_CORE.md). Until Postgres cutover: Replicas = 1, wo
 
 **GC-RANK-AUTO-001:** Runtime also shows a **maintenance bag heartbeat** (age + source). Auto ranking is a **dirty batch** (~10 min): `players_updated` = dirty players only; ranks are rewritten after. Admin „Ranking jetzt neu berechnen“ = full-universe reconcile. If bag heartbeat is stale while Maintenance says Sidecar, check logs for `[maintenance-worker] started` / `waiting_for_leader_lock`.
 
-After Postgres: optional dedicated `scripts/run_game_worker.py` service + keep sidecar or HTTP cron.
+After multi-writer DB (if ever): optional dedicated `scripts/run_game_worker.py` service + keep sidecar or HTTP cron.
 
 Soft-Off A/B + `hold_ms` measurement: [GC_PERF_PROD_001.md](GC_PERF_PROD_001.md).
 
@@ -138,4 +140,5 @@ Check Railway logs for `[maintenance-worker] started` (GC-PERF-PROD-002) or lega
 - [ARCHITECTURE.md](ARCHITECTURE.md) — HTTP cron / embedded bag
 - [SECURITY.md](SECURITY.md) — `/health`
 - [PAYMENT_SHOP.md](PAYMENT_SHOP.md) — `PUBLIC_BASE_URL`
-- [GC_PERF_CORE.md](GC_PERF_CORE.md) — Postgres cutover
+- [CAPABILITY_STATUS.md](CAPABILITY_STATUS.md) — SQLite-first product path
+- [GC_PERF_CORE.md](GC_PERF_CORE.md) — Performance / optional PG code path

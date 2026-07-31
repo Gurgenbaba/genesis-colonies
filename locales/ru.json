@@ -6970,5 +6970,9 @@
   "admin_maint_bag_source": "Источник bag",
   "admin_maint_bag_stale_title": "Maintenance owner устарел",
   "admin_maint_bag_stale_hint": "Нет heartbeat bag — проверьте логи Sidecar/Embedded ([maintenance-worker] started). Авто-рейтинг может не работать.",
-  "admin_ranking_worker_hint": "Авто обновляет только dirty игроков; кнопка Admin = полный reconcile. Ранги после dirty batch."
+  "admin_ranking_worker_hint": "Авто обновляет только dirty игроков; кнопка Admin = полный reconcile. Ранги после dirty batch.",
+  "combat_report_attack_btn": "Атаковать координаты",
+  "combat_report_kind_pirate_base": "Пиратская база",
+  "combat_report_kind_world_boss": "Мировой босс",
+  "fleet_error_mission_blocked_nap": "Атака заблокирована пактом о ненападении (NAP)."
 }

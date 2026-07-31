@@ -6970,5 +6970,9 @@
   "admin_maint_bag_source": "Bag-Quelle",
   "admin_maint_bag_stale_title": "Maintenance-Owner stale",
   "admin_maint_bag_stale_hint": "Kein Bag-Heartbeat — Sidecar/Embedded: Logs prüfen ([maintenance-worker] started). Ranking-Auto kann ausfallen.",
-  "admin_ranking_worker_hint": "Auto aktualisiert nur dirty markierte Spieler; Admin-Button = Full-Reconcile aller Scores. Ränge werden nach dem Dirty-Batch neu gesetzt."
+  "admin_ranking_worker_hint": "Auto aktualisiert nur dirty markierte Spieler; Admin-Button = Full-Reconcile aller Scores. Ränge werden nach dem Dirty-Batch neu gesetzt.",
+  "combat_report_attack_btn": "Koordinaten angreifen",
+  "combat_report_kind_pirate_base": "Piratenbasis",
+  "combat_report_kind_world_boss": "World Boss",
+  "fleet_error_mission_blocked_nap": "Angriff durch Nichtangriffspakt (NAP) blockiert."
 }

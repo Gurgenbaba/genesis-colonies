@@ -357,6 +357,43 @@
     return `<div class="gc-spy-report-actions">${parts.join("")}</div>`;
   }
 
+  /** GC-700E: fleet CTAs on combat reports (coords already linked in hero/teaser). */
+  function renderCombatReportActionBar(meta) {
+    const kind = String(meta?.combat_kind || "").trim().toLowerCase();
+    // Special PvE fights are not re-attackable via normal fleet prefill.
+    if (kind === "world_boss" || kind === "pirate_base") return "";
+    const attackHref = fleetAttackHrefFromCoords(meta?.target_coords);
+    if (!attackHref) return "";
+    return (
+      `<div class="gc-combat-report-actions">` +
+        `<a href="${esc(attackHref)}" class="gc-btn gc-btn-danger gc-btn-sm" data-spy-action="attack">${esc(
+          t("combat_report_attack_btn", "Attack coordinates")
+        )}</a>` +
+      `</div>`
+    );
+  }
+
+  function combatKindBadgeHtml(meta) {
+    const kind = String(meta?.combat_kind || "").trim().toLowerCase();
+    if (kind === "world_boss") {
+      return `<span class="gc-combat-kind-badge gc-combat-kind-badge--world-boss">${esc(
+        t("combat_report_kind_world_boss", "World Boss")
+      )}</span>`;
+    }
+    if (kind === "pirate_base") {
+      return `<span class="gc-combat-kind-badge gc-combat-kind-badge--pirate">${esc(
+        t("combat_report_kind_pirate_base", "Pirate base")
+      )}</span>`;
+    }
+    return "";
+  }
+
+  function combatCoordsHtml(meta) {
+    const coords = meta?.target_coords;
+    if (!coords) return "";
+    return `<div class="gc-combat-report-coords gc-mono">${coordLink(coords, coords)}</div>`;
+  }
+
   function combatViewerOutcome(meta) {
     const winner = String(meta?.result || meta?.winner || "undecided");
     const perspective = String(meta?.perspective || "attacker");
@@ -755,13 +792,31 @@
       );
     }
     if (recycleHref && !isExpeditionField) {
-      footerParts.push(
-        `<div class="gc-combat-debris-actions">` +
-          `<a href="${esc(recycleHref)}" class="gc-btn gc-btn-primary gc-btn-sm">${esc(
-            t("combat_report_send_recycler", "Send recycler")
-          )}</a>` +
-        `</div>`
-      );
+      const c = parseTargetCoordsForFleet(meta?.target_coords);
+      const needed = Math.max(0, Number(debris.recycler_slots_needed) || 0);
+      if (c && needed > 0) {
+        footerParts.push(
+          `<div class="gc-combat-debris-actions">` +
+            `<button type="button" class="gc-btn gc-btn-primary gc-btn-sm"` +
+            ` data-combat-debris-recycle` +
+            ` data-target-galaxy="${esc(c.galaxy)}"` +
+            ` data-target-system="${esc(c.system)}"` +
+            ` data-target-position="${esc(c.position)}"` +
+            ` data-recycler-slots="${esc(needed)}">` +
+            `${esc(t("combat_report_send_recycler", "Send recycler"))}` +
+            `</button>` +
+          `</div>`
+        );
+      } else if (c) {
+        // Fallback: open fleet prefill when slots unknown.
+        footerParts.push(
+          `<div class="gc-combat-debris-actions">` +
+            `<a href="${esc(recycleHref)}" class="gc-btn gc-btn-primary gc-btn-sm">${esc(
+              t("combat_report_send_recycler", "Send recycler")
+            )}</a>` +
+          `</div>`
+        );
+      }
     }
     const footer = footerParts.length
       ? `<div class="gc-combat-debris-footer">${footerParts.join("")}</div>`
@@ -829,55 +884,6 @@
     );
   }
 
-  function renderCombatBattleOverview(meta) {
-    const targetPlanet = combatActorLabel(meta.target_planet_name);
-    const originPlanet = combatActorLabel(meta.origin_planet_name);
-    const atkName = combatActorLabel(meta.attacker_name) || "—";
-    const defName = combatActorLabel(meta.defender_name) || "—";
-    const atkShips = unitCountTotal(meta.attacking_ships);
-    const defFleet = unitCountTotal(meta.defending_ships);
-    const defStruct = unitCountTotal(meta.defending_defense || {});
-    const defUnitsLine = t("combat_report_side_defense", "%(fleet)s fleet · %(def)s defense")
-      .replace("%(fleet)s", formatInt(defFleet))
-      .replace("%(def)s", formatInt(defStruct));
-    const originPlanetLine =
-      originPlanet && originPlanet !== atkName
-        ? `<span class="gc-combat-report-side-planet">${esc(originPlanet)}</span>`
-        : "";
-    const targetPlanetLine =
-      targetPlanet && targetPlanet !== defName
-        ? `<span class="gc-combat-report-side-planet">${esc(targetPlanet)}</span>`
-        : "";
-
-    return (
-      `<section class="gc-combat-report-overview">` +
-        `<h4 class="gc-combat-report-panel-title">${esc(t("combat_report_battlefield", "Battlefield"))}</h4>` +
-        `<div class="gc-combat-report-battlefield">${esc(
-          combatBattlefieldLabel(meta) ||
-            t("combat_report_vs", "%(attacker)s vs %(defender)s")
-              .replace("%(attacker)s", atkName)
-              .replace("%(defender)s", defName)
-        )}</div>` +
-        `<div class="gc-combat-report-sides">` +
-          `<div class="gc-combat-report-side gc-combat-report-side--attacker">` +
-            `<span class="gc-combat-report-side-role">${esc(t("combat_report_section_attacker", "Attacker"))}</span>` +
-            `<strong class="gc-combat-report-side-name">${esc(atkName)}</strong>` +
-            originPlanetLine +
-            `<span class="gc-combat-report-side-units">${esc(
-              t("combat_report_side_ships", "%(count)s ships").replace("%(count)s", formatInt(atkShips))
-            )}</span>` +
-          `</div>` +
-          `<div class="gc-combat-report-side gc-combat-report-side--defender">` +
-            `<span class="gc-combat-report-side-role">${esc(t("combat_report_section_defender", "Defender"))}</span>` +
-            `<strong class="gc-combat-report-side-name">${esc(defName)}</strong>` +
-            targetPlanetLine +
-            `<span class="gc-combat-report-side-units">${esc(defUnitsLine)}</span>` +
-          `</div>` +
-        `</div>` +
-      `</section>`
-    );
-  }
-
   function renderCombatReportTeaser(meta, opts = {}) {
     const compact = Boolean(opts.compact);
     const messageId = opts.messageId;
@@ -896,6 +902,10 @@
         ? `${formatInt(loot.metal || 0)} / ${formatInt(loot.crystal || 0)} / ${formatInt(loot.fuel_cells || 0)}`
         : t("combat_report_loot_none", "No plunder");
     const placeLine = combatBattlefieldLabel(meta) || vsLine;
+    const kindBadge = combatKindBadgeHtml(meta);
+    const coordsRow = meta.target_coords
+      ? `<span class="gc-combat-teaser-coords gc-mono">${coordLink(meta.target_coords, meta.target_coords)}</span>`
+      : "";
 
     return (
       `<div class="gc-combat-teaser gc-combat-teaser--${esc(visual.badge)}${compact ? " gc-combat-teaser--compact" : ""}" data-result="${esc(resultKey)}">` +
@@ -903,6 +913,8 @@
           `<span class="gc-combat-teaser-icon" aria-hidden="true">${esc(visual.icon)}</span>` +
           `<div class="gc-combat-teaser-headings">` +
             `<span class="gc-combat-teaser-place">${esc(placeLine)}</span>` +
+            coordsRow +
+            (kindBadge ? `<span class="gc-combat-teaser-kind">${kindBadge}</span>` : "") +
             `<span class="gc-combat-teaser-vs">${esc(compact ? resultLabel : vsLine)}</span>` +
           `</div>` +
           `<span class="gc-combat-teaser-badge">${esc(resultLabel)}` +
@@ -943,12 +955,15 @@
 
     const sections = [];
 
+    const kindBadge = combatKindBadgeHtml(safeMeta);
     sections.push(
       `<header class="gc-combat-report-hero gc-combat-report-hero--${esc(visual.badge)}">` +
         `<div class="gc-combat-report-hero-top">` +
           `<span class="gc-combat-report-hero-icon" aria-hidden="true">${esc(visual.icon)}</span>` +
           `<div class="gc-combat-report-hero-text">` +
             (placeLine ? `<div class="gc-combat-report-place">${esc(placeLine)}</div>` : "") +
+            combatCoordsHtml(safeMeta) +
+            (kindBadge ? `<div class="gc-combat-report-kind">${kindBadge}</div>` : "") +
             `<div class="gc-combat-report-vs">${esc(vsLine)}</div>` +
           `</div>` +
           `<span class="gc-combat-report-result-badge">` +
@@ -958,6 +973,7 @@
               : "") +
           `</span>` +
         `</div>` +
+        renderCombatReportActionBar(safeMeta) +
       `</header>`
     );
 
@@ -975,12 +991,10 @@
           `<span class="gc-player-card-stat-label">${esc(t("combat_report_stat_def_lost", "Defender losses"))}</span>` +
           `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(defLossTotal))}</span>` +
         `</div>` +
-        (lootTotal > 0
-          ? `<div class="gc-player-card-stat gc-player-card-stat--highlight">` +
-              `<span class="gc-player-card-stat-label">${esc(t("combat_report_stat_loot", "Plunder"))}</span>` +
-              `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(lootTotal))}</span>` +
-            `</div>`
-          : "") +
+        `<div class="gc-player-card-stat${lootTotal > 0 ? " gc-player-card-stat--highlight" : ""}">` +
+          `<span class="gc-player-card-stat-label">${esc(t("combat_report_stat_loot", "Plunder"))}</span>` +
+          `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(lootTotal))}</span>` +
+        `</div>` +
       `</div>`
     );
 
@@ -1000,15 +1014,16 @@
       )
     );
 
-    if (lootTotal > 0) {
-      sections.push(
-        renderCombatPanel(
-          t("combat_report_section_loot", "Plundered cargo"),
-          renderCombatLootChips(loot),
-          "gc-combat-report-panel--loot gc-combat-report-panel--loot-found"
-        )
-      );
-    }
+    // GC-700E: always show loot panel (empty state via renderCombatLootChips).
+    sections.push(
+      renderCombatPanel(
+        t("combat_report_section_loot", "Plundered cargo"),
+        renderCombatLootChips(loot),
+        lootTotal > 0
+          ? "gc-combat-report-panel--loot gc-combat-report-panel--loot-found"
+          : "gc-combat-report-panel--loot gc-combat-report-panel--loot-empty"
+      )
+    );
 
     const debrisPanel = renderCombatDebrisPanel(safeMeta);
     if (debrisPanel) sections.push(debrisPanel);
@@ -2422,6 +2437,32 @@
       }
 
       if (e.target.closest("a.gc-galaxy-coord-link")) {
+        return;
+      }
+
+      const combatRecycle = e.target.closest("[data-combat-debris-recycle]");
+      if (combatRecycle) {
+        e.preventDefault();
+        e.stopPropagation();
+        // Close report first so the fleet-send toast is visible above the inbox.
+        closeInboxReportModal();
+        const qa = GC.GalaxyQuickAction;
+        if (!qa || typeof qa.sendDebrisRecycle !== "function") {
+          const href = fleetRecycleHrefFromCoords(
+            `[${combatRecycle.dataset.targetGalaxy}:${combatRecycle.dataset.targetSystem}:${combatRecycle.dataset.targetPosition}]`
+          );
+          if (href && typeof GC.navigateTo === "function") GC.navigateTo(href);
+          else if (href) window.location.href = href;
+          return;
+        }
+        qa.sendDebrisRecycle({
+          trigger: combatRecycle,
+          targetGalaxy: combatRecycle.dataset.targetGalaxy,
+          targetSystem: combatRecycle.dataset.targetSystem,
+          targetPosition: combatRecycle.dataset.targetPosition,
+          needed: combatRecycle.dataset.recyclerSlots,
+          watchArrivals: false,
+        });
         return;
       }
 

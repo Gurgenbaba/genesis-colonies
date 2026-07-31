@@ -75,6 +75,125 @@
       return Math.min(this.getAvailableReclaimers(root), need);
     },
 
+    /**
+     * Resolve free Harvest Reclaimers on the active planet.
+     * Prefer galaxy page dataset; otherwise GET /api/shipyard current_ships.
+     */
+    async resolveAvailableReclaimersAsync(root) {
+      const cached = this.getAvailableReclaimers(root);
+      if (cached > 0) return cached;
+      const { fetchGameAction } = deps();
+      if (!fetchGameAction) return 0;
+      try {
+        const res = await fetchGameAction("/api/shipyard", {
+          method: "GET",
+          headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" },
+        });
+        const payload = res?.data || res?.payload || res || {};
+        const ships = payload.current_ships || payload.ships || {};
+        if (ships && typeof ships === "object" && !Array.isArray(ships)) {
+          return Math.max(0, parseInt(ships.harvest_reclaimer || ships.recycler || "0", 10) || 0);
+        }
+        if (Array.isArray(ships)) {
+          const row = ships.find(
+            (s) => String(s?.ship_key || s?.key || "") === "harvest_reclaimer"
+          );
+          return Math.max(0, parseInt(row?.count || row?.amount || "0", 10) || 0);
+        }
+      } catch (_) {
+        /* fall through */
+      }
+      return 0;
+    },
+
+    /**
+     * One-click recycle send (Galaxy debris + combat-report CTA).
+     * Sends min(needed, available) Harvest Reclaimers via /api/fleet/send.
+     */
+    async sendDebrisRecycle({
+      trigger,
+      targetGalaxy,
+      targetSystem,
+      targetPosition,
+      needed,
+      root = null,
+      watchArrivals = false,
+    } = {}) {
+      const { t, showNotify } = deps();
+      const g = parseInt(targetGalaxy || "0", 10);
+      const s = parseInt(targetSystem || "0", 10);
+      const p = parseInt(targetPosition || "0", 10);
+      const need = Math.max(0, parseInt(needed || "0", 10) || 0);
+      const originPlanetId = this.getOriginPlanetId(root);
+      const available = await this.resolveAvailableReclaimersAsync(root);
+      const sendCount = Math.min(available, need);
+
+      if (!originPlanetId) {
+        showNotify(t("galaxy_debris_recycle_no_origin", "No active colony for recycler launch."), "error");
+        return null;
+      }
+      if (!g || !s || !p) {
+        showNotify(t("galaxy_debris_recycle_bad_target", "Invalid debris coordinates."), "error");
+        return null;
+      }
+      if (need < 1) {
+        showNotify(t("galaxy_debris_recycle_empty", "No harvestable debris."), "error");
+        return null;
+      }
+      if (sendCount < 1) {
+        showNotify(
+          t(
+            "galaxy_debris_recycle_no_ships",
+            "No Harvest Reclaimers free — wait for return or build more."
+          ),
+          "error"
+        );
+        return null;
+      }
+
+      const run = async () => {
+        return this.postFleetSend(root, trigger, {
+          skipGuard: true,
+          body: {
+            mission_type: "recycle",
+            target_galaxy: g,
+            target_system: s,
+            target_position: p,
+            ships: { harvest_reclaimer: sendCount },
+            resources: {},
+            speed_percent: 100,
+          },
+          onSuccess: async () => {
+            if (sendCount < need) {
+              showNotify(
+                t(
+                  "galaxy_debris_recycle_partial",
+                  "Fleet dispatched with available reclaimers (partial harvest)."
+                ),
+                "success"
+              );
+            } else {
+              showNotify(t("fleet_send_success", "Fleet dispatched."), "success");
+            }
+            if (watchArrivals) this.watchRecycleArrivals();
+          },
+          onError: async (reason, res) => {
+            if (await this.handleStaleRecycleTargetError(reason)) return;
+            this.notifyFleetError(reason, res, null);
+          },
+        });
+      };
+
+      if (trigger) {
+        let result = null;
+        await this.runGuarded(trigger, async () => {
+          result = await run();
+        });
+        return result;
+      }
+      return run();
+    },
+
     coordsLabel(galaxy, system, position) {
       return `[${galaxy}:${system}:${position}]`;
     },
@@ -569,68 +688,14 @@
       const wrap = btn.closest("[data-galaxy-ring-debris-wrap]");
       if (!wrap) return;
 
-      const { t, showNotify } = deps();
-      const targetGalaxy = parseInt(wrap.dataset.targetGalaxy || "0", 10);
-      const targetSystem = parseInt(wrap.dataset.targetSystem || "0", 10);
-      const targetPosition = parseInt(wrap.dataset.targetPosition || "0", 10);
-      const needed = parseInt(wrap.dataset.recyclerSlots || "0", 10);
-      const sendCount = this.resolveRecycleSendCount(root, needed);
-      const originPlanetId = this.getOriginPlanetId(root);
-
-      if (!originPlanetId) {
-        showNotify(t("galaxy_debris_recycle_no_origin", "No active colony for recycler launch."), "error");
-        return;
-      }
-      if (!targetGalaxy || !targetSystem || !targetPosition) {
-        showNotify(t("galaxy_debris_recycle_bad_target", "Invalid debris coordinates."), "error");
-        return;
-      }
-      if (needed < 1) {
-        showNotify(t("galaxy_debris_recycle_empty", "No harvestable debris."), "error");
-        return;
-      }
-      if (sendCount < 1) {
-        showNotify(
-          t(
-            "galaxy_debris_recycle_no_ships",
-            "No Harvest Reclaimers free — wait for return or build more."
-          ),
-          "error"
-        );
-        return;
-      }
-
-      await this.runGuarded(btn, async () => {
-        await this.postFleetSend(root, btn, {
-          skipGuard: true,
-          body: {
-            mission_type: "recycle",
-            target_galaxy: targetGalaxy,
-            target_system: targetSystem,
-            target_position: targetPosition,
-            ships: { harvest_reclaimer: sendCount },
-            resources: {},
-            speed_percent: 100,
-          },
-          onSuccess: async () => {
-            if (sendCount < needed) {
-              showNotify(
-                t(
-                  "galaxy_debris_recycle_partial",
-                  "Fleet dispatched with available reclaimers (partial harvest)."
-                ),
-                "success"
-              );
-            } else {
-              showNotify(t("fleet_send_success", "Fleet dispatched."), "success");
-            }
-            // Arrival watcher reloads Galaxy after harvest (avoid caching pre-harvest HTML).
-          },
-          onError: async (reason, res) => {
-            if (await this.handleStaleRecycleTargetError(reason)) return;
-            this.notifyFleetError(reason, res, null);
-          },
-        });
+      await this.sendDebrisRecycle({
+        trigger: btn,
+        root,
+        targetGalaxy: wrap.dataset.targetGalaxy,
+        targetSystem: wrap.dataset.targetSystem,
+        targetPosition: wrap.dataset.targetPosition,
+        needed: wrap.dataset.recyclerSlots,
+        watchArrivals: true,
       });
     },
 

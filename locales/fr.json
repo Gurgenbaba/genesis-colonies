@@ -6970,5 +6970,9 @@
   "admin_maint_bag_source": "Source bag",
   "admin_maint_bag_stale_title": "Owner maintenance périmé",
   "admin_maint_bag_stale_hint": "Pas de heartbeat bag — vérifier logs Sidecar/Embedded ([maintenance-worker] started). Le ranking auto peut être hors service.",
-  "admin_ranking_worker_hint": "Auto ne met à jour que les joueurs dirty; bouton Admin = réconciliation complète. Rangs réécrits après le lot dirty."
+  "admin_ranking_worker_hint": "Auto ne met à jour que les joueurs dirty; bouton Admin = réconciliation complète. Rangs réécrits après le lot dirty.",
+  "combat_report_attack_btn": "Attaquer les coordonnées",
+  "combat_report_kind_pirate_base": "Base pirate",
+  "combat_report_kind_world_boss": "Boss mondial",
+  "fleet_error_mission_blocked_nap": "Attaque bloquée par le pacte de non-agression (NAP)."
 }
