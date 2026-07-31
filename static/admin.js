@@ -1548,6 +1548,47 @@
     return res;
   }
 
+  async function publishAdminReleasePack() {
+    const version = String(qs("#admin_release_version")?.value || "").trim();
+    if (!version) {
+      showAlert(t("admin_news_release_version_required", "Bitte Version angeben (z. B. v0.9)."), "error");
+      return { ok: false };
+    }
+    const payload = {
+      version_tag: version,
+      version_label: String(qs("#admin_release_label")?.value || "").trim(),
+      release_date: String(qs("#admin_release_date")?.value || "").trim(),
+      badge: String(qs("#admin_release_badge")?.value || "ALPHA").trim(),
+      intro: String(qs("#admin_release_intro")?.value || "").trim(),
+      added: String(qs("#admin_release_added")?.value || ""),
+      changed: String(qs("#admin_release_changed")?.value || ""),
+      fixed: String(qs("#admin_release_fixed")?.value || ""),
+      set_banner: !!qs("#admin_release_banner")?.checked,
+      is_major_release: true,
+    };
+    const res = await adminPost("/api/admin/universe-news/publish-release", payload);
+    if (res.ok) {
+      notify(
+        `${t("admin_news_release_ok", "Release veröffentlicht.")} ${esc(res.version_tag || version)} (+${res.inserted || 0})`,
+        "success"
+      );
+      ["#admin_release_version", "#admin_release_label", "#admin_release_date", "#admin_release_intro",
+        "#admin_release_added", "#admin_release_changed", "#admin_release_fixed"].forEach((sel) => {
+        const el = qs(sel);
+        if (el) el.value = "";
+      });
+      const banner = qs("#admin_release_banner");
+      if (banner) banner.checked = false;
+      await loadAdminNews();
+    } else {
+      const msg = res.error === "version_exists"
+        ? t("admin_news_release_exists", "Diese Version existiert bereits — bitte Einträge bearbeiten.")
+        : (res.message || res.error || t("admin_action_failed", "Aktion fehlgeschlagen"));
+      showAlert(msg, "error");
+    }
+    return res;
+  }
+
   async function setAdminNewsBanner(newsId) {
     const res = await adminPost(`/api/admin/universe-news/${Number(newsId)}/banner`, {});
     if (res.ok) {
@@ -4019,6 +4060,7 @@
     if (act === "news-import-git") return importAdminGitHistory();
     if (act === "news-import-full") return importAdminFullHistory();
     if (act === "news-reclassify") return reclassifyAdminNews();
+    if (act === "news-publish-release") return publishAdminReleasePack();
     if (act === "news-edit") return startEditAdminNews(btn.dataset.newsId);
     if (act === "news-cancel-edit") return resetAdminNewsForm();
     if (act === "news-set-banner") return setAdminNewsBanner(btn.dataset.newsId);

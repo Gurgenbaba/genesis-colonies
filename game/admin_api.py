@@ -1926,6 +1926,45 @@ def api_import_changelog(admin_id: int) -> Dict[str, Any]:
     return _ok(**result)
 
 
+def api_publish_universe_news_release(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    from game.universe_news import publish_release_pack
+
+    result = publish_release_pack(
+        version_tag=str(body.get("version_tag") or ""),
+        version_label=str(body.get("version_label") or ""),
+        intro=str(body.get("intro") or ""),
+        release_date=str(body.get("release_date") or ""),
+        badge=str(body.get("badge") or "ALPHA"),
+        is_major_release=bool(body.get("is_major_release", True)),
+        added=body.get("added"),
+        changed=body.get("changed"),
+        fixed=body.get("fixed"),
+        set_banner=bool(body.get("set_banner")),
+        created_by=int(admin_id),
+    )
+    audit(
+        int(admin_id),
+        "universe_news_publish_release",
+        target_type="system",
+        payload={
+            "ok": bool(result.get("ok")),
+            "version_tag": result.get("version_tag"),
+            "inserted": result.get("inserted"),
+            "error": result.get("error"),
+        },
+    )
+    if not result.get("ok"):
+        return _err(
+            str(result.get("error") or "publish_failed"),
+            str(result.get("version_tag") or result.get("error") or ""),
+        )
+    return _ok(
+        version_tag=result.get("version_tag"),
+        inserted=result.get("inserted"),
+        entries=result.get("entries") or [],
+    )
+
+
 def api_import_git_history(admin_id: int) -> Dict[str, Any]:
     from game.universe_news import import_git_history
 

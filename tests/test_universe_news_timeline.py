@@ -48,11 +48,13 @@ def timeline_db(tmp_path, monkeypatch):
     db_file = tmp_path / "timeline.db"
     monkeypatch.setenv("GC_DB_PATH", str(db_file))
     monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
+    monkeypatch.setenv("GC_SKIP_NEWS_SEED", "1")
     monkeypatch.setattr(dbmod, "DB_PATH", db_file)
     monkeypatch.setattr(models, "DB_PATH", db_file)
 
     env = os.environ.copy()
     env["GC_DB_PATH"] = str(db_file)
+    env["GC_SKIP_NEWS_SEED"] = "1"
     result = subprocess.run(
         [sys.executable, str(MIGRATE_SCRIPT)],
         cwd=str(ROOT),
@@ -138,6 +140,13 @@ def test_whats_new_payload_latest_version(timeline_db):
 
 
 def test_whats_new_api(timeline_db, monkeypatch):
+    create_news(
+        title="v0.8 — Alpha Polish",
+        body="Major lead",
+        version_tag="v0.8",
+        is_major_release=True,
+        badge="ALPHA",
+    )
     create_news(title="Feature X", body="Feature X", version_tag="v0.8", category="FEATURE")
     _, uname = _create_player()
     client = _app_client(monkeypatch)
@@ -214,8 +223,8 @@ def test_sidebar_release_nav_falls_back_to_changelog_not_build_version(timeline_
     from game.config import get_app_version
 
     nav = sidebar_release_nav()
-    assert nav["label"] == "v0.8"
-    assert nav["href"] == "/news#version-v0-8"
+    assert nav["label"] == "v0.9"
+    assert nav["href"] == "/news#version-v0-9"
     build = str(get_app_version() or "").strip()
     assert build.startswith("0.")
     assert nav["label"] != f"v{build}"
@@ -228,7 +237,7 @@ def test_ensure_changelog_seeded_idempotent(timeline_db):
     assert int((first.get("import") or {}).get("inserted") or 0) >= 1
 
     nav = sidebar_release_nav()
-    assert nav["label"] == "v0.8"
+    assert nav["label"] == "v0.9"
 
     second = ensure_changelog_seeded()
     assert second["ok"] is True
@@ -237,12 +246,12 @@ def test_ensure_changelog_seeded_idempotent(timeline_db):
 
 
 def test_sidebar_release_nav_major_and_dev(timeline_db):
-    create_news(title="v0.8 — Alpha", body="Major", version_tag="v0.8", is_major_release=True)
+    create_news(title="v0.9 — LiveOps", body="Major", version_tag="v0.9", is_major_release=True)
     create_news(title="GC-650", body="Timeline", version_tag="development", category="FEATURE")
 
     nav = sidebar_release_nav()
-    assert nav["label"] == "v0.8"
-    assert nav["href"] == "/news#version-v0-8"
+    assert nav["label"] == "v0.9"
+    assert nav["href"] == "/news#version-v0-9"
     assert nav["has_dev_stream"] is False
 
 
@@ -262,6 +271,13 @@ def test_player_timeline_excludes_dev_and_git(timeline_db):
         category="DEVBLOG",
         source_ref="git:abc123",
     )
+    create_news(
+        title="GC-981: Add daily expedition efficiency",
+        body="Expedition work",
+        version_tag="development",
+        category="FEATURE",
+        source_ref="git:def456",
+    )
     reclassify_news_audience()
 
     payload = news_page_payload()
@@ -274,7 +290,39 @@ def test_player_timeline_excludes_dev_and_git(timeline_db):
     ]
     assert any("Fleet" in t for t in titles)
     assert not any("tests/" in t for t in titles)
+    assert not any("GC-981" in t for t in titles)
     assert not any(v.get("version_tag") == "development" for year in payload["timeline"] for v in year["versions"])
+    assert not any(v.get("is_development_stream") for year in payload["timeline"] for v in year["versions"])
+
+
+def test_player_timeline_newest_major_first(timeline_db):
+    create_news(
+        title="v0.8 — Alpha Polish",
+        body="Older",
+        version_tag="v0.8",
+        is_major_release=True,
+        published_at=1749513600,
+    )
+    create_news(
+        title="v0.9 — LiveOps",
+        body="Newest",
+        version_tag="v0.9",
+        is_major_release=True,
+        published_at=1753920000,
+    )
+    create_news(
+        title="GC-981 ticket noise",
+        body="Should stay on devlog",
+        version_tag="development",
+        category="FEATURE",
+        source_ref="git:noise1",
+    )
+
+    timeline = build_player_timeline(list_news(limit=50))
+    versions = [v["version_tag"] for year in timeline for v in year["versions"]]
+    assert versions[0] == "v0.9"
+    assert "v0.8" in versions
+    assert "development" not in versions
 
 
 def test_sanitize_player_text_strips_tickets():
@@ -296,33 +344,84 @@ def test_dev_content_hidden_from_players(timeline_db):
     assert _is_player_visible_entry(entry) is False
 
 
+def test_event_excluded_from_player_timeline_but_banner_ok(timeline_db):
+    create_news(
+        title="v0.9 — Focus",
+        body="Major intro",
+        version_tag="v0.9",
+        category="FEATURE",
+        is_major_release=True,
+    )
+    event = create_news(
+        title="World Boss spawned",
+        body="A titan appears.",
+        category="EVENT",
+        badge="EVENT",
+        source_ref="world_boss:spawn:99",
+        set_banner=True,
+    )
+    pirate = create_news(
+        title="Pirate hideout",
+        body="A base appeared.",
+        category="EVENT",
+        source_ref="pirate_base:spawn:7",
+    )
+
+    assert _is_player_visible_entry(event) is False
+    assert _is_player_visible_entry(pirate) is False
+
+    from game.universe_news import get_banner_entry
+
+    banner = get_banner_entry()
+    assert banner is not None
+    assert int(banner["id"]) == int(event["id"])
+    assert banner["category"] == "EVENT"
+
+    payload = news_page_payload()
+    titles = [e["title"] for e in payload["entries"]]
+    assert "World Boss spawned" not in titles
+    assert "Pirate hideout" not in titles
+    assert "v0.9 — Focus" in titles
+
+    timeline_blob = str(payload.get("timeline") or "")
+    assert "World Boss spawned" not in timeline_blob
+    assert "Pirate hideout" not in timeline_blob
+
+    release = payload.get("current_release") or {}
+    assert release.get("anchor_id") == "version-v0-9"
+    assert "version-v0-9" in str(release.get("href") or "")
+
+    nav = sidebar_release_nav()
+    assert nav.get("anchor_id") == "version-v0-9"
+
+
 def test_changelog_release_dates_monotonic(timeline_db):
     from pathlib import Path
 
     text = (Path(__file__).resolve().parent.parent / "CHANGELOG.md").read_text(encoding="utf-8")
     dates = _changelog_release_dates(text)
 
-    assert dates["v0.1"] < dates["v0.8"]
+    assert dates["v0.1"] < dates["v0.8"] < dates["v0.9"]
     assert _format_published(dates["v0.1"]) == "25.05.2026"
-    assert _format_published(dates["v0.8"]) == "10.06.2026"
+    assert _format_published(dates["v0.9"]) == "31.07.2026"
 
 
 def test_sync_release_dates_updates_rows(timeline_db):
     create_news(
-        title="v0.8 — Alpha",
+        title="v0.9 — LiveOps",
         body="Intro",
-        version_tag="v0.8",
+        version_tag="v0.9",
         is_major_release=True,
         published_at=1,
     )
     result = sync_release_dates()
     assert result["updated"] >= 1
-    entry = list_news(limit=5)[0]
-    assert entry["published_label"] == "10.06.2026"
+    entry = next(e for e in list_news(limit=20) if e.get("version_tag") == "v0.9")
+    assert entry["published_label"] == "31.07.2026"
 
 
 def test_latest_changelog_version_picks_highest_not_last_in_file(timeline_db):
-    assert _latest_changelog_version() == "v0.8"
+    assert _latest_changelog_version() == "v0.9"
 
 
 def test_repository_history_audit(timeline_db):
@@ -332,8 +431,8 @@ def test_repository_history_audit(timeline_db):
     assert audit["changelog_exists"] is True
     assert audit["commit_count"] > 0
     assert audit["first_commit_date"] == "2026-05-25"
-    assert audit["current_release"] == "v0.8"
-    assert audit["current_release_date"] == "10.06.2026"
+    assert audit["current_release"] == "v0.9"
+    assert audit["current_release_date"] == "31.07.2026"
     assert audit["development_commits_since_release"] < audit["commit_count"]
     nav = sidebar_release_nav()
     assert nav["label"].startswith("v")

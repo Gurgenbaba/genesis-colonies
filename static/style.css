@@ -2414,6 +2414,11 @@ body.gc-body-simple .gc-toast-stack{
   color: var(--gc-text-soft);
 }
 
+.gc-news-empty-panel .hint{
+  margin: 0 0 8px;
+  padding: 0 4px;
+}
+
 .gc-news-timeline{
   display: flex;
   flex-direction: column;
@@ -2467,6 +2472,15 @@ body.gc-body-simple .gc-toast-stack{
   scroll-margin-top: calc(var(--gc-sidebar-top, 136px) + 12px);
   padding: 0;
   overflow: visible;
+}
+
+.gc-news-version--hash-target{
+  outline: 1px solid rgba(255, 196, 0, 0.55);
+  box-shadow:
+    var(--gc-border-glow),
+    0 0 28px rgba(255, 196, 0, 0.16),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.45);
+  transition: outline-color 0.35s ease, box-shadow 0.35s ease;
 }
 
 .gc-news-version--major{
@@ -2968,6 +2982,27 @@ body.gc-body-simple .gc-toast-stack{
 
 .admin-news-compose{
   margin-top: 4px;
+}
+
+.admin-news-release-pack{
+  margin: 12px 0 16px;
+  padding: 14px 16px 12px;
+  border: 1px solid rgba(80, 160, 200, 0.28);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(6, 14, 24, 0.55);
+}
+
+.admin-news-release-sections{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 10px 0;
+}
+
+@media (max-width: 900px){
+  .admin-news-release-sections{
+    grid-template-columns: 1fr;
+  }
 }
 
 .admin-news-compose--edit{

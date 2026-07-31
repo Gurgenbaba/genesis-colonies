@@ -97,6 +97,22 @@ def bootstrap_application(*, skip_migration_check: bool = False) -> None:
     except Exception as exc:
         print(f"[GC bootstrap] WARNING: avatar backfill: {exc}", file=sys.stderr)
 
+    try:
+        from game.universe_news import ensure_player_news_seeded
+
+        skip_news_seed = os.environ.get("GC_SKIP_NEWS_SEED", "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+        if not skip_news_seed:
+            seeded = ensure_player_news_seeded()
+            if seeded.get("v09", {}).get("seeded") or seeded.get("changelog", {}).get("seeded"):
+                print(f"[GC bootstrap] universe news seed: {seeded}", file=sys.stderr)
+    except Exception as exc:
+        print(f"[GC bootstrap] WARNING: universe news seed: {exc}", file=sys.stderr)
+
     validate_schema = os.environ.get(
         "GC_VALIDATE_SCHEMA",
         "1" if not is_production() else "0",

@@ -805,6 +805,7 @@
           </label>
         </div>
         <p class="admin-small-hint">{{ T("admin_news_hint", "News-Einträge bleiben im Archiv sichtbar. Nur ein Eintrag ist gleichzeitig Live-Banner.") }}</p>
+        <p class="admin-small-hint">{{ T("admin_news_player_source_hint", "Spieler-Patchnotes kommen aus dem Release-Publisher oder CHANGELOG.md — nicht aus Git-Commits.") }}</p>
 
         <details class="admin-motd-collapse" id="admin-motd-published-collapse">
           <summary class="admin-motd-collapse-summary">
@@ -816,11 +817,11 @@
               <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="news-import-changelog">
                 {{ T("admin_news_import_changelog", "CHANGELOG.md importieren") }}
               </button>
-              <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="news-import-git">
-                {{ T("admin_news_import_git", "Git-Historie importieren") }}
+              <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="news-import-git" title="{{ T('admin_news_import_git_hint', 'Dev/Offline-Backfill — braucht .git, nicht für Spieler-Patchnotes') }}">
+                {{ T("admin_news_import_git", "Git-Historie (Dev only)") }}
               </button>
-              <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="news-import-full">
-                {{ T("admin_news_import_full", "Vollständiger Import") }}
+              <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="news-import-full" title="{{ T('admin_news_import_full_hint', 'CHANGELOG + Git Devlog — Git braucht .git') }}">
+                {{ T("admin_news_import_full", "Vollständiger Import (Dev)") }}
               </button>
               <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="news-reclassify">
                 {{ T("admin_news_reclassify", "Patchnotes bereinigen") }}
@@ -831,8 +832,67 @@
           </div>
         </details>
 
+        <div class="admin-news-release-pack" id="admin-news-release-pack">
+          <h3 class="admin-subsection-title">{{ T("admin_news_release_heading", "Release veröffentlichen") }}</h3>
+          <p class="admin-small-hint">{{ T("admin_news_release_hint", "Eine Version = Intro + Neu / Verbessert / Behoben (eine Zeile = ein Bullet). Existiert die Version schon, muss sie manuell bearbeitet werden.") }}</p>
+          <div class="admin-form-grid-2">
+            <div class="admin-field">
+              <label class="admin-label" for="admin_release_version">{{ T("admin_news_version_label", "Version") }}</label>
+              <input class="admin-input" id="admin_release_version" type="text" maxlength="32" placeholder="v0.9">
+            </div>
+            <div class="admin-field">
+              <label class="admin-label" for="admin_release_label">{{ T("admin_news_release_label", "Versions-Titel") }}</label>
+              <input class="admin-input" id="admin_release_label" type="text" maxlength="120" placeholder="LiveOps & World Events">
+            </div>
+            <div class="admin-field">
+              <label class="admin-label" for="admin_release_date">{{ T("admin_news_release_date", "Release-Datum") }}</label>
+              <input class="admin-input" id="admin_release_date" type="date">
+            </div>
+            <div class="admin-field">
+              <label class="admin-label" for="admin_release_badge">{{ T("admin_news_badge_label", "Badge") }}</label>
+              <select class="admin-input admin-select" data-gc-hud-select id="admin_release_badge">
+                <option value="ALPHA">ALPHA</option>
+                <option value="NEW">NEW</option>
+                <option value="HOT">HOT</option>
+                <option value="EVENT">EVENT</option>
+              </select>
+            </div>
+          </div>
+          <div class="admin-field admin-field-wide">
+            <label class="admin-label" for="admin_release_intro">{{ T("admin_news_release_intro", "Intro / Lead") }}</label>
+            <textarea class="admin-textarea" id="admin_release_intro" rows="3"
+                      placeholder="{{ T('admin_news_release_intro_ph', 'Kurzer Lead für die Timeline und Whats-New…') }}"></textarea>
+          </div>
+          <div class="admin-form-grid-3 admin-news-release-sections">
+            <div class="admin-field">
+              <label class="admin-label" for="admin_release_added">{{ T("news_section_new", "Neu") }}</label>
+              <textarea class="admin-textarea" id="admin_release_added" rows="6"
+                        placeholder="{{ T('admin_news_release_bullets_ph', 'Eine Zeile pro Punkt') }}"></textarea>
+            </div>
+            <div class="admin-field">
+              <label class="admin-label" for="admin_release_changed">{{ T("news_section_improved", "Verbessert") }}</label>
+              <textarea class="admin-textarea" id="admin_release_changed" rows="6"
+                        placeholder="{{ T('admin_news_release_bullets_ph', 'Eine Zeile pro Punkt') }}"></textarea>
+            </div>
+            <div class="admin-field">
+              <label class="admin-label" for="admin_release_fixed">{{ T("news_section_fixed", "Behoben") }}</label>
+              <textarea class="admin-textarea" id="admin_release_fixed" rows="6"
+                        placeholder="{{ T('admin_news_release_bullets_ph', 'Eine Zeile pro Punkt') }}"></textarea>
+            </div>
+          </div>
+          <label class="admin-checkbox-row" for="admin_release_banner">
+            <input type="checkbox" id="admin_release_banner" value="1">
+            <span>{{ T("admin_news_release_set_banner", "Als Live-Banner setzen") }}</span>
+          </label>
+          <div class="admin-btn-row">
+            <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="news-publish-release">
+              {{ T("admin_news_release_publish", "Release veröffentlichen") }}
+            </button>
+          </div>
+        </div>
+
         <div class="admin-news-compose" id="admin-news-compose">
-          <h3 class="admin-subsection-title" id="admin-news-form-title">{{ T("admin_news_compose_heading", "Neue Meldung veröffentlichen") }}</h3>
+          <h3 class="admin-subsection-title" id="admin-news-form-title">{{ T("admin_news_compose_heading", "Einzelmeldung / Entwurf") }}</h3>
           <input type="hidden" id="admin_news_edit_id" value="">
           <div class="admin-row admin-news-form">
           <div class="admin-form-grid-2">

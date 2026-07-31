@@ -66,6 +66,7 @@ Vor jeder Änderung die relevanten Docs lesen:
 | [EFFECTS.md](EFFECTS.md) | EffectResolver, Formeln |
 | [STATE_AJAX.md](STATE_AJAX.md) | Polling, PJAX, Live-State |
 | [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) | Serverweite PvE-Bosse, Contribution, LiveOps |
+| [UNIVERSE_NEWS.md](UNIVERSE_NEWS.md) | Genesis Timeline / Spieler-Patchnotes |
 | [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md) | Galaxy Heat, Piratenbasen, player-like AI, Bot-Log |
 | [INACTIVE_AUTOPLAY.md](INACTIVE_AUTOPLAY.md) | Dormante Konten: Round-Robin Wake, Presence, Economy (keine Expeditionen) |
 | [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) | 30-Tage Login + Battle Pass (EPIC-22) |
@@ -138,7 +139,7 @@ Kurz. Keine Projektzusammenfassung.
 ## Tests
 
 ```bash
-python -m pytest tests/ -v          # gesamt (4162 Tests)
+python -m pytest tests/ -v          # gesamt (4166 Tests)
 python -m pytest tests/test_fleet.py -v   # domänenspezifisch
 ```
 

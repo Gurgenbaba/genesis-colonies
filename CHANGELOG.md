@@ -2,10 +2,38 @@
 
 Vollständige Entwicklungshistorie von Projektstart bis heute.  
 Clustered by milestone versions (not every commit).  
-Stand: **2026-07-12** · Alpha-Meilenstein **v0.8** (Build-Zähler: `VERSION`, nur intern/Cache-Bust)
+Stand: **2026-07-31** · Alpha-Meilenstein **v0.9** (Build-Zähler: `VERSION`, nur intern/Cache-Bust)
 
 > Spieler: Aktuelle Patchnotes live im Spiel unter **News** (`/news`) und im NEWS-Banner.  
-> Admins: Einträge im Admin-Panel → Server → Universums-News.
+> Admins: Release-Publisher im Admin-Panel → Server → Universums-News (nicht Git-Commits).
+
+---
+
+## v0.9 — LiveOps & World Events *(2026-07-31)*
+
+### Added
+- **World Boss Events** — Encounter-Stage, Sofort-Angriff, Auto-Angriff
+- **Zähmen** in Phase 3 (10 %, 10h Timekeeper, 1h Cooldown)
+- **Titanen** auf der Übersicht mit Titan-Link Popover
+- **Ark-Token-Missionen** — Patrouille / Schlag / Void-Run mit Fail-Risiko
+- **Titan-Slots** — Start 1, Shop bis 4
+- **Piraten-Ökosystem**
+- **Login-Kalender & Battle Pass**
+- **Allianz-Hub**
+- **Convenience-Shop** (Stripe / PayPal)
+- **Story Ops / Lore** Sidequests mit Free-Shop Ark-Token Loop
+- **Universe News Release-Publisher** — kuratierte Spieler-Patchnotes ohne Git-Runtime
+
+### Changed
+- Titanen größer und mit Aura (helle + dunkle Landscapes)
+- World Boss Action-Bar: Angriff / Auto / Zähmen vereint
+- Performance & Live-Updates gehärtet
+- News: Git-Audit aus Spieler-Pfad entfernt; Whats-New nur Major Releases
+
+### Fixed
+- Diverse Sync-/PJAX-Themen
+- Timer- & Queue-Stabilität
+- Viele kleine Darstellungsfehler aus dem Alpha-Feedback
 
 ---
 

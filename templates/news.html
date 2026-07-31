@@ -4,7 +4,9 @@
 {% set payload = news_payload if news_payload is defined and news_payload else {'ok': false, 'timeline': []} %}
 {% set timeline = payload.timeline if payload.timeline is defined else [] %}
 
-<div class="gc-page gc-news-page" id="news-page">
+{% set _release_anchor = (payload.current_release.anchor_id if payload.current_release is defined and payload.current_release.anchor_id else (SIDEBAR_RELEASE.anchor_id if SIDEBAR_RELEASE is defined else '')) %}
+<div class="gc-page gc-news-page" id="news-page"
+     {% if _release_anchor %}data-current-release-anchor="{{ _release_anchor }}"{% endif %}>
 
   <header class="section-header gc-news-header">
     <div class="gc-news-header-top">
@@ -38,8 +40,9 @@
   {% endif %}
 
   {% if not payload.ok or not timeline %}
-  <section class="gc-panel gc-news-panel">
-    <p class="gc-news-empty">{{ T("news_empty", "Noch keine News veröffentlicht.") }}</p>
+  <section class="gc-panel gc-news-panel gc-news-empty-panel">
+    <p class="gc-news-empty">{{ T("news_empty", "Noch keine Patchnotes veröffentlicht.") }}</p>
+    <p class="hint">{{ T("news_empty_hint", "Sobald ein Release veröffentlicht ist, erscheint es hier als Genesis Timeline.") }}</p>
   </section>
   {% else %}
   <div class="gc-news-timeline">
@@ -54,7 +57,8 @@
         {% for version in year_block.versions %}
         {% set _is_dev = version.is_development_stream or ((version.version_tag or '') | lower) in ['development', 'dev', 'ongoing'] %}
         <article class="gc-panel gc-news-version{% if version.is_major_release %} gc-news-version--major{% endif %}{% if _is_dev %} gc-news-version--dev{% endif %}"
-                 id="{{ version.anchor_id }}">          <header class="gc-panel-header gc-news-version-head">
+                 id="{{ version.anchor_id }}">
+          <header class="gc-panel-header gc-news-version-head">
             <div class="gc-panel-head-left">
               <div class="gc-news-version-title-row">
                 {% if version.version_tag %}

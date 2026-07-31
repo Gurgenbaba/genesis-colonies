@@ -29,7 +29,7 @@ Status-Legende:
 | Docker + Gunicorn Deployment | ✅ |
 | DB-Abstraction (`game/db.py`) | ✅ |
 | Bootstrap & Migration Guard | ✅ |
-| pytest-Suite (**4162** Tests) | ✅ |
+| pytest-Suite (**4166** Tests) | ✅ |
 
 ---
 

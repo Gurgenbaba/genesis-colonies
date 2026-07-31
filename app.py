@@ -7080,6 +7080,14 @@ def api_admin_universe_news_import_changelog():
     return _admin_json(admin_api_logic.api_import_changelog(_admin_actor_id()))
 
 
+@app.route("/api/admin/universe-news/publish-release", methods=["POST"])
+@require_admin_api
+def api_admin_universe_news_publish_release():
+    return _admin_json(
+        admin_api_logic.api_publish_universe_news_release(_admin_actor_id(), _admin_body())
+    )
+
+
 @app.route("/api/admin/universe-news/import-git-history", methods=["POST"])
 @require_admin_api
 def api_admin_universe_news_import_git_history():

@@ -2242,6 +2242,7 @@
     if (path.endsWith("/chronicles")) return "chronicles";
     if (path.endsWith("/records")) return "records";
     if (path.endsWith("/messages")) return "messages";
+    if (path.endsWith("/news")) return "news";
     if (path.endsWith("/options")) return "options";
     if (path.endsWith("/galaxy")) return "galaxy";
     if (path.endsWith("/techtree")) return "techtree";
@@ -33722,6 +33723,39 @@
     });
 
     bindWorldBossAttackCooldownUnlock(root);
+  };
+  GC.modules.news = function initNewsPage() {
+    const root = document.getElementById("news-page");
+    if (!root) return;
+
+    const clearHighlight = () => {
+      root.querySelectorAll(".gc-news-version--hash-target").forEach((el) => {
+        el.classList.remove("gc-news-version--hash-target");
+      });
+    };
+
+    const scrollToReleaseAnchor = () => {
+      clearHighlight();
+      const rawHash = String(window.location.hash || "").replace(/^#/, "").trim();
+      if (!rawHash) return;
+      const target =
+        document.getElementById(rawHash) ||
+        root.querySelector(`[id="${CSS.escape(rawHash)}"]`);
+      if (!target) return;
+      target.classList.add("gc-news-version--hash-target");
+      try {
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+      } catch (_err) {
+        target.scrollIntoView(true);
+      }
+      window.setTimeout(clearHighlight, 2200);
+    };
+
+    const defer =
+      typeof requestAnimationFrame === "function"
+        ? (fn) => requestAnimationFrame(() => requestAnimationFrame(fn))
+        : (fn) => window.setTimeout(fn, 0);
+    defer(scrollToReleaseAnchor);
   };
   GC.modules.chronicles = function initChroniclesPage() {
     const root = document.getElementById("chronicles-page");

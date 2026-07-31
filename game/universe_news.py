@@ -352,17 +352,6 @@ def repository_history_audit(*, repo_root: Path | None = None) -> Dict[str, Any]
     }
 
 
-def _is_player_dev_highlight(entry: Dict[str, Any]) -> bool:
-    if _normalize_audience(entry.get("audience")) != AUDIENCE_DEV:
-        return False
-    if not str(entry.get("source_ref") or "").startswith("git:"):
-        return False
-    title = str(entry.get("title") or "")
-    if not _GC_TICKET_RE.search(title):
-        return False
-    return not _looks_like_dev_content(title)
-
-
 def _parse_changelog_month_ts(header_tail: str, fallback_ts: int) -> int:
     hinted = _extract_release_hint_ts(header_tail)
     return hinted if hinted else fallback_ts
@@ -377,10 +366,22 @@ def _decorate_player_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+def _is_live_event_entry(entry: Dict[str, Any]) -> bool:
+    """World Boss / pirate live ops — banner-eligible, not patchnotes."""
+    if _normalize_category(entry.get("category")) == "EVENT":
+        return True
+    ref = str(entry.get("source_ref") or "").strip().lower()
+    if ref.startswith("world_boss:") or ref.startswith("pirate"):
+        return True
+    return False
+
+
 def _is_player_visible_entry(entry: Dict[str, Any]) -> bool:
     if entry.get("is_draft"):
         return False
     if _normalize_audience(entry.get("audience")) != AUDIENCE_PLAYER:
+        return False
+    if _is_live_event_entry(entry):
         return False
     if str(entry.get("version_tag") or "").strip().lower() in _DEVELOPMENT_VERSION_TAGS:
         return False
@@ -638,12 +639,18 @@ def create_news(
     created_by: int | None = None,
     source_ref: str = "",
     published_at: int | None = None,
+    entry_section: str = "",
+    audience: str | None = None,
     conn: sqlite3.Connection | None = None,
 ) -> Dict[str, Any]:
     clean_title = str(title or "").strip() or "Update"
     clean_body = str(body or "").strip()
     if not clean_body and not is_draft:
         raise ValueError("body_required")
+
+    section = str(entry_section or "").strip().lower()
+    if section and section not in ("added", "changed", "fixed", "technical", ""):
+        section = ""
 
     own = conn is None
     if own:
@@ -653,6 +660,19 @@ def create_news(
         cur = conn.cursor()
         if set_banner and not is_draft:
             _clear_banner(cur)
+        resolved_audience = (
+            _normalize_audience(audience)
+            if audience is not None
+            else _resolve_audience(
+                title=clean_title,
+                body=clean_body,
+                version_tag=version_tag,
+                category=category,
+                source_ref=source_ref,
+                entry_section=section,
+                is_major_release=is_major_release,
+            )
+        )
         cur.execute(
             f"""
             INSERT INTO universe_news (
@@ -676,15 +696,8 @@ def create_news(
                 1 if is_major_release else 0,
                 1 if is_draft else 0,
                 str(source_ref or "").strip()[:120],
-                _resolve_audience(
-                    title=clean_title,
-                    body=clean_body,
-                    version_tag=version_tag,
-                    category=category,
-                    source_ref=source_ref,
-                    is_major_release=is_major_release,
-                ),
-                "",
+                resolved_audience,
+                section,
             ),
         )
         news_id = int(cur.lastrowid)
@@ -861,63 +874,31 @@ def _player_sections_for_version(entries: List[Dict[str, Any]]) -> List[Dict[str
     return sections
 
 
-def _development_player_block(
-    entries: List[Dict[str, Any]],
-    *,
-    locale: str | None = None,
-) -> Dict[str, Any] | None:
-    from game.i18n import tr
-
-    highlights = [_decorate_player_entry(e) for e in entries if _is_player_dev_highlight(e)]
-    if not highlights:
-        return None
-    by_date: Dict[str, List[Dict[str, Any]]] = {}
-    for row in highlights:
-        day = str(row.get("published_label") or "")
-        by_date.setdefault(day, []).append(row)
-    day_sections: List[Dict[str, Any]] = []
-    sorted_days = sorted(
-        by_date.items(),
-        key=lambda item: max(int(r.get("published_at") or 0) for r in item[1]),
-        reverse=True,
-    )
-    for day, rows in sorted_days:
-        day_sections.append(
-            {
-                "key": f"dev-{day.replace('.', '-')}",
-                "label_key": "",
-                "label": day,
-                "entries": sorted(rows, key=lambda r: -int(r.get("published_at") or 0)),
-                "is_date_group": True,
-            }
-        )
-    return {
-        "version_tag": "development",
-        "version_label": tr("news_dev_stream_label", "Ongoing Development", locale=locale),
-        "is_major_release": False,
-        "badge": "DEV",
-        "anchor_id": "version-development",
-        "intro": tr("news_dev_stream_hint", "Active development since the last release.", locale=locale),
-        "release_date": "",
-        "sections": day_sections,
-        "is_development_stream": True,
-    }
+def _version_block_recency(version: Dict[str, Any]) -> Tuple[int, int, int, str]:
+    """Newest-first key: major published_at, then version number, then tag."""
+    rows = version.get("entries") or []
+    major_ts = 0
+    any_ts = 0
+    for row in rows:
+        ts = int(row.get("published_at") or 0)
+        if ts > any_ts:
+            any_ts = ts
+        if row.get("is_major_release") and ts > major_ts:
+            major_ts = ts
+    tag = str(version.get("version_tag") or "").strip()
+    major, minor, _ = _version_sort_key(tag)
+    return (major_ts or any_ts, major, minor, tag)
 
 
 def build_player_timeline(
     entries: List[Dict[str, Any]],
     *,
-    dev_pool: List[Dict[str, Any]] | None = None,
     locale: str | None = None,
 ) -> List[Dict[str, Any]]:
+    """Player patchnotes only — newest major/version first. No git/dev stream."""
     player_entries = [e for e in entries if _is_player_visible_entry(e)]
     timeline = build_timeline(player_entries)
     cleaned: List[Dict[str, Any]] = []
-
-    dev_block = _development_player_block(dev_pool or entries, locale=locale)
-    if dev_block:
-        year = datetime.now(tz=timezone.utc).year
-        cleaned.append({"year": year, "versions": [dev_block]})
 
     for year_block in timeline:
         versions: List[Dict[str, Any]] = []
@@ -945,6 +926,7 @@ def build_player_timeline(
             version["intro"] = intro
             version["sections"] = sections
             versions.append(version)
+        versions.sort(key=_version_block_recency, reverse=True)
         if versions:
             cleaned.append({"year": year_block["year"], "versions": versions})
     return cleaned
@@ -1018,16 +1000,25 @@ def news_page_payload(*, locale: str | None = None, conn: sqlite3.Connection | N
 
     loc = normalize_locale(locale or current_locale())
     all_entries = list_news(limit=800, conn=conn)
-    player_entries = [e for e in all_entries if _normalize_audience(e.get("audience")) == AUDIENCE_PLAYER]
-    timeline = build_player_timeline(player_entries, dev_pool=all_entries, locale=loc)
-    repo_audit = repository_history_audit()
+    player_entries = [
+        e
+        for e in all_entries
+        if _normalize_audience(e.get("audience")) == AUDIENCE_PLAYER and _is_player_visible_entry(e)
+    ]
+    timeline = build_player_timeline(player_entries, locale=loc)
+    release = sidebar_release_nav(conn=conn)
     return {
         "ok": True,
         "entries": player_entries,
         "timeline": timeline,
         "audience": AUDIENCE_PLAYER,
         "locale": loc,
-        "repository": repo_audit,
+        "current_release": {
+            "label": release.get("label") or "",
+            "version_tag": release.get("version_tag") or "",
+            "anchor_id": release.get("anchor_id") or "",
+            "href": release.get("href") or "/news",
+        },
     }
 
 
@@ -1043,12 +1034,23 @@ def whats_new_payload(*, conn: sqlite3.Connection | None = None) -> Dict[str, An
     if not timeline:
         return {"ok": True, "show": False}
 
-    latest_year = timeline[0]
-    versions = latest_year.get("versions") or []
-    if not versions:
+    latest = None
+    for year_block in timeline:
+        for version in year_block.get("versions") or []:
+            if version.get("is_development_stream"):
+                continue
+            tag = str(version.get("version_tag") or "").strip().lower()
+            if tag in _DEVELOPMENT_VERSION_TAGS:
+                continue
+            if not version.get("is_major_release"):
+                continue
+            latest = version
+            break
+        if latest:
+            break
+    if not latest:
         return {"ok": True, "show": False}
 
-    latest = versions[0]
     highlights = []
     for section in latest.get("sections") or []:
         highlights.extend(section.get("entries") or [])
@@ -1518,6 +1520,243 @@ def _player_release_fallback_label() -> str:
     if latest:
         return _format_sidebar_version_label(latest)
     return "Genesis"
+
+
+def _normalize_version_tag(raw: str) -> str:
+    tag = str(raw or "").strip()
+    if not tag:
+        return ""
+    if not tag.lower().startswith("v") and re.match(r"^\d", tag):
+        tag = f"v{tag}"
+    return tag[:32]
+
+
+def _parse_release_date_ts(raw: str | None) -> int:
+    text = str(raw or "").strip()
+    if not text:
+        return _now_ts()
+    for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%Y/%m/%d"):
+        try:
+            dt = datetime.strptime(text, fmt).replace(tzinfo=timezone.utc)
+            return int(dt.timestamp())
+        except ValueError:
+            continue
+    return _now_ts()
+
+
+def _normalize_bullet_list(items: Any) -> List[str]:
+    if items is None:
+        return []
+    if isinstance(items, str):
+        lines = items.replace("\r\n", "\n").split("\n")
+    elif isinstance(items, (list, tuple)):
+        lines = [str(x) for x in items]
+    else:
+        return []
+    out: List[str] = []
+    for line in lines:
+        bullet = str(line or "").strip()
+        if not bullet:
+            continue
+        if bullet.startswith(("- ", "* ", "• ")):
+            bullet = bullet[2:].strip()
+        bullet = _sanitize_player_text(bullet)
+        if bullet:
+            out.append(bullet[:200])
+    return out
+
+
+def version_has_player_rows(version_tag: str, *, conn) -> bool:
+    tag = _normalize_version_tag(version_tag)
+    if not tag:
+        return False
+    row = conn.execute(
+        """
+        SELECT COUNT(*) AS c
+        FROM universe_news
+        WHERE version_tag = ? AND is_draft = 0 AND audience = ?;
+        """,
+        (tag, AUDIENCE_PLAYER),
+    ).fetchone()
+    return int(row["c"] or 0) > 0
+
+
+def publish_release_pack(
+    *,
+    version_tag: str,
+    version_label: str = "",
+    intro: str = "",
+    release_date: str = "",
+    badge: str = "ALPHA",
+    is_major_release: bool = True,
+    added: Any = None,
+    changed: Any = None,
+    fixed: Any = None,
+    set_banner: bool = False,
+    created_by: int | None = None,
+    conn: sqlite3.Connection | None = None,
+) -> Dict[str, Any]:
+    """Publish a curated player release (Neu / Verbessert / Behoben). Rejects if version exists."""
+    tag = _normalize_version_tag(version_tag)
+    if not tag:
+        return {"ok": False, "error": "version_required"}
+
+    added_list = _normalize_bullet_list(added)
+    changed_list = _normalize_bullet_list(changed)
+    fixed_list = _normalize_bullet_list(fixed)
+    if not (added_list or changed_list or fixed_list or str(intro or "").strip()):
+        return {"ok": False, "error": "empty_release"}
+
+    label = _sanitize_player_text(version_label) or tag
+    intro_body = str(intro or "").strip() or _major_release_intro(label)
+    ts = _parse_release_date_ts(release_date)
+    major_title = f"{tag} — {label}".strip(" —")[:200]
+
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        if version_has_player_rows(tag, conn=conn):
+            return {"ok": False, "error": "version_exists", "version_tag": tag}
+
+        inserted: List[Dict[str, Any]] = []
+        intro_entry = create_news(
+            title=major_title,
+            body=intro_body,
+            set_banner=bool(set_banner),
+            version_tag=tag,
+            category="ALPHA" if str(badge).upper() == "ALPHA" else "FEATURE",
+            badge=badge or "NEW",
+            is_major_release=bool(is_major_release),
+            created_by=created_by,
+            source_ref=f"release:{tag}",
+            published_at=ts,
+            entry_section="",
+            audience=AUDIENCE_PLAYER,
+            conn=conn,
+        )
+        inserted.append(intro_entry)
+
+        section_specs = (
+            ("added", added_list, "FEATURE"),
+            ("changed", changed_list, "FEATURE"),
+            ("fixed", fixed_list, "BUGFIX"),
+        )
+        for section_key, bullets, category in section_specs:
+            for bullet in bullets:
+                entry = create_news(
+                    title=bullet[:200],
+                    body=bullet,
+                    version_tag=tag,
+                    category=category,
+                    badge="",
+                    is_major_release=False,
+                    created_by=created_by,
+                    source_ref=f"release:{tag}:{section_key}",
+                    published_at=ts,
+                    entry_section=section_key,
+                    audience=AUDIENCE_PLAYER,
+                    conn=conn,
+                )
+                inserted.append(entry)
+
+        if own:
+            conn.commit()
+        return {
+            "ok": True,
+            "version_tag": tag,
+            "inserted": len(inserted),
+            "entries": inserted,
+        }
+    finally:
+        if own:
+            conn.close()
+
+
+V09_RELEASE_PACK: Dict[str, Any] = {
+    "version_tag": "v0.9",
+    "version_label": "LiveOps & World Events",
+    "release_date": "2026-07-31",
+    "badge": "ALPHA",
+    "intro": (
+        "Genesis Colonies lebt: World Bosses, Titanen-Missionen, Piraten, "
+        "Login/Battle Pass, Allianz-Hub und mehr — Patchnotes für Commander."
+    ),
+    "added": [
+        "World Boss Events mit Encounter-Stage, Sofort-Angriff und Auto-Angriff",
+        "Zähmen in Phase 3 (10 % Chance, 10h Timekeeper, 1h Cooldown)",
+        "Titanen auf der Übersicht mit Titan-Link Popover",
+        "Ark-Token-Missionen: Patrouille, Schlag und Void-Run mit Fail-Risiko",
+        "Titan-Slots: Start 1, im Shop erweiterbar bis 4",
+        "Piraten-Ökosystem als lebendige Bedrohung",
+        "Login-Kalender und Battle Pass",
+        "Allianz-Hub mit Spenden, Projekten, Tech und Boni",
+        "Convenience-Shop (Stripe / PayPal)",
+        "Story Ops / Lore Sidequests mit Free-Shop Ark-Token Loop",
+    ],
+    "changed": [
+        "Titanen größer und mit Aura — lesbar auf hellen und dunklen Landscapes",
+        "World Boss: Angriff, Auto und Zähmen in einer Action-Bar",
+        "Performance und Live-Updates weiter gehärtet",
+        "UI-Feinschliff über Overview, Fleet und News",
+    ],
+    "fixed": [
+        "Diverse Sync- und PJAX-Themen",
+        "Timer- und Queue-Stabilität",
+        "Viele kleine Darstellungsfehler aus dem Alpha-Feedback",
+    ],
+}
+
+
+def ensure_v09_release_seeded(*, conn: sqlite3.Connection | None = None) -> Dict[str, Any]:
+    """Idempotent curated v0.9 player pack (not git)."""
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        if not table_exists(conn, "universe_news"):
+            return {"ok": False, "error": "schema_missing", "seeded": False}
+        if version_has_player_rows("v0.9", conn=conn):
+            return {"ok": True, "seeded": False, "reason": "v0.9_exists"}
+        result = publish_release_pack(
+            version_tag=V09_RELEASE_PACK["version_tag"],
+            version_label=V09_RELEASE_PACK["version_label"],
+            intro=V09_RELEASE_PACK["intro"],
+            release_date=V09_RELEASE_PACK["release_date"],
+            badge=V09_RELEASE_PACK["badge"],
+            is_major_release=True,
+            added=V09_RELEASE_PACK["added"],
+            changed=V09_RELEASE_PACK["changed"],
+            fixed=V09_RELEASE_PACK["fixed"],
+            set_banner=False,
+            conn=conn,
+        )
+        if own and result.get("ok"):
+            conn.commit()
+        return {
+            "ok": bool(result.get("ok")),
+            "seeded": bool(result.get("ok")),
+            "publish": result,
+        }
+    finally:
+        if own:
+            conn.close()
+
+
+def ensure_player_news_seeded(*, conn: sqlite3.Connection | None = None) -> Dict[str, Any]:
+    """Boot helper: CHANGELOG majors if empty, then curated v0.9 pack."""
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        changelog = ensure_changelog_seeded(conn=conn)
+        v09 = ensure_v09_release_seeded(conn=conn)
+        if own:
+            conn.commit()
+        return {"ok": True, "changelog": changelog, "v09": v09}
+    finally:
+        if own:
+            conn.close()
 
 
 def ensure_changelog_seeded(*, conn: sqlite3.Connection | None = None) -> Dict[str, Any]:
