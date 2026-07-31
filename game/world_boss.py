@@ -1,8 +1,10 @@
 """
 EPIC-20 — World Boss Events (server-wide PvE).
 
-Owner of shared-HP events, contribution ledger, schedule, and reward claims.
-Combat math stays in ``game/combat.py``; fleet send/arrival orchestration in ``game/fleet.py``.
+Owner of shared-HP events, contribution ledger, schedule, reward claims,
+and instant encounter attacks (``execute_instant_attack``).
+Ship combat stats / research mods come from ``game/combat.py`` + ``combat_models``;
+legacy arrival resolve remains in ``game/fleet.py`` for in-flight leftovers only.
 """
 
 from __future__ import annotations
@@ -39,13 +41,18 @@ SCHEDULE_RUNTIME_KEY = "world_boss_last_ended_at"
 SPAWN_RUNTIME_KEY = "world_boss_last_spawn_at"
 ROTATION_RUNTIME_KEY = "world_boss_rotation_index"
 
-# Raid HP mapping (combat still uses simulate_battle; HP is not raw prestige).
+# Raid HP mapping (instant snapshot + legacy arrival wipe mapping).
 # Even fight full wipe ≈ WAVE_HP_FRACTION of max_hp.
 WAVE_HP_FRACTION = 0.02
 # Soft overkill: 1 + scale * log2(1 + force_ratio). Mega fleets approach the cap.
 OVERKILL_LOG_SCALE = 0.15
 # Cap ≈ 8% → solo mega fleet needs ~13 waves (target band 10–20 hits).
 MAX_WAVE_HP_FRACTION = 0.08
+
+# Instant encounter strike (GC-WB-ATTACK-002) — no ship losses, no flight.
+INSTANT_CRIT_CHANCE = 0.12
+INSTANT_CRIT_MULT = 1.5
+ALLIANCE_SALVO_FRACTION = 0.0  # reserved; visual hook only until LIVEOPS tuning
 
 # Alliance XP from world-boss damage (good, not OP vs donation daily ~150).
 # ~1 XP per 40k damage; hard cap per wave so mega fleets cannot dump levels.
@@ -472,13 +479,8 @@ def get_bosses_for_system(
             "hp_ratio": event["hp_ratio"],
             "ends_at": event["ends_at"],
             "coords": event["coords"],
-            "fleet_deep_link": (
-                f"/fleet?mission=attack"
-                f"&target_galaxy={int(event['galaxy'])}"
-                f"&target_system={int(event['system'])}"
-                f"&target_position={int(event['position'])}"
-                f"&target_type=world_boss"
-            ),
+            "fleet_deep_link": f"/world-boss",
+            "encounter_path": "/world-boss",
             "wave_cooldown_sec": int(WAVE_COOLDOWN_SEC),
             "max_waves": int(MAX_WAVES_PER_PLAYER),
         }
@@ -847,6 +849,461 @@ def select_world_boss_auto_attack_ships(
         }
     )
     return dict(selected), meta
+
+
+def hp_phase_from_ratio(hp_ratio: float) -> int:
+    """UI/combat phase from remaining HP ratio (1 cyan / 2 orange / 3 red / 0 dead)."""
+    pct = float(hp_ratio) * 100.0
+    if pct <= 0:
+        return 0
+    if pct <= 25:
+        return 3
+    if pct <= 50:
+        return 2
+    return 1
+
+
+def compute_attack_power(
+    ships: Mapping[str, int],
+    *,
+    player_id: int,
+    planet_id: Optional[int] = None,
+    conn=None,
+) -> int:
+    """Sum of effective ship attack × qty (canonical combat stats + research mods)."""
+    from .combat import combat_modifiers_for_player
+    from .combat_models import combat_stats_for_ship
+
+    mods = combat_modifiers_for_player(
+        int(player_id),
+        planet_id=int(planet_id) if planet_id is not None else None,
+        conn=conn,
+    )
+    weapon_bonus = max(0.0, float(mods.weapon_bonus))
+    total = 0
+    for key, amount in dict(ships or {}).items():
+        qty = max(0, int(amount or 0))
+        if qty <= 0:
+            continue
+        stats = combat_stats_for_ship(str(key))
+        if stats is None or int(stats.attack) <= 0:
+            continue
+        effective = max(0, int(round(int(stats.attack) * (1.0 + weapon_bonus))))
+        total += effective * qty
+    return int(total)
+
+
+def compute_instant_hp_damage(
+    *,
+    ships: Mapping[str, int],
+    defender_ships: Mapping[str, int],
+    max_hp: int,
+    critical: bool = False,
+) -> int:
+    """
+    Map attack snapshot → shared boss HP damage (no simulate_battle / no losses).
+
+    Uses prestige scores of attacker vs wave stacks with the same wipe/overkill/cap
+    rules as ``compute_world_boss_hp_damage`` (even fight ≈ 2%, cap 8%).
+    """
+    from .scoring import compute_destroyed_raw_from_losses
+
+    hp_budget = max(0, int(max_hp))
+    if hp_budget <= 0:
+        return 0
+    atk = {
+        str(k): max(0, int(v or 0))
+        for k, v in dict(ships or {}).items()
+        if int(v or 0) > 0
+    }
+    wave = {
+        str(k): max(0, int(v or 0))
+        for k, v in dict(defender_ships or {}).items()
+        if int(v or 0) > 0
+    }
+    if not atk:
+        return 0
+    atk_score = int(compute_destroyed_raw_from_losses(atk)) if atk else 0
+    wave_score = int(compute_destroyed_raw_from_losses(wave)) if wave else 0
+    if atk_score <= 0:
+        return 0
+    if wave_score <= 0:
+        # No defender stacks — still allow a capped strike from attacker force.
+        wave_score = max(1, atk_score)
+    fraction = min(1.0, float(atk_score) / float(wave_score))
+    force_ratio = float(atk_score) / float(max(wave_score, 1))
+    overkill_mult = max(
+        1.0,
+        1.0 + float(OVERKILL_LOG_SCALE) * math.log2(max(1.0, force_ratio)),
+    )
+    base = float(hp_budget) * float(WAVE_HP_FRACTION) * fraction * overkill_mult
+    if critical:
+        base *= float(INSTANT_CRIT_MULT)
+    cap = float(hp_budget) * float(MAX_WAVE_HP_FRACTION)
+    damage = int(min(cap, max(0.0, base)))
+    if damage <= 0 and atk_score > 0:
+        return 1
+    return max(0, damage)
+
+
+def _projectile_profile_for_ships(ships: Mapping[str, int]) -> str:
+    from .combat_models import combat_stats_for_ship
+
+    best = 0
+    for key, amount in dict(ships or {}).items():
+        if int(amount or 0) <= 0:
+            continue
+        stats = combat_stats_for_ship(str(key))
+        if stats is None:
+            continue
+        best = max(best, int(stats.attack or 0))
+    if best >= 500:
+        return "plasma_heavy"
+    if best >= 100:
+        return "laser_mid"
+    return "kinetic_light"
+
+
+def _normalize_attack_ships(ships: Mapping[str, int] | None) -> Dict[str, int]:
+    from .fleet_defs import canonical_ship_key
+
+    out: Dict[str, int] = {}
+    for key, amount in dict(ships or {}).items():
+        qty = max(0, int(amount or 0))
+        if qty <= 0:
+            continue
+        ck = canonical_ship_key(str(key))
+        if not ck:
+            continue
+        out[ck] = int(out.get(ck, 0)) + qty
+    return out
+
+
+def _validate_ships_in_hangar(
+    ships: Mapping[str, int],
+    hangar: Mapping[str, int],
+) -> Tuple[bool, str]:
+    for key, qty in dict(ships or {}).items():
+        need = max(0, int(qty or 0))
+        if need <= 0:
+            continue
+        have = max(0, int(hangar.get(key) or 0))
+        if have < need:
+            return False, "insufficient_ships"
+    if not ships or sum(int(v or 0) for v in ships.values()) <= 0:
+        return False, "no_ships_selected"
+    return True, ""
+
+
+def execute_instant_attack(
+    player_id: int,
+    event_id: int,
+    ships: Mapping[str, int] | None,
+    *,
+    planet_id: int,
+    conn,
+    now: Optional[float] = None,
+    rng: Any = None,
+    auto_select: bool = False,
+) -> Dict[str, Any]:
+    """
+    GC-WB-ATTACK-002 — resolve a World Boss strike in-request (no flight, no losses).
+
+    Ships stay in hangar; cooldown and contribution update atomically with HP.
+    """
+    import random
+
+    from .fleet import get_planet_ships
+
+    ts = float(now if now is not None else _now())
+    pid = int(player_id)
+    eid = int(event_id)
+    origin_id = int(planet_id)
+
+    ok_atk, reason, meta = can_player_attack_boss(
+        pid,
+        eid,
+        conn=conn,
+        now=ts,
+        enforce_cooldown=True,
+        check_inflight=False,
+    )
+    if not ok_atk:
+        return {
+            "ok": False,
+            "error": reason,
+            "attack": None,
+            "boss": None,
+            "player": None,
+            **(meta or {}),
+        }
+
+    event = meta.get("event") or get_event_by_id(eid, conn=conn)
+    if not event or event["status"] != STATUS_ACTIVE:
+        return {"ok": False, "error": "world_boss_inactive", "attack": None, "boss": None, "player": None}
+
+    hangar = get_planet_ships(origin_id, conn=conn)
+    selected = _normalize_attack_ships(ships)
+    if auto_select or not selected:
+        defender_preview = defender_ships_for_event(event, conn=conn)
+        selected, pick_meta = select_world_boss_auto_attack_ships(
+            hangar,
+            defender_ships=defender_preview,
+            max_hp=int(event.get("max_hp") or 0),
+            event_id=eid,
+            conn=conn,
+        )
+        if not selected:
+            return {
+                "ok": False,
+                "error": "no_combat_ships_available",
+                "attack": None,
+                "boss": None,
+                "player": None,
+                "auto_meta": pick_meta,
+            }
+
+    ok_ships, ship_reason = _validate_ships_in_hangar(selected, hangar)
+    if not ok_ships:
+        return {
+            "ok": False,
+            "error": ship_reason,
+            "attack": None,
+            "boss": None,
+            "player": None,
+        }
+
+    definition = get_definition(event["boss_key"], conn=conn) or {}
+    phase_index, defender_ships = _resolve_phase_stacks(
+        definition,
+        current_hp=int(event["current_hp"]),
+        max_hp=int(event["max_hp"]),
+        current_stacks=event.get("fleet_stacks") or {},
+    )
+
+    battle_rng = rng if rng is not None else random.Random(
+        int(eid) * 1_000_003 + int(pid) * 97 + int(ts)
+    )
+    critical = bool(battle_rng.random() < float(INSTANT_CRIT_CHANCE))
+    attack_power = compute_attack_power(
+        selected, player_id=pid, planet_id=origin_id, conn=conn
+    )
+    rolled = compute_instant_hp_damage(
+        ships=selected,
+        defender_ships=defender_ships,
+        max_hp=int(event["max_hp"]),
+        critical=critical,
+    )
+    alliance_salvo = 0
+    if float(ALLIANCE_SALVO_FRACTION) > 0:
+        alliance_salvo = int(rolled * float(ALLIANCE_SALVO_FRACTION))
+        rolled += alliance_salvo
+
+    if rolled <= 0:
+        return {
+            "ok": False,
+            "error": "world_boss_no_damage",
+            "attack": None,
+            "boss": None,
+            "player": None,
+            "attack_power": attack_power,
+        }
+
+    before_hp = int(event["current_hp"])
+    max_hp = int(event["max_hp"])
+    cur = conn.execute(
+        """
+        UPDATE world_boss_events
+        SET current_hp = MAX(0, current_hp - ?),
+            updated_at = ?
+        WHERE id = ? AND status = ? AND current_hp > 0;
+        """,
+        (int(rolled), ts, eid, STATUS_ACTIVE),
+    )
+    if int(cur.rowcount or 0) <= 0:
+        return {
+            "ok": False,
+            "error": "world_boss_defeated",
+            "attack": None,
+            "boss": None,
+            "player": None,
+        }
+
+    updated_row = conn.execute(
+        "SELECT current_hp FROM world_boss_events WHERE id = ? LIMIT 1;",
+        (eid,),
+    ).fetchone()
+    new_hp = max(0, int(updated_row["current_hp"] if updated_row else 0))
+    applied = max(0, before_hp - new_hp)
+    defeated = new_hp <= 0
+
+    new_phase, remaining_def = _resolve_phase_stacks(
+        definition,
+        current_hp=new_hp,
+        max_hp=max_hp,
+        current_stacks=defender_ships,
+    )
+    new_status = STATUS_DEFEATED if defeated else STATUS_ACTIVE
+    conn.execute(
+        """
+        UPDATE world_boss_events
+        SET phase_index = ?,
+            fleet_stacks_json = ?,
+            status = ?,
+            defeated_at = CASE WHEN ? THEN ? ELSE defeated_at END,
+            updated_at = ?
+        WHERE id = ?;
+        """,
+        (
+            int(new_phase),
+            _json_dumps(remaining_def),
+            new_status,
+            1 if defeated else 0,
+            ts,
+            ts,
+            eid,
+        ),
+    )
+
+    try:
+        from .pirates.hooks import safe_record_heat
+
+        safe_record_heat(conn, int(event.get("galaxy") or 0) or None, "world_boss")
+    except Exception:
+        logger.exception("pirate heat world_boss instant hook failed event_id=%s", eid)
+
+    alliance_id = None
+    try:
+        from .alliance import get_player_alliance
+
+        membership = get_player_alliance(pid, conn=conn)
+        if membership:
+            alliance_id = int(membership["alliance_id"])
+    except Exception:
+        logger.exception("world_boss alliance lookup failed player=%s", pid)
+
+    note_attack_dispatched(
+        pid, eid, conn=conn, now=ts, alliance_id=alliance_id
+    )
+
+    wave_xp = 0
+    alliance_xp_granted = 0
+    if alliance_id is not None and applied > 0:
+        wave_xp = alliance_xp_from_boss_damage(int(applied))
+
+    _upsert_contribution(
+        event_id=eid,
+        player_id=pid,
+        alliance_id=alliance_id,
+        damage=applied,
+        alliance_xp=wave_xp,
+        now=ts,
+        conn=conn,
+    )
+
+    if alliance_id is not None and wave_xp > 0:
+        try:
+            from .alliance import grant_alliance_xp
+
+            alliance_xp_granted = int(
+                grant_alliance_xp(int(alliance_id), wave_xp, conn=conn)
+            )
+        except Exception:
+            logger.exception(
+                "world_boss alliance xp failed player=%s alliance=%s",
+                pid,
+                alliance_id,
+            )
+
+    try:
+        from .directives.progress import emit_world_boss_damage_event
+
+        # Synthetic movement id: unique per event/player/wave for directive ledger.
+        waves_after = int(meta.get("waves") or 0) + 1
+        synth_movement = int(eid) * 1_000_000 + (pid % 10_000) * 100 + (waves_after % 100)
+        emit_world_boss_damage_event(
+            pid,
+            movement_id=synth_movement,
+            damage=applied,
+            event_id=eid,
+            conn=conn,
+            now=ts,
+        )
+    except Exception:
+        logger.exception("world_boss directive emit failed instant event=%s", eid)
+
+    updated = get_event_by_id(eid, conn=conn)
+    if defeated and updated:
+        set_runtime_value(SCHEDULE_RUNTIME_KEY, str(ts), conn=conn)
+        try:
+            _announce_defeat(updated, conn=conn)
+        except Exception:
+            logger.exception("world_boss defeat news failed event=%s", eid)
+
+    cooldown_until = float(ts + WAVE_COOLDOWN_SEC)
+    hp_ratio = (float(new_hp) / float(max_hp)) if max_hp > 0 else 0.0
+    contrib_row = conn.execute(
+        """
+        SELECT damage, waves FROM world_boss_contributions
+        WHERE event_id = ? AND player_id = ? LIMIT 1;
+        """,
+        (eid, pid),
+    ).fetchone()
+    total_damage = int(contrib_row["damage"] or 0) if contrib_row else int(applied)
+    waves_done = int(contrib_row["waves"] or 0) if contrib_row else 1
+
+    rank = None
+    total_players = None
+    try:
+        contribs = list_contributions(eid, conn=conn, limit=200)
+        total_players = len(contribs)
+        for row in contribs:
+            if int(row.get("player_id") or 0) == pid:
+                rank = int(row.get("rank") or 0)
+                break
+    except Exception:
+        logger.exception("world_boss rank lookup failed")
+
+    hangar_after = get_planet_ships(origin_id, conn=conn)
+
+    return {
+        "ok": True,
+        "error": "",
+        "attack": {
+            "damage": int(applied),
+            "critical": bool(critical),
+            "projectile_profile": _projectile_profile_for_ships(selected),
+            "hit_at": int(ts),
+            "alliance_salvo": int(alliance_salvo),
+            "attack_power": int(attack_power),
+            "ships": dict(selected),
+        },
+        "boss": {
+            "event_id": eid,
+            "hp": int(new_hp),
+            "max_hp": int(max_hp),
+            "hp_pct": round(max(0.0, min(100.0, hp_ratio * 100.0)), 2),
+            "phase": int(hp_phase_from_ratio(hp_ratio)),
+            "phase_index": int(new_phase),
+            "defeated": bool(defeated),
+            "status": new_status,
+            "boss_key": str(event.get("boss_key") or ""),
+        },
+        "player": {
+            "total_damage": int(total_damage),
+            "rank": rank,
+            "total_players": total_players,
+            "cooldown_until": cooldown_until,
+            "waves": int(waves_done),
+            "max_waves": int(MAX_WAVES_PER_PLAYER),
+            "alliance_xp_granted": int(alliance_xp_granted),
+        },
+        "ships_snapshot": dict(selected),
+        "hangar_unchanged": hangar_after == hangar,
+        "event": updated,
+        "damage": int(applied),
+        "defeated": bool(defeated),
+    }
 
 
 def compute_world_boss_hp_damage(
@@ -1329,6 +1786,7 @@ def can_player_attack_boss(
         "wave_cooldown_sec": int(WAVE_COOLDOWN_SEC),
         "last_attack_at": last_at if last_at > 0 else None,
         "next_attack_at": None,
+        "cooldown_until": None,
         "cooldown_remaining": 0,
     }
     if waves >= MAX_WAVES_PER_PLAYER:
@@ -1342,8 +1800,10 @@ def can_player_attack_boss(
         return False, "world_boss_inflight", base_meta
     if enforce_cooldown and last_at > 0 and (ts - last_at) < WAVE_COOLDOWN_SEC:
         remaining = max(0, int(WAVE_COOLDOWN_SEC - (ts - last_at)))
+        next_at = float(last_at + WAVE_COOLDOWN_SEC)
         base_meta["cooldown_remaining"] = remaining
-        base_meta["next_attack_at"] = float(last_at + WAVE_COOLDOWN_SEC)
+        base_meta["next_attack_at"] = next_at
+        base_meta["cooldown_until"] = next_at
         return False, "world_boss_cooldown", base_meta
     base_meta["event"] = event
     return True, "", base_meta
@@ -2006,6 +2466,20 @@ def build_schedule_info(*, conn, now: Optional[float] = None) -> Dict[str, Any]:
     }
 
 
+def formation_preview_from_hangar(
+    hangar: Mapping[str, int] | None,
+    *,
+    limit: int = 4,
+) -> List[Dict[str, Any]]:
+    """Top combat hulls for Encounter Stage formation (max ``limit`` types)."""
+    combat = combat_ships_from_hangar(hangar)
+    items = sorted(
+        ((str(k), int(v)) for k, v in combat.items() if int(v) > 0),
+        key=lambda kv: (-kv[1], kv[0]),
+    )[: max(0, int(limit))]
+    return [{"ship_key": key, "count": qty} for key, qty in items]
+
+
 def _event_card_for_player(
     event: Dict[str, Any],
     player_id: Optional[int],
@@ -2043,6 +2517,27 @@ def _event_card_for_player(
                 int(player_id), int(event["id"]), conn=conn, now=now
             )
         outlook = build_player_reward_outlook(event, int(player_id), conn=conn)
+        formation: List[Dict[str, Any]] = []
+        auto_enabled = False
+        try:
+            from .fleet import get_planet_ships
+            from .planet_evolution.repository import get_context_planet
+
+            planet = get_context_planet(int(player_id), conn=conn)
+            if planet:
+                hangar = get_planet_ships(int(planet["id"]), conn=conn)
+                formation = formation_preview_from_hangar(hangar, limit=4)
+        except Exception:
+            logger.exception("world_boss formation preview failed player=%s", player_id)
+        if _auto_attack_columns_ready(conn):
+            auto_row = conn.execute(
+                """
+                SELECT auto_attack_enabled FROM world_boss_contributions
+                WHERE event_id = ? AND player_id = ? LIMIT 1;
+                """,
+                (int(event["id"]), int(player_id)),
+            ).fetchone()
+            auto_enabled = bool(auto_row and int(auto_row["auto_attack_enabled"] or 0))
         player_info = {
             "contribution": mine,
             "claim": claim,
@@ -2053,6 +2548,8 @@ def _event_card_for_player(
             "is_discoverer": bool(disc_id and int(disc_id) == int(player_id)),
             "alliance_xp_earned": int((mine or {}).get("alliance_xp") or 0),
             "reward_outlook": outlook,
+            "formation": formation,
+            "auto_attack_enabled": auto_enabled,
         }
     earned_tiers = set(outlook.get("earned_tiers") or [])
     return {
@@ -2076,6 +2573,7 @@ def build_world_boss_payload(
     conn,
     event_id: Optional[int] = None,
     now: Optional[float] = None,
+    flush_auto: bool = True,
 ) -> Dict[str, Any]:
     ts = float(now if now is not None else _now())
     empty = {
@@ -2089,9 +2587,21 @@ def build_world_boss_payload(
         "definitions": [],
         "schedule": build_schedule_info(conn=conn, now=ts),
         "server_now": ts,
+        "flushed_attacks": [],
     }
     if not world_boss_schema_ready(conn):
         return empty
+
+    # Opportunistic auto-fire so "Auto aktiv + CD frei" works without waiting on fleet_worker.
+    flushed_attacks: List[Dict[str, Any]] = []
+    if flush_auto and player_id is not None:
+        try:
+            flush_res = flush_ready_auto_attacks_for_player(int(player_id), conn=conn, now=ts)
+            raw_hits = flush_res.get("attacks") if isinstance(flush_res, dict) else None
+            if isinstance(raw_hits, list):
+                flushed_attacks = [h for h in raw_hits if isinstance(h, dict) and h.get("attack")]
+        except Exception:
+            logger.exception("world_boss opportunistic auto flush failed player=%s", player_id)
 
     schedule = build_schedule_info(conn=conn, now=ts)
     active = list_active_events(conn=conn, now=ts, limit=MAX_CONCURRENT_EVENTS + 5)
@@ -2144,7 +2654,361 @@ def build_world_boss_payload(
         "definitions": list_definitions(conn=conn),
         "schedule": schedule,
         "server_now": ts,
+        "flushed_attacks": flushed_attacks,
     }
+
+
+def _auto_attack_columns_ready(conn) -> bool:
+    from .db import column_exists
+
+    return bool(
+        column_exists(conn, WORLD_BOSS_CONTRIB_TABLE, "auto_attack_enabled")
+        and column_exists(conn, WORLD_BOSS_CONTRIB_TABLE, "auto_attack_ships_json")
+    )
+
+
+def _clear_auto_attack(event_id: int, player_id: int, *, conn) -> None:
+    if not _auto_attack_columns_ready(conn):
+        return
+    conn.execute(
+        """
+        UPDATE world_boss_contributions
+        SET auto_attack_enabled = 0,
+            auto_attack_ships_json = '{}',
+            updated_at = ?
+        WHERE event_id = ? AND player_id = ?;
+        """,
+        (_now(), int(event_id), int(player_id)),
+    )
+
+
+def maybe_fire_ready_auto_attack(
+    player_id: int,
+    event_id: int,
+    *,
+    conn,
+    now: Optional[float] = None,
+    ships: Mapping[str, int] | None = None,
+    planet_id: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Fire one instant strike when auto-attack is enabled and cooldown is free.
+
+    Shared by fleet_worker ticks and opportunistic WB payload flush.
+    Clears the flag on terminal failures (defeated / invalid hangar / wave limit).
+    """
+    if not world_boss_schema_ready(conn) or not _auto_attack_columns_ready(conn):
+        return {"ok": False, "fired": False, "error": "schema_not_ready"}
+
+    ts = float(now if now is not None else _now())
+    pid = int(player_id)
+    eid = int(event_id)
+
+    row = conn.execute(
+        """
+        SELECT c.auto_attack_enabled, c.auto_attack_ships_json, c.auto_attack_planet_id,
+               c.waves, e.status, e.ends_at, e.current_hp
+        FROM world_boss_contributions c
+        JOIN world_boss_events e ON e.id = c.event_id
+        WHERE c.event_id = ? AND c.player_id = ?
+        LIMIT 1;
+        """,
+        (eid, pid),
+    ).fetchone()
+    if not row or not int(row["auto_attack_enabled"] or 0):
+        return {"ok": True, "fired": False, "error": "auto_disabled"}
+
+    status = str(row["status"] or "")
+    ends_at = float(row["ends_at"] or 0)
+    hp = int(row["current_hp"] or 0)
+    waves = int(row["waves"] or 0)
+    if (
+        status != STATUS_ACTIVE
+        or hp <= 0
+        or (ends_at > 0 and ts >= ends_at)
+        or waves >= MAX_WAVES_PER_PLAYER
+    ):
+        _clear_auto_attack(eid, pid, conn=conn)
+        return {"ok": True, "fired": False, "stopped": True, "error": "auto_stopped"}
+
+    ok_atk, atk_reason, _meta = can_player_attack_boss(
+        pid,
+        eid,
+        conn=conn,
+        now=ts,
+        enforce_cooldown=True,
+        check_inflight=False,
+    )
+    if not ok_atk:
+        out: Dict[str, Any] = {"ok": True, "fired": False, "error": atk_reason or "blocked"}
+        if atk_reason == "world_boss_cooldown" and _meta.get("cooldown_until") is not None:
+            out["cooldown_until"] = float(_meta["cooldown_until"])
+        return out
+
+    selected = _normalize_attack_ships(ships if ships is not None else _json_loads(row["auto_attack_ships_json"], {}))
+    origin_id = int(planet_id if planet_id is not None else (row["auto_attack_planet_id"] or 0))
+    if origin_id <= 0:
+        try:
+            from .planet_evolution.repository import get_context_planet
+
+            planet = get_context_planet(pid, conn=conn)
+            origin_id = int(planet["id"]) if planet else 0
+        except Exception:
+            origin_id = 0
+    if origin_id <= 0 or not selected:
+        _clear_auto_attack(eid, pid, conn=conn)
+        return {"ok": True, "fired": False, "stopped": True, "error": "no_ships_selected"}
+
+    result = execute_instant_attack(
+        pid,
+        eid,
+        selected,
+        planet_id=origin_id,
+        conn=conn,
+        now=ts,
+        auto_select=False,
+    )
+    if result.get("ok"):
+        if result.get("defeated"):
+            _clear_auto_attack(eid, pid, conn=conn)
+        return {
+            "ok": True,
+            "fired": True,
+            "stopped": bool(result.get("defeated")),
+            "attack": result.get("attack"),
+            "boss": result.get("boss"),
+            "player": result.get("player"),
+            "damage": result.get("damage"),
+        }
+
+    err = str(result.get("error") or "")
+    if err in (
+        "world_boss_defeated",
+        "world_boss_inactive",
+        "world_boss_expired",
+        "world_boss_wave_limit",
+        "insufficient_ships",
+        "no_ships_selected",
+        "no_combat_ships_available",
+    ):
+        _clear_auto_attack(eid, pid, conn=conn)
+        return {"ok": True, "fired": False, "stopped": True, "error": err}
+    return {"ok": True, "fired": False, "error": err or "world_boss_attack_failed"}
+
+
+def flush_ready_auto_attacks_for_player(
+    player_id: int,
+    *,
+    conn,
+    now: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Opportunistic auto-fire for one player across active events (WB page/API)."""
+    if not world_boss_schema_ready(conn) or not _auto_attack_columns_ready(conn):
+        return {"ok": True, "fired": 0, "stopped": 0}
+
+    ts = float(now if now is not None else _now())
+    pid = int(player_id)
+    rows = conn.execute(
+        """
+        SELECT c.event_id
+        FROM world_boss_contributions c
+        JOIN world_boss_events e ON e.id = c.event_id
+        WHERE c.player_id = ? AND c.auto_attack_enabled = 1 AND e.status = ?;
+        """,
+        (pid, STATUS_ACTIVE),
+    ).fetchall()
+
+    fired = 0
+    stopped = 0
+    attacks: List[Dict[str, Any]] = []
+    for row in rows:
+        res = maybe_fire_ready_auto_attack(pid, int(row["event_id"]), conn=conn, now=ts)
+        if res.get("fired"):
+            fired += 1
+            if res.get("attack"):
+                attacks.append(
+                    {
+                        "event_id": int(row["event_id"]),
+                        "attack": res.get("attack"),
+                        "boss": res.get("boss"),
+                        "player": res.get("player"),
+                    }
+                )
+        if res.get("stopped"):
+            stopped += 1
+    return {
+        "ok": True,
+        "fired": int(fired),
+        "stopped": int(stopped),
+        "candidates": len(rows),
+        "attacks": attacks,
+    }
+
+
+def set_world_boss_auto_attack(
+    player_id: int,
+    event_id: int,
+    *,
+    enabled: bool,
+    planet_id: int,
+    ships: Mapping[str, int] | None = None,
+    conn,
+    now: Optional[float] = None,
+    auto_select: bool = True,
+) -> Dict[str, Any]:
+    """GC-WB-AUTO-004 — enable/disable server-owned auto-attack for one event."""
+    if not world_boss_schema_ready(conn) or not _auto_attack_columns_ready(conn):
+        return {"ok": False, "error": "schema_not_ready"}
+
+    ts = float(now if now is not None else _now())
+    pid = int(player_id)
+    eid = int(event_id)
+    origin_id = int(planet_id)
+
+    event = get_event_by_id(eid, conn=conn)
+    if not event or event["status"] != STATUS_ACTIVE:
+        return {"ok": False, "error": "world_boss_inactive"}
+
+    if not enabled:
+        _clear_auto_attack(eid, pid, conn=conn)
+        return {
+            "ok": True,
+            "enabled": False,
+            "event_id": eid,
+            "ships": {},
+        }
+
+    from .fleet import get_planet_ships
+
+    hangar = get_planet_ships(origin_id, conn=conn)
+    selected = _normalize_attack_ships(ships)
+    if auto_select or not selected:
+        defender = defender_ships_for_event(event, conn=conn)
+        selected, _meta = select_world_boss_auto_attack_ships(
+            hangar,
+            defender_ships=defender,
+            max_hp=int(event.get("max_hp") or 0),
+            event_id=eid,
+            conn=conn,
+        )
+    ok_ships, ship_reason = _validate_ships_in_hangar(selected, hangar)
+    if not ok_ships:
+        return {"ok": False, "error": ship_reason or "no_combat_ships_available"}
+
+    alliance_id = None
+    try:
+        from .alliance import get_player_alliance
+
+        membership = get_player_alliance(pid, conn=conn)
+        if membership:
+            alliance_id = int(membership["alliance_id"])
+    except Exception:
+        alliance_id = None
+
+    ships_json = _json_dumps(selected)
+    conn.execute(
+        """
+        INSERT INTO world_boss_contributions (
+            event_id, player_id, alliance_id, damage, waves,
+            last_attack_at, created_at, updated_at,
+            auto_attack_enabled, auto_attack_ships_json, auto_attack_planet_id
+        ) VALUES (?, ?, ?, 0, 0, NULL, ?, ?, 1, ?, ?)
+        ON CONFLICT(event_id, player_id) DO UPDATE SET
+            alliance_id = COALESCE(excluded.alliance_id, alliance_id),
+            auto_attack_enabled = 1,
+            auto_attack_ships_json = excluded.auto_attack_ships_json,
+            auto_attack_planet_id = excluded.auto_attack_planet_id,
+            updated_at = excluded.updated_at;
+        """,
+        (
+            eid,
+            pid,
+            int(alliance_id) if alliance_id is not None else None,
+            ts,
+            ts,
+            ships_json,
+            origin_id,
+        ),
+    )
+
+    # Immediate strike on enable when cooldown is free; follow-ups stay tick-owned.
+    out: Dict[str, Any] = {
+        "ok": True,
+        "enabled": True,
+        "event_id": eid,
+        "ships": dict(selected),
+        "planet_id": origin_id,
+        "fired": False,
+        "attack": None,
+        "boss": None,
+        "player": None,
+    }
+    ok_atk, atk_reason, _atk_meta = can_player_attack_boss(
+        pid,
+        eid,
+        conn=conn,
+        now=ts,
+        enforce_cooldown=True,
+        check_inflight=False,
+    )
+    if ok_atk:
+        strike = execute_instant_attack(
+            pid,
+            eid,
+            selected,
+            planet_id=origin_id,
+            conn=conn,
+            now=ts,
+            auto_select=False,
+        )
+        if strike.get("ok"):
+            out["fired"] = True
+            out["attack"] = strike.get("attack")
+            out["boss"] = strike.get("boss")
+            out["player"] = strike.get("player")
+        else:
+            out["immediate_error"] = strike.get("error") or "world_boss_attack_failed"
+    elif atk_reason == "world_boss_cooldown":
+        out["on_cooldown"] = True
+        if _atk_meta.get("cooldown_until") is not None:
+            out["cooldown_until"] = float(_atk_meta["cooldown_until"])
+    return out
+
+
+def tick_world_boss_auto_attacks(*, conn, now: Optional[float] = None) -> Dict[str, Any]:
+    """
+    Server-owned auto-attack fire: one instant strike per ready flagged player.
+
+    Stops (clears flag) on defeat/expire, invalid hangar, wave limit, or inactive event.
+    """
+    if not world_boss_schema_ready(conn) or not _auto_attack_columns_ready(conn):
+        return {"ok": True, "fired": 0, "stopped": 0}
+
+    ts = float(now if now is not None else _now())
+    rows = conn.execute(
+        """
+        SELECT c.event_id, c.player_id
+        FROM world_boss_contributions c
+        JOIN world_boss_events e ON e.id = c.event_id
+        WHERE c.auto_attack_enabled = 1;
+        """
+    ).fetchall()
+
+    fired = 0
+    stopped = 0
+    for row in rows:
+        res = maybe_fire_ready_auto_attack(
+            int(row["player_id"]),
+            int(row["event_id"]),
+            conn=conn,
+            now=ts,
+        )
+        if res.get("fired"):
+            fired += 1
+        if res.get("stopped"):
+            stopped += 1
+
+    return {"ok": True, "fired": int(fired), "stopped": int(stopped), "candidates": len(rows)}
 
 
 def tick_world_boss_schedule(*, conn, now: Optional[float] = None) -> Dict[str, Any]:
@@ -2179,17 +3043,20 @@ def tick_world_boss_schedule(*, conn, now: Optional[float] = None) -> Dict[str, 
                 if result.get("ok"):
                     spawned = result.get("event")
 
+    auto_tick = tick_world_boss_auto_attacks(conn=conn, now=ts)
+
     return {
         "ok": True,
         "expired_ids": expired_ids,
         "spawned_event_id": int(spawned["id"]) if spawned else None,
         "active_count": len(list_active_events(conn=conn, now=ts)),
         "active_event_id": int(spawned["id"]) if spawned else (int(active[0]["id"]) if active else None),
+        "auto_attack": auto_tick,
     }
 
 
 def maybe_tick_world_boss_schedule(*, conn, now: Optional[float] = None) -> Dict[str, Any]:
-    """Throttled schedule tick for fleet_worker maintenance."""
+    """Throttled schedule tick for fleet_worker maintenance (spawn/expire + auto-attack)."""
     try:
         return tick_world_boss_schedule(conn=conn, now=now)
     except Exception:

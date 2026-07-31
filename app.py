@@ -5825,12 +5825,20 @@ def world_boss_view():
     if player_view is None:
         return redirect(url_for("login"))
 
+    from game.db import begin_write_transaction, commit, rollback
     from game.world_boss import build_world_boss_payload
 
     player_id = _current_player_id()
     conn = db()
+    wb_payload = None
     try:
-        wb_payload = build_world_boss_payload(player_id, conn=conn)
+        begin_write_transaction(conn)
+        try:
+            wb_payload = build_world_boss_payload(player_id, conn=conn, flush_auto=True)
+            commit(conn)
+        except Exception:
+            rollback(conn)
+            raise
     finally:
         conn.close()
 
@@ -5852,17 +5860,186 @@ def api_world_boss():
     if player_id is None:
         return jsonify({"ok": False, "error": "not_logged_in"}), 401
     try:
+        from game.db import begin_write_transaction, commit, rollback
         from game.world_boss import build_world_boss_payload
 
         event_id = request.args.get("event_id", type=int)
         conn = db()
         try:
-            payload = build_world_boss_payload(player_id, conn=conn, event_id=event_id)
+            begin_write_transaction(conn)
+            try:
+                payload = build_world_boss_payload(
+                    player_id, conn=conn, event_id=event_id, flush_auto=True
+                )
+                commit(conn)
+            except Exception:
+                rollback(conn)
+                raise
         finally:
             conn.close()
         return jsonify(payload)
     except Exception:
         return jsonify({"ok": False, "error": "world_boss_unavailable"}), 500
+
+
+@app.route("/api/world-boss/attack", methods=["POST"])
+@require_login_api
+def api_world_boss_attack():
+    """GC-WB-ATTACK-002 — instant World Boss strike (no fleet flight, no ship losses)."""
+    player_id = _current_player_id()
+    if player_id is None:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+    data = request.get_json(silent=True) or {}
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(int(player_id), request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    try:
+        event_id = int(data.get("event_id") or 0)
+    except (TypeError, ValueError):
+        event_id = 0
+    if event_id <= 0:
+        return jsonify({"ok": False, "error": "invalid_event"}), 400
+
+    raw_ships = data.get("ships") if isinstance(data.get("ships"), dict) else {}
+    ships: Dict[str, int] = {}
+    for key, amount in raw_ships.items():
+        try:
+            qty = int(amount or 0)
+        except (TypeError, ValueError):
+            qty = 0
+        if qty > 0:
+            ships[str(key)] = qty
+    auto_select = bool(data.get("auto_select") or data.get("world_boss_auto_attack"))
+
+    from game.db import begin_write_transaction, commit, rollback
+    from game.planet_evolution.repository import get_context_planet
+    from game.world_boss import execute_instant_attack
+
+    conn = db()
+    result: Dict[str, Any] = {"ok": False, "error": "world_boss_attack_failed"}
+    try:
+        begin_write_transaction(conn)
+        try:
+            planet = get_context_planet(int(player_id), conn=conn)
+            if not planet:
+                rollback(conn)
+                return jsonify({"ok": False, "error": "origin_not_found"}), 400
+            result = execute_instant_attack(
+                int(player_id),
+                event_id,
+                ships,
+                planet_id=int(planet["id"]),
+                conn=conn,
+                auto_select=auto_select or not ships,
+            )
+            if result.get("ok"):
+                commit(conn)
+            else:
+                rollback(conn)
+        except Exception:
+            rollback(conn)
+            raise
+    except Exception:
+        return jsonify({"ok": False, "error": "world_boss_attack_failed"}), 500
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(
+        include_panel=True,
+        finish_source="api_world_boss_attack",
+    )
+    body: Dict[str, Any] = {
+        "ok": bool(result.get("ok")),
+        "attack": result.get("attack"),
+        "boss": result.get("boss"),
+        "player": result.get("player"),
+        "state": state,
+    }
+    if not result.get("ok"):
+        body["error"] = result.get("error") or "world_boss_attack_failed"
+    status = 200 if result.get("ok") else 400
+    if request_id and result.get("ok"):
+        save_idempotent_action(int(player_id), request_id, body)
+    return jsonify(body), status
+
+
+@app.route("/api/world-boss/auto-attack", methods=["POST"])
+@require_login_api
+def api_world_boss_auto_attack():
+    """GC-WB-AUTO-004 — toggle server auto-attack; enable may fire an immediate strike."""
+    player_id = _current_player_id()
+    if player_id is None:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+    data = request.get_json(silent=True) or {}
+    try:
+        event_id = int(data.get("event_id") or 0)
+    except (TypeError, ValueError):
+        event_id = 0
+    if event_id <= 0:
+        return jsonify({"ok": False, "error": "invalid_event"}), 400
+    enabled = bool(data.get("enabled"))
+    raw_ships = data.get("ships") if isinstance(data.get("ships"), dict) else {}
+    ships: Dict[str, int] = {}
+    for key, amount in raw_ships.items():
+        try:
+            qty = int(amount or 0)
+        except (TypeError, ValueError):
+            qty = 0
+        if qty > 0:
+            ships[str(key)] = qty
+
+    from game.db import begin_write_transaction, commit, rollback
+    from game.planet_evolution.repository import get_context_planet
+    from game.world_boss import set_world_boss_auto_attack
+
+    conn = db()
+    result: Dict[str, Any] = {"ok": False}
+    try:
+        begin_write_transaction(conn)
+        try:
+            planet = get_context_planet(int(player_id), conn=conn)
+            if not planet:
+                rollback(conn)
+                return jsonify({"ok": False, "error": "origin_not_found"}), 400
+            result = set_world_boss_auto_attack(
+                int(player_id),
+                event_id,
+                enabled=enabled,
+                planet_id=int(planet["id"]),
+                ships=ships,
+                conn=conn,
+                auto_select=bool(data.get("auto_select", True)) or not ships,
+            )
+            if result.get("ok"):
+                commit(conn)
+            else:
+                rollback(conn)
+        except Exception:
+            rollback(conn)
+            raise
+    except Exception:
+        return jsonify({"ok": False, "error": "world_boss_auto_failed"}), 500
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(
+        include_panel=True,
+        finish_source="api_world_boss_auto_attack",
+    )
+    body = {
+        "ok": bool(result.get("ok")),
+        "auto_attack": result,
+        "attack": result.get("attack"),
+        "boss": result.get("boss"),
+        "player": result.get("player"),
+        "state": state,
+    }
+    if not result.get("ok"):
+        body["error"] = result.get("error") or "world_boss_auto_failed"
+    return jsonify(body), (200 if result.get("ok") else 400)
 
 
 @app.route("/api/world-boss/claim", methods=["POST"])

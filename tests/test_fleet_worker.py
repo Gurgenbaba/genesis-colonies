@@ -357,6 +357,9 @@ def test_global_fleet_worker_interval_skip_when_idle(fleet_db):
     result = run_fleet_worker(source="test", force=False, persist=False)
     assert result["skipped_interval"] is True
     assert int(result.get("next_run_in_sec") or 0) <= int(FLEET_WORKER_INTERVAL_SEC)
+    # Idle skip still runs the cheap world-boss auto-attack tick.
+    assert "auto_attack" in result
+    assert result["auto_attack"].get("ok") is True
 
 
 def test_internal_cron_fleet_tick_endpoint(fleet_worker_client, fleet_db):

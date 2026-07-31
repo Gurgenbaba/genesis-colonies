@@ -2,7 +2,7 @@
 
 Server-wide PvE bosses: shared HP, multi-player contribution, exclusive meta rewards, recurring LiveOps windows.
 
-**Status:** ✅ EPIC-20 (GC-W01…GC-W08)  
+**Status:** ✅ EPIC-20 (GC-W01…GC-W08) · 🔄 Encounter Stage (GC-WB-VISUAL/ATTACK/…)  
 **Owner:** `game/world_boss.py`  
 **Epic:** EPIC-20 — World Boss Events
 
@@ -12,19 +12,19 @@ Server-wide PvE bosses: shared HP, multi-player contribution, exclusive meta rew
 
 | Concern | Owner | Notes |
 |---------|--------|--------|
-| Event state, HP, schedule, contribution, claims | `game/world_boss.py` | Single domain owner |
-| Fleet send / attack arrival | `game/fleet.py` | Mission stays `attack`; target type `world_boss`; slot-cap bypass (not mass-expo reserve) |
-| World-native target type | `game/fleet_target.py` | `world_boss` in `WORLD_NATIVE_TARGET_TYPES` |
-| Battle math | `game/combat.py` | `simulate_battle()` only — no second combat engine |
+| Event state, HP, schedule, contribution, claims, **instant attack** | `game/world_boss.py` | Single domain owner |
+| Legacy fleet arrival resolve | `game/fleet.py` | Outbound WB sends **blocked** (`use_world_boss_attack`); arrival path kept for in-flight leftovers |
+| World-native target type | `game/fleet_target.py` | `world_boss` in `WORLD_NATIVE_TARGET_TYPES` (galaxy attach) |
+| Ship combat stats / research mods | `game/combat.py` + `combat_models` | Instant path reuses stats + EffectResolver mods — **no** second combat engine |
 | Galaxy visibility | `game/galaxy.py` | Slot attach like debris |
 | Loot pools | `game/inventory_loot.py` | Meta-only (`item` / `booster`) |
 | Grants | `game/inventory.py` | `grant_inventory_item` |
-| Cron spawn/expire | `game/fleet_worker.py` piggyback | No module-owned polling |
+| Cron spawn/expire (+ auto-attack tick) | `game/fleet_worker.py` piggyback | No module-owned polling |
 | Directives | `game/directives/progress.py` | Event kind `world_boss_damage` |
 | News | `game/universe_news.py` | `category="EVENT"` |
 | Alliance aggregation | `game/alliance.py` + world_boss | Contribution `alliance_id`; Ally XP via `grant_alliance_xp` |
 
-**Forbidden:** expedition pirate ratio combat for bosses; Command Map as live gate; frontend HP math; parallel fleet/combat modules; resource/ship loot boxes.
+**Forbidden:** expedition pirate ratio combat for bosses; Command Map as live gate; frontend HP math; parallel fleet/combat modules; resource/ship loot boxes; new WB attacks as `fleet_movements`.
 
 ---
 
@@ -39,32 +39,33 @@ Server-wide PvE bosses: shared HP, multi-player contribution, exclusive meta rew
 
 ---
 
-## Combat contract
+## Combat contract (instant encounter)
 
-1. Player sends `attack` to boss coordinates (`target_type=world_boss`, no `target_planet_id`).
-2. World Boss attacks **do not consume normal fleet slots** and are not blocked by `fleet_slots_full` (independent of the 3 slots mass-expedition reserves).
-3. On **send**, `note_attack_dispatched` sets `last_attack_at` (wave cooldown starts). In-flight outbound attacks to the same slot are blocked (`world_boss_inflight`).
-4. On arrival, `world_boss.resolve_attack_arrival` builds defender stacks; arrival does **not** reset `last_attack_at`.
-5. `simulate_battle` runs; attacker losses apply to return fleet.
-6. Boss HP damage = `wipe_fraction × WAVE_HP_FRACTION × max_hp × overkill_mult`, capped at `MAX_WAVE_HP_FRACTION × max_hp`.
-   - `wipe_fraction = defender_losses_score / wave_stack_score` (0..1)
-   - `overkill_mult = max(1, 1 + OVERKILL_LOG_SCALE × log2(max(1, attacker_fleet_score / wave_stack_score)))`
-   - Defaults: base 2%, soft overkill `0.15`, cap **8%** → solo mega fleets need ~10–20 waves
-7. If the attacker is in an alliance: Ally XP = `min(40, damage // 40_000)` via `grant_alliance_xp` (owner `game/alliance.py`); stored on `world_boss_contributions.alliance_xp`.
-8. Stacks persist for subsequent waves; debris may spawn; combat report uses defender name = boss label, `defender_id=0`.
+1. Player posts `POST /api/world-boss/attack` with `event_id`, optional `ships`, optional `request_id` / `X-Request-Id`.
+2. Server validates cooldown, wave limit, active HP, and that selected ships ⊆ active-planet hangar (**ships are not deducted**).
+3. `attack_power` = Σ effective ship attack × qty (`combat_stats_for_ship` + research weapon bonus via EffectResolver).
+4. HP damage from prestige score ratio vs current phase stacks (`compute_instant_hp_damage`) with same band as before: even fight ≈ **2%** `max_hp`, soft overkill, hard cap **8%**. Optional crit (`INSTANT_CRIT_CHANCE`).
+5. Boss HP reduced atomically (`MAX(0, current_hp - damage)`); never below 0; further attacks blocked when defeated.
+6. Contribution + `last_attack_at` updated; `cooldown_until = now + 300`.
+7. Response: `{ ok, attack, boss, player, state }` — client animates only; no client damage math.
+8. Ally XP = `min(40, damage // 40_000)` via `grant_alliance_xp` when applicable.
 9. When HP ≤ 0 → status `defeated`; rewards unlock. On `ends_at` with HP > 0 → `expired`.
+
+### Legacy arrival path
+
+`resolve_attack_arrival` + `simulate_battle` remain for any pre-cutover outbound movements. New sends via `send_fleet` with `target_type=world_boss` return `use_world_boss_attack`.
 
 ### Anti-farm
 
 | Rule | Default |
 |------|---------|
-| Account cooldown between waves | 300 s — starts on **fleet send** |
-| In-flight lock | one outbound attack per player per boss slot |
+| Account cooldown between waves | 300 s — starts on **instant attack** |
 | Max waves per player per event | 40 |
-| Even-fight full wipe HP | ~2% of `max_hp` (`WAVE_HP_FRACTION`) |
+| Even-fight strike HP | ~2% of `max_hp` (`WAVE_HP_FRACTION`) |
 | Overkill scaling | `1 + 0.15 × log2(max(1, attacker_score / wave_score))` |
 | Cap HP per wave | 8% of `max_hp` (`MAX_WAVE_HP_FRACTION`) |
-| Contribution | Server-only from battle → HP mapping; never client-reported |
+| Ship losses | **None** (Community DPS; hangar unchanged) |
+| Contribution | Server-only; never client-reported |
 
 ---
 
@@ -119,12 +120,14 @@ Default window: **48 h**; inter-spawn gap: **4 h**.
 
 | Route | Role |
 |-------|------|
-| `GET /world-boss` | Contribution board + active event |
+| `GET /world-boss` | Encounter stage + contribution board |
 | `GET /api/world-boss` | JSON payload |
+| `POST /api/world-boss/attack` | Instant strike `{ ok, attack, boss, player, state }` (idempotent via `request_id`) |
+| `POST /api/world-boss/auto-attack` | Toggle server auto-attack `{ ok, auto_attack, attack?, boss?, player?, state }` — enable fires immediately when CD free; follow-ups via `fleet_worker` (also on idle-skip) + opportunistic flush on WB page/API load |
 | `POST /api/world-boss/claim` | Claim rewards `{ ok, state }` |
 | `POST /api/admin/world-boss/spawn` | Admin force spawn |
 | `GET /api/admin/world-boss` | Admin status + definitions catalog |
-| Galaxy system slots | `slot.world_boss` + `has_world_boss` (ring marker + inspector) |
+| Galaxy system slots | `slot.world_boss` + `has_world_boss`; deep-link → `/world-boss` |
 
 ### Admin LiveOps tab
 
@@ -134,15 +137,11 @@ Admin panel tab **World Boss** (`templates/admin_panel.html` + `static/admin.js`
 - Spawn form posts to existing `POST /api/admin/world-boss/spawn` (`boss_key`, optional G/S/P, `force`, `announce`)
 - No second spawn owner — same `spawn_world_boss` path as cron/admin API
 
-Fleet deep-link: `/fleet?mission=attack&target_galaxy=G&target_system=S&target_position=P&target_type=world_boss`
+Galaxy deep-link: `/world-boss` (encounter). Fleet mission send for `target_type=world_boss` is rejected.
 
-Prefill (GC-WB-FLEET-PREFILL-001): with `mission=attack` and `target_type=world_boss`, the fleet UI max-selects combat hulls (`data-ship-role=combat`) plus `eclipse_runner` on the active planet via `applyFleetUrlPrefill` / `setFleetShipInputValue`. Normal PvP attack links without `target_type=world_boss` are unchanged.
+Boss art: `static/img/bosses/{boss_key}.png|.webp` with alpha cutout (fallback `_placeholder.png`); stage glow/phase is CSS `drop-shadow` + aura — no art panel border.
 
-Auto-Attack (GC-WB-AUTO-ATTACK-001): World Boss page button `data-wb-auto-attack` posts `POST /api/fleet/send` with `world_boss_auto_attack: true`. Server picks combat hulls (`select_world_boss_auto_attack_ships`: combat role + `eclipse_runner`) and **trims** the proportional fleet to the smallest scale that still deals the player's max achievable wave HP damage vs the current boss phase (soft overkill cap). Sends via existing `send_fleet`. Deep-link Prefill (full max-select) remains for manual adjust.
-
-Boss art: `static/img/bosses/{boss_key}.png` with fallback `_placeholder.png`.
-
-Active event UI: centered Monster-Warlord-style hero (portrait `object-fit: contain`, glow pulse, HP bar under art). Sidebar nav pulses via `nav_badges.world_boss` + SSR `WORLD_BOSS_ACTIVE`.
+Active event UI: cinematic Encounter Stage (compact floating boss, ambient nebula/particles, HP bar, in-frame V-formation with ship counts + attack FX). Fleet counts live only on formation slots (no duplicate fleet strip). Phase art variants and boss abilities are a follow-up. Sidebar nav pulses via `nav_badges.world_boss` + SSR `WORLD_BOSS_ACTIVE`.
 
 ### Idle / Help UX
 
@@ -162,20 +161,15 @@ UI: countdown via `data-countdown-at` when idle; `event.ends_at` countdown when 
 
 | Ticket | Focus |
 |--------|--------|
-| GC-W01 | Spec + CORE §17 + ROADMAP |
-| GC-W02 | Migration + `world_boss.py` core |
-| GC-W03 | Fleet/combat hook |
-| GC-W04 | Galaxy UI attach (ring marker + inspector + attack) |
-| GC-W05 | Rewards + board |
-| GC-W06 | Schedule + admin spawn |
-| GC-W07 | Alliance aggregation |
-| GC-W08 | Directives + universe news |
-| GC-W09 | Spawn ETA + help modal |
-| GC-W10 | Admin World Boss spawn tab |
-| GC-W11 | Hero Warlord layout + nav live pulse |
+| GC-W01…W11 | Original EPIC-20 delivery |
+| GC-WB-VISUAL-001 | Encounter Stage layout + CSS phase glow |
+| GC-WB-ATTACK-002 | Instant attack contract (no flight / no losses) |
+| GC-WB-COMBAT-FX-003 | Formation + projectile / hit FX |
+| GC-WB-AUTO-004 | Server-side auto-attack tick |
+| GC-WB-REWARD-005 | Collapsible rewards + progress UX |
 
 ---
 
 ## Tests
 
-`tests/test_world_boss.py` — schema, spawn, attack, claim, schedule, admin GET, deep-link, galaxy UI, HP damage mapping, hero/nav contracts, `nav_badges.world_boss`.
+`tests/test_world_boss.py` — schema, spawn, instant attack, claim, schedule, admin GET, galaxy UI, HP damage mapping, encounter/nav contracts, `nav_badges.world_boss`.

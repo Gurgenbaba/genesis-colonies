@@ -22,6 +22,7 @@ from game.world_boss import (
     WAVE_COOLDOWN_SEC,
     build_world_boss_payload,
     claim_world_boss_rewards,
+    execute_instant_attack,
     get_active_event,
     get_active_event_at,
     get_bosses_for_system,
@@ -135,12 +136,8 @@ def test_spawn_and_galaxy_attach(wb_db):
         assert 8 in bosses
         assert bosses[8]["event_id"] == event["id"]
         link = bosses[8]["fleet_deep_link"]
-        assert "target_galaxy=1" in link
-        assert "target_system=1" in link
-        assert "target_position=8" in link
-        assert "mission=attack" in link
-        assert "target_type=world_boss" in link
-        assert "&galaxy=" not in link.replace("target_galaxy=", "")
+        assert link == "/world-boss"
+        assert bosses[8].get("encounter_path") == "/world-boss"
         at = get_active_event_at(1, 1, 8, conn=conn)
         assert at and at["id"] == event["id"]
         target = resolve_fleet_target(1, 1, 1, 8, conn=conn)
@@ -153,7 +150,7 @@ def test_spawn_and_galaxy_attach(wb_db):
         slot = next(s for s in system["slots"] if int(s["position"]) == 8)
         assert slot["has_world_boss"] is True
         assert slot["world_boss"]["event_id"] == event["id"]
-        assert "target_galaxy" in slot["world_boss"]["fleet_deep_link"]
+        assert slot["world_boss"]["fleet_deep_link"] == "/world-boss"
         commit(conn)
     finally:
         conn.close()
@@ -171,19 +168,14 @@ def test_world_boss_galaxy_ui_contracts():
     marker = Path("templates/partials/galaxy_ring_world_boss_marker.html").read_text(encoding="utf-8")
     assert "galaxy-ring-wb-marker" in marker
     assert "fleet_deep_link" in marker
-    assert "target_type=world_boss" in marker
 
     wb_page = Path("templates/world_boss.html").read_text(encoding="utf-8")
-    assert "target_type=world_boss" in wb_page
     assert "data-wb-auto-attack" in wb_page
     assert "wb_auto_attack" in wb_page
+    assert "data-wb-encounter" in wb_page
 
     wb_block = Path("templates/partials/galaxy_world_boss_block.html").read_text(encoding="utf-8")
-    assert "target_type=world_boss" in wb_block
-
-    main_js = Path("static/main.js").read_text(encoding="utf-8")
-    assert "world_boss_auto_attack: true" in main_js
-    assert "resolve_world_boss_auto_attack_ships" not in main_js  # server-owned ship pick
+    assert "fleet_deep_link" in wb_block
 
     hover_stack = Path("templates/partials/galaxy_ring_slot_hover_stack.html").read_text(encoding="utf-8")
     assert "galaxy-ring-slot-hover-stack" in hover_stack
@@ -196,9 +188,6 @@ def test_world_boss_galaxy_ui_contracts():
     assert "galaxy-fleet-action--world-boss" in actions
 
     page = Path("templates/world_boss.html").read_text(encoding="utf-8")
-    assert "target_galaxy=" in page
-    assert "target_system=" in page
-    assert "target_position=" in page
     assert "img/bosses/" in page
     assert "gc-world-boss-cards" in page
     assert "gc-world-boss-card" in page
@@ -207,8 +196,14 @@ def test_world_boss_galaxy_ui_contracts():
     assert "wb-attack-btn" in page
     assert "data-wb-locked-until" in page
     assert "data-wb-attack-cooldown" in page
+    assert "data-wb-instant-attack" in page
+    assert "data-wb-formation" in page
+    assert "data-wb-damage-mount" in page
     assert "gc-world-boss-rewards" in page
     assert "gc-world-boss-payout" in page
+    assert "wb_rewards_show" in page
+    assert "data-wb-rewards-block" in page
+    assert "gc-world-boss-rewards-toggle" in page
     assert "wb_your_rewards_title" in page
     assert "wb_rewards_catalog_title" in page
     assert "rewards_preview" in page or "wb_rewards_title" in page
@@ -217,6 +212,33 @@ def test_world_boss_galaxy_ui_contracts():
     assert "wb_col_alliance_xp" in page
     assert "wb_help_alliance_xp" in page
     assert "wb_rewards_inventory_hint" in page
+    # GC-WB-VISUAL-001 / Boss Window — Encounter Stage contracts
+    assert "gc-world-boss-hero" in page
+    assert "gc-world-boss-stage" in page
+    assert "gc-world-boss-hero-art" in page
+    assert "gc-wb-glow" in page
+    assert "data-wb-encounter" in page
+    assert "data-wb-hp-phase" in page
+    assert "data-wb-boss-art" in page
+    assert "gc-world-boss-boss-float" in page
+    assert "gc-world-boss-aura" in page
+    assert "gc-world-boss-shadow" in page
+    assert "gc-world-boss-progress" in page
+    assert "gc-world-boss-layout" in page
+    assert "gc-world-boss-arena" in page
+    assert "gc-world-boss-rail" in page
+    assert "gc-world-boss-action-bar" in page
+    assert "gc-world-boss-stage-fx" in page
+    assert "gc-wb-particle" in page
+    assert "gc-world-boss-ship-count" in page
+    assert "gc-world-boss-hp-label" in page
+    assert "data-wb-damage-mount" in page
+    assert "data-wb-projectiles" in page
+    assert "gc-world-boss-fleet-strip" not in page
+    assert "wb_combat_progress_title" in page
+    assert "wb_attack_no_movement_hint" in page
+    assert "gc-world-boss-card-body" not in page  # replaced by hero stage
+    assert "fleet_view" not in page  # instant attack — no fleet deep-link
 
     alliance_page = Path("templates/alliance.html").read_text(encoding="utf-8")
     assert "alliance_xp_source_world_boss" in alliance_page
@@ -225,8 +247,42 @@ def test_world_boss_galaxy_ui_contracts():
     css = Path("static/style.css").read_text(encoding="utf-8")
     assert "object-fit: contain" in css
     assert "gc-wb-glow-pulse" in css or "gc-world-boss-cards" in css
+    assert "gc-wb-boss-float" in css
+    assert "gc-wb-phase-1" in css
+    assert "min-height: 400px" in css
+    assert "width: auto" in css  # HP wrap inset (not width:100% + left overflow)
+    assert "gc-wb-particle-drift" in css
+    assert "gc-wb-nebula-drift" in css
+    assert "repeating-linear-gradient" in css
+    assert "gc-wb-projectile-fly" in css
+    assert ".gc-world-boss-fleet-strip {" not in css
+    assert ".gc-world-boss-projectiles" in css and "z-index: 7" in css
+    assert ".gc-world-boss-damage-mount" in css
+    assert "--wb-ship-rot" in css  # V-formation rotation tokens
+    assert "animation: gc-wb-projectile-fly" in css and "both" in css
+
+    main_js = Path("static/main.js").read_text(encoding="utf-8")
+    assert "wbPlayAttackFx" in main_js
+    assert "gc-wb-projectile" in main_js
+    assert "GC.playWorldBossAttackFx" in main_js
+    assert "GC.consumeWorldBossAutoPresentation" in main_js
+    assert "flushed_attacks" in main_js
+    assert "wbAutoPollTick" in main_js or "wbAutoPoll" in main_js
+    assert "consumeWorldBossAutoPresentation" in main_js
+    assert "data-wb-ship-slot" in main_js
+    assert "gc-world-boss-ship-count" in main_js
+    assert "gc-wb-phase-2" in css
+    assert "gc-wb-phase-3" in css
+    assert "gc-wb-projectile" in css
+    assert "gc-wb-dmg-num" in css
+    assert "prefers-reduced-motion" in css
     assert "has-boss-image" in css
     assert "has-world-boss-wrap" in css
+
+    main_js = Path("static/main.js").read_text(encoding="utf-8")
+    assert "/api/world-boss/attack" in main_js
+    assert "wbPlayAttackFx" in main_js or "data-wb-instant-attack" in main_js
+    assert "location.reload" not in main_js[main_js.find("GC.modules.world_boss") : main_js.find("GC.modules.chronicles")]
     assert "galaxy-ring-slot-hover-stack" in css
     assert "galaxy-ring-hover-card--wb" in css
     assert "galaxy-ring-hover-card--debris" in css
@@ -732,7 +788,30 @@ def test_world_boss_attack_ignores_fleet_slot_cap(wb_db):
             announce=False,
         )
         assert spawn["ok"], spawn
-        ok_wb, err_wb, res_wb = send_fleet(
+        event_id = int(spawn["event"]["id"])
+        hangar_before = get_planet_ships(pid, conn=conn)
+        result = execute_instant_attack(
+            uid,
+            event_id,
+            {"falcon_interceptor": 5},
+            planet_id=pid,
+            conn=conn,
+            rng=__import__("random").Random(1),
+        )
+        assert result["ok"], result
+        # Instant attack must not create fleet movements or consume slots.
+        mov = conn.execute(
+            "SELECT COUNT(*) AS c FROM fleet_movements WHERE player_id = ? AND mission_type = 'attack';",
+            (uid,),
+        ).fetchone()
+        assert int(mov["c"] or 0) == 0
+        hangar_after = get_planet_ships(pid, conn=conn)
+        assert hangar_after == hangar_before
+        slots_after = get_fleet_slot_status(uid, conn=conn)
+        assert int(slots_after["free"]) == 0
+        assert int(slots_after["active"]) == 3
+        # Fleet send path is closed for world boss.
+        ok_wb, err_wb, _ = send_fleet(
             player_id=uid,
             origin_planet_id=pid,
             target_galaxy=hg,
@@ -744,23 +823,19 @@ def test_world_boss_attack_ignores_fleet_slot_cap(wb_db):
             speed_percent=100,
             conn=conn,
         )
-        assert ok_wb, err_wb
-        assert res_wb
-        # WB must not consume the normal slot pool.
-        slots_after = get_fleet_slot_status(uid, conn=conn)
-        assert int(slots_after["free"]) == 0
-        assert int(slots_after["active"]) == 3
+        assert not ok_wb
+        assert err_wb == "use_world_boss_attack"
         commit(conn)
     finally:
         conn.close()
 
 
 def test_attack_cooldown_blocks_send(wb_db):
+    """GC-WB-ATTACK-002 — cooldown blocks instant attack; fleet send rejected."""
     uid = _player()
     pid = _home(uid)
     _fund(pid)
     _seed_combat_fleet(pid, uid)
-    # Avoid player's homeworld coords — use a free classic slot in galaxy 1.
     conn = db()
     try:
         begin_write_transaction(conn)
@@ -790,7 +865,18 @@ def test_attack_cooldown_blocks_send(wb_db):
             """,
             (event_id, uid, now, now, now),
         )
-        ok, err, _ = send_fleet(
+        blocked = execute_instant_attack(
+            uid,
+            event_id,
+            {"falcon_interceptor": 10},
+            planet_id=pid,
+            conn=conn,
+            now=now + 10,
+            rng=__import__("random").Random(2),
+        )
+        assert not blocked["ok"]
+        assert blocked["error"] == "world_boss_cooldown"
+        ok_fleet, err_fleet, _ = send_fleet(
             player_id=uid,
             origin_planet_id=pid,
             target_galaxy=hg,
@@ -802,26 +888,23 @@ def test_attack_cooldown_blocks_send(wb_db):
             speed_percent=100,
             conn=conn,
         )
-        assert not ok
-        assert err == "world_boss_cooldown"
+        assert not ok_fleet
+        assert err_fleet == "use_world_boss_attack"
         conn.execute(
             "UPDATE world_boss_contributions SET last_attack_at = ? WHERE event_id = ? AND player_id = ?;",
             (now - WAVE_COOLDOWN_SEC - 1, event_id, uid),
         )
-        ok2, err2, _ = send_fleet(
-            player_id=uid,
-            origin_planet_id=pid,
-            target_galaxy=hg,
-            target_system=hs,
-            target_position=boss_pos,
-            mission_type="attack",
-            ships={"falcon_interceptor": 10},
-            resources={},
-            speed_percent=100,
+        ok2 = execute_instant_attack(
+            uid,
+            event_id,
+            {"falcon_interceptor": 10},
+            planet_id=pid,
             conn=conn,
+            now=now + 1,
+            rng=__import__("random").Random(3),
         )
-        assert ok2, err2
-        # Send starts cooldown immediately.
+        assert ok2["ok"], ok2
+        assert int(ok2["attack"]["damage"]) > 0
         row = conn.execute(
             "SELECT last_attack_at, waves, damage FROM world_boss_contributions "
             "WHERE event_id = ? AND player_id = ?;",
@@ -829,28 +912,28 @@ def test_attack_cooldown_blocks_send(wb_db):
         ).fetchone()
         assert row is not None
         assert float(row["last_attack_at"] or 0) > 0
-        assert int(row["waves"] or 0) == 1  # prior seeded wave
-        # Second send while outbound / on CD fails.
-        ok3, err3, _ = send_fleet(
-            player_id=uid,
-            origin_planet_id=pid,
-            target_galaxy=hg,
-            target_system=hs,
-            target_position=boss_pos,
-            mission_type="attack",
-            ships={"falcon_interceptor": 5},
-            resources={},
-            speed_percent=100,
-            conn=conn,
+        assert int(row["waves"] or 0) == 2  # seeded wave + instant
+        assert float(ok2["player"]["cooldown_until"]) == pytest.approx(
+            float(row["last_attack_at"]) + WAVE_COOLDOWN_SEC, abs=1.5
         )
-        assert not ok3
-        assert err3 in ("world_boss_cooldown", "world_boss_inflight")
+        ok3 = execute_instant_attack(
+            uid,
+            event_id,
+            {"falcon_interceptor": 5},
+            planet_id=pid,
+            conn=conn,
+            now=now + 2,
+            rng=__import__("random").Random(4),
+        )
+        assert not ok3["ok"]
+        assert ok3["error"] == "world_boss_cooldown"
         commit(conn)
     finally:
         conn.close()
 
 
 def test_send_starts_cooldown_without_prior_contribution(wb_db):
+    """Instant attack sets cooldown and wave/damage in one step."""
     uid = _player()
     pid = _home(uid)
     _fund(pid)
@@ -874,19 +957,17 @@ def test_send_starts_cooldown_without_prior_contribution(wb_db):
         )
         assert spawn["ok"], spawn
         event_id = int(spawn["event"]["id"])
-        ok, err, _ = send_fleet(
-            player_id=uid,
-            origin_planet_id=pid,
-            target_galaxy=hg,
-            target_system=hs,
-            target_position=boss_pos,
-            mission_type="attack",
-            ships={"falcon_interceptor": 10},
-            resources={},
-            speed_percent=100,
+        now = time.time()
+        result = execute_instant_attack(
+            uid,
+            event_id,
+            {"falcon_interceptor": 10},
+            planet_id=pid,
             conn=conn,
+            now=now,
+            rng=__import__("random").Random(5),
         )
-        assert ok, err
+        assert result["ok"], result
         row = conn.execute(
             "SELECT last_attack_at, waves, damage FROM world_boss_contributions "
             "WHERE event_id = ? AND player_id = ?;",
@@ -894,22 +975,19 @@ def test_send_starts_cooldown_without_prior_contribution(wb_db):
         ).fetchone()
         assert row is not None
         assert float(row["last_attack_at"] or 0) > 0
-        assert int(row["waves"] or 0) == 0
-        assert int(row["damage"] or 0) == 0
-        ok2, err2, _ = send_fleet(
-            player_id=uid,
-            origin_planet_id=pid,
-            target_galaxy=hg,
-            target_system=hs,
-            target_position=boss_pos,
-            mission_type="attack",
-            ships={"falcon_interceptor": 5},
-            resources={},
-            speed_percent=100,
+        assert int(row["waves"] or 0) == 1
+        assert int(row["damage"] or 0) > 0
+        again = execute_instant_attack(
+            uid,
+            event_id,
+            {"falcon_interceptor": 5},
+            planet_id=pid,
             conn=conn,
+            now=now + 1,
+            rng=__import__("random").Random(6),
         )
-        assert not ok2
-        assert err2 in ("world_boss_cooldown", "world_boss_inflight")
+        assert not again["ok"]
+        assert again["error"] == "world_boss_cooldown"
         commit(conn)
     finally:
         conn.close()
@@ -1403,8 +1481,8 @@ def test_resolve_world_boss_auto_attack_ships_empty(wb_db):
         conn.close()
 
 
-def test_api_world_boss_auto_attack_send(wb_db, monkeypatch):
-    """GC-WB-AUTO-ATTACK-001 — flag fills/trims ships and uses send_fleet."""
+def test_api_world_boss_instant_attack(wb_db, monkeypatch):
+    """GC-WB-ATTACK-002 — POST /api/world-boss/attack deals damage without hangar loss."""
     import importlib
 
     import app as app_module
@@ -1412,14 +1490,13 @@ def test_api_world_boss_auto_attack_send(wb_db, monkeypatch):
     monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
     importlib.reload(app_module)
 
-    uid = _player(name="AutoSend")
+    uid = _player(name="InstantAtk")
     pid = _home(uid)
     _fund(pid)
     _seed_combat_fleet(pid, uid)
     conn = db()
     try:
         begin_write_transaction(conn)
-        add_planet_ships(pid, uid, {"mule_courier": 40, "eclipse_runner": 7}, conn=conn)
         home = conn.execute(
             "SELECT galaxy, system, position FROM planets WHERE id = ?;",
             (pid,),
@@ -1435,6 +1512,7 @@ def test_api_world_boss_auto_attack_send(wb_db, monkeypatch):
             announce=False,
         )
         assert spawn["ok"], spawn
+        event_id = int(spawn["event"]["id"])
         commit(conn)
     finally:
         conn.close()
@@ -1444,44 +1522,53 @@ def test_api_world_boss_auto_attack_send(wb_db, monkeypatch):
         sess["user_id"] = uid
 
     before = get_planet_ships(pid)
-    pool = (
-        int(before.get("falcon_interceptor", 0))
-        + int(before.get("ironclad_frigate", 0))
-        + int(before.get("eclipse_runner", 0))
-    )
-
     res = client.post(
-        "/api/fleet/send",
+        "/api/world-boss/attack",
         json={
-            "mission_type": "attack",
-            "target_galaxy": hg,
-            "target_system": hs,
-            "target_position": boss_pos,
-            "target_type": "world_boss",
-            "world_boss_auto_attack": True,
-            "resources": {},
-            "speed_percent": 100,
+            "event_id": event_id,
+            "ships": {"falcon_interceptor": 20, "ironclad_frigate": 5},
+            "request_id": "wb-atk-1",
         },
-        headers={"Accept": "application/json"},
+        headers={"Accept": "application/json", "X-Request-Id": "wb-atk-1"},
     )
     assert res.status_code == 200, res.get_data(as_text=True)
     body = res.get_json()
     assert body["ok"] is True
-    meta = body["data"]["world_boss_auto_attack"]
-    assert "mule_courier" not in meta["ships"]
-    assert meta["sent_count"] > 0
-    assert meta["sent_count"] <= pool
-    assert meta["pool_sent_count"] == pool
+    assert body["attack"]["damage"] > 0
+    assert "projectile_profile" in body["attack"]
+    assert body["boss"]["hp"] < body["boss"]["max_hp"]
+    assert body["player"]["cooldown_until"] > 0
+    assert "state" in body
+    assert get_planet_ships(pid) == before
 
-    ships_left = get_planet_ships(pid)
-    sent = meta["ships"]
-    assert int(ships_left.get("falcon_interceptor", 0)) == int(before.get("falcon_interceptor", 0)) - int(
-        sent.get("falcon_interceptor", 0)
+    # Idempotent replay
+    res_idemp = client.post(
+        "/api/world-boss/attack",
+        json={
+            "event_id": event_id,
+            "ships": {"falcon_interceptor": 20},
+            "request_id": "wb-atk-1",
+        },
+        headers={"Accept": "application/json", "X-Request-Id": "wb-atk-1"},
     )
-    assert int(ships_left.get("mule_courier", 0)) == 40
+    assert res_idemp.status_code == 200
+    assert res_idemp.get_json()["attack"]["damage"] == body["attack"]["damage"]
 
-    # Second auto-attack while in-flight / cooldown must fail.
+    # Cooldown blocks second distinct request
     res2 = client.post(
+        "/api/world-boss/attack",
+        json={
+            "event_id": event_id,
+            "ships": {"falcon_interceptor": 5},
+            "request_id": "wb-atk-2",
+        },
+        headers={"Accept": "application/json"},
+    )
+    assert res2.status_code == 400
+    assert res2.get_json()["error"] == "world_boss_cooldown"
+
+    # Fleet send path closed
+    res_fleet = client.post(
         "/api/fleet/send",
         json={
             "mission_type": "attack",
@@ -1489,24 +1576,17 @@ def test_api_world_boss_auto_attack_send(wb_db, monkeypatch):
             "target_system": hs,
             "target_position": boss_pos,
             "target_type": "world_boss",
-            "world_boss_auto_attack": True,
+            "ships": {"falcon_interceptor": 5},
             "resources": {},
             "speed_percent": 100,
         },
         headers={"Accept": "application/json"},
     )
-    assert res2.status_code == 400
-    err = res2.get_json()
-    assert err["ok"] is False
-    assert err["error"] in (
-        "world_boss_inflight",
-        "world_boss_cooldown",
-        "no_combat_ships_available",
-        "not_enough_ships",
-    )
+    assert res_fleet.status_code == 400
+    assert res_fleet.get_json()["error"] == "use_world_boss_attack"
 
 
-def test_api_world_boss_auto_attack_no_ships(wb_db, monkeypatch):
+def test_api_world_boss_instant_attack_auto_select_no_ships(wb_db, monkeypatch):
     import importlib
 
     import app as app_module
@@ -1514,7 +1594,7 @@ def test_api_world_boss_auto_attack_no_ships(wb_db, monkeypatch):
     monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
     importlib.reload(app_module)
 
-    uid = _player(name="AutoNone")
+    uid = _player(name="InstantNone")
     pid = _home(uid)
     _fund(pid)
     conn = db()
@@ -1535,6 +1615,7 @@ def test_api_world_boss_auto_attack_no_ships(wb_db, monkeypatch):
             announce=False,
         )
         assert spawn["ok"], spawn
+        event_id = int(spawn["event"]["id"])
         commit(conn)
     finally:
         conn.close()
@@ -1543,20 +1624,422 @@ def test_api_world_boss_auto_attack_no_ships(wb_db, monkeypatch):
     with client.session_transaction() as sess:
         sess["user_id"] = uid
     res = client.post(
-        "/api/fleet/send",
-        json={
-            "mission_type": "attack",
-            "target_galaxy": hg,
-            "target_system": hs,
-            "target_position": boss_pos,
-            "target_type": "world_boss",
-            "world_boss_auto_attack": True,
-            "resources": {},
-            "speed_percent": 100,
-        },
+        "/api/world-boss/attack",
+        json={"event_id": event_id, "auto_select": True},
         headers={"Accept": "application/json"},
     )
     assert res.status_code == 400
     body = res.get_json()
     assert body["ok"] is False
     assert body["error"] == "no_combat_ships_available"
+
+
+def test_instant_attack_hp_never_below_zero(wb_db):
+    uid = _player(name="FloorHp")
+    pid = _home(uid)
+    _fund(pid)
+    _seed_combat_fleet(pid, uid)
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        spawn = spawn_world_boss(
+            "ancient_leviathan",
+            conn=conn,
+            galaxy=1,
+            system=2,
+            position=9,
+            announce=False,
+        )
+        assert spawn["ok"], spawn
+        event_id = int(spawn["event"]["id"])
+        conn.execute(
+            "UPDATE world_boss_events SET max_hp = 100, current_hp = 2 WHERE id = ?;",
+            (event_id,),
+        )
+        result = execute_instant_attack(
+            uid,
+            event_id,
+            {"falcon_interceptor": 500, "ironclad_frigate": 100},
+            planet_id=pid,
+            conn=conn,
+            rng=__import__("random").Random(99),
+        )
+        assert result["ok"], result
+        assert int(result["boss"]["hp"]) == 0
+        assert result["boss"]["defeated"] is True
+        assert 1 <= int(result["attack"]["damage"]) <= 2
+        # Direct DB floor check — never negative.
+        hp_row = conn.execute(
+            "SELECT current_hp FROM world_boss_events WHERE id = ?;",
+            (event_id,),
+        ).fetchone()
+        assert int(hp_row["current_hp"]) == 0
+        blocked = execute_instant_attack(
+            uid,
+            event_id,
+            {"falcon_interceptor": 10},
+            planet_id=pid,
+            conn=conn,
+            now=time.time() + WAVE_COOLDOWN_SEC + 5,
+            rng=__import__("random").Random(100),
+        )
+        assert not blocked["ok"]
+        assert blocked["error"] in ("world_boss_defeated", "world_boss_inactive")
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_payload_flush_fires_ready_auto_attack(wb_db):
+    """Auto on + CD free → build_world_boss_payload opportunistic fire (no worker)."""
+    from game.world_boss import (
+        build_world_boss_payload,
+        execute_instant_attack,
+        set_world_boss_auto_attack,
+    )
+
+    uid = _player(name="AutoFlush")
+    pid = _home(uid)
+    _fund(pid)
+    _seed_combat_fleet(pid, uid)
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        spawn = spawn_world_boss(
+            "void_titan",
+            conn=conn,
+            galaxy=1,
+            system=9,
+            position=4,
+            announce=False,
+        )
+        assert spawn["ok"], spawn
+        event_id = int(spawn["event"]["id"])
+        now = time.time()
+        first = execute_instant_attack(
+            uid,
+            event_id,
+            None,
+            planet_id=pid,
+            conn=conn,
+            now=now,
+            auto_select=True,
+        )
+        assert first["ok"], first
+        enabled = set_world_boss_auto_attack(
+            uid,
+            event_id,
+            enabled=True,
+            planet_id=pid,
+            conn=conn,
+            now=now + 10,
+            auto_select=True,
+        )
+        assert enabled["ok"]
+        assert enabled["fired"] is False
+        dmg_mid = int(
+            conn.execute(
+                "SELECT damage FROM world_boss_contributions WHERE event_id = ? AND player_id = ?;",
+                (event_id, uid),
+            ).fetchone()["damage"]
+            or 0
+        )
+        # Cooldown still active — payload must not fire.
+        build_world_boss_payload(uid, conn=conn, now=now + 10, flush_auto=True)
+        dmg_cd = int(
+            conn.execute(
+                "SELECT damage FROM world_boss_contributions WHERE event_id = ? AND player_id = ?;",
+                (event_id, uid),
+            ).fetchone()["damage"]
+            or 0
+        )
+        assert dmg_cd == dmg_mid
+
+        # After cooldown — payload flush fires without calling tick_world_boss_auto_attacks.
+        payload = build_world_boss_payload(
+            uid, conn=conn, now=now + WAVE_COOLDOWN_SEC + 5, flush_auto=True
+        )
+        assert payload["ready"] is True
+        row = conn.execute(
+            "SELECT damage, waves, auto_attack_enabled, last_attack_at "
+            "FROM world_boss_contributions WHERE event_id = ? AND player_id = ?;",
+            (event_id, uid),
+        ).fetchone()
+        assert int(row["damage"] or 0) > dmg_mid
+        assert int(row["waves"] or 0) == 2
+        assert int(row["auto_attack_enabled"] or 0) == 1
+        assert float(row["last_attack_at"] or 0) >= now + WAVE_COOLDOWN_SEC
+        player = (payload["events"][0].get("player") or {}) if payload.get("events") else {}
+        assert int((player.get("contribution") or {}).get("waves") or 0) == 2
+        flushed = payload.get("flushed_attacks") or []
+        assert len(flushed) >= 1
+        assert flushed[0].get("attack") and flushed[0]["attack"].get("damage")
+        assert flushed[0].get("boss") and "hp" in flushed[0]["boss"]
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_auto_attack_enable_fires_immediate_when_cooldown_free(wb_db):
+    """Enable with free cooldown → immediate instant strike + flag on."""
+    from game.world_boss import set_world_boss_auto_attack
+
+    uid = _player(name="AutoImmediate")
+    pid = _home(uid)
+    _fund(pid)
+    _seed_combat_fleet(pid, uid)
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        spawn = spawn_world_boss(
+            "void_titan",
+            conn=conn,
+            galaxy=1,
+            system=5,
+            position=8,
+            announce=False,
+        )
+        assert spawn["ok"], spawn
+        event_id = int(spawn["event"]["id"])
+        hangar_before = get_planet_ships(pid, conn=conn)
+        now = time.time()
+        enabled = set_world_boss_auto_attack(
+            uid,
+            event_id,
+            enabled=True,
+            planet_id=pid,
+            conn=conn,
+            now=now,
+            auto_select=True,
+        )
+        assert enabled["ok"], enabled
+        assert enabled["enabled"] is True
+        assert enabled["fired"] is True
+        assert int(enabled["attack"]["damage"]) > 0
+        assert enabled["boss"]["hp"] < enabled["boss"]["max_hp"]
+        assert get_planet_ships(pid, conn=conn) == hangar_before
+        row = conn.execute(
+            "SELECT damage, waves, auto_attack_enabled "
+            "FROM world_boss_contributions WHERE event_id = ? AND player_id = ?;",
+            (event_id, uid),
+        ).fetchone()
+        assert int(row["damage"] or 0) > 0
+        assert int(row["waves"] or 0) == 1
+        assert int(row["auto_attack_enabled"] or 0) == 1
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_auto_attack_enable_skips_strike_on_cooldown(wb_db):
+    """Enable while cooldown active → flag on, no extra damage."""
+    from game.world_boss import execute_instant_attack, set_world_boss_auto_attack
+
+    uid = _player(name="AutoCooldown")
+    pid = _home(uid)
+    _fund(pid)
+    _seed_combat_fleet(pid, uid)
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        spawn = spawn_world_boss(
+            "ancient_leviathan",
+            conn=conn,
+            galaxy=1,
+            system=4,
+            position=6,
+            announce=False,
+        )
+        assert spawn["ok"], spawn
+        event_id = int(spawn["event"]["id"])
+        now = time.time()
+        first = execute_instant_attack(
+            uid,
+            event_id,
+            None,
+            planet_id=pid,
+            conn=conn,
+            now=now,
+            auto_select=True,
+        )
+        assert first["ok"], first
+        dmg_after = int(
+            conn.execute(
+                "SELECT damage FROM world_boss_contributions WHERE event_id = ? AND player_id = ?;",
+                (event_id, uid),
+            ).fetchone()["damage"]
+            or 0
+        )
+        enabled = set_world_boss_auto_attack(
+            uid,
+            event_id,
+            enabled=True,
+            planet_id=pid,
+            conn=conn,
+            now=now + 10,
+            auto_select=True,
+        )
+        assert enabled["ok"], enabled
+        assert enabled["enabled"] is True
+        assert enabled["fired"] is False
+        assert enabled.get("on_cooldown") is True
+        assert enabled.get("attack") is None
+        row = conn.execute(
+            "SELECT damage, waves, auto_attack_enabled "
+            "FROM world_boss_contributions WHERE event_id = ? AND player_id = ?;",
+            (event_id, uid),
+        ).fetchone()
+        assert int(row["damage"] or 0) == dmg_after
+        assert int(row["waves"] or 0) == 1
+        assert int(row["auto_attack_enabled"] or 0) == 1
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_server_auto_attack_tick_fires_and_stops(wb_db):
+    """GC-WB-AUTO-004 — tick fires follow-up after cooldown; stops when disabled."""
+    from game.world_boss import set_world_boss_auto_attack, tick_world_boss_auto_attacks
+
+    uid = _player(name="AutoTick")
+    pid = _home(uid)
+    _fund(pid)
+    _seed_combat_fleet(pid, uid)
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        spawn = spawn_world_boss(
+            "void_titan",
+            conn=conn,
+            galaxy=1,
+            system=5,
+            position=8,
+            announce=False,
+        )
+        assert spawn["ok"], spawn
+        event_id = int(spawn["event"]["id"])
+        hangar_before = get_planet_ships(pid, conn=conn)
+        now = time.time()
+        enabled = set_world_boss_auto_attack(
+            uid,
+            event_id,
+            enabled=True,
+            planet_id=pid,
+            conn=conn,
+            now=now,
+            auto_select=True,
+        )
+        assert enabled["ok"], enabled
+        assert enabled["enabled"] is True
+        assert enabled["ships"]
+        assert enabled["fired"] is True
+        assert get_planet_ships(pid, conn=conn) == hangar_before
+        row = conn.execute(
+            "SELECT damage, waves, auto_attack_enabled, last_attack_at "
+            "FROM world_boss_contributions WHERE event_id = ? AND player_id = ?;",
+            (event_id, uid),
+        ).fetchone()
+        assert int(row["damage"] or 0) > 0
+        assert int(row["waves"] or 0) == 1
+        assert int(row["auto_attack_enabled"] or 0) == 1
+
+        # Immediate strike already consumed cooldown — same-now tick must not double-fire.
+        tick1 = tick_world_boss_auto_attacks(conn=conn, now=now)
+        assert tick1["fired"] == 0
+
+        # Still on cooldown — no second fire.
+        tick2 = tick_world_boss_auto_attacks(conn=conn, now=now + 10)
+        assert tick2["fired"] == 0
+
+        # After cooldown, tick fires follow-up.
+        tick3 = tick_world_boss_auto_attacks(conn=conn, now=now + WAVE_COOLDOWN_SEC + 2)
+        assert tick3["fired"] == 1
+        row2 = conn.execute(
+            "SELECT waves FROM world_boss_contributions WHERE event_id = ? AND player_id = ?;",
+            (event_id, uid),
+        ).fetchone()
+        assert int(row2["waves"] or 0) == 2
+
+        disabled = set_world_boss_auto_attack(
+            uid,
+            event_id,
+            enabled=False,
+            planet_id=pid,
+            conn=conn,
+        )
+        assert disabled["ok"]
+        assert disabled["enabled"] is False
+        tick4 = tick_world_boss_auto_attacks(conn=conn, now=now + WAVE_COOLDOWN_SEC * 3)
+        assert tick4["fired"] == 0
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_api_world_boss_auto_attack_toggle(wb_db, monkeypatch):
+    import importlib
+
+    import app as app_module
+
+    monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
+    importlib.reload(app_module)
+
+    uid = _player(name="AutoApi")
+    pid = _home(uid)
+    _fund(pid)
+    _seed_combat_fleet(pid, uid)
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        spawn = spawn_world_boss(
+            "planet_eater",
+            conn=conn,
+            galaxy=1,
+            system=6,
+            position=7,
+            announce=False,
+        )
+        assert spawn["ok"], spawn
+        event_id = int(spawn["event"]["id"])
+        commit(conn)
+    finally:
+        conn.close()
+
+    client = app_module.app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+
+    res = client.post(
+        "/api/world-boss/auto-attack",
+        json={"event_id": event_id, "enabled": True, "auto_select": True},
+        headers={"Accept": "application/json"},
+    )
+    assert res.status_code == 200, res.get_data(as_text=True)
+    body = res.get_json()
+    assert body["ok"] is True
+    assert body["auto_attack"]["enabled"] is True
+    assert body["auto_attack"]["ships"]
+    assert body["auto_attack"]["fired"] is True
+    assert body["attack"] and int(body["attack"]["damage"]) > 0
+    assert body["boss"] and "hp" in body["boss"]
+    assert body["player"] and body["player"]["cooldown_until"]
+
+    res_off = client.post(
+        "/api/world-boss/auto-attack",
+        json={"event_id": event_id, "enabled": False},
+        headers={"Accept": "application/json"},
+    )
+    assert res_off.status_code == 200
+    assert res_off.get_json()["auto_attack"]["enabled"] is False
+
+    main_js = Path("static/main.js").read_text(encoding="utf-8")
+    assert "/api/world-boss/auto-attack" in main_js
+    assert "wbPlayAttackFx(card, res.attack, res.boss)" in main_js
+    page = Path("templates/world_boss.html").read_text(encoding="utf-8")
+    assert "data-wb-auto-enabled" in page
+    css = Path("static/style.css").read_text(encoding="utf-8")
+    assert ".gc-world-boss-page .gc-world-boss-hero-art" in css
+    assert ".gc-world-boss-page .gc-world-boss-layout" in css
+    assert "minmax(220px, 280px)" in css or "gc-world-boss-layout" in css
+    assert "overflow: visible" in css
+    assert "border: none" in css

@@ -4,7 +4,6 @@
 {% set wb = world_boss_payload if world_boss_payload is defined and world_boss_payload else {'ready': false, 'events': [], 'schedule': {}} %}
 {% set cards = wb.events if wb.events is defined and wb.events else [] %}
 {% set schedule = wb.schedule if wb.schedule is defined and wb.schedule else {} %}
-{% set active_cards = cards|selectattr('event')|list %}
 {% set has_active = schedule.has_active if schedule.has_active is defined else false %}
 
 <div class="gc-page gc-world-boss-page" id="world-boss-page"
@@ -61,209 +60,348 @@
         {% set is_active = event.status == 'active' %}
         {% set is_ended = event.status in ('defeated', 'expired') %}
         {% set hp_pct = ((event.hp_ratio or 0) * 100)|round(1) %}
+        {% if hp_pct <= 0 %}
+          {% set hp_phase = 0 %}
+        {% elif hp_pct <= 25 %}
+          {% set hp_phase = 3 %}
+        {% elif hp_pct <= 50 %}
+          {% set hp_phase = 2 %}
+        {% else %}
+          {% set hp_phase = 1 %}
+        {% endif %}
         {% set atk_meta = player_info.attack_meta if player_info and player_info.attack_meta is defined and player_info.attack_meta else {} %}
         {% set waves_done = (player_info.contribution.waves if player_info and player_info.contribution else (atk_meta.waves if atk_meta.waves is defined else 0))|int %}
         {% set waves_max = (atk_meta.max_waves if atk_meta.max_waves is defined else 40)|int %}
         {% set cool_sec = (atk_meta.wave_cooldown_sec if atk_meta.wave_cooldown_sec is defined else 300)|int %}
-        {% set attack_href = url_for('fleet_view') ~ '?mission=attack&target_galaxy=' ~ event.galaxy ~ '&target_system=' ~ event.system ~ '&target_position=' ~ event.position ~ '&target_type=world_boss' %}
+        {% set _boss_png = url_for('static', filename='img/bosses/' ~ event.boss_key ~ '.png', v=GC_ASSET_VERSION) %}
+        {% set _boss_webp = _boss_png|webp_static %}
+        {% set _boss_ph = url_for('static', filename='img/bosses/_placeholder.png', v=GC_ASSET_VERSION) %}
+        {% set outlook = card.reward_outlook if card.reward_outlook is defined else (player_info.reward_outlook if player_info and player_info.reward_outlook is defined else none) %}
+        {% set rewards_preview = card.rewards_preview if card.rewards_preview is defined else [] %}
+        {% set formation = player_info.formation if player_info and player_info.formation is defined else [] %}
+        {% set cooldown_until = atk_meta.cooldown_until if atk_meta.cooldown_until is defined else (atk_meta.next_attack_at if atk_meta.next_attack_at is defined else none) %}
         <article class="gc-world-boss-card {% if is_active %}gc-world-boss-card--active{% endif %}"
-                 data-wb-event-id="{{ event.id }}">
-          <header class="gc-world-boss-card-head">
-            <p class="gc-world-boss-name">
-              <strong>{{ T(event.name_key, event.boss_key) }}</strong>
-              <span class="gc-world-boss-status-badge gc-world-boss-status-badge--{{ event.status }}">
-                {{ T('wb_status_' ~ event.status, event.status) }}
-              </span>
-            </p>
-            <p class="gc-world-boss-coords hint gc-mono">{{ event.coords }}</p>
-            {% if card.discoverer_name %}
-            <p class="hint gc-world-boss-discovered">
-              {{ T("wb_discovered_by", "Entdeckt von") }}:
-              <strong>{{ card.discoverer_name }}</strong>
-            </p>
-            {% endif %}
-          </header>
+                 data-wb-event-id="{{ event.id }}"
+                 data-wb-hp-phase="{{ hp_phase }}"
+                 data-wb-status="{{ event.status }}"
+                 data-wb-max-hp="{{ event.max_hp }}"
+                 data-wb-player-damage="{{ (player_info.contribution.damage if player_info and player_info.contribution else 0)|int }}">
 
-          <div class="gc-world-boss-card-body">
-            <div class="gc-world-boss-card-art">
-              {% set _boss_png = url_for('static', filename='img/bosses/' ~ event.boss_key ~ '.png', v=GC_ASSET_VERSION) %}
-              {% set _boss_webp = _boss_png|webp_static %}
-              {% set _boss_ph = url_for('static', filename='img/bosses/_placeholder.png', v=GC_ASSET_VERSION) %}
-              <picture>
-                <source type="image/webp" srcset="{{ _boss_webp }}">
-                <img class="gc-world-boss-portrait"
-                     src="{{ _boss_png }}"
-                     alt="{{ T(event.name_key, event.boss_key) }}"
-                     width="160"
-                     height="160"
-                     loading="lazy"
-                     decoding="async"
-                     onerror="this.onerror=null;this.src='{{ _boss_ph }}';">
-              </picture>
-            </div>
-            <div class="gc-world-boss-card-meta">
-              <div class="gc-world-boss-hp" role="meter" aria-valuemin="0" aria-valuemax="100"
-                   aria-valuenow="{{ hp_pct|int }}"
-                   aria-label="{{ T('wb_hp', 'HP') }} {{ hp_pct }}%">
-                <div class="gc-world-boss-hp-fill" style="width: {{ hp_pct }}%;"></div>
-              </div>
-              <p class="gc-world-boss-hp-text hint gc-mono">
-                {{ T("wb_hp", "HP") }}: {{ event.current_hp|fmt_int }} / {{ event.max_hp|fmt_int }} ({{ hp_pct }}%)
-              </p>
-              {% if is_active and event.ends_at %}
-              <p class="hint">
-                {{ T("wb_ends_in", "Endet in") }}:
-                <span class="gc-mono" data-countdown-at="{{ event.ends_at|int }}" data-countdown-format="eta">—</span>
-              </p>
+          {% set auto_on = player_info.auto_attack_enabled if player_info and player_info.auto_attack_enabled is defined else false %}
+          {% set ns_ally = namespace(row=none) %}
+          {% if alliance_board and player_info and player_info.contribution and player_info.contribution.alliance_id %}
+            {% for row in alliance_board %}
+              {% if row.alliance_id and row.alliance_id == player_info.contribution.alliance_id %}
+                {% set ns_ally.row = row %}
               {% endif %}
-              {% if is_active %}
-              <p class="gc-world-boss-waves hint">
-                {{ T("wb_your_waves", "Wellen") }}:
-                <span class="gc-mono">{{ waves_done }} / {{ waves_max }}</span>
-                · {{ T("wb_wave_cooldown_rule", "Cooldown zwischen Wellen") }}:
-                <span class="gc-mono">{{ (cool_sec / 60)|int }}m</span>
-              </p>
-              {% if player_info and player_info.attack_block_reason == 'world_boss_cooldown' and atk_meta.next_attack_at %}
-              <p class="gc-world-boss-cooldown" role="status" data-wb-attack-cooldown>
-                {{ T("wb_attack_cooldown", "Nächster Angriff in") }}:
-                <span class="gc-mono"
-                      data-countdown-at="{{ atk_meta.next_attack_at|int }}"
-                      data-countdown-format="eta"
-                      data-wb-cooldown-at="{{ atk_meta.next_attack_at|int }}">—</span>
-              </p>
-              {% elif player_info and player_info.attack_block_reason == 'world_boss_inflight' %}
-              <p class="gc-world-boss-cooldown" role="status">{{ T("wb_attack_inflight", "Angriffsflotte bereits unterwegs.") }}</p>
-              {% elif player_info and player_info.attack_block_reason == 'world_boss_wave_limit' %}
-              <p class="gc-world-boss-cooldown" role="status">{{ T("wb_attack_wave_limit", "Wellenlimit für dieses Ereignis erreicht.") }}</p>
-              {% elif player_info and player_info.can_attack %}
-              <p class="gc-world-boss-ready hint" role="status" data-wb-attack-ready>{{ T("wb_attack_ready", "Angriff bereit.") }}</p>
-              {% endif %}
-              <p class="gc-world-boss-actions">
-                {% if player_info and player_info.attack_block_reason == 'world_boss_wave_limit' %}
-                <span class="gc-btn gc-btn-primary is-disabled" aria-disabled="true">{{ T("wb_attack", "Angreifen") }}</span>
-                <span class="gc-btn gc-btn-primary is-disabled" aria-disabled="true">{{ T("wb_auto_attack", "Auto-Angriff") }}</span>
-                {% elif player_info and player_info.attack_block_reason in ('world_boss_cooldown', 'world_boss_inflight') and atk_meta.next_attack_at %}
-                <a class="gc-btn gc-btn-primary is-disabled wb-attack-btn"
-                   href="{{ attack_href }}"
-                   aria-disabled="true"
-                   tabindex="-1"
-                   data-wb-locked-until="{{ atk_meta.next_attack_at|int }}">{{ T("wb_attack", "Angreifen") }}</a>
-                <button type="button"
-                        class="gc-btn gc-btn-primary is-disabled wb-auto-attack-btn"
-                        aria-disabled="true"
-                        tabindex="-1"
-                        data-wb-auto-attack
-                        data-wb-locked-until="{{ atk_meta.next_attack_at|int }}"
-                        data-target-galaxy="{{ event.galaxy }}"
-                        data-target-system="{{ event.system }}"
-                        data-target-position="{{ event.position }}">{{ T("wb_auto_attack", "Auto-Angriff") }}</button>
-                {% elif player_info and player_info.attack_block_reason == 'world_boss_inflight' %}
-                <span class="gc-btn gc-btn-primary is-disabled" aria-disabled="true">{{ T("wb_attack", "Angreifen") }}</span>
-                <span class="gc-btn gc-btn-primary is-disabled" aria-disabled="true">{{ T("wb_auto_attack", "Auto-Angriff") }}</span>
-                {% else %}
-                <a class="gc-btn gc-btn-primary wb-attack-btn" href="{{ attack_href }}">{{ T("wb_attack", "Angreifen") }}</a>
-                <button type="button"
-                        class="gc-btn gc-btn-primary wb-auto-attack-btn"
-                        data-wb-auto-attack
-                        data-target-galaxy="{{ event.galaxy }}"
-                        data-target-system="{{ event.system }}"
-                        data-target-position="{{ event.position }}">{{ T("wb_auto_attack", "Auto-Angriff") }}</button>
-                {% endif %}
-                <a class="gc-btn" href="{{ url_for('galaxy_view') }}?galaxy={{ event.galaxy }}&system={{ event.system }}">
-                  {{ T("wb_galaxy", "Zur Galaxie") }}
-                </a>
-              </p>
-              {% endif %}
+            {% endfor %}
+          {% endif %}
+          {% set has_reward_content = (outlook and outlook.grants) or rewards_preview or (is_ended and player_info and (player_info.can_claim or player_info.claim)) %}
 
-              {% set rewards_preview = card.rewards_preview if card.rewards_preview is defined else [] %}
-              {% set outlook = card.reward_outlook if card.reward_outlook is defined else (player_info.reward_outlook if player_info and player_info.reward_outlook is defined else none) %}
-              {% if outlook and outlook.grants %}
-              <section class="gc-world-boss-payout" data-wb-payout-mode="{{ outlook.mode }}" aria-label="{{ T('wb_your_rewards_title', 'Deine Belohnung') }}">
-                <h3 class="gc-world-boss-payout-title">{{ T("wb_your_rewards_title", "Deine Belohnung") }}</h3>
-                {% if outlook.mode == 'claimable' %}
-                <p class="gc-world-boss-payout-lead hint">{{ T("wb_your_rewards_claimable", "Beim Abholen erhältst du:") }}</p>
-                {% elif outlook.mode == 'claimed' %}
-                <p class="gc-world-boss-payout-lead hint">{{ T("wb_your_rewards_claimed", "Du hast erhalten:") }}</p>
-                {% else %}
-                <p class="gc-world-boss-payout-lead hint">{{ T("wb_your_rewards_projected", "Aktuell freigeschaltet (Stand jetzt):") }}</p>
-                {% endif %}
-                <ul class="gc-world-boss-payout-list">
-                  {% for g in outlook.grants %}
-                  <li class="gc-world-boss-payout-item">
-                    <span class="gc-mono gc-world-boss-payout-amount">×{{ g.amount }}</span>
-                    <span class="gc-world-boss-payout-name">{{ T(g.name_key if g.name_key is defined else ('inv_' ~ g.item_key), g.item_key) }}</span>
-                  </li>
-                  {% endfor %}
-                  {% if (outlook.alliance_xp_earned|default(0)|int) > 0 %}
-                  <li class="gc-world-boss-payout-item gc-world-boss-payout-item--ally">
-                    <span class="gc-mono gc-world-boss-payout-amount">+{{ outlook.alliance_xp_earned|fmt_int }}</span>
-                    <span class="gc-world-boss-payout-name">{{ T("wb_col_alliance_xp", "Ally-XP") }}</span>
-                  </li>
+          <div class="gc-world-boss-layout{% if is_active %} gc-world-boss-layout--active{% endif %}">
+            <div class="gc-world-boss-arena">
+              {# —— 1. Encounter Stage —— #}
+              <div class="gc-world-boss-hero {% if is_active %}gc-world-boss-hero--active{% endif %}"
+                   data-wb-encounter
+                   data-wb-hp-phase="{{ hp_phase }}">
+                <div class="gc-world-boss-stage gc-wb-phase-{{ hp_phase }}" data-wb-stage>
+                  <div class="gc-world-boss-stage-fx" aria-hidden="true">
+                    <span class="gc-wb-particle"></span>
+                    <span class="gc-wb-particle"></span>
+                    <span class="gc-wb-particle"></span>
+                    <span class="gc-wb-particle"></span>
+                    <span class="gc-wb-particle"></span>
+                    <span class="gc-wb-particle"></span>
+                    <span class="gc-wb-particle"></span>
+                    <span class="gc-wb-particle"></span>
+                    <span class="gc-wb-particle"></span>
+                    <span class="gc-wb-particle"></span>
+                    <span class="gc-wb-particle"></span>
+                    <span class="gc-wb-particle"></span>
+                  </div>
+                  <div class="gc-world-boss-stage-overlay">
+                    <div class="gc-world-boss-stage-overlay-left">
+                      <p class="gc-world-boss-stage-label">{{ T("wb_stage_label", "World Boss") }}</p>
+                      <p class="gc-world-boss-name"><strong>{{ T(event.name_key, event.boss_key) }}</strong></p>
+                      {% if is_active and event.ends_at %}
+                      <p class="gc-world-boss-eta">
+                        {{ T("wb_ends_in", "Endet in") }}:
+                        <span class="gc-mono" data-countdown-at="{{ event.ends_at|int }}" data-countdown-format="eta">—</span>
+                      </p>
+                      {% endif %}
+                      <p class="gc-world-boss-coords hint gc-mono">{{ event.coords }}{% if card.discoverer_name %} · {{ T("wb_discovered_by", "Entdeckt von") }}: {{ card.discoverer_name }}{% endif %}</p>
+                    </div>
+                    <div class="gc-world-boss-stage-overlay-right">
+                      <span class="gc-world-boss-status-badge gc-world-boss-status-badge--{{ event.status }}">
+                        {{ T('wb_status_' ~ event.status, event.status) }}
+                      </span>
+                      {% if is_active and hp_phase > 0 %}
+                      <span class="gc-world-boss-phase-badge gc-wb-phase-{{ hp_phase }}" data-wb-phase-badge>
+                        {{ T("wb_phase_badge", "Phase %(n)s", n=hp_phase) }}
+                      </span>
+                      {% endif %}
+                    </div>
+                  </div>
+
+                  <div class="gc-world-boss-hero-art gc-wb-glow gc-wb-phase-{{ hp_phase }}"
+                       data-wb-boss-art
+                       data-wb-hp-phase="{{ hp_phase }}">
+                    <div class="gc-world-boss-boss-float" data-wb-boss-float>
+                      <picture>
+                        <source type="image/webp" srcset="{{ _boss_webp }}">
+                        <img class="gc-world-boss-portrait"
+                             src="{{ _boss_png }}"
+                             alt="{{ T(event.name_key, event.boss_key) }}"
+                             width="480"
+                             height="268"
+                             loading="lazy"
+                             decoding="async"
+                             onerror="this.onerror=null;this.src='{{ _boss_ph }}';">
+                      </picture>
+                    </div>
+                    <div class="gc-world-boss-aura" aria-hidden="true"></div>
+                    <div class="gc-world-boss-shadow" aria-hidden="true"></div>
+                    <div class="gc-world-boss-hit-flash" data-wb-hit-flash aria-hidden="true"></div>
+                  </div>
+
+                  <div class="gc-world-boss-hp-wrap">
+                    <p class="gc-world-boss-hp-label">{{ T(event.name_key, event.boss_key) }}</p>
+                    <div class="gc-world-boss-hp gc-wb-phase-{{ hp_phase }}"
+                         role="meter"
+                         aria-valuemin="0"
+                         aria-valuemax="100"
+                         aria-valuenow="{{ hp_pct|int }}"
+                         aria-label="{{ T('wb_hp', 'HP') }} {{ hp_pct }}%"
+                         data-wb-hp-bar
+                         data-wb-hp="{{ event.current_hp }}"
+                         data-wb-max-hp="{{ event.max_hp }}">
+                      <div class="gc-world-boss-hp-fill"
+                           data-wb-hp-fill
+                           style="width: {{ hp_pct }}%;"></div>
+                    </div>
+                    <p class="gc-world-boss-hp-text hint gc-mono" data-wb-hp-text>
+                      {{ event.current_hp|fmt_int }} / {{ event.max_hp|fmt_int }}
+                      <span class="gc-world-boss-hp-pct">({{ hp_pct }}%)</span>
+                    </p>
+                  </div>
+
+                  <div class="gc-world-boss-formation" data-wb-formation {% if not formation %}aria-hidden="true"{% endif %}>
+                    {% for slot in formation %}
+                    {% set _sk = slot.ship_key %}
+                    {% set _ship_png = url_for('static', filename='img/ships/' ~ _sk ~ '.png', v=GC_ASSET_VERSION) %}
+                    {% set _ship_webp = _ship_png|webp_static %}
+                    <div class="gc-world-boss-ship-slot"
+                         data-wb-ship-slot
+                         data-ship-key="{{ _sk }}"
+                         data-ship-count="{{ slot.count }}">
+                      <picture>
+                        <source type="image/webp" srcset="{{ _ship_webp }}">
+                        <img class="gc-world-boss-ship-img"
+                             src="{{ _ship_png }}"
+                             alt=""
+                             width="56"
+                             height="56"
+                             loading="lazy"
+                             decoding="async">
+                      </picture>
+                      <span class="gc-world-boss-ship-count gc-mono">×{{ slot.count|fmt_int }}</span>
+                    </div>
+                    {% endfor %}
+                  </div>
+                  <div class="gc-world-boss-projectiles" data-wb-projectiles aria-hidden="true"></div>
+                  <div class="gc-world-boss-damage-mount" data-wb-damage-mount aria-live="polite"></div>
+                </div>
+
+                {% if is_active %}
+                <div class="gc-world-boss-action-bar">
+                  {% if player_info and player_info.attack_block_reason == 'world_boss_cooldown' and cooldown_until %}
+                  <p class="gc-world-boss-cooldown gc-world-boss-cooldown-chip" role="status" data-wb-attack-cooldown>
+                    {{ T("wb_attack_cooldown", "Nächster Angriff in") }}
+                    <span class="gc-mono"
+                          data-countdown-at="{{ cooldown_until|int }}"
+                          data-countdown-format="eta"
+                          data-wb-cooldown-at="{{ cooldown_until|int }}">—</span>
+                  </p>
+                  {% elif player_info and player_info.attack_block_reason == 'world_boss_inflight' %}
+                  <p class="gc-world-boss-cooldown" role="status">{{ T("wb_attack_inflight", "Angriffsflotte bereits unterwegs.") }}</p>
+                  {% elif player_info and player_info.attack_block_reason == 'world_boss_wave_limit' %}
+                  <p class="gc-world-boss-cooldown" role="status">{{ T("wb_attack_wave_limit", "Wellenlimit für dieses Ereignis erreicht.") }}</p>
+                  {% elif player_info and player_info.can_attack and auto_on %}
+                  <p class="gc-world-boss-ready hint" role="status" data-wb-attack-ready>{{ T("wb_auto_attack_pending", "Auto-Angriff aktiv — nächster Treffer folgt.") }}</p>
+                  {% elif player_info and player_info.can_attack %}
+                  <p class="gc-world-boss-ready hint" role="status" data-wb-attack-ready>{{ T("wb_attack_ready", "Angriff bereit.") }}</p>
                   {% endif %}
-                </ul>
-                <p class="gc-world-boss-payout-hint hint">{{ T("wb_rewards_inventory_hint", "Container landen im Inventar und können dort geöffnet werden.") }}</p>
-              </section>
-              {% endif %}
-
-              {% if rewards_preview %}
-              <section class="gc-world-boss-rewards" aria-label="{{ T('wb_rewards_catalog_title', 'Belohnungsstufen') }}">
-                <h3 class="gc-world-boss-rewards-title">{{ T("wb_rewards_catalog_title", "Belohnungsstufen") }}</h3>
-                <ul class="gc-world-boss-rewards-list">
-                  {% for row in rewards_preview %}
-                  {% set row_earned = row.earned if row.earned is defined else false %}
-                  <li class="gc-world-boss-reward-row{% if row_earned %} is-earned{% elif outlook and outlook.mode != 'none' %} is-locked{% endif %}"
-                      data-wb-reward-tier="{{ row.tier }}"
-                      data-wb-earned="{{ 1 if row_earned else 0 }}">
-                    <span class="gc-world-boss-reward-tier">
-                      {{ T(row.label_key, row.tier) }}
-                      {% if row_earned %}
-                      <span class="gc-world-boss-reward-badge" aria-label="{{ T('wb_reward_tier_earned', 'Erreicht') }}">✓</span>
-                      {% endif %}
-                    </span>
-                    <span class="gc-world-boss-reward-grants">
-                      {% if row.tier == 'alliance_xp' %}
-                      {% set g0 = row.grants[0] if row.grants else none %}
-                      <span class="gc-mono">{{ T(
-                        (g0.name_key if g0 and g0.name_key is defined else 'wb_reward_alliance_xp_rule'),
-                        '+1 Allianz-XP je %(divisor)s Schaden (max %(cap)s / Welle)',
-                        divisor=((g0.divisor if g0 and g0.divisor is defined else row.divisor)|default(40000)|fmt_int),
-                        cap=((g0.wave_cap if g0 and g0.wave_cap is defined else row.wave_cap)|default(40)|int)
-                      ) }}</span>
-                      {% else %}
-                      {% for g in row.grants %}
-                      <span class="gc-mono">{{ T(g.name_key, g.item_key) }} ×{{ g.amount }}</span>{% if not loop.last %}<span class="gc-world-boss-reward-sep" aria-hidden="true"> · </span>{% endif %}
-                      {% endfor %}
-                      {% endif %}
-                    </span>
-                  </li>
-                  {% endfor %}
-                </ul>
-              </section>
-              {% endif %}
-
-              {% if is_ended and player_info and player_info.can_claim %}
-              <p>
-                <button type="button" class="gc-btn gc-btn-primary wb-claim-btn" data-event-id="{{ event.id }}">
-                  {{ T("wb_claim", "Belohnung abholen") }}
-                </button>
-              </p>
-              {% elif is_ended and player_info and player_info.claim %}
-              <p class="hint">{{ T("wb_claimed", "Belohnung bereits abgeholt.") }}</p>
-              {% endif %}
-              {% if player_info and player_info.contribution %}
-              <p class="hint">{{ T("wb_your_damage", "Dein Schaden") }}:
-                <span class="gc-mono">{{ player_info.contribution.damage|fmt_int }}</span>
-                {% if outlook and outlook.rank %}
-                · {{ T("wb_your_rank", "Rang") }}:
-                <span class="gc-mono">#{{ outlook.rank }}{% if outlook.total_players %}/{{ outlook.total_players }}{% endif %}</span>
+                  <div class="gc-world-boss-actions">
+                    {% if player_info and player_info.attack_block_reason == 'world_boss_wave_limit' %}
+                    <span class="gc-btn gc-btn-primary is-disabled" aria-disabled="true">{{ T("wb_attack", "Angreifen") }}</span>
+                    <span class="gc-btn gc-btn-primary is-disabled" aria-disabled="true">{{ T("wb_auto_attack", "Auto-Angriff") }}</span>
+                    {% elif player_info and player_info.attack_block_reason == 'world_boss_cooldown' and cooldown_until %}
+                    <button type="button"
+                            class="gc-btn gc-btn-primary is-disabled wb-attack-btn"
+                            aria-disabled="true"
+                            tabindex="-1"
+                            disabled
+                            data-wb-instant-attack
+                            data-wb-event-id="{{ event.id }}"
+                            data-wb-locked-until="{{ cooldown_until|int }}">{{ T("wb_attack", "Angreifen") }}</button>
+                    <button type="button"
+                            class="gc-btn gc-btn-primary wb-auto-attack-btn{% if auto_on %} is-active{% endif %}"
+                            data-wb-auto-attack
+                            data-wb-event-id="{{ event.id }}"
+                            data-wb-auto-enabled="{{ 1 if auto_on else 0 }}"
+                            aria-pressed="{{ 'true' if auto_on else 'false' }}">
+                      {{ T("wb_auto_attack_active", "Auto-Angriff aktiv") if auto_on else T("wb_auto_attack", "Auto-Angriff") }}
+                    </button>
+                    {% else %}
+                    <button type="button"
+                            class="gc-btn gc-btn-primary wb-attack-btn"
+                            data-wb-instant-attack
+                            data-wb-event-id="{{ event.id }}">{{ T("wb_attack", "Angreifen") }}</button>
+                    <button type="button"
+                            class="gc-btn gc-btn-primary wb-auto-attack-btn{% if auto_on %} is-active{% endif %}"
+                            data-wb-auto-attack
+                            data-wb-event-id="{{ event.id }}"
+                            data-wb-auto-enabled="{{ 1 if auto_on else 0 }}"
+                            aria-pressed="{{ 'true' if auto_on else 'false' }}">
+                      {{ T("wb_auto_attack_active", "Auto-Angriff aktiv") if auto_on else T("wb_auto_attack", "Auto-Angriff") }}
+                    </button>
+                    {% endif %}
+                    <a class="gc-btn" href="{{ url_for('galaxy_view') }}?galaxy={{ event.galaxy }}&system={{ event.system }}">
+                      {{ T("wb_galaxy", "Zur Galaxie") }}
+                    </a>
+                  </div>
+                  <p class="gc-world-boss-action-hint hint">{{ T("wb_attack_no_movement_hint", "Jeder Angriff hat einen 5-Minuten-Cooldown. Es findet keine Flottenbewegung statt.") }}</p>
+                  <p class="gc-world-boss-waves hint">
+                    {{ T("wb_your_waves", "Wellen") }}:
+                    <span class="gc-mono" data-wb-player-waves-meta>{{ waves_done }} / {{ waves_max }}</span>
+                  </p>
+                </div>
                 {% endif %}
-              </p>
-              {% endif %}
-              {% if player_info and (player_info.alliance_xp_earned|default(0)|int) > 0 and not (outlook and outlook.grants) %}
-              <p class="hint gc-world-boss-ally-xp">{{ T("wb_your_alliance_xp", "Dein Allianz-XP") }}:
-                <span class="gc-mono">+{{ player_info.alliance_xp_earned|fmt_int }}</span></p>
-              {% endif %}
+              </div>
             </div>
+
+            <aside class="gc-world-boss-rail">
+              {# —— 2. Personal progress —— #}
+              <section class="gc-world-boss-progress" data-wb-progress aria-label="{{ T('wb_combat_progress_title', 'Dein Kampffortschritt') }}">
+                <h3 class="gc-world-boss-progress-title">{{ T("wb_combat_progress_title", "Dein Kampffortschritt") }}</h3>
+                <dl class="gc-world-boss-progress-grid">
+                  <div class="gc-world-boss-progress-item">
+                    <dt>{{ T("wb_your_damage", "Dein Schaden") }}</dt>
+                    <dd class="gc-mono" data-wb-player-damage>
+                      {{ (player_info.contribution.damage if player_info and player_info.contribution else 0)|fmt_int }}
+                    </dd>
+                  </div>
+                  <div class="gc-world-boss-progress-item">
+                    <dt>{{ T("wb_your_rank", "Rang") }}</dt>
+                    <dd class="gc-mono" data-wb-player-rank>
+                      {% if outlook and outlook.rank %}
+                      #{{ outlook.rank }}{% if outlook.total_players %}/{{ outlook.total_players }}{% endif %}
+                      {% else %}—{% endif %}
+                    </dd>
+                  </div>
+                  <div class="gc-world-boss-progress-item">
+                    <dt>{{ T("wb_your_waves", "Wellen") }}</dt>
+                    <dd class="gc-mono" data-wb-player-waves>{{ waves_done }} / {{ waves_max }}</dd>
+                  </div>
+                  {% if player_info and (player_info.alliance_xp_earned|default(0)|int) > 0 %}
+                  <div class="gc-world-boss-progress-item">
+                    <dt>{{ T("wb_your_alliance_xp", "Dein Allianz-XP") }}</dt>
+                    <dd class="gc-mono gc-world-boss-ally-xp">+{{ player_info.alliance_xp_earned|fmt_int }}</dd>
+                  </div>
+                  {% endif %}
+                  {% if ns_ally.row %}
+                  <div class="gc-world-boss-progress-item">
+                    <dt>{{ T("wb_alliance_damage", "Allianzschaden") }}</dt>
+                    <dd class="gc-mono" data-wb-alliance-damage>{{ ns_ally.row.damage|fmt_int }}</dd>
+                  </div>
+                  {% endif %}
+                </dl>
+              </section>
+
+              {# —— 3. Rewards (collapsible) —— #}
+              {% if has_reward_content %}
+              <details class="gc-world-boss-rewards-block" data-wb-rewards-block{% if is_ended and player_info and player_info.can_claim %} open{% endif %}>
+                <summary class="gc-world-boss-rewards-toggle">
+                  {{ T("wb_rewards_show", "Belohnungen anzeigen") }}
+                </summary>
+                <div class="gc-world-boss-rewards-inner">
+                  {% if outlook and outlook.grants %}
+                  <section class="gc-world-boss-payout" data-wb-payout-mode="{{ outlook.mode }}" aria-label="{{ T('wb_your_rewards_title', 'Deine Belohnung') }}">
+                    <h3 class="gc-world-boss-payout-title">{{ T("wb_your_rewards_title", "Deine Belohnung") }}</h3>
+                    {% if outlook.mode == 'claimable' %}
+                    <p class="gc-world-boss-payout-lead hint">{{ T("wb_your_rewards_claimable", "Beim Abholen erhältst du:") }}</p>
+                    {% elif outlook.mode == 'claimed' %}
+                    <p class="gc-world-boss-payout-lead hint">{{ T("wb_your_rewards_claimed", "Du hast erhalten:") }}</p>
+                    {% else %}
+                    <p class="gc-world-boss-payout-lead hint">{{ T("wb_your_rewards_projected", "Aktuell freigeschaltet (Stand jetzt):") }}</p>
+                    {% endif %}
+                    <ul class="gc-world-boss-payout-list">
+                      {% for g in outlook.grants %}
+                      <li class="gc-world-boss-payout-item">
+                        <span class="gc-mono gc-world-boss-payout-amount">×{{ g.amount }}</span>
+                        <span class="gc-world-boss-payout-name">{{ T(g.name_key if g.name_key is defined else ('inv_' ~ g.item_key), g.item_key) }}</span>
+                      </li>
+                      {% endfor %}
+                      {% if (outlook.alliance_xp_earned|default(0)|int) > 0 %}
+                      <li class="gc-world-boss-payout-item gc-world-boss-payout-item--ally">
+                        <span class="gc-mono gc-world-boss-payout-amount">+{{ outlook.alliance_xp_earned|fmt_int }}</span>
+                        <span class="gc-world-boss-payout-name">{{ T("wb_col_alliance_xp", "Ally-XP") }}</span>
+                      </li>
+                      {% endif %}
+                    </ul>
+                    <p class="gc-world-boss-payout-hint hint">{{ T("wb_rewards_inventory_hint", "Container landen im Inventar und können dort geöffnet werden.") }}</p>
+                  </section>
+                  {% endif %}
+
+                  {% if rewards_preview %}
+                  <section class="gc-world-boss-rewards" aria-label="{{ T('wb_rewards_catalog_title', 'Belohnungsstufen') }}">
+                    <h3 class="gc-world-boss-rewards-title">{{ T("wb_rewards_catalog_title", "Belohnungsstufen") }}</h3>
+                    <ul class="gc-world-boss-rewards-list">
+                      {% for row in rewards_preview %}
+                      {% set row_earned = row.earned if row.earned is defined else false %}
+                      <li class="gc-world-boss-reward-row{% if row_earned %} is-earned{% elif outlook and outlook.mode != 'none' %} is-locked{% endif %}"
+                          data-wb-reward-tier="{{ row.tier }}"
+                          data-wb-earned="{{ 1 if row_earned else 0 }}">
+                        <span class="gc-world-boss-reward-tier">
+                          {{ T(row.label_key, row.tier) }}
+                          {% if row_earned %}
+                          <span class="gc-world-boss-reward-badge" aria-label="{{ T('wb_reward_tier_earned', 'Erreicht') }}">✓</span>
+                          {% endif %}
+                        </span>
+                        <span class="gc-world-boss-reward-grants">
+                          {% if row.tier == 'alliance_xp' %}
+                          {% set g0 = row.grants[0] if row.grants else none %}
+                          <span class="gc-mono">{{ T(
+                            (g0.name_key if g0 and g0.name_key is defined else 'wb_reward_alliance_xp_rule'),
+                            '+1 Allianz-XP je %(divisor)s Schaden (max %(cap)s / Welle)',
+                            divisor=((g0.divisor if g0 and g0.divisor is defined else row.divisor)|default(40000)|fmt_int),
+                            cap=((g0.wave_cap if g0 and g0.wave_cap is defined else row.wave_cap)|default(40)|int)
+                          ) }}</span>
+                          {% else %}
+                          {% for g in row.grants %}
+                          <span class="gc-mono">{{ T(g.name_key, g.item_key) }} ×{{ g.amount }}</span>{% if not loop.last %}<span class="gc-world-boss-reward-sep" aria-hidden="true"> · </span>{% endif %}
+                          {% endfor %}
+                          {% endif %}
+                        </span>
+                      </li>
+                      {% endfor %}
+                    </ul>
+                  </section>
+                  {% endif %}
+
+                  {% if is_ended and player_info and player_info.can_claim %}
+                  <p class="gc-world-boss-claim-wrap">
+                    <button type="button" class="gc-btn gc-btn-primary wb-claim-btn" data-event-id="{{ event.id }}">
+                      {{ T("wb_claim", "Belohnung abholen") }}
+                    </button>
+                  </p>
+                  {% elif is_ended and player_info and player_info.claim %}
+                  <p class="hint">{{ T("wb_claimed", "Belohnung bereits abgeholt.") }}</p>
+                  {% endif %}
+                </div>
+              </details>
+              {% endif %}
+            </aside>
           </div>
 
           <details class="gc-world-boss-board-details">
@@ -385,7 +523,7 @@
         <p class="gc-world-boss-help-lead">{{ T("wb_help_lead", "World Bosses sind serverweite PvE-Ziele. Alle Spieler kämpfen gemeinsam gegen Bosse mit geteilten Lebenspunkten.") }}</p>
         <ul class="gc-world-boss-help-list">
           <li>{{ T("wb_help_hp", "Geteilte HP: Schaden skaliert mit Overkill; Mega-Flotten brauchen etwa 10–20 Wellen solo.") }}</li>
-          <li>{{ T("wb_help_attack", "Angriff: Schicke eine Flotte mit Mission Angriff — Cooldown startet beim Absenden.") }}</li>
+          <li>{{ T("wb_help_attack", "Angriff: Direkter Treffer ohne Flugzeit — Cooldown 5 Minuten, keine Schiffsverluste.") }}</li>
           <li>{{ T("wb_help_board", "Rangliste: Pro Boss-Card einklappbar; Schaden pro Spieler und Allianz.") }}</li>
           <li>{{ T("wb_help_rewards", "Belohnungen: Pro Boss eigene Teilnahme-Container; Top 10 % Void + Boss-Loot; Platz 1 Mythic; Top-Allianz Relic; Expo-Entdecker +1 Boss-Loot.") }}</li>
           <li>{{ T("wb_help_alliance_xp", "Allianz-XP: Skaliert mit dem Schaden deiner Wellen — mehr Schaden, mehr Ally-XP (mit Cap pro Welle).") }}</li>

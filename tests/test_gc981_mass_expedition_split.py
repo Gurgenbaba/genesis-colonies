@@ -60,6 +60,31 @@ def test_compute_mass_expedition_slot_split_floor_and_leftover():
     assert leftover == {"solar_skiff": 3}
 
 
+def test_preview_mass_expedition_clamps_over_selection_to_hangar(fleet_db):
+    """Over-typed ship amounts clamp to hangar stock instead of not_enough_ships."""
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, pid)
+    _grant_navigation_for_mass_expo(cur, uid, min_usable=1)
+    _seed_ships(pid, uid, {"solar_skiff": 50_000}, conn=conn)
+    conn.commit()
+
+    ok, reason, preview = preview_mass_expedition_slot_split(
+        player_id=uid,
+        origin_planet_id=pid,
+        ships={"solar_skiff": 50_000_000},
+        conn=conn,
+    )
+    assert ok is True, reason
+    assert reason == ""
+    assert preview is not None
+    assert int((preview.get("selected_ships") or {}).get("solar_skiff") or 0) == 50_000
+    assert int(preview.get("started_count") or 0) >= 1
+    conn.close()
+
+
 def test_preview_mass_expedition_slot_split_success(fleet_db):
     conn = db()
     uid = _player(conn=conn)
@@ -461,12 +486,19 @@ def test_main_js_ship_max_selection_triggers_mass_expo_preview():
     assert "setFleetShipInputValue" in js
     assert "emitFleetShipInputChange" in js
     assert "scheduleMassExpoSplitPreview" in js
+    assert "Cap to hangar stock" in js or "data-ship-have" in js
+    get_ships_idx = js.index("const getShipsSelection = (page) =>")
+    get_ships_chunk = js[get_ships_idx : get_ships_idx + 900]
+    assert "data-ship-have" in get_ships_chunk
+    assert "parseIntNumber" in get_ships_chunk
     max_image_idx = js.index('closest("[data-ship-max-image]")')
     max_image_chunk = js[max_image_idx : max_image_idx + 550]
     assert "setFleetShipInputValue" in max_image_chunk
+    assert "parseIntNumber" in max_image_chunk
     max_btn_idx = js.index('closest("[data-ship-max]")')
     max_btn_chunk = js[max_btn_idx : max_btn_idx + 550]
     assert "setFleetShipInputValue" in max_btn_chunk
+    assert "parseIntNumber" in max_btn_chunk
     emit_chunk = js[js.index("emitFleetShipInputChange") : js.index("emitFleetShipInputChange") + 400]
     assert 'new Event("input"' in emit_chunk
     assert 'new Event("change"' in emit_chunk

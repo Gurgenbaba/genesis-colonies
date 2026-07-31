@@ -1492,21 +1492,14 @@ def validate_fleet_send(
     noob_protection_info: Optional[Dict[str, Any]] = None
     if mission == "attack" and target_info:
         if str(target_info.get("target_type") or "") == "world_boss":
-            from .world_boss import can_player_attack_boss
-
+            # GC-WB-ATTACK-002 — World Boss strikes use POST /api/world-boss/attack
+            # (instant snapshot). Do not create fleet_movements for new attacks.
             wb = target_info.get("world_boss") or {}
-            event_id = int(wb.get("event_id") or 0)
-            if event_id <= 0:
-                return False, "world_boss_inactive", {"target": target_info}
-            ok_wb, wb_reason, wb_meta = can_player_attack_boss(
-                int(player_id),
-                event_id,
-                conn=conn,
-                enforce_cooldown=True,
-                check_inflight=True,
-            )
-            if not ok_wb:
-                return False, wb_reason, {"target": target_info, **(wb_meta or {})}
+            return False, "use_world_boss_attack", {
+                "target": target_info,
+                "event_id": int(wb.get("event_id") or 0) or None,
+                "encounter_path": "/world-boss",
+            }
         elif str(target_info.get("target_type") or "") == "pirate_base":
             from .pirates.bases import can_player_attack_base
 
@@ -6014,9 +6007,17 @@ def preview_mass_expedition_slot_split(
             return False, "no_ships", meta
 
         available = get_planet_ships(int(origin_planet_id), conn=conn)
+        # Cap requested amounts to hangar stock. Over-selection (UI formatting / stale
+        # inputs) must not hard-fail mass expedition when ships are actually present.
+        clamped: Dict[str, int] = {}
         for key, need in normalized.items():
-            if int(available.get(key, 0)) < int(need):
-                return False, "not_enough_ships", meta
+            take = min(max(0, int(need)), max(0, int(available.get(key, 0))))
+            if take > 0:
+                clamped[key] = take
+        if not clamped:
+            return False, "not_enough_ships", meta
+        normalized = clamped
+        meta["selected_ships"] = normalized
 
         per_slot, leftover, slot_count = compute_mass_expedition_slot_split(
             normalized, usable_slots

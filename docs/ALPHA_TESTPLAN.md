@@ -12,9 +12,9 @@ Bestehende `game/game.db` **nicht löschen**, wenn du einen vorhandenen Spielsta
 
 | # | Schritt | Erwartung |
 |---|---------|-----------|
-| 1.1 | `/register` — neuen Commander anlegen | Erfolg, Redirect zu Übersicht |
-| 1.2 | Logout → `/login` mit neuem Account | Login ok |
-| 1.3 | Falsches Passwort | Fehlermeldung, kein Crash |
+| 1.1 | `/register` — neuen Commander anlegen | Erfolg, Redirect zu Übersicht | - klappt
+| 1.2 | Logout → `/login` mit neuem Account | Login ok | - klappt
+| 1.3 | Falsches Passwort | Fehlermeldung, kein Crash | - klappt
 
 ---
 
@@ -22,9 +22,9 @@ Bestehende `game/game.db` **nicht löschen**, wenn du einen vorhandenen Spielsta
 
 | # | Schritt | Erwartung |
 |---|---------|-----------|
-| 2.1 | Seite laden | Ferronit, Crytite, Energie sichtbar |
-| 2.2 | 10–15 s warten (Polling) | Ressourcenwerte aktualisieren sich |
-| 2.3 | Gebäude-Tabelle | Mindestens Minen + Solar sichtbar |
+| 2.1 | Seite laden | Ferronit, Crytite, Energie sichtbar | - klappt
+| 2.2 | 10–15 s warten (Polling) | Ressourcenwerte aktualisieren sich | - klappt
+| 2.3 | Gebäude-Tabelle | Mindestens Minen + Solar sichtbar | - klappt
 
 ---
 
@@ -32,9 +32,9 @@ Bestehende `game/game.db` **nicht löschen**, wenn du einen vorhandenen Spielsta
 
 | # | Schritt | Erwartung |
 |---|---------|-----------|
-| 3.1 | Tab „Ressourcen“ | Gebäudeliste lädt |
-| 3.2 | Upgrade starten (wenn Ressourcen reichen) | Kompaktstatus oben (`🏗 N Bauaufträge`); aktiver Job in der Gebäude-Card |
-| 3.3 | Countdown / Fortschrittsbalken | Nur in der Card — läuft ohne Reload |
+| 3.1 | Tab „Ressourcen“ | Gebäudeliste lädt | - klappt
+| 3.2 | Upgrade starten (wenn Ressourcen reichen) | Kompaktstatus oben (`🏗 N Bauaufträge`); aktiver Job in der Gebäude-Card | - klappt
+| 3.3 | Countdown / Fortschrittsbalken | Nur in der Card — läuft ohne Reload | - klappt
 
 **Queue-Regression (GC-512):** Vollständige Checkliste [GC-512_QUEUE_MANUAL_QA.md](GC-512_QUEUE_MANUAL_QA.md) (Cancel active/middle/last, near-finish, PJAX, Planetwechsel).
 
@@ -44,9 +44,9 @@ Bestehende `game/game.db` **nicht löschen**, wenn du einen vorhandenen Spielsta
 
 | # | Schritt | Erwartung |
 |---|---------|-----------|
-| 4.1 | Tech-Liste | Einträge mit Kosten/Zeit |
-| 4.2 | Forschung starten | Kompaktstatus oben; aktiver Job in der Tech-Card |
-| 4.3 | Zweite Forschung anreihen | QUEUE #2 in passender Card, kein oberes Queue-Panel |
+| 4.1 | Tech-Liste | Einträge mit Kosten/Zeit | - klappt
+| 4.2 | Forschung starten | Kompaktstatus oben; aktiver Job in der Tech-Card | - klappt
+| 4.3 | Zweite Forschung anreihen | QUEUE #2 in passender Card, kein oberes Queue-Panel | - klappt
 
 Siehe auch [GC-512_QUEUE_MANUAL_QA.md](GC-512_QUEUE_MANUAL_QA.md) § B.
 
@@ -58,16 +58,16 @@ Manuelle QA über alle Queue-Seiten. Kein großes Queue-Panel mehr.
 
 | # | Seite | Schritt | Erwartung |
 |---|-------|---------|-----------|
-| Q1 | `/buildings` | Bau starten | Mini-Strip oben + Card zeigt AKTIV + Timer + Progress + ⚡ |
-| Q2 | `/research` | 2. Tech anreihen | Wartender Job: QUEUE in Tech-Card; Mini-Strip aktualisiert |
-| Q3 | `/shipyard` | Schiff bauen | **Nur** zentrale Mini-Bauschleife oben (Menge, Timer, Progress, ⚡, Abbrechen); Schiff-Card ohne Queue-UI |
-| Q3b | `/defense` | Verteidigung bauen | **Nur** zentrale Mini-Bauschleife oben; Defense-Card ohne Queue-UI |
-| Q3c | `/shipyard` oder `/defense` | Timekeeper ⚡ | ⚡ nur in der oberen Bauschleife (aktiver Job); nach Apply sofort ohne Reload |
-| Q4 | `/planet_evolution` | Planet-Tech starten | Card-Queue mit DNA-Akzent; kein separater Job-Listenblock |
-| Q5 | `/planet_evolution` | Ascension (Stufe ≥25) | Ascension-Card mit Orbit-Pulse; Kompaktstatus `🌌 N Ascension-Aufträge` |
-| Q6 | PJAX | Buildings → Research → Shipyard | Keine doppelte Unit-Queue in Cards nach Navigation |
-| Q7 | Mobile 390px | Alle vier Seiten | Kein horizontaler Overflow; Mini-Strip / Cards umbrechen sauber |
-| Q8 | Cancel | Job in Mini-Strip / Card abbrechen | Nächster Job wird aktiv ohne Reload; Unit-Cards bleiben queue-frei |
+| Q1 | `/buildings` | Bau starten | Mini-Strip oben + Card zeigt AKTIV + Timer + Progress + ⚡ | - klappt
+| Q2 | `/research` | 2. Tech anreihen | Wartender Job: QUEUE in Tech-Card; Mini-Strip aktualisiert | - klappt
+| Q3 | `/shipyard` | Schiff bauen | **Nur** zentrale Mini-Bauschleife oben (Menge, Timer, Progress, ⚡, Abbrechen); Schiff-Card ohne Queue-UI | - klappt
+| Q3b | `/defense` | Verteidigung bauen | **Nur** zentrale Mini-Bauschleife oben; Defense-Card ohne Queue-UI | - klappt
+| Q3c | `/shipyard` oder `/defense` | Timekeeper ⚡ | ⚡ nur in der oberen Bauschleife (aktiver Job); nach Apply sofort ohne Reload | - klappt
+| Q4 | `/planet_evolution` | Planet-Tech starten | Card-Queue mit DNA-Akzent; kein separater Job-Listenblock | - klappt
+| Q5 | `/planet_evolution` | Ascension (Stufe ≥25) | Ascension-Card mit Orbit-Pulse; Kompaktstatus `🌌 N Ascension-Aufträge` | - klappt
+| Q6 | PJAX | Buildings → Research → Shipyard | Keine doppelte Unit-Queue in Cards nach Navigation | - klappt
+| Q7 | Mobile 390px | Alle vier Seiten | Kein horizontaler Overflow; Mini-Strip / Cards umbrechen sauber | - klappt
+| Q8 | Cancel | Job in Mini-Strip / Card abbrechen | Nächster Job wird aktiv ohne Reload; Unit-Cards bleiben queue-frei | - klappt
 
 Referenz: [GC-536_QUEUE_CARD_UX.md](GC-536_QUEUE_CARD_UX.md) · [GC-512_QUEUE_MANUAL_QA.md](GC-512_QUEUE_MANUAL_QA.md) F1–F5
 
@@ -77,8 +77,8 @@ Referenz: [GC-536_QUEUE_CARD_UX.md](GC-536_QUEUE_CARD_UX.md) · [GC-512_QUEUE_MA
 
 | # | Schritt | Erwartung |
 |---|---------|-----------|
-| 5.1 | Seite öffnen | Tabelle mit Spielern |
-| 5.2 | Eigener Eintrag | Score sichtbar (wenn vorhanden) |
+| 5.1 | Seite öffnen | Tabelle mit Spielern | - klappt
+| 5.2 | Eigener Eintrag | Score sichtbar (wenn vorhanden) | - klappt
 
 ---
 
@@ -86,9 +86,9 @@ Referenz: [GC-536_QUEUE_CARD_UX.md](GC-536_QUEUE_CARD_UX.md) · [GC-512_QUEUE_MA
 
 | # | Schritt | Erwartung |
 |---|---------|-----------|
-| 6.1 | Panel öffnen | Universe-Settings sichtbar |
-| 6.2 | MOTD setzen (optional) | Banner auf Ingame-Seiten |
-| 6.3 | **Kein Wipe** während Demo | Daten bleiben erhalten |
+| 6.1 | Panel öffnen | Universe-Settings sichtbar | - klappt
+| 6.2 | MOTD setzen (optional) | Banner auf Ingame-Seiten | - klappt
+| 6.3 | **Kein Wipe** während Demo | Daten bleiben erhalten | - klappt
 
 ---
 
@@ -96,11 +96,11 @@ Referenz: [GC-536_QUEUE_CARD_UX.md](GC-536_QUEUE_CARD_UX.md) · [GC-512_QUEUE_MA
 
 | # | Schritt | Erwartung |
 |---|---------|-----------|
-| 7.1 | `/overview` | Bottom-Nav sichtbar |
-| 7.2 | Scrollen | Ressourcenleiste bleibt oben kleben |
-| 7.3 | Bottom-Nav: Gebäude, Forschung | Navigation funktioniert |
-| 7.4 | „Mehr“ → Drawer | Öffnet/schließt smooth |
-| 7.5 | Kein horizontaler Page-Scroll | Nur Tabellen innerhalb Scroll-Container |
+| 7.1 | `/overview` | Bottom-Nav sichtbar | - Broke
+| 7.2 | Scrollen | Ressourcenleiste bleibt oben kleben | - Broke
+| 7.3 | Bottom-Nav: Gebäude, Forschung | Navigation funktioniert | - Broke
+| 7.4 | „Mehr“ → Drawer | Öffnet/schließt smooth | - Broke
+| 7.5 | Kein horizontaler Page-Scroll | Nur Tabellen innerhalb Scroll-Container | - Broke
 
 ---
 
@@ -108,9 +108,9 @@ Referenz: [GC-536_QUEUE_CARD_UX.md](GC-536_QUEUE_CARD_UX.md) · [GC-512_QUEUE_MA
 
 | # | Schritt | Erwartung |
 |---|---------|-----------|
-| 8.1 | Sidebar links | Alle Nav-Links sichtbar |
-| 8.2 | Keine Bottom-Nav | Nur Mobile-Layout |
-| 8.3 | Zwei-Spalten-Grids | Overview/Research ok |
+| 8.1 | Sidebar links | Alle Nav-Links sichtbar | - klappt
+| 8.2 | Keine Bottom-Nav | Nur Mobile-Layout | - klappt
+| 8.3 | Zwei-Spalten-Grids | Overview/Research ok | - klappt
 
 ---
 
@@ -118,7 +118,7 @@ Referenz: [GC-536_QUEUE_CARD_UX.md](GC-536_QUEUE_CARD_UX.md) · [GC-512_QUEUE_MA
 
 | Route | Erwartung |
 |-------|-----------|
-| `/alliance` | Platzhalter-UI (sofern nicht freigeschaltet) |
+| `/alliance` | Platzhalter-UI (sofern nicht freigeschaltet) | - Freigeschaltet schon!
 
 ---
 
@@ -128,10 +128,10 @@ Referenz: [GC-536_QUEUE_CARD_UX.md](GC-536_QUEUE_CARD_UX.md) · [GC-512_QUEUE_MA
 
 | # | Schritt | Erwartung |
 |---|---------|-----------|
-| 9b.1 | Seite laden | Fabrik-Stufe, Queue, Bestand, baubare/gesperrte Karten sichtbar |
-| 9b.2 | Einheit bauen (wenn Ressourcen reichen) | Queue + Countdown ohne Full-Page-Reload |
-| 9b.3 | Cancel aktiver Job | 60 % Erstattung; Restqueue neu terminiert (GC-510) |
-| 9b.4 | Planetwechsel (Header) | `/defense` PJAX-Reload; `data-planet-id` = aktiver Planet |
+| 9b.1 | Seite laden | Fabrik-Stufe, Queue, Bestand, baubare/gesperrte Karten sichtbar | - klappt
+| 9b.2 | Einheit bauen (wenn Ressourcen reichen) | Queue + Countdown ohne Full-Page-Reload | - klappt
+| 9b.3 | Cancel aktiver Job | 60 % Erstattung; Restqueue neu terminiert (GC-510) | - klappt
+| 9b.4 | Planetwechsel (Header) | `/defense` PJAX-Reload; `data-planet-id` = aktiver Planet | - klappt
 
 **Automatisiert (optional vor manueller QA):**
 
@@ -147,8 +147,8 @@ python -m pytest tests/test_defense_detail_modal.py tests/test_queue_engine.py -
 
 | # | Prüfung | Erwartung |
 |---|---------|-----------|
-| 10.1 | Nach Neustart `python app.py` | Spielstand aus `game/game.db` erhalten |
-| 10.2 | `/api/status` (eingeloggt) | JSON mit Ressourcen/Queues |
+| 10.1 | Nach Neustart `python app.py` | Spielstand aus `game/game.db` erhalten | - klappt
+| 10.2 | `/api/status` (eingeloggt) | JSON mit Ressourcen/Queues | - klappt
 
 ---
 

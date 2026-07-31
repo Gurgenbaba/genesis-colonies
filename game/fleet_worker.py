@@ -160,10 +160,17 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
             from .world_boss import maybe_tick_world_boss_schedule
 
             wb_tick = maybe_tick_world_boss_schedule(conn=conn)
-            if wb_tick.get("expired_ids") or wb_tick.get("spawned_event_id"):
+            auto = wb_tick.get("auto_attack") or {}
+            if (
+                wb_tick.get("expired_ids")
+                or wb_tick.get("spawned_event_id")
+                or int(auto.get("fired") or 0) > 0
+                or int(auto.get("stopped") or 0) > 0
+            ):
                 _worker_log(
                     f"world-boss expired={wb_tick.get('expired_ids')} "
-                    f"spawned={wb_tick.get('spawned_event_id')}"
+                    f"spawned={wb_tick.get('spawned_event_id')} "
+                    f"auto_fired={auto.get('fired')} auto_stopped={auto.get('stopped')}"
                 )
 
         def _asteroids() -> None:
@@ -412,6 +419,26 @@ def run_fleet_worker(
     conn = db()
     try:
         if not force and not should_run_global_fleet_tick(force=False, conn=conn):
+            # Auto-attack must not wait on fleet arrivals — cheap tick even when idle-skipped.
+            auto_attack: Dict[str, Any] = {}
+            try:
+                from .world_boss import tick_world_boss_auto_attacks
+
+                begin_write_transaction(conn)
+                try:
+                    auto_attack = tick_world_boss_auto_attacks(conn=conn)
+                    commit(conn)
+                except Exception:
+                    rollback(conn)
+                    raise
+                if int(auto_attack.get("fired") or 0) > 0 or int(auto_attack.get("stopped") or 0) > 0:
+                    _worker_log(
+                        f"world-boss auto (idle-skip) fired={auto_attack.get('fired')} "
+                        f"stopped={auto_attack.get('stopped')}"
+                    )
+            except Exception:
+                logger.exception("world_boss auto tick on skipped_interval failed")
+                auto_attack = {"ok": False, "error": "tick_failed"}
             wait = seconds_until_fleet_worker_allowed(conn=conn)
             duration_ms = int((time.perf_counter() - started) * 1000)
             return {
@@ -423,6 +450,7 @@ def run_fleet_worker(
                 "duration_ms": duration_ms,
                 "errors": [],
                 "next_run_in_sec": max(0, int(wait)),
+                "auto_attack": auto_attack,
             }
 
         from .fleet import fleet_schema_ready, process_fleet_tick

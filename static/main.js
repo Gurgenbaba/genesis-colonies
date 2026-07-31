@@ -19553,8 +19553,18 @@
       const ships = {};
       page.querySelectorAll("[data-ship-input]").forEach((inp) => {
         const key = inp.getAttribute("data-ship-input");
-        const val = readNumberInput(inp);
-        if (key && val > 0) ships[key] = val;
+        if (!key) return;
+        let val = readNumberInput(inp);
+        if (val <= 0) return;
+        // Cap to hangar stock on the row — over-typed / misformatted amounts must not
+        // block mass-expedition preview/send with not_enough_ships.
+        const row = inp.closest("[data-ship-key]");
+        const have = parseIntNumber(row?.getAttribute("data-ship-have") ?? "0");
+        if (have >= 0 && val > have) {
+          val = have;
+          setNumberInputValue(inp, have);
+        }
+        if (val > 0) ships[key] = val;
       });
       return ships;
     };
@@ -21582,7 +21592,7 @@
         e.preventDefault();
         const key = maxShip.getAttribute("data-ship-max");
         const row = maxShip.closest("[data-ship-key]");
-        const have = parseInt(row?.getAttribute("data-ship-have") || "0", 10);
+        const have = parseIntNumber(row?.getAttribute("data-ship-have") || "0");
         const inp = form?.querySelector(`[data-ship-input="${key}"]`);
         if (inp) setFleetShipInputValue(page, inp, have);
         return;
@@ -21593,7 +21603,7 @@
         e.preventDefault();
         const key = maxShipImage.getAttribute("data-ship-max-image");
         const row = maxShipImage.closest("[data-ship-key]");
-        const have = parseInt(row?.getAttribute("data-ship-have") || "0", 10);
+        const have = parseIntNumber(row?.getAttribute("data-ship-have") || "0");
         const inp = form?.querySelector(`[data-ship-input="${key}"]`);
         if (inp && have > 0) setFleetShipInputValue(page, inp, have);
         return;
@@ -22889,12 +22899,12 @@
     // GC-WB-FLEET-PREFILL-001: max-select combat hulls (+ Eclipse Runner) for WB attack only.
     const prefillMission = (page.dataset.fleetUrlMission || missionRaw || "").trim().toLowerCase();
     const prefillTargetType = (page.dataset.fleetTargetType || targetTypeRaw || "").trim().toLowerCase();
-    if (prefillMission === "attack" && prefillTargetType === "world_boss") {
+        if (prefillMission === "attack" && prefillTargetType === "world_boss") {
       page.querySelectorAll("[data-ship-key][data-ship-have]").forEach((row) => {
         const role = (row.getAttribute("data-ship-role") || "").trim().toLowerCase();
         const key = (row.getAttribute("data-ship-key") || "").trim();
         if (role !== "combat" && key !== "eclipse_runner") return;
-        const have = parseInt(row.getAttribute("data-ship-have") || "0", 10) || 0;
+        const have = parseIntNumber(row.getAttribute("data-ship-have") || "0") || 0;
         if (have <= 0) return;
         const inp = form.querySelector(`[data-ship-input="${key}"]`);
         if (!inp) return;
@@ -32419,13 +32429,36 @@
 
         const card = btn.closest(".gc-world-boss-card") || root;
         const cdBlock = card.querySelector("[data-wb-attack-cooldown]");
+        const autoBtn = card.querySelector("[data-wb-auto-attack]");
+        const autoOn = autoBtn && autoBtn.getAttribute("data-wb-auto-enabled") === "1";
         if (cdBlock) {
           const ready = document.createElement("p");
-          ready.className = "gc-world-boss-ready hint";
+          ready.className = "gc-world-boss-ready hint is-pulse";
           ready.setAttribute("role", "status");
           ready.setAttribute("data-wb-attack-ready", "");
-          ready.textContent = t("wb_attack_ready", "Angriff bereit.");
+          ready.textContent = autoOn
+            ? t("wb_auto_attack_pending", "Auto-Angriff aktiv — nächster Treffer folgt.")
+            : t("wb_attack_ready", "Angriff bereit.");
           cdBlock.replaceWith(ready);
+        }
+        // Server flush via WB API (opportunistic auto-fire). Play FX on-page —
+        // never PJAX-reload here (reload skips attack presentation).
+        if (autoOn) {
+          fetch("/api/world-boss", {
+            method: "GET",
+            credentials: "same-origin",
+            headers: { Accept: "application/json" },
+          })
+            .then((r) => (r && r.ok ? r.json() : null))
+            .then((payload) => {
+              if (!payload || !card || !card.isConnected) return;
+              if (typeof GC.consumeWorldBossAutoPresentation === "function") {
+                GC.consumeWorldBossAutoPresentation(card, payload);
+              }
+            })
+            .catch(() => {
+              /* stay on page — auto poll will retry */
+            });
         }
         return true;
       };
@@ -32538,85 +32571,492 @@
       });
     });
 
-    // GC-WB-AUTO-ATTACK-001 — one-click combat fleet via existing /api/fleet/send
+    const wbReducedMotion =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const wbFmtInt = (n) => {
+      const v = Math.trunc(Number(n) || 0);
+      try {
+        return v.toLocaleString(undefined);
+      } catch (_e) {
+        return String(v);
+      }
+    };
+
+    const wbPhaseFromPct = (pct) => {
+      const p = Number(pct) || 0;
+      if (p <= 0) return 0;
+      if (p <= 25) return 3;
+      if (p <= 50) return 2;
+      return 1;
+    };
+
+    const wbApplyCooldownUi = (card, cooldownUntil) => {
+      if (!card || !(cooldownUntil > 0)) return;
+      const until = Math.floor(Number(cooldownUntil));
+      card.querySelectorAll("[data-wb-instant-attack], [data-wb-auto-attack]").forEach((btn) => {
+        btn.classList.add("is-disabled");
+        btn.setAttribute("aria-disabled", "true");
+        btn.setAttribute("tabindex", "-1");
+        btn.setAttribute("data-wb-locked-until", String(until));
+        if (btn.tagName === "BUTTON") btn.disabled = true;
+        delete btn.dataset.wbCdBound;
+      });
+      let cd = card.querySelector("[data-wb-attack-cooldown]");
+      const ready = card.querySelector("[data-wb-attack-ready]");
+      if (!cd) {
+        cd = document.createElement("p");
+        cd.className = "gc-world-boss-cooldown gc-world-boss-cooldown-chip";
+        cd.setAttribute("role", "status");
+        cd.setAttribute("data-wb-attack-cooldown", "");
+        const bar = card.querySelector(".gc-world-boss-action-bar");
+        const actions = card.querySelector(".gc-world-boss-actions");
+        const meta = card.querySelector(".gc-world-boss-hero-meta");
+        if (bar && actions) bar.insertBefore(cd, actions);
+        else if (meta && actions) meta.insertBefore(cd, actions);
+        else if (bar) bar.prepend(cd);
+        else if (meta) meta.appendChild(cd);
+      }
+      if (ready) ready.remove();
+      cd.innerHTML =
+        `${t("wb_attack_cooldown", "Nächster Angriff in")} ` +
+        `<span class="gc-mono" data-countdown-at="${until}" data-countdown-format="eta" data-wb-cooldown-at="${until}">—</span>`;
+      bindWorldBossAttackCooldownUnlock(card);
+    };
+
+    const wbUpdateFormation = (card, ships) => {
+      const mount = card.querySelector("[data-wb-formation]");
+      if (!mount || !ships || typeof ships !== "object") return;
+      const entries = Object.entries(ships)
+        .map(([k, v]) => [String(k), Math.max(0, Math.trunc(Number(v) || 0))])
+        .filter(([, v]) => v > 0)
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .slice(0, 4);
+      if (!entries.length) return;
+      mount.removeAttribute("aria-hidden");
+      mount.innerHTML = entries
+        .map(([key, count]) => {
+          const png = `/static/img/ships/${encodeURIComponent(key)}.png`;
+          const webp =
+            typeof GC.preferWebpStaticUrl === "function" ? GC.preferWebpStaticUrl(png) : png;
+          return (
+            `<div class="gc-world-boss-ship-slot" data-wb-ship-slot data-ship-key="${key}" data-ship-count="${count}">` +
+            `<picture><source type="image/webp" srcset="${webp}">` +
+            `<img class="gc-world-boss-ship-img" src="${png}" alt="" width="56" height="56" loading="lazy"></picture>` +
+            `<span class="gc-world-boss-ship-count gc-mono">×${wbFmtInt(count)}</span></div>`
+          );
+        })
+        .join("");
+    };
+
+    const wbPlayAttackFx = (card, attack, boss) => {
+      if (!card || !attack) return;
+      const art = card.querySelector("[data-wb-boss-art]");
+      const formation = card.querySelector("[data-wb-formation]");
+      const projMount = card.querySelector("[data-wb-projectiles]");
+      const dmgMount = card.querySelector("[data-wb-damage-mount]");
+      const hpFill = card.querySelector("[data-wb-hp-fill]");
+      const hpBar = card.querySelector("[data-wb-hp-bar]");
+      const hpText = card.querySelector("[data-wb-hp-text]");
+      const stage = card.querySelector("[data-wb-stage]");
+      const profile = String(attack.projectile_profile || "laser_mid");
+      const crit = !!attack.critical;
+      const damage = Math.max(0, Math.trunc(Number(attack.damage) || 0));
+      const salvo = Math.max(0, Math.trunc(Number(attack.alliance_salvo) || 0));
+      const newHp = Math.max(0, Math.trunc(Number(boss?.hp) || 0));
+      const maxHp = Math.max(1, Math.trunc(Number(boss?.max_hp) || card.getAttribute("data-wb-max-hp") || 1));
+      const hpPct = Math.max(0, Math.min(100, Number(boss?.hp_pct != null ? boss.hp_pct : (newHp / maxHp) * 100)));
+      const phase = boss?.phase != null ? Number(boss.phase) : wbPhaseFromPct(hpPct);
+      const motionScale = wbReducedMotion ? 0 : 1;
+
+      const clearTimers = [];
+      const later = (fn, ms) => {
+        const id = setTimeout(fn, motionScale ? ms : 0);
+        clearTimers.push(id);
+        return id;
+      };
+      if (typeof GC.registerCleanup === "function") {
+        GC.registerCleanup(() => clearTimers.forEach((id) => clearTimeout(id)));
+      }
+
+      later(() => {
+        if (formation) formation.classList.add("is-lunging");
+      }, 120);
+
+      later(() => {
+        if (!projMount || !motionScale) return;
+        projMount.innerHTML = "";
+        const slots = formation
+          ? Array.from(formation.querySelectorAll("[data-wb-ship-slot]"))
+          : [];
+        const stageEl = stage || projMount;
+        const stageRect = stageEl.getBoundingClientRect();
+        const starts = [];
+        if (slots.length && stageRect.width > 0 && stageRect.height > 0) {
+          slots.forEach((slot) => {
+            const r = slot.getBoundingClientRect();
+            const leftPct = ((r.left + r.width / 2 - stageRect.left) / stageRect.width) * 100;
+            const bottomPct = ((stageRect.bottom - (r.top + r.height * 0.35)) / stageRect.height) * 100;
+            starts.push({
+              left: Math.max(8, Math.min(92, leftPct)),
+              bottom: Math.max(4, Math.min(28, bottomPct)),
+            });
+          });
+        }
+        while (starts.length < 5) {
+          const i = starts.length;
+          starts.push({ left: 22 + i * 14, bottom: 8 + (i % 2) * 4 });
+        }
+        starts.slice(0, 6).forEach((pos, i) => {
+          const el = document.createElement("span");
+          el.className = "gc-wb-projectile is-flying";
+          if (profile === "plasma_heavy") el.classList.add("is-plasma");
+          else if (profile === "kinetic_light") el.classList.add("is-kinetic");
+          el.style.left = `${pos.left}%`;
+          el.style.bottom = `${pos.bottom}%`;
+          el.style.animationDelay = `${i * 40}ms`;
+          projMount.appendChild(el);
+        });
+      }, 280);
+
+      later(() => {
+        if (art) {
+          art.classList.add("is-hit");
+          if (crit) art.classList.add("is-crit");
+        }
+        if (hpBar) hpBar.classList.add("is-hit");
+      }, 780);
+
+      later(() => {
+        if (!dmgMount) return;
+        dmgMount.innerHTML = "";
+        if (crit) {
+          const lab = document.createElement("div");
+          lab.className = "gc-wb-dmg-crit-label";
+          lab.textContent = t("wb_critical_hit", "KRITISCH");
+          dmgMount.appendChild(lab);
+        }
+        const num = document.createElement("div");
+        num.className = "gc-wb-dmg-num" + (crit ? " is-crit" : "");
+        num.textContent = `−${wbFmtInt(damage)}`;
+        dmgMount.appendChild(num);
+        if (salvo > 0) {
+          const sEl = document.createElement("div");
+          sEl.className = "gc-wb-dmg-salvo";
+          sEl.textContent = `+${wbFmtInt(salvo)} ${t("wb_alliance_salvo", "ALLIANZ-SALVE")}`;
+          dmgMount.appendChild(sEl);
+        }
+      }, 820);
+
+      later(() => {
+        if (hpFill) hpFill.style.width = `${hpPct}%`;
+        if (hpBar) {
+          hpBar.setAttribute("aria-valuenow", String(Math.round(hpPct)));
+          hpBar.setAttribute("data-wb-hp", String(newHp));
+          hpBar.classList.remove("gc-wb-phase-1", "gc-wb-phase-2", "gc-wb-phase-3", "gc-wb-phase-0");
+          hpBar.classList.add(`gc-wb-phase-${phase}`);
+        }
+        if (hpText) {
+          hpText.innerHTML =
+            `${wbFmtInt(newHp)} / ${wbFmtInt(maxHp)} ` +
+            `<span class="gc-world-boss-hp-pct">(${hpPct.toFixed(1)}%)</span>`;
+        }
+        if (art) {
+          art.classList.remove("gc-wb-phase-1", "gc-wb-phase-2", "gc-wb-phase-3", "gc-wb-phase-0");
+          art.classList.add(`gc-wb-phase-${phase}`);
+          art.setAttribute("data-wb-hp-phase", String(phase));
+        }
+        if (stage) {
+          stage.classList.remove("gc-wb-phase-1", "gc-wb-phase-2", "gc-wb-phase-3", "gc-wb-phase-0");
+          stage.classList.add(`gc-wb-phase-${phase}`);
+        }
+        card.setAttribute("data-wb-hp-phase", String(phase));
+        if (boss?.defeated) card.setAttribute("data-wb-status", "defeated");
+      }, 900);
+
+      later(() => {
+        if (art) art.classList.remove("is-hit", "is-crit");
+        if (hpBar) hpBar.classList.remove("is-hit");
+        if (projMount) projMount.innerHTML = "";
+      }, 1500);
+
+      later(() => {
+        if (formation) formation.classList.remove("is-lunging");
+        if (dmgMount) dmgMount.innerHTML = "";
+      }, 1900);
+    };
+
+    const wbApplyAttackResult = (card, strike) => {
+      if (!card || !strike) return;
+      const attack = strike.attack || {};
+      const player = strike.player || {};
+      if (attack.ships) wbUpdateFormation(card, attack.ships);
+      const dmgEl = card.querySelector("[data-wb-player-damage]");
+      if (dmgEl && player.total_damage != null) dmgEl.textContent = wbFmtInt(player.total_damage);
+      const rankEl = card.querySelector("[data-wb-player-rank]");
+      if (rankEl && player.rank) {
+        rankEl.textContent = player.total_players
+          ? `#${player.rank}/${player.total_players}`
+          : `#${player.rank}`;
+      }
+      const wavesEl = card.querySelector("[data-wb-player-waves]");
+      const wavesMeta = card.querySelector("[data-wb-player-waves-meta]");
+      if (player.waves != null || player.max_waves != null) {
+        const wTxt = `${player.waves || 0} / ${player.max_waves || 40}`;
+        if (wavesEl) wavesEl.textContent = wTxt;
+        if (wavesMeta) wavesMeta.textContent = wTxt;
+      }
+      if (player.cooldown_until) wbApplyCooldownUi(card, player.cooldown_until);
+    };
+
+    GC.playWorldBossAttackFx = wbPlayAttackFx;
+    GC.applyWorldBossAttackResult = wbApplyAttackResult;
+
+    /** Play auto-attack FX while staying on the WB page (flush strike or damage delta). */
+    const wbConsumeAutoPresentation = (card, payload) => {
+      if (!card || !payload) return false;
+      const strikes = Array.isArray(payload.flushed_attacks) ? payload.flushed_attacks : [];
+      if (strikes.length) {
+        const strike = strikes[0];
+        const hitAt = strike.attack && strike.attack.hit_at;
+        if (hitAt && String(hitAt) === String(card.dataset.wbLastHitAt || "")) return false;
+        if (hitAt) card.dataset.wbLastHitAt = String(hitAt);
+        wbApplyAttackResult(card, strike);
+        wbPlayAttackFx(card, strike.attack, strike.boss);
+        if (strike.player && strike.player.total_damage != null) {
+          card.dataset.wbPlayerDamage = String(strike.player.total_damage);
+        }
+        return true;
+      }
+
+      const evCard = Array.isArray(payload.events) ? payload.events[0] : null;
+      const eventRow = payload.event || (evCard && evCard.event) || null;
+      const player = (evCard && evCard.player) || payload.player || null;
+      const contrib = player && player.contribution;
+      const dmg = Math.max(
+        0,
+        Math.trunc(Number((contrib && contrib.damage) || player?.total_damage || 0))
+      );
+      const prevRaw = card.dataset.wbPlayerDamage;
+      if (prevRaw == null || prevRaw === "") {
+        card.dataset.wbPlayerDamage = String(dmg);
+        return false;
+      }
+      const prev = Math.max(0, Math.trunc(Number(prevRaw) || 0));
+      if (dmg > prev && eventRow) {
+        const delta = dmg - prev;
+        card.dataset.wbPlayerDamage = String(dmg);
+        const maxHp = Math.max(1, Math.trunc(Number(eventRow.max_hp || card.getAttribute("data-wb-max-hp") || 1)));
+        const hp = Math.max(0, Math.trunc(Number(eventRow.current_hp || 0)));
+        const hpPct = Math.max(0, Math.min(100, (hp / maxHp) * 100));
+        const atkMeta = player && player.attack_meta;
+        wbApplyAttackResult(card, {
+          player: {
+            total_damage: dmg,
+            rank: (player && player.rank) || (contrib && contrib.rank) || null,
+            total_players: (player && player.total_players) || null,
+            waves: contrib && contrib.waves,
+            max_waves: 40,
+            cooldown_until: atkMeta && atkMeta.cooldown_until,
+          },
+        });
+        wbPlayAttackFx(
+          card,
+          {
+            damage: delta,
+            critical: false,
+            projectile_profile: "laser_mid",
+            alliance_salvo: 0,
+          },
+          {
+            hp,
+            max_hp: maxHp,
+            hp_pct: hpPct,
+            phase: eventRow.phase != null ? Number(eventRow.phase) : wbPhaseFromPct(hpPct),
+            defeated: String(eventRow.status || "") === "defeated",
+          }
+        );
+        return true;
+      }
+      if (dmg !== prev) card.dataset.wbPlayerDamage = String(dmg);
+      return false;
+    };
+    GC.consumeWorldBossAutoPresentation = wbConsumeAutoPresentation;
+
+    // While Auto is on, poll so follow-up strikes (flush / fleet_worker) show FX on-page.
+    const wbAutoPollTick = () => {
+      const card = root.querySelector(".gc-world-boss-card");
+      if (!card || !card.isConnected) return;
+      const autoOn = card.querySelector("[data-wb-auto-attack][data-wb-auto-enabled='1']");
+      if (!autoOn) return;
+      if (card.dataset.wbAutoPollBusy === "1") return;
+      card.dataset.wbAutoPollBusy = "1";
+      fetch("/api/world-boss", {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+      })
+        .then((r) => (r && r.ok ? r.json() : null))
+        .then((payload) => {
+          if (payload && card.isConnected) wbConsumeAutoPresentation(card, payload);
+        })
+        .catch(() => null)
+        .finally(() => {
+          delete card.dataset.wbAutoPollBusy;
+        });
+    };
+    const wbAutoPollId =
+      typeof GC.setSafeInterval === "function"
+        ? GC.setSafeInterval(wbAutoPollTick, 2500)
+        : setInterval(wbAutoPollTick, 2500);
+    if (typeof GC.registerCleanup === "function") {
+      GC.registerCleanup(() => {
+        if (typeof GC.clearSafeInterval === "function") GC.clearSafeInterval(wbAutoPollId);
+        else clearInterval(wbAutoPollId);
+      });
+    }
+
+    const wbMapAttackError = (reason, res) => {
+      if (reason === "no_combat_ships_available" || reason === "not_enough_ships" || reason === "no_ships_selected" || reason === "insufficient_ships") {
+        return t("wb_auto_attack_no_ships", "Keine Kampfschiffe auf dem aktiven Planeten.");
+      }
+      if (reason === "world_boss_cooldown") return t("wb_attack_cooldown", "Nächster Angriff in") + "…";
+      if (reason === "world_boss_inflight") return t("wb_attack_inflight", "Angriffsflotte bereits unterwegs.");
+      if (reason === "world_boss_wave_limit") return t("wb_attack_wave_limit", "Wellenlimit für dieses Ereignis erreicht.");
+      if (reason === "world_boss_defeated" || reason === "world_boss_inactive") {
+        return t("wb_status_defeated", "Besiegt");
+      }
+      if (typeof mapActionError === "function") return mapActionError(reason, res);
+      return t("msg_action_failed", "Aktion fehlgeschlagen.");
+    };
+
+    const wbPostInstantAttack = async (btn, { autoSelect }) => {
+      if (
+        !btn ||
+        btn.disabled ||
+        btn.classList.contains("is-disabled") ||
+        btn.getAttribute("aria-disabled") === "true" ||
+        btn.dataset.submitting === "1"
+      ) {
+        return;
+      }
+      const eventId = Number(btn.getAttribute("data-wb-event-id") || 0);
+      if (!eventId) return;
+      const card = btn.closest(".gc-world-boss-card");
+      btn.disabled = true;
+      btn.dataset.submitting = "1";
+      const requestId =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `wb-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      try {
+        const res = await GC.fetchGameAction("/api/world-boss/attack", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            "X-Request-Id": requestId,
+          },
+          body: JSON.stringify({
+            event_id: eventId,
+            auto_select: !!autoSelect,
+            request_id: requestId,
+          }),
+        });
+        if (res && res.state && typeof GC.applyActionState === "function") {
+          GC.applyActionState(res, res.ok ? "world_boss_attack" : "world_boss_attack_error");
+        }
+        if (res && res.ok) {
+          if (card) {
+            wbApplyAttackResult(card, res);
+            wbPlayAttackFx(card, res.attack, res.boss);
+            if (res.player && res.player.total_damage != null) {
+              card.dataset.wbPlayerDamage = String(res.player.total_damage);
+            }
+            if (res.attack && res.attack.hit_at) {
+              card.dataset.wbLastHitAt = String(res.attack.hit_at);
+            }
+          }
+          delete btn.dataset.submitting;
+        } else {
+          const reason = String(res?.error || res?.reason || "generic");
+          showNotify(wbMapAttackError(reason, res), "error");
+          btn.disabled = false;
+          delete btn.dataset.submitting;
+        }
+      } catch (_err) {
+        showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
+        btn.disabled = false;
+        delete btn.dataset.submitting;
+      }
+    };
+
+    // GC-WB-ATTACK-002 / COMBAT-FX-003 — instant strike + presentation FX
+    root.querySelectorAll("[data-wb-instant-attack]").forEach((atkBtn) => {
+      if (atkBtn.dataset.wbAtkBound === "1") return;
+      atkBtn.dataset.wbAtkBound = "1";
+      atkBtn.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        wbPostInstantAttack(atkBtn, { autoSelect: true });
+      });
+    });
+
     root.querySelectorAll("[data-wb-auto-attack]").forEach((autoBtn) => {
       if (autoBtn.dataset.wbAutoBound === "1") return;
       autoBtn.dataset.wbAutoBound = "1";
       autoBtn.addEventListener("click", async (ev) => {
-        if (
-          autoBtn.disabled ||
-          autoBtn.classList.contains("is-disabled") ||
-          autoBtn.getAttribute("aria-disabled") === "true" ||
-          autoBtn.dataset.submitting === "1"
-        ) {
-          ev.preventDefault();
-          return;
-        }
-        const g = parseInt(autoBtn.getAttribute("data-target-galaxy") || "0", 10);
-        const s = parseInt(autoBtn.getAttribute("data-target-system") || "0", 10);
-        const p = parseInt(autoBtn.getAttribute("data-target-position") || "0", 10);
-        if (!(g > 0 && s > 0 && p > 0)) return;
-        const coords = `${g}:${s}:${p}`;
-        autoBtn.disabled = true;
+        ev.preventDefault();
+        if (autoBtn.dataset.submitting === "1") return;
+        const eventId = Number(autoBtn.getAttribute("data-wb-event-id") || 0);
+        if (!eventId) return;
+        const currentlyOn = autoBtn.getAttribute("data-wb-auto-enabled") === "1";
         autoBtn.dataset.submitting = "1";
+        autoBtn.disabled = true;
         try {
-          const res = await GC.fetchGameAction("/api/fleet/send", {
+          const res = await GC.fetchGameAction("/api/world-boss/auto-attack", {
             method: "POST",
             headers: { "Content-Type": "application/json", Accept: "application/json" },
             body: JSON.stringify({
-              mission_type: "attack",
-              target_galaxy: g,
-              target_system: s,
-              target_position: p,
-              target_type: "world_boss",
-              world_boss_auto_attack: true,
-              resources: {},
-              speed_percent: 100,
+              event_id: eventId,
+              enabled: !currentlyOn,
+              auto_select: true,
             }),
           });
           if (res && res.state && typeof GC.applyActionState === "function") {
-            GC.applyActionState(res, res.ok ? "world_boss_auto_attack" : "world_boss_auto_attack_error");
+            GC.applyActionState(res, res.ok ? "world_boss_auto_toggle" : "world_boss_auto_toggle_error");
           }
           if (res && res.ok) {
-            const payload = res.data && typeof res.data === "object" ? res.data : res;
-            const meta = payload.world_boss_auto_attack || {};
-            const sent = parseInt(meta.sent_count, 10) || 0;
-            const tpl = t(
-              "wb_auto_attack_success",
-              "Kampfflotte nach %(coords)s gesendet (%(count)s Schiffe)."
-            );
+            const on = !!(res.auto_attack && res.auto_attack.enabled);
+            const card = autoBtn.closest(".gc-world-boss-card");
+            autoBtn.setAttribute("data-wb-auto-enabled", on ? "1" : "0");
+            autoBtn.setAttribute("aria-pressed", on ? "true" : "false");
+            autoBtn.classList.toggle("is-active", on);
+            autoBtn.textContent = on
+              ? t("wb_auto_attack_active", "Auto-Angriff aktiv")
+              : t("wb_auto_attack", "Auto-Angriff");
+            if (on && res.attack && card) {
+              wbApplyAttackResult(card, res);
+              wbPlayAttackFx(card, res.attack, res.boss);
+              if (res.player && res.player.total_damage != null) {
+                card.dataset.wbPlayerDamage = String(res.player.total_damage);
+              }
+              if (res.attack.hit_at) card.dataset.wbLastHitAt = String(res.attack.hit_at);
+            } else if (on && res.auto_attack && res.auto_attack.cooldown_until && card) {
+              wbApplyCooldownUi(card, res.auto_attack.cooldown_until);
+            }
             showNotify(
-              tpl.replace("%(coords)s", coords).replace("%(count)s", String(sent)),
+              on
+                ? t("wb_auto_attack_enabled", "Auto-Angriff aktiviert — Server greift bei freiem Cooldown an.")
+                : t("wb_auto_attack_disabled", "Auto-Angriff deaktiviert."),
               "success"
             );
-            if (typeof GC.reloadCurrentPage === "function") {
-              GC.reloadCurrentPage();
-            }
           } else {
-            const reason = String(res?.error || res?.reason || "generic");
-            let msg;
-            if (reason === "no_combat_ships_available" || reason === "not_enough_ships") {
-              msg = t(
-                "wb_auto_attack_no_ships",
-                "Keine Kampfschiffe auf dem aktiven Planeten."
-              );
-            } else if (reason === "world_boss_cooldown") {
-              msg = t("wb_attack_cooldown", "Nächster Angriff in") + "…";
-            } else if (reason === "world_boss_inflight") {
-              msg = t("wb_attack_inflight", "Angriffsflotte bereits unterwegs.");
-            } else if (reason === "world_boss_wave_limit") {
-              msg = t("wb_attack_wave_limit", "Wellenlimit für dieses Ereignis erreicht.");
-            } else if (typeof mapActionError === "function") {
-              msg = mapActionError(reason, res);
-            } else {
-              msg = t(`fleet_error_${reason}`, t("msg_action_failed", "Aktion fehlgeschlagen."));
-            }
-            showNotify(msg, "error");
-            autoBtn.disabled = false;
-            delete autoBtn.dataset.submitting;
+            showNotify(wbMapAttackError(String(res?.error || "generic"), res), "error");
           }
         } catch (_err) {
           showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
+        } finally {
           autoBtn.disabled = false;
           delete autoBtn.dataset.submitting;
         }
