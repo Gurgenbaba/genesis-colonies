@@ -7000,7 +7000,7 @@
   "wb_catch_cooldown": "Próximo intento en",
   "wb_catch_need_tk": "Timekeeper insuficiente (se requieren 10h).",
   "wb_catch_phase_locked": "Domesticar solo desde Fase 3 (≤25% HP).",
-  "wb_catch_success": "¡Domesticado! El compañero aparece en Resumen.",
+  "wb_catch_success": "¡Domado! El jefe desaparece: recompensas repartidas entre los participantes.",
   "wb_catch_fail": "Fallo al domesticar — intento gastado. Enfriamiento activo.",
   "wb_help_catch": "Domesticar: En Fase 3 (≤25% HP) 10% por 10h Timekeeper — una vez por jefe. Los compañeros viven en Resumen y ganan Ark Tokens.",
   "overview_companions_label": "Compañeros World Boss",
@@ -7214,5 +7214,7 @@
   "commander_icon_signal": "Signal",
   "commander_rank_up": "Subir rango",
   "commander_available_label": "Disponible",
-  "commander_map_locked_hint": "Bloqueado: maximiza el nodo anterior primero."
+  "commander_map_locked_hint": "Bloqueado: maximiza el nodo anterior primero.",
+  "wb_news_tame_title": "World Boss domado: %(boss)s",
+  "wb_news_tame_body": "El World Boss en %(coords)s fue domado y desapareció. Las recompensas se repartieron entre los participantes."
 }

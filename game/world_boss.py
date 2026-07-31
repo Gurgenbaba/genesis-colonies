@@ -28,7 +28,10 @@ WORLD_BOSS_CLAIM_TABLE = "world_boss_claims"
 STATUS_ACTIVE = "active"
 STATUS_DEFEATED = "defeated"
 STATUS_EXPIRED = "expired"
+STATUS_TAMED = "tamed"
 STATUS_SCHEDULED = "scheduled"
+# Ended events that unlock (or already paid) contribution rewards.
+CLAIMABLE_STATUSES = frozenset({STATUS_DEFEATED, STATUS_EXPIRED, STATUS_TAMED})
 
 WAVE_COOLDOWN_SEC = 300
 MAX_WAVES_PER_PLAYER = 40
@@ -234,7 +237,7 @@ def build_player_reward_outlook(
         return empty
 
     status = str(event.get("status") or "")
-    mode = "claimable" if status in (STATUS_DEFEATED, STATUS_EXPIRED) else "projected"
+    mode = "claimable" if status in CLAIMABLE_STATUSES else "projected"
     return {
         "mode": mode,
         "earned_tiers": list(tiers),
@@ -1533,6 +1536,21 @@ def format_world_boss_news(
                 coords=coords,
             ),
         }
+    if kind == "tame":
+        return {
+            "title": tr(
+                "wb_news_tame_title",
+                "World Boss gezähmt: %(boss)s",
+                locale=loc,
+                boss=boss_name,
+            ),
+            "body": tr(
+                "wb_news_tame_body",
+                "Der World Boss bei %(coords)s wurde gezähmt und ist verschwunden. Belohnungen wurden an alle Teilnehmer ausgezahlt.",
+                locale=loc,
+                coords=coords,
+            ),
+        }
     if discoverer_name:
         return {
             "title": tr(
@@ -1652,6 +1670,22 @@ def _announce_defeat(event: Mapping[str, Any], *, conn) -> None:
     )
 
 
+def _announce_tame(event: Mapping[str, Any], *, conn) -> None:
+    from .i18n import DEFAULT_LOCALE
+    from .universe_news import create_news
+
+    copy = format_world_boss_news(event, kind="tame", locale=DEFAULT_LOCALE)
+    create_news(
+        title=copy["title"],
+        body=copy["body"],
+        category="EVENT",
+        badge="EVENT",
+        source_ref=f"world_boss:tame:{int(event['id'])}",
+        set_banner=True,
+        conn=conn,
+    )
+
+
 def _expire_event(
     event_id: int,
     *,
@@ -1663,12 +1697,91 @@ def _expire_event(
         """
         UPDATE world_boss_events
         SET status = ?, updated_at = ?,
-            defeated_at = CASE WHEN ? = 'defeated' THEN ? ELSE defeated_at END
+            defeated_at = CASE
+                WHEN ? IN ('defeated', 'tamed') THEN ?
+                ELSE defeated_at
+            END
         WHERE id = ? AND status = ?;
         """,
         (status, float(now), status, float(now), int(event_id), STATUS_ACTIVE),
     )
     set_runtime_value(SCHEDULE_RUNTIME_KEY, str(float(now)), conn=conn)
+
+
+def close_event_as_tamed(
+    event_id: int,
+    *,
+    conn,
+    now: Optional[float] = None,
+) -> Optional[Dict[str, Any]]:
+    """Remove live boss after successful catch: status tamed, HP 0, stop auto-attack."""
+    if not world_boss_schema_ready(conn):
+        return None
+    ts = float(now if now is not None else _now())
+    eid = int(event_id)
+    conn.execute(
+        """
+        UPDATE world_boss_events
+        SET status = ?, current_hp = 0, defeated_at = ?, updated_at = ?
+        WHERE id = ? AND status = ?;
+        """,
+        (STATUS_TAMED, ts, ts, eid, STATUS_ACTIVE),
+    )
+    if _auto_attack_columns_ready(conn):
+        conn.execute(
+            """
+            UPDATE world_boss_contributions
+            SET auto_attack_enabled = 0
+            WHERE event_id = ? AND auto_attack_enabled = 1;
+            """,
+            (eid,),
+        )
+    set_runtime_value(SCHEDULE_RUNTIME_KEY, str(ts), conn=conn)
+    updated = get_event_by_id(eid, conn=conn)
+    if updated and str(updated.get("status") or "") == STATUS_TAMED:
+        try:
+            _announce_tame(updated, conn=conn)
+        except Exception:
+            logger.exception("world_boss tame news failed event=%s", eid)
+    return updated
+
+
+def auto_distribute_world_boss_rewards(
+    event_id: int,
+    *,
+    conn,
+    now: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Pay every damage contributor via claim_world_boss_rewards (idempotent)."""
+    ts = float(now if now is not None else _now())
+    eid = int(event_id)
+    contribs = list_contributions(eid, conn=conn, limit=10000)
+    paid: List[Dict[str, Any]] = []
+    skipped: List[Dict[str, Any]] = []
+    for row in contribs:
+        pid = int(row.get("player_id") or 0)
+        if pid <= 0 or int(row.get("damage") or 0) <= 0:
+            continue
+        result = claim_world_boss_rewards(pid, eid, conn=conn, now=ts)
+        entry = {
+            "player_id": pid,
+            "ok": bool(result.get("ok")),
+            "error": str(result.get("error") or ""),
+            "tiers": list(result.get("tiers") or []),
+        }
+        if result.get("ok"):
+            paid.append(entry)
+        else:
+            skipped.append(entry)
+    return {
+        "ok": True,
+        "event_id": eid,
+        "participant_count": len(paid) + len(skipped),
+        "claimed_count": len(paid),
+        "skipped_count": len(skipped),
+        "paid": paid,
+        "skipped": skipped,
+    }
 
 
 def has_inflight_world_boss_attack(
@@ -2291,7 +2404,7 @@ def claim_world_boss_rewards(
     event = get_event_by_id(int(event_id), conn=conn)
     if not event:
         return {"ok": False, "error": "event_not_found"}
-    if event["status"] not in (STATUS_DEFEATED, STATUS_EXPIRED):
+    if event["status"] not in CLAIMABLE_STATUSES:
         return {"ok": False, "error": "event_not_claimable"}
 
     existing = _player_claim_row(int(event_id), int(player_id), conn=conn)
@@ -2506,7 +2619,7 @@ def _event_card_for_player(
         mine = next((c for c in contribs if int(c["player_id"]) == int(player_id)), None)
         claim = _player_claim_row(int(event["id"]), int(player_id), conn=conn)
         can_claim = (
-            event["status"] in (STATUS_DEFEATED, STATUS_EXPIRED)
+            event["status"] in CLAIMABLE_STATUSES
             and mine is not None
             and int(mine["damage"]) > 0
             and claim is None
@@ -2623,11 +2736,11 @@ def build_world_boss_payload(
     ended_rows = conn.execute(
         """
         SELECT id FROM world_boss_events
-        WHERE status IN (?, ?)
+        WHERE status IN (?, ?, ?)
         ORDER BY updated_at DESC
         LIMIT 8;
         """,
-        (STATUS_DEFEATED, STATUS_EXPIRED),
+        (STATUS_DEFEATED, STATUS_EXPIRED, STATUS_TAMED),
     ).fetchall()
     active_ids = {int(c["event"]["id"]) for c in cards}
     for row in ended_rows:

@@ -7000,7 +7000,7 @@
   "wb_catch_cooldown": "Próxima tentativa em",
   "wb_catch_need_tk": "Timekeeper insuficiente (10h necessários).",
   "wb_catch_phase_locked": "Domar só a partir da Fase 3 (≤25% HP).",
-  "wb_catch_success": "Domado! O companion aparece na visão geral.",
+  "wb_catch_success": "Domado! O boss desaparece — recompensas pagas a todos os participantes.",
   "wb_catch_fail": "Falha ao domar — tentativa gasta. Cooldown ativo.",
   "wb_help_catch": "Domar: na Fase 3 (≤25% HP), 10% por 10h Timekeeper — uma vez por boss. Companions na visão geral ganham Ark Tokens.",
   "overview_companions_label": "Companions World Boss",
@@ -7214,5 +7214,7 @@
   "commander_icon_signal": "Signal",
   "commander_rank_up": "Aumentar rank",
   "commander_available_label": "Disponível",
-  "commander_map_locked_hint": "Bloqueado — maximize o nó anterior primeiro."
+  "commander_map_locked_hint": "Bloqueado — maximize o nó anterior primeiro.",
+  "wb_news_tame_title": "World Boss domado: %(boss)s",
+  "wb_news_tame_body": "O World Boss em %(coords)s foi domado e desapareceu. As recompensas foram pagas a todos os participantes."
 }

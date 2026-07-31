@@ -149,6 +149,68 @@ def test_catch_success_and_once(wb_db):
         conn.close()
 
 
+def test_tame_removes_boss_and_auto_pays_participants(wb_db):
+    """Successful catch ends the live event and auto-claims contrib rewards."""
+    from game.inventory import inventory_amount
+    from game.world_boss import (
+        STATUS_TAMED,
+        _player_claim_row,
+        claim_world_boss_rewards,
+        get_event_by_id,
+        list_active_events,
+    )
+
+    uid_a = _player("wb_tame_a")
+    uid_b = _player("wb_tame_b")
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        event = _spawn_phase3(conn, "void_titan")
+        eid = int(event["id"])
+        now = time.time()
+        for uid, dmg in ((uid_a, 5000), (uid_b, 1500)):
+            conn.execute(
+                """
+                INSERT INTO world_boss_contributions (
+                    event_id, player_id, alliance_id, damage, waves,
+                    last_attack_at, created_at, updated_at
+                ) VALUES (?, ?, NULL, ?, 1, ?, ?, ?);
+                """,
+                (eid, uid, dmg, now, now, now),
+            )
+        credit(uid_a, CATCH_COST_SEC, "tame_pay", conn=conn)
+
+        class _Ok:
+            def random(self):
+                return 0.0
+
+        result = attempt_tame(uid_a, eid, conn=conn, rng=_Ok())
+        assert result["ok"] and result["success"]
+        assert result.get("event_status") == STATUS_TAMED
+        assert int((result.get("reward_distribution") or {}).get("claimed_count") or 0) == 2
+
+        closed = get_event_by_id(eid, conn=conn)
+        assert closed is not None
+        assert closed["status"] == STATUS_TAMED
+        assert int(closed["current_hp"]) == 0
+        active_ids = {int(e["id"]) for e in list_active_events(conn=conn)}
+        assert eid not in active_ids
+
+        claim_a = _player_claim_row(eid, uid_a, conn=conn)
+        claim_b = _player_claim_row(eid, uid_b, conn=conn)
+        assert claim_a and claim_a["rewards"]
+        assert claim_b and claim_b["rewards"]
+        assert inventory_amount(uid_a, "container_void_artifact", conn=conn) > 0
+        assert inventory_amount(uid_b, "container_void_artifact", conn=conn) > 0
+
+        again = claim_world_boss_rewards(uid_a, eid, conn=conn, now=now)
+        assert again["ok"] is False
+        assert again["error"] == "already_claimed"
+        commit(conn)
+    finally:
+        conn.close()
+
+
 def test_catch_phase_and_cooldown(wb_db):
     uid = _player()
     conn = db()

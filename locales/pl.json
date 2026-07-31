@@ -7000,7 +7000,7 @@
   "wb_catch_cooldown": "Następna próba za",
   "wb_catch_need_tk": "Za mało Timekeeper (wymagane 10h).",
   "wb_catch_phase_locked": "Oswojenie od fazy 3 (≤25% HP).",
-  "wb_catch_success": "Oswojono! Companion pojawia się na przeglądzie.",
+  "wb_catch_success": "Oswojono! Boss znika — nagrody wypłacono wszystkim uczestnikom.",
   "wb_catch_fail": "Nieudane oswojenie — próba zużyta. Cooldown aktywny.",
   "wb_help_catch": "Oswojenie: Faza 3 (≤25% HP), 10% za 10h Timekeeper — raz na bossa. Companiony na przeglądzie zdobywają Ark-Tokeny.",
   "overview_companions_label": "Companiony World Boss",
@@ -7214,5 +7214,7 @@
   "commander_icon_signal": "Signal",
   "commander_rank_up": "Podnieś rangę",
   "commander_available_label": "Dostępne",
-  "commander_map_locked_hint": "Zablokowane — najpierw zmaksymalizuj poprzedni węzeł."
+  "commander_map_locked_hint": "Zablokowane — najpierw zmaksymalizuj poprzedni węzeł.",
+  "wb_news_tame_title": "World Boss oswojony: %(boss)s",
+  "wb_news_tame_body": "World Boss przy %(coords)s został oswojony i zniknął. Nagrody wypłacono wszystkim uczestnikom."
 }

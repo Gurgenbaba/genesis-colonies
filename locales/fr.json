@@ -7000,7 +7000,7 @@
   "wb_catch_cooldown": "Prochaine tentative dans",
   "wb_catch_need_tk": "Timekeeper insuffisant (10 h requis).",
   "wb_catch_phase_locked": "Apprivoisement dès la phase 3 (≤25 % PV).",
-  "wb_catch_success": "Apprivoisé ! Le compagnon apparaît sur l’aperçu.",
+  "wb_catch_success": "Dompté ! Le boss disparaît — récompenses versées à tous les participants.",
   "wb_catch_fail": "Échec — tentative consommée. Cooldown actif.",
   "wb_help_catch": "Apprivoiser : en phase 3 (≤25 % PV), 10 % pour 10 h Timekeeper — une fois par boss. Les compagnons sont sur l’aperçu et rapportent des Ark Tokens.",
   "overview_companions_label": "Compagnons World Boss",
@@ -7214,5 +7214,7 @@
   "commander_icon_signal": "Signal",
   "commander_rank_up": "Augmenter le rang",
   "commander_available_label": "Disponible",
-  "commander_map_locked_hint": "Verrouillé — maximisez d’abord le nœud précédent."
+  "commander_map_locked_hint": "Verrouillé — maximisez d’abord le nœud précédent.",
+  "wb_news_tame_title": "World Boss dompté : %(boss)s",
+  "wb_news_tame_body": "Le World Boss en %(coords)s a été dompté et a disparu. Les récompenses ont été versées à tous les participants."
 }

@@ -7000,7 +7000,7 @@
   "wb_catch_cooldown": "Next tame attempt in",
   "wb_catch_need_tk": "Not enough Timekeeper (10h required).",
   "wb_catch_phase_locked": "Taming unlocks in Phase 3 (≤25% HP).",
-  "wb_catch_success": "Tamed! Companion appears on Overview.",
+  "wb_catch_success": "Tamed! Boss vanishes — rewards paid out to all participants.",
   "wb_catch_fail": "Tame failed — attempt spent. Cooldown active.",
   "wb_help_catch": "Tame: In Phase 3 (≤25% HP) 10% chance for 10h Timekeeper — once per boss. Tamed companions live on Overview and earn Ark Tokens.",
   "overview_companions_label": "World Boss Companions",
@@ -7214,5 +7214,7 @@
   "commander_icon_signal": "Signal",
   "commander_rank_up": "Increase rank",
   "commander_available_label": "Available",
-  "commander_map_locked_hint": "Locked — maximize the previous node first."
+  "commander_map_locked_hint": "Locked — maximize the previous node first.",
+  "wb_news_tame_title": "World Boss tamed: %(boss)s",
+  "wb_news_tame_body": "The World Boss at %(coords)s was tamed and vanished. Rewards were paid out to all participants."
 }

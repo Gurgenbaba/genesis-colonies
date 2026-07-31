@@ -7000,7 +7000,7 @@
   "wb_catch_cooldown": "Sonraki deneme",
   "wb_catch_need_tk": "Yetersiz Timekeeper (10s gerekli).",
   "wb_catch_phase_locked": "Evcilleştirme Faz 3’te açılır (≤%25 HP).",
-  "wb_catch_success": "Evcilleştirildi! Companion Genel Bakış’ta görünür.",
+  "wb_catch_success": "Evcilleştirildi! Boss kaybolur — ödüller tüm katılımcılara dağıtıldı.",
   "wb_catch_fail": "Başarısız — deneme harcandı. Bekleme aktif.",
   "wb_help_catch": "Evcilleştir: Faz 3 (≤%25 HP), 10s Timekeeper için %10 — boss başına bir kez. Companionlar Genel Bakış’ta Ark-Token getirir.",
   "overview_companions_label": "World Boss Companionları",
@@ -7214,5 +7214,7 @@
   "commander_icon_signal": "Signal",
   "commander_rank_up": "Rütbe yükselt",
   "commander_available_label": "Uygun",
-  "commander_map_locked_hint": "Kilitli — önce önceki düğümü maksimize edin."
+  "commander_map_locked_hint": "Kilitli — önce önceki düğümü maksimize edin.",
+  "wb_news_tame_title": "World Boss evcilleştirildi: %(boss)s",
+  "wb_news_tame_body": "%(coords)s konumundaki World Boss evcilleştirildi ve kayboldu. Ödüller tüm katılımcılara dağıtıldı."
 }

@@ -7000,7 +7000,7 @@
   "wb_catch_cooldown": "Следующая попытка через",
   "wb_catch_need_tk": "Недостаточно Timekeeper (нужно 10ч).",
   "wb_catch_phase_locked": "Приручение с фазы 3 (≤25% HP).",
-  "wb_catch_success": "Приручен! Компаньон появится на обзоре.",
+  "wb_catch_success": "Приручен! Босс исчезает — награды выплачены всем участникам.",
   "wb_catch_fail": "Не удалось — попытка потрачена. Кулдаун активен.",
   "wb_help_catch": "Приручение: фаза 3 (≤25% HP), 10% за 10ч Timekeeper — один раз на босса. Компаньоны на обзоре приносят Ark-Token.",
   "overview_companions_label": "Компаньоны World Boss",
@@ -7214,5 +7214,7 @@
   "commander_icon_signal": "Signal",
   "commander_rank_up": "Повысить ранг",
   "commander_available_label": "Доступно",
-  "commander_map_locked_hint": "Заблокировано — сначала максимизируйте предыдущий узел."
+  "commander_map_locked_hint": "Заблокировано — сначала максимизируйте предыдущий узел.",
+  "wb_news_tame_title": "World Boss приручен: %(boss)s",
+  "wb_news_tame_body": "World Boss у %(coords)s приручен и исчез. Награды выплачены всем участникам."
 }

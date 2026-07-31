@@ -119,8 +119,8 @@ Meta retention loop: **fight → HP Phase 3 → tame attempt → Overview compan
 1. `POST /api/world-boss/catch` with `event_id` (+ optional `request_id`).
 2. Server validates phase 3, not owned, catch CD free, TK ≥ 10h.
 3. Debit TK → record attempt/CD → roll 10%.
-4. On success: insert `player_boss_companions` + idle mission row.
-5. Response `{ ok, catch, state }` — UI toasts; no client RNG.
+4. On success: insert `player_boss_companions` + idle mission row → event status **`tamed`** (HP 0, removed from live galaxy/auto-attack) → **auto-claim** contribution rewards for every damage participant → news banner.
+5. Response `{ ok, catch, state }` — UI toasts; no client RNG. Manual `/api/world-boss/claim` remains for defeat/expire leftover cases (`already_claimed` after tame payout).
 
 ### Mission contract
 

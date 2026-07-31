@@ -442,7 +442,7 @@ def attempt_tame(
 
     ts = float(now if now is not None else _now())
     event = get_event_by_id(int(event_id), conn=conn)
-    if not event or str(event.get("status") or "") != STATUS_ACTIVE:
+    if not event:
         return {"ok": False, "error": "inactive"}
 
     boss_key = str(event.get("boss_key") or "")
@@ -451,6 +451,9 @@ def attempt_tame(
 
     if has_companion(int(player_id), boss_key, conn=conn):
         return {"ok": False, "error": "already_tamed"}
+
+    if str(event.get("status") or "") != STATUS_ACTIVE:
+        return {"ok": False, "error": "inactive"}
 
     capacity = get_companion_capacity(int(player_id), conn=conn)
     owned_count = owned_companion_count(int(player_id), conn=conn)
@@ -528,9 +531,23 @@ def attempt_tame(
             "tamed_at": ts,
             "tamed_event_id": int(event_id),
         }
+        # Boss leaves the map; pay all damage contributors immediately.
+        from .world_boss import (
+            auto_distribute_world_boss_rewards,
+            close_event_as_tamed,
+        )
+
+        closed = close_event_as_tamed(int(event_id), conn=conn, now=ts)
+        payout = auto_distribute_world_boss_rewards(int(event_id), conn=conn, now=ts)
+        out["event"] = closed
+        out["event_status"] = str((closed or {}).get("status") or "")
+        out["reward_distribution"] = payout
 
     out["catch"] = build_catch_info_for_event(
-        int(player_id), event, conn=conn, now=ts
+        int(player_id),
+        (out.get("event") or event),
+        conn=conn,
+        now=ts,
     )
     return out
 

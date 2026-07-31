@@ -58,7 +58,7 @@
         {% set contribs = card.contributions if card.contributions is defined else [] %}
         {% set alliance_board = card.alliance_board if card.alliance_board is defined else [] %}
         {% set is_active = event.status == 'active' %}
-        {% set is_ended = event.status in ('defeated', 'expired') %}
+        {% set is_ended = event.status in ('defeated', 'expired', 'tamed') %}
         {% set hp_pct = ((event.hp_ratio or 0) * 100)|round(1) %}
         {% if hp_pct <= 0 %}
           {% set hp_phase = 0 %}

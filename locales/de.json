@@ -7000,7 +7000,7 @@
   "wb_catch_cooldown": "Nächster Zähmversuch in",
   "wb_catch_need_tk": "Nicht genug Timekeeper (10h nötig).",
   "wb_catch_phase_locked": "Zähmen erst ab Phase 3 (≤25 % HP).",
-  "wb_catch_success": "Gezähmt! Companion erscheint auf der Übersicht.",
+  "wb_catch_success": "Gezähmt! Boss verschwindet — Belohnungen wurden an alle Teilnehmer ausgezahlt.",
   "wb_catch_fail": "Zähmen fehlgeschlagen — Versuch verbraucht. Cooldown aktiv.",
   "wb_help_catch": "Zähmen: In Phase 3 (≤25 % HP) 10 % Chance für 10h Timekeeper — einmal pro Boss. Gezähmte Companions stehen auf der Übersicht und holen Ark-Token.",
   "overview_companions_label": "World-Boss-Companions",
@@ -7214,5 +7214,7 @@
   "commander_icon_signal": "Signal",
   "commander_rank_up": "Rang erhöhen",
   "commander_available_label": "Verfügbar",
-  "commander_map_locked_hint": "Gesperrt — vorherigen Knoten maximieren."
+  "commander_map_locked_hint": "Gesperrt — vorherigen Knoten maximieren.",
+  "wb_news_tame_title": "World Boss gezähmt: %(boss)s",
+  "wb_news_tame_body": "Der World Boss bei %(coords)s wurde gezähmt und ist verschwunden. Belohnungen wurden an alle Teilnehmer ausgezahlt."
 }

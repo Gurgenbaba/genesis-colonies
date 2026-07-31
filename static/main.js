@@ -33696,7 +33696,13 @@
           if (res && res.ok) {
             const catchRes = res.catch || {};
             if (catchRes.success) {
-              showNotify(t("wb_catch_success", "Gezähmt! Companion erscheint auf der Übersicht."), "success");
+              showNotify(
+                t(
+                  "wb_catch_success",
+                  "Gezähmt! Boss verschwindet — Belohnungen wurden an alle Teilnehmer ausgezahlt."
+                ),
+                "success"
+              );
             } else {
               showNotify(t("wb_catch_fail", "Zähmen fehlgeschlagen — Versuch verbraucht. Cooldown aktiv."), "warning");
             }

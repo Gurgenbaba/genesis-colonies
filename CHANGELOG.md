@@ -27,6 +27,7 @@ Stand: **2026-07-31** · Alpha-Meilenstein **v0.9** (Build-Zähler: `VERSION`, n
 - **Commander Pick UI (GC-CLASS-UI-001)** — Destiny-style Command Staff cards + Active Commander bar
 - **Living Focus (GC-CLASS-UI-002)** — WebP-slim portraits, role icons, focus overlay, parallax
 - **Compact Tree Skillmap (GC-CLASS-UI-006)** — GoF-inspired fork silhouette map, dock unlock, live patch (v0.5.9.66)
+- **World Boss tame closeout** — successful catch removes the live boss and auto-pays contribution rewards (v0.5.9.67)
 
 ### Changed
 - Titanen größer und mit Aura (helle + dunkle Landscapes)
