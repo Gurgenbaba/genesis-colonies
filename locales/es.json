@@ -547,10 +547,10 @@
   "admin_maint_mode_sidecar": "Sidecar",
   "admin_ranking_worker_dirty": "Dirty pendiente",
   "admin_ranking_worker_last": "Última ejecución de ranking",
-  "admin_ranking_worker_next": "Próxima ejecución en",
-  "admin_ranking_worker_players": "Jugadores actualizados",
-  "admin_ranking_worker_ranks": "Rangos",
-  "admin_ranking_worker_title": "Worker de ranking (cada 10 min)",
+  "admin_ranking_worker_next": "Próximo ranking en",
+  "admin_ranking_worker_players": "Jugadores dirty actualizados",
+  "admin_ranking_worker_ranks": "Rangos reescritos",
+  "admin_ranking_worker_title": "Worker de ranking (lote dirty ~10 min)",
   "admin_queues_hint": "Inspeccionar y finalizar trabajos de cola pendientes.",
   "admin_queues_title": "Colas",
   "admin_ranking_recompute_button": "Recalcular la clasificación ahora",
@@ -6965,5 +6965,10 @@
   "wb_auto_attack": "Ataque automático",
   "wb_auto_attack_success": "Flota de combate enviada a %(coords)s (%(count)s naves).",
   "wb_auto_attack_no_ships": "No hay naves de combate en el planeta activo.",
-  "fleet_error_no_combat_ships_available": "No hay naves de combate en el planeta activo."
+  "fleet_error_no_combat_ships_available": "No hay naves de combate en el planeta activo.",
+  "admin_maint_bag_age": "Edad heartbeat bag",
+  "admin_maint_bag_source": "Fuente bag",
+  "admin_maint_bag_stale_title": "Owner de maintenance obsoleto",
+  "admin_maint_bag_stale_hint": "Sin heartbeat del bag — revisa logs Sidecar/Embedded ([maintenance-worker] started). El ranking auto puede fallar.",
+  "admin_ranking_worker_hint": "Auto solo actualiza jugadores dirty; botón Admin = reconciliación completa. Los rangos se reescriben tras el lote dirty."
 }

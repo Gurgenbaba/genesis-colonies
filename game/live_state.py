@@ -556,6 +556,45 @@ def shipyard_panel_for_game_state(user_id: int, *, conn) -> Optional[Dict[str, A
     }
 
 
+def attach_timekeeper_domain_queue_slices(
+    payload: Dict[str, Any],
+    user_id: int,
+    domain: str,
+    *,
+    conn,
+) -> Dict[str, Any]:
+    """
+    GC-PERF-TK-004: slim TK apply must still return the boosted production queue.
+
+    ``build_queue`` / ``research`` already live on the base payload. Shipyard and
+    defense panels are include_panel-only and were diet-stripped — without a
+    queue slice the client cannot patch timers (looks like a no-op click).
+    Catalog (ships/defenses stock) stays omitted.
+    """
+    if not isinstance(payload, dict):
+        return payload
+    dom = str(domain or "").strip().lower()
+    if dom in ("building", "build", "buildings"):
+        dom = "build"
+    if dom == "shipyard":
+        try:
+            panel = shipyard_panel_for_game_state(int(user_id), conn=conn)
+        except Exception:
+            panel = None
+        if panel and isinstance(panel.get("queue"), dict):
+            payload["shipyard"] = {"queue": panel["queue"]}
+            payload["shipyard_queue"] = panel["queue"]
+    elif dom == "defense":
+        try:
+            panel = defense_panel_for_game_state(int(user_id), conn=conn)
+        except Exception:
+            panel = None
+        if panel and isinstance(panel.get("queue"), dict):
+            # Queue only — mirror shipyard slim shape for patchDefensePanelFromGameState
+            payload["defense"] = {"queue": panel["queue"]}
+    return payload
+
+
 def _head_card_jobs(card_jobs, *, max_queued: int = 0):
     """Active job first; optional queued slots (position 2..N) for one domain."""
     if not card_jobs:

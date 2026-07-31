@@ -43,7 +43,7 @@ def embedded_env(tmp_path, monkeypatch):
 
 
 def test_run_maintenance_bag_includes_backup_and_fleet(embedded_env, monkeypatch):
-    from game.internal_cron import run_maintenance_bag
+    from game.internal_cron import get_maintenance_bag_heartbeat, run_maintenance_bag
 
     with (
         patch("game.internal_cron.execute_ranking_recompute", return_value={"ok": True, "players_updated": 0}),
@@ -60,6 +60,44 @@ def test_run_maintenance_bag_includes_backup_and_fleet(embedded_env, monkeypatch
     backup_path = Path(payload["sqlite_backup"]["path"])
     assert backup_path.is_file()
     assert backup_path.parent.name == "backups"
+    hb = get_maintenance_bag_heartbeat()
+    assert hb["stale"] is False
+    assert hb["source"] == "test"
+    assert hb["last_at"] is not None
+
+
+def test_maintenance_bag_heartbeat_on_ranking_skip(embedded_env, monkeypatch):
+    from game.internal_cron import get_maintenance_bag_heartbeat, run_maintenance_bag
+
+    with (
+        patch(
+            "game.internal_cron.execute_ranking_recompute",
+            return_value={
+                "ok": True,
+                "skipped_interval": True,
+                "mode": "skip",
+                "players_updated": 0,
+                "next_run_in_sec": 400,
+            },
+        ),
+        patch("game.internal_cron._maybe_run_fleet_tick", return_value={"ok": True, "skipped_interval": True}),
+        patch("game.internal_cron._maybe_run_vote_reengagement", return_value={"ok": True, "skipped_interval": True}),
+        patch("game.options.maybe_run_due_account_deletions", return_value={"ok": True, "deleted": 0}),
+    ):
+        payload = run_maintenance_bag(force=False, source="maintenance_worker")
+
+    assert payload.get("skipped_interval") is True
+    hb = get_maintenance_bag_heartbeat()
+    assert hb["stale"] is False
+    assert hb["source"] == "maintenance_worker"
+    assert hb["ranking_skipped"] is True
+
+
+def test_admin_panel_balance_has_no_duplicate_ranking_button():
+    text = Path("templates/admin_panel.html").read_text(encoding="utf-8")
+    assert 'data-admin-action="balance-recalculate"' not in text
+    assert 'data-admin-action="ranking-recompute"' in text
+    assert "admin-btn-ranking-recompute" in text
 
 
 def test_sqlite_backup_skips_second_run_same_day(embedded_env):

@@ -547,10 +547,10 @@
   "admin_maint_mode_sidecar": "Sidecar",
   "admin_ranking_worker_dirty": "Dirty pending",
   "admin_ranking_worker_last": "Letzter Ranking-Lauf",
-  "admin_ranking_worker_next": "Nächster Lauf in",
-  "admin_ranking_worker_players": "Spieler aktualisiert",
-  "admin_ranking_worker_ranks": "Ränge",
-  "admin_ranking_worker_title": "Ranking-Worker (alle 10 min)",
+  "admin_ranking_worker_next": "Nächster Ranking-Lauf in",
+  "admin_ranking_worker_players": "Dirty-Spieler aktualisiert",
+  "admin_ranking_worker_ranks": "Ränge neu gesetzt",
+  "admin_ranking_worker_title": "Ranking-Worker (Dirty-Batch ~10 min)",
   "admin_queues_hint": "Queue-Jobs für Spieler und Planeten prüfen und fällige Jobs abschließen.",
   "admin_queues_title": "Queues",
   "admin_ranking_recompute_button": "Ranking jetzt neu berechnen",
@@ -6965,5 +6965,10 @@
   "wb_auto_attack": "Auto-Angriff",
   "wb_auto_attack_success": "Kampfflotte nach %(coords)s gesendet (%(count)s Schiffe).",
   "wb_auto_attack_no_ships": "Keine Kampfschiffe auf dem aktiven Planeten.",
-  "fleet_error_no_combat_ships_available": "Keine Kampfschiffe auf dem aktiven Planeten."
+  "fleet_error_no_combat_ships_available": "Keine Kampfschiffe auf dem aktiven Planeten.",
+  "admin_maint_bag_age": "Bag-Heartbeat Alter",
+  "admin_maint_bag_source": "Bag-Quelle",
+  "admin_maint_bag_stale_title": "Maintenance-Owner stale",
+  "admin_maint_bag_stale_hint": "Kein Bag-Heartbeat — Sidecar/Embedded: Logs prüfen ([maintenance-worker] started). Ranking-Auto kann ausfallen.",
+  "admin_ranking_worker_hint": "Auto aktualisiert nur dirty markierte Spieler; Admin-Button = Full-Reconcile aller Scores. Ränge werden nach dem Dirty-Batch neu gesetzt."
 }

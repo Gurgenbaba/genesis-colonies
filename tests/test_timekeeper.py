@@ -722,3 +722,57 @@ def test_timekeeper_shipyard_boost_shifts_started_at_and_survives_client(timekee
         assert rem_after < rem_before - 40
     finally:
         conn.close()
+
+
+def test_api_timekeeper_apply_shipyard_returns_queue_slice(timekeeper_db, monkeypatch):
+    """GC-PERF-TK-004: slim shipyard apply must include queue-only state for UI patch."""
+    from game.shipyard import build_ship
+
+    client, uid = _api_client(timekeeper_db, monkeypatch)
+    conn = db()
+    try:
+        planet = get_context_planet(uid, conn=conn)
+        pid = int(planet["id"])
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE planets SET metal = ?, crystal = ?, fuel_cells = ? WHERE id = ?;",
+            (5_000_000, 5_000_000, 500_000, pid),
+        )
+        _grant_shipyard_tk_prereqs(cur, pid, uid)
+        conn.commit()
+        ok, reason, _ = build_ship(
+            player_id=uid, planet_id=pid, ship_key="mule_courier", amount=10, conn=conn
+        )
+        assert ok, reason
+        begin_write_transaction(conn)
+        credit(uid, 3600, "test", conn=conn)
+        commit(conn)
+        finish_before = float(
+            conn.execute(
+                "SELECT finish_at FROM shipyard_queue WHERE planet_id = ? ORDER BY id LIMIT 1;",
+                (pid,),
+            ).fetchone()["finish_at"]
+        )
+    finally:
+        conn.close()
+
+    res = client.post(
+        "/api/timekeeper/apply",
+        json={"domain": "shipyard", "mode": "partial", "seconds": 120, "planet_id": pid},
+        headers={"Accept": "application/json", "Content-Type": "application/json"},
+    )
+    assert res.status_code == 200
+    payload = res.get_json()
+    assert payload["ok"] is True
+    assert int(payload.get("seconds_applied") or 0) >= 60
+    state = payload.get("state") or {}
+    assert "buildings_panel" not in state
+    assert "codex" not in state
+    sy = state.get("shipyard") or {}
+    assert isinstance(sy, dict)
+    assert "ships" not in sy  # catalog stays slim
+    queue = sy.get("queue") or state.get("shipyard_queue") or {}
+    jobs = queue.get("queue") if isinstance(queue, dict) else None
+    assert isinstance(jobs, list) and jobs
+    head_finish = float(jobs[0].get("finish_at") or jobs[0].get("finish_time") or 0)
+    assert head_finish <= finish_before - 50

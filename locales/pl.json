@@ -547,10 +547,10 @@
   "admin_maint_mode_sidecar": "Sidecar",
   "admin_ranking_worker_dirty": "Dirty oczekujące",
   "admin_ranking_worker_last": "Ostatni run rankingu",
-  "admin_ranking_worker_next": "Następny run za",
-  "admin_ranking_worker_players": "Zaktualizowani gracze",
-  "admin_ranking_worker_ranks": "Rangi",
-  "admin_ranking_worker_title": "Worker rankingu (co 10 min)",
+  "admin_ranking_worker_next": "Następny ranking za",
+  "admin_ranking_worker_players": "Zaktualizowani dirty gracze",
+  "admin_ranking_worker_ranks": "Rangi przepisane",
+  "admin_ranking_worker_title": "Worker rankingu (dirty batch ~10 min)",
   "admin_queues_hint": "Przeglądaj i kończ zaległe zadania kolejek.",
   "admin_queues_title": "Kolejki",
   "admin_ranking_recompute_button": "Przelicz ranking teraz",
@@ -6965,5 +6965,10 @@
   "wb_auto_attack": "Auto-atak",
   "wb_auto_attack_success": "Flota bojowa wysłana do %(coords)s (%(count)s okrętów).",
   "wb_auto_attack_no_ships": "Brak okrętów bojowych na aktywnej planecie.",
-  "fleet_error_no_combat_ships_available": "Brak okrętów bojowych na aktywnej planecie."
+  "fleet_error_no_combat_ships_available": "Brak okrętów bojowych na aktywnej planecie.",
+  "admin_maint_bag_age": "Wiek heartbeat bag",
+  "admin_maint_bag_source": "Źródło bag",
+  "admin_maint_bag_stale_title": "Owner maintenance nieaktualny",
+  "admin_maint_bag_stale_hint": "Brak heartbeat bag — sprawdź logi Sidecar/Embedded ([maintenance-worker] started). Auto ranking może nie działać.",
+  "admin_ranking_worker_hint": "Auto odświeża tylko dirty graczy; przycisk Admin = pełny reconcile. Rangi po dirty batch."
 }

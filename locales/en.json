@@ -547,10 +547,10 @@
   "admin_maint_mode_sidecar": "Sidecar",
   "admin_ranking_worker_dirty": "Dirty pending",
   "admin_ranking_worker_last": "Last ranking run",
-  "admin_ranking_worker_next": "Next run in",
-  "admin_ranking_worker_players": "Players updated",
-  "admin_ranking_worker_ranks": "Ranks",
-  "admin_ranking_worker_title": "Ranking worker (every 10 min)",
+  "admin_ranking_worker_next": "Next ranking run in",
+  "admin_ranking_worker_players": "Dirty players updated",
+  "admin_ranking_worker_ranks": "Ranks rewritten",
+  "admin_ranking_worker_title": "Ranking worker (dirty batch ~10 min)",
   "admin_queues_hint": "Inspect and finish due queue jobs for players and planets.",
   "admin_queues_title": "Queues",
   "admin_ranking_recompute_button": "Recalculate ranking now",
@@ -6965,5 +6965,10 @@
   "wb_auto_attack": "Auto-Attack",
   "wb_auto_attack_success": "Combat fleet sent to %(coords)s (%(count)s ships).",
   "wb_auto_attack_no_ships": "No combat ships available on the active planet.",
-  "fleet_error_no_combat_ships_available": "No combat ships available on the active planet."
+  "fleet_error_no_combat_ships_available": "No combat ships available on the active planet.",
+  "admin_maint_bag_age": "Bag heartbeat age",
+  "admin_maint_bag_source": "Bag source",
+  "admin_maint_bag_stale_title": "Maintenance owner stale",
+  "admin_maint_bag_stale_hint": "No bag heartbeat — check Sidecar/Embedded logs ([maintenance-worker] started). Auto ranking may be down.",
+  "admin_ranking_worker_hint": "Auto refreshes only dirty-marked players; Admin button = full reconcile of all scores. Ranks are rewritten after the dirty batch."
 }

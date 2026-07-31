@@ -3360,7 +3360,7 @@ def api_timekeeper_apply():
             rollback(conn)
             conn.close()
             conn = None
-            state = _timekeeper_apply_game_state()
+            state = _timekeeper_apply_game_state(domain)
             body = {"ok": False, "reason": reason, "state": state}
             if result.get("timekeeper"):
                 body["timekeeper"] = result["timekeeper"]
@@ -3395,7 +3395,7 @@ def api_timekeeper_apply():
             )
             conn.close()
             conn = None
-            state = _timekeeper_apply_game_state()
+            state = _timekeeper_apply_game_state(domain)
             if isinstance(state, dict) and tk_slice:
                 state["timekeeper"] = tk_slice
             return jsonify(
@@ -3413,7 +3413,7 @@ def api_timekeeper_apply():
         conn = None
 
         t_state0 = time.perf_counter()
-        state = _timekeeper_apply_game_state()
+        state = _timekeeper_apply_game_state(domain)
         state_ms = (time.perf_counter() - t_state0) * 1000.0
         # Apply ledger wins over rebuild so HUD never keeps a stale balance.
         if isinstance(state, dict) and tk_slice:
@@ -8835,13 +8835,30 @@ def _fleet_mutation_game_state(finish_source: str) -> dict:
     return state
 
 
-def _timekeeper_apply_game_state() -> dict:
-    """GC-PERF-TK-003: HUD + queue slices only — no full buildings/codex panel."""
+def _timekeeper_apply_game_state(domain: str | None = None) -> dict:
+    """GC-PERF-TK-003/004: HUD + queue slices — no full buildings/codex catalog."""
     state, _ = _build_game_state_payload(
         include_panel=False,
         finish_source="api_timekeeper_apply",
         action_slim=True,
     )
+    dom = str(domain or "").strip().lower()
+    if dom in ("shipyard", "defense"):
+        try:
+            from game.live_state import attach_timekeeper_domain_queue_slices
+
+            conn = db()
+            try:
+                attach_timekeeper_domain_queue_slices(
+                    state, int(session.get("user_id") or 0), dom, conn=conn
+                )
+            finally:
+                conn.close()
+        except Exception:
+            logger.exception(
+                "timekeeper_apply queue slice attach failed domain=%s",
+                dom,
+            )
     return state
 
 

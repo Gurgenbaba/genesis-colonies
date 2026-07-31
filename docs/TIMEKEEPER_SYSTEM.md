@@ -46,6 +46,8 @@ Response: `{ ok, reason, state, timekeeper, seconds_applied }`
 
 **GC-PERF-TK-003:** Apply response uses slim action state (`include_panel=False`, `action_slim=True`) — HUD + queue slices only, no full `buildings_panel` / codex / shipyard catalog. Same diet pattern as GC-840 buildings upgrades. Logs `apply_ms` / `state_ms` on success.
 
+**GC-PERF-TK-004:** For `domain=shipyard|defense`, the slim apply response re-attaches a **queue-only** slice (`state.shipyard.queue` / `state.defense.queue`, no ship/defense catalogs) so the client can patch timers immediately. Without this, TK balance dropped but the mini-queue looked unchanged (false “click does nothing”). Client also refreshes `/api/shipyard` or `/api/defense` when on-page and the slice is missing, and merges prior production queues into `GC.lastState` on `timekeeper_apply`.
+
 `POST /api/inventory/use` with `deposit_domain: "build"|"research"|"shipyard"|"all"` deposits **all** owned legacy time items for that domain (or every depositable domain when `"all"`) into Timekeeper in one action (inventory Alle / Bau / Forschung / Werft chips).
 
 ## Autoplay auto-boost (GC-2616)

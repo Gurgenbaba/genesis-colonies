@@ -1598,6 +1598,19 @@
       ) {
         syncMountedQueuePagesFromState(state, reasonStr);
       }
+      if (
+        reasonStr === "timekeeper_apply"
+        || reasonStr === "shipyard_build"
+        || reasonStr === "shipyard_cancel"
+        || reasonStr === "defense_build"
+        || reasonStr === "defense_cancel"
+      ) {
+        try {
+          if (typeof releaseShellNavigationBlockers === "function") {
+            releaseShellNavigationBlockers(reasonStr);
+          }
+        } catch (_) {}
+      }
       _schedulePlanetEvolutionRefreshAfterAction(reasonStr);
       syncFleetUiAfterMutation(reasonStr);
       if (shouldPollGameState()) {
@@ -13236,19 +13249,25 @@
     const pagePid = Number(page.dataset.planetId || 0);
     if (statePid > 0 && pagePid > 0 && pagePid !== statePid) return;
     const slice = data.defense;
-    const inner = slice.defenses && typeof slice.defenses === "object" ? slice.defenses : slice;
-    if (!inner || inner.ready === false) return;
-    const payload = {
-      ...inner,
-      defense_queue: slice.queue || inner.defense_queue,
-    };
-    applyDefenseState(page, payload);
+    const inner = slice.defenses && typeof slice.defenses === "object" ? slice.defenses : null;
+    if (inner && inner.ready !== false) {
+      applyDefenseState(page, {
+        ...inner,
+        defense_queue: slice.queue || inner.defense_queue,
+      });
+      return;
+    }
+    // GC-PERF-TK-004: queue-only slim slice (no stock catalog)
+    if (slice.queue) {
+      renderDefenseQueue(page, slice.queue);
+    }
   }
 
   function syncProductionPanelsAfterGameState(data, reason, activePlanetId) {
     patchDefensePanelFromGameState(data, activePlanetId);
     const reasonStr = String(reason || "");
     const onShipyard = document.getElementById("shipyard-page")?.dataset.ready === "1";
+    const onDefense = document.getElementById("defense-page")?.dataset.ready === "1";
     const completionReason =
       reasonStr === "timer_done"
       || reasonStr === "queue_timer_zero"
@@ -13256,10 +13275,15 @@
       || reasonStr === "shipyard_build"
       || reasonStr === "shipyard_cancel"
       || reasonStr === "defense_build"
-      || reasonStr === "defense_cancel";
+      || reasonStr === "defense_cancel"
+      || reasonStr === "timekeeper_apply";
     if (onShipyard && completionReason && !data?.shipyard && !data?.shipyard_queue) {
       const syPage = document.getElementById("shipyard-page");
       if (syPage) refreshShipyardStateCoalesced(syPage);
+    }
+    if (onDefense && completionReason && !data?.defense) {
+      const defPage = document.getElementById("defense-page");
+      if (defPage) refreshDefenseStateCoalesced(defPage);
     }
   }
 
@@ -13355,6 +13379,19 @@
     }
     if (isHudOnlyGameStateReason(reason)) {
       patchHudLastState(data, reason);
+      return;
+    }
+    const reasonStr = String(reason || "");
+    // GC-PERF-TK-004: slim TK apply must not wipe production queue caches.
+    if (reasonStr === "timekeeper_apply" && GC.lastState && data && typeof data === "object") {
+      const prev = GC.lastState;
+      const merged = { ...data };
+      if (merged.shipyard == null && prev.shipyard != null) merged.shipyard = prev.shipyard;
+      if (merged.shipyard_queue == null && prev.shipyard_queue != null) {
+        merged.shipyard_queue = prev.shipyard_queue;
+      }
+      if (merged.defense == null && prev.defense != null) merged.defense = prev.defense;
+      GC.lastState = coercePollUnreadForHud(merged, reason);
       return;
     }
     GC.lastState = coercePollUnreadForHud(data, reason);

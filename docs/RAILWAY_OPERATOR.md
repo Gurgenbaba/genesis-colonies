@@ -111,6 +111,8 @@ See [GC_PERF_CORE.md](GC_PERF_CORE.md). Until Postgres cutover: Replicas = 1, wo
 
 **GC-RANK-CRON-001:** Sidecar uses a **respawn loop** + leader-lock **retry** so a deploy volume handoff (old container still holds `.gc_embedded_cron.lock`) cannot leave ranking/fleet without an owner. Admin → System → Runtime shows last ranking-worker run + dirty pending.
 
+**GC-RANK-AUTO-001:** Runtime also shows a **maintenance bag heartbeat** (age + source). Auto ranking is a **dirty batch** (~10 min): `players_updated` = dirty players only; ranks are rewritten after. Admin „Ranking jetzt neu berechnen“ = full-universe reconcile. If bag heartbeat is stale while Maintenance says Sidecar, check logs for `[maintenance-worker] started` / `waiting_for_leader_lock`.
+
 After Postgres: optional dedicated `scripts/run_game_worker.py` service + keep sidecar or HTTP cron.
 
 Soft-Off A/B + `hold_ms` measurement: [GC_PERF_PROD_001.md](GC_PERF_PROD_001.md).

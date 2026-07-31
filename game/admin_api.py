@@ -188,6 +188,7 @@ def api_runtime() -> Dict[str, Any]:
         is_embedded_cron_enabled,
         is_maintenance_worker_sidecar_enabled,
     )
+    from game.internal_cron import get_maintenance_bag_heartbeat
     from game.ranking_worker import get_ranking_worker_status
     from game.runtime_state import get_queue_tick_status
     from game.score_events import count_dirty_score_players
@@ -201,6 +202,17 @@ def api_runtime() -> Dict[str, Any]:
         dirty_scores = 0
     ranking_worker = dict(ranking_worker)
     ranking_worker["dirty_pending"] = dirty_scores
+    try:
+        bag_heartbeat = get_maintenance_bag_heartbeat()
+    except Exception:
+        bag_heartbeat = {
+            "last_at": None,
+            "source": None,
+            "ok": None,
+            "age_sec": None,
+            "stale": True,
+            "stale_after_sec": 180,
+        }
     return _ok(
         runtime={
             "version": get_app_version(),
@@ -229,6 +241,7 @@ def api_runtime() -> Dict[str, Any]:
                 "embedded_cron_enabled": is_embedded_cron_enabled(),
                 "gc_maintenance_worker": os.environ.get("GC_MAINTENANCE_WORKER", ""),
                 "gc_embedded_cron": os.environ.get("GC_EMBEDDED_CRON", ""),
+                "bag_heartbeat": bag_heartbeat,
             },
         },
     )

@@ -547,10 +547,10 @@
   "admin_maint_mode_sidecar": "Sidecar",
   "admin_ranking_worker_dirty": "Dirty в очереди",
   "admin_ranking_worker_last": "Последний запуск рейтинга",
-  "admin_ranking_worker_next": "Следующий запуск через",
-  "admin_ranking_worker_players": "Игроков обновлено",
-  "admin_ranking_worker_ranks": "Ранги",
-  "admin_ranking_worker_title": "Ranking-worker (каждые 10 мин)",
+  "admin_ranking_worker_next": "Следующий рейтинг через",
+  "admin_ranking_worker_players": "Dirty игроков обновлено",
+  "admin_ranking_worker_ranks": "Ранги пересчитаны",
+  "admin_ranking_worker_title": "Ranking-worker (dirty batch ~10 мин)",
   "admin_queues_hint": "Просмотр и завершение просроченных заданий очереди.",
   "admin_queues_title": "Очереди",
   "admin_ranking_recompute_button": "Пересчитать рейтинг сейчас",
@@ -6965,5 +6965,10 @@
   "wb_auto_attack": "Автоатака",
   "wb_auto_attack_success": "Боевой флот отправлен на %(coords)s (%(count)s кораблей).",
   "wb_auto_attack_no_ships": "На активной планете нет боевых кораблей.",
-  "fleet_error_no_combat_ships_available": "На активной планете нет боевых кораблей."
+  "fleet_error_no_combat_ships_available": "На активной планете нет боевых кораблей.",
+  "admin_maint_bag_age": "Возраст heartbeat bag",
+  "admin_maint_bag_source": "Источник bag",
+  "admin_maint_bag_stale_title": "Maintenance owner устарел",
+  "admin_maint_bag_stale_hint": "Нет heartbeat bag — проверьте логи Sidecar/Embedded ([maintenance-worker] started). Авто-рейтинг может не работать.",
+  "admin_ranking_worker_hint": "Авто обновляет только dirty игроков; кнопка Admin = полный reconcile. Ранги после dirty batch."
 }

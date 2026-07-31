@@ -21,6 +21,7 @@ Do NOT set Railway ``cronSchedule`` on the web service — that expects the proc
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import threading
@@ -44,6 +45,11 @@ from game.ranking_worker import run_ranking_worker
 
 logger = logging.getLogger(__name__)
 
+# GC-RANK-AUTO-001: bag liveness for Admin → System → Runtime (not a second scheduler).
+MAINTENANCE_BAG_HEARTBEAT_KEY = "maintenance_bag_heartbeat"
+# Stale when no bag tick for this many cron intervals (default 60s → 180s).
+MAINTENANCE_BAG_STALE_INTERVALS = 3
+
 _EMBEDDED_THREAD: Optional[threading.Thread] = None
 _EMBEDDED_STOP = threading.Event()
 _EMBEDDED_LOCK_FH: Any = None
@@ -64,6 +70,10 @@ def build_ranking_recompute_payload(result: Dict[str, Any]) -> Dict[str, Any]:
         "duration_ms": int(result.get("duration_ms") or 0),
         "skipped_interval": bool(result.get("skipped_interval")),
     }
+    if result.get("mode") is not None:
+        payload["mode"] = str(result.get("mode") or "")
+    if result.get("dirty_cleared") is not None:
+        payload["dirty_cleared"] = int(result.get("dirty_cleared") or 0)
     if result.get("players_seen") is not None:
         payload["players_seen"] = int(result["players_seen"])
     if result.get("next_run_in_sec") is not None:
@@ -351,6 +361,84 @@ def handle_internal_cron_ranking(request: Request) -> Tuple[Dict[str, Any], int]
     return payload, status
 
 
+def record_maintenance_bag_heartbeat(
+    payload: Dict[str, Any],
+    *,
+    source: str,
+) -> None:
+    """Persist last maintenance-bag tick for Runtime liveness (incl. ranking skip)."""
+    from game.runtime_state import set_runtime_value
+
+    record = {
+        "at": int(time.time()),
+        "source": str(source or "unknown"),
+        "ok": bool(payload.get("ok", True)),
+        "ranking_skipped": bool(payload.get("skipped_interval")),
+        "ranking_mode": str(payload.get("mode") or ""),
+        "players_updated": int(payload.get("players_updated") or 0),
+        "dirty_pending_hint": int(payload.get("dirty_cleared") or 0),
+    }
+    if payload.get("error"):
+        record["error"] = str(payload.get("error"))
+    try:
+        set_runtime_value(
+            MAINTENANCE_BAG_HEARTBEAT_KEY,
+            json.dumps(record, ensure_ascii=False),
+        )
+    except Exception:
+        logger.exception("maintenance bag heartbeat persist failed")
+
+
+def get_maintenance_bag_heartbeat(
+    *,
+    now: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Runtime status for bag owner liveness (sidecar / embedded / http)."""
+    from game.runtime_state import get_runtime_value
+
+    interval = float(get_embedded_cron_interval_sec())
+    stale_after = max(interval * MAINTENANCE_BAG_STALE_INTERVALS, 90.0)
+    now_f = float(now if now is not None else time.time())
+    empty = {
+        "last_at": None,
+        "source": None,
+        "ok": None,
+        "age_sec": None,
+        "stale": True,
+        "stale_after_sec": int(stale_after),
+        "ranking_skipped": None,
+        "ranking_mode": None,
+    }
+    raw = get_runtime_value(MAINTENANCE_BAG_HEARTBEAT_KEY)
+    if not raw:
+        return empty
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        empty["ok"] = False
+        empty["parse_error"] = True
+        return empty
+    if not isinstance(data, dict):
+        return empty
+    try:
+        last_at = int(data.get("at") or 0)
+    except (TypeError, ValueError):
+        last_at = 0
+    if last_at <= 0:
+        return empty
+    age = max(0.0, now_f - float(last_at))
+    return {
+        "last_at": last_at,
+        "source": data.get("source"),
+        "ok": data.get("ok"),
+        "age_sec": int(age),
+        "stale": age > stale_after,
+        "stale_after_sec": int(stale_after),
+        "ranking_skipped": bool(data.get("ranking_skipped")),
+        "ranking_mode": data.get("ranking_mode") or None,
+    }
+
+
 def run_maintenance_bag(*, force: bool = False, source: str = "embedded_cron") -> Dict[str, Any]:
     """
     Canonical web-service maintenance bag (ranking + fleet + vote + deletions + backup).
@@ -363,7 +451,9 @@ def run_maintenance_bag(*, force: bool = False, source: str = "embedded_cron") -
     except Exception as exc:
         logger.exception("maintenance bag ranking failed")
         _recompute_log("maintenance-bag", f"source={source} ranking_error={exc}")
-        return {"ok": False, "error": str(exc)}
+        failed = {"ok": False, "error": str(exc)}
+        record_maintenance_bag_heartbeat(failed, source=source)
+        return failed
 
     log_ranking_recompute_result(
         payload,
@@ -394,6 +484,8 @@ def run_maintenance_bag(*, force: bool = False, source: str = "embedded_cron") -
         logger.exception("maintenance bag sqlite backup failed")
         payload["sqlite_backup"] = {"ok": False, "error": str(exc)}
 
+    # Heartbeat even when ranking skipped_interval — proves bag owner is alive.
+    record_maintenance_bag_heartbeat(payload, source=source)
     return payload
 
 

@@ -649,10 +649,6 @@
     return res;
   }
 
-  async function recalculateAdminRankings() {
-    return runAdminRankingRecompute(qs('[data-admin-action="balance-recalculate"]'));
-  }
-
   async function runAdminRankingRecompute(triggerBtn) {
     const btn = triggerBtn || qs("#admin-btn-ranking-recompute");
     const resultEl = qs("#admin-ranking-recompute-result");
@@ -3421,6 +3417,7 @@
             : t("admin_tick_unknown", "—");
       const rw = r.ranking_worker || {};
       const maint = r.maintenance || {};
+      const hb = maint.bag_heartbeat || {};
       const rankAt = rw.last_run_at
         ? new Date(Number(rw.last_run_at) * 1000).toLocaleString()
         : t("admin_tick_never", "—");
@@ -3439,6 +3436,19 @@
         : maint.embedded_cron_enabled
           ? t("admin_maint_mode_embedded", "Embedded")
           : t("admin_maint_mode_off", "AUS");
+      const hbAge =
+        hb.age_sec != null ? `${Math.max(0, Number(hb.age_sec) || 0)} s` : t("admin_tick_never", "—");
+      const hbStale = hb.stale === true;
+      const maintAlert = hbStale
+        ? `<div class="admin-alert admin-alert-error"><strong>${esc(
+            t("admin_maint_bag_stale_title", "Maintenance-Owner stale")
+          )}</strong> ${esc(
+            t(
+              "admin_maint_bag_stale_hint",
+              "Kein Bag-Heartbeat — Sidecar/Embedded prüft Logs ([maintenance-worker] started). Ranking-Auto kann ausfallen."
+            )
+          )}</div>`
+        : "";
       out.innerHTML = `
         
         <div class="admin-kpi-grid">
@@ -3479,25 +3489,34 @@
             .join("")}
         </div>
         <div class="admin-section-title">
-          <span class="admin-section-title-text">${esc(t("admin_ranking_worker_title", "Ranking-Worker (alle 10 min)"))}</span>
+          <span class="admin-section-title-text">${esc(t("admin_ranking_worker_title", "Ranking-Worker (Dirty-Batch ~10 min)"))}</span>
         </div>
+        <p class="admin-small-hint">${esc(
+          t(
+            "admin_ranking_worker_hint",
+            "Auto aktualisiert nur dirty markierte Spieler; Admin-Button = Full-Reconcile aller Scores. Ränge werden nach dem Dirty-Batch neu gesetzt."
+          )
+        )}</p>
         <div class="admin-kpi-grid">
           ${[
             [t("admin_ranking_worker_last", "Letzter Ranking-Lauf"), rankAt],
             [t("admin_tick_status", "Status"), rankOk],
             [t("admin_tick_source", "Quelle"), rw.last_run_source || "—"],
             [t("admin_tick_duration", "Dauer"), rw.duration_ms != null ? `${rw.duration_ms} ms` : "—"],
-            [t("admin_ranking_worker_players", "Spieler aktualisiert"), rw.players_updated != null ? rw.players_updated : 0],
-            [t("admin_ranking_worker_ranks", "Ränge"), rw.ranks_assigned != null ? rw.ranks_assigned : 0],
+            [t("admin_ranking_worker_players", "Dirty-Spieler aktualisiert"), rw.players_updated != null ? rw.players_updated : 0],
+            [t("admin_ranking_worker_ranks", "Ränge neu gesetzt"), rw.ranks_assigned != null ? rw.ranks_assigned : 0],
             [t("admin_ranking_worker_dirty", "Dirty pending"), rw.dirty_pending != null ? rw.dirty_pending : 0],
-            [t("admin_ranking_worker_next", "Nächster Lauf in"), nextRank],
+            [t("admin_ranking_worker_next", "Nächster Ranking-Lauf in"), nextRank],
             [t("admin_maint_mode", "Maintenance"), maintMode],
+            [t("admin_maint_bag_age", "Bag-Heartbeat Alter"), hbAge],
+            [t("admin_maint_bag_source", "Bag-Quelle"), hb.source || "—"],
           ]
             .map(
               ([k, v]) => `<div class="admin-kpi-card admin-card"><div class="admin-metric-label">${esc(k)}</div><div class="admin-metric-value">${esc(v)}</div></div>`
             )
             .join("")}
         </div>
+        ${maintAlert}
         ${
           (qt.errors || []).length
             ? `<div class="admin-alert admin-alert-error"><strong>${esc(t("admin_tick_errors", "Fehler"))}</strong><pre class="admin-pre">${esc((qt.errors || []).join("\n"))}</pre></div>`
@@ -3980,7 +3999,6 @@
     if (act === "refresh-runtime") return loadAdminRuntime();
     if (act === "balance-save") return saveAdminBalance();
     if (act === "balance-preset-b") return applyBalancePresetB();
-    if (act === "balance-recalculate") return recalculateAdminRankings();
     if (act === "ranking-recompute") return runAdminRankingRecompute(btn);
     if (act === "votes-refresh") return loadAdminVotes();
     if (act === "votes-search") return searchAdminVotesPlayers();

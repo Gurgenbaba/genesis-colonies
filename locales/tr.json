@@ -547,10 +547,10 @@
   "admin_maint_mode_sidecar": "Sidecar",
   "admin_ranking_worker_dirty": "Dirty bekleyen",
   "admin_ranking_worker_last": "Son ranking çalışması",
-  "admin_ranking_worker_next": "Sonraki çalışma",
-  "admin_ranking_worker_players": "Güncellenen oyuncular",
-  "admin_ranking_worker_ranks": "Sıralamalar",
-  "admin_ranking_worker_title": "Ranking worker (10 dk)",
+  "admin_ranking_worker_next": "Sonraki ranking",
+  "admin_ranking_worker_players": "Güncellenen dirty oyuncular",
+  "admin_ranking_worker_ranks": "Yenilenen sıralamalar",
+  "admin_ranking_worker_title": "Ranking worker (dirty batch ~10 dk)",
   "admin_queues_hint": "Oyuncu/gezegen kuyruk işlerini incele ve vadesi gelenleri bitir.",
   "admin_queues_title": "Kuyruklar",
   "admin_ranking_recompute_button": "Sıralamayı şimdi yeniden hesaplayın",
@@ -6965,5 +6965,10 @@
   "wb_auto_attack": "Otomatik Saldırı",
   "wb_auto_attack_success": "Savaş filosu %(coords)s konumuna gönderildi (%(count)s gemi).",
   "wb_auto_attack_no_ships": "Aktif gezegende savaş gemisi yok.",
-  "fleet_error_no_combat_ships_available": "Aktif gezegende savaş gemisi yok."
+  "fleet_error_no_combat_ships_available": "Aktif gezegende savaş gemisi yok.",
+  "admin_maint_bag_age": "Bag heartbeat yaşı",
+  "admin_maint_bag_source": "Bag kaynağı",
+  "admin_maint_bag_stale_title": "Maintenance owner bayat",
+  "admin_maint_bag_stale_hint": "Bag heartbeat yok — Sidecar/Embedded loglarını kontrol edin ([maintenance-worker] started). Otomatik ranking durmuş olabilir.",
+  "admin_ranking_worker_hint": "Otomatik yalnızca dirty oyuncuları günceller; Admin düğmesi = tam reconcile. Rütbeler dirty batch sonrası."
 }
