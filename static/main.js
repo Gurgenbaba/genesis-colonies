@@ -14591,6 +14591,8 @@
 
     const popHome = pop.parentElement;
     let activeHotspot = null;
+    let companionSyncInFlight = false;
+    let companionWatchTimer = null;
 
     const clearHotspotActive = () => {
       layer.querySelectorAll(".overview-companion-hotspot.is-popover-open").forEach((el) => {
@@ -14601,6 +14603,10 @@
     };
 
     const closeCompanionPopover = () => {
+      if (companionWatchTimer) {
+        clearInterval(companionWatchTimer);
+        companionWatchTimer = null;
+      }
       pop.hidden = true;
       pop.innerHTML = "";
       pop.classList.remove("is-open", "gc-popover-layer");
@@ -14613,6 +14619,7 @@
         popHome.appendChild(pop);
       }
       clearHotspotActive();
+      ensureAwayWatcher();
     };
 
     const positionCompanionPopover = (btn) => {
@@ -14627,39 +14634,42 @@
       pop.style.left = "-9999px";
       pop.style.top = "0px";
 
-      const margin = 10;
+      // Keep clear of overview hero HUD frame (top-left edge / ark chrome).
+      const marginX = 16;
+      const marginTop = 72;
+      const marginBottom = 16;
       const rect = btn.getBoundingClientRect();
       const popRect = pop.getBoundingClientRect();
       const popW = Math.max(popRect.width, 1);
       const popH = Math.max(popRect.height, 1);
 
       let left = rect.left + rect.width / 2 - popW / 2;
-      left = Math.max(margin, Math.min(left, window.innerWidth - popW - margin));
+      left = Math.max(marginX, Math.min(left, window.innerWidth - popW - marginX));
 
-      let top = rect.top - popH - margin;
+      let top = rect.top - popH - 12;
       let placement = "above";
-      if (top < margin) {
-        top = rect.bottom + margin;
+      if (top < marginTop) {
+        top = rect.bottom + 12;
         placement = "below";
       }
-      // Tall mission popovers: keep in viewport without snapping to 0,0.
-      if (top + popH > window.innerHeight - margin) {
-        top = Math.max(margin, window.innerHeight - popH - margin);
+      if (top + popH > window.innerHeight - marginBottom) {
+        top = Math.max(marginTop, window.innerHeight - popH - marginBottom);
       }
-      // If still covering the hotspot awkwardly and side space exists, nudge beside.
       if (placement === "below" && top < rect.top && popH > window.innerHeight * 0.55) {
-        const sideLeft = rect.right + margin;
-        const sideRight = rect.left - popW - margin;
-        if (sideLeft + popW <= window.innerWidth - margin) {
+        const sideLeft = rect.right + 12;
+        const sideRight = rect.left - popW - 12;
+        if (sideLeft + popW <= window.innerWidth - marginX) {
           left = sideLeft;
-          top = Math.max(margin, Math.min(rect.top, window.innerHeight - popH - margin));
+          top = Math.max(marginTop, Math.min(rect.top, window.innerHeight - popH - marginBottom));
           placement = "below";
-        } else if (sideRight >= margin) {
+        } else if (sideRight >= marginX) {
           left = sideRight;
-          top = Math.max(margin, Math.min(rect.top, window.innerHeight - popH - margin));
+          top = Math.max(marginTop, Math.min(rect.top, window.innerHeight - popH - marginBottom));
           placement = "below";
         }
       }
+      top = Math.max(marginTop, Math.min(top, window.innerHeight - popH - marginBottom));
+      left = Math.max(marginX, Math.min(left, window.innerWidth - popW - marginX));
 
       const caretX = Math.max(16, Math.min(popW - 16, rect.left + rect.width / 2 - left));
       pop.dataset.placement = placement;
@@ -14709,7 +14719,9 @@
       const endurance = btn.getAttribute("data-companion-endurance") || "0";
       const cunning = btn.getAttribute("data-companion-cunning") || "0";
       const reward = btn.getAttribute("data-companion-reward") || "0";
+      const startedAt = Number(btn.getAttribute("data-companion-started-at") || 0);
       const endsAt = Number(btn.getAttribute("data-companion-ends-at") || 0);
+      const durationSec = Number(btn.getAttribute("data-companion-duration") || 0);
       const canStart = btn.getAttribute("data-companion-can-start") === "1";
       const canClaim = btn.getAttribute("data-companion-can-claim") === "1";
       const outcome = btn.getAttribute("data-companion-outcome") || "";
@@ -14755,7 +14767,34 @@
       } else if (canStart) {
         actions = `<button type="button" class="gc-btn gc-btn-primary" data-companion-action="start" data-companion-boss="${bossKey}" data-companion-variant="strike">${t("overview_companion_mission", "Auf Mission schicken")} (+${reward} Ark)</button>`;
       } else if (status === "away" && endsAt > 0) {
-        actions = `<p class="hint">${t("overview_companion_mission_eta", "Zurück in")} <span class="gc-mono" data-countdown-at="${endsAt}" data-countdown-format="eta">—</span></p>`;
+        const total = Math.max(
+          1,
+          durationSec > 0
+            ? durationSec
+            : startedAt > 0
+              ? endsAt - startedAt
+              : 1
+        );
+        const nowSec =
+          typeof getTimerServerNow === "function"
+            ? Number(getTimerServerNow()) || Date.now() / 1000
+            : Date.now() / 1000;
+        const elapsed = Math.max(0, Math.min(total, nowSec - (startedAt || endsAt - total)));
+        const pct = Math.max(0, Math.min(100, Math.round((elapsed / total) * 100)));
+        actions = `<div class="overview-companion-mission-progress" data-companion-progress
+            data-started-at="${startedAt || endsAt - total}"
+            data-ends-at="${endsAt}"
+            data-duration="${total}">
+          <div class="overview-companion-mission-progress__meta">
+            <p class="hint">${t("overview_companion_mission_eta", "Zurück in")}
+              <span class="gc-mono" data-countdown-at="${endsAt}" data-countdown-format="eta" data-companion-countdown="1">—</span>
+            </p>
+            <span class="gc-mono" data-companion-progress-pct>${pct}%</span>
+          </div>
+          <div class="overview-companion-mission-progress__track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}">
+            <span class="overview-companion-mission-progress__fill" data-companion-progress-fill style="width:${pct}%;"></span>
+          </div>
+        </div>`;
       }
 
       clearHotspotActive();
@@ -14781,6 +14820,93 @@
       schedulePositionCompanionPopover(btn);
       if (typeof GC.refreshCountdowns === "function") GC.refreshCountdowns(pop);
       else if (typeof GC.initCountdowns === "function") GC.initCountdowns(pop);
+      armCompanionMissionWatch(btn);
+    };
+
+    const updateCompanionProgressDom = () => {
+      const block = pop.querySelector("[data-companion-progress]");
+      if (!block || pop.hidden) return;
+      const started = Number(block.getAttribute("data-started-at") || 0);
+      const ends = Number(block.getAttribute("data-ends-at") || 0);
+      const total = Math.max(1, Number(block.getAttribute("data-duration") || ends - started || 1));
+      const nowSec =
+        typeof getTimerServerNow === "function"
+          ? Number(getTimerServerNow()) || Date.now() / 1000
+          : Date.now() / 1000;
+      const elapsed = Math.max(0, Math.min(total, nowSec - started));
+      const pct = Math.max(0, Math.min(100, Math.round((elapsed / total) * 100)));
+      const fill = block.querySelector("[data-companion-progress-fill]");
+      const pctEl = block.querySelector("[data-companion-progress-pct]");
+      const track = block.querySelector("[role='progressbar']");
+      if (fill) fill.style.width = pct + "%";
+      if (pctEl) pctEl.textContent = pct + "%";
+      if (track) track.setAttribute("aria-valuenow", String(pct));
+    };
+
+    const syncCompanionDue = async (btn) => {
+      if (!btn || companionSyncInFlight) return;
+      const bossKey = btn.getAttribute("data-companion-boss");
+      if (!bossKey) return;
+      companionSyncInFlight = true;
+      try {
+        const res = await GC.fetchGameAction("/api/world-boss/companion/mission", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({ action: "sync", boss_key: bossKey }),
+        });
+        if (res && res.state && typeof GC.applyActionState === "function") {
+          GC.applyActionState(res, "companion_mission_sync");
+        }
+        if (res && res.ok) {
+          const companions = res.state?.overview?.status?.companions;
+          if (companions) applyCompanionState(companions);
+          else if (activeHotspot === btn && !pop.hidden) renderPopover(btn);
+        }
+      } catch (_err) {
+        /* keep watching; next tick retries */
+      } finally {
+        companionSyncInFlight = false;
+      }
+    };
+
+    const armCompanionMissionWatch = (btn) => {
+      if (companionWatchTimer) {
+        clearInterval(companionWatchTimer);
+        companionWatchTimer = null;
+      }
+      companionWatchTimer = setInterval(() => {
+        if (activeHotspot && !pop.hidden) {
+          updateCompanionProgressDom();
+        }
+        const dueBtns = layer.querySelectorAll(
+          '.overview-companion-hotspot[data-companion-status="away"][data-companion-ends-at]'
+        );
+        const nowSec =
+          typeof getTimerServerNow === "function"
+            ? Number(getTimerServerNow()) || Date.now() / 1000
+            : Date.now() / 1000;
+        dueBtns.forEach((el) => {
+          const endsAt = Number(el.getAttribute("data-companion-ends-at") || 0);
+          if (endsAt > 0 && nowSec >= endsAt - 0.25) {
+            syncCompanionDue(el);
+          }
+        });
+        if (!dueBtns.length && (pop.hidden || !activeHotspot)) {
+          clearInterval(companionWatchTimer);
+          companionWatchTimer = null;
+        }
+      }, 1000);
+    };
+
+    // Keep a light watcher for away hotspots even without open popover.
+    const ensureAwayWatcher = () => {
+      const anyAway = layer.querySelector(
+        '.overview-companion-hotspot[data-companion-status="away"][data-companion-ends-at]'
+      );
+      if (anyAway && !companionWatchTimer) armCompanionMissionWatch(anyAway);
     };
 
     const applyCompanionState = (companions) => {
@@ -14800,7 +14926,9 @@
         btn.setAttribute("data-companion-endurance", String((slot.stats && slot.stats.endurance) || 0));
         btn.setAttribute("data-companion-cunning", String((slot.stats && slot.stats.cunning) || 0));
         btn.setAttribute("data-companion-reward", String(mission.reward_tokens || 0));
+        btn.setAttribute("data-companion-started-at", String(mission.started_at || 0));
         btn.setAttribute("data-companion-ends-at", String(mission.ends_at || 0));
+        btn.setAttribute("data-companion-duration", String(mission.duration_sec || 0));
         btn.setAttribute("data-companion-can-start", mission.can_start ? "1" : "0");
         btn.setAttribute("data-companion-can-claim", mission.can_claim ? "1" : "0");
         btn.setAttribute("data-companion-active-event", String(slot.active_event_id || 0));
@@ -14813,9 +14941,14 @@
         const badge = btn.querySelector("[data-companion-badge]");
         if (badge) badge.textContent = badgeLabel(status, owned);
       });
+      if (activeHotspot && !pop.hidden) {
+        renderPopover(activeHotspot);
+      }
+      ensureAwayWatcher();
     };
 
     GC.patchOverviewCompanions = applyCompanionState;
+    ensureAwayWatcher();
 
     layer.addEventListener("click", (ev) => {
       const btn = ev.target.closest("[data-companion-boss]");
@@ -14906,13 +15039,18 @@
                 : t("overview_companion_claim_ok", "Ark-Token erhalten."),
               failed ? "warning" : "success"
             );
-          } else {
+            closeCompanionPopover();
+          } else if (action === "start") {
             showNotify(
               t("overview_companion_mission_ok", "Companion auf Mission geschickt."),
               "success"
             );
+            if (activeHotspot) renderPopover(activeHotspot);
+            else closeCompanionPopover();
+            ensureAwayWatcher();
+          } else {
+            closeCompanionPopover();
           }
-          closeCompanionPopover();
         } else {
           showNotify(
             t(String(res?.error || "companion_mission_failed"), "Mission fehlgeschlagen."),

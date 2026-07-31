@@ -1568,6 +1568,10 @@ def overview():
         overview_status = build_overview_page_context(
             int(session["user_id"]), ctx, planet=planet, conn=conn
         )
+        # Persist companion away→ready transitions from overview build.
+        from game.db import commit as _commit
+
+        _commit(conn)
         if ssr is not None:
             ssr.add_live_context_ms((time.perf_counter() - ctx_t0) * 1000.0)
     finally:
@@ -6329,11 +6333,15 @@ def api_world_boss_companion_mission():
     variant_key = str(data.get("variant_key") or "strike").strip().lower()
     if not boss_key:
         return jsonify({"ok": False, "error": "invalid_boss"}), 400
-    if action not in ("start", "claim"):
+    if action not in ("start", "claim", "sync"):
         return jsonify({"ok": False, "error": "invalid_action"}), 400
 
     from game.db import begin_write_transaction, commit, rollback
-    from game.world_boss_companions import claim_mission_reward, start_companion_mission
+    from game.world_boss_companions import (
+        claim_mission_reward,
+        start_companion_mission,
+        sync_companion_mission,
+    )
 
     conn = db()
     result: Dict[str, Any] = {"ok": False, "error": "companion_mission_failed"}
@@ -6342,6 +6350,8 @@ def api_world_boss_companion_mission():
         try:
             if action == "claim":
                 result = claim_mission_reward(int(player_id), boss_key, conn=conn)
+            elif action == "sync":
+                result = sync_companion_mission(int(player_id), boss_key, conn=conn)
             else:
                 result = start_companion_mission(
                     int(player_id),
@@ -6374,7 +6384,7 @@ def api_world_boss_companion_mission():
     if not result.get("ok"):
         body["error"] = result.get("error") or "companion_mission_failed"
     status = 200 if result.get("ok") else 400
-    if request_id and result.get("ok"):
+    if request_id and result.get("ok") and action != "sync":
         save_idempotent_action(int(player_id), request_id, body)
     return jsonify(body), status
 

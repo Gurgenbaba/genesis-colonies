@@ -327,6 +327,13 @@ def refresh_player_live_state(
 
         recover_aborted_transaction(conn)
         try:
+            from .world_boss_companions import tick_companion_missions_for_player
+
+            tick_companion_missions_for_player(uid, conn=conn)
+        except Exception:
+            recover_aborted_transaction(conn)
+            logger.exception("companion mission tick failed player=%s", uid)
+        try:
             from .live_state import set_request_perf_meta
 
             derived = int(finish_result.get("derived_sync_count") or 0)

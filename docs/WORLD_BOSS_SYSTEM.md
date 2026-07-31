@@ -129,6 +129,7 @@ Meta retention loop: **fight → HP Phase 3 → tame attempt → Overview compan
 3. Start: owned + idle + valid variant → `away` until `ends_at` (stores `fail_chance`).
 4. Worker (`tick_companion_missions`) rolls success/fail once, marks `away` → `ready` with `outcome`.
 5. Claim grants Ark-Token on success (0 on fail), resets to `idle`. Starting again auto-claims if `ready`.
+6. Due missions resolve on live-state refresh + `action=sync` (countdown zero) — not only the 60s fleet_worker tick.
 
 Overview: landscape hotspots on `#overview-planet-hero` (locked silhouettes + owned companions); popover shows flavor stats + **3 mission cards**. Encounter: Attack / Auto / Catch share one action row.
 

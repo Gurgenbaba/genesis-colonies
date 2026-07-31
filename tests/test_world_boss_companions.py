@@ -334,6 +334,39 @@ def test_companion_mission_ark_tokens(wb_db):
         conn.close()
 
 
+def test_mission_sync_marks_ready_immediately(wb_db):
+    """Countdown end must flip away→ready without waiting for fleet_worker."""
+    from game.world_boss_companions import sync_companion_mission
+
+    uid = _player()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        event = _spawn_phase3(conn, "ancient_leviathan")
+        credit(uid, CATCH_COST_SEC, "test", conn=conn)
+
+        class _Ok:
+            def random(self):
+                return 0.0
+
+        tame = attempt_tame(uid, int(event["id"]), conn=conn, rng=_Ok())
+        assert tame["ok"] and tame["success"]
+        started = start_companion_mission(
+            uid, "ancient_leviathan", conn=conn, variant_key="patrol"
+        )
+        assert started["ok"]
+        conn.execute(
+            "UPDATE player_boss_missions SET ends_at = ? WHERE player_id = ? AND boss_key = ?;",
+            (time.time() - 1, uid, "ancient_leviathan"),
+        )
+        synced = sync_companion_mission(uid, "ancient_leviathan", conn=conn)
+        assert synced["ok"]
+        assert synced["status"] == "ready"
+        commit(conn)
+    finally:
+        conn.close()
+
+
 def test_companion_mission_can_fail(wb_db):
     uid = _player()
     conn = db()

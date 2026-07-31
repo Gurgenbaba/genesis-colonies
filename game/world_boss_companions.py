@@ -887,6 +887,60 @@ def tick_companion_missions(*, conn, now: Optional[float] = None) -> Dict[str, A
     return {"ok": True, "marked_ready": marked}
 
 
+def tick_companion_missions_for_player(
+    player_id: int,
+    *,
+    conn,
+    now: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Resolve this player's due away missions (request-path, committed with live state)."""
+    if not companions_schema_ready(conn):
+        return {"ok": True, "marked_ready": 0}
+    ts = float(now if now is not None else _now())
+    rows = conn.execute(
+        """
+        SELECT boss_key FROM player_boss_missions
+        WHERE player_id = ? AND status = ? AND ends_at IS NOT NULL AND ends_at <= ?;
+        """,
+        (int(player_id), MISSION_STATUS_AWAY, ts),
+    ).fetchall()
+    marked = 0
+    for row in rows:
+        _resolve_away_to_ready(
+            int(player_id),
+            str(row["boss_key"]),
+            conn=conn,
+            now=ts,
+        )
+        marked += 1
+    return {"ok": True, "marked_ready": marked}
+
+
+def sync_companion_mission(
+    player_id: int,
+    boss_key: str,
+    *,
+    conn,
+    now: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Idempotent away→ready sync for one companion (countdown-zero client refresh)."""
+    if not companions_schema_ready(conn):
+        return {"ok": False, "error": "companions_unavailable"}
+    key = str(boss_key or "").strip()
+    if not key:
+        return {"ok": False, "error": "invalid_boss"}
+    if not has_companion(int(player_id), key, conn=conn):
+        return {"ok": False, "error": "not_owned"}
+    ts = float(now if now is not None else _now())
+    mission = refresh_mission_status(int(player_id), key, conn=conn, now=ts)
+    return {
+        "ok": True,
+        "boss_key": key,
+        "status": str((mission or {}).get("status") or MISSION_STATUS_IDLE),
+        "mission": mission,
+    }
+
+
 def _boss_display_name(boss_key: str, *, locale: str = "de") -> str:
     from .i18n import tr
 
