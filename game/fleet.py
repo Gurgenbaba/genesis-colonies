@@ -905,12 +905,39 @@ def _fleet_galactic_modifiers(
         return {
             "fleet_speed_multiplier": float(mods.get("fleet_speed_multiplier", 1.0) or 1.0),
             "fuel_efficiency_factor": float(mods.get("fuel_efficiency_factor", 1.0) or 1.0),
+            "cargo_multiplier": float(mods.get("cargo_multiplier", 1.0) or 1.0),
         }
     except Exception:
         return {
             "fleet_speed_multiplier": 1.0,
             "fuel_efficiency_factor": 1.0,
+            "cargo_multiplier": 1.0,
         }
+
+
+def _fleet_cargo_multiplier(
+    player_id: int,
+    conn,
+    *,
+    galaxy: int | None = None,
+) -> float:
+    return float(
+        _fleet_galactic_modifiers(player_id, conn, galaxy=galaxy).get("cargo_multiplier", 1.0)
+        or 1.0
+    )
+
+
+def _fleet_cargo_capacity(
+    ships: Mapping[str, int],
+    player_id: int,
+    conn,
+    *,
+    galaxy: int | None = None,
+) -> int:
+    return calculate_total_cargo(
+        ships,
+        cargo_multiplier=_fleet_cargo_multiplier(player_id, conn, galaxy=galaxy),
+    )
 
 
 def _fleet_speed_multiplier(
@@ -1562,7 +1589,8 @@ def validate_fleet_send(
     if not ok_ship_mission:
         return False, ship_reason, {"target": target_info}
 
-    cargo = calculate_total_cargo(ships_n)
+    origin_galaxy = int(origin_planet.get("galaxy") or 0) or None
+    cargo = _fleet_cargo_capacity(ships_n, player_id, conn, galaxy=origin_galaxy)
     loaded_total = loaded_resource_total(resources_n)
     if loaded_total > 0 and loaded_total > cargo:
         return False, "not_enough_cargo", {"target": target_info}
@@ -1960,11 +1988,13 @@ def preview_fleet_flight(
             fuel_efficiency_factor_override=fuel_eff_factor,
         )
         mission = str(mission_type or "").strip().lower()
-        cargo_total = (
-            calculate_expedition_loot_cap(ships)
-            if mission == "expedition"
-            else calculate_total_cargo(ships)
-        )
+        cargo_mult = _fleet_cargo_multiplier(player_id, conn, galaxy=origin_galaxy)
+        if mission == "expedition":
+            cargo_total = int(
+                math.floor(float(calculate_expedition_loot_cap(ships)) * cargo_mult + 1e-9)
+            )
+        else:
+            cargo_total = calculate_total_cargo(ships, cargo_multiplier=cargo_mult)
         fuel_cells_have = float(origin_planet.get("fuel_cells") or 0)
         return build_flight_preview_payload(
             distance=distance,
@@ -4319,7 +4349,7 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
         timing = _return_timing_from_now(movement, now=now)
         return_at = timing["return_at"]
         ships_n = normalize_ships(ships)
-        cargo_total = calculate_total_cargo(ships_n)
+        cargo_total = _fleet_cargo_capacity(ships_n, player_id, conn)
         collected = {"metal": 0, "crystal": 0, "fuel_cells": 0}
         tg = int(movement.get("target_galaxy") or 0)
         ts = int(movement.get("target_system") or 0)
@@ -4683,7 +4713,7 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
         return_at = timing["return_at"]
         ships = normalize_ships(ships)
         current_loaded = calculate_loaded_resources(resources)
-        cargo_total = calculate_total_cargo(ships)
+        cargo_total = _fleet_cargo_capacity(ships, player_id, conn)
         remaining_cap = max(0, cargo_total - loaded_resource_total(current_loaded))
         collected = {"metal": 0, "crystal": 0, "fuel_cells": 0}
         target_name = ""

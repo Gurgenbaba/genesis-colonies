@@ -7216,5 +7216,14 @@
   "commander_available_label": "Verfügbar",
   "commander_map_locked_hint": "Gesperrt — vorherigen Knoten maximieren.",
   "wb_news_tame_title": "World Boss gezähmt: %(boss)s",
-  "wb_news_tame_body": "Der World Boss bei %(coords)s wurde gezähmt und ist verschwunden. Belohnungen wurden an alle Teilnehmer ausgezahlt."
+  "wb_news_tame_body": "Der World Boss bei %(coords)s wurde gezähmt und ist verschwunden. Belohnungen wurden an alle Teilnehmer ausgezahlt.",
+  "commander_chip_per_rank": "Rang",
+  "commander_chip_prepared": "vorbereitet",
+  "playercard_commander_class": "Commander-Klasse",
+  "shipyard_role_siege": "Belagerung",
+  "techtree_role_siege": "Belagerung",
+  "wb_attack_x1": "×1",
+  "wb_attack_x5": "×5",
+  "wb_attack_x5_hint": "×5 Treffer: fünffacher Schaden, 25 Min. Cooldown.",
+  "techtree_max_level": "Maximalstufe"
 }

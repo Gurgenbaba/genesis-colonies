@@ -7216,5 +7216,14 @@
   "commander_available_label": "Available",
   "commander_map_locked_hint": "Locked — maximize the previous node first.",
   "wb_news_tame_title": "World Boss tamed: %(boss)s",
-  "wb_news_tame_body": "The World Boss at %(coords)s was tamed and vanished. Rewards were paid out to all participants."
+  "wb_news_tame_body": "The World Boss at %(coords)s was tamed and vanished. Rewards were paid out to all participants.",
+  "commander_chip_per_rank": "rank",
+  "commander_chip_prepared": "prepared",
+  "playercard_commander_class": "Commander class",
+  "shipyard_role_siege": "Siege",
+  "techtree_role_siege": "Siege",
+  "wb_attack_x1": "×1",
+  "wb_attack_x5": "×5",
+  "wb_attack_x5_hint": "×5 hit: five times damage, 25 min cooldown.",
+  "techtree_max_level": "Max level"
 }

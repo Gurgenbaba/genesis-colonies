@@ -7216,5 +7216,14 @@
   "commander_available_label": "Доступно",
   "commander_map_locked_hint": "Заблокировано — сначала максимизируйте предыдущий узел.",
   "wb_news_tame_title": "World Boss приручен: %(boss)s",
-  "wb_news_tame_body": "World Boss у %(coords)s приручен и исчез. Награды выплачены всем участникам."
+  "wb_news_tame_body": "World Boss у %(coords)s приручен и исчез. Награды выплачены всем участникам.",
+  "commander_chip_per_rank": "ранг",
+  "commander_chip_prepared": "подготовлено",
+  "playercard_commander_class": "Класс командира",
+  "shipyard_role_siege": "Осада",
+  "techtree_role_siege": "Осада",
+  "wb_attack_x1": "×1",
+  "wb_attack_x5": "×5",
+  "wb_attack_x5_hint": "Удар ×5: пятикратный урон, 25 мин перезарядки.",
+  "techtree_max_level": "Макс. уровень"
 }

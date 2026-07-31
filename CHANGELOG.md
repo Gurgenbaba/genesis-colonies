@@ -37,6 +37,12 @@ Stand: **2026-07-31** · Spieler-Meilenstein **v0.9 Alpha** · Build-Zähler [`V
 - Diverse Sync-/PJAX-Themen
 - Timer- & Queue-Stabilität
 - Timekeeper-Finish: Karten-Locks / Afford / Stock nach Boost-Abschluss via include_panel Refresh
+- Commander: Fuel-Efficiency-Polarität, Cargo-Multiplier in Fleet, Skilltree %-Chips, Klasse auf PlayerCard
+- World Boss: ×1/×5 Hit-Grid (×5 = 5× Schaden + 25 Min CD), stabile Button-Breiten
+- Tech-Tree: aktive Fleet-Research nicht mehr „vorbereitet“; Siege-Rolle; Research-Effekt-Previews
+- Planet Breaker: neues Cutout-Art + Fleet-Picker Siege-Gruppe
+- Titan-Link ETA sofort; WB Claim nach Kill ohne Manual-Refresh; kompakte Claim-Leiste; ×5 über Wave-Cap mit Jitter
+- Tech-Tree Max-Level (Gebäude real / Forschung Soft-L50 bzw. Interstellar L6)
 - Viele kleine Darstellungsfehler aus dem Alpha-Feedback
 - Commander Pick-Cards: Preview-Chips nicht mehr am Kartenfuß abgeschnitten; Role-Icons als transparente WebP
 - Commander Pick: Session-Fehlalarm behoben (POST/JSON statt GET → kein Login-Redirect)

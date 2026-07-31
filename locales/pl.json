@@ -7216,5 +7216,14 @@
   "commander_available_label": "Dostępne",
   "commander_map_locked_hint": "Zablokowane — najpierw zmaksymalizuj poprzedni węzeł.",
   "wb_news_tame_title": "World Boss oswojony: %(boss)s",
-  "wb_news_tame_body": "World Boss przy %(coords)s został oswojony i zniknął. Nagrody wypłacono wszystkim uczestnikom."
+  "wb_news_tame_body": "World Boss przy %(coords)s został oswojony i zniknął. Nagrody wypłacono wszystkim uczestnikom.",
+  "commander_chip_per_rank": "ranga",
+  "commander_chip_prepared": "przygotowane",
+  "playercard_commander_class": "Klasa dowódcy",
+  "shipyard_role_siege": "Oblężenie",
+  "techtree_role_siege": "Oblężenie",
+  "wb_attack_x1": "×1",
+  "wb_attack_x5": "×5",
+  "wb_attack_x5_hint": "Trafienie ×5: pięciokrotne obrażenia, 25 min odnowienia.",
+  "techtree_max_level": "Poziom maks."
 }

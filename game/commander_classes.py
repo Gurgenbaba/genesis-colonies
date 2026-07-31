@@ -24,6 +24,8 @@ from .commander_class_catalog import (
     preview_chips_for_class,
     role_icon_path,
     skill_image_path,
+    skill_per_rank_effect_chips,
+    skill_rank_effect_chips,
     skills_for_class,
     swap_cost_sec,
 )
@@ -505,6 +507,8 @@ def _skill_ui_rows(class_key: str, ranks: Dict[str, int], unspent: int) -> List[
                 "resource_cost": skill.get("resource_cost"),
                 "prereq_skill": skill.get("prereq_skill"),
                 "effect_mods_per_rank": skill.get("effect_mods_per_rank") or {},
+                "effect_chips_per_rank": skill_per_rank_effect_chips(skill),
+                "effect_chips": skill_rank_effect_chips(skill, current),
                 "status": status,
             }
         )
@@ -566,7 +570,7 @@ def serialize_for_client(player_id: int, *, conn) -> Dict[str, Any]:
                     }
                     for ik in icons
                 ],
-                "preview_chips": preview_chips_for_class(ck, limit=3),
+                "preview_chips": preview_chips_for_class(ck, limit=4),
                 "playstyle": meta["playstyle"],
                 "preview_mods": class_preview_mods(ck),
                 "selected": ck == class_key,

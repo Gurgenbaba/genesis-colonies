@@ -589,3 +589,64 @@ def test_skilltree_path_art_in_markup(commander_db):
     assert "img/classes/skills/" in body
     assert "skilltree-map-dock" in body
     assert "data-skilltree-dock-unlock" in body
+
+
+def test_void_admiral_fuel_and_cargo_apply(commander_db):
+    """Fuel efficiency factor < 1 reduces cost; cargo_multiplier enlarges holds."""
+    from game.commander_class_catalog import format_mod_chip, preview_chips_for_class
+    from game.fleet import _fleet_galactic_modifiers
+    from game.fleet_calc import calculate_fuel_cost, calculate_total_cargo
+
+    uid = _player()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        assert pick_class(uid, "void_admiral", conn=conn)[0]
+        conn.execute(
+            "UPDATE player_commander SET skill_points_unspent = 20 WHERE player_id = ?",
+            (uid,),
+        )
+        for key in ("admiral_warp_lanes", "admiral_hold_capacity", "admiral_fuel_thrift"):
+            skill = next(s for s in skills_for_class("void_admiral") if s["key"] == key)
+            for _ in range(int(skill["max_rank"])):
+                ok, reason, _ = unlock_skill(uid, key, planet_id=None, conn=conn)
+                assert ok, (key, reason)
+        mods = get_commander_effect_modifiers(uid, conn=conn)
+        assert float(mods.get("cargo_multiplier", 1.0)) > 1.0
+        assert float(mods.get("fuel_efficiency_factor", 1.0)) < 1.0
+        fuel_chip = format_mod_chip("fuel_efficiency_factor", mods["fuel_efficiency_factor"])
+        assert fuel_chip and fuel_chip["display"].startswith("+")
+        chips = preview_chips_for_class("void_admiral", limit=4)
+        assert any(c["key"] == "fleet_speed_multiplier" for c in chips)
+        assert any(c["key"] == "cargo_multiplier" for c in chips)
+        er_mods = _fleet_galactic_modifiers(uid, conn)
+        base_cargo = calculate_total_cargo({"mule_courier": 10})
+        boosted = calculate_total_cargo(
+            {"mule_courier": 10}, cargo_multiplier=er_mods["cargo_multiplier"]
+        )
+        assert boosted > base_cargo
+        base_fuel = calculate_fuel_cost({"mule_courier": 500}, distance=1000, speed_percent=100)
+        cheap = calculate_fuel_cost(
+            {"mule_courier": 500},
+            distance=1000,
+            speed_percent=100,
+            fuel_efficiency_factor_override=er_mods["fuel_efficiency_factor"],
+        )
+        assert base_fuel > 10
+        assert cheap < base_fuel
+        ser = serialize_for_client(uid, conn=conn)
+        hold = next(s for s in ser["skills"] if s["key"] == "admiral_hold_capacity")
+        assert hold["effect_chips"]
+        assert hold["effect_chips_per_rank"]
+        commit(conn)
+    finally:
+        conn.close()
+
+
+def test_envoy_scan_chip_marked_prepared(commander_db):
+    from game.commander_class_catalog import preview_chips_for_class
+
+    chips = preview_chips_for_class("envoy", limit=4)
+    scan = next((c for c in chips if c["key"] == "scan_range"), None)
+    assert scan is not None
+    assert scan.get("prepared") is True

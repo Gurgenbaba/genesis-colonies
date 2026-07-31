@@ -48,7 +48,8 @@ TECHTREE_BUILDINGS: Dict[str, Dict[str, Any]] = {
 TECHTREE_RESEARCH: Dict[str, Dict[str, Any]] = RESEARCH_TECHS
 
 # Research whose primary gameplay effect is prepared (EffectResolver / docs/EFFECTS.md).
-RESEARCH_PREPARED_EFFECT_KEYS = frozenset({"navigation_tech", "engine_tech"})
+# Fleet techs (navigation/engine/fuel) are active consumers — not prepared.
+RESEARCH_PREPARED_EFFECT_KEYS = frozenset()
 
 # Buildings whose primary effect is prepared until scan engine consumes it.
 BUILDING_PREPARED_EFFECT_KEYS = frozenset({"radar_array"})
@@ -61,6 +62,7 @@ SHIP_ROLE_LABEL_KEYS: Dict[str, str] = {
     "scout": "techtree_role_scout",
     "cargo": "techtree_role_cargo",
     "combat": "techtree_role_combat",
+    "siege": "techtree_role_siege",
     "colony": "techtree_role_colonize",
     "expedition": "techtree_role_expedition",
     "expedition_combat": "techtree_role_expedition_combat",
@@ -334,6 +336,8 @@ def _ensure_context(
 
 
 def _build_building_items(buildings: Dict[str, int], research: Dict[str, int]) -> List[Dict[str, Any]]:
+    from .buildings import get_max_level_for_building
+
     items: List[Dict[str, Any]] = []
     for key in BUILDING_ORDER:
         cfg = TECHTREE_BUILDINGS.get(key, {})
@@ -343,6 +347,7 @@ def _build_building_items(buildings: Dict[str, int], research: Dict[str, int]) -
         level = int(buildings.get(key, 0) or 0)
         tab = str(cfg.get("tab") or "infrastructure")
         prepared = key in BUILDING_PREPARED_EFFECT_KEYS
+        max_level = int(get_max_level_for_building(key, buildings))
 
         items.append(
             {
@@ -353,6 +358,7 @@ def _build_building_items(buildings: Dict[str, int], research: Dict[str, int]) -
                 "category": tab,
                 "category_label_key": BUILDING_TAB_LABEL_KEYS.get(tab, "techtree_cat_infrastructure"),
                 "level": level,
+                "max_level": max_level,
                 "icon": cfg.get("icon"),
                 "requirements": req_list,
                 "requirements_met": reqs_met,
@@ -372,6 +378,33 @@ def _build_building_items(buildings: Dict[str, int], research: Dict[str, int]) -
     return items
 
 
+def _techtree_research_effect_preview(
+    key: str,
+    *,
+    level: int,
+) -> Optional[Dict[str, Any]]:
+    """Server-authored research preview for techtree cards (mirrors research page)."""
+    from .research import get_research_effect_preview
+
+    lvl = max(0, int(level or 0))
+    try:
+        preview = get_research_effect_preview(key, lvl, lvl + 1)
+    except Exception:
+        return None
+    if not isinstance(preview, dict) or not preview:
+        return None
+    return preview
+
+
+def _research_max_level(tech_key: str) -> int:
+    """Techtree display max — hard cap when defined, else soft endgame reference (L50)."""
+    if str(tech_key) == "interstellar_expansion":
+        from .planet_evolution.expansion_protocol import INTERSTELLAR_EXPANSION_MAX_LEVEL
+
+        return int(INTERSTELLAR_EXPANSION_MAX_LEVEL)
+    return 50
+
+
 def _build_research_items(buildings: Dict[str, int], research: Dict[str, int]) -> List[Dict[str, Any]]:
     items: List[Dict[str, Any]] = []
     for key in sorted(RESEARCH_TECHS.keys()):
@@ -382,6 +415,13 @@ def _build_research_items(buildings: Dict[str, int], research: Dict[str, int]) -
         reqs_met = _check_requirements(req_cfg, buildings, research)
         icon_file = cfg.get("icon")
         prepared = key in RESEARCH_PREPARED_EFFECT_KEYS
+        preview = _techtree_build_time_effect_preview(
+            "research",
+            key,
+            buildings=buildings,
+            research=research,
+            level=lvl,
+        ) if key in BUILD_TIME_TECHTREE_RESEARCH else _techtree_research_effect_preview(key, level=lvl)
 
         items.append(
             {
@@ -391,20 +431,13 @@ def _build_research_items(buildings: Dict[str, int], research: Dict[str, int]) -
                 "description_key": cfg.get("description_key"),
                 "category": cfg.get("category"),
                 "level": lvl,
+                "max_level": _research_max_level(key),
                 "icon": f"img/research/{icon_file}" if icon_file else None,
                 "requirements": req_list,
                 "requirements_met": reqs_met,
                 "status": _progressive_status(level=lvl, requirements_met=reqs_met),
                 "effect_status": "prepared" if prepared else "active",
-                "effect_preview": _techtree_build_time_effect_preview(
-                    "research",
-                    key,
-                    buildings=buildings,
-                    research=research,
-                    level=lvl,
-                )
-                if key in BUILD_TIME_TECHTREE_RESEARCH
-                else None,
+                "effect_preview": preview,
             }
         )
     return items
@@ -442,36 +475,6 @@ def _build_ship_items(
                 "requirements_met": ok,
                 "status": _progressive_status(count=count, requirements_met=ok),
                 "effect_status": "active",
-                "build_cost": {
-                    "metal": int(cost.get("metal") or 0),
-                    "crystal": int(cost.get("crystal") or 0),
-                    "fuel_cells": int(cost.get("fuel_cells") or 0),
-                },
-            }
-        )
-
-    # Prepared hulls (not in ACTIVE_SHIP_KEYS).
-    for key, spec in sorted(SHIPS.items()):
-        if key in ACTIVE_SHIP_KEYS or not spec.get("phase2_only"):
-            continue
-        req_cfg = spec.get("requirements") or {}
-        req_list = _expand_requirements(req_cfg, buildings, research)
-        role = str(spec.get("role") or "utility")
-        cost = spec.get("build_cost") or {}
-        items.append(
-            {
-                "key": key,
-                "kind": "ship",
-                "label_key": str(spec.get("name_key") or f"fleet_ship_{key}"),
-                "description_key": spec.get("description_key"),
-                "role": role,
-                "role_label_key": SHIP_ROLE_LABEL_KEYS.get(role, "techtree_role_support"),
-                "level": 0,
-                "icon": f"img/ships/{key}.png",
-                "requirements": req_list,
-                "requirements_met": False,
-                "status": "planned",
-                "effect_status": "prepared",
                 "build_cost": {
                     "metal": int(cost.get("metal") or 0),
                     "crystal": int(cost.get("crystal") or 0),

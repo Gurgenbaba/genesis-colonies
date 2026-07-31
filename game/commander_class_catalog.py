@@ -6,7 +6,7 @@ Owner: game/commander_class_catalog.py · Docs: docs/COMMANDER_CLASSES.md
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 CLASS_KEYS: Tuple[str, ...] = (
     "vanguard",
@@ -429,7 +429,7 @@ _register(
         icon_key="fuel",
         max_rank=3,
         prereq="admiral_hold_capacity",
-        mods_per_rank={"fuel_efficiency_factor": 1.03},
+        mods_per_rank={"fuel_efficiency_factor": 0.97},
     ),
     _skill(
         "admiral_dockyard",
@@ -473,7 +473,7 @@ _register(
         prereq="admiral_armada",
         mods_per_rank={
             "fleet_speed_multiplier": 1.04,
-            "fuel_efficiency_factor": 1.05,
+            "fuel_efficiency_factor": 0.95,
             "shipyard_time_speed": 1.05,
         },
         resource_cost=_CAPSTONE_B,
@@ -502,7 +502,7 @@ _register(
         icon_key="support",
         max_rank=3,
         prereq="envoy_signal_net",
-        mods_per_rank={"cargo_multiplier": 1.02, "fuel_efficiency_factor": 1.02},
+        mods_per_rank={"cargo_multiplier": 1.02, "fuel_efficiency_factor": 0.98},
     ),
     _skill(
         "envoy_shield_doctrine",
@@ -607,44 +607,135 @@ PREVIEW_CHIP_META: Dict[str, Dict[str, str]] = {
     "storage_factor": {"label_key": "commander_chip_storage", "kind": "mult"},
     "fleet_speed_multiplier": {"label_key": "commander_chip_fleet", "kind": "mult"},
     "cargo_multiplier": {"label_key": "commander_chip_cargo", "kind": "mult"},
-    "fuel_efficiency_factor": {"label_key": "commander_chip_fuel_eff", "kind": "mult"},
+    "fuel_efficiency_factor": {"label_key": "commander_chip_fuel_eff", "kind": "fuel_eff"},
     "shipyard_time_speed": {"label_key": "commander_chip_shipyard", "kind": "mult"},
     "defense_time_speed": {"label_key": "commander_chip_defense", "kind": "mult"},
-    "scan_range": {"label_key": "commander_chip_scan", "kind": "additive"},
+    "scan_range": {"label_key": "commander_chip_scan", "kind": "additive", "prepared": True},
+}
+
+# Signature keys first per class so pick cards show real identity bonuses.
+CLASS_CHIP_PRIORITY: Dict[str, Tuple[str, ...]] = {
+    "vanguard": ("weapon_bonus", "armor_bonus", "shield_bonus"),
+    "forge_lord": ("metal_prod_factor", "crystal_prod_factor", "fuel_prod_factor", "build_time_speed", "storage_factor"),
+    "archivist": ("research_time_speed", "crystal_prod_factor", "build_time_speed"),
+    "void_admiral": (
+        "fleet_speed_multiplier",
+        "cargo_multiplier",
+        "fuel_efficiency_factor",
+        "shipyard_time_speed",
+    ),
+    "envoy": (
+        "scan_range",
+        "cargo_multiplier",
+        "shield_bonus",
+        "armor_bonus",
+        "defense_time_speed",
+        "build_time_speed",
+    ),
 }
 
 
-def preview_chips_for_class(class_key: str, *, limit: int = 3) -> List[Dict[str, Any]]:
-    """Top preview chips for UI (server-authored labels + display strings)."""
-    mods = class_preview_mods(class_key)
-    chips: List[Dict[str, Any]] = []
-    for key, meta in PREVIEW_CHIP_META.items():
-        if key not in mods:
-            continue
-        raw = float(mods[key])
-        kind = meta["kind"]
-        if kind == "additive":
-            if abs(raw) < 0.001:
-                continue
-            pct = int(round(raw * 100))
-            display = f"+{pct}%" if pct >= 0 else f"{pct}%"
-            if key == "scan_range":
-                display = f"+{int(round(raw))}"
+def format_mod_chip(key: str, raw: float, *, prepared: bool = False) -> Optional[Dict[str, Any]]:
+    """Server-authored display chip for one ER key/value (no client math)."""
+    meta = PREVIEW_CHIP_META.get(str(key))
+    if not meta:
+        return None
+    kind = meta["kind"]
+    val = float(raw)
+    if kind == "additive":
+        if abs(val) < 0.001:
+            return None
+        if key == "scan_range":
+            display = f"+{int(round(val))}"
         else:
-            if abs(raw - 1.0) < 0.001:
-                continue
-            pct = int(round((raw - 1.0) * 100))
+            pct = int(round(val * 100))
             display = f"+{pct}%" if pct >= 0 else f"{pct}%"
-        chips.append(
-            {
-                "key": key,
-                "label_key": meta["label_key"],
-                "display": display,
-            }
-        )
+    elif kind == "fuel_eff":
+        # factor < 1.0 = cheaper fuel; surface as positive efficiency %
+        if abs(val - 1.0) < 0.001:
+            return None
+        pct = int(round((1.0 - val) * 100))
+        display = f"+{pct}%" if pct >= 0 else f"{pct}%"
+    else:
+        if abs(val - 1.0) < 0.001:
+            return None
+        pct = int(round((val - 1.0) * 100))
+        display = f"+{pct}%" if pct >= 0 else f"{pct}%"
+    chip: Dict[str, Any] = {
+        "key": str(key),
+        "label_key": meta["label_key"],
+        "display": display,
+    }
+    if prepared or meta.get("prepared"):
+        chip["prepared"] = True
+    return chip
+
+
+def chips_from_mods(
+    mods: Mapping[str, float],
+    *,
+    priority: Sequence[str] | None = None,
+    limit: int = 4,
+    include_prepared: bool = True,
+) -> List[Dict[str, Any]]:
+    """Build ordered preview chips from stacked modifier map."""
+    chips: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    ordered: List[str] = []
+    if priority:
+        ordered.extend(str(k) for k in priority)
+    for key in PREVIEW_CHIP_META:
+        if key not in ordered:
+            ordered.append(key)
+    for key in ordered:
+        if key not in mods or key in seen:
+            continue
+        meta = PREVIEW_CHIP_META.get(key) or {}
+        prepared = bool(meta.get("prepared"))
+        if prepared and not include_prepared:
+            continue
+        chip = format_mod_chip(key, float(mods[key]), prepared=prepared)
+        if not chip:
+            continue
+        chips.append(chip)
+        seen.add(key)
         if len(chips) >= int(limit):
             break
     return chips
+
+
+def skill_rank_effect_chips(skill: Mapping[str, Any], ranks: int) -> List[Dict[str, Any]]:
+    """Chips for ``ranks`` of a single skill (per-rank stack math)."""
+    per = skill.get("effect_mods_per_rank") or {}
+    r = max(0, int(ranks or 0))
+    if r <= 0 or not per:
+        return []
+    stacked: Dict[str, float] = {}
+    for k, raw in per.items():
+        key = str(k)
+        val = float(raw)
+        if key in ADDITIVE_MOD_KEYS:
+            stacked[key] = val * r
+        else:
+            stacked[key] = val ** r
+    return chips_from_mods(stacked, limit=8, include_prepared=True)
+
+
+def skill_per_rank_effect_chips(skill: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    """Chips describing one rank of a skill."""
+    return skill_rank_effect_chips(skill, 1)
+
+
+def preview_chips_for_class(class_key: str, *, limit: int = 4) -> List[Dict[str, Any]]:
+    """Top preview chips for UI (server-authored labels + display strings)."""
+    ck = str(class_key or "")
+    mods = class_preview_mods(ck)
+    return chips_from_mods(
+        mods,
+        priority=CLASS_CHIP_PRIORITY.get(ck),
+        limit=limit,
+        include_prepared=True,
+    )
 
 
 def role_icon_path(icon_key: str) -> str:

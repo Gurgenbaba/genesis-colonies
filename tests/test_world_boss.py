@@ -2046,3 +2046,91 @@ def test_api_world_boss_auto_attack_toggle(wb_db, monkeypatch):
     assert "minmax(220px, 280px)" in css or "gc-world-boss-layout" in css
     assert "overflow: visible" in css
     assert "border: none" in css
+
+
+def test_instant_attack_hit_mult_x5_damage_and_cooldown(wb_db):
+    uid = _player()
+    pid = _home(uid)
+    _fund(pid)
+    _seed_combat_fleet(pid, uid)
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        home = conn.execute(
+            "SELECT galaxy, system, position FROM planets WHERE id = ?;",
+            (pid,),
+        ).fetchone()
+        hg, hs, hp = int(home["galaxy"]), int(home["system"]), int(home["position"])
+        boss_pos = 6 if hp != 6 else 7
+        spawn = spawn_world_boss(
+            "void_titan",
+            conn=conn,
+            galaxy=hg,
+            system=hs,
+            position=boss_pos,
+            announce=False,
+        )
+        assert spawn["ok"], spawn
+        event_id = int(spawn["event"]["id"])
+        now = time.time()
+        x1 = execute_instant_attack(
+            uid,
+            event_id,
+            {"falcon_interceptor": 10},
+            planet_id=pid,
+            conn=conn,
+            now=now,
+            rng=__import__("random").Random(42),
+            hit_mult=1,
+        )
+        assert x1["ok"], x1
+        dmg1 = int(x1["attack"]["damage"])
+        conn.execute(
+            "UPDATE world_boss_contributions SET last_attack_at = 0, waves = 0, damage = 0 WHERE event_id = ? AND player_id = ?",
+            (event_id, uid),
+        )
+        conn.execute(
+            "UPDATE world_boss_events SET current_hp = max_hp, status = 'active' WHERE id = ?",
+            (event_id,),
+        )
+        x5 = execute_instant_attack(
+            uid,
+            event_id,
+            {"falcon_interceptor": 10},
+            planet_id=pid,
+            conn=conn,
+            now=now + 1,
+            rng=__import__("random").Random(42),
+            hit_mult=5,
+        )
+        assert x5["ok"], x5
+        assert int(x5["attack"]["hit_mult"]) == 5
+        dmg5 = int(x5["attack"]["damage"])
+        wave_cap = max(1, int(float(x5["boss"]["max_hp"]) * 0.08))
+        assert dmg5 > dmg1
+        # ×5 must be able to exceed the single-wave cap and must not land on exact 5×cap.
+        assert dmg5 != wave_cap * 5
+        if dmg1 >= wave_cap - 1:
+            assert dmg5 > wave_cap
+        cd = float(x5["player"]["cooldown_until"]) - (now + 1)
+        assert abs(cd - 1500) < 1.5
+        assert int(x5["player"]["waves"]) == 5
+        bad = execute_instant_attack(
+            uid,
+            event_id,
+            {"falcon_interceptor": 10},
+            planet_id=pid,
+            conn=conn,
+            now=now + 1,
+            hit_mult=3,
+        )
+        assert not bad["ok"]
+        assert bad["error"] == "invalid_hit_mult"
+        page = Path("templates/world_boss.html").read_text(encoding="utf-8")
+        assert 'data-wb-hit-mult="5"' in page
+        assert "wb-hit-group" in page
+        css = Path("static/style.css").read_text(encoding="utf-8")
+        assert ".gc-world-boss-page .wb-hit-group" in css
+        commit(conn)
+    finally:
+        conn.close()

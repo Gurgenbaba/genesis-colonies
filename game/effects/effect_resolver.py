@@ -790,13 +790,14 @@ class EffectResolver:
         lhn = _lvl(r, "navigation_tech")
         if lhn > 0:
             fleet_speed_multiplier *= 1.0 + 0.03 * lhn
-            sources.append(self._source_entry("fleet_speed_multiplier", "navigation_tech", fleet_speed_multiplier, lhn, prepared=True))
+            sources.append(self._source_entry("fleet_speed_multiplier", "navigation_tech", fleet_speed_multiplier, lhn))
 
         leng = _lvl(r, "engine_tech")
         if leng > 0:
             fleet_speed_multiplier *= 1.0 + 0.02 * leng
             cargo_multiplier *= 1.0 + 0.02 * leng
-            sources.append(self._source_entry("fleet_speed_multiplier", "engine_tech", fleet_speed_multiplier, leng, prepared=True))
+            sources.append(self._source_entry("fleet_speed_multiplier", "engine_tech", fleet_speed_multiplier, leng))
+            sources.append(self._source_entry("cargo_multiplier", "engine_tech", cargo_multiplier, leng))
 
         # --- Buildings: nanofactory (diminishing returns — applied in get_build_time_duration_multiplier) ---
         nano = _bld(b, "nanofactory")

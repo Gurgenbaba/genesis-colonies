@@ -7216,5 +7216,14 @@
   "commander_available_label": "Uygun",
   "commander_map_locked_hint": "Kilitli — önce önceki düğümü maksimize edin.",
   "wb_news_tame_title": "World Boss evcilleştirildi: %(boss)s",
-  "wb_news_tame_body": "%(coords)s konumundaki World Boss evcilleştirildi ve kayboldu. Ödüller tüm katılımcılara dağıtıldı."
+  "wb_news_tame_body": "%(coords)s konumundaki World Boss evcilleştirildi ve kayboldu. Ödüller tüm katılımcılara dağıtıldı.",
+  "commander_chip_per_rank": "rütbe",
+  "commander_chip_prepared": "hazır",
+  "playercard_commander_class": "Komutan sınıfı",
+  "shipyard_role_siege": "Kuşatma",
+  "techtree_role_siege": "Kuşatma",
+  "wb_attack_x1": "×1",
+  "wb_attack_x5": "×5",
+  "wb_attack_x5_hint": "×5 vuruş: beş kat hasar, 25 dk bekleme.",
+  "techtree_max_level": "Maks. seviye"
 }

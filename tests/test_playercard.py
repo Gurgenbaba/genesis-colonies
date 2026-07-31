@@ -17,7 +17,7 @@ import pytest
 
 import game.db as dbmod
 import game.models as models
-from game.db import commit, db, table_exists
+from game.db import commit, db, table_exists, begin_write_transaction
 from game.models import create_user, init_db, upsert_player_score
 from game.playercard import (
     AVATAR_OUTPUT_SIZE,
@@ -1072,3 +1072,42 @@ def test_get_equipped_identity_returns_theme_and_aura(temp_db):
     theme, aura = get_equipped_identity(pid)
     assert theme == "violet"
     assert aura == "aura_gold"
+
+
+def test_public_card_shows_commander_class(temp_db):
+    init_db()
+    _run_migrate(temp_db)
+    _close_db_conn()
+    pid, _ = _create_player("card_class_owner")
+    other, _ = _create_player("card_class_viewer")
+    from game.commander_classes import pick_class, schema_ready
+
+    conn = db()
+    try:
+        assert schema_ready(conn)
+        begin_write_transaction(conn)
+        ok, reason, _ = pick_class(pid, "vanguard", conn=conn)
+        assert ok, reason
+        commit(conn)
+    finally:
+        conn.close()
+    card, err = build_public_card(pid, viewer_id=other)
+    assert err is None
+    assert card.get("is_private") is not True
+    cc = card.get("commander_class")
+    assert cc and cc.get("key") == "vanguard"
+    assert cc.get("name_key")
+    assert cc.get("portrait")
+    ensure_player_card(pid)
+    c = db()
+    try:
+        begin_write_transaction(c)
+        cur = c.execute("UPDATE player_cards SET is_public = 0 WHERE player_id = ?", (pid,))
+        assert int(cur.rowcount or 0) >= 1
+        commit(c)
+    finally:
+        c.close()
+    private_view, err2 = build_public_card(pid, viewer_id=other)
+    assert err2 is None
+    assert private_view.get("is_private") is True
+    assert not private_view.get("commander_class")

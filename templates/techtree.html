@@ -145,14 +145,16 @@
                       </div>
                     </div>
 
-                    {% if item.level is defined and item.level|int > 0 %}
-                      <span class="tech-level-pill">
-                        {% if item.kind == 'ship' or item.kind == 'defense' %}
-                          ×{{ item.level|fmt_int }}
-                        {% else %}
-                          L{{ item.level|fmt_int }}
-                        {% endif %}
+                    {% if item.kind == 'ship' or item.kind == 'defense' %}
+                      {% if item.level is defined and item.level|int > 0 %}
+                      <span class="tech-level-pill">×{{ item.level|fmt_int }}</span>
+                      {% endif %}
+                    {% elif item.max_level is defined and item.max_level is not none %}
+                      <span class="tech-level-pill" title="{{ T('techtree_max_level', 'Maximalstufe') }} {{ item.max_level|fmt_int }}">
+                        L{{ (item.level or 0)|fmt_int }}/{{ item.max_level|fmt_int }}
                       </span>
+                    {% elif item.level is defined and item.level|int > 0 %}
+                      <span class="tech-level-pill">L{{ item.level|fmt_int }}</span>
                     {% endif %}
                   </div>
 

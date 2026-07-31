@@ -43,7 +43,7 @@ Trunk-Phase (GC-CLASS-UI-006): Active Commander bar + **compact skillmap** (5×4
 | Void Admiral | Flotte | `fleet_speed_multiplier`, `cargo_multiplier`, `fuel_efficiency_factor`, `shipyard_time_speed` |
 | Envoy | Intel / Support | `scan_range` (prepared), moderate Support-Keys |
 
-Balance: ~5–15 % soft-cap auf Kern-Keys. Ersetzt weder Research, Buildings noch PE.
+Balance: Soft-Cap-Leitlinie ~5–15 % auf Kern-Keys (manche Capstone-Stacks können höher liegen, z. B. Archivist Research). Ersetzt weder Research, Buildings noch PE.
 
 ## Progression
 

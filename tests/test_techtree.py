@@ -117,6 +117,19 @@ def test_prepared_research_flagged(techtree_db):
     for key in RESEARCH_PREPARED_EFFECT_KEYS:
         assert by_key[key]["effect_status"] == "prepared"
     assert by_key["energy_tech"]["effect_status"] == "active"
+    assert by_key["navigation_tech"]["effect_status"] == "active"
+    assert by_key["engine_tech"]["effect_status"] == "active"
+    assert by_key["weapon_tech"].get("effect_preview")
+    assert by_key["energy_tech"].get("max_level") == 50
+    assert by_key["interstellar_expansion"].get("max_level") == 6
+    ships = next(s for s in ctx["sections"] if s["key"] == "ships")
+    breaker = next(i for i in ships["nodes"] if i["key"] == "planet_breaker")
+    assert breaker["role_label_key"] == "techtree_role_siege"
+    buildings = next(s for s in ctx["sections"] if s["key"] == "buildings")
+    radar = next(i for i in buildings["nodes"] if i["key"] == "radar_array")
+    assert radar["effect_status"] == "prepared"
+    metal = next(i for i in buildings["nodes"] if i["key"] == "metal_mine")
+    assert int(metal.get("max_level") or 0) >= 50
 
 
 def test_legacy_get_techtree_data_tuple(techtree_db):

@@ -7216,5 +7216,14 @@
   "commander_available_label": "Disponible",
   "commander_map_locked_hint": "Verrouillé — maximisez d’abord le nœud précédent.",
   "wb_news_tame_title": "World Boss dompté : %(boss)s",
-  "wb_news_tame_body": "Le World Boss en %(coords)s a été dompté et a disparu. Les récompenses ont été versées à tous les participants."
+  "wb_news_tame_body": "Le World Boss en %(coords)s a été dompté et a disparu. Les récompenses ont été versées à tous les participants.",
+  "commander_chip_per_rank": "rang",
+  "commander_chip_prepared": "préparé",
+  "playercard_commander_class": "Classe de commandant",
+  "shipyard_role_siege": "Siège",
+  "techtree_role_siege": "Siège",
+  "wb_attack_x1": "×1",
+  "wb_attack_x5": "×5",
+  "wb_attack_x5_hint": "Frappe ×5 : cinq fois les dégâts, 25 min de recharge.",
+  "techtree_max_level": "Niveau max"
 }

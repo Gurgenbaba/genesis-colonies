@@ -1821,6 +1821,25 @@ def _build_public_card_payload(
             }
     except Exception:
         pass
+    commander_class = None
+    try:
+        from .commander_class_catalog import get_class
+        from .commander_classes import get_commander_row, schema_ready as commander_schema_ready
+
+        if commander_schema_ready(conn):
+            crow = get_commander_row(tid, conn=conn)
+            ck = str((crow or {}).get("class_key") or "").strip()
+            meta = get_class(ck) if ck else None
+            if meta:
+                commander_class = {
+                    "key": ck,
+                    "name_key": meta.get("name_key"),
+                    "tagline_key": meta.get("tagline_key"),
+                    "portrait": meta.get("portrait"),
+                    "theme": meta.get("theme") or ck,
+                }
+    except Exception:
+        logger.exception("playercard commander_class lookup failed player=%s", tid)
     payload: Dict[str, Any] = {
         "player_id": tid,
         "commander_name": escape(names["commander_name"]),
@@ -1839,6 +1858,7 @@ def _build_public_card_payload(
         "is_private": False,
         "is_self": is_self,
         "can_edit": is_self,
+        "commander_class": commander_class,
         "alliance": alliance_info,
         "alliance_label": alliance_label,
         "rank": int(rank) if rank is not None and int(rank) >= 1 else None,

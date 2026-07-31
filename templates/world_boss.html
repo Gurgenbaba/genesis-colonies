@@ -254,17 +254,33 @@
                   </div>
                   <div class="gc-world-boss-actions" data-wb-catch data-wb-event-id="{{ event.id }}">
                     {% if player_info and player_info.attack_block_reason == 'world_boss_wave_limit' %}
-                    <span class="gc-btn gc-btn-primary is-disabled" aria-disabled="true">{{ T("wb_attack", "Angreifen") }}</span>
+                    <div class="wb-hit-group" role="group" aria-label="{{ T('wb_attack', 'Angreifen') }}">
+                      <span class="gc-btn gc-btn-primary is-disabled wb-attack-btn" aria-disabled="true">{{ T("wb_attack_x1", "×1") }}</span>
+                      <span class="gc-btn gc-btn-primary is-disabled wb-attack-btn" aria-disabled="true">{{ T("wb_attack_x5", "×5") }}</span>
+                    </div>
                     <span class="gc-btn gc-btn-primary is-disabled" aria-disabled="true">{{ T("wb_auto_attack", "Auto-Angriff") }}</span>
                     {% elif player_info and player_info.attack_block_reason == 'world_boss_cooldown' and cooldown_until %}
-                    <button type="button"
-                            class="gc-btn gc-btn-primary is-disabled wb-attack-btn"
-                            aria-disabled="true"
-                            tabindex="-1"
-                            disabled
-                            data-wb-instant-attack
-                            data-wb-event-id="{{ event.id }}"
-                            data-wb-locked-until="{{ cooldown_until|int }}">{{ T("wb_attack", "Angreifen") }}</button>
+                    <div class="wb-hit-group" role="group" aria-label="{{ T('wb_attack', 'Angreifen') }}">
+                      <button type="button"
+                              class="gc-btn gc-btn-primary is-disabled wb-attack-btn"
+                              aria-disabled="true"
+                              tabindex="-1"
+                              disabled
+                              data-wb-instant-attack
+                              data-wb-hit-mult="1"
+                              data-wb-event-id="{{ event.id }}"
+                              data-wb-locked-until="{{ cooldown_until|int }}">{{ T("wb_attack_x1", "×1") }}</button>
+                      <button type="button"
+                              class="gc-btn gc-btn-primary is-disabled wb-attack-btn"
+                              aria-disabled="true"
+                              tabindex="-1"
+                              disabled
+                              data-wb-instant-attack
+                              data-wb-hit-mult="5"
+                              data-wb-event-id="{{ event.id }}"
+                              data-wb-locked-until="{{ cooldown_until|int }}"
+                              title="{{ T('wb_attack_x5_hint', '×5 Treffer: fünffacher Schaden, 25 Min. Cooldown.') }}">{{ T("wb_attack_x5", "×5") }}</button>
+                    </div>
                     <button type="button"
                             class="gc-btn gc-btn-primary wb-auto-attack-btn{% if auto_on %} is-active{% endif %}"
                             data-wb-auto-attack
@@ -274,10 +290,19 @@
                       {{ T("wb_auto_attack_active", "Auto-Angriff aktiv") if auto_on else T("wb_auto_attack", "Auto-Angriff") }}
                     </button>
                     {% else %}
-                    <button type="button"
-                            class="gc-btn gc-btn-primary wb-attack-btn"
-                            data-wb-instant-attack
-                            data-wb-event-id="{{ event.id }}">{{ T("wb_attack", "Angreifen") }}</button>
+                    <div class="wb-hit-group" role="group" aria-label="{{ T('wb_attack', 'Angreifen') }}">
+                      <button type="button"
+                              class="gc-btn gc-btn-primary wb-attack-btn"
+                              data-wb-instant-attack
+                              data-wb-hit-mult="1"
+                              data-wb-event-id="{{ event.id }}">{{ T("wb_attack_x1", "×1") }}</button>
+                      <button type="button"
+                              class="gc-btn gc-btn-primary wb-attack-btn"
+                              data-wb-instant-attack
+                              data-wb-hit-mult="5"
+                              data-wb-event-id="{{ event.id }}"
+                              title="{{ T('wb_attack_x5_hint', '×5 Treffer: fünffacher Schaden, 25 Min. Cooldown.') }}">{{ T("wb_attack_x5", "×5") }}</button>
+                    </div>
                     <button type="button"
                             class="gc-btn gc-btn-primary wb-auto-attack-btn{% if auto_on %} is-active{% endif %}"
                             data-wb-auto-attack
@@ -305,7 +330,7 @@
                       {{ T("wb_galaxy", "Zur Galaxie") }}
                     </a>
                   </div>
-                  <p class="gc-world-boss-action-hint hint">{{ T("wb_attack_no_movement_hint", "Jeder Angriff hat einen 5-Minuten-Cooldown. Es findet keine Flottenbewegung statt.") }}</p>
+                  <p class="gc-world-boss-action-hint hint">{{ T("wb_attack_no_movement_hint", "Jeder Angriff hat einen 5-Minuten-Cooldown. Es findet keine Flottenbewegung statt.") }} {{ T("wb_attack_x5_hint", "×5 Treffer: fünffacher Schaden, 25 Min. Cooldown.") }}</p>
                   <p class="gc-world-boss-waves hint">
                     {{ T("wb_your_waves", "Wellen") }}:
                     <span class="gc-mono" data-wb-player-waves-meta>{{ waves_done }} / {{ waves_max }}</span>
@@ -353,14 +378,36 @@
                 </dl>
               </section>
 
-              {# —— 3. Rewards (collapsible) —— #}
+              {# —— Claim strip (compact, always visible when claimable) —— #}
+              {% if is_ended and player_info and player_info.can_claim %}
+              <section class="gc-world-boss-claim-panel" data-wb-claim-panel>
+                <div class="gc-world-boss-claim-panel__head">
+                  <h3 class="gc-world-boss-claim-panel__title">{{ T("wb_your_rewards_title", "Deine Belohnung") }}</h3>
+                  {% if outlook and outlook.grants %}
+                  <ul class="gc-world-boss-claim-panel__loot">
+                    {% for g in outlook.grants[:4] %}
+                    <li class="gc-mono">×{{ g.amount }} {{ T(g.name_key if g.name_key is defined else ('inv_' ~ g.item_key), g.item_key) }}</li>
+                    {% endfor %}
+                    {% if outlook.grants|length > 4 %}
+                    <li class="hint">+{{ outlook.grants|length - 4 }}</li>
+                    {% endif %}
+                  </ul>
+                  {% endif %}
+                </div>
+                <button type="button" class="gc-btn gc-btn-primary wb-claim-btn" data-event-id="{{ event.id }}">
+                  {{ T("wb_claim", "Belohnung abholen") }}
+                </button>
+              </section>
+              {% endif %}
+
+              {# —— 3. Rewards (collapsible catalog; never auto-open when claimable) —— #}
               {% if has_reward_content %}
-              <details class="gc-world-boss-rewards-block" data-wb-rewards-block{% if is_ended and player_info and player_info.can_claim %} open{% endif %}>
+              <details class="gc-world-boss-rewards-block" data-wb-rewards-block>
                 <summary class="gc-world-boss-rewards-toggle">
                   {{ T("wb_rewards_show", "Belohnungen anzeigen") }}
                 </summary>
                 <div class="gc-world-boss-rewards-inner">
-                  {% if outlook and outlook.grants %}
+                  {% if outlook and outlook.grants and not (is_ended and player_info and player_info.can_claim) %}
                   <section class="gc-world-boss-payout" data-wb-payout-mode="{{ outlook.mode }}" aria-label="{{ T('wb_your_rewards_title', 'Deine Belohnung') }}">
                     <h3 class="gc-world-boss-payout-title">{{ T("wb_your_rewards_title", "Deine Belohnung") }}</h3>
                     {% if outlook.mode == 'claimable' %}
@@ -424,13 +471,7 @@
                   </section>
                   {% endif %}
 
-                  {% if is_ended and player_info and player_info.can_claim %}
-                  <p class="gc-world-boss-claim-wrap">
-                    <button type="button" class="gc-btn gc-btn-primary wb-claim-btn" data-event-id="{{ event.id }}">
-                      {{ T("wb_claim", "Belohnung abholen") }}
-                    </button>
-                  </p>
-                  {% elif is_ended and player_info and player_info.claim %}
+                  {% if is_ended and player_info and player_info.claim and not player_info.can_claim %}
                   <p class="hint">{{ T("wb_claimed", "Belohnung bereits abgeholt.") }}</p>
                   {% endif %}
                 </div>

@@ -34,6 +34,7 @@ STATUS_SCHEDULED = "scheduled"
 CLAIMABLE_STATUSES = frozenset({STATUS_DEFEATED, STATUS_EXPIRED, STATUS_TAMED})
 
 WAVE_COOLDOWN_SEC = 300
+ALLOWED_HIT_MULT = frozenset({1, 5})
 MAX_WAVES_PER_PLAYER = 40
 DEFAULT_EVENT_DURATION_SEC = 48 * 3600
 # Gap between successive spawns when under the concurrent cap (GC-W13).
@@ -902,12 +903,15 @@ def compute_instant_hp_damage(
     defender_ships: Mapping[str, int],
     max_hp: int,
     critical: bool = False,
+    apply_wave_cap: bool = True,
 ) -> int:
     """
     Map attack snapshot → shared boss HP damage (no simulate_battle / no losses).
 
     Uses prestige scores of attacker vs wave stacks with the same wipe/overkill/cap
     rules as ``compute_world_boss_hp_damage`` (even fight ≈ 2%, cap 8%).
+    Pass ``apply_wave_cap=False`` for multi-hit scaling (×5) that may exceed the
+    single-wave cap.
     """
     from .scoring import compute_destroyed_raw_from_losses
 
@@ -942,11 +946,49 @@ def compute_instant_hp_damage(
     base = float(hp_budget) * float(WAVE_HP_FRACTION) * fraction * overkill_mult
     if critical:
         base *= float(INSTANT_CRIT_MULT)
-    cap = float(hp_budget) * float(MAX_WAVE_HP_FRACTION)
-    damage = int(min(cap, max(0.0, base)))
+    if apply_wave_cap:
+        cap = float(hp_budget) * float(MAX_WAVE_HP_FRACTION)
+        damage = int(min(cap, max(0.0, base)))
+    else:
+        damage = int(max(0.0, base))
     if damage <= 0 and atk_score > 0:
         return 1
     return max(0, damage)
+
+
+def scale_instant_hit_damage(
+    base_damage: int,
+    *,
+    hit_mult: int,
+    max_hp: int,
+    rng: Any,
+) -> int:
+    """
+    Scale a single-wave hit for ×N strikes.
+
+    ×1 stays at the wave-capped value. ×5 exceeds the single-wave cap, uses a
+    jitter so damage is never exactly ``5 × wave_cap``, and soft-caps at 45% HP.
+    """
+    mult = int(hit_mult or 1)
+    dmg = max(0, int(base_damage))
+    if mult <= 1 or dmg <= 0:
+        return dmg
+    hp_budget = max(0, int(max_hp))
+    wave_cap = int(float(hp_budget) * float(MAX_WAVE_HP_FRACTION)) if hp_budget > 0 else 0
+    # Prefer uncapped-feeling scale from the (already capped) base hit.
+    scaled = float(dmg) * float(mult)
+    # Jitter ±8% so capped fleets never land on exactly 5× wave_cap.
+    jitter = 0.92 + (float(rng.random()) * 0.16) if rng is not None else 0.97
+    scaled *= jitter
+    # Soft ceiling: allow well past wave cap, but not a full one-shot via ×5 alone.
+    soft_cap = int(float(hp_budget) * 0.45) if hp_budget > 0 else int(scaled)
+    out = int(max(1, min(soft_cap, round(scaled))))
+    exact_five_cap = int(wave_cap) * int(mult) if wave_cap > 0 else 0
+    if exact_five_cap > 0 and out == exact_five_cap:
+        # Nudge off the exact 5×-cap value (never fake a lower hit below ×4.5).
+        nudge = max(1, int(round(exact_five_cap * 0.03)))
+        out = min(soft_cap, exact_five_cap + nudge) if jitter >= 1.0 else max(1, exact_five_cap - nudge)
+    return max(0, int(out))
 
 
 def _projectile_profile_for_ships(ships: Mapping[str, int]) -> str:
@@ -1008,11 +1050,13 @@ def execute_instant_attack(
     now: Optional[float] = None,
     rng: Any = None,
     auto_select: bool = False,
+    hit_mult: int = 1,
 ) -> Dict[str, Any]:
     """
     GC-WB-ATTACK-002 — resolve a World Boss strike in-request (no flight, no losses).
 
     Ships stay in hangar; cooldown and contribution update atomically with HP.
+    ``hit_mult`` ∈ {1, 5}: scales damage, wave count, and cooldown.
     """
     import random
 
@@ -1022,6 +1066,18 @@ def execute_instant_attack(
     pid = int(player_id)
     eid = int(event_id)
     origin_id = int(planet_id)
+    try:
+        mult = int(hit_mult or 1)
+    except (TypeError, ValueError):
+        mult = 1
+    if mult not in ALLOWED_HIT_MULT:
+        return {
+            "ok": False,
+            "error": "invalid_hit_mult",
+            "attack": None,
+            "boss": None,
+            "player": None,
+        }
 
     ok_atk, reason, meta = can_player_attack_boss(
         pid,
@@ -1039,6 +1095,19 @@ def execute_instant_attack(
             "boss": None,
             "player": None,
             **(meta or {}),
+        }
+
+    waves_done = int((meta or {}).get("waves") or 0)
+    if waves_done + mult > int(MAX_WAVES_PER_PLAYER):
+        return {
+            "ok": False,
+            "error": "world_boss_wave_limit",
+            "attack": None,
+            "boss": None,
+            "player": None,
+            "waves": waves_done,
+            "max_waves": int(MAX_WAVES_PER_PLAYER),
+            "hit_mult": mult,
         }
 
     event = meta.get("event") or get_event_by_id(eid, conn=conn)
@@ -1097,6 +1166,15 @@ def execute_instant_attack(
         max_hp=int(event["max_hp"]),
         critical=critical,
     )
+    if mult > 1:
+        rolled = scale_instant_hit_damage(
+            rolled,
+            hit_mult=mult,
+            max_hp=int(event["max_hp"]),
+            rng=battle_rng,
+        )
+    else:
+        rolled = max(0, int(rolled))
     alliance_salvo = 0
     if float(ALLIANCE_SALVO_FRACTION) > 0:
         alliance_salvo = int(rolled * float(ALLIANCE_SALVO_FRACTION))
@@ -1186,7 +1264,12 @@ def execute_instant_attack(
         logger.exception("world_boss alliance lookup failed player=%s", pid)
 
     note_attack_dispatched(
-        pid, eid, conn=conn, now=ts, alliance_id=alliance_id
+        pid,
+        eid,
+        conn=conn,
+        now=ts,
+        alliance_id=alliance_id,
+        hit_mult=mult,
     )
 
     wave_xp = 0
@@ -1202,6 +1285,7 @@ def execute_instant_attack(
         alliance_xp=wave_xp,
         now=ts,
         conn=conn,
+        wave_delta=mult,
     )
 
     if alliance_id is not None and wave_xp > 0:
@@ -1222,7 +1306,7 @@ def execute_instant_attack(
         from .directives.progress import emit_world_boss_damage_event
 
         # Synthetic movement id: unique per event/player/wave for directive ledger.
-        waves_after = int(meta.get("waves") or 0) + 1
+        waves_after = int(meta.get("waves") or 0) + int(mult)
         synth_movement = int(eid) * 1_000_000 + (pid % 10_000) * 100 + (waves_after % 100)
         emit_world_boss_damage_event(
             pid,
@@ -1243,7 +1327,7 @@ def execute_instant_attack(
         except Exception:
             logger.exception("world_boss defeat news failed event=%s", eid)
 
-    cooldown_until = float(ts + WAVE_COOLDOWN_SEC)
+    cooldown_until = float(ts + WAVE_COOLDOWN_SEC * int(mult))
     hp_ratio = (float(new_hp) / float(max_hp)) if max_hp > 0 else 0.0
     contrib_row = conn.execute(
         """
@@ -1253,7 +1337,7 @@ def execute_instant_attack(
         (eid, pid),
     ).fetchone()
     total_damage = int(contrib_row["damage"] or 0) if contrib_row else int(applied)
-    waves_done = int(contrib_row["waves"] or 0) if contrib_row else 1
+    waves_done = int(contrib_row["waves"] or 0) if contrib_row else int(mult)
 
     rank = None
     total_players = None
@@ -1280,6 +1364,7 @@ def execute_instant_attack(
             "alliance_salvo": int(alliance_salvo),
             "attack_power": int(attack_power),
             "ships": dict(selected),
+            "hit_mult": int(mult),
         },
         "boss": {
             "event_id": eid,
@@ -1830,9 +1915,18 @@ def note_attack_dispatched(
     conn,
     now: Optional[float] = None,
     alliance_id: Optional[int] = None,
+    hit_mult: int = 1,
 ) -> None:
     """Start wave cooldown at fleet send (no wave/damage yet)."""
     ts = float(now if now is not None else _now())
+    try:
+        mult = int(hit_mult or 1)
+    except (TypeError, ValueError):
+        mult = 1
+    if mult not in ALLOWED_HIT_MULT:
+        mult = 1
+    # Shift last_attack_at forward so existing WAVE_COOLDOWN_SEC gate covers ×N CD.
+    cooldown_anchor = float(ts + (mult - 1) * WAVE_COOLDOWN_SEC)
     if alliance_id is None:
         try:
             from .alliance import get_player_alliance
@@ -1857,7 +1951,7 @@ def note_attack_dispatched(
             int(event_id),
             int(player_id),
             int(alliance_id) if alliance_id is not None else None,
-            ts,
+            cooldown_anchor,
             ts,
             ts,
         ),
@@ -2187,12 +2281,14 @@ def _upsert_contribution(
     now: float,
     conn,
     alliance_xp: int = 0,
+    wave_delta: int = 1,
 ) -> None:
     """Apply arrival damage/waves. Preserves ``last_attack_at`` from send-time CD."""
     from .db import column_exists
 
     dmg = max(0, int(damage))
     xp = max(0, int(alliance_xp))
+    waves = max(1, int(wave_delta or 1))
     has_xp_col = column_exists(conn, WORLD_BOSS_CONTRIB_TABLE, "alliance_xp")
     if has_xp_col:
         conn.execute(
@@ -2200,10 +2296,10 @@ def _upsert_contribution(
             INSERT INTO world_boss_contributions (
                 event_id, player_id, alliance_id, damage, waves, alliance_xp,
                 last_attack_at, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(event_id, player_id) DO UPDATE SET
                 damage = damage + excluded.damage,
-                waves = waves + 1,
+                waves = waves + excluded.waves,
                 alliance_xp = alliance_xp + excluded.alliance_xp,
                 alliance_id = COALESCE(excluded.alliance_id, alliance_id),
                 updated_at = excluded.updated_at;
@@ -2213,6 +2309,7 @@ def _upsert_contribution(
                 int(player_id),
                 int(alliance_id) if alliance_id is not None else None,
                 dmg,
+                waves,
                 xp,
                 float(now),
                 float(now),
@@ -2225,10 +2322,10 @@ def _upsert_contribution(
         INSERT INTO world_boss_contributions (
             event_id, player_id, alliance_id, damage, waves,
             last_attack_at, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, 1, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(event_id, player_id) DO UPDATE SET
             damage = damage + excluded.damage,
-            waves = waves + 1,
+            waves = waves + excluded.waves,
             alliance_id = COALESCE(excluded.alliance_id, alliance_id),
             updated_at = excluded.updated_at;
         """,
@@ -2237,6 +2334,7 @@ def _upsert_contribution(
             int(player_id),
             int(alliance_id) if alliance_id is not None else None,
             dmg,
+            waves,
             float(now),
             float(now),
             float(now),

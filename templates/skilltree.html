@@ -63,8 +63,8 @@
           <p class="cc-card-tag">{{ T(c.tagline_key, "") }}</p>
           <ul class="cc-card-chips">
             {% for chip in (c.preview_chips or []) %}
-            <li class="cc-chip">
-              <span class="cc-chip-label">{{ T(chip.label_key, chip.key) }}</span>
+            <li class="cc-chip{% if chip.prepared %} is-prepared{% endif %}">
+              <span class="cc-chip-label">{{ T(chip.label_key, chip.key) }}{% if chip.prepared %} · {{ T("commander_chip_prepared", "vorbereitet") }}{% endif %}</span>
               <span class="cc-chip-val gc-mono">{{ chip.display }}</span>
             </li>
             {% endfor %}
@@ -280,6 +280,18 @@
         <p class="skilltree-map-dock__desc" data-skilltree-dock-desc>
           {% if selected_skill %}{{ T(selected_skill.desc_key, "") }}{% endif %}
         </p>
+        <ul class="skilltree-map-dock__effects" data-skilltree-dock-effects>
+          {% if selected_skill %}
+            {% set effect_list = selected_skill.effect_chips if selected_skill.rank and selected_skill.rank > 0 else selected_skill.effect_chips_per_rank %}
+            {% for chip in (effect_list or []) %}
+            <li class="skilltree-map-dock__effect{% if chip.prepared %} is-prepared{% endif %}">
+              <span class="skilltree-map-dock__effect-label">{{ T(chip.label_key, chip.key) }}</span>
+              <span class="skilltree-map-dock__effect-val gc-mono">{{ chip.display }}{% if selected_skill.rank == 0 %}/{{ T("commander_chip_per_rank", "Rang") }}{% endif %}</span>
+              {% if chip.prepared %}<span class="skilltree-map-dock__effect-prep">{{ T("commander_chip_prepared", "vorbereitet") }}</span>{% endif %}
+            </li>
+            {% endfor %}
+          {% endif %}
+        </ul>
         <div class="skilltree-map-dock__rankbar" aria-hidden="true">
           <span class="skilltree-map-dock__rankbar-fill" data-skilltree-dock-rankbar style="width: {{ sel_rank_pct }}%;"></span>
         </div>

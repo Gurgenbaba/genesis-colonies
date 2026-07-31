@@ -11,7 +11,7 @@ Consumers (`resources`, `buildings`, `research`) delegate to these modules; the 
 | Time (build, research, lab, academy, nanofactory) | **Fixed** | `get_build_time_seconds` → `power_build_seconds` (GC-850A); `get_research_time_seconds` |
 | Building caps (core nexus, geothermal) | **Fixed** | Max levels for mines/solar/fuel/storage; terraform = storage bonus only |
 | Combat (`weapon_tech`, `armor_tech`, `shield_tech`) | **Fixed** | Applied in `simulate_battle()` via `EffectResolver.get_combat_modifiers()` — [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) |
-| Fleet (`navigation_tech`, `engine_tech`, `fuel_efficiency`) | **Fixed** | `fleet_speed_multiplier`, `fuel_efficiency_factor` — consumed in `fleet.py` / `fleet_calc.py` |
+| Fleet (`navigation_tech`, `engine_tech`, `fuel_efficiency`) | **Fixed** | `fleet_speed_multiplier`, `fuel_efficiency_factor`, `cargo_multiplier` — consumed in `fleet.py` / `fleet_calc.py` (incl. Commander Class) |
 | Radar (`radar_array` → `scan_range`) | **Not wired** | **No scan/galaxy engine** |
 | Multi-universe | **Not supported** | Single SQLite DB; `universe_name` is display config only — **no `universe_id` in schema** |
 

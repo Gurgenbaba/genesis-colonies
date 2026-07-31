@@ -7216,5 +7216,14 @@
   "commander_available_label": "Disponible",
   "commander_map_locked_hint": "Bloqueado: maximiza el nodo anterior primero.",
   "wb_news_tame_title": "World Boss domado: %(boss)s",
-  "wb_news_tame_body": "El World Boss en %(coords)s fue domado y desapareció. Las recompensas se repartieron entre los participantes."
+  "wb_news_tame_body": "El World Boss en %(coords)s fue domado y desapareció. Las recompensas se repartieron entre los participantes.",
+  "commander_chip_per_rank": "rango",
+  "commander_chip_prepared": "preparado",
+  "playercard_commander_class": "Clase de comandante",
+  "shipyard_role_siege": "Asedio",
+  "techtree_role_siege": "Asedio",
+  "wb_attack_x1": "×1",
+  "wb_attack_x5": "×5",
+  "wb_attack_x5_hint": "Golpe ×5: cinco veces el daño, 25 min de enfriamiento.",
+  "techtree_max_level": "Nivel máximo"
 }

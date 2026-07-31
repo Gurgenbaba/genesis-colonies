@@ -71,6 +71,22 @@
         {% elif card.get('title') %}
           <p class="gc-player-card-title-text">{{ card.get('title') }}</p>
         {% endif %}
+        {% if card.get('commander_class') and card.commander_class.get('key') %}
+        <div class="gc-player-card-class" data-commander-class="{{ card.commander_class.key }}">
+          {% if card.commander_class.get('portrait') %}
+          <img class="gc-player-card-class-portrait"
+               src="{{ url_for('static', filename=card.commander_class.portrait) }}"
+               alt=""
+               width="36"
+               height="36"
+               loading="lazy">
+          {% endif %}
+          <div class="gc-player-card-class-meta">
+            <span class="gc-player-card-class-label">{{ T("playercard_commander_class", "Commander-Klasse") }}</span>
+            <strong class="gc-player-card-class-name">{{ T(card.commander_class.name_key, card.commander_class.key) }}</strong>
+          </div>
+        </div>
+        {% endif %}
         <p class="gc-player-card-activity">
           {{ T(card.get('activity_key', 'playercard_recently_active')) }}
         </p>

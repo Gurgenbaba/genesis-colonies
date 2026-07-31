@@ -270,7 +270,11 @@ def calculate_fuel_cost(
     return max(0, int(math.ceil(base * factor)))
 
 
-def calculate_total_cargo(ships: Mapping[str, int]) -> int:
+def calculate_total_cargo(
+    ships: Mapping[str, int],
+    *,
+    cargo_multiplier: float = 1.0,
+) -> int:
     total = 0
     for key, amount in ships.items():
         try:
@@ -282,6 +286,9 @@ def calculate_total_cargo(ships: Mapping[str, int]) -> int:
         spec = get_ship(str(key))
         if spec:
             total += int(spec.get("cargo") or 0) * qty
+    mult = max(0.0, float(cargo_multiplier or 1.0))
+    if abs(mult - 1.0) > 1e-9:
+        total = int(math.floor(total * mult + 1e-9))
     return max(0, total)
 
 

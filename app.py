@@ -6089,6 +6089,10 @@ def api_world_boss_attack():
         if qty > 0:
             ships[str(key)] = qty
     auto_select = bool(data.get("auto_select") or data.get("world_boss_auto_attack"))
+    try:
+        hit_mult = int(data.get("hit_mult") or 1)
+    except (TypeError, ValueError):
+        hit_mult = 1
 
     from game.db import begin_write_transaction, commit, rollback
     from game.planet_evolution.repository import get_context_planet
@@ -6110,6 +6114,7 @@ def api_world_boss_attack():
                 planet_id=int(planet["id"]),
                 conn=conn,
                 auto_select=auto_select or not ships,
+                hit_mult=hit_mult,
             )
             if result.get("ok"):
                 commit(conn)

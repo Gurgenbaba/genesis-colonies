@@ -9904,6 +9904,22 @@
     updatePageTimers(serverNow);
   }
 
+  /** Immediate countdown paint for dynamically inserted DOM (Titan-Link, etc.). */
+  GC.refreshCountdowns = function refreshCountdowns(root) {
+    const base = root && root.querySelectorAll ? root : document;
+    const now = getTimerServerNow();
+    const els = base.querySelectorAll
+      ? base.querySelectorAll("[data-countdown-at], [data-timer-target]")
+      : [];
+    els.forEach((el) => {
+      syncTimerElement(el);
+      const rem = timerRemainingSeconds(el, now);
+      const kind = el.dataset.timerKind || inferTimerKind(el);
+      _setIfChanged(el, formatTimerDisplay(rem, kind));
+    });
+    if (typeof GC.startProgressTicker === "function") GC.startProgressTicker();
+  };
+
   let _buildZeroHandled = "";
 
   /** GC-557 — drop cached queue timer state (planet switch / PJAX cleanup). */
@@ -14822,13 +14838,16 @@
             : Date.now() / 1000;
         const elapsed = Math.max(0, Math.min(total, nowSec - (startedAt || endsAt - total)));
         const pct = Math.max(0, Math.min(100, Math.round((elapsed / total) * 100)));
+        const etaLeft = Math.max(0, Math.ceil(endsAt - nowSec));
+        const etaLabel =
+          typeof formatEta === "function" ? formatEta(etaLeft) : String(etaLeft) + "s";
         actions = `<div class="overview-companion-mission-progress" data-companion-progress
             data-started-at="${startedAt || endsAt - total}"
             data-ends-at="${endsAt}"
             data-duration="${total}">
           <div class="overview-companion-mission-progress__meta">
             <p class="hint">${t("overview_companion_mission_eta", "Zurück in")}
-              <span class="gc-mono" data-countdown-at="${endsAt}" data-countdown-format="eta" data-companion-countdown="1">—</span>
+              <span class="gc-mono" data-countdown-at="${endsAt}" data-countdown-format="eta" data-companion-countdown="1">${etaLabel}</span>
             </p>
             <span class="gc-mono" data-companion-progress-pct>${pct}%</span>
           </div>
@@ -14859,8 +14878,9 @@
         </div>`;
       positionCompanionPopover(btn);
       schedulePositionCompanionPopover(btn);
+      updateCompanionProgressDom();
       if (typeof GC.refreshCountdowns === "function") GC.refreshCountdowns(pop);
-      else if (typeof GC.initCountdowns === "function") GC.initCountdowns(pop);
+      else if (typeof GC.startProgressTicker === "function") GC.startProgressTicker();
       armCompanionMissionWatch(btn);
     };
 
@@ -14882,6 +14902,16 @@
       if (fill) fill.style.width = pct + "%";
       if (pctEl) pctEl.textContent = pct + "%";
       if (track) track.setAttribute("aria-valuenow", String(pct));
+      const cdEl = block.querySelector("[data-companion-countdown], [data-countdown-at]");
+      if (cdEl) {
+        const rem = Math.max(0, ends - nowSec);
+        const label =
+          typeof formatEta === "function"
+            ? formatEta(Math.max(0, Math.ceil(rem)))
+            : String(Math.max(0, Math.ceil(rem))) + "s";
+        if (typeof _setIfChanged === "function") _setIfChanged(cdEl, label);
+        else cdEl.textContent = label;
+      }
     };
 
     const syncCompanionDue = async (btn) => {
@@ -33590,6 +33620,24 @@
         if (wavesMeta) wavesMeta.textContent = wTxt;
       }
       if (player.cooldown_until) wbApplyCooldownUi(card, player.cooldown_until);
+      const boss = strike.boss || {};
+      if (boss.defeated) {
+        card.setAttribute("data-wb-status", "defeated");
+        card.classList.add("is-defeated");
+        // Claim UI is SSR — soft PJAX reload so reward strip appears without manual refresh.
+        const reload = () => {
+          if (typeof GC.reloadCurrentPage === "function") {
+            GC.reloadCurrentPage({ reason: "world_boss_defeated" });
+          } else if (typeof GC.navigateTo === "function") {
+            GC.navigateTo(window.location.pathname + window.location.search, {
+              replace: true,
+              reason: "world_boss_defeated",
+            });
+          }
+        };
+        if (typeof GC.setSafeTimeout === "function") GC.setSafeTimeout(reload, 700);
+        else setTimeout(reload, 700);
+      }
     };
 
     GC.playWorldBossAttackFx = wbPlayAttackFx;
@@ -33725,6 +33773,8 @@
       }
       const eventId = Number(btn.getAttribute("data-wb-event-id") || 0);
       if (!eventId) return;
+      let hitMult = Number(btn.getAttribute("data-wb-hit-mult") || 1);
+      if (hitMult !== 5) hitMult = 1;
       const card = btn.closest(".gc-world-boss-card");
       btn.disabled = true;
       btn.dataset.submitting = "1";
@@ -33743,6 +33793,7 @@
           body: JSON.stringify({
             event_id: eventId,
             auto_select: !!autoSelect,
+            hit_mult: hitMult,
             request_id: requestId,
           }),
         });
@@ -34224,6 +34275,7 @@
     const dockRank = root.querySelector("[data-skilltree-dock-rank]");
     const dockBadge = root.querySelector("[data-skilltree-dock-badge]");
     const dockDesc = root.querySelector("[data-skilltree-dock-desc]");
+    const dockEffects = root.querySelector("[data-skilltree-dock-effects]");
     const dockRankbar = root.querySelector("[data-skilltree-dock-rankbar]");
     const dockCost = root.querySelector("[data-skilltree-dock-cost]");
     const dockLocked = root.querySelector("[data-skilltree-dock-locked]");
@@ -34292,6 +34344,34 @@
         if (skill.is_capstone) dockBadge.textContent = tFn("commander_capstone", "Capstone");
       }
       if (dockDesc) dockDesc.textContent = tFn(skill.desc_key, "");
+      if (dockEffects) {
+        const rank = Number(skill.rank) || 0;
+        const chips =
+          rank > 0
+            ? Array.isArray(skill.effect_chips)
+              ? skill.effect_chips
+              : []
+            : Array.isArray(skill.effect_chips_per_rank)
+              ? skill.effect_chips_per_rank
+              : [];
+        const perRankSuffix =
+          rank <= 0 ? " / " + tFn("commander_chip_per_rank", "Rang") : "";
+        const prepLabel = tFn("commander_chip_prepared", "vorbereitet");
+        dockEffects.innerHTML = chips
+          .map((chip) => {
+            const label = tFn(chip.label_key || chip.key, chip.key || "");
+            const val = String(chip.display || "") + perRankSuffix;
+            const prep = chip.prepared
+              ? `<span class="skilltree-map-dock__effect-prep">${prepLabel}</span>`
+              : "";
+            return (
+              `<li class="skilltree-map-dock__effect${chip.prepared ? " is-prepared" : ""}">` +
+              `<span class="skilltree-map-dock__effect-label">${label}</span>` +
+              `<span class="skilltree-map-dock__effect-val gc-mono">${val}</span>${prep}</li>`
+            );
+          })
+          .join("");
+      }
       if (dockRankbar) {
         const maxR = Math.max(1, Number(skill.max_rank) || 1);
         const pct = Math.min(100, Math.round(((Number(skill.rank) || 0) * 100) / maxR));

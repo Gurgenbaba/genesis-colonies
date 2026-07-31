@@ -24623,6 +24623,42 @@ body.gc-combat-report-open { overflow: hidden; }
   color: rgba(140, 200, 215, 0.82);
   opacity: 1;
 }
+.gc-player-card-class {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0.35rem 0 0.2rem;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid color-mix(in srgb, var(--gc-accent, #5ad1ff) 28%, #2a3a45);
+  background: rgba(0, 0, 0, 0.22);
+  border-radius: var(--gc-radius-sm, 2px);
+  max-width: 16rem;
+}
+.gc-player-card-class-portrait {
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: var(--gc-radius-xs, 0);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  flex: 0 0 auto;
+}
+.gc-player-card-class-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  min-width: 0;
+}
+.gc-player-card-class-label {
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.65;
+}
+.gc-player-card-class-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
 .gc-player-card-ai-banner {
   display: flex;
   flex-direction: column;
@@ -28295,6 +28331,45 @@ button.pe-hero-planet-hint:focus-visible {
   background: rgba(4, 12, 20, 0.45);
   padding: 0.35rem 0.55rem 0.55rem;
 }
+.gc-world-boss-page .gc-world-boss-claim-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem 0.75rem;
+  margin-top: 0.65rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid rgba(80, 220, 140, 0.45);
+  background: linear-gradient(180deg, rgba(18, 42, 28, 0.92), rgba(8, 18, 14, 0.96));
+  border-radius: var(--gc-radius-sm, 2px);
+  box-shadow: 0 0 14px rgba(60, 180, 100, 0.12);
+}
+.gc-world-boss-page .gc-world-boss-claim-panel__head {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+.gc-world-boss-page .gc-world-boss-claim-panel__title {
+  margin: 0 0 0.25rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(180, 255, 210, 0.95);
+}
+.gc-world-boss-page .gc-world-boss-claim-panel__loot {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.55rem;
+  font-size: 0.74rem;
+  opacity: 0.9;
+}
+.gc-world-boss-page .gc-world-boss-claim-panel .wb-claim-btn {
+  flex: 0 0 auto;
+  min-height: 2.4rem;
+  white-space: nowrap;
+}
 .gc-world-boss-page .gc-world-boss-rewards-toggle {
   cursor: pointer;
   list-style: none;
@@ -29123,6 +29198,21 @@ button.pe-hero-planet-hint:focus-visible {
   align-items: center;
   justify-content: center;
   gap: 0.35rem;
+}
+.gc-world-boss-page .wb-hit-group {
+  display: inline-grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+  min-width: 7.5rem;
+  width: 7.5rem;
+  flex: 0 0 auto;
+}
+.gc-world-boss-page .wb-hit-group .wb-attack-btn {
+  min-width: 0;
+  width: 100%;
+  padding-left: 0.35rem;
+  padding-right: 0.35rem;
+  box-sizing: border-box;
 }
 .gc-world-boss-page .gc-world-boss-actions .wb-auto-attack-btn.is-active {
   border-color: rgba(80, 220, 140, 0.65);
@@ -42997,6 +43087,42 @@ a.alliance-hub-browse-card:hover,
   font-size: 0.8rem;
   line-height: 1.35;
   opacity: 0.85;
+}
+.skilltree-page .skilltree-map-dock__effects {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.skilltree-page .skilltree-map-dock__effect {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  font-size: 0.74rem;
+  border: 1px solid color-mix(in srgb, var(--cc-theme, var(--gc-accent)) 22%, #2a3a45);
+  background: rgba(0, 0, 0, 0.18);
+  padding: 0.18rem 0.35rem;
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.skilltree-page .skilltree-map-dock__effect-label {
+  opacity: 0.8;
+}
+.skilltree-page .skilltree-map-dock__effect-val {
+  margin-left: auto;
+  color: color-mix(in srgb, var(--cc-theme, var(--gc-accent)) 70%, #fff 20%);
+}
+.skilltree-page .skilltree-map-dock__effect-prep {
+  font-size: 0.65rem;
+  opacity: 0.65;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.skilltree-page .skilltree-map-dock__effect.is-prepared {
+  border-style: dashed;
+  opacity: 0.9;
 }
 .skilltree-page .skilltree-map-dock__rankbar {
   height: 4px;
