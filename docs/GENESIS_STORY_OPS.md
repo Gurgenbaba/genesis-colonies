@@ -192,10 +192,11 @@ Default: narrative Rewards **auto-grant** beim Reward-Beat (kein Claim-UI wie Di
 | **GC-2517** | Free Shop (Ark-Token redeem on `/shop`) |
 | **GC-2519** | Kapitel-Drip Ark-Token (Engine-owned, idempotent) |
 | **GC-2518** | Side-Ops Year Band |
+| **GC-WB-TAME** | Secondary Ark-Token earn: World Boss companion missions (`story_scrap_token` via inventory grant; Free Shop spend unchanged) |
 
 ## Phase 2 — Imperium Chronicle (Jahres-Lore)
 
-Siehe [GENESIS_LORE_BIBLE.md](GENESIS_LORE_BIBLE.md). Packs: `ark_signal`, `living_lattice`, `birth_of_worlds`, `heat_and_shadow`, `anomaly_protocol`, `unlabeled_depth`, `side_ops_year` — je mit `season_code`/`season_key` (TOC-Badge). Side-Ops Year One: 7 Arcs. Contact-Orb + **Free Shop** (`/shop` Tab). **Ark-Token Kapitel-Drip:** Engine vergibt bei Kapitelabschluss (Main 2 / Finale 6 / Side 4), Catch-up in `ensure_player_story`.
+Siehe [GENESIS_LORE_BIBLE.md](GENESIS_LORE_BIBLE.md). Packs: `ark_signal`, `living_lattice`, `birth_of_worlds`, `heat_and_shadow`, `anomaly_protocol`, `unlabeled_depth`, `side_ops_year` — je mit `season_code`/`season_key` (TOC-Badge). Side-Ops Year One: 7 Arcs. Contact-Orb + **Free Shop** (`/shop` Tab). **Ark-Token Kapitel-Drip:** Engine vergibt bei Kapitelabschluss (Main 2 / Finale 6 / Side 4), Catch-up in `ensure_player_story`. **Zusätzlich:** gezähmte World-Boss-Companions können Missionen für Ark-Token abschließen ([WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) GC-WB-TAME) — gleiche Inventory-Währung, kein paralleler Token.
 
 ---
 

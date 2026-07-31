@@ -1171,8 +1171,10 @@ def test_main_js_apply_planet_hero_theme_border_fx():
     assert "no panel plate / aura chrome behind the frame" in css
     assert "#020810" not in css.split(".overview-hero--themed.gc-planet-hero,")[1].split(".overview-hero-atmo")[0]
     assert "z-index: 4" in css.split(".overview-hero-hud-frame,")[1].split(".overview-hero-frame-glow")[0]
-    assert "overview-hero-activity-panel" in overview
-    assert 'id="overview-activities"' in overview
+    assert "overview-companion-layer" in overview
+    assert 'id="overview-companion-layer"' in overview
+    assert "overview-hero-activity-panel" not in overview
+    assert 'id="overview-activities"' not in overview
     assert "overview-activities-panel--primary" not in overview
     assert "overview-hero-corner--tl" in overview
     assert "overview-hero-corner--br" in overview
@@ -1181,21 +1183,19 @@ def test_main_js_apply_planet_hero_theme_border_fx():
     assert "galactic_status_banner" not in overview
     assert "gc-galaxy-status" not in overview
     assert ".overview-hero-corner--bl" in css
-    assert ".overview-hero-activity-panel" in css
-    assert 'getElementById("overview-activities")' in src
+    assert ".overview-companion-layer{" in css
+    assert "position: absolute" in css.split(".overview-companion-layer{")[1].split(".overview-companion-hotspot{")[0]
+    assert "overview-companion-float" in css
+    assert 'getElementById("overview-companion-layer")' in src
+    assert "data-companion-nav-wb" in src
+    assert "overview_companion_goto_wb" in src
+    assert 'GC.navigateTo(path)' in src or 'GC.navigateTo(path)' in src.replace(" ", "")
+    assert "data-companion-nav-wb" in src and "navigateTo" in src.split("initOverviewCompanions")[1].split("function parseInventoryPageState")[0]
+    hero_img = css.split(".overview-hero--themed.gc-planet-hero .overview-hero-bg picture,")[1].split(".overview-hero-hud{")[0]
+    assert "transform: none" in hero_img
+    assert ":hover .overview-hero-bg picture" not in css.split(".overview-hero--themed.gc-planet-hero .overview-hero-bg picture,")[0][-200:] + hero_img
     assert "overview-hero-title-plate" in overview
-    assert "top: var(--hero-activity-top" in css.split(".overview-hero-activity-panel")[1].split(".overview-hero-activity-head")[0]
-    assert "scale(1.05)" in css
-    idx = css.find(".overview-hero-activity-panel .overview-activity-link,")
-    assert idx >= 0
-    assert "flex-direction: column" in css[idx : idx + 520]
-    assert "--hero-activity-glass" in css
-    assert "blur(2.5px)" in css
-    assert ".overview-hero--themed.gc-planet-hero:hover .overview-hero-bg::after" in css
-    assert "radial-gradient" in css.split(".overview-hero--themed.gc-planet-hero:hover .overview-hero-bg::after")[1][:800]
-    assert "overview-hero-activity-panel .overview-activity-row::after" in css
-    assert "opacity: 0" in css.split(".overview-hero-activity-panel{")[1].split(".overview-hero-activity-head")[0]
-    assert ".overview-hero--themed.gc-planet-hero:hover .overview-hero-activity-panel" in css
+    assert ".overview-hero--themed.gc-planet-hero:hover .overview-hero-bg::after" not in css
     assert "--hero-frame-top-name: color-mix" in css
     assert "var(--planet-accent-secondary" in css.split("--hero-frame-top-name")[1].split("--hero-frame-top-coords")[0]
 

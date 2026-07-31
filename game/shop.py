@@ -33,7 +33,9 @@ STATUS_FAILED = "failed"
 STATUS_REFUNDED = "refunded"
 
 # Bump when reseeding prices/payloads into existing DBs (upsert).
-CATALOG_VERSION = 5
+CATALOG_VERSION = 6
+
+SKU_TITAN_SLOT_PLUS = "titan_slot_plus"
 
 # Free-Baseline Value Balance (GC-2310…2313):
 # Paid sells scarce flexible TK + dense high-tier packs; domain boosters must beat ~2× login-month skip.
@@ -46,6 +48,7 @@ SHOP_SKU_IMAGES: Dict[str, str] = {
     "booster_pack_starter": "img/pass/build_boost.webp",
     "container_pack_rare": "img/pass/rare_container.webp",
     "commander_supply_pack": "img/pass/relic_container.webp",
+    SKU_TITAN_SLOT_PLUS: "img/pass/premium.webp",
     "name_style_ash": "img/pass/premium.webp",
     "name_style_signal": "img/pass/premium.webp",
     "name_style_etched": "img/pass/premium.webp",
@@ -152,6 +155,16 @@ DEFAULT_CATALOG: Tuple[Dict[str, Any], ...] = (
                 {"item_key": "container_relic", "amount": 2},
             ],
         },
+    },
+    {
+        "sku": SKU_TITAN_SLOT_PLUS,
+        "kind": KIND_INVENTORY_BUNDLE,
+        "title_key": "shop_sku_titan_slot",
+        "hint_key": "shop_sku_titan_slot_hint",
+        "price_cents": 299,
+        "currency": "eur",
+        "sort_order": 55,
+        "payload": {"companion_slots": 1},
     },
     {
         "sku": "name_style_ash",
@@ -699,6 +712,15 @@ def create_pending_order(
     ):
         return False, "already_owned", None
 
+    if product["sku"] == SKU_TITAN_SLOT_PLUS and not allow_owned:
+        from .world_boss_companions import (
+            MAX_COMPANION_CAPACITY,
+            get_companion_capacity,
+        )
+
+        if get_companion_capacity(pid, conn=conn) >= int(MAX_COMPANION_CAPACITY):
+            return False, "already_owned", None
+
     ts = float(now if now is not None else time.time())
     cur = conn.execute(
         """
@@ -845,7 +867,12 @@ def fulfill_order(
 
         items = payload.get("items") or []
         tk_sec = max(0, int(payload.get("timekeeper_sec") or 0))
-        if (not isinstance(items, list) or not items) and tk_sec <= 0:
+        companion_slots = max(0, int(payload.get("companion_slots") or 0))
+        if (
+            (not isinstance(items, list) or not items)
+            and tk_sec <= 0
+            and companion_slots <= 0
+        ):
             return False, "invalid_payload", order
         granted_items = []
         for entry in items if isinstance(items, list) else []:
@@ -875,6 +902,29 @@ def fulfill_order(
             bal = credit(pid, tk_sec, source, conn=conn)
             granted["timekeeper_sec"] = tk_sec
             granted["balance_sec"] = bal
+        if companion_slots > 0:
+            from .world_boss_companions import grant_companion_slot
+
+            slot_res = grant_companion_slot(pid, conn=conn, source=source, now=ts)
+            if not slot_res.get("ok"):
+                # At max capacity: still fulfill as already_owned (no double charge loop).
+                if str(slot_res.get("error") or "") == "already_owned":
+                    grant_reason = "already_owned"
+                    granted["companion_slots"] = slot_res
+                else:
+                    conn.execute(
+                        """
+                        UPDATE shop_orders SET status = ?, fulfill_reason = ? WHERE id = ?;
+                        """,
+                        (STATUS_FAILED, str(slot_res.get("error") or "grant_failed"), int(order_id)),
+                    )
+                    return False, str(slot_res.get("error") or "grant_failed"), get_order(
+                        int(order_id), conn=conn
+                    )
+            else:
+                granted["companion_slots"] = slot_res
+                if int(slot_res.get("granted") or 0) <= 0:
+                    grant_reason = "already_owned"
     elif kind == KIND_COSMETIC_UNLOCK:
         from .playercard import (
             COSMETIC_KIND_NAME_STYLE,
@@ -1112,8 +1162,17 @@ def _cosmetic_payload_owned(player_id: int, payload: Mapping[str, Any], *, conn)
 def serialize_catalog_for_client(*, conn, player_id: Optional[int] = None) -> Dict[str, Any]:
     products = list_catalog(conn=conn)
     season_owned = False
+    titan_cap_max = False
     if player_id:
         season_owned, _ = _season_pass_owned(int(player_id), conn=conn)
+        from .world_boss_companions import (
+            MAX_COMPANION_CAPACITY,
+            get_companion_capacity,
+        )
+
+        titan_cap_max = get_companion_capacity(int(player_id), conn=conn) >= int(
+            MAX_COMPANION_CAPACITY
+        )
     out = []
     for p in products:
         entry = dict(p)
@@ -1121,6 +1180,8 @@ def serialize_catalog_for_client(*, conn, player_id: Optional[int] = None) -> Di
         owned = False
         if p["sku"] == SKU_SEASON_PASS:
             owned = bool(season_owned)
+        elif p["sku"] == SKU_TITAN_SLOT_PLUS:
+            owned = bool(titan_cap_max)
         elif str(p.get("kind")) == KIND_COSMETIC_UNLOCK and player_id:
             owned = _cosmetic_payload_owned(int(player_id), payload, conn=conn)
         entry["owned"] = owned
@@ -1146,6 +1207,7 @@ def serialize_catalog_for_client(*, conn, player_id: Optional[int] = None) -> Di
             "preview_style": str(payload.get("preview_style") or "") or None,
             "unlock_count": len(unlocks_display),
             "unlocks": unlocks_display,
+            "companion_slots": int(payload.get("companion_slots") or 0),
         }
         entry.pop("payload", None)
         out.append(entry)

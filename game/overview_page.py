@@ -556,6 +556,17 @@ def build_overview_status(
     if include_log:
         status["recent_log"] = fetch_recent_log(int(user_id), limit=5, conn=conn)
 
+    # GC-WB-TAME: tamed World Boss companions on overview landscape.
+    try:
+        from .world_boss_companions import build_overview_companions
+
+        if conn is not None:
+            status["companions"] = build_overview_companions(int(user_id), conn=conn)
+        else:
+            status["companions"] = {"ready": False, "slots": [], "owned_count": 0}
+    except Exception:
+        status["companions"] = {"ready": False, "slots": [], "owned_count": 0}
+
     return status
 
 

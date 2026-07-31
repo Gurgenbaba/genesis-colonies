@@ -158,19 +158,23 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
 
         def _world_boss() -> None:
             from .world_boss import maybe_tick_world_boss_schedule
+            from .world_boss_companions import tick_companion_missions
 
             wb_tick = maybe_tick_world_boss_schedule(conn=conn)
+            companion_tick = tick_companion_missions(conn=conn)
             auto = wb_tick.get("auto_attack") or {}
             if (
                 wb_tick.get("expired_ids")
                 or wb_tick.get("spawned_event_id")
                 or int(auto.get("fired") or 0) > 0
                 or int(auto.get("stopped") or 0) > 0
+                or int(companion_tick.get("marked_ready") or 0) > 0
             ):
                 _worker_log(
                     f"world-boss expired={wb_tick.get('expired_ids')} "
                     f"spawned={wb_tick.get('spawned_event_id')} "
-                    f"auto_fired={auto.get('fired')} auto_stopped={auto.get('stopped')}"
+                    f"auto_fired={auto.get('fired')} auto_stopped={auto.get('stopped')} "
+                    f"missions_ready={companion_tick.get('marked_ready')}"
                 )
 
         def _asteroids() -> None:

@@ -4466,6 +4466,9 @@
 
     const actList = document.getElementById("overview-activities");
     const activities = status?.activities;
+    if (status?.companions && typeof GC.patchOverviewCompanions === "function") {
+      GC.patchOverviewCompanions(status.companions);
+    }
     if (!actList || !Array.isArray(activities)) return;
 
     const hrefFor = (key) => {
@@ -14365,6 +14368,7 @@
   GC.patchPlanetRelocationFromState = patchPlanetRelocationFromState;
 
   function initOverview() {
+    initOverviewCompanions();
     const trigger = document.getElementById("overview-planet-menu-trigger");
     const modal = document.getElementById("gc-planet-manage-root");
     const renameForm = document.getElementById("overview-planet-rename-form");
@@ -14575,6 +14579,362 @@
     }
 
     GC.applyOverviewPlanetName = setPlanetNameDisplay;
+  }
+
+  function initOverviewCompanions() {
+    const layer = document.getElementById("overview-companion-layer");
+    const pop = document.getElementById("overview-companion-popover");
+    if (!layer || !pop) return;
+    if (layer.dataset.companionBound === "1") return;
+    layer.dataset.companionBound = "1";
+
+    const popHome = pop.parentElement;
+    let activeHotspot = null;
+
+    const clearHotspotActive = () => {
+      layer.querySelectorAll(".overview-companion-hotspot.is-popover-open").forEach((el) => {
+        el.classList.remove("is-popover-open");
+        el.setAttribute("aria-expanded", "false");
+      });
+      activeHotspot = null;
+    };
+
+    const closeCompanionPopover = () => {
+      pop.hidden = true;
+      pop.innerHTML = "";
+      pop.classList.remove("is-open", "gc-popover-layer");
+      pop.removeAttribute("data-placement");
+      pop.style.left = "";
+      pop.style.top = "";
+      pop.style.visibility = "";
+      pop.style.setProperty("--companion-caret-x", "");
+      if (popHome && pop.parentElement !== popHome) {
+        popHome.appendChild(pop);
+      }
+      clearHotspotActive();
+    };
+
+    const positionCompanionPopover = (btn) => {
+      if (!btn) return;
+      pop.classList.add("gc-popover-layer", "is-open");
+      if (pop.parentElement !== document.body) {
+        document.body.appendChild(pop);
+      }
+      pop.hidden = false;
+      pop.style.visibility = "hidden";
+      // Park offscreen while measuring — never leave a 0×0 box at viewport origin.
+      pop.style.left = "-9999px";
+      pop.style.top = "0px";
+
+      const margin = 10;
+      const rect = btn.getBoundingClientRect();
+      const popRect = pop.getBoundingClientRect();
+      const popW = Math.max(popRect.width, 1);
+      const popH = Math.max(popRect.height, 1);
+
+      let left = rect.left + rect.width / 2 - popW / 2;
+      left = Math.max(margin, Math.min(left, window.innerWidth - popW - margin));
+
+      let top = rect.top - popH - margin;
+      let placement = "above";
+      if (top < margin) {
+        top = rect.bottom + margin;
+        placement = "below";
+      }
+      // Tall mission popovers: keep in viewport without snapping to 0,0.
+      if (top + popH > window.innerHeight - margin) {
+        top = Math.max(margin, window.innerHeight - popH - margin);
+      }
+      // If still covering the hotspot awkwardly and side space exists, nudge beside.
+      if (placement === "below" && top < rect.top && popH > window.innerHeight * 0.55) {
+        const sideLeft = rect.right + margin;
+        const sideRight = rect.left - popW - margin;
+        if (sideLeft + popW <= window.innerWidth - margin) {
+          left = sideLeft;
+          top = Math.max(margin, Math.min(rect.top, window.innerHeight - popH - margin));
+          placement = "below";
+        } else if (sideRight >= margin) {
+          left = sideRight;
+          top = Math.max(margin, Math.min(rect.top, window.innerHeight - popH - margin));
+          placement = "below";
+        }
+      }
+
+      const caretX = Math.max(16, Math.min(popW - 16, rect.left + rect.width / 2 - left));
+      pop.dataset.placement = placement;
+      pop.style.setProperty("--companion-caret-x", `${caretX}px`);
+      pop.style.left = `${Math.round(left)}px`;
+      pop.style.top = `${Math.round(top)}px`;
+      pop.style.visibility = "visible";
+    };
+
+    const schedulePositionCompanionPopover = (btn) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (!btn || pop.hidden || activeHotspot !== btn) return;
+          positionCompanionPopover(btn);
+        });
+      });
+    };
+
+    const badgeLabel = (status, owned) => {
+      if (status === "away") return t("overview_companion_away", "Mission");
+      if (status === "ready") return t("overview_companion_ready", "Bereit");
+      if (owned) return t("overview_companion_idle", "Bereit");
+      return t("overview_companion_locked", "???");
+    };
+
+    const formatMissionHours = (sec) => {
+      const h = Math.max(1, Math.round(Number(sec || 0) / 3600));
+      return `${h}h`;
+    };
+
+    const parseOffers = (btn) => {
+      try {
+        const raw = btn.getAttribute("data-companion-offers") || "[]";
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (_e) {
+        return [];
+      }
+    };
+
+    const renderPopover = (btn) => {
+      const owned = btn.getAttribute("data-companion-owned") === "1";
+      const bossKey = btn.getAttribute("data-companion-boss") || "";
+      const name = btn.getAttribute("data-companion-name") || bossKey;
+      const status = btn.getAttribute("data-companion-status") || "locked";
+      const power = btn.getAttribute("data-companion-power") || "0";
+      const endurance = btn.getAttribute("data-companion-endurance") || "0";
+      const cunning = btn.getAttribute("data-companion-cunning") || "0";
+      const reward = btn.getAttribute("data-companion-reward") || "0";
+      const endsAt = Number(btn.getAttribute("data-companion-ends-at") || 0);
+      const canStart = btn.getAttribute("data-companion-can-start") === "1";
+      const canClaim = btn.getAttribute("data-companion-can-claim") === "1";
+      const outcome = btn.getAttribute("data-companion-outcome") || "";
+      const offers = parseOffers(btn);
+
+      let actions = "";
+      const activeEventId = Number(btn.getAttribute("data-companion-active-event") || 0);
+      if (!owned) {
+        if (activeEventId > 0) {
+          actions = `<button type="button" class="gc-btn gc-btn-primary" data-companion-nav-wb data-companion-event-id="${activeEventId}">${t("overview_companion_goto_wb", "Zum World Boss")}</button>`;
+        } else {
+          actions = `<p class="hint">${t("overview_companion_locked_hint", "Noch nicht gezähmt — World Boss Phase 3.")}</p>`;
+        }
+      } else if (canClaim) {
+        const fail = outcome === "fail";
+        const claimLabel = fail
+          ? t("overview_companion_claim_fail", "Mission gescheitert — abschließen")
+          : t("overview_companion_claim", "Ark-Token abholen");
+        const claimExtra = fail ? "" : ` (+${reward})`;
+        actions = `<p class="hint">${fail ? t("overview_companion_fail_hint", "Der Titan kehrt leer zurück.") : t("overview_companion_success_hint", "Mission erfolgreich.")}</p>
+          <button type="button" class="gc-btn gc-btn-primary" data-companion-action="claim" data-companion-boss="${bossKey}">${claimLabel}${claimExtra}</button>`;
+      } else if (canStart && offers.length) {
+        actions = `<p class="overview-companion-mission-lead">${t("overview_companion_pick_mission", "Wähle eine Ark-Mission")}</p>
+          <div class="overview-companion-mission-grid">
+            ${offers
+              .map((offer) => {
+                const vk = String(offer.variant_key || "");
+                const title = t(offer.title_key || vk, vk);
+                const hint = t(offer.hint_key || "", "");
+                const risk = t(offer.risk_key || "", "");
+                const dur = formatMissionHours(offer.duration_sec);
+                const succ = Math.round(Number(offer.success_chance || 0) * 100);
+                const tok = Number(offer.reward_tokens || 0);
+                return `<button type="button" class="overview-companion-mission-card" data-companion-action="start" data-companion-boss="${bossKey}" data-companion-variant="${vk}">
+                  <span class="overview-companion-mission-title">${title}</span>
+                  <span class="overview-companion-mission-meta gc-mono">${dur} · ${succ}% · +${tok} Ark</span>
+                  <span class="overview-companion-mission-risk">${risk}</span>
+                  <span class="overview-companion-mission-hint hint">${hint}</span>
+                </button>`;
+              })
+              .join("")}
+          </div>`;
+      } else if (canStart) {
+        actions = `<button type="button" class="gc-btn gc-btn-primary" data-companion-action="start" data-companion-boss="${bossKey}" data-companion-variant="strike">${t("overview_companion_mission", "Auf Mission schicken")} (+${reward} Ark)</button>`;
+      } else if (status === "away" && endsAt > 0) {
+        actions = `<p class="hint">${t("overview_companion_mission_eta", "Zurück in")} <span class="gc-mono" data-countdown-at="${endsAt}" data-countdown-format="eta">—</span></p>`;
+      }
+
+      clearHotspotActive();
+      btn.classList.add("is-popover-open");
+      btn.setAttribute("aria-expanded", "true");
+      activeHotspot = btn;
+
+      pop.innerHTML = `
+        <div class="overview-companion-popover-inner">
+          <p class="overview-companion-popover-eyebrow">${t("overview_companion_link", "Titan-Link")}</p>
+          <header class="overview-companion-popover-head">
+            <h3 id="overview-companion-popover-title">${name}</h3>
+            <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-companion-close aria-label="${t("close", "Schließen")}">×</button>
+          </header>
+          <dl class="overview-companion-stats">
+            <div><dt>${t("overview_companion_stat_power", "Power")}</dt><dd class="gc-mono">${power}</dd></div>
+            <div><dt>${t("overview_companion_stat_endurance", "Ausdauer")}</dt><dd class="gc-mono">${endurance}</dd></div>
+            <div><dt>${t("overview_companion_stat_cunning", "List")}</dt><dd class="gc-mono">${cunning}</dd></div>
+          </dl>
+          <div class="overview-companion-actions">${actions}</div>
+        </div>`;
+      positionCompanionPopover(btn);
+      schedulePositionCompanionPopover(btn);
+      if (typeof GC.refreshCountdowns === "function") GC.refreshCountdowns(pop);
+      else if (typeof GC.initCountdowns === "function") GC.initCountdowns(pop);
+    };
+
+    const applyCompanionState = (companions) => {
+      if (!companions || !Array.isArray(companions.slots)) return;
+      companions.slots.forEach((slot) => {
+        const btn = layer.querySelector(`[data-companion-boss="${slot.boss_key}"]`);
+        if (!btn) return;
+        const owned = !!slot.owned;
+        const status = slot.status || (owned ? "idle" : "locked");
+        const mission = slot.mission || {};
+        const keepOpen = btn === activeHotspot;
+        btn.className = `overview-companion-hotspot overview-companion-hotspot--${status}${owned ? "" : " is-locked"}`;
+        if (keepOpen) btn.classList.add("is-popover-open");
+        btn.setAttribute("data-companion-owned", owned ? "1" : "0");
+        btn.setAttribute("data-companion-status", status);
+        btn.setAttribute("data-companion-power", String((slot.stats && slot.stats.power) || 0));
+        btn.setAttribute("data-companion-endurance", String((slot.stats && slot.stats.endurance) || 0));
+        btn.setAttribute("data-companion-cunning", String((slot.stats && slot.stats.cunning) || 0));
+        btn.setAttribute("data-companion-reward", String(mission.reward_tokens || 0));
+        btn.setAttribute("data-companion-ends-at", String(mission.ends_at || 0));
+        btn.setAttribute("data-companion-can-start", mission.can_start ? "1" : "0");
+        btn.setAttribute("data-companion-can-claim", mission.can_claim ? "1" : "0");
+        btn.setAttribute("data-companion-active-event", String(slot.active_event_id || 0));
+        btn.setAttribute("data-companion-outcome", String(mission.outcome || ""));
+        try {
+          btn.setAttribute("data-companion-offers", JSON.stringify(slot.mission_offers || []));
+        } catch (_e) {
+          btn.setAttribute("data-companion-offers", "[]");
+        }
+        const badge = btn.querySelector("[data-companion-badge]");
+        if (badge) badge.textContent = badgeLabel(status, owned);
+      });
+    };
+
+    GC.patchOverviewCompanions = applyCompanionState;
+
+    layer.addEventListener("click", (ev) => {
+      const btn = ev.target.closest("[data-companion-boss]");
+      if (!btn || !layer.contains(btn)) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (activeHotspot === btn && !pop.hidden) {
+        closeCompanionPopover();
+        return;
+      }
+      renderPopover(btn);
+    });
+
+    const onDocPointerDown = (ev) => {
+      if (pop.hidden) return;
+      const target = ev.target;
+      if (pop.contains(target)) return;
+      if (activeHotspot && activeHotspot.contains(target)) return;
+      closeCompanionPopover();
+    };
+
+    const onReposition = () => {
+      if (pop.hidden || !activeHotspot) return;
+      schedulePositionCompanionPopover(activeHotspot);
+    };
+
+    const onKeyDown = (ev) => {
+      if (ev.key === "Escape" && !pop.hidden) {
+        closeCompanionPopover();
+      }
+    };
+
+    document.addEventListener("pointerdown", onDocPointerDown, true);
+    window.addEventListener("resize", onReposition);
+    window.addEventListener("scroll", onReposition, true);
+    document.addEventListener("keydown", onKeyDown);
+
+    pop.addEventListener("click", async (ev) => {
+      if (ev.target.closest("[data-companion-close]")) {
+        closeCompanionPopover();
+        return;
+      }
+      const navBtn = ev.target.closest("[data-companion-nav-wb]");
+      if (navBtn) {
+        const eid = Number(navBtn.getAttribute("data-companion-event-id") || 0);
+        closeCompanionPopover();
+        const path = eid > 0 ? `/world-boss?event_id=${eid}` : "/world-boss";
+        if (typeof GC.navigateTo === "function") GC.navigateTo(path);
+        return;
+      }
+      const actionBtn = ev.target.closest("[data-companion-action]");
+      if (!actionBtn) return;
+      const action = actionBtn.getAttribute("data-companion-action");
+      const bossKey = actionBtn.getAttribute("data-companion-boss");
+      const variantKey = actionBtn.getAttribute("data-companion-variant") || "strike";
+      if (!action || !bossKey) return;
+      actionBtn.disabled = true;
+      const requestId =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `cmp-${Date.now()}`;
+      try {
+        const res = await GC.fetchGameAction("/api/world-boss/companion/mission", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            "X-Request-Id": requestId,
+          },
+          body: JSON.stringify({
+            action,
+            boss_key: bossKey,
+            variant_key: variantKey,
+            request_id: requestId,
+          }),
+        });
+        if (res && res.state && typeof GC.applyActionState === "function") {
+          GC.applyActionState(res, res.ok ? "companion_mission" : "companion_mission_error");
+        }
+        if (res && res.ok) {
+          const companions = res.state?.overview?.status?.companions;
+          if (companions) applyCompanionState(companions);
+          if (action === "claim") {
+            const failed = res.mission && res.mission.success === false;
+            showNotify(
+              failed
+                ? t("overview_companion_claim_fail_toast", "Mission gescheitert — keine Ark-Token.")
+                : t("overview_companion_claim_ok", "Ark-Token erhalten."),
+              failed ? "warning" : "success"
+            );
+          } else {
+            showNotify(
+              t("overview_companion_mission_ok", "Companion auf Mission geschickt."),
+              "success"
+            );
+          }
+          closeCompanionPopover();
+        } else {
+          showNotify(
+            t(String(res?.error || "companion_mission_failed"), "Mission fehlgeschlagen."),
+            "error"
+          );
+          actionBtn.disabled = false;
+        }
+      } catch (_err) {
+        showNotify(t("msg_action_failed", "Aktion fehlgeschlagen."), "error");
+        actionBtn.disabled = false;
+      }
+    });
+
+    if (typeof GC.registerCleanup === "function") {
+      GC.registerCleanup(() => {
+        document.removeEventListener("pointerdown", onDocPointerDown, true);
+        window.removeEventListener("resize", onReposition);
+        window.removeEventListener("scroll", onReposition, true);
+        document.removeEventListener("keydown", onKeyDown);
+        closeCompanionPopover();
+        delete layer.dataset.companionBound;
+      });
+    }
   }
 
   function parseInventoryPageState() {
@@ -33301,6 +33661,62 @@
         } finally {
           autoBtn.disabled = false;
           delete autoBtn.dataset.submitting;
+        }
+      });
+    });
+
+    root.querySelectorAll("[data-wb-catch-attempt]").forEach((catchBtn) => {
+      if (catchBtn.dataset.wbCatchBound === "1") return;
+      catchBtn.dataset.wbCatchBound = "1";
+      catchBtn.addEventListener("click", async (ev) => {
+        ev.preventDefault();
+        if (catchBtn.disabled || catchBtn.dataset.submitting === "1") return;
+        const eventId = Number(catchBtn.getAttribute("data-wb-event-id") || 0);
+        if (!eventId) return;
+        catchBtn.disabled = true;
+        catchBtn.dataset.submitting = "1";
+        const requestId =
+          typeof crypto !== "undefined" && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `wbc-${Date.now()}`;
+        try {
+          const res = await GC.fetchGameAction("/api/world-boss/catch", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              "X-Request-Id": requestId,
+            },
+            body: JSON.stringify({ event_id: eventId, request_id: requestId }),
+          });
+          if (res && res.state && typeof GC.applyActionState === "function") {
+            GC.applyActionState(res, res.ok ? "world_boss_catch" : "world_boss_catch_error");
+          }
+          if (res && res.ok) {
+            const catchRes = res.catch || {};
+            if (catchRes.success) {
+              showNotify(t("wb_catch_success", "Gezähmt! Companion erscheint auf der Übersicht."), "success");
+            } else {
+              showNotify(t("wb_catch_fail", "Zähmen fehlgeschlagen — Versuch verbraucht. Cooldown aktiv."), "warning");
+            }
+            if (typeof GC.reloadCurrentPage === "function") GC.reloadCurrentPage();
+          } else {
+            const err = String(res?.error || "world_boss_catch_failed");
+            const map = {
+              phase_locked: t("wb_catch_phase_locked", "Zähmen erst ab Phase 3 (≤25 % HP)."),
+              catch_cooldown: t("wb_catch_cooldown", "Nächster Zähmversuch in") + "…",
+              insufficient_timekeeper: t("wb_catch_need_tk", "Nicht genug Timekeeper (10h nötig)."),
+              already_tamed: t("wb_catch_owned", "Bereits gezähmt — Companion auf der Übersicht."),
+              capacity_full: t("wb_catch_capacity_full", "Titan-Slots voll — im Shop erweiterbar."),
+            };
+            showNotify(map[err] || t("msg_action_failed", "Aktion fehlgeschlagen."), "error");
+            catchBtn.disabled = false;
+            delete catchBtn.dataset.submitting;
+          }
+        } catch (_err) {
+          showNotify(t("msg_action_failed", "Aktion fehlgeschlagen."), "error");
+          catchBtn.disabled = false;
+          delete catchBtn.dataset.submitting;
         }
       });
     });

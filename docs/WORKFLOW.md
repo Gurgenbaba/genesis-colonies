@@ -21,7 +21,7 @@ Epics beschreiben nur das Ziel. **Niemals direkt implementieren.**
 | EPIC-15 | Imperium & Expansion (Genesis 2.0) | [IMPERIUM_VISION.md](IMPERIUM_VISION.md) |
 | EPIC-17 | Imperial Directives (High Command) | [IMPERIAL_DIRECTIVES.md](IMPERIAL_DIRECTIVES.md) |
 | EPIC-19 | Performance Core (Maximum Speed Stack) | [GC_PERF_CORE.md](GC_PERF_CORE.md) |
-| EPIC-20 | World Boss Events (serverweite PvE-Bosse) | [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) |
+| EPIC-20 | World Boss Events (serverweite PvE-Bosse, Catch/Companions) | [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) |
 | EPIC-21 | Pirate Ecosystem (Living Threat) | [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md) |
 | EPIC-22 | LiveOps Retention (Login + Battle Pass) | [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) |
 | EPIC-26 | Living Inactives + AI Expeditions | [INACTIVE_AUTOPLAY.md](INACTIVE_AUTOPLAY.md) |
@@ -138,7 +138,7 @@ Kurz. Keine Projektzusammenfassung.
 ## Tests
 
 ```bash
-python -m pytest tests/ -v          # gesamt (4065 Tests)
+python -m pytest tests/ -v          # gesamt (4162 Tests)
 python -m pytest tests/test_fleet.py -v   # domänenspezifisch
 ```
 

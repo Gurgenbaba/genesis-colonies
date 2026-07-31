@@ -2,8 +2,8 @@
 
 Server-wide PvE bosses: shared HP, multi-player contribution, exclusive meta rewards, recurring LiveOps windows.
 
-**Status:** ✅ EPIC-20 (GC-W01…GC-W08) · 🔄 Encounter Stage (GC-WB-VISUAL/ATTACK/…)  
-**Owner:** `game/world_boss.py`  
+**Status:** ✅ EPIC-20 (GC-W01…GC-W08) · 🔄 Encounter Stage · ✅ GC-WB-TAME (Catch + Companions)  
+**Owner:** `game/world_boss.py` (+ companions helper `game/world_boss_companions.py`)  
 **Epic:** EPIC-20 — World Boss Events
 
 ---
@@ -13,18 +13,20 @@ Server-wide PvE bosses: shared HP, multi-player contribution, exclusive meta rew
 | Concern | Owner | Notes |
 |---------|--------|--------|
 | Event state, HP, schedule, contribution, claims, **instant attack** | `game/world_boss.py` | Single domain owner |
+| Catch / tame, ownership, companion missions | `game/world_boss_companions.py` | EPIC-20 subdomain — **no** combat/fleet math |
 | Legacy fleet arrival resolve | `game/fleet.py` | Outbound WB sends **blocked** (`use_world_boss_attack`); arrival path kept for in-flight leftovers |
 | World-native target type | `game/fleet_target.py` | `world_boss` in `WORLD_NATIVE_TARGET_TYPES` (galaxy attach) |
 | Ship combat stats / research mods | `game/combat.py` + `combat_models` | Instant path reuses stats + EffectResolver mods — **no** second combat engine |
 | Galaxy visibility | `game/galaxy.py` | Slot attach like debris |
 | Loot pools | `game/inventory_loot.py` | Meta-only (`item` / `booster`) |
-| Grants | `game/inventory.py` | `grant_inventory_item` |
-| Cron spawn/expire (+ auto-attack tick) | `game/fleet_worker.py` piggyback | No module-owned polling |
+| Grants | `game/inventory.py` | `grant_inventory_item` (incl. Ark-Token `story_scrap_token` from missions) |
+| Cron spawn/expire (+ auto-attack + mission ready) | `game/fleet_worker.py` piggyback | No module-owned polling |
+| Overview landscape hotspots | `game/overview_page.py` + templates | Display-only companions from companions payload |
 | Directives | `game/directives/progress.py` | Event kind `world_boss_damage` |
 | News | `game/universe_news.py` | `category="EVENT"` |
 | Alliance aggregation | `game/alliance.py` + world_boss | Contribution `alliance_id`; Ally XP via `grant_alliance_xp` |
 
-**Forbidden:** expedition pirate ratio combat for bosses; Command Map as live gate; frontend HP math; parallel fleet/combat modules; resource/ship loot boxes; new WB attacks as `fleet_movements`.
+**Forbidden:** expedition pirate ratio combat for bosses; Command Map as live gate; frontend HP math / catch RNG; parallel fleet/combat modules; resource/ship loot boxes; new WB attacks as `fleet_movements`; companion combat/fleet stat buffs; second Ark-Token currency.
 
 ---
 
@@ -36,6 +38,10 @@ Server-wide PvE bosses: shared HP, multi-player contribution, exclusive meta rew
 | `world_boss_events` | Active/ended instances (coords, HP, phase, schedule) |
 | `world_boss_contributions` | Per player (+ alliance) damage ledger |
 | `world_boss_claims` | Idempotent reward claims |
+| `player_boss_companions` | One tamed companion per `boss_key` per player |
+| `player_boss_catch_state` | Catch attempt CD / counters per boss |
+| `player_boss_missions` | Companion mission status (`idle` / `away` / `ready`) + `variant_key` / `fail_chance` / `outcome` |
+| `player_boss_capacity` | Shop bonus slots (`bonus_slots`; capacity = min(4, 1 + bonus)) |
 
 ---
 
@@ -93,6 +99,41 @@ Expo discovery ≈ **5.5%** per expedition resolve when under the concurrent cap
 
 ---
 
+## Catch & companions (GC-WB-TAME)
+
+Meta retention loop: **fight → HP Phase 3 → tame attempt → Overview companion → mission → Ark-Token** (Free Shop). Companions are **flavor + missions only** — no combat/fleet bonuses.
+
+| Rule | Value |
+|------|--------|
+| Catch gate | Event `active` + UI phase **3** (≤25% HP) + free companion capacity |
+| Catch chance | **10%** (server RNG only) |
+| Catch cost | **10h Timekeeper** (`36000` sec) via `timekeeper.debit` |
+| Catch cooldown | **1h** between attempts (independent of attack CD) |
+| Ownership | **1** companion per `boss_key`; **capacity** starts at **1**, Shop SKU `titan_slot_plus` +1 (max **4**) |
+| Mission picks | Always **3** variants: `patrol` (2h, 10% fail), `strike` (4h, 25% fail), `void_run` (8h, 40% fail) |
+| Mission reward | `base (2–4) + (capacity - 1) + variant_bonus` Ark-Token (`story_scrap_token`); fail grants **0** |
+| Concurrent missions | 1 per companion (up to capacity) |
+
+### Catch contract
+
+1. `POST /api/world-boss/catch` with `event_id` (+ optional `request_id`).
+2. Server validates phase 3, not owned, catch CD free, TK ≥ 10h.
+3. Debit TK → record attempt/CD → roll 10%.
+4. On success: insert `player_boss_companions` + idle mission row.
+5. Response `{ ok, catch, state }` — UI toasts; no client RNG.
+
+### Mission contract
+
+1. Overview hotspot / `POST /api/world-boss/companion/mission` with `action=start|claim`, `boss_key`, optional `variant_key`.
+2. Idle companions always expose `mission_offers` (3 server-authored picks).
+3. Start: owned + idle + valid variant → `away` until `ends_at` (stores `fail_chance`).
+4. Worker (`tick_companion_missions`) rolls success/fail once, marks `away` → `ready` with `outcome`.
+5. Claim grants Ark-Token on success (0 on fail), resets to `idle`. Starting again auto-claims if `ready`.
+
+Overview: landscape hotspots on `#overview-planet-hero` (locked silhouettes + owned companions); popover shows flavor stats + **3 mission cards**. Encounter: Attack / Auto / Catch share one action row.
+
+---
+
 ## Schedule
 
 - Up to **3** concurrent `active` events (distinct `boss_key`).
@@ -125,6 +166,8 @@ Default window: **48 h**; inter-spawn gap: **4 h**.
 | `POST /api/world-boss/attack` | Instant strike `{ ok, attack, boss, player, state }` (idempotent via `request_id`) |
 | `POST /api/world-boss/auto-attack` | Toggle server auto-attack `{ ok, auto_attack, attack?, boss?, player?, state }` — enable fires immediately when CD free; follow-ups via `fleet_worker` (also on idle-skip) + opportunistic flush on WB page/API load |
 | `POST /api/world-boss/claim` | Claim rewards `{ ok, state }` |
+| `POST /api/world-boss/catch` | Phase-3 tame attempt `{ ok, catch, state }` |
+| `POST /api/world-boss/companion/mission` | Start/claim companion mission `{ ok, mission, state }` |
 | `POST /api/admin/world-boss/spawn` | Admin force spawn |
 | `GET /api/admin/world-boss` | Admin status + definitions catalog |
 | Galaxy system slots | `slot.world_boss` + `has_world_boss`; deep-link → `/world-boss` |
@@ -167,9 +210,12 @@ UI: countdown via `data-countdown-at` when idle; `event.ends_at` countdown when 
 | GC-WB-COMBAT-FX-003 | Formation + projectile / hit FX |
 | GC-WB-AUTO-004 | Server-side auto-attack tick |
 | GC-WB-REWARD-005 | Collapsible rewards + progress UX |
+| GC-WB-TAME-01…06 | Catch schema/API, Encounter CTA, Overview hotspots, missions, i18n/docs |
 
 ---
 
 ## Tests
 
 `tests/test_world_boss.py` — schema, spawn, instant attack, claim, schedule, admin GET, galaxy UI, HP damage mapping, encounter/nav contracts, `nav_badges.world_boss`.
+
+`tests/test_world_boss_companions.py` — companions schema, Phase-3 catch + TK + CD + once-per-boss, 3 mission variants, success/fail rolls, Ark-Token claim.

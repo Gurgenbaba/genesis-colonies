@@ -6085,6 +6085,134 @@ def api_world_boss_claim():
     return jsonify({"ok": bool(result.get("ok")), "claim": result, "state": state}), status
 
 
+@app.route("/api/world-boss/catch", methods=["POST"])
+@require_login_api
+def api_world_boss_catch():
+    """GC-WB-TAME-01 — Phase-3 tame attempt (10h TK, 10% roll, catch cooldown)."""
+    player_id = _current_player_id()
+    if player_id is None:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+    data = request.get_json(silent=True) or {}
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(int(player_id), request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    try:
+        event_id = int(data.get("event_id") or 0)
+    except (TypeError, ValueError):
+        event_id = 0
+    if event_id <= 0:
+        return jsonify({"ok": False, "error": "invalid_event"}), 400
+
+    from game.db import begin_write_transaction, commit, rollback
+    from game.world_boss_companions import attempt_tame
+
+    conn = db()
+    result: Dict[str, Any] = {"ok": False, "error": "world_boss_catch_failed"}
+    try:
+        begin_write_transaction(conn)
+        try:
+            result = attempt_tame(int(player_id), event_id, conn=conn)
+            if result.get("ok"):
+                commit(conn)
+            else:
+                rollback(conn)
+        except Exception:
+            rollback(conn)
+            raise
+    except Exception:
+        return jsonify({"ok": False, "error": "world_boss_catch_failed"}), 500
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(
+        include_panel=True,
+        finish_source="api_world_boss_catch",
+    )
+    body: Dict[str, Any] = {
+        "ok": bool(result.get("ok")),
+        "catch": result,
+        "state": state,
+    }
+    if not result.get("ok"):
+        body["error"] = result.get("error") or "world_boss_catch_failed"
+    status = 200 if result.get("ok") else 400
+    if request_id and result.get("ok"):
+        save_idempotent_action(int(player_id), request_id, body)
+    return jsonify(body), status
+
+
+@app.route("/api/world-boss/companion/mission", methods=["POST"])
+@require_login_api
+def api_world_boss_companion_mission():
+    """GC-WB-TAME-05 — start or claim companion Ark-Token mission."""
+    player_id = _current_player_id()
+    if player_id is None:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+    data = request.get_json(silent=True) or {}
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(int(player_id), request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    boss_key = str(data.get("boss_key") or "").strip()
+    action = str(data.get("action") or "start").strip().lower()
+    variant_key = str(data.get("variant_key") or "strike").strip().lower()
+    if not boss_key:
+        return jsonify({"ok": False, "error": "invalid_boss"}), 400
+    if action not in ("start", "claim"):
+        return jsonify({"ok": False, "error": "invalid_action"}), 400
+
+    from game.db import begin_write_transaction, commit, rollback
+    from game.world_boss_companions import claim_mission_reward, start_companion_mission
+
+    conn = db()
+    result: Dict[str, Any] = {"ok": False, "error": "companion_mission_failed"}
+    try:
+        begin_write_transaction(conn)
+        try:
+            if action == "claim":
+                result = claim_mission_reward(int(player_id), boss_key, conn=conn)
+            else:
+                result = start_companion_mission(
+                    int(player_id),
+                    boss_key,
+                    conn=conn,
+                    variant_key=variant_key,
+                    request_id=request_id,
+                )
+            if result.get("ok"):
+                commit(conn)
+            else:
+                rollback(conn)
+        except Exception:
+            rollback(conn)
+            raise
+    except Exception:
+        return jsonify({"ok": False, "error": "companion_mission_failed"}), 500
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(
+        include_panel=True,
+        finish_source="api_world_boss_companion_mission",
+    )
+    body: Dict[str, Any] = {
+        "ok": bool(result.get("ok")),
+        "mission": result,
+        "state": state,
+    }
+    if not result.get("ok"):
+        body["error"] = result.get("error") or "companion_mission_failed"
+    status = 200 if result.get("ok") else 400
+    if request_id and result.get("ok"):
+        save_idempotent_action(int(player_id), request_id, body)
+    return jsonify(body), status
+
+
 @app.route("/api/admin/world-boss", methods=["GET"])
 @require_admin_api
 def api_admin_world_boss():

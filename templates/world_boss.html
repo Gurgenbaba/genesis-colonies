@@ -213,25 +213,46 @@
                 </div>
 
                 {% if is_active %}
+                {% set catch = player_info.catch if player_info and player_info.catch is defined else none %}
                 <div class="gc-world-boss-action-bar">
-                  {% if player_info and player_info.attack_block_reason == 'world_boss_cooldown' and cooldown_until %}
-                  <p class="gc-world-boss-cooldown gc-world-boss-cooldown-chip" role="status" data-wb-attack-cooldown>
-                    {{ T("wb_attack_cooldown", "Nächster Angriff in") }}
-                    <span class="gc-mono"
-                          data-countdown-at="{{ cooldown_until|int }}"
-                          data-countdown-format="eta"
-                          data-wb-cooldown-at="{{ cooldown_until|int }}">—</span>
-                  </p>
-                  {% elif player_info and player_info.attack_block_reason == 'world_boss_inflight' %}
-                  <p class="gc-world-boss-cooldown" role="status">{{ T("wb_attack_inflight", "Angriffsflotte bereits unterwegs.") }}</p>
-                  {% elif player_info and player_info.attack_block_reason == 'world_boss_wave_limit' %}
-                  <p class="gc-world-boss-cooldown" role="status">{{ T("wb_attack_wave_limit", "Wellenlimit für dieses Ereignis erreicht.") }}</p>
-                  {% elif player_info and player_info.can_attack and auto_on %}
-                  <p class="gc-world-boss-ready hint" role="status" data-wb-attack-ready>{{ T("wb_auto_attack_pending", "Auto-Angriff aktiv — nächster Treffer folgt.") }}</p>
-                  {% elif player_info and player_info.can_attack %}
-                  <p class="gc-world-boss-ready hint" role="status" data-wb-attack-ready>{{ T("wb_attack_ready", "Angriff bereit.") }}</p>
-                  {% endif %}
-                  <div class="gc-world-boss-actions">
+                  <div class="gc-world-boss-status-row">
+                    {% if player_info and player_info.attack_block_reason == 'world_boss_cooldown' and cooldown_until %}
+                    <p class="gc-world-boss-cooldown gc-world-boss-cooldown-chip" role="status" data-wb-attack-cooldown>
+                      {{ T("wb_attack_cooldown", "Nächster Angriff in") }}
+                      <span class="gc-mono"
+                            data-countdown-at="{{ cooldown_until|int }}"
+                            data-countdown-format="eta"
+                            data-wb-cooldown-at="{{ cooldown_until|int }}">—</span>
+                    </p>
+                    {% elif player_info and player_info.attack_block_reason == 'world_boss_inflight' %}
+                    <p class="gc-world-boss-cooldown gc-world-boss-cooldown-chip" role="status">{{ T("wb_attack_inflight", "Angriffsflotte bereits unterwegs.") }}</p>
+                    {% elif player_info and player_info.attack_block_reason == 'world_boss_wave_limit' %}
+                    <p class="gc-world-boss-cooldown gc-world-boss-cooldown-chip" role="status">{{ T("wb_attack_wave_limit", "Wellenlimit für dieses Ereignis erreicht.") }}</p>
+                    {% elif player_info and player_info.can_attack and auto_on %}
+                    <p class="gc-world-boss-ready hint" role="status" data-wb-attack-ready>{{ T("wb_auto_attack_pending", "Auto-Angriff aktiv — nächster Treffer folgt.") }}</p>
+                    {% elif player_info and player_info.can_attack %}
+                    <p class="gc-world-boss-ready hint" role="status" data-wb-attack-ready>{{ T("wb_attack_ready", "Angriff bereit.") }}</p>
+                    {% endif %}
+                    {% if catch and catch.ready and not catch.owned %}
+                      {% if catch.block_reason == 'catch_cooldown' and catch.cooldown_until %}
+                      <p class="gc-world-boss-cooldown gc-world-boss-cooldown-chip gc-world-boss-catch-chip" role="status" data-wb-catch-cooldown>
+                        {{ T("wb_catch_cooldown", "Nächster Zähmversuch in") }}
+                        <span class="gc-mono"
+                              data-countdown-at="{{ catch.cooldown_until|int }}"
+                              data-countdown-format="eta">—</span>
+                      </p>
+                      {% elif catch.block_reason == 'insufficient_timekeeper' %}
+                      <p class="hint" role="status">{{ T("wb_catch_need_tk", "Nicht genug Timekeeper (10h nötig).") }}</p>
+                      {% elif catch.block_reason == 'capacity_full' %}
+                      <p class="hint" role="status">{{ T("wb_catch_capacity_full", "Titan-Slots voll — im Shop erweiterbar.") }}</p>
+                      {% elif catch.block_reason == 'phase_locked' %}
+                      <p class="hint" role="status">{{ T("wb_catch_phase_locked", "Zähmen erst ab Phase 3 (≤25 % HP).") }}</p>
+                      {% endif %}
+                    {% elif catch and catch.ready and catch.owned %}
+                    <p class="hint" role="status">{{ T("wb_catch_owned", "Bereits gezähmt — Companion auf der Übersicht.") }}</p>
+                    {% endif %}
+                  </div>
+                  <div class="gc-world-boss-actions" data-wb-catch data-wb-event-id="{{ event.id }}">
                     {% if player_info and player_info.attack_block_reason == 'world_boss_wave_limit' %}
                     <span class="gc-btn gc-btn-primary is-disabled" aria-disabled="true">{{ T("wb_attack", "Angreifen") }}</span>
                     <span class="gc-btn gc-btn-primary is-disabled" aria-disabled="true">{{ T("wb_auto_attack", "Auto-Angriff") }}</span>
@@ -265,6 +286,20 @@
                             aria-pressed="{{ 'true' if auto_on else 'false' }}">
                       {{ T("wb_auto_attack_active", "Auto-Angriff aktiv") if auto_on else T("wb_auto_attack", "Auto-Angriff") }}
                     </button>
+                    {% endif %}
+                    {% if catch and catch.ready and catch.phase_ok and catch.can_attempt and not catch.owned %}
+                    <button type="button"
+                            class="gc-btn gc-btn-primary wb-catch-btn"
+                            data-wb-catch-attempt
+                            data-wb-event-id="{{ event.id }}"
+                            title="{{ T('wb_catch_hint', 'Phase 3: 10 % Chance, kostet 10h Timekeeper. Cooldown zwischen Versuchen.') }}">
+                      {{ T("wb_catch_attempt", "Zähmen") }}
+                      <span class="gc-mono wb-catch-meta">10% · 10h TK</span>
+                    </button>
+                    {% elif catch and catch.ready and not catch.owned and catch.block_reason == 'catch_cooldown' %}
+                    <span class="gc-btn gc-btn-primary is-disabled wb-catch-btn" aria-disabled="true">
+                      {{ T("wb_catch_attempt", "Zähmen") }}
+                    </span>
                     {% endif %}
                     <a class="gc-btn" href="{{ url_for('galaxy_view') }}?galaxy={{ event.galaxy }}&system={{ event.system }}">
                       {{ T("wb_galaxy", "Zur Galaxie") }}
@@ -529,6 +564,7 @@
           <li>{{ T("wb_help_alliance_xp", "Allianz-XP: Skaliert mit dem Schaden deiner Wellen — mehr Schaden, mehr Ally-XP (mit Cap pro Welle).") }}</li>
           <li>{{ T("wb_help_limits", "Limits: Cooldown und Wellenlimit gelten pro Boss-Ereignis.") }}</li>
           <li>{{ T("wb_help_schedule", "Zeitplan: Bis zu 3 parallele Bosse; Spawn alle paar Stunden oder selten per Expedition.") }}</li>
+          <li>{{ T("wb_help_catch", "Zähmen: In Phase 3 (≤25 % HP) 10 % Chance für 10h Timekeeper — einmal pro Boss. Gezähmte Companions stehen auf der Übersicht und holen Ark-Token.") }}</li>
         </ul>
       </div>
     </div>

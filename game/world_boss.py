@@ -2550,7 +2550,16 @@ def _event_card_for_player(
             "reward_outlook": outlook,
             "formation": formation,
             "auto_attack_enabled": auto_enabled,
+            "catch": None,
         }
+        try:
+            from .world_boss_companions import build_catch_info_for_event
+
+            player_info["catch"] = build_catch_info_for_event(
+                int(player_id), event, conn=conn, now=now
+            )
+        except Exception:
+            logger.exception("world_boss catch info failed player=%s", player_id)
     earned_tiers = set(outlook.get("earned_tiers") or [])
     return {
         "event": event,
@@ -2585,6 +2594,7 @@ def build_world_boss_payload(
         "alliance_board": [],
         "player": None,
         "definitions": [],
+        "companions": {"ready": False, "slots": [], "owned_count": 0},
         "schedule": build_schedule_info(conn=conn, now=ts),
         "server_now": ts,
         "flushed_attacks": [],
@@ -2643,6 +2653,14 @@ def build_world_boss_payload(
                 cards.insert(0, preferred)
 
     primary = cards[0] if cards else None
+    companions: Dict[str, Any] = {"ready": False, "slots": [], "owned_count": 0}
+    if player_id is not None:
+        try:
+            from .world_boss_companions import build_overview_companions
+
+            companions = build_overview_companions(int(player_id), conn=conn, now=ts)
+        except Exception:
+            logger.exception("world_boss companions payload failed player=%s", player_id)
     return {
         "ok": True,
         "ready": True,
@@ -2652,6 +2670,7 @@ def build_world_boss_payload(
         "alliance_board": primary["alliance_board"] if primary else [],
         "player": primary["player"] if primary else None,
         "definitions": list_definitions(conn=conn),
+        "companions": companions,
         "schedule": schedule,
         "server_now": ts,
         "flushed_attacks": flushed_attacks,

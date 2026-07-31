@@ -54,9 +54,9 @@ Free ist reich an domain-locked Boosters, arm an flexiblem TK.
 | Premium Entitlement | `game/premium_entitlements.py` | Flag Single Source |
 | Battle Pass Unlock | `game/battle_pass.py` | `unlock_premium(source=…)` |
 
-**Grant path (canonical):** `unlock_premium` / `grant_inventory_item` / `timekeeper.credit` — keine zweite Loot-Engine.
+**Grant path (canonical):** `unlock_premium` / `grant_inventory_item` / `timekeeper.credit` / `grant_companion_slot` — keine zweite Loot-Engine.
 
-## Catalog v3 (`CATALOG_VERSION = 3`)
+## Catalog (`CATALOG_VERSION = 6`)
 
 | SKU | Kind | Price (EUR) | Fulfill |
 |-----|------|-------------|---------|
@@ -67,8 +67,9 @@ Free ist reich an domain-locked Boosters, arm an flexiblem TK.
 | `booster_pack_starter` | inventory_bundle | 2,99 | Build/Research **24h ×6** + **6h ×8** + prod_50 ×4 (≥ ~176 h/Domain) |
 | `container_pack_rare` | inventory_bundle | 2,99 | rare×8 + epic×4 + mythic×2 + relic×1 |
 | `commander_supply_pack` | inventory_bundle | 9,99 | **48 h** TK + Build/Research 24h ×6 + prod_100 ×3 + epic×4 + mythic×3 + ancient×2 + relic×2 |
+| `titan_slot_plus` | inventory_bundle | 2,99 | `grant_companion_slot` (+1 capacity, max 4); checkout blocked at max |
 
-`ensure_catalog_seeded` **upsertet** Preise/Payloads aus Code (Server-Truth).
+`ensure_catalog_seeded` **upsertet** Preise/Payloads aus Code (Server-Truth). Companion capacity owner: `game/world_boss_companions.py`.
 
 ## Schema
 

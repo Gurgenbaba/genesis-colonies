@@ -20,6 +20,8 @@ from game.shop import (
     CATALOG_VERSION,
     DEFAULT_CATALOG,
     SKU_SEASON_PASS,
+    SKU_TITAN_SLOT_PLUS,
+    create_pending_order,
     fulfill_order,
     get_order,
     is_shop_enabled,
@@ -629,3 +631,56 @@ def test_name_style_locked_without_unlock(shop_db):
     )
     assert ok is False
     assert reason == "playercard_name_style_locked"
+
+
+def test_titan_slot_plus_fulfill_and_cap(shop_db):
+    from game.db import begin_write_transaction, commit
+    from game.world_boss_companions import (
+        MAX_COMPANION_CAPACITY,
+        get_companion_capacity,
+    )
+
+    uid = _player()
+    conn = db()
+    begin_write_transaction(conn)
+    try:
+        products = list_catalog(conn=conn)
+        assert any(p["sku"] == SKU_TITAN_SLOT_PLUS for p in products)
+        assert CATALOG_VERSION >= 6
+
+        assert get_companion_capacity(uid, conn=conn) == 1
+        ok, reason, meta = create_pending_order(
+            uid, SKU_TITAN_SLOT_PLUS, "test", conn=conn
+        )
+        assert ok, reason
+        oid = int(meta["order"]["id"])
+        mark_paid(oid, conn=conn)
+        ok_f, reason_f, order = fulfill_order(oid, conn=conn)
+        assert ok_f, reason_f
+        assert get_companion_capacity(uid, conn=conn) == 2
+        assert (order or {}).get("status") == "fulfilled"
+
+        # Buy until max
+        while get_companion_capacity(uid, conn=conn) < MAX_COMPANION_CAPACITY:
+            ok2, reason2, meta2 = create_pending_order(
+                uid, SKU_TITAN_SLOT_PLUS, "test", conn=conn
+            )
+            assert ok2, reason2
+            oid2 = int(meta2["order"]["id"])
+            mark_paid(oid2, conn=conn)
+            ok_f2, reason_f2, _ = fulfill_order(oid2, conn=conn)
+            assert ok_f2, reason_f2
+
+        assert get_companion_capacity(uid, conn=conn) == MAX_COMPANION_CAPACITY
+        ok3, reason3, _ = create_pending_order(
+            uid, SKU_TITAN_SLOT_PLUS, "test", conn=conn
+        )
+        assert ok3 is False
+        assert reason3 == "already_owned"
+
+        cat = serialize_catalog_for_client(conn=conn, player_id=uid)
+        titan = next(p for p in cat["products"] if p["sku"] == SKU_TITAN_SLOT_PLUS)
+        assert titan["owned"] is True
+        commit(conn)
+    finally:
+        conn.close()

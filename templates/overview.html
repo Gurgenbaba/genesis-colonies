@@ -34,7 +34,6 @@
 {% block content %}
 
 {% set commander = (os.commander if os.commander is defined else {}) %}
-{% set activities = (os.activities if os.activities is defined and os.activities else []) %}
 {% set player_obj = (player if player is defined and player else None) %}
 {% set cmd_id = commander.id if commander.id is defined else (player_obj.id if player_obj and player_obj.id is defined else None) %}
 {% set cmd_name = commander.name if commander.name is defined and commander.name else "Commander" %}
@@ -62,7 +61,7 @@
       {% endif %}
     </div>
     <p class="section-hint hint">
-      {{ T("overview_command_hint", "Planet-Status und laufende Aktionen auf einen Blick.") }}
+      {{ T("overview_command_hint", "Gezähmte Titanen auf eurer Kolonie — tippen für Stats und Missionen.") }}
     </p>
   </header>
   {% include "partials/codex_page_surfaces.html" %}
@@ -131,43 +130,6 @@
         </span>
       </div>
 
-      <div class="overview-hero-activity-panel" aria-label="{{ T('overview_label_activities', 'Aktive Systeme') }}">
-        <div class="overview-hero-activity-head">
-          <span class="overview-hero-activity-title">{{ T("overview_label_activities", "Aktive Systeme") }}</span>
-        </div>
-        <ul class="overview-activities overview-activities-grid overview-hero-activities" id="overview-activities">
-          {% for act in activities %}
-          <li class="overview-activity-card overview-activity-row overview-activity-{{ act.key }} overview-activity-{{ act.state }}"
-              data-activity-key="{{ act.key }}"
-              {% if act.finish_at %}data-finish-at="{{ act.finish_at|int }}"{% endif %}
-              {% if act.phase %}data-activity-phase="{{ act.phase }}"{% endif %}
-              {% if act.remaining is defined %}data-remaining="{{ act.remaining|int }}"{% endif %}>
-            <a class="overview-activity-link" href="{{ url_for(act.href_key) }}">
-              <span class="overview-activity-type">{{ T('overview_activity_' ~ act.key, act.key) }}</span>
-              <span class="overview-activity-body">
-                {% if act.state == 'active' %}
-                  <span class="overview-activity-name">{{ T(act.label_key, act.label_key) }}</span>
-                  <span class="overview-activity-detail gc-mono">{% if act.status_label %}{{ T(act.status_label, act.status_label) }} · {% endif %}{{ act.summary }}</span>
-                  <span class="overview-activity-eta gc-mono" data-activity-eta
-                    {% if act.countdown_at or act.finish_at %}
-                    data-timer-target="{{ (act.countdown_at or act.finish_at)|int }}"
-                    data-timer-kind="queue"
-                    data-refresh-on-zero="game-state"
-                    data-countdown-at="{{ (act.countdown_at or act.finish_at)|int }}"
-                    data-countdown-scope="overview"
-                    data-countdown-format="eta"
-                    data-countdown-key="{{ act.key }}:{{ act.phase or act.state }}:{{ (act.countdown_at or act.finish_at)|int }}"
-                    {% endif %}>{{ act.remaining_display }}</span>
-                {% else %}
-                  <span class="overview-activity-idle">{{ T(act.label_key, 'Bereit') }}</span>
-                {% endif %}
-              </span>
-            </a>
-          </li>
-          {% endfor %}
-        </ul>
-      </div>
-
       <div class="overview-hero-corner overview-hero-corner--bl">
         <dl class="overview-hero-corner-meta">
           <div class="overview-meta-item">
@@ -198,7 +160,59 @@
       </div>
     </div>
 
+    {% set companions = os.companions if os.companions is defined and os.companions else {} %}
+    {% set companion_slots = companions.slots if companions.slots is defined and companions.slots else [] %}
+    {% if companion_slots %}
+    <div class="overview-companion-layer" id="overview-companion-layer" data-overview-companions aria-label="{{ T('overview_companions_label', 'World-Boss-Companions') }}">
+      {% for slot in companion_slots %}
+      {% set _slot_png = url_for('static', filename=slot.art_relpath or ('img/bosses/' ~ slot.boss_key ~ '.png'), v=GC_ASSET_VERSION) %}
+      {% set _slot_webp = _slot_png|webp_static %}
+      <button type="button"
+              class="overview-companion-hotspot overview-companion-hotspot--{{ slot.status or 'locked' }}{% if not slot.owned %} is-locked{% endif %}"
+              style="left: {{ slot.left_pct }}%; top: {{ slot.top_pct }}%; --companion-float-delay: {{ loop.index0 * 0.35 }}s;"
+              data-companion-boss="{{ slot.boss_key }}"
+              data-companion-owned="{{ '1' if slot.owned else '0' }}"
+              data-companion-status="{{ slot.status or 'locked' }}"
+              data-companion-name="{{ T(slot.name_key, slot.name or slot.boss_key) }}"
+              data-companion-power="{{ slot.stats.power if slot.stats is defined else 0 }}"
+              data-companion-endurance="{{ slot.stats.endurance if slot.stats is defined else 0 }}"
+              data-companion-cunning="{{ slot.stats.cunning if slot.stats is defined else 0 }}"
+              data-companion-reward="{{ slot.mission.reward_tokens if slot.mission is defined else 0 }}"
+              data-companion-ends-at="{{ (slot.mission.ends_at|int) if slot.mission is defined and slot.mission.ends_at else 0 }}"
+              data-companion-can-start="{{ '1' if slot.mission is defined and slot.mission.can_start else '0' }}"
+              data-companion-can-claim="{{ '1' if slot.mission is defined and slot.mission.can_claim else '0' }}"
+              data-companion-active-event="{{ slot.active_event_id|int if slot.active_event_id else 0 }}"
+              data-companion-outcome="{{ slot.mission.outcome if slot.mission is defined and slot.mission.outcome else '' }}"
+              data-companion-offers='{{ (slot.mission_offers if slot.mission_offers is defined else [])|tojson }}'
+              aria-label="{{ T(slot.name_key, slot.name or slot.boss_key) }}">
+        <span class="overview-companion-hotspot-aura" aria-hidden="true"></span>
+        <span class="overview-companion-hotspot-art" aria-hidden="true">
+          <picture>
+            <source type="image/webp" srcset="{{ _slot_webp }}">
+            <img src="{{ _slot_png }}" alt="" width="128" height="128" loading="lazy" decoding="async">
+          </picture>
+        </span>
+        <span class="overview-companion-hotspot-badge" data-companion-badge>
+          {% if slot.status == 'away' %}{{ T('overview_companion_away', 'Mission') }}
+          {% elif slot.status == 'ready' %}{{ T('overview_companion_ready', 'Bereit') }}
+          {% elif slot.owned %}{{ T('overview_companion_idle', 'Bereit') }}
+          {% else %}{{ T('overview_companion_locked', '???') }}{% endif %}
+        </span>
+      </button>
+      {% endfor %}
+    </div>
+    {% endif %}
+
   </section>
+
+  {% if companion_slots %}
+  <div id="overview-companion-popover"
+       class="overview-companion-popover"
+       hidden
+       role="dialog"
+       aria-modal="false"
+       aria-labelledby="overview-companion-popover-title"></div>
+  {% endif %}
 
 </div>
 

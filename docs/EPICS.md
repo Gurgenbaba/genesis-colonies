@@ -25,7 +25,7 @@ Status: v1.5.9.2 (2026-06-24)
 | EPIC-17 | Imperial Directives (High Command) | 📋 | [IMPERIAL_DIRECTIVES.md](IMPERIAL_DIRECTIVES.md) |
 | EPIC-16 | Genesis Knowledge Base (Knowledge Pipeline) | 📋 | [GC-950_KNOWLEDGE_PIPELINE.md](GC-950_KNOWLEDGE_PIPELINE.md) |
 | EPIC-18 | Collector Exchange (Sammler-Markt) | 📋 | [COLLECTOR_EXCHANGE.md](COLLECTOR_EXCHANGE.md) |
-| EPIC-20 | World Boss Events | 🔄 | [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) |
+| EPIC-20 | World Boss Events | 🔄 | [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) — GC-WB-TAME companions |
 | EPIC-21 | Pirate Ecosystem (Living Threat) | ✅ | [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md) |
 | EPIC-22 | LiveOps Retention (Login + Battle Pass) | ✅ | [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) |
 | EPIC-23 | Payment / Shop | ✅ | [PAYMENT_SHOP.md](PAYMENT_SHOP.md) · GC-2300…2306 |
