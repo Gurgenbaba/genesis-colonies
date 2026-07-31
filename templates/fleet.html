@@ -252,7 +252,9 @@
                        data-ship-tooltip-name="{{ T(ship.name_key) }}"
                        data-ship-tooltip-role="{{ T('shipyard_role_' ~ ship.role) }}"
                        data-ship-tooltip-speed="{{ ship.speed|fmt_int }}"
-                       data-ship-tooltip-cargo="{{ ship.cargo|fmt_int }}">
+                       data-ship-tooltip-cargo="{{ ship.cargo|fmt_int }}"
+                       data-ship-tooltip-speed-bonus="{{ (ship.speed_stat.bonus_display if ship.speed_stat is mapping and ship.speed_stat.bonus_pct else '') }}"
+                       data-ship-tooltip-cargo-bonus="{{ (ship.cargo_stat.bonus_display if ship.cargo_stat is mapping and ship.cargo_stat.bonus_pct else '') }}">
                 <div class="fleet-ship-pick-stack">
                   <div class="fleet-ship-card-art-wrap" data-fleet-ship-pick-trigger>
                     <button type="button"
@@ -396,7 +398,10 @@
               </div>
               <div class="fleet-preview-stat">
                 <span class="fleet-preview-stat-label">{{ T("fleet_preview_flight") }}</span>
-                <span class="fleet-preview-stat-value gc-mono" data-preview-flight>–</span>
+                <span class="fleet-preview-stat-value">
+                  <span class="gc-mono" data-preview-flight>–</span>
+                  <span class="gc-eff-stat-bonus" data-preview-speed-bonus hidden></span>
+                </span>
               </div>
               <div class="fleet-preview-stat">
                 <span class="fleet-preview-stat-label">{{ T("fleet_preview_arrival") }}</span>
@@ -404,7 +409,10 @@
               </div>
               <div class="fleet-preview-stat">
                 <span class="fleet-preview-stat-label">{{ T("fleet_preview_cargo") }}</span>
-                <span class="fleet-preview-stat-value gc-mono" data-preview-cargo>–</span>
+                <span class="fleet-preview-stat-value">
+                  <span class="gc-mono" data-preview-cargo>–</span>
+                  <span class="gc-eff-stat-bonus" data-preview-cargo-bonus hidden></span>
+                </span>
               </div>
               <div class="fleet-preview-stat">
                 <span class="fleet-preview-stat-label">{{ T("fleet_preview_cargo_free") }}</span>
@@ -412,7 +420,10 @@
               </div>
               <div class="fleet-preview-stat">
                 <span class="fleet-preview-stat-label">{{ T("fleet_preview_fuel") }}</span>
-                <span class="fleet-preview-stat-value gc-mono" data-preview-fuel>–</span>
+                <span class="fleet-preview-stat-value">
+                  <span class="gc-mono" data-preview-fuel>–</span>
+                  <span class="gc-eff-stat-bonus is-neg" data-preview-fuel-bonus hidden></span>
+                </span>
               </div>
               <div class="fleet-preview-stat">
                 <span class="fleet-preview-stat-label">{{ T("fleet_preview_fuel_available") }}</span>

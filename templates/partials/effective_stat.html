@@ -1,0 +1,22 @@
+{# GC-EFFSTAT — shared effective stat value + net bonus badge #}
+{% macro render_effective_stat_value(stat, fallback=0, compact=false) %}
+  {% if stat is mapping %}
+    {% set eff = (stat.get('effective') if stat.get('effective') is not none else fallback)|int %}
+    {% set pct = (stat.get('bonus_pct') or 0)|int %}
+    <span class="gc-eff-stat">
+      <span class="gc-eff-stat-value gc-mono{% if compact %} gc-num-compact{% endif %}">{% if compact %}{{ eff|fmt_int_compact }}{% else %}{{ eff|fmt_int }}{% endif %}</span>
+      {% if pct != 0 %}
+      <span class="gc-eff-stat-bonus{% if pct < 0 %} is-neg{% endif %}" title="{{ T('effective_stat_bonus_total', 'Gesamtbonus') }}">{{ stat.get('bonus_display') or (('+' ~ pct ~ ' %') if pct > 0 else (pct ~ ' %')) }}</span>
+      {% endif %}
+    </span>
+  {% else %}
+    <span class="gc-eff-stat-value gc-mono{% if compact %} gc-num-compact{% endif %}">{% if compact %}{{ (stat|default(fallback))|fmt_int_compact }}{% else %}{{ (stat|default(fallback))|fmt_int }}{% endif %}</span>
+  {% endif %}
+{% endmacro %}
+
+{% macro render_effective_stat_line(label, stat, fallback=0) %}
+  <div class="gc-tech-line">
+    <span class="gc-tech-label">{{ label }}</span>
+    <span class="gc-tech-val">{{ render_effective_stat_value(stat, fallback=fallback) }}</span>
+  </div>
+{% endmacro %}

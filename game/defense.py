@@ -1006,6 +1006,24 @@ def build_defense_api_payload(player_id: int, planet_id: int, *, conn=None) -> D
         if defense_queue_table_ready(conn):
             queue_full = queue_count(planet_id, conn=conn) >= get_defense_queue_limit(conn=conn)
         from .defense_defs import defense_icon_static_path
+        from .models import get_planet_buildings, get_research_levels
+        from .technical_data import apply_combat_stats_to_catalog_entry, resolve_unit_effect_context
+
+        buildings = get_planet_buildings(int(planet_id), conn=conn)
+        research = get_research_levels(user_id=int(player_id), conn=conn)
+        try:
+            from .planet_evolution.repository import get_context_planet
+
+            planet_row = get_context_planet(int(player_id), conn=conn)
+        except Exception:
+            planet_row = None
+        effect_ctx = resolve_unit_effect_context(
+            buildings=buildings,
+            research_levels=research,
+            player_id=int(player_id),
+            conn=conn,
+            planet=planet_row,
+        )
 
         for key in sorted(ACTIVE_DEFENSE_KEYS):
             if not defense_unlocked(
@@ -1033,8 +1051,7 @@ def build_defense_api_payload(player_id: int, planet_id: int, *, conn=None) -> D
 
             stats = combat_stats_for_defense(key)
             spec = get_defense(key) or {}
-            buildable.append(
-                {
+            entry = {
                     "defense_key": key,
                     "name_key": str(spec.get("name_key") or f"defense_{key}"),
                     "description_key": str(spec.get("description_key") or f"defense_{key}_desc"),
@@ -1056,7 +1073,8 @@ def build_defense_api_payload(player_id: int, planet_id: int, *, conn=None) -> D
                     "can_build": can_build,
                     "block_reason": block_reason,
                 }
-            )
+            apply_combat_stats_to_catalog_entry(entry, effect_ctx=effect_ctx)
+            buildable.append(entry)
         queue = defense_queue_for_client(
             player_id, planet_id, conn=conn
         )

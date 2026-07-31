@@ -18,6 +18,10 @@ def build_defense_detail_card(
     *,
     buildings: Mapping[str, Any] | None = None,
     research: Mapping[str, Any] | None = None,
+    player_id: int | None = None,
+    conn=None,
+    planet: Mapping[str, Any] | None = None,
+    effect_ctx: Mapping[str, Any] | None = None,
 ) -> Tuple[DefenseDetailCard | None, DefenseDetailError]:
     key = str(defense_key or "").strip()
     spec = get_defense(key)
@@ -30,15 +34,19 @@ def build_defense_detail_card(
 
     from .defense_defs import defense_score_value
 
+    base_attack = int(stats.attack if stats else spec.get("attack", 0) or 0)
+    base_shield = int(stats.shield if stats else spec.get("shield", 0) or 0)
+    base_hull = int(stats.hull if stats else spec.get("hull", 0) or 0)
+
     card: DefenseDetailCard = {
         "defense_key": key,
         "name_key": spec.get("name_key", f"defense_{key}"),
         "description_key": spec.get("description_key", ""),
         "role": spec.get("role", "turret"),
         "role_key": f"defense_role_{spec.get('role', 'turret')}",
-        "attack": int(stats.attack if stats else spec.get("attack", 0) or 0),
-        "shield": int(stats.shield if stats else spec.get("shield", 0) or 0),
-        "hull": int(stats.hull if stats else spec.get("hull", 0) or 0),
+        "attack": base_attack,
+        "shield": base_shield,
+        "hull": base_hull,
         "score_value": defense_score_value(key),
         "icon": defense_icon_static_path(key),
         "build_cost_metal": int(build_cost.get("metal", 0) or 0),
@@ -65,15 +73,26 @@ def build_defense_detail_card(
         card["requirements"] = req_summary
         card["requirements_items"] = list(req_summary.get("items") or [])
         card["technical"] = build_unit_technical_block(
-            base_attack=int(card["attack"]),
-            base_shield=int(card["shield"]),
-            base_hull=int(card["hull"]),
+            base_attack=base_attack,
+            base_shield=base_shield,
+            base_hull=base_hull,
             base_build_seconds=int(card["build_seconds"]),
             production=card["production"],
             buildings=buildings,
             research_levels=research,
             next_yard_unit_seconds=unit_build_seconds(key, sy_level + 1),
+            player_id=player_id,
+            conn=conn,
+            planet=planet,
+            effect_ctx=effect_ctx,
         )
+        combat = (card["technical"] or {}).get("combat") or {}
+        for combat_key in ("attack", "shield", "hull"):
+            if combat.get(combat_key) is not None:
+                card[combat_key] = int(combat.get(combat_key) or 0)
+            stat = combat.get(f"{combat_key}_stat")
+            if isinstance(stat, dict):
+                card[f"{combat_key}_stat"] = stat
         from .combat_models import build_rapid_fire_matchup_payload
 
         card["technical"].update(build_rapid_fire_matchup_payload(key, "defense"))

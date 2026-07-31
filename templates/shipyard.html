@@ -125,7 +125,7 @@
             </div>
           </div>
         </div>
-        {{ render_compact_unit_stat_chips(ship.attack, ship.shield, ship.hull, none, 'ship') }}
+        {{ render_compact_unit_stat_chips(ship.attack, ship.shield, ship.hull, none, 'ship', ship.attack_stat, ship.shield_stat, ship.hull_stat) }}
         <div class="gc-bld-card-meta gc-bld-card-meta--costs-only" data-shipyard-cost
              data-unit-cost-metal="{{ ship.cost_metal }}"
              data-unit-cost-crystal="{{ ship.cost_crystal }}"
@@ -200,7 +200,7 @@
             </div>
           </div>
         </div>
-        {{ render_compact_unit_stat_chips(ship.attack, ship.shield, ship.hull, none, 'ship') }}
+        {{ render_compact_unit_stat_chips(ship.attack, ship.shield, ship.hull, none, 'ship', ship.attack_stat, ship.shield_stat, ship.hull_stat) }}
         <div class="gc-bld-card-meta gc-bld-card-meta--costs-only">
           {{ render_card_costs_block(ship.cost_metal, ship.cost_crystal, ship.cost_fuel_cells if ship.cost_fuel_cells else none) }}
         </div>

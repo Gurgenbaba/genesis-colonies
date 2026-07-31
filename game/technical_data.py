@@ -1742,14 +1742,109 @@ def build_research_effect_milestones(
     return out[:6]
 
 
-def _stat_with_combat_bonus(base: int, bonus_frac: float) -> int:
-    return int(round(max(0, int(base)) * (1.0 + max(0.0, float(bonus_frac)))))
+def _format_bonus_pct_display(bonus_pct: int) -> str:
+    pct = int(bonus_pct)
+    if pct > 0:
+        return f"+{pct} %"
+    if pct < 0:
+        return f"{pct} %"
+    return "+0 %"
 
 
-def _active_combat_bonuses(research_levels: Mapping[str, int]) -> List[Dict[str, Any]]:
+def build_effective_stat(
+    key: str,
+    base: int | float,
+    *,
+    multiplier: float | None = None,
+    additive_frac: float | None = None,
+    sources: List[Dict[str, Any]] | None = None,
+) -> Dict[str, Any]:
+    """
+    GC-EFFSTAT — canonical effective-stat display payload.
+
+    Primary value is ``effective`` (gameplay). ``bonus_pct`` is the single net
+    total percentage vs catalog base. Frontend formats only — no game math.
+    """
+    base_i = max(0, int(round(float(base or 0))))
+    if multiplier is not None:
+        mult = max(0.0, float(multiplier))
+        effective = int(round(base_i * mult)) if base_i else 0
+    elif additive_frac is not None:
+        frac = float(additive_frac)
+        effective = int(round(base_i * (1.0 + frac))) if base_i else 0
+        effective = max(0, effective)
+    else:
+        effective = base_i
+
+    if base_i > 0:
+        bonus_pct = int(round((float(effective) / float(base_i) - 1.0) * 100.0))
+    else:
+        bonus_pct = 0
+
+    return {
+        "key": str(key),
+        "base": base_i,
+        "effective": int(effective),
+        "bonus_pct": int(bonus_pct),
+        "bonus_display": _format_bonus_pct_display(bonus_pct),
+        "sources": list(sources or []),
+    }
+
+
+def _resolver_source_contributions(
+    resolver: Any,
+    mod_key: str,
+    *,
+    kind: str,
+) -> List[Dict[str, Any]]:
+    """Derive per-source % contributions from EffectResolver source log."""
+    prev = 0.0 if kind == "additive_frac" else 1.0
+    rows: List[Dict[str, Any]] = []
+    for entry in list(getattr(resolver, "_sources", None) or []):
+        if not isinstance(entry, Mapping):
+            continue
+        if str(entry.get("status") or "") != "active":
+            continue
+        if str(entry.get("key") or "") != mod_key:
+            continue
+        try:
+            val = float(entry.get("value"))
+        except (TypeError, ValueError):
+            continue
+        label = str(entry.get("source") or mod_key).strip() or mod_key
+        if kind == "additive_frac":
+            delta = val - prev
+            pct = int(round(delta * 100.0))
+        else:
+            if prev <= 0:
+                prev = val
+                continue
+            pct = int(round((val / prev - 1.0) * 100.0))
+        prev = val
+        if pct == 0:
+            continue
+        rows.append({"label_key": label, "display": _format_bonus_pct_display(pct)})
+    return rows
+
+
+def _active_combat_bonuses(
+    research_levels: Mapping[str, int],
+    *,
+    resolver: Any | None = None,
+) -> List[Dict[str, Any]]:
+    """Combat bonus lines: prefer full-stack resolver contributions, else research."""
+    if resolver is not None:
+        rows: List[Dict[str, Any]] = []
+        for mod_key in ("weapon_bonus", "shield_bonus", "armor_bonus"):
+            rows.extend(
+                _resolver_source_contributions(resolver, mod_key, kind="additive_frac")
+            )
+        if rows:
+            return rows
+
     from .effects import EffectResolver
 
-    rows: List[Dict[str, Any]] = []
+    rows = []
     for key in ("weapon_tech", "shield_tech", "armor_tech"):
         lvl = int(research_levels.get(key, 0) or 0)
         if lvl > 0:
@@ -1757,6 +1852,155 @@ def _active_combat_bonuses(research_levels: Mapping[str, int]) -> List[Dict[str,
             if pct > 0:
                 rows.append({"label_key": key, "display": f"+{pct} %"})
     return rows
+
+
+def _active_mobility_bonuses(resolver: Any) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for mod_key in ("fleet_speed_multiplier", "cargo_multiplier", "fuel_efficiency_factor"):
+        rows.extend(_resolver_source_contributions(resolver, mod_key, kind="mult"))
+    return rows
+
+
+def resolve_unit_effect_context(
+    *,
+    buildings: Mapping[str, int] | None = None,
+    research_levels: Mapping[str, int] | None = None,
+    player_id: int | None = None,
+    conn=None,
+    planet: Mapping[str, Any] | None = None,
+) -> Dict[str, Any]:
+    """
+    Shared EffectResolver snapshot for unit/fleet display (GC-EFFSTAT).
+
+    Prefer full player stack when ``player_id`` + ``conn`` are available so
+    alliance / class / directives / boosters match gameplay.
+    """
+    from .effects import EffectResolver, get_effect_resolver
+
+    bld = dict(buildings or {})
+    res = dict(research_levels or {})
+    if player_id is not None and conn is not None:
+        resolver = get_effect_resolver(
+            int(player_id),
+            buildings=bld,
+            research=res,
+            conn=conn,
+            planet=dict(planet) if planet is not None else None,
+        )
+    else:
+        resolver = EffectResolver(bld, res)
+
+    combat = resolver.get_combat_modifiers()
+    mods = resolver.get_modifiers()
+    return {
+        "resolver": resolver,
+        "weapon_bonus": float(combat.get("weapon_bonus", 0.0) or 0.0),
+        "shield_bonus": float(combat.get("shield_bonus", 0.0) or 0.0),
+        "armor_bonus": float(combat.get("armor_bonus", 0.0) or 0.0),
+        "fleet_speed_multiplier": float(mods.get("fleet_speed_multiplier", 1.0) or 1.0),
+        "cargo_multiplier": float(mods.get("cargo_multiplier", 1.0) or 1.0),
+        "fuel_efficiency_factor": float(mods.get("fuel_efficiency_factor", 1.0) or 1.0),
+    }
+
+
+def build_combat_effective_stats(
+    *,
+    base_attack: int,
+    base_shield: int,
+    base_hull: int,
+    effect_ctx: Mapping[str, Any],
+) -> Dict[str, Dict[str, Any]]:
+    resolver = effect_ctx.get("resolver")
+    return {
+        "attack": build_effective_stat(
+            "attack",
+            base_attack,
+            additive_frac=float(effect_ctx.get("weapon_bonus") or 0.0),
+            sources=_resolver_source_contributions(resolver, "weapon_bonus", kind="additive_frac")
+            if resolver is not None
+            else None,
+        ),
+        "shield": build_effective_stat(
+            "shield",
+            base_shield,
+            additive_frac=float(effect_ctx.get("shield_bonus") or 0.0),
+            sources=_resolver_source_contributions(resolver, "shield_bonus", kind="additive_frac")
+            if resolver is not None
+            else None,
+        ),
+        "hull": build_effective_stat(
+            "hull",
+            base_hull,
+            additive_frac=float(effect_ctx.get("armor_bonus") or 0.0),
+            sources=_resolver_source_contributions(resolver, "armor_bonus", kind="additive_frac")
+            if resolver is not None
+            else None,
+        ),
+    }
+
+
+def build_mobility_effective_stats(
+    *,
+    base_speed: int,
+    base_cargo: int,
+    base_fuel: int,
+    effect_ctx: Mapping[str, Any],
+) -> Dict[str, Dict[str, Any]]:
+    resolver = effect_ctx.get("resolver")
+    return {
+        "speed": build_effective_stat(
+            "speed",
+            base_speed,
+            multiplier=float(effect_ctx.get("fleet_speed_multiplier") or 1.0),
+            sources=_resolver_source_contributions(
+                resolver, "fleet_speed_multiplier", kind="mult"
+            )
+            if resolver is not None
+            else None,
+        ),
+        "cargo": build_effective_stat(
+            "cargo",
+            base_cargo,
+            multiplier=float(effect_ctx.get("cargo_multiplier") or 1.0),
+            sources=_resolver_source_contributions(resolver, "cargo_multiplier", kind="mult")
+            if resolver is not None
+            else None,
+        ),
+        "fuel": build_effective_stat(
+            "fuel",
+            base_fuel,
+            multiplier=float(effect_ctx.get("fuel_efficiency_factor") or 1.0),
+            sources=_resolver_source_contributions(
+                resolver, "fuel_efficiency_factor", kind="mult"
+            )
+            if resolver is not None
+            else None,
+        ),
+    }
+
+
+def apply_combat_stats_to_catalog_entry(
+    entry: Dict[str, Any],
+    *,
+    effect_ctx: Mapping[str, Any],
+    attack_key: str = "attack",
+    shield_key: str = "shield",
+    hull_key: str = "hull",
+) -> Dict[str, Any]:
+    """Attach EffectiveStat payloads and overwrite catalog ints with effective values."""
+    combat = build_combat_effective_stats(
+        base_attack=int(entry.get(attack_key) or 0),
+        base_shield=int(entry.get(shield_key) or 0),
+        base_hull=int(entry.get(hull_key) or 0),
+        effect_ctx=effect_ctx,
+    )
+    entry["attack_stat"] = combat["attack"]
+    entry["shield_stat"] = combat["shield"]
+    entry["hull_stat"] = combat["hull"]
+    entry[attack_key] = int(combat["attack"]["effective"])
+    entry[shield_key] = int(combat["shield"]["effective"])
+    entry[hull_key] = int(combat["hull"]["effective"])
+    return entry
 
 
 def build_unit_technical_block(
@@ -1769,22 +2013,48 @@ def build_unit_technical_block(
     buildings: Mapping[str, int],
     research_levels: Mapping[str, int],
     next_yard_unit_seconds: int,
+    player_id: int | None = None,
+    conn=None,
+    planet: Mapping[str, Any] | None = None,
+    base_speed: int | None = None,
+    base_cargo: int | None = None,
+    base_fuel: int | None = None,
+    effect_ctx: Mapping[str, Any] | None = None,
 ) -> Dict[str, Any]:
-    """GC-828 — unified unit detail sections (build time preview, combat, bonuses)."""
-    from .effects import EffectResolver
-
-    resolver = EffectResolver(dict(buildings or {}), dict(research_levels or {}))
-    combat = resolver.get_combat_modifiers()
+    """GC-828 / GC-EFFSTAT — unit detail: build preview, effective combat/mobility, bonuses."""
+    ctx = dict(effect_ctx) if effect_ctx is not None else resolve_unit_effect_context(
+        buildings=buildings,
+        research_levels=research_levels,
+        player_id=player_id,
+        conn=conn,
+        planet=planet,
+    )
+    resolver = ctx.get("resolver")
+    combat_stats = build_combat_effective_stats(
+        base_attack=base_attack,
+        base_shield=base_shield,
+        base_hull=base_hull,
+        effect_ctx=ctx,
+    )
 
     cur_cycle = max(1, int(production.get("cycle_seconds") or base_build_seconds or 1))
     next_cycle = max(1, int(next_yard_unit_seconds or cur_cycle))
     cycle_delta = cur_cycle - next_cycle
 
-    cur_attack = _stat_with_combat_bonus(base_attack, combat["weapon_bonus"])
-    cur_shield = _stat_with_combat_bonus(base_shield, combat["shield_bonus"])
-    cur_hull = _stat_with_combat_bonus(base_hull, combat["armor_bonus"])
+    active = _active_combat_bonuses(research_levels, resolver=resolver)
+    mobility = None
+    if base_speed is not None or base_cargo is not None or base_fuel is not None:
+        mobility = build_mobility_effective_stats(
+            base_speed=int(base_speed or 0),
+            base_cargo=int(base_cargo or 0),
+            base_fuel=int(base_fuel or 0),
+            effect_ctx=ctx,
+        )
+        for row in _active_mobility_bonuses(resolver):
+            if row not in active:
+                active.append(row)
 
-    return {
+    out: Dict[str, Any] = {
         "build_preview": {
             "current_seconds": cur_cycle,
             "next_seconds": next_cycle,
@@ -1792,15 +2062,21 @@ def build_unit_technical_block(
             "at_max_yard": next_cycle >= cur_cycle and cycle_delta <= 0,
         },
         "combat": {
-            "attack": cur_attack,
-            "shield": cur_shield,
-            "hull": cur_hull,
+            "attack": int(combat_stats["attack"]["effective"]),
+            "shield": int(combat_stats["shield"]["effective"]),
+            "hull": int(combat_stats["hull"]["effective"]),
             "build_seconds": cur_cycle,
             "base_attack": int(base_attack),
             "base_shield": int(base_shield),
             "base_hull": int(base_hull),
+            "attack_stat": combat_stats["attack"],
+            "shield_stat": combat_stats["shield"],
+            "hull_stat": combat_stats["hull"],
         },
-        "active_bonuses": _active_combat_bonuses(research_levels),
+        "active_bonuses": active,
         "yard_batch_capacity": int(production.get("yard_batch_capacity") or 0),
         "build_time_reduction_percent": int(production.get("build_time_reduction_percent") or 0),
     }
+    if mobility is not None:
+        out["mobility"] = mobility
+    return out

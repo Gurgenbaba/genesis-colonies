@@ -58,8 +58,12 @@ Percent alone is forbidden as the primary statement. Percent may appear only as 
 - Parallel display engine beside `technical_data`
 - Mixing Command Center into normal-building nano previews
 
+## Effective unit stats (GC-EFFSTAT)
+
+Ship/defense/fleet catalog surfaces follow the same contract: **effective value first**, net total `%` as secondary badge (`build_effective_stat`). See [EFFECTS.md](EFFECTS.md) § Effective Stat Display.
+
 ## Tests
 
 ```bash
-python -m pytest tests/test_gc_techcard_ux.py -q
+python -m pytest tests/test_gc_techcard_ux.py tests/test_gc_effstat.py -q
 ```

@@ -7229,5 +7229,7 @@
   "wb_attack_x1": "×1",
   "wb_attack_x5": "×5",
   "wb_attack_x5_hint": "Golpe ×5: cinco vezes o dano, 25 min de recarga.",
-  "techtree_max_level": "Nível máx."
+  "techtree_max_level": "Nível máx.",
+  "effective_stat_bonus_total": "Bônus total",
+  "effective_stat_base_hint": "Base"
 }

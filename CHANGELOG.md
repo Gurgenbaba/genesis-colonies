@@ -34,6 +34,7 @@ Stand: **2026-07-31** · Spieler-Meilenstein **v0.9 Alpha** · Build-Zähler [`V
 - World Boss Action-Bar: Angriff / Auto / Zähmen vereint
 - Performance & Live-Updates gehärtet
 - News: Git-Audit aus Spieler-Pfad entfernt; Whats-New nur Major Releases
+- **GC-EFFSTAT** — Katalog-Stats (Speed/Cargo/Fuel/Kampf) zeigen effektive Werte inkl. Gesamtbonus-% (Shipyard, Defense, Fleet, Detail, Battle Lab)
 
 ### Fixed
 - Diverse Sync-/PJAX-Themen

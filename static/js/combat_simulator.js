@@ -620,9 +620,18 @@
 
     function renderCombatValueCard(row) {
       const name = unitLabel(row.name_key, row.unit_key);
-      const atk = fmt(row.attack_effective ?? row.attack_base ?? 0);
-      const sh = fmt(row.shield_effective ?? row.shield_base ?? 0);
-      const hull = fmt(row.hull_effective ?? row.hull_base ?? 0);
+      const fmtStat = (eff, base) => {
+        const e = Number(eff ?? base ?? 0) || 0;
+        const b = Number(base ?? e) || 0;
+        const pct = b > 0 ? Math.round((e / b - 1) * 100) : 0;
+        const bonus = pct
+          ? ` <span class="gc-eff-stat-bonus">${pct > 0 ? "+" : ""}${pct} %</span>`
+          : "";
+        return `${fmt(e)}${bonus}`;
+      };
+      const atk = fmtStat(row.attack_effective, row.attack_base);
+      const sh = fmtStat(row.shield_effective, row.shield_base);
+      const hull = fmtStat(row.hull_effective, row.hull_base);
       const zeroClass = Number(row.count) <= 0 ? " is-zero" : "";
       return `<article class="gbl-stat-card${zeroClass}">
         <div class="gbl-stat-card-head">${unitIconHtml(row.unit_key, row.unit_type || "ship")}<span>${name}</span></div>

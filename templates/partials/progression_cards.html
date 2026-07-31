@@ -152,10 +152,14 @@
 {% endmacro %}
 
 {# GC-632 / GC-827B — compact unit benefit row (Shipyard + Defense cards) #}
-{% macro render_compact_unit_stat_chips(attack, shield, hull, build_seconds=none, mode='ship') %}
-  {% set atk = (attack or 0)|int %}
-  {% set shd = (shield or 0)|int %}
-  {% set hul = (hull or 0)|int %}
+{% macro render_compact_unit_stat_chips(attack, shield, hull, build_seconds=none, mode='ship', attack_stat=none, shield_stat=none, hull_stat=none) %}
+  {% from "partials/effective_stat.html" import render_effective_stat_value with context %}
+  {% set atk_stat = attack_stat if attack_stat is mapping else none %}
+  {% set shd_stat = shield_stat if shield_stat is mapping else none %}
+  {% set hul_stat = hull_stat if hull_stat is mapping else none %}
+  {% set atk = (atk_stat.effective if atk_stat else (attack or 0))|int %}
+  {% set shd = (shd_stat.effective if shd_stat else (shield or 0))|int %}
+  {% set hul = (hul_stat.effective if hul_stat else (hull or 0))|int %}
   {% set hp = shd + hul if (shd + hul) > 0 else hul %}
   <div class="gc-bld-effect-bundle">
     <div class="gc-card-benefit-block" data-unit-stats data-unit-mode="{{ mode }}"
@@ -163,12 +167,22 @@
       {% if mode == 'defense' and hp > 0 %}
       <div class="gc-card-lr-row gc-card-benefit-row">
         <span class="gc-card-lr-label"><span aria-hidden="true">🛡</span> {{ T('defense_stat_defense', 'Verteidigung') }}</span>
-        <span class="gc-card-lr-value gc-mono gc-num-compact">{{ hp|fmt_int_compact }}</span>
+        <span class="gc-card-lr-value">
+          <span class="gc-eff-stat">
+            <span class="gc-eff-stat-value gc-mono gc-num-compact">{{ hp|fmt_int_compact }}</span>
+            {% if (shd_stat and shd_stat.bonus_pct) or (hul_stat and hul_stat.bonus_pct) %}
+              {% set def_pct = (shd_stat.bonus_pct if shd_stat and shd_stat.bonus_pct else (hul_stat.bonus_pct if hul_stat else 0))|int %}
+              {% if def_pct != 0 %}
+              <span class="gc-eff-stat-bonus">{{ ('+' ~ def_pct ~ ' %') if def_pct > 0 else (def_pct ~ ' %') }}</span>
+              {% endif %}
+            {% endif %}
+          </span>
+        </span>
       </div>
       {% elif mode != 'defense' and atk > 0 %}
       <div class="gc-card-lr-row gc-card-benefit-row">
         <span class="gc-card-lr-label"><span aria-hidden="true">⚔</span> {{ T('ship_stat_attack', 'Angriff') }}</span>
-        <span class="gc-card-lr-value gc-mono gc-num-compact">{{ atk|fmt_int_compact }}</span>
+        <span class="gc-card-lr-value">{{ render_effective_stat_value(atk_stat if atk_stat else atk, fallback=atk, compact=true) }}</span>
       </div>
       {% endif %}
     </div>

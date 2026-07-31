@@ -1,6 +1,7 @@
 {# Ship detail partial (AJAX) #}
 {% from "partials/progression_cards.html" import render_resource_cost_chip with context %}
 {% from "partials/unit_technical_detail.html" import render_unit_technical_detail with context %}
+{% from "partials/effective_stat.html" import render_effective_stat_value with context %}
 {% set card = card if card is defined and card else {} %}
 
 <div class="gc-player-card-shell gc-ship-detail-shell"
@@ -30,15 +31,15 @@
   <div class="gc-player-card-stats">
     <div class="gc-player-card-stat">
       <span class="gc-player-card-stat-label">{{ T("ship_detail_stat_speed") }}</span>
-      <span class="gc-player-card-stat-value gc-mono">{{ (card.get('speed') or 0)|fmt_int }}</span>
+      <span class="gc-player-card-stat-value">{{ render_effective_stat_value(card.get('speed_stat'), fallback=card.get('speed') or 0) }}</span>
     </div>
     <div class="gc-player-card-stat">
       <span class="gc-player-card-stat-label">{{ T("ship_detail_stat_cargo") }}</span>
-      <span class="gc-player-card-stat-value gc-mono">{{ (card.get('cargo') or 0)|fmt_int }}</span>
+      <span class="gc-player-card-stat-value">{{ render_effective_stat_value(card.get('cargo_stat'), fallback=card.get('cargo') or 0) }}</span>
     </div>
     <div class="gc-player-card-stat">
       <span class="gc-player-card-stat-label">{{ T("ship_detail_stat_fuel") }}</span>
-      <span class="gc-player-card-stat-value gc-mono">{{ (card.get('fuel') or 0)|fmt_int }}</span>
+      <span class="gc-player-card-stat-value">{{ render_effective_stat_value(card.get('fuel_stat'), fallback=card.get('fuel') or 0) }}</span>
     </div>
     {% if card.get('crew') is not none %}
     <div class="gc-player-card-stat">

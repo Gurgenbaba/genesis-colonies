@@ -119,7 +119,7 @@
             </div>
           </div>
         </div>
-        {{ render_compact_unit_stat_chips(unit.attack, unit.shield, unit.hull, none, 'defense') }}
+        {{ render_compact_unit_stat_chips(unit.attack, unit.shield, unit.hull, none, 'defense', unit.attack_stat, unit.shield_stat, unit.hull_stat) }}
         <div class="gc-bld-card-meta gc-bld-card-meta--costs-only" data-defense-cost
              data-unit-cost-metal="{{ unit.cost_metal }}"
              data-unit-cost-crystal="{{ unit.cost_crystal }}"
@@ -193,7 +193,7 @@
             </div>
           </div>
         </div>
-        {{ render_compact_unit_stat_chips(unit.attack, unit.shield, unit.hull, none, 'defense') }}
+        {{ render_compact_unit_stat_chips(unit.attack, unit.shield, unit.hull, none, 'defense', unit.attack_stat, unit.shield_stat, unit.hull_stat) }}
         <div class="gc-bld-card-meta gc-bld-card-meta--costs-only">
           {{ render_card_costs_block(unit.cost_metal, unit.cost_crystal, unit.cost_fuel_cells if unit.cost_fuel_cells else none) }}
         </div>

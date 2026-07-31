@@ -8788,6 +8788,49 @@ body:not(.gc-perf-idle) .research-bar-fill{
   color: rgba(180, 210, 230, 0.8);
 }
 
+/* GC-EFFSTAT — effective value + net bonus badge */
+.gc-eff-stat{
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.gc-eff-stat-value{
+  color: inherit;
+}
+.gc-eff-stat-bonus{
+  display: inline-block;
+  padding: 0 4px;
+  border: 1px solid rgba(70, 229, 255, 0.35);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(70, 229, 255, 0.08);
+  color: rgba(120, 220, 180, 0.95);
+  font-size: 0.72em;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+.gc-eff-stat-bonus.is-neg{
+  border-color: rgba(255, 160, 90, 0.4);
+  background: rgba(255, 140, 60, 0.08);
+  color: rgba(255, 190, 120, 0.95);
+}
+.gc-card-lr-value .gc-eff-stat,
+.fleet-preview-stat-value .gc-eff-stat-bonus,
+.gc-fleet-drawer-tooltip-section .gc-eff-stat-bonus,
+.gbl-stat-row .gc-eff-stat-bonus{
+  margin-left: 2px;
+}
+.fleet-preview-stat-value{
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .gc-tech-section--milestones{
   padding-top: 4px;
   border-top: 1px solid rgba(70, 229, 255, 0.1);

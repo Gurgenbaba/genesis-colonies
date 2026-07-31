@@ -377,6 +377,9 @@ def build_flight_preview_payload(
     cargo_total: int,
     resources: Mapping[str, Any] | None,
     fuel_cells_have: float = 0,
+    speed_bonus_pct: int = 0,
+    cargo_bonus_pct: int = 0,
+    fuel_bonus_pct: int = 0,
 ) -> Dict[str, Any]:
     loaded = calculate_loaded_resources(resources)
     loaded_total = loaded["metal"] + loaded["crystal"] + loaded["fuel_cells"]
@@ -398,6 +401,9 @@ def build_flight_preview_payload(
         "cargo_free": max(0, cargo_total - loaded_total),
         "cargo_used": loaded_total,
         "resources": loaded,
+        "speed_bonus_pct": int(speed_bonus_pct or 0),
+        "cargo_bonus_pct": int(cargo_bonus_pct or 0),
+        "fuel_bonus_pct": int(fuel_bonus_pct or 0),
     }
 
 

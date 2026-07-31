@@ -7229,5 +7229,7 @@
   "wb_attack_x1": "×1",
   "wb_attack_x5": "×5",
   "wb_attack_x5_hint": "Frappe ×5 : cinq fois les dégâts, 25 min de recharge.",
-  "techtree_max_level": "Niveau max"
+  "techtree_max_level": "Niveau max",
+  "effective_stat_bonus_total": "Bonus total",
+  "effective_stat_base_hint": "Base"
 }

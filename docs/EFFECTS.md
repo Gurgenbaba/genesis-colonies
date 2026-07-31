@@ -118,6 +118,16 @@ Pipeline (single request, one finish pass):
 3. Payload includes `energy`, `overview.rows`, `production_per_hour`
 4. `static/main.js` `applyGameStateData()` updates resource bar + overview table without reload
 
+### Effective Stat Display (GC-EFFSTAT)
+
+Wherever catalog stats are shown to players (ship/defense cards, ship detail Speed/Cargo/Fuel, fleet pick tooltips, fleet preview, Battle Lab combat cards), the UI must show:
+
+1. **Primary:** effective gameplay value (EffectResolver full stack when `player_id`+`conn` available)
+2. **Secondary:** single net total bonus `%` (`bonus_pct` / `bonus_display`) — omit when `0`
+3. **Detail:** source breakdown via `active_bonuses` / `sources`
+
+Owner: `game/technical_data.py` → `build_effective_stat`, `resolve_unit_effect_context`, `build_unit_technical_block`. Shared macro: `templates/partials/effective_stat.html`. No frontend formulas.
+
 ### `energy_tech` (mine consumption only)
 
 - **Effect:** reduces **mine** energy draw only (`metal_mine` / `crystal_mine`), not solar output or other buildings.

@@ -1,5 +1,6 @@
 {# GC-828 — shared technical sections for ship + defense detail modals #}
 {% macro render_unit_technical_detail(technical) %}
+{% from "partials/effective_stat.html" import render_effective_stat_line, render_effective_stat_value with context %}
 {% if technical %}
 {% set build = technical.get('build_preview') or {} %}
 {% set combat = technical.get('combat') or {} %}
@@ -34,18 +35,9 @@
     <div class="gc-tech-section-title">{{ T("unit_technical_combat_title", "Kampfwerte") }}</div>
     <div class="gc-tech-display">
       <div class="gc-tech-metrics">
-        <div class="gc-tech-line">
-          <span class="gc-tech-label">{{ T("ship_detail_stat_attack", "Angriff") }}</span>
-          <span class="gc-tech-val gc-mono">{{ (combat.get('attack') or 0)|fmt_int }}</span>
-        </div>
-        <div class="gc-tech-line">
-          <span class="gc-tech-label">{{ T("ship_detail_stat_shield", "Schild") }}</span>
-          <span class="gc-tech-val gc-mono">{{ (combat.get('shield') or 0)|fmt_int }}</span>
-        </div>
-        <div class="gc-tech-line">
-          <span class="gc-tech-label">{{ T("ship_detail_stat_hull", "Hülle") }}</span>
-          <span class="gc-tech-val gc-mono">{{ (combat.get('hull') or 0)|fmt_int }}</span>
-        </div>
+        {{ render_effective_stat_line(T("ship_detail_stat_attack", "Angriff"), combat.get('attack_stat'), combat.get('attack') or 0) }}
+        {{ render_effective_stat_line(T("ship_detail_stat_shield", "Schild"), combat.get('shield_stat'), combat.get('shield') or 0) }}
+        {{ render_effective_stat_line(T("ship_detail_stat_hull", "Hülle"), combat.get('hull_stat'), combat.get('hull') or 0) }}
         <div class="gc-tech-line">
           <span class="gc-tech-label">{{ T("unit_technical_build_time", "Bauzeit") }}</span>
           <span class="gc-tech-val gc-mono">{{ (combat.get('build_seconds') or 0)|fmt_int }}s</span>

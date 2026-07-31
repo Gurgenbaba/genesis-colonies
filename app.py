@@ -10374,6 +10374,7 @@ def api_ship_detail(ship_key: str):
 
     buildings = None
     research = None
+    planet = None
     user_id = int(session.get("user_id") or 0)
     if user_id:
         conn = db()
@@ -10381,10 +10382,18 @@ def api_ship_detail(ship_key: str):
             planet = get_context_planet(user_id, conn=conn)
             buildings = get_planet_buildings(int(planet["id"]), conn=conn)
             research = get_research_levels(user_id=user_id, conn=conn)
+            card, err = build_ship_detail_card(
+                ship_key,
+                buildings=buildings,
+                research=research,
+                player_id=user_id,
+                conn=conn,
+                planet=planet,
+            )
         finally:
             conn.close()
-
-    card, err = build_ship_detail_card(ship_key, buildings=buildings, research=research)
+    else:
+        card, err = build_ship_detail_card(ship_key, buildings=buildings, research=research)
     if err:
         return (
             render_template(
@@ -10405,6 +10414,7 @@ def api_defense_detail(defense_key: str):
 
     buildings = None
     research = None
+    planet = None
     user_id = int(session.get("user_id") or 0)
     if user_id:
         conn = db()
@@ -10412,12 +10422,20 @@ def api_defense_detail(defense_key: str):
             planet = get_context_planet(user_id, conn=conn)
             buildings = get_planet_buildings(int(planet["id"]), conn=conn)
             research = get_research_levels(user_id=user_id, conn=conn)
+            card, err = build_defense_detail_card(
+                defense_key,
+                buildings=buildings,
+                research=research,
+                player_id=user_id,
+                conn=conn,
+                planet=planet,
+            )
         finally:
             conn.close()
-
-    card, err = build_defense_detail_card(
-        defense_key, buildings=buildings, research=research
-    )
+    else:
+        card, err = build_defense_detail_card(
+            defense_key, buildings=buildings, research=research
+        )
     if err:
         return (
             render_template(

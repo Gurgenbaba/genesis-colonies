@@ -20458,12 +20458,17 @@
       const have = parseInt(card.getAttribute("data-ship-have") || "0", 10) || 0;
       const speed = card.getAttribute("data-ship-tooltip-speed") || "0";
       const cargo = card.getAttribute("data-ship-tooltip-cargo") || "0";
+      const speedBonus = (card.getAttribute("data-ship-tooltip-speed-bonus") || "").trim();
+      const cargoBonus = (card.getAttribute("data-ship-tooltip-cargo-bonus") || "").trim();
       const esc = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const withBonus = (value, bonus) => bonus
+        ? `${esc(value)} <span class="gc-eff-stat-bonus">${esc(bonus)}</span>`
+        : esc(value);
       return [
         `<div class="gc-fleet-drawer-tooltip-title">${esc(name)}</div>`,
         `<div class="gc-fleet-drawer-tooltip-section"><span class="gc-fleet-drawer-tooltip-label">${tt("fleet_ship_stock", "Bestand")}</span>× ${formatNumber(have)}</div>`,
-        `<div class="gc-fleet-drawer-tooltip-section"><span class="gc-fleet-drawer-tooltip-label">${tt("fleet_table_speed", "Speed")}</span>${esc(speed)}</div>`,
-        `<div class="gc-fleet-drawer-tooltip-section"><span class="gc-fleet-drawer-tooltip-label">${tt("fleet_table_cargo", "Cargo")}</span>${esc(cargo)}</div>`,
+        `<div class="gc-fleet-drawer-tooltip-section"><span class="gc-fleet-drawer-tooltip-label">${tt("fleet_table_speed", "Speed")}</span>${withBonus(speed, speedBonus)}</div>`,
+        `<div class="gc-fleet-drawer-tooltip-section"><span class="gc-fleet-drawer-tooltip-label">${tt("fleet_table_cargo", "Cargo")}</span>${withBonus(cargo, cargoBonus)}</div>`,
       ].join("");
     };
 
@@ -21984,6 +21989,23 @@
           if (previewCargo) {
             previewCargo.textContent = `${formatNumber(p.cargo_used || 0)} / ${formatNumber(p.cargo_total || 0)}`;
           }
+          const setPreviewBonus = (sel, pct) => {
+            const el = page.querySelector(sel);
+            if (!el) return;
+            const n = parseInt(pct, 10) || 0;
+            if (!n) {
+              el.hidden = true;
+              el.textContent = "";
+              el.classList.toggle("is-neg", false);
+              return;
+            }
+            el.hidden = false;
+            el.textContent = n > 0 ? `+${n} %` : `${n} %`;
+            el.classList.toggle("is-neg", n < 0);
+          };
+          setPreviewBonus("[data-preview-cargo-bonus]", p.cargo_bonus_pct);
+          setPreviewBonus("[data-preview-speed-bonus]", p.speed_bonus_pct);
+          setPreviewBonus("[data-preview-fuel-bonus]", p.fuel_bonus_pct);
           if (previewCargoFree) previewCargoFree.textContent = formatNumber(p.cargo_free || 0);
           if (previewFuel) previewFuel.textContent = formatNumber(p.fuel_cost || 0);
           if (previewFuelAvail) {

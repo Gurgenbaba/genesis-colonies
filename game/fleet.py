@@ -1996,6 +1996,26 @@ def preview_fleet_flight(
         else:
             cargo_total = calculate_total_cargo(ships, cargo_multiplier=cargo_mult)
         fuel_cells_have = float(origin_planet.get("fuel_cells") or 0)
+        from .technical_data import build_effective_stat
+
+        speed_bonus_pct = int(
+            build_effective_stat("fleet_speed", 100, multiplier=float(speed_mult or 1.0)).get(
+                "bonus_pct"
+            )
+            or 0
+        )
+        cargo_bonus_pct = int(
+            build_effective_stat("fleet_cargo", 100, multiplier=float(cargo_mult or 1.0)).get(
+                "bonus_pct"
+            )
+            or 0
+        )
+        fuel_bonus_pct = int(
+            build_effective_stat("fleet_fuel", 100, multiplier=float(fuel_eff_factor or 1.0)).get(
+                "bonus_pct"
+            )
+            or 0
+        )
         return build_flight_preview_payload(
             distance=distance,
             fleet_speed=fleet_speed,
@@ -2004,6 +2024,9 @@ def preview_fleet_flight(
             cargo_total=cargo_total,
             resources=resources,
             fuel_cells_have=fuel_cells_have,
+            speed_bonus_pct=speed_bonus_pct,
+            cargo_bonus_pct=cargo_bonus_pct,
+            fuel_bonus_pct=fuel_bonus_pct,
         )
     finally:
         if own and conn is not None:
@@ -7359,12 +7382,67 @@ def build_fleet_page_context(
         slots = get_fleet_slot_status(player_id, conn=conn)
         movements = list_active_movements(player_id, conn=conn)
 
-        from .models import get_planet_buildings
+        from .models import get_planet_buildings, get_research_levels
         from .shipyard import get_shipyard_level, list_buildable_ships
+        from .technical_data import (
+            build_effective_stat,
+            build_mobility_effective_stats,
+            resolve_unit_effect_context,
+        )
 
         sy_level = get_shipyard_level(player_id, planet_id, conn=conn)
         buildable = list_buildable_ships(player_id, planet_id, conn=conn)
         has_ships = sum(int(v) for v in ships.values()) > 0
+
+        buildings = get_planet_buildings(int(planet_id), conn=conn)
+        research = get_research_levels(user_id=int(player_id), conn=conn)
+        effect_ctx = resolve_unit_effect_context(
+            buildings=buildings,
+            research_levels=research,
+            player_id=int(player_id),
+            conn=conn,
+            planet=planet,
+        )
+        ship_defs = []
+        for raw in ships_for_fleet_ui():
+            row = dict(raw)
+            mobility = build_mobility_effective_stats(
+                base_speed=int(row.get("speed") or 0),
+                base_cargo=int(row.get("cargo") or 0),
+                base_fuel=int(row.get("fuel") or 0),
+                effect_ctx=effect_ctx,
+            )
+            row["speed_stat"] = mobility["speed"]
+            row["cargo_stat"] = mobility["cargo"]
+            row["fuel_stat"] = mobility["fuel"]
+            row["speed"] = int(mobility["speed"]["effective"])
+            row["cargo"] = int(mobility["cargo"]["effective"])
+            row["fuel"] = int(mobility["fuel"]["effective"])
+            ship_defs.append(row)
+        speed_bonus_pct = int(
+            build_effective_stat(
+                "fleet_speed",
+                100,
+                multiplier=float(effect_ctx.get("fleet_speed_multiplier") or 1.0),
+            ).get("bonus_pct")
+            or 0
+        )
+        cargo_bonus_pct = int(
+            build_effective_stat(
+                "fleet_cargo",
+                100,
+                multiplier=float(effect_ctx.get("cargo_multiplier") or 1.0),
+            ).get("bonus_pct")
+            or 0
+        )
+        fuel_bonus_pct = int(
+            build_effective_stat(
+                "fleet_fuel",
+                100,
+                multiplier=float(effect_ctx.get("fuel_efficiency_factor") or 1.0),
+            ).get("bonus_pct")
+            or 0
+        )
 
         return {
             "ready": True,
@@ -7372,7 +7450,12 @@ def build_fleet_page_context(
             "coordinates": coords,
             "ships": ships,
             "has_ships": has_ships,
-            "ship_defs": ships_for_fleet_ui(),
+            "ship_defs": ship_defs,
+            "fleet_stat_bonuses": {
+                "speed_bonus_pct": speed_bonus_pct,
+                "cargo_bonus_pct": cargo_bonus_pct,
+                "fuel_bonus_pct": fuel_bonus_pct,
+            },
             "resources": {
                 "metal": int(float(planet.get("metal") or 0)),
                 "crystal": int(float(planet.get("crystal") or 0)),
