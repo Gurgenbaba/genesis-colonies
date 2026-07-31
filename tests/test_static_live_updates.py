@@ -1186,6 +1186,13 @@ def test_main_js_apply_planet_hero_theme_border_fx():
     assert ".overview-companion-layer{" in css
     assert "position: absolute" in css.split(".overview-companion-layer{")[1].split(".overview-companion-hotspot{")[0]
     assert "overview-companion-float" in css
+    # No rectangular selection frame around Titan hotspots (glow only).
+    assert (
+        "outline: none"
+        in css.split(".overview-companion-hotspot.is-popover-open{")[1].split(
+            ".overview-companion-hotspot.is-popover-open .overview-companion-hotspot-aura{"
+        )[0]
+    )
     assert 'getElementById("overview-companion-layer")' in src
     assert "data-companion-nav-wb" in src
     assert "overview_companion_goto_wb" in src

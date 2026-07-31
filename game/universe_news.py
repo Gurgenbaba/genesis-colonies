@@ -1696,6 +1696,7 @@ V09_RELEASE_PACK: Dict[str, Any] = {
     ],
     "changed": [
         "Titanen größer und mit Aura — lesbar auf hellen und dunklen Landscapes",
+        "Titan-Hotspots ohne Auswahl-Rahmen — nur Glow/Aura",
         "World Boss: Angriff, Auto und Zähmen in einer Action-Bar",
         "Performance und Live-Updates weiter gehärtet",
         "UI-Feinschliff über Overview, Fleet und News",
@@ -1704,6 +1705,7 @@ V09_RELEASE_PACK: Dict[str, Any] = {
         "Diverse Sync- und PJAX-Themen",
         "Timer- und Queue-Stabilität",
         "Viele kleine Darstellungsfehler aus dem Alpha-Feedback",
+        "Titan-Link: Mission-Ende sofort sichtbar (ohne langes Warten)",
     ],
 }
 

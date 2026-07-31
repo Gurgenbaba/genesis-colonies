@@ -2,19 +2,20 @@
 
 Vollständige Entwicklungshistorie von Projektstart bis heute.  
 Clustered by milestone versions (not every commit).  
-Stand: **2026-07-31** · Alpha-Meilenstein **v0.9** (Build-Zähler: `VERSION`, nur intern/Cache-Bust)
+Stand: **2026-07-31** · Spieler-Meilenstein **v0.9 Alpha** · Build-Zähler [`VERSION`](VERSION) (intern / Cache-Bust, derzeit `0.5.9.x`)
 
-> Spieler: Aktuelle Patchnotes live im Spiel unter **News** (`/news`) und im NEWS-Banner.  
+> **Versionsregel:** Alpha bleibt **`v0.9.x`**. **`v1.0` / `v1.0.0-beta`** ist der Beta-Gate ([docs/BETA_GATE.md](docs/BETA_GATE.md)) — nicht für Alpha-Patches verwenden.  
+> Spieler: Patchnotes live unter **News** (`/news`) und im NEWS-Banner.  
 > Admins: Release-Publisher im Admin-Panel → Server → Universums-News (nicht Git-Commits).
 
 ---
 
-## v0.9 — LiveOps & World Events *(2026-07-31)*
+## v0.9 — LiveOps & World Events *(Alpha · 2026-07-31)*
 
 ### Added
 - **World Boss Events** — Encounter-Stage, Sofort-Angriff, Auto-Angriff
-- **Zähmen** in Phase 3 (10 %, 10h Timekeeper, 1h Cooldown)
-- **Titanen** auf der Übersicht mit Titan-Link Popover
+- **Zähmen** in Phase 3 (10 %, 10h Timekeeper, 1h Cooldown); erfolgreiches Zähmen beendet den Live-Boss und zahlt Belohnungen an Teilnehmer aus
+- **Titanen** auf der Übersicht mit Titan-Link Popover (Mission-Fortschritt, sofortiges Zurück-Sync)
 - **Ark-Token-Missionen** — Patrouille / Schlag / Void-Run mit Fail-Risiko
 - **Titan-Slots** — Start 1, Shop bis 4
 - **Piraten-Ökosystem**
@@ -24,14 +25,10 @@ Stand: **2026-07-31** · Alpha-Meilenstein **v0.9** (Build-Zähler: `VERSION`, n
 - **Story Ops / Lore** Sidequests mit Free-Shop Ark-Token Loop
 - **Universe News Release-Publisher** — kuratierte Spieler-Patchnotes ohne Git-Runtime
 - **Commander Classes (EPIC-27)** — 5 Klassen, linearer Skill-Trunk, Capstones, TK-Swap (`/skilltree`)
-- **Commander Pick UI (GC-CLASS-UI-001)** — Destiny-style Command Staff cards + Active Commander bar
-- **Living Focus (GC-CLASS-UI-002)** — WebP-slim portraits, role icons, focus overlay, parallax
-- **Compact Tree Skillmap (GC-CLASS-UI-006)** — GoF-inspired fork silhouette map, dock unlock, live patch (v0.5.9.66)
-- **World Boss tame closeout** — successful catch removes the live boss and auto-pays contribution rewards (v0.5.9.67)
-- **Titan-Link mission UX** — progress bar, larger unclipped popover, instant return sync (v0.5.9.68)
+- **Commander Pick UI** — Destiny-style Command Staff cards, Living Focus, Compact Skillmap
 
 ### Changed
-- Titanen größer und mit Aura (helle + dunkle Landscapes)
+- Titanen größer und mit Aura (helle + dunkle Landscapes); Hotspot ohne Auswahl-Rahmen
 - World Boss Action-Bar: Angriff / Auto / Zähmen vereint
 - Performance & Live-Updates gehärtet
 - News: Git-Audit aus Spieler-Pfad entfernt; Whats-New nur Major Releases
@@ -40,11 +37,10 @@ Stand: **2026-07-31** · Alpha-Meilenstein **v0.9** (Build-Zähler: `VERSION`, n
 - Diverse Sync-/PJAX-Themen
 - Timer- & Queue-Stabilität
 - Viele kleine Darstellungsfehler aus dem Alpha-Feedback
-- Commander Pick-Cards: Preview-Chips nicht mehr am Kartenfuß abgeschnitten; Role-Icons als transparente WebP (ohne schwarze Ecken)
+- Commander Pick-Cards: Preview-Chips nicht mehr am Kartenfuß abgeschnitten; Role-Icons als transparente WebP
 - Commander Pick: Session-Fehlalarm behoben (POST/JSON statt GET → kein Login-Redirect)
-- Commander Skilltree: linearer Listen-Trunk → visueller Pfad (Nodes + Connectors)
-- Commander Skilltree: Role-Icon-Art auf Path-Nodes (WebP Alpha) + cinematic Node-Treatment
-- Commander Skilltree: eigene Skill-Arts (`skills/{skill_key}.webp`) statt Role-Icons im Trunk
+- Commander Skilltree: Compact Map + Dock-Unlock statt Listen-/Path-Cards
+- Titan-Link: Mission-Ende wird sofort sichtbar (kein langes Warten auf Worker)
 
 ---
 
