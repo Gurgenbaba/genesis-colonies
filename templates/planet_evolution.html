@@ -409,8 +409,6 @@
   {% set strengths = traits | selectattr('polarity', 'in', ['positive', 'rare', 'neutral']) | list %}
   {% set weaknesses = traits | selectattr('polarity', 'equalto', 'negative') | list %}
 
-  {% include "partials/codex_page_surfaces.html" %}
-
   {% if ps.ok %}
 
   {% set affinity_icons = {

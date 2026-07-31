@@ -673,7 +673,6 @@ def inject_globals():
         auth_discord_linked = False
 
     codex_panel: dict[str, Any] = {"bands": []}
-    codex_quick_help: dict[str, str] | None = None
     codex_commander_tip: dict[str, str] | None = None
     codex_primary: str | None = None
     codex_client: dict[str, Any] = {"articles": {}}
@@ -691,7 +690,6 @@ def inject_globals():
                     conn=_codex_conn,
                 )
                 codex_panel = _codex_ctx["CODEX_PANEL"]
-                codex_quick_help = _codex_ctx["CODEX_QUICK_HELP"]
                 codex_commander_tip = _codex_ctx["CODEX_COMMANDER_TIP"]
                 codex_primary = _codex_ctx["CODEX_PRIMARY"]
                 codex_client = _codex_ctx["CODEX_CLIENT"]
@@ -887,7 +885,6 @@ def inject_globals():
         AUTH_DISCORD_LINKED=auth_discord_linked,
 
         CODEX_PANEL=codex_panel,
-        CODEX_QUICK_HELP=codex_quick_help,
         CODEX_COMMANDER_TIP=codex_commander_tip,
         CODEX_PRIMARY=codex_primary,
         CODEX_CLIENT=codex_client,

@@ -269,24 +269,6 @@ def primary_codex_for_route(endpoint: str) -> Optional[str]:
     return None
 
 
-def quick_help_for_route(
-    player_id: int,
-    endpoint: str,
-    *,
-    conn: sqlite3.Connection | None = None,
-) -> Optional[Dict[str, str]]:
-    codex_id = primary_codex_for_route(endpoint)
-    if not codex_id:
-        return None
-    if not is_codex_unlocked(int(player_id), codex_id, conn=conn):
-        return None
-    article = catalog_articles().get(codex_id) or {}
-    if "quick_help" not in (article.get("surfaces") or []):
-        return None
-    key = f"codex_{codex_id}_quick_help"
-    return {"codex_id": codex_id, "text_key": key}
-
-
 def commander_tip_for_date(
     player_id: int,
     *,
@@ -543,7 +525,6 @@ def build_codex_template_context(
     primary = primary_codex_for_route(route_key)
     return {
         "CODEX_PANEL": build_codex_panel_state(int(player_id), conn=conn),
-        "CODEX_QUICK_HELP": quick_help_for_route(int(player_id), route_key, conn=conn),
         "CODEX_COMMANDER_TIP": commander_tip_for_date(int(player_id), conn=conn),
         "CODEX_PRIMARY": primary,
         "CODEX_CLIENT": build_codex_client_config(int(player_id), conn=conn),

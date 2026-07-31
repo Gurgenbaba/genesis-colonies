@@ -28,6 +28,7 @@ Stand: **2026-07-31** · Spieler-Meilenstein **v0.9 Alpha** · Build-Zähler [`V
 - **Commander Pick UI** — Destiny-style Command Staff cards, Living Focus, Compact Skillmap
 
 ### Changed
+- Codex Quick-Help-Banner auf Seiten entfernt (Codex über Context-Button)
 - Titan-Link Mission-Progress: Mini-Titan wandert Richtung Fortschritts-Spitze und zurück (Ping-Pong, reduced-motion-sicher)
 - Titanen größer und mit Aura (helle + dunkle Landscapes); Hotspot ohne Auswahl-Rahmen
 - World Boss Action-Bar: Angriff / Auto / Zähmen vereint

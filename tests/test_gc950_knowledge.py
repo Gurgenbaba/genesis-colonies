@@ -310,7 +310,10 @@ def test_overview_renders_codex_surfaces(gc950_db, monkeypatch):
         sess["user_id"] = uid
     html = client.get("/overview").get_data(as_text=True)
     assert "data-special-window=\"codex\"" in html
-    assert "data-codex-quick-help" in html or "gc-codex-quick-help" in html
+    # Page-inline Codex quick-help banners removed — players open Codex via context button.
+    assert "data-codex-quick-help" not in html
+    assert "gc-codex-quick-help" not in html
+    assert "partials/codex_page_surfaces.html" not in (ROOT / "templates/overview.html").read_text(encoding="utf-8")
     assert "gc-codex-client" in html
     assert "data-codex-context-open" in html
     assert "data-codex-article-body" in html

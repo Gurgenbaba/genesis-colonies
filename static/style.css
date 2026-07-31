@@ -19901,23 +19901,6 @@ a.gc-ranking-alliance:hover{
   gap: 6px;
 }
 
-.gc-codex-quick-help{
-  margin: 0 0 12px;
-  padding: 10px 12px;
-  border: 1px solid rgba(70, 229, 255, 0.18);
-  background: rgba(8, 18, 36, 0.55);
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-}
-
-.gc-codex-quick-help-text{
-  flex: 1 1 220px;
-  margin: 0;
-  font-size: 0.82rem;
-}
-
 .gc-codex-context-btn{
   min-width: 28px;
   min-height: 28px;
@@ -19960,13 +19943,6 @@ a.gc-ranking-alliance:hover{
 
 .gc-codex-commander-tip-mobile{
   display: none !important;
-}
-
-/* Mobile overview: hide quick-help / tip strip for a cleaner command view. */
-@media (max-width: 991px){
-  .gc-codex-quick-help{
-    display: none !important;
-  }
 }
 
 .gc-special-head{
