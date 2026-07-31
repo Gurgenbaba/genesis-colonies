@@ -6445,13 +6445,13 @@ body.gc-body-ingame .overview-hero.overview-hero--themed.gc-planet-hero.gc-panel
   width: 36px;
   height: 20px;
   margin: 0;
-  transform: translateX(-50%) scaleX(1);
+  transform: translateX(-50%);
   transform-origin: center bottom;
   pointer-events: none;
   filter: drop-shadow(0 0 6px rgba(70, 229, 255, 0.45));
   transition: left 0.35s linear;
-  animation: companion-titan-bob 1.15s ease-in-out infinite;
   will-change: left, transform;
+  z-index: 2;
 }
 .overview-companion-mission-progress__walker img{
   display: block;
@@ -6461,16 +6461,105 @@ body.gc-body-ingame .overview-hero.overview-hero--themed.gc-planet-hero.gc-panel
   object-position: center bottom;
   border-radius: var(--gc-radius-xs, 0);
   image-rendering: auto;
+  animation: companion-titan-bob 1.15s ease-in-out infinite;
+  transform-origin: center bottom;
+}
+.overview-companion-mission-progress__muzzle,
+.overview-companion-mission-progress__bolt,
+.overview-companion-mission-progress__impact{
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+}
+/* Muzzle flash at the Titan's forward edge */
+.overview-companion-mission-progress__muzzle{
+  right: -2px;
+  top: 42%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, #9cf0ff 35%, rgba(42, 127, 255, 0) 72%);
+  box-shadow: 0 0 10px rgba(70, 229, 255, 0.85);
+  transform: translateY(-50%) scale(0.2);
+}
+/* Plasma bolt flying ahead along the track */
+.overview-companion-mission-progress__bolt{
+  left: 70%;
+  top: 55%;
+  width: 18px;
+  height: 3px;
+  border-radius: 1px;
+  background: linear-gradient(90deg, rgba(156, 240, 255, 0.95), rgba(42, 127, 255, 0));
+  box-shadow: 0 0 8px rgba(70, 229, 255, 0.75);
+  transform: translateY(-50%);
+}
+/* Impact spark further down the track */
+.overview-companion-mission-progress__impact{
+  left: 140%;
+  top: 70%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, #46e5ff 40%, rgba(42, 127, 255, 0) 70%);
+  box-shadow: 0 0 12px rgba(70, 229, 255, 0.7);
+  transform: translateY(-50%) scale(0.2);
+}
+.overview-companion-mission-progress__walker.is-firing img{
+  animation:
+    companion-titan-bob 1.15s ease-in-out infinite,
+    companion-titan-recoil 0.55s ease-out 1;
+}
+.overview-companion-mission-progress__walker.is-firing .overview-companion-mission-progress__muzzle{
+  animation: companion-titan-muzzle 0.45s ease-out 1;
+}
+.overview-companion-mission-progress__walker.is-firing .overview-companion-mission-progress__bolt{
+  animation: companion-titan-bolt 0.55s ease-out 1;
+}
+.overview-companion-mission-progress__walker.is-firing .overview-companion-mission-progress__impact{
+  animation: companion-titan-impact 0.55s ease-out 1;
 }
 @keyframes companion-titan-bob{
   0%,
-  100%{ translate: 0 0; }
-  50%{ translate: 0 -2px; }
+  100%{ transform: translateY(0); }
+  50%{ transform: translateY(-2px); }
+}
+@keyframes companion-titan-recoil{
+  0%{ transform: translateY(0) translateX(0); }
+  18%{ transform: translateY(0) translateX(-3px); filter: brightness(1.35); }
+  55%{ transform: translateY(0) translateX(1px); filter: brightness(1.1); }
+  100%{ transform: translateY(0) translateX(0); filter: brightness(1); }
+}
+@keyframes companion-titan-muzzle{
+  0%{ opacity: 0; transform: translateY(-50%) scale(0.2); }
+  20%{ opacity: 1; transform: translateY(-50%) scale(1.35); }
+  100%{ opacity: 0; transform: translateY(-50%) scale(0.4); }
+}
+@keyframes companion-titan-bolt{
+  0%{ opacity: 0; transform: translateY(-50%) translateX(0) scaleX(0.4); }
+  12%{ opacity: 1; }
+  100%{ opacity: 0; transform: translateY(-50%) translateX(28px) scaleX(1.1); }
+}
+@keyframes companion-titan-impact{
+  0%,
+  35%{ opacity: 0; transform: translateY(-50%) scale(0.2); }
+  48%{ opacity: 1; transform: translateY(-50%) scale(1.4); }
+  100%{ opacity: 0; transform: translateY(-50%) scale(0.3); }
 }
 @media (prefers-reduced-motion: reduce){
   .overview-companion-mission-progress__walker{
-    animation: none;
     transition: none;
+  }
+  .overview-companion-mission-progress__walker img,
+  .overview-companion-mission-progress__walker.is-firing img,
+  .overview-companion-mission-progress__walker.is-firing .overview-companion-mission-progress__muzzle,
+  .overview-companion-mission-progress__walker.is-firing .overview-companion-mission-progress__bolt,
+  .overview-companion-mission-progress__walker.is-firing .overview-companion-mission-progress__impact{
+    animation: none !important;
+  }
+  .overview-companion-mission-progress__muzzle,
+  .overview-companion-mission-progress__bolt,
+  .overview-companion-mission-progress__impact{
+    display: none;
   }
 }
 .overview-companion-mission-lead{

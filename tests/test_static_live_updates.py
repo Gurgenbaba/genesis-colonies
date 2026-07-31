@@ -1202,23 +1202,30 @@ def test_main_js_apply_planet_hero_theme_border_fx():
     assert "overview_companion_goto_wb" in src
     assert 'GC.navigateTo(path)' in src or 'GC.navigateTo(path)' in src.replace(" ", "")
     assert "data-companion-nav-wb" in src and "navigateTo" in src.split("initOverviewCompanions")[1].split("function parseInventoryPageState")[0]
-    # Titan mission progress: walker advances along the fill tip as %.
+    # Titan mission progress: walker pinned to fill tip + client-only fire FX.
     assert "overview-companion-mission-progress__walker" in src
     assert "data-companion-progress-walker" in src
     assert "--companion-walk-at" in src
+    assert "overview-companion-mission-progress__bolt" in src
+    assert "overview-companion-mission-progress__muzzle" in src
+    assert "is-firing" in src
     assert "@keyframes companion-titan-bob" in css
+    assert "@keyframes companion-titan-bolt" in css
+    assert "@keyframes companion-titan-recoil" in css
     assert "companion-titan-wander" not in css
     walker_css = css.split(".overview-companion-mission-progress__walker{")[1].split(
         ".overview-companion-mission-progress__walker img{"
     )[0]
     assert "--companion-walk-at" in walker_css
-    assert "companion-titan-bob" in walker_css
-    assert "updateCompanionProgressDom" in src
     progress_fn = src.split("const updateCompanionProgressDom = () => {")[1].split(
         "const syncCompanionDue"
     )[0]
     assert "--companion-walk-at" in progress_fn
+    assert "pctExact" in progress_fn
+    assert "is-firing" in progress_fn
     assert "data-companion-progress-walker" in progress_fn
+    # Fire cadence is local DOM only — no extra companion API from the FX path.
+    assert "/api/world-boss/companion" not in progress_fn
     hero_img = css.split(".overview-hero--themed.gc-planet-hero .overview-hero-bg picture,")[1].split(".overview-hero-hud{")[0]
     assert "transform: none" in hero_img
     assert ":hover .overview-hero-bg picture" not in css.split(".overview-hero--themed.gc-planet-hero .overview-hero-bg picture,")[0][-200:] + hero_img

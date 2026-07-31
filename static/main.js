@@ -14863,9 +14863,13 @@
           </div>
           <div class="overview-companion-mission-progress__track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}">
             <span class="overview-companion-mission-progress__fill" data-companion-progress-fill style="width:${pct}%;"></span>
-            <span class="overview-companion-mission-progress__walker" data-companion-progress-walker aria-hidden="true">
+            <span class="overview-companion-mission-progress__walker" data-companion-progress-walker aria-hidden="true"
+                  style="left:${walkAt}%">
               <img src="${artSrc}" alt="" width="36" height="20" loading="lazy" decoding="async"
                    onerror="this.onerror=null;this.src='/static/img/bosses/_placeholder.webp';">
+              <span class="overview-companion-mission-progress__muzzle"></span>
+              <span class="overview-companion-mission-progress__bolt"></span>
+              <span class="overview-companion-mission-progress__impact"></span>
             </span>
           </div>
         </div>`;
@@ -14909,17 +14913,32 @@
           ? Number(getTimerServerNow()) || Date.now() / 1000
           : Date.now() / 1000;
       const elapsed = Math.max(0, Math.min(total, nowSec - started));
-      const pct = Math.max(0, Math.min(100, Math.round((elapsed / total) * 100)));
+      // Smooth walker position (exact tip); rounded % only for the label.
+      const pctExact = Math.max(0, Math.min(100, (elapsed / total) * 100));
+      const pct = Math.round(pctExact);
       const fill = block.querySelector("[data-companion-progress-fill]");
       const pctEl = block.querySelector("[data-companion-progress-pct]");
       const track = block.querySelector("[role='progressbar']");
-      if (fill) fill.style.width = pct + "%";
+      if (fill) fill.style.width = pctExact + "%";
       if (pctEl) pctEl.textContent = pct + "%";
       if (track) track.setAttribute("aria-valuenow", String(pct));
-      const walkAt = Math.max(0, Math.min(100, pct));
-      block.style.setProperty("--companion-walk-at", walkAt + "%");
+      // Pin Titan to the live fill tip (10% → 10%, 24% → 24%, …).
+      block.style.setProperty("--companion-walk-at", pctExact + "%");
       const walker = block.querySelector("[data-companion-progress-walker]");
-      if (walker) walker.style.left = walkAt + "%";
+      if (walker) {
+        walker.style.left = pctExact + "%";
+        // Client-only volley cadence (~every 2.8–3.6s). No network.
+        const fireEveryMs = 3000;
+        const phase = Math.floor((nowSec * 1000) / fireEveryMs);
+        const lastPhase = Number(walker.getAttribute("data-fire-phase") || -1);
+        if (phase !== lastPhase) {
+          walker.setAttribute("data-fire-phase", String(phase));
+          walker.classList.remove("is-firing");
+          // Force reflow so the fire animation can restart.
+          void walker.offsetWidth;
+          walker.classList.add("is-firing");
+        }
+      }
       const cdEl = block.querySelector("[data-companion-countdown], [data-countdown-at]");
       if (cdEl) {
         const rem = Math.max(0, ends - nowSec);
