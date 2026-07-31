@@ -11461,6 +11461,7 @@
       syncMobileFleetSheetTop();
       root.setAttribute("aria-expanded", "true");
     } else {
+      closeAllFleetDrawerRowDetails(root);
       _restoreFleetSheetPortal(root);
       root.setAttribute("aria-expanded", "false");
       syncMobileHeaderFleetSlot(root);
@@ -11686,6 +11687,70 @@
     positionFleetDrawerTooltip(tooltip, trigger);
   }
 
+  function closeFleetDrawerRowDetail(row) {
+    if (!row) return;
+    row.classList.remove("is-detail-open");
+    row.setAttribute("aria-expanded", "false");
+    const detail = row.querySelector("[data-fleet-drawer-detail]");
+    if (detail) {
+      detail.hidden = true;
+      detail.innerHTML = "";
+    }
+  }
+
+  function closeAllFleetDrawerRowDetails(scope) {
+    const root = scope
+      || document.getElementById("global-fleet-drawer-root")
+      || document.querySelector("[data-global-fleet-drawer]")
+      || document;
+    root.querySelectorAll("[data-fleet-drawer-row].is-detail-open").forEach((row) => {
+      closeFleetDrawerRowDetail(row);
+    });
+  }
+
+  function ensureFleetDrawerRowDetailEl(row) {
+    if (!row) return null;
+    let detail = row.querySelector("[data-fleet-drawer-detail]");
+    if (detail) return detail;
+    detail = document.createElement("div");
+    detail.className = "gc-fleet-drawer-row-detail";
+    detail.dataset.fleetDrawerDetail = "1";
+    detail.hidden = true;
+    detail.setAttribute("role", "region");
+    row.appendChild(detail);
+    return detail;
+  }
+
+  function refreshFleetDrawerRowDetail(row, mv) {
+    if (!row || !row.classList.contains("is-detail-open") || !mv) return;
+    const detail = ensureFleetDrawerRowDetailEl(row);
+    if (!detail) return;
+    detail.innerHTML = buildFleetDrawerTooltipHtml(mv);
+    detail.hidden = false;
+  }
+
+  function openFleetDrawerRowDetail(row, mv) {
+    if (!row || !mv) return;
+    const root = document.getElementById("global-fleet-drawer-root")
+      || document.querySelector("[data-global-fleet-drawer]");
+    if (root) closeAllFleetDrawerRowDetails(root);
+    const detail = ensureFleetDrawerRowDetailEl(row);
+    if (!detail) return;
+    detail.innerHTML = buildFleetDrawerTooltipHtml(mv);
+    detail.hidden = false;
+    row.classList.add("is-detail-open");
+    row.setAttribute("aria-expanded", "true");
+  }
+
+  function toggleFleetDrawerRowDetail(row, mv) {
+    if (!row || !mv) return;
+    if (row.classList.contains("is-detail-open")) {
+      closeFleetDrawerRowDetail(row);
+      return;
+    }
+    openFleetDrawerRowDetail(row, mv);
+  }
+
   function fleetDrawerFlightProgress(mv) {
     const pct = Number(mv?.progress_pct);
     if (Number.isFinite(pct)) return Math.max(0, Math.min(100, pct));
@@ -11760,7 +11825,9 @@
     if (rowId) row.dataset.movementId = rowId;
     const mission = String(mv.mission || mv.mission_type || "custom");
     const missionKey = mv.mission_label_key || `fleet_mission_${mission}`;
+    const detailOpen = row.classList.contains("is-detail-open");
     row.className = `gc-fleet-hud-row gc-fleet-drawer-row gc-fleet-hud-row--${mission}`;
+    if (detailOpen) row.classList.add("is-detail-open");
     const missionEl = row.querySelector("[data-fleet-drawer-mission]");
     if (missionEl) {
       missionEl.className = `gc-fleet-hud-mission gc-fleet-hud-mission--${mission}`;
@@ -11780,6 +11847,7 @@
     patchFleetDrawerRowCountdown(row, mv);
     patchFleetHudFlightTrack(row, mv);
     syncFleetDrawerRowAction(row, mv);
+    refreshFleetDrawerRowDetail(row, mv);
   }
 
   function syncFleetDrawerList(listEl, visibleItems, opts) {
@@ -11985,6 +12053,7 @@
     row.dataset.fleetDrawerRow = "1";
     row.dataset.movementId = movementId;
     row.setAttribute("role", "listitem");
+    row.setAttribute("aria-expanded", "false");
 
     const main = document.createElement("div");
     main.className = "gc-fleet-hud-main";
@@ -12445,6 +12514,25 @@
         return;
       }
 
+      // Touch / coarse pointer: tap row for ship/cargo detail (desktop keeps hover tooltip).
+      if (!fleetDrawerHoverTooltipsEnabled()) {
+        const detailRow = e.target.closest("[data-fleet-drawer-row]");
+        if (detailRow && !detailRow.hasAttribute("data-fleet-alert")) {
+          const drawerRoot = document.getElementById("global-fleet-drawer-root")
+            || document.querySelector("[data-global-fleet-drawer]");
+          if (drawerRoot && drawerRoot.contains(detailRow)) {
+            if (e.target.closest("[data-fleet-drawer-detail]")) return;
+            const movementId = parseInt(detailRow.dataset.movementId || "0", 10);
+            const mv = movementId ? _fleetDrawerMovementById.get(movementId) : null;
+            if (mv) {
+              e.preventDefault();
+              toggleFleetDrawerRowDetail(detailRow, mv);
+              return;
+            }
+          }
+        }
+      }
+
       const moreBtn = e.target.closest("[data-fleet-drawer-more]");
       if (!moreBtn) return;
       const drawerRoot = document.getElementById("global-fleet-drawer-root")
@@ -12516,6 +12604,7 @@
       const fleetRoot = document.getElementById("global-fleet-drawer-root")
         || document.querySelector("[data-global-fleet-drawer]");
       if (fleetRoot) {
+        closeAllFleetDrawerRowDetails(fleetRoot);
         fleetRoot.classList.remove("is-show-all");
         const listEl = fleetRoot.querySelector("[data-fleet-drawer-list]");
         if (listEl) listEl.classList.remove("is-show-all");

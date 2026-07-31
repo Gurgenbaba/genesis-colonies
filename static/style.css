@@ -21311,6 +21311,51 @@ a.gc-ranking-alliance:hover{
   color: rgba(127, 255, 217, 0.62);
 }
 
+/* Mobile tap detail — same HTML as hover tooltip, inline under the row. */
+.gc-fleet-drawer-row-detail{
+  display: none;
+  width: 100%;
+  margin: 2px 0 0;
+  padding: 8px 10px;
+  border-radius: var(--gc-radius-sm, 2px);
+  border: 1px solid rgba(70, 229, 255, 0.36);
+  background: rgba(6, 12, 24, 0.96);
+  color: rgba(210, 230, 250, 0.92);
+  font-size: 0.72rem;
+  line-height: 1.45;
+  box-sizing: border-box;
+}
+
+.gc-fleet-drawer-row.is-detail-open .gc-fleet-drawer-row-detail,
+.gc-fleet-hud-row.is-detail-open .gc-fleet-drawer-row-detail{
+  display: block;
+}
+
+.gc-fleet-drawer-row.is-detail-open,
+.gc-fleet-hud-row.is-detail-open{
+  padding-bottom: 6px;
+}
+
+.gc-fleet-drawer-row-detail .gc-fleet-drawer-tooltip-title{
+  margin-bottom: 6px;
+}
+
+.gc-fleet-drawer-row-detail .gc-fleet-drawer-tooltip-section{
+  margin-top: 5px;
+}
+
+.gc-fleet-drawer-row-detail .gc-fleet-drawer-tooltip-label{
+  display: block;
+  margin-bottom: 2px;
+}
+
+@media (hover: none), (pointer: coarse){
+  .gc-fleet-drawer-row[data-movement-id]:not([data-fleet-alert]),
+  .gc-fleet-hud-row[data-movement-id]:not([data-fleet-alert]){
+    cursor: pointer;
+  }
+}
+
 @media (max-width: 900px){
   .gc-fleet-flight-timer{
     font-size: 0.68rem;
@@ -21363,6 +21408,11 @@ a.gc-ranking-alliance:hover{
 @media (hover: none), (pointer: coarse){
   .gc-fleet-hud-row{
     cursor: default;
+  }
+
+  .gc-fleet-drawer-row[data-movement-id]:not([data-fleet-alert]),
+  .gc-fleet-hud-row[data-movement-id]:not([data-fleet-alert]){
+    cursor: pointer;
   }
 }
 
@@ -40221,6 +40271,22 @@ a.alliance-hub-browse-card:hover,
     overflow: visible;
     text-overflow: unset;
     word-break: break-word;
+  }
+
+  .gc-fleet-drawer-root.is-show-all.gc-fleet-sheet-portal .gc-fleet-drawer-row-detail,
+  .gc-fleet-hud-root.is-show-all.gc-fleet-sheet-portal .gc-fleet-drawer-row-detail{
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: 100%;
+    margin-top: 4px;
+    pointer-events: auto;
+  }
+
+  .gc-fleet-drawer-root.is-show-all.gc-fleet-sheet-portal .gc-fleet-drawer-row.is-detail-open,
+  .gc-fleet-hud-root.is-show-all.gc-fleet-sheet-portal .gc-fleet-hud-row.is-detail-open,
+  .gc-fleet-drawer-root.is-show-all.gc-fleet-sheet-portal .gc-fleet-hud-row.is-detail-open{
+    min-height: 0;
+    gap: 6px;
   }
 
   .gc-fleet-drawer-root.is-show-all .gc-fleet-drawer-more,

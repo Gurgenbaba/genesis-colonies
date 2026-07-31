@@ -1790,6 +1790,30 @@ def test_main_js_gc654b_fleet_drawer_visual_polish():
     assert "ships_breakdown" in fleet_py
 
 
+def test_main_js_mobile_fleet_row_detail_tap():
+    """Touch: tap fleet sheet row shows ships/cargo via existing tooltip HTML builder."""
+    src = _read("static/main.js")
+    css = _read("static/style.css")
+    assert "function toggleFleetDrawerRowDetail" in src
+    assert "function openFleetDrawerRowDetail" in src
+    assert "function closeFleetDrawerRowDetail" in src
+    assert "function closeAllFleetDrawerRowDetails" in src
+    assert "function refreshFleetDrawerRowDetail" in src
+    assert "data-fleet-drawer-detail" in src
+    assert "gc-fleet-drawer-row-detail" in src
+    assert "is-detail-open" in src
+    assert "buildFleetDrawerTooltipHtml(mv)" in src.split("function refreshFleetDrawerRowDetail")[1].split("function openFleetDrawerRowDetail")[0]
+    init = src.split("function initGlobalFleetDrawer()")[1].split("GC.initGlobalFleetDrawer = initGlobalFleetDrawer")[0]
+    assert "fleetDrawerHoverTooltipsEnabled()" in init
+    assert "toggleFleetDrawerRowDetail(detailRow, mv)" in init
+    assert "closeAllFleetDrawerRowDetails" in src.split("function syncMobileFleetSheetLayout")[1].split("function formatFleetDrawerRoute")[0]
+    patch = src.split("function patchFleetDrawerRow(row, mv)")[1].split("function syncFleetDrawerList")[0]
+    assert "detailOpen" in patch
+    assert "refreshFleetDrawerRowDetail(row, mv)" in patch
+    assert "gc-fleet-drawer-row-detail" in css
+    assert ".gc-fleet-drawer-row.is-detail-open .gc-fleet-drawer-row-detail" in css
+
+
 def test_main_js_fleet_hud_sticky_live_state():
     """Fleet header must not flash empty between valid poll/action states (GC-FLEET-HUD-STABLE)."""
     src = _read("static/main.js")
