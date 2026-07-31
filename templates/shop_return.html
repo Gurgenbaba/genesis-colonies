@@ -18,6 +18,10 @@
       </p>
       {% if order.status == 'fulfilled' %}
         <p class="shop-banner shop-banner--ok">{{ T("shop_return_fulfilled", "Kauf gutgeschrieben.") }}</p>
+        {% set _sku = (order.sku or '')|string %}
+        {% if _sku.startswith('name_style') or _sku.startswith('title_flair') or 'name_style' in _sku %}
+        <p class="hint shop-cosmetic-equip-hint">{{ T("shop_cosmetic_equip_hint", "Im PlayerCard anlegen — Name-Style auswählen und speichern.") }}</p>
+        {% endif %}
       {% elif order.status == 'paid' %}
         <p>{{ T("shop_return_paid", "Zahlung erkannt — Freischaltung läuft.") }}</p>
       {% else %}

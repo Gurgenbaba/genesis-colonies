@@ -506,7 +506,7 @@
                     {% for row in contribs[:3] %}
                     <tr>
                       <td>#{{ row.rank }}</td>
-                      <td>{{ row.player_name }}</td>
+                      <td>{{ player_name_link(row.player_id, row.player_name) }}</td>
                       <td>{% if row.alliance_id and row.alliance_tag %}<a href="{{ url_for('alliance_visitor_view', alliance_id=row.alliance_id) }}" class="gc-world-boss-alliance-link">[{{ row.alliance_tag }}]</a>{% else %}{{ row.alliance_tag or "—" }}{% endif %}</td>
                       <td>{{ row.damage|fmt_int }}</td>
                       <td>{{ row.waves }}</td>
@@ -516,7 +516,7 @@
                     {% for row in contribs[3:] %}
                     <tr class="gc-world-boss-board-more">
                       <td>#{{ row.rank }}</td>
-                      <td>{{ row.player_name }}</td>
+                      <td>{{ player_name_link(row.player_id, row.player_name) }}</td>
                       <td>{% if row.alliance_id and row.alliance_tag %}<a href="{{ url_for('alliance_visitor_view', alliance_id=row.alliance_id) }}" class="gc-world-boss-alliance-link">[{{ row.alliance_tag }}]</a>{% else %}{{ row.alliance_tag or "—" }}{% endif %}</td>
                       <td>{{ row.damage|fmt_int }}</td>
                       <td>{{ row.waves }}</td>

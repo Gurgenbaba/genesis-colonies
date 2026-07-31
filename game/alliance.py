@@ -800,7 +800,20 @@ def _recent_donations(alliance_id: int, conn, *, limit: int = 8) -> List[Dict[st
         """,
         (int(alliance_id), int(limit)),
     )
-    return [dict(r) for r in cur.fetchall()]
+    rows = [dict(r) for r in cur.fetchall()]
+    try:
+        from .playercard import map_equipped_name_styles
+
+        styles = map_equipped_name_styles(
+            [int(r["player_id"]) for r in rows if r.get("player_id")],
+            conn=conn,
+        )
+    except Exception:
+        styles = {}
+    for r in rows:
+        pid = int(r.get("player_id") or 0)
+        r["name_style"] = styles.get(pid, "none") if pid > 0 else "none"
+    return rows
 
 
 def _player_donation_totals(player_id: int, alliance_id: int, conn) -> Dict[str, int]:

@@ -139,6 +139,30 @@
       .join(" ");
   }
 
+  function combatActorNameHtml(meta, role, fallback) {
+    const isAttacker = role === "attacker";
+    const namePlain = combatActorLabel(
+      isAttacker ? meta?.attacker_name : meta?.defender_name
+    );
+    const display = namePlain || fallback || "—";
+    const pid = Number(isAttacker ? meta?.attacker_id : meta?.defender_id) || 0;
+    const style =
+      (isAttacker ? meta?.attacker_name_style : meta?.defender_name_style) || "none";
+    if (
+      pid > 0 &&
+      namePlain &&
+      typeof GC !== "undefined" &&
+      typeof GC.playerNameHtml === "function"
+    ) {
+      return GC.playerNameHtml({
+        id: pid,
+        name: namePlain,
+        nameStyle: style,
+      });
+    }
+    return esc(display);
+  }
+
   /** Resolve stored combat actor/place labels — boss keys → wb_boss_* i18n. */
   function combatActorLabel(raw) {
     const s = String(raw || "").trim();
@@ -488,11 +512,11 @@
       `<p class="gc-combat-report-research-hint">${esc(hint)}</p>` +
         `<div class="gc-combat-research-columns">` +
           `<div class="gc-combat-research-col">` +
-            `<h5 class="gc-combat-research-col-title">${esc(combatActorLabel(meta.attacker_name) || t("combat_report_section_attacker", "Attacker"))}</h5>` +
+            `<h5 class="gc-combat-research-col-title">${combatActorNameHtml(meta, "attacker", t("combat_report_section_attacker", "Attacker"))}</h5>` +
             renderCombatResearchSide(atk, "attacker") +
           `</div>` +
           `<div class="gc-combat-research-col">` +
-            `<h5 class="gc-combat-research-col-title">${esc(combatActorLabel(meta.defender_name) || t("combat_report_section_defender", "Defender"))}</h5>` +
+            `<h5 class="gc-combat-research-col-title">${combatActorNameHtml(meta, "defender", t("combat_report_section_defender", "Defender"))}</h5>` +
             renderCombatResearchSide(def, "defender") +
           `</div>` +
         `</div>`,
@@ -835,6 +859,7 @@
     const loseClass =
       winner !== "draw" && winner !== "undecided" && winner !== role ? " gc-combat-side-card--loser" : "";
     const name = combatActorLabel(isAttacker ? meta.attacker_name : meta.defender_name) || "—";
+    const nameHtml = combatActorNameHtml(meta, role);
     const planetRaw = combatActorLabel(
       isAttacker ? meta.origin_planet_name : meta.target_planet_name
     );
@@ -864,7 +889,7 @@
             )}</span>` +
             badgeHtml +
           `</div>` +
-          `<strong class="gc-combat-side-card-name">${esc(name)}</strong>` +
+          `<strong class="gc-combat-side-card-name">${nameHtml}</strong>` +
           (planet ? `<span class="gc-combat-side-card-planet">${esc(planet)}</span>` : "") +
           `<span class="gc-combat-side-card-total gc-mono" title="${esc(
             t("combat_report_side_ships", "%(count)s ships").replace("%(count)s", formatInt(unitTotal))

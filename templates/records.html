@@ -40,7 +40,9 @@
           {{ T(record.label_key, record.key) }}
         </div>
         <div class="gc-records-row-holder">
-          {% if record.has_holder %}
+          {% if record.has_holder and record.player_id %}
+          {{ player_name_link(record.player_id, record.player_name, extra_class='gc-records-player') }}
+          {% elif record.has_holder %}
           <span class="gc-records-player" title="{{ record.player_name or '' }}">{{ record.player_name or "—" }}</span>
           {% else %}
           <span class="gc-records-none">{{ T("records_no_holder", "Noch kein Rekord") }}</span>

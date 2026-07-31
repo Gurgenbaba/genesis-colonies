@@ -216,7 +216,7 @@
                     <span class="gc-pvp-role gc-pvp-role--{{ battle.perspective }}">{{ T(battle.perspective_label_key, battle.perspective) }}</span>
                     {% else %}—{% endif %}
                   </td>
-                  <td class="gc-hof-col-name">{{ battle.opponent_name or '—' }}</td>
+                  <td class="gc-hof-col-name">{% if battle.opponent_player_id %}{{ player_name_link(battle.opponent_player_id, battle.opponent_name) }}{% else %}{{ battle.opponent_name or '—' }}{% endif %}</td>
                   <td class="gc-pvp-col-coords gc-mono">{{ battle.target_coords or '—' }}</td>
                   <td class="gc-hof-col-num gc-mono" title="{{ battle.destroyed_total }}">{{ battle.destroyed_total_compact or '0' }}</td>
                   <td class="gc-hof-col-num gc-mono" title="{{ battle.loot_total if battle.loot_total > 0 else '' }}">
@@ -247,7 +247,7 @@
                 <span class="gc-mono hint">{{ battle.created_at_short or '—' }}</span>
               </div>
               <div class="gc-pvp-mobile-main">
-                <strong>{{ battle.opponent_name or '—' }}</strong>
+                <strong>{% if battle.opponent_player_id %}{{ player_name_link(battle.opponent_player_id, battle.opponent_name) }}{% else %}{{ battle.opponent_name or '—' }}{% endif %}</strong>
                 <span class="gc-mono hint">{{ battle.target_coords or '—' }}</span>
               </div>
               <div class="gc-pvp-mobile-stats">

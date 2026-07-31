@@ -92,10 +92,10 @@
                     <span class="gc-ranking-place-num">#{{ battle.rank }}</span>
                   </td>
                   <td class="gc-hof-col-name">
-                    <span class="gc-hof-commander gc-hof-commander--atk">{{ battle.attacker_name or "—" }}</span>
+                    {{ player_name_link(battle.attacker_player_id, battle.attacker_name, extra_class='gc-hof-commander gc-hof-commander--atk') }}
                   </td>
                   <td class="gc-hof-col-name">
-                    <span class="gc-hof-commander gc-hof-commander--def">{{ battle.defender_name or "—" }}</span>
+                    {{ player_name_link(battle.defender_player_id, battle.defender_name, extra_class='gc-hof-commander gc-hof-commander--def') }}
                   </td>
                   <td class="gc-hof-col-num gc-mono" title="{{ battle.total_destroyed_score_fmt }}">
                     {{ battle.total_destroyed_score_compact }}
@@ -139,9 +139,9 @@
                 {% endif %}
               </div>
               <div class="gc-hof-mobile-matchup">
-                <span class="gc-hof-commander gc-hof-commander--atk">{{ battle.attacker_name or "—" }}</span>
+                {{ player_name_link(battle.attacker_player_id, battle.attacker_name, extra_class='gc-hof-commander gc-hof-commander--atk') }}
                 <span class="gc-hof-mobile-vs" aria-hidden="true">vs</span>
-                <span class="gc-hof-commander gc-hof-commander--def">{{ battle.defender_name or "—" }}</span>
+                {{ player_name_link(battle.defender_player_id, battle.defender_name, extra_class='gc-hof-commander gc-hof-commander--def') }}
               </div>
               <dl class="gc-hof-mobile-stats">
                 <div>

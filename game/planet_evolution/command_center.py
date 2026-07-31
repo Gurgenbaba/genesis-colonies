@@ -1517,6 +1517,7 @@ def build_foreign_colony_command_center(
         "influence_pct": int(node.get("influence_pct") or 0),
         "colony_count": max(0, int(node.get("colony_count") or 0)),
         "owner_username": str(node.get("owner_username") or "").strip(),
+        "owner_player_id": owner_id,
         "icon": icon,
         "status_key": _foreign_status_key(node),
         "role_label_key": role_key,
@@ -1538,6 +1539,12 @@ def build_foreign_colony_command_center(
         ),
         "hints": [{"label_key": "command_center_foreign_public_hint"}],
     }
+    try:
+        from game.playercard import get_equipped_name_style
+
+        payload["owner_name_style"] = get_equipped_name_style(owner_id, conn=conn) if owner_id > 0 else "none"
+    except Exception:
+        payload["owner_name_style"] = "none"
 
     for forbidden in _FOREIGN_CC_FORBIDDEN_KEYS:
         payload.pop(forbidden, None)

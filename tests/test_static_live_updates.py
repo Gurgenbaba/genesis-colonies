@@ -479,6 +479,10 @@ def test_admin_balance_save_skips_blocking_game_state():
     assert "quiesceLiveClientFetches" in balance_section
     assert "scheduleDeferredHudRefresh" not in admin_src
     assert "releaseShellNavigationBlockers" in balance_section
+    # GC-INFRA: Balance save must not restore leftnav accordion on /admin
+    # (breaks GC-849 Infrastructure section pointer-events / expand).
+    assert "GC.restoreLeftmenuState" not in balance_section
+    assert "restoreLeftmenuState(" not in balance_section
     assert "syncAdminHudSelects(qs('[data-admin-panel=\"balance\"]')" not in balance_section
     snapshot_fn = admin_src.split("function applyBalanceHudSnapshot")[1].split("function focusAdminDetail")[0]
     assert "patchShellHudFromState" in snapshot_fn
@@ -1198,15 +1202,23 @@ def test_main_js_apply_planet_hero_theme_border_fx():
     assert "overview_companion_goto_wb" in src
     assert 'GC.navigateTo(path)' in src or 'GC.navigateTo(path)' in src.replace(" ", "")
     assert "data-companion-nav-wb" in src and "navigateTo" in src.split("initOverviewCompanions")[1].split("function parseInventoryPageState")[0]
-    # Titan mission progress: decorative walker patrols toward fill tip and back.
+    # Titan mission progress: walker advances along the fill tip as %.
     assert "overview-companion-mission-progress__walker" in src
     assert "data-companion-progress-walker" in src
-    assert "--companion-walk-end" in src
-    assert "@keyframes companion-titan-wander" in css
+    assert "--companion-walk-at" in src
     assert "@keyframes companion-titan-bob" in css
-    walker_motion = css.split("@keyframes companion-titan-wander")[1].split(".overview-companion-mission-lead{")[0]
-    assert "animation: none" in walker_motion
-    assert "--companion-walk-end" in walker_motion
+    assert "companion-titan-wander" not in css
+    walker_css = css.split(".overview-companion-mission-progress__walker{")[1].split(
+        ".overview-companion-mission-progress__walker img{"
+    )[0]
+    assert "--companion-walk-at" in walker_css
+    assert "companion-titan-bob" in walker_css
+    assert "updateCompanionProgressDom" in src
+    progress_fn = src.split("const updateCompanionProgressDom = () => {")[1].split(
+        "const syncCompanionDue"
+    )[0]
+    assert "--companion-walk-at" in progress_fn
+    assert "data-companion-progress-walker" in progress_fn
     hero_img = css.split(".overview-hero--themed.gc-planet-hero .overview-hero-bg picture,")[1].split(".overview-hero-hud{")[0]
     assert "transform: none" in hero_img
     assert ":hover .overview-hero-bg picture" not in css.split(".overview-hero--themed.gc-planet-hero .overview-hero-bg picture,")[0][-200:] + hero_img

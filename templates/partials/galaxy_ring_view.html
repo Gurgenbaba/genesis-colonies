@@ -157,12 +157,14 @@
                       aria-hidden="true"
                       title="{{ T(slot.asteroid.name_key, slot.asteroid.asteroid_key) }}">{{ T('galaxy_asteroid_short', 'Ast') }}</span>
                 {% elif slot.occupied and slot.commander_name %}
-                <span class="galaxy-ring-slot-owner-label
-                      {% if slot.is_own_planet %}galaxy-ring-slot-owner-label--own
-                      {% elif slot.is_ally_planet %}galaxy-ring-slot-owner-label--ally
-                      {% else %}galaxy-ring-slot-owner-label--foreign{% endif %}"
+                {% set owner_label_cls = 'galaxy-ring-slot-owner-label' ~ (' galaxy-ring-slot-owner-label--own' if slot.is_own_planet else (' galaxy-ring-slot-owner-label--ally' if slot.is_ally_planet else ' galaxy-ring-slot-owner-label--foreign')) %}
+                {% if slot.player_id %}
+                {{ player_name_link(slot.player_id, slot.commander_name, extra_class=owner_label_cls, name_style=slot.name_style if slot.name_style is defined else none, enable_card=False) }}
+                {% else %}
+                <span class="{{ owner_label_cls }}"
                       aria-hidden="true"
                       title="{{ slot.commander_name }}">{{ slot.commander_name }}</span>
+                {% endif %}
                 {% endif %}
                 <span class="galaxy-ring-slot-body
                       galaxy-ring-slot-body--{{ effect }}

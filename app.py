@@ -7490,7 +7490,12 @@ def api_player_card_save():
         "avatar_version": int(card.get("avatar_version") or 0),
         "show_avatar": bool(card.get("avatar_url_client")),
         "theme": card.get("theme") or "cyan",
+        "aura_key": card.get("aura_key") or "none",
+        "title_flair": card.get("title_flair") or "none",
+        "name_style": card.get("name_style") or "none",
+        "title": card.get("title") or "",
         "avatar_initial": (card.get("commander_name_raw") or "?")[:1],
+        "badges": card.get("badges") or [],
     }
     return jsonify({"ok": True, "reason": reason, "html": html, "card": sync})
 

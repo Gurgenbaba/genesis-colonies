@@ -209,6 +209,16 @@ def _listing_recent_bids(listing_id: int, *, conn, limit: int = 3) -> List[Dict[
                 "created_at": int(row["created_at"] or 0),
             }
         )
+    try:
+        from .playercard import map_equipped_name_styles
+
+        styles = map_equipped_name_styles(
+            [int(r["player_id"]) for r in rows], conn=conn
+        )
+    except Exception:
+        styles = {}
+    for r in rows:
+        r["name_style"] = styles.get(int(r["player_id"]), "none")
     return rows
 
 
@@ -236,12 +246,21 @@ def _serialize_listing(row: Mapping[str, Any], *, viewer_id: int, conn) -> Dict[
     meta = item_catalog_entry(inv_key)
     bidder_id = row["current_bidder_id"]
     bidder_name = None
+    bidder_name_style = "none"
     if bidder_id is not None:
         cur = conn.cursor()
         cur.execute("SELECT name FROM players WHERE id = ? LIMIT 1;", (int(bidder_id),))
         prow = cur.fetchone()
         if prow:
             bidder_name = commander_display_name(str(prow["name"] or ""))
+        try:
+            from .playercard import map_equipped_name_styles
+
+            bidder_name_style = map_equipped_name_styles(
+                [int(bidder_id)], conn=conn
+            ).get(int(bidder_id), "none")
+        except Exception:
+            bidder_name_style = "none"
     now = int(time.time())
     ends_at = int(row["ends_at"] or 0)
     listing_id = int(row["id"])
@@ -262,6 +281,7 @@ def _serialize_listing(row: Mapping[str, Any], *, viewer_id: int, conn) -> Dict[
         "min_next_bid": _min_next_bid(row),
         "current_bidder_id": int(bidder_id) if bidder_id is not None else None,
         "current_bidder_name": bidder_name,
+        "current_bidder_name_style": bidder_name_style,
         "is_leading": bidder_id is not None and int(bidder_id) == int(viewer_id),
         "starts_at": int(row["starts_at"] or 0),
         "ends_at": ends_at,

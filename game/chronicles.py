@@ -255,6 +255,17 @@ def _opponent_name(meta: Mapping[str, Any], perspective: str) -> str:
     return "—"
 
 
+def _opponent_player_id(meta: Mapping[str, Any], perspective: str) -> int:
+    try:
+        if perspective == "attacker":
+            return int(meta.get("defender_id") or 0)
+        if perspective == "defender":
+            return int(meta.get("attacker_id") or 0)
+    except (TypeError, ValueError):
+        return 0
+    return 0
+
+
 def _battle_from_row(row: Any, *, player_id: int) -> Dict[str, Any]:
     meta = normalize_combat_metadata(chronicle_row_metadata(row["body_json"]))
     perspective = _resolve_perspective(meta, player_id)
@@ -283,6 +294,7 @@ def _battle_from_row(row: Any, *, player_id: int) -> Dict[str, Any]:
         "outcome": outcome,
         "outcome_label_key": _outcome_label_key(outcome),
         "opponent_name": _opponent_name(meta, perspective),
+        "opponent_player_id": _opponent_player_id(meta, perspective),
         "target_coords": str(meta.get("target_coords") or ""),
         "target_planet_name": str(meta.get("target_planet_name") or ""),
         "destroyed_dealt": destroyed_dealt,

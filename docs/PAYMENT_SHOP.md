@@ -184,8 +184,20 @@ Catchy Impulse-Preise (unter 3 €). Admin: alle Styles/Themes frei.
 |--------|--------|---------|
 | **UI-Farbe** | Equipped **PlayerCard Theme** (`player_cards.theme`) | Header, Nav, Panels, Buttons, Landscape-Wash. Attribut: `body[data-identity-theme]` |
 | **UI-Aura (Prestige-FX)** | Equipped **PlayerCard Aura** (`player_cards.aura_key`) | Glow/Rim auf Shell (Header, Sidebar, Panels, Nav). Attribut: `body[data-identity-aura]` |
-| **Name-Style** | Equipped `player_cards.name_style` (Shop-Unlock) | Nur sichtbarer Name (Galaxy/Chat/Ranking/…). **Keine** UI-Farbe/Aura |
+| **Name-Style** | Equipped `player_cards.name_style` (Shop-Unlock) | Nur sichtbarer Name überall: Galaxy (Orbit+Inspector), Chat, Ranking, Alliance, HoF, Records, World Boss, Auction, Fleet-Preview, Combat-Side-Cards. **Keine** UI-Farbe/Aura. Auch bei privatem Profil. Render: `player_name_link` (SSR) / `GC.playerNameHtml` (JS). |
 | Title-Flair | Equipped Card-Feld | Nur PlayerCard-Ansicht |
+
+### Social Identity Render Contract
+
+Jeder fremde Commander-Name in Multiplayer-Surfaces nutzt denselben Markup-Vertrag:
+
+- SSR: `player_name_link(player_id, name, …)` in `app.py`
+- JS: `GC.playerNameHtml({ id, name, nameStyle, enableCard, extraClass })`
+- Markup: `.gc-player-name` + `data-player-id` + `data-name-style` (+ optional `data-player-card`)
+- Batch-Lookup: `playercard.map_equipped_name_styles(ids)`
+- Owner: `game/playercard.py` — kein zweites Cosmetics-Modul
+
+Identity Shell (Theme/Aura am eigenen Chrome) bleibt owner-only; Theme/Aura auf der öffentlichen PlayerCard sind für andere sichtbar.
 
 Server-Owner: `game/playercard.get_equipped_identity()` → Context `IDENTITY_THEME` + `IDENTITY_AURA` → `templates/base.html`. Live-Preview im PlayerCard-Editor setzt beide Attribute clientseitig.
 

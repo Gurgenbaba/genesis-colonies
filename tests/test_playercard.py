@@ -492,12 +492,33 @@ def test_player_name_link_escapes_and_valid_id(app_client):
     link = app_mod.player_name_link(5, '<img onerror="x">')
     html = str(link)
     assert 'data-player-id="5"' in html
+    assert 'data-name-style="' in html
+    assert "gc-player-name" in html
     assert "<img" not in html
     assert "&lt;img" in html or "onerror" not in html
 
     bad = app_mod.player_name_link(0, "Ghost")
     assert "data-player-card" not in str(bad)
     assert "Ghost" in str(bad) or "—" in str(bad)
+
+    no_card = app_mod.player_name_link(5, "Nova", enable_card=False, name_style="plasma")
+    no_html = str(no_card)
+    assert 'data-name-style="plasma"' in no_html
+    assert "data-player-card" not in no_html
+
+
+def test_gc_player_name_html_mirrors_ssr_contract():
+    """GC.playerNameHtml must emit the same attrs as player_name_link."""
+    from pathlib import Path
+
+    src = Path("static/main.js").read_text(encoding="utf-8")
+    assert "GC.playerNameHtml = playerNameHtml" in src
+    fn = src.split("function playerNameHtml(opts)")[1].split("GC.playerNameHtml = playerNameHtml")[0]
+    assert "gc-player-name" in fn
+    assert "data-name-style" in fn
+    assert "data-player-id" in fn
+    assert "data-player-card" in fn
+
 
 
 def test_session_user_id_matches_player_id(temp_db):
@@ -1011,8 +1032,13 @@ def test_playercard_view_includes_badge_zoom_markers(temp_db, app_client):
     assert "data-pc-badge-zoom" in body
     assert "data-pc-media-zoom-root" in body
     assert "gc-badge-icon" in body
-    assert "/static/img/badges/founder.png" in body
+    # Prefer webp assets; png remains as onerror fallback.
+    assert (
+        "/static/img/badges/founder.webp" in body
+        or "/static/img/badges/founder.png" in body
+    )
     assert "onerror" in body
+    assert "/static/img/badges/default.png" in body
 
 
 def test_identity_shell_css_theme_rgb_not_overridden_by_shared_block():

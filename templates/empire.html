@@ -25,7 +25,7 @@
     <dl class="overview-meta-grid empire-meta-grid">
       <div class="overview-meta-item">
         <dt>{{ T("empire_label_commander", "Commander") }}</dt>
-        <dd class="empire-summary-value">{{ cmd.name or T("commander", "Commander") }}</dd>
+        <dd class="empire-summary-value">{% if cmd.id %}{{ player_name_link(cmd.id, cmd.name) }}{% else %}{{ cmd.name or T("commander", "Commander") }}{% endif %}</dd>
       </div>
       <div class="overview-meta-item">
         <dt>{{ T("empire_label_colonies", "Kolonien") }}</dt>

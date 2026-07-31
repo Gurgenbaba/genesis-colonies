@@ -51,6 +51,28 @@
           </div>
         </div>
         <div class="gc-player-card-badges gc-player-card-badges-showcase gc-player-card-badges-preview" id="pc-preview-badges" aria-live="polite"></div>
+
+        {% set _social_raw = card.get('commander_name_raw') or card.get('commander_name') or '—' %}
+        {% set _social_short = (_social_raw[:16]) if (_social_raw|length > 16) else _social_raw %}
+        <div class="gc-pc-social-preview" id="pc-social-preview"
+             aria-label="{{ T('playercard_social_preview') }}">
+          <div class="gc-pc-social-preview-label">{{ T("playercard_social_preview") }}</div>
+          <div class="gc-pc-social-preview-row" data-pc-social-surface="chat">
+            <span class="gc-pc-social-preview-k">{{ T("playercard_social_preview_chat") }}</span>
+            <span class="gc-pc-social-preview-line">
+              <span class="gc-player-name"
+                    data-name-style="{{ form.get('name_style', 'none') }}">{{ _social_short }}</span><span class="gc-pc-social-preview-msg">: …</span>
+            </span>
+          </div>
+          <div class="gc-pc-social-preview-row" data-pc-social-surface="rank">
+            <span class="gc-pc-social-preview-k">{{ T("playercard_social_preview_rank") }}</span>
+            <span class="gc-pc-social-preview-line">
+              <span class="gc-pc-social-preview-rank-pos" aria-hidden="true">#42</span>
+              <span class="gc-player-name"
+                    data-name-style="{{ form.get('name_style', 'none') }}">{{ _social_short }}</span>
+            </span>
+          </div>
+        </div>
       </section>
 
       <section class="gc-player-card-fields">
@@ -85,15 +107,36 @@
                     data-pc-field="bio">{{ form.get('bio', '') }}</textarea>
         </label>
 
-        <label class="gc-player-card-field">
-          <span class="gc-player-card-field-label">{{ T("playercard_theme") }}</span>
-          <select name="theme" class="gc-input" data-pc-field="theme">
+        <div class="gc-player-card-field">
+          <span class="gc-player-card-field-label" id="pc-theme-label">{{ T("playercard_theme") }}</span>
+          <div class="gc-pc-cosmetic-chip-grid gc-pc-theme-swatches"
+               role="group"
+               aria-labelledby="pc-theme-label">
+            {% for th in card.get('themes', ['cyan', 'violet', 'amber', 'emerald', 'rose']) %}
+              {% set th_sel = form.get('theme', 'cyan') == th %}
+              <button type="button"
+                      class="gc-pc-cosmetic-chip gc-pc-cosmetic-chip--theme{% if th_sel %} is-selected{% endif %}"
+                      data-pc-chip="theme"
+                      data-value="{{ th }}"
+                      data-theme="{{ th }}"
+                      aria-pressed="{{ 'true' if th_sel else 'false' }}"
+                      title="{{ T('playercard_theme_' ~ th) }}">
+                <span class="gc-pc-theme-swatch" aria-hidden="true"></span>
+                <span class="gc-pc-cosmetic-chip-label">{{ T("playercard_theme_" ~ th) }}</span>
+              </button>
+            {% endfor %}
+          </div>
+          <select name="theme"
+                  class="gc-input gc-sr-only"
+                  data-pc-field="theme"
+                  tabindex="-1"
+                  aria-hidden="true">
             {% for th in card.get('themes', ['cyan', 'violet', 'amber', 'emerald', 'rose']) %}
               <option value="{{ th }}" {% if form.get('theme', 'cyan') == th %}selected{% endif %}>{{ T("playercard_theme_" ~ th) }}</option>
             {% endfor %}
           </select>
           <span class="gc-player-card-field-hint">{{ T("playercard_theme_hint") }}</span>
-        </label>
+        </div>
 
         <label class="gc-player-card-field">
           <span class="gc-player-card-field-label">{{ T("playercard_aura") }}</span>
@@ -115,15 +158,36 @@
           <span class="gc-player-card-field-hint">{{ T("playercard_title_flair_hint") }}</span>
         </label>
 
-        <label class="gc-player-card-field">
-          <span class="gc-player-card-field-label">{{ T("playercard_name_style") }}</span>
-          <select name="name_style" class="gc-input" data-pc-field="name_style">
+        <div class="gc-player-card-field" id="pc-field-name-style">
+          <span class="gc-player-card-field-label" id="pc-name-style-label">{{ T("playercard_name_style") }}</span>
+          {% set _chip_name = card.get('commander_name_raw') or card.get('commander_name') or '—' %}
+          {% set _chip_short = (_chip_name[:12]) if (_chip_name|length > 12) else _chip_name %}
+          <div class="gc-pc-cosmetic-chip-grid"
+               role="group"
+               aria-labelledby="pc-name-style-label">
+            {% for ns in card.get('name_styles', ['none']) %}
+              {% set ns_sel = form.get('name_style', 'none') == ns %}
+              <button type="button"
+                      class="gc-pc-cosmetic-chip{% if ns_sel %} is-selected{% endif %}"
+                      data-pc-chip="name_style"
+                      data-value="{{ ns }}"
+                      aria-pressed="{{ 'true' if ns_sel else 'false' }}"
+                      title="{{ T('playercard_name_style_' ~ ns) }}">
+                <span class="gc-player-name" data-name-style="{{ ns }}">{{ _chip_short }}</span>
+              </button>
+            {% endfor %}
+          </div>
+          <select name="name_style"
+                  class="gc-input gc-sr-only"
+                  data-pc-field="name_style"
+                  tabindex="-1"
+                  aria-hidden="true">
             {% for ns in card.get('name_styles', ['none']) %}
               <option value="{{ ns }}" {% if form.get('name_style', 'none') == ns %}selected{% endif %}>{{ T("playercard_name_style_" ~ ns) }}</option>
             {% endfor %}
           </select>
           <span class="gc-player-card-field-hint">{{ T("playercard_name_style_hint") }}</span>
-        </label>
+        </div>
 
         <label class="gc-player-card-field gc-player-card-field-check">
           <input type="checkbox"

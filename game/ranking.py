@@ -1114,6 +1114,10 @@ def _ranking_social_select_and_join(conn) -> Tuple[str, str]:
                 "pc.selected_badge_3 AS card_badge_3",
             ]
         )
+        if column_exists(conn, "player_cards", "name_style"):
+            select_parts.append("COALESCE(pc.name_style, 'none') AS card_name_style")
+        else:
+            select_parts.append("'none' AS card_name_style")
         join_parts.append("LEFT JOIN player_cards pc ON pc.player_id = p.id")
         if table_exists(conn, "player_card_badges"):
             select_parts.extend(
@@ -1151,6 +1155,7 @@ def _ranking_social_select_and_join(conn) -> Tuple[str, str]:
                 "NULL AS card_title",
                 "NULL AS card_theme",
                 "1 AS card_is_public",
+                "'none' AS card_name_style",
                 "NULL AS card_badge_1",
                 "NULL AS card_badge_2",
                 "NULL AS card_badge_3",
@@ -1220,7 +1225,7 @@ def enrich_ranking_social_fields(raw: Dict[str, Any]) -> Dict[str, Any]:
     Normalize player-card and alliance fields for ranking API / templates.
     Avatar URL is only exposed when the profile is public and passes validation.
     """
-    from .playercard import resolve_avatar_display, sanitize_text_field, validate_theme, TITLE_MAX
+    from .playercard import resolve_avatar_display, sanitize_text_field, validate_theme, TITLE_MAX, validate_name_style
 
     from .player_display import commander_display_name, commander_lookup_name
 
@@ -1248,6 +1253,8 @@ def enrich_ranking_social_fields(raw: Dict[str, Any]) -> Dict[str, Any]:
 
     title = sanitize_text_field(raw.get("card_title"), TITLE_MAX) if is_public else ""
     theme = validate_theme(raw.get("card_theme")) if raw.get("card_theme") is not None else "cyan"
+    # Name style is a social status signal — always exposed (even if card is private).
+    name_style = validate_name_style(raw.get("card_name_style"))
 
     alliance_id: Optional[int] = None
     try:
@@ -1274,6 +1281,7 @@ def enrich_ranking_social_fields(raw: Dict[str, Any]) -> Dict[str, Any]:
         "show_avatar": show_avatar,
         "title": title,
         "theme": theme,
+        "name_style": name_style,
         "profile_is_public": is_public,
         "alliance_id": alliance_id,
         "alliance_tag": alliance_tag,

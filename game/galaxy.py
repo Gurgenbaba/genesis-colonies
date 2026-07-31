@@ -1028,6 +1028,19 @@ def list_system(
             _attach_slot_presentation(slot, pos, occupied=False)
             slots.append(slot)
 
+    try:
+        from .playercard import map_equipped_name_styles
+
+        style_map = map_equipped_name_styles(
+            [int(s["player_id"]) for s in slots if s.get("player_id")],
+            conn=conn,
+        )
+    except Exception:
+        style_map = {}
+    for slot in slots:
+        pid = int(slot.get("player_id") or 0)
+        slot["name_style"] = style_map.get(pid, "none") if pid > 0 else "none"
+
     available_reclaimers = 0
     if active_planet_id is not None and int(active_planet_id) > 0:
         try:

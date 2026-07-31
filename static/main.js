@@ -14848,13 +14848,13 @@
         if (typeof GC.preferWebpStaticUrl === "function" && artSrc.indexOf(".png") > 0) {
           artSrc = GC.preferWebpStaticUrl(artSrc);
         }
-        const walkEnd = Math.max(18, Math.min(94, pct || 18));
+        const walkAt = Math.max(0, Math.min(100, pct));
         actions = `<div class="overview-companion-mission-progress" data-companion-progress
             data-started-at="${startedAt || endsAt - total}"
             data-ends-at="${endsAt}"
             data-duration="${total}"
             data-companion-boss="${bossKey}"
-            style="--companion-walk-end:${walkEnd}%">
+            style="--companion-walk-at:${walkAt}%">
           <div class="overview-companion-mission-progress__meta">
             <p class="hint">${t("overview_companion_mission_eta", "Zurück in")}
               <span class="gc-mono" data-countdown-at="${endsAt}" data-countdown-format="eta" data-companion-countdown="1">${etaLabel}</span>
@@ -14916,8 +14916,10 @@
       if (fill) fill.style.width = pct + "%";
       if (pctEl) pctEl.textContent = pct + "%";
       if (track) track.setAttribute("aria-valuenow", String(pct));
-      const walkEnd = Math.max(18, Math.min(94, pct || 18));
-      block.style.setProperty("--companion-walk-end", walkEnd + "%");
+      const walkAt = Math.max(0, Math.min(100, pct));
+      block.style.setProperty("--companion-walk-at", walkAt + "%");
+      const walker = block.querySelector("[data-companion-progress-walker]");
+      if (walker) walker.style.left = walkAt + "%";
       const cdEl = block.querySelector("[data-companion-countdown], [data-countdown-at]");
       if (cdEl) {
         const rem = Math.max(0, ends - nowSec);
@@ -16571,12 +16573,23 @@
       list.dataset.auctionRecentList = String(listingId);
       section.appendChild(list);
     }
-    list.innerHTML = rows.map((bid) => (
-      `<li class="auction-house-recent-row">`
-      + `<span class="auction-house-recent-name">${escapeHtml(String(bid.player_name || "—"))}</span>`
-      + `<span class="auction-house-recent-amount gc-mono">${escapeHtml(fmtNumber(bid.amount || 0))}</span>`
-      + `</li>`
-    )).join("");
+    list.innerHTML = rows.map((bid) => {
+      const nameHtml =
+        typeof GC.playerNameHtml === "function" && Number(bid.player_id) > 0
+          ? GC.playerNameHtml({
+              id: bid.player_id,
+              name: bid.player_name || "—",
+              nameStyle: bid.name_style || "none",
+              extraClass: "auction-house-recent-name",
+            })
+          : `<span class="auction-house-recent-name">${escapeHtml(String(bid.player_name || "—"))}</span>`;
+      return (
+        `<li class="auction-house-recent-row">`
+        + nameHtml
+        + `<span class="auction-house-recent-amount gc-mono">${escapeHtml(fmtNumber(bid.amount || 0))}</span>`
+        + `</li>`
+      );
+    }).join("");
   }
 
   function toggleAuctionHouseExpand(listingId, forceOpen) {
@@ -16642,12 +16655,23 @@
 
       const rowBidderEl = page.querySelector(`[data-auction-row-bidder="${id}"]`);
       if (rowBidderEl) {
-        const rowTxt = hasBids
-          ? (a.is_leading
-            ? tt("auction_house_you_lead_short", "Du (Führst)")
-            : String(a.current_bidder_name || "—"))
-          : "—";
-        _setIfChanged(rowBidderEl, rowTxt);
+        if (!hasBids) {
+          _setIfChanged(rowBidderEl, "—");
+        } else if (a.is_leading) {
+          _setIfChanged(rowBidderEl, tt("auction_house_you_lead_short", "Du (Führst)"));
+        } else if (
+          typeof GC.playerNameHtml === "function"
+          && Number(a.current_bidder_id) > 0
+        ) {
+          const html = GC.playerNameHtml({
+            id: a.current_bidder_id,
+            name: a.current_bidder_name || "—",
+            nameStyle: a.current_bidder_name_style || "none",
+          });
+          if (rowBidderEl.innerHTML !== html) rowBidderEl.innerHTML = html;
+        } else {
+          _setIfChanged(rowBidderEl, String(a.current_bidder_name || "—"));
+        }
       }
 
       const leaderBadge = page.querySelector(`[data-auction-leader="${id}"]`);
@@ -16658,10 +16682,21 @@
         leaderBadge.classList.toggle("auction-house-leader-badge--you", Boolean(a.is_leading));
         leaderBadge.classList.remove("auction-house-leader-badge--empty");
         if (bidderEl) {
-          const txt = a.is_leading
-            ? tt("auction_house_you_lead", "Du führst aktuell")
-            : String(a.current_bidder_name || "—");
-          _setIfChanged(bidderEl, txt);
+          if (a.is_leading) {
+            _setIfChanged(bidderEl, tt("auction_house_you_lead", "Du führst aktuell"));
+          } else if (
+            typeof GC.playerNameHtml === "function"
+            && Number(a.current_bidder_id) > 0
+          ) {
+            const html = GC.playerNameHtml({
+              id: a.current_bidder_id,
+              name: a.current_bidder_name || "—",
+              nameStyle: a.current_bidder_name_style || "none",
+            });
+            if (bidderEl.innerHTML !== html) bidderEl.innerHTML = html;
+          } else {
+            _setIfChanged(bidderEl, String(a.current_bidder_name || "—"));
+          }
         }
         if (noBidsEl) noBidsEl.hidden = true;
       } else if (leaderBadge) {
@@ -18071,7 +18106,21 @@
           GC.applyActionState(res, "shop_checkout");
         }
         if (res?.ok && res.fulfilled) {
+          const kindHost = btn.closest("[data-shop-kind]");
+          const shopKind = kindHost ? kindHost.getAttribute("data-shop-kind") || "" : "";
           showNotify(t("shop_fulfill_ok", "Kauf gutgeschrieben."), "success");
+          if (shopKind === "cosmetic_unlock") {
+            try {
+              sessionStorage.setItem("gc_shop_equip_hint", "1");
+            } catch (_) { /* ignore */ }
+            showNotify(
+              t(
+                "shop_cosmetic_equip_hint",
+                "Equip in Player Card — pick a name style and save."
+              ),
+              "info"
+            );
+          }
           if (typeof GC.reloadCurrentPage === "function") {
             GC.reloadCurrentPage({ reason: "shop_fulfilled" });
           }
@@ -18109,6 +18158,18 @@
       if (el) {
         const fs = JSON.parse(el.textContent || "{}");
         if (fs && typeof fs === "object") _renderFreeShopState(page, fs);
+      }
+    } catch (_) { /* ignore */ }
+    try {
+      if (sessionStorage.getItem("gc_shop_equip_hint") === "1") {
+        sessionStorage.removeItem("gc_shop_equip_hint");
+        showNotify(
+          t(
+            "shop_cosmetic_equip_hint",
+            "Equip in Player Card — pick a name style and save."
+          ),
+          "info"
+        );
       }
     } catch (_) { /* ignore */ }
   }
@@ -18312,7 +18373,14 @@
       };
       logList.innerHTML = rows
         .map((d) => {
-          const name = escapeHtml(String(d.player_name || ""));
+          const name =
+            typeof GC.playerNameHtml === "function" && Number(d.player_id) > 0
+              ? GC.playerNameHtml({
+                  id: d.player_id,
+                  name: d.player_name || "",
+                  nameStyle: d.name_style || "none",
+                })
+              : escapeHtml(String(d.player_name || ""));
           const amt = fmt(Number(d.amount || 0));
           const resKey = String(d.resource || "");
           const label = escapeHtml(resLabel(resKey));
@@ -21829,7 +21897,17 @@
               || (target.target_type ? tt(`fleet_target_${target.target_type}`, target.target_type) : "–");
           }
           if (previewTargetOwner) {
-            previewTargetOwner.textContent = named.name || "–";
+            const ownerPid = Number(target.target_player_id || 0);
+            const ownerName = named.name || "–";
+            if (ownerPid > 0 && typeof GC.playerNameHtml === "function") {
+              previewTargetOwner.innerHTML = GC.playerNameHtml({
+                id: ownerPid,
+                name: ownerName,
+                nameStyle: target.target_owner_name_style || "none",
+              });
+            } else {
+              previewTargetOwner.textContent = ownerName;
+            }
           }
           const debrisRow = page.querySelector("[data-preview-debris-row]");
           const previewDebris = page.querySelector("[data-preview-debris]");
@@ -23117,6 +23195,37 @@
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
   }
+
+  /**
+   * Canonical player-name markup (mirrors app.player_name_link).
+   * opts: { id|playerId, name, nameStyle|name_style, enableCard, extraClass }
+   */
+  function playerNameHtml(opts) {
+    const o = opts && typeof opts === "object" ? opts : {};
+    const id = Number(o.id != null ? o.id : o.playerId);
+    const rawName = o.name != null ? String(o.name) : "—";
+    const styleRaw = o.nameStyle != null ? o.nameStyle : o.name_style;
+    const style = String(styleRaw || "none").trim() || "none";
+    const enableCard = o.enableCard !== false;
+    const extraClass = String(o.extraClass || "").trim();
+    if (!Number.isFinite(id) || id <= 0) return escapeHtml(rawName || "—");
+    const label = escapeHtml(rawName || "—");
+    const styleEsc = escapeHtml(style);
+    const classes = ["gc-player-name"];
+    if (extraClass) classes.push(extraClass);
+    let html =
+      `<span class="${classes.join(" ")}" data-player-id="${id}" ` +
+      `data-player-name="${label}" data-name-style="${styleEsc}"`;
+    if (enableCard) {
+      const openTitle = escapeHtml(
+        typeof t === "function" ? t("playercard_open", "Open player card") : "Open player card"
+      );
+      html += ` data-player-card="1" role="button" tabindex="0" title="${openTitle}"`;
+    }
+    html += `>${label}</span>`;
+    return html;
+  }
+  GC.playerNameHtml = playerNameHtml;
 
   function buildLogisticsPreviewBody(page) {
     const mode = getLogisticsMode(page);
@@ -30063,6 +30172,8 @@
         || ds.ownerUsername
         || details.find((row) => row.label_key === "world_map_inspector_player")?.value_text
         || "";
+      const ownerPlayerId = Number(cc.owner_player_id || ds.ownerPlayerId || 0) || 0;
+      const ownerNameStyle = cc.owner_name_style || ds.ownerNameStyle || "none";
 
       titleEl.textContent = isEmpire ? (homeworldName || empireName) : name;
       contentEl.innerHTML = `
@@ -30096,7 +30207,18 @@
         stats.innerHTML = rows.join("");
         const dds = stats.querySelectorAll("dd");
         let idx = 0;
-        if (owner && dds[idx]) dds[idx++].textContent = owner;
+        if (owner && dds[idx]) {
+          if (ownerPlayerId > 0 && typeof GC.playerNameHtml === "function") {
+            dds[idx++].innerHTML = GC.playerNameHtml({
+              id: ownerPlayerId,
+              name: owner,
+              nameStyle: ownerNameStyle,
+              enableCard: true,
+            });
+          } else {
+            dds[idx++].textContent = owner;
+          }
+        }
         if (coords && dds[idx]) dds[idx++].textContent = coords;
         if (isEmpire && cc.colony_count != null && dds[idx]) dds[idx++].textContent = String(cc.colony_count);
       }
@@ -32672,46 +32794,90 @@
     const pid = Number(sync?.player_id);
     if (!Number.isFinite(pid) || pid <= 0) return;
 
-    const busted = String(sync.avatar_url || "").trim();
-    const show = !!(sync.show_avatar && busted);
+    const hasAvatarPatch = Object.prototype.hasOwnProperty.call(sync, "avatar_url");
+    const hasNameStylePatch = Object.prototype.hasOwnProperty.call(sync, "name_style");
+    const hasTitlePatch = Object.prototype.hasOwnProperty.call(sync, "title");
+    const hasBadgesPatch = Object.prototype.hasOwnProperty.call(sync, "badges");
+
+    const busted = hasAvatarPatch ? String(sync.avatar_url || "").trim() : "";
+    const show = hasAvatarPatch ? !!(sync.show_avatar && busted) : false;
     const initial = String(sync.avatar_initial || "?").slice(0, 1).toUpperCase() || "?";
     const theme = String(sync.theme || "cyan");
+    const nameStyle = hasNameStylePatch ? String(sync.name_style || "none") : null;
+    const title = hasTitlePatch ? String(sync.title || "") : null;
 
-    document.querySelectorAll(`[data-player-card][data-player-id="${pid}"]`).forEach((trigger) => {
-      const avatarWrap = trigger.querySelector(".gc-ranking-avatar");
-      if (!avatarWrap) return;
-      if (show) {
-        avatarWrap.innerHTML =
-          `<img class="gc-ranking-avatar-img" src="${rankingEscapeHtml(busted)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" ` +
-          `data-avatar-initial="${rankingEscapeHtml(initial)}" data-avatar-theme="${rankingEscapeHtml(theme)}" ` +
-          `onerror="GC.fallbackRankingAvatar(this)">`;
-      } else {
-        avatarWrap.innerHTML =
-          `<span class="gc-ranking-avatar-fallback gc-ranking-avatar-fallback--${rankingEscapeHtml(theme)}" aria-hidden="true">${rankingEscapeHtml(initial)}</span>`;
+    if (hasAvatarPatch) {
+      document.querySelectorAll(`[data-player-card][data-player-id="${pid}"]`).forEach((trigger) => {
+        const avatarWrap = trigger.querySelector(".gc-ranking-avatar");
+        if (!avatarWrap) return;
+        if (show) {
+          avatarWrap.innerHTML =
+            `<img class="gc-ranking-avatar-img" src="${rankingEscapeHtml(busted)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" ` +
+            `data-avatar-initial="${rankingEscapeHtml(initial)}" data-avatar-theme="${rankingEscapeHtml(theme)}" ` +
+            `onerror="GC.fallbackRankingAvatar(this)">`;
+        } else {
+          avatarWrap.innerHTML =
+            `<span class="gc-ranking-avatar-fallback gc-ranking-avatar-fallback--${rankingEscapeHtml(theme)}" aria-hidden="true">${rankingEscapeHtml(initial)}</span>`;
+        }
+      });
+
+      const modalImg = PLAYER_CARD.content?.querySelector(".gc-player-card-avatar[src]");
+      if (modalImg && PLAYER_CARD.currentId === pid && show) {
+        modalImg.src = busted;
+        modalImg.hidden = false;
+        const ph = PLAYER_CARD.content.querySelector(".gc-player-card-avatar-placeholder");
+        if (ph) ph.hidden = true;
       }
-    });
+    }
 
-    const modalImg = PLAYER_CARD.content?.querySelector(".gc-player-card-avatar[src]");
-    if (modalImg && PLAYER_CARD.currentId === pid && show) {
-      modalImg.src = busted;
-      modalImg.hidden = false;
-      const ph = PLAYER_CARD.content.querySelector(".gc-player-card-avatar-placeholder");
-      if (ph) ph.hidden = true;
+    if (nameStyle != null) {
+      const esc =
+        typeof CSS !== "undefined" && CSS.escape ? CSS.escape(String(pid)) : String(pid);
+      document.querySelectorAll(`.gc-player-name[data-player-id="${esc}"]`).forEach((el) => {
+        el.setAttribute("data-name-style", nameStyle || "none");
+      });
+      document.querySelectorAll(`.gc-chat-msg-sender[data-player-id="${esc}"]`).forEach((el) => {
+        el.setAttribute("data-name-style", nameStyle || "none");
+        el.dataset.nameStyle = nameStyle || "none";
+      });
     }
 
     const top = GC._rankingLastPayload || _rankingLifecycle.payload;
     if (top?.top_players) {
       const row = top.top_players.find((r) => Number(r.player_id) === pid);
       if (row) {
-        row.avatar_url = busted;
-        row.show_avatar = show;
-        row.avatar_initial = initial;
-        row.theme = theme;
+        if (hasAvatarPatch) {
+          row.avatar_url = busted;
+          row.show_avatar = show;
+          row.avatar_initial = initial;
+          if (sync.theme != null) row.theme = theme;
+        }
+        if (nameStyle != null) row.name_style = nameStyle || "none";
+        if (title != null) row.title = title;
+        if (hasBadgesPatch && Array.isArray(sync.badges)) row.badges = sync.badges;
         if (document.getElementById("ranking-page")) {
           rankingRenderList(top, _rankingLifecycle.tab);
+          if (typeof rankingRenderMyStrip === "function") {
+            rankingRenderMyStrip(top, _rankingLifecycle.tab);
+          }
         }
       }
     }
+
+    if (nameStyle != null) {
+      const esc =
+        typeof CSS !== "undefined" && CSS.escape ? CSS.escape(String(pid)) : String(pid);
+      document.querySelectorAll(`.gc-player-name[data-player-id="${esc}"]`).forEach((el) => {
+        el.setAttribute("data-name-style", nameStyle || "none");
+      });
+    }
+  };
+
+  GC.syncPlayerNameStyleVisuals = function syncPlayerNameStyleVisuals(playerId, nameStyle) {
+    GC.syncPlayerAvatarVisuals({
+      player_id: playerId,
+      name_style: nameStyle || "none",
+    });
   };
 
   function rankingBadgesHtml(row) {
@@ -32808,8 +32974,21 @@
   }
 
   function rankingCommanderNameHtml(row) {
-    const name = rankingEscapeHtml(row.commander_display || row.commander_name || "—");
-    return `<span class="gc-ranking-player-name">${name}</span>${rankingStatusBadgesHtml(row)}`;
+    const name = row.commander_display || row.commander_name || "—";
+    const pid = Number(row.player_id) || 0;
+    const style = row.name_style || "none";
+    if (typeof GC.playerNameHtml === "function" && pid > 0) {
+      return (
+        GC.playerNameHtml({
+          id: pid,
+          name,
+          nameStyle: style,
+          enableCard: false,
+          extraClass: "gc-ranking-player-name",
+        }) + rankingStatusBadgesHtml(row)
+      );
+    }
+    return `<span class="gc-ranking-player-name">${rankingEscapeHtml(name)}</span>${rankingStatusBadgesHtml(row)}`;
   }
 
   function rankingPlayerCell(row, isMe) {
@@ -37710,8 +37889,9 @@
     }
   }
 
-  async function loadPlayerCardEdit(playerId) {
+  async function loadPlayerCardEdit(playerId, opts) {
     if (!pcPrepareOpen(playerId, "edit")) return;
+    const focusField = opts && opts.focus ? String(opts.focus) : "";
     const reqToken = PLAYER_CARD.reqId;
     try {
       const result = await fetchPlayerCardHtml(`/api/player-card/${playerId}/edit`, reqToken);
@@ -37729,6 +37909,19 @@
       }
       mountPlayerCardHtml(result.html, "edit");
       initPlayerCardEditPreview();
+      if (focusField === "name_style") {
+        const host = PLAYER_CARD.content;
+        const field = host?.querySelector("#pc-field-name-style");
+        if (field && typeof field.scrollIntoView === "function") {
+          field.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        }
+        const chip =
+          host?.querySelector('.gc-pc-cosmetic-chip[data-pc-chip="name_style"].is-selected') ||
+          host?.querySelector('.gc-pc-cosmetic-chip[data-pc-chip="name_style"]');
+        if (chip && typeof chip.focus === "function") {
+          try { chip.focus(); } catch (_) {}
+        }
+      }
     } catch (_) {
       if (reqToken !== PLAYER_CARD.reqId) return;
       pcSetError(t("playercard_load_error", "Profil konnte nicht geladen werden."));
@@ -37828,6 +38021,19 @@
       if (previewName) {
         previewName.setAttribute("data-name-style", nstyle);
       }
+      form.querySelectorAll("#pc-social-preview .gc-player-name").forEach((el) => {
+        el.setAttribute("data-name-style", nstyle);
+      });
+      form.querySelectorAll('.gc-pc-cosmetic-chip[data-pc-chip="name_style"]').forEach((chip) => {
+        const on = chip.getAttribute("data-value") === nstyle;
+        chip.classList.toggle("is-selected", on);
+        chip.setAttribute("aria-pressed", on ? "true" : "false");
+      });
+      form.querySelectorAll('.gc-pc-cosmetic-chip[data-pc-chip="theme"]').forEach((chip) => {
+        const on = chip.getAttribute("data-value") === th;
+        chip.classList.toggle("is-selected", on);
+        chip.setAttribute("aria-pressed", on ? "true" : "false");
+      });
       const shell = form.closest(".gc-player-card-shell");
       if (shell) {
         shell.setAttribute("data-theme", th);
@@ -37844,9 +38050,43 @@
       syncBadgePreview();
     }
 
+    let _lastPreviewNameStyle = nameStyleSel?.value || "none";
+    function syncPreviewAndLiveNameStyle() {
+      syncPreview();
+      const nstyle = nameStyleSel?.value || "none";
+      if (nstyle === _lastPreviewNameStyle) return;
+      _lastPreviewNameStyle = nstyle;
+      try {
+        const pid =
+          form.querySelector('[name="player_id"]')?.value ||
+          PLAYER_CARD.currentId ||
+          document.body.getAttribute("data-player-id") ||
+          "";
+        if (pid && typeof GC.syncPlayerNameStyleVisuals === "function") {
+          GC.syncPlayerNameStyleVisuals(pid, nstyle);
+        }
+      } catch (_) {}
+    }
+
     form.querySelectorAll("[data-pc-field]").forEach((el) => {
       el.addEventListener("input", syncPreview);
-      el.addEventListener("change", syncPreview);
+      el.addEventListener("change", syncPreviewAndLiveNameStyle);
+    });
+    form.querySelectorAll("[data-pc-chip]").forEach((chip) => {
+      chip.addEventListener("click", (e) => {
+        e.preventDefault();
+        const field = chip.getAttribute("data-pc-chip") || "";
+        const value = chip.getAttribute("data-value") || "";
+        if (!field || !value) return;
+        const sel = form.querySelector(`[data-pc-field="${field}"]`);
+        if (!sel) return;
+        if (sel.value === value) {
+          syncPreviewAndLiveNameStyle();
+          return;
+        }
+        sel.value = value;
+        sel.dispatchEvent(new Event("change", { bubbles: true }));
+      });
     });
     form.querySelectorAll('input[name="badge_slot"]').forEach((el) => {
       el.addEventListener("change", () => {
@@ -37965,12 +38205,21 @@
       }
       showNotify(t("playercard_save_success", "Profil gespeichert."), "success");
       if (data.html) mountPlayerCardHtml(data.html, "view");
-      if (data.card && typeof GC.syncPlayerAvatarVisuals === "function") {
-        GC.syncPlayerAvatarVisuals(data.card);
+      const syncCard = Object.assign({}, payload, data.card || {});
+      if (data.card && data.card.player_id) syncCard.player_id = data.card.player_id;
+      else {
+        syncCard.player_id =
+          form.querySelector('[name="player_id"]')?.value ||
+          document.body.getAttribute("data-player-id") ||
+          PLAYER_CARD.currentId ||
+          "";
+      }
+      if (typeof GC.syncPlayerAvatarVisuals === "function") {
+        GC.syncPlayerAvatarVisuals(syncCard);
       }
       try {
-        const th = (data.card && data.card.theme) || payload.theme || "cyan";
-        const aura = (data.card && data.card.aura_key) || payload.aura_key || "none";
+        const th = syncCard.theme || payload.theme || "cyan";
+        const aura = syncCard.aura_key || payload.aura_key || "none";
         document.body.setAttribute("data-identity-theme", th);
         document.body.setAttribute("data-identity-aura", aura);
       } catch (_) {}
@@ -38411,6 +38660,7 @@
   }
 
   GC.openPlayerCard = loadPlayerCardView;
+  GC.openPlayerCardEdit = loadPlayerCardEdit;
   GC.closePlayerCard = closePlayerCardModal;
 
   /** GC-553 — DevTools snapshot: polling, loops, lifecycle counters. */

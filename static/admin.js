@@ -102,14 +102,23 @@
     }
   }
 
-  function playerNameLink(playerId, name) {
+  function playerNameLink(playerId, name, nameStyle) {
     const id = Number(playerId);
     if (!Number.isFinite(id) || id <= 0) return esc(name || "—");
+    if (typeof GC.playerNameHtml === "function") {
+      return GC.playerNameHtml({
+        id,
+        name: name || "Commander",
+        nameStyle: nameStyle || "none",
+        enableCard: true,
+      });
+    }
     const label = esc(name || "Commander");
     const title = esc(t("playercard_open", "Profil öffnen"));
+    const style = esc(String(nameStyle || "none"));
     return (
       `<span class="gc-player-name" data-player-id="${id}" data-player-name="${label}" ` +
-      `data-player-card="1" role="button" tabindex="0" title="${title}">${label}</span>`
+      `data-name-style="${style}" data-player-card="1" role="button" tabindex="0" title="${title}">${label}</span>`
     );
   }
 
@@ -586,13 +595,14 @@
       hud: extras && extras.hud,
       skipGameState: true,
     });
+    // GC-INFRA: do NOT restore left-menu accordion state on /admin — that path has no
+    // infrastructure route hints and re-applies accordion state against GC-849
+    // grid collapse, leaving Infra nav non-interactive. Leaving admin restores
+    // via PJAX initPage / _syncNavActive.
     if (typeof GC.releaseShellNavigationBlockers === "function") {
       GC.releaseShellNavigationBlockers(reason || "admin_balance_save");
     } else if (typeof GC.teardownHudSelectPortals === "function") {
       GC.teardownHudSelectPortals();
-    }
-    if (typeof GC.restoreLeftmenuState === "function") {
-      GC.restoreLeftmenuState(window.location.href);
     }
   }
 

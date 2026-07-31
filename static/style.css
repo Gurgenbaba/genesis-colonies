@@ -1024,6 +1024,8 @@ body.gc-has-open-popover .admin-card:has(.gc-hud-select.is-open){
 .gc-nav-section[data-nav-section="infrastructure"].is-expanded > .gc-nav-section-body{
   max-height: none;
   grid-template-rows: 1fr;
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .gc-nav-section[data-nav-section="infrastructure"] > .gc-nav-section-body > *{
@@ -6438,7 +6440,7 @@ body.gc-body-ingame .overview-hero.overview-hero--themed.gc-planet-hero.gc-panel
 }
 .overview-companion-mission-progress__walker{
   position: absolute;
-  left: 6%;
+  left: var(--companion-walk-at, 0%);
   bottom: calc(100% + 2px);
   width: 36px;
   height: 20px;
@@ -6447,9 +6449,8 @@ body.gc-body-ingame .overview-hero.overview-hero--themed.gc-planet-hero.gc-panel
   transform-origin: center bottom;
   pointer-events: none;
   filter: drop-shadow(0 0 6px rgba(70, 229, 255, 0.45));
-  animation:
-    companion-titan-wander 5.2s ease-in-out infinite,
-    companion-titan-bob 1.15s ease-in-out infinite;
+  transition: left 0.35s linear;
+  animation: companion-titan-bob 1.15s ease-in-out infinite;
   will-change: left, transform;
 }
 .overview-companion-mission-progress__walker img{
@@ -6461,25 +6462,6 @@ body.gc-body-ingame .overview-hero.overview-hero--themed.gc-planet-hero.gc-panel
   border-radius: var(--gc-radius-xs, 0);
   image-rendering: auto;
 }
-@keyframes companion-titan-wander{
-  0%,
-  100%{
-    left: 6%;
-    transform: translateX(-50%) scaleX(1);
-  }
-  46%{
-    left: var(--companion-walk-end, 90%);
-    transform: translateX(-50%) scaleX(1);
-  }
-  50%{
-    left: var(--companion-walk-end, 90%);
-    transform: translateX(-50%) scaleX(-1);
-  }
-  96%{
-    left: 6%;
-    transform: translateX(-50%) scaleX(-1);
-  }
-}
 @keyframes companion-titan-bob{
   0%,
   100%{ translate: 0 0; }
@@ -6488,8 +6470,7 @@ body.gc-body-ingame .overview-hero.overview-hero--themed.gc-planet-hero.gc-panel
 @media (prefers-reduced-motion: reduce){
   .overview-companion-mission-progress__walker{
     animation: none;
-    left: var(--companion-walk-end, 50%);
-    transform: translateX(-50%) scaleX(1);
+    transition: none;
   }
 }
 .overview-companion-mission-lead{
@@ -18944,6 +18925,16 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   color: var(--gc-primary-2);
 }
 
+/* Inner commander label must inherit equipped name-style paint from parent. */
+.gc-player-name[data-name-style]:not([data-name-style="none"]) .gc-commander-name {
+  color: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-shadow: inherit;
+  font-family: inherit;
+}
+
 .gc-player-card-commander .gc-commander-prefix{
   margin-right: 0.35em;
 }
@@ -23357,8 +23348,10 @@ body.gc-tab-hidden .gc-card-queue-glyph--research {
   outline: none;
 }
 
-/* --- Name Styles (Identity) ? loud, cheap CSS --- */
+/* --- Name Styles (Identity) — loud, cheap CSS --- */
+/* Include .gc-ranking-player-name so ranking color rule cannot win. */
 .gc-player-name[data-name-style="ash"],
+.gc-player-name.gc-ranking-player-name[data-name-style="ash"],
 .gc-chat-msg-sender[data-name-style="ash"] {
   color: #d5dde8;
   font-weight: 800;
@@ -23368,6 +23361,7 @@ body.gc-tab-hidden .gc-card-queue-glyph--research {
   text-shadow: 0 0 8px rgba(200, 210, 220, 0.35);
 }
 .gc-player-name[data-name-style="signal"],
+.gc-player-name.gc-ranking-player-name[data-name-style="signal"],
 .gc-chat-msg-sender[data-name-style="signal"] {
   color: #7af0ff;
   font-weight: 800;
@@ -23378,6 +23372,7 @@ body.gc-tab-hidden .gc-card-queue-glyph--research {
   box-shadow: 0 0 12px rgba(70, 229, 255, 0.35);
 }
 .gc-player-name[data-name-style="etched"],
+.gc-player-name.gc-ranking-player-name[data-name-style="etched"],
 .gc-chat-msg-sender[data-name-style="etched"] {
   color: #e8eef6;
   font-weight: 900;
@@ -23390,6 +23385,7 @@ body.gc-tab-hidden .gc-card-queue-glyph--research {
   border-bottom: 2px solid #9aa8bc;
 }
 .gc-player-name[data-name-style="relic"],
+.gc-player-name.gc-ranking-player-name[data-name-style="relic"],
 .gc-chat-msg-sender[data-name-style="relic"] {
   color: #5dff9a;
   font-family: var(--gc-mono);
@@ -23402,6 +23398,7 @@ body.gc-tab-hidden .gc-card-queue-glyph--research {
   box-shadow: 0 0 14px rgba(40, 220, 120, 0.3);
 }
 .gc-player-name[data-name-style="imperial"],
+.gc-player-name.gc-ranking-player-name[data-name-style="imperial"],
 .gc-chat-msg-sender[data-name-style="imperial"] {
   color: #ffe07a;
   font-weight: 900;
@@ -23415,6 +23412,7 @@ body.gc-tab-hidden .gc-card-queue-glyph--research {
   box-shadow: 0 0 16px rgba(255, 190, 60, 0.35);
 }
 .gc-player-name[data-name-style="plasma"],
+.gc-player-name.gc-ranking-player-name[data-name-style="plasma"],
 .gc-chat-msg-sender[data-name-style="plasma"] {
   color: #00ffe8;
   font-weight: 900;
@@ -23426,6 +23424,7 @@ body.gc-tab-hidden .gc-card-queue-glyph--research {
   box-shadow: 0 0 18px rgba(0, 255, 220, 0.4);
 }
 .gc-player-name[data-name-style="void"],
+.gc-player-name.gc-ranking-player-name[data-name-style="void"],
 .gc-chat-msg-sender[data-name-style="void"] {
   color: #e0c4ff;
   font-weight: 900;
@@ -25025,6 +25024,141 @@ body.gc-combat-report-open { overflow: hidden; }
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   gap: 8px;
 }
+
+/* Human Wardrobe — social surfaces + cosmetic chips */
+.gc-pc-social-preview {
+  position: relative;
+  z-index: 2;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.gc-pc-social-preview-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--gc-text-muted, #9aa8c4);
+  opacity: 0.9;
+  margin-bottom: 2px;
+}
+.gc-pc-social-preview-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  padding: 4px 6px;
+  border: 1px solid rgba(120, 160, 200, 0.14);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(0, 0, 0, 0.22);
+}
+.gc-pc-social-preview-k {
+  flex: 0 0 auto;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--gc-text-muted, #9aa8c4);
+  opacity: 0.85;
+  min-width: 4.2em;
+}
+.gc-pc-social-preview-line {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gc-pc-social-preview-msg {
+  color: var(--gc-text-muted, #9aa8c4);
+  opacity: 0.75;
+}
+.gc-pc-social-preview-rank-pos {
+  color: var(--gc-text-muted, #9aa8c4);
+  margin-right: 6px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
+.gc-pc-cosmetic-chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.gc-pc-cosmetic-chip {
+  appearance: none;
+  margin: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 4px 8px;
+  border: 1px solid rgba(120, 190, 255, 0.22);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(5, 10, 22, 0.88);
+  color: inherit;
+  font: inherit;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+.gc-pc-cosmetic-chip:hover,
+.gc-pc-cosmetic-chip:focus-visible {
+  border-color: rgba(120, 220, 255, 0.45);
+  outline: none;
+  box-shadow: inset 0 0 0 1px rgba(120, 220, 255, 0.12), 0 0 0 1px rgba(70, 180, 255, 0.2);
+}
+.gc-pc-cosmetic-chip.is-selected,
+.gc-pc-cosmetic-chip[aria-pressed="true"] {
+  border-color: rgba(70, 229, 255, 0.55);
+  background: rgba(20, 40, 58, 0.95);
+  box-shadow:
+    inset 0 0 0 1px rgba(70, 229, 255, 0.18),
+    0 0 12px rgba(70, 229, 255, 0.12);
+}
+.gc-pc-cosmetic-chip .gc-player-name {
+  font-size: 0.82rem;
+  line-height: 1.2;
+  max-width: 9em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gc-pc-cosmetic-chip--theme {
+  min-width: 0;
+  padding: 4px 8px 4px 6px;
+}
+.gc-pc-cosmetic-chip-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  color: var(--gc-text-muted, #9aa8c4);
+  max-width: 7em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gc-pc-theme-swatch {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  border-radius: var(--gc-radius-sm, 2px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: #46e5ff;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+.gc-pc-cosmetic-chip--theme[data-theme="cyan"] .gc-pc-theme-swatch { background: #46e5ff; }
+.gc-pc-cosmetic-chip--theme[data-theme="violet"] .gc-pc-theme-swatch { background: #a878ff; }
+.gc-pc-cosmetic-chip--theme[data-theme="amber"] .gc-pc-theme-swatch { background: #ffbe50; }
+.gc-pc-cosmetic-chip--theme[data-theme="emerald"] .gc-pc-theme-swatch { background: #50dc8c; }
+.gc-pc-cosmetic-chip--theme[data-theme="rose"] .gc-pc-theme-swatch { background: #ff7898; }
+.gc-pc-cosmetic-chip--theme[data-theme="ash"] .gc-pc-theme-swatch { background: #8c94a0; }
+.gc-pc-cosmetic-chip--theme[data-theme="steel"] .gc-pc-theme-swatch { background: #a0b0c4; }
+.gc-pc-cosmetic-chip--theme[data-theme="gold"] .gc-pc-theme-swatch { background: #ffc848; }
+.gc-pc-cosmetic-chip--theme[data-theme="void"] .gc-pc-theme-swatch { background: #8c5aff; }
+.gc-pc-cosmetic-chip--theme[data-theme="plasma"] .gc-pc-theme-swatch { background: #00ffdc; }
 
 .gc-player-card-fields {
   min-width: 0;

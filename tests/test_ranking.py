@@ -706,6 +706,7 @@ def test_ranking_uses_single_join_query(temp_db):
     assert "LEFT JOIN alliances a ON a.id = am.alliance_id" in sql
     assert "card_avatar_url" in social_select
     assert "alliance_tag" in social_select
+    assert "card_name_style" in social_select
 
     for i in range(3):
         pid = _create_player(f"join_{i}")
@@ -753,6 +754,7 @@ def test_ranking_invalid_avatar_url_rejected(temp_db):
         "card_avatar_url": "javascript:alert(1)",
         "card_title": "Title",
         "card_theme": "cyan",
+        "card_name_style": "plasma",
         "card_is_public": 1,
         "alliance_id": None,
         "alliance_tag": "",
@@ -762,6 +764,27 @@ def test_ranking_invalid_avatar_url_rejected(temp_db):
     assert social["show_avatar"] is False
     assert social["avatar_url"] == ""
     assert social["avatar_initial"] == "T"
+    assert social["name_style"] == "plasma"
+
+
+def test_ranking_name_style_always_public(temp_db):
+    """Name style is a social signal — exposed even when the card is private."""
+    social = enrich_ranking_social_fields(
+        {
+            "commander_name": "Ghost",
+            "card_avatar_url": "/static/img/x.png",
+            "card_title": "Hidden",
+            "card_theme": "violet",
+            "card_name_style": "void",
+            "card_is_public": 0,
+            "alliance_id": None,
+            "alliance_tag": "",
+            "alliance_name": "",
+        }
+    )
+    assert social["profile_is_public"] is False
+    assert social["title"] == ""
+    assert social["name_style"] == "void"
 
 
 def test_ranking_includes_player_without_score_row(temp_db):
