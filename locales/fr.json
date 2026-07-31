@@ -4111,7 +4111,8 @@
   "nav_badge_imperial_directives_aria": "Imperial Directive reward ready",
   "nav_badge_referrals_aria": "Récompense de parrainage disponible",
   "nav_badge_story_aria": "Story transmission awaiting response",
-  "nav_badge_vote_center_aria": "Vote disponible",
+  "nav_badge_alliance_aria": "Candidature d alliance en attente",
+"nav_badge_vote_center_aria": "Vote disponible",
   "nav_badge_world_boss_aria": "World Boss actif",
   "nav_banned_short": "Bannis",
   "nav_buildings": "Bâtiments",
@@ -6988,5 +6989,9 @@
   "wb_your_fleet": "Votre flotte d'attaque",
   "wb_attack_no_movement_hint": "Chaque attaque a un temps de recharge de 5 minutes. Aucun mouvement de flotte.",
   "wb_combat_progress_title": "Votre progression de combat",
-  "wb_auto_attack_pending": "Attaque auto active — prochaine frappe en attente."
+  "wb_auto_attack_pending": "Attaque auto active — prochaine frappe en attente.",
+  "header_fleets_toggle_title": "Flottes actives",
+  "header_fleets_toggle_aria": "Afficher les flottes en vol",
+"header_planets_toggle_title": "Liste des planetes",
+  "header_planets_toggle_aria": "Afficher la liste des planetes"
 }

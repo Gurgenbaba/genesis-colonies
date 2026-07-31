@@ -63,7 +63,7 @@ Antwort enthält vollständigen `state` (game-state payload) + `planets[]`.
 
 ### Planet Registry (GC-575 / GC-575A)
 
-- Template: `templates/partials/planet_registry.html` — rechte Sidebar (oben), Meta-Nav compact darunter
+- Template: `templates/partials/planet_registry.html` — Desktop/Tablet rechte Sidebar; Phone: Header-Pfeil → `#gc-planet-registry-sheet` (nicht MEHR/META)
 - Kein Header-Planet-Switcher — Wechsel nur über Registry (Desktop + Mobile-Drawer)
 - Mini-Cards: Name, Empire-Rolle/Identity, Koordinaten, `is-active`
 - Spec: [GC_PLANET_REGISTRY.md](GC_PLANET_REGISTRY.md)

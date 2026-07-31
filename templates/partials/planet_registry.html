@@ -7,9 +7,9 @@
 {% set pr_pl_max = ((pr_pl.max if pr_pl else none) or (pr_gs_pl.max_colonies_per_player|default(9)))|int %}
 {% endif %}
 {% set _shell = NAV_SHELL | default('desktop') %}
-{% if _shell == 'mobile-drawer-right' %}
-  {% set _pr_id = 'gc-mnav-planet-registry' %}
-  {% set _pr_list_id = 'gc-mnav-planet-registry-list' %}
+{% if _shell == 'mobile-sheet' %}
+  {% set _pr_id = 'gc-sheet-planet-registry' %}
+  {% set _pr_list_id = 'gc-sheet-planet-registry-list' %}
 {% else %}
   {% set _pr_id = 'gc-planet-registry' %}
   {% set _pr_list_id = 'gc-planet-registry-list' %}

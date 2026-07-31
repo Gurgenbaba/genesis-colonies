@@ -113,7 +113,7 @@ Optionaler PG-Code-Pfad existiert in [GC_PERF_CORE.md](GC_PERF_CORE.md), ist abe
 
 **GC-RANK-CRON-001:** Sidecar uses a **respawn loop** + leader-lock **retry** so a deploy volume handoff (old container still holds `.gc_embedded_cron.lock`) cannot leave ranking/fleet without an owner. Admin → System → Runtime shows last ranking-worker run + dirty pending.
 
-**GC-RANK-AUTO-001:** Runtime also shows a **maintenance bag heartbeat** (age + source). Auto ranking is a **dirty batch** (~10 min): `players_updated` = dirty players only; ranks are rewritten after. Admin „Ranking jetzt neu berechnen“ = full-universe reconcile. If bag heartbeat is stale while Maintenance says Sidecar, check logs for `[maintenance-worker] started` / `waiting_for_leader_lock`.
+**GC-RANK-AUTO-001:** Runtime also shows a **maintenance bag heartbeat** (age + source). Auto ranking refreshes **all players' scores** every ~10 min, then rewrites ranks. Admin „Ranking jetzt neu berechnen“ = same full-universe reconcile on demand. If bag heartbeat is stale while Maintenance says Sidecar, check logs for `[maintenance-worker] started` / `waiting_for_leader_lock`.
 
 After multi-writer DB (if ever): optional dedicated `scripts/run_game_worker.py` service + keep sidecar or HTTP cron.
 

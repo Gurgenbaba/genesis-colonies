@@ -30,27 +30,13 @@ Interval remains **600s** (`RANKING_WORKER_INTERVAL_SEC`).
 
 | Mode | When | Behaviour |
 |------|------|-----------|
-| `dirty` | Ordinary cron / force | Bounded dirty batch (`GC_SCORE_DIRTY_BATCH`, default 50); ranks **once** after successes |
-| `full` | `source=admin`, `full_reconcile=True`, or daily due (24h) | Full-universe safety net; clears all dirty |
+| `full` | Every ordinary / forced cron tick | Full-universe score refresh for **all** players; ranks rewritten; dirty cleared |
+| `dirty` | Direct helper / tests only (`process_dirty_score_batch`) | Bounded dirty batch (`GC_SCORE_DIRTY_BATCH`, default 50) |
 
 Overlap guards: in-process `_RANKING_LOCK` + `runtime_state.ranking_worker_busy`.
 
-## Phase 1 audit verdict (kept)
-
-Finish recomputed **one player** (not all formulas). The bug was sync work inside the finish TX. Ranking route was already read-only.
-
-## Env
-
-| Env | Default | Meaning |
-|-----|---------|---------|
-| `GC_SCORE_DIRTY_BATCH` | 50 | Max dirty players per ordinary worker run |
-
-## Tests
-
-`tests/test_gc_score_perf_001_audit.py` plus updated ranking_worker / queue_engine / autoplay contracts.
-
 ## Ops
 
-- Ranking UI may lag gameplay by up to ~10 minutes.
+- Ranking UI refreshes for the whole universe every ~10 minutes.
 - Admin ranking recompute still runs **full** reconcile.
-- Daily full reconcile repairs missed dirty marks without 10-minute full-universe cost.
+- Dirty marks remain as a fast invalidate path between ticks.

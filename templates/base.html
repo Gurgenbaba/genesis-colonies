@@ -85,6 +85,33 @@
               </div>
             {% endif %}
 
+            {# Mobile: fleet icon opens sheet; desktop keeps fleets under resources. #}
+            <button type="button"
+                    class="gc-header-fleets-toggle"
+                    id="gc-header-fleets-toggle"
+                    data-gc-open-fleet-sheet
+                    aria-controls="global-fleet-drawer-root"
+                    aria-expanded="false"
+                    title="{{ T('header_fleets_toggle_title', 'Aktive Flotten') }}"
+                    aria-label="{{ T('header_fleets_toggle_aria', 'Fliegende Flotten anzeigen') }}">
+              <span class="gc-header-fleets-toggle-icon" aria-hidden="true">🚀</span>
+              <span class="gc-header-fleets-badge hidden"
+                    data-header-fleet-badge
+                    hidden
+                    aria-hidden="true"></span>
+            </button>
+
+            <button type="button"
+                    class="gc-header-planets-toggle"
+                    id="gc-header-planets-toggle"
+                    data-gc-open-planet-registry
+                    aria-controls="gc-planet-registry-sheet"
+                    aria-expanded="false"
+                    title="{{ T('header_planets_toggle_title', 'Planetenliste') }}"
+                    aria-label="{{ T('header_planets_toggle_aria', 'Planetenliste einblenden') }}">
+              <span class="gc-header-planets-toggle-icon" aria-hidden="true">‹</span>
+            </button>
+
           </div>
 
         {% endif %}
@@ -476,13 +503,17 @@
       <span class="gc-bottom-nav-icon" aria-hidden="true">📊</span>
       <span class="gc-bottom-nav-label">{{ T("nav_overview") }}</span>
     </a>
-    <a href="{{ url_for('buildings_view') }}"
-       data-nav-module="buildings"
-       class="gc-bottom-nav-item gc-nav-module--{{ nav_module_tier(_sn, 'buildings') }} {% if request.endpoint == 'buildings_view' %}active{% endif %}"
-       {% if 'buildings' not in _mb %}hidden{% endif %}>
+    <button type="button"
+            data-nav-module="buildings"
+            id="gc-bottom-nav-buildings"
+            class="gc-bottom-nav-item gc-nav-module--{{ nav_module_tier(_sn, 'buildings') }} {% if request.endpoint == 'buildings_view' %}active{% endif %}"
+            aria-haspopup="menu"
+            aria-expanded="false"
+            aria-controls="gc-bottom-buildings-menu"
+            {% if 'buildings' not in _mb %}hidden{% endif %}>
       <span class="gc-bottom-nav-icon" aria-hidden="true">🏗️</span>
       <span class="gc-bottom-nav-label">{{ T("nav_buildings") }}</span>
-    </a>
+    </button>
     <a href="{{ url_for('research_view') }}"
        data-nav-module="research"
        class="gc-bottom-nav-item gc-nav-module--{{ nav_module_tier(_sn, 'research') }} {% if request.endpoint == 'research_view' %}active{% endif %}"
@@ -544,6 +575,24 @@
       <span class="gc-bottom-nav-label">{{ T("nav_more", "Mehr") }}</span>
     </button>
   </nav>
+  <div id="gc-bottom-buildings-menu"
+       class="gc-bottom-buildings-menu"
+       role="menu"
+       hidden
+       aria-label="{{ T('buildings_tabs', 'Gebäude-Kategorien') }}">
+    <button type="button" role="menuitem" class="gc-bottom-buildings-menu-item" data-building-tab="resources">
+      {{ T("buildings_nav_tab_resources") }}
+    </button>
+    <button type="button" role="menuitem" class="gc-bottom-buildings-menu-item" data-building-tab="research">
+      {{ T("buildings_nav_tab_research") }}
+    </button>
+    <button type="button" role="menuitem" class="gc-bottom-buildings-menu-item" data-building-tab="military">
+      {{ T("buildings_nav_tab_military") }}
+    </button>
+    <button type="button" role="menuitem" class="gc-bottom-buildings-menu-item" data-building-tab="infrastructure">
+      {{ T("buildings_nav_tab_infrastructure") }}
+    </button>
+  </div>
 
   <div class="gc-nav-drawer{% if _sn.full_nav %} gc-nav-drawer--full-nav{% else %} gc-nav-drawer--role-nav{% endif %}"
        id="gc-nav-drawer"
@@ -601,6 +650,30 @@
       </div>
     </div>
   </div>
+
+  {# Phone: planet list card only (not the full MEHR nav drawer). #}
+  {% if AUTH_USER %}
+  <div id="gc-planet-registry-sheet"
+       class="gc-planet-registry-sheet"
+       hidden
+       aria-hidden="true">
+    <div class="gc-planet-registry-sheet-backdrop" data-gc-planet-sheet-close aria-hidden="true"></div>
+    <div class="gc-planet-registry-sheet-panel"
+         role="dialog"
+         aria-modal="true"
+         aria-label="{{ T('planet_registry_aria', 'Imperiumsübersicht') }}">
+      <button type="button"
+              class="gc-planet-registry-sheet-close gc-btn gc-btn-ghost gc-btn-xs"
+              data-gc-planet-sheet-close
+              aria-label="{{ T('close', 'Schließen') }}">✕</button>
+      <div class="gc-planet-registry-sheet-body">
+        {% with NAV_SHELL='mobile-sheet' %}
+          {% include "partials/planet_registry.html" %}
+        {% endwith %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
   {% endif %}
 
   <!-- Locale JSON für Frontend-JS -->

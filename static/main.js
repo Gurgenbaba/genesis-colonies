@@ -5746,10 +5746,15 @@
     GC._tabsBound = true;
 
     document.addEventListener("click", (e) => {
-      const subBtn = e.target.closest('[id$="nav-buildings-sub"] [data-building-tab]');
+      const subBtn = e.target.closest(
+        '[id$="nav-buildings-sub"] [data-building-tab], #gc-bottom-buildings-menu [data-building-tab]'
+      );
       if (subBtn) {
         e.preventDefault();
         const tab = subBtn.dataset.buildingTab || "resources";
+        if (typeof GC.closeBottomBuildingsMenu === "function") {
+          GC.closeBottomBuildingsMenu();
+        }
         if (GC.detectPage() === "buildings" && _getActiveBuildingTab() === tab) {
           return;
         }
@@ -10994,6 +10999,8 @@
               ? "nav_badge_imperial_directives_aria"
               : key === "world_boss"
                 ? "nav_badge_world_boss_aria"
+              : key === "alliance"
+                ? "nav_badge_alliance_aria"
               : key === "community"
               ? "nav_badge_community_aria"
               : "";
@@ -11008,6 +11015,8 @@
                 ? "Imperial Directive abholbereit"
                 : key === "world_boss"
                   ? "World Boss aktiv"
+                : key === "alliance"
+                  ? "Allianz-Bewerbung ausstehend"
                 : "Abstimmung offen")
         );
       }
@@ -11343,10 +11352,23 @@
 
   function _ensureFleetSheetAnchor(root) {
     if (!root || _fleetSheetAnchor?.parentNode) return;
+    const home = _fleetSheetHomeEl();
+    if (!home) return;
     const parent = root.parentNode;
+    // Never park the restore marker in the sheet portal or empty parents.
     if (!parent || parent === document.body) return;
     _fleetSheetAnchor = document.createComment("gc-fleet-sheet-anchor");
-    parent.insertBefore(_fleetSheetAnchor, root);
+    if (parent === home) {
+      home.insertBefore(_fleetSheetAnchor, root);
+      return;
+    }
+    // Root already docked in header slot: mark sticky restore point.
+    const bar = home.querySelector("#resource-bar, .resource-bar.resource-bar-cmd");
+    if (bar) {
+      home.insertBefore(_fleetSheetAnchor, bar.nextSibling);
+    } else {
+      home.appendChild(_fleetSheetAnchor);
+    }
   }
 
   function _fleetSheetHomeEl() {
@@ -11359,6 +11381,7 @@
   function _restoreFleetSheetPortal(root) {
     if (!root) return;
     root.classList.remove("gc-fleet-sheet-portal");
+    root.classList.remove("gc-fleet-hud--header-slot");
     const sticky = _fleetSheetHomeEl();
     if (!sticky) return;
     const parent = root.parentNode;
@@ -11377,6 +11400,41 @@
     sticky.appendChild(root);
   }
 
+  function isMobileHeaderFleetViewport() {
+    return window.matchMedia("(max-width: 768px)").matches;
+  }
+
+  function syncHeaderFleetsToggle(expanded) {
+    const btn = document.getElementById("gc-header-fleets-toggle");
+    if (!btn) return;
+    btn.setAttribute("aria-expanded", expanded ? "true" : "false");
+    btn.classList.toggle("is-active", !!expanded);
+  }
+
+  function toggleHeaderFleetSheet() {
+    const root = document.getElementById("global-fleet-drawer-root")
+      || document.querySelector("[data-global-fleet-drawer]");
+    if (!root) return;
+    const willExpand = !isFleetDrawerShowAll();
+    setFleetDrawerShowAll(willExpand);
+    if (GC.lastState?.active_fleets) {
+      renderGlobalFleetHud(GC.lastState.active_fleets);
+    } else {
+      syncMobileFleetSheetLayout(root);
+      syncHeaderFleetsToggle(willExpand);
+    }
+  }
+
+  function syncMobileHeaderFleetSlot(root) {
+    // Phone: keep drawer in resource sticky (CSS-hidden when collapsed).
+    // Header shows icon+badge only — never dock the full HUD into the meta row.
+    if (!root) return;
+    root.classList.remove("gc-fleet-hud--header-slot");
+    syncHeaderFleetsToggle(
+      !!(root.classList.contains("is-show-all") && isMobileFleetSheetViewport())
+    );
+  }
+
   function syncMobileFleetSheetTop() {
     if (!isMobileFleetSheetViewport()) return;
     const resourcesRow = document.querySelector(".gc-header-cmd .gc-header-row-resources");
@@ -11391,6 +11449,7 @@
     const backdrop = getFleetSheetBackdrop();
     backdrop.hidden = !expanded;
     document.body.classList.toggle("gc-fleet-sheet-open", expanded);
+    syncHeaderFleetsToggle(expanded);
     if (!root) return;
     if (expanded) {
       _ensureFleetSheetAnchor(root);
@@ -11398,11 +11457,13 @@
         document.body.appendChild(root);
       }
       root.classList.add("gc-fleet-sheet-portal");
+      root.classList.remove("gc-fleet-hud--header-slot");
       syncMobileFleetSheetTop();
       root.setAttribute("aria-expanded", "true");
     } else {
       _restoreFleetSheetPortal(root);
       root.setAttribute("aria-expanded", "false");
+      syncMobileHeaderFleetSlot(root);
     }
   }
 
@@ -12235,13 +12296,12 @@
     const moreBtn = root.querySelector("[data-fleet-drawer-more]");
     rememberFleetDrawerMovements(list);
     const canExpand = canExpandFleetDrawer(count, visibleLimit);
-    const nowShowAll = showAll && canExpand;
+    // Phone: header icon may open the sheet even with 0–1 fleets.
+    const nowShowAll = showAll && (canExpand || isMobileFleetSheetViewport());
     if (listEl) {
       listEl.classList.toggle("is-show-all", nowShowAll);
       root.classList.toggle("is-show-all", nowShowAll);
-      const visibleItems = showAll || count <= visibleLimit || isMobileFleetSheetViewport()
-        ? list
-        : list.slice(0, visibleLimit);
+      const visibleItems = nowShowAll ? list : list.slice(0, visibleLimit);
       const prevCount = Number(listEl.dataset.fleetDrawerCount || 0);
       const countChanged = prevCount !== count;
       if (countChanged) {
@@ -12363,6 +12423,17 @@
     _globalFleetDrawerBound = true;
 
     document.addEventListener("click", (e) => {
+      const headerFleetBtn = e.target.closest("[data-gc-open-fleet-sheet]");
+      if (headerFleetBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleHeaderFleetSheet();
+        if (isFleetDrawerShowAll() && typeof GC.refreshGameState === "function") {
+          void GC.refreshGameState("fleet_drawer_expand");
+        }
+        return;
+      }
+
       const recallBtn = e.target.closest("[data-fleet-drawer-recall]");
       if (recallBtn) {
         const drawerRoot = document.getElementById("global-fleet-drawer-root")
@@ -12516,6 +12587,23 @@
         navItem?.classList.remove("gc-bottom-nav-item--fleet-active");
       }
     });
+    document.querySelectorAll("[data-header-fleet-badge]").forEach((el) => {
+      if (n > 0) {
+        el.textContent = label;
+        el.hidden = false;
+        el.classList.remove("hidden");
+        el.setAttribute("aria-hidden", "false");
+      } else {
+        el.textContent = "";
+        el.hidden = true;
+        el.classList.add("hidden");
+        el.setAttribute("aria-hidden", "true");
+      }
+    });
+    const fleetsToggle = document.getElementById("gc-header-fleets-toggle");
+    if (fleetsToggle) {
+      fleetsToggle.classList.toggle("has-fleets", n > 0);
+    }
   }
   GC.updateFleetNavBadge = updateFleetNavBadge;
 
@@ -25795,7 +25883,7 @@
       : prominent.slice(0, slotMax);
     const visibleSet = new Set([...visible, ...alwaysBottom]);
 
-    bottomNav.querySelectorAll("a.gc-bottom-nav-item[data-nav-module]").forEach((el) => {
+    bottomNav.querySelectorAll(".gc-bottom-nav-item[data-nav-module]").forEach((el) => {
       const key = String(el.dataset.navModule || "");
       const show = visibleSet.has(key);
       el.hidden = !show;
@@ -26111,6 +26199,9 @@
       e.preventDefault();
       GC._planetSwitchInFlight = true;
       console.debug("[GC] planet_switch start", planetId);
+      if (typeof GC.closePlanetRegistrySheet === "function") {
+        GC.closePlanetRegistrySheet();
+      }
       planetRegistryRoots().forEach((r) => r.classList.add("is-busy"));
       item.disabled = true;
       let shellUnlocked = false;
@@ -33759,23 +33850,32 @@
   const GC_LCP_HERO_PRELOAD_ID = "gc-lcp-hero-preload";
 
   function resolveLcpHeroImageUrl(root) {
-    if (!root) return "";
+    if (!root) return { href: "", imagesrcset: "", imagesizes: "" };
     const img = root.querySelector('[data-gc-lcp-hero="1"]');
-    if (!img) return "";
-    const webpHint = String(img.getAttribute("data-gc-lcp-webp-href") || "").trim();
-    if (webpHint) return webpHint;
+    if (!img) return { href: "", imagesrcset: "", imagesizes: "" };
     const picture = img.closest("picture");
     const source = picture?.querySelector('source[type="image/webp"]');
     if (source) {
       const srcset = String(source.getAttribute("srcset") || "").trim();
-      const first = srcset.split(/\s*,\s*/)[0]?.split(/\s+/)[0];
-      if (first) return first;
+      if (srcset) {
+        return {
+          imagesrcset: srcset,
+          imagesizes: String(
+            source.getAttribute("sizes")
+            || img.getAttribute("sizes")
+            || ""
+          ).trim(),
+          href: "",
+        };
+      }
     }
+    const webpHint = String(img.getAttribute("data-gc-lcp-webp-href") || "").trim();
+    if (webpHint) return { href: webpHint, imagesrcset: "", imagesizes: "" };
     const raw = String(img.getAttribute("src") || img.src || "").trim();
     if (/\.(png|jpe?g)(\?|$)/i.test(raw)) {
-      return raw.replace(/\.(png|jpe?g)(\?.*)?$/i, ".webp$2");
+      return { href: raw.replace(/\.(png|jpe?g)(\?.*)?$/i, ".webp$2"), imagesrcset: "", imagesizes: "" };
     }
-    return raw;
+    return { href: raw, imagesrcset: "", imagesizes: "" };
   }
 
   function isValidLcpPreloadHref(href) {
@@ -33801,15 +33901,20 @@
   function removeLcpHeroPreloadLinks() {
     document
       .querySelectorAll(
-        `#${GC_LCP_HERO_PRELOAD_ID}, link[data-gc-lcp-preload], head link[rel="preload"][as="image"]`
+        `#${GC_LCP_HERO_PRELOAD_ID}, link[data-gc-lcp-preload], link[data-gc-frame-preload], head link[rel="preload"][as="image"]`
       )
       .forEach((el) => el.remove());
   }
 
-  function syncLcpHeroPreload(href) {
-    const url = normalizeLcpPreloadHref(href);
+  function syncLcpHeroPreload(spec) {
+    const resolved = typeof spec === "string"
+      ? { href: spec, imagesrcset: "", imagesizes: "" }
+      : (spec && typeof spec === "object" ? spec : {});
+    const href = normalizeLcpPreloadHref(resolved.href || "");
+    const imagesrcset = String(resolved.imagesrcset || "").trim();
+    const imagesizes = String(resolved.imagesizes || "").trim();
     let link = document.getElementById(GC_LCP_HERO_PRELOAD_ID);
-    if (!url) {
+    if (!href && !imagesrcset) {
       removeLcpHeroPreloadLinks();
       return;
     }
@@ -33821,11 +33926,20 @@
       link.as = "image";
       link.dataset.gcLcpPreload = "1";
     }
-    if (link.getAttribute("href") === url) return;
-    link.setAttribute("href", url);
+    if (imagesrcset) {
+      link.setAttribute("imagesrcset", imagesrcset);
+      if (imagesizes) link.setAttribute("imagesizes", imagesizes);
+      else link.removeAttribute("imagesizes");
+      link.removeAttribute("href");
+    } else {
+      link.removeAttribute("imagesrcset");
+      link.removeAttribute("imagesizes");
+      link.setAttribute("href", href);
+    }
     if (!link.isConnected) document.head.appendChild(link);
     link.setAttribute("fetchpriority", "high");
-    if (/\.webp(\?|$)/i.test(url)) link.type = "image/webp";
+    const typeProbe = imagesrcset || href || "";
+    if (/\.webp(\?|$)/i.test(typeProbe)) link.type = "image/webp";
     else link.removeAttribute("type");
   }
 
@@ -34908,6 +35022,192 @@
   }
 
   // =========================
+  // Mobile planet registry sheet (planet list card — not full MEHR drawer)
+  // =========================
+  function syncPlanetRegistrySheetToggle(open) {
+    const btn = document.getElementById("gc-header-planets-toggle");
+    if (!btn) return;
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+
+  function isPlanetRegistrySheetOpen() {
+    const sheet = document.getElementById("gc-planet-registry-sheet");
+    return !!(sheet && !sheet.hidden && sheet.classList.contains("is-open"));
+  }
+
+  function closePlanetRegistrySheet() {
+    const sheet = document.getElementById("gc-planet-registry-sheet");
+    if (!sheet || sheet.hidden) {
+      syncPlanetRegistrySheetToggle(false);
+      document.body.classList.remove("gc-planet-sheet-open");
+      return;
+    }
+    // Blur before aria-hidden so a11y tooling does not flag focused descendants.
+    const active = document.activeElement;
+    if (active && sheet.contains(active) && typeof active.blur === "function") {
+      active.blur();
+    }
+    const planetsToggle = document.getElementById("gc-header-planets-toggle");
+    if (planetsToggle && typeof planetsToggle.focus === "function") {
+      try {
+        planetsToggle.focus({ preventScroll: true });
+      } catch (_e) {
+        /* ignore */
+      }
+    }
+    sheet.classList.remove("is-open");
+    syncPlanetRegistrySheetToggle(false);
+    document.body.classList.remove("gc-planet-sheet-open");
+    const panel = sheet.querySelector(".gc-planet-registry-sheet-panel");
+    const finish = () => {
+      sheet.hidden = true;
+      sheet.setAttribute("aria-hidden", "true");
+    };
+    if (panel) {
+      let done = false;
+      const onEnd = (e) => {
+        if (e.target !== panel || e.propertyName !== "transform") return;
+        done = true;
+        panel.removeEventListener("transitionend", onEnd);
+        finish();
+      };
+      panel.addEventListener("transitionend", onEnd);
+      setTimeout(() => {
+        if (!done) {
+          panel.removeEventListener("transitionend", onEnd);
+          finish();
+        }
+      }, 320);
+    } else {
+      finish();
+    }
+  }
+
+  function openPlanetRegistrySheet() {
+    const sheet = document.getElementById("gc-planet-registry-sheet");
+    if (!sheet) return false;
+    // Close MEHR drawer if open — planet card is exclusive.
+    const navDrawer = document.getElementById("gc-nav-drawer");
+    if (navDrawer && navDrawer.classList.contains("is-open")) {
+      navDrawer.classList.remove("is-open");
+      document.body.classList.remove("gc-nav-drawer-open");
+      navDrawer.hidden = true;
+      const moreBtn = document.getElementById("gc-nav-more-btn");
+      if (moreBtn) {
+        moreBtn.setAttribute("aria-expanded", "false");
+        moreBtn.classList.remove("active");
+      }
+    }
+    sheet.hidden = false;
+    sheet.setAttribute("aria-hidden", "false");
+    document.body.classList.add("gc-planet-sheet-open");
+    syncPlanetRegistrySheetToggle(true);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        sheet.classList.add("is-open");
+      });
+    });
+    return true;
+  }
+
+  function togglePlanetRegistrySheet() {
+    if (isPlanetRegistrySheetOpen()) {
+      closePlanetRegistrySheet();
+      return false;
+    }
+    return openPlanetRegistrySheet();
+  }
+
+  GC.openPlanetRegistrySheet = openPlanetRegistrySheet;
+  GC.closePlanetRegistrySheet = closePlanetRegistrySheet;
+  GC.togglePlanetRegistrySheet = togglePlanetRegistrySheet;
+
+  function initPlanetRegistrySheet() {
+    if (GC._planetRegistrySheetBound) return;
+    const sheet = document.getElementById("gc-planet-registry-sheet");
+    if (!sheet) return;
+    GC._planetRegistrySheetBound = true;
+
+    sheet.querySelectorAll("[data-gc-planet-sheet-close]").forEach((el) => {
+      el.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        closePlanetRegistrySheet();
+      });
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && isPlanetRegistrySheetOpen()) {
+        closePlanetRegistrySheet();
+      }
+    });
+
+    if (typeof GC.registerCleanup === "function") {
+      GC.registerCleanup(() => {
+        closePlanetRegistrySheet();
+      });
+    }
+  }
+
+  // =========================
+  // Mobile bottom-nav buildings menu
+  // =========================
+  function initBottomBuildingsMenu() {
+    if (GC._bottomBuildingsMenuBound) return;
+    const trigger = document.getElementById("gc-bottom-nav-buildings");
+    const menu = document.getElementById("gc-bottom-buildings-menu");
+    if (!trigger || !menu) return;
+    GC._bottomBuildingsMenuBound = true;
+
+    function closeMenu() {
+      menu.hidden = true;
+      menu.classList.remove("is-open");
+      trigger.setAttribute("aria-expanded", "false");
+      trigger.classList.remove("is-menu-open");
+      document.body.classList.remove("gc-bottom-buildings-menu-open");
+    }
+
+    function openMenu() {
+      menu.hidden = false;
+      trigger.setAttribute("aria-expanded", "true");
+      trigger.classList.add("is-menu-open");
+      document.body.classList.add("gc-bottom-buildings-menu-open");
+      requestAnimationFrame(() => {
+        menu.classList.add("is-open");
+      });
+    }
+
+    function toggleMenu() {
+      if (menu.hidden || !menu.classList.contains("is-open")) openMenu();
+      else closeMenu();
+    }
+
+    GC.closeBottomBuildingsMenu = closeMenu;
+    GC.openBottomBuildingsMenu = openMenu;
+
+    trigger.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleMenu();
+    });
+
+    document.addEventListener("click", (e) => {
+      if (menu.hidden) return;
+      if (menu.contains(e.target) || trigger.contains(e.target)) return;
+      closeMenu();
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !menu.hidden) closeMenu();
+    });
+
+    if (typeof GC.registerCleanup === "function") {
+      GC.registerCleanup(() => {
+        closeMenu();
+      });
+    }
+  }
+
+  // =========================
   // Mobile nav drawer
   // =========================
   function initMobileNav() {
@@ -34949,8 +35249,12 @@
       }
     }
 
-    function openDrawer() {
-      setMobileNavTab(readMobileNavTab(), false);
+    function openDrawer(tabKey) {
+      if (tabKey === "meta" || tabKey === "gameplay") {
+        setMobileNavTab(tabKey, false);
+      } else {
+        setMobileNavTab(readMobileNavTab(), false);
+      }
       drawer.hidden = false;
       document.body.classList.add("gc-nav-drawer-open");
       moreBtn.setAttribute("aria-expanded", "true");
@@ -34992,9 +35296,37 @@
       }
     }
 
+    function openPlanetRegistry() {
+      // Tablet: right sidebar hosts the registry. Phone: dedicated planet card sheet.
+      const mqTablet = window.matchMedia("(min-width: 992px) and (max-width: 1279px)");
+      if (mqTablet.matches) {
+        const toggle = document.getElementById("gc-sidebar-right-toggle");
+        const sidebar = document.getElementById("gc-sidebar-right-stack")
+          || document.getElementById("gc-sidebar-nav-right");
+        if (toggle && sidebar && !sidebar.classList.contains("is-drawer-open")) {
+          toggle.click();
+        }
+        return;
+      }
+      if (typeof GC.togglePlanetRegistrySheet === "function") {
+        GC.togglePlanetRegistrySheet();
+      }
+    }
+
+    GC.openMobilePlanetRegistry = openPlanetRegistry;
+
     moreBtn.addEventListener("click", () => {
       if (drawer.hidden || !drawer.classList.contains("is-open")) openDrawer();
       else closeDrawer();
+    });
+
+    document.querySelectorAll("[data-gc-open-planet-registry]").forEach((btn) => {
+      if (btn.dataset.gcPlanetsBound === "1") return;
+      btn.dataset.gcPlanetsBound = "1";
+      btn.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        openPlanetRegistry();
+      });
     });
 
     if (backdrop) backdrop.addEventListener("click", closeDrawer);
@@ -36987,6 +37319,8 @@
     initSimplePageAmbience();
     initMotionPreferenceListener();
     initMobileNav();
+    initBottomBuildingsMenu();
+    initPlanetRegistrySheet();
     initPjax();
     initShellChrome();
     // Shell overlays must bind even on Admin hard-load (PJAX leave never re-runs shell init).

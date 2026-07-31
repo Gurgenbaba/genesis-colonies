@@ -4111,7 +4111,8 @@
   "nav_badge_imperial_directives_aria": "Imperial Directive reward ready",
   "nav_badge_referrals_aria": "Referral reward available",
   "nav_badge_story_aria": "Story transmission awaiting response",
-  "nav_badge_vote_center_aria": "Vote available",
+  "nav_badge_alliance_aria": "Alliance application pending",
+"nav_badge_vote_center_aria": "Vote available",
   "nav_badge_world_boss_aria": "World Boss active",
   "nav_banned_short": "Banned",
   "nav_buildings": "Buildings",
@@ -6988,5 +6989,9 @@
   "wb_your_fleet": "Your attack fleet",
   "wb_attack_no_movement_hint": "Each attack has a 5-minute cooldown. No fleet movement occurs.",
   "wb_combat_progress_title": "Your combat progress",
-  "wb_auto_attack_pending": "Auto-attack active — next strike pending."
+  "wb_auto_attack_pending": "Auto-attack active — next strike pending.",
+  "header_fleets_toggle_title": "Active fleets",
+  "header_fleets_toggle_aria": "Show flying fleets",
+"header_planets_toggle_title": "Planet list",
+  "header_planets_toggle_aria": "Show planet list"
 }

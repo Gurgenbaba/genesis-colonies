@@ -423,6 +423,14 @@ def test_pending_application_guest_state(alliance_db):
         assert state["pending_application"]["tag"] == "PND"
         assert state["pending_application"]["message"] == "Please let me in"
         assert state["in_alliance"] is False
+        from game.alliance import count_alliance_nav_attention
+        from game.live_state import nav_badges_for_game_state
+
+        assert count_alliance_nav_attention(applicant, conn=conn) == 1
+        assert count_alliance_nav_attention(leader, conn=conn) == 1
+        badges = nav_badges_for_game_state(applicant, conn=conn)
+        assert badges["alliance"]["active"] is True
+        assert int(badges["alliance"]["count"]) == 1
     finally:
         conn.close()
 

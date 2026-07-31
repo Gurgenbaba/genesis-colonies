@@ -155,7 +155,7 @@ def test_ranking_worker_recomputes_after_queue_finish(temp_db):
     result = run_ranking_worker(source="test", force=True, persist=False)
     _close_db()
     assert result["ok"] is True
-    assert result.get("mode") == "dirty"
+    assert result.get("mode") == "full"
     assert int(result.get("players_updated") or 0) >= 1
     assert get_player_score_dirty(pid) is None
 
@@ -302,7 +302,7 @@ def test_ranking_worker_commits_score_changes(temp_db):
     result = run_ranking_worker(source="test", force=True, persist=False)
     _close_db()
     assert result["ok"] is True
-    assert result.get("mode") == "dirty"
+    assert result.get("mode") == "full"
     assert int(result.get("scores_updated") or 0) >= 1
 
     conn2 = db()

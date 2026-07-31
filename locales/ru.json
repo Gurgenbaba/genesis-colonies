@@ -4111,7 +4111,8 @@
   "nav_badge_imperial_directives_aria": "Imperial Directive reward ready",
   "nav_badge_referrals_aria": "Доступно реферальное вознаграждение",
   "nav_badge_story_aria": "Story transmission awaiting response",
-  "nav_badge_vote_center_aria": "Голосование доступно",
+  "nav_badge_alliance_aria": "Заявка в альянс ожидает",
+"nav_badge_vote_center_aria": "Голосование доступно",
   "nav_badge_world_boss_aria": "World Boss активен",
   "nav_banned_short": "Баны",
   "nav_buildings": "Здания",
@@ -6988,5 +6989,9 @@
   "wb_your_fleet": "Ваш ударный флот",
   "wb_attack_no_movement_hint": "У каждой атаки кулдаун 5 минут. Перемещения флота нет.",
   "wb_combat_progress_title": "Ваш боевой прогресс",
-  "wb_auto_attack_pending": "Автоатака активна — следующий удар скоро."
+  "wb_auto_attack_pending": "Автоатака активна — следующий удар скоро.",
+  "header_fleets_toggle_title": "Активные флоты",
+  "header_fleets_toggle_aria": "Показать летящие флоты",
+  "header_planets_toggle_title": "Список планет",
+  "header_planets_toggle_aria": "Показать список планет"
 }

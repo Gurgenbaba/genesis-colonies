@@ -1586,6 +1586,10 @@ def test_main_js_gc640_global_fleet_hud():
     base = _read("templates/base.html")
     assert "global-fleet-drawer-root" in base
     assert "data-global-fleet-drawer" in base
+    assert "gc-header-fleets-toggle" in base
+    assert "data-gc-open-fleet-sheet" in base
+    assert "data-gc-open-planet-registry" in base
+    assert "gc-header-planets-toggle" in base
     assert "data-fleet-global-hud" not in base
     assert "data-fleet-drawer-fleet-link" not in base
     assert "data-fleet-nav-badge" in base
@@ -1604,8 +1608,39 @@ def test_main_js_gc640_global_fleet_hud():
     assert "body.gc-fleet-sheet-open" in css
     assert "--gc-fleet-sheet-top" in css
     assert "syncMobileFleetSheetLayout" in src
+    assert "syncMobileHeaderFleetSlot" in src
+    assert "toggleHeaderFleetSheet" in src
+    assert "data-gc-open-fleet-sheet" in base
+    assert "gc-header-fleets-toggle" in base
+    assert "data-header-fleet-badge" in base
+    assert "openMobilePlanetRegistry" in src
+    assert "togglePlanetRegistrySheet" in src
+    assert "gc-planet-registry-sheet" in base
+    assert "NAV_SHELL='mobile-sheet'" in base
+    assert "aria-controls=\"gc-planet-registry-sheet\"" in base
+    pr = _read("templates/partials/planet_registry.html")
+    assert "gc-sheet-planet-registry" in pr
+    assert "gc-mnav-planet-registry" not in pr
+    sidebar_right = _read("templates/partials/sidebar_right.html")
+    assert "_shell != 'mobile-drawer-right'" in sidebar_right
+    assert "gc-mnav-planet-registry" not in src
+    assert "nowShowAll ? list : list.slice(0, visibleLimit)" in src
+    assert "canExpand || isMobileFleetSheetViewport()" in src
+    assert ".gc-header-fleets-toggle" in css
+    assert ".gc-header-planets-toggle" in css
+    assert ".gc-planet-registry-sheet" in css
+    # Phone: collapsed fleet HUD hidden under resources; header icon opens sheet.
+    assert ".gc-resource-sticky > .gc-fleet-drawer-root:not(.is-show-all)" in css
+    # Mobile tip strip stays in markup but is CSS-hidden (cleaner overview).
+    tip_block = css.split(".gc-codex-commander-tip-mobile{")[1].split("}")[0]
+    assert "display: none" in tip_block
     assert "gc-fleet-sheet-backdrop" in src
     assert "gc-fleet-sheet-portal" in src
+    assert "gc-fleet-sheet-portal .gc-fleet-drawer-row" in css or "gc-fleet-sheet-portal .gc-fleet-hud-row" in css
+    assert "min-height: 3.4rem" in css
+    assert 'data-nav-badge="alliance"' in _read("templates/partials/sidebar_right.html")
+    assert "count_alliance_nav_attention" in _read("game/alliance.py")
+    assert '"alliance"' in _read("game/live_state.py").split("def nav_badges_for_game_state")[1].split("def imperial_directives")[0]
     assert "canExpandFleetDrawer" in src
     assert "fleet_drawer_expand" in src
     assert "_fleetSheetHomeEl" in src
@@ -2609,7 +2644,15 @@ def test_gc804_leftmenu_ui_state_independent_from_game_state_poll():
     assert "GC.restoreLeftmenuState(window.location.href)" in sync_role
     buildings_tabs = src.split("function bindBuildingTabsOnce", 1)[1].split("function initBuildings", 1)[0]
     assert 'GC.navigateTo(`/buildings?tab=${encodeURIComponent(tab)}`)' in buildings_tabs
+    assert "#gc-bottom-buildings-menu [data-building-tab]" in buildings_tabs
     assert 'data-building-tab="military"' in _read("templates/partials/sidebar.html")
+    base = _read("templates/base.html")
+    assert 'id="gc-bottom-nav-buildings"' in base
+    assert 'id="gc-bottom-buildings-menu"' in base
+    assert "initBottomBuildingsMenu" in src
+    assert ".gc-bottom-buildings-menu" in _read("static/style.css")
+    assert "run_full_score_reconcile" in _read("game/ranking_worker.py").split("with _RANKING_LOCK:")[1].split("after_stats")[0]
+    assert "process_dirty_score_batch(conn=conn)" not in _read("game/ranking_worker.py").split("with _RANKING_LOCK:")[1].split("after_stats")[0]
 
 
 def test_main_js_mini_queue_research_label_resolution():

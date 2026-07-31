@@ -331,8 +331,8 @@ def run_ranking_worker(
     """
     Canonical score batch job (10-minute cadence).
 
-    - Ordinary / forced cron: dirty-only batch (bounded).
-    - Admin source or ``full_reconcile=True`` or daily due: full-universe safety net.
+    Every ordinary / forced tick refreshes ALL player scores (full-universe),
+    then rewrites ranks. Dirty-batch helper remains for unit tests/tooling.
     """
     started = time.perf_counter()
     conn = db()
@@ -432,15 +432,10 @@ def run_ranking_worker(
         acquired = True
         conn.commit()
 
-        want_full = bool(full_reconcile) or str(source or "") == "admin" or _full_reconcile_due(
-            conn=conn, now=now
-        )
-
         with _RANKING_LOCK:
-            if want_full:
-                result = run_full_score_reconcile(conn=conn)
-            else:
-                result = process_dirty_score_batch(conn=conn)
+            # Cadence (~10 min): refresh scores for ALL players, then rewrite ranks.
+            # Dirty-batch helper remains for targeted tests/tooling: process_dirty_score_batch.
+            result = run_full_score_reconcile(conn=conn)
 
         after_stats = gather_score_stats(conn)
         result["skipped_interval"] = False

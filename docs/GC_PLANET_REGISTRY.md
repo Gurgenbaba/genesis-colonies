@@ -30,7 +30,8 @@ Header: kein Planet-Switcher
 ```
 
 - Outer rail: `.gc-sidebar-right-rails` — Desktop `display: contents` → 4 Spalten; Tablet-Drawer stapelt Meta+Registry
-- Registry: `#gc-planet-registry` / `#gc-mnav-planet-registry` (eigene Spalte rechts außen)
+- Registry: `#gc-planet-registry` (Desktop/Tablet rechte Spalte); Phone: `#gc-planet-registry-sheet` / `#gc-sheet-planet-registry` (Header-Pfeil)
+- Phone META/MEHR: keine Planetenliste (nur Meta-Nav-Links)
 - Meta-Nav: `#gc-sidebar-nav-right` eigene Spalte (wie vor GC-575), nicht unter Registry gestapelt
 - Planet-Limit: Registry-Header (`data-planet-limit-value`), nicht Header-Dropdown
 - Shell: zentrierte Max-Width (`--gc-shell-max-width: 1500px`); schmale Imperium-Spalte (`--gc-registry-rail-w: 196px`)

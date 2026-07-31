@@ -85,7 +85,10 @@ def test_perf_img_webp_static_preserves_query():
 
 def test_perf_img_overview_template_preload_and_version():
     text = (ROOT / "templates" / "overview.html").read_text(encoding="utf-8")
-    assert "data-gc-frame-preload" in text
+    # Frame is CSS image-set (not link-preload) — avoids unused-preload console spam.
+    assert "data-gc-frame-preload" not in text
+    assert "imagesrcset=" in text
+    assert "imagesizes=" in text
     assert "GC_ASSET_VERSION" in text
     assert "840px" in text
 

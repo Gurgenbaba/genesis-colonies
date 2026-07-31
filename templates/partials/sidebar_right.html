@@ -163,12 +163,15 @@
            data-nav-module="alliance"
            class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'alliance') }} {% if request.endpoint == 'alliance_view' %}active{% endif %}"
            {% if not module_in_section(_sn, 'alliance', 'administration') %}hidden{% endif %}>
-          <span>{{ T("nav_alliance") }}</span>
+          <span class="gc-nav-link-label">{{ T("nav_alliance") }}</span>
+          <span class="gc-nav-badge hidden" data-nav-badge="alliance" hidden aria-hidden="true"></span>
         </a>
       </div>
     </div>
 
   </nav>
 
+  {% if _shell != 'mobile-drawer-right' %}
   {% include "partials/planet_registry.html" %}
+  {% endif %}
 </div>

@@ -6,16 +6,26 @@
 {% set herocard_rel = theme.herocard_relpath or 'img/herocards/herocard_08.png' %}
 {% set herocard_png_url = url_for('static', filename=herocard_rel, v=GC_ASSET_VERSION) %}
 {% set herocard_webp_url = herocard_png_url|webp_static %}
-{% set _lcp_preload_href = herocard_webp_url %}
+{% set herocard_srcset_parts = theme.herocard_webp_srcset_parts if theme.herocard_webp_srcset_parts is defined else [] %}
+{% set herocard_sizes = theme.herocard_webp_sizes or '(max-width: 768px) 100vw, (max-width: 1280px) 70vw, 840px' %}
 {% set _frame_webp_url = url_for('static', filename='img/herocardsframe/frame.webp', v=GC_ASSET_VERSION) %}
 {% set _frame_png_url = url_for('static', filename='img/herocardsframe/frame.png', v=GC_ASSET_VERSION) %}
 
 {% block extra_head %}
 {{ super() }}
-{% if _lcp_preload_href %}
-<link id="gc-lcp-hero-preload" rel="preload" as="image" type="image/webp" href="{{ _lcp_preload_href }}" fetchpriority="high" data-gc-lcp-preload="1">
+{# Match <picture> srcset so the preloaded candidate is the one the browser paints (avoids unused preload warnings). #}
+{% if herocard_srcset_parts %}
+<link id="gc-lcp-hero-preload"
+      rel="preload"
+      as="image"
+      type="image/webp"
+      imagesrcset="{% for rel, w in herocard_srcset_parts %}{{ url_for('static', filename=rel, v=GC_ASSET_VERSION) }} {{ w }}w{% if not loop.last %}, {% endif %}{% endfor %}"
+      imagesizes="{{ herocard_sizes }}"
+      fetchpriority="high"
+      data-gc-lcp-preload="1">
+{% elif herocard_webp_url %}
+<link id="gc-lcp-hero-preload" rel="preload" as="image" type="image/webp" href="{{ herocard_webp_url }}" fetchpriority="high" data-gc-lcp-preload="1">
 {% endif %}
-<link rel="preload" as="image" type="image/webp" href="{{ _frame_webp_url }}" data-gc-frame-preload="1">
 {% endblock %}
 
 {% block content %}
@@ -25,7 +35,6 @@
 {% set player_obj = (player if player is defined and player else None) %}
 {% set cmd_id = commander.id if commander.id is defined else (player_obj.id if player_obj and player_obj.id is defined else None) %}
 {% set cmd_name = commander.name if commander.name is defined and commander.name else "Commander" %}
-{% set theme = (planet.theme if planet.theme is defined else {}) %}
 {% set hero_accent = theme.accent_color or '#46e5ff' %}
 {% set hero_secondary = theme.secondary_color or '#7fffd9' %}
 {% set hero_glow = theme.glow_color or hero_accent %}
@@ -33,8 +42,6 @@
 {% set hero_theme_key = theme.theme_key or 'temperate-highlands' %}
 {% set hero_theme_group = theme.theme_group or 'living' %}
 {% set hero_label_key = theme.label_key or 'planet_slot_08' %}
-{% set herocard_srcset_parts = theme.herocard_webp_srcset_parts if theme.herocard_webp_srcset_parts is defined else [] %}
-{% set herocard_sizes = theme.herocard_webp_sizes or '(max-width: 768px) 100vw, (max-width: 1280px) 70vw, 840px' %}
 {% set herocard_w = theme.herocard_fallback_width|default(560) %}
 {% set herocard_h = theme.herocard_fallback_height|default(373) %}
 {% set hero_landscape_rel = theme.landscape_relpath or 'img/landscapes/normaltempplanet01-h.jpg' %}
@@ -83,6 +90,7 @@
              decoding="async"
              width="{{ herocard_w }}"
              height="{{ herocard_h }}"
+             sizes="{{ herocard_sizes }}"
              data-gc-lcp-hero="1"
              data-gc-lcp-webp-href="{{ herocard_webp_url }}">
       </picture>

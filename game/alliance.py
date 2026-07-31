@@ -89,6 +89,27 @@ def can_manage_applications(role: str) -> bool:
     return is_officer_role(role)
 
 
+def count_alliance_nav_attention(player_id: int, *, conn=None) -> int:
+    """Nav badge count: outbound pending app (1) or inbound apps for officers."""
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        if not alliance_hub_schema_ready(conn):
+            return 0
+        pid = int(player_id)
+        membership = get_player_alliance(pid, conn=conn)
+        if not membership:
+            return 1 if _player_pending_application(pid, conn) else 0
+        if not can_manage_applications(membership.get("role")):
+            return 0
+        aid = int(membership["alliance_id"])
+        return len(_pending_applications(aid, conn))
+    finally:
+        if own:
+            conn.close()
+
+
 def is_leader_role(role: str) -> bool:
     return _normalize_role(role) == "leader"
 

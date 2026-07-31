@@ -19504,13 +19504,13 @@ a.gc-ranking-alliance:hover{
 }
 
 .gc-codex-commander-tip-mobile{
-  display: none;
+  display: none !important;
 }
 
+/* Mobile overview: hide quick-help / tip strip for a cleaner command view. */
 @media (max-width: 991px){
-  .gc-codex-commander-tip-mobile{
-    display: block;
-    margin-bottom: 12px;
+  .gc-codex-quick-help{
+    display: none !important;
   }
 }
 
@@ -20062,6 +20062,67 @@ a.gc-ranking-alliance:hover{
 
   .gc-bottom-nav-more.active{
     color: var(--gc-primary);
+  }
+
+  .gc-bottom-buildings-menu{
+    position: fixed;
+    left: max(8px, var(--gc-safe-left));
+    right: max(8px, var(--gc-safe-right));
+    bottom: calc(var(--gc-bottom-nav-h, 64px) + var(--gc-safe-bottom, 0px) + 8px);
+    z-index: calc(var(--gc-z-dropdown, 12000) + 2);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px;
+    border: 1px solid rgba(120, 190, 255, 0.28);
+    border-radius: var(--gc-radius-sm, 2px);
+    background: linear-gradient(180deg, rgba(8, 14, 28, 0.98), rgba(4, 8, 18, 0.96));
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.35) inset,
+      0 14px 32px rgba(0, 0, 0, 0.55);
+    opacity: 0;
+    transform: translateY(8px);
+    pointer-events: none;
+    transition: opacity 0.16s ease, transform 0.16s ease;
+  }
+
+  .gc-bottom-buildings-menu[hidden]{
+    display: none !important;
+  }
+
+  .gc-bottom-buildings-menu.is-open{
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  .gc-bottom-buildings-menu-item{
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid rgba(120, 190, 255, 0.16);
+    border-radius: var(--gc-radius-sm, 2px);
+    background: rgba(6, 12, 24, 0.85);
+    color: rgba(220, 236, 255, 0.95);
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-align: left;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+
+  .gc-bottom-buildings-menu-item:hover,
+  .gc-bottom-buildings-menu-item:focus-visible{
+    border-color: rgba(70, 229, 255, 0.45);
+    background: rgba(70, 229, 255, 0.10);
+    outline: none;
+  }
+
+  .gc-bottom-nav-item.is-menu-open{
+    color: var(--gc-primary-2);
   }
 
   /* Drawer (More menu) ? class .is-open for smooth animation */
@@ -20808,7 +20869,7 @@ a.gc-ranking-alliance:hover{
 .gc-fleet-hud-list.is-show-all,
 .gc-fleet-drawer-list.is-show-all{
   max-height: none;
-  overflow-y: visible;
+  overflow-y: auto;
 }
 
 .gc-fleet-hud-row,
@@ -21549,6 +21610,176 @@ a.gc-ranking-alliance:hover{
   flex: 0 1 auto;
   min-width: 0;
   flex-wrap: nowrap;
+}
+
+.gc-header-fleets-toggle,
+.gc-header-planets-toggle{
+  display: none;
+  position: relative;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(120, 190, 255, 0.28);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: linear-gradient(180deg, rgba(8, 14, 28, 0.92), rgba(6, 10, 22, 0.78));
+  color: rgba(140, 230, 255, 0.95);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.28) inset,
+    0 6px 14px rgba(0, 0, 0, 0.28);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.gc-header-fleets-toggle-icon{
+  display: block;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.gc-header-fleets-badge{
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  padding: 0 3px;
+  border: 1px solid rgba(255, 80, 80, 0.55);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(140, 20, 30, 0.95);
+  color: #fff;
+  font-size: 0.58rem;
+  font-weight: 700;
+  line-height: 1.1rem;
+  text-align: center;
+}
+
+.gc-header-fleets-toggle:not(.has-fleets){
+  opacity: 0.72;
+}
+
+.gc-header-fleets-toggle.is-active,
+.gc-header-fleets-toggle.has-fleets{
+  opacity: 1;
+  border-color: rgba(70, 229, 255, 0.4);
+}
+
+.gc-header-planets-toggle-icon{
+  display: block;
+  font-size: 1.35rem;
+  font-weight: 700;
+  transform: translateX(-1px);
+}
+
+.gc-header-fleets-toggle:hover,
+.gc-header-fleets-toggle:focus-visible,
+.gc-header-planets-toggle:hover,
+.gc-header-planets-toggle:focus-visible{
+  border-color: rgba(70, 229, 255, 0.45);
+  outline: none;
+}
+
+.gc-header-planets-toggle[aria-expanded="true"] .gc-header-planets-toggle-icon{
+  transform: translateX(1px) scaleX(-1);
+}
+
+/* Planet-only sheet card (header arrow) — not the full MEHR drawer. */
+.gc-planet-registry-sheet{
+  position: fixed;
+  inset: 0;
+  z-index: var(--gc-z-modal, 13000);
+  pointer-events: none;
+}
+
+.gc-planet-registry-sheet[hidden]{
+  display: none !important;
+}
+
+.gc-planet-registry-sheet-backdrop{
+  position: absolute;
+  inset: 0;
+  border: none;
+  padding: 0;
+  margin: 0;
+  background: rgba(2, 6, 14, 0.58);
+  cursor: pointer;
+  pointer-events: auto;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.gc-planet-registry-sheet-panel{
+  position: absolute;
+  top: max(8px, var(--gc-safe-top, 0px));
+  right: max(8px, var(--gc-safe-right, 0px));
+  bottom: calc(var(--gc-bottom-nav-h, 64px) + var(--gc-safe-bottom, 0px) + 8px);
+  width: min(22rem, calc(100vw - 16px));
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(120, 190, 255, 0.28);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: linear-gradient(180deg, rgba(8, 14, 28, 0.98), rgba(4, 8, 18, 0.96));
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35) inset,
+    0 18px 40px rgba(0, 0, 0, 0.55);
+  transform: translateX(110%);
+  transition: transform 0.24s ease;
+  pointer-events: auto;
+  overflow: hidden;
+}
+
+.gc-planet-registry-sheet.is-open{
+  pointer-events: auto;
+}
+
+.gc-planet-registry-sheet.is-open .gc-planet-registry-sheet-backdrop{
+  opacity: 1;
+}
+
+.gc-planet-registry-sheet.is-open .gc-planet-registry-sheet-panel{
+  transform: translateX(0);
+}
+
+.gc-planet-registry-sheet-close{
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  min-width: 32px;
+  min-height: 32px;
+}
+
+.gc-planet-registry-sheet-body{
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 10px 12px;
+}
+
+.gc-planet-registry-sheet-body .gc-planet-registry{
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  margin: 0;
+  padding: 0;
+  height: auto;
+  max-height: none;
+}
+
+.gc-planet-registry-sheet-body .gc-planet-registry-head{
+  padding-right: 36px;
+}
+
+.gc-planet-registry-sheet-body .gc-planet-registry-list{
+  max-height: none;
+}
+
+body.gc-planet-sheet-open{
+  overflow: hidden;
 }
 
 .gc-hslot-messages{
@@ -39702,6 +39933,27 @@ a.alliance-hub-browse-card:hover,
 
   .gc-header-cmd .gc-header-meta{
     order: 4;
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    flex: 1 1 100%;
+  }
+
+  .gc-header-cmd .gc-header-fleets-toggle,
+  .gc-header-cmd .gc-header-planets-toggle{
+    display: inline-flex;
+  }
+
+  .gc-header-cmd .gc-header-planets-toggle{
+    margin-left: auto;
+  }
+
+  /* Collapsed fleet HUD stays off the phone layout; sheet portal shows it. */
+  .gc-resource-sticky > .gc-fleet-drawer-root:not(.is-show-all),
+  .gc-resource-sticky > .gc-fleet-hud-root:not(.is-show-all){
+    display: none !important;
   }
 
   .gc-header-cmd .gc-logo{
@@ -39722,12 +39974,6 @@ a.alliance-hub-browse-card:hover,
   .gc-header-cmd .gc-hud-user{
     min-width: 0;
     max-width: 100%;
-  }
-
-  .gc-header-cmd .gc-header-meta{
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
   }
 
   .gc-header-cmd .gc-hud-user{
@@ -39919,8 +40165,62 @@ a.alliance-hub-browse-card:hover,
     min-height: 0;
     max-height: none !important;
     overflow-y: auto !important;
+    overflow-x: hidden !important;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 4px 0 8px;
+  }
+
+  /* Sheet rows must not collapse — each fleet is its own readable card line. */
+  .gc-fleet-drawer-root.is-show-all.gc-fleet-sheet-portal .gc-fleet-drawer-row,
+  .gc-fleet-hud-root.is-show-all.gc-fleet-sheet-portal .gc-fleet-hud-row,
+  .gc-fleet-drawer-root.is-show-all.gc-fleet-sheet-portal .gc-fleet-hud-row{
+    display: flex !important;
+    flex-direction: column;
+    flex: 0 0 auto !important;
+    position: relative;
+    height: auto !important;
+    min-height: 3.4rem;
+    padding: 8px 6px;
+    gap: 4px;
+    grid-template-columns: unset;
+    border-bottom: 1px solid rgba(120, 190, 255, 0.12);
+    background: rgba(4, 10, 20, 0.35);
+  }
+
+  .gc-fleet-drawer-root.is-show-all.gc-fleet-sheet-portal .gc-fleet-hud-main{
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .gc-fleet-drawer-root.is-show-all.gc-fleet-sheet-portal .gc-fleet-hud-track{
+    display: none !important;
+  }
+
+  .gc-fleet-drawer-root.is-show-all.gc-fleet-sheet-portal .gc-fleet-hud-meta{
+    display: flex !important;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 4px 8px;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .gc-fleet-drawer-root.is-show-all.gc-fleet-sheet-portal .gc-fleet-hud-route,
+  .gc-fleet-drawer-root.is-show-all.gc-fleet-sheet-portal .gc-fleet-drawer-row-route{
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    word-break: break-word;
   }
 
   .gc-fleet-drawer-root.is-show-all .gc-fleet-drawer-more,

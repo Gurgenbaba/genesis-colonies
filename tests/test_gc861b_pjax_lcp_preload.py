@@ -47,14 +47,13 @@ def test_gc861b_main_js_lcp_preload_contract():
     assert 'GC_LCP_HERO_PRELOAD_ID = "gc-lcp-hero-preload"' in block
     assert 'link.rel = "preload"' in block
     assert 'link.as = "image"' in block
-    # "no hero on this page" reset used to be an explicit syncLcpHeroPreload("")
-    # call inside the now-removed syncLcpHeroPreloadFromPjaxDoc fallback; that
-    # behavior lives directly in resolveLcpHeroImageUrl (returns "" when no
-    # [data-gc-lcp-hero] is found) feeding syncLcpHeroPreload's own falsy-href
-    # removeLcpHeroPreloadLinks() branch (GC-STABILIZE-002).
-    assert 'if (!root) return "";' in block
+    # "no hero on this page" reset: resolveLcpHeroImageUrl returns empty
+    # href/imagesrcset when no [data-gc-lcp-hero] is found, feeding
+    # syncLcpHeroPreload's removeLcpHeroPreloadLinks() branch.
+    assert 'if (!root) return { href: "", imagesrcset: "", imagesizes: "" };' in block
+    assert "imagesrcset" in block
     assert "removeLcpHeroPreloadLinks()" in block
-
+    assert "data-gc-frame-preload" in block
 
 @pytest.mark.parametrize(
     "path,expect_cached,expect_immutable",

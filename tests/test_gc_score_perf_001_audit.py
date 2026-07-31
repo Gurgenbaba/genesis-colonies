@@ -197,13 +197,13 @@ def test_concurrent_mutation_does_not_clear_newer_dirty(score_audit_db):
     assert int(remaining["dirty_version"]) == v2
 
 
-def test_ranking_worker_dirty_mode_skips_clean_universe(score_audit_db):
+def test_ranking_worker_full_mode_updates_clean_universe(score_audit_db):
     _player()
     result = run_ranking_worker(source="test", force=True, persist=False)
     assert result.get("ok") is True
-    assert result.get("mode") == "dirty"
-    assert int(result.get("players_updated") or 0) == 0
-    assert int(result.get("rank_rewrites") or 0) == 0
+    assert result.get("mode") == "full"
+    assert int(result.get("players_updated") or 0) >= 1
+    assert int(result.get("ranks_assigned") or 0) >= 1
 
 
 def test_finish_then_worker_updates_snapshot(score_audit_db):

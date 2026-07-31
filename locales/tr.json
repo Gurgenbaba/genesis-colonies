@@ -4111,7 +4111,8 @@
   "nav_badge_imperial_directives_aria": "Imperial Directive reward ready",
   "nav_badge_referrals_aria": "Tavsiye ödülü mevcut",
   "nav_badge_story_aria": "Story transmission awaiting response",
-  "nav_badge_vote_center_aria": "Oy mevcut",
+  "nav_badge_alliance_aria": "Bekleyen ittifak basvurusu",
+"nav_badge_vote_center_aria": "Oy mevcut",
   "nav_badge_world_boss_aria": "World Boss aktif",
   "nav_banned_short": "Yasaklılar",
   "nav_buildings": "Binalar",
@@ -6988,5 +6989,9 @@
   "wb_your_fleet": "Saldırı filonuz",
   "wb_attack_no_movement_hint": "Her saldırının 5 dakikalık bekleme süresi vardır. Filo hareketi olmaz.",
   "wb_combat_progress_title": "Savaş ilerlemeniz",
-  "wb_auto_attack_pending": "Otomatik saldırı aktif — sonraki vuruş bekleniyor."
+  "wb_auto_attack_pending": "Otomatik saldırı aktif — sonraki vuruş bekleniyor.",
+  "header_fleets_toggle_title": "Aktif filolar",
+  "header_fleets_toggle_aria": "Ucusan filolari goster",
+"header_planets_toggle_title": "Gezegen listesi",
+  "header_planets_toggle_aria": "Gezegen listesini goster"
 }

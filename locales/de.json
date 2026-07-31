@@ -4111,7 +4111,8 @@
   "nav_badge_imperial_directives_aria": "Imperial Directive abholbereit",
   "nav_badge_referrals_aria": "Referral-Belohnung verfügbar",
   "nav_badge_story_aria": "Story transmission awaiting response",
-  "nav_badge_vote_center_aria": "Vote verfügbar",
+  "nav_badge_alliance_aria": "Allianz-Bewerbung ausstehend",
+"nav_badge_vote_center_aria": "Vote verfügbar",
   "nav_badge_world_boss_aria": "World Boss aktiv",
   "nav_banned_short": "Gebannte",
   "nav_buildings": "Gebäude",
@@ -6988,5 +6989,9 @@
   "wb_your_fleet": "Deine Angriffsflotte",
   "wb_attack_no_movement_hint": "Jeder Angriff hat einen 5-Minuten-Cooldown. Es findet keine Flottenbewegung statt.",
   "wb_combat_progress_title": "Dein Kampffortschritt",
-  "wb_auto_attack_pending": "Auto-Angriff aktiv — nächster Treffer folgt."
+  "wb_auto_attack_pending": "Auto-Angriff aktiv — nächster Treffer folgt.",
+  "header_fleets_toggle_title": "Aktive Flotten",
+  "header_fleets_toggle_aria": "Fliegende Flotten anzeigen",
+"header_planets_toggle_title": "Planetenliste",
+  "header_planets_toggle_aria": "Planetenliste einblenden"
 }

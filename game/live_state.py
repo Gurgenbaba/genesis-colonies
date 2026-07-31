@@ -457,6 +457,14 @@ def nav_badges_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
     except Exception:
         story_attention = 0
 
+    alliance_count = 0
+    try:
+        from game.alliance import count_alliance_nav_attention
+
+        alliance_count = int(count_alliance_nav_attention(uid, conn=conn) or 0)
+    except Exception:
+        alliance_count = 0
+
     return {
         "vote_center": _nav_badge_entry(
             active=vote_count > 0,
@@ -497,6 +505,11 @@ def nav_badges_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
             active=bp_claimable > 0,
             count=bp_claimable,
             label=str(bp_claimable) if bp_claimable > 0 else "",
+        ),
+        "alliance": _nav_badge_entry(
+            active=alliance_count > 0,
+            count=alliance_count,
+            label=str(alliance_count) if alliance_count > 0 else "",
         ),
     }
 
