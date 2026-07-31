@@ -3422,12 +3422,17 @@ def api_timekeeper_apply():
         # Apply ledger wins over rebuild so HUD never keeps a stale balance.
         if isinstance(state, dict) and tk_slice:
             state["timekeeper"] = tk_slice
+        jobs_finished = bool(result.get("jobs_finished"))
+        # Surfaced on state so applyActionState / panel sync see the finish flag.
+        if isinstance(state, dict):
+            state["jobs_finished"] = jobs_finished
         logger.info(
             "timekeeper_apply user_id=%s domain=%s ok=1 reason=ok seconds_applied=%s "
-            "balance_after=%s apply_ms=%.1f state_ms=%.1f",
+            "jobs_finished=%s balance_after=%s apply_ms=%.1f state_ms=%.1f",
             user_id,
             domain,
             applied,
+            1 if jobs_finished else 0,
             expected_bal,
             apply_ms,
             state_ms,
@@ -3439,6 +3444,7 @@ def api_timekeeper_apply():
                 "state": state,
                 "timekeeper": tk_slice,
                 "seconds_applied": applied,
+                "jobs_finished": jobs_finished,
             }
         )
     except Exception:

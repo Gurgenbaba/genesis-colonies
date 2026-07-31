@@ -480,6 +480,7 @@ def apply_timekeeper(
     if not rows:
         return False, "no_queue", {"timekeeper": serialize_for_client(uid, conn=conn)}
 
+    head_id_before = _row_field(rows[0], "id")
     remaining = _active_head_remaining_seconds(rows, now=now, finish_col=finish_col)
     boost_seconds = _resolve_apply_seconds(
         balance=balance,
@@ -509,12 +510,19 @@ def apply_timekeeper(
 
     _finish_before_apply(conn, uid, pid if pid > 0 else None)
 
+    # GC-TK-PANEL-REFRESH-001: detect real head completion (not rem/shift rounding).
+    now_after = float(time.time())
+    rows_after, _ = _load_domain_rows(dom, uid, pid, conn=conn, now=now_after)
+    head_id_after = _row_field(rows_after[0], "id") if rows_after else None
+    jobs_finished = head_id_before is not None and head_id_before != head_id_after
+
     return True, "ok", {
         "timekeeper": serialize_for_client(uid, conn=conn),
         "domain": dom,
         "seconds_applied": shifted,
         "seconds_requested": boost_seconds,
         "mode": str(mode or "partial"),
+        "jobs_finished": bool(jobs_finished),
     }
 
 

@@ -40,7 +40,7 @@ Single **Imperium time account** — empire-wide, manual apply only, separate fr
 }
 ```
 
-Response: `{ ok, reason, state, timekeeper, seconds_applied }`
+Response: `{ ok, reason, state, timekeeper, seconds_applied, jobs_finished }`
 
 **GC-PERF-TK-002:** After a successful apply, `state.timekeeper` is forced from the apply ledger (`result.timekeeper`), not only from the post-commit state rebuild — so the HUD cannot keep a stale balance. Client prefers `res.timekeeper` over `state.timekeeper` and only calls `applyActionState` when `ok` and `seconds_applied > 0`. After JS changes, bump `VERSION` and hard-refresh so `main.js?v=…` cache busts.
 
@@ -48,6 +48,7 @@ Response: `{ ok, reason, state, timekeeper, seconds_applied }`
 
 **GC-PERF-TK-004:** For `domain=shipyard|defense`, the slim apply response re-attaches a **queue-only** slice (`state.shipyard.queue` / `state.defense.queue`, no ship/defense catalogs) so the client can patch timers immediately. Without this, TK balance dropped but the mini-queue looked unchanged (false “click does nothing”). Client also refreshes `/api/shipyard` or `/api/defense` when on-page and the slice is missing, and merges prior production queues into `GC.lastState` on `timekeeper_apply`.
 
+**GC-TK-PANEL-REFRESH-001:** When apply completes the active head (`jobs_finished: true` on response + `state`, detected after finish by head-job id change), the client calls `forceCanonicalGameStateRefresh("timekeeper_apply")` on Buildings / Research / Shipyard / Defense / PE pages so locks, affordability, and stock update from `include_panel=1` (same path as timer-zero). Slim apply stays diet; full panel is only fetched after a real finish. `syncProductionPanelsAfterGameState` treats queue-only TK-004 slices as insufficient catalog when `jobs_finished` — it must not skip shipyard/defense catalog refresh just because a queue slice exists.
 `POST /api/inventory/use` with `deposit_domain: "build"|"research"|"shipyard"|"all"` deposits **all** owned legacy time items for that domain (or every depositable domain when `"all"`) into Timekeeper in one action (inventory Alle / Bau / Forschung / Werft chips).
 
 ## Autoplay auto-boost (GC-2616)

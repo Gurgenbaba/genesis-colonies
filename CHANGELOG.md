@@ -36,6 +36,7 @@ Stand: **2026-07-31** · Spieler-Meilenstein **v0.9 Alpha** · Build-Zähler [`V
 ### Fixed
 - Diverse Sync-/PJAX-Themen
 - Timer- & Queue-Stabilität
+- Timekeeper-Finish: Karten-Locks / Afford / Stock nach Boost-Abschluss via include_panel Refresh
 - Viele kleine Darstellungsfehler aus dem Alpha-Feedback
 - Commander Pick-Cards: Preview-Chips nicht mehr am Kartenfuß abgeschnitten; Role-Icons als transparente WebP
 - Commander Pick: Session-Fehlalarm behoben (POST/JSON statt GET → kein Login-Redirect)

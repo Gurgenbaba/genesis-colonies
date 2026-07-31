@@ -13077,6 +13077,21 @@
         if (el && el.dataset) delete el.dataset.serverRemaining;
       });
       applyActionState(res, "timekeeper_apply");
+      // GC-TK-PANEL-REFRESH-001: slim TK apply has no buildings_panel / catalogs.
+      // When a job finishes, refresh include_panel so locks, afford, and stock update
+      // (same path as queue_timer_zero).
+      const finished = Boolean(res.jobs_finished || res.state?.jobs_finished);
+      if (finished && typeof GC.forceCanonicalGameStateRefresh === "function") {
+        const onProgression =
+          Boolean(document.querySelector(".buildings-prog-list"))
+          || Boolean(document.querySelector(".research-prog-list"))
+          || document.getElementById("shipyard-page")?.dataset.ready === "1"
+          || document.getElementById("defense-page")?.dataset.ready === "1"
+          || Boolean(document.querySelector(".planet-evolution-page"));
+        if (onProgression) {
+          void GC.forceCanonicalGameStateRefresh("timekeeper_apply");
+        }
+      }
     } catch (err) {
       console.error("[GC] timekeeper apply failed", err);
       showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
@@ -13474,13 +13489,39 @@
       || reasonStr === "defense_build"
       || reasonStr === "defense_cancel"
       || reasonStr === "timekeeper_apply";
-    if (onShipyard && completionReason && !data?.shipyard && !data?.shipyard_queue) {
-      const syPage = document.getElementById("shipyard-page");
-      if (syPage) refreshShipyardStateCoalesced(syPage);
+    // GC-TK-PANEL-REFRESH-001 / TK-004: queue-only slim slices must not skip
+    // catalog refresh when a job finished (locks / stock / afford).
+    const syHasCatalog = Boolean(
+      data?.shipyard?.ships && typeof data.shipyard.ships === "object"
+    );
+    const defHasCatalog = Boolean(
+      data?.defense?.defenses && typeof data.defense.defenses === "object"
+    );
+    if (onShipyard && completionReason) {
+      let needSyCatalog = !syHasCatalog;
+      if (reasonStr === "timekeeper_apply") {
+        const hasQueueSlice = Boolean(data?.shipyard || data?.shipyard_queue);
+        needSyCatalog =
+          !syHasCatalog
+          && (Boolean(data?.jobs_finished) || !hasQueueSlice);
+      }
+      if (needSyCatalog) {
+        const syPage = document.getElementById("shipyard-page");
+        if (syPage) refreshShipyardStateCoalesced(syPage);
+      }
     }
-    if (onDefense && completionReason && !data?.defense) {
-      const defPage = document.getElementById("defense-page");
-      if (defPage) refreshDefenseStateCoalesced(defPage);
+    if (onDefense && completionReason) {
+      let needDefCatalog = !defHasCatalog;
+      if (reasonStr === "timekeeper_apply") {
+        const hasQueueSlice = Boolean(data?.defense);
+        needDefCatalog =
+          !defHasCatalog
+          && (Boolean(data?.jobs_finished) || !hasQueueSlice);
+      }
+      if (needDefCatalog) {
+        const defPage = document.getElementById("defense-page");
+        if (defPage) refreshDefenseStateCoalesced(defPage);
+      }
     }
   }
 

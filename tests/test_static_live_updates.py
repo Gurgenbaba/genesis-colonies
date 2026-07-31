@@ -2740,6 +2740,15 @@ def test_main_js_timekeeper_one_click_apply_flow():
     assert "_timekeeperOpenContext(openBtn)" in src
     assert 'GC.fetchGameAction("/api/timekeeper/apply"' in src
     assert "gc-timekeeper-modal" not in _read("templates/base.html")
+    # GC-TK-PANEL-REFRESH-001: finish → canonical include_panel refresh
+    assert "jobs_finished" in submit
+    assert 'forceCanonicalGameStateRefresh("timekeeper_apply")' in submit
+    sync = src.split("function syncProductionPanelsAfterGameState")[1].split(
+        "const _HUD_LAST_STATE_KEYS"
+    )[0]
+    assert "syHasCatalog" in sync
+    assert "defHasCatalog" in sync
+    assert "data?.jobs_finished" in sync
 
 
 def test_main_js_timekeeper_research_card_selector():

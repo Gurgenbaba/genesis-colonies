@@ -310,7 +310,9 @@ def test_api_timekeeper_apply_returns_state(timekeeper_db, monkeypatch):
     assert payload["ok"] is True
     applied = int(payload.get("seconds_applied") or 0)
     assert applied >= 1700
+    assert payload.get("jobs_finished") is False
     state = payload.get("state") or {}
+    assert state.get("jobs_finished") is False
     assert state.get("timekeeper", {}).get("balance_sec") == 1800
     assert payload.get("timekeeper", {}).get("balance_sec") == 1800
     # GC-PERF-TK-003: action diet — no full panel catalogs on apply response
@@ -371,9 +373,11 @@ def test_api_timekeeper_apply_max_mode_debits_and_shortens(timekeeper_db, monkey
     payload = res.get_json()
     assert payload["ok"] is True
     assert int(payload.get("seconds_applied") or 0) == 600
+    assert payload.get("jobs_finished") is False
     assert payload.get("timekeeper", {}).get("balance_sec") == 0
     assert (payload.get("state") or {}).get("timekeeper", {}).get("balance_sec") == 0
     state = payload.get("state") or {}
+    assert state.get("jobs_finished") is False
     assert "buildings_panel" not in state
     assert "codex" not in state
 
@@ -387,6 +391,48 @@ def test_api_timekeeper_apply_max_mode_debits_and_shortens(timekeeper_db, monkey
             ).fetchone()["finish_time"]
         )
         assert finish_after <= finish_before - 500
+    finally:
+        conn.close()
+
+
+def test_api_timekeeper_apply_jobs_finished_triggers_flag(timekeeper_db, monkeypatch):
+    """GC-TK-PANEL-REFRESH-001: covering remaining sets jobs_finished; slim panel stays diet."""
+    client, uid = _api_client(timekeeper_db, monkeypatch)
+    conn = db()
+    try:
+        planet = get_context_planet(uid, conn=conn)
+        pid = int(planet["id"])
+        now = time.time()
+        add_build_job(pid, "metal_mine", now - 10, now + 900, conn=conn)
+        begin_write_transaction(conn)
+        credit(uid, 3600, "test", conn=conn)
+        commit(conn)
+    finally:
+        conn.close()
+
+    res = client.post(
+        "/api/timekeeper/apply",
+        json={"domain": "build", "mode": "max", "planet_id": pid},
+        headers={"Accept": "application/json", "Content-Type": "application/json"},
+    )
+    assert res.status_code == 200
+    payload = res.get_json()
+    assert payload["ok"] is True
+    assert int(payload.get("seconds_applied") or 0) >= 800
+    assert payload.get("jobs_finished") is True
+    state = payload.get("state") or {}
+    assert state.get("jobs_finished") is True
+    # Still slim — client fetches include_panel after finish, not on apply
+    assert "buildings_panel" not in state
+    assert "codex" not in state
+
+    conn = db()
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) AS c FROM build_queue WHERE planet_id = ?;",
+            (pid,),
+        ).fetchone()
+        assert int(row["c"] or 0) == 0
     finally:
         conn.close()
 
