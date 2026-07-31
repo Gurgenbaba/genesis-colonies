@@ -1080,7 +1080,9 @@
     const labelKey = String(ap.slot_label_key || theme.label_key || "").trim();
     const herocardUrl = String(ap.herocard_url || "").trim();
     const herocardWebp = String(ap.herocard_webp_url || "").trim();
-    const herocardSrcset = String(ap.herocard_webp_srcset || herocardWebp || "").trim();
+    // Never fall back to full herocard_XX.webp as srcset — that fights responsive
+    // variants and triggers unused link-preload warnings for the full asset.
+    const herocardSrcset = String(ap.herocard_webp_srcset || "").trim();
     const herocardSizes = String(ap.herocard_webp_sizes || "").trim();
     const planetPosition = ap.position != null && ap.position !== "" ? String(ap.position) : "";
     const landscapeUrl = String(ap.landscape_url || "").trim();
@@ -1147,12 +1149,26 @@
           if (herocardSizes) source.sizes = herocardSizes;
         }
         img.src = herocardUrl;
+        if (herocardSrcset) {
+          const picked = resolveLcpPreloadFromSrcset(herocardSrcset, herocardSizes);
+          if (picked.href) img.setAttribute("data-gc-lcp-webp-href", picked.href);
+          else if (herocardWebp) img.setAttribute("data-gc-lcp-webp-href", herocardWebp);
+        } else if (herocardWebp) {
+          img.setAttribute("data-gc-lcp-webp-href", herocardWebp);
+        }
       } else if (img) {
         if (source && herocardSrcset) {
           source.srcset = herocardSrcset;
           if (herocardSizes) source.sizes = herocardSizes;
         }
         img.src = herocardUrl;
+        if (herocardSrcset) {
+          const picked = resolveLcpPreloadFromSrcset(herocardSrcset, herocardSizes);
+          if (picked.href) img.setAttribute("data-gc-lcp-webp-href", picked.href);
+          else if (herocardWebp) img.setAttribute("data-gc-lcp-webp-href", herocardWebp);
+        } else if (herocardWebp) {
+          img.setAttribute("data-gc-lcp-webp-href", herocardWebp);
+        }
       }
     }
 
@@ -33938,27 +33954,50 @@
   // GC-861B — PJAX LCP hero preload (SSR extra_head is not swapped with main-content)
   const GC_LCP_HERO_PRELOAD_ID = "gc-lcp-hero-preload";
 
+  /** Prefer a single preload href (560w) — imagesrcset preloads often warn unused after PJAX. */
+  function resolveLcpPreloadFromSrcset(srcset, sizes) {
+    const parts = String(srcset || "")
+      .split(",")
+      .map((part) => String(part || "").trim())
+      .filter(Boolean);
+    let firstHref = "";
+    let mdHref = "";
+    for (const part of parts) {
+      const match = part.match(/^(\S+)(?:\s+(\d+)w)?$/i);
+      if (!match) continue;
+      const url = match[1];
+      const width = match[2] ? Number(match[2]) : 0;
+      if (!firstHref) firstHref = url;
+      if (width === 560) mdHref = url;
+    }
+    if (mdHref) return { href: mdHref, imagesrcset: "", imagesizes: "" };
+    if (firstHref) return { href: firstHref, imagesrcset: "", imagesizes: "" };
+    return {
+      href: "",
+      imagesrcset: String(srcset || "").trim(),
+      imagesizes: String(sizes || "").trim(),
+    };
+  }
+
   function resolveLcpHeroImageUrl(root) {
     if (!root) return { href: "", imagesrcset: "", imagesizes: "" };
     const img = root.querySelector('[data-gc-lcp-hero="1"]');
     if (!img) return { href: "", imagesrcset: "", imagesizes: "" };
+    const webpHint = String(img.getAttribute("data-gc-lcp-webp-href") || "").trim();
     const picture = img.closest("picture");
     const source = picture?.querySelector('source[type="image/webp"]');
     if (source) {
       const srcset = String(source.getAttribute("srcset") || "").trim();
       if (srcset) {
-        return {
-          imagesrcset: srcset,
-          imagesizes: String(
-            source.getAttribute("sizes")
-            || img.getAttribute("sizes")
-            || ""
-          ).trim(),
-          href: "",
-        };
+        const sizes = String(
+          source.getAttribute("sizes")
+          || img.getAttribute("sizes")
+          || ""
+        ).trim();
+        // Prefer a concrete srcset candidate — never the full herocard_XX.webp hint.
+        return resolveLcpPreloadFromSrcset(srcset, sizes);
       }
     }
-    const webpHint = String(img.getAttribute("data-gc-lcp-webp-href") || "").trim();
     if (webpHint) return { href: webpHint, imagesrcset: "", imagesizes: "" };
     const raw = String(img.getAttribute("src") || img.src || "").trim();
     if (/\.(png|jpe?g)(\?|$)/i.test(raw)) {
@@ -34002,34 +34041,25 @@
     const href = normalizeLcpPreloadHref(resolved.href || "");
     const imagesrcset = String(resolved.imagesrcset || "").trim();
     const imagesizes = String(resolved.imagesizes || "").trim();
-    let link = document.getElementById(GC_LCP_HERO_PRELOAD_ID);
-    if (!href && !imagesrcset) {
-      removeLcpHeroPreloadLinks();
-      return;
-    }
-    if (!link) {
-      removeLcpHeroPreloadLinks();
-      link = document.createElement("link");
-      link.id = GC_LCP_HERO_PRELOAD_ID;
-      link.rel = "preload";
-      link.as = "image";
-      link.dataset.gcLcpPreload = "1";
-    }
+    // Always tear down first — mutating an existing preload link leaves Chrome
+    // fetching the previous URL (unused-preload spam after PJAX).
+    removeLcpHeroPreloadLinks();
+    if (!href && !imagesrcset) return;
+    const link = document.createElement("link");
+    link.id = GC_LCP_HERO_PRELOAD_ID;
+    link.rel = "preload";
+    link.as = "image";
+    link.dataset.gcLcpPreload = "1";
+    link.setAttribute("fetchpriority", "high");
     if (imagesrcset) {
       link.setAttribute("imagesrcset", imagesrcset);
       if (imagesizes) link.setAttribute("imagesizes", imagesizes);
-      else link.removeAttribute("imagesizes");
-      link.removeAttribute("href");
     } else {
-      link.removeAttribute("imagesrcset");
-      link.removeAttribute("imagesizes");
       link.setAttribute("href", href);
     }
-    if (!link.isConnected) document.head.appendChild(link);
-    link.setAttribute("fetchpriority", "high");
     const typeProbe = imagesrcset || href || "";
     if (/\.webp(\?|$)/i.test(typeProbe)) link.type = "image/webp";
-    else link.removeAttribute("type");
+    document.head.appendChild(link);
   }
 
   GC.syncLcpHeroPreload = syncLcpHeroPreload;
@@ -34037,6 +34067,9 @@
   async function applyPjaxPayload(url, payload, doc, opts = {}) {
     const push = opts.push !== false;
     const navPerf = _navPerfSession;
+    // Drop previous page LCP preload immediately so Chrome does not warn that
+    // overview herocard (etc.) was preloaded but never painted after PJAX.
+    removeLcpHeroPreloadLinks();
     GC.cleanupPage({ preserveGameLoop: Boolean(opts.preserveGameLoop) });
     preserveFleetHudAcrossNavigation();
     const main = document.getElementById("main-content");

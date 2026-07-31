@@ -82,12 +82,13 @@ def test_gc861d_overview_lcp_hero(overview_html):
     assert 'data-gc-lcp-hero="1"' in overview_html
     assert 'data-gc-lcp-webp-href' in overview_html
     assert 'rel="preload"' in overview_html
-    assert "imagesrcset=" in overview_html
-    assert "imagesizes=" in overview_html
+    # Single md candidate href — not full imagesrcset (avoids unused-preload spam).
+    assert "herocard_" in overview_html and "-md.webp" in overview_html
+    assert 'imagesrcset=' not in overview_html.split("gc-lcp-hero-preload", 1)[1].split(">", 1)[0]
     assert ".webp" in overview_html
     hero = overview_html.split("overview-hero-bg", 1)[1].split("overview-hero-atmo", 1)[0]
     assert _high_priority_count(hero) == 1
-
+    assert "-md.webp" in overview_html.split('data-gc-lcp-webp-href="', 1)[1].split('"', 1)[0]
 
 def test_gc861d_inventory_first_container_lcp(inventory_html):
     assert 'rel="preload"' in inventory_html

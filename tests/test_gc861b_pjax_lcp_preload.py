@@ -51,10 +51,18 @@ def test_gc861b_main_js_lcp_preload_contract():
     # href/imagesrcset when no [data-gc-lcp-hero] is found, feeding
     # syncLcpHeroPreload's removeLcpHeroPreloadLinks() branch.
     assert 'if (!root) return { href: "", imagesrcset: "", imagesizes: "" };' in block
-    assert "imagesrcset" in block
+    assert "function resolveLcpPreloadFromSrcset" in block
     assert "removeLcpHeroPreloadLinks()" in block
     assert "data-gc-frame-preload" in block
-
+    # Tear down before recreate — mutating preload href leaves unused Chrome warnings.
+    sync_fn = block.split("function syncLcpHeroPreload(spec)", 1)[1].split("GC.syncLcpHeroPreload", 1)[0]
+    assert sync_fn.index("removeLcpHeroPreloadLinks()") < sync_fn.index("document.createElement(\"link\")")
+    apply = src.split("async function applyPjaxPayload(url, payload, doc, opts = {})", 1)[1].split(
+        "function pjaxPayloadFromDoc", 1
+    )[0]
+    assert apply.index("removeLcpHeroPreloadLinks()") < apply.index("main.innerHTML = payload.mainHtml")
+    assert "herocard_webp_srcset || herocardWebp" not in src
+    assert "herocard_webp_srcset || \"\"" in src or 'ap.herocard_webp_srcset || ""' in src
 @pytest.mark.parametrize(
     "path,expect_cached,expect_immutable",
     [
