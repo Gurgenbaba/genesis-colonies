@@ -14841,10 +14841,20 @@
         const etaLeft = Math.max(0, Math.ceil(endsAt - nowSec));
         const etaLabel =
           typeof formatEta === "function" ? formatEta(etaLeft) : String(etaLeft) + "s";
+        const artImg = btn.querySelector(".overview-companion-hotspot-art img");
+        let artSrc =
+          (artImg && (artImg.currentSrc || artImg.getAttribute("src"))) ||
+          `/static/img/bosses/${encodeURIComponent(bossKey)}.webp`;
+        if (typeof GC.preferWebpStaticUrl === "function" && artSrc.indexOf(".png") > 0) {
+          artSrc = GC.preferWebpStaticUrl(artSrc);
+        }
+        const walkEnd = Math.max(18, Math.min(94, pct || 18));
         actions = `<div class="overview-companion-mission-progress" data-companion-progress
             data-started-at="${startedAt || endsAt - total}"
             data-ends-at="${endsAt}"
-            data-duration="${total}">
+            data-duration="${total}"
+            data-companion-boss="${bossKey}"
+            style="--companion-walk-end:${walkEnd}%">
           <div class="overview-companion-mission-progress__meta">
             <p class="hint">${t("overview_companion_mission_eta", "Zurück in")}
               <span class="gc-mono" data-countdown-at="${endsAt}" data-countdown-format="eta" data-companion-countdown="1">${etaLabel}</span>
@@ -14853,6 +14863,10 @@
           </div>
           <div class="overview-companion-mission-progress__track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}">
             <span class="overview-companion-mission-progress__fill" data-companion-progress-fill style="width:${pct}%;"></span>
+            <span class="overview-companion-mission-progress__walker" data-companion-progress-walker aria-hidden="true">
+              <img src="${artSrc}" alt="" width="36" height="20" loading="lazy" decoding="async"
+                   onerror="this.onerror=null;this.src='/static/img/bosses/_placeholder.webp';">
+            </span>
           </div>
         </div>`;
       }
@@ -14902,6 +14916,8 @@
       if (fill) fill.style.width = pct + "%";
       if (pctEl) pctEl.textContent = pct + "%";
       if (track) track.setAttribute("aria-valuenow", String(pct));
+      const walkEnd = Math.max(18, Math.min(94, pct || 18));
+      block.style.setProperty("--companion-walk-end", walkEnd + "%");
       const cdEl = block.querySelector("[data-companion-countdown], [data-countdown-at]");
       if (cdEl) {
         const rem = Math.max(0, ends - nowSec);

@@ -6419,11 +6419,13 @@ body.gc-body-ingame .overview-hero.overview-hero--themed.gc-planet-hero.gc-panel
   margin: 0;
 }
 .overview-companion-mission-progress__track{
+  position: relative;
   height: 8px;
+  margin-top: 1.55rem;
   border: 1px solid rgba(70, 229, 255, 0.35);
   border-radius: var(--gc-radius-xs, 0);
   background: rgba(0, 12, 24, 0.75);
-  overflow: hidden;
+  overflow: visible;
 }
 .overview-companion-mission-progress__fill{
   display: block;
@@ -6432,6 +6434,63 @@ body.gc-body-ingame .overview-hero.overview-hero--themed.gc-planet-hero.gc-panel
   background: linear-gradient(90deg, #2a7fff, #46e5ff 70%, #9cf0ff);
   box-shadow: 0 0 10px rgba(70, 229, 255, 0.35);
   transition: width 0.35s linear;
+  border-radius: inherit;
+}
+.overview-companion-mission-progress__walker{
+  position: absolute;
+  left: 6%;
+  bottom: calc(100% + 2px);
+  width: 36px;
+  height: 20px;
+  margin: 0;
+  transform: translateX(-50%) scaleX(1);
+  transform-origin: center bottom;
+  pointer-events: none;
+  filter: drop-shadow(0 0 6px rgba(70, 229, 255, 0.45));
+  animation:
+    companion-titan-wander 5.2s ease-in-out infinite,
+    companion-titan-bob 1.15s ease-in-out infinite;
+  will-change: left, transform;
+}
+.overview-companion-mission-progress__walker img{
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center bottom;
+  border-radius: var(--gc-radius-xs, 0);
+  image-rendering: auto;
+}
+@keyframes companion-titan-wander{
+  0%,
+  100%{
+    left: 6%;
+    transform: translateX(-50%) scaleX(1);
+  }
+  46%{
+    left: var(--companion-walk-end, 90%);
+    transform: translateX(-50%) scaleX(1);
+  }
+  50%{
+    left: var(--companion-walk-end, 90%);
+    transform: translateX(-50%) scaleX(-1);
+  }
+  96%{
+    left: 6%;
+    transform: translateX(-50%) scaleX(-1);
+  }
+}
+@keyframes companion-titan-bob{
+  0%,
+  100%{ translate: 0 0; }
+  50%{ translate: 0 -2px; }
+}
+@media (prefers-reduced-motion: reduce){
+  .overview-companion-mission-progress__walker{
+    animation: none;
+    left: var(--companion-walk-end, 50%);
+    transform: translateX(-50%) scaleX(1);
+  }
 }
 .overview-companion-mission-lead{
   margin: 0 0 0.4rem;

@@ -1198,6 +1198,15 @@ def test_main_js_apply_planet_hero_theme_border_fx():
     assert "overview_companion_goto_wb" in src
     assert 'GC.navigateTo(path)' in src or 'GC.navigateTo(path)' in src.replace(" ", "")
     assert "data-companion-nav-wb" in src and "navigateTo" in src.split("initOverviewCompanions")[1].split("function parseInventoryPageState")[0]
+    # Titan mission progress: decorative walker patrols toward fill tip and back.
+    assert "overview-companion-mission-progress__walker" in src
+    assert "data-companion-progress-walker" in src
+    assert "--companion-walk-end" in src
+    assert "@keyframes companion-titan-wander" in css
+    assert "@keyframes companion-titan-bob" in css
+    walker_motion = css.split("@keyframes companion-titan-wander")[1].split(".overview-companion-mission-lead{")[0]
+    assert "animation: none" in walker_motion
+    assert "--companion-walk-end" in walker_motion
     hero_img = css.split(".overview-hero--themed.gc-planet-hero .overview-hero-bg picture,")[1].split(".overview-hero-hud{")[0]
     assert "transform: none" in hero_img
     assert ":hover .overview-hero-bg picture" not in css.split(".overview-hero--themed.gc-planet-hero .overview-hero-bg picture,")[0][-200:] + hero_img
