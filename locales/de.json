@@ -7231,5 +7231,6 @@
   "wb_attack_x5_hint": "×5 Treffer: fünffacher Schaden, 25 Min. Cooldown.",
   "techtree_max_level": "Maximalstufe",
   "effective_stat_bonus_total": "Gesamtbonus",
-  "effective_stat_base_hint": "Basis"
+  "effective_stat_base_hint": "Basis",
+  "effective_stat_source_booster": "Inventar-Booster"
 }

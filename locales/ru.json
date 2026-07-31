@@ -7231,5 +7231,6 @@
   "wb_attack_x5_hint": "Удар ×5: пятикратный урон, 25 мин перезарядки.",
   "techtree_max_level": "Макс. уровень",
   "effective_stat_bonus_total": "Суммарный бонус",
-  "effective_stat_base_hint": "База"
+  "effective_stat_base_hint": "База",
+  "effective_stat_source_booster": "Бустер инвентаря"
 }

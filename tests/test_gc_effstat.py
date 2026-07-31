@@ -24,6 +24,8 @@ from game.technical_data import (
     build_mobility_effective_stats,
     build_unit_technical_block,
     resolve_unit_effect_context,
+    _effect_source_label_key,
+    _resolver_source_contributions,
 )
 
 
@@ -195,7 +197,68 @@ def test_templates_include_effective_stat_macro():
     macro = (root / "templates" / "partials" / "effective_stat.html").read_text(encoding="utf-8")
     shipyard = (root / "templates" / "shipyard.html").read_text(encoding="utf-8")
     fleet = (root / "templates" / "fleet.html").read_text(encoding="utf-8")
+    unit_tpl = (root / "templates" / "partials" / "unit_technical_detail.html").read_text(
+        encoding="utf-8"
+    )
     assert "render_effective_stat_value" in macro
     assert "attack_stat" in shipyard
     assert "data-ship-tooltip-speed-bonus" in fleet
     assert "data-preview-cargo-bonus" in fleet
+    assert "metric_key" in unit_tpl
+    assert "gd:" not in unit_tpl
+
+
+def test_effect_source_label_keys_are_player_facing():
+    assert _effect_source_label_key("gd:defensive") == "gd_dir_defensive_title"
+    assert _effect_source_label_key("gd:defensive+logistics") == "gd_dir_defensive_title"
+    assert _effect_source_label_key("alliance:defensive_protocols") == (
+        "alliance_tech_defensive_protocols"
+    )
+    assert _effect_source_label_key("weapon_tech") == "weapon_tech"
+    assert "gd:" not in _effect_source_label_key("gd:military")
+
+
+def test_resolver_delta_sources_do_not_invent_negative_combat_spikes():
+    class _FakeResolver:
+        _sources = [
+            {
+                "key": "weapon_bonus",
+                "source": "weapon_tech",
+                "value": 2.5,
+                "status": "active",
+            },
+            {
+                "key": "weapon_bonus",
+                "source": "gd:defensive",
+                "value": 0.15,
+                "status": "active",
+            },
+            {
+                "key": "fleet_speed_multiplier",
+                "source": "navigation_tech",
+                "value": 2.5,
+                "status": "active",
+            },
+            {
+                "key": "fleet_speed_multiplier",
+                "source": "gd:defensive",
+                "value": 0.85,
+                "status": "active",
+            },
+        ]
+
+    combat = _resolver_source_contributions(
+        _FakeResolver(), "weapon_bonus", kind="additive_frac"
+    )
+    assert combat[0]["label_key"] == "weapon_tech"
+    assert combat[0]["display"] == "+250 %"
+    assert combat[1]["label_key"] == "gd_dir_defensive_title"
+    assert combat[1]["display"] == "+15 %"
+    assert combat[1]["metric_key"] == "ship_detail_stat_attack"
+
+    speed = _resolver_source_contributions(
+        _FakeResolver(), "fleet_speed_multiplier", kind="mult"
+    )
+    assert speed[0]["display"] == "+150 %"
+    assert speed[1]["label_key"] == "gd_dir_defensive_title"
+    assert speed[1]["display"] == "-15 %"

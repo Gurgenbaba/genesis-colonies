@@ -7231,5 +7231,6 @@
   "wb_attack_x5_hint": "×5 hit: five times damage, 25 min cooldown.",
   "techtree_max_level": "Max level",
   "effective_stat_bonus_total": "Total bonus",
-  "effective_stat_base_hint": "Base"
+  "effective_stat_base_hint": "Base",
+  "effective_stat_source_booster": "Inventory booster"
 }

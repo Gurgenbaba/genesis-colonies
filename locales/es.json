@@ -7231,5 +7231,6 @@
   "wb_attack_x5_hint": "Golpe ×5: cinco veces el daño, 25 min de enfriamiento.",
   "techtree_max_level": "Nivel máximo",
   "effective_stat_bonus_total": "Bonus total",
-  "effective_stat_base_hint": "Base"
+  "effective_stat_base_hint": "Base",
+  "effective_stat_source_booster": "Potenciador de inventario"
 }

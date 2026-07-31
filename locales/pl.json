@@ -7231,5 +7231,6 @@
   "wb_attack_x5_hint": "Trafienie ×5: pięciokrotne obrażenia, 25 min odnowienia.",
   "techtree_max_level": "Poziom maks.",
   "effective_stat_bonus_total": "Suma bonusów",
-  "effective_stat_base_hint": "Baza"
+  "effective_stat_base_hint": "Baza",
+  "effective_stat_source_booster": "Booster ekwipunku"
 }

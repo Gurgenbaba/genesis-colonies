@@ -52,7 +52,13 @@
     <div class="gc-tech-bonuses">
       {% for b in bonuses %}
       <div class="gc-tech-bonus-line">
-        <span class="gc-tech-bonus-label">{{ T(b.label_key, b.label_key) }}</span>
+        <span class="gc-tech-bonus-label">
+          {% if b.get('metric_key') %}
+          <span class="gc-tech-bonus-metric">{{ T(b.metric_key, b.metric_key) }}</span>
+          <span class="gc-tech-bonus-sep" aria-hidden="true">·</span>
+          {% endif %}
+          {{ T(b.label_key, b.label_key) }}
+        </span>
         <span class="gc-tech-val gc-mono">{{ b.display }}</span>
       </div>
       {% endfor %}

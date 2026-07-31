@@ -7231,5 +7231,6 @@
   "wb_attack_x5_hint": "Frappe ×5 : cinq fois les dégâts, 25 min de recharge.",
   "techtree_max_level": "Niveau max",
   "effective_stat_bonus_total": "Bonus total",
-  "effective_stat_base_hint": "Base"
+  "effective_stat_base_hint": "Base",
+  "effective_stat_source_booster": "Booster d'inventaire"
 }

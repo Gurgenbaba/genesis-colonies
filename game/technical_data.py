@@ -1751,6 +1751,134 @@ def _format_bonus_pct_display(bonus_pct: int) -> str:
     return "+0 %"
 
 
+# EffectResolver logs research/building as cumulative totals, but galactic
+# directives / diplomacy / alliance / class / boosters log the step delta/factor.
+_DELTA_LOGGED_SOURCE_PREFIXES = (
+    "gd:",
+    "gdp:",
+    "alliance:",
+    "class:",
+    "inventory_booster:",
+)
+
+_MOD_KEY_METRIC_LABEL = {
+    "weapon_bonus": "ship_detail_stat_attack",
+    "shield_bonus": "ship_detail_stat_shield",
+    "armor_bonus": "ship_detail_stat_hull",
+    "fleet_speed_multiplier": "ship_detail_stat_speed",
+    "cargo_multiplier": "ship_detail_stat_cargo",
+    "fuel_efficiency_factor": "ship_detail_stat_fuel",
+}
+
+
+def _effect_source_is_delta_logged(source: str) -> bool:
+    s = str(source or "").strip()
+    return any(s.startswith(prefix) for prefix in _DELTA_LOGGED_SOURCE_PREFIXES)
+
+
+def _effect_source_label_key(source: str) -> str:
+    """Map internal EffectResolver source ids to player-facing i18n keys."""
+    s = str(source or "").strip()
+    if not s:
+        return "technical_active_bonuses"
+    if s.startswith("gd:"):
+        body = s[3:]
+        primary = body.split("+", 1)[0].strip().lower()
+        if primary:
+            return f"gd_dir_{primary}_title"
+        return "gd_banner_primary_label"
+    if s.startswith("gdp:"):
+        parts = [p.strip().lower() for p in s[4:].split("+") if p.strip()]
+        if not parts:
+            return "gdp_banner_title"
+        try:
+            from .galactic_diplomacy.definitions import PERSONALITY_KEYS
+            from .galactic_diplomacy.emergencies import EMERGENCY_KEYS
+            from .galactic_diplomacy.resolutions import RESOLUTION_KEYS
+        except Exception:
+            PERSONALITY_KEYS = frozenset()
+            EMERGENCY_KEYS = frozenset()
+            RESOLUTION_KEYS = frozenset()
+        for part in parts:
+            if part in PERSONALITY_KEYS:
+                return f"gdp_trait_{part}_title"
+            if part in EMERGENCY_KEYS:
+                return f"gdp_emergency_{part}_title"
+            if part in RESOLUTION_KEYS:
+                return f"gdp_res_{part}_title"
+        return "gdp_banner_title"
+    if s.startswith("alliance:"):
+        tech = s.split(":", 1)[1].strip()
+        if tech:
+            return f"alliance_tech_{tech}"
+        return "alliance_tech_active_title"
+    if s.startswith("class:"):
+        parts = s.split(":")
+        if len(parts) >= 3 and parts[2].strip():
+            return f"commander_skill_{parts[2].strip()}"
+        if len(parts) >= 2 and parts[1].strip():
+            return f"commander_class_{parts[1].strip()}"
+        return "nav_skilltree"
+    if s.startswith("inventory_booster:"):
+        return "effective_stat_source_booster"
+    return s
+
+
+def _resolver_source_contributions(
+    resolver: Any,
+    mod_key: str,
+    *,
+    kind: str,
+) -> List[Dict[str, Any]]:
+    """Derive per-source % contributions from EffectResolver source log."""
+    prev = 0.0 if kind == "additive_frac" else 1.0
+    rows: List[Dict[str, Any]] = []
+    metric_key = _MOD_KEY_METRIC_LABEL.get(str(mod_key))
+    for entry in list(getattr(resolver, "_sources", None) or []):
+        if not isinstance(entry, Mapping):
+            continue
+        if str(entry.get("status") or "") != "active":
+            continue
+        if str(entry.get("key") or "") != mod_key:
+            continue
+        try:
+            val = float(entry.get("value"))
+        except (TypeError, ValueError):
+            continue
+        raw_source = str(entry.get("source") or mod_key).strip() or mod_key
+        label = _effect_source_label_key(raw_source)
+        delta_logged = _effect_source_is_delta_logged(raw_source)
+        if kind == "additive_frac":
+            if delta_logged:
+                pct = int(round(val * 100.0))
+                # Keep running total aligned for any later cumulative entries.
+                prev = prev + val
+            else:
+                pct = int(round((val - prev) * 100.0))
+                prev = val
+        else:
+            if delta_logged:
+                pct = int(round((val - 1.0) * 100.0))
+                prev = prev * val if prev > 0 else val
+            else:
+                if prev <= 0:
+                    prev = val
+                    continue
+                pct = int(round((val / prev - 1.0) * 100.0))
+                prev = val
+        if pct == 0:
+            continue
+        row: Dict[str, Any] = {
+            "label_key": label,
+            "display": _format_bonus_pct_display(pct),
+        }
+        # External stacks can hit several stats — show which one for clarity.
+        if metric_key and delta_logged:
+            row["metric_key"] = metric_key
+        rows.append(row)
+    return rows
+
+
 def build_effective_stat(
     key: str,
     base: int | float,
@@ -1789,42 +1917,6 @@ def build_effective_stat(
         "bonus_display": _format_bonus_pct_display(bonus_pct),
         "sources": list(sources or []),
     }
-
-
-def _resolver_source_contributions(
-    resolver: Any,
-    mod_key: str,
-    *,
-    kind: str,
-) -> List[Dict[str, Any]]:
-    """Derive per-source % contributions from EffectResolver source log."""
-    prev = 0.0 if kind == "additive_frac" else 1.0
-    rows: List[Dict[str, Any]] = []
-    for entry in list(getattr(resolver, "_sources", None) or []):
-        if not isinstance(entry, Mapping):
-            continue
-        if str(entry.get("status") or "") != "active":
-            continue
-        if str(entry.get("key") or "") != mod_key:
-            continue
-        try:
-            val = float(entry.get("value"))
-        except (TypeError, ValueError):
-            continue
-        label = str(entry.get("source") or mod_key).strip() or mod_key
-        if kind == "additive_frac":
-            delta = val - prev
-            pct = int(round(delta * 100.0))
-        else:
-            if prev <= 0:
-                prev = val
-                continue
-            pct = int(round((val / prev - 1.0) * 100.0))
-        prev = val
-        if pct == 0:
-            continue
-        rows.append({"label_key": label, "display": _format_bonus_pct_display(pct)})
-    return rows
 
 
 def _active_combat_bonuses(

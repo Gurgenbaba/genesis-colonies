@@ -149,6 +149,11 @@ def get_bonus_slots(player_id: int, *, conn) -> int:
 
 
 def get_companion_capacity(player_id: int, *, conn) -> int:
+    """Effective Titan companion slots (base + shop). Admins always get the max."""
+    from .chat import is_admin
+
+    if is_admin(int(player_id), conn):
+        return int(MAX_COMPANION_CAPACITY)
     bonus = get_bonus_slots(int(player_id), conn=conn)
     return min(int(MAX_COMPANION_CAPACITY), int(BASE_COMPANION_CAPACITY) + bonus)
 

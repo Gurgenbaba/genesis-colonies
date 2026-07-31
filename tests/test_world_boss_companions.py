@@ -27,6 +27,7 @@ from game.world_boss_companions import (
     claim_mission_reward,
     companions_schema_ready,
     get_companion_capacity,
+    get_bonus_slots,
     grant_companion_slot,
     has_companion,
     list_mission_offers,
@@ -469,6 +470,19 @@ def test_capacity_blocks_second_tame_and_shop_slot(wb_db):
         full = grant_companion_slot(uid, conn=conn, source="test")
         assert full["ok"] is False
         assert full["error"] == "already_owned"
+        commit(conn)
+    finally:
+        conn.close()
+def test_admin_gets_max_titan_slots_without_purchase(wb_db):
+    uid = _player()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        assert get_companion_capacity(uid, conn=conn) == BASE_COMPANION_CAPACITY
+        conn.execute('UPDATE users SET is_admin = 1 WHERE id = ?;', (uid,))
+        conn.execute('UPDATE players SET is_admin = 1 WHERE id = ?;', (uid,))
+        assert get_companion_capacity(uid, conn=conn) == MAX_COMPANION_CAPACITY
+        assert get_bonus_slots(uid, conn=conn) == 0
         commit(conn)
     finally:
         conn.close()

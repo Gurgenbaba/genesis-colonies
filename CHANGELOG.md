@@ -39,6 +39,8 @@ Stand: **2026-07-31** · Spieler-Meilenstein **v0.9 Alpha** · Build-Zähler [`V
 ### Fixed
 - Diverse Sync-/PJAX-Themen
 - Timer- & Queue-Stabilität
+- **GC-EFFSTAT** — Aktive-Boni-Liste: keine internen Keys wie `gd:defensive`; korrekte Direktiven-Beiträge statt falscher −200 %-Spikes
+- Admins erhalten alle Titan-Slots ohne Shop-Kauf
 - Timekeeper-Finish: Karten-Locks / Afford / Stock nach Boost-Abschluss via include_panel Refresh
 - Commander: Fuel-Efficiency-Polarität, Cargo-Multiplier in Fleet, Skilltree %-Chips, Klasse auf PlayerCard
 - World Boss: ×1/×5 Hit-Grid (×5 = 5× Schaden + 25 Min CD), stabile Button-Breiten

@@ -7231,5 +7231,6 @@
   "wb_attack_x5_hint": "×5 vuruş: beş kat hasar, 25 dk bekleme.",
   "techtree_max_level": "Maks. seviye",
   "effective_stat_bonus_total": "Toplam bonus",
-  "effective_stat_base_hint": "Temel"
+  "effective_stat_base_hint": "Temel",
+  "effective_stat_source_booster": "Envanter güçlendirici"
 }
