@@ -2794,7 +2794,10 @@ def test_main_js_timekeeper_one_click_apply_flow():
     )[0]
     assert "syHasCatalog" in sync
     assert "defHasCatalog" in sync
-    assert "data?.jobs_finished" in sync
+    # Partial TK can deliver ships without jobs_finished — always refresh stock when catalog missing.
+    assert "Progressive batch delivery" in sync
+    assert "needSyCatalog = !syHasCatalog" in sync
+    assert "needDefCatalog = !defHasCatalog" in sync
 
 
 def test_main_js_timekeeper_research_card_selector():

@@ -934,7 +934,8 @@ def _defense_job_row_for_client(
         "start_at": start_at,
         "started_at": started_at,
         "icon": defense_icon_static_path(dk),
-        "amount": total_units,
+        # Display / mini-queue use remaining units still in this job (not original total).
+        "amount": amount_remaining,
         "amount_total": total_units,
         "amount_remaining": amount_remaining,
         "units_delivered": units_delivered,

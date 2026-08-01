@@ -375,7 +375,11 @@ def map_defense_queue_to_card_jobs(
         if not owner_key:
             continue
         label = str(raw.get("label") or raw.get("label_key") or owner_key)
-        amount = _safe_int(raw.get("amount_total") or raw.get("amount"), 0) or None
+        # Prefer remaining so progressive TK/natural delivery updates the mini-queue ×N.
+        if "amount_remaining" in raw and raw.get("amount_remaining") is not None:
+            amount = max(0, _safe_int(raw.get("amount_remaining"), 0))
+        else:
+            amount = _safe_int(raw.get("amount") or raw.get("amount_total"), 0) or None
         finish = _safe_float(raw.get("finish_at") or raw.get("finish_time"))
         order_total = _safe_int(
             raw.get("order_total_seconds") or raw.get("total_seconds") or raw.get("total"),
@@ -432,7 +436,11 @@ def map_shipyard_queue_to_card_jobs(
         if not owner_key:
             continue
         label = str(raw.get("label") or raw.get("label_key") or owner_key)
-        amount = _safe_int(raw.get("amount_total") or raw.get("amount"), 0) or None
+        # Prefer remaining so progressive TK/natural delivery updates the mini-queue ×N.
+        if "amount_remaining" in raw and raw.get("amount_remaining") is not None:
+            amount = max(0, _safe_int(raw.get("amount_remaining"), 0))
+        else:
+            amount = _safe_int(raw.get("amount") or raw.get("amount_total"), 0) or None
         finish = _safe_float(raw.get("finish_at") or raw.get("finish_time"))
         order_total = _safe_int(
             raw.get("order_total_seconds") or raw.get("total_seconds") or raw.get("total"),
@@ -630,7 +638,10 @@ def map_card_jobs_to_mini_queue_jobs(
         status = str(job.get("status") or "")
         is_active = status == STATUS_ACTIVE
         position = _safe_int(job.get("queue_position"), idx + 1)
-        amount = _safe_int(job.get("target_amount"), 0)
+        if "amount_remaining" in job and job.get("amount_remaining") is not None:
+            amount = max(0, _safe_int(job.get("amount_remaining"), 0))
+        else:
+            amount = _safe_int(job.get("target_amount"), 0)
         target_level = _safe_int(job.get("target_level"), 0)
         if dom in (OWNER_BUILDING, "building", "build", OWNER_RESEARCH, "research"):
             amount = 0

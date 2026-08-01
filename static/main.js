@@ -8297,7 +8297,9 @@
         queue_position: idx + 1,
         finish_at: resolveQueueJobFinishTime(job),
         remaining_seconds: resolveQueueJobRemaining(job),
-        target_amount: job.amount || job.amount_total,
+        // Remaining units still in the job — not original amount_total.
+        target_amount: job.amount_remaining ?? job.amount ?? job.amount_total,
+        amount_remaining: job.amount_remaining ?? job.amount,
         ship_label_key: `fleet_ship_${job.ship_key}`,
       }));
     });
@@ -8314,7 +8316,9 @@
         queue_position: idx + 1,
         finish_at: resolveQueueJobFinishTime(job),
         remaining_seconds: resolveQueueJobRemaining(job),
-        target_amount: job.amount || job.amount_total,
+        // Remaining units still in the job — not original amount_total.
+        target_amount: job.amount_remaining ?? job.amount ?? job.amount_total,
+        amount_remaining: job.amount_remaining ?? job.amount,
         defense_label_key: `defense_${job.defense_key}`,
       }));
     });
@@ -8386,7 +8390,11 @@
       label: String(
         job.ship_label_key || job.defense_label_key || job.label_key || job.label || job.owner_key || ""
       ),
-      amount: isLevelQueue ? 0 : Math.floor(Number(job.target_amount || 0)),
+      amount: isLevelQueue
+        ? 0
+        : Math.floor(Number(
+          job.amount_remaining != null ? job.amount_remaining : (job.target_amount || 0)
+        )),
       target_level: Math.floor(Number(job.target_level || 0)) || null,
       position: Math.floor(Number(job.queue_position || 1)),
       is_active: String(job.status || "") === "active",
@@ -13520,10 +13528,9 @@
     if (onShipyard && completionReason) {
       let needSyCatalog = !syHasCatalog;
       if (reasonStr === "timekeeper_apply") {
-        const hasQueueSlice = Boolean(data?.shipyard || data?.shipyard_queue);
-        needSyCatalog =
-          !syHasCatalog
-          && (Boolean(data?.jobs_finished) || !hasQueueSlice);
+        // Progressive batch delivery can grant ships without finishing the head job.
+        // Always refresh stock/catalog after TK when the slim slice omitted ships.
+        needSyCatalog = !syHasCatalog;
       }
       if (needSyCatalog) {
         const syPage = document.getElementById("shipyard-page");
@@ -13533,10 +13540,8 @@
     if (onDefense && completionReason) {
       let needDefCatalog = !defHasCatalog;
       if (reasonStr === "timekeeper_apply") {
-        const hasQueueSlice = Boolean(data?.defense);
-        needDefCatalog =
-          !defHasCatalog
-          && (Boolean(data?.jobs_finished) || !hasQueueSlice);
+        // Same as shipyard: partial TK can deliver units while the job stays active.
+        needDefCatalog = !defHasCatalog;
       }
       if (needDefCatalog) {
         const defPage = document.getElementById("defense-page");

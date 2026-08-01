@@ -31,6 +31,32 @@ ROOT = Path(__file__).resolve().parents[1]
 _NOW = 1_700_000_160.0
 
 
+def test_shipyard_mini_queue_uses_amount_remaining_not_total():
+    """After progressive delivery, ×N must show remaining — not original amount_total."""
+    queue = {
+        "queue": [
+            {
+                "id": 10,
+                "ship_key": "mule_courier",
+                "amount": 600,
+                "amount_total": 1000,
+                "amount_remaining": 600,
+                "units_delivered": 400,
+                "order_remaining": 260,
+                "order_total_seconds": 420,
+                "finish_at": 1_700_000_420.0,
+                "started_at": 1_700_000_000.0,
+                "is_active": True,
+            }
+        ],
+        "summary": {"count": 1, "limit": 3},
+    }
+    card_jobs = map_shipyard_queue_to_card_jobs(queue, now=_NOW)
+    mini = map_card_jobs_to_mini_queue_jobs(card_jobs, domain="shipyard", now=_NOW)
+    assert card_jobs[0]["target_amount"] == 600
+    assert mini[0]["amount"] == 600
+
+
 def _shipyard_queue(*, multi: bool = False) -> dict:
     jobs = [
         {

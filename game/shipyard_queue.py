@@ -233,7 +233,8 @@ def _job_row_for_client(
         "id": int(row["id"]),
         "ship_key": sk,
         "icon": ship_icon_static_path(sk),
-        "amount": total_units,
+        # Display / mini-queue use remaining units still in this job (not original total).
+        "amount": amount_remaining,
         "amount_total": total_units,
         "amount_remaining": amount_remaining,
         "units_delivered": units_delivered,

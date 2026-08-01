@@ -770,6 +770,100 @@ def test_timekeeper_shipyard_boost_shifts_started_at_and_survives_client(timekee
         conn.close()
 
 
+def test_timekeeper_shipyard_partial_boost_delivers_ships_by_time(timekeeper_db):
+    """Partial TK on a large order must complete ceil(boost/unit) batches worth of ships."""
+    from game.fleet import get_planet_ships
+    from game.shipyard import (
+        build_ship,
+        get_shipyard_level,
+        orbital_production_batch_capacity,
+        unit_build_seconds,
+    )
+    from game.shipyard_queue import shipyard_queue_for_client
+
+    conn = db()
+    try:
+        uid = _player(conn=conn)
+        planet = get_context_planet(uid, conn=conn)
+        pid = int(planet["id"])
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE planets SET metal = ?, crystal = ?, fuel_cells = ? WHERE id = ?;",
+            (10**15, 10**15, 10**15, pid),
+        )
+        cur.execute(
+            """
+            UPDATE planet_buildings
+            SET orbital_shipyard = 50, research_lab = 50, command_center = 50, barracks = 50
+            WHERE planet_id = ?;
+            """,
+            (pid,),
+        )
+        for tech in (
+            "energy_tech",
+            "mining_tech",
+            "drone_tech",
+            "engine_tech",
+            "navigation_tech",
+            "weapon_tech",
+            "armor_tech",
+            "storage_tech",
+            "fuel_efficiency",
+            "shield_tech",
+        ):
+            cur.execute(
+                """
+                INSERT INTO research_levels (user_id, tech_key, level)
+                VALUES (?, ?, 50)
+                ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;
+                """,
+                (uid, tech),
+            )
+        conn.commit()
+
+        qty = 50_000
+        ok, reason, _ = build_ship(
+            player_id=uid,
+            planet_id=pid,
+            ship_key="harvest_reclaimer",
+            amount=qty,
+            conn=conn,
+        )
+        assert ok, reason
+        sy = get_shipyard_level(uid, pid, conn=conn)
+        unit = unit_build_seconds("harvest_reclaimer", sy, conn=conn, planet_id=pid)
+        cap = orbital_production_batch_capacity(sy)
+        assert unit >= 1 and cap >= 1
+
+        boost = unit * 3 + (unit // 2)
+        before = int(get_planet_ships(pid, conn=conn).get("harvest_reclaimer") or 0)
+        begin_write_transaction(conn)
+        credit(uid, boost, "test", conn=conn)
+        ok, reason, result = apply_timekeeper(
+            uid, "shipyard", planet_id=pid, mode="max", conn=conn
+        )
+        assert ok, reason
+        applied = int(result.get("seconds_applied") or 0)
+        assert applied >= unit * 3
+        commit(conn)
+
+        after = int(get_planet_ships(pid, conn=conn).get("harvest_reclaimer") or 0)
+        delivered = after - before
+        expected = (applied // unit) * cap
+        assert delivered == expected
+        assert delivered >= 3 * cap
+
+        client = shipyard_queue_for_client(uid, pid, sy, conn=conn, now=time.time())
+        jobs = client.get("queue") or []
+        assert jobs
+        head = jobs[0]
+        assert int(head.get("amount_remaining") or 0) == qty - delivered
+        assert int(head.get("amount") or 0) == qty - delivered
+        assert int(head.get("amount") or 0) < qty
+    finally:
+        conn.close()
+
+
 def test_api_timekeeper_apply_shipyard_returns_queue_slice(timekeeper_db, monkeypatch):
     """GC-PERF-TK-004: slim shipyard apply must include queue-only state for UI patch."""
     from game.shipyard import build_ship
