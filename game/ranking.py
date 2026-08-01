@@ -1290,6 +1290,187 @@ def enrich_ranking_social_fields(raw: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _world_boss_damage_select(conn) -> str:
+    """Lifetime World Boss damage — ranking dimension, not wealth score."""
+    if not table_exists(conn, "world_boss_contributions"):
+        return "0 AS world_boss_damage"
+    return """COALESCE((
+        SELECT SUM(c.damage) FROM world_boss_contributions c WHERE c.player_id = p.id
+    ), 0) AS world_boss_damage"""
+
+
+def get_player_world_boss_damage(player_id: int, conn=None) -> int:
+    owns_conn = False
+    if conn is None:
+        conn = db()
+        owns_conn = True
+    try:
+        if not table_exists(conn, "world_boss_contributions"):
+            return 0
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT COALESCE(SUM(damage), 0) AS d
+            FROM world_boss_contributions
+            WHERE player_id = ?
+            """,
+            (int(player_id),),
+        )
+        row = cur.fetchone()
+        return _safe_int(row["d"] if row else 0)
+    finally:
+        if owns_conn:
+            conn.close()
+
+
+def get_sorted_alliance_ranking_entries(
+    limit: int = 100,
+    offset: int = 0,
+    conn=None,
+) -> List[Dict[str, Any]]:
+    """
+    Alliance ranking by sum of member player wealth scores (total_score).
+    Distinct from alliance_xp progression.
+    """
+    owns_conn = False
+    if conn is None:
+        conn = db()
+        owns_conn = True
+    try:
+        if not (
+            table_exists(conn, "alliances")
+            and table_exists(conn, "alliance_members")
+            and table_exists(conn, "player_scores")
+        ):
+            return []
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT
+                a.id AS alliance_id,
+                a.tag AS alliance_tag,
+                a.name AS alliance_name,
+                COUNT(am.player_id) AS member_count,
+                COALESCE(SUM(COALESCE(ps.score_total, 0)), 0) AS alliance_score
+            FROM alliances a
+            INNER JOIN alliance_members am ON am.alliance_id = a.id
+            LEFT JOIN player_scores ps ON ps.player_id = am.player_id
+            GROUP BY a.id
+            ORDER BY alliance_score DESC, a.id ASC
+            LIMIT ? OFFSET ?
+            """,
+            (int(limit), int(offset)),
+        )
+        rows = cur.fetchall()
+        out: List[Dict[str, Any]] = []
+        base_rank = int(offset)
+        for idx, raw in enumerate(rows, start=1):
+            d = dict(raw)
+            out.append(
+                {
+                    "rank": base_rank + idx,
+                    "alliance_id": int(d["alliance_id"]),
+                    "alliance_tag": str(d.get("alliance_tag") or "").strip(),
+                    "alliance_name": str(d.get("alliance_name") or "").strip(),
+                    "member_count": int(d.get("member_count") or 0),
+                    "alliance_score": _safe_int(d.get("alliance_score")),
+                    "is_current_alliance": False,
+                }
+            )
+        return out
+    finally:
+        if owns_conn:
+            conn.close()
+
+
+def get_player_alliance_ranking_snapshot(
+    player_id: int,
+    conn=None,
+) -> Dict[str, Any]:
+    """Current player's alliance rank + points (member score sum), or empty if none."""
+    owns_conn = False
+    if conn is None:
+        conn = db()
+        owns_conn = True
+    try:
+        empty = {
+            "alliance_id": None,
+            "alliance_tag": "",
+            "alliance_name": "",
+            "alliance_score": 0,
+            "alliance_rank": None,
+            "total_alliances": 0,
+            "member_count": 0,
+        }
+        if not (
+            table_exists(conn, "alliances")
+            and table_exists(conn, "alliance_members")
+            and table_exists(conn, "player_scores")
+        ):
+            return empty
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT a.id AS alliance_id, a.tag AS alliance_tag, a.name AS alliance_name
+            FROM alliance_members am
+            INNER JOIN alliances a ON a.id = am.alliance_id
+            WHERE am.player_id = ?
+            LIMIT 1
+            """,
+            (int(player_id),),
+        )
+        mine = cur.fetchone()
+        cur.execute("SELECT COUNT(*) AS cnt FROM alliances")
+        total_alliances = int(cur.fetchone()["cnt"])
+        if not mine:
+            return {**empty, "total_alliances": total_alliances}
+        aid = int(mine["alliance_id"])
+        cur.execute(
+            """
+            SELECT
+                COUNT(am.player_id) AS member_count,
+                COALESCE(SUM(COALESCE(ps.score_total, 0)), 0) AS alliance_score
+            FROM alliance_members am
+            LEFT JOIN player_scores ps ON ps.player_id = am.player_id
+            WHERE am.alliance_id = ?
+            """,
+            (aid,),
+        )
+        agg = cur.fetchone()
+        my_score = _safe_int(agg["alliance_score"] if agg else 0)
+        member_count = int(agg["member_count"] if agg else 0)
+        cur.execute(
+            """
+            SELECT COUNT(*) AS better
+            FROM (
+                SELECT
+                    a.id AS alliance_id,
+                    COALESCE(SUM(COALESCE(ps.score_total, 0)), 0) AS alliance_score
+                FROM alliances a
+                INNER JOIN alliance_members am ON am.alliance_id = a.id
+                LEFT JOIN player_scores ps ON ps.player_id = am.player_id
+                GROUP BY a.id
+            ) ranked
+            WHERE ranked.alliance_score > ?
+               OR (ranked.alliance_score = ? AND ranked.alliance_id < ?)
+            """,
+            (my_score, my_score, aid),
+        )
+        better = int(cur.fetchone()["better"])
+        return {
+            "alliance_id": aid,
+            "alliance_tag": str(mine["alliance_tag"] or "").strip(),
+            "alliance_name": str(mine["alliance_name"] or "").strip(),
+            "alliance_score": my_score,
+            "alliance_rank": better + 1,
+            "total_alliances": total_alliances,
+            "member_count": member_count,
+        }
+    finally:
+        if owns_conn:
+            conn.close()
+
+
 def get_sorted_ranking_entries(
     limit: int = 100,
     offset: int = 0,
@@ -1307,6 +1488,7 @@ def get_sorted_ranking_entries(
     combat_sel = _combat_ranking_select(conn)
     vacation_sel = _vacation_mode_select(conn)
     last_seen_sel = _last_seen_select(conn)
+    wb_sel = _world_boss_damage_select(conn)
     total_expr = _total_score_sql(conn)
     social_select, social_join = _ranking_social_select_and_join(conn)
     rank_select = ""
@@ -1328,6 +1510,7 @@ def get_sorted_ranking_entries(
             {combat_sel},
             {vacation_sel},
             {last_seen_sel},
+            {wb_sel},
             COALESCE(ps.updated_at, 0) AS score_updated_at{rank_select},
             {social_select}
         FROM players p
@@ -1374,6 +1557,7 @@ def get_sorted_ranking_entries(
                 "vacation_active": bool(int(d.get("vacation_mode_active") or 0)),
                 "last_seen": last_seen,
                 "inactive": ranking_inactive_from_last_seen(last_seen, now=now_i),
+                "world_boss_damage": _safe_int(d.get("world_boss_damage")),
                 **scores,
                 **social,
             }
@@ -1711,6 +1895,8 @@ def get_player_category_ranks(
 def _current_player_payload(
     current_player_id: int,
     top_players: List[Dict[str, Any]],
+    *,
+    top_alliances: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     pid = int(current_player_id)
     my_scores = get_player_score_cached(pid, read_only=True)
@@ -1718,9 +1904,42 @@ def _current_player_payload(
 
     conn = db()
     try:
+        wb_damage = (
+            _safe_int(in_top.get("world_boss_damage"))
+            if in_top is not None
+            else get_player_world_boss_damage(pid, conn=conn)
+        )
+        ally_snap = get_player_alliance_ranking_snapshot(pid, conn=conn)
+        if top_alliances and ally_snap.get("alliance_id"):
+            in_ally_top = next(
+                (
+                    r
+                    for r in top_alliances
+                    if int(r.get("alliance_id") or 0) == int(ally_snap["alliance_id"])
+                ),
+                None,
+            )
+            if in_ally_top is not None:
+                ally_snap = {
+                    **ally_snap,
+                    "alliance_rank": int(in_ally_top["rank"]),
+                    "alliance_score": _safe_int(in_ally_top.get("alliance_score")),
+                    "member_count": int(in_ally_top.get("member_count") or 0),
+                }
+
         category_ranks = get_player_category_ranks(
             pid, conn=conn, skip_live_total=in_top is not None
         )
+        ally_extra = {
+            "world_boss_damage": wb_damage,
+            "alliance_id": ally_snap.get("alliance_id"),
+            "alliance_tag": ally_snap.get("alliance_tag") or "",
+            "alliance_name": ally_snap.get("alliance_name") or "",
+            "alliance_score": int(ally_snap.get("alliance_score") or 0),
+            "alliance_rank": ally_snap.get("alliance_rank"),
+            "total_alliances": int(ally_snap.get("total_alliances") or 0),
+            "alliance_member_count": int(ally_snap.get("member_count") or 0),
+        }
         if in_top is not None:
             my_rank = int(in_top["rank"])
             cur = conn.cursor()
@@ -1744,6 +1963,7 @@ def _current_player_payload(
                 "military_score": int(in_top.get("military_score", 0)),
                 "evolution_score": int(in_top.get("evolution_score", 0)),
                 "ranks": category_ranks,
+                **ally_extra,
             }
 
         my_rank = category_ranks.get("total")
@@ -1770,6 +1990,7 @@ def _current_player_payload(
             "military_score": int(my_scores.get("military", 0)),
             "evolution_score": int(my_scores.get("evolution", 0)),
             "ranks": category_ranks,
+            **ally_extra,
         }
     finally:
         conn.close()
@@ -1809,12 +2030,21 @@ def build_ranking_api_payload(
     for row in top:
         row["is_current_player"] = int(row["player_id"]) == int(current_player_id)
 
-    current = _current_player_payload(int(current_player_id), top)
+    top_alliances = get_sorted_alliance_ranking_entries(limit=limit, offset=0)
+    current = _current_player_payload(
+        int(current_player_id), top, top_alliances=top_alliances
+    )
+    cur_aid = current.get("alliance_id")
+    if cur_aid:
+        for row in top_alliances:
+            if int(row.get("alliance_id") or 0) == int(cur_aid):
+                row["is_current_alliance"] = True
 
     return {
         "ok": True,
         "current_player": current,
         "top_players": top,
+        "top_alliances": top_alliances,
         "server_time": int(time.time()),
     }
 

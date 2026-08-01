@@ -51,15 +51,16 @@ Account Score
 
 **Verlust durch Kampf:** Zerstörte eigene Einheiten reduzieren den Account-Score (Vermögen ist weg). **Zerstörungspunkte** (Lifetime Combat Prestige) sind ein **separates** Ranking-Signal — nicht in `score_total` mischen, sonst entsteht ein Logikbruch (verlorene Flotte, aber Punkte bleiben als „Vermögen“ erhalten).
 
-**Ranking-Tabs (Ziel):**
+**Ranking-Tabs (Ist):**
 
 | Tab | Inhalt |
 |-----|--------|
 | Gesamtpunkte | Aktuelles Vermögen (Erhaltungssatz) |
-| Economy | Gebäude + Lager |
-| Forschung | Account-Tech investiert |
-| Militärbestand | Fleet + Defense (aktiv) |
-| Zerstörung | Combat Prestige (lifetime, getrennt) |
+| Gebäude / Forschung / Evolution / Fleet / Defense | Wealth-Komponenten |
+| World Boss | Lifetime-Damage (`SUM(world_boss_contributions.damage)`) — **kein** Wealth-Score |
+| Allianz | Allianzpunkte = `SUM(member total_score)` — **nicht** `alliance_xp` |
+
+Alliance-Progression (`alliance_xp` / Level) bleibt getrennt; siehe [ALLIANCE_SYSTEM.md](ALLIANCE_SYSTEM.md).
 
 ---
 

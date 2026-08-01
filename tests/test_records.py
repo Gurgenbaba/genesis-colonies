@@ -19,6 +19,9 @@ from game.models import (
 from game.research import RESEARCH_TECHS
 from game.records import (
     RECORD_BUILDING_KEYS,
+    RECORD_DEFENSE_KEYS,
+    RECORD_FLEET_KEYS,
+    RECORD_TITAN_KEYS,
     build_records_payload,
     _top_building_record,
 )
@@ -63,13 +66,19 @@ def test_build_records_payload_structure(records_db):
     try:
         payload = build_records_payload(conn=conn)
         assert payload["ok"] is True
-        assert payload["group_count"] == 3
+        assert payload["group_count"] == 6
         keys = [g["key"] for g in payload["groups"]]
-        assert keys == ["buildings", "research", "empire"]
+        assert keys == ["buildings", "research", "empire", "fleet", "defense", "titans"]
         building_group = payload["groups"][0]
         assert len(building_group["records"]) == len(RECORD_BUILDING_KEYS)
         research_group = payload["groups"][1]
         assert len(research_group["records"]) == len(RESEARCH_TECHS)
+        fleet_group = next(g for g in payload["groups"] if g["key"] == "fleet")
+        assert len(fleet_group["records"]) == len(RECORD_FLEET_KEYS)
+        defense_group = next(g for g in payload["groups"] if g["key"] == "defense")
+        assert len(defense_group["records"]) == len(RECORD_DEFENSE_KEYS)
+        titan_group = next(g for g in payload["groups"] if g["key"] == "titans")
+        assert len(titan_group["records"]) == len(RECORD_TITAN_KEYS) + 1
     finally:
         conn.close()
 
@@ -175,6 +184,67 @@ def test_empire_colonies_record(records_db):
         assert rec["has_holder"] is True
         assert rec["value"] == 3
         assert rec["player_id"] == uid
+    finally:
+        conn.close()
+
+
+def test_fleet_defense_titan_records(records_db):
+    """GC-Rec-01: ship / defense counts and titan ownership records."""
+    import time
+
+    from game.models import set_planet_defense
+
+    uid_a, pid_a = _player("fleet_a")
+    uid_b, pid_b = _player("fleet_b")
+    conn = db()
+    try:
+        now = time.time()
+        conn.execute(
+            """
+            INSERT INTO planet_ships (player_id, planet_id, ship_key, amount, created_at, updated_at)
+            VALUES (?, ?, 'falcon_interceptor', 40, ?, ?),
+                   (?, ?, 'falcon_interceptor', 120, ?, ?)
+            """,
+            (uid_a, pid_a, now, now, uid_b, pid_b, now, now),
+        )
+        set_planet_defense(pid_a, {"plasma_arc": 10}, conn=conn)
+        set_planet_defense(pid_b, {"plasma_arc": 55}, conn=conn)
+        if conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='player_boss_companions'"
+        ).fetchone():
+            conn.execute(
+                """
+                INSERT INTO player_boss_companions (player_id, boss_key, tamed_at, tamed_event_id)
+                VALUES (?, 'void_titan', ?, NULL),
+                       (?, 'ancient_leviathan', ?, NULL),
+                       (?, 'void_titan', ?, NULL)
+                """,
+                (uid_b, now, uid_b, now + 1, uid_a, now + 2),
+            )
+        conn.commit()
+
+        payload = build_records_payload(conn=conn)
+        fleet = _record_by_key(payload, "fleet", "falcon_interceptor")
+        assert fleet["has_holder"] is True
+        assert fleet["value"] == 120
+        assert fleet["player_id"] == uid_b
+        assert fleet["icon"] == "img/ships/falcon_interceptor.png"
+
+        defense = _record_by_key(payload, "defense", "plasma_arc")
+        assert defense["has_holder"] is True
+        assert defense["value"] == 55
+        assert defense["player_id"] == uid_b
+        assert defense["icon"] == "img/defense/plasma_arc.png"
+
+        total = _record_by_key(payload, "titans", "total_titans")
+        assert total["has_holder"] is True
+        assert total["value"] == 2
+        assert total["player_id"] == uid_b
+
+        void_rec = _record_by_key(payload, "titans", "void_titan")
+        assert void_rec["has_holder"] is True
+        # earliest tamed_at wins
+        assert void_rec["player_id"] == uid_b
     finally:
         conn.close()
 

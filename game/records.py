@@ -6,12 +6,20 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .buildings import BUILDING_ORDER
 from .db import table_exists
+from .defense_defs import ACTIVE_DEFENSE_KEYS, DEFENSE_ORDER, DEFENSES
+from .fleet_defs import ACTIVE_SHIP_KEYS, SHIPS, sort_ship_keys_by_role
 from .galaxy import format_coordinates
 from .models import BUILDING_KEYS
 from .number_format import fmt_int
 from .research import RESEARCH_TECHS
+from .world_boss_companions import COMPANION_FLAVOR
 
 RECORD_BUILDING_KEYS: Tuple[str, ...] = tuple(BUILDING_ORDER)
+RECORD_FLEET_KEYS: Tuple[str, ...] = tuple(sort_ship_keys_by_role(ACTIVE_SHIP_KEYS))
+RECORD_DEFENSE_KEYS: Tuple[str, ...] = tuple(
+    k for k in DEFENSE_ORDER if k in ACTIVE_DEFENSE_KEYS
+)
+RECORD_TITAN_KEYS: Tuple[str, ...] = tuple(sorted(COMPANION_FLAVOR.keys()))
 
 EMPIRE_RECORD_KEYS: Tuple[Tuple[str, str], ...] = (
     ("planet_level", "records_empire_planet_level"),
@@ -23,6 +31,13 @@ RECORD_ICON_DEFAULT = "img/buildings/default.png"
 RECORD_EMPIRE_ICONS: Dict[str, str] = {
     "planet_level": "img/evo/specialization.png",
     "colonies": "img/buildings/command_center.png",
+}
+
+RECORD_TITAN_ICONS: Dict[str, str] = {
+    "ancient_leviathan": "img/bosses/ancient_leviathan.png",
+    "void_titan": "img/bosses/void_titan.png",
+    "planet_eater": "img/bosses/planet_eater.png",
+    "rogue_ai_nexus": "img/bosses/rogue_ai_nexus.png",
 }
 
 
@@ -37,6 +52,14 @@ def record_icon(*, group: str, key: str) -> str:
         return f"img/research/{icon_file}"
     if group == "empire":
         return RECORD_EMPIRE_ICONS.get(key, RECORD_ICON_DEFAULT)
+    if group == "fleet":
+        return f"img/ships/{key}.png"
+    if group == "defense":
+        return f"img/defense/{key}.png"
+    if group == "titans":
+        if key == "total_titans":
+            return RECORD_TITAN_ICONS.get("void_titan", RECORD_ICON_DEFAULT)
+        return RECORD_TITAN_ICONS.get(key, f"img/bosses/{key}.png")
     return RECORD_ICON_DEFAULT
 
 
@@ -273,6 +296,197 @@ def _top_colonies_record(conn) -> Dict[str, Any]:
     )
 
 
+def _player_account_record(
+    *,
+    key: str,
+    label_key: str,
+    group: str,
+    row: Any,
+    value: int,
+) -> Dict[str, Any]:
+    val = max(0, int(value))
+    if val <= 0 or row is None:
+        return _empty_record(key=key, label_key=label_key, group=group)
+    return _finalize_record(
+        {
+            "key": key,
+            "label_key": label_key,
+            "group": group,
+            "value": val,
+            "value_fmt": fmt_int(val),
+            "player_id": int(row["player_id"]),
+            "player_name": str(row["player_name"] or ""),
+            "planet_id": None,
+            "planet_name": "",
+            "coords": "",
+            "has_holder": True,
+        }
+    )
+
+
+def _top_fleet_records(conn) -> List[Dict[str, Any]]:
+    if not table_exists(conn, "planet_ships"):
+        return [
+            _empty_record(
+                key=sk,
+                label_key=str((SHIPS.get(sk) or {}).get("name_key") or sk),
+                group="fleet",
+            )
+            for sk in RECORD_FLEET_KEYS
+        ]
+    out: List[Dict[str, Any]] = []
+    cur = conn.cursor()
+    for ship_key in RECORD_FLEET_KEYS:
+        label_key = str((SHIPS.get(ship_key) or {}).get("name_key") or ship_key)
+        cur.execute(
+            """
+            SELECT
+                ps.player_id,
+                pl.name AS player_name,
+                SUM(ps.amount) AS value
+            FROM planet_ships ps
+            INNER JOIN players pl ON pl.id = ps.player_id
+            WHERE ps.ship_key = ?
+            GROUP BY ps.player_id
+            HAVING SUM(ps.amount) > 0
+            ORDER BY value DESC, ps.player_id ASC
+            LIMIT 1;
+            """,
+            (ship_key,),
+        )
+        row = cur.fetchone()
+        val = int(row["value"] or 0) if row else 0
+        out.append(
+            _player_account_record(
+                key=ship_key,
+                label_key=label_key,
+                group="fleet",
+                row=row,
+                value=val,
+            )
+        )
+    return out
+
+
+def _top_defense_records(conn) -> List[Dict[str, Any]]:
+    if not table_exists(conn, "planet_defense"):
+        return [
+            _empty_record(
+                key=dk,
+                label_key=str((DEFENSES.get(dk) or {}).get("name_key") or dk),
+                group="defense",
+            )
+            for dk in RECORD_DEFENSE_KEYS
+        ]
+    out: List[Dict[str, Any]] = []
+    cur = conn.cursor()
+    for defense_key in RECORD_DEFENSE_KEYS:
+        label_key = str((DEFENSES.get(defense_key) or {}).get("name_key") or defense_key)
+        cur.execute(
+            """
+            SELECT
+                p.player_id,
+                pl.name AS player_name,
+                SUM(pd.amount) AS value
+            FROM planet_defense pd
+            INNER JOIN planets p ON p.id = pd.planet_id
+            INNER JOIN players pl ON pl.id = p.player_id
+            WHERE pd.defense_key = ?
+            GROUP BY p.player_id
+            HAVING SUM(pd.amount) > 0
+            ORDER BY value DESC, p.player_id ASC
+            LIMIT 1;
+            """,
+            (defense_key,),
+        )
+        row = cur.fetchone()
+        val = int(row["value"] or 0) if row else 0
+        out.append(
+            _player_account_record(
+                key=defense_key,
+                label_key=label_key,
+                group="defense",
+                row=row,
+                value=val,
+            )
+        )
+    return out
+
+
+def _top_titan_records(conn) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    if not table_exists(conn, "player_boss_companions"):
+        out.append(
+            _empty_record(
+                key="total_titans",
+                label_key="records_titans_total",
+                group="titans",
+            )
+        )
+        for boss_key in RECORD_TITAN_KEYS:
+            out.append(
+                _empty_record(
+                    key=boss_key,
+                    label_key=f"wb_boss_{boss_key}",
+                    group="titans",
+                )
+            )
+        return out
+
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT
+            c.player_id,
+            pl.name AS player_name,
+            COUNT(*) AS value
+        FROM player_boss_companions c
+        INNER JOIN players pl ON pl.id = c.player_id
+        GROUP BY c.player_id
+        HAVING COUNT(*) > 0
+        ORDER BY value DESC, c.player_id ASC
+        LIMIT 1;
+        """
+    )
+    total_row = cur.fetchone()
+    total_val = int(total_row["value"] or 0) if total_row else 0
+    out.append(
+        _player_account_record(
+            key="total_titans",
+            label_key="records_titans_total",
+            group="titans",
+            row=total_row,
+            value=total_val,
+        )
+    )
+    for boss_key in RECORD_TITAN_KEYS:
+        cur.execute(
+            """
+            SELECT
+                c.player_id,
+                pl.name AS player_name,
+                1 AS value
+            FROM player_boss_companions c
+            INNER JOIN players pl ON pl.id = c.player_id
+            WHERE c.boss_key = ?
+            ORDER BY COALESCE(c.tamed_at, 0) ASC, c.player_id ASC
+            LIMIT 1;
+            """,
+            (boss_key,),
+        )
+        row = cur.fetchone()
+        out.append(
+            _player_account_record(
+                key=boss_key,
+                label_key=f"wb_boss_{boss_key}",
+                group="titans",
+                row=row,
+                value=int(row["value"] or 0) if row else 0,
+            )
+        )
+    return out
+
+
 def _group_payload(
     *,
     key: str,
@@ -297,6 +511,9 @@ def build_records_payload(*, conn) -> Dict[str, Any]:
         _top_planet_level_record(conn),
         _top_colonies_record(conn),
     ]
+    fleet_records = _top_fleet_records(conn)
+    defense_records = _top_defense_records(conn)
+    titan_records = _top_titan_records(conn)
 
     groups = [
         _group_payload(
@@ -313,6 +530,21 @@ def build_records_payload(*, conn) -> Dict[str, Any]:
             key="empire",
             label_key="records_group_empire",
             records=empire_records,
+        ),
+        _group_payload(
+            key="fleet",
+            label_key="records_group_fleet",
+            records=fleet_records,
+        ),
+        _group_payload(
+            key="defense",
+            label_key="records_group_defense",
+            records=defense_records,
+        ),
+        _group_payload(
+            key="titans",
+            label_key="records_group_titans",
+            records=titan_records,
         ),
     ]
     return {

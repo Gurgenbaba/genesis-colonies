@@ -219,8 +219,15 @@ def test_style_has_collector_trader_hub_contract():
 
 
 def test_trader_hub_existing_layout_unchanged(trader_collector_db, monkeypatch):
+    """Hub still hosts exchange/scrap/collector; GC-Trd-01 switched to top tabs (full middle)."""
     client, _uid = _login_client(trader_collector_db, monkeypatch)
     html = client.get("/trader-hub").get_data(as_text=True)
-    assert "trader-hub-content-grid" in html
+    assert "trader-hub-panels" in html
+    assert 'data-trader-hub-tab="exchange"' in html
+    assert 'data-trader-hub-tab="scrapyard"' in html
+    assert 'data-trader-hub-tab="collector"' in html
     assert "trader-hub-subpanel" in html
     assert "data-exchange-daily-used" in html
+    assert "gc-exchange-panel" in html
+    assert "gc-scrapyard-panel" in html
+    assert "gc-collector-exchange-panel" in html

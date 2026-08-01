@@ -21157,10 +21157,67 @@
     syncTradingSubnav("galactic_politics");
   }
 
+  function _traderHubSelectTab(page, tabKey) {
+    if (!page) return;
+    const allowed = { exchange: 1, scrapyard: 1, collector: 1 };
+    const key = allowed[tabKey] ? tabKey : "exchange";
+    page.querySelectorAll("[data-trader-hub-tab]").forEach((btn) => {
+      const on = btn.getAttribute("data-trader-hub-tab") === key;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    page.querySelectorAll("[data-trader-hub-panel]").forEach((panel) => {
+      const on = panel.getAttribute("data-trader-hub-panel") === key;
+      panel.classList.toggle("is-active", on);
+      if (on) panel.removeAttribute("hidden");
+      else panel.setAttribute("hidden", "");
+    });
+    page.querySelectorAll("[data-trader-hub-head-context]").forEach((slot) => {
+      const on = slot.getAttribute("data-trader-hub-head-context") === key;
+      slot.classList.toggle("is-hidden", !on);
+      if (on) slot.removeAttribute("hidden");
+      else slot.setAttribute("hidden", "");
+    });
+    try {
+      const hash = key === "exchange" ? "" : `#${key}`;
+      const next = `${window.location.pathname}${window.location.search}${hash}`;
+      if (`${window.location.pathname}${window.location.search}${window.location.hash}` !== next) {
+        history.replaceState(null, "", next);
+      }
+    } catch (_) { /* ignore */ }
+  }
+
+  function _traderHubResolveInitialTab(page) {
+    let tab = "exchange";
+    try {
+      const params = new URLSearchParams(window.location.search || "");
+      if (params.has("collector")) tab = "collector";
+      const hash = String(window.location.hash || "").replace(/^#/, "");
+      if (hash === "scrapyard" || hash === "collector" || hash === "exchange") tab = hash;
+    } catch (_) { /* ignore */ }
+    _traderHubSelectTab(page, tab);
+  }
+
+  function bindTraderHubTabsOnce() {
+    if (GC._traderHubTabsBound) return;
+    GC._traderHubTabsBound = true;
+    document.addEventListener("click", (ev) => {
+      const tabBtn = ev.target.closest("[data-trader-hub-tab]");
+      if (!tabBtn) return;
+      const page = document.getElementById("trader-hub-page");
+      if (!page) return;
+      ev.preventDefault();
+      _traderHubSelectTab(page, tabBtn.getAttribute("data-trader-hub-tab") || "exchange");
+    });
+  }
+
   function initTraderHub() {
+    const page = document.getElementById("trader-hub-page");
+    bindTraderHubTabsOnce();
     initExchangePanel();
     initScrapyardPanel();
     initCollectorExchangePanel();
+    if (page) _traderHubResolveInitialTab(page);
   }
 
   function parseFleetPageData(page) {
@@ -26000,10 +26057,12 @@
     const patchExchangeFromState = (exchange) => {
       if (!exchange) return;
       if (typeof exchange.daily_used === "number" && dailyUsedEl) {
-        dailyUsedEl.textContent = fmtNumber(exchange.daily_used);
+        dailyUsedEl.textContent = formatNumberCompact(exchange.daily_used);
+        dailyUsedEl.setAttribute("title", fmtNumber(exchange.daily_used));
       }
       if (typeof exchange.daily_remaining === "number" && remainingEl) {
-        remainingEl.textContent = fmtNumber(exchange.daily_remaining);
+        remainingEl.textContent = formatNumberCompact(exchange.daily_remaining);
+        remainingEl.setAttribute("title", fmtNumber(exchange.daily_remaining));
       }
       if (typeof exchange.daily_remaining === "number") {
         panel.dataset.dailyRemaining = String(Math.max(0, Math.floor(exchange.daily_remaining)));
@@ -26020,17 +26079,22 @@
         }
       }
       if (typeof exchange.daily_limit === "number" && dailyLimitEl) {
-        dailyLimitEl.textContent = fmtNumber(exchange.daily_limit);
+        dailyLimitEl.textContent = formatNumberCompact(exchange.daily_limit);
+        dailyLimitEl.setAttribute("title", fmtNumber(exchange.daily_limit));
       }
       if (typeof exchange.daily_limit === "number" && dailyLimitDisplayEl) {
-        dailyLimitDisplayEl.textContent = fmtNumber(exchange.daily_limit);
+        dailyLimitDisplayEl.textContent = formatNumberCompact(exchange.daily_limit);
+        dailyLimitDisplayEl.setAttribute("title", fmtNumber(exchange.daily_limit));
       }
       if (typeof exchange.empire_production_day_total === "number" && empireDayEl) {
+        const empireFull = fmtNumber(exchange.empire_production_day_total);
+        const empireCompact = formatNumberCompact(exchange.empire_production_day_total);
         empireDayEl.textContent = tf(
           "trader_hub_empire_production_day",
-          { total: fmtNumber(exchange.empire_production_day_total) },
-          `Empire / Tag: ${fmtNumber(exchange.empire_production_day_total)}`
+          { total: empireCompact },
+          `Empire / Tag: ${empireCompact}`
         );
+        empireDayEl.setAttribute("title", empireFull);
       }
       if (typeof exchange.rate_metal_to_crystal === "number") {
         panel.dataset.rateM2c = String(exchange.rate_metal_to_crystal);
@@ -26158,6 +26222,35 @@
     setDirection(selectedDirection());
   }
 
+  function scrapyardResIcon(resKey) {
+    const file =
+      resKey === "crystal"
+        ? "Crytite.webp"
+        : resKey === "fuel_cells"
+          ? "Brennzellen.webp"
+          : "Ferronit.webp";
+    const mod =
+      resKey === "crystal"
+        ? "gc-res-crystal"
+        : resKey === "fuel_cells"
+          ? "gc-res-fuel-cells"
+          : "gc-res-metal";
+    const src =
+      typeof GC.preferWebpStaticUrl === "function"
+        ? GC.preferWebpStaticUrl(`/static/img/res/${file}`)
+        : `/static/img/res/${file}`;
+    return `<img src="${src}" alt="" class="gc-res-icon ${mod} gc-res-icon--sm" width="14" height="14" loading="lazy" decoding="async" aria-hidden="true">`;
+  }
+
+  function scrapyardRefundRow(resKey, minVal, maxVal, label) {
+    const full = `${formatNumber(minVal)}–${formatNumber(maxVal)} ${label}`;
+    const compact = `${formatNumberCompact(minVal)}–${formatNumberCompact(maxVal)}`;
+    return `<div class="gc-scrapyard-refund-row" title="${escapeHtml(full)}">
+      <span class="gc-scrapyard-refund-icon">${scrapyardResIcon(resKey)}</span>
+      <span class="gc-scrapyard-refund-range gc-mono">${escapeHtml(compact)}</span>
+    </div>`;
+  }
+
   function renderScrapyardRows(ships) {
     const tt = (key, fallback, vars) => t(key, fallback, vars);
     if (!Array.isArray(ships) || ships.length === 0) {
@@ -26175,30 +26268,28 @@
       const maxM = Number(row.preview_refund_max?.metal || 0);
       const minC = Number(row.preview_refund_min?.crystal || 0);
       const maxC = Number(row.preview_refund_max?.crystal || 0);
-      const haveLabel = tt("scrapyard_have", "Available: %(count)s").replace("%(count)s", formatNumber(amount));
-      const refundLabel = tt("scrapyard_refund_range", "Refund");
       const metalLabel = tt("resource_metal", "Ferronit");
       const crystalLabel = tt("resource_crystal", "Crytite");
       const recycleLabel = tt("scrapyard_recycle_btn", "Recycle");
       const amountLabel = tt("scrapyard_amount", "Amount");
+      const refundLabel = tt("scrapyard_refund_estimate", "Refund (approx.)");
+      const amountCompact = formatNumberCompact(amount);
       return `
-        <article class="gc-scrapyard-row fleet-ship-row gc-trader-scrap-row" data-scrap-ship="${key}" data-scrap-max="${amount}">
-          <div class="fleet-ship-row-main gc-trader-scrap-main">
-            <div class="gc-trader-scrap-icon-wrap">
-              <img src="${icon}" alt="" class="gc-scrapyard-ship-icon" width="40" height="40" loading="lazy">
-            </div>
-            <div class="gc-trader-scrap-body">
-              <span class="gc-scrapyard-ship-name fleet-ship-name">${shipName}</span>
-              <span class="gc-scrapyard-have fleet-ship-stock gc-mono">${haveLabel}</span>
-              <span class="gc-trader-scrap-refund hint gc-mono">
-                ${tt("scrapyard_refund_estimate", "Refund (approx.)")}:
-                ${formatNumber(minM)}–${formatNumber(maxM)} ${metalLabel},
-                ${formatNumber(minC)}–${formatNumber(maxC)} ${crystalLabel}
-              </span>
+        <article class="gc-scrapyard-card inventory-item-card" data-scrap-ship="${key}" data-scrap-max="${amount}">
+          <div class="inventory-item-card-hero gc-scrapyard-card-hero">
+            <img src="${icon}" alt="" class="gc-scrapyard-ship-icon inventory-item-img" width="64" height="64" loading="lazy">
+            <span class="inventory-item-amount gc-mono" title="${formatNumber(amount)}">×${amountCompact}</span>
+          </div>
+          <div class="inventory-item-card-body gc-scrapyard-card-body">
+            <span class="gc-scrapyard-ship-name inventory-item-name">${shipName}</span>
+            <div class="gc-scrapyard-refund" aria-label="${escapeHtml(refundLabel)}">
+              <span class="gc-scrapyard-refund-label hint">${escapeHtml(refundLabel)}</span>
+              ${scrapyardRefundRow("metal", minM, maxM, metalLabel)}
+              ${scrapyardRefundRow("crystal", minC, maxC, crystalLabel)}
             </div>
           </div>
-          <div class="fleet-ship-row-controls gc-trader-scrap-actions">
-            <input type="text" inputmode="numeric" class="gc-trader-input fleet-ship-input gc-scrapyard-qty gc-num-input" min="1" max="${amount}" value="1"
+          <div class="inventory-item-card-actions gc-trader-scrap-actions">
+            <input type="text" inputmode="numeric" class="gc-trader-input gc-scrapyard-qty gc-num-input" min="1" max="${amount}" value="1"
                    data-scrap-qty="${key}" aria-label="${amountLabel}">
             <button type="button" class="gc-btn gc-btn-secondary gc-trader-scrap-btn" data-scrap-recycle="${key}">
               ${recycleLabel.toUpperCase()}
@@ -26379,10 +26470,16 @@
       : canRedeem
         ? t("collector_redeem_button", "Redeem")
         : t("collector_missing_fragments", "Missing fragments");
-    return `<article class="collector-offer-card${cardClass}" data-offer-key="${escapeHtml(key)}" data-collector-offer="${escapeHtml(key)}">
-      <div class="collector-offer-main">
+    const ownedCompact = typeof formatCompactNumber === "function" ? formatCompactNumber(owned) : formatNumber(owned);
+    const reqCompact = typeof formatCompactNumber === "function" ? formatCompactNumber(required) : formatNumber(required);
+    return `<article class="collector-offer-card inventory-item-card${cardClass}" data-offer-key="${escapeHtml(key)}" data-collector-offer="${escapeHtml(key)}">
+      <div class="inventory-item-card-hero collector-offer-hero" aria-hidden="true">
+        <span class="collector-offer-hero-icon">✦</span>
+        <span class="inventory-item-amount gc-mono" data-collector-owned-badge="${escapeHtml(key)}">${escapeHtml(ownedCompact)}/${escapeHtml(reqCompact)}</span>
+      </div>
+      <div class="collector-offer-main inventory-item-card-body">
         <div class="collector-offer-headline">
-          <h3 class="collector-offer-title">${escapeHtml(title)}</h3>
+          <h3 class="collector-offer-title inventory-item-name">${escapeHtml(title)}</h3>
           <p class="collector-offer-reward-line hint">${escapeHtml(rewardLine)}</p>
         </div>
         <div class="collector-offer-metrics">
@@ -26394,8 +26491,10 @@
           <div class="gc-card-queue-bar collector-offer-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}" aria-label="${escapeHtml(title)}" data-collector-progress-bar="${escapeHtml(key)}">
             <div class="gc-card-queue-bar-fill gc-progress-smooth" style="width: ${progress}%;" data-collector-progress-fill="${escapeHtml(key)}"></div>
           </div>
-          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm collector-redeem-btn" data-collector-redeem="${escapeHtml(key)}"${canRedeem && rewardsReady ? "" : " disabled"}>${escapeHtml(btnLabel)}</button>
         </div>
+      </div>
+      <div class="inventory-item-card-actions collector-offer-actions">
+        <button type="button" class="gc-btn gc-btn-primary gc-btn-sm collector-redeem-btn" data-collector-redeem="${escapeHtml(key)}"${canRedeem && rewardsReady ? "" : " disabled"}>${escapeHtml(btnLabel)}</button>
       </div>
       <details class="collector-offer-details">
         <summary class="collector-offer-details-toggle">${escapeHtml(t("collector_offer_details", "Details"))}</summary>
@@ -26454,11 +26553,21 @@
     panel.dataset.collectorBound = "1";
 
     collectorExchangeCache = readCollectorExchangeStateFromDom();
+    let deepSpecialist = "";
+    try {
+      deepSpecialist = new URLSearchParams(window.location.search || "").get("collector") || "";
+    } catch (_) {
+      deepSpecialist = "";
+    }
     activeCollectorSpecialistKey =
+      deepSpecialist ||
       panel.dataset.collectorActiveSpecialist ||
       panel.querySelector("[data-collector-specialist-tab].is-active")?.getAttribute("data-collector-specialist-tab") ||
       collectorExchangeCache?.specialists?.[0]?.specialist_key ||
       null;
+    if (deepSpecialist) {
+      activateCollectorSpecialistTab(panel, deepSpecialist);
+    }
 
     const tt = (key, fallback) => t(key, fallback);
     const errorEl = panel.querySelector("[data-collector-error]");
@@ -33545,6 +33654,26 @@
       fallback: "Defense",
       colFallback: "Defense",
     },
+    {
+      id: "world_boss",
+      scoreKey: "world_boss_damage",
+      rankKey: null,
+      labelKey: "ranking_tab_world_boss",
+      colLabelKey: "ranking_col_world_boss",
+      fallback: "World Boss",
+      colFallback: "Damage",
+      kind: "player",
+    },
+    {
+      id: "alliance",
+      scoreKey: "alliance_score",
+      rankKey: null,
+      labelKey: "ranking_tab_alliance",
+      colLabelKey: "ranking_col_alliance",
+      fallback: "Alliance",
+      colFallback: "Alliance Points",
+      kind: "alliance",
+    },
   ];
 
   function rankingColLabel(tab) {
@@ -33566,16 +33695,35 @@
       .replace(/"/g, "&quot;");
   }
 
+  function rankingTabMeta(tabId) {
+    return RANKING_TABS.find((t) => t.id === tabId) || RANKING_TABS[0];
+  }
+
+  function rankingIsAllianceTab(tabId) {
+    return rankingTabMeta(tabId).kind === "alliance";
+  }
+
   function rankingScoreValue(row, tabId) {
-    const tab = RANKING_TABS.find((t) => t.id === tabId) || RANKING_TABS[0];
+    const tab = rankingTabMeta(tabId);
     return parseIntNumber(row[tab.scoreKey]);
   }
 
   function rankingVisibleTabs(payload) {
-    const cur = payload?.current_player || {};
-    const top = Array.isArray(payload?.top_players) ? payload.top_players : [];
     return RANKING_TABS.filter((tab) => {
-      if (tab.id === "total" || tab.id === "building" || tab.id === "research" || tab.id === "fleet" || tab.id === "defense" || tab.id === "evolution") return true;
+      if (
+        tab.id === "total" ||
+        tab.id === "building" ||
+        tab.id === "research" ||
+        tab.id === "fleet" ||
+        tab.id === "defense" ||
+        tab.id === "evolution" ||
+        tab.id === "world_boss" ||
+        tab.id === "alliance"
+      ) {
+        return true;
+      }
+      const cur = payload?.current_player || {};
+      const top = Array.isArray(payload?.top_players) ? payload.top_players : [];
       const curScore = Number(cur[tab.scoreKey]) || 0;
       const anyScore = top.some((row) => (Number(row[tab.scoreKey]) || 0) > 0);
       return curScore > 0 || anyScore;
@@ -33583,6 +33731,25 @@
   }
 
   function rankingSortedRows(payload, tabId) {
+    if (rankingIsAllianceTab(tabId)) {
+      const seen = new Set();
+      const top = (Array.isArray(payload?.top_alliances) ? payload.top_alliances : []).filter((row) => {
+        const aid = Number(row.alliance_id) || 0;
+        if (!aid || seen.has(aid)) return false;
+        seen.add(aid);
+        return true;
+      });
+      top.sort((a, b) => {
+        const diff = rankingScoreValue(b, tabId) - rankingScoreValue(a, tabId);
+        if (diff !== 0) return diff;
+        return (Number(a.alliance_id) || 0) - (Number(b.alliance_id) || 0);
+      });
+      return top.map((row, idx) => ({
+        ...row,
+        display_rank: idx + 1,
+        display_score: rankingScoreValue(row, tabId),
+      }));
+    }
     const seen = new Set();
     const top = (Array.isArray(payload?.top_players) ? payload.top_players : []).filter((row) => {
       const pid = Number(row.player_id) || 0;
@@ -33611,12 +33778,22 @@
   }
 
   function rankingCurrentRank(payload, tabId) {
+    const cur = payload?.current_player || {};
+    if (rankingIsAllianceTab(tabId)) {
+      const aid = Number(cur.alliance_id) || 0;
+      if (aid > 0) {
+        const inTop = rankingSortedRows(payload, tabId).find(
+          (row) => Number(row.alliance_id) === aid
+        );
+        if (inTop) return Number(inTop.display_rank);
+      }
+      return cur.alliance_rank != null ? Number(cur.alliance_rank) : null;
+    }
     const pid = rankingCurrentPlayerId(payload);
     if (pid > 0) {
       const inTop = rankingSortedRows(payload, tabId).find((row) => Number(row.player_id) === pid);
       if (inTop) return Number(inTop.display_rank);
     }
-    const cur = payload?.current_player || {};
     const ranks = cur.ranks || {};
     if (ranks[tabId] != null) return Number(ranks[tabId]);
     if (tabId === "total" && cur.rank != null) return Number(cur.rank);
@@ -33625,7 +33802,7 @@
 
   function rankingCurrentScore(payload, tabId) {
     const cur = payload?.current_player || {};
-    const tab = RANKING_TABS.find((t) => t.id === tabId) || RANKING_TABS[0];
+    const tab = rankingTabMeta(tabId);
     return parseIntNumber(cur[tab.scoreKey]);
   }
 
@@ -33917,13 +34094,19 @@
       return;
     }
     const rank = rankingCurrentRank(payload, tabId);
-    const totalPlayers = Number(payload.current_player?.total_players) || 0;
+    const cur = payload.current_player || {};
+    const totalUnits = rankingIsAllianceTab(tabId)
+      ? Number(cur.total_alliances) || 0
+      : Number(cur.total_players) || 0;
     const score = rankingCurrentScore(payload, tabId);
-    const tab = RANKING_TABS.find((t) => t.id === tabId) || RANKING_TABS[0];
-    const rankText = rank ? `#${fmtNumber(rank)} / ${fmtNumber(totalPlayers)}` : "—";
+    const tab = rankingTabMeta(tabId);
+    const rankLabel = rankingIsAllianceTab(tabId)
+      ? rankingT("ranking_my_alliance_rank", "Your alliance")
+      : rankingT("ranking_my_rank", "Your rank");
+    const rankText = rank ? `#${fmtNumber(rank)} / ${fmtNumber(totalUnits)}` : "—";
     stripEl.innerHTML =
       `<div class="gc-ranking-my-rank">` +
-      `<span class="gc-ranking-my-label">${rankingEscapeHtml(rankingT("ranking_my_rank", "Your rank"))}</span>` +
+      `<span class="gc-ranking-my-label">${rankingEscapeHtml(rankLabel)}</span>` +
       `<span class="gc-ranking-my-value">${rankText}</span>` +
       `</div>` +
       `<div class="gc-ranking-my-score">` +
@@ -33954,6 +34137,36 @@
       .join("");
   }
 
+  function rankingAlliancePrimaryCell(row, isMine) {
+    const aid = Number(row.alliance_id) || 0;
+    const tag = row.alliance_tag ? `[${rankingEscapeHtml(row.alliance_tag)}]` : "";
+    const name = row.alliance_name ? ` ${rankingEscapeHtml(row.alliance_name)}` : "";
+    const label = `${tag}${name}`.trim() || rankingEscapeHtml(rankingT("ranking_no_alliance", "No alliance"));
+    const members = Number(row.member_count) || 0;
+    const membersLabel = rankingEscapeHtml(
+      rankingT("ranking_alliance_members", "Members") + `: ${fmtNumber(members)}`
+    );
+    const you = rankingYouPill(isMine);
+    if (aid <= 0) {
+      return (
+        `<div class="gc-ranking-player">` +
+        `<div class="gc-ranking-player-meta">` +
+        `<div class="gc-ranking-player-name-row">${you}<span class="gc-ranking-player-name">${label}</span></div>` +
+        `<span class="gc-ranking-player-title">${membersLabel}</span>` +
+        `</div></div>`
+      );
+    }
+    const href = `/alliance/${encodeURIComponent(String(aid))}`;
+    return (
+      `<a href="${href}" class="gc-ranking-player gc-ranking-alliance-primary" ` +
+      `data-alliance-ranking-link="${rankingEscapeHtml(String(aid))}">` +
+      `<div class="gc-ranking-player-meta">` +
+      `<div class="gc-ranking-player-name-row">${you}<span class="gc-ranking-player-name">${label}</span></div>` +
+      `<span class="gc-ranking-player-title">${membersLabel}</span>` +
+      `</div></a>`
+    );
+  }
+
   function rankingRenderList(payload, tabId) {
     const tableEl = document.getElementById("ranking-table-content");
     if (!tableEl) return;
@@ -33965,22 +34178,36 @@
     }
 
     const rows = rankingSortedRows(payload, tabId);
-    const tab = RANKING_TABS.find((t) => t.id === tabId) || RANKING_TABS[0];
+    const tab = rankingTabMeta(tabId);
     const scoreLabel = rankingEscapeHtml(rankingColLabel(tab));
+    const isAlliance = rankingIsAllianceTab(tabId);
 
     if (!rows.length) {
       tableEl.innerHTML = `<p class="ranking-empty">${rankingEscapeHtml(rankingT("ranking_empty", "No data yet."))}</p>`;
       return;
     }
 
+    const primaryCol = isAlliance
+      ? rankingEscapeHtml(rankingT("ranking_alliance", "Alliance"))
+      : rankingEscapeHtml(rankingT("ranking_commander", "Commander"));
+    const secondaryCol = isAlliance
+      ? rankingEscapeHtml(rankingT("ranking_alliance_members", "Members"))
+      : rankingEscapeHtml(rankingT("ranking_alliance", "Alliance"));
+
     const desktopRows = rows
       .map((row) => {
-        const isMe = !!row.is_current_player;
+        const isMe = isAlliance ? !!row.is_current_alliance : !!row.is_current_player;
+        const primary = isAlliance
+          ? rankingAlliancePrimaryCell(row, isMe)
+          : rankingPlayerCell(row, isMe);
+        const secondary = isAlliance
+          ? `<span class="gc-mono">${fmtNumber(Number(row.member_count) || 0)}</span>`
+          : rankingAllianceHtml(row);
         return (
           `<tr class="gc-ranking-row${isMe ? " is-me" : ""}${rankingTopClass(row.display_rank)}">` +
           `<td class="gc-ranking-place"><span class="gc-ranking-place-num">#${fmtNumber(row.display_rank)}</span></td>` +
-          `<td class="gc-ranking-col-player">${rankingPlayerCell(row, isMe)}</td>` +
-          `<td class="gc-ranking-col-alliance">${rankingAllianceHtml(row)}</td>` +
+          `<td class="gc-ranking-col-player">${primary}</td>` +
+          `<td class="gc-ranking-col-alliance">${secondary}</td>` +
           `<td class="gc-ranking-score gc-ranking-score--active">${renderMonoCompact(row.display_score)}</td>` +
           `</tr>`
         );
@@ -33989,15 +34216,21 @@
 
     const mobileCards = rows
       .map((row) => {
-        const isMe = !!row.is_current_player;
+        const isMe = isAlliance ? !!row.is_current_alliance : !!row.is_current_player;
+        const primary = isAlliance
+          ? rankingAlliancePrimaryCell(row, isMe)
+          : rankingPlayerCell(row, isMe);
+        const secondary = isAlliance
+          ? `<span class="gc-ranking-alliance">${fmtNumber(Number(row.member_count) || 0)} ${rankingEscapeHtml(rankingT("ranking_alliance_members", "Members"))}</span>`
+          : rankingAllianceHtml(row);
         return (
           `<article class="gc-ranking-mobile-card${isMe ? " is-me" : ""}${rankingTopClass(row.display_rank)}">` +
           `<div class="gc-ranking-mobile-head">` +
           `<span class="gc-ranking-place gc-ranking-place-num">#${fmtNumber(row.display_rank)}</span>` +
-          rankingAllianceHtml(row) +
+          secondary +
           `<span class="gc-ranking-mobile-score-inline gc-mono">${renderMonoCompact(row.display_score)}</span>` +
           `</div>` +
-          `<div class="gc-ranking-mobile-player">${rankingPlayerCell(row, isMe)}</div>` +
+          `<div class="gc-ranking-mobile-player">${primary}</div>` +
           `</article>`
         );
       })
@@ -34009,8 +34242,8 @@
       `<table class="gc-ranking-table">` +
       `<thead><tr>` +
       `<th class="gc-ranking-place">${rankingEscapeHtml(rankingT("ranking_rank", "Rank"))}</th>` +
-      `<th class="gc-ranking-col-player">${rankingEscapeHtml(rankingT("ranking_commander", "Commander"))}</th>` +
-      `<th class="gc-ranking-col-alliance">${rankingEscapeHtml(rankingT("ranking_alliance", "Alliance"))}</th>` +
+      `<th class="gc-ranking-col-player">${primaryCol}</th>` +
+      `<th class="gc-ranking-col-alliance">${secondaryCol}</th>` +
       `<th class="gc-ranking-score gc-ranking-score--active">${scoreLabel}</th>` +
       `</tr></thead>` +
       `<tbody>${desktopRows}</tbody>` +
@@ -34156,6 +34389,18 @@
     GC._empireMatrixBound = true;
 
     document.addEventListener("click", (e) => {
+      const empireLink = e.target.closest(
+        'a[data-nav-module="empire"], a[href="/empire"], a[href$="/empire"]'
+      );
+      if (empireLink) {
+        try {
+          const cur = String(location.pathname || "") + String(location.search || "");
+          if (cur && cur !== "/empire" && !cur.endsWith("/empire")) {
+            sessionStorage.setItem("gc_empire_return_path", cur);
+          }
+        } catch (_) {}
+      }
+
       const btn = e.target.closest("[data-empire-section-toggle]");
       if (!btn) return;
       const matrix = document.querySelector("#empire-page .empire-matrix");
@@ -34180,13 +34425,68 @@
     });
   }
 
+  function empireClearFocus() {
+    document.body.classList.remove("gc-empire-focus");
+    document.documentElement.classList.remove("gc-empire-focus");
+  }
+
+  function empireEnterFocus() {
+    document.body.classList.add("gc-empire-focus");
+    document.documentElement.classList.add("gc-empire-focus");
+  }
+
+  function empireCloseFocus() {
+    empireClearFocus();
+    let target = "/overview";
+    try {
+      const stored = sessionStorage.getItem("gc_empire_return_path");
+      if (stored && stored !== "/empire" && !stored.endsWith("/empire")) {
+        target = stored;
+      }
+      sessionStorage.removeItem("gc_empire_return_path");
+    } catch (_) {}
+    if (typeof GC.navigateTo === "function") {
+      GC.navigateTo(target, { push: true });
+      return;
+    }
+    if (typeof GC.reloadCurrentPage === "function") {
+      GC.reloadCurrentPage({ force: true });
+    }
+  }
+
   function initEmpire() {
     const root = document.getElementById("empire-page");
     if (!root) return;
-    const matrix = root.querySelector(".empire-matrix");
-    if (!matrix) return;
 
     bindEmpireMatrixOnce();
+    empireEnterFocus();
+
+    const onKeydown = (e) => {
+      if (e.key !== "Escape") return;
+      if (!document.getElementById("empire-page")) return;
+      e.preventDefault();
+      empireCloseFocus();
+    };
+    document.addEventListener("keydown", onKeydown);
+
+    const onCloseClick = (e) => {
+      const btn = e.target.closest("[data-empire-close]");
+      if (!btn || !root.contains(btn)) return;
+      e.preventDefault();
+      empireCloseFocus();
+    };
+    root.addEventListener("click", onCloseClick);
+
+    if (typeof GC.registerCleanup === "function") {
+      GC.registerCleanup(() => {
+        document.removeEventListener("keydown", onKeydown);
+        root.removeEventListener("click", onCloseClick);
+        empireClearFocus();
+      });
+    }
+
+    const matrix = root.querySelector(".empire-matrix");
+    if (!matrix) return;
 
     const collapsed = new Set(loadEmpireMatrixCollapsed());
     matrix.querySelectorAll("[data-empire-section-toggle]").forEach((btn) => {

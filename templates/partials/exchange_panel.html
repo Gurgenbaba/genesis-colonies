@@ -27,6 +27,19 @@
     </div>
   </div>
 
+  <div class="trader-hub-daily-panel"
+       aria-label="{{ T('trader_hub_daily_limit', 'Daily limit (per commander)') }}">
+    <div class="trader-hub-daily-breakdown hint">
+      <p class="trader-hub-daily-formula">
+        {{ T('trader_hub_daily_formula', 'Berechnung: Empire-Produktion × %(pct)s %%', pct=(ex.daily_limit_pct|default(15)|int)) }}
+      </p>
+      <p class="trader-hub-daily-empire gc-mono" data-exchange-empire-day
+         title="{{ ex.empire_production_day_total|fmt_int if ex.empire_production_day_total is defined else '0' }}">
+        {{ T('trader_hub_empire_production_day', 'Empire / Tag: %(total)s', total=(ex.empire_production_day_total|fmt_int_compact if ex.empire_production_day_total is defined else '0')) }}
+      </p>
+    </div>
+  </div>
+
   {% if ex.enabled %}
   <select id="gc-exchange-route" class="gc-trader-select gc-exchange-route-select visually-hidden" data-exchange-route tabindex="-1" aria-hidden="true">
     <option value="metal_to_crystal" selected>{{ T('exchange_metal_to_crystal') }}</option>

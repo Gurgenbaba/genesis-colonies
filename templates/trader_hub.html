@@ -24,43 +24,82 @@
             {{ active_planet.name }}
           </span>
           {% endif %}
-          <span class="gc-panel-tag trader-hub-status-chip" title="{{ T('trader_hub_daily_limit_label', 'Daily limit') }}">
+          <span class="gc-panel-tag trader-hub-status-chip"
+                data-trader-hub-head-context="exchange"
+                title="{{ T('trader_hub_daily_limit_label', 'Daily limit') }}: {{ ex.daily_limit|fmt_int if ex.daily_limit is defined else '–' }}">
             {{ T('trader_hub_daily_limit_label', 'Tageslimit') }}:
-            <span class="gc-mono" data-exchange-daily-limit-display>{{ ex.daily_limit|fmt_int if ex.daily_limit is defined else '–' }}</span>
+            <span class="gc-mono" data-exchange-daily-limit-display title="{{ ex.daily_limit|fmt_int if ex.daily_limit is defined else '' }}">{{ ex.daily_limit|fmt_int_compact if ex.daily_limit is defined else '–' }}</span>
           </span>
-          <span class="gc-panel-tag trader-hub-status-chip trader-hub-status-chip--accent" title="{{ T('trader_hub_daily_used', 'Used today') }}">
+          <span class="gc-panel-tag trader-hub-status-chip trader-hub-status-chip--accent"
+                data-trader-hub-head-context="exchange"
+                title="{{ T('trader_hub_daily_used', 'Used today') }}: {{ ex.daily_used|fmt_int if ex.daily_used is defined else '0' }} / {{ ex.daily_limit|fmt_int if ex.daily_limit is defined else '–' }}">
             {{ T('trader_hub_daily_used', 'Heute genutzt') }}:
             <span class="gc-mono">
-              <strong data-exchange-daily-used>{{ ex.daily_used|fmt_int if ex.daily_used is defined else '0' }}</strong>
+              <strong data-exchange-daily-used title="{{ ex.daily_used|fmt_int if ex.daily_used is defined else '0' }}">{{ ex.daily_used|fmt_int_compact if ex.daily_used is defined else '0' }}</strong>
               <span class="trader-hub-daily-sep">/</span>
-              <span data-exchange-daily-limit>{{ ex.daily_limit|fmt_int if ex.daily_limit is defined else '–' }}</span>
+              <span data-exchange-daily-limit title="{{ ex.daily_limit|fmt_int if ex.daily_limit is defined else '' }}">{{ ex.daily_limit|fmt_int_compact if ex.daily_limit is defined else '–' }}</span>
             </span>
           </span>
         </div>
       </div>
 
-      <div class="trader-hub-daily-panel" aria-label="{{ T('trader_hub_daily_limit', 'Daily limit (per commander)') }}">
-        <div class="trader-hub-daily-breakdown hint">
-          <p class="trader-hub-daily-formula">
-            {{ T('trader_hub_daily_formula', 'Berechnung: Empire-Produktion × %(pct)s %%', pct=(ex.daily_limit_pct|default(15)|int)) }}
-          </p>
-          <p class="trader-hub-daily-empire gc-mono" data-exchange-empire-day>
-            {{ T('trader_hub_empire_production_day', 'Empire / Tag: %(total)s', total=(ex.empire_production_day_total|fmt_int if ex.empire_production_day_total is defined else '0')) }}
-          </p>
-        </div>
-      </div>
+      <nav class="trader-hub-tabs inventory-tabs inventory-tabs--inline"
+           data-trader-hub-tabs
+           role="tablist"
+           aria-label="{{ T('trader_hub_tabs_label', 'Trader Hub Bereiche') }}">
+        <button type="button"
+                class="inventory-tab trader-hub-tab is-active"
+                role="tab"
+                aria-selected="true"
+                data-trader-hub-tab="exchange"
+                id="trader-hub-tab-exchange"
+                aria-controls="trader-hub-panel-exchange">{{ T("trader_hub_tab_exchange", "Ress Tausch") }}</button>
+        <button type="button"
+                class="inventory-tab trader-hub-tab"
+                role="tab"
+                aria-selected="false"
+                data-trader-hub-tab="scrapyard"
+                id="trader-hub-tab-scrapyard"
+                aria-controls="trader-hub-panel-scrapyard">{{ T("trader_hub_tab_scrapyard", "Schrotthändler") }}</button>
+        <button type="button"
+                class="inventory-tab trader-hub-tab"
+                role="tab"
+                aria-selected="false"
+                data-trader-hub-tab="collector"
+                id="trader-hub-tab-collector"
+                aria-controls="trader-hub-panel-collector">{{ T("trader_hub_tab_collector", "Sammler Markt") }}</button>
+      </nav>
     </section>
 
     <hr class="trader-hub-divider gc-prog-divider">
 
-    <div class="trader-hub-content-grid">
-      {% include "partials/exchange_panel.html" %}
-      {% include "partials/scrapyard_panel.html" %}
+    <div class="trader-hub-panels">
+      <div class="trader-hub-panel is-active"
+           id="trader-hub-panel-exchange"
+           role="tabpanel"
+           data-trader-hub-panel="exchange"
+           aria-labelledby="trader-hub-tab-exchange">
+        {% include "partials/exchange_panel.html" %}
+      </div>
+
+      <div class="trader-hub-panel"
+           id="trader-hub-panel-scrapyard"
+           role="tabpanel"
+           data-trader-hub-panel="scrapyard"
+           aria-labelledby="trader-hub-tab-scrapyard"
+           hidden>
+        {% include "partials/scrapyard_panel.html" %}
+      </div>
+
+      <div class="trader-hub-panel"
+           id="trader-hub-panel-collector"
+           role="tabpanel"
+           data-trader-hub-panel="collector"
+           aria-labelledby="trader-hub-tab-collector"
+           hidden>
+        {% include "partials/collector_exchange_panel.html" %}
+      </div>
     </div>
-
-    <hr class="trader-hub-divider gc-prog-divider">
-
-    {% include "partials/collector_exchange_panel.html" %}
   </div>
 </div>
 {% endblock %}

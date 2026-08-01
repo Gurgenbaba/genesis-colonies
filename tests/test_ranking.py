@@ -1087,6 +1087,87 @@ def test_ranking_exposes_vacation_active_flag(temp_db):
     assert row["vacation_active"] is True
 
 
+def test_ranking_world_boss_and_alliance_tabs(temp_db):
+    """GC-Rnk-01: lifetime WB damage + alliance points = sum of member scores."""
+    from game.db import begin_write_transaction
+    from game.world_boss import spawn_world_boss
+
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    leader = _create_player("rnk_ally_lead")
+    member = _create_player("rnk_ally_mem")
+    solo = _create_player("rnk_solo_wb")
+
+    _seed_scores(leader, 1000, 0)
+    _seed_scores(member, 400, 0)
+    _seed_scores(solo, 50, 0)
+
+    create_alliance("WBA", "World Boss Alliance", leader)
+    conn = db()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT id FROM alliances WHERE tag = 'WBA' LIMIT 1")
+        aid = int(cur.fetchone()["id"])
+        cur.execute(
+            "INSERT INTO alliance_members (alliance_id, player_id, role, joined_at) VALUES (?, ?, 'member', ?)",
+            (aid, member, int(time.time())),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        spawn = spawn_world_boss(
+            "void_titan",
+            conn=conn,
+            galaxy=1,
+            system=9,
+            position=4,
+            announce=False,
+        )
+        eid = int(spawn["event"]["id"])
+        now = time.time()
+        for pid, dmg in ((solo, 9000), (leader, 1000), (member, 500)):
+            conn.execute(
+                """
+                INSERT INTO world_boss_contributions (
+                    event_id, player_id, alliance_id, damage, waves,
+                    last_attack_at, created_at, updated_at
+                ) VALUES (?, ?, NULL, ?, 1, ?, ?, ?)
+                """,
+                (eid, pid, dmg, now, now, now),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+    _close_db()
+
+    payload = build_ranking_api_payload(solo, limit=50, refresh=False)
+    assert payload["ok"] is True
+    assert "top_alliances" in payload
+
+    top = payload["top_players"]
+    solo_row = next(r for r in top if r["player_id"] == solo)
+    assert int(solo_row.get("world_boss_damage") or 0) == 9000
+    assert int(payload["current_player"].get("world_boss_damage") or 0) == 9000
+
+    alliances = payload["top_alliances"]
+    assert alliances, "expected at least one alliance ranking row"
+    top_ally = alliances[0]
+    assert int(top_ally["alliance_id"]) == aid
+    assert int(top_ally["alliance_score"]) == 1400  # 1000 + 400
+
+    payload_lead = build_ranking_api_payload(leader, limit=50, refresh=False)
+    cur = payload_lead["current_player"]
+    assert int(cur["alliance_id"]) == aid
+    assert int(cur["alliance_score"]) == 1400
+    assert int(cur["alliance_rank"]) == 1
+
+
 def test_ranking_inactive_flag_after_three_days(temp_db):
     _run_migrate(temp_db)
     init_db()

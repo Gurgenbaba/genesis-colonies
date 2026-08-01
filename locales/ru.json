@@ -7451,5 +7451,20 @@
   "gd_politics_badge_stance": "Только позиция · без баффа",
   "auction_house_rotation_clock_hint": "Момент следующей серверной проверки ротации",
   "auction_house_my_bids_nav_hint": "Перейти к лотам, где вы лидируете",
-  "admin_votes_col_player_name": "Игрок"
+  "admin_votes_col_player_name": "Игрок",
+  "ranking_tab_world_boss": "Мировой босс",
+  "ranking_col_world_boss": "Урон",
+  "ranking_tab_alliance": "Альянс",
+  "ranking_col_alliance": "Очки альянса",
+  "ranking_my_alliance_rank": "Ваш альянс",
+  "ranking_alliance_members": "Участники",
+  "records_group_fleet": "Рекорды кораблей",
+  "records_group_defense": "Рекорды обороны",
+  "records_group_titans": "Рекорды титанов",
+  "records_titans_total": "Титаны всего",
+  "empire_close": "Закрыть Империю",
+  "trader_hub_tabs_label": "Разделы Trader Hub",
+  "trader_hub_tab_exchange": "Обмен ресурсов",
+  "trader_hub_tab_scrapyard": "Скупщик",
+  "trader_hub_tab_collector": "Рынок коллекционера"
 }

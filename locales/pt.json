@@ -7451,5 +7451,20 @@
   "gd_politics_badge_stance": "Só postura · sem buff",
   "auction_house_rotation_clock_hint": "Momento da próxima verificação de rotação no servidor",
   "auction_house_my_bids_nav_hint": "Ir para os lotes em que estás a liderar",
-  "admin_votes_col_player_name": "Jogador"
+  "admin_votes_col_player_name": "Jogador",
+  "ranking_tab_world_boss": "Chefe Mundial",
+  "ranking_col_world_boss": "Dano",
+  "ranking_tab_alliance": "Aliança",
+  "ranking_col_alliance": "Pontos de aliança",
+  "ranking_my_alliance_rank": "Sua aliança",
+  "ranking_alliance_members": "Membros",
+  "records_group_fleet": "Recordes de naves",
+  "records_group_defense": "Recordes de defesa",
+  "records_group_titans": "Recordes de titãs",
+  "records_titans_total": "Titãs totais",
+  "empire_close": "Fechar Império",
+  "trader_hub_tabs_label": "Seções do Trader Hub",
+  "trader_hub_tab_exchange": "Troca de recursos",
+  "trader_hub_tab_scrapyard": "Sucateiro",
+  "trader_hub_tab_collector": "Mercado colecionador"
 }

@@ -128,6 +128,7 @@ Officer erhalten System-Nachricht bei Spende.
 
 - **XP:** Spenden (klein, `DONATION_XP_DAILY_CAP` pro Spieler/Tag) + Projektabschluss (`cost_sum / PROJECT_XP_DIVISOR`) + World-Boss-Schaden (`grant_alliance_xp`, Formel `min(40, damage // 40_000)` in `world_boss.alliance_xp_from_boss_damage`, Ledger auf `world_boss_contributions.alliance_xp`).
 - **Level:** `alliance_level_from_xp()` — schaltet Gebäude/Tech-Voraussetzungen frei, keine Pflicht-Mega-Boni.
+- **Ranking-Allianzpunkte (getrennt von XP):** Im Ranking-Tab „Allianz“ zählt `SUM(member player_scores.score_total)`. Directory-Sortierung nach `alliance_xp` bleibt unverändert.
 
 ## Technologien (serverseitig)
 

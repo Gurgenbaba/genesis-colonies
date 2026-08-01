@@ -14,9 +14,18 @@
   <header class="section-header empire-header">
     <div class="section-header-row">
       <h1 class="section-title">{{ T("empire_title", "Empire") }}</h1>
-      {% if CODEX_PRIMARY %}
-      {% include "partials/codex_context_btn.html" %}
-      {% endif %}
+      <div class="empire-header-actions">
+        {% if CODEX_PRIMARY %}
+        {% include "partials/codex_context_btn.html" %}
+        {% endif %}
+        <button type="button"
+                class="gc-btn gc-btn-ghost empire-focus-close"
+                data-empire-close
+                aria-label="{{ T('empire_close', 'Empire schließen') }}"
+                title="{{ T('empire_close', 'Empire schließen') }} (Esc)">
+          <span aria-hidden="true">×</span>
+        </button>
+      </div>
     </div>
     <p class="section-hint hint">{{ T("empire_hint", "Gesamtübersicht deines Imperiums.") }}</p>
   </header>

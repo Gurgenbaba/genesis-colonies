@@ -7451,5 +7451,20 @@
   "gd_politics_badge_stance": "Position seule · pas de buff",
   "auction_house_rotation_clock_hint": "Moment de la prochaine vérification de rotation côté serveur",
   "auction_house_my_bids_nav_hint": "Aller aux lots où vous êtes en tête",
-  "admin_votes_col_player_name": "Joueur"
+  "admin_votes_col_player_name": "Joueur",
+  "ranking_tab_world_boss": "Boss Mondial",
+  "ranking_col_world_boss": "Dégâts",
+  "ranking_tab_alliance": "Alliance",
+  "ranking_col_alliance": "Points d'alliance",
+  "ranking_my_alliance_rank": "Votre alliance",
+  "ranking_alliance_members": "Membres",
+  "records_group_fleet": "Records de vaisseaux",
+  "records_group_defense": "Records de défense",
+  "records_group_titans": "Records de titans",
+  "records_titans_total": "Titans au total",
+  "empire_close": "Fermer l'Empire",
+  "trader_hub_tabs_label": "Sections du Trader Hub",
+  "trader_hub_tab_exchange": "Échange de ressources",
+  "trader_hub_tab_scrapyard": "Ferrailleur",
+  "trader_hub_tab_collector": "Marché collectionneur"
 }

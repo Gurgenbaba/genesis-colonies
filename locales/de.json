@@ -7451,5 +7451,20 @@
   "gd_politics_badge_stance": "Nur Haltung · kein Buff",
   "auction_house_rotation_clock_hint": "Zeitpunkt der nächsten serverseitigen Rotationsprüfung",
   "auction_house_my_bids_nav_hint": "Zu den Lots springen, bei denen du führst",
-  "admin_votes_col_player_name": "Spieler"
+  "admin_votes_col_player_name": "Spieler",
+  "ranking_tab_world_boss": "World Boss",
+  "ranking_col_world_boss": "Schaden",
+  "ranking_tab_alliance": "Allianz",
+  "ranking_col_alliance": "Allianzpunkte",
+  "ranking_my_alliance_rank": "Deine Allianz",
+  "ranking_alliance_members": "Mitglieder",
+  "records_group_fleet": "Schiffs-Rekorde",
+  "records_group_defense": "Verteidigungs-Rekorde",
+  "records_group_titans": "Titanen-Rekorde",
+  "records_titans_total": "Titanen gesamt",
+  "empire_close": "Empire schließen",
+  "trader_hub_tabs_label": "Trader Hub Bereiche",
+  "trader_hub_tab_exchange": "Ress Tausch",
+  "trader_hub_tab_scrapyard": "Schrotthändler",
+  "trader_hub_tab_collector": "Sammler Markt"
 }

@@ -50,17 +50,23 @@
 
 {% macro collector_offer_card(offer) %}
 
-<article class="collector-offer-card{% if offer.can_redeem %} is-redeemable{% elif not offer.rewards_ready|default(true) %} is-locked{% elif (offer.progress_pct|default(0)|int) <= 0 %} is-dim{% endif %}"
+<article class="collector-offer-card inventory-item-card{% if offer.can_redeem %} is-redeemable{% elif not offer.rewards_ready|default(true) %} is-locked{% elif (offer.progress_pct|default(0)|int) <= 0 %} is-dim{% endif %}"
 
          data-offer-key="{{ offer.offer_key }}"
 
          data-collector-offer="{{ offer.offer_key }}">
 
-  <div class="collector-offer-main">
+  <div class="inventory-item-card-hero collector-offer-hero" aria-hidden="true">
+    <span class="collector-offer-hero-icon">✦</span>
+    <span class="inventory-item-amount gc-mono"
+          data-collector-owned-badge="{{ offer.offer_key }}">{{ offer.owned|fmt_int_compact }}/{{ offer.input_amount|fmt_int_compact }}</span>
+  </div>
+
+  <div class="collector-offer-main inventory-item-card-body">
 
     <div class="collector-offer-headline">
 
-      <h3 class="collector-offer-title">{{ collector_offer_title(offer) }}</h3>
+      <h3 class="collector-offer-title inventory-item-name">{{ collector_offer_title(offer) }}</h3>
 
       <p class="collector-offer-reward-line hint">{{ collector_offer_reward_line(offer) }}</p>
 
@@ -96,6 +102,11 @@
 
       </div>
 
+    </div>
+
+  </div>
+
+  <div class="inventory-item-card-actions collector-offer-actions">
       <button type="button"
               class="gc-btn gc-btn-primary gc-btn-sm collector-redeem-btn"
               data-collector-redeem="{{ offer.offer_key }}"
@@ -108,9 +119,6 @@
         {{ T('collector_missing_fragments', 'Fehlende Fragmente') }}
         {% endif %}
       </button>
-
-    </div>
-
   </div>
 
   <details class="collector-offer-details">

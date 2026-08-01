@@ -202,6 +202,21 @@ def test_empire_route_pjax_compatible(empire_db, monkeypatch):
     html = res.get_data(as_text=True)
     assert 'id="empire-page"' in html
 
+
+def test_empire_focus_close_control(empire_db, monkeypatch):
+    """GC-Emp-01: Empire focus mode exposes close control; CSS contract present."""
+    client, _player_id, _app = _login_client(empire_db, monkeypatch)
+    res = client.get('/empire')
+    assert res.status_code == 200
+    html = res.get_data(as_text=True)
+    assert 'data-empire-close' in html
+    assert 'empire-focus-close' in html
+    css = (ROOT / 'static' / 'style.css').read_text(encoding='utf-8')
+    assert 'gc-empire-focus' in css
+    js = (ROOT / 'static' / 'main.js').read_text(encoding='utf-8')
+    assert 'empireCloseFocus' in js
+    assert 'gc-empire-focus' in js
+
 def test_empire_nav_link_in_base_template():
     # The right-hand nav links (incl. Empire) were extracted into
     # partials/sidebar_right.html, which base.html includes twice (desktop +

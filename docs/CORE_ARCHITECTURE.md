@@ -69,7 +69,9 @@ Zusätzlich: Header, Resource Bar, Bottom Utility Dock (Support, Tickets, legal,
 | Sidebars pro Seite togglen, um Content-Breite zu erzwingen | Tablet 992–1279px: rechte Sidebar als Drawer |
 | Paralleles Layout-System neben `.gc-layout--dual` | Ein Shell-Grid in `base.html`; PJAX tauscht nur `#main-content` |
 
-**Regel:** Navigation niemals auf Desktop verstecken — breite Module passen sich an, nicht die Shell.
+**Ausnahme GC-Emp-01 — Empire Focus Mode:** Auf `/empire` setzt `initEmpire` `body.gc-empire-focus`. Sidebars **schieben** per CSS (`translateX`) kurzzeitig weg; Shell-Owner bleibt `.gc-layout--dual` (kein zweites Layout). Schließen: X (`data-empire-close`) oder Escape → Fokus entfernen + `GC.navigateTo` zurück / `/overview`. PJAX-Cleanup entfernt den Fokus. Kein dauerhaftes Ausblenden anderer Routen.
+
+**Regel:** Navigation niemals auf Desktop verstecken — breite Module passen sich an, nicht die Shell. (Empire Focus ist die einzige dokumentierte Ausnahme.)
 
 Details: [ARCHITECTURE.md](ARCHITECTURE.md) — Navigation Shell (GC-806).
 

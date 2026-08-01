@@ -137,15 +137,32 @@ def test_trader_hub_uses_genesis_window_layout(trader_hub_db, monkeypatch):
     assert res.status_code == 200
     html = res.get_data(as_text=True)
     assert "trader-hub-shell" in html
-    assert "trader-hub-content-grid" in html
+    assert "trader-hub-panels" in html
+    assert "data-trader-hub-tab" in html
+    assert "data-trader-hub-panel=\"exchange\"" in html
+    assert "data-trader-hub-panel=\"scrapyard\"" in html
+    assert "data-trader-hub-panel=\"collector\"" in html
     assert "trader-hub-subpanel" in html
     assert "trader-hub-daily-panel" in html
     assert "data-exchange-daily-used" in html
     assert "gc-exchange-panel" in html
     assert "gc-scrapyard-panel" in html
+    assert "gc-scrapyard-card-grid" in html
+    # Daily formula lives on exchange panel only (not above all tabs).
+    exchange_idx = html.find('data-trader-hub-panel="exchange"')
+    scrap_idx = html.find('data-trader-hub-panel="scrapyard"')
+    daily_idx = html.find("trader-hub-daily-panel")
+    assert exchange_idx != -1 and scrap_idx != -1 and daily_idx != -1
+    assert exchange_idx < daily_idx < scrap_idx
     assert "trader-hub-layout" not in html
     assert "trader-hub-resources" not in html
     assert "gc-trader-panel" in html
+    scrap_tpl = (ROOT / "templates" / "partials" / "scrapyard_panel.html").read_text(encoding="utf-8")
+    assert "gc-scrapyard-refund" in scrap_tpl
+    assert "fmt_int_compact" in scrap_tpl
+    js = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+    assert "_traderHubSelectTab" in js
+    assert "formatNumberCompact(minVal)" in js
 
 
 def test_trader_hub_contrast_css_contract():
