@@ -946,6 +946,100 @@ def list_messages(
         conn.close()
 
 
+def _enrich_expedition_pirate_combat_message(
+    message: dict[str, Any],
+    *,
+    player_id: int,
+    conn,
+) -> dict[str, Any]:
+    """Merge expo salvage/debris meta into older Void-Pirate combat reports (read-time)."""
+    if not isinstance(message, dict):
+        return message
+    if str(message.get("category") or "") != "combat":
+        return message
+    meta = dict(message.get("metadata") or {})
+    if str(meta.get("combat_kind") or "").strip().lower() != "expedition_pirate":
+        return message
+    fleet_id = meta.get("fleet_id")
+    if fleet_id is None:
+        return message
+    debris = dict(meta.get("debris") or {})
+    needs_salvage = (
+        int(debris.get("harvested_metal") or 0) <= 0
+        and int(debris.get("harvested_crystal") or 0) <= 0
+    )
+    needs_flags = debris.get("expedition_field") is None and debris.get("galaxy_persisted") is None
+    if not needs_salvage and not needs_flags and debris:
+        return message
+    if not _table_ready(conn):
+        return message
+    fleet_sql = _json_text_path_sql("metadata_json", "fleet_id")
+    cur = conn.cursor()
+    cur.execute(
+        f"""
+        SELECT metadata_json
+        FROM player_messages
+        WHERE recipient_player_id = ?
+          AND category = 'expedition'
+          AND {_not_deleted_sql()}
+          AND CAST({fleet_sql} AS TEXT) = ?
+        ORDER BY id DESC
+        LIMIT 1;
+        """,
+        (int(player_id), str(int(fleet_id))),
+    )
+    row = cur.fetchone()
+    if not row:
+        # Still mark as expedition field so UI hides dead attack/recycle CTAs.
+        if debris:
+            debris.setdefault("expedition_field", True)
+            meta["debris"] = debris
+            message = dict(message)
+            message["metadata"] = meta
+        return message
+    expo_meta = _parse_metadata(row["metadata_json"]) or {}
+    expo_debris = dict(expo_meta.get("debris") or {})
+    if not expo_debris and not debris:
+        return message
+    merged = dict(debris)
+    merged["expedition_field"] = True
+    for key in (
+        "harvested_metal",
+        "harvested_crystal",
+        "galaxy_persisted",
+        "coords",
+        "galaxy",
+        "system",
+        "position",
+        "total_metal",
+        "total_crystal",
+        "recycler_slots_needed",
+        "metal",
+        "crystal",
+        "ttl",
+        "recycler_protected",
+    ):
+        if key in expo_debris and (
+            merged.get(key) in (None, "", 0, {})
+            or (key.startswith("harvested_") and int(merged.get(key) or 0) <= 0)
+            or (key in ("metal", "crystal") and expo_debris.get("galaxy_persisted"))
+        ):
+            merged[key] = expo_debris[key]
+    # Prefer expo remainder amounts when combat still has full auto-built totals.
+    if expo_debris.get("galaxy_persisted") or expo_debris.get("expedition_field"):
+        if "metal" in expo_debris:
+            merged["metal"] = expo_debris["metal"]
+        if "crystal" in expo_debris:
+            merged["crystal"] = expo_debris["crystal"]
+        if "recycler_slots_needed" in expo_debris:
+            merged["recycler_slots_needed"] = expo_debris["recycler_slots_needed"]
+    meta["debris"] = merged
+    meta["expedition_pirate"] = True
+    message = dict(message)
+    message["metadata"] = meta
+    return message
+
+
 def get_message(player_id: int, message_id: int, *, mark_read: bool = True) -> dict[str, Any]:
     conn = db()
     try:
@@ -998,7 +1092,12 @@ def get_message(player_id: int, message_id: int, *, mark_read: bool = True) -> d
             )
             row = cur.fetchone()
 
-        return _with_unread(player_id, {"message": _row_to_dict(row)}, conn=conn)
+        message = _enrich_expedition_pirate_combat_message(
+            _row_to_dict(row),
+            player_id=int(player_id),
+            conn=conn,
+        )
+        return _with_unread(player_id, {"message": message}, conn=conn)
     finally:
         conn.close()
 

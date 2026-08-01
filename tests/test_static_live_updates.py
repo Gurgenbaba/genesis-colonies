@@ -997,6 +997,11 @@ def test_gc700e_combat_report_ux_residuals():
     assert "combat_report_kind_world_boss" in js
     assert ".gc-combat-report-actions" in css
     assert ".gc-combat-kind-badge--pirate" in css
+    action_bar = js.split("function renderCombatReportActionBar(meta)")[1].split(
+        "function combatKindBadgeHtml"
+    )[0]
+    assert 'kind === "expedition_pirate"' in action_bar
+    assert "Number(coords.position) === 16" in action_bar
 
 def test_gc700d_combat_debris_recycler_ux():
     """GC-700D/E: debris metadata UX — recycler hint + one-click send CTA."""
@@ -1020,6 +1025,23 @@ def test_gc700d_combat_debris_recycler_ux():
     assert "gc-combat-debris-actions" in css
     assert '"combat_report_debris_recycler_needed"' in en
     assert '"combat_report_send_recycler"' in de
+    # Expo pirate remainder: galaxy_persisted unlocks recycle CTA; auto-built expo debris must not.
+    panel_fn = js.split("function renderCombatDebrisPanel(meta)")[1].split("function renderCombatSideCard")[0]
+    assert "galaxy_persisted" in panel_fn
+    assert "showRecycleCta" in panel_fn
+    assert "isExpoPirate" in panel_fn
+    assert "expedition_report_debris_galaxy_persisted" in panel_fn
+    assert "%(coords)s" in panel_fn or 'persistCoords' in panel_fn
+    en_json = json.loads(en)
+    de_json = json.loads(de)
+    assert "%(coords)s" in en_json["expedition_report_debris_galaxy_persisted"]
+    assert "%(coords)s" in de_json["expedition_report_debris_galaxy_persisted"]
+    ring = _read("templates/partials/galaxy_ring_view.html")
+    expo_block = ring.split("data-galaxy-ring-slot-wrap=\"expedition\"")[1].split(
+        "data-galaxy-ring-inspector-panel=\"expedition\""
+    )[0]
+    assert "galaxy_ring_debris_marker.html" in expo_block
+    assert "galaxy_debris_block.html" in ring.split("data-galaxy-ring-inspector-panel=\"expedition\"")[1][:800]
 
 
 def test_gc700db_galaxy_debris_ux():

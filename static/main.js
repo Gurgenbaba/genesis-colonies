@@ -35064,6 +35064,67 @@
     GC.playWorldBossAttackFx = wbPlayAttackFx;
     GC.applyWorldBossAttackResult = wbApplyAttackResult;
 
+    /** Sync HP bar from shared event state (other players' hits while you stay on page). */
+    const wbSyncSharedBossHp = (card, eventRow) => {
+      if (!card || !eventRow) return false;
+      const maxHp = Math.max(
+        1,
+        Math.trunc(Number(eventRow.max_hp || card.getAttribute("data-wb-max-hp") || 1))
+      );
+      const hp = Math.max(0, Math.trunc(Number(eventRow.current_hp || 0)));
+      const bar = card.querySelector("[data-wb-hp-bar]");
+      const prevRaw = card.dataset.wbSyncedHp;
+      const prevHp =
+        prevRaw != null && prevRaw !== ""
+          ? Math.trunc(Number(prevRaw) || 0)
+          : Math.trunc(Number(bar?.getAttribute("data-wb-hp") || NaN));
+      if (Number.isFinite(prevHp) && hp === prevHp) {
+        if (String(eventRow.status || "") === "defeated" && card.getAttribute("data-wb-status") !== "defeated") {
+          wbApplyAttackResult(card, { boss: { defeated: true }, player: {}, attack: {} });
+        }
+        return false;
+      }
+      const dropped = Number.isFinite(prevHp) && hp < prevHp;
+      card.dataset.wbSyncedHp = String(hp);
+      const hpPct = Math.max(0, Math.min(100, (hp / maxHp) * 100));
+      const phase =
+        eventRow.phase != null ? Number(eventRow.phase) : wbPhaseFromPct(hpPct);
+      const hpFill = card.querySelector("[data-wb-hp-fill]");
+      const hpText = card.querySelector("[data-wb-hp-text]");
+      const art = card.querySelector("[data-wb-boss-art]");
+      const stage = card.querySelector("[data-wb-stage]");
+      if (hpFill) hpFill.style.width = `${hpPct}%`;
+      if (bar) {
+        bar.setAttribute("aria-valuenow", String(Math.round(hpPct)));
+        bar.setAttribute("data-wb-hp", String(hp));
+        bar.classList.remove("gc-wb-phase-1", "gc-wb-phase-2", "gc-wb-phase-3", "gc-wb-phase-0");
+        bar.classList.add(`gc-wb-phase-${phase}`);
+        if (dropped) {
+          bar.classList.add("is-hit");
+          const clearHit = () => bar.classList.remove("is-hit");
+          if (typeof GC.setSafeTimeout === "function") GC.setSafeTimeout(clearHit, 420);
+          else setTimeout(clearHit, 420);
+        }
+      }
+      if (hpText) {
+        hpText.innerHTML =
+          `${wbFmtInt(hp)} / ${wbFmtInt(maxHp)} ` +
+          `<span class="gc-world-boss-hp-pct">(${hpPct.toFixed(1)}%)</span>`;
+      }
+      [art, stage, card].forEach((el) => {
+        if (!el || !el.classList) return;
+        el.classList.remove("gc-wb-phase-1", "gc-wb-phase-2", "gc-wb-phase-3", "gc-wb-phase-0");
+        el.classList.add(`gc-wb-phase-${phase}`);
+      });
+      if (art) art.setAttribute("data-wb-hp-phase", String(phase));
+      card.setAttribute("data-wb-hp-phase", String(phase));
+      card.setAttribute("data-wb-max-hp", String(maxHp));
+      if (String(eventRow.status || "") === "defeated") {
+        wbApplyAttackResult(card, { boss: { defeated: true }, player: {}, attack: {} });
+      }
+      return dropped;
+    };
+
     /** Play auto-attack FX while staying on the WB page (flush strike or damage delta). */
     const wbConsumeAutoPresentation = (card, payload) => {
       if (!card || !payload) return false;
@@ -35075,6 +35136,9 @@
         if (hitAt) card.dataset.wbLastHitAt = String(hitAt);
         wbApplyAttackResult(card, strike);
         wbPlayAttackFx(card, strike.attack, strike.boss);
+        if (strike.boss && strike.boss.hp != null) {
+          card.dataset.wbSyncedHp = String(Math.max(0, Math.trunc(Number(strike.boss.hp) || 0)));
+        }
         if (strike.player && strike.player.total_damage != null) {
           card.dataset.wbPlayerDamage = String(strike.player.total_damage);
         }
@@ -35128,6 +35192,7 @@
             defeated: String(eventRow.status || "") === "defeated",
           }
         );
+        card.dataset.wbSyncedHp = String(hp);
         return true;
       }
       if (dmg !== prev) card.dataset.wbPlayerDamage = String(dmg);
@@ -35135,12 +35200,10 @@
     };
     GC.consumeWorldBossAutoPresentation = wbConsumeAutoPresentation;
 
-    // While Auto is on, poll so follow-up strikes (flush / fleet_worker) show FX on-page.
-    const wbAutoPollTick = () => {
+    // Live HP + auto FX while on the World Boss page (own strikes and other players).
+    const wbLivePollTick = () => {
       const card = root.querySelector(".gc-world-boss-card");
       if (!card || !card.isConnected) return;
-      const autoOn = card.querySelector("[data-wb-auto-attack][data-wb-auto-enabled='1']");
-      if (!autoOn) return;
       if (card.dataset.wbAutoPollBusy === "1") return;
       card.dataset.wbAutoPollBusy = "1";
       fetch("/api/world-boss", {
@@ -35150,7 +35213,11 @@
       })
         .then((r) => (r && r.ok ? r.json() : null))
         .then((payload) => {
-          if (payload && card.isConnected) wbConsumeAutoPresentation(card, payload);
+          if (!payload || !card.isConnected) return;
+          wbConsumeAutoPresentation(card, payload);
+          const evCard = Array.isArray(payload.events) ? payload.events[0] : null;
+          const eventRow = payload.event || (evCard && evCard.event) || null;
+          wbSyncSharedBossHp(card, eventRow);
         })
         .catch(() => null)
         .finally(() => {
@@ -35159,8 +35226,8 @@
     };
     const wbAutoPollId =
       typeof GC.setSafeInterval === "function"
-        ? GC.setSafeInterval(wbAutoPollTick, 1000)
-        : setInterval(wbAutoPollTick, 1000);
+        ? GC.setSafeInterval(wbLivePollTick, 1000)
+        : setInterval(wbLivePollTick, 1000);
     if (typeof GC.registerCleanup === "function") {
       GC.registerCleanup(() => {
         if (typeof GC.clearSafeInterval === "function") GC.clearSafeInterval(wbAutoPollId);

@@ -1699,6 +1699,7 @@ def publish_expedition_pirate_combat_report(
     movement_id: int,
     locale: str | None = None,
     conn=None,
+    debris: Mapping[str, Any] | None = None,
 ) -> Dict[str, Any] | None:
     """Inbox combat report for Expo pirate fights — real ``simulate_battle`` rounds."""
     from .combat import WINNER_ATTACKER, WINNER_DEFENDER, publish_attack_combat_report
@@ -1744,6 +1745,24 @@ def publish_expedition_pirate_combat_report(
     fighting, _recyclers = split_expedition_pirate_fleets(attacking_ships)
     remaining = dict(pc.get("remaining_ships") or {})
     pirate_name = tr("combat_report_expedition_pirate_name", "Void Pirates", locale=locale)
+    extra: Dict[str, Any] = {
+        "theater_synthetic": False,
+        "expedition_pirate": True,
+        "real_battle": True,
+        "pirate_points": pirate_points,
+        "expedition_hull_value": max(0, int(pc.get("expedition_hull_value") or 0)),
+        "escort_combat_value": max(0, int(pc.get("escort_combat_value") or 0)),
+        "escort_ratio": float(pc.get("escort_ratio") or 0.0),
+        "fleet_points": max(0, int(pc.get("fleet_points") or 0)),
+        "fighting_score": max(0, int(pc.get("fighting_score") or pc.get("fleet_points") or 0)),
+        "rounds_fought": max(0, int(pc.get("rounds_fought") or len(pc.get("rounds") or []))),
+        "recycler_protected": True,
+        "combat_research_applicable": True,
+        "defender_combat_research_na": True,
+    }
+    if debris:
+        # Prefer expedition remainder/onboard meta over auto-built full-loss debris.
+        extra["debris"] = dict(debris)
     return publish_attack_combat_report(
         attacker_id=int(player_id),
         defender_id=0,
@@ -1760,21 +1779,7 @@ def publish_expedition_pirate_combat_report(
         conn=conn,
         attacker_locale=locale,
         combat_kind="expedition_pirate",
-        extra_metadata={
-            "theater_synthetic": False,
-            "expedition_pirate": True,
-            "real_battle": True,
-            "pirate_points": pirate_points,
-            "expedition_hull_value": max(0, int(pc.get("expedition_hull_value") or 0)),
-            "escort_combat_value": max(0, int(pc.get("escort_combat_value") or 0)),
-            "escort_ratio": float(pc.get("escort_ratio") or 0.0),
-            "fleet_points": max(0, int(pc.get("fleet_points") or 0)),
-            "fighting_score": max(0, int(pc.get("fighting_score") or pc.get("fleet_points") or 0)),
-            "rounds_fought": max(0, int(pc.get("rounds_fought") or len(pc.get("rounds") or []))),
-            "recycler_protected": True,
-            "combat_research_applicable": True,
-            "defender_combat_research_na": True,
-        },
+        extra_metadata=extra,
     )
 
 
@@ -1798,9 +1803,19 @@ def resolve_expedition_pirate_debris(
     remaining_ships: Mapping[str, int],
     ship_losses: Mapping[str, int],
     pirate_combat: Mapping[str, Any],
+    galaxy: int | None = None,
+    system: int | None = None,
+    position: int | None = None,
+    conn=None,
 ) -> Dict[str, Any] | None:
-    """Ephemeral pirate debris field — recyclers aboard salvage during the same expedition."""
-    from .combat import build_combat_debris_metadata, calculate_combat_debris
+    """Pirate debris: onboard reclaimers salvage first; remainder persists as galaxy debris_fields."""
+    from .combat import (
+        DEBRIS_FIELD_TTL_SECONDS,
+        add_debris_field,
+        calculate_combat_debris,
+        estimate_recycler_slots_needed,
+    )
+    from .fleet_defs import EXPEDITION_POSITION
 
     player_losses = {str(k): int(v) for k, v in (ship_losses or {}).items() if int(v or 0) > 0}
     pirate_losses = {
@@ -1820,11 +1835,59 @@ def resolve_expedition_pirate_debris(
     if recycler_cap > 0:
         collected = _load_debris_into_recycler_cargo(metal, crystal, recycler_cap)
 
-    debris_meta = dict(build_combat_debris_metadata(player_losses, pirate_losses) or {})
-    debris_meta["expedition_field"] = True
-    debris_meta["recycler_protected"] = bool(pirate_combat.get("recycler_protected"))
-    debris_meta["harvested_metal"] = int(collected.get("metal") or 0)
-    debris_meta["harvested_crystal"] = int(collected.get("crystal") or 0)
+    harvested_m = max(0, int(collected.get("metal") or 0))
+    harvested_c = max(0, int(collected.get("crystal") or 0))
+    rem_m = max(0, int(metal) - harvested_m)
+    rem_c = max(0, int(crystal) - harvested_c)
+
+    galaxy_persisted = False
+    field_totals = {"metal": rem_m, "crystal": rem_c}
+    g = int(galaxy) if galaxy is not None else 0
+    s = int(system) if system is not None else 0
+    p = int(position) if position is not None else int(EXPEDITION_POSITION)
+    if rem_m > 0 or rem_c > 0:
+        if conn is not None and g > 0 and s > 0 and p > 0:
+            try:
+                field_totals = add_debris_field(g, s, p, rem_m, rem_c, conn=conn)
+                # Schema-not-ready returns zeros without raising — treat as not persisted.
+                if int(field_totals.get("metal") or 0) + int(field_totals.get("crystal") or 0) > 0:
+                    galaxy_persisted = True
+                else:
+                    field_totals = {"metal": rem_m, "crystal": rem_c}
+                    galaxy_persisted = False
+            except Exception:
+                import logging
+
+                logging.getLogger(__name__).exception(
+                    "expedition pirate debris persist failed at [%s:%s:%s]",
+                    g,
+                    s,
+                    p,
+                )
+                field_totals = {"metal": rem_m, "crystal": rem_c}
+                galaxy_persisted = False
+
+    debris_meta: Dict[str, Any] = {
+        "metal": max(0, int(field_totals.get("metal") or 0)) if galaxy_persisted else rem_m,
+        "crystal": max(0, int(field_totals.get("crystal") or 0)) if galaxy_persisted else rem_c,
+        "ttl": int(DEBRIS_FIELD_TTL_SECONDS),
+        "recycler_slots_needed": estimate_recycler_slots_needed(rem_m, rem_c),
+        "expedition_field": True,
+        "galaxy_persisted": bool(galaxy_persisted),
+        "recycler_protected": bool(pirate_combat.get("recycler_protected")),
+        "harvested_metal": harvested_m,
+        "harvested_crystal": harvested_c,
+        "total_metal": int(metal),
+        "total_crystal": int(crystal),
+    }
+    if galaxy_persisted or (g > 0 and s > 0):
+        debris_meta["galaxy"] = g
+        debris_meta["system"] = s
+        debris_meta["position"] = p
+        from .galaxy import format_coordinates
+
+        debris_meta["coords"] = format_coordinates(g, s, p)
+
     return {
         "debris": debris_meta,
         "collected": collected,
@@ -1846,6 +1909,9 @@ def resolve_expedition_outcome(
     familiarity_status: str | None = None,
     player_id: int | None = None,
     conn=None,
+    target_galaxy: int | None = None,
+    target_system: int | None = None,
+    target_position: int | None = None,
 ) -> Dict[str, Any]:
     """Idempotent expedition resolution keyed by movement id."""
     flags = dict(directive_flags or {})
@@ -2034,6 +2100,10 @@ def resolve_expedition_outcome(
             remaining_ships=fleet_after,
             ship_losses=ship_losses,
             pirate_combat=pirate_combat,
+            galaxy=target_galaxy,
+            system=target_system,
+            position=target_position,
+            conn=conn,
         )
         if debris_out:
             debris_meta = dict(debris_out.get("debris") or {})
@@ -2235,11 +2305,21 @@ def build_expedition_report(
                         resource=_t("resource_crystal", "Crytite"),
                     )
                 )
-        else:
+        elif not debris.get("galaxy_persisted"):
             body_lines.append(
                 _t(
                     "expedition_report_debris_uncollected",
                     "Debris field created — no reclaimer aboard to salvage.",
+                )
+            )
+        if debris.get("galaxy_persisted") and (
+            int(debris.get("metal") or 0) + int(debris.get("crystal") or 0) > 0
+        ):
+            body_lines.append(
+                _t(
+                    "expedition_report_debris_galaxy_persisted",
+                    "A debris field formed in the galaxy at %(coords)s — send reclaimers to harvest the remainder.",
+                    coords=str(debris.get("coords") or coords or "—"),
                 )
             )
 

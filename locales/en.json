@@ -2541,6 +2541,7 @@
   "expedition_report_cargo_jackpot_badge": "Jackpot ×%(mult)s",
   "expedition_report_debris_recycler_salvaged": "Reclaimers salvaged during the expedition",
   "expedition_report_debris_uncollected": "Debris field created — no reclaimer aboard to salvage.",
+  "expedition_report_debris_galaxy_persisted": "A debris field formed in the galaxy at %(coords)s — send reclaimers to harvest the remainder.",
   "expedition_report_delivery_notice": "Reward is credited when the fleet returns to the origin planet.",
   "expedition_report_efficiency_notice": "Daily expedition efficiency was %(pct)s%% for this run.",
   "expedition_report_legendary_ancient_beacon_beacon": "The beacon unlocked a sealed cache from a forgotten age.",

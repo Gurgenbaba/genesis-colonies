@@ -189,8 +189,9 @@
                  data-galaxy-ring-slot-wrap="expedition"
                  data-orbit-band="expedition"
                  data-orbit-angle="-148">
+              {% set slot = exp_slot %}
               <button type="button"
-                      class="galaxy-ring-slot galaxy-ring-slot--expedition is-expedition is-empty"
+                      class="galaxy-ring-slot galaxy-ring-slot--expedition is-expedition is-empty{% if slot.has_debris %} has-debris{% endif %}"
                       id="galaxy-slot-expedition"
                       data-galaxy-ring-slot="expedition"
                       data-galaxy-ring-fleet-href="{{ url_for('fleet_view') }}?target_galaxy={{ nav.galaxy or 1 }}&target_system={{ nav.system or 1 }}&target_position={{ exp_slot.position }}&mission=expedition"
@@ -203,6 +204,8 @@
                   <span class="galaxy-ring-slot-pos gc-mono" aria-hidden="true">{{ exp_slot.position }}</span>
                 </span>
               </button>
+              {% include "partials/galaxy_ring_debris_marker.html" %}
+              {% include "partials/galaxy_ring_slot_hover_stack.html" %}
             </div>
             {% endif %}
           </div>
@@ -294,6 +297,9 @@
               {{ galaxy_coord_link(slot.coordinates_formatted) }}
             </div>
             <p class="galaxy-slot-empty-hint">{{ T("galaxy_expedition_slot_hint") }}</p>
+            {% if slot.has_debris %}
+            {% include "partials/galaxy_debris_block.html" %}
+            {% endif %}
             <div class="galaxy-ring-inspector-actions">
               {% include "partials/galaxy_fleet_actions.html" %}
             </div>

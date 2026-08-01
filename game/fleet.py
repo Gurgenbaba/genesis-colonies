@@ -2037,11 +2037,19 @@ def mission_safe_expedition(target: Tuple[int, int, int]) -> bool:
     return int(target[2]) == EXPEDITION_POSITION
 
 
-def build_expedition_slot(galaxy: int, system: int) -> Dict[str, Any]:
-    """Synthetic galaxy slot for expedition position 16."""
+def build_expedition_slot(
+    galaxy: int,
+    system: int,
+    *,
+    conn=None,
+) -> Dict[str, Any]:
+    """Synthetic galaxy slot for expedition position 16 (may carry combat debris)."""
+    from .combat import get_debris_at_field
+    from .galaxy import _attach_debris_to_slot
+
     g, s = int(galaxy), int(system)
     coords = format_coordinates(g, s, EXPEDITION_POSITION)
-    return {
+    slot: Dict[str, Any] = {
         "position": EXPEDITION_POSITION,
         "occupied": False,
         "is_expedition_slot": True,
@@ -2065,6 +2073,19 @@ def build_expedition_slot(galaxy: int, system: int) -> Dict[str, Any]:
         "is_highlighted": False,
         "colony_target": False,
     }
+    if conn is not None:
+        debris = get_debris_at_field(g, s, EXPEDITION_POSITION, conn=conn)
+        _attach_debris_to_slot(
+            slot,
+            debris if (int(debris.get("metal") or 0) + int(debris.get("crystal") or 0)) > 0 else None,
+            galaxy=g,
+            system=s,
+            position=EXPEDITION_POSITION,
+        )
+    else:
+        slot["has_debris"] = False
+        slot["debris"] = {"metal": 0, "crystal": 0, "total": 0, "has_debris": False}
+    return slot
 
 
 def _enrich_movement_world_target(
@@ -5347,6 +5368,8 @@ def _handle_expedition_holding_end(movement: Dict[str, Any], *, conn, now: float
             familiarity_status, _ = familiarity_from_count(count)
         except Exception:
             familiarity_status = None
+    tg = int(movement.get("target_galaxy") or 0)
+    ts = int(movement.get("target_system") or 0)
     outcome = resolve_expedition_outcome(
         movement_id,
         cargo_total=cargo_total,
@@ -5360,6 +5383,9 @@ def _handle_expedition_holding_end(movement: Dict[str, Any], *, conn, now: float
         familiarity_status=familiarity_status,
         player_id=int(player_id),
         conn=conn,
+        target_galaxy=tg or None,
+        target_system=ts or None,
+        target_position=int(EXPEDITION_POSITION) if tg > 0 and ts > 0 else None,
     )
     rewards = dict(outcome["rewards"])
     if world_key:
@@ -5507,12 +5533,17 @@ def _handle_expedition_holding_end(movement: Dict[str, Any], *, conn, now: float
             publish_expedition_pirate_combat_report(
                 player_id=int(player_id),
                 player_name=_player_name(player_id, conn=conn),
-                coords=str(report_coords or ""),
+                coords=str(
+                    (outcome.get("debris") or {}).get("coords")
+                    or report_coords
+                    or ""
+                ),
                 attacking_ships=ships,
                 pirate_combat=outcome.get("pirate_combat") or {},
                 movement_id=int(movement_id),
                 locale=sender_locale,
                 conn=conn,
+                debris=outcome.get("debris"),
             )
         except Exception:
             logger.exception(

@@ -650,7 +650,7 @@ def test_pirate_protects_recyclers_from_combat_losses():
 
 
 def test_pirate_encounter_with_recycler_always_harvests_when_debris_exists():
-    """GC-EXPO-P2: if recyclers were sent, surviving cargo salvages ephemeral TF."""
+    """GC-EXPO-P2: if recyclers were sent, surviving cargo salvages TF (remainder may persist)."""
     import random
 
     ships = {"solar_skiff": 80, "harvest_reclaimer": 1}
@@ -665,11 +665,12 @@ def test_pirate_encounter_with_recycler_always_harvests_when_debris_exists():
         if debris is None:
             continue
         assert int(debris["recycler_cap"]) == 20_000
-        field_total = int(debris["debris"].get("metal") or 0) + int(debris["debris"].get("crystal") or 0)
+        field = debris["debris"]
+        total_debris = int(field.get("total_metal") or 0) + int(field.get("total_crystal") or 0)
         collected_total = int(debris["collected"].get("metal") or 0) + int(
             debris["collected"].get("crystal") or 0
         )
-        if field_total > 0:
+        if total_debris > 0:
             assert collected_total > 0
             harvested_any = True
     assert harvested_any
@@ -1016,7 +1017,210 @@ def test_pirate_debris_uses_real_defender_losses():
     )
     if debris is None:
         pytest.skip("no debris from sampled battle")
-    assert int(debris["debris"].get("metal") or 0) + int(debris["debris"].get("crystal") or 0) > 0
+    field = debris["debris"]
+    assert int(field.get("total_metal") or field.get("metal") or 0) + int(
+        field.get("total_crystal") or field.get("crystal") or 0
+    ) > 0
+
+
+def test_pirate_debris_persists_remainder_to_galaxy(fleet_db):
+    """Onboard reclaimers harvest first; remainder lands in debris_fields at G:S:16."""
+    from game.combat import get_debris_at_field
+    from game.db import db
+    from game.fleet import build_expedition_slot
+    from game.fleet_defs import EXPEDITION_POSITION
+    from game.galaxy import get_debris_for_system
+
+    fleet = {"solar_skiff": 50, "falcon_interceptor": 200, "harvest_reclaimer": 1}
+    remaining, losses = apply_expedition_ship_losses(fleet, 40)
+    assert sum(losses.values()) > 0
+    conn = db()
+    try:
+        debris = resolve_expedition_pirate_debris(
+            remaining_ships=remaining,
+            ship_losses=losses,
+            pirate_combat={
+                "won": True,
+                "pirate_points": 80_000,
+                "recycler_protected": True,
+                "defender_losses": {"falcon_interceptor": 80},
+            },
+            galaxy=1,
+            system=2,
+            position=EXPEDITION_POSITION,
+            conn=conn,
+        )
+        assert debris is not None
+        field = debris["debris"]
+        harvested = int(field.get("harvested_metal") or 0) + int(field.get("harvested_crystal") or 0)
+        assert harvested > 0
+        rem = int(field.get("metal") or 0) + int(field.get("crystal") or 0)
+        total = int(field.get("total_metal") or 0) + int(field.get("total_crystal") or 0)
+        assert rem == total - harvested
+        if rem > 0:
+            assert field.get("galaxy_persisted") is True
+            stored = get_debris_at_field(1, 2, EXPEDITION_POSITION, conn=conn)
+            assert int(stored.get("metal") or 0) + int(stored.get("crystal") or 0) == rem
+            assert field.get("coords")
+            by_pos = get_debris_for_system(1, 2, conn)
+            assert EXPEDITION_POSITION in by_pos
+            expo_slot = build_expedition_slot(1, 2, conn=conn)
+            assert expo_slot.get("has_debris") is True
+        else:
+            assert field.get("galaxy_persisted") is False
+    finally:
+        conn.close()
+
+
+def test_pirate_debris_without_recycler_persists_full_field(fleet_db):
+    """No reclaimers aboard → entire combat debris persists at expo slot."""
+    from game.combat import get_debris_at_field
+    from game.db import db
+    from game.fleet_defs import EXPEDITION_POSITION
+
+    fleet = {"solar_skiff": 80, "falcon_interceptor": 120}
+    remaining, losses = apply_expedition_ship_losses(fleet, 25)
+    conn = db()
+    try:
+        debris = resolve_expedition_pirate_debris(
+            remaining_ships=remaining,
+            ship_losses=losses,
+            pirate_combat={
+                "won": False,
+                "pirate_points": 60_000,
+                "defender_losses": {"spark_drone": 25},
+            },
+            galaxy=3,
+            system=4,
+            position=EXPEDITION_POSITION,
+            conn=conn,
+        )
+        assert debris is not None
+        field = debris["debris"]
+        assert int(field.get("harvested_metal") or 0) == 0
+        rem = int(field.get("metal") or 0) + int(field.get("crystal") or 0)
+        assert rem > 0
+        assert field.get("galaxy_persisted") is True
+        stored = get_debris_at_field(3, 4, EXPEDITION_POSITION, conn=conn)
+        assert int(stored.get("metal") or 0) + int(stored.get("crystal") or 0) == rem
+    finally:
+        conn.close()
+
+
+def test_pirate_debris_full_recycler_cap_skips_persist(fleet_db):
+    """When reclaimers carry the entire field, nothing is written to debris_fields."""
+    from game.combat import get_debris_at_field
+    from game.db import db
+    from game.fleet_defs import EXPEDITION_POSITION
+
+    # Huge recycler cargo vs tiny losses → full onboard harvest.
+    remaining = {"solar_skiff": 10, "harvest_reclaimer": 50}
+    losses = {"solar_skiff": 2}
+    conn = db()
+    try:
+        debris = resolve_expedition_pirate_debris(
+            remaining_ships=remaining,
+            ship_losses=losses,
+            pirate_combat={
+                "won": True,
+                "pirate_points": 1_000,
+                "recycler_protected": True,
+                "defender_losses": {"spark_drone": 1},
+            },
+            galaxy=5,
+            system=6,
+            position=EXPEDITION_POSITION,
+            conn=conn,
+        )
+        assert debris is not None
+        field = debris["debris"]
+        rem = int(field.get("metal") or 0) + int(field.get("crystal") or 0)
+        harvested = int(field.get("harvested_metal") or 0) + int(field.get("harvested_crystal") or 0)
+        assert harvested > 0
+        assert rem == 0
+        assert field.get("galaxy_persisted") is False
+        stored = get_debris_at_field(5, 6, EXPEDITION_POSITION, conn=conn)
+        assert int(stored.get("metal") or 0) + int(stored.get("crystal") or 0) == 0
+    finally:
+        conn.close()
+
+
+def test_old_pirate_combat_report_enriched_with_expo_salvage(fleet_db):
+    """Read-time: old Void-Pirate combat reports inherit recycler salvage from expo report."""
+    import json
+    import time
+    import uuid
+
+    from game.db import db
+    from game.messages import get_message
+    from game.models import create_user
+
+    ok, err, user = create_user(f"expo_salvage_{uuid.uuid4().hex[:8]}", "test-pass-123")
+    assert ok and user, err
+    pid = int(user["id"])
+    fleet_id = 909090
+    now = int(time.time())
+    expo_meta = {
+        "fleet_id": fleet_id,
+        "event_key": "pirate_encounter",
+        "report_version": 2,
+        "debris": {
+            "metal": 5000,
+            "crystal": 2000,
+            "harvested_metal": 1_176_460_000,
+            "harvested_crystal": 0,
+            "expedition_field": True,
+            "galaxy_persisted": True,
+            "coords": "[1:77:16]",
+            "position": 16,
+        },
+    }
+    combat_meta = {
+        "fleet_id": fleet_id,
+        "combat_kind": "expedition_pirate",
+        "report_version": 2,
+        "target_coords": "[1:77:16]",
+        "debris": {
+            "metal": 77_000_000_000,
+            "crystal": 37_000_000_000,
+            "recycler_slots_needed": 5000000,
+        },
+    }
+    conn = db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO player_messages (
+                recipient_player_id, sender_player_id, sender_name,
+                category, subject, body, is_read, is_archived,
+                metadata_json, created_at
+            ) VALUES (?, NULL, 'System', 'expedition', 'Expo', 'body', 1, 0, ?, ?);
+            """,
+            (pid, json.dumps(expo_meta), now),
+        )
+        cur.execute(
+            """
+            INSERT INTO player_messages (
+                recipient_player_id, sender_player_id, sender_name,
+                category, subject, body, is_read, is_archived,
+                metadata_json, created_at
+            ) VALUES (?, NULL, 'System', 'combat', 'Combat', 'body', 0, 0, ?, ?);
+            """,
+            (pid, json.dumps(combat_meta), now),
+        )
+        combat_id = int(cur.lastrowid)
+        conn.commit()
+    finally:
+        conn.close()
+
+    got = get_message(pid, combat_id, mark_read=False)
+    assert got["ok"]
+    debris = (got["data"]["message"].get("metadata") or {}).get("debris") or {}
+    assert debris.get("expedition_field") is True
+    assert int(debris.get("harvested_metal") or 0) == 1_176_460_000
+    assert int(debris.get("metal") or 0) == 5000
+    assert debris.get("galaxy_persisted") is True
 
 
 def test_ion_storm_delay_within_flight_fraction():

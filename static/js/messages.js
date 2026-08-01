@@ -385,7 +385,10 @@
   function renderCombatReportActionBar(meta) {
     const kind = String(meta?.combat_kind || "").trim().toLowerCase();
     // Special PvE fights are not re-attackable via normal fleet prefill.
-    if (kind === "world_boss" || kind === "pirate_base") return "";
+    if (kind === "world_boss" || kind === "pirate_base" || kind === "expedition_pirate") return "";
+    const coords = parseTargetCoordsForFleet(meta?.target_coords);
+    // Expedition slot (pos 16) has no planet to attack.
+    if (coords && Number(coords.position) === 16) return "";
     const attackHref = fleetAttackHrefFromCoords(meta?.target_coords);
     if (!attackHref) return "";
     return (
@@ -808,14 +811,21 @@
     if (!raw || typeof raw !== "object") return null;
     const metal = Math.max(0, Number(raw.metal) || 0);
     const crystal = Math.max(0, Number(raw.crystal) || 0);
-    if (metal <= 0 && crystal <= 0) return null;
+    const harvestedMetal = Math.max(0, Number(raw.harvested_metal ?? raw.harvested?.metal) || 0);
+    const harvestedCrystal = Math.max(
+      0,
+      Number(raw.harvested_crystal ?? raw.harvested?.crystal) || 0
+    );
+    if (metal <= 0 && crystal <= 0 && harvestedMetal <= 0 && harvestedCrystal <= 0) return null;
     return {
       metal,
       crystal,
       ttl: Math.max(0, Number(raw.ttl) || 0),
       recycler_slots_needed: Math.max(0, Number(raw.recycler_slots_needed) || 0),
-      harvested_metal: Math.max(0, Number(raw.harvested_metal ?? raw.harvested?.metal) || 0),
-      harvested_crystal: Math.max(0, Number(raw.harvested_crystal ?? raw.harvested?.crystal) || 0),
+      harvested_metal: harvestedMetal,
+      harvested_crystal: harvestedCrystal,
+      galaxy_persisted: Boolean(raw.galaxy_persisted),
+      coords: raw.coords || "",
     };
   }
 
@@ -843,10 +853,20 @@
   function renderCombatDebrisPanel(meta) {
     const debris = combatDebrisPayload(meta);
     if (!debris) return "";
-    const recycleHref = fleetRecycleHrefFromCoords(meta?.target_coords);
+    const recycleCoords = debris.coords || meta?.target_coords;
+    const recycleHref = fleetRecycleHrefFromCoords(recycleCoords);
     const footerParts = [];
     const isExpeditionField = Boolean(meta?.debris?.expedition_field);
-    if (!isExpeditionField && debris.recycler_slots_needed > 0) {
+    const isExpoPirate = Boolean(
+      meta?.expedition_pirate || String(meta?.combat_kind || "") === "expedition_pirate"
+    );
+    const galaxyPersisted = Boolean(debris.galaxy_persisted || meta?.debris?.galaxy_persisted);
+    // Expo pirate: only offer recycle when remainder was written to debris_fields.
+    // Auto-built full-loss debris must not show a dead CTA (no_debris_at_target).
+    const showRecycleCta =
+      (debris.metal > 0 || debris.crystal > 0) &&
+      (galaxyPersisted || (!isExpeditionField && !isExpoPirate));
+    if (showRecycleCta && debris.recycler_slots_needed > 0) {
       footerParts.push(
         `<div class="gc-combat-debris-hint">${esc(
           t("combat_report_debris_recycler_needed", "Recyclers needed: %(count)s").replace(
@@ -888,8 +908,19 @@
         )}</div>`
       );
     }
-    if (recycleHref && !isExpeditionField) {
-      const c = parseTargetCoordsForFleet(meta?.target_coords);
+    if (galaxyPersisted && (debris.metal > 0 || debris.crystal > 0)) {
+      const persistCoords = debris.coords || meta?.target_coords || "";
+      footerParts.push(
+        `<div class="gc-combat-debris-hint">${esc(
+          t(
+            "expedition_report_debris_galaxy_persisted",
+            "A debris field formed in the galaxy at %(coords)s — send reclaimers to harvest the remainder."
+          ).replace("%(coords)s", persistCoords || "—")
+        )}</div>`
+      );
+    }
+    if (recycleHref && showRecycleCta) {
+      const c = parseTargetCoordsForFleet(recycleCoords);
       const needed = Math.max(0, Number(debris.recycler_slots_needed) || 0);
       if (c && needed > 0) {
         footerParts.push(

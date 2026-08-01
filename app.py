@@ -1966,6 +1966,7 @@ def galaxy_view():
     galactic_diplomacy_banner: dict[str, Any] = {"visible": False}
     galaxy_nav: dict[str, Any] = {}
     system_data: dict[str, Any] = {"galaxy": galaxy, "system": system, "slots": []}
+    expedition_slot = None
     try:
         try:
             active_planet_id = get_active_planet_id(user_id, conn=conn) or None
@@ -2020,6 +2021,7 @@ def galaxy_view():
                 active_planet_id=active_planet_id,
                 highlight_position=highlight_pos,
             )
+            expedition_slot = build_expedition_slot(galaxy, system, conn=conn)
     finally:
         conn.close()
 
@@ -2036,7 +2038,7 @@ def galaxy_view():
         viewer_player_id=user_id,
         # Required for PJAX: inject_globals skips HEADER_ACTIVE_PLANET on X-PJAX.
         active_planet_id=active_planet_id,
-        expedition_slot=build_expedition_slot(galaxy, system) if view != "command_map" else None,
+        expedition_slot=expedition_slot,
         orbit_radii=galaxy_ring_orbit_radii_payload() if view != "command_map" else None,
         hold_mission_enabled=hold_mission_enabled,
         has_seed_ark=has_seed_ark,

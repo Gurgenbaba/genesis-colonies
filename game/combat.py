@@ -1662,7 +1662,10 @@ def publish_attack_combat_report(
         metadata["combat_kind"] = kind
     if extra_metadata:
         for key, value in dict(extra_metadata).items():
-            if key not in metadata or metadata.get(key) in (None, "", 0, {}):
+            # Expedition pirate debris carries onboard/remainder meta — always win over auto-build.
+            if key == "debris" and value is not None:
+                metadata[key] = value
+            elif key not in metadata or metadata.get(key) in (None, "", 0, {}):
                 metadata[key] = value
     from .messages import dispatch_combat_reports
 

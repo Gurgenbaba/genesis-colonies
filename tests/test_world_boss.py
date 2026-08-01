@@ -267,7 +267,8 @@ def test_world_boss_galaxy_ui_contracts():
     assert "GC.playWorldBossAttackFx" in main_js
     assert "GC.consumeWorldBossAutoPresentation" in main_js
     assert "flushed_attacks" in main_js
-    assert "wbAutoPollTick" in main_js or "wbAutoPoll" in main_js
+    assert "wbLivePollTick" in main_js or "wbAutoPollTick" in main_js or "wbAutoPoll" in main_js
+    assert "wbSyncSharedBossHp" in main_js
     assert "consumeWorldBossAutoPresentation" in main_js
     assert "wbFlushAutoUntilFired" in main_js
     assert "wbCdUntil" in main_js

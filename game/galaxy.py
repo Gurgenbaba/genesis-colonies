@@ -683,9 +683,15 @@ def get_debris_for_system(
         SELECT position, metal, crystal, updated_at
         FROM debris_fields
         WHERE galaxy = ? AND system = ?
-          AND position BETWEEN ? AND ?;
+          AND (position BETWEEN ? AND ? OR position = ?);
         """,
-        (int(galaxy), int(system), POSITION_MIN, POSITION_MAX),
+        (
+            int(galaxy),
+            int(system),
+            POSITION_MIN,
+            POSITION_MAX,
+            EXPEDITION_SLOT_POSITION,
+        ),
     )
     for row in cur.fetchall():
         pos = int(row["position"])
