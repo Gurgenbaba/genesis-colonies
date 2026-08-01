@@ -33,11 +33,20 @@ No analytics / marketing cookies.
 
 ## Operator checklist (outside code)
 
-- [ ] AV / DPA / SCC with **Railway** (hosting)
-- [ ] AV / terms with **SMTP** provider
-- [ ] PayPal / Stripe merchant privacy settings reviewed
-- [ ] Discord developer app privacy / webhook scope reviewed
-- [ ] If edge-tts / OpenAI enabled: document in privacy + review provider terms
+### Auftragsverarbeiter (Art. 28) — AV/DPA möglich
+
+- [x] **Railway** hosting — DPA abgeschlossen (2026-08)
+- [ ] SMTP provider AV / terms (if transactional mail is live)
+- [ ] If edge-tts / OpenAI enabled: review provider DPA/terms
+
+### Eigenständige Verantwortliche — kein Art.-28-AV
+
+- [x] **PayPal** — kein AV; PayPal ist Zahlungsdienstleister / eigener Verantwortlicher (ggf. gemeinsame Verantwortlichkeit). Privacy: https://www.paypal.com/myaccount/privacy/privacyhub — Merchant-Einstellungen geprüft / dokumentiert
+- [ ] **Stripe** (nur falls `SHOP_ENABLE_STRIPE=1`) — eigener Provider; Stripe DPA im Dashboard akzeptieren falls genutzt
+- [ ] **Discord** OAuth / support webhooks — Privacy Policy & scopes reviewed
+
+### Sonstiges
+
 - [ ] Confirm no third-party analytics snippets were added to templates
 
 ## Tax / shop orders

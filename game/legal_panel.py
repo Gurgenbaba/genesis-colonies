@@ -16,7 +16,7 @@ OPERATOR_CITY = "Breitungen"
 OPERATOR_COUNTRY = "Deutschland"
 OPERATOR_EMAIL = "r.finn2303@gmail.com"
 OPERATOR_ADDRESS_LINE = f"{OPERATOR_STREET}, {OPERATOR_POSTAL} {OPERATOR_CITY}"
-LEGAL_TEXT_VERSION = "v2"
+LEGAL_TEXT_VERSION = "v2.1"
 LEGAL_STAND = "01.08.2026"
 
 DOC_IMPRINT = "imprint"
@@ -172,18 +172,23 @@ def _de_strings() -> Dict[str, str]:
             "Ein Opt-in für Analyse-/Marketing-Cookies ist nicht erforderlich, weil solche "
             "Cookies nicht verwendet werden."
         ),
-        "legal_privacy_recipients_title": "Empfänger / Auftragsverarbeitung",
+        "legal_privacy_recipients_title": "Empfänger und Verantwortlichkeiten",
         "legal_privacy_recipients_body": (
             "Je nach Nutzung können Daten an folgende Empfänger gelangen:\n\n"
-            "- **Railway** (Hosting der Spielserver)\n"
+            "**Auftragsverarbeiter (Art. 28 DSGVO)**\n"
+            "- **Railway** (Hosting der Spielserver) — AV-/DPA-Vertrag abgeschlossen\n"
             "- **SMTP-Anbieter** (E-Mail-Verifikation / Passwort-Reset, sofern konfiguriert)\n"
-            "- **PayPal** und ggf. **Stripe** (Shop-Zahlungen)\n"
-            "- **Discord** (optionaler Login / Support-Benachrichtigungen)\n"
-            "- optional **Microsoft edge-tts** (Story-Vorlesen, sofern aktiviert)\n"
-            "- optional **OpenAI** (Namens-Moderation, sofern per Konfiguration aktiv)\n\n"
-            "Mit Auftragsverarbeitern werden soweit erforderlich AV-Verträge bzw. "
-            "Standardvertragsklauseln der Anbieter genutzt. Übermittlungen in Drittländer "
-            "(insb. USA) erfolgen nur über die genannten Dienste mit deren Garantien."
+            "- optional **Microsoft edge-tts** / **OpenAI** (nur wenn per Konfiguration aktiv)\n\n"
+            "**Eigenständige Verantwortliche (kein AV nach Art. 28)**\n"
+            "- **PayPal** (Shop-Zahlungen) — PayPal verarbeitet Zahlungsdaten als eigener "
+            "Verantwortlicher bzw. im Rahmen gemeinsamer Verantwortlichkeit; ein AV-Vertrag "
+            "wird von PayPal nicht angeboten. Details: "
+            "https://www.paypal.com/myaccount/privacy/privacyhub\n"
+            "- ggf. **Stripe** (falls aktiv) — eigener Zahlungsdienstleister, siehe deren DPA/Privacy\n"
+            "- **Discord** (optionaler Login / Support-Benachrichtigungen) — eigener Anbieter, "
+            "siehe Discord Privacy Policy\n\n"
+            "Übermittlungen in Drittländer (insb. USA) erfolgen nur über die genannten Dienste "
+            "mit deren Garantien (z. B. SCCs der Anbieter)."
         ),
         "legal_privacy_rights_title": "Ihre Rechte",
         "legal_privacy_rights_body": (
@@ -399,17 +404,21 @@ def _en_strings() -> Dict[str, str]:
             "Legal basis: contract performance / legitimate interest in a working service. "
             "No analytics/marketing cookie opt-in is needed because those cookies are not used."
         ),
-        "legal_privacy_recipients_title": "Recipients / processors",
+        "legal_privacy_recipients_title": "Recipients and roles",
         "legal_privacy_recipients_body": (
             "Depending on use, data may go to:\n\n"
-            "- **Railway** (game hosting)\n"
+            "**Processors (Art. 28 GDPR)**\n"
+            "- **Railway** (game hosting) — DPA concluded\n"
             "- **SMTP provider** (email verification / password reset, if configured)\n"
-            "- **PayPal** and optionally **Stripe** (shop payments)\n"
-            "- **Discord** (optional login / support notifications)\n"
-            "- optionally **Microsoft edge-tts** (story TTS, if enabled)\n"
-            "- optionally **OpenAI** (name moderation, if configured)\n\n"
-            "Processor agreements / SCCs of those providers apply where required. "
-            "Transfers to third countries (esp. USA) occur only via these services."
+            "- optionally **Microsoft edge-tts** / **OpenAI** (only if enabled in config)\n\n"
+            "**Independent controllers (not Art. 28 processors)**\n"
+            "- **PayPal** (shop payments) — PayPal processes payment data as its own "
+            "controller (or joint controllership); PayPal does not offer an Art. 28 DPA. "
+            "Details: https://www.paypal.com/myaccount/privacy/privacyhub\n"
+            "- optionally **Stripe** (if enabled) — payment provider; see their DPA/privacy\n"
+            "- **Discord** (optional login / support notifications) — see Discord privacy policy\n\n"
+            "Transfers to third countries (esp. USA) occur only via these services under "
+            "their safeguards (e.g. SCCs)."
         ),
         "legal_privacy_rights_title": "Your rights",
         "legal_privacy_rights_body": (
