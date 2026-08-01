@@ -234,3 +234,98 @@ def test_v091_seed_idempotent(news_db):
     rows = list_news(audience="player", include_drafts=False)
     tags = {str(r.get("version_tag") or "") for r in rows}
     assert "v0.9.1" in tags
+
+
+def test_release_pack_localized_for_game_locale(news_db):
+    from game.i18n import set_request_locale
+    from game.universe_news import news_page_payload
+    from game.universe_news_packs import get_pack_locale
+
+    ensure_v091_release_seeded()
+    de_pack = get_pack_locale("v0.9.1", "de")
+    en_pack = get_pack_locale("v0.9.1", "en")
+    es_pack = get_pack_locale("v0.9.1", "es")
+    assert de_pack and en_pack and es_pack
+    assert de_pack["intro"] != en_pack["intro"]
+
+    set_request_locale("de")
+    de_payload = news_page_payload(locale="de")
+    set_request_locale("en")
+    en_payload = news_page_payload(locale="en")
+    set_request_locale("es")
+    es_payload = news_page_payload(locale="es")
+
+    def _v091(payload):
+        for year in payload.get("timeline") or []:
+            for ver in year.get("versions") or []:
+                if str(ver.get("version_tag") or "") == "v0.9.1":
+                    return ver
+        return None
+
+    de_v = _v091(de_payload)
+    en_v = _v091(en_payload)
+    es_v = _v091(es_payload)
+    assert de_v and en_v and es_v
+    assert de_v["intro"] == de_pack["intro"]
+    assert en_v["intro"] == en_pack["intro"]
+    assert es_v["intro"] == es_pack["intro"]
+    assert en_v["intro"] != de_v["intro"]
+    assert es_v["intro"] != de_v["intro"]
+
+    de_bullets = [
+        e.get("display_title") or e.get("title")
+        for sec in de_v.get("sections") or []
+        for e in sec.get("entries") or []
+    ]
+    en_bullets = [
+        e.get("display_title") or e.get("title")
+        for sec in en_v.get("sections") or []
+        for e in sec.get("entries") or []
+    ]
+    assert de_bullets
+    assert en_bullets
+    assert de_bullets != en_bullets
+
+    set_request_locale("en")
+    wn = whats_new_payload()
+    assert wn.get("show") is True
+    titles = [h.get("title") for h in wn.get("highlights") or []]
+    assert titles
+    assert any(t in en_bullets for t in titles)
+
+
+def test_release_pack_unknown_locale_falls_back(news_db):
+    from game.universe_news_packs import get_pack_locale, localize_release_news_entry
+
+    ensure_v091_release_seeded()
+    en = get_pack_locale("v0.9.1", "en")
+    fallback = get_pack_locale("v0.9.1", "xx")
+    assert fallback == en or fallback == get_pack_locale("v0.9.1", "de")
+
+    entry = {
+        "source_ref": "release:v0.9.1",
+        "version_tag": "v0.9.1",
+        "is_major_release": True,
+        "title": "v0.9.1 — DE",
+        "body": "DE intro",
+    }
+    out = localize_release_news_entry(entry, locale="en")
+    assert out["body"] == en["intro"]
+    assert en["version_label"] in out["title"]
+
+
+def test_publish_release_indexed_source_ref(news_db):
+    result = publish_release_pack(
+        version_tag="v9.8",
+        version_label="Index Test",
+        intro="Lead",
+        added=["Alpha bullet", "Beta bullet"],
+        changed=["Gamma"],
+        fixed=[],
+    )
+    assert result["ok"] is True
+    refs = {str(e.get("source_ref") or "") for e in result.get("entries") or []}
+    assert "release:v9.8" in refs
+    assert "release:v9.8:added:0" in refs
+    assert "release:v9.8:added:1" in refs
+    assert "release:v9.8:changed:0" in refs

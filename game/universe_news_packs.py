@@ -1,0 +1,594 @@
+"""Curated player release packs — multi-locale copy for Universe News.
+
+Owner remains game/universe_news.py. DB seeds store canonical German (de);
+read-path overlays title/body from this module via current_locale().
+"""
+
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional
+
+# Structure per version:
+#   version_tag, release_date, badge,
+#   locales: { loc: { version_label, intro, added, changed, fixed } }
+#
+# German (de) is the canonical seed source.
+
+RELEASE_PACK_I18N: Dict[str, Dict[str, Any]] = {
+    "v0.9": {
+        "version_tag": "v0.9",
+        "release_date": "2026-07-31",
+        "badge": "ALPHA",
+        "locales": {
+            "de": {
+                "version_label": "LiveOps & World Events",
+                "intro": (
+                    "Genesis Colonies lebt: World Bosses, Titanen-Missionen, Piraten, "
+                    "Login/Battle Pass, Allianz-Hub und mehr — Patchnotes für Commander."
+                ),
+                "added": [
+                    "World Boss Events mit Encounter-Stage, Sofort-Angriff und Auto-Angriff",
+                    "Zähmen in Phase 3 (10 % Chance, 10h Timekeeper, 1h Cooldown)",
+                    "Titanen auf der Übersicht mit Titan-Link Popover",
+                    "Ark-Token-Missionen: Patrouille, Schlag und Void-Run mit Fail-Risiko",
+                    "Titan-Slots: Start 1, im Shop erweiterbar bis 4",
+                    "Piraten-Ökosystem als lebendige Bedrohung",
+                    "Login-Kalender und Battle Pass",
+                    "Allianz-Hub mit Spenden, Projekten, Tech und Boni",
+                    "Convenience-Shop (Stripe / PayPal)",
+                    "Story Ops / Lore Sidequests mit Free-Shop Ark-Token Loop",
+                ],
+                "changed": [
+                    "Titanen größer und mit Aura — lesbar auf hellen und dunklen Landscapes",
+                    "Titan-Hotspots ohne Auswahl-Rahmen — nur Glow/Aura",
+                    "World Boss: Angriff, Auto und Zähmen in einer Action-Bar",
+                    "Performance und Live-Updates weiter gehärtet",
+                    "UI-Feinschliff über Overview, Fleet und News",
+                ],
+                "fixed": [
+                    "Diverse Sync- und PJAX-Themen",
+                    "Timer- und Queue-Stabilität",
+                    "Viele kleine Darstellungsfehler aus dem Alpha-Feedback",
+                    "Titan-Link: Mission-Ende sofort sichtbar (ohne langes Warten)",
+                ],
+            },
+            "en": {
+                "version_label": "LiveOps & World Events",
+                "intro": (
+                    "Genesis Colonies is alive: World Bosses, Titan missions, pirates, "
+                    "login/Battle Pass, Alliance Hub and more — patch notes for commanders."
+                ),
+                "added": [
+                    "World Boss Events with encounter stage, instant attack and auto-attack",
+                    "Taming in phase 3 (10% chance, 10h Timekeeper, 1h cooldown)",
+                    "Titans on Overview with Titan-Link popover",
+                    "Ark-Token missions: Patrol, Strike and Void-Run with fail risk",
+                    "Titan slots: start at 1, expandable to 4 in the shop",
+                    "Pirate ecosystem as a living threat",
+                    "Login calendar and Battle Pass",
+                    "Alliance Hub with donations, projects, tech and bonuses",
+                    "Convenience shop (Stripe / PayPal)",
+                    "Story Ops / lore sidequests with Free Shop Ark-Token loop",
+                ],
+                "changed": [
+                    "Titans larger with aura — readable on light and dark landscapes",
+                    "Titan hotspots without selection frames — glow/aura only",
+                    "World Boss: attack, auto and tame in one action bar",
+                    "Performance and live updates hardened further",
+                    "UI polish across Overview, Fleet and News",
+                ],
+                "fixed": [
+                    "Various sync and PJAX issues",
+                    "Timer and queue stability",
+                    "Many small display bugs from alpha feedback",
+                    "Titan-Link: mission end visible immediately (no long wait)",
+                ],
+            },
+            "es": {
+                "version_label": "LiveOps y eventos mundiales",
+                "intro": (
+                    "Genesis Colonies cobra vida: World Bosses, misiones de Titanes, piratas, "
+                    "login/Battle Pass, Hub de alianza y más — notas para comandantes."
+                ),
+                "added": [
+                    "Eventos World Boss con fase de encuentro, ataque inmediato y autoataque",
+                    "Domesticar en fase 3 (10 % de probabilidad, 10 h Timekeeper, 1 h de enfriamiento)",
+                    "Titanes en la vista general con popover Titan-Link",
+                    "Misiones Ark-Token: Patrulla, Golpe y Void-Run con riesgo de fallo",
+                    "Ranuras de Titán: empieza en 1, ampliables a 4 en la tienda",
+                    "Ecosistema pirata como amenaza viva",
+                    "Calendario de login y Battle Pass",
+                    "Hub de alianza con donaciones, proyectos, tech y bonos",
+                    "Tienda de conveniencia (Stripe / PayPal)",
+                    "Story Ops / misiones secundarias de lore con bucle Free Shop Ark-Token",
+                ],
+                "changed": [
+                    "Titanes más grandes con aura — legibles en paisajes claros y oscuros",
+                    "Hotspots de Titán sin marco de selección — solo brillo/aura",
+                    "World Boss: ataque, auto y domesticar en una barra de acción",
+                    "Rendimiento y actualizaciones en vivo más robustos",
+                    "Pulido de UI en Overview, Flota y Noticias",
+                ],
+                "fixed": [
+                    "Varios problemas de sync y PJAX",
+                    "Estabilidad de temporizadores y colas",
+                    "Muchos errores visuales pequeños del feedback alpha",
+                    "Titan-Link: fin de misión visible al instante (sin larga espera)",
+                ],
+            },
+            "fr": {
+                "version_label": "LiveOps & événements mondiaux",
+                "intro": (
+                    "Genesis Colonies vit : World Bosses, missions Titan, pirates, "
+                    "login/Battle Pass, Hub d'alliance et plus — notes pour les commandants."
+                ),
+                "added": [
+                    "Événements World Boss avec phase de rencontre, attaque instantanée et auto-attaque",
+                    "Apprivoisement en phase 3 (10 % de chance, 10 h Timekeeper, 1 h de recharge)",
+                    "Titans sur l'aperçu avec popover Titan-Link",
+                    "Missions Ark-Token : Patrouille, Frappe et Void-Run avec risque d'échec",
+                    "Emplacements Titan : démarre à 1, extensible à 4 dans la boutique",
+                    "Écosystème pirate comme menace vivante",
+                    "Calendrier de connexion et Battle Pass",
+                    "Hub d'alliance avec dons, projets, tech et bonus",
+                    "Boutique de confort (Stripe / PayPal)",
+                    "Story Ops / quêtes secondaires lore avec boucle Free Shop Ark-Token",
+                ],
+                "changed": [
+                    "Titans plus grands avec aura — lisibles sur paysages clairs et sombres",
+                    "Hotspots Titan sans cadre de sélection — glow/aura seulement",
+                    "World Boss : attaque, auto et apprivoiser dans une barre d'actions",
+                    "Performances et mises à jour live encore renforcées",
+                    "Polish UI sur Overview, Flotte et Actualités",
+                ],
+                "fixed": [
+                    "Divers problèmes de sync et PJAX",
+                    "Stabilité des timers et files d'attente",
+                    "Nombreux petits bugs d'affichage issus du feedback alpha",
+                    "Titan-Link : fin de mission visible immédiatement (sans longue attente)",
+                ],
+            },
+            "pl": {
+                "version_label": "LiveOps i wydarzenia światowe",
+                "intro": (
+                    "Genesis Colonies żyje: World Bosses, misje Tytanów, piraci, "
+                    "login/Battle Pass, Hub sojuszu i więcej — notatki dla dowódców."
+                ),
+                "added": [
+                    "Wydarzenia World Boss z fazą starcia, natychmiastowym atakiem i auto-atakiem",
+                    "Oswajanie w fazie 3 (10 % szansy, 10 h Timekeeper, 1 h odnowienia)",
+                    "Tytani na przeglądzie z popoverem Titan-Link",
+                    "Misje Ark-Token: Patrol, Uderzenie i Void-Run z ryzykiem porażki",
+                    "Sloty Tytana: start 1, w sklepie do 4",
+                    "Ekosystem piracki jako żywe zagrożenie",
+                    "Kalendarz logowania i Battle Pass",
+                    "Hub sojuszu z darowiznami, projektami, tech i bonusami",
+                    "Sklep wygody (Stripe / PayPal)",
+                    "Story Ops / sidequesty lore z pętlą Free Shop Ark-Token",
+                ],
+                "changed": [
+                    "Większe Tytany z aurą — czytelne na jasnych i ciemnych krajobrazach",
+                    "Hotspoty Tytana bez ramki zaznaczenia — tylko glow/aura",
+                    "World Boss: atak, auto i oswajanie w jednym pasku akcji",
+                    "Wydajność i aktualizacje na żywo dalej wzmocnione",
+                    "Dopracowanie UI na Overview, Flocie i News",
+                ],
+                "fixed": [
+                    "Różne problemy sync i PJAX",
+                    "Stabilność timerów i kolejek",
+                    "Wiele drobnych błędów wyświetlania z feedbacku alpha",
+                    "Titan-Link: koniec misji widoczny od razu (bez długiego czekania)",
+                ],
+            },
+            "pt": {
+                "version_label": "LiveOps e eventos mundiais",
+                "intro": (
+                    "Genesis Colonies está vivo: World Bosses, missões de Titãs, piratas, "
+                    "login/Battle Pass, Hub de aliança e mais — notas para comandantes."
+                ),
+                "added": [
+                    "Eventos World Boss com fase de encontro, ataque instantâneo e autoataque",
+                    "Domar na fase 3 (10 % de chance, 10 h Timekeeper, 1 h de recarga)",
+                    "Titãs na visão geral com popover Titan-Link",
+                    "Missões Ark-Token: Patrulha, Golpe e Void-Run com risco de falha",
+                    "Slots de Titã: começa em 1, expansível até 4 na loja",
+                    "Ecossistema pirata como ameaça viva",
+                    "Calendário de login e Battle Pass",
+                    "Hub de aliança com doações, projetos, tech e bônus",
+                    "Loja de conveniência (Stripe / PayPal)",
+                    "Story Ops / sidequests de lore com loop Free Shop Ark-Token",
+                ],
+                "changed": [
+                    "Titãs maiores com aura — legíveis em paisagens claras e escuras",
+                    "Hotspots de Titã sem moldura de seleção — só glow/aura",
+                    "World Boss: ataque, auto e domar numa barra de ações",
+                    "Desempenho e atualizações ao vivo ainda mais sólidos",
+                    "Polimento de UI em Overview, Frota e Notícias",
+                ],
+                "fixed": [
+                    "Vários problemas de sync e PJAX",
+                    "Estabilidade de timers e filas",
+                    "Muitos pequenos bugs de exibição do feedback alpha",
+                    "Titan-Link: fim da missão visível de imediato (sem longa espera)",
+                ],
+            },
+            "ru": {
+                "version_label": "LiveOps и мировые события",
+                "intro": (
+                    "Genesis Colonies живёт: World Bosses, миссии Титанов, пираты, "
+                    "login/Battle Pass, хаб альянса и многое другое — патчноуты для командиров."
+                ),
+                "added": [
+                    "События World Boss с фазой столкновения, мгновенной атакой и автоатакой",
+                    "Приручение в фазе 3 (10 % шанс, 10 ч Timekeeper, 1 ч перезарядка)",
+                    "Титаны на обзоре с поповером Titan-Link",
+                    "Миссии Ark-Token: Патруль, Удар и Void-Run с риском провала",
+                    "Слоты Титана: старт 1, в магазине до 4",
+                    "Пиратская экосистема как живая угроза",
+                    "Календарь входа и Battle Pass",
+                    "Хаб альянса с пожертвованиями, проектами, tech и бонусами",
+                    "Магазин удобств (Stripe / PayPal)",
+                    "Story Ops / лор-сайдквесты с циклом Free Shop Ark-Token",
+                ],
+                "changed": [
+                    "Титаны крупнее с аурой — читаемы на светлых и тёмных ландшафтах",
+                    "Хотспоты Титана без рамки выбора — только glow/aura",
+                    "World Boss: атака, авто и приручение в одной панели действий",
+                    "Производительность и live-обновления ещё надёжнее",
+                    "Полировка UI на Overview, флоте и новостях",
+                ],
+                "fixed": [
+                    "Разные проблемы sync и PJAX",
+                    "Стабильность таймеров и очередей",
+                    "Много мелких ошибок отображения из alpha-фидбека",
+                    "Titan-Link: конец миссии виден сразу (без долгого ожидания)",
+                ],
+            },
+            "tr": {
+                "version_label": "LiveOps ve dünya etkinlikleri",
+                "intro": (
+                    "Genesis Colonies yaşıyor: World Bosses, Titan görevleri, korsanlar, "
+                    "login/Battle Pass, İttifak Hub'ı ve daha fazlası — komutanlar için yama notları."
+                ),
+                "added": [
+                    "Karşılaşma aşaması, anında saldırı ve otomatik saldırı ile World Boss etkinlikleri",
+                    "3. fazda evcilleştirme (%10 şans, 10s Timekeeper, 1s bekleme)",
+                    "Genel bakışta Titan-Link popover'lı Titanlar",
+                    "Ark-Token görevleri: Devriye, Darbe ve başarısızlık riskli Void-Run",
+                    "Titan yuvaları: 1 ile başlar, mağazada 4'e kadar",
+                    "Canlı tehdit olarak korsan ekosistemi",
+                    "Giriş takvimi ve Battle Pass",
+                    "Bağışlar, projeler, tech ve bonuslarla İttifak Hub'ı",
+                    "Kolaylık mağazası (Stripe / PayPal)",
+                    "Free Shop Ark-Token döngülü Story Ops / lore yan görevleri",
+                ],
+                "changed": [
+                    "Aura'lı daha büyük Titanlar — açık ve koyu manzaralarda okunur",
+                    "Seçim çerçevesiz Titan hotspot'ları — yalnızca glow/aura",
+                    "World Boss: saldırı, otomatik ve evcilleştirme tek eylem çubuğunda",
+                    "Performans ve canlı güncellemeler daha da sağlam",
+                    "Overview, Filo ve Haberler'de UI cilası",
+                ],
+                "fixed": [
+                    "Çeşitli sync ve PJAX sorunları",
+                    "Zamanlayıcı ve kuyruk kararlılığı",
+                    "Alpha geri bildiriminden birçok küçük görüntü hatası",
+                    "Titan-Link: görev sonu hemen görünür (uzun bekleme yok)",
+                ],
+            },
+        },
+    },
+    "v0.9.1": {
+        "version_tag": "v0.9.1",
+        "release_date": "2026-08-01",
+        "badge": "ALPHA",
+        "locales": {
+            "de": {
+                "version_label": "Effective Stats & Polyglot Story",
+                "intro": (
+                    "Standardwerte werden zu echten Kampfwerten, Story Ops spricht deine Sprache, "
+                    "und Titanen, Boosts sowie Mobile-UX sind geschärft."
+                ),
+                "added": [
+                    "Story Ops vollständig in acht Sprachen (DE/EN/ES/FR/PL/PT/RU/TR)",
+                    "Vorleser folgt der gewählten Game-Sprache (Neural + Browser-Fallback)",
+                ],
+                "changed": [
+                    "GC-EFFSTAT: Katalog-Stats zeigen effektive Werte inkl. Gesamtbonus-%",
+                    "Commander-, Tech-Tree- und World-Boss-Boosts ehrlich und sichtbar",
+                    "Titan-Link mit wanderndem Progress-Icon und Fire-FX",
+                    "Identity Name-Styles, Logistics Collect von Quell-Kolonien, Mobile Fleet-Details",
+                    "Codex nur noch über Context-Button (keine Quick-Help-Banner)",
+                ],
+                "fixed": [
+                    "EFFSTAT Aktive-Boni: lesbare Labels statt interner Keys; korrekte Direktiven-Beiträge",
+                    "Admins erhalten alle Titan-Slots ohne Shop-Kauf",
+                    "Timekeeper-Finish aktualisiert Karten-Locks und Afford korrekt",
+                ],
+            },
+            "en": {
+                "version_label": "Effective Stats & Polyglot Story",
+                "intro": (
+                    "Catalog base stats become real combat values, Story Ops speaks your language, "
+                    "and Titans, boosts and mobile UX are sharpened."
+                ),
+                "added": [
+                    "Story Ops fully in eight languages (DE/EN/ES/FR/PL/PT/RU/TR)",
+                    "Narrator follows the selected game language (neural + browser fallback)",
+                ],
+                "changed": [
+                    "GC-EFFSTAT: catalog stats show effective values including total bonus %",
+                    "Commander, tech-tree and World Boss boosts honest and visible",
+                    "Titan-Link with wandering progress icon and fire FX",
+                    "Identity name styles, logistics collect from source colonies, mobile fleet details",
+                    "Codex only via context button (no quick-help banners)",
+                ],
+                "fixed": [
+                    "EFFSTAT active bonuses: readable labels instead of internal keys; correct directive contributions",
+                    "Admins receive all Titan slots without a shop purchase",
+                    "Timekeeper finish correctly refreshes card locks and afford state",
+                ],
+            },
+            "es": {
+                "version_label": "Stats efectivos e historia políglota",
+                "intro": (
+                    "Los valores de catálogo pasan a ser valores de combate reales, Story Ops habla tu idioma "
+                    "y Titanes, boosts y UX móvil están más afilados."
+                ),
+                "added": [
+                    "Story Ops completo en ocho idiomas (DE/EN/ES/FR/PL/PT/RU/TR)",
+                    "El narrador sigue el idioma de juego elegido (neural + fallback del navegador)",
+                ],
+                "changed": [
+                    "GC-EFFSTAT: las stats de catálogo muestran valores efectivos incl. % de bonus total",
+                    "Boosts de Commander, árbol tech y World Boss honestos y visibles",
+                    "Titan-Link con icono de progreso móvil y Fire-FX",
+                    "Estilos de nombre Identity, Logistics Collect desde colonias origen, detalles de flota móvil",
+                    "Codex solo por botón de contexto (sin banners quick-help)",
+                ],
+                "fixed": [
+                    "Bonos activos EFFSTAT: etiquetas legibles en lugar de keys internas; aportes de directivas correctos",
+                    "Los admins reciben todas las ranuras de Titán sin comprar en la tienda",
+                    "Timekeeper finish actualiza correctamente bloqueos de carta y afford",
+                ],
+            },
+            "fr": {
+                "version_label": "Stats effectives & Story polyglotte",
+                "intro": (
+                    "Les valeurs catalogue deviennent de vraies valeurs de combat, Story Ops parle votre langue, "
+                    "et Titans, boosts et UX mobile sont affûtés."
+                ),
+                "added": [
+                    "Story Ops entièrement en huit langues (DE/EN/ES/FR/PL/PT/RU/TR)",
+                    "Le narrateur suit la langue de jeu choisie (neural + fallback navigateur)",
+                ],
+                "changed": [
+                    "GC-EFFSTAT : les stats catalogue montrent les valeurs effectives incl. % de bonus total",
+                    "Boosts Commander, arbre tech et World Boss honnêtes et visibles",
+                    "Titan-Link avec icône de progression mobile et Fire-FX",
+                    "Styles de nom Identity, Logistics Collect depuis les colonies sources, détails flotte mobile",
+                    "Codex uniquement via bouton contextuel (plus de bannières quick-help)",
+                ],
+                "fixed": [
+                    "Bonus actifs EFFSTAT : libellés lisibles au lieu de clés internes ; contributions de directives correctes",
+                    "Les admins reçoivent tous les emplacements Titan sans achat boutique",
+                    "Timekeeper finish rafraîchit correctement les verrous de carte et l'afford",
+                ],
+            },
+            "pl": {
+                "version_label": "Efektywne statystyki i wielojęzyczna Story",
+                "intro": (
+                    "Wartości katalogowe stają się prawdziwymi wartościami bojowymi, Story Ops mówi Twoim językiem, "
+                    "a Tytani, boosty i mobilne UX są wyostrzone."
+                ),
+                "added": [
+                    "Story Ops w pełni w ośmiu językach (DE/EN/ES/FR/PL/PT/RU/TR)",
+                    "Lektor podąża za wybranym językiem gry (neural + fallback przeglądarki)",
+                ],
+                "changed": [
+                    "GC-EFFSTAT: statystyki katalogowe pokazują wartości efektywne w tym % łącznego bonusu",
+                    "Boosty Commander, drzewa tech i World Boss uczciwe i widoczne",
+                    "Titan-Link z wędrującą ikoną postępu i Fire-FX",
+                    "Style nazw Identity, Logistics Collect z kolonii źródłowych, szczegóły floty na mobile",
+                    "Codex tylko przez przycisk kontekstu (bez bannerów quick-help)",
+                ],
+                "fixed": [
+                    "Aktywne bonusy EFFSTAT: czytelne etykiety zamiast wewnętrznych kluczy; poprawne wkłady dyrektyw",
+                    "Admini otrzymują wszystkie sloty Tytana bez zakupu w sklepie",
+                    "Timekeeper finish poprawnie odświeża blokady kart i afford",
+                ],
+            },
+            "pt": {
+                "version_label": "Stats efetivos e Story poliglota",
+                "intro": (
+                    "Valores de catálogo viram valores de combate reais, Story Ops fala o seu idioma "
+                    "e Titãs, boosts e UX mobile estão mais afiados."
+                ),
+                "added": [
+                    "Story Ops completo em oito idiomas (DE/EN/ES/FR/PL/PT/RU/TR)",
+                    "O narrador segue o idioma de jogo escolhido (neural + fallback do navegador)",
+                ],
+                "changed": [
+                    "GC-EFFSTAT: stats de catálogo mostram valores efetivos incl. % de bônus total",
+                    "Boosts de Commander, árvore tech e World Boss honestos e visíveis",
+                    "Titan-Link com ícone de progresso móvel e Fire-FX",
+                    "Estilos de nome Identity, Logistics Collect de colônias fonte, detalhes de frota no mobile",
+                    "Codex só via botão de contexto (sem banners quick-help)",
+                ],
+                "fixed": [
+                    "Bônus ativos EFFSTAT: rótulos legíveis em vez de keys internas; contribuições de diretivas corretas",
+                    "Admins recebem todos os slots de Titã sem comprar na loja",
+                    "Timekeeper finish atualiza corretamente locks de carta e afford",
+                ],
+            },
+            "ru": {
+                "version_label": "Эффективные статы и многоязычная Story",
+                "intro": (
+                    "Каталожные значения становятся реальными боевыми, Story Ops говорит на вашем языке, "
+                    "а Титаны, бусты и мобильный UX заточены."
+                ),
+                "added": [
+                    "Story Ops полностью на восьми языках (DE/EN/ES/FR/PL/PT/RU/TR)",
+                    "Диктор следует выбранному языку игры (neural + браузерный fallback)",
+                ],
+                "changed": [
+                    "GC-EFFSTAT: каталожные статы показывают эффективные значения вкл. общий бонус-%",
+                    "Бусты Commander, техдерева и World Boss честные и видимые",
+                    "Titan-Link с блуждающей иконкой прогресса и Fire-FX",
+                    "Стили имён Identity, Logistics Collect с исходных колоний, детали флота на mobile",
+                    "Codex только через context-кнопку (без quick-help баннеров)",
+                ],
+                "fixed": [
+                    "Активные бонусы EFFSTAT: читаемые подписи вместо внутренних ключей; корректные вклады директив",
+                    "Админы получают все слоты Титана без покупки в магазине",
+                    "Timekeeper finish корректно обновляет блокировки карт и afford",
+                ],
+            },
+            "tr": {
+                "version_label": "Efektif istatistikler ve çok dilli Story",
+                "intro": (
+                    "Katalog değerleri gerçek savaş değerlerine dönüşür, Story Ops dilinizi konuşur "
+                    "ve Titanlar, boostlar ile mobil UX keskinleştirildi."
+                ),
+                "added": [
+                    "Story Ops sekiz dilde tam (DE/EN/ES/FR/PL/PT/RU/TR)",
+                    "Anlatıcı seçilen oyun dilini izler (neural + tarayıcı fallback)",
+                ],
+                "changed": [
+                    "GC-EFFSTAT: katalog istatistikleri toplam bonus-% dahil efektif değerleri gösterir",
+                    "Commander, tech ağacı ve World Boss boostları dürüst ve görünür",
+                    "Gezinen ilerleme ikonu ve Fire-FX ile Titan-Link",
+                    "Identity isim stilleri, kaynak kolonilerden Logistics Collect, mobil filo detayları",
+                    "Codex yalnızca bağlam düğmesiyle (quick-help banner yok)",
+                ],
+                "fixed": [
+                    "EFFSTAT aktif bonuslar: iç key yerine okunabilir etiketler; doğru direktif katkıları",
+                    "Adminler mağaza alımı olmadan tüm Titan yuvalarını alır",
+                    "Timekeeper finish kart kilitlerini ve afford'u doğru yeniler",
+                ],
+            },
+        },
+    },
+}
+
+
+def _normalize_tag(version_tag: str) -> str:
+    tag = str(version_tag or "").strip().lower()
+    if tag and not tag.startswith("v"):
+        tag = f"v{tag}"
+    return tag
+
+
+def get_release_pack(version_tag: str) -> Optional[Dict[str, Any]]:
+    return RELEASE_PACK_I18N.get(_normalize_tag(version_tag))
+
+
+def get_pack_locale(version_tag: str, locale: str) -> Optional[Dict[str, Any]]:
+    """Return localized pack slice with fallback en → de."""
+    pack = get_release_pack(version_tag)
+    if not pack:
+        return None
+    locales = pack.get("locales") or {}
+    loc = str(locale or "de").strip().lower().split("-")[0]
+    return locales.get(loc) or locales.get("en") or locales.get("de")
+
+
+def canonical_de_seed(version_tag: str) -> Optional[Dict[str, Any]]:
+    """Flat DE pack for publish_release_pack seeding (single source of truth)."""
+    pack = get_release_pack(version_tag)
+    if not pack:
+        return None
+    de = (pack.get("locales") or {}).get("de")
+    if not de:
+        return None
+    return {
+        "version_tag": pack["version_tag"],
+        "version_label": de["version_label"],
+        "release_date": pack["release_date"],
+        "badge": pack["badge"],
+        "intro": de["intro"],
+        "added": list(de.get("added") or []),
+        "changed": list(de.get("changed") or []),
+        "fixed": list(de.get("fixed") or []),
+    }
+
+
+def localize_release_news_entry(
+    entry: Dict[str, Any],
+    *,
+    locale: str | None = None,
+) -> Dict[str, Any]:
+    """Overlay title/body for release:* rows from multi-locale packs."""
+    from game.i18n import current_locale, normalize_locale
+
+    ref = str(entry.get("source_ref") or "").strip()
+    if not ref.startswith("release:"):
+        return entry
+
+    tag = _normalize_tag(entry.get("version_tag") or "")
+    if not tag:
+        # Parse from source_ref release:v0.9.1 or release:v0.9.1:added:0
+        parts = ref.split(":")
+        if len(parts) >= 2:
+            tag = _normalize_tag(parts[1])
+    pack = get_release_pack(tag)
+    if not pack:
+        return entry
+
+    loc = normalize_locale(locale) if locale is not None else current_locale()
+    loc_slice = get_pack_locale(tag, loc)
+    de_slice = get_pack_locale(tag, "de")
+    if not loc_slice or not de_slice:
+        return entry
+
+    out = dict(entry)
+    is_major = bool(entry.get("is_major_release"))
+    # Major: source_ref == release:{tag} (no section)
+    ref_parts = ref.split(":")
+    if is_major or (len(ref_parts) == 2):
+        label = str(loc_slice.get("version_label") or "").strip()
+        intro = str(loc_slice.get("intro") or "").strip()
+        if label:
+            out["title"] = f"{tag} — {label}"[:200]
+        if intro:
+            out["body"] = intro
+        return out
+
+    section = str(entry.get("entry_section") or "").strip().lower()
+    if section not in ("added", "changed", "fixed"):
+        # Infer from source_ref release:tag:section[:index]
+        if len(ref_parts) >= 3:
+            section = str(ref_parts[2] or "").strip().lower()
+    if section not in ("added", "changed", "fixed"):
+        return out
+
+    de_bullets: List[str] = list(de_slice.get(section) or [])
+    loc_bullets: List[str] = list(loc_slice.get(section) or [])
+    if not de_bullets or not loc_bullets:
+        return out
+
+    body = str(entry.get("body") or "").strip()
+    title = str(entry.get("title") or "").strip()
+    idx: Optional[int] = None
+
+    # Indexed source_ref: release:v0.9.1:added:0
+    if len(ref_parts) >= 4:
+        try:
+            idx = int(ref_parts[3])
+        except (TypeError, ValueError):
+            idx = None
+
+    if idx is None:
+        for candidate in (body, title):
+            if candidate in de_bullets:
+                idx = de_bullets.index(candidate)
+                break
+
+    if idx is None or idx < 0 or idx >= len(loc_bullets):
+        return out
+
+    text = str(loc_bullets[idx] or "").strip()
+    if text:
+        out["title"] = text[:200]
+        out["body"] = text
+    return out

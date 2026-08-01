@@ -1,7 +1,7 @@
 # Universe News — Genesis Timeline (Spieler-Patchnotes)
 
 **Status:** ✅ GC-642 / GC-650 / GC-651 · ✅ GC-NEWS AAAA+ (Release-Publisher, kein Git im Spieler-Pfad)  
-**Owner:** `game/universe_news.py`  
+**Owner:** `game/universe_news.py` (+ Daten `game/universe_news_packs.py`)  
 **Store:** `universe_news` (Audience `player` | `dev`)
 
 ---
@@ -9,7 +9,9 @@
 ## Prinzip
 
 Spieler sehen **nur kuratierte** Patchnotes (`audience=player`).  
-Git-Commits sind **kein** Spieler-Content. `CHANGELOG.md` und Git-Import sind Seed/Dev-Backfill.
+Git-Commits sind **kein** Spieler-Content. `CHANGELOG.md` und Git-Import sind Seed/Dev-Backfill (Dev-Historie, **Deutsch**).
+
+**Locale:** DB speichert kanonisches DE für kuratierte Releases. Read-Path (`_maybe_localize_entry`) overlayt Title/Body aus `universe_news_packs` für `source_ref=release:…` gemäß `current_locale()` (Fallback en→de). World-Boss-EVENT-News bleiben im bestehenden World-Boss-Localize. Admin-Freitext ohne Pack bleibt gespeicherter Text.
 
 | Surface | Quelle |
 |---------|--------|
@@ -79,4 +81,4 @@ Idempotent. Kein Runtime-Git.
 
 ## Tests
 
-`tests/test_universe_news.py`, `tests/test_universe_news_timeline.py` — create/list, publish-release idempotency, no git in `news_page_payload`, v0.9 / v0.9.1 seed, whats-new major, EVENT excluded from timeline but banner-capable.
+`tests/test_universe_news.py`, `tests/test_universe_news_timeline.py` — create/list, publish-release idempotency, no git in `news_page_payload`, v0.9 / v0.9.1 seed, release pack locale overlay, indexed `source_ref`, whats-new major, EVENT excluded from timeline but banner-capable.

@@ -15,6 +15,7 @@ Stand: **2026-08-01** · Spieler-Meilenstein **v0.9 Alpha** · Build-Zähler [`V
 ### Changed
 - **GC-EFFSTAT (Standardwerte)** — Katalog-Stats (Speed/Cargo/Fuel/Kampf) zeigen überall **effektive Werte** inkl. **Gesamtbonus-%** (Shipyard, Defense, Fleet, Detail, Battle Lab)
 - **Story Ops mehrsprachig** — Lore & UI in DE/EN/ES/FR/PL/PT/RU/TR; Vorleser (Neural + Browser-Fallback) folgt der gewählten Game-Sprache
+- **Spieler-Patchnotes lokalisiert** — `/news` und Whats-New zeigen v0.9 / v0.9.1 in der gewählten Game-Sprache
 - Commander-, Tech-Tree- und World-Boss-Boosts ehrlich und sichtbar
 - Titan-Link: Mini-Titan wandert zur Fortschritts-Spitze; clientseitige Fire-FX; Live-Progress überall
 - Codex Quick-Help-Banner entfernt (Codex nur noch über Context-Button)

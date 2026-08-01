@@ -514,6 +514,7 @@ def list_news(
     limit: int = 200,
     include_drafts: bool = False,
     audience: str | None = None,
+    locale: str | None = None,
     conn: sqlite3.Connection | None = None,
 ) -> List[Dict[str, Any]]:
     own = conn is None
@@ -541,13 +542,21 @@ def list_news(
             """,
             tuple(params),
         )
-        return [_maybe_localize_entry(_row_to_entry(row), conn=conn) for row in cur.fetchall()]
+        return [
+            _maybe_localize_entry(_row_to_entry(row), locale=locale, conn=conn)
+            for row in cur.fetchall()
+        ]
     finally:
         if own:
             conn.close()
 
 
-def get_news_entry(news_id: int, *, conn: sqlite3.Connection | None = None) -> Optional[Dict[str, Any]]:
+def get_news_entry(
+    news_id: int,
+    *,
+    locale: str | None = None,
+    conn: sqlite3.Connection | None = None,
+) -> Optional[Dict[str, Any]]:
     own = conn is None
     if own:
         conn = db()
@@ -562,7 +571,7 @@ def get_news_entry(news_id: int, *, conn: sqlite3.Connection | None = None) -> O
             (int(news_id),),
         )
         row = cur.fetchone()
-        return _maybe_localize_entry(_row_to_entry(row), conn=conn) if row else None
+        return _maybe_localize_entry(_row_to_entry(row), locale=locale, conn=conn) if row else None
     finally:
         if own:
             conn.close()
@@ -571,17 +580,25 @@ def get_news_entry(news_id: int, *, conn: sqlite3.Connection | None = None) -> O
 def _maybe_localize_entry(
     entry: Optional[Dict[str, Any]],
     *,
+    locale: str | None = None,
     conn: sqlite3.Connection | None = None,
 ) -> Optional[Dict[str, Any]]:
     if not entry:
         return entry
     ref = str(entry.get("source_ref") or "")
+    if ref.startswith("release:"):
+        try:
+            from game.universe_news_packs import localize_release_news_entry
+
+            return localize_release_news_entry(entry, locale=locale)
+        except Exception:
+            return entry
     if not ref.startswith("world_boss:"):
         return entry
     try:
         from game.world_boss import localize_world_boss_news_entry
 
-        return localize_world_boss_news_entry(entry, conn=conn)
+        return localize_world_boss_news_entry(entry, locale=locale, conn=conn)
     except Exception:
         return entry
 
@@ -910,6 +927,15 @@ def build_player_timeline(
             major = next((r for r in rows if r.get("is_major_release")), None)
             version_label = str(version.get("version_label") or "").strip()
             clean_label = _sanitize_player_text(version_label.split("*")[0])
+            # Prefer curated pack label for known releases (already locale-resolved on entries).
+            try:
+                from game.universe_news_packs import get_pack_locale
+
+                pack_slice = get_pack_locale(tag, locale or "de")
+                if pack_slice and pack_slice.get("version_label"):
+                    clean_label = str(pack_slice["version_label"]).strip()
+            except Exception:
+                pass
             intro = ""
             release_date = ""
             if major:
@@ -999,7 +1025,7 @@ def news_page_payload(*, locale: str | None = None, conn: sqlite3.Connection | N
     from game.i18n import current_locale, normalize_locale
 
     loc = normalize_locale(locale or current_locale())
-    all_entries = list_news(limit=800, conn=conn)
+    all_entries = list_news(limit=800, locale=loc, conn=conn)
     player_entries = [
         e
         for e in all_entries
@@ -1643,7 +1669,7 @@ def publish_release_pack(
             ("fixed", fixed_list, "BUGFIX"),
         )
         for section_key, bullets, category in section_specs:
-            for bullet in bullets:
+            for idx, bullet in enumerate(bullets):
                 entry = create_news(
                     title=bullet[:200],
                     body=bullet,
@@ -1652,7 +1678,7 @@ def publish_release_pack(
                     badge="",
                     is_major_release=False,
                     created_by=created_by,
-                    source_ref=f"release:{tag}:{section_key}",
+                    source_ref=f"release:{tag}:{section_key}:{idx}",
                     published_at=ts,
                     entry_section=section_key,
                     audience=AUDIENCE_PLAYER,
@@ -1673,45 +1699,23 @@ def publish_release_pack(
             conn.close()
 
 
-V09_RELEASE_PACK: Dict[str, Any] = {
-    "version_tag": "v0.9",
-    "version_label": "LiveOps & World Events",
-    "release_date": "2026-07-31",
-    "badge": "ALPHA",
-    "intro": (
-        "Genesis Colonies lebt: World Bosses, Titanen-Missionen, Piraten, "
-        "Login/Battle Pass, Allianz-Hub und mehr — Patchnotes für Commander."
-    ),
-    "added": [
-        "World Boss Events mit Encounter-Stage, Sofort-Angriff und Auto-Angriff",
-        "Zähmen in Phase 3 (10 % Chance, 10h Timekeeper, 1h Cooldown)",
-        "Titanen auf der Übersicht mit Titan-Link Popover",
-        "Ark-Token-Missionen: Patrouille, Schlag und Void-Run mit Fail-Risiko",
-        "Titan-Slots: Start 1, im Shop erweiterbar bis 4",
-        "Piraten-Ökosystem als lebendige Bedrohung",
-        "Login-Kalender und Battle Pass",
-        "Allianz-Hub mit Spenden, Projekten, Tech und Boni",
-        "Convenience-Shop (Stripe / PayPal)",
-        "Story Ops / Lore Sidequests mit Free-Shop Ark-Token Loop",
-    ],
-    "changed": [
-        "Titanen größer und mit Aura — lesbar auf hellen und dunklen Landscapes",
-        "Titan-Hotspots ohne Auswahl-Rahmen — nur Glow/Aura",
-        "World Boss: Angriff, Auto und Zähmen in einer Action-Bar",
-        "Performance und Live-Updates weiter gehärtet",
-        "UI-Feinschliff über Overview, Fleet und News",
-    ],
-    "fixed": [
-        "Diverse Sync- und PJAX-Themen",
-        "Timer- und Queue-Stabilität",
-        "Viele kleine Darstellungsfehler aus dem Alpha-Feedback",
-        "Titan-Link: Mission-Ende sofort sichtbar (ohne langes Warten)",
-    ],
-}
+def _seed_pack_or_raise(version_tag: str) -> Dict[str, Any]:
+    from game.universe_news_packs import canonical_de_seed
+
+    pack = canonical_de_seed(version_tag)
+    if not pack:
+        raise RuntimeError(f"missing canonical DE release pack for {version_tag}")
+    return pack
+
+
+# Back-compat aliases — always DE seed from universe_news_packs (single source).
+V09_RELEASE_PACK: Dict[str, Any] = _seed_pack_or_raise("v0.9")
+V091_RELEASE_PACK: Dict[str, Any] = _seed_pack_or_raise("v0.9.1")
 
 
 def ensure_v09_release_seeded(*, conn: sqlite3.Connection | None = None) -> Dict[str, Any]:
     """Idempotent curated v0.9 player pack (not git)."""
+    pack = _seed_pack_or_raise("v0.9")
     own = conn is None
     if own:
         conn = db()
@@ -1721,15 +1725,15 @@ def ensure_v09_release_seeded(*, conn: sqlite3.Connection | None = None) -> Dict
         if version_has_player_rows("v0.9", conn=conn):
             return {"ok": True, "seeded": False, "reason": "v0.9_exists"}
         result = publish_release_pack(
-            version_tag=V09_RELEASE_PACK["version_tag"],
-            version_label=V09_RELEASE_PACK["version_label"],
-            intro=V09_RELEASE_PACK["intro"],
-            release_date=V09_RELEASE_PACK["release_date"],
-            badge=V09_RELEASE_PACK["badge"],
+            version_tag=pack["version_tag"],
+            version_label=pack["version_label"],
+            intro=pack["intro"],
+            release_date=pack["release_date"],
+            badge=pack["badge"],
             is_major_release=True,
-            added=V09_RELEASE_PACK["added"],
-            changed=V09_RELEASE_PACK["changed"],
-            fixed=V09_RELEASE_PACK["fixed"],
+            added=pack["added"],
+            changed=pack["changed"],
+            fixed=pack["fixed"],
             set_banner=False,
             conn=conn,
         )
@@ -1745,36 +1749,9 @@ def ensure_v09_release_seeded(*, conn: sqlite3.Connection | None = None) -> Dict
             conn.close()
 
 
-V091_RELEASE_PACK: Dict[str, Any] = {
-    "version_tag": "v0.9.1",
-    "version_label": "Effective Stats & Polyglot Story",
-    "release_date": "2026-08-01",
-    "badge": "ALPHA",
-    "intro": (
-        "Standardwerte werden zu echten Kampfwerten, Story Ops spricht deine Sprache, "
-        "und Titanen, Boosts sowie Mobile-UX sind geschärft."
-    ),
-    "added": [
-        "Story Ops vollständig in acht Sprachen (DE/EN/ES/FR/PL/PT/RU/TR)",
-        "Vorleser folgt der gewählten Game-Sprache (Neural + Browser-Fallback)",
-    ],
-    "changed": [
-        "GC-EFFSTAT: Katalog-Stats zeigen effektive Werte inkl. Gesamtbonus-%",
-        "Commander-, Tech-Tree- und World-Boss-Boosts ehrlich und sichtbar",
-        "Titan-Link mit wanderndem Progress-Icon und Fire-FX",
-        "Identity Name-Styles, Logistics Collect von Quell-Kolonien, Mobile Fleet-Details",
-        "Codex nur noch über Context-Button (keine Quick-Help-Banner)",
-    ],
-    "fixed": [
-        "EFFSTAT Aktive-Boni: lesbare Labels statt interner Keys; korrekte Direktiven-Beiträge",
-        "Admins erhalten alle Titan-Slots ohne Shop-Kauf",
-        "Timekeeper-Finish aktualisiert Karten-Locks und Afford korrekt",
-    ],
-}
-
-
 def ensure_v091_release_seeded(*, conn: sqlite3.Connection | None = None) -> Dict[str, Any]:
     """Idempotent curated v0.9.1 player pack (EFFSTAT + Story i18n wave)."""
+    pack = _seed_pack_or_raise("v0.9.1")
     own = conn is None
     if own:
         conn = db()
@@ -1784,15 +1761,15 @@ def ensure_v091_release_seeded(*, conn: sqlite3.Connection | None = None) -> Dic
         if version_has_player_rows("v0.9.1", conn=conn):
             return {"ok": True, "seeded": False, "reason": "v0.9.1_exists"}
         result = publish_release_pack(
-            version_tag=V091_RELEASE_PACK["version_tag"],
-            version_label=V091_RELEASE_PACK["version_label"],
-            intro=V091_RELEASE_PACK["intro"],
-            release_date=V091_RELEASE_PACK["release_date"],
-            badge=V091_RELEASE_PACK["badge"],
+            version_tag=pack["version_tag"],
+            version_label=pack["version_label"],
+            intro=pack["intro"],
+            release_date=pack["release_date"],
+            badge=pack["badge"],
             is_major_release=True,
-            added=V091_RELEASE_PACK["added"],
-            changed=V091_RELEASE_PACK["changed"],
-            fixed=V091_RELEASE_PACK["fixed"],
+            added=pack["added"],
+            changed=pack["changed"],
+            fixed=pack["fixed"],
             set_banner=False,
             conn=conn,
         )
