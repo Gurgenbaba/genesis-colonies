@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 96" role="img" fill="none">
+  <rect width="256" height="96" fill="#0a1018"/>
+  <rect x="4" y="4" width="248" height="88" stroke="#5cc8ff" stroke-width="2"/>
+  <rect x="10" y="10" width="236" height="76" stroke="#5cc8ff" stroke-width="1" opacity="0.3"/>
+  <circle cx="56" cy="48" r="28" stroke="#5cc8ff" stroke-width="1.5" opacity="0.45"/>
+  <circle cx="56" cy="48" r="18" stroke="#d4a25a" stroke-width="2"/>
+  <path d="M56 30v36M40 48h32" stroke="#d4a25a" stroke-width="1.4" opacity="0.7"/>
+  <path d="M44 48c0-8 5-14 12-14s12 6 12 14-5 14-12 14" stroke="#5cc8ff" stroke-width="1.6"/>
+  <path d="M100 28h140M100 68h140" stroke="#5cc8ff" stroke-width="1" opacity="0.35"/>
+  <text x="108" y="46" font-family="ui-monospace,Consolas,monospace" font-size="16" letter-spacing="3" fill="#5cc8ff">SENATE</text>
+  <text x="108" y="66" font-family="ui-sans-serif,system-ui" font-size="9" letter-spacing="2" fill="#8b97a8">ORBITAL CHAMBER</text>
+  <path d="M230 24h10v10M230 72h10v-10M100 24h-6v10M100 72h-6v-10" stroke="#5cc8ff" stroke-width="1.3"/>
+</svg>

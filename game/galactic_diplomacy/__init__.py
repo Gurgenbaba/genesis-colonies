@@ -53,12 +53,25 @@ from .definitions import (
     reload_definitions,
     schema_ready,
 )
+from .politics_surface import (
+    build_command_map_politics_overlay,
+    build_diplomacy_politics_payload,
+    propose_resolution_session,
+    submit_bloc_membership,
+)
+from .sessions import (
+    open_resolution_session,
+    resolve_due_resolution_sessions,
+    submit_resolution_vote,
+)
 
 __all__ = [
     "BLOC_KEYS",
     "EMERGENCY_KEYS",
     "PERSONALITY_KEYS",
     "RESOLUTION_KEYS",
+    "build_command_map_politics_overlay",
+    "build_diplomacy_politics_payload",
     "build_galactic_diplomacy_banner",
     "clear_active_emergency",
     "clear_active_resolution",
@@ -87,13 +100,18 @@ __all__ = [
     "normalize_galaxy",
     "normalize_personality_key",
     "normalize_resolution_key",
+    "open_resolution_session",
+    "propose_resolution_session",
     "reload_definitions",
     "reload_emergency_definitions",
     "reload_resolution_definitions",
+    "resolve_due_resolution_sessions",
     "schema_ready",
     "score_directive_history",
     "set_active_emergency",
     "set_active_resolution",
     "set_alliance_bloc",
     "set_galaxy_personality",
+    "submit_bloc_membership",
+    "submit_resolution_vote",
 ]

@@ -394,6 +394,14 @@ def build_command_map_payload(
         "landmarks": landmarks,
         "influence": influence,
     }
+    try:
+        from ..galactic_diplomacy.politics_surface import build_command_map_politics_overlay
+
+        payload["politics"] = build_command_map_politics_overlay(
+            int(player_id), conn=conn
+        )
+    except Exception:
+        payload["politics"] = {"galaxies": {}}
     from .world_map import apply_shared_world_layout
 
     return apply_shared_world_layout(payload, int(player_id), conn=conn)

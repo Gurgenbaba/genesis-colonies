@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" fill="none">
+  <rect width="128" height="128" fill="#0a1018"/>
+  <rect x="4" y="4" width="120" height="120" stroke="#7ad4a8" stroke-width="2"/>
+  <rect x="10" y="10" width="108" height="108" stroke="#7ad4a8" stroke-width="1" opacity="0.35"/>
+  <path d="M18 18h12M18 18v12M110 18h-12M110 18v12M18 110h12M18 110v-12M110 110h-12M110 110v-12" stroke="#7ad4a8" stroke-width="1.2" opacity="0.55"/>
+  <circle cx="64" cy="64" r="28" stroke="#7ad4a8" stroke-width="1.5" opacity="0.45"/>
+  <path d="M64 36v56M36 64h56" stroke="#7ad4a8" stroke-width="1.4" opacity="0.5"/>
+  <path d="M64 42l6 16 18 2-14 12 4 18-14-10-14 10 4-18-14-12 18-2z" stroke="#7ad4a8" stroke-width="2"/>
+  <text x="64" y="112" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="9" letter-spacing="2" fill="#7ad4a8" opacity="0.85">XPL</text>
+</svg>

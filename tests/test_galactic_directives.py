@@ -446,6 +446,101 @@ def test_galactic_politics_js_formats_galaxy_title():
     assert get_vote_phase(cycle, mid) == PHASE_VOTE_OPEN
 
 
+def test_galactic_politics_clarity_guide_and_human_bloc_labels():
+    """UI must teach the 3 layers via tabs and never fall back to raw *_bloc keys."""
+    import json
+
+    src = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+    assert "_gdGuideStripHtml" in src
+    assert "data-gd-tab" in src
+    assert "data-gd-tab-panel" in src
+    assert "_gdStatusStripHtml" in src
+    assert "_gdSetGalaxyTab" in src
+    assert "_gdPoliticsImgTag" in src
+    assert "gp-option-banner" in src
+    assert "gp-bloc-btn-grid" in src
+    assert "_gdVoteCountLabel" in src
+    assert "gd_politics_mandate_votes_one" in src
+    assert "_gdBlocFallbackName" in src
+    assert "/_bloc$/i.test(translated)" in src
+    assert "gp-live-effects" in src
+    assert "gd_politics_stance_help" in src
+    assert "gp-stance" in src
+    assert "_gdEffectChipsHtml" in src
+    assert "gp-chamber" in src
+    assert "gp-faction-tile" in src
+    assert "gp-badge-stance" in src
+
+    css = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+    assert "minmax(220px, 1fr)" in css
+    assert "text-overflow: ellipsis" in css
+    assert "gp-bloc-btn-grid" in css
+    assert "gp-option-banner" in css
+    assert "chamber_backdrop.png" in css
+    assert "gp-live-effects" in css
+    assert "gp-chamber" in css
+    assert "gp-faction-tile" in css
+
+    required = [
+        "gd_politics_hint",
+        "gd_politics_guide_now",
+        "gd_politics_guide_politics",
+        "gd_politics_guide_vote",
+        "gd_politics_badge_not_voted",
+        "gd_politics_badge_resolution",
+        "gd_politics_badge_emergency",
+        "gd_politics_mandate_votes_one",
+        "gd_politics_mandate_votes",
+        "gd_politics_live_kicker",
+        "gd_politics_stance_help",
+        "gd_politics_stance_military",
+        "gd_politics_badge_stance",
+        "gd_politics_live_mandate_only",
+        "gd_fx_gate_control_active",
+        "gdp_bloc_military_title",
+        "gdp_bloc_scientific_title",
+        "gdp_bloc_industrial_title",
+        "gdp_bloc_frontier_title",
+        "gdp_bloc_neutral_title",
+    ]
+    for locale in ("de", "en", "es", "fr", "pl", "pt", "ru", "tr"):
+        data = json.loads((ROOT / "locales" / f"{locale}.json").read_text(encoding="utf-8"))
+        for key in required:
+            assert key in data, f"missing {key} in {locale}.json"
+            assert not str(data[key]).endswith("_bloc"), f"raw bloc key in {locale}:{key}"
+        assert len(data["gd_politics_stance_help"]) > 20
+
+
+def test_galactic_politics_sigil_art_pack_exists():
+    """Senate immersion PNGs must exist; SVG remains fallback."""
+    base = ROOT / "static" / "img" / "politics"
+    required_png = [
+        "chamber/chamber_backdrop.png",
+        "chamber/senate_hero.png",
+        "chamber/tab_now.png",
+        "chamber/tab_politics.png",
+        "chamber/tab_vote.png",
+        "chamber/mandate_ring.png",
+        "chamber/resolution_mark.png",
+        "directives/industrial.png",
+        "directives/scientific.png",
+        "directives/military.png",
+        "directives/logistics.png",
+        "directives/defensive.png",
+        "directives/expansion.png",
+        "directives/exploration.png",
+        "blocs/military_bloc.png",
+        "blocs/scientific_bloc.png",
+        "blocs/industrial_bloc.png",
+        "blocs/frontier_bloc.png",
+        "blocs/neutral_bloc.png",
+    ]
+    for rel in required_png:
+        path = base / rel
+        assert path.is_file(), f"missing art {rel}"
+        assert path.stat().st_size > 1000, f"art too small: {rel}"
+
+
 def test_get_or_create_reopens_empty_mid_month_cycle(gd_db):
     conn = db()
     try:
@@ -900,4 +995,161 @@ def test_research_queue_limit_includes_directive_bonus(gd_db):
         assert with_bonus >= base + 1
     finally:
         conn.close()
+
+
+def test_politics_state_exposes_mandate_and_chronicle(gd_db):
+    """GC-POL-00: during a new vote, players see the prior election mandate + chronicle."""
+    from game.galactic_directives.voting import (
+        build_galaxy_politics_entry,
+        get_galactic_politics_state,
+    )
+
+    conn = db()
+    try:
+        uid = _gd_player(conn)
+        galaxy = _gd_player_galaxy(uid, conn)
+        _gd_place_in_galaxy(uid, galaxy, conn)
+
+        july = _cycle_timestamps(2026, 7)
+        august = _cycle_timestamps(2026, 8)
+        # Prior election (July vote → August mandate window)
+        conn.execute(
+            """
+            INSERT INTO gd_cycles (
+                galaxy, year, month,
+                vote_start_at, vote_end_at, effect_start_at, effect_end_at,
+                status, winning_primary, winning_secondary,
+                winning_primary_votes, winning_secondary_votes,
+                total_votes, total_voters, is_tie_primary, is_tie_secondary,
+                results_sent, created_at, updated_at
+            ) VALUES (
+                ?, 2026, 7, ?, ?, ?, ?, 'active',
+                'military', 'logistics', 12, 7, 19, 15, 0, 0, 1, ?, ?
+            );
+            """,
+            (
+                galaxy,
+                july["vote_start_at"],
+                july["vote_end_at"],
+                july["effect_start_at"],
+                july["effect_end_at"],
+                july["effect_start_at"],
+                july["effect_start_at"],
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO gd_cycles (
+                galaxy, year, month,
+                vote_start_at, vote_end_at, effect_start_at, effect_end_at,
+                status, winning_primary, winning_secondary,
+                winning_primary_votes, winning_secondary_votes,
+                total_votes, total_voters, created_at, updated_at
+            ) VALUES (
+                ?, 2026, 6, ?, ?, ?, ?, 'resolved',
+                'scientific', 'defensive', 9, 4, 13, 11, ?, ?
+            );
+            """,
+            (
+                galaxy,
+                _cycle_timestamps(2026, 6)["vote_start_at"],
+                _cycle_timestamps(2026, 6)["vote_end_at"],
+                _cycle_timestamps(2026, 6)["effect_start_at"],
+                _cycle_timestamps(2026, 6)["effect_end_at"],
+                _cycle_timestamps(2026, 6)["effect_start_at"],
+                _cycle_timestamps(2026, 6)["effect_start_at"],
+            ),
+        )
+        conn.execute(
+            """
+            UPDATE gd_galaxy_state
+            SET primary_directive = 'military',
+                secondary_directive = 'logistics',
+                last_cycle_id = (
+                    SELECT id FROM gd_cycles WHERE galaxy = ? AND year = 2026 AND month = 7
+                )
+            WHERE galaxy = ?;
+            """,
+            (galaxy, galaxy),
+        )
+        conn.commit()
+
+        # Mid-August: new vote open, July mandate still in force
+        now = august["vote_start_at"] + 3 * 86400
+        entry = build_galaxy_politics_entry(uid, galaxy, conn=conn, now=now)
+
+        assert entry["cycle"]["phase"] == PHASE_VOTE_OPEN
+        assert entry["cycle"]["month"] == 8
+        mandate = entry["mandate"]
+        assert mandate["in_force"] is True
+        assert mandate["primary"] == "military"
+        assert mandate["secondary"] == "logistics"
+        assert mandate["election_year"] == 2026
+        assert mandate["election_month"] == 7
+        assert mandate["effect_year"] == 2026
+        assert mandate["effect_month"] == 8
+        assert mandate["primary_votes"] == 12
+        assert mandate["total_voters"] == 15
+        assert mandate["primary_monogram"] == "MIL"
+        assert mandate["countdown_seconds"] > 0
+
+        chronicle = entry["chronicle"]
+        assert len(chronicle) >= 2
+        assert chronicle[0]["primary"] == "military"
+        assert chronicle[0]["in_force"] is True
+        assert chronicle[1]["primary"] == "scientific"
+        assert chronicle[1]["election_month"] == 6
+
+        state = get_galactic_politics_state(uid, conn=conn, now=now)
+        assert state["ready"] is True
+        assert state["galaxies"][0]["mandate"]["primary"] == "military"
+        assert len(state["galaxies"][0]["chronicle"]) >= 2
+    finally:
+        conn.close()
+
+
+def test_politics_state_includes_diplomacy_and_vote_share(gd_db):
+    from game.galactic_directives.voting import build_galaxy_politics_entry
+
+    conn = db()
+    try:
+        uid = _gd_player(conn)
+        galaxy = _gd_player_galaxy(uid, conn)
+        now = _gd_vote_open_now(2026, 8)
+        entry = build_galaxy_politics_entry(uid, galaxy, conn=conn, now=now)
+        assert "diplomacy" in entry
+        assert "mandate" in entry
+        assert "chronicle" in entry
+        assert isinstance(entry["options"], list)
+        for opt in entry["options"]:
+            assert "vote_share" in opt
+            assert "monogram" in opt
+            assert "tradeoffs" in opt
+            for chip in opt["tradeoffs"]:
+                assert "label_key" in chip
+                assert "display" in chip
+                assert "mine_energy_factor" not in str(chip.get("display"))
+        assert entry["cycle"].get("effect_year") is not None
+        assert entry["cycle"].get("effect_month") is not None
+        # Vote month August → effect September
+        assert int(entry["cycle"]["month"]) == 8
+        assert int(entry["cycle"]["effect_month"]) == 9
+    finally:
+        conn.close()
+
+
+def test_politics_js_renders_mandate_rail_and_chronicle():
+    src = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+    assert "_gdMandateRailHtml" in src
+    assert "_gdChronicleHtml" in src
+    assert "_gdDiplomacyRailHtml" in src
+    assert "gd_politics_mandate_kicker" in src
+    assert "data-gd-mandate-rail" in src
+    assert "data-gd-chronicle" in src
+    assert "data-gd-bloc-btn" in src
+    assert "/api/galactic-politics/resolution/vote" in src
+    css = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+    assert ".gp-mandate-rail" in css
+    assert ".gp-chronicle-list" in css
+    assert ".gp-emergency-theater" in css
 

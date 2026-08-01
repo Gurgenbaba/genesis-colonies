@@ -42,6 +42,23 @@ style="--world-x: {{ wx }}; --world-y: {{ wy }};"
     {% endif %}
     <p class="galaxy-command-map-viewport-hint hint">{{ T("galaxy_command_map_viewport_hint", "Ziehen zum Verschieben · Mausrad zum Zoomen") }}</p>
     <p class="galaxy-command-map-landmark-hint hint">{{ T("galaxy_command_map_landmark_hint", "Landmarks erzählen Geschichte — noch nicht erschließbar.") }}</p>
+    {% set cm_politics = cm.politics if cm.politics is defined else {} %}
+    {% set cm_politics_galaxies = cm_politics.galaxies if cm_politics.galaxies is defined else {} %}
+    {% if cm_politics_galaxies %}
+    <div class="galaxy-command-map-politics-strip" data-command-map-politics aria-label="{{ T('gd_politics_cmap_strip_aria', 'Galaktische Politik') }}">
+      {% for gid, pol in cm_politics_galaxies.items() %}
+      <a class="gc-cmap-politics-badge{% if pol.has_emergency %} gc-cmap-politics-badge--emergency{% endif %}"
+         href="{{ url_for('galactic_politics_view') }}"
+         data-pjax
+         title="{{ T('gd_politics_cmap_badge_title', 'Galaxie %(galaxy)s — Politik', galaxy=pol.galaxy or gid) }}">
+        G{{ pol.galaxy or gid }}
+        {% if pol.primary %}· {{ pol.primary }}{% endif %}
+        {% if pol.personality %}· {{ pol.personality }}{% endif %}
+        {% if pol.has_emergency %}· !{% endif %}
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
   </header>
 
   {% if cm_nodes %}

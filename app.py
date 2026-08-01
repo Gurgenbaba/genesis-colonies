@@ -4353,6 +4353,158 @@ def api_galactic_politics_vote():
     return jsonify(resp), status
 
 
+@app.route("/api/galactic-politics/bloc", methods=["POST"])
+@require_login
+def api_galactic_politics_bloc():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached:
+            return jsonify(cached)
+
+    galaxy = data.get("galaxy")
+    bloc_key = str(data.get("bloc_key") or data.get("bloc") or "").strip()
+    from game.galactic_diplomacy import submit_bloc_membership
+    from game.galactic_directives import get_galactic_politics_state
+
+    conn = db()
+    try:
+        result = submit_bloc_membership(user_id, galaxy, bloc_key, conn=conn)
+        conn.commit()
+    except Exception:
+        logger.exception("galactic politics bloc failed user_id=%s galaxy=%s", user_id, galaxy)
+        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_galactic_politics_bloc")
+        return jsonify({"ok": False, "reason": "bloc_failed", "state": state}), 500
+    finally:
+        conn.close()
+
+    ok = bool(result.get("ok"))
+    state, _ = _build_game_state_payload(include_panel=True, finish_source="api_galactic_politics_bloc")
+    conn2 = db()
+    try:
+        politics = get_galactic_politics_state(user_id, conn=conn2)
+    finally:
+        conn2.close()
+    resp: Dict[str, Any] = {
+        "ok": ok,
+        "reason": result.get("reason"),
+        "state": state,
+        "galactic_politics": politics,
+        "bloc_key": result.get("bloc_key"),
+    }
+    if request_id and ok:
+        save_idempotent_action(user_id, request_id, resp)
+    return jsonify(resp), (200 if ok else 400)
+
+
+@app.route("/api/galactic-politics/resolution/propose", methods=["POST"])
+@require_login
+def api_galactic_politics_resolution_propose():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached:
+            return jsonify(cached)
+
+    galaxy = data.get("galaxy")
+    resolution_key = str(data.get("resolution_key") or data.get("resolution") or "").strip()
+    from game.galactic_diplomacy import propose_resolution_session
+    from game.galactic_directives import get_galactic_politics_state
+
+    conn = db()
+    try:
+        result = propose_resolution_session(user_id, galaxy, resolution_key, conn=conn)
+        conn.commit()
+    except Exception:
+        logger.exception("galactic resolution propose failed user_id=%s", user_id)
+        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_galactic_politics_res_propose")
+        return jsonify({"ok": False, "reason": "propose_failed", "state": state}), 500
+    finally:
+        conn.close()
+
+    ok = bool(result.get("ok"))
+    state, _ = _build_game_state_payload(include_panel=True, finish_source="api_galactic_politics_res_propose")
+    conn2 = db()
+    try:
+        politics = get_galactic_politics_state(user_id, conn=conn2)
+    finally:
+        conn2.close()
+    resp: Dict[str, Any] = {
+        "ok": ok,
+        "reason": result.get("reason"),
+        "state": state,
+        "galactic_politics": politics,
+        "session": result.get("session"),
+    }
+    if request_id and ok:
+        save_idempotent_action(user_id, request_id, resp)
+    return jsonify(resp), (200 if ok else 400)
+
+
+@app.route("/api/galactic-politics/resolution/vote", methods=["POST"])
+@require_login
+def api_galactic_politics_resolution_vote():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached:
+            return jsonify(cached)
+
+    session_id = data.get("session_id") or data.get("session")
+    choice = str(data.get("choice") or "").strip()
+    from game.galactic_diplomacy import submit_resolution_vote
+    from game.galactic_directives import get_galactic_politics_state
+
+    try:
+        sid = int(session_id or 0)
+    except (TypeError, ValueError):
+        sid = 0
+
+    conn = db()
+    try:
+        result = submit_resolution_vote(user_id, sid, choice, conn=conn)
+        conn.commit()
+    except Exception:
+        logger.exception("galactic resolution vote failed user_id=%s", user_id)
+        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_galactic_politics_res_vote")
+        return jsonify({"ok": False, "reason": "vote_failed", "state": state}), 500
+    finally:
+        conn.close()
+
+    ok = bool(result.get("ok"))
+    state, _ = _build_game_state_payload(include_panel=True, finish_source="api_galactic_politics_res_vote")
+    conn2 = db()
+    try:
+        politics = get_galactic_politics_state(user_id, conn=conn2)
+    finally:
+        conn2.close()
+    resp: Dict[str, Any] = {
+        "ok": ok,
+        "reason": result.get("reason"),
+        "state": state,
+        "galactic_politics": politics,
+        "session": result.get("session"),
+    }
+    if request_id and ok:
+        save_idempotent_action(user_id, request_id, resp)
+    return jsonify(resp), (200 if ok else 400)
+
+
 @app.route("/skilltree")
 @require_login
 def skilltree_view():

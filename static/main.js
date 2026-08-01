@@ -20202,11 +20202,619 @@
     return t("gd_politics_countdown_resolved", "Zyklus beendet");
   }
 
+  function _gdMonthLabel(month) {
+    const m = Math.max(1, Math.min(12, Number(month) || 0));
+    const defaults = [
+      "", "Januar", "Februar", "März", "April", "Mai", "Juni",
+      "Juli", "August", "September", "Oktober", "November", "Dezember",
+    ];
+    return t(`gd_politics_month_${m}`, defaults[m] || String(m));
+  }
+
+  function _gdPeriodLabel(year, month) {
+    if (!year || !month) return "—";
+    return `${_gdMonthLabel(month)} ${year}`;
+  }
+
+  function _gdVoteCountLabel(count) {
+    const n = Math.max(0, Number(count) || 0);
+    const formatted = fmtNumber(n);
+    if (n === 1) {
+      return tf("gd_politics_mandate_votes_one", { count: formatted }, "%(count)s Stimme");
+    }
+    return tf("gd_politics_mandate_votes", { count: formatted }, "%(count)s Stimmen");
+  }
+
+  function _gdPoliticsImg(kind, key, ext) {
+    const safe = String(key || "").replace(/[^a-z0-9_]/gi, "");
+    const base = (window.GC_STATIC_BASE || "/static").replace(/\/$/, "");
+    if (!safe) return `${base}/img/politics/_placeholder.svg`;
+    const useExt = ext === "svg" ? "svg" : "png";
+    return `${base}/img/politics/${kind}/${safe}.${useExt}`;
+  }
+
+  function _gdPoliticsImgTag(kind, key, className, width, height) {
+    const png = escapeHtml(_gdPoliticsImg(kind, key, "png"));
+    const svg = escapeHtml(_gdPoliticsImg(kind, key, "svg"));
+    const cls = className ? ` class="${escapeHtml(className)}"` : "";
+    const wh = (width && height) ? ` width="${width}" height="${height}"` : "";
+    return `<img${cls} src="${png}" alt=""${wh} loading="lazy" data-gd-img-fallback="${svg}" onerror="if(this.dataset.gdImgFallback){this.onerror=null;this.src=this.dataset.gdImgFallback;}"/>`;
+  }
+
+  function _gdSealHtml(role, key, labelKey, monogram, descKey, votes, isTie) {
+    const dir = String(key || "");
+    if (role === "secondary" && !dir) return "";
+    const label = escapeHtml(t(labelKey, dir || "—"));
+    const desc = descKey ? escapeHtml(t(descKey, "")) : "";
+    const roleLabel = role === "secondary"
+      ? t("gd_banner_secondary_label", "Sekundär")
+      : t("gd_banner_primary_label", "Primär");
+    const voteBits = [];
+    if (votes != null && Number(votes) > 0) {
+      voteBits.push(_gdVoteCountLabel(votes));
+    }
+    if (isTie) {
+      voteBits.push(t("gd_politics_mandate_tie", "Gleichstand"));
+    }
+    const art = dir ? _gdPoliticsImgTag("directives", dir, "gp-seal-art", 56, 56) : "";
+    return `
+      <div class="gp-seal gp-seal--${escapeHtml(role)}${dir ? ` gp-seal--${escapeHtml(dir)}` : " gp-seal--empty"}"
+           data-directive="${escapeHtml(dir)}"
+           ${desc ? `title="${desc}"` : ""}>
+        ${art}
+        <div class="gp-seal-copy">
+          <span class="gp-seal-role">${escapeHtml(roleLabel)}</span>
+          <span class="gp-seal-name" title="${label}">${label}</span>
+          ${voteBits.length ? `<span class="gp-seal-meta gc-mono">${escapeHtml(voteBits.join(" · "))}</span>` : ""}
+        </div>
+      </div>
+    `;
+  }
+
+  function _gdMandateRailHtml(entry) {
+    const mandate = entry.mandate || {};
+    const primary = mandate.primary || entry.active?.primary || "";
+    const secondary = mandate.secondary || entry.active?.secondary || "";
+    const effectPeriod = _gdPeriodLabel(mandate.effect_year, mandate.effect_month);
+    let origin = "";
+    if (mandate.election_year && mandate.election_month) {
+      origin = tf(
+        "gd_politics_mandate_from_election",
+        {
+          period: _gdPeriodLabel(mandate.election_year, mandate.election_month),
+        },
+        "Aus der Wahl %(period)s"
+      );
+    } else if (mandate.source === "fallback") {
+      origin = t("gd_politics_mandate_fallback", "Übergangsmandat · noch keine Wahl");
+    }
+    const voters = Number(mandate.total_voters) || 0;
+    const turnout = voters > 0
+      ? tf("gd_politics_mandate_turnout", { count: fmtNumber(voters) }, "%(count)s Wähler")
+      : "";
+    const countdown = Math.max(0, Number(mandate.countdown_seconds) || 0);
+    const inForce = Boolean(mandate.in_force);
+    const forceBadge = inForce
+      ? t("gd_politics_mandate_in_force", "Gilt jetzt")
+      : t("gd_politics_mandate_archived", "Letzte Wahl");
+    let countdownHtml = "";
+    if (inForce && countdown > 0) {
+      countdownHtml = `
+        <p class="gp-mandate-countdown gc-mono" data-gd-mandate-countdown data-seconds="${countdown}">
+          ${escapeHtml(t("gd_politics_mandate_ends", "Gilt noch"))}:
+          <strong data-gd-mandate-countdown-value>${escapeHtml(formatCountdownRemain(countdown))}</strong>
+        </p>`;
+    }
+    return `
+      <div class="gp-mandate-rail" data-gd-mandate-rail>
+        <div class="gp-mandate-head">
+          <div class="gp-mandate-titles">
+            <p class="gp-rail-kicker">${escapeHtml(t("gd_politics_mandate_kicker", "1 · Geltendes Mandat"))}</p>
+            <h3 class="gp-mandate-period">${escapeHtml(effectPeriod)}</h3>
+            ${origin ? `<p class="gp-mandate-origin hint">${escapeHtml(origin)}</p>` : ""}
+          </div>
+          <span class="gp-mandate-badge${inForce ? " gp-mandate-badge--live" : ""}">${escapeHtml(forceBadge)}</span>
+        </div>
+        <div class="gp-seal-row" data-gd-seal-row>
+          ${_gdSealHtml(
+            "primary",
+            primary,
+            mandate.primary_label_key || entry.active?.primary_label_key,
+            mandate.primary_monogram,
+            mandate.primary_description_key,
+            mandate.primary_votes,
+            mandate.is_tie_primary
+          )}
+          ${_gdSealHtml(
+            "secondary",
+            secondary,
+            mandate.secondary_label_key || entry.active?.secondary_label_key,
+            mandate.secondary_monogram,
+            mandate.secondary_description_key,
+            mandate.secondary_votes,
+            mandate.is_tie_secondary
+          )}
+        </div>
+        ${turnout ? `<p class="gp-mandate-turnout gc-mono">${escapeHtml(turnout)}</p>` : ""}
+        ${countdownHtml}
+      </div>
+    `;
+  }
+
+  function _gdChronicleHtml(entry) {
+    const items = Array.isArray(entry.chronicle) ? entry.chronicle : [];
+    if (!items.length) {
+      return `
+        <details class="gp-chronicle" data-gd-chronicle>
+          <summary class="gp-chronicle-summary">${escapeHtml(t("gd_politics_chronicle_kicker", "Vergangene Mandate"))}</summary>
+          <p class="gp-chronicle-empty hint">${escapeHtml(t("gd_politics_chronicle_empty", "Noch keine entschiedenen Mandate in dieser Galaxie."))}</p>
+        </details>`;
+    }
+    const rows = items.map((item) => {
+      const period = escapeHtml(_gdPeriodLabel(item.election_year, item.election_month));
+      const effect = escapeHtml(_gdPeriodLabel(item.effect_year, item.effect_month));
+      const pLabel = escapeHtml(t(item.primary_label_key, item.primary || "—"));
+      const hasSecondary = Boolean(item.secondary);
+      const live = item.in_force ? " gp-chronicle-item--live" : "";
+      const liveMark = item.in_force
+        ? `<span class="gp-chronicle-live">${escapeHtml(t("gd_politics_chronicle_live", "aktiv"))}</span>`
+        : "";
+      const secondaryChip = hasSecondary
+        ? `<span class="gp-chronicle-chip gp-chronicle-chip--secondary" data-directive="${escapeHtml(item.secondary || "")}">
+              <span class="gp-chronicle-mono">${escapeHtml(item.secondary_monogram || "—")}</span>
+              ${escapeHtml(t(item.secondary_label_key, item.secondary))}
+            </span>`
+        : "";
+      const votesLine = hasSecondary
+        ? tf("gd_politics_chronicle_votes", {
+            primary: fmtNumber(Number(item.primary_votes) || 0),
+            secondary: fmtNumber(Number(item.secondary_votes) || 0),
+            voters: fmtNumber(Number(item.total_voters) || 0),
+          }, "%(primary)s / %(secondary)s · %(voters)s")
+        : tf("gd_politics_chronicle_votes_primary", {
+            primary: fmtNumber(Number(item.primary_votes) || 0),
+            voters: fmtNumber(Number(item.total_voters) || 0),
+          }, "%(primary)s Stimmen · %(voters)s Wähler");
+      return `
+        <li class="gp-chronicle-item${live}" data-gd-chronicle-item>
+          <div class="gp-chronicle-when">
+            <span class="gp-chronicle-election gc-mono">${period}</span>
+            <span class="gp-chronicle-effect hint">${escapeHtml(tf("gd_politics_chronicle_effect", { period: effect }, "wirkte %(period)s"))}</span>
+          </div>
+          <div class="gp-chronicle-seals">
+            <span class="gp-chronicle-chip gp-chronicle-chip--primary" data-directive="${escapeHtml(item.primary || "")}">
+              <span class="gp-chronicle-mono">${escapeHtml(item.primary_monogram || "—")}</span>
+              ${pLabel}
+            </span>
+            ${secondaryChip}
+            ${liveMark}
+          </div>
+          <div class="gp-chronicle-votes gc-mono">${escapeHtml(votesLine)}</div>
+        </li>`;
+    }).join("");
+    return `
+      <details class="gp-chronicle" data-gd-chronicle>
+        <summary class="gp-chronicle-summary">${escapeHtml(t("gd_politics_chronicle_kicker", "Vergangene Mandate"))}</summary>
+        <ol class="gp-chronicle-list">${rows}</ol>
+      </details>`;
+  }
+
+  function _gdBlocFallbackName(blocKey) {
+    const map = {
+      scientific_bloc: t("gdp_bloc_scientific_title", "Wissenschaftsblock"),
+      military_bloc: t("gdp_bloc_military_title", "Militärblock"),
+      industrial_bloc: t("gdp_bloc_industrial_title", "Industrieblock"),
+      frontier_bloc: t("gdp_bloc_frontier_title", "Frontier-Block"),
+      neutral_bloc: t("gdp_bloc_neutral_title", "Neutral"),
+    };
+    return map[String(blocKey || "")] || String(blocKey || "—");
+  }
+
+  function _gdBlocLabel(bloc) {
+    if (!bloc) return "—";
+    const key = bloc.label_key;
+    const fallback = _gdBlocFallbackName(bloc.bloc_key);
+    if (!key) return fallback;
+    const translated = t(key, fallback);
+    // Avoid showing raw keys like military_bloc / SCIENTIFIC_BLOC
+    if (!translated || translated === key || /_bloc$/i.test(translated) || translated === String(bloc.bloc_key || "")) {
+      return fallback;
+    }
+    return translated;
+  }
+
+  function _gdGuideStripHtml(galaxy, activeTab) {
+    const tabs = [
+      {
+        id: "now",
+        num: "1",
+        label: t("gd_politics_guide_now", "Jetzt"),
+        desc: t("gd_politics_guide_now_desc", "Aktives Mandat — Boni für alle Kolonien in dieser Galaxie."),
+        icon: "tab_now",
+      },
+      {
+        id: "politics",
+        num: "2",
+        label: t("gd_politics_guide_politics", "Politik"),
+        desc: t("gd_politics_guide_politics_desc", "Ausrichtung (keine Buffs) und echte Sonderboni (Resolution / Notfall / Charakter)."),
+        icon: "tab_politics",
+      },
+      {
+        id: "vote",
+        num: "3",
+        label: t("gd_politics_guide_vote", "Wahl"),
+        desc: t("gd_politics_guide_vote_desc", "Stimme für die Direktive des nächsten Monats."),
+        icon: "tab_vote",
+      },
+    ];
+    const buttons = tabs.map((tab) => {
+      const selected = tab.id === activeTab;
+      return `
+        <button type="button"
+                class="gp-tab${selected ? " gp-tab--active" : ""}"
+                role="tab"
+                id="gp-tab-${galaxy}-${tab.id}"
+                data-gd-tab="${tab.id}"
+                data-galaxy="${galaxy}"
+                aria-selected="${selected ? "true" : "false"}"
+                aria-controls="gp-panel-${galaxy}-${tab.id}"
+                title="${escapeHtml(tab.desc)}">
+          <img class="gp-tab-icon" src="${escapeHtml(_gdPoliticsImg("chamber", tab.icon, "png"))}" alt="" width="24" height="24" loading="lazy" data-gd-img-fallback="${escapeHtml(_gdPoliticsImg("chamber", tab.icon, "svg"))}" onerror="if(this.dataset.gdImgFallback){this.onerror=null;this.src=this.dataset.gdImgFallback;}"/>
+          <span class="gp-tab-num">${tab.num}</span>
+          <span class="gp-tab-label">${escapeHtml(tab.label)}</span>
+        </button>`;
+    }).join("");
+    const active = tabs.find((tab) => tab.id === activeTab) || tabs[0];
+    return `
+      <div class="gp-tabs-wrap">
+        <div class="gp-guide-strip" role="tablist" aria-label="${escapeHtml(t("gd_politics_title", "Galaktische Politik"))}">
+          ${buttons}
+        </div>
+        <p class="hint gp-tab-hint" data-gd-tab-hint>${escapeHtml(active.desc)}</p>
+      </div>`;
+  }
+
+  function _gdDefaultTab(entry) {
+    const galaxy = Number(entry.galaxy) || 0;
+    try {
+      const stored = sessionStorage.getItem(`gp-tab-${galaxy}`);
+      if (stored === "now" || stored === "politics" || stored === "vote") return stored;
+    } catch (_err) { /* ignore */ }
+    const phase = String(entry.cycle?.phase || "");
+    const hasVoted = Array.isArray(entry.options) && entry.options.some((o) => o.selected);
+    const session = entry.diplomacy?.session;
+    if (phase === "vote_open" && entry.can_vote && !hasVoted) return "vote";
+    if (session && session.can_vote && !session.player_choice) return "politics";
+    if (entry.diplomacy?.emergency) return "politics";
+    return "now";
+  }
+
+  function _gdSetGalaxyTab(card, tabId) {
+    if (!card) return;
+    const galaxy = Number(card.dataset.galaxy) || 0;
+    const allowed = new Set(["now", "politics", "vote"]);
+    const next = allowed.has(tabId) ? tabId : "now";
+    card.querySelectorAll("[data-gd-tab]").forEach((btn) => {
+      const on = btn.getAttribute("data-gd-tab") === next;
+      btn.classList.toggle("gp-tab--active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    card.querySelectorAll("[data-gd-tab-panel]").forEach((panel) => {
+      const on = panel.getAttribute("data-gd-tab-panel") === next;
+      panel.hidden = !on;
+    });
+    const hint = card.querySelector("[data-gd-tab-hint]");
+    if (hint) {
+      const map = {
+        now: t("gd_politics_guide_now_desc", "Aktives Mandat — Boni für alle Kolonien in dieser Galaxie."),
+        politics: t("gd_politics_guide_politics_desc", "Haltung (kein Buff) · echte Boni: Resolution / Notfall / Charakter."),
+        vote: t("gd_politics_guide_vote_desc", "Stimme für die Direktive des nächsten Monats."),
+      };
+      hint.textContent = map[next] || map.now;
+    }
+    try {
+      sessionStorage.setItem(`gp-tab-${galaxy}`, next);
+    } catch (_err) { /* ignore */ }
+  }
+
+  function _gdStatusStripHtml(entry) {
+    const mandate = entry.mandate || {};
+    const primary = mandate.primary || entry.active?.primary || "";
+    const primaryLabel = t(
+      mandate.primary_label_key || entry.active?.primary_label_key,
+      primary || "—"
+    );
+    const phase = String(entry.cycle?.phase || "resolved");
+    const voteCd = Math.max(0, Number(entry.cycle?.countdown_seconds) || 0);
+    const mandateCd = Math.max(0, Number(mandate.countdown_seconds) || 0);
+    let countdownLabel = "";
+    let countdownSec = 0;
+    if (phase === "vote_open") {
+      countdownLabel = t("gd_politics_countdown_vote_closes", "Abstimmung schließt in");
+      countdownSec = voteCd;
+    } else if (mandate.in_force && mandateCd > 0) {
+      countdownLabel = t("gd_politics_mandate_ends", "Gilt noch");
+      countdownSec = mandateCd;
+    }
+    const badges = [];
+    const hasVoted = Array.isArray(entry.options) && entry.options.some((o) => o.selected);
+    if (phase === "vote_open" && entry.can_vote && !hasVoted) {
+      badges.push(`<span class="gp-status-badge gp-status-badge--vote">${escapeHtml(t("gd_politics_badge_not_voted", "Noch nicht abgestimmt"))}</span>`);
+    }
+    if (entry.diplomacy?.session) {
+      badges.push(`<span class="gp-status-badge gp-status-badge--res">${escapeHtml(t("gd_politics_badge_resolution", "Resolution offen"))}</span>`);
+    }
+    if (entry.diplomacy?.emergency) {
+      badges.push(`<span class="gp-status-badge gp-status-badge--alert">${escapeHtml(t("gd_politics_badge_emergency", "Notfall"))}</span>`);
+    }
+    const sigil = primary
+      ? `<span class="gp-status-sigil-wrap">
+           ${_gdPoliticsImgTag("chamber", "mandate_ring", "gp-status-ring", 48, 48)}
+           ${_gdPoliticsImgTag("directives", primary, "gp-status-sigil", 36, 36)}
+         </span>`
+      : "";
+    return `
+      <div class="gp-status-strip" data-gd-status-strip>
+        ${sigil}
+        <div class="gp-status-copy">
+          <span class="gp-status-mandate">${escapeHtml(primaryLabel)}</span>
+          ${countdownLabel ? `
+            <span class="gp-status-countdown gc-mono" data-gd-countdown data-seconds="${countdownSec}">
+              ${escapeHtml(countdownLabel)}:
+              <strong data-gd-countdown-value>${escapeHtml(formatCountdownRemain(countdownSec))}</strong>
+            </span>` : ""}
+        </div>
+        ${badges.length ? `<div class="gp-status-badges">${badges.join("")}</div>` : ""}
+      </div>`;
+  }
+
+  function _gdEffectChipsHtml(effects) {
+    const list = Array.isArray(effects) ? effects : [];
+    if (!list.length) return "";
+    return `<ul class="gp-tradeoff-list gp-effect-chips">${list.map((tr) => {
+      const label = escapeHtml(t(tr.label_key, String(tr.key || "")));
+      const displayRaw = String(tr.display != null ? tr.display : "").trim();
+      const display = escapeHtml(displayRaw);
+      const title = escapeHtml([label, displayRaw].filter(Boolean).join(" "));
+      const valueHtml = displayRaw
+        ? ` <span class="gc-mono gp-tradeoff-value">${display}</span>`
+        : "";
+      return `<li class="gp-tradeoff-chip" title="${title}"><span class="gp-tradeoff-label">${label}</span>${valueHtml}</li>`;
+    }).join("")}</ul>`;
+  }
+
+  function _gdDiplomacyRailHtml(entry) {
+    const dip = entry.diplomacy || {};
+    const emergency = dip.emergency;
+    const personality = dip.personality;
+    const resolution = dip.resolution;
+    const session = dip.session;
+    const blocs = dip.blocs || {};
+
+    const liveCards = [];
+    if (personality) {
+      liveCards.push(`
+        <article class="gp-live-card gp-sigil-tile" data-kind="personality">
+          ${_gdPoliticsImgTag("personalities", personality.key, "gp-live-art", 64, 64)}
+          <div class="gp-live-copy">
+            <span class="gp-identity-label">${escapeHtml(t("gdp_banner_personality_label", "Charakter"))}</span>
+            <strong class="gp-live-title">${escapeHtml(t(personality.label_key, personality.key || ""))}</strong>
+            ${_gdEffectChipsHtml(personality.effects)}
+          </div>
+        </article>`);
+    }
+    if (resolution) {
+      const cd = Math.max(0, Number(resolution.countdown_seconds) || 0);
+      liveCards.push(`
+        <article class="gp-live-card gp-sigil-tile" data-kind="resolution">
+          ${_gdPoliticsImgTag("chamber", "resolution_mark", "gp-live-art", 64, 64)}
+          <div class="gp-live-copy">
+            <span class="gp-identity-label">${escapeHtml(t("gdp_banner_resolution_label", "Resolution"))}</span>
+            <strong class="gp-live-title">${escapeHtml(t(resolution.label_key, resolution.key || ""))}</strong>
+            ${_gdEffectChipsHtml(resolution.effects)}
+            ${cd > 0 ? `<p class="gc-mono gp-live-cd gp-stamp">${escapeHtml(t("gd_politics_live_ends", "Endet in"))} <strong>${escapeHtml(formatCountdownRemain(cd))}</strong></p>` : ""}
+          </div>
+        </article>`);
+    }
+    if (emergency) {
+      const cd = Math.max(0, Number(emergency.countdown_seconds) || 0);
+      liveCards.push(`
+        <article class="gp-live-card gp-sigil-tile gp-live-card--alert" data-kind="emergency" data-gd-emergency data-key="${escapeHtml(emergency.key || "")}">
+          ${_gdPoliticsImgTag("emergencies", emergency.key, "gp-live-art", 64, 64)}
+          <div class="gp-live-copy">
+            <span class="gp-identity-label gp-rail-kicker--alert">${escapeHtml(t("gd_politics_emergency_kicker", "Notfall-Sitzung"))}</span>
+            <strong class="gp-live-title">${escapeHtml(t(emergency.label_key, emergency.key || ""))}</strong>
+            ${_gdEffectChipsHtml(emergency.effects)}
+            ${cd > 0 ? `<p class="gc-mono gp-live-cd gp-stamp">${escapeHtml(t("gd_politics_emergency_ends", "Endet in"))} <strong>${escapeHtml(formatCountdownRemain(cd))}</strong></p>` : ""}
+          </div>
+        </article>`);
+    }
+
+    const liveHtml = `
+      <section class="gp-chamber gp-chamber--live gp-live-effects" data-gd-live-effects>
+        <header class="gp-chamber-head">
+          <p class="gp-rail-kicker">${escapeHtml(t("gd_politics_live_kicker", "Was jetzt wirkt"))}</p>
+          <span class="gp-chamber-tag" title="${escapeHtml(t("gd_politics_live_help", "Echte Diplomatie-Boni. Mandat unter Jetzt / Wahl."))}">${escapeHtml(t("gd_politics_live_help", "Echte Diplomatie-Boni. Mandat unter Jetzt / Wahl."))}</span>
+        </header>
+        ${liveCards.length
+          ? `<div class="gp-live-grid">${liveCards.join("")}</div>`
+          : `<div class="gp-live-empty">
+               <p class="gp-live-empty-line">${escapeHtml(t("gd_politics_live_empty", "Keine Sonderboni aktiv."))}</p>
+               <span class="gp-badge gp-badge-mandate">${escapeHtml(t("gd_politics_live_mandate_only", "Nur Mandat · Tab Jetzt / Wahl"))}</span>
+             </div>`}
+      </section>`;
+
+    const blocRows = (Array.isArray(blocs.blocs) ? blocs.blocs : [])
+      .filter((b) => Number(b.alliance_count) > 0)
+      .map((b) => {
+        const tags = (b.alliances || []).map((a) => escapeHtml(a.tag || "")).join(" · ");
+        const countLabel = tf(
+          "gd_politics_bloc_alliances",
+          { count: fmtNumber(Number(b.alliance_count) || 0) },
+          "%(count)s Allianz(en)"
+        );
+        const stance = escapeHtml(t(b.stance_key, t(b.description_key, "")));
+        const mono = escapeHtml(b.monogram || "—");
+        return `<li class="gp-bloc-row" data-bloc="${escapeHtml(b.bloc_key || "")}">
+          ${_gdPoliticsImgTag("blocs", b.bloc_key, "gp-bloc-row-art", 32, 32)}
+          <div class="gp-bloc-row-copy">
+            <span class="gp-bloc-name"><span class="gp-faction-mono">${mono}</span> ${escapeHtml(_gdBlocLabel(b))}</span>
+            <span class="hint gp-bloc-stance">${stance}</span>
+          </div>
+          <span class="gp-bloc-count gc-mono" title="${escapeHtml(countLabel)}">${escapeHtml(countLabel)}</span>
+          <span class="gp-bloc-tags hint">${tags}</span>
+        </li>`;
+      }).join("");
+
+    let blocControls = "";
+    if (blocs.can_manage) {
+      const options = (blocs.options || []).map((o) => {
+        const selected = blocs.player_bloc && blocs.player_bloc.bloc_key === o.bloc_key;
+        const label = _gdBlocLabel(o);
+        const stance = t(o.stance_key, t(o.description_key, ""));
+        const titleAttr = escapeHtml([label, stance].filter(Boolean).join(" — "));
+        const mono = escapeHtml(o.monogram || "—");
+        return `<button type="button" class="gp-faction-tile${selected ? " gp-faction-tile--active" : ""}"
+          data-gd-bloc-btn data-galaxy="${Number(entry.galaxy) || 0}" data-bloc-key="${escapeHtml(o.bloc_key || "")}"
+          ${!blocs.can_set_bloc || selected ? "disabled" : ""}
+          title="${titleAttr}"
+          aria-pressed="${selected ? "true" : "false"}">
+          ${_gdPoliticsImgTag("blocs", o.bloc_key, "gp-faction-art", 48, 48)}
+          <span class="gp-faction-mono">${mono}</span>
+          <span class="gp-faction-label">${escapeHtml(label)}</span>
+          <span class="gp-faction-stance hint">${escapeHtml(stance)}</span>
+        </button>`;
+      }).join("");
+      const cd = Number(blocs.cooldown_seconds) || 0;
+      blocControls = `
+        <div class="gp-bloc-controls" data-gd-bloc-controls>
+          <p class="gp-rail-kicker">${escapeHtml(t("gd_politics_bloc_set_kicker", "Ausrichtung eurer Allianz"))}</p>
+          ${cd > 0 ? `<p class="hint gp-cooldown-note">${escapeHtml(tf("gd_politics_bloc_cooldown", { time: formatCountdownRemain(cd) }, "Abklingzeit: %(time)s"))}</p>` : ""}
+          <div class="gp-faction-board gp-bloc-btn-grid">${options}</div>
+        </div>`;
+    } else if (dip.has_alliance && !dip.is_officer) {
+      blocControls = `<p class="hint">${escapeHtml(t("gd_politics_stance_officer_only", "Nur Allianz-Officer können die Ausrichtung setzen oder Resolutionen einbringen."))}</p>`;
+    } else if (!dip.has_alliance) {
+      blocControls = `<p class="hint">${escapeHtml(t("gd_politics_stance_need_alliance", "Ohne Allianz kannst du keine Ausrichtung setzen."))}</p>`;
+    }
+
+    const stanceHtml = `
+      <section class="gp-chamber gp-chamber--stance gp-stance" data-gd-stance>
+        <header class="gp-chamber-head">
+          <p class="gp-rail-kicker">${escapeHtml(t("gd_politics_stance_kicker", "Allianz-Ausrichtung"))}</p>
+          <span class="gp-badge gp-badge-stance" title="${escapeHtml(t("gd_politics_stance_help", "Politische Farbe auf der Karte — kein Buff."))}">${escapeHtml(t("gd_politics_badge_stance", "Nur Haltung · kein Buff"))}</span>
+        </header>
+        ${blocRows ? `<ul class="gp-bloc-list">${blocRows}</ul>` : `<p class="hint">${escapeHtml(t("gd_politics_bloc_empty", "Noch keine Allianz hat hier eine Ausrichtung gesetzt."))}</p>`}
+        ${blocControls}
+      </section>`;
+
+    let sessionHtml = "";
+    if (session) {
+      const yesShare = Number(session.yes_share) || 0;
+      const noShare = Number(session.no_share) || 0;
+      const totalVotes = Number(session.total_votes) || 0;
+      const quorum = Number(session.quorum_needed) || 0;
+      const days = Number(session.duration_days) || 0;
+      sessionHtml = `
+        <div class="gp-resolution-session gp-resolution-floor" data-gd-resolution-session data-session-id="${Number(session.id) || 0}">
+          <div class="gp-resolution-head">
+            ${_gdPoliticsImgTag("chamber", "resolution_mark", "gp-resolution-mark", 56, 56)}
+            <div class="gp-resolution-head-copy">
+              <p class="gp-rail-kicker">${escapeHtml(t("gd_politics_resolution_kicker", "Sonderbeschluss · offene Abstimmung"))}</p>
+              <h4 class="gp-resolution-title">${escapeHtml(t(session.label_key, session.resolution_key || ""))}</h4>
+              ${days > 0 ? `<span class="gp-badge gp-badge-duration">${escapeHtml(tf("gd_politics_resolution_duration", { days: fmtNumber(days) }, "Wirkt %(days)s Tage bei Annahme"))}</span>` : ""}
+            </div>
+          </div>
+          ${_gdEffectChipsHtml(session.effects)}
+          <div class="gp-tally-bar gp-tally-bar--floor" aria-hidden="true">
+            <span class="gp-tally-yes" style="width:${yesShare}%"></span>
+            <span class="gp-tally-no" style="width:${noShare}%"></span>
+          </div>
+          <p class="gc-mono gp-resolution-meta">
+            ${escapeHtml(tf("gd_politics_resolution_tally", {
+              yes: fmtNumber(session.yes_votes || 0),
+              no: fmtNumber(session.no_votes || 0),
+              quorum: fmtNumber(quorum),
+            }, "JA %(yes)s · NEIN %(no)s · Quorum %(quorum)s"))}
+          </p>
+          <p class="hint gp-quorum-hint">${escapeHtml(tf("gd_politics_resolution_quorum_hint", {
+            quorum: fmtNumber(quorum),
+            total: fmtNumber(totalVotes),
+          }, "Quorum: mindestens %(quorum)s Stimmen nötig (aktuell %(total)s)."))}</p>
+          ${session.can_vote ? `
+            <div class="gp-resolution-actions gp-resolution-actions--floor">
+              <button type="button" class="gc-btn gc-btn-primary" data-gd-res-vote data-choice="yes"
+                data-session-id="${Number(session.id) || 0}" ${session.player_choice === "yes" ? "disabled" : ""}>
+                ${escapeHtml(t("gd_politics_resolution_yes", "Ja"))}
+              </button>
+              <button type="button" class="gc-btn gc-btn-secondary" data-gd-res-vote data-choice="no"
+                data-session-id="${Number(session.id) || 0}" ${session.player_choice === "no" ? "disabled" : ""}>
+                ${escapeHtml(t("gd_politics_resolution_no", "Nein"))}
+              </button>
+            </div>` : ""}
+        </div>`;
+    } else if (dip.can_propose_resolution && Array.isArray(dip.resolution_options) && dip.resolution_options.length) {
+      const opts = dip.resolution_options.map((o) => {
+        const days = Number(o.duration_days) || 0;
+        const fx = (Array.isArray(o.effects) ? o.effects : [])
+          .slice(0, 2)
+          .map((e) => `${t(e.label_key, e.key || "")} ${e.display || ""}`.trim())
+          .join(", ");
+        const extra = [days ? `${days}d` : "", fx].filter(Boolean).join(" · ");
+        const label = t(o.label_key, o.resolution_key || "");
+        return `<option value="${escapeHtml(o.resolution_key || "")}">${escapeHtml(extra ? `${label} (${extra})` : label)}</option>`;
+      }).join("");
+      const previewEffects = (dip.resolution_options[0] && dip.resolution_options[0].effects) || [];
+      const effectsMap = {};
+      (dip.resolution_options || []).forEach((o) => {
+        effectsMap[String(o.resolution_key || "")] = Array.isArray(o.effects) ? o.effects : [];
+      });
+      sessionHtml = `
+        <div class="gp-resolution-propose gp-resolution-floor" data-gd-resolution-propose
+             data-gd-res-effects="${escapeHtml(JSON.stringify(effectsMap))}">
+          <p class="gp-rail-kicker">${escapeHtml(t("gd_politics_resolution_propose_kicker", "Sonderbeschluss einbringen"))}</p>
+          <p class="hint gp-chamber-tag">${escapeHtml(t("gd_politics_resolution_section_help", "JA/NEIN neben dem Mandat. Ohne Quorum keine Wirkung."))}</p>
+          <label class="gp-resolution-propose-label" for="gp-res-propose-${Number(entry.galaxy) || 0}">
+            ${escapeHtml(t("gd_politics_resolution_propose_label", "Welche Resolution?"))}
+          </label>
+          <div class="gp-resolution-propose-row">
+            <select id="gp-res-propose-${Number(entry.galaxy) || 0}"
+                    class="gc-input gp-resolution-select"
+                    data-gd-res-propose-select>${opts}</select>
+            <button type="button" class="gc-btn gc-btn-secondary" data-gd-res-propose-btn
+              data-galaxy="${Number(entry.galaxy) || 0}">
+              ${escapeHtml(t("gd_politics_resolution_propose_btn", "Sitzung öffnen"))}
+            </button>
+          </div>
+          <div class="gp-resolution-propose-preview" data-gd-res-propose-preview>
+            ${_gdEffectChipsHtml(previewEffects)}
+          </div>
+        </div>`;
+    } else if (!session) {
+      sessionHtml = `<p class="hint gp-resolution-none">${escapeHtml(t("gd_politics_resolution_none", "Keine offene Resolution. Officer können eine JA/NEIN-Sitzung einbringen."))}</p>`;
+    }
+
+    return `
+      <div class="gp-diplomacy-rail" data-gd-diplomacy-rail>
+        ${liveHtml}
+        ${stanceHtml}
+        <section class="gp-chamber gp-chamber--resolution gp-resolution-block" data-gd-resolution-block>
+          <header class="gp-chamber-head">
+            <p class="gp-rail-kicker">${escapeHtml(t("gd_politics_resolution_block_kicker", "Sonderbeschlüsse"))}</p>
+            <span class="gp-chamber-tag">${escapeHtml(t("gd_politics_resolution_section_help", "JA/NEIN neben dem Mandat. Ohne Quorum keine Wirkung."))}</span>
+          </header>
+          ${sessionHtml}
+        </section>
+      </div>`;
+  }
+
   function _gdOptionCardHtml(entry, opt) {
     const key = escapeHtml(String(opt.key || ""));
     const title = escapeHtml(t(opt.label_key, key));
-    const desc = escapeHtml(t(opt.description_key, ""));
+    const descRaw = t(opt.description_key, "");
+    const desc = escapeHtml(descRaw);
     const votes = fmtNumber(Math.max(0, Number(opt.vote_count) || 0));
+    const share = Math.max(0, Math.min(100, Number(opt.vote_share) || 0));
     const selected = Boolean(opt.selected);
     const onCooldown = Boolean(opt.on_cooldown);
     const canVote = Boolean(entry.can_vote);
@@ -20227,16 +20835,35 @@
         data-directive-key="${key}"
         ${selected ? 'disabled aria-pressed="true"' : ""}>${escapeHtml(btnLabel)}</button>`;
     }
+    const mono = escapeHtml(opt.monogram || "—");
+    const tradeoffs = Array.isArray(opt.tradeoffs) ? opt.tradeoffs : [];
+    const tradeHtml = tradeoffs.length
+      ? `<ul class="gp-tradeoff-list">${tradeoffs.map((tr) => {
+          const label = escapeHtml(t(tr.label_key, String(tr.key || "")));
+          const display = escapeHtml(String(tr.display != null ? tr.display : tr.value ?? ""));
+          return `<li class="gp-tradeoff-chip" title="${label} ${display}"><span class="gp-tradeoff-label">${label}</span> <span class="gc-mono">${display}</span></li>`;
+        }).join("")}</ul>`
+      : "";
+    const tallyHtml = share > 0
+      ? `<div class="gp-option-tally" aria-hidden="true"><span style="width:${share}%"></span></div>`
+      : `<div class="gp-option-tally gp-option-tally--empty" aria-hidden="true"></div>`;
     return `
       <article class="galactic-politics-option ${stateClass.trim()}"
                data-gd-option
                data-directive-key="${key}"
-               data-on-cooldown="${onCooldown ? "1" : "0"}">
+               data-on-cooldown="${onCooldown ? "1" : "0"}"
+               title="${desc}">
+        <div class="gp-option-banner">
+          ${_gdPoliticsImgTag("directives", opt.key, "gp-option-banner-img", 512, 288)}
+          <span class="gp-option-mono" aria-hidden="true">${mono}</span>
+        </div>
         <div class="galactic-politics-option-head">
-          <h3 class="galactic-politics-option-title">${title}</h3>
+          <h3 class="galactic-politics-option-title" title="${title}">${title}</h3>
           <span class="galactic-politics-option-votes gc-mono" data-gd-option-votes>${votes}</span>
         </div>
-        <p class="galactic-politics-option-desc hint">${desc}</p>
+        ${tallyHtml}
+        <p class="galactic-politics-option-desc hint gp-option-desc--clamp">${desc}</p>
+        ${tradeHtml}
         ${action}
       </article>
     `;
@@ -20246,12 +20873,8 @@
     const galaxy = Number(entry.galaxy) || 0;
     const phase = String(entry.cycle?.phase || "resolved");
     const countdown = Math.max(0, Number(entry.cycle?.countdown_seconds) || 0);
-    const primary = escapeHtml(t(entry.active?.primary_label_key, entry.active?.primary || "—"));
-    const secondaryKey = entry.active?.secondary_label_key;
-    const secondary = secondaryKey
-      ? escapeHtml(t(secondaryKey, entry.active?.secondary || "—"))
-      : "—";
     const options = Array.isArray(entry.options) ? entry.options : [];
+    const activeTab = _gdDefaultTab(entry);
     let note = "";
     if (entry.vote_reason === "no_colony") {
       note = `<p class="galactic-politics-note hint">${escapeHtml(t("gd_politics_no_vote_right", "Kein Stimmrecht in dieser Galaxie."))}</p>`;
@@ -20261,31 +20884,62 @@
     const countdownText = phase === "resolved"
       ? "—"
       : formatCountdownRemain(countdown);
+    const voteKicker = phase === "vote_open"
+      ? t("gd_politics_vote_rail_kicker", "3 · Nächstes Mandat wählen")
+      : phase === "active"
+        ? t("gd_politics_vote_rail_active", "Mandatsfenster")
+        : t("gd_politics_vote_rail_resolved", "Zyklus abgeschlossen");
+    const effectPeriod = _gdPeriodLabel(entry.cycle?.effect_year, entry.cycle?.effect_month);
+    const votePeriod = _gdPeriodLabel(entry.cycle?.year, entry.cycle?.month);
+    const periodLine = phase === "vote_open" && effectPeriod !== "—"
+      ? tf(
+          "gd_politics_vote_rail_period",
+          { effect: effectPeriod, vote: votePeriod },
+          "Wirkt %(effect)s · Wahlmonat %(vote)s"
+        )
+      : (effectPeriod !== "—" ? effectPeriod : votePeriod);
+    const countdownLabel = phase === "vote_open"
+      ? t("gd_politics_countdown_vote_closes", "Abstimmung schließt in")
+      : _gdCountdownPrefix(phase);
     return `
       <section class="gc-panel galactic-politics-panel galactic-politics-galaxy-card"
                data-gd-galaxy-card
-               data-galaxy="${galaxy}">
+               data-galaxy="${galaxy}"
+               data-active-tab="${escapeHtml(activeTab)}">
         <div class="gc-panel-header galactic-politics-galaxy-head">
           <span class="gc-panel-title">${escapeHtml(tf("gd_politics_galaxy_title", { galaxy }, "Galaxie %(galaxy)s"))}</span>
           <span class="galactic-politics-phase gc-mono" data-gd-phase-label data-phase="${escapeHtml(phase)}">${escapeHtml(_gdPhaseLabel(phase))}</span>
         </div>
-        <div class="galactic-politics-active" data-gd-active-row>
-          <div class="gc-gd-chip">
-            <span class="gc-gd-chip-label">${escapeHtml(t("gd_banner_primary_label", "Primär"))}</span>
-            <span class="gc-gd-chip-value" data-gd-active-primary>${primary}</span>
-          </div>
-          <div class="gc-gd-chip gc-gd-chip--secondary">
-            <span class="gc-gd-chip-label">${escapeHtml(t("gd_banner_secondary_label", "Sekundär"))}</span>
-            <span class="gc-gd-chip-value" data-gd-active-secondary>${secondary}</span>
-          </div>
+        ${_gdStatusStripHtml(entry)}
+        ${_gdGuideStripHtml(galaxy, activeTab)}
+        <div class="gp-tab-panel" role="tabpanel" id="gp-panel-${galaxy}-now"
+             data-gd-tab-panel="now" ${activeTab === "now" ? "" : "hidden"}
+             aria-labelledby="gp-tab-${galaxy}-now">
+          ${_gdMandateRailHtml(entry)}
+          ${_gdChronicleHtml(entry)}
         </div>
-        <p class="galactic-politics-countdown gc-mono" data-gd-countdown data-seconds="${countdown}">
-          ${escapeHtml(_gdCountdownPrefix(phase))}:
-          <strong data-gd-countdown-value>${escapeHtml(countdownText)}</strong>
-        </p>
-        ${note}
-        <div class="galactic-politics-options" data-gd-options>
-          ${options.map((opt) => _gdOptionCardHtml(entry, opt)).join("")}
+        <div class="gp-tab-panel" role="tabpanel" id="gp-panel-${galaxy}-politics"
+             data-gd-tab-panel="politics" ${activeTab === "politics" ? "" : "hidden"}
+             aria-labelledby="gp-tab-${galaxy}-politics">
+          ${_gdDiplomacyRailHtml(entry)}
+        </div>
+        <div class="gp-tab-panel" role="tabpanel" id="gp-panel-${galaxy}-vote"
+             data-gd-tab-panel="vote" ${activeTab === "vote" ? "" : "hidden"}
+             aria-labelledby="gp-tab-${galaxy}-vote">
+          <div class="gp-vote-rail" data-gd-vote-rail>
+            <div class="gp-vote-rail-head">
+              <p class="gp-rail-kicker">${escapeHtml(voteKicker)}</p>
+              <p class="gp-vote-cycle-period gc-mono">${escapeHtml(periodLine)}</p>
+            </div>
+            <p class="galactic-politics-countdown gc-mono" data-gd-countdown data-seconds="${countdown}">
+              ${escapeHtml(countdownLabel)}:
+              <strong data-gd-countdown-value>${escapeHtml(countdownText)}</strong>
+            </p>
+            ${note}
+            <div class="galactic-politics-options" data-gd-options>
+              ${options.map((opt) => _gdOptionCardHtml(entry, opt)).join("")}
+            </div>
+          </div>
         </div>
       </section>
     `;
@@ -20306,37 +20960,112 @@
     if (_galacticPoliticsBound) return;
     _galacticPoliticsBound = true;
 
-    document.addEventListener("click", async (ev) => {
-      const btn = ev.target.closest("[data-gd-vote-btn]");
-      if (!btn || btn.disabled) return;
-      const page = document.getElementById("galactic-politics-page");
-      if (!page) return;
-      const galaxy = Number(btn.dataset.galaxy) || 0;
-      const directiveKey = String(btn.dataset.directiveKey || "").trim();
-      if (!galaxy || !directiveKey) return;
-      const res = await GC.fetchGameAction("/api/galactic-politics/vote", {
+    async function _gpAction(url, body) {
+      const res = await GC.fetchGameAction(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body: JSON.stringify({ ...body, request_id: newRequestId() }),
+      });
+      if (res?.state) applyActionState(res, "galactic_politics_action");
+      if (res?.galactic_politics) patchGalacticPoliticsDom(res.galactic_politics);
+      return res;
+    }
+
+    document.addEventListener("change", (ev) => {
+      const select = ev.target?.closest?.("[data-gd-res-propose-select]");
+      if (!select) return;
+      const page = document.getElementById("galactic-politics-page");
+      if (!page || !page.contains(select)) return;
+      const wrap = select.closest("[data-gd-resolution-propose]");
+      const preview = wrap?.querySelector("[data-gd-res-propose-preview]");
+      if (!wrap || !preview) return;
+      let map = {};
+      try {
+        map = JSON.parse(wrap.getAttribute("data-gd-res-effects") || "{}") || {};
+      } catch (_err) {
+        map = {};
+      }
+      preview.innerHTML = _gdEffectChipsHtml(map[select.value] || []);
+    });
+
+    document.addEventListener("click", async (ev) => {
+      const page = document.getElementById("galactic-politics-page");
+      if (!page) return;
+
+      const tabBtn = ev.target.closest("[data-gd-tab]");
+      if (tabBtn) {
+        const card = tabBtn.closest("[data-gd-galaxy-card]");
+        const tabId = String(tabBtn.getAttribute("data-gd-tab") || "");
+        if (card && tabId) _gdSetGalaxyTab(card, tabId);
+        return;
+      }
+
+      const voteBtn = ev.target.closest("[data-gd-vote-btn]");
+      if (voteBtn && !voteBtn.disabled) {
+        const galaxy = Number(voteBtn.dataset.galaxy) || 0;
+        const directiveKey = String(voteBtn.dataset.directiveKey || "").trim();
+        if (!galaxy || !directiveKey) return;
+        const res = await _gpAction("/api/galactic-politics/vote", {
           galaxy,
           directive_key: directiveKey,
-          request_id: newRequestId(),
-        }),
-      });
-      if (res?.state) applyActionState(res, "galactic_politics_vote");
-      if (res?.galactic_politics) patchGalacticPoliticsDom(res.galactic_politics);
-      if (res?.ok) {
-        showNotify(t("gd_politics_vote_ok", "Stimme registriert."), "success");
-      } else {
-        const reason = String(res?.reason || "");
-        const msg = reason === "no_colony"
-          ? t("gd_politics_err_no_colony", "Kein Stimmrecht in dieser Galaxie.")
-          : reason === "vote_closed"
-            ? t("gd_politics_err_vote_closed", "Abstimmung ist geschlossen.")
-            : reason === "cooldown"
-              ? t("gd_politics_err_cooldown", "Diese Direktive ist gesperrt.")
-              : t("gd_politics_vote_fail", "Stimme konnte nicht gespeichert werden.");
-        showNotify(msg, "error");
+        });
+        if (res?.ok) {
+          showNotify(t("gd_politics_vote_ok", "Stimme registriert."), "success");
+        } else {
+          const reason = String(res?.reason || "");
+          const msg = reason === "no_colony"
+            ? t("gd_politics_err_no_colony", "Kein Stimmrecht in dieser Galaxie.")
+            : reason === "vote_closed"
+              ? t("gd_politics_err_vote_closed", "Abstimmung ist geschlossen.")
+              : reason === "cooldown"
+                ? t("gd_politics_err_cooldown", "Diese Direktive ist gesperrt.")
+                : t("gd_politics_vote_fail", "Stimme konnte nicht gespeichert werden.");
+          showNotify(msg, "error");
+        }
+        return;
+      }
+
+      const blocBtn = ev.target.closest("[data-gd-bloc-btn]");
+      if (blocBtn && !blocBtn.disabled) {
+        const galaxy = Number(blocBtn.dataset.galaxy) || 0;
+        const blocKey = String(blocBtn.dataset.blocKey || "").trim();
+        if (!galaxy || !blocKey) return;
+        const res = await _gpAction("/api/galactic-politics/bloc", {
+          galaxy,
+          bloc_key: blocKey,
+        });
+        if (res?.ok) showNotify(t("gd_politics_bloc_ok", "Block gesetzt."), "success");
+        else showNotify(t("gd_politics_bloc_fail", "Block konnte nicht gesetzt werden."), "error");
+        return;
+      }
+
+      const resVote = ev.target.closest("[data-gd-res-vote]");
+      if (resVote && !resVote.disabled) {
+        const sessionId = Number(resVote.dataset.sessionId) || 0;
+        const choice = String(resVote.dataset.choice || "").trim();
+        if (!sessionId || !choice) return;
+        const res = await _gpAction("/api/galactic-politics/resolution/vote", {
+          session_id: sessionId,
+          choice,
+        });
+        if (res?.ok) showNotify(t("gd_politics_resolution_vote_ok", "Resolution-Stimme gespeichert."), "success");
+        else showNotify(t("gd_politics_resolution_vote_fail", "Resolution-Stimme fehlgeschlagen."), "error");
+        return;
+      }
+
+      const proposeBtn = ev.target.closest("[data-gd-res-propose-btn]");
+      if (proposeBtn && !proposeBtn.disabled) {
+        const galaxy = Number(proposeBtn.dataset.galaxy) || 0;
+        const wrap = proposeBtn.closest("[data-gd-resolution-propose]");
+        const select = wrap?.querySelector("[data-gd-res-propose-select]");
+        const resolutionKey = String(select?.value || "").trim();
+        if (!galaxy || !resolutionKey) return;
+        const res = await _gpAction("/api/galactic-politics/resolution/propose", {
+          galaxy,
+          resolution_key: resolutionKey,
+        });
+        if (res?.ok) showNotify(t("gd_politics_resolution_propose_ok", "Resolution-Sitzung geöffnet."), "success");
+        else showNotify(t("gd_politics_resolution_propose_fail", "Sitzung konnte nicht geöffnet werden."), "error");
       }
     });
   }

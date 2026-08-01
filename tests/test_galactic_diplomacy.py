@@ -125,6 +125,54 @@ def test_bloc_definition_seeds(gdp_db):
     assert "scientific" in scientific.get("affinity_directives", [])
 
 
+def test_politics_payload_marks_blocs_as_stance_and_exposes_effects(gdp_db):
+    import uuid
+
+    from game.galactic_diplomacy.politics_surface import (
+        build_bloc_landscape,
+        build_diplomacy_politics_payload,
+    )
+    from game.galactic_diplomacy import set_galaxy_personality, set_active_resolution
+    from game.models import create_user, ensure_player_and_homeworld
+
+    conn = db()
+    try:
+        landscape = build_bloc_landscape(1, conn=conn, player_id=None)
+        assert landscape["grants_mechanics"] is False
+        assert landscape["role"] == "stance"
+        for opt in landscape["options"]:
+            assert opt["grants_mechanics"] is False
+            assert opt["role"] == "stance"
+            assert opt.get("stance_key")
+
+        ok, err, user = create_user(f"pol_{uuid.uuid4().hex[:8]}", "test-pass-123")
+        assert ok, err
+        uid = int(user["id"])
+        ensure_player_and_homeworld(uid, player_name="PolClarity", conn=conn)
+        conn.commit()
+        set_galaxy_personality(1, "academia_prime", conn=conn)
+        set_active_resolution(1, "gate_control", conn=conn)
+        conn.commit()
+
+        payload = build_diplomacy_politics_payload(1, conn=conn, player_id=uid)
+        assert payload["ready"] is True
+        assert payload["blocs"]["grants_mechanics"] is False
+        assert payload["personality"] is not None
+        assert payload["personality"]["grants_mechanics"] is True
+        assert isinstance(payload["personality"]["effects"], list)
+        assert payload["personality"]["effects"], "academia should expose research chips"
+        assert payload["resolution"] is not None
+        assert payload["resolution"]["grants_mechanics"] is True
+        assert isinstance(payload["resolution"]["effects"], list)
+        gate_fx = [e for e in payload["resolution"]["effects"] if e.get("key") == "gate_control_active"]
+        assert gate_fx, "gate_control should expose gate_control_active chip"
+        assert gate_fx[0]["label_key"] == "gd_fx_gate_control_active"
+        assert gate_fx[0]["display"] != "1"
+        assert gate_fx[0]["display"] == "AKTIV"
+    finally:
+        conn.close()
+
+
 def test_personality_definition_seeds(gdp_db):
     traits = list_personality_definitions()
     assert len(traits) == len(PERSONALITY_KEYS)
@@ -596,3 +644,64 @@ def test_build_galactic_diplomacy_banner_emergency_only(gdp_db):
 def test_build_galactic_diplomacy_banner_invalid_galaxy(gdp_db):
     assert build_galactic_diplomacy_banner(0)["visible"] is False
     assert build_galactic_diplomacy_banner(99)["visible"] is False
+
+
+def test_resolution_session_vote_and_pass(gdp_db):
+    import uuid
+    from game.models import create_user, ensure_player_and_homeworld
+    from game.galactic_diplomacy.sessions import (
+        open_resolution_session,
+        submit_resolution_vote,
+    )
+
+    conn = db()
+    try:
+        ok, err, user = create_user(f"res_{uuid.uuid4().hex[:8]}", "test-pass-123")
+        assert ok, err
+        uid = int(user["id"])
+        ensure_player_and_homeworld(uid, player_name="ResVoter", conn=conn)
+        conn.commit()
+        planet = conn.execute(
+            "SELECT galaxy FROM planets WHERE player_id = ? LIMIT 1;", (uid,)
+        ).fetchone()
+        galaxy = int(planet["galaxy"])
+
+        opened = open_resolution_session(
+            galaxy, "ban_directive", created_by=uid, vote_hours=24, conn=conn
+        )
+        assert opened["ok"] is True
+        sid = int(opened["session"]["id"])
+        voted = submit_resolution_vote(uid, sid, "yes", conn=conn)
+        assert voted["ok"] is True
+        assert voted["session"]["yes_votes"] == 1
+        assert voted["session"]["player_choice"] == "yes"
+    finally:
+        conn.close()
+
+
+def test_politics_art_pack_exists():
+    base = ROOT / "static" / "img" / "politics"
+    assert (base / "_placeholder.svg").is_file()
+    assert (base / "directives" / "military.svg").is_file()
+    assert (base / "blocs" / "scientific_bloc.svg").is_file()
+    assert (base / "emergencies" / "pirate_war.svg").is_file()
+    assert (base / "chamber" / "senate_hero.svg").is_file()
+
+
+def test_command_map_includes_politics_overlay(gdp_db):
+    import uuid
+    from game.models import create_user, ensure_player_and_homeworld
+    from game.planet_evolution.command_map import build_command_map_payload
+
+    conn = db()
+    try:
+        ok, err, user = create_user(f"cm_{uuid.uuid4().hex[:8]}", "test-pass-123")
+        assert ok, err
+        uid = int(user["id"])
+        ensure_player_and_homeworld(uid, player_name="MapPol", conn=conn)
+        conn.commit()
+        payload = build_command_map_payload(uid, conn=conn)
+        assert "politics" in payload
+        assert "galaxies" in payload["politics"]
+    finally:
+        conn.close()

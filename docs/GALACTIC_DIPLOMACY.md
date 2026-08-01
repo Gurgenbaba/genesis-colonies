@@ -510,6 +510,19 @@ Body: serverseitig HTML/Text — **kein** Client-Template für Zahlen.
 
 ---
 
+## Player Actions (GC-POL live)
+
+| Action | Route | Owner |
+|--------|-------|-------|
+| Directive vote | POST /api/galactic-politics/vote | galactic_directives.voting |
+| Alliance bloc set (officer) | POST /api/galactic-politics/bloc | galactic_diplomacy.politics_surface |
+| Resolution propose (officer) | POST /api/galactic-politics/resolution/propose | galactic_diplomacy.sessions |
+| Resolution JA/NEIN | POST /api/galactic-politics/resolution/vote | galactic_diplomacy.sessions |
+
+Schema: migrations/125_galactic_resolution_sessions.sql (gd_resolution_sessions, gd_resolution_session_votes).
+
+---
+
 ## UI & Präsentation (Spezifikation)
 
 | Surface | Inhalt |

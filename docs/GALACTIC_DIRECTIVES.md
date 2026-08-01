@@ -658,6 +658,20 @@ Weitere Surfaces (Buildings, Research, Command-Map-Badges) folgen in späteren T
 
 Actions: `GC.fetchGameAction` → `{ok, state}` → `applyActionState()` — kein Form-POST mit Redirect wie PHP.
 
+### `/galactic-politics` Dual-Rail (GC-POL-00)
+
+`build_galaxy_politics_entry()` liefert zusätzlich:
+
+| Feld | Inhalt |
+|------|--------|
+| `mandate` | Geltendes Mandat (in-force election window aus `gd_cycles`, sonst latest/fallback) inkl. Stimmen, Monogramme, Countdown |
+| `chronicle` | Letzte ≤6 entschiedenen Zyklen (Wahlmonat + Wirkmonat + Siegel) |
+| `active` | Kompatibel (Primary/Secondary Keys für Banner/Legacy) |
+
+Während `vote_open` sieht der Spieler klar: **was jetzt gilt** (vorherige Wahl) vs. **wofür gerade abgestimmt wird**.
+
+Zusätzlich (GC-POL-01…08): `diplomacy` Payload (Personality, Emergency, Bloc-Landschaft, Resolution-Sessions), Chamber-Embleme unter `static/img/politics/`, Player-APIs `/api/galactic-politics/bloc`, `/resolution/propose`, `/resolution/vote`, Command-Map Politics-Strip.
+
 ---
 
 ## Admin & Tests

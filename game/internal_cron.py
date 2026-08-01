@@ -850,6 +850,14 @@ def execute_galactic_directives_resolve(*, force: bool, source: str) -> Dict[str
 
     _ = force  # reserved for interval-guard symmetry with other cron jobs
     result = resolve_due_cycles()
+    sessions_resolved = []
+    try:
+        from game.galactic_diplomacy import resolve_due_resolution_sessions
+
+        sessions = resolve_due_resolution_sessions()
+        sessions_resolved = list(sessions.get("resolved") or [])
+    except Exception:
+        sessions_resolved = []
     payload = {
         "ok": bool(result.get("ok")),
         "resolved_count": len(result.get("resolved") or []),
@@ -857,9 +865,12 @@ def execute_galactic_directives_resolve(*, force: bool, source: str) -> Dict[str
         "galaxies": int(result.get("galaxies") or 0),
         "server_time": int(result.get("server_time") or 0),
         "source": str(source or "http_cron"),
+        "resolution_sessions_resolved": len(sessions_resolved),
     }
     if result.get("resolved"):
         payload["resolved"] = list(result["resolved"])
+    if sessions_resolved:
+        payload["resolution_sessions"] = sessions_resolved
     return payload
 
 

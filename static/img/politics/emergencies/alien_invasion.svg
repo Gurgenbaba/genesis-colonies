@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" fill="none">
+  <rect width="128" height="128" fill="#0a1018"/>
+  <rect x="4" y="4" width="120" height="120" stroke="#c48ad4" stroke-width="2"/>
+  <rect x="10" y="10" width="108" height="108" stroke="#c48ad4" stroke-width="1" opacity="0.35"/>
+  <path d="M18 18h12M18 18v12M110 18h-12M110 18v12M18 110h12M18 110v-12M110 110h-12M110 110v-12" stroke="#c48ad4" stroke-width="1.2" opacity="0.55"/>
+  <path d="M30 40l68 48M98 40L30 88" stroke="#c48ad4" stroke-width="1.2" opacity="0.3"/>
+  <ellipse cx="64" cy="58" rx="28" ry="12" stroke="#c48ad4" stroke-width="2"/>
+  <circle cx="64" cy="58" r="8" stroke="#c48ad4" stroke-width="1.6"/>
+  <path d="M40 70l8 16M88 70l-8 16" stroke="#c48ad4" stroke-width="1.5"/>
+  <text x="64" y="112" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="9" letter-spacing="2" fill="#c48ad4" opacity="0.85">ALI</text>
+</svg>
