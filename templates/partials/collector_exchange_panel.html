@@ -57,7 +57,17 @@
          data-collector-offer="{{ offer.offer_key }}">
 
   <div class="inventory-item-card-hero collector-offer-hero" aria-hidden="true">
-    <span class="collector-offer-hero-icon">✦</span>
+    {% if offer.input_image %}
+    {% set _in_img = offer.input_image|string %}
+    {% set _in_src = _in_img if _in_img.startswith('/') else url_for('static', filename=_in_img) %}
+    <img class="collector-offer-hero-img"
+         src="{{ _in_src }}"
+         alt="" width="64" height="64" loading="lazy" decoding="async"
+         data-collector-hero-fallback="{{ offer.input_icon or '✦' }}"
+         onerror="if(window.GC&amp;&amp;GC.webpImgOnError&amp;&amp;!this.dataset.gcWebpFallback){GC.webpImgOnError(this);return;}this.onerror=null;var s=document.createElement('span');s.className='collector-offer-hero-icon';s.textContent=this.dataset.collectorHeroFallback||'✦';this.replaceWith(s);">
+    {% else %}
+    <span class="collector-offer-hero-icon">{{ offer.input_icon or '✦' }}</span>
+    {% endif %}
     <span class="inventory-item-amount gc-mono"
           data-collector-owned-badge="{{ offer.offer_key }}">{{ offer.owned|fmt_int_compact }}/{{ offer.input_amount|fmt_int_compact }}</span>
   </div>

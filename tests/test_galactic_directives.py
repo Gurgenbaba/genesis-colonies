@@ -476,7 +476,8 @@ def test_galactic_politics_clarity_guide_and_human_bloc_labels():
     assert "text-overflow: ellipsis" in css
     assert "gp-bloc-btn-grid" in css
     assert "gp-option-banner" in css
-    assert "chamber_backdrop.png" in css
+    assert "chamber_backdrop.webp" in css
+    assert css.count("chamber_backdrop") == 1
     assert "gp-live-effects" in css
     assert "gp-chamber" in css
     assert "gp-faction-tile" in css
@@ -512,33 +513,40 @@ def test_galactic_politics_clarity_guide_and_human_bloc_labels():
 
 
 def test_galactic_politics_sigil_art_pack_exists():
-    """Senate immersion PNGs must exist; SVG remains fallback."""
+    """Senate immersion: optimized PNG + WebP siblings; SVG remains fallback."""
     base = ROOT / "static" / "img" / "politics"
-    required_png = [
-        "chamber/chamber_backdrop.png",
-        "chamber/senate_hero.png",
-        "chamber/tab_now.png",
-        "chamber/tab_politics.png",
-        "chamber/tab_vote.png",
-        "chamber/mandate_ring.png",
-        "chamber/resolution_mark.png",
-        "directives/industrial.png",
-        "directives/scientific.png",
-        "directives/military.png",
-        "directives/logistics.png",
-        "directives/defensive.png",
-        "directives/expansion.png",
-        "directives/exploration.png",
-        "blocs/military_bloc.png",
-        "blocs/scientific_bloc.png",
-        "blocs/industrial_bloc.png",
-        "blocs/frontier_bloc.png",
-        "blocs/neutral_bloc.png",
+    required = [
+        ("chamber/chamber_backdrop", 200_000, 100_000),
+        ("chamber/senate_hero", 150_000, 60_000),
+        ("chamber/tab_now", 40_000, 16_000),
+        ("chamber/tab_politics", 40_000, 16_000),
+        ("chamber/tab_vote", 40_000, 16_000),
+        ("chamber/mandate_ring", 40_000, 16_000),
+        ("chamber/resolution_mark", 40_000, 16_000),
+        ("directives/industrial", 160_000, 80_000),
+        ("directives/scientific", 160_000, 80_000),
+        ("directives/military", 160_000, 80_000),
+        ("directives/logistics", 160_000, 80_000),
+        ("directives/defensive", 160_000, 80_000),
+        ("directives/expansion", 160_000, 80_000),
+        ("directives/exploration", 160_000, 80_000),
+        ("blocs/military_bloc", 40_000, 16_000),
+        ("blocs/scientific_bloc", 40_000, 16_000),
+        ("blocs/industrial_bloc", 40_000, 16_000),
+        ("blocs/frontier_bloc", 40_000, 16_000),
+        ("blocs/neutral_bloc", 40_000, 16_000),
     ]
-    for rel in required_png:
-        path = base / rel
-        assert path.is_file(), f"missing art {rel}"
-        assert path.stat().st_size > 1000, f"art too small: {rel}"
+    for stem, png_budget, webp_budget in required:
+        png = base / f"{stem}.png"
+        webp = base / f"{stem}.webp"
+        assert png.is_file(), f"missing art {stem}.png"
+        assert webp.is_file(), f"missing art {stem}.webp"
+        assert 1000 < png.stat().st_size <= png_budget, f"png budget {stem}: {png.stat().st_size}"
+        assert 500 < webp.stat().st_size <= webp_budget, f"webp budget {stem}: {webp.stat().st_size}"
+
+    src = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+    assert "preferWebpStaticUrl" in src.split("function _gdPoliticsImgTag")[1].split("function _gdSealHtml")[0]
+    assert 'kind === "personalities"' in src.split("function _gdPoliticsImg(")[1].split("function _gdPoliticsImgTag")[0]
 
 
 def test_get_or_create_reopens_empty_mid_month_cycle(gd_db):

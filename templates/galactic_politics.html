@@ -19,9 +19,12 @@
         {{ T("gd_politics_hint", "Drei Tabs: aktuelles Mandat, Galaxie-Politik, Wahl für den nächsten Monat.") }}
       </p>
     </div>
+    {% set _senate_hero = url_for('static', filename='img/politics/chamber/senate_hero.png') %}
     <img class="gp-senate-hero-seal"
-         src="{{ url_for('static', filename='img/politics/chamber/senate_hero.png') }}"
-         alt="" width="256" height="96" loading="lazy"/>
+         src="{{ _senate_hero|webp_static }}"
+         alt="" width="256" height="96"
+         loading="eager" fetchpriority="high" decoding="async"
+         onerror="if(window.GC&amp;&amp;GC.webpImgOnError)GC.webpImgOnError(this);"/>
   </header>
 
   {% if not ps.ready %}

@@ -23,7 +23,7 @@ from game.collector_catalog import (
 )
 from game.db import table_exists
 from game.inventory import consume_inventory_item, grant_inventory_item, inventory_amount, inventory_schema_ready
-from game.inventory_catalog import is_known_item_key
+from game.inventory_catalog import is_known_item_key, item_catalog_entry
 from game.queue_engine import finish_due_work_once
 
 COLLECTOR_SCHEMA_TABLES = (
@@ -85,11 +85,16 @@ def build_offer_state(
         enabled=enabled,
         input_key=input_key,
     )
+    catalog = item_catalog_entry(input_key) if input_key else {}
+    input_image = str(catalog.get("image") or "").strip() or None
+    input_icon = str(catalog.get("icon") or "").strip() or None
     return {
         "offer_key": str(offer_key),
         "specialist_key": str(offer.get("specialist_key") or ""),
         "input_key": input_key,
         "input_amount": input_amount,
+        "input_image": input_image,
+        "input_icon": input_icon,
         "owned": owned_i,
         "progress_pct": compute_progress_pct(owned_i, input_amount),
         "can_redeem": bool(base_can_redeem and rewards_ready),

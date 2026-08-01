@@ -231,3 +231,48 @@ def test_trader_hub_existing_layout_unchanged(trader_collector_db, monkeypatch):
     assert "gc-exchange-panel" in html
     assert "gc-scrapyard-panel" in html
     assert "gc-collector-exchange-panel" in html
+
+
+def test_collector_input_art_pack_and_payload_images(trader_collector_db):
+    """GC-Coll-Img: catalog-owned collectible art on every collector input_key."""
+    from game.inventory_catalog import item_catalog_entry
+
+    keys = sorted({str(o.get("input_key") or "") for o in COLLECTOR_OFFERS.values() if o.get("input_key")})
+    assert len(keys) == 13
+    base = ROOT / "static" / "img" / "collectibles"
+    for key in keys:
+        entry = item_catalog_entry(key)
+        assert entry.get("image"), f"missing catalog image for {key}"
+        assert str(entry["image"]).startswith("img/collectibles/"), key
+        stem = key
+        assert (base / f"{stem}.webp").is_file(), f"missing {stem}.webp"
+        assert (base / f"{stem}.png").is_file(), f"missing {stem}.png"
+
+    conn = db()
+    uname = f"cimg_{uuid.uuid4().hex[:8]}"
+    ok, err, user = create_user(uname, "test-pass-123")
+    assert ok, err
+    uid = int(user["id"])
+    ensure_player_and_homeworld(uid, conn=conn)
+    conn.commit()
+    payload = build_collector_exchange_payload(uid, conn=conn)
+    conn.close()
+    for specialist in payload["specialists"]:
+        for offer in specialist["offers"]:
+            assert offer.get("input_image"), offer.get("offer_key")
+            assert "collectibles/" in str(offer["input_image"])
+            assert offer.get("input_icon")
+
+
+def test_collector_offer_hero_uses_catalog_image_not_star():
+    src = MAIN_JS.read_text(encoding="utf-8")
+    card_fn = src.split("function renderCollectorOfferCard")[1].split("function renderCollectorOffersGrid")[0]
+    assert "collectorOfferHeroHtml" in card_fn
+    assert "collector-offer-hero-icon\">✦" not in card_fn
+    hero_fn = src.split("function collectorOfferHeroHtml")[1].split("function renderCollectorOfferCard")[0]
+    assert "input_image" in hero_fn
+    html = (ROOT / "templates" / "partials" / "collector_exchange_panel.html").read_text(encoding="utf-8")
+    assert "collector-offer-hero-img" in html
+    assert 'collector-offer-hero-icon">✦' not in html
+    css = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+    assert ".collector-offer-hero-img" in css

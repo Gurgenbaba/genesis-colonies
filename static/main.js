@@ -20307,16 +20307,29 @@
     const safe = String(key || "").replace(/[^a-z0-9_]/gi, "");
     const base = (window.GC_STATIC_BASE || "/static").replace(/\/$/, "");
     if (!safe) return `${base}/img/politics/_placeholder.svg`;
-    const useExt = ext === "svg" ? "svg" : "png";
-    return `${base}/img/politics/${kind}/${safe}.${useExt}`;
+    // Personalities/emergencies ship SVG-only — skip PNG 404 round-trips.
+    if (kind === "personalities" || kind === "emergencies" || ext === "svg") {
+      return `${base}/img/politics/${kind}/${safe}.svg`;
+    }
+    return `${base}/img/politics/${kind}/${safe}.png`;
   }
 
   function _gdPoliticsImgTag(kind, key, className, width, height) {
-    const png = escapeHtml(_gdPoliticsImg(kind, key, "png"));
-    const svg = escapeHtml(_gdPoliticsImg(kind, key, "svg"));
     const cls = className ? ` class="${escapeHtml(className)}"` : "";
     const wh = (width && height) ? ` width="${width}" height="${height}"` : "";
-    return `<img${cls} src="${png}" alt=""${wh} loading="lazy" data-gd-img-fallback="${svg}" onerror="if(this.dataset.gdImgFallback){this.onerror=null;this.src=this.dataset.gdImgFallback;}"/>`;
+    if (kind === "personalities" || kind === "emergencies") {
+      const svg = escapeHtml(_gdPoliticsImg(kind, key, "svg"));
+      return `<img${cls} src="${svg}" alt=""${wh} loading="lazy" decoding="async"/>`;
+    }
+    const pngUrl = _gdPoliticsImg(kind, key, "png");
+    const webpUrl =
+      typeof GC !== "undefined" && typeof GC.preferWebpStaticUrl === "function"
+        ? GC.preferWebpStaticUrl(pngUrl)
+        : pngUrl;
+    const webp = escapeHtml(webpUrl);
+    const png = escapeHtml(pngUrl);
+    const svg = escapeHtml(_gdPoliticsImg(kind, key, "svg"));
+    return `<img${cls} src="${webp}" alt=""${wh} loading="lazy" decoding="async" data-gd-img-fallback="${png}" data-gd-img-fallback2="${svg}" onerror="if(this.dataset.gdImgFallback){const n=this.dataset.gdImgFallback;delete this.dataset.gdImgFallback;this.src=n;return;}if(this.dataset.gdImgFallback2){this.onerror=null;this.src=this.dataset.gdImgFallback2;}"/>`;
   }
 
   function _gdSealHtml(role, key, labelKey, monogram, descKey, votes, isTie) {
@@ -20537,7 +20550,7 @@
                 aria-selected="${selected ? "true" : "false"}"
                 aria-controls="gp-panel-${galaxy}-${tab.id}"
                 title="${escapeHtml(tab.desc)}">
-          <img class="gp-tab-icon" src="${escapeHtml(_gdPoliticsImg("chamber", tab.icon, "png"))}" alt="" width="24" height="24" loading="lazy" data-gd-img-fallback="${escapeHtml(_gdPoliticsImg("chamber", tab.icon, "svg"))}" onerror="if(this.dataset.gdImgFallback){this.onerror=null;this.src=this.dataset.gdImgFallback;}"/>
+          ${_gdPoliticsImgTag("chamber", tab.icon, "gp-tab-icon", 24, 24)}
           <span class="gp-tab-num">${tab.num}</span>
           <span class="gp-tab-label">${escapeHtml(tab.label)}</span>
         </button>`;
@@ -26446,6 +26459,20 @@
     });
   }
 
+  function collectorOfferHeroHtml(offer) {
+    const icon = String(offer?.input_icon || "✦");
+    const raw = String(offer?.input_image || "").trim();
+    if (!raw) {
+      return `<span class="collector-offer-hero-icon">${escapeHtml(icon)}</span>`;
+    }
+    const abs = raw.startsWith("/") ? raw : `/static/${raw.replace(/^\/+/, "")}`;
+    const src =
+      typeof GC !== "undefined" && typeof GC.preferWebpStaticUrl === "function" && /\.(png|jpe?g)$/i.test(abs)
+        ? GC.preferWebpStaticUrl(abs)
+        : abs;
+    return `<img class="collector-offer-hero-img" src="${escapeHtml(src)}" alt="" width="64" height="64" loading="lazy" decoding="async" data-collector-hero-fallback="${escapeHtml(icon)}" onerror="if(window.GC&&GC.webpImgOnError&&!this.dataset.gcWebpFallback){GC.webpImgOnError(this);return;}this.onerror=null;var s=document.createElement('span');s.className='collector-offer-hero-icon';s.textContent=this.dataset.collectorHeroFallback||'✦';this.replaceWith(s);">`;
+  }
+
   function renderCollectorOfferCard(offer) {
     const key = String(offer.offer_key || "");
     const owned = parseInt(offer.owned, 10) || 0;
@@ -26474,7 +26501,7 @@
     const reqCompact = typeof formatCompactNumber === "function" ? formatCompactNumber(required) : formatNumber(required);
     return `<article class="collector-offer-card inventory-item-card${cardClass}" data-offer-key="${escapeHtml(key)}" data-collector-offer="${escapeHtml(key)}">
       <div class="inventory-item-card-hero collector-offer-hero" aria-hidden="true">
-        <span class="collector-offer-hero-icon">✦</span>
+        ${collectorOfferHeroHtml(offer)}
         <span class="inventory-item-amount gc-mono" data-collector-owned-badge="${escapeHtml(key)}">${escapeHtml(ownedCompact)}/${escapeHtml(reqCompact)}</span>
       </div>
       <div class="collector-offer-main inventory-item-card-body">

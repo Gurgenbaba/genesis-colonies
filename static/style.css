@@ -5200,7 +5200,16 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   transform: translateY(-1px);
 }
 .collector-offer-hero{
-  min-height: 56px;
+  min-height: 72px;
+  display: grid;
+  place-items: center;
+}
+.collector-offer-hero-img{
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  image-rendering: auto;
+  filter: drop-shadow(0 0 10px rgba(70, 229, 255, 0.22));
 }
 .collector-offer-hero-icon{
   font-size: 1.45rem;
@@ -38259,7 +38268,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   opacity: 0.28;
   background:
     linear-gradient(180deg, rgba(6, 10, 16, 0.35) 0%, rgba(6, 10, 16, 0.82) 100%),
-    url("/static/img/politics/chamber/chamber_backdrop.png") center top / cover no-repeat;
+    url("/static/img/politics/chamber/chamber_backdrop.webp") center top / cover no-repeat;
 }
 
 .galactic-politics-page > * {
@@ -39112,10 +39121,9 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  opacity: 0.22;
-  background:
-    linear-gradient(180deg, rgba(6, 10, 16, 0.4) 0%, rgba(6, 10, 16, 0.88) 100%),
-    url("/static/img/politics/chamber/chamber_backdrop.png") center top / cover no-repeat;
+  opacity: 0.55;
+  /* Page-level backdrop already paints once — chamber only adds a local veil. */
+  background: linear-gradient(180deg, rgba(6, 10, 16, 0.4) 0%, rgba(6, 10, 16, 0.88) 100%);
 }
 
 .gp-chamber > * {
