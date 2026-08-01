@@ -18114,12 +18114,28 @@
       const sku = String(btn.getAttribute("data-sku") || "").trim();
       const provider = String(btn.getAttribute("data-provider") || "").trim();
       if (!sku || !provider) return;
+      const page = document.getElementById("shop-page") || document.getElementById("premium-page");
+      const ackRoot = page && page.querySelector("[data-legal-ack-root]");
+      const ackAgb = ackRoot && ackRoot.querySelector("[data-legal-ack-agb]");
+      const ackDigital = ackRoot && ackRoot.querySelector("[data-legal-ack-digital]");
+      if (!ackAgb || !ackDigital || !ackAgb.checked || !ackDigital.checked) {
+        showNotify(
+          t("legal_ack_required", "Bitte die rechtlichen Hinweise vor dem Kauf bestätigen."),
+          "error"
+        );
+        return;
+      }
       btn.disabled = true;
       try {
         const res = await GC.fetchGameAction("/api/shop/checkout", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sku, provider }),
+          body: JSON.stringify({
+            sku,
+            provider,
+            legal_ack: true,
+            legal_text_version: "v1",
+          }),
         });
         if (res?.state && typeof GC.applyActionState === "function") {
           GC.applyActionState(res, "shop_checkout");
@@ -18168,6 +18184,7 @@
 
   function initShop() {
     bindShopBuyOnce();
+    if (typeof GC.initLegalPanel === "function") GC.initLegalPanel();
     const page = document.getElementById("shop-page");
     if (!page) return;
     const wantFree = (window.location.hash || "") === "#free";
@@ -36943,10 +36960,57 @@
 
     root.classList.add("is-open");
     setActiveBarButton(key);
+    if (key === "imprint") {
+      const openDoc = String(root.getAttribute("data-legal-pending-doc") || "").trim();
+      if (openDoc && typeof GC.showLegalDoc === "function") {
+        GC.showLegalDoc(openDoc);
+        root.removeAttribute("data-legal-pending-doc");
+      }
+    }
   }
 
   GC.openSpecialWindow = openSpecialWindow;
   GC.closeSpecialWindows = closeSpecialWindows;
+
+  function showLegalDoc(docId) {
+    const panel = document.querySelector("[data-legal-panel]");
+    if (!panel) return;
+    const id = String(docId || "imprint").trim() || "imprint";
+    panel.querySelectorAll("[data-legal-tab]").forEach((tab) => {
+      const on = (tab.getAttribute("data-legal-tab") || "") === id;
+      tab.classList.toggle("is-active", on);
+      tab.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    panel.querySelectorAll("[data-legal-doc]").forEach((doc) => {
+      const on = (doc.getAttribute("data-legal-doc") || "") === id;
+      doc.classList.toggle("is-active", on);
+      doc.hidden = !on;
+    });
+  }
+
+  GC.showLegalDoc = showLegalDoc;
+  GC.initLegalPanel = initLegalPanel;
+
+  function initLegalPanel() {
+    const panel = document.querySelector("[data-legal-panel]");
+    if (panel && panel.dataset.legalBound !== "1") {
+      panel.dataset.legalBound = "1";
+      panel.querySelectorAll("[data-legal-tab]").forEach((tab) => {
+        tab.addEventListener("click", () => {
+          showLegalDoc(tab.getAttribute("data-legal-tab") || "imprint");
+        });
+      });
+    }
+    document.querySelectorAll("[data-legal-open-doc]").forEach((btn) => {
+      if (btn.dataset.legalOpenBound === "1") return;
+      btn.dataset.legalOpenBound = "1";
+      btn.addEventListener("click", () => {
+        const doc = btn.getAttribute("data-legal-open-doc") || "";
+        const root = document.querySelector("[data-special-root]");
+        if (root && doc) root.setAttribute("data-legal-pending-doc", doc);
+      });
+    });
+  }
 
   function initSpecialPanel() {
     const root = document.querySelector("[data-special-root]");
@@ -36957,6 +37021,8 @@
       btn.addEventListener("click", (e) => {
         e.preventDefault();
         const target = btn.dataset.specialOpenWindow || "";
+        const openDoc = btn.getAttribute("data-legal-open-doc") || "";
+        if (openDoc) root.setAttribute("data-legal-pending-doc", openDoc);
         if (target) openSpecialWindow(target);
       });
     });
@@ -36971,6 +37037,7 @@
         if (e.key === "Escape") closeSpecialWindows();
       });
     }
+    initLegalPanel();
   }
 
   // =========================

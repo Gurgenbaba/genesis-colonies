@@ -1253,12 +1253,31 @@ def start_checkout(
     success_url: str,
     cancel_url: str,
     now: Optional[float] = None,
+    legal_ack: bool = False,
+    legal_text_version: Optional[str] = None,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     """Create pending order + provider checkout session."""
     from . import payment_providers as pp
 
+    if not legal_ack:
+        return False, "legal_ack_required", None
+
+    from .legal_panel import LEGAL_TEXT_VERSION
+
+    ts = float(now if now is not None else time.time())
+    legal_meta = {
+        "legal_ack": True,
+        "legal_text_version": str(legal_text_version or LEGAL_TEXT_VERSION),
+        "legal_acked_at": ts,
+    }
+
     ok, reason, created = create_pending_order(
-        int(player_id), sku, provider, conn=conn, now=now
+        int(player_id),
+        sku,
+        provider,
+        conn=conn,
+        now=now,
+        metadata=legal_meta,
     )
     if not ok or not created:
         return False, reason, None

@@ -119,6 +119,7 @@
       <p class="hint battle-pass-premium-note">
         {{ T("bp_premium_note", "Premium-Track über den Shop freischalten — Convenience & Season-Kosmetik, kein Pay-to-Win.") }}
       </p>
+      {% include "partials/legal_ack.html" %}
       <div class="battle-pass-premium-actions" data-bp-shop-buy>
         {% if sc.enabled and shop_providers %}
           {% for prov in shop_providers %}

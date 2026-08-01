@@ -269,4 +269,14 @@
 
 </div>
 
+<footer class="auth-legal-footer" aria-label="{{ T('legal_page_title', 'Rechtliche Hinweise') }}">
+  <a href="{{ url_for('legal_view', doc='imprint') }}">{{ T("legal_tab_imprint", "Impressum") }}</a>
+  <span aria-hidden="true">·</span>
+  <a href="{{ url_for('legal_view', doc='privacy') }}">{{ T("legal_tab_privacy", "Datenschutz") }}</a>
+  <span aria-hidden="true">·</span>
+  <a href="{{ url_for('legal_view', doc='terms') }}">{{ T("legal_tab_terms", "AGB") }}</a>
+  <span aria-hidden="true">·</span>
+  <a href="{{ url_for('legal_view', doc='withdrawal') }}">{{ T("legal_tab_withdrawal", "Widerruf") }}</a>
+</footer>
+
 {% endblock %}

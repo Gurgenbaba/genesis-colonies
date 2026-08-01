@@ -49,6 +49,7 @@ def _category_label(category: str) -> str:
         "bug": "Bug",
         "account": "Account",
         "balance": "Balance",
+        "billing": "Zahlung / Billing",
         "report": "Meldung",
     }
     return mapping.get(str(category or "general"), "Allgemein")
@@ -135,7 +136,7 @@ def create_ticket(player_id: int, payload: dict[str, Any]) -> dict[str, Any]:
         return _err("missing_subject")
     if not message:
         return _err("missing_message")
-    if category not in {"general", "bug", "account", "balance", "report"}:
+    if category not in {"general", "bug", "account", "balance", "billing", "report"}:
         category = "general"
     if priority not in {"low", "normal", "high"}:
         priority = "normal"

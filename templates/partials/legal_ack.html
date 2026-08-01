@@ -1,0 +1,16 @@
+{# Shared shop checkout acknowledgements (digital content / §356 Abs. 5). #}
+<div class="gc-legal-ack" data-legal-ack-root>
+  <label class="gc-legal-ack-row">
+    <input type="checkbox" data-legal-ack-agb>
+    <span>
+      {{ T("legal_ack_agb_label", "Ich akzeptiere die AGB und die Widerrufsbelehrung.") }}
+      <button type="button" class="gc-legal-ack-link" data-special-open-window="imprint" data-legal-open-doc="terms">{{ T("legal_tab_terms", "AGB") }}</button>
+      ·
+      <button type="button" class="gc-legal-ack-link" data-special-open-window="imprint" data-legal-open-doc="withdrawal">{{ T("legal_tab_withdrawal", "Widerruf") }}</button>
+    </span>
+  </label>
+  <label class="gc-legal-ack-row">
+    <input type="checkbox" data-legal-ack-digital>
+    <span>{{ T("legal_ack_digital_label", "Ich verlange die sofortige Ausführung der digitalen Inhalte…") }}</span>
+  </label>
+</div>

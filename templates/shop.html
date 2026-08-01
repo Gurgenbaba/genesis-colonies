@@ -257,6 +257,16 @@
     </section>
 
     <section class="gc-panel shop-policy-panel">
+      {% include "partials/legal_ack.html" %}
+      <p class="hint shop-legal-footer">
+        {{ T("legal_shop_footer", "Digitale Inhalte · nach Gutschrift kein Widerruf") }}
+        ·
+        <a href="{{ url_for('legal_view', doc='terms') }}" data-pjax-link>{{ T("legal_tab_terms", "AGB") }}</a>
+        ·
+        <a href="{{ url_for('legal_view', doc='withdrawal') }}" data-pjax-link>{{ T("legal_tab_withdrawal", "Widerruf") }}</a>
+        ·
+        <a href="{{ url_for('legal_view') }}" data-pjax-link>{{ T("legal_tab_imprint", "Impressum") }}</a>
+      </p>
       <p class="hint">
         {{ T("shop_policy", "Offizieller Shop: Timekeeper, Boosters, Container (meta), Season Pass und Name-Styles. Kampf-Power und Rohstoff-Stacks werden nicht verkauft.") }}
         <a href="{{ url_for('premium_view') }}" class="gc-btn gc-btn-ghost gc-btn-sm" data-pjax-link>

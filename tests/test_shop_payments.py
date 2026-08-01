@@ -156,6 +156,7 @@ def test_shop_disabled_blocks_checkout(shop_db, monkeypatch):
         conn=conn,
         success_url="http://localhost/shop/return",
         cancel_url="http://localhost/shop?cancelled=1",
+        legal_ack=True,
     )
     assert ok is False
     assert reason == "shop_disabled"
@@ -173,6 +174,7 @@ def test_fulfill_season_pass_sets_entitlement(shop_db):
         conn=conn,
         success_url="http://localhost/shop/return",
         cancel_url="http://localhost/shop?cancelled=1",
+        legal_ack=True,
     )
     assert ok, reason
     assert result["fulfilled"] is True
@@ -193,6 +195,7 @@ def test_fulfill_season_pass_sets_entitlement(shop_db):
         conn=conn,
         success_url="http://localhost/shop/return",
         cancel_url="http://localhost/shop?cancelled=1",
+        legal_ack=True,
     )
     assert ok2 is False
     assert reason2 == "already_owned"
@@ -209,6 +212,7 @@ def test_fulfill_order_idempotent(shop_db):
         conn=conn,
         success_url="http://localhost/shop/return",
         cancel_url="http://localhost/shop?cancelled=1",
+        legal_ack=True,
     )
     assert ok, reason
     oid = int(created["order_id"])
@@ -231,6 +235,7 @@ def test_fulfill_tk_and_inventory_packs(shop_db):
         conn=conn,
         success_url="http://localhost/shop/return",
         cancel_url="http://localhost/shop?cancelled=1",
+        legal_ack=True,
     )
     assert ok, reason
     assert get_balance(uid, conn=conn) >= before_tk + 6 * 3600
@@ -243,6 +248,7 @@ def test_fulfill_tk_and_inventory_packs(shop_db):
         conn=conn,
         success_url="http://localhost/shop/return",
         cancel_url="http://localhost/shop?cancelled=1",
+        legal_ack=True,
     )
     assert ok, reason
     assert get_balance(uid, conn=conn) >= before_m + 24 * 3600
@@ -255,6 +261,7 @@ def test_fulfill_tk_and_inventory_packs(shop_db):
         conn=conn,
         success_url="http://localhost/shop/return",
         cancel_url="http://localhost/shop?cancelled=1",
+        legal_ack=True,
     )
     assert ok, reason
     assert inventory_amount(uid, "container_rare", conn=conn) >= before_rare + 8
@@ -269,6 +276,7 @@ def test_fulfill_tk_and_inventory_packs(shop_db):
         conn=conn,
         success_url="http://localhost/shop/return",
         cancel_url="http://localhost/shop?cancelled=1",
+        legal_ack=True,
     )
     assert ok, reason
     assert inventory_amount(uid, "booster_build_6h", conn=conn) >= 8
@@ -283,6 +291,7 @@ def test_fulfill_tk_and_inventory_packs(shop_db):
         conn=conn,
         success_url="http://localhost/shop/return",
         cancel_url="http://localhost/shop?cancelled=1",
+        legal_ack=True,
     )
     assert ok, reason
     assert get_balance(uid, conn=conn) >= before_cmd + 48 * 3600
@@ -340,7 +349,7 @@ def test_http_shop_and_checkout_auth(shop_db, monkeypatch):
     # Unauthenticated checkout
     res = client.post(
         "/api/shop/checkout",
-        json={"sku": "tk_pack_s", "provider": "test"},
+        json={"sku": "tk_pack_s", "provider": "test", "legal_ack": True},
     )
     assert res.status_code in (401, 302)
 
@@ -363,7 +372,7 @@ def test_http_shop_and_checkout_auth(shop_db, monkeypatch):
 
     checkout = client.post(
         "/api/shop/checkout",
-        json={"sku": "tk_pack_s", "provider": "test"},
+        json={"sku": "tk_pack_s", "provider": "test", "legal_ack": True},
         headers={"Content-Type": "application/json"},
     )
     assert checkout.status_code == 200
@@ -579,6 +588,7 @@ def test_fulfill_name_style_cosmetic(shop_db):
         conn=conn,
         success_url="http://localhost/shop/return",
         cancel_url="http://localhost/shop?cancelled=1",
+        legal_ack=True,
     )
     assert ok, reason
     assert player_has_name_style(uid, "signal", conn=conn) is True
@@ -592,6 +602,7 @@ def test_fulfill_name_style_cosmetic(shop_db):
         conn=conn,
         success_url="http://localhost/shop/return",
         cancel_url="http://localhost/shop?cancelled=1",
+        legal_ack=True,
     )
     assert ok2 is False
     assert reason2 == "already_owned"
@@ -603,6 +614,7 @@ def test_fulfill_name_style_cosmetic(shop_db):
         conn=conn,
         success_url="http://localhost/shop/return",
         cancel_url="http://localhost/shop?cancelled=1",
+        legal_ack=True,
     )
     assert ok3, reason3
     assert player_has_name_style(uid, "etched", conn=conn) is True

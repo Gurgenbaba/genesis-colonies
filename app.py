@@ -454,6 +454,7 @@ _SIMPLE_LAYOUT_ENDPOINTS = frozenset(
         "auth_discord_start",
         "auth_discord_callback",
         "discord_welcome",
+        "legal_view",
     }
 )
 
@@ -716,6 +717,25 @@ def inject_globals():
     except Exception:
         pass
 
+    legal_panel_ctx: dict[str, Any] = {
+        "LEGAL_DOCS": (),
+        "LEGAL_TEXT_VERSION": "v1",
+        "LEGAL_STAND": "",
+        "LEGAL_OPERATOR_NAME": "",
+        "LEGAL_OPERATOR_STREET": "",
+        "LEGAL_OPERATOR_POSTAL": "",
+        "LEGAL_OPERATOR_CITY": "",
+        "LEGAL_OPERATOR_COUNTRY": "",
+        "LEGAL_OPERATOR_EMAIL": "",
+        "LEGAL_OPERATOR_ADDRESS_LINE": "",
+    }
+    try:
+        from game.legal_panel import legal_panel_template_context
+
+        legal_panel_ctx = legal_panel_template_context()
+    except Exception:
+        pass
+
     client_runtime_config = get_client_runtime_config()
     try:
         if auth_user and auth_user.get("id"):
@@ -890,6 +910,7 @@ def inject_globals():
         CODEX_CLIENT=codex_client,
 
         **rules_panel_ctx,
+        **legal_panel_ctx,
     )
 
 
@@ -1531,6 +1552,17 @@ def landing():
     if user and user.get("id"):
         return redirect(url_for("overview"))
     return render_template("landing.html")
+
+
+@app.route("/legal")
+@app.route("/legal/<doc>")
+def legal_view(doc: str | None = None):
+    """Public legal notices (provider ID, privacy, terms, withdrawal) — no login."""
+    from flask import request
+    from game.legal_panel import resolve_doc_id
+
+    raw = doc or request.args.get("doc")
+    return render_template("legal.html", legal_doc=resolve_doc_id(raw))
 
 
 # --------------------------------------------------------------------------
@@ -4979,6 +5011,8 @@ def api_shop_checkout():
 
     sku = str(data.get("sku") or "").strip()
     provider = str(data.get("provider") or "").strip().lower()
+    legal_ack = bool(data.get("legal_ack"))
+    legal_text_version = str(data.get("legal_text_version") or "").strip() or None
     from game.shop import start_checkout
     from urllib.parse import urlparse
     from game.config import get_public_base_url
@@ -5013,6 +5047,8 @@ def api_shop_checkout():
             conn=conn,
             success_url=success_url,
             cancel_url=cancel_url,
+            legal_ack=legal_ack,
+            legal_text_version=legal_text_version,
         )
         if ok:
             # Rewrite success URL with concrete order_id for non-Stripe flows.

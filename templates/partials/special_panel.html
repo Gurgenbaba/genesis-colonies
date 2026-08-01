@@ -112,6 +112,7 @@
               <option value="bug">Bug</option>
               <option value="account">Account</option>
               <option value="balance">Balance</option>
+              <option value="billing">Zahlung / Billing</option>
               <option value="report">Meldung</option>
             </select>
           </label>
@@ -160,31 +161,57 @@
       <span class="gc-special-title">{{ T('imprint', 'Impressum') }}</span>
       <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-special-window-close="imprint" aria-label="{{ T('close', 'Schließen') }}">✕</button>
     </header>
-    <div class="gc-special-window-content">
-      <details class="gc-special-card" open>
-        <summary>Projektstatus</summary>
-        <p>Genesis Colonies ist ein privates Hobbyprojekt in aktiver Entwicklung. Das Projekt wird nicht kommerziell betrieben und ist derzeit nicht offiziell in einem oeffentlichen Register gelistet.</p>
-      </details>
-      <details class="gc-special-card">
-        <summary>Anbieterhinweis</summary>
-        <p>Dieses Angebot wird im Rahmen eines Freizeitprojekts bereitgestellt. Es besteht kein Anspruch auf dauerhafte Verfuegbarkeit, bestimmte Funktionen oder Support-Level wie bei professionellen/kommerziellen Diensten.</p>
-      </details>
-      <details class="gc-special-card">
-        <summary>Inhalte und Haftung</summary>
-        <p>Alle Inhalte und Spielmechaniken werden nach bestem Wissen gepflegt, koennen sich aber jederzeit aendern oder fehlerhaft sein. Fuer Datenverlust, Spielfortschritt, Ausfaelle oder Folgeschaeden wird im Rahmen dieses Hobbyprojekts keine Gewaehr uebernommen.</p>
-      </details>
-      <details class="gc-special-card">
-        <summary>Urheberrecht und Assets</summary>
-        <p>Spielcode, Texte, UI-Elemente und eigene Assets unterliegen dem Urheberrecht der Projektbetreiber, sofern nicht anders gekennzeichnet. Verwendete Drittinhalte bleiben Eigentum der jeweiligen Rechteinhaber.</p>
-      </details>
-      <details class="gc-special-card">
-        <summary>Kontakt</summary>
-        <p>Da es sich um ein nicht offiziell gelistetes Hobbyprojekt handelt, erfolgt Kontakt und Rueckmeldung aktuell ausschliesslich ueber die Ingame-Kanaele (z. B. Support-Bereich/Chat) oder direkt ueber die bekannten Projektkontakte.</p>
-      </details>
-      <details class="gc-special-card">
-        <summary>Stand</summary>
-        <p>Stand dieses Hinweises: Mai 2026.</p>
-      </details>
+    <div class="gc-special-window-content gc-legal-panel" data-legal-panel>
+      <section class="gc-legal-provider" aria-label="{{ T('legal_provider_block_title', 'Anbieter') }}">
+        <p class="gc-legal-provider-lines gc-mono">
+          <strong>{{ LEGAL_OPERATOR_NAME }}</strong><br>
+          {{ LEGAL_OPERATOR_STREET }}<br>
+          {{ LEGAL_OPERATOR_POSTAL }} {{ LEGAL_OPERATOR_CITY }}<br>
+          <a href="mailto:{{ LEGAL_OPERATOR_EMAIL }}">{{ LEGAL_OPERATOR_EMAIL }}</a>
+        </p>
+      </section>
+
+      <nav class="gc-legal-tabs" role="tablist" aria-label="{{ T('legal_page_title', 'Rechtliche Hinweise') }}">
+        {% for doc in LEGAL_DOCS %}
+        <button type="button"
+                class="gc-legal-tab{% if loop.first %} is-active{% endif %}"
+                role="tab"
+                aria-selected="{{ 'true' if loop.first else 'false' }}"
+                data-legal-tab="{{ doc.id }}">{{ T(doc.tab_key, doc.id) }}</button>
+        {% endfor %}
+      </nav>
+
+      {% for doc in LEGAL_DOCS %}
+      <div class="gc-legal-doc{% if loop.first %} is-active{% endif %}"
+           data-legal-doc="{{ doc.id }}"
+           role="tabpanel"
+           {% if not loop.first %}hidden{% endif %}>
+        <h3 class="gc-legal-doc-title">{{ T(doc.title_key, doc.id) }}</h3>
+        {% for section in doc.sections %}
+        <details class="gc-special-card"{% if section.open %} open{% endif %}>
+          <summary>{{ T(section.title_key, '') }}</summary>
+          <div class="gc-rules-panel-body">{{ T(section.body_key, '') | rules_md }}</div>
+        </details>
+        {% endfor %}
+      </div>
+      {% endfor %}
+
+      <footer class="gc-legal-footer">
+        <p class="gc-legal-stand gc-mono">{{ T("legal_stand_label", "") }}</p>
+        <div class="gc-legal-footer-actions">
+          <button type="button"
+                  class="gc-btn gc-btn-outline gc-btn-sm"
+                  data-special-open-window="support">
+            {{ T("legal_contact_form_cta", "Kontaktformular öffnen") }}
+          </button>
+          <a href="{{ url_for('legal_view') }}"
+             class="gc-btn gc-btn-ghost gc-btn-sm"
+             data-pjax-link
+             data-special-window-close="imprint">
+            {{ T("legal_open_public", "Vollständige Fassung öffnen") }}
+          </a>
+        </div>
+      </footer>
     </div>
   </aside>
 

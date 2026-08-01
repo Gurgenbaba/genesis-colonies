@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% set active_doc = legal_doc if legal_doc is defined else 'imprint' %}
+<div class="gc-page legal-page" id="legal-page" data-legal-page data-legal-doc="{{ active_doc }}">
+  <header class="gc-page-header section-header">
+    <h1 class="section-title">{{ T("legal_page_title", "Rechtliche Hinweise") }}</h1>
+    <p class="section-hint hint">{{ T("legal_page_intro", "") }}</p>
+  </header>
+
+  <section class="gc-panel legal-provider-panel" aria-labelledby="legal-provider-title">
+    <h2 class="gc-panel-title" id="legal-provider-title">{{ T("legal_provider_block_title", "Anbieter") }}</h2>
+    <p class="legal-provider-lines gc-mono">
+      <strong>{{ LEGAL_OPERATOR_NAME }}</strong><br>
+      {{ LEGAL_OPERATOR_STREET }}<br>
+      {{ LEGAL_OPERATOR_POSTAL }} {{ LEGAL_OPERATOR_CITY }}<br>
+      {{ LEGAL_OPERATOR_COUNTRY }}<br>
+      {{ T("legal_contact_email_label", "E-Mail") }}:
+      <a href="mailto:{{ LEGAL_OPERATOR_EMAIL }}">{{ LEGAL_OPERATOR_EMAIL }}</a>
+    </p>
+    <p class="hint">{{ T("legal_imprint_contact_body", "") | rules_md }}</p>
+  </section>
+
+  <nav class="legal-doc-tabs" role="tablist" aria-label="{{ T('legal_page_title', 'Rechtliche Hinweise') }}">
+    {% for doc in LEGAL_DOCS %}
+    <a href="{{ url_for('legal_view', doc=doc.id) }}"
+       class="legal-doc-tab{% if active_doc == doc.id %} is-active{% endif %}"
+       role="tab"
+       aria-selected="{{ 'true' if active_doc == doc.id else 'false' }}">
+      {{ T(doc.tab_key, doc.id) }}
+    </a>
+    {% endfor %}
+  </nav>
+
+  {% for doc in LEGAL_DOCS %}
+  {% if active_doc == doc.id %}
+  <section class="gc-panel legal-doc-panel" data-legal-doc-panel="{{ doc.id }}">
+    <h2 class="gc-panel-title">{{ T(doc.title_key, doc.id) }}</h2>
+    {% for section in doc.sections %}
+    <details class="gc-special-card"{% if section.open %} open{% endif %}>
+      <summary>{{ T(section.title_key, '') }}</summary>
+      <div class="gc-rules-panel-body">{{ T(section.body_key, '') | rules_md }}</div>
+    </details>
+    {% endfor %}
+    <p class="legal-stand gc-mono">{{ T("legal_stand_label", "") }}</p>
+  </section>
+  {% endif %}
+  {% endfor %}
+</div>
+{% endblock %}

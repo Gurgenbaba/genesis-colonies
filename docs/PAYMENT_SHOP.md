@@ -167,6 +167,19 @@ Webhook: `…/api/webhooks/stripe` Event `checkout.session.completed`.
 - Avatar-Frames / Fleet-Skins (später).
 - Free Login/Directives nerfen (Paid wird wertiger, Free bleibt stark).
 
+## Legal surfaces (digital goods)
+
+Owner: `game/legal_panel.py` — Imprint, Privacy, Terms, Withdrawal.
+
+| Surface | Notes |
+|---------|--------|
+| `GET /legal` (+ `/legal/<doc>`) | Public, no login — provider block always visible |
+| Ingame special window `imprint` | Same docs + contact-form CTA (Support) |
+| Auth/Landing footers | Links to `/legal` |
+| Checkout | Client Doppel-Ack; API `legal_ack` + `legal_text_version` stored on `shop_orders.metadata_json` |
+
+**Policy:** Virtual goods credit immediately after payment. After § 356 Abs. 5 acknowledgement + fulfillment: no voluntary refund. Exception: technical non-delivery → re-grant or provider refund (`billing` support category).
+
 ## Identity Cosmetics (Catalog v5 — Impulse)
 
 | SKU | Kind | Preis | Grant |

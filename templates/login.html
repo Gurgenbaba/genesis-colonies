@@ -123,6 +123,13 @@
       <footer class="auth-footer">
         <span>{{ footer_noacc }} <a href="{{ url_for('register') }}">{{ footer_create }}</a></span>
         <span><a href="{{ url_for('landing') }}">{{ footer_back }}</a></span>
+        <span class="auth-legal-links">
+          <a href="{{ url_for('legal_view', doc='imprint') }}">{{ T("legal_tab_imprint", "Impressum") }}</a>
+          ·
+          <a href="{{ url_for('legal_view', doc='privacy') }}">{{ T("legal_tab_privacy", "Datenschutz") }}</a>
+          ·
+          <a href="{{ url_for('legal_view', doc='terms') }}">{{ T("legal_tab_terms", "AGB") }}</a>
+        </span>
       </footer>
 
     </section>
