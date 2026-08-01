@@ -65,14 +65,16 @@ Never used for damage.
 
 ---
 
-## Expo pirate bridge (GC-CT-EXPO-001)
+## Expo pirate bridge (GC-CT-EXPO-001 / GC-EXPO-BATTLE)
 
-`pirate_encounter` still resolves via **ratio combat** (`resolve_pirate_encounter`). After resolve, `publish_expedition_pirate_combat_report` sends an inbox combat message with:
+`pirate_encounter` resolves via **real** `simulate_battle` (`resolve_pirate_encounter`). After resolve, `publish_expedition_pirate_combat_report` sends an inbox combat message with:
 
 - `combat_kind=expedition_pirate`
-- virtual pirate fleet for defender display
-- **synthetic** `rounds[]` for Theater playback only (`theater_synthetic: true`)
-- real player losses from Ratio
+- real pirate fleet stacks (`pirate_ships` from `pirate_points`)
+- **real** `rounds[]` from battle (`theater_synthetic: false`)
+- real attacker/defender losses; recyclers excluded from the fight and always return
+- player combat tech applies (`combat_research_applicable: true`); defender tech N/A (NPC)
+- battle metadata: `fighting_score`, `pirate_points`, `rounds_fought`
 
 Expedition report (loot/salvage) is unchanged and still sent. Opening the combat report starts Combat Theater.
 

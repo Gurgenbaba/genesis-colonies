@@ -87,6 +87,9 @@ def test_combat_theater_js_and_css_markers():
     assert "data-ct-wrap" in messages
     assert "combatTheater.mountAndPlay" in messages
     assert "expedition_pirate" in messages
+    assert "renderExpeditionPirateBattlePanel" in messages
+    assert "combat_report_research_npc_na" in messages
+    assert "isExpeditionPirateCombat" in messages
 
 
 def test_projectile_signatures_cover_all_units():
@@ -128,6 +131,12 @@ def test_locale_theater_keys_present():
         "combat_theater_skip",
         "combat_report_kind_expedition_pirate",
         "combat_report_expedition_pirate_name",
+        "combat_report_research_npc_na",
+        "combat_report_section_expo_pirate_ratio",
+        "combat_report_expo_pirate_hint",
+        "combat_report_expo_pirate_fleet_note",
+        "combat_report_expo_pirate_fight_score",
+        "combat_report_expo_pirate_points",
     ]
     for loc in ("de", "en", "es", "fr", "pl", "pt", "ru", "tr"):
         data = json.loads((ROOT / "locales" / f"{loc}.json").read_text(encoding="utf-8"))

@@ -21,16 +21,15 @@ EXPEDITION_DAILY_EFFICIENCY_STEP_EXPEDITIONS = 30
 EXPEDITION_DAILY_EFFICIENCY_STEP_DROP = 0.05
 EXPEDITION_DAILY_EFFICIENCY_FLOOR = 0.45
 
-# Role split (GC-EXPEDITION-LOOT-FINAL): loot / bergung / piratenkampf / escort
+# Role split (GC-EXPEDITION-LOOT-FINAL): loot / bergung / piratenkampf
 _EXPEDITION_CARGO_ROLES = frozenset({"expedition", "cargo"})
 _EXPEDITION_HULL_ROLES = frozenset({"expedition"})
 _EXPEDITION_ESCORT_ROLES = frozenset({"combat"})
-# Legacy alias — pirate combat uses escort-only fight power; hull value scales risk.
+# Preview alias — pirate battles now use all non-recycle hulls via simulate_battle.
 _EXPEDITION_COMBAT_ROLES = _EXPEDITION_HULL_ROLES | _EXPEDITION_ESCORT_ROLES
 
-# Escort effectiveness — ratio-based, diminishing returns (GC-SHIP escort balance).
+# Escort preview rating (informational only — not pirate battle SoT).
 _ESCORT_EFFECTIVENESS_CAP = 0.50
-_EXPO_ONLY_FIGHT_FACTOR = 0.18  # desperation fight when no combat escorts aboard (GC-EXPO-P1)
 
 # Voidrunner discovery bonus — once per fleet, server-side (GC-SHIP-1).
 _VOIDRUNNER_KEY = "eclipse_runner"
@@ -123,19 +122,13 @@ _EXPEDITION_LOOTBOX_DROPS: Dict[str, Dict[str, Any]] = {
 _ION_STORM_DELAY_MULT_RANGE = (0.20, 0.60)
 _MINEFIELD_LOSS_RANGE = (2, 8)
 
-# Pirate encounter — lightweight ratio combat (no combat.py resolver). GC-EXPO-P1/P2/P3.
-_PIRATE_ENEMY_FACTOR_RANGE = (0.40, 0.75)
-_PIRATE_WIN_CHANCE_BASE = 0.28
-_PIRATE_WIN_CHANCE_SCALE = 0.70
-_PIRATE_WIN_CHANCE_CLAMP = (0.10, 0.90)
-_PIRATE_LOSS_WIN_RANGE = (1, 6)
-_PIRATE_LOSS_CLOSE_RANGE = (3, 10)
-_PIRATE_LOSS_DEFEAT_RANGE = (5, 14)
-_PIRATE_WRECK_POINTS_RATIO = 0.80  # virtual pirate wrecks for ephemeral TF on win
+# Pirate encounter — real simulate_battle (GC-EXPO-BATTLE). Recyclers never fight.
+_PIRATE_ENEMY_FACTOR_RANGE = (0.55, 0.95)
+_PIRATE_BUDGET_SOFT_CAP = 5_000_000
+_PIRATE_BUDGET_SOFT_SQRT_SCALE = 2500.0
 _PIRATE_PROTECT_ROLES: Tuple[str, ...] = ("recycle",)
 
 # Default loss order for hazards (minefield): combat → recycle → expedition → …
-# Pirate encounters pass protect_roles=_PIRATE_PROTECT_ROLES so recyclers always salvage TF.
 _LOSS_ROLE_PRIORITY: Tuple[str, ...] = (
     "combat",
     "recycle",
@@ -710,9 +703,11 @@ def _voidrunner_loot_mult(ships: Mapping[str, int] | None) -> float:
 
 
 def build_expedition_fleet_rating(ships: Mapping[str, int]) -> Dict[str, Any]:
-    """Canonical expedition escort / voidrunner rating — preview, outcome, and report."""
+    """Expedition preview rating — escort cover is informational; pirates use real battles."""
     hull_val = calculate_expedition_hull_value(ships)
     escort_val = calculate_expedition_escort_value(ships)
+    fighting, recyclers = split_expedition_pirate_fleets(ships or {})
+    fighting_score = calculate_fleet_value(fighting)
     ratio = escort_val / max(1, hull_val) if hull_val > 0 else 0.0
     eff = _escort_effectiveness(ratio)
     void_bonus = _voidrunner_discovery_bonus(ships)
@@ -721,6 +716,9 @@ def build_expedition_fleet_rating(ships: Mapping[str, int]) -> Dict[str, Any]:
         "escort_combat_value": int(escort_val),
         "escort_ratio": round(ratio, 4),
         "escort_effectiveness": round(eff, 4),
+        "fighting_score": int(fighting_score),
+        "recycler_count": int(sum(recyclers.values())),
+        "pirate_battle_mode": "simulate_battle",
         "voidrunner_bonus_active": void_bonus > 0,
         "voidrunner_bonus_pct": int(round(void_bonus * 100)) if void_bonus > 0 else 0,
     }
@@ -1011,11 +1009,6 @@ def _apply_directive_reward_modifiers(
         return
     for key in VALID_RESOURCE_KEYS:
         rewards[key] = int(int(rewards.get(key) or 0) * mult)
-
-
-def _pirate_win_chance(ratio: float) -> float:
-    raw = _PIRATE_WIN_CHANCE_BASE + _PIRATE_WIN_CHANCE_SCALE * float(ratio) / (1.0 + float(ratio))
-    return max(_PIRATE_WIN_CHANCE_CLAMP[0], min(_PIRATE_WIN_CHANCE_CLAMP[1], raw))
 
 
 def _loss_role_priority(ship_key: str) -> int:
@@ -1495,16 +1488,56 @@ def _resolve_event_delay_extra(
     return base
 
 
+def split_expedition_pirate_fleets(
+    ships: Mapping[str, int],
+) -> Tuple[Dict[str, int], Dict[str, int]]:
+    """Split expo fleet into fighters (all non-recycle) and protected recyclers."""
+    fighting: Dict[str, int] = {}
+    recyclers: Dict[str, int] = {}
+    for key, qty in (ships or {}).items():
+        amount = int(qty or 0)
+        if amount <= 0:
+            continue
+        sk = str(key)
+        if ship_has_role(sk, "recycle"):
+            recyclers[sk] = recyclers.get(sk, 0) + amount
+        else:
+            fighting[sk] = fighting.get(sk, 0) + amount
+    return fighting, recyclers
+
+
+def soft_cap_pirate_budget(fighting_score: int) -> int:
+    """Linear to soft cap, then sqrt diminishing returns (mega-fleet performance + balance)."""
+    score = max(0, int(fighting_score))
+    soft = int(_PIRATE_BUDGET_SOFT_CAP)
+    if score <= soft:
+        return score
+    over = score - soft
+    return soft + int(math.sqrt(float(over)) * float(_PIRATE_BUDGET_SOFT_SQRT_SCALE))
+
+
 def resolve_pirate_encounter(
     rng: random.Random,
     ships: Mapping[str, int],
     *,
+    player_id: int | None = None,
+    conn=None,
+    movement_id: int | None = None,
     expedition_hull_value: int | None = None,
     escort_combat_value: int | None = None,
 ) -> Dict[str, Any]:
-    """Ratio-based pirate skirmish — pirates scale with expo hull risk, fight power from escorts only."""
+    """Real ``simulate_battle`` vs Void Pirates — all non-recycle hulls fight; recyclers stand off."""
+    from .combat import (
+        WINNER_ATTACKER,
+        attacker_stacks_from_fleet,
+        remaining_stock,
+        simulate_battle,
+    )
+    from .combat_models import COMBAT_UNIT_SHIP, stacks_from_counts
+
+    fighting, recyclers = split_expedition_pirate_fleets(ships)
     expo_risk = max(
-        1,
+        0,
         int(
             expedition_hull_value
             if expedition_hull_value is not None
@@ -1519,54 +1552,95 @@ def resolve_pirate_encounter(
             else calculate_expedition_escort_value(ships)
         ),
     )
-    escort_ratio = escort_pts / max(1, expo_risk)
+    escort_ratio = escort_pts / max(1, expo_risk) if expo_risk > 0 else 0.0
     escort_eff = _escort_effectiveness(escort_ratio)
 
+    fighting_score = max(0, calculate_fleet_value(fighting))
+    budget = soft_cap_pirate_budget(fighting_score)
     enemy_factor = rng.uniform(_PIRATE_ENEMY_FACTOR_RANGE[0], _PIRATE_ENEMY_FACTOR_RANGE[1])
-    pirate_points = max(1, int(expo_risk * enemy_factor))
+    pirate_points = max(1, int(budget * enemy_factor)) if budget > 0 else 1
 
-    if escort_pts > 0:
-        fight_points = escort_pts
-    else:
-        fight_points = max(1, int(expo_risk * _EXPO_ONLY_FIGHT_FACTOR))
+    seed = int(movement_id) if movement_id is not None else int(rng.random() * 1_000_000_000)
+    pirate_ships = virtual_pirate_fleet(pirate_points, seed=seed)
 
-    ratio = fight_points / max(1, pirate_points)
-    base_win = _pirate_win_chance(ratio)
-    win_chance = min(
-        _PIRATE_WIN_CHANCE_CLAMP[1],
-        base_win + escort_eff * (1.0 - base_win),
+    if not fighting:
+        # Only recyclers / empty — no fight; pirates present for report flavor only.
+        return {
+            "won": False,
+            "pirate_points": int(pirate_points),
+            "pirate_ships": dict(pirate_ships),
+            "expedition_hull_value": int(expo_risk),
+            "escort_combat_value": int(escort_pts),
+            "escort_ratio": float(escort_ratio),
+            "escort_effectiveness": float(escort_eff),
+            "fleet_points": 0,
+            "fighting_score": 0,
+            "remaining_ships": dict(recyclers),
+            "losses": {},
+            "losses_total": 0,
+            "defender_losses": {},
+            "rounds": [],
+            "rounds_fought": 0,
+            "winner": "defender",
+            "recycler_protected": True,
+            "real_battle": True,
+        }
+
+    atk_stacks = attacker_stacks_from_fleet(fighting)
+    def_stacks = stacks_from_counts(pirate_ships, unit_type=COMBAT_UNIT_SHIP)
+    battle_rng = random.Random(int(seed) * 91711 + 4243)
+    combat_result = simulate_battle(
+        atk_stacks,
+        def_stacks,
+        rng=battle_rng,
+        attacker_player_id=int(player_id) if player_id is not None and int(player_id) > 0 else None,
+        defender_player_id=None,
+        conn=conn,
     )
-    win_chance = max(_PIRATE_WIN_CHANCE_CLAMP[0], win_chance)
-    won = rng.random() <= win_chance
-
-    if won:
-        lo, hi = _PIRATE_LOSS_CLOSE_RANGE if ratio < 1.0 else _PIRATE_LOSS_WIN_RANGE
-    else:
-        lo, hi = _PIRATE_LOSS_DEFEAT_RANGE
-    loss_pct = rng.randint(int(lo), int(hi))
-    if escort_eff > 0 and won:
-        loss_pct = max(1, int(loss_pct * (1.0 - escort_eff * 0.35)))
-
-    remaining, losses = apply_expedition_ship_losses(
-        ships,
-        loss_pct,
-        protect_roles=_PIRATE_PROTECT_ROLES,
+    losses = {
+        str(k): int(v)
+        for k, v in dict(combat_result.attacker_losses or {}).items()
+        if int(v or 0) > 0
+    }
+    defender_losses = {
+        str(k): int(v)
+        for k, v in dict(combat_result.defender_losses or {}).items()
+        if int(v or 0) > 0
+    }
+    remaining_fighters = remaining_stock(
+        fighting,
+        losses,
+        canonical_ship_keys=True,
     )
+    remaining = _merge_ship_counts(remaining_fighters, recyclers)
+    won = str(combat_result.winner or "") == WINNER_ATTACKER
+    rounds_meta = [
+        {
+            "number": int(getattr(rnd, "number", idx + 1) or (idx + 1)),
+            "attacker_losses": dict(getattr(rnd, "attacker_losses", {}) or {}),
+            "defender_losses": dict(getattr(rnd, "defender_losses", {}) or {}),
+        }
+        for idx, rnd in enumerate(tuple(combat_result.rounds or ()))
+    ]
     return {
         "won": bool(won),
         "pirate_points": int(pirate_points),
+        "pirate_ships": dict(pirate_ships),
         "expedition_hull_value": int(expo_risk),
         "escort_combat_value": int(escort_pts),
         "escort_ratio": float(escort_ratio),
         "escort_effectiveness": float(escort_eff),
-        "fleet_points": int(fight_points),
-        "ratio": float(ratio),
-        "win_chance": float(win_chance),
-        "loss_pct": int(loss_pct),
+        "fleet_points": int(fighting_score),
+        "fighting_score": int(fighting_score),
         "remaining_ships": remaining,
         "losses": losses,
         "losses_total": int(sum(losses.values())),
+        "defender_losses": defender_losses,
+        "rounds": rounds_meta,
+        "rounds_fought": len(rounds_meta),
+        "winner": str(combat_result.winner or ""),
         "recycler_protected": True,
+        "real_battle": True,
     }
 
 
@@ -1586,19 +1660,6 @@ def calculate_expedition_recycler_cargo(ships: Mapping[str, int]) -> int:
     return max(0, total)
 
 
-def _virtual_pirate_losses(pirate_points: int, *, won: bool) -> Dict[str, int]:
-    """Estimate destroyed pirate hulls for debris when the player wins."""
-    if not won:
-        return {}
-    pts = max(0, int(pirate_points))
-    if pts <= 0:
-        return {}
-    wreck_pts = int(pts * _PIRATE_WRECK_POINTS_RATIO)
-    per_hull = max(1, ship_score_value("falcon_interceptor"))
-    count = max(1, wreck_pts // per_hull)
-    return {"falcon_interceptor": min(count, 500)}
-
-
 _VIRTUAL_PIRATE_HULL_MIX: Tuple[Tuple[str, float], ...] = (
     ("spark_drone", 0.35),
     ("falcon_interceptor", 0.35),
@@ -1608,7 +1669,7 @@ _VIRTUAL_PIRATE_HULL_MIX: Tuple[Tuple[str, float], ...] = (
 
 
 def virtual_pirate_fleet(pirate_points: int, *, seed: int) -> Dict[str, int]:
-    """Deterministic display fleet for Combat Theater (presentation only)."""
+    """Deterministic pirate fleet from ``pirate_points`` — used as real battle stacks."""
     pts = max(0, int(pirate_points))
     if pts <= 0:
         return {"spark_drone": 1}
@@ -1621,62 +1682,11 @@ def virtual_pirate_fleet(pirate_points: int, *, seed: int) -> Dict[str, int]:
         jitter = 0.85 + rng.random() * 0.3
         count = max(0, int((budget * jitter) / per))
         if count > 0:
-            out[key] = min(count, 50_000)
+            out[key] = count
             remaining = max(0.0, remaining - count * per)
     if not out:
         out["spark_drone"] = max(1, pts // max(1, ship_score_value("spark_drone")))
     return out
-
-
-def _split_losses_across_rounds(
-    losses: Mapping[str, int],
-    n_rounds: int,
-    rng: random.Random,
-) -> list[Dict[str, int]]:
-    n = max(1, int(n_rounds))
-    buckets: list[Dict[str, int]] = [{} for _ in range(n)]
-    for key, raw in dict(losses or {}).items():
-        total = max(0, int(raw or 0))
-        if total <= 0:
-            continue
-        # Prefer later rounds for residual so early rounds still have fire.
-        weights = [rng.randint(1, 5) for _ in range(n)]
-        wsum = sum(weights) or 1
-        assigned = 0
-        for i in range(n):
-            if i == n - 1:
-                qty = total - assigned
-            else:
-                qty = int(total * weights[i] / wsum)
-                assigned += qty
-            if qty > 0:
-                buckets[i][str(key)] = qty
-    return buckets
-
-
-def synthesize_expo_pirate_theater_rounds(
-    *,
-    attacker_losses: Mapping[str, int],
-    defender_losses: Mapping[str, int],
-    movement_id: int,
-) -> list[Any]:
-    """Presentation-only round list for Combat Theater (does not alter Ratio outcomes)."""
-    from types import SimpleNamespace
-
-    rng = random.Random(int(movement_id) * 7919 + 4242)
-    n = 2 + rng.randint(0, 2)  # 2..4
-    atk_parts = _split_losses_across_rounds(attacker_losses, n, rng)
-    def_parts = _split_losses_across_rounds(defender_losses, n, rng)
-    rounds = []
-    for i in range(n):
-        rounds.append(
-            SimpleNamespace(
-                number=i + 1,
-                attacker_losses=dict(atk_parts[i]),
-                defender_losses=dict(def_parts[i]),
-            )
-        )
-    return rounds
 
 
 def publish_expedition_pirate_combat_report(
@@ -1690,10 +1700,7 @@ def publish_expedition_pirate_combat_report(
     locale: str | None = None,
     conn=None,
 ) -> Dict[str, Any] | None:
-    """Inbox combat report so Expo pirate fights open Combat Theater.
-
-    Ratio combat remains SoT for win/losses; rounds are synthetic presentation only.
-    """
+    """Inbox combat report for Expo pirate fights — real ``simulate_battle`` rounds."""
     from .combat import WINNER_ATTACKER, WINNER_DEFENDER, publish_attack_combat_report
     from .i18n import tr
     from types import SimpleNamespace
@@ -1702,41 +1709,48 @@ def publish_expedition_pirate_combat_report(
     won = bool(pc.get("won"))
     pirate_points = max(0, int(pc.get("pirate_points") or 0))
     player_losses = dict(pc.get("losses") or {})
-    pirate_losses = _virtual_pirate_losses(pirate_points, won=won)
-    if not won and not pirate_losses:
-        # Still show some pirate casualties for theater when player loses (cosmetic).
-        pirate_losses = {
-            "spark_drone": max(1, min(40, pirate_points // max(1, ship_score_value("spark_drone") * 8))),
-        }
-
-    defending = virtual_pirate_fleet(pirate_points, seed=int(movement_id))
-    # Ensure losses ⊆ starting fleet for display consistency
+    pirate_losses = {
+        str(k): int(v)
+        for k, v in dict(pc.get("defender_losses") or {}).items()
+        if int(v or 0) > 0
+    }
+    defending = dict(pc.get("pirate_ships") or {})
+    if not defending:
+        defending = virtual_pirate_fleet(pirate_points, seed=int(movement_id))
     for key, lost in list(pirate_losses.items()):
         if key not in defending:
             defending[key] = max(int(lost), 1)
         else:
             defending[key] = max(int(defending[key]), int(lost))
 
-    rounds = synthesize_expo_pirate_theater_rounds(
+    rounds_raw = list(pc.get("rounds") or [])
+    rounds_ns = [
+        SimpleNamespace(
+            number=int(rnd.get("number") or (i + 1)),
+            attacker_losses=dict(rnd.get("attacker_losses") or {}),
+            defender_losses=dict(rnd.get("defender_losses") or {}),
+        )
+        for i, rnd in enumerate(rounds_raw)
+        if isinstance(rnd, Mapping)
+    ]
+    combat_result = SimpleNamespace(
+        winner=str(pc.get("winner") or (WINNER_ATTACKER if won else WINNER_DEFENDER)),
+        rounds=rounds_ns,
         attacker_losses=player_losses,
         defender_losses=pirate_losses,
-        movement_id=int(movement_id),
     )
+
+    # Report attacker side = fighting hulls only (recyclers stood off).
+    fighting, _recyclers = split_expedition_pirate_fleets(attacking_ships)
     remaining = dict(pc.get("remaining_ships") or {})
     pirate_name = tr("combat_report_expedition_pirate_name", "Void Pirates", locale=locale)
-    combat_result = SimpleNamespace(
-        winner=WINNER_ATTACKER if won else WINNER_DEFENDER,
-        rounds=rounds,
-        attacker_losses=player_losses,
-        defender_losses=pirate_losses,
-    )
     return publish_attack_combat_report(
         attacker_id=int(player_id),
         defender_id=0,
         coords=str(coords or ""),
         attacker_name=str(player_name or "—"),
         defender_name=pirate_name,
-        attacking_ships=dict(attacking_ships or {}),
+        attacking_ships=dict(fighting or attacking_ships or {}),
         defending_ships=defending,
         defending_defense={},
         combat_result=combat_result,
@@ -1747,9 +1761,19 @@ def publish_expedition_pirate_combat_report(
         attacker_locale=locale,
         combat_kind="expedition_pirate",
         extra_metadata={
-            "theater_synthetic": True,
+            "theater_synthetic": False,
             "expedition_pirate": True,
+            "real_battle": True,
             "pirate_points": pirate_points,
+            "expedition_hull_value": max(0, int(pc.get("expedition_hull_value") or 0)),
+            "escort_combat_value": max(0, int(pc.get("escort_combat_value") or 0)),
+            "escort_ratio": float(pc.get("escort_ratio") or 0.0),
+            "fleet_points": max(0, int(pc.get("fleet_points") or 0)),
+            "fighting_score": max(0, int(pc.get("fighting_score") or pc.get("fleet_points") or 0)),
+            "rounds_fought": max(0, int(pc.get("rounds_fought") or len(pc.get("rounds") or []))),
+            "recycler_protected": True,
+            "combat_research_applicable": True,
+            "defender_combat_research_na": True,
         },
     )
 
@@ -1779,10 +1803,11 @@ def resolve_expedition_pirate_debris(
     from .combat import build_combat_debris_metadata, calculate_combat_debris
 
     player_losses = {str(k): int(v) for k, v in (ship_losses or {}).items() if int(v or 0) > 0}
-    pirate_losses = _virtual_pirate_losses(
-        int(pirate_combat.get("pirate_points") or 0),
-        won=bool(pirate_combat.get("won")),
-    )
+    pirate_losses = {
+        str(k): int(v)
+        for k, v in dict(pirate_combat.get("defender_losses") or {}).items()
+        if int(v or 0) > 0
+    }
     if not player_losses and not pirate_losses:
         return None
 
@@ -1819,6 +1844,8 @@ def resolve_expedition_outcome(
     directive_flags: Mapping[str, Any] | None = None,
     daily_efficiency_mult: float = 1.0,
     familiarity_status: str | None = None,
+    player_id: int | None = None,
+    conn=None,
 ) -> Dict[str, Any]:
     """Idempotent expedition resolution keyed by movement id."""
     flags = dict(directive_flags or {})
@@ -1861,6 +1888,9 @@ def resolve_expedition_outcome(
         pirate_combat = resolve_pirate_encounter(
             pirate_rng,
             ships,
+            player_id=player_id,
+            conn=conn,
+            movement_id=int(movement_id),
             expedition_hull_value=int(fleet_rating["expedition_hull_value"]),
             escort_combat_value=int(fleet_rating["escort_combat_value"]),
         )
@@ -2166,9 +2196,18 @@ def build_expedition_report(
         if losses_total > 0:
             body_lines.append(
                 _t(
-                    "fleet_expedition_report_pirate_loss_rate",
-                    "Ship losses: %(pct)s%%",
-                    pct=fmt_int(int(pirate_combat.get("loss_pct") or 0)),
+                    "fleet_expedition_report_pirate_losses",
+                    "Ship losses: %(count)s",
+                    count=fmt_int(losses_total),
+                )
+            )
+        rounds_fought = int(pirate_combat.get("rounds_fought") or 0)
+        if rounds_fought > 0:
+            body_lines.append(
+                _t(
+                    "fleet_expedition_report_pirate_rounds",
+                    "Combat rounds: %(count)s",
+                    count=fmt_int(rounds_fought),
                 )
             )
 
@@ -2415,13 +2454,13 @@ def build_expedition_report(
             "won": bool(pirate_combat.get("won")),
             "pirate_points": int(pirate_combat.get("pirate_points") or 0),
             "fleet_points": int(pirate_combat.get("fleet_points") or 0),
+            "fighting_score": int(pirate_combat.get("fighting_score") or pirate_combat.get("fleet_points") or 0),
             "expedition_hull_value": int(pirate_combat.get("expedition_hull_value") or 0),
             "escort_combat_value": int(pirate_combat.get("escort_combat_value") or 0),
             "escort_ratio": float(pirate_combat.get("escort_ratio") or 0),
             "escort_effectiveness": float(pirate_combat.get("escort_effectiveness") or 0),
-            "ratio": float(pirate_combat.get("ratio") or 0),
-            "win_chance": float(pirate_combat.get("win_chance") or 0),
-            "loss_pct": int(pirate_combat.get("loss_pct") or 0),
+            "rounds_fought": int(pirate_combat.get("rounds_fought") or 0),
+            "real_battle": bool(pirate_combat.get("real_battle")),
             "salvage_tier": str(pirate_combat.get("salvage_tier") or "none"),
             "recycler_protected": bool(pirate_combat.get("recycler_protected")),
         }

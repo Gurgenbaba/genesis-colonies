@@ -555,6 +555,37 @@ def test_build_combat_report_omits_debris_when_none():
     assert "Trümmerfeld" not in body and "Debris field" not in body
 
 
+def test_build_combat_report_expo_pirate_shows_attacker_tech_npc_na():
+    """Expo pirate real battles: player tech applies; NPC side is N/A (not fake L0)."""
+    from game.combat import build_combat_report
+    from game.combat_models import CombatResult
+
+    combat_result = CombatResult(
+        winner="defender",
+        rounds=(),
+        attacker_losses={"ironclad_frigate": 10},
+        defender_losses={"spark_drone": 500},
+    )
+    body, meta = build_combat_report(
+        attacker_id=1,
+        attacker_name="Commander",
+        defender_id=0,
+        defender_name="Void Pirates",
+        coords="1:6:16",
+        attacking_ships={"ironclad_frigate": 100, "solar_skiff": 1000},
+        defending_ships={"spark_drone": 80_000},
+        combat_result=combat_result,
+        locale="en",
+        combat_kind="expedition_pirate",
+    )
+    assert meta.get("combat_research_applicable") is True
+    assert meta.get("defender_combat_research_na") is True
+    assert meta.get("defender_combat_research") is None
+    assert meta.get("attacker_combat_research") is not None
+    assert "NPC force" in body
+    assert "Ratio skirmish" not in body
+
+
 def test_both_sides_empty_returns_draw_without_rounds():
     attacker = make_combat_side("attacker", [])
     defender = make_combat_side("defender", [])

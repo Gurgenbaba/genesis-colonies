@@ -1293,11 +1293,14 @@ def build_combat_report(
     defender_planet_id: int | None = None,
     conn=None,
     locale: str | None = None,
+    combat_kind: str | None = None,
 ) -> Tuple[str, Dict[str, Any]]:
     """Genesis-style combat report body + structured metadata for ``player_messages``."""
     from .i18n import fmt_int, tr
 
     loc = locale
+    kind = str(combat_kind or "").strip().lower()
+    expo_pirate = kind == "expedition_pirate"
 
     def _t(key: str, default: str | None = None, **kw: Any) -> str:
         return tr(key, default, locale=loc, **kw)
@@ -1322,6 +1325,7 @@ def build_combat_report(
     target_planet_txt = str(target_planet_name or "").strip()
     origin_planet_txt = str(origin_planet_name or "").strip()
 
+    # Expo pirates: player combat tech applies; NPC side has no account research (not fake L0).
     atk_research = (
         combat_research_snapshot_for_player(
             int(attacker_id),
@@ -1331,15 +1335,18 @@ def build_combat_report(
         if int(attacker_id) > 0
         else {}
     )
-    def_research = (
-        combat_research_snapshot_for_player(
-            int(defender_id),
-            planet_id=int(defender_planet_id) if defender_planet_id else None,
-            conn=conn,
+    if expo_pirate:
+        def_research: Dict[str, Any] | None = None
+    else:
+        def_research = (
+            combat_research_snapshot_for_player(
+                int(defender_id),
+                planet_id=int(defender_planet_id) if defender_planet_id else None,
+                conn=conn,
+            )
+            if int(defender_id) > 0
+            else {}
         )
-        if int(defender_id) > 0
-        else {}
-    )
 
     body_lines: list[str] = [
         _t("combat_report_title", "═══ Combat report ═══"),
@@ -1419,15 +1426,31 @@ def build_combat_report(
             ],
         ),
         "",
-        _format_kv_section(
-            _t("combat_report_section_research", "Combat technology"),
-            [
-                _t("combat_report_section_attacker", "Attacker"),
-                *_format_combat_research_lines(atk_research, tr_fn=_t),
-                "",
-                _t("combat_report_section_defender", "Defender"),
-                *_format_combat_research_lines(def_research, tr_fn=_t),
-            ],
+        (
+            _format_kv_section(
+                _t("combat_report_section_research", "Combat technology"),
+                [
+                    _t("combat_report_section_attacker", "Attacker"),
+                    *_format_combat_research_lines(atk_research, tr_fn=_t),
+                    "",
+                    _t("combat_report_section_defender", "Defender"),
+                    _t(
+                        "combat_report_research_npc_na",
+                        "NPC force — no account combat technology.",
+                    ),
+                ],
+            )
+            if expo_pirate
+            else _format_kv_section(
+                _t("combat_report_section_research", "Combat technology"),
+                [
+                    _t("combat_report_section_attacker", "Attacker"),
+                    *_format_combat_research_lines(atk_research, tr_fn=_t),
+                    "",
+                    _t("combat_report_section_defender", "Defender"),
+                    *_format_combat_research_lines(def_research, tr_fn=_t),
+                ],
+            )
         ),
         "",
         _format_kv_section(
@@ -1575,9 +1598,11 @@ def build_combat_report(
         "loot": dict(loot_map),
         "rounds_fought": len(rounds_meta),
         "rounds": rounds_meta,
-        "attacker_combat_research": atk_research,
-        "defender_combat_research": def_research,
+        "combat_research_applicable": True,
+        "defender_combat_research_na": bool(expo_pirate),
     }
+    metadata["attacker_combat_research"] = atk_research
+    metadata["defender_combat_research"] = None if expo_pirate else def_research
     if debris_meta:
         metadata["debris"] = dict(debris_meta)
     return "\n".join(line for line in body_lines if line is not None).strip(), metadata
@@ -1628,6 +1653,7 @@ def publish_attack_combat_report(
         defender_planet_id=defender_planet_id,
         conn=conn,
         locale=attacker_locale,
+        combat_kind=combat_kind,
     )
     if fleet_id is not None:
         metadata["fleet_id"] = int(fleet_id)

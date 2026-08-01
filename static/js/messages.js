@@ -504,14 +504,29 @@
     return `<div class="gc-combat-research-side gc-combat-research-side--${esc(roleClass)}">${rows}</div>`;
   }
 
+  function isExpeditionPirateCombat(meta) {
+    const kind = String(meta?.combat_kind || "").trim().toLowerCase();
+    return kind === "expedition_pirate" || meta?.expedition_pirate === true;
+  }
+
   function renderCombatResearchPanel(meta) {
     const atk = meta.attacker_combat_research;
     const def = meta.defender_combat_research;
-    if (!atk && !def) return "";
+    const defNa =
+      isExpeditionPirateCombat(meta) || meta?.defender_combat_research_na === true;
+    if (!atk && !def && !defNa) return "";
     const hint = t(
       "combat_report_research_hint",
       "Account research bonuses applied to attack, hull, and shields in this battle."
     );
+    const defSide = defNa
+      ? `<p class="gc-combat-report-research-hint">${esc(
+          t(
+            "combat_report_research_npc_na",
+            "NPC force — no account combat technology."
+          )
+        )}</p>`
+      : renderCombatResearchSide(def, "defender");
     return renderCombatPanel(
       t("combat_report_section_research", "Combat technology"),
       `<p class="gc-combat-report-research-hint">${esc(hint)}</p>` +
@@ -522,10 +537,63 @@
           `</div>` +
           `<div class="gc-combat-research-col">` +
             `<h5 class="gc-combat-research-col-title">${combatActorNameHtml(meta, "defender", t("combat_report_section_defender", "Defender"))}</h5>` +
-            renderCombatResearchSide(def, "defender") +
+            defSide +
           `</div>` +
         `</div>`,
       "gc-combat-report-panel--research"
+    );
+  }
+
+  function renderExpeditionPirateBattlePanel(meta) {
+    if (!isExpeditionPirateCombat(meta)) return "";
+    const rounds = Math.max(
+      0,
+      Number(meta.rounds_fought) || (Array.isArray(meta.rounds) ? meta.rounds.length : 0) || 0
+    );
+    const atkLost = unitCountTotal(meta.attacker_losses);
+    const defLost = unitCountTotal(meta.defender_losses);
+    const fightScore = Math.max(0, Number(meta.fighting_score) || Number(meta.fleet_points) || 0);
+    const piratePts = Math.max(0, Number(meta.pirate_points) || 0);
+    const hint = t(
+      "combat_report_expo_pirate_hint",
+      "Real battle — all hulls fight except reclaimers, which stand off to salvage debris."
+    );
+    return renderCombatPanel(
+      t("combat_report_section_expo_pirate_ratio", "Battle summary"),
+      `<p class="gc-combat-report-research-hint">${esc(hint)}</p>` +
+        `<div class="gc-player-card-stats gc-combat-report-stats gc-combat-report-expo-ratio">` +
+          `<div class="gc-player-card-stat">` +
+            `<span class="gc-player-card-stat-label">${esc(
+              t("combat_report_stat_rounds", "Rounds")
+            )}</span>` +
+            `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(rounds))}</span>` +
+          `</div>` +
+          `<div class="gc-player-card-stat">` +
+            `<span class="gc-player-card-stat-label">${esc(
+              t("combat_report_stat_atk_lost", "Attacker losses")
+            )}</span>` +
+            `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(atkLost))}</span>` +
+          `</div>` +
+          `<div class="gc-player-card-stat">` +
+            `<span class="gc-player-card-stat-label">${esc(
+              t("combat_report_stat_def_lost", "Defender losses")
+            )}</span>` +
+            `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(defLost))}</span>` +
+          `</div>` +
+          `<div class="gc-player-card-stat">` +
+            `<span class="gc-player-card-stat-label">${esc(
+              t("combat_report_expo_pirate_fight_score", "Fighting score")
+            )}</span>` +
+            `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(fightScore))}</span>` +
+          `</div>` +
+          `<div class="gc-player-card-stat">` +
+            `<span class="gc-player-card-stat-label">${esc(
+              t("combat_report_expo_pirate_points", "Pirate strength")
+            )}</span>` +
+            `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(piratePts))}</span>` +
+          `</div>` +
+        `</div>`,
+      "gc-combat-report-panel--expo-ratio"
     );
   }
 
@@ -1028,10 +1096,20 @@
       `</div>`
     );
 
+    const expoBattlePanel = renderExpeditionPirateBattlePanel(safeMeta);
+    if (expoBattlePanel) sections.push(expoBattlePanel);
+
     sections.push(
       renderCombatPanel(
         t("combat_report_section_forces", "Forces"),
-        renderCombatForcesDuel(safeMeta, defenseStock),
+        (isExpeditionPirateCombat(safeMeta)
+          ? `<p class="gc-combat-report-research-hint">${esc(
+              t(
+                "combat_report_expo_pirate_fleet_note",
+                "Real Void Pirate fleet from combat resolution. Reclaimers did not enter the fight."
+              )
+            )}</p>`
+          : "") + renderCombatForcesDuel(safeMeta, defenseStock),
         "gc-combat-report-panel--forces-wrap"
       )
     );
@@ -1952,19 +2030,19 @@
               `</div>` +
               `<div class="gc-player-card-stat">` +
                 `<span class="gc-player-card-stat-label">${esc(t("expedition_report_stat_fleet_strength", "Fleet strength"))}</span>` +
-                `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(pirateCombat.fleet_points || 0))}</span>` +
-              `</div>` +
-              `<div class="gc-player-card-stat">` +
-                `<span class="gc-player-card-stat-label">${esc(t("expedition_report_stat_loss_rate", "Loss rate"))}</span>` +
-                `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(pirateCombat.loss_pct || 0))}%</span>` +
-              `</div>` +
-              `<div class="gc-player-card-stat">` +
-                `<span class="gc-player-card-stat-label">${esc(
-                  t("expedition_report_stat_escort_cover", "Escort cover")
-                )}</span>` +
                 `<span class="gc-player-card-stat-value gc-mono">${esc(
-                  formatInt(Math.round((Number(pirateCombat.escort_effectiveness) || 0) * 100))
-                )}%</span>` +
+                  formatInt(pirateCombat.fighting_score || pirateCombat.fleet_points || 0)
+                )}</span>` +
+              `</div>` +
+              `<div class="gc-player-card-stat">` +
+                `<span class="gc-player-card-stat-label">${esc(t("combat_report_stat_rounds", "Rounds"))}</span>` +
+                `<span class="gc-player-card-stat-value gc-mono">${esc(
+                  formatInt(pirateCombat.rounds_fought || 0)
+                )}</span>` +
+              `</div>` +
+              `<div class="gc-player-card-stat">` +
+                `<span class="gc-player-card-stat-label">${esc(t("combat_report_stat_atk_lost", "Attacker losses"))}</span>` +
+                `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(lossesTotal))}</span>` +
               `</div>` +
             `</div>` +
             (pirateCombat.recycler_protected

@@ -5358,6 +5358,8 @@ def _handle_expedition_holding_end(movement: Dict[str, Any], *, conn, now: float
         directive_flags=directive_flags,
         daily_efficiency_mult=daily_efficiency_mult,
         familiarity_status=familiarity_status,
+        player_id=int(player_id),
+        conn=conn,
     )
     rewards = dict(outcome["rewards"])
     if world_key:

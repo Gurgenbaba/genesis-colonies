@@ -33,7 +33,8 @@ from game.expedition_events import (
     resolve_pirate_encounter,
     roll_lost_container_lootboxes,
     roll_pirate_salvage_rewards,
-    synthesize_expo_pirate_theater_rounds,
+    soft_cap_pirate_budget,
+    split_expedition_pirate_fleets,
     virtual_pirate_fleet,
 )
 from game.fleet_defs import ship_score_value
@@ -178,39 +179,69 @@ def test_hull_and_escort_values_split_roles():
     assert rating["escort_effectiveness"] < 0.05
 
 
-def test_one_escort_with_large_expo_fleet_has_minimal_pirate_advantage():
+def test_pirate_battle_uses_real_simulate_battle_payload():
     import random
 
-    small_expo = {_ODYSSEY_KEY: 1, "falcon_interceptor": 1}
-    large_expo = {_ODYSSEY_KEY: 100, "falcon_interceptor": 1}
-    small = resolve_pirate_encounter(random.Random(42), small_expo)
-    large = resolve_pirate_encounter(random.Random(42), large_expo)
-    assert small["win_chance"] > large["win_chance"]
-    assert large["escort_ratio"] < 0.01
-    assert small["escort_ratio"] >= 0.5
+    ships = {_ODYSSEY_KEY: 40, "falcon_interceptor": 80}
+    combat = resolve_pirate_encounter(random.Random(42), ships, movement_id=99)
+    assert combat.get("real_battle") is True
+    assert isinstance(combat.get("pirate_ships"), dict) and combat["pirate_ships"]
+    assert isinstance(combat.get("rounds"), list)
+    assert "win_chance" not in combat
+    assert "loss_pct" not in combat
+    assert int(combat.get("fleet_points") or 0) == int(combat.get("fighting_score") or 0)
+    assert int(combat.get("fighting_score") or 0) == calculate_fleet_value(
+        split_expedition_pirate_fleets(ships)[0]
+    )
 
 
-def test_scaled_escort_improves_pirate_outcome():
+def test_more_combat_ships_improve_pirate_battle_survival():
+    """GC-EXPO-BATTLE: more fighters → better win rate / fewer relative losses across seeds."""
     import random
 
-    weak = resolve_pirate_encounter(random.Random(7), {_ODYSSEY_KEY: 50, "falcon_interceptor": 2})
-    strong = resolve_pirate_encounter(random.Random(7), {_ODYSSEY_KEY: 50, "falcon_interceptor": 80})
-    assert strong["escort_ratio"] > weak["escort_ratio"]
-    assert strong["win_chance"] > weak["win_chance"]
+    weak_ships = {_ODYSSEY_KEY: 30, "falcon_interceptor": 5}
+    strong_ships = {_ODYSSEY_KEY: 30, "falcon_interceptor": 200}
+    weak_wins = strong_wins = 0
+    weak_loss_ratio = []
+    strong_loss_ratio = []
+    for seed in range(40):
+        weak = resolve_pirate_encounter(random.Random(seed), weak_ships, movement_id=seed)
+        strong = resolve_pirate_encounter(random.Random(seed), strong_ships, movement_id=seed)
+        if weak.get("won"):
+            weak_wins += 1
+        if strong.get("won"):
+            strong_wins += 1
+        weak_total = sum(weak_ships.values())
+        strong_total = sum(strong_ships.values())
+        weak_loss_ratio.append(int(weak.get("losses_total") or 0) / max(1, weak_total))
+        strong_loss_ratio.append(int(strong.get("losses_total") or 0) / max(1, strong_total))
+    assert strong_wins >= weak_wins
+    assert sum(strong_loss_ratio) / len(strong_loss_ratio) <= sum(weak_loss_ratio) / len(
+        weak_loss_ratio
+    )
 
 
-def test_pirate_rebalance_enemy_factor_and_expo_only_win_chance():
-    """GC-EXPO-P1: weaker pirates + playable expo-only desperation fight."""
+def test_odyssey_only_fleet_fights_pirates():
+    """Expo hulls now fight in real battles (not escort-only)."""
     import random
 
-    ships = {_ODYSSEY_KEY: 100}
-    combat = resolve_pirate_encounter(random.Random(42), ships)
-    expo_risk = int(combat["expedition_hull_value"])
-    pirate_points = int(combat["pirate_points"])
-    assert int(expo_risk * 0.40) <= pirate_points <= int(expo_risk * 0.75)
-    assert int(combat["fleet_points"]) == max(1, int(expo_risk * 0.18))
-    assert float(combat["win_chance"]) >= 0.20
-    assert int(combat["loss_pct"]) <= 14
+    ships = {_ODYSSEY_KEY: 80}
+    combat = resolve_pirate_encounter(random.Random(42), ships, movement_id=7)
+    assert combat.get("real_battle") is True
+    assert int(combat.get("fighting_score") or 0) > 0
+    assert combat.get("pirate_ships")
+    # Either side may take losses; battle must produce a winner label.
+    assert combat.get("winner") in {"attacker", "defender", "draw"}
+
+
+def test_pirate_budget_soft_cap_is_sublinear():
+    from game.expedition_events import _PIRATE_BUDGET_SOFT_CAP
+
+    soft = int(_PIRATE_BUDGET_SOFT_CAP)
+    assert soft_cap_pirate_budget(soft) == soft
+    mega = soft_cap_pirate_budget(soft * 20)
+    assert mega > soft
+    assert mega < soft * 20
 
 
 def test_voidrunner_discovery_bonus_once_per_fleet():
@@ -566,7 +597,12 @@ def test_pirate_debris_collected_when_recycler_aboard():
     debris = resolve_expedition_pirate_debris(
         remaining_ships=remaining,
         ship_losses=losses,
-        pirate_combat={"won": True, "pirate_points": 80_000, "recycler_protected": True},
+        pirate_combat={
+            "won": True,
+            "pirate_points": 80_000,
+            "recycler_protected": True,
+            "defender_losses": {"falcon_interceptor": 40},
+        },
     )
     assert debris is not None
     collected = debris["collected"]
@@ -581,7 +617,11 @@ def test_pirate_debris_without_recycler_not_collected():
     debris = resolve_expedition_pirate_debris(
         remaining_ships=remaining,
         ship_losses=losses,
-        pirate_combat={"won": False, "pirate_points": 60_000},
+        pirate_combat={
+            "won": False,
+            "pirate_points": 60_000,
+            "defender_losses": {"spark_drone": 25},
+        },
     )
     assert debris is not None
     assert int(debris["collected"].get("metal") or 0) == 0
@@ -692,15 +732,15 @@ def test_pirate_encounter_event_weight_is_rare():
     assert 0.02 <= rate <= 0.08
 
 
-def test_pirate_encounter_never_wipes_fleet():
+def test_pirate_encounter_recyclers_always_survive_even_if_fighters_wipe():
     import random
 
-    ships = {"solar_skiff": 5, "falcon_interceptor": 50}
-    for seed in range(200):
-        rng = random.Random(seed)
-        combat = resolve_pirate_encounter(rng, ships)
+    ships = {"solar_skiff": 5, "falcon_interceptor": 10, "harvest_reclaimer": 3}
+    for seed in range(80):
+        combat = resolve_pirate_encounter(random.Random(seed), ships, movement_id=seed)
         remaining = combat["remaining_ships"]
-        assert sum(remaining.values()) >= 1
+        assert int(remaining.get("harvest_reclaimer") or 0) == 3
+        assert "harvest_reclaimer" not in (combat.get("losses") or {})
 
 
 def test_apply_expedition_ship_losses_keeps_minimum_hull():
@@ -792,30 +832,18 @@ def test_virtual_pirate_fleet_deterministic_and_positive():
     assert sum(a.values()) >= 1
 
 
-def test_synthesize_expo_pirate_theater_rounds_preserves_total_losses():
-    atk = {"falcon_interceptor": 10, "solar_skiff": 4}
-    dfn = {"spark_drone": 20}
-    rounds = synthesize_expo_pirate_theater_rounds(
-        attacker_losses=atk,
-        defender_losses=dfn,
-        movement_id=4242,
+def test_virtual_pirate_fleet_scales_past_former_per_type_cap():
+    """Display fleet must scale with pirate_points — no 50k/type mini-fleet illusion."""
+    mega = virtual_pirate_fleet(50_000_000, seed=42)
+    assert sum(mega.values()) > 50_000
+    assert any(int(qty) > 50_000 for qty in mega.values())
+
+
+def test_publish_expedition_pirate_combat_report_real_battle_meta(monkeypatch):
+    ships = {"solar_skiff": 5, "falcon_interceptor": 40, "harvest_reclaimer": 1}
+    combat = resolve_pirate_encounter(
+        __import__("random").Random(7), ships, movement_id=9001
     )
-    assert 2 <= len(rounds) <= 4
-    atk_sum = {}
-    def_sum = {}
-    for rnd in rounds:
-        assert int(rnd.number) >= 1
-        for k, v in dict(rnd.attacker_losses).items():
-            atk_sum[k] = atk_sum.get(k, 0) + int(v)
-        for k, v in dict(rnd.defender_losses).items():
-            def_sum[k] = def_sum.get(k, 0) + int(v)
-    assert atk_sum == atk
-    assert def_sum == dfn
-
-
-def test_publish_expedition_pirate_combat_report_theater_meta(monkeypatch):
-    ships = {"solar_skiff": 5, "falcon_interceptor": 40}
-    combat = resolve_pirate_encounter(__import__("random").Random(7), ships)
     captured: dict = {}
 
     def _fake_publish(**kwargs):
@@ -860,11 +888,18 @@ def test_publish_expedition_pirate_combat_report_theater_meta(monkeypatch):
     meta = out.get("metadata") or {}
     assert captured.get("combat_kind") == "expedition_pirate"
     assert meta.get("combat_kind") == "expedition_pirate"
-    assert meta.get("theater_synthetic") is True
+    assert meta.get("theater_synthetic") is False
+    assert meta.get("real_battle") is True
     assert meta.get("attacking_ships")
-    assert meta.get("defending_ships")
-    assert isinstance(meta.get("rounds"), list) and len(meta["rounds"]) >= 2
+    assert "harvest_reclaimer" not in (meta.get("attacking_ships") or {})
+    assert meta.get("defending_ships") == combat.get("pirate_ships")
+    assert isinstance(meta.get("rounds"), list)
     assert dict(meta.get("attacker_losses") or {}) == dict(combat.get("losses") or {})
+    assert dict(meta.get("defender_losses") or {}) == dict(combat.get("defender_losses") or {})
+    assert meta.get("combat_research_applicable") is True
+    assert meta.get("defender_combat_research_na") is True
+    assert meta.get("recycler_protected") is True
+    assert int(meta.get("fighting_score") or 0) == int(combat.get("fighting_score") or 0)
 
 
 def test_fleet_publishes_expo_pirate_combat_report_callsite():
@@ -962,20 +997,26 @@ def test_salvage_tier_distribution_approximate():
     assert tiers["rare"] / total == pytest.approx(0.10, abs=0.04)
 
 
-def test_pirate_win_wreck_debris_uses_eighty_percent_points():
-    """GC-EXPO-P3: virtual pirate wrecks use 80% of pirate_points."""
-    from game.expedition_events import _virtual_pirate_losses
-    from game.fleet_defs import ship_score_value
+def test_pirate_debris_uses_real_defender_losses():
+    """GC-EXPO-BATTLE: debris comes from real battle defender_losses."""
+    import random
 
-    pirate_points = 100_000
-    wrecks = _virtual_pirate_losses(pirate_points, won=True)
-    per_hull = max(1, ship_score_value("falcon_interceptor"))
-    expected = min(max(1, int(pirate_points * 0.80) // per_hull), 500)
-    assert wrecks.get("falcon_interceptor") == expected
-    weak = _virtual_pirate_losses(pirate_points, won=True)
-    # Sanity: 80% wrecks >= old 60% curve for same points.
-    old_count = min(max(1, int(pirate_points * 0.60) // per_hull), 500)
-    assert int(weak.get("falcon_interceptor") or 0) >= old_count
+    ships = {"solar_skiff": 60, "falcon_interceptor": 120}
+    combat = None
+    for seed in range(80):
+        rolled = resolve_pirate_encounter(random.Random(seed), ships, movement_id=seed)
+        if int(rolled.get("losses_total") or 0) > 0 or rolled.get("defender_losses"):
+            combat = rolled
+            break
+    assert combat is not None
+    debris = resolve_expedition_pirate_debris(
+        remaining_ships=dict(combat["remaining_ships"]),
+        ship_losses=dict(combat["losses"]),
+        pirate_combat=combat,
+    )
+    if debris is None:
+        pytest.skip("no debris from sampled battle")
+    assert int(debris["debris"].get("metal") or 0) + int(debris["debris"].get("crystal") or 0) > 0
 
 
 def test_ion_storm_delay_within_flight_fraction():
