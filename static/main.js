@@ -20845,15 +20845,14 @@
             </div>` : ""}
         </div>`;
     } else if (dip.can_propose_resolution && Array.isArray(dip.resolution_options) && dip.resolution_options.length) {
+      // Option text = title + duration only; effect chips live in the preview below.
       const opts = dip.resolution_options.map((o) => {
         const days = Number(o.duration_days) || 0;
-        const fx = (Array.isArray(o.effects) ? o.effects : [])
-          .slice(0, 2)
-          .map((e) => `${t(e.label_key, e.key || "")} ${e.display || ""}`.trim())
-          .join(", ");
-        const extra = [days ? `${days}d` : "", fx].filter(Boolean).join(" · ");
         const label = t(o.label_key, o.resolution_key || "");
-        return `<option value="${escapeHtml(o.resolution_key || "")}">${escapeHtml(extra ? `${label} (${extra})` : label)}</option>`;
+        const duration = days
+          ? tf("gd_politics_resolution_option_days", { days: fmtNumber(days) }, "%(days)s Tage")
+          : "";
+        return `<option value="${escapeHtml(o.resolution_key || "")}">${escapeHtml(duration ? `${label} · ${duration}` : label)}</option>`;
       }).join("");
       const previewEffects = (dip.resolution_options[0] && dip.resolution_options[0].effects) || [];
       const effectsMap = {};
@@ -20864,7 +20863,7 @@
         <div class="gp-resolution-propose gp-resolution-floor" data-gd-resolution-propose
              data-gd-res-effects="${escapeHtml(JSON.stringify(effectsMap))}">
           <p class="gp-rail-kicker">${escapeHtml(t("gd_politics_resolution_propose_kicker", "Sonderbeschluss einbringen"))}</p>
-          <p class="hint gp-chamber-tag">${escapeHtml(t("gd_politics_resolution_section_help", "JA/NEIN neben dem Mandat. Ohne Quorum keine Wirkung."))}</p>
+          <p class="hint gp-chamber-tag">${escapeHtml(t("gd_politics_resolution_propose_hint", "Officer starten eine zeitlich begrenzte JA/NEIN-Abstimmung für die ganze Galaxie. Alle Kolonisten können abstimmen."))}</p>
           <label class="gp-resolution-propose-label" for="gp-res-propose-${Number(entry.galaxy) || 0}">
             ${escapeHtml(t("gd_politics_resolution_propose_label", "Welche Resolution?"))}
           </label>
@@ -20874,7 +20873,7 @@
                     data-gd-res-propose-select>${opts}</select>
             <button type="button" class="gc-btn gc-btn-secondary" data-gd-res-propose-btn
               data-galaxy="${Number(entry.galaxy) || 0}">
-              ${escapeHtml(t("gd_politics_resolution_propose_btn", "Sitzung öffnen"))}
+              ${escapeHtml(t("gd_politics_resolution_propose_btn", "Abstimmung starten"))}
             </button>
           </div>
           <div class="gp-resolution-propose-preview" data-gd-res-propose-preview>
@@ -20882,7 +20881,8 @@
           </div>
         </div>`;
     } else if (!session) {
-      sessionHtml = `<p class="hint gp-resolution-none">${escapeHtml(t("gd_politics_resolution_none", "Keine offene Resolution. Officer können eine JA/NEIN-Sitzung einbringen."))}</p>`;
+      sessionHtml = `<p class="hint gp-resolution-none">${escapeHtml(t("gd_politics_resolution_none", "Keine offene Abstimmung. Allianz-Officer können einen Sonderbeschluss zur Abstimmung bringen."))}</p>
+        <p class="hint gp-chamber-tag">${escapeHtml(t("gd_politics_stance_officer_only", "Nur Allianz-Officer können die Ausrichtung setzen oder Resolutionen einbringen."))}</p>`;
     }
 
     return `

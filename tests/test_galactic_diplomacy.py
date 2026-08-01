@@ -169,6 +169,35 @@ def test_politics_payload_marks_blocs_as_stance_and_exposes_effects(gdp_db):
         assert gate_fx[0]["label_key"] == "gd_fx_gate_control_active"
         assert gate_fx[0]["display"] != "1"
         assert gate_fx[0]["display"] == "AKTIV"
+
+        # Resolution flag chips must use i18n label_keys + human displays (no raw "1").
+        from game.galactic_directives.voting import _serialize_tradeoff_chips
+
+        ban = get_resolution_definition("ban_directive")
+        ban_chips = _serialize_tradeoff_chips(ban["mechanics"])
+        assert ban_chips[0]["key"] == "ban_directive_cycles"
+        assert ban_chips[0]["label_key"] == "gd_fx_ban_directive_cycles"
+        assert ban_chips[0]["display"] == "1×"
+
+        boost = get_resolution_definition("boost_directive")
+        boost_chips = _serialize_tradeoff_chips(boost["mechanics"])
+        assert boost_chips[0]["key"] == "directive_boost_mult"
+        assert boost_chips[0]["label_key"] == "gd_fx_directive_boost_mult"
+        assert boost_chips[0]["display"] == "+20%"
+
+        emergency = get_resolution_definition("emergency_session")
+        em_chips = _serialize_tradeoff_chips(emergency["mechanics"])
+        assert em_chips[0]["key"] == "trigger_emergency_session"
+        assert em_chips[0]["label_key"] == "gd_fx_trigger_emergency_session"
+        assert em_chips[0]["display"] == "AKTIV"
+
+        sanction = get_resolution_definition("bloc_sanction")
+        sanction_chips = _serialize_tradeoff_chips(sanction["mechanics"])
+        by_key = {c["key"]: c for c in sanction_chips}
+        assert by_key["bloc_vote_weight_mult"]["label_key"] == "gd_fx_bloc_vote_weight_mult"
+        assert by_key["bloc_vote_weight_mult"]["display"] == "-15%"
+        assert by_key["trader_daily_limit_mult"]["label_key"] == "gd_fx_trader_daily_limit_mult"
+        assert by_key["trader_daily_limit_mult"]["display"] == "-10%"
     finally:
         conn.close()
 

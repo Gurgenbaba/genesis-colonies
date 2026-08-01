@@ -467,9 +467,13 @@ def test_galactic_politics_clarity_guide_and_human_bloc_labels():
     assert "gd_politics_stance_help" in src
     assert "gp-stance" in src
     assert "_gdEffectChipsHtml" in src
+    assert "gd_politics_resolution_option_days" in src
+    assert "Abstimmung starten" in src
     assert "gp-chamber" in src
     assert "gp-faction-tile" in src
     assert "gp-badge-stance" in src
+    # Propose dropdown: title + duration only — no effect chips baked into <option>.
+    assert ".slice(0, 2)" not in src.split("data-gd-resolution-propose")[1][:800]
 
     css = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
     assert "minmax(220px, 1fr)" in css
@@ -498,6 +502,13 @@ def test_galactic_politics_clarity_guide_and_human_bloc_labels():
         "gd_politics_badge_stance",
         "gd_politics_live_mandate_only",
         "gd_fx_gate_control_active",
+        "gd_fx_ban_directive_cycles",
+        "gd_fx_directive_boost_mult",
+        "gd_fx_trigger_emergency_session",
+        "gd_fx_bloc_vote_weight_mult",
+        "gd_fx_trader_daily_limit_mult",
+        "gd_politics_resolution_propose_btn",
+        "gd_politics_resolution_option_days",
         "gdp_bloc_military_title",
         "gdp_bloc_scientific_title",
         "gdp_bloc_industrial_title",

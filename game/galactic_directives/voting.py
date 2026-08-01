@@ -674,14 +674,43 @@ _TRADEOFF_LABEL_KEYS = {
     "cargo_multiplier": "gd_fx_cargo",
     "fuel_efficiency_factor": "gd_fx_fuel_efficiency",
     "gate_control_active": "gd_fx_gate_control_active",
+    # Resolution / emergency / personality / directive flags (same chip path).
+    "ban_directive_cycles": "gd_fx_ban_directive_cycles",
+    "directive_boost_mult": "gd_fx_directive_boost_mult",
+    "trigger_emergency_session": "gd_fx_trigger_emergency_session",
+    "bloc_vote_weight_mult": "gd_fx_bloc_vote_weight_mult",
+    "trader_daily_limit_mult": "gd_fx_trader_daily_limit_mult",
+    "defense_combat_mult": "gd_fx_defense_combat_mult",
+    "fleet_attack_bonus": "gd_fx_fleet_attack_bonus",
+    "expedition_event_bonus": "gd_fx_expedition_event_bonus",
+    "expedition_loot_mult": "gd_fx_expedition_loot_mult",
+    "expedition_wreckage_bonus": "gd_fx_expedition_wreckage_bonus",
+    "expedition_legendary_bonus": "gd_fx_expedition_legendary_bonus",
+    "expedition_slot_bonus": "gd_fx_expedition_slot_bonus",
+    "colonize_cost_mult": "gd_fx_colonize_cost_mult",
+    "max_colonies_bonus": "gd_fx_max_colonies_bonus",
+    "discovery_roll_bonus": "gd_fx_discovery_roll_bonus",
+    "scrapyard_yield_mult": "gd_fx_scrapyard_yield_mult",
+    "trade_route_speed_mult": "gd_fx_trade_route_speed_mult",
+    "planet_xp_mult": "gd_fx_planet_xp_mult",
+    "planet_xp_mult_cap_level": "gd_fx_planet_xp_mult_cap_level",
 }
+
+# Absolute (non-percent) integer counters — not ratio multipliers.
+_TRADEOFF_ABSOLUTE_KEYS = frozenset(
+    {
+        "max_colonies_bonus",
+        "expedition_slot_bonus",
+        "planet_xp_mult_cap_level",
+    }
+)
 
 
 def _format_tradeoff_display(key: str, value: Any) -> str:
     """Server-authored display string — no client math for meaning."""
     key_l = str(key or "")
     # Boolean / toggle flags: show human status, never raw "1".
-    if key_l.endswith("_active"):
+    if key_l.endswith("_active") or key_l.startswith("trigger_"):
         try:
             truthy = bool(float(value)) if not isinstance(value, bool) else bool(value)
         except (TypeError, ValueError):
@@ -691,6 +720,12 @@ def _format_tradeoff_display(key: str, value: Any) -> str:
         num = float(value)
     except (TypeError, ValueError):
         return str(value)
+    if key_l.endswith("_cycles"):
+        return f"{int(num)}×"
+    if key_l in _TRADEOFF_ABSOLUTE_KEYS:
+        if float(num).is_integer():
+            return f"{int(num):+d}" if key_l.endswith("_bonus") else f"{int(num)}"
+        return f"{num:g}"
     if key_l.endswith("_bonus") or "bonus" in key_l:
         return f"{num * 100:+.0f}%"
     if any(tok in key_l for tok in ("factor", "multiplier", "mult", "speed")):
