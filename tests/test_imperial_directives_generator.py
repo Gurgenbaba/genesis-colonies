@@ -19,11 +19,17 @@ from game.directives.definitions import (
     directives_schema_ready,
     list_definitions_for_cadence,
 )
+from game.directives.balancing import directive_hard_cap
 from game.directives.generator import (
     daily_period_key,
     ensure_player_directives,
     generate_directives_for_cadence,
+    previous_daily_period_key,
     weekly_period_key,
+)
+
+PVP_DIRECTIVE_KEYS = frozenset(
+    {"win_battles", "destroy_enemy_ships", "destroy_enemy_defense"}
 )
 from game.models import create_user
 
@@ -230,6 +236,138 @@ def test_period_keys_format(id_db):
     assert weekly_period_key(ts).startswith("weekly:")
 
 
+def test_pvp_directives_excluded_from_roll_pool(id_db):
+    conn = db()
+    try:
+        daily_defs = list_definitions_for_cadence("daily", conn=conn)
+        weekly_defs = list_definitions_for_cadence("weekly", conn=conn)
+        daily_keys = {str(d["key"]) for d in daily_defs}
+        weekly_keys = {str(d["key"]) for d in weekly_defs}
+        assert not (daily_keys & PVP_DIRECTIVE_KEYS)
+        assert not (weekly_keys & PVP_DIRECTIVE_KEYS)
+
+        player_id = _create_player(conn, tag="pvp")
+        conn.commit()
+        for offset in range(14):
+            state = ensure_player_directives(
+                player_id,
+                conn=conn,
+                now=1_718_000_000.0 + offset * 86_400.0,
+            )
+            conn.commit()
+            keys = {
+                str(row["definition_key"])
+                for row in state["daily"] + state["weekly"]
+            }
+            assert not (keys & PVP_DIRECTIVE_KEYS)
+    finally:
+        conn.close()
+
+
+def test_disabled_pvp_active_row_is_replaced(id_db):
+    conn = db()
+    try:
+        player_id = _create_player(conn, tag="stale_pvp")
+        conn.commit()
+        fixed_now = 1_718_750_000.0
+        period = daily_period_key(fixed_now)
+        ensure_player_directives(player_id, conn=conn, now=fixed_now)
+        conn.commit()
+
+        row = conn.execute(
+            """
+            SELECT id FROM player_directives
+            WHERE player_id = ? AND period_key = ? AND cadence = 'daily'
+            ORDER BY id ASC LIMIT 1;
+            """,
+            (player_id, period),
+        ).fetchone()
+        assert row
+        conn.execute(
+            """
+            UPDATE player_directives
+            SET definition_key = 'destroy_enemy_ships', status = 'active', progress_value = 0
+            WHERE id = ?;
+            """,
+            (int(row["id"]),),
+        )
+        conn.commit()
+
+        generate_directives_for_cadence(
+            player_id,
+            "daily",
+            conn=conn,
+            now=fixed_now,
+        )
+        conn.commit()
+
+        keys = [
+            str(r["definition_key"])
+            for r in conn.execute(
+                """
+                SELECT definition_key FROM player_directives
+                WHERE player_id = ? AND period_key = ? AND cadence = 'daily';
+                """,
+                (player_id, period),
+            ).fetchall()
+        ]
+        assert len(keys) == DAILY_DIRECTIVE_COUNT
+        assert "destroy_enemy_ships" not in keys
+    finally:
+        conn.close()
+
+
+def test_anti_repeat_excludes_previous_daily_keys(id_db):
+    conn = db()
+    try:
+        player_id = _create_player(conn, tag="antirep")
+        conn.commit()
+        day1 = 1_718_800_000.0
+        day2 = day1 + 86_400.0
+        state1 = ensure_player_directives(player_id, conn=conn, now=day1)
+        conn.commit()
+        keys1 = {str(r["definition_key"]) for r in state1["daily"]}
+        assert previous_daily_period_key(day2) == daily_period_key(day1)
+
+        state2 = ensure_player_directives(player_id, conn=conn, now=day2)
+        conn.commit()
+        keys2 = {str(r["definition_key"]) for r in state2["daily"]}
+        # Prefer no overlap; soft fallback may allow some if pool is tiny.
+        assert len(keys2) == DAILY_DIRECTIVE_COUNT
+        assert len(keys1 & keys2) < DAILY_DIRECTIVE_COUNT
+    finally:
+        conn.close()
+
+
+def test_daily_category_diversity_when_pool_allows(id_db):
+    conn = db()
+    try:
+        player_id = _create_player(conn, tag="cats")
+        conn.commit()
+        # Sample several periods — most should have 3 distinct categories.
+        diverse_days = 0
+        for offset in range(10):
+            state = ensure_player_directives(
+                player_id,
+                conn=conn,
+                now=1_718_900_000.0 + offset * 86_400.0,
+            )
+            conn.commit()
+            cats = set()
+            for row in state["daily"]:
+                defn = conn.execute(
+                    "SELECT category FROM directive_definitions WHERE key = ?;",
+                    (row["definition_key"],),
+                ).fetchone()
+                assert defn
+                cats.add(str(defn["category"]))
+            if len(cats) == DAILY_DIRECTIVE_COUNT:
+                diverse_days += 1
+        assert diverse_days >= 7
+    finally:
+        conn.close()
+
+
 def test_stale_overcap_directive_is_replaced(id_db):
     conn = db()
     try:
@@ -243,7 +381,10 @@ def test_stale_overcap_directive_is_replaced(id_db):
         conn.execute(
             """
             UPDATE player_directives
-            SET target_value = 999999
+            SET definition_key = 'upgrade_buildings',
+                target_value = 999999,
+                status = 'active',
+                progress_value = 0
             WHERE id = (
                 SELECT id FROM player_directives
                 WHERE player_id = ? AND period_key = ? AND cadence = 'daily'
@@ -265,12 +406,16 @@ def test_stale_overcap_directive_is_replaced(id_db):
 
         rows = conn.execute(
             """
-            SELECT target_value FROM player_directives
+            SELECT definition_key, target_value FROM player_directives
             WHERE player_id = ? AND period_key = ? AND cadence = 'daily';
             """,
             (player_id, period),
         ).fetchall()
         assert len(rows) == DAILY_DIRECTIVE_COUNT
-        assert all(int(r["target_value"]) <= 50 for r in rows)
+        assert all(int(r["target_value"]) < 999999 for r in rows)
+        for r in rows:
+            hard = directive_hard_cap(str(r["definition_key"]), cadence="daily")
+            if hard is not None:
+                assert int(r["target_value"]) <= hard
     finally:
         conn.close()

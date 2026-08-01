@@ -3636,7 +3636,9 @@ def auction_house_view():
             crystal=float(ctx["player_view"]["crystal"]),
             fuel_cells=float(ctx["player_view"].get("fuel_cells") or 0),
             conn=conn,
+            mark_visited=True,
         )
+        commit(conn)
     finally:
         conn.close()
 
@@ -3671,6 +3673,7 @@ def api_auction_house_state():
             crystal=float(player_view["crystal"]),
             fuel_cells=float(player_view.get("fuel_cells") or 0),
             conn=conn,
+            mark_visited=True,
         )
         commit(conn)
         return jsonify({"ok": True, "auction_house": payload})
@@ -9123,6 +9126,7 @@ def _payload_from_live_context(
             "government": {"active": False, "count": 0, "label": ""},
             "referrals": {"active": False, "count": 0, "label": ""},
             "imperial_directives": {"active": False, "count": 0, "label": ""},
+            "auction_house": {"active": False, "count": 0, "label": ""},
         }
 
     try:

@@ -20,6 +20,7 @@ from .definitions import (
     STATUS_COMPLETED,
     STATUS_EXPIRED,
     WEEKLY_DIRECTIVE_COUNT,
+    definition_is_rollable,
     directives_schema_ready,
     effective_base_target,
     get_definition,
@@ -41,6 +42,17 @@ def daily_period_key(ts: float | None = None) -> str:
 
 def weekly_period_key(ts: float | None = None) -> str:
     dt = _utc_dt(ts if ts is not None else time.time())
+    iso = dt.isocalendar()
+    return f"weekly:{iso.year}-W{iso.week:02d}"
+
+
+def previous_daily_period_key(ts: float | None = None) -> str:
+    dt = _utc_dt(ts if ts is not None else time.time()) - datetime.timedelta(days=1)
+    return f"daily:{dt.strftime('%Y-%m-%d')}"
+
+
+def previous_weekly_period_key(ts: float | None = None) -> str:
+    dt = _utc_dt(ts if ts is not None else time.time()) - datetime.timedelta(days=7)
     iso = dt.isocalendar()
     return f"weekly:{iso.year}-W{iso.week:02d}"
 
@@ -81,14 +93,33 @@ def _weighted_pick_definitions(
     count: int,
     *,
     exclude_keys: Sequence[str],
+    prefer_category_diversity: bool = False,
+    seed_categories: Sequence[str] | None = None,
 ) -> List[Dict[str, Any]]:
     blocked = {str(k) for k in exclude_keys}
-    pool = [dict(row) for row in candidates if str(row.get("key")) not in blocked]
+    pool = [
+        dict(row)
+        for row in candidates
+        if str(row.get("key")) not in blocked and int(row.get("weight") or 0) > 0
+    ]
     picked: List[Dict[str, Any]] = []
+    used_categories: set[str] = {
+        str(c) for c in (seed_categories or ()) if str(c or "").strip()
+    }
     while pool and len(picked) < count:
-        weights = [max(1, int(row.get("weight") or 1)) for row in pool]
-        choice = rng.choices(pool, weights=weights, k=1)[0]
+        if prefer_category_diversity:
+            diverse = [
+                row
+                for row in pool
+                if str(row.get("category") or "") not in used_categories
+            ]
+            pick_from = diverse if diverse else pool
+        else:
+            pick_from = pool
+        weights = [max(1, int(row.get("weight") or 1)) for row in pick_from]
+        choice = rng.choices(pick_from, weights=weights, k=1)[0]
         picked.append(choice)
+        used_categories.add(str(choice.get("category") or ""))
         pool = [row for row in pool if row.get("key") != choice.get("key")]
     return picked
 
@@ -197,14 +228,17 @@ def _player_scaling_context(player_id: int, *, conn: sqlite3.Connection) -> Dict
 
 
 def _directive_row_stale(row: Mapping[str, Any], *, conn: sqlite3.Connection) -> bool:
-    """True when an active row should be replaced (missing def or over hard cap)."""
+    """True when an active row should be replaced (missing/disabled def or over hard cap)."""
     status = str(row.get("status") or STATUS_ACTIVE)
     if status in (STATUS_CLAIMED, STATUS_COMPLETED):
         return False
     definition_key = str(row.get("definition_key") or "").strip()
     if not definition_key:
         return True
-    if not get_definition(definition_key, conn=conn):
+    definition = get_definition(definition_key, conn=conn)
+    if not definition:
+        return True
+    if not definition_is_rollable(definition):
         return True
     cadence = str(row.get("cadence") or CADENCE_DAILY)
     return is_directive_target_stale(
@@ -287,14 +321,50 @@ def generate_directives_for_cadence(
     if missing <= 0:
         return _fetch_player_directives(player_id, cadence_norm, period_key, conn=conn)
 
+    if cadence_norm == CADENCE_DAILY:
+        prev_period = previous_daily_period_key(ts)
+    else:
+        prev_period = previous_weekly_period_key(ts)
+    anti_repeat_keys = _existing_period_keys(
+        player_id,
+        cadence_norm,
+        prev_period,
+        conn=conn,
+    )
+    exclude = list(dict.fromkeys([*existing_keys, *anti_repeat_keys]))
+    seed_categories: List[str] = []
+    for row in existing_rows:
+        defn = get_definition(str(row.get("definition_key") or ""), conn=conn)
+        if defn:
+            seed_categories.append(str(defn.get("category") or ""))
+
     candidates = list_definitions_for_cadence(cadence_norm, conn=conn)
     rng = _rng_for_period(player_id, period_key)
+    diversify = cadence_norm == CADENCE_DAILY
     picks = _weighted_pick_definitions(
         rng,
         candidates,
         missing,
-        exclude_keys=existing_keys,
+        exclude_keys=exclude,
+        prefer_category_diversity=diversify,
+        seed_categories=seed_categories,
     )
+    # If anti-repeat emptied the pool too far, retry without previous-period excludes.
+    if len(picks) < missing and anti_repeat_keys:
+        soft_exclude = list(existing_keys) + [str(p.get("key")) for p in picks]
+        seed_after = list(seed_categories) + [
+            str(p.get("category") or "") for p in picks
+        ]
+        picks.extend(
+            _weighted_pick_definitions(
+                rng,
+                candidates,
+                missing - len(picks),
+                exclude_keys=soft_exclude,
+                prefer_category_diversity=diversify,
+                seed_categories=seed_after,
+            )
+        )
 
     scaling_ctx = _player_scaling_context(player_id, conn=conn)
     created: List[Dict[str, Any]] = []

@@ -16,14 +16,17 @@ from game.auction_house import (
     ROTATION_INTERVAL_SECONDS,
     auction_schema_ready,
     build_auction_house_state,
+    count_auction_nav_attention,
     finish_due_auctions,
     generate_auction_rotation,
     get_active_auctions,
     get_rotation_meta,
     is_auction_allowed_box,
     is_event_box,
+    mark_auction_house_visited,
     place_bid,
 )
+from game.live_state import nav_badges_for_game_state
 from game.db import db
 from game.models import create_user, ensure_player_and_homeworld, get_planets_by_player, init_db
 
@@ -446,4 +449,87 @@ def test_bid_limit_per_listing(auction_db):
     assert not ok
     assert reason == "auction_bid_limit_reached"
     assert extra and int(extra["max_bids"]) == MAX_BIDS_PER_PLAYER_PER_LISTING
+    conn.close()
+
+
+def test_recent_bids_shows_highest_per_player_only(auction_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    cur.execute("UPDATE planets SET metal = 500000 WHERE id = ?;", (pid,))
+    listing_id = _insert_listing(conn, currency="metal", start_price=50_000)
+    conn.commit()
+
+    ok1, reason1, _ = place_bid(
+        player_id=uid,
+        planet_id=pid,
+        listing_id=listing_id,
+        amount=50_000,
+        currency="metal",
+        conn=conn,
+    )
+    assert ok1, reason1
+    ok2, reason2, _ = place_bid(
+        player_id=uid,
+        planet_id=pid,
+        listing_id=listing_id,
+        amount=52_500,
+        currency="metal",
+        conn=conn,
+    )
+    assert ok2, reason2
+
+    hist = conn.execute(
+        "SELECT COUNT(*) AS c FROM auction_house_bids WHERE listing_id = ? AND player_id = ?;",
+        (listing_id, uid),
+    ).fetchone()
+    assert int(hist["c"]) == 2
+
+    auctions = get_active_auctions(uid, conn=conn)
+    lot = next(a for a in auctions if int(a["id"]) == listing_id)
+    mine = [b for b in lot["recent_bids"] if int(b["player_id"]) == uid]
+    assert len(mine) == 1
+    assert int(mine[0]["amount"]) == 52_500
+    conn.close()
+
+
+def test_nav_attention_outbid_and_clears_new_on_visit(auction_db):
+    uid1 = _player()
+    uid2 = _second_player()
+    conn = db()
+    pid1 = int(get_planets_by_player(uid1, conn=conn)[0]["id"])
+    pid2 = int(get_planets_by_player(uid2, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    cur.execute("UPDATE planets SET metal = 500000 WHERE id IN (?, ?);", (pid1, pid2))
+    listing_id = _insert_listing(conn, currency="metal", start_price=50_000)
+    conn.commit()
+
+    # Never visited: active listings count as attention
+    before_visit = count_auction_nav_attention(uid1, conn=conn)
+    assert before_visit >= 1
+
+    mark_auction_house_visited(uid1, conn=conn, now=time.time())
+    conn.commit()
+    assert count_auction_nav_attention(uid1, conn=conn) == 0
+
+    ok1, _, _ = place_bid(
+        player_id=uid1, planet_id=pid1, listing_id=listing_id, amount=50_000, currency="metal", conn=conn
+    )
+    assert ok1
+    ok2, _, _ = place_bid(
+        player_id=uid2, planet_id=pid2, listing_id=listing_id, amount=52_500, currency="metal", conn=conn
+    )
+    assert ok2
+
+    outbid_n = count_auction_nav_attention(uid1, conn=conn)
+    assert outbid_n >= 1
+    badges = nav_badges_for_game_state(uid1, conn=conn)
+    assert badges["auction_house"]["active"] is True
+    assert badges["auction_house"]["count"] >= 1
+
+    # Visit clears "new" only; outbid remains
+    mark_auction_house_visited(uid1, conn=conn, now=time.time())
+    conn.commit()
+    assert count_auction_nav_attention(uid1, conn=conn) >= 1
     conn.close()

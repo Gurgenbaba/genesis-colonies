@@ -107,15 +107,17 @@ Exploration ist Phase 1 Teil von **Fleet**; eigene Kategorie optional in Phase 2
 
 ### Military
 
-| Objective key | Event-Quelle |
-|---------------|--------------|
-| `win_battles` | Combat resolver, attacker win |
-| `destroy_enemy_ships` | Combat losses (defender ships) |
-| `destroy_enemy_defense` | Combat losses (defense) |
-| `build_defense` | Defense queue finish |
-| `build_combat_ships` | Shipyard finish, combat hull filter |
-| `defeat_pirates` | Expedition/combat, NPC tag |
-| `deal_world_boss_damage` | World Boss contribution damage (EPIC-20) |
+| Objective key | Event-Quelle | Roll-Pool |
+|---------------|--------------|-----------|
+| `win_battles` | Combat resolver, attacker win | **Paused** (`weight=0`) — low PvP + newbie protection |
+| `destroy_enemy_ships` | Combat losses (defender ships) | **Paused** (`weight=0`) |
+| `destroy_enemy_defense` | Combat losses (defense) | **Paused** (`weight=0`) |
+| `build_defense` | Defense queue finish | Active (PvE prep) |
+| `build_combat_ships` | Shipyard finish, combat hull filter | Active |
+| `defeat_pirates` | Expedition/combat, NPC tag | Active (primary military) |
+| `deal_world_boss_damage` | World Boss contribution damage (EPIC-20) | Active |
+
+Definitions with `weight <= 0` stay in the catalog (progress/claim) but are never rolled. Active (non-claimed) rows for disabled keys are replaced on ensure.
 
 ### Exploration (Fleet-Subphase 1)
 
@@ -145,12 +147,23 @@ Langfristige Kosmetik (Commander Titles, Banners, Tokens): Phase 3 — nicht in 
 
 ---
 
+## Roll-Regeln (Generator)
+
+| Regel | Verhalten |
+|-------|-----------|
+| Daily count | 3 |
+| Weekly count | 1 |
+| `weight <= 0` | nie im Pool |
+| Anti-Repeat | Keys der vorherigen Daily-/Weekly-Periode ausschließen (Fallback wenn Pool zu klein) |
+| Kategorie-Diversity (Daily) | möglichst 3 verschiedene Kategorien |
+| Determinismus | `SHA256(player_id:period_key)` → RNG |
+
 ## Skalierung (serverseitig)
 
-**Anker:** `player_scores.total_score` via `game/ranking.get_player_score_cached()` (nicht Frontend, nicht Session).
+**Anker:** `player_scores.total_score` via `game/ranking.get_player_score_cached()` (nicht Frontend, nicht Session). Produce/Spend zusätzlich über Empire-Tagesproduktion.
 
 ```python
-# Konzept — Implementierung in game/directives/scaling.py
+# Konzept — Implementierung in game/directives/scaling.py + balancing.py
 target = floor(base_target * (max(total_score, score_floor) / score_anchor) ** scale_exponent)
 target = clamp(target, min_target, max_target_for_key)
 ```
@@ -160,8 +173,9 @@ target = clamp(target, min_target, max_target_for_key)
 | `base_target` | pro Objective-Key + Rarity in `definitions.py` |
 | `score_anchor` | Universe-Default (z. B. 20_000 — „Midgame“-Referenz) |
 | `score_floor` | verhindert Zero/NaN für Neulinge |
-| `scale_exponent` | 0.45–0.65 je Kategorie (Produce ~0.58) |
-| Weekly multiplier | z. B. 5×–10× Daily-Ziel |
+| `PRODUCE_DAILY_PCT` | common/rare/epic/legendary: **5 / 8 / 12 / 18 %** der Tagesproduktion |
+| Weekly produce multiplier | **6×** Daily-Ziel |
+| Count tiers | Buildings `(5,8,10,15)`, Expeditions `(5,8,12)`, Piraten `(2,3,5)` |
 
 Beispiele aus Vision (Qualitätsziel für Tests):
 
@@ -181,7 +195,7 @@ Kalibrierung: `tests/test_imperial_directives_scaling.py` gegen Ankerkurven.
 |--------|--------|
 | Definitionen, Generator, Skalierung, Progress, Rewards, Claim | `game/directives/` |
 | Live-State-Slice | `game/live_state.py` + `app.py` `_build_game_state_payload` |
-| Route + Template | `app.py`, `templates/imperial_directives.html` |
+| Route + Template | `app.py`, `templates/imperial_directives.html` (compact main frame) |
 | Container/Booster-Ausgabe | `game/inventory.py` (Consumer) |
 
 ### Modulstruktur
@@ -306,10 +320,11 @@ Frontend: `GC.fetchGameAction` → `applyActionState()`.
 
 ### Page
 
-- Route: `/imperial-directives`
+- Route: `/imperial-directives` (PJAX module `imperial_directives`)
 - Template: `templates/imperial_directives.html`
+- Layout: kompaktes `.id-directives-main-frame` (max ~880px) mit Command-Strip + einer gemeinsamen Orders-Grid (3 Daily + 1 Weekly) — kein Special-Window/Popup
 - Design: High-Command-Terminal (`.gc-panel`, Directive Cards, Progress aus Server)
-- Nav: Meta-Sidebar oder Imperium-Section — Badge via `nav_badges_for_game_state`
+- Nav: Community-Sidebar — Badge via `nav_badges_for_game_state`
 
 ---
 

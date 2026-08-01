@@ -28,12 +28,13 @@ def _defn(key: str, **overrides):
 @pytest.mark.parametrize(
     "key,max_daily",
     [
-        ("upgrade_buildings", 10),
-        ("launch_expeditions", 10),
-        ("complete_expeditions", 10),
+        ("upgrade_buildings", 15),
+        ("launch_expeditions", 12),
+        ("complete_expeditions", 12),
         ("send_fleet_missions", 50),
         ("complete_research", 3),
         ("win_battles", 3),
+        ("defeat_pirates", 5),
         ("start_research", 2),
     ],
 )
@@ -73,7 +74,7 @@ def test_expedition_tiers_small():
         cadence=CADENCE_DAILY,
         context=ctx,
     )
-    assert target <= 10
+    assert target <= 12
 
 
 def test_produce_scales_with_daily_production_not_billions_floor():
@@ -96,8 +97,8 @@ def test_produce_scales_with_daily_production_not_billions_floor():
 
 def test_stale_detection_over_cap():
     assert is_directive_target_stale("send_fleet_missions", 51, cadence=CADENCE_DAILY)
-    assert is_directive_target_stale("launch_expeditions", 11, cadence=CADENCE_DAILY)
-    assert not is_directive_target_stale("launch_expeditions", 10, cadence=CADENCE_DAILY)
+    assert is_directive_target_stale("launch_expeditions", 13, cadence=CADENCE_DAILY)
+    assert not is_directive_target_stale("launch_expeditions", 12, cadence=CADENCE_DAILY)
 
 
 def test_directive_hard_cap_table_complete():
@@ -130,6 +131,6 @@ def test_balancing_examples_early_mid_endgame():
         cadence=CADENCE_DAILY,
         context=end_ctx,
     )
-    assert early_exp in (3, 5)
+    assert early_exp in (5, 8)
     assert 10 <= mid_fleet <= 50
-    assert end_build <= 10
+    assert end_build <= 15

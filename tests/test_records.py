@@ -286,4 +286,10 @@ def test_records_page_renders(records_db):
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
     assert "records-page" in html
+    assert "gc-records-workspace" in html
+    assert 'data-records-tabs' in html
+    assert 'data-records-tab="buildings"' in html
+    assert 'data-records-tab="research"' in html
+    assert 'data-records-panel="buildings"' in html
+    assert "gc-records-tab" in html
     assert "Gebäude-Rekorde" in html or "Building records" in html

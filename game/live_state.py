@@ -465,6 +465,14 @@ def nav_badges_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
     except Exception:
         alliance_count = 0
 
+    auction_count = 0
+    try:
+        from game.auction_house import count_auction_nav_attention
+
+        auction_count = int(count_auction_nav_attention(uid, conn=conn) or 0)
+    except Exception:
+        auction_count = 0
+
     return {
         "vote_center": _nav_badge_entry(
             active=vote_count > 0,
@@ -510,6 +518,11 @@ def nav_badges_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
             active=alliance_count > 0,
             count=alliance_count,
             label=str(alliance_count) if alliance_count > 0 else "",
+        ),
+        "auction_house": _nav_badge_entry(
+            active=auction_count > 0,
+            count=auction_count,
+            label=str(auction_count) if auction_count > 0 else "",
         ),
     }
 

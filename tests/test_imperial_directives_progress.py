@@ -327,13 +327,12 @@ def test_fleet_build_and_combat_events_update_directives(id_db):
             "send_fleet_missions",
             "build_ships",
             "build_combat_ships",
-            "win_battles",
+            "defeat_pirates",
         ]
         _set_daily_directives(conn, player_id, keys, fixed_now=now)
 
-        from game.combat import WINNER_ATTACKER
         from game.directives.progress import (
-            emit_combat_directive_events,
+            emit_expedition_complete_event,
             emit_fleet_mission_sent,
             emit_ship_built_events,
         )
@@ -363,11 +362,14 @@ def test_fleet_build_and_combat_events_update_directives(id_db):
             conn=conn,
             now=now,
         )
-        emit_combat_directive_events(
+        emit_expedition_complete_event(
             player_id,
             movement_id=202,
-            winner=WINNER_ATTACKER,
-            defender_losses={"spark_drone": 3, "sentinel_turret": 2},
+            outcome={
+                "event_key": "pirate_encounter",
+                "severity": "combat",
+                "pirate_won": True,
+            },
             conn=conn,
             now=now,
         )
@@ -386,7 +388,7 @@ def test_fleet_build_and_combat_events_update_directives(id_db):
         assert progress["send_fleet_missions"] == 1
         assert progress["build_ships"] == 3
         assert progress["build_combat_ships"] == 1
-        assert progress["win_battles"] == 1
+        assert progress["defeat_pirates"] == 1
     finally:
         conn.close()
 
@@ -396,21 +398,22 @@ def test_defense_and_expedition_events_update_directives(id_db):
     try:
         player_id = _create_player(conn)
         now = time.time()
-        keys = ["destroy_enemy_ships", "build_defense", "complete_expeditions"]
+        keys = ["defeat_pirates", "build_defense", "complete_expeditions"]
         _set_daily_directives(conn, player_id, keys, fixed_now=now)
 
         from game.directives.progress import (
-            emit_combat_directive_events,
             emit_defense_built_events,
             emit_expedition_complete_event,
         )
-        from game.combat import WINNER_ATTACKER
 
-        emit_combat_directive_events(
+        emit_expedition_complete_event(
             player_id,
             movement_id=203,
-            winner=WINNER_ATTACKER,
-            defender_losses={"spark_drone": 3},
+            outcome={
+                "event_key": "pirate_encounter",
+                "severity": "combat",
+                "pirate_won": True,
+            },
             conn=conn,
             now=now,
         )
@@ -442,8 +445,28 @@ def test_defense_and_expedition_events_update_directives(id_db):
                 (player_id, *keys),
             ).fetchall()
         }
-        assert progress["destroy_enemy_ships"] == 3
+        assert progress["defeat_pirates"] == 1
         assert progress["build_defense"] == 4
-        assert progress["complete_expeditions"] == 1
+        assert progress["complete_expeditions"] == 2
+    finally:
+        conn.close()
+
+
+def test_paused_pvp_directive_hooks_still_match_events(id_db):
+    """PvP keys stay in catalog (weight 0) so hooks remain wired if re-enabled."""
+    from game.directives.definitions import get_definition
+    from game.directives.progress import _event_delta
+
+    conn = db()
+    try:
+        for key, event in (
+            ("win_battles", {"kind": "battle_won", "won": True, "amount": 1}),
+            ("destroy_enemy_ships", {"kind": "ships_destroyed", "amount": 3}),
+            ("destroy_enemy_defense", {"kind": "defense_destroyed", "amount": 2}),
+        ):
+            defn = get_definition(key, conn=conn)
+            assert defn is not None
+            assert int(defn["weight"]) == 0
+            assert _event_delta(defn, event) == int(event["amount"])
     finally:
         conn.close()

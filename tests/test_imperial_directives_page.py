@@ -91,9 +91,14 @@ def test_imperial_directives_page_renders(page_client):
     html = r.get_data(as_text=True)
     assert 'id="imperial-directives-page"' in html
     assert "data-imperial-directives" in html
+    assert "id-directives-main-frame" in html
+    assert 'data-id-directive-list="orders"' in html
     assert "inventory-loot-card" in html or "data-id-directive-list" in html
     assert html.count("data-directive-card") == 4
     assert "inventory-loot-card-name" in html
+    assert 'data-id-directive-list="daily"' not in html
+    assert 'data-id-directive-list="weekly"' not in html
+    assert 'data-special-window="imperial-directives"' not in html
 
 
 def test_imperial_directives_persist_after_page_load(id_page_db):

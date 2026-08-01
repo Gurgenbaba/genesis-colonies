@@ -11037,6 +11037,8 @@
                 ? "nav_badge_world_boss_aria"
               : key === "alliance"
                 ? "nav_badge_alliance_aria"
+              : key === "auction_house"
+                ? "nav_badge_auction_house_aria"
               : key === "community"
               ? "nav_badge_community_aria"
               : "";
@@ -11053,6 +11055,8 @@
                   ? "World Boss aktiv"
                 : key === "alliance"
                   ? "Allianz-Bewerbung ausstehend"
+                : key === "auction_house"
+                  ? "Auktionshaus-Aktivität"
                 : "Abstimmung offen")
         );
       }
@@ -19310,6 +19314,8 @@
     _syncImperialDirectiveCountdowns(page);
   }
 
+  let _idCountdownTimer = null;
+
   async function refreshImperialDirectivesFullState(reason) {
     const page = document.getElementById("imperial-directives-page");
     if (!page || page.dataset.ready !== "1") return null;
@@ -19410,9 +19416,11 @@
       actionHtml = `<span class="id-directive-card__active-hint">${escapeHtml(t("imperial_directives_active_hint", "Progress through normal gameplay"))}</span>`;
     }
     const expires = Number(d.expires_at || 0);
-    return `<article class="id-directive-card inventory-loot-card id-directive-card--${escapeHtml(cardState)}"
+    const weeklyClass = cadence === "weekly" ? " id-directive-card--weekly" : "";
+    return `<article class="id-directive-card inventory-loot-card id-directive-card--${escapeHtml(cardState)}${weeklyClass}"
          data-directive-card
          data-directive-id="${id}"
+         data-directive-cadence="${escapeHtml(cadence)}"
          data-directive-status="${escapeHtml(status)}"
          data-directive-expires-at="${expires}"
          data-rarity="${escapeHtml(rarity)}">
@@ -19445,8 +19453,6 @@
       </div>
     </article>`;
   }
-
-  let _idCountdownTimer = null;
 
   function _syncImperialDirectiveCountdowns(page) {
     if (!page) return;
@@ -19493,13 +19499,14 @@
       return;
     }
 
-    const dailyList = page.querySelector('[data-id-directive-list="daily"]');
-    const weeklyList = page.querySelector('[data-id-directive-list="weekly"]');
+    const ordersList = page.querySelector('[data-id-directive-list="orders"]')
+      || page.querySelector('[data-id-directive-list="daily"]');
     const directives = Array.isArray(state.directives) ? state.directives : [];
     const daily = directives.filter((d) => String(d.cadence) === "daily");
     const weekly = directives.filter((d) => String(d.cadence) === "weekly");
+    const ordered = daily.concat(weekly);
 
-    if (!daily.length && !weekly.length) {
+    if (!ordered.length) {
       _patchImperialDirectivesMeta(page, state);
       _syncImperialDirectiveCountdowns(page);
       return;
@@ -19513,8 +19520,7 @@
       return;
     }
 
-    if (dailyList && daily.length) dailyList.innerHTML = daily.map(_idDirectiveCardHtml).join("");
-    if (weeklyList && weekly.length) weeklyList.innerHTML = weekly.map(_idDirectiveCardHtml).join("");
+    if (ordersList) ordersList.innerHTML = ordered.map(_idDirectiveCardHtml).join("");
 
     _patchImperialDirectivesMeta(page, state);
 
@@ -35433,9 +35439,56 @@
       bindReportBtn(btn, category, "data-chronicles-report");
     });
   };
+  const RECORDS_TAB_KEYS = ["buildings", "research", "empire", "fleet", "defense", "titans"];
+
+  function _recordsSelectTab(page, tabKey) {
+    if (!page) return;
+    const key = RECORDS_TAB_KEYS.includes(tabKey) ? tabKey : "buildings";
+    page.querySelectorAll("[data-records-tab]").forEach((btn) => {
+      const on = btn.getAttribute("data-records-tab") === key;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    page.querySelectorAll("[data-records-panel]").forEach((panel) => {
+      const on = panel.getAttribute("data-records-panel") === key;
+      panel.classList.toggle("is-active", on);
+      if (on) {
+        panel.removeAttribute("hidden");
+      } else {
+        panel.setAttribute("hidden", "");
+      }
+    });
+    try {
+      const hash = `#${key}`;
+      if (window.location.hash !== hash) {
+        history.replaceState(null, "", `${window.location.pathname}${window.location.search}${hash}`);
+      }
+    } catch (_) { /* ignore */ }
+  }
+
+  function bindRecordsOnce() {
+    if (GC._recordsEventsBound) return;
+    GC._recordsEventsBound = true;
+    document.addEventListener("click", (ev) => {
+      const tabBtn = ev.target.closest("[data-records-tab]");
+      if (!tabBtn) return;
+      const page = document.getElementById("records-page");
+      if (!page || page.dataset.recordsReady !== "1") return;
+      ev.preventDefault();
+      _recordsSelectTab(page, tabBtn.getAttribute("data-records-tab") || "buildings");
+    });
+  }
+
   GC.modules.records = function initRecordsPage() {
     const root = document.getElementById("records-page");
     if (!root) return;
+    bindRecordsOnce();
+    if (root.dataset.recordsReady !== "1") return;
+    const hashKey = String(window.location.hash || "").replace(/^#/, "");
+    const initial = RECORDS_TAB_KEYS.includes(hashKey)
+      ? hashKey
+      : (root.querySelector("[data-records-tab]")?.getAttribute("data-records-tab") || "buildings");
+    _recordsSelectTab(root, initial);
   };
   const TECHTREE_STORAGE_KEY = "gc_techtree_collapsed";
   let techtreeMediaZoomOpen = false;

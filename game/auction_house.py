@@ -69,6 +69,108 @@ def auction_schema_ready(conn) -> bool:
     )
 
 
+def auction_visits_schema_ready(conn) -> bool:
+    return table_exists(conn, "auction_house_player_visits")
+
+
+def mark_auction_house_visited(
+    player_id: int,
+    *,
+    conn,
+    now: float | None = None,
+) -> None:
+    """Record that the player opened the auction house (clears 'new listing' badge)."""
+    if not auction_visits_schema_ready(conn):
+        return
+    pid = int(player_id)
+    if pid <= 0:
+        return
+    ts = int(now if now is not None else time.time())
+    conn.execute(
+        """
+        INSERT INTO auction_house_player_visits (player_id, last_visited_at)
+        VALUES (?, ?)
+        ON CONFLICT(player_id) DO UPDATE SET last_visited_at = excluded.last_visited_at;
+        """,
+        (pid, ts),
+    )
+
+
+def count_auction_nav_attention(player_id: int, *, conn=None) -> int:
+    """
+    Nav badge count: outbid lots + new active listings since last visit.
+
+    Never-visited players get attention for any active listing (discoverability).
+    """
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        if not auction_schema_ready(conn):
+            return 0
+        pid = int(player_id)
+        if pid <= 0:
+            return 0
+        now_i = int(time.time())
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            SELECT COUNT(DISTINCT l.id) AS c
+            FROM auction_house_listings l
+            WHERE l.status = 'active'
+              AND l.ends_at > ?
+              AND l.current_bidder_id IS NOT NULL
+              AND l.current_bidder_id != ?
+              AND EXISTS (
+                SELECT 1 FROM auction_house_bids b
+                WHERE b.listing_id = l.id AND b.player_id = ?
+              );
+            """,
+            (now_i, pid, pid),
+        )
+        outbid = int(cur.fetchone()["c"] or 0)
+
+        last_visited = None
+        if auction_visits_schema_ready(conn):
+            cur.execute(
+                """
+                SELECT last_visited_at FROM auction_house_player_visits
+                WHERE player_id = ? LIMIT 1;
+                """,
+                (pid,),
+            )
+            vrow = cur.fetchone()
+            if vrow is not None:
+                last_visited = int(vrow["last_visited_at"] or 0)
+
+        if last_visited is None:
+            cur.execute(
+                """
+                SELECT COUNT(*) AS c FROM auction_house_listings
+                WHERE status = 'active' AND ends_at > ?;
+                """,
+                (now_i,),
+            )
+            new_listings = int(cur.fetchone()["c"] or 0)
+        else:
+            cur.execute(
+                """
+                SELECT COUNT(*) AS c FROM auction_house_listings
+                WHERE status = 'active'
+                  AND ends_at > ?
+                  AND created_at > ?;
+                """,
+                (now_i, last_visited),
+            )
+            new_listings = int(cur.fetchone()["c"] or 0)
+
+        return outbid + new_listings
+    finally:
+        if own and conn is not None:
+            conn.close()
+
+
 def resolve_inventory_key(box_key: str) -> Optional[str]:
     key = str(box_key or "").strip()
     if key in BOX_INVENTORY_MAP:
@@ -186,6 +288,7 @@ def _loot_content_hints(inv_key: str, *, conn) -> List[Dict[str, str]]:
 
 
 def _listing_recent_bids(listing_id: int, *, conn, limit: int = 3) -> List[Dict[str, Any]]:
+    """Highest bid per player (display collapse); history rows stay append-only."""
     cur = conn.cursor()
     cur.execute(
         """
@@ -193,21 +296,27 @@ def _listing_recent_bids(listing_id: int, *, conn, limit: int = 3) -> List[Dict[
         FROM auction_house_bids b
         JOIN players p ON p.id = b.player_id
         WHERE b.listing_id = ?
-        ORDER BY b.created_at DESC, b.id DESC
-        LIMIT ?;
+        ORDER BY b.amount DESC, b.created_at DESC, b.id DESC;
         """,
-        (int(listing_id), int(limit)),
+        (int(listing_id),),
     )
     rows: List[Dict[str, Any]] = []
+    seen_players: set[int] = set()
     for row in cur.fetchall():
+        pid = int(row["player_id"])
+        if pid in seen_players:
+            continue
+        seen_players.add(pid)
         rows.append(
             {
-                "player_id": int(row["player_id"]),
+                "player_id": pid,
                 "player_name": commander_display_name(str(row["player_name"] or "")),
                 "amount": int(row["amount"] or 0),
                 "created_at": int(row["created_at"] or 0),
             }
         )
+        if len(rows) >= max(1, int(limit)):
+            break
     try:
         from .playercard import map_equipped_name_styles
 
@@ -525,6 +634,7 @@ def build_auction_house_state(
     crystal: float = 0,
     fuel_cells: float = 0,
     conn=None,
+    mark_visited: bool = False,
 ) -> Dict[str, Any]:
     own = conn is None
     if own:
@@ -538,6 +648,8 @@ def build_auction_house_state(
             "won_auctions": 0,
         }
         now_i = int(time.time())
+        if ready and mark_visited:
+            mark_auction_house_visited(int(player_id), conn=conn, now=now_i)
         rotation = get_rotation_meta(conn, now=now_i) if ready else {
             "next_rotation_at": now_i,
             "rotation_interval_seconds": ROTATION_INTERVAL_SECONDS,

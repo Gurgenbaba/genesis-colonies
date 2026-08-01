@@ -14,9 +14,10 @@
 {% set _boosters = d.rewards_preview[1:] if d.rewards_preview and (d.rewards_preview|length > 1) else [] %}
 {% set _hero_img = url_for('static', filename=_hero.image) if _hero and _hero.image else _loot_fallback %}
 {% set _card_state = 'completed' if d.claimable else d.status %}
-<article class="id-directive-card inventory-loot-card id-directive-card--{{ _card_state }}"
+<article class="id-directive-card inventory-loot-card id-directive-card--{{ _card_state }}{% if d.cadence == 'weekly' %} id-directive-card--weekly{% endif %}"
          data-directive-card
          data-directive-id="{{ d.id }}"
+         data-directive-cadence="{{ d.cadence }}"
          data-directive-status="{{ d.status }}"
          data-directive-expires-at="{{ d.expires_at or 0 }}"
          data-rarity="{{ d.rarity }}">
@@ -93,71 +94,64 @@
   <script type="application/json" id="imperial-directives-page-state">{{ id_state | tojson }}</script>
   {% endif %}
 
-  <header class="gc-page-header section-header id-directives-header inventory-headline">
-    <p class="id-directives-eyebrow">{{ T('imperial_directives_eyebrow', 'HIGH COMMAND') }}</p>
-    <h1 class="section-title">{{ T('imperial_directives_title', 'Imperial Directives') }}</h1>
-    <p class="section-hint hint id-directives-hint">
-      {{ T('imperial_directives_hint', 'Operational orders from High Command. Progress through normal gameplay — claim rewards when complete.') }}
-    </p>
-  </header>
+  <div class="id-directives-main-frame">
+    <header class="gc-page-header section-header id-directives-header inventory-headline">
+      <p class="id-directives-eyebrow">{{ T('imperial_directives_eyebrow', 'HIGH COMMAND') }}</p>
+      <h1 class="section-title">{{ T('imperial_directives_title', 'Imperial Directives') }}</h1>
+      <p class="section-hint hint id-directives-hint">
+        {{ T('imperial_directives_hint', 'Operational orders from High Command. Progress through normal gameplay — claim rewards when complete.') }}
+      </p>
+    </header>
 
-  {% if not id_state.ready %}
-  <section class="gc-panel inventory-panel id-directives-panel">
-    <p class="id-directives-empty inventory-empty">{{ T('imperial_directives_unavailable', 'Imperial Directives are currently unavailable.') }}</p>
-  </section>
-  {% else %}
+    {% if not id_state.ready %}
+    <section class="gc-panel inventory-panel id-directives-panel">
+      <p class="id-directives-empty inventory-empty">{{ T('imperial_directives_unavailable', 'Imperial Directives are currently unavailable.') }}</p>
+    </section>
+    {% else %}
 
-  <section class="gc-panel inventory-panel id-directives-command-strip">
-    <div class="id-directives-command-strip__inner">
-      <div class="id-directives-stats">
-        <div class="id-directives-stat">
-          <span class="id-directives-stat__label">{{ T('imperial_directives_reset_daily', 'Daily reset') }}</span>
-          <span class="id-directives-stat__value gc-mono" data-id-daily-reset data-ts="{{ id_state.daily_reset_at or 0 }}">…</span>
+    <section class="gc-panel inventory-panel id-directives-command-strip">
+      <div class="id-directives-command-strip__inner">
+        <div class="id-directives-stats">
+          <div class="id-directives-stat">
+            <span class="id-directives-stat__label">{{ T('imperial_directives_reset_daily', 'Daily reset') }}</span>
+            <span class="id-directives-stat__value gc-mono" data-id-daily-reset data-ts="{{ id_state.daily_reset_at or 0 }}">…</span>
+          </div>
+          <div class="id-directives-stat">
+            <span class="id-directives-stat__label">{{ T('imperial_directives_reset_weekly', 'Weekly reset') }}</span>
+            <span class="id-directives-stat__value gc-mono" data-id-weekly-reset data-ts="{{ id_state.weekly_reset_at or 0 }}">…</span>
+          </div>
         </div>
-        <div class="id-directives-stat">
-          <span class="id-directives-stat__label">{{ T('imperial_directives_reset_weekly', 'Weekly reset') }}</span>
-          <span class="id-directives-stat__value gc-mono" data-id-weekly-reset data-ts="{{ id_state.weekly_reset_at or 0 }}">…</span>
+        <div class="id-directives-claim-strip">
+          <div class="id-directives-claimable-wrap">
+            <span class="id-directives-pending-badge gc-mono" data-id-claimable-count>{{ id_claimable }}</span>
+            <span class="id-directives-claimable-label">{{ T('imperial_directives_claimable_label', 'Ready to claim') }}</span>
+          </div>
+          <button type="button"
+                  class="gc-btn gc-btn-secondary gc-btn-sm id-directives-claim-all-btn"
+                  data-directive-claim-all
+                  {% if id_claimable <= 0 %}disabled{% endif %}>
+            {{ T('imperial_directives_claim_all_btn', 'Claim all rewards') }}
+          </button>
         </div>
       </div>
-      <div class="id-directives-claim-strip">
-        <div class="id-directives-claimable-wrap">
-          <span class="id-directives-pending-badge gc-mono" data-id-claimable-count>{{ id_claimable }}</span>
-          <span class="id-directives-claimable-label">{{ T('imperial_directives_claimable_label', 'Ready to claim') }}</span>
-        </div>
-        <button type="button"
-                class="gc-btn gc-btn-secondary gc-btn-sm id-directives-claim-all-btn"
-                data-directive-claim-all
-                {% if id_claimable <= 0 %}disabled{% endif %}>
-          {{ T('imperial_directives_claim_all_btn', 'Claim all rewards') }}
-        </button>
+    </section>
+
+    <section class="gc-panel inventory-panel id-directives-panel">
+      <div class="gc-panel-header">
+        <span class="gc-panel-title">{{ T('imperial_directives_orders_section', 'Orders') }}</span>
+        <span class="gc-panel-subtitle">{{ T('imperial_directives_orders_subtitle', 'Three daily orders and one weekly order') }}</span>
       </div>
-    </div>
-  </section>
+      <div class="inventory-container-grid id-directive-grid" data-id-directive-list="orders">
+        {% for d in id_daily %}
+        {{ id_directive_card(d) }}
+        {% endfor %}
+        {% for d in id_weekly %}
+        {{ id_directive_card(d) }}
+        {% endfor %}
+      </div>
+    </section>
 
-  <section class="gc-panel inventory-panel id-directives-panel">
-    <div class="gc-panel-header">
-      <span class="gc-panel-title">{{ T('imperial_directives_daily_section', 'Daily orders') }}</span>
-      <span class="gc-panel-subtitle">{{ T('imperial_directives_daily_subtitle', 'Three operational orders — refreshed every 24h') }}</span>
-    </div>
-    <div class="inventory-container-grid id-directive-grid" data-id-directive-list="daily">
-      {% for d in id_daily %}
-      {{ id_directive_card(d) }}
-      {% endfor %}
-    </div>
-  </section>
-
-  <section class="gc-panel inventory-panel id-directives-panel id-directives-panel--weekly">
-    <div class="gc-panel-header">
-      <span class="gc-panel-title">{{ T('imperial_directives_weekly_section', 'Weekly order') }}</span>
-      <span class="gc-panel-subtitle">{{ T('imperial_directives_weekly_subtitle', 'One strategic directive — refreshed each week') }}</span>
-    </div>
-    <div class="inventory-container-grid id-directive-grid id-directive-grid--weekly" data-id-directive-list="weekly">
-      {% for d in id_weekly %}
-      {{ id_directive_card(d) }}
-      {% endfor %}
-    </div>
-  </section>
-
-  {% endif %}
+    {% endif %}
+  </div>
 </div>
 {% endblock %}

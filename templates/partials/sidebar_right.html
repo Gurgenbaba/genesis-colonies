@@ -68,9 +68,12 @@
           {{ T("nav_trader_hub", "Trader Hub") }}
         </a>
         <a href="{{ url_for('auction_house_view') }}"
+           data-nav-module="auction_house"
+           data-nav-key="auction_house"
            class="gc-nav-sub-link {% if request.endpoint == 'auction_house_view' %}active{% endif %}"
            data-trading-nav="auction_house">
-          {{ T("nav_auction_house", "Auktionshaus") }}
+          <span class="gc-nav-link-label">{{ T("nav_auction_house", "Auktionshaus") }}</span>
+          <span class="gc-nav-badge hidden" data-nav-badge="auction_house" hidden aria-hidden="true"></span>
         </a>
         <a href="{{ url_for('inventory_view') }}"
            class="gc-nav-sub-link {% if request.endpoint == 'inventory_view' %}active{% endif %}"

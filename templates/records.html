@@ -3,8 +3,16 @@
 {% block content %}
 {% set payload = records_payload if records_payload is defined and records_payload else {'ok': false, 'groups': []} %}
 {% set groups = payload.groups if payload.groups is defined else [] %}
+{% set _tab_keys = {
+  'buildings': 'records_tab_buildings',
+  'research': 'records_tab_research',
+  'empire': 'records_tab_empire',
+  'fleet': 'records_tab_fleet',
+  'defense': 'records_tab_defense',
+  'titans': 'records_tab_titans'
+} %}
 
-<div class="gc-page gc-records-page" id="records-page">
+<div class="gc-page gc-records-page" id="records-page" data-records-ready="{{ '1' if payload.ok else '0' }}">
 
   <header class="section-header gc-records-header">
     <h1 class="section-title">{{ T("records_title", "Rekorde") }}</h1>
@@ -16,46 +24,74 @@
     <p class="gc-records-empty">{{ T("records_unavailable", "Rekorde sind derzeit nicht verfügbar.") }}</p>
   </section>
   {% else %}
-  {% for group in groups %}
-  <section class="gc-panel gc-records-panel" aria-labelledby="records-group-{{ group.key }}">
-    <div class="gc-panel-header gc-records-panel-head">
-      <span class="gc-panel-title" id="records-group-{{ group.key }}">
-        {{ T(group.label_key, group.key) }}
-      </span>
-    </div>
 
-    <div class="gc-records-list" role="list">
-      {% for record in group.records %}
-      {% set _rec_icon_png = url_for('static', filename=record.icon, v=GC_ASSET_VERSION) if record.icon else url_for('static', filename='img/buildings/default.png', v=GC_ASSET_VERSION) %}
-      {% set _rec_icon = _rec_icon_png|webp_static %}
-      <article class="gc-records-row{% if not record.has_holder %} gc-records-row--empty{% endif %}" role="listitem">
-        <div class="gc-records-row-icon" aria-hidden="true">
-          <img class="gc-prog-icon gc-records-icon"
-               src="{{ _rec_icon }}"
-               alt=""
-               loading="lazy"
-               onerror="this.onerror=null;this.src='{{ _rec_icon_png }}';">
+  <section class="gc-panel gc-records-workspace" aria-label="{{ T('records_title', 'Rekorde') }}">
+    <nav class="gc-records-tabs"
+         data-records-tabs
+         role="tablist"
+         aria-label="{{ T('records_tabs_aria', 'Rekord-Kategorien') }}">
+      {% for group in groups %}
+      {% set _tab_label_key = _tab_keys.get(group.key, group.label_key) %}
+      <button type="button"
+              class="gc-records-tab{% if loop.first %} is-active{% endif %}"
+              role="tab"
+              data-records-tab="{{ group.key }}"
+              id="records-tab-{{ group.key }}"
+              aria-controls="records-panel-{{ group.key }}"
+              aria-selected="{{ 'true' if loop.first else 'false' }}">
+        <span class="gc-records-tab-label">{{ T(_tab_label_key, group.key) }}</span>
+      </button>
+      {% endfor %}
+    </nav>
+
+    <div class="gc-records-workspace-body">
+      {% for group in groups %}
+      <div class="gc-records-panel{% if loop.first %} is-active{% endif %}"
+           data-records-panel="{{ group.key }}"
+           id="records-panel-{{ group.key }}"
+           role="tabpanel"
+           aria-labelledby="records-tab-{{ group.key }}"
+           {% if not loop.first %}hidden{% endif %}>
+        <div class="gc-records-panel-head">
+          <span class="gc-panel-title" id="records-group-{{ group.key }}">
+            {{ T(group.label_key, group.key) }}
+          </span>
         </div>
-        <div class="gc-records-row-label">
-          {{ T(record.label_key, record.key) }}
+
+        <div class="gc-records-list" role="list">
+          {% for record in group.records %}
+          {% set _rec_icon_png = url_for('static', filename=record.icon, v=GC_ASSET_VERSION) if record.icon else url_for('static', filename='img/buildings/default.png', v=GC_ASSET_VERSION) %}
+          {% set _rec_icon = _rec_icon_png|webp_static %}
+          <article class="gc-records-row{% if not record.has_holder %} gc-records-row--empty{% endif %}" role="listitem">
+            <div class="gc-records-row-icon" aria-hidden="true">
+              <img class="gc-prog-icon gc-records-icon"
+                   src="{{ _rec_icon }}"
+                   alt=""
+                   loading="lazy"
+                   onerror="this.onerror=null;this.src='{{ _rec_icon_png }}';">
+            </div>
+            <div class="gc-records-row-label">
+              {{ T(record.label_key, record.key) }}
+            </div>
+            <div class="gc-records-row-holder">
+              {% if record.has_holder and record.player_id %}
+              {{ player_name_link(record.player_id, record.player_name, extra_class='gc-records-player') }}
+              {% elif record.has_holder %}
+              <span class="gc-records-player" title="{{ record.player_name or '' }}">{{ record.player_name or "—" }}</span>
+              {% else %}
+              <span class="gc-records-none">{{ T("records_no_holder", "Noch kein Rekord") }}</span>
+              {% endif %}
+            </div>
+            <div class="gc-records-row-value gc-mono" title="{{ record.value_fmt }}">
+              {{ record.value_fmt if record.has_holder else "—" }}
+            </div>
+          </article>
+          {% endfor %}
         </div>
-        <div class="gc-records-row-holder">
-          {% if record.has_holder and record.player_id %}
-          {{ player_name_link(record.player_id, record.player_name, extra_class='gc-records-player') }}
-          {% elif record.has_holder %}
-          <span class="gc-records-player" title="{{ record.player_name or '' }}">{{ record.player_name or "—" }}</span>
-          {% else %}
-          <span class="gc-records-none">{{ T("records_no_holder", "Noch kein Rekord") }}</span>
-          {% endif %}
-        </div>
-        <div class="gc-records-row-value gc-mono" title="{{ record.value_fmt }}">
-          {{ record.value_fmt if record.has_holder else "—" }}
-        </div>
-      </article>
+      </div>
       {% endfor %}
     </div>
   </section>
-  {% endfor %}
   {% endif %}
 
 </div>

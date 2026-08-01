@@ -235,9 +235,10 @@ Meta-System für rotierende Lootbox-Auktionen (Wirtschaft → Auktionshaus, nebe
 - Bis zu **3** aktive Auktionen; Laufzeit **6–12 h**; nach Ablauf neue Rotation (`generate_auction_rotation`).
 - Gebote in `metal`, `crystal` oder `fuel_cells` — Währung pro Listing fest.
 - Mindest-Erhöhung **5 %**; Abbuchung vom **context planet**; Überbotene erhalten sofort Refund auf ihre Bieter-Kolonie.
-- **Gebotslimit:** max. **25** Gebote pro Commander und Listing (Anti-Spam / Ressourcen-Glitch-Schutz).
+- **Gebotslimit:** max. **25** Gebote pro Commander und Listing (Anti-Spam / Ressourcen-Glitch-Schutz). History bleibt append-only; die UI-Liste „Letzte Gebote“ zeigt pro Spieler nur das **höchste** Gebot (`_listing_recent_bids`).
 - Gewinner erhält Box in `lootbox_inventory` + `player_inventory_items` (kanonisches Inventar).
 - **Eventboxen ausgeschlossen:** kein `event_container`, kein `event_*`-Prefix, keine Box mit `is_event` / Kategorie `event`.
+- **Nav-Badge** (`nav_badges.auction_house`): aktiv bei Überboten (gebietet, führt nicht) und/oder neuen aktiven Listings seit `auction_house_player_visits.last_visited_at` (Page / `/api/auction-house/state` markieren Besuch; Game-State-Poll nicht).
 
 ### UI (Active-Lots AAA)
 
@@ -252,7 +253,7 @@ Meta-System für rotierende Lootbox-Auktionen (Wirtschaft → Auktionshaus, nebe
 
 Poll liefert `auction_house` in `/api/game-state` (Panel).
 
-Migration: `047_auction_house.sql`
+Migration: `047_auction_house.sql`, Visits: `127_auction_house_player_visits.sql`
 
 ---
 

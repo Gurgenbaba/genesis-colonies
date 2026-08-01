@@ -2967,12 +2967,13 @@ def test_main_js_imperial_directives_full_state_endpoint():
     patch_fn = src.split("function patchImperialDirectivesDom(state, opts)")[1].split("let _imperialDirectivesBound", 1)[0]
     assert "_imperialDirectivesStateUsable(state)" in patch_fn
     assert "_imperialDirectivesHasSsrCards(page)" in patch_fn
-    assert "if (dailyList && daily.length)" in patch_fn
-    card_html = src.split("function _idDirectiveCardHtml(d)")[1].split("let _idCountdownTimer", 1)[0]
+    assert 'data-id-directive-list="orders"' in patch_fn or "ordersList" in patch_fn
+    assert "_idDirectiveCardHtml" in patch_fn
+    card_html = src.split("function _idDirectiveCardHtml(d)")[1].split("function _syncImperialDirectiveCountdowns", 1)[0]
     assert "inventory-loot-card-name" in card_html
     assert "data-directive-progress-fill" in card_html
     assert "data-directive-claim" in card_html
-    init = src.split("function initImperialDirectives()")[1].split("function parseGalacticPoliticsPageState", 1)[0]
+    init = src.split("function initImperialDirectives()")[1].split("function parseStoryOpsPageState", 1)[0]
     assert "_imperialDirectivesHasSsrCards(page)" in init
     assert "refreshImperialDirectivesFullState" in init
     assert "if (!hasSsrCards)" in init
@@ -2986,7 +2987,7 @@ def test_main_js_imperial_directive_expire_timer_targets_label_only():
     assert "[data-directive-expires-label]" in sync_fn
     assert "label.textContent" in sync_fn
     assert 'querySelectorAll("[data-directive-expires]")' not in sync_fn
-    card_html = src.split("function _idDirectiveCardHtml(d)")[1].split("let _idCountdownTimer", 1)[0]
+    card_html = src.split("function _idDirectiveCardHtml(d)")[1].split("function _syncImperialDirectiveCountdowns", 1)[0]
     assert "data-directive-expires-at" in card_html
     assert "data-directive-expires-label" in card_html
     assert 'data-directive-expires="' not in card_html
@@ -2994,6 +2995,7 @@ def test_main_js_imperial_directive_expire_timer_targets_label_only():
     assert "data-directive-expires-at" in tpl
     assert "data-directive-expires-label" in tpl
     assert 'data-directive-expires="{{' not in tpl
+    assert "id-directives-main-frame" in tpl
 
 
 def test_main_js_notification_poll_singleton_heartbeat():

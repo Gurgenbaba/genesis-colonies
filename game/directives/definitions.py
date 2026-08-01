@@ -75,7 +75,12 @@ def _parse_row(row: sqlite3.Row | Mapping[str, Any]) -> Dict[str, Any]:
     data["objective_kind"] = str(data.get("objective_kind") or OBJECTIVE_COUNT).strip().lower()
     data["scale_profile"] = str(data.get("scale_profile") or "count_light").strip()
     data["base_target"] = int(data.get("base_target") or 1)
-    data["weight"] = max(1, int(data.get("weight") or 1))
+    # weight 0 = disabled from roll pool (keep definition for progress/claim)
+    raw_weight = data.get("weight")
+    if raw_weight is None:
+        data["weight"] = 1
+    else:
+        data["weight"] = max(0, int(raw_weight))
     data["min_rarity"] = str(data.get("min_rarity") or "common").strip().lower()
     data["max_rarity"] = str(data.get("max_rarity") or "legendary").strip().lower()
     data["title_key"] = str(data.get("title_key") or "")
@@ -117,12 +122,21 @@ def list_definitions(conn, *, cadence: str) -> List[Dict[str, Any]]:
             continue
         if parsed["category"] not in CATEGORIES:
             continue
+        if int(parsed.get("weight") or 0) <= 0:
+            continue
         out.append(parsed)
     return out
 
 
 def list_definitions_for_cadence(cadence: str, *, conn) -> List[Dict[str, Any]]:
     return list_definitions(conn, cadence=cadence)
+
+
+def definition_is_rollable(definition: Mapping[str, Any] | None) -> bool:
+    """True when a definition may appear in new daily/weekly rolls."""
+    if not definition:
+        return False
+    return int(definition.get("weight") or 0) > 0
 
 
 def get_definition(key: str, *, conn) -> Optional[Dict[str, Any]]:

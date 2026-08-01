@@ -17,12 +17,12 @@ from .scaling import SCORE_ANCHOR, SCORE_FLOOR, scale_profile_config
 
 # (daily_max, weekly_max) — 0 means profile-only cap
 DIRECTIVE_TARGET_CAPS: Dict[str, Tuple[int, int]] = {
-    "upgrade_buildings": (10, 25),
+    "upgrade_buildings": (15, 35),
     "upgrade_storages": (10, 20),
     "upgrade_solar_plants": (10, 20),
     "upgrade_fuel_plants": (10, 20),
-    "launch_expeditions": (10, 30),
-    "complete_expeditions": (10, 35),
+    "launch_expeditions": (12, 35),
+    "complete_expeditions": (12, 40),
     "send_fleet_missions": (50, 120),
     "recycle_debris": (5, 15),
     "start_research": (2, 5),
@@ -31,7 +31,7 @@ DIRECTIVE_TARGET_CAPS: Dict[str, Tuple[int, int]] = {
     "upgrade_energy_tech": (2, 4),
     "upgrade_navigation_tech": (2, 4),
     "win_battles": (3, 8),
-    "defeat_pirates": (3, 8),
+    "defeat_pirates": (5, 12),
     "deal_world_boss_damage": (100000, 500000),
     "destroy_enemy_defense": (30, 80),
     "build_defense": (40, 100),
@@ -45,17 +45,17 @@ DIRECTIVE_TARGET_CAPS: Dict[str, Tuple[int, int]] = {
 }
 
 COUNT_TIER_SNAP: Dict[str, Sequence[int]] = {
-    "launch_expeditions": (3, 5, 10),
-    "complete_expeditions": (3, 5, 10),
+    "launch_expeditions": (5, 8, 12),
+    "complete_expeditions": (5, 8, 12),
     "send_fleet_missions": (10, 20, 30, 40, 50),
-    "upgrade_buildings": (3, 5, 8, 10),
+    "upgrade_buildings": (5, 8, 10, 15),
     "upgrade_storages": (3, 5, 8, 10),
     "upgrade_solar_plants": (3, 5, 8, 10),
     "upgrade_fuel_plants": (3, 5, 8, 10),
     "start_research": (1, 2),
     "complete_research": (1, 2, 3),
     "win_battles": (1, 2, 3),
-    "defeat_pirates": (1, 2, 3),
+    "defeat_pirates": (2, 3, 5),
     "recycle_debris": (2, 3, 5),
     "find_rare_loot": (1, 2, 3),
     "trigger_expedition_events": (2, 3, 5),
@@ -63,13 +63,13 @@ COUNT_TIER_SNAP: Dict[str, Sequence[int]] = {
 
 # Daily production share by rarity (produce / spend accumulate objectives)
 PRODUCE_DAILY_PCT: Dict[str, float] = {
-    "common": 0.02,
-    "rare": 0.035,
-    "epic": 0.055,
-    "legendary": 0.08,
+    "common": 0.05,
+    "rare": 0.08,
+    "epic": 0.12,
+    "legendary": 0.18,
 }
 
-WEEKLY_PRODUCE_MULTIPLIER = 5.0
+WEEKLY_PRODUCE_MULTIPLIER = 6.0
 STARTER_DAILY_PRODUCTION = 12_000
 PRODUCE_ABSOLUTE_DAILY_CAP = 25_000_000
 PRODUCE_ABSOLUTE_WEEKLY_CAP = 120_000_000
