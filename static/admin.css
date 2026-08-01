@@ -128,111 +128,32 @@
   color: var(--gc-text);
 }
 
-/* ── Segmented Command Tabs ── */
+/* ── Command tabs: both group + detail rails use canonical .gc-page-tabs ── */
 .admin-nav {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 6px;
   margin: 14px 0 16px;
 }
 
-.admin-group-rail {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0;
-  margin: 0;
-  padding: 0;
-  border: 1px solid var(--admin-border);
-  border-bottom: none;
-  background: rgba(0, 0, 0, 0.35);
-}
-
-.admin-group-btn {
-  appearance: none;
-  -webkit-appearance: none;
-  flex: 0 1 auto;
-  min-width: max-content;
-  border: none;
-  border-right: 1px solid var(--admin-border);
-  border-radius: 0;
-  background: transparent;
-  color: var(--gc-text-soft);
-  padding: 8px 12px;
-  font: inherit;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s, box-shadow 0.12s;
-}
-
-.admin-group-btn:last-child {
-  border-right: none;
-}
-
-.admin-group-btn:hover {
-  color: var(--admin-warn);
-  background: rgba(255, 154, 26, 0.08);
-}
-
-.admin-group-btn.is-active {
-  color: #120a02;
-  background: var(--admin-warn);
-  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.35), 0 0 10px rgba(255, 154, 26, 0.22);
-  font-weight: 800;
-}
-
-/* Admin tabs: same rail as .gc-page-tabs (admin often without Identity Shell). */
+.admin-nav .gc-page-tabs,
+.admin-group-rail.gc-page-tabs,
 .admin-tabs.gc-page-tabs {
-  margin: 14px 0 16px;
+  margin: 0;
+  flex: 0 0 auto;
   --gc-neon-cyan: var(--admin-accent, #46e5ff);
 }
 
-.admin-nav .admin-tabs {
-  margin: 0;
-  flex: 0 0 auto;
-}
-
 .admin-tab-btn[hidden],
-.admin-cc-tab[hidden] {
+.admin-cc-tab[hidden],
+.admin-group-btn[hidden] {
   display: none !important;
 }
 
-/* CC sub-tabs share page-tab look when marked */
-.admin-cc-tab {
-  appearance: none;
-  -webkit-appearance: none;
-  flex: 1 1 auto;
-  min-width: max-content;
-  border: none;
-  border-right: 1px solid color-mix(in srgb, var(--admin-accent, #46e5ff) 12%, transparent);
-  border-radius: 0;
-  background: transparent;
-  color: var(--gc-text-dim, #8aa);
-  padding: 12px 14px;
-  font: inherit;
-  font-family: Orbitron, Inter, system-ui, sans-serif;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  cursor: pointer;
-}
-
-.admin-cc-tab:hover {
-  color: var(--gc-text-soft);
-  background: color-mix(in srgb, var(--admin-accent, #46e5ff) 5%, transparent);
-}
-
-.admin-cc-tab.is-active {
-  color: var(--admin-accent, #46e5ff);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--admin-accent, #46e5ff) 14%, transparent) 0%,
-    color-mix(in srgb, var(--admin-accent, #46e5ff) 4%, transparent) 100%
-  );
-  box-shadow: inset 0 -3px 0 var(--admin-accent, #46e5ff);
+/* CC sub-tabs: markup should include .gc-page-tab; keep hook class only */
+.admin-cc-tabs.gc-page-tabs {
+  margin: 0 0 12px;
+  --gc-neon-cyan: var(--admin-accent, #46e5ff);
 }
 
 /* ── Panels ── */
@@ -1370,14 +1291,13 @@
     position: static;
     max-height: none;
   }
-  .admin-tabs.gc-page-tabs {
+  .admin-nav .gc-page-tabs {
     display: flex;
     flex-direction: column;
   }
-  .admin-tabs .gc-page-tab,
-  .admin-cc-tab {
+  .admin-nav .gc-page-tab {
     border-right: none;
-    border-bottom: 1px solid var(--admin-border);
+    border-bottom: 1px solid color-mix(in srgb, var(--admin-accent, #46e5ff) 12%, transparent);
     width: 100%;
     text-align: left;
   }

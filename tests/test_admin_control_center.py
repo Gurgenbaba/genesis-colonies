@@ -601,14 +601,24 @@ def test_admin_page_smoke_html(app_client):
     html = r.get_data(as_text=True)
     assert 'id="admin-control-center"' in html
     assert 'data-page="admin"' in html
-    assert 'class="admin-tab-btn' in html
+    assert 'class="gc-page-tab admin-tab-btn' in html
     assert 'data-admin-tab="health"' in html
     assert 'data-admin-panel="health"' in html
     assert 'data-admin-tab="lootboxes"' in html
     assert 'data-admin-panel="lootboxes"' in html
-    assert 'class="admin-group-rail"' in html
+    assert "admin-group-rail" in html
+    assert "gc-page-tabs" in html
+    assert 'class="gc-page-tab admin-group-btn' in html
     assert 'data-admin-group="liveops"' in html
     assert 'data-admin-group="system"' in html
+    from pathlib import Path
+
+    admin_css = (Path(__file__).resolve().parents[1] / "static/admin.css").read_text(
+        encoding="utf-8"
+    )
+    # Group rail must not use solid warn-fill active (clashes with page-tabs).
+    assert ".admin-group-btn.is-active" not in admin_css
+    assert "background: var(--admin-warn)" not in admin_css
     assert "admin-toolbar--danger" in html
     assert 'data-admin-tab="pirates"' in html
     assert "admin.js" in html

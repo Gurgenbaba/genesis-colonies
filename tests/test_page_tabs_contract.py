@@ -56,3 +56,15 @@ def test_admin_online_panel_markup():
     js = _read("static/admin.js")
     assert "loadAdminOnlinePlayers" in js
     assert "/api/admin/players?online=1" in js
+
+
+def test_admin_dual_tab_rails_share_page_tabs():
+    """Group + detail admin rails must both use gc-page-tabs (no solid-fill clash)."""
+    html = _read("templates/admin_panel.html")
+    css = _read("static/admin.css")
+    assert 'gc-page-tabs gc-page-tabs--auto gc-page-tabs--sm admin-group-rail' in html
+    assert 'gc-page-tabs gc-page-tabs--auto admin-tabs' in html
+    assert "gc-page-tab admin-group-btn" in html
+    assert "gc-page-tab admin-tab-btn" in html
+    assert ".admin-group-btn.is-active" not in css
+    assert "background: var(--admin-warn)" not in css

@@ -113,12 +113,12 @@
         <p id="admin-alert-host" class="admin-alert-host" role="alert" aria-live="polite" hidden></p>
 
     <nav class="admin-nav" aria-label="{{ T('admin_tabs_label') }}">
-      <div class="admin-group-rail" role="tablist" aria-label="{{ T('admin_groups_label') }}">
-        <button type="button" class="admin-group-btn" data-admin-group="liveops" role="tab">{{ T("admin_group_liveops") }}</button>
-        <button type="button" class="admin-group-btn" data-admin-group="players" role="tab">{{ T("admin_group_players") }}</button>
-        <button type="button" class="admin-group-btn" data-admin-group="economy" role="tab">{{ T("admin_group_economy") }}</button>
-        <button type="button" class="admin-group-btn" data-admin-group="moderation" role="tab">{{ T("admin_group_moderation") }}</button>
-        <button type="button" class="admin-group-btn is-active" data-admin-group="system" role="tab">{{ T("admin_group_system") }}</button>
+      <div class="gc-page-tabs gc-page-tabs--auto gc-page-tabs--sm admin-group-rail" role="tablist" aria-label="{{ T('admin_groups_label') }}">
+        <button type="button" class="gc-page-tab admin-group-btn" data-admin-group="liveops" role="tab">{{ T("admin_group_liveops") }}</button>
+        <button type="button" class="gc-page-tab admin-group-btn" data-admin-group="players" role="tab">{{ T("admin_group_players") }}</button>
+        <button type="button" class="gc-page-tab admin-group-btn" data-admin-group="economy" role="tab">{{ T("admin_group_economy") }}</button>
+        <button type="button" class="gc-page-tab admin-group-btn" data-admin-group="moderation" role="tab">{{ T("admin_group_moderation") }}</button>
+        <button type="button" class="gc-page-tab admin-group-btn is-active" data-admin-group="system" role="tab">{{ T("admin_group_system") }}</button>
       </div>
       <div class="gc-page-tabs gc-page-tabs--auto admin-tabs" role="tablist" aria-label="{{ T('admin_tabs_label') }}">
         <button type="button" class="gc-page-tab admin-tab-btn is-active" data-admin-tab="health" data-admin-group="system" role="tab">{{ T("admin_health_title") }}</button>
