@@ -1037,7 +1037,7 @@
   "auction_house_loot_preview_btn": "Contenu",
   "auction_house_lore": "Des conteneurs de récupération rares, des stocks militaires et des capsules de recherche provenant de l'espace connu sont vendus aux enchères ici.",
   "auction_house_min_bid": "min.",
-  "auction_house_new_auctions_in": "De nouvelles enchères apparaissent dans :",
+  "auction_house_new_auctions_in": "Prochaine vérification de rotation dans :",
   "auction_house_no_bids_yet": "Aucune offre pour l'instant — soyez le premier.",
   "auction_house_panel_subtitle": "Les enchères sont débitées de la colonie active",
   "auction_house_panel_title": "Enchères actives",
@@ -7440,5 +7440,7 @@
   "gd_politics_resolution_duration": "Lasts %(days)s days if passed",
   "gd_fx_gate_control_active": "Contrôle de porte Hélios",
   "gd_politics_live_mandate_only": "Mandat seul · onglets Maintenant / Vote",
-  "gd_politics_badge_stance": "Position seule · pas de buff"
+  "gd_politics_badge_stance": "Position seule · pas de buff",
+  "auction_house_rotation_clock_hint": "Moment de la prochaine vérification de rotation côté serveur",
+  "auction_house_my_bids_nav_hint": "Aller aux lots où vous êtes en tête"
 }

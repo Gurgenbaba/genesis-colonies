@@ -239,6 +239,13 @@ Meta-System für rotierende Lootbox-Auktionen (Wirtschaft → Auktionshaus, nebe
 - Gewinner erhält Box in `lootbox_inventory` + `player_inventory_items` (kanonisches Inventar).
 - **Eventboxen ausgeschlossen:** kein `event_container`, kein `event_*`-Prefix, keine Box mit `is_event` / Kategorie `event`.
 
+### UI (Active-Lots AAA)
+
+- Mittelteil zeigt **ausschließlich aktive Auktionen** (Full-Width Lot-Cards) oder Empty-State.
+- Stats `Active` / `MyBids` / `Won` sind Statusanzeigen, keine Filter-Tabs. `MyBids` = Anzahl aktiver Lots mit `is_leading=true`; Soft-Nav scrollt/pulst nur führende Lots.
+- **Rotation Clock** = `next_rotation_at` (serverseitige Rotationsprüfung). **Lot Timer** = individuelles `ends_at`. Keine Client-Lot-Erzeugung.
+- **Upcoming-Preview entfernt:** kein Upcoming-Panel, keine `upcoming`-State-Slice, keine `build_upcoming_preview` / `get_upcoming_auctions`.
+
 ### Erlaubte Box-Keys (Rotation)
 
 `generic_supply_container`, `resource_cache`, `research_capsule`, `wreckage_container`, `military_cache`, `alien_cache`, `premium_cache` — gewichtet nach Seltenheit; `birthday_gift_container` nur manuell/admin.

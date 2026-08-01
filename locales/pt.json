@@ -1037,7 +1037,7 @@
   "auction_house_loot_preview_btn": "Conteúdo",
   "auction_house_lore": "Contêineres de salvamento raros, estoques militares e cápsulas de pesquisa do espaço conhecido são leiloados aqui.",
   "auction_house_min_bid": "min.",
-  "auction_house_new_auctions_in": "Novos leilões aparecem em:",
+  "auction_house_new_auctions_in": "Próxima verificação de rotação em:",
   "auction_house_no_bids_yet": "Ainda não há lances – seja o primeiro.",
   "auction_house_panel_subtitle": "Os lances são debitados da colônia ativa",
   "auction_house_panel_title": "Leilões ativos",
@@ -7440,5 +7440,7 @@
   "gd_politics_resolution_duration": "Lasts %(days)s days if passed",
   "gd_fx_gate_control_active": "Controle do portão Helios",
   "gd_politics_live_mandate_only": "Só mandato · abas Agora / Voto",
-  "gd_politics_badge_stance": "Só postura · sem buff"
+  "gd_politics_badge_stance": "Só postura · sem buff",
+  "auction_house_rotation_clock_hint": "Momento da próxima verificação de rotação no servidor",
+  "auction_house_my_bids_nav_hint": "Ir para os lotes em que estás a liderar"
 }

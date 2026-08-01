@@ -14,14 +14,12 @@ from game.auction_house import (
     ACTIVE_AUCTION_TARGET,
     MAX_BIDS_PER_PLAYER_PER_LISTING,
     ROTATION_INTERVAL_SECONDS,
-    UPCOMING_AUCTION_TARGET,
     auction_schema_ready,
     build_auction_house_state,
     finish_due_auctions,
     generate_auction_rotation,
     get_active_auctions,
     get_rotation_meta,
-    get_upcoming_auctions,
     is_auction_allowed_box,
     is_event_box,
     place_bid,
@@ -133,34 +131,19 @@ def test_get_active_auctions_seeds_rotation(auction_db):
     conn.close()
 
 
-def test_upcoming_auctions_seeded(auction_db):
+def test_auction_house_state_has_no_upcoming(auction_db):
+    """GC-550 Active-Lots: upcoming preview removed — state is active lots only."""
     conn = db()
     uid = _player(conn=conn)
-    get_active_auctions(uid, conn=conn)
-    upcoming = get_upcoming_auctions(conn=conn)
-    assert len(upcoming) == UPCOMING_AUCTION_TARGET
-    assert all(u["seconds_until_available"] >= 0 for u in upcoming)
-    assert all(not is_event_box(u["box_key"]) for u in upcoming)
     pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    get_active_auctions(uid, conn=conn)
     state = build_auction_house_state(uid, pid, conn=conn)
-    assert len(state["upcoming"]) == UPCOMING_AUCTION_TARGET
+    assert "upcoming" not in state
+    assert len(state["auctions"]) == ACTIVE_AUCTION_TARGET
     assert state["next_rotation_at"] > 0
     assert state["rotation_interval_seconds"] == ROTATION_INTERVAL_SECONDS
-    conn.close()
-
-
-def test_upcoming_times_tied_to_rotation_anchor(auction_db):
-    conn = db()
-    uid = _player(conn=conn)
-    get_active_auctions(uid, conn=conn)
-    meta = get_rotation_meta(conn)
-    upcoming = get_upcoming_auctions(conn=conn)
-    anchor = int(meta["next_rotation_at"])
-    interval = int(meta["rotation_interval_seconds"])
-    assert upcoming[0]["available_at"] == anchor
-    assert upcoming[1]["available_at"] == anchor + interval
-    assert upcoming[2]["available_at"] == anchor + interval * 2
-    assert all(not is_event_box(u["box_key"]) for u in upcoming)
+    assert state["stats"]["active_auctions"] == ACTIVE_AUCTION_TARGET
+    assert state["stats"]["my_bids"] == 0
     conn.close()
 
 
@@ -169,11 +152,33 @@ def test_next_rotation_at_stable_within_same_window(auction_db):
     uid = _player(conn=conn)
     get_active_auctions(uid, conn=conn)
     meta1 = get_rotation_meta(conn)
-    upcoming1 = get_upcoming_auctions(conn=conn)
     meta2 = get_rotation_meta(conn)
-    upcoming2 = get_upcoming_auctions(conn=conn)
     assert meta1["next_rotation_at"] == meta2["next_rotation_at"]
-    assert [u["box_key"] for u in upcoming1] == [u["box_key"] for u in upcoming2]
+    assert meta1["rotation_interval_seconds"] == ROTATION_INTERVAL_SECONDS
+    conn.close()
+
+
+def test_my_bids_stat_counts_leading_lots_only(auction_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    cur.execute("UPDATE planets SET metal = 500000 WHERE id = ?;", (pid,))
+    listing_id = _insert_listing(conn, currency="metal", start_price=50_000)
+    conn.commit()
+    ok, reason, _ = place_bid(
+        player_id=uid,
+        planet_id=pid,
+        listing_id=listing_id,
+        amount=50_000,
+        currency="metal",
+        conn=conn,
+    )
+    assert ok, reason
+    state = build_auction_house_state(uid, pid, conn=conn)
+    assert state["stats"]["my_bids"] >= 1
+    leading = [a for a in state["auctions"] if a.get("is_leading")]
+    assert len(leading) == state["stats"]["my_bids"]
     conn.close()
 
 
@@ -370,9 +375,16 @@ def test_auction_house_page_reachable(auction_db, monkeypatch):
     body = res.get_data(as_text=True)
     assert "auction-house-page" in body
     assert "auction-house-shell" in body
-    assert "auction-house-card" in body or "auction-house-table" in body or "auction-house-empty" in body
-    assert "auction-upcoming-panel" in body or "auction-house-upcoming" in body or "auction-house-empty" in body
+    assert "auction-house-lot" in body or "auction-house-empty" in body
+    assert "auction-upcoming-panel" not in body
+    assert "auction-house-upcoming" not in body
+    assert "data-auction-upcoming" not in body
+    assert "data-auction-expand" not in body
+    assert "data-auction-open-bid" not in body
+    assert "data-auction-lot-toggle" not in body
+    assert "data-auction-bid-form" in body or "auction-house-empty" in body
     assert "auction-stats-bar" in body or "auction-house-empty" in body
+    assert "data-auction-rotation-timer" in body or "auction-house-empty" in body or "auction-house-unavailable" in body
 
 
 def test_context_planet_resources_used_for_bid(auction_db):

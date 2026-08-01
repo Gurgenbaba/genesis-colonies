@@ -1037,7 +1037,7 @@
   "auction_house_loot_preview_btn": "Inhalt",
   "auction_house_lore": "Seltene Bergungscontainer, Militärbestände und Forschungskapseln aus dem bekannten Raum werden hier versteigert.",
   "auction_house_min_bid": "min.",
-  "auction_house_new_auctions_in": "Neue Auktionen erscheinen in:",
+  "auction_house_new_auctions_in": "Nächste Rotationsprüfung in:",
   "auction_house_no_bids_yet": "Noch keine Gebote — sei der Erste.",
   "auction_house_panel_subtitle": "Gebote werden vom aktiven Planeten abgebucht",
   "auction_house_panel_title": "Aktive Auktionen",
@@ -7440,5 +7440,7 @@
   "gd_politics_resolution_duration": "Wirkt %(days)s Tage bei Annahme",
   "gd_fx_gate_control_active": "Helios-Tor-Kontrolle",
   "gd_politics_live_mandate_only": "Nur Mandat · Tab Jetzt / Wahl",
-  "gd_politics_badge_stance": "Nur Haltung · kein Buff"
+  "gd_politics_badge_stance": "Nur Haltung · kein Buff",
+  "auction_house_rotation_clock_hint": "Zeitpunkt der nächsten serverseitigen Rotationsprüfung",
+  "auction_house_my_bids_nav_hint": "Zu den Lots springen, bei denen du führst"
 }

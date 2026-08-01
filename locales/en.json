@@ -1037,7 +1037,7 @@
   "auction_house_loot_preview_btn": "Contents",
   "auction_house_lore": "Rare salvage containers, military stockpiles, and research capsules from known space are auctioned here.",
   "auction_house_min_bid": "min.",
-  "auction_house_new_auctions_in": "New auctions appear in:",
+  "auction_house_new_auctions_in": "Next rotation check in:",
   "auction_house_no_bids_yet": "No bids yet — be the first.",
   "auction_house_panel_subtitle": "Bids are debited from the active colony",
   "auction_house_panel_title": "Active auctions",
@@ -7440,5 +7440,7 @@
   "gd_politics_resolution_duration": "Lasts %(days)s days if passed",
   "gd_fx_gate_control_active": "Helios gate control",
   "gd_politics_live_mandate_only": "Mandate only · Now / Vote tabs",
-  "gd_politics_badge_stance": "Stance only · no buff"
+  "gd_politics_badge_stance": "Stance only · no buff",
+  "auction_house_rotation_clock_hint": "When the server next renews or checks the active auction rotation",
+  "auction_house_my_bids_nav_hint": "Jump to lots where you are currently leading"
 }

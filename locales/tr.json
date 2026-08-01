@@ -1037,7 +1037,7 @@
   "auction_house_loot_preview_btn": "İçindekiler",
   "auction_house_lore": "Nadir kurtarma konteynerleri, askeri stoklar ve bilinen uzaydan gelen araştırma kapsülleri burada açık artırmayla satılıyor.",
   "auction_house_min_bid": "dk.",
-  "auction_house_new_auctions_in": "Yeni açık artırmalar şu konumlarda görünür:",
+  "auction_house_new_auctions_in": "Sonraki rotasyon kontrolü:",
   "auction_house_no_bids_yet": "Henüz teklif yok; ilk siz olun.",
   "auction_house_panel_subtitle": "Teklifler aktif koloniden tahsil edilir",
   "auction_house_panel_title": "Aktif açık artırmalar",
@@ -7440,5 +7440,7 @@
   "gd_politics_resolution_duration": "Lasts %(days)s days if passed",
   "gd_fx_gate_control_active": "Helios kapı kontrolü",
   "gd_politics_live_mandate_only": "Sadece mandat · Şimdi / Oy sekmeleri",
-  "gd_politics_badge_stance": "Sadece tutum · buff yok"
+  "gd_politics_badge_stance": "Sadece tutum · buff yok",
+  "auction_house_rotation_clock_hint": "Sunucunun bir sonraki rotasyon kontrolü zamanı",
+  "auction_house_my_bids_nav_hint": "Önde olduğun lotlara git"
 }

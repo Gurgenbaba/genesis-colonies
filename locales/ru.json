@@ -1037,7 +1037,7 @@
   "auction_house_loot_preview_btn": "Содержание",
   "auction_house_lore": "Здесь продаются на аукционе редкие контейнеры для мусора, военные запасы и исследовательские капсулы из известного космоса.",
   "auction_house_min_bid": "мин.",
-  "auction_house_new_auctions_in": "Новые аукционы появляются в:",
+  "auction_house_new_auctions_in": "Следующая проверка ротации через:",
   "auction_house_no_bids_yet": "Ставок пока нет — будьте первым.",
   "auction_house_panel_subtitle": "Ставки списываются с активной колонии",
   "auction_house_panel_title": "Активные аукционы",
@@ -7440,5 +7440,7 @@
   "gd_politics_resolution_duration": "Lasts %(days)s days if passed",
   "gd_fx_gate_control_active": "Контроль врат Гелиоса",
   "gd_politics_live_mandate_only": "Только мандат · вкладки Сейчас / Голос",
-  "gd_politics_badge_stance": "Только позиция · без баффа"
+  "gd_politics_badge_stance": "Только позиция · без баффа",
+  "auction_house_rotation_clock_hint": "Момент следующей серверной проверки ротации",
+  "auction_house_my_bids_nav_hint": "Перейти к лотам, где вы лидируете"
 }

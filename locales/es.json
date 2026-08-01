@@ -1037,7 +1037,7 @@
   "auction_house_loot_preview_btn": "Contenido",
   "auction_house_lore": "Aquí se subastan raros contenedores de salvamento, arsenales militares y cápsulas de investigación del espacio conocido.",
   "auction_house_min_bid": "mín.",
-  "auction_house_new_auctions_in": "Nuevas subastas aparecen en:",
+  "auction_house_new_auctions_in": "Próxima comprobación de rotación en:",
   "auction_house_no_bids_yet": "Aún no hay ofertas: sé el primero.",
   "auction_house_panel_subtitle": "Las pujas se debitan de la colonia activa.",
   "auction_house_panel_title": "Subastas activas",
@@ -7440,5 +7440,7 @@
   "gd_politics_resolution_duration": "Lasts %(days)s days if passed",
   "gd_fx_gate_control_active": "Control de puerta Helios",
   "gd_politics_live_mandate_only": "Solo mandato · pestañas Ahora / Voto",
-  "gd_politics_badge_stance": "Solo postura · sin buff"
+  "gd_politics_badge_stance": "Solo postura · sin buff",
+  "auction_house_rotation_clock_hint": "Momento de la próxima comprobación de rotación en el servidor",
+  "auction_house_my_bids_nav_hint": "Ir a los lotes en los que vas en cabeza"
 }
