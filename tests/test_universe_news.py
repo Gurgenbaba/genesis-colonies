@@ -19,6 +19,7 @@ from game.universe_news import (
     delete_news,
     ensure_legacy_motd_migrated,
     ensure_v09_release_seeded,
+    ensure_v091_release_seeded,
     get_banner_entry,
     get_news_entry,
     list_news,
@@ -221,3 +222,15 @@ def test_v09_seed_idempotent_and_whats_new_major(news_db):
     if wn.get("show"):
         assert wn.get("is_major_release") is True
         assert str(wn.get("version_tag") or "").lower() not in ("development", "dev", "ongoing")
+
+
+def test_v091_seed_idempotent(news_db):
+    first = ensure_v091_release_seeded()
+    assert first["ok"] is True
+    again = ensure_v091_release_seeded()
+    assert again["ok"] is True
+    assert again.get("seeded") is False
+    assert again.get("reason") == "v0.9.1_exists"
+    rows = list_news(audience="player", include_drafts=False)
+    tags = {str(r.get("version_tag") or "") for r in rows}
+    assert "v0.9.1" in tags

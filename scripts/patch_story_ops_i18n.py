@@ -1,4 +1,9 @@
-"""Patch Story Ops i18n keys into all locale files (GC-2502/2503)."""
+"""LEGACY seed helper (GC-2502/2503).
+
+Do NOT re-run against live locales: it copies EN into es/fr/pl/pt/ru/tr.
+Story Ops prose is now fully translated; use scripts/apply_story_ops_translations.py
+for MT refresh from DE, or edit locales/*.json directly.
+"""
 
 from __future__ import annotations
 

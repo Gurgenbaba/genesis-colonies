@@ -2,11 +2,28 @@
 
 Vollständige Entwicklungshistorie von Projektstart bis heute.  
 Clustered by milestone versions (not every commit).  
-Stand: **2026-07-31** · Spieler-Meilenstein **v0.9 Alpha** · Build-Zähler [`VERSION`](VERSION) (intern / Cache-Bust, derzeit `0.5.9.x`)
+Stand: **2026-08-01** · Spieler-Meilenstein **v0.9 Alpha** · Build-Zähler [`VERSION`](VERSION) (intern / Cache-Bust, derzeit `0.5.9.x`)
 
 > **Versionsregel:** Alpha bleibt **`v0.9.x`**. **`v1.0` / `v1.0.0-beta`** ist der Beta-Gate ([docs/BETA_GATE.md](docs/BETA_GATE.md)) — nicht für Alpha-Patches verwenden.  
 > Spieler: Patchnotes live unter **News** (`/news`) und im NEWS-Banner.  
 > Admins: Release-Publisher im Admin-Panel → Server → Universums-News (nicht Git-Commits).
+
+---
+
+## v0.9.1 — Effective Stats & Polyglot Story *(Alpha · 2026-08-01)*
+
+### Changed
+- **GC-EFFSTAT (Standardwerte)** — Katalog-Stats (Speed/Cargo/Fuel/Kampf) zeigen überall **effektive Werte** inkl. **Gesamtbonus-%** (Shipyard, Defense, Fleet, Detail, Battle Lab)
+- **Story Ops mehrsprachig** — Lore & UI in DE/EN/ES/FR/PL/PT/RU/TR; Vorleser (Neural + Browser-Fallback) folgt der gewählten Game-Sprache
+- Commander-, Tech-Tree- und World-Boss-Boosts ehrlich und sichtbar
+- Titan-Link: Mini-Titan wandert zur Fortschritts-Spitze; clientseitige Fire-FX; Live-Progress überall
+- Codex Quick-Help-Banner entfernt (Codex nur noch über Context-Button)
+- Social Name-Styles und Titan-Progress aktualisieren live
+
+### Fixed
+- **GC-EFFSTAT** — Aktive-Boni-Liste: keine internen Keys wie `gd:defensive`; korrekte Direktiven-Beiträge statt falscher −200 %-Spikes
+- Admins erhalten alle Titan-Slots ohne Shop-Kauf
+- Timekeeper-Finish: Karten-Locks / Afford / Stock nach Boost-Abschluss via include_panel Refresh
 
 ---
 
@@ -19,29 +36,32 @@ Stand: **2026-07-31** · Spieler-Meilenstein **v0.9 Alpha** · Build-Zähler [`V
 - **Ark-Token-Missionen** — Patrouille / Schlag / Void-Run mit Fail-Risiko
 - **Titan-Slots** — Start 1, Shop bis 4
 - **Piraten-Ökosystem**
-- **Login-Kalender & Battle Pass**
-- **Allianz-Hub**
-- **Convenience-Shop** (Stripe / PayPal)
+- **Login-Kalender & Season Pass** — Trackboard, Relic-Icons, Prestige-Cosmetics
+- **Allianz-Hub** — Visitor-Page, klarere Spenden, PE-Style Logo-Hero
+- **Convenience-Shop** (Stripe / PayPal) mit Produkt-Art und Command-Supply-Layout
 - **Story Ops / Lore** Sidequests mit Free-Shop Ark-Token Loop
 - **Universe News Release-Publisher** — kuratierte Spieler-Patchnotes ohne Git-Runtime
 - **Commander Classes (EPIC-27)** — 5 Klassen, linearer Skill-Trunk, Capstones, TK-Swap (`/skilltree`)
 - **Commander Pick UI** — Destiny-style Command Staff cards, Living Focus, Compact Skillmap
+- **Identity** — Name-Styles im Shop + Identity-Shell Theme/Aura
+- **Logistics Collect** — Freighter starten von Quell-Kolonien; Hub-Bestand nach Collect sichtbar
+- **Combat Reports** — UX-Polish und One-Click Recycle
+- **Planet-Registry** — Status-Indikatoren in der Kolonie-Liste
+- **Collector Lifetime-Badges** (Prestige)
+- Inventory: One-Click „Alle“-Deposit für Timekeeper-Booster
 
 ### Changed
-- Codex Quick-Help-Banner auf Seiten entfernt (Codex über Context-Button)
-- Titan-Link Mission-Progress: Mini-Titan wandert Richtung Fortschritts-Spitze und zurück (Ping-Pong, reduced-motion-sicher)
 - Titanen größer und mit Aura (helle + dunkle Landscapes); Hotspot ohne Auswahl-Rahmen
 - World Boss Action-Bar: Angriff / Auto / Zähmen vereint
-- Performance & Live-Updates gehärtet
+- Galaktische Politik in einer Status-Card (kein Overview-Duplikat)
+- Mobile HUD, Allianz-Badge und Universe-Ranking-Refresh
+- Fleet: Schiff- und Cargo-Details per Mobile-Row-Tap
+- Performance & Live-Updates gehärtet (Planet-Switch, Queues, Ranking)
 - News: Git-Audit aus Spieler-Pfad entfernt; Whats-New nur Major Releases
-- **GC-EFFSTAT** — Katalog-Stats (Speed/Cargo/Fuel/Kampf) zeigen effektive Werte inkl. Gesamtbonus-% (Shipyard, Defense, Fleet, Detail, Battle Lab)
 
 ### Fixed
 - Diverse Sync-/PJAX-Themen
 - Timer- & Queue-Stabilität
-- **GC-EFFSTAT** — Aktive-Boni-Liste: keine internen Keys wie `gd:defensive`; korrekte Direktiven-Beiträge statt falscher −200 %-Spikes
-- Admins erhalten alle Titan-Slots ohne Shop-Kauf
-- Timekeeper-Finish: Karten-Locks / Afford / Stock nach Boost-Abschluss via include_panel Refresh
 - Commander: Fuel-Efficiency-Polarität, Cargo-Multiplier in Fleet, Skilltree %-Chips, Klasse auf PlayerCard
 - World Boss: ×1/×5 Hit-Grid (×5 = 5× Schaden + 25 Min CD), stabile Button-Breiten
 - Tech-Tree: aktive Fleet-Research nicht mehr „vorbereitet“; Siege-Rolle; Research-Effekt-Previews

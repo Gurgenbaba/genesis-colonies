@@ -1745,17 +1745,81 @@ def ensure_v09_release_seeded(*, conn: sqlite3.Connection | None = None) -> Dict
             conn.close()
 
 
+V091_RELEASE_PACK: Dict[str, Any] = {
+    "version_tag": "v0.9.1",
+    "version_label": "Effective Stats & Polyglot Story",
+    "release_date": "2026-08-01",
+    "badge": "ALPHA",
+    "intro": (
+        "Standardwerte werden zu echten Kampfwerten, Story Ops spricht deine Sprache, "
+        "und Titanen, Boosts sowie Mobile-UX sind geschärft."
+    ),
+    "added": [
+        "Story Ops vollständig in acht Sprachen (DE/EN/ES/FR/PL/PT/RU/TR)",
+        "Vorleser folgt der gewählten Game-Sprache (Neural + Browser-Fallback)",
+    ],
+    "changed": [
+        "GC-EFFSTAT: Katalog-Stats zeigen effektive Werte inkl. Gesamtbonus-%",
+        "Commander-, Tech-Tree- und World-Boss-Boosts ehrlich und sichtbar",
+        "Titan-Link mit wanderndem Progress-Icon und Fire-FX",
+        "Identity Name-Styles, Logistics Collect von Quell-Kolonien, Mobile Fleet-Details",
+        "Codex nur noch über Context-Button (keine Quick-Help-Banner)",
+    ],
+    "fixed": [
+        "EFFSTAT Aktive-Boni: lesbare Labels statt interner Keys; korrekte Direktiven-Beiträge",
+        "Admins erhalten alle Titan-Slots ohne Shop-Kauf",
+        "Timekeeper-Finish aktualisiert Karten-Locks und Afford korrekt",
+    ],
+}
+
+
+def ensure_v091_release_seeded(*, conn: sqlite3.Connection | None = None) -> Dict[str, Any]:
+    """Idempotent curated v0.9.1 player pack (EFFSTAT + Story i18n wave)."""
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        if not table_exists(conn, "universe_news"):
+            return {"ok": False, "error": "schema_missing", "seeded": False}
+        if version_has_player_rows("v0.9.1", conn=conn):
+            return {"ok": True, "seeded": False, "reason": "v0.9.1_exists"}
+        result = publish_release_pack(
+            version_tag=V091_RELEASE_PACK["version_tag"],
+            version_label=V091_RELEASE_PACK["version_label"],
+            intro=V091_RELEASE_PACK["intro"],
+            release_date=V091_RELEASE_PACK["release_date"],
+            badge=V091_RELEASE_PACK["badge"],
+            is_major_release=True,
+            added=V091_RELEASE_PACK["added"],
+            changed=V091_RELEASE_PACK["changed"],
+            fixed=V091_RELEASE_PACK["fixed"],
+            set_banner=False,
+            conn=conn,
+        )
+        if own and result.get("ok"):
+            conn.commit()
+        return {
+            "ok": bool(result.get("ok")),
+            "seeded": bool(result.get("ok")),
+            "publish": result,
+        }
+    finally:
+        if own:
+            conn.close()
+
+
 def ensure_player_news_seeded(*, conn: sqlite3.Connection | None = None) -> Dict[str, Any]:
-    """Boot helper: CHANGELOG majors if empty, then curated v0.9 pack."""
+    """Boot helper: CHANGELOG majors if empty, then curated v0.9 / v0.9.1 packs."""
     own = conn is None
     if own:
         conn = db()
     try:
         changelog = ensure_changelog_seeded(conn=conn)
         v09 = ensure_v09_release_seeded(conn=conn)
+        v091 = ensure_v091_release_seeded(conn=conn)
         if own:
             conn.commit()
-        return {"ok": True, "changelog": changelog, "v09": v09}
+        return {"ok": True, "changelog": changelog, "v09": v09, "v091": v091}
     finally:
         if own:
             conn.close()

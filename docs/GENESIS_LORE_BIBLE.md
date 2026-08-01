@@ -21,7 +21,7 @@ UI: sprechender Kreis-Orb (Wellen bei TTS). Kein Cartoon-Gesicht.
 
 ## Prose-Canon (Buchband)
 
-1. DE führend literarisch; EN gleichwertig; andere Locales EN-Parity bis Übersetzung.
+1. DE führend literarisch; EN gleichwertig; **alle acht Locales** (de/en/es/fr/pl/pt/ru/tr) tragen Story-Prose — TTS folgt `current_locale()`.
 2. Transmission-Body: **120–400 Wörter**, Szenen-Rhythmus, Bild, Spannung — kein „Tutorial“ / „Quest-Log“.
 3. Objective-Hints bleiben kurz und klar getrennt vom Lore-Body.
 4. Jeder Beat trägt intern ≥1 Fact aus der Whitelist unten.

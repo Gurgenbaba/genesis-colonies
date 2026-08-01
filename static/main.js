@@ -19707,8 +19707,18 @@
     if (session !== _storyTtsSession) return;
     try { window.speechSynthesis.cancel(); } catch (_) {}
     const u = new window.SpeechSynthesisUtterance(text);
-    const lang = String(document.documentElement.lang || "de").toLowerCase();
-    u.lang = lang.startsWith("de") ? "de-DE" : "en-US";
+    const lang = String(document.documentElement.lang || "de").toLowerCase().split("-")[0];
+    const browserTtsLang = {
+      de: "de-DE",
+      en: "en-US",
+      es: "es-ES",
+      fr: "fr-FR",
+      pl: "pl-PL",
+      pt: "pt-BR",
+      ru: "ru-RU",
+      tr: "tr-TR",
+    };
+    u.lang = browserTtsLang[lang] || "en-US";
     u.rate = 0.96;
     u.pitch = 0.92;
     u.volume = Math.max(0, Math.min(1, Number(volume) || 0.85));
