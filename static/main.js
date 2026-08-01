@@ -26277,7 +26277,7 @@
       return `
         <article class="gc-scrapyard-card inventory-item-card" data-scrap-ship="${key}" data-scrap-max="${amount}">
           <div class="inventory-item-card-hero gc-scrapyard-card-hero">
-            <img src="${icon}" alt="" class="gc-scrapyard-ship-icon inventory-item-img" width="64" height="64" loading="lazy">
+            <img src="${icon}" alt="" class="gc-scrapyard-ship-icon" width="168" height="132" loading="lazy">
             <span class="inventory-item-amount gc-mono" title="${formatNumber(amount)}">×${amountCompact}</span>
           </div>
           <div class="inventory-item-card-body gc-scrapyard-card-body">

@@ -4979,21 +4979,36 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 }
 .gc-scrapyard-card-grid{
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
   min-width: 0;
   align-items: stretch;
 }
 .gc-scrapyard-card.inventory-item-card{
   height: 100%;
 }
+.trader-hub-page .gc-scrapyard-card .gc-scrapyard-card-hero,
 .gc-scrapyard-card .gc-scrapyard-card-hero{
-  min-height: 88px;
-  padding: 12px 10px 8px;
+  min-height: 148px;
+  padding: 14px 10px 12px;
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(70, 229, 255, 0.12), transparent 62%),
+    rgba(0, 0, 0, 0.28);
 }
-.gc-scrapyard-card .gc-scrapyard-ship-icon.inventory-item-img{
-  width: 64px;
-  height: 64px;
+.trader-hub-page .gc-scrapyard-card .gc-scrapyard-ship-icon,
+.gc-scrapyard-card .gc-scrapyard-ship-icon{
+  width: min(92%, 168px) !important;
+  height: auto !important;
+  max-height: 132px;
+  min-height: 96px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 14px rgba(70, 229, 255, 0.35));
+  transition: transform 0.18s ease, filter 0.18s ease;
+}
+.trader-hub-page .gc-scrapyard-card:hover .gc-scrapyard-ship-icon,
+.gc-scrapyard-card:hover .gc-scrapyard-ship-icon{
+  transform: scale(1.04);
+  filter: drop-shadow(0 0 18px rgba(70, 229, 255, 0.5));
 }
 .gc-scrapyard-card-body{
   gap: 6px;
@@ -5877,11 +5892,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   background: rgba(5, 12, 28, 0.92);
 }
 .trader-hub-page .gc-scrapyard-ship-icon{
-  width: 64px;
-  height: 64px;
-  object-fit: contain;
   opacity: 1;
-  filter: drop-shadow(0 0 8px rgba(70, 229, 255, 0.28));
 }
 .trader-hub-page .gc-trader-scrap-body{
   display: grid;
