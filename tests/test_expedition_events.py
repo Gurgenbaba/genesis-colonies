@@ -840,6 +840,34 @@ def test_virtual_pirate_fleet_scales_past_former_per_type_cap():
     assert any(int(qty) > 50_000 for qty in mega.values())
 
 
+def test_void_pirate_combat_research_mostly_weaker_than_player(monkeypatch):
+    import random
+
+    import game.models as models
+    from game.expedition_events import roll_void_pirate_combat_research
+
+    player_levels = {"weapon_tech": 10, "armor_tech": 8, "shield_tech": 6}
+    monkeypatch.setattr(
+        models,
+        "get_research_levels",
+        lambda _pid, conn=None: dict(player_levels),
+    )
+    weaker = 0
+    hotter = 0
+    for seed in range(200):
+        _mods, snap = roll_void_pirate_combat_research(
+            random.Random(seed), player_id=1, conn=object()
+        )
+        for key, p_lvl in player_levels.items():
+            lvl = int(snap[key]["level"])
+            assert 0 <= lvl <= p_lvl + 1
+            if lvl < p_lvl:
+                weaker += 1
+            elif lvl > p_lvl:
+                hotter += 1
+    assert weaker > hotter
+
+
 def test_publish_expedition_pirate_combat_report_real_battle_meta(monkeypatch):
     ships = {"solar_skiff": 5, "falcon_interceptor": 40, "harvest_reclaimer": 1}
     combat = resolve_pirate_encounter(
@@ -898,7 +926,8 @@ def test_publish_expedition_pirate_combat_report_real_battle_meta(monkeypatch):
     assert dict(meta.get("attacker_losses") or {}) == dict(combat.get("losses") or {})
     assert dict(meta.get("defender_losses") or {}) == dict(combat.get("defender_losses") or {})
     assert meta.get("combat_research_applicable") is True
-    assert meta.get("defender_combat_research_na") is True
+    assert meta.get("defender_combat_research_na") is False
+    assert meta.get("defender_combat_research") or combat.get("pirate_combat_research")
     assert meta.get("recycler_protected") is True
     assert int(meta.get("fighting_score") or 0) == int(combat.get("fighting_score") or 0)
 
@@ -1024,12 +1053,11 @@ def test_pirate_debris_uses_real_defender_losses():
 
 
 def test_pirate_debris_persists_remainder_to_galaxy(fleet_db):
-    """Onboard reclaimers harvest first; remainder lands in debris_fields at G:S:16."""
+    """Onboard reclaimers harvest first; remainder lands on classic slot 1–15 (never 16)."""
     from game.combat import get_debris_at_field
     from game.db import db
-    from game.fleet import build_expedition_slot
     from game.fleet_defs import EXPEDITION_POSITION
-    from game.galaxy import get_debris_for_system
+    from game.galaxy import POSITION_MAX, POSITION_MIN, get_debris_for_system
 
     fleet = {"solar_skiff": 50, "falcon_interceptor": 200, "harvest_reclaimer": 1}
     remaining, losses = apply_expedition_ship_losses(fleet, 40)
@@ -1059,13 +1087,15 @@ def test_pirate_debris_persists_remainder_to_galaxy(fleet_db):
         assert rem == total - harvested
         if rem > 0:
             assert field.get("galaxy_persisted") is True
-            stored = get_debris_at_field(1, 2, EXPEDITION_POSITION, conn=conn)
+            pos = int(field.get("position") or 0)
+            assert POSITION_MIN <= pos <= POSITION_MAX
+            assert pos != EXPEDITION_POSITION
+            stored = get_debris_at_field(1, 2, pos, conn=conn)
             assert int(stored.get("metal") or 0) + int(stored.get("crystal") or 0) == rem
             assert field.get("coords")
             by_pos = get_debris_for_system(1, 2, conn)
-            assert EXPEDITION_POSITION in by_pos
-            expo_slot = build_expedition_slot(1, 2, conn=conn)
-            assert expo_slot.get("has_debris") is True
+            assert pos in by_pos
+            assert EXPEDITION_POSITION not in by_pos
         else:
             assert field.get("galaxy_persisted") is False
     finally:
@@ -1073,10 +1103,11 @@ def test_pirate_debris_persists_remainder_to_galaxy(fleet_db):
 
 
 def test_pirate_debris_without_recycler_persists_full_field(fleet_db):
-    """No reclaimers aboard → entire combat debris persists at expo slot."""
+    """No reclaimers aboard → entire combat debris persists on a classic slot."""
     from game.combat import get_debris_at_field
     from game.db import db
     from game.fleet_defs import EXPEDITION_POSITION
+    from game.galaxy import POSITION_MAX, POSITION_MIN
 
     fleet = {"solar_skiff": 80, "falcon_interceptor": 120}
     remaining, losses = apply_expedition_ship_losses(fleet, 25)
@@ -1101,7 +1132,10 @@ def test_pirate_debris_without_recycler_persists_full_field(fleet_db):
         rem = int(field.get("metal") or 0) + int(field.get("crystal") or 0)
         assert rem > 0
         assert field.get("galaxy_persisted") is True
-        stored = get_debris_at_field(3, 4, EXPEDITION_POSITION, conn=conn)
+        pos = int(field.get("position") or 0)
+        assert POSITION_MIN <= pos <= POSITION_MAX
+        assert pos != EXPEDITION_POSITION
+        stored = get_debris_at_field(3, 4, pos, conn=conn)
         assert int(stored.get("metal") or 0) + int(stored.get("crystal") or 0) == rem
     finally:
         conn.close()
@@ -1139,8 +1173,9 @@ def test_pirate_debris_full_recycler_cap_skips_persist(fleet_db):
         assert harvested > 0
         assert rem == 0
         assert field.get("galaxy_persisted") is False
-        stored = get_debris_at_field(5, 6, EXPEDITION_POSITION, conn=conn)
-        assert int(stored.get("metal") or 0) + int(stored.get("crystal") or 0) == 0
+        for pos in range(1, 16):
+            stored = get_debris_at_field(5, 6, pos, conn=conn)
+            assert int(stored.get("metal") or 0) + int(stored.get("crystal") or 0) == 0
     finally:
         conn.close()
 

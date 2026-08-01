@@ -1294,6 +1294,7 @@ def build_combat_report(
     conn=None,
     locale: str | None = None,
     combat_kind: str | None = None,
+    defender_research_override: Mapping[str, Any] | None = None,
 ) -> Tuple[str, Dict[str, Any]]:
     """Genesis-style combat report body + structured metadata for ``player_messages``."""
     from .i18n import fmt_int, tr
@@ -1301,6 +1302,9 @@ def build_combat_report(
     loc = locale
     kind = str(combat_kind or "").strip().lower()
     expo_pirate = kind == "expedition_pirate"
+    npc_research_override = (
+        dict(defender_research_override) if defender_research_override else None
+    )
 
     def _t(key: str, default: str | None = None, **kw: Any) -> str:
         return tr(key, default, locale=loc, **kw)
@@ -1325,7 +1329,7 @@ def build_combat_report(
     target_planet_txt = str(target_planet_name or "").strip()
     origin_planet_txt = str(origin_planet_name or "").strip()
 
-    # Expo pirates: player combat tech applies; NPC side has no account research (not fake L0).
+    # Expo pirates: player tech applies; NPC may carry rolled combat tech (override).
     atk_research = (
         combat_research_snapshot_for_player(
             int(attacker_id),
@@ -1336,7 +1340,7 @@ def build_combat_report(
         else {}
     )
     if expo_pirate:
-        def_research: Dict[str, Any] | None = None
+        def_research = npc_research_override
     else:
         def_research = (
             combat_research_snapshot_for_player(
@@ -1426,31 +1430,24 @@ def build_combat_report(
             ],
         ),
         "",
-        (
-            _format_kv_section(
-                _t("combat_report_section_research", "Combat technology"),
-                [
-                    _t("combat_report_section_attacker", "Attacker"),
-                    *_format_combat_research_lines(atk_research, tr_fn=_t),
-                    "",
-                    _t("combat_report_section_defender", "Defender"),
-                    _t(
-                        "combat_report_research_npc_na",
-                        "NPC force — no account combat technology.",
-                    ),
-                ],
-            )
-            if expo_pirate
-            else _format_kv_section(
-                _t("combat_report_section_research", "Combat technology"),
-                [
-                    _t("combat_report_section_attacker", "Attacker"),
-                    *_format_combat_research_lines(atk_research, tr_fn=_t),
-                    "",
-                    _t("combat_report_section_defender", "Defender"),
-                    *_format_combat_research_lines(def_research, tr_fn=_t),
-                ],
-            )
+        _format_kv_section(
+            _t("combat_report_section_research", "Combat technology"),
+            [
+                _t("combat_report_section_attacker", "Attacker"),
+                *_format_combat_research_lines(atk_research, tr_fn=_t),
+                "",
+                _t("combat_report_section_defender", "Defender"),
+                *(
+                    _format_combat_research_lines(def_research, tr_fn=_t)
+                    if def_research
+                    else [
+                        _t(
+                            "combat_report_research_npc_na",
+                            "NPC force — no account combat technology.",
+                        )
+                    ]
+                ),
+            ],
         ),
         "",
         _format_kv_section(
@@ -1599,10 +1596,10 @@ def build_combat_report(
         "rounds_fought": len(rounds_meta),
         "rounds": rounds_meta,
         "combat_research_applicable": True,
-        "defender_combat_research_na": bool(expo_pirate),
+        "defender_combat_research_na": bool(expo_pirate and not def_research),
     }
     metadata["attacker_combat_research"] = atk_research
-    metadata["defender_combat_research"] = None if expo_pirate else def_research
+    metadata["defender_combat_research"] = def_research
     if debris_meta:
         metadata["debris"] = dict(debris_meta)
     return "\n".join(line for line in body_lines if line is not None).strip(), metadata
@@ -1631,6 +1628,7 @@ def publish_attack_combat_report(
     attacker_locale: str | None = None,
     defender_locale: str | None = None,
     combat_kind: str | None = None,
+    defender_research_override: Mapping[str, Any] | None = None,
     extra_metadata: Mapping[str, Any] | None = None,
 ) -> Dict[str, Any]:
     """Build report and deliver permanent inbox messages to attacker and defender."""
@@ -1654,6 +1652,7 @@ def publish_attack_combat_report(
         conn=conn,
         locale=attacker_locale,
         combat_kind=combat_kind,
+        defender_research_override=defender_research_override,
     )
     if fleet_id is not None:
         metadata["fleet_id"] = int(fleet_id)
@@ -1662,8 +1661,8 @@ def publish_attack_combat_report(
         metadata["combat_kind"] = kind
     if extra_metadata:
         for key, value in dict(extra_metadata).items():
-            # Expedition pirate debris carries onboard/remainder meta — always win over auto-build.
-            if key == "debris" and value is not None:
+            # Expedition pirate debris / NPC research — always win over auto-build defaults.
+            if key in ("debris", "defender_combat_research", "defender_combat_research_na") and value is not None:
                 metadata[key] = value
             elif key not in metadata or metadata.get(key) in (None, "", 0, {}):
                 metadata[key] = value

@@ -516,20 +516,24 @@
     const atk = meta.attacker_combat_research;
     const def = meta.defender_combat_research;
     const defNa =
-      isExpeditionPirateCombat(meta) || meta?.defender_combat_research_na === true;
+      !def &&
+      (meta?.defender_combat_research_na === true ||
+        (isExpeditionPirateCombat(meta) && !def));
     if (!atk && !def && !defNa) return "";
     const hint = t(
       "combat_report_research_hint",
       "Account research bonuses applied to attack, hull, and shields in this battle."
     );
-    const defSide = defNa
-      ? `<p class="gc-combat-report-research-hint">${esc(
-          t(
-            "combat_report_research_npc_na",
-            "NPC force — no account combat technology."
-          )
-        )}</p>`
-      : renderCombatResearchSide(def, "defender");
+    const defSide = def
+      ? renderCombatResearchSide(def, "defender")
+      : defNa
+        ? `<p class="gc-combat-report-research-hint">${esc(
+            t(
+              "combat_report_research_npc_na",
+              "NPC force — no account combat technology."
+            )
+          )}</p>`
+        : renderCombatResearchSide(def, "defender");
     return renderCombatPanel(
       t("combat_report_section_research", "Combat technology"),
       `<p class="gc-combat-report-research-hint">${esc(hint)}</p>` +
@@ -911,13 +915,20 @@
     if (galaxyPersisted && (debris.metal > 0 || debris.crystal > 0)) {
       const persistCoords = debris.coords || meta?.target_coords || "";
       footerParts.push(
-        `<div class="gc-combat-debris-hint">${esc(
+        `<div class="gc-combat-debris-hint gc-combat-debris-hint--location"><strong>${esc(
           t(
             "expedition_report_debris_galaxy_persisted",
-            "A debris field formed in the galaxy at %(coords)s — send reclaimers to harvest the remainder."
+            "Remaining debris field is in the galaxy at %(coords)s — send reclaimers there to harvest it."
           ).replace("%(coords)s", persistCoords || "—")
-        )}</div>`
+        )}</strong></div>`
       );
+      if (persistCoords) {
+        footerParts.push(
+          `<div class="gc-combat-debris-hint gc-mono">${esc(
+            t("expedition_report_debris_location_label", "Debris location")
+          )}: ${esc(persistCoords)}</div>`
+        );
+      }
     }
     if (recycleHref && showRecycleCta) {
       const c = parseTargetCoordsForFleet(recycleCoords);

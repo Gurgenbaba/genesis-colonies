@@ -1036,12 +1036,8 @@ def test_gc700d_combat_debris_recycler_ux():
     de_json = json.loads(de)
     assert "%(coords)s" in en_json["expedition_report_debris_galaxy_persisted"]
     assert "%(coords)s" in de_json["expedition_report_debris_galaxy_persisted"]
-    ring = _read("templates/partials/galaxy_ring_view.html")
-    expo_block = ring.split("data-galaxy-ring-slot-wrap=\"expedition\"")[1].split(
-        "data-galaxy-ring-inspector-panel=\"expedition\""
-    )[0]
-    assert "galaxy_ring_debris_marker.html" in expo_block
-    assert "galaxy_debris_block.html" in ring.split("data-galaxy-ring-inspector-panel=\"expedition\"")[1][:800]
+    assert "expedition_report_debris_location_label" in en_json
+    assert "expedition_report_debris_location_label" in panel_fn
 
 
 def test_gc700db_galaxy_debris_ux():

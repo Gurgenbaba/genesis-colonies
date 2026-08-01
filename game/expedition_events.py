@@ -127,6 +127,9 @@ _PIRATE_ENEMY_FACTOR_RANGE = (0.55, 0.95)
 _PIRATE_BUDGET_SOFT_CAP = 5_000_000
 _PIRATE_BUDGET_SOFT_SQRT_SCALE = 2500.0
 _PIRATE_PROTECT_ROLES: Tuple[str, ...] = ("recycle",)
+# Mirror EffectResolver combat research: +5% per level (weapon/armor/shield).
+_PIRATE_TECH_BONUS_PER_LEVEL = 0.05
+_PIRATE_COMBAT_TECH_KEYS: Tuple[str, ...] = ("weapon_tech", "armor_tech", "shield_tech")
 
 # Default loss order for hazards (minefield): combat → recycle → expedition → …
 _LOSS_ROLE_PRIORITY: Tuple[str, ...] = (
@@ -1516,6 +1519,74 @@ def soft_cap_pirate_budget(fighting_score: int) -> int:
     return soft + int(math.sqrt(float(over)) * float(_PIRATE_BUDGET_SOFT_SQRT_SCALE))
 
 
+def roll_void_pirate_combat_research(
+    rng: random.Random,
+    *,
+    player_id: int | None = None,
+    conn=None,
+) -> Tuple[Any, Dict[str, Any]]:
+    """Random NPC combat tech — usually below the player, never more than +1 level over them."""
+    from .combat import CombatModifiers
+    from .models import get_research_levels
+
+    player_levels = {key: 0 for key in _PIRATE_COMBAT_TECH_KEYS}
+    if player_id is not None and int(player_id) > 0:
+        try:
+            levels = get_research_levels(int(player_id), conn=conn) or {}
+            for key in _PIRATE_COMBAT_TECH_KEYS:
+                player_levels[key] = max(0, int(levels.get(key) or 0))
+        except Exception:
+            pass
+
+    snap: Dict[str, Any] = {}
+    bonuses: Dict[str, float] = {}
+    for key in _PIRATE_COMBAT_TECH_KEYS:
+        p_lvl = int(player_levels[key])
+        roll = float(rng.random())
+        if p_lvl <= 0:
+            lvl = 1 if roll < 0.15 else 0
+        elif roll < 0.60:
+            lvl = int(rng.randint(0, max(0, p_lvl - 1)))
+        elif roll < 0.90:
+            lo = max(0, int(p_lvl * 0.45))
+            lvl = int(rng.randint(lo, p_lvl))
+        else:
+            lvl = int(rng.randint(max(0, p_lvl - 1), p_lvl + 1))
+        lvl = max(0, min(int(lvl), p_lvl + 1))
+        bonus = float(_PIRATE_TECH_BONUS_PER_LEVEL) * float(lvl)
+        snap[key] = {"level": int(lvl), "bonus_pct": max(0, int(round(bonus * 100)))}
+        bonuses[key] = bonus
+
+    mods = CombatModifiers(
+        weapon_bonus=float(bonuses.get("weapon_tech") or 0.0),
+        armor_bonus=float(bonuses.get("armor_tech") or 0.0),
+        shield_bonus=float(bonuses.get("shield_tech") or 0.0),
+    )
+    return mods, snap
+
+
+def pick_expedition_remainder_debris_position(
+    galaxy: int,
+    system: int,
+    *,
+    conn,
+    rng: random.Random | None = None,
+) -> int:
+    """Classic galaxy slot 1–15 for remainder TF (never expedition pos 16)."""
+    from .galaxy import POSITION_MAX, POSITION_MIN, coordinate_is_available
+
+    g, s = int(galaxy), int(system)
+    picker = rng if rng is not None else random.Random()
+    empty = [
+        p
+        for p in range(POSITION_MIN, POSITION_MAX + 1)
+        if coordinate_is_available(conn, g, s, p)
+    ]
+    if empty:
+        return int(picker.choice(empty))
+    return int(picker.randint(POSITION_MIN, POSITION_MAX))
+
+
 def resolve_pirate_encounter(
     rng: random.Random,
     ships: Mapping[str, int],
@@ -1589,12 +1660,19 @@ def resolve_pirate_encounter(
     atk_stacks = attacker_stacks_from_fleet(fighting)
     def_stacks = stacks_from_counts(pirate_ships, unit_type=COMBAT_UNIT_SHIP)
     battle_rng = random.Random(int(seed) * 91711 + 4243)
+    tech_rng = random.Random(int(seed) * 5011 + 7919)
+    pirate_mods, pirate_research = roll_void_pirate_combat_research(
+        tech_rng,
+        player_id=player_id,
+        conn=conn,
+    )
     combat_result = simulate_battle(
         atk_stacks,
         def_stacks,
         rng=battle_rng,
         attacker_player_id=int(player_id) if player_id is not None and int(player_id) > 0 else None,
         defender_player_id=None,
+        defender_modifiers=pirate_mods,
         conn=conn,
     )
     losses = {
@@ -1641,6 +1719,7 @@ def resolve_pirate_encounter(
         "winner": str(combat_result.winner or ""),
         "recycler_protected": True,
         "real_battle": True,
+        "pirate_combat_research": dict(pirate_research),
     }
 
 
@@ -1758,8 +1837,11 @@ def publish_expedition_pirate_combat_report(
         "rounds_fought": max(0, int(pc.get("rounds_fought") or len(pc.get("rounds") or []))),
         "recycler_protected": True,
         "combat_research_applicable": True,
-        "defender_combat_research_na": True,
+        "defender_combat_research_na": False,
     }
+    pirate_research = dict(pc.get("pirate_combat_research") or {})
+    if pirate_research:
+        extra["defender_combat_research"] = pirate_research
     if debris:
         # Prefer expedition remainder/onboard meta over auto-built full-loss debris.
         extra["debris"] = dict(debris)
@@ -1779,6 +1861,7 @@ def publish_expedition_pirate_combat_report(
         conn=conn,
         attacker_locale=locale,
         combat_kind="expedition_pirate",
+        defender_research_override=pirate_research or None,
         extra_metadata=extra,
     )
 
@@ -1808,7 +1891,7 @@ def resolve_expedition_pirate_debris(
     position: int | None = None,
     conn=None,
 ) -> Dict[str, Any] | None:
-    """Pirate debris: onboard reclaimers salvage first; remainder persists as galaxy debris_fields."""
+    """Pirate debris: onboard reclaimers first; remainder → classic galaxy slot (1–15), never pos 16."""
     from .combat import (
         DEBRIS_FIELD_TTL_SECONDS,
         add_debris_field,
@@ -1816,6 +1899,7 @@ def resolve_expedition_pirate_debris(
         estimate_recycler_slots_needed,
     )
     from .fleet_defs import EXPEDITION_POSITION
+    from .galaxy import POSITION_MAX, POSITION_MIN, format_coordinates
 
     player_losses = {str(k): int(v) for k, v in (ship_losses or {}).items() if int(v or 0) > 0}
     pirate_losses = {
@@ -1844,12 +1928,18 @@ def resolve_expedition_pirate_debris(
     field_totals = {"metal": rem_m, "crystal": rem_c}
     g = int(galaxy) if galaxy is not None else 0
     s = int(system) if system is not None else 0
-    p = int(position) if position is not None else int(EXPEDITION_POSITION)
+    # Never persist remainder on expedition slot 16 — pick a harvestable classic slot.
+    requested_p = int(position) if position is not None else 0
+    if requested_p == int(EXPEDITION_POSITION) or requested_p < POSITION_MIN or requested_p > POSITION_MAX:
+        requested_p = 0
+    p = requested_p
     if rem_m > 0 or rem_c > 0:
-        if conn is not None and g > 0 and s > 0 and p > 0:
+        if conn is not None and g > 0 and s > 0:
             try:
+                if p <= 0:
+                    slot_rng = random.Random((g * 100_003 + s * 97 + rem_m + rem_c) % (2**31 - 1))
+                    p = pick_expedition_remainder_debris_position(g, s, conn=conn, rng=slot_rng)
                 field_totals = add_debris_field(g, s, p, rem_m, rem_c, conn=conn)
-                # Schema-not-ready returns zeros without raising — treat as not persisted.
                 if int(field_totals.get("metal") or 0) + int(field_totals.get("crystal") or 0) > 0:
                     galaxy_persisted = True
                 else:
@@ -1880,13 +1970,11 @@ def resolve_expedition_pirate_debris(
         "total_metal": int(metal),
         "total_crystal": int(crystal),
     }
-    if galaxy_persisted or (g > 0 and s > 0):
+    if galaxy_persisted or (g > 0 and s > 0 and p > 0):
         debris_meta["galaxy"] = g
         debris_meta["system"] = s
-        debris_meta["position"] = p
-        from .galaxy import format_coordinates
-
-        debris_meta["coords"] = format_coordinates(g, s, p)
+        debris_meta["position"] = int(p)
+        debris_meta["coords"] = format_coordinates(g, s, int(p))
 
     return {
         "debris": debris_meta,
@@ -2315,12 +2403,16 @@ def build_expedition_report(
         if debris.get("galaxy_persisted") and (
             int(debris.get("metal") or 0) + int(debris.get("crystal") or 0) > 0
         ):
+            debris_coords = str(debris.get("coords") or "—")
             body_lines.append(
                 _t(
                     "expedition_report_debris_galaxy_persisted",
-                    "A debris field formed in the galaxy at %(coords)s — send reclaimers to harvest the remainder.",
-                    coords=str(debris.get("coords") or coords or "—"),
+                    "Remaining debris field is in the galaxy at %(coords)s — send reclaimers there to harvest it.",
+                    coords=debris_coords,
                 )
+            )
+            body_lines.append(
+                f"{_t('expedition_report_debris_location_label', 'Debris location')}: {debris_coords}"
             )
 
     if event_key == "ancient_minefield" and losses_total > 0:

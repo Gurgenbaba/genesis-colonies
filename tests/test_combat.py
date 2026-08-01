@@ -579,11 +579,44 @@ def test_build_combat_report_expo_pirate_shows_attacker_tech_npc_na():
         combat_kind="expedition_pirate",
     )
     assert meta.get("combat_research_applicable") is True
+    # Without override, expo pirates still show NPC N/A in the plain-text body.
     assert meta.get("defender_combat_research_na") is True
     assert meta.get("defender_combat_research") is None
     assert meta.get("attacker_combat_research") is not None
     assert "NPC force" in body
     assert "Ratio skirmish" not in body
+
+
+def test_expo_pirate_combat_report_accepts_npc_research_override():
+    from game.combat import build_combat_report
+    from game.combat_models import CombatResult
+
+    combat_result = CombatResult(
+        winner="attacker",
+        rounds=(),
+        attacker_losses={"falcon_interceptor": 2},
+        defender_losses={"spark_drone": 40},
+    )
+    npc = {
+        "weapon_tech": {"level": 3, "bonus_pct": 15},
+        "armor_tech": {"level": 1, "bonus_pct": 5},
+        "shield_tech": {"level": 2, "bonus_pct": 10},
+    }
+    _body, meta = build_combat_report(
+        attacker_id=1,
+        attacker_name="Commander",
+        defender_id=0,
+        defender_name="Void Pirates",
+        coords="1:6:16",
+        attacking_ships={"falcon_interceptor": 20},
+        defending_ships={"spark_drone": 80},
+        combat_result=combat_result,
+        locale="en",
+        combat_kind="expedition_pirate",
+        defender_research_override=npc,
+    )
+    assert meta.get("defender_combat_research_na") is False
+    assert meta.get("defender_combat_research") == npc
 
 
 def test_both_sides_empty_returns_draw_without_rounds():
