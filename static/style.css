@@ -36385,7 +36385,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
 
 .auction-house-lot-body {
   display: grid;
-  grid-template-columns: 88px minmax(0, 1.1fr) minmax(6.5rem, 0.75fr) minmax(5.5rem, 0.5fr) minmax(16rem, 1.7fr);
+  grid-template-columns: 88px minmax(0, 1.15fr) minmax(6rem, 0.7fr) minmax(5rem, 0.45fr) minmax(11.5rem, 1.35fr);
   gap: 12px 14px;
   align-items: center;
   padding: 14px 16px 10px;
@@ -36465,17 +36465,18 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
 
 .auction-house-lot-bid-value,
 .auction-house-lot .col-bid {
-  font-size: 1.25rem;
-  font-weight: 800;
+  font-size: 1.02rem;
+  font-weight: 700;
   color: var(--gc-text);
-  line-height: 1.1;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
 }
 
 .auction-currency-wrap {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   color: var(--gc-text-soft);
 }
 
@@ -36497,8 +36498,8 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
 .auction-time,
 .auction-house-time {
   display: block;
-  font-size: 0.92rem;
-  font-weight: 700;
+  font-size: 0.86rem;
+  font-weight: 650;
   line-height: 1.2;
   white-space: nowrap;
 }
@@ -36525,10 +36526,14 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   border: none;
 }
 
+.auction-house-lot-form .auction-house-bid-label {
+  font-size: 0.74rem;
+}
+
 .auction-house-lot-form .auction-house-bid-row {
   display: grid;
-  grid-template-columns: minmax(8.5rem, 1fr) auto;
-  gap: 8px;
+  grid-template-columns: 1fr;
+  gap: 6px;
   align-items: stretch;
 }
 
@@ -36539,9 +36544,15 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
 }
 
 .auction-house-lot-form .auction-house-bid-btn {
-  flex-shrink: 0;
-  min-width: 8.5rem;
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 8px 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   white-space: nowrap;
+  overflow: visible;
 }
 
 .auction-house-loot-preview {
@@ -36675,7 +36686,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
 
 .auction-house-bid-btn {
   flex-shrink: 0;
-  min-width: 7.5rem;
+  min-width: 0;
 }
 
 .auction-house-bid-hint {
