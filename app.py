@@ -454,7 +454,6 @@ _SIMPLE_LAYOUT_ENDPOINTS = frozenset(
         "auth_discord_start",
         "auth_discord_callback",
         "discord_welcome",
-        "legal_view",
     }
 )
 
@@ -466,9 +465,14 @@ def _is_pjax_request() -> bool:
 
 
 def _is_simple_layout_request() -> bool:
-    from flask import request
+    """Auth/landing pages use the simple shell. Legal is simple only for guests —
+    logged-in players keep the ingame shell + identity theme."""
+    from flask import request, session
 
-    return str(request.endpoint or "") in _SIMPLE_LAYOUT_ENDPOINTS
+    ep = str(request.endpoint or "")
+    if ep == "legal_view":
+        return not bool(session.get("user_id"))
+    return ep in _SIMPLE_LAYOUT_ENDPOINTS
 
 
 def _is_lightweight_layout_request() -> bool:

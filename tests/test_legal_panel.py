@@ -102,11 +102,48 @@ def test_public_legal_route_renders_provider(client_anon=None):
         assert OPERATOR_POSTAL in body
         assert OPERATOR_CITY in body
         assert OPERATOR_EMAIL in body
+        assert "mailto:" in body
+        assert "](mailto:" not in body
         low = body.lower()
         for phrase in forbidden_hobby_phrases():
             assert phrase.lower() not in low, phrase
         if path.endswith("terms") or path.endswith("withdrawal"):
             assert "356" in body or "Widerruf" in body or "withdrawal" in body.lower()
+
+
+def test_legal_keeps_identity_theme_when_logged_in(shop_db, monkeypatch):
+    """Logged-in /legal must stay on the ingame shell with equipped identity theme."""
+    monkeypatch.setenv("SECRET_KEY", "test-secret-key-not-default-value-32chars")
+    from game.battle_pass import ensure_default_season
+    from game.db import db
+    from game.models import create_user, ensure_player_and_homeworld
+    from game.playercard import ensure_player_card
+    from app import app
+
+    conn = db()
+    ok_u, err, user = create_user(f"skin_{uuid.uuid4().hex[:10]}", "test-pass-123")
+    assert ok_u, err
+    uid = int(user["id"])
+    ensure_player_and_homeworld(uid, player_name="SkinTester", conn=conn)
+    ensure_default_season(conn)
+    ensure_player_card(uid, conn=conn)
+    conn.execute(
+        "UPDATE player_cards SET theme = ? WHERE player_id = ?;",
+        ("amber", uid),
+    )
+    conn.commit()
+    conn.close()
+
+    app.config["TESTING"] = True
+    client = app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+    res = client.get("/legal")
+    assert res.status_code == 200
+    body = res.get_data(as_text=True)
+    assert 'data-identity-theme="amber"' in body
+    assert "gc-body-ingame" in body
+    assert "gc-body-simple" not in body
 
 
 def test_checkout_requires_legal_ack(shop_db, monkeypatch):

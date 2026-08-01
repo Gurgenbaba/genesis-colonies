@@ -17,7 +17,9 @@
   {% block extra_head %}{% endblock %}
 </head>
 
-{% set SIMPLE_LAYOUT = request.endpoint in ['landing', 'login', 'register', 'forgot_password', 'reset_password', 'verify_email'] %}
+{% set _auth_user = AUTH_USER if AUTH_USER is defined else none %}
+{% set _legal_guest = request.endpoint == 'legal_view' and not (_auth_user and _auth_user.id) %}
+{% set SIMPLE_LAYOUT = _legal_guest or request.endpoint in ['landing', 'login', 'register', 'forgot_password', 'reset_password', 'verify_email'] %}
 {% set _fleet_mode = request.args.get('mode', 'send')|lower %}
 {% set _fleet_logistics_active = request.endpoint == 'fleet_view' and _fleet_mode in ('collect', 'distribute') %}
 {% set WIP_ENDPOINTS = [] %}
