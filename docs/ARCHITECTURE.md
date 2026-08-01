@@ -249,7 +249,7 @@ Authorization: Bearer $GC_INTERNAL_CRON_TOKEN
 
 Optional `?force=1` bypasses the 10-minute interval guard. Local manual runs: `scripts/run_ranking_worker.py` (deprecated on Railway SQLite).
 
-**Vote re-engagement (30 min, inactive players):** `game/vote_reengagement.run_vote_reengagement()` — piggybacks on the same ranking HTTP cron (30-minute interval guard; no separate scheduler required). Env: `GC_VOTE_REENGAGEMENT_BATCH` (default 12), `GC_VOTE_REENGAGEMENT_ENABLED=0` to disable. Optional dedicated: `POST /api/internal/cron/vote-reengagement` (same bearer token).
+**Vote Center admin stats:** `game/vote_rewards.build_admin_vote_stats()` / `search_admin_vote_players()` — reports **external verified votes** vs **historical synthetic grants** (`vote_channel=reengagement`). Synthetic re-engagement grants are fully removed (no cron, admin, CLI, or env kill-switch). Historical rows remain for reporting and do **not** drive provider cooldowns.
 
 **Fleet tick (global, ~60 s idle guard):** `game/fleet_worker.run_fleet_worker()` — processes due `fleet_movements` for **all** players while offline. Piggybacks on ranking HTTP cron; dedicated: `POST /api/internal/cron/fleet-tick` (same bearer token). Live requests also run a throttled global safety net in `_load_page_live_context`. Env: `GC_FLEET_WORKER_INTERVAL_SEC` (default 60).
 

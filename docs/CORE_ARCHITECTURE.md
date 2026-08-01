@@ -298,7 +298,7 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | Resource score (kanonischer Punktwert) | `game/resource_score.py` → `game/ranking.py` | [SCORE_SYSTEM.md](SCORE_SYSTEM.md) |
 | Ranking scores / ranks (batch) | `game/ranking_worker.py` → `game/ranking.py` | [SCORE_SYSTEM.md](SCORE_SYSTEM.md) · `POST /api/internal/cron/ranking` |
 | Definition / settings cache | `game/definition_cache.py` | Process + optional Redis (`GC_REDIS_URL`); never SoT for queues/fleets |
-| Vote re-engagement (inactive players) | `game/vote_reengagement.py` | Piggyback on ranking HTTP cron (30 min guard); optional `POST /api/internal/cron/vote-reengagement`; local: `scripts/run_vote_reengagement.py` |
+| Vote Center (providers, postbacks, rewards, admin stats) | `game/vote_rewards.py` | External votes only; historical `reengagement` rows kept for reporting, ignored for cooldowns |
 | Game Rules (Fair Play, PvP-Policy, Support) | `game/game_rules_panel.py` (UI) · Enforcement verteilt | [GAME_RULES.md](GAME_RULES.md) |
 | Legal notices (Imprint / Privacy / Terms / Withdrawal) | `game/legal_panel.py` | [PAYMENT_SHOP.md](PAYMENT_SHOP.md) (Legal) / [PRIVACY_OPS.md](PRIVACY_OPS.md) |
 | Privacy retention purge | `game/privacy_retention.py` | [PRIVACY_OPS.md](PRIVACY_OPS.md) |

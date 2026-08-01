@@ -1041,15 +1041,6 @@ def api_internal_cron_ranking():
     return jsonify(payload), status
 
 
-@app.route("/api/internal/cron/vote-reengagement", methods=["POST"])
-def api_internal_cron_vote_reengagement():
-    """Token-gated staggered vote re-engagement for inactive players."""
-    from game.internal_cron import handle_internal_cron_vote_reengagement
-
-    payload, status = handle_internal_cron_vote_reengagement(request)
-    return jsonify(payload), status
-
-
 @app.route("/api/internal/cron/fleet-tick", methods=["POST"])
 def api_internal_cron_fleet_tick():
     """Token-gated global fleet tick — same DB as web (Railway SQLite cron)."""
@@ -7326,7 +7317,7 @@ def api_admin_ranking_recompute():
 @require_admin_api
 def api_admin_votes_stats():
     from game.db import db
-    from game.vote_reengagement import build_admin_vote_stats
+    from game.vote_rewards import build_admin_vote_stats
 
     conn = db()
     try:
@@ -7340,7 +7331,7 @@ def api_admin_votes_stats():
 @require_admin_api
 def api_admin_votes_players():
     from game.db import db
-    from game.vote_reengagement import search_admin_vote_players
+    from game.vote_rewards import search_admin_vote_players
 
     q = str(request.args.get("q") or "").strip()
     activity = str(request.args.get("activity") or "all").strip().lower()
@@ -7364,51 +7355,6 @@ def api_admin_votes_players():
     finally:
         conn.close()
     return jsonify(payload)
-
-
-@app.route("/api/admin/votes/reengagement-run", methods=["POST"])
-@require_admin_api
-def api_admin_votes_reengagement_run():
-    from game.internal_cron import handle_admin_vote_reengagement_run
-
-    admin = get_current_user()
-    admin_id = int(admin["id"]) if admin else 0
-    body = request.get_json(silent=True) or {}
-    force = bool(body.get("force") in (True, 1, "1", "true", "yes", "on"))
-    catch_all = bool(body.get("catch_all") in (True, 1, "1", "true", "yes", "on"))
-    batch_size = body.get("batch_size")
-    try:
-        batch_size_int = int(batch_size) if batch_size is not None else None
-    except (TypeError, ValueError):
-        batch_size_int = None
-    payload, status = handle_admin_vote_reengagement_run(
-        force=force or True,
-        catch_all=catch_all,
-        batch_size=batch_size_int,
-    )
-    if admin_id and payload.get("ok"):
-        try:
-            from game.admin_audit import write_admin_audit
-
-            write_admin_audit(
-                admin_id,
-                "admin_vote_reengagement_run",
-                target_type="system",
-                payload={
-                    "created": payload.get("created"),
-                    "slot": payload.get("slot"),
-                    "force": payload.get("force"),
-                    "catch_all": payload.get("catch_all"),
-                    "eligible_inactive": payload.get("eligible_inactive"),
-                    "exhausted": payload.get("exhausted"),
-                    "skipped_not_ready": payload.get("skipped_not_ready"),
-                    "skipped_no_provider": payload.get("skipped_no_provider"),
-                    "duration_ms": payload.get("duration_ms"),
-                },
-            )
-        except Exception:
-            logger.exception("admin vote reengagement audit failed")
-    return jsonify(payload), status
 
 
 @app.route("/api/admin/balance", methods=["GET"])

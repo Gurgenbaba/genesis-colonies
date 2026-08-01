@@ -19,8 +19,6 @@ from game.models import add_build_job, create_user, get_homeworld, get_planet_bu
 from game.ranking import get_player_score_row
 from game.ranking_worker import RANKING_WORKER_KEY, RANKING_WORKER_INTERVAL_SEC
 from game.runtime_state import set_runtime_value
-from game.vote_reengagement import VOTE_REENGAGEMENT_WORKER_KEY, VOTE_REENGAGEMENT_INTERVAL_SEC
-
 ROOT = Path(__file__).resolve().parent.parent
 CRON_URL = "/api/internal/cron/ranking"
 TOKEN = "test-internal-cron-secret-token"
@@ -238,68 +236,16 @@ def test_internal_cron_real_guard_skips_within_interval(cron_client):
     assert int(second_data.get("next_run_in_sec") or 0) <= RANKING_WORKER_INTERVAL_SEC
 
 
-def test_internal_cron_ranking_piggybacks_vote_reengagement(cron_client, monkeypatch):
-    monkeypatch.setenv("GC_VOTE_REENGAGEMENT_ENABLED", "1")
+def test_internal_cron_ranking_does_not_piggyback_vote_reengagement(cron_client):
+    """Synthetic vote grants were removed from the maintenance bag."""
     _create_player_with_building()
-
-    with patch("game.internal_cron.execute_vote_reengagement") as mock_vote:
-        mock_vote.return_value = {
-            "ok": True,
-            "created": 2,
-            "skipped_interval": False,
-            "duration_ms": 15,
-            "slot": 10,
-            "errors": [],
-        }
-        resp = cron_client.post(CRON_URL, headers=_auth_headers())
-
+    resp = cron_client.post(CRON_URL, headers=_auth_headers())
     assert resp.status_code == 200
     data = resp.get_json()
-    assert "vote_reengagement" in data
-    assert data["vote_reengagement"]["created"] == 2
-    mock_vote.assert_called_once_with(force=False, source="http_cron")
+    assert "vote_reengagement" not in data
+    assert "fleet_tick" in data
 
 
-def test_internal_cron_vote_reengagement_endpoint(cron_client, monkeypatch):
-    monkeypatch.setenv("GC_VOTE_REENGAGEMENT_ENABLED", "1")
-    url = "/api/internal/cron/vote-reengagement"
-
-    with patch("game.internal_cron.execute_vote_reengagement") as mock_run:
-        mock_run.return_value = {
-            "ok": True,
-            "created": 1,
-            "skipped_interval": False,
-            "duration_ms": 8,
-            "errors": [],
-        }
-        resp = cron_client.post(url, headers=_auth_headers())
-
-    assert resp.status_code == 200
-    assert resp.get_json().get("created") == 1
-    mock_run.assert_called_once_with(force=False, source="http_cron")
-
-
-def test_internal_cron_vote_reengagement_interval_guard(cron_client, monkeypatch):
-    monkeypatch.setenv("GC_VOTE_REENGAGEMENT_ENABLED", "1")
-    set_runtime_value(
-        VOTE_REENGAGEMENT_WORKER_KEY,
-        json.dumps(
-            {
-                "at": int(time.time()),
-                "source": "test",
-                "ok": True,
-                "created": 1,
-                "duration_ms": 5,
-                "errors": [],
-            }
-        ),
-    )
-    url = "/api/internal/cron/vote-reengagement"
-
-    with patch("game.vote_reengagement.process_provider_vote"):
-        resp = cron_client.post(url, headers=_auth_headers())
-
-    assert resp.status_code == 200
-    data = resp.get_json()
-    assert data.get("skipped_interval") is True
-    assert int(data.get("next_run_in_sec") or 0) <= VOTE_REENGAGEMENT_INTERVAL_SEC
+def test_internal_cron_vote_reengagement_endpoint_removed(cron_client):
+    resp = cron_client.post("/api/internal/cron/vote-reengagement", headers=_auth_headers())
+    assert resp.status_code == 404

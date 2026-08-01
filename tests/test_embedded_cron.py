@@ -48,14 +48,13 @@ def test_run_maintenance_bag_includes_backup_and_fleet(embedded_env, monkeypatch
     with (
         patch("game.internal_cron.execute_ranking_recompute", return_value={"ok": True, "players_updated": 0}),
         patch("game.internal_cron._maybe_run_fleet_tick", return_value={"ok": True, "skipped_interval": True}),
-        patch("game.internal_cron._maybe_run_vote_reengagement", return_value={"ok": True, "skipped_interval": True}),
         patch("game.options.maybe_run_due_account_deletions", return_value={"ok": True, "deleted": 0}),
     ):
         payload = run_maintenance_bag(force=True, source="test")
 
     assert payload["ok"] is True
     assert "fleet_tick" in payload
-    assert "vote_reengagement" in payload
+    assert "vote_reengagement" not in payload
     assert payload["sqlite_backup"]["ok"] is True
     backup_path = Path(payload["sqlite_backup"]["path"])
     assert backup_path.is_file()
@@ -81,7 +80,6 @@ def test_maintenance_bag_heartbeat_on_ranking_skip(embedded_env, monkeypatch):
             },
         ),
         patch("game.internal_cron._maybe_run_fleet_tick", return_value={"ok": True, "skipped_interval": True}),
-        patch("game.internal_cron._maybe_run_vote_reengagement", return_value={"ok": True, "skipped_interval": True}),
         patch("game.options.maybe_run_due_account_deletions", return_value={"ok": True, "deleted": 0}),
     ):
         payload = run_maintenance_bag(force=False, source="maintenance_worker")

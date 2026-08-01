@@ -738,9 +738,9 @@
     const label = ready ? "✓" : fmtCooldown(pr.cooldown_remaining_sec);
     const ch =
       pr.last_channel === "reengagement"
-        ? t("admin_votes_channel_reengagement", "R-E")
+        ? t("admin_votes_channel_reengagement", "Historisch synthetisch")
         : pr.last_channel === "player"
-          ? t("admin_votes_channel_player", "Spieler")
+          ? t("admin_votes_channel_player", "Extern")
           : "";
     const tip = [
       pr.display_name || pr.provider_key,
@@ -769,28 +769,27 @@
     const providers = Array.isArray(data.providers) ? data.providers : [];
     const metricsHtml =
       `<div class="admin-metrics-grid admin-votes-metrics-grid">` +
-      `<div class="admin-metric-card"><span class="admin-metric-label">${esc(t("admin_votes_metric_24h", "Votes 24h"))}</span><strong class="admin-metric-value gc-mono">${fmtInt(s.votes_24h)}</strong><span class="admin-metric-sub">${esc(t("admin_votes_metric_player", "Spieler"))}: ${fmtInt(s.player_votes_24h)} · ${esc(t("admin_votes_metric_reengagement", "Re-Engagement"))}: ${fmtInt(s.reengagement_votes_24h)}</span></div>` +
-      `<div class="admin-metric-card"><span class="admin-metric-label">${esc(t("admin_votes_metric_7d", "Votes 7d"))}</span><strong class="admin-metric-value gc-mono">${fmtInt(s.votes_7d)}</strong><span class="admin-metric-sub">${esc(t("admin_votes_metric_player", "Spieler"))}: ${fmtInt(s.player_votes_7d)} · ${esc(t("admin_votes_metric_reengagement", "Re-Engagement"))}: ${fmtInt(s.reengagement_votes_7d)}</span></div>` +
+      `<div class="admin-metric-card"><span class="admin-metric-label">${esc(t("admin_votes_metric_24h", "Rewards 24h"))}</span><strong class="admin-metric-value gc-mono">${fmtInt(s.rewards_granted_24h ?? s.votes_24h)}</strong><span class="admin-metric-sub">${esc(t("admin_votes_metric_player", "Extern"))}: ${fmtInt(s.external_votes_24h ?? s.player_votes_24h)} · ${esc(t("admin_votes_metric_reengagement", "Historisch synthetisch"))}: ${fmtInt(s.historical_synthetic_24h ?? s.reengagement_votes_24h)}</span></div>` +
+      `<div class="admin-metric-card"><span class="admin-metric-label">${esc(t("admin_votes_metric_7d", "Rewards 7d"))}</span><strong class="admin-metric-value gc-mono">${fmtInt(s.rewards_granted_7d ?? s.votes_7d)}</strong><span class="admin-metric-sub">${esc(t("admin_votes_metric_player", "Extern"))}: ${fmtInt(s.external_votes_7d ?? s.player_votes_7d)} · ${esc(t("admin_votes_metric_reengagement", "Historisch synthetisch"))}: ${fmtInt(s.historical_synthetic_7d ?? s.reengagement_votes_7d)}</span></div>` +
       `<div class="admin-metric-card"><span class="admin-metric-label">${esc(t("admin_votes_metric_pending", "Offene Belohnungen"))}</span><strong class="admin-metric-value gc-mono">${fmtInt(s.pending_rewards)}</strong></div>` +
       `<div class="admin-metric-card"><span class="admin-metric-label">${esc(t("admin_votes_metric_voteable_active", "Vote-bereit (aktiv)"))}</span><strong class="admin-metric-value gc-mono">${fmtInt(s.active_voteable_now)}</strong></div>` +
       `<div class="admin-metric-card"><span class="admin-metric-label">${esc(t("admin_votes_metric_voteable_inactive", "Vote-bereit (inaktiv)"))}</span><strong class="admin-metric-value gc-mono">${fmtInt(s.inactive_voteable_now)}</strong></div>` +
-      `<div class="admin-metric-card"><span class="admin-metric-label">${esc(t("admin_votes_metric_slot", "Aktueller Slot"))}</span><strong class="admin-metric-value gc-mono">${fmtInt(data.current_slot)}<span class="admin-metric-sub">/${fmtInt(data.slots_per_day || 48)}</span></strong></div>` +
       `</div>`;
 
     const providerTable = providers.length
       ? `<table class="admin-table admin-table-compact admin-votes-provider-summary"><thead><tr>` +
         `<th>${esc(t("admin_votes_col_provider", "Provider"))}</th>` +
-        `<th>${esc(t("admin_votes_col_7d", "7d"))}</th>` +
-        `<th>${esc(t("admin_votes_col_player", "Spieler"))}</th>` +
-        `<th>${esc(t("admin_votes_col_reengagement", "R-E"))}</th>` +
+        `<th>${esc(t("admin_votes_col_7d", "7d gesamt"))}</th>` +
+        `<th>${esc(t("admin_votes_col_player", "Extern"))}</th>` +
+        `<th>${esc(t("admin_votes_col_reengagement", "Historisch"))}</th>` +
         `</tr></thead><tbody>` +
         providers
           .map(
             (p) =>
               `<tr><td>${esc(p.display_name || p.provider_key)}</td>` +
-              `<td class="gc-mono">${fmtInt(p.votes_7d)}</td>` +
-              `<td class="gc-mono">${fmtInt(p.player_votes_7d)}</td>` +
-              `<td class="gc-mono">${fmtInt(p.reengagement_votes_7d)}</td></tr>`
+              `<td class="gc-mono">${fmtInt(p.rewards_granted_7d ?? p.votes_7d)}</td>` +
+              `<td class="gc-mono">${fmtInt(p.external_votes_7d ?? p.player_votes_7d)}</td>` +
+              `<td class="gc-mono">${fmtInt(p.historical_synthetic_7d ?? p.reengagement_votes_7d)}</td></tr>`
           )
           .join("") +
         `</tbody></table>`
@@ -822,12 +821,11 @@
     host.innerHTML =
       `<div class="admin-votes-players-scroll">` +
       `<table class="admin-table table-std admin-table--entity admin-votes-players-table"><thead><tr>` +
-      `<th>${esc(t("admin_votes_col_player", "Spieler"))}</th>` +
+      `<th>${esc(t("admin_votes_col_player_name", "Spieler"))}</th>` +
       `<th>${esc(t("admin_votes_col_activity", "Status"))}</th>` +
       `<th>${esc(t("admin_votes_col_last_seen", "Zuletzt"))}</th>` +
-      `<th class="gc-mono">${esc(t("admin_votes_col_votes", "Votes"))}</th>` +
+      `<th class="gc-mono">${esc(t("admin_votes_col_votes", "Rewards"))}</th>` +
       `<th class="gc-mono">${esc(t("admin_votes_col_pending", "Offen"))}</th>` +
-      `<th class="gc-mono">${esc(t("admin_votes_col_slot", "Slot"))}</th>` +
       providerHead +
       `</tr></thead><tbody>` +
       rows
@@ -836,14 +834,15 @@
           const providerCells = ADMIN_VOTE_PROVIDER_ORDER.map((key) =>
             renderAdminVoteProviderCell(provMap[key])
           ).join("");
+          const external = p.external_votes ?? p.player_votes;
+          const synthetic = p.historical_synthetic_votes ?? p.reengagement_votes;
           return (
             `<tr class="admin-votes-player-row" data-admin-player-id="${Number(p.user_id)}">` +
             `<td class="admin-votes-player-cell">${playerNameLink(p.user_id, p.player_name || p.username)}<span class="admin-small-hint gc-mono">#${Number(p.user_id)}</span></td>` +
             `<td><span class="admin-status-badge ${p.activity === "inactive" ? "admin-status-warn" : "admin-status-ok"}">${esc(activityLabel(p.activity))}</span></td>` +
             `<td class="gc-mono admin-votes-ts">${esc(fmtTsShort(p.last_seen))}</td>` +
-            `<td class="gc-mono admin-votes-votes" title="${esc(t("admin_votes_metric_player", "Spieler"))}/${esc(t("admin_votes_metric_reengagement", "Re-Engagement"))}">${fmtInt(p.total_votes)}<span class="admin-votes-split">${fmtInt(p.player_votes)}/${fmtInt(p.reengagement_votes)}</span></td>` +
+            `<td class="gc-mono admin-votes-votes" title="${esc(t("admin_votes_metric_player", "Extern"))}/${esc(t("admin_votes_metric_reengagement", "Historisch synthetisch"))}">${fmtInt(p.rewards_granted ?? p.total_votes)}<span class="admin-votes-split">${fmtInt(external)}/${fmtInt(synthetic)}</span></td>` +
             `<td class="gc-mono">${fmtInt(p.pending_rewards)}</td>` +
-            `<td class="gc-mono">${fmtInt(p.reengagement_slot)}</td>` +
             providerCells +
             `</tr>`
           );
@@ -881,63 +880,6 @@
     }
     renderAdminVotePlayers(data);
     return data;
-  }
-
-  async function runAdminVoteReengagement(triggerBtn, opts) {
-    const options = opts || {};
-    const catchAll = !!options.catchAll;
-    if (catchAll) {
-      const ok = window.confirm(
-        t(
-          "admin_votes_reengagement_catchall_confirm",
-          "Alle derzeit vote-bereiten Inaktiven belohnen? (Ignoriert Slot/Interval, max. 5000)"
-        )
-      );
-      if (!ok) return null;
-    }
-    const resultEl = qs("#admin-votes-reengagement-result");
-    if (resultEl) {
-      resultEl.textContent = catchAll
-        ? t("admin_votes_reengagement_catchall_running", "Catch-all Re-Engagement …")
-        : t("admin_votes_reengagement_running", "Re-Engagement-Lauf …");
-    }
-    setBusy(triggerBtn, true);
-    try {
-      const res = await adminPost("/api/admin/votes/reengagement-run", {
-        force: true,
-        catch_all: catchAll,
-      });
-      if (res.ok) {
-        const msg = catchAll
-          ? t(
-              "admin_votes_reengagement_catchall_success",
-              "Catch-all: {created} Votes · eligible {eligible} · skipped_ready {skipped_ready} · skipped_provider {skipped_provider} · exhausted {exhausted}."
-            )
-              .replace("{created}", String(res.created ?? 0))
-              .replace("{eligible}", String(res.eligible_inactive ?? 0))
-              .replace("{skipped_ready}", String(res.skipped_not_ready ?? 0))
-              .replace("{skipped_provider}", String(res.skipped_no_provider ?? 0))
-              .replace("{exhausted}", res.exhausted ? "yes" : "no")
-          : t("admin_votes_reengagement_success", "Re-Engagement: {created} Votes erstellt (Slot {slot}).")
-              .replace("{created}", String(res.created ?? 0))
-              .replace("{slot}", String(res.slot ?? "–"));
-        notify(msg, "success");
-        if (resultEl) resultEl.textContent = msg;
-        await loadAdminVotes();
-      } else {
-        const errMsg = res.message || res.error || t("admin_votes_reengagement_error", "Re-Engagement fehlgeschlagen.");
-        showAlert(errMsg, "error");
-        if (resultEl) resultEl.textContent = errMsg;
-      }
-      return res;
-    } catch (err) {
-      const errMsg = err?.message || t("admin_votes_reengagement_error", "Re-Engagement fehlgeschlagen.");
-      showAlert(errMsg, "error");
-      if (resultEl) resultEl.textContent = errMsg;
-      return { ok: false, error: errMsg };
-    } finally {
-      setBusy(triggerBtn, false);
-    }
   }
 
   async function runInactiveStorageBoost(triggerBtn) {
@@ -4053,8 +3995,6 @@
     if (act === "ranking-recompute") return runAdminRankingRecompute(btn);
     if (act === "votes-refresh") return loadAdminVotes();
     if (act === "votes-search") return searchAdminVotesPlayers();
-    if (act === "votes-reengagement-run") return runAdminVoteReengagement(btn);
-    if (act === "votes-reengagement-catchall") return runAdminVoteReengagement(btn, { catchAll: true });
     if (act === "inactive-storage-boost") return runInactiveStorageBoost(btn);
     if (act === "combat-hof-backfill") return backfillCombatHof();
     if (act === "combat-bots-ensure") return ensureCombatBots();

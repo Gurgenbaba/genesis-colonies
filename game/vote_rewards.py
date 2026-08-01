@@ -104,8 +104,9 @@ TOPG_DEFAULT_BOX_KEY = DEFAULT_VOTE_BOX_KEY
 TOPG_REMOTE_HOST = "monitor.topg.org"
 
 VOTE_CHANNEL_PLAYER = "player"
+# Historical only — synthetic grants are retired; never write this channel again.
 VOTE_CHANNEL_REENGAGEMENT = "reengagement"
-ALLOWED_VOTE_CHANNELS = frozenset({VOTE_CHANNEL_PLAYER, VOTE_CHANNEL_REENGAGEMENT})
+ALLOWED_VOTE_CHANNELS = frozenset({VOTE_CHANNEL_PLAYER})
 
 ALLOWED_VOTE_BOX_KEYS = frozenset({DEFAULT_VOTE_BOX_KEY})
 
@@ -421,14 +422,22 @@ def _provider_latest_vote_row(
     *,
     conn,
 ) -> Optional[Any]:
-    """Latest vote row for provider (any status)."""
+    """
+    Latest *external* vote row for provider (player channel only).
+
+    Historical ``vote_channel=reengagement`` rows must not drive cooldowns —
+    they were synthetic grants and would block real Vote Center votes.
+    """
     cur = conn.cursor()
+    channel_filter = ""
+    if vote_channel_column_ready(conn):
+        channel_filter = " AND COALESCE(vote_channel, 'player') = 'player'"
     if vote_reward_next_at_column_ready(conn):
         cur.execute(
-            """
+            f"""
             SELECT voted_at, provider_next_vote_at
             FROM vote_rewards
-            WHERE user_id = ? AND provider = ?
+            WHERE user_id = ? AND provider = ?{channel_filter}
             ORDER BY voted_at DESC
             LIMIT 1;
             """,
@@ -436,10 +445,10 @@ def _provider_latest_vote_row(
         )
     else:
         cur.execute(
-            """
+            f"""
             SELECT voted_at, NULL AS provider_next_vote_at
             FROM vote_rewards
-            WHERE user_id = ? AND provider = ?
+            WHERE user_id = ? AND provider = ?{channel_filter}
             ORDER BY voted_at DESC
             LIMIT 1;
             """,
@@ -1467,3 +1476,340 @@ def claim_all_vote_rewards(
         if result:
             claimed.append(result)
     return True, "vote_rewards_claimed_all", {"claimed": claimed, "claimed_count": len(claimed)}
+
+
+def _admin_vote_channel_expr(conn) -> str:
+    if vote_channel_column_ready(conn):
+        return "COALESCE(vr.vote_channel, 'player')"
+    return "'player'"
+
+
+def build_admin_vote_stats(*, conn, now: Optional[int] = None) -> Dict[str, Any]:
+    """
+    Admin Vote Center reporting.
+
+    Distinguishes external player votes from historical synthetic reengagement grants.
+    Does not mint rewards.
+    """
+    from .ranking import RANKING_INACTIVE_AFTER_SEC, is_player_inactive
+
+    ts = int(now if now is not None else time.time())
+    week_ago = ts - 7 * 86400
+    day_ago = ts - 86400
+    channel_expr = _admin_vote_channel_expr(conn)
+    out: Dict[str, Any] = {
+        "ready": vote_system_ready(conn),
+        "inactive_threshold_sec": int(RANKING_INACTIVE_AFTER_SEC),
+        "summary": {
+            # Total reward rows granted (external + historical synthetic)
+            "votes_7d": 0,
+            "rewards_granted_7d": 0,
+            "external_votes_7d": 0,
+            "player_votes_7d": 0,  # alias: external
+            "historical_synthetic_7d": 0,
+            "reengagement_votes_7d": 0,  # alias: historical synthetic
+            "votes_24h": 0,
+            "rewards_granted_24h": 0,
+            "external_votes_24h": 0,
+            "player_votes_24h": 0,
+            "historical_synthetic_24h": 0,
+            "reengagement_votes_24h": 0,
+            "pending_rewards": 0,
+            "players_voted_7d": 0,
+            "inactive_players_voted_7d": 0,
+            "active_players_voted_7d": 0,
+            "inactive_voteable_now": 0,
+            "active_voteable_now": 0,
+        },
+        "providers": [],
+    }
+    if not out["ready"]:
+        return out
+
+    cur = conn.cursor()
+    cur.execute(
+        f"""
+        SELECT
+            COUNT(*) AS total,
+            SUM(CASE WHEN {channel_expr} = 'player' THEN 1 ELSE 0 END) AS external_votes,
+            SUM(CASE WHEN {channel_expr} = 'reengagement' THEN 1 ELSE 0 END) AS synthetic_votes
+        FROM vote_rewards vr
+        WHERE vr.voted_at >= ?;
+        """,
+        (week_ago,),
+    )
+    row = cur.fetchone()
+    total_7d = int(row["total"] or 0)
+    external_7d = int(row["external_votes"] or 0)
+    synthetic_7d = int(row["synthetic_votes"] or 0)
+    out["summary"]["votes_7d"] = total_7d
+    out["summary"]["rewards_granted_7d"] = total_7d
+    out["summary"]["external_votes_7d"] = external_7d
+    out["summary"]["player_votes_7d"] = external_7d
+    out["summary"]["historical_synthetic_7d"] = synthetic_7d
+    out["summary"]["reengagement_votes_7d"] = synthetic_7d
+
+    cur.execute(
+        f"""
+        SELECT
+            COUNT(*) AS total,
+            SUM(CASE WHEN {channel_expr} = 'player' THEN 1 ELSE 0 END) AS external_votes,
+            SUM(CASE WHEN {channel_expr} = 'reengagement' THEN 1 ELSE 0 END) AS synthetic_votes
+        FROM vote_rewards vr
+        WHERE vr.voted_at >= ?;
+        """,
+        (day_ago,),
+    )
+    row24 = cur.fetchone()
+    total_24h = int(row24["total"] or 0)
+    external_24h = int(row24["external_votes"] or 0)
+    synthetic_24h = int(row24["synthetic_votes"] or 0)
+    out["summary"]["votes_24h"] = total_24h
+    out["summary"]["rewards_granted_24h"] = total_24h
+    out["summary"]["external_votes_24h"] = external_24h
+    out["summary"]["player_votes_24h"] = external_24h
+    out["summary"]["historical_synthetic_24h"] = synthetic_24h
+    out["summary"]["reengagement_votes_24h"] = synthetic_24h
+
+    cur.execute("SELECT COUNT(*) AS c FROM vote_rewards WHERE status = 'pending';")
+    out["summary"]["pending_rewards"] = int(cur.fetchone()["c"] or 0)
+
+    cur.execute(
+        """
+        SELECT COUNT(DISTINCT vr.user_id) AS c
+        FROM vote_rewards vr
+        WHERE vr.voted_at >= ?
+          AND COALESCE(vr.vote_channel, 'player') = 'player';
+        """
+        if vote_channel_column_ready(conn)
+        else """
+        SELECT COUNT(DISTINCT vr.user_id) AS c
+        FROM vote_rewards vr
+        WHERE vr.voted_at >= ?;
+        """,
+        (week_ago,),
+    )
+    out["summary"]["players_voted_7d"] = int(cur.fetchone()["c"] or 0)
+
+    inactive_cutoff = ts - int(RANKING_INACTIVE_AFTER_SEC)
+    if vote_channel_column_ready(conn):
+        cur.execute(
+            """
+            SELECT COUNT(DISTINCT vr.user_id) AS c
+            FROM vote_rewards vr
+            JOIN players p ON p.id = vr.user_id
+            WHERE vr.voted_at >= ?
+              AND COALESCE(vr.vote_channel, 'player') = 'player'
+              AND COALESCE(p.last_seen, 0) <= ?;
+            """,
+            (week_ago, inactive_cutoff),
+        )
+    else:
+        cur.execute(
+            """
+            SELECT COUNT(DISTINCT vr.user_id) AS c
+            FROM vote_rewards vr
+            JOIN players p ON p.id = vr.user_id
+            WHERE vr.voted_at >= ?
+              AND COALESCE(p.last_seen, 0) <= ?;
+            """,
+            (week_ago, inactive_cutoff),
+        )
+    out["summary"]["inactive_players_voted_7d"] = int(cur.fetchone()["c"] or 0)
+    out["summary"]["active_players_voted_7d"] = max(
+        0,
+        out["summary"]["players_voted_7d"] - out["summary"]["inactive_players_voted_7d"],
+    )
+
+    providers = list_enabled_providers(conn=conn)
+    provider_stats: List[Dict[str, Any]] = []
+    for provider in providers:
+        key = str(provider["provider_key"])
+        cur.execute(
+            f"""
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN {channel_expr} = 'player' THEN 1 ELSE 0 END) AS external_votes,
+                SUM(CASE WHEN {channel_expr} = 'reengagement' THEN 1 ELSE 0 END) AS synthetic_votes
+            FROM vote_rewards vr
+            WHERE vr.provider = ? AND vr.voted_at >= ?;
+            """,
+            (key, week_ago),
+        )
+        prow = cur.fetchone()
+        ext = int(prow["external_votes"] or 0)
+        syn = int(prow["synthetic_votes"] or 0)
+        provider_stats.append(
+            {
+                "provider_key": key,
+                "display_name": str(provider["display_name"]),
+                "votes_7d": int(prow["total"] or 0),
+                "rewards_granted_7d": int(prow["total"] or 0),
+                "external_votes_7d": ext,
+                "player_votes_7d": ext,
+                "historical_synthetic_7d": syn,
+                "reengagement_votes_7d": syn,
+                "cooldown_sec": int(provider.get("cooldown_sec") or 0),
+            }
+        )
+    out["providers"] = provider_stats
+
+    cur.execute(
+        """
+        SELECT p.id AS user_id, COALESCE(p.last_seen, 0) AS last_seen
+        FROM players p
+        JOIN users u ON u.id = p.id
+        WHERE COALESCE(p.banned_until, 0) <= ?;
+        """,
+        (ts,),
+    )
+    inactive_voteable = 0
+    active_voteable = 0
+    for prow in cur.fetchall():
+        uid = int(prow["user_id"])
+        inactive = is_player_inactive({"last_seen": int(prow["last_seen"] or 0)}, now=ts)
+        voteable = any(
+            can_process_provider_vote(uid, p, conn=conn, now=ts) for p in providers
+        )
+        if not voteable:
+            continue
+        if inactive:
+            inactive_voteable += 1
+        else:
+            active_voteable += 1
+    out["summary"]["inactive_voteable_now"] = inactive_voteable
+    out["summary"]["active_voteable_now"] = active_voteable
+    return out
+
+
+def search_admin_vote_players(
+    *,
+    conn,
+    q: str = "",
+    activity: str = "all",
+    limit: int = 50,
+    offset: int = 0,
+    now: Optional[int] = None,
+) -> Dict[str, Any]:
+    from .ranking import RANKING_INACTIVE_AFTER_SEC, is_player_inactive
+
+    ts = int(now if now is not None else time.time())
+    lim = max(1, min(int(limit), 100))
+    off = max(0, int(offset))
+    inactive_cutoff = ts - int(RANKING_INACTIVE_AFTER_SEC)
+    channel_expr = _admin_vote_channel_expr(conn)
+
+    where: List[str] = ["COALESCE(p.banned_until, 0) <= ?"]
+    params: List[Any] = [ts]
+    q_norm = str(q or "").strip()
+    if q_norm:
+        where.append("(u.username LIKE ? OR p.name LIKE ? OR CAST(p.id AS TEXT) = ?)")
+        like = f"%{q_norm}%"
+        params.extend([like, like, q_norm])
+
+    activity_norm = str(activity or "all").strip().lower()
+    if activity_norm == "active":
+        where.append("COALESCE(p.last_seen, 0) > ?")
+        params.append(inactive_cutoff)
+    elif activity_norm == "inactive":
+        where.append("(COALESCE(p.last_seen, 0) <= ? OR COALESCE(p.last_seen, 0) = 0)")
+        params.append(inactive_cutoff)
+
+    where_sql = " AND ".join(where)
+    cur = conn.cursor()
+    cur.execute(
+        f"""
+        SELECT COUNT(*) AS c
+        FROM players p
+        JOIN users u ON u.id = p.id
+        WHERE {where_sql};
+        """,
+        tuple(params),
+    )
+    total = int(cur.fetchone()["c"] or 0)
+
+    cur.execute(
+        f"""
+        SELECT p.id AS user_id, u.username, p.name AS player_name,
+               COALESCE(p.last_seen, 0) AS last_seen
+        FROM players p
+        JOIN users u ON u.id = p.id
+        WHERE {where_sql}
+        ORDER BY p.last_seen DESC, p.id ASC
+        LIMIT ? OFFSET ?;
+        """,
+        tuple(params) + (lim, off),
+    )
+    providers = list_enabled_providers(conn=conn)
+    players: List[Dict[str, Any]] = []
+    for row in cur.fetchall():
+        uid = int(row["user_id"])
+        last_seen = int(row["last_seen"] or 0)
+        inactive = is_player_inactive({"last_seen": last_seen}, now=ts)
+        cur.execute(
+            f"""
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN {channel_expr} = 'player' THEN 1 ELSE 0 END) AS external_votes,
+                SUM(CASE WHEN {channel_expr} = 'reengagement' THEN 1 ELSE 0 END) AS synthetic_votes,
+                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending_rewards
+            FROM vote_rewards vr
+            WHERE vr.user_id = ?;
+            """,
+            (uid,),
+        )
+        vrow = cur.fetchone()
+        provider_rows: List[Dict[str, Any]] = []
+        for provider in providers:
+            pkey = str(provider["provider_key"])
+            cd = get_provider_cooldown_status(uid, provider, conn=conn, now=ts)
+            cur.execute(
+                f"""
+                SELECT voted_at, {channel_expr} AS vote_channel
+                FROM vote_rewards vr
+                WHERE vr.user_id = ? AND vr.provider = ?
+                ORDER BY vr.voted_at DESC
+                LIMIT 1;
+                """,
+                (uid, pkey),
+            )
+            last = cur.fetchone()
+            provider_rows.append(
+                {
+                    "provider_key": pkey,
+                    "display_name": str(provider["display_name"]),
+                    "last_vote_at": int(last["voted_at"]) if last and last["voted_at"] else None,
+                    "last_channel": str(last["vote_channel"]) if last else None,
+                    "next_vote_at": cd["next_vote_at"],
+                    "can_vote": bool(cd["can_vote"]),
+                    "cooldown_remaining_sec": int(cd["cooldown_remaining_sec"]),
+                    "vote_end": cd.get("vote_end"),
+                }
+            )
+        external = int(vrow["external_votes"] or 0)
+        synthetic = int(vrow["synthetic_votes"] or 0)
+        players.append(
+            {
+                "user_id": uid,
+                "username": str(row["username"]),
+                "player_name": str(row["player_name"] or row["username"]),
+                "last_seen": last_seen,
+                "activity": "inactive" if inactive else "active",
+                "total_votes": int(vrow["total"] or 0),
+                "rewards_granted": int(vrow["total"] or 0),
+                "external_votes": external,
+                "player_votes": external,
+                "historical_synthetic_votes": synthetic,
+                "reengagement_votes": synthetic,
+                "pending_rewards": int(vrow["pending_rewards"] or 0),
+                "providers": provider_rows,
+            }
+        )
+
+    return {
+        "ok": True,
+        "total": total,
+        "limit": lim,
+        "offset": off,
+        "players": players,
+    }

@@ -10,11 +10,12 @@ Maintenance runs via:
 3. Optional HTTP: POST /api/internal/cron/* with GC_INTERNAL_CRON_TOKEN (manual / force)
 
 Endpoints:
-  - ranking, fleet-tick, vote-reengagement, queue-tick (GC-PERF-WORKER-001)
+  - ranking, fleet-tick, queue-tick (GC-PERF-WORKER-001)
   - galactic-directives (GC-720I monthly mandate resolve)
 
 With GC_DB_BACKEND=postgres, a dedicated ``scripts/run_game_worker.py`` process is supported.
-Vote re-engagement piggybacks on the ranking maintenance bag (30-minute interval guard).
+Synthetic vote re-engagement grants were removed (cooldown damage, no toplist effect).
+Admin vote reporting lives in ``game/vote_rewards.py``.
 
 Do NOT set Railway ``cronSchedule`` on the web service — that expects the process to exit.
 """
@@ -166,70 +167,6 @@ def parse_force_flag(request: Request) -> bool:
     return False
 
 
-def execute_vote_reengagement(
-    *,
-    force: bool,
-    source: str,
-    catch_all: bool = False,
-    batch_size: Optional[int] = None,
-) -> Dict[str, Any]:
-    """Canonical vote re-engagement batch — shared by HTTP cron and ranking piggyback."""
-    from game.db import begin_write_transaction, commit, db, rollback
-    from game.vote_reengagement import run_vote_reengagement
-
-    conn = db()
-    try:
-        begin_write_transaction(conn)
-        payload = run_vote_reengagement(
-            conn=conn,
-            force=force,
-            catch_all=catch_all,
-            batch_size=batch_size,
-            persist=True,
-            source=source,
-        )
-        if payload.get("ok") and not payload.get("skipped_interval"):
-            commit(conn)
-        else:
-            rollback(conn)
-        return payload
-    except Exception:
-        rollback(conn)
-        raise
-    finally:
-        conn.close()
-
-
-def log_vote_reengagement_result(
-    payload: Dict[str, Any],
-    *,
-    log_prefix: str,
-    source_label: str,
-) -> None:
-    if payload.get("skipped_disabled"):
-        _recompute_log(log_prefix, f"source={source_label} skipped_disabled=true")
-    elif payload.get("skipped_interval"):
-        _recompute_log(
-            log_prefix,
-            f"source={source_label} skipped_interval=true "
-            f"next_run_in_sec={payload.get('next_run_in_sec', 0)} "
-            f"duration_ms={payload.get('duration_ms', 0)}",
-        )
-    elif payload.get("ok"):
-        _recompute_log(
-            log_prefix,
-            f"source={source_label} created={payload.get('created', 0)} "
-            f"slot={payload.get('slot', 0)} duration_ms={payload.get('duration_ms', 0)}",
-        )
-    else:
-        _recompute_log(
-            log_prefix,
-            f"source={source_label} ok=false "
-            f"duration_ms={payload.get('duration_ms', 0)} "
-            f"errors={payload.get('errors', [])}",
-        )
-
-
 def execute_fleet_tick(*, force: bool, source: str) -> Dict[str, Any]:
     """Canonical global fleet tick — shared by HTTP cron and request safety net."""
     return run_fleet_worker(force=force, source=source, persist=True)
@@ -317,22 +254,6 @@ def _maybe_run_fleet_tick(*, force: bool, source: str) -> Dict[str, Any]:
     except Exception as exc:
         logger.exception("fleet tick piggyback failed")
         _recompute_log("fleet-http-cron", f"source={source} error={exc}")
-        return {"ok": False, "error": str(exc)}
-
-
-def _maybe_run_vote_reengagement(*, force: bool, source: str) -> Dict[str, Any]:
-    """Run vote re-engagement when due; never raises — ranking cron stays resilient."""
-    try:
-        payload = execute_vote_reengagement(force=force, source=source)
-        log_vote_reengagement_result(
-            payload,
-            log_prefix="vote-reengagement-http-cron",
-            source_label=source,
-        )
-        return payload
-    except Exception as exc:
-        logger.exception("vote reengagement piggyback failed")
-        _recompute_log("vote-reengagement-http-cron", f"source={source} error={exc}")
         return {"ok": False, "error": str(exc)}
 
 
@@ -463,9 +384,6 @@ def run_maintenance_bag(*, force: bool = False, source: str = "embedded_cron") -
 
     fleet_payload = _maybe_run_fleet_tick(force=False, source=source)
     payload["fleet_tick"] = fleet_payload
-
-    vote_payload = _maybe_run_vote_reengagement(force=False, source=source)
-    payload["vote_reengagement"] = vote_payload
 
     try:
         from game.options import maybe_run_due_account_deletions
@@ -816,34 +734,6 @@ def handle_admin_ranking_recompute() -> Tuple[Dict[str, Any], int]:
     return payload, status
 
 
-def handle_internal_cron_vote_reengagement(request: Request) -> Tuple[Dict[str, Any], int]:
-    """Staggered vote re-engagement for inactive universe players."""
-    authorized, auth_err = verify_internal_cron_request(request)
-    if not authorized:
-        logger.info("vote-reengagement-http-cron unauthorized")
-        return {"ok": False, "error": auth_err or "unauthorized"}, 401
-
-    force = parse_force_flag(request)
-    _recompute_log(
-        "vote-reengagement-http-cron",
-        f"request_received force={str(force).lower()}",
-    )
-    try:
-        payload = execute_vote_reengagement(force=force, source="http_cron")
-    except Exception as exc:
-        logger.exception("internal cron vote reengagement failed")
-        _recompute_log("vote-reengagement-http-cron", f"error={exc}")
-        return {"ok": False, "error": str(exc)}, 500
-
-    log_vote_reengagement_result(
-        payload,
-        log_prefix="vote-reengagement-http-cron",
-        source_label="http",
-    )
-    status = 200 if payload.get("ok") else 500
-    return payload, status
-
-
 def execute_galactic_directives_resolve(*, force: bool, source: str) -> Dict[str, Any]:
     """GC-720I: resolve overdue galactic directive cycles for all galaxies."""
     from game.galactic_directives import resolve_due_cycles
@@ -910,25 +800,5 @@ def handle_internal_cron_galactic_directives(request: Request) -> Tuple[Dict[str
         log_prefix="gd-http-cron",
         source_label="http",
     )
-    status = 200 if payload.get("ok") else 500
-    return payload, status
-
-
-def handle_admin_vote_reengagement_run(
-    *,
-    force: bool = True,
-    catch_all: bool = False,
-    batch_size: Optional[int] = None,
-) -> Tuple[Dict[str, Any], int]:
-    try:
-        payload = execute_vote_reengagement(
-            force=force,
-            catch_all=catch_all,
-            batch_size=batch_size,
-            source="admin",
-        )
-    except Exception as exc:
-        logger.exception("admin vote reengagement run failed")
-        return {"ok": False, "error": str(exc)}, 500
     status = 200 if payload.get("ok") else 500
     return payload, status

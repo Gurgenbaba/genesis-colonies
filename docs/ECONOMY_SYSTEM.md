@@ -288,7 +288,9 @@ Neue Topliste: Zeile in `vote_providers` + optional Postback-Route — keine sep
 - Postback nur nach echtem Vote; **kein** Reward beim Link-Klick.
 - Dev/Test IP-Lock: `GC_VOTE_SKIP_IP_CHECK=1` (oder Legacy `GC_TOPG_SKIP_IP_CHECK=1`).
 - Production TopG IP-Check: `TOPG_STRICT_IP_CHECK=1` (Default **0** — Railway/Proxy loggt nur, blockiert nicht).
-- **Cooldown** pro User/Provider (TopG: 6h, GTop100/GameToor/Arena: 12h) — hart beim Klick via `POST /api/vote/visit`; `provider_ref = {provider}:{user_id}:{bucket}`.
+- **Cooldown** pro User/Provider (TopG: 6h, GTop100/GameToor/Arena: 12h) — hart beim Klick via `POST /api/vote/visit`; `provider_ref = {provider}:{user_id}:{bucket}`; Feld `provider_next_vote_at` (sonst `voted_at + cooldown_sec`).
+- Cooldown-Lookup berücksichtigt nur `vote_channel=player` — historische synthetische `reengagement`-Rows blockieren echte Votes nicht.
+- Synthetische Reengagement-Grants sind entfernt (kein Cron/Admin/CLI/Env).
 - GTop100 Pingback-Key: Env `GTOP100_PINGBACK_KEY` (muss mit GTop100-Dashboard übereinstimmen).
 - Pro Vote **eine** gewichtete Zufallsbelohnung (`lootbox` / `resources` / `ships` / `defense`) — Auszahlung beim Claim auf context planet.
 - Dev-Test: `POST /api/dev/topg/postback-test` (Admin/Debug).
@@ -316,7 +318,7 @@ Schiffsbau zieht metal, crystal **und fuel_cells** ab (siehe [FLEET_SYSTEM.md](F
 | `game/fuel_exchange.py` | Legacy-Wrapper (deprecated) |
 | `game/scrapyard.py` | Recycling |
 | `game/auction_house.py` | Lootbox-Auktionen |
-| `game/vote_rewards.py` | TopG Vote Rewards |
+| `game/vote_rewards.py` | Vote Center: providers, postbacks, rewards, admin stats |
 | `game/logic.py` | Poll-Fassade |
 | `templates/trader_hub.html` | Trader Hub UI |
 | `templates/auction_house.html` | Auktionshaus UI |

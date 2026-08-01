@@ -75,7 +75,7 @@ def build_admin_inactive_autoplay_payload(conn) -> Dict[str, Any]:
         try:
             # GC-2614: username lives on `users`, not `players` (players.name is
             # the in-game display name) — join like every other admin/list
-            # surface already does (e.g. game/vote_reengagement.py, game/pirates/accounts.py).
+            # surface already does (e.g. game/vote_rewards.py admin stats, game/pirates/accounts.py).
             cur = conn.execute(
                 f"""
                 SELECT p.id AS id, u.username AS username, p.last_seen AS last_seen
