@@ -76,7 +76,11 @@ def test_resource_switch_updates_max_button():
 
 def test_trader_max_button_css_is_compact_row():
     css = _read("static/style.css")
-    block = css.split(".trader-hub-page .gc-trader-amount-input-row{")[1].split(".trader-hub-page .gc-trader-field-label{")[0]
-    assert "display: flex" in block
+    block = css.split(".trader-hub-page .gc-trader-amount-input-row{")[1].split(".trader-hub-page .gc-trader-max-btn{")[0]
+    assert "display: grid" in block
     assert "min-width: 0" in block
+    assert "max-width: none" in block
     assert ".gc-trader-max-btn" in css
+    amount = css.split(".trader-hub-page .gc-trader-amount-row{")[1].split(".trader-hub-page .gc-trader-amount-field{")[0]
+    assert "minmax(0, 1fr) 2rem minmax(0, 1fr)" in amount
+    assert "max-width: none" in css.split(".trader-hub-page .gc-exchange-input{")[1].split("}")[0]

@@ -5693,10 +5693,10 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 }
 .trader-hub-page .gc-trader-exchange-pick{
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 2rem minmax(0, 1fr);
   gap: 0.65rem;
   align-items: end;
-  margin-bottom: 0.85rem;
+  margin-bottom: 0.65rem;
 }
 .trader-hub-page .gc-trader-pick-label{
   display: block;
@@ -5706,9 +5706,14 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   color: rgba(214, 235, 245, 0.72);
 }
 .trader-hub-page .gc-trader-pick-swap{
-  padding-bottom: 1.35rem;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  justify-self: center;
+  padding-bottom: 1.1rem;
   color: rgba(70, 229, 255, 0.72);
   font-size: 1.1rem;
+  line-height: 1;
 }
 .trader-hub-page .gc-trader-resource-tiles{
   display: grid;
@@ -5767,23 +5772,39 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 }
 .trader-hub-page .gc-trader-exchange-form{
   display: grid;
-  gap: 0.75rem;
+  gap: 0.65rem;
 }
 .trader-hub-page .gc-trader-amount-row{
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  gap: 0.55rem;
+  grid-template-columns: minmax(0, 1fr) 2rem minmax(0, 1fr);
+  gap: 0.65rem;
   align-items: end;
+  padding: 0.65rem 0.7rem;
+  border: 1px solid rgba(70, 229, 255, 0.2);
+  border-radius: var(--gc-radius-sm);
+  background: rgba(6, 12, 28, 0.55);
+}
+.trader-hub-page .gc-trader-amount-field{
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+  width: 100%;
 }
 .trader-hub-page .gc-trader-amount-input-row{
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: stretch;
   gap: 0.35rem;
   min-width: 0;
+  width: 100%;
 }
 .trader-hub-page .gc-trader-amount-input-row .gc-trader-input{
-  flex: 1 1 auto;
+  width: 100%;
   min-width: 0;
+  max-width: none;
+}
+.trader-hub-page .gc-exchange-input{
+  max-width: none;
 }
 .trader-hub-page .gc-trader-max-btn{
   flex: 0 0 auto;
@@ -5794,20 +5815,27 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 }
 .trader-hub-page .gc-trader-field-label{
   display: block;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0;
   font-size: 0.68rem;
   letter-spacing: 0.06em;
   color: rgba(214, 235, 245, 0.72);
 }
 .trader-hub-page .gc-trader-amount-arrow{
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  justify-self: center;
   padding-bottom: 0.55rem;
   color: rgba(70, 229, 255, 0.72);
   font-size: 1.15rem;
+  line-height: 1;
 }
 .trader-hub-page .gc-trader-input,
 .trader-hub-page .gc-trader-output{
   width: 100%;
+  max-width: none;
   min-height: 38px;
+  box-sizing: border-box;
   padding: 8px 10px;
   border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(70, 229, 255, 0.38);
