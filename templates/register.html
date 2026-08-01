@@ -78,13 +78,19 @@
       {% if DISCORD_OAUTH_ENABLED %}
         {% set discord_label = T("register_btn_discord") %}
         {% if discord_label == "register_btn_discord" %}{% set discord_label = "Mit Discord registrieren" %}{% endif %}
-        {% include "partials/auth_discord_oauth.html" %}
+        <a href="{{ url_for('auth_discord_start') }}"
+           class="gc-btn gc-btn-lg auth-btn-discord auth-btn-discord--primary"
+           data-no-pjax
+           data-auth-discord-register>
+          <span>{{ discord_label }}</span>
+        </a>
         {% include "partials/auth_discord_divider.html" %}
       {% endif %}
 
       <form method="POST"
             action="{{ url_for('register') }}"
             class="auth-form auth-form--classic"
+            id="gc-register-form"
             novalidate
             data-validate="register">
         {{ csrf_input() }}
@@ -159,6 +165,20 @@
         </div>
 
         <p class="auth-hint auth-hint-compact">Sicheres Passwort empfohlen.</p>
+
+        <label class="auth-check auth-check--legal">
+          <input type="checkbox" name="age_ok" value="1" required data-register-age>
+          <span>{{ T("register_age_label", "Ich bin mindestens 16 Jahre alt.") }}</span>
+        </label>
+        <label class="auth-check auth-check--legal">
+          <input type="checkbox" name="legal_ack" value="1" required data-register-legal>
+          <span>
+            {{ T("register_legal_label", "Ich akzeptiere die Datenschutzhinweise und die AGB.") }}
+            <a href="{{ url_for('legal_view', doc='privacy') }}">{{ T("legal_tab_privacy", "Datenschutz") }}</a>
+            ·
+            <a href="{{ url_for('legal_view', doc='terms') }}">{{ T("legal_tab_terms", "AGB") }}</a>
+          </span>
+        </label>
 
         <button type="submit"
                 class="gc-btn gc-btn-primary gc-btn-lg auth-btn-primary landing-btn-primary"

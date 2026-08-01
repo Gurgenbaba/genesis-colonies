@@ -481,9 +481,13 @@ def create_user_from_discord(profile: Dict[str, Any], conn=None) -> Tuple[bool, 
             c.close()
 
 
-def resolve_discord_login(profile: Dict[str, Any]) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+def resolve_discord_login(
+    profile: Dict[str, Any],
+    *,
+    allow_register: bool = False,
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     """
-    Existing discord_id -> login; otherwise create new account.
+    Existing discord_id -> login; otherwise create new account if allow_register.
     """
     discord_id = str(profile.get("id") or "").strip()
     if not discord_id:
@@ -492,6 +496,9 @@ def resolve_discord_login(profile: Dict[str, Any]) -> Tuple[bool, str, Optional[
     existing = get_user_by_discord_id(discord_id)
     if existing:
         return True, "discord_login_ok", dict(existing)
+
+    if not allow_register:
+        return False, "discord_register_ack_required", None
 
     ok, err, user = create_user_from_discord(profile)
     if ok and user:
@@ -524,7 +531,11 @@ def update_discord_profile(user_id: int, profile: Dict[str, Any], conn=None) -> 
             c.close()
 
 
-def complete_discord_callback(code: str) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+def complete_discord_callback(
+    code: str,
+    *,
+    allow_register: bool = False,
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     ok, token, err = exchange_code_for_token(code)
     if not ok or not token:
         return False, err or "discord_token_failed", None
@@ -533,7 +544,7 @@ def complete_discord_callback(code: str) -> Tuple[bool, str, Optional[Dict[str, 
     if not ok or not profile:
         return False, err or "discord_profile_failed", None
 
-    ok, err, user = resolve_discord_login(profile)
+    ok, err, user = resolve_discord_login(profile, allow_register=bool(allow_register))
     if not ok or not user:
         return False, err or "discord_register_failed", None
 

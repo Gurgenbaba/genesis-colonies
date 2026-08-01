@@ -1,0 +1,15 @@
+{# Essential-only cookie notice (TTDSG) — no tracking CMP. #}
+<div class="gc-cookie-notice" data-cookie-notice hidden role="dialog" aria-live="polite" aria-label="{{ T('cookie_notice_title', 'Cookies') }}">
+  <div class="gc-cookie-notice-inner">
+    <p class="gc-cookie-notice-title">{{ T("cookie_notice_title", "Cookies") }}</p>
+    <p class="gc-cookie-notice-body">{{ T("cookie_notice_body", "Wir verwenden nur technisch notwendige Cookies.") }}</p>
+    <div class="gc-cookie-notice-actions">
+      <a href="{{ url_for('legal_view', doc='privacy') }}"
+         class="gc-btn gc-btn-ghost gc-btn-sm"
+         data-pjax-link>{{ T("cookie_notice_privacy", "Datenschutz") }}</a>
+      <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-cookie-notice-accept>
+        {{ T("cookie_notice_accept", "Verstanden") }}
+      </button>
+    </div>
+  </div>
+</div>

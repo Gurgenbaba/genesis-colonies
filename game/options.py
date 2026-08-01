@@ -1420,24 +1420,50 @@ def hard_delete_player_account(player_id: int, *, conn) -> Dict[str, Any]:
 
 
 def execute_account_deletion(player_id: int, *, conn) -> None:
-    """Anonymize login and wipe game data after grace period."""
+    """Anonymize login and wipe game data after grace period (DSGVO-hardened)."""
     pid = int(player_id)
     _wipe_player_game_progress(pid, conn=conn)
     token = secrets.token_hex(8)
     cur = conn.cursor()
-    cur.execute(
-        """
-        UPDATE users
-        SET username = ?, email = NULL, email_verified = 0,
-            email_verification_token = NULL, password_reset_token = NULL,
-            password_reset_expires_at = NULL,
-            discord_id = NULL, discord_username = NULL, discord_avatar = NULL,
-            discord_email = NULL,
-            password_hash = ?
-        WHERE id = ?;
-        """,
-        (f"deleted_{pid}_{token}", hash_password(secrets.token_urlsafe(24)), pid),
-    )
+
+    # Clear registration IP when column exists.
+    try:
+        cols = {
+            str(r[1])
+            for r in cur.execute("PRAGMA table_info(users);").fetchall()
+        }
+    except Exception:
+        cols = set()
+    if "registration_ip" in cols:
+        cur.execute(
+            """
+            UPDATE users
+            SET username = ?, email = NULL, email_verified = 0,
+                email_verification_token = NULL, password_reset_token = NULL,
+                password_reset_expires_at = NULL,
+                discord_id = NULL, discord_username = NULL, discord_avatar = NULL,
+                discord_email = NULL,
+                registration_ip = NULL,
+                password_hash = ?
+            WHERE id = ?;
+            """,
+            (f"deleted_{pid}_{token}", hash_password(secrets.token_urlsafe(24)), pid),
+        )
+    else:
+        cur.execute(
+            """
+            UPDATE users
+            SET username = ?, email = NULL, email_verified = 0,
+                email_verification_token = NULL, password_reset_token = NULL,
+                password_reset_expires_at = NULL,
+                discord_id = NULL, discord_username = NULL, discord_avatar = NULL,
+                discord_email = NULL,
+                password_hash = ?
+            WHERE id = ?;
+            """,
+            (f"deleted_{pid}_{token}", hash_password(secrets.token_urlsafe(24)), pid),
+        )
+
     cur.execute(
         """
         UPDATE players
@@ -1448,6 +1474,177 @@ def execute_account_deletion(player_id: int, *, conn) -> None:
         """,
         (f"Deleted-{pid}", _now_ts(), pid),
     )
+
+    if table_exists(conn, "player_avatars"):
+        cur.execute("DELETE FROM player_avatars WHERE player_id = ?;", (pid,))
+
+    if table_exists(conn, "chat_messages"):
+        cur.execute(
+            "UPDATE chat_messages SET body = ? WHERE sender_id = ?;",
+            ("[gelöscht]", pid),
+        )
+
+    if table_exists(conn, "player_messages"):
+        try:
+            cur.execute(
+                """
+                UPDATE player_messages
+                SET body = ?, subject = ?
+                WHERE sender_player_id = ? OR recipient_player_id = ?;
+                """,
+                ("[gelöscht]", "[gelöscht]", pid, pid),
+            )
+        except Exception:
+            pass
+
+    if table_exists(conn, "support_tickets"):
+        cur.execute(
+            "UPDATE support_tickets SET subject = ? WHERE player_id = ?;",
+            ("[gelöscht]", pid),
+        )
+    if table_exists(conn, "support_messages"):
+        cur.execute(
+            """
+            UPDATE support_messages
+            SET message = ?
+            WHERE ticket_id IN (SELECT id FROM support_tickets WHERE player_id = ?);
+            """,
+            ("[gelöscht]", pid),
+        )
+
+    if table_exists(conn, "account_audit_log"):
+        cur.execute(
+            "UPDATE account_audit_log SET ip = NULL, user_agent = NULL WHERE player_id = ?;",
+            (pid,),
+        )
+
+    if table_exists(conn, "referral_attributions") or table_exists(conn, "referrals"):
+        for tbl, col in (
+            ("referral_attributions", "apply_ip"),
+            ("users", "registration_ip"),
+        ):
+            if table_exists(conn, tbl) and col != "registration_ip":
+                try:
+                    cur.execute(f"UPDATE {tbl} SET {col} = NULL WHERE player_id = ?;", (pid,))
+                except Exception:
+                    pass
+
+    if table_exists(conn, "shop_orders"):
+        cur.execute(
+            """
+            UPDATE shop_orders
+            SET metadata_json = ?,
+                provider_session_id = NULL
+            WHERE player_id = ?;
+            """,
+            ('{"retained":"tax"}', pid),
+        )
+
+
+def export_player_personal_data(player_id: int, *, conn=None) -> Dict[str, Any]:
+    """DSGVO Auskunft / portability payload (no password hashes, no webhook raw bodies)."""
+    owns = conn is None
+    c = conn or db()
+    pid = int(player_id)
+    try:
+        user = c.execute(
+            """
+            SELECT id, username, email, email_verified,
+                   discord_id, discord_username, discord_email
+            FROM users WHERE id = ? LIMIT 1;
+            """,
+            (pid,),
+        ).fetchone()
+        # Optional columns
+        user_out = dict(user) if user is not None else {}
+        try:
+            extra = c.execute(
+                "SELECT registered_at, registration_ip, is_admin FROM users WHERE id = ? LIMIT 1;",
+                (pid,),
+            ).fetchone()
+            if extra:
+                user_out.update({k: extra[k] for k in extra.keys()})
+        except Exception:
+            pass
+
+        player = c.execute(
+            """
+            SELECT id, name, last_seen, vacation_mode_active,
+                   account_deletion_requested_at, account_deletion_due_at,
+                   account_deleted_at
+            FROM players WHERE id = ? LIMIT 1;
+            """,
+            (pid,),
+        ).fetchone()
+
+        def _row(r):
+            if r is None:
+                return None
+            try:
+                return dict(r)
+            except Exception:
+                return {k: r[k] for k in r.keys()}
+
+        planets = []
+        if table_exists(c, "planets"):
+            try:
+                planets = [
+                    dict(r)
+                    for r in c.execute(
+                        """
+                        SELECT id, name, galaxy, system, position
+                        FROM planets WHERE player_id = ? ORDER BY id ASC;
+                        """,
+                        (pid,),
+                    ).fetchall()
+                ]
+            except Exception:
+                planets = [
+                    dict(r)
+                    for r in c.execute(
+                        "SELECT id, name FROM planets WHERE player_id = ? ORDER BY id ASC;",
+                        (pid,),
+                    ).fetchall()
+                ]
+
+        orders = []
+        if table_exists(c, "shop_orders"):
+            for r in c.execute(
+                """
+                SELECT id, sku, provider, amount_cents, currency, status,
+                       created_at, paid_at, fulfilled_at
+                FROM shop_orders WHERE player_id = ? ORDER BY id DESC LIMIT 200;
+                """,
+                (pid,),
+            ).fetchall():
+                orders.append(dict(r))
+
+        tickets = []
+        if table_exists(c, "support_tickets"):
+            for r in c.execute(
+                """
+                SELECT id, subject, category, status, created_at, updated_at
+                FROM support_tickets WHERE player_id = ? ORDER BY id DESC LIMIT 100;
+                """,
+                (pid,),
+            ).fetchall():
+                tickets.append(dict(r))
+
+        user_out.pop("password_hash", None)
+
+        return {
+            "exported_at": _now_ts(),
+            "player_id": pid,
+            "user": user_out,
+            "player": _row(player),
+            "planets": planets,
+            "shop_orders": orders,
+            "support_tickets": tickets,
+            "discord_linked": bool(user_out.get("discord_id")),
+        }
+    finally:
+        if owns:
+            c.close()
 
 
 def any_due_account_deletions(*, now: Optional[int] = None, conn=None) -> bool:

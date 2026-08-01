@@ -39033,7 +39033,67 @@
   // =========================
   // Boot
   // =========================
+  function initCookieNotice() {
+    const root = document.querySelector("[data-cookie-notice]");
+    if (!root) return;
+    const key = "gc_cookie_notice";
+    let seen = false;
+    try {
+      seen = document.cookie.split(";").some((c) => c.trim().startsWith(key + "=1"));
+      if (!seen && window.localStorage) seen = localStorage.getItem(key) === "1";
+    } catch (_) {}
+    if (seen) {
+      root.hidden = true;
+      return;
+    }
+    root.hidden = false;
+    const btn = root.querySelector("[data-cookie-notice-accept]");
+    if (!btn || btn.dataset.bound === "1") return;
+    btn.dataset.bound = "1";
+    btn.addEventListener("click", () => {
+      try {
+        localStorage.setItem(key, "1");
+      } catch (_) {}
+      document.cookie =
+        key + "=1;path=/;max-age=" + 365 * 24 * 3600 + ";SameSite=Lax";
+      root.hidden = true;
+    });
+  }
+
+  function initRegisterLegalAcks() {
+    document.querySelectorAll("[data-auth-discord-register]").forEach((link) => {
+      if (link.dataset.bound === "1") return;
+      link.dataset.bound = "1";
+      link.addEventListener("click", (ev) => {
+        const age = document.querySelector("[data-register-age]");
+        const legal = document.querySelector("[data-register-legal]");
+        if (!age || !age.checked) {
+          ev.preventDefault();
+          window.alert(
+            (window.GC_T && GC_T("register_age_required")) ||
+              "Bitte bestätige, dass du mindestens 16 Jahre alt bist."
+          );
+          return;
+        }
+        if (!legal || !legal.checked) {
+          ev.preventDefault();
+          window.alert(
+            (window.GC_T && GC_T("register_legal_required")) ||
+              "Bitte akzeptiere Datenschutz und AGB."
+          );
+          return;
+        }
+        const url = new URL(link.href, window.location.origin);
+        url.searchParams.set("age_ok", "1");
+        url.searchParams.set("legal_ack", "1");
+        link.href = url.pathname + url.search;
+      });
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
+    initCookieNotice();
+    initRegisterLegalAcks();
     initShellOnce();
     GC.initPage();
   });

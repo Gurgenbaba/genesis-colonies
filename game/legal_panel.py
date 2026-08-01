@@ -11,12 +11,12 @@ from typing import Any, Dict, List, Tuple
 # --- Operator stammdaten (single source) ---
 OPERATOR_NAME = "Robert Finn"
 OPERATOR_STREET = "Winne Siedlung 32"
-OPERATOR_POSTAL = "98507"
+OPERATOR_POSTAL = "98597"
 OPERATOR_CITY = "Breitungen"
 OPERATOR_COUNTRY = "Deutschland"
 OPERATOR_EMAIL = "r.finn2303@gmail.com"
 OPERATOR_ADDRESS_LINE = f"{OPERATOR_STREET}, {OPERATOR_POSTAL} {OPERATOR_CITY}"
-LEGAL_TEXT_VERSION = "v1"
+LEGAL_TEXT_VERSION = "v2"
 LEGAL_STAND = "01.08.2026"
 
 DOC_IMPRINT = "imprint"
@@ -44,9 +44,11 @@ LEGAL_DOCS: Tuple[Dict[str, Any], ...] = (
         "sections": (
             {"title_key": "legal_privacy_controller_title", "body_key": "legal_privacy_controller_body", "open": True},
             {"title_key": "legal_privacy_purposes_title", "body_key": "legal_privacy_purposes_body", "open": False},
+            {"title_key": "legal_privacy_cookies_title", "body_key": "legal_privacy_cookies_body", "open": False},
             {"title_key": "legal_privacy_recipients_title", "body_key": "legal_privacy_recipients_body", "open": False},
             {"title_key": "legal_privacy_rights_title", "body_key": "legal_privacy_rights_body", "open": False},
             {"title_key": "legal_privacy_retention_title", "body_key": "legal_privacy_retention_body", "open": False},
+            {"title_key": "legal_privacy_marketing_title", "body_key": "legal_privacy_marketing_body", "open": False},
         ),
     },
     {
@@ -151,35 +153,81 @@ def _de_strings() -> Dict[str, str]:
         ),
         "legal_privacy_purposes_title": "Zwecke und Rechtsgrundlagen",
         "legal_privacy_purposes_body": (
-            "Wir verarbeiten Daten zur Bereitstellung des Spiels und der Nutzerkonten "
-            "(Vertragserfüllung), zur Betrugs- und Missbrauchsprävention (berechtigtes Interesse), "
-            "zur Bearbeitung von Support-Anfragen sowie zur Abwicklung von Käufen digitaler "
-            "Inhalte über Zahlungsdienstleister (Vertragserfüllung). Soweit Einwilligungen "
-            "erforderlich sind (z. B. optionale Cookies), ist die Einwilligung Rechtsgrundlage."
+            "Wir verarbeiten personenbezogene Daten insbesondere für:\n\n"
+            "- Bereitstellung von Spiel und Nutzerkonto (**Art. 6 Abs. 1 lit. b DSGVO**)\n"
+            "- Support und Missbrauchsprävention (**Art. 6 Abs. 1 lit. f DSGVO**)\n"
+            "- Abwicklung von Käufen digitaler Inhalte (**Art. 6 Abs. 1 lit. b DSGVO**)\n"
+            "- Erfüllung gesetzlicher Aufbewahrungspflichten bei Bestellungen "
+            "(**Art. 6 Abs. 1 lit. c DSGVO**)\n\n"
+            "Es werden **keine Tracking- oder Marketing-Cookies** eingesetzt."
+        ),
+        "legal_privacy_cookies_title": "Cookies (nur notwendig)",
+        "legal_privacy_cookies_body": (
+            "Wir setzen ausschließlich **technisch notwendige** Cookies ein:\n\n"
+            "- **Session-Cookie** (Flask) — Login/Sitzung\n"
+            "- **gc_locale** — Sprachauswahl\n"
+            "- **gc_cookie_notice** — Speichert, dass der Cookie-Hinweis bestätigt wurde\n\n"
+            "Rechtsgrundlage: Vertragserfüllung bzw. berechtigtes Interesse an einem "
+            "funktionsfähigen Dienst (TTDSG / Art. 6 Abs. 1 lit. b/f DSGVO). "
+            "Ein Opt-in für Analyse-/Marketing-Cookies ist nicht erforderlich, weil solche "
+            "Cookies nicht verwendet werden."
         ),
         "legal_privacy_recipients_title": "Empfänger / Auftragsverarbeitung",
         "legal_privacy_recipients_body": (
-            "Je nach Nutzung können Daten an folgende Kategorien von Empfängern gelangen:\n\n"
-            "- **Hosting-Anbieter** (Betrieb der Spielserver)\n"
-            "- **PayPal** und ggf. **Stripe** (Zahlungsabwicklung im Shop)\n"
-            "- **Discord** (optionaler Login / Support-Benachrichtigungen)\n\n"
-            "Eine Übermittlung in Drittländer erfolgt nur, soweit der jeweilige Anbieter dies "
-            "technisch vorsieht und geeignete Garantien greifen."
+            "Je nach Nutzung können Daten an folgende Empfänger gelangen:\n\n"
+            "- **Railway** (Hosting der Spielserver)\n"
+            "- **SMTP-Anbieter** (E-Mail-Verifikation / Passwort-Reset, sofern konfiguriert)\n"
+            "- **PayPal** und ggf. **Stripe** (Shop-Zahlungen)\n"
+            "- **Discord** (optionaler Login / Support-Benachrichtigungen)\n"
+            "- optional **Microsoft edge-tts** (Story-Vorlesen, sofern aktiviert)\n"
+            "- optional **OpenAI** (Namens-Moderation, sofern per Konfiguration aktiv)\n\n"
+            "Mit Auftragsverarbeitern werden soweit erforderlich AV-Verträge bzw. "
+            "Standardvertragsklauseln der Anbieter genutzt. Übermittlungen in Drittländer "
+            "(insb. USA) erfolgen nur über die genannten Dienste mit deren Garantien."
         ),
         "legal_privacy_rights_title": "Ihre Rechte",
         "legal_privacy_rights_body": (
-            "Sie haben nach Maßgabe der DSGVO insbesondere Rechte auf Auskunft, Berichtigung, "
-            "Löschung, Einschränkung der Verarbeitung, Datenübertragbarkeit und Widerspruch. "
-            "Account-Löschung kann in den Spieleinstellungen vorgemerkt werden. Beschwerden "
-            "können bei einer Datenschutzaufsichtsbehörde eingereicht werden."
+            "Sie haben nach der DSGVO Rechte auf Auskunft, Berichtigung, Löschung, Einschränkung, "
+            "Datenübertragbarkeit und Widerspruch. Eine **Datenauskunft (JSON)** steht in den "
+            "Spieleinstellungen (Optionen) zur Verfügung. Account-Löschung kann dort mit "
+            "7-Tage-Widerrufsfrist vorgemerkt werden; danach erfolgt Anonymisierung. "
+            "Steuerlich relevante Bestelldaten können gesetzlich länger gespeichert bleiben. "
+            "Beschwerden sind bei einer Datenschutzaufsichtsbehörde möglich."
         ),
         "legal_privacy_retention_title": "Speicherdauer",
         "legal_privacy_retention_body": (
-            "Kontodaten werden für die Dauer der Mitgliedschaft und danach gemäß gesetzlicher "
-            "Aufbewahrungsfristen (z. B. handels-/steuerrechtlich bei Käufen) gespeichert. "
-            "Support-Tickets und Bestellnachweise werden so lange aufbewahrt, wie es für "
-            "Nachweis und Abwicklung erforderlich ist."
+            "- **Kontodaten:** Dauer der Mitgliedschaft; nach Löschung Anonymisierung\n"
+            "- **Shop-Bestellungen:** Aufbewahrung für Buchhaltung/Steuern (i. d. R. bis zu "
+            "gesetzlicher Frist); Webhook-Rohdaten werden zeitnah reduziert\n"
+            "- **Support-Tickets:** für Bearbeitung und Nachweis; Inhalte bei Account-Löschung "
+            "anonymisiert\n"
+            "- **Audit-Logs (IP/UA):** werden nach festgelegten Fristen genullt bzw. gelöscht\n"
+            "- **Payment-Event-Payloads:** Rohdaten nach ca. 90 Tagen entfernt (IDs bleiben)"
         ),
+        "legal_privacy_marketing_title": "Marketing / Newsletter",
+        "legal_privacy_marketing_body": (
+            "Es gibt **keinen Marketing-Newsletter** und keine Analyse-Tracker Dritter "
+            "(kein Google Analytics o. Ä.). Transaktionsmails (Verifikation, Passwort-Reset) "
+            "werden nur zur Kontofunktion versendet."
+        ),
+        "cookie_notice_title": "Cookies",
+        "cookie_notice_body": (
+            "Wir verwenden nur technisch notwendige Cookies (Session, Sprache, Hinweis-Status). "
+            "Keine Tracking-Cookies."
+        ),
+        "cookie_notice_accept": "Verstanden",
+        "cookie_notice_privacy": "Datenschutz",
+        "register_age_label": "Ich bin mindestens 16 Jahre alt.",
+        "register_legal_label": "Ich akzeptiere die Datenschutzhinweise und die AGB.",
+        "register_age_required": "Bitte bestätige, dass du mindestens 16 Jahre alt bist.",
+        "register_legal_required": "Bitte akzeptiere Datenschutz und AGB.",
+        "options_data_export_title": "Datenauskunft",
+        "options_data_export_lead": "Lade eine JSON-Datei mit deinen gespeicherten Kontodaten herunter (DSGVO Auskunft/Portabilität).",
+        "options_data_export_btn": "Datenauskunft (JSON)",
+        "discord_register_ack_required": (
+            "Neue Discord-Accounts nur über Registrierung mit Alters- und Datenschutz-Bestätigung."
+        ),
+
         "legal_terms_title": "Allgemeine Geschäftsbedingungen",
         "legal_terms_scope_title": "Geltungsbereich",
         "legal_terms_scope_body": (
@@ -335,32 +383,73 @@ def _en_strings() -> Dict[str, str]:
         ),
         "legal_privacy_purposes_title": "Purposes and legal bases",
         "legal_privacy_purposes_body": (
-            "We process data to provide the game and accounts (contract performance), to prevent "
-            "fraud and abuse (legitimate interest), to handle support requests, and to process "
-            "purchases of digital content via payment providers (contract performance). Where "
-            "consent is required (e.g. optional cookies), consent is the legal basis."
+            "We process personal data in particular for:\n\n"
+            "- Providing the game and account (**Art. 6(1)(b) GDPR**)\n"
+            "- Support and abuse prevention (**Art. 6(1)(f) GDPR**)\n"
+            "- Processing purchases of digital content (**Art. 6(1)(b) GDPR**)\n"
+            "- Statutory retention duties for orders (**Art. 6(1)(c) GDPR**)\n\n"
+            "We do **not** use tracking or marketing cookies."
+        ),
+        "legal_privacy_cookies_title": "Cookies (essential only)",
+        "legal_privacy_cookies_body": (
+            "We only use **technically essential** cookies:\n\n"
+            "- **Session cookie** (Flask) — login/session\n"
+            "- **gc_locale** — language preference\n"
+            "- **gc_cookie_notice** — records that the cookie notice was acknowledged\n\n"
+            "Legal basis: contract performance / legitimate interest in a working service. "
+            "No analytics/marketing cookie opt-in is needed because those cookies are not used."
         ),
         "legal_privacy_recipients_title": "Recipients / processors",
         "legal_privacy_recipients_body": (
-            "Depending on use, data may be shared with:\n\n"
-            "- **Hosting provider** (game servers)\n"
+            "Depending on use, data may go to:\n\n"
+            "- **Railway** (game hosting)\n"
+            "- **SMTP provider** (email verification / password reset, if configured)\n"
             "- **PayPal** and optionally **Stripe** (shop payments)\n"
-            "- **Discord** (optional login / support notifications)\n\n"
-            "Transfers to third countries occur only as provided by those services with "
-            "appropriate safeguards."
+            "- **Discord** (optional login / support notifications)\n"
+            "- optionally **Microsoft edge-tts** (story TTS, if enabled)\n"
+            "- optionally **OpenAI** (name moderation, if configured)\n\n"
+            "Processor agreements / SCCs of those providers apply where required. "
+            "Transfers to third countries (esp. USA) occur only via these services."
         ),
         "legal_privacy_rights_title": "Your rights",
         "legal_privacy_rights_body": (
             "Under the GDPR you have rights of access, rectification, erasure, restriction, "
-            "portability and objection. Account deletion can be scheduled in game settings. "
+            "portability and objection. A **JSON data export** is available in Options. "
+            "Account deletion can be scheduled there with a 7-day grace period, then "
+            "anonymisation. Tax-relevant order records may be retained longer by law. "
             "You may lodge a complaint with a supervisory authority."
         ),
         "legal_privacy_retention_title": "Retention",
         "legal_privacy_retention_body": (
-            "Account data is stored for the membership period and thereafter as required by "
-            "statutory retention (e.g. commercial/tax records for purchases). Support tickets "
-            "and order records are kept as needed for proof and processing."
+            "- **Account data:** membership period; anonymised after deletion\n"
+            "- **Shop orders:** kept for accounting/tax; webhook raw payloads reduced promptly\n"
+            "- **Support tickets:** for handling/proof; content anonymised on account deletion\n"
+            "- **Audit logs (IP/UA):** nulled/deleted after set periods\n"
+            "- **Payment event payloads:** raw data removed after ~90 days (IDs kept)"
         ),
+        "legal_privacy_marketing_title": "Marketing / newsletter",
+        "legal_privacy_marketing_body": (
+            "There is **no marketing newsletter** and no third-party analytics trackers. "
+            "Transactional email (verification, password reset) is sent only for account function."
+        ),
+        "cookie_notice_title": "Cookies",
+        "cookie_notice_body": (
+            "We only use technically essential cookies (session, language, notice status). "
+            "No tracking cookies."
+        ),
+        "cookie_notice_accept": "Got it",
+        "cookie_notice_privacy": "Privacy",
+        "register_age_label": "I am at least 16 years old.",
+        "register_legal_label": "I accept the privacy policy and the Terms.",
+        "register_age_required": "Please confirm that you are at least 16 years old.",
+        "register_legal_required": "Please accept the privacy policy and Terms.",
+        "options_data_export_title": "Data export",
+        "options_data_export_lead": "Download a JSON file with your stored account data (GDPR access/portability).",
+        "options_data_export_btn": "Data export (JSON)",
+        "discord_register_ack_required": (
+            "New Discord accounts require registration with age and privacy acknowledgement."
+        ),
+
         "legal_terms_title": "Terms of service",
         "legal_terms_scope_title": "Scope",
         "legal_terms_scope_body": (

@@ -180,6 +180,8 @@ Owner: `game/legal_panel.py` — Imprint, Privacy, Terms, Withdrawal.
 
 **Policy:** Virtual goods credit immediately after payment. After § 356 Abs. 5 acknowledgement + fulfillment: no voluntary refund. Exception: technical non-delivery → re-grant or provider refund (`billing` support category).
 
+Privacy / retention ops: [PRIVACY_OPS.md](PRIVACY_OPS.md).
+
 ## Identity Cosmetics (Catalog v5 — Impulse)
 
 | SKU | Kind | Preis | Grant |

@@ -300,7 +300,8 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | Definition / settings cache | `game/definition_cache.py` | Process + optional Redis (`GC_REDIS_URL`); never SoT for queues/fleets |
 | Vote re-engagement (inactive players) | `game/vote_reengagement.py` | Piggyback on ranking HTTP cron (30 min guard); optional `POST /api/internal/cron/vote-reengagement`; local: `scripts/run_vote_reengagement.py` |
 | Game Rules (Fair Play, PvP-Policy, Support) | `game/game_rules_panel.py` (UI) · Enforcement verteilt | [GAME_RULES.md](GAME_RULES.md) |
-| Legal notices (Imprint / Privacy / Terms / Withdrawal) | `game/legal_panel.py` | [PAYMENT_SHOP.md](PAYMENT_SHOP.md) (Legal) |
+| Legal notices (Imprint / Privacy / Terms / Withdrawal) | `game/legal_panel.py` | [PAYMENT_SHOP.md](PAYMENT_SHOP.md) (Legal) / [PRIVACY_OPS.md](PRIVACY_OPS.md) |
+| Privacy retention purge | `game/privacy_retention.py` | [PRIVACY_OPS.md](PRIVACY_OPS.md) |
 | Genesis Codex (loader, unlocks) | `game/codex.py` | [GC-950_KNOWLEDGE_PIPELINE.md](GC-950_KNOWLEDGE_PIPELINE.md) |
 | Knowledge generator (Player Blocks → catalog/locales) | `scripts/generate_knowledge.py` | [GC-950_KNOWLEDGE_PIPELINE.md](GC-950_KNOWLEDGE_PIPELINE.md) |
 | Codex UI surfaces | `templates/partials/codex_*.html`, `special_panel.html` | [GC-950_KNOWLEDGE_PIPELINE.md](GC-950_KNOWLEDGE_PIPELINE.md) |

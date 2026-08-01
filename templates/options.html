@@ -469,6 +469,19 @@
                 <p class="gc-options-form-hint gc-options-safety-hint" id="options-vacation-hint" role="status" aria-live="polite" hidden></p>
               </div>
 
+              <div class="gc-options-safety-block" id="options-safety-export">
+                <div class="gc-options-form-head">
+                  <span class="gc-options-form-kicker">{{ T("options_data_export_title", "Datenauskunft") }}</span>
+                </div>
+                <p class="gc-options-safety-lead">{{ T("options_data_export_lead", "Lade eine JSON-Datei mit deinen gespeicherten Kontodaten herunter.") }}</p>
+                <div class="gc-options-safety-actions">
+                  <a href="{{ url_for('api_options_data_export') }}"
+                     class="gc-btn gc-btn-outline gc-options-safety-btn"
+                     data-no-pjax
+                     download>{{ T("options_data_export_btn", "Datenauskunft (JSON)") }}</a>
+                </div>
+              </div>
+
               <div class="gc-options-safety-block" id="options-safety-deletion">
                 <div class="gc-options-form-head">
                   <span class="gc-options-form-kicker">{{ T("options_deletion_title") }}</span>

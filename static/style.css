@@ -20324,6 +20324,65 @@ a.gc-ranking-alliance:hover{
   margin-top: 10px;
 }
 
+.gc-cookie-notice{
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: var(--gc-z-popover, 1200);
+  max-width: 420px;
+  margin: 0 auto;
+  pointer-events: none;
+}
+.gc-cookie-notice:not([hidden]){
+  pointer-events: auto;
+}
+.gc-cookie-notice-inner{
+  border: 1px solid rgba(120, 190, 255, 0.28);
+  background: rgba(6, 12, 24, 0.96);
+  padding: 12px 14px;
+  border-radius: var(--gc-radius-sm, 2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.gc-cookie-notice-title{
+  margin: 0 0 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--gc-primary-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.gc-cookie-notice-body{
+  margin: 0 0 10px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--gc-text-soft);
+}
+.gc-cookie-notice-actions{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.auth-check--legal{
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  color: var(--gc-text-soft);
+  line-height: 1.4;
+  cursor: pointer;
+}
+.auth-check--legal input{
+  margin-top: 3px;
+  flex: 0 0 auto;
+}
+.auth-legal-acks{
+  margin: 0 0 12px;
+}
+
+
 .gc-support-form{
   display: grid;
   gap: 8px;

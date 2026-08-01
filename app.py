@@ -1319,6 +1319,13 @@ def auth_discord_start():
         flash(T("discord_oauth_unavailable"), "error")
         return redirect(url_for("login"))
 
+    # New Discord accounts require age + privacy/AGB ack (from register page query).
+    allow_register = (
+        str(request.args.get("age_ok") or "").strip() == "1"
+        and str(request.args.get("legal_ack") or "").strip() == "1"
+    )
+    session["discord_allow_register"] = bool(allow_register)
+
     state = discord_auth_logic.start_oauth_session(session, link=False)
     return redirect(discord_auth_logic.build_authorize_url(state))
 
@@ -1380,10 +1387,15 @@ def auth_discord_callback():
             flash(T("msg_discord_link_success"), "success")
         return redirect(url_for("options_view"))
 
-    ok, err_key, user = discord_auth_logic.complete_discord_callback(code)
+    ok, err_key, user = discord_auth_logic.complete_discord_callback(
+        code,
+        allow_register=bool(session.pop("discord_allow_register", False)),
+    )
     if not ok or not user:
         msg = T(err_key) if err_key and T(err_key) != err_key else T("discord_oauth_failed")
         flash(msg, "error")
+        if err_key == "discord_register_ack_required":
+            return redirect(url_for("register"))
         return redirect(url_for("login"))
 
     login_user(user)
@@ -1433,6 +1445,10 @@ def register():
 
             if not username or not password or not email:
                 error = T("msg_register_need_user_pass_email") or T("msg_register_need_user_pass")
+            elif str(request.form.get("age_ok") or "") != "1":
+                error = T("register_age_required") or "Bitte bestätige, dass du mindestens 16 Jahre alt bist."
+            elif str(request.form.get("legal_ack") or "") != "1":
+                error = T("register_legal_required") or "Bitte akzeptiere Datenschutz und AGB."
             elif password != password2:
                 error = T("msg_register_pw_mismatch") or "Die Passwörter stimmen nicht überein."
             elif len(username) < 3:
@@ -8353,6 +8369,30 @@ def api_options_account_deletion_cancel():
     if not ok:
         return _options_api_response(False, err, data, 400)
     return _options_api_response(True, err, data)
+
+
+@app.route("/api/options/data-export", methods=["GET"])
+@require_login_api
+def api_options_data_export():
+    """DSGVO Auskunft — JSON download of personal data."""
+    from flask import Response
+    import json as _json
+
+    pid = _current_player_id()
+    if not pid:
+        return _options_api_response(False, "not_logged_in", None, 401)
+    if not check_register_rate_limit(client_ip(request)):
+        # reuse rate limit bucket loosely; prefer dedicated if available
+        pass
+    payload = options_logic.export_player_personal_data(int(pid))
+    body = _json.dumps(payload, ensure_ascii=False, indent=2)
+    return Response(
+        body,
+        mimetype="application/json; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="genesis-colonies-data-{int(pid)}.json"'
+        },
+    )
 
 
 @app.route("/api/options/account-reset", methods=["POST"])

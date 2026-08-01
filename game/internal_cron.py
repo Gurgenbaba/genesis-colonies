@@ -479,6 +479,17 @@ def run_maintenance_bag(*, force: bool = False, source: str = "embedded_cron") -
         payload["account_deletions"] = {"ok": False, "error": str(exc)}
 
     try:
+        from game.privacy_retention import maybe_run_privacy_retention_purge
+
+        payload["privacy_retention"] = maybe_run_privacy_retention_purge(
+            force=force,
+            source=source,
+        )
+    except Exception as exc:
+        logger.exception("maintenance bag privacy retention failed")
+        payload["privacy_retention"] = {"ok": False, "error": str(exc)}
+
+    try:
         payload["sqlite_backup"] = maybe_sqlite_volume_backup(force=force)
     except Exception as exc:
         logger.exception("maintenance bag sqlite backup failed")

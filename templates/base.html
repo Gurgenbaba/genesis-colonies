@@ -729,6 +729,8 @@
     })();
   </script>
 
+  {% include "partials/cookie_notice.html" %}
+
   <script src="{{ url_for('static', filename='main.js') }}?v={{ GC_ASSET_VERSION }}"></script>
   <script src="{{ url_for('static', filename='js/core/gc.js') }}?v={{ GC_ASSET_VERSION }}"></script>
   <script src="{{ url_for('static', filename='js/core/state.js') }}?v={{ GC_ASSET_VERSION }}"></script>
