@@ -5140,39 +5140,11 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .trader-hub-collector-header{
   margin-bottom: 8px;
 }
-.collector-specialist-tabs{
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 6px;
-  margin-bottom: 10px;
-  min-width: 0;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-  padding-bottom: 2px;
-}
-.collector-specialist-tab{
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 9px;
-  border: 1px solid rgba(70, 229, 255, 0.22);
-  border-radius: var(--gc-radius-sm);
-  background: rgba(6, 14, 32, 0.85);
-  color: rgba(214, 235, 245, 0.88);
-  font-size: 0.74rem;
-  line-height: 1.2;
-  cursor: pointer;
-  flex: 0 0 auto;
-  max-width: 100%;
-}
-.collector-specialist-tab.is-active{
-  border-color: rgba(70, 229, 255, 0.55);
-  background: rgba(12, 32, 58, 0.95);
-  color: var(--gc-neon-cyan);
-  box-shadow: 0 0 12px rgba(70, 229, 255, 0.12);
-}
+/* collector specialist tabs: visual owned by .gc-page-tabs */
+.collector-specialist-tabs{ margin: 0 0 10px; }
+.collector-specialist-tab-icon{ line-height: 1; }
+.collector-specialist-tab-label{ min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
 .collector-specialist-tab-icon{
   font-size: 0.95rem;
   line-height: 1;
@@ -11548,34 +11520,9 @@ img.gc-res-icon.gc-res-timekeeper,
   border-color: var(--gc-neon-cyan);
   box-shadow: inset 0 2px 8px rgba(0,0,0,0.35), 0 0 0 1px rgba(70, 229, 255, 0.28);
 }
-.techtree-filter-bar{
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.techtree-filter-btn{
-  padding: 6px 10px;
-  border-radius: var(--gc-radius-sm);
-  border: 1px solid var(--gc-panel-border);
-  background: var(--gc-panel-bg-2);
-  color: var(--gc-text-dim);
-  font-size: 0.78rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: border-color .12s ease, color .12s ease, background .12s ease;
-}
-.techtree-filter-btn:hover{
-  border-color: var(--gc-panel-border-strong);
-  color: var(--gc-text-soft);
-  background: var(--gc-panel-strong);
-}
-.techtree-filter-btn.is-active{
-  border-color: var(--gc-neon-cyan);
-  background: rgba(70, 229, 255, 0.12);
-  color: var(--gc-primary-2);
-  box-shadow: 0 0 14px rgba(70, 229, 255, 0.12);
-}
+/* techtree filters: visual owned by .gc-page-tabs */
+.techtree-filter-bar{ margin: 0; }
+
 .techtree-board{
   display: flex;
   flex-direction: column;
@@ -12043,30 +11990,9 @@ body.gc-techtree-media-zoom-open{
 }
 
 /* --- Galaxy world map (command map) --- */
-.galaxy-view-tabs{
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-.galaxy-view-tab{
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border-radius: var(--gc-radius-sm);
-  border: 1px solid rgba(120, 190, 255, 0.18);
-  background: rgba(5, 10, 22, 0.55);
-  color: var(--gc-text-soft);
-  text-decoration: none;
-  font-size: 0.88rem;
-  font-weight: 600;
-}
-.galaxy-view-tab.is-active,
-.galaxy-view-tab--world.is-active{
-  border-color: rgba(70, 229, 255, 0.45);
-  color: var(--gc-primary-2);
-  background: rgba(70, 229, 255, 0.08);
-}
+/* galaxy view tabs: visual owned by .gc-page-tabs */
+.galaxy-view-tabs{ margin: 0 0 10px; }
+
 .gc-dev-preview-badge{
   flex: 0 0 auto;
   padding: 2px 7px;
@@ -15607,76 +15533,9 @@ body.gc-techtree-media-zoom-open{
   .fleet-command-grid{ grid-template-columns: 1fr; }
 }
 
-/* GC-640E/G/H: OGame-like compact fleet center + solid mode tabs */
+/* Fleet mode tabs: visual owned by .gc-page-tabs */
 .fleet-mode-tabs{
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
   margin: 0 0 10px;
-  padding: 6px;
-  background: linear-gradient(180deg, rgba(3, 12, 18, 0.96), rgba(2, 8, 13, 0.98));
-  border: 1px solid rgba(38, 226, 255, 0.28);
-  border-radius: var(--gc-radius-sm);
-  box-shadow: inset 0 0 18px rgba(0, 229, 255, 0.05);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-.fleet-mode-tab{
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: auto;
-  max-width: none;
-  flex: 0 0 auto;
-  min-height: 34px;
-  padding: 8px 15px;
-  border-radius: 0;
-  border: 1px solid rgba(63, 145, 165, 0.35);
-  background: linear-gradient(180deg, #081824, #040b12);
-  color: #8fb0bd;
-  font-family: Orbitron, Inter, system-ui, sans-serif;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  text-decoration: none;
-  white-space: nowrap;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.025);
-  text-shadow: none;
-  transition: border-color 0.14s ease, background 0.14s ease, color 0.14s ease, box-shadow 0.14s ease;
-}
-.fleet-mode-tab:hover{
-  color: #d7fbff;
-  border-color: rgba(39, 230, 255, 0.7);
-  background: linear-gradient(180deg, #0b2633, #06131d);
-  box-shadow:
-    0 0 10px rgba(35, 230, 255, 0.12),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.03);
-  transform: none;
-}
-.fleet-mode-tab.active,
-.fleet-mode-tab.is-active,
-.fleet-mode-tab[aria-selected="true"]{
-  color: #eaffff;
-  border-color: #2ff3ff;
-  background: linear-gradient(180deg, #0d3442, #061823);
-  box-shadow:
-    0 0 12px rgba(47, 243, 255, 0.18),
-    inset 0 0 0 1px rgba(47, 243, 255, 0.12);
-  text-shadow: none;
-}
-@media (max-width: 640px){
-  .fleet-mode-tabs{
-    gap: 4px;
-    margin-bottom: 8px;
-    padding: 4px;
-  }
-  .fleet-mode-tab{
-    padding: 6px 10px;
-    font-size: 0.66rem;
-    min-height: 32px;
-  }
 }
 .fleet-ogame-stack{
   display: grid;
@@ -18342,55 +18201,9 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   gap: 10px;
 }
 
+/* HoF / Chronicles tabs: visual owned by .gc-page-tabs */
 .gc-hof-tabs{
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-  padding: 4px 0 8px;
-}
-
-.gc-hof-tabs .gc-hof-tab{
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: auto;
-  min-width: 0;
-  min-height: 0;
-  height: auto;
-  flex: 1 1 0;
-  padding: 8px 10px;
-  border-radius: var(--gc-radius-sm);
-  border: 1px solid rgba(120, 190, 255, 0.18);
-  border-left: 1px solid rgba(120, 190, 255, 0.18);
-  background: rgba(5, 10, 22, 0.55);
-  box-shadow: none;
-  color: var(--gc-text-soft);
-  text-decoration: none;
-  font-family: Orbitron, Inter, system-ui, sans-serif;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  text-shadow: none;
-  white-space: nowrap;
-}
-
-.gc-hof-tabs .gc-hof-tab:hover{
-  border-color: rgba(120, 190, 255, 0.32);
-  border-left-color: rgba(120, 190, 255, 0.32);
-  color: var(--gc-text);
-  background: rgba(8, 16, 34, 0.72);
-  box-shadow: none;
-  transform: none;
-}
-
-.gc-hof-tabs .gc-hof-tab.active{
-  border-color: rgba(70, 229, 255, 0.45);
-  border-left-color: rgba(70, 229, 255, 0.45);
-  color: var(--gc-primary-2);
-  background: rgba(70, 229, 255, 0.08);
-  box-shadow: inset 0 0 0 1px rgba(70, 229, 255, 0.12);
-  text-shadow: none;
+  margin: 0 0 10px;
 }
 
 .gc-hof-my-strip{
@@ -18608,10 +18421,9 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 }
 
 .gc-chronicles-section-tabs{
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-  padding: 12px 14px 8px;
-  margin: 0;
+  --gc-page-tabs-cols: 5;
+  padding: 0;
+  margin: 0 0 10px;
 }
 
 .gc-chronicles-shell > .gc-ranking-panel-head,
@@ -18620,11 +18432,11 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 }
 
 .gc-pvp-tabs{
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  --gc-page-tabs-cols: 6;
 }
 
 .gc-chronicles-expo-tabs{
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  --gc-page-tabs-cols: 7;
 }
 
 .gc-chronicles-panel{
@@ -18854,19 +18666,19 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
   .gc-pvp-tabs{
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    --gc-page-tabs-cols: 3;
   }
 }
 
 @media (max-width: 520px){
   .gc-chronicles-section-tabs{
-    grid-template-columns: 1fr;
+    --gc-page-tabs-cols: 1;
   }
   .gc-chronicles-expo-tabs{
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    --gc-page-tabs-cols: 2;
   }
   .gc-pvp-tabs{
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    --gc-page-tabs-cols: 2;
   }
   .gc-chronicles-stats{
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -18976,31 +18788,65 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   min-width: 0;
 }
 
-.gc-records-tabs{
+/* ==========================================================================
+   GC Page Tabs — canonical tab rail (Records look, Identity Shell reactive)
+   Active accent follows equipped PlayerCard theme via --gc-neon-cyan /
+   --gc-id-rgb (body[data-identity-theme]). See docs/PAYMENT_SHOP.md.
+   ========================================================================== */
+.gc-page-tabs{
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--gc-page-tabs-cols, 4), minmax(0, 1fr));
   gap: 0;
-  margin: 0;
-  border-bottom: 1px solid rgba(70, 229, 255, 0.28);
+  margin: 0 0 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--gc-neon-cyan) 28%, transparent);
   background:
     linear-gradient(180deg, rgba(10, 18, 36, 0.98) 0%, rgba(4, 10, 22, 0.96) 100%);
   box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.45);
   position: relative;
   z-index: 1;
+  max-width: 100%;
+  min-width: 0;
 }
 
-.gc-records-tab{
+.gc-page-tabs--cols-2{ --gc-page-tabs-cols: 2; }
+.gc-page-tabs--cols-3{ --gc-page-tabs-cols: 3; }
+.gc-page-tabs--cols-4{ --gc-page-tabs-cols: 4; }
+.gc-page-tabs--cols-5{ --gc-page-tabs-cols: 5; }
+.gc-page-tabs--cols-6{ --gc-page-tabs-cols: 6; }
+.gc-page-tabs--cols-7{ --gc-page-tabs-cols: 7; }
+
+.gc-page-tabs--auto{
+  display: flex;
+  flex-wrap: wrap;
+}
+.gc-page-tabs--auto > .gc-page-tab{
+  flex: 1 1 7rem;
+}
+
+.gc-page-tabs--inline{
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.gc-page-tabs--sm .gc-page-tab{
+  min-height: 36px;
+  padding: 8px 6px;
+  font-size: 0.62rem;
+}
+
+.gc-page-tab{
   appearance: none;
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 4px;
   min-width: 0;
   min-height: 48px;
   margin: 0;
   padding: 12px 8px;
   border: none;
-  border-right: 1px solid rgba(70, 229, 255, 0.12);
+  border-right: 1px solid color-mix(in srgb, var(--gc-neon-cyan) 12%, transparent);
   border-radius: 0;
   background: transparent;
   color: var(--gc-text-dim);
@@ -19009,15 +18855,20 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  text-decoration: none;
   cursor: pointer;
   transition: color 0.15s ease, background 0.15s ease;
+  box-shadow: none;
+  text-shadow: none;
+  white-space: nowrap;
 }
 
-.gc-records-tab:last-child{
+.gc-page-tabs > .gc-page-tab:last-child,
+.gc-page-tabs > a.gc-page-tab:last-child{
   border-right: none;
 }
 
-.gc-records-tab-label{
+.gc-page-tab-label{
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -19025,24 +18876,134 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   line-height: 1.2;
 }
 
-.gc-records-tab:hover{
+.gc-page-tab:hover{
   color: var(--gc-text-soft);
-  background: rgba(70, 229, 255, 0.05);
+  background: color-mix(in srgb, var(--gc-neon-cyan) 5%, transparent);
+  text-decoration: none;
 }
 
-.gc-records-tab:focus-visible{
+.gc-page-tab:focus-visible{
   outline: none;
   color: var(--gc-neon-cyan);
-  background: rgba(70, 229, 255, 0.08);
-  box-shadow: inset 0 0 0 1px rgba(70, 229, 255, 0.35);
+  background: color-mix(in srgb, var(--gc-neon-cyan) 8%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gc-neon-cyan) 35%, transparent);
 }
 
-.gc-records-tab.is-active{
+.gc-page-tab.is-active,
+.gc-page-tab.active,
+.gc-page-tab.gp-tab--active,
+.gc-page-tab[aria-selected="true"],
+.gc-page-tab[aria-current="page"]{
   color: var(--gc-neon-cyan);
   background:
-    linear-gradient(180deg, rgba(70, 229, 255, 0.14) 0%, rgba(70, 229, 255, 0.04) 100%);
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--gc-neon-cyan) 14%, transparent) 0%,
+      color-mix(in srgb, var(--gc-neon-cyan) 4%, transparent) 100%
+    );
   box-shadow: inset 0 -3px 0 var(--gc-neon-cyan);
-  text-shadow: 0 0 12px rgba(70, 229, 255, 0.35);
+  text-shadow: 0 0 12px color-mix(in srgb, var(--gc-neon-cyan) 35%, transparent);
+  border-color: transparent;
+  text-decoration: none;
+}
+
+a.gc-page-tab.gc-nav-link{
+  border-left: none;
+  box-shadow: none;
+}
+
+a.gc-page-tab.gc-nav-link.is-active,
+a.gc-page-tab.gc-nav-link.active,
+a.gc-page-tab.gc-nav-link[aria-current="page"]{
+  box-shadow: inset 0 -3px 0 var(--gc-neon-cyan);
+}
+
+.gc-page-tab--rich{
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  white-space: normal;
+  text-align: left;
+  padding: 8px 10px;
+  min-height: 56px;
+}
+
+/* Reset legacy button chrome when migrated onto the page-tab rail */
+.gc-page-tab.gc-btn,
+.gc-page-tab.gc-btn-ghost,
+.gc-page-tab.gc-btn-outline,
+.gc-page-tab.gc-btn-sm,
+.gc-page-tab.tab-btn{
+  border: none;
+  border-right: 1px solid color-mix(in srgb, var(--gc-neon-cyan) 12%, transparent);
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  min-height: 48px;
+  padding: 12px 8px;
+  font-family: Orbitron, Inter, system-ui, sans-serif;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gc-text-dim);
+}
+.gc-page-tabs > .gc-page-tab.gc-btn:last-child,
+.gc-page-tabs > .gc-page-tab.tab-btn:last-child{
+  border-right: none;
+}
+.gc-page-tab.tab-btn.active,
+.gc-page-tab.gc-btn.active,
+.gc-page-tab.gc-btn.is-active{
+  color: var(--gc-neon-cyan);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--gc-neon-cyan) 14%, transparent) 0%,
+      color-mix(in srgb, var(--gc-neon-cyan) 4%, transparent) 100%
+    );
+  box-shadow: inset 0 -3px 0 var(--gc-neon-cyan);
+  border-color: transparent;
+  text-shadow: 0 0 12px color-mix(in srgb, var(--gc-neon-cyan) 35%, transparent);
+}
+
+@media (max-width: 720px){
+  .gc-page-tabs--cols-5,
+  .gc-page-tabs--cols-6,
+  .gc-page-tabs--cols-7{
+    --gc-page-tabs-cols: 3;
+  }
+  .gc-page-tabs--cols-5 > .gc-page-tab:nth-child(3n),
+  .gc-page-tabs--cols-6 > .gc-page-tab:nth-child(3n),
+  .gc-page-tabs--cols-7 > .gc-page-tab:nth-child(3n){
+    border-right: none;
+  }
+  .gc-page-tabs--cols-5 > .gc-page-tab:nth-child(n+4),
+  .gc-page-tabs--cols-6 > .gc-page-tab:nth-child(n+4),
+  .gc-page-tabs--cols-7 > .gc-page-tab:nth-child(n+4){
+    border-top: 1px solid color-mix(in srgb, var(--gc-neon-cyan) 12%, transparent);
+  }
+}
+
+@media (max-width: 520px){
+  .gc-page-tabs--cols-5{
+    --gc-page-tabs-cols: 1;
+  }
+  .gc-page-tabs--cols-4,
+  .gc-page-tabs--cols-6,
+  .gc-page-tabs--cols-7{
+    --gc-page-tabs-cols: 2;
+  }
+  .gc-page-tab{
+    min-height: 42px;
+    padding: 10px 6px;
+    font-size: 0.62rem;
+  }
+}
+
+/* Records — uses canonical page tabs */
+.gc-records-tabs{
+  margin: 0;
 }
 
 .gc-records-workspace-body{
@@ -19148,28 +19109,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   font-size: 0.82rem;
 }
 
-@media (max-width: 900px){
-  .gc-records-tabs{
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .gc-records-tab:nth-child(3n){
-    border-right: none;
-  }
-
-  .gc-records-tab:nth-child(n+4){
-    border-top: 1px solid rgba(70, 229, 255, 0.12);
-  }
-}
-
 @media (max-width: 720px){
-  .gc-records-tab{
-    min-height: 42px;
-    padding: 10px 6px;
-    font-size: 0.62rem;
-    letter-spacing: 0.05em;
-  }
-
   .gc-records-row{
     grid-template-columns: 36px minmax(0, 1fr) auto;
     grid-template-areas:
@@ -20438,34 +20378,10 @@ a.gc-ranking-alliance:hover{
   line-height: 1.45;
   font-size: 0.88rem;
 }
+/* legal tabs: visual owned by .gc-page-tabs */
 .gc-legal-tabs,
-.legal-doc-tabs{
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin: 0 0 8px;
-}
-.gc-legal-tab,
-.legal-doc-tab{
-  appearance: none;
-  border: 1px solid rgba(120, 190, 255, 0.22);
-  background: rgba(7, 15, 31, 0.75);
-  color: var(--gc-text-soft);
-  padding: 4px 8px;
-  border-radius: var(--gc-radius-sm, 2px);
-  font-size: 0.78rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  cursor: pointer;
-  text-decoration: none;
-}
-.gc-legal-tab.is-active,
-.legal-doc-tab.is-active{
-  border-color: rgba(120, 190, 255, 0.55);
-  color: var(--gc-primary-2);
-  background: rgba(20, 40, 70, 0.9);
-}
+.legal-doc-tabs{ margin: 0 0 8px; }
+
 .gc-legal-doc-title{
   margin: 0 0 8px;
   font-size: 0.95rem;
@@ -21158,36 +21074,9 @@ a.gc-ranking-alliance:hover{
     letter-spacing: 0.05em;
   }
 
-  .gc-nav-drawer-tabs{
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px;
-    flex: 0 0 auto;
-    padding: 10px 14px;
-    border-bottom: 1px solid rgba(120, 190, 255, 0.12);
-  }
+  /* nav drawer tabs: visual owned by .gc-page-tabs */
+  .gc-nav-drawer-tabs{ margin: 0 0 8px; }
 
-  .gc-nav-drawer-tab{
-    min-height: var(--gc-touch-min);
-    padding: 10px 12px;
-    border: 1px solid rgba(120, 190, 255, 0.16);
-    border-radius: var(--gc-radius-sm);
-    background: rgba(5, 10, 22, 0.58);
-    color: var(--gc-text-dim);
-    font: inherit;
-    font-weight: 800;
-    letter-spacing: 0.06em;
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-    transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
-  }
-
-  .gc-nav-drawer-tab.is-active{
-    color: var(--gc-primary-2);
-    border-color: rgba(70, 229, 255, 0.55);
-    background: rgba(70, 229, 255, 0.10);
-    box-shadow: var(--gc-border-glow);
-  }
 
   .gc-nav-drawer-body{
     flex: 1 1 auto;
@@ -24132,6 +24021,8 @@ body.gc-tab-hidden .gc-card-queue-glyph--research {
    Not driven by name_style / aura / flair. See docs/PAYMENT_SHOP.md Identity Shell.
    IMPORTANT: never set --gc-id-rgb on the shared :not(cyan) block ? that selector is
    more specific than [data-identity-theme="violet"] and would lock the shell to cyan. */
+/* Cyan also exposes --gc-id-rgb so rgba(var(--gc-id-rgb), …) works for all themes. */
+.gc-body-ingame[data-identity-theme="cyan"] { --gc-id-rgb: 70, 229, 255; }
 .gc-body-ingame[data-identity-theme="violet"] { --gc-id-rgb: 168, 120, 255; }
 .gc-body-ingame[data-identity-theme="amber"] { --gc-id-rgb: 255, 190, 80; }
 .gc-body-ingame[data-identity-theme="emerald"] { --gc-id-rgb: 80, 220, 140; }
@@ -33496,46 +33387,9 @@ a.gc-galaxy-coord-link:focus-visible {
   min-width: 0;
 }
 
-.gc-options-tab-rail {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 8px;
-  border-right: 1px solid rgba(70, 229, 255, 0.12);
-  background: rgba(2, 8, 18, 0.55);
-  min-width: 0;
-}
+/* options tabs: visual owned by .gc-page-tabs */
+.gc-options-tab-rail { margin: 0 0 12px; }
 
-.gc-options-tab-btn {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  min-width: 0;
-  padding: 8px 10px;
-  border: 1px solid transparent;
-  border-radius: var(--gc-radius-sm, 6px);
-  background: transparent;
-  color: var(--gc-text-soft, rgba(200, 220, 235, 0.82));
-  font-size: 0.78rem;
-  font-weight: 600;
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
-}
-
-.gc-options-tab-btn:hover {
-  border-color: rgba(70, 229, 255, 0.18);
-  color: var(--gc-text, #e8f4ff);
-}
-
-.gc-options-tab-btn.is-active {
-  border-color: rgba(70, 229, 255, 0.42);
-  color: var(--gc-neon-cyan, #46e5ff);
-  background: rgba(70, 229, 255, 0.08);
-  box-shadow:
-    0 0 0 1px rgba(70, 229, 255, 0.12) inset,
-    0 0 14px rgba(70, 229, 255, 0.12);
-}
 
 .gc-options-tab-content {
   min-width: 0;
@@ -35339,17 +35193,8 @@ html.gc-empire-focus .gc-planet-registry {
   color: var(--gc-text-dim);
 }
 
-.inventory-tabs {
-  display: flex;
-  gap: 0.35rem;
-  margin: 0 0 0.85rem;
-  flex-wrap: wrap;
-}
+/* inventory-tabs layout owned by .gc-page-tabs */
 
-.inventory-tabs--inline {
-  margin: 0;
-  flex-shrink: 0;
-}
 
 .inventory-workspace-head {
   display: flex;
@@ -35420,25 +35265,8 @@ html.gc-empire-focus .gc-planet-registry {
   box-shadow: none;
 }
 
-.inventory-tab {
-  appearance: none;
-  background: rgba(8, 18, 24, 0.9);
-  border: 1px solid var(--gc-border, #2a3a44);
-  border-radius: var(--gc-radius-sm, 2px);
-  color: var(--gc-text-muted, #8aa);
-  font-size: 0.78rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 0.45rem 0.85rem;
-  cursor: pointer;
-  min-height: 34px;
-}
+/* inventory-tab visual owned by .gc-page-tab */
 
-.inventory-tab.is-active {
-  color: var(--gc-accent, #5ad0e6);
-  border-color: rgba(90, 208, 230, 0.55);
-  background: rgba(20, 40, 50, 0.95);
-}
 
 .inventory-panel-tab[hidden] {
   display: none !important;
@@ -39072,34 +38900,10 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   background: transparent;
 }
 
-.gp-tabs-wrap {
-  margin: 0.55rem 0 0.65rem;
-}
+/* GP politics tabs: visual owned by .gc-page-tabs */
+.gp-tabs-wrap { margin: 0 0 8px; }
+.gp-guide-strip { margin: 0 0 6px; }
 
-.gp-tab {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  min-width: 0;
-  padding: 0.4rem 0.5rem;
-  border: 1px solid rgba(92, 200, 255, 0.22);
-  background: rgba(8, 16, 24, 0.55);
-  color: var(--gc-text, #e8eef6);
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-  border-radius: var(--gc-radius-sm, 2px);
-}
-
-.gp-tab:hover {
-  border-color: rgba(92, 200, 255, 0.45);
-}
-
-.gp-tab--active {
-  border-color: var(--gc-accent, #5cc8ff);
-  background: rgba(92, 200, 255, 0.1);
-  box-shadow: inset 0 0 0 1px rgba(92, 200, 255, 0.25);
-}
 
 .gp-tab-icon {
   flex-shrink: 0;
@@ -40880,32 +40684,10 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   font-size: 0.75rem;
 }
 
+/* combat sim tabs: visual owned by .gc-page-tabs */
 .gc-combat-sim-tabs,
 .combat-sim-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0;
-  margin-bottom: 0.35rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.gc-combat-sim-tab,
-.combat-sim-tab {
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: inherit;
-  font-size: 0.72rem;
-  padding: 0.3rem 0.55rem;
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-}
-
-.gc-combat-sim-tab.active,
-.combat-sim-tab.active {
-  color: var(--gc-accent, #5ec4ff);
-  border-bottom-color: var(--gc-accent, #5ec4ff);
+  margin: 0 0 0.35rem;
 }
 
 .gc-combat-sim-unit-toolbar {
@@ -41868,32 +41650,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   max-width: 100%;
   box-sizing: border-box;
 }
-.alliance-hub-module .alliance-hub-tab-bar {
-  display: flex;
-  gap: 0;
-  border-bottom: 1px solid var(--gc-border, #334);
-  background: var(--gc-bg-inset, #111);
-}
-.alliance-hub-module button.alliance-hub-tab {
-  appearance: none;
-  -webkit-appearance: none;
-  flex: 1;
-  min-width: 0;
-  padding: 10px 8px;
-  border: none;
-  border-right: 1px solid var(--gc-border-subtle, #222);
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  opacity: 0.65;
-  transition: opacity 0.15s, border-color 0.15s;
-}
+/* alliance hub tab bar/button chrome owned by .gc-page-tabs */
 .alliance-hub-module .alliance-hub-project-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
@@ -42346,34 +42103,9 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   display: flex;
   flex-direction: column;
 }
+/* alliance-hub-tab-bar / .alliance-hub-tab visual owned by .gc-page-tabs */
 .alliance-hub-tab-bar {
-  display: flex;
-  gap: 0;
-  border-bottom: 1px solid var(--gc-border, #334);
-  background: var(--gc-bg-inset, #111);
-}
-.alliance-hub-tab {
-  flex: 1;
-  min-width: 0;
-  padding: 10px 8px;
-  border: none;
-  border-right: 1px solid var(--gc-border-subtle, #222);
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  opacity: 0.65;
-  transition: opacity 0.15s, border-color 0.15s;
-}
-.alliance-hub-tab:last-child { border-right: none; }
-.alliance-hub-tab:hover { opacity: 0.9; }
-.alliance-hub-tab.is-active {
-  opacity: 1;
-  border-bottom-color: var(--gc-accent, #6ec8ff);
-  background: rgba(110, 200, 255, 0.04);
+  margin: 0 0 0;
 }
 .alliance-hub-tab-panel {
   padding: 14px 16px;
@@ -42828,10 +42560,6 @@ a.alliance-hub-browse-card:hover,
   }
   .alliance-hub-directory-layout {
     grid-template-columns: minmax(0, 1fr);
-  }
-  .alliance-hub-tab {
-    font-size: 0.65rem;
-    padding: 8px 4px;
   }
   .alliance-hub-hero-top {
     flex-direction: row;
@@ -44271,16 +43999,8 @@ a.alliance-hub-browse-card:hover,
 .shop-banner--cancel { border-color: rgba(200, 160, 80, 0.45); }
 .shop-banner--ok { border-color: rgba(80, 180, 120, 0.45); }
 
-.shop-tabs {
-  display: flex;
-  gap: 0.35rem;
-  margin: 0 0 0.85rem;
-  flex-wrap: wrap;
-}
-.shop-tabs--inline {
-  margin: 0;
-  flex-shrink: 0;
-}
+/* shop-tabs layout owned by .gc-page-tabs */
+
 .shop-workspace-header {
   align-items: center;
   gap: 0.75rem;
@@ -44303,23 +44023,8 @@ a.alliance-hub-browse-card:hover,
   margin: 0;
   font-size: 0.82rem;
 }
-.shop-tab {
-  appearance: none;
-  background: rgba(8, 18, 24, 0.9);
-  border: 1px solid var(--gc-border, #2a3a44);
-  border-radius: var(--gc-radius-sm, 2px);
-  color: var(--gc-text-muted, #8aa);
-  font-size: 0.78rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 0.45rem 0.85rem;
-  cursor: pointer;
-}
-.shop-tab.is-active {
-  color: var(--gc-accent, #5ad0e6);
-  border-color: rgba(90, 208, 230, 0.55);
-  background: rgba(20, 40, 50, 0.95);
-}
+/* shop-tab visual owned by .gc-page-tab */
+
 .shop-panel[hidden] { display: none !important; }
 .shop-panel.is-active { display: block; }
 

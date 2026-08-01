@@ -119,6 +119,45 @@ def test_player_search_works(app_client):
     assert any(int(p["id"]) == user_id for p in players)
 
 
+def test_admin_players_online_list(app_client):
+    """Admin online list uses the same last_seen window as the HUD count."""
+    import time
+    import uuid
+
+    from game.db import db
+    from game.models import ONLINE_WINDOW_SEC, create_user, ensure_player_and_homeworld
+
+    client, admin_id, user_id = app_client
+    ok_o, _, offline_info = create_user(f"offline_{uuid.uuid4().hex[:8]}", "userpass123", is_admin=0)
+    assert ok_o
+    offline_id = int(offline_info["id"])
+    ensure_player_and_homeworld(offline_id)
+
+    now = int(time.time())
+    conn = db()
+    try:
+        conn.execute("UPDATE players SET last_seen = ? WHERE id = ?", (now - 30, int(user_id)))
+        conn.execute(
+            "UPDATE players SET last_seen = ? WHERE id = ?",
+            (now - ONLINE_WINDOW_SEC - 120, offline_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    _login(client, "admin_cc", "adminpass123")
+    r = client.get("/api/admin/players?online=1")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["ok"] is True
+    assert data.get("online_only") is True
+    ids = [int(p["id"]) for p in data.get("players") or []]
+    assert user_id in ids
+    # Admin request itself marks the admin online via touch_player_online.
+    assert admin_id in ids
+    assert offline_id not in ids
+
+
 def test_resources_set_clamps_negative(app_client):
     client, admin_id, user_id = app_client
     _login(client, "admin_cc", "adminpass123")

@@ -71,19 +71,19 @@
     </div>
   </header>
 
-  <nav class="fleet-mode-tabs" role="tablist" aria-label="{{ T('fleet_title') }}">
+  <nav class="gc-page-tabs gc-page-tabs--cols-3 fleet-mode-tabs" role="tablist" aria-label="{{ T('fleet_title') }}">
     <a href="{{ url_for('fleet_view') }}"
-       class="fleet-mode-tab{% if fleet_mode == 'send' %} active{% endif %}"
+       class="gc-page-tab fleet-mode-tab{% if fleet_mode == 'send' %} active{% endif %}"
        data-fleet-mode-tab="send"
        role="tab"
        aria-selected="{{ 'true' if fleet_mode == 'send' else 'false' }}">{{ T("fleet_mode_send") }}</a>
     <a href="{{ url_for('fleet_view') }}?mode=collect"
-       class="fleet-mode-tab{% if fleet_mode == 'collect' %} active{% endif %}"
+       class="gc-page-tab fleet-mode-tab{% if fleet_mode == 'collect' %} active{% endif %}"
        data-fleet-mode-tab="collect"
        role="tab"
        aria-selected="{{ 'true' if fleet_mode == 'collect' else 'false' }}">{{ T("fleet_logistics_collect") }}</a>
     <a href="{{ url_for('fleet_view') }}?mode=distribute"
-       class="fleet-mode-tab{% if fleet_mode == 'distribute' %} active{% endif %}"
+       class="gc-page-tab fleet-mode-tab{% if fleet_mode == 'distribute' %} active{% endif %}"
        data-fleet-mode-tab="distribute"
        role="tab"
        aria-selected="{{ 'true' if fleet_mode == 'distribute' else 'false' }}">{{ T("fleet_logistics_distribute") }}</a>

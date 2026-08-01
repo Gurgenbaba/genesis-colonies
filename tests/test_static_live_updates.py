@@ -1120,6 +1120,7 @@ def test_gc700cd_chronicles_genesis_design():
     assert "gc-chronicles-kicker" in html
     assert "gc-chronicles-section-tabs" in html
     assert "gc-hof-tab gc-chronicles-section-tab" not in html
+    assert "gc-page-tabs" in html
     assert "gc-hof-tabs gc-chronicles-section-tabs" in html
     assert "gc-chronicles-shell" in html
     assert "gc-chronicles-stats" in html
@@ -1973,35 +1974,31 @@ def test_main_js_gc640f_fleet_no_scroll_ship_selector():
 
 
 def test_main_js_gc640g_fleet_mode_tabs_compact():
-    """GC-640G: mode tabs are compact inline pills, not full-width nav bars."""
+    """GC-640G: fleet mode tabs use the canonical page-tab rail (not full-width nav)."""
     tpl = _read("templates/fleet.html")
     css = _read("static/style.css")
     js = _read("static/main.js")
     assert "fleet-mode-tab gc-nav-link" not in tpl
-    assert 'class="fleet-mode-tab' in tpl
-    tabs_css = css.split(".fleet-mode-tabs")[1].split(".fleet-mode-tab{")[0]
-    assert "display: flex" in tabs_css
-    assert "width: auto" in css.split(".fleet-mode-tab{")[1].split(".fleet-mode-tab:hover")[0]
-    assert "min-height: 34px" in css.split(".fleet-mode-tab{")[1].split(".fleet-mode-tab:hover")[0]
+    assert "gc-page-tabs" in tpl
+    assert "gc-page-tab fleet-mode-tab" in tpl
+    assert ".gc-page-tabs{" in css
+    assert "inset 0 -3px 0 var(--gc-neon-cyan)" in css
     assert "a.fleet-mode-tab" in js
 
 
 def test_main_js_gc640h_fleet_mode_tabs_visual_polish():
-    """GC-640H/J: mode tab bar is opaque; active uses outline/glow not cyan fill."""
+    """GC-640H/J: fleet mode tabs inherit Identity Shell page-tab active accent."""
     css = _read("static/style.css")
-    tabs_bar = css.split(".fleet-mode-tabs{")[1].split(".fleet-mode-tab{")[0]
-    tab_base = css.split(".fleet-mode-tab{")[1].split(".fleet-mode-tab:hover")[0]
-    tab_active = css.split(".fleet-mode-tab.active,")[1].split("@media (max-width: 640px)")[0]
-    assert "rgba(3, 12, 18, 0.96)" in tabs_bar
-    assert "backdrop-filter: none" in tabs_bar
-    assert "linear-gradient(180deg, #081824, #040b12)" in tab_base
-    assert "linear-gradient(180deg, #0d3442, #061823)" in tab_active
-    assert "#2ff3ff" in tab_active
-    assert "linear-gradient(180deg, #35f2ff, #079fbd)" not in tab_active
+    page_tabs = css.split(".gc-page-tabs{")[1].split(".gc-page-tab{")[0]
+    active = css.split(".gc-page-tab.is-active,")[1].split(".gc-page-tab--rich")[0]
+    assert "color-mix(in srgb, var(--gc-neon-cyan)" in page_tabs or "var(--gc-neon-cyan)" in page_tabs
+    assert "inset 0 -3px 0 var(--gc-neon-cyan)" in active
+    assert "rgba(70, 229, 255, 0.14)" not in active
+    assert "linear-gradient(180deg, #35f2ff, #079fbd)" not in active
 
 
 def test_main_js_gc640j_fleet_button_consistency():
-    """GC-640J: mode tabs and quicktargets use dezente dark outline control styling."""
+    """GC-640J: fleet controls stay compact; mode tabs share page-tab chrome."""
     tpl = _read("templates/fleet.html")
     css = _read("static/style.css")
     assert "data-fleet-quick-target-select" in tpl
@@ -2009,8 +2006,8 @@ def test_main_js_gc640j_fleet_button_consistency():
     assert "fleet-colony-chips" not in tpl
     assert "data-gc-hud-select" in tpl
     assert ".fleet-expedition-shortcut" in css
-    tab_active = css.split(".fleet-mode-tab.active,")[1].split("@media (max-width: 640px)")[0]
-    assert "linear-gradient(180deg, #0d3442, #061823)" in tab_active
+    assert "gc-page-tab fleet-mode-tab" in tpl
+    assert "inset 0 -3px 0 var(--gc-neon-cyan)" in css
 
 
 def test_main_js_gc640e_fleet_logistics_merge():

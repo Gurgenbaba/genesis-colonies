@@ -607,9 +607,9 @@
         <span class="gc-nav-drawer-title">{{ T("nav_mobile_drawer", "Navigation") }}</span>
         <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" id="gc-nav-drawer-close" aria-label="{{ T('close', 'Schließen') }}">✕</button>
       </div>
-      <div class="gc-nav-drawer-tabs" role="tablist" aria-label="{{ T('nav_mobile_drawer', 'Navigation') }}">
+      <div class="gc-page-tabs gc-page-tabs--cols-2 gc-nav-drawer-tabs" role="tablist" aria-label="{{ T('nav_mobile_drawer', 'Navigation') }}">
         <button type="button"
-                class="gc-nav-drawer-tab is-active"
+                class="gc-page-tab gc-nav-drawer-tab is-active"
                 id="gc-nav-drawer-tab-gameplay"
                 role="tab"
                 aria-selected="true"
@@ -618,7 +618,7 @@
           {{ T("nav_mobile_tab_gameplay", "SPIEL") }}
         </button>
         <button type="button"
-                class="gc-nav-drawer-tab"
+                class="gc-page-tab gc-nav-drawer-tab"
                 id="gc-nav-drawer-tab-meta"
                 role="tab"
                 aria-selected="false"

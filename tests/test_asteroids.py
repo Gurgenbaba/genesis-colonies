@@ -934,6 +934,15 @@ def test_galaxy_asteroid_board_template_contract():
     assert "galaxy_asteroid_en_route" in board
     assert "galaxy_asteroid_reclaimers_needed" in board or "recycler_slots_needed" in board
     assert "data-refresh-on-zero" in board
+    # Board harvest CTA (not PJAX jump) — same GalaxyQuickAction recycle path as ring markers.
+    assert "data-galaxy-ring-asteroid-recycle" in board
+    assert "data-galaxy-ring-asteroid-wrap" in board
+    assert "data-recycler-slots" in board
+    assert "galaxy_asteroid_harvest" in board
+    assert "galaxy-asteroid-board-jump" not in board
+    assert "data-pjax" not in board.split("galaxy-asteroid-board-row-meta")[1].split("</ul>")[0]
+    assert "resolveAvailableReclaimersAsync" in qa
+    assert "handleAsteroidRecycleClick" in qa
     # Must match World Boss modal shell (dialog + overlay), not broken aliases.
     assert "gc-player-card-dialog" in board
     assert "gc-player-card-overlay" in board

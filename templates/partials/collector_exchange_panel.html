@@ -181,13 +181,13 @@
 
   <script type="application/json" id="gc-collector-exchange-state">{{ ce | tojson }}</script>
 
-  <nav class="collector-specialist-tabs" role="tablist" aria-label="{{ T('collector_exchange_title', 'Sammler-Markt') }}" data-collector-tabs>
+  <nav class="gc-page-tabs gc-page-tabs--auto gc-page-tabs--sm collector-specialist-tabs" role="tablist" aria-label="{{ T('collector_exchange_title', 'Sammler-Markt') }}" data-collector-tabs>
 
     {% for spec in specialists %}
 
     <button type="button"
 
-            class="collector-specialist-tab{% if spec.specialist_key == first_spec_key %} is-active{% endif %}"
+            class="gc-page-tab collector-specialist-tab{% if spec.specialist_key == first_spec_key %} is-active{% endif %}"
 
             role="tab"
 

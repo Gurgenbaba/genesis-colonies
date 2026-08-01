@@ -23,6 +23,7 @@ from game.models import (
     get_player_stats,
     get_registered_player_count,
     init_db,
+    list_online_players,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -120,6 +121,25 @@ def test_registered_player_count(online_db):
     _create_player("alpha")
     _create_player("beta")
     assert get_registered_player_count() == before + 2
+
+
+def test_list_online_players_window_and_order(online_db):
+    now = int(time.time())
+    fresh = _create_player("list_fresh")
+    mid = _create_player("list_mid")
+    stale = _create_player("list_stale")
+    _set_last_seen(fresh, now - 10)
+    _set_last_seen(mid, now - 90)
+    _set_last_seen(stale, now - ONLINE_WINDOW_SEC - 5)
+
+    rows = list_online_players(now=now, limit=50)
+    ids = [int(r["id"]) for r in rows]
+    assert fresh in ids
+    assert mid in ids
+    assert stale not in ids
+    assert ids.index(fresh) < ids.index(mid)
+    assert all("username" in r and "last_seen" in r and "is_admin" in r for r in rows)
+    assert len(rows) == get_online_player_count(now=now)
 
 
 def test_landing_renders_server_online_count(app_client, online_db):

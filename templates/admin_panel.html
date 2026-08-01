@@ -44,7 +44,7 @@
           <div class="admin-metric-label">
             {{ T("admin_metric_online_now") if T("admin_metric_online_now") != "admin_metric_online_now" else "Online jetzt" }}
           </div>
-          <div class="admin-metric-value">{{ ((ps.online_now if ps and ps.online_now is defined else 0) or 0)|fmt_int }}</div>
+          <div class="admin-metric-value" data-admin-online-count>{{ ((ps.online_now if ps and ps.online_now is defined else 0) or 0)|fmt_int }}</div>
           <div class="admin-metric-sub">
             {{ T("admin_metric_active_24h") if T("admin_metric_active_24h") != "admin_metric_active_24h" else "Letzte 24h" }}:
             {{ ((ps.active_24h if ps and ps.active_24h is defined else 0) or 0)|fmt_int }}
@@ -95,6 +95,21 @@
       </div>
     </section>
 
+    <section class="admin-section admin-online-section" aria-labelledby="admin-online-title">
+      <div class="admin-action-row">
+        <h2 class="admin-panel-title" id="admin-online-title">{{ T("admin_online_players_title", "Spieler online") }}</h2>
+        <div class="admin-toolbar">
+          <button type="button" class="gc-btn gc-btn-sm gc-btn-ghost" id="admin-online-refresh" data-admin-action="refresh-online">
+            {{ T("admin_online_players_refresh", "Aktualisieren") }}
+          </button>
+        </div>
+      </div>
+      <p class="admin-tab-hint admin-small-hint">{{ T("admin_online_players_hint", "Commander mit Aktivität in den letzten 5 Minuten.") }}</p>
+      <div id="admin-online-output" class="admin-table-wrap admin-online-output" aria-live="polite">
+        <p class="admin-empty">{{ T("admin_online_players_loading", "Lade Online-Liste…") }}</p>
+      </div>
+    </section>
+
         <p id="admin-alert-host" class="admin-alert-host" role="alert" aria-live="polite" hidden></p>
 
     <nav class="admin-nav" aria-label="{{ T('admin_tabs_label') }}">
@@ -105,26 +120,26 @@
         <button type="button" class="admin-group-btn" data-admin-group="moderation" role="tab">{{ T("admin_group_moderation") }}</button>
         <button type="button" class="admin-group-btn is-active" data-admin-group="system" role="tab">{{ T("admin_group_system") }}</button>
       </div>
-      <div class="admin-tabs" role="tablist" aria-label="{{ T('admin_tabs_label') }}">
-        <button type="button" class="admin-tab-btn is-active" data-admin-tab="health" data-admin-group="system" role="tab">{{ T("admin_health_title") }}</button>
-        <button type="button" class="admin-tab-btn" data-admin-tab="migrations" data-admin-group="system" role="tab">{{ T("admin_migrations_title") }}</button>
-        <button type="button" class="admin-tab-btn" data-admin-tab="players" data-admin-group="players" role="tab">{{ T("admin_players_title") }}</button>
-        <button type="button" class="admin-tab-btn" data-admin-tab="lootboxes" data-admin-group="economy" role="tab">{{ T("admin_lootboxes_title", "Lootboxen") }}</button>
-        <button type="button" class="admin-tab-btn" data-admin-tab="planets" data-admin-group="players" role="tab">{{ T("admin_planets_title") }}</button>
-        <button type="button" class="admin-tab-btn" data-admin-tab="queues" data-admin-group="economy" role="tab">{{ T("admin_queues_title") }}</button>
-        <button type="button" class="admin-tab-btn" data-admin-tab="fleets" data-admin-group="economy" role="tab">{{ T("admin_fleets_title", "Flotten") }}</button>
-        <button type="button" class="admin-tab-btn" data-admin-tab="audit" data-admin-group="system" role="tab">{{ T("admin_audit_title") }}</button>
-        <button type="button" class="admin-tab-btn" data-admin-tab="chat" data-admin-group="moderation" role="tab">{{ T("admin_chat_title") }}</button>
-        <button type="button" class="admin-tab-btn" data-admin-tab="support" data-admin-group="moderation" role="tab">{{ T("admin_support_title", "Support") }}</button>
-        <button type="button" class="admin-tab-btn" data-admin-tab="messages" data-admin-group="moderation" role="tab">{{ T("admin_messages_title", "Nachrichten") }}</button>
-        <button type="button" class="admin-tab-btn" data-admin-tab="runtime" data-admin-group="system" role="tab">{{ T("admin_runtime_title") }}</button>
-        <button type="button" class="admin-tab-btn" data-admin-tab="votes" data-admin-group="liveops" role="tab">{{ T("admin_votes_title", "Votes") }}</button>
-        <button type="button" class="admin-tab-btn" data-admin-tab="balance" data-admin-group="economy" role="tab">{{ T("admin_balance_title", "Balance") }}</button>
-        <button type="button" class="admin-tab-btn" data-admin-tab="server" data-admin-group="system" role="tab">{{ T("admin_server_title", "Server") }}</button>
-        <button type="button" class="admin-tab-btn" data-admin-tab="diplomacy" data-admin-group="liveops" role="tab">{{ T("admin_diplomacy_title", "Galaktische Diplomatie") }}</button>
-        <button type="button" class="admin-tab-btn" data-admin-tab="world_boss" data-admin-group="liveops" role="tab">{{ T("admin_wb_title", "World Boss") }}</button>
-        <button type="button" class="admin-tab-btn" data-admin-tab="pirates" data-admin-group="liveops" role="tab">{{ T("admin_pirates_title", "Pirate Bot-Log") }}</button>
-        <button type="button" class="admin-tab-btn" data-admin-tab="inactive_autoplay" data-admin-group="liveops" role="tab">{{ T("admin_inactive_autoplay_title", "Inactive Autoplay") }}</button>
+      <div class="gc-page-tabs gc-page-tabs--auto admin-tabs" role="tablist" aria-label="{{ T('admin_tabs_label') }}">
+        <button type="button" class="gc-page-tab admin-tab-btn is-active" data-admin-tab="health" data-admin-group="system" role="tab">{{ T("admin_health_title") }}</button>
+        <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="migrations" data-admin-group="system" role="tab">{{ T("admin_migrations_title") }}</button>
+        <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="players" data-admin-group="players" role="tab">{{ T("admin_players_title") }}</button>
+        <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="lootboxes" data-admin-group="economy" role="tab">{{ T("admin_lootboxes_title", "Lootboxen") }}</button>
+        <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="planets" data-admin-group="players" role="tab">{{ T("admin_planets_title") }}</button>
+        <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="queues" data-admin-group="economy" role="tab">{{ T("admin_queues_title") }}</button>
+        <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="fleets" data-admin-group="economy" role="tab">{{ T("admin_fleets_title", "Flotten") }}</button>
+        <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="audit" data-admin-group="system" role="tab">{{ T("admin_audit_title") }}</button>
+        <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="chat" data-admin-group="moderation" role="tab">{{ T("admin_chat_title") }}</button>
+        <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="support" data-admin-group="moderation" role="tab">{{ T("admin_support_title", "Support") }}</button>
+        <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="messages" data-admin-group="moderation" role="tab">{{ T("admin_messages_title", "Nachrichten") }}</button>
+        <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="runtime" data-admin-group="system" role="tab">{{ T("admin_runtime_title") }}</button>
+        <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="votes" data-admin-group="liveops" role="tab">{{ T("admin_votes_title", "Votes") }}</button>
+        <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="balance" data-admin-group="economy" role="tab">{{ T("admin_balance_title", "Balance") }}</button>
+        <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="server" data-admin-group="system" role="tab">{{ T("admin_server_title", "Server") }}</button>
+        <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="diplomacy" data-admin-group="liveops" role="tab">{{ T("admin_diplomacy_title", "Galaktische Diplomatie") }}</button>
+        <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="world_boss" data-admin-group="liveops" role="tab">{{ T("admin_wb_title", "World Boss") }}</button>
+        <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="pirates" data-admin-group="liveops" role="tab">{{ T("admin_pirates_title", "Pirate Bot-Log") }}</button>
+        <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="inactive_autoplay" data-admin-group="liveops" role="tab">{{ T("admin_inactive_autoplay_title", "Inactive Autoplay") }}</button>
       </div>
     </nav>
 

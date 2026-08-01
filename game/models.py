@@ -908,6 +908,52 @@ def get_online_player_count(
     return count
 
 
+def list_online_players(
+    *,
+    now: int | None = None,
+    limit: int = 100,
+    conn: sqlite3.Connection | None = None,
+) -> list[dict]:
+    """Players currently online (same ``ONLINE_WINDOW_SEC`` as the count helper).
+
+    Returns rows sorted by ``last_seen`` descending: id, username, player_name,
+    last_seen, is_admin.
+    """
+    own_conn = False
+    if conn is None:
+        conn = db()
+        own_conn = True
+    ts = int(now if now is not None else _now_ts())
+    cutoff = ts - ONLINE_WINDOW_SEC
+    lim = max(1, min(int(limit), 200))
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT u.id, u.username, u.is_admin AS user_is_admin,
+               p.name AS player_name, p.is_admin AS player_is_admin,
+               p.last_seen
+        FROM players p
+        JOIN users u ON u.id = p.id
+        WHERE p.last_seen >= ?
+        ORDER BY p.last_seen DESC
+        LIMIT ?;
+        """,
+        (cutoff, lim),
+    )
+    rows = []
+    for r in cur.fetchall():
+        d = dict(r)
+        d["is_admin"] = (
+            1
+            if int(d.get("user_is_admin") or 0) or int(d.get("player_is_admin") or 0)
+            else 0
+        )
+        rows.append(d)
+    if own_conn:
+        conn.close()
+    return rows
+
+
 def get_registered_player_count(*, conn: sqlite3.Connection | None = None) -> int:
     """Count all registered commanders (players table rows)."""
     own_conn = False

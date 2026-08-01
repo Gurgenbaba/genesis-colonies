@@ -20553,7 +20553,7 @@
       const selected = tab.id === activeTab;
       return `
         <button type="button"
-                class="gp-tab${selected ? " gp-tab--active" : ""}"
+                class="gc-page-tab gc-page-tab--rich gp-tab${selected ? " gp-tab--active is-active" : ""}"
                 role="tab"
                 id="gp-tab-${galaxy}-${tab.id}"
                 data-gd-tab="${tab.id}"
@@ -20563,13 +20563,13 @@
                 title="${escapeHtml(tab.desc)}">
           ${_gdPoliticsImgTag("chamber", tab.icon, "gp-tab-icon", 24, 24)}
           <span class="gp-tab-num">${tab.num}</span>
-          <span class="gp-tab-label">${escapeHtml(tab.label)}</span>
+          <span class="gc-page-tab-label gp-tab-label">${escapeHtml(tab.label)}</span>
         </button>`;
     }).join("");
     const active = tabs.find((tab) => tab.id === activeTab) || tabs[0];
     return `
       <div class="gp-tabs-wrap">
-        <div class="gp-guide-strip" role="tablist" aria-label="${escapeHtml(t("gd_politics_title", "Galaktische Politik"))}">
+        <div class="gc-page-tabs gc-page-tabs--cols-3 gc-page-tabs--sm gp-guide-strip" role="tablist" aria-label="${escapeHtml(t("gd_politics_title", "Galaktische Politik"))}">
           ${buttons}
         </div>
         <p class="hint gp-tab-hint" data-gd-tab-hint>${escapeHtml(active.desc)}</p>
@@ -20599,6 +20599,7 @@
     card.querySelectorAll("[data-gd-tab]").forEach((btn) => {
       const on = btn.getAttribute("data-gd-tab") === next;
       btn.classList.toggle("gp-tab--active", on);
+      btn.classList.toggle("is-active", on);
       btn.setAttribute("aria-selected", on ? "true" : "false");
     });
     card.querySelectorAll("[data-gd-tab-panel]").forEach((panel) => {
@@ -34166,9 +34167,9 @@
         const label = rankingEscapeHtml(rankingT(tab.labelKey, tab.fallback));
         const active = tab.id === activeTab ? " active" : "";
         return (
-          `<button type="button" class="gc-btn gc-btn-outline tab-btn${active}" ` +
+          `<button type="button" class="gc-page-tab tab-btn${active}" ` +
           `data-ranking-tab="${tab.id}" role="tab" aria-selected="${tab.id === activeTab ? "true" : "false"}">` +
-          label +
+          `<span class="gc-page-tab-label">${label}</span>` +
           `</button>`
         );
       })

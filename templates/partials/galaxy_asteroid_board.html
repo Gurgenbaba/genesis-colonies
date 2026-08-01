@@ -70,9 +70,10 @@
     </p>
     {% endif %}
     {% if board_count > 0 %}
-    <p class="galaxy-asteroid-board-subtitle hint">{{ T('galaxy_asteroid_board_subtitle', 'Aktive Felder im Universum — springe hin und ernte mit Harvest Reclaimern.') }}</p>
+    <p class="galaxy-asteroid-board-subtitle hint">{{ T('galaxy_asteroid_board_subtitle', 'Aktive Felder im Universum — ernte direkt mit Harvest Reclaimern (HR = benötigte Anzahl).') }}</p>
     <ul class="galaxy-asteroid-board-list">
       {% for entry in board %}
+      {% set harvest_locked = entry.viewer_harvest_locked if entry.viewer_harvest_locked is defined else false %}
       <li class="galaxy-asteroid-board-row{% if entry.is_current_system %} is-current-system{% endif %}{% if entry.viewer_en_route or entry.viewer_engaged %} is-en-route{% endif %}">
         <div class="galaxy-asteroid-board-row-main">
           <span class="galaxy-asteroid-board-thumb" aria-hidden="true"></span>
@@ -110,9 +111,21 @@
                 data-countdown-format="eta"
                 data-refresh-on-zero="galaxy">—</span>
           {% endif %}
-          <a href="{{ entry.galaxy_href }}"
-             class="gc-btn gc-btn-sm gc-btn-outline galaxy-asteroid-board-jump"
-             data-pjax>{{ T('galaxy_asteroid_board_jump', 'Springen') }}</a>
+          <span class="galaxy-asteroid-board-harvest-wrap"
+                data-galaxy-ring-asteroid-wrap
+                data-target-galaxy="{{ entry.galaxy }}"
+                data-target-system="{{ entry.system }}"
+                data-target-position="{{ entry.position }}"
+                data-recycler-slots="{{ entry.recycler_slots_needed or 0 }}"
+                {% if harvest_locked %}data-harvest-locked="1"{% endif %}>
+            <button type="button"
+                    class="gc-btn gc-btn-sm gc-btn-outline galaxy-asteroid-board-harvest"
+                    data-galaxy-ring-asteroid-recycle
+                    {% if harvest_locked %}disabled aria-disabled="true"{% endif %}
+                    title="{% if harvest_locked %}{{ T('galaxy_asteroid_en_route_title', 'Harvest-Flotte unterwegs') }}{% else %}{{ T('galaxy_asteroid_harvest_click', 'Harvest Reclaimer zum Asteroiden senden') }}{% endif %}">
+              {{ T('galaxy_asteroid_harvest', 'Abbauen') }}
+            </button>
+          </span>
         </div>
       </li>
       {% endfor %}
@@ -163,7 +176,7 @@
         <li>{{ T('galaxy_asteroid_help_spawn', 'Spawn: Wellen in den dichtesten Systemen (alle ~45 Minuten, Cap 15 Felder). Der Timer im Board zeigt die nächste Welle.') }}</li>
         <li>{{ T('galaxy_asteroid_help_ships', 'Schiffe: Nur Harvest Reclaimer (Mission Recycling).') }}</li>
         <li>{{ T('galaxy_asteroid_help_race', 'Wettkampf: Mehrere Flotten möglich — wer zuerst ankommt, claimt das Feld.') }}</li>
-        <li>{{ T('galaxy_asteroid_help_board', 'Board: Liste aller aktiven Felder mit Sprung zur Galaxie-Position. Eigene Anflüge zeigen „Unterwegs“.') }}</li>
+        <li>{{ T('galaxy_asteroid_help_board', 'Board: Liste aller aktiven Felder — Abbauen sendet die benötigten Harvest Reclaimer (oder alle verfügbaren). Eigene Anflüge zeigen „Unterwegs“.') }}</li>
         <li>{{ T('galaxy_asteroid_help_partial', 'Fracht: Zu wenige Reclaimer bergen nur teilweise — Rest kann verloren gehen.') }}</li>
       </ul>
     </div>

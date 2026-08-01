@@ -2768,6 +2768,57 @@
     return data;
   }
 
+  async function loadAdminOnlinePlayers() {
+    const out = qs("#admin-online-output");
+    const countEl = qs("[data-admin-online-count]");
+    if (out) out.innerHTML = loadingHtml();
+    const data = await adminGet("/api/admin/players?online=1");
+    if (!data.ok) {
+      showAlert(data.message, "error");
+      if (out) out.innerHTML = errorCard(data);
+      return data;
+    }
+    const players = Array.isArray(data.players) ? data.players : [];
+    if (countEl) countEl.textContent = String(players.length);
+    if (!out) return data;
+    if (!players.length) {
+      out.innerHTML = `<p class="admin-empty">${esc(t("admin_online_players_empty", "Niemand online"))}</p>`;
+      return data;
+    }
+    const nowSec = Math.floor(Date.now() / 1000);
+    const rows = players.map((p) => {
+      const last = Number(p.last_seen) || 0;
+      const ago = last > 0 ? Math.max(0, nowSec - last) : null;
+      const agoLabel =
+        ago == null
+          ? "—"
+          : ago < 60
+            ? t("admin_online_players_ago_sec", "vor %ss").replace("%s", String(ago))
+            : t("admin_online_players_ago_min", "vor %s min").replace(
+                "%s",
+                String(Math.floor(ago / 60))
+              );
+      const display = p.player_name || p.username || String(p.id);
+      return `<tr class="admin-entity-row" data-admin-player-id="${p.id}" title="${esc(t("admin_btn_details", "Details"))}">
+        <td class="col-id">${p.id}</td>
+        <td class="col-name">${playerNameLink(p.id, display)}</td>
+        <td class="col-flag">${p.is_admin ? "✓" : "–"}</td>
+        <td class="col-date" title="${esc(fmtTs(p.last_seen))}">${esc(agoLabel)}</td>
+      </tr>`;
+    });
+    out.innerHTML = renderTable(
+      [
+        t("admin_col_id", "ID"),
+        t("admin_col_username", "Username"),
+        t("admin_col_admin", "Admin"),
+        t("admin_col_last_seen", "Zuletzt"),
+      ],
+      rows,
+      { inline: true }
+    );
+    return data;
+  }
+
   async function renderPlayerDetail(data) {
     const el = qs("#admin-player-detail");
     if (!el || !data.ok) return;
@@ -3883,6 +3934,7 @@
     if (act === "refresh-migrations") return loadAdminMigrations();
     if (act === "run-migrations") return runAdminMigrations();
     if (act === "search-players") return searchAdminPlayers();
+    if (act === "refresh-online") return loadAdminOnlinePlayers();
     if (act === "search-planets") return searchAdminPlanets();
     if (act === "load-queues") return loadAdminQueues();
     if (act === "load-fleets") return loadAdminFleets();
@@ -4596,6 +4648,7 @@
       if (healthOut && initial === "health") healthOut.innerHTML = loadingHtml();
       switchTab(initial);
       loadAdminRuntime().then(() => loadTab(initial));
+      loadAdminOnlinePlayers();
     }
 
     syncAdminHudSelects(adminRoot());
@@ -4613,6 +4666,7 @@
   GC.loadAdminHealth = loadAdminHealth;
   GC.loadAdminMigrations = loadAdminMigrations;
   GC.searchAdminPlayers = searchAdminPlayers;
+  GC.loadAdminOnlinePlayers = loadAdminOnlinePlayers;
   GC.loadAdminPlayer = loadAdminPlayer;
   GC.searchAdminPlanets = searchAdminPlanets;
   GC.loadAdminQueues = loadAdminQueues;

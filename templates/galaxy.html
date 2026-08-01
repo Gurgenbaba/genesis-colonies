@@ -33,13 +33,13 @@
   {% endif %}
 
   {% if cmd_map_available and is_command_map %}
-  <nav class="galaxy-view-tabs" aria-label="{{ T('galaxy_view_tabs_label', 'Galaxie-Ansicht') }}">
+  <nav class="gc-page-tabs gc-page-tabs--cols-2 galaxy-view-tabs" aria-label="{{ T('galaxy_view_tabs_label', 'Galaxie-Ansicht') }}">
     <a href="{{ url_for('galaxy_view', view='system', galaxy=nav.galaxy or 1, system=nav.system or 1) }}"
-       class="gc-nav-link galaxy-view-tab galaxy-view-tab--classic">
-      <span class="galaxy-view-tab-label">{{ T("nav_galaxy", "Galaxie") }}</span>
+       class="gc-page-tab gc-nav-link galaxy-view-tab galaxy-view-tab--classic">
+      <span class="gc-page-tab-label galaxy-view-tab-label">{{ T("nav_galaxy", "Galaxie") }}</span>
     </a>
-    <span class="galaxy-view-tab galaxy-view-tab--world is-active" aria-current="page">
-      <span class="galaxy-view-tab-label">{{ T("galaxy_view_world_map", "Weltkarte") }}</span>
+    <span class="gc-page-tab galaxy-view-tab galaxy-view-tab--world is-active" aria-current="page">
+      <span class="gc-page-tab-label galaxy-view-tab-label">{{ T("galaxy_view_world_map", "Weltkarte") }}</span>
       <span class="gc-dev-preview-badge" title="{{ T('command_map_dev_preview_title') }}">{{ T("command_map_dev_badge", "DEV") }}</span>
     </span>
   </nav>

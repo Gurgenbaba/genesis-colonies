@@ -838,8 +838,9 @@ def test_inventory_vault_ux_html_contract(inventory_db, monkeypatch):
     assert "inventory-item-card" in body
     assert "inventory-item-group" in body
     assert 'data-inventory-item-group="' in body
+    assert "gc-page-tabs" in body
+    assert "gc-page-tabs--inline" in body
     assert "inventory-tabs" in body
-    assert "inventory-tabs--inline" in body
     assert "inventory-workspace-head" in body
     assert 'data-inventory-head-context="containers"' in body
     assert 'data-inventory-head-context="items"' in body
@@ -895,26 +896,27 @@ def test_inventory_vault_ux_static_contract():
     assert "inv_open_max_btn" not in tpl
     assert "inventory-item-grid" in tpl
     assert "inventory-item-group" in tpl
-    assert "inventory-tabs--inline" in tpl
+    assert "gc-page-tabs--inline" in tpl
+    assert "gc-page-tab" in tpl
     assert "inventory-workspace-head" in tpl
     assert "data-inventory-tab" in tpl
     assert "data-inventory-head-context" in tpl
     assert "inventory-vault" in tpl
     assert "inventory-tk-rail" in tpl
-    assert "shop-tabs--inline" in shop_tpl
+    assert "gc-page-tabs--inline" in shop_tpl
+    assert "gc-page-tab" in shop_tpl
     assert "shop-workspace-header" in shop_tpl
     assert "data-shop-head-context" in shop_tpl
     assert "data-shop-head-context" in js
     assert ".inventory-item-grid" in css
     assert ".inventory-item-group" in css
-    assert ".inventory-tabs" in css
-    assert ".inventory-tabs--inline" in css
+    assert ".gc-page-tabs" in css
+    assert ".gc-page-tab.is-active" in css
+    assert "var(--gc-neon-cyan)" in css.split(".gc-page-tab.is-active")[1].split(".gc-page-tab--rich")[0]
     assert ".inventory-workspace-head" in css
-    assert ".inventory-tab" in css
     assert ".inventory-item-card" in css
     assert ".inventory-tk-rail" in css
     assert ".inventory-vault" in css
-    assert ".shop-tabs--inline" in css
     assert ".shop-workspace-header" in css
     assert "minmax(132px" in css
     assert "flex: 1 1 100%" in css or "flex: 1 1 100%;" in css

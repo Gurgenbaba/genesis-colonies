@@ -719,9 +719,11 @@
       const targetGalaxy = parseInt(wrap.dataset.targetGalaxy || "0", 10);
       const targetSystem = parseInt(wrap.dataset.targetSystem || "0", 10);
       const targetPosition = parseInt(wrap.dataset.targetPosition || "0", 10);
-      const needed = parseInt(wrap.dataset.recyclerSlots || "0", 10);
-      const sendCount = this.resolveRecycleSendCount(root, needed);
+      const needed = Math.max(0, parseInt(wrap.dataset.recyclerSlots || "0", 10) || 0);
       const originPlanetId = this.getOriginPlanetId(root);
+      // Board + ring: send min(needed, available); if short, send all free reclaimers.
+      const available = await this.resolveAvailableReclaimersAsync(root);
+      const sendCount = Math.min(available, needed);
 
       if (!originPlanetId) {
         showNotify(t("galaxy_asteroid_harvest_no_origin", "No active colony for asteroid harvest."), "error");

@@ -18,7 +18,7 @@
           data-galaxy-ring-asteroid-recycle
           {% if harvest_locked %}disabled aria-disabled="true"{% endif %}
           title="{% if en_route %}{{ T('galaxy_asteroid_en_route_title', 'Harvest-Flotte unterwegs') }}{% else %}{{ T('galaxy_asteroid_harvest_click', 'Harvest Reclaimer zum Asteroiden senden') }}{% endif %}"
-          aria-label="{{ T(asteroid.name_key, asteroid.asteroid_key) }} {{ p }} — {% if en_route %}{{ T('galaxy_asteroid_en_route', 'Unterwegs') }}{% else %}{{ T('galaxy_asteroid_harvest', 'Einsammeln') }}{% endif %}">
+          aria-label="{{ T(asteroid.name_key, asteroid.asteroid_key) }} {{ p }} — {% if en_route %}{{ T('galaxy_asteroid_en_route', 'Unterwegs') }}{% else %}{{ T('galaxy_asteroid_harvest', 'Abbauen') }}{% endif %}">
     <span class="galaxy-ring-asteroid-marker-img" aria-hidden="true"></span>
     {% if en_route %}
     <span class="galaxy-ring-asteroid-en-route-badge" aria-hidden="true">⟶</span>

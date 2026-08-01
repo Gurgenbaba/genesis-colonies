@@ -29,7 +29,7 @@
         autocomplete="off">
     </label>
 
-    <div class="techtree-filter-bar" role="group" aria-label="{{ T('techtree_filter_label', 'Filter') }}">
+    <div class="gc-page-tabs gc-page-tabs--cols-5 gc-page-tabs--sm techtree-filter-bar" role="group" aria-label="{{ T('techtree_filter_label', 'Filter') }}">
       {% for fkey, flabel in [
         ('all', T('techtree_filter_all', 'Alle')),
         ('unlocked', T('techtree_status_unlocked', 'Freigeschaltet')),
@@ -39,7 +39,7 @@
       ] %}
         <button
           type="button"
-          class="techtree-filter-btn{% if fkey == 'all' %} is-active{% endif %}"
+          class="gc-page-tab techtree-filter-btn{% if fkey == 'all' %} is-active{% endif %}"
           data-techtree-filter="{{ fkey }}">
           {{ flabel }}
         </button>

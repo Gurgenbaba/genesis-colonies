@@ -12390,7 +12390,14 @@ def api_admin_runtime():
 @app.route("/api/admin/players", methods=["GET"])
 @require_admin_api
 def api_admin_players_search():
-    return _admin_json(admin_api_logic.search_players(request.args.get("q", "")))
+    online_raw = str(request.args.get("online") or "").strip().lower()
+    online_only = online_raw in ("1", "true", "yes")
+    return _admin_json(
+        admin_api_logic.search_players(
+            request.args.get("q", ""),
+            online_only=online_only,
+        )
+    )
 
 
 @app.route("/api/admin/player/<int:player_id>", methods=["GET"])

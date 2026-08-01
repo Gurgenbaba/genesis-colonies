@@ -26,20 +26,20 @@
   {% else %}
 
   <section class="gc-panel gc-records-workspace" aria-label="{{ T('records_title', 'Rekorde') }}">
-    <nav class="gc-records-tabs"
+    <nav class="gc-page-tabs gc-page-tabs--cols-6 gc-records-tabs"
          data-records-tabs
          role="tablist"
          aria-label="{{ T('records_tabs_aria', 'Rekord-Kategorien') }}">
       {% for group in groups %}
       {% set _tab_label_key = _tab_keys.get(group.key, group.label_key) %}
       <button type="button"
-              class="gc-records-tab{% if loop.first %} is-active{% endif %}"
+              class="gc-page-tab gc-records-tab{% if loop.first %} is-active{% endif %}"
               role="tab"
               data-records-tab="{{ group.key }}"
               id="records-tab-{{ group.key }}"
               aria-controls="records-panel-{{ group.key }}"
               aria-selected="{{ 'true' if loop.first else 'false' }}">
-        <span class="gc-records-tab-label">{{ T(_tab_label_key, group.key) }}</span>
+        <span class="gc-page-tab-label gc-records-tab-label">{{ T(_tab_label_key, group.key) }}</span>
       </button>
       {% endfor %}
     </nav>

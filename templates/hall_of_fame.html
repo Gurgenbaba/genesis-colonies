@@ -32,7 +32,7 @@
     </div>
 
     <div class="gc-ranking-body gc-hof-body-wrap">
-      <nav class="gc-hof-tabs" role="tablist" aria-label="{{ T('hof_tabs_label', 'Hall of Fame Kategorien') }}">
+      <nav class="gc-page-tabs gc-page-tabs--cols-4 gc-hof-tabs" role="tablist" aria-label="{{ T('hof_tabs_label', 'Hall of Fame Kategorien') }}">
         {% for tab in [
           ('destroyed', 'hof_tab_destroyed', 'Zerstörung'),
           ('debris', 'hof_tab_debris', 'Trümmerfeld'),
@@ -40,7 +40,7 @@
           ('recent', 'hof_tab_recent', 'Kürzlich')
         ] %}
         <a href="{{ url_for('hall_of_fame_view', sort=tab[0]) }}"
-           class="tab-btn gc-nav-link gc-hof-tab{% if active_sort == tab[0] %} active{% endif %}"
+           class="gc-page-tab gc-nav-link gc-hof-tab{% if active_sort == tab[0] %} active{% endif %}"
            role="tab"
            aria-selected="{{ 'true' if active_sort == tab[0] else 'false' }}"
            {% if active_sort == tab[0] %}aria-current="page"{% endif %}

@@ -48,7 +48,7 @@
           class="gc-btn gc-btn-sm {% if harvest_locked %}gc-btn-outline{% else %}gc-btn-primary{% endif %} galaxy-asteroid-harvest-btn"
           data-galaxy-ring-asteroid-recycle
           {% if harvest_locked %}disabled aria-disabled="true"{% endif %}>
-    {% if en_route %}{{ T('galaxy_asteroid_en_route', 'Unterwegs') }}{% else %}{{ T('galaxy_asteroid_harvest', 'Einsammeln') }}{% endif %}
+    {% if en_route %}{{ T('galaxy_asteroid_en_route', 'Unterwegs') }}{% else %}{{ T('galaxy_asteroid_harvest', 'Abbauen') }}{% endif %}
   </button>
 </div>
 {% endif %}

@@ -20,10 +20,10 @@
     </p>
   </section>
 
-  <nav class="legal-doc-tabs" role="tablist" aria-label="{{ T('legal_page_title', 'Rechtliche Hinweise') }}">
+  <nav class="gc-page-tabs gc-page-tabs--auto legal-doc-tabs" role="tablist" aria-label="{{ T('legal_page_title', 'Rechtliche Hinweise') }}">
     {% for doc in LEGAL_DOCS %}
     <a href="{{ url_for('legal_view', doc=doc.id) }}"
-       class="legal-doc-tab{% if active_doc == doc.id %} is-active{% endif %}"
+       class="gc-page-tab legal-doc-tab{% if active_doc == doc.id %} is-active{% endif %}"
        role="tab"
        aria-selected="{{ 'true' if active_doc == doc.id else 'false' }}">
       {{ T(doc.tab_key, doc.id) }}

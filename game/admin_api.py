@@ -269,9 +269,19 @@ def api_run_migrations(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
 # Players
 # ---------------------------------------------------------------------------
 
-def search_players(q: str = "", limit: int = SEARCH_LIMIT) -> Dict[str, Any]:
+def search_players(
+    q: str = "",
+    limit: int = SEARCH_LIMIT,
+    *,
+    online_only: bool = False,
+) -> Dict[str, Any]:
     q = str(q or "").strip()[:64]
     limit = max(1, min(int(limit), SEARCH_LIMIT))
+    if online_only and not q:
+        from game.models import list_online_players
+
+        rows = list_online_players(limit=limit)
+        return _ok(players=rows, online_only=True)
     conn = db()
     try:
         cur = conn.cursor()
@@ -319,7 +329,7 @@ def search_players(q: str = "", limit: int = SEARCH_LIMIT) -> Dict[str, Any]:
         rows = [dict(r) for r in cur.fetchall()]
         for r in rows:
             r["is_admin"] = 1 if int(r.get("user_is_admin") or 0) or int(r.get("player_is_admin") or 0) else 0
-        return _ok(players=rows)
+        return _ok(players=rows, online_only=False)
     finally:
         conn.close()
 

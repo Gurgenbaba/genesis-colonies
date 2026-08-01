@@ -197,7 +197,7 @@ Catchy Impulse-Preise (unter 3 €). Admin: alle Styles/Themes frei.
 
 | Signal | Quelle | Wirkung |
 |--------|--------|---------|
-| **UI-Farbe** | Equipped **PlayerCard Theme** (`player_cards.theme`) | Header, Nav, Panels, Buttons, Landscape-Wash. Attribut: `body[data-identity-theme]` |
+| **UI-Farbe** | Equipped **PlayerCard Theme** (`player_cards.theme`) | Header, Nav, Panels, Buttons, Landscape-Wash, **Page Tabs** (`.gc-page-tabs` / Active via `--gc-neon-cyan`). Attribut: `body[data-identity-theme]` |
 | **UI-Aura (Prestige-FX)** | Equipped **PlayerCard Aura** (`player_cards.aura_key`) | Glow/Rim auf Shell (Header, Sidebar, Panels, Nav). Attribut: `body[data-identity-aura]` |
 | **Name-Style** | Equipped `player_cards.name_style` (Shop-Unlock) | Nur sichtbarer Name überall: Galaxy (Orbit+Inspector), Chat, Ranking, Alliance, HoF, Records, World Boss, Auction, Fleet-Preview, Combat-Side-Cards. **Keine** UI-Farbe/Aura. Auch bei privatem Profil. Render: `player_name_link` (SSR) / `GC.playerNameHtml` (JS). |
 | Title-Flair | Equipped Card-Feld | Nur PlayerCard-Ansicht |

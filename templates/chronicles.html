@@ -57,9 +57,9 @@
 
   <section class="gc-panel gc-chronicles-shell gc-hof-panel ranking-panel-full gc-chronicles-panel gc-chronicles-panel--{{ active_section }}" aria-labelledby="chronicles-panel-title">
 
-    <nav class="gc-hof-tabs gc-chronicles-section-tabs" role="tablist" aria-label="{{ T('chronicles_sections_label', 'Chroniken Bereiche') }}">
+    <nav class="gc-page-tabs gc-page-tabs--cols-5 gc-hof-tabs gc-chronicles-section-tabs" role="tablist" aria-label="{{ T('chronicles_sections_label', 'Chroniken Bereiche') }}">
       <a href="{{ url_for('chronicles_view', section='pvp', tab=pvp_tab if active_section == 'pvp' else 'overview') }}"
-         class="tab-btn gc-nav-link gc-hof-tab{% if active_section == 'pvp' %} active{% endif %}"
+         class="gc-page-tab gc-nav-link gc-hof-tab{% if active_section == 'pvp' %} active{% endif %}"
          role="tab"
          aria-selected="{{ 'true' if active_section == 'pvp' else 'false' }}"
          {% if active_section == 'pvp' %}aria-current="page"{% endif %}
@@ -67,7 +67,7 @@
         {{ T("chronicles_section_pvp", "PvP") }}
       </a>
       <a href="{{ url_for('chronicles_view', section='expeditions', tab=exp_tab if active_section == 'expeditions' else 'overview') }}"
-         class="tab-btn gc-nav-link gc-hof-tab{% if active_section == 'expeditions' %} active{% endif %}"
+         class="gc-page-tab gc-nav-link gc-hof-tab{% if active_section == 'expeditions' %} active{% endif %}"
          role="tab"
          aria-selected="{{ 'true' if active_section == 'expeditions' else 'false' }}"
          {% if active_section == 'expeditions' %}aria-current="page"{% endif %}
@@ -75,7 +75,7 @@
         {{ T("chronicles_section_expeditions", "Expeditionen") }}
       </a>
       <a href="{{ url_for('chronicles_view', section='world_boss', tab=boss_tab if active_section == 'world_boss' else 'overview') }}"
-         class="tab-btn gc-nav-link gc-hof-tab{% if active_section == 'world_boss' %} active{% endif %}"
+         class="gc-page-tab gc-nav-link gc-hof-tab{% if active_section == 'world_boss' %} active{% endif %}"
          role="tab"
          aria-selected="{{ 'true' if active_section == 'world_boss' else 'false' }}"
          {% if active_section == 'world_boss' %}aria-current="page"{% endif %}
@@ -83,7 +83,7 @@
         {{ T("chronicles_section_world_boss", "World Boss") }}
       </a>
       <a href="{{ url_for('chronicles_view', section='asteroids', tab=asteroid_tab if active_section == 'asteroids' else 'overview') }}"
-         class="tab-btn gc-nav-link gc-hof-tab{% if active_section == 'asteroids' %} active{% endif %}"
+         class="gc-page-tab gc-nav-link gc-hof-tab{% if active_section == 'asteroids' %} active{% endif %}"
          role="tab"
          aria-selected="{{ 'true' if active_section == 'asteroids' else 'false' }}"
          {% if active_section == 'asteroids' %}aria-current="page"{% endif %}
@@ -91,7 +91,7 @@
         {{ T("chronicles_section_asteroids", "Asteroiden") }}
       </a>
       <a href="{{ url_for('chronicles_view', section='records') }}"
-         class="tab-btn gc-nav-link gc-hof-tab{% if active_section == 'records' %} active{% endif %}"
+         class="gc-page-tab gc-nav-link gc-hof-tab{% if active_section == 'records' %} active{% endif %}"
          role="tab"
          aria-selected="{{ 'true' if active_section == 'records' else 'false' }}"
          {% if active_section == 'records' %}aria-current="page"{% endif %}
@@ -162,7 +162,7 @@
       </div>
       {% endif %}
 
-      <nav class="gc-hof-tabs gc-pvp-tabs" role="tablist" aria-label="{{ T('pvp_tabs_label', 'PvP Kategorien') }}">
+      <nav class="gc-page-tabs gc-page-tabs--cols-6 gc-page-tabs--sm gc-hof-tabs gc-pvp-tabs" role="tablist" aria-label="{{ T('pvp_tabs_label', 'PvP Kategorien') }}">
         {% for tab in [
           ('overview', 'pvp_tab_overview', 'Übersicht'),
           ('recent', 'pvp_tab_recent', 'Alle'),
@@ -172,7 +172,7 @@
           ('defenses', 'pvp_tab_defenses', 'Verteidigungen')
         ] %}
         <a href="{{ url_for('chronicles_view', section='pvp', tab=tab[0]) }}"
-           class="tab-btn gc-nav-link gc-hof-tab gc-pvp-tab{% if active_tab == tab[0] %} active{% endif %}"
+           class="gc-page-tab gc-nav-link gc-hof-tab gc-pvp-tab{% if active_tab == tab[0] %} active{% endif %}"
            role="tab"
            aria-selected="{{ 'true' if active_tab == tab[0] else 'false' }}"
            {% if active_tab == tab[0] %}aria-current="page"{% endif %}
@@ -327,7 +327,7 @@
       </div>
       {% endif %}
 
-      <nav class="gc-hof-tabs gc-pvp-tabs gc-chronicles-expo-tabs" role="tablist" aria-label="{{ T('chronicles_expo_tabs_label', 'Expeditionskategorien') }}">
+      <nav class="gc-page-tabs gc-page-tabs--cols-7 gc-page-tabs--sm gc-hof-tabs gc-pvp-tabs gc-chronicles-expo-tabs" role="tablist" aria-label="{{ T('chronicles_expo_tabs_label', 'Expeditionskategorien') }}">
         {% for tab in [
           ('overview', 'chronicles_expo_tab_overview', 'Übersicht'),
           ('all', 'chronicles_expo_tab_all', 'Alle'),
@@ -338,7 +338,7 @@
           ('legendary', 'chronicles_expo_tab_legendary', 'Legendary')
         ] %}
         <a href="{{ url_for('chronicles_view', section='expeditions', tab=tab[0]) }}"
-           class="tab-btn gc-nav-link gc-hof-tab gc-pvp-tab{% if exp_tab == tab[0] %} active{% endif %}"
+           class="gc-page-tab gc-nav-link gc-hof-tab gc-pvp-tab{% if exp_tab == tab[0] %} active{% endif %}"
            role="tab"
            aria-selected="{{ 'true' if exp_tab == tab[0] else 'false' }}"
            {% if exp_tab == tab[0] %}aria-current="page"{% endif %}
@@ -462,10 +462,10 @@
         </div>
       </div>
       {% endif %}
-      <nav class="gc-hof-tabs gc-pvp-tabs" role="tablist" aria-label="{{ T('chronicles_boss_tabs_label', 'Boss Kategorien') }}">
+      <nav class="gc-page-tabs gc-page-tabs--cols-6 gc-page-tabs--sm gc-hof-tabs gc-pvp-tabs" role="tablist" aria-label="{{ T('chronicles_boss_tabs_label', 'Boss Kategorien') }}">
         {% for tab in [('overview', 'chronicles_ops_tab_overview', 'Übersicht'), ('recent', 'chronicles_ops_tab_recent', 'Alle')] %}
         <a href="{{ url_for('chronicles_view', section='world_boss', tab=tab[0]) }}"
-           class="tab-btn gc-nav-link gc-hof-tab gc-pvp-tab{% if boss_tab == tab[0] %} active{% endif %}"
+           class="gc-page-tab gc-nav-link gc-hof-tab gc-pvp-tab{% if boss_tab == tab[0] %} active{% endif %}"
            role="tab"
            aria-selected="{{ 'true' if boss_tab == tab[0] else 'false' }}"
            {% if boss_tab == tab[0] %}aria-current="page"{% endif %}>
@@ -551,10 +551,10 @@
         </div>
       </div>
       {% endif %}
-      <nav class="gc-hof-tabs gc-pvp-tabs" role="tablist" aria-label="{{ T('chronicles_asteroid_tabs_label', 'Asteroiden Kategorien') }}">
+      <nav class="gc-page-tabs gc-page-tabs--cols-6 gc-page-tabs--sm gc-hof-tabs gc-pvp-tabs" role="tablist" aria-label="{{ T('chronicles_asteroid_tabs_label', 'Asteroiden Kategorien') }}">
         {% for tab in [('overview', 'chronicles_ops_tab_overview', 'Übersicht'), ('recent', 'chronicles_ops_tab_recent', 'Alle')] %}
         <a href="{{ url_for('chronicles_view', section='asteroids', tab=tab[0]) }}"
-           class="tab-btn gc-nav-link gc-hof-tab gc-pvp-tab{% if asteroid_tab == tab[0] %} active{% endif %}"
+           class="gc-page-tab gc-nav-link gc-hof-tab gc-pvp-tab{% if asteroid_tab == tab[0] %} active{% endif %}"
            role="tab"
            aria-selected="{{ 'true' if asteroid_tab == tab[0] else 'false' }}"
            {% if asteroid_tab == tab[0] %}aria-current="page"{% endif %}>

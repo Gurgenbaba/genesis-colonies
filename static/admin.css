@@ -183,16 +183,10 @@
   font-weight: 800;
 }
 
-.admin-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0;
+/* Admin tabs: same rail as .gc-page-tabs (admin often without Identity Shell). */
+.admin-tabs.gc-page-tabs {
   margin: 14px 0 16px;
-  padding: 0;
-  border-radius: 0;
-  background: var(--admin-panel);
-  border: 1px solid var(--admin-border);
-  overflow: hidden;
+  --gc-neon-cyan: var(--admin-accent, #46e5ff);
 }
 
 .admin-nav .admin-tabs {
@@ -200,52 +194,45 @@
   flex: 0 0 auto;
 }
 
-.admin-tab-btn,
+.admin-tab-btn[hidden],
+.admin-cc-tab[hidden] {
+  display: none !important;
+}
+
+/* CC sub-tabs share page-tab look when marked */
 .admin-cc-tab {
   appearance: none;
   -webkit-appearance: none;
   flex: 1 1 auto;
   min-width: max-content;
   border: none;
-  border-right: 1px solid var(--admin-border);
+  border-right: 1px solid color-mix(in srgb, var(--admin-accent, #46e5ff) 12%, transparent);
   border-radius: 0;
   background: transparent;
-  color: var(--gc-text-soft);
-  padding: 10px 14px;
+  color: var(--gc-text-dim, #8aa);
+  padding: 12px 14px;
   font: inherit;
-  font-size: 0.72rem;
+  font-family: Orbitron, Inter, system-ui, sans-serif;
+  font-size: 0.68rem;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   cursor: pointer;
-  transition: background 0.12s, color 0.12s, box-shadow 0.12s;
 }
 
-.admin-nav .admin-tab-btn,
-.admin-nav .admin-cc-tab {
-  flex: 0 1 auto;
-}
-
-.admin-tab-btn:last-child,
-.admin-cc-tab:last-child { border-right: none; }
-
-.admin-tab-btn[hidden],
-.admin-cc-tab[hidden] {
-  display: none !important;
-}
-
-.admin-tab-btn:hover,
 .admin-cc-tab:hover {
-  color: var(--admin-accent);
-  background: rgba(70, 229, 255, 0.06);
+  color: var(--gc-text-soft);
+  background: color-mix(in srgb, var(--admin-accent, #46e5ff) 5%, transparent);
 }
 
-.admin-tab-btn.is-active,
 .admin-cc-tab.is-active {
-  color: #020508;
-  background: var(--admin-accent);
-  box-shadow: inset 0 -2px 0 rgba(0,0,0,0.35), 0 0 12px rgba(70, 229, 255, 0.25);
-  font-weight: 800;
+  color: var(--admin-accent, #46e5ff);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--admin-accent, #46e5ff) 14%, transparent) 0%,
+    color-mix(in srgb, var(--admin-accent, #46e5ff) 4%, transparent) 100%
+  );
+  box-shadow: inset 0 -3px 0 var(--admin-accent, #46e5ff);
 }
 
 /* ── Panels ── */
@@ -1383,8 +1370,11 @@
     position: static;
     max-height: none;
   }
-  .admin-tabs { flex-direction: column; }
-  .admin-tab-btn,
+  .admin-tabs.gc-page-tabs {
+    display: flex;
+    flex-direction: column;
+  }
+  .admin-tabs .gc-page-tab,
   .admin-cc-tab {
     border-right: none;
     border-bottom: 1px solid var(--admin-border);
