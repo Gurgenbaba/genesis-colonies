@@ -7232,5 +7232,16 @@
   "techtree_max_level": "Poziom maks.",
   "effective_stat_bonus_total": "Suma bonusów",
   "effective_stat_base_hint": "Baza",
-  "effective_stat_source_booster": "Booster ekwipunku"
+  "effective_stat_source_booster": "Booster ekwipunku",
+  "combat_theater_attacker": "Atakujący",
+  "combat_theater_defender": "Obrońca",
+  "combat_theater_empty_side": "Brak sił",
+  "combat_theater_engaging": "Kontakt…",
+  "combat_theater_heavy": "CIĘŻKI",
+  "combat_theater_open_report": "Otwórz raport",
+  "combat_theater_replay": "Ponów",
+  "combat_theater_round": "Runda %(n)s",
+  "combat_theater_skip": "Pomiń",
+  "combat_report_kind_expedition_pirate": "Piraci ekspedycji",
+  "combat_report_expedition_pirate_name": "Piraci Pustki"
 }

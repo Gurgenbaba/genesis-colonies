@@ -23974,6 +23974,12 @@
   }
   GC.shipyardIconUrl = shipyardIconUrl;
 
+  function shipBattleIconUrl(shipKey) {
+    const sk = String(shipKey || "").trim();
+    return GC.preferWebpStaticUrl(`/static/img/ships/cutout/${sk}.png`);
+  }
+  GC.shipBattleIconUrl = shipBattleIconUrl;
+
   function renderShipyardQueue(page, queueData) {
     const host = document.getElementById("shipyard-mini-queue");
     if (!host) return;
@@ -24481,6 +24487,13 @@
     );
   }
   GC.defenseIconUrl = defenseIconUrl;
+
+  function defenseBattleIconUrl(defenseKey) {
+    return GC.preferWebpStaticUrl(
+      `/static/img/defense/cutout/${String(defenseKey || "").trim()}.png`
+    );
+  }
+  GC.defenseBattleIconUrl = defenseBattleIconUrl;
 
   function defenseLabel(defenseKey) {
     const k = String(defenseKey || "").trim();
@@ -33695,13 +33708,18 @@
       mount.removeAttribute("aria-hidden");
       mount.innerHTML = entries
         .map(([key, count]) => {
-          const png = `/static/img/ships/${encodeURIComponent(key)}.png`;
+          const png =
+            typeof GC.shipBattleIconUrl === "function"
+              ? `/static/img/ships/cutout/${encodeURIComponent(key)}.png`
+              : `/static/img/ships/${encodeURIComponent(key)}.png`;
           const webp =
             typeof GC.preferWebpStaticUrl === "function" ? GC.preferWebpStaticUrl(png) : png;
+          const fallback = `/static/img/ships/${encodeURIComponent(key)}.png`;
           return (
             `<div class="gc-world-boss-ship-slot" data-wb-ship-slot data-ship-key="${key}" data-ship-count="${count}">` +
             `<picture><source type="image/webp" srcset="${webp}">` +
-            `<img class="gc-world-boss-ship-img" src="${png}" alt="" width="56" height="56" loading="lazy"></picture>` +
+            `<img class="gc-world-boss-ship-img" src="${png}" alt="" width="56" height="56" loading="lazy" ` +
+            `onerror="this.onerror=null;this.src='${fallback}';"></picture>` +
             `<span class="gc-world-boss-ship-count gc-mono">×${wbFmtInt(count)}</span></div>`
           );
         })

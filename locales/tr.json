@@ -7232,5 +7232,16 @@
   "techtree_max_level": "Maks. seviye",
   "effective_stat_bonus_total": "Toplam bonus",
   "effective_stat_base_hint": "Temel",
-  "effective_stat_source_booster": "Envanter güçlendirici"
+  "effective_stat_source_booster": "Envanter güçlendirici",
+  "combat_theater_attacker": "Saldıran",
+  "combat_theater_defender": "Savunan",
+  "combat_theater_empty_side": "Kuvvet yok",
+  "combat_theater_engaging": "Çatışma…",
+  "combat_theater_heavy": "AĞIR",
+  "combat_theater_open_report": "Raporu aç",
+  "combat_theater_replay": "Tekrar",
+  "combat_theater_round": "Tur %(n)s",
+  "combat_theater_skip": "Atla",
+  "combat_report_kind_expedition_pirate": "Sefer korsanları",
+  "combat_report_expedition_pirate_name": "Boşluk Korsanları"
 }

@@ -5498,6 +5498,25 @@ def _handle_expedition_holding_end(movement: Dict[str, Any], *, conn, now: float
             locale=sender_locale,
             conn=conn,
         )
+    if outcome.get("event_key") == "pirate_encounter":
+        try:
+            from .expedition_events import publish_expedition_pirate_combat_report
+
+            publish_expedition_pirate_combat_report(
+                player_id=int(player_id),
+                player_name=_player_name(player_id, conn=conn),
+                coords=str(report_coords or ""),
+                attacking_ships=ships,
+                pirate_combat=outcome.get("pirate_combat") or {},
+                movement_id=int(movement_id),
+                locale=sender_locale,
+                conn=conn,
+            )
+        except Exception:
+            logger.exception(
+                "expedition pirate combat report failed movement_id=%s",
+                movement_id,
+            )
     try:
         from .directives.progress import emit_expedition_complete_event
 

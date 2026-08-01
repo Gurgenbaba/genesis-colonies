@@ -409,6 +409,11 @@
         t("combat_report_kind_pirate_base", "Pirate base")
       )}</span>`;
     }
+    if (kind === "expedition_pirate") {
+      return `<span class="gc-combat-kind-badge gc-combat-kind-badge--pirate">${esc(
+        t("combat_report_kind_expedition_pirate", "Expedition pirates")
+      )}</span>`;
+    }
     return "";
   }
 
@@ -1096,11 +1101,18 @@
       );
     }
 
-    return (
+    const reportShell =
       `<div class="gc-player-card-shell gc-combat-report-shell" data-theme="${esc(visual.theme)}" data-result="${esc(
         resultKey
       )}">` +
       sections.join("") +
+      `</div>`;
+
+    // Combat Encounter Theater: face-off stage first, then GC-700 report payload.
+    return (
+      `<div class="gc-combat-report-wrap" data-ct-wrap>` +
+      `<div class="gc-combat-theater-host" data-ct-host></div>` +
+      `<div class="gc-combat-report-payload" data-ct-report hidden>${reportShell}</div>` +
       `</div>`
     );
   }
@@ -1166,6 +1178,7 @@
     if (!msg || !getInboxReportKind(msg)) return;
     const root = cacheReportModalElements();
     if (!root || !REPORT_MODAL.content) return;
+    if (typeof GC.combatTheater?.stop === "function") GC.combatTheater.stop();
     if (REPORT_MODAL.dialog) {
       REPORT_MODAL.dialog.setAttribute("data-theme", reportModalTheme(msg));
     }
@@ -1177,6 +1190,13 @@
     root.setAttribute("aria-hidden", "false");
     document.body.classList.add("gc-combat-report-open");
     REPORT_MODAL.open = true;
+    const kind = getInboxReportKind(msg);
+    if (kind === "combat" && typeof GC.combatTheater?.mountAndPlay === "function") {
+      GC.combatTheater.mountAndPlay(REPORT_MODAL.content, msg.metadata || {}, {});
+    } else {
+      const report = REPORT_MODAL.content.querySelector("[data-ct-report]");
+      if (report) report.hidden = false;
+    }
     const closeBtn = root.querySelector("[data-cr-close].gc-player-card-close");
     if (closeBtn) closeBtn.focus({ preventScroll: true });
   }
@@ -1184,6 +1204,7 @@
   function closeInboxReportModal() {
     const root = cacheReportModalElements();
     if (!root) return;
+    if (typeof GC.combatTheater?.stop === "function") GC.combatTheater.stop();
     if (REPORT_MODAL.content) REPORT_MODAL.content.innerHTML = "";
     root.hidden = true;
     root.setAttribute("aria-hidden", "true");

@@ -174,6 +174,7 @@ Nur Schiffe mit `role: expedition` zählen (Phase 1: **Odyssey** = `solar_skiff`
 
 **Escort-Skalierung (GC-SHIP):** `escort_ratio = escort_combat_value / expedition_hull_value` — ein einzelnes Kampfschiff bei großer Odyssey-Flotte bringt kaum Schutz. Piratenstärke skaliert mit `expedition_hull_value`; Kampfkraft nur aus Eskorten. Owner: `build_expedition_fleet_rating()` / `resolve_pirate_encounter()` in `expedition_events.py`. Preview + Report liefern `expedition_rating` (escort_ratio, voidrunner_bonus).
 
+**Combat Theater bridge (GC-CT-EXPO):** bei `pirate_encounter` zusätzlich Inbox-Kampfbericht (`combat_kind=expedition_pirate`) mit synthetischen Runden fürs Theater — Ratio bleibt SoT; Expeditionsbericht (Loot/Salvage) unverändert.
 **Voidrunner-Bonus:** +25 % Gewicht/Loot-Qualität bei positiven Fund-Events (einmal pro Flotte, serverseitig) — kein Piraten-Schutz-Bonus.
 
 **Piraten-Trümmerfeld (Expo, GC-EXPO-P2/P3):** Nach Piratenkontakt mit Verlusten entsteht ein **ephemeres TF** (Spieler- + bei Sieg ~80 % Piraten-Wrack-Punkte als virtuelle Hüllen, kanonische `calculate_combat_debris`). Mitgeschickte Recycler überleben den Piratenkampf und bergen sofort in Recycler-Frachtraum (nicht Expo-Cargo-Cap); Rest verfällt. Kein persistentes Galaxy-Debris-Feld.

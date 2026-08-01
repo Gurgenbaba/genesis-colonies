@@ -7232,5 +7232,16 @@
   "techtree_max_level": "Nivel máximo",
   "effective_stat_bonus_total": "Bonus total",
   "effective_stat_base_hint": "Base",
-  "effective_stat_source_booster": "Potenciador de inventario"
+  "effective_stat_source_booster": "Potenciador de inventario",
+  "combat_theater_attacker": "Atacante",
+  "combat_theater_defender": "Defensor",
+  "combat_theater_empty_side": "Sin fuerzas",
+  "combat_theater_engaging": "Enganche…",
+  "combat_theater_heavy": "FUERTE",
+  "combat_theater_open_report": "Abrir informe",
+  "combat_theater_replay": "Repetir",
+  "combat_theater_round": "Ronda %(n)s",
+  "combat_theater_skip": "Omitir",
+  "combat_report_kind_expedition_pirate": "Piratas de expedición",
+  "combat_report_expedition_pirate_name": "Piratas del Vacío"
 }

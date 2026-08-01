@@ -1599,6 +1599,161 @@ def _virtual_pirate_losses(pirate_points: int, *, won: bool) -> Dict[str, int]:
     return {"falcon_interceptor": min(count, 500)}
 
 
+_VIRTUAL_PIRATE_HULL_MIX: Tuple[Tuple[str, float], ...] = (
+    ("spark_drone", 0.35),
+    ("falcon_interceptor", 0.35),
+    ("ironclad_frigate", 0.18),
+    ("eclipse_runner", 0.12),
+)
+
+
+def virtual_pirate_fleet(pirate_points: int, *, seed: int) -> Dict[str, int]:
+    """Deterministic display fleet for Combat Theater (presentation only)."""
+    pts = max(0, int(pirate_points))
+    if pts <= 0:
+        return {"spark_drone": 1}
+    rng = random.Random(int(seed) ^ 0xA5A5)
+    remaining = float(pts)
+    out: Dict[str, int] = {}
+    for key, share in _VIRTUAL_PIRATE_HULL_MIX:
+        budget = remaining * share if key != _VIRTUAL_PIRATE_HULL_MIX[-1][0] else remaining
+        per = max(1, ship_score_value(key))
+        jitter = 0.85 + rng.random() * 0.3
+        count = max(0, int((budget * jitter) / per))
+        if count > 0:
+            out[key] = min(count, 50_000)
+            remaining = max(0.0, remaining - count * per)
+    if not out:
+        out["spark_drone"] = max(1, pts // max(1, ship_score_value("spark_drone")))
+    return out
+
+
+def _split_losses_across_rounds(
+    losses: Mapping[str, int],
+    n_rounds: int,
+    rng: random.Random,
+) -> list[Dict[str, int]]:
+    n = max(1, int(n_rounds))
+    buckets: list[Dict[str, int]] = [{} for _ in range(n)]
+    for key, raw in dict(losses or {}).items():
+        total = max(0, int(raw or 0))
+        if total <= 0:
+            continue
+        # Prefer later rounds for residual so early rounds still have fire.
+        weights = [rng.randint(1, 5) for _ in range(n)]
+        wsum = sum(weights) or 1
+        assigned = 0
+        for i in range(n):
+            if i == n - 1:
+                qty = total - assigned
+            else:
+                qty = int(total * weights[i] / wsum)
+                assigned += qty
+            if qty > 0:
+                buckets[i][str(key)] = qty
+    return buckets
+
+
+def synthesize_expo_pirate_theater_rounds(
+    *,
+    attacker_losses: Mapping[str, int],
+    defender_losses: Mapping[str, int],
+    movement_id: int,
+) -> list[Any]:
+    """Presentation-only round list for Combat Theater (does not alter Ratio outcomes)."""
+    from types import SimpleNamespace
+
+    rng = random.Random(int(movement_id) * 7919 + 4242)
+    n = 2 + rng.randint(0, 2)  # 2..4
+    atk_parts = _split_losses_across_rounds(attacker_losses, n, rng)
+    def_parts = _split_losses_across_rounds(defender_losses, n, rng)
+    rounds = []
+    for i in range(n):
+        rounds.append(
+            SimpleNamespace(
+                number=i + 1,
+                attacker_losses=dict(atk_parts[i]),
+                defender_losses=dict(def_parts[i]),
+            )
+        )
+    return rounds
+
+
+def publish_expedition_pirate_combat_report(
+    *,
+    player_id: int,
+    player_name: str,
+    coords: str,
+    attacking_ships: Mapping[str, int],
+    pirate_combat: Mapping[str, Any],
+    movement_id: int,
+    locale: str | None = None,
+    conn=None,
+) -> Dict[str, Any] | None:
+    """Inbox combat report so Expo pirate fights open Combat Theater.
+
+    Ratio combat remains SoT for win/losses; rounds are synthetic presentation only.
+    """
+    from .combat import WINNER_ATTACKER, WINNER_DEFENDER, publish_attack_combat_report
+    from .i18n import tr
+    from types import SimpleNamespace
+
+    pc = dict(pirate_combat or {})
+    won = bool(pc.get("won"))
+    pirate_points = max(0, int(pc.get("pirate_points") or 0))
+    player_losses = dict(pc.get("losses") or {})
+    pirate_losses = _virtual_pirate_losses(pirate_points, won=won)
+    if not won and not pirate_losses:
+        # Still show some pirate casualties for theater when player loses (cosmetic).
+        pirate_losses = {
+            "spark_drone": max(1, min(40, pirate_points // max(1, ship_score_value("spark_drone") * 8))),
+        }
+
+    defending = virtual_pirate_fleet(pirate_points, seed=int(movement_id))
+    # Ensure losses ⊆ starting fleet for display consistency
+    for key, lost in list(pirate_losses.items()):
+        if key not in defending:
+            defending[key] = max(int(lost), 1)
+        else:
+            defending[key] = max(int(defending[key]), int(lost))
+
+    rounds = synthesize_expo_pirate_theater_rounds(
+        attacker_losses=player_losses,
+        defender_losses=pirate_losses,
+        movement_id=int(movement_id),
+    )
+    remaining = dict(pc.get("remaining_ships") or {})
+    pirate_name = tr("combat_report_expedition_pirate_name", "Void Pirates", locale=locale)
+    combat_result = SimpleNamespace(
+        winner=WINNER_ATTACKER if won else WINNER_DEFENDER,
+        rounds=rounds,
+        attacker_losses=player_losses,
+        defender_losses=pirate_losses,
+    )
+    return publish_attack_combat_report(
+        attacker_id=int(player_id),
+        defender_id=0,
+        coords=str(coords or ""),
+        attacker_name=str(player_name or "—"),
+        defender_name=pirate_name,
+        attacking_ships=dict(attacking_ships or {}),
+        defending_ships=defending,
+        defending_defense={},
+        combat_result=combat_result,
+        return_ships=remaining,
+        loot={},
+        fleet_id=int(movement_id),
+        conn=conn,
+        attacker_locale=locale,
+        combat_kind="expedition_pirate",
+        extra_metadata={
+            "theater_synthetic": True,
+            "expedition_pirate": True,
+            "pirate_points": pirate_points,
+        },
+    )
+
+
 def _load_debris_into_recycler_cargo(
     debris_metal: int,
     debris_crystal: int,

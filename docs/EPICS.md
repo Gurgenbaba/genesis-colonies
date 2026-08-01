@@ -13,7 +13,7 @@ Status: v1.5.9.2 (2026-06-24)
 | EPIC-05 | Planet Evolution | ✅ | [PLANET_EVOLUTION.md](PLANET_EVOLUTION.md) |
 | EPIC-06 | Buildings System | ✅ | [BUILDINGS_SYSTEM.md](BUILDINGS_SYSTEM.md) |
 | EPIC-07 | Account Research | ✅ | [RESEARCH_SYSTEM.md](RESEARCH_SYSTEM.md) |
-| EPIC-08 | Defense & Combat | ✅ | [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md), [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) |
+| EPIC-08 | Defense & Combat | ✅ | [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md), [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) · Theater: [COMBAT_THEATER.md](COMBAT_THEATER.md) GC-CT-001…005 |
 | EPIC-09 | Alliance Hub | ✅ | MVP + UX-Pass (Visitor `/alliance/<id>`, Spenden-Klarheit, Hub-IA) — [ALLIANCE_SYSTEM.md](ALLIANCE_SYSTEM.md) |
 | EPIC-10 | Social (Chat, Messages) | ✅ | ARCHITECTURE |
 | EPIC-11 | Security Hardening | 📋 | [SECURITY.md](SECURITY.md) |

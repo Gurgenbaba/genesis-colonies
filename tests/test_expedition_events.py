@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
 import pytest
 
@@ -25,12 +26,15 @@ from game.expedition_events import (
     expedition_ship_fleet_value,
     grant_expedition_lootboxes,
     is_allowed_expedition_lootbox,
+    publish_expedition_pirate_combat_report,
     resolve_expedition_outcome,
     resolve_expedition_pirate_debris,
     resolve_minefield_hazard,
     resolve_pirate_encounter,
     roll_lost_container_lootboxes,
     roll_pirate_salvage_rewards,
+    synthesize_expo_pirate_theater_rounds,
+    virtual_pirate_fleet,
 )
 from game.fleet_defs import ship_score_value
 
@@ -777,6 +781,95 @@ def test_build_expedition_report_includes_pirate_metadata():
     assert meta.get("losses_total", 0) >= 0
     if meta.get("losses_total"):
         assert meta.get("remaining_ships")
+
+
+def test_virtual_pirate_fleet_deterministic_and_positive():
+    a = virtual_pirate_fleet(50_000, seed=99)
+    b = virtual_pirate_fleet(50_000, seed=99)
+    c = virtual_pirate_fleet(50_000, seed=100)
+    assert a == b
+    assert a != c
+    assert sum(a.values()) >= 1
+
+
+def test_synthesize_expo_pirate_theater_rounds_preserves_total_losses():
+    atk = {"falcon_interceptor": 10, "solar_skiff": 4}
+    dfn = {"spark_drone": 20}
+    rounds = synthesize_expo_pirate_theater_rounds(
+        attacker_losses=atk,
+        defender_losses=dfn,
+        movement_id=4242,
+    )
+    assert 2 <= len(rounds) <= 4
+    atk_sum = {}
+    def_sum = {}
+    for rnd in rounds:
+        assert int(rnd.number) >= 1
+        for k, v in dict(rnd.attacker_losses).items():
+            atk_sum[k] = atk_sum.get(k, 0) + int(v)
+        for k, v in dict(rnd.defender_losses).items():
+            def_sum[k] = def_sum.get(k, 0) + int(v)
+    assert atk_sum == atk
+    assert def_sum == dfn
+
+
+def test_publish_expedition_pirate_combat_report_theater_meta(monkeypatch):
+    ships = {"solar_skiff": 5, "falcon_interceptor": 40}
+    combat = resolve_pirate_encounter(__import__("random").Random(7), ships)
+    captured: dict = {}
+
+    def _fake_publish(**kwargs):
+        captured.update(kwargs)
+        cr = kwargs.get("combat_result")
+        return {
+            "ok": True,
+            "metadata": {
+                "combat_kind": kwargs.get("combat_kind"),
+                "attacking_ships": dict(kwargs.get("attacking_ships") or {}),
+                "defending_ships": dict(kwargs.get("defending_ships") or {}),
+                "attacker_losses": dict(getattr(cr, "attacker_losses", {}) or {}),
+                "defender_losses": dict(getattr(cr, "defender_losses", {}) or {}),
+                "rounds": [
+                    {
+                        "number": int(getattr(r, "number", 0) or 0),
+                        "attacker_losses": dict(getattr(r, "attacker_losses", {}) or {}),
+                        "defender_losses": dict(getattr(r, "defender_losses", {}) or {}),
+                    }
+                    for r in (getattr(cr, "rounds", ()) or ())
+                ],
+                "result": "attacker" if combat.get("won") else "defender",
+                **dict(kwargs.get("extra_metadata") or {}),
+            },
+        }
+
+    monkeypatch.setattr(
+        "game.combat.publish_attack_combat_report",
+        _fake_publish,
+    )
+    out = publish_expedition_pirate_combat_report(
+        player_id=42,
+        player_name="Commander",
+        coords="1:2:16",
+        attacking_ships=ships,
+        pirate_combat=combat,
+        movement_id=9001,
+        locale="en",
+        conn=None,
+    )
+    assert out is not None
+    meta = out.get("metadata") or {}
+    assert captured.get("combat_kind") == "expedition_pirate"
+    assert meta.get("combat_kind") == "expedition_pirate"
+    assert meta.get("theater_synthetic") is True
+    assert meta.get("attacking_ships")
+    assert meta.get("defending_ships")
+    assert isinstance(meta.get("rounds"), list) and len(meta["rounds"]) >= 2
+    assert dict(meta.get("attacker_losses") or {}) == dict(combat.get("losses") or {})
+
+
+def test_fleet_publishes_expo_pirate_combat_report_callsite():
+    fleet_src = (Path(__file__).resolve().parents[1] / "game" / "fleet.py").read_text(encoding="utf-8")
+    assert "publish_expedition_pirate_combat_report" in fleet_src
 
 
 def test_pirate_salvage_only_on_win():

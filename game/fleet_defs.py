@@ -374,6 +374,11 @@ def ship_icon_static_path(ship_key: str) -> str:
     return f"/static/img/ships/{ship_icon_filename(ship_key)}"
 
 
+def ship_battle_icon_path(ship_key: str) -> str:
+    """Cutout art for Combat Theater / World Boss formation (RGBA)."""
+    return f"/static/img/ships/cutout/{ship_icon_filename(ship_key)}"
+
+
 def canonical_ship_key(ship_key: str) -> str:
     k = str(ship_key or "").strip()
     return LEGACY_SHIP_KEY_MAP.get(k, k)

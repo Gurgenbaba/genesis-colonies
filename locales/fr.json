@@ -7232,5 +7232,16 @@
   "techtree_max_level": "Niveau max",
   "effective_stat_bonus_total": "Bonus total",
   "effective_stat_base_hint": "Base",
-  "effective_stat_source_booster": "Booster d'inventaire"
+  "effective_stat_source_booster": "Booster d'inventaire",
+  "combat_theater_attacker": "Attaquant",
+  "combat_theater_defender": "Défenseur",
+  "combat_theater_empty_side": "Aucune force",
+  "combat_theater_engaging": "Engagement…",
+  "combat_theater_heavy": "LOURD",
+  "combat_theater_open_report": "Ouvrir le rapport",
+  "combat_theater_replay": "Rejouer",
+  "combat_theater_round": "Round %(n)s",
+  "combat_theater_skip": "Passer",
+  "combat_report_kind_expedition_pirate": "Pirates d'expédition",
+  "combat_report_expedition_pirate_name": "Pirates du Vide"
 }

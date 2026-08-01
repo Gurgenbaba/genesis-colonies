@@ -275,6 +275,7 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | Fleet origin scope audit (GC-557C) | `game/fleet_origin.py` | [GC-557_GLOBAL_TIMER_AUDIT.md](GC-557_GLOBAL_TIMER_AUDIT.md) |
 | Defense-Queue | `game/defense.py`, `game/defense_api.py` | [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md) |
 | Combat | `game/combat.py` | [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) |
+| Combat Encounter Theater (report face-off playback) | `static/js/combat_theater.js` (+ `messages.js`; timeline contract `game/combat_theater.py`) | [COMBAT_THEATER.md](COMBAT_THEATER.md) |
 | Galaxy (system view — player default) | `game/galaxy.py` | [GALAXY_SYSTEM.md](GALAXY_SYSTEM.md) |
 | World Map (command_map — **Dev-Preview only**, GC-593) | `game/planet_evolution/command_map.py` | [GC-570_WORLD_MAP_DIRECTION.md](GC-570_WORLD_MAP_DIRECTION.md) |
 | Shared world presence (Dev-Preview map layout) | `game/planet_evolution/world_map.py` | [GC-571_SHARED_WORLD_PRESENCE.md](GC-571_SHARED_WORLD_PRESENCE.md) |

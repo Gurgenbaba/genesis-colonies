@@ -7232,5 +7232,16 @@
   "techtree_max_level": "Nível máx.",
   "effective_stat_bonus_total": "Bônus total",
   "effective_stat_base_hint": "Base",
-  "effective_stat_source_booster": "Booster de inventario"
+  "effective_stat_source_booster": "Booster de inventario",
+  "combat_theater_attacker": "Atacante",
+  "combat_theater_defender": "Defensor",
+  "combat_theater_empty_side": "Sem forças",
+  "combat_theater_engaging": "Engajando…",
+  "combat_theater_heavy": "PESADO",
+  "combat_theater_open_report": "Abrir relatório",
+  "combat_theater_replay": "Repetir",
+  "combat_theater_round": "Rodada %(n)s",
+  "combat_theater_skip": "Pular",
+  "combat_report_kind_expedition_pirate": "Piratas de expedição",
+  "combat_report_expedition_pirate_name": "Piratas do Vazio"
 }

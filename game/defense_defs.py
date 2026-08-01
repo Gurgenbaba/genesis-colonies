@@ -222,3 +222,8 @@ def defense_icon_filename(defense_key: str) -> str:
 
 def defense_icon_static_path(defense_key: str) -> str:
     return f"/static/img/defense/{defense_icon_filename(defense_key)}"
+
+
+def defense_battle_icon_path(defense_key: str) -> str:
+    """Cutout art for Combat Theater defender formation (RGBA)."""
+    return f"/static/img/defense/cutout/{defense_icon_filename(defense_key)}"

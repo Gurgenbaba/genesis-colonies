@@ -115,6 +115,8 @@ Debris: stored in `debris_fields` at target coordinates; shown in galaxy system 
 - Both attacker and defender receive inbox messages (`dispatch_combat_reports`)
 - UI: `static/js/messages.js` → `renderCombatReportTeaser` / `renderCombatReportFull` (modal)
 - **GC-700E:** coord links + attack CTA, always-on loot panel (empty state), `combat_kind` badges (pirate / world boss), dead `renderCombatBattleOverview` removed
+- **Combat Encounter Theater (GC-CT):** cinematic dual-formation playback before full report — [COMBAT_THEATER.md](COMBAT_THEATER.md); no resolver changes
+- **GC-CT-FX / GC-CT-EXPO:** per-unit bolt signatures; Expo `pirate_encounter` also publishes a combat report (`combat_kind=expedition_pirate`) for Theater — Ratio combat remains SoT
 - **Recycler CTA:** one-click send of `recycler_slots_needed` via `GC.GalaxyQuickAction.sendDebrisRecycle` (same owner as Galaxy debris)
 
 ---

@@ -7232,5 +7232,16 @@
   "techtree_max_level": "Макс. уровень",
   "effective_stat_bonus_total": "Суммарный бонус",
   "effective_stat_base_hint": "База",
-  "effective_stat_source_booster": "Бустер инвентаря"
+  "effective_stat_source_booster": "Бустер инвентаря",
+  "combat_theater_attacker": "Атакующий",
+  "combat_theater_defender": "Защитник",
+  "combat_theater_empty_side": "Нет сил",
+  "combat_theater_engaging": "Схватка…",
+  "combat_theater_heavy": "ТЯЖЁЛЫЙ",
+  "combat_theater_open_report": "Открыть отчёт",
+  "combat_theater_replay": "Повтор",
+  "combat_theater_round": "Раунд %(n)s",
+  "combat_theater_skip": "Пропустить",
+  "combat_report_kind_expedition_pirate": "Пираты экспедиции",
+  "combat_report_expedition_pirate_name": "Пираты Пустоты"
 }

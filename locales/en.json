@@ -7232,5 +7232,16 @@
   "techtree_max_level": "Max level",
   "effective_stat_bonus_total": "Total bonus",
   "effective_stat_base_hint": "Base",
-  "effective_stat_source_booster": "Inventory booster"
+  "effective_stat_source_booster": "Inventory booster",
+  "combat_theater_attacker": "Attacker",
+  "combat_theater_defender": "Defender",
+  "combat_theater_empty_side": "No forces",
+  "combat_theater_engaging": "Engaging…",
+  "combat_theater_heavy": "HEAVY",
+  "combat_theater_open_report": "Open report",
+  "combat_theater_replay": "Replay",
+  "combat_theater_round": "Round %(n)s",
+  "combat_theater_skip": "Skip",
+  "combat_report_kind_expedition_pirate": "Expedition pirates",
+  "combat_report_expedition_pirate_name": "Void Pirates"
 }
