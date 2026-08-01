@@ -158,7 +158,72 @@ def classify_inventory_item(item_key: str) -> Dict[str, Any]:
         "use_hint_key": use_hint_key,
         "use_role": role,
         "use_kind": use_kind,
+        "vault_group": resolve_vault_group(key, classification={
+            "usable": usable,
+            "instant_use": instant_use,
+            "duration_effect": duration_effect,
+            "collectible": collectible,
+            "prestige_only": prestige,
+            "trade_material": trade_material,
+            "use_role": role,
+        }),
     }
+
+
+VAULT_GROUP_ORDER = ("boosters", "materials", "collectibles", "special")
+
+VAULT_GROUP_LABELS = {
+    "boosters": ("inv_group_boosters", "Booster & Verbrauch"),
+    "materials": ("inv_group_materials", "Fragmente & Material"),
+    "collectibles": ("inv_group_collectibles", "Sammlerstücke"),
+    "special": ("inv_group_special", "Spezialitems"),
+}
+
+
+def resolve_vault_group(
+    item_key: str,
+    *,
+    classification: Optional[Dict[str, Any]] = None,
+) -> str:
+    """UI vault section for inventory mini-cards (single owner)."""
+    key = str(item_key or "").strip()
+    row = classification if classification is not None else classify_inventory_item(key)
+    if key in CONTAINER_KEYS:
+        return "special"
+    if row.get("usable") or row.get("duration_effect") or row.get("instant_use"):
+        return "boosters"
+    if row.get("collectible") or row.get("prestige_only"):
+        return "collectibles"
+    meta = ITEM_CATALOG.get(key) or {}
+    item_type = str(meta.get("item_type") or "")
+    role = str(row.get("use_role") or "")
+    if (
+        item_type == "fragment"
+        or row.get("trade_material")
+        or role in ("craft_material", "exchange_material")
+    ):
+        return "materials"
+    return "special"
+
+
+def build_vault_item_groups(other_items: list) -> list:
+    """Group enriched inventory rows for the vault UI. Empty groups omitted."""
+    buckets: Dict[str, list] = {key: [] for key in VAULT_GROUP_ORDER}
+    for item in other_items or []:
+        group = str((item or {}).get("vault_group") or "").strip()
+        if group not in buckets:
+            group = resolve_vault_group(str((item or {}).get("item_key") or ""))
+        if group not in buckets:
+            group = "special"
+        buckets[group].append(item)
+    groups = []
+    for key in VAULT_GROUP_ORDER:
+        rows = buckets[key]
+        if not rows:
+            continue
+        name_key, _fallback = VAULT_GROUP_LABELS[key]
+        groups.append({"key": key, "name_key": name_key, "items": rows})
+    return groups
 
 
 def audit_all_inventory_items() -> Dict[str, Dict[str, Any]]:

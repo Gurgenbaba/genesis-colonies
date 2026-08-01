@@ -8,7 +8,7 @@ Single **Imperium time account** — empire-wide, manual apply only, separate fr
 |--------|----------------|
 | `game/timekeeper.py` | Balance, credit/debit, apply, serialize |
 | `game/inventory_use.py` | Legacy time items → `credit()` |
-| `game/inventory.py` | Inventory hero + legacy deposit list |
+| `game/inventory.py` | Inventory vault + legacy deposit list (TK rail in Items vault) |
 | `app.py` | `/api/timekeeper/apply`, game-state slice |
 | `static/main.js` | HUD patch, one-click ⚡ apply (`mode: max`) |
 
@@ -49,7 +49,7 @@ Response: `{ ok, reason, state, timekeeper, seconds_applied, jobs_finished }`
 **GC-PERF-TK-004:** For `domain=shipyard|defense`, the slim apply response re-attaches a **queue-only** slice (`state.shipyard.queue` / `state.defense.queue`, no ship/defense catalogs) so the client can patch timers immediately. Without this, TK balance dropped but the mini-queue looked unchanged (false “click does nothing”). Client also refreshes `/api/shipyard` or `/api/defense` when on-page and the slice is missing, and merges prior production queues into `GC.lastState` on `timekeeper_apply`.
 
 **GC-TK-PANEL-REFRESH-001:** When apply completes the active head (`jobs_finished: true` on response + `state`, detected after finish by head-job id change), the client calls `forceCanonicalGameStateRefresh("timekeeper_apply")` on Buildings / Research / Shipyard / Defense / PE pages so locks, affordability, and stock update from `include_panel=1` (same path as timer-zero). Slim apply stays diet; full panel is only fetched after a real finish. `syncProductionPanelsAfterGameState` treats queue-only TK-004 slices as insufficient catalog when `jobs_finished` — it must not skip shipyard/defense catalog refresh just because a queue slice exists.
-`POST /api/inventory/use` with `deposit_domain: "build"|"research"|"shipyard"|"all"` deposits **all** owned legacy time items for that domain (or every depositable domain when `"all"`) into Timekeeper in one action (inventory Alle / Bau / Forschung / Werft chips).
+`POST /api/inventory/use` with `deposit_domain: "build"|"research"|"shipyard"|"all"` deposits **all** owned legacy time items for that domain (or every depositable domain when `"all"`) into Timekeeper in one action (inventory vault TK chips: Alle / Bau / Forschung / Werft).
 
 ## Autoplay auto-boost (GC-2616)
 

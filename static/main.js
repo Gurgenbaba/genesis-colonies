@@ -15606,7 +15606,66 @@
     btn.classList.add("is-loading", "is-busy");
   }
 
-  function buildInventoryItemRowHtml(item) {
+  function inventoryOpenButtonLabel(openAmt, freeReady) {
+    const n = Math.max(1, parseInt(openAmt, 10) || 1);
+    if (freeReady) return t("inv_open_free_btn", "Gratis öffnen");
+    if (n > 1) {
+      return tf("inv_open_all_btn", { n: formatNumber(n) }, "Öffnen ×%(n)s");
+    }
+    return t("inv_open_btn", "Öffnen");
+  }
+
+  const INVENTORY_VAULT_GROUP_ORDER = [
+    ["boosters", "inv_group_boosters", "Booster & Verbrauch"],
+    ["materials", "inv_group_materials", "Fragmente & Material"],
+    ["collectibles", "inv_group_collectibles", "Sammlerstücke"],
+    ["special", "inv_group_special", "Spezialitems"],
+  ];
+
+  function inventoryVaultGroupKey(item) {
+    const raw = String((item && item.vault_group) || "").trim();
+    if (INVENTORY_VAULT_GROUP_ORDER.some(([k]) => k === raw)) return raw;
+    if (item && (item.usable || item.duration_effect || item.instant_use)) return "boosters";
+    if (item && (item.collectible || item.prestige_only)) return "collectibles";
+    if (
+      item &&
+      (String(item.item_type || "") === "fragment" ||
+        item.trade_material ||
+        item.use_role === "craft_material" ||
+        item.use_role === "exchange_material")
+    ) {
+      return "materials";
+    }
+    return "special";
+  }
+
+  function buildInventoryItemGroupsHtml(items) {
+    const list = items || [];
+    if (!list.length) {
+      return `<p class="inventory-empty" data-inventory-empty-items>${escapeHtml(t("inv_no_items", "Noch keine Items."))}</p>`;
+    }
+    const buckets = {};
+    INVENTORY_VAULT_GROUP_ORDER.forEach(([key]) => {
+      buckets[key] = [];
+    });
+    list.forEach((item) => {
+      const group = inventoryVaultGroupKey(item);
+      buckets[group].push(item);
+    });
+    return INVENTORY_VAULT_GROUP_ORDER.filter(([key]) => buckets[key].length)
+      .map(([key, nameKey, fallback]) => {
+        const cards = buckets[key]
+          .map((item) => {
+            const rarity = item.rarity || "common";
+            return `<article class="inventory-item-card inventory-item-card--${escapeHtml(rarity)}" data-inventory-item="${escapeHtml(item.item_key)}" data-vault-group="${escapeHtml(key)}" data-rarity="${escapeHtml(rarity)}" data-usable="${item.usable ? "1" : "0"}" data-collectible="${item.collectible ? "1" : "0"}" data-can-craft="${item.can_craft ? "1" : "0"}" data-can-exchange="${item.can_exchange ? "1" : "0"}">${buildInventoryItemCardHtml(item)}</article>`;
+          })
+          .join("");
+        return `<section class="inventory-item-group" data-inventory-item-group="${escapeHtml(key)}"><header class="inventory-item-group__head"><span class="inventory-item-group__title">${escapeHtml(t(nameKey, fallback))}</span><span class="inventory-item-group__count gc-mono">${formatNumber(buckets[key].length)}</span></header><div class="inventory-item-grid">${cards}</div></section>`;
+      })
+      .join("");
+  }
+
+  function buildInventoryItemCardHtml(item) {
     const rarity = item.rarity || "common";
     const name = t(item.name_key || `inv_item_${item.item_key}`, item.item_key);
     const amount = parseInt(item.amount, 10) || 0;
@@ -15620,18 +15679,17 @@
       .map((ep) => {
         const inputName = t(`inv_${ep.input_key}`, ep.input_key);
         const outputName = t(`inv_${ep.output_key}`, ep.output_key);
-        return `<span class="inventory-exchange-progress gc-mono">${escapeHtml(
-          tf(
-            "inv_exchange_upgrade_hint",
-            {
-              input_amount: ep.required,
-              output_amount: ep.output_amount || 1,
-              input_name: inputName,
-              output_name: outputName,
-            },
-            "Upgrade möglich: %(input_amount)s %(input_name)s → %(output_amount)s %(output_name)s"
-          )
-        )}</span>`;
+        const hint = tf(
+          "inv_exchange_upgrade_hint",
+          {
+            input_amount: ep.required,
+            output_amount: ep.output_amount || 1,
+            input_name: inputName,
+            output_name: outputName,
+          },
+          "Upgrade möglich: %(input_amount)s %(input_name)s → %(output_amount)s %(output_name)s"
+        );
+        return `<span class="inventory-exchange-progress gc-mono" title="${escapeHtml(hint)}">${escapeHtml(hint)}</span>`;
       })
       .join("");
     let prestigeProgress = "";
@@ -15702,9 +15760,10 @@
       )
       .join("");
     const iconHtml = item.image
-      ? `<span class="inventory-item-icon" aria-hidden="true"><img class="inventory-item-img" src="/static/${escapeHtml(String(item.image).replace(/^\/+/, ""))}" alt="" width="28" height="28" loading="lazy"></span>`
+      ? `<span class="inventory-item-icon" aria-hidden="true"><img class="inventory-item-img" src="/static/${escapeHtml(String(item.image).replace(/^\/+/, ""))}" alt="" width="40" height="40" loading="lazy"></span>`
       : `<span class="inventory-item-icon" aria-hidden="true">${item.icon || "📦"}</span>`;
-    return `${iconHtml}<div class="inventory-item-body"><span class="inventory-item-name">${escapeHtml(name)}</span>${craftProgress}${exchangeProgress}${prestigeProgress}${endgameHint}${roleHint}</div><span class="inventory-rarity-badge inventory-rarity-badge--${escapeHtml(rarity)}">${escapeHtml(t(`inv_rarity_${rarity}`, rarity))}</span>${collectibleBadge}<span class="inventory-item-amount gc-mono" data-inventory-item-amount="${escapeHtml(item.item_key)}">×${formatNumber(amount)}</span>${useBtn}${craftBtns}${exchangeBtns}`;
+    const actions = `${useBtn}${craftBtns}${exchangeBtns}`;
+    return `<div class="inventory-item-card-hero">${iconHtml}<span class="inventory-item-amount gc-mono" data-inventory-item-amount="${escapeHtml(item.item_key)}">×${formatNumber(amount)}</span></div><div class="inventory-item-card-body"><span class="inventory-item-name">${escapeHtml(name)}</span><span class="inventory-rarity-badge inventory-rarity-badge--${escapeHtml(rarity)}">${escapeHtml(t(`inv_rarity_${rarity}`, rarity))}</span>${collectibleBadge}<div class="inventory-item-card-meta">${craftProgress}${exchangeProgress}${prestigeProgress}${endgameHint}${roleHint}</div></div><div class="inventory-item-card-actions">${actions}</div>`;
   }
 
   function patchInventoryActiveBoosters(inventory) {
@@ -15722,12 +15781,8 @@
       .filter((effect) => !effect.hud_chip_only && !effect.stack_aggregate)
       .map((effect) => {
         const rem = Math.max(0, Math.floor(Number(effect.remaining_seconds) || 0));
-        const domainKey = `inv_boost_domain_${effect.affected_domain || "general"}`;
-        const domain = t(domainKey, effect.affected_domain || "general");
-        const note = effect.note
-          ? `<span class="inventory-active-booster-note">${escapeHtml(effect.note)}</span>`
-          : "";
-        return `<li class="inventory-active-booster-row" data-boost-key="${escapeHtml(effect.key || "")}" data-remaining-seconds="${rem}"><span class="inventory-active-booster-label">${escapeHtml(effect.label || "")}</span><span class="inventory-active-booster-effect">${escapeHtml(effect.effect_summary || "")}</span><span class="inventory-active-booster-domain">${escapeHtml(domain)}</span><span class="inventory-active-booster-time gc-mono" data-boost-remaining>${escapeHtml(formatDuration(rem))}</span>${note}</li>`;
+        const tipParts = [effect.label || "", effect.effect_summary || "", effect.note || ""].filter(Boolean);
+        return `<article class="inventory-active-booster-chip" data-boost-key="${escapeHtml(effect.key || "")}" data-remaining-seconds="${rem}" title="${escapeHtml(tipParts.join(" — "))}"><span class="inventory-active-booster-label">${escapeHtml(effect.label || "")}</span><span class="inventory-active-booster-effect">${escapeHtml(effect.effect_summary || "")}</span><span class="inventory-active-booster-time gc-mono" data-boost-remaining>${escapeHtml(formatDuration(rem))}</span></article>`;
       })
       .join("");
     if (!list.innerHTML) {
@@ -16149,6 +16204,8 @@
       const toInv = ev.target.closest(".gc-loot-to-inventory");
       if (toInv) {
         closeLootModal();
+        const invPage = document.getElementById("inventory-page");
+        if (invPage) _inventorySelectTab(invPage, "items");
         return;
       }
       const closeAction = ev.target.closest(".gc-loot-close-action");
@@ -16161,7 +16218,8 @@
         const openPayload = { ..._lootModalState.payload };
         const itemKey = openPayload.container_key || openPayload.item_key;
         closeLootModal();
-        const btn = document.querySelector(`[data-inventory-open="${CSS.escape(itemKey)}"][data-open-amount="1"]`)
+        const card = document.querySelector(`[data-inventory-container="${CSS.escape(itemKey)}"]`);
+        const btn = (card && card.querySelector("[data-inventory-open]"))
           || document.querySelector(`[data-inventory-open="${CSS.escape(itemKey)}"]`);
         if (btn && !btn.disabled) btn.click();
       }
@@ -16288,13 +16346,17 @@
       if (hint) {
         hint.dataset.cooldownSeconds = String(cooldownSeconds);
         if (owned) {
-          hint.textContent = t("inv_card_owned_hint", "Bereit zum Öffnen");
-        } else if (freeOpenReady) {
-          hint.textContent = t("inv_basic_free_ready", "Gratis-Öffnung verfügbar");
-        } else if (openBlocked && cooldownSeconds > 0) {
-          hint.textContent = t("inv_basic_cooldown_active", "Cooldown aktiv — 1× alle 24 Stunden");
+          hint.hidden = true;
+          hint.textContent = "";
         } else {
-          hint.textContent = t("inv_card_empty_hint", "Noch nicht im Besitz");
+          hint.hidden = false;
+          if (freeOpenReady) {
+            hint.textContent = t("inv_basic_free_ready", "Gratis-Öffnung verfügbar");
+          } else if (openBlocked && cooldownSeconds > 0) {
+            hint.textContent = t("inv_basic_cooldown_active", "Cooldown aktiv — 1× alle 24 Stunden");
+          } else {
+            hint.textContent = t("inv_card_empty_hint", "Noch nicht im Besitz");
+          }
         }
       }
       const cooldownEl = card.querySelector("[data-inventory-cooldown]");
@@ -16306,69 +16368,97 @@
           : t("inv_basic_cooldown_ready", "Jetzt verfügbar");
       }
       card.dataset.maxOpen = String(maxOpen);
-      card.querySelectorAll("[data-inventory-open]").forEach((btn) => {
-        const isMaxBtn = btn.dataset.openMax === "1";
-        if (isMaxBtn) {
-          const openable = Math.max(0, Math.min(amount, maxOpen));
-          btn.dataset.openAmount = String(Math.max(openable, 2));
-          btn.disabled = !owned || openBlocked || amount < 2 || maxOpen < 2;
-          return;
-        }
-        const need = parseInt(btn.dataset.openAmount, 10) || 1;
-        const overMax = need > maxOpen;
-        if (isBasic && need === 1) {
-          btn.disabled = (openBlocked && !owned) || overMax;
-        } else {
-          btn.disabled = !owned || openBlocked || amount < need || overMax;
-        }
-      });
+      const openable = Math.max(
+        0,
+        Math.min(
+          row && row.openable_amount != null ? parseInt(row.openable_amount, 10) || 0 : amount,
+          maxOpen
+        )
+      );
+      const openAmt = freeOpenReady && !owned ? 1 : Math.max(openable, owned > 0 ? 1 : 0) || (freeOpenReady ? 1 : 0);
+      const canOpen = (owned && !openBlocked) || freeOpenReady;
+      const openBtn = card.querySelector("[data-inventory-open]");
+      if (openBtn) {
+        const amt = canOpen ? Math.max(1, openAmt || 1) : 1;
+        openBtn.dataset.openAmount = String(amt);
+        openBtn.textContent = inventoryOpenButtonLabel(amt, freeOpenReady && !owned);
+        openBtn.disabled = !canOpen;
+      }
     });
 
     const itemList = document.querySelector("[data-inventory-item-list]");
     if (!itemList) return;
 
-    const emptyItems = itemList.querySelector("[data-inventory-empty-items]");
-    if (emptyItems) emptyItems.hidden = items.length > 0;
-
-    items.forEach((item) => {
-      let row = itemList.querySelector(`[data-inventory-item="${item.item_key}"]`);
-      if (!row) {
-        row = document.createElement("li");
-        row.className = "inventory-item-row";
-        row.dataset.inventoryItem = item.item_key;
-        row.dataset.rarity = item.rarity || "common";
-        itemList.appendChild(row);
-      }
-      row.dataset.usable = item.usable ? "1" : "0";
-      row.dataset.collectible = item.collectible ? "1" : "0";
-      row.dataset.canCraft = item.can_craft ? "1" : "0";
-      row.innerHTML = buildInventoryItemRowHtml(item);
-      row.hidden = false;
-    });
-
-    itemList.querySelectorAll("[data-inventory-item]").forEach((row) => {
-      const key = row.dataset.inventoryItem;
-      if (!items.some((i) => i.item_key === key)) row.remove();
-    });
-
-    if (items.length === 0 && !itemList.querySelector("[data-inventory-empty-items]")) {
-      const empty = document.createElement("li");
-      empty.className = "inventory-empty";
-      empty.dataset.inventoryEmptyItems = "";
-      empty.textContent = t("inv_no_items", "Noch keine Items.");
-      itemList.appendChild(empty);
-    }
+    const groups = Array.isArray(inv.item_groups) && inv.item_groups.length
+      ? inv.item_groups.flatMap((g) => (g && g.items) || [])
+      : items;
+    itemList.innerHTML = buildInventoryItemGroupsHtml(groups.length ? groups : items);
 
     patchInventoryActiveBoosters(inv);
   }
 
   let _inventoryLastState = null;
 
+  function _inventorySelectTab(page, tabKey) {
+    if (!page) return;
+    const key = tabKey === "items" ? "items" : "containers";
+    page.querySelectorAll("[data-inventory-tab]").forEach((btn) => {
+      const on = btn.getAttribute("data-inventory-tab") === key;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    page.querySelectorAll("[data-inventory-panel]").forEach((panel) => {
+      const on = panel.getAttribute("data-inventory-panel") === key;
+      panel.classList.toggle("is-active", on);
+      if (on) panel.removeAttribute("hidden");
+      else panel.setAttribute("hidden", "");
+    });
+    page.querySelectorAll("[data-inventory-head-context]").forEach((slot) => {
+      const on = slot.getAttribute("data-inventory-head-context") === key;
+      if (on) slot.removeAttribute("hidden");
+      else slot.setAttribute("hidden", "");
+    });
+    try {
+      if (key === "items" && window.location.hash !== "#items") {
+        history.replaceState(null, "", `${window.location.pathname}${window.location.search}#items`);
+      } else if (key !== "items" && window.location.hash === "#items") {
+        history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+      }
+    } catch (_) { /* ignore */ }
+  }
+
   function bindInventoryOnce() {
     if (GC._inventoryEventsBound) return;
     GC._inventoryEventsBound = true;
 
     document.addEventListener("click", async (ev) => {
+      const tabBtn = ev.target.closest("[data-inventory-tab]");
+      if (tabBtn) {
+        const page = document.getElementById("inventory-page");
+        if (!page || page.dataset.ready !== "1") return;
+        ev.preventDefault();
+        _inventorySelectTab(page, tabBtn.getAttribute("data-inventory-tab") || "containers");
+        return;
+      }
+
+      const focusDrops = ev.target.closest("[data-inventory-focus-drops]");
+      if (focusDrops) {
+        const page = document.getElementById("inventory-page");
+        if (!page || page.dataset.ready !== "1") return;
+        ev.preventDefault();
+        _inventorySelectTab(page, "containers");
+        const details = document.getElementById("inventory-loot-drops");
+        if (details) {
+          try { details.open = true; } catch (_) { /* ignore */ }
+          try {
+            details.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          } catch (_) {
+            details.scrollIntoView(true);
+          }
+        }
+        return;
+      }
+
       const tkChip = ev.target.closest("[data-inventory-tk-chip-domain]");
       if (tkChip) {
         ev.preventDefault();
@@ -16458,18 +16548,15 @@
       const itemKey = openBtn.dataset.inventoryOpen;
       if (!itemKey) return;
       let amount = parseInt(openBtn.dataset.openAmount, 10) || 1;
-      if (openBtn.dataset.openMax === "1") {
-        const card = openBtn.closest("[data-inventory-container]");
-        const stockEl = card && card.querySelector(`[data-inventory-amount="${itemKey}"]`);
+      const card = openBtn.closest("[data-inventory-container]");
+      if (card) {
+        const stockEl = card.querySelector(`[data-inventory-amount="${itemKey}"]`);
         const owned = Math.max(0, parseInt(stockEl && stockEl.textContent, 10) || 0);
-        const maxOpen = Math.max(
-          1,
-          parseInt(card && card.dataset.maxOpen, 10) ||
-            parseInt(openBtn.dataset.openAmount, 10) ||
-            500
-        );
-        amount = Math.min(owned, maxOpen);
-        if (amount < 2) return;
+        const maxOpen = Math.max(1, parseInt(card.dataset.maxOpen, 10) || 500);
+        const freeReady = card.classList.contains("inventory-loot-card--free-ready") && owned <= 0;
+        amount = freeReady ? 1 : Math.min(Math.max(owned, 0), maxOpen);
+        if (amount < 1 && freeReady) amount = 1;
+        if (amount < 1) return;
         openBtn.dataset.openAmount = String(amount);
       }
 
@@ -16512,12 +16599,19 @@
           const amountEl = card.querySelector('[data-inventory-amount="container_basic"]');
           const amount = amountEl ? parseInt(amountEl.textContent, 10) || 0 : 0;
           const hint = card.querySelector(".inventory-loot-card-status, .inventory-loot-card-hint");
-          const openBtn = card.querySelector('[data-inventory-open][data-open-amount="1"]');
+          const openBtn = card.querySelector("[data-inventory-open]");
           if (amount <= 0) {
             card.classList.add("inventory-loot-card--free-ready");
             card.classList.remove("inventory-loot-card--empty");
-            if (hint) hint.textContent = t("inv_basic_free_ready", "Gratis-Öffnung verfügbar");
-            if (openBtn) openBtn.disabled = false;
+            if (hint) {
+              hint.hidden = false;
+              hint.textContent = t("inv_basic_free_ready", "Gratis-Öffnung verfügbar");
+            }
+            if (openBtn) {
+              openBtn.disabled = false;
+              openBtn.dataset.openAmount = "1";
+              openBtn.textContent = inventoryOpenButtonLabel(1, true);
+            }
           }
         }
         return;
@@ -16535,6 +16629,8 @@
     if (!page || page.dataset.ready !== "1") return;
     _inventoryLastState = parseInventoryPageState();
     patchInventoryDom(_inventoryLastState);
+    const hashTab = (window.location.hash || "").replace(/^#/, "");
+    _inventorySelectTab(page, hashTab === "items" ? "items" : "containers");
     GC.setSafeInterval(tickInventoryCooldowns, 1000);
     GC.registerCleanup(() => {
       closeLootModal();
@@ -17985,6 +18081,11 @@
       panel.classList.toggle("is-active", on);
       if (on) panel.removeAttribute("hidden");
       else panel.setAttribute("hidden", "");
+    });
+    page.querySelectorAll("[data-shop-head-context]").forEach((slot) => {
+      const on = slot.getAttribute("data-shop-head-context") === key;
+      if (on) slot.removeAttribute("hidden");
+      else slot.setAttribute("hidden", "");
     });
     try {
       if (key === "free" && window.location.hash !== "#free") {

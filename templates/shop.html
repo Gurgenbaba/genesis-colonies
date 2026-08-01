@@ -178,44 +178,57 @@
     </p>
   </header>
 
-  <nav class="shop-tabs" data-shop-tabs role="tablist" aria-label="{{ T('shop_tabs_label', 'Shop-Bereiche') }}">
-    <button type="button"
-            class="shop-tab is-active"
-            role="tab"
-            aria-selected="true"
-            data-shop-tab="premium"
-            id="shop-tab-premium">{{ T("shop_tab_premium", "Premium") }}</button>
-    <button type="button"
-            class="shop-tab"
-            role="tab"
-            aria-selected="false"
-            data-shop-tab="free"
-            id="shop-tab-free">{{ T("shop_tab_free", "Free Shop") }}</button>
-  </nav>
-
   {% if shop_cancelled is defined and shop_cancelled %}
   <section class="gc-panel shop-banner shop-banner--cancel" data-shop-panel="premium">
     <p>{{ T("shop_cancelled", "Kauf abgebrochen. Es wurde nichts belastet.") }}</p>
   </section>
   {% endif %}
 
-  <div class="shop-panel is-active" data-shop-panel="premium" role="tabpanel" aria-labelledby="shop-tab-premium">
+  <section class="gc-panel shop-workspace" data-shop-workspace>
+    <div class="gc-panel-header shop-workspace-header">
+      <nav class="shop-tabs shop-tabs--inline" data-shop-tabs role="tablist" aria-label="{{ T('shop_tabs_label', 'Shop-Bereiche') }}">
+        <button type="button"
+                class="shop-tab is-active"
+                role="tab"
+                aria-selected="true"
+                data-shop-tab="premium"
+                id="shop-tab-premium"
+                aria-controls="shop-panel-premium">{{ T("shop_tab_premium", "Premium") }}</button>
+        <button type="button"
+                class="shop-tab"
+                role="tab"
+                aria-selected="false"
+                data-shop-tab="free"
+                id="shop-tab-free"
+                aria-controls="shop-panel-free">{{ T("shop_tab_free", "Free Shop") }}</button>
+      </nav>
+      <div class="shop-workspace-context shop-workspace-context--premium"
+           data-shop-head-context="premium">
+        <span class="shop-catalog-rail" aria-hidden="true"></span>
+      </div>
+      <div class="shop-workspace-context shop-workspace-context--free"
+           data-shop-head-context="free"
+           hidden>
+        <p class="free-shop-balance free-shop-balance--header gc-mono" data-free-shop-balance>
+          {{ T("free_shop_balance", "Bestand") }}:
+          <strong>{{ (free_shop_state.balance or 0)|int }}</strong>
+          {{ free_shop_state.label or T("inv_ark_token", "Ark-Token") }}
+        </p>
+      </div>
+    </div>
+
+  <div class="shop-panel is-active" data-shop-panel="premium" id="shop-panel-premium" role="tabpanel" aria-labelledby="shop-tab-premium">
     {% if not shop_state.enabled %}
-    <section class="gc-panel shop-banner">
+    <section class="shop-banner shop-banner--inset">
       <p>{{ T("shop_disabled", "Shop ist derzeit deaktiviert.") }}</p>
     </section>
     {% elif not providers %}
-    <section class="gc-panel shop-banner">
+    <section class="shop-banner shop-banner--inset">
       <p>{{ T("shop_no_providers", "Zahlungsanbieter sind noch nicht konfiguriert.") }}</p>
     </section>
     {% endif %}
 
-    <section class="gc-panel shop-catalog-panel">
-      <div class="gc-panel-header shop-catalog-header">
-        <span class="gc-panel-title">{{ T("shop_catalog_title", "Angebote") }}</span>
-        <span class="shop-catalog-rail" aria-hidden="true"></span>
-      </div>
-
+    <div class="shop-catalog-body">
       {% if not products %}
       <p class="hint">{{ T("shop_empty", "Keine Produkte verfügbar.") }}</p>
       {% else %}
@@ -254,9 +267,9 @@
         {% endif %}
       </div>
       {% endif %}
-    </section>
+    </div>
 
-    <section class="gc-panel shop-policy-panel">
+    <section class="shop-policy-panel">
       {% include "partials/legal_ack.html" %}
       <p class="hint shop-legal-footer">
         {{ T("legal_shop_footer", "Digitale Inhalte · nach Gutschrift kein Widerruf") }}
@@ -276,18 +289,9 @@
     </section>
   </div>
 
-  <div class="shop-panel" data-shop-panel="free" role="tabpanel" aria-labelledby="shop-tab-free" hidden>
-    <section class="gc-panel free-shop-panel" data-free-shop>
-      <div class="gc-panel-header shop-catalog-header">
-        <span class="gc-panel-title">{{ T("free_shop_title", "Free Shop") }}</span>
-        <span class="shop-catalog-rail" aria-hidden="true"></span>
-      </div>
+  <div class="shop-panel" data-shop-panel="free" id="shop-panel-free" role="tabpanel" aria-labelledby="shop-tab-free" hidden>
+    <div class="free-shop-panel" data-free-shop>
       <p class="hint free-shop-hint">{{ T("free_shop_hint", "Ark-Tokens aus Story Ops gegen Convenience-Meta eintauschen — unter dem EUR-Shop, kein Combat-P2W.") }}</p>
-      <p class="free-shop-balance gc-mono" data-free-shop-balance>
-        {{ T("free_shop_balance", "Bestand") }}:
-        <strong>{{ (free_shop_state.balance or 0)|int }}</strong>
-        {{ free_shop_state.label or T("inv_ark_token", "Ark-Token") }}
-      </p>
       {% if free_shop_state.offers %}
       <div class="shop-grid free-shop-grid" data-free-shop-grid>
         {% for offer in free_shop_state.offers %}
@@ -303,7 +307,8 @@
           {{ T("free_shop_goto_story", "Story Ops öffnen") }}
         </a>
       </p>
-    </section>
+    </div>
   </div>
+  </section>
 </div>
 {% endblock %}

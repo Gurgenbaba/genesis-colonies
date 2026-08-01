@@ -410,6 +410,9 @@ def build_inventory_state(user_id: int, *, conn, locale: str | None = None) -> D
         for i in items
         if i["item_type"] != "container" and not is_legacy_time_booster_item(str(i["item_key"]))
     ]
+    from .inventory_classification import build_vault_item_groups
+
+    item_groups = build_vault_item_groups(other_items)
     tk = serialize_for_client(int(user_id), conn=conn)
     tk["legacy_time_items"] = legacy_time_items
     tk["legacy_time_seconds"] = sum(
@@ -421,6 +424,7 @@ def build_inventory_state(user_id: int, *, conn, locale: str | None = None) -> D
         "ready": inventory_schema_ready(conn),
         "containers": containers,
         "other_items": other_items,
+        "item_groups": item_groups,
         "timekeeper": tk,
         "loot_drops": build_loot_drops_reference(conn=conn, user_id=int(user_id)),
         "craft_recipes": _craft_recipes_reference(),

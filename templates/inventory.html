@@ -75,11 +75,91 @@
   </section>
   {% else %}
 
-  <section class="gc-panel inventory-panel inventory-containers-hero" id="inventory-containers-panel">
-    <header class="inventory-containers-hub__head">
-      <span class="inventory-containers-hub__title">{{ T("inv_containers_title", "Container") }}</span>
-      <span class="inventory-containers-hub__sub gc-mono">{{ T("inv_containers_subtitle_short", "Loot-Pools") }}</span>
+  <div id="gc-loot-modal-root" class="gc-loot-modal-root" aria-hidden="true"></div>
+
+  <section class="gc-panel inventory-panel inventory-rewards-panel-wrap" id="inventory-rewards-panel" hidden aria-live="polite">
+    <div class="gc-panel-header">
+      <span class="gc-panel-title">{{ T("inv_rewards_title", "Erhaltene Belohnungen") }}</span>
+      <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-inventory-rewards-close>
+        {{ T("inv_rewards_close", "Schließen") }}
+      </button>
+    </div>
+    <p class="inventory-effect-message" data-inventory-effect-message hidden></p>
+    <ul class="inventory-rewards-list" data-inventory-rewards-list></ul>
+  </section>
+
+  {% set tk = inv_data.timekeeper if inv_data.timekeeper is defined else {'balance_sec': 0, 'label': '0min'} %}
+  {% set _tk_legacy = tk.legacy_time_items if tk.legacy_time_items is defined else [] %}
+  {% set _active_boosts = (inv_data.active_boosters.active_effects if inv_data.active_boosters is defined and inv_data.active_boosters.active_effects else []) %}
+
+  <section class="gc-panel inventory-panel inventory-workspace inventory-containers-hero"
+           id="inventory-workspace"
+           data-inventory-timekeeper>
+    <header class="inventory-workspace-head">
+      <nav class="inventory-tabs inventory-tabs--inline" data-inventory-tabs role="tablist" aria-label="{{ T('inv_tabs_label', 'Inventar-Bereiche') }}">
+        <button type="button"
+                class="inventory-tab is-active"
+                role="tab"
+                aria-selected="true"
+                data-inventory-tab="containers"
+                id="inventory-tab-containers"
+                aria-controls="inventory-panel-containers">{{ T("inv_tab_containers", "Container") }}</button>
+        <button type="button"
+                class="inventory-tab"
+                role="tab"
+                aria-selected="false"
+                data-inventory-tab="items"
+                id="inventory-tab-items"
+                aria-controls="inventory-panel-items">{{ T("inv_tab_items", "Items") }}</button>
+      </nav>
+      <div class="inventory-workspace-context inventory-workspace-context--containers"
+           data-inventory-head-context="containers">
+        <button type="button"
+                class="inventory-head-link gc-mono"
+                data-inventory-focus-drops
+                title="{{ T('inv_loot_drops_subtitle', 'Gewichtete Loot-Pools pro Container') }}">
+          {{ T("inv_containers_subtitle_short", "Loot-Pools") }}
+        </button>
+      </div>
+      <div class="inventory-workspace-context inventory-workspace-context--items"
+           data-inventory-head-context="items"
+           hidden>
+        <div class="inventory-tk-rail" id="inventory-timekeeper-panel" aria-label="{{ T('timekeeper_short', 'TK') }}">
+          <img class="inventory-tk-rail__icon"
+               src="{{ url_for('static', filename='img/res/timekeeper.webp') }}"
+               alt="" width="22" height="22" loading="lazy" decoding="async">
+          <span class="inventory-tk-rail__tag gc-mono">{{ T('timekeeper_short', 'TK') }}</span>
+          <strong class="inventory-tk-rail__balance gc-mono" data-inventory-timekeeper-balance>{{ tk.label }}</strong>
+          <div class="inventory-tk-rail__chips" data-inventory-timekeeper-chips aria-label="{{ T('inv_tk_deposit_chips', 'Einzahlbare Zeit-Booster') }}">
+            {{ inventory_tk_domain_chips(_tk_legacy) }}
+          </div>
+        </div>
+      </div>
     </header>
+    {% if _tk_legacy %}
+    <div class="inventory-tk-rail__deposit-list" data-inventory-timekeeper-legacy hidden>
+      {% for item in _tk_legacy %}
+      <button type="button"
+              class="inventory-tk-deposit-btn"
+              data-inventory-use="{{ item.item_key }}"
+              data-inventory-tk-domain="{% if item.item_key.startswith('booster_build') %}build{% elif item.item_key.startswith('booster_research') %}research{% elif item.item_key.startswith('booster_shipyard') %}shipyard{% else %}other{% endif %}"
+              {% if not (item.usable is defined and item.usable) %}disabled{% endif %}
+              title="{{ T(item.name_key, item.item_key) }}">
+        <span class="inventory-tk-deposit-btn__icon" aria-hidden="true">{{ item.icon|default('⚡') }}</span>
+        <span class="inventory-tk-deposit-btn__label">{{ T(item.name_key, item.item_key) }}</span>
+        <span class="inventory-tk-deposit-btn__amt gc-mono">×{{ item.amount|fmt_int }}</span>
+      </button>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+  <div class="inventory-panel-tab is-active"
+       data-inventory-panel="containers"
+       id="inventory-panel-containers"
+       role="tabpanel"
+       aria-labelledby="inventory-tab-containers">
+
+  <div class="inventory-containers-body" id="inventory-containers-panel">
     <div class="inventory-container-grid" data-inventory-container-grid>
       {% for c in inv_data.containers %}
       {% set _owned = (c.amount|int) > 0 %}
@@ -97,7 +177,7 @@
                data-max-open="{{ _max_open }}">
         <div class="inventory-loot-card-hero">
           <div class="inventory-loot-card-glow inventory-loot-card-glow--{{ c.rarity }}" aria-hidden="true"></div>
-          {{ render_card_hero_img(_img, T(c.name_key, c.item_key), 'inventory-loot-card-img', _card_load, loop.index0 == 0, 320, 180, "this.onerror=null;this.src='" ~ _loot_fallback ~ "';") }}
+          {{ render_card_hero_img(_img, T(c.name_key, c.item_key), 'inventory-loot-card-img', _card_load, loop.index0 == 0, 200, 120, "this.onerror=null;this.src='" ~ _loot_fallback ~ "';") }}
           <span class="inventory-loot-card-stock gc-mono"
                 data-inventory-amount="{{ c.item_key }}"
                 title="{{ T('inv_amount_label', 'Anzahl') }}">
@@ -111,12 +191,11 @@
               {{ T("inv_rarity_" ~ c.rarity, c.rarity) }}
             </span>
           </div>
+          {% if not _owned %}
           <p class="inventory-loot-card-status gc-mono"
              data-inventory-hint="{{ c.item_key }}"
              data-cooldown-seconds="{{ _cooldown }}">
-            {% if _owned %}
-              {{ T("inv_card_owned_hint", "Bereit zum Öffnen") }}
-            {% elif _free_ready %}
+            {% if _free_ready %}
               {{ T("inv_basic_free_ready", "Gratis-Öffnung verfügbar") }}
             {% elif _blocked %}
               {{ T("inv_basic_cooldown_active", "Cooldown aktiv — 1× alle 24 Stunden") }}
@@ -124,6 +203,12 @@
               {{ T("inv_card_empty_hint", "Noch nicht im Besitz") }}
             {% endif %}
           </p>
+          {% else %}
+          <p class="inventory-loot-card-status gc-mono inventory-loot-card-status--owned"
+             data-inventory-hint="{{ c.item_key }}"
+             data-cooldown-seconds="{{ _cooldown }}"
+             hidden></p>
+          {% endif %}
           {% if c.item_key == 'container_basic' %}
           <p class="inventory-loot-card-cooldown gc-mono"
              data-inventory-cooldown="{{ c.item_key }}"
@@ -136,209 +221,33 @@
           </p>
           {% endif %}
         </div>
+        {% set _openable = (c.openable_amount|int) if c.openable_amount is defined else (c.amount|int) %}
+        {% if _free_ready and not _owned %}
+          {% set _open_amt = 1 %}
+        {% else %}
+          {% set _open_amt = _openable if _openable > 0 else 1 %}
+        {% endif %}
         <div class="inventory-loot-card-actions">
           <button type="button"
                   class="gc-btn gc-btn-primary gc-btn-sm inventory-open-btn"
                   data-inventory-open="{{ c.item_key }}"
-                  data-open-amount="1"
+                  data-open-amount="{{ _open_amt }}"
                   {% if not _can_open %}disabled{% endif %}>
-            {{ T("inv_open_btn", "Öffnen") }}
+            {% if _free_ready and not _owned %}
+              {{ T("inv_open_free_btn", "Gratis öffnen") }}
+            {% elif _open_amt > 1 %}
+              {{ T("inv_open_all_btn", "Öffnen ×%(n)s", n=_open_amt|fmt_int) }}
+            {% else %}
+              {{ T("inv_open_btn", "Öffnen") }}
+            {% endif %}
           </button>
-          {% set _openable = (c.openable_amount|int) if c.openable_amount is defined else (c.amount|int) %}
-          {% if _max_open > 1 %}
-          <button type="button"
-                  class="gc-btn gc-btn-secondary gc-btn-sm inventory-open-btn"
-                  data-inventory-open="{{ c.item_key }}"
-                  data-open-amount="{{ _openable if _openable > 1 else 2 }}"
-                  data-open-max="1"
-                  {% if (c.amount|int) < 2 %}disabled{% endif %}>
-            {{ T("inv_open_max_btn", "Max öffnen") }}
-          </button>
-          {% endif %}
         </div>
       </article>
       {% endfor %}
     </div>
-  </section>
+  </div>{# /inventory-containers-body #}
 
-  {% set tk = inv_data.timekeeper if inv_data.timekeeper is defined else {'balance_sec': 0, 'label': '0min'} %}
-  {% set _tk_legacy = tk.legacy_time_items if tk.legacy_time_items is defined else [] %}
-  <section class="gc-panel inventory-panel inventory-tk-bar" id="inventory-timekeeper-panel" data-inventory-timekeeper>
-    <div class="inventory-tk-bar__row">
-      <span class="inventory-tk-bar__glyph" aria-hidden="true">⏳</span>
-      <span class="inventory-tk-bar__tag gc-mono">{{ T('timekeeper_short', 'TK') }}</span>
-      <strong class="inventory-tk-bar__balance gc-mono" data-inventory-timekeeper-balance>{{ tk.label }}</strong>
-      <div class="inventory-tk-bar__chips" data-inventory-timekeeper-chips aria-label="{{ T('inv_tk_deposit_chips', 'Einzahlbare Zeit-Booster') }}">
-        {{ inventory_tk_domain_chips(_tk_legacy) }}
-      </div>
-    </div>
-    {% if _tk_legacy %}
-    <div class="inventory-tk-bar__deposit-list" data-inventory-timekeeper-legacy hidden>
-      {% for item in _tk_legacy %}
-      <button type="button"
-              class="inventory-tk-deposit-btn"
-              data-inventory-use="{{ item.item_key }}"
-              data-inventory-tk-domain="{% if item.item_key.startswith('booster_build') %}build{% elif item.item_key.startswith('booster_research') %}research{% elif item.item_key.startswith('booster_shipyard') %}shipyard{% else %}other{% endif %}"
-              {% if not (item.usable is defined and item.usable) %}disabled{% endif %}
-              title="{{ T(item.name_key, item.item_key) }}">
-        <span class="inventory-tk-deposit-btn__icon" aria-hidden="true">{{ item.icon|default('⚡') }}</span>
-        <span class="inventory-tk-deposit-btn__label">{{ T(item.name_key, item.item_key) }}</span>
-        <span class="inventory-tk-deposit-btn__amt gc-mono">×{{ item.amount|fmt_int }}</span>
-      </button>
-      {% endfor %}
-    </div>
-    {% endif %}
-  </section>
-
-  <div id="gc-loot-modal-root" class="gc-loot-modal-root" aria-hidden="true"></div>
-
-  <section class="gc-panel inventory-panel inventory-rewards-panel-wrap" id="inventory-rewards-panel" hidden aria-live="polite">
-    <div class="gc-panel-header">
-      <span class="gc-panel-title">{{ T("inv_rewards_title", "Erhaltene Belohnungen") }}</span>
-      <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-inventory-rewards-close>
-        {{ T("inv_rewards_close", "Schließen") }}
-      </button>
-    </div>
-    <p class="inventory-effect-message" data-inventory-effect-message hidden></p>
-    <ul class="inventory-rewards-list" data-inventory-rewards-list></ul>
-  </section>
-
-  <section class="gc-panel inventory-panel inventory-active-boosters-panel"
-           id="inventory-active-boosters-panel"
-           data-inventory-active-boosters
-           {% if not inv_data.active_boosters is defined or not inv_data.active_boosters.active_effects %}hidden{% endif %}>
-    <div class="gc-panel-header inventory-active-boosters-head">
-      <span class="gc-panel-title">{{ T("inv_active_boosters_title", "Aktive Booster") }}</span>
-    </div>
-    <ul class="inventory-active-boosters-list" data-inventory-active-boosters-list>
-      {% for effect in (inv_data.active_boosters.active_effects if inv_data.active_boosters is defined else []) %}
-      {% if not (effect.hud_chip_only or effect.stack_aggregate) %}
-      <li class="inventory-active-booster-row"
-          data-boost-key="{{ effect.key }}"
-          data-remaining-seconds="{{ effect.remaining_seconds|int }}">
-        <span class="inventory-active-booster-label">{{ effect.label }}</span>
-        <span class="inventory-active-booster-effect">{{ effect.effect_summary }}</span>
-        <span class="inventory-active-booster-time gc-mono" data-boost-remaining>{{ effect.remaining_seconds|int }}s</span>
-        {% if effect.note %}<span class="inventory-active-booster-note">{{ effect.note }}</span>{% endif %}
-      </li>
-      {% endif %}
-      {% endfor %}
-    </ul>
-  </section>
-
-  <section class="gc-panel inventory-panel inventory-items-panel">
-    <div class="gc-panel-header">
-      <span class="gc-panel-title">{{ T("inv_items_title", "Items") }}</span>
-      <span class="gc-panel-subtitle">{{ T("inv_items_subtitle", "Booster, Fragmente und Spezialitems") }}</span>
-    </div>
-    <ul class="inventory-item-list" data-inventory-item-list>
-      {% for item in inv_data['other_items'] %}
-      <li class="inventory-item-row" data-inventory-item="{{ item.item_key }}" data-rarity="{{ item.rarity }}"
-          data-usable="{{ '1' if item.usable is defined and item.usable else '0' }}"
-          data-collectible="{{ '1' if item.collectible is defined and item.collectible else '0' }}"
-          data-can-craft="{{ '1' if item.can_craft is defined and item.can_craft else '0' }}"
-          data-can-exchange="{{ '1' if item.can_exchange is defined and item.can_exchange else '0' }}">
-        {% if item.image is defined and item.image %}
-        <span class="inventory-item-icon" aria-hidden="true">
-          <img class="inventory-item-img" src="{{ url_for('static', filename=item.image) }}" alt="" width="28" height="28" loading="lazy">
-        </span>
-        {% else %}
-        <span class="inventory-item-icon" aria-hidden="true">{{ item.icon }}</span>
-        {% endif %}
-        <div class="inventory-item-body">
-          <span class="inventory-item-name">{{ T(item.name_key, item.item_key) }}</span>
-          {% if item.craft_progress is defined and item.craft_progress %}
-          {% for cp in item.craft_progress %}
-          <span class="inventory-craft-progress gc-mono" data-craft-progress="{{ item.item_key }}">
-            {{ cp.owned|fmt_int }} / {{ cp.required|fmt_int }} {{ T(cp.name_key, cp.output_key) }}
-          </span>
-          {% endfor %}
-          {% endif %}
-          {% if item.exchange_progress is defined and item.exchange_progress %}
-          {% for ep in item.exchange_progress %}
-          <span class="inventory-exchange-progress gc-mono" data-exchange-progress="{{ item.item_key }}">
-            {{ T("inv_exchange_upgrade_hint", "Upgrade möglich: %(input_amount)s %(input_name)s → %(output_amount)s %(output_name)s",
-                 input_amount=ep.required, output_amount=ep.output_amount,
-                 input_name=T("inv_" ~ ep.input_key, ep.input_key),
-                 output_name=T("inv_" ~ ep.output_key, ep.output_key)) }}
-          </span>
-          {% endfor %}
-          {% endif %}
-          {% if item.prestige_progress is defined and item.prestige_progress %}
-          {% set pp = item.prestige_progress %}
-          <span class="inventory-prestige-progress gc-mono" data-prestige-progress="{{ item.item_key }}">
-            {% if pp.unlocked %}
-            {{ T("inv_prestige_progress_done", "%(badge)s freigeschaltet", badge=T(pp.badge_name_key, pp.badge_key)) }}
-            {% else %}
-            {{ T("inv_prestige_progress", "%(owned)s / %(required)s → %(badge)s",
-                 owned=pp.owned|fmt_int, required=pp.required|fmt_int,
-                 badge=T(pp.badge_name_key, pp.badge_key)) }}
-            {% if pp.reward_key %}
-            <span class="inventory-prestige-reward-hint">
-              {{ T("inv_prestige_reward_hint", "Belohnung: %(amount)s× %(reward)s",
-                   amount=pp.reward_amount|fmt_int,
-                   reward=T("inv_" ~ pp.reward_key, pp.reward_key)) }}
-            </span>
-            {% endif %}
-            {% endif %}
-          </span>
-          {% endif %}
-          {% if item.exchange_endgame is defined and item.exchange_endgame %}
-          <span class="inventory-endgame-hint">{{ T("inv_dna_core_epic_hint", "Endgame-Material — später nutzbar") }}</span>
-          {% endif %}
-          {% if item.locked_planned is defined and item.locked_planned %}
-          <span class="inventory-locked-hint">{{ T("inv_hint_locked_planned", "Bald verfügbar") }}</span>
-          {% elif item.prestige_progress is defined and item.prestige_progress %}
-          {# progress line above replaces static prestige hint #}
-          {% elif item.use_hint_key is defined and item.use_hint_key and not (item.usable is defined and item.usable) %}
-          <span class="inventory-use-hint">{{ T(item.use_hint_key, item.use_hint_key) }}</span>
-          {% elif item.trade_material is defined and item.trade_material and not (item.usable is defined and item.usable) %}
-          <span class="inventory-trade-hint">{{ T("inv_hint_collector_trade", "Im Sammler-Markt tauschbar") }}</span>
-          {% endif %}
-        </div>
-        <span class="inventory-rarity-badge inventory-rarity-badge--{{ item.rarity }}">
-          {{ T("inv_rarity_" ~ item.rarity, item.rarity) }}
-        </span>
-        {% if item.collectible is defined and item.collectible %}
-        <span class="inventory-collectible-badge">{{ T("inv_collectible_badge", "Sammlerstück") }}</span>
-        {% endif %}
-        <span class="inventory-item-amount gc-mono" data-inventory-item-amount="{{ item.item_key }}">
-          ×{{ item.amount|fmt_int }}
-        </span>
-        {% if item.usable is defined and item.usable %}
-        <button type="button" class="gc-btn gc-btn-primary gc-btn-xs inventory-use-btn"
-                data-inventory-use="{{ item.item_key }}">
-          {{ T("inv_use_btn", "Benutzen") }}
-        </button>
-        {% endif %}
-        {% if item.can_craft is defined and item.can_craft and item.craft_progress is defined %}
-        {% for cp in item.craft_progress %}
-        {% if cp.can_craft %}
-        <button type="button" class="gc-btn gc-btn-secondary gc-btn-xs inventory-craft-btn"
-                data-inventory-craft="{{ cp.recipe_key }}">
-          {{ T("inv_craft_btn", "Craften") }}
-        </button>
-        {% endif %}
-        {% endfor %}
-        {% endif %}
-        {% if item.can_exchange is defined and item.can_exchange and item.exchange_progress is defined %}
-        {% for ep in item.exchange_progress %}
-        {% if ep.can_exchange %}
-        <button type="button" class="gc-btn gc-btn-secondary gc-btn-xs inventory-exchange-btn"
-                data-inventory-exchange="{{ ep.recipe_key }}">
-          {{ T("inv_upgrade_btn", "Upgrade") }}
-        </button>
-        {% endif %}
-        {% endfor %}
-        {% endif %}
-      </li>
-      {% else %}
-      <li class="inventory-empty" data-inventory-empty-items>{{ T("inv_no_items", "Noch keine Items.") }}</li>
-      {% endfor %}
-    </ul>
-  </section>
-
-  <section class="gc-panel inventory-panel inventory-drops-panel">
+  <section class="inventory-drops-panel">
     <details class="inventory-drops-details" id="inventory-loot-drops">
       <summary class="inventory-drops-summary">
         <span class="inventory-drops-summary-text">
@@ -388,6 +297,165 @@
       </div>
     </details>
   </section>
+  </div>{# /inventory-panel-containers #}
+
+  <div class="inventory-panel-tab"
+       data-inventory-panel="items"
+       id="inventory-panel-items"
+       role="tabpanel"
+       aria-labelledby="inventory-tab-items"
+       hidden>
+  <div class="inventory-items-body inventory-vault" id="inventory-vault-panel">
+    <div class="inventory-active-boosters-rail"
+         id="inventory-active-boosters-panel"
+         data-inventory-active-boosters
+         {% if not _active_boosts %}hidden{% endif %}>
+      <span class="inventory-active-boosters-rail__label gc-mono">{{ T("inv_active_boosters_title", "Aktive Booster") }}</span>
+      <div class="inventory-active-boosters-chips" data-inventory-active-boosters-list>
+        {% for effect in _active_boosts %}
+        {% if not (effect.hud_chip_only or effect.stack_aggregate) %}
+        <article class="inventory-active-booster-chip"
+                 data-boost-key="{{ effect.key }}"
+                 data-remaining-seconds="{{ effect.remaining_seconds|int }}"
+                 title="{{ effect.label }} — {{ effect.effect_summary }}{% if effect.note %} ({{ effect.note }}){% endif %}">
+          <span class="inventory-active-booster-label">{{ effect.label }}</span>
+          <span class="inventory-active-booster-effect">{{ effect.effect_summary }}</span>
+          <span class="inventory-active-booster-time gc-mono" data-boost-remaining>{{ effect.remaining_seconds|int }}s</span>
+        </article>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="inventory-item-vault" data-inventory-item-list>
+      {% set _item_groups = inv_data.item_groups if inv_data.item_groups is defined else [] %}
+      {% if _item_groups %}
+      {% for group in _item_groups %}
+      <section class="inventory-item-group" data-inventory-item-group="{{ group['key'] }}">
+        <header class="inventory-item-group__head">
+          <span class="inventory-item-group__title">{{ T(group['name_key'], group['key']) }}</span>
+          <span class="inventory-item-group__count gc-mono">{{ group['items']|length }}</span>
+        </header>
+        <div class="inventory-item-grid">
+          {% for item in group['items'] %}
+          <article class="inventory-item-card inventory-item-card--{{ item.rarity }}"
+                   data-inventory-item="{{ item.item_key }}"
+                   data-vault-group="{{ group['key'] }}"
+                   data-rarity="{{ item.rarity }}"
+                   data-usable="{{ '1' if item.usable is defined and item.usable else '0' }}"
+                   data-collectible="{{ '1' if item.collectible is defined and item.collectible else '0' }}"
+                   data-can-craft="{{ '1' if item.can_craft is defined and item.can_craft else '0' }}"
+                   data-can-exchange="{{ '1' if item.can_exchange is defined and item.can_exchange else '0' }}">
+            <div class="inventory-item-card-hero">
+              {% if item.image is defined and item.image %}
+              <span class="inventory-item-icon" aria-hidden="true">
+                <img class="inventory-item-img" src="{{ url_for('static', filename=item.image) }}" alt="" width="36" height="36" loading="lazy">
+              </span>
+              {% else %}
+              <span class="inventory-item-icon" aria-hidden="true">{{ item.icon }}</span>
+              {% endif %}
+              <span class="inventory-item-amount gc-mono" data-inventory-item-amount="{{ item.item_key }}">
+                ×{{ item.amount|fmt_int }}
+              </span>
+            </div>
+            <div class="inventory-item-card-body">
+              <span class="inventory-item-name">{{ T(item.name_key, item.item_key) }}</span>
+              <span class="inventory-rarity-badge inventory-rarity-badge--{{ item.rarity }}">
+                {{ T("inv_rarity_" ~ item.rarity, item.rarity) }}
+              </span>
+              {% if item.collectible is defined and item.collectible %}
+              <span class="inventory-collectible-badge">{{ T("inv_collectible_badge", "Sammlerstück") }}</span>
+              {% endif %}
+              <div class="inventory-item-card-meta">
+                {% if item.craft_progress is defined and item.craft_progress %}
+                {% for cp in item.craft_progress %}
+                <span class="inventory-craft-progress gc-mono" data-craft-progress="{{ item.item_key }}">
+                  {{ cp.owned|fmt_int }} / {{ cp.required|fmt_int }} {{ T(cp.name_key, cp.output_key) }}
+                </span>
+                {% endfor %}
+                {% endif %}
+                {% if item.exchange_progress is defined and item.exchange_progress %}
+                {% for ep in item.exchange_progress %}
+                <span class="inventory-exchange-progress gc-mono" data-exchange-progress="{{ item.item_key }}"
+                      title="{{ T('inv_exchange_upgrade_hint', 'Upgrade möglich: %(input_amount)s %(input_name)s → %(output_amount)s %(output_name)s', input_amount=ep.required, output_amount=ep.output_amount, input_name=T('inv_' ~ ep.input_key, ep.input_key), output_name=T('inv_' ~ ep.output_key, ep.output_key)) }}">
+                  {{ T("inv_exchange_upgrade_hint", "Upgrade möglich: %(input_amount)s %(input_name)s → %(output_amount)s %(output_name)s",
+                       input_amount=ep.required, output_amount=ep.output_amount,
+                       input_name=T("inv_" ~ ep.input_key, ep.input_key),
+                       output_name=T("inv_" ~ ep.output_key, ep.output_key)) }}
+                </span>
+                {% endfor %}
+                {% endif %}
+                {% if item.prestige_progress is defined and item.prestige_progress %}
+                {% set pp = item.prestige_progress %}
+                <span class="inventory-prestige-progress gc-mono" data-prestige-progress="{{ item.item_key }}">
+                  {% if pp.unlocked %}
+                  {{ T("inv_prestige_progress_done", "%(badge)s freigeschaltet", badge=T(pp.badge_name_key, pp.badge_key)) }}
+                  {% else %}
+                  {{ T("inv_prestige_progress", "%(owned)s / %(required)s → %(badge)s",
+                       owned=pp.owned|fmt_int, required=pp.required|fmt_int,
+                       badge=T(pp.badge_name_key, pp.badge_key)) }}
+                  {% if pp.reward_key %}
+                  <span class="inventory-prestige-reward-hint">
+                    {{ T("inv_prestige_reward_hint", "Belohnung: %(amount)s× %(reward)s",
+                         amount=pp.reward_amount|fmt_int,
+                         reward=T("inv_" ~ pp.reward_key, pp.reward_key)) }}
+                  </span>
+                  {% endif %}
+                  {% endif %}
+                </span>
+                {% endif %}
+                {% if item.exchange_endgame is defined and item.exchange_endgame %}
+                <span class="inventory-endgame-hint">{{ T("inv_dna_core_epic_hint", "Endgame-Material — später nutzbar") }}</span>
+                {% endif %}
+                {% if item.locked_planned is defined and item.locked_planned %}
+                <span class="inventory-locked-hint">{{ T("inv_hint_locked_planned", "Bald verfügbar") }}</span>
+                {% elif item.prestige_progress is defined and item.prestige_progress %}
+                {# progress line above replaces static prestige hint #}
+                {% elif item.use_hint_key is defined and item.use_hint_key and not (item.usable is defined and item.usable) %}
+                <span class="inventory-use-hint">{{ T(item.use_hint_key, item.use_hint_key) }}</span>
+                {% elif item.trade_material is defined and item.trade_material and not (item.usable is defined and item.usable) %}
+                <span class="inventory-trade-hint">{{ T("inv_hint_collector_trade", "Im Sammler-Markt tauschbar") }}</span>
+                {% endif %}
+              </div>
+            </div>
+            <div class="inventory-item-card-actions">
+              {% if item.usable is defined and item.usable %}
+              <button type="button" class="gc-btn gc-btn-primary gc-btn-xs inventory-use-btn"
+                      data-inventory-use="{{ item.item_key }}">
+                {{ T("inv_use_btn", "Benutzen") }}
+              </button>
+              {% endif %}
+              {% if item.can_craft is defined and item.can_craft and item.craft_progress is defined %}
+              {% for cp in item.craft_progress %}
+              {% if cp.can_craft %}
+              <button type="button" class="gc-btn gc-btn-secondary gc-btn-xs inventory-craft-btn"
+                      data-inventory-craft="{{ cp.recipe_key }}">
+                {{ T("inv_craft_btn", "Craften") }}
+              </button>
+              {% endif %}
+              {% endfor %}
+              {% endif %}
+              {% if item.can_exchange is defined and item.can_exchange and item.exchange_progress is defined %}
+              {% for ep in item.exchange_progress %}
+              {% if ep.can_exchange %}
+              <button type="button" class="gc-btn gc-btn-secondary gc-btn-xs inventory-exchange-btn"
+                      data-inventory-exchange="{{ ep.recipe_key }}">
+                {{ T("inv_upgrade_btn", "Upgrade") }}
+              </button>
+              {% endif %}
+              {% endfor %}
+              {% endif %}
+            </div>
+          </article>
+          {% endfor %}
+        </div>
+      </section>
+      {% endfor %}
+      {% endif %}
+    </div>
+  </div>{# /inventory-items-body #}
+  </div>{# /inventory-panel-items #}
+  </section>{# /inventory-workspace #}
 
   {% endif %}
 </div>

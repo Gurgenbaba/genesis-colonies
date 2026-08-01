@@ -814,3 +814,130 @@ def test_save_idempotent_action_roundtrip(inventory_db):
     save_idempotent_action(uid, rid, payload)
     cached = get_idempotent_action(uid, rid)
     assert cached == payload
+
+
+def test_inventory_vault_ux_html_contract(inventory_db, monkeypatch):
+    """GC-INV-UX: single open-all CTA, mini-card vault, TK rail in items panel."""
+    client, uid, _ = _login_client(inventory_db, monkeypatch)
+    conn = db()
+    grant_inventory_item(uid, "container_rare", 4, conn=conn)
+    grant_inventory_item(uid, "booster_build_5m", 2, conn=conn)
+    grant_inventory_item(uid, "research_data_mining", 3, conn=conn)
+    grant_inventory_item(uid, "fragment_dna_common", 5, conn=conn)
+    conn.commit()
+    conn.close()
+
+    res = client.get("/inventory")
+    body = res.get_data(as_text=True)
+    assert res.status_code == 200
+
+    assert "inventory-vault" in body
+    assert "inventory-tk-rail" in body
+    assert 'data-inventory-timekeeper' in body
+    assert "inventory-item-grid" in body
+    assert "inventory-item-card" in body
+    assert "inventory-item-group" in body
+    assert 'data-inventory-item-group="' in body
+    assert "inventory-tabs" in body
+    assert "inventory-tabs--inline" in body
+    assert "inventory-workspace-head" in body
+    assert 'data-inventory-head-context="containers"' in body
+    assert 'data-inventory-head-context="items"' in body
+    assert "data-inventory-focus-drops" in body
+    assert 'data-inventory-tab="containers"' in body
+    assert 'data-inventory-tab="items"' in body
+    assert 'data-inventory-panel="containers"' in body
+    assert 'data-inventory-panel="items"' in body
+    assert "inventory-item-row" not in body
+    assert 'class="inventory-item-list"' not in body
+    assert 'data-open-max' not in body
+    assert "inv_open_max_btn" not in body
+    assert "Max öffnen" not in body
+
+    # Exactly one open button per container card
+    container_count = body.count('data-inventory-container="')
+    open_count = body.count("data-inventory-open=")
+    assert container_count > 0
+    assert open_count == container_count
+
+    # Owned rare stack uses open-all amount on the single CTA
+    assert 'data-inventory-container="container_rare"' in body
+    rare_idx = body.index('data-inventory-container="container_rare"')
+    rare_slice = body[rare_idx : rare_idx + 1800]
+    assert 'data-open-amount="4"' in rare_slice
+    assert rare_slice.count("data-inventory-open=") == 1
+
+    # TK lives in workspace header context (items), not orphan bar
+    assert "inventory-tk-bar" not in body
+    assert "inventory-active-boosters-rail" in body
+    assert body.count('id="inventory-timekeeper-panel"') == 1
+
+
+def test_inventory_vault_ux_static_contract():
+    """GC-INV-UX: JS/CSS owners match vault markup (no dual-open / row legacy)."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    js = (root / "static" / "main.js").read_text(encoding="utf-8")
+    css = (root / "static" / "style.css").read_text(encoding="utf-8")
+    tpl = (root / "templates" / "inventory.html").read_text(encoding="utf-8")
+    shop_tpl = (root / "templates" / "shop.html").read_text(encoding="utf-8")
+
+    assert "function buildInventoryItemCardHtml(" in js
+    assert "function buildInventoryItemGroupsHtml(" in js
+    assert "function inventoryOpenButtonLabel(" in js
+    assert "function _inventorySelectTab(" in js
+    assert "data-inventory-head-context" in js
+    assert "data-inventory-focus-drops" in js
+    assert "buildInventoryItemRowHtml" not in js
+    assert "data-open-max" not in js
+    assert "data-open-max" not in tpl
+    assert "inv_open_max_btn" not in tpl
+    assert "inventory-item-grid" in tpl
+    assert "inventory-item-group" in tpl
+    assert "inventory-tabs--inline" in tpl
+    assert "inventory-workspace-head" in tpl
+    assert "data-inventory-tab" in tpl
+    assert "data-inventory-head-context" in tpl
+    assert "inventory-vault" in tpl
+    assert "inventory-tk-rail" in tpl
+    assert "shop-tabs--inline" in shop_tpl
+    assert "shop-workspace-header" in shop_tpl
+    assert "data-shop-head-context" in shop_tpl
+    assert "data-shop-head-context" in js
+    assert ".inventory-item-grid" in css
+    assert ".inventory-item-group" in css
+    assert ".inventory-tabs" in css
+    assert ".inventory-tabs--inline" in css
+    assert ".inventory-workspace-head" in css
+    assert ".inventory-tab" in css
+    assert ".inventory-item-card" in css
+    assert ".inventory-tk-rail" in css
+    assert ".inventory-vault" in css
+    assert ".shop-tabs--inline" in css
+    assert ".shop-workspace-header" in css
+    assert "minmax(132px" in css
+    assert "flex: 1 1 100%" in css or "flex: 1 1 100%;" in css
+
+def test_inventory_vault_item_groups(inventory_db):
+    """Vault groups come from classification owner — boosters vs materials."""
+    from game.inventory_classification import build_vault_item_groups, resolve_vault_group
+
+    conn = db()
+    uid = _player(conn=conn)
+    grant_inventory_item(uid, "booster_production_25", 2, conn=conn)
+    grant_inventory_item(uid, "fragment_dna_common", 5, conn=conn)
+    conn.commit()
+    state = build_inventory_state(uid, conn=conn)
+    conn.close()
+
+    assert state["item_groups"]
+    keys = [g["key"] for g in state["item_groups"]]
+    assert "boosters" in keys or "materials" in keys
+    flat = {i["item_key"]: i["vault_group"] for g in state["item_groups"] for i in g["items"]}
+    assert flat.get("fragment_dna_common") == "materials"
+    if "booster_production_25" in flat:
+        assert flat["booster_production_25"] == "boosters"
+    assert resolve_vault_group("fragment_dna_common") == "materials"
+    rebuilt = build_vault_item_groups(state["other_items"])
+    assert [g["key"] for g in rebuilt] == keys
