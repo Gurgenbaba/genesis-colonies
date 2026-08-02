@@ -38,6 +38,10 @@ Actions use `_player_context_for_action()` (read-only DB) then **one** `refresh_
 - Repeated idle polls may set `diet_probe_skip:1` when the process-local fingerprint still matches (**GC-PERF-STATE-005**) — skips EffectResolver/nav probe after unread check.
 - Poll cadence (active/idle/hidden) is owned by `gameStatePollTick` only — unchanged polls must not `stopPolling`+`startPolling` (**GC-PERF-POLL-THRASH-001**).
 - Client resource HUD climb uses `_resourceLive` + `production_per_hour` (not diet payload on every poll). After soft-nav / `skipGameState`, `bootstrapResourceLiveFromDom` restores rates from `GC.lastState` → `[data-res-rate]` → same-planet live rates (never force `0` alone). On `{unchanged:true}` with zero rates, client resyncs from `lastState` or forces one full diet (`resource_rates_missing`, cooldown) — resources stay off `poll_version` by design.
+- **GC-INSTANT-HUD-RATES-001:** Full-page SSR writes production rates into `#resource-bar [data-res-rate]` via `HEADER_PROD_PER_HOUR` / `prod_per_hour` (`g.gc_prod_per_hour` from `_load_page_live_context`). GC-742 skip no longer leaves `/h` blank until the first diet poll.
+- **GC-INSTANT-POLL-BOOT-001:** After SSR skip, `bootstrapBusyFlagsFromDom()` sets busy cadence; first diet poll waits the full active/idle interval (not a forced 3 s HUD wait). Notification poll stays deferred.
+- **GC-INSTANT-QUEUE-FINISH-001:** At timer-zero, `optimisticDismissDueCardQueueBlock` patches the card level from `data-target-level` (server-provided next level) before `forceCanonicalGameStateRefresh` / `include_panel=1` reconciles. Landscape CSS is no-op when unchanged; `gc-perf-idle` ON is debounced to avoid chrome snap.
+- **GC-PERF-OVERVIEW-TTFB-001:** Full-page `_load_page_live_context` stashes `g.gc_world_boss_count` / `g.gc_fleet_hud` on the same DB connection; `inject_globals` reuses them (no second WB/fleet connection on SSR).
 
 Full panel payload is returned on **page load** and after **POST actions** (build, trade, fleet, …).
 

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-{% from "partials/progression_cards.html" import render_resource_icon, render_hud_capacity_bar with context %}
+{% from "partials/progression_cards.html" import render_resource_icon, render_hud_capacity_bar, render_hud_storage_warn, hud_storage_warn_level with context %}
 <html lang="{{ GC_LOCALE }}">
 <head>
   <meta charset="UTF-8">
@@ -13,6 +13,27 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&family=Orbitron:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap">
 
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ GC_ASSET_VERSION }}">
+
+  {# GC-INSTANT-IDENTITY-FOUC-001: theme tokens before first paint (avoid cyan :root flash). #}
+  {% set _auth_head = AUTH_USER if AUTH_USER is defined else none %}
+  {% set _simple_for_identity = (request.endpoint == 'legal_view' and not (_auth_head and _auth_head.id)) or request.endpoint in ['landing', 'login', 'register', 'forgot_password', 'reset_password', 'verify_email'] %}
+  {% if not _simple_for_identity and IDENTITY_THEME is defined and IDENTITY_THEME %}
+  <style id="gc-identity-critical">
+    .gc-body-ingame[data-identity-theme="{{ IDENTITY_THEME }}"] {
+      --gc-id-rgb: {{ IDENTITY_THEME_RGB|default('70, 229, 255') }};
+      --gc-bg: {{ IDENTITY_THEME_BG|default('#040810') }};
+      {% if IDENTITY_THEME != 'cyan' %}
+      --gc-primary: rgb(var(--gc-id-rgb));
+      --gc-primary-2: color-mix(in srgb, rgb(var(--gc-id-rgb)) 65%, #ffffff);
+      --gc-neon-cyan: rgb(var(--gc-id-rgb));
+      --gc-accent: rgb(var(--gc-id-rgb));
+      --gc-accent-cyan: rgb(var(--gc-id-rgb));
+      --gc-panel-border: rgba(var(--gc-id-rgb), 0.42);
+      --gc-border: rgba(var(--gc-id-rgb), 0.36);
+      {% endif %}
+    }
+  </style>
+  {% endif %}
 
   {% block extra_head %}{% endblock %}
 </head>
@@ -197,7 +218,12 @@
 
             {% set metal_have = (player.metal if player is defined else 0)|int %}
             {% set metal_cap_val = (storage_caps.metal if storage_caps is defined else 0)|int %}
-            <div class="hud-res-panel hud-res-metal" data-hud-res="metal" title="{{ T('resource_metal') }}" aria-label="{{ T('resource_metal') }}">
+            {% set _metal_warn = hud_storage_warn_level(metal_have, metal_cap_val)|trim %}
+            {% set _hud_prod = (prod_per_hour if prod_per_hour is defined and prod_per_hour else (HEADER_PROD_PER_HOUR if HEADER_PROD_PER_HOUR is defined and HEADER_PROD_PER_HOUR else {})) %}
+            {% set _rate_metal = (_hud_prod.metal_mine if _hud_prod.metal_mine is defined else (_hud_prod.metal if _hud_prod.metal is defined else 0))|int %}
+            {% set _rate_crystal = (_hud_prod.crystal_mine if _hud_prod.crystal_mine is defined else (_hud_prod.crystal if _hud_prod.crystal is defined else 0))|int %}
+            {% set _rate_fuel = (_hud_prod.fuel_cell_plant if _hud_prod.fuel_cell_plant is defined else (_hud_prod.fuel_cells if _hud_prod.fuel_cells is defined else 0))|int %}
+            <div class="hud-res-panel hud-res-metal{% if _metal_warn == 'full' %} hud-res-panel--storage-full{% elif _metal_warn == 'warn' %} hud-res-panel--storage-warn{% endif %}" data-hud-res="metal" title="{{ T('resource_metal') }}" aria-label="{{ T('resource_metal') }}">
               <div class="hud-res-body res-block res-block-metal">
                 <span class="hud-res-badge" aria-hidden="true">{{ T('resource_metal_short', 'FN') }}</span>
                 {{ render_resource_icon('metal', hud=true, lazy=false, priority='high', alt=T('resource_metal')) }}
@@ -211,16 +237,17 @@
                   </span>
                 </span>
               </div>
-              <span class="hud-res-warn" data-hud-res-warn="metal" hidden aria-live="polite"></span>
+              {{ render_hud_storage_warn('metal', metal_have, metal_cap_val) }}
               <span class="hud-res-footer">
-                <span class="res-rate metal" data-res-rate="metal" aria-hidden="true" style="visibility:hidden"></span>
+                <span class="res-rate metal" data-res-rate="metal"{% if _rate_metal > 0 %} style="visibility:visible"{% else %} aria-hidden="true" style="visibility:hidden"{% endif %}>{% if _rate_metal > 0 %}+{{ _rate_metal|fmt_int }}/h{% endif %}</span>
                 <span class="res-boost-chip gc-mono" data-res-boost="metal" hidden></span>
               </span>
             </div>
 
             {% set crystal_have = (player.crystal if player is defined else 0)|int %}
             {% set crystal_cap_val = (storage_caps.crystal if storage_caps is defined else 0)|int %}
-            <div class="hud-res-panel hud-res-crystal" data-hud-res="crystal" title="{{ T('resource_crystal') }}" aria-label="{{ T('resource_crystal') }}">
+            {% set _crystal_warn = hud_storage_warn_level(crystal_have, crystal_cap_val)|trim %}
+            <div class="hud-res-panel hud-res-crystal{% if _crystal_warn == 'full' %} hud-res-panel--storage-full{% elif _crystal_warn == 'warn' %} hud-res-panel--storage-warn{% endif %}" data-hud-res="crystal" title="{{ T('resource_crystal') }}" aria-label="{{ T('resource_crystal') }}">
               <div class="hud-res-body res-block res-block-crystal">
                 <span class="hud-res-badge" aria-hidden="true">{{ T('resource_crystal_short', 'CT') }}</span>
                 {{ render_resource_icon('crystal', hud=true, lazy=false, priority='high', alt=T('resource_crystal')) }}
@@ -234,16 +261,17 @@
                   </span>
                 </span>
               </div>
-              <span class="hud-res-warn" data-hud-res-warn="crystal" hidden aria-live="polite"></span>
+              {{ render_hud_storage_warn('crystal', crystal_have, crystal_cap_val) }}
               <span class="hud-res-footer">
-                <span class="res-rate crystal" data-res-rate="crystal" aria-hidden="true" style="visibility:hidden"></span>
+                <span class="res-rate crystal" data-res-rate="crystal"{% if _rate_crystal > 0 %} style="visibility:visible"{% else %} aria-hidden="true" style="visibility:hidden"{% endif %}>{% if _rate_crystal > 0 %}+{{ _rate_crystal|fmt_int }}/h{% endif %}</span>
                 <span class="res-boost-chip gc-mono" data-res-boost="crystal" hidden></span>
               </span>
             </div>
 
             {% set fc_have = (player.fuel_cells if player is defined and player.fuel_cells is defined else 0) | int %}
             {% set fc_cap_val = (storage_caps.fuel_cells if storage_caps is defined else 0)|int %}
-            <div class="hud-res-panel hud-res-fuel-cells" data-hud-res="fuel_cells" title="{{ T('resource_fuel_cells') }}" aria-label="{{ T('resource_fuel_cells') }}">
+            {% set _fc_warn = hud_storage_warn_level(fc_have, fc_cap_val)|trim %}
+            <div class="hud-res-panel hud-res-fuel-cells{% if _fc_warn == 'full' %} hud-res-panel--storage-full{% elif _fc_warn == 'warn' %} hud-res-panel--storage-warn{% endif %}" data-hud-res="fuel_cells" title="{{ T('resource_fuel_cells') }}" aria-label="{{ T('resource_fuel_cells') }}">
               <div class="hud-res-body res-block res-block-fuel-cells">
                 <span class="hud-res-badge" aria-hidden="true">{{ T('resource_fuel_cells_short', 'BZ') }}</span>
                 {{ render_resource_icon('fuel_cells', hud=true, lazy=false, priority='high', alt=T('resource_fuel_cells')) }}
@@ -257,9 +285,9 @@
                   </span>
                 </span>
               </div>
-              <span class="hud-res-warn" data-hud-res-warn="fuel_cells" hidden aria-live="polite"></span>
+              {{ render_hud_storage_warn('fuel_cells', fc_have, fc_cap_val) }}
               <span class="hud-res-footer">
-                <span class="res-rate fuel_cells" data-res-rate="fuel_cells" aria-hidden="true" style="visibility:hidden"></span>
+                <span class="res-rate fuel_cells" data-res-rate="fuel_cells"{% if _rate_fuel > 0 %} style="visibility:visible"{% else %} aria-hidden="true" style="visibility:hidden"{% endif %}>{% if _rate_fuel > 0 %}+{{ _rate_fuel|fmt_int }}/h{% endif %}</span>
                 <span class="res-boost-chip gc-mono" data-res-boost="fuel_cells" hidden></span>
               </span>
             </div>
@@ -736,9 +764,7 @@
   <script src="{{ url_for('static', filename='js/core/state.js') }}?v={{ GC_ASSET_VERSION }}"></script>
   <script src="{{ url_for('static', filename='js/core/lifecycle.js') }}?v={{ GC_ASSET_VERSION }}"></script>
   {% if not SIMPLE_LAYOUT and AUTH_USER and AUTH_USER.id %}
-  <script src="{{ url_for('static', filename='js/pages/shipyard.js') }}?v={{ GC_ASSET_VERSION }}"></script>
-  <script src="{{ url_for('static', filename='js/galaxy-quick-action.js') }}?v={{ GC_ASSET_VERSION }}"></script>
-  <script src="{{ url_for('static', filename='js/combat_simulator.js') }}?v={{ GC_ASSET_VERSION }}"></script>
+  {# GC-PERF-JS-002: shipyard/defense/galaxy-QA/battle-lab via page extra_scripts #}
   <script src="{{ url_for('static', filename='js/combat_theater.js') }}?v={{ GC_ASSET_VERSION }}"></script>
   <script src="{{ url_for('static', filename='js/chat.js') }}?v={{ GC_ASSET_VERSION }}"></script>
   <script src="{{ url_for('static', filename='js/messages.js') }}?v={{ GC_ASSET_VERSION }}"></script>

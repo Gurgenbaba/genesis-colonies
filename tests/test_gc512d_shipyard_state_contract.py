@@ -16,26 +16,33 @@ def _read(rel: str) -> str:
 
 
 def test_shipyard_build_uses_apply_action_state_when_state_present():
-    """GC-512D — build success path is state-first (applyActionState when res.state)."""
+    """GC-512D — build success path is state-first (applyActionState when res.state).
+
+    Why updated: product now passes `{ skipQueue: true }` when state already owns the
+    mini-strip (avoids wiping TK ⚡). Still verifies state-first + optional data apply.
+    """
     src = _read("static/js/pages/shipyard.js")
     build = src.split('GC.fetchGameAction("/api/shipyard/build"')[1].split(
         'showNotify(reasonText("generic")'
     )[0]
     assert "if (res.state)" in build
     assert 'applyActionState(res, "shipyard_build")' in build
-    assert "applyShipyardState(page, res.data)" in build
+    assert "applyShipyardState(page, res.data" in build
+    assert "skipQueue: true" in build
     # No redundant full refresh when state already applied
     assert 'refreshGameState("shipyard_build")' not in build
 
 
 def test_shipyard_cancel_uses_apply_action_state_when_state_present():
+    """Cancel remains state-first; data apply uses skipQueue when state present."""
     src = _read("static/js/pages/shipyard.js")
     cancel = src.split('GC.fetchGameAction("/api/shipyard/queue/cancel"')[1].split(
         'GC.fetchGameAction("/api/shipyard/queue/move"'
     )[0]
     assert 'applyActionState(resCancel, "shipyard_cancel")' in cancel
     assert "if (resCancel.state)" in cancel
-    assert "applyShipyardState(page, resCancel.data)" in cancel
+    assert "applyShipyardState(page, resCancel.data" in cancel
+    assert "skipQueue: true" in cancel
 
 
 def test_state_ajax_docs_shipyard_ok_state_envelope():
@@ -69,4 +76,7 @@ def test_gc_perf_js_002_shipyard_page_module_extracted():
     assert "GC.applyActionState = applyActionState" in main
 
     base = _read("templates/base.html")
-    assert "js/pages/shipyard.js" in base
+    # GC-PERF-JS-002: page-scoped load (not global shell).
+    assert "js/pages/shipyard.js" not in base
+    shipyard_tpl = (ROOT / "templates" / "shipyard.html").read_text(encoding="utf-8")
+    assert "js/pages/shipyard.js" in shipyard_tpl

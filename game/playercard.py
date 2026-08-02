@@ -61,6 +61,44 @@ ALLOWED_THEMES = frozenset({
 BASE_FREE_THEMES = frozenset({"cyan", "violet", "amber", "emerald", "rose"})
 SEASON_THEMES = frozenset({"ash", "steel", "gold", "void", "plasma"})
 
+# CSS --gc-id-rgb values (must match static/style.css Identity Shell).
+IDENTITY_THEME_RGB = {
+    "cyan": "70, 229, 255",
+    "violet": "168, 120, 255",
+    "amber": "255, 190, 80",
+    "emerald": "80, 220, 140",
+    "rose": "255, 120, 160",
+    "ash": "154, 164, 176",
+    "steel": "160, 176, 196",
+    "gold": "255, 200, 72",
+    "void": "140, 90, 255",
+    "plasma": "0, 255, 220",
+}
+
+# Tinted shell backgrounds so gc-perf-idle solid fill matches the theme.
+IDENTITY_THEME_BG = {
+    "cyan": "#040810",
+    "violet": "#0a0614",
+    "amber": "#120e06",
+    "emerald": "#04120a",
+    "rose": "#12060c",
+    "ash": "#0c0e12",
+    "steel": "#0a0e14",
+    "gold": "#120e06",
+    "void": "#0a0618",
+    "plasma": "#031416",
+}
+
+
+def identity_theme_rgb(theme: Any) -> str:
+    key = validate_theme(theme)
+    return IDENTITY_THEME_RGB.get(key, IDENTITY_THEME_RGB["cyan"])
+
+
+def identity_theme_bg(theme: Any) -> str:
+    key = validate_theme(theme)
+    return IDENTITY_THEME_BG.get(key, IDENTITY_THEME_BG["cyan"])
+
 # Prestige layer (Season Pass) — separate from themes; CSS data-aura / data-flair.
 ALLOWED_AURAS = frozenset({
     "none",

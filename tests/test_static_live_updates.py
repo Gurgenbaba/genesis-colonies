@@ -3032,7 +3032,10 @@ def test_main_js_notification_poll_singleton_heartbeat():
     assert "fleetAlertsHudSignature" in src
     start_poll = src.split("GC.startPolling = function startPolling")[1].split("function scheduleMessagesInboxBoot")[0]
     assert "GC.startNotificationPoll()" in start_poll or "GC.startNotificationPoll(deferFirstPoll" in start_poll
-    assert "Math.min(next, 3000)" in start_poll
+    # GC-INSTANT-POLL-BOOT-001: SSR-complete first diet poll waits full cadence (not min(,3000)).
+    assert "Math.min(next, 3000)" not in start_poll
+    assert "deferFirstPoll" in start_poll
+    assert "? next" in start_poll or ": next" in start_poll
     coerce = src.split("function coercePollUnreadForHud(data, reason)")[1].split("function updateMessagesUnreadBadges")[0]
     assert 'r === "notification_poll"' in coerce
     assert 'r === "queue_timer_zero"' in coerce
@@ -3162,3 +3165,110 @@ def test_app_story_state_api_is_read_only_ensure():
     fn = src.split("def api_story_state():")[1].split("def api_story_tts():")[0]
     assert "ensure=False" in fn
     assert "get_story_state(" in fn
+
+
+def test_gc_instant_queue_finish_optimistic_level_contract():
+    """GC-INSTANT-QUEUE-FINISH-001: timer-zero bumps level from data-target-level before include_panel."""
+    src = _read("static/main.js")
+    assert "function optimisticPatchCardLevelFromQueueBlock(block, cardEl)" in src
+    dismiss = src.split("function optimisticDismissDueCardQueueBlock(block)")[1].split(
+        "function findCardQueueBlockByJobId"
+    )[0]
+    assert "optimisticPatchCardLevelFromQueueBlock(block, cardEl)" in dismiss
+    assert "dismissCompletedCardQueueBlock(block)" in dismiss
+    assert "PERF_IDLE_ON_DEBOUNCE_MS" in src
+    land = src.split("function applyPlanetLandscapeFromState(data)")[1].split(
+        "function ensurePlanetLandscapeAfterSoftNav"
+    )[0]
+    assert "alreadyPainted" in land
+    macros = _read("templates/partials/card_queue_macros.html")
+    assert "data-target-level=" in macros
+    assert "forceCanonicalGameStateRefresh(\"queue_timer_zero\")" in src
+
+
+def test_gc_instant_hud_rates_ssr_contract():
+    """GC-INSTANT-HUD-RATES-001: resource /h rates SSR'd into #resource-bar."""
+    base = _read("templates/base.html")
+    assert "HEADER_PROD_PER_HOUR" in base
+    assert "_rate_metal" in base
+    assert 'data-res-rate="metal"' in base
+    assert "+{{ _rate_metal|fmt_int }}/h" in base
+    app = _read("app.py")
+    assert "HEADER_PROD_PER_HOUR=header_prod_per_hour" in app
+    assert "gc_prod_per_hour" in app
+    src = _read("static/main.js")
+    assert "function bootstrapBusyFlagsFromDom()" in src
+    assert "bootstrapBusyFlagsFromDom()" in src
+
+
+def test_gc_instant_hud_storage_warn_ssr_contract():
+    """GC-INSTANT-HUD-STORAGE-WARN-001: Lager voll visible on first paint when over cap."""
+    macros = _read("templates/partials/progression_cards.html")
+    assert "macro hud_storage_warn_level" in macros or "macro hud_storage_warn_level(" in macros
+    assert "macro render_hud_storage_warn" in macros or "macro render_hud_storage_warn(" in macros
+    assert "hud_storage_full" in macros
+    assert "0.92" in macros or "92" in macros
+    base = _read("templates/base.html")
+    assert "render_hud_storage_warn" in base
+    assert "hud-res-panel--storage-full" in base
+    assert "_metal_warn" in base
+    boot = _read("static/main.js").split("function bootstrapResourceLiveFromDom()")[1].split(
+        "const GC_DEFER_CHAT_BOOT_MS"
+    )[0]
+    assert "patchHudStorageWarnings(" in boot
+    warn_fn = _read("static/main.js").split("function patchHudStorageWarnings(")[1].split(
+        "function syncHeaderVacationBanner"
+    )[0]
+    assert "STORAGE_WARN_RATIO = 0.92" in warn_fn
+    assert 'hud_storage_full' in warn_fn
+
+
+def test_gc_instant_identity_critical_css_contract():
+    """GC-INSTANT-IDENTITY-FOUC-001: critical identity tokens in <head> before style paint."""
+    base = _read("templates/base.html")
+    assert 'id="gc-identity-critical"' in base
+    assert "IDENTITY_THEME_RGB" in base
+    assert "--gc-id-rgb:" in base
+    app = _read("app.py")
+    assert "IDENTITY_THEME_RGB=identity_theme_rgb" in app
+    assert "IDENTITY_THEME_BG=identity_theme_bg" in app
+    from game.playercard import identity_theme_bg, identity_theme_rgb
+
+    assert identity_theme_rgb("violet") == "168, 120, 255"
+    assert identity_theme_bg("gold").startswith("#")
+    css = _read("static/style.css")
+    assert '[data-identity-theme="violet"] {\n  --gc-bg:' in css or 'data-identity-theme="violet"]' in css
+
+
+def test_gc_perf_js_002_page_scoped_binders():
+    """GC-PERF-JS-002: heavy page binders not on every ingame shell boot."""
+    base = _read("templates/base.html")
+    assert "js/pages/shipyard.js" not in base
+    assert "js/pages/defense.js" not in base
+    assert "js/combat_simulator.js" not in base
+    assert "js/galaxy-quick-action.js" not in base
+    assert "js/combat_theater.js" in base  # messages combat replay
+    assert "js/pages/shipyard.js" in _read("templates/shipyard.html")
+    assert "js/pages/defense.js" in _read("templates/defense.html")
+    assert "js/galaxy-quick-action.js" in _read("templates/galaxy.html")
+    assert "js/combat_simulator.js" in _read("templates/combat_simulator.html")
+    defense_mod = _read("static/js/pages/defense.js")
+    assert "GC.modules.defense = initDefense" in defense_mod
+    assert "GC.pages.defense" in defense_mod
+    main = _read("static/main.js")
+    thin = main.split("function initDefense()")[1].split("GC.refreshDefenseState")[0]
+    assert "GC.pages.defense" in thin
+    assert "document.addEventListener(\"click\"" not in thin
+
+
+def test_gc_perf_overview_ttfb_shell_stash_contract():
+    """GC-PERF-OVERVIEW-TTFB-001: live_context stashes WB/fleet for inject_globals."""
+    app = _read("app.py")
+    assert "def _stash_shell_boot_for_inject(" in app
+    assert "_stash_shell_boot_for_inject(user_id, conn)" in app
+    assert 'getattr(_flask_g, "gc_world_boss_count"' in app or "gc_world_boss_count" in app
+    assert 'getattr(_flask_g, "gc_fleet_hud"' in app or "gc_fleet_hud" in app
+    inject_wb = app.split("world_boss_active = False")[1].split("sidebar_release =")[0]
+    assert "gc_world_boss_count" in inject_wb
+    hud = app.split("header_hud_boot: dict[str, Any]")[1].split("identity_theme =")[0]
+    assert "gc_fleet_hud" in hud

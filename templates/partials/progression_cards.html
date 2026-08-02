@@ -53,6 +53,21 @@
   {% endif %}
 {% endmacro %}
 
+{# GC-INSTANT-HUD-STORAGE-WARN-001 — SSR storage warn/full (same 0.92 threshold as patchHudStorageWarnings). #}
+{% macro hud_storage_warn_level(current, max_cap) -%}
+{%- set cur = (current or 0)|int -%}
+{%- set cap = (max_cap or 0)|int -%}
+{%- if cap > 0 and cur >= cap -%}full
+{%- elif cap > 0 and cur >= ((cap * 92) / 100)|int -%}warn
+{%- else -%}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro render_hud_storage_warn(res_key, current, max_cap) %}
+  {% set level = hud_storage_warn_level(current, max_cap)|trim %}
+  <span class="hud-res-warn" data-hud-res-warn="{{ res_key }}"{% if not level %} hidden{% endif %} aria-live="polite">{% if level == 'full' %}{{ T('hud_storage_full', 'Lager voll') }}{% elif level == 'warn' %}{{ T('hud_storage_almost_full', 'Lager fast voll') }}{% endif %}</span>
+{% endmacro %}
+
 {# GC-807A/B — 10-segment storage / usage capacity bar under HUD resources (no % label) #}
 {% macro render_hud_capacity_bar(res_key, current, max_cap) %}
   {% set cur = (current or 0)|int %}

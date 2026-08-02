@@ -24064,6 +24064,31 @@ body.gc-tab-hidden .gc-card-queue-glyph--research {
   box-shadow: inset 4px 0 0 rgb(var(--gc-id-rgb));
 }
 
+/* GC-INSTANT-IDENTITY-FOUC-001: every theme sets --gc-bg so gc-perf-idle solid fill matches. */
+.gc-body-ingame[data-identity-theme="violet"] {
+  --gc-bg: #0a0614;
+  --gc-bg2: #05030c;
+}
+.gc-body-ingame[data-identity-theme="amber"] {
+  --gc-bg: #120e06;
+  --gc-bg2: #0a0804;
+}
+.gc-body-ingame[data-identity-theme="emerald"] {
+  --gc-bg: #04120a;
+  --gc-bg2: #020a06;
+}
+.gc-body-ingame[data-identity-theme="rose"] {
+  --gc-bg: #12060c;
+  --gc-bg2: #0a0408;
+}
+.gc-body-ingame[data-identity-theme="ash"] {
+  --gc-bg: #0c0e12;
+  --gc-bg2: #080a0c;
+}
+.gc-body-ingame[data-identity-theme="steel"] {
+  --gc-bg: #0a0e14;
+  --gc-bg2: #060910;
+}
 .gc-body-ingame[data-identity-theme="gold"] {
   --gc-bg: #120e06;
   --gc-bg2: #0a0804;
@@ -24084,6 +24109,12 @@ body.gc-tab-hidden .gc-card-queue-glyph--research {
   --gc-panel: rgba(2, 22, 26, 0.96);
   --gc-panel-bg: rgba(2, 22, 26, 0.96);
   --gc-panel-bg-2: rgba(4, 30, 34, 0.92);
+}
+
+/* Keep identity landscape wash under idle (no snap when last queue job ends). */
+body.gc-perf-idle.gc-body-ingame.gc-has-planet-landscape[data-identity-theme]:not([data-identity-theme="cyan"]) .gc-bg {
+  opacity: 1;
+  display: block;
 }
 
 /* Grid bg only without planet landscape ? never wipe --planet-landscape */

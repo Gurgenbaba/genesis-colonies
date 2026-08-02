@@ -115,7 +115,7 @@ Referenz: `order_total_seconds` / `order_remaining` in `game/shipyard_queue.py`,
 | State | Condition | Server | Client |
 |-------|-----------|--------|--------|
 | **Active** | `remaining_seconds > 0` | Job in queue, position 1 active | Show progress + timer |
-| **Completed** | `remaining_seconds <= 0` or `finish_at <= now` | Finish immediately, remove from queue, apply reward, start next | Remove card/HUD queue block immediately; refresh via `/api/game-state` |
+| **Completed** | `remaining_seconds <= 0` or `finish_at <= now` | Finish immediately, remove from queue, apply reward, start next | Remove queue UI immediately; **optimistic level** from `data-target-level` (**GC-INSTANT-QUEUE-FINISH-001**); then Canonical `include_panel=1` reconcile |
 | **Cancelled** | User cancel | Remove job, refund per GC-831, reschedule | Clear queue UI from action `state` |
 
 **Forbidden** (must never appear in API or UI):
@@ -156,7 +156,7 @@ Queue-**Logik** bleibt in `game/queue_engine.py` und den Domänen-Ownern. Presen
 - Gebäude / Forschung / PE: Jobs in Item-Cards (+ Mini-Strip)
 - **Unit-Queues (Shipyard / Defense):** ausschließlich zentrale Mini-Bauschleife; `renderCardQueueBlock` liefert für `shipyard`/`defense` `null`; TK/Cancel nur im Strip
 - **TK-Boost Dedup:** eine ⚡ pro aktivem Job — Mini-Strip (Build/Research/Shipyard/Defense) bzw. PE-Queue-List; Hero-/Tech-Cards hosten keinen Apply-Button
-- **Live-Sync:** `syncMountedQueuePagesFromState` nach Actions und Diet-Polls; Finish → `queue_timer_zero` / `*_finished` + include_panel aktualisiert Levels/Stock
+- **Live-Sync:** `syncMountedQueuePagesFromState` nach Actions und Diet-Polls; Finish → optimistic Level-Patch → `queue_timer_zero` / `*_finished` + include_panel (Authority)
 - Serializer (`map_*_queue_to_card_jobs`, `mini_queue_jobs`) bleiben für Strip/HUD — nicht für Unit-Card-DOM
 
 ---

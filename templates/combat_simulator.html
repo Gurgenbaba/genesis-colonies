@@ -291,3 +291,8 @@
   </div>
 </div>
 {% endblock %}
+
+{% block extra_scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/combat_simulator.js') }}?v={{ GC_ASSET_VERSION }}"></script>
+{% endblock %}

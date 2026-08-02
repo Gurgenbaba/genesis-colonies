@@ -1071,12 +1071,20 @@ def test_identity_shell_css_theme_rgb_not_overridden_by_shared_block():
     assert '[data-identity-theme="violet"] { --gc-id-rgb:' in css
     assert '[data-identity-theme="amber"] { --gc-id-rgb:' in css
     assert '[data-identity-theme="gold"] { --gc-id-rgb:' in css
-    assert "data-identity-aura" in (
+    base = (
         Path(__file__).resolve().parents[1] / "templates" / "base.html"
     ).read_text(encoding="utf-8")
+    assert "data-identity-aura" in base
+    assert 'id="gc-identity-critical"' in base
+    assert "IDENTITY_THEME_RGB" in base
     assert '[data-identity-aura="aura_gold"] { --gc-aura-rgb:' in css
     assert '[data-identity-aura="aura_void"] { --gc-aura-rgb:' in css
     assert "gc-id-aura-pulse" in css
+    # Idle solid fill must not flash default cyan bg for non-cyan themes.
+    assert 'data-identity-theme="violet"]' in css and "--gc-bg:" in css
+    from game.playercard import IDENTITY_THEME_RGB, identity_theme_rgb
+
+    assert IDENTITY_THEME_RGB["violet"] == identity_theme_rgb("violet")
 
 
 def test_get_equipped_identity_returns_theme_and_aura(temp_db):

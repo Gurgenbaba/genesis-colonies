@@ -33,10 +33,14 @@ Light-PJAX und SSR-Skip (Owner: `static/main.js`, Details in [STATE_AJAX.md](STA
 | Soft-Nav tickers (**GC-PERF-PJAX-TICKER-001**) | Progress-Ticker pausiert während Apply (`cleanupPage` → `initPage`); Resource-Ticker bleibt; `requestFinishRefresh` / queue-timer-zero no-op solange `GC.pjaxInFlight` |
 | PJAX fetch failure | Hard-load fallback (`location.assign`) so the shell does not stay toast-only |
 | Shell-HUD nach Login | `#gc-hud-boot-state` → `bootstrapHudFromDom()` vor Fleet-Drawer (GC-INSTANT-UX-001A) |
+| Production `/h` Rates SSR | `HEADER_PROD_PER_HOUR` / `prod_per_hour` in `#resource-bar` — Climb ohne Diet-Poll (**GC-INSTANT-HUD-RATES-001**) |
+| Busy-Flags aus SSR | `bootstrapBusyFlagsFromDom()` nach Queue-Bootstrap; First Diet-Poll = volle Cadence (**GC-INSTANT-POLL-BOOT-001**) |
+| Timer-Zero Finish | Optimistic Level aus `data-target-level`, dann Canonical `include_panel=1` (**GC-INSTANT-QUEUE-FINISH-001**) |
+| Identity First Paint | `#gc-identity-critical` im `<head>` (**GC-INSTANT-IDENTITY-FOUC-001**) |
 | Fleet-Seite mit `#fleet-page-state` `ready: true` | `initFleet` skippt sofortiges `refreshFleetState` (GC-INSTANT-UX-001C) |
 | PJAX server context | Score/Rank, `HEADER_PLANETS`, Landscape hinter `_is_lightweight_layout_request()` — Shell bleibt im DOM (**GC-PERF-PJAX-CTX-SHELL-001**) |
 
-Diet-Poll / deferred first poll liefert weiterhin Live-Updates; kein zweites Polling-System.
+Diet-Poll bleibt Hintergrund-Wahrheit; HUD/Finish-UX hängt nicht mehr am ersten Poll. Kein zweites Polling-System.
 
 ### Pflicht-APIs (`static/main.js`)
 

@@ -541,16 +541,24 @@ def inject_globals():
     world_boss_count = 0
     try:
         if not simple_layout:
-            from game.db import db as _wb_db
-            from game.world_boss import list_active_events
+            # GC-PERF-OVERVIEW-TTFB-001: reuse stash from page live_context when present.
+            from flask import g as _flask_g
 
-            _wb_conn = _wb_db()
-            try:
-                _wb_list = list_active_events(conn=_wb_conn, limit=10)
-                world_boss_count = len(_wb_list)
-                world_boss_active = world_boss_count > 0
-            finally:
-                _wb_conn.close()
+            _wb_cached_count = getattr(_flask_g, "gc_world_boss_count", None)
+            if _wb_cached_count is not None:
+                world_boss_count = int(_wb_cached_count or 0)
+                world_boss_active = bool(getattr(_flask_g, "gc_world_boss_active", world_boss_count > 0))
+            else:
+                from game.db import db as _wb_db
+                from game.world_boss import list_active_events
+
+                _wb_conn = _wb_db()
+                try:
+                    _wb_list = list_active_events(conn=_wb_conn, limit=10)
+                    world_boss_count = len(_wb_list)
+                    world_boss_active = world_boss_count > 0
+                finally:
+                    _wb_conn.close()
     except Exception:
         world_boss_active = False
         world_boss_count = 0
@@ -796,7 +804,12 @@ def inject_globals():
                 except Exception:
                     pass
                 try:
-                    fleet_hud = fleet_hud_for_game_state(uid, conn=_boost_conn)
+                    # GC-PERF-OVERVIEW-TTFB-001: fleet HUD stashed on live_context conn.
+                    from flask import g as _flask_g
+
+                    fleet_hud = getattr(_flask_g, "gc_fleet_hud", None)
+                    if fleet_hud is None:
+                        fleet_hud = fleet_hud_for_game_state(uid, conn=_boost_conn)
                     if fleet_hud is not None:
                         header_hud_boot["active_fleets"] = fleet_hud.get("active_fleets") or {
                             "count": 0,
@@ -839,15 +852,35 @@ def inject_globals():
 
     identity_theme = "cyan"
     identity_aura = "none"
+    identity_theme_rgb = "70, 229, 255"
+    identity_theme_bg = "#040810"
     try:
         user_id = session.get("user_id")
         if user_id is not None and not simple_layout:
-            from game.playercard import get_equipped_identity
+            from game.playercard import (
+                get_equipped_identity,
+                identity_theme_bg as _identity_theme_bg,
+                identity_theme_rgb as _identity_theme_rgb,
+            )
 
             identity_theme, identity_aura = get_equipped_identity(int(user_id))
+            identity_theme_rgb = _identity_theme_rgb(identity_theme)
+            identity_theme_bg = _identity_theme_bg(identity_theme)
     except Exception:
         identity_theme = "cyan"
         identity_aura = "none"
+        identity_theme_rgb = "70, 229, 255"
+        identity_theme_bg = "#040810"
+
+    header_prod_per_hour = {}
+    try:
+        from flask import g as _flask_g
+
+        raw_prod = getattr(_flask_g, "gc_prod_per_hour", None)
+        if isinstance(raw_prod, dict):
+            header_prod_per_hour = raw_prod
+    except Exception:
+        header_prod_per_hour = {}
 
     return dict(
         T=T,
@@ -860,6 +893,9 @@ def inject_globals():
         CURRENT_PLAYER_ID=_current_player_id(),
         IDENTITY_THEME=identity_theme,
         IDENTITY_AURA=identity_aura,
+        IDENTITY_THEME_RGB=identity_theme_rgb,
+        IDENTITY_THEME_BG=identity_theme_bg,
+        HEADER_PROD_PER_HOUR=header_prod_per_hour,
 
         AUTH_USER=auth_user,
         AUTH_ADMIN=auth_admin,
@@ -1167,6 +1203,15 @@ def _load_page_live_context(
                 ratio=ratio,
                 user_id=user_id,
             )
+            try:
+                from flask import g as _flask_g, has_request_context
+
+                if has_request_context():
+                    _flask_g.gc_prod_per_hour = prod_per_hour
+            except Exception:
+                pass
+            if not use_poll_live_path and not use_planet_switch_live_path:
+                _stash_shell_boot_for_inject(user_id, conn)
         except RuntimeError:
             return None
         except sqlite3.OperationalError:
@@ -1212,6 +1257,15 @@ def _load_page_live_context(
                 ratio=ratio,
                 user_id=user_id,
             )
+            try:
+                from flask import g as _flask_g, has_request_context
+
+                if has_request_context():
+                    _flask_g.gc_prod_per_hour = prod_per_hour
+            except Exception:
+                pass
+            if not use_poll_live_path and not use_planet_switch_live_path:
+                _stash_shell_boot_for_inject(user_id, conn)
     except Exception:
         rollback(conn)
         raise
@@ -1229,6 +1283,14 @@ def _load_page_live_context(
     except Exception:
         pass
 
+    try:
+        from flask import g as _flask_g, has_request_context
+
+        if has_request_context() and prod_per_hour is not None:
+            _flask_g.gc_prod_per_hour = prod_per_hour
+    except Exception:
+        pass
+
     return {
         "player_view": player_view,
         "buildings": buildings,
@@ -1242,6 +1304,28 @@ def _load_page_live_context(
         "include_panel": include_panel,
         "planet": planet,
     }
+
+
+def _stash_shell_boot_for_inject(user_id: int, conn) -> None:
+    """GC-PERF-OVERVIEW-TTFB-001 — request-scoped shell bits for inject_globals (no 2nd DB conn)."""
+    try:
+        from flask import g as _flask_g, has_request_context
+
+        if not has_request_context() or conn is None:
+            return
+        uid = int(user_id)
+        if getattr(_flask_g, "gc_world_boss_count", None) is None:
+            from game.world_boss import list_active_events
+
+            wb_list = list_active_events(conn=conn, limit=10)
+            _flask_g.gc_world_boss_count = len(wb_list)
+            _flask_g.gc_world_boss_active = bool(wb_list)
+        if getattr(_flask_g, "gc_fleet_hud", None) is None:
+            from game.live_state import fleet_hud_for_game_state
+
+            _flask_g.gc_fleet_hud = fleet_hud_for_game_state(uid, conn=conn)
+    except Exception:
+        pass
 
 
 def _is_game_state_poll_source(finish_source: str) -> bool:

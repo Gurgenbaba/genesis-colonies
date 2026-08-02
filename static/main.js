@@ -807,6 +807,8 @@
   }
 
   let _prefersReducedMotion = false;
+  let _perfIdleOnTimer = null;
+  const PERF_IDLE_ON_DEBOUNCE_MS = 320;
 
   function syncPerfBodyClasses() {
     const body = document.body;
@@ -814,7 +816,23 @@
     body.classList.toggle("gc-tab-hidden", !isTabVisible());
     body.classList.toggle("gc-reduced-motion", _prefersReducedMotion);
     const perfIdle = isPerfIdle();
-    body.classList.toggle("gc-perf-idle", perfIdle);
+    // GC-INSTANT-QUEUE-FINISH-001: debounce idle-ON so finish panel patch does not flash chrome.
+    if (!perfIdle) {
+      if (_perfIdleOnTimer != null) {
+        try { clearTimeout(_perfIdleOnTimer); } catch (_) {}
+        _perfIdleOnTimer = null;
+      }
+      body.classList.remove("gc-perf-idle");
+    } else if (!body.classList.contains("gc-perf-idle")) {
+      if (_perfIdleOnTimer == null) {
+        _perfIdleOnTimer = GC.setSafeTimeout(() => {
+          _perfIdleOnTimer = null;
+          if (document.body && isPerfIdle()) {
+            document.body.classList.add("gc-perf-idle");
+          }
+        }, PERF_IDLE_ON_DEBOUNCE_MS);
+      }
+    }
     if (shouldRunVisualLoops() && _resourceLive.planetId) {
       startResourceTicker();
     } else {
@@ -1038,6 +1056,10 @@
     }
     const url = String(ap.landscape_url || "").trim();
     if (!url) {
+      if (!document.body.classList.contains("gc-has-planet-landscape")) {
+        applyPlanetHeroThemeFromState(data);
+        return;
+      }
       document.body.classList.remove("gc-has-planet-landscape");
       document.body.style.removeProperty("--planet-landscape");
       document.body.style.removeProperty("--planet-landscape-webp");
@@ -1045,12 +1067,22 @@
       return;
     }
     const webp = String(ap?.landscape_webp_url || landscapeWebpUrlFromRaster(url) || "").trim();
-    document.body.classList.add("gc-has-planet-landscape");
-    document.body.style.setProperty("--planet-landscape", `url("${url}")`);
-    if (webp) {
-      document.body.style.setProperty("--planet-landscape-webp", `url("${webp}")`);
-    } else {
-      document.body.style.removeProperty("--planet-landscape-webp");
+    const nextLandscape = `url("${url}")`;
+    const nextWebp = webp ? `url("${webp}")` : "";
+    const curLandscape = String(document.body.style.getPropertyValue("--planet-landscape") || "").trim();
+    const curWebp = String(document.body.style.getPropertyValue("--planet-landscape-webp") || "").trim();
+    const alreadyPainted =
+      document.body.classList.contains("gc-has-planet-landscape")
+      && curLandscape === nextLandscape
+      && curWebp === nextWebp;
+    if (!alreadyPainted) {
+      document.body.classList.add("gc-has-planet-landscape");
+      document.body.style.setProperty("--planet-landscape", nextLandscape);
+      if (webp) {
+        document.body.style.setProperty("--planet-landscape-webp", nextWebp);
+      } else {
+        document.body.style.removeProperty("--planet-landscape-webp");
+      }
     }
     applyPlanetHeroThemeFromState(data);
   }
@@ -1314,20 +1346,28 @@
       return parseIntNumber(el.textContent);
     };
     const rates = resolveBootstrapProductionRates(planetId);
+    const metal = readVal("#resource-bar .res-value.metal");
+    const crystal = readVal("#resource-bar .res-value.crystal");
+    const fuelCells = readVal("#resource-bar .res-value.fuel_cells");
+    const storageMetal = readVal("#resource-bar .res-cap.metal");
+    const storageCrystal = readVal("#resource-bar .res-cap.crystal");
+    const storageFuelCells = readVal("#resource-bar .res-cap.fuel_cells");
     syncResourceLiveBaseline({
       planetId,
-      metal: readVal("#resource-bar .res-value.metal"),
-      crystal: readVal("#resource-bar .res-value.crystal"),
-      fuelCells: readVal("#resource-bar .res-value.fuel_cells"),
-      storageMetal: readVal("#resource-bar .res-cap.metal"),
-      storageCrystal: readVal("#resource-bar .res-cap.crystal"),
-      storageFuelCells: readVal("#resource-bar .res-cap.fuel_cells"),
+      metal,
+      crystal,
+      fuelCells,
+      storageMetal,
+      storageCrystal,
+      storageFuelCells,
       energyUsed: readVal("#resource-bar .res-value.energy[data-energy-used], #resource-bar [data-energy-used]"),
       energyTotal: readVal("#resource-bar .res-cap.energy[data-energy-total], #resource-bar [data-energy-total]"),
       prodMetal: rates.prodMetal,
       prodCrystal: rates.prodCrystal,
       prodFuelCells: rates.prodFuelCells,
     });
+    // GC-INSTANT-HUD-STORAGE-WARN-001: keep "Lager voll" in sync after SSR even before diet poll.
+    patchHudStorageWarnings(metal, crystal, fuelCells, storageMetal, storageCrystal, storageFuelCells);
     return true;
   }
 
@@ -2635,14 +2675,16 @@
 
     p.running = true;
     const deferFirstPoll = Boolean(deferFirst);
+    // GC-INSTANT-POLL-BOOT-001: with SSR HUD complete, first diet poll waits full cadence
+    // (not min(interval, 3000)) — rates/busy already bootstrapped; notification stays deferred.
     const firstPollDelay = deferFirstPoll
-      ? Math.min(next, 3000)
+      ? next
       : (p.started ? next : 0);
     p.started = true;
     p.lastInterval = next;
     console.debug("[GC] polling started", next, "ms", firstPollDelay ? `(first in ${firstPollDelay}ms)` : "(immediate first tick)");
     scheduleGameStatePoll(firstPollDelay);
-    GC.startNotificationPoll(deferFirstPoll ? Math.max(2500, firstPollDelay) : undefined);
+    GC.startNotificationPoll(deferFirstPoll ? Math.max(2500, Math.min(firstPollDelay || 2500, 5000)) : undefined);
   };
 
   function scheduleMessagesInboxBoot() {
@@ -2752,8 +2794,10 @@
     if (shouldRunGameLoop()) {
       if (skipFreshServerHtml || hydrated) {
         _bootstrapPageQueueCompactLiveFromDom();
+        bootstrapBusyFlagsFromDom();
       } else {
         _hydratePageQueueCompactsFromState();
+        bootstrapBusyFlagsFromDom();
       }
     }
 
@@ -2780,6 +2824,7 @@
         bootstrapResourceLiveFromDom();
         bootstrapHeaderBoostersFromDom();
         _bootstrapPageQueueCompactLiveFromDom();
+        bootstrapBusyFlagsFromDom();
       }
       if (willPoll) {
         GC.startPolling(
@@ -3544,58 +3589,68 @@
     if (payload && payload !== "[]") warnBtn.setAttribute("data-req-items", payload);
   }
 
+  function _syncExclusiveProgClass(row, nextClass, extrasOn, extrasOff) {
+    if (!row) return;
+    const PROG = ["gc-prog-affordable", "gc-prog-locked", "gc-prog-unaffordable", "gc-prog-max"];
+    PROG.forEach((cls) => {
+      if (cls === nextClass) {
+        if (!row.classList.contains(cls)) row.classList.add(cls);
+      } else if (row.classList.contains(cls)) {
+        row.classList.remove(cls);
+      }
+    });
+    (extrasOff || []).forEach((cls) => {
+      if (row.classList.contains(cls)) row.classList.remove(cls);
+    });
+    (extrasOn || []).forEach((cls) => {
+      if (!row.classList.contains(cls)) row.classList.add(cls);
+    });
+  }
+
+  function _syncQueueOwnerClasses(row, prefix, qj) {
+    if (!row || !prefix) return;
+    const inQueue = `${prefix}--in-queue`;
+    const active = `${prefix}--queue-active`;
+    const pending = `${prefix}--queue-pending`;
+    if (qj && typeof qj === "object") {
+      if (!row.classList.contains(inQueue)) row.classList.add(inQueue);
+      const isActive = String(qj.status) === "active";
+      row.classList.toggle(active, isActive);
+      row.classList.toggle(pending, !isActive);
+    } else {
+      if (row.classList.contains(inQueue)) row.classList.remove(inQueue);
+      if (row.classList.contains(active)) row.classList.remove(active);
+      if (row.classList.contains(pending)) row.classList.remove(pending);
+    }
+  }
+
   function applyBuildingRowState(row, b) {
     if (!row || !b) return;
     const isMax = (b.level >= b.max_level) || b.at_queue_max;
-    row.classList.remove(
-      "gc-prog-affordable",
-      "gc-prog-locked",
-      "gc-prog-unaffordable",
-      "gc-prog-max",
-      "gc-building-card--in-queue",
-      "gc-building-card--queue-active",
-      "gc-building-card--queue-pending"
-    );
-    if (isMax) row.classList.add("gc-prog-max");
-    else if (!b.requirements_met) row.classList.add("gc-prog-locked");
-    else if (!b.can_afford) row.classList.add("gc-prog-unaffordable");
-    else row.classList.add("gc-prog-affordable");
-
-    const qj = b.queue_job;
-    if (qj && typeof qj === "object") {
-      row.classList.add("gc-building-card--in-queue");
-      if (String(qj.status) === "active") row.classList.add("gc-building-card--queue-active");
-      else row.classList.add("gc-building-card--queue-pending");
-    }
+    let prog = "gc-prog-affordable";
+    if (isMax) prog = "gc-prog-max";
+    else if (!b.requirements_met) prog = "gc-prog-locked";
+    else if (!b.can_afford) prog = "gc-prog-unaffordable";
+    _syncExclusiveProgClass(row, prog);
+    _syncQueueOwnerClasses(row, "gc-building-card", b.queue_job);
   }
 
   function applyResearchRowState(row, tech) {
     if (!row || !tech) return;
     const locked = !tech.requirements_met;
     const unaffordable = !locked && tech.can_afford === false;
-    row.classList.remove(
-      "gc-prog-affordable",
-      "gc-prog-locked",
-      "gc-prog-unaffordable",
-      "tech-row-locked",
-      "gc-research-card--in-queue",
-      "gc-research-card--queue-active",
-      "gc-research-card--queue-pending"
-    );
+    let prog = "gc-prog-affordable";
+    const extrasOn = [];
+    const extrasOff = ["tech-row-locked"];
     if (locked) {
-      row.classList.add("gc-prog-locked", "tech-row-locked");
+      prog = "gc-prog-locked";
+      extrasOn.push("tech-row-locked");
+      extrasOff.length = 0;
     } else if (unaffordable) {
-      row.classList.add("gc-prog-unaffordable");
-    } else {
-      row.classList.add("gc-prog-affordable");
+      prog = "gc-prog-unaffordable";
     }
-
-    const qj = tech.queue_job;
-    if (qj && typeof qj === "object") {
-      row.classList.add("gc-research-card--in-queue");
-      if (String(qj.status) === "active") row.classList.add("gc-research-card--queue-active");
-      else row.classList.add("gc-research-card--queue-pending");
-    }
+    _syncExclusiveProgClass(row, prog, extrasOn, extrasOff);
+    _syncQueueOwnerClasses(row, "gc-research-card", tech.queue_job);
   }
 
   function formatResearchReqTooltip(items) {
@@ -7477,9 +7532,26 @@
     }
   }
 
-  /** GC-838 — optimistic overlay removal at timer 0 before server confirm. */
+  /** GC-INSTANT-QUEUE-FINISH-001 — bump level badge from server-provided target before include_panel. */
+  function optimisticPatchCardLevelFromQueueBlock(block, cardEl) {
+    if (!block || !cardEl) return;
+    const domain = String(block.dataset.timerDomain || "building");
+    if (domain === "shipyard" || domain === "defense" || domain === "ascension") return;
+    const targetLevel = Math.floor(Number(block.dataset.targetLevel || 0));
+    if (targetLevel < 1) return;
+    const buildingKey = cardEl.getAttribute("data-building-row") || "";
+    const byId = buildingKey ? document.getElementById(`level-${buildingKey}`) : null;
+    const levelEl =
+      byId
+      || cardEl.querySelector(".gc-bld-hero-level, .gc-bld-card-level, .tech-level-current, .gc-hero-stat-badge--level");
+    if (levelEl) _setIfChanged(levelEl, fmtNumber(targetLevel));
+  }
+
+  /** GC-838 / GC-INSTANT-QUEUE-FINISH-001 — optimistic overlay removal + level patch before server confirm. */
   function optimisticDismissDueCardQueueBlock(block) {
     if (!block) return;
+    const cardEl = block.closest("[data-building-row], [data-research-card], [data-building-card]");
+    optimisticPatchCardLevelFromQueueBlock(block, cardEl);
     dismissCompletedCardQueueBlock(block);
   }
 
@@ -7571,6 +7643,20 @@
     else delete block.dataset.finishAt;
     if (startAt > 0) block.dataset.startAt = String(startAt);
     else delete block.dataset.startAt;
+    const targetLevel = Math.floor(Number(queueJob.target_level || 0));
+    if (targetLevel > 0) block.dataset.targetLevel = String(targetLevel);
+    else delete block.dataset.targetLevel;
+    if (targetLevel > 0) {
+      const currentLevel = Math.floor(
+        Number(queueJob.current_level ?? Math.max(0, targetLevel - 1))
+      );
+      block.dataset.currentLevel = String(Math.max(0, currentLevel));
+    } else {
+      delete block.dataset.currentLevel;
+    }
+    const targetAmount = Math.floor(Number(queueJob.target_amount || 0));
+    if (targetAmount > 0) block.dataset.targetAmount = String(targetAmount);
+    else delete block.dataset.targetAmount;
   }
 
   function syncCardQueueOwnerClasses(cardEl, queueJob, domain) {
@@ -7850,6 +7936,10 @@
     if (jobId > 0) block.dataset.jobId = String(jobId);
     if (startAt > 0) block.dataset.startAt = String(startAt);
     if (finishAt > 0) block.dataset.finishAt = String(finishAt);
+    const heroTargetLevel = Math.floor(Number(queueJob.target_level || 0));
+    if (heroTargetLevel > 0) block.dataset.targetLevel = String(heroTargetLevel);
+    const heroCurrentLevel = Math.floor(Number(queueJob.current_level ?? (heroTargetLevel > 0 ? heroTargetLevel - 1 : 0)));
+    if (heroTargetLevel > 0) block.dataset.currentLevel = String(Math.max(0, heroCurrentLevel));
     block.dataset.totalSeconds = String(totalSeconds);
     if (isActive && Number.isFinite(remaining)) assignMonotonicServerRemaining(block, remaining, finishAt);
 
@@ -8100,6 +8190,10 @@
     delete block.dataset.queueZeroFiredAt;
     if (startAt > 0) block.dataset.startAt = String(startAt);
     if (finishAt > 0) block.dataset.finishAt = String(finishAt);
+    if (targetLevel > 0) block.dataset.targetLevel = String(targetLevel);
+    if (currentLevel >= 0 && targetLevel > 0) block.dataset.currentLevel = String(currentLevel);
+    const targetAmountAttr = Math.floor(Number(queueJob.target_amount || 0));
+    if (targetAmountAttr > 0) block.dataset.targetAmount = String(targetAmountAttr);
     block.dataset.totalSeconds = String(totalSeconds);
     if (isActive && Number.isFinite(remaining)) {
       assignMonotonicServerRemaining(block, remaining, finishAt);
@@ -8977,6 +9071,46 @@
       live.active.finishTime = finish;
       live.active.totalSeconds = Math.max(1, srvRem + 1);
     });
+  }
+
+  /** GC-INSTANT-POLL-BOOT-001 — busy cadence from SSR queues/fleets before first diet poll. */
+  function bootstrapBusyFlagsFromDom() {
+    const now = getTimerServerNow();
+    lastHadActiveJob = BUILDQ.active.finishTime > now;
+    lastHadActiveResearch = RESEARCHQ.active.finishTime > now;
+    lastHadActiveShipyard = SHIPYARDQ.active.finishTime > now;
+    lastHadActiveDefense = DEFENSEQ.active.finishTime > now;
+    if (!lastHadActiveJob) {
+      lastHadActiveJob = !!document.querySelector(
+        "[data-gc-card-queue][data-timer-domain='building'][data-queue-active='1'][data-finish-at], #build-mini-queue .gc-mini-queue-card--active"
+      );
+    }
+    if (!lastHadActiveResearch) {
+      lastHadActiveResearch = !!document.querySelector(
+        "[data-gc-card-queue][data-timer-domain='research'][data-queue-active='1'][data-finish-at], #research-mini-queue .gc-mini-queue-card--active"
+      );
+    }
+    if (!lastHadActiveShipyard) {
+      lastHadActiveShipyard = !!document.querySelector(
+        "[data-gc-card-queue][data-timer-domain='shipyard'][data-queue-active='1'][data-finish-at], #shipyard-mini-queue .gc-mini-queue-card--active"
+      );
+    }
+    if (!lastHadActiveDefense) {
+      lastHadActiveDefense = !!document.querySelector(
+        "[data-gc-card-queue][data-timer-domain='defense'][data-queue-active='1'][data-finish-at], #defense-mini-queue .gc-mini-queue-card--active"
+      );
+    }
+    if (GC.lastState && typeof syncActiveFleetBusyFromState === "function") {
+      syncActiveFleetBusyFromState(GC.lastState);
+    } else if (!lastHadActiveFleet) {
+      const boot = document.getElementById("gc-hud-boot-state");
+      if (boot && boot.textContent) {
+        try {
+          const parsed = JSON.parse(boot.textContent);
+          syncActiveFleetBusyFromState(parsed);
+        } catch (_) {}
+      }
+    }
   }
 
   function _hydratePageQueueCompactsFromState() {
@@ -25873,7 +26007,6 @@
 
   let _defenseRefreshTimer = null;
   let _defenseUnitFinishKey = "";
-  let _defenseBound = false;
   let _lastDefenseQueueSignature = "";
 
   function defenseIconUrl(defenseKey) {
@@ -26184,110 +26317,20 @@
     GC.startProgressTicker();
   }
 
-  function bindDefenseOnce() {
-    if (_defenseBound) return;
-    _defenseBound = true;
-    const tt = (key, fallback) => t(key, fallback);
-    const apiError = (res) => (res && (res.error || res.reason)) || "generic";
-    const reasonText = (reason) =>
-      tt(`defense_error_${reason}`, tt(`fleet_error_${reason}`, reason || "Error"));
+  GC.applyDefenseState = applyDefenseState;
+  GC.parseDefensePageData = parseDefensePageData;
+  GC.normalizeDefenseApiPayload = normalizeDefenseApiPayload;
+  GC.startDefenseTimers = startDefenseTimers;
+  GC.stopDefenseTimers = stopDefenseTimers;
+  GC.clearDefenseQueueSignature = function clearDefenseQueueSignature() {
+    _lastDefenseQueueSignature = "";
+  };
 
-    document.addEventListener("click", async (e) => {
-      const page = document.getElementById("defense-page");
-      if (!page || page.dataset.ready !== "1") return;
-
-      const maxBtn = e.target.closest("[data-defense-max]");
-      if (maxBtn && page.contains(maxBtn)) {
-        e.preventDefault();
-        const dk = maxBtn.getAttribute("data-defense-max");
-        const qtyInp = page.querySelector(`[data-defense-qty="${dk}"]`);
-        const maxQty = parseIntNumber(
-          maxBtn.dataset.maxQty || maxBtn.getAttribute("data-max-qty") || "0"
-        );
-        if (qtyInp && maxQty > 0) {
-          qtyInp.dataset.inputMax = String(maxQty);
-          setNumberInputValue(qtyInp, maxQty);
-          const card = maxBtn.closest("[data-defense-card]");
-          if (card) syncUnitCardCostPreview(card, militaryPageResources(page));
-        }
-        return;
-      }
-
-      const cancelBtn = e.target.closest("[data-defense-queue-cancel]");
-      if (cancelBtn && page.contains(cancelBtn)) {
-        e.preventDefault();
-        const jobId = parseInt(cancelBtn.getAttribute("data-defense-queue-cancel") || "0", 10);
-        const planetId = parseInt(page.dataset.planetId || "0", 10);
-        if (!jobId) return;
-        cancelBtn.disabled = true;
-        try {
-          const res = await GC.fetchGameAction("/api/defense/cancel", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ job_id: jobId, planet_id: planetId || undefined }),
-          });
-          if (res?.ok) {
-            if (res.state) applyActionState(res, "defense_cancel");
-            const payload = normalizeDefenseApiPayload(res);
-            if (payload) applyDefenseState(page, payload, res.state ? { skipQueue: true } : undefined);
-            else await refreshDefenseState(page);
-          } else {
-            showNotify(reasonText(res?.error || apiError(res)), "error");
-          }
-        } catch (_) {
-          showNotify(reasonText("generic"), "error");
-        } finally {
-          cancelBtn.disabled = false;
-        }
-        return;
-      }
-
-      const buildBtn = e.target.closest("[data-defense-build]");
-      if (!buildBtn || !page.contains(buildBtn) || buildBtn.disabled) return;
-      if (buildBtn.dataset.building === "1" || buildBtn.dataset.canBuild === "0") return;
-      e.preventDefault();
-      const defenseKey = buildBtn.getAttribute("data-defense-build");
-      const qtyInp = page.querySelector(`[data-defense-qty="${defenseKey}"]`);
-      const amount = readNumberInput(qtyInp) || 1;
-      const planetId = parseInt(page.dataset.planetId || "0", 10);
-      buildBtn.dataset.building = "1";
-      buildBtn.disabled = true;
-      buildBtn.classList.add("is-loading");
-      try {
-        const res = await GC.fetchGameAction("/api/defense/build", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ defense_key: defenseKey, amount, planet_id: planetId || undefined }),
-        });
-        if (res?.ok) {
-          _lastDefenseQueueSignature = "";
-          if (res.state) applyActionState(res, "defense_build");
-          const payload = normalizeDefenseApiPayload(res);
-          if (payload) applyDefenseState(page, payload, res.state ? { skipQueue: true } : undefined);
-          else if (!res.state) await refreshDefenseState(page);
-        } else {
-          showNotify(reasonText(res?.error || apiError(res)), "error");
-        }
-      } catch (_) {
-        showNotify(reasonText("generic"), "error");
-      } finally {
-        delete buildBtn.dataset.building;
-        buildBtn.classList.remove("is-loading");
-        buildBtn.disabled = buildBtn.dataset.canBuild !== "1";
-      }
-    });
-  }
-
+  /** Thin delegate — real bind/init in GC.pages.defense (defense.js). */
   function initDefense() {
-    bindDefenseOnce();
-    const page = document.getElementById("defense-page");
-    if (!page || page.dataset.ready !== "1") return;
-    const data = parseDefensePageData(page);
-    if (!data) return;
-    applyDefenseState(page, data);
-    startDefenseTimers();
-    GC.registerCleanup(stopDefenseTimers);
-    GC.startProgressTicker();
+    if (GC.pages && typeof GC.pages.defense?.init === "function") {
+      return GC.pages.defense.init();
+    }
   }
 
   GC.refreshDefenseState = refreshDefenseState;
@@ -28635,6 +28678,7 @@
           bootstrapResourceLiveFromDom();
           bootstrapHeaderBoostersFromDom();
           _bootstrapPageQueueCompactLiveFromDom();
+          bootstrapBusyFlagsFromDom();
           if (typeof GC.releaseShellNavigationBlockers === "function") {
             GC.releaseShellNavigationBlockers("planet_switch");
           }

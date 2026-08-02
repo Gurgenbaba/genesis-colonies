@@ -9,9 +9,12 @@ def _read_js() -> str:
     return Path("static/js/galaxy-quick-action.js").read_text(encoding="utf-8")
 
 
-def test_galaxy_quick_action_module_loaded_in_base():
+def test_galaxy_quick_action_module_loaded_on_galaxy_page():
+    """GC-PERF-JS-002: galaxy QA is page-scoped (not paid on every shell boot)."""
     base = Path("templates/base.html").read_text(encoding="utf-8")
-    assert "js/galaxy-quick-action.js" in base
+    assert "js/galaxy-quick-action.js" not in base
+    galaxy = Path("templates/galaxy.html").read_text(encoding="utf-8")
+    assert "js/galaxy-quick-action.js" in galaxy
 
 
 def test_galaxy_quick_action_exports_gc_namespace():
