@@ -513,11 +513,111 @@ def build_active_effects_for_hud(
             str(r.get("key") or ""),
         )
     )
+    _merge_server_event_production_into_hud(out, now=ts, locale=locale, conn=conn)
     return enrich_active_effects_with_resource_impacts(
         user_id,
         conn=conn,
         locale=locale,
         effects=out,
+    )
+
+
+def _merge_server_event_production_into_hud(
+    out: List[Dict[str, Any]],
+    *,
+    now: float,
+    locale: Optional[str],
+    conn,
+) -> None:
+    """Fold active server-event production into the resource-bar production chip."""
+    try:
+        from game.server_events import production_hud_contribution
+    except Exception:
+        return
+    try:
+        contrib = production_hud_contribution(now=now, conn=conn)
+    except Exception:
+        return
+    if not contrib or int(contrib.get("pct") or 0) <= 0:
+        return
+
+    from game.i18n import tr
+
+    event_pct = int(contrib["pct"])
+    event_summary = tr(
+        "boost_hud_event_pct_summary",
+        "Event +{pct} %",
+        locale=locale,
+        pct=event_pct,
+    )
+    event_label = tr("boost_hud_event_production", "Server Event", locale=locale)
+    ends_at = float(contrib["ends_at"])
+    remaining = max(0, int(contrib["remaining_seconds"]))
+
+    agg = next(
+        (
+            r
+            for r in out
+            if r.get("hud_chip_only")
+            and str(r.get("key") or "") == "production"
+            and str(r.get("affected_domain") or "") == "production"
+        ),
+        None,
+    )
+    if agg:
+        boost_summary = str(agg.get("effect_summary") or "").strip()
+        agg["effect_summary"] = (
+            f"{boost_summary} · {event_summary}" if boost_summary else event_summary
+        )
+        agg["remaining_seconds"] = min(int(agg.get("remaining_seconds") or 0), remaining)
+        agg["expires_at"] = min(float(agg.get("expires_at") or ends_at), ends_at)
+        params = dict(agg.get("effect_summary_params") or {})
+        params["pct"] = int(params.get("pct") or 0) + event_pct
+        params["event_pct"] = event_pct
+        agg["effect_summary_params"] = params
+        agg["server_event"] = True
+    else:
+        out.insert(
+            0,
+            {
+                "key": "production",
+                "effect_key": "production",
+                "label_key": "boost_hud_event_production",
+                "label": event_label,
+                "effect_summary_key": "boost_hud_event_pct_summary",
+                "effect_summary": event_summary,
+                "effect_summary_params": {"pct": event_pct, "event_pct": event_pct},
+                "expires_at": ends_at,
+                "remaining_seconds": remaining,
+                "affected_domain": "production",
+                "applies_to": "ongoing",
+                "note": "",
+                "source_item_key": "server_event",
+                "hud_chip_only": True,
+                "stack_aggregate": True,
+                "server_event": True,
+            },
+        )
+
+    # Inventory list row so the event is visible beside booster chips.
+    out.append(
+        {
+            "key": "server_event:production",
+            "effect_key": "production",
+            "label_key": "boost_hud_event_production",
+            "label": event_label,
+            "effect_summary_key": "boost_hud_event_pct_summary",
+            "effect_summary": event_summary,
+            "effect_summary_params": {"pct": event_pct, "event_pct": event_pct},
+            "expires_at": ends_at,
+            "remaining_seconds": remaining,
+            "affected_domain": "production",
+            "applies_to": "ongoing",
+            "note": " · ".join(contrib.get("titles") or [])[:120],
+            "source_item_key": "server_event",
+            "hud_list_only": True,
+            "server_event": True,
+        }
     )
 
 

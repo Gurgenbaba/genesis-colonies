@@ -8,11 +8,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, TypedDic
 
 from .fleet_defs import (
     ACTIVE_SHIP_KEYS,
-    DEFAULT_EXPEDITION_STAY_HOURS,
     DEFAULT_HOLD_SECONDS,
-    EXPEDITION_STAY_HOURS_MAX,
-    EXPEDITION_STAY_HOURS_MIN,
-    EXPEDITION_STAY_HOUR_SECONDS,
     FLEET_FUEL_RESOURCE,
     canonical_ship_key,
     get_ship,
@@ -96,22 +92,16 @@ def _movement_return_leg_seconds(movement: Mapping[str, Any]) -> int:
     return max(1, int(movement.get("flight_seconds") or movement.get("duration_seconds") or 0))
 
 
-def _normalize_expedition_hours(raw: Any) -> int:
-    try:
-        hours = int(raw)
-    except (TypeError, ValueError):
-        hours = DEFAULT_EXPEDITION_STAY_HOURS
-    return max(EXPEDITION_STAY_HOURS_MIN, min(EXPEDITION_STAY_HOURS_MAX, hours))
-
-
 def _target_stay_seconds(movement: Mapping[str, Any]) -> int:
     mission = str(movement.get("mission_type") or "").strip().lower()
     if mission == "hold":
         return DEFAULT_HOLD_SECONDS
     if mission == "expedition":
+        # Canonical stay owner: fleet.expedition_stay_seconds (includes server events).
+        from .fleet import expedition_stay_seconds
+
         resources = movement.get("resources") or {}
-        hours = _normalize_expedition_hours(resources.get("expedition_hours"))
-        return hours * EXPEDITION_STAY_HOUR_SECONDS
+        return expedition_stay_seconds(resources.get("expedition_hours"))
     return 0
 
 

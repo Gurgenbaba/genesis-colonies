@@ -322,6 +322,14 @@ def production_context_from_resolver(
     temp = temperature_mid_c_for_slot(resolver.planet_position)
     overlay = resolver.prod_overlay_factor(key)
 
+    event_mod = 1.0
+    try:
+        from .server_events import active_production_mult
+
+        event_mod = float(active_production_mult() or 1.0)
+    except Exception:
+        event_mod = 1.0
+
     return ProductionContext(
         resource_type=key,
         level=int(level),
@@ -333,6 +341,7 @@ def production_context_from_resolver(
         player=resolver.player_id,
         planet=resolver.planet_id,
         directive_modifier=float(overlay),
+        event_modifier=max(0.0, event_mod),
     )
 
 

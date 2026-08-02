@@ -13,7 +13,7 @@ Grouped rail + filtered tab pills:
 
 | Group | Tabs |
 |-------|------|
-| LiveOps | world_boss, pirates, diplomacy, votes |
+| LiveOps | world_boss, pirates, inactive_autoplay, events, diplomacy, votes |
 | Players | players, planets |
 | Economy | balance, lootboxes, queues, fleets |
 | Moderation | chat, support, messages |

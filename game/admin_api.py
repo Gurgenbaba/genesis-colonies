@@ -2470,3 +2470,123 @@ def api_set_galactic_diplomacy_emergency(
 
     return api_get_galactic_diplomacy_state(galaxy)
 
+
+# ---------------------------------------------------------------------------
+# Server Events (LiveOps timed bonuses)
+# ---------------------------------------------------------------------------
+
+
+def api_get_server_events() -> Dict[str, Any]:
+    from game.server_events import effect_kind_catalog, list_events, serialize_active_events
+
+    return _ok(
+        events=list_events(limit=200),
+        active=serialize_active_events(),
+        kinds=effect_kind_catalog(),
+    )
+
+
+def _server_event_fields_from_body(body: Dict[str, Any]) -> Dict[str, Any]:
+    starts_raw = body.get("starts_at")
+    ends_raw = body.get("ends_at")
+    try:
+        starts_at = int(float(starts_raw)) if starts_raw is not None else None
+    except (TypeError, ValueError):
+        starts_at = None
+    try:
+        ends_at = int(float(ends_raw)) if ends_raw is not None else None
+    except (TypeError, ValueError):
+        ends_at = None
+    enabled = body.get("enabled")
+    if enabled is None:
+        enabled_flag = None
+    else:
+        enabled_flag = enabled in (True, 1, "1", "true", "on", "yes")
+    return {
+        "slug": str(body.get("slug") or "").strip(),
+        "title": str(body.get("title") or "").strip(),
+        "starts_at": starts_at,
+        "ends_at": ends_at,
+        "effects": body.get("effects"),
+        "enabled": enabled_flag,
+    }
+
+
+def api_create_server_event(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    from game.server_events import create_event
+
+    if not isinstance(body, dict):
+        return _err("invalid_payload", "Expected JSON object")
+    fields = _server_event_fields_from_body(body)
+    if fields["starts_at"] is None or fields["ends_at"] is None:
+        return _err("window_required", "starts_at and ends_at (unix UTC) are required")
+    entry, err = create_event(
+        slug=fields["slug"],
+        title=fields["title"],
+        starts_at=int(fields["starts_at"]),
+        ends_at=int(fields["ends_at"]),
+        effects=fields["effects"] if fields["effects"] is not None else [],
+        enabled=True if fields["enabled"] is None else bool(fields["enabled"]),
+        created_by=int(admin_id),
+    )
+    if err or not entry:
+        return _err(str(err or "create_failed"), str(err or "create_failed"))
+    audit(
+        int(admin_id),
+        "server_event_create",
+        target_type="system",
+        payload={"event_id": entry["id"], "slug": entry["slug"]},
+    )
+    return _ok(event=entry)
+
+
+def api_update_server_event(admin_id: int, event_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    from game.server_events import update_event
+
+    if not isinstance(body, dict):
+        return _err("invalid_payload", "Expected JSON object")
+    fields = _server_event_fields_from_body(body)
+    kwargs: Dict[str, Any] = {}
+    if "slug" in body:
+        kwargs["slug"] = fields["slug"]
+    if "title" in body:
+        kwargs["title"] = fields["title"]
+    if "starts_at" in body:
+        if fields["starts_at"] is None:
+            return _err("invalid_starts_at", "starts_at must be unix UTC")
+        kwargs["starts_at"] = int(fields["starts_at"])
+    if "ends_at" in body:
+        if fields["ends_at"] is None:
+            return _err("invalid_ends_at", "ends_at must be unix UTC")
+        kwargs["ends_at"] = int(fields["ends_at"])
+    if "effects" in body:
+        kwargs["effects"] = fields["effects"]
+    if fields["enabled"] is not None:
+        kwargs["enabled"] = bool(fields["enabled"])
+    entry, err = update_event(int(event_id), **kwargs)
+    if err == "not_found":
+        return _err("not_found", "Event not found")
+    if err or not entry:
+        return _err(str(err or "update_failed"), str(err or "update_failed"))
+    audit(
+        int(admin_id),
+        "server_event_update",
+        target_type="system",
+        payload={"event_id": entry["id"], "slug": entry["slug"]},
+    )
+    return _ok(event=entry)
+
+
+def api_delete_server_event(admin_id: int, event_id: int) -> Dict[str, Any]:
+    from game.server_events import delete_event
+
+    ok, err = delete_event(int(event_id))
+    if not ok:
+        return _err(str(err or "delete_failed"), str(err or "delete_failed"))
+    audit(
+        int(admin_id),
+        "server_event_delete",
+        target_type="system",
+        payload={"event_id": int(event_id)},
+    )
+    return _ok(deleted=True, event_id=int(event_id))

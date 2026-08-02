@@ -315,6 +315,7 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | Human duration labels (y/mo/w/d/h/min/s) | `game/time_format.py` → Jinja `fmt_duration`, `GC.formatDurationHuman` | Adaptive ladders; never `mo`+`w`; season-scale uses days |
 | World Boss Events (shared HP PvE, contribution, LiveOps, tame/companions) | `game/world_boss.py` (+ `game/world_boss_companions.py`) | [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) |
 | Universe News / Genesis Timeline (player patchnotes) | `game/universe_news.py` | [UNIVERSE_NEWS.md](UNIVERSE_NEWS.md) |
+| Server Events (timed global LiveOps bonuses) | `game/server_events.py` | [SERVER_EVENTS.md](SERVER_EVENTS.md) |
 | Galaxy Asteroid Belt (temporary harvest fields) | `game/asteroids.py` | [ASTEROID_SYSTEM.md](ASTEROID_SYSTEM.md) |
 | Pirate Ecosystem (Heat, bases, player-like AI, Bot-Log) | `game/pirates/` | [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md) |
 | Passive empire planner (buildings/research/defense/ships enqueue) | `game/auto_empire.py` | [INACTIVE_AUTOPLAY.md](INACTIVE_AUTOPLAY.md) · Pirate wrapper: `game/pirates/economy.py` |

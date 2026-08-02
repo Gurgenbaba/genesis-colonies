@@ -140,6 +140,7 @@
         <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="world_boss" data-admin-group="liveops" role="tab">{{ T("admin_wb_title", "World Boss") }}</button>
         <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="pirates" data-admin-group="liveops" role="tab">{{ T("admin_pirates_title", "Pirate Bot-Log") }}</button>
         <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="inactive_autoplay" data-admin-group="liveops" role="tab">{{ T("admin_inactive_autoplay_title", "Inactive Autoplay") }}</button>
+        <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="events" data-admin-group="liveops" role="tab">{{ T("admin_events_title", "Server Events") }}</button>
       </div>
     </nav>
 
@@ -1255,6 +1256,93 @@
       <p class="admin-tab-hint admin-small-hint">{{ T("admin_inactive_autoplay_force_tick_hint", "Außerhalb von Production läuft kein Embedded-Cron — \"Force Tick jetzt\" weckt/tickt den Roster sofort, ohne auf das nächste Zyklus-Fenster zu warten.") }}</p>
       <div id="admin-inactive-autoplay-status" class="admin-small-hint" aria-live="polite"></div>
       <div id="admin-inactive-autoplay-output" class="admin-panel-body" aria-live="polite"></div>
+    </section>
+
+    <section id="admin-tab-events" class="admin-panel admin-tab-panel gc-overflow-visible" data-admin-panel="events" role="tabpanel" hidden>
+      <div class="admin-action-row">
+        <h2 class="admin-panel-title">{{ T("admin_events_title", "Server Events") }}</h2>
+        <div class="admin-toolbar">
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="events-refresh">
+            {{ T("admin_btn_refresh", "Aktualisieren") }}
+          </button>
+          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="events-preset-weekend">
+            {{ T("admin_events_preset_weekend", "Wochenend-Boost") }}
+          </button>
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="events-new">
+            {{ T("admin_events_new", "Neues Event") }}
+          </button>
+        </div>
+      </div>
+      <p class="admin-tab-hint admin-small-hint">{{ T("admin_events_hint", "Zeitgebundene Server-Boni. Zeiten in deiner lokalen Uhrzeit — Server speichert UTC. Produktion stackt mit Boostern; Expo-Hold verkürzt die Haltezeit.") }}</p>
+      <div id="admin-events-active" class="admin-metrics-grid" aria-live="polite"></div>
+      <div class="admin-section" id="admin-events-compose">
+        <h3 class="admin-section-title">{{ T("admin_events_form_title", "Boost erstellen") }}</h3>
+        <input type="hidden" id="admin-event-id" value="" />
+        <div class="admin-toolbar" style="margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.4rem;">
+          <span class="admin-small-hint">{{ T("admin_events_preset_label", "Schnell:") }}</span>
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-xs" data-admin-action="events-effect-combo">
+            {{ T("admin_events_effect_combo", "+100% Prod & −25% Hold") }}
+          </button>
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-xs" data-admin-action="events-effect-prod">
+            {{ T("admin_events_effect_prod", "Nur +100% Prod") }}
+          </button>
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-xs" data-admin-action="events-effect-hold">
+            {{ T("admin_events_effect_hold", "Nur −25% Hold") }}
+          </button>
+        </div>
+        <div class="admin-form-grid">
+          <label class="admin-field">
+            <span>{{ T("admin_events_field_title", "Titel") }}</span>
+            <input type="text" id="admin-event-title" class="gc-input" maxlength="120" placeholder="Res-Prod / Expo Event" />
+          </label>
+          <label class="admin-field">
+            <span>{{ T("admin_events_field_slug", "Slug (auto)") }}</span>
+            <input type="text" id="admin-event-slug" class="gc-input" maxlength="64" placeholder="weekend-prod-boost" />
+          </label>
+          <label class="admin-field">
+            <span>{{ T("admin_events_field_starts", "Start (lokale Zeit)") }}</span>
+            <input type="datetime-local" id="admin-event-starts" class="gc-input" />
+          </label>
+          <label class="admin-field">
+            <span>{{ T("admin_events_field_ends", "Ende (lokale Zeit)") }}</span>
+            <input type="datetime-local" id="admin-event-ends" class="gc-input" />
+          </label>
+          <label class="admin-field">
+            <span>{{ T("admin_events_field_prod_mult", "Produktion × (2 = +100%)") }}</span>
+            <input type="number" id="admin-event-prod-mult" class="gc-input" step="0.01" min="0" placeholder="2.0" />
+          </label>
+          <label class="admin-field">
+            <span>{{ T("admin_events_field_hold_mult", "Expo-Hold × (0.75 = −25%)") }}</span>
+            <input type="number" id="admin-event-hold-mult" class="gc-input" step="0.01" min="0" placeholder="0.75" />
+          </label>
+          <label class="admin-field admin-field-check">
+            <input type="checkbox" id="admin-event-enabled" checked />
+            <span>{{ T("admin_events_field_enabled", "Aktiviert") }}</span>
+          </label>
+        </div>
+        <div class="admin-toolbar" style="margin-top: 0.5rem; flex-wrap: wrap; gap: 0.4rem;">
+          <span class="admin-small-hint">{{ T("admin_events_duration_label", "Dauer:") }}</span>
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-xs" data-admin-action="events-dur-24h">
+            {{ T("admin_events_dur_24h", "24 Stunden") }}
+          </button>
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-xs" data-admin-action="events-dur-48h">
+            {{ T("admin_events_dur_48h", "48 Stunden") }}
+          </button>
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-xs" data-admin-action="events-dur-sunday">
+            {{ T("admin_events_dur_sunday", "Bis So 20:00") }}
+          </button>
+        </div>
+        <p id="admin-events-window-hint" class="admin-small-hint" style="margin-top: 0.5rem;" aria-live="polite"></p>
+        <div class="admin-toolbar" style="margin-top: 0.75rem;">
+          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="events-save">
+            {{ T("admin_events_save", "Speichern") }}
+          </button>
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="events-reset">
+            {{ T("admin_events_reset", "Formular leeren") }}
+          </button>
+        </div>
+      </div>
+      <div id="admin-events-list" class="admin-panel-body" aria-live="polite"></div>
     </section>
 
   </div>

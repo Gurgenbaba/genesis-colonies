@@ -95,6 +95,14 @@ After alliance, `EffectResolver` applies account class skill modifiers via `get_
 
 Owner: `game/commander_classes.py` · [COMMANDER_CLASSES.md](COMMANDER_CLASSES.md)
 
+### Server Events (timed LiveOps)
+
+Global timed bonuses from `game/server_events.py` (Admin LiveOps → Events).
+
+**Production:** `production_context_from_resolver` sets `ProductionContext.event_modifier` from active `production_mult` factors (product of concurrent events). Multiplies **after** `directive_modifier` / ER overlay (research, GD, diplomacy, inventory boosters, alliance, class) — stacks with boosters as advertised.
+
+**Expedition hold:** `fleet.expedition_stay_seconds` multiplies base stay by active `expedition_hold_mult` (e.g. `0.75` = −25%). `fleet_calc` uses the same helper for home-ETA.
+
 Use labels like **“prepared / not active”** in admin copy when showing `scan_range` and other deferred flags.
 
 ## Offline queue finish → derived state

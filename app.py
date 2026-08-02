@@ -7479,6 +7479,38 @@ def api_admin_universe_news_delete(news_id: int):
     return _admin_json(admin_api_logic.api_delete_universe_news(_admin_actor_id(), news_id))
 
 
+@app.route("/api/admin/events", methods=["GET"])
+@require_admin_api
+def api_admin_events_list():
+    return _admin_json(admin_api_logic.api_get_server_events())
+
+
+@app.route("/api/admin/events", methods=["POST"])
+@require_admin_api
+def api_admin_events_create():
+    return _admin_json(admin_api_logic.api_create_server_event(_admin_actor_id(), _admin_body()))
+
+
+@app.route("/api/admin/events/<int:event_id>", methods=["PATCH"])
+@require_admin_api
+def api_admin_events_update(event_id: int):
+    return _admin_json(
+        admin_api_logic.api_update_server_event(_admin_actor_id(), event_id, _admin_body())
+    )
+
+
+@app.route("/api/admin/events/<int:event_id>", methods=["DELETE"])
+@require_admin_api
+def api_admin_events_delete(event_id: int):
+    return _admin_json(admin_api_logic.api_delete_server_event(_admin_actor_id(), event_id))
+
+
+@app.route("/api/admin/events/<int:event_id>/delete", methods=["POST"])
+@require_admin_api
+def api_admin_events_delete_post(event_id: int):
+    return _admin_json(admin_api_logic.api_delete_server_event(_admin_actor_id(), event_id))
+
+
 @app.route("/api/admin/resources", methods=["POST"])
 @require_admin_api
 def api_admin_resources_apply():
@@ -9148,6 +9180,17 @@ def _payload_from_live_context(
                 "daily_reset_at": 0,
                 "weekly_reset_at": 0,
             }
+
+    try:
+        from game.server_events import serialize_active_events
+
+        payload["server_events"] = serialize_active_events(conn=conn)
+    except Exception:
+        payload["server_events"] = {
+            "events": [],
+            "production_mult": 1.0,
+            "expedition_hold_mult": 1.0,
+        }
 
     try:
         from game.live_state import fleet_hud_for_game_state

@@ -977,8 +977,17 @@ def normalize_expedition_hours(raw: Any) -> int:
     return max(EXPEDITION_STAY_HOURS_MIN, min(EXPEDITION_STAY_HOURS_MAX, hours))
 
 
-def expedition_stay_seconds(hours: int | None = None) -> int:
-    return normalize_expedition_hours(hours) * EXPEDITION_STAY_HOUR_SECONDS
+def expedition_stay_seconds(hours: int | None = None, *, now: float | None = None) -> int:
+    base = normalize_expedition_hours(hours) * EXPEDITION_STAY_HOUR_SECONDS
+    try:
+        from .server_events import active_expedition_hold_mult
+
+        mult = float(active_expedition_hold_mult(now=now) or 1.0)
+    except Exception:
+        mult = 1.0
+    if mult <= 0:
+        mult = 1.0
+    return max(1, int(base * mult))
 
 
 def _expedition_hours_from_movement(movement: Mapping[str, Any]) -> int:
