@@ -81,12 +81,14 @@ Default: Inventory time items; direct `timekeeper.credit` only for day-1 welcome
 
 ### Season Ops
 
+Workload is stronger than trivial 1× finishes, but below Story Ops Q1 (e.g. build 5–8). XP rewards and pace are unchanged.
+
 | Op | Cadence | Target | XP |
 |----|---------|--------|----|
-| `op_build_1` | daily | 1 building finish | 40 |
-| `op_research_1` | daily | 1 account research | 45 |
-| `op_fleet_1` | daily | 1 expedition / spy / recycle | 50 |
-| `op_week_active` | weekly | 8 build/research/expedition | 160 |
+| `op_build_1` | daily | 3 building finishes | 40 |
+| `op_research_1` | daily | 2 account researches | 45 |
+| `op_fleet_1` | daily | 3 expedition / spy / recycle | 50 |
+| `op_week_active` | weekly | 18 build/research/expedition | 160 |
 
 Daily Ops total **135 XP** + drip **40** + weekly ≈ **23 XP/day** ≈ **~198 XP/day** → Level 50 in ~**28 Tage** bei täglicher Anwesenheit.
 

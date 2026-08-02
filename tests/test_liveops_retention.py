@@ -17,6 +17,7 @@ from game.activity_xp import (
 )
 from game.battle_pass import (
     OP_BUILD,
+    OPS_CATALOG,
     PASSIVE_DRIP_DAILY_CAP,
     REWARD_CATALOG_VERSION,
     _default_level_rewards,
@@ -384,6 +385,21 @@ def test_battle_pass_op_key_lists_are_iterable_keys(liveops_db):
         assert key in OPS_CATALOG
 
 
+def test_battle_pass_ops_catalog_targets_stronger_than_trivial(liveops_db):
+    """Season Ops targets sit between trivial 1× and Story Ops Q1 intensity."""
+    from game.battle_pass import OPS_CATALOG, OP_BUILD, OP_FLEET, OP_RESEARCH, OP_WEEK_ACTIVE
+
+    assert int(OPS_CATALOG[OP_BUILD]["target"]) == 3
+    assert int(OPS_CATALOG[OP_RESEARCH]["target"]) == 2
+    assert int(OPS_CATALOG[OP_FLEET]["target"]) == 3
+    assert int(OPS_CATALOG[OP_WEEK_ACTIVE]["target"]) == 18
+    # XP pace unchanged.
+    assert int(OPS_CATALOG[OP_BUILD]["xp_reward"]) == 40
+    assert int(OPS_CATALOG[OP_RESEARCH]["xp_reward"]) == 45
+    assert int(OPS_CATALOG[OP_FLEET]["xp_reward"]) == 50
+    assert int(OPS_CATALOG[OP_WEEK_ACTIVE]["xp_reward"]) == 160
+
+
 def test_battle_pass_daily_pace_finishes_near_30_days(liveops_db):
     """Dedicated daily Ops + drip + weekly ≈ Level 50 within ~30 days (5000 XP)."""
     from game.battle_pass import (
@@ -410,7 +426,8 @@ def test_battle_pass_daily_pace_finishes_near_30_days(liveops_db):
 def test_battle_pass_ops_claim_and_no_double(liveops_db):
     uid = _player()
     conn = db()
-    apply_op_progress(uid, SOURCE_BUILDING_FINISH, conn=conn)
+    build_target = int(OPS_CATALOG[OP_BUILD]["target"])
+    apply_op_progress(uid, SOURCE_BUILDING_FINISH, conn=conn, amount=build_target)
     state = bp_serialize(uid, conn=conn)
     build = next(o for o in state["ops"]["daily"] if o["op_key"] == OP_BUILD)
     assert build["claimable"] is True
@@ -434,7 +451,8 @@ def test_battle_pass_daily_ops_reset_next_utc_day(liveops_db):
     uid = _player()
     conn = db()
     t0 = 1_700_000_000.0  # fixed UTC anchor
-    apply_op_progress(uid, SOURCE_BUILDING_FINISH, conn=conn, now=t0)
+    build_target = int(OPS_CATALOG[OP_BUILD]["target"])
+    apply_op_progress(uid, SOURCE_BUILDING_FINISH, conn=conn, now=t0, amount=build_target)
     ok, reason, _ = claim_op(uid, OP_BUILD, conn=conn, now=t0)
     assert ok, reason
     # Stale client period must not reopen yesterday's claim.
@@ -456,7 +474,7 @@ def test_battle_pass_daily_ops_reset_next_utc_day(liveops_db):
     assert build["progress"] == 0
     assert build["period_key"] == daily_period_key(t1)
 
-    apply_op_progress(uid, SOURCE_BUILDING_FINISH, conn=conn, now=t1)
+    apply_op_progress(uid, SOURCE_BUILDING_FINISH, conn=conn, now=t1, amount=build_target)
     state2 = bp_serialize(uid, conn=conn, now=t1)
     build2 = next(o for o in state2["ops"]["daily"] if o["op_key"] == OP_BUILD)
     assert build2["claimable"] is True
@@ -571,7 +589,12 @@ def test_login_and_battle_pass_http_claim(liveops_db):
 
     # Complete build op via gameplay hook, then claim-op API
     conn = db()
-    apply_op_progress(uid, SOURCE_BUILDING_FINISH, conn=conn)
+    apply_op_progress(
+        uid,
+        SOURCE_BUILDING_FINISH,
+        conn=conn,
+        amount=int(OPS_CATALOG[OP_BUILD]["target"]),
+    )
     conn.commit()
     conn.close()
     op = client.post(

@@ -49,10 +49,11 @@ OP_WEEK_ACTIVE = "op_week_active"
 # Pace (GC-BPUI): 50 levels × 100 XP = 5000.
 # Full daily Ops + drip + weekly ≈ finish in ~28–30 calendar days.
 # Season length stays 60d so missed days still complete in-season.
+# Targets: stronger than trivial 1×, below Story Ops Q1 (build 5–8 / fleet ~5).
 OPS_CATALOG: Dict[str, Dict[str, Any]] = {
     OP_BUILD: {
         "cadence": "daily",
-        "target": 1,
+        "target": 3,
         "xp_reward": 40,
         "icon": "⚒",
         "image": "img/pass/build_boost.webp",
@@ -62,7 +63,7 @@ OPS_CATALOG: Dict[str, Dict[str, Any]] = {
     },
     OP_RESEARCH: {
         "cadence": "daily",
-        "target": 1,
+        "target": 2,
         "xp_reward": 45,
         "icon": "◈",
         "image": "img/pass/research_booster.webp",
@@ -72,7 +73,7 @@ OPS_CATALOG: Dict[str, Dict[str, Any]] = {
     },
     OP_FLEET: {
         "cadence": "daily",
-        "target": 1,
+        "target": 3,
         "xp_reward": 50,
         "icon": "🚀",
         "image": "img/pass/expedition_ticket.webp",
@@ -82,7 +83,7 @@ OPS_CATALOG: Dict[str, Dict[str, Any]] = {
     },
     OP_WEEK_ACTIVE: {
         "cadence": "weekly",
-        "target": 8,
+        "target": 18,
         "xp_reward": 160,
         "icon": "★",
         "image": "img/pass/xp.webp",
