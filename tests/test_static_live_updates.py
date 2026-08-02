@@ -3120,6 +3120,42 @@ def test_story_ops_template_center_focus_contracts():
     assert "story_narrator_slice" in _read("game/story/service.py")
 
 
+def test_login_rewards_hover_tip_clears_inline_display():
+    """Hover tip must clear inline display so [hidden] actually hides the empty husk."""
+    src = _read("static/main.js")
+    hide = src.split("const hideLoginRewardsHoverTip = () => {")[1].split(
+        "const ensureLoginRewardsHoverTip"
+    )[0]
+    assert 'tip.style.display = ""' in hide
+    assert 'tip.style.visibility = ""' in hide
+    assert "tip.hidden = true" in hide
+    css = _read("static/style.css")
+    assert "body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden]" in css
+    assert "display: none !important" in css
+
+
+def test_production_build_skips_queue_repaint_when_state_present():
+    """Shipyard/Defense must not wipe TK ⚡ by re-rendering from unenriched data after state."""
+    shipyard = _read("static/js/pages/shipyard.js")
+    assert 'skipQueue: true' in shipyard
+    assert "shipyard_build" in shipyard
+    assert "shipyard_cancel" in shipyard
+    main = _read("static/main.js")
+    assert "skipQueue === true" in main
+    assert 'skipQueue: true' in main
+    assert "defense_build" in main
+    collect = main.split("function _collectMiniQueueJobs(queueRaw, domain)")[1].split(
+        "function "
+    )[0]
+    assert "mini_queue_jobs.length > 0" in collect
+    assert "_renderShipyardMiniQueueAndFinalize" in main
+    assert "_renderDefenseMiniQueueAndFinalize" in main
+    submit = main.split("async function submitTimekeeperApplyFromBtn(openBtn)")[1].split(
+        "_timekeeperApplying = true"
+    )[0]
+    assert "timekeeper_apply_unavailable" in submit
+
+
 def test_app_story_state_api_is_read_only_ensure():
     """Arc/chapter tabbing must not run ensure_player_story (SQLite write hang)."""
     src = _read("app.py")

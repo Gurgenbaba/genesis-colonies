@@ -43535,6 +43535,11 @@ a.alliance-hub-browse-card:hover,
   pointer-events: none;
   padding: 0.55rem 0.65rem;
 }
+/* Inline display:block must not beat [hidden] and leave an empty tip husk */
+body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
+  display: none !important;
+  visibility: hidden !important;
+}
 .login-rewards-tip-head {
   display: flex;
   justify-content: space-between;

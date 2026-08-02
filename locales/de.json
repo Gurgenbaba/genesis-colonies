@@ -7574,5 +7574,6 @@
   "story_reward_title": "Belohnungen",
   "story_reward_auto_hint": "Story-Belohnungen werden serverseitig automatisch gutgeschrieben — kein manueller Claim.",
   "story_narrator_commander": "Dein Commander",
-  "story_tts_console": "Übertragungskonsole"
+  "story_tts_console": "Übertragungskonsole",
+  "timekeeper_apply_unavailable": "Timekeeper gerade nicht anwendbar."
 }

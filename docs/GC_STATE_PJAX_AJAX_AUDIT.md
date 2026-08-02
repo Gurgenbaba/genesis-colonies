@@ -235,8 +235,7 @@ GC.navigateTo(url, opts)
 
 | Item | Location | Status |
 |------|----------|--------|
-| `GC.shipyardPollMs` | `main.js` | **Configured, never read** |
-| `_shipyardPollIntervalId`, `_defensePollIntervalId` | stop-only stubs | **Dead** (GC-540 unified ticker) |
+| `GC.shipyardPollMs` / poll interval stubs | removed | Canonical `/api/game-state` + progress ticker only |
 | `GC.stopStatusPoller` | alias of `stopPolling` | **legacy** |
 
 ### Polling risks
@@ -287,7 +286,7 @@ Each candidate requires **call-site grep before deletion** (Regel 19).
 | `GC.clearBuildingCardQueue` | alias | 0 call sites | GC-CLEAN-007 |
 | `attach_card_jobs_by_owner` | `game/queue_card.py` | Definition only | GC-CLEAN-007 |
 | `_updateMiniQueueSlots` | `main.js` | Empty stub | GC-CLEAN-007 |
-| `GC.shipyardPollMs`, `_shipyardPollIntervalId` | `main.js` | Never started | GC-CLEAN-003 |
+| `GC.shipyardPollMs`, `_shipyardPollIntervalId` | removed | — | GC-TK-SKIP-QUEUE-001 |
 | `/api/status` alias | `app.py` | Tests/legacy | GC-CLEAN-006 |
 | Compact queue CSS | `style.css` ~9260+ | No HTML IDs | GC-CLEAN-008 |
 | Stale tick selectors `.build-job-active` etc. | `updateAllProgressBars` | No current SSR | GC-CLEAN-007 |
@@ -394,7 +393,7 @@ Wave 7              CSS/template duplication cleanup
 ### GC-CLEAN-003 — Game-state polling singleton audit/fix
 
 **Scope:** `static/main.js`, `game/queue_poll.py`.  
-**Do:** Remove dead `GC.shipyardPollMs`, `_shipyardPollIntervalId`; document notification poll as allowed exception; ensure `cleanupPage({ preserveGameLoop })` never double-starts poll; fix `polling already active` log spam.
+**Do:** Dead `GC.shipyardPollMs` / interval stubs removed (GC-TK-SKIP-QUEUE-001); document notification poll as allowed exception; ensure `cleanupPage({ preserveGameLoop })` never double-starts poll; fix `polling already active` log spam.
 
 **Tests:** extend `test_static_live_updates.py` poll contracts.
 

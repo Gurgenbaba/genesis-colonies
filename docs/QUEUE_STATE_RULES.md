@@ -77,6 +77,8 @@ Jeder Auftrag erscheint **unmittelbar nach Start** in der jeweiligen Bauschleife
 
 **Timekeeper ⚡ (eine pro Job):** nur Mini-Bauschleife (Build/Research/Shipyard/Defense) bzw. PE-Queue-Listen — **kein** zweites Boost auf Hero/Tech-Card.
 
+**Production Build/Cancel (Shipyard/Defense):** Nach `applyActionState(res.state)` darf `applyShipyardState` / `applyDefenseState` die Mini-Strip **nicht** nochmals aus unangereichertem `res.data` / `res.queue` rendern (`skipQueue: true`). Sonst gehen ⚡-Enablement / `remaining` bis Reload verloren. Queue-Ownership bleibt state-first (`patchQueuePanelsImmediate`).
+
 ### Timer pro Position
 
 | Position | Anzeige |

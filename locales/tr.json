@@ -7574,5 +7574,6 @@
   "story_reward_title": "Ödüller",
   "story_reward_auto_hint": "Hikâye ödülleri sunucu tarafında otomatik verilir — manuel talep yok.",
   "story_narrator_commander": "Komutanın",
-  "story_tts_console": "İletim konsolu"
+  "story_tts_console": "İletim konsolu",
+  "timekeeper_apply_unavailable": "Timekeeper şu anda uygulanamıyor."
 }

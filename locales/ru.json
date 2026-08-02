@@ -7574,5 +7574,6 @@
   "story_reward_title": "Награды",
   "story_reward_auto_hint": "Награды сюжета начисляются автоматически на сервере — без ручного получения.",
   "story_narrator_commander": "Твой командир",
-  "story_tts_console": "Консоль передачи"
+  "story_tts_console": "Консоль передачи",
+  "timekeeper_apply_unavailable": "Timekeeper сейчас недоступен."
 }

@@ -1,7 +1,8 @@
 /**
  * GC-PERF-JS-002 — Shipyard page binder (extracted from main.js).
  * Mutations are state-first (GC-512D): applyActionState when res.state;
- * applyShipyardState only when res.data is present (stocks / page-local labels).
+ * applyShipyardState for stocks / page-local labels; skipQueue when state already
+ * patched the mini strip (avoids wiping Timekeeper ⚡ until reload).
  * Queue/HUD ownership stays in main.js (applyActionState / patchShipyardPanelFromState).
  */
 (function (global) {
@@ -18,8 +19,8 @@
     return false;
   }
 
-  function applyShipyardState(page, data) {
-    if (typeof GC.applyShipyardState === "function") GC.applyShipyardState(page, data);
+  function applyShipyardState(page, data, opts) {
+    if (typeof GC.applyShipyardState === "function") GC.applyShipyardState(page, data, opts);
   }
 
   function refreshShipyardState(page) {
@@ -116,7 +117,7 @@
               applyActionState(resCancel, "shipyard_cancel");
             }
             if (resCancel.data) {
-              applyShipyardState(page, resCancel.data);
+              applyShipyardState(page, resCancel.data, resCancel.state ? { skipQueue: true } : undefined);
             } else if (!resCancel.state) {
               await refreshShipyardState(page);
               if (typeof GC.refreshGameState === "function") {
@@ -197,9 +198,9 @@
           if (res.state) {
             applyActionState(res, "shipyard_build");
           }
-          // Optional data: page-local stocks / buildable card labels (not redundant queue math)
+          // Optional data: stocks / card labels only when state already owns the queue strip
           if (res.data) {
-            applyShipyardState(page, res.data);
+            applyShipyardState(page, res.data, res.state ? { skipQueue: true } : undefined);
           } else if (!res.state) {
             await refreshShipyardState(page);
           }

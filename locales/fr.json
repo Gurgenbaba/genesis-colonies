@@ -7574,5 +7574,6 @@
   "story_reward_title": "Récompenses",
   "story_reward_auto_hint": "Les récompenses d’histoire sont accordées automatiquement côté serveur — pas de réclamation manuelle.",
   "story_narrator_commander": "Ton commandant",
-  "story_tts_console": "Console de transmission"
+  "story_tts_console": "Console de transmission",
+  "timekeeper_apply_unavailable": "Timekeeper indisponible pour le moment."
 }

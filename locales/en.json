@@ -7574,5 +7574,6 @@
   "story_reward_title": "Rewards",
   "story_reward_auto_hint": "Story rewards are granted automatically on the server — no manual claim.",
   "story_narrator_commander": "Your Commander",
-  "story_tts_console": "Transmission Console"
+  "story_tts_console": "Transmission Console",
+  "timekeeper_apply_unavailable": "Timekeeper cannot be applied right now."
 }

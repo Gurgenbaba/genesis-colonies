@@ -7574,5 +7574,6 @@
   "story_reward_title": "Nagrody",
   "story_reward_auto_hint": "Nagrody fabularne są przyznawane automatycznie po stronie serwera — bez ręcznego odbioru.",
   "story_narrator_commander": "Twój dowódca",
-  "story_tts_console": "Konsola transmisji"
+  "story_tts_console": "Konsola transmisji",
+  "timekeeper_apply_unavailable": "Timekeeper jest teraz niedostępny."
 }

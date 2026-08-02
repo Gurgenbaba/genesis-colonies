@@ -374,29 +374,24 @@ def get_client_runtime_config() -> dict[str, int | bool]:
     Client poll intervals (ms) injected into templates as GC_CLIENT_CONFIG.
 
     Production defaults are slower to reduce SQLite lock pressure on small hosts.
-    Override: GC_POLL_ACTIVE_MS, GC_POLL_IDLE_MS, GC_POLL_HIDDEN_MS, GC_SHIPYARD_POLL_MS.
+    Override: GC_POLL_ACTIVE_MS, GC_POLL_IDLE_MS, GC_POLL_HIDDEN_MS.
     """
     if is_production():
         defaults = {
             "poll_active_ms": 5000,  # GC-PERF-STATE-004: closer to server finish cadence
             "poll_idle_ms": 12000,
             "poll_hidden_ms": 30000,
-            "shipyard_poll_ms": 10000,
         }
     else:
         defaults = {
             "poll_active_ms": 3000,
             "poll_idle_ms": 5000,
             "poll_hidden_ms": 15000,
-            "shipyard_poll_ms": 5000,
         }
     return {
         "poll_active_ms": _env_int("GC_POLL_ACTIVE_MS", defaults["poll_active_ms"], minimum=2000),
         "poll_idle_ms": _env_int("GC_POLL_IDLE_MS", defaults["poll_idle_ms"], minimum=3000),
         "poll_hidden_ms": _env_int("GC_POLL_HIDDEN_MS", defaults["poll_hidden_ms"], minimum=10000),
-        "shipyard_poll_ms": _env_int(
-            "GC_SHIPYARD_POLL_MS", defaults["shipyard_poll_ms"], minimum=3000
-        ),
         "command_map_dev_mode": is_command_map_dev_mode(),
         "action_perf_debug": is_action_perf_debug_enabled(),
         "nav_perf_debug": is_nav_perf_debug_enabled(),

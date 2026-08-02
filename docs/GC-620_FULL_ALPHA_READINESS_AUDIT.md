@@ -99,7 +99,7 @@ python -m pytest tests/test_gc597_world_inspector_modal.py -q       # ✅
 | Planet Scope | ✅ | `get_context_planet()` in `game/planet_evolution/repository.py` |
 | Queue finish before mutate | ✅ | `game/queue_engine.py`, `test_race_conditions.py` |
 | No Frontend Gameplay Math | 🔄 | Countdown/Progress aus Server-TS ✅; **Resource-Bar-Ticker** interpoliert prod/cap zwischen Polls (`projectLiveResourceAmount` in `main.js`) — Display-only, aber Regel-16-Grenzfall |
-| Modul-Polling | 🔄 | Chat ✅ dokumentierte Ausnahme; Vote-Center 5s Poll; Auction 1s Countdown; Shipyard on-demand GET; **kein** Shipyard-Interval aktiv (dead code `_shipyardPollIntervalId`) |
+| Modul-Polling | 🔄 | Chat ✅ dokumentierte Ausnahme; Vote-Center 5s Poll; Auction 1s Countdown; Shipyard on-demand GET; kein Shipyard-Interval (entfernt) |
 | Owner-Module (§17) | ✅ | Command Map → `command_map.py`, World → `world_map.py`, Fleet targets → `fleet_target.py` |
 
 ### Parallele / Doppelte State-Quellen

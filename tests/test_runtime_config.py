@@ -34,7 +34,7 @@ def test_client_runtime_config_production_slower_poll(monkeypatch):
     assert cfg["poll_active_ms"] == 5000
     assert cfg["poll_idle_ms"] == 12000
     assert cfg["poll_hidden_ms"] == 30000
-    assert cfg["shipyard_poll_ms"] == 10000
+    assert "shipyard_poll_ms" not in cfg
 
 
 def test_client_runtime_config_development_defaults(monkeypatch):
@@ -82,4 +82,6 @@ def test_main_js_applies_client_runtime_config():
 
     js = (Path(__file__).resolve().parent.parent / "static" / "main.js").read_text(encoding="utf-8")
     assert "applyClientRuntimeConfig" in js
-    assert "GC.shipyardPollMs" in js
+    assert "GC.shipyardPollMs" not in js
+    assert "_shipyardPollIntervalId" not in js
+    assert "_defensePollIntervalId" not in js

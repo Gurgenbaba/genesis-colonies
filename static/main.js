@@ -1699,7 +1699,6 @@
       intervalIdle: 5000,
       intervalHidden: 15000,
     },
-    shipyardPollMs: 5000,
     modules: {},
     lastAppliedStateVersion: 0,
   };
@@ -1881,7 +1880,6 @@
     if (Number(cfg.poll_active_ms) > 0) pol.intervalActive = Number(cfg.poll_active_ms);
     if (Number(cfg.poll_idle_ms) > 0) pol.intervalIdle = Number(cfg.poll_idle_ms);
     if (Number(cfg.poll_hidden_ms) > 0) pol.intervalHidden = Number(cfg.poll_hidden_ms);
-    if (Number(cfg.shipyard_poll_ms) > 0) GC.shipyardPollMs = Number(cfg.shipyard_poll_ms);
     GC.settings = {
       notify_attack_sound: normalizeNotifySoundMode(cfg.notify_attack_sound),
       notify_message_sound: normalizeNotifySoundMode(cfg.notify_message_sound),
@@ -8374,7 +8372,10 @@
   }
 
   function _collectMiniQueueJobs(queueRaw, domain) {
-    if (Array.isArray(queueRaw?.mini_queue_jobs)) return queueRaw.mini_queue_jobs;
+    // Empty array is not "enriched missing" — treat as absent and fall back to queue[].
+    if (Array.isArray(queueRaw?.mini_queue_jobs) && queueRaw.mini_queue_jobs.length > 0) {
+      return queueRaw.mini_queue_jobs;
+    }
     const dom = String(domain || "").toLowerCase();
     let cardJobs;
     if (dom === "defense") cardJobs = _collectDefenseQueueCardJobs(queueRaw);
@@ -13054,9 +13055,22 @@
   }
 
   async function submitTimekeeperApplyFromBtn(openBtn) {
-    if (!openBtn || openBtn.disabled || _timekeeperApplying) return;
+    if (!openBtn || _timekeeperApplying) return;
+    if (openBtn.disabled) {
+      showNotify(
+        t("timekeeper_apply_unavailable", "Timekeeper gerade nicht anwendbar."),
+        "error"
+      );
+      return;
+    }
     const ctx = _timekeeperOpenContext(openBtn);
-    if (!ctx.domain || ctx.remaining <= 0 || _timekeeperApplyBalance() <= 0) return;
+    if (!ctx.domain || ctx.remaining <= 0 || _timekeeperApplyBalance() <= 0) {
+      showNotify(
+        t("timekeeper_apply_unavailable", "Timekeeper gerade nicht anwendbar."),
+        "error"
+      );
+      return;
+    }
 
     _timekeeperApplying = true;
     setProgressionActionBusy(openBtn, true);
@@ -17792,6 +17806,12 @@
       if (tip) {
         tip.hidden = true;
         tip.innerHTML = "";
+        // Clear inline display/visibility — otherwise display:block beats [hidden]
+        // and leaves an empty cyan popover box on screen.
+        tip.style.display = "";
+        tip.style.visibility = "";
+        tip.style.left = "";
+        tip.style.top = "";
       }
       lrHoverActive = null;
     };
@@ -17810,9 +17830,9 @@
     const positionLoginRewardsHoverTip = (tip, trigger) => {
       const rect = trigger.getBoundingClientRect();
       const margin = 8;
-      tip.style.visibility = "hidden";
       tip.hidden = false;
-      tip.style.display = "block";
+      tip.style.display = "";
+      tip.style.visibility = "hidden";
       const popRect = tip.getBoundingClientRect();
       let left = rect.left + rect.width / 2 - popRect.width / 2;
       left = Math.max(margin, Math.min(left, window.innerWidth - popRect.width - margin));
@@ -25262,14 +25282,10 @@
     }, delay);
   }
 
-  let _shipyardPollIntervalId = null;
   let _lastShipyardQueueSignature = "";
 
   function stopShipyardTimers() {
-    if (_shipyardPollIntervalId != null) {
-      clearInterval(_shipyardPollIntervalId);
-      _shipyardPollIntervalId = null;
-    }
+    // No module interval poller — progress ticker is owned by GC.startProgressTicker.
   }
 
   function startShipyardTimers() {
@@ -25351,6 +25367,11 @@
   }
   GC.shipBattleIconUrl = shipBattleIconUrl;
 
+  function _renderShipyardMiniQueueAndFinalize(qd) {
+    _renderProductionMiniQueue("shipyard-mini-queue", qd, { domain: "shipyard" });
+    if (GC.lastState) _finalizeTimekeeperQueueButtons(GC.lastState);
+  }
+
   function renderShipyardQueue(page, queueData) {
     const host = document.getElementById("shipyard-mini-queue");
     if (!host) return;
@@ -25371,7 +25392,7 @@
       _shipyardUnitFinishKey = "";
       SHIPYARDQ.active.finishTime = 0;
       SHIPYARDQ.active.totalSeconds = 0;
-      _renderProductionMiniQueue("shipyard-mini-queue", qd, { domain: "shipyard" });
+      _renderShipyardMiniQueueAndFinalize(qd);
       clearAllProductionCardQueues(page);
       GC.startProgressTicker();
       return;
@@ -25387,7 +25408,7 @@
         (finishTime > 0 && finishTime <= now) ||
         (nextUnitFinish > 0 && nextUnitFinish <= now);
       if (!overdue) {
-        _renderProductionMiniQueue("shipyard-mini-queue", qd, { domain: "shipyard" });
+        _renderShipyardMiniQueueAndFinalize(qd);
         clearAllProductionCardQueues(page);
         GC.startProgressTicker();
         return;
@@ -25396,7 +25417,7 @@
     _lastShipyardQueueSignature = sig;
     _productionZeroHandled.shipyard = "";
 
-    _renderProductionMiniQueue("shipyard-mini-queue", qd, { domain: "shipyard" });
+    _renderShipyardMiniQueueAndFinalize(qd);
     if (!jobs.length) _finishRefreshArmed.shipyard = false;
     else clearFinishRefreshArmed("shipyard", jobs);
 
@@ -25743,8 +25764,10 @@
     }
   }
 
-  function applyShipyardState(page, data) {
+  function applyShipyardState(page, data, opts) {
     if (!page || !data) return;
+    const options = opts && typeof opts === "object" ? opts : {};
+    const skipQueue = options.skipQueue === true;
     const statePlanet = Number(data.planet_id || 0);
     const activePlanet = Number(GC.lastState?.active_planet_id || page.dataset.planetId || 0);
     if (activePlanet > 0 && statePlanet > 0 && activePlanet !== statePlanet) {
@@ -25785,7 +25808,9 @@
     }
 
     if (data.current_ships) updateShipyardStockBadges(page, data.current_ships);
-    if (data.shipyard_queue) renderShipyardQueue(page, data.shipyard_queue);
+    // When applyActionState already patched the mini strip, do not re-render from
+    // unenriched res.data — that wipes Timekeeper ⚡ enablement until reload.
+    if (!skipQueue && data.shipyard_queue) renderShipyardQueue(page, data.shipyard_queue);
 
     const syLevel = data.orbital_shipyard_level != null ? data.orbital_shipyard_level : page.dataset.shipyardLevel;
 
@@ -25849,7 +25874,6 @@
   let _defenseRefreshTimer = null;
   let _defenseUnitFinishKey = "";
   let _defenseBound = false;
-  let _defensePollIntervalId = null;
   let _lastDefenseQueueSignature = "";
 
   function defenseIconUrl(defenseKey) {
@@ -25951,6 +25975,11 @@
     }
   }
 
+  function _renderDefenseMiniQueueAndFinalize(qd) {
+    _renderProductionMiniQueue("defense-mini-queue", qd, { domain: "defense" });
+    if (GC.lastState) _finalizeTimekeeperQueueButtons(GC.lastState);
+  }
+
   function renderDefenseQueue(page, queuePayload) {
     const host = document.getElementById("defense-mini-queue");
     if (!host) return;
@@ -25971,7 +26000,7 @@
       _defenseUnitFinishKey = "";
       DEFENSEQ.active.finishTime = 0;
       DEFENSEQ.active.totalSeconds = 0;
-      _renderProductionMiniQueue("defense-mini-queue", qd, { domain: "defense" });
+      _renderDefenseMiniQueueAndFinalize(qd);
       clearAllProductionCardQueues(page);
       GC.startProgressTicker();
       return;
@@ -25987,7 +26016,7 @@
         (finishTime > 0 && finishTime <= now) ||
         (nextUnitFinish > 0 && nextUnitFinish <= now);
       if (!overdue) {
-        _renderProductionMiniQueue("defense-mini-queue", qd, { domain: "defense" });
+        _renderDefenseMiniQueueAndFinalize(qd);
         clearAllProductionCardQueues(page);
         GC.startProgressTicker();
         return;
@@ -25996,7 +26025,7 @@
     _lastDefenseQueueSignature = sig;
     _productionZeroHandled.defense = "";
 
-    _renderProductionMiniQueue("defense-mini-queue", qd, { domain: "defense" });
+    _renderDefenseMiniQueueAndFinalize(qd);
     if (!jobs.length) _finishRefreshArmed.defense = false;
     else clearFinishRefreshArmed("defense", jobs);
 
@@ -26004,8 +26033,10 @@
     GC.startProgressTicker();
   }
 
-  function applyDefenseState(page, data) {
+  function applyDefenseState(page, data, opts) {
     if (!page || !data) return;
+    const options = opts && typeof opts === "object" ? opts : {};
+    const skipQueue = options.skipQueue === true;
     const tt = (key, fallback) => t(key, fallback);
     if (data.planet_id != null) page.dataset.planetId = String(data.planet_id);
     if (data.defense_factory_level != null) {
@@ -26029,7 +26060,8 @@
       }
     }
     if (data.current_defense) updateDefenseStockBadges(page, data.current_defense);
-    if (data.defense_queue) renderDefenseQueue(page, data.defense_queue);
+    // State-first: skip unenriched res.queue overwrite after applyActionState.
+    if (!skipQueue && data.defense_queue) renderDefenseQueue(page, data.defense_queue);
     (data.buildable_defense || []).forEach((unit) => {
       applyDefenseUnitCard(page, unit, data.resources || {}, tt);
     });
@@ -26143,14 +26175,10 @@
   }
 
   function stopDefenseTimers() {
-    if (_defensePollIntervalId != null) {
-      clearInterval(_defensePollIntervalId);
-      _defensePollIntervalId = null;
-    }
+    // No module interval poller — progress ticker is owned by GC.startProgressTicker.
   }
 
   function startDefenseTimers() {
-    stopDefenseTimers();
     const page = document.getElementById("defense-page");
     if (!page || page.dataset.ready !== "1") return;
     GC.startProgressTicker();
@@ -26201,7 +26229,7 @@
           if (res?.ok) {
             if (res.state) applyActionState(res, "defense_cancel");
             const payload = normalizeDefenseApiPayload(res);
-            if (payload) applyDefenseState(page, payload);
+            if (payload) applyDefenseState(page, payload, res.state ? { skipQueue: true } : undefined);
             else await refreshDefenseState(page);
           } else {
             showNotify(reasonText(res?.error || apiError(res)), "error");
@@ -26235,7 +26263,7 @@
           _lastDefenseQueueSignature = "";
           if (res.state) applyActionState(res, "defense_build");
           const payload = normalizeDefenseApiPayload(res);
-          if (payload) applyDefenseState(page, payload);
+          if (payload) applyDefenseState(page, payload, res.state ? { skipQueue: true } : undefined);
           else if (!res.state) await refreshDefenseState(page);
         } else {
           showNotify(reasonText(res?.error || apiError(res)), "error");
