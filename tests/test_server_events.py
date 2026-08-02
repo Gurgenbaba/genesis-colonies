@@ -261,3 +261,44 @@ def test_admin_panel_has_events_tab(events_db, monkeypatch):
     html = res.get_data(as_text=True)
     assert 'data-admin-tab="events"' in html
     assert 'data-admin-panel="events"' in html
+
+
+def test_login_calendar_marks_event_days(events_db):
+    """Streak-day UTC buckets overlapping server events get event:true; claim status unchanged."""
+    from game.login_rewards import day_bucket, serialize_for_client as lr_serialize
+
+    uid = _player()
+    now = float(int(time.time()))
+    today = day_bucket(now)
+    day_start = today * 86400
+    create_event(
+        slug="cal-weekend",
+        title="Calendar Weekend",
+        starts_at=day_start,
+        ends_at=day_start + 2 * 86400,
+        effects=[
+            {"kind": KIND_PRODUCTION_MULT, "mult": 2.0},
+            {"kind": KIND_EXPEDITION_HOLD_MULT, "mult": 0.75},
+        ],
+    )
+    clear_factor_cache()
+    conn = db()
+    payload = lr_serialize(uid, conn=conn, now=now, include_calendar=True)
+    assert payload.get("ready") is True
+    assert payload.get("available") is True
+    assert payload.get("next_day") == 1
+    days = {int(d["day"]): d for d in payload.get("days") or []}
+    assert days[1]["status"] == "claimable"
+    assert days[1]["event"] is True
+    assert days[1]["day_bucket"] == today
+    summaries = days[1]["events"][0]["effects_summary"]
+    assert any("Prod" in s for s in summaries)
+    assert any("Hold" in s for s in summaries)
+    # Tomorrow's locked day still in the 2-day window
+    assert days[2]["status"] == "locked"
+    assert days[2]["event"] is True
+    # Far future locked day outside window
+    assert days[10]["status"] == "locked"
+    assert days[10]["event"] is False
+    assert isinstance(payload.get("active_server_events"), list)
+    assert any(e.get("slug") == "cal-weekend" for e in payload["active_server_events"])

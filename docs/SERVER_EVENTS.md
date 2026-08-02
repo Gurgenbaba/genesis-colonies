@@ -34,6 +34,10 @@ Resource bar: active `production_mult` is merged into `active_boosters.active_ef
 
 Universe News announcements stay separate (manual EVENT posts).
 
+**Login calendar overlay**
+
+`/login-rewards` projects attendance streak days 1–30 onto UTC buckets and flags days whose window overlaps active/scheduled server events (`event`, `events[]` with effect summary). Claim rules are unchanged — events are visual/context only.
+
 ## Not in v1
 
 Build/research time, loot, Timekeeper, auto-news, Battle Pass coupling.

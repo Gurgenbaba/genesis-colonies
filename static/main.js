@@ -17785,6 +17785,77 @@
         showNotify(t("login_rewards_claim_fail", "Belohnung konnte nicht abgeholt werden."), "error");
       }
     });
+
+    let lrHoverActive = null;
+    const hideLoginRewardsHoverTip = () => {
+      const tip = document.getElementById("login-rewards-hover-tip");
+      if (tip) {
+        tip.hidden = true;
+        tip.innerHTML = "";
+      }
+      lrHoverActive = null;
+    };
+    const ensureLoginRewardsHoverTip = () => {
+      let tip = document.getElementById("login-rewards-hover-tip");
+      if (!tip) {
+        tip = document.createElement("div");
+        tip.id = "login-rewards-hover-tip";
+        tip.className = "gc-popover login-rewards-hover-tip gc-popover-layer";
+        tip.setAttribute("role", "tooltip");
+        tip.hidden = true;
+        document.body.appendChild(tip);
+      }
+      return tip;
+    };
+    const positionLoginRewardsHoverTip = (tip, trigger) => {
+      const rect = trigger.getBoundingClientRect();
+      const margin = 8;
+      tip.style.visibility = "hidden";
+      tip.hidden = false;
+      tip.style.display = "block";
+      const popRect = tip.getBoundingClientRect();
+      let left = rect.left + rect.width / 2 - popRect.width / 2;
+      left = Math.max(margin, Math.min(left, window.innerWidth - popRect.width - margin));
+      let top = rect.bottom + margin;
+      if (top + popRect.height > window.innerHeight - margin) {
+        top = Math.max(margin, rect.top - popRect.height - margin);
+      }
+      tip.style.left = `${left}px`;
+      tip.style.top = `${top}px`;
+      tip.style.visibility = "visible";
+    };
+    const showLoginRewardsHoverTip = (dayEl) => {
+      const src = dayEl.querySelector("template[data-lr-tip]");
+      if (!src) return;
+      const tip = ensureLoginRewardsHoverTip();
+      tip.innerHTML = "";
+      tip.appendChild(src.content.cloneNode(true));
+      positionLoginRewardsHoverTip(tip, dayEl);
+      lrHoverActive = dayEl;
+    };
+    document.addEventListener(
+      "pointerover",
+      (e) => {
+        const day = e.target.closest("#login-rewards-page .login-rewards-day");
+        if (day) {
+          if (day !== lrHoverActive) showLoginRewardsHoverTip(day);
+          return;
+        }
+        if (lrHoverActive) hideLoginRewardsHoverTip();
+      },
+      true
+    );
+    document.addEventListener("focusin", (e) => {
+      const day = e.target.closest("#login-rewards-page .login-rewards-day");
+      if (day) showLoginRewardsHoverTip(day);
+    });
+    document.addEventListener("focusout", (e) => {
+      const day = e.target.closest("#login-rewards-page .login-rewards-day");
+      if (day && !day.contains(e.relatedTarget)) hideLoginRewardsHoverTip();
+    });
+    window.addEventListener("resize", hideLoginRewardsHoverTip);
+    window.addEventListener("scroll", hideLoginRewardsHoverTip, true);
+    GC.hideLoginRewardsHoverTip = hideLoginRewardsHoverTip;
   }
 
   function initLoginRewards() {
@@ -17795,6 +17866,9 @@
     if (state) patchLoginRewardsDom(state);
     if (typeof GC.registerCleanup === "function") {
       GC.registerCleanup(_stopLoginRewardsCooldown);
+      GC.registerCleanup(() => {
+        if (typeof GC.hideLoginRewardsHoverTip === "function") GC.hideLoginRewardsHoverTip();
+      });
     }
   }
 

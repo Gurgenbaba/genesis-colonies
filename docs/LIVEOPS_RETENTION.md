@@ -54,7 +54,7 @@
 
 - `POST /api/login-rewards/claim` → `{ ok, reason, state, login_rewards }`
 - Game-state slice `login_rewards`: `{ available, current_day, next_day, next_unlock_in_sec, cycle_id }`
-- Page: `/login-rewards`
+- Page: `/login-rewards` — calendar UI marks **claimed** / **claimable** / **locked** clearly; streak days are projected onto UTC day-buckets and overlay **Server Events** (`event` + short effect chips) when the bucket overlaps an event window (read-only; no event loot on claim).
 
 ### Catalog highlights
 

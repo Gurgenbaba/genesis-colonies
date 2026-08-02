@@ -7558,5 +7558,9 @@
   "admin_events_window_invalid": "Выбери старт и конец (конец после старта).",
   "admin_events_effects_required": "Нужен хотя бы один эффект (Prod и/или Hold).",
   "boost_hud_event_pct_summary": "Ивент +{pct} %",
-  "boost_hud_event_production": "Серверный ивент"
+  "boost_hud_event_production": "Серверный ивент",
+  "login_rewards_today_badge": "Сегодня",
+  "login_rewards_event_badge": "Ивент",
+  "login_rewards_event_banner": "Активные серверные ивенты",
+  "login_rewards_hover_hint": "Наведение: награды · Клик: забрать"
 }

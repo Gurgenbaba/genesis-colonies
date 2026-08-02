@@ -429,6 +429,79 @@ def claim_login_reward(
     }
 
 
+def _effect_summary_short(effects: Any) -> List[str]:
+    """Compact labels for calendar chips (+100% Prod, −25% Hold)."""
+    out: List[str] = []
+    if not isinstance(effects, list):
+        return out
+    for eff in effects:
+        if not isinstance(eff, Mapping):
+            continue
+        kind = str(eff.get("kind") or "").strip()
+        try:
+            mult = float(eff.get("mult") or 1.0)
+        except (TypeError, ValueError):
+            continue
+        if kind == "production_mult" and mult > 0:
+            pct = int(round((mult - 1.0) * 100))
+            if pct != 0:
+                out.append(f"+{pct}% Prod" if pct > 0 else f"{pct}% Prod")
+        elif kind == "expedition_hold_mult" and mult > 0:
+            pct = int(round((1.0 - mult) * 100))
+            if pct != 0:
+                out.append(f"−{pct}% Hold" if pct > 0 else f"+{abs(pct)}% Hold")
+    return out
+
+
+def _calendar_events_for_window(
+    *,
+    day_start: int,
+    day_end: int,
+    events: List[Mapping[str, Any]],
+) -> List[Dict[str, Any]]:
+    hits: List[Dict[str, Any]] = []
+    for ev in events:
+        if not bool(ev.get("enabled", True)):
+            continue
+        status = str(ev.get("status") or "")
+        if status not in ("active", "scheduled"):
+            continue
+        starts = int(ev.get("starts_at") or 0)
+        ends = int(ev.get("ends_at") or 0)
+        if ends <= day_start or starts >= day_end:
+            continue
+        summary = _effect_summary_short(ev.get("effects"))
+        hits.append(
+            {
+                "slug": str(ev.get("slug") or ""),
+                "title": str(ev.get("title") or ""),
+                "effects_summary": summary,
+            }
+        )
+    return hits
+
+
+def _projected_day_bucket(
+    day_index: int,
+    *,
+    status: str,
+    next_day: int,
+    today_bucket: int,
+    claimed_at_by_day: Mapping[int, float],
+) -> int:
+    d = int(day_index)
+    if status == "claimable":
+        return int(today_bucket)
+    if status == "claimed":
+        claimed_at = claimed_at_by_day.get(d)
+        if claimed_at is not None:
+            return day_bucket(float(claimed_at))
+        # Fallback: walk back from next claim target.
+        return int(today_bucket) - max(0, int(next_day) - d)
+    # locked — project forward from next claimable day
+    return int(today_bucket) + max(0, d - int(next_day))
+
+
 def serialize_for_client(
     player_id: int,
     *,
@@ -453,16 +526,45 @@ def serialize_for_client(
         "cycle_started_at": float(progress["cycle_started_at"]),
     }
     if include_calendar:
-        claimed_days = {
-            int(r["day_index"])
-            for r in conn.execute(
-                """
-                SELECT day_index FROM login_reward_claims
-                WHERE player_id = ? AND cycle_id = ?;
-                """,
-                (int(player_id), str(progress["cycle_id"])),
-            ).fetchall()
+        claim_rows = conn.execute(
+            """
+            SELECT day_index, claimed_at FROM login_reward_claims
+            WHERE player_id = ? AND cycle_id = ?;
+            """,
+            (int(player_id), str(progress["cycle_id"])),
+        ).fetchall()
+        claimed_days = {int(r["day_index"]) for r in claim_rows}
+        claimed_at_by_day = {
+            int(r["day_index"]): float(r["claimed_at"] or 0)
+            for r in claim_rows
+            if r["claimed_at"] is not None
         }
+        today_bucket = day_bucket(ts)
+        next_day = int(status.get("next_day") or (int(progress["current_day"]) + 1) or 1)
+
+        calendar_events: List[Dict[str, Any]] = []
+        try:
+            from game.server_events import list_events, schema_ready as events_ready
+
+            if events_ready(conn):
+                calendar_events = list_events(conn=conn, limit=100)
+        except Exception:
+            calendar_events = []
+
+        active_banner: List[Dict[str, Any]] = []
+        for ev in calendar_events:
+            if str(ev.get("status") or "") != "active":
+                continue
+            active_banner.append(
+                {
+                    "slug": str(ev.get("slug") or ""),
+                    "title": str(ev.get("title") or ""),
+                    "effects_summary": _effect_summary_short(ev.get("effects")),
+                    "ends_at": int(ev.get("ends_at") or 0),
+                }
+            )
+        out["active_server_events"] = active_banner
+
         days: List[Dict[str, Any]] = []
         for entry in LOGIN_REWARD_CATALOG:
             d = int(entry["day"])
@@ -475,6 +577,25 @@ def serialize_for_client(
                 preview["status"] = "claimed"
             else:
                 preview["status"] = "locked"
+
+            bucket = _projected_day_bucket(
+                d,
+                status=str(preview["status"]),
+                next_day=next_day,
+                today_bucket=today_bucket,
+                claimed_at_by_day=claimed_at_by_day,
+            )
+            day_start = int(bucket) * 86400
+            day_end = day_start + 86400
+            hits = _calendar_events_for_window(
+                day_start=day_start,
+                day_end=day_end,
+                events=calendar_events,
+            )
+            preview["day_bucket"] = int(bucket)
+            preview["event"] = bool(hits)
+            preview["events"] = hits
             days.append(preview)
         out["days"] = days
     return out
+

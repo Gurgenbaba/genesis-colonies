@@ -7558,5 +7558,9 @@
   "admin_events_window_invalid": "Choisis debut et fin (fin apres debut).",
   "admin_events_effects_required": "Definir au moins un effet (Prod et/ou Hold).",
   "boost_hud_event_pct_summary": "Event +{pct} %",
-  "boost_hud_event_production": "Evenement serveur"
+  "boost_hud_event_production": "Evenement serveur",
+  "login_rewards_today_badge": "Aujourd'hui",
+  "login_rewards_event_badge": "Event",
+  "login_rewards_event_banner": "Evenements serveur actifs",
+  "login_rewards_hover_hint": "Survol: recompenses · Clic: claim"
 }

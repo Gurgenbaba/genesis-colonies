@@ -3,6 +3,8 @@
 {% block content %}
 {% set lr = login_rewards if login_rewards is defined and login_rewards else {'ready': false} %}
 {% set days = lr.days if lr.days is defined else [] %}
+{% set active_events = lr.active_server_events if lr.active_server_events is defined else [] %}
+{% set progress_pct = ((lr.current_day or 0) / 30 * 100) if lr.ready else 0 %}
 
 <div class="gc-page login-rewards-page" id="login-rewards-page"
      data-login-rewards
@@ -42,7 +44,7 @@
       </div>
       <div class="login-rewards-actions">
         <button type="button"
-                class="gc-btn gc-btn-primary"
+                class="gc-btn gc-btn-primary login-rewards-claim-main{% if lr.available %} login-rewards-claim-main--ready{% endif %}"
                 data-lr-claim
                 {% if not lr.available %}disabled aria-disabled="true"{% endif %}>
           {{ T("login_rewards_claim", "Heutige Belohnung holen") }}
@@ -52,53 +54,132 @@
         </a>
       </div>
     </div>
+    <div class="login-rewards-progress-track" aria-hidden="true">
+      <div class="login-rewards-progress-fill" style="width: {{ progress_pct }}%;"></div>
+    </div>
     <p class="login-rewards-cooldown hint" data-lr-cooldown{% if lr.available or not (lr.next_unlock_in_sec or 0) %} hidden{% endif %}>
       {{ T("login_rewards_next_in", "Nächster Claim in") }}
       <span class="gc-mono" data-lr-cooldown-sec>{{ lr.next_unlock_in_sec or 0 }}</span>
     </p>
   </section>
 
-  <section class="gc-panel login-rewards-panel">
+  {% if active_events %}
+  <section class="gc-panel login-rewards-panel login-rewards-event-banner" data-lr-event-banner>
+    <div class="login-rewards-event-banner-head">
+      <span class="login-rewards-event-banner-pulse" aria-hidden="true"></span>
+      <span class="login-rewards-event-banner-label">{{ T("login_rewards_event_banner", "Aktive Server Events") }}</span>
+    </div>
+    <ul class="login-rewards-event-banner-list">
+      {% for ev in active_events %}
+      <li class="login-rewards-event-banner-item">
+        <strong class="login-rewards-event-banner-title">{{ ev.title or ev.slug }}</strong>
+        {% if ev.effects_summary %}
+        <span class="login-rewards-event-banner-effects gc-mono">{{ ev.effects_summary | join(" · ") }}</span>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  <section class="gc-panel login-rewards-panel login-rewards-calendar-panel">
     <div class="gc-panel-header">
       <span class="gc-panel-title">{{ T("login_rewards_calendar_title", "Attendance-Kalender") }}</span>
+      <span class="login-rewards-calendar-hint hint">{{ T("login_rewards_hover_hint", "Hover: Belohnungen · Klick: Claim") }}</span>
     </div>
     <div class="login-rewards-grid" data-lr-grid>
       {% for day in days %}
-      <article class="login-rewards-day login-rewards-day--{{ day.status }}{% if day.milestone %} login-rewards-day--milestone{% endif %}"
-               data-lr-day="{{ day.day }}"
-               data-lr-status="{{ day.status }}">
-        <header class="login-rewards-day-head">
-          <span class="login-rewards-day-num gc-mono">{{ T("login_rewards_day_n", "Tag {n}").replace("{n}", day.day|string) }}</span>
+      {% set day_events = day.events if day.events is defined else [] %}
+      {% set hero = day['items'][0] if day['items'] else none %}
+      {% set day_label = T("login_rewards_day_n", "Tag {n}").replace("{n}", day.day|string) %}
+      {% if day.status == 'claimable' %}
+      {% set status_label = T("login_rewards_today_badge", "Heute") %}
+      {% elif day.status == 'claimed' %}
+      {% set status_label = T("login_rewards_claimed", "Abgeholt") %}
+      {% else %}
+      {% set status_label = T("login_rewards_locked", "Gesperrt") %}
+      {% endif %}
+      <button type="button"
+              class="login-rewards-day login-rewards-day--{{ day.status }}{% if day.milestone %} login-rewards-day--milestone{% endif %}{% if day.event %} login-rewards-day--event{% endif %}{% if hero and hero.rarity %} login-rewards-day--rarity-{{ hero.rarity }}{% endif %}"
+              data-lr-day="{{ day.day }}"
+              data-lr-status="{{ day.status }}"
+              {% if day.status == 'claimable' %}data-lr-claim{% endif %}
+              {% if day.event %}data-lr-event="1"{% endif %}
+              {% if day.status != 'claimable' %}disabled aria-disabled="true"{% endif %}
+              aria-label="{{ day_label }} — {{ status_label }}">
+        <span class="login-rewards-day-num gc-mono">{{ '%02d'|format(day.day) }}</span>
+        <div class="login-rewards-day-marks" aria-hidden="true">
+          {% if day.status == 'claimable' %}
+          <span class="login-rewards-day-mark login-rewards-day-mark--today"></span>
+          {% endif %}
           {% if day.milestone %}
-          <span class="login-rewards-day-badge">{{ T("login_rewards_milestone", "Meilenstein") }}</span>
+          <span class="login-rewards-day-mark login-rewards-day-mark--milestone" title="{{ T('login_rewards_milestone', 'Meilenstein') }}"></span>
           {% endif %}
-        </header>
-        <ul class="login-rewards-day-rewards">
-          {% for item in day['items'] %}
-          <li class="login-rewards-reward-item">
-            <span class="login-rewards-reward-icon" aria-hidden="true">{{ item.icon or '📦' }}</span>
-            <span class="login-rewards-reward-name">{{ T(item.name_key, item.item_key) }}</span>
-            <span class="login-rewards-reward-amt gc-mono">×{{ item.amount }}</span>
-          </li>
-          {% endfor %}
-          {% if day.timekeeper_sec and day.timekeeper_sec > 0 %}
-          <li class="login-rewards-reward-item login-rewards-reward-item--tk">
-            <span class="login-rewards-reward-icon" aria-hidden="true">⚡</span>
-            <span class="login-rewards-reward-name">{{ T("login_rewards_tk", "Timekeeper") }}</span>
-            <span class="login-rewards-reward-amt gc-mono">{{ day.timekeeper_sec }}s</span>
-          </li>
+          {% if day.event %}
+          <span class="login-rewards-day-mark login-rewards-day-mark--event" title="{{ T('login_rewards_event_badge', 'Event') }}"></span>
           {% endif %}
-        </ul>
-        {% if day.status == 'claimable' %}
-        <button type="button" class="gc-btn gc-btn-sm gc-btn-primary login-rewards-day-claim" data-lr-claim>
-          {{ T("login_rewards_claim_short", "Claim") }}
-        </button>
-        {% elif day.status == 'claimed' %}
-        <span class="login-rewards-day-state">{{ T("login_rewards_claimed", "Abgeholt") }}</span>
-        {% else %}
-        <span class="login-rewards-day-state">{{ T("login_rewards_locked", "Gesperrt") }}</span>
+        </div>
+        <span class="login-rewards-day-media">
+          {% if hero and hero.image %}
+          <img class="login-rewards-day-img" src="{{ url_for('static', filename=hero.image) }}" alt="" loading="lazy" width="64" height="64" />
+          {% else %}
+          <span class="login-rewards-day-icon" aria-hidden="true">{{ (hero.icon if hero else none) or '📦' }}</span>
+          {% endif %}
+        </span>
+        {% if day.status == 'claimed' %}
+        <span class="login-rewards-day-check" aria-hidden="true">✓</span>
+        {% elif day.status == 'locked' %}
+        <span class="login-rewards-day-lock" aria-hidden="true"></span>
         {% endif %}
-      </article>
+        <template data-lr-tip>
+          <div class="login-rewards-tip">
+            <header class="login-rewards-tip-head">
+              <strong class="login-rewards-tip-title">{{ day_label }}</strong>
+              <span class="login-rewards-tip-status login-rewards-tip-status--{{ day.status }}">{{ status_label }}</span>
+            </header>
+            {% if day.milestone or day.event %}
+            <div class="login-rewards-tip-badges">
+              {% if day.milestone %}
+              <span class="login-rewards-tip-badge login-rewards-tip-badge--milestone">{{ T("login_rewards_milestone", "Meilenstein") }}</span>
+              {% endif %}
+              {% if day.event %}
+              <span class="login-rewards-tip-badge login-rewards-tip-badge--event">{{ T("login_rewards_event_badge", "Event") }}</span>
+              {% endif %}
+            </div>
+            {% endif %}
+            <ul class="login-rewards-tip-list">
+              {% for item in day['items'] %}
+              <li class="login-rewards-tip-item">
+                {% if item.image %}
+                <img class="login-rewards-tip-thumb" src="{{ url_for('static', filename=item.image) }}" alt="" width="22" height="22" />
+                {% else %}
+                <span class="login-rewards-tip-icon" aria-hidden="true">{{ item.icon or '📦' }}</span>
+                {% endif %}
+                <span class="login-rewards-tip-name">{{ T(item.name_key, item.item_key) }}</span>
+                <span class="login-rewards-tip-amt gc-mono">×{{ item.amount }}</span>
+              </li>
+              {% endfor %}
+              {% if day.timekeeper_sec and day.timekeeper_sec > 0 %}
+              <li class="login-rewards-tip-item">
+                <span class="login-rewards-tip-icon" aria-hidden="true">⚡</span>
+                <span class="login-rewards-tip-name">{{ T("login_rewards_tk", "Timekeeper") }}</span>
+                <span class="login-rewards-tip-amt gc-mono">{{ day.timekeeper_sec }}s</span>
+              </li>
+              {% endif %}
+            </ul>
+            {% if day_events %}
+            <p class="login-rewards-tip-event gc-mono">
+              {% for ev in day_events %}
+              {% if ev.effects_summary %}{{ ev.effects_summary | join(" · ") }}{% else %}{{ ev.title }}{% endif %}{% if not loop.last %} · {% endif %}
+              {% endfor %}
+            </p>
+            {% endif %}
+            {% if day.status == 'claimable' %}
+            <p class="login-rewards-tip-cta">{{ T("login_rewards_claim_short", "Claim") }}</p>
+            {% endif %}
+          </div>
+        </template>
+      </button>
       {% endfor %}
     </div>
   </section>

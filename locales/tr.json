@@ -7558,5 +7558,9 @@
   "admin_events_window_invalid": "Baslangic ve bitis sec (bitis sonra).",
   "admin_events_effects_required": "En az bir efekt ayarla (Prod ve/veya Hold).",
   "boost_hud_event_pct_summary": "Event +{pct} %",
-  "boost_hud_event_production": "Sunucu Eventi"
+  "boost_hud_event_production": "Sunucu Eventi",
+  "login_rewards_today_badge": "Bugun",
+  "login_rewards_event_badge": "Event",
+  "login_rewards_event_banner": "Aktif sunucu eventleri",
+  "login_rewards_hover_hint": "Hover: oduller · Tik: claim"
 }

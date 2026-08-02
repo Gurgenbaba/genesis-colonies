@@ -7558,5 +7558,9 @@
   "admin_events_window_invalid": "Pick start and end (end after start).",
   "admin_events_effects_required": "Set at least one effect (Prod and/or Hold).",
   "boost_hud_event_pct_summary": "Event +{pct} %",
-  "boost_hud_event_production": "Server Event"
+  "boost_hud_event_production": "Server Event",
+  "login_rewards_today_badge": "Today",
+  "login_rewards_event_badge": "Event",
+  "login_rewards_event_banner": "Active Server Events",
+  "login_rewards_hover_hint": "Hover: rewards · Click: claim"
 }
