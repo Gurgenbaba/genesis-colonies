@@ -601,3 +601,31 @@ def serialize_for_client(player_id: int, *, conn) -> Dict[str, Any]:
 def get_skilltree_page_context(player_id: int, *, conn) -> Dict[str, Any]:
     claim_skill_points(int(player_id), conn=conn)
     return {"commander": serialize_for_client(int(player_id), conn=conn)}
+
+
+def story_narrator_slice(player_id: int, *, conn) -> Optional[Dict[str, Any]]:
+    """Read-only Story Ops hero payload — catalog portrait only, no ensure/write."""
+    if not schema_ready(conn):
+        return None
+    row = conn.execute(
+        "SELECT class_key FROM player_commander WHERE player_id = ? LIMIT 1;",
+        (int(player_id),),
+    ).fetchone()
+    if not row:
+        return None
+    class_key = str(row["class_key"] or "").strip()
+    if not class_key or not is_valid_class(class_key):
+        return None
+    meta = get_class(class_key) or {}
+    portrait = str(meta.get("portrait") or "").strip()
+    if not portrait:
+        return None
+    return {
+        "class_key": class_key,
+        "theme": str(meta.get("theme") or class_key),
+        "portrait": portrait,
+        "name_key": str(meta.get("name_key") or ""),
+        "officer_key": str(meta.get("officer_key") or ""),
+        "title_key": str(meta.get("title_key") or ""),
+        "epithet_key": str(meta.get("epithet_key") or ""),
+    }

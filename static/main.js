@@ -19705,6 +19705,136 @@
     return t("story_contact_ark", "Genesis Ark");
   }
 
+  function _storyStaticUrl(relPath) {
+    const rel = String(relPath || "").replace(/^\/+/, "");
+    if (!rel) return "";
+    if (/^https?:\/\//i.test(rel) || rel.startsWith("/static/")) return rel;
+    return `/static/${rel}`;
+  }
+
+  function _storyNarratorLabel(narrator) {
+    if (!narrator) return "";
+    const officerKey = String(narrator.officer_key || "").trim();
+    if (officerKey) return t(officerKey, narrator.class_key || "Commander");
+    const nameKey = String(narrator.name_key || "").trim();
+    if (nameKey) return t(nameKey, narrator.class_key || "Commander");
+    return String(narrator.class_key || "");
+  }
+
+  function _storyApplySpeakerVisual(page, state, contact) {
+    const speaker = page.querySelector("[data-story-speaker]") || page.querySelector("[data-story-orb]");
+    if (!speaker) return;
+    const narrator = state && state.narrator;
+    const hasCommander = !!(narrator && narrator.portrait);
+    const speaking = _storyAudio && !_storyAudio.paused && !_storyAudio.ended;
+    const paused = _storyAudio && _storyAudio.paused && !_storyAudio.ended && _storyAudio.currentTime > 0;
+    const theme = String((narrator && narrator.theme) || "").replace(/[^a-z0-9_-]/gi, "");
+    const contactKey = String(contact || "ark").replace(/[^a-z0-9_-]/gi, "") || "ark";
+
+    if (hasCommander) {
+      speaker.dataset.speakerMode = "commander";
+      speaker.setAttribute("data-class-key", narrator.class_key || "");
+      speaker.setAttribute("data-cc-theme", theme);
+      speaker.className = (
+        `story-speaker story-speaker--hero story-speaker--commander`
+        + (theme ? ` story-speaker--${theme}` : "")
+      );
+      if (!speaker.querySelector("[data-story-holo]")) {
+        const holo = document.createElement("div");
+        holo.className = "story-holo";
+        holo.setAttribute("data-story-holo", "");
+        holo.innerHTML = (
+          '<span class="story-holo__orbit story-holo__orbit--a"></span>'
+          + '<span class="story-holo__orbit story-holo__orbit--b"></span>'
+          + '<span class="story-holo__orbit story-holo__orbit--c"></span>'
+          + '<span class="story-holo__pulse"></span>'
+          + '<span class="story-holo__marker story-holo__marker--1"></span>'
+          + '<span class="story-holo__marker story-holo__marker--2"></span>'
+          + '<span class="story-holo__marker story-holo__marker--3"></span>'
+          + '<span class="story-holo__marker story-holo__marker--4"></span>'
+          + '<span class="story-holo__particles"></span>'
+        );
+        speaker.insertBefore(holo, speaker.firstChild);
+      }
+      let img = speaker.querySelector("[data-story-speaker-portrait]");
+      let frame = speaker.querySelector(".story-speaker__frame");
+      if (!frame) {
+        // Swap orb core → commander frame if page was rendered without class.
+        const core = speaker.querySelector(".story-orb__core");
+        if (core) core.remove();
+        frame = document.createElement("div");
+        frame.className = "story-speaker__frame";
+        img = document.createElement("img");
+        img.className = "story-speaker__portrait";
+        img.setAttribute("data-story-speaker-portrait", "");
+        img.alt = "";
+        const scan = document.createElement("span");
+        scan.className = "story-speaker__holo-scan";
+        const fade = document.createElement("span");
+        fade.className = "story-speaker__fade";
+        const eq = document.createElement("span");
+        eq.className = "story-speaker__eq story-orb__eq";
+        eq.setAttribute("aria-hidden", "true");
+        eq.innerHTML = "<i></i><i></i><i></i><i></i><i></i>";
+        frame.appendChild(img);
+        frame.appendChild(scan);
+        frame.appendChild(fade);
+        frame.appendChild(eq);
+        speaker.appendChild(frame);
+      }
+      if (img) img.src = _storyStaticUrl(narrator.portrait);
+    } else {
+      speaker.dataset.speakerMode = "orb";
+      speaker.removeAttribute("data-class-key");
+      speaker.removeAttribute("data-cc-theme");
+      speaker.className = `story-speaker story-speaker--hero story-speaker--orb story-orb story-orb--hero story-orb--${contactKey}`;
+      const frame = speaker.querySelector(".story-speaker__frame");
+      if (frame) frame.remove();
+      if (!speaker.querySelector(".story-orb__core")) {
+        const core = document.createElement("span");
+        core.className = "story-orb__core";
+        core.innerHTML = (
+          '<span class="story-orb__pulse"></span>'
+          + '<span class="story-orb__eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>'
+        );
+        speaker.appendChild(core);
+      }
+    }
+    speaker.classList.toggle("is-speaking", !!speaking);
+    speaker.classList.toggle("is-paused", !!paused);
+
+    const contactLabel = page.querySelector("[data-story-contact-label]");
+    if (contactLabel) {
+      contactLabel.textContent = hasCommander
+        ? _storyNarratorLabel(narrator)
+        : _storyContactLabel(contactKey);
+    }
+    let roleEl = page.querySelector("[data-story-commander-role]");
+    if (hasCommander) {
+      if (!roleEl) {
+        const meta = page.querySelector(".story-tx__meta");
+        const status = page.querySelector("[data-story-channel-status]");
+        if (meta) {
+          roleEl = document.createElement("span");
+          roleEl.className = "story-tx__commander-role gc-mono";
+          roleEl.setAttribute("data-story-commander-role", "");
+          if (status) meta.insertBefore(roleEl, status);
+          else meta.appendChild(roleEl);
+        }
+      }
+      if (roleEl) {
+        const titleKey = String(narrator.title_key || "").trim();
+        const title = titleKey ? t(titleKey, "") : "";
+        const base = t("story_narrator_commander", "Dein Commander");
+        roleEl.textContent = title ? `${base} · ${title}` : base;
+        roleEl.hidden = false;
+      }
+    } else if (roleEl) {
+      roleEl.hidden = true;
+      roleEl.textContent = "";
+    }
+  }
+
   const STORY_TTS_LS_KEY = "gc_story_tts_v1";
   const STORY_FOCUS_KEY = "gc_story_focus_v1";
   const STORY_TTS_AUTO_DEBOUNCE_MS = 350;
@@ -19797,30 +19927,60 @@
     }
     _storyTtsUtterance = null;
     _storyOrbSetState("idle");
+    _storyTtsSyncSeekButton();
   }
 
   function _storyTtsPause() {
     if (_storyAudio) {
       try { _storyAudio.pause(); } catch (_) {}
       _storyOrbSetState("paused");
+      _storyTtsSyncSeekButton();
       return;
     }
     if ("speechSynthesis" in window) {
       try { if (window.speechSynthesis.speaking) window.speechSynthesis.pause(); } catch (_) {}
       _storyOrbSetState("paused");
     }
+    _storyTtsSyncSeekButton();
   }
 
   function _storyTtsResume() {
     if (_storyAudio) {
       try { _storyAudio.play(); } catch (_) {}
       _storyOrbSetState("speaking");
+      _storyTtsSyncSeekButton();
       return;
     }
     if ("speechSynthesis" in window) {
       try { if (window.speechSynthesis.paused) window.speechSynthesis.resume(); } catch (_) {}
       _storyOrbSetState("speaking");
     }
+    _storyTtsSyncSeekButton();
+  }
+
+  function _storyTtsSyncSeekButton() {
+    const page = document.getElementById("story-ops-page");
+    if (!page) return;
+    const btn = page.querySelector("[data-story-tts-seek-back]");
+    if (!btn) return;
+    const canSeek = !!(
+      _storyAudio
+      && _storyAudio.src
+      && !_storyAudio.ended
+      && Number.isFinite(_storyAudio.duration)
+      && _storyAudio.duration > 0
+    );
+    btn.disabled = !canSeek;
+  }
+
+  function _storyTtsSeekBack(seconds) {
+    const delta = Math.max(0.5, Number(seconds) || 10);
+    if (!_storyAudio || !_storyAudio.src) return;
+    try {
+      const next = Math.max(0, (Number(_storyAudio.currentTime) || 0) - delta);
+      _storyAudio.currentTime = next;
+    } catch (_) {}
+    _storyTtsSyncSeekButton();
   }
 
   function _storyTtsIsAbortError(err) {
@@ -19877,6 +20037,9 @@
     }
     _storyAudio = audio;
     _storyOrbSetState("speaking");
+    _storyTtsSyncSeekButton();
+    audio.addEventListener("loadedmetadata", _storyTtsSyncSeekButton, { once: true });
+    audio.ontimeupdate = () => { _storyTtsSyncSeekButton(); };
     await audio.play();
   }
 
@@ -20003,12 +20166,15 @@
     if (vol) vol.value = String(Math.round(prefs.volume * 100));
     if (volVal) volVal.textContent = `${Math.round(prefs.volume * 100)}%`;
     if (auto) auto.checked = !!prefs.auto;
-    const label = page.querySelector(".story-tts__label");
-    if (label) label.textContent = t("story_tts_bender_label", "Neural Contact Voice");
+    const label = page.querySelector(".story-tts__section-label") || page.querySelector(".story-tts__label");
+    if (label) label.textContent = t("story_tts_console", "Übertragungskonsole");
+    const tag = page.querySelector(".story-tts__console-tag");
+    if (tag) tag.textContent = t("story_tts_bender_label", "Neural Contact Voice");
     [
+      ["[data-story-tts-seek-back]", "story_tts_seek_back", "−10 s"],
       ["[data-story-tts-play]", "story_tts_play", "Abspielen"],
       ["[data-story-tts-pause]", "story_tts_pause", "Pause"],
-      ["[data-story-tts-resume]", "story_tts_resume", "Weiter"],
+      ["[data-story-tts-resume]", "story_tts_resume", "Fortsetzen"],
       ["[data-story-tts-stop]", "story_tts_stop", "Stop"],
     ].forEach(([sel, key, fb]) => {
       const btn = page.querySelector(sel);
@@ -20024,6 +20190,118 @@
         ? t("story_tts_hint_neural", "Neurale Kontaktstimme (Killian). Natürliches Tempo, Absätze mit Pause — Kontaktkanal, kein Otto.")
         : t("story_tts_hint_missing", "Neural-TTS nicht installiert (pip install edge-tts). Fallback: Browser-Stimme.");
     }
+    _storyTtsSyncSeekButton();
+  }
+
+  const STORY_CAROUSEL_DOT_MAX = 8;
+
+  function _storyCarouselCardWidth(track) {
+    if (!track) return 220;
+    const card = track.querySelector(".story-ops-arc:not(.story-ops-arc--empty)");
+    if (!card) return 220;
+    const style = window.getComputedStyle(track);
+    const gap = parseFloat(style.columnGap || style.gap || "0") || 0;
+    return card.getBoundingClientRect().width + gap;
+  }
+
+  function _storyCarouselScrollBy(dir) {
+    const page = document.getElementById("story-ops-page");
+    if (!page) return;
+    const track = page.querySelector("[data-story-carousel-track]");
+    if (!track) return;
+    const step = _storyCarouselCardWidth(track) || 220;
+    track.scrollBy({ left: dir * step, behavior: "smooth" });
+  }
+
+  function _storyCarouselScrollToIndex(index) {
+    const page = document.getElementById("story-ops-page");
+    if (!page) return;
+    const track = page.querySelector("[data-story-carousel-track]");
+    if (!track) return;
+    const cards = track.querySelectorAll(".story-ops-arc[data-story-focus-arc], .story-ops-arc.is-locked");
+    const card = cards[index];
+    if (card && typeof card.scrollIntoView === "function") {
+      card.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    }
+  }
+
+  function _storyCarouselUpdateChrome() {
+    const page = document.getElementById("story-ops-page");
+    if (!page) return;
+    const track = page.querySelector("[data-story-carousel-track]");
+    const posEl = page.querySelector("[data-story-carousel-pos]");
+    const dotsEl = page.querySelector("[data-story-carousel-dots]");
+    if (!track) return;
+    const cards = Array.from(track.querySelectorAll(".story-ops-arc:not(.story-ops-arc--empty)"));
+    const total = cards.length;
+    if (!total) {
+      if (posEl) posEl.hidden = true;
+      if (dotsEl) {
+        dotsEl.hidden = true;
+        dotsEl.innerHTML = "";
+      }
+      return;
+    }
+    const trackRect = track.getBoundingClientRect();
+    const center = trackRect.left + trackRect.width / 2;
+    let activeIdx = 0;
+    let best = Infinity;
+    cards.forEach((card, idx) => {
+      const r = card.getBoundingClientRect();
+      const c = r.left + r.width / 2;
+      const dist = Math.abs(c - center);
+      if (dist < best) {
+        best = dist;
+        activeIdx = idx;
+      }
+    });
+    const focusCard = track.querySelector(".story-ops-arc.is-focus");
+    if (focusCard) {
+      const fi = cards.indexOf(focusCard);
+      if (fi >= 0) activeIdx = fi;
+    }
+    if (total <= STORY_CAROUSEL_DOT_MAX) {
+      if (posEl) posEl.hidden = true;
+      if (dotsEl) {
+        dotsEl.hidden = false;
+        if (dotsEl.children.length !== total) {
+          dotsEl.innerHTML = "";
+          for (let i = 0; i < total; i += 1) {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.className = "story-ops-carousel__dot";
+            b.setAttribute("data-story-carousel-dot", String(i));
+            b.setAttribute("aria-label", String(i + 1));
+            dotsEl.appendChild(b);
+          }
+        }
+        Array.from(dotsEl.children).forEach((dot, i) => {
+          dot.classList.toggle("is-active", i === activeIdx);
+        });
+      }
+    } else {
+      if (dotsEl) {
+        dotsEl.hidden = true;
+        dotsEl.innerHTML = "";
+      }
+      if (posEl) {
+        posEl.hidden = false;
+        const tmpl = t("story_carousel_position", "%(current)s / %(total)s");
+        posEl.textContent = tmpl
+          .replace("%(current)s", String(activeIdx + 1))
+          .replace("%(total)s", String(total));
+      }
+    }
+  }
+
+  function _storyCarouselEnsureFocusVisible() {
+    const page = document.getElementById("story-ops-page");
+    if (!page) return;
+    const focusCard = page.querySelector(".story-ops-arc.is-focus");
+    if (focusCard && typeof focusCard.scrollIntoView === "function") {
+      focusCard.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    }
+    _storyCarouselUpdateChrome();
   }
 
   function _renderStoryOpsState(state, opts = {}) {
@@ -20052,15 +20330,7 @@
     const contact = (focus && focus.contact_key) || "ark";
     const tx = page.querySelector("[data-story-tx]");
     if (tx) tx.setAttribute("data-contact", contact);
-    const portrait = page.querySelector("[data-story-orb]");
-    if (portrait) {
-      portrait.className = `story-orb story-orb--${contact}`;
-      if (_storyAudio && !_storyAudio.paused && !_storyAudio.ended) {
-        portrait.classList.add("is-speaking");
-      }
-    }
-    const contactLabel = page.querySelector("[data-story-contact-label]");
-    if (contactLabel) contactLabel.textContent = _storyContactLabel(contact);
+    _storyApplySpeakerVisual(page, state, contact);
     const chapterLabel = page.querySelector("[data-story-chapter-label]");
     if (chapterLabel) chapterLabel.textContent = (focus && focus.chapter_title) || "";
 
@@ -20079,13 +20349,18 @@
           || t("story_idle_body", "Keine aktive Übertragung. Side Ops öffnen sich, wenn dein Imperium wächst."));
     }
 
+    const hasObjective = !!(beat && beat.type === "objective");
+    const missionEl = page.querySelector("[data-story-mission]");
+    const missionRow = page.querySelector("[data-story-mission-row]");
+    const missionHint = page.querySelector("[data-story-mission-hint]");
     const progWrap = page.querySelector("[data-story-progress-wrap]");
     const prog = page.querySelector("[data-story-progress-fill]");
     const progBar = page.querySelector("[data-story-progress]");
     const progLabel = page.querySelector("[data-story-progress-label]");
-    if (beat && beat.type === "objective") {
+    if (hasObjective) {
       const target = Math.max(1, Number(beat.target) || 1);
       const progress = Math.max(0, Number(beat.progress) || 0);
+      if (missionEl) missionEl.hidden = false;
       if (progWrap) progWrap.hidden = false;
       if (prog) prog.style.width = `${Math.min(100, Math.floor((progress / target) * 100))}%`;
       if (progBar) {
@@ -20093,8 +20368,15 @@
         progBar.setAttribute("aria-valuenow", String(progress));
       }
       if (progLabel) progLabel.textContent = `${fmtNumber(progress)} / ${fmtNumber(target)}`;
-    } else if (progWrap) {
-      progWrap.hidden = true;
+      if (missionHint) {
+        missionHint.textContent = beat.objective_hint
+          || beat.title
+          || t("story_waiting_gameplay", "Erfülle das Ziel durch normales Spielen.");
+      }
+    } else {
+      if (missionEl) missionEl.hidden = true;
+      if (progWrap) progWrap.hidden = true;
+      if (missionHint) missionHint.textContent = "";
     }
 
     const actions = page.querySelector("[data-story-actions]");
@@ -20107,7 +20389,7 @@
         btn.setAttribute("data-story-advance", "");
         btn.setAttribute("data-pack-id", focus.pack_id || "");
         btn.setAttribute("data-arc-id", focus.arc_id || "");
-        btn.textContent = beat.cta || t("story_cta_continue", "Weiter");
+        btn.textContent = beat.cta || t("story_cta_continue", "Kapitel fortsetzen");
         actions.appendChild(btn);
       } else if (beat && beat.type === "choice" && Array.isArray(beat.choices) && focus) {
         beat.choices.forEach((ch) => {
@@ -20142,29 +20424,36 @@
         state.arcs.forEach((arc) => {
           const li = document.createElement("li");
           const isFocus = focus && focus.pack_id === arc.pack_id && focus.arc_id === arc.arc_id;
-          li.className = `story-ops-arc story-ops-arc--${arc.status || ""}${isFocus ? " is-focus" : ""}`;
-          li.setAttribute("data-story-focus-arc", "");
+          const statusKey = String(arc.status || "").replace(/[^a-z0-9_-]/gi, "") || "unknown";
+          const isLocked = statusKey === "locked";
+          const isCompleted = statusKey === "completed";
+          li.className = (
+            `story-ops-arc story-ops-arc--${statusKey}`
+            + `${isFocus ? " is-focus" : ""}`
+            + `${isLocked ? " is-locked" : ""}`
+          );
+          if (!isLocked) li.setAttribute("data-story-focus-arc", "");
+          else li.setAttribute("aria-disabled", "true");
           li.setAttribute("data-pack-id", arc.pack_id || "");
           li.setAttribute("data-arc-id", arc.arc_id || "");
-          let chaptersHtml = "";
-          if (Array.isArray(arc.chapters) && arc.chapters.length) {
-            chaptersHtml = `<ol class="story-ops-arc__chapters">${arc.chapters.map((ch) => (
-              `<li class="story-ops-ch story-ops-ch--${escapeHtml(ch.status || "")}">`
-              + `<span class="story-ops-ch__mark" aria-hidden="true"></span>`
-              + `<span class="story-ops-ch__title">${escapeHtml(ch.title || "")}</span></li>`
-            )).join("")}</ol>`;
-          }
           const seasonCode = arc.season_code || "";
           const seasonLabel = arc.season_label || seasonCode;
           const seasonHtml = seasonCode || seasonLabel
             ? `<span class="story-ops-arc__season" title="${escapeHtml(seasonLabel)}">${escapeHtml(seasonCode || seasonLabel)}</span>`
             : "";
+          const subtitle = arc.chapter_title || "";
+          const statusClass = isCompleted ? " story-ops-arc__status--done" : "";
+          const checkHtml = isCompleted
+            ? `<span class="story-ops-arc__check" aria-hidden="true">✓</span>`
+            : "";
           li.innerHTML = (
             `<div class="story-ops-arc__head">`
             + `<span class="story-ops-arc__kind">${escapeHtml(arc.kind_label || arc.kind || "")}</span>`
             + seasonHtml
-            + `<span class="story-ops-arc__status">${escapeHtml(arc.status_label || arc.status || "")}</span>`
-            + `</div><strong class="story-ops-arc__title">${escapeHtml(arc.title || "")}</strong>${chaptersHtml}`
+            + `</div>`
+            + `<strong class="story-ops-arc__title">${escapeHtml(arc.title || "")}</strong>`
+            + (subtitle ? `<span class="story-ops-arc__subtitle">${escapeHtml(subtitle)}</span>` : "")
+            + `<span class="story-ops-arc__status${statusClass}">${checkHtml}${escapeHtml(arc.status_label || arc.status || "")}</span>`
           );
           list.appendChild(li);
         });
@@ -20174,12 +20463,31 @@
     _storyTtsSyncControls(page);
 
     const freeShop = state.free_shop || null;
+    const rewardEl = page.querySelector("[data-story-reward]");
+    const rewardAuto = page.querySelector("[data-story-reward-auto]");
     const arkBal = page.querySelector("[data-story-ark-balance]");
+    const hasFreeShop = !!(freeShop && (freeShop.label || freeShop.balance != null));
+    if (rewardEl) rewardEl.hidden = false;
+    if (rewardAuto) {
+      rewardAuto.textContent = t(
+        "story_reward_auto_hint",
+        "Story-Belohnungen werden serverseitig automatisch gutgeschrieben — kein manueller Claim."
+      );
+    }
     if (arkBal) {
       const label = (freeShop && freeShop.label) || t("inv_ark_token", "Ark-Token");
       const bal = freeShop ? Number(freeShop.balance) || 0 : 0;
       arkBal.innerHTML = `${escapeHtml(t("free_shop_balance", "Bestand"))}: <strong>${fmtNumber(bal)}</strong> ${escapeHtml(label)}`;
     }
+    if (missionRow) {
+      const missionVisible = !!(missionEl && !missionEl.hidden);
+      const rewardVisible = !!(rewardEl && !rewardEl.hidden);
+      missionRow.hidden = !(missionVisible || rewardVisible || hasFreeShop);
+    }
+
+    window.requestAnimationFrame(() => {
+      _storyCarouselEnsureFocusVisible();
+    });
 
     const fp = _storyTtsFingerprint({ focus });
     const prefs = _storyTtsLoadPrefs();
@@ -20206,12 +20514,33 @@
   }
 
   let _storyOpsBound = false;
+  let _storyCarouselScrollBound = null;
+  let _storyCarouselWheelBound = null;
+
   function bindStoryOpsOnce() {
     if (_storyOpsBound) return;
     _storyOpsBound = true;
     document.addEventListener("click", async (ev) => {
       const page = document.getElementById("story-ops-page");
       if (!page) return;
+
+      if (ev.target.closest("[data-story-carousel-prev]")) {
+        ev.preventDefault();
+        _storyCarouselScrollBy(-1);
+        return;
+      }
+      if (ev.target.closest("[data-story-carousel-next]")) {
+        ev.preventDefault();
+        _storyCarouselScrollBy(1);
+        return;
+      }
+      const dot = ev.target.closest("[data-story-carousel-dot]");
+      if (dot) {
+        ev.preventDefault();
+        const idx = Number(dot.getAttribute("data-story-carousel-dot"));
+        if (Number.isFinite(idx)) _storyCarouselScrollToIndex(idx);
+        return;
+      }
 
       const focusArc = ev.target.closest("[data-story-focus-arc]");
       if (focusArc && !ev.target.closest("[data-story-advance],[data-story-choice]")) {
@@ -20244,6 +20573,11 @@
         return;
       }
 
+      if (ev.target.closest("[data-story-tts-seek-back]")) {
+        ev.preventDefault();
+        _storyTtsSeekBack(10);
+        return;
+      }
       if (ev.target.closest("[data-story-tts-play]")) {
         ev.preventDefault();
         void _storyTtsSpeakText(_storyTtsCurrentScript());
@@ -20331,17 +20665,74 @@
     });
   }
 
+  function _storyCarouselBindPage(page) {
+    const track = page.querySelector("[data-story-carousel-track]");
+    if (!track) return;
+    if (_storyCarouselScrollBound) {
+      try { _storyCarouselScrollBound.target.removeEventListener("scroll", _storyCarouselScrollBound.fn); } catch (_) {}
+      _storyCarouselScrollBound = null;
+    }
+    if (_storyCarouselWheelBound) {
+      try {
+        _storyCarouselWheelBound.target.removeEventListener("wheel", _storyCarouselWheelBound.fn);
+      } catch (_) {}
+      _storyCarouselWheelBound = null;
+    }
+    const onScroll = () => { _storyCarouselUpdateChrome(); };
+    const onWheel = (ev) => {
+      if (!track.contains(ev.target) && ev.target !== track) return;
+      const maxScroll = Math.max(0, track.scrollWidth - track.clientWidth);
+      if (maxScroll <= 1) return;
+
+      let dx = ev.deltaX;
+      let dy = ev.deltaY;
+      if (ev.shiftKey && Math.abs(dy) > Math.abs(dx)) {
+        dx = dy;
+        dy = 0;
+      }
+
+      // Native horizontal / trackpad pan — do not hijack.
+      if (Math.abs(dx) > Math.abs(dy)) return;
+
+      // Vertical wheel → horizontal only while the track can still move that way.
+      if (Math.abs(dy) < 1) return;
+      const atStart = track.scrollLeft <= 1;
+      const atEnd = track.scrollLeft >= maxScroll - 1;
+      if ((dy < 0 && atStart) || (dy > 0 && atEnd)) return;
+      ev.preventDefault();
+      track.scrollLeft += dy;
+      _storyCarouselUpdateChrome();
+    };
+    track.addEventListener("scroll", onScroll, { passive: true });
+    track.addEventListener("wheel", onWheel, { passive: false });
+    _storyCarouselScrollBound = { target: track, fn: onScroll };
+    _storyCarouselWheelBound = { target: track, fn: onWheel };
+  }
+
+  function _storyCarouselUnbindPage() {
+    if (_storyCarouselScrollBound) {
+      try { _storyCarouselScrollBound.target.removeEventListener("scroll", _storyCarouselScrollBound.fn); } catch (_) {}
+      _storyCarouselScrollBound = null;
+    }
+    if (_storyCarouselWheelBound) {
+      try { _storyCarouselWheelBound.target.removeEventListener("wheel", _storyCarouselWheelBound.fn); } catch (_) {}
+      _storyCarouselWheelBound = null;
+    }
+  }
+
   function initStoryOps() {
     bindStoryOpsOnce();
     const page = document.getElementById("story-ops-page");
     if (!page || page.dataset.ready !== "1") return;
     _storyFocus = _storyFocusLoad();
     _storyTtsSyncControls(page);
+    _storyCarouselBindPage(page);
     const state = parseStoryOpsPageState();
     if (state) _renderStoryOpsState(state);
     GC.registerCleanup(() => {
       _storyTtsStop();
       _storyTtsLastFingerprint = "";
+      _storyCarouselUnbindPage();
     });
   }
 

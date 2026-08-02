@@ -6032,7 +6032,7 @@
   "story_contact_ark": "Genesis Ark",
   "story_cta_accept": "Accept directive",
   "story_cta_acknowledge": "Acknowledge",
-  "story_cta_continue": "Continue",
+  "story_cta_continue": "Continue chapter",
   "story_cta_listen": "Open channel",
   "story_eyebrow": "TRANSMISSION CHANNEL",
   "story_hint": "Authorized arcs and side ops from the Ark signal net. Read chapter by chapter — progress through real gameplay.",
@@ -7562,5 +7562,17 @@
   "login_rewards_today_badge": "Today",
   "login_rewards_event_badge": "Event",
   "login_rewards_event_banner": "Active Server Events",
-  "login_rewards_hover_hint": "Hover: rewards · Click: claim"
+  "login_rewards_hover_hint": "Hover: rewards · Click: claim",
+  "story_carousel_title": "Browse chapters",
+  "story_carousel_prev": "Previous arcs",
+  "story_carousel_next": "Next arcs",
+  "story_carousel_position": "%(current)s / %(total)s",
+  "story_tts_seek_back": "−10 s",
+  "story_tts_seek_back_hint": "Rewind 10 seconds (neural audio only)",
+  "story_tts_controls": "Audio controls",
+  "story_mission_title": "Chapter mission",
+  "story_reward_title": "Rewards",
+  "story_reward_auto_hint": "Story rewards are granted automatically on the server — no manual claim.",
+  "story_narrator_commander": "Your Commander",
+  "story_tts_console": "Transmission Console"
 }

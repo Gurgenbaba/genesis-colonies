@@ -3073,16 +3073,51 @@ def test_main_js_story_tts_abort_and_stop_on_focus():
     stop_fn = src.split("function _storyTtsStop()")[1].split("function _storyTtsPause()")[0]
     assert "_storyTtsSession += 1" in stop_fn
     assert "_storyTtsAbort.abort()" in stop_fn
-    focus = src.split('closest("[data-story-focus-arc]")')[1].split("data-story-tts-play")[0]
+    focus = src.split('closest("[data-story-focus-arc]")')[1].split("data-story-tts-seek-back")[0]
     assert "_storyTtsStop()" in focus
     assert "_storyFocusSave" in focus
     assert "skipAutoSpeak: true" in focus
     assert "parseStoryOpsPageState()" in focus
-    render_tail = src.split("const fp = _storyTtsFingerprint({ focus })")[1].split("function bindStoryOpsOnce")[0]
+    # Seek-back is audio control; play still present after seek handler.
+    assert 'closest("[data-story-tts-play]")' in src
+    assert "_storyTtsSeekBack" in src
+    assert "_storyCarouselUnbindPage" in src
+    assert "STORY_CAROUSEL_DOT_MAX = 8" in src
+    render_tail = src.split("const fp = _storyTtsFingerprint({ focus })")[1].split("let _storyOpsBound")[0]
     assert "fpChanged" in render_tail
     assert "skipAutoSpeak" in render_tail
     assert "_storyTtsStop()" in render_tail
     assert "_storyTtsScheduleAutoSpeak" in render_tail
+
+
+def test_story_ops_template_center_focus_contracts():
+    """Story Ops hero layout keeps focus/TTS contracts and separates audio from story actions."""
+    html = _read("templates/story.html")
+    assert 'id="story-ops-page"' in html
+    assert 'id="story-ops-page-state"' in html
+    assert 'data-story-orb' in html
+    assert 'data-story-speaker' in html
+    assert "story-speaker--commander" in html
+    assert "data-story-speaker-portrait" in html
+    assert "story-holo" in html
+    assert "story-tx__atmos" in html
+    assert "story-tts--console" in html
+    assert "story-speaker__fade" in html
+    assert 'data-story-focus-arc' in html
+    assert 'data-story-carousel-track' in html
+    assert 'data-story-arc-list' in html
+    assert 'data-story-tts-seek-back' in html
+    assert 'data-story-tts-play' in html
+    assert 'data-story-advance' in html
+    assert 'data-story-actions' in html
+    assert "story-ops-toc" not in html
+    # Audio block before story actions in source order
+    assert html.index("data-story-tts") < html.index("data-story-actions")
+    assert html.index("data-story-carousel") < html.index("data-story-mission-row")
+    js = _read("static/main.js")
+    assert "_storyApplySpeakerVisual" in js
+    assert "story_narrator_slice" in _read("game/commander_classes.py")
+    assert "story_narrator_slice" in _read("game/story/service.py")
 
 
 def test_app_story_state_api_is_read_only_ensure():

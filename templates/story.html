@@ -1,10 +1,16 @@
 {% extends "base.html" %}
 
-{% set st = story if story is defined and story else {'ready': false, 'arcs': [], 'focus': none, 'lore_fragments': [], 'tts': {}} %}
+{% set st = story if story is defined and story else {'ready': false, 'arcs': [], 'focus': none, 'lore_fragments': [], 'tts': {}, 'narrator': none} %}
 {% set focus = st.focus if st.focus else none %}
 {% set contact = (focus.contact_key if focus else 'ark') %}
 {% set beat = focus.beat if focus and focus.beat else none %}
 {% set neural = st.tts.neural if st.tts is defined and st.tts else false %}
+{% set fs = st.free_shop if st.free_shop is defined and st.free_shop else none %}
+{% set has_objective = beat and beat.type == 'objective' %}
+{% set narrator = st.narrator if st.narrator is defined and st.narrator else none %}
+{% set narr_theme = (narrator.theme if narrator and narrator.theme else '') %}
+{% set narr_portrait = (narrator.portrait if narrator and narrator.portrait else '') %}
+{% set has_commander = narrator and narr_portrait %}
 
 {% block content %}
 <div class="gc-page story-ops-page" id="story-ops-page" data-story-ops data-ready="{{ '1' if st.ready else '0' }}" data-tts-neural="{{ '1' if neural else '0' }}">
@@ -23,61 +29,75 @@
   {% else %}
 
   <div class="story-ops-layout">
-    <aside class="story-ops-toc gc-panel" data-story-toc>
-      <h3 class="story-ops-toc__title">{{ T("story_toc_title", "Kapitel & Arcs") }}</h3>
-      <ul class="story-ops-toc__arcs" data-story-arc-list>
-        {% for arc in st.arcs %}
-        <li class="story-ops-arc story-ops-arc--{{ arc.status }}{% if focus and focus.pack_id == arc.pack_id and focus.arc_id == arc.arc_id %} is-focus{% endif %}"
-            data-story-focus-arc
-            data-pack-id="{{ arc.pack_id }}"
-            data-arc-id="{{ arc.arc_id }}">
-          <div class="story-ops-arc__head">
-            <span class="story-ops-arc__kind">{{ arc.kind_label or arc.kind }}</span>
-            {% if arc.season_label or arc.season_code %}
-            <span class="story-ops-arc__season" title="{{ arc.season_label or arc.season_code }}">{{ arc.season_code or arc.season_label }}</span>
-            {% endif %}
-            <span class="story-ops-arc__status">{{ arc.status_label or arc.status }}</span>
-          </div>
-          <strong class="story-ops-arc__title">{{ arc.title }}</strong>
-          {% if arc.chapters %}
-          <ol class="story-ops-arc__chapters">
-            {% for ch in arc.chapters %}
-            <li class="story-ops-ch story-ops-ch--{{ ch.status }}">
-              <span class="story-ops-ch__mark" aria-hidden="true"></span>
-              <span class="story-ops-ch__title">{{ ch.title }}</span>
-            </li>
-            {% endfor %}
-          </ol>
-          {% endif %}
-        </li>
-        {% else %}
-        <li class="story-ops-arc story-ops-arc--empty">{{ T("story_no_arcs", "Noch keine Arcs.") }}</li>
-        {% endfor %}
-      </ul>
-    </aside>
-
-    <section class="story-tx" data-story-tx data-contact="{{ contact }}">
+    <section class="story-tx story-tx--hero" data-story-tx data-contact="{{ contact }}">
+      <div class="story-tx__atmos" aria-hidden="true">
+        <span class="story-tx__nebula"></span>
+        <span class="story-tx__stars"></span>
+        <span class="story-tx__grid"></span>
+      </div>
       <div class="story-tx__scan" aria-hidden="true"></div>
-      <div class="story-tx__contact" data-story-contact>
-        <div class="story-orb story-orb--{{ contact }}" data-story-orb aria-hidden="true">
-          <span class="story-orb__ring story-orb__ring--1"></span>
-          <span class="story-orb__ring story-orb__ring--2"></span>
-          <span class="story-orb__ring story-orb__ring--3"></span>
+
+      <div class="story-tx__hero" data-story-contact>
+        <div class="story-speaker story-speaker--hero{% if has_commander %} story-speaker--commander story-speaker--{{ narr_theme }}{% else %} story-speaker--orb story-orb story-orb--hero story-orb--{{ contact }}{% endif %}"
+             data-story-orb
+             data-story-speaker
+             data-speaker-mode="{{ 'commander' if has_commander else 'orb' }}"
+             {% if has_commander %}data-class-key="{{ narrator.class_key }}" data-cc-theme="{{ narr_theme }}"{% endif %}
+             aria-hidden="true">
+          <div class="story-holo" data-story-holo>
+            <span class="story-holo__orbit story-holo__orbit--a"></span>
+            <span class="story-holo__orbit story-holo__orbit--b"></span>
+            <span class="story-holo__orbit story-holo__orbit--c"></span>
+            <span class="story-holo__pulse"></span>
+            <span class="story-holo__marker story-holo__marker--1"></span>
+            <span class="story-holo__marker story-holo__marker--2"></span>
+            <span class="story-holo__marker story-holo__marker--3"></span>
+            <span class="story-holo__marker story-holo__marker--4"></span>
+            <span class="story-holo__particles"></span>
+          </div>
+          <span class="story-speaker__ring story-orb__ring story-orb__ring--1"></span>
+          <span class="story-speaker__ring story-orb__ring story-orb__ring--2"></span>
+          <span class="story-speaker__ring story-orb__ring story-orb__ring--3"></span>
+          {% if has_commander %}
+          <div class="story-speaker__frame">
+            <img class="story-speaker__portrait"
+                 data-story-speaker-portrait
+                 src="{{ url_for('static', filename=narr_portrait) }}"
+                 alt="">
+            <span class="story-speaker__holo-scan"></span>
+            <span class="story-speaker__fade"></span>
+            <span class="story-speaker__eq story-orb__eq" aria-hidden="true">
+              <i></i><i></i><i></i><i></i><i></i>
+            </span>
+          </div>
+          {% else %}
           <span class="story-orb__core">
             <span class="story-orb__pulse"></span>
             <span class="story-orb__eq" aria-hidden="true">
               <i></i><i></i><i></i><i></i><i></i>
             </span>
           </span>
+          {% endif %}
         </div>
         <div class="story-tx__meta">
           <span class="story-tx__contact-label" data-story-contact-label>
-            {% if contact == 'androgyn' %}
+            {% if has_commander and narrator.officer_key %}
+              {{ T(narrator.officer_key, narrator.class_key) }}
+            {% elif has_commander and narrator.name_key %}
+              {{ T(narrator.name_key, narrator.class_key) }}
+            {% elif contact == 'androgyn' %}
               {{ T("story_contact_androgyn", "Androgyn-Echo") }}
             {% else %}
               {{ T("story_contact_ark", "Genesis Ark") }}
             {% endif %}
           </span>
+          {% if has_commander %}
+          <span class="story-tx__commander-role gc-mono" data-story-commander-role>
+            {{ T("story_narrator_commander", "Dein Commander") }}
+            {% if narrator.title_key %} · {{ T(narrator.title_key, "") }}{% endif %}
+          </span>
+          {% endif %}
+          <span class="story-tx__meta-rule" aria-hidden="true"></span>
           <span class="story-tx__status gc-mono" data-story-channel-status>{{ T("story_status_live", "LIVE-KANAL") }}</span>
           <span class="story-tx__chapter gc-mono" data-story-chapter-label>
             {% if focus and focus.chapter_title %}{{ focus.chapter_title }}{% endif %}
@@ -85,33 +105,7 @@
         </div>
       </div>
 
-      <div class="story-tts" data-story-tts>
-        <div class="story-tts__row">
-          <span class="story-tts__label gc-mono">{{ T("story_tts_bender_label", "Neural Contact Voice") }}</span>
-          <div class="story-tts__btns">
-            <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-story-tts-play>{{ T("story_tts_play", "Abspielen") }}</button>
-            <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-story-tts-pause>{{ T("story_tts_pause", "Pause") }}</button>
-            <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-story-tts-resume>{{ T("story_tts_resume", "Weiter") }}</button>
-            <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-story-tts-stop>{{ T("story_tts_stop", "Stop") }}</button>
-          </div>
-        </div>
-        <label class="story-tts__vol">
-          <span class="story-tts__vol-label">{{ T("story_tts_volume", "Lautstärke") }}</span>
-          <input type="range" min="0" max="100" value="85" step="1" data-story-tts-volume>
-          <span class="story-tts__vol-val gc-mono" data-story-tts-volume-val>85%</span>
-        </label>
-        <label class="story-tts__auto">
-          <input type="checkbox" data-story-tts-auto>
-          <span>{{ T("story_tts_auto", "Neue Übertragungen automatisch vorlesen") }}</span>
-        </label>
-        <p class="story-tts__hint hint" data-story-tts-hint>
-          {% if neural %}
-            {{ T("story_tts_hint_neural", "Neurale Kontaktstimme (Edge TTS). Pause, Weiter und Lautstärke steuern die Wiedergabe.") }}
-          {% else %}
-            {{ T("story_tts_hint_missing", "Neural-TTS nicht installiert (pip install edge-tts). Fallback: Browser-Stimme.") }}
-          {% endif %}
-        </p>
-      </div>
+      <div class="story-tx__rule" aria-hidden="true"></div>
 
       <div class="story-tx__body" data-story-body>
         <h3 class="story-tx__title" data-story-title>
@@ -124,20 +118,38 @@
           {% elif st.idle %}{{ st.idle.body }}
           {% else %}{{ T("story_idle_body", "Keine aktive Übertragung. Side Ops öffnen sich, wenn dein Imperium wächst.") }}{% endif %}
         </p>
-        <div class="story-tx__progress-wrap" data-story-progress-wrap {% if not beat or beat.type != 'objective' %}hidden{% endif %}>
-          <div class="story-tx__progress" role="progressbar"
-               data-story-progress
-               aria-valuemin="0"
-               aria-valuemax="{{ (beat.target if beat and beat.target else 1)|int }}"
-               aria-valuenow="{{ (beat.progress if beat and beat.progress else 0)|int }}">
-            <div class="story-tx__progress-fill"
-                 data-story-progress-fill
-                 style="width: {{ ((beat.progress / beat.target * 100) if beat and beat.target else 0)|int }}%;"></div>
-          </div>
-          <p class="story-tx__progress-label gc-mono" data-story-progress-label>
-            {% if beat and beat.type == 'objective' %}{{ beat.progress|fmt_int }} / {{ beat.target|fmt_int }}{% endif %}
-          </p>
+      </div>
+
+      <div class="story-tx__rule" aria-hidden="true"></div>
+
+      <div class="story-tts story-tts--console" data-story-tts>
+        <div class="story-tts__console-head">
+          <p class="story-tts__section-label gc-mono">{{ T("story_tts_console", "Übertragungskonsole") }}</p>
+          <span class="story-tts__console-tag gc-mono">{{ T("story_tts_bender_label", "Neural Contact Voice") }}</span>
         </div>
+        <div class="story-tts__btns" role="group" aria-label="{{ T('story_tts_controls', 'Audiosteuerung') }}">
+          <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-story-tts-seek-back disabled title="{{ T('story_tts_seek_back_hint', '10 Sekunden zurück (nur Neural-Audio)') }}">{{ T("story_tts_seek_back", "−10 s") }}</button>
+          <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-story-tts-play>{{ T("story_tts_play", "Abspielen") }}</button>
+          <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-story-tts-pause>{{ T("story_tts_pause", "Pause") }}</button>
+          <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-story-tts-resume>{{ T("story_tts_resume", "Fortsetzen") }}</button>
+          <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-story-tts-stop>{{ T("story_tts_stop", "Stop") }}</button>
+        </div>
+        <label class="story-tts__vol">
+          <span class="story-tts__vol-label">{{ T("story_tts_volume", "Lautstärke") }}</span>
+          <input type="range" min="0" max="100" value="85" step="1" data-story-tts-volume>
+          <span class="story-tts__vol-val gc-mono" data-story-tts-volume-val>85%</span>
+        </label>
+        <label class="story-tts__auto">
+          <input type="checkbox" data-story-tts-auto>
+          <span>{{ T("story_tts_auto", "Neue Übertragungen automatisch vorlesen") }}</span>
+        </label>
+        <p class="story-tts__hint hint" data-story-tts-hint>
+          {% if neural %}
+            {{ T("story_tts_hint_neural", "Neurale Kontaktstimme (Edge TTS). Pause, Fortsetzen und Lautstärke steuern die Wiedergabe.") }}
+          {% else %}
+            {{ T("story_tts_hint_missing", "Neural-TTS nicht installiert (pip install edge-tts). Fallback: Browser-Stimme.") }}
+          {% endif %}
+        </p>
       </div>
 
       <div class="story-tx__actions" data-story-actions>
@@ -159,23 +171,88 @@
         {% endif %}
       </div>
     </section>
-  </div>
 
-  {% set fs = st.free_shop if st.free_shop is defined and st.free_shop else none %}
-  <section class="story-free-shop-teaser gc-panel" data-story-free-shop-teaser>
-    <div class="story-free-shop-teaser__head">
-      <h3 class="story-free-shop-teaser__title">{{ T("free_shop_title", "Free Shop") }}</h3>
-      <p class="story-free-shop-teaser__bal gc-mono" data-story-ark-balance>
-        {{ T("free_shop_balance", "Bestand") }}:
-        <strong>{{ (fs.balance if fs else 0)|int }}</strong>
-        {{ fs.label if fs and fs.label else T("inv_ark_token", "Ark-Token") }}
-      </p>
+    <section class="story-ops-carousel gc-panel" data-story-carousel aria-label="{{ T('story_carousel_title', 'Kapitel durchsuchen') }}">
+      <div class="story-ops-carousel__head">
+        <h3 class="story-ops-carousel__title">{{ T("story_carousel_title", "Kapitel durchsuchen") }}</h3>
+        <p class="story-ops-carousel__pos gc-mono" data-story-carousel-pos hidden></p>
+      </div>
+      <div class="story-ops-carousel__row">
+        <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary story-ops-carousel__nav" data-story-carousel-prev aria-label="{{ T('story_carousel_prev', 'Vorherige Arcs') }}">‹</button>
+        <ul class="story-ops-carousel__track" data-story-arc-list data-story-carousel-track>
+          {% for arc in st.arcs %}
+          {% set is_focus = focus and focus.pack_id == arc.pack_id and focus.arc_id == arc.arc_id %}
+          {% set is_locked = arc.status == 'locked' %}
+          <li class="story-ops-arc story-ops-arc--{{ arc.status }}{% if is_focus %} is-focus{% endif %}{% if is_locked %} is-locked{% endif %}"
+              {% if not is_locked %}data-story-focus-arc{% endif %}
+              data-pack-id="{{ arc.pack_id }}"
+              data-arc-id="{{ arc.arc_id }}"
+              {% if is_locked %}aria-disabled="true"{% endif %}>
+            <div class="story-ops-arc__head">
+              <span class="story-ops-arc__kind">{{ arc.kind_label or arc.kind }}</span>
+              {% if arc.season_label or arc.season_code %}
+              <span class="story-ops-arc__season" title="{{ arc.season_label or arc.season_code }}">{{ arc.season_code or arc.season_label }}</span>
+              {% endif %}
+            </div>
+            <strong class="story-ops-arc__title">{{ arc.title }}</strong>
+            {% if arc.chapter_title %}
+            <span class="story-ops-arc__subtitle">{{ arc.chapter_title }}</span>
+            {% endif %}
+            <span class="story-ops-arc__status{% if arc.status == 'completed' %} story-ops-arc__status--done{% endif %}">
+              {% if arc.status == 'completed' %}<span class="story-ops-arc__check" aria-hidden="true">✓</span>{% endif %}
+              {{ arc.status_label or arc.status }}
+            </span>
+          </li>
+          {% else %}
+          <li class="story-ops-arc story-ops-arc--empty">{{ T("story_no_arcs", "Noch keine Arcs.") }}</li>
+          {% endfor %}
+        </ul>
+        <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary story-ops-carousel__nav" data-story-carousel-next aria-label="{{ T('story_carousel_next', 'Nächste Arcs') }}">›</button>
+      </div>
+      <div class="story-ops-carousel__dots" data-story-carousel-dots hidden></div>
+    </section>
+
+    <div class="story-ops-mission-row" data-story-mission-row {% if not has_objective and not fs %}hidden{% endif %}>
+      <section class="story-ops-mission gc-panel" data-story-mission {% if not has_objective %}hidden{% endif %}>
+        <h3 class="story-ops-mission__title">{{ T("story_mission_title", "Kapitelmission") }}</h3>
+        <div class="story-ops-mission__body">
+          <div class="story-tx__progress-wrap" data-story-progress-wrap {% if not has_objective %}hidden{% endif %}>
+            <div class="story-tx__progress" role="progressbar"
+                 data-story-progress
+                 aria-valuemin="0"
+                 aria-valuemax="{{ (beat.target if beat and beat.target else 1)|int }}"
+                 aria-valuenow="{{ (beat.progress if beat and beat.progress else 0)|int }}">
+              <div class="story-tx__progress-fill"
+                   data-story-progress-fill
+                   style="width: {{ ((beat.progress / beat.target * 100) if beat and beat.target else 0)|int }}%;"></div>
+            </div>
+            <p class="story-tx__progress-label gc-mono" data-story-progress-label>
+              {% if has_objective %}{{ beat.progress|fmt_int }} / {{ beat.target|fmt_int }}{% endif %}
+            </p>
+          </div>
+          <p class="story-ops-mission__hint hint" data-story-mission-hint>
+            {% if has_objective %}{{ beat.objective_hint or beat.title or T("story_waiting_gameplay", "Erfülle das Ziel durch normales Spielen.") }}{% endif %}
+          </p>
+        </div>
+      </section>
+
+      <section class="story-ops-reward gc-panel" data-story-reward data-story-free-shop-teaser>
+        <h3 class="story-ops-reward__title">{{ T("story_reward_title", "Belohnungen") }}</h3>
+        <p class="hint story-ops-reward__auto" data-story-reward-auto>
+          {{ T("story_reward_auto_hint", "Story-Belohnungen werden serverseitig automatisch gutgeschrieben — kein manueller Claim.") }}
+        </p>
+        <p class="story-ops-reward__bal gc-mono" data-story-ark-balance>
+          {{ T("free_shop_balance", "Bestand") }}:
+          <strong>{{ (fs.balance if fs else 0)|int }}</strong>
+          {{ fs.label if fs and fs.label else T("inv_ark_token", "Ark-Token") }}
+        </p>
+        <p class="hint story-ops-reward__shop-hint">{{ T("story_free_shop_teaser", "Ark-Tokens aus der Lore im Free Shop gegen Convenience-Meta eintauschen.") }}</p>
+        <a href="{{ url_for('shop_view') }}#free" class="gc-btn gc-btn-sm gc-btn-secondary" data-pjax-link data-shop-tab-target="free">
+          {{ T("story_goto_free_shop", "Free Shop öffnen") }}
+        </a>
+      </section>
     </div>
-    <p class="hint story-free-shop-teaser__hint">{{ T("story_free_shop_teaser", "Ark-Tokens aus der Lore im Free Shop gegen Convenience-Meta eintauschen.") }}</p>
-    <a href="{{ url_for('shop_view') }}#free" class="gc-btn gc-btn-sm gc-btn-secondary" data-pjax-link data-shop-tab-target="free">
-      {{ T("story_goto_free_shop", "Free Shop öffnen") }}
-    </a>
-  </section>
+  </div>
 
   {% if st.lore_fragments %}
   <section class="story-lore gc-panel">

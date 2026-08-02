@@ -164,12 +164,14 @@ Default: narrative Rewards **auto-grant** beim Reward-Beat (kein Claim-UI wie Di
 ## Immersion UX
 
 - Route `/story` — Transmission-Surface (industrial sci-fi, eckig, Scanline)
-- **Kapitel-TOC** links: Arcs + Kapitelstatus (Aktuell / Abgeschlossen / Gesperrt), Fokus-Wechsel ohne Reload
+- **Center Focus Layout:** zentrierter Hero-Orb (Story-Player) → Meta/Übertragung → **Audio-Controls** (getrennt von Story-Actions) → horizontales **Arc-Karussell** → optionale Mission-/Belohnungs-Zeile
+- **Arc-Karussell** (ersetzt TOC links): Cards mit `kind_label`, Titel, Kapitel-Untertitel, Status; Focus `pack_id`+`arc_id` ohne Reload; Completed lesbar/anklickbar; Locked nur wenn Status `locked`
 - **Nav:** rechte Meta-Leiste unter **Community** (nicht KOMMANDO links — Platz)
 - Sidebar-Badge bei aktiver Transmission/Choice
-- Kontakt: **sprechender Kreis-Orb** (Wellen-Ringe + EQ bei TTS `is-speaking`)
-- **Neural Contact Voice:** `edge-tts` (DE: **KillianNeural**, EN: ChristopherNeural) via `POST /api/story/tts` → MP3-Cache. Prosody **v5**: Plain-Text, Absatz-Pausen via `…`, Rate/Pitch `-6%`/`-3Hz`. Client: **AbortController + Session-Token** (Stop/Tabben killt in-flight Fetch), Auto-Speak Debounce 350ms; **Arc-Tab lokal** (`skipAutoSpeak`, kein ensure). `/api/story/state` is **read-only** (`ensure=False`). Override: `STORY_TTS_VOICE` / `STORY_TTS_RATE` / `STORY_TTS_PITCH`. Fallback Browser-TTS.
-- PJAX: `GC.fetchGameAction` → `{ ok, state, story }` → `applyActionState` + lokales `_renderStoryOpsState`; TTS stoppt in `cleanupPage`
+- Kontakt/Hero: **gewählter Living Commander** als Sprecher-Portrait (`story.narrator` aus `commander_classes.story_narrator_slice`, Katalog-Pfad) — Fallback Kreis-Orb wenn keine Klasse gewählt; Wellen-Ringe + EQ bei TTS `is-speaking` / `is-paused`
+- **Neural Contact Voice:** `edge-tts` (DE: **KillianNeural**, EN: ChristopherNeural) via `POST /api/story/tts` → MP3-Cache. Prosody **v5**: Plain-Text, Absatz-Pausen via `…`, Rate/Pitch `-6%`/`-3Hz`. Client: **AbortController + Session-Token** (Stop/Tabben killt in-flight Fetch), Auto-Speak Debounce 350ms; Seek −10s nur für Neural-`Audio`; **Arc-Tab lokal** (`skipAutoSpeak`, kein ensure). `/api/story/state` is **read-only** (`ensure=False`). Override: `STORY_TTS_VOICE` / `STORY_TTS_RATE` / `STORY_TTS_PITCH`. Fallback Browser-TTS.
+- Mission-Card nur bei Objective-Beat; Reward-Card = Auto-Grant-Hinweis + Ark-Bestand/Free-Shop (kein erfundenes Kapitel-Reward-Preview)
+- PJAX: `GC.fetchGameAction` → `{ ok, state, story }` → `applyActionState` + lokales `_renderStoryOpsState`; TTS stoppt in `cleanupPage`; Carousel wheel/scroll unbound in `registerCleanup`
 - Kein `location.reload()`
 
 ---

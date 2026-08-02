@@ -105,6 +105,7 @@ def get_story_state(
             "focus": None,
             "lore_fragments": [],
             "tts": {"neural": False},
+            "narrator": None,
         }
 
     ts = float(now if now is not None else time.time())
@@ -189,8 +190,14 @@ def get_story_state(
             }
 
     from .free_shop import get_free_shop_state
+    from ..commander_classes import story_narrator_slice
 
     free_shop = get_free_shop_state(int(player_id), conn=conn)
+    narrator = None
+    try:
+        narrator = story_narrator_slice(int(player_id), conn=conn)
+    except Exception:
+        narrator = None
 
     return {
         "ready": True,
@@ -200,6 +207,7 @@ def get_story_state(
         "idle": idle,
         "lore_fragments": _lore_fragments(flags),
         "free_shop": free_shop,
+        "narrator": narrator,
         "tts": {"neural": bool(tts_available()), "provider": "edge-tts" if tts_available() else "none"},
         "packs": [
             {

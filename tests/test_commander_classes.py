@@ -650,3 +650,25 @@ def test_envoy_scan_chip_marked_prepared(commander_db):
     scan = next((c for c in chips if c["key"] == "scan_range"), None)
     assert scan is not None
     assert scan.get("prepared") is True
+
+
+def test_story_narrator_slice_read_only_portrait(commander_db):
+    """Story Ops hero uses catalog portrait — no write/ensure side effects."""
+    from game.commander_classes import story_narrator_slice
+
+    conn = db()
+    try:
+        uid = _player(conn=conn)
+        assert story_narrator_slice(uid, conn=conn) is None
+        begin_write_transaction(conn)
+        ok, reason, _ = pick_class(uid, "void_admiral", conn=conn)
+        assert ok and reason == "ok"
+        commit(conn)
+        slice_ = story_narrator_slice(uid, conn=conn)
+        assert slice_ is not None
+        assert slice_["class_key"] == "void_admiral"
+        assert slice_["theme"] == "admiral"
+        assert slice_["portrait"] == "img/classes/Void_Admiral.webp"
+        assert "officer_key" in slice_
+    finally:
+        conn.close()
