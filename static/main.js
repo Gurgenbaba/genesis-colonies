@@ -4276,6 +4276,7 @@
         else GC.clearCardQueueBlock(row);
       });
     });
+    syncBuildingStageProps(rowsByTab);
   }
 
   function patchResearchEffects(row, tech) {
@@ -6100,14 +6101,80 @@
     });
   }
 
+  function syncBuildingStageProps(rowsByTab) {
+    const stage = document.querySelector("[data-bld-planet-stage]");
+    if (!stage || !rowsByTab) return;
+    Object.values(rowsByTab).forEach((rows) => {
+      (rows || []).forEach((b) => {
+        const key = b && b.key;
+        if (!key) return;
+        const prop = stage.querySelector(`[data-bld-stage-prop="${key}"]`);
+        if (!prop) return;
+        const levelEl = prop.querySelector("[data-bld-stage-level]");
+        if (levelEl) _setIfChanged(levelEl, fmtNumber(b.level));
+        prop.dataset.level = String(b.level ?? 0);
+        let state = "ready";
+        if ((b.level >= b.max_level) || b.at_queue_max) state = "max";
+        else if (!b.requirements_met) state = "locked";
+        else if ((Number(b.queue_count) || 0) > 0 || b.queue_job) state = "queue";
+        else if (!b.can_afford) state = "warn";
+        prop.dataset.propState = state;
+        prop.classList.remove(
+          "bld-stage-prop--ready",
+          "bld-stage-prop--warn",
+          "bld-stage-prop--locked",
+          "bld-stage-prop--queue",
+          "bld-stage-prop--max"
+        );
+        prop.classList.add(`bld-stage-prop--${state}`);
+        const name = t("building_" + key, key);
+        prop.title = `${name} · ${t("buildings_col_level", "Level")} ${fmtNumber(b.level)}`;
+      });
+    });
+  }
+
+  function focusBuildingCardFromStage(buildingKey) {
+    const key = String(buildingKey || "").trim();
+    if (!key) return;
+    const card = document.querySelector(`[data-building-row="${key}"]`);
+    if (!card) return;
+    document.querySelectorAll(".bld-stage-prop.is-focused").forEach((el) => {
+      el.classList.remove("is-focused");
+    });
+    const prop = document.querySelector(`[data-bld-stage-prop="${key}"]`);
+    if (prop) prop.classList.add("is-focused");
+    card.scrollIntoView({ behavior: "smooth", block: "center" });
+    card.classList.add("gc-building-card--stage-focus");
+    window.setTimeout(() => card.classList.remove("gc-building-card--stage-focus"), 1600);
+  }
+
+  function bindBuildingStageOnce() {
+    if (GC._bldStageBound) return;
+    GC._bldStageBound = true;
+    document.addEventListener("click", (e) => {
+      const prop = e.target.closest("[data-bld-stage-prop]");
+      if (!prop || !prop.closest("[data-buildings-page]")) return;
+      e.preventDefault();
+      focusBuildingCardFromStage(prop.getAttribute("data-bld-stage-prop") || prop.dataset.building);
+    });
+  }
+
   function initBuildings() {
     bindBuildingTabsOnce();
+    bindBuildingStageOnce();
     initBuildingTechnicalData();
     const pageRoot = document.querySelector("[data-buildings-page]");
     if (!pageRoot) return;
     const initialTab = pageRoot.dataset.activeBuildingTab || "resources";
     activateBuildingTabByName(initialTab, null);
     GC.startProgressTicker();
+    if (typeof GC.registerCleanup === "function") {
+      GC.registerCleanup(() => {
+        document.querySelectorAll(".bld-stage-prop.is-focused").forEach((el) => {
+          el.classList.remove("is-focused");
+        });
+      });
+    }
   }
 
   const BUILDING_TECH = {

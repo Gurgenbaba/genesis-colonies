@@ -8188,5 +8188,6 @@
   "landing_shot_titans": "Titans",
   "landing_shot_auctions": "Auctions",
   "landing_shot_research": "Research",
-  "landing_shot_commander": "Commander"
+  "landing_shot_commander": "Commander",
+  "buildings_stage_label": "Colony Stage"
 }

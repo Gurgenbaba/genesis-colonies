@@ -233,6 +233,41 @@
 
   <div class="buildings-shell gc-panel">
 
+    {% set _stage_rows = rows_by_tab.get(active_tab, []) if rows_by_tab else [] %}
+    <section class="bld-planet-stage"
+             data-bld-planet-stage
+             aria-label="{{ T('buildings_stage_label', 'Kolonie-Stage') }}">
+      <div class="bld-planet-stage-surface" aria-hidden="true"></div>
+      <div class="bld-planet-stage-shade" aria-hidden="true"></div>
+      <div class="bld-planet-stage-props" data-bld-stage-props>
+        {% for b in _stage_rows %}
+        {% if b.stage_left_pct is defined %}
+        {% set _icon_png = url_for('static', filename=b.icon, v=GC_ASSET_VERSION) %}
+        {% set _icon_webp = _icon_png|webp_static %}
+        {% set _prop_state = 'max' if (b.level >= b.max_level) or (b.at_queue_max if b.at_queue_max is defined else false) else ('locked' if not b.requirements_met else ('queue' if (b.queue_count|int) > 0 or (b.queue_job is defined and b.queue_job) else ('warn' if not b.can_afford else 'ready'))) %}
+        <button type="button"
+                class="bld-stage-prop bld-stage-prop--{{ _prop_state }}"
+                style="left: {{ b.stage_left_pct }}%; top: {{ b.stage_top_pct }}%; z-index: {{ b.stage_z|default(1) }}; --bld-stage-scale: {{ b.stage_scale|default(1) }};"
+                data-bld-stage-prop="{{ b.key }}"
+                data-stage-tab="{{ b.tab }}"
+                data-building="{{ b.key }}"
+                data-level="{{ b.level|int }}"
+                data-prop-state="{{ _prop_state }}"
+                title="{{ T('building_' ~ b.key) }} · {{ T('buildings_col_level') }} {{ b.level|fmt_int }}"
+                aria-label="{{ T('building_' ~ b.key) }}">
+          <span class="bld-stage-prop-art" aria-hidden="true">
+            <picture>
+              <source type="image/webp" srcset="{{ _icon_webp }}">
+              <img src="{{ _icon_png }}" alt="" width="96" height="96" loading="lazy" decoding="async">
+            </picture>
+          </span>
+          <span class="bld-stage-prop-level gc-mono" data-bld-stage-level>{{ b.level|fmt_int }}</span>
+        </button>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </section>
+
     {% set bq_jobs = (bq.queue if bq and bq.queue is defined and bq.queue else []) %}
     {% set bq_mini = (bq.mini_queue_jobs if bq and bq.mini_queue_jobs is defined else []) %}
     {{ render_page_mini_queue_strip(

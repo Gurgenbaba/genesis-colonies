@@ -216,8 +216,17 @@ Meist Energiemangel oder volles Ferronit-/Crytite-Lager.
 **Wo baue ich die Werft?**
 Orbitalwerft auf der Welt, von der du Flotten senden willst — planetengebunden.
 
-## Discord Summary
+**Discord Summary**
 
 **Gebäude — Infrastruktur pro Welt**
 
 Gebäude produzieren Ressourcen, schalten Forschung und Werft frei und laufen über die Bau-Queue der **aktiven Welt**. Motor für Evolution und Expansion — nicht der Haupt-Fortschrittsbalken allein. ROI und Formeln: Technische Daten im UI.
+
+## Colony Stage (GC-BST)
+
+Die Buildings-Seite zeigt oben eine **Planet-Stage** mit Gebäude-Props (Positionen aus `BUILDING_STAGE_LAYOUT` in `game/buildings.py`).
+
+- Display-only: keine Kosten-/Zeit-Formeln im Frontend
+- Upgrade/+1/MAX/Cancel bleiben auf den **Karten** und der Queue
+- Prop-Klick scrollt/fokussiert die passende Karte
+- Panel-Poll/`applyActionState` aktualisiert Prop-Level und Status-Klassen

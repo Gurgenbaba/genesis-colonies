@@ -8399,6 +8399,125 @@ body:not(.gc-perf-idle) .research-bar-fill{
    ========================= */
 .buildings-shell{ padding: 10px; }
 
+/* GC-BST — Buildings planet stage (display-only props; cards remain upgrade UI) */
+.bld-planet-stage{
+  position: relative;
+  margin: 0 0 12px;
+  min-height: clamp(180px, 28vh, 280px);
+  border: 1px solid rgba(70, 229, 255, 0.18);
+  border-radius: var(--gc-radius-sm, 2px);
+  overflow: hidden;
+  background: rgba(2, 6, 14, 0.72);
+}
+.bld-planet-stage-surface{
+  position: absolute;
+  inset: 0;
+  background-color: #040810;
+  background-image:
+    linear-gradient(180deg, rgba(2, 6, 14, 0.35) 0%, transparent 40%, rgba(2, 6, 14, 0.55) 100%),
+    var(--planet-landscape, none);
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+}
+@supports (background-image: image-set(url("x") type("image/webp"))) {
+  .bld-planet-stage-surface{
+    background-image:
+      linear-gradient(180deg, rgba(2, 6, 14, 0.35) 0%, transparent 40%, rgba(2, 6, 14, 0.55) 100%),
+      image-set(
+        var(--planet-landscape-webp, var(--planet-landscape, none)) type("image/webp"),
+        var(--planet-landscape, none) type("image/jpeg")
+      );
+  }
+}
+.bld-planet-stage-shade{
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 40%, transparent 35%, rgba(2, 6, 14, 0.55) 100%),
+    linear-gradient(0deg, rgba(2, 6, 14, 0.7) 0%, transparent 45%);
+}
+.bld-planet-stage-props{
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+.bld-stage-prop{
+  position: absolute;
+  transform: translate(-50%, -50%) scale(var(--bld-stage-scale, 1));
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  margin: 0;
+  border: 1px solid rgba(70, 229, 255, 0.35);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(4, 10, 22, 0.82);
+  cursor: pointer;
+  color: inherit;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.45);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+.bld-stage-prop:hover,
+.bld-stage-prop:focus-visible{
+  border-color: rgba(70, 229, 255, 0.85);
+  box-shadow: 0 0 14px rgba(70, 229, 255, 0.35);
+  outline: none;
+  z-index: 20 !important;
+}
+.bld-stage-prop-art{
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.bld-stage-prop-art img{
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.bld-stage-prop-level{
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  min-width: 1.4em;
+  padding: 0 3px;
+  font-size: 0.65rem;
+  line-height: 1.2;
+  text-align: center;
+  color: #e8f7ff;
+  background: rgba(2, 6, 14, 0.88);
+  border: 1px solid rgba(70, 229, 255, 0.35);
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.bld-stage-prop--locked{
+  opacity: 0.55;
+  filter: grayscale(0.35);
+}
+.bld-stage-prop--warn{
+  border-color: rgba(255, 180, 70, 0.55);
+}
+.bld-stage-prop--queue{
+  border-color: rgba(127, 255, 217, 0.65);
+  box-shadow: 0 0 12px rgba(127, 255, 217, 0.25);
+}
+.bld-stage-prop--max{
+  border-color: rgba(180, 190, 210, 0.45);
+}
+.bld-stage-prop.is-focused{
+  border-color: rgba(255, 220, 90, 0.9);
+  box-shadow: 0 0 16px rgba(255, 220, 90, 0.35);
+}
+.gc-building-card.gc-building-card--stage-focus{
+  outline: 1px solid rgba(255, 220, 90, 0.65);
+  box-shadow: 0 0 18px rgba(255, 220, 90, 0.22);
+}
+@media (max-width: 720px){
+  .bld-planet-stage{ min-height: 160px; }
+  .bld-stage-prop{ width: 44px; height: 44px; }
+}
+
 .shipyard-shell.gc-panel,
 .defense-shell.gc-panel{
   padding: 10px;

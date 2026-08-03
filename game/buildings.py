@@ -206,6 +206,29 @@ BUILDING_TAB: Dict[str, str] = {
     "planet_core_nexus": "infrastructure",
 }
 
+# Display-only colony stage slots (percent of stage box). Not used for economy/queue math.
+BUILDING_STAGE_LAYOUT: Dict[str, Dict[str, float]] = {
+    "metal_mine": {"left_pct": 14.0, "top_pct": 64.0, "z": 3, "scale": 1.05},
+    "crystal_mine": {"left_pct": 28.0, "top_pct": 58.0, "z": 3, "scale": 1.0},
+    "solar_plant": {"left_pct": 44.0, "top_pct": 52.0, "z": 2, "scale": 1.05},
+    "fuel_cell_plant": {"left_pct": 58.0, "top_pct": 60.0, "z": 3, "scale": 1.0},
+    "metal_storage": {"left_pct": 18.0, "top_pct": 78.0, "z": 4, "scale": 0.95},
+    "crystal_storage": {"left_pct": 34.0, "top_pct": 76.0, "z": 4, "scale": 0.95},
+    "fuel_storage": {"left_pct": 50.0, "top_pct": 80.0, "z": 4, "scale": 0.95},
+    "research_lab": {"left_pct": 68.0, "top_pct": 48.0, "z": 3, "scale": 1.05},
+    "academy": {"left_pct": 82.0, "top_pct": 54.0, "z": 3, "scale": 1.0},
+    "orbital_shipyard": {"left_pct": 78.0, "top_pct": 28.0, "z": 5, "scale": 1.15},
+    "defense_factory": {"left_pct": 62.0, "top_pct": 36.0, "z": 3, "scale": 1.0},
+    "barracks": {"left_pct": 48.0, "top_pct": 40.0, "z": 3, "scale": 1.0},
+    "radar_array": {"left_pct": 88.0, "top_pct": 34.0, "z": 4, "scale": 0.95},
+    "command_center": {"left_pct": 50.0, "top_pct": 66.0, "z": 5, "scale": 1.2},
+    "shield_generator": {"left_pct": 36.0, "top_pct": 42.0, "z": 2, "scale": 1.0},
+    "terraformer": {"left_pct": 22.0, "top_pct": 46.0, "z": 2, "scale": 1.0},
+    "nanofactory": {"left_pct": 72.0, "top_pct": 70.0, "z": 3, "scale": 1.0},
+    "geothermal_nexus": {"left_pct": 10.0, "top_pct": 50.0, "z": 2, "scale": 1.05},
+    "planet_core_nexus": {"left_pct": 50.0, "top_pct": 88.0, "z": 1, "scale": 1.1},
+}
+
 _BUILDING_ICON_OVERRIDES: Dict[str, str] = {
     "orbital_shipyard": "img/buildings/shipyard.png",
     "fuel_storage": "img/buildings/fuel_cell_storage.png",
@@ -1456,6 +1479,12 @@ def _make_panel_row(
         "max_queueable": int(max_queue_preview.get("jobs") or 0),
         "max_queue_preview": max_queue_preview,
     }
+    stage = BUILDING_STAGE_LAYOUT.get(building_type)
+    if stage:
+        row["stage_left_pct"] = float(stage.get("left_pct") or 50.0)
+        row["stage_top_pct"] = float(stage.get("top_pct") or 50.0)
+        row["stage_z"] = int(stage.get("z") or 1)
+        row["stage_scale"] = float(stage.get("scale") or 1.0)
     row.update(
         _panel_upgrade_effect_fields(
             building_type, buildings, target_level, ratio, research_levels, panel_ctx=panel_ctx
