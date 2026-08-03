@@ -8184,5 +8184,9 @@
   "landing_moment_build": "İnşa",
   "landing_moment_fleet": "Filo fırlatma",
   "landing_moment_boss": "World Boss",
-  "landing_moment_loot": "Ganimet ve kasalar"
+  "landing_moment_loot": "Ganimet ve kasalar",
+  "landing_shot_titans": "Titanlar",
+  "landing_shot_auctions": "Müzayedeler",
+  "landing_shot_research": "Araştırma",
+  "landing_shot_commander": "Komutan"
 }

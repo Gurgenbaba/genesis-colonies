@@ -8184,5 +8184,9 @@
   "landing_moment_build": "Budowa",
   "landing_moment_fleet": "Start floty",
   "landing_moment_boss": "World Boss",
-  "landing_moment_loot": "Łupy i skrzynki"
+  "landing_moment_loot": "Łupy i skrzynki",
+  "landing_shot_titans": "Tytani",
+  "landing_shot_auctions": "Aukcje",
+  "landing_shot_research": "Badania",
+  "landing_shot_commander": "Dowódca"
 }

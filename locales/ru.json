@@ -8184,5 +8184,9 @@
   "landing_moment_build": "Строительство",
   "landing_moment_fleet": "Запуск флота",
   "landing_moment_boss": "World Boss",
-  "landing_moment_loot": "Лут и кейсы"
+  "landing_moment_loot": "Лут и кейсы",
+  "landing_shot_titans": "Титаны",
+  "landing_shot_auctions": "Аукционы",
+  "landing_shot_research": "Исследования",
+  "landing_shot_commander": "Командир"
 }

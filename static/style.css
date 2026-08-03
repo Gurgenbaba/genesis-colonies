@@ -4228,8 +4228,8 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(90deg, rgba(2, 6, 14, 0.88) 0%, rgba(2, 6, 14, 0.55) 42%, rgba(2, 6, 14, 0.28) 100%),
-    linear-gradient(0deg, rgba(2, 6, 14, 0.92) 0%, transparent 42%);
+    linear-gradient(90deg, rgba(2, 6, 14, 0.72) 0%, rgba(2, 6, 14, 0.38) 38%, rgba(2, 6, 14, 0.12) 72%, rgba(2, 6, 14, 0.18) 100%),
+    linear-gradient(0deg, rgba(2, 6, 14, 0.78) 0%, rgba(2, 6, 14, 0.2) 38%, transparent 58%);
   pointer-events: none;
 }
 
@@ -4306,6 +4306,30 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   border: 1px solid rgba(70, 229, 255, 0.16);
   border-radius: var(--gc-radius-sm, 2px);
   background: linear-gradient(180deg, rgba(8, 16, 34, 0.82), rgba(4, 10, 22, 0.72));
+}
+
+.landing-system-card--shot{
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.landing-system-thumb{
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  background: #02060e;
+  border-bottom: 1px solid rgba(70, 229, 255, 0.12);
+}
+
+.landing-system-body{
+  padding: 12px 14px 14px;
+}
+
+.landing-system-card--shot .landing-system-body{
+  padding: 10px 12px 12px;
 }
 
 .landing-system-title{

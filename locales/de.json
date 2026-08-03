@@ -8184,5 +8184,9 @@
   "landing_moment_build": "Gebäudebau",
   "landing_moment_fleet": "Flottenstart",
   "landing_moment_boss": "World Boss",
-  "landing_moment_loot": "Loot & Cases"
+  "landing_moment_loot": "Loot & Cases",
+  "landing_shot_titans": "Titans",
+  "landing_shot_auctions": "Auktionen",
+  "landing_shot_research": "Forschung",
+  "landing_shot_commander": "Commander"
 }

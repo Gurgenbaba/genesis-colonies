@@ -11,6 +11,9 @@
 {% set landing_tagline = T("landing_tagline") %}
 {% if landing_tagline == "landing_tagline" %}{% set landing_tagline = "Errichte dein interstellares Imperium." %}{% endif %}
 
+{% set landing_endline = T("landing_hero_endline") %}
+{% if landing_endline == "landing_hero_endline" %}{% set landing_endline = "Build your Empire. Conquer the Galaxy." %}{% endif %}
+
 {% set vision1 = T("landing_vision_colonies") %}
 {% if vision1 == "landing_vision_colonies" %}{% set vision1 = "Baue Kolonien." %}{% endif %}
 {% set vision2 = T("landing_vision_research") %}
@@ -30,20 +33,51 @@
 {% set cta_logout = T("landing_cta_logout") %}
 {% if cta_logout == "landing_cta_logout" %}{% set cta_logout = "Abmelden" %}{% endif %}
 
-{% set f1_t = T("landing_feature_persistent_title") %}
-{% if f1_t == "landing_feature_persistent_title" %}{% set f1_t = "Persistentes Universum" %}{% endif %}
-{% set f1_s = T("landing_feature_persistent_text") %}
-{% if f1_s == "landing_feature_persistent_text" %}{% set f1_s = "Deine Kolonie arbeitet weiter, auch wenn du offline bist." %}{% endif %}
+{% set lbl_systems = T("landing_systems_heading") %}
+{% if lbl_systems == "landing_systems_heading" %}{% set lbl_systems = "Was dich erwartet" %}{% endif %}
+{% set lbl_systems_sub = T("landing_systems_sub") %}
+{% if lbl_systems_sub == "landing_systems_sub" %}{% set lbl_systems_sub = "Ein persistentes Universum — viele Systeme, eine Kommandozentrale." %}{% endif %}
 
-{% set f2_t = T("landing_feature_research_title") %}
-{% if f2_t == "landing_feature_research_title" %}{% set f2_t = "Forschung & Fortschritt" %}{% endif %}
-{% set f2_s = T("landing_feature_research_text") %}
-{% if f2_s == "landing_feature_research_text" %}{% set f2_s = "Neue Technologien schalten Gebäude und Schiffe frei." %}{% endif %}
+{% set lbl_gallery = T("landing_gallery_heading") %}
+{% if lbl_gallery == "landing_gallery_heading" %}{% set lbl_gallery = "Kommando-Ansichten" %}{% endif %}
+{% set lbl_gallery_sub = T("landing_gallery_sub") %}
+{% if lbl_gallery_sub == "landing_gallery_sub" %}{% set lbl_gallery_sub = "Echte Screenshots aus Genesis Colonies." %}{% endif %}
 
-{% set f3_t = T("landing_feature_expansion_title") %}
-{% if f3_t == "landing_feature_expansion_title" %}{% set f3_t = "Expansion" %}{% endif %}
-{% set f3_s = T("landing_feature_expansion_text") %}
-{% if f3_s == "landing_feature_expansion_text" %}{% set f3_s = "Besiedle neue Welten und erweitere dein Imperium." %}{% endif %}
+{% set lbl_moments = T("landing_moments_heading") %}
+{% if lbl_moments == "landing_moments_heading" %}{% set lbl_moments = "Live Moments" %}{% endif %}
+{% set lbl_moments_sub = T("landing_moments_sub") %}
+{% if lbl_moments_sub == "landing_moments_sub" %}{% set lbl_moments_sub = "Kurze Einblicke in Aufbau, Flotte und Konflikt." %}{% endif %}
+
+{% set lbl_final = T("landing_final_heading") %}
+{% if lbl_final == "landing_final_heading" %}{% set lbl_final = "Dein Imperium wartet." %}{% endif %}
+{% set lbl_trailer = T("landing_trailer_watch") %}
+{% if lbl_trailer == "landing_trailer_watch" %}{% set lbl_trailer = "Trailer ansehen" %}{% endif %}
+
+{% set media = landing_media if landing_media is defined and landing_media else {} %}
+{% set hero = media.get('hero', {}) if media else {} %}
+{% set trailer = media.get('trailer', {}) if media else {} %}
+{% set shots = media.get('shots', []) if media else [] %}
+{% set shot_by_stem = media.get('shot_by_stem', {}) if media else {} %}
+{% set moments = media.get('moments', []) if media else [] %}
+{% set has_hero_video = hero.get('has_video') if hero else False %}
+{% set has_shots = media.get('has_shots') if media else False %}
+{% set has_moments = media.get('has_moments') if media else False %}
+{% set has_trailer = trailer.get('has_video') if trailer else False %}
+
+{% set systems = [
+  ('landing_sys_overview_title', 'landing_sys_overview_text', 'Overview', 'shot-01-overview'),
+  ('landing_sys_galaxy_title', 'landing_sys_galaxy_text', 'Galaxy', 'shot-02-galaxy'),
+  ('landing_sys_fleet_title', 'landing_sys_fleet_text', 'Fleet', 'shot-04-fleet'),
+  ('landing_sys_worldboss_title', 'landing_sys_worldboss_text', 'World Boss', 'shot-03-world-boss'),
+  ('landing_sys_titans_title', 'landing_sys_titans_text', 'Titans', 'shot-09-titans'),
+  ('landing_sys_empire_title', 'landing_sys_empire_text', 'Empire', 'shot-06-empire'),
+  ('landing_sys_story_title', 'landing_sys_story_text', 'Story Ops', 'shot-07-story'),
+  ('landing_sys_politics_title', 'landing_sys_politics_text', 'Politics', 'shot-08-politics'),
+  ('landing_sys_inventory_title', 'landing_sys_inventory_text', 'Inventory', 'shot-05-inventory'),
+  ('landing_sys_auctions_title', 'landing_sys_auctions_text', 'Auctions', 'shot-10-auctions'),
+  ('landing_sys_research_title', 'landing_sys_research_text', 'Research', 'shot-11-research'),
+  ('landing_sys_commander_title', 'landing_sys_commander_text', 'Commander', 'shot-12-commander'),
+] %}
 
 {% set gs = (GAME_SETTINGS if GAME_SETTINGS is defined and GAME_SETTINGS else {}) %}
 {% set ps = (PLAYER_STATS if PLAYER_STATS is defined and PLAYER_STATS else {}) %}
@@ -89,7 +123,7 @@
 {% set lbl_fleet_peace = T("admin_label_fleet_speed_peaceful") %}
 {% if lbl_fleet_peace == "admin_label_fleet_speed_peaceful" %}{% set lbl_fleet_peace = "Flotte · Friedlich" %}{% endif %}
 
-<div class="gc-page landing-wrapper">
+<div class="gc-page landing-wrapper{% if has_hero_video %} landing-wrapper--cinematic{% endif %}" data-landing-showcase>
 
   <div class="landing-fx" aria-hidden="true">
     <div class="landing-fx-vignette"></div>
@@ -107,7 +141,20 @@
     <span class="landing-fx-meteor landing-fx-meteor-2"></span>
   </div>
 
-  <section class="landing-hero" aria-labelledby="landing-title">
+  <section class="landing-hero{% if has_hero_video %} landing-hero--video{% endif %}" aria-labelledby="landing-title" data-landing-hero>
+    {% if has_hero_video %}
+    <div class="landing-hero-media" aria-hidden="true">
+      <video class="landing-hero-video"
+             data-landing-hero-video
+             autoplay muted loop playsinline preload="auto"
+             {% if hero.get('poster') %}poster="{{ url_for('static', filename=hero.poster, v=GC_ASSET_VERSION) }}"{% endif %}>
+        {% for src in hero.get('sources', []) %}
+        <source src="{{ url_for('static', filename=src.src, v=GC_ASSET_VERSION) }}" type="{{ src.type }}">
+        {% endfor %}
+      </video>
+      <div class="landing-hero-media-shade"></div>
+    </div>
+    {% endif %}
     <div class="landing-hero-scan" aria-hidden="true"></div>
     {% set title_parts = landing_title.split(' ', 1) %}
 
@@ -119,6 +166,7 @@
         {% endif %}
       </h1>
       <p class="landing-tagline">{{ landing_tagline }}</p>
+      <p class="landing-endline">{{ landing_endline }}</p>
 
       <ul class="landing-vision">
         <li>
@@ -155,27 +203,105 @@
             {{ cta_login }}
           </a>
         {% endif %}
+        {% if has_trailer %}
+          <button type="button" class="gc-btn gc-btn-ghost gc-btn-lg landing-btn-ghost" data-landing-trailer-open>
+            {{ lbl_trailer }}
+          </button>
+        {% endif %}
       </div>
     </div>
   </section>
 
-  <div class="landing-features" role="list">
-    <article class="landing-feature-card" role="listitem">
-      <span class="landing-feature-icon" aria-hidden="true">⚡</span>
-      <h2 class="landing-feature-title">{{ f1_t }}</h2>
-      <p class="landing-feature-text">{{ f1_s }}</p>
-    </article>
-    <article class="landing-feature-card" role="listitem">
-      <span class="landing-feature-icon" aria-hidden="true">🧪</span>
-      <h2 class="landing-feature-title">{{ f2_t }}</h2>
-      <p class="landing-feature-text">{{ f2_s }}</p>
-    </article>
-    <article class="landing-feature-card" role="listitem">
-      <span class="landing-feature-icon" aria-hidden="true">🚀</span>
-      <h2 class="landing-feature-title">{{ f3_t }}</h2>
-      <p class="landing-feature-text">{{ f3_s }}</p>
-    </article>
-  </div>
+  <section class="landing-systems" aria-labelledby="landing-systems-heading" data-landing-systems>
+    <header class="landing-section-head">
+      <h2 class="landing-section-title" id="landing-systems-heading">{{ lbl_systems }}</h2>
+      <p class="landing-section-sub">{{ lbl_systems_sub }}</p>
+    </header>
+    <div class="landing-systems-grid" role="list">
+      {% for title_key, text_key, fallback, shot_stem in systems %}
+      {% set st = T(title_key) %}
+      {% if st == title_key %}{% set st = fallback %}{% endif %}
+      {% set sx = T(text_key) %}
+      {% if sx == text_key %}{% set sx = "" %}{% endif %}
+      {% set sys_shot = shot_by_stem.get(shot_stem) if shot_stem else None %}
+      <article class="landing-system-card{% if sys_shot %} landing-system-card--shot{% endif %}" role="listitem">
+        {% if sys_shot %}
+        <img class="landing-system-thumb"
+             src="{{ url_for('static', filename=sys_shot.src, v=GC_ASSET_VERSION) }}"
+             alt="{{ st|e }}"
+             loading="lazy"
+             width="480"
+             height="270">
+        {% endif %}
+        <div class="landing-system-body">
+          <h3 class="landing-system-title">{{ st }}</h3>
+          {% if sx %}<p class="landing-system-text">{{ sx }}</p>{% endif %}
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+
+  {% if has_shots %}
+  <section class="landing-gallery" aria-labelledby="landing-gallery-heading" data-landing-gallery>
+    <header class="landing-section-head">
+      <h2 class="landing-section-title" id="landing-gallery-heading">{{ lbl_gallery }}</h2>
+      <p class="landing-section-sub">{{ lbl_gallery_sub }}</p>
+    </header>
+    <div class="landing-gallery-grid" role="list">
+      {% for shot in shots %}
+      {% set shot_label = T(shot.label_key) %}
+      {% if shot_label == shot.label_key %}{% set shot_label = shot.stem %}{% endif %}
+      <button type="button"
+              class="landing-gallery-item"
+              role="listitem"
+              data-landing-lightbox-src="{{ url_for('static', filename=shot.src, v=GC_ASSET_VERSION) }}"
+              data-landing-lightbox-label="{{ shot_label|e }}"
+              aria-label="{{ shot_label|e }}">
+        <img class="landing-gallery-img"
+             src="{{ url_for('static', filename=shot.src, v=GC_ASSET_VERSION) }}"
+             alt="{{ shot_label|e }}"
+             loading="lazy"
+             width="640"
+             height="360">
+        <span class="landing-gallery-caption">{{ shot_label }}</span>
+      </button>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if has_moments %}
+  <section class="landing-moments" aria-labelledby="landing-moments-heading" data-landing-moments>
+    <header class="landing-section-head">
+      <h2 class="landing-section-title" id="landing-moments-heading">{{ lbl_moments }}</h2>
+      <p class="landing-section-sub">{{ lbl_moments_sub }}</p>
+    </header>
+    <div class="landing-moments-strip" role="list">
+      {% for moment in moments %}
+      {% set mlabel = T(moment.label_key) %}
+      {% if mlabel == moment.label_key %}{% set mlabel = moment.stem %}{% endif %}
+      <article class="landing-moment-card" role="listitem">
+        {% if moment.sources %}
+        <video class="landing-moment-video"
+               autoplay muted loop playsinline
+               {% if moment.get('img') %}poster="{{ url_for('static', filename=moment.img, v=GC_ASSET_VERSION) }}"{% endif %}>
+          {% for src in moment.sources %}
+          <source src="{{ url_for('static', filename=src.src, v=GC_ASSET_VERSION) }}" type="{{ src.type }}">
+          {% endfor %}
+        </video>
+        {% elif moment.get('img') %}
+        <img class="landing-moment-video"
+             src="{{ url_for('static', filename=moment.img, v=GC_ASSET_VERSION) }}"
+             alt="{{ mlabel|e }}"
+             loading="lazy">
+        {% endif %}
+        <span class="landing-moment-caption">{{ mlabel }}</span>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
 
   <section class="landing-universe-panel" aria-labelledby="landing-universe-heading">
     <header class="landing-universe-head">
@@ -267,7 +393,43 @@
     </div>
   </section>
 
+  <section class="landing-final-cta" aria-labelledby="landing-final-heading" data-landing-final-cta>
+    <h2 class="landing-final-title" id="landing-final-heading">{{ lbl_final }}</h2>
+    <p class="landing-final-endline">{{ landing_endline }}</p>
+    <div class="landing-actions">
+      {% if AUTH_USER and AUTH_USER.id %}
+        <a href="{{ url_for('overview') }}" class="gc-btn gc-btn-primary gc-btn-lg landing-btn-primary">{{ cta_cc }}</a>
+      {% else %}
+        <a href="{{ url_for('register') }}" class="gc-btn gc-btn-primary gc-btn-lg landing-btn-primary">{{ cta_play }}</a>
+        <a href="{{ url_for('login') }}" class="gc-btn gc-btn-ghost gc-btn-lg landing-btn-ghost">{{ cta_login }}</a>
+      {% endif %}
+    </div>
+  </section>
+
 </div>
+
+{% if has_shots %}
+<dialog class="landing-lightbox" data-landing-lightbox aria-label="{{ lbl_gallery }}">
+  <form method="dialog" class="landing-lightbox-close-form">
+    <button type="submit" class="gc-btn gc-btn-ghost landing-lightbox-close" aria-label="Close">×</button>
+  </form>
+  <img class="landing-lightbox-img" data-landing-lightbox-img alt="">
+  <p class="landing-lightbox-caption" data-landing-lightbox-caption></p>
+</dialog>
+{% endif %}
+
+{% if has_trailer %}
+<dialog class="landing-trailer-modal" data-landing-trailer-modal aria-label="{{ lbl_trailer }}">
+  <form method="dialog" class="landing-lightbox-close-form">
+    <button type="submit" class="gc-btn gc-btn-ghost landing-lightbox-close" aria-label="Close">×</button>
+  </form>
+  <video class="landing-trailer-video" data-landing-trailer-video controls playsinline>
+    {% for src in trailer.get('sources', []) %}
+    <source src="{{ url_for('static', filename=src.src, v=GC_ASSET_VERSION) }}" type="{{ src.type }}">
+    {% endfor %}
+  </video>
+</dialog>
+{% endif %}
 
 <footer class="auth-legal-footer" aria-label="{{ T('legal_page_title', 'Rechtliche Hinweise') }}">
   <a href="{{ url_for('legal_view', doc='imprint') }}">{{ T("legal_tab_imprint", "Impressum") }}</a>

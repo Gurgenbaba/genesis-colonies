@@ -893,36 +893,27 @@
     if (!root) return;
 
     const video = root.querySelector("[data-landing-hero-video]");
-    const muteBtn = root.querySelector("[data-landing-mute]");
     const reduceMotion =
       typeof window.matchMedia === "function" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     if (video instanceof HTMLVideoElement) {
+      // Background cinematic: always muted (autoplay policy + product intent).
+      video.defaultMuted = true;
+      video.muted = true;
+      video.setAttribute("muted", "");
+      video.volume = 0;
       if (reduceMotion) {
         try {
           video.pause();
         } catch (_) {}
         video.removeAttribute("autoplay");
       } else {
-        video.muted = true;
         const playPromise = video.play();
         if (playPromise && typeof playPromise.catch === "function") {
           playPromise.catch(() => {});
         }
       }
-    }
-
-    if (muteBtn && video instanceof HTMLVideoElement) {
-      muteBtn.addEventListener("click", () => {
-        const nextMuted = !video.muted;
-        video.muted = nextMuted;
-        muteBtn.setAttribute("aria-pressed", nextMuted ? "true" : "false");
-        if (!nextMuted) {
-          const p = video.play();
-          if (p && typeof p.catch === "function") p.catch(() => {});
-        }
-      });
     }
 
     const lightbox = document.querySelector("[data-landing-lightbox]");
