@@ -987,12 +987,8 @@
     }
   }
 
-  GC.initLandingShowcase = initLandingShowcase;
-
   function initSimplePageAmbience() {
-    if (typeof GC.initLandingShowcase === "function") {
-      GC.initLandingShowcase();
-    }
+    initLandingShowcase();
     if (!isAmbiencePage()) return;
     const audio = document.getElementById("gc-ambience");
     if (!audio) return;
@@ -1851,6 +1847,7 @@
 
   GC.abortInFlightGameStateFetches = abortInFlightGameStateFetches;
   GC.quiesceLiveClientFetches = quiesceLiveClientFetches;
+  GC.initLandingShowcase = initLandingShowcase;
 
   GC.parseIntNumber = parseIntNumber;
   GC.readNumberInput = readNumberInput;
