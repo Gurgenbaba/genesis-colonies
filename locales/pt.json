@@ -4264,7 +4264,7 @@
   "options_error_invalid_email": "Endereço de e-mail inválido.",
   "options_error_invalid_locale": "Idioma inválido.",
   "options_error_invalid_name": "Nome inválido (de 2 a 32 caracteres; somente letras, números, espaços, -. _).",
-  "options_error_invalid_notify_sound": "Configuração de som inválida.",
+  "options_error_invalid_notify_sound": "Configuração de volume inválida.",
   "options_error_invalid_spy_probes": "Quantidade de sondas espiãs inválida.",
   "options_error_name_taken": "Este nome já está em uso.",
   "options_error_password_mismatch": "As senhas não coincidem.",
@@ -4288,10 +4288,7 @@
   "options_not_set": "-",
   "options_notify_attack_title": "Alerta de ataque",
   "options_notify_message_title": "Som de mensagens",
-  "options_notify_sound_normal": "Normal",
-  "options_notify_sound_off": "Desligado",
-  "options_notify_sound_quiet": "Baixo",
-  "options_notify_subtitle": "Controle alertas de ataque, mensagens, UI e sons de combate separadamente.",
+  "options_notify_subtitle": "Ajuste separadamente o volume de alertas de ataque, mensagens, UI e combate.",
   "options_notify_title": "Sons e notificações",
   "options_password": "Senha",
   "options_placeholder_email": "comandante@genesis-cluster…",
@@ -8045,5 +8042,6 @@
   "codex_faq_general_faq_2_a": "Painel Codex, Ajuda rápida nas páginas e este FAQ. Detalhes de combate/exposição também aparecem em Mensagens.",
   "codex_faq_general_tip_0": "Comece na Visão Geral e estabilize a produção da Ark antes de expandir.",
   "codex_faq_general_tip_1": "Verifique o alternador de planetas do cabeçalho antes de gastar recursos.",
-  "codex_faq_general_tip_2": "As entradas bloqueadas do Codex mostram um teaser – visite a página relacionada ou expanda a Arca."
+  "codex_faq_general_tip_2": "As entradas bloqueadas do Codex mostram um teaser – visite a página relacionada ou expanda a Arca.",
+  "options_sound_volume": "Volume"
 }

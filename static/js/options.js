@@ -226,50 +226,80 @@
     combat: "sfx_combat_sound",
   };
 
-  function readNotifySoundMode(page, kind) {
-    if (!page) return "normal";
+  function readNotifySoundVolume(page, kind) {
+    if (!page) return 0.1;
     const attr = SOUND_KIND_ATTR[kind] || "data-notify-attack-sound";
-    const raw = String(page.getAttribute(attr) || "normal").trim().toLowerCase();
-    return raw === "off" || raw === "quiet" || raw === "normal" ? raw : "normal";
+    const raw = page.getAttribute(attr);
+    if (typeof GC.normalizeSoundVolume === "function") {
+      return GC.normalizeSoundVolume(raw, 0.1);
+    }
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return 0.1;
+    if (n < 0) return 0;
+    if (n > 1) return 1;
+    return n;
   }
 
-  function setNotifySoundToggleUi(kind, mode) {
-    document.querySelectorAll(`[data-notify-sound="${kind}"]`).forEach((btn) => {
-      const active = String(btn.getAttribute("data-notify-mode") || "") === mode;
-      btn.classList.toggle("is-active", active);
-      btn.setAttribute("aria-pressed", active ? "true" : "false");
-    });
+  function setNotifySoundSliderUi(kind, volume) {
+    const scale =
+      typeof GC.normalizeSoundVolume === "function"
+        ? GC.normalizeSoundVolume(volume, 0.1)
+        : Math.max(0, Math.min(1, Number(volume) || 0));
+    const pct = Math.round(scale * 100);
+    const input = document.querySelector(
+      `#options-notify-sounds input[data-notify-sound="${kind}"]`
+    );
+    if (input) input.value = String(pct);
+    const label = document.querySelector(`[data-notify-sound-pct="${kind}"]`);
+    if (label) label.textContent = `${pct}%`;
   }
 
   function applySavedSoundSettings(page, saved) {
     if (!page || !saved || typeof saved !== "object") return;
     Object.keys(SOUND_KIND_PAYLOAD).forEach((kind) => {
       const key = SOUND_KIND_PAYLOAD[kind];
-      const mode = saved[key];
-      if (!mode) return;
-      page.setAttribute(SOUND_KIND_ATTR[kind], mode);
-      setNotifySoundToggleUi(kind, mode);
+      if (saved[key] === undefined || saved[key] === null) return;
+      const vol =
+        typeof GC.normalizeSoundVolume === "function"
+          ? GC.normalizeSoundVolume(saved[key], 0.1)
+          : Number(saved[key]);
+      page.setAttribute(SOUND_KIND_ATTR[kind], String(vol));
+      setNotifySoundSliderUi(kind, vol);
     });
   }
 
-  function bindNotifySoundToggles() {
+  function bindNotifySoundSliders() {
     const block = document.getElementById("options-notify-sounds");
     const page = document.getElementById("options-page");
     const hint = document.getElementById("options-notify-hint");
     if (!block || !page || block.dataset.gcBound === "1") return;
     block.dataset.gcBound = "1";
 
-    block.querySelectorAll("[data-notify-sound]").forEach((btn) => {
-      if (btn.dataset.gcBound === "1") return;
-      btn.dataset.gcBound = "1";
-      btn.addEventListener("click", async () => {
-        const kind = String(btn.getAttribute("data-notify-sound") || "");
-        const mode = String(btn.getAttribute("data-notify-mode") || "normal");
+    block.querySelectorAll("input[data-notify-sound]").forEach((input) => {
+      if (input.dataset.gcBound === "1") return;
+      input.dataset.gcBound = "1";
+
+      input.addEventListener("input", () => {
+        const kind = String(input.getAttribute("data-notify-sound") || "");
+        const pct = Math.max(0, Math.min(100, parseInt(input.value, 10) || 0));
+        const label = block.querySelector(`[data-notify-sound-pct="${kind}"]`);
+        if (label) label.textContent = `${pct}%`;
+      });
+
+      input.addEventListener("change", async () => {
+        const kind = String(input.getAttribute("data-notify-sound") || "");
         const payloadKey = SOUND_KIND_PAYLOAD[kind];
         if (!payloadKey) return;
-        if (readNotifySoundMode(page, kind) === mode) return;
+        const pct = Math.max(0, Math.min(100, parseInt(input.value, 10) || 0));
+        const volume = pct / 100;
+        if (Math.abs(readNotifySoundVolume(page, kind) - volume) < 1e-9) {
+          if (typeof GC.playSoundPreview === "function") {
+            GC.playSoundPreview(kind);
+          }
+          return;
+        }
 
-        block.querySelectorAll(`[data-notify-sound="${kind}"]`).forEach((el) => {
+        block.querySelectorAll("input[data-notify-sound]").forEach((el) => {
           el.disabled = true;
         });
         if (hint) {
@@ -278,7 +308,7 @@
           hint.classList.remove("gc-options-hint-error", "gc-options-hint-success");
         }
 
-        const payload = { [payloadKey]: mode };
+        const payload = { [payloadKey]: volume };
 
         try {
           const data = await postOptionsJson("/api/options/notify-sounds", payload);
@@ -288,12 +318,16 @@
               hint.hidden = false;
               hint.classList.add("gc-options-hint-error");
             }
+            setNotifySoundSliderUi(kind, readNotifySoundVolume(page, kind));
             return;
           }
           const saved = data.data || {};
           applySavedSoundSettings(page, saved);
           if (typeof GC.applyNotifySoundSettings === "function") {
             GC.applyNotifySoundSettings(saved);
+          }
+          if (typeof GC.playSoundPreview === "function") {
+            GC.playSoundPreview(kind);
           }
           if (hint) {
             hint.textContent = msgKey("options_saved");
@@ -302,8 +336,9 @@
           }
         } catch (err) {
           if (err && err.name === "AuthError") return;
+          setNotifySoundSliderUi(kind, readNotifySoundVolume(page, kind));
         } finally {
-          block.querySelectorAll("[data-notify-sound]").forEach((el) => {
+          block.querySelectorAll("input[data-notify-sound]").forEach((el) => {
             el.disabled = false;
           });
         }
@@ -543,12 +578,12 @@
     const notifyBlock = document.getElementById("options-notify-sounds");
     if (notifyBlock) {
       delete notifyBlock.dataset.gcBound;
-      notifyBlock.querySelectorAll("[data-notify-sound]").forEach((btn) => {
-        delete btn.dataset.gcBound;
+      notifyBlock.querySelectorAll("input[data-notify-sound]").forEach((el) => {
+        delete el.dataset.gcBound;
       });
     }
 
-    bindNotifySoundToggles();
+    bindNotifySoundSliders();
     const spyBlock = document.getElementById("options-galaxy-settings");
     if (spyBlock) {
       delete spyBlock.dataset.gcBound;

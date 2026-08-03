@@ -757,8 +757,12 @@ def create_user(username: str, password: str, is_admin: int = 0, email: str | No
 
         cur.execute(
             """
-            INSERT INTO users (username, password_hash, is_admin, email, email_verified)
-            VALUES (?, ?, ?, ?, ?);
+            INSERT INTO users (
+                username, password_hash, is_admin, email, email_verified,
+                notify_attack_sound, notify_message_sound,
+                sfx_ui_sound, sfx_combat_sound
+            )
+            VALUES (?, ?, ?, ?, ?, '0.1', '0.1', '0.1', '0.1');
             """,
             (
                 uname,

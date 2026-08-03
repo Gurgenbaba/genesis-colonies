@@ -1811,26 +1811,47 @@
   const GC_NOTIFY_SOUND_LS_ATTACK = "gc_last_attack_alert_sound_key";
   const GC_NOTIFY_SOUND_LS_MESSAGE = "gc_last_message_sound_key";
   const GC_NOTIFY_SOUND_BASE_VOLUME = 0.65;
+  const GC_DEFAULT_SOUND_VOLUME = 0.1;
 
-  function normalizeNotifySoundMode(mode) {
-    const value = String(mode || "normal").trim().toLowerCase();
-    return value === "off" || value === "quiet" || value === "normal" ? value : "normal";
+  function normalizeSoundVolume(value, defaultVolume) {
+    const fallback =
+      Number.isFinite(Number(defaultVolume)) && Number(defaultVolume) >= 0
+        ? Math.max(0, Math.min(1, Number(defaultVolume)))
+        : GC_DEFAULT_SOUND_VOLUME;
+    if (value === null || value === undefined) return fallback;
+    if (typeof value === "boolean") return fallback;
+    if (typeof value === "number") {
+      if (!Number.isFinite(value)) return fallback;
+      if (value < 0) return 0;
+      if (value > 1) return 1;
+      return value;
+    }
+    const raw = String(value).trim().toLowerCase();
+    if (!raw) return fallback;
+    if (raw === "off") return 0;
+    if (raw === "quiet") return 0.5;
+    if (raw === "normal") return 1;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) return fallback;
+    if (parsed < 0) return 0;
+    if (parsed > 1) return 1;
+    return parsed;
   }
 
   function applyNotifySoundSettings(partial) {
     if (!partial || typeof partial !== "object") return;
     GC.settings = GC.settings || {};
     if (partial.notify_attack_sound !== undefined) {
-      GC.settings.notify_attack_sound = normalizeNotifySoundMode(partial.notify_attack_sound);
+      GC.settings.notify_attack_sound = normalizeSoundVolume(partial.notify_attack_sound);
     }
     if (partial.notify_message_sound !== undefined) {
-      GC.settings.notify_message_sound = normalizeNotifySoundMode(partial.notify_message_sound);
+      GC.settings.notify_message_sound = normalizeSoundVolume(partial.notify_message_sound);
     }
     if (partial.sfx_ui_sound !== undefined) {
-      GC.settings.sfx_ui_sound = normalizeNotifySoundMode(partial.sfx_ui_sound);
+      GC.settings.sfx_ui_sound = normalizeSoundVolume(partial.sfx_ui_sound);
     }
     if (partial.sfx_combat_sound !== undefined) {
-      GC.settings.sfx_combat_sound = normalizeNotifySoundMode(partial.sfx_combat_sound);
+      GC.settings.sfx_combat_sound = normalizeSoundVolume(partial.sfx_combat_sound);
     }
   }
 
@@ -1860,7 +1881,7 @@
     return normalizeSpyProbeCount(GC.settings?.default_spy_probes);
   }
 
-  function soundModeForKind(kind) {
+  function soundVolumeForKind(kind) {
     applyNotifySoundSettings(GC.settings || {});
     const key =
       kind === "attack"
@@ -1870,16 +1891,15 @@
           : kind === "combat"
             ? "sfx_combat_sound"
             : "sfx_ui_sound";
-    return normalizeNotifySoundMode(GC.settings?.[key]);
+    return normalizeSoundVolume(GC.settings?.[key]);
   }
 
   function sfxVolumeForKind(kind, baseVolume) {
-    const mode = soundModeForKind(kind);
-    if (mode === "off") return 0;
+    const scale = soundVolumeForKind(kind);
+    if (!(scale > 0)) return 0;
     const base = Number(baseVolume);
     const resolved =
       Number.isFinite(base) && base >= 0 ? base : GC_NOTIFY_SOUND_BASE_VOLUME;
-    const scale = mode === "quiet" ? 0.5 : 1.0;
     return resolved * scale;
   }
 
@@ -1928,10 +1948,10 @@
     }
   }
 
-  GC.normalizeNotifySoundMode = normalizeNotifySoundMode;
+  GC.normalizeSoundVolume = normalizeSoundVolume;
   GC.applyNotifySoundSettings = applyNotifySoundSettings;
   GC.sfxVolumeForKind = sfxVolumeForKind;
-  GC.soundModeForKind = soundModeForKind;
+  GC.soundVolumeForKind = soundVolumeForKind;
   GC.applySpyProbeSettings = applySpyProbeSettings;
   GC.resolveDefaultSpyProbes = resolveDefaultSpyProbes;
   GC.resolveAttackAlertSoundKey = resolveAttackAlertSoundKey;
@@ -1946,10 +1966,10 @@
     if (Number(cfg.poll_idle_ms) > 0) pol.intervalIdle = Number(cfg.poll_idle_ms);
     if (Number(cfg.poll_hidden_ms) > 0) pol.intervalHidden = Number(cfg.poll_hidden_ms);
     GC.settings = {
-      notify_attack_sound: normalizeNotifySoundMode(cfg.notify_attack_sound),
-      notify_message_sound: normalizeNotifySoundMode(cfg.notify_message_sound),
-      sfx_ui_sound: normalizeNotifySoundMode(cfg.sfx_ui_sound),
-      sfx_combat_sound: normalizeNotifySoundMode(cfg.sfx_combat_sound),
+      notify_attack_sound: normalizeSoundVolume(cfg.notify_attack_sound),
+      notify_message_sound: normalizeSoundVolume(cfg.notify_message_sound),
+      sfx_ui_sound: normalizeSoundVolume(cfg.sfx_ui_sound),
+      sfx_combat_sound: normalizeSoundVolume(cfg.sfx_combat_sound),
       default_spy_probes: normalizeSpyProbeCount(cfg.default_spy_probes),
     };
   })();
@@ -16185,6 +16205,26 @@
       audio.play().catch(() => {});
     } catch (_) {}
   }
+  GC.playLootboxOpenSound = playLootboxOpenSound;
+
+  function playSoundPreview(kind) {
+    const key = String(kind || "").trim().toLowerCase();
+    if (key === "attack" || key === "message") {
+      playNotificationSound(key);
+      return;
+    }
+    if (key === "ui") {
+      playLootboxOpenSound();
+      playTitanClickSound("void_titan");
+      return;
+    }
+    if (key === "combat") {
+      if (typeof GC.playCombatSoundPreview === "function") {
+        GC.playCombatSoundPreview();
+      }
+    }
+  }
+  GC.playSoundPreview = playSoundPreview;
 
   /** Overview Titan/companion hotspot — per-boss voice pool, random pick on owned click. */
   const GC_TITAN_CLICK_SOUNDS_BY_BOSS = {

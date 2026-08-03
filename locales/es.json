@@ -4264,7 +4264,7 @@
   "options_error_invalid_email": "Dirección de correo electrónico no válida.",
   "options_error_invalid_locale": "Idioma no válido.",
   "options_error_invalid_name": "Nombre no válido (de 2 a 32 caracteres; letras, números, espacios, - . _ únicamente).",
-  "options_error_invalid_notify_sound": "Ajuste de sonido no válido.",
+  "options_error_invalid_notify_sound": "Ajuste de volumen no válido.",
   "options_error_invalid_spy_probes": "Cantidad de sondas espía no válida.",
   "options_error_name_taken": "Este nombre ya está en uso.",
   "options_error_password_mismatch": "Las contraseñas no coinciden.",
@@ -4288,10 +4288,7 @@
   "options_not_set": "—",
   "options_notify_attack_title": "Alerta de ataque",
   "options_notify_message_title": "Sonido de mensajes",
-  "options_notify_sound_normal": "Normal",
-  "options_notify_sound_off": "Apagado",
-  "options_notify_sound_quiet": "Suave",
-  "options_notify_subtitle": "Controla alertas de ataque, mensajes, UI y sonidos de combate por separado.",
+  "options_notify_subtitle": "Ajusta por separado el volumen de alertas de ataque, mensajes, IU y combate.",
   "options_notify_title": "Sonidos y notificaciones",
   "options_password": "Contraseña",
   "options_placeholder_email": "comandante@genesis-cluster…",
@@ -8045,5 +8042,6 @@
   "codex_faq_general_faq_2_a": "Panel del Codex, páginas de ayuda rápida y estas preguntas frecuentes. Los detalles del combate/exposición también aparecen en Mensajes.",
   "codex_faq_general_tip_0": "Comience en Descripción general y estabilice la producción de Ark antes de expandirse.",
   "codex_faq_general_tip_1": "Verifique el conmutador de planetas del encabezado antes de gastar recursos.",
-  "codex_faq_general_tip_2": "Las entradas bloqueadas del Codex muestran un adelanto: visite la página relacionada o haga crecer el Arca."
+  "codex_faq_general_tip_2": "Las entradas bloqueadas del Codex muestran un adelanto: visite la página relacionada o haga crecer el Arca.",
+  "options_sound_volume": "Volumen"
 }

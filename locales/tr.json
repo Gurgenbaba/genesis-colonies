@@ -4264,7 +4264,7 @@
   "options_error_invalid_email": "Geçersiz e-posta adresi.",
   "options_error_invalid_locale": "Geçersiz dil.",
   "options_error_invalid_name": "Geçersiz ad (2-32 karakter; harfler, sayılar, boşluklar, yalnızca - . _).",
-  "options_error_invalid_notify_sound": "Geçersiz ses ayarı.",
+  "options_error_invalid_notify_sound": "Geçersiz ses düzeyi ayarı.",
   "options_error_invalid_spy_probes": "Geçersiz casus sondası sayısı.",
   "options_error_name_taken": "Bu ad zaten alınmış.",
   "options_error_password_mismatch": "Şifreler eşleşmiyor.",
@@ -4288,10 +4288,7 @@
   "options_not_set": "—",
   "options_notify_attack_title": "Saldırı alarmı",
   "options_notify_message_title": "Mesaj sesi",
-  "options_notify_sound_normal": "Normal",
-  "options_notify_sound_off": "Kapalı",
-  "options_notify_sound_quiet": "Sessiz",
-  "options_notify_subtitle": "Saldırı alarmı, mesaj, UI ve savaş seslerini ayrı ayarla.",
+  "options_notify_subtitle": "Saldırı uyarısı, mesaj, arayüz ve savaş ses düzeylerini ayrı ayarlayın.",
   "options_notify_title": "Sesler ve bildirimler",
   "options_password": "Şifre",
   "options_placeholder_email": "komutan@genesis-kümesi …",
@@ -8045,5 +8042,6 @@
   "codex_faq_general_faq_2_a": "Codex paneli, sayfalardaki Hızlı Yardım ve bu SSS. Savaş/fuar ayrıntıları da Mesajlar'da yer alır.",
   "codex_faq_general_tip_0": "Genel Bakış'tan başlayın ve genişlemeden önce Ark üretimini dengeleyin.",
   "codex_faq_general_tip_1": "Kaynakları harcamadan önce başlık gezegeni değiştiriciyi kontrol edin.",
-  "codex_faq_general_tip_2": "Kilitli Kodeks girişleri bir teaser gösterir; ilgili sayfayı ziyaret edin veya Ark'ı büyütün."
+  "codex_faq_general_tip_2": "Kilitli Kodeks girişleri bir teaser gösterir; ilgili sayfayı ziyaret edin veya Ark'ı büyütün.",
+  "options_sound_volume": "Ses düzeyi"
 }

@@ -1250,6 +1250,14 @@ def test_main_js_apply_planet_hero_theme_border_fx():
         "GC_TITAN_CLICK_SOUNDS_BY_BOSS"
     )[0]
     assert "function sfxVolumeForKind(kind, baseVolume)" in src
+    assert "function normalizeSoundVolume(value, defaultVolume)" in src
+    assert "function soundVolumeForKind(kind)" in src
+    assert "GC_DEFAULT_SOUND_VOLUME = 0.1" in src
+    assert "function playSoundPreview(kind)" in src
+    assert "GC.playSoundPreview = playSoundPreview" in src
+    assert 'playTitanClickSound("void_titan")' in src.split("function playSoundPreview(kind)")[1].split(
+        "GC.playSoundPreview = playSoundPreview"
+    )[0]
     assert (ROOT / "static/sounds/bosses/tita/tita_click.mp3").is_file()
     assert (ROOT / "static/sounds/bosses/tita/titan_click_2.mp3").is_file()
     assert (ROOT / "static/sounds/bosses/tita/tita_click_3.mp3").is_file()
@@ -1827,6 +1835,8 @@ def test_notify_sound_assets_and_main_js_wiring():
     )[0]
     assert "function playCombatTheaterOneShot(src, baseVolume)" in theater
     assert 'GC.sfxVolumeForKind("combat", baseVolume)' in theater
+    assert "function playCombatSoundPreview()" in theater
+    assert "GC.playCombatSoundPreview = playCombatSoundPreview" in theater
     assert "theater_fight_sound.mp3" in theater
     assert "theater_fight_sound_2.mp3" in theater
     assert "theater_fight_sound_3.mp3" in theater

@@ -4264,7 +4264,7 @@
   "options_error_invalid_email": "Invalid email address.",
   "options_error_invalid_locale": "Invalid language.",
   "options_error_invalid_name": "Invalid name (2–32 characters; letters, numbers, spaces, - . _ only).",
-  "options_error_invalid_notify_sound": "Invalid sound setting.",
+  "options_error_invalid_notify_sound": "Invalid volume setting.",
   "options_error_invalid_spy_probes": "Invalid spy probe count.",
   "options_error_name_taken": "This name is already taken.",
   "options_error_password_mismatch": "Passwords do not match.",
@@ -4288,10 +4288,7 @@
   "options_not_set": "—",
   "options_notify_attack_title": "Attack alert",
   "options_notify_message_title": "Message sound",
-  "options_notify_sound_normal": "Normal",
-  "options_notify_sound_off": "Off",
-  "options_notify_sound_quiet": "Quiet",
-  "options_notify_subtitle": "Control attack alerts, messages, UI, and combat sounds separately.",
+  "options_notify_subtitle": "Set volume for attack alerts, messages, UI, and combat sounds separately.",
   "options_notify_title": "Sounds & notifications",
   "options_password": "Password",
   "options_placeholder_email": "commander@genesis-cluster …",
@@ -8045,5 +8042,6 @@
   "codex_faq_general_faq_2_a": "Codex panel, Quick Help on pages, and this FAQ. Combat/expo details also land in Messages.",
   "codex_faq_general_tip_0": "Start on Overview and stabilize Ark production before expanding.",
   "codex_faq_general_tip_1": "Check the header planet switcher before spending resources.",
-  "codex_faq_general_tip_2": "Locked Codex entries show a teaser — visit the related page or grow the Ark."
+  "codex_faq_general_tip_2": "Locked Codex entries show a teaser — visit the related page or grow the Ark.",
+  "options_sound_volume": "Volume"
 }

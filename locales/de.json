@@ -4264,7 +4264,7 @@
   "options_error_invalid_email": "Ungültige E-Mail-Adresse.",
   "options_error_invalid_locale": "Ungültige Sprache.",
   "options_error_invalid_name": "Ungültiger Name (2–32 Zeichen, nur Buchstaben, Zahlen, Leerzeichen, - . _).",
-  "options_error_invalid_notify_sound": "Ungültige Sound-Einstellung.",
+  "options_error_invalid_notify_sound": "Ungültige Lautstärke-Einstellung.",
   "options_error_invalid_spy_probes": "Ungültige Anzahl Spionagesonden.",
   "options_error_name_taken": "Dieser Name ist bereits vergeben.",
   "options_error_password_mismatch": "Die Passwörter stimmen nicht überein.",
@@ -4288,10 +4288,7 @@
   "options_not_set": "—",
   "options_notify_attack_title": "Angriffs-Alarm",
   "options_notify_message_title": "Nachrichten-Ton",
-  "options_notify_sound_normal": "Normal",
-  "options_notify_sound_off": "Aus",
-  "options_notify_sound_quiet": "Leise",
-  "options_notify_subtitle": "Angriffsalarm, Nachrichten, UI- und Kampftöne getrennt steuern.",
+  "options_notify_subtitle": "Lautstärke für Angriffsalarm, Nachrichten, UI- und Kampftöne getrennt einstellen.",
   "options_notify_title": "Töne & Benachrichtigungen",
   "options_password": "Passwort",
   "options_placeholder_email": "kommando@genesis-cluster …",
@@ -8045,5 +8042,6 @@
   "codex_ranking_faq_1_a": "Zerstörte eigene Einheiten entfernen Vermögen. Zerstörungsprestige ist ein separates Signal.",
   "codex_ranking_tip_0": "Ressourcen in Gebäude/Flotte stecken — Vermögen wandert zwischen Score-Buckets, Total bleibt wenn nichts verbrannt wird.",
   "codex_ranking_tip_1": "World-Boss-Tab = Lifetime-Damage, kein Wealth.",
-  "codex_ranking_tip_2": "Inaktive Accounts können aus Live-Boards fallen — weiterspielen."
+  "codex_ranking_tip_2": "Inaktive Accounts können aus Live-Boards fallen — weiterspielen.",
+  "options_sound_volume": "Lautstärke"
 }

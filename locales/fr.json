@@ -4264,7 +4264,7 @@
   "options_error_invalid_email": "Adresse e-mail invalide.",
   "options_error_invalid_locale": "Langue invalide.",
   "options_error_invalid_name": "Nom invalide (2 à 32 caractères ; lettres, chiffres, espaces, - . _ uniquement).",
-  "options_error_invalid_notify_sound": "Réglage sonore invalide.",
+  "options_error_invalid_notify_sound": "Réglage de volume invalide.",
   "options_error_invalid_spy_probes": "Nombre de sondes espion invalide.",
   "options_error_name_taken": "Ce nom est déjà pris.",
   "options_error_password_mismatch": "Les mots de passe ne correspondent pas.",
@@ -4288,10 +4288,7 @@
   "options_not_set": "—",
   "options_notify_attack_title": "Alerte d'attaque",
   "options_notify_message_title": "Son des messages",
-  "options_notify_sound_normal": "Normal",
-  "options_notify_sound_off": "Désactivé",
-  "options_notify_sound_quiet": "Discret",
-  "options_notify_subtitle": "Contrôlez séparément alertes d'attaque, messages, UI et sons de combat.",
+  "options_notify_subtitle": "Réglez séparément le volume des alertes d’attaque, messages, UI et combat.",
   "options_notify_title": "Sons et notifications",
   "options_password": "Mot de passe",
   "options_placeholder_email": "commandant@genesis-cluster …",
@@ -8045,5 +8042,6 @@
   "codex_faq_general_faq_2_a": "Panneau Codex, aide rapide sur les pages et cette FAQ. Les détails du combat/expo apparaissent également dans les messages.",
   "codex_faq_general_tip_0": "Commencez par Présentation et stabilisez la production d’Ark avant de l’étendre.",
   "codex_faq_general_tip_1": "Vérifiez le sélecteur de planète d'en-tête avant de dépenser des ressources.",
-  "codex_faq_general_tip_2": "Les entrées verrouillées du Codex affichent un teaser – visitez la page correspondante ou développez l'Arche."
+  "codex_faq_general_tip_2": "Les entrées verrouillées du Codex affichent un teaser – visitez la page correspondante ou développez l'Arche.",
+  "options_sound_volume": "Volume"
 }

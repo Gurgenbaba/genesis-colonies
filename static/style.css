@@ -33578,22 +33578,38 @@ a.gc-galaxy-coord-link:focus-visible {
 
 .gc-options-notify-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(8rem, 14rem);
   gap: 8px 10px;
   align-items: center;
   min-width: 0;
 }
 
-.gc-options-sound-toggle {
+.gc-options-sound-slider {
   display: inline-flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
   justify-content: flex-end;
+  min-width: 0;
+  width: 100%;
+  margin: 0;
+  cursor: pointer;
 }
 
-.gc-options-sound-btn.is-active {
-  border-color: var(--gc-primary-2);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--gc-primary-2) 45%, transparent);
+.gc-options-sound-slider input[type="range"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 1.25rem;
+  margin: 0;
+  accent-color: var(--gc-primary-2, #5ad0e6);
+  cursor: pointer;
+}
+
+.gc-options-sound-pct {
+  flex: 0 0 2.75rem;
+  text-align: right;
+  font-size: 0.75rem;
+  color: var(--gc-text-muted, #8aa);
+  font-variant-numeric: tabular-nums;
 }
 
 .gc-options-notify-hint {
@@ -33986,8 +34002,9 @@ a.gc-galaxy-coord-link:focus-visible {
     grid-template-columns: 1fr;
   }
 
-  .gc-options-sound-toggle {
-    justify-content: flex-start;
+  .gc-options-sound-slider {
+    justify-content: stretch;
+    width: 100%;
   }
 }
 

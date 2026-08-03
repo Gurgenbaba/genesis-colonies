@@ -4264,7 +4264,7 @@
   "options_error_invalid_email": "Nieprawidłowy adres e-mail.",
   "options_error_invalid_locale": "Nieprawidłowy język.",
   "options_error_invalid_name": "Nieprawidłowa nazwa (2–32 znaki; tylko litery, cyfry, spacje, -. _).",
-  "options_error_invalid_notify_sound": "Nieprawidłowe ustawienie dźwięku.",
+  "options_error_invalid_notify_sound": "Nieprawidłowe ustawienie głośności.",
   "options_error_invalid_spy_probes": "Nieprawidłowa liczba sond szpiegowskich.",
   "options_error_name_taken": "To imię jest już zajęte.",
   "options_error_password_mismatch": "Hasła nie pasują.",
@@ -4288,10 +4288,7 @@
   "options_not_set": "—",
   "options_notify_attack_title": "Alarm ataku",
   "options_notify_message_title": "Dźwięk wiadomości",
-  "options_notify_sound_normal": "Normalnie",
-  "options_notify_sound_off": "Wył.",
-  "options_notify_sound_quiet": "Cicho",
-  "options_notify_subtitle": "Osobno ustaw alarm ataku, wiadomości, UI i dźwięki walki.",
+  "options_notify_subtitle": "Ustaw osobno głośność alarmów ataku, wiadomości, UI i walki.",
   "options_notify_title": "Dźwięki i powiadomienia",
   "options_password": "Hasło",
   "options_placeholder_email": "dowódca@genesis-cluster…",
@@ -8045,5 +8042,6 @@
   "codex_faq_general_faq_2_a": "Panel Kodeksu, Szybka pomoc na stronach i to FAQ. Szczegóły walki/ekspozycji pojawiają się także w Wiadomościach.",
   "codex_faq_general_tip_0": "Zacznij od Przeglądu i ustabilizuj produkcję Arki przed rozbudową.",
   "codex_faq_general_tip_1": "Przed wydaniem zasobów sprawdź przełącznik planet nagłówka.",
-  "codex_faq_general_tip_2": "Zablokowane wpisy w Kodeksie pokazują zwiastun — odwiedź odpowiednią stronę lub rozwijaj Arkę."
+  "codex_faq_general_tip_2": "Zablokowane wpisy w Kodeksie pokazują zwiastun — odwiedź odpowiednią stronę lub rozwijaj Arkę.",
+  "options_sound_volume": "Głośność"
 }

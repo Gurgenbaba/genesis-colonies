@@ -133,6 +133,11 @@
     playCombatTheaterOneShot(src, COMBAT_FIGHT_BASE_VOLUME);
   }
 
+  function playCombatSoundPreview() {
+    playCombatTheaterOneShot(COMBAT_FIGHT_SOUNDS[0], COMBAT_FIGHT_BASE_VOLUME);
+  }
+  GC.playCombatSoundPreview = playCombatSoundPreview;
+
   /** Explosion SFX — stop overlapping salvo clips so the wipe is audible. */
   function playPirateDownSound() {
     stopFightSounds();

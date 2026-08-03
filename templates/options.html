@@ -15,10 +15,10 @@
      data-deletion-pending="{{ '1' if safety.get('deletion_pending') else '0' }}"
      data-deletion-due="{{ safety.get('deletion_due_at') or '' }}"
      data-vacation-locked-until="{{ safety.get('vacation_locked_until') or '' }}"
-     data-notify-attack-sound="{{ od.get('notify_attack_sound', 'normal')|e }}"
-     data-notify-message-sound="{{ od.get('notify_message_sound', 'normal')|e }}"
-     data-sfx-ui-sound="{{ od.get('sfx_ui_sound', 'normal')|e }}"
-     data-sfx-combat-sound="{{ od.get('sfx_combat_sound', 'normal')|e }}"
+     data-notify-attack-sound="{{ od.get('notify_attack_sound', 0.1)|e }}"
+     data-notify-message-sound="{{ od.get('notify_message_sound', 0.1)|e }}"
+     data-sfx-ui-sound="{{ od.get('sfx_ui_sound', 0.1)|e }}"
+     data-sfx-combat-sound="{{ od.get('sfx_combat_sound', 0.1)|e }}"
      data-default-spy-probes="{{ od.get('default_spy_probes', 5)|int }}">
 
   <section class="gc-options-control-module" aria-labelledby="options-control-title">
@@ -300,61 +300,57 @@
               <span class="gc-options-card-sub">{{ T("options_notify_subtitle") }}</span>
             </header>
             <div class="gc-options-notify-grid" id="options-notify-sounds">
+              {% set attack_vol = od.get('notify_attack_sound', 0.1)|float %}
+              {% set message_vol = od.get('notify_message_sound', 0.1)|float %}
+              {% set ui_vol = od.get('sfx_ui_sound', 0.1)|float %}
+              {% set combat_vol = od.get('sfx_combat_sound', 0.1)|float %}
               <div class="gc-options-notify-row">
                 <span class="gc-options-label">{{ T("options_notify_attack_title") }}</span>
-                <div class="gc-options-sound-toggle" role="group" aria-label="{{ T('options_notify_attack_title') }}">
-                  {% for mode in ['off', 'quiet', 'normal'] %}
-                  <button type="button"
-                          class="gc-btn gc-btn-sm gc-options-sound-btn{% if od.get('notify_attack_sound', 'normal') == mode %} is-active{% endif %}"
-                          data-notify-sound="attack"
-                          data-notify-mode="{{ mode }}"
-                          aria-pressed="{{ 'true' if od.get('notify_attack_sound', 'normal') == mode else 'false' }}">
-                    {{ T("options_notify_sound_" ~ mode) }}
-                  </button>
-                  {% endfor %}
-                </div>
+                <label class="gc-options-sound-slider">
+                  <span class="visually-hidden">{{ T("options_sound_volume") }}</span>
+                  <input type="range"
+                         min="0" max="100" step="1"
+                         value="{{ (attack_vol * 100)|round|int }}"
+                         data-notify-sound="attack"
+                         aria-label="{{ T('options_notify_attack_title') }}">
+                  <span class="gc-options-sound-pct gc-mono" data-notify-sound-pct="attack">{{ (attack_vol * 100)|round|int }}%</span>
+                </label>
               </div>
               <div class="gc-options-notify-row">
                 <span class="gc-options-label">{{ T("options_notify_message_title") }}</span>
-                <div class="gc-options-sound-toggle" role="group" aria-label="{{ T('options_notify_message_title') }}">
-                  {% for mode in ['off', 'quiet', 'normal'] %}
-                  <button type="button"
-                          class="gc-btn gc-btn-sm gc-options-sound-btn{% if od.get('notify_message_sound', 'normal') == mode %} is-active{% endif %}"
-                          data-notify-sound="message"
-                          data-notify-mode="{{ mode }}"
-                          aria-pressed="{{ 'true' if od.get('notify_message_sound', 'normal') == mode else 'false' }}">
-                    {{ T("options_notify_sound_" ~ mode) }}
-                  </button>
-                  {% endfor %}
-                </div>
+                <label class="gc-options-sound-slider">
+                  <span class="visually-hidden">{{ T("options_sound_volume") }}</span>
+                  <input type="range"
+                         min="0" max="100" step="1"
+                         value="{{ (message_vol * 100)|round|int }}"
+                         data-notify-sound="message"
+                         aria-label="{{ T('options_notify_message_title') }}">
+                  <span class="gc-options-sound-pct gc-mono" data-notify-sound-pct="message">{{ (message_vol * 100)|round|int }}%</span>
+                </label>
               </div>
               <div class="gc-options-notify-row">
                 <span class="gc-options-label">{{ T("options_sfx_ui_title") }}</span>
-                <div class="gc-options-sound-toggle" role="group" aria-label="{{ T('options_sfx_ui_title') }}">
-                  {% for mode in ['off', 'quiet', 'normal'] %}
-                  <button type="button"
-                          class="gc-btn gc-btn-sm gc-options-sound-btn{% if od.get('sfx_ui_sound', 'normal') == mode %} is-active{% endif %}"
-                          data-notify-sound="ui"
-                          data-notify-mode="{{ mode }}"
-                          aria-pressed="{{ 'true' if od.get('sfx_ui_sound', 'normal') == mode else 'false' }}">
-                    {{ T("options_notify_sound_" ~ mode) }}
-                  </button>
-                  {% endfor %}
-                </div>
+                <label class="gc-options-sound-slider">
+                  <span class="visually-hidden">{{ T("options_sound_volume") }}</span>
+                  <input type="range"
+                         min="0" max="100" step="1"
+                         value="{{ (ui_vol * 100)|round|int }}"
+                         data-notify-sound="ui"
+                         aria-label="{{ T('options_sfx_ui_title') }}">
+                  <span class="gc-options-sound-pct gc-mono" data-notify-sound-pct="ui">{{ (ui_vol * 100)|round|int }}%</span>
+                </label>
               </div>
               <div class="gc-options-notify-row">
                 <span class="gc-options-label">{{ T("options_sfx_combat_title") }}</span>
-                <div class="gc-options-sound-toggle" role="group" aria-label="{{ T('options_sfx_combat_title') }}">
-                  {% for mode in ['off', 'quiet', 'normal'] %}
-                  <button type="button"
-                          class="gc-btn gc-btn-sm gc-options-sound-btn{% if od.get('sfx_combat_sound', 'normal') == mode %} is-active{% endif %}"
-                          data-notify-sound="combat"
-                          data-notify-mode="{{ mode }}"
-                          aria-pressed="{{ 'true' if od.get('sfx_combat_sound', 'normal') == mode else 'false' }}">
-                    {{ T("options_notify_sound_" ~ mode) }}
-                  </button>
-                  {% endfor %}
-                </div>
+                <label class="gc-options-sound-slider">
+                  <span class="visually-hidden">{{ T("options_sound_volume") }}</span>
+                  <input type="range"
+                         min="0" max="100" step="1"
+                         value="{{ (combat_vol * 100)|round|int }}"
+                         data-notify-sound="combat"
+                         aria-label="{{ T('options_sfx_combat_title') }}">
+                  <span class="gc-options-sound-pct gc-mono" data-notify-sound-pct="combat">{{ (combat_vol * 100)|round|int }}%</span>
+                </label>
               </div>
               <p class="gc-options-form-hint gc-options-notify-hint" id="options-notify-hint" role="status" aria-live="polite" hidden></p>
             </div>

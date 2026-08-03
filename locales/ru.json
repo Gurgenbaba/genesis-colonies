@@ -4264,7 +4264,7 @@
   "options_error_invalid_email": "Неверный адрес электронной почты.",
   "options_error_invalid_locale": "Неверный язык.",
   "options_error_invalid_name": "Недопустимое имя (2–32 символа; только буквы, цифры, пробелы - . _).",
-  "options_error_invalid_notify_sound": "Недопустимая настройка звука.",
+  "options_error_invalid_notify_sound": "Недопустимая настройка громкости.",
   "options_error_invalid_spy_probes": "Недопустимое количество шпионских зондов.",
   "options_error_name_taken": "Это имя уже занято.",
   "options_error_password_mismatch": "Пароли не совпадают.",
@@ -4288,10 +4288,7 @@
   "options_not_set": "—",
   "options_notify_attack_title": "Тревога атаки",
   "options_notify_message_title": "Звук сообщений",
-  "options_notify_sound_normal": "Обычно",
-  "options_notify_sound_off": "Выкл.",
-  "options_notify_sound_quiet": "Тихо",
-  "options_notify_subtitle": "Отдельно настройте тревогу атаки, сообщения, UI и боевые звуки.",
+  "options_notify_subtitle": "Отдельно настройте громкость тревог, сообщений, UI и боя.",
   "options_notify_title": "Звуки и уведомления",
   "options_password": "Пароль",
   "options_placeholder_email": "командир@генезис-кластер …",
@@ -8045,5 +8042,6 @@
   "codex_faq_general_faq_2_a": "Панель Кодекса, краткая справка по страницам и этот FAQ. Подробности о боях и выставках также попадают в сообщения.",
   "codex_faq_general_tip_0": "Начните с обзора и стабилизируйте производство Ковчега перед расширением.",
   "codex_faq_general_tip_1": "Прежде чем тратить ресурсы, проверьте переключатель планет в заголовке.",
-  "codex_faq_general_tip_2": "Заблокированные записи Кодекса содержат тизер — посетите соответствующую страницу или вырастите Ковчег."
+  "codex_faq_general_tip_2": "Заблокированные записи Кодекса содержат тизер — посетите соответствующую страницу или вырастите Ковчег.",
+  "options_sound_volume": "Громкость"
 }
