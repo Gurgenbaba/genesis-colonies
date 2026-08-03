@@ -2178,6 +2178,13 @@
   };
 
   GC.cleanupPage = function cleanupPage(opts = {}) {
+    // Hard-stop Story Ops Killian before any DOM tear-down (PJAX leave).
+    try {
+      if (typeof GC.storyTtsStop === "function") GC.storyTtsStop();
+    } catch (_) {}
+    try {
+      document.dispatchEvent(new CustomEvent("gc:before-navigate", { bubbles: true }));
+    } catch (_) {}
     const preserveGameLoop = Boolean(opts.preserveGameLoop);
     console.debug("[GC] cleanupPage", preserveGameLoop ? "(preserve game loop)" : "");
     if (!preserveGameLoop) abortInFlightGameStateFetches();
@@ -20787,6 +20794,9 @@
   let _storyTtsSpeakTimer = null;
   let _storyTtsSession = 0;
   let _storyTtsAbort = null;
+  let _storyTtsTransport = "idle"; // idle | speaking | paused
+  let _storyTtsLeaveGuardsBound = false;
+
   let _storyFocus = { pack_id: "", arc_id: "" };
 
   function _storyFocusLoad() {
@@ -20838,11 +20848,52 @@
     return document.querySelector("#story-ops-page [data-story-orb]");
   }
 
+  function _storyTtsSyncTransportUi() {
+    const page = document.getElementById("story-ops-page");
+    if (!page) return;
+    const playBtn = page.querySelector("[data-story-tts-play]");
+    if (!playBtn) return;
+    const playIcon = playBtn.querySelector("[data-story-tts-icon-play]");
+    const pauseIcon = playBtn.querySelector("[data-story-tts-icon-pause]");
+    const speaking = _storyTtsTransport === "speaking";
+    const paused = _storyTtsTransport === "paused";
+    if (playIcon) playIcon.hidden = speaking;
+    if (pauseIcon) pauseIcon.hidden = !speaking;
+    playBtn.classList.toggle("is-playing", speaking);
+    playBtn.setAttribute("data-story-tts-transport", _storyTtsTransport);
+    const label = speaking
+      ? t("story_tts_pause", "Pause")
+      : (paused ? t("story_tts_resume", "Fortsetzen") : t("story_tts_play", "Abspielen"));
+    playBtn.setAttribute("aria-label", label);
+    playBtn.setAttribute("title", label);
+  }
+
+  function _storyTtsSetTransport(state) {
+    _storyTtsTransport = state === "speaking" || state === "paused" ? state : "idle";
+    _storyTtsSyncTransportUi();
+  }
+
   function _storyOrbSetState(state) {
     const orb = _storyOrbEl();
-    if (!orb) return;
-    orb.classList.toggle("is-speaking", state === "speaking");
-    orb.classList.toggle("is-paused", state === "paused");
+    if (orb) {
+      orb.classList.toggle("is-speaking", state === "speaking");
+      orb.classList.toggle("is-paused", state === "paused");
+    }
+    if (state === "speaking") _storyTtsSetTransport("speaking");
+    else if (state === "paused") _storyTtsSetTransport("paused");
+    else _storyTtsSetTransport("idle");
+  }
+
+  function _storyTtsBindLeaveGuards() {
+    if (_storyTtsLeaveGuardsBound) return;
+    _storyTtsLeaveGuardsBound = true;
+    const hardStop = () => {
+      try { _storyTtsStop(); } catch (_) {}
+    };
+    window.addEventListener("pagehide", hardStop);
+    window.addEventListener("beforeunload", hardStop);
+    // PJAX leaves Story Ops: page node is gone — kill Killian immediately.
+    document.addEventListener("gc:before-navigate", hardStop);
   }
 
   function _storyTtsStop() {
@@ -20871,6 +20922,7 @@
     _storyOrbSetState("idle");
     _storyTtsSyncSeekButton();
   }
+  GC.storyTtsStop = _storyTtsStop;
 
   function _storyTtsPause() {
     if (_storyAudio) {
@@ -20961,7 +21013,9 @@
     const audio = new Audio(_storyAudioUrl);
     audio.volume = Math.max(0, Math.min(1, Number(volume) || 0.85));
     audio.onended = () => {
-      if (session === _storyTtsSession) _storyOrbSetState("idle");
+      if (session !== _storyTtsSession) return;
+      _storyOrbSetState("idle");
+      _storyTtsMaybeAutoAdvance(session);
     };
     audio.onpause = () => {
       if (session !== _storyTtsSession) return;
@@ -21023,7 +21077,9 @@
       if (session === _storyTtsSession) _storyOrbSetState("speaking");
     };
     u.onend = () => {
-      if (session === _storyTtsSession) _storyOrbSetState("idle");
+      if (session !== _storyTtsSession) return;
+      _storyOrbSetState("idle");
+      _storyTtsMaybeAutoAdvance(session);
     };
     u.onerror = () => {
       if (session === _storyTtsSession) _storyOrbSetState("idle");
@@ -21079,6 +21135,95 @@
     }
   }
 
+  function _storyTtsMaybeAutoAdvance(session) {
+    if (session !== _storyTtsSession) return;
+    const page = document.getElementById("story-ops-page");
+    if (!page) return;
+    const st = parseStoryOpsPageState();
+    const focus = st && st.focus;
+    const beat = focus && focus.beat;
+    // Only continue past pure transmissions — never skip objectives/choices.
+    if (!beat || beat.type !== "transmission") return;
+    const btn = page.querySelector("[data-story-advance]");
+    if (!btn || btn.disabled || btn.hidden) return;
+    window.setTimeout(() => {
+      if (session !== _storyTtsSession) return;
+      if (_storyTtsTransport === "speaking" || _storyTtsTransport === "paused") return;
+      const live = document.getElementById("story-ops-page");
+      if (!live) return;
+      const liveBtn = live.querySelector("[data-story-advance]");
+      if (!liveBtn || liveBtn.disabled) return;
+      try { liveBtn.click(); } catch (_) {}
+    }, 450);
+  }
+
+  function _storyRenderLorePanel(state) {
+    const page = document.getElementById("story-ops-page");
+    if (!page) return;
+    const root = page.querySelector("[data-story-lore]");
+    if (!root) return;
+    const frags = Array.isArray(state && state.lore_fragments) ? state.lore_fragments : [];
+    const earned = (state && state.earned_rewards) || {};
+    const ark = Math.max(0, Math.trunc(Number(earned.ark_tokens) || 0));
+    const items = Array.isArray(earned.items) ? earned.items : [];
+    const has = frags.length > 0 || ark > 0 || items.length > 0;
+    root.hidden = !has;
+    if (!has) return;
+
+    const meta = root.querySelector("[data-story-lore-meta]");
+    if (meta) {
+      const parts = [];
+      if (frags.length) {
+        parts.push(`${frags.length} ${t("story_lore_count_label", "Fragmente")}`);
+      }
+      if (ark > 0) {
+        parts.push(`+${fmtNumber(ark)} ${t("inv_ark_token", "Ark-Token")}`);
+      }
+      if (items.length) {
+        parts.push(`${items.length} ${t("story_lore_rewards_label", "Belohnungen")}`);
+      }
+      meta.textContent = parts.join(" · ");
+    }
+
+    const rewardsEl = root.querySelector("[data-story-lore-rewards]");
+    if (rewardsEl) {
+      if (ark > 0 || items.length) {
+        rewardsEl.hidden = false;
+        const rows = [];
+        if (ark > 0) {
+          rows.push(`<li>+${escapeHtml(fmtNumber(ark))} ${escapeHtml(t("inv_ark_token", "Ark-Token"))}</li>`);
+        }
+        items.forEach((it) => {
+          const amt = Math.max(1, Math.trunc(Number(it.amount) || 1));
+          const label = String(it.label || it.item_key || "");
+          rows.push(`<li>+${escapeHtml(fmtNumber(amt))} ${escapeHtml(label)}</li>`);
+        });
+        rewardsEl.innerHTML =
+          `<p class="story-lore-rewards__title gc-mono">${escapeHtml(t("story_lore_rewards_title", "Erhaltene Belohnungen"))}</p>`
+          + `<ul class="story-lore-rewards__list">${rows.join("")}</ul>`;
+      } else {
+        rewardsEl.hidden = true;
+        rewardsEl.innerHTML = "";
+      }
+    }
+
+    const list = root.querySelector("[data-story-lore-list]");
+    const empty = root.querySelector("[data-story-lore-empty]");
+    if (list) {
+      if (frags.length) {
+        list.innerHTML = frags.map((frag) => (
+          `<li class="story-lore-item"><strong>${escapeHtml(frag.title || "")}</strong>`
+          + `<p>${escapeHtml(frag.body || "")}</p></li>`
+        )).join("");
+        list.hidden = false;
+      } else {
+        list.innerHTML = "";
+        list.hidden = true;
+      }
+    }
+    if (empty) empty.hidden = frags.length > 0;
+  }
+
   function _storyTtsScheduleAutoSpeak(script) {
     if (_storyTtsSpeakTimer) {
       clearTimeout(_storyTtsSpeakTimer);
@@ -21129,29 +21274,33 @@
     if (volVal) volVal.textContent = `${Math.round(prefs.volume * 100)}%`;
     if (auto) auto.checked = !!prefs.auto;
     const label = page.querySelector(".story-tts__section-label") || page.querySelector(".story-tts__label");
-    if (label) label.textContent = t("story_tts_console", "Übertragungskonsole");
+    if (label) label.textContent = t("story_tts_console", "Übertragung");
     const tag = page.querySelector(".story-tts__console-tag");
-    if (tag) tag.textContent = t("story_tts_bender_label", "Neural Contact Voice");
-    [
-      ["[data-story-tts-seek-back]", "story_tts_seek_back", "−10 s"],
-      ["[data-story-tts-play]", "story_tts_play", "Abspielen"],
-      ["[data-story-tts-pause]", "story_tts_pause", "Pause"],
-      ["[data-story-tts-resume]", "story_tts_resume", "Fortsetzen"],
-      ["[data-story-tts-stop]", "story_tts_stop", "Stop"],
-    ].forEach(([sel, key, fb]) => {
-      const btn = page.querySelector(sel);
-      if (btn) btn.textContent = t(key, fb);
-    });
-    const volLabel = page.querySelector(".story-tts__vol-label");
-    if (volLabel) volLabel.textContent = t("story_tts_volume", "Lautstärke");
-    const autoSpan = page.querySelector(".story-tts__auto span");
-    if (autoSpan) autoSpan.textContent = t("story_tts_auto", "Neue Übertragungen automatisch vorlesen");
+    if (tag) tag.textContent = t("story_tts_bender_label", "Killian");
+    const autoShort = page.querySelector(".story-tts__auto-short");
+    if (autoShort) autoShort.textContent = t("story_tts_auto_short", "AUTO");
+    const autoLabel = page.querySelector(".story-tts__auto");
+    if (autoLabel) {
+      autoLabel.setAttribute("title", t("story_tts_auto", "Neue Übertragungen automatisch vorlesen"));
+    }
+    const seek = page.querySelector("[data-story-tts-seek-back]");
+    if (seek) {
+      seek.setAttribute("aria-label", t("story_tts_seek_back", "−10 s"));
+      seek.setAttribute("title", t("story_tts_seek_back_hint", "10 Sekunden zurück (nur Neural-Audio)"));
+    }
+    const stop = page.querySelector("[data-story-tts-stop]");
+    if (stop) {
+      stop.setAttribute("aria-label", t("story_tts_stop", "Stop"));
+      stop.setAttribute("title", t("story_tts_stop", "Stop"));
+    }
     const hint = page.querySelector("[data-story-tts-hint]");
     if (hint) {
       hint.textContent = _storyNeuralEnabled(page)
-        ? t("story_tts_hint_neural", "Neurale Kontaktstimme (Killian). Natürliches Tempo, Absätze mit Pause — Kontaktkanal, kein Otto.")
+        ? t("story_tts_hint_neural", "Neurale Kontaktstimme (Killian). Absätze mit Pause — Kontaktkanal.")
         : t("story_tts_hint_missing", "Neural-TTS nicht installiert (pip install edge-tts). Fallback: Browser-Stimme.");
+      if (tag) tag.setAttribute("title", hint.textContent);
     }
+    _storyTtsSyncTransportUi();
     _storyTtsSyncSeekButton();
   }
 
@@ -21441,6 +21590,7 @@
       const bal = freeShop ? Number(freeShop.balance) || 0 : 0;
       arkBal.innerHTML = `${escapeHtml(t("free_shop_balance", "Bestand"))}: <strong>${fmtNumber(bal)}</strong> ${escapeHtml(label)}`;
     }
+    _storyRenderLorePanel(state);
     if (missionRow) {
       const missionVisible = !!(missionEl && !missionEl.hidden);
       const rewardVisible = !!(rewardEl && !rewardEl.hidden);
@@ -21542,11 +21692,17 @@
       }
       if (ev.target.closest("[data-story-tts-play]")) {
         ev.preventDefault();
+        if (_storyTtsTransport === "speaking") {
+          _storyTtsPause();
+          return;
+        }
+        if (_storyTtsTransport === "paused") {
+          _storyTtsResume();
+          return;
+        }
         void _storyTtsSpeakText(_storyTtsCurrentScript());
         return;
       }
-      if (ev.target.closest("[data-story-tts-pause]")) { ev.preventDefault(); _storyTtsPause(); return; }
-      if (ev.target.closest("[data-story-tts-resume]")) { ev.preventDefault(); _storyTtsResume(); return; }
       if (ev.target.closest("[data-story-tts-stop]")) { ev.preventDefault(); _storyTtsStop(); return; }
 
       const advanceBtn = ev.target.closest("[data-story-advance]");
@@ -21684,6 +21840,13 @@
 
   function initStoryOps() {
     bindStoryOpsOnce();
+    _storyTtsBindLeaveGuards();
+    // Always register leave-stop — even if story pack is not ready yet.
+    GC.registerCleanup(() => {
+      _storyTtsStop();
+      _storyTtsLastFingerprint = "";
+      _storyCarouselUnbindPage();
+    });
     const page = document.getElementById("story-ops-page");
     if (!page || page.dataset.ready !== "1") return;
     _storyFocus = _storyFocusLoad();
@@ -21691,11 +21854,6 @@
     _storyCarouselBindPage(page);
     const state = parseStoryOpsPageState();
     if (state) _renderStoryOpsState(state);
-    GC.registerCleanup(() => {
-      _storyTtsStop();
-      _storyTtsLastFingerprint = "";
-      _storyCarouselUnbindPage();
-    });
   }
 
   function parseGalacticPoliticsPageState() {

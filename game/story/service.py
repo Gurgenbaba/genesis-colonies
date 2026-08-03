@@ -104,6 +104,7 @@ def get_story_state(
             "flags": {},
             "focus": None,
             "lore_fragments": [],
+            "earned_rewards": {"ark_tokens": 0, "items": [], "fragment_count": 0},
             "tts": {"neural": False},
             "narrator": None,
         }
@@ -206,6 +207,7 @@ def get_story_state(
         "focus": focus,
         "idle": idle,
         "lore_fragments": _lore_fragments(flags),
+        "earned_rewards": _earned_rewards_summary(flags),
         "free_shop": free_shop,
         "narrator": narrator,
         "tts": {"neural": bool(tts_available()), "provider": "edge-tts" if tts_available() else "none"},
@@ -382,6 +384,62 @@ def _lore_fragments(flags: Dict[str, str]) -> List[Dict[str, str]]:
             }
         )
     return out
+
+
+def _earned_rewards_summary(flags: Dict[str, str]) -> Dict[str, Any]:
+    """Aggregate Story Ops grants the player already received (for the lore drawer)."""
+    from .packs import load_all_packs
+    from .rewards import chapter_ark_token_amount, chapter_receipt_flag
+
+    flag_set = set(flags.keys())
+    ark_tokens = 0
+    items: Dict[str, int] = {}
+    item_labels: Dict[str, str] = {}
+
+    for pack_id, pack in load_all_packs().items():
+        for arc in pack.get("arcs") or []:
+            arc_id = str(arc.get("arc_id") or "")
+            if not arc_id:
+                continue
+            for ci, _ch in enumerate(arc.get("chapters") or []):
+                receipt = chapter_receipt_flag(str(pack_id), arc_id, ci)
+                if receipt in flag_set:
+                    ark_tokens += int(chapter_ark_token_amount(arc, ci, pack=pack) or 0)
+            for ch in arc.get("chapters") or []:
+                for beat in (ch or {}).get("beats") or []:
+                    if str((beat or {}).get("type") or "") != "reward":
+                        continue
+                    grants = list((beat or {}).get("grants") or [])
+                    gate_flags = [
+                        str(g.get("flag") or "").strip()
+                        for g in grants
+                        if str(g.get("kind") or "") in ("flag", "codex_flag")
+                        and str(g.get("flag") or "").strip()
+                    ]
+                    if gate_flags and not any(f in flag_set for f in gate_flags):
+                        continue
+                    if not gate_flags:
+                        continue
+                    for g in grants:
+                        if str(g.get("kind") or "") != "inventory":
+                            continue
+                        key = str(g.get("item_key") or "").strip()
+                        if not key:
+                            continue
+                        amt = max(1, int(g.get("amount") or 1))
+                        items[key] = int(items.get(key) or 0) + amt
+                        if key not in item_labels:
+                            item_labels[key] = _t(f"inv_{key}", key.replace("_", " ").title())
+
+    item_rows = [
+        {"item_key": k, "amount": int(items[k]), "label": item_labels.get(k) or k}
+        for k in sorted(items.keys())
+    ]
+    return {
+        "ark_tokens": int(ark_tokens),
+        "items": item_rows,
+        "fragment_count": sum(1 for f in flag_set if str(f).startswith("codex_")),
+    }
 
 
 def admin_preview_packs() -> Dict[str, Any]:

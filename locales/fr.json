@@ -6044,7 +6044,7 @@
   "story_no_arcs": "Pas encore d'arcs.",
   "story_status_live": "CHAÎNE EN DIRECT",
   "story_tts_auto": "Lire automatiquement les nouvelles transmissions",
-  "story_tts_bender_label": "Contact vocal Killian",
+  "story_tts_bender_label": "Killian",
   "story_tts_empty": "Aucun texte diffusé à lire à haute voix.",
   "story_tts_hint": "Voix de contact robotique (navigateur TTS). Pas de voix de personnage officielle – Protocole d’immersion de style Bender.",
   "story_tts_pause": "Pause",
@@ -7574,7 +7574,7 @@
   "story_reward_title": "Récompenses",
   "story_reward_auto_hint": "Les récompenses d’histoire sont accordées automatiquement côté serveur — pas de réclamation manuelle.",
   "story_narrator_commander": "Ton commandant",
-  "story_tts_console": "Console de transmission",
+  "story_tts_console": "Transmission",
   "timekeeper_apply_unavailable": "Timekeeper indisponible pour le moment.",
   "options_sfx_ui_title": "Effets UI",
   "options_sfx_combat_title": "Théâtre de combat",
@@ -7639,5 +7639,10 @@
   "cb_copy_code": "Copier le code",
   "cb_code_copied": "Code copié.",
   "nav_badge_inventory_aria": "Battles Relikt-Arena ouvertes",
-  "story_tts_neural_failed": "Voix de contact (Killian) indisponible. Réessayez — pas de secours navigateur."
+  "story_tts_neural_failed": "Voix de contact (Killian) indisponible. Réessayez — pas de secours navigateur.",
+  "story_tts_auto_short": "AUTO",
+  "story_lore_count_label": "fragments",
+  "story_lore_rewards_label": "récompenses",
+  "story_lore_rewards_title": "Récompenses obtenues",
+  "story_lore_empty": "Aucun fragment de codex débloqué."
 }

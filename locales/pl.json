@@ -6044,7 +6044,7 @@
   "story_no_arcs": "Nie ma jeszcze łuków.",
   "story_status_live": "KANAŁ NA ŻYWO",
   "story_tts_auto": "Automatycznie odczytaj nowe transmisje",
-  "story_tts_bender_label": "Głos kontaktowy Killian",
+  "story_tts_bender_label": "Killian",
   "story_tts_empty": "Brak nadawanego tekstu do odczytania na głos.",
   "story_tts_hint": "Robotyczny głos kontaktowy (przeglądarka TTS). Brak oficjalnego głosu postaci — protokół zanurzenia w stylu Bendera.",
   "story_tts_pause": "Pause",
@@ -7574,7 +7574,7 @@
   "story_reward_title": "Nagrody",
   "story_reward_auto_hint": "Nagrody fabularne są przyznawane automatycznie po stronie serwera — bez ręcznego odbioru.",
   "story_narrator_commander": "Twój dowódca",
-  "story_tts_console": "Konsola transmisji",
+  "story_tts_console": "Transmisja",
   "timekeeper_apply_unavailable": "Timekeeper jest teraz niedostępny.",
   "options_sfx_ui_title": "Efekty UI",
   "options_sfx_combat_title": "Teatr walki",
@@ -7639,5 +7639,10 @@
   "cb_copy_code": "Kopiuj kod",
   "cb_code_copied": "Kod skopiowany.",
   "nav_badge_inventory_aria": "Otwarte bitwy Areny Reliktów",
-  "story_tts_neural_failed": "Głos kontaktu (Killian) niedostępny. Spróbuj ponownie — bez zapasowego TTS przeglądarki."
+  "story_tts_neural_failed": "Głos kontaktu (Killian) niedostępny. Spróbuj ponownie — bez zapasowego TTS przeglądarki.",
+  "story_tts_auto_short": "AUTO",
+  "story_lore_count_label": "fragmenty",
+  "story_lore_rewards_label": "nagrody",
+  "story_lore_rewards_title": "Zdobyte nagrody",
+  "story_lore_empty": "Brak odblokowanych fragmentów kodeksu."
 }

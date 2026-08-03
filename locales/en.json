@@ -6044,7 +6044,7 @@
   "story_no_arcs": "No arcs yet.",
   "story_status_live": "LIVE CHANNEL",
   "story_tts_auto": "Auto-speak new transmissions",
-  "story_tts_bender_label": "Contact Voice",
+  "story_tts_bender_label": "Killian",
   "story_tts_empty": "No transmission text to speak.",
   "story_tts_hint": "Robotic contact voice (browser TTS). Not an official character voice — a Bender-style protocol for immersion.",
   "story_tts_pause": "Pause",
@@ -7574,7 +7574,7 @@
   "story_reward_title": "Rewards",
   "story_reward_auto_hint": "Story rewards are granted automatically on the server — no manual claim.",
   "story_narrator_commander": "Your Commander",
-  "story_tts_console": "Transmission Console",
+  "story_tts_console": "Transmission",
   "timekeeper_apply_unavailable": "Timekeeper cannot be applied right now.",
   "options_sfx_ui_title": "UI effects",
   "options_sfx_combat_title": "Combat theater",
@@ -7639,5 +7639,10 @@
   "cb_copy_code": "Copy code",
   "cb_code_copied": "Code copied.",
   "nav_badge_inventory_aria": "Open Relic Arena battles",
-  "story_tts_neural_failed": "Contact voice (Killian) unavailable right now. Please retry — no browser fallback."
+  "story_tts_neural_failed": "Contact voice (Killian) unavailable right now. Please retry — no browser fallback.",
+  "story_tts_auto_short": "AUTO",
+  "story_lore_count_label": "fragments",
+  "story_lore_rewards_label": "rewards",
+  "story_lore_rewards_title": "Rewards earned",
+  "story_lore_empty": "No codex fragments unlocked yet."
 }

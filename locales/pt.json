@@ -6044,7 +6044,7 @@
   "story_no_arcs": "Nenhum arco ainda.",
   "story_status_live": "CANAL AO VIVO",
   "story_tts_auto": "Leia automaticamente novas transmissões",
-  "story_tts_bender_label": "Voz de contato Killian",
+  "story_tts_bender_label": "Killian",
   "story_tts_empty": "Nenhum texto transmitido para ler em voz alta.",
   "story_tts_hint": "Voz de contato robótico (TTS do navegador). Nenhuma voz oficial do personagem – protocolo estilo Bender para imersão.",
   "story_tts_pause": "Pause",
@@ -7574,7 +7574,7 @@
   "story_reward_title": "Recompensas",
   "story_reward_auto_hint": "As recompensas da história são concedidas automaticamente no servidor — sem reivindicação manual.",
   "story_narrator_commander": "O teu comandante",
-  "story_tts_console": "Consola de transmissão",
+  "story_tts_console": "Transmissão",
   "timekeeper_apply_unavailable": "Timekeeper não pode ser aplicado agora.",
   "options_sfx_ui_title": "Efeitos de UI",
   "options_sfx_combat_title": "Teatro de combate",
@@ -7639,5 +7639,10 @@
   "cb_copy_code": "Copiar código",
   "cb_code_copied": "Código copiado.",
   "nav_badge_inventory_aria": "Battles abertas da Arena de Relíquias",
-  "story_tts_neural_failed": "Voz de contacto (Killian) indisponível. Tente novamente — sem fallback do browser."
+  "story_tts_neural_failed": "Voz de contacto (Killian) indisponível. Tente novamente — sem fallback do browser.",
+  "story_tts_auto_short": "AUTO",
+  "story_lore_count_label": "fragmentos",
+  "story_lore_rewards_label": "recompensas",
+  "story_lore_rewards_title": "Recompensas obtidas",
+  "story_lore_empty": "Ainda sem fragmentos do códice."
 }

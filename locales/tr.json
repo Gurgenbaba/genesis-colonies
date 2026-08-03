@@ -6044,7 +6044,7 @@
   "story_no_arcs": "Henüz yay yok.",
   "story_status_live": "CANLI KANAL",
   "story_tts_auto": "Yeni iletimleri otomatik olarak oku",
-  "story_tts_bender_label": "İletişim sesi Killian",
+  "story_tts_bender_label": "Killian",
   "story_tts_empty": "Yüksek sesle okunacak yayın metni yok.",
   "story_tts_hint": "Robotik iletişim sesi (tarayıcı TTS). Resmi karakter sesi yok - Sürükleme için Bender tarzı protokol.",
   "story_tts_pause": "Pause",
@@ -7574,7 +7574,7 @@
   "story_reward_title": "Ödüller",
   "story_reward_auto_hint": "Hikâye ödülleri sunucu tarafında otomatik verilir — manuel talep yok.",
   "story_narrator_commander": "Komutanın",
-  "story_tts_console": "İletim konsolu",
+  "story_tts_console": "İletim",
   "timekeeper_apply_unavailable": "Timekeeper şu anda uygulanamıyor.",
   "options_sfx_ui_title": "UI efektleri",
   "options_sfx_combat_title": "Savaş tiyatrosu",
@@ -7639,5 +7639,10 @@
   "cb_copy_code": "Kodu kopyala",
   "cb_code_copied": "Kod kopyalandı.",
   "nav_badge_inventory_aria": "Açık Kalıntı Arenası battle’ları",
-  "story_tts_neural_failed": "İletişim sesi (Killian) şu an yok. Yeniden deneyin — tarayıcı yedek sesi yok."
+  "story_tts_neural_failed": "İletişim sesi (Killian) şu an yok. Yeniden deneyin — tarayıcı yedek sesi yok.",
+  "story_tts_auto_short": "OTOMATİK",
+  "story_lore_count_label": "parça",
+  "story_lore_rewards_label": "ödüller",
+  "story_lore_rewards_title": "Kazanılan ödüller",
+  "story_lore_empty": "Henüz kodeks parçası açılmadı."
 }

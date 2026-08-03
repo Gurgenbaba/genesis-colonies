@@ -6044,7 +6044,7 @@
   "story_no_arcs": "Noch keine Arcs.",
   "story_status_live": "LIVE-KANAL",
   "story_tts_auto": "Neue Übertragungen automatisch vorlesen",
-  "story_tts_bender_label": "Kontaktstimme Killian",
+  "story_tts_bender_label": "Killian",
   "story_tts_empty": "Kein Übertragungstext zum Vorlesen.",
   "story_tts_hint": "Robotische Kontaktstimme (Browser-TTS). Keine offizielle Charakterstimme — Bender-Style-Protokoll für Immersion.",
   "story_tts_pause": "Pause",
@@ -7574,7 +7574,7 @@
   "story_reward_title": "Belohnungen",
   "story_reward_auto_hint": "Story-Belohnungen werden serverseitig automatisch gutgeschrieben — kein manueller Claim.",
   "story_narrator_commander": "Dein Commander",
-  "story_tts_console": "Übertragungskonsole",
+  "story_tts_console": "Übertragung",
   "timekeeper_apply_unavailable": "Timekeeper gerade nicht anwendbar.",
   "options_sfx_ui_title": "UI-Effekte",
   "options_sfx_combat_title": "Kampftheater",
@@ -7639,5 +7639,10 @@
   "cb_copy_code": "Code kopieren",
   "cb_code_copied": "Code kopiert.",
   "nav_badge_inventory_aria": "Offene Relikt-Arena Battles",
-  "story_tts_neural_failed": "Kontaktstimme (Killian) gerade nicht erreichbar. Bitte erneut versuchen — kein Browser-Fallback."
+  "story_tts_neural_failed": "Kontaktstimme (Killian) gerade nicht erreichbar. Bitte erneut versuchen — kein Browser-Fallback.",
+  "story_tts_auto_short": "AUTO",
+  "story_lore_count_label": "Fragmente",
+  "story_lore_rewards_label": "Belohnungen",
+  "story_lore_rewards_title": "Erhaltene Belohnungen",
+  "story_lore_empty": "Noch keine Codex-Fragmente freigeschaltet."
 }

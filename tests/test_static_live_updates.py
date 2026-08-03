@@ -3147,6 +3147,16 @@ def test_main_js_story_tts_abort_and_stop_on_focus():
     assert "_storyTtsSeekBack" in src
     assert "_storyCarouselUnbindPage" in src
     assert "STORY_CAROUSEL_DOT_MAX = 8" in src
+    assert "GC.storyTtsStop = _storyTtsStop" in src
+    assert "_storyTtsBindLeaveGuards" in src
+    assert "gc:before-navigate" in src
+    assert 'if (typeof GC.storyTtsStop === "function") GC.storyTtsStop()' in src
+    play_click = src.split('closest("[data-story-tts-play]")')[1].split(
+        'closest("[data-story-tts-stop]")'
+    )[0]
+    assert '_storyTtsTransport === "speaking"' in play_click
+    assert "_storyTtsPause()" in play_click
+    assert "_storyTtsResume()" in play_click
     render_tail = src.split("const fp = _storyTtsFingerprint({ focus })")[1].split("let _storyOpsBound")[0]
     assert "fpChanged" in render_tail
     assert "skipAutoSpeak" in render_tail
@@ -3166,12 +3176,24 @@ def test_story_ops_template_center_focus_contracts():
     assert "story-holo" in html
     assert "story-tx__atmos" in html
     assert "story-tts--console" in html
+    assert "story-tts--compact" in html
+    assert "story-tts__icon-btn" in html
+    assert "data-story-tts-icon-play" in html
+    assert "data-story-tts-icon-pause" in html
+    assert 'data-story-lore' in html
+    assert "story-lore__summary" in html
+    assert 'data-story-lore-rewards' in html
+    assert "_storyTtsMaybeAutoAdvance" in _read("static/main.js")
+    assert "_storyRenderLorePanel" in _read("static/main.js")
     assert "story-speaker__fade" in html
     assert 'data-story-focus-arc' in html
     assert 'data-story-carousel-track' in html
     assert 'data-story-arc-list' in html
     assert 'data-story-tts-seek-back' in html
     assert 'data-story-tts-play' in html
+    assert 'data-story-tts-stop' in html
+    assert 'data-story-tts-pause' not in html
+    assert 'data-story-tts-resume' not in html
     assert 'data-story-advance' in html
     assert 'data-story-actions' in html
     assert "story-ops-toc" not in html

@@ -6044,7 +6044,7 @@
   "story_no_arcs": "Дуг пока нет.",
   "story_status_live": "ЖИВОЙ КАНАЛ",
   "story_tts_auto": "Автоматически считывать новые передачи",
-  "story_tts_bender_label": "Контактный голос Киллиана",
+  "story_tts_bender_label": "Killian",
   "story_tts_empty": "Нет транслируемого текста для чтения вслух.",
   "story_tts_hint": "Роботизированный контактный голос (браузер TTS). Официального голоса персонажа нет — протокол погружения в стиле Бендера.",
   "story_tts_pause": "Pause",
@@ -7574,7 +7574,7 @@
   "story_reward_title": "Награды",
   "story_reward_auto_hint": "Награды сюжета начисляются автоматически на сервере — без ручного получения.",
   "story_narrator_commander": "Твой командир",
-  "story_tts_console": "Консоль передачи",
+  "story_tts_console": "Передача",
   "timekeeper_apply_unavailable": "Timekeeper сейчас недоступен.",
   "options_sfx_ui_title": "UI-эффекты",
   "options_sfx_combat_title": "Боевой театр",
@@ -7639,5 +7639,10 @@
   "cb_copy_code": "Копировать код",
   "cb_code_copied": "Код скопирован.",
   "nav_badge_inventory_aria": "Открытые бои Арены реликвий",
-  "story_tts_neural_failed": "Голос контакта (Killian) сейчас недоступен. Повторите попытку — без браузерного TTS."
+  "story_tts_neural_failed": "Голос контакта (Killian) сейчас недоступен. Повторите попытку — без браузерного TTS.",
+  "story_tts_auto_short": "АВТО",
+  "story_lore_count_label": "фрагменты",
+  "story_lore_rewards_label": "награды",
+  "story_lore_rewards_title": "Полученные награды",
+  "story_lore_empty": "Фрагменты кодекса ещё не открыты."
 }

@@ -122,30 +122,59 @@
 
       <div class="story-tx__rule" aria-hidden="true"></div>
 
-      <div class="story-tts story-tts--console" data-story-tts>
-        <div class="story-tts__console-head">
-          <p class="story-tts__section-label gc-mono">{{ T("story_tts_console", "Übertragungskonsole") }}</p>
-          <span class="story-tts__console-tag gc-mono">{{ T("story_tts_bender_label", "Neural Contact Voice") }}</span>
+      <div class="story-tts story-tts--console story-tts--compact" data-story-tts>
+        <div class="story-tts__rail">
+          <div class="story-tts__meta">
+            <span class="story-tts__section-label gc-mono">{{ T("story_tts_console", "Übertragung") }}</span>
+            <span class="story-tts__console-tag gc-mono" title="{% if neural %}{{ T('story_tts_hint_neural', 'Neurale Kontaktstimme (Killian).') }}{% else %}{{ T('story_tts_hint_missing', 'Neural-TTS nicht installiert.') }}{% endif %}">{{ T("story_tts_bender_label", "Killian") }}</span>
+          </div>
+          <div class="story-tts__btns" role="group" aria-label="{{ T('story_tts_controls', 'Audiosteuerung') }}">
+            <button type="button"
+                    class="story-tts__icon-btn"
+                    data-story-tts-seek-back
+                    disabled
+                    aria-label="{{ T('story_tts_seek_back', '−10 s') }}"
+                    title="{{ T('story_tts_seek_back_hint', '10 Sekunden zurück (nur Neural-Audio)') }}">
+              <svg class="story-tts__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path fill="currentColor" d="M11.5 12 18 7.5v9L11.5 12zm-7 0L11 7.5v9L4.5 12zM3 7h1.5v10H3V7z"/>
+              </svg>
+            </button>
+            <button type="button"
+                    class="story-tts__icon-btn story-tts__icon-btn--primary"
+                    data-story-tts-play
+                    data-story-tts-transport="idle"
+                    aria-label="{{ T('story_tts_play', 'Abspielen') }}"
+                    title="{{ T('story_tts_play', 'Abspielen') }}">
+              <svg class="story-tts__icon story-tts__icon--play" data-story-tts-icon-play viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path fill="currentColor" d="M8 5.5v13l11-6.5L8 5.5z"/>
+              </svg>
+              <svg class="story-tts__icon story-tts__icon--pause" data-story-tts-icon-pause hidden viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path fill="currentColor" d="M7 5h3.5v14H7V5zm6.5 0H17v14h-3.5V5z"/>
+              </svg>
+            </button>
+            <button type="button"
+                    class="story-tts__icon-btn"
+                    data-story-tts-stop
+                    aria-label="{{ T('story_tts_stop', 'Stop') }}"
+                    title="{{ T('story_tts_stop', 'Stop') }}">
+              <svg class="story-tts__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path fill="currentColor" d="M6.5 6.5h11v11h-11z"/>
+              </svg>
+            </button>
+          </div>
+          <label class="story-tts__vol" title="{{ T('story_tts_volume', 'Lautstärke') }}">
+            <span class="story-tts__vol-label visually-hidden">{{ T("story_tts_volume", "Lautstärke") }}</span>
+            <input type="range" min="0" max="100" value="85" step="1" data-story-tts-volume aria-label="{{ T('story_tts_volume', 'Lautstärke') }}">
+            <span class="story-tts__vol-val gc-mono" data-story-tts-volume-val>85%</span>
+          </label>
+          <label class="story-tts__auto" title="{{ T('story_tts_auto', 'Neue Übertragungen automatisch vorlesen') }}">
+            <input type="checkbox" data-story-tts-auto>
+            <span class="story-tts__auto-short gc-mono">{{ T("story_tts_auto_short", "AUTO") }}</span>
+          </label>
         </div>
-        <div class="story-tts__btns" role="group" aria-label="{{ T('story_tts_controls', 'Audiosteuerung') }}">
-          <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-story-tts-seek-back disabled title="{{ T('story_tts_seek_back_hint', '10 Sekunden zurück (nur Neural-Audio)') }}">{{ T("story_tts_seek_back", "−10 s") }}</button>
-          <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-story-tts-play>{{ T("story_tts_play", "Abspielen") }}</button>
-          <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-story-tts-pause>{{ T("story_tts_pause", "Pause") }}</button>
-          <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-story-tts-resume>{{ T("story_tts_resume", "Fortsetzen") }}</button>
-          <button type="button" class="gc-btn gc-btn-sm gc-btn-secondary" data-story-tts-stop>{{ T("story_tts_stop", "Stop") }}</button>
-        </div>
-        <label class="story-tts__vol">
-          <span class="story-tts__vol-label">{{ T("story_tts_volume", "Lautstärke") }}</span>
-          <input type="range" min="0" max="100" value="85" step="1" data-story-tts-volume>
-          <span class="story-tts__vol-val gc-mono" data-story-tts-volume-val>85%</span>
-        </label>
-        <label class="story-tts__auto">
-          <input type="checkbox" data-story-tts-auto>
-          <span>{{ T("story_tts_auto", "Neue Übertragungen automatisch vorlesen") }}</span>
-        </label>
-        <p class="story-tts__hint hint" data-story-tts-hint>
+        <p class="story-tts__hint hint visually-hidden" data-story-tts-hint>
           {% if neural %}
-            {{ T("story_tts_hint_neural", "Neurale Kontaktstimme (Edge TTS). Pause, Fortsetzen und Lautstärke steuern die Wiedergabe.") }}
+            {{ T("story_tts_hint_neural", "Neurale Kontaktstimme (Killian). Absätze mit Pause — Kontaktkanal.") }}
           {% else %}
             {{ T("story_tts_hint_missing", "Neural-TTS nicht installiert (pip install edge-tts). Fallback: Browser-Stimme.") }}
           {% endif %}
@@ -254,19 +283,20 @@
     </div>
   </div>
 
-  {% if st.lore_fragments %}
-  <section class="story-lore gc-panel">
-    <h3 class="story-lore__title">{{ T("story_lore_title", "Freigeschaltete Fragmente") }}</h3>
-    <ul class="story-lore-list" data-story-lore-list>
-      {% for frag in st.lore_fragments %}
-      <li class="story-lore-item">
-        <strong>{{ frag.title }}</strong>
-        <p>{{ frag.body }}</p>
-      </li>
-      {% endfor %}
-    </ul>
-  </section>
-  {% endif %}
+  {% set earned = st.earned_rewards if st.earned_rewards is defined and st.earned_rewards else {'ark_tokens': 0, 'items': []} %}
+  {% set frag_count = (st.lore_fragments|length) if st.lore_fragments else 0 %}
+  {% set has_lore = frag_count > 0 or (earned.ark_tokens|default(0))|int > 0 or (earned.items|default([]))|length > 0 %}
+  <details class="story-lore gc-panel" data-story-lore {% if not has_lore %}hidden{% endif %}>
+    <summary class="story-lore__summary">
+      <span class="story-lore__title">{{ T("story_lore_title", "Freigeschaltete Fragmente") }}</span>
+      <span class="story-lore__meta gc-mono" data-story-lore-meta></span>
+    </summary>
+    <div class="story-lore__body">
+      <div class="story-lore-rewards" data-story-lore-rewards hidden></div>
+      <ul class="story-lore-list" data-story-lore-list></ul>
+      <p class="hint story-lore__empty" data-story-lore-empty hidden>{{ T("story_lore_empty", "Noch keine Codex-Fragmente freigeschaltet.") }}</p>
+    </div>
+  </details>
 
   {% endif %}
 </div>
