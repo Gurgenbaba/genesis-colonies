@@ -83,6 +83,49 @@
   };
 
   let _active = null;
+  let _fightAudios = [];
+
+  /** One-shot SFX pool — one random clip per salvo (attacker / defender alternating beats). */
+  const COMBAT_FIGHT_SOUNDS = [
+    "/static/sounds/combat/theater_fight_sound.mp3",
+    "/static/sounds/combat/theater_fight_sound_2.mp3",
+    "/static/sounds/combat/theater_fight_sound_3.mp3",
+  ];
+  const COMBAT_FIGHT_BASE_VOLUME = 0.45;
+
+  function stopFightSounds() {
+    (_fightAudios || []).forEach((audio) => {
+      try {
+        audio.pause();
+        audio.currentTime = 0;
+      } catch (_) {}
+    });
+    _fightAudios = [];
+  }
+
+  function playFightSalvoSound() {
+    try {
+      const volume =
+        typeof GC.sfxVolumeForKind === "function"
+          ? GC.sfxVolumeForKind("combat", COMBAT_FIGHT_BASE_VOLUME)
+          : COMBAT_FIGHT_BASE_VOLUME;
+      if (!(volume > 0)) return;
+      const pool = COMBAT_FIGHT_SOUNDS;
+      if (!pool.length) return;
+      const src = pool[Math.floor(Math.random() * pool.length)];
+      const audio = new Audio(src);
+      audio.volume = volume;
+      _fightAudios.push(audio);
+      const drop = () => {
+        _fightAudios = _fightAudios.filter((a) => a !== audio);
+      };
+      audio.addEventListener("ended", drop, { once: true });
+      const promise = audio.play();
+      if (promise && typeof promise.catch === "function") {
+        promise.catch(drop);
+      }
+    } catch (_) {}
+  }
 
   function t(key, fallback) {
     if (typeof GC.t === "function") return GC.t(key, fallback);
@@ -437,6 +480,7 @@
     const projMount = root.querySelector("[data-ct-projectiles]");
     const arena = root.querySelector("[data-ct-arena]");
     if (!projMount || !arena) return;
+    playFightSalvoSound();
 
     const shipForm = root.querySelector(
       side === "attacker" ? '[data-ct-formation="attacker"]' : '[data-ct-formation="defender"]'
@@ -644,6 +688,7 @@
   }
 
   function stop() {
+    stopFightSounds();
     if (!_active) return;
     (_active.timers || []).forEach((id) => clearTimeout(id));
     if (_active.abort) _active.abort();

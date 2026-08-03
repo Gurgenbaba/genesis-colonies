@@ -1770,6 +1770,8 @@ def test_notify_sound_assets_and_main_js_wiring():
     assert (ROOT / "static/sounds/notify/notify.mp3").is_file()
     assert (ROOT / "static/sounds/notify/message.mp3").is_file()
     assert (ROOT / "static/sounds/combat/theater_fight_sound.mp3").is_file()
+    assert (ROOT / "static/sounds/combat/theater_fight_sound_2.mp3").is_file()
+    assert (ROOT / "static/sounds/combat/theater_fight_sound_3.mp3").is_file()
     assert "function initNotificationSounds()" in src
     assert "GC.initNotificationSounds = initNotificationSounds" in src
     assert "function playNotificationSound(kind)" in src
@@ -1785,9 +1787,14 @@ def test_notify_sound_assets_and_main_js_wiring():
     assert "sfx_combat_sound" in src.split("(function applyClientRuntimeConfig()")[1].split(
         "function gcEscHtml"
     )[0]
-    assert "function playFightSound()" in theater
+    assert "function playFightSalvoSound()" in theater
+    assert "COMBAT_FIGHT_SOUNDS" in theater
     assert 'GC.sfxVolumeForKind("combat", COMBAT_FIGHT_BASE_VOLUME)' in theater
     assert "theater_fight_sound.mp3" in theater
+    assert "theater_fight_sound_2.mp3" in theater
+    assert "theater_fight_sound_3.mp3" in theater
+    assert "playFightSalvoSound()" in theater.split("function fireSalvo(")[1].split("const shipForm")[0]
+    assert "audio.loop = true" not in theater
     assert "incoming_attack_count" in fleet_py
     assert "has_incoming_attack" in fleet_py
     assert "next_attack_arrival" in fleet_py
