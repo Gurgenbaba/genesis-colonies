@@ -16778,10 +16778,19 @@
 
   function _cbBattleCardHtml(battle) {
     if (!battle) return "";
+    const missingContainers = battle.join_blocked_reason === "insufficient_containers"
+      || (battle.case_previews || []).some((c) => c && c.owned === false);
     const cases = (battle.case_previews || []).map((c) => {
       const img = c.image ? `/static/${c.image}` : "";
       const label = t(c.name_key || c.item_key, c.item_key || "");
-      return `<span class="inventory-cb-case-chip" title="${_cbEscape(label)}">${
+      const ownedClass = c.owned === true
+        ? " inventory-cb-case-chip--owned"
+        : (c.owned === false ? " inventory-cb-case-chip--missing" : "");
+      const ownHint = c.owned === true
+        ? t("cb_case_owned", "Vorhanden")
+        : (c.owned === false ? t("cb_case_missing", "Fehlt") : "");
+      const title = ownHint ? `${label} — ${ownHint}` : label;
+      return `<span class="inventory-cb-case-chip${ownedClass}" title="${_cbEscape(title)}" aria-label="${_cbEscape(title)}">${
         img ? `<img src="${_cbEscape(img)}" alt="" width="28" height="28" loading="lazy">` : _cbEscape(c.icon || "📦")
       }</span>`;
     }).join("");
@@ -16791,6 +16800,8 @@
     let action = "";
     if (battle.can_join) {
       action = `<button type="button" class="gc-btn gc-btn-primary gc-btn-xs" data-cb-join="${battle.id}">${t("cb_join_btn", "Beitreten")}</button>`;
+    } else if (battle.join_blocked_reason === "insufficient_containers" && !battle.is_participant && battle.status === "open") {
+      action = `<button type="button" class="gc-btn gc-btn-primary gc-btn-xs" data-cb-join-blocked="${battle.id}" disabled aria-disabled="true" title="${_cbEscape(t("cb_join_need_containers", "Du brauchst alle angezeigten Container."))}">${t("cb_join_btn", "Beitreten")}</button>`;
     } else if (battle.can_cancel) {
       action = `<button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-cb-cancel="${battle.id}">${t("cb_cancel_btn", "Abbrechen")}</button>`;
     } else if (battle.status === "running" && battle.is_participant) {
@@ -16798,6 +16809,9 @@
     } else if (battle.status === "finished") {
       action = `<button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-cb-watch="${battle.id}">${t("cb_history_btn", "Details")}</button>`;
     }
+    const needHint = missingContainers && battle.status === "open" && !battle.is_participant && !battle.can_cancel
+      ? `<p class="inventory-cb-need-hint">${t("cb_join_need_containers", "Du brauchst alle angezeigten Container.")}</p>`
+      : "";
     return `<article class="inventory-cb-card" data-cb-card="${battle.id}" data-status="${_cbEscape(battle.status)}">
       <div class="inventory-cb-card-top">
         <span class="gc-mono">${battle.player_count || 0} / ${battle.player_limit || 2} ${t("cb_commanders", "Commander")}</span>
@@ -16807,6 +16821,7 @@
       <div class="inventory-cb-card-meta">
         <span>${_cbEscape(_cbModeLabel(battle.mode))} · ${_cbEscape(vis)} · ${_cbEscape(_cbStatusLabel(battle.status))}</span>
       </div>
+      ${needHint}
       <div class="inventory-cb-card-actions">${action}</div>
     </article>`;
   }
@@ -17164,7 +17179,10 @@
     }
     if (!res || !res.ok) {
       const msg = (res && (res.message || res.reason)) || t("cb_action_failed", "Aktion fehlgeschlagen.");
-      try { GC.toast && GC.toast(msg, "error"); } catch (_) { /* ignore */ }
+      try {
+        if (typeof showNotify === "function") showNotify(msg, "error");
+        else if (GC.showNotify) GC.showNotify(msg, "error");
+      } catch (_) { /* ignore */ }
     }
     return res;
   }
@@ -17296,6 +17314,17 @@
         const code = input ? String(input.value || "").trim() : "";
         if (!code) return;
         await runCaseBattleAction("/api/case-battles/join", { battle_id: 0, join_code: code });
+        return;
+      }
+
+      const blockedJoin = ev.target.closest("[data-cb-join-blocked]");
+      if (blockedJoin) {
+        ev.preventDefault();
+        const msg = t("cb_join_need_containers", "Du brauchst alle angezeigten Container.");
+        try {
+          if (typeof showNotify === "function") showNotify(msg, "error");
+          else if (GC.showNotify) GC.showNotify(msg, "error");
+        } catch (_) { /* ignore */ }
         return;
       }
 

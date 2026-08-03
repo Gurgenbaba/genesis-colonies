@@ -232,6 +232,43 @@ def test_insufficient_containers_rejected(cb_db):
     assert not ok and reason == "insufficient_containers"
 
 
+def test_join_blocked_when_viewer_lacks_containers(cb_db):
+    host = _player("HostOwn")
+    guest = _player("GuestPoor")
+    cases = ["container_basic", "container_rare"]
+    _grant_cases(host, cases)
+    _grant_cases(guest, ["container_basic"])  # missing rare
+    ok, _, battle = run_inventory_mutation(
+        lambda c: create_battle(host, cases=cases, mode="standard", visibility="public", conn=c)
+    )
+    assert ok
+    bid = int(battle["id"])
+    conn = db()
+    try:
+        payload = get_battle_payload(bid, viewer_id=guest, conn=conn)
+        assert payload["can_join"] is False
+        assert payload["join_blocked_reason"] == "insufficient_containers"
+        owned_flags = [bool(c.get("owned")) for c in payload["case_previews"]]
+        assert owned_flags == [True, False]
+        assert payload["can_afford_cases"] is False
+    finally:
+        conn.close()
+    ok, reason, _ = run_inventory_mutation(lambda c: join_battle(guest, bid, conn=c))
+    assert not ok and reason == "insufficient_containers"
+    _grant_cases(guest, ["container_rare"])
+    conn = db()
+    try:
+        payload = get_battle_payload(bid, viewer_id=guest, conn=conn)
+        assert payload["can_join"] is True
+        assert payload["join_blocked_reason"] is None
+        assert all(c.get("owned") is True for c in payload["case_previews"])
+    finally:
+        conn.close()
+    ok, reason, joined = run_inventory_mutation(lambda c: join_battle(guest, bid, conn=c))
+    assert ok, reason
+    assert joined["status"] == "running"
+
+
 def test_escrow_blocks_normal_open(cb_db):
     uid = _player()
     cases = ["container_rare"]

@@ -267,6 +267,44 @@ def _refund_cases(user_id: int, cases: Sequence[str], *, conn) -> None:
         grant_inventory_item(int(user_id), key, int(need), conn=conn)
 
 
+def _case_preview_rows(
+    cases: Sequence[str],
+    *,
+    viewer_id: Optional[int],
+    conn,
+) -> Tuple[List[Dict[str, Any]], bool]:
+    """Per-slot ownership for lobby chips + whether the viewer can afford the full stake."""
+    keys = [str(k or "").strip() for k in cases if str(k or "").strip()]
+    need = _case_counts(keys)
+    owned_map: Dict[str, int] = {}
+    if viewer_id is not None and int(viewer_id) > 0:
+        for key in need:
+            owned_map[key] = int(inventory_amount(int(viewer_id), key, conn=conn) or 0)
+    remaining = dict(owned_map)
+    rows: List[Dict[str, Any]] = []
+    for key in keys:
+        meta = ITEM_CATALOG.get(key) or {}
+        have_left = int(remaining.get(key) or 0)
+        owned = have_left > 0
+        if owned:
+            remaining[key] = have_left - 1
+        rows.append(
+            {
+                "item_key": key,
+                "battle_value": battle_value_for_container(key),
+                "name_key": meta.get("name_key") or key,
+                "rarity": meta.get("rarity") or "common",
+                "image": meta.get("image"),
+                "icon": meta.get("icon") or "📦",
+                "owned": bool(owned),
+            }
+        )
+    can_afford = all(int(owned_map.get(k) or 0) >= int(n) for k, n in need.items()) if need else True
+    if viewer_id is None or int(viewer_id) <= 0:
+        can_afford = False
+    return rows, bool(can_afford)
+
+
 def _reward_display(reward: Mapping[str, Any]) -> Dict[str, Any]:
     rtype = str(reward.get("reward_type") or "item")
     rkey = str(reward.get("reward_key") or "")
@@ -400,6 +438,23 @@ def _serialize_battle(
         and viewer_id is not None
         and int(viewer_id) == int(battle["creator_id"])
     )
+    is_participant = viewer_id is not None and any(
+        int(p["user_id"]) == int(viewer_id) for p in players
+    )
+    slot_open = (
+        status == "open"
+        and len(players) < int(battle.get("player_limit") or PLAYER_LIMIT_DEFAULT)
+        and viewer_id is not None
+        and not is_participant
+    )
+    # Ownership borders only for join candidates — participants already escrowed cases.
+    if status == "open" and not is_participant:
+        case_previews, can_afford_cases = _case_preview_rows(cases, viewer_id=viewer_id, conn=conn)
+    else:
+        case_previews, _ = _case_preview_rows(cases, viewer_id=None, conn=conn)
+        for row in case_previews:
+            row.pop("owned", None)
+        can_afford_cases = True
 
     out: Dict[str, Any] = {
         "id": int(battle["id"]),
@@ -411,17 +466,8 @@ def _serialize_battle(
         "player_count": len(players),
         "total_battle_value": int(battle.get("total_battle_value") or 0),
         "cases": list(cases),
-        "case_previews": [
-            {
-                "item_key": k,
-                "battle_value": battle_value_for_container(k),
-                "name_key": (ITEM_CATALOG.get(k) or {}).get("name_key") or k,
-                "rarity": (ITEM_CATALOG.get(k) or {}).get("rarity") or "common",
-                "image": (ITEM_CATALOG.get(k) or {}).get("image"),
-                "icon": (ITEM_CATALOG.get(k) or {}).get("icon") or "📦",
-            }
-            for k in cases
-        ],
+        "case_previews": case_previews,
+        "can_afford_cases": bool(can_afford_cases if slot_open else True),
         "server_seed_hash": battle.get("server_seed_hash"),
         "server_seed": str(seed) if reveal_seed else None,
         "created_at": float(battle.get("created_at") or 0),
@@ -443,11 +489,9 @@ def _serialize_battle(
         "settled": settlement is not None,
         "granted": _json_loads(settlement.get("granted_json"), []) if settlement else None,
         "join_code": str(join_code) if show_code and join_code else None,
-        "can_join": (
-            status == "open"
-            and len(players) < int(battle.get("player_limit") or PLAYER_LIMIT_DEFAULT)
-            and viewer_id is not None
-            and all(int(p["user_id"]) != int(viewer_id) for p in players)
+        "can_join": bool(slot_open and can_afford_cases),
+        "join_blocked_reason": (
+            "insufficient_containers" if slot_open and not can_afford_cases else None
         ),
         "can_cancel": (
             status == "open"
@@ -455,8 +499,7 @@ def _serialize_battle(
             and int(viewer_id) == int(battle["creator_id"])
         ),
         "can_settle": status == "running" and settlement is None,
-        "is_participant": viewer_id is not None
-        and any(int(p["user_id"]) == int(viewer_id) for p in players),
+        "is_participant": bool(is_participant),
         "mode_meta": MODE_META.get(str(battle.get("mode") or "standard"), MODE_META["standard"]),
     }
     # Attach team labels for UI

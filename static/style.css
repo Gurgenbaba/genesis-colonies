@@ -36157,6 +36157,15 @@ html.gc-empire-focus .gc-planet-registry {
   background: rgba(0, 0, 0, 0.35);
   overflow: hidden;
 }
+.inventory-cb-case-chip--owned {
+  border-color: rgba(80, 200, 120, 0.95);
+  box-shadow: inset 0 0 0 1px rgba(80, 200, 120, 0.35);
+}
+.inventory-cb-case-chip--missing {
+  border-color: rgba(220, 70, 70, 0.95);
+  box-shadow: inset 0 0 0 1px rgba(220, 70, 70, 0.35);
+  opacity: 0.88;
+}
 .inventory-cb-case-chip img {
   width: 100%;
   height: 100%;
@@ -36166,9 +36175,18 @@ html.gc-empire-focus .gc-planet-registry {
   font-size: 0.75rem;
   color: var(--gc-text-dim);
 }
+.inventory-cb-need-hint {
+  margin: 0;
+  font-size: 0.72rem;
+  color: #f0a0a0;
+}
 .inventory-cb-card-actions {
   display: flex;
   justify-content: flex-end;
+}
+.inventory-cb-card-actions [data-cb-join-blocked][disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 .inventory-cb-empty {
   margin: 0;
