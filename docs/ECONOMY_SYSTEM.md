@@ -200,6 +200,8 @@ Recycelt Schiffe vom context planet → Ressourcen-Rückerstattung nach `fleet_d
 Owner: `game/inventory_loot.py` (`LOOT_POOLS`, `sanitize_loot_pool`), `game/inventory.py` (Roll + Inventar-Gutschrift).  
 Admin-Overrides: nur `item` / `booster` — siehe [GC-864_LOOT_BALANCE_TABLE.md](GC-864_LOOT_BALANCE_TABLE.md).
 
+**Case Battles / Relikt-Arena:** darüberliegende Lobby-Schicht (`game/case_battles.py`) — fester Battle Value je Container, Reward Value je Drop, Escrow via `consume_inventory_item`, Rolls über dieselbe Loot-Engine. UI: Inventar-Tab. Siehe [CASE_BATTLES.md](CASE_BATTLES.md).
+
 Ressourcen kommen aus Produktion, Handel, Expedition und Kampf. Schiffe aus der Werft. Defense aus der Fabrik.
 
 ---

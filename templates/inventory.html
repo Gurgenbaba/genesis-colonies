@@ -2,6 +2,7 @@
 {% from "partials/card_hero_img_macros.html" import render_card_hero_img with context %}
 
 {% set inv_data = inventory if inventory is defined and inventory else {'ready': false, 'containers': [], 'other_items': []} %}
+{% set cb_data = case_battles if case_battles is defined and case_battles else {'ready': false, 'lobby': [], 'mine': [], 'active': None} %}
 {% set _loot_fallback = url_for('static', filename='img/lootboxes/Generic_Supply_Container.png') %}
 {% set _containers = inv_data.containers if inv_data.containers is defined else [] %}
 {% set _first_container_img = (url_for('static', filename=_containers[0].image) if _containers[0].image is defined else _loot_fallback) if _containers else '' %}
@@ -56,6 +57,7 @@
 
   {% if inv_data.ready is not defined or inv_data.ready != false %}
   <script type="application/json" id="inventory-page-state">{{ inv_data | tojson }}</script>
+  <script type="application/json" id="case-battles-page-state">{{ cb_data | tojson }}</script>
   {% endif %}
 
   <header class="gc-page-header section-header inventory-headline inventory-headline--compact">
@@ -96,7 +98,7 @@
            id="inventory-workspace"
            data-inventory-timekeeper>
     <header class="inventory-workspace-head">
-      <nav class="gc-page-tabs gc-page-tabs--cols-2 gc-page-tabs--inline inventory-tabs" data-inventory-tabs role="tablist" aria-label="{{ T('inv_tabs_label', 'Inventar-Bereiche') }}">
+      <nav class="gc-page-tabs gc-page-tabs--cols-3 gc-page-tabs--inline inventory-tabs" data-inventory-tabs role="tablist" aria-label="{{ T('inv_tabs_label', 'Inventar-Bereiche') }}">
         <button type="button"
                 class="gc-page-tab inventory-tab is-active"
                 role="tab"
@@ -111,6 +113,13 @@
                 data-inventory-tab="items"
                 id="inventory-tab-items"
                 aria-controls="inventory-panel-items">{{ T("inv_tab_items", "Items") }}</button>
+        <button type="button"
+                class="gc-page-tab inventory-tab"
+                role="tab"
+                aria-selected="false"
+                data-inventory-tab="case-battles"
+                id="inventory-tab-case-battles"
+                aria-controls="inventory-panel-case-battles">{{ T("inv_tab_case_battles", "Relikt-Arena") }}</button>
       </nav>
       <div class="inventory-workspace-context inventory-workspace-context--containers"
            data-inventory-head-context="containers">
@@ -134,6 +143,11 @@
             {{ inventory_tk_domain_chips(_tk_legacy) }}
           </div>
         </div>
+      </div>
+      <div class="inventory-workspace-context inventory-workspace-context--case-battles"
+           data-inventory-head-context="case-battles"
+           hidden>
+        <p class="inventory-cb-tagline gc-mono">{{ T("cb_tagline", "Stelle dein Glück unter Beweis und gewinne epische Beute!") }}</p>
       </div>
     </header>
     {% if _tk_legacy %}
@@ -455,6 +469,103 @@
     </div>
   </div>{# /inventory-items-body #}
   </div>{# /inventory-panel-items #}
+
+  <div class="inventory-panel-tab"
+       data-inventory-panel="case-battles"
+       id="inventory-panel-case-battles"
+       role="tabpanel"
+       aria-labelledby="inventory-tab-case-battles"
+       hidden>
+    <div class="inventory-cb" data-case-battles-root>
+      <header class="inventory-cb-head">
+        <div class="inventory-cb-titles">
+          <h3 class="inventory-cb-title">{{ T("cb_title", "Relikt-Arena") }}</h3>
+          <p class="inventory-cb-sub">{{ T("cb_subtitle", "Commander setzen versiegelte Container ein — der wertvollste Fund beansprucht den gesamten Bergungspool.") }}</p>
+        </div>
+        <div class="inventory-cb-actions">
+          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-cb-create-open>
+            {{ T("cb_create_btn", "+ Battle erstellen") }}
+          </button>
+        </div>
+      </header>
+
+      <div class="inventory-cb-join-code-row">
+        <label class="inventory-cb-field inventory-cb-field--inline">
+          <span>{{ T("cb_join_code_label", "Privater Code") }}</span>
+          <input type="text" class="gc-input" data-cb-join-code-input maxlength="8" autocomplete="off" spellcheck="false">
+        </label>
+        <button type="button" class="gc-btn gc-btn-secondary gc-btn-sm" data-cb-join-by-code>
+          {{ T("cb_join_code_btn", "Mit Code beitreten") }}
+        </button>
+      </div>
+
+      <nav class="inventory-cb-subtabs" data-cb-subtabs role="tablist">
+        <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs is-active" data-cb-view="lobby">{{ T("cb_view_lobby", "Lobby") }}</button>
+        <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-cb-view="mine">{{ T("cb_view_mine", "Meine Battles") }}</button>
+      </nav>
+
+      <div class="inventory-cb-active" data-cb-active hidden></div>
+
+      <div class="inventory-cb-lobby" data-cb-lobby>
+        <p class="inventory-cb-empty gc-mono" data-cb-lobby-empty>{{ T("cb_lobby_empty", "Keine offenen öffentlichen Battles.") }}</p>
+        <div class="inventory-cb-grid" data-cb-lobby-grid></div>
+      </div>
+      <div class="inventory-cb-mine" data-cb-mine hidden>
+        <p class="inventory-cb-empty gc-mono" data-cb-mine-empty>{{ T("cb_mine_empty", "Noch keine Battles.") }}</p>
+        <div class="inventory-cb-grid" data-cb-mine-grid></div>
+      </div>
+
+      <div class="inventory-cb-create-modal" data-cb-create-modal hidden>
+        <div class="inventory-cb-create-panel gc-panel">
+          <header class="gc-panel-header">
+            <span class="gc-panel-title">{{ T("cb_create_title", "Battle erstellen") }}</span>
+            <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-cb-create-close>{{ T("cb_close", "Schließen") }}</button>
+          </header>
+          <div class="inventory-cb-create-body">
+            <label class="inventory-cb-field">
+              <span>{{ T("cb_mode_label", "Modus") }}</span>
+              <select data-cb-create-mode data-gc-hud-select>
+                <option value="standard">{{ T("cb_mode_standard", "Standard — höchster Wert gewinnt alles") }}</option>
+                <option value="crazy">{{ T("cb_mode_crazy", "Crazy — niedrigster Wert gewinnt alles") }}</option>
+                <option value="terminal">{{ T("cb_mode_terminal", "Terminal — jede Runde einzeln") }}</option>
+                <option value="share">{{ T("cb_mode_share", "Share — Beute nach Wertanteil") }}</option>
+                <option value="team">{{ T("cb_mode_team", "Team 2v2 — Teamwert entscheidet") }}</option>
+              </select>
+            </label>
+            <label class="inventory-cb-field">
+              <span>{{ T("cb_players_label", "Commander") }}</span>
+              <select data-cb-create-players data-gc-hud-select>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+              </select>
+            </label>
+            <label class="inventory-cb-field">
+              <span>{{ T("cb_visibility_label", "Sichtbarkeit") }}</span>
+              <select data-cb-create-visibility data-gc-hud-select>
+                <option value="public">{{ T("cb_vis_public", "Öffentlich") }}</option>
+                <option value="private">{{ T("cb_vis_private", "Privat") }}</option>
+              </select>
+            </label>
+            <div class="inventory-cb-case-picker" data-cb-case-picker></div>
+            <p class="inventory-cb-bv gc-mono">{{ T("cb_total_bv", "Gesamtwert") }}: <strong data-cb-create-bv>0</strong> BV</p>
+            <button type="button" class="gc-btn gc-btn-primary" data-cb-create-submit>{{ T("cb_create_submit", "Battle starten") }}</button>
+            <div class="inventory-cb-create-success" data-cb-create-success hidden>
+              <p class="inventory-cb-create-success-title">{{ T("cb_create_success", "Battle erstellt") }}</p>
+              <p class="inventory-cb-create-success-code-label gc-mono">{{ T("cb_join_code_label", "Privater Code") }}</p>
+              <p class="inventory-cb-create-success-code gc-mono" data-cb-created-code>—</p>
+              <p class="inventory-cb-create-success-hint">{{ T("cb_join_code_share_hint", "Teile diesen Code mit dem anderen Commander.") }}</p>
+              <button type="button" class="gc-btn gc-btn-secondary gc-btn-sm" data-cb-copy-code>{{ T("cb_copy_code", "Code kopieren") }}</button>
+              <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-cb-create-close>{{ T("cb_close", "Schließen") }}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>{# /inventory-panel-case-battles #}
+
+  <div id="gc-cb-theater-root" class="gc-cb-theater-root" hidden aria-hidden="true"></div>
+
   </section>{# /inventory-workspace #}
 
   {% endif %}

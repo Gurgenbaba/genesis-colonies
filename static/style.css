@@ -36053,6 +36053,478 @@ html.gc-empire-focus .gc-planet-registry {
   line-height: 1;
 }
 
+/* Case Battles / Relikt-Arena (inventory tab) */
+.inventory-cb-tagline {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--gc-text-dim);
+  letter-spacing: 0.04em;
+}
+.inventory-cb {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+.inventory-cb-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.inventory-cb-title {
+  margin: 0;
+  font-size: 1.05rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.inventory-cb-sub {
+  margin: 4px 0 0;
+  max-width: 52rem;
+  color: var(--gc-text-dim);
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+.inventory-cb-join-code-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+.inventory-cb-field--inline {
+  flex: 1 1 160px;
+}
+.inventory-cb-field--inline input {
+  width: 100%;
+  max-width: 220px;
+}
+.inventory-cb-subtabs {
+  display: flex;
+  gap: 6px;
+}
+.inventory-cb-subtabs .is-active {
+  border-color: rgba(212, 175, 55, 0.55);
+  color: #f0d78c;
+}
+.inventory-cb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+}
+.inventory-cb-card {
+  border: 1px solid rgba(120, 160, 200, 0.22);
+  background: rgba(8, 14, 22, 0.72);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.inventory-cb-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.78rem;
+}
+.inventory-cb-bv-pill {
+  color: #8fe8a8;
+  font-weight: 700;
+}
+.inventory-cb-card-cases {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 32px;
+}
+.inventory-cb-case-chip {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(120, 160, 200, 0.28);
+  background: rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+.inventory-cb-case-chip img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.inventory-cb-card-meta {
+  font-size: 0.75rem;
+  color: var(--gc-text-dim);
+}
+.inventory-cb-card-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.inventory-cb-empty {
+  margin: 0;
+  color: var(--gc-text-dim);
+}
+.inventory-cb-active-panel {
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  background: rgba(12, 16, 24, 0.85);
+  padding: 12px;
+}
+.inventory-cb-active-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.inventory-cb-players {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+.inventory-cb-player {
+  border: 1px solid rgba(120, 160, 200, 0.2);
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.28);
+}
+.inventory-cb-player-rv {
+  margin: 4px 0 8px;
+  color: #f0d78c;
+  font-weight: 700;
+}
+.inventory-cb-drops {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.78rem;
+}
+.inventory-cb-drop {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+}
+.inventory-cb-winner {
+  margin-left: 6px;
+  color: #8fe8a8;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.inventory-cb-seed {
+  margin: 10px 0 0;
+  font-size: 0.72rem;
+  word-break: break-all;
+  color: var(--gc-text-dim);
+}
+.inventory-cb-create-modal {
+  position: fixed;
+  inset: 0;
+  z-index: var(--gc-z-modal, 80);
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 16px;
+}
+.inventory-cb-create-modal[hidden] { display: none !important; }
+.inventory-cb-create-panel {
+  width: min(520px, 100%);
+  max-height: 90vh;
+  overflow: auto;
+  padding: 12px;
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.inventory-cb-create-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.inventory-cb-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+}
+.inventory-cb-picker-owned {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.inventory-cb-pick-btn {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 1px solid rgba(120, 160, 200, 0.28);
+  background: rgba(0, 0, 0, 0.35);
+  color: inherit;
+  cursor: pointer;
+  border-radius: var(--gc-radius-sm, 2px);
+  font-size: 0.75rem;
+}
+.inventory-cb-picked {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.inventory-cb-picked-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  font-size: 0.72rem;
+  background: rgba(212, 175, 55, 0.08);
+}
+.inventory-cb-picked-chip button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.inventory-cb-bv {
+  margin: 0;
+}
+.inventory-cb-create-success {
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  background: rgba(212, 175, 55, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+.inventory-cb-create-success[hidden] { display: none !important; }
+.inventory-cb-create-success-title {
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.inventory-cb-create-success-code-label {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--gc-text-dim);
+}
+.inventory-cb-create-success-code {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: #f0d78c;
+}
+.inventory-cb-create-success-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--gc-text-dim);
+}
+
+/* Simultaneous Relikt-Arena theater */
+body.gc-cb-theater-open { overflow: hidden; }
+.gc-cb-theater-root {
+  position: fixed;
+  inset: 0;
+  z-index: var(--gc-z-modal, 90);
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.72);
+}
+.gc-cb-theater-root[hidden] { display: none !important; }
+.gc-cb-theater {
+  position: relative;
+  width: min(1100px, 100%);
+  max-height: 94vh;
+  overflow: auto;
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  background: linear-gradient(180deg, rgba(10, 14, 22, 0.98), rgba(6, 8, 14, 0.98));
+  padding: 14px;
+  border-radius: var(--gc-radius-sm, 2px);
+  box-shadow: 0 0 40px rgba(212, 175, 55, 0.12);
+}
+.gc-cb-theater-scan {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(255, 255, 255, 0.015) 3px
+  );
+  opacity: 0.5;
+}
+.gc-cb-theater-head {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+.gc-cb-theater-kicker {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #f0d78c;
+}
+.gc-cb-theater-title {
+  margin: 4px 0 0;
+  font-size: 1.05rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.gc-cb-stepper {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.gc-cb-step {
+  min-width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(120, 160, 200, 0.3);
+  font-size: 0.75rem;
+  color: var(--gc-text-dim);
+}
+.gc-cb-step.is-active {
+  border-color: rgba(212, 175, 55, 0.8);
+  color: #f0d78c;
+  box-shadow: 0 0 12px rgba(212, 175, 55, 0.25);
+}
+.gc-cb-step.is-done {
+  border-color: rgba(143, 232, 168, 0.5);
+  color: #8fe8a8;
+}
+.gc-cb-round-label {
+  margin: 0 0 10px;
+  color: var(--gc-text-dim);
+  font-size: 0.8rem;
+}
+.gc-cb-lanes {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--cb-lanes, 2), minmax(0, 1fr));
+  gap: 10px;
+}
+.gc-cb-lane {
+  border: 1px solid rgba(120, 160, 200, 0.25);
+  background: rgba(0, 0, 0, 0.35);
+  padding: 8px;
+  min-width: 0;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.gc-cb-lane.is-winner {
+  border-color: rgba(212, 175, 55, 0.85);
+  box-shadow: 0 0 18px rgba(212, 175, 55, 0.2);
+}
+.gc-cb-lane-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+  margin-bottom: 8px;
+  font-size: 0.85rem;
+}
+.gc-cb-lane-team {
+  font-size: 0.7rem;
+  color: #8eb7ff;
+  letter-spacing: 0.06em;
+}
+.gc-cb-lane-rv {
+  margin-left: auto;
+  color: #f0d78c;
+  font-weight: 700;
+}
+.gc-cb-lane-roller {
+  position: relative;
+  height: 72px;
+  overflow: hidden;
+  border: 1px solid rgba(70, 229, 255, 0.2);
+  background: rgba(0, 8, 16, 0.65);
+  margin-bottom: 8px;
+}
+.gc-cb-lane-roller::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgba(212, 175, 55, 0.85);
+  transform: translateX(-50%);
+  z-index: 2;
+  pointer-events: none;
+}
+.gc-cb-lane-strip {
+  display: flex;
+  gap: 6px;
+  height: 100%;
+  align-items: center;
+  padding: 0 8px;
+  will-change: transform;
+}
+.gc-cb-tile {
+  flex: 0 0 56px;
+  height: 56px;
+  border: 1px solid rgba(120, 160, 200, 0.28);
+  background: rgba(12, 18, 28, 0.9);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 0.7rem;
+}
+.gc-cb-tile.is-winning {
+  border-color: rgba(212, 175, 55, 0.9);
+  box-shadow: 0 0 10px rgba(212, 175, 55, 0.35);
+}
+.gc-cb-tile-amt { font-size: 0.65rem; color: var(--gc-text-dim); }
+.gc-cb-lane-drops {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 120px;
+  overflow: auto;
+  font-size: 0.72rem;
+}
+.gc-cb-lane-drops li {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+}
+.gc-cb-theater-status {
+  position: relative;
+  margin: 12px 0 0;
+  text-align: center;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8eb7ff;
+}
+.gc-cb-theater-win {
+  color: #f0d78c;
+  font-weight: 700;
+}
+@media (max-width: 800px) {
+  .gc-cb-lanes {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (max-width: 520px) {
+  .gc-cb-lanes {
+    grid-template-columns: 1fr;
+  }
+}
+
+
 .inventory-effect-text {
   flex: 1 1 auto;
 }

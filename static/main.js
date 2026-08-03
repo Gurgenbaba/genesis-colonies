@@ -16710,10 +16710,600 @@
   }
 
   let _inventoryLastState = null;
+  let _caseBattlesLastState = null;
+  let _cbCreateCases = [];
+  let _cbView = "lobby";
+  let _cbAnimatingBattleId = null;
+
+  function parseCaseBattlesPageState() {
+    const el = document.getElementById("case-battles-page-state");
+    if (el && el.textContent) {
+      try { return JSON.parse(el.textContent); } catch (_) {}
+    }
+    return null;
+  }
+
+  function _cbEscape(s) {
+    return String(s || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function _cbModeLabel(mode) {
+    const map = {
+      crazy: t("cb_mode_crazy_short", "Crazy"),
+      terminal: t("cb_mode_terminal_short", "Terminal"),
+      share: t("cb_mode_share_short", "Share"),
+      team: t("cb_mode_team_short", "Team 2v2"),
+      standard: t("cb_mode_standard_short", "Standard"),
+    };
+    return map[mode] || map.standard;
+  }
+
+  function _cbStatusLabel(status) {
+    const map = {
+      open: t("cb_status_open", "Offen"),
+      running: t("cb_status_running", "Läuft"),
+      finished: t("cb_status_finished", "Beendet"),
+      cancelled: t("cb_status_cancelled", "Abgebrochen"),
+    };
+    return map[status] || status;
+  }
+
+  function _cbSyncPlayerLimitSelect() {
+    const modeEl = document.querySelector("[data-cb-create-mode]");
+    const playersEl = document.querySelector("[data-cb-create-players]");
+    if (!modeEl || !playersEl) return;
+    const mode = modeEl.value || "standard";
+    if (mode === "team") {
+      playersEl.value = "4";
+      playersEl.disabled = true;
+    } else {
+      playersEl.disabled = false;
+    }
+  }
+
+  function _cbBattleCardHtml(battle) {
+    if (!battle) return "";
+    const cases = (battle.case_previews || []).map((c) => {
+      const img = c.image ? `/static/${c.image}` : "";
+      const label = t(c.name_key || c.item_key, c.item_key || "");
+      return `<span class="inventory-cb-case-chip" title="${_cbEscape(label)}">${
+        img ? `<img src="${_cbEscape(img)}" alt="" width="28" height="28" loading="lazy">` : _cbEscape(c.icon || "📦")
+      }</span>`;
+    }).join("");
+    const vis = battle.visibility === "private"
+      ? t("cb_vis_private", "Privat")
+      : t("cb_vis_public", "Öffentlich");
+    let action = "";
+    if (battle.can_join) {
+      action = `<button type="button" class="gc-btn gc-btn-primary gc-btn-xs" data-cb-join="${battle.id}">${t("cb_join_btn", "Beitreten")}</button>`;
+    } else if (battle.can_cancel) {
+      action = `<button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-cb-cancel="${battle.id}">${t("cb_cancel_btn", "Abbrechen")}</button>`;
+    } else if (battle.status === "running" && battle.is_participant) {
+      action = `<button type="button" class="gc-btn gc-btn-secondary gc-btn-xs" data-cb-watch="${battle.id}">${t("cb_watch_btn", "Zuschauen")}</button>`;
+    } else if (battle.status === "finished") {
+      action = `<button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-cb-watch="${battle.id}">${t("cb_history_btn", "Details")}</button>`;
+    }
+    return `<article class="inventory-cb-card" data-cb-card="${battle.id}" data-status="${_cbEscape(battle.status)}">
+      <div class="inventory-cb-card-top">
+        <span class="gc-mono">${battle.player_count || 0} / ${battle.player_limit || 2} ${t("cb_commanders", "Commander")}</span>
+        <span class="inventory-cb-bv-pill gc-mono">${Number(battle.total_battle_value || 0).toLocaleString()} BV</span>
+      </div>
+      <div class="inventory-cb-card-cases">${cases || "—"}</div>
+      <div class="inventory-cb-card-meta">
+        <span>${_cbEscape(_cbModeLabel(battle.mode))} · ${_cbEscape(vis)} · ${_cbEscape(_cbStatusLabel(battle.status))}</span>
+      </div>
+      <div class="inventory-cb-card-actions">${action}</div>
+    </article>`;
+  }
+
+  function _cbRenderActive(battle) {
+    const root = document.querySelector("[data-cb-active]");
+    if (!root) return;
+    if (!battle || (battle.status !== "running" && battle.status !== "finished" && battle.status !== "open")) {
+      root.hidden = true;
+      root.innerHTML = "";
+      return;
+    }
+    if (battle.status === "open" && battle.is_participant) {
+      root.hidden = false;
+      root.innerHTML = `<div class="inventory-cb-active-panel inventory-cb-active-panel--wait">
+        <p class="gc-mono">${t("cb_waiting", "Warte auf Commander…")} ${battle.player_count}/${battle.player_limit}</p>
+        ${battle.join_code ? `<p class="inventory-cb-seed gc-mono">${t("cb_join_code_label", "Privater Code")}: <strong>${_cbEscape(battle.join_code)}</strong></p>` : ""}
+      </div>`;
+      return;
+    }
+    if (battle.status === "running") {
+      root.hidden = false;
+      root.innerHTML = `<div class="inventory-cb-active-panel">
+        <button type="button" class="gc-btn gc-btn-primary" data-cb-watch="${battle.id}">${t("cb_enter_arena", "Arena betreten")}</button>
+      </div>`;
+      return;
+    }
+    root.hidden = false;
+    const players = battle.players || [];
+    const playerCols = players.map((p) => {
+      const win = battle.winner_id && Number(battle.winner_id) === Number(p.user_id)
+        ? `<span class="inventory-cb-winner">${t("cb_winner", "Sieger")}</span>`
+        : "";
+      const team = p.team ? `<span class="inventory-cb-team">T-${_cbEscape(p.team)}</span>` : "";
+      return `<div class="inventory-cb-player"><header><strong>${_cbEscape(p.name || "Commander")}</strong> ${team} ${win}</header>
+        <p class="gc-mono inventory-cb-player-rv">${Number(p.total_reward_value || 0)} ${t("cb_value_label", "VALUE")}</p></div>`;
+    }).join("");
+    root.innerHTML = `<div class="inventory-cb-active-panel">
+      <header class="inventory-cb-active-head">
+        <span class="gc-mono">${_cbEscape(_cbModeLabel(battle.mode))} · ${_cbEscape(_cbStatusLabel(battle.status))}</span>
+        <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-cb-watch="${battle.id}">${t("cb_history_btn", "Details")}</button>
+      </header>
+      <div class="inventory-cb-players">${playerCols}</div>
+      ${battle.server_seed ? `<p class="inventory-cb-seed gc-mono">${t("cb_seed_revealed", "Server-Seed")}: ${_cbEscape(battle.server_seed)}</p>` : ""}
+    </div>`;
+  }
+
+  function _cbCloseTheater() {
+    const root = document.getElementById("gc-cb-theater-root");
+    if (!root) return;
+    root.hidden = true;
+    root.setAttribute("aria-hidden", "true");
+    root.innerHTML = "";
+    document.body.classList.remove("gc-cb-theater-open");
+    _cbAnimatingBattleId = null;
+  }
+
+  function _cbBuildStripTiles(roll) {
+    const preview = Array.isArray(roll.roll_preview) ? roll.roll_preview : [];
+    const winIdx = Number(roll.winning_index || 0);
+    if (!preview.length) {
+      const rw = roll.reward || {};
+      return `<div class="gc-cb-tile is-winning"><span>${_cbEscape(rw.icon || "📦")}</span></div>`;
+    }
+    return preview.map((tile, idx) => {
+      const cls = idx === winIdx ? "gc-cb-tile is-winning" : "gc-cb-tile";
+      return `<div class="${cls}" data-tile-index="${idx}">
+        <span class="gc-cb-tile-icon">${_cbEscape(tile.icon || "📦")}</span>
+        <span class="gc-cb-tile-amt gc-mono">×${Number(tile.amount || 0)}</span>
+      </div>`;
+    }).join("");
+  }
+
+  function _cbAnimateStrip(stripEl, winningIndex) {
+    return new Promise((resolve) => {
+      if (!stripEl) {
+        resolve();
+        return;
+      }
+      const tiles = stripEl.querySelectorAll(".gc-cb-tile");
+      const target = tiles[Math.max(0, Math.min(winningIndex, tiles.length - 1))];
+      const rail = stripEl.parentElement;
+      if (!target || !rail) {
+        resolve();
+        return;
+      }
+      const reduced = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+      const railW = rail.clientWidth || 160;
+      const tileCenter = target.offsetLeft + target.offsetWidth / 2;
+      const targetX = Math.round(railW / 2 - tileCenter);
+      if (reduced) {
+        stripEl.style.transform = `translate3d(${targetX}px,0,0)`;
+        resolve();
+        return;
+      }
+      stripEl.style.transition = "none";
+      stripEl.style.transform = "translate3d(0,0,0)";
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          stripEl.style.transition = "transform 2.2s cubic-bezier(0.12, 0.85, 0.18, 1)";
+          stripEl.style.transform = `translate3d(${targetX}px,0,0)`;
+          window.setTimeout(resolve, 2300);
+        });
+      });
+    });
+  }
+
+  async function _cbPlayBattleAnimation(battle) {
+    if (!battle || !battle.id) return;
+    if (_cbAnimatingBattleId === battle.id) return;
+    _cbAnimatingBattleId = battle.id;
+    const root = document.getElementById("gc-cb-theater-root");
+    if (!root) {
+      _cbAnimatingBattleId = null;
+      return;
+    }
+    try {
+      try { closeLootModal(); } catch (_) { /* ignore */ }
+      const players = battle.players || [];
+      const cases = battle.cases || [];
+      const byRound = {};
+      (battle.rolls || []).forEach((r) => {
+        const ri = Number(r.round_index);
+        if (!byRound[ri]) byRound[ri] = [];
+        byRound[ri].push(r);
+      });
+      const roundKeys = Object.keys(byRound).map(Number).sort((a, b) => a - b);
+      const runningTotals = {};
+      players.forEach((p) => { runningTotals[p.user_id] = 0; });
+
+      root.hidden = false;
+      root.setAttribute("aria-hidden", "false");
+      document.body.classList.add("gc-cb-theater-open");
+
+      const renderShell = (roundIdx) => {
+        const caseKey = cases[roundIdx] || "";
+        const steps = roundKeys.map((ri) => {
+          const done = ri < roundIdx;
+          const on = ri === roundIdx;
+          return `<span class="gc-cb-step ${done ? "is-done" : ""} ${on ? "is-active" : ""}">${ri + 1}</span>`;
+        }).join("");
+        const cols = players.map((p) => {
+          const team = p.team ? `<span class="gc-cb-lane-team">T-${_cbEscape(p.team)}</span>` : "";
+          return `<div class="gc-cb-lane" data-cb-lane="${p.user_id}">
+            <header class="gc-cb-lane-head">
+              <strong>${_cbEscape(p.name || "Commander")}</strong>
+              ${team}
+              <span class="gc-cb-lane-rv gc-mono" data-cb-lane-rv="${p.user_id}">${runningTotals[p.user_id] || 0} RV</span>
+            </header>
+            <div class="gc-cb-lane-roller"><div class="gc-cb-lane-strip" data-cb-lane-strip="${p.user_id}"></div></div>
+            <ul class="gc-cb-lane-drops" data-cb-lane-drops="${p.user_id}"></ul>
+          </div>`;
+        }).join("");
+        root.innerHTML = `<div class="gc-cb-theater" role="dialog" aria-modal="true" aria-label="${_cbEscape(t("cb_title", "Relikt-Arena"))}">
+          <div class="gc-cb-theater-scan" aria-hidden="true"></div>
+          <header class="gc-cb-theater-head">
+            <div>
+              <div class="gc-cb-theater-kicker gc-mono">${_cbEscape(_cbModeLabel(battle.mode))} · ${Number(battle.total_battle_value || 0)} BV</div>
+              <h3 class="gc-cb-theater-title">${t("cb_theater_title", "Bergungssiegel werden gebrochen")}</h3>
+            </div>
+            <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-cb-theater-close>${t("cb_close", "Schließen")}</button>
+          </header>
+          <div class="gc-cb-stepper">${steps}</div>
+          <p class="gc-cb-round-label gc-mono" data-cb-round-label>
+            ${tf("cb_round_of", { cur: roundIdx + 1, max: roundKeys.length }, "Runde %(cur)s / %(max)s")}
+            ${caseKey ? ` · ${_cbEscape(t("inv_" + caseKey, caseKey))}` : ""}
+          </p>
+          <div class="gc-cb-lanes" data-cb-lanes style="--cb-lanes:${Math.max(2, players.length)}">${cols}</div>
+          <p class="gc-cb-theater-status gc-mono" data-cb-theater-status>${t("cb_theater_rolling", "Gleichzeitige Öffnung…")}</p>
+        </div>`;
+      };
+
+      for (let i = 0; i < roundKeys.length; i += 1) {
+        const ri = roundKeys[i];
+        renderShell(ri);
+        const rolls = byRound[ri] || [];
+        const anims = [];
+        rolls.forEach((roll) => {
+          const strip = root.querySelector(`[data-cb-lane-strip="${roll.user_id}"]`);
+          if (strip) {
+            strip.innerHTML = _cbBuildStripTiles(roll);
+            anims.push(_cbAnimateStrip(strip, Number(roll.winning_index || 0)));
+          }
+        });
+        try { if (typeof playLootboxOpenSound === "function") playLootboxOpenSound(); } catch (_) { /* ignore */ }
+        await Promise.all(anims);
+        rolls.forEach((roll) => {
+          const rw = roll.reward || {};
+          runningTotals[roll.user_id] = (runningTotals[roll.user_id] || 0) + Number(roll.reward_value || 0);
+          const rvEl = root.querySelector(`[data-cb-lane-rv="${roll.user_id}"]`);
+          if (rvEl) rvEl.textContent = `${runningTotals[roll.user_id]} RV`;
+          const drops = root.querySelector(`[data-cb-lane-drops="${roll.user_id}"]`);
+          if (drops) {
+            const li = document.createElement("li");
+            li.innerHTML = `<span>${_cbEscape(rw.icon || "📦")} ${_cbEscape(t(rw.name_key || rw.reward_key, rw.reward_key || ""))} ×${Number(rw.amount || 0)}</span>
+              <span class="gc-mono">+${Number(roll.reward_value || 0)}</span>`;
+            drops.appendChild(li);
+          }
+        });
+        const status = root.querySelector("[data-cb-theater-status]");
+        if (status) status.textContent = t("cb_theater_round_done", "Runde gesichert.");
+        await new Promise((r) => window.setTimeout(r, 700));
+      }
+
+      const status = root.querySelector("[data-cb-theater-status]");
+      if (status) status.textContent = t("cb_theater_settling", "Auswertung…");
+      let finished = battle;
+      if (battle.status === "running") {
+        const res = await runCaseBattleAction("/api/case-battles/settle", { battle_id: battle.id });
+        if (res && res.battle) finished = res.battle;
+      }
+      const winnerName = ((finished.players || []).find((p) => Number(p.user_id) === Number(finished.winner_id)) || {}).name
+        || t("cb_winner", "Sieger");
+      if (status) {
+        status.innerHTML = `<span class="gc-cb-theater-win">${_cbEscape(tf("cb_theater_winner", { name: winnerName }, "Sieg: %(name)s"))}</span>`;
+      }
+      const lanes = root.querySelector("[data-cb-lanes]");
+      if (lanes && finished.winner_id) {
+        const winLane = lanes.querySelector(`[data-cb-lane="${finished.winner_id}"]`);
+        if (winLane) winLane.classList.add("is-winner");
+        (finished.winner_ids || []).forEach((wid) => {
+          const el = lanes.querySelector(`[data-cb-lane="${wid}"]`);
+          if (el) el.classList.add("is-winner");
+        });
+      }
+    } catch (_) {
+      /* ignore theater errors */
+    } finally {
+      // keep theater open until user closes; clear anim lock after settle
+      if (_cbAnimatingBattleId === battle.id) _cbAnimatingBattleId = null;
+    }
+  }
+
+  function renderCaseBattlesUI(state) {
+    _caseBattlesLastState = state || _caseBattlesLastState || {};
+    const root = document.querySelector("[data-case-battles-root]");
+    if (!root) return;
+    const lobby = _caseBattlesLastState.lobby || [];
+    const mine = _caseBattlesLastState.mine || [];
+    const lobbyGrid = root.querySelector("[data-cb-lobby-grid]");
+    const mineGrid = root.querySelector("[data-cb-mine-grid]");
+    const lobbyEmpty = root.querySelector("[data-cb-lobby-empty]");
+    const mineEmpty = root.querySelector("[data-cb-mine-empty]");
+    if (lobbyGrid) {
+      lobbyGrid.innerHTML = lobby.map(_cbBattleCardHtml).join("");
+      if (lobbyEmpty) lobbyEmpty.hidden = lobby.length > 0;
+    }
+    if (mineGrid) {
+      mineGrid.innerHTML = mine.map(_cbBattleCardHtml).join("");
+      if (mineEmpty) mineEmpty.hidden = mine.length > 0;
+    }
+    root.querySelectorAll("[data-cb-view]").forEach((btn) => {
+      btn.classList.toggle("is-active", btn.getAttribute("data-cb-view") === _cbView);
+    });
+    const lobbyEl = root.querySelector("[data-cb-lobby]");
+    const mineEl = root.querySelector("[data-cb-mine]");
+    if (lobbyEl) lobbyEl.hidden = _cbView !== "lobby";
+    if (mineEl) mineEl.hidden = _cbView !== "mine";
+    _cbRenderActive(_caseBattlesLastState.active || null);
+  }
+
+  function _cbOwnedContainers() {
+    const inv = _inventoryLastState || {};
+    const list = inv.containers || [];
+    return list.filter((c) => Number(c.amount || 0) > 0);
+  }
+
+  function _cbRebuildPicker() {
+    const picker = document.querySelector("[data-cb-case-picker]");
+    const bvEl = document.querySelector("[data-cb-create-bv]");
+    if (!picker) return;
+    const bvMap = (_caseBattlesLastState && _caseBattlesLastState.container_battle_values) || {};
+    const owned = _cbOwnedContainers();
+    picker.innerHTML = `<p class="inventory-cb-picker-hint">${t("cb_picker_hint", "Wähle 1–10 Container (Reihenfolge = Runden).")}</p>
+      <div class="inventory-cb-picker-owned">${owned.map((c) => {
+        const bv = bvMap[c.item_key] || 0;
+        return `<button type="button" class="inventory-cb-pick-btn" data-cb-pick="${_cbEscape(c.item_key)}" data-bv="${bv}">
+          <span>${_cbEscape(t(c.name_key || c.item_key, c.item_key))} ×${Number(c.amount || 0)}</span>
+          <span class="gc-mono">${bv} BV</span>
+        </button>`;
+      }).join("") || `<p class="gc-mono">${t("cb_no_containers", "Keine Container im Inventar.")}</p>`}</div>
+      <div class="inventory-cb-picked" data-cb-picked-list></div>`;
+    _cbRenderPicked(bvMap, bvEl);
+  }
+
+  function _cbRenderPicked(bvMap, bvEl) {
+    const list = document.querySelector("[data-cb-picked-list]");
+    if (!list) return;
+    list.innerHTML = _cbCreateCases.map((key, idx) => {
+      const bv = (bvMap || {})[key] || 0;
+      return `<span class="inventory-cb-picked-chip">${idx + 1}. ${_cbEscape(key)} (${bv} BV)
+        <button type="button" data-cb-unpick="${idx}" aria-label="remove">×</button></span>`;
+    }).join("");
+    const total = _cbCreateCases.reduce((sum, k) => sum + Number((bvMap || {})[k] || 0), 0);
+    if (bvEl) bvEl.textContent = String(total);
+  }
+
+  async function runCaseBattleAction(path, body) {
+    const res = await GC.fetchGameAction(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Request-Id": (GC.uuid && GC.uuid()) || String(Date.now()) },
+      body: JSON.stringify(body || {}),
+    });
+    if (res && res.state) {
+      try { GC.applyActionState(res, "case_battles"); } catch (_) { /* ignore */ }
+    }
+    if (res && res.inventory) {
+      _inventoryLastState = res.inventory;
+      try { patchInventoryDom(res.inventory); } catch (_) { /* ignore */ }
+    }
+    if (res && res.case_battles) {
+      _caseBattlesLastState = res.case_battles;
+      renderCaseBattlesUI(res.case_battles);
+    }
+    if (res && res.battle) {
+      if (_caseBattlesLastState) {
+        if (res.battle.status === "running" || res.battle.status === "open" || res.battle.status === "finished") {
+          _caseBattlesLastState.active = res.battle;
+        }
+      }
+      _cbRenderActive(res.battle);
+      if (res.battle.status === "running" && !_cbAnimatingBattleId) {
+        void _cbPlayBattleAnimation(res.battle);
+      }
+    }
+    if (!res || !res.ok) {
+      const msg = (res && (res.message || res.reason)) || t("cb_action_failed", "Aktion fehlgeschlagen.");
+      try { GC.toast && GC.toast(msg, "error"); } catch (_) { /* ignore */ }
+    }
+    return res;
+  }
+
+  function bindCaseBattlesOnce() {
+    if (GC._caseBattlesEventsBound) return;
+    GC._caseBattlesEventsBound = true;
+
+    document.addEventListener("change", (ev) => {
+      if (ev.target && ev.target.matches && ev.target.matches("[data-cb-create-mode]")) {
+        _cbSyncPlayerLimitSelect();
+      }
+    });
+
+    document.addEventListener("click", async (ev) => {
+      const page = document.getElementById("inventory-page");
+      if (!page || page.dataset.ready !== "1") return;
+
+      if (ev.target.closest("[data-cb-theater-close]")) {
+        ev.preventDefault();
+        _cbCloseTheater();
+        return;
+      }
+
+      const viewBtn = ev.target.closest("[data-cb-view]");
+      if (viewBtn) {
+        ev.preventDefault();
+        _cbView = viewBtn.getAttribute("data-cb-view") || "lobby";
+        renderCaseBattlesUI(_caseBattlesLastState);
+        return;
+      }
+
+      if (ev.target.closest("[data-cb-create-open]")) {
+        ev.preventDefault();
+        _cbCreateCases = [];
+        const modal = document.querySelector("[data-cb-create-modal]");
+        if (modal) modal.hidden = false;
+        const success = document.querySelector("[data-cb-create-success]");
+        if (success) success.hidden = true;
+        const submit = document.querySelector("[data-cb-create-submit]");
+        if (submit) submit.hidden = false;
+        _cbRebuildPicker();
+        _cbSyncPlayerLimitSelect();
+        try { GC.initHudSelects && GC.initHudSelects(modal); } catch (_) { /* ignore */ }
+        return;
+      }
+      if (ev.target.closest("[data-cb-create-close]")) {
+        ev.preventDefault();
+        const modal = document.querySelector("[data-cb-create-modal]");
+        if (modal) modal.hidden = true;
+        const success = document.querySelector("[data-cb-create-success]");
+        if (success) success.hidden = true;
+        return;
+      }
+      if (ev.target.closest("[data-cb-copy-code]")) {
+        ev.preventDefault();
+        const codeEl = document.querySelector("[data-cb-created-code]");
+        const code = codeEl ? String(codeEl.textContent || "").trim() : "";
+        if (!code || code === "—") return;
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            void navigator.clipboard.writeText(code);
+          }
+          GC.toast && GC.toast(t("cb_code_copied", "Code kopiert."), "success");
+        } catch (_) { /* ignore */ }
+        return;
+      }
+
+      const pick = ev.target.closest("[data-cb-pick]");
+      if (pick) {
+        ev.preventDefault();
+        if (_cbCreateCases.length >= 10) return;
+        _cbCreateCases.push(pick.getAttribute("data-cb-pick"));
+        const bvMap = (_caseBattlesLastState && _caseBattlesLastState.container_battle_values) || {};
+        _cbRenderPicked(bvMap, document.querySelector("[data-cb-create-bv]"));
+        return;
+      }
+      const unpick = ev.target.closest("[data-cb-unpick]");
+      if (unpick) {
+        ev.preventDefault();
+        const idx = Number(unpick.getAttribute("data-cb-unpick"));
+        if (!Number.isNaN(idx)) _cbCreateCases.splice(idx, 1);
+        const bvMap = (_caseBattlesLastState && _caseBattlesLastState.container_battle_values) || {};
+        _cbRenderPicked(bvMap, document.querySelector("[data-cb-create-bv]"));
+        return;
+      }
+
+      if (ev.target.closest("[data-cb-create-submit]")) {
+        ev.preventDefault();
+        const modeEl = document.querySelector("[data-cb-create-mode]");
+        const visEl = document.querySelector("[data-cb-create-visibility]");
+        const playersEl = document.querySelector("[data-cb-create-players]");
+        const res = await runCaseBattleAction("/api/case-battles/create", {
+          cases: _cbCreateCases.slice(),
+          mode: (modeEl && modeEl.value) || "standard",
+          visibility: (visEl && visEl.value) || "public",
+          player_limit: Number((playersEl && playersEl.value) || 2),
+        });
+        if (res && res.ok) {
+          _cbView = "mine";
+          renderCaseBattlesUI(_caseBattlesLastState);
+          const modal = document.querySelector("[data-cb-create-modal]");
+          if (res.battle && res.battle.join_code) {
+            const success = document.querySelector("[data-cb-create-success]");
+            const codeEl = document.querySelector("[data-cb-created-code]");
+            const submit = document.querySelector("[data-cb-create-submit]");
+            if (codeEl) codeEl.textContent = String(res.battle.join_code);
+            if (success) success.hidden = false;
+            if (submit) submit.hidden = true;
+            if (modal) modal.hidden = false;
+            try {
+              GC.toast && GC.toast(
+                `${t("cb_join_code_label", "Privater Code")}: ${res.battle.join_code}`,
+                "info"
+              );
+            } catch (_) { /* ignore */ }
+          } else if (modal) {
+            modal.hidden = true;
+            const success = document.querySelector("[data-cb-create-success]");
+            if (success) success.hidden = true;
+          }
+        }
+        return;
+      }
+
+      if (ev.target.closest("[data-cb-join-by-code]")) {
+        ev.preventDefault();
+        const input = document.querySelector("[data-cb-join-code-input]");
+        const code = input ? String(input.value || "").trim() : "";
+        if (!code) return;
+        await runCaseBattleAction("/api/case-battles/join", { battle_id: 0, join_code: code });
+        return;
+      }
+
+      const joinBtn = ev.target.closest("[data-cb-join]");
+      if (joinBtn) {
+        ev.preventDefault();
+        const id = Number(joinBtn.getAttribute("data-cb-join"));
+        await runCaseBattleAction("/api/case-battles/join", { battle_id: id, join_code: null });
+        return;
+      }
+      const cancelBtn = ev.target.closest("[data-cb-cancel]");
+      if (cancelBtn) {
+        ev.preventDefault();
+        await runCaseBattleAction("/api/case-battles/cancel", {
+          battle_id: Number(cancelBtn.getAttribute("data-cb-cancel")),
+        });
+        return;
+      }
+      const settleBtn = ev.target.closest("[data-cb-settle]");
+      if (settleBtn) {
+        ev.preventDefault();
+        await runCaseBattleAction("/api/case-battles/settle", {
+          battle_id: Number(settleBtn.getAttribute("data-cb-settle")),
+        });
+        return;
+      }
+      const watchBtn = ev.target.closest("[data-cb-watch]");
+      if (watchBtn) {
+        ev.preventDefault();
+        const id = Number(watchBtn.getAttribute("data-cb-watch"));
+        try {
+          const res = await fetch(`/api/case-battles/${id}`, { credentials: "same-origin" });
+          const data = await res.json();
+          if (data && data.battle) {
+            if (_caseBattlesLastState) _caseBattlesLastState.active = data.battle;
+            _cbRenderActive(data.battle);
+            if (data.battle.status === "running" || data.battle.status === "finished") {
+              void _cbPlayBattleAnimation(data.battle);
+            }
+          }
+        } catch (_) { /* ignore */ }
+      }
+    });
+  }
 
   function _inventorySelectTab(page, tabKey) {
     if (!page) return;
-    const key = tabKey === "items" ? "items" : "containers";
+    const allowed = { containers: 1, items: 1, "case-battles": 1 };
+    const key = allowed[tabKey] ? tabKey : "containers";
     page.querySelectorAll("[data-inventory-tab]").forEach((btn) => {
       const on = btn.getAttribute("data-inventory-tab") === key;
       btn.classList.toggle("is-active", on);
@@ -16731,12 +17321,15 @@
       else slot.setAttribute("hidden", "");
     });
     try {
-      if (key === "items" && window.location.hash !== "#items") {
-        history.replaceState(null, "", `${window.location.pathname}${window.location.search}#items`);
-      } else if (key !== "items" && window.location.hash === "#items") {
-        history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+      const hash = key === "containers" ? "" : `#${key === "case-battles" ? "case-battles" : "items"}`;
+      const next = `${window.location.pathname}${window.location.search}${hash}`;
+      if (`${window.location.pathname}${window.location.search}${window.location.hash || ""}` !== next) {
+        history.replaceState(null, "", next);
       }
     } catch (_) { /* ignore */ }
+    if (key === "case-battles") {
+      try { renderCaseBattlesUI(_caseBattlesLastState); } catch (_) { /* ignore */ }
+    }
   }
 
   function bindInventoryOnce() {
@@ -16936,18 +17529,24 @@
 
   function initInventory() {
     bindInventoryOnce();
+    bindCaseBattlesOnce();
     syncTradingSubnav("inventory");
     const page = document.getElementById("inventory-page");
     if (!page || page.dataset.ready !== "1") return;
     _inventoryLastState = parseInventoryPageState();
     patchInventoryDom(_inventoryLastState);
+    _caseBattlesLastState = parseCaseBattlesPageState();
+    renderCaseBattlesUI(_caseBattlesLastState);
     const hashTab = (window.location.hash || "").replace(/^#/, "");
-    _inventorySelectTab(page, hashTab === "items" ? "items" : "containers");
+    const tab = hashTab === "items" || hashTab === "case-battles" ? hashTab : "containers";
+    _inventorySelectTab(page, tab);
     GC.setSafeInterval(tickInventoryCooldowns, 1000);
     GC.registerCleanup(() => {
       closeLootModal();
+      _cbCloseTheater();
       const panel = document.getElementById("inventory-rewards-panel");
       if (panel) panel.hidden = true;
+      _cbAnimatingBattleId = null;
     });
   }
 

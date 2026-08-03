@@ -602,6 +602,16 @@ def _debit_inventory_item(user_id: int, item_key: str, amount: int, *, conn) -> 
     return True
 
 
+def roll_single_loot_reward(
+    pool: Sequence[LootEntry],
+    rng: random.Random,
+    *,
+    loot_context: Optional[Dict[str, Any]] = None,
+) -> Reward:
+    """Public weighted roll helper (Case Battles / non-open consumers). Does not debit or grant."""
+    return _roll_single_reward(pool, rng, loot_context=loot_context)
+
+
 def _roll_single_reward(
     pool: Sequence[LootEntry],
     rng: random.Random,

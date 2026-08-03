@@ -3182,6 +3182,22 @@ _INVENTORY_ACTION_MESSAGES = {
     "no_effect_target": "Kein gültiges Ziel für dieses Item.",
     "container_cooldown": "Container ist noch im Cooldown.",
     "insufficient_containers": "Nicht genug Container im Inventar.",
+    "case_battles_unavailable": "Relikt-Arena ist derzeit nicht verfügbar.",
+    "invalid_cases": "Ungültige Container-Auswahl.",
+    "invalid_case_count": "1–10 Container pro Battle erlaubt.",
+    "unknown_container": "Unbekannter Container.",
+    "invalid_mode": "Ungültiger Battle-Modus.",
+    "invalid_visibility": "Ungültige Sichtbarkeit.",
+    "battle_not_found": "Battle nicht gefunden.",
+    "battle_not_open": "Battle ist nicht mehr offen.",
+    "battle_not_running": "Battle läuft nicht.",
+    "battle_full": "Battle ist voll.",
+    "already_joined": "Du bist bereits in diesem Battle.",
+    "invalid_join_code": "Ungültiger Beitrittscode.",
+    "not_creator": "Nur der Ersteller kann das Battle abbrechen.",
+    "invalid_player_limit": "Ungültige Spieleranzahl.",
+    "not_participant": "Nur Teilnehmer können dieses Battle abschließen.",
+    "battle_not_finished": "Battle ist noch nicht beendet.",
 }
 
 
@@ -3190,17 +3206,21 @@ def _inventory_action_message(reason: str) -> str:
     return _INVENTORY_ACTION_MESSAGES.get(key, "Aktion konnte nicht abgeschlossen werden.")
 
 
-def _inventory_action_context(user_id: int, finish_source: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    """Build fresh game state + inventory after mutation connection is closed."""
+def _inventory_action_context(
+    user_id: int, finish_source: str
+) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+    """Build fresh game state + inventory + case battles after mutation connection is closed."""
+    from game.case_battles import build_case_battles_state
     from game.inventory import build_inventory_state
 
     state, _ = _build_game_state_payload(include_panel=True, finish_source=finish_source)
     conn = db()
     try:
         inventory = build_inventory_state(int(user_id), conn=conn)
+        case_battles = build_case_battles_state(int(user_id), conn=conn)
     finally:
         conn.close()
-    return state, inventory
+    return state, inventory, case_battles
 
 
 def _inventory_action_error_response(
@@ -3211,13 +3231,14 @@ def _inventory_action_error_response(
     status: int = 400,
     extra: Optional[Dict[str, Any]] = None,
 ):
-    state, inventory = _inventory_action_context(user_id, finish_source)
+    state, inventory, case_battles = _inventory_action_context(user_id, finish_source)
     resp: Dict[str, Any] = {
         "ok": False,
         "reason": str(reason or "inventory_action_failed"),
         "message": _inventory_action_message(reason),
         "state": state,
         "inventory": inventory,
+        "case_battles": case_battles,
     }
     if extra:
         resp.update(extra)
@@ -3232,12 +3253,13 @@ def _inventory_action_ok_response(
     *,
     request_id: str = "",
 ):
-    state, inventory = _inventory_action_context(user_id, finish_source)
+    state, inventory, case_battles = _inventory_action_context(user_id, finish_source)
     resp: Dict[str, Any] = {
         "ok": True,
         "reason": reason,
         "state": state,
         "inventory": inventory,
+        "case_battles": case_battles,
     }
     resp.update(payload)
     if request_id:
@@ -3252,6 +3274,7 @@ def inventory_view():
     if user_id is None:
         return redirect(url_for("login"))
 
+    from game.case_battles import build_case_battles_state
     from game.inventory import build_inventory_state, inventory_schema_ready
     from game.planet_evolution.repository import get_context_planet
 
@@ -3260,6 +3283,7 @@ def inventory_view():
         return redirect(url_for("login"))
 
     inventory = {"ready": False, "containers": [], "other_items": []}
+    case_battles = {"ready": False, "lobby": [], "mine": [], "active": None}
     conn = db()
     try:
         if inventory_schema_ready(conn):
@@ -3267,6 +3291,7 @@ def inventory_view():
             planet = get_context_planet(int(user_id), conn=conn)
             inventory["planet_id"] = int(planet["id"])
             inventory["planet_name"] = str(planet.get("name") or "").strip()
+        case_battles = build_case_battles_state(int(user_id), conn=conn)
     finally:
         conn.close()
 
@@ -3278,6 +3303,7 @@ def inventory_view():
         energy_used=ctx["energy_used"],
         storage_caps=ctx["storage_caps"],
         inventory=inventory,
+        case_battles=case_battles,
     )
 
 
@@ -3288,6 +3314,7 @@ def api_inventory_state():
     if not user_id:
         return jsonify({"ok": False, "reason": "not_logged_in"}), 401
 
+    from game.case_battles import build_case_battles_state
     from game.inventory import build_inventory_state, inventory_schema_ready
 
     conn = db()
@@ -3295,10 +3322,11 @@ def api_inventory_state():
         if not inventory_schema_ready(conn):
             return jsonify({"ok": False, "reason": "inventory_unavailable"}), 503
         inventory = build_inventory_state(user_id, conn=conn)
+        case_battles = build_case_battles_state(user_id, conn=conn)
     finally:
         conn.close()
 
-    return jsonify({"ok": True, "inventory": inventory})
+    return jsonify({"ok": True, "inventory": inventory, "case_battles": case_battles})
 
 
 @app.route("/api/inventory/open-container", methods=["POST"])
@@ -3697,6 +3725,317 @@ def api_inventory_exchange():
         },
         request_id=request_id,
     )
+
+
+@app.route("/api/case-battles/state", methods=["GET"])
+@require_login
+def api_case_battles_state():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    from game.case_battles import build_case_battles_state
+
+    conn = db()
+    try:
+        case_battles = build_case_battles_state(user_id, conn=conn)
+    finally:
+        conn.close()
+    return jsonify({"ok": True, "case_battles": case_battles})
+
+
+@app.route("/api/case-battles/<int:battle_id>", methods=["GET"])
+@require_login
+def api_case_battles_get(battle_id: int):
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    from game.case_battles import get_battle_payload
+    from game.db import begin_write_transaction, commit, rollback
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        battle = get_battle_payload(int(battle_id), conn=conn, viewer_id=user_id, auto_settle=True)
+        commit(conn)
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+    if not battle:
+        return jsonify({"ok": False, "reason": "battle_not_found", "message": _inventory_action_message("battle_not_found")}), 404
+    return jsonify({"ok": True, "battle": battle})
+
+
+@app.route("/api/case-battles/create", methods=["POST"])
+@require_login
+def api_case_battles_create():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in", "message": "Nicht angemeldet."}), 401
+
+    data = request.get_json(silent=True) or {}
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    from game.case_battles import case_battles_schema_ready, create_battle
+    from game.inventory import run_inventory_mutation
+
+    conn = db()
+    try:
+        if not case_battles_schema_ready(conn):
+            return _inventory_action_error_response(
+                user_id, "case_battles_unavailable", "case_battles_create", status=503
+            )
+    finally:
+        conn.close()
+
+    cases = data.get("cases")
+    mode = str(data.get("mode") or "standard")
+    visibility = str(data.get("visibility") or "public")
+    try:
+        player_limit = int(data.get("player_limit") or 2)
+    except (TypeError, ValueError):
+        player_limit = 2
+
+    try:
+        ok, reason, result = run_inventory_mutation(
+            lambda c: create_battle(
+                user_id,
+                cases=cases,
+                mode=mode,
+                visibility=visibility,
+                player_limit=player_limit,
+                conn=c,
+            )
+        )
+    except Exception:
+        return _inventory_action_error_response(
+            user_id, "inventory_action_failed", "case_battles_create", status=500
+        )
+
+    if not ok:
+        return _inventory_action_error_response(user_id, reason, "case_battles_create")
+
+    return _inventory_action_ok_response(
+        user_id,
+        reason,
+        "case_battles_create",
+        {"battle": result},
+        request_id=request_id,
+    )
+
+
+@app.route("/api/case-battles/join", methods=["POST"])
+@require_login
+def api_case_battles_join():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in", "message": "Nicht angemeldet."}), 401
+
+    data = request.get_json(silent=True) or {}
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    try:
+        battle_id = int(data.get("battle_id") or 0)
+    except (TypeError, ValueError):
+        battle_id = 0
+    join_code = data.get("join_code")
+
+    from game.case_battles import case_battles_schema_ready, join_battle, join_battle_by_code
+    from game.inventory import run_inventory_mutation
+
+    conn = db()
+    try:
+        if not case_battles_schema_ready(conn):
+            return _inventory_action_error_response(
+                user_id, "case_battles_unavailable", "case_battles_join", status=503
+            )
+    finally:
+        conn.close()
+
+    try:
+        if battle_id <= 0 and join_code:
+            ok, reason, result = run_inventory_mutation(
+                lambda c: join_battle_by_code(user_id, str(join_code), conn=c)
+            )
+        else:
+            ok, reason, result = run_inventory_mutation(
+                lambda c: join_battle(user_id, battle_id, join_code=join_code, conn=c)
+            )
+    except Exception:
+        return _inventory_action_error_response(
+            user_id, "inventory_action_failed", "case_battles_join", status=500
+        )
+
+    if not ok:
+        return _inventory_action_error_response(user_id, reason, "case_battles_join")
+
+    return _inventory_action_ok_response(
+        user_id,
+        reason,
+        "case_battles_join",
+        {"battle": result},
+        request_id=request_id,
+    )
+
+
+@app.route("/api/case-battles/cancel", methods=["POST"])
+@require_login
+def api_case_battles_cancel():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in", "message": "Nicht angemeldet."}), 401
+
+    data = request.get_json(silent=True) or {}
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    try:
+        battle_id = int(data.get("battle_id") or 0)
+    except (TypeError, ValueError):
+        battle_id = 0
+
+    from game.case_battles import cancel_battle, case_battles_schema_ready
+    from game.inventory import run_inventory_mutation
+
+    conn = db()
+    try:
+        if not case_battles_schema_ready(conn):
+            return _inventory_action_error_response(
+                user_id, "case_battles_unavailable", "case_battles_cancel", status=503
+            )
+    finally:
+        conn.close()
+
+    try:
+        ok, reason, result = run_inventory_mutation(
+            lambda c: cancel_battle(user_id, battle_id, conn=c)
+        )
+    except Exception:
+        return _inventory_action_error_response(
+            user_id, "inventory_action_failed", "case_battles_cancel", status=500
+        )
+
+    if not ok:
+        return _inventory_action_error_response(user_id, reason, "case_battles_cancel")
+
+    return _inventory_action_ok_response(
+        user_id,
+        reason,
+        "case_battles_cancel",
+        {"battle": result},
+        request_id=request_id,
+    )
+
+
+@app.route("/api/case-battles/settle", methods=["POST"])
+@require_login
+def api_case_battles_settle():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in", "message": "Nicht angemeldet."}), 401
+
+    data = request.get_json(silent=True) or {}
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    try:
+        battle_id = int(data.get("battle_id") or 0)
+    except (TypeError, ValueError):
+        battle_id = 0
+
+    from game.case_battles import case_battles_schema_ready, get_battle_payload, settle_battle
+    from game.inventory import run_inventory_mutation
+
+    conn = db()
+    try:
+        if not case_battles_schema_ready(conn):
+            return _inventory_action_error_response(
+                user_id, "case_battles_unavailable", "case_battles_settle", status=503
+            )
+        preview = get_battle_payload(battle_id, conn=conn, viewer_id=user_id)
+        if not preview:
+            return _inventory_action_error_response(user_id, "battle_not_found", "case_battles_settle")
+        if not preview.get("is_participant"):
+            return _inventory_action_error_response(user_id, "not_participant", "case_battles_settle")
+    finally:
+        conn.close()
+
+    try:
+        ok, reason, result = run_inventory_mutation(
+            lambda c: settle_battle(battle_id, conn=c)
+        )
+    except Exception:
+        return _inventory_action_error_response(
+            user_id, "inventory_action_failed", "case_battles_settle", status=500
+        )
+
+    if not ok:
+        return _inventory_action_error_response(user_id, reason, "case_battles_settle")
+
+    return _inventory_action_ok_response(
+        user_id,
+        reason,
+        "case_battles_settle",
+        {"battle": result},
+        request_id=request_id,
+    )
+
+
+@app.route("/api/case-battles/verify", methods=["POST"])
+@require_login
+def api_case_battles_verify():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    try:
+        battle_id = int(data.get("battle_id") or 0)
+    except (TypeError, ValueError):
+        battle_id = 0
+    try:
+        round_index = int(data.get("round_index") or 0)
+    except (TypeError, ValueError):
+        round_index = -1
+    try:
+        target_user_id = int(data.get("user_id") or user_id)
+    except (TypeError, ValueError):
+        target_user_id = user_id
+
+    from game.case_battles import verify_battle_roll
+
+    conn = db()
+    try:
+        ok, reason, result = verify_battle_roll(
+            battle_id,
+            round_index=round_index,
+            user_id=target_user_id,
+            conn=conn,
+        )
+    finally:
+        conn.close()
+
+    if not ok:
+        return jsonify({"ok": False, "reason": reason, "message": _inventory_action_message(reason)}), 400
+    return jsonify({"ok": True, "reason": reason, "verification": result})
 
 
 @app.route("/auction-house")
@@ -8439,6 +8778,8 @@ def api_options_notify_sounds():
         int(pid),
         notify_attack_sound=payload.get("notify_attack_sound"),
         notify_message_sound=payload.get("notify_message_sound"),
+        sfx_ui_sound=payload.get("sfx_ui_sound"),
+        sfx_combat_sound=payload.get("sfx_combat_sound"),
     )
     if not ok:
         return _options_api_response(False, err, data, 400)
