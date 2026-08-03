@@ -2895,6 +2895,11 @@ body.gc-body-simple .gc-toast-stack{
   place-items: center;
   padding: 20px;
 }
+.gc-whats-new.hidden,
+.gc-whats-new[hidden]{
+  display: none !important;
+  pointer-events: none !important;
+}
 .gc-whats-new-backdrop{
   position: absolute;
   inset: 0;
