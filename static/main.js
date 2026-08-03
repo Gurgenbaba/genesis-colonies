@@ -2427,6 +2427,7 @@
     if (path.endsWith("/skilltree")) return "skilltree";
     if (path.endsWith("/premium")) return "premium";
     if (path.endsWith("/shop") || path.endsWith("/shop/return")) return "shop";
+    if (path.endsWith("/creator")) return "creator";
     if (path === "/alliance" || /^\/alliance\/\d+$/.test(path)) return "alliance";
     if (path.endsWith("/shipyard")) return "shipyard";
     if (path.endsWith("/defense")) return "defense";
@@ -19180,6 +19181,84 @@
   }
 
   let _shopBuyBound = false;
+  let _shopActivePromo = "";
+
+  function _shopActivePromoCode() {
+    const page = document.getElementById("shop-page");
+    const input = page && page.querySelector("[data-shop-promo-input]");
+    const fromInput = input ? String(input.value || "").trim().toUpperCase() : "";
+    return fromInput || _shopActivePromo || "";
+  }
+
+  function _formatShopEuro(cents) {
+    const n = Number(cents || 0) / 100;
+    try {
+      return new Intl.NumberFormat(undefined, { style: "currency", currency: "EUR" }).format(n);
+    } catch (_) {
+      return `${n.toFixed(2)} €`;
+    }
+  }
+
+  function _applyShopPromoPrices(priced) {
+    const page = document.getElementById("shop-page");
+    if (!page || !Array.isArray(priced)) return;
+    const bySku = {};
+    priced.forEach((row) => {
+      if (row && row.sku) bySku[String(row.sku)] = row;
+    });
+    page.querySelectorAll("[data-shop-price]").forEach((el) => {
+      const sku = el.getAttribute("data-sku") || "";
+      const list = Number(el.getAttribute("data-list-cents") || 0);
+      const row = bySku[sku];
+      if (!row) {
+        el.textContent = _formatShopEuro(list);
+        el.classList.remove("shop-card-price--promo");
+        return;
+      }
+      const paid = Number(row.paid_cents || list);
+      if (paid < list) {
+        el.innerHTML = `<span class="shop-price-list">${escapeHtml(_formatShopEuro(list))}</span> <span class="shop-price-paid">${escapeHtml(_formatShopEuro(paid))}</span>`;
+        el.classList.add("shop-card-price--promo");
+      } else {
+        el.textContent = _formatShopEuro(paid);
+        el.classList.remove("shop-card-price--promo");
+      }
+    });
+  }
+
+  async function _shopApplyPromo(code) {
+    const page = document.getElementById("shop-page");
+    const status = page && page.querySelector("[data-shop-promo-status]");
+    const normalized = String(code || "").trim().toUpperCase();
+    if (!normalized) {
+      _shopActivePromo = "";
+      if (status) status.textContent = "";
+      _applyShopPromoPrices([]);
+      return;
+    }
+    try {
+      const res = await GC.fetchGameAction("/api/shop/promo/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: normalized, sticky: true }),
+      });
+      if (res && res.ok) {
+        _shopActivePromo = String(res.code || normalized);
+        if (status) {
+          status.textContent = t("shop_promo_active", "Code aktiv") + `: ${_shopActivePromo}`;
+        }
+        _applyShopPromoPrices(res.priced || []);
+        showNotify(t("shop_promo_applied", "Creator-Code angewendet."), "success");
+      } else {
+        _shopActivePromo = "";
+        if (status) status.textContent = t("shop_promo_invalid", "Code ungültig");
+        _applyShopPromoPrices([]);
+        showNotify(t("shop_promo_invalid", "Code ungültig"), "error");
+      }
+    } catch (_) {
+      showNotify(t("shop_promo_invalid", "Code ungültig"), "error");
+    }
+  }
 
   function _shopSelectTab(page, tabKey) {
     const key = tabKey === "free" ? "free" : "premium";
@@ -19295,7 +19374,16 @@
       }
 
       const btn = ev.target && ev.target.closest ? ev.target.closest("[data-shop-buy]") : null;
-      if (!btn) return;
+      if (!btn) {
+        const applyBtn = ev.target && ev.target.closest ? ev.target.closest("[data-shop-promo-apply]") : null;
+        if (applyBtn && document.getElementById("shop-page")) {
+          ev.preventDefault();
+          const page = document.getElementById("shop-page");
+          const input = page && page.querySelector("[data-shop-promo-input]");
+          _shopApplyPromo(input ? input.value : "");
+        }
+        return;
+      }
       if (!document.getElementById("shop-page") && !document.getElementById("premium-page")) {
         return;
       }
@@ -19325,6 +19413,7 @@
             provider,
             legal_ack: true,
             legal_text_version: "v1",
+            promo_code: _shopActivePromoCode(),
           }),
         });
         if (res?.state && typeof GC.applyActionState === "function") {
@@ -19398,6 +19487,52 @@
         );
       }
     } catch (_) { /* ignore */ }
+    const input = page.querySelector("[data-shop-promo-input]");
+    const initial = input ? String(input.value || "").trim() : "";
+    if (initial) {
+      _shopApplyPromo(initial);
+    }
+  }
+
+  function initCreator() {
+    const page = document.getElementById("creator-page");
+    if (!page) return;
+    const ackBtn = page.querySelector("[data-creator-terms-ack]");
+    if (ackBtn) {
+      ackBtn.addEventListener("click", async () => {
+        ackBtn.disabled = true;
+        try {
+          const res = await GC.fetchGameAction("/api/creator/terms-ack", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+          });
+          if (res && res.ok) {
+            showNotify(t("creator_terms_ok", "Bedingungen akzeptiert."), "success");
+            if (typeof GC.reloadCurrentPage === "function") GC.reloadCurrentPage();
+          } else {
+            showNotify(t("creator_terms_fail", "Bestätigung fehlgeschlagen."), "error");
+          }
+        } catch (_) {
+          showNotify(t("creator_terms_fail", "Bestätigung fehlgeschlagen."), "error");
+        } finally {
+          ackBtn.disabled = false;
+        }
+      });
+    }
+    page.querySelectorAll("[data-creator-copy]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const code = btn.getAttribute("data-creator-copy") || "";
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(code);
+          }
+          showNotify(t("creator_copied", "Code kopiert."), "success");
+        } catch (_) {
+          showNotify(code, "info");
+        }
+      });
+    });
   }
 
   function parseAlliancePageState() {
@@ -36170,6 +36305,7 @@
   GC.modules.login_rewards = initLoginRewards;
   GC.modules.premium = initBattlePass;
   GC.modules.shop = initShop;
+  GC.modules.creator = initCreator;
   GC.modules.alliance = initAlliance;
   bindAllianceOnce();
   GC.modules.imperial_directives = initImperialDirectives;

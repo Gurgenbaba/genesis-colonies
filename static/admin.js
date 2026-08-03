@@ -22,7 +22,7 @@
   const ADMIN_TAB_GROUPS = {
     liveops: ["world_boss", "pirates", "inactive_autoplay", "events", "diplomacy", "votes"],
     players: ["players", "planets"],
-    economy: ["balance", "lootboxes", "queues", "fleets"],
+    economy: ["balance", "lootboxes", "queues", "fleets", "promos"],
     moderation: ["chat", "support", "messages"],
     system: ["health", "server", "runtime", "migrations", "audit"],
   };
@@ -411,6 +411,9 @@
         break;
       case "lootboxes":
         result = await loadAdminLootboxes();
+        break;
+      case "promos":
+        result = await loadAdminPromos();
         break;
       case "planets":
         result = await searchAdminPlanets();
@@ -3119,6 +3122,108 @@
       syncAdminHudSelects(grantPlayer);
     }
     renderLootPoolEditor(_lootboxSelectedContainer);
+    return data;
+  }
+
+  async function loadAdminPromos() {
+    const host = qs("#admin-promos-panel");
+    if (!host) return { ok: false };
+    host.innerHTML = loadingHtml();
+    const data = await adminGet("/api/admin/promos/state");
+    if (!data.ok) {
+      host.innerHTML = errorCard(data);
+      return data;
+    }
+    const creators = data.creators || [];
+    const rows = creators
+      .map((c) => {
+        const perf = c.performance || {};
+        const bal = perf.balance || c.balance || {};
+        const code = perf.code || ((c.codes || []).find((p) => p.active) || {}).code || "—";
+        const statusLabel =
+          (perf.status || (c.active ? "active" : "inactive")) === "active"
+            ? t("admin_promos_state_active", "active")
+            : t("admin_promos_state_inactive", "inactive");
+        const toggleCodes = (c.codes || [])
+          .map((p) => {
+            const on = !!p.active;
+            const toggleLabel = on
+              ? t("admin_promos_disable", "Disable")
+              : t("admin_promos_enable", "Enable");
+            return (
+              `<button type="button" class="gc-btn gc-btn-xs gc-btn-outline" data-admin-promo-toggle="${p.id}" data-active="${on ? 0 : 1}">` +
+              `${esc(toggleLabel)}</button>`
+            );
+          })
+          .join(" ");
+        return (
+          `<tr data-creator-id="${c.id}">` +
+          `<td>${esc(c.display_name)}</td>` +
+          `<td><strong>${esc(code)}</strong></td>` +
+          `<td>${Number(perf.registrations || 0)}</td>` +
+          `<td>${Number(perf.active_7d || 0)}</td>` +
+          `<td>${Number(perf.active_30d || 0)}</td>` +
+          `<td>${Number(perf.donations || 0)}</td>` +
+          `<td>${(Number(perf.revenue_cents || 0) / 100).toFixed(2)} €</td>` +
+          `<td>${(Number(bal.available || 0) / 100).toFixed(2)} €</td>` +
+          `<td>${esc(statusLabel)} ${toggleCodes} <a class="gc-btn gc-btn-xs gc-btn-outline" href="/api/admin/promos/${c.id}/ledger.csv">${esc(t("admin_promos_csv", "CSV"))}</a></td>` +
+          `</tr>`
+        );
+      })
+      .join("");
+    host.innerHTML =
+      `<div class="admin-tool-panel">` +
+      `<h4 class="admin-tool-panel__title">${esc(t("admin_promos_create", "Creator anlegen"))}</h4>` +
+      `<div class="admin-form-grid">` +
+      `<label>${esc(t("admin_promos_player_id", "Player ID"))}<input type="number" id="admin-promo-player-id" class="gc-input"></label>` +
+      `<label>${esc(t("admin_promos_name", "Name"))}<input type="text" id="admin-promo-name" class="gc-input"></label>` +
+      `<label>${esc(t("admin_promos_code", "Code"))}<input type="text" id="admin-promo-code" class="gc-input"></label>` +
+      `<label>${esc(t("admin_promos_paypal", "PayPal"))}<input type="text" id="admin-promo-paypal" class="gc-input"></label>` +
+      `<button type="button" class="gc-btn gc-btn-primary" id="admin-promo-create">${esc(t("admin_promos_create_btn", "Anlegen"))}</button>` +
+      `</div></div>` +
+      `<div class="admin-table-wrap"><table class="admin-table admin-table-compact"><thead><tr>` +
+      `<th>${esc(t("admin_promos_col_creator", "Creator"))}</th>` +
+      `<th>${esc(t("admin_promos_col_code", "Code"))}</th>` +
+      `<th>${esc(t("admin_promos_col_regs", "Registrations"))}</th>` +
+      `<th>${esc(t("admin_promos_col_active_7d", "Active (7d)"))}</th>` +
+      `<th>${esc(t("admin_promos_col_active_30d", "Active (30d)"))}</th>` +
+      `<th>${esc(t("admin_promos_col_donations", "Donations"))}</th>` +
+      `<th>${esc(t("admin_promos_col_revenue", "Revenue"))}</th>` +
+      `<th>${esc(t("admin_promos_col_balance", "Balance €"))}</th>` +
+      `<th>${esc(t("admin_promos_col_status", "Status"))}</th>` +
+      `</tr></thead><tbody>${rows || `<tr><td colspan="9">${esc(t("admin_promos_empty", "Keine Creators"))}</td></tr>`}</tbody></table></div>`;
+
+    const createBtn = qs("#admin-promo-create", host);
+    if (createBtn) {
+      createBtn.onclick = async () => {
+        const body = {
+          player_id: Number(qs("#admin-promo-player-id", host)?.value || 0),
+          display_name: qs("#admin-promo-name", host)?.value || "",
+          code: qs("#admin-promo-code", host)?.value || "",
+          paypal_email: qs("#admin-promo-paypal", host)?.value || "",
+        };
+        const res = await adminPost("/api/admin/promos/creators", body);
+        if (!res.ok) {
+          showAlert(res.message || res.error, "error");
+          return;
+        }
+        showAlert(t("admin_promos_created", "Creator angelegt."), "success");
+        await loadAdminPromos();
+      };
+    }
+    host.querySelectorAll("[data-admin-promo-toggle]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const res = await adminPost("/api/admin/promos/codes/active", {
+          promo_id: Number(btn.getAttribute("data-admin-promo-toggle") || 0),
+          active: Number(btn.getAttribute("data-active") || 0) === 1,
+        });
+        if (!res.ok) {
+          showAlert(res.message || res.error, "error");
+          return;
+        }
+        await loadAdminPromos();
+      });
+    });
     return data;
   }
 

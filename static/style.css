@@ -47824,3 +47824,26 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
     transition: none !important;
   }
 }
+
+/* Creator promo shop + dashboard */
+.shop-promo-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.75rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--gc-border, #2a3540);
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.shop-promo-label { font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.8; }
+.shop-promo-input { max-width: 10rem; text-transform: uppercase; }
+.shop-promo-status { font-size: 0.85rem; color: var(--gc-neon-cyan, #5ee7ff); }
+.shop-card-price--promo .shop-price-list { text-decoration: line-through; opacity: 0.55; margin-right: 0.35rem; }
+.shop-card-price--promo .shop-price-paid { color: var(--gc-neon-cyan, #5ee7ff); }
+.creator-page .creator-kit { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; margin-bottom: 1rem; }
+.creator-funnel { display: grid; grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr)); gap: 0.5rem; margin-bottom: 0.75rem; }
+.creator-stat { border: 1px solid var(--gc-border, #2a3540); padding: 0.45rem 0.55rem; border-radius: var(--gc-radius-sm, 2px); }
+.creator-stat span { display: block; font-size: 0.7rem; opacity: 0.7; text-transform: uppercase; }
+.creator-stat strong { font-size: 1rem; }
+.creator-terms { padding: 0.75rem; margin-bottom: 1rem; }

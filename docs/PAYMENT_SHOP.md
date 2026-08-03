@@ -16,6 +16,23 @@
 | 6 | Contract tests + GAME_RULES | GC-2306 | ✅ |
 | 7 | Free-Baseline Value Balance | GC-2310…2313 | ✅ |
 | 8 | PayPal Live go-live | Ops | ✅ |
+| 9 | Creator Promo Codes (Rabatt + Kommission + Referral-Bridge + Dashboard) | GC-Creator | ✅ |
+
+## Creator Partner Program
+
+Owner: `game/shop_promos.py` — Vanity-Code für Shop-Rabatt/Kommission **und** Referral-Attribution (Register/nachträglich via Bridge in `game/referrals.py`).
+
+- Default: 10% Rabatt + 10% Kommission vom **Listenpreis**; Codes laufen nie ab.
+- Ledger: `held` → `available` erst wenn Käufer **qualifiziert** ist:
+  - Account-Alter ≥ 7 Tage (`CREATOR_COMMISSION_HOLD_SEC`)
+  - `last_seen` innerhalb 7 Tage (`CREATOR_BUYER_ACTIVE_WINDOW_SEC`)
+  - `score_total` ≥ 100 (`CREATOR_MIN_BUYER_SCORE`)
+  - nicht gebannt
+  - danach Admin-Payout (Min 25 €)
+- Partner-KPIs (Admin + `/creator`): Registrierungen, Active 7d/30d, Spenden, Umsatz, Balance, Status.
+- Surfaces: `/shop` Promo-Feld, `/r/<CODE>`, `/creator` Dashboard, Admin Tab **Creator Promos**.
+- Providers chargen `order.amount_cents` (nicht Catalog-Preis).
+- Kein Parallel-Tracking: Spielerzählung bleibt `player_referrals`.
 
 ## Philosophy
 
@@ -50,6 +67,7 @@ Free ist reich an domain-locked Boosters, arm an flexiblem TK.
 | System | Owner | Notes |
 |--------|-------|-------|
 | Shop Catalog + Fulfill | `game/shop.py` | SKUs, Orders, Fulfillment |
+| Creator Promos + Ledger | `game/shop_promos.py` | Codes, Pricing, Funnel, Commission |
 | Payment Providers | `game/payment_providers.py` | Stripe/PayPal Session + Webhook verify |
 | Premium Entitlement | `game/premium_entitlements.py` | Flag Single Source |
 | Battle Pass Unlock | `game/battle_pass.py` | `unlock_premium(source=…)` |

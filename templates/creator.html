@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% set ov = creator if creator is defined and creator else none %}
+<section class="gc-panel creator-page" id="creator-page" data-page="creator">
+  <header class="gc-panel-header">
+    <h1 class="gc-panel-title">{{ T("creator_title", "Creator Partner") }}</h1>
+    <p class="gc-panel-sub">{{ T("creator_sub", "Code teilen, Community tracken, Kommission einsehen.") }}</p>
+  </header>
+
+  {% if not creator_ok or not ov %}
+  <div class="gc-panel-body">
+    <p class="creator-locked">{{ T("creator_locked", "Kein aktives Creator-Profil für diesen Account.") }}</p>
+  </div>
+  {% else %}
+  <div class="gc-panel-body creator-body">
+    {% if ov.terms_required %}
+    <div class="creator-terms gc-panel" data-creator-terms>
+      <p>{{ T("creator_terms_hint", "Bitte die Partner-Bedingungen bestätigen, um das Dashboard zu nutzen.") }}</p>
+      <button type="button" class="gc-btn gc-btn-primary" data-creator-terms-ack>{{ T("creator_terms_ack", "Bedingungen akzeptieren") }}</button>
+    </div>
+    {% else %}
+    {% set promo = ov.promo %}
+    <div class="creator-kit">
+      <div class="creator-kit-code">
+        <span class="creator-kit-label">{{ T("creator_code_label", "Dein Code") }}</span>
+        <strong data-creator-code>{{ promo.code if promo else "—" }}</strong>
+        {% if promo %}
+        <button type="button" class="gc-btn gc-btn-sm gc-btn-outline" data-creator-copy="{{ promo.code }}">{{ T("creator_copy", "Kopieren") }}</button>
+        {% endif %}
+      </div>
+      {% if promo %}
+      <div class="creator-kit-links">
+        <a class="gc-btn gc-btn-sm gc-btn-outline" href="{{ url_for('shop_promo_share_landing', code=promo.code) }}">{{ T("creator_share_link", "Share-Link") }}</a>
+        <a class="gc-btn gc-btn-sm gc-btn-outline" href="{{ url_for('shop_view', promo=promo.code) }}">{{ T("creator_shop_link", "Shop-Link") }}</a>
+        <a class="gc-btn gc-btn-sm gc-btn-outline" href="{{ url_for('api_creator_ledger_csv') }}">{{ T("creator_csv", "CSV Export") }}</a>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="creator-funnel">
+      {% set p = ov.performance if ov.performance is defined and ov.performance else {} %}
+      {% set b = ov.balance %}
+      <div class="creator-stat"><span>{{ T("creator_stat_regs", "Registrierungen") }}</span><strong>{{ p.registrations or 0 }}</strong></div>
+      <div class="creator-stat"><span>{{ T("creator_stat_active_7d", "Aktiv (7d)") }}</span><strong>{{ p.active_7d or 0 }}</strong></div>
+      <div class="creator-stat"><span>{{ T("creator_stat_active_30d", "Aktiv (30d)") }}</span><strong>{{ p.active_30d or 0 }}</strong></div>
+      <div class="creator-stat"><span>{{ T("creator_stat_donations", "Spenden") }}</span><strong>{{ p.donations or 0 }}</strong></div>
+      <div class="creator-stat"><span>{{ T("creator_stat_revenue", "Umsatz") }}</span><strong>{{ '%.2f'|format((p.revenue_cents or 0) / 100) }} €</strong></div>
+      <div class="creator-stat"><span>{{ T("creator_stat_held", "Gesperrt €") }}</span><strong>{{ '%.2f'|format(b.held / 100) }}</strong></div>
+      <div class="creator-stat"><span>{{ T("creator_stat_available", "Verfügbar €") }}</span><strong>{{ '%.2f'|format(b.available / 100) }}</strong></div>
+      <div class="creator-stat"><span>{{ T("creator_stat_paid", "Ausgezahlt €") }}</span><strong>{{ '%.2f'|format(b.paid / 100) }}</strong></div>
+    </div>
+    <p class="creator-min-hint">{{ T("creator_min_payout", "Mindestauszahlung") }}: {{ '%.2f'|format(ov.min_payout_cents / 100) }} €</p>
+    <p class="creator-min-hint admin-small-hint">{{ T("creator_payout_rules", "Auszahlung erst nach 7 Tagen, aktiver Spielzeit, Mindest-Score und ohne Ban.") }}</p>
+
+    <div class="admin-table-wrap creator-ledger-wrap">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>{{ T("creator_col_order", "Order") }}</th>
+            <th>{{ T("creator_col_gross", "Gross") }}</th>
+            <th>{{ T("creator_col_commission", "Commission") }}</th>
+            <th>{{ T("creator_col_status", "Status") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in ov.ledger %}
+          <tr>
+            <td>{{ row.id }}</td>
+            <td>{{ row.order_id }}</td>
+            <td>{{ '%.2f'|format(row.gross_cents / 100) }} €</td>
+            <td>{{ '%.2f'|format(row.commission_cents / 100) }} €</td>
+            <td>{{ T('creator_status_' ~ row.status, row.status) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5">{{ T("creator_ledger_empty", "Noch keine Kommissionen.") }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

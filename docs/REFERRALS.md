@@ -6,6 +6,8 @@
 
 Unique referral codes and activity-gated tier rewards (meta containers into Inventory). Same-IP referrals are recorded but do not count toward tiers.
 
+**Creator bridge:** Active `shop_promo_codes` resolve to the creator `player_id` inside `_resolve_referrer_by_code` when no native referral code matches — one vanity code for invites + shop. See [PAYMENT_SHOP.md](PAYMENT_SHOP.md) Creator Partner Program.
+
 ---
 
 ## Player Article

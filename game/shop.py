@@ -501,15 +501,22 @@ def _format_price(cents: int, currency: str) -> str:
 def get_order(order_id: int, *, conn) -> Optional[Dict[str, Any]]:
     if not schema_ready(conn) or int(order_id) <= 0:
         return None
-    row = conn.execute(
-        """
-        SELECT id, player_id, sku, provider, provider_session_id, provider_payment_id,
-               amount_cents, currency, status, fulfill_reason, created_at, paid_at,
-               fulfilled_at, metadata_json
-        FROM shop_orders WHERE id = ? LIMIT 1;
-        """,
-        (int(order_id),),
-    ).fetchone()
+    cols = _order_select_cols()
+    try:
+        row = conn.execute(
+            f"SELECT {cols} FROM shop_orders WHERE id = ? LIMIT 1;",
+            (int(order_id),),
+        ).fetchone()
+    except Exception:
+        row = conn.execute(
+            """
+            SELECT id, player_id, sku, provider, provider_session_id, provider_payment_id,
+                   amount_cents, currency, status, fulfill_reason, created_at, paid_at,
+                   fulfilled_at, metadata_json
+            FROM shop_orders WHERE id = ? LIMIT 1;
+            """,
+            (int(order_id),),
+        ).fetchone()
     if not row:
         return None
     return _order_from_row(row)
@@ -520,17 +527,28 @@ def find_order_by_session(
 ) -> Optional[Dict[str, Any]]:
     if not schema_ready(conn):
         return None
-    row = conn.execute(
-        """
-        SELECT id, player_id, sku, provider, provider_session_id, provider_payment_id,
-               amount_cents, currency, status, fulfill_reason, created_at, paid_at,
-               fulfilled_at, metadata_json
-        FROM shop_orders
-        WHERE provider = ? AND provider_session_id = ?
-        LIMIT 1;
-        """,
-        (str(provider), str(session_id)),
-    ).fetchone()
+    cols = _order_select_cols()
+    try:
+        row = conn.execute(
+            f"""
+            SELECT {cols} FROM shop_orders
+            WHERE provider = ? AND provider_session_id = ?
+            LIMIT 1;
+            """,
+            (str(provider), str(session_id)),
+        ).fetchone()
+    except Exception:
+        row = conn.execute(
+            """
+            SELECT id, player_id, sku, provider, provider_session_id, provider_payment_id,
+                   amount_cents, currency, status, fulfill_reason, created_at, paid_at,
+                   fulfilled_at, metadata_json
+            FROM shop_orders
+            WHERE provider = ? AND provider_session_id = ?
+            LIMIT 1;
+            """,
+            (str(provider), str(session_id)),
+        ).fetchone()
     return _order_from_row(row) if row else None
 
 
@@ -539,17 +557,28 @@ def find_order_by_payment(
 ) -> Optional[Dict[str, Any]]:
     if not schema_ready(conn) or not str(payment_id or "").strip():
         return None
-    row = conn.execute(
-        """
-        SELECT id, player_id, sku, provider, provider_session_id, provider_payment_id,
-               amount_cents, currency, status, fulfill_reason, created_at, paid_at,
-               fulfilled_at, metadata_json
-        FROM shop_orders
-        WHERE provider = ? AND provider_payment_id = ?
-        LIMIT 1;
-        """,
-        (str(provider), str(payment_id).strip()),
-    ).fetchone()
+    cols = _order_select_cols()
+    try:
+        row = conn.execute(
+            f"""
+            SELECT {cols} FROM shop_orders
+            WHERE provider = ? AND provider_payment_id = ?
+            LIMIT 1;
+            """,
+            (str(provider), str(payment_id).strip()),
+        ).fetchone()
+    except Exception:
+        row = conn.execute(
+            """
+            SELECT id, player_id, sku, provider, provider_session_id, provider_payment_id,
+                   amount_cents, currency, status, fulfill_reason, created_at, paid_at,
+                   fulfilled_at, metadata_json
+            FROM shop_orders
+            WHERE provider = ? AND provider_payment_id = ?
+            LIMIT 1;
+            """,
+            (str(provider), str(payment_id).strip()),
+        ).fetchone()
     return _order_from_row(row) if row else None
 
 
@@ -613,7 +642,10 @@ def recover_paypal_return_for_player(
     product = get_product(sku, conn=conn, active_only=False)
     if not product:
         return False, "unknown_sku", existing
-    if int(product["price_cents"]) != amount_cents:
+    expected_cents = int(product["price_cents"])
+    if existing is not None:
+        expected_cents = int(existing.get("amount_cents") or expected_cents)
+    if expected_cents != amount_cents:
         return False, "amount_mismatch", existing
     if str(product.get("currency") or "eur").lower() != str(
         summary.get("currency") or "eur"
@@ -653,8 +685,21 @@ def recover_paypal_return_for_player(
     )
 
 
+def _order_select_cols() -> str:
+    base = (
+        "id, player_id, sku, provider, provider_session_id, provider_payment_id, "
+        "amount_cents, currency, status, fulfill_reason, created_at, paid_at, "
+        "fulfilled_at, metadata_json"
+    )
+    return (
+        base
+        + ", promo_code_id, list_amount_cents, discount_cents, commission_cents"
+    )
+
+
 def _order_from_row(row) -> Dict[str, Any]:
-    return {
+    keys = set(row.keys()) if hasattr(row, "keys") else set()
+    out = {
         "id": int(row["id"]),
         "player_id": int(row["player_id"]),
         "sku": str(row["sku"]),
@@ -669,7 +714,22 @@ def _order_from_row(row) -> Dict[str, Any]:
         "paid_at": float(row["paid_at"]) if row["paid_at"] is not None else None,
         "fulfilled_at": float(row["fulfilled_at"]) if row["fulfilled_at"] is not None else None,
         "metadata": _json_loads(row["metadata_json"]),
+        "promo_code_id": None,
+        "list_amount_cents": int(row["amount_cents"]),
+        "discount_cents": 0,
+        "commission_cents": 0,
     }
+    if "promo_code_id" in keys:
+        out["promo_code_id"] = (
+            int(row["promo_code_id"]) if row["promo_code_id"] is not None else None
+        )
+    if "list_amount_cents" in keys and row["list_amount_cents"] is not None:
+        out["list_amount_cents"] = int(row["list_amount_cents"])
+    if "discount_cents" in keys:
+        out["discount_cents"] = int(row["discount_cents"] or 0)
+    if "commission_cents" in keys:
+        out["commission_cents"] = int(row["commission_cents"] or 0)
+    return out
 
 
 def create_pending_order(
@@ -681,6 +741,7 @@ def create_pending_order(
     now: Optional[float] = None,
     metadata: Optional[Mapping[str, Any]] = None,
     allow_owned: bool = False,
+    promo_code: Optional[str] = None,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     if not schema_ready(conn):
         return False, "shop_unavailable", None
@@ -721,25 +782,84 @@ def create_pending_order(
         if get_companion_capacity(pid, conn=conn) >= int(MAX_COMPANION_CAPACITY):
             return False, "already_owned", None
 
+    list_cents = int(product["price_cents"])
+    paid_cents = list_cents
+    discount_cents = 0
+    commission_cents = 0
+    promo_code_id = None
+    meta = dict(metadata or {})
+    code_raw = str(promo_code or "").strip()
+    if code_raw:
+        from . import shop_promos as promos
+
+        ok_p, reason_p, promo = promos.validate_promo_for_buyer(
+            code_raw, pid, conn=conn
+        )
+        if not ok_p or not promo:
+            return False, reason_p, None
+        br = promos.price_breakdown(
+            list_cents,
+            int(promo["discount_bps"]),
+            int(promo["commission_bps"]),
+        )
+        paid_cents = int(br["paid_cents"])
+        discount_cents = int(br["discount_cents"])
+        commission_cents = int(br["commission_cents"])
+        promo_code_id = int(promo["id"])
+        meta["promo_code"] = str(promo["code"])
+
     ts = float(now if now is not None else time.time())
-    cur = conn.execute(
-        """
-        INSERT INTO shop_orders (
-            player_id, sku, provider, amount_cents, currency, status,
-            created_at, metadata_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
-        """,
-        (
-            pid,
-            product["sku"],
-            prov,
-            int(product["price_cents"]),
-            str(product["currency"]),
-            STATUS_PENDING,
-            ts,
-            _json_dumps(metadata or {}),
-        ),
-    )
+    has_promo_cols = False
+    try:
+        from .db import column_exists
+
+        has_promo_cols = column_exists(conn, "shop_orders", "promo_code_id")
+    except Exception:
+        has_promo_cols = False
+
+    if has_promo_cols:
+        cur = conn.execute(
+            """
+            INSERT INTO shop_orders (
+                player_id, sku, provider, amount_cents, currency, status,
+                created_at, metadata_json, promo_code_id, list_amount_cents,
+                discount_cents, commission_cents
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """,
+            (
+                pid,
+                product["sku"],
+                prov,
+                int(paid_cents),
+                str(product["currency"]),
+                STATUS_PENDING,
+                ts,
+                _json_dumps(meta),
+                promo_code_id,
+                int(list_cents),
+                int(discount_cents),
+                int(commission_cents),
+            ),
+        )
+    else:
+        cur = conn.execute(
+            """
+            INSERT INTO shop_orders (
+                player_id, sku, provider, amount_cents, currency, status,
+                created_at, metadata_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+            """,
+            (
+                pid,
+                product["sku"],
+                prov,
+                int(paid_cents),
+                str(product["currency"]),
+                STATUS_PENDING,
+                ts,
+                _json_dumps(meta),
+            ),
+        )
     order_id = int(cur.lastrowid)
     order = get_order(order_id, conn=conn)
     return True, "ok", {"order": order, "product": product}
@@ -1003,6 +1123,14 @@ def fulfill_order(
     if out is not None:
         out["granted"] = granted
         out["fulfill_reason"] = grant_reason
+        try:
+            from . import shop_promos as promos
+
+            if promos.schema_ready(conn):
+                promos.credit_commission_for_order(out, conn=conn, now=ts)
+                promos.release_held_commissions(conn=conn, now=ts)
+        except Exception:
+            pass
     return True, grant_reason, out
 
 
@@ -1255,6 +1383,7 @@ def start_checkout(
     now: Optional[float] = None,
     legal_ack: bool = False,
     legal_text_version: Optional[str] = None,
+    promo_code: Optional[str] = None,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     """Create pending order + provider checkout session."""
     from . import payment_providers as pp
@@ -1278,6 +1407,7 @@ def start_checkout(
         conn=conn,
         now=now,
         metadata=legal_meta,
+        promo_code=promo_code,
     )
     if not ok or not created:
         return False, reason, None

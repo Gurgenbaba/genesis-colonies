@@ -125,6 +125,7 @@
         <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="migrations" data-admin-group="system" role="tab">{{ T("admin_migrations_title") }}</button>
         <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="players" data-admin-group="players" role="tab">{{ T("admin_players_title") }}</button>
         <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="lootboxes" data-admin-group="economy" role="tab">{{ T("admin_lootboxes_title", "Lootboxen") }}</button>
+        <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="promos" data-admin-group="economy" role="tab">{{ T("admin_promos_title", "Creator Promos") }}</button>
         <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="planets" data-admin-group="players" role="tab">{{ T("admin_planets_title") }}</button>
         <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="queues" data-admin-group="economy" role="tab">{{ T("admin_queues_title") }}</button>
         <button type="button" class="gc-page-tab admin-tab-btn" data-admin-tab="fleets" data-admin-group="economy" role="tab">{{ T("admin_fleets_title", "Flotten") }}</button>
@@ -237,6 +238,16 @@
       </div>
       <section class="admin-section">
         <div id="admin-lootbox-pools-editor" class="admin-panel-body"></div>
+      </section>
+    </section>
+
+    <section id="admin-tab-promos" class="admin-panel admin-tab-panel" data-admin-panel="promos" role="tabpanel" hidden>
+      <div class="admin-action-row">
+        <h2 class="admin-panel-title">{{ T("admin_promos_title", "Creator Promos") }}</h2>
+      </div>
+      <p class="admin-tab-hint admin-small-hint">{{ T("admin_promos_hint", "Creators anlegen, Vanity-Codes, Ledger und manuelle Auszahlungen.") }}</p>
+      <section class="admin-section">
+        <div id="admin-promos-panel" class="admin-panel-body"></div>
       </section>
     </section>
 

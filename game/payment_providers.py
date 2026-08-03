@@ -60,8 +60,10 @@ def stripe_create_checkout_session(
         return False, "stripe_sdk_missing", None
 
     stripe.api_key = _env("STRIPE_SECRET_KEY")
-    currency = str(product.get("currency") or "eur").lower()
-    amount = int(product.get("price_cents") or 0)
+    currency = str(
+        order.get("currency") or product.get("currency") or "eur"
+    ).lower()
+    amount = int(order.get("amount_cents") or product.get("price_cents") or 0)
     if amount <= 0:
         return False, "invalid_amount", None
 
@@ -190,8 +192,10 @@ def paypal_create_checkout_order(
     if not token:
         return False, "paypal_auth_failed", None
 
-    currency = str(product.get("currency") or "eur").upper()
-    amount = max(0, int(product.get("price_cents") or 0)) / 100.0
+    currency = str(
+        order.get("currency") or product.get("currency") or "eur"
+    ).upper()
+    amount = max(0, int(order.get("amount_cents") or product.get("price_cents") or 0)) / 100.0
     value = f"{amount:.2f}"
     body = {
         "intent": "CAPTURE",

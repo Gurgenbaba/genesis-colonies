@@ -286,9 +286,16 @@ def _resolve_referrer_by_code(code: str, *, conn) -> Optional[int]:
         (normalized,),
     )
     row = cur.fetchone()
-    if not row:
-        return None
-    return int(row["player_id"])
+    if row:
+        return int(row["player_id"])
+    try:
+        from .shop_promos import resolve_referrer_player_id, schema_ready as promo_schema_ready
+
+        if promo_schema_ready(conn):
+            return resolve_referrer_player_id(normalized, conn=conn)
+    except Exception:
+        pass
+    return None
 
 
 def _get_referral_link_row(referred_player_id: int, *, conn) -> Optional[Any]:
@@ -428,6 +435,15 @@ def apply_referral_code(
         """,
         (pid, int(referrer_id), normalized_code, apply_ip_val, same_ip_flag, ts),
     )
+    try:
+        from .shop_promos import record_register_attribution, schema_ready as promo_schema_ready
+
+        if promo_schema_ready(conn):
+            record_register_attribution(
+                normalized_code, pid, conn=conn, now=float(ts)
+            )
+    except Exception:
+        pass
     return True, "referral_linked"
 
 

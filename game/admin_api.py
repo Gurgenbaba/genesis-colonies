@@ -2590,3 +2590,166 @@ def api_delete_server_event(admin_id: int, event_id: int) -> Dict[str, Any]:
         payload={"event_id": int(event_id)},
     )
     return _ok(deleted=True, event_id=int(event_id))
+
+def promos_admin_state() -> Dict[str, Any]:
+    from game.shop_promos import list_creators_admin, min_payout_cents, schema_ready
+
+    conn = db()
+    try:
+        if not schema_ready(conn):
+            return _ok(ready=False, creators=[], min_payout_cents=min_payout_cents())
+        return _ok(
+            ready=True,
+            creators=list_creators_admin(conn=conn),
+            min_payout_cents=min_payout_cents(),
+        )
+    finally:
+        conn.close()
+
+
+def create_creator_admin(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    from game.db import begin_write_transaction, commit, rollback
+    from game.shop_promos import create_creator, create_promo_code
+
+    display_name = str(body.get("display_name") or "").strip()
+    player_id = int(body.get("player_id") or 0)
+    code = str(body.get("code") or "").strip()
+    paypal_email = str(body.get("paypal_email") or "").strip() or None
+    discount_bps = int(body.get("discount_bps") or 1000)
+    commission_bps = int(body.get("commission_bps") or 1000)
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ok, reason, creator = create_creator(
+            conn=conn,
+            display_name=display_name,
+            player_id=player_id,
+            paypal_email=paypal_email,
+            payout_note=str(body.get("payout_note") or ""),
+        )
+        if not ok or not creator:
+            rollback(conn)
+            return _err(reason, reason)
+        promo = None
+        if code:
+            ok_p, reason_p, promo = create_promo_code(
+                conn=conn,
+                creator_id=int(creator["id"]),
+                code=code,
+                discount_bps=discount_bps,
+                commission_bps=commission_bps,
+            )
+            if not ok_p:
+                rollback(conn)
+                return _err(reason_p, reason_p)
+        commit(conn)
+        audit(
+            int(admin_id),
+            "shop_creator_create",
+            target_type="player",
+            target_id=player_id,
+            payload={"creator_id": creator["id"], "code": code or None},
+        )
+        return _ok(creator=creator, promo=promo)
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+
+def create_promo_admin(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    from game.db import begin_write_transaction, commit, rollback
+    from game.shop_promos import create_promo_code
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ok, reason, promo = create_promo_code(
+            conn=conn,
+            creator_id=int(body.get("creator_id") or 0),
+            code=str(body.get("code") or ""),
+            discount_bps=int(body.get("discount_bps") or 1000),
+            commission_bps=int(body.get("commission_bps") or 1000),
+            max_redemptions=int(body["max_redemptions"]) if body.get("max_redemptions") not in (None, "") else None,
+            notes=str(body.get("notes") or ""),
+        )
+        if not ok:
+            rollback(conn)
+            return _err(reason, reason)
+        commit(conn)
+        audit(int(admin_id), "shop_promo_create", payload={"promo_id": promo["id"] if promo else None})
+        return _ok(promo=promo)
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+
+def set_promo_active_admin(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    from game.db import begin_write_transaction, commit, rollback
+    from game.shop_promos import set_promo_active
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ok, reason = set_promo_active(
+            int(body.get("promo_id") or 0),
+            bool(body.get("active")),
+            conn=conn,
+        )
+        if not ok:
+            rollback(conn)
+            return _err(reason, reason)
+        commit(conn)
+        audit(int(admin_id), "shop_promo_active", payload=dict(body))
+        return _ok()
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+
+def payout_creator_admin(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    from game.db import begin_write_transaction, commit, rollback
+    from game.shop_promos import create_payout_batch
+
+    ids = body.get("ledger_ids") or []
+    if not isinstance(ids, list):
+        return _err("invalid_ledger_ids", "ledger_ids must be a list")
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ok, reason, batch = create_payout_batch(
+            conn=conn,
+            creator_id=int(body.get("creator_id") or 0),
+            ledger_ids=[int(x) for x in ids],
+            note=str(body.get("note") or ""),
+            marked_by=int(admin_id),
+            allow_below_min=bool(body.get("allow_below_min")),
+        )
+        if not ok:
+            rollback(conn)
+            return _err(reason, reason)
+        commit(conn)
+        audit(int(admin_id), "shop_creator_payout", payload={"batch": batch})
+        return _ok(batch=batch)
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+
+def creator_ledger_csv_admin(creator_id: int) -> Dict[str, Any]:
+    from game.shop_promos import ledger_csv, schema_ready
+
+    conn = db()
+    try:
+        if not schema_ready(conn):
+            return _err("promo_unavailable", "promo schema missing")
+        return _ok(csv=ledger_csv(int(creator_id), conn=conn))
+    finally:
+        conn.close()

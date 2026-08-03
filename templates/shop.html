@@ -93,7 +93,10 @@
       {% endif %}
     </div>
     <div class="shop-card-footer">
-      <p class="shop-card-price gc-mono">{{ p.price_label }}</p>
+      <p class="shop-card-price gc-mono"
+         data-shop-price
+         data-sku="{{ p.sku }}"
+         data-list-cents="{{ p.price_cents }}">{{ p.price_label }}</p>
       <div class="shop-card-actions">
         {% if p.owned %}
         <span class="shop-owned">{{ T("shop_owned", "Bereits freigeschaltet") }}</span>
@@ -218,6 +221,22 @@
     </div>
 
   <div class="shop-panel is-active" data-shop-panel="premium" id="shop-panel-premium" role="tabpanel" aria-labelledby="shop-tab-premium">
+    <section class="shop-promo-bar gc-panel" data-shop-promo-bar>
+      <label class="shop-promo-label" for="shop-promo-input">{{ T("shop_promo_label", "Creator-Code") }}</label>
+      <input id="shop-promo-input"
+             class="gc-input shop-promo-input"
+             type="text"
+             maxlength="32"
+             autocomplete="off"
+             spellcheck="false"
+             value="{{ active_promo if active_promo is defined else '' }}"
+             data-shop-promo-input
+             placeholder="{{ T('shop_promo_placeholder', 'CODE') }}">
+      <button type="button" class="gc-btn gc-btn-sm gc-btn-outline" data-shop-promo-apply>
+        {{ T("shop_promo_apply", "Anwenden") }}
+      </button>
+      <span class="shop-promo-status" data-shop-promo-status aria-live="polite"></span>
+    </section>
     {% if not shop_state.enabled %}
     <section class="shop-banner shop-banner--inset">
       <p>{{ T("shop_disabled", "Shop ist derzeit deaktiviert.") }}</p>

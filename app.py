@@ -5447,6 +5447,12 @@ def shop_view():
     finally:
         conn.close()
 
+    promo_q = str(request.args.get("promo") or "").strip()
+    if promo_q:
+        _set_shop_promo_sticky(promo_q)
+    sticky = session.get("shop_promo_code") if isinstance(session.get("shop_promo_code"), dict) else {}
+    active_promo = str(sticky.get("code") or "") if sticky else ""
+
     return render_template(
         "shop.html",
         player=ctx["player_view"],
@@ -5454,6 +5460,7 @@ def shop_view():
         shop=shop_state,
         free_shop=free_shop_state,
         shop_cancelled=bool(request.args.get("cancelled")),
+        active_promo=active_promo,
     )
 
 
@@ -5604,6 +5611,14 @@ def api_shop_checkout():
     provider = str(data.get("provider") or "").strip().lower()
     legal_ack = bool(data.get("legal_ack"))
     legal_text_version = str(data.get("legal_text_version") or "").strip() or None
+    promo_code = str(data.get("promo_code") or "").strip()
+    if not promo_code:
+        sticky = session.get("shop_promo_code") or {}
+        if isinstance(sticky, dict):
+            code_s = str(sticky.get("code") or "").strip()
+            exp = float(sticky.get("expires_at") or 0)
+            if code_s and exp >= time.time():
+                promo_code = code_s
     from game.shop import start_checkout
     from urllib.parse import urlparse
     from game.config import get_public_base_url
@@ -5640,6 +5655,7 @@ def api_shop_checkout():
             cancel_url=cancel_url,
             legal_ack=legal_ack,
             legal_text_version=legal_text_version,
+            promo_code=promo_code or None,
         )
         if ok:
             # Rewrite success URL with concrete order_id for non-Stripe flows.
@@ -5680,6 +5696,165 @@ def api_shop_checkout():
     if reason in ("not_logged_in",):
         status = 401
     return jsonify(resp), status
+
+
+def _set_shop_promo_sticky(code: str) -> None:
+    from game.shop_promos import SESSION_PROMO_TTL_SEC, normalize_code
+
+    normalized = normalize_code(code)
+    if not normalized:
+        return
+    session["shop_promo_code"] = {
+        "code": normalized,
+        "expires_at": time.time() + float(SESSION_PROMO_TTL_SEC),
+    }
+
+
+@app.route("/api/shop/promo/preview", methods=["POST"])
+@require_login
+def api_shop_promo_preview():
+    user_id = int(session.get("user_id") or 0)
+    data = request.get_json(silent=True) or {}
+    code = str(data.get("code") or data.get("promo_code") or "").strip()
+    sku = str(data.get("sku") or "").strip() or None
+    sticky = bool(data.get("sticky", True))
+    from game.shop_promos import preview_pricing, schema_ready
+
+    conn = db()
+    try:
+        if not schema_ready(conn):
+            return jsonify({"ok": False, "reason": "promo_unavailable"}), 400
+        ok, reason, payload = preview_pricing(
+            code, conn=conn, buyer_player_id=user_id, sku=sku
+        )
+        if ok and sticky and payload:
+            _set_shop_promo_sticky(str(payload.get("code") or code))
+            conn.commit()
+        return jsonify({"ok": ok, "reason": reason, **(payload or {})}), (200 if ok else 400)
+    finally:
+        conn.close()
+
+
+@app.route("/r/<code>")
+def shop_promo_share_landing(code: str):
+    from game.shop_promos import record_click, schema_ready
+
+    conn = db()
+    try:
+        if schema_ready(conn):
+            begin_write_transaction(conn)
+            try:
+                uid = int(session.get("user_id") or 0) or None
+                record_click(code, conn=conn, actor_player_id=uid)
+                commit(conn)
+            except Exception:
+                rollback(conn)
+        _set_shop_promo_sticky(code)
+    finally:
+        conn.close()
+    if session.get("user_id"):
+        return redirect(url_for("shop_view", promo=str(code or "").strip().upper()))
+    return redirect(url_for("register", ref=str(code or "").strip().upper()))
+
+
+@app.route("/creator")
+@require_login
+def creator_dashboard_view():
+    ctx = _load_page_live_context(finish_source="creator")
+    if ctx is None:
+        return redirect(url_for("login"))
+    from game.shop_promos import creator_overview, schema_ready
+
+    overview = None
+    reason = "promo_unavailable"
+    conn = db()
+    try:
+        if schema_ready(conn):
+            begin_write_transaction(conn)
+            try:
+                ok, reason, overview = creator_overview(int(session["user_id"]), conn=conn)
+                commit(conn)
+            except Exception:
+                rollback(conn)
+                raise
+    finally:
+        conn.close()
+    return render_template(
+        "creator.html",
+        player=ctx["player_view"],
+        storage_caps=ctx["storage_caps"],
+        creator_ok=bool(overview),
+        creator_reason=reason,
+        creator=overview,
+    )
+
+
+@app.route("/api/creator/overview", methods=["GET"])
+@require_login
+def api_creator_overview():
+    from game.shop_promos import creator_overview, schema_ready
+
+    conn = db()
+    try:
+        if not schema_ready(conn):
+            return jsonify({"ok": False, "reason": "promo_unavailable"}), 400
+        begin_write_transaction(conn)
+        try:
+            ok, reason, overview = creator_overview(int(session["user_id"]), conn=conn)
+            commit(conn)
+        except Exception:
+            rollback(conn)
+            raise
+        return jsonify({"ok": ok, "reason": reason, "overview": overview}), (200 if ok else 403)
+    finally:
+        conn.close()
+
+
+@app.route("/api/creator/terms-ack", methods=["POST"])
+@require_login
+def api_creator_terms_ack():
+    from game.shop_promos import ack_partner_terms, schema_ready
+
+    conn = db()
+    try:
+        if not schema_ready(conn):
+            return jsonify({"ok": False, "reason": "promo_unavailable"}), 400
+        begin_write_transaction(conn)
+        try:
+            ok, reason = ack_partner_terms(int(session["user_id"]), conn=conn)
+            if ok:
+                commit(conn)
+            else:
+                rollback(conn)
+        except Exception:
+            rollback(conn)
+            raise
+        return jsonify({"ok": ok, "reason": reason}), (200 if ok else 400)
+    finally:
+        conn.close()
+
+
+@app.route("/api/creator/ledger.csv", methods=["GET"])
+@require_login
+def api_creator_ledger_csv():
+    from game.shop_promos import get_creator_by_player, ledger_csv, schema_ready
+    from flask import Response
+
+    conn = db()
+    try:
+        if not schema_ready(conn):
+            return jsonify({"ok": False, "reason": "promo_unavailable"}), 400
+        creator = get_creator_by_player(int(session["user_id"]), conn=conn)
+        if not creator or not creator["active"]:
+            return jsonify({"ok": False, "reason": "not_creator"}), 403
+        csv_text = ledger_csv(int(creator["id"]), conn=conn)
+        return Response(
+            csv_text,
+            mimetype="text/csv",
+            headers={"Content-Disposition": "attachment; filename=creator_ledger.csv"},
+        )
+    finally:
+        conn.close()
 
 
 @app.route("/api/webhooks/stripe", methods=["POST"])
@@ -12983,6 +13158,53 @@ def api_admin_lootboxes_grant_player():
         player_id = 0
     return _admin_json(
         admin_api_logic.grant_player_inventory(_admin_actor_id(), player_id, body)
+    )
+
+
+@app.route("/api/admin/promos/state", methods=["GET"])
+@require_admin_api
+def api_admin_promos_state():
+    return _admin_json(admin_api_logic.promos_admin_state())
+
+
+@app.route("/api/admin/promos/creators", methods=["POST"])
+@require_admin_api
+def api_admin_promos_create_creator():
+    return _admin_json(admin_api_logic.create_creator_admin(_admin_actor_id(), _admin_body()))
+
+
+@app.route("/api/admin/promos/codes", methods=["POST"])
+@require_admin_api
+def api_admin_promos_create_code():
+    return _admin_json(admin_api_logic.create_promo_admin(_admin_actor_id(), _admin_body()))
+
+
+@app.route("/api/admin/promos/codes/active", methods=["POST"])
+@require_admin_api
+def api_admin_promos_set_active():
+    return _admin_json(admin_api_logic.set_promo_active_admin(_admin_actor_id(), _admin_body()))
+
+
+@app.route("/api/admin/promos/payout", methods=["POST"])
+@require_admin_api
+def api_admin_promos_payout():
+    return _admin_json(admin_api_logic.payout_creator_admin(_admin_actor_id(), _admin_body()))
+
+
+@app.route("/api/admin/promos/<int:creator_id>/ledger.csv", methods=["GET"])
+@require_admin_api
+def api_admin_promos_ledger_csv(creator_id: int):
+    from flask import Response
+
+    res = admin_api_logic.creator_ledger_csv_admin(int(creator_id))
+    if not res.get("ok"):
+        return _admin_json(res)
+    return Response(
+        res.get("csv") or "",
+        mimetype="text/csv",
+        headers={
+            "Content-Disposition": f"attachment; filename=creator_{creator_id}_ledger.csv"
+        },
     )
 
 
