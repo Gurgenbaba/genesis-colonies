@@ -1772,6 +1772,7 @@ def test_notify_sound_assets_and_main_js_wiring():
     assert (ROOT / "static/sounds/combat/theater_fight_sound.mp3").is_file()
     assert (ROOT / "static/sounds/combat/theater_fight_sound_2.mp3").is_file()
     assert (ROOT / "static/sounds/combat/theater_fight_sound_3.mp3").is_file()
+    assert (ROOT / "static/sounds/combat/piratedown_theater.mp3").is_file()
     assert "function initNotificationSounds()" in src
     assert "GC.initNotificationSounds = initNotificationSounds" in src
     assert "function playNotificationSound(kind)" in src
@@ -1789,6 +1790,10 @@ def test_notify_sound_assets_and_main_js_wiring():
     )[0]
     assert "function playFightSalvoSound()" in theater
     assert "COMBAT_FIGHT_SOUNDS" in theater
+    assert "function playPirateDownSound()" in theater
+    assert "piratedown_theater.mp3" in theater
+    assert "countWipedClasses" in theater
+    assert "playPirateDownSound()" in theater.split("function showResolve(")[1].split("meta._liveAtk = applyLosses")[0]
     assert 'GC.sfxVolumeForKind("combat", COMBAT_FIGHT_BASE_VOLUME)' in theater
     assert "theater_fight_sound.mp3" in theater
     assert "theater_fight_sound_2.mp3" in theater

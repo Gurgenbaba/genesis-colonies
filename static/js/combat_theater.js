@@ -92,6 +92,8 @@
     "/static/sounds/combat/theater_fight_sound_3.mp3",
   ];
   const COMBAT_FIGHT_BASE_VOLUME = 0.45;
+  const COMBAT_PIRATE_DOWN_SOUND = "/static/sounds/combat/piratedown_theater.mp3";
+  const COMBAT_PIRATE_DOWN_BASE_VOLUME = 0.55;
 
   function stopFightSounds() {
     (_fightAudios || []).forEach((audio) => {
@@ -103,16 +105,13 @@
     _fightAudios = [];
   }
 
-  function playFightSalvoSound() {
+  function playCombatTheaterOneShot(src, baseVolume) {
     try {
       const volume =
         typeof GC.sfxVolumeForKind === "function"
-          ? GC.sfxVolumeForKind("combat", COMBAT_FIGHT_BASE_VOLUME)
-          : COMBAT_FIGHT_BASE_VOLUME;
-      if (!(volume > 0)) return;
-      const pool = COMBAT_FIGHT_SOUNDS;
-      if (!pool.length) return;
-      const src = pool[Math.floor(Math.random() * pool.length)];
+          ? GC.sfxVolumeForKind("combat", baseVolume)
+          : baseVolume;
+      if (!(volume > 0) || !src) return;
       const audio = new Audio(src);
       audio.volume = volume;
       _fightAudios.push(audio);
@@ -125,6 +124,32 @@
         promise.catch(drop);
       }
     } catch (_) {}
+  }
+
+  function playFightSalvoSound() {
+    const pool = COMBAT_FIGHT_SOUNDS;
+    if (!pool.length) return;
+    const src = pool[Math.floor(Math.random() * pool.length)];
+    playCombatTheaterOneShot(src, COMBAT_FIGHT_BASE_VOLUME);
+  }
+
+  /** Play when at least one ship/defense class hits zero in this resolve beat. */
+  function playPirateDownSound() {
+    playCombatTheaterOneShot(COMBAT_PIRATE_DOWN_SOUND, COMBAT_PIRATE_DOWN_BASE_VOLUME);
+  }
+
+  function countWipedClasses(stock, losses) {
+    let wiped = 0;
+    const before = stock && typeof stock === "object" ? stock : {};
+    Object.entries(losses || {}).forEach(([k, v]) => {
+      const key = String(k || "").trim();
+      if (!key) return;
+      const loss = Math.max(0, Math.trunc(Number(v) || 0));
+      if (!loss) return;
+      const prev = Math.max(0, Math.trunc(Number(before[key]) || 0));
+      if (prev > 0 && prev - loss <= 0) wiped += 1;
+    });
+    return wiped;
   }
 
   function t(key, fallback) {
@@ -616,7 +641,6 @@
           : "";
     }
 
-    meta._liveAtk = applyLosses(meta._liveAtk, evt.attacker_losses);
     const shipLoss = {};
     const defLossMap = {};
     Object.entries(evt.defender_losses || {}).forEach(([k, v]) => {
@@ -626,6 +650,17 @@
         shipLoss[k] = v;
       }
     });
+
+    // Class wipe SFX before applying losses (stock still has pre-resolve counts).
+    const wipedClasses =
+      countWipedClasses(meta._liveAtk, evt.attacker_losses) +
+      countWipedClasses(meta._liveDefShips, shipLoss) +
+      countWipedClasses(meta._liveDefDefense, defLossMap);
+    if (wipedClasses > 0) {
+      playPirateDownSound();
+    }
+
+    meta._liveAtk = applyLosses(meta._liveAtk, evt.attacker_losses);
     meta._liveDefShips = applyLosses(meta._liveDefShips, shipLoss);
     meta._liveDefDefense = applyLosses(meta._liveDefDefense, defLossMap);
 
