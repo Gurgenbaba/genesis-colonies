@@ -88,3 +88,83 @@ Migration `130_case_battles.sql`: `case_battles`, `case_battle_players`, `case_b
 
 - [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) — Container-Loot GC-864
 - [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) §17 Owner
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: case_battles
+band: III
+difficulty: intermediate
+estimated_read: 4 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+  - commander_tips
+  - discord
+routes:
+  - inventory_view
+related_codex:
+  - inventory
+  - shop_identity
+  - collector_exchange
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: route_visit
+  route: inventory_view
+teaser_key: codex_unlock_case_battles_teaser
+---
+```
+
+## Quick Help
+
+Die **Relikt-Arena** (Case Battles) im Inventar lässt Commander versiegelte Container gegeneinander setzen — simultanes Öffnen, wertvollster Fund beansprucht den Pool.
+
+## Summary
+
+Du erstellst oder joinest eine Battle (öffentlich/privat), hinterlegst Container im Escrow und wählst einen Modus (Standard, Crazy, Terminal, Share, Team). Alle Siegel brechen parallel im Arena-Theater. Gewinner-Logik und Reward-Werte berechnet nur der Server; danach Seed-Reveal und Verify. Meta-only Drops — dieselbe Loot-Engine wie normale Container.
+
+## Why
+
+Sozialer Spike um Inventar-Overflow: faire, nachprüfbare Container-Wetten ohne Cashout und ohne zweite Loot-Mathe im Client.
+
+## How it works
+
+- Inventar → Tab **Relikt-Arena**.
+- Create/Join konsumiert Container atomar; Cancel (solange offen) refundet.
+- Start → running → finished (oder cancelled); Auto-Settle greift bei hängenden Runs.
+- Modi ändern Verteilung (z. B. Share proportional, Team teilt Gegner-Loot, Terminal pro Runde).
+- Nach Finish: Seed prüfen über Verify-API.
+- Nav-Badge am Inventar, wenn du in offenen/laufenden Battles steckst.
+
+## Related Systems
+
+- inventory
+- shop_identity
+- collector_exchange
+
+## Commander Tips
+
+- Nur Container einsetzen, deren Verlust du verkraftest — Escrow ist echt weg bis Cancel/Finish.
+- Modus lesen, bevor du joinest (Share ≠ Winner-takes-all).
+- Private Lobby mit Freunden, wenn du Randoms meiden willst.
+
+## FAQ
+
+**Kann ich Echtgeld auszahlen?**
+Nein. Nur Inventar-Meta-Items; kein Cashout.
+
+**Sind die Rolls manipulierbar?**
+Commit-Reveal: Hash vor dem Battle, Seed nach Finish — Verify prüft die Kette.
+
+**Zählt das als Pay-to-Win?**
+Eingesetzt werden vorhandene Container; Gewinne bleiben meta-only.
+
+## Discord Summary
+
+**Relikt-Arena — Case Battles**
+
+Inventar-Tab: Container-Escrow, simultane Opens, Server-Winner, Seed-Verify. Modi inkl. Share/Team. Meta-only.

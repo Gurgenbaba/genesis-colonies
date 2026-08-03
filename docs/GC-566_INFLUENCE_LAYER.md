@@ -65,3 +65,82 @@ GC-569   Presence
 ## Ausgabe (nach Abschluss)
 
 ### Root Cause · Changed Files · Tests · Ergebnis
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: influence
+band: II
+difficulty: beginner
+estimated_read: 3 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+  - commander_tips
+  - discord
+routes:
+  - galaxy_view
+  - empire_view
+related_codex:
+  - command_map
+  - galaxy
+  - expansion
+  - genesis_ark
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: homeworld_level
+  value: 10
+teaser_key: codex_unlock_influence_teaser
+---
+```
+
+## Quick Help
+
+**Einfluss** ist das sichtbare teal Territorium um deine Genesis Ark und Kolonien auf der Command Map — Fußabdruck deines Imperiums, kein Kampf-Buff.
+
+## Summary
+
+Einfluss malt dein eigenes Reich auf der Weltkarte: eine weiche teal Fläche um den Ark-Hub und verbundene Kolonien. Gesperrte Expansion Sites bleiben außen. Abgeleitet aus Kolonie-Positionen — keine separate DB-Ökonomie und im MVP keine Feind-Gebiete.
+
+## Why
+
+Du sollst auf einen Blick sehen „das gehört mir“. Einfluss macht Hub-and-Spoke-Besitz lesbar, bevor fremde Commander-Präsenz dazukommt.
+
+## How it works
+
+- Öffne die **Command Map** (`/galaxy` Weltkarte-Tab).
+- Teal-Einfluss umgibt die Genesis Ark und deine Kolonien.
+- Expansion Sites erhalten keinen Einfluss, solange sie locked / unbeansprucht sind.
+- Pan/Zoom hält den Layer unter Nebel und über dem Hintergrund.
+- Keine Produktions- oder Kampf-Modifikatoren in dieser Schicht — zuerst Darstellung.
+- Codex-Freischaltung ab Ark-Entwicklungsstufe **10**.
+
+## Related Systems
+
+- command_map
+- galaxy
+- expansion
+- genesis_ark
+
+## Commander Tips
+
+- Einfluss als Fußabdruck lesen, während du Expansion planst.
+- Lücken zwischen Kolonien sind normal, bis du mehr Welten gründest.
+- Erwarte keine PvP-Buffs vom teal Glow — das ist Territoriums-Visualisierung.
+
+## FAQ
+
+**Gibt Einfluss Boni?**
+Nicht in der Basis-Einflussschicht — sie visualisiert dein Imperiums-Territorium.
+
+**Sehe ich Einfluss anderer Spieler?**
+MVP fokussiert dein eigenes Reich; fremde Präsenz ist eine spätere Schicht.
+
+## Discord Summary
+
+**Einfluss — Imperiums-Glow auf der Karte**
+
+Command Map: teal Fußabdruck um Ark + Kolonien. Display-Layer, keine Kampf-Math. Codex ab Ark-Stufe 10.

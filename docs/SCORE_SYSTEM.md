@@ -154,3 +154,84 @@ Nach Deploy: **einmalig** `POST /api/admin/ranking/recompute` — erwartete Scor
 - [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md) — Defense Score
 - [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) — Military / Destruction
 - [GC-822_LIVE_ECONOMY_QA.md](GC-822_LIVE_ECONOMY_QA.md) — Ranking-Drift-Audit
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: ranking
+band: III
+difficulty: beginner
+estimated_read: 3 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+  - commander_tips
+  - discord
+routes:
+  - ranking_view
+related_codex:
+  - resources
+  - buildings
+  - fleet
+  - defense
+  - world_boss
+  - alliance
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: route_visit
+  route: ranking_view
+teaser_key: codex_unlock_ranking_teaser
+---
+```
+
+## Quick Help
+
+**Ranking** vergleicht Commander nach Imperiums-Score und verwandten Boards unter `/ranking` — Vermögens-Komponenten, Kampfprestige, World-Boss-Schaden und Allianzen.
+
+## Summary
+
+Die Ranking-Seite zeigt, wie Imperien im Vergleich stehen. Kernscore ist das **normierte Gesamtvermögen** eines Accounts (Gebäude, Forschung, Flotte, Verteidigung, Planet Evolution, Lager) — keine separate Vanity-Formel. Tabs zerlegen Komponenten; World Boss und Zerstörung sind eigene Prestige-Signale.
+
+## Why
+
+Commander brauchen eine faire, lesbare Leiter: wer investiert hat, wer kämpft, wer den World Boss trifft. Ranking macht Fortschritt sichtbar, ohne eine zweite Ökonomie zu erfinden.
+
+## How it works
+
+- Öffne **`/ranking`** für Boards und deine Platzierung.
+- **Gesamtpunkte** = erhaltenes Vermögen (investierte Ressourcen + Lager) über den Score-Owner — Tausch zu score-neutralen Kursen erzeugt keine Punkte.
+- Tabs: Gebäude, Forschung, Evolution, Fleet, Defense, World-Boss-Schaden, Allianz-Summen — UI zeigt Server-Snapshots.
+- Kampf-Zerstörungsprestige ist getrennt vom Vermögens-Total.
+- Scores aktualisieren serverseitig im Takt — im Codex keine Punkte rückrechnen.
+
+## Related Systems
+
+- resources
+- buildings
+- fleet
+- defense
+- world_boss
+- alliance
+
+## Commander Tips
+
+- Ressourcen in Gebäude/Flotte stecken — Vermögen wandert zwischen Score-Buckets, Total bleibt wenn nichts verbrannt wird.
+- World-Boss-Tab = Lifetime-Damage, kein Wealth.
+- Inaktive Accounts können aus Live-Boards fallen — weiterspielen.
+
+## FAQ
+
+**Erhöht Tausch meinen Score?**
+Score-neutrale Trader-Kurse verschieben nur Vermögen zwischen Metall/Kristall/Brennstoff — sie erzeugen keine Punkte.
+
+**Warum sinkt mein Score nach einem Kampf?**
+Zerstörte eigene Einheiten entfernen Vermögen. Zerstörungsprestige ist ein separates Signal.
+
+## Discord Summary
+
+**Ranking — Imperiums-Score-Boards**
+
+`/ranking`: Wealth-Score + Komponenten-Tabs, World-Boss-Schaden, Allianzen. Server-Snapshots. Freischaltung nach erstem Besuch.

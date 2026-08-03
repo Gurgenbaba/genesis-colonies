@@ -766,3 +766,86 @@ Port aus `Gov_resultsController::buildBodyStatic()` — HTML-Body serverseitig, 
 |---------|-------|----------|
 | v1.1 | 2026-07-26 | GC-720G/H/I/J — Politics fertig ohne Premium: Nav, Cron/Admin, Results, Domain-Flags |
 | v1.0 | 2026-06-17 | GC-720A — Initial Master-Doc aus OGX Gov-Port + Primary/Secondary-Design |
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: galactic_directives
+band: IV
+difficulty: advanced
+estimated_read: 5 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+  - commander_tips
+  - discord
+routes:
+  - galactic_politics_view
+related_codex:
+  - planet_evolution
+  - galaxy
+  - alliance
+  - research
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: route_visit
+  route: galactic_politics_view
+teaser_key: codex_unlock_galactic_directives_teaser
+---
+```
+
+## Quick Help
+
+**Galactic Directives** unter `/galactic-politics` sind die Makro-Politik pro Galaxie: Community stimmt ab, Primary und Secondary formen Boni für alle Welten in dieser Galaxie.
+
+## Summary
+
+Anders als Planet Policies (du wählst lokal) laufen Galactic Directives in monatlichen Zyklen: Abstimmung über Kandidaten-Direktiven, danach Mandat mit **Primary** (stärkster Effekt) und **Secondary** (abgeschwächt oder eigener Secondary-Satz). Effekte greifen über den EffectResolver auf Produktion, Forschung, Flotte, Defense usw. — je nach gewonnener Direktive, mit Tradeoffs. Mehrere Galaxien bedeuten mehrere politische Landschaften für dein Imperium.
+
+## Why
+
+Räumliche Strategie: Mining-Kolonie in G1 und Research-Hub in G2 sollen unterschiedliche Mandate spüren. Politik wird zum Endgame-Hebel über dem Imperium, ohne Planet Policies zu ersetzen.
+
+## How it works
+
+- Öffne **Galactic Politics**; wähle die Galaxie, in der du Kolonien hast.
+- Während `vote_open`: eine Stimme pro Zyklus für eine Primary-Kandidatin — änderbar bis Fensterende.
+- Resolution setzt Primary/Secondary; Folgemonat ist das aktive Mandat.
+- Wiederholte Primary-Siege können Cooldowns auslösen (Server-Regel).
+- Nachrichten/Results informieren über Ausgang; Admin/LiveOps können bei Bedarf forcen.
+- Planet Policies bleiben zusätzlich aktiv — Mikro + Makro stapeln sich über Effects.
+
+## Related Systems
+
+- planet_evolution
+- galaxy
+- alliance
+- research
+- fleet
+
+## Commander Tips
+
+- Stimme in jeder Galaxie, in der du ernsthaft produzierst — eine Ignoranz kostet Mandate.
+- Tradeoffs lesen: starke Primary-Boni kommen selten ohne Malus.
+- Policies lokal an das galaktische Mandat anpassen (Industrie vs. Research).
+
+## FAQ
+
+**Ersetzt das meine Planet Policies?**
+Nein. Policies = pro Kolonie. Directives = pro Galaxie für alle dort.
+
+**Zählt Allianz-Diplomatie hier?**
+Nein — Allianz-NAP/Krieg ist getrennt. Politics ist Galaxie-Community-Vote.
+
+**Sehe ich Boni als Prozent in der Hilfe?**
+Technische Magnitude steht in der Politics-UI/Technischen Daten — der Codex erklärt nur das Prinzip.
+
+## Discord Summary
+
+**Galactic Directives — Makro-Politik**
+
+`/galactic-politics`: Monatsvote pro Galaxie, Primary+Secondary Mandate, EffectResolver. Komplementär zu Planet Policies.

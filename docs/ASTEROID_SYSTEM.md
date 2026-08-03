@@ -90,3 +90,86 @@ Cargo take = `min(fleet_cargo, pool)`; asteroid is fully claimed and removed eve
 ## Tests
 
 See `tests/test_asteroids.py` — density spawn, TTL, first-arrival race, engagement durability after tick, anti-pop slot reserve, expired≠debris, board en-route UX contracts.
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: asteroids
+band: III
+difficulty: intermediate
+estimated_read: 3 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+  - commander_tips
+  - discord
+routes:
+  - galaxy_view
+  - fleet_view
+related_codex:
+  - galaxy
+  - fleet
+  - salvage
+  - resources
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: route_visit
+  route: galaxy_view
+teaser_key: codex_unlock_asteroids_teaser
+---
+```
+
+## Quick Help
+
+**Asteroidenfelder** erscheinen zeitlich begrenzt in dichten Galaxie-Systemen. Ernte sie mit dem **Ernter/Recycler** über die Mission **Recycle**.
+
+## Summary
+
+Wellen spawnen Gürtel aus Ferronit-Gestein, Crytite-Scherben, Brennstoff-Eis oder Mischgürteln auf freien klassischen Slots. Mehrere Flotten können starten — **wer zuerst ankommt**, claimt den Pool. Abgelaufene Felder erzeugen kein Debris-Fallback. Die Galaxy-Board zeigt Unterwegs-Status und Countdown zur nächsten Welle.
+
+## Why
+
+Kurzlebige, umkämpfte Rohstoff-Preise ohne neue Miner-Klasse: bestehende Recycle-Pipeline, sichtbarer Wettbewerb, LiveOps-Tempo in vollen Systemen.
+
+## How it works
+
+- Galaxie-System mit aktivem Asteroid-Board öffnen; Typ und Timer lesen.
+- Flotte mit Ernter-Schiffen, Mission Recycle, Ziel Asteroid — Prefill/Quick-Action hilft.
+- Ankunft: Claim, Miss (zu spät) oder Expired — Bericht erklärt den Ausgang.
+- Eigenes Outbound disabled den Harvest-Button, bis die Flotte zurück ist oder das Feld weg ist.
+- Loot nur Ferronit / Crytite / Brennzellen in den Frachtraum; Rest verfällt, wenn Cargo nicht reicht.
+
+## Related Systems
+
+- galaxy
+- fleet
+- salvage
+- pirates
+- resources
+
+## Commander Tips
+
+- Dichte Systeme beobachten — dort spawnen Gürtel zuerst.
+- Fracht und Ernter-Anzahl vor dem Send checken; First-Arrival zählt.
+- Nicht mit Debris-Recycle verwechseln: Asteroid-Flüge fallen nicht auf Debris zurück.
+
+## FAQ
+
+**Welches Schiff?**
+Ernter mit Recycle-Rolle (`harvest_reclaimer`) — gemischte Flotten möglich, Mission bleibt Recycle.
+
+**Verschwindet das Feld während meines Flugs?**
+Ja möglich — dann Expired-Report, kein automatisches Debris.
+
+**World Boss auf dem Slot?**
+Boss hat Vorrang; Asteroid braucht freien klassischen Slot.
+
+## Discord Summary
+
+**Asteroiden — Timed Harvest**
+
+Galaxy-Gürtel, Recycle-Mission, First-Arrival Claim. Nur Ressourcen-Loot. Board zeigt En-route und Wave-Timer.

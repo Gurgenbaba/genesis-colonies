@@ -400,3 +400,92 @@ Spieler erleben operative High-Command-Befehle statt einer Quest-Liste. Das Syst
 - belohnt normales Spielen über Event-Hooks,
 - nutzt bestehendes Inventar/Loot,
 - integriert sich in `/api/game-state` ohne Parallel-Polling.
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: imperial_directives
+band: IV
+difficulty: intermediate
+estimated_read: 4 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+  - commander_tips
+  - discord
+routes:
+  - imperial_directives_view
+related_codex:
+  - diplomacy
+  - galactic_directives
+  - genesis_ark
+  - fleet
+  - buildings
+  - research
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: route_visit
+  route: imperial_directives_view
+teaser_key: codex_unlock_imperial_directives_teaser
+---
+```
+
+## Quick Help
+
+**Imperial Directives** sind persönliche High-Command-Befehle: **3 Daily** und **1 Weekly**. Fortschritt aus normalem Spielen; Belohnungen manuell claimen unter `/imperial-directives`.
+
+## Summary
+
+Imperial Directives belohnen Economy, Science, Fleet, Military und Exploration — ohne separates Quest-Annehmen. Ziele skalieren serverseitig mit deinem Imperiums-Score. Abgeschlossene Direktiven geben Container/Booster ins **Inventar** nach Claim. Unfertige verfallen beim Reset.
+
+## Why
+
+High Command soll operatives Spielen belohnen, nicht eine zweite Fortschrittsleiste erzwingen. Kein Accept/Track — Direktiven sind immer aktiv und verschwinden beim Periodenwechsel, wenn unerledigt.
+
+## How it works
+
+- Seite **`/imperial-directives`**: Karten mit Kategorie, Seltenheit, Fortschritt, Restzeit, Belohnungsvorschau.
+- **Daily:** 3 Befehle, Reset alle 24 h (UTC). **Weekly:** 1 Befehl, wöchentlicher Reset.
+- Fortschritt entsteht aus Gameplay-Events (Gebäude fertig, Forschung, Flotte, Expeditionen, Verteidigung, …) — kein eigenes Polling.
+- Status: aktiv → abgeschlossen → **Claim** → claimed bis Reset.
+- Belohnungen: Inventory-Container und Booster — kein paralleles Loot-System.
+- **Nicht** Galactic Directives / Diplomacy: jene sind Galaxie-Politik; diese sind account-persönlich.
+- Ziele und Skalierung nur Server — Codex enthält keine Formeln.
+
+## Related Systems
+
+- diplomacy
+- galactic_directives
+- genesis_ark
+- buildings
+- research
+- fleet
+- expeditions
+- inventory
+
+## Commander Tips
+
+- Claim nicht vergessen — abgeschlossen ≠ automatisch eingesammelt.
+- Daily/Weekly ergänzen normales Bauen und Fliegen; nichts erzwingen.
+- Nav-Badge zeigt claimbare Direktiven.
+
+## FAQ
+
+**Imperial vs. Galactic Directives?**
+Imperial = deine persönlichen Befehle. Galactic = Galaxie-Abstimmung und Makro-Buffs/Politik.
+
+**Muss ich Direktiven annehmen?**
+Nein — sie sind sofort aktiv. Nicht geschafft → Ersatz beim nächsten Reset.
+
+**Wo landen Belohnungen?**
+Nach Claim im **Inventar** (Container/Booster).
+
+## Discord Summary
+
+**Imperial Directives — High-Command-Befehle**
+
+3 Daily + 1 Weekly, Fortschritt aus Gameplay, manuell claimen. `/imperial-directives`. ≠ Galactic Diplomacy. Freischaltung nach erstem Besuch.

@@ -40,3 +40,87 @@ Wrackfeld → Bergung starten → Fleet (mission=expedition + world_key) → Ber
 ## Tests
 
 - `tests/test_gc584_wreckage_salvage.py`
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: salvage
+band: III
+difficulty: intermediate
+estimated_read: 3 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+  - commander_tips
+  - discord
+routes:
+  - empire_view
+  - fleet_view
+  - galaxy_view
+related_codex:
+  - expeditions
+  - fleet
+  - asteroids
+  - combat
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: route_visit
+  route: empire_view
+teaser_key: codex_unlock_salvage_teaser
+---
+```
+
+## Quick Help
+
+**Bergung (Salvage)** erschließt **Wrackfelder** auf der Command Map: Expeditions-Mission zur Welt, Bergungsbericht statt klassischem Slot-16-Expo-Ersatz.
+
+## Summary
+
+`wreckage_field`-Welten sind spielbare Map-Ziele. Im Inspector startest du die Bergung; die Flotte fliegt mit Mission **Expedition** und `world_key`. Outcomes nutzen salvage-taugliche Event-Keys (Debris-Funde, Mineral-Caches, Distress). Parallel bleibt die klassische **Recycle**-Mission für Combat-Debris und Asteroiden — anderer Zieltyp, gleiche Ernter-Schiffe möglich.
+
+## Why
+
+Wracks erzählen Verlust und Opportunity auf der Imperiumskarte, ohne Combat auf der Salvage-Welt zu erzwingen. Bergung erweitert die Expeditions-Pipeline statt einer zweiten Fleet-Engine.
+
+## How it works
+
+- Command Map / Empire: Wrackfeld mit Badge „Bergung“ finden.
+- Preview prüft Schiffe und Startbarkeit; Inspector → Bergung vorbereiten/starten.
+- Fleet-Prefill: Expedition + World-Key; Activity wie bei anderen World-Missionen.
+- Rückkehr: Bergungsbericht (`world_salvage`) mit Weltname.
+- Debris nach PvP: separate Recycle-Mission auf Galaxy-Slots — nicht mit Wrackfeld verwechseln.
+
+## Related Systems
+
+- expeditions
+- fleet
+- asteroids
+- combat
+- galaxy
+
+## Commander Tips
+
+- Salvage-Schiffe vor dem Start prüfen — Preview spart Fehlflüge.
+- Wrackfeld ≠ Asteroid ≠ Debris: Mission und Zieltyp in der UI lesen.
+- Berichte im Posteingang behalten Kontext für Folgeflüge.
+
+## FAQ
+
+**Ist Bergung ein Kampf?**
+Phase-1-Wrackfelder nutzen die Expeditions-Outcome-Pipeline ohne Combat-Focus auf der Salvage-Welt.
+
+**Welcher Unterschied zu Asteroiden?**
+Asteroiden: klassische Slots, Recycle, First-Arrival. Salvage: Command-Map-Welt, Expedition + world_key.
+
+**Brauche ich einen eigenen Recycler-Bau?**
+Nein — kanonische Fleet-Missionen und vorhandene Ernter/Expeditions-Schiffe.
+
+## Discord Summary
+
+**Bergung — Wrackfelder auf der Map**
+
+Command Map → Expedition mit World-Key → Bergungsbericht. Debris/Asteroiden bleiben Recycle. Keine zweite Fleet-Engine.

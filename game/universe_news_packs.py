@@ -469,6 +469,229 @@ RELEASE_PACK_I18N: Dict[str, Dict[str, Any]] = {
             },
         },
     },
+    "v0.9.2": {
+        "version_tag": "v0.9.2",
+        "release_date": "2026-08-03",
+        "badge": "ALPHA",
+        "locales": {
+            "de": {
+                "version_label": "Knowledge & LiveOps Catch-up",
+                "intro": (
+                    "Die LiveOps-Systeme sind da — dieser Catch-up zeigt Commander, was es zu entdecken gibt: "
+                    "World Boss & Titanen, Commander-Klassen, Allianz, Story Ops, Login & Season Pass, "
+                    "Shop & Identity, Inventar & Sammler, Asteroiden, Relikt-Arena, Logistik und den erweiterten Codex."
+                ),
+                "added": [
+                    "World Boss & Titanen — serverweite Events, Angriff/Zähmen und Titan-Missionen auf der Übersicht",
+                    "Commander-Klassen — Command Staff wählen, Skill-Trunk freischalten (dauerhaft)",
+                    "Allianz-Hub — Spenden, Projekte, Tech und gemeinsame Boni",
+                    "Story Ops — Lore-Arcs und Sidequests mit Ark-Token-Loop",
+                    "Login-Kalender & Season Pass — tägliche Belohnungen und Season Ops",
+                    "Shop & Identity — Convenience-Packs, Name-Styles und Free Shop (kein Combat-P2W)",
+                    "Inventar & Sammler-Markt — Container öffnen, Collectibles tauschen",
+                    "Asteroiden & Relikt-Arena — Bergung in der Galaxie, Case Battles im Inventar",
+                    "Logistik & Expeditionen — Collect/Distribute über Kolonien, Deep-Space-Missionen",
+                    "Codex-Wissen erweitert — Quick Help und Guides zu den LiveOps-Systemen",
+                ],
+                "changed": [
+                    "Wissenslandkarte und Context-Help an den aktuellen Catalog angepasst",
+                    "Spieler-Entdeckbarkeit: Hinweise und Codex-Routen für LiveOps nachgezogen",
+                ],
+                "fixed": [
+                    "Stale „Coming soon“-Hinweise zur Allianz in internen Patchnotes bereinigt",
+                ],
+            },
+            "en": {
+                "version_label": "Knowledge & LiveOps Catch-up",
+                "intro": (
+                    "LiveOps systems are live — this catch-up helps commanders discover what's new: "
+                    "World Boss & Titans, Commander Classes, Alliance, Story Ops, Login & Season Pass, "
+                    "Shop & Identity, Inventory & Collector, Asteroids, Relic Arena, Logistics, and the expanded Codex."
+                ),
+                "added": [
+                    "World Boss & Titans — server-wide events, attack/tame, and Titan missions on Overview",
+                    "Commander Classes — pick Command Staff, unlock the skill trunk (permanent)",
+                    "Alliance Hub — donations, projects, tech and shared bonuses",
+                    "Story Ops — lore arcs and sidequests with Ark-Token loop",
+                    "Login calendar & Season Pass — daily rewards and Season Ops",
+                    "Shop & Identity — convenience packs, name styles and Free Shop (no combat P2W)",
+                    "Inventory & Collector Market — open containers, trade collectibles",
+                    "Asteroids & Relic Arena — galaxy salvage, case battles in Inventory",
+                    "Logistics & Expeditions — collect/distribute across colonies, deep-space missions",
+                    "Codex knowledge expanded — quick help and guides for LiveOps systems",
+                ],
+                "changed": [
+                    "Knowledge map and context help aligned with the current catalog",
+                    "Player discoverability: page hints and Codex routes for LiveOps updated",
+                ],
+                "fixed": [
+                    "Stale “coming soon” Alliance notes cleaned up in internal patch notes",
+                ],
+            },
+            "es": {
+                "version_label": "Knowledge y LiveOps catch-up",
+                "intro": (
+                    "Los sistemas LiveOps ya están — este catch-up ayuda a descubrir: "
+                    "World Boss y Titanes, clases de Commander, Alianza, Story Ops, Login y Season Pass, "
+                    "Tienda e Identity, Inventario y Coleccionista, Asteroides, Relic Arena, Logística y el Codex ampliado."
+                ),
+                "added": [
+                    "World Boss y Titanes — eventos de servidor, ataque/domesticar y misiones de Titán en Overview",
+                    "Clases de Commander — elige Command Staff, desbloquea el skill trunk (permanente)",
+                    "Hub de alianza — donaciones, proyectos, tech y bonos compartidos",
+                    "Story Ops — arcos de lore y misiones secundarias con bucle Ark-Token",
+                    "Calendario de login y Season Pass — recompensas diarias y Season Ops",
+                    "Tienda e Identity — packs de comodidad, estilos de nombre y Free Shop (sin P2W de combate)",
+                    "Inventario y mercado coleccionista — abre contenedores, intercambia coleccionables",
+                    "Asteroides y Relic Arena — salvamento en galaxia, case battles en Inventario",
+                    "Logística y expediciones — collect/distribute entre colonias, misiones de espacio profundo",
+                    "Codex ampliado — ayuda rápida y guías de sistemas LiveOps",
+                ],
+                "changed": [
+                    "Mapa de conocimiento y ayuda contextual alineados con el catálogo actual",
+                    "Descubribilidad: pistas de página y rutas Codex de LiveOps actualizadas",
+                ],
+                "fixed": [
+                    "Notas internas obsoletas de “próximamente” sobre Alianza limpiadas",
+                ],
+            },
+            "fr": {
+                "version_label": "Knowledge & LiveOps catch-up",
+                "intro": (
+                    "Les systèmes LiveOps sont là — ce catch-up aide à découvrir : "
+                    "World Boss & Titans, classes Commander, Alliance, Story Ops, Login & Season Pass, "
+                    "Boutique & Identity, Inventaire & Collectionneur, Astéroïdes, Relic Arena, Logistique et le Codex élargi."
+                ),
+                "added": [
+                    "World Boss & Titans — événements serveur, attaque/apprivoiser et missions Titan sur Overview",
+                    "Classes Commander — choisissez le Command Staff, débloquez le skill trunk (permanent)",
+                    "Hub d'alliance — dons, projets, tech et bonus partagés",
+                    "Story Ops — arcs lore et quêtes secondaires avec boucle Ark-Token",
+                    "Calendrier de connexion & Season Pass — récompenses quotidiennes et Season Ops",
+                    "Boutique & Identity — packs confort, styles de nom et Free Shop (pas de P2W combat)",
+                    "Inventaire & marché collectionneur — ouvrir des conteneurs, échanger des collectibles",
+                    "Astéroïdes & Relic Arena — salvage galaxie, case battles dans l'Inventaire",
+                    "Logistique & expéditions — collect/distribute entre colonies, missions deep-space",
+                    "Codex élargi — aide rapide et guides des systèmes LiveOps",
+                ],
+                "changed": [
+                    "Carte du savoir et aide contextuelle alignées sur le catalogue actuel",
+                    "Découvrabilité : indices de page et routes Codex LiveOps mises à jour",
+                ],
+                "fixed": [
+                    "Notes internes « bientôt » obsolètes sur l'Alliance nettoyées",
+                ],
+            },
+            "pl": {
+                "version_label": "Knowledge i LiveOps catch-up",
+                "intro": (
+                    "Systemy LiveOps są dostępne — ten catch-up pomaga odkryć: "
+                    "World Boss i Tytanów, klasy Commander, Sojusz, Story Ops, Login i Season Pass, "
+                    "Sklep i Identity, Ekwipunek i Kolekcjoner, Asteroidy, Relic Arena, Logistykę oraz rozszerzony Codex."
+                ),
+                "added": [
+                    "World Boss i Tytani — wydarzenia serwerowe, atak/oswajanie i misje Tytana na Overview",
+                    "Klasy Commander — wybierz Command Staff, odblokuj skill trunk (trwale)",
+                    "Hub sojuszu — darowizny, projekty, tech i wspólne bonusy",
+                    "Story Ops — łuki lore i sidequesty z pętlą Ark-Token",
+                    "Kalendarz logowania i Season Pass — codzienne nagrody i Season Ops",
+                    "Sklep i Identity — pakiety wygody, style nazw i Free Shop (bez combat P2W)",
+                    "Ekwipunek i rynek kolekcjonerski — otwieraj kontenery, wymieniaj collectibles",
+                    "Asteroidy i Relic Arena — salvage w galaktyce, case battles w Ekwipunku",
+                    "Logistyka i ekspedycje — collect/distribute między koloniami, misje deep-space",
+                    "Rozszerzony Codex — szybka pomoc i przewodniki systemów LiveOps",
+                ],
+                "changed": [
+                    "Mapa wiedzy i pomoc kontekstowa dopasowane do aktualnego katalogu",
+                    "Odkrywalność: wskazówki stron i trasy Codex LiveOps zaktualizowane",
+                ],
+                "fixed": [
+                    "Przestarzałe wewnętrzne notatki „wkrótce” o Sojuszu wyczyszczone",
+                ],
+            },
+            "pt": {
+                "version_label": "Knowledge e LiveOps catch-up",
+                "intro": (
+                    "Os sistemas LiveOps estão ativos — este catch-up ajuda a descobrir: "
+                    "World Boss e Titãs, classes Commander, Aliança, Story Ops, Login e Season Pass, "
+                    "Loja e Identity, Inventário e Colecionador, Asteroides, Relic Arena, Logística e o Codex expandido."
+                ),
+                "added": [
+                    "World Boss e Titãs — eventos de servidor, ataque/domar e missões de Titã no Overview",
+                    "Classes Commander — escolha o Command Staff, desbloqueie o skill trunk (permanente)",
+                    "Hub de aliança — doações, projetos, tech e bônus partilhados",
+                    "Story Ops — arcos de lore e sidequests com loop Ark-Token",
+                    "Calendário de login e Season Pass — recompensas diárias e Season Ops",
+                    "Loja e Identity — packs de conveniência, estilos de nome e Free Shop (sem P2W de combate)",
+                    "Inventário e mercado colecionador — abra contentores, troque collectibles",
+                    "Asteroides e Relic Arena — salvage na galáxia, case battles no Inventário",
+                    "Logística e expedições — collect/distribute entre colónias, missões deep-space",
+                    "Codex expandido — ajuda rápida e guias dos sistemas LiveOps",
+                ],
+                "changed": [
+                    "Mapa de conhecimento e ajuda contextual alinhados com o catálogo atual",
+                    "Descoberta: dicas de página e rotas Codex LiveOps atualizadas",
+                ],
+                "fixed": [
+                    "Notas internas obsoletas de “em breve” sobre Aliança limpas",
+                ],
+            },
+            "ru": {
+                "version_label": "Knowledge и LiveOps catch-up",
+                "intro": (
+                    "Системы LiveOps уже в игре — этот catch-up поможет открыть: "
+                    "World Boss и Титанов, классы Commander, Альянс, Story Ops, Login и Season Pass, "
+                    "Магазин и Identity, Инвентарь и Коллекционер, Астероиды, Relic Arena, Логистику и расширенный Codex."
+                ),
+                "added": [
+                    "World Boss и Титаны — серверные события, атака/приручение и миссии Титана на Overview",
+                    "Классы Commander — выберите Command Staff, откройте skill trunk (навсегда)",
+                    "Хаб альянса — пожертвования, проекты, tech и общие бонусы",
+                    "Story Ops — лор-арки и сайдквесты с циклом Ark-Token",
+                    "Календарь входа и Season Pass — ежедневные награды и Season Ops",
+                    "Магазин и Identity — пакеты удобства, стили имён и Free Shop (без combat P2W)",
+                    "Инвентарь и рынок коллекционера — открывайте контейнеры, обменивайте collectibles",
+                    "Астероиды и Relic Arena — salvage в галактике, case battles в Инвентаре",
+                    "Логистика и экспедиции — collect/distribute между колониями, deep-space миссии",
+                    "Расширенный Codex — быстрая помощь и гайды по LiveOps",
+                ],
+                "changed": [
+                    "Карта знаний и контекстная помощь приведены к актуальному каталогу",
+                    "Открываемость: подсказки страниц и маршруты Codex LiveOps обновлены",
+                ],
+                "fixed": [
+                    "Устаревшие внутренние заметки «скоро» про Альянс очищены",
+                ],
+            },
+            "tr": {
+                "version_label": "Knowledge ve LiveOps catch-up",
+                "intro": (
+                    "LiveOps sistemleri canlı — bu catch-up keşfetmenize yardımcı olur: "
+                    "World Boss ve Titanlar, Commander sınıfları, İttifak, Story Ops, Login ve Season Pass, "
+                    "Mağaza ve Identity, Envanter ve Koleksiyoncu, Asteroitler, Relic Arena, Lojistik ve genişletilmiş Codex."
+                ),
+                "added": [
+                    "World Boss ve Titanlar — sunucu etkinlikleri, saldırı/evcilleştirme ve Overview'da Titan görevleri",
+                    "Commander sınıfları — Command Staff seçin, skill trunk açın (kalıcı)",
+                    "İttifak Hub — bağışlar, projeler, tech ve ortak bonuslar",
+                    "Story Ops — lore yayları ve Ark-Token döngülü yan görevler",
+                    "Giriş takvimi ve Season Pass — günlük ödüller ve Season Ops",
+                    "Mağaza ve Identity — kolaylık paketleri, isim stilleri ve Free Shop (combat P2W yok)",
+                    "Envanter ve koleksiyoncu pazarı — kapları açın, collectible takas edin",
+                    "Asteroitler ve Relic Arena — galakside salvage, Envanterde case battles",
+                    "Lojistik ve seferler — koloniler arası collect/distribute, deep-space görevler",
+                    "Genişletilmiş Codex — LiveOps sistemleri için hızlı yardım ve rehberler",
+                ],
+                "changed": [
+                    "Bilgi haritası ve bağlamsal yardım güncel katalogla hizalandı",
+                    "Keşfedilebilirlik: LiveOps sayfa ipuçları ve Codex rotaları güncellendi",
+                ],
+                "fixed": [
+                    "İttifak hakkında eski “yakında” iç yama notları temizlendi",
+                ],
+            },
+        },
+    },
 }
 
 

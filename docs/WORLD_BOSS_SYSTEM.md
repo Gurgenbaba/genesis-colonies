@@ -220,3 +220,169 @@ UI: countdown via `data-countdown-at` when idle; `event.ends_at` countdown when 
 `tests/test_world_boss.py` — schema, spawn, instant attack, claim, schedule, admin GET, galaxy UI, HP damage mapping, encounter/nav contracts, `nav_badges.world_boss`.
 
 `tests/test_world_boss_companions.py` — companions schema, Phase-3 catch + TK + CD + once-per-boss, 3 mission variants, success/fail rolls, Ark-Token claim.
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: world_boss
+band: III
+difficulty: intermediate
+estimated_read: 5 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+  - commander_tips
+  - discord
+routes:
+  - world_boss_view
+related_codex:
+  - titans
+  - fleet
+  - alliance
+  - inventory
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: route_visit
+  route: world_boss_view
+teaser_key: codex_unlock_world_boss_teaser
+---
+```
+
+## Quick Help
+
+**World Boss**-Events sind serverweite PvE-Begegnungen: alle Commander teilen sich den Boss, treffen ihn in der Encounter-Stage und sammeln Beitrag für Meta-Belohnungen.
+
+## Summary
+
+Unter `/world-boss` öffnet die **Encounter Stage**: ein aktiver Boss mit gemeinsamer Lebensleiste, Wellen-Angriffen aus deinem Hangar und Boards für persönlichen sowie Allianz-Beitrag. Bosse erscheinen in der Galaxie und bleiben nur für ein LiveOps-Fenster aktiv. Nach Sieg oder Ablauf kannst du Belohnungen claimen — Container und Meta-Items, keine Schiffe und keine Rohstoff-Stacks.
+
+## Why
+
+World Boss verbindet LiveOps, Community-DPS und Meta-Progression. Du kämpfst nicht allein um einen lokalen Slot — der Server teilt ein Event, und dein Beitrag zählt für Ränge, Allianz-XP und Claim-Tiers. Catch und Titan-Companions sind der Retention-Loop danach (eigener Codex-Eintrag).
+
+## How it works
+
+- Öffne **World Boss** in der Navigation oder folge dem Deep-Link aus der Galaxie, wenn ein Boss-Slot sichtbar ist.
+- **Angriff:** sofortiger Encounter-Schlag — Schiffe bleiben im Hangar (Community-DPS, keine Verluste auf diesem Pfad). Cooldown und Wellenlimit setzt der Server.
+- **Auto-Angriff:** optional serverseitig; der nächste Schlag folgt, wenn der Cooldown frei ist.
+- **Beitrag:** Schaden und Ränge pflegt nur der Server; Allianz-Mitglieder aggregieren gemeinsam.
+- **Phasen:** die Stage zeigt Phase und Aura — bei kritischer Phase wird **Zähmung** möglich (siehe Titans).
+- **Belohnungen:** nach `defeated` oder `expired` (mit Beitrag) claimen — Tiers für Teilnahme, Top-Beiträge, Allianz-Top und Entdecker. Die UI zeigt deine Outlook und den Katalog.
+- Idle-State: Countdown bis zum nächsten Spawn-Fenster; Hilfe-Modal erklärt die Stage ohne Formeln.
+
+## Related Systems
+
+- titans
+- fleet
+- alliance
+- inventory
+- galaxy
+
+## Commander Tips
+
+- Aktiven Boss früh angreifen — Beitrag und Ränge bauen sich über das Fenster auf.
+- Allianz-Beitrag zählt für gemeinsame Tiers; koordiniert Waves, wenn ihr den Ally-Top wollt.
+- Entdecker-Bonus braucht Expedition-Fund **und** eigenen Schaden.
+
+## FAQ
+
+**Verliere ich Schiffe beim World-Boss-Angriff?**
+Nein — der Instant-Pfad zieht keine Hangar-Verluste. Schiffe werden nur für die Schlagkraft gelesen.
+
+**Wo finde ich den Boss?**
+Aktive Events erscheinen in der Galaxie und auf `/world-boss`. Deep-Links führen zur Encounter Stage.
+
+**Wann kann ich belohnen claimen?**
+Wenn das Event besiegt oder abgelaufen ist und du Beitrag geleistet hast — oder automatisch nach erfolgreicher Zähmung für alle Schaden-Teilnehmer.
+
+## Discord Summary
+
+**World Boss — serverweite Encounter Stage**
+
+`/world-boss`: gemeinsamer Boss, Instant-Angriffe ohne Hangar-Verlust, Beitragsboards, Claim-Tiers. Galaxie zeigt aktive Slots. Catch/Titans = eigener Codex.
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: titans
+band: III
+difficulty: intermediate
+estimated_read: 4 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+  - commander_tips
+  - discord
+routes:
+  - world_boss_view
+  - overview
+related_codex:
+  - world_boss
+  - story_ops
+  - shop_identity
+  - inventory
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: route_visit
+  route: world_boss_view
+teaser_key: codex_unlock_titans_teaser
+---
+```
+
+## Quick Help
+
+**Titans** (Boss-Companions) entstehen durch Zähmung in der World-Boss-Stage. Gezähmte Titans leben auf der Overview — Missionen bringen **Ark-Token** für den Free Shop.
+
+## Summary
+
+Wenn ein World Boss in die kritische Phase fällt, kannst du einen **Catch**-Versuch starten (Timekeeper-Kosten, Chance und Cooldown setzt der Server). Erfolg bindet den Titan an dich: Flavor-Companion ohne Kampf- oder Flottenboni. Auf der **Overview** erscheinen Hotspots und Klick-SFX nur für **deine eigenen** Titans; gesperrte Silhouetten markieren noch nicht gezähmte Bosse. Missionen (Patrouille, Strike, Void Run) laufen serverseitig und zahlen bei Erfolg Ark-Token (`story_scrap_token`) — dieselbe Währung wie Story/Free Shop.
+
+## Why
+
+Titans verlängern den World-Boss-Loop: Fight → Catch → Overview-Präsenz → Mission → Meta-Währung. Sie sind Prestige und Side-Content, kein zweites Combat-System.
+
+## How it works
+
+- **Catch:** nur bei aktivem Event in kritischer Phase, freier Companion-Kapazität und ohne bestehenden Besitz dieses Boss-Keys.
+- **Kapazität:** startet niedrig; Shop-SKU kann Slots erweitern (Deckel serverseitig).
+- **Overview:** Landschafts-Hotspots + Popover mit Flavor und drei Mission-Karten — Interaktion und SFX nur für **owned** Titans.
+- **Missionen:** Start/Claim über Overview oder API; eine Mission pro Companion; Erfolg → Ark-Token, Misserfolg → kein Token.
+- Keine Combat-/Fleet-Stat-Buffs durch Companions.
+
+## Related Systems
+
+- world_boss
+- story_ops
+- shop_identity
+- inventory
+
+## Commander Tips
+
+- Catch erst planen, wenn Timekeeper und Kapazität reichen — Fehlversuche starten den Catch-Cooldown.
+- Mission-Varianten tauschen Dauer gegen Risiko; längere Runs lohnen sich nur, wenn du Claim-Zeiten einhalten kannst.
+- Overview-Hotspots sind kein Galaxie-Kampf — nur Companion-Missionen.
+
+## FAQ
+
+**Geben Titans Kampfboni?**
+Nein. Flavor, Overview-Präsenz und Ark-Token-Missionen — keine Weapon-/Fleet-Mods.
+
+**Warum höre ich keinen Klick-SFX auf einem Hotspot?**
+SFX und Mission-Popover gelten nur für **gezähmte** Titans. Silhouetten ohne Besitz bleiben locked.
+
+**Wohin mit Ark-Token?**
+Free-Shop-Tab unter `/shop` (Story-Owner) — nicht der EUR-Payment-Katalog.
+
+## Discord Summary
+
+**Titans — Companions, Overview, Ark-Token**
+
+World-Boss-Catch → eigener Titan. Overview-Hotspots/SFX nur für owned. Missionen → Ark-Token für Free Shop. Keine Combat-Buffs.

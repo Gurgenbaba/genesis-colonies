@@ -182,3 +182,86 @@ Abdeckung: Schema, CRUD, Spenden/Pool, Projekte, Boni/EffectResolver, Expedition
 - [EFFECTS.md](EFFECTS.md) — Alliance modifier extension
 - [AJAX_PJAX_CONTRACT.md](AJAX_PJAX_CONTRACT.md) — Actions mit `applyActionState`
 - [BETA_GATE.md](BETA_GATE.md) — Alliance MVP Gate
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: alliance
+band: III
+difficulty: intermediate
+estimated_read: 5 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+  - commander_tips
+  - discord
+routes:
+  - alliance_view
+related_codex:
+  - fleet
+  - world_boss
+  - combat
+  - resources
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: route_visit
+  route: alliance_view
+teaser_key: codex_unlock_alliance_teaser
+---
+```
+
+## Quick Help
+
+Die **Allianz** unter `/alliance` ist dein soziales und kooperatives Hub: gründen, beitreten, spenden, Projekte starten und Diplomatie führen.
+
+## Summary
+
+Allianzen haben Tag, Logo, Ränge (Leader / Officer / Member), Mitgliederlimit und Rekrutierungsmodi (offen, nur Bewerbung, geschlossen). Der **Spendenpool** nimmt Ferronit, Crytite und Brennzellen vom **aktiven Planeten** entgegen. Officer starten **Allianz-Projekte** (Gebäude/Technologien) aus dem Pool — eigene Projekt-Zeitlinie, keine Planeten-Bauqueue. Boni laufen über den EffectResolver; Diplomatie steuert NAP, Bündnis und Krieg inkl. Flotten-Hooks.
+
+## Why
+
+Allein kommst du weit — zusammen skaliert LiveOps (World Boss), Expo-Koordination und Verteidigung. Die Allianz ist kein zweites Imperium, sondern geteilter Fortschritt und Regeln zwischen Commandern.
+
+## How it works
+
+- **Hub `/alliance`:** eigenes Cockpit oder Onboarding + Directory; öffentliche Besucherseite `/alliance/<id>`.
+- **Beitritt:** Tag-Join oder Bewerbung je nach Rekrutierungsmodus; Leader/Officer entscheiden.
+- **Spenden:** Ressourcen vom Context-Planeten in den Pool — Cap und Headroom setzt der Server; UI zeigt Projektbedarf nur als Hinweis.
+- **Projekte:** ein aktives Projekt; Fortschritt und Finish serverseitig; Level schalten Gebäude/Techs frei.
+- **Rollen:** Leader überträgt, kickt, löst auf; Officer managen Profil, Logo, Bewerbungen, Diplomatie.
+- **Diplomatie:** NAP blockiert Angriffe; Bündnis erlaubt Ally-Transport/Hold; Krieg öffnet Angriff mit Flag.
+
+## Related Systems
+
+- fleet
+- world_boss
+- combat
+- resources
+- ranking
+
+## Commander Tips
+
+- Spenden vom Planeten mit Überschuss — Context-Planet prüfen.
+- Officer: Pool für das nächste Projekt füllen, bevor ihr startet.
+- NAP mit Nachbarn früh klären, bevor Flottenmissverständnisse entstehen.
+
+## FAQ
+
+**Zählt Allianz-XP wie Ranking-Punkte?**
+Nein. Allianz-XP/Level steuern Projekte; das Ranking-Tab „Allianz“ summiert Member-Scores getrennt.
+
+**Kann der Leader die Allianz verlassen?**
+Nur nach Transfer oder als letztes Mitglied (dann Auflösung).
+
+**Greifen Allianz-Boni auf jedem Planeten?**
+Ja — EffectResolver account-/allianzweit; Spenden bleiben planetengebunden.
+
+## Discord Summary
+
+**Allianz — Hub, Pool, Projekte, Diplomatie**
+
+`/alliance`: Ränge, Spenden vom aktiven Planeten, ein Projekt, EffectResolver-Boni, NAP/Bündnis/Krieg mit Fleet-Hooks.

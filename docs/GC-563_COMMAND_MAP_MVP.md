@@ -309,3 +309,90 @@ Wenn das sitzt, ist es der **erste echte sichtbare Schritt** zur neuen Galaxy.
 ### Tests
 
 ### Ergebnis
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: command_map
+band: II
+difficulty: beginner
+estimated_read: 4 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+  - commander_tips
+  - discord
+routes:
+  - galaxy_view
+  - empire_view
+related_codex:
+  - galaxy
+  - expansion
+  - planet_evolution
+  - strategic_worlds
+  - fleet
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: homeworld_level
+  value: 5
+teaser_key: codex_unlock_command_map_teaser
+---
+```
+
+## Quick Help
+
+Die **Command Map** (Weltkarte) zeigt dein Imperium räumlich: Genesis Ark als Hub, Kolonien, Expansion Sites und strategische Orte — unter `/galaxy` als Weltkarte-Tab (`view=command_map`).
+
+## Summary
+
+Die **Command Map** ist die visuelle Imperiumskarte von Genesis Colonies. Statt einer reinen Kolonie-Liste siehst du Hub-and-Spoke: die **Genesis Ark** im Zentrum, verbundene Welten, Handelsrouten und Orte mit Typ und Versprechen. Sie lebt unter **`/galaxy`** (Weltkarte) — **`/empire` ist keine Karte**, sondern Wirtschafts-/Produktionsmatrix.
+
+## Why
+
+Ein Sternenreich soll man **sehen**, nicht nur scrollen. Die Command Map macht Expansion, Rollen und Ziele räumlich lesbar und verbindet Planet Evolution, Expansion Sites und Flottenziele zu einer gemeinsamen Weltansicht.
+
+## How it works
+
+- Öffne **`/galaxy`** und den Tab **Weltkarte** (`view=command_map` / Alias `imperium`).
+- **Hub:** Genesis Ark (Homeworld) zentral; Kolonien als Satelliten mit Rollen-Icons.
+- **Kanten:** aktive Handelsrouten und Hub-Links verbinden Welten.
+- Klick auf eigene Welten wechselt den **aktiven Planeten** (wie Header-Switcher).
+- Expansion Sites, Strategic Worlds, Landmarken und Chokepoints erscheinen mit Entwicklungsfortschritt der Ark — Aktionen hängen an Gates und Missionen.
+- Klassische **Systemansicht** (`view=system`) bleibt parallel für Slots und Flotten-Prefill.
+- **`/empire`** nicht mit der Command Map verwechseln.
+
+## Related Systems
+
+- galaxy
+- expansion
+- planet_evolution
+- strategic_worlds
+- fleet
+- genesis_ark
+
+## Commander Tips
+
+- Expansion und Orte zuerst auf der **Weltkarte** planen, nicht nur in der Slot-Liste.
+- Genesis Ark bleibt der Hub — Kolonien drumherum lesen.
+- `/empire` = Produktion/Matrix; Weltkarte = `/galaxy` Weltkarte-Tab.
+
+## FAQ
+
+**Wo finde ich die Command Map?**
+Unter `/galaxy` → Tab **Weltkarte** (`view=command_map`). Nicht unter `/empire`.
+
+**Unterschied zu `/empire`?**
+Command Map = räumliche Imperiums-/Weltansicht. `/empire` = Wirtschafts- und Produktionsmatrix.
+
+**Brauche ich die Systemansicht noch?**
+Ja — klassische Slots, Expeditions-Slot und viele Flotten-Prefills laufen weiter über die Systemansicht.
+
+## Discord Summary
+
+**Command Map — Imperium auf der Weltkarte**
+
+`/galaxy` Weltkarte: Genesis Ark als Hub, Kolonien, Expansion Sites, Strategic Worlds. `/empire` ist Wirtschaft, keine Karte. Freischaltung mit Ark-Entwicklungsstufe 5.

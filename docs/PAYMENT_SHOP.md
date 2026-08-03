@@ -225,3 +225,84 @@ Themes/Auras freischalten: Basis-Themes immer frei; Season-Themes/Auras via Batt
 - [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) — EPIC-22 entitlement hook
 - [GAME_RULES.md](GAME_RULES.md) §3.3a — official premium policy
 - [GENESIS_STORY_OPS.md](GENESIS_STORY_OPS.md) — **Free Shop** (Ark-Token) ist Story-Owner auf `/shop` Tab, **nicht** Teil des EUR-Catalogs in `game/shop.py`
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: shop_identity
+band: III
+difficulty: beginner
+estimated_read: 4 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+  - commander_tips
+  - discord
+routes:
+  - shop_view
+related_codex:
+  - liveops_retention
+  - story_ops
+  - titans
+  - inventory
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: route_visit
+  route: shop_view
+teaser_key: codex_unlock_shop_identity_teaser
+---
+```
+
+## Quick Help
+
+Der **Shop** unter `/shop` verkauft Convenience und **Identity**: Season Pass, Timekeeper-Packs, Booster/Container — plus Name-Styles. Theme und Aura formen deine UI-Shell.
+
+## Summary
+
+Payment (PayPal, optional Stripe) erfüllt nur erlaubte SKUs: Premium-Entitlement, Timekeeper, Meta-Container, Booster-Bundles, Titan-Slot, Cosmetics. **Kein** Rohstoff-, Schiff- oder Defense-Shop. Die **Identity Shell** trennt Signale: ausgerüstetes PlayerCard-**Theme** färbt Chrome/UI; **Aura** legt Prestige-Glow; **Name-Style** stylt nur den sichtbaren Namen in Galaxie, Chat, Ranking usw. Free Shop (Ark-Token) ist ein eigener Tab — Story-Owner, nicht EUR-Katalog.
+
+## Why
+
+Paid beschleunigt Geduld und Ausdruck, nicht den Combat-Sieg. Identity macht Commander in Multiplayer-Surfaces wiedererkennbar, ohne zweite Cosmetics-Engine.
+
+## How it works
+
+- Katalog auf `/shop` → Checkout → Provider → Webhook/Return fulfillment (idempotent).
+- Season Pass schreibt dasselbe Premium-Flag wie LiveOps.
+- Cosmetics freischalten und in der PlayerCard ausrüsten.
+- Theme/Aura wirken auf deinen Shell; Name-Style auf Namenslinks überall.
+- Rechtliche Hinweise und Doppel-Ack vor dem Kauf; virtuelle Güter nach Fulfillment.
+
+## Related Systems
+
+- liveops_retention
+- story_ops
+- titans
+- inventory
+
+## Commander Tips
+
+- Free-Baseline (Login, Directives, BP Free) zuerst ausschöpfen — Paid ist Impuls, kein Pflichtkauf.
+- Name-Style ist sozial sichtbar; Theme/Aura vor allem dein Chrome.
+- Ark-Token-Tab ≠ EUR-Tab — Währungen nicht mischen.
+
+## FAQ
+
+**Kann ich Ferronit kaufen?**
+Nein. Shop und Loot bleiben meta-only für Paid/Convenience.
+
+**Warum ändert mein Name-Style nicht die UI-Farbe?**
+Absicht: Name-Style ≠ Theme. Farbe kommt vom ausgerüsteten Theme.
+
+**Was ist der Free Shop?**
+Ark-Token-Einlösung (Story/Titans) auf dem Shop-Tab — ohne Echtgeld.
+
+## Discord Summary
+
+**Shop & Identity**
+
+`/shop`: Season Pass, TK, Meta-Packs, Cosmetics. Theme/Aura = Shell; Name-Style = Name only. Kein Resource/Ship-Shop. Free Shop = Ark-Token.

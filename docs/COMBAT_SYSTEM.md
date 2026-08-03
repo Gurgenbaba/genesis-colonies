@@ -230,6 +230,7 @@ PvP und Risiko auf Kolonien brauchen klare, serverseitige Resolution — kein Cl
 - Beide Spieler erhalten **Kampfberichte** (strukturierte Inbox) mit Runden, Verlusten und Ergebnis.
 - **Verteidigung** (stationär) und **Hangar-Schiffe** kämpfen gemeinsam — nur Hangar reicht nicht.
 - Kampf-Techs (`weapon_tech`, `armor_tech`, `shield_tech`) modifizieren Werte imperiumsweit.
+- **Effektive Stats:** angezeigte Kampfwerte können zusätzlich Boni aus Commander-Klasse, Tech-Tree und Titans enthalten — UI zeigt Server-Gesamtbonus; keine Client-Formel.
 - Kampfformeln und Einzelwerte: nicht im Codex — Schiff/Defense-Detail und Technische Daten.
 
 ## Related Systems

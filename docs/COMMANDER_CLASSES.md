@@ -89,3 +89,85 @@ Shipyard/Defense lesen `shipyard_time_speed` / `defense_time_speed` über den vo
 - Keine aktiven Cooldown-Skills in v1
 - Keine Ark-Token-/Shop-Währung für Swap
 - Kein zweites Research / keine PE-Hijack
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: commander_classes
+band: II
+difficulty: intermediate
+estimated_read: 4 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+  - commander_tips
+  - discord
+routes:
+  - skilltree_view
+related_codex:
+  - research
+  - fleet
+  - resources
+  - story_ops
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: route_visit
+  route: skilltree_view
+teaser_key: codex_unlock_commander_classes_teaser
+---
+```
+
+## Quick Help
+
+Unter `/skilltree` wählst du eine **Commander-Klasse** und schaltest einen linearen Skill-Trunk frei — account-weit, über den EffectResolver, ohne Parallel-Research.
+
+## Summary
+
+Fünf Klassen prägen deinen Playstyle: **Vanguard** (Kampf), **Forge Lord** (Wirtschaft), **Archivist** (Forschung), **Void Admiral** (Flotte), **Envoy** (Intel/Support). Skill Points kommen aus Score-Meilensteinen. Der Baum ist strikt linear; Capstones kosten hohe Ferronit-/Crytite-/Brennzellen-Beträge vom Kontext-Planeten. Klassenwechsel ist möglich — gegen Timekeeper, mit Skill-Reset und erneutem Pick. Kein In-Class-Respec.
+
+## Why
+
+Die Klasse ist deine langfristige Commander-Identität: weiche Boni auf dem bestehenden Effekt-Stack, nicht ein zweites Tech-System und keine PE-Spezialisierung. Story kann den Living Commander als Sprecher nutzen.
+
+## How it works
+
+- Öffne **Skilltree** — zuerst cinematic Class-Pick, danach Trunk-Karte mit Inspector.
+- **SP claimen** aus fälligen Score-Meilensteinen, dann Ränge der Reihe nach freischalten.
+- **Capstones** am Ende des Trunks: teure Ressourcen vom aktiven Planeten.
+- **Swap:** Timekeeper abbuchen → Skills weg → SP zurück → Klasse neu wählen; Kosten steigen mit jedem Wechsel.
+- Boni wirken über denselben EffectResolver wie Allianz und Booster.
+
+## Related Systems
+
+- research
+- fleet
+- buildings
+- story_ops
+- inventory
+
+## Commander Tips
+
+- Klasse an deinen Hauptloop wählen — Eco vs. Fleet vs. PvP — nicht „alles ein bisschen“.
+- SP erst claimen, dann Trunk pushen; Capstones nur mit vollen Depots am Kontext-Planeten.
+- Swap sparsam: Timekeeper ist knapp und der Baum startet neu.
+
+## FAQ
+
+**Ersetzt die Klasse Account-Forschung?**
+Nein. Klasse stapelt weiche Mods; Research, Gebäude und Planet Evolution bleiben Pflicht.
+
+**Kann ich einzelne Skills zurücksetzen?**
+Nein — nur voller Klassenwechsel gegen Timekeeper.
+
+**Ist die Klasse an einen Planeten gebunden?**
+Nein — account-weit, unabhängig vom aktiven Planeten (Kosten für Capstones kommen vom Kontext-Planeten).
+
+## Discord Summary
+
+**Commander-Klassen — Skilltree**
+
+`/skilltree`: eine Klasse, linearer Trunk, SP aus Score, Capstones teuer, Swap nur mit Timekeeper. EffectResolver-Boni — kein zweites Research.

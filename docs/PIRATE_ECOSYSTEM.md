@@ -218,3 +218,86 @@ Feature is live for players **and**:
 10. Inbound attack on AI → fleet-save recall; colony wipe (AI **or** human non-homeworld) requires `planet_breaker` + full military wipe (homeworld protected) 
 
 **LiveOps enable:** run migrations through `114_pirate_phase3_factions.sql`, then Soft-On AI in Admin → Pirate Bot-Log. Use **Force Spawn** if Heat is still below 150.
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: pirates
+band: III
+difficulty: intermediate
+estimated_read: 5 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+  - commander_tips
+  - discord
+routes:
+  - galaxy_view
+related_codex:
+  - galaxy
+  - fleet
+  - combat
+  - alliance
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: route_visit
+  route: galaxy_view
+teaser_key: codex_unlock_pirates_teaser
+---
+```
+
+## Quick Help
+
+**Piraten** sind eine lebende Bedrohung in der Galaxie: Basen, Fraktions-KI und Heat. Du spionierst, greifst an und bergst wie gegen Spieler — über dieselbe Flotten- und Kampf-Pipeline.
+
+## Summary
+
+Das Pirate Ecosystem füllt dichtere Galaxien mit temporären **Piratenbasen**, Fraktions-Commandern im Ranking und Raids, die mit steigender **Galaxy Heat** eskalieren. Piraten nutzen Spy → Intel → Angriff wie echte Flotten; Kampf und Flugzeiten laufen kanonisch. Du kannst Basen zerstören, Bounty und Threat beobachten und in Krisen (`pirate_war`) geraten, wenn die Heat kritisch wird. Expositionen können Ambush und Infiltration nachziehen.
+
+## Why
+
+Statt leerer Systeme entsteht ein lebendiger Gegnerdruck: Farm-Ziele, Risiko für Kolonien und eine Fairness-Linie (kein Cheat-Hangar, sichtbare ETAs, Kill-Switch nur Ops). Piraten halten die Galaxie „wach“, ohne Chat-Bots oder Fake-PMs.
+
+## How it works
+
+- **Galaxie:** Basen und KI-Welten erscheinen mit Status-Chips; Inspector zeigt Fraktion und deine Bounty gegenüber der Fraktion.
+- **Heat:** Aktivität in der Galaxie (Kampf, Expo, Asteroiden, World Boss, Kolonisierung) heizt Systeme auf — ab Schwellen starten Patrouillen, Raids und Krisen.
+- **Spieleraktionen:** Spy, Attack, Recycle gegen Basen über `/fleet` und Galaxy-Quick-Actions — gleiche Missionen wie PvP.
+- **Zerstörung:** Basis weg → Slot frei, ausgehende Raids der Basis werden zurückgerufen.
+- **KI-Commanders:** echte Konten im Ranking/PlayerCard (AI-Badge), bauen und forschen spielerähnlich; Homeworlds sind geschützt, Kolonien können unter harten Bedingungen fallen.
+- **Threat / Bounty:** wer Basen und KI hart trifft, wird bevorzugtes Vergeltungsziel.
+
+## Related Systems
+
+- galaxy
+- fleet
+- combat
+- asteroids
+- world_boss
+
+## Commander Tips
+
+- Vor dem Raid spionieren — Intel steuert, wie die KI zuschlägt, und du brauchst dieselbe Vorsicht.
+- Heat-Hotspots sind lukrativ und gefährlich; Kolonien dort absichern.
+- Debris und Basen teilen sich oft Systeme — Recycler und Raid-Flotten nicht vermischen ohne Plan.
+
+## FAQ
+
+**Sind Piraten echte Spieler?**
+Fraktions-Bots sind KI-Konten mit Hangar und Planeten — sichtbare Flotten, kein Chat. Temporäre Basen sind Map-Instanzen, keine Expansion-Welten.
+
+**Kann meine Genesis Ark zerstört werden?**
+Nein. Homeworlds sind geschützt; nur Nicht-Heimat-Kolonien können unter Planet-Breaker-Bedingungen fallen.
+
+**Warum werde ich plötzlich geraidet?**
+Hohe Threat/Bounty oder heiße Galaxie — die KI bevorzugt lohnende Ziele mit sichtbarer Flugzeit.
+
+## Discord Summary
+
+**Piraten — lebende Galaxy-Bedrohung**
+
+Basen + Fraktions-KI, Heat-Eskalation, Spy/Attack über kanonische Flotte. Ranking zeigt AI-Commanders. Homeworld sicher; Kolonien unter Risiko.

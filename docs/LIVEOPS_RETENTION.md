@@ -145,3 +145,85 @@ Stripe + PayPal Checkout set the **same** entitlement flag via `battle_pass.unlo
 | GC-993 | premium_entitlements admin grant |
 | GC-994 | `/premium` UI |
 | GC-995 | GAME_RULES sync + contract tests |
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: liveops_retention
+band: II
+difficulty: beginner
+estimated_read: 4 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+  - commander_tips
+  - discord
+routes:
+  - login_rewards_view
+  - premium_view
+related_codex:
+  - shop_identity
+  - inventory
+  - imperial_directives
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: route_visit
+  route: login_rewards_view
+teaser_key: codex_unlock_liveops_retention_teaser
+---
+```
+
+## Quick Help
+
+**Login-Kalender** (`/login-rewards`) und **Battle Pass** (`/premium`) sind die Free-to-Play LiveOps-Schiene: tägliche Anwesenheit und Season-Ops für Meta-Belohnungen.
+
+## Summary
+
+Der Login-Kalender ist eine rollierende Anwesenheits-Strecke: ein Claim pro UTC-Tag, streng sequentiell; Lücken setzen den Streak zurück. Meilenstein-Tage liefern stärkere Container und Timekeeper-nahe Rewards. Der **Battle Pass** hat Free- und Premium-Track, Season-Ops (täglich/wöchentlich) plus sanften Aktivitäts-Drip. Premium schaltet denselben Entitlement-Pfad frei wie der Shop — keine zweite Währung. Belohnungen bleiben Meta (Booster, Container, Cosmetics), keine Schiffe oder Ferronit-Stacks.
+
+## Why
+
+Retention ohne Pay-to-Win: High Command begrüßt dich täglich, die Season belohnt aktives Spielen. Paid ist Convenience und FOMO, Free bleibt wertvoll.
+
+## How it works
+
+- **`/login-rewards`:** Kalender mit claimed / claimable / locked; Server-Events können als Overlay erscheinen (read-only).
+- Claim nur für den nächsten fälligen Tag — kein Aufholen verpasster Tage.
+- **`/premium`:** horizontales Trackboard Free/Premium, Season-Ops-Karten, Claim für Level und Ops.
+- XP kommt aus Ops und begrenztem Aktivitäts-Drip — Anzeige und Caps setzt der Server.
+- Premium mitten in der Season: bereits erreichte Premium-Stufen werden claimbar.
+- Nav-Badges signalisieren claimbare Ops/Rewards.
+
+## Related Systems
+
+- shop_identity
+- inventory
+- imperial_directives
+- vote_center
+
+## Commander Tips
+
+- Login-Streak schützen — eine verpasste UTC-Nacht setzt dich zurück.
+- Daily Ops vor dem Offline-Gang claimen; Weekly parallel mitlaufen lassen.
+- Premium nur kaufen, wenn du die Season noch aktiv spielst — Mid-Season holt erreichte Stufen nach.
+
+## FAQ
+
+**Ist Battle Pass Pay-to-Win?**
+Nein. Tracks geben Meta/QoL/Cosmetics — keine Schiffe, Defense oder Rohstoff-Stacks als Paid-Power.
+
+**Unterschied zu Imperial Directives?**
+Directives = rotierende Kommando-Ops mit eigenem Loot. Login/BP = Anwesenheit + Season-Track. Beide dürfen parallel laufen.
+
+**Wo schalte ich Premium frei?**
+Shop-SKU Season Pass oder Admin/LiveOps — derselbe Entitlement-Flag.
+
+## Discord Summary
+
+**LiveOps — Login-Kalender & Battle Pass**
+
+`/login-rewards` + `/premium`: tägliche Streak, Free/Premium-Tracks, Season Ops. Meta-Rewards only. Premium = Shop-Entitlement.

@@ -1,5 +1,98 @@
 {
   "articles": {
+    "alliance": {
+      "codex_id": "alliance",
+      "band": "III",
+      "difficulty": "intermediate",
+      "estimated_read": "5 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips",
+        "discord"
+      ],
+      "routes": [
+        "alliance_view"
+      ],
+      "related_codex": [
+        "fleet",
+        "world_boss",
+        "combat",
+        "resources"
+      ],
+      "unlock": {
+        "type": "route_visit",
+        "route": "alliance_view"
+      },
+      "teaser_key": "codex_unlock_alliance_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "ALLIANCE_SYSTEM.md",
+      "faq_count": 3,
+      "tip_count": 3
+    },
+    "asteroids": {
+      "codex_id": "asteroids",
+      "band": "III",
+      "difficulty": "intermediate",
+      "estimated_read": "3 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips",
+        "discord"
+      ],
+      "routes": [
+        "galaxy_view",
+        "fleet_view"
+      ],
+      "related_codex": [
+        "galaxy",
+        "fleet",
+        "salvage",
+        "resources"
+      ],
+      "unlock": {
+        "type": "route_visit",
+        "route": "galaxy_view"
+      },
+      "teaser_key": "codex_unlock_asteroids_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "ASTEROID_SYSTEM.md",
+      "faq_count": 3,
+      "tip_count": 3
+    },
+    "auction": {
+      "codex_id": "auction",
+      "band": "III",
+      "difficulty": "beginner",
+      "estimated_read": "3 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips",
+        "discord"
+      ],
+      "routes": [
+        "auction_house_view"
+      ],
+      "related_codex": [
+        "inventory",
+        "resources",
+        "trader"
+      ],
+      "unlock": {
+        "type": "route_visit",
+        "route": "auction_house_view"
+      },
+      "teaser_key": "codex_unlock_auction_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "AUCTION_HOUSE.md",
+      "faq_count": 2,
+      "tip_count": 3
+    },
     "buildings": {
       "codex_id": "buildings",
       "band": "I",
@@ -28,6 +121,67 @@
       "faq_count": 2,
       "tip_count": 4
     },
+    "case_battles": {
+      "codex_id": "case_battles",
+      "band": "III",
+      "difficulty": "intermediate",
+      "estimated_read": "4 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips",
+        "discord"
+      ],
+      "routes": [
+        "inventory_view"
+      ],
+      "related_codex": [
+        "inventory",
+        "shop_identity",
+        "collector_exchange"
+      ],
+      "unlock": {
+        "type": "route_visit",
+        "route": "inventory_view"
+      },
+      "teaser_key": "codex_unlock_case_battles_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "CASE_BATTLES.md",
+      "faq_count": 3,
+      "tip_count": 3
+    },
+    "collector_exchange": {
+      "codex_id": "collector_exchange",
+      "band": "III",
+      "difficulty": "intermediate",
+      "estimated_read": "4 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips",
+        "discord"
+      ],
+      "routes": [
+        "trader_hub_view"
+      ],
+      "related_codex": [
+        "trader",
+        "inventory",
+        "planet_evolution",
+        "research"
+      ],
+      "unlock": {
+        "type": "route_visit",
+        "route": "trader_hub_view"
+      },
+      "teaser_key": "codex_unlock_collector_exchange_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "COLLECTOR_EXCHANGE.md",
+      "faq_count": 3,
+      "tip_count": 3
+    },
     "combat": {
       "codex_id": "combat",
       "band": "III",
@@ -54,6 +208,37 @@
       "terminology": "GENESIS_TERMINOLOGY",
       "source_doc": "COMBAT_SYSTEM.md",
       "faq_count": 2,
+      "tip_count": 3
+    },
+    "commander_classes": {
+      "codex_id": "commander_classes",
+      "band": "II",
+      "difficulty": "intermediate",
+      "estimated_read": "4 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips",
+        "discord"
+      ],
+      "routes": [
+        "skilltree_view"
+      ],
+      "related_codex": [
+        "research",
+        "fleet",
+        "resources",
+        "story_ops"
+      ],
+      "unlock": {
+        "type": "route_visit",
+        "route": "skilltree_view"
+      },
+      "teaser_key": "codex_unlock_commander_classes_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "COMMANDER_CLASSES.md",
+      "faq_count": 3,
       "tip_count": 3
     },
     "defense": {
@@ -173,6 +358,36 @@
       "faq_count": 2,
       "tip_count": 3
     },
+    "faq_general": {
+      "codex_id": "faq_general",
+      "band": "I",
+      "difficulty": "beginner",
+      "estimated_read": "3 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips",
+        "discord"
+      ],
+      "routes": [
+        "overview"
+      ],
+      "related_codex": [
+        "genesis_ark",
+        "buildings",
+        "research",
+        "planet_scope"
+      ],
+      "unlock": {
+        "type": "always"
+      },
+      "teaser_key": "",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "FAQ_GENERAL.md",
+      "faq_count": 3,
+      "tip_count": 3
+    },
     "fleet": {
       "codex_id": "fleet",
       "band": "II",
@@ -204,6 +419,69 @@
       "faq_count": 2,
       "tip_count": 3
     },
+    "diplomacy": {
+      "codex_id": "diplomacy",
+      "band": "IV",
+      "difficulty": "advanced",
+      "estimated_read": "5 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips",
+        "discord"
+      ],
+      "routes": [
+        "galactic_politics_view"
+      ],
+      "related_codex": [
+        "imperial_directives",
+        "galactic_directives",
+        "galaxy",
+        "command_map",
+        "genesis_ark"
+      ],
+      "unlock": {
+        "type": "route_visit",
+        "route": "galactic_politics_view"
+      },
+      "teaser_key": "codex_unlock_diplomacy_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "GALACTIC_DIPLOMACY.md",
+      "faq_count": 2,
+      "tip_count": 3
+    },
+    "galactic_directives": {
+      "codex_id": "galactic_directives",
+      "band": "IV",
+      "difficulty": "advanced",
+      "estimated_read": "5 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips",
+        "discord"
+      ],
+      "routes": [
+        "galactic_politics_view"
+      ],
+      "related_codex": [
+        "planet_evolution",
+        "galaxy",
+        "alliance",
+        "research"
+      ],
+      "unlock": {
+        "type": "route_visit",
+        "route": "galactic_politics_view"
+      },
+      "teaser_key": "codex_unlock_galactic_directives_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "GALACTIC_DIRECTIVES.md",
+      "faq_count": 3,
+      "tip_count": 3
+    },
     "galaxy": {
       "codex_id": "galaxy",
       "band": "II",
@@ -232,6 +510,268 @@
       "faq_count": 2,
       "tip_count": 3
     },
+    "command_map": {
+      "codex_id": "command_map",
+      "band": "II",
+      "difficulty": "beginner",
+      "estimated_read": "4 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips",
+        "discord"
+      ],
+      "routes": [
+        "galaxy_view",
+        "empire_view"
+      ],
+      "related_codex": [
+        "galaxy",
+        "expansion",
+        "planet_evolution",
+        "strategic_worlds",
+        "fleet"
+      ],
+      "unlock": {
+        "type": "homeworld_level",
+        "value": 5
+      },
+      "teaser_key": "codex_unlock_command_map_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "GC-563_COMMAND_MAP_MVP.md",
+      "faq_count": 3,
+      "tip_count": 3
+    },
+    "influence": {
+      "codex_id": "influence",
+      "band": "II",
+      "difficulty": "beginner",
+      "estimated_read": "3 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips",
+        "discord"
+      ],
+      "routes": [
+        "galaxy_view",
+        "empire_view"
+      ],
+      "related_codex": [
+        "command_map",
+        "galaxy",
+        "expansion",
+        "genesis_ark"
+      ],
+      "unlock": {
+        "type": "homeworld_level",
+        "value": 10
+      },
+      "teaser_key": "codex_unlock_influence_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "GC-566_INFLUENCE_LAYER.md",
+      "faq_count": 2,
+      "tip_count": 3
+    },
+    "strategic_worlds": {
+      "codex_id": "strategic_worlds",
+      "band": "IV",
+      "difficulty": "advanced",
+      "estimated_read": "4 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips",
+        "discord"
+      ],
+      "routes": [
+        "galaxy_view",
+        "planet_evolution_view",
+        "empire_view"
+      ],
+      "related_codex": [
+        "expansion",
+        "command_map",
+        "planet_evolution",
+        "expeditions",
+        "galaxy"
+      ],
+      "unlock": {
+        "type": "homeworld_level",
+        "value": 15
+      },
+      "teaser_key": "codex_unlock_strategic_worlds_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "GC-581_STRATEGIC_WORLDS.md",
+      "faq_count": 1,
+      "tip_count": 3
+    },
+    "expeditions": {
+      "codex_id": "expeditions",
+      "band": "III",
+      "difficulty": "intermediate",
+      "estimated_read": "5 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips",
+        "discord"
+      ],
+      "routes": [
+        "fleet_view",
+        "galaxy_view",
+        "empire_view"
+      ],
+      "related_codex": [
+        "fleet",
+        "galaxy",
+        "strategic_worlds",
+        "combat",
+        "command_map"
+      ],
+      "unlock": {
+        "type": "homeworld_level",
+        "value": 10
+      },
+      "teaser_key": "codex_unlock_expeditions_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "GC-583_EXPEDITION_WORLDS.md",
+      "faq_count": 3,
+      "tip_count": 3
+    },
+    "salvage": {
+      "codex_id": "salvage",
+      "band": "III",
+      "difficulty": "intermediate",
+      "estimated_read": "3 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips",
+        "discord"
+      ],
+      "routes": [
+        "empire_view",
+        "fleet_view",
+        "galaxy_view"
+      ],
+      "related_codex": [
+        "expeditions",
+        "fleet",
+        "asteroids",
+        "combat"
+      ],
+      "unlock": {
+        "type": "route_visit",
+        "route": "empire_view"
+      },
+      "teaser_key": "codex_unlock_salvage_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "GC-584_WRECKAGE_SALVAGE.md",
+      "faq_count": 3,
+      "tip_count": 3
+    },
+    "logistics": {
+      "codex_id": "logistics",
+      "band": "III",
+      "difficulty": "intermediate",
+      "estimated_read": "4 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips",
+        "discord"
+      ],
+      "routes": [
+        "logistics_view",
+        "fleet_view"
+      ],
+      "related_codex": [
+        "fleet",
+        "resources",
+        "buildings",
+        "planet_scope"
+      ],
+      "unlock": {
+        "type": "building",
+        "building": "orbital_shipyard"
+      },
+      "teaser_key": "codex_unlock_logistics_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "GC-900_LOGISTICS.md",
+      "faq_count": 3,
+      "tip_count": 3
+    },
+    "story_ops": {
+      "codex_id": "story_ops",
+      "band": "II",
+      "difficulty": "beginner",
+      "estimated_read": "4 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips",
+        "discord"
+      ],
+      "routes": [
+        "story_view"
+      ],
+      "related_codex": [
+        "commander_classes",
+        "shop_identity",
+        "titans",
+        "imperial_directives"
+      ],
+      "unlock": {
+        "type": "route_visit",
+        "route": "story_view"
+      },
+      "teaser_key": "codex_unlock_story_ops_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "GENESIS_STORY_OPS.md",
+      "faq_count": 3,
+      "tip_count": 3
+    },
+    "imperial_directives": {
+      "codex_id": "imperial_directives",
+      "band": "IV",
+      "difficulty": "intermediate",
+      "estimated_read": "4 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips",
+        "discord"
+      ],
+      "routes": [
+        "imperial_directives_view"
+      ],
+      "related_codex": [
+        "diplomacy",
+        "galactic_directives",
+        "genesis_ark",
+        "fleet",
+        "buildings",
+        "research"
+      ],
+      "unlock": {
+        "type": "route_visit",
+        "route": "imperial_directives_view"
+      },
+      "teaser_key": "codex_unlock_imperial_directives_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "IMPERIAL_DIRECTIVES.md",
+      "faq_count": 3,
+      "tip_count": 3
+    },
     "genesis_ark": {
       "codex_id": "genesis_ark",
       "band": "I",
@@ -258,6 +798,160 @@
       "terminology": "GENESIS_TERMINOLOGY",
       "source_doc": "IMPERIUM_VISION.md",
       "faq_count": 2,
+      "tip_count": 3
+    },
+    "inventory": {
+      "codex_id": "inventory",
+      "band": "III",
+      "difficulty": "beginner",
+      "estimated_read": "4 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips",
+        "discord"
+      ],
+      "routes": [
+        "inventory_view"
+      ],
+      "related_codex": [
+        "liveops_retention",
+        "collector_exchange",
+        "case_battles",
+        "shop_identity"
+      ],
+      "unlock": {
+        "type": "route_visit",
+        "route": "inventory_view"
+      },
+      "teaser_key": "codex_unlock_inventory_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "INVENTORY_SYSTEM.md",
+      "faq_count": 3,
+      "tip_count": 3
+    },
+    "liveops_retention": {
+      "codex_id": "liveops_retention",
+      "band": "II",
+      "difficulty": "beginner",
+      "estimated_read": "4 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips",
+        "discord"
+      ],
+      "routes": [
+        "login_rewards_view",
+        "premium_view"
+      ],
+      "related_codex": [
+        "shop_identity",
+        "inventory",
+        "imperial_directives"
+      ],
+      "unlock": {
+        "type": "route_visit",
+        "route": "login_rewards_view"
+      },
+      "teaser_key": "codex_unlock_liveops_retention_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "LIVEOPS_RETENTION.md",
+      "faq_count": 3,
+      "tip_count": 3
+    },
+    "messages": {
+      "codex_id": "messages",
+      "band": "I",
+      "difficulty": "beginner",
+      "estimated_read": "3 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips",
+        "discord"
+      ],
+      "routes": [
+        "messages_view"
+      ],
+      "related_codex": [
+        "combat",
+        "fleet",
+        "logistics",
+        "expeditions"
+      ],
+      "unlock": {
+        "type": "always"
+      },
+      "teaser_key": "",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "MESSAGES.md",
+      "faq_count": 2,
+      "tip_count": 3
+    },
+    "shop_identity": {
+      "codex_id": "shop_identity",
+      "band": "III",
+      "difficulty": "beginner",
+      "estimated_read": "4 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips",
+        "discord"
+      ],
+      "routes": [
+        "shop_view"
+      ],
+      "related_codex": [
+        "liveops_retention",
+        "story_ops",
+        "titans",
+        "inventory"
+      ],
+      "unlock": {
+        "type": "route_visit",
+        "route": "shop_view"
+      },
+      "teaser_key": "codex_unlock_shop_identity_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "PAYMENT_SHOP.md",
+      "faq_count": 3,
+      "tip_count": 3
+    },
+    "pirates": {
+      "codex_id": "pirates",
+      "band": "III",
+      "difficulty": "intermediate",
+      "estimated_read": "5 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips",
+        "discord"
+      ],
+      "routes": [
+        "galaxy_view"
+      ],
+      "related_codex": [
+        "galaxy",
+        "fleet",
+        "combat",
+        "alliance"
+      ],
+      "unlock": {
+        "type": "route_visit",
+        "route": "galaxy_view"
+      },
+      "teaser_key": "codex_unlock_pirates_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "PIRATE_ECOSYSTEM.md",
+      "faq_count": 3,
       "tip_count": 3
     },
     "planet_evolution": {
@@ -343,6 +1037,36 @@
       "faq_count": 2,
       "tip_count": 3
     },
+    "referrals": {
+      "codex_id": "referrals",
+      "band": "III",
+      "difficulty": "beginner",
+      "estimated_read": "3 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips",
+        "discord"
+      ],
+      "routes": [
+        "referrals_view"
+      ],
+      "related_codex": [
+        "inventory",
+        "liveops_retention",
+        "genesis_ark"
+      ],
+      "unlock": {
+        "type": "route_visit",
+        "route": "referrals_view"
+      },
+      "teaser_key": "codex_unlock_referrals_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "REFERRALS.md",
+      "faq_count": 2,
+      "tip_count": 3
+    },
     "research": {
       "codex_id": "research",
       "band": "I",
@@ -370,73 +1094,299 @@
       "source_doc": "RESEARCH_SYSTEM.md",
       "faq_count": 2,
       "tip_count": 3
+    },
+    "ranking": {
+      "codex_id": "ranking",
+      "band": "III",
+      "difficulty": "beginner",
+      "estimated_read": "3 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips",
+        "discord"
+      ],
+      "routes": [
+        "ranking_view"
+      ],
+      "related_codex": [
+        "resources",
+        "buildings",
+        "fleet",
+        "defense",
+        "world_boss",
+        "alliance"
+      ],
+      "unlock": {
+        "type": "route_visit",
+        "route": "ranking_view"
+      },
+      "teaser_key": "codex_unlock_ranking_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "SCORE_SYSTEM.md",
+      "faq_count": 2,
+      "tip_count": 3
+    },
+    "world_boss": {
+      "codex_id": "world_boss",
+      "band": "III",
+      "difficulty": "intermediate",
+      "estimated_read": "5 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips",
+        "discord"
+      ],
+      "routes": [
+        "world_boss_view"
+      ],
+      "related_codex": [
+        "titans",
+        "fleet",
+        "alliance",
+        "inventory"
+      ],
+      "unlock": {
+        "type": "route_visit",
+        "route": "world_boss_view"
+      },
+      "teaser_key": "codex_unlock_world_boss_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "WORLD_BOSS_SYSTEM.md",
+      "faq_count": 3,
+      "tip_count": 3
+    },
+    "titans": {
+      "codex_id": "titans",
+      "band": "III",
+      "difficulty": "intermediate",
+      "estimated_read": "4 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq",
+        "commander_tips",
+        "discord"
+      ],
+      "routes": [
+        "world_boss_view",
+        "overview"
+      ],
+      "related_codex": [
+        "world_boss",
+        "story_ops",
+        "shop_identity",
+        "inventory"
+      ],
+      "unlock": {
+        "type": "route_visit",
+        "route": "world_boss_view"
+      },
+      "teaser_key": "codex_unlock_titans_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "WORLD_BOSS_SYSTEM.md",
+      "faq_count": 3,
+      "tip_count": 3
     }
   },
   "routes": {
+    "alliance_view": [
+      "alliance"
+    ],
+    "galaxy_view": [
+      "asteroids",
+      "expansion",
+      "galaxy",
+      "command_map",
+      "influence",
+      "strategic_worlds",
+      "expeditions",
+      "salvage",
+      "pirates"
+    ],
+    "fleet_view": [
+      "asteroids",
+      "combat",
+      "fleet",
+      "expeditions",
+      "salvage",
+      "logistics",
+      "planet_scope"
+    ],
+    "auction_house_view": [
+      "auction"
+    ],
     "buildings_view": [
       "buildings",
       "resources",
       "planet_scope"
     ],
-    "fleet_view": [
-      "combat",
-      "fleet",
-      "planet_scope"
+    "inventory_view": [
+      "case_battles",
+      "inventory"
+    ],
+    "trader_hub_view": [
+      "collector_exchange",
+      "trader"
+    ],
+    "skilltree_view": [
+      "commander_classes"
     ],
     "defense_view": [
       "defense"
     ],
     "overview": [
       "resources",
+      "faq_general",
       "genesis_ark",
-      "planet_scope"
-    ],
-    "trader_hub_view": [
-      "trader"
+      "planet_scope",
+      "titans"
     ],
     "empire_view": [
       "expansion",
-      "galaxy"
-    ],
-    "galaxy_view": [
-      "expansion",
-      "galaxy"
+      "galaxy",
+      "command_map",
+      "influence",
+      "strategic_worlds",
+      "expeditions",
+      "salvage"
     ],
     "shipyard_view": [
       "fleet"
     ],
+    "galactic_politics_view": [
+      "diplomacy",
+      "galactic_directives"
+    ],
     "planet_evolution_view": [
+      "strategic_worlds",
       "planet_evolution",
       "ascension"
+    ],
+    "logistics_view": [
+      "logistics"
+    ],
+    "story_view": [
+      "story_ops"
+    ],
+    "imperial_directives_view": [
+      "imperial_directives"
+    ],
+    "login_rewards_view": [
+      "liveops_retention"
+    ],
+    "premium_view": [
+      "liveops_retention"
+    ],
+    "messages_view": [
+      "messages"
+    ],
+    "shop_view": [
+      "shop_identity"
+    ],
+    "referrals_view": [
+      "referrals"
     ],
     "research_view": [
       "research"
+    ],
+    "ranking_view": [
+      "ranking"
+    ],
+    "world_boss_view": [
+      "world_boss",
+      "titans"
     ]
   },
   "bands": {
+    "III": [
+      "alliance",
+      "asteroids",
+      "auction",
+      "case_battles",
+      "collector_exchange",
+      "combat",
+      "defense",
+      "expeditions",
+      "inventory",
+      "logistics",
+      "pirates",
+      "ranking",
+      "referrals",
+      "salvage",
+      "shop_identity",
+      "titans",
+      "trader",
+      "world_boss"
+    ],
     "I": [
       "buildings",
+      "faq_general",
       "genesis_ark",
+      "messages",
       "research",
       "resources"
     ],
-    "III": [
-      "combat",
-      "defense",
-      "trader"
-    ],
     "II": [
+      "command_map",
+      "commander_classes",
       "expansion",
       "fleet",
       "galaxy",
+      "influence",
+      "liveops_retention",
       "planet_evolution",
-      "planet_scope"
+      "planet_scope",
+      "story_ops"
     ],
     "IV": [
-      "ascension"
+      "ascension",
+      "diplomacy",
+      "galactic_directives",
+      "imperial_directives",
+      "strategic_worlds"
     ]
   },
   "commander_tips_pool": [
+    {
+      "codex_id": "alliance",
+      "text": "Spenden vom Planeten mit Überschuss — Context-Planet prüfen."
+    },
+    {
+      "codex_id": "alliance",
+      "text": "Officer: Pool für das nächste Projekt füllen, bevor ihr startet."
+    },
+    {
+      "codex_id": "alliance",
+      "text": "NAP mit Nachbarn früh klären, bevor Flottenmissverständnisse entstehen."
+    },
+    {
+      "codex_id": "asteroids",
+      "text": "Dichte Systeme beobachten — dort spawnen Gürtel zuerst."
+    },
+    {
+      "codex_id": "asteroids",
+      "text": "Fracht und Ernter-Anzahl vor dem Send checken; First-Arrival zählt."
+    },
+    {
+      "codex_id": "asteroids",
+      "text": "Nicht mit Debris-Recycle verwechseln: Asteroid-Flüge fallen nicht auf Debris zurück."
+    },
+    {
+      "codex_id": "auction",
+      "text": "Vor dem Bieten auf einen Planeten mit genug Ressourcen wechseln."
+    },
+    {
+      "codex_id": "auction",
+      "text": "Restzeit beobachten — Last-Second-Raises sind üblich."
+    },
+    {
+      "codex_id": "auction",
+      "text": "Gewonnene Boxen landen im Inventar — dort öffnen, nicht auf der Auktionsseite."
+    },
     {
       "codex_id": "buildings",
       "text": "Energie im Plus halten, bevor du Minen massiv hochziehst."
@@ -454,6 +1404,30 @@
       "text": "Queue-Limit beachten — plan die gesamte Queue, nicht nur den ersten Slot."
     },
     {
+      "codex_id": "case_battles",
+      "text": "Nur Container einsetzen, deren Verlust du verkraftest — Escrow ist echt weg bis Cancel/Finish."
+    },
+    {
+      "codex_id": "case_battles",
+      "text": "Modus lesen, bevor du joinest (Share ≠ Winner-takes-all)."
+    },
+    {
+      "codex_id": "case_battles",
+      "text": "Private Lobby mit Freunden, wenn du Randoms meiden willst."
+    },
+    {
+      "codex_id": "collector_exchange",
+      "text": "Lifetime-Ziele im Blick behalten, bevor du alles für Sofort-Booster verbrennst."
+    },
+    {
+      "codex_id": "collector_exchange",
+      "text": "Schrottmeister für Werft-nahe Boosts; Xenobiologe für Research/PE."
+    },
+    {
+      "codex_id": "collector_exchange",
+      "text": "Redeem nur mit genug Input — Teilmengen helfen nicht."
+    },
+    {
       "codex_id": "combat",
       "text": "Kampf-Techs vor dem ersten Angriff — sie wirken auf die gesamte Flotte bzw. Verteidigung."
     },
@@ -464,6 +1438,18 @@
     {
       "codex_id": "combat",
       "text": "Plunder ist begrenzt durch Rückkehr-Cargo, nicht durch unendlichen Raub."
+    },
+    {
+      "codex_id": "commander_classes",
+      "text": "Klasse an deinen Hauptloop wählen — Eco vs. Fleet vs. PvP — nicht „alles ein bisschen“."
+    },
+    {
+      "codex_id": "commander_classes",
+      "text": "SP erst claimen, dann Trunk pushen; Capstones nur mit vollen Depots am Kontext-Planeten."
+    },
+    {
+      "codex_id": "commander_classes",
+      "text": "Swap sparsam: Timekeeper ist knapp und der Baum startet neu."
     },
     {
       "codex_id": "defense",
@@ -510,6 +1496,18 @@
       "text": "Expansion Sites erscheinen mit Ark-Entwicklungsstufe — Evolution vor Slot-Denken."
     },
     {
+      "codex_id": "faq_general",
+      "text": "Auf Overview starten und Ark-Produktion stabilisieren, bevor expandiert wird."
+    },
+    {
+      "codex_id": "faq_general",
+      "text": "Vor Ressourcen-Ausgaben den Header-Planeten-Switcher prüfen."
+    },
+    {
+      "codex_id": "faq_general",
+      "text": "Gesperrte Codex-Einträge zeigen einen Teaser — zugehörige Seite besuchen oder Ark entwickeln."
+    },
+    {
       "codex_id": "fleet",
       "text": "Flotten-Abgang immer mit aktivem Planet abstimmen — Schiffe liegen planetengebunden."
     },
@@ -520,6 +1518,30 @@
     {
       "codex_id": "fleet",
       "text": "Expedition: Expo-Hüllen für Funde; Frachter für Bergungskapazität — Rollen beachten."
+    },
+    {
+      "codex_id": "diplomacy",
+      "text": "Vor großen Investitionsentscheidungen Bloc und Trait der Galaxie checken."
+    },
+    {
+      "codex_id": "diplomacy",
+      "text": "Imperial Directives ≠ Galactic Diplomacy — persönlich vs. Galaxie-Politik."
+    },
+    {
+      "codex_id": "diplomacy",
+      "text": "Bloc-Wechsel hat Cooldown; während offener Resolution oft gesperrt."
+    },
+    {
+      "codex_id": "galactic_directives",
+      "text": "Stimme in jeder Galaxie, in der du ernsthaft produzierst — eine Ignoranz kostet Mandate."
+    },
+    {
+      "codex_id": "galactic_directives",
+      "text": "Tradeoffs lesen: starke Primary-Boni kommen selten ohne Malus."
+    },
+    {
+      "codex_id": "galactic_directives",
+      "text": "Policies lokal an das galaktische Mandat anpassen (Industrie vs. Research)."
     },
     {
       "codex_id": "galaxy",
@@ -534,6 +1556,102 @@
       "text": "Expeditions-Slot ist kein normaler Kolonie-Planet."
     },
     {
+      "codex_id": "command_map",
+      "text": "Expansion und Orte zuerst auf der **Weltkarte** planen, nicht nur in der Slot-Liste."
+    },
+    {
+      "codex_id": "command_map",
+      "text": "Genesis Ark bleibt der Hub — Kolonien drumherum lesen."
+    },
+    {
+      "codex_id": "command_map",
+      "text": "`/empire` = Produktion/Matrix; Weltkarte = `/galaxy` Weltkarte-Tab."
+    },
+    {
+      "codex_id": "influence",
+      "text": "Einfluss als Fußabdruck lesen, während du Expansion planst."
+    },
+    {
+      "codex_id": "influence",
+      "text": "Lücken zwischen Kolonien sind normal, bis du mehr Welten gründest."
+    },
+    {
+      "codex_id": "influence",
+      "text": "Erwarte keine PvP-Buffs vom teal Glow — das ist Territoriums-Visualisierung."
+    },
+    {
+      "codex_id": "strategic_worlds",
+      "text": "Inspector lesen, bevor du Flotte bindest — Typ entscheidet Kolonie vs. Expedition."
+    },
+    {
+      "codex_id": "strategic_worlds",
+      "text": "Spezialisierung auf eigenen Welten ist dauerhaft; vor der Wahl nachdenken."
+    },
+    {
+      "codex_id": "strategic_worlds",
+      "text": "Strategic World ≠ Ersatz-Hauptstadt — die Genesis Ark bleibt Zentrum."
+    },
+    {
+      "codex_id": "expeditions",
+      "text": "Expo-Schiffe für Funde mitnehmen; Frachter für Bergung; Eskorten gegen Piraten."
+    },
+    {
+      "codex_id": "expeditions",
+      "text": "World-Expeditionen über Inspector starten — Ziel bleibt an den Ort gebunden."
+    },
+    {
+      "codex_id": "expeditions",
+      "text": "Berichte immer im Posteingang lesen; Preview nur vom Server vertrauen."
+    },
+    {
+      "codex_id": "salvage",
+      "text": "Salvage-Schiffe vor dem Start prüfen — Preview spart Fehlflüge."
+    },
+    {
+      "codex_id": "salvage",
+      "text": "Wrackfeld ≠ Asteroid ≠ Debris: Mission und Zieltyp in der UI lesen."
+    },
+    {
+      "codex_id": "salvage",
+      "text": "Berichte im Posteingang behalten Kontext für Folgeflüge."
+    },
+    {
+      "codex_id": "logistics",
+      "text": "Vor Collect: Frachter auf den **Quellen** stationieren; vor Distribute: Frachter am **Hub**."
+    },
+    {
+      "codex_id": "logistics",
+      "text": "Hub = aktiver Planet prüfen, bevor du startest."
+    },
+    {
+      "codex_id": "logistics",
+      "text": "Freie Flotten-Slots checken — viele Ziele brauchen viele Slots."
+    },
+    {
+      "codex_id": "story_ops",
+      "text": "Story und Imperial Directives parallel lesen — unterschiedliche Rhythmen, gemeinsames Gameplay."
+    },
+    {
+      "codex_id": "story_ops",
+      "text": "Choices ernst nehmen: Flags können spätere Beats und Codex-Fragmente öffnen."
+    },
+    {
+      "codex_id": "story_ops",
+      "text": "Ark-Token nicht mit EUR-Shop verwechseln — Free Shop ist der Story-Tab."
+    },
+    {
+      "codex_id": "imperial_directives",
+      "text": "Claim nicht vergessen — abgeschlossen ≠ automatisch eingesammelt."
+    },
+    {
+      "codex_id": "imperial_directives",
+      "text": "Daily/Weekly ergänzen normales Bauen und Fliegen; nichts erzwingen."
+    },
+    {
+      "codex_id": "imperial_directives",
+      "text": "Nav-Badge zeigt claimbare Direktiven."
+    },
+    {
       "codex_id": "genesis_ark",
       "text": "Denke in Imperium, nicht in „Mine 17 → 18“ — die Ark-Entwicklungsstufe öffnet neue Möglichkeiten."
     },
@@ -544,6 +1662,66 @@
     {
       "codex_id": "genesis_ark",
       "text": "Die Command Map visualisiert dein wachsendes Reich — die Ark bleibt der Hub."
+    },
+    {
+      "codex_id": "inventory",
+      "text": "Timekeeper für lange Offline-Jobs sparen; kurze Filler ohne TK durchlaufen lassen."
+    },
+    {
+      "codex_id": "inventory",
+      "text": "Container öffnen, wenn du Boosters sofort brauchst — sonst Inventar voller „später“."
+    },
+    {
+      "codex_id": "inventory",
+      "text": "Fragmente nicht wegwerfen-Mentalität: Lifetime-Stats und Exchange lohnen Sammeln."
+    },
+    {
+      "codex_id": "liveops_retention",
+      "text": "Login-Streak schützen — eine verpasste UTC-Nacht setzt dich zurück."
+    },
+    {
+      "codex_id": "liveops_retention",
+      "text": "Daily Ops vor dem Offline-Gang claimen; Weekly parallel mitlaufen lassen."
+    },
+    {
+      "codex_id": "liveops_retention",
+      "text": "Premium nur kaufen, wenn du die Season noch aktiv spielst — Mid-Season holt erreichte Stufen nach."
+    },
+    {
+      "codex_id": "messages",
+      "text": "Nach Flottenankünften prüfen — Kampf- und Expo-Berichte landen hier zuerst."
+    },
+    {
+      "codex_id": "messages",
+      "text": "Ungelesen-Badge in der Nav bedeutet: etwas wartet."
+    },
+    {
+      "codex_id": "messages",
+      "text": "Unwichtiges archivieren; wichtige Kampfberichte behalten, bis Verluste geprüft sind."
+    },
+    {
+      "codex_id": "shop_identity",
+      "text": "Free-Baseline (Login, Directives, BP Free) zuerst ausschöpfen — Paid ist Impuls, kein Pflichtkauf."
+    },
+    {
+      "codex_id": "shop_identity",
+      "text": "Name-Style ist sozial sichtbar; Theme/Aura vor allem dein Chrome."
+    },
+    {
+      "codex_id": "shop_identity",
+      "text": "Ark-Token-Tab ≠ EUR-Tab — Währungen nicht mischen."
+    },
+    {
+      "codex_id": "pirates",
+      "text": "Vor dem Raid spionieren — Intel steuert, wie die KI zuschlägt, und du brauchst dieselbe Vorsicht."
+    },
+    {
+      "codex_id": "pirates",
+      "text": "Heat-Hotspots sind lukrativ und gefährlich; Kolonien dort absichern."
+    },
+    {
+      "codex_id": "pirates",
+      "text": "Debris und Basen teilen sich oft Systeme — Recycler und Raid-Flotten nicht vermischen ohne Plan."
     },
     {
       "codex_id": "planet_evolution",
@@ -578,6 +1756,18 @@
       "text": "Inaktive Kolonien bauen im Hintergrund weiter; Scope betrifft nur die UI-Kontext-Anzeige."
     },
     {
+      "codex_id": "referrals",
+      "text": "Link früh teilen — Codes gelten nur einmal pro Account."
+    },
+    {
+      "codex_id": "referrals",
+      "text": "Tiers claimen, wenn der Zähler voll ist; Boxen warten im Inventar."
+    },
+    {
+      "codex_id": "referrals",
+      "text": "Keine Same-IP-Alts farmen — sie zählen nicht."
+    },
+    {
       "codex_id": "research",
       "text": "Forschung sollte selten stillstehen — wie Bau-Queue parallel halten."
     },
@@ -588,6 +1778,42 @@
     {
       "codex_id": "research",
       "text": "Tech-Tree-Seite zeigt Abhängigkeiten; priorisiere Engpass-Techs vor Output-Push."
+    },
+    {
+      "codex_id": "ranking",
+      "text": "Ressourcen in Gebäude/Flotte stecken — Vermögen wandert zwischen Score-Buckets, Total bleibt wenn nichts verbrannt wird."
+    },
+    {
+      "codex_id": "ranking",
+      "text": "World-Boss-Tab = Lifetime-Damage, kein Wealth."
+    },
+    {
+      "codex_id": "ranking",
+      "text": "Inaktive Accounts können aus Live-Boards fallen — weiterspielen."
+    },
+    {
+      "codex_id": "world_boss",
+      "text": "Aktiven Boss früh angreifen — Beitrag und Ränge bauen sich über das Fenster auf."
+    },
+    {
+      "codex_id": "world_boss",
+      "text": "Allianz-Beitrag zählt für gemeinsame Tiers; koordiniert Waves, wenn ihr den Ally-Top wollt."
+    },
+    {
+      "codex_id": "world_boss",
+      "text": "Entdecker-Bonus braucht Expedition-Fund **und** eigenen Schaden."
+    },
+    {
+      "codex_id": "titans",
+      "text": "Catch erst planen, wenn Timekeeper und Kapazität reichen — Fehlversuche starten den Catch-Cooldown."
+    },
+    {
+      "codex_id": "titans",
+      "text": "Mission-Varianten tauschen Dauer gegen Risiko; längere Runs lohnen sich nur, wenn du Claim-Zeiten einhalten kannst."
+    },
+    {
+      "codex_id": "titans",
+      "text": "Overview-Hotspots sind kein Galaxie-Kampf — nur Companion-Missionen."
     }
   ]
 }

@@ -402,3 +402,88 @@ python -m pytest tests/test_fleet_logistics.py -k distribute -v
 | **GC-900C** Collect UI | 📋 |
 | **GC-900D** Distribute Backend | ✅ |
 | **GC-900E** Distribute UI / Polish | 📋 |
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: logistics
+band: III
+difficulty: intermediate
+estimated_read: 4 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+  - commander_tips
+  - discord
+routes:
+  - logistics_view
+  - fleet_view
+related_codex:
+  - fleet
+  - resources
+  - buildings
+  - planet_scope
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: building
+  building: orbital_shipyard
+teaser_key: codex_unlock_logistics_teaser
+---
+```
+
+## Quick Help
+
+**Logistik** bewegt Ferronit, Crytite und Brennzellen zwischen **deinen** Kolonien: **Collect** (Quellen → Hub) und **Distribute** (Hub → Ziele) unter `/logistics`.
+
+## Summary
+
+Fleet Logistics ist die Multi-Kolonie-Ressourcenbewegung über die bestehende Fleet-Pipeline — kein zweites Bewegungssystem. Auf **`/logistics`** planst du Collect oder Distribute um einen **Hub** (meist aktiver Kontext-Planet). Der Server wählt Frachter (`auto_cargo`); Preview und Start nur mit Server-Plan.
+
+## Why
+
+Mit mehreren Welten reicht Einzel-Transport nicht. Logistik bündelt Abholen und Verteilen, damit Produktionswelten den Hub versorgen und der Hub Kolonien nachfüllen kann — mit denselben Flottenregeln und Slots.
+
+## How it works
+
+- Öffne **`/logistics`** (Link von der Fleet-Seite).
+- **Collect:** Quell-Kolonien markieren → Frachter starten **von den Quellen** und liefern zum **Hub**; Schiffe kehren leer zur Quelle zurück.
+- **Distribute:** Mengen am Hub eingeben → Lieferung an gewählte eigene Ziele; Schiffe kehren leer zum Hub zurück.
+- Nur **eigene** Planeten; nur **Cargo-Schiffe**; UI nutzt **auto_cargo** (keine manuelle Frachterwahl nötig).
+- Jede gestartete Teilstrecke verbraucht **einen Flotten-Slot**; Preview zeigt, ob Start möglich ist.
+- Nachrichten: Ankunft und Rückkehr als Logistics-Berichte im Posteingang.
+- Flugzeit, Fracht und Brennzellen: nur Server-Preview — nicht selbst rechnen.
+
+## Related Systems
+
+- fleet
+- resources
+- buildings
+- planet_scope
+- galaxy
+
+## Commander Tips
+
+- Vor Collect: Frachter auf den **Quellen** stationieren; vor Distribute: Frachter am **Hub**.
+- Hub = aktiver Planet prüfen, bevor du startest.
+- Freie Flotten-Slots checken — viele Ziele brauchen viele Slots.
+
+## FAQ
+
+**Unterschied zu Transport?**
+Einzel-Transport = eine Mission. Logistik = geplantes Collect/Distribute über mehrere eigene Welten mit Batch und Preview.
+
+**Kann ich fremde Planeten beliefern?**
+Nein — nur Welten, die dir gehören.
+
+**Warum startet nichts?**
+Keine Frachter am richtigen Ort, keine Ressourcen, keine freien Slots oder Preview `can_launch` fehlt — Meldung in der UI lesen.
+
+## Discord Summary
+
+**Logistik — Collect und Distribute**
+
+`/logistics`: Ressourcen zwischen eigenen Kolonien. Collect = Quellen → Hub; Distribute = Hub → Ziele. Cargo-only, auto_cargo, ein Slot pro Leg. Orbitalwerft-Freischaltung wie Fleet.

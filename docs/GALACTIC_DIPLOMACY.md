@@ -627,3 +627,86 @@ GC-720 (Directives live) ──► GC-721A (dieses Doc)
 | Version | Datum | Änderung |
 |---------|-------|----------|
 | v1.0 | 2026-06-17 | GC-721A — Initial Master-Doc: Blocs, Resolutions, Emergency, Personality |
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: diplomacy
+band: IV
+difficulty: advanced
+estimated_read: 5 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+  - commander_tips
+  - discord
+routes:
+  - galactic_politics_view
+related_codex:
+  - imperial_directives
+  - galactic_directives
+  - galaxy
+  - command_map
+  - genesis_ark
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: route_visit
+  route: galactic_politics_view
+teaser_key: codex_unlock_diplomacy_teaser
+---
+```
+
+## Quick Help
+
+**Galactic Diplomacy** formt den Charakter deiner Galaxie: Allianz-Blöcke, Resolutionen, Krisen und langfristige Personality — Oberfläche unter `/galactic-politics`.
+
+## Summary
+
+Diplomatie ist die **Makro-Politik-Schicht** über Galactic Directives. Directives steuern, *was* die Galaxie im Zyklus betont; Diplomacy steuert, *wer* sie formt: Scientific, Military, Industrial, Frontier oder Neutral-Blöcke, Abstimmungen, Emergency-Sessions und dauerhafte Traits. Spieler-Oberfläche: **`/galactic-politics`**.
+
+## Why
+
+Galaxien sollen politisch erzählbar sein — nicht nur ein Buff. Bloc-Lage und Traits beeinflussen, wo Forschung, Krieg, Expansion oder Logistik langfristig stark wirken. Das ist Community-Ebene, kein 1:1-Kriegssystem zwischen einzelnen Commandern.
+
+## How it works
+
+- Seite **`/galactic-politics`**: Bloc-Landschaft, offene Resolutionen, aktive Personality, Emergency-Banner.
+- **Alliance Blocs** pro Galaxie (Officer setzt Bloc): Scientific, Military, Industrial, Frontier, Neutral.
+- **Directive-Vote** und **Resolutionen** (JA/NEIN, Vorschläge durch Officers) neben dem monatlichen Directive-Zyklus.
+- **Galaxy Personality** entsteht aus Historie und Bloc-Dominanz — langsame, dauerhafte Ausrichtung.
+- **Emergency Directives** sind zeitlich begrenzte Krisen-Overlays.
+- Mechanische Boni laufen über den **EffectResolver** — UI zeigt Serverzustand, keine Client-Math.
+- Nicht verwechseln mit **Imperial Directives** (persönliche High-Command-Befehle) oder Allianz-Chat.
+
+## Related Systems
+
+- imperial_directives
+- galactic_directives
+- galaxy
+- command_map
+- genesis_ark
+- fleet
+
+## Commander Tips
+
+- Vor großen Investitionsentscheidungen Bloc und Trait der Galaxie checken.
+- Imperial Directives ≠ Galactic Diplomacy — persönlich vs. Galaxie-Politik.
+- Bloc-Wechsel hat Cooldown; während offener Resolution oft gesperrt.
+
+## FAQ
+
+**Was ist der Unterschied zu Imperial Directives?**
+Imperial = deine persönlichen Daily/Weekly-Befehle. Diplomacy/Directives = Galaxie-weite Politik und Community-Ausrichtung.
+
+**Muss ich in einer Allianz sein?**
+Bloc-Zuordnung läuft über die Allianz. Unzugeordnet zählt als Neutral — Resolutionen und Directives bleiben galaktisch sichtbar.
+
+## Discord Summary
+
+**Diplomatie — Blöcke, Resolutionen, Galaxie-Charakter**
+
+`/galactic-politics`: Allianz-Blöcke, Votes, Resolutionen, Personality, Emergencies. Ergänzt Galactic Directives. ≠ Imperial Directives. Freischaltung nach erstem Besuch.

@@ -2,11 +2,13 @@
 
 > **Epic:** EPIC-16 Genesis Knowledge Base  
 > **Status:** 📋 Architektur (kein Player-Text)  
-> **Stand:** 2026-06-27  
+> **Stand:** 2026-08-03  
 > **Parent:** [GC-950_KNOWLEDGE_PIPELINE.md](GC-950_KNOWLEDGE_PIPELINE.md)  
-> **Nächster Schritt:** GC-950A2 — Player Blocks für P1-Artikel schreiben
+> **Catalog:** `generated/codex/catalog.json` (27 Artikel · Stand Regeneration 2026-08)
 
 Dieses Dokument ist die **Landkarte des Wissens**: welcher Artikel wohin gehört, **wann** der Spieler ihn sieht, und **wo** jede Art von Inhalt gepflegt wird. Kein Codex-Text — nur Struktur.
+
+**Status-Spalte:** **Shipped** = Artikel in `generated/codex/catalog.json` · **Planned** = Landkarte / Backlog, noch nicht im Catalog.
 
 ---
 
@@ -89,10 +91,8 @@ Codex-Bände folgen **nicht** der Doc-Ordnerstruktur, sondern **wann Systeme rel
 |------|---------------|--------------------|-----------|
 | **I** | Erste Stunde | 0–60 min | Was ist Genesis? Was baue ich zuerst? |
 | **II** | Frühes Imperium | Tag 1–3 | Wie wächst mein Imperium? |
-| **III** | Operative Systeme | Tag 3–14 | Flotte, Kampf, Expeditionen, Wirtschaft |
+| **III** | Operative Systeme | Tag 3–14 | Flotte, Kampf, LiveOps, Wirtschaft |
 | **IV** | Endgame | Wochen+ | Spezialisierung, Diplomatie, Ascension |
-
-**P1-Artikel** = alle Zeilen mit `P1` in der Landkarte unten. GC-950A2 schreibt nur diese Blocks.
 
 ---
 
@@ -127,118 +127,120 @@ teaser_key: codex_unlock_expansion_teaser   # i18n wenn gesperrt
 | `expansion_phase` | Welt in Phase | `expansion_phase.py` |
 | `player_flag` | Persistierter Unlock | `player_unlocks` (optional GC-950B+) |
 
-**Resolver-Owner (geplant):** `game/codex.py` → `is_codex_unlocked(player_id, codex_id)` — liest `generated/codex/unlocks.json` + Live-State.
+**Resolver-Owner:** `game/codex.py` → `is_codex_unlocked(player_id, codex_id)` — liest `generated/codex/unlocks.json` + Live-State.
 
 ---
 
-## Landkarte — P1-Artikel (vollständige Matrix)
+## Landkarte — Catalog (Shipped) + Planned
 
-Spalten: **Doc** · **Band** · **Route** · **Surfaces** · **Unlock** · **Source of Truth** · **P1**
+Spalten: **Doc** · **Band** · **Route** · **Surfaces** · **Unlock** · **Status**
 
 ### Band I — Erste Stunde
 
-| codex_id | Master Doc | Route (`endpoint` → Pfad) | Surfaces | Unlock | SoT (Narrativ) | P1 |
-|----------|------------|---------------------------|----------|--------|----------------|-----|
-| `genesis_ark` | [IMPERIUM_VISION.md](IMPERIUM_VISION.md) | `overview` → `/overview` | Quick Help, Codex, Tips | `always` | Player Block | ✓ |
-| `overview` | [IMPERIUM_VISION.md](IMPERIUM_VISION.md) (Kurz) | `overview` → `/overview` | Quick Help | `always` | Player Block | ✓ |
-| `resources` | [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) | `overview`, `buildings_view` → `/overview`, `/buildings` | Quick Help, Codex, FAQ | `always` | Player Block + Terminology | ✓ |
-| `buildings` | [BUILDINGS_SYSTEM.md](BUILDINGS_SYSTEM.md) | `buildings_view` → `/buildings` | Quick Help, Codex, FAQ, Tips | `always` | Player Block | ✓ |
-| `research` | [RESEARCH_SYSTEM.md](RESEARCH_SYSTEM.md) | `research_view` → `/research` | Quick Help, Codex, FAQ, Tips | `always` | Player Block | ✓ |
+| codex_id | Master Doc | Route (`endpoint`) | Unlock | Status |
+|----------|------------|-------------------|--------|--------|
+| `genesis_ark` | [IMPERIUM_VISION.md](IMPERIUM_VISION.md) | `overview` → `/overview` | `always` | **Shipped** |
+| `resources` | [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) | `overview`, `buildings_view` | `always` | **Shipped** |
+| `buildings` | [BUILDINGS_SYSTEM.md](BUILDINGS_SYSTEM.md) | `buildings_view` | `always` | **Shipped** |
+| `research` | [RESEARCH_SYSTEM.md](RESEARCH_SYSTEM.md) | `research_view` | `always` | **Shipped** |
 
 **Band I — Hinweise**
 
-- `genesis_ark` = Identität der Genesis Ark (Homeworld), nicht generisches „Imperium“.
-- `overview` = dünn: Imperium-Ziel in 2 Sätzen; Detail in `genesis_ark`.
+- `genesis_ark` = Identität der Genesis Ark (Homeworld). **Overview bleibt merged:** es gibt **keinen** separaten Codex-Artikel `overview` — Imperium-Kurzintro und Ark-Identität sitzen in `genesis_ark` (Catalog bestätigt).
 - Ressourcen-Copy: **Ferronit / Crytite / Brennzellen** — nie Metall/Krytit ([GENESIS_TERMINOLOGY.md](GENESIS_TERMINOLOGY.md)).
 
 ---
 
 ### Band II — Frühes Imperium
 
-| codex_id | Master Doc | Route | Surfaces | Unlock | SoT | P1 |
-|----------|------------|-------|----------|--------|-----|-----|
-| `planet_evolution` | [PLANET_EVOLUTION.md](PLANET_EVOLUTION.md) | `planet_evolution_view` → `/planet-evolution` | Quick Help, Codex, FAQ, Tips, Discord | `always` | Player Block | ✓ |
-| `planet_scope` | [PLANET_SCOPE.md](PLANET_SCOPE.md) | Header Switcher (alle Shell-Routen) | Quick Help, FAQ | `always` | Player Block | ✓ |
-| `expansion` | [EXPANSION_PROTOCOL.md](EXPANSION_PROTOCOL.md) | `empire_view` → `/empire`, `galaxy_view` → `/galaxy` | Quick Help, Codex, FAQ, Tips, Discord | `homeworld_level: 5` **oder** `expansion_site: frontier_ix` | Player Block | ✓ |
-| `command_map` | [GC-563_COMMAND_MAP_MVP.md](GC-563_COMMAND_MAP_MVP.md) | `empire_view` → `/empire` | Quick Help, Codex | `homeworld_level: 5` (Site-Gate) | Player Block | ✓ |
-| `fleet` | [FLEET_SYSTEM.md](FLEET_SYSTEM.md) | `fleet_view` → `/fleet`, `shipyard_view` → `/shipyard` | Quick Help, Codex, FAQ, Tips | `building: orbital_shipyard` | Player Block | ✓ |
-| `galaxy` | [GALAXY_SYSTEM.md](GALAXY_SYSTEM.md) | `galaxy_view` → `/galaxy` | Quick Help, Codex | `always` (Nav sichtbar) | Player Block | ✓ |
+| codex_id | Master Doc | Route | Unlock | Status |
+|----------|------------|-------|--------|--------|
+| `planet_evolution` | [PLANET_EVOLUTION.md](PLANET_EVOLUTION.md) | `planet_evolution_view` | `always` | **Shipped** |
+| `planet_scope` | [PLANET_SCOPE.md](PLANET_SCOPE.md) | Header Switcher / Shell | `always` | **Shipped** |
+| `expansion` | [EXPANSION_PROTOCOL.md](EXPANSION_PROTOCOL.md) | `empire_view`, `galaxy_view` | `homeworld_level: 5` + site | **Shipped** |
+| `fleet` | [FLEET_SYSTEM.md](FLEET_SYSTEM.md) | `fleet_view`, `shipyard_view` | `building: orbital_shipyard` | **Shipped** |
+| `galaxy` | [GALAXY_SYSTEM.md](GALAXY_SYSTEM.md) | `galaxy_view`, `empire_view` | `always` | **Shipped** |
+| `commander_classes` | [COMMANDER_CLASSES.md](COMMANDER_CLASSES.md) | `skilltree_view` → `/skilltree` | `route_visit: skilltree_view` | **Shipped** |
+| `story_ops` | [GENESIS_STORY_OPS.md](GENESIS_STORY_OPS.md) | `story_view` → `/story` | `route_visit: story_view` | **Shipped** |
+| `liveops_retention` | [LIVEOPS_RETENTION.md](LIVEOPS_RETENTION.md) | `login_rewards_view`, `premium_view` | `route_visit: login_rewards_view` | **Shipped** |
+| `command_map` | [GC-563_COMMAND_MAP_MVP.md](GC-563_COMMAND_MAP_MVP.md) | `galaxy_view` (Weltkarte), `empire_view` | `homeworld_level: 5` | **Shipped** |
+| `influence` | [GC-566_INFLUENCE_LAYER.md](GC-566_INFLUENCE_LAYER.md) | `galaxy_view`, `empire_view` | `homeworld_level: 10` | **Shipped** |
 
 **Band II — Unlock-Anker (Code)**
 
-- Erste Expansion: `EXPANSION_SLOT_GATES[0]` → Homeworld **L5** + Interstellar Expansion **L1** (`expansion_protocol.py`).
-- Erste Expansion Site: `frontier_ix` → `required_homeworld_level: 5` (`expansion_gates.py`).
+- Erste Expansion: `EXPANSION_SLOT_GATES[0]` → Homeworld **L5** + Interstellar Expansion **L1**.
 - Flotte: Orbitalwerft auf aktivem Planet (`orbital_shipyard`).
-
-**Teaser-Keys (Vorschlag):**
-
-- `codex_unlock_expansion_teaser` — „Schalte die erste Expansion Site frei (Entwicklungsstufe 5).“
-- `codex_unlock_fleet_teaser` — „Baue eine Orbitalwerft, um Flotten zu entsenden.“
+- Commander Classes / Story Ops / Login+Pass: erster Besuch der jeweiligen Route.
 
 ---
 
-### Band III — Operative Systeme
+### Band III — Operative Systeme & LiveOps
 
-| codex_id | Master Doc | Route | Surfaces | Unlock | SoT | P1 |
-|----------|------------|-------|----------|--------|-----|-----|
-| `expeditions` | [GC-583_EXPEDITION_WORLDS.md](GC-583_EXPEDITION_WORLDS.md) | `fleet_view` → `/fleet`, `empire_view` → `/empire` | Quick Help, Codex, FAQ, Tips, Discord | `expansion_site: ancient_relay` **oder** `has_world_type: ruins_world` | Player Block | ✓ |
-| `trader` | [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) (Trader Hub) | `trader_hub_view` → `/trader-hub` | Quick Help, Codex, FAQ | `route_visit: trader_hub_view` | Player Block | ✓ |
-| `combat` | [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) | `fleet_view` → `/fleet` | Quick Help, Codex, FAQ | `building: orbital_shipyard` + `player_flag: first_fleet_sent` | Player Block | ✓ |
-| `defense` | [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md) | `defense_view` → `/defense` | Quick Help, Codex, FAQ | `building: defense_factory` | Player Block | ✓ |
-| `logistics` | [FLEET_SYSTEM.md](FLEET_SYSTEM.md) (Logistics) | `fleet_view` → `/fleet?mode=collect` | Quick Help, FAQ | `building: orbital_shipyard` | Player Block | P2 |
-
-**Band III — Hinweise**
-
-- Expeditionen: Ancient Relay Site ab Homeworld **L10**; Ruins/Expedition-Zonen auf Strategic Worlds (`GC-583`).
-- Trader: Nav-Modul `trading` ist prominent auf allen Welten — Unlock = **erster Besuch** `/trader-hub` (Spieler „entdeckt“ den Hub).
-- Combat: nach erster Flottenmission (Flag in GC-950B persistieren).
-
-**Teaser-Keys:**
-
-- `codex_unlock_expeditions_teaser` — „Entdecke eine Ancient World oder Expedition-Zone auf der Command Map.“
-- `codex_unlock_combat_teaser` — „Sende deine erste Flotte — dann öffnet sich der Kampf-Guide.“
+| codex_id | Master Doc | Route | Unlock | Status |
+|----------|------------|-------|--------|--------|
+| `combat` | [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) | `fleet_view` | `player_flag: first_fleet_sent` | **Shipped** |
+| `defense` | [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md) | `defense_view` | `building: defense_factory` | **Shipped** |
+| `trader` | [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) | `trader_hub_view` | `route_visit: trader_hub_view` | **Shipped** |
+| `world_boss` | [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) | `world_boss_view` | `route_visit: world_boss_view` | **Shipped** |
+| `titans` | [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) | `world_boss_view`, `overview` | `route_visit: world_boss_view` | **Shipped** |
+| `pirates` | [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md) | `galaxy_view` | `route_visit: galaxy_view` | **Shipped** |
+| `alliance` | [ALLIANCE_SYSTEM.md](ALLIANCE_SYSTEM.md) | `alliance_view` | `route_visit: alliance_view` | **Shipped** |
+| `inventory` | [INVENTORY_SYSTEM.md](INVENTORY_SYSTEM.md) | `inventory_view` | `route_visit: inventory_view` | **Shipped** |
+| `case_battles` | [CASE_BATTLES.md](CASE_BATTLES.md) | `inventory_view` (Relikt-Arena-Tab) | `route_visit: inventory_view` | **Shipped** |
+| `shop_identity` | [PAYMENT_SHOP.md](PAYMENT_SHOP.md) | `shop_view` | `route_visit: shop_view` | **Shipped** |
+| `collector_exchange` | [COLLECTOR_EXCHANGE.md](COLLECTOR_EXCHANGE.md) | `trader_hub_view` | `route_visit: trader_hub_view` | **Shipped** |
+| `asteroids` | [ASTEROID_SYSTEM.md](ASTEROID_SYSTEM.md) | `galaxy_view`, `fleet_view` | `route_visit: galaxy_view` | **Shipped** |
+| `salvage` | [GC-584_WRECKAGE_SALVAGE.md](GC-584_WRECKAGE_SALVAGE.md) | `empire_view`, `fleet_view`, `galaxy_view` | `route_visit: empire_view` | **Shipped** |
+| `expeditions` | [GC-583_EXPEDITION_WORLDS.md](GC-583_EXPEDITION_WORLDS.md) | `fleet_view`, `galaxy_view` | `homeworld_level: 10` | **Shipped** |
+| `logistics` | [GC-900_LOGISTICS.md](GC-900_LOGISTICS.md) | `logistics_view`, `fleet_view` | `building: orbital_shipyard` | **Shipped** |
+| `ranking` | [SCORE_SYSTEM.md](SCORE_SYSTEM.md) | `ranking_view` | `route_visit: ranking_view` | **Shipped** |
+| `auction` | [AUCTION_HOUSE.md](AUCTION_HOUSE.md) | `auction_house_view` | `route_visit: auction_house_view` | **Shipped** |
+| `messages` | [MESSAGES.md](MESSAGES.md) | `messages_view` | `always` / `route_visit` | **Shipped** |
+| `referrals` | [REFERRALS.md](REFERRALS.md) | `referrals_view` | `route_visit: referrals_view` | **Shipped** |
 
 ---
 
 ### Band IV — Endgame
 
-| codex_id | Master Doc | Route | Surfaces | Unlock | SoT | P1 |
-|----------|------------|-------|----------|--------|-----|-----|
-| `strategic_worlds` | [GC-581_STRATEGIC_WORLDS.md](GC-581_STRATEGIC_WORLDS.md) | `planet_evolution_view`, `empire_view` | Codex, FAQ | `expansion_phase: strategic_world` **oder** Homeworld L15+ | Player Block | ✓ |
-| `diplomacy` | [GALACTIC_DIPLOMACY.md](GALACTIC_DIPLOMACY.md) | `galactic_politics` → `/galactic-politics` | Codex | `route_visit: galactic_politics_view` | Player Block | P1 |
-| `ascension` | [PLANET_EVOLUTION.md](PLANET_EVOLUTION.md) (Ascension) | `planet_evolution_view` | Codex, FAQ | Planet Ascension sichtbar / Queue aktiv | Player Block | P1 |
-| `imperial_directives` | [IMPERIAL_DIRECTIVES.md](IMPERIAL_DIRECTIVES.md) | `imperial_directives_view` | Codex, Tips | `route_visit: imperial_directives_view` | Player Block | P1 |
+| codex_id | Master Doc | Route | Unlock | Status |
+|----------|------------|-------|--------|--------|
+| `ascension` | [PLANET_EVOLUTION.md](PLANET_EVOLUTION.md) | `planet_evolution_view` | `homeworld_level: 15` | **Shipped** |
+| `galactic_directives` | [GALACTIC_DIRECTIVES.md](GALACTIC_DIRECTIVES.md) | `galactic_politics_view` | `route_visit: galactic_politics_view` | **Shipped** |
+| `strategic_worlds` | [GC-581_STRATEGIC_WORLDS.md](GC-581_STRATEGIC_WORLDS.md) | `galaxy_view`, `planet_evolution_view` | `homeworld_level: 15` | **Shipped** |
+| `diplomacy` | [GALACTIC_DIPLOMACY.md](GALACTIC_DIPLOMACY.md) | `galactic_politics_view` | `route_visit: galactic_politics_view` | **Shipped** |
+| `imperial_directives` | [IMPERIAL_DIRECTIVES.md](IMPERIAL_DIRECTIVES.md) | `imperial_directives_view` | `route_visit: imperial_directives_view` | **Shipped** |
+| `faq_general` | [FAQ_GENERAL.md](FAQ_GENERAL.md) | Codex / Overview | `always` | **Shipped** |
 
 ---
 
-## Landkarte — P2 (nach P1, nicht GC-950A2)
+## Landkarte — Planned (kein Catalog-Eintrag)
 
-| codex_id | Master Doc | Band | Unlock (kurz) |
-|----------|------------|------|----------------|
-| `influence` | [GC-566_INFLUENCE_LAYER.md](GC-566_INFLUENCE_LAYER.md) | II | Homeworld L10+ |
-| `salvage` | [GC-584_WRECKAGE_SALVAGE.md](GC-584_WRECKAGE_SALVAGE.md) | III | Wreckage field spielbar |
-| `ranking` | Ranking / Scores | III | `route_visit: ranking_view` |
-| `inventory` | Inventory / Items | III | `route_visit: inventory_view` |
-| `auction` | Auktionshaus | III | `route_visit: auction_house_view` |
-| `messages` | Messages / Chat | I–III | `always` (Nav) |
-| `galactic_directives` | [GALACTIC_DIRECTIVES.md](GALACTIC_DIRECTIVES.md) | IV | Community-Feature live |
-| `referrals` | Referrals | III | `route_visit: referrals_view` |
-| `faq_general` | Querschnitt | — | `always` |
+Kein offenes P1/P2-Backlog mehr nach dem Knowledge Catch-up 2026-08-03. Neue Domänen erst nach IA-Erweiterung.
+
+**Bewusst kein eigener Artikel:** `overview` → bleibt gemerged in `genesis_ark`.
+
+---
+
+## Catalog-Inventar (2026-08-03)
+
+**39 Shipped-IDs** in `generated/codex/catalog.json`:
+
+`alliance`, `ascension`, `asteroids`, `auction`, `buildings`, `case_battles`, `collector_exchange`, `combat`, `command_map`, `commander_classes`, `defense`, `diplomacy`, `expansion`, `expeditions`, `faq_general`, `fleet`, `galactic_directives`, `galaxy`, `genesis_ark`, `imperial_directives`, `influence`, `inventory`, `liveops_retention`, `logistics`, `messages`, `pirates`, `planet_evolution`, `planet_scope`, `ranking`, `referrals`, `research`, `resources`, `salvage`, `shop_identity`, `story_ops`, `strategic_worlds`, `titans`, `trader`, `world_boss`
+
+**Merged / kein Catalog:** `overview` → `genesis_ark`.
 
 ---
 
 ## Master-Doc-Kategorien (Pflege — nicht Codex-Navigation)
-
-Für Entwickler: welches Doc in welcher Domäne liegt.
 
 | Kategorie | Docs |
 |-----------|------|
 | **Core** | CORE_ARCHITECTURE, GENESIS_TERMINOLOGY, IMPERIUM_VISION, WORKFLOW |
 | **Imperium** | IMPERIUM_VISION, GC-563–567, GC-592, IMPERIAL_DIRECTIVES |
 | **Expansion** | EXPANSION_PROTOCOL, PLANET_EVOLUTION, PLANET_SCOPE, GALAXY_SYSTEM, GC-582, GC-581, GC-583 |
-| **Economy** | ECONOMY_SYSTEM, BUILDINGS_SYSTEM, RESEARCH_SYSTEM, PRODUCTION_FORMULA_SYSTEM |
-| **Military** | FLEET_SYSTEM, COMBAT_SYSTEM, DEFENSE_SYSTEM, GALACTIC_DIPLOMACY |
-| **Social** | Messages/Chat (ARCHITECTURE), Alliance (EPIC-09) |
+| **Economy** | ECONOMY_SYSTEM, BUILDINGS_SYSTEM, RESEARCH_SYSTEM, PRODUCTION_FORMULA_SYSTEM, INVENTORY_SYSTEM, PAYMENT_SHOP, COLLECTOR_EXCHANGE |
+| **Military / LiveOps** | FLEET_SYSTEM, COMBAT_SYSTEM, DEFENSE_SYSTEM, WORLD_BOSS_SYSTEM, PIRATE_ECOSYSTEM, ASTEROID_SYSTEM, CASE_BATTLES |
+| **Social / Retention** | ALLIANCE_SYSTEM, COMMANDER_CLASSES, GENESIS_STORY_OPS, LIVEOPS_RETENTION, GALACTIC_DIPLOMACY, GALACTIC_DIRECTIVES |
 | **Admin** | SECURITY, Operator-Docs |
 
 **Regel:** Kategorie = Pflege-Cluster. **Band** = Spieler-Progression (Tabelle oben).
@@ -247,21 +249,33 @@ Für Entwickler: welches Doc in welcher Domäne liegt.
 
 ## Route → Context Help (GC-950D)
 
-| `request.endpoint` | Primärer `codex_id` | FAQ aus |
-|--------------------|---------------------|---------|
-| `overview` | `overview` + `genesis_ark` | beide |
+| `request.endpoint` | Primärer `codex_id` | FAQ / Related aus |
+|--------------------|---------------------|-------------------|
+| `overview` | `genesis_ark` (+ Titans-Teaser) | `resources`, `titans` |
 | `buildings_view` | `buildings` | `resources` |
 | `research_view` | `research` | `buildings` |
 | `planet_evolution_view` | `planet_evolution` | `ascension` (wenn unlock) |
-| `empire_view` | `command_map` + `expansion` | `expeditions` |
-| `galaxy_view` | `galaxy` | `expansion` |
-| `fleet_view` | `fleet` | `expeditions`, `combat` |
+| `empire_view` | `command_map` | `expansion`, `salvage`, `expeditions` |
+| `galaxy_view` | `galaxy` | `expansion`, `asteroids`, `pirates`, `command_map` |
+| `fleet_view` | `fleet` | `combat`, `expeditions`, `logistics`, `asteroids`, `salvage` |
+| `logistics_view` | `logistics` | `fleet`, `resources` |
 | `shipyard_view` | `fleet` | — |
 | `defense_view` | `defense` | `combat` |
-| `trader_hub_view` | `trader` | `resources` |
-| `imperial_directives_view` | `imperial_directives` | — |
-| `galactic_politics` | `diplomacy` | — |
-| `ranking_view` | `ranking` (P2) | — |
+| `trader_hub_view` | `trader` | `collector_exchange`, `resources` |
+| `world_boss_view` | `world_boss` | `titans` |
+| `skilltree_view` | `commander_classes` | `research`, `fleet` |
+| `story_view` | `story_ops` | `liveops_retention`, `shop_identity` |
+| `login_rewards_view` | `liveops_retention` | — |
+| `premium_view` | `liveops_retention` | `shop_identity` |
+| `shop_view` | `shop_identity` | `liveops_retention`, `inventory` |
+| `inventory_view` | `inventory` | `case_battles`, `collector_exchange` |
+| `alliance_view` | `alliance` | `world_boss`, `fleet` |
+| `imperial_directives_view` | `imperial_directives` | `inventory` |
+| `galactic_politics_view` | `diplomacy` | `galactic_directives` |
+| `ranking_view` | `ranking` | — |
+| `auction_house_view` | `auction` | `inventory` |
+| `referrals_view` | `referrals` | — |
+| `messages_view` | `messages` | — |
 
 ---
 
@@ -298,17 +312,19 @@ Für Entwickler: welches Doc in welcher Domäne liegt.
 ## GC-950A1 — Akzeptanzkriterien
 
 - [x] Landkarte mit Band I–IV nach **Spieler-Reihenfolge** (nicht alphabetisch)
-- [x] Jeder P1-`codex_id` hat: Master Doc, Route, Surfaces, Unlock, SoT
+- [x] Shipped vs Planned anhand `generated/codex/catalog.json` markiert (Stand 2026-08-03)
+- [x] `overview` merged in `genesis_ark` (kein separater Artikel)
+- [x] LiveOps-/Catalog-IDs in der Landkarte
 - [x] Unlock-Typen definiert mit Code-Ankern
 - [x] Source-of-Truth-Tabelle global
-- [x] Route → Context-Help-Mapping
-- [x] P2-Backlog separat
+- [x] Route → Context-Help-Mapping (inkl. neue Endpoints)
+- [x] Planned-Backlog separat
 - [x] **Kein** Player-Article-Text geschrieben
-- [ ] Team-Review: P1-Liste + Unlock-Schwellen bestätigt (offen)
+- [ ] Team-Review: Unlock-Schwellen bestätigt (offen)
 
 ## GC-950A2 — Voraussetzung
 
-Start nur wenn GC-950A1 Review ✅. Schreibt Player Blocks für alle `P1 ✓` Zeilen in der Landkarte (17 Artikel — `overview` kann in `genesis_ark` merge wenn gewünscht → Ziel **12–15** Blocks).
+Player Blocks für Shipped-Artikel existieren bzw. werden regeneriert. **`overview` bleibt merged in `genesis_ark`** — kein separater Block.
 
 ---
 

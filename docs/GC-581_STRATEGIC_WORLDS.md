@@ -87,3 +87,83 @@ Bei Klick auf Strategic World:
 | GC-582 | Dynamic Colonization — [GC-582_DYNAMIC_COLONIZATION.md](GC-582_DYNAMIC_COLONIZATION.md) |
 | GC-583 | Expedition Worlds |
 | GC-566B | Dynamic Influence |
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: strategic_worlds
+band: IV
+difficulty: advanced
+estimated_read: 4 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+  - commander_tips
+  - discord
+routes:
+  - galaxy_view
+  - planet_evolution_view
+  - empire_view
+related_codex:
+  - expansion
+  - command_map
+  - planet_evolution
+  - expeditions
+  - galaxy
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: homeworld_level
+  value: 15
+teaser_key: codex_unlock_strategic_worlds_teaser
+---
+```
+
+## Quick Help
+
+**Strategic Worlds** sind benannte Orte auf der Weltkarte mit Typ, Risiko und Versprechen — und zugleich das Reifestadium einer Kolonie nach abgeschlossener Planet Evolution und Spezialisierung.
+
+## Summary
+
+Auf der Command Map werden freie Felder zu **Strategic Worlds**: Mining, Research, Industrial, Fortress, Expedition Zone, Ruins, Anomaly, Wreckage — jeweils mit Namen, Risiko und Flavor. Manche Typen kolonisiert du (Expansion), andere **expeditionierst** du. Im Expansion Protocol ist **Strategic World** außerdem die Phase nach voller Kolonie + Evolution/Spezialisierung.
+
+## Why
+
+Die Karte soll antworten „**wo will ich hin**“, nicht nur „wo ist ein Slot frei“. Typ und Versprechen steuern Erwartung: Ferronit-Potenzial, Forschung, Werft, Festung oder Expedition — Identität vor reiner Slot-Belegung.
+
+## How it works
+
+- Auf der **Weltkarte** Strategic-World-Knoten anklicken → Inspector: Typ, Status, Risiko, Versprechen, geplante Aktion.
+- **Kolonisierbare** Typen: über Expansion/Fleet mit Seed Ark beanspruchen (siehe Expansion).
+- **Expeditions-Typen** (`expedition_zone`, `anomaly_zone`, `ruins_world`): Mission Expedition, kein Claim als Kolonie.
+- Eigene Kolonie kann zur **Strategic World** reifen, wenn Planet Evolution und Spezialisierung abgeschlossen sind — Charakterwelt, keine zweite Genesis Ark.
+- Codex-Eintrag öffnet sich mit Ark-Entwicklungsstufe **15** (höhere Expansion-/Welt-Gates).
+
+## Related Systems
+
+- expansion
+- command_map
+- planet_evolution
+- expeditions
+- galaxy
+- genesis_ark
+
+## Commander Tips
+
+- Inspector lesen, bevor du Flotte bindest — Typ entscheidet Kolonie vs. Expedition.
+- Spezialisierung auf eigenen Welten ist dauerhaft; vor der Wahl nachdenken.
+- Strategic World ≠ Ersatz-Hauptstadt — die Genesis Ark bleibt Zentrum.
+
+## FAQ
+
+**Ist jede Strategic World eine Kolonie?**
+Nein. Manche sind unbeanspruchte Orte; Expeditions-Typen bleiben Erkundungsziele. Kolonien können später den Status Strategic World erreichen.
+
+## Discord Summary
+
+**Strategic Worlds — Orte mit Charakter**
+
+Weltkarte: benannte Typen (Mining, Research, Expedition, Ruinen …). Kolonisieren oder expeditionieren je nach Typ. Reife Kolonien nach Evolution. Codex ab Ark-Stufe 15.

@@ -2,11 +2,22 @@
 
 Vollständige Entwicklungshistorie von Projektstart bis heute.  
 Clustered by milestone versions (not every commit).  
-Stand: **2026-08-01** · Spieler-Meilenstein **v0.9 Alpha** · Build-Zähler [`VERSION`](VERSION) (intern / Cache-Bust, derzeit `0.5.9.x`)
+Stand: **2026-08-03** · Spieler-Meilenstein **v0.9.2 Alpha** · Build-Zähler [`VERSION`](VERSION) (intern / Cache-Bust, derzeit `0.5.9.x`)
 
 > **Versionsregel:** Alpha bleibt **`v0.9.x`**. **`v1.0` / `v1.0.0-beta`** ist der Beta-Gate ([docs/BETA_GATE.md](docs/BETA_GATE.md)) — nicht für Alpha-Patches verwenden.  
 > Spieler: Patchnotes live unter **News** (`/news`) und im NEWS-Banner.  
 > Admins: Release-Publisher im Admin-Panel → Server → Universums-News (nicht Git-Commits).
+
+---
+
+## v0.9.2 — Knowledge & LiveOps Catch-up *(Alpha · 2026-08-03)*
+
+### Added
+- **Spieler-News Pack** `v0.9.2` — Catch-up für LiveOps-Entdeckung (8 Locales): World Boss/Titans, Commander Classes, Alliance, Story Ops, Login/Season Pass, Shop/Identity, Inventory/Collector, Asteroids, Relic Arena, Logistics/Expeditions, Codex-Wissen
+- **Wissenslandkarte** — Catalog-Stand (27 Shipped-Artikel), Overview merged in `genesis_ark`, Route→Context-Help für LiveOps-Endpoints
+
+### Changed
+- Interne Unreleased-Liste: Allianz nicht mehr als „upcoming“ geführt (seit v0.9 live)
 
 ---
 
@@ -323,7 +334,8 @@ Built from:
 
 ## Unreleased / Next
 
-- **GC-650** — Patch Notes versioning (version tags, categories, badges on `/news`)
+- Knowledge / LiveOps catch-up für Spieler: siehe **v0.9.2** (Universe News Pack + Codex-Landkarte)
+- **GC-650** — Patch Notes versioning (version tags, categories, badges on `/news`) — teilweise live via Release-Publisher
 - **GC-700** — Combat polish gaps (no resolver rebuild)
-- **Alliance Hub** — Gründung, Rechte, Diplomatie (EPIC-09)
 - **PostgreSQL / Multi-Worker** — Phase 7 Platform Scale
+- ~~Alliance Hub~~ — seit **v0.9** live (nicht mehr Unreleased)

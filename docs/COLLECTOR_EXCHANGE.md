@@ -527,39 +527,81 @@ Abhängigkeit: 965A → 965B → 966* → 967/968 parallel → 969.
 
 ---
 
-## Player Article Block (Codex / GC-950)
+## Player Article
 
 ```yaml
-# ECONOMY_SYSTEM.md — Player Block (Entwurf)
-player_article:
-  id: economy_collector_exchange
-  title_de: "Sammler-Markt im Trader Hub"
-  unlock: { min_containers_opened: 1 }
-  summary_de: >
-    Sammle Fragmente aus Lootboxen und Expeditionen. Tausche sie bei
-    Spezialisten im Trader Hub gegen Booster und seltene Belohnungen —
-    oder horte sie für Titel und Meilensteine.
-  faq:
-    - q: "Verschwinden gesammelte Fragmente aus meiner Statistik?"
-      a: "Nein. Deine Gesamt-Sammelstatistik wächst dauerhaft — auch wenn du Fragmente eintauschst."
+---
+codex_id: collector_exchange
+band: III
+difficulty: intermediate
+estimated_read: 4 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+  - commander_tips
+  - discord
+routes:
+  - trader_hub_view
+related_codex:
+  - trader
+  - inventory
+  - planet_evolution
+  - research
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: route_visit
+  route: trader_hub_view
+teaser_key: codex_unlock_collector_exchange_teaser
+---
 ```
 
----
+## Quick Help
 
-## Offene Entscheidungen (vor Implementierung)
+Der **Sammler-Markt** im Trader Hub tauscht Fragmente und Sammlerstücke gegen Booster, Utility und kuratierte Offers — nicht gegen Ferronit-Kurse.
 
-| # | Frage | Empfehlung |
-|---|-------|------------|
-| 1 | DNA-Kapsel: Craft und Exchange redundant? | Ja — bewusst; UI zeigt „oder beim Xenobiologen" |
-| 2 | `artifact_core_fragment` eintauschbar? | Phase 2 nur Hypertechniker-Endgame-Offer |
-| 3 | Tageslimit für Redeems? | Nein — Input-Rate limitiert natürlich |
-| 4 | Alliance-weite Stats? | Nein — persönliches Prestige (Phase 4 optional) |
+## Summary
 
----
+Vier Spezialisten (Xenobiologe, Schrottmeister, Energieingenieur, Hypertechniker) nehmen Inventar-Sammlerstücke und geben feste Offers zurück. Jeder Fund erhöht deine **Lifetime-Statistik** dauerhaft — Einlösen verringert nur den Inventar-Bestand, nie Lifetime. Prestige-Badges und Titel hängen an Lifetime-Meilensteinen. Wrack-Rekonstruktion und DNA-Wege sind kuratierte Offers, keine Lootbox-Inflation.
 
-## Ausgabe (nach Implementierung)
+## Why
 
-- Root Cause
-- Changed Files
-- Tests
-- Ergebnis
+Nach Meta-only-Loot sollen Fragmente kein totes Badge bleiben: jeder Drop ist Fortschritt — jetzt einlösen oder auf Meilensteine sparen.
+
+## How it works
+
+- Trader Hub öffnen → Collector-Exchange-Bereich / Spezialisten wählen.
+- Offer wählen, Input prüfen, Redeem (idempotent) — Belohnung ins Inventar oder an den Kontext-Planeten, wenn planetengebunden.
+- Craft im Inventar und Exchange können denselben Sink teilen (z. B. DNA) — UI zeigt Alternativen.
+- Keine Ressourcen-Trader-Raten; das bleibt der Unified Resource Trader.
+
+## Related Systems
+
+- trader
+- inventory
+- planet_evolution
+- research
+- fleet
+
+## Commander Tips
+
+- Lifetime-Ziele im Blick behalten, bevor du alles für Sofort-Booster verbrennst.
+- Schrottmeister für Werft-nahe Boosts; Xenobiologe für Research/PE.
+- Redeem nur mit genug Input — Teilmengen helfen nicht.
+
+## FAQ
+
+**Verschwinden gesammelte Fragmente aus meiner Statistik?**
+Nein. Lifetime wächst nur — Einlösen senkt nur den Inventarbestand.
+
+**Ist das derselbe Trader wie Ferronit/Crytite?**
+Nein. Resource Trader und Schrottplatz bleiben getrennt; Collector ist Sammlerstück ↔ Fortschritt.
+
+**Kann Exchange Schiffe geben?**
+Nur über kuratierte Rekonstruktions-Offers — nie als Zufalls-Lootbox.
+
+## Discord Summary
+
+**Sammler-Markt — Fragmente mit Sinn**
+
+Trader Hub Spezialisten: Fragmente → Booster/Utility/kuratierte Offers. Lifetime-Stats nie sinken. Prestige durch Sammeln.

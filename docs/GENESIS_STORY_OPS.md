@@ -218,3 +218,85 @@ Siehe [GENESIS_LORE_BIBLE.md](GENESIS_LORE_BIBLE.md). Packs: `ark_signal`, `livi
 - **Ersetzt:** nichts (neue Domäne)
 - **Teilt:** Gameplay-Event-Sensorik mit Directives (Fan-out, keine zweite Call-Site-Lawine)
 - **Nicht:** Daily-Ops-Duplikat neben `game/directives/`
+
+---
+
+## Player Article
+
+```yaml
+---
+codex_id: story_ops
+band: II
+difficulty: beginner
+estimated_read: 4 min
+surfaces:
+  - quick_help
+  - codex
+  - faq
+  - commander_tips
+  - discord
+routes:
+  - story_view
+related_codex:
+  - commander_classes
+  - shop_identity
+  - titans
+  - imperial_directives
+terminology: GENESIS_TERMINOLOGY
+unlock:
+  type: route_visit
+  route: story_view
+teaser_key: codex_unlock_story_ops_teaser
+---
+```
+
+## Quick Help
+
+**Genesis Story Ops** unter `/story` sind autorisierte Übertragungen und Side Ops — Lore, die auf echtem Gameplay reagiert, kein Daily-Quest-Reset.
+
+## Summary
+
+Du empfängst Transmissionen (Ark-Signal, High Command, Kontakte), triffst Choices und erfüllst Objectives im normalen Spiel (Bau, Flotte, Kampf). Fortschritt ist persistent über Kapitel und Arcs. Belohnungen sind Meta: Container, Booster, Flags, Inbox — keine Schiffe oder Rohstoff-Stacks. **Ark-Token** tropfen bei Kapitelabschluss und können im Free Shop ausgegeben werden; Titans liefern dieselbe Währung über Missionen.
+
+## Why
+
+Story macht das Imperium erzählbar, ohne eine zweite Daily-Ops-Insel neben Imperial Directives. Beide teilen den Event-Bus — unterschiedliche Owner und Cadence.
+
+## How it works
+
+- Öffne **Story** (Community-Nav): Hero-Orb, Arc-Karussell, Audio-Controls, Mission-/Reward-Hinweise.
+- **Advance / Choice:** serverseitig; UI patched State ohne Reload.
+- Objectives lauschen auf Gameplay-Events — du spielst weiter Bau/Flotte, die Story zählt mit.
+- Optional **Neural Voice** (TTS) für Transmissionen.
+- Living Commander (Skilltree-Klasse) kann als Sprecher-Portrait erscheinen.
+- Sidebar-Badge bei wartender Transmission oder Choice.
+
+## Related Systems
+
+- commander_classes
+- shop_identity
+- titans
+- inventory
+
+## Commander Tips
+
+- Story und Imperial Directives parallel lesen — unterschiedliche Rhythmen, gemeinsames Gameplay.
+- Choices ernst nehmen: Flags können spätere Beats und Codex-Fragmente öffnen.
+- Ark-Token nicht mit EUR-Shop verwechseln — Free Shop ist der Story-Tab.
+
+## FAQ
+
+**Resetten Story-Ops täglich?**
+Nein. Story ist persistent; Daily/Weekly Ops gehören zu Imperial Directives / Battle Pass.
+
+**Muss ich claimen wie bei Directives?**
+Narrative Rewards werden typischerweise auto-gegrantet; die UI zeigt den Hinweis.
+
+**Brauche ich eine Commander-Klasse?**
+Empfohlen für Immersion (Portrait/Voice-Kontext), aber Arcs starten auch ohne.
+
+## Discord Summary
+
+**Story Ops — Transmissionen & Side Ops**
+
+`/story`: persistente Arcs, Choices, Gameplay-Objectives, Meta-Rewards, Ark-Token/Free Shop. Kein Daily-Reset — Directives bleiben getrennt.
