@@ -1793,7 +1793,17 @@ def test_notify_sound_assets_and_main_js_wiring():
     assert "function playPirateDownSound()" in theater
     assert "piratedown_theater.mp3" in theater
     assert "countWipedClasses" in theater
-    assert "playPirateDownSound()" in theater.split("function showResolve(")[1].split("meta._liveAtk = applyLosses")[0]
+    assert "shouldPlayPirateDown" in theater
+    assert "stockWipedByLosses" in theater
+    assert "stopFightSounds()" in theater.split("function playPirateDownSound()")[1].split(
+        "function countWipedClasses"
+    )[0]
+    assert "shouldPlayPirateDown(meta, evt, shipLoss, defLossMap)" in theater.split(
+        "function showResolve("
+    )[1].split("meta._liveAtk = applyLosses")[0]
+    assert "_pirateDownPlayed" in theater.split("function showFinale(")[1].split(
+        "el.hidden = false"
+    )[0]
     assert "function playCombatTheaterOneShot(src, baseVolume)" in theater
     assert 'GC.sfxVolumeForKind("combat", baseVolume)' in theater
     assert "theater_fight_sound.mp3" in theater

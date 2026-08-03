@@ -133,8 +133,9 @@
     playCombatTheaterOneShot(src, COMBAT_FIGHT_BASE_VOLUME);
   }
 
-  /** Play when at least one ship/defense class hits zero in this resolve beat. */
+  /** Explosion SFX — stop overlapping salvo clips so the wipe is audible. */
   function playPirateDownSound() {
+    stopFightSounds();
     playCombatTheaterOneShot(COMBAT_PIRATE_DOWN_SOUND, COMBAT_PIRATE_DOWN_BASE_VOLUME);
   }
 
@@ -150,6 +151,29 @@
       if (prev > 0 && prev - loss <= 0) wiped += 1;
     });
     return wiped;
+  }
+
+  /** True when this resolve empties an entire stock (fleet/defense line wiped). */
+  function stockWipedByLosses(stock, losses) {
+    const before = unitCountTotal(stock);
+    if (before <= 0) return false;
+    return unitCountTotal(applyLosses(stock, losses)) <= 0;
+  }
+
+  function shouldPlayPirateDown(meta, evt, shipLoss, defLossMap) {
+    const wipedClasses =
+      countWipedClasses(meta._liveAtk, evt.attacker_losses) +
+      countWipedClasses(meta._liveDefShips, shipLoss) +
+      countWipedClasses(meta._liveDefDefense, defLossMap);
+    if (wipedClasses > 0) return true;
+    if (stockWipedByLosses(meta._liveAtk, evt.attacker_losses)) return true;
+    const defBefore =
+      unitCountTotal(meta._liveDefShips) + unitCountTotal(meta._liveDefDefense);
+    if (defBefore <= 0) return false;
+    const defAfter =
+      unitCountTotal(applyLosses(meta._liveDefShips, shipLoss)) +
+      unitCountTotal(applyLosses(meta._liveDefDefense, defLossMap));
+    return defAfter <= 0;
   }
 
   function t(key, fallback) {
@@ -651,13 +675,10 @@
       }
     });
 
-    // Class wipe SFX before applying losses (stock still has pre-resolve counts).
-    const wipedClasses =
-      countWipedClasses(meta._liveAtk, evt.attacker_losses) +
-      countWipedClasses(meta._liveDefShips, shipLoss) +
-      countWipedClasses(meta._liveDefDefense, defLossMap);
-    if (wipedClasses > 0) {
+    // Wipe / fleet-defeat SFX before applying losses (stock still has pre-resolve counts).
+    if (shouldPlayPirateDown(meta, evt, shipLoss, defLossMap)) {
       playPirateDownSound();
+      meta._pirateDownPlayed = true;
     }
 
     meta._liveAtk = applyLosses(meta._liveAtk, evt.attacker_losses);
@@ -687,6 +708,16 @@
   function showFinale(root, meta, winner) {
     const el = root.querySelector("[data-ct-finale]");
     if (!el) return;
+    // Safety net: if a side was emptied but no mid-resolve wipe fired (edge timelines).
+    if (meta && !meta._pirateDownPlayed) {
+      const atkEmpty = unitCountTotal(meta._liveAtk) <= 0;
+      const defEmpty =
+        unitCountTotal(meta._liveDefShips) + unitCountTotal(meta._liveDefDefense) <= 0;
+      if (atkEmpty || defEmpty) {
+        playPirateDownSound();
+        meta._pirateDownPlayed = true;
+      }
+    }
     const w = String(winner || "").toLowerCase();
     let label = t("combat_report_winner_undecided", "Outcome pending");
     let cls = "is-draw";
