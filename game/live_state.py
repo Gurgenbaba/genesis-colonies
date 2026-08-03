@@ -473,6 +473,14 @@ def nav_badges_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
     except Exception:
         auction_count = 0
 
+    inventory_count = 0
+    try:
+        from game.case_battles import count_case_battles_nav_attention
+
+        inventory_count = int(count_case_battles_nav_attention(uid, conn=conn) or 0)
+    except Exception:
+        inventory_count = 0
+
     return {
         "vote_center": _nav_badge_entry(
             active=vote_count > 0,
@@ -523,6 +531,11 @@ def nav_badges_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
             active=auction_count > 0,
             count=auction_count,
             label=str(auction_count) if auction_count > 0 else "",
+        ),
+        "inventory": _nav_badge_entry(
+            active=inventory_count > 0,
+            count=inventory_count,
+            label=str(inventory_count) if inventory_count > 0 else "",
         ),
     }
 

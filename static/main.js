@@ -11313,6 +11313,8 @@
                 ? "nav_badge_alliance_aria"
               : key === "auction_house"
                 ? "nav_badge_auction_house_aria"
+              : key === "inventory"
+                ? "nav_badge_inventory_aria"
               : key === "community"
               ? "nav_badge_community_aria"
               : "";
@@ -11331,6 +11333,8 @@
                   ? "Allianz-Bewerbung ausstehend"
                 : key === "auction_house"
                   ? "Auktionshaus-Aktivität"
+                : key === "inventory"
+                  ? "Offene Relikt-Arena Battles"
                 : "Abstimmung offen")
         );
       }
@@ -17029,6 +17033,35 @@
     }
   }
 
+  function _cbSyncAttentionBadges(state) {
+    const count = Math.max(0, Number((state && state.attention_count) || 0));
+    const entry = count > 0
+      ? { active: true, count, label: String(count > 99 ? "99+" : count) }
+      : { active: false, count: 0, label: "" };
+    if (typeof GC.updateNavBadges === "function") {
+      // Merge into last known badges if available; otherwise patch inventory key only.
+      const base = (GC._lastHudState && GC._lastHudState.nav_badges)
+        || (window.GC && GC.lastGameState && GC.lastGameState.nav_badges)
+        || {};
+      const next = Object.assign({}, base, { inventory: entry });
+      GC.updateNavBadges(next);
+    } else {
+      document.querySelectorAll('[data-nav-badge="inventory"]').forEach((el) => {
+        if (count <= 0) {
+          el.textContent = "";
+          el.hidden = true;
+          el.classList.add("hidden");
+          el.setAttribute("aria-hidden", "true");
+          return;
+        }
+        el.textContent = String(count > 99 ? "99+" : count);
+        el.hidden = false;
+        el.classList.remove("hidden");
+        el.setAttribute("aria-hidden", "false");
+      });
+    }
+  }
+
   function renderCaseBattlesUI(state) {
     _caseBattlesLastState = state || _caseBattlesLastState || {};
     const root = document.querySelector("[data-case-battles-root]");
@@ -17055,6 +17088,7 @@
     if (lobbyEl) lobbyEl.hidden = _cbView !== "lobby";
     if (mineEl) mineEl.hidden = _cbView !== "mine";
     _cbRenderActive(_caseBattlesLastState.active || null);
+    _cbSyncAttentionBadges(_caseBattlesLastState);
   }
 
   function _cbOwnedContainers() {

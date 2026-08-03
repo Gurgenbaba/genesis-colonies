@@ -60,6 +60,8 @@ _SENSITIVE_BUCKETS: Dict[str, Dict[int, list]] = {"email": {}, "password": {}}
 NOTIFY_SOUND_MODES = frozenset({"off", "quiet", "normal"})
 DEFAULT_NOTIFY_ATTACK_SOUND = "normal"
 DEFAULT_NOTIFY_MESSAGE_SOUND = "normal"
+DEFAULT_SFX_UI_SOUND = "normal"
+DEFAULT_SFX_COMBAT_SOUND = "normal"
 
 DEFAULT_SPY_PROBES = 5
 MIN_SPY_PROBES = 1
@@ -112,6 +114,12 @@ def ensure_account_options_schema(conn=None) -> None:
         )
         ensure_column(
             c, "users", "notify_message_sound", "TEXT NOT NULL DEFAULT 'normal'"
+        )
+        ensure_column(
+            c, "users", "sfx_ui_sound", "TEXT NOT NULL DEFAULT 'normal'"
+        )
+        ensure_column(
+            c, "users", "sfx_combat_sound", "TEXT NOT NULL DEFAULT 'normal'"
         )
         ensure_column(
             c, "users", "default_spy_probes", "INTEGER NOT NULL DEFAULT 5"
@@ -193,29 +201,34 @@ def normalize_spy_probe_count(value: Any, *, default: int = DEFAULT_SPY_PROBES) 
     return count
 
 
+def _default_sound_settings() -> Dict[str, str]:
+    return {
+        "notify_attack_sound": DEFAULT_NOTIFY_ATTACK_SOUND,
+        "notify_message_sound": DEFAULT_NOTIFY_MESSAGE_SOUND,
+        "sfx_ui_sound": DEFAULT_SFX_UI_SOUND,
+        "sfx_combat_sound": DEFAULT_SFX_COMBAT_SOUND,
+    }
+
+
 def get_notify_sound_settings(player_id: int, *, conn=None) -> Dict[str, str]:
+    """Persisted sound modes: attack/message notify + UI/combat SFX."""
     pid = int(player_id or 0)
     if pid <= 0:
-        return {
-            "notify_attack_sound": DEFAULT_NOTIFY_ATTACK_SOUND,
-            "notify_message_sound": DEFAULT_NOTIFY_MESSAGE_SOUND,
-        }
+        return _default_sound_settings()
     own = conn is None
     c = conn or db()
     try:
         ensure_account_options_schema(c)
         row = c.execute(
             """
-            SELECT notify_attack_sound, notify_message_sound
+            SELECT notify_attack_sound, notify_message_sound,
+                   sfx_ui_sound, sfx_combat_sound
             FROM users WHERE id = ? LIMIT 1;
             """,
             (pid,),
         ).fetchone()
         if not row:
-            return {
-                "notify_attack_sound": DEFAULT_NOTIFY_ATTACK_SOUND,
-                "notify_message_sound": DEFAULT_NOTIFY_MESSAGE_SOUND,
-            }
+            return _default_sound_settings()
         return {
             "notify_attack_sound": normalize_notify_sound_mode(
                 row["notify_attack_sound"],
@@ -224,6 +237,14 @@ def get_notify_sound_settings(player_id: int, *, conn=None) -> Dict[str, str]:
             "notify_message_sound": normalize_notify_sound_mode(
                 row["notify_message_sound"],
                 default=DEFAULT_NOTIFY_MESSAGE_SOUND,
+            ),
+            "sfx_ui_sound": normalize_notify_sound_mode(
+                row["sfx_ui_sound"],
+                default=DEFAULT_SFX_UI_SOUND,
+            ),
+            "sfx_combat_sound": normalize_notify_sound_mode(
+                row["sfx_combat_sound"],
+                default=DEFAULT_SFX_COMBAT_SOUND,
             ),
         }
     finally:
@@ -236,6 +257,8 @@ def update_notify_sounds(
     *,
     notify_attack_sound: Optional[str] = None,
     notify_message_sound: Optional[str] = None,
+    sfx_ui_sound: Optional[str] = None,
+    sfx_combat_sound: Optional[str] = None,
     conn=None,
 ) -> Tuple[bool, str, Dict[str, Any]]:
     pid = int(player_id or 0)
@@ -252,7 +275,22 @@ def update_notify_sounds(
         if notify_message_sound is not None
         else None
     )
-    if attack_mode is None and message_mode is None:
+    ui_mode = (
+        normalize_notify_sound_mode(sfx_ui_sound, default=DEFAULT_SFX_UI_SOUND)
+        if sfx_ui_sound is not None
+        else None
+    )
+    combat_mode = (
+        normalize_notify_sound_mode(sfx_combat_sound, default=DEFAULT_SFX_COMBAT_SOUND)
+        if sfx_combat_sound is not None
+        else None
+    )
+    if (
+        attack_mode is None
+        and message_mode is None
+        and ui_mode is None
+        and combat_mode is None
+    ):
         return False, "options_error_invalid_notify_sound", {}
 
     own = conn is None
@@ -262,9 +300,13 @@ def update_notify_sounds(
         current = get_notify_sound_settings(pid, conn=c)
         next_attack = attack_mode if attack_mode is not None else current["notify_attack_sound"]
         next_message = message_mode if message_mode is not None else current["notify_message_sound"]
+        next_ui = ui_mode if ui_mode is not None else current["sfx_ui_sound"]
+        next_combat = combat_mode if combat_mode is not None else current["sfx_combat_sound"]
         if (
             next_attack == current["notify_attack_sound"]
             and next_message == current["notify_message_sound"]
+            and next_ui == current["sfx_ui_sound"]
+            and next_combat == current["sfx_combat_sound"]
         ):
             return True, "options_saved", dict(current)
 
@@ -272,16 +314,19 @@ def update_notify_sounds(
         c.execute(
             """
             UPDATE users
-            SET notify_attack_sound = ?, notify_message_sound = ?
+            SET notify_attack_sound = ?, notify_message_sound = ?,
+                sfx_ui_sound = ?, sfx_combat_sound = ?
             WHERE id = ?;
             """,
-            (next_attack, next_message, pid),
+            (next_attack, next_message, next_ui, next_combat, pid),
         )
         if own:
             commit(c)
         payload = {
             "notify_attack_sound": next_attack,
             "notify_message_sound": next_message,
+            "sfx_ui_sound": next_ui,
+            "sfx_combat_sound": next_combat,
         }
         return True, "options_saved", payload
     except Exception:

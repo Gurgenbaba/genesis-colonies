@@ -77,8 +77,10 @@
         </a>
         <a href="{{ url_for('inventory_view') }}"
            class="gc-nav-sub-link {% if request.endpoint == 'inventory_view' %}active{% endif %}"
-           data-trading-nav="inventory">
-          {{ T("nav_inventory", "Inventar") }}
+           data-trading-nav="inventory"
+           data-nav-key="inventory">
+          <span class="gc-nav-link-label">{{ T("nav_inventory", "Inventar") }}</span>
+          <span class="gc-nav-badge hidden" data-nav-badge="inventory" hidden aria-hidden="true"></span>
         </a>
         <a href="{{ url_for('empire_view') }}"
            data-nav-module="empire"

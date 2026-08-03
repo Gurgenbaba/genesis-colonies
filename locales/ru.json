@@ -7637,5 +7637,6 @@
   "cb_create_success": "Battle создан",
   "cb_join_code_share_hint": "Поделись кодом с другим командиром.",
   "cb_copy_code": "Копировать код",
-  "cb_code_copied": "Код скопирован."
+  "cb_code_copied": "Код скопирован.",
+  "nav_badge_inventory_aria": "Открытые бои Арены реликвий"
 }

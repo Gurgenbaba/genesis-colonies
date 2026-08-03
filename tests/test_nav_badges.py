@@ -222,3 +222,5 @@ def test_api_game_state_includes_nav_badges(nav_badges_db, monkeypatch):
     assert isinstance(state["nav_badges"]["alliance"]["active"], bool)
     assert "auction_house" in state["nav_badges"]
     assert isinstance(state["nav_badges"]["auction_house"]["active"], bool)
+    assert "inventory" in state["nav_badges"]
+    assert isinstance(state["nav_badges"]["inventory"]["active"], bool)

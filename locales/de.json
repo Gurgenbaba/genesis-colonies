@@ -7637,5 +7637,6 @@
   "cb_create_success": "Battle erstellt",
   "cb_join_code_share_hint": "Teile diesen Code mit dem anderen Commander.",
   "cb_copy_code": "Code kopieren",
-  "cb_code_copied": "Code kopiert."
+  "cb_code_copied": "Code kopiert.",
+  "nav_badge_inventory_aria": "Offene Relikt-Arena Battles"
 }

@@ -71,6 +71,15 @@ Pool-Snapshot beim Start aus Default-`LOOT_POOLS` (Admin-Overrides für laufende
 
 Responses: `{ ok, reason, state?, inventory?, case_battles?, battle? }` + `applyActionState`.
 
+## Nav-Attention
+
+Offene/laufende Battles, in denen der Spieler Teilnehmer ist, erzeugen:
+
+- Badge am Sidebar-Link **Inventar** (`data-nav-badge="inventory"`)
+- Badge am Inventar-Tab **Relikt-Arena** (nicht Container / Items)
+
+Zähler: `count_case_battles_nav_attention` → `nav_badges.inventory` in `/api/game-state` und `case_battles.attention_count`.
+
 ## Schema
 
 Migration `130_case_battles.sql`: `case_battles`, `case_battle_players`, `case_battle_rolls`, `case_battle_settlements`.

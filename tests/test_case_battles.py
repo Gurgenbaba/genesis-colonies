@@ -400,6 +400,46 @@ def test_terminal_settlement_grants_per_round(cb_db):
     assert all("user_id" in g for g in granted)
 
 
+def test_inventory_badge_active_for_open_case_battle(cb_db):
+    from game.live_state import nav_badges_for_game_state
+
+    a = _player("BadgeHost")
+    cases = ["container_basic"]
+    _grant_cases(a, cases)
+    ok, reason, _ = run_inventory_mutation(
+        lambda c: create_battle(a, cases=cases, mode="standard", visibility="public", conn=c)
+    )
+    assert ok, reason
+    conn = db()
+    try:
+        badges = nav_badges_for_game_state(a, conn=conn)
+        assert badges["inventory"]["active"] is True
+        assert int(badges["inventory"]["count"]) >= 1
+    finally:
+        conn.close()
+
+
+def test_inventory_badge_clears_after_cancel(cb_db):
+    from game.live_state import nav_badges_for_game_state
+
+    a = _player("BadgeCancel")
+    cases = ["container_basic"]
+    _grant_cases(a, cases)
+    ok, _, battle = run_inventory_mutation(
+        lambda c: create_battle(a, cases=cases, mode="standard", visibility="public", conn=c)
+    )
+    assert ok
+    bid = int(battle["id"])
+    run_inventory_mutation(lambda c: cancel_battle(a, bid, conn=c))
+    conn = db()
+    try:
+        badges = nav_badges_for_game_state(a, conn=conn)
+        assert badges["inventory"]["active"] is False
+        assert int(badges["inventory"]["count"]) == 0
+    finally:
+        conn.close()
+
+
 def test_state_endpoint(cb_db, monkeypatch):
     import game.db as dbmod
     import game.models as models

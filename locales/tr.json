@@ -7637,5 +7637,6 @@
   "cb_create_success": "Battle oluşturuldu",
   "cb_join_code_share_hint": "Bu kodu diğer komutanla paylaş.",
   "cb_copy_code": "Kodu kopyala",
-  "cb_code_copied": "Kod kopyalandı."
+  "cb_code_copied": "Kod kopyalandı.",
+  "nav_badge_inventory_aria": "Açık Kalıntı Arenası battle’ları"
 }

@@ -1169,6 +1169,26 @@ def list_my_battles(user_id: int, *, conn, limit: int = HISTORY_LIMIT) -> List[D
     return out
 
 
+def count_case_battles_nav_attention(user_id: int, *, conn) -> int:
+    """Open or running Relikt-Arena battles where the player is a participant."""
+    if not case_battles_schema_ready(conn):
+        return 0
+    uid = int(user_id)
+    if uid <= 0:
+        return 0
+    row = conn.execute(
+        """
+        SELECT COUNT(DISTINCT b.id) AS c
+        FROM case_battles b
+        JOIN case_battle_players p ON p.battle_id = b.id
+        WHERE p.user_id = ?
+          AND b.status IN ('open', 'running');
+        """,
+        (uid,),
+    ).fetchone()
+    return int((row["c"] if row else 0) or 0)
+
+
 def build_case_battles_state(user_id: int, *, conn) -> Dict[str, Any]:
     ready = case_battles_schema_ready(conn)
     if not ready:
@@ -1181,6 +1201,7 @@ def build_case_battles_state(user_id: int, *, conn) -> Dict[str, Any]:
             "lobby": [],
             "mine": [],
             "active": None,
+            "attention_count": 0,
         }
 
     mine = list_my_battles(int(user_id), conn=conn)
@@ -1188,6 +1209,7 @@ def build_case_battles_state(user_id: int, *, conn) -> Dict[str, Any]:
         (b for b in mine if b.get("status") in ("open", "running") and b.get("is_participant")),
         None,
     )
+    attention = count_case_battles_nav_attention(int(user_id), conn=conn)
     return {
         "ready": True,
         "modes": sorted(MODES),
@@ -1200,6 +1222,7 @@ def build_case_battles_state(user_id: int, *, conn) -> Dict[str, Any]:
         "lobby": list_lobby_battles(conn=conn, viewer_id=int(user_id)),
         "mine": mine,
         "active": active,
+        "attention_count": int(attention),
     }
 
 

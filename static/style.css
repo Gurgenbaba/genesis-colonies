@@ -36054,12 +36054,22 @@ html.gc-empire-focus .gc-planet-registry {
 }
 
 /* Case Battles / Relikt-Arena (inventory tab) */
-.inventory-cb-tagline {
-  margin: 0;
-  font-size: 0.78rem;
-  color: var(--gc-text-dim);
-  letter-spacing: 0.04em;
+.inventory-tab {
+  position: relative;
 }
+.inventory-tab .inventory-tab-badge,
+.gc-page-tab .inventory-tab-badge {
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.inventory-tab .gc-nav-badge {
+  min-width: 1.1rem;
+  height: 1.1rem;
+  padding: 0 4px;
+  font-size: 0.65rem;
+  line-height: 1.1rem;
+}
+
 .inventory-cb {
   display: flex;
   flex-direction: column;

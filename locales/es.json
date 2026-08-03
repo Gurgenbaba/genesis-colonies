@@ -7637,5 +7637,6 @@
   "cb_create_success": "Batalla creada",
   "cb_join_code_share_hint": "Comparte este código con el otro comandante.",
   "cb_copy_code": "Copiar código",
-  "cb_code_copied": "Código copiado."
+  "cb_code_copied": "Código copiado.",
+  "nav_badge_inventory_aria": "Batallas abiertas de Arena de Reliquias"
 }

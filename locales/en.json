@@ -7637,5 +7637,6 @@
   "cb_create_success": "Battle created",
   "cb_join_code_share_hint": "Share this code with the other commander.",
   "cb_copy_code": "Copy code",
-  "cb_code_copied": "Code copied."
+  "cb_code_copied": "Code copied.",
+  "nav_badge_inventory_aria": "Open Relic Arena battles"
 }

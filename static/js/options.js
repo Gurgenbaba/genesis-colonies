@@ -213,9 +213,22 @@
     });
   }
 
+  const SOUND_KIND_ATTR = {
+    attack: "data-notify-attack-sound",
+    message: "data-notify-message-sound",
+    ui: "data-sfx-ui-sound",
+    combat: "data-sfx-combat-sound",
+  };
+  const SOUND_KIND_PAYLOAD = {
+    attack: "notify_attack_sound",
+    message: "notify_message_sound",
+    ui: "sfx_ui_sound",
+    combat: "sfx_combat_sound",
+  };
+
   function readNotifySoundMode(page, kind) {
     if (!page) return "normal";
-    const attr = kind === "attack" ? "data-notify-attack-sound" : "data-notify-message-sound";
+    const attr = SOUND_KIND_ATTR[kind] || "data-notify-attack-sound";
     const raw = String(page.getAttribute(attr) || "normal").trim().toLowerCase();
     return raw === "off" || raw === "quiet" || raw === "normal" ? raw : "normal";
   }
@@ -225,6 +238,17 @@
       const active = String(btn.getAttribute("data-notify-mode") || "") === mode;
       btn.classList.toggle("is-active", active);
       btn.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+  }
+
+  function applySavedSoundSettings(page, saved) {
+    if (!page || !saved || typeof saved !== "object") return;
+    Object.keys(SOUND_KIND_PAYLOAD).forEach((kind) => {
+      const key = SOUND_KIND_PAYLOAD[kind];
+      const mode = saved[key];
+      if (!mode) return;
+      page.setAttribute(SOUND_KIND_ATTR[kind], mode);
+      setNotifySoundToggleUi(kind, mode);
     });
   }
 
@@ -241,7 +265,8 @@
       btn.addEventListener("click", async () => {
         const kind = String(btn.getAttribute("data-notify-sound") || "");
         const mode = String(btn.getAttribute("data-notify-mode") || "normal");
-        if (kind !== "attack" && kind !== "message") return;
+        const payloadKey = SOUND_KIND_PAYLOAD[kind];
+        if (!payloadKey) return;
         if (readNotifySoundMode(page, kind) === mode) return;
 
         block.querySelectorAll(`[data-notify-sound="${kind}"]`).forEach((el) => {
@@ -253,10 +278,7 @@
           hint.classList.remove("gc-options-hint-error", "gc-options-hint-success");
         }
 
-        const payload =
-          kind === "attack"
-            ? { notify_attack_sound: mode }
-            : { notify_message_sound: mode };
+        const payload = { [payloadKey]: mode };
 
         try {
           const data = await postOptionsJson("/api/options/notify-sounds", payload);
@@ -269,14 +291,7 @@
             return;
           }
           const saved = data.data || {};
-          if (saved.notify_attack_sound) {
-            page.setAttribute("data-notify-attack-sound", saved.notify_attack_sound);
-            setNotifySoundToggleUi("attack", saved.notify_attack_sound);
-          }
-          if (saved.notify_message_sound) {
-            page.setAttribute("data-notify-message-sound", saved.notify_message_sound);
-            setNotifySoundToggleUi("message", saved.notify_message_sound);
-          }
+          applySavedSoundSettings(page, saved);
           if (typeof GC.applyNotifySoundSettings === "function") {
             GC.applyNotifySoundSettings(saved);
           }

@@ -119,7 +119,10 @@
                 aria-selected="false"
                 data-inventory-tab="case-battles"
                 id="inventory-tab-case-battles"
-                aria-controls="inventory-panel-case-battles">{{ T("inv_tab_case_battles", "Relikt-Arena") }}</button>
+                aria-controls="inventory-panel-case-battles">
+          <span>{{ T("inv_tab_case_battles", "Relikt-Arena") }}</span>
+          <span class="gc-nav-badge inventory-tab-badge hidden" data-nav-badge="inventory" hidden aria-hidden="true"></span>
+        </button>
       </nav>
       <div class="inventory-workspace-context inventory-workspace-context--containers"
            data-inventory-head-context="containers">

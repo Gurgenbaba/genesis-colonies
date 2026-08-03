@@ -7637,5 +7637,6 @@
   "cb_create_success": "Battle utworzone",
   "cb_join_code_share_hint": "Udostępnij ten kod drugiemu dowódcy.",
   "cb_copy_code": "Kopiuj kod",
-  "cb_code_copied": "Kod skopiowany."
+  "cb_code_copied": "Kod skopiowany.",
+  "nav_badge_inventory_aria": "Otwarte bitwy Areny Reliktów"
 }
