@@ -1826,6 +1826,12 @@
     if (partial.notify_message_sound !== undefined) {
       GC.settings.notify_message_sound = normalizeNotifySoundMode(partial.notify_message_sound);
     }
+    if (partial.sfx_ui_sound !== undefined) {
+      GC.settings.sfx_ui_sound = normalizeNotifySoundMode(partial.sfx_ui_sound);
+    }
+    if (partial.sfx_combat_sound !== undefined) {
+      GC.settings.sfx_combat_sound = normalizeNotifySoundMode(partial.sfx_combat_sound);
+    }
   }
 
   const DEFAULT_SPY_PROBES = 5;
@@ -1854,14 +1860,31 @@
     return normalizeSpyProbeCount(GC.settings?.default_spy_probes);
   }
 
-  function notifySoundVolumeForKind(kind) {
+  function soundModeForKind(kind) {
     applyNotifySoundSettings(GC.settings || {});
-    const mode = kind === "attack"
-      ? normalizeNotifySoundMode(GC.settings?.notify_attack_sound)
-      : normalizeNotifySoundMode(GC.settings?.notify_message_sound);
+    const key =
+      kind === "attack"
+        ? "notify_attack_sound"
+        : kind === "message"
+          ? "notify_message_sound"
+          : kind === "combat"
+            ? "sfx_combat_sound"
+            : "sfx_ui_sound";
+    return normalizeNotifySoundMode(GC.settings?.[key]);
+  }
+
+  function sfxVolumeForKind(kind, baseVolume) {
+    const mode = soundModeForKind(kind);
     if (mode === "off") return 0;
+    const base = Number(baseVolume);
+    const resolved =
+      Number.isFinite(base) && base >= 0 ? base : GC_NOTIFY_SOUND_BASE_VOLUME;
     const scale = mode === "quiet" ? 0.5 : 1.0;
-    return GC_NOTIFY_SOUND_BASE_VOLUME * scale;
+    return resolved * scale;
+  }
+
+  function notifySoundVolumeForKind(kind) {
+    return sfxVolumeForKind(kind, GC_NOTIFY_SOUND_BASE_VOLUME);
   }
 
   function _notifySoundStorageKey(base) {
@@ -1907,6 +1930,8 @@
 
   GC.normalizeNotifySoundMode = normalizeNotifySoundMode;
   GC.applyNotifySoundSettings = applyNotifySoundSettings;
+  GC.sfxVolumeForKind = sfxVolumeForKind;
+  GC.soundModeForKind = soundModeForKind;
   GC.applySpyProbeSettings = applySpyProbeSettings;
   GC.resolveDefaultSpyProbes = resolveDefaultSpyProbes;
   GC.resolveAttackAlertSoundKey = resolveAttackAlertSoundKey;
@@ -1923,6 +1948,8 @@
     GC.settings = {
       notify_attack_sound: normalizeNotifySoundMode(cfg.notify_attack_sound),
       notify_message_sound: normalizeNotifySoundMode(cfg.notify_message_sound),
+      sfx_ui_sound: normalizeNotifySoundMode(cfg.sfx_ui_sound),
+      sfx_combat_sound: normalizeNotifySoundMode(cfg.sfx_combat_sound),
       default_spy_probes: normalizeSpyProbeCount(cfg.default_spy_probes),
     };
   })();
@@ -2045,6 +2072,47 @@
   };
   // Alias used by messages.js (older name)
   GC.registerPageCleanup = GC.registerCleanup;
+
+  /**
+   * Load a page-scoped script once (PJAX never executes template extra_scripts).
+   * `path` is root-relative without query, e.g. "/static/js/galaxy-quick-action.js".
+   */
+  GC.ensureScript = function ensureScript(path) {
+    const clean = String(path || "").trim();
+    if (!clean) return Promise.reject(new Error("ensureScript: empty path"));
+    GC._scriptPromises = GC._scriptPromises || {};
+    if (GC._scriptPromises[clean]) return GC._scriptPromises[clean];
+
+    const already = Array.from(document.scripts).some((el) => {
+      const src = String(el.getAttribute("src") || "");
+      if (!src) return false;
+      if (src === clean) return true;
+      const bare = src.split("?")[0];
+      return bare === clean || bare.endsWith(clean) || src.includes(clean);
+    });
+    if (already) {
+      GC._scriptPromises[clean] = Promise.resolve();
+      return GC._scriptPromises[clean];
+    }
+
+    const assetV =
+      (typeof GC !== "undefined" && GC.assetVersion) ? String(GC.assetVersion) : "";
+    const src = assetV ? `${clean}${clean.includes("?") ? "&" : "?"}v=${encodeURIComponent(assetV)}` : clean;
+
+    GC._scriptPromises[clean] = new Promise((resolve, reject) => {
+      const el = document.createElement("script");
+      el.src = src;
+      el.async = false;
+      el.dataset.gcEnsureScript = clean;
+      el.onload = () => resolve();
+      el.onerror = () => {
+        delete GC._scriptPromises[clean];
+        reject(new Error(`ensureScript failed: ${clean}`));
+      };
+      (document.head || document.documentElement).appendChild(el);
+    });
+    return GC._scriptPromises[clean];
+  };
 
   GC.cleanupPage = function cleanupPage(opts = {}) {
     const preserveGameLoop = Boolean(opts.preserveGameLoop);
@@ -15220,6 +15288,7 @@
       if (!btn || !layer.contains(btn)) return;
       ev.preventDefault();
       ev.stopPropagation();
+      playTitanClickSound();
       if (activeHotspot === btn && !pop.hidden) {
         closeCompanionPopover();
         return;
@@ -16033,11 +16102,34 @@
 
   function playLootboxOpenSound() {
     try {
+      const volume = sfxVolumeForKind("ui", 0.2);
+      if (!(volume > 0)) return;
       const audio = new Audio("/static/sounds/lootboxes/lootbox_sound.mp3");
-      audio.volume = 0.2;
+      audio.volume = volume;
       audio.play().catch(() => {});
     } catch (_) {}
   }
+
+  /** Overview Titan/companion hotspot — one random click SFX per press. */
+  const GC_TITAN_CLICK_SOUNDS = [
+    "/static/sounds/bosses/titan_click_sound.mp3",
+    "/static/sounds/bosses/titan_click_sound_2.mp3",
+    "/static/sounds/bosses/titan_click_sound_3.mp3",
+  ];
+
+  function playTitanClickSound() {
+    try {
+      const volume = sfxVolumeForKind("ui", 0.35);
+      if (!(volume > 0)) return;
+      const pool = GC_TITAN_CLICK_SOUNDS;
+      if (!pool.length) return;
+      const src = pool[Math.floor(Math.random() * pool.length)];
+      const audio = new Audio(src);
+      audio.volume = volume;
+      audio.play().catch(() => {});
+    } catch (_) {}
+  }
+  GC.playTitanClickSound = playTitanClickSound;
 
   function playIncomingAttackNotifySound() {
     playNotificationSound("attack");
@@ -26000,8 +26092,17 @@
 
   /** Thin delegate — real bind/init in GC.pages.shipyard (shipyard.js). */
   function initShipyard() {
-    if (GC.pages && typeof GC.pages.shipyard?.init === "function") {
-      return GC.pages.shipyard.init();
+    const run = () => {
+      if (GC.detectPage() !== "shipyard") return;
+      if (GC.pages && typeof GC.pages.shipyard?.init === "function") {
+        return GC.pages.shipyard.init();
+      }
+    };
+    if (GC.pages && typeof GC.pages.shipyard?.init === "function") return run();
+    if (typeof GC.ensureScript === "function") {
+      return GC.ensureScript("/static/js/pages/shipyard.js").then(run).catch((err) => {
+        console.error("[GC] shipyard.js load failed", err);
+      });
     }
   }
 
@@ -26328,8 +26429,17 @@
 
   /** Thin delegate — real bind/init in GC.pages.defense (defense.js). */
   function initDefense() {
-    if (GC.pages && typeof GC.pages.defense?.init === "function") {
-      return GC.pages.defense.init();
+    const run = () => {
+      if (GC.detectPage() !== "defense") return;
+      if (GC.pages && typeof GC.pages.defense?.init === "function") {
+        return GC.pages.defense.init();
+      }
+    };
+    if (GC.pages && typeof GC.pages.defense?.init === "function") return run();
+    if (typeof GC.ensureScript === "function") {
+      return GC.ensureScript("/static/js/pages/defense.js").then(run).catch((err) => {
+        console.error("[GC] defense.js load failed", err);
+      });
     }
   }
 
@@ -34138,6 +34248,14 @@
     });
   }
 
+  const GALAXY_QUICK_ACTION_SCRIPT = "/static/js/galaxy-quick-action.js";
+
+  function bootGalaxyRingAfterQuickAction() {
+    if (!document.querySelector(".galaxy-page")) return;
+    initGalaxyDebrisUx();
+    initGalaxyRingView();
+  }
+
   function initGalaxy() {
     if (!document.querySelector(".galaxy-page")) return;
     persistGalaxyViewFromPage();
@@ -34154,8 +34272,20 @@
     initFirstDiscoveryMoment();
     initCommandMapSiteInspector();
     initCommandMapColonizeMode();
-    initGalaxyDebrisUx();
-    initGalaxyRingView();
+    // PJAX swaps only #main-content — galaxy-quick-action.js lives in extra_scripts
+    // and is otherwise missing until a full reload (debris/asteroid/spy/attack clicks noop).
+    if (typeof GC !== "undefined" && GC.GalaxyQuickAction) {
+      bootGalaxyRingAfterQuickAction();
+    } else if (typeof GC.ensureScript === "function") {
+      GC.ensureScript(GALAXY_QUICK_ACTION_SCRIPT)
+        .then(() => bootGalaxyRingAfterQuickAction())
+        .catch((err) => {
+          console.error("[GC] galaxy-quick-action load failed", err);
+          bootGalaxyRingAfterQuickAction();
+        });
+    } else {
+      bootGalaxyRingAfterQuickAction();
+    }
     prefetchGalaxyAdjacent();
     bindWorldBossAttackCooldownUnlock(document.getElementById("galaxy-page-root") || document);
   }
@@ -36748,8 +36878,17 @@
   GC.modules.skilltree = initSkilltree;
 
   function initCombatSimulator() {
-    if (typeof GC.initCombatSimulatorPage === "function") {
-      GC.initCombatSimulatorPage();
+    const run = () => {
+      if (GC.detectPage() !== "combat_simulator") return;
+      if (typeof GC.initCombatSimulatorPage === "function") {
+        GC.initCombatSimulatorPage();
+      }
+    };
+    if (typeof GC.initCombatSimulatorPage === "function") return run();
+    if (typeof GC.ensureScript === "function") {
+      return GC.ensureScript("/static/js/combat_simulator.js").then(run).catch((err) => {
+        console.error("[GC] combat_simulator.js load failed", err);
+      });
     }
   }
 

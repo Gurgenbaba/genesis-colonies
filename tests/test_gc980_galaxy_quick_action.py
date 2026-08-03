@@ -104,6 +104,10 @@ def test_main_js_wires_galaxy_quick_action():
     main_js = Path("static/main.js").read_text(encoding="utf-8")
     assert "GC.GalaxyQuickAction" in main_js
     assert "bindRingView(root)" in main_js
+    assert "GC.ensureScript = function ensureScript" in main_js
+    assert "GC.ensureScript(GALAXY_QUICK_ACTION_SCRIPT)" in main_js
+    assert "/static/js/galaxy-quick-action.js" in main_js
+    assert "bootGalaxyRingAfterQuickAction" in main_js
     assert "onQuickSpyClick" not in main_js
     assert "onDebrisRecycleClick" not in main_js
 

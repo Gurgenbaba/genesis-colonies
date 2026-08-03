@@ -1221,6 +1221,26 @@ def test_main_js_apply_planet_hero_theme_border_fx():
     assert "overview_companion_goto_wb" in src
     assert 'GC.navigateTo(path)' in src or 'GC.navigateTo(path)' in src.replace(" ", "")
     assert "data-companion-nav-wb" in src and "navigateTo" in src.split("initOverviewCompanions")[1].split("function parseInventoryPageState")[0]
+    # Titan click SFX — random one-shot from bosses pool on each hotspot press.
+    assert "function playTitanClickSound()" in src
+    assert "GC_TITAN_CLICK_SOUNDS" in src
+    assert "/static/sounds/bosses/titan_click_sound.mp3" in src
+    assert "/static/sounds/bosses/titan_click_sound_2.mp3" in src
+    assert "/static/sounds/bosses/titan_click_sound_3.mp3" in src
+    assert 'sfxVolumeForKind("ui", 0.35)' in src.split("function playTitanClickSound()")[1].split(
+        "GC.playTitanClickSound"
+    )[0]
+    assert 'sfxVolumeForKind("ui", 0.2)' in src.split("function playLootboxOpenSound()")[1].split(
+        "GC_TITAN_CLICK_SOUNDS"
+    )[0]
+    assert "function sfxVolumeForKind(kind, baseVolume)" in src
+    assert (ROOT / "static/sounds/bosses/titan_click_sound.mp3").is_file()
+    assert (ROOT / "static/sounds/bosses/titan_click_sound_2.mp3").is_file()
+    assert (ROOT / "static/sounds/bosses/titan_click_sound_3.mp3").is_file()
+    companion_click = src.split("function initOverviewCompanions()")[1].split(
+        "const onDocPointerDown"
+    )[0]
+    assert "playTitanClickSound()" in companion_click
     # Titan mission progress: walker pinned to fill tip + client-only fire FX.
     assert "overview-companion-mission-progress__walker" in src
     assert "data-companion-progress-walker" in src
@@ -1745,9 +1765,11 @@ def test_main_js_gc_fleet_incoming_attack_alert_row():
 def test_notify_sound_assets_and_main_js_wiring():
     """Attack + mailbox notify sounds use primed audio + real game-state fields."""
     src = _read("static/main.js")
+    theater = _read("static/js/combat_theater.js")
     fleet_py = _read("game/fleet.py")
     assert (ROOT / "static/sounds/notify/notify.mp3").is_file()
     assert (ROOT / "static/sounds/notify/message.mp3").is_file()
+    assert (ROOT / "static/sounds/combat/theater_fight_sound.mp3").is_file()
     assert "function initNotificationSounds()" in src
     assert "GC.initNotificationSounds = initNotificationSounds" in src
     assert "function playNotificationSound(kind)" in src
@@ -1757,6 +1779,15 @@ def test_notify_sound_assets_and_main_js_wiring():
     assert "playNotificationSound(\"attack\")" in src.split("function playIncomingAttackNotifySound()")[1].split("function playNewMessageNotifySound()")[0]
     assert "playNotificationSound(\"message\")" in src.split("function playNewMessageNotifySound()")[1].split("function lootTileAmountLabel")[0]
     assert "notifySoundVolumeForKind(kind)" in src.split("function playNotificationSound(kind)")[1].split("GC.playNotificationSound = playNotificationSound")[0]
+    assert "sfx_ui_sound" in src.split("function applyNotifySoundSettings(partial)")[1].split(
+        "const DEFAULT_SPY_PROBES"
+    )[0]
+    assert "sfx_combat_sound" in src.split("(function applyClientRuntimeConfig()")[1].split(
+        "function gcEscHtml"
+    )[0]
+    assert "function playFightSound()" in theater
+    assert 'GC.sfxVolumeForKind("combat", COMBAT_FIGHT_BASE_VOLUME)' in theater
+    assert "theater_fight_sound.mp3" in theater
     assert "incoming_attack_count" in fleet_py
     assert "has_incoming_attack" in fleet_py
     assert "next_attack_arrival" in fleet_py
@@ -3258,7 +3289,13 @@ def test_gc_perf_js_002_page_scoped_binders():
     main = _read("static/main.js")
     thin = main.split("function initDefense()")[1].split("GC.refreshDefenseState")[0]
     assert "GC.pages.defense" in thin
+    assert "GC.ensureScript" in thin
     assert "document.addEventListener(\"click\"" not in thin
+    # PJAX must dynamically load page-scoped scripts (extra_scripts outside #main-content).
+    assert "GC.ensureScript = function ensureScript" in main
+    galaxy_init = main.split("function initGalaxy()")[1].split("GC.modules.galaxy")[0]
+    assert "GC.ensureScript(GALAXY_QUICK_ACTION_SCRIPT)" in galaxy_init
+    assert "bootGalaxyRingAfterQuickAction" in galaxy_init
 
 
 def test_gc_perf_overview_ttfb_shell_stash_contract():
