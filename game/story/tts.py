@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 _APP_ROOT = Path(__file__).resolve().parents[2]
 _TTS_CACHE = _APP_ROOT / "static" / "uploads" / "story_tts"
 
-# Cache/prosody revision — bump to invalidate broken v4 SSML caches.
-_STYLE_VERSION = "v5"
+# Cache/prosody revision — bump to invalidate broken caches (v5 smileys on G:S:P).
+_STYLE_VERSION = "v6"
 
 # Modern contact voices — clear, cinematic; avoid over-slow/deep mud.
 _VOICE_BY_LANG = {
@@ -63,6 +63,43 @@ _DE_PRONUNCE = (
     (re.compile(r"\bROI\b"), "R O I"),
 )
 
+# Edge voices treat ":P" / ":S:" as smileys — expand coordinate notation for speech.
+_GSP_SPEAK = {
+    "de": "Galaxie System Position",
+    "en": "galaxy system position",
+    "fr": "galaxie système position",
+    "es": "galaxia sistema posición",
+    "pl": "galaktyka układ pozycja",
+    "pt": "galáxia sistema posição",
+    "ru": "галактика система позиция",
+    "tr": "galaksi sistem pozisyon",
+}
+
+_RE_GSP_LETTER = re.compile(
+    r"\[?\s*[GgГг]\s*:\s*[SsСс]\s*:\s*[PpПп]\s*\]?",
+)
+_RE_GSP_NUMERIC_BRACKET = re.compile(r"\[(\d{1,4}):(\d{1,4}):(\d{1,4})\]")
+_RE_GSP_NUMERIC_BARE = re.compile(r"\b(\d{1,4}):(\d{1,4}):(\d{1,4})\b")
+
+
+def _speak_numeric_coord(g: str, s: str, p: str, *, lang: str) -> str:
+    if lang == "de":
+        return f"{g} zu {s} zu {p}"
+    return f"{g}, {s}, {p}"
+
+
+def _expand_coords_for_speech(body: str, *, lang: str) -> str:
+    """Rewrite [G:S:P] / numeric coords so TTS does not read colon-emoticons."""
+    gsp = _GSP_SPEAK.get(lang) or _GSP_SPEAK["en"]
+    out = _RE_GSP_LETTER.sub(gsp, body)
+
+    def _num(m: re.Match[str]) -> str:
+        return _speak_numeric_coord(m.group(1), m.group(2), m.group(3), lang=lang)
+
+    out = _RE_GSP_NUMERIC_BRACKET.sub(_num, out)
+    out = _RE_GSP_NUMERIC_BARE.sub(_num, out)
+    return out
+
 
 def tts_available() -> bool:
     try:
@@ -94,6 +131,15 @@ def prepare_contact_script(text: str, *, locale: str | None = None) -> str:
     if not raw:
         return ""
 
+    # Preserve numeric ranges (1–15) before dash→comma; else TTS says "1, 15".
+    lang_early = str(locale or "de").strip().lower().split("-")[0]
+    range_word = "bis" if lang_early == "de" else "to"
+    raw = re.sub(
+        rf"(\d+)\s*[—–-]\s*(\d+)",
+        rf"\1 {range_word} \2",
+        raw,
+    )
+
     # Normalize fancy dashes / bullets — keep as short pause via spaced en-dash,
     # which Killian handles better than reading "Gedankenstrich".
     raw = raw.replace("—", ", ").replace("–", ", ").replace("•", "")
@@ -115,6 +161,7 @@ def prepare_contact_script(text: str, *, locale: str | None = None) -> str:
     body = re.sub(r"\s{2,}", " ", body).strip()
 
     lang = str(locale or "de").strip().lower().split("-")[0]
+    body = _expand_coords_for_speech(body, lang=lang)
     if lang == "de":
         for pattern, repl in _DE_PRONUNCE:
             body = pattern.sub(repl, body)
