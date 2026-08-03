@@ -1221,26 +1221,47 @@ def test_main_js_apply_planet_hero_theme_border_fx():
     assert "overview_companion_goto_wb" in src
     assert 'GC.navigateTo(path)' in src or 'GC.navigateTo(path)' in src.replace(" ", "")
     assert "data-companion-nav-wb" in src and "navigateTo" in src.split("initOverviewCompanions")[1].split("function parseInventoryPageState")[0]
-    # Titan click SFX — random one-shot from bosses pool on each hotspot press.
-    assert "function playTitanClickSound()" in src
-    assert "GC_TITAN_CLICK_SOUNDS" in src
-    assert "/static/sounds/bosses/titan_click_sound.mp3" in src
-    assert "/static/sounds/bosses/titan_click_sound_2.mp3" in src
-    assert "/static/sounds/bosses/titan_click_sound_3.mp3" in src
-    assert 'sfxVolumeForKind("ui", 0.35)' in src.split("function playTitanClickSound()")[1].split(
+    # Titan click SFX — per-boss voice pool on owned hotspot press.
+    assert "function playTitanClickSound(bossKey)" in src
+    assert "GC_TITAN_CLICK_SOUNDS_BY_BOSS" in src
+    assert "/static/sounds/bosses/tita/tita_click.mp3" in src
+    assert "/static/sounds/bosses/tita/titan_click_2.mp3" in src
+    assert "/static/sounds/bosses/tita/tita_click_3.mp3" in src
+    assert "/static/sounds/bosses/levi/levi_click.mp3" in src
+    assert "/static/sounds/bosses/levi/levi_click_2.mp3" in src
+    assert "/static/sounds/bosses/eater/eater_click.mp3" in src
+    assert "/static/sounds/bosses/ki/ki_click.mp3" in src
+    assert "void_titan" in src.split("GC_TITAN_CLICK_SOUNDS_BY_BOSS")[1].split(
+        "function playTitanClickSound"
+    )[0]
+    assert "ancient_leviathan" in src.split("GC_TITAN_CLICK_SOUNDS_BY_BOSS")[1].split(
+        "function playTitanClickSound"
+    )[0]
+    assert "planet_eater" in src.split("GC_TITAN_CLICK_SOUNDS_BY_BOSS")[1].split(
+        "function playTitanClickSound"
+    )[0]
+    assert "rogue_ai_nexus" in src.split("GC_TITAN_CLICK_SOUNDS_BY_BOSS")[1].split(
+        "function playTitanClickSound"
+    )[0]
+    assert 'sfxVolumeForKind("ui", 0.35)' in src.split("function playTitanClickSound(bossKey)")[1].split(
         "GC.playTitanClickSound"
     )[0]
     assert 'sfxVolumeForKind("ui", 0.2)' in src.split("function playLootboxOpenSound()")[1].split(
-        "GC_TITAN_CLICK_SOUNDS"
+        "GC_TITAN_CLICK_SOUNDS_BY_BOSS"
     )[0]
     assert "function sfxVolumeForKind(kind, baseVolume)" in src
-    assert (ROOT / "static/sounds/bosses/titan_click_sound.mp3").is_file()
-    assert (ROOT / "static/sounds/bosses/titan_click_sound_2.mp3").is_file()
-    assert (ROOT / "static/sounds/bosses/titan_click_sound_3.mp3").is_file()
+    assert (ROOT / "static/sounds/bosses/tita/tita_click.mp3").is_file()
+    assert (ROOT / "static/sounds/bosses/tita/titan_click_2.mp3").is_file()
+    assert (ROOT / "static/sounds/bosses/tita/tita_click_3.mp3").is_file()
+    assert (ROOT / "static/sounds/bosses/levi/levi_click.mp3").is_file()
+    assert (ROOT / "static/sounds/bosses/levi/levi_click_2.mp3").is_file()
+    assert (ROOT / "static/sounds/bosses/eater/eater_click.mp3").is_file()
+    assert (ROOT / "static/sounds/bosses/ki/ki_click.mp3").is_file()
     companion_click = src.split("function initOverviewCompanions()")[1].split(
         "const onDocPointerDown"
     )[0]
-    assert "playTitanClickSound()" in companion_click
+    assert 'data-companion-owned") === "1"' in companion_click
+    assert "playTitanClickSound(btn.getAttribute(\"data-companion-boss\")" in companion_click
     # Titan mission progress: walker pinned to fill tip + client-only fire FX.
     assert "overview-companion-mission-progress__walker" in src
     assert "data-companion-progress-walker" in src

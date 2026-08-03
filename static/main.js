@@ -15362,7 +15362,9 @@
       if (!btn || !layer.contains(btn)) return;
       ev.preventDefault();
       ev.stopPropagation();
-      playTitanClickSound();
+      if (btn.getAttribute("data-companion-owned") === "1") {
+        playTitanClickSound(btn.getAttribute("data-companion-boss") || "");
+      }
       if (activeHotspot === btn && !pop.hidden) {
         closeCompanionPopover();
         return;
@@ -16184,18 +16186,27 @@
     } catch (_) {}
   }
 
-  /** Overview Titan/companion hotspot — one random click SFX per press. */
-  const GC_TITAN_CLICK_SOUNDS = [
-    "/static/sounds/bosses/titan_click_sound.mp3",
-    "/static/sounds/bosses/titan_click_sound_2.mp3",
-    "/static/sounds/bosses/titan_click_sound_3.mp3",
-  ];
+  /** Overview Titan/companion hotspot — per-boss voice pool, random pick on owned click. */
+  const GC_TITAN_CLICK_SOUNDS_BY_BOSS = {
+    void_titan: [
+      "/static/sounds/bosses/tita/tita_click.mp3",
+      "/static/sounds/bosses/tita/titan_click_2.mp3",
+      "/static/sounds/bosses/tita/tita_click_3.mp3",
+    ],
+    ancient_leviathan: [
+      "/static/sounds/bosses/levi/levi_click.mp3",
+      "/static/sounds/bosses/levi/levi_click_2.mp3",
+    ],
+    planet_eater: ["/static/sounds/bosses/eater/eater_click.mp3"],
+    rogue_ai_nexus: ["/static/sounds/bosses/ki/ki_click.mp3"],
+  };
 
-  function playTitanClickSound() {
+  function playTitanClickSound(bossKey) {
     try {
       const volume = sfxVolumeForKind("ui", 0.35);
       if (!(volume > 0)) return;
-      const pool = GC_TITAN_CLICK_SOUNDS;
+      const key = String(bossKey || "").trim();
+      const pool = GC_TITAN_CLICK_SOUNDS_BY_BOSS[key] || [];
       if (!pool.length) return;
       const src = pool[Math.floor(Math.random() * pool.length)];
       const audio = new Audio(src);
