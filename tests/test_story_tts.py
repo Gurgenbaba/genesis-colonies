@@ -61,3 +61,22 @@ def test_prepare_numeric_range_not_comma_split():
     out = prepare_contact_script("Positionen 1–15 tragen Welten.", locale="de")
     assert "1 bis 15" in out
     assert "1, 15" not in out
+
+
+def test_tts_cache_dir_prefers_db_volume(monkeypatch, tmp_path):
+    from game.story import tts as tts_mod
+
+    db_file = tmp_path / "data" / "game.db"
+    db_file.parent.mkdir(parents=True)
+    db_file.write_text("x", encoding="utf-8")
+    monkeypatch.setenv("GC_DB_PATH", str(db_file))
+    monkeypatch.delenv("GC_TTS_CACHE_DIR", raising=False)
+    assert tts_mod.tts_cache_dir() == db_file.parent / "story_tts"
+
+
+def test_tts_cache_dir_explicit_override(monkeypatch, tmp_path):
+    from game.story import tts as tts_mod
+
+    override = tmp_path / "custom_tts"
+    monkeypatch.setenv("GC_TTS_CACHE_DIR", str(override))
+    assert tts_mod.tts_cache_dir() == override

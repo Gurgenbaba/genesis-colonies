@@ -17,5 +17,5 @@ psycopg_pool>=3.1.0,<4.0.0
 # Optional — EPIC-23 Payment / Shop (Stripe Checkout); PayPal uses stdlib urllib
 stripe>=11.0.0,<14.0.0
 
-# Optional — EPIC-25 Story Ops neural TTS (Microsoft Edge voices)
-edge-tts>=6.1.0,<8.0.0
+# Story Ops neural TTS (Microsoft Edge voices — Killian etc.). Pin recent DRM-capable builds.
+edge-tts>=7.2.8,<8.0.0

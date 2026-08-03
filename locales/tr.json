@@ -7638,5 +7638,6 @@
   "cb_join_code_share_hint": "Bu kodu diğer komutanla paylaş.",
   "cb_copy_code": "Kodu kopyala",
   "cb_code_copied": "Kod kopyalandı.",
-  "nav_badge_inventory_aria": "Açık Kalıntı Arenası battle’ları"
+  "nav_badge_inventory_aria": "Açık Kalıntı Arenası battle’ları",
+  "story_tts_neural_failed": "İletişim sesi (Killian) şu an yok. Yeniden deneyin — tarayıcı yedek sesi yok."
 }

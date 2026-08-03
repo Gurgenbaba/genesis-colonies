@@ -7638,5 +7638,6 @@
   "cb_join_code_share_hint": "Teile diesen Code mit dem anderen Commander.",
   "cb_copy_code": "Code kopieren",
   "cb_code_copied": "Code kopiert.",
-  "nav_badge_inventory_aria": "Offene Relikt-Arena Battles"
+  "nav_badge_inventory_aria": "Offene Relikt-Arena Battles",
+  "story_tts_neural_failed": "Kontaktstimme (Killian) gerade nicht erreichbar. Bitte erneut versuchen — kein Browser-Fallback."
 }

@@ -7638,5 +7638,6 @@
   "cb_join_code_share_hint": "Поделись кодом с другим командиром.",
   "cb_copy_code": "Копировать код",
   "cb_code_copied": "Код скопирован.",
-  "nav_badge_inventory_aria": "Открытые бои Арены реликвий"
+  "nav_badge_inventory_aria": "Открытые бои Арены реликвий",
+  "story_tts_neural_failed": "Голос контакта (Killian) сейчас недоступен. Повторите попытку — без браузерного TTS."
 }

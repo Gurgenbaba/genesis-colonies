@@ -3126,6 +3126,13 @@ def test_main_js_story_tts_abort_and_stop_on_focus():
     assert "STORY_TTS_AUTO_DEBOUNCE_MS = 350" in src
     assert "new AbortController()" in src
     assert "signal: controller.signal" in src
+    assert "story_tts_neural_failed" in src
+    assert "kein Browser-Fallback" in src or "no browser fallback" in src.lower() or "story_tts_neural_failed" in src
+    # Must not soft-swap to OS woman voice while neural contact is advertised.
+    speak = src.split("async function _storyTtsSpeakText(text)")[1].split("function _storyTtsScheduleAutoSpeak")[0]
+    assert "wantNeural" in speak
+    assert "_storyTtsSpeakNeural" in speak
+    assert "story_tts_neural_failed" in speak
     assert "_storyTtsScheduleAutoSpeak" in src
     stop_fn = src.split("function _storyTtsStop()")[1].split("function _storyTtsPause()")[0]
     assert "_storyTtsSession += 1" in stop_fn

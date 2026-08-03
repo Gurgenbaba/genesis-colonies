@@ -6166,7 +6166,10 @@ def api_story_tts():
 
     audio, mime, err = synthesize_mp3(text, locale=current_locale())
     if err or not audio:
-        code = 503 if err == "edge_tts_missing" else 400
+        # Transient Microsoft/edge failures → 503 so clients can retry Killian.
+        code = 503 if err in ("edge_tts_missing", "tts_timeout", "empty_audio") or str(
+            err or ""
+        ).startswith("tts_failed") else 400
         return jsonify({"ok": False, "error": err or "tts_failed"}), code
     return Response(audio, mimetype=mime, headers={"Cache-Control": "private, max-age=3600"})
 

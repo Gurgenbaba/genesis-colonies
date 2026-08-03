@@ -12,13 +12,14 @@ import logging
 import os
 import re
 import threading
+import time
 from pathlib import Path
 from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
 _APP_ROOT = Path(__file__).resolve().parents[2]
-_TTS_CACHE = _APP_ROOT / "static" / "uploads" / "story_tts"
+_DEFAULT_TTS_CACHE = _APP_ROOT / "static" / "uploads" / "story_tts"
 
 # Cache/prosody revision — bump to invalidate broken caches (v5 smileys on G:S:P).
 _STYLE_VERSION = "v6"
@@ -42,7 +43,9 @@ _DEFAULT_RATE = "-6%"
 _DEFAULT_PITCH = "-3Hz"
 _DEFAULT_VOLUME = "+0%"
 
-_SYNTH_TIMEOUT_S = 18.0
+# Railway / cold Microsoft endpoints can exceed 18s on longer beats.
+_SYNTH_TIMEOUT_S = float(os.environ.get("STORY_TTS_TIMEOUT_S") or "45")
+_SYNTH_RETRIES = max(1, int(os.environ.get("STORY_TTS_RETRIES") or "2"))
 _executor = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="story-tts")
 _synth_lock = threading.Lock()
 
@@ -99,6 +102,20 @@ def _expand_coords_for_speech(body: str, *, lang: str) -> str:
     out = _RE_GSP_NUMERIC_BRACKET.sub(_num, out)
     out = _RE_GSP_NUMERIC_BARE.sub(_num, out)
     return out
+
+
+def tts_cache_dir() -> Path:
+    """Prefer durable volume cache on Railway (`GC_DB_PATH` parent) over image FS."""
+    override = str(os.environ.get("GC_TTS_CACHE_DIR") or "").strip()
+    if override:
+        return Path(override)
+    db_path = str(os.environ.get("GC_DB_PATH") or "").strip()
+    if db_path:
+        try:
+            return Path(db_path).expanduser().resolve().parent / "story_tts"
+        except OSError:
+            pass
+    return _DEFAULT_TTS_CACHE
 
 
 def tts_available() -> bool:
@@ -178,7 +195,7 @@ def _cache_path(voice: str, text: str, rate: str, pitch: str, volume: str) -> Pa
     digest = hashlib.sha256(
         f"{_STYLE_VERSION}|{voice}|{rate}|{pitch}|{volume}\n{text}".encode("utf-8")
     ).hexdigest()
-    return _TTS_CACHE / f"{digest}.mp3"
+    return tts_cache_dir() / f"{digest}.mp3"
 
 
 def synthesize_mp3(
@@ -189,8 +206,8 @@ def synthesize_mp3(
 ) -> Tuple[Optional[bytes], str, Optional[str]]:
     """
     Return (mp3_bytes, mime, error).
-    Uses on-disk cache under static/uploads/story_tts/.
-    Synthesis runs in a worker thread with timeout so Flask is not wedged.
+    Uses on-disk cache (volume-backed when GC_DB_PATH is set).
+    Synthesis runs in a worker thread with timeout + one retry so Flask is not wedged.
     """
     body = prepare_contact_script(text, locale=locale)
     if not body:
@@ -208,31 +225,51 @@ def synthesize_mp3(
     except OSError:
         pass
 
-    try:
-        fut = _executor.submit(_edge_synthesize_sync, body, chosen, rate, pitch, volume)
-        audio = fut.result(timeout=_SYNTH_TIMEOUT_S)
-    except concurrent.futures.TimeoutError:
-        logger.warning("story tts timeout voice=%s", chosen)
-        return None, "audio/mpeg", "tts_timeout"
-    except Exception as exc:
-        logger.exception("story tts failed voice=%s", chosen)
-        return None, "audio/mpeg", f"tts_failed:{exc.__class__.__name__}"
+    last_err = "tts_failed"
+    audio: Optional[bytes] = None
+    for attempt in range(1, _SYNTH_RETRIES + 1):
+        try:
+            fut = _executor.submit(_edge_synthesize_sync, body, chosen, rate, pitch, volume)
+            audio = fut.result(timeout=_SYNTH_TIMEOUT_S)
+            if audio:
+                break
+            last_err = "empty_audio"
+        except concurrent.futures.TimeoutError:
+            last_err = "tts_timeout"
+            logger.warning(
+                "story tts timeout voice=%s attempt=%s/%s",
+                chosen,
+                attempt,
+                _SYNTH_RETRIES,
+            )
+        except Exception as exc:
+            last_err = f"tts_failed:{exc.__class__.__name__}"
+            logger.exception(
+                "story tts failed voice=%s attempt=%s/%s",
+                chosen,
+                attempt,
+                _SYNTH_RETRIES,
+            )
+        if attempt < _SYNTH_RETRIES:
+            time.sleep(0.35 * attempt)
 
     if not audio:
-        return None, "audio/mpeg", "empty_audio"
+        return None, "audio/mpeg", last_err
 
     try:
         with _synth_lock:
-            _TTS_CACHE.mkdir(parents=True, exist_ok=True)
+            cache_dir = tts_cache_dir()
+            cache_dir.mkdir(parents=True, exist_ok=True)
             if not path.is_file():
                 path.write_bytes(audio)
     except OSError:
-        logger.exception("story tts cache write failed")
+        logger.exception("story tts cache write failed dir=%s", tts_cache_dir())
 
     return audio, "audio/mpeg", None
 
 
 def _edge_synthesize_sync(text: str, voice: str, rate: str, pitch: str, volume: str) -> bytes:
+    """Run edge-tts on a fresh event loop (safe under gunicorn worker threads)."""
     import asyncio
 
     async def _run() -> bytes:
@@ -251,4 +288,20 @@ def _edge_synthesize_sync(text: str, voice: str, rate: str, pitch: str, volume: 
                 chunks.append(item["data"])
         return b"".join(chunks)
 
-    return asyncio.run(_run())
+    loop = asyncio.new_event_loop()
+    try:
+        asyncio.set_event_loop(loop)
+        return loop.run_until_complete(_run())
+    finally:
+        try:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+        except Exception:
+            pass
+        try:
+            loop.close()
+        except Exception:
+            pass
+        try:
+            asyncio.set_event_loop(None)
+        except Exception:
+            pass

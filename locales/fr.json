@@ -7638,5 +7638,6 @@
   "cb_join_code_share_hint": "Partage ce code avec l’autre commandant.",
   "cb_copy_code": "Copier le code",
   "cb_code_copied": "Code copié.",
-  "nav_badge_inventory_aria": "Battles Relikt-Arena ouvertes"
+  "nav_badge_inventory_aria": "Battles Relikt-Arena ouvertes",
+  "story_tts_neural_failed": "Voix de contact (Killian) indisponible. Réessayez — pas de secours navigateur."
 }

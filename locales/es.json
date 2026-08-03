@@ -7638,5 +7638,6 @@
   "cb_join_code_share_hint": "Comparte este código con el otro comandante.",
   "cb_copy_code": "Copiar código",
   "cb_code_copied": "Código copiado.",
-  "nav_badge_inventory_aria": "Batallas abiertas de Arena de Reliquias"
+  "nav_badge_inventory_aria": "Batallas abiertas de Arena de Reliquias",
+  "story_tts_neural_failed": "La voz de contacto (Killian) no está disponible. Inténtalo de nuevo — sin fallback del navegador."
 }

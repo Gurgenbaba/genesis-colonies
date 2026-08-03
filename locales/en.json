@@ -7638,5 +7638,6 @@
   "cb_join_code_share_hint": "Share this code with the other commander.",
   "cb_copy_code": "Copy code",
   "cb_code_copied": "Code copied.",
-  "nav_badge_inventory_aria": "Open Relic Arena battles"
+  "nav_badge_inventory_aria": "Open Relic Arena battles",
+  "story_tts_neural_failed": "Contact voice (Killian) unavailable right now. Please retry — no browser fallback."
 }

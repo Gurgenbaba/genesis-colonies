@@ -40,6 +40,15 @@ if not result.get('ok'):
 print(f\"[GC] Codex catalog OK ({result.get('article_count')} articles, {result.get('category_count')} bands).\")
 "
 
+echo "[GC] Verifying Story TTS (edge-tts / Killian)..."
+python -c "
+from game.story.tts import resolve_voice, tts_available, tts_cache_dir
+ok = tts_available()
+print(f'[GC] Story TTS available={ok} voice={resolve_voice(\"de\")} cache={tts_cache_dir()}')
+if not ok:
+    print('[GC] WARNING: edge-tts missing — Story Ops will not have Killian neural voice.')
+"
+
 WORKERS="${GUNICORN_WORKERS:-1}"
 
 # GC-PERF-PROD-002: run the maintenance bag in a sibling OS process so gunicorn

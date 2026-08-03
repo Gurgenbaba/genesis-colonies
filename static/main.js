@@ -21007,6 +21007,18 @@
     u.rate = 0.96;
     u.pitch = 0.92;
     u.volume = Math.max(0, Math.min(1, Number(volume) || 0.85));
+    // Prefer a male contact voice if the OS exposes one — never default Otto/Hedda silently.
+    try {
+      const voices = window.speechSynthesis.getVoices() || [];
+      const want = String(u.lang || "").toLowerCase();
+      const maleRe = /male|männlich|mann|stefan|conrad|klaus|markus|georg|thomas|david|mark|daniel|paul|james|alex/i;
+      const femaleRe = /female|weiblich|frau|hedda|katja|petra|zira|susan|samantha|anna|linda|google UK English Female/i;
+      const langVoices = voices.filter((v) => String(v.lang || "").toLowerCase().startsWith(want.slice(0, 2)));
+      const male = langVoices.find((v) => maleRe.test(String(v.name || "")) && !femaleRe.test(String(v.name || "")));
+      const anyLocal = langVoices.find((v) => !femaleRe.test(String(v.name || "")));
+      if (male) u.voice = male;
+      else if (anyLocal) u.voice = anyLocal;
+    } catch (_) {}
     u.onstart = () => {
       if (session === _storyTtsSession) _storyOrbSetState("speaking");
     };
@@ -21032,22 +21044,30 @@
     const prefs = _storyTtsLoadPrefs();
     _storyTtsStop();
     const session = _storyTtsSession;
+    const wantNeural = _storyNeuralEnabled();
+    // Always attempt Killian/neural first when the server advertises it — never soft-swap to
+    // the OS default woman voice without telling the commander.
+    let neuralErr = "";
     try {
-      if (_storyNeuralEnabled()) {
-        // Keep paragraph breaks for server prosody — do not flatten to Otto-monotone.
-        await _storyTtsSpeakNeural(raw, prefs.volume, session);
-        return;
-      }
+      await _storyTtsSpeakNeural(raw, prefs.volume, session);
+      return;
     } catch (err) {
       if (_storyTtsIsAbortError(err) || session !== _storyTtsSession) return;
-      const code = String((err && err.message) || "");
-      if (code === "edge_tts_missing" || code === "tts_timeout" || code.indexOf("tts_failed") === 0) {
-        // Soft fallback — no error toast unless browser also fails.
-      } else {
-        // keep going to browser fallback
-      }
+      neuralErr = String((err && err.message) || "tts_failed");
     }
     if (session !== _storyTtsSession) return;
+    if (wantNeural) {
+      showNotify(
+        t(
+          "story_tts_neural_failed",
+          "Kontaktstimme (Killian) gerade nicht erreichbar. Bitte erneut versuchen — kein Browser-Fallback."
+        ),
+        "error"
+      );
+      _storyOrbSetState("idle");
+      return;
+    }
+    // Neural package missing on this deploy — last-resort browser voice (male preferred).
     try {
       _storyTtsSpeakBrowser(raw.replace(/\s+/g, " ").trim(), prefs.volume, session);
     } catch (_) {
