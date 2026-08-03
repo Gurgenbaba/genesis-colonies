@@ -2612,23 +2612,37 @@
         e.stopPropagation();
         // Close report first so the fleet-send toast is visible above the inbox.
         closeInboxReportModal();
-        const qa = GC.GalaxyQuickAction;
-        if (!qa || typeof qa.sendDebrisRecycle !== "function") {
-          const href = fleetRecycleHrefFromCoords(
-            `[${combatRecycle.dataset.targetGalaxy}:${combatRecycle.dataset.targetSystem}:${combatRecycle.dataset.targetPosition}]`
-          );
-          if (href && typeof GC.navigateTo === "function") GC.navigateTo(href);
-          else if (href) window.location.href = href;
-          return;
+        const runRecycle = () => {
+          const qa = GC.GalaxyQuickAction;
+          if (!qa || typeof qa.sendDebrisRecycle !== "function") {
+            const href = fleetRecycleHrefFromCoords(
+              `[${combatRecycle.dataset.targetGalaxy}:${combatRecycle.dataset.targetSystem}:${combatRecycle.dataset.targetPosition}]`
+            );
+            if (href && typeof GC.navigateTo === "function") GC.navigateTo(href);
+            else if (href) window.location.href = href;
+            return;
+          }
+          qa.sendDebrisRecycle({
+            trigger: combatRecycle,
+            targetGalaxy: combatRecycle.dataset.targetGalaxy,
+            targetSystem: combatRecycle.dataset.targetSystem,
+            targetPosition: combatRecycle.dataset.targetPosition,
+            needed: combatRecycle.dataset.recyclerSlots,
+            watchArrivals: false,
+          });
+        };
+        // Module is page-scoped to Galaxy; load on demand from combat reports too.
+        if (GC.GalaxyQuickAction?.sendDebrisRecycle) {
+          runRecycle();
+        } else if (typeof GC.ensureGalaxyQuickAction === "function") {
+          GC.ensureGalaxyQuickAction().then(runRecycle).catch(runRecycle);
+        } else if (typeof GC.ensureScript === "function") {
+          GC.ensureScript(GC.GALAXY_QUICK_ACTION_SCRIPT || "/static/js/galaxy-quick-action.js")
+            .then(runRecycle)
+            .catch(runRecycle);
+        } else {
+          runRecycle();
         }
-        qa.sendDebrisRecycle({
-          trigger: combatRecycle,
-          targetGalaxy: combatRecycle.dataset.targetGalaxy,
-          targetSystem: combatRecycle.dataset.targetSystem,
-          targetPosition: combatRecycle.dataset.targetPosition,
-          needed: combatRecycle.dataset.recyclerSlots,
-          watchArrivals: false,
-        });
         return;
       }
 

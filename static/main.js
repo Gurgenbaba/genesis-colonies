@@ -2073,6 +2073,24 @@
   // Alias used by messages.js (older name)
   GC.registerPageCleanup = GC.registerCleanup;
 
+  /** Page-scoped Galaxy quick missions (spy/attack/recycle/asteroid/relocation). */
+  GC.GALAXY_QUICK_ACTION_SCRIPT = "/static/js/galaxy-quick-action.js";
+
+  function _scriptSrcMatchesPath(src, clean) {
+    const raw = String(src || "");
+    if (!raw || !clean) return false;
+    if (raw === clean) return true;
+    const bare = raw.split("?")[0];
+    return bare === clean || bare.endsWith(clean) || raw.includes(clean);
+  }
+
+  function _findScriptElByPath(clean) {
+    return Array.from(document.scripts).find((el) => {
+      if (el.getAttribute("data-gc-ensure-script") === clean) return true;
+      return _scriptSrcMatchesPath(el.getAttribute("src"), clean);
+    }) || null;
+  }
+
   /**
    * Load a page-scoped script once (PJAX never executes template extra_scripts).
    * `path` is root-relative without query, e.g. "/static/js/galaxy-quick-action.js".
@@ -2083,15 +2101,42 @@
     GC._scriptPromises = GC._scriptPromises || {};
     if (GC._scriptPromises[clean]) return GC._scriptPromises[clean];
 
-    const already = Array.from(document.scripts).some((el) => {
-      const src = String(el.getAttribute("src") || "");
-      if (!src) return false;
-      if (src === clean) return true;
-      const bare = src.split("?")[0];
-      return bare === clean || bare.endsWith(clean) || src.includes(clean);
-    });
-    if (already) {
-      GC._scriptPromises[clean] = Promise.resolve();
+    const existing = _findScriptElByPath(clean);
+    if (existing) {
+      if (existing.dataset.gcEnsureReady === "1") {
+        GC._scriptPromises[clean] = Promise.resolve();
+        return GC._scriptPromises[clean];
+      }
+      GC._scriptPromises[clean] = new Promise((resolve, reject) => {
+        let settled = false;
+        const done = () => {
+          if (settled) return;
+          settled = true;
+          existing.dataset.gcEnsureReady = "1";
+          resolve();
+        };
+        const fail = () => {
+          if (settled) return;
+          settled = true;
+          delete GC._scriptPromises[clean];
+          reject(new Error(`ensureScript failed: ${clean}`));
+        };
+        existing.addEventListener("load", done, { once: true });
+        existing.addEventListener("error", fail, { once: true });
+        // SSR / already-executed tags never re-fire load — settle on next tick.
+        queueMicrotask(() => {
+          if (settled) return;
+          if (clean === GC.GALAXY_QUICK_ACTION_SCRIPT && GC.GalaxyQuickAction) {
+            done();
+            return;
+          }
+          // If the element was injected by a prior ensureScript still loading, wait for events.
+          if (existing.dataset.gcEnsureScript === clean && existing.dataset.gcEnsureReady !== "1") {
+            return;
+          }
+          done();
+        });
+      });
       return GC._scriptPromises[clean];
     }
 
@@ -2104,7 +2149,10 @@
       el.src = src;
       el.async = false;
       el.dataset.gcEnsureScript = clean;
-      el.onload = () => resolve();
+      el.onload = () => {
+        el.dataset.gcEnsureReady = "1";
+        resolve();
+      };
       el.onerror = () => {
         delete GC._scriptPromises[clean];
         reject(new Error(`ensureScript failed: ${clean}`));
@@ -2112,6 +2160,21 @@
       (document.head || document.documentElement).appendChild(el);
     });
     return GC._scriptPromises[clean];
+  };
+
+  GC.ensureGalaxyQuickAction = function ensureGalaxyQuickAction() {
+    if (GC.GalaxyQuickAction) return Promise.resolve(GC.GalaxyQuickAction);
+    const path = GC.GALAXY_QUICK_ACTION_SCRIPT;
+    return GC.ensureScript(path).then(() => {
+      if (GC.GalaxyQuickAction) return GC.GalaxyQuickAction;
+      return GC.ensureScript(path).then(() => GC.GalaxyQuickAction || null);
+    });
+  };
+
+  GC.prefetchGalaxyQuickActionScript = function prefetchGalaxyQuickActionScript() {
+    if (GC.GalaxyQuickAction) return;
+    if (typeof GC.ensureScript !== "function") return;
+    GC.ensureScript(GC.GALAXY_QUICK_ACTION_SCRIPT).catch(() => {});
   };
 
   GC.cleanupPage = function cleanupPage(opts = {}) {
@@ -30032,6 +30095,10 @@
           const u = new URL(link.href, window.location.origin);
           const href = `${u.pathname}${u.search}`;
           if (isGalaxySystemPjaxUrl(href)) prefetchGalaxyHref(href);
+          // Warm quick-mission module before PJAX so spy/attack/recycle bind immediately.
+          if ((u.pathname.replace(/\/$/, "") || "/") === "/galaxy") {
+            GC.prefetchGalaxyQuickActionScript?.();
+          }
         } catch (_) {}
       },
       { passive: true }
@@ -34248,8 +34315,6 @@
     });
   }
 
-  const GALAXY_QUICK_ACTION_SCRIPT = "/static/js/galaxy-quick-action.js";
-
   function bootGalaxyRingAfterQuickAction() {
     if (!document.querySelector(".galaxy-page")) return;
     initGalaxyDebrisUx();
@@ -34272,19 +34337,24 @@
     initFirstDiscoveryMoment();
     initCommandMapSiteInspector();
     initCommandMapColonizeMode();
-    // PJAX swaps only #main-content — galaxy-quick-action.js lives in extra_scripts
-    // and is otherwise missing until a full reload (debris/asteroid/spy/attack clicks noop).
-    if (typeof GC !== "undefined" && GC.GalaxyQuickAction) {
+    // PJAX swaps only #main-content — galaxy-quick-action.js lives in extra_scripts.
+    // Must be present before bindRingView (spy/attack/recycle/asteroid/relocation).
+    const bootRing = () => {
+      if (!document.querySelector(".galaxy-page")) return;
+      if (!GC.GalaxyQuickAction) {
+        console.error("[GC] GalaxyQuickAction missing after ensure — quick missions unbound");
+      }
       bootGalaxyRingAfterQuickAction();
-    } else if (typeof GC.ensureScript === "function") {
-      GC.ensureScript(GALAXY_QUICK_ACTION_SCRIPT)
-        .then(() => bootGalaxyRingAfterQuickAction())
+    };
+    if (typeof GC.ensureGalaxyQuickAction === "function") {
+      GC.ensureGalaxyQuickAction()
+        .then(bootRing)
         .catch((err) => {
           console.error("[GC] galaxy-quick-action load failed", err);
-          bootGalaxyRingAfterQuickAction();
+          bootRing();
         });
     } else {
-      bootGalaxyRingAfterQuickAction();
+      bootRing();
     }
     prefetchGalaxyAdjacent();
     bindWorldBossAttackCooldownUnlock(document.getElementById("galaxy-page-root") || document);
@@ -37661,6 +37731,11 @@
     }
     const push = opts.push !== false;
     const target = normalizePjaxUrl(url);
+    // Start Galaxy quick-mission module load in parallel with PJAX HTML fetch.
+    try {
+      const pathOnly = String(target || "").split("?")[0].replace(/\/$/, "") || "/";
+      if (pathOnly === "/galaxy") GC.prefetchGalaxyQuickActionScript?.();
+    } catch (_) {}
 
     if (_activePjaxNavigation && _activePjaxNavigation.normalizedUrl === target && _activePjaxNavigation.promise) {
       console.debug("[GC] PJAX dedupe", target);

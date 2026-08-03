@@ -105,11 +105,36 @@ def test_main_js_wires_galaxy_quick_action():
     assert "GC.GalaxyQuickAction" in main_js
     assert "bindRingView(root)" in main_js
     assert "GC.ensureScript = function ensureScript" in main_js
-    assert "GC.ensureScript(GALAXY_QUICK_ACTION_SCRIPT)" in main_js
+    assert "GC.ensureGalaxyQuickAction = function ensureGalaxyQuickAction" in main_js
+    assert "GC.prefetchGalaxyQuickActionScript" in main_js
+    assert "GC.ensureGalaxyQuickAction()" in main_js
     assert "/static/js/galaxy-quick-action.js" in main_js
     assert "bootGalaxyRingAfterQuickAction" in main_js
     assert "onQuickSpyClick" not in main_js
     assert "onDebrisRecycleClick" not in main_js
+
+
+def test_galaxy_quick_action_bind_ring_covers_all_missions():
+    """Spy, attack, debris, asteroid, relocation all bind via the same PJAX-safe path."""
+    js = _read_js()
+    bind = js.split("bindRingView(root)")[1].split("return () =>")[0]
+    for handler in (
+        "handleSpyClick",
+        "handleAttackClick",
+        "handleDebrisRecycleClick",
+        "handleAsteroidRecycleClick",
+        "handleRelocationClick",
+    ):
+        assert handler in bind, handler
+    main_js = Path("static/main.js").read_text(encoding="utf-8")
+    galaxy_init = main_js.split("function initGalaxy()")[1].split("GC.modules.galaxy")[0]
+    assert "ensureGalaxyQuickAction" in galaxy_init
+    assert "prefetchGalaxyQuickActionScript" in main_js
+    # Warm module before/during PJAX to galaxy so quick missions bind without F5.
+    assert 'pathOnly === "/galaxy"' in main_js
+    messages = Path("static/js/messages.js").read_text(encoding="utf-8")
+    assert "ensureGalaxyQuickAction" in messages
+    assert "data-combat-debris-recycle" in messages
 
 
 def test_gc_exports_for_galaxy_quick_action():

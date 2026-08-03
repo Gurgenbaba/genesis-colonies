@@ -3293,8 +3293,9 @@ def test_gc_perf_js_002_page_scoped_binders():
     assert "document.addEventListener(\"click\"" not in thin
     # PJAX must dynamically load page-scoped scripts (extra_scripts outside #main-content).
     assert "GC.ensureScript = function ensureScript" in main
+    assert "GC.ensureGalaxyQuickAction = function ensureGalaxyQuickAction" in main
     galaxy_init = main.split("function initGalaxy()")[1].split("GC.modules.galaxy")[0]
-    assert "GC.ensureScript(GALAXY_QUICK_ACTION_SCRIPT)" in galaxy_init
+    assert "ensureGalaxyQuickAction" in galaxy_init
     assert "bootGalaxyRingAfterQuickAction" in galaxy_init
 
 
