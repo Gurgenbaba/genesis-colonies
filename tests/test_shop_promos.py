@@ -12,7 +12,9 @@ from game.models import create_user, ensure_player_and_homeworld, init_db
 from game.referrals import apply_referral_code, ensure_referral_code
 from game.shop import create_pending_order, fulfill_order, get_order, start_checkout
 from game.shop_promos import (
+    KIND_CAMPAIGN,
     ack_partner_terms,
+    create_campaign_code,
     create_creator,
     create_promo_code,
     create_payout_batch,
@@ -247,4 +249,78 @@ def test_creator_overview_terms(promo_db):
     assert ok
     assert overview["terms_required"] is False
     conn.commit()
+    conn.close()
+
+
+def test_campaign_code_discount_no_commission(promo_db):
+    buyer_uid = _user("campb")
+    conn = db()
+    ok, reason, promo = create_campaign_code(
+        conn=conn,
+        code="EVENT10",
+        discount_bps=1000,
+        max_redemptions=2,
+        notes="Giveaway",
+    )
+    assert ok, reason
+    assert promo["kind"] == KIND_CAMPAIGN
+    assert promo["commission_bps"] == 0
+    assert resolve_referrer_player_id("EVENT10", conn=conn) is None
+
+    ok, reason, result = start_checkout(
+        buyer_uid,
+        "tk_pack_s",
+        "test",
+        conn=conn,
+        success_url="http://localhost/ok",
+        cancel_url="http://localhost/cancel",
+        legal_ack=True,
+        promo_code="EVENT10",
+    )
+    assert ok, reason
+    order = result["order"]
+    assert int(order["amount_cents"]) == 90
+    assert int(order["discount_cents"]) == 9
+    assert int(order["commission_cents"]) == 0
+    assert order["status"] == "fulfilled"
+    rows = conn.execute(
+        "SELECT COUNT(*) AS c FROM shop_creator_ledger WHERE order_id = ?;",
+        (int(order["id"]),),
+    ).fetchone()
+    assert int(rows["c"] or 0) == 0
+    conn.commit()
+    conn.close()
+
+
+def test_campaign_max_redemptions(promo_db):
+    buyer1 = _user("camp1")
+    buyer2 = _user("camp2")
+    buyer3 = _user("camp3")
+    conn = db()
+    ok, reason, _ = create_campaign_code(
+        conn=conn, code="ONCEONLY", discount_bps=1000, max_redemptions=1
+    )
+    assert ok, reason
+    ok, reason, _ = start_checkout(
+        buyer1,
+        "tk_pack_s",
+        "test",
+        conn=conn,
+        success_url="http://localhost/ok",
+        cancel_url="http://localhost/cancel",
+        legal_ack=True,
+        promo_code="ONCEONLY",
+    )
+    assert ok, reason
+    ok, reason, _ = create_pending_order(
+        buyer2, "tk_pack_s", "test", conn=conn, promo_code="ONCEONLY"
+    )
+    assert not ok
+    assert reason == "promo_max_redemptions"
+    # Unrelated buyer still blocked once cap hit
+    ok, reason, _ = create_pending_order(
+        buyer3, "tk_pack_s", "test", conn=conn, promo_code="ONCEONLY"
+    )
+    assert not ok
+    assert reason == "promo_max_redemptions"
     conn.close()

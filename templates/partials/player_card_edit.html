@@ -106,6 +106,12 @@
                     rows="4"
                     data-pc-field="bio">{{ form.get('bio', '') }}</textarea>
         </label>
+        {% if card.get('invite_code') %}
+        <p class="gc-player-card-field-hint">
+          {{ T("playercard_invite_edit_hint", "Dein Referral-Code steht auf dem Profil — Details unter") }}
+          <a href="{{ url_for('referrals_view') }}">{{ T("nav_referrals", "Referrals") }}</a>.
+        </p>
+        {% endif %}
 
         <div class="gc-player-card-field">
           <span class="gc-player-card-field-label" id="pc-theme-label">{{ T("playercard_theme") }}</span>

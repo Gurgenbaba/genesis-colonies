@@ -3135,6 +3135,7 @@
       return data;
     }
     const creators = data.creators || [];
+    const campaigns = data.campaigns || [];
     const rows = creators
       .map((c) => {
         const perf = c.performance || {};
@@ -3171,6 +3172,26 @@
         );
       })
       .join("");
+    const campaignRows = campaigns
+      .map((p) => {
+        const on = !!p.active;
+        const toggleLabel = on
+          ? t("admin_promos_disable", "Disable")
+          : t("admin_promos_enable", "Enable");
+        const maxR = p.max_redemptions == null ? "∞" : String(p.max_redemptions);
+        return (
+          `<tr>` +
+          `<td><strong>${esc(p.code)}</strong></td>` +
+          `<td>${(Number(p.discount_bps || 0) / 100).toFixed(0)}%</td>` +
+          `<td>${Number(p.redemptions || 0)} / ${esc(maxR)}</td>` +
+          `<td>${esc(p.notes || "—")}</td>` +
+          `<td>` +
+          `<button type="button" class="gc-btn gc-btn-xs gc-btn-outline" data-admin-promo-toggle="${p.id}" data-active="${on ? 0 : 1}">${esc(toggleLabel)}</button>` +
+          `</td>` +
+          `</tr>`
+        );
+      })
+      .join("");
     host.innerHTML =
       `<div class="admin-tool-panel">` +
       `<h4 class="admin-tool-panel__title">${esc(t("admin_promos_create", "Creator anlegen"))}</h4>` +
@@ -3181,6 +3202,25 @@
       `<label>${esc(t("admin_promos_paypal", "PayPal"))}<input type="text" id="admin-promo-paypal" class="gc-input"></label>` +
       `<button type="button" class="gc-btn gc-btn-primary" id="admin-promo-create">${esc(t("admin_promos_create_btn", "Anlegen"))}</button>` +
       `</div></div>` +
+      `<div class="admin-tool-panel" style="margin-top:0.75rem">` +
+      `<h4 class="admin-tool-panel__title">${esc(t("admin_promos_campaign_create", "Event-/Discount-Code"))}</h4>` +
+      `<p class="admin-small-hint">${esc(t("admin_promos_campaign_hint", "Nur Shop-Rabatt — ideal für Verlosungen & Events. Keine Creator-Kommission."))}</p>` +
+      `<div class="admin-form-grid">` +
+      `<label>${esc(t("admin_promos_code", "Code"))}<input type="text" id="admin-campaign-code" class="gc-input"></label>` +
+      `<label>${esc(t("admin_promos_discount_pct", "Rabatt %"))}<input type="number" id="admin-campaign-discount" class="gc-input" value="10" min="1" max="90"></label>` +
+      `<label>${esc(t("admin_promos_max_uses", "Max Uses"))}<input type="number" id="admin-campaign-max" class="gc-input" placeholder="∞"></label>` +
+      `<label>${esc(t("admin_promos_notes", "Notiz"))}<input type="text" id="admin-campaign-notes" class="gc-input" placeholder="Event Giveaway"></label>` +
+      `<button type="button" class="gc-btn gc-btn-primary" id="admin-campaign-create">${esc(t("admin_promos_campaign_create_btn", "Code anlegen"))}</button>` +
+      `</div></div>` +
+      `<div class="admin-section-title" style="margin-top:1rem"><span class="admin-section-title-text">${esc(t("admin_promos_campaigns_title", "Campaign Codes"))}</span></div>` +
+      `<div class="admin-table-wrap"><table class="admin-table admin-table-compact"><thead><tr>` +
+      `<th>${esc(t("admin_promos_col_code", "Code"))}</th>` +
+      `<th>${esc(t("admin_promos_discount_pct", "Rabatt %"))}</th>` +
+      `<th>${esc(t("admin_promos_col_uses", "Uses"))}</th>` +
+      `<th>${esc(t("admin_promos_notes", "Notiz"))}</th>` +
+      `<th>${esc(t("admin_promos_col_status", "Status"))}</th>` +
+      `</tr></thead><tbody>${campaignRows || `<tr><td colspan="5">${esc(t("admin_promos_campaigns_empty", "Keine Campaign-Codes"))}</td></tr>`}</tbody></table></div>` +
+      `<div class="admin-section-title" style="margin-top:1rem"><span class="admin-section-title-text">${esc(t("admin_promos_creators_title", "Creators"))}</span></div>` +
       `<div class="admin-table-wrap"><table class="admin-table admin-table-compact"><thead><tr>` +
       `<th>${esc(t("admin_promos_col_creator", "Creator"))}</th>` +
       `<th>${esc(t("admin_promos_col_code", "Code"))}</th>` +
@@ -3208,6 +3248,27 @@
           return;
         }
         showAlert(t("admin_promos_created", "Creator angelegt."), "success");
+        await loadAdminPromos();
+      };
+    }
+    const campaignBtn = qs("#admin-campaign-create", host);
+    if (campaignBtn) {
+      campaignBtn.onclick = async () => {
+        const discountPct = Number(qs("#admin-campaign-discount", host)?.value || 10);
+        const maxRaw = qs("#admin-campaign-max", host)?.value;
+        const body = {
+          kind: "campaign",
+          code: qs("#admin-campaign-code", host)?.value || "",
+          discount_bps: Math.round(discountPct * 100),
+          max_redemptions: maxRaw === "" || maxRaw == null ? null : Number(maxRaw),
+          notes: qs("#admin-campaign-notes", host)?.value || "",
+        };
+        const res = await adminPost("/api/admin/promos/codes", body);
+        if (!res.ok) {
+          showAlert(res.message || res.error, "error");
+          return;
+        }
+        showAlert(t("admin_promos_campaign_created", "Campaign-Code angelegt."), "success");
         await loadAdminPromos();
       };
     }

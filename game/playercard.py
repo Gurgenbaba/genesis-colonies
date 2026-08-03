@@ -1827,6 +1827,9 @@ def _build_public_card_payload(
             "is_private": True,
             "is_self": False,
             "can_edit": False,
+            "invite_code": "",
+            "invite_url": "",
+            "invite_is_creator": False,
         }, None
 
     ranking = get_playercard_ranking_snapshot(tid, conn=conn)
@@ -1952,9 +1955,47 @@ def _build_public_card_payload(
         # Never surface raw keys / English stubs — banner uses ai_* i18n keys.
         payload["title"] = ""
         payload["bio"] = ""
+        payload["invite_code"] = ""
+        payload["invite_url"] = ""
+        payload["invite_is_creator"] = False
     else:
         payload["is_ai"] = False
+        _attach_invite_code(payload, tid, conn=conn)
     return payload, None
+
+
+def _attach_invite_code(payload: Dict[str, Any], player_id: int, *, conn) -> None:
+    """Canonical referral/creator vanity from referrals owner — display only."""
+    payload["invite_code"] = ""
+    payload["invite_url"] = ""
+    payload["invite_is_creator"] = False
+    try:
+        from .db import commit as db_commit
+        from .referrals import ensure_referral_code, referrals_schema_ready
+
+        if not referrals_schema_ready(conn):
+            return
+        code = str(ensure_referral_code(int(player_id), conn=conn) or "").strip()
+        if not code:
+            return
+        payload["invite_code"] = code
+        payload["invite_url"] = f"/r/{code}"
+        try:
+            db_commit(conn)
+        except Exception:
+            pass
+    except Exception:
+        logger.exception("playercard invite_code lookup failed player=%s", player_id)
+        return
+    try:
+        from .shop_promos import get_creator_by_player, schema_ready as promo_schema_ready
+
+        if promo_schema_ready(conn):
+            creator = get_creator_by_player(int(player_id), conn=conn)
+            if creator and creator.get("active"):
+                payload["invite_is_creator"] = True
+    except Exception:
+        logger.exception("playercard creator flag lookup failed player=%s", player_id)
 
 
 def build_edit_card(player_id: int, conn=None) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:

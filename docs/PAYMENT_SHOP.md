@@ -17,6 +17,7 @@
 | 7 | Free-Baseline Value Balance | GC-2310…2313 | ✅ |
 | 8 | PayPal Live go-live | Ops | ✅ |
 | 9 | Creator Promo Codes (Rabatt + Kommission + Referral-Bridge + Dashboard) | GC-Creator | ✅ |
+| 10 | Campaign / Event Discount Codes (nur Shop-Rabatt) | GC-Campaign | ✅ |
 
 ## Creator Partner Program
 
@@ -33,6 +34,10 @@ Owner: `game/shop_promos.py` — Vanity-Code für Shop-Rabatt/Kommission **und**
 - Surfaces: `/shop` Promo-Feld, `/r/<CODE>`, `/creator` Dashboard, Admin Tab **Creator Promos**.
 - Providers chargen `order.amount_cents` (nicht Catalog-Preis).
 - Kein Parallel-Tracking: Spielerzählung bleibt `player_referrals`.
+
+## Campaign / Event Codes
+
+Gleicher Owner (`shop_promos`, `kind=campaign`): Admin legt Discount-Codes an (z. B. Verlosung). Einlösen im Premium-Shop → Rabatt, **keine** Creator-Kommission, **kein** Referral-Bridge. Optional `max_redemptions`; sonst unbegrenzt bis `active=0`.
 
 ## Philosophy
 

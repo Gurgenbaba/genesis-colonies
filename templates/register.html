@@ -151,17 +151,19 @@
             {% if err %}aria-invalid="true"{% endif %}
           >
 
-          <label class="auth-label" for="referral_code">{{ T("register_label_referral", "Referral-Code (optional)") }}</label>
+          <label class="auth-label" for="referral_code">{{ T("register_label_referral", "Creator-/Referral-Code (optional)") }}</label>
           <input
             id="referral_code"
             type="text"
             name="referral_code"
             class="auth-input gc-mono"
-            placeholder="{{ T('register_placeholder_referral', 'ABCDEFGH') }}"
+            placeholder="{{ T('register_placeholder_referral', 'CODE') }}"
             autocomplete="off"
             maxlength="32"
+            spellcheck="false"
             value="{{ v_ref }}"
           >
+          <p class="auth-hint auth-hint-compact">{{ T("register_hint_referral", "Creator-Code deines Partners oder klassischer Referral-Code — zählt für beide.") }}</p>
         </div>
 
         <p class="auth-hint auth-hint-compact">Sicheres Passwort empfohlen.</p>

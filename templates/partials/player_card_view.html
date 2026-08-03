@@ -178,6 +178,43 @@
     </div>
   {% endif %}
 
+  {% if card.get('invite_code') and not card.get('is_ai') %}
+    <div class="gc-player-card-invite" data-pc-invite>
+      <span class="gc-player-card-stat-label">
+        {% if card.get('invite_is_creator') %}
+          {{ T("playercard_invite_creator_code", "Creator-/Referral-Code") }}
+        {% else %}
+          {{ T("playercard_invite_code", "Referral-Code") }}
+        {% endif %}
+      </span>
+      <div class="gc-player-card-invite-row">
+        <code class="gc-player-card-invite-value gc-mono" data-pc-invite-code>{{ card.get('invite_code') }}</code>
+        <div class="gc-player-card-invite-actions">
+          <button type="button"
+                  class="gc-btn gc-btn-outline gc-btn-sm"
+                  data-pc-invite-copy="code"
+                  aria-label="{{ T('playercard_invite_copy', 'Kopieren') }}">
+            {{ T("playercard_invite_copy", "Kopieren") }}
+          </button>
+          {% if card.get('invite_url') %}
+          <a class="gc-btn gc-btn-outline gc-btn-sm"
+             href="{{ card.get('invite_url') }}"
+             data-pc-invite-share
+             target="_blank"
+             rel="noopener">
+            {{ T("playercard_invite_share", "Share-Link") }}
+          </a>
+          {% endif %}
+          {% if card.get('is_self') %}
+          <a class="gc-btn gc-btn-outline gc-btn-sm" href="{{ url_for('referrals_view') }}">
+            {{ T("playercard_invite_details", "Details") }}
+          </a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
   <div class="gc-player-card-badges-section">
     <span class="gc-player-card-stat-label">{{ T("playercard_badges") }}</span>
     {% if card.get('badges') and card.get('badges')|length > 0 %}

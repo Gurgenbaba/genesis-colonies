@@ -2592,15 +2592,26 @@ def api_delete_server_event(admin_id: int, event_id: int) -> Dict[str, Any]:
     return _ok(deleted=True, event_id=int(event_id))
 
 def promos_admin_state() -> Dict[str, Any]:
-    from game.shop_promos import list_creators_admin, min_payout_cents, schema_ready
+    from game.shop_promos import (
+        list_campaign_codes_admin,
+        list_creators_admin,
+        min_payout_cents,
+        schema_ready,
+    )
 
     conn = db()
     try:
         if not schema_ready(conn):
-            return _ok(ready=False, creators=[], min_payout_cents=min_payout_cents())
+            return _ok(
+                ready=False,
+                creators=[],
+                campaigns=[],
+                min_payout_cents=min_payout_cents(),
+            )
         return _ok(
             ready=True,
             creators=list_creators_admin(conn=conn),
+            campaigns=list_campaign_codes_admin(conn=conn),
             min_payout_cents=min_payout_cents(),
         )
     finally:
@@ -2660,25 +2671,47 @@ def create_creator_admin(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
 
 def create_promo_admin(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
     from game.db import begin_write_transaction, commit, rollback
-    from game.shop_promos import create_promo_code
+    from game.shop_promos import create_campaign_code, create_promo_code
 
+    kind = str(body.get("kind") or "creator").strip().lower()
     conn = db()
     try:
         begin_write_transaction(conn)
-        ok, reason, promo = create_promo_code(
-            conn=conn,
-            creator_id=int(body.get("creator_id") or 0),
-            code=str(body.get("code") or ""),
-            discount_bps=int(body.get("discount_bps") or 1000),
-            commission_bps=int(body.get("commission_bps") or 1000),
-            max_redemptions=int(body["max_redemptions"]) if body.get("max_redemptions") not in (None, "") else None,
-            notes=str(body.get("notes") or ""),
-        )
+        if kind == "campaign":
+            ok, reason, promo = create_campaign_code(
+                conn=conn,
+                code=str(body.get("code") or ""),
+                discount_bps=int(body.get("discount_bps") or 1000),
+                max_redemptions=(
+                    int(body["max_redemptions"])
+                    if body.get("max_redemptions") not in (None, "")
+                    else None
+                ),
+                notes=str(body.get("notes") or ""),
+            )
+        else:
+            ok, reason, promo = create_promo_code(
+                conn=conn,
+                creator_id=int(body.get("creator_id") or 0),
+                code=str(body.get("code") or ""),
+                discount_bps=int(body.get("discount_bps") or 1000),
+                commission_bps=int(body.get("commission_bps") or 1000),
+                max_redemptions=(
+                    int(body["max_redemptions"])
+                    if body.get("max_redemptions") not in (None, "")
+                    else None
+                ),
+                notes=str(body.get("notes") or ""),
+            )
         if not ok:
             rollback(conn)
             return _err(reason, reason)
         commit(conn)
-        audit(int(admin_id), "shop_promo_create", payload={"promo_id": promo["id"] if promo else None})
+        audit(
+            int(admin_id),
+            "shop_promo_create",
+            payload={"promo_id": promo["id"] if promo else None, "kind": kind},
+        )
         return _ok(promo=promo)
     except Exception:
         rollback(conn)

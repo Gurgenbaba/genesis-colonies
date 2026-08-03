@@ -86,6 +86,10 @@ def velocity_cap_24h() -> int:
         return 5
 
 
+KIND_CREATOR = "creator"
+KIND_CAMPAIGN = "campaign"
+
+
 def schema_ready(conn) -> bool:
     return (
         table_exists(conn, "shop_creators")
@@ -94,6 +98,10 @@ def schema_ready(conn) -> bool:
         and table_exists(conn, "shop_promo_events")
         and column_exists(conn, "shop_orders", "promo_code_id")
     )
+
+
+def campaign_schema_ready(conn) -> bool:
+    return schema_ready(conn) and column_exists(conn, "shop_promo_codes", "kind")
 
 
 def normalize_code(code: str) -> str:
@@ -186,13 +194,15 @@ def get_promo_by_code(code: str, *, conn, active_only: bool = True) -> Optional[
     normalized = normalize_code(code)
     if not normalized:
         return None
+    has_kind = column_exists(conn, "shop_promo_codes", "kind")
+    kind_sel = "p.kind," if has_kind else "'creator' AS kind,"
     row = conn.execute(
-        """
-        SELECT p.id, p.code, p.creator_id, p.discount_bps, p.commission_bps,
+        f"""
+        SELECT p.id, p.code, {kind_sel} p.creator_id, p.discount_bps, p.commission_bps,
                p.max_redemptions, p.active, p.notes, p.created_at, p.updated_at,
                c.display_name, c.player_id AS creator_player_id, c.active AS creator_active
         FROM shop_promo_codes p
-        JOIN shop_creators c ON c.id = p.creator_id
+        LEFT JOIN shop_creators c ON c.id = p.creator_id
         WHERE p.code = ?
         LIMIT 1;
         """,
@@ -201,7 +211,9 @@ def get_promo_by_code(code: str, *, conn, active_only: bool = True) -> Optional[
     if not row:
         return None
     promo = _promo_from_row(row)
-    if active_only and (not promo["active"] or not promo["creator_active"]):
+    if active_only and not promo["active"]:
+        return None
+    if active_only and promo["kind"] == KIND_CREATOR and not promo["creator_active"]:
         return None
     return promo
 
@@ -209,13 +221,15 @@ def get_promo_by_code(code: str, *, conn, active_only: bool = True) -> Optional[
 def get_promo_by_id(promo_id: int, *, conn, active_only: bool = False) -> Optional[Dict[str, Any]]:
     if not schema_ready(conn) or int(promo_id) <= 0:
         return None
+    has_kind = column_exists(conn, "shop_promo_codes", "kind")
+    kind_sel = "p.kind," if has_kind else "'creator' AS kind,"
     row = conn.execute(
-        """
-        SELECT p.id, p.code, p.creator_id, p.discount_bps, p.commission_bps,
+        f"""
+        SELECT p.id, p.code, {kind_sel} p.creator_id, p.discount_bps, p.commission_bps,
                p.max_redemptions, p.active, p.notes, p.created_at, p.updated_at,
                c.display_name, c.player_id AS creator_player_id, c.active AS creator_active
         FROM shop_promo_codes p
-        JOIN shop_creators c ON c.id = p.creator_id
+        LEFT JOIN shop_creators c ON c.id = p.creator_id
         WHERE p.id = ?
         LIMIT 1;
         """,
@@ -224,16 +238,24 @@ def get_promo_by_id(promo_id: int, *, conn, active_only: bool = False) -> Option
     if not row:
         return None
     promo = _promo_from_row(row)
-    if active_only and (not promo["active"] or not promo["creator_active"]):
+    if active_only and not promo["active"]:
+        return None
+    if active_only and promo["kind"] == KIND_CREATOR and not promo["creator_active"]:
         return None
     return promo
 
 
 def _promo_from_row(row) -> Dict[str, Any]:
+    keys = set(row.keys()) if hasattr(row, "keys") else set()
+    creator_id = row["creator_id"] if "creator_id" in keys else None
+    creator_player_id = row["creator_player_id"] if "creator_player_id" in keys else None
+    creator_active_raw = row["creator_active"] if "creator_active" in keys else None
+    kind = str(row["kind"] if "kind" in keys and row["kind"] is not None else KIND_CREATOR)
     return {
         "id": int(row["id"]),
         "code": str(row["code"]),
-        "creator_id": int(row["creator_id"]),
+        "kind": kind,
+        "creator_id": int(creator_id) if creator_id is not None else None,
         "discount_bps": int(row["discount_bps"] or 0),
         "commission_bps": int(row["commission_bps"] or 0),
         "max_redemptions": int(row["max_redemptions"]) if row["max_redemptions"] is not None else None,
@@ -241,18 +263,21 @@ def _promo_from_row(row) -> Dict[str, Any]:
         "notes": str(row["notes"] or ""),
         "created_at": float(row["created_at"] or 0),
         "updated_at": float(row["updated_at"] or 0),
-        "display_name": str(row["display_name"] or ""),
-        "creator_player_id": int(row["creator_player_id"]),
-        "creator_active": int(row["creator_active"] or 0) == 1,
+        "display_name": str(row["display_name"] or "") if row["display_name"] is not None else "",
+        "creator_player_id": int(creator_player_id) if creator_player_id is not None else None,
+        "creator_active": (
+            int(creator_active_raw or 0) == 1 if creator_active_raw is not None else kind == KIND_CAMPAIGN
+        ),
     }
 
 
 def resolve_referrer_player_id(code: str, *, conn) -> Optional[int]:
-    """Referral bridge: active promo code → creator player_id."""
+    """Referral bridge: active creator promo code → creator player_id."""
     promo = get_promo_by_code(code, conn=conn, active_only=True)
-    if not promo:
+    if not promo or promo.get("kind") != KIND_CREATOR:
         return None
-    return int(promo["creator_player_id"])
+    pid = promo.get("creator_player_id")
+    return int(pid) if pid else None
 
 
 def _redemption_count(promo_id: int, *, conn) -> int:
@@ -278,7 +303,8 @@ def validate_promo_for_buyer(
     promo = get_promo_by_code(code, conn=conn, active_only=True)
     if not promo:
         return False, "promo_not_found", None
-    if int(promo["creator_player_id"]) == int(buyer_player_id):
+    creator_pid = promo.get("creator_player_id")
+    if creator_pid is not None and int(creator_pid) == int(buyer_player_id):
         return False, "promo_self_not_allowed", None
     max_r = promo.get("max_redemptions")
     if max_r is not None and _redemption_count(int(promo["id"]), conn=conn) >= int(max_r):
@@ -334,8 +360,9 @@ def preview_pricing(
         )
     return True, "ok", {
         "code": promo["code"],
+        "kind": promo.get("kind") or KIND_CREATOR,
         "promo_code_id": int(promo["id"]),
-        "creator_id": int(promo["creator_id"]),
+        "creator_id": int(promo["creator_id"]) if promo.get("creator_id") is not None else None,
         "display_name": promo["display_name"],
         "discount_bps": int(promo["discount_bps"]),
         "commission_bps": int(promo["commission_bps"]),
@@ -346,7 +373,7 @@ def preview_pricing(
 def record_event(
     *,
     conn,
-    creator_id: int,
+    creator_id: Optional[int],
     event_type: str,
     promo_code_id: Optional[int] = None,
     actor_player_id: Optional[int] = None,
@@ -366,7 +393,7 @@ def record_event(
             ) VALUES (?, ?, ?, ?, ?, ?, ?);
             """,
             (
-                int(creator_id),
+                int(creator_id) if creator_id else None,
                 int(promo_code_id) if promo_code_id else None,
                 str(event_type),
                 int(actor_player_id) if actor_player_id else None,
@@ -387,7 +414,7 @@ def record_click(code: str, *, conn, actor_player_id: Optional[int] = None, now:
         return False, "promo_not_found"
     return record_event(
         conn=conn,
-        creator_id=int(promo["creator_id"]),
+        creator_id=promo.get("creator_id"),
         event_type=EVENT_CLICK,
         promo_code_id=int(promo["id"]),
         actor_player_id=actor_player_id,
@@ -403,7 +430,7 @@ def record_register_attribution(
     now: Optional[float] = None,
 ) -> Tuple[bool, str]:
     promo = get_promo_by_code(code, conn=conn, active_only=False)
-    if not promo:
+    if not promo or promo.get("kind") != KIND_CREATOR or not promo.get("creator_id"):
         # Vanity may only exist on referral table; skip funnel
         return False, "promo_not_found"
     return record_event(
@@ -584,10 +611,29 @@ def credit_commission_for_order(order: Mapping[str, Any], *, conn, now: Optional
         return True, "no_promo"
     commission = int(order.get("commission_cents") or 0)
     if commission <= 0:
+        # Campaign / zero-commission codes: still record purchase event, no ledger.
+        promo = get_promo_by_id(int(promo_id), conn=conn, active_only=False)
+        if promo:
+            record_event(
+                conn=conn,
+                creator_id=promo.get("creator_id"),
+                event_type=EVENT_PURCHASE,
+                promo_code_id=int(promo_id),
+                actor_player_id=int(order["player_id"]),
+                order_id=int(order["id"]),
+                meta={
+                    "sku": order.get("sku"),
+                    "amount_cents": order.get("amount_cents"),
+                    "kind": promo.get("kind"),
+                },
+                now=now,
+            )
         return True, "no_commission"
     promo = get_promo_by_id(int(promo_id), conn=conn, active_only=False)
     if not promo:
         return False, "promo_not_found"
+    if not promo.get("creator_id") or promo.get("kind") == KIND_CAMPAIGN:
+        return True, "no_commission"
 
     existing = conn.execute(
         "SELECT id, status FROM shop_creator_ledger WHERE order_id = ? LIMIT 1;",
@@ -848,9 +894,9 @@ def create_promo_code(
         return False, "creator_not_found", None
     normalized = normalize_code(code)
     if not _CODE_RE.match(normalized):
-        return False, "invalid_code"
+        return False, "invalid_code", None
     if get_promo_by_code(normalized, conn=conn, active_only=False):
-        return False, "code_taken"
+        return False, "code_taken", None
     if sync_referral:
         ok_s, reason_s = sync_vanity_referral_code(
             int(creator["player_id"]), normalized, conn=conn, now=now
@@ -858,18 +904,89 @@ def create_promo_code(
         if not ok_s:
             return False, reason_s, None
     ts = _now(now)
+    has_kind = column_exists(conn, "shop_promo_codes", "kind")
+    if has_kind:
+        cur = conn.execute(
+            """
+            INSERT INTO shop_promo_codes (
+                code, kind, creator_id, discount_bps, commission_bps, max_redemptions,
+                active, notes, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?);
+            """,
+            (
+                normalized,
+                KIND_CREATOR,
+                int(creator_id),
+                max(0, min(9000, int(discount_bps))),
+                max(0, min(5000, int(commission_bps))),
+                int(max_redemptions) if max_redemptions is not None else None,
+                str(notes or "")[:500],
+                ts,
+                ts,
+            ),
+        )
+    else:
+        cur = conn.execute(
+            """
+            INSERT INTO shop_promo_codes (
+                code, creator_id, discount_bps, commission_bps, max_redemptions,
+                active, notes, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?);
+            """,
+            (
+                normalized,
+                int(creator_id),
+                max(0, min(9000, int(discount_bps))),
+                max(0, min(5000, int(commission_bps))),
+                int(max_redemptions) if max_redemptions is not None else None,
+                str(notes or "")[:500],
+                ts,
+                ts,
+            ),
+        )
+    return True, "ok", get_promo_by_id(int(cur.lastrowid), conn=conn)
+
+
+def create_campaign_code(
+    *,
+    conn,
+    code: str,
+    discount_bps: int = DEFAULT_DISCOUNT_BPS,
+    max_redemptions: Optional[int] = None,
+    notes: str = "",
+    now: Optional[float] = None,
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """Event/giveaway discount code — shop redeem only, no commission/referral."""
+    if not schema_ready(conn) or not campaign_schema_ready(conn):
+        return False, "promo_unavailable", None
+    normalized = normalize_code(code)
+    if not _CODE_RE.match(normalized):
+        return False, "invalid_code", None
+    if get_promo_by_code(normalized, conn=conn, active_only=False):
+        return False, "code_taken", None
+    # Also clash with referral vanity codes
+    if table_exists(conn, "player_referral_codes"):
+        clash = conn.execute(
+            "SELECT 1 FROM player_referral_codes WHERE UPPER(code) = ? LIMIT 1;",
+            (normalized,),
+        ).fetchone()
+        if clash:
+            return False, "code_taken", None
+    ts = _now(now)
+    dbps = max(0, min(9000, int(discount_bps)))
+    if dbps <= 0:
+        return False, "invalid_discount", None
     cur = conn.execute(
         """
         INSERT INTO shop_promo_codes (
-            code, creator_id, discount_bps, commission_bps, max_redemptions,
+            code, kind, creator_id, discount_bps, commission_bps, max_redemptions,
             active, notes, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?);
+        ) VALUES (?, ?, NULL, ?, 0, ?, 1, ?, ?, ?);
         """,
         (
             normalized,
-            int(creator_id),
-            max(0, min(9000, int(discount_bps))),
-            max(0, min(5000, int(commission_bps))),
+            KIND_CAMPAIGN,
+            dbps,
             int(max_redemptions) if max_redemptions is not None else None,
             str(notes or "")[:500],
             ts,
@@ -877,6 +994,37 @@ def create_promo_code(
         ),
     )
     return True, "ok", get_promo_by_id(int(cur.lastrowid), conn=conn)
+
+
+def list_campaign_codes_admin(*, conn) -> List[Dict[str, Any]]:
+    if not schema_ready(conn) or not campaign_schema_ready(conn):
+        return []
+    rows = conn.execute(
+        """
+        SELECT id, code, kind, discount_bps, commission_bps, max_redemptions,
+               active, notes, created_at, updated_at
+        FROM shop_promo_codes
+        WHERE kind = 'campaign'
+        ORDER BY id DESC;
+        """
+    ).fetchall()
+    out = []
+    for r in rows:
+        pid = int(r["id"])
+        out.append(
+            {
+                "id": pid,
+                "code": str(r["code"]),
+                "kind": KIND_CAMPAIGN,
+                "discount_bps": int(r["discount_bps"] or 0),
+                "max_redemptions": int(r["max_redemptions"]) if r["max_redemptions"] is not None else None,
+                "redemptions": _redemption_count(pid, conn=conn),
+                "active": int(r["active"] or 0) == 1,
+                "notes": str(r["notes"] or ""),
+                "created_at": float(r["created_at"] or 0),
+            }
+        )
+    return out
 
 
 def set_promo_active(promo_id: int, active: bool, *, conn, now: Optional[float] = None) -> Tuple[bool, str]:

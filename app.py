@@ -1562,7 +1562,21 @@ def register():
                     flash(T("msg_register_success_verify") or T("msg_register_success"), "success")
                     return redirect(url_for("overview"))
 
-    prefilled_referral = (request.args.get("ref") or "").strip()
+    prefilled_referral = (
+        request.args.get("ref")
+        or request.args.get("promo")
+        or request.args.get("referral_code")
+        or ""
+    ).strip()
+    if not prefilled_referral:
+        sticky = session.get("shop_promo_code")
+        if isinstance(sticky, dict):
+            code_s = str(sticky.get("code") or "").strip()
+            exp = float(sticky.get("expires_at") or 0)
+            if code_s and exp >= time.time():
+                prefilled_referral = code_s
+    if prefilled_referral:
+        prefilled_referral = prefilled_referral.upper()
     return render_template("register.html", error=error, prefilled_referral=prefilled_referral)
 
 
@@ -1646,7 +1660,9 @@ def landing():
     user = get_current_user()
     if user and user.get("id"):
         return redirect(url_for("overview"))
-    return render_template("landing.html")
+    from game.landing_media import resolve_landing_media
+
+    return render_template("landing.html", landing_media=resolve_landing_media())
 
 
 @app.route("/legal")

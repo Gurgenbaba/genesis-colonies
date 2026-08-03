@@ -1145,3 +1145,58 @@ def test_public_card_shows_commander_class(temp_db):
     assert err2 is None
     assert private_view.get("is_private") is True
     assert not private_view.get("commander_class")
+
+
+def test_public_card_shows_invite_code_private_hides(temp_db):
+    init_db()
+    _run_migrate(temp_db)
+    _close_db_conn()
+    pid, _ = _create_player("card_invite_owner")
+    other, _ = _create_player("card_invite_viewer")
+    ensure_player_card(pid)
+
+    card, err = build_public_card(pid, viewer_id=other)
+    assert err is None
+    assert card.get("is_private") is not True
+    code = str(card.get("invite_code") or "")
+    assert code
+    assert card.get("invite_url") == f"/r/{code}"
+    assert card.get("invite_is_creator") is False
+
+    # Code persists via referrals owner
+    from game.referrals import ensure_referral_code
+
+    conn = db()
+    try:
+        assert ensure_referral_code(pid, conn=conn) == code
+    finally:
+        conn.close()
+
+    # Creator flag
+    from game.shop_promos import create_creator, schema_ready as promo_ready
+
+    conn = db()
+    try:
+        if promo_ready(conn):
+            begin_write_transaction(conn)
+            ok, reason, _ = create_creator(conn=conn, display_name="InviteCreator", player_id=pid)
+            assert ok, reason
+            commit(conn)
+    finally:
+        conn.close()
+    card2, err2 = build_public_card(pid, viewer_id=other)
+    assert err2 is None
+    assert card2.get("invite_is_creator") is True
+    assert card2.get("invite_code") == code
+
+    c = db()
+    try:
+        begin_write_transaction(c)
+        c.execute("UPDATE player_cards SET is_public = 0 WHERE player_id = ?", (pid,))
+        commit(c)
+    finally:
+        c.close()
+    private_view, err3 = build_public_card(pid, viewer_id=other)
+    assert err3 is None
+    assert private_view.get("is_private") is True
+    assert not private_view.get("invite_code")

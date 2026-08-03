@@ -888,7 +888,111 @@
     else audio.addEventListener("loadedmetadata", apply, { once: true });
   }
 
+  function initLandingShowcase() {
+    const root = document.querySelector("[data-landing-showcase]");
+    if (!root) return;
+
+    const video = root.querySelector("[data-landing-hero-video]");
+    const muteBtn = root.querySelector("[data-landing-mute]");
+    const reduceMotion =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    if (video instanceof HTMLVideoElement) {
+      if (reduceMotion) {
+        try {
+          video.pause();
+        } catch (_) {}
+        video.removeAttribute("autoplay");
+      } else {
+        video.muted = true;
+        const playPromise = video.play();
+        if (playPromise && typeof playPromise.catch === "function") {
+          playPromise.catch(() => {});
+        }
+      }
+    }
+
+    if (muteBtn && video instanceof HTMLVideoElement) {
+      muteBtn.addEventListener("click", () => {
+        const nextMuted = !video.muted;
+        video.muted = nextMuted;
+        muteBtn.setAttribute("aria-pressed", nextMuted ? "true" : "false");
+        if (!nextMuted) {
+          const p = video.play();
+          if (p && typeof p.catch === "function") p.catch(() => {});
+        }
+      });
+    }
+
+    const lightbox = document.querySelector("[data-landing-lightbox]");
+    const lightboxImg = document.querySelector("[data-landing-lightbox-img]");
+    const lightboxCaption = document.querySelector("[data-landing-lightbox-caption]");
+    if (lightbox && lightboxImg) {
+      root.querySelectorAll("[data-landing-lightbox-src]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const src = btn.getAttribute("data-landing-lightbox-src") || "";
+          const label = btn.getAttribute("data-landing-lightbox-label") || "";
+          lightboxImg.setAttribute("src", src);
+          lightboxImg.setAttribute("alt", label);
+          if (lightboxCaption) lightboxCaption.textContent = label;
+          if (typeof lightbox.showModal === "function") lightbox.showModal();
+        });
+      });
+    }
+
+    const trailerModal = document.querySelector("[data-landing-trailer-modal]");
+    const trailerVideo = document.querySelector("[data-landing-trailer-video]");
+    const trailerOpen = root.querySelector("[data-landing-trailer-open]");
+    if (trailerOpen && trailerModal) {
+      trailerOpen.addEventListener("click", () => {
+        if (typeof trailerModal.showModal === "function") trailerModal.showModal();
+        if (trailerVideo instanceof HTMLVideoElement) {
+          const p = trailerVideo.play();
+          if (p && typeof p.catch === "function") p.catch(() => {});
+        }
+      });
+      trailerModal.addEventListener("close", () => {
+        if (trailerVideo instanceof HTMLVideoElement) {
+          try {
+            trailerVideo.pause();
+          } catch (_) {}
+        }
+      });
+    }
+
+    if (typeof GC.registerCleanup === "function") {
+      GC.registerCleanup(() => {
+        if (video instanceof HTMLVideoElement) {
+          try {
+            video.pause();
+          } catch (_) {}
+        }
+        if (trailerVideo instanceof HTMLVideoElement) {
+          try {
+            trailerVideo.pause();
+          } catch (_) {}
+        }
+        if (lightbox && typeof lightbox.close === "function" && lightbox.open) {
+          try {
+            lightbox.close();
+          } catch (_) {}
+        }
+        if (trailerModal && typeof trailerModal.close === "function" && trailerModal.open) {
+          try {
+            trailerModal.close();
+          } catch (_) {}
+        }
+      });
+    }
+  }
+
+  GC.initLandingShowcase = initLandingShowcase;
+
   function initSimplePageAmbience() {
+    if (typeof GC.initLandingShowcase === "function") {
+      GC.initLandingShowcase();
+    }
     if (!isAmbiencePage()) return;
     const audio = document.getElementById("gc-ambience");
     if (!audio) return;
@@ -19248,7 +19352,7 @@
           status.textContent = t("shop_promo_active", "Code aktiv") + `: ${_shopActivePromo}`;
         }
         _applyShopPromoPrices(res.priced || []);
-        showNotify(t("shop_promo_applied", "Creator-Code angewendet."), "success");
+        showNotify(t("shop_promo_applied", "Promo-Code angewendet."), "success");
       } else {
         _shopActivePromo = "";
         if (status) status.textContent = t("shop_promo_invalid", "Code ungültig");
@@ -41418,6 +41522,30 @@
         e.preventDefault();
         const pid = editBtn.getAttribute("data-player-id") || PLAYER_CARD.currentId;
         loadPlayerCardEdit(pid);
+      });
+    }
+
+    const inviteRoot = PLAYER_CARD.content.querySelector("[data-pc-invite]");
+    if (inviteRoot && inviteRoot.dataset.pcBound !== "1") {
+      inviteRoot.dataset.pcBound = "1";
+      inviteRoot.addEventListener("click", async (e) => {
+        const copyBtn = e.target && e.target.closest ? e.target.closest("[data-pc-invite-copy]") : null;
+        if (!copyBtn || !inviteRoot.contains(copyBtn)) return;
+        e.preventDefault();
+        const mode = String(copyBtn.getAttribute("data-pc-invite-copy") || "code");
+        let text = "";
+        if (mode === "code") {
+          text = inviteRoot.querySelector("[data-pc-invite-code]")?.textContent?.trim() || "";
+        } else if (mode === "link") {
+          text = inviteRoot.querySelector("[data-pc-invite-share]")?.getAttribute("href") || "";
+        }
+        if (!text) return;
+        try {
+          await navigator.clipboard.writeText(text);
+          showNotify(t("playercard_invite_copied", "In Zwischenablage kopiert."), "success");
+        } catch (_) {
+          showNotify(t("playercard_invite_copy_fail", "Kopieren fehlgeschlagen."), "error");
+        }
       });
     }
 
