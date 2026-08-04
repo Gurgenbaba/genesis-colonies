@@ -599,6 +599,16 @@ def test_main_js_gc802_planet_switch_state_sync():
     )[0]
     assert "wantPlanet" in canonical
     assert "o.planetId" in canonical
+    assert "exclusive" in canonical
+    assert "planet_switch_panel" in canonical
+    assert "invalidateCanonicalGameStateRefresh" in src
+    assert "canonical state refresh superseded" in canonical
+    assert "DOM planet mismatch" in canonical
+    assert "syncMountedQueuePagesFromState" in canonical
+    assert "setProgressionActionBusy" in canonical or "gc-bld-head-action-btn.is-busy" in canonical
+    assert 'invalidateCanonicalGameStateRefresh("planet_switch_start")' in src.split(
+        "function initPlanetRegistry()"
+    )[1].split("function bindPlanetEvolutionOnce()")[0]
     apply_live = src.split("const applyLiveState = (page, state, opts) => {")[1].split(
         "const refreshFleetState = async (page, opts) => {"
     )[0]

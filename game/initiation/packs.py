@@ -98,6 +98,14 @@ def step_image_path(step: Dict[str, Any] | None) -> str:
     if objective == "upgrade_buildings" and highlight:
         return get_building_icon(highlight)
     if objective == "complete_research":
+        if highlight == "energy_tech":
+            return "img/research/energieeffizienz.png"
+        if highlight == "mining_tech":
+            return "img/research/metallveredelung.png"
+        if highlight == "crystal_tech":
+            return "img/research/crytite-synthese.webp"
+        if highlight == "buildtime_tech":
+            return "img/research/bauoptimierung.png"
         return get_building_icon("research_lab")
     if objective == "build_ships":
         return get_building_icon("orbital_shipyard")

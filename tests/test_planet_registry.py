@@ -662,6 +662,13 @@ def test_planet_switch_hotfix_client_contract():
     assert '"buildings"' in registry
     assert "PLANET_SWITCH_SOFT_PANEL" in registry
     assert 'forceCanonicalGameStateRefresh("planet_switch_panel"' in registry
+    # GC-PERF-PLANET-SWITCH-005: do not reuse pre-switch panel fetches
+    assert 'invalidateCanonicalGameStateRefresh("planet_switch_start")' in registry
+    canonical = src.split("async function forceCanonicalGameStateRefresh(reason, opts)")[1].split(
+        "GC.forceCanonicalGameStateRefresh = forceCanonicalGameStateRefresh"
+    )[0]
+    assert "exclusive" in canonical
+    assert "canonical state refresh superseded" in canonical
     apply = src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]
     assert "GC.refreshInFlight = null" in apply
     assert "hudOnly: isPlanetSwitch" in apply

@@ -248,7 +248,13 @@ def _event_applies(definition: Mapping[str, Any], event: Mapping[str, Any]) -> b
     if key == "start_research":
         return kind == "research_started"
     if key == "complete_research":
-        return kind == "research_complete"
+        if kind != "research_complete":
+            return False
+        # Optional filters.research_keys (Command Initiation build-order).
+        allowed = filters.get("research_keys") or []
+        if allowed:
+            return str(event.get("tech_key") or "") in {str(x) for x in allowed}
+        return True
     if key in ("upgrade_mining_tech", "upgrade_energy_tech", "upgrade_navigation_tech"):
         if kind != "research_complete":
             return False

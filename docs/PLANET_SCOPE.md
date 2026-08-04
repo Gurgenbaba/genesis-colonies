@@ -91,6 +91,8 @@ Klick Kolonie (Registry-Card)
 
 **GC-PERF-PLANET-SWITCH-004:** On buildings / research / shipyard / defense / overview (and similar), planet switch **skips PJAX SSR** and soft-patches via `forceCanonicalGameStateRefresh("planet_switch_panel", { planetId })`. Late `upgrade_success` for the previous planet is HUD-only when DOM scope already moved — avoids stutter after enqueue→instant switch.
 
+**GC-PERF-PLANET-SWITCH-005:** Soft panel refresh after switch is **exclusive** (does not coalesce onto an in-flight `queue_timer_zero` / panel fetch). In-flight canonical refreshes are token-superseded on switch start so a pre-switch `include_panel` response cannot re-paint the previous colony’s unaffordable/grey cards onto the new active planet. Response must match `planetId` **and** DOM scope; stuck upgrade `is-busy` buttons are cleared after the panel patch.
+
 ### DOM-Planet-ID
 
 Scoped Pages tragen `data-planet-id`:

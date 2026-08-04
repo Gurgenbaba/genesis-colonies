@@ -1,6 +1,6 @@
 # Command Initiation
 
-Once-through **do-first** guidance: deep-link to a page, complete a concrete objective, advance. Not Story Ops (lore) and not Imperial Directives (daily).
+Once-through **do-first** guidance that teaches the **efficient colony build order**, then walks the rest of the game. Not Story Ops (lore) and not Imperial Directives (daily).
 
 ## Owner
 
@@ -11,53 +11,60 @@ Once-through **do-first** guidance: deep-link to a page, complete a concrete obj
 | Schema | `migrations/142_command_initiation.sql` |
 | Routes | `GET /initiation`, `GET /api/initiation/state` |
 | Event bus | Fan-out from `game/directives/progress.py` (`_fanout_story_events`) |
-| Page visits | `record_page_visit` / `maybe_record_page_visit_from_request` (hooked in `_load_page_live_context`; Empire has a direct call) |
+| Page visits | `record_page_visit` / `maybe_record_page_visit_from_request` |
+
+## Design goal
+
+Phase 1 is the **way to go** for early economy — aligned with the fresh-account sim strategy (`docs/GC-829_FRESH_ACCOUNT_PROGRESSION.md`):
+
+> Solar → Mines → Energy balance → Lab → Energy Tech → Fuel → grow mines → Mining Tech → Command Center → Shipyard → first fleet
+
+Hints explain *why* (energy before mines, Crytite unlocks Lab/Fuel, Energy Tech keeps production efficient).
 
 ## Phases
 
-### Phase 1 — Colony Core
+### Phase 1 — Colony Core (efficient build)
 
-1. Upgrade Ferronite Mine ×3 (`/buildings`)
-2. Upgrade Crytite Extractor ×1
-3. Upgrade Solar Collector Field ×1
-4. Complete research ×1 (`/research`)
-5. Build a ship ×1 at Orbital Shipyard (`/shipyard`)
-6. Build defense ×1 (`/defense`)
-7. Send a fleet ×1 (`/fleet`)
-8. Visit Galaxy
-9. Visit Messages
-10. Visit Combat Simulator
-11. Visit Planet Evolution
+1. Solar Collector Field ×1 (energy first)
+2. Ferronite Mine ×2
+3. Crytite Extractor ×2 (Lab + Fuel gates)
+4. Solar ×1 (keep energy ahead)
+5. Ferronite ×1 (reach Mine 3 for Lab)
+6. Research Lab ×1
+7. Complete **Energy Tech** ×1
+8. Fuel Cell Plant ×1
+9. Ferronite ×2 / Crytite ×1 / Solar ×1 (grow + balance)
+10. Complete **Mining Tech** ×1
+11. Command Center ×2 → Orbital Shipyard building ×1
+12. Build a ship → send a fleet
+13. Visit Galaxy + Planet Evolution
 
-Action objectives reuse directive keys via `gameplay_event_delta`. `upgrade_buildings` accepts optional `filters.building_types`. Visit steps use `objective_key: visit_page` + `filters.pages`.
+`upgrade_buildings` / `complete_research` accept optional `building_types` / `research_keys` filters.
 
 ### Phase 2 — Empire & Expansion
 
-Visit: Empire, Tech Tree, Skill Tree, Ranking, Hall of Fame.
+Visit: Empire, Messages, Combat Simulator, Tech Tree, Skill Tree, Ranking, Hall of Fame.
 
 ### Phase 3 — LiveOps & Meta
 
-Visit: Imperial Directives, Story Ops, Login Rewards, Season Pass, Shop, Inventory, Trader Hub, Auction House, World Boss, Alliance, Galactic Politics, Vote Center, Referrals.
-
-Player-facing copy uses Genesis Colonies building names only (no OGame “Metal Mine” wording).
+Visit: Directives, Story, Login, Season Pass, Shop, Inventory, Trader, Auction, World Boss, Alliance, Politics, Vote, Referrals.
 
 ## UX
 
-- Compact header icon rail (`partials/header_icon_rail.html`): Initiation + Login Rewards + Season Pass
-- Mission page: compact image card grid
-- Go links for building steps use `/buildings?tab=…&highlight=<building_key>`
-- `initiation` on `/api/game-state` (diet-safe) patches the icon via `GC.patchInitiationHud`
+- Header icon rail: Initiation + Login Rewards + Season Pass
+- Mission cards with Go deep-links (`highlight=` for buildings/research)
+- `initiation` on `/api/game-state` patches the HUD
 
 ## Rules
 
-- Server-authoritative progress; idempotent `source_event_id`
-- Auto-start on first ensure; one-time track (no daily reset)
-- Page visits only when the **active** step is `visit_page` for that page (no premature consume)
-- Meta rewards deferred to a later ticket
-- Pack version bump when appending steps; existing `step_index` players continue mid-track
+- Server-authoritative; idempotent `source_event_id`
+- Auto-start once; no daily reset
+- Page visits only when the active step is `visit_page` for that page
+- Pack version bump on restructure; mid-track players keep `step_index`
 
 ## Related
 
+- [GC-829_FRESH_ACCOUNT_PROGRESSION.md](GC-829_FRESH_ACCOUNT_PROGRESSION.md) — sim strategy
+- [BUILDINGS_SYSTEM.md](BUILDINGS_SYSTEM.md) — requirement gates
 - [IMPERIAL_DIRECTIVES.md](IMPERIAL_DIRECTIVES.md) — shared event bus
 - [GENESIS_STORY_OPS.md](GENESIS_STORY_OPS.md) — lore (not tutorial)
-- [GC-950_KNOWLEDGE_PIPELINE.md](GC-950_KNOWLEDGE_PIPELINE.md) — reading help (optional links later)

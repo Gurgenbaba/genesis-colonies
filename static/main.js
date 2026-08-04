@@ -10632,9 +10632,19 @@
 
   // GC-546D — production completion refresh: canonical include_panel state at timer zero.
   let _queuePanelRefreshInFlight = null;
+  // GC-PERF-PLANET-SWITCH-005: bump to supersede in-flight panel applies after colony switch.
+  let _queuePanelRefreshToken = 0;
   let _shipyardApiInFlight = null;
   let _defenseApiInFlight = null;
   const _productionZeroHandled = { shipyard: "", defense: "" };
+
+  function invalidateCanonicalGameStateRefresh(reason) {
+    _queuePanelRefreshToken += 1;
+    if (reason) {
+      console.debug("[GC] canonical state refresh invalidated", String(reason));
+    }
+  }
+  GC.invalidateCanonicalGameStateRefresh = invalidateCanonicalGameStateRefresh;
 
   function _timerZeroAlreadyFired(el, target) {
     return !!(el && target > 0 && el.dataset.refreshFiredAt === String(target));
@@ -15837,28 +15847,76 @@
     if (!shouldRunGameLoop() || _authLoopAborted) return null;
     const reasonStr = String(reason || "queue_timer_zero");
     const o = opts && typeof opts === "object" ? opts : {};
-    if (_queuePanelRefreshInFlight) return _queuePanelRefreshInFlight;
-    _queuePanelRefreshInFlight = (async () => {
+    const wantPlanet = Number(o.planetId || 0);
+    // Planet-switch (and any planet-gated refresh) must not coalesce onto a pre-switch
+    // include_panel fetch — that re-applies the old colony's greyed cards/affordability.
+    const exclusive = Boolean(
+      o.exclusive
+      || reasonStr === "planet_switch_panel"
+      || wantPlanet > 0
+    );
+    if (_queuePanelRefreshInFlight && !exclusive) {
+      return _queuePanelRefreshInFlight;
+    }
+    if (exclusive) {
+      invalidateCanonicalGameStateRefresh(reasonStr);
+    }
+    const myToken = _queuePanelRefreshToken;
+    const flight = (async () => {
       try {
         const data = await GC.fetchJSON("/api/game-state?include_panel=1", { cache: "no-store" });
+        if (myToken !== _queuePanelRefreshToken) {
+          console.debug("[GC] canonical state refresh superseded", { reason: reasonStr });
+          return null;
+        }
         if (!data || data.ok === false) return null;
-        const wantPlanet = Number(o.planetId || 0);
-        if (wantPlanet > 0) {
-          const gotPlanet = Number(data.active_planet_id || data.build_queue?.planet_id || 0);
-          if (gotPlanet > 0 && gotPlanet !== wantPlanet) {
-            console.debug("[GC] canonical state refresh stale planet", {
-              reason: reasonStr,
-              wantPlanet,
-              gotPlanet,
-            });
-            return null;
-          }
+        const gotPlanet = Number(data.active_planet_id || data.build_queue?.planet_id || 0);
+        if (wantPlanet > 0 && gotPlanet > 0 && gotPlanet !== wantPlanet) {
+          console.debug("[GC] canonical state refresh stale planet", {
+            reason: reasonStr,
+            wantPlanet,
+            gotPlanet,
+          });
+          return null;
+        }
+        const domPlanet = typeof getDomPlanetId === "function" ? getDomPlanetId() : 0;
+        if (domPlanet > 0 && gotPlanet > 0 && gotPlanet !== domPlanet) {
+          console.debug("[GC] canonical state refresh DOM planet mismatch", {
+            reason: reasonStr,
+            domPlanet,
+            gotPlanet,
+          });
+          return null;
         }
         syncServerClockFromState(data);
         applyGameStateData(data, reasonStr, {
           forcePanel: true,
           forceResourceBar: Boolean(o.forceResourceBar !== false),
+          allowResourceRegression: reasonStr === "planet_switch_panel",
+          planetSwitchReload: reasonStr === "planet_switch_panel",
         });
+        if (reasonStr === "planet_switch_panel") {
+          try {
+            syncMountedQueuePagesFromState(data, reasonStr);
+          } catch (_) {}
+          // Drop leftover click-busy greys from the previous colony's failed/queued upgrades.
+          document
+            .querySelectorAll(
+              ".gc-bld-head-action-btn.is-busy, button.btn-upgrade.is-busy, button.btn-upgrade-max.is-busy, button.btn-research.is-busy, button.btn-research-max.is-busy"
+            )
+            .forEach((el) => {
+              try {
+                if (typeof setProgressionActionBusy === "function") {
+                  setProgressionActionBusy(el, false);
+                } else {
+                  el.classList.remove("is-loading", "is-busy", "gc-bld-head-action-btn--busy");
+                  delete el.dataset.busy;
+                  el.removeAttribute("aria-busy");
+                }
+              } catch (_) {}
+            });
+          clearStatusWidgetOffline();
+        }
         return data;
       } catch (err) {
         if (err?.name !== "AbortError") {
@@ -15866,10 +15924,13 @@
         }
         return null;
       } finally {
-        _queuePanelRefreshInFlight = null;
+        if (_queuePanelRefreshInFlight === flight) {
+          _queuePanelRefreshInFlight = null;
+        }
       }
     })();
-    return _queuePanelRefreshInFlight;
+    _queuePanelRefreshInFlight = flight;
+    return flight;
   }
   GC.forceCanonicalGameStateRefresh = forceCanonicalGameStateRefresh;
 
@@ -31365,6 +31426,9 @@
 
       e.preventDefault();
       GC._planetSwitchInFlight = true;
+      if (typeof GC.invalidateCanonicalGameStateRefresh === "function") {
+        GC.invalidateCanonicalGameStateRefresh("planet_switch_start");
+      }
       console.debug("[GC] planet_switch start", planetId);
       if (typeof GC.closePlanetRegistrySheet === "function") {
         GC.closePlanetRegistrySheet();

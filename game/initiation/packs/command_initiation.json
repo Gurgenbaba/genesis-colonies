@@ -1,50 +1,150 @@
 {
   "id": "command_initiation",
-  "version": 2,
+  "version": 3,
   "phases": [
     {
       "id": "colony_core",
       "title_key": "initiation_phase_colony_core",
       "steps": [
         {
-          "id": "build_metal_mines",
+          "id": "solar_first",
           "route": "/buildings",
-          "title_key": "initiation_step_metal_mines",
-          "hint_key": "initiation_step_metal_mines_hint",
-          "objective_key": "upgrade_buildings",
-          "objective_kind": "count",
-          "target": 3,
-          "filters": { "building_types": ["metal_mine"] }
-        },
-        {
-          "id": "build_crystal_mine",
-          "route": "/buildings",
-          "title_key": "initiation_step_crystal_mine",
-          "hint_key": "initiation_step_crystal_mine_hint",
-          "objective_key": "upgrade_buildings",
-          "objective_kind": "count",
-          "target": 1,
-          "filters": { "building_types": ["crystal_mine"] }
-        },
-        {
-          "id": "build_solar_plant",
-          "route": "/buildings",
-          "title_key": "initiation_step_solar_plant",
-          "hint_key": "initiation_step_solar_plant_hint",
+          "title_key": "initiation_step_solar_first",
+          "hint_key": "initiation_step_solar_first_hint",
           "objective_key": "upgrade_buildings",
           "objective_kind": "count",
           "target": 1,
           "filters": { "building_types": ["solar_plant"] }
         },
         {
-          "id": "complete_research",
+          "id": "metal_bootstrap",
+          "route": "/buildings",
+          "title_key": "initiation_step_metal_bootstrap",
+          "hint_key": "initiation_step_metal_bootstrap_hint",
+          "objective_key": "upgrade_buildings",
+          "objective_kind": "count",
+          "target": 2,
+          "filters": { "building_types": ["metal_mine"] }
+        },
+        {
+          "id": "crystal_gates",
+          "route": "/buildings",
+          "title_key": "initiation_step_crystal_gates",
+          "hint_key": "initiation_step_crystal_gates_hint",
+          "objective_key": "upgrade_buildings",
+          "objective_kind": "count",
+          "target": 2,
+          "filters": { "building_types": ["crystal_mine"] }
+        },
+        {
+          "id": "solar_balance",
+          "route": "/buildings",
+          "title_key": "initiation_step_solar_balance",
+          "hint_key": "initiation_step_solar_balance_hint",
+          "objective_key": "upgrade_buildings",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "building_types": ["solar_plant"] }
+        },
+        {
+          "id": "metal_lab_gate",
+          "route": "/buildings",
+          "title_key": "initiation_step_metal_lab_gate",
+          "hint_key": "initiation_step_metal_lab_gate_hint",
+          "objective_key": "upgrade_buildings",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "building_types": ["metal_mine"] }
+        },
+        {
+          "id": "build_research_lab",
+          "route": "/buildings",
+          "title_key": "initiation_step_research_lab",
+          "hint_key": "initiation_step_research_lab_hint",
+          "objective_key": "upgrade_buildings",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "building_types": ["research_lab"] }
+        },
+        {
+          "id": "research_energy_tech",
           "route": "/research",
-          "title_key": "initiation_step_research",
-          "hint_key": "initiation_step_research_hint",
+          "title_key": "initiation_step_energy_tech",
+          "hint_key": "initiation_step_energy_tech_hint",
           "objective_key": "complete_research",
           "objective_kind": "count",
           "target": 1,
-          "filters": {}
+          "filters": { "research_keys": ["energy_tech"] }
+        },
+        {
+          "id": "build_fuel_cell",
+          "route": "/buildings",
+          "title_key": "initiation_step_fuel_cell",
+          "hint_key": "initiation_step_fuel_cell_hint",
+          "objective_key": "upgrade_buildings",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "building_types": ["fuel_cell_plant"] }
+        },
+        {
+          "id": "metal_grow",
+          "route": "/buildings",
+          "title_key": "initiation_step_metal_grow",
+          "hint_key": "initiation_step_metal_grow_hint",
+          "objective_key": "upgrade_buildings",
+          "objective_kind": "count",
+          "target": 2,
+          "filters": { "building_types": ["metal_mine"] }
+        },
+        {
+          "id": "crystal_grow",
+          "route": "/buildings",
+          "title_key": "initiation_step_crystal_grow",
+          "hint_key": "initiation_step_crystal_grow_hint",
+          "objective_key": "upgrade_buildings",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "building_types": ["crystal_mine"] }
+        },
+        {
+          "id": "solar_keep_ahead",
+          "route": "/buildings",
+          "title_key": "initiation_step_solar_keep_ahead",
+          "hint_key": "initiation_step_solar_keep_ahead_hint",
+          "objective_key": "upgrade_buildings",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "building_types": ["solar_plant"] }
+        },
+        {
+          "id": "research_mining_tech",
+          "route": "/research",
+          "title_key": "initiation_step_mining_tech",
+          "hint_key": "initiation_step_mining_tech_hint",
+          "objective_key": "complete_research",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "research_keys": ["mining_tech"] }
+        },
+        {
+          "id": "build_command_center",
+          "route": "/buildings",
+          "title_key": "initiation_step_command_center",
+          "hint_key": "initiation_step_command_center_hint",
+          "objective_key": "upgrade_buildings",
+          "objective_kind": "count",
+          "target": 2,
+          "filters": { "building_types": ["command_center"] }
+        },
+        {
+          "id": "build_orbital_shipyard",
+          "route": "/buildings",
+          "title_key": "initiation_step_orbital_shipyard_bldg",
+          "hint_key": "initiation_step_orbital_shipyard_bldg_hint",
+          "objective_key": "upgrade_buildings",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "building_types": ["orbital_shipyard"] }
         },
         {
           "id": "build_ship",
@@ -52,16 +152,6 @@
           "title_key": "initiation_step_shipyard",
           "hint_key": "initiation_step_shipyard_hint",
           "objective_key": "build_ships",
-          "objective_kind": "count",
-          "target": 1,
-          "filters": {}
-        },
-        {
-          "id": "build_defense",
-          "route": "/defense",
-          "title_key": "initiation_step_defense",
-          "hint_key": "initiation_step_defense_hint",
-          "objective_key": "build_defense",
           "objective_kind": "count",
           "target": 1,
           "filters": {}
@@ -85,26 +175,6 @@
           "objective_kind": "count",
           "target": 1,
           "filters": { "pages": ["galaxy"] }
-        },
-        {
-          "id": "visit_messages",
-          "route": "/messages",
-          "title_key": "initiation_step_messages",
-          "hint_key": "initiation_step_messages_hint",
-          "objective_key": "visit_page",
-          "objective_kind": "count",
-          "target": 1,
-          "filters": { "pages": ["messages"] }
-        },
-        {
-          "id": "visit_combat_simulator",
-          "route": "/combat-simulator",
-          "title_key": "initiation_step_combat_simulator",
-          "hint_key": "initiation_step_combat_simulator_hint",
-          "objective_key": "visit_page",
-          "objective_kind": "count",
-          "target": 1,
-          "filters": { "pages": ["combat_simulator"] }
         },
         {
           "id": "visit_planet_evolution",
@@ -131,6 +201,26 @@
           "objective_kind": "count",
           "target": 1,
           "filters": { "pages": ["empire"] }
+        },
+        {
+          "id": "visit_messages",
+          "route": "/messages",
+          "title_key": "initiation_step_messages",
+          "hint_key": "initiation_step_messages_hint",
+          "objective_key": "visit_page",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "pages": ["messages"] }
+        },
+        {
+          "id": "visit_combat_simulator",
+          "route": "/combat-simulator",
+          "title_key": "initiation_step_combat_simulator",
+          "hint_key": "initiation_step_combat_simulator_hint",
+          "objective_key": "visit_page",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "pages": ["combat_simulator"] }
         },
         {
           "id": "visit_techtree",
