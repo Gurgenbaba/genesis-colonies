@@ -14,6 +14,24 @@
 
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ GC_ASSET_VERSION }}">
 
+  {# GC-INSTANT-LANDSCAPE-001: start planet surface fetch before first paint (shell + stage). #}
+  {% if current_planet_landscape_webp_url is defined and current_planet_landscape_webp_url %}
+  <link id="gc-planet-landscape-preload"
+        rel="preload"
+        as="image"
+        type="image/webp"
+        href="{{ current_planet_landscape_webp_url }}"
+        fetchpriority="high"
+        data-gc-landscape-preload="1">
+  {% elif current_planet_landscape_url is defined and current_planet_landscape_url %}
+  <link id="gc-planet-landscape-preload"
+        rel="preload"
+        as="image"
+        href="{{ current_planet_landscape_url }}"
+        fetchpriority="high"
+        data-gc-landscape-preload="1">
+  {% endif %}
+
   {# GC-INSTANT-IDENTITY-FOUC-001: theme tokens before first paint (avoid cyan :root flash). #}
   {% set _auth_head = AUTH_USER if AUTH_USER is defined else none %}
   {% set _simple_for_identity = (request.endpoint == 'legal_view' and not (_auth_head and _auth_head.id)) or request.endpoint in ['landing', 'login', 'register', 'forgot_password', 'reset_password', 'verify_email'] %}

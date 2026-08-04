@@ -119,11 +119,12 @@
   </div>
 {% endmacro %}
 
-{% macro render_building_table(rows, tab_name, bq_summary, bq_queue_full) %}
+{% macro render_building_table(rows, tab_name, bq_summary, bq_queue_full, lcp_hero=true) %}
 
   {% set rows = rows if rows else [] %}
   {% set _bq_summary = bq_summary if bq_summary is defined and bq_summary else {} %}
   {% set _bq_queue_full = bq_queue_full if bq_queue_full is defined else false %}
+  {% set _lcp_hero = false if lcp_hero is sameas false else true %}
   {% if rows|length == 0 %}
     <div class="gc-empty-state">
       <div class="gc-empty-title">{{ T("msg_generic_error", "Keine Daten") }}</div>
@@ -156,8 +157,8 @@
           <div class="gc-bld-card-hero">
             {% set _bld_png = url_for('static', filename=b.icon) %}
             {% set _bld_webp = _bld_png|webp_static %}
-            {% set _card_load = 'high' if loop.index0 == 0 else 'lazy' %}
-            {{ render_hero_img_stack(_bld_webp, _bld_png, b.queue_job if b.queue_job is defined else none, _card_load, loop.index0 == 0) }}
+            {% set _card_load = 'high' if (_lcp_hero and loop.index0 == 0) else 'lazy' %}
+            {{ render_hero_img_stack(_bld_webp, _bld_png, b.queue_job if b.queue_job is defined else none, _card_load, _lcp_hero and loop.index0 == 0) }}
             {% if b.queue_job is defined and b.queue_job %}
             {{ render_hero_queue(b.queue_job, 'build', 'build') }}
             {% endif %}
@@ -202,12 +203,15 @@
 
 {% set active_tab = (active_tab if active_tab is defined and active_tab else 'resources') %}
 {% set rows_by_tab = (rows_by_tab if rows_by_tab is defined and rows_by_tab else {}) %}
+{% set buildings_ui_mode = (buildings_ui_mode if buildings_ui_mode is defined and buildings_ui_mode in ('stage', 'cards') else 'stage') %}
+{% set ui_is_stage = buildings_ui_mode == 'stage' %}
 {% set _lcp_rows = rows_by_tab.get(active_tab, []) if rows_by_tab else [] %}
-{% set _lcp_preload_href = (url_for('static', filename=_lcp_rows[0].icon)|webp_static) if _lcp_rows else '' %}
+{% set _lcp_preload_href = (url_for('static', filename=_lcp_rows[0].icon)|webp_static) if (_lcp_rows and not ui_is_stage) else '' %}
 
 {% block extra_head %}
 {{ super() }}
-{% if _lcp_preload_href %}
+{# Stage LCP = planet landscape (base preload). Retro cards keep first-card hero preload. #}
+{% if not ui_is_stage and _lcp_preload_href %}
 <link id="gc-lcp-hero-preload" rel="preload" as="image" type="image/webp" href="{{ _lcp_preload_href }}" fetchpriority="high" data-gc-lcp-preload="1">
 {% endif %}
 {% endblock %}
@@ -273,7 +277,8 @@
         {% set _prop_state = 'locked' if (b.level|int) <= 0 else ('max' if (b.level >= b.max_level) or (b.at_queue_max if b.at_queue_max is defined else false) else ('queue' if (b.queue_count|int) > 0 or (b.queue_job is defined and b.queue_job) else ('warn' if not b.can_afford else 'ready'))) %}
         {% set _qj = b.queue_job if b.queue_job is defined and b.queue_job else none %}
         {% set _prog = (_qj.progress_pct|int) if _qj and _qj.progress_pct is defined else 0 %}
-        <div class="bld-stage-prop bld-stage-prop--round bld-stage-prop--{{ _prop_state }}{% if b.tab != active_tab %} is-stage-tab-hidden{% endif %}"
+        {% set _prop_visible = b.tab == active_tab %}
+        <div class="bld-stage-prop bld-stage-prop--round bld-stage-prop--{{ _prop_state }}{% if not _prop_visible %} is-stage-tab-hidden{% endif %}"
              style="left: {{ b.stage_left_pct }}%; top: {{ b.stage_top_pct }}%; z-index: {{ b.stage_z|default(1) }}; --bld-stage-scale: {{ b.stage_scale|default(1) }}; --bld-stage-progress: {{ _prog }};"
              tabindex="0"
              data-bld-stage-prop="{{ b.key }}"
@@ -284,12 +289,17 @@
              data-bld-stage-progress="{{ _prog }}"
              title="{{ T('building_' ~ b.key) }} · {{ T('buildings_col_level') }} {{ b.level|fmt_int }}"
              aria-label="{{ T('building_' ~ b.key) }}"
-             {% if b.tab != active_tab %}hidden aria-hidden="true"{% endif %}>
+             {% if not _prop_visible %}hidden aria-hidden="true"{% endif %}>
           <span class="bld-stage-prop-halo" aria-hidden="true"></span>
           <span class="bld-stage-prop-art" aria-hidden="true">
             <picture>
               <source type="image/webp" srcset="{{ _icon_webp }}">
-              <img src="{{ _icon_png }}" alt="" width="96" height="96" loading="lazy" decoding="async">
+              <img src="{{ _icon_png }}"
+                   alt=""
+                   width="96"
+                   height="96"
+                   loading="{{ 'eager' if _prop_visible else 'lazy' }}"
+                   decoding="async">
             </picture>
           </span>
           <span class="bld-stage-prop-build" aria-hidden="true" data-bld-stage-build-fx></span>
@@ -303,7 +313,8 @@
     </section>
 
     {# Hidden card sources: stage popup clones [data-building-row]; live patches need .buildings-prog-list.
-       Not the Retro panel (no data-bld-cards-panel) — exclusive Stage UI stays stage-only. #}
+       Not the Retro panel (no data-bld-cards-panel) — exclusive Stage UI stays stage-only.
+       lcp_hero=false so hidden cards do not steal bandwidth from landscape/props. #}
     <div class="bld-stage-card-source"
          data-bld-stage-card-source
          hidden
@@ -313,7 +324,7 @@
              data-tab="{{ active_tab }}"
              role="tabpanel"
              id="panel-{{ active_tab }}">
-          {{ render_building_table(rows_by_tab.get(active_tab, []), active_tab, bq_summary, bq_queue_full) }}
+          {{ render_building_table(rows_by_tab.get(active_tab, []), active_tab, bq_summary, bq_queue_full, false) }}
         </div>
       </div>
     </div>
@@ -331,6 +342,16 @@
       'data-build-cancel-id',
       fallback_queue=bq_jobs
     ) }}
+    {# Drop idle chrome before main.js when SSR already has active queue jobs. #}
+    <script>
+      (function () {
+        try {
+          if (document.querySelector("#build-mini-queue .gc-mini-queue-card--active")) {
+            document.body.classList.remove("gc-perf-idle");
+          }
+        } catch (_) {}
+      })();
+    </script>
 
     {% if not ui_is_stage %}
     <hr class="buildings-divider gc-prog-divider">
@@ -347,7 +368,7 @@
                data-tab="{{ active_tab }}"
                role="tabpanel"
                id="panel-{{ active_tab }}">
-            {{ render_building_table(rows_by_tab.get(active_tab, []), active_tab, bq_summary, bq_queue_full) }}
+            {{ render_building_table(rows_by_tab.get(active_tab, []), active_tab, bq_summary, bq_queue_full, true) }}
           </div>
         </div>
       </div>

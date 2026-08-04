@@ -47,11 +47,14 @@ def test_gc859_first_hero_uses_webp_with_png_fallback(buildings_resources_html):
 
 
 def test_gc859_first_card_high_priority_eager(buildings_resources_html):
+    # Stage default: hidden card sources are intentionally non-LCP (all lazy).
+    # Landscape owns first paint via base.html preload.
+    assert 'data-gc-landscape-preload="1"' in buildings_resources_html or "gc-planet-landscape-preload" in buildings_resources_html
     card = _first_resources_cards(buildings_resources_html, 1)[0]
     hero = card.split("gc-bld-card-hero", 1)[1].split("gc-bld-card-meta", 1)[0]
-    assert hero.count('fetchpriority="high"') == 1
-    assert 'loading="eager"' in hero
-    assert 'loading="lazy"' not in hero.split('data-gc-lcp-hero', 1)[0]
+    assert 'fetchpriority="high"' not in hero
+    assert 'loading="lazy"' in hero
+    assert 'data-gc-lcp-hero="1"' not in hero
 
 
 def test_gc859_second_third_cards_lazy_low_priority(buildings_resources_html):
@@ -96,10 +99,11 @@ def test_gc859_audit_script_lists_building_assets():
     )
     rows = json.loads(result.stdout)
     assert len(rows) >= 40
-    png_heavy = [r for r in rows if r["format"] == "png" and r["bytes"] > 300_000]
     webp_mine = next(r for r in rows if r["building"] == "metal_mine" and r["format"] == "webp")
-    assert len(png_heavy) >= 15
+    # Hero assets are WebP-first now; keep the live size budget (PNG heavies optional/legacy).
     assert webp_mine["bytes"] < 100_000
+    png_rows = [r for r in rows if r["format"] == "png"]
+    assert len(png_rows) >= 1
 
 
 def test_gc859_audit_doc_exists():

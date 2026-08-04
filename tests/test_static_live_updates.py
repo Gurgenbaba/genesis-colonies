@@ -2718,7 +2718,8 @@ def test_main_js_gc553_global_perf_audit():
     assert 'decoding="async"' in progression
     assert 'fetchpriority="low"' in progression
     assert "webp_static" in buildings
-    assert 'fetchpriority="high"' in buildings
+    assert "_lcp_hero" in buildings
+    assert 'fetchpriority="high"' in _read("templates/partials/card_hero_img_macros.html")
 
 
 def test_main_js_lootbox_roll_accuracy_and_sound():

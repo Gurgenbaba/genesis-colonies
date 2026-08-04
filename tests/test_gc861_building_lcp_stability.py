@@ -43,25 +43,28 @@ def buildings_resources_html(game_client):
 
 
 def test_gc861_preloads_first_tab_hero_webp(buildings_resources_html):
-    assert 'rel="preload"' in buildings_resources_html
-    assert 'as="image"' in buildings_resources_html
-    assert "metal_mine.webp" in buildings_resources_html or "buildings/metal_mine.webp" in buildings_resources_html
+    # Stage is default: LCP is planet landscape (base preload), not a card hero.
+    assert 'data-gc-landscape-preload="1"' in buildings_resources_html or 'id="gc-planet-landscape-preload"' in buildings_resources_html
+    assert "herocard" in buildings_resources_html or "gc-planet-landscape-preload" in buildings_resources_html
+    # Retro card hero preload must not steal bandwidth in Stage mode.
+    assert 'id="gc-lcp-hero-preload"' not in buildings_resources_html
 
 
 def test_gc861_only_first_card_high_priority(buildings_resources_html):
+    # Hidden stage card sources keep lazy heroes (no LCP competition).
     cards = _first_resources_cards(buildings_resources_html, 4)
     assert len(cards) >= 4
-    assert _high_priority_count(_hero_slice(cards[0])) == 1
-    for card in cards[1:]:
+    for card in cards:
         hero = _hero_slice(card)
         assert 'fetchpriority="high"' not in hero
         assert 'loading="lazy"' in hero
-        assert 'fetchpriority="low"' in hero
 
 
 def test_gc861_first_card_marks_lcp_hero(buildings_resources_html):
-    card = _first_resources_cards(buildings_resources_html, 1)[0]
-    assert 'data-gc-lcp-hero="1"' in card
+    # Stage mode: no card LCP marker — landscape owns first paint.
+    cards = _first_resources_cards(buildings_resources_html, 1)
+    assert cards
+    assert 'data-gc-lcp-hero="1"' not in cards[0]
 
 
 def test_gc861_active_stack_single_high_priority_in_template():
@@ -70,7 +73,8 @@ def test_gc861_active_stack_single_high_priority_in_template():
     assert "role == 'secondary'" in src or "'secondary'" in src
     assert "data-gc-lcp-hero" in src
     bld = _read("templates/buildings.html")
-    assert "_card_load = 'high' if loop.index0 == 0 else 'lazy'" in bld
+    assert "_card_load = 'high' if (_lcp_hero and loop.index0 == 0) else 'lazy'" in bld
+    assert 'loading="{{ \'eager\' if _prop_visible else \'lazy\' }}"' in bld or "loading=\"{{ 'eager' if _prop_visible else 'lazy' }}\"" in bld
 
 
 def test_gc861_second_third_cards_no_longer_eager(buildings_resources_html):

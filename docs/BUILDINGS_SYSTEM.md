@@ -237,6 +237,7 @@ Die Buildings-Seite zeigt oben eine **Kolonie-Stage** (Diorama-Foundation).
 
 - Display-only: keine Kosten-/Zeit-Formeln im Frontend
 - Surface: `--planet-landscape` = kanonisches Slot-Herocard (`planet_visuals.landscape_static_relpath` → `img/herocards/`), gleiches Bild wie Overview / Planetenmenü; scharf (kein Blur, kein schwarzes Deck); leichte Vignette
+- **Hard-reload Instant:** `base.html` preloaded Landscape-WebP (`gc-planet-landscape-preload`); Stage-Props des aktiven Tabs `loading=eager`; Mini-Queue-Bilder eager; versteckte Card-Quellen ohne LCP-Priority; bei aktiver Mini-Queue `gc-perf-idle` sofort droppen
 - **UI-Modus (Account):** `users.buildings_ui_mode` via Options-Owner — `stage` (Default, Kolonie-Stage) oder `cards` (Retro-Karten). Exklusiv sichtbar: nur eine Oberfläche. Stage hält versteckte Card-Quellen (`[data-bld-stage-card-source]` / `[data-building-row]`) für Detail-Popup + Live-Patches — kein Retro-Panel (`data-bld-cards-panel`).
 - Defaults: `BUILDING_STAGE_LAYOUT` — **pro Tab über die volle Stage gespreizt** (min. ≈18% Abstand innerhalb des Tabs)
 - Stage zeigt nur Gebäude des **aktiven Gebäude-Tabs** (Ressourcen/Forschung/Militär/Infrastruktur) — verhindert Überlappungen; SSR ist tab-scoped

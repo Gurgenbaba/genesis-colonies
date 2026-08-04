@@ -9673,7 +9673,9 @@
       img.src = imageUrl;
       img.alt = label;
       img.title = label;
-      img.loading = "lazy";
+      img.loading = "eager";
+      img.decoding = "async";
+      if (isActive) img.fetchPriority = "high";
       card.appendChild(img);
 
       const body = document.createElement("div");

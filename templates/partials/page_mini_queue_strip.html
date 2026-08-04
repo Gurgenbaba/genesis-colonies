@@ -44,7 +44,9 @@
          src="{{ job.image_url }}"
          alt="{{ _mini_queue_job_label(domain, job) }}"
          title="{{ _mini_queue_job_label(domain, job) }}"
-         loading="lazy">
+         loading="eager"
+         decoding="async"
+         {% if job.is_active %}fetchpriority="high"{% endif %}>
     <div class="gc-mini-queue-card__body">
       <span class="gc-mini-queue-card__title">{{ _mini_queue_job_label(domain, job) }}</span>
       {% if is_level_queue %}

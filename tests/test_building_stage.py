@@ -72,6 +72,19 @@ def _create_and_login(client):
     return int(user["id"]), int(hw["id"])
 
 
+def test_stage_eager_props_and_landscape_preload():
+    """Hard-reload FOUC: landscape preload + eager active-tab props (not lazy)."""
+    base = (ROOT / "templates" / "base.html").read_text(encoding="utf-8")
+    assert "gc-planet-landscape-preload" in base
+    assert "data-gc-landscape-preload" in base
+    bld = (ROOT / "templates" / "buildings.html").read_text(encoding="utf-8")
+    assert "_prop_visible" in bld
+    assert "gc-perf-idle" in bld  # early drop when mini-queue active
+    assert 'loading="eager"' in (ROOT / "templates" / "partials" / "page_mini_queue_strip.html").read_text(
+        encoding="utf-8"
+    )
+
+
 def test_building_stage_layout_covers_all_buildings():
     missing = [k for k in BUILDING_ORDER if k not in BUILDING_STAGE_LAYOUT]
     assert missing == [], f"missing stage slots: {missing}"
