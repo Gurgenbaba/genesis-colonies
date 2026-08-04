@@ -905,7 +905,7 @@ body.gc-has-open-popover .admin-card:has(.gc-hud-select.is-open){
   justify-content: flex-start;
 }
 
-/* Sidebar — GC-621C accordion + Genesis cyan glow */
+/* Sidebar ? GC-621C accordion + Genesis cyan glow */
 .gc-sidebar{
   position: sticky;
   top: var(--gc-sidebar-top, 136px);
@@ -8531,7 +8531,7 @@ body:not(.gc-perf-idle) .research-bar-fill{
    ========================= */
 .buildings-shell{ padding: 10px; }
 
-/* GC-BST — Buildings planet stage: clear planet landscape + round props + inline +1/MAX */
+/* GC-BST ? Buildings planet stage: clear planet landscape + round props + inline +1/MAX */
 .bld-planet-stage{
   position: relative;
   margin: 0 0 12px;
@@ -8595,7 +8595,7 @@ body:not(.gc-perf-idle) .research-bar-fill{
   inset: 0;
   z-index: 0;
   background-color: #040810;
-  /* Landscape must stay sharp and readable — no blur, light read-scrim only */
+  /* Landscape must stay sharp and readable ? no blur, light read-scrim only */
   background-image:
     linear-gradient(180deg, rgba(2, 6, 14, 0.18) 0%, transparent 32%, rgba(2, 6, 14, 0.28) 100%),
     var(--planet-landscape, none);
@@ -8624,7 +8624,7 @@ body:not(.gc-perf-idle) .research-bar-fill{
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  /* Soft edge vignette only — do not crush the landscape */
+  /* Soft edge vignette only ? do not crush the landscape */
   background:
     radial-gradient(ellipse 95% 85% at 50% 45%, transparent 55%, rgba(2, 6, 14, 0.28) 100%);
 }
@@ -8923,7 +8923,7 @@ body:not(.gc-perf-idle) .research-bar-fill{
   box-shadow: 0 0 18px rgba(255, 220, 90, 0.22);
 }
 
-/* Stage sits in buildings-shell — keep shell from painting a black plate over the landscape */
+/* Stage sits in buildings-shell ? keep shell from painting a black plate over the landscape */
 body.gc-body-ingame.gc-has-planet-landscape .buildings-shell.gc-panel{
   background: rgba(2, 10, 20, 0.55);
 }
@@ -9841,7 +9841,7 @@ body.gc-body-ingame.gc-has-planet-landscape .buildings-shell.gc-panel::before{
   color: rgba(180, 210, 230, 0.8);
 }
 
-/* GC-EFFSTAT — effective value + net bonus badge */
+/* GC-EFFSTAT ? effective value + net bonus badge */
 .gc-eff-stat{
   display: inline-flex;
   align-items: baseline;
@@ -10820,7 +10820,7 @@ a.gc-bld-head-action-btn--go:focus-visible{
   grid-template-rows: auto auto;
   align-items: center;
   gap: 2px 6px;
-  /* Fixed slot width — never stretch when the queue is short (GC-QUEUE-SLOT-001). */
+  /* Fixed slot width ? never stretch when the queue is short (GC-QUEUE-SLOT-001). */
   flex: 0 0 var(--gc-queue-card-slot-w, 248px);
   width: var(--gc-queue-card-slot-w, 248px);
   min-width: var(--gc-queue-card-slot-w, 248px);
@@ -11043,7 +11043,7 @@ a.gc-bld-head-action-btn--go:focus-visible{
 }
 
 .gc-card-queue-list > .gc-card-queue-block:not(.gc-bld-hero-queue){
-  /* Fixed slot width — left-aligned, no grow when fewer jobs are queued. */
+  /* Fixed slot width ? left-aligned, no grow when fewer jobs are queued. */
   flex: 0 0 var(--gc-queue-card-slot-w, 248px);
   width: var(--gc-queue-card-slot-w, 248px);
   min-width: var(--gc-queue-card-slot-w, 248px);
@@ -17449,7 +17449,7 @@ body.gc-techtree-media-zoom-open{
   white-space: nowrap;
 }
 /* GC-STABILIZE-002: role badge doubles as the ship-detail trigger button
-   (data-ship-detail) — re-enable pointer events (the sibling rule above sets
+   (data-ship-detail) ? re-enable pointer events (the sibling rule above sets
    pointer-events:none for the decorative <span> variant) + reset native
    button chrome so it keeps the exact overlay look of the former <span>. */
 .fleet-ship-card-art-wrap button.fleet-ship-card-role-badge{
@@ -19934,7 +19934,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 }
 
 /* ==========================================================================
-   GC Page Tabs — canonical tab rail (Records look, Identity Shell reactive)
+   GC Page Tabs ? canonical tab rail (Records look, Identity Shell reactive)
    Active accent follows equipped PlayerCard theme via --gc-neon-cyan /
    --gc-id-rgb (body[data-identity-theme]). See docs/PAYMENT_SHOP.md.
    ========================================================================== */
@@ -20146,7 +20146,7 @@ a.gc-page-tab.gc-nav-link[aria-current="page"]{
   }
 }
 
-/* Records — uses canonical page tabs */
+/* Records ? uses canonical page tabs */
 .gc-records-tabs{
   margin: 0;
 }
@@ -23306,7 +23306,7 @@ a.gc-ranking-alliance:hover{
   color: rgba(127, 255, 217, 0.62);
 }
 
-/* Mobile tap detail — same HTML as hover tooltip, inline under the row. */
+/* Mobile tap detail ? same HTML as hover tooltip, inline under the row. */
 .gc-fleet-drawer-row-detail{
   display: none;
   width: 100%;
@@ -23442,7 +23442,7 @@ a.gc-ranking-alliance:hover{
   animation: gc-fleet-drawer-timer-pulse 1s ease-in-out infinite;
 }
 
-/* Deep-Space Threat Net — Sensorphalanx-style contact rows */
+/* Deep-Space Threat Net ? Sensorphalanx-style contact rows */
 .gc-fleet-hud-row--radar-contact,
 .gc-fleet-hud-row--radar-more{
   cursor: default;
@@ -23788,7 +23788,7 @@ a.gc-ranking-alliance:hover{
   transform: translateX(1px) scaleX(-1);
 }
 
-/* Planet-only sheet card (header arrow) — not the full MEHR drawer. */
+/* Planet-only sheet card (header arrow) ? not the full MEHR drawer. */
 .gc-planet-registry-sheet{
   position: fixed;
   inset: 0;
@@ -24977,7 +24977,7 @@ body.gc-tab-hidden .gc-card-queue-glyph--research {
   outline: none;
 }
 
-/* --- Name Styles (Identity) — loud, cheap CSS --- */
+/* --- Name Styles (Identity) ? loud, cheap CSS --- */
 /* Include .gc-ranking-player-name so ranking color rule cannot win. */
 .gc-player-name[data-name-style="ash"],
 .gc-player-name.gc-ranking-player-name[data-name-style="ash"],
@@ -25222,7 +25222,7 @@ body.gc-tab-hidden .gc-card-queue-glyph--research {
    Not driven by name_style / aura / flair. See docs/PAYMENT_SHOP.md Identity Shell.
    IMPORTANT: never set --gc-id-rgb on the shared :not(cyan) block ? that selector is
    more specific than [data-identity-theme="violet"] and would lock the shell to cyan. */
-/* Cyan also exposes --gc-id-rgb so rgba(var(--gc-id-rgb), …) works for all themes. */
+/* Cyan also exposes --gc-id-rgb so rgba(var(--gc-id-rgb), ?) works for all themes. */
 .gc-body-ingame[data-identity-theme="cyan"] { --gc-id-rgb: 70, 229, 255; }
 .gc-body-ingame[data-identity-theme="violet"] { --gc-id-rgb: 168, 120, 255; }
 .gc-body-ingame[data-identity-theme="amber"] { --gc-id-rgb: 255, 190, 80; }
@@ -26825,7 +26825,7 @@ body.gc-combat-report-open { overflow: hidden; }
   gap: 8px;
 }
 
-/* Human Wardrobe — social surfaces + cosmetic chips */
+/* Human Wardrobe ? social surfaces + cosmetic chips */
 .gc-pc-social-preview {
   position: relative;
   z-index: 2;
@@ -30256,7 +30256,18 @@ button.pe-hero-planet-hint:focus-visible {
   color: var(--gc-text-soft);
 }
 
-/* EPIC-20 World Boss ? spawn ETA + help (scoped) */
+/* EPIC-20 World Boss — spawn ETA + help (scoped)
+   UI chrome follows PlayerCard identity via body[data-identity-theme] → --gc-id-rgb. */
+.gc-world-boss-page {
+  --wb-ui-rgb: var(--gc-id-rgb, 70, 229, 255);
+  --wb-ui: rgb(var(--wb-ui-rgb));
+  --wb-ui-border: rgba(var(--wb-ui-rgb), 0.28);
+  --wb-ui-border-soft: rgba(var(--wb-ui-rgb), 0.18);
+  --wb-ui-glow: rgba(var(--wb-ui-rgb), 0.2);
+  --wb-ui-text: color-mix(in srgb, rgb(var(--wb-ui-rgb)) 55%, #e8f6ff 45%);
+  --wb-stage-glow: rgba(var(--wb-ui-rgb), 0.42);
+}
+
 .gc-world-boss-page .gc-world-boss-cards {
   display: grid;
   gap: 1rem;
@@ -30264,7 +30275,7 @@ button.pe-hero-planet-hint:focus-visible {
   overflow-x: hidden;
 }
 .gc-world-boss-page .gc-world-boss-card {
-  border: 1px solid rgba(90, 200, 255, 0.28);
+  border: 1px solid var(--wb-ui-border);
   border-radius: var(--gc-radius-sm, 2px);
   background: rgba(6, 14, 24, 0.55);
   padding: 0.85rem 0.9rem 1rem;
@@ -30272,17 +30283,21 @@ button.pe-hero-planet-hint:focus-visible {
   overflow-x: hidden;
 }
 .gc-world-boss-page .gc-world-boss-card--active {
-  box-shadow: 0 0 20px rgba(60, 180, 255, 0.2);
+  box-shadow: 0 0 20px var(--wb-ui-glow);
+}
+/* Reel focus ? subtle only (audio ownership is IntersectionObserver) */
+.gc-world-boss-page .gc-world-boss-card.is-wb-reel-active {
+  border-color: rgba(var(--wb-ui-rgb), 0.38);
 }
 .gc-world-boss-page .gc-world-boss-board-details {
   margin-top: 0.75rem;
-  border-top: 1px solid rgba(90, 200, 255, 0.18);
+  border-top: 1px solid var(--wb-ui-border-soft);
   padding-top: 0.45rem;
 }
 .gc-world-boss-page .gc-world-boss-board-details > summary {
   cursor: pointer;
   font-size: 0.82rem;
-  color: rgba(180, 230, 255, 0.9);
+  color: var(--wb-ui-text);
   list-style: none;
 }
 .gc-world-boss-page .gc-world-boss-board-details > summary::-webkit-details-marker {
@@ -30303,7 +30318,7 @@ button.pe-hero-planet-hint:focus-visible {
 }
 .gc-world-boss-page .gc-world-boss-rewards-block {
   margin-top: 0.75rem;
-  border: 1px solid rgba(90, 200, 255, 0.22);
+  border: 1px solid rgba(var(--wb-ui-rgb), 0.22);
   border-radius: var(--gc-radius-sm, 2px);
   background: rgba(4, 12, 20, 0.45);
   padding: 0.35rem 0.55rem 0.55rem;
@@ -30354,7 +30369,7 @@ button.pe-hero-planet-hint:focus-visible {
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: rgba(180, 230, 255, 0.92);
+  color: var(--wb-ui-text);
   padding: 0.35rem 0.15rem;
 }
 .gc-world-boss-page .gc-world-boss-rewards-toggle::-webkit-details-marker {
@@ -30373,7 +30388,7 @@ button.pe-hero-planet-hint:focus-visible {
 .gc-world-boss-page .gc-world-boss-rewards {
   margin-top: 0.7rem;
   padding: 0.55rem 0.65rem;
-  border: 1px solid rgba(90, 200, 255, 0.28);
+  border: 1px solid var(--wb-ui-border);
   border-radius: var(--gc-radius-sm, 2px);
   background: rgba(4, 14, 24, 0.55);
 }
@@ -30424,7 +30439,7 @@ button.pe-hero-planet-hint:focus-visible {
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(180, 230, 255, 0.92);
+  color: var(--wb-ui-text);
 }
 .gc-world-boss-page .gc-world-boss-rewards-list {
   margin: 0;
@@ -30468,10 +30483,10 @@ button.pe-hero-planet-hint:focus-visible {
   font-size: 0.78rem;
 }
 .gc-world-boss-page .gc-world-boss-ally-xp {
-  color: rgba(180, 230, 255, 0.92);
+  color: var(--wb-ui-text);
 }
 .gc-world-boss-page .gc-world-boss-reward-row[data-wb-reward-tier="alliance_xp"] .gc-world-boss-reward-tier {
-  color: rgba(160, 220, 255, 0.95);
+  color: rgba(var(--wb-ui-rgb), 0.95);
 }
 .gc-world-boss-page .gc-world-boss-panel-head {
   display: flex;
@@ -30486,7 +30501,7 @@ button.pe-hero-planet-hint:focus-visible {
   font-weight: 700;
 }
 
-/* Encounter stage — cinematic arena (Boss Window Mockup) */
+/* Encounter stage ? cinematic arena (Boss Window Mockup) */
 .gc-world-boss-page .gc-world-boss-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
@@ -30500,12 +30515,29 @@ button.pe-hero-planet-hint:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
+  /* Soft dissolve stays inside the arena column ? don't cover the progress rail */
+  overflow-x: clip;
+  overflow-y: visible;
+  position: relative;
+  z-index: 1;
 }
 .gc-world-boss-page .gc-world-boss-rail {
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
+  position: relative;
+  z-index: 4;
+  isolation: isolate;
+  background: linear-gradient(
+    90deg,
+    rgba(6, 14, 24, 0.72) 0%,
+    rgba(6, 14, 24, 0.92) 18%,
+    rgba(6, 14, 24, 0.92) 100%
+  );
+  padding: 0.35rem 0.45rem 0.35rem 0.55rem;
+  margin: -0.35rem -0.15rem -0.35rem 0;
+  border-radius: var(--gc-radius-sm, 2px);
 }
 .gc-world-boss-page .gc-world-boss-hero {
   display: flex;
@@ -30522,33 +30554,35 @@ button.pe-hero-planet-hint:focus-visible {
   position: relative;
   display: block;
   width: 100%;
-  max-width: min(100%, 780px);
-  min-height: 400px;
+  max-width: min(100%, 820px);
+  min-height: 420px;
   margin: 0 auto;
-  border: 1px solid rgba(80, 160, 200, 0.28);
-  border-radius: var(--gc-radius-sm, 2px);
-  overflow: hidden;
-  --wb-stage-glow: rgba(40, 180, 255, 0.22);
+  border: none;
+  border-radius: 0;
+  overflow: visible;
+  --wb-stage-glow: rgba(var(--wb-ui-rgb), 0.42);
   background:
-    radial-gradient(ellipse 120% 55% at 50% 118%, rgba(40, 120, 180, 0.55) 0%, transparent 52%),
-    radial-gradient(ellipse 70% 40% at 50% 100%, rgba(20, 60, 110, 0.5) 0%, transparent 60%),
-    radial-gradient(ellipse 35% 28% at 12% 68%, rgba(70, 90, 120, 0.28) 0%, transparent 70%),
-    radial-gradient(ellipse 32% 26% at 88% 58%, rgba(55, 75, 100, 0.26) 0%, transparent 70%),
-    radial-gradient(1px 1px at 12% 22%, rgba(200, 230, 255, 0.55), transparent),
-    radial-gradient(1px 1px at 28% 48%, rgba(180, 210, 255, 0.4), transparent),
-    radial-gradient(1px 1px at 64% 18%, rgba(220, 240, 255, 0.5), transparent),
-    radial-gradient(1px 1px at 78% 36%, rgba(170, 200, 255, 0.35), transparent),
-    radial-gradient(1px 1px at 44% 32%, rgba(200, 230, 255, 0.45), transparent),
-    linear-gradient(180deg, #030812 0%, #081426 38%, #061018 72%, #040a12 100%);
+    radial-gradient(ellipse 70% 55% at 50% 40%, rgba(8, 24, 44, 0.92) 0%, transparent 72%),
+    radial-gradient(ellipse 120% 55% at 50% 118%, rgba(var(--wb-ui-rgb), 0.32) 0%, transparent 52%),
+    radial-gradient(ellipse 70% 40% at 50% 100%, rgba(var(--wb-ui-rgb), 0.22) 0%, transparent 60%),
+    radial-gradient(ellipse 35% 28% at 12% 68%, rgba(70, 90, 120, 0.22) 0%, transparent 70%),
+    radial-gradient(ellipse 32% 26% at 88% 58%, rgba(55, 75, 100, 0.2) 0%, transparent 70%),
+    radial-gradient(1px 1px at 12% 22%, rgba(var(--wb-ui-rgb), 0.55), transparent),
+    radial-gradient(1px 1px at 28% 48%, rgba(var(--wb-ui-rgb), 0.4), transparent),
+    radial-gradient(1px 1px at 64% 18%, rgba(var(--wb-ui-rgb), 0.5), transparent),
+    radial-gradient(1px 1px at 78% 36%, rgba(var(--wb-ui-rgb), 0.35), transparent),
+    radial-gradient(1px 1px at 44% 32%, rgba(var(--wb-ui-rgb), 0.45), transparent),
+    radial-gradient(ellipse 95% 90% at 50% 42%, #081426 0%, #061018 48%, transparent 78%);
   box-shadow:
-    inset 0 0 48px rgba(0, 20, 40, 0.6),
-    0 0 28px var(--wb-stage-glow);
+    0 0 60px var(--wb-stage-glow),
+    0 0 140px rgba(0, 20, 40, 0.35);
 }
 .gc-world-boss-page .gc-world-boss-stage.gc-wb-phase-2 {
-  --wb-stage-glow: rgba(255, 150, 40, 0.2);
+  --wb-stage-glow: rgba(255, 150, 40, 0.4);
 }
 .gc-world-boss-page .gc-world-boss-stage.gc-wb-phase-3 {
-  --wb-stage-glow: rgba(255, 60, 60, 0.22);
+  /* Bloom only ? avoid reading as a red picture frame */
+  --wb-stage-glow: rgba(255, 70, 70, 0.38);
 }
 .gc-world-boss-page .gc-world-boss-stage::before,
 .gc-world-boss-page .gc-world-boss-stage::after {
@@ -30563,26 +30597,65 @@ button.pe-hero-planet-hint:focus-visible {
   bottom: -8%;
   height: 42%;
   background:
-    radial-gradient(ellipse at 50% 80%, rgba(30, 90, 140, 0.45) 0%, transparent 65%),
-    linear-gradient(180deg, transparent 0%, rgba(8, 30, 55, 0.35) 100%);
+    radial-gradient(ellipse at 50% 80%, rgba(var(--wb-ui-rgb), 0.28) 0%, transparent 65%),
+    linear-gradient(180deg, transparent 0%, rgba(var(--wb-ui-rgb), 0.18) 100%);
   filter: blur(8px);
   opacity: 0.85;
   animation: gc-wb-nebula-drift 14s ease-in-out infinite;
 }
 .gc-world-boss-page .gc-world-boss-stage::after {
-  inset: 0;
+  inset: -4%;
   background: linear-gradient(
     180deg,
     transparent 0%,
     transparent 46%,
-    rgba(0, 40, 70, 0.08) 47%,
+    rgba(var(--wb-ui-rgb), 0.08) 47%,
     transparent 48%,
     transparent 100%
   );
   background-size: 100% 18px;
-  opacity: 0.35;
+  opacity: 0.22;
   mix-blend-mode: screen;
   animation: gc-wb-scan-drift 9s linear infinite;
+  -webkit-mask-image: radial-gradient(ellipse 88% 82% at 50% 42%, #000 50%, transparent 100%);
+  mask-image: radial-gradient(ellipse 88% 82% at 50% 42%, #000 50%, transparent 100%);
+}
+/* HUD corner ticks ? quiet instrument marks, not a picture frame */
+.gc-world-boss-page .gc-wb-stage-corner {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  z-index: 7;
+  pointer-events: none;
+  border-color: var(--wb-stage-glow);
+  border-style: solid;
+  border-width: 0;
+  box-shadow: 0 0 8px var(--wb-stage-glow);
+  opacity: 0.55;
+}
+.gc-world-boss-page .gc-wb-stage-corner--tl {
+  top: 10px;
+  left: 10px;
+  border-top-width: 2px;
+  border-left-width: 2px;
+}
+.gc-world-boss-page .gc-wb-stage-corner--tr {
+  top: 10px;
+  right: 10px;
+  border-top-width: 2px;
+  border-right-width: 2px;
+}
+.gc-world-boss-page .gc-wb-stage-corner--bl {
+  bottom: 10px;
+  left: 10px;
+  border-bottom-width: 2px;
+  border-left-width: 2px;
+}
+.gc-world-boss-page .gc-wb-stage-corner--br {
+  bottom: 10px;
+  right: 10px;
+  border-bottom-width: 2px;
+  border-right-width: 2px;
 }
 .gc-world-boss-page .gc-world-boss-stage-fx {
   position: absolute;
@@ -30590,14 +30663,16 @@ button.pe-hero-planet-hint:focus-visible {
   z-index: 1;
   pointer-events: none;
   overflow: hidden;
+  -webkit-mask-image: radial-gradient(ellipse 92% 88% at 50% 42%, #000 58%, transparent 100%);
+  mask-image: radial-gradient(ellipse 92% 88% at 50% 42%, #000 58%, transparent 100%);
 }
 .gc-world-boss-page .gc-world-boss-stage-fx .gc-wb-particle {
   position: absolute;
   width: 3px;
   height: 3px;
   border-radius: 50%;
-  background: rgba(180, 230, 255, 0.75);
-  box-shadow: 0 0 6px rgba(120, 200, 255, 0.65);
+  background: rgba(var(--wb-ui-rgb), 0.75);
+  box-shadow: 0 0 6px rgba(var(--wb-ui-rgb), 0.65);
   opacity: 0.35;
   animation: gc-wb-particle-drift 11s ease-in-out infinite;
 }
@@ -30621,8 +30696,14 @@ button.pe-hero-planet-hint:focus-visible {
   justify-content: space-between;
   align-items: flex-start;
   gap: 0.75rem;
-  padding: 0.65rem 0.75rem;
+  padding: 0.7rem 0.85rem 1.35rem;
   pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(2, 8, 18, 0.78) 0%,
+    rgba(2, 8, 18, 0.42) 55%,
+    transparent 100%
+  );
 }
 .gc-world-boss-page .gc-world-boss-stage-overlay-left,
 .gc-world-boss-page .gc-world-boss-stage-overlay-right {
@@ -30638,19 +30719,23 @@ button.pe-hero-planet-hint:focus-visible {
   font-size: 0.65rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(140, 200, 230, 0.75);
+  color: rgba(var(--wb-ui-rgb), 0.75);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
 }
 .gc-world-boss-page .gc-world-boss-stage .gc-world-boss-name {
   margin: 0;
   font-size: 1.05rem;
   color: rgba(230, 245, 255, 0.95);
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.85);
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.95),
+    0 2px 14px rgba(0, 0, 0, 0.85);
 }
 .gc-world-boss-page .gc-world-boss-stage .gc-world-boss-eta,
 .gc-world-boss-page .gc-world-boss-stage .gc-world-boss-coords {
   margin: 0;
   font-size: 0.72rem;
-  color: rgba(180, 220, 245, 0.85);
+  color: var(--wb-ui-text);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9);
 }
 .gc-world-boss-page .gc-world-boss-phase-badge {
   display: inline-block;
@@ -30667,10 +30752,10 @@ button.pe-hero-planet-hint:focus-visible {
 .gc-world-boss-page .gc-world-boss-hero-art {
   position: absolute;
   left: 50%;
-  top: 1%;
+  top: -4%;
   transform: translateX(-50%);
-  width: min(94%, 580px);
-  height: 58%;
+  width: min(100%, 720px);
+  height: 72%;
   aspect-ratio: auto;
   border: none;
   border-radius: 0;
@@ -30678,12 +30763,12 @@ button.pe-hero-planet-hint:focus-visible {
   overflow: visible;
   box-shadow: none;
   z-index: 2;
-  --wb-glow: rgba(40, 180, 255, 0.45);
-  --wb-glow-soft: rgba(40, 140, 220, 0.22);
+  --wb-glow: rgba(var(--wb-ui-rgb), 0.45);
+  --wb-glow-soft: rgba(var(--wb-ui-rgb), 0.22);
 }
 .gc-world-boss-page .gc-world-boss-hero-art.gc-wb-phase-1 {
-  --wb-glow: rgba(40, 200, 255, 0.52);
-  --wb-glow-soft: rgba(40, 160, 255, 0.26);
+  --wb-glow: rgba(var(--wb-ui-rgb), 0.52);
+  --wb-glow-soft: rgba(var(--wb-ui-rgb), 0.26);
 }
 .gc-world-boss-page .gc-world-boss-hero-art.gc-wb-phase-2 {
   --wb-glow: rgba(255, 160, 40, 0.55);
@@ -30704,6 +30789,10 @@ button.pe-hero-planet-hint:focus-visible {
     drop-shadow(0 0 14px var(--wb-glow))
     drop-shadow(0 0 28px var(--wb-glow-soft));
 }
+.gc-world-boss-page .gc-world-boss-hero-art.gc-wb-phase-0 .gc-world-boss-boss-float:not(.is-portrait-fallback) {
+  opacity: 0.85;
+}
+/* Glow pulse only on static portrait ? video already has motion */
 .gc-world-boss-page .gc-world-boss-hero-art.gc-wb-glow .gc-world-boss-portrait {
   animation: gc-wb-glow-pulse 2.8s ease-in-out infinite;
 }
@@ -30717,15 +30806,25 @@ button.pe-hero-planet-hint:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: gc-wb-boss-float 3.6s ease-in-out infinite;
   transform-origin: 50% 55%;
 }
+/* Hero video: steady ? soft-edge dissolve so keyed plate isn't a hard rectangle */
+.gc-world-boss-page .gc-world-boss-boss-float:not(.is-portrait-fallback) {
+  animation: none;
+  transform: scale(1.03);
+  inset: -2% -1% 2% -1%;
+}
+.gc-world-boss-page .gc-world-boss-boss-float.is-portrait-fallback {
+  animation: gc-wb-boss-float 3.6s ease-in-out infinite;
+}
 .gc-world-boss-page .gc-world-boss-boss-float picture,
-.gc-world-boss-page .gc-world-boss-boss-float .gc-world-boss-portrait {
+.gc-world-boss-page .gc-world-boss-boss-float .gc-world-boss-portrait,
+.gc-world-boss-page .gc-world-boss-boss-float .gc-world-boss-portrait-video {
   width: 100%;
   height: 100%;
 }
-.gc-world-boss-page .gc-world-boss-portrait {
+.gc-world-boss-page .gc-world-boss-portrait,
+.gc-world-boss-page .gc-world-boss-portrait-video {
   display: block;
   width: 100%;
   height: 100%;
@@ -30738,6 +30837,32 @@ button.pe-hero-planet-hint:focus-visible {
     drop-shadow(0 0 18px var(--wb-glow))
     drop-shadow(0 0 36px var(--wb-glow-soft));
 }
+/* Dissolve opaque keyed plate edges into the arena */
+.gc-world-boss-page .gc-world-boss-portrait-video {
+  -webkit-mask-image: radial-gradient(
+    ellipse 82% 78% at 50% 48%,
+    #000 42%,
+    rgba(0, 0, 0, 0.85) 58%,
+    transparent 78%
+  );
+  mask-image: radial-gradient(
+    ellipse 82% 78% at 50% 48%,
+    #000 42%,
+    rgba(0, 0, 0, 0.85) 58%,
+    transparent 78%
+  );
+}
+.gc-world-boss-page .gc-world-boss-boss-float.is-portrait-fallback .gc-world-boss-portrait-video {
+  display: none;
+}
+.gc-world-boss-page .gc-world-boss-boss-float.is-portrait-fallback .gc-world-boss-portrait-fallback {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.gc-world-boss-page .gc-world-boss-portrait-fallback[hidden] {
+  display: none !important;
+}
 .gc-world-boss-page .gc-world-boss-aura {
   position: absolute;
   inset: 8% 10% 14% 10%;
@@ -30747,6 +30872,17 @@ button.pe-hero-planet-hint:focus-visible {
   opacity: 0.6;
   pointer-events: none;
   animation: gc-wb-aura-pulse 2.4s ease-in-out infinite;
+}
+/* Steady video frame: quiet aura/shadow (no pulse competing with clip) */
+.gc-world-boss-page .gc-world-boss-hero-art:has(.gc-world-boss-boss-float:not(.is-portrait-fallback)) .gc-world-boss-aura {
+  animation: none;
+  opacity: 0.48;
+  transform: none;
+}
+.gc-world-boss-page .gc-world-boss-hero-art:has(.gc-world-boss-boss-float:not(.is-portrait-fallback)) .gc-world-boss-shadow {
+  animation: none;
+  opacity: 0.88;
+  transform: none;
 }
 .gc-world-boss-page .gc-world-boss-shadow {
   position: absolute;
@@ -30795,7 +30931,7 @@ button.pe-hero-planet-hint:focus-visible {
   right: 1.25rem;
   width: auto;
   max-width: none;
-  bottom: 24%;
+  bottom: 16%;
   z-index: 5;
   margin: 0;
   box-sizing: border-box;
@@ -30806,7 +30942,7 @@ button.pe-hero-planet-hint:focus-visible {
   font-size: 0.72rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(200, 230, 255, 0.88);
+  color: var(--wb-ui-text);
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.85);
 }
 .gc-world-boss-page .gc-world-boss-formation {
@@ -30853,7 +30989,7 @@ button.pe-hero-planet-hint:focus-visible {
   display: block;
   animation: gc-wb-ship-bob 2.8s ease-in-out infinite;
   filter:
-    drop-shadow(0 0 8px rgba(80, 180, 255, 0.5))
+    drop-shadow(0 0 8px rgba(var(--wb-ui-rgb), 0.5))
     drop-shadow(0 4px 8px rgba(0, 0, 0, 0.6));
 }
 .gc-world-boss-page .gc-world-boss-ship-slot:nth-child(1) .gc-world-boss-ship-img { animation-delay: 0s; }
@@ -30867,10 +31003,10 @@ button.pe-hero-planet-hint:focus-visible {
   display: block;
   font-size: 0.68rem;
   font-weight: 700;
-  color: rgba(180, 230, 255, 0.95);
+  color: var(--wb-ui-text);
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
   background: rgba(4, 12, 22, 0.72);
-  border: 1px solid rgba(80, 160, 200, 0.35);
+  border: 1px solid rgba(var(--wb-ui-rgb), 0.35);
   border-radius: var(--gc-radius-sm, 2px);
   padding: 0.05rem 0.28rem;
   line-height: 1.2;
@@ -30916,7 +31052,7 @@ button.pe-hero-planet-hint:focus-visible {
   font-size: 0.72rem;
 }
 .gc-world-boss-page .gc-world-boss-rail .gc-world-boss-progress {
-  border: 1px solid rgba(80, 160, 200, 0.22);
+  border: 1px solid rgba(var(--wb-ui-rgb), 0.22);
   border-radius: var(--gc-radius-sm, 2px);
   background: rgba(6, 14, 24, 0.72);
   padding: 0.65rem 0.75rem;
@@ -30929,11 +31065,11 @@ button.pe-hero-planet-hint:focus-visible {
   width: 8px;
   height: 36px;
   border-radius: var(--gc-radius-xs, 0);
-  background: linear-gradient(180deg, #fff 0%, #7ae0ff 30%, #2a90cc 100%);
+  background: linear-gradient(180deg, #fff 0%, rgb(var(--wb-ui-rgb)) 30%, color-mix(in srgb, rgb(var(--wb-ui-rgb)) 55%, #102030) 100%);
   box-shadow:
-    0 0 14px rgba(120, 230, 255, 1),
-    0 0 28px rgba(40, 180, 255, 0.65),
-    0 10px 18px rgba(40, 160, 255, 0.45);
+    0 0 14px rgba(var(--wb-ui-rgb), 1),
+    0 0 28px rgba(var(--wb-ui-rgb), 0.65),
+    0 10px 18px rgba(var(--wb-ui-rgb), 0.45);
   opacity: 0;
   transform: translate(-50%, 0);
   will-change: transform, opacity;
@@ -31042,7 +31178,7 @@ button.pe-hero-planet-hint:focus-visible {
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: rgba(180, 230, 255, 0.95);
+  color: var(--wb-ui-text);
   background: rgba(10, 30, 48, 0.75);
 }
 .gc-world-boss-page .gc-world-boss-status-badge--active {
@@ -31235,7 +31371,7 @@ button.pe-hero-planet-hint:focus-visible {
 .gc-world-boss-page .gc-world-boss-progress {
   margin-top: 0.85rem;
   padding: 0.65rem 0.75rem;
-  border: 1px solid rgba(90, 200, 255, 0.28);
+  border: 1px solid var(--wb-ui-border);
   border-radius: var(--gc-radius-sm, 2px);
   background: rgba(4, 12, 22, 0.65);
   width: 100%;
@@ -31247,7 +31383,7 @@ button.pe-hero-planet-hint:focus-visible {
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(180, 230, 255, 0.92);
+  color: var(--wb-ui-text);
 }
 .gc-world-boss-page .gc-world-boss-progress-grid {
   margin: 0;
@@ -31383,8 +31519,9 @@ button.pe-hero-planet-hint:focus-visible {
     min-height: 340px;
   }
   .gc-world-boss-page .gc-world-boss-hero-art {
-    width: min(98%, 400px);
-    height: 52%;
+    width: min(102%, 560px);
+    height: 64%;
+    top: -2%;
   }
   .gc-world-boss-page .gc-world-boss-progress-grid {
     grid-template-columns: 1fr 1fr;
@@ -31422,6 +31559,15 @@ button.pe-hero-planet-hint:focus-visible {
   }
   .gc-world-boss-page .gc-world-boss-boss-float {
     transform: none;
+  }
+  .gc-world-boss-page .gc-world-boss-portrait-video {
+    display: none !important;
+  }
+  .gc-world-boss-page .gc-world-boss-portrait-fallback,
+  .gc-world-boss-page .gc-world-boss-portrait-fallback[hidden] {
+    display: block !important;
+    width: 100%;
+    height: 100%;
   }
   .gc-world-boss-page .gc-world-boss-stage-fx {
     opacity: 0.35;
@@ -35807,7 +35953,7 @@ a.gc-galaxy-coord-link:focus-visible {
   overflow-x: clip;
 }
 
-/* GC-Emp-01 — Empire Focus Mode: slide side rails, expand main (documented CORE §3 exception). */
+/* GC-Emp-01 ? Empire Focus Mode: slide side rails, expand main (documented CORE ?3 exception). */
 .empire-header-actions {
   display: flex;
   align-items: center;
@@ -35832,7 +35978,7 @@ html.gc-empire-focus .gc-layout--dual > .gc-sidebar--left {
   pointer-events: none;
 }
 
-/* Right rails use display:contents on desktop — target children directly. */
+/* Right rails use display:contents on desktop ? target children directly. */
 body.gc-empire-focus .gc-sidebar--right,
 body.gc-empire-focus .gc-planet-registry,
 html.gc-empire-focus .gc-sidebar--right,
@@ -36523,7 +36669,7 @@ html.gc-empire-focus .gc-planet-registry {
   }
 }
 
-/* GC-540 / GC-INV-UX — Inventory vault */
+/* GC-540 / GC-INV-UX ? Inventory vault */
 .inventory-page {
   --inv-hub-pad: 10px;
   position: relative;
@@ -38570,7 +38716,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   }
 }
 
-/* GC-550 — Auction House Active-Lots AAA */
+/* GC-550 ? Auction House Active-Lots AAA */
 .auction-page,
 .auction-house-page {
   max-width: 100%;
@@ -39751,7 +39897,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   padding: 12px 18px 28px;
 }
 
-/* High-Command terminal frame — compact, no edge clipping */
+/* High-Command terminal frame ? compact, no edge clipping */
 .id-directives-main-frame {
   --id-frame-accent: #d4a24a;
   position: relative;
@@ -39881,7 +40027,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   }
 }
 
-/* Command strip — meta + claim-all (no clip-path; padding clears edges) */
+/* Command strip ? meta + claim-all (no clip-path; padding clears edges) */
 .id-directives-command-strip {
   padding: 0;
   overflow: visible;
@@ -39983,7 +40129,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
 }
 
-/* Directive cards — no clip-path so badges/labels never get sheared off */
+/* Directive cards ? no clip-path so badges/labels never get sheared off */
 .id-directives-page .id-directive-card.inventory-loot-card {
   gap: 0;
   min-height: 100%;
@@ -40489,7 +40635,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   border-radius: 0;
 }
 
-/* GC-POL-00 — Mandate rail + chronicle */
+/* GC-POL-00 ? Mandate rail + chronicle */
 .gp-rail-kicker {
   margin: 0;
   font-size: 0.68rem;
@@ -41128,7 +41274,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   z-index: 0;
   pointer-events: none;
   opacity: 0.55;
-  /* Page-level backdrop already paints once — chamber only adds a local veil. */
+  /* Page-level backdrop already paints once ? chamber only adds a local veil. */
   background: linear-gradient(180deg, rgba(6, 10, 16, 0.4) 0%, rgba(6, 10, 16, 0.88) 100%);
 }
 
@@ -44921,7 +45067,7 @@ a.alliance-hub-browse-card:hover,
     padding: 4px 0 8px;
   }
 
-  /* Sheet rows must not collapse — each fleet is its own readable card line. */
+  /* Sheet rows must not collapse ? each fleet is its own readable card line. */
   .gc-fleet-drawer-root.is-show-all.gc-fleet-sheet-portal .gc-fleet-drawer-row,
   .gc-fleet-hud-root.is-show-all.gc-fleet-sheet-portal .gc-fleet-hud-row,
   .gc-fleet-drawer-root.is-show-all.gc-fleet-sheet-portal .gc-fleet-hud-row{
@@ -46236,7 +46382,7 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
   margin-top: 1rem;
 }
 
-/* story-free-shop-teaser → merged into .story-ops-reward (GC Story Ops hero layout) */
+/* story-free-shop-teaser ? merged into .story-ops-reward (GC Story Ops hero layout) */
 
 .shop-catalog-panel {
   position: relative;
@@ -46623,7 +46769,7 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
 .banned-players-empty { margin: 0; color: var(--gc-text-muted, #8a93a3); }
 
 /* ===== Genesis Story Ops (EPIC-25 / GC-2502) ===== */
-/* ===== Story Ops — Center Focus Hero Layout (scoped) ===== */
+/* ===== Story Ops ? Center Focus Hero Layout (scoped) ===== */
 .story-ops-page {
   --cc-vanguard: #e04545;
   --cc-forge: #e08a2a;
@@ -46649,7 +46795,7 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
   min-width: 0;
 }
 
-/* Hero transmission panel — hologram stage */
+/* Hero transmission panel ? hologram stage */
 .story-ops-page .story-tx {
   position: relative;
   overflow: hidden;
@@ -46819,7 +46965,7 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
 .story-ops-page .story-tx__actions:empty { display: none; }
 .story-ops-page .story-tx__waiting { margin: 0; text-align: center; width: 100%; }
 
-/* Story speaker — hologram Commander portrait (preferred) or contact orb fallback */
+/* Story speaker ? hologram Commander portrait (preferred) or contact orb fallback */
 .story-ops-page .story-speaker,
 .story-ops-page .story-orb {
   --story-orb-accent: #5ad0e6;
@@ -47177,7 +47323,7 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
   96% { opacity: 0.82; }
 }
 
-/* Transmission console — compact icon transport */
+/* Transmission console ? compact icon transport */
 .story-ops-page .story-tts {
   position: relative;
   z-index: 1;
@@ -47564,7 +47710,7 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
   color: var(--gc-text-muted, #8aa);
   margin-left: 0.35rem;
 }
-.story-ops-page .story-lore[open] > .story-lore__summary::after { content: "−"; }
+.story-ops-page .story-lore[open] > .story-lore__summary::after { content: "?"; }
 .story-ops-page .story-lore__meta {
   font-size: 0.68rem;
   color: var(--gc-text-muted, #8aa);
@@ -47672,7 +47818,7 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
   .story-ops-page .story-tx__text { text-align: left; }
 }
 
-/* EPIC-27 / GC-CLASS-UI-002 — Living Commander Focus (scoped) */
+/* EPIC-27 / GC-CLASS-UI-002 ? Living Commander Focus (scoped) */
 .skilltree-page {
   --cc-vanguard: #e04545;
   --cc-forge: #e08a2a;
@@ -47976,7 +48122,7 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
 .skilltree-trunk--envoy,
 .skilltree-map--envoy { --cc-theme: var(--cc-envoy); }
 
-/* Compact tree skillmap (GC-CLASS-UI-006) — fork silhouette, linear unlock */
+/* Compact tree skillmap (GC-CLASS-UI-006) ? fork silhouette, linear unlock */
 .skilltree-page .skilltree-map__viewport {
   width: 100%;
   overflow-x: auto;
@@ -48317,7 +48463,7 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
 }
 
 
-/* === Combat Encounter Theater (GC-CT) — cinematic stage === */
+/* === Combat Encounter Theater (GC-CT) ? cinematic stage === */
 .gc-combat-report-modal .gc-combat-report-dialog {
   width: min(980px, 100%);
 }
@@ -49179,7 +49325,7 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
 .creator-stat strong { font-size: 1rem; }
 .creator-terms { padding: 0.75rem; margin-bottom: 1rem; }
 
-/* Secret Vault Raid — Barracks troops + fleet troop loadout */
+/* Secret Vault Raid ? Barracks troops + fleet troop loadout */
 .barracks-troops-panel,
 .fleet-troops-panel {
   margin-top: var(--gc-space-3, 12px);
@@ -49426,7 +49572,7 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
   margin-bottom: 10px;
 }
 
-/* Command Initiation / LiveOps — compact header icon rail + compact mission cards */
+/* Command Initiation / LiveOps ? compact header icon rail + compact mission cards */
 .gc-header-icon-rail {
   display: inline-flex;
   align-items: center;

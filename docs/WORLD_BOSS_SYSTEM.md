@@ -185,7 +185,9 @@ Galaxy deep-link: `/world-boss` (encounter). Fleet mission send for `target_type
 
 Boss art: `static/img/bosses/{boss_key}.png|.webp` with alpha cutout (fallback `_placeholder.png`); stage glow/phase is CSS `drop-shadow` + aura — no art panel border.
 
-Active event UI: cinematic Encounter Stage (compact floating boss, ambient nebula/particles, HP bar, in-frame V-formation with ship counts + attack FX). Fleet counts live only on formation slots (no duplicate fleet strip). Phase art variants and boss abilities are a follow-up. Sidebar nav pulses via `nav_badges.world_boss` + SSR `WORLD_BOSS_ACTIVE`.
+Hero loop video: `static/video/bosses/{boss_key}.mp4` plays in the Encounter Stage (Attack/Auto/Catch remain immediately available). Studio plates (white/grey) are pre-keyed onto stage dark (`#081426`) via `scripts/key_boss_video_white.py`. Stage is borderless with soft edge dissolve + `gc-wb-stage-corner` HUD ticks (no art panel frame). Video float is steady. **Reel audio:** `IntersectionObserver` — only the most-visible in-view boss plays with UI-SFX volume (`sfxVolumeForKind("ui", …)`); scrolled-away clips pause+mute. Hard reload boots via `wbEnsureBossVideoBoot` (layout seed + soft-boot activate) so clips start without a second nav click. Portrait fallback still uses `gc-wb-boss-float`. Reduced-motion / error → static portrait. **UI chrome** (borders/glows/stage accent) follows PlayerCard identity (`body[data-identity-theme]` → `--gc-id-rgb` / `--wb-ui-rgb`); phase-2/3 combat colors stay amber/red.
+
+Active event UI: borderless Encounter Arena (soft vignette dissolve, HUD corner ticks instead of a picture frame, steady hero video, ambient nebula/particles, HP bar, in-frame V-formation with ship counts + attack FX). Phase glow is bloom via `--wb-stage-glow`, not a box border. Fleet counts live only on formation slots (no duplicate fleet strip). Sidebar nav pulses via `nav_badges.world_boss` + SSR `WORLD_BOSS_ACTIVE`.
 
 ### Idle / Help UX
 

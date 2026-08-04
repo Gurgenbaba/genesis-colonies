@@ -189,6 +189,10 @@ def test_world_boss_galaxy_ui_contracts():
 
     page = Path("templates/world_boss.html").read_text(encoding="utf-8")
     assert "img/bosses/" in page
+    assert "video/bosses/" in page
+    assert "data-wb-boss-video" in page
+    assert "gc-world-boss-portrait-video" in page
+    assert "data-wb-boss-portrait-fallback" in page
     assert "gc-world-boss-cards" in page
     assert "gc-world-boss-card" in page
     assert "gc-world-boss-board-details" in page
@@ -215,6 +219,9 @@ def test_world_boss_galaxy_ui_contracts():
     # GC-WB-VISUAL-001 / Boss Window — Encounter Stage contracts
     assert "gc-world-boss-hero" in page
     assert "gc-world-boss-stage" in page
+    assert "gc-wb-stage-corner" in page
+    assert "gc-wb-stage-corner--tl" in page
+    assert "gc-wb-stage-corner--br" in page
     assert "gc-world-boss-hero-art" in page
     assert "gc-wb-glow" in page
     assert "data-wb-encounter" in page
@@ -222,6 +229,65 @@ def test_world_boss_galaxy_ui_contracts():
     assert "data-wb-boss-art" in page
     assert "gc-world-boss-boss-float" in page
     assert "gc-world-boss-aura" in page
+    # Hero loop video: loop + muted autoplay attrs; portrait remains fallback
+    assert "data-wb-boss-video" in page and "loop" in page
+    assert "playsinline" in page
+    assert "muted" in page
+    assert "gc-world-boss-portrait" in page
+    video_dir = Path("static/video/bosses")
+    for boss_key in (
+        "rogue_ai_nexus",
+        "planet_eater",
+        "void_titan",
+        "ancient_leviathan",
+    ):
+        assert (video_dir / f"{boss_key}.mp4").is_file(), f"missing hero loop for {boss_key}"
+    css = Path("static/style.css").read_text(encoding="utf-8")
+    assert ".gc-world-boss-portrait-video" in css
+    assert "gc-world-boss-portrait-fallback" in css
+    assert ".gc-world-boss-boss-float:not(.is-portrait-fallback)" in css
+    assert "animation: none" in css
+    assert "min(100%, 720px)" in css
+    assert "gc-world-boss-stage-overlay" in css
+    assert ".gc-wb-stage-corner" in css
+    assert "gc-wb-stage-corner--tl" in css
+    assert "is-wb-reel-active" in css
+    assert "mask-image" in css
+    assert "overflow-x: clip" in css
+    # Break-frame arena: stage has no hard picture border
+    assert ".gc-world-boss-page .gc-world-boss-stage" in css
+    stage_css_idx = css.find(".gc-world-boss-page .gc-world-boss-stage {")
+    assert stage_css_idx >= 0
+    stage_block = css[stage_css_idx : stage_css_idx + 1200]
+    assert "border: none" in stage_block
+    assert "overflow: visible" in stage_block
+    assert "min-height: 420px" in stage_block
+    assert ".gc-world-boss-portrait-video" in css
+    video_css_idx = css.find(".gc-world-boss-page .gc-world-boss-portrait-video {")
+    assert video_css_idx >= 0
+    video_block = css[video_css_idx : video_css_idx + 700]
+    assert "mask-image" in video_block or "-webkit-mask-image" in video_block
+    rail_idx = css.find(".gc-world-boss-page .gc-world-boss-rail {")
+    assert rail_idx >= 0
+    rail_block = css[rail_idx : rail_idx + 500]
+    assert "z-index: 4" in rail_block
+    main_js = Path("static/main.js").read_text(encoding="utf-8")
+    assert "wbSyncBossVideoVolumes" in main_js
+    assert "IntersectionObserver" in main_js
+    assert "wbActivateBossVideo" in main_js
+    assert "wbDeactivateBossVideo" in main_js
+    assert "wbPickInViewBossVideo" in main_js
+    assert "wbEnsureBossVideoBoot" in main_js
+    assert "wbSeedBossVideoRatios" in main_js
+    assert "softBoot" in main_js
+    assert 'sfxVolumeForKind("ui", 0.35)' in main_js or "sfxVolumeForKind" in main_js
+    assert "data-wb-boss-video" in main_js
+    assert "wbk3" in page or "video/bosses/" in page
+    assert "preload=\"auto\"" in page
+    assert "--wb-ui-rgb" in css
+    assert "--gc-id-rgb" in css
+    assert "var(--wb-ui-border)" in css
+    assert "var(--wb-ui-rgb)" in css
     assert "gc-world-boss-shadow" in page
     assert "gc-world-boss-progress" in page
     assert "gc-world-boss-layout" in page
@@ -249,7 +315,7 @@ def test_world_boss_galaxy_ui_contracts():
     assert "gc-wb-glow-pulse" in css or "gc-world-boss-cards" in css
     assert "gc-wb-boss-float" in css
     assert "gc-wb-phase-1" in css
-    assert "min-height: 400px" in css
+    assert "min-height: 420px" in css
     assert "width: auto" in css  # HP wrap inset (not width:100% + left overflow)
     assert "gc-wb-particle-drift" in css
     assert "gc-wb-nebula-drift" in css

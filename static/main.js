@@ -38328,6 +38328,254 @@
       typeof window.matchMedia === "function" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+    /** Hero loop clips — Instagram-style: only the in-view boss plays with UI-SFX audio. */
+    const wbBossVideos = [];
+    let wbActiveBossVideo = null;
+    let wbBossVideoObserver = null;
+    const wbBossVideoRatio = new Map();
+    const wbShowBossPortraitFallback = (floatEl, video) => {
+      if (!floatEl) return;
+      floatEl.classList.add("is-portrait-fallback");
+      if (video) {
+        try {
+          video.pause();
+        } catch (_e) {}
+        video.hidden = true;
+        video.muted = true;
+      }
+      const fallback = floatEl.querySelector("[data-wb-boss-portrait-fallback]");
+      if (fallback) fallback.hidden = false;
+    };
+    const wbUiSfxVolume = () => {
+      const volFn =
+        typeof GC.sfxVolumeForKind === "function"
+          ? GC.sfxVolumeForKind
+          : typeof sfxVolumeForKind === "function"
+            ? sfxVolumeForKind
+            : null;
+      return volFn ? volFn("ui", 0.35) : 0;
+    };
+    const wbSetCardReelActive = (video, on) => {
+      const card = video && video.closest ? video.closest(".gc-world-boss-card") : null;
+      if (card) card.classList.toggle("is-wb-reel-active", !!on);
+      const stage = video && video.closest ? video.closest("[data-wb-stage]") : null;
+      if (stage) stage.classList.toggle("is-wb-reel-active", !!on);
+    };
+    const wbDeactivateBossVideo = (video) => {
+      if (!video) return;
+      try {
+        video.pause();
+      } catch (_e) {}
+      try {
+        video.muted = true;
+      } catch (_e) {}
+      wbSetCardReelActive(video, false);
+      if (wbActiveBossVideo === video) wbActiveBossVideo = null;
+    };
+    const wbActivateBossVideo = (video) => {
+      if (!video || video.hidden) return;
+      if (wbActiveBossVideo && wbActiveBossVideo !== video) {
+        wbDeactivateBossVideo(wbActiveBossVideo);
+      }
+      wbActiveBossVideo = video;
+      wbSetCardReelActive(video, true);
+      const volume = wbUiSfxVolume();
+      const audible = volume > 0;
+      try {
+        video.volume = Math.max(0, Math.min(1, audible ? volume : 0));
+        /* Start muted for autoplay policy, then unmute if UI SFX allows. */
+        video.muted = true;
+      } catch (_e) {}
+      const p = video.play();
+      const finishUnmute = () => {
+        if (wbActiveBossVideo !== video) return;
+        try {
+          video.volume = Math.max(0, Math.min(1, audible ? volume : 0));
+          video.muted = !audible;
+        } catch (_e) {}
+      };
+      if (p && typeof p.then === "function") {
+        p.then(finishUnmute).catch(() => {
+          /* Autoplay blocked — keep muted visual loop attempt. */
+          try {
+            video.muted = true;
+            video.play().catch(() => {});
+          } catch (_e) {}
+        });
+      } else {
+        finishUnmute();
+      }
+    };
+    const videoKeepVolume = (video, volume) => {
+      const audible = volume > 0;
+      video.volume = Math.max(0, Math.min(1, audible ? volume : 0));
+      if (wbActiveBossVideo === video) video.muted = !audible;
+      else video.muted = true;
+    };
+    const wbSyncBossVideoVolumes = () => {
+      const volume = wbUiSfxVolume();
+      wbBossVideos.forEach((video) => {
+        if (!video || video.hidden) return;
+        try {
+          videoKeepVolume(video, volume);
+        } catch (_e) {}
+      });
+    };
+    const wbMeasureBossVideoRatio = (video) => {
+      const target = (video && video._wbObserveRoot) || video;
+      if (!target || typeof target.getBoundingClientRect !== "function") return 0;
+      const rect = target.getBoundingClientRect();
+      const vh = window.innerHeight || 1;
+      const visible = Math.max(0, Math.min(rect.bottom, vh) - Math.max(rect.top, 0));
+      if (!(rect.height > 0)) return 0;
+      return Math.min(1, visible / rect.height);
+    };
+    const wbSeedBossVideoRatios = () => {
+      wbBossVideos.forEach((video) => {
+        if (!video || video.hidden) return;
+        wbBossVideoRatio.set(video, wbMeasureBossVideoRatio(video));
+      });
+    };
+    const wbPickInViewBossVideo = (opts) => {
+      const softBoot = Boolean(opts && opts.softBoot);
+      let best = null;
+      let bestRatio = 0;
+      wbBossVideos.forEach((video) => {
+        if (!video || video.hidden) return;
+        const ratio = Number(wbBossVideoRatio.get(video) || 0);
+        if (ratio > bestRatio) {
+          bestRatio = ratio;
+          best = video;
+        }
+      });
+      const threshold = softBoot ? 0.12 : 0.35;
+      if (best && bestRatio >= threshold) {
+        if (wbActiveBossVideo !== best) wbActivateBossVideo(best);
+        else wbSyncBossVideoVolumes();
+      } else if (softBoot && best && bestRatio > 0.02) {
+        if (wbActiveBossVideo !== best) wbActivateBossVideo(best);
+        else wbSyncBossVideoVolumes();
+      } else if (softBoot && !wbActiveBossVideo && wbBossVideos[0] && !wbBossVideos[0].hidden) {
+        /* Hard reload: IO may report 0 before layout — still start first hero loop. */
+        wbActivateBossVideo(wbBossVideos[0]);
+      } else if (wbActiveBossVideo && !softBoot) {
+        wbDeactivateBossVideo(wbActiveBossVideo);
+      }
+    };
+    const wbEnsureBossVideoBoot = () => {
+      wbSeedBossVideoRatios();
+      wbPickInViewBossVideo({ softBoot: true });
+    };
+    root.querySelectorAll("[data-wb-boss-video]").forEach((video) => {
+      const floatEl = video.closest("[data-wb-boss-float]");
+      const stage = video.closest("[data-wb-stage]") || video.closest(".gc-world-boss-card") || video;
+      if (wbReducedMotion) {
+        wbShowBossPortraitFallback(floatEl, video);
+        return;
+      }
+      const onVideoError = () => wbShowBossPortraitFallback(floatEl, video);
+      video.addEventListener("error", onVideoError);
+      video.addEventListener(
+        "loadeddata",
+        () => {
+          if (floatEl) floatEl.classList.remove("is-portrait-fallback");
+          wbEnsureBossVideoBoot();
+        },
+        { once: true }
+      );
+      video.muted = true;
+      try {
+        video.pause();
+      } catch (_e) {}
+      try {
+        if (video.preload !== "auto") video.preload = "auto";
+        if (typeof video.load === "function" && video.readyState < 2) video.load();
+      } catch (_e) {}
+      wbBossVideos.push(video);
+      wbBossVideoRatio.set(video, 0);
+      video._wbObserveRoot = stage;
+    });
+    let wbBossVideoBootTimers = [];
+    const wbScheduleBossVideoBoot = () => {
+      const run = () => wbEnsureBossVideoBoot();
+      run();
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(() => requestAnimationFrame(run));
+      }
+      wbBossVideoBootTimers.push(window.setTimeout(run, 120));
+      wbBossVideoBootTimers.push(window.setTimeout(run, 450));
+    };
+    if (wbBossVideos.length && typeof IntersectionObserver === "function") {
+      wbBossVideoObserver = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            const stage = entry.target;
+            const video =
+              stage.matches && stage.matches("[data-wb-boss-video]")
+                ? stage
+                : stage.querySelector("[data-wb-boss-video]");
+            if (!video || video.hidden) return;
+            wbBossVideoRatio.set(video, entry.isIntersecting ? entry.intersectionRatio : 0);
+          });
+          wbPickInViewBossVideo();
+        },
+        {
+          threshold: [0, 0.12, 0.25, 0.35, 0.5, 0.75, 1],
+          rootMargin: "-6% 0px -6% 0px",
+        }
+      );
+      wbBossVideos.forEach((video) => {
+        const target = video._wbObserveRoot || video;
+        try {
+          wbBossVideoObserver.observe(target);
+        } catch (_e) {}
+      });
+      wbScheduleBossVideoBoot();
+    } else if (wbBossVideos.length) {
+      /* No IO — activate first video only. */
+      wbActivateBossVideo(wbBossVideos[0]);
+    }
+    const onWbBossVideoPageShow = () => wbScheduleBossVideoBoot();
+    const onWbBossVideoWindowLoad = () => wbScheduleBossVideoBoot();
+    window.addEventListener("pageshow", onWbBossVideoPageShow);
+    if (document.readyState !== "complete") {
+      window.addEventListener("load", onWbBossVideoWindowLoad, { once: true });
+    }
+    const prevApplyNotifySoundSettings = GC.applyNotifySoundSettings;
+    if (typeof prevApplyNotifySoundSettings === "function") {
+      GC.applyNotifySoundSettings = function wbApplyNotifySoundSettingsWrapped(partial) {
+        prevApplyNotifySoundSettings(partial);
+        wbSyncBossVideoVolumes();
+      };
+    }
+    if (typeof GC.registerCleanup === "function") {
+      GC.registerCleanup(() => {
+        if (typeof prevApplyNotifySoundSettings === "function") {
+          GC.applyNotifySoundSettings = prevApplyNotifySoundSettings;
+        }
+        window.removeEventListener("pageshow", onWbBossVideoPageShow);
+        window.removeEventListener("load", onWbBossVideoWindowLoad);
+        wbBossVideoBootTimers.forEach((id) => {
+          try {
+            window.clearTimeout(id);
+          } catch (_e) {}
+        });
+        wbBossVideoBootTimers = [];
+        if (wbBossVideoObserver) {
+          try {
+            wbBossVideoObserver.disconnect();
+          } catch (_e) {}
+          wbBossVideoObserver = null;
+        }
+        wbBossVideos.forEach((video) => {
+          wbDeactivateBossVideo(video);
+        });
+        wbBossVideos.length = 0;
+        wbBossVideoRatio.clear();
+        wbActiveBossVideo = null;
+      });
+    }
+
     const wbFmtInt = (n) => {
       const v = Math.trunc(Number(n) || 0);
       try {

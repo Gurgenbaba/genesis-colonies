@@ -76,6 +76,7 @@
         {% set _boss_png = url_for('static', filename='img/bosses/' ~ event.boss_key ~ '.png', v=GC_ASSET_VERSION) %}
         {% set _boss_webp = _boss_png|webp_static %}
         {% set _boss_ph = url_for('static', filename='img/bosses/_placeholder.png', v=GC_ASSET_VERSION) %}
+        {% set _boss_video = url_for('static', filename='video/bosses/' ~ event.boss_key ~ '.mp4', v=GC_ASSET_VERSION ~ '-wbk3') %}
         {% set outlook = card.reward_outlook if card.reward_outlook is defined else (player_info.reward_outlook if player_info and player_info.reward_outlook is defined else none) %}
         {% set rewards_preview = card.rewards_preview if card.rewards_preview is defined else [] %}
         {% set formation = player_info.formation if player_info and player_info.formation is defined else [] %}
@@ -119,6 +120,10 @@
                     <span class="gc-wb-particle"></span>
                     <span class="gc-wb-particle"></span>
                   </div>
+                  <span class="gc-wb-stage-corner gc-wb-stage-corner--tl" aria-hidden="true"></span>
+                  <span class="gc-wb-stage-corner gc-wb-stage-corner--tr" aria-hidden="true"></span>
+                  <span class="gc-wb-stage-corner gc-wb-stage-corner--bl" aria-hidden="true"></span>
+                  <span class="gc-wb-stage-corner gc-wb-stage-corner--br" aria-hidden="true"></span>
                   <div class="gc-world-boss-stage-overlay">
                     <div class="gc-world-boss-stage-overlay-left">
                       <p class="gc-world-boss-stage-label">{{ T("wb_stage_label", "World Boss") }}</p>
@@ -147,7 +152,19 @@
                        data-wb-boss-art
                        data-wb-hp-phase="{{ hp_phase }}">
                     <div class="gc-world-boss-boss-float" data-wb-boss-float>
-                      <picture>
+                      <video class="gc-world-boss-portrait-video"
+                             data-wb-boss-video
+                             data-wb-boss-key="{{ event.boss_key }}"
+                             src="{{ _boss_video }}"
+                             poster="{{ _boss_png }}"
+                             loop
+                             muted
+                             playsinline
+                             preload="auto"
+                             aria-label="{{ T(event.name_key, event.boss_key) }}"></video>
+                      <picture class="gc-world-boss-portrait-fallback"
+                              data-wb-boss-portrait-fallback
+                              hidden>
                         <source type="image/webp" srcset="{{ _boss_webp }}">
                         <img class="gc-world-boss-portrait"
                              src="{{ _boss_png }}"

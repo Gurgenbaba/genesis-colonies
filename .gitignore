@@ -59,3 +59,7 @@ Thumbs.db
 *.gz
 *.bz2
 *.xz
+
+# World Boss hero video source plates / local previews
+static/video/bosses/*.mp4.whitebak
+static/video/bosses/_preview/
