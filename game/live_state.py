@@ -801,11 +801,46 @@ def account_safety_hud_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
     return get_account_safety_hud_state(int(user_id), conn=conn, self_heal=True)
 
 
+def _fleet_alerts_for_notification_heartbeat(user_id: int, *, conn) -> Dict[str, Any]:
+    """
+    GC-PERF-RADAR-001: incoming fleets + Threat Net fingerprint only.
+
+    Full ``radar_contacts`` rows stay on ``/api/game-state`` (Fleet HUD / Galaxy).
+    """
+    fleet_alerts: Dict[str, Any] = {
+        "incoming_attack_count": 0,
+        "next_attack_arrival": None,
+        "has_incoming_attack": False,
+        "alert_key": "",
+        "incoming_attacks": [],
+        "incoming_hostile_attack_count": 0,
+    }
+    try:
+        from game.fleet import (
+            build_fleet_incoming_attack_alerts,
+            enrich_fleet_alerts_with_radar_fingerprint,
+            fleet_schema_ready,
+        )
+
+        if fleet_schema_ready(conn):
+            fleet_alerts = (
+                build_fleet_incoming_attack_alerts(int(user_id), conn=conn)
+                or fleet_alerts
+            )
+            fleet_alerts = enrich_fleet_alerts_with_radar_fingerprint(
+                fleet_alerts, int(user_id), conn=conn
+            )
+    except Exception:
+        pass
+    return fleet_alerts
+
+
 def notification_summary_for_client(user_id: int, *, conn) -> Dict[str, Any]:
     """
     Tiny notification heartbeat — unread + attack alerts only.
 
-    Must not run queue finish or full live refresh (client polls ~1s).
+    Must not run queue finish or full live refresh (client polls ~12s).
+    GC-PERF-RADAR-001: Threat Net contributes fingerprint/counts, not contact rows.
     """
     from game import messages as messages_logic
     from game.logic import attach_canonical_server_time
@@ -827,28 +862,7 @@ def notification_summary_for_client(user_id: int, *, conn) -> Dict[str, Any]:
         latest_id = None
         new_items = []
 
-    fleet_alerts = {
-        "incoming_attack_count": 0,
-        "next_attack_arrival": None,
-        "has_incoming_attack": False,
-        "alert_key": "",
-        "incoming_attacks": [],
-        "incoming_hostile_attack_count": 0,
-    }
-    try:
-        from game.fleet import (
-            build_fleet_incoming_attack_alerts,
-            enrich_fleet_alerts_with_radar,
-            fleet_schema_ready,
-        )
-
-        if fleet_schema_ready(conn):
-            fleet_alerts = build_fleet_incoming_attack_alerts(uid, conn=conn) or fleet_alerts
-            fleet_alerts = enrich_fleet_alerts_with_radar(
-                fleet_alerts, uid, conn=conn
-            )
-    except Exception:
-        pass
+    fleet_alerts = _fleet_alerts_for_notification_heartbeat(uid, conn=conn)
 
     alert_key = str(fleet_alerts.get("alert_key") or "")
     revision = f"{unread}:{latest_id or 0}:{alert_key}"
@@ -1004,6 +1018,82 @@ def active_fleets_poll_slice(active_fleets: Optional[Dict[str, Any]]) -> Dict[st
     }
 
 
+# Match Fleet HUD contact cap — diet keeps overflow count, trims heavy ship maps.
+_DIET_RADAR_CONTACT_CAP = 8
+_DIET_RADAR_CONTACT_KEYS = (
+    "movement_id",
+    "tier",
+    "threat_class",
+    "mission_type",
+    "match_edge",
+    "sensor_planet_id",
+    "arrival_at",
+    "eta_band",
+    "origin",
+    "target",
+    "owner_id",
+    "owner_name",
+    "ships_by_role",
+)
+
+
+def fleet_alerts_poll_slice(fleet_alerts: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """GC-PERF-RADAR-001: diet keeps Threat Net HUD fields; drops full ``ships`` maps."""
+    if not isinstance(fleet_alerts, dict):
+        return {
+            "incoming_attack_count": 0,
+            "next_attack_arrival": None,
+            "has_incoming_attack": False,
+            "alert_key": "",
+            "incoming_attacks": [],
+            "incoming_hostile_attack_count": 0,
+            "radar_contact_count": 0,
+            "radar_contacts": [],
+            "radar_sensors": [],
+            "has_radar_sensor": False,
+            "has_radar_contact": False,
+        }
+    out = dict(fleet_alerts)
+    contacts = out.get("radar_contacts")
+    if isinstance(contacts, list):
+        slim_contacts: List[Dict[str, Any]] = []
+        for row in contacts[:_DIET_RADAR_CONTACT_CAP]:
+            if not isinstance(row, dict):
+                continue
+            slim = {k: row[k] for k in _DIET_RADAR_CONTACT_KEYS if k in row}
+            if slim:
+                slim_contacts.append(slim)
+        out["radar_contacts"] = slim_contacts
+        # Preserve authoritative count for overflow UI even when contacts are capped.
+        if "radar_contact_count" not in out:
+            out["radar_contact_count"] = len(contacts)
+    else:
+        out["radar_contacts"] = []
+    sensors = out.get("radar_sensors")
+    if isinstance(sensors, list):
+        slim_sensors: List[Dict[str, Any]] = []
+        for row in sensors:
+            if not isinstance(row, dict):
+                continue
+            slim_sensors.append(
+                {
+                    "planet_id": row.get("planet_id"),
+                    "name": row.get("name"),
+                    "galaxy": row.get("galaxy"),
+                    "system": row.get("system"),
+                    "position": row.get("position"),
+                    "scan_range": row.get("scan_range"),
+                }
+            )
+        out["radar_sensors"] = slim_sensors
+    else:
+        out["radar_sensors"] = []
+    # Drop empty radar_alert_key noise from diet when idle.
+    if not out.get("radar_alert_key"):
+        out.pop("radar_alert_key", None)
+    return out
+
+
 def apply_lightweight_game_state_diet(payload: Dict[str, Any]) -> Dict[str, Any]:
     """
     GC-747 / GC-802 / GC-PERF-005: normal poll diet — shell HUD only.
@@ -1041,6 +1131,9 @@ def apply_lightweight_game_state_diet(payload: Dict[str, Any]) -> Dict[str, Any]
 
     if "active_fleets" in payload:
         payload["active_fleets"] = active_fleets_poll_slice(payload.get("active_fleets"))
+
+    if "fleet_alerts" in payload:
+        payload["fleet_alerts"] = fleet_alerts_poll_slice(payload.get("fleet_alerts"))
 
     unread = payload.get("unread_messages_count")
     latest = payload.get("latest_message_id")
@@ -1168,11 +1261,35 @@ def compute_poll_version(payload: Dict[str, Any]) -> int:
     return _hash_poll_slim(poll_slim_from_payload(payload))
 
 
+def _notification_revision_for_probe(user_id: int, *, conn) -> tuple[str, int]:
+    """
+    GC-PERF-RADAR-001: probe revision without toast-item assembly.
+
+    Uses the same unread + alert_key shape as diet ``notification_revision``.
+    """
+    from game import messages as messages_logic
+
+    uid = int(user_id)
+    unread = 0
+    latest_id = 0
+    try:
+        unread = int(messages_logic.unread_count(uid, conn=conn, prepare=False) or 0)
+        raw_latest = messages_logic.latest_inbox_message_id(uid, conn=conn, prepare=False)
+        latest_id = int(raw_latest) if raw_latest else 0
+    except Exception:
+        unread = 0
+        latest_id = 0
+    fleet_alerts = _fleet_alerts_for_notification_heartbeat(uid, conn=conn)
+    alert_key = str(fleet_alerts.get("alert_key") or "")
+    return f"{unread}:{latest_id}:{alert_key}", unread
+
+
 def probe_poll_version(player_id: int, conn) -> Optional[int]:
     """
     GC-PERF-STATE-004: cheap HUD fingerprint matching ``compute_poll_version``.
 
     Reads queue/fleet/unread/energy/score/nav owners without diet payload assembly.
+    GC-PERF-RADAR-001: Threat Net via fingerprint only (no contact rows / toast items).
     Returns None on error so callers fall back to a full diet build.
     """
     try:
@@ -1208,7 +1325,7 @@ def probe_poll_version(player_id: int, conn) -> Optional[int]:
         if fleet_schema_ready(conn):
             fleets = active_fleets_poll_slice(build_active_fleets_payload(uid, conn=conn))
 
-        notif = notification_summary_for_client(uid, conn=conn)
+        revision, unread = _notification_revision_for_probe(uid, conn=conn)
         score_raw = get_player_score_cached(uid, read_only=True) or {
             "total": 0,
             "buildings": 0,
@@ -1224,8 +1341,8 @@ def probe_poll_version(player_id: int, conn) -> Optional[int]:
         }
         # Match diet fingerprint: active_planet poll slice historically omits last_update.
         stub = {
-            "notification_revision": notif.get("notification_revision"),
-            "unread_messages_count": notif.get("unread_messages_count"),
+            "notification_revision": revision,
+            "unread_messages_count": unread,
             "build_queue": build_queue,
             "research": research_poll_slice(research),
             "active_fleets": fleets,

@@ -113,9 +113,10 @@ Navigation: GET `/galaxy?galaxy=N&system=M` (PJAX shell swap).
 - Each colony with radar projects a bubble of `scan_range` **system steps** (same galaxy; cross-galaxy when range ≥ 8).
 - Detects foreign `outbound` missions `attack` / `spy` / `deploy` whose origin **or** target lies in a bubble.
 - Progressive intel tiers: **tier 1+** mission + exact ETA + coords (Sensorphalanx-style); owner at tier 3+; fuzzy roles / full ships at 4–5.
-- Live payload: `fleet_alerts.radar_contacts` + `radar_sensors` via `/api/game-state`.
+- Live payload: `fleet_alerts.radar_contacts` + `radar_sensors` via `/api/game-state` only (**GC-PERF-RADAR-001**). Probe / notification heartbeats carry `radar_alert_key` + counts — not contact rows.
+- Bubble load is batched (`planet_buildings` JOIN); outbound SQL is scoped to bubble galaxy/system windows.
 - **Fleet HUD:** one row per contact (UI cap + overflow hint).
-- **Galaxy → Radar tab:** same payload as contact list + sensor overview (no second poller). Sensor and contact rows navigate to the system view (`GC.navigateTo`); active phalanx scan remains deferred. Ring fleet markers remain deferred.
+- **Galaxy → Radar tab:** same payload as contact list + sensor overview (no second poller); client sync is signature-gated with Fleet HUD alerts. Sensor and contact rows navigate to the system view (`GC.navigateTo`); active phalanx scan remains deferred. Ring fleet markers remain deferred.
 
 Spy probes remain a separate grounded-intel channel.
 

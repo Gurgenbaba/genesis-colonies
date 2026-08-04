@@ -256,3 +256,189 @@ def test_galaxy_radar_panel_client_row_nav_contract():
         data = (ROOT / "locales" / f"{loc}.json").read_text(encoding="utf-8")
         assert "galaxy_radar_nav_sensor" in data
         assert "galaxy_radar_nav_contact" in data
+
+
+def test_radar_fingerprint_matches_full_alert_key():
+    """GC-PERF-RADAR-001: probe/notification fingerprint shares radar_alert_key with full build."""
+    from game.fleet import radar_poll_fingerprint
+
+    ok, _, defender = create_user("def_radar_fp", "pw")
+    assert ok
+    ok, _, attacker = create_user("atk_radar_fp", "pw")
+    assert ok
+    def_id = int(defender["id"])
+    atk_id = int(attacker["id"])
+
+    hw = get_homeworld(player_id=def_id)
+    save_planet_buildings(int(hw["id"]), {"radar_array": 5, "command_center": 3})
+
+    conn = db()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE planets SET galaxy = 1, system = 10, position = 8 WHERE player_id = ?;",
+        (def_id,),
+    )
+    cur.execute(
+        "UPDATE planets SET galaxy = 1, system = 12, position = 4 WHERE player_id = ?;",
+        (atk_id,),
+    )
+    atk_hw = get_homeworld(player_id=atk_id)
+    now = time.time()
+    cur.execute(
+        """
+        INSERT INTO fleet_movements (
+            player_id, origin_planet_id, target_planet_id,
+            target_galaxy, target_system, target_position,
+            mission_type, status, ships_json, resources_json,
+            departure_at, arrival_at, return_at, holding_until,
+            distance, flight_seconds, speed_percent, fuel_cost,
+            created_at, updated_at
+        ) VALUES (?, ?, ?, 1, 10, 8, 'attack', 'outbound', ?, '{}',
+                  ?, ?, NULL, NULL, 100, 60, 100, 10, ?, ?);
+        """,
+        (
+            atk_id,
+            int(atk_hw["id"]),
+            int(hw["id"]),
+            json.dumps({"falcon_interceptor": 5}),
+            now - 10,
+            now + 120,
+            now,
+            now,
+        ),
+    )
+    conn.commit()
+
+    full = build_radar_contacts(def_id, conn=conn, now=now)
+    fp = radar_poll_fingerprint(def_id, conn=conn, now=now)
+    conn.close()
+    assert full["radar_alert_key"]
+    assert fp["radar_alert_key"] == full["radar_alert_key"]
+    assert fp["radar_contact_count"] == full["radar_contact_count"]
+    assert fp["radar_contacts"] == []
+    assert fp["has_radar_sensor"] is True
+
+
+def test_notification_summary_uses_radar_fingerprint_not_contacts():
+    """GC-PERF-RADAR-001: /api/notifications/summary must not ship radar_contacts rows."""
+    from game.live_state import notification_summary_for_client
+
+    ok, _, defender = create_user("def_radar_notif", "pw")
+    assert ok
+    ok, _, attacker = create_user("atk_radar_notif", "pw")
+    assert ok
+    def_id = int(defender["id"])
+    atk_id = int(attacker["id"])
+
+    hw = get_homeworld(player_id=def_id)
+    save_planet_buildings(int(hw["id"]), {"radar_array": 5, "command_center": 3})
+
+    conn = db()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE planets SET galaxy = 1, system = 10, position = 8 WHERE player_id = ?;",
+        (def_id,),
+    )
+    cur.execute(
+        "UPDATE planets SET galaxy = 1, system = 12, position = 4 WHERE player_id = ?;",
+        (atk_id,),
+    )
+    atk_hw = get_homeworld(player_id=atk_id)
+    now = time.time()
+    cur.execute(
+        """
+        INSERT INTO fleet_movements (
+            player_id, origin_planet_id, target_planet_id,
+            target_galaxy, target_system, target_position,
+            mission_type, status, ships_json, resources_json,
+            departure_at, arrival_at, return_at, holding_until,
+            distance, flight_seconds, speed_percent, fuel_cost,
+            created_at, updated_at
+        ) VALUES (?, ?, ?, 1, 10, 8, 'attack', 'outbound', ?, '{}',
+                  ?, ?, NULL, NULL, 100, 60, 100, 10, ?, ?);
+        """,
+        (
+            atk_id,
+            int(atk_hw["id"]),
+            int(hw["id"]),
+            json.dumps({"falcon_interceptor": 2}),
+            now - 10,
+            now + 120,
+            now,
+            now,
+        ),
+    )
+    conn.commit()
+
+    summary = notification_summary_for_client(def_id, conn=conn)
+    conn.close()
+    alerts = summary["fleet_alerts"]
+    assert alerts.get("radar_contact_count", 0) >= 1
+    assert alerts.get("has_radar_contact") is True
+    assert "radar_contacts" not in alerts or alerts.get("radar_contacts") in (None, [])
+    assert "r:" in str(alerts.get("alert_key") or "")
+
+
+def test_fleet_alerts_poll_slice_caps_and_drops_ships():
+    """GC-PERF-RADAR-001: diet keeps HUD fields, drops heavy ships maps."""
+    from game.live_state import fleet_alerts_poll_slice
+
+    fat = {
+        "incoming_attack_count": 0,
+        "has_incoming_attack": False,
+        "alert_key": "r:1,2,3",
+        "radar_contact_count": 3,
+        "has_radar_contact": True,
+        "has_radar_sensor": True,
+        "radar_sensors": [{"planet_id": 1, "name": "A", "galaxy": 1, "system": 1, "position": 1, "scan_range": 4}],
+        "radar_contacts": [
+            {
+                "movement_id": i,
+                "tier": 5,
+                "mission_type": "attack",
+                "arrival_at": 1000 + i,
+                "origin": {"galaxy": 1, "system": 2},
+                "target": {"galaxy": 1, "system": 1, "position": 1},
+                "ships": {"falcon_interceptor": 99},
+                "ships_by_role": {"fighter": 99},
+            }
+            for i in range(1, 12)
+        ],
+    }
+    slim = fleet_alerts_poll_slice(fat)
+    assert slim["radar_contact_count"] == 3
+    assert len(slim["radar_contacts"]) == 8
+    assert "ships" not in slim["radar_contacts"][0]
+    assert slim["radar_contacts"][0]["ships_by_role"] == {"fighter": 99}
+
+
+def test_radar_bubbles_batched_no_n_plus_one_contract():
+    """GC-PERF-RADAR-001: bubble load uses JOIN, not per-planet get_planet_buildings."""
+    fleet_src = (ROOT / "game" / "fleet.py").read_text(encoding="utf-8")
+    bubble_fn = fleet_src.split("def _load_radar_bubbles(")[1].split("def _radar_galaxy_system_bounds(")[0]
+    assert "LEFT JOIN planet_buildings" in bubble_fn
+    assert "get_planet_buildings" not in bubble_fn
+    assert "enrich_fleet_alerts_with_radar_fingerprint" in fleet_src
+    assert "def radar_poll_fingerprint(" in fleet_src
+
+
+def test_client_galaxy_radar_signature_gated_and_resource_ticker_split():
+    """GC-PERF-RADAR-001: Galaxy panel signature-gated; resource ticker ignores transport-only."""
+    main = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+    patch = main.split("function patchShellHudFromState(data, opts)")[1].split(
+        "GC.patchShellHudFromState = patchShellHudFromState"
+    )[0]
+    assert "syncGalaxyRadarPanel(data.fleet_alerts)" in patch
+    # Must be inside the signature-changed branch (not after it unconditionally).
+    sig_block = patch.split("if (alertSig !== _lastFleetAlertsHudSig)")[1].split("}")[0]
+    assert "syncGalaxyRadarPanel(data.fleet_alerts)" in sig_block
+    assert "function _hasResourceTickerBusyActivity()" in main
+    assert "_fleetHasHostileAttackInbound(GC.lastState?.fleet_alerts)" in main
+    assert "_hasResourceTickerBusyActivity()" in main.split(
+        "function _resourceTickerIntervalMs()"
+    )[1].split("function pauseResourceTicker")[0]
+    notif = main.split("function applyNotificationSummary(data, reason)")[1].split(
+        "function scheduleNotificationPoll"
+    )[0]
+    assert "radar_contacts" in notif
+    assert "preserve contact rows" in notif.lower() or "Threat Net fingerprint" in notif

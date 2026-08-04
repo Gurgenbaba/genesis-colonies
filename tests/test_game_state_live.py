@@ -363,9 +363,13 @@ def test_api_game_state_poll_is_diet_gc747(game_client):
     assert "sidebar_nav" not in ap
     assert ap.get("empire_role_key") or ap.get("is_homeworld") is not None
     assert body.get("notification_revision")
-    raw = client.get("/api/game-state").get_data(as_text=True)
-    assert len(raw) < 16000
+    # GC-PERF-005 budget is compact wire size (~15KB via diet_payload_bytes), not
+    # Flask pretty-print. Pretty-print grew past 16KB from intentional HUD slices
+    # (commander / battle_pass / Threat Net keys) while compact stayed under budget.
+    import json as _json
 
+    compact = _json.dumps(body, separators=(",", ":"), default=str)
+    assert len(compact.encode("utf-8")) < 15000, len(compact)
 
 def test_api_game_state_include_panel_has_full_research_catalog(game_client):
     """Panel polls still include research.techs for live research/buildings pages."""

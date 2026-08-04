@@ -2842,13 +2842,32 @@
     if (revision) _lastAppliedNotificationRevision = revision;
     const reasonStr = String(reason || "notification_poll");
     syncServerClockFromState(data);
+    // GC-PERF-RADAR-001: notification carries Threat Net fingerprint only —
+    // preserve contact rows from last game-state diet poll.
+    let fleetAlerts = data.fleet_alerts;
+    if (fleetAlerts && typeof fleetAlerts === "object") {
+      const prev = GC.lastState?.fleet_alerts;
+      if (
+        prev
+        && !Array.isArray(fleetAlerts.radar_contacts)
+        && Array.isArray(prev.radar_contacts)
+      ) {
+        fleetAlerts = {
+          ...fleetAlerts,
+          radar_contacts: prev.radar_contacts,
+          radar_sensors: Array.isArray(fleetAlerts.radar_sensors)
+            ? fleetAlerts.radar_sensors
+            : prev.radar_sensors,
+        };
+      }
+    }
     const hudSlice = {
       ok: true,
       server_time: data.server_time,
       server_now: data.server_now,
       unread_messages_count: data.unread_messages_count,
       latest_message_id: data.latest_message_id,
-      fleet_alerts: data.fleet_alerts,
+      fleet_alerts: fleetAlerts,
       notification_revision: data.notification_revision,
       notifications: data.notifications,
     };
@@ -2857,15 +2876,19 @@
       updateMessagesUnreadBadges(data.unread_messages_count);
     }
     _processUnreadMessagesPoll(hudSlice, reasonStr, {});
-    if (data.fleet_alerts) {
-      const alertSig = fleetAlertsHudSignature(data.fleet_alerts);
+    if (fleetAlerts) {
+      const alertSig = fleetAlertsHudSignature(fleetAlerts);
       if (alertSig !== _lastFleetAlertsHudSig) {
         _lastFleetAlertsHudSig = alertSig;
-        _maybePlayIncomingAttackNotify(data.fleet_alerts);
-        syncFleetAttackAlert(data.fleet_alerts);
-        syncRadarContactAlert(data.fleet_alerts);
+        _maybePlayIncomingAttackNotify(fleetAlerts);
+        syncFleetAttackAlert(fleetAlerts);
+        if (Array.isArray(fleetAlerts.radar_contacts)) {
+          syncRadarContactAlert(fleetAlerts);
+          syncGalaxyRadarPanel(fleetAlerts);
+        }
+      } else if (Array.isArray(fleetAlerts.radar_contacts)) {
+        syncGalaxyRadarPanel(fleetAlerts);
       }
-      syncGalaxyRadarPanel(data.fleet_alerts);
     }
   }
 
@@ -5415,6 +5438,36 @@
       defenseFinish ||
       activeFleetCount > 0 ||
       (GC.lastState?.fleet_alerts?.has_incoming_attack === true) ||
+      _hasSafetyCountdownTimers() ||
+      !!document.querySelector(".build-job.build-job-active") ||
+      !!document.querySelector(".research-job.research-job-active") ||
+      !!document.querySelector(".shipyard-job.shipyard-job-active") ||
+      !!document.querySelector("[data-fleet-drawer-row]") ||
+      _hasVisibleOverviewResearchTimer() ||
+      !!document.querySelector(".planet-evolution-page .gc-card-queue-block[data-gc-card-queue='1']") ||
+      !!document.querySelector(".gc-mini-queue-card--active[data-finish-at]") ||
+      !!document.querySelector("[data-gc-card-queue][data-queue-active='1'][data-finish-at]") ||
+      _hasLiveCountdownAt() ||
+      _hasStaleActiveCardQueue()
+    );
+  }
+
+  /** GC-PERF-RADAR-001: resource climb stays idle for transport/spy-only inbound. */
+  function _hasResourceTickerBusyActivity() {
+    const now = getTimerServerNow();
+    const buildFinish = BUILDQ.active.finishTime > now;
+    const researchFinish = RESEARCHQ.active.finishTime > now;
+    const shipyardFinish = SHIPYARDQ.active.finishTime > now;
+    const defenseFinish = DEFENSEQ.active.finishTime > now;
+    const activeFleetCount = normalizeActiveFleetsPayload(GC.lastState?.active_fleets).count;
+    return (
+      buildFinish ||
+      researchFinish ||
+      shipyardFinish ||
+      defenseFinish ||
+      activeFleetCount > 0 ||
+      _fleetHasHostileAttackInbound(GC.lastState?.fleet_alerts) ||
+      _fleetRadarActive(GC.lastState?.fleet_alerts) ||
       _hasSafetyCountdownTimers() ||
       !!document.querySelector(".build-job.build-job-active") ||
       !!document.querySelector(".research-job.research-job-active") ||
@@ -11594,7 +11647,7 @@
   }
 
   function _resourceTickerIntervalMs() {
-    if (_hasActiveProgressJobs()) return RESOURCE_TICKER_MS_ACTIVE;
+    if (_hasResourceTickerBusyActivity()) return RESOURCE_TICKER_MS_ACTIVE;
     return RESOURCE_TICKER_MS_IDLE;
   }
 
@@ -14955,8 +15008,8 @@
         _maybePlayIncomingAttackNotify(data.fleet_alerts);
         syncFleetAttackAlert(data.fleet_alerts);
         syncRadarContactAlert(data.fleet_alerts);
+        syncGalaxyRadarPanel(data.fleet_alerts);
       }
-      syncGalaxyRadarPanel(data.fleet_alerts);
     }
 
     if (data.account_safety !== undefined) {

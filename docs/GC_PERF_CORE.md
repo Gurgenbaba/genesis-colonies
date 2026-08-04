@@ -27,6 +27,7 @@
 | Vollständiger `main.js`-Split | 🔄 Scaffold → GC-PERF-JS-002 |
 | EffectResolver-Cache | ✅ request-scoped (**GC-PERF-EFFECT-CACHE-001**) |
 | Diet early-exit vor Payload-Build | ✅ **GC-PERF-STATE-004** + probe-skip **STATE-005** |
+| Threat Net poll cost (probe/notif fingerprint) | ✅ **GC-PERF-RADAR-001** |
 | Poll stop/start thrash (hidden+busy) | ✅ **GC-PERF-POLL-THRASH-001** |
 | Chat idle poll (panel closed) | ✅ **GC-PERF-CHAT-IDLE-001** |
 | PJAX shell globals skip (score/planets) | ✅ **GC-PERF-PJAX-CTX-SHELL-001** |
@@ -82,6 +83,7 @@ Schema-Port
 | **GC-PERF-LIVE-001** | Client diet `?since=` + Busy-Poll Fleet/Defense | ✅ |
 | **GC-PERF-STATE-004** | Early exit vor diet payload build | ✅ |
 | **GC-PERF-STATE-005** | Process-local probe skip when since+unread match | ✅ |
+| **GC-PERF-RADAR-001** | Threat Net: fingerprint on probe/notification; batched bubbles; scoped SQL; diet alert slice; client signature/ticker split | ✅ |
 | **GC-PERF-POLL-THRASH-001** | No stop/start on unchanged hidden polls | ✅ |
 | **GC-PERF-CHAT-IDLE-001** | Chat message poll slows when panel closed | ✅ |
 | **GC-PERF-PJAX-CTX-SHELL-001** | Skip score/rank/HEADER_PLANETS on PJAX | ✅ |

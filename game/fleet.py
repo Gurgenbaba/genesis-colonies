@@ -2787,19 +2787,57 @@ def _radar_fuzzy_ship_roles(ships: Mapping[str, Any]) -> Dict[str, int]:
     return out
 
 
+def _radar_request_cache_get(player_id: int, slot: str) -> Any:
+    """GC-PERF-RADAR-001: request-scoped Threat Net reuse (Flask ``g``)."""
+    try:
+        from flask import g, has_request_context
+
+        if not has_request_context():
+            return None
+        cache = getattr(g, "gc_radar_cache", None)
+        if not isinstance(cache, dict):
+            return None
+        return cache.get((int(player_id), str(slot)))
+    except Exception:
+        return None
+
+
+def _radar_request_cache_set(player_id: int, slot: str, value: Any) -> None:
+    try:
+        from flask import g, has_request_context
+
+        if not has_request_context():
+            return
+        cache = getattr(g, "gc_radar_cache", None)
+        if not isinstance(cache, dict):
+            cache = {}
+            g.gc_radar_cache = cache
+        cache[(int(player_id), str(slot))] = value
+    except Exception:
+        return
+
+
 def _load_radar_bubbles(player_id: int, *, conn) -> List[Dict[str, Any]]:
-    """Per-colony radar bubbles: coords + scan_range (building + Envoy bonus)."""
+    """Per-colony radar bubbles: coords + scan_range (building + Envoy bonus).
+
+    GC-PERF-RADAR-001: one batched ``planet_buildings`` query (no N+1).
+    """
     from .commander_classes import get_commander_effect_modifiers
-    from .models import get_planet_buildings
 
     pid = int(player_id)
+    cached = _radar_request_cache_get(pid, "bubbles")
+    if isinstance(cached, list):
+        return cached
+
     cur = conn.cursor()
     cur.execute(
         """
-        SELECT id, galaxy, system, position, name
-        FROM planets
-        WHERE player_id = ?
-        ORDER BY id ASC;
+        SELECT p.id, p.galaxy, p.system, p.position, p.name,
+               COALESCE(pb.radar_array, 0) AS radar_array
+        FROM planets p
+        LEFT JOIN planet_buildings pb ON pb.planet_id = p.id
+        WHERE p.player_id = ?
+        ORDER BY p.id ASC;
         """,
         (pid,),
     )
@@ -2813,8 +2851,7 @@ def _load_radar_bubbles(player_id: int, *, conn) -> List[Dict[str, Any]]:
     bubbles: List[Dict[str, Any]] = []
     for row in rows:
         planet_id = int(row["id"])
-        buildings = get_planet_buildings(planet_id, conn=conn) or {}
-        radar_lvl = max(0, int(buildings.get("radar_array") or 0))
+        radar_lvl = max(0, int(row["radar_array"] or 0))
         if radar_lvl <= 0 and envoy_scan <= 0:
             continue
         scan_range = int(2 * radar_lvl + max(0, envoy_scan))
@@ -2830,7 +2867,62 @@ def _load_radar_bubbles(player_id: int, *, conn) -> List[Dict[str, Any]]:
                 "scan_range": scan_range,
             }
         )
+    _radar_request_cache_set(pid, "bubbles", bubbles)
     return bubbles
+
+
+def _radar_galaxy_system_bounds(
+    bubbles: Sequence[Mapping[str, Any]],
+) -> Dict[int, Tuple[int, int]]:
+    """Per-galaxy system min/max covering all bubble scan windows (SQL prefilter)."""
+    bounds: Dict[int, Tuple[int, int]] = {}
+
+    def _widen(galaxy: int, sys_lo: int, sys_hi: int) -> None:
+        g = int(galaxy)
+        lo = max(1, int(sys_lo))
+        hi = max(lo, int(sys_hi))
+        prev = bounds.get(g)
+        if prev is None:
+            bounds[g] = (lo, hi)
+        else:
+            bounds[g] = (min(prev[0], lo), max(prev[1], hi))
+
+    for bubble in bubbles or []:
+        try:
+            g = int(bubble["galaxy"])
+            s = int(bubble["system"])
+            r = int(bubble["scan_range"])
+        except (TypeError, ValueError, KeyError):
+            continue
+        if r <= 0:
+            continue
+        _widen(g, s - r, s + r)
+        if r >= RADAR_CROSS_GALAXY_MIN_RANGE:
+            leftover = r - RADAR_CROSS_GALAXY_MIN_RANGE
+            _widen(g - 1, s - leftover, s + leftover)
+            _widen(g + 1, s - leftover, s + leftover)
+    return bounds
+
+
+def _radar_outbound_window_clause(
+    bubbles: Sequence[Mapping[str, Any]],
+) -> Tuple[str, List[Any]]:
+    """SQL fragment: origin OR target inside any bubble galaxy/system window."""
+    bounds = _radar_galaxy_system_bounds(bubbles)
+    if not bounds:
+        return "0", []
+    parts: List[str] = []
+    params: List[Any] = []
+    for galaxy, (sys_lo, sys_hi) in sorted(bounds.items()):
+        parts.append(
+            "(op.galaxy = ? AND op.system BETWEEN ? AND ?)"
+        )
+        params.extend([galaxy, sys_lo, sys_hi])
+        parts.append(
+            "(fm.target_galaxy = ? AND fm.target_system BETWEEN ? AND ?)"
+        )
+        params.extend([galaxy, sys_lo, sys_hi])
+    return "(" + " OR ".join(parts) + ")", params
 
 
 def _best_radar_effective(
@@ -2882,49 +2974,76 @@ def _radar_sensors_payload(bubbles: Sequence[Mapping[str, Any]]) -> List[Dict[st
     return out
 
 
-def build_radar_contacts(
-    player_id: int,
-    *,
-    conn,
-    now: Optional[float] = None,
-) -> Dict[str, Any]:
-    """Threat Net contacts for /api/game-state fleet_alerts.radar_contacts."""
-    empty: Dict[str, Any] = {
+def _radar_empty_payload() -> Dict[str, Any]:
+    return {
         "radar_contact_count": 0,
         "radar_contacts": [],
         "radar_alert_key": "",
         "radar_sensors": [],
         "has_radar_sensor": False,
     }
-    if not fleet_schema_ready(conn):
-        return dict(empty)
 
-    pid = int(player_id)
-    if pid <= 0:
-        return dict(empty)
 
-    bubbles = _load_radar_bubbles(pid, conn=conn)
-    sensors = _radar_sensors_payload(bubbles)
-    base: Dict[str, Any] = {
-        "radar_contact_count": 0,
-        "radar_contacts": [],
-        "radar_alert_key": "",
-        "radar_sensors": sensors,
-        "has_radar_sensor": bool(sensors),
-    }
-    if not bubbles:
-        return dict(base)
+def _radar_match_row(
+    row: Mapping[str, Any],
+    bubbles: Sequence[Mapping[str, Any]],
+) -> Optional[Tuple[int, Optional[Dict[str, Any]], str, int, int, int, int, int]]:
+    """Return (tier, sensor, match_edge, og, osys, tg, tsys, tpos) or None."""
+    mission = str(row["mission_type"] or "").strip().lower()
+    if mission not in RADAR_DETECT_MISSIONS:
+        return None
+    try:
+        og = int(row["origin_galaxy"] if row["origin_galaxy"] is not None else 0)
+        osys = int(row["origin_system"] if row["origin_system"] is not None else 0)
+    except (TypeError, ValueError):
+        og, osys = 0, 0
+    try:
+        tg = int(row["target_galaxy"] if row["target_galaxy"] is not None else 0)
+        tsys = int(row["target_system"] if row["target_system"] is not None else 0)
+        tpos = int(row["target_position"] if row["target_position"] is not None else 0)
+    except (TypeError, ValueError):
+        tg, tsys, tpos = 0, 0, 0
 
-    ts = float(now if now is not None else _now())
+    eff_origin, bub_o = _best_radar_effective(bubbles, og, osys)
+    eff_target, bub_t = _best_radar_effective(bubbles, tg, tsys)
+    if eff_origin <= 0 and eff_target <= 0:
+        return None
+    if eff_origin >= eff_target:
+        effective = eff_origin
+        sensor = bub_o
+        match_edge = "origin"
+    else:
+        effective = eff_target
+        sensor = bub_t
+        match_edge = "target"
+    tier = radar_intel_tier(effective)
+    if tier <= 0:
+        return None
+    return tier, sensor, match_edge, og, osys, tg, tsys, tpos
+
+
+def _fetch_radar_outbound_rows(
+    player_id: int,
+    bubbles: Sequence[Mapping[str, Any]],
+    *,
+    conn,
+    now: float,
+    include_ships: bool,
+) -> List[Any]:
+    """Scoped outbound scan — origin/target must fall in a bubble galaxy window."""
+    window_sql, window_params = _radar_outbound_window_clause(bubbles)
+    if window_sql == "0":
+        return []
+    ships_col = "fm.ships_json," if include_ships else ""
     cur = conn.cursor()
     cur.execute(
-        """
+        f"""
         SELECT fm.id AS movement_id,
                fm.player_id AS owner_id,
                fm.mission_type,
                fm.status,
                fm.arrival_at,
-               fm.ships_json,
+               {ships_col}
                fm.origin_planet_id,
                fm.target_planet_id,
                fm.target_galaxy,
@@ -2941,48 +3060,138 @@ def build_radar_contacts(
           AND fm.status = 'outbound'
           AND fm.arrival_at > ?
           AND fm.mission_type IN ('attack', 'spy', 'deploy')
+          AND {window_sql}
         ORDER BY fm.arrival_at ASC, fm.id ASC;
         """,
-        (pid, ts),
+        (int(player_id), float(now), *window_params),
     )
-    rows = cur.fetchall() or []
+    return list(cur.fetchall() or [])
+
+
+def radar_poll_fingerprint(
+    player_id: int,
+    *,
+    conn,
+    now: Optional[float] = None,
+) -> Dict[str, Any]:
+    """
+    GC-PERF-RADAR-001: cheap Threat Net key for probe / notification heartbeats.
+
+    Same ``radar_alert_key`` / counts as ``build_radar_contacts``, without contact
+    rows or ships parsing. Sensors meta is included (small) for has_radar_sensor.
+    """
+    empty = _radar_empty_payload()
+    if not fleet_schema_ready(conn):
+        return dict(empty)
+
+    pid = int(player_id)
+    if pid <= 0:
+        return dict(empty)
+
+    cached = _radar_request_cache_get(pid, "fingerprint")
+    if isinstance(cached, dict):
+        return dict(cached)
+
+    # Prefer full contacts cache when already built this request.
+    full = _radar_request_cache_get(pid, "contacts")
+    if isinstance(full, dict):
+        fp = {
+            "radar_contact_count": int(full.get("radar_contact_count") or 0),
+            "radar_contacts": [],
+            "radar_alert_key": str(full.get("radar_alert_key") or ""),
+            "radar_sensors": list(full.get("radar_sensors") or []),
+            "has_radar_sensor": bool(full.get("has_radar_sensor")),
+        }
+        _radar_request_cache_set(pid, "fingerprint", fp)
+        return dict(fp)
+
+    bubbles = _load_radar_bubbles(pid, conn=conn)
+    sensors = _radar_sensors_payload(bubbles)
+    base: Dict[str, Any] = {
+        "radar_contact_count": 0,
+        "radar_contacts": [],
+        "radar_alert_key": "",
+        "radar_sensors": sensors,
+        "has_radar_sensor": bool(sensors),
+    }
+    if not bubbles:
+        _radar_request_cache_set(pid, "fingerprint", base)
+        return dict(base)
+
+    ts = float(now if now is not None else _now())
+    rows = _fetch_radar_outbound_rows(
+        pid, bubbles, conn=conn, now=ts, include_ships=False
+    )
+    ids: List[int] = []
+    for row in rows:
+        matched = _radar_match_row(row, bubbles)
+        if matched is None:
+            continue
+        ids.append(int(row["movement_id"]))
+
+    if not ids:
+        _radar_request_cache_set(pid, "fingerprint", base)
+        return dict(base)
+
+    ids_sorted = sorted(ids)
+    fp = {
+        "radar_contact_count": len(ids_sorted),
+        "radar_contacts": [],
+        "radar_alert_key": "r:" + ",".join(str(i) for i in ids_sorted),
+        "radar_sensors": sensors,
+        "has_radar_sensor": bool(sensors),
+    }
+    _radar_request_cache_set(pid, "fingerprint", fp)
+    return dict(fp)
+
+
+def build_radar_contacts(
+    player_id: int,
+    *,
+    conn,
+    now: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Threat Net contacts for /api/game-state fleet_alerts.radar_contacts."""
+    empty = _radar_empty_payload()
+    if not fleet_schema_ready(conn):
+        return dict(empty)
+
+    pid = int(player_id)
+    if pid <= 0:
+        return dict(empty)
+
+    cached = _radar_request_cache_get(pid, "contacts")
+    if isinstance(cached, dict):
+        return dict(cached)
+
+    bubbles = _load_radar_bubbles(pid, conn=conn)
+    sensors = _radar_sensors_payload(bubbles)
+    base: Dict[str, Any] = {
+        "radar_contact_count": 0,
+        "radar_contacts": [],
+        "radar_alert_key": "",
+        "radar_sensors": sensors,
+        "has_radar_sensor": bool(sensors),
+    }
+    if not bubbles:
+        _radar_request_cache_set(pid, "contacts", base)
+        return dict(base)
+
+    ts = float(now if now is not None else _now())
+    rows = _fetch_radar_outbound_rows(
+        pid, bubbles, conn=conn, now=ts, include_ships=True
+    )
     if not rows:
+        _radar_request_cache_set(pid, "contacts", base)
         return dict(base)
 
     contacts: List[Dict[str, Any]] = []
     for row in rows:
+        matched = _radar_match_row(row, bubbles)
+        if matched is None:
+            continue
+        tier, sensor, match_edge, og, osys, tg, tsys, tpos = matched
         mission = str(row["mission_type"] or "").strip().lower()
-        if mission not in RADAR_DETECT_MISSIONS:
-            continue
-
-        try:
-            og = int(row["origin_galaxy"] if row["origin_galaxy"] is not None else 0)
-            osys = int(row["origin_system"] if row["origin_system"] is not None else 0)
-        except (TypeError, ValueError):
-            og, osys = 0, 0
-        try:
-            tg = int(row["target_galaxy"] if row["target_galaxy"] is not None else 0)
-            tsys = int(row["target_system"] if row["target_system"] is not None else 0)
-            tpos = int(row["target_position"] if row["target_position"] is not None else 0)
-        except (TypeError, ValueError):
-            tg, tsys, tpos = 0, 0, 0
-
-        eff_origin, bub_o = _best_radar_effective(bubbles, og, osys)
-        eff_target, bub_t = _best_radar_effective(bubbles, tg, tsys)
-        if eff_origin <= 0 and eff_target <= 0:
-            continue
-        if eff_origin >= eff_target:
-            effective = eff_origin
-            sensor = bub_o
-            match_edge = "origin"
-        else:
-            effective = eff_target
-            sensor = bub_t
-            match_edge = "target"
-
-        tier = radar_intel_tier(effective)
-        if tier <= 0:
-            continue
 
         try:
             arrival_at = int(float(row["arrival_at"]))
@@ -3014,8 +3223,10 @@ def build_radar_contacts(
         try:
             parsed = json.loads(row["ships_json"] or "{}")
             if isinstance(parsed, dict):
-                ships_raw = {str(k): int(v or 0) for k, v in parsed.items() if int(v or 0) > 0}
-        except (TypeError, ValueError, json.JSONDecodeError):
+                ships_raw = {
+                    str(k): int(v or 0) for k, v in parsed.items() if int(v or 0) > 0
+                }
+        except (TypeError, ValueError, json.JSONDecodeError, KeyError):
             ships_raw = {}
 
         if tier >= 5:
@@ -3027,16 +3238,63 @@ def build_radar_contacts(
         contacts.append(contact)
 
     if not contacts:
+        _radar_request_cache_set(pid, "contacts", base)
         return dict(base)
 
     ids = sorted(int(c["movement_id"]) for c in contacts)
-    return {
+    payload = {
         "radar_contact_count": len(contacts),
         "radar_contacts": contacts,
         "radar_alert_key": "r:" + ",".join(str(i) for i in ids),
         "radar_sensors": sensors,
         "has_radar_sensor": bool(sensors),
     }
+    _radar_request_cache_set(pid, "contacts", payload)
+    # Keep fingerprint aligned if probe/notification also runs this request.
+    _radar_request_cache_set(
+        pid,
+        "fingerprint",
+        {
+            "radar_contact_count": payload["radar_contact_count"],
+            "radar_contacts": [],
+            "radar_alert_key": payload["radar_alert_key"],
+            "radar_sensors": sensors,
+            "has_radar_sensor": bool(sensors),
+        },
+    )
+    return dict(payload)
+
+
+def _merge_radar_into_alerts(
+    alerts: Dict[str, Any],
+    radar: Mapping[str, Any],
+    *,
+    include_contacts: bool,
+) -> Dict[str, Any]:
+    out = dict(alerts or {})
+    out["radar_contact_count"] = int(radar.get("radar_contact_count") or 0)
+    if include_contacts:
+        out["radar_contacts"] = list(radar.get("radar_contacts") or [])
+        out["radar_sensors"] = list(radar.get("radar_sensors") or [])
+    else:
+        # Fingerprint path: keys/counts only — HUD contact rows stay on game-state.
+        out.pop("radar_contacts", None)
+        out["radar_sensors"] = list(radar.get("radar_sensors") or [])
+    out["has_radar_sensor"] = bool(radar.get("has_radar_sensor"))
+    radar_key = str(radar.get("radar_alert_key") or "")
+    out["radar_alert_key"] = radar_key
+    base_key = str(out.get("alert_key") or "")
+    # Strip any prior radar suffix before re-merge (idempotent).
+    if "|r:" in base_key:
+        base_key = base_key.split("|r:", 1)[0]
+    elif base_key.startswith("r:"):
+        base_key = ""
+    if radar_key:
+        out["alert_key"] = f"{base_key}|{radar_key}" if base_key else radar_key
+    else:
+        out["alert_key"] = base_key
+    out["has_radar_contact"] = bool(out["radar_contact_count"] > 0)
+    return out
 
 
 def enrich_fleet_alerts_with_radar(
@@ -3046,19 +3304,21 @@ def enrich_fleet_alerts_with_radar(
     conn,
     now: Optional[float] = None,
 ) -> Dict[str, Any]:
-    """Merge Threat Net contacts into the fleet_alerts payload."""
-    out = dict(alerts or {})
+    """Merge full Threat Net contacts into the fleet_alerts payload (game-state HUD)."""
     radar = build_radar_contacts(player_id, conn=conn, now=now)
-    out["radar_contact_count"] = int(radar.get("radar_contact_count") or 0)
-    out["radar_contacts"] = list(radar.get("radar_contacts") or [])
-    out["radar_sensors"] = list(radar.get("radar_sensors") or [])
-    out["has_radar_sensor"] = bool(radar.get("has_radar_sensor"))
-    radar_key = str(radar.get("radar_alert_key") or "")
-    base_key = str(out.get("alert_key") or "")
-    if radar_key:
-        out["alert_key"] = f"{base_key}|{radar_key}" if base_key else radar_key
-    out["has_radar_contact"] = bool(out["radar_contact_count"] > 0)
-    return out
+    return _merge_radar_into_alerts(alerts, radar, include_contacts=True)
+
+
+def enrich_fleet_alerts_with_radar_fingerprint(
+    alerts: Dict[str, Any],
+    player_id: int,
+    *,
+    conn,
+    now: Optional[float] = None,
+) -> Dict[str, Any]:
+    """GC-PERF-RADAR-001: merge Threat Net key/counts only (probe / notification)."""
+    radar = radar_poll_fingerprint(player_id, conn=conn, now=now)
+    return _merge_radar_into_alerts(alerts, radar, include_contacts=False)
 
 
 def recall_fleet_movement(

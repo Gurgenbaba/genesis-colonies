@@ -90,6 +90,16 @@ def test_notification_summary_includes_new_items_slice():
     assert "notification_toast_items" in summary
     assert '"new_items"' in summary or "'new_items'" in summary
     assert "notifications" in summary
+    # GC-PERF-RADAR-001: fingerprint only — not full contact enrich.
+    assert "enrich_fleet_alerts_with_radar_fingerprint" in py
+    assert "_fleet_alerts_for_notification_heartbeat" in py
+    heartbeat = py.split("def _fleet_alerts_for_notification_heartbeat")[1].split(
+        "def notification_summary_for_client"
+    )[0]
+    assert "enrich_fleet_alerts_with_radar_fingerprint" in heartbeat
+    assert "enrich_fleet_alerts_with_radar(" not in heartbeat.replace(
+        "enrich_fleet_alerts_with_radar_fingerprint", ""
+    )
 
     msgs = _read("game/messages.py")
     assert "def notification_toast_items(" in msgs

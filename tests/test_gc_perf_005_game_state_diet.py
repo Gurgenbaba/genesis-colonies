@@ -25,7 +25,9 @@ def test_live_state_diet_drops_page_catalog_blocks():
     assert "active_planet_poll_slice" in live
     assert "planets_poll_slice" in live
     assert "active_fleets_poll_slice" in live
+    assert "fleet_alerts_poll_slice" in live
     assert "notification_revision" in diet
+    assert "fleet_alerts_poll_slice" in diet
 
 
 def test_app_skips_heavy_blocks_on_lightweight_payload():
