@@ -8279,13 +8279,33 @@
     if (domain === "shipyard" || domain === "defense" || domain === "ascension") return;
     const targetLevel = Math.floor(Number(block.dataset.targetLevel || 0));
     if (targetLevel < 1) return;
-    const buildingKey = cardEl.getAttribute("data-building-row") || "";
+    const buildingKey =
+      cardEl.getAttribute("data-building-row") ||
+      cardEl.getAttribute("data-building") ||
+      cardEl.getAttribute("data-tech-key") ||
+      "";
     const byId = buildingKey ? document.getElementById(`level-${buildingKey}`) : null;
     const levelEl =
       byId
       || cardEl.querySelector(".gc-bld-hero-level, .gc-bld-card-level, .tech-level-current, .gc-hero-stat-badge--level");
     if (levelEl) _setIfChanged(levelEl, fmtNumber(targetLevel));
+    // Stage prop is the visible badge in Colony Stage — #level-* lives on the hidden card source.
+    if (buildingKey && (domain === "building" || domain === "build" || !domain)) {
+      optimisticPatchStagePropLevel(buildingKey, targetLevel);
+    }
   }
+
+  function optimisticPatchStagePropLevel(buildingKey, targetLevel) {
+    const key = String(buildingKey || "").trim();
+    const level = Math.floor(Number(targetLevel) || 0);
+    if (!key || level < 1) return;
+    const stageProp = document.querySelector(`[data-bld-stage-prop="${key}"]`);
+    if (!stageProp) return;
+    stageProp.dataset.level = String(level);
+    const stageLevel = stageProp.querySelector("[data-bld-stage-level]");
+    if (stageLevel) _setIfChanged(stageLevel, fmtNumber(level));
+  }
+  GC.optimisticPatchStagePropLevel = optimisticPatchStagePropLevel;
 
   /** GC-838 / GC-INSTANT-QUEUE-FINISH-001 — optimistic overlay removal + level patch before server confirm. */
   function optimisticDismissDueCardQueueBlock(block) {
@@ -11215,6 +11235,15 @@
       const fill = card.querySelector(".gc-mini-queue-card__progress-fill");
       if (bar) bar.setAttribute("aria-valuenow", String(Math.round(pct)));
       _applyProgressFill(fill, pct);
+      if (isQueueTimerComplete(remaining, finish, serverNowTs)) {
+        const ownerKey = String(card.dataset.ownerKey || "").trim();
+        const targetLevel = Math.floor(Number(card.dataset.targetLevel || 0));
+        if ((domain === "building" || domain === "build") && ownerKey && targetLevel >= 1) {
+          optimisticPatchStagePropLevel(ownerKey, targetLevel);
+          const levelEl = document.getElementById(`level-${ownerKey}`);
+          if (levelEl) _setIfChanged(levelEl, fmtNumber(targetLevel));
+        }
+      }
     });
     // Stage build FX: drive from mini-queue (always present on /buildings), not only hidden cards.
     updateBuildingStageBuildFxFromMiniQueue(serverNowTs);

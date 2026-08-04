@@ -3286,11 +3286,19 @@ def test_gc_instant_queue_finish_optimistic_level_contract():
     """GC-INSTANT-QUEUE-FINISH-001: timer-zero bumps level from data-target-level before include_panel."""
     src = _read("static/main.js")
     assert "function optimisticPatchCardLevelFromQueueBlock(block, cardEl)" in src
+    assert "function optimisticPatchStagePropLevel(buildingKey, targetLevel)" in src
     dismiss = src.split("function optimisticDismissDueCardQueueBlock(block)")[1].split(
         "function findCardQueueBlockByJobId"
     )[0]
     assert "optimisticPatchCardLevelFromQueueBlock(block, cardEl)" in dismiss
     assert "dismissCompletedCardQueueBlock(block)" in dismiss
+    patch = src.split("function optimisticPatchCardLevelFromQueueBlock(block, cardEl)")[1].split(
+        "function optimisticPatchStagePropLevel"
+    )[0]
+    assert "optimisticPatchStagePropLevel(buildingKey, targetLevel)" in patch
+    assert 'data-bld-stage-prop' in src.split("function optimisticPatchStagePropLevel")[1].split(
+        "GC.optimisticPatchStagePropLevel"
+    )[0]
     assert "PERF_IDLE_ON_DEBOUNCE_MS" in src
     land = src.split("function applyPlanetLandscapeFromState(data)")[1].split(
         "function ensurePlanetLandscapeAfterSoftNav"
@@ -3299,6 +3307,10 @@ def test_gc_instant_queue_finish_optimistic_level_contract():
     macros = _read("templates/partials/card_queue_macros.html")
     assert "data-target-level=" in macros
     assert "forceCanonicalGameStateRefresh(\"queue_timer_zero\")" in src
+    mini = src.split("function updateMiniQueueProgressBars(serverNowTs)")[1].split(
+        "function updateBuildingStageBuildFxFromMiniQueue"
+    )[0]
+    assert "optimisticPatchStagePropLevel(ownerKey, targetLevel)" in mini
 
 
 def test_gc_instant_hud_rates_ssr_contract():
