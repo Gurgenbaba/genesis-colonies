@@ -47,6 +47,7 @@ Einzelmeldungen / Entwürfe bleiben über das Compose-Form möglich.
 1. `ensure_changelog_seeded` — wenn keine Major Releases: Import `CHANGELOG.md`
 2. `ensure_v09_release_seeded` — kuratiertes v0.9 Pack, wenn `v0.9` fehlt
 3. `ensure_v091_release_seeded` — kuratiertes v0.9.1 Pack (EFFSTAT / Story-i18n), wenn `v0.9.1` fehlt
+4. `ensure_v092_release_seeded` — kuratiertes v0.9.2 Pack (LiveOps Catch-up + Kolonie-Stage), wenn `v0.9.2` fehlt
 
 Idempotent. Kein Runtime-Git.
 
@@ -81,4 +82,4 @@ Idempotent. Kein Runtime-Git.
 
 ## Tests
 
-`tests/test_universe_news.py`, `tests/test_universe_news_timeline.py` — create/list, publish-release idempotency, no git in `news_page_payload`, v0.9 / v0.9.1 seed, release pack locale overlay, indexed `source_ref`, whats-new major, EVENT excluded from timeline but banner-capable.
+`tests/test_universe_news.py`, `tests/test_universe_news_timeline.py` — create/list, publish-release idempotency, no git in `news_page_payload`, v0.9 / v0.9.1 / v0.9.2 seed, release pack locale overlay, indexed `source_ref`, whats-new major, EVENT excluded from timeline but banner-capable.

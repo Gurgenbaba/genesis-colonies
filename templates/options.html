@@ -19,7 +19,8 @@
      data-notify-message-sound="{{ od.get('notify_message_sound', 0.1)|e }}"
      data-sfx-ui-sound="{{ od.get('sfx_ui_sound', 0.1)|e }}"
      data-sfx-combat-sound="{{ od.get('sfx_combat_sound', 0.1)|e }}"
-     data-default-spy-probes="{{ od.get('default_spy_probes', 5)|int }}">
+     data-default-spy-probes="{{ od.get('default_spy_probes', 5)|int }}"
+     data-buildings-ui-mode="{{ od.get('buildings_ui_mode', 'stage')|e }}">
 
   <section class="gc-options-control-module" aria-labelledby="options-control-title">
 
@@ -391,6 +392,46 @@
                 </div>
               </div>
               <p class="gc-options-form-hint gc-options-galaxy-hint" id="options-spy-probes-hint" role="status" aria-live="polite" hidden></p>
+            </div>
+          </article>
+
+          <article class="gc-options-card gc-options-buildings-ui-card"
+                   id="options-buildings-ui"
+                   data-buildings-ui-mode="{{ od.get('buildings_ui_mode', 'stage')|e }}">
+            <header class="gc-options-card-head">
+              <span class="gc-options-card-title">{{ T("options_buildings_ui_title", "Gebäude-Menü") }}</span>
+              <span class="gc-options-card-sub">{{ T("options_buildings_ui_subtitle", "Kolonie-Stage oder Retro-Karten.") }}</span>
+            </header>
+            <div class="gc-options-buildings-ui-grid" role="radiogroup" aria-label="{{ T('options_buildings_ui_title', 'Gebäude-Menü') }}">
+              {% set _bld_mode = od.get('buildings_ui_mode', 'stage') %}
+              <label class="gc-options-buildings-ui-choice">
+                <input type="radio"
+                       name="buildings_ui_mode"
+                       value="stage"
+                       data-buildings-ui-mode-input
+                       {% if _bld_mode != 'cards' %}checked{% endif %}>
+                <span class="gc-options-buildings-ui-choice-body">
+                  <strong>{{ T("buildings_ui_mode_stage", "Kolonie-Stage") }}</strong>
+                  <span class="hint">{{ T("buildings_ui_mode_stage_help", "Neues Build-UI: Landschaft, Props, +1/MAX auf der Stage.") }}</span>
+                </span>
+              </label>
+              <label class="gc-options-buildings-ui-choice">
+                <input type="radio"
+                       name="buildings_ui_mode"
+                       value="cards"
+                       data-buildings-ui-mode-input
+                       {% if _bld_mode == 'cards' %}checked{% endif %}>
+                <span class="gc-options-buildings-ui-choice-body">
+                  <strong>{{ T("buildings_ui_mode_cards", "Retro-Karten") }}</strong>
+                  <span class="hint">{{ T("buildings_ui_mode_cards_help", "Klassische Gebäude-Kartenliste wie zuvor.") }}</span>
+                </span>
+              </label>
+            </div>
+            <div class="gc-options-form-actions">
+              <button type="button" class="gc-btn gc-btn-primary" data-buildings-ui-save>
+                {{ T("options_save") }}
+              </button>
+              <p class="gc-options-form-hint" id="options-buildings-ui-hint" role="status" aria-live="polite" hidden></p>
             </div>
           </article>
         </div>

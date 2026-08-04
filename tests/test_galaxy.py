@@ -491,7 +491,8 @@ def test_list_system_occupied_slot_uses_herocard_image(galaxy_db):
     slot = next(s for s in data["slots"] if s["occupied"])
     assert slot["planet_image_relpath"].startswith("img/herocards/")
     assert slot["herocard_relpath"] == slot["planet_image_relpath"]
-    assert slot["landscape_relpath"].startswith("img/landscapes/")
+    assert slot["landscape_relpath"].startswith("img/herocards/")
+    assert slot["landscape_relpath"] == slot["herocard_relpath"]
 
 
 def test_list_system_slot_coordinates_match_position(galaxy_db):

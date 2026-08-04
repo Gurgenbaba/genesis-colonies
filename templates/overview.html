@@ -46,7 +46,7 @@
 {% set hero_label_key = theme.label_key or 'planet_slot_08' %}
 {% set herocard_w = theme.herocard_fallback_width|default(560) %}
 {% set herocard_h = theme.herocard_fallback_height|default(373) %}
-{% set hero_landscape_rel = theme.landscape_relpath or 'img/landscapes/normaltempplanet01-h.jpg' %}
+{% set hero_landscape_rel = theme.landscape_relpath or 'img/herocards/herocard_08.png' %}
 {% set hero_landscape_url = url_for('static', filename=hero_landscape_rel, v=GC_ASSET_VERSION) %}
 
 <div class="gc-page overview-wrapper overview-command" data-planet-id="{{ planet.planet_id or 0 }}">

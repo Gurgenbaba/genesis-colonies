@@ -212,7 +212,7 @@ body.gc-body-ingame.gc-has-planet-landscape .gc-bg {
     linear-gradient(rgba(0, 12, 28, 0.62), rgba(0, 10, 22, 0.78)),
     image-set(
       var(--planet-landscape-webp) type("image/webp"),
-      var(--planet-landscape) type("image/jpeg")
+      var(--planet-landscape) type("image/png")
     );
   background-size: cover;
   background-position: center center;
@@ -2952,11 +2952,142 @@ body.gc-body-simple .gc-toast-stack{
   left: 0;
   color: #7dffb2;
 }
-.gc-whats-new-foot{
+.gc-options-buildings-ui-grid{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+@media (max-width: 720px){
+  .gc-options-buildings-ui-grid{ grid-template-columns: 1fr; }
+}
+.gc-options-buildings-ui-choice{
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px;
+  border: 1px solid rgba(120, 160, 190, 0.28);
+  background: rgba(6, 14, 26, 0.72);
+  border-radius: var(--gc-radius-sm, 2px);
+  cursor: pointer;
+}
+.gc-options-buildings-ui-choice:has(input:checked){
+  border-color: rgba(70, 229, 255, 0.65);
+  box-shadow: inset 0 0 0 1px rgba(70, 229, 255, 0.28);
+}
+.gc-options-buildings-ui-choice input{
+  margin-top: 3px;
+}
+.gc-options-buildings-ui-choice-body{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.gc-options-buildings-ui-choice-body strong{
+  font-size: 0.95rem;
+}
+
+.gc-bld-ui-chooser{
+  position: fixed;
+  inset: 0;
+  z-index: var(--gc-z-modal, 1200);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+.gc-bld-ui-chooser.hidden,
+.gc-bld-ui-chooser[hidden]{
+  display: none !important;
+  pointer-events: none !important;
+}
+.gc-bld-ui-chooser-backdrop{
+  position: absolute;
+  inset: 0;
+  background: rgba(2, 6, 16, 0.78);
+}
+.gc-bld-ui-chooser-panel{
+  position: relative;
+  width: min(640px, 100%);
+  max-height: min(90vh, 720px);
+  overflow: auto;
+  padding: 18px 20px;
+  border-color: rgba(70, 229, 255, 0.32);
+  box-shadow: 0 0 36px rgba(70, 229, 255, 0.1);
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.gc-bld-ui-chooser-kicker{
+  margin: 0;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gc-text-muted);
+}
+.gc-bld-ui-chooser-title{
+  margin: 4px 0 0;
+  font-size: 1.15rem;
+  color: var(--gc-text, #e8f4ff);
+}
+.gc-bld-ui-chooser-lead{
+  margin: 12px 0 16px;
+  color: var(--gc-text-soft);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+.gc-bld-ui-chooser-tiles{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+@media (max-width: 640px){
+  .gc-bld-ui-chooser-tiles{ grid-template-columns: 1fr; }
+}
+.gc-bld-ui-chooser-tile{
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  text-align: left;
+  padding: 14px 14px 12px;
+  border: 1px solid rgba(120, 160, 190, 0.28);
+  background: rgba(6, 14, 26, 0.92);
+  color: inherit;
+  border-radius: var(--gc-radius-sm, 2px);
+  cursor: pointer;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.gc-bld-ui-chooser-tile:hover{
+  border-color: rgba(70, 229, 255, 0.45);
+}
+.gc-bld-ui-chooser-tile.is-selected{
+  border-color: rgba(70, 229, 255, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(70, 229, 255, 0.35);
+}
+.gc-bld-ui-chooser-tile-badge{
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #7dffb2;
+  border: 1px solid rgba(125, 255, 178, 0.35);
+  padding: 2px 6px;
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.gc-bld-ui-chooser-tile-title{
+  font-size: 1rem;
+  color: var(--gc-text, #e8f4ff);
+}
+.gc-bld-ui-chooser-tile-desc{
+  font-size: 0.84rem;
+  color: var(--gc-text-muted);
+  line-height: 1.35;
+}
+.gc-bld-ui-chooser-foot{
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
 }
 
 .admin-news-badge--draft{
@@ -8399,123 +8530,476 @@ body:not(.gc-perf-idle) .research-bar-fill{
    ========================= */
 .buildings-shell{ padding: 10px; }
 
-/* GC-BST — Buildings planet stage (display-only props; cards remain upgrade UI) */
+/* GC-BST — Buildings planet stage: clear planet landscape + round props + inline +1/MAX */
 .bld-planet-stage{
   position: relative;
   margin: 0 0 12px;
-  min-height: clamp(180px, 28vh, 280px);
-  border: 1px solid rgba(70, 229, 255, 0.18);
+  min-height: clamp(280px, 42vh, 460px);
+  border: 1px solid rgba(var(--gc-id-rgb), 0.22);
   border-radius: var(--gc-radius-sm, 2px);
   overflow: hidden;
-  background: rgba(2, 6, 14, 0.72);
+  background: transparent;
+}
+.bld-planet-stage-toolbar{
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  pointer-events: none;
+}
+.bld-planet-stage-toolbar .gc-btn,
+.bld-stage-arrange-hint{
+  pointer-events: auto;
+}
+.bld-stage-arrange-btn,
+.bld-stage-reset-btn{
+  min-height: 28px;
+  padding: 2px 10px;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: rgba(4, 10, 22, 0.82);
+}
+.bld-stage-arrange-btn[aria-pressed="true"]{
+  border-color: rgba(255, 220, 90, 0.7);
+  color: #ffe28a;
+}
+.bld-stage-arrange-hint{
+  font-size: 0.72rem;
+  color: var(--gc-text-soft, #9bb4c8);
+  background: rgba(4, 10, 22, 0.75);
+  border: 1px solid rgba(70, 229, 255, 0.18);
+  padding: 4px 8px;
+}
+.bld-planet-stage--arrange{
+  outline: 1px dashed rgba(255, 220, 90, 0.45);
+  outline-offset: -2px;
+}
+.bld-planet-stage--arrange .bld-planet-stage-surface{
+  filter: none;
+}
+.bld-planet-stage--arrange .bld-planet-stage-props{
+  background-image:
+    linear-gradient(rgba(255, 220, 90, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 220, 90, 0.07) 1px, transparent 1px);
+  background-size: 10% 10%;
 }
 .bld-planet-stage-surface{
   position: absolute;
   inset: 0;
+  z-index: 0;
   background-color: #040810;
+  /* Landscape must stay sharp and readable — no blur, light read-scrim only */
   background-image:
-    linear-gradient(180deg, rgba(2, 6, 14, 0.35) 0%, transparent 40%, rgba(2, 6, 14, 0.55) 100%),
+    linear-gradient(180deg, rgba(2, 6, 14, 0.18) 0%, transparent 32%, rgba(2, 6, 14, 0.28) 100%),
     var(--planet-landscape, none);
   background-size: cover;
   background-position: center center;
   background-repeat: no-repeat;
+  filter: none;
+  pointer-events: none;
 }
 @supports (background-image: image-set(url("x") type("image/webp"))) {
   .bld-planet-stage-surface{
     background-image:
-      linear-gradient(180deg, rgba(2, 6, 14, 0.35) 0%, transparent 40%, rgba(2, 6, 14, 0.55) 100%),
+      linear-gradient(180deg, rgba(2, 6, 14, 0.18) 0%, transparent 32%, rgba(2, 6, 14, 0.28) 100%),
       image-set(
         var(--planet-landscape-webp, var(--planet-landscape, none)) type("image/webp"),
-        var(--planet-landscape, none) type("image/jpeg")
+        var(--planet-landscape, none) type("image/png")
       );
   }
+}
+.bld-planet-stage--resync .bld-planet-stage-props{
+  opacity: 0.35;
+  transition: opacity 0.12s ease;
 }
 .bld-planet-stage-shade{
   position: absolute;
   inset: 0;
+  z-index: 1;
   pointer-events: none;
+  /* Soft edge vignette only — do not crush the landscape */
   background:
-    radial-gradient(ellipse 90% 70% at 50% 40%, transparent 35%, rgba(2, 6, 14, 0.55) 100%),
-    linear-gradient(0deg, rgba(2, 6, 14, 0.7) 0%, transparent 45%);
+    radial-gradient(ellipse 95% 85% at 50% 45%, transparent 55%, rgba(2, 6, 14, 0.28) 100%);
 }
 .bld-planet-stage-props{
   position: absolute;
   inset: 0;
-  z-index: 1;
+  z-index: 3;
 }
 .bld-stage-prop{
   position: absolute;
-  transform: translate(-50%, -50%) scale(var(--bld-stage-scale, 1));
-  width: 56px;
-  height: 56px;
+  transform: translate(-50%, -70%) scale(var(--bld-stage-scale, 1));
+  width: 72px;
+  height: 72px;
   padding: 0;
   margin: 0;
-  border: 1px solid rgba(70, 229, 255, 0.35);
-  border-radius: var(--gc-radius-sm, 2px);
-  background: rgba(4, 10, 22, 0.82);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   cursor: pointer;
   color: inherit;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.45);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  box-shadow: none;
+  transition: filter 0.15s ease, transform 0.12s ease;
+  touch-action: none;
+  --bld-stage-progress: 0;
+}
+.bld-stage-prop.is-stage-tab-hidden,
+.bld-stage-prop[hidden]{
+  display: none !important;
+}
+.bld-stage-prop-halo{
+  position: absolute;
+  left: 50%;
+  bottom: 2%;
+  width: 72%;
+  height: 18%;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(0,0,0,0.72) 0%, transparent 72%);
+  pointer-events: none;
+  z-index: 0;
+}
+.bld-planet-stage--arrange .bld-stage-prop,
+.bld-stage-prop.is-dragging{
+  transition: none !important;
+}
+.bld-planet-stage--arrange .bld-stage-prop{
+  cursor: grab;
+}
+.bld-stage-prop.is-dragging{
+  cursor: grabbing;
+  z-index: 30 !important;
+  transform: translate(-50%, -70%) scale(var(--bld-stage-scale, 1));
 }
 .bld-stage-prop:hover,
 .bld-stage-prop:focus-visible{
-  border-color: rgba(70, 229, 255, 0.85);
-  box-shadow: 0 0 14px rgba(70, 229, 255, 0.35);
   outline: none;
   z-index: 20 !important;
+  filter: brightness(1.12);
+}
+.bld-planet-stage--arrange .bld-stage-prop:hover,
+.bld-planet-stage--arrange .bld-stage-prop:focus-visible{
+  filter: none;
+  transform: translate(-50%, -70%) scale(var(--bld-stage-scale, 1));
 }
 .bld-stage-prop-art{
+  position: relative;
   display: block;
   width: 100%;
   height: 100%;
   overflow: hidden;
+  z-index: 1;
+  border-radius: 50%;
+  border: 1px solid rgba(var(--gc-id-rgb), 0.48);
+  background: rgba(4, 10, 22, 0.35);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.45),
+    0 0 12px rgba(var(--gc-id-rgb), 0.22);
 }
 .bld-stage-prop-art img{
   display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center 40%;
+  filter:
+    drop-shadow(0 2px 3px rgba(0, 0, 0, 0.75))
+    saturate(1.05);
 }
 .bld-stage-prop-level{
   position: absolute;
-  right: 2px;
-  bottom: 2px;
-  min-width: 1.4em;
-  padding: 0 3px;
-  font-size: 0.65rem;
+  right: -2px;
+  bottom: 4%;
+  z-index: 3;
+  min-width: 1.45em;
+  padding: 1px 4px;
+  font-size: 0.68rem;
   line-height: 1.2;
   text-align: center;
   color: #e8f7ff;
-  background: rgba(2, 6, 14, 0.88);
-  border: 1px solid rgba(70, 229, 255, 0.35);
+  background: rgba(2, 6, 14, 0.92);
+  border: 1px solid rgba(var(--gc-id-rgb), 0.5);
   border-radius: var(--gc-radius-sm, 2px);
+  box-shadow: 0 0 8px rgba(var(--gc-id-rgb), 0.22);
+  pointer-events: none;
+}
+.bld-stage-prop-actions{
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 4px);
+  transform: translateX(-50%);
+  z-index: 4;
+  margin: 0;
+  padding: 0;
+  width: max-content;
+  max-width: 118px;
+}
+.bld-stage-prop-actions .gc-bld-card-head-action-group{
+  transform: scale(0.72);
+  transform-origin: top center;
+  border-color: rgba(var(--gc-id-rgb), 0.55);
+  background: rgba(6, 12, 20, 0.92);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.28) inset,
+    0 0 14px rgba(var(--gc-id-rgb), 0.2);
+}
+.bld-stage-prop-actions .gc-bld-card-head-action-group .gc-bld-head-action-btn--plus-one{
+  border-right-color: rgba(var(--gc-id-rgb), 0.3);
+}
+.bld-stage-prop-actions a.gc-bld-head-action-btn--go,
+.bld-stage-prop-actions button.gc-bld-head-action-btn--go{
+  border-color: rgba(var(--gc-id-rgb), 0.78);
+  background: linear-gradient(
+    180deg,
+    rgba(var(--gc-id-rgb), 0.48) 0%,
+    rgba(var(--gc-id-rgb), 0.22) 100%
+  );
+  color: #fff8e8;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.32) inset,
+    0 0 14px rgba(var(--gc-id-rgb), 0.32);
+}
+.bld-stage-prop-actions a.gc-bld-head-action-btn--go:hover,
+.bld-stage-prop-actions a.gc-bld-head-action-btn--go:focus-visible{
+  border-color: rgba(var(--gc-id-rgb), 0.95);
+  background: linear-gradient(
+    180deg,
+    rgba(var(--gc-id-rgb), 0.62) 0%,
+    rgba(var(--gc-id-rgb), 0.34) 100%
+  );
+  color: #ffffff;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.32) inset,
+    0 0 20px rgba(var(--gc-id-rgb), 0.45);
+}
+.bld-stage-prop-actions .gc-bld-head-action-btn--queue-max{
+  border-color: rgba(var(--gc-id-rgb), 0.45);
+  color: color-mix(in srgb, rgb(var(--gc-id-rgb)) 70%, #ffffff);
+  background: linear-gradient(
+    180deg,
+    rgba(var(--gc-id-rgb), 0.18) 0%,
+    rgba(8, 12, 20, 0.96) 100%
+  );
+}
+.bld-stage-prop-actions .gc-bld-head-action-btn--queue-max:not(:disabled):hover,
+.bld-stage-prop-actions .gc-bld-head-action-btn--queue-max:not(:disabled):focus-visible{
+  border-color: rgba(var(--gc-id-rgb), 0.85);
+  color: #ffffff;
+  background: linear-gradient(
+    180deg,
+    rgba(var(--gc-id-rgb), 0.32) 0%,
+    rgba(10, 14, 22, 0.98) 100%
+  );
+  box-shadow: 0 0 16px rgba(var(--gc-id-rgb), 0.32);
+}
+.bld-stage-prop-actions .gc-bld-head-action-btn--warn{
+  border-color: rgba(251, 191, 36, 0.55);
+  color: rgba(255, 220, 140, 0.96);
+}
+.bld-stage-prop-actions .gc-bld-head-action-btn--max{
+  border-color: rgba(var(--gc-id-rgb), 0.4);
+  color: color-mix(in srgb, rgb(var(--gc-id-rgb)) 55%, #ffffff);
+}
+.bld-stage-prop-actions .gc-bld-head-action-btn:not(.gc-bld-head-action-btn--plus-one):not(.gc-bld-head-action-btn--queue-max){
+  min-width: 28px;
+  min-height: 28px;
+}
+.bld-planet-stage--arrange .bld-stage-prop-actions{
+  pointer-events: none;
+  opacity: 0.28;
+}
+.bld-stage-prop-build{
+  position: absolute;
+  inset: -5px;
+  z-index: 2;
+  pointer-events: none;
+  border-radius: 50%;
+  opacity: 0;
+  background:
+    conic-gradient(
+      from -90deg,
+      rgba(127, 255, 217, 0.95) calc(var(--bld-stage-progress) * 1%),
+      rgba(70, 229, 255, 0.12) 0
+    );
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
 }
 .bld-stage-prop--locked{
-  opacity: 0.55;
-  filter: grayscale(0.35);
+  opacity: 0.48;
+  filter: grayscale(0.45) brightness(0.85);
 }
-.bld-stage-prop--warn{
-  border-color: rgba(255, 180, 70, 0.55);
+.bld-stage-prop--warn .bld-stage-prop-art{
+  border-color: rgba(255, 180, 70, 0.65);
+  box-shadow: 0 0 12px rgba(255, 180, 70, 0.28);
 }
-.bld-stage-prop--queue{
-  border-color: rgba(127, 255, 217, 0.65);
-  box-shadow: 0 0 12px rgba(127, 255, 217, 0.25);
+.bld-stage-prop--queue .bld-stage-prop-build{
+  opacity: 1;
+  animation: bld-stage-build-pulse 1.6s ease-in-out infinite;
 }
-.bld-stage-prop--max{
-  border-color: rgba(180, 190, 210, 0.45);
+.bld-stage-prop--queue .bld-stage-prop-art{
+  border-color: rgba(127, 255, 217, 0.7);
+  box-shadow: 0 0 14px rgba(127, 255, 217, 0.35);
+}
+.bld-stage-prop--queue::before{
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: 10%;
+  height: 3px;
+  z-index: 2;
+  pointer-events: none;
+  border-radius: 50%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(127, 255, 217, 0.15) 20%,
+    rgba(127, 255, 217, 0.95) 50%,
+    rgba(127, 255, 217, 0.15) 80%,
+    transparent
+  );
+  background-size: 200% 100%;
+  animation: bld-stage-scan 1.4s linear infinite;
+  box-shadow: 0 0 10px rgba(127, 255, 217, 0.45);
+}
+.bld-stage-prop--max .bld-stage-prop-level{
+  border-color: rgba(180, 190, 210, 0.55);
+  color: #d0d6e0;
 }
 .bld-stage-prop.is-focused{
+  z-index: 22 !important;
+}
+.bld-stage-prop.is-focused .bld-stage-prop-art{
   border-color: rgba(255, 220, 90, 0.9);
-  box-shadow: 0 0 16px rgba(255, 220, 90, 0.35);
+  box-shadow: 0 0 16px rgba(255, 220, 90, 0.45);
+}
+@keyframes bld-stage-build-pulse{
+  0%, 100%{ filter: brightness(1); }
+  50%{ filter: brightness(1.25); }
+}
+@keyframes bld-stage-scan{
+  0%{ background-position: 100% 0; transform: translateY(0); opacity: 0.35; }
+  50%{ opacity: 1; }
+  100%{ background-position: -100% 0; transform: translateY(52px); opacity: 0.35; }
 }
 .gc-building-card.gc-building-card--stage-focus{
   outline: 1px solid rgba(255, 220, 90, 0.65);
   box-shadow: 0 0 18px rgba(255, 220, 90, 0.22);
 }
+
+/* Stage sits in buildings-shell — keep shell from painting a black plate over the landscape */
+body.gc-body-ingame.gc-has-planet-landscape .buildings-shell.gc-panel{
+  background: rgba(2, 10, 20, 0.55);
+}
+body.gc-body-ingame.gc-has-planet-landscape .buildings-shell.gc-panel::before{
+  opacity: 0.04;
+}
+
+.bld-cards-panel{
+  border: 1px solid rgba(var(--gc-id-rgb), 0.22);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(4, 10, 22, 0.55);
+}
+.bld-cards-panel-toggle{
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid rgba(var(--gc-id-rgb), 0.16);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.bld-cards-panel.is-collapsed .bld-cards-panel-toggle{
+  border-bottom: 0;
+}
+.bld-cards-panel-toggle-label{
+  font-family: Orbitron, Inter, system-ui, sans-serif;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gc-primary-2, #7fffd9);
+}
+.bld-cards-panel-toggle-meta{
+  flex: 1;
+  font-size: 0.75rem;
+  color: var(--gc-text-soft, #9bb4c8);
+}
+.bld-cards-panel-chevron{
+  color: rgb(var(--gc-id-rgb));
+  transition: transform 0.15s ease;
+}
+.bld-cards-panel.is-collapsed .bld-cards-panel-chevron{
+  transform: rotate(-90deg);
+}
+.bld-cards-panel-body{
+  padding: 10px;
+}
+
+.bld-card-popup{
+  border: 1px solid rgba(70, 229, 255, 0.28);
+  border-radius: var(--gc-radius-sm, 2px);
+  padding: 0;
+  background: rgba(4, 8, 18, 0.96);
+  color: inherit;
+  max-width: min(520px, 94vw);
+  width: 100%;
+  overflow: visible;
+  z-index: var(--gc-z-modal, 13000);
+}
+.bld-card-popup::backdrop{
+  background: rgba(2, 6, 14, 0.38);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.bld-card-popup-inner{
+  display: flex;
+  flex-direction: column;
+  max-height: min(86vh, 720px);
+  overflow: visible;
+}
+.bld-card-popup-head{
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 8px 0;
+}
+.bld-card-popup-close{
+  min-width: 36px;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+.bld-card-popup-body{
+  padding: 0 10px 12px;
+  overflow: auto;
+}
+.bld-card-popup-card{
+  width: 100%;
+  max-width: none;
+}
+.bld-card-popup .gc-bld-hero-action-row{
+  display: none;
+}
+.bld-card-popup .gc-max-queue-hover-tooltip,
+.bld-card-popup .gc-req-hover-tooltip{
+  z-index: 50;
+}
+
 @media (max-width: 720px){
-  .bld-planet-stage{ min-height: 160px; }
-  .bld-stage-prop{ width: 44px; height: 44px; }
+  .bld-planet-stage{ min-height: 240px; }
+  .bld-stage-prop{ width: 58px; height: 58px; }
+  .bld-stage-prop-actions{ max-width: 96px; }
+  .bld-stage-prop-actions .gc-bld-card-head-action-group{ transform: scale(0.64); }
 }
 
 .shipyard-shell.gc-panel,
@@ -24594,7 +25078,7 @@ body.gc-body-ingame.gc-has-planet-landscape[data-identity-theme]:not([data-ident
     ),
     image-set(
       var(--planet-landscape-webp) type("image/webp"),
-      var(--planet-landscape) type("image/jpeg")
+      var(--planet-landscape) type("image/png")
     );
   background-size: cover;
   background-position: center center;
@@ -28892,7 +29376,7 @@ button.pe-hero-planet-hint:focus-visible {
     center / cover no-repeat
     image-set(
       var(--planet-landscape-webp) type("image/webp"),
-      var(--planet-landscape) type("image/jpeg")
+      var(--planet-landscape) type("image/png")
     ),
     radial-gradient(circle at 50% 50%, #1a3a5c, #0a1528);
   box-shadow: inset 0 -8px 16px rgba(0, 0, 0, 0.45);

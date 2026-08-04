@@ -83,7 +83,7 @@ Klick Kolonie (Registry-Card)
   → applyActionState(res, "planet_switch")
   → unlockShellEarly (before SSR)
   → rebuildPlanetRegistry / updatePlanetRegistryFromState
-  → applyPlanetLandscapeFromState (CSS --planet-landscape)
+  → applyPlanetLandscapeFromState (CSS --planet-landscape; Slot-Herocard via planet_visuals)
   → GC.reloadCurrentPage({ force: true })  # skipped on fleet/admin/…
 ```
 

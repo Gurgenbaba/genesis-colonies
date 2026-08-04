@@ -49,11 +49,12 @@
   </div>
 {% endmacro %}
 
-{% macro render_building_head_action(b, tab_name, bq_summary, bq_queue_full) %}
+{% macro render_building_head_action(b, tab_name, bq_summary, bq_queue_full, btn_id=none, action_extra_class='') %}
   {% set is_max = (b.level >= b.max_level) or (b.at_queue_max if b.at_queue_max is defined else false) %}
   {% set req_tooltip = render_req_tooltip(b.requirements_items) | trim %}
   {% set _action_queue = bq_summary.count if bq_summary.count is defined else 0 %}
   {% set _action_label = T("research_btn_queue", "Anreihen") if _action_queue else T("buildings_btn_upgrade", "Ausbau starten") %}
+  {% set _btn_id = btn_id if btn_id is not none else ('btn-' ~ b.key) %}
   {% if is_max %}
     {% set _action_state = 'max' %}
   {% elif not b.requirements_met %}
@@ -65,7 +66,9 @@
   {% else %}
     {% set _action_state = 'go' %}
   {% endif %}
-  <div class="gc-bld-card-head-action gc-bld-card-action bcell-action" data-building="{{ b.key }}">
+  <div class="gc-bld-card-head-action gc-bld-card-action bcell-action{{ (' ' ~ action_extra_class) if action_extra_class else '' }}"
+       data-building="{{ b.key }}"
+       {% if action_extra_class and 'bld-stage-prop-actions' in action_extra_class %}data-bld-stage-actions{% endif %}>
     {% if is_max %}
       <span class="gc-bld-head-action-btn gc-bld-head-action-btn--max" data-action-state="max"
             title="{{ T('buildings_btn_max_level') }}"
@@ -96,8 +99,7 @@
       {% set _preview = b.max_queue_preview if b.max_queue_preview is defined else {'jobs': (b.max_queueable if b.max_queueable is defined else 0)|int} %}
       {% set _max_q = (_preview.jobs if _preview.jobs is defined else 0)|int %}
       <div class="gc-bld-card-head-action-group">
-        <a id="btn-{{ b.key }}"
-           data-building="{{ b.key }}"
+        <a {% if _btn_id %}id="{{ _btn_id }}" {% endif %}data-building="{{ b.key }}"
            data-action-state="go"
            href="{{ url_for('upgrade', building_type=b.key, src='buildings', tab=tab_name) }}"
            class="gc-bld-head-action-btn gc-bld-head-action-btn--go gc-bld-head-action-btn--plus-one btn-upgrade"
@@ -215,8 +217,10 @@
 {% set bq_summary = (bq.summary if bq and bq.summary is defined and bq.summary else {}) %}
 {% set bq_limit = (bq_summary.limit if bq_summary.limit is defined else 3) %}
 {% set bq_queue_full = (bq_summary.count or 0)|int >= bq_limit|int %}
+{% set buildings_ui_mode = (buildings_ui_mode if buildings_ui_mode is defined and buildings_ui_mode in ('stage', 'cards') else 'stage') %}
+{% set ui_is_stage = buildings_ui_mode == 'stage' %}
 
-<div class="gc-page buildings-wrapper" data-buildings-page data-active-building-tab="{{ active_tab }}" data-planet-id="{{ (active_planet_id if active_planet_id is defined else (HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET else 0))|int }}">
+<div class="gc-page buildings-wrapper" data-buildings-page data-buildings-ui-mode="{{ buildings_ui_mode }}" data-active-building-tab="{{ active_tab }}" data-planet-id="{{ (active_planet_id if active_planet_id is defined else (HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET else 0))|int }}">
 
   <header class="buildings-headline section-header">
     <div class="section-header-row">
@@ -231,42 +235,73 @@
     </p>
   </header>
 
-  <div class="buildings-shell gc-panel">
+  <div class="buildings-shell gc-panel" data-buildings-ui-mode="{{ buildings_ui_mode }}">
 
-    {% set _stage_rows = rows_by_tab.get(active_tab, []) if rows_by_tab else [] %}
+    {% if ui_is_stage %}
     <section class="bld-planet-stage"
              data-bld-planet-stage
+             data-bld-stage-yard="0"
+             data-active-stage-tab="{{ active_tab }}"
              aria-label="{{ T('buildings_stage_label', 'Kolonie-Stage') }}">
+      <div class="bld-planet-stage-toolbar">
+        <button type="button"
+                class="gc-btn gc-btn-ghost bld-stage-arrange-btn"
+                data-bld-stage-arrange
+                aria-pressed="false">
+          {{ T('buildings_stage_arrange', 'Anordnen') }}
+        </button>
+        <button type="button"
+                class="gc-btn gc-btn-ghost bld-stage-reset-btn"
+                data-bld-stage-reset
+                title="{{ T('buildings_stage_reset_title', 'Standard-Positionen wiederherstellen') }}">
+          {{ T('buildings_stage_reset', 'Reset') }}
+        </button>
+        <span class="bld-stage-arrange-hint" data-bld-stage-arrange-hint hidden>
+          {{ T('buildings_stage_arrange_hint', 'Ziehen zum Positionieren — Speichern beim Loslassen.') }}
+        </span>
+      </div>
       <div class="bld-planet-stage-surface" aria-hidden="true"></div>
       <div class="bld-planet-stage-shade" aria-hidden="true"></div>
       <div class="bld-planet-stage-props" data-bld-stage-props>
-        {% for b in _stage_rows %}
+        {# Stage shows the active buildings tab only — keeps props/actions from stacking. #}
+        {% for _tab_rows in (rows_by_tab.values() if rows_by_tab else []) %}
+        {% for b in _tab_rows %}
         {% if b.stage_left_pct is defined %}
-        {% set _icon_png = url_for('static', filename=b.icon, v=GC_ASSET_VERSION) %}
+        {% set _stage_icon = b.stage_icon if b.stage_icon is defined and b.stage_icon else b.icon %}
+        {% set _icon_png = url_for('static', filename=_stage_icon, v=GC_ASSET_VERSION) %}
         {% set _icon_webp = _icon_png|webp_static %}
-        {% set _prop_state = 'max' if (b.level >= b.max_level) or (b.at_queue_max if b.at_queue_max is defined else false) else ('locked' if not b.requirements_met else ('queue' if (b.queue_count|int) > 0 or (b.queue_job is defined and b.queue_job) else ('warn' if not b.can_afford else 'ready'))) %}
-        <button type="button"
-                class="bld-stage-prop bld-stage-prop--{{ _prop_state }}"
-                style="left: {{ b.stage_left_pct }}%; top: {{ b.stage_top_pct }}%; z-index: {{ b.stage_z|default(1) }}; --bld-stage-scale: {{ b.stage_scale|default(1) }};"
-                data-bld-stage-prop="{{ b.key }}"
-                data-stage-tab="{{ b.tab }}"
-                data-building="{{ b.key }}"
-                data-level="{{ b.level|int }}"
-                data-prop-state="{{ _prop_state }}"
-                title="{{ T('building_' ~ b.key) }} · {{ T('buildings_col_level') }} {{ b.level|fmt_int }}"
-                aria-label="{{ T('building_' ~ b.key) }}">
+        {% set _prop_state = 'locked' if (b.level|int) <= 0 else ('max' if (b.level >= b.max_level) or (b.at_queue_max if b.at_queue_max is defined else false) else ('queue' if (b.queue_count|int) > 0 or (b.queue_job is defined and b.queue_job) else ('warn' if not b.can_afford else 'ready'))) %}
+        {% set _qj = b.queue_job if b.queue_job is defined and b.queue_job else none %}
+        {% set _prog = (_qj.progress_pct|int) if _qj and _qj.progress_pct is defined else 0 %}
+        <div class="bld-stage-prop bld-stage-prop--round bld-stage-prop--{{ _prop_state }}{% if b.tab != active_tab %} is-stage-tab-hidden{% endif %}"
+             style="left: {{ b.stage_left_pct }}%; top: {{ b.stage_top_pct }}%; z-index: {{ b.stage_z|default(1) }}; --bld-stage-scale: {{ b.stage_scale|default(1) }}; --bld-stage-progress: {{ _prog }};"
+             tabindex="0"
+             data-bld-stage-prop="{{ b.key }}"
+             data-stage-tab="{{ b.tab }}"
+             data-building="{{ b.key }}"
+             data-level="{{ b.level|int }}"
+             data-prop-state="{{ _prop_state }}"
+             data-bld-stage-progress="{{ _prog }}"
+             title="{{ T('building_' ~ b.key) }} · {{ T('buildings_col_level') }} {{ b.level|fmt_int }}"
+             aria-label="{{ T('building_' ~ b.key) }}"
+             {% if b.tab != active_tab %}hidden aria-hidden="true"{% endif %}>
+          <span class="bld-stage-prop-halo" aria-hidden="true"></span>
           <span class="bld-stage-prop-art" aria-hidden="true">
             <picture>
               <source type="image/webp" srcset="{{ _icon_webp }}">
               <img src="{{ _icon_png }}" alt="" width="96" height="96" loading="lazy" decoding="async">
             </picture>
           </span>
+          <span class="bld-stage-prop-build" aria-hidden="true" data-bld-stage-build-fx></span>
           <span class="bld-stage-prop-level gc-mono" data-bld-stage-level>{{ b.level|fmt_int }}</span>
-        </button>
+          {{ render_building_head_action(b, b.tab, bq_summary, bq_queue_full, '', 'bld-stage-prop-actions') }}
+        </div>
         {% endif %}
+        {% endfor %}
         {% endfor %}
       </div>
     </section>
+    {% endif %}
 
     {% set bq_jobs = (bq.queue if bq and bq.queue is defined and bq.queue else []) %}
     {% set bq_mini = (bq.mini_queue_jobs if bq and bq.mini_queue_jobs is defined else []) %}
@@ -281,19 +316,41 @@
       fallback_queue=bq_jobs
     ) }}
 
+    {% if not ui_is_stage %}
     <hr class="buildings-divider gc-prog-divider">
 
-    <div class="buildings-tab-panels" data-buildings-tab-panels>
-    <div class="tab-content active"
-         data-tab="{{ active_tab }}"
-         role="tabpanel"
-         id="panel-{{ active_tab }}">
-      {{ render_building_table(rows_by_tab.get(active_tab, []), active_tab, bq_summary, bq_queue_full) }}
-    </div>
-    </div>
+    <section class="bld-cards-panel"
+             data-bld-cards-panel
+             data-bld-cards-collapsed="0"
+             data-bld-cards-mode="retro">
+      <div class="bld-cards-panel-body"
+           id="bld-cards-panel-body"
+           data-bld-cards-body>
+        <div class="buildings-tab-panels" data-buildings-tab-panels>
+          <div class="tab-content active"
+               data-tab="{{ active_tab }}"
+               role="tabpanel"
+               id="panel-{{ active_tab }}">
+            {{ render_building_table(rows_by_tab.get(active_tab, []), active_tab, bq_summary, bq_queue_full) }}
+          </div>
+        </div>
+      </div>
+    </section>
+    {% endif %}
 
   </div>
 </div>
+
+{% if ui_is_stage %}
+<dialog class="bld-card-popup" data-bld-card-popup aria-label="{{ T('buildings_card_popup', 'Gebäude') }}">
+  <div class="bld-card-popup-inner">
+    <header class="bld-card-popup-head">
+      <button type="button" class="gc-btn gc-btn-ghost bld-card-popup-close" data-bld-card-popup-close aria-label="{{ T('action_close', 'Schließen') }}">×</button>
+    </header>
+    <div class="bld-card-popup-body" data-bld-card-popup-body></div>
+  </div>
+</dialog>
+{% endif %}
 
 {% endblock %}
 

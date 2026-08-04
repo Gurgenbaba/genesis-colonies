@@ -428,7 +428,7 @@ Audit: [GC_PERF_DB_001_POSTGRES_AUDIT.md](GC_PERF_DB_001_POSTGRES_AUDIT.md) · E
 
 ## Test-Suite
 
-**4219 pytest-Tests** (Stand v0.5.9.88 — `python -m pytest --collect-only -q`), u. a.:
+**4219 pytest-Tests** (Stand v0.5.9.90 — `python -m pytest --collect-only -q`), u. a.:
 
 - `test_persistence.py`, `test_race_conditions.py` — DB/Queues
 - `test_game_state_live.py`, `test_effects.py`, `test_queue_engine.py` — Live pipeline

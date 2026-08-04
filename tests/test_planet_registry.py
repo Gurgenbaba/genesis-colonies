@@ -495,7 +495,8 @@ def test_overview_injects_planet_landscape_css_var(switcher_db, monkeypatch):
     _login(client, player_id, uname)
     body = client.get("/overview").get_data(as_text=True)
     assert "--planet-landscape:" in body
-    assert f"img/landscapes/{expected_fn}" in body
+    assert f"img/herocards/{expected_fn}" in body
+    assert "img/landscapes/" not in body.split("--planet-landscape:")[1][:200]
 
 
 def test_game_state_includes_planet_limit(switcher_db, monkeypatch):
@@ -567,6 +568,10 @@ def test_game_state_includes_landscape_url(switcher_db, monkeypatch):
     assert ap.get("position") == position
     assert ap.get("landscape_url")
     assert expected_fn in ap["landscape_url"]
+    assert "/img/herocards/" in ap["landscape_url"]
+    assert ap.get("herocard_url")
+    assert ap["landscape_url"] == ap["herocard_url"]
+    assert ap.get("landscape_webp_url") == ap.get("herocard_webp_url")
 
 
 def test_gc641_economy_nav_visible_on_colony(switcher_db, monkeypatch):

@@ -1,4 +1,9 @@
-"""Planet visuals — landscape + hero card + accent theme keyed by galaxy slot (position 1–15)."""
+"""Planet visuals — surface art + accent theme keyed by galaxy slot (position 1–15).
+
+Canonical surface art is the herocard set (``img/herocards/herocard_XX.*``).
+Shell ``--planet-landscape``, Buildings Stage, Overview hero, and planet menu
+all resolve to the same slot asset — no parallel ``img/landscapes/`` climate map.
+"""
 
 from __future__ import annotations
 
@@ -24,8 +29,9 @@ class PlanetIdentity(TypedDict):
     effect: str
 
 
-DEFAULT_LANDSCAPE = "normaltempplanet01-h.jpg"
 DEFAULT_HEROCARD = "herocard_08.png"
+# Landscape filename alias — same canonical herocard (shell/stage use herocard path).
+DEFAULT_LANDSCAPE = DEFAULT_HEROCARD
 DEFAULT_LABEL_KEY = "planet_slot_08"
 DEFAULT_THEME_KEY = "temperate-highlands"
 DEFAULT_THEME_GROUP = "living"
@@ -81,10 +87,11 @@ _CLIMATE_ECONOMY_BY_POSITION: Dict[int, ClimateEconomyModifiers] = {
 }
 _DEFAULT_CLIMATE_ECONOMY = _CLIMATE_ECONOMY_BY_POSITION[8]
 
-# Position 1 = warmest galaxy slot, 15 = coldest — same order as landscapes + hero cards.
+# Position 1 = warmest galaxy slot, 15 = coldest.
+# ``landscape`` filename matches ``herocard`` — one climate asset per slot.
 _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
     1: {
-        "landscape": "trockenplanet01-h.jpg",
+        "landscape": "herocard_01.png",
         "herocard": "herocard_01.png",
         "label_key": "planet_slot_01",
         "theme_key": "inferno",
@@ -94,7 +101,7 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "effect": "volcanic",
     },
     2: {
-        "landscape": "trockenplanet04-h.jpg",
+        "landscape": "herocard_02.png",
         "herocard": "herocard_02.png",
         "label_key": "planet_slot_02",
         "theme_key": "magma",
@@ -104,7 +111,7 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "effect": "volcanic",
     },
     3: {
-        "landscape": "trockenplanet06-h.jpg",
+        "landscape": "herocard_03.png",
         "herocard": "herocard_03.png",
         "label_key": "planet_slot_03",
         "theme_key": "ash",
@@ -114,7 +121,7 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "effect": "ash",
     },
     4: {
-        "landscape": "trockenplanet08-h.jpg",
+        "landscape": "herocard_04.png",
         "herocard": "herocard_04.png",
         "label_key": "planet_slot_04",
         "theme_key": "barren-fireland",
@@ -124,7 +131,7 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "effect": "desert",
     },
     5: {
-        "landscape": "normaltempplanet04-h.jpg",
+        "landscape": "herocard_05.png",
         "herocard": "herocard_05.png",
         "label_key": "planet_slot_05",
         "theme_key": "crimson-desert",
@@ -134,7 +141,7 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "effect": "desert",
     },
     6: {
-        "landscape": "normaltempplanet03-h.jpg",
+        "landscape": "herocard_06.png",
         "herocard": "herocard_06.png",
         "label_key": "planet_slot_06",
         "theme_key": "golden-desert",
@@ -144,7 +151,7 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "effect": "desert",
     },
     7: {
-        "landscape": "normaltempplanet01-h.jpg",
+        "landscape": "herocard_07.png",
         "herocard": "herocard_07.png",
         "label_key": "planet_slot_07",
         "theme_key": "arid-frontier",
@@ -154,7 +161,7 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "effect": "desert",
     },
     8: {
-        "landscape": "wasserplanet07-h.jpg",
+        "landscape": "herocard_08.png",
         "herocard": "herocard_08.png",
         "label_key": "planet_slot_08",
         "theme_key": "temperate-highlands",
@@ -164,7 +171,7 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "effect": "temperate",
     },
     9: {
-        "landscape": "wasserplanet08-h.jpg",
+        "landscape": "herocard_09.png",
         "herocard": "herocard_09.png",
         "label_key": "planet_slot_09",
         "theme_key": "forest-world",
@@ -174,7 +181,7 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "effect": "forest",
     },
     10: {
-        "landscape": "dschungelplanet08-h.jpg",
+        "landscape": "herocard_10.png",
         "herocard": "herocard_10.png",
         "label_key": "planet_slot_10",
         "theme_key": "jungle-prime",
@@ -184,7 +191,7 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "effect": "jungle",
     },
     11: {
-        "landscape": "dschungelplanet07-h.jpg",
+        "landscape": "herocard_11.png",
         "herocard": "herocard_11.png",
         "label_key": "planet_slot_11",
         "theme_key": "ocean-world",
@@ -194,7 +201,7 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "effect": "ocean",
     },
     12: {
-        "landscape": "gasplanet05-h.jpg",
+        "landscape": "herocard_12.png",
         "herocard": "herocard_12.png",
         "label_key": "planet_slot_12",
         "theme_key": "tundra-world",
@@ -204,7 +211,7 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "effect": "tundra",
     },
     13: {
-        "landscape": "eisplanet04-h.jpg",
+        "landscape": "herocard_13.png",
         "herocard": "herocard_13.png",
         "label_key": "planet_slot_13",
         "theme_key": "glacier-world",
@@ -214,7 +221,7 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "effect": "frost",
     },
     14: {
-        "landscape": "eisplanet06-h.jpg",
+        "landscape": "herocard_14.png",
         "herocard": "herocard_14.png",
         "label_key": "planet_slot_14",
         "theme_key": "deep-frost",
@@ -224,7 +231,7 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "effect": "glacier",
     },
     15: {
-        "landscape": "eisplanet09-h.jpg",
+        "landscape": "herocard_15.png",
         "herocard": "herocard_15.png",
         "label_key": "planet_slot_15",
         "theme_key": "absolute-zero",
@@ -258,7 +265,7 @@ def get_planet_identity_for_position(position: Any) -> PlanetIdentity:
 
 
 def get_landscape_for_position(position: int) -> str:
-    """Return landscape filename for galaxy slot 1–15; fallback for invalid values."""
+    """Return canonical surface filename for galaxy slot 1–15 (herocard alias)."""
     return get_planet_identity_for_position(position)["landscape"]
 
 
@@ -424,8 +431,8 @@ def herocard_static_relpath(position: int) -> str:
 
 
 def landscape_static_relpath(position: int) -> str:
-    """Relative static path under ``static/`` for the given galaxy slot."""
-    return f"img/landscapes/{get_landscape_for_position(position)}"
+    """Shell/stage surface path — same herocard asset as Overview / planet menu."""
+    return herocard_static_relpath(position)
 
 
 def raster_webp_relpath(relpath: str) -> str:
@@ -516,7 +523,7 @@ def herocard_webp_srcset_for_position(position: int, static_url) -> str:
 
 
 def landscape_filename_for_planet(planet: dict | None) -> str:
-    """Resolve landscape filename from a planet row (uses ``position`` when present)."""
+    """Resolve canonical surface filename from a planet row (herocard alias)."""
     if not planet:
         return DEFAULT_LANDSCAPE
     position = planet.get("position")
@@ -540,7 +547,7 @@ def planet_theme_for_planet(planet: dict | None) -> Dict[str, Any]:
             ident = get_planet_identity_for_position(pos)
 
     herocard_rel = herocard_static_relpath(pos) if pos else f"img/herocards/{DEFAULT_HEROCARD}"
-    landscape_rel = landscape_static_relpath(pos) if pos else f"img/landscapes/{DEFAULT_LANDSCAPE}"
+    landscape_rel = herocard_rel  # canonical: one surface asset per slot
     return {
         "position": pos,
         "accent_color": ident["accent_color"],

@@ -3031,6 +3031,7 @@
     initMotdBanner();
     if (!opts?.pjax) {
       initWhatsNew();
+      initBuildingsUiChooser();
       bootstrapScoreStateFromDom();
       bootstrapHeaderBoostersFromDom();
     }
@@ -4127,7 +4128,7 @@
     return "go";
   }
 
-  function renderBuildingActionCell(b, bqSummary, bqQueueFull) {
+  function renderBuildingActionCell(b, bqSummary, bqQueueFull, opts) {
     const key = b.key;
     const btnUpgrade = t("buildings_btn_upgrade", "Ausbau starten");
     const btnMax = t("buildings_btn_max_level", "Max. Level");
@@ -4136,6 +4137,7 @@
     const queueActive = (bqSummary?.count || 0) > 0;
     const actionLabel = queueActive ? btnQueue : btnUpgrade;
     const state = getBuildingActionState(b, bqQueueFull);
+    const btnId = opts && opts.omitId ? "" : `btn-${key}`;
 
     if (state === "max") {
       return (
@@ -4156,13 +4158,13 @@
     const href = `/upgrade/${encodeURIComponent(key)}?src=buildings&tab=${encodeURIComponent(tab)}`;
     return (
       `<div class="gc-bld-card-head-action-group">` +
-      renderPlusOneActionBtn("btn-upgrade", "data-building", key, href, actionLabel, `btn-${key}`) +
+      renderPlusOneActionBtn("btn-upgrade", "data-building", key, href, actionLabel, btnId) +
       renderMaxQueueActionBtn("btn-upgrade", "data-building", key, b.max_queue_preview || { jobs: b.max_queueable }, "building") +
       `</div>`
     );
   }
 
-  function syncBuildingHeadAction(cell, b, bqSummary, bqQueueFull) {
+  function syncBuildingHeadAction(cell, b, bqSummary, bqQueueFull, opts) {
     if (!cell || !b) return;
     const state = getBuildingActionState(b, bqQueueFull);
     const goBtn = cell.querySelector("[data-action-state='go']");
@@ -4175,7 +4177,7 @@
 
     if (stateBtn && prevState === state) {
       if (state === "go" && !cell.querySelector(".gc-bld-card-head-action-group")) {
-        const html = renderBuildingActionCell(b, bqSummary, bqQueueFull);
+        const html = renderBuildingActionCell(b, bqSummary, bqQueueFull, opts);
         if (cell.innerHTML.trim() !== html.trim()) cell.innerHTML = html;
         return;
       }
@@ -4219,7 +4221,7 @@
       return;
     }
 
-    const html = renderBuildingActionCell(b, bqSummary, bqQueueFull);
+    const html = renderBuildingActionCell(b, bqSummary, bqQueueFull, opts);
     if (cell.innerHTML.trim() !== html.trim()) cell.innerHTML = html;
   }
 
@@ -4276,7 +4278,7 @@
         else GC.clearCardQueueBlock(row);
       });
     });
-    syncBuildingStageProps(rowsByTab);
+    syncBuildingStageProps(rowsByTab, summary, bqQueueFull);
   }
 
   function patchResearchEffects(row, tech) {
@@ -6040,6 +6042,25 @@
     });
   }
 
+  function syncBuildingStageActiveTab(tab) {
+    const stage = document.querySelector("[data-bld-planet-stage]");
+    if (!stage) return;
+    const active = String(tab || "resources");
+    stage.dataset.activeStageTab = active;
+    stage.querySelectorAll("[data-bld-stage-prop]").forEach((prop) => {
+      const propTab = prop.getAttribute("data-stage-tab") || "";
+      const on = propTab === active;
+      prop.classList.toggle("is-stage-tab-hidden", !on);
+      if (on) {
+        prop.removeAttribute("hidden");
+        prop.setAttribute("aria-hidden", "false");
+      } else {
+        prop.setAttribute("hidden", "");
+        prop.setAttribute("aria-hidden", "true");
+      }
+    });
+  }
+
   function activateBuildingTabByName(targetTab, focusEl) {
     const pageRoot = document.querySelector("[data-buildings-page]");
     if (!pageRoot) return;
@@ -6051,6 +6072,7 @@
       if (panel.getAttribute("role") === "tabpanel") panel.hidden = false;
       syncBuildingSidebarTab(panel.dataset.tab || tab);
       pageRoot.dataset.activeBuildingTab = panel.dataset.tab || tab;
+      syncBuildingStageActiveTab(panel.dataset.tab || tab);
     } else {
       panels.forEach((c) => {
         const isActive = c.dataset.tab === tab;
@@ -6059,6 +6081,7 @@
       });
       syncBuildingSidebarTab(tab);
       pageRoot.dataset.activeBuildingTab = tab;
+      syncBuildingStageActiveTab(tab);
     }
     if (focusEl && typeof focusEl.focus === "function") focusEl.focus();
     if (GC.lastState && GC.lastState.ok !== false) {
@@ -6101,9 +6124,50 @@
     });
   }
 
-  function syncBuildingStageProps(rowsByTab) {
+  function applyBuildingStageLayout(layout, opts) {
+    const stage = document.querySelector("[data-bld-planet-stage]");
+    if (!stage || !layout || typeof layout !== "object") return false;
+    const force = !!(opts && opts.force);
+    if (!force && (GC._bldStageDragging || isBuildingStageArrangeMode())) return false;
+    if (force) {
+      setBuildingStageArrangeMode(false);
+      GC._bldStageDragging = false;
+    }
+    let applied = 0;
+    Object.keys(layout).forEach((key) => {
+      const slot = layout[key] || {};
+      const prop = stage.querySelector(`[data-bld-stage-prop="${key}"]`);
+      if (!prop) return;
+      if (slot.left_pct != null) prop.style.left = `${Number(slot.left_pct)}%`;
+      if (slot.top_pct != null) prop.style.top = `${Number(slot.top_pct)}%`;
+      applied += 1;
+    });
+    return applied > 0;
+  }
+
+  function syncBuildingStageLayoutFromState(state, opts) {
+    const layout =
+      (state && state.building_stage_layout) ||
+      (state && state.stage_layout) ||
+      null;
+    if (!layout) return false;
+    const stage = document.querySelector("[data-bld-planet-stage]");
+    if (stage) stage.classList.add("bld-planet-stage--resync");
+    const ok = applyBuildingStageLayout(layout, opts || { force: true });
+    if (stage) {
+      window.setTimeout(() => stage.classList.remove("bld-planet-stage--resync"), 80);
+    }
+    return ok;
+  }
+
+  function syncBuildingStageProps(rowsByTab, bqSummary, bqQueueFull) {
     const stage = document.querySelector("[data-bld-planet-stage]");
     if (!stage || !rowsByTab) return;
+    // Never overwrite live drag / arrange positions from poll — that caused props to jump.
+    const skipPos =
+      !!GC._bldStageDragging || isBuildingStageArrangeMode();
+    const summary = bqSummary || {};
+    const queueFull = !!bqQueueFull;
     Object.values(rowsByTab).forEach((rows) => {
       (rows || []).forEach((b) => {
         const key = b && b.key;
@@ -6113,9 +6177,25 @@
         const levelEl = prop.querySelector("[data-bld-stage-level]");
         if (levelEl) _setIfChanged(levelEl, fmtNumber(b.level));
         prop.dataset.level = String(b.level ?? 0);
+        if (!skipPos) {
+          if (b.stage_left_pct != null) prop.style.left = `${Number(b.stage_left_pct)}%`;
+          if (b.stage_top_pct != null) prop.style.top = `${Number(b.stage_top_pct)}%`;
+        }
+        // Position-only payloads (post-save layout) omit panel fields — do not
+        // recompute state or every prop becomes --locked (almost transparent).
+        const hasPanelState =
+          b.requirements_met !== undefined ||
+          b.max_level !== undefined ||
+          b.can_afford !== undefined ||
+          b.queue_job !== undefined ||
+          b.queue_count !== undefined;
+        if (!hasPanelState) return;
+
+        const levelNum = Number(b.level ?? prop.dataset.level ?? 0);
         let state = "ready";
-        if ((b.level >= b.max_level) || b.at_queue_max) state = "max";
-        else if (!b.requirements_met) state = "locked";
+        // Dim only when the building does not exist yet (Lv.0), not for unmet reqs on built props.
+        if (levelNum <= 0) state = "locked";
+        else if ((b.level >= b.max_level) || b.at_queue_max) state = "max";
         else if ((Number(b.queue_count) || 0) > 0 || b.queue_job) state = "queue";
         else if (!b.can_afford) state = "warn";
         prop.dataset.propState = state;
@@ -6127,49 +6207,368 @@
           "bld-stage-prop--max"
         );
         prop.classList.add(`bld-stage-prop--${state}`);
+        let progressPct = 0;
+        const qj = b.queue_job;
+        if (qj && state === "queue") {
+          progressPct = Math.max(
+            0,
+            Math.min(100, Math.floor(Number(qj.progress_pct != null ? qj.progress_pct : 0)))
+          );
+        }
+        prop.style.setProperty("--bld-stage-progress", String(progressPct));
+        prop.dataset.bldStageProgress = String(progressPct);
         const name = t("building_" + key, key);
-        prop.title = `${name} · ${t("buildings_col_level", "Level")} ${fmtNumber(b.level)}`;
+        const progHint =
+          state === "queue" && progressPct > 0
+            ? ` · ${progressPct}%`
+            : state === "queue"
+              ? ` · ${t("buildings_stage_building", "Bau läuft")}`
+              : "";
+        prop.title = `${name} · ${t("buildings_col_level", "Level")} ${fmtNumber(b.level)}${progHint}`;
+        const actionsEl = prop.querySelector("[data-bld-stage-actions]");
+        if (actionsEl) syncBuildingHeadAction(actionsEl, b, summary, queueFull, { omitId: true });
       });
     });
   }
 
-  function focusBuildingCardFromStage(buildingKey) {
+  function getBuildingCardPopup() {
+    return document.querySelector("[data-bld-card-popup]");
+  }
+
+  function closeBuildingCardPopup() {
+    const dlg = getBuildingCardPopup();
+    if (!dlg) return;
+    if (typeof GC.hideMaxQueueTooltip === "function") GC.hideMaxQueueTooltip();
+    if (typeof GC.hideReqTooltip === "function") GC.hideReqTooltip();
+    try {
+      if (typeof dlg.close === "function" && dlg.open) dlg.close();
+    } catch (_) {}
+    const body = dlg.querySelector("[data-bld-card-popup-body]");
+    if (body) body.innerHTML = "";
+    document.querySelectorAll(".bld-stage-prop.is-focused").forEach((el) => {
+      el.classList.remove("is-focused");
+    });
+  }
+
+  function openBuildingCardPopup(buildingKey) {
     const key = String(buildingKey || "").trim();
     if (!key) return;
-    const card = document.querySelector(`[data-building-row="${key}"]`);
-    if (!card) return;
+    const source = document.querySelector(`[data-building-row="${key}"]`);
+    const dlg = getBuildingCardPopup();
+    const body = dlg && dlg.querySelector("[data-bld-card-popup-body]");
+    if (!source || !dlg || !body) return;
+
     document.querySelectorAll(".bld-stage-prop.is-focused").forEach((el) => {
       el.classList.remove("is-focused");
     });
     const prop = document.querySelector(`[data-bld-stage-prop="${key}"]`);
     if (prop) prop.classList.add("is-focused");
-    card.scrollIntoView({ behavior: "smooth", block: "center" });
-    card.classList.add("gc-building-card--stage-focus");
-    window.setTimeout(() => card.classList.remove("gc-building-card--stage-focus"), 1600);
+
+    body.innerHTML = "";
+    const clone = source.cloneNode(true);
+    clone.classList.add("bld-card-popup-card");
+    clone.removeAttribute("id");
+    // Stage already has +1/MAX — keep popup as detail/info only.
+    clone
+      .querySelectorAll(
+        ".gc-bld-card-hero-action-slot, .gc-bld-card-head-action, .bcell-action, a.btn-upgrade, button.btn-upgrade, button.btn-upgrade-max"
+      )
+      .forEach((el) => el.remove());
+    body.appendChild(clone);
+
+    if (typeof dlg.showModal === "function") dlg.showModal();
+    else dlg.setAttribute("open", "");
+  }
+
+  function setBuildingCardsExpanded(expanded) {
+    const panel = document.querySelector("[data-bld-cards-panel]");
+    const toggle = document.querySelector("[data-bld-cards-toggle]");
+    const body = document.querySelector("[data-bld-cards-body]");
+    if (!panel) return;
+    const on = !!expanded;
+    panel.classList.toggle("is-collapsed", !on);
+    panel.classList.toggle("is-expanded", on);
+    panel.dataset.bldCardsCollapsed = on ? "0" : "1";
+    if (toggle) toggle.setAttribute("aria-expanded", on ? "true" : "false");
+    if (body) {
+      if (on) body.removeAttribute("hidden");
+      else body.setAttribute("hidden", "");
+    }
+    try {
+      localStorage.setItem("gc_bld_cards_expanded", on ? "1" : "0");
+    } catch (_) {}
+  }
+
+  function initBuildingCardsCollapse() {
+    const panel = document.querySelector("[data-bld-cards-panel]");
+    if (!panel) return;
+    let expanded = false;
+    try {
+      expanded = localStorage.getItem("gc_bld_cards_expanded") === "1";
+    } catch (_) {
+      expanded = false;
+    }
+    // Default collapsed — never auto-open from poll/queue.
+    setBuildingCardsExpanded(expanded);
+  }
+
+  function isBuildingStageArrangeMode() {
+    const stage = document.querySelector("[data-bld-planet-stage]");
+    return !!(stage && stage.classList.contains("bld-planet-stage--arrange"));
+  }
+
+  function setBuildingStageArrangeMode(on) {
+    const stage = document.querySelector("[data-bld-planet-stage]");
+    const btn = document.querySelector("[data-bld-stage-arrange]");
+    const hint = document.querySelector("[data-bld-stage-arrange-hint]");
+    if (!stage) return;
+    const wasOn = stage.classList.contains("bld-planet-stage--arrange");
+    stage.classList.toggle("bld-planet-stage--arrange", !!on);
+    if (btn) btn.setAttribute("aria-pressed", on ? "true" : "false");
+    if (hint) {
+      if (on) hint.removeAttribute("hidden");
+      else hint.setAttribute("hidden", "");
+    }
+    if (!on) {
+      closeBuildingCardPopup();
+      // Leaving arrange: keep whatever is on the DOM (already saved on drag-end).
+      // Do not re-apply server layout here — that caused a visible flip.
+    } else if (!wasOn) {
+      // Entering arrange: freeze transitions so props do not animate/jump.
+      stage.querySelectorAll(".bld-stage-prop").forEach((prop) => {
+        prop.style.transition = "none";
+      });
+    }
+  }
+
+  function collectBuildingStagePositions() {
+    const stage = document.querySelector("[data-bld-planet-stage]");
+    if (!stage) return [];
+    const out = [];
+    stage.querySelectorAll("[data-bld-stage-prop]").forEach((prop) => {
+      const key = prop.getAttribute("data-bld-stage-prop");
+      if (!key) return;
+      const left = parseFloat(String(prop.style.left || "").replace("%", ""));
+      const top = parseFloat(String(prop.style.top || "").replace("%", ""));
+      if (!Number.isFinite(left) || !Number.isFinite(top)) return;
+      out.push({
+        building_key: key,
+        left_pct: Math.round(left * 100) / 100,
+        top_pct: Math.round(top * 100) / 100,
+      });
+    });
+    return out;
+  }
+
+  async function saveBuildingStageLayout(payload) {
+    if (typeof GC.fetchGameAction !== "function") return null;
+    const body = { ...(payload || {}), request_id: newRequestId() };
+    const arranging = isBuildingStageArrangeMode() && !body.reset;
+    let res = null;
+    try {
+      res = await GC.fetchGameAction("/api/buildings/stage-layout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      if (typeof GC.toast === "function") {
+        GC.toast(
+          t("buildings_stage_save_failed", "Stage-Layout konnte nicht gespeichert werden."),
+          "error"
+        );
+      }
+      return null;
+    }
+    if (!res || res.ok === false) {
+      if (res && res.error !== "not_logged_in" && typeof GC.toast === "function") {
+        GC.toast(
+          t("buildings_stage_save_failed", "Stage-Layout konnte nicht gespeichert werden."),
+          "error"
+        );
+      }
+      return res;
+    }
+    // During arrange: never applyActionState — panel/HUD patches made props flip.
+    // DOM already has the correct positions from the drag.
+    if (arranging) {
+      if (res.stage_layout) GC._bldStageLayoutCache = res.stage_layout;
+      return res;
+    }
+    if (typeof GC.applyActionState === "function") {
+      GC.applyActionState(res, "buildings-stage-layout");
+    }
+    if (res.stage_layout) {
+      applyBuildingStageLayout(res.stage_layout, { force: true });
+    }
+    return res;
+  }
+
+  function bindBuildingStageDrag() {
+    const stage = document.querySelector("[data-bld-planet-stage]");
+    if (!stage || stage.dataset.dragBound === "1") return;
+    stage.dataset.dragBound = "1";
+    let drag = null;
+    let saveTimer = null;
+
+    const onMove = (ev) => {
+      if (!drag || !isBuildingStageArrangeMode()) return;
+      const rect = stage.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const x = ((ev.clientX - drag.offX - rect.left) / rect.width) * 100;
+      const y = ((ev.clientY - drag.offY - rect.top) / rect.height) * 100;
+      const left = Math.max(2, Math.min(98, x));
+      const top = Math.max(2, Math.min(98, y));
+      drag.prop.style.left = `${left}%`;
+      drag.prop.style.top = `${top}%`;
+      drag.moved = true;
+    };
+
+    const onUp = (ev) => {
+      if (!drag) return;
+      const prop = drag.prop;
+      const moved = drag.moved;
+      drag = null;
+      GC._bldStageDragging = false;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      prop.classList.remove("is-dragging");
+      try {
+        prop.releasePointerCapture(ev.pointerId);
+      } catch (_) {}
+      if (!moved || !isBuildingStageArrangeMode()) return;
+      // Debounce save so rapid repositions do not stack thrashing requests.
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => {
+        saveTimer = null;
+        void saveBuildingStageLayout({ positions: collectBuildingStagePositions() });
+      }, 120);
+    };
+
+    stage.addEventListener("pointerdown", (ev) => {
+      if (!isBuildingStageArrangeMode()) return;
+      const prop = ev.target.closest("[data-bld-stage-prop]");
+      if (!prop || !stage.contains(prop)) return;
+      if (ev.target.closest("[data-bld-stage-actions], .btn-upgrade, .btn-upgrade-max")) return;
+      if (ev.button != null && ev.button !== 0) return;
+      ev.preventDefault();
+      const rect = stage.getBoundingClientRect();
+      const leftPct = parseFloat(String(prop.style.left || "").replace("%", ""));
+      const topPct = parseFloat(String(prop.style.top || "").replace("%", ""));
+      const cx = rect.left + ((Number.isFinite(leftPct) ? leftPct : 50) / 100) * rect.width;
+      const cy = rect.top + ((Number.isFinite(topPct) ? topPct : 50) / 100) * rect.height;
+      drag = {
+        prop,
+        moved: false,
+        offX: ev.clientX - cx,
+        offY: ev.clientY - cy,
+      };
+      GC._bldStageDragging = true;
+      prop.classList.add("is-dragging");
+      prop.style.transition = "none";
+      try {
+        prop.setPointerCapture(ev.pointerId);
+      } catch (_) {}
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onUp);
+    });
   }
 
   function bindBuildingStageOnce() {
     if (GC._bldStageBound) return;
     GC._bldStageBound = true;
+
     document.addEventListener("click", (e) => {
+      const toggle = e.target.closest("[data-bld-cards-toggle]");
+      if (toggle && toggle.closest("[data-buildings-page]")) {
+        e.preventDefault();
+        const panel = document.querySelector("[data-bld-cards-panel]");
+        const expanded = !(panel && panel.classList.contains("is-expanded"));
+        setBuildingCardsExpanded(expanded);
+        return;
+      }
+
+      const arrangeBtn = e.target.closest("[data-bld-stage-arrange]");
+      if (arrangeBtn && arrangeBtn.closest("[data-buildings-page]")) {
+        e.preventDefault();
+        setBuildingStageArrangeMode(!isBuildingStageArrangeMode());
+        return;
+      }
+
+      const resetBtn = e.target.closest("[data-bld-stage-reset]");
+      if (resetBtn && resetBtn.closest("[data-buildings-page]")) {
+        e.preventDefault();
+        saveBuildingStageLayout({ reset: true });
+        return;
+      }
+
+      const closeBtn = e.target.closest("[data-bld-card-popup-close]");
+      if (closeBtn) {
+        e.preventDefault();
+        closeBuildingCardPopup();
+        return;
+      }
+
       const prop = e.target.closest("[data-bld-stage-prop]");
-      if (!prop || !prop.closest("[data-buildings-page]")) return;
-      e.preventDefault();
-      focusBuildingCardFromStage(prop.getAttribute("data-bld-stage-prop") || prop.dataset.building);
+      if (prop && prop.closest("[data-buildings-page]")) {
+        if (isBuildingStageArrangeMode()) return;
+        // +1 / MAX stay one-click; detail popup only when clicking the prop itself.
+        if (
+          e.target.closest(
+            "[data-bld-stage-actions], .btn-upgrade, .btn-upgrade-max, a.btn-upgrade, button.btn-upgrade"
+          )
+        ) {
+          return;
+        }
+        e.preventDefault();
+        openBuildingCardPopup(prop.getAttribute("data-bld-stage-prop") || prop.dataset.building);
+        return;
+      }
     });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeBuildingCardPopup();
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const prop = e.target.closest?.("[data-bld-stage-prop]");
+      if (!prop || !prop.closest("[data-buildings-page]")) return;
+      if (isBuildingStageArrangeMode()) return;
+      if (e.target.closest("[data-bld-stage-actions]")) return;
+      e.preventDefault();
+      openBuildingCardPopup(prop.getAttribute("data-bld-stage-prop") || prop.dataset.building);
+    });
+
+    const dlg = getBuildingCardPopup();
+    if (dlg) {
+      dlg.addEventListener("click", (e) => {
+        if (e.target === dlg) closeBuildingCardPopup();
+      });
+    }
   }
 
   function initBuildings() {
-    bindBuildingTabsOnce();
-    bindBuildingStageOnce();
-    initBuildingTechnicalData();
     const pageRoot = document.querySelector("[data-buildings-page]");
     if (!pageRoot) return;
+    const uiMode = String(pageRoot.getAttribute("data-buildings-ui-mode") || "stage").trim();
+    bindBuildingTabsOnce();
+    if (uiMode === "stage") {
+      bindBuildingStageOnce();
+      bindBuildingStageDrag();
+    }
+    if (uiMode === "cards") {
+      // Retro cards are always expanded (no collapse chrome).
+      setBuildingCardsExpanded(true);
+    }
+    initBuildingTechnicalData();
     const initialTab = pageRoot.dataset.activeBuildingTab || "resources";
     activateBuildingTabByName(initialTab, null);
     GC.startProgressTicker();
     if (typeof GC.registerCleanup === "function") {
       GC.registerCleanup(() => {
+        closeBuildingCardPopup();
+        setBuildingStageArrangeMode(false);
+        GC._bldStageDragging = false;
         document.querySelectorAll(".bld-stage-prop.is-focused").forEach((el) => {
           el.classList.remove("is-focused");
         });
@@ -7391,6 +7790,9 @@
 
   function openBuildingTechnicalModal(focusClose) {
     if (!cacheBuildingTechElements()) return;
+    // Native <dialog> stage popup sits in the top layer above the tech modal —
+    // close it so Technische Daten is not stuck behind the card.
+    closeBuildingCardPopup();
     BUILDING_TECH.open = true;
     BUILDING_TECH.root.hidden = false;
     BUILDING_TECH.root.setAttribute("aria-hidden", "false");
@@ -10490,6 +10892,21 @@
           _setIfChanged(timerEl, eta);
           block.title = eta;
         }
+        // Stage prop construction ring (display-only; same remaining as card queue).
+        if (domain === "building" && cardEl) {
+          const bKey =
+            cardEl.getAttribute("data-building-row") ||
+            cardEl.getAttribute("data-building") ||
+            "";
+          const stageProp = bKey
+            ? document.querySelector(`[data-bld-stage-prop="${bKey}"]`)
+            : null;
+          if (stageProp) {
+            stageProp.classList.add("bld-stage-prop--queue");
+            stageProp.style.setProperty("--bld-stage-progress", String(rounded));
+            stageProp.dataset.bldStageProgress = String(rounded);
+          }
+        }
       } else {
         if (timerEl) {
           applyQueueJobTimerAttrs(timerEl, finish, timerKind, refreshOnZero, remaining);
@@ -10497,6 +10914,21 @@
         }
         _applyProgressFill(fillEl, pct);
         if (barEl) barEl.setAttribute("aria-valuenow", String(Math.max(0, Math.min(100, Math.round(pct)))));
+        if (domain === "building" && cardEl) {
+          const bKey =
+            cardEl.getAttribute("data-building-row") ||
+            cardEl.getAttribute("data-building") ||
+            "";
+          const stageProp = bKey
+            ? document.querySelector(`[data-bld-stage-prop="${bKey}"]`)
+            : null;
+          if (stageProp) {
+            const rounded = Math.max(0, Math.min(100, Math.round(pct)));
+            stageProp.classList.add("bld-stage-prop--queue");
+            stageProp.style.setProperty("--bld-stage-progress", String(rounded));
+            stageProp.dataset.bldStageProgress = String(rounded);
+          }
+        }
       }
       if (isQueueTimerComplete(remaining, finish, serverNowTs)) {
         const jobId = Math.floor(Number(block.dataset.jobId || 0));
@@ -29973,6 +30405,10 @@
         });
         if (res?.ok) {
           const anyActive = applyActionState(res, "planet_switch");
+          // GC-BST-22: apply stage positions in the same tick as switch (before panel refresh).
+          if (res.state && document.querySelector("[data-bld-planet-stage]")) {
+            syncBuildingStageLayoutFromState(res.state, { force: true });
+          }
           const name = item.dataset.planetName || "";
           ["research-planet-label"].forEach((id) => {
             const el = document.getElementById(id);
@@ -30814,7 +31250,7 @@
       }
     };
 
-    const ensureReqTooltipEl = () => {
+    const ensureReqTooltipEl = (host) => {
       let tip = document.getElementById("gc-req-hover-tooltip");
       if (!tip) {
         tip = document.createElement("div");
@@ -30822,8 +31258,9 @@
         tip.className = "gc-req-hover-tooltip";
         tip.hidden = true;
         tip.setAttribute("role", "tooltip");
-        document.body.appendChild(tip);
       }
+      const mount = host || document.body;
+      if (tip.parentElement !== mount) mount.appendChild(tip);
       return tip;
     };
 
@@ -30860,7 +31297,8 @@
       if (activeTrigger && activeTrigger !== trigger) {
         activeTrigger.removeAttribute("aria-describedby");
       }
-      const tip = ensureReqTooltipEl();
+      const dialogHost = trigger.closest("dialog[open]");
+      const tip = ensureReqTooltipEl(dialogHost || document.body);
       tip.innerHTML = html;
       positionReqTooltip(tip, trigger);
       activeTrigger = trigger;
@@ -30892,6 +31330,7 @@
     window.addEventListener("blur", hideReqTooltip);
 
     GC.hideCardReqTooltip = hideReqTooltip;
+    GC.hideReqTooltip = hideReqTooltip;
     GC.registerCleanup(hideReqTooltip);
   }
 
@@ -30915,7 +31354,7 @@
       }
     };
 
-    const ensureMaxQueueTooltipEl = () => {
+    const ensureMaxQueueTooltipEl = (host) => {
       let tip = document.getElementById("gc-max-queue-hover-tooltip");
       if (!tip) {
         tip = document.createElement("div");
@@ -30923,8 +31362,10 @@
         tip.className = "gc-max-queue-hover-tooltip";
         tip.hidden = true;
         tip.setAttribute("role", "tooltip");
-        document.body.appendChild(tip);
       }
+      // Native <dialog showModal()> uses the top layer — body-level tips stay behind it.
+      const mount = host || document.body;
+      if (tip.parentElement !== mount) mount.appendChild(tip);
       return tip;
     };
 
@@ -30962,7 +31403,8 @@
       if (activeTrigger && activeTrigger !== trigger) {
         activeTrigger.removeAttribute("aria-describedby");
       }
-      const tip = ensureMaxQueueTooltipEl();
+      const dialogHost = trigger.closest("dialog[open]");
+      const tip = ensureMaxQueueTooltipEl(dialogHost || document.body);
       tip.innerHTML = html;
       positionMaxQueueTooltip(tip, trigger);
       activeTrigger = trigger;
@@ -39724,6 +40166,107 @@
     };
 
     GC.setSafeTimeout(loadWhatsNew, GC_DEFER_WHATS_NEW_MS);
+    GC.registerCleanup(() => {});
+  }
+
+  function initBuildingsUiChooser() {
+    if (GC._bldUiChooserBound) return;
+    GC._bldUiChooserBound = true;
+
+    const root = document.getElementById("gc-bld-ui-chooser");
+    if (!root) return;
+
+    let selected = "stage";
+    const tiles = Array.from(root.querySelectorAll("[data-bld-ui-choice]"));
+    const confirmBtn = root.querySelector("[data-bld-ui-chooser-confirm]");
+
+    const hide = () => {
+      root.hidden = true;
+      root.classList.add("hidden");
+    };
+
+    const show = () => {
+      root.hidden = false;
+      root.classList.remove("hidden");
+    };
+
+    const applySelection = (mode) => {
+      selected = mode === "cards" ? "cards" : "stage";
+      tiles.forEach((tile) => {
+        const on = tile.getAttribute("data-bld-ui-choice") === selected;
+        tile.classList.toggle("is-selected", on);
+        tile.setAttribute("aria-pressed", on ? "true" : "false");
+      });
+    };
+
+    tiles.forEach((tile) => {
+      tile.addEventListener("click", () => {
+        applySelection(tile.getAttribute("data-bld-ui-choice") || "stage");
+      });
+    });
+
+    const persistChoice = async () => {
+      if (confirmBtn) confirmBtn.disabled = true;
+      try {
+        if (typeof GC.fetchGameAction !== "function") return;
+        const data = await GC.fetchGameAction("/api/options/buildings-ui", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({
+            buildings_ui_mode: selected,
+            mark_choice_done: true,
+          }),
+        });
+        if (!data || data.ok !== true) return;
+        const saved = data.data || {};
+        if (window.GC_CLIENT_CONFIG && typeof window.GC_CLIENT_CONFIG === "object") {
+          window.GC_CLIENT_CONFIG.buildings_ui_mode = saved.buildings_ui_mode || selected;
+          window.GC_CLIENT_CONFIG.buildings_ui_prompt_pending = false;
+        }
+        hide();
+        const onBuildings = !!document.querySelector("[data-buildings-page]");
+        if (onBuildings && typeof GC.reloadCurrentPage === "function") {
+          GC.reloadCurrentPage({ force: true });
+        }
+      } catch (_) {
+        /* keep dialog open on failure */
+      } finally {
+        if (confirmBtn) confirmBtn.disabled = false;
+      }
+    };
+
+    if (confirmBtn) {
+      confirmBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        persistChoice();
+      });
+    }
+
+    const tryShow = () => {
+      if (!shouldRunGameLoop()) return;
+      const cfg = window.GC_CLIENT_CONFIG || {};
+      if (!cfg.buildings_ui_prompt_pending) return;
+      const whats = document.getElementById("gc-whats-new");
+      const whatsOpen = whats && !whats.hidden && !whats.classList.contains("hidden");
+      if (whatsOpen) return;
+      applySelection(cfg.buildings_ui_mode === "cards" ? "cards" : "stage");
+      show();
+    };
+
+    const schedule = () => {
+      GC.setSafeTimeout(tryShow, GC_DEFER_WHATS_NEW_MS + 200);
+    };
+    schedule();
+
+    const whatsRoot = document.getElementById("gc-whats-new");
+    if (whatsRoot) {
+      whatsRoot.addEventListener("click", (event) => {
+        if (event.target.closest("[data-whats-new-dismiss]") || event.target.closest("[data-whats-new-more]")) {
+          GC.setSafeTimeout(tryShow, 120);
+        }
+      });
+    }
+
     GC.registerCleanup(() => {});
   }
 

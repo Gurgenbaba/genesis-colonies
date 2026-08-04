@@ -19,6 +19,7 @@ env/
 .env
 .env.local
 .env.*.local
+.gc_dev_secret
 
 # Flask
 instance/

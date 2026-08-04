@@ -70,6 +70,11 @@ MIN_SPY_PROBES = 1
 MAX_SPY_PROBES = 9999
 SPY_PROBE_QUICK_VALUES = (1, 3, 5, 10, 25)
 
+BUILDINGS_UI_STAGE = "stage"
+BUILDINGS_UI_CARDS = "cards"
+BUILDINGS_UI_MODES = frozenset({BUILDINGS_UI_STAGE, BUILDINGS_UI_CARDS})
+DEFAULT_BUILDINGS_UI_MODE = BUILDINGS_UI_STAGE
+
 _NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _\-.]{1,39}$")
 _EMAIL_RE = re.compile(
     r"^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
@@ -125,6 +130,12 @@ def ensure_account_options_schema(conn=None) -> None:
         )
         ensure_column(
             c, "users", "default_spy_probes", "INTEGER NOT NULL DEFAULT 5"
+        )
+        ensure_column(
+            c, "users", "buildings_ui_mode", "TEXT NOT NULL DEFAULT 'stage'"
+        )
+        ensure_column(
+            c, "users", "buildings_ui_choice_done", "INTEGER NOT NULL DEFAULT 0"
         )
         cur.execute(
             """
@@ -247,6 +258,15 @@ def normalize_spy_probe_count(value: Any, *, default: int = DEFAULT_SPY_PROBES) 
     if count > MAX_SPY_PROBES:
         return MAX_SPY_PROBES
     return count
+
+
+def normalize_buildings_ui_mode(
+    value: Any, *, default: str = DEFAULT_BUILDINGS_UI_MODE
+) -> str:
+    mode = str(value or "").strip().lower()
+    if mode in BUILDINGS_UI_MODES:
+        return mode
+    return default
 
 
 def _default_sound_settings() -> Dict[str, float]:
@@ -1002,6 +1022,7 @@ def get_options_snapshot(player_id: int, conn=None) -> Dict[str, Any]:
             "account_safety": get_account_safety_state(int(player_id), conn=c),
             **get_notify_sound_settings(int(player_id), conn=c),
             **get_spy_probe_settings(int(player_id), conn=c),
+            **get_buildings_ui_settings(int(player_id), conn=c),
         }
     finally:
         if own:
@@ -1062,6 +1083,98 @@ def update_spy_probe_settings(
         if own:
             rollback(c)
         return False, "options_error_invalid_spy_probes", {}
+    finally:
+        if own:
+            c.close()
+
+
+def get_buildings_ui_settings(player_id: int, *, conn=None) -> Dict[str, Any]:
+    """Colony Stage vs Retro cards preference + one-time chooser flag."""
+    pid = int(player_id or 0)
+    if pid <= 0:
+        return {
+            "buildings_ui_mode": DEFAULT_BUILDINGS_UI_MODE,
+            "buildings_ui_prompt_pending": False,
+        }
+    own = conn is None
+    c = conn or db()
+    try:
+        ensure_account_options_schema(c)
+        if not column_exists(c, "users", "buildings_ui_mode"):
+            return {
+                "buildings_ui_mode": DEFAULT_BUILDINGS_UI_MODE,
+                "buildings_ui_prompt_pending": True,
+            }
+        row = c.execute(
+            """
+            SELECT buildings_ui_mode, buildings_ui_choice_done
+            FROM users WHERE id = ? LIMIT 1;
+            """,
+            (pid,),
+        ).fetchone()
+        if not row:
+            return {
+                "buildings_ui_mode": DEFAULT_BUILDINGS_UI_MODE,
+                "buildings_ui_prompt_pending": True,
+            }
+        mode = normalize_buildings_ui_mode(row["buildings_ui_mode"])
+        done = bool(int(row["buildings_ui_choice_done"] or 0))
+        return {
+            "buildings_ui_mode": mode,
+            "buildings_ui_prompt_pending": not done,
+        }
+    finally:
+        if own:
+            c.close()
+
+
+def update_buildings_ui_settings(
+    player_id: int,
+    *,
+    buildings_ui_mode: Any,
+    mark_choice_done: bool = False,
+    conn=None,
+) -> Tuple[bool, str, Dict[str, Any]]:
+    """Persist buildings UI mode. Chooser sets mark_choice_done=True once."""
+    pid = int(player_id or 0)
+    if pid <= 0:
+        return False, "not_logged_in", {}
+    raw = str(buildings_ui_mode or "").strip().lower()
+    if raw not in BUILDINGS_UI_MODES:
+        return False, "options_error_invalid_buildings_ui", {}
+    mode = raw
+    own = conn is None
+    c = conn or db()
+    try:
+        ensure_account_options_schema(c)
+        current = get_buildings_ui_settings(pid, conn=c)
+        if (
+            mode == current["buildings_ui_mode"]
+            and (not mark_choice_done or not current["buildings_ui_prompt_pending"])
+        ):
+            return True, "options_saved", dict(current)
+        begin_write_transaction(c)
+        if mark_choice_done:
+            c.execute(
+                """
+                UPDATE users
+                SET buildings_ui_mode = ?, buildings_ui_choice_done = 1
+                WHERE id = ?;
+                """,
+                (mode, pid),
+            )
+        else:
+            c.execute(
+                "UPDATE users SET buildings_ui_mode = ? WHERE id = ?;",
+                (mode, pid),
+            )
+        if own:
+            commit(c)
+        return True, "options_saved", get_buildings_ui_settings(pid, conn=c)
+    except Exception:
+        if own:
+            rollback(c)
+        return False, "options_error_invalid_buildings_ui", {}
     finally:
         if own:
             c.close()

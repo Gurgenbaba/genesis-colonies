@@ -1711,6 +1711,7 @@ def _seed_pack_or_raise(version_tag: str) -> Dict[str, Any]:
 # Back-compat aliases — always DE seed from universe_news_packs (single source).
 V09_RELEASE_PACK: Dict[str, Any] = _seed_pack_or_raise("v0.9")
 V091_RELEASE_PACK: Dict[str, Any] = _seed_pack_or_raise("v0.9.1")
+V092_RELEASE_PACK: Dict[str, Any] = _seed_pack_or_raise("v0.9.2")
 
 
 def ensure_v09_release_seeded(*, conn: sqlite3.Connection | None = None) -> Dict[str, Any]:
@@ -1785,8 +1786,44 @@ def ensure_v091_release_seeded(*, conn: sqlite3.Connection | None = None) -> Dic
             conn.close()
 
 
+def ensure_v092_release_seeded(*, conn: sqlite3.Connection | None = None) -> Dict[str, Any]:
+    """Idempotent curated v0.9.2 player pack (LiveOps catch-up + Colony Stage)."""
+    pack = _seed_pack_or_raise("v0.9.2")
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        if not table_exists(conn, "universe_news"):
+            return {"ok": False, "error": "schema_missing", "seeded": False}
+        if version_has_player_rows("v0.9.2", conn=conn):
+            return {"ok": True, "seeded": False, "reason": "v0.9.2_exists"}
+        result = publish_release_pack(
+            version_tag=pack["version_tag"],
+            version_label=pack["version_label"],
+            intro=pack["intro"],
+            release_date=pack["release_date"],
+            badge=pack["badge"],
+            is_major_release=True,
+            added=pack["added"],
+            changed=pack["changed"],
+            fixed=pack["fixed"],
+            set_banner=False,
+            conn=conn,
+        )
+        if own and result.get("ok"):
+            conn.commit()
+        return {
+            "ok": bool(result.get("ok")),
+            "seeded": bool(result.get("ok")),
+            "publish": result,
+        }
+    finally:
+        if own:
+            conn.close()
+
+
 def ensure_player_news_seeded(*, conn: sqlite3.Connection | None = None) -> Dict[str, Any]:
-    """Boot helper: CHANGELOG majors if empty, then curated v0.9 / v0.9.1 packs."""
+    """Boot helper: CHANGELOG majors if empty, then curated v0.9 / v0.9.1 / v0.9.2 packs."""
     own = conn is None
     if own:
         conn = db()
@@ -1794,9 +1831,10 @@ def ensure_player_news_seeded(*, conn: sqlite3.Connection | None = None) -> Dict
         changelog = ensure_changelog_seeded(conn=conn)
         v09 = ensure_v09_release_seeded(conn=conn)
         v091 = ensure_v091_release_seeded(conn=conn)
+        v092 = ensure_v092_release_seeded(conn=conn)
         if own:
             conn.commit()
-        return {"ok": True, "changelog": changelog, "v09": v09, "v091": v091}
+        return {"ok": True, "changelog": changelog, "v09": v09, "v091": v091, "v092": v092}
     finally:
         if own:
             conn.close()

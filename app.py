@@ -631,10 +631,20 @@ def inject_globals():
     try:
         user_id = session.get("user_id")
         if user_id is not None and not simple_layout:
-            from game.planet_visuals import landscape_filename_for_planet, raster_webp_relpath
+            from game.planet_visuals import (
+                DEFAULT_HEROCARD,
+                landscape_static_relpath,
+                raster_webp_relpath,
+            )
 
-            landscape_fn = landscape_filename_for_planet(header_active_planet)
-            landscape_rel = f"img/landscapes/{landscape_fn}"
+            pos = (header_active_planet or {}).get("position")
+            try:
+                pos_i = int(pos) if pos is not None and pos != "" else 0
+            except (TypeError, ValueError):
+                pos_i = 0
+            landscape_rel = (
+                landscape_static_relpath(pos_i) if pos_i else f"img/herocards/{DEFAULT_HEROCARD}"
+            )
             current_planet_landscape_url = url_for("static", filename=landscape_rel)
             current_planet_landscape_webp_url = url_for(
                 "static", filename=raster_webp_relpath(landscape_rel)
@@ -751,10 +761,13 @@ def inject_globals():
     client_runtime_config = get_client_runtime_config()
     try:
         if auth_user and auth_user.get("id"):
+            from game.options import get_buildings_ui_settings
+
             client_runtime_config = {
                 **client_runtime_config,
                 **get_notify_sound_settings(int(auth_user["id"])),
                 **get_spy_probe_settings(int(auth_user["id"])),
+                **get_buildings_ui_settings(int(auth_user["id"])),
             }
     except Exception:
         pass
@@ -887,7 +900,7 @@ def inject_globals():
         T_DATA=get_locale_dict(active_locale),
         GC_LOCALE=active_locale,
         SUPPORTED_LANGUAGES=SUPPORTED_LANGUAGES,
-        GC_ASSET_VERSION=GC_ASSET_VERSION,
+        GC_ASSET_VERSION=get_asset_version(),
         GC_CLIENT_CONFIG=client_runtime_config,
         player_name_link=player_name_link,
         CURRENT_PLAYER_ID=_current_player_id(),
@@ -970,8 +983,22 @@ except Exception:
 
 _secret = get_secret_key()
 if not _secret:
-    # Dev fallback only — rotating keys invalidate every cookie on restart.
-    _secret = os.environ.get("GC_DEV_SECRET_KEY", "").strip() or "gc-dev-only-unstable-secret"
+    # Dev: persist a stable local secret so Flask sessions survive process restarts.
+    _dev_secret_path = Path(__file__).resolve().parent / ".gc_dev_secret"
+    try:
+        if _dev_secret_path.is_file():
+            _secret = _dev_secret_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        _secret = ""
+    if not _secret:
+        _secret = (
+            os.environ.get("GC_DEV_SECRET_KEY", "").strip()
+            or "gc-dev-only-unstable-secret"
+        )
+        try:
+            _dev_secret_path.write_text(_secret, encoding="utf-8")
+        except OSError:
+            pass
     if is_production():
         raise RuntimeError("SECRET_KEY must be set in production")
 app.secret_key = _secret
@@ -1838,6 +1865,10 @@ def buildings_view():
             build_queue=ctx["build_queue"],
             active_tab=active_tab,
         )
+        from game.options import get_buildings_ui_settings
+
+        buildings_ui = get_buildings_ui_settings(int(session["user_id"]), conn=conn)
+        buildings_ui_mode = buildings_ui.get("buildings_ui_mode") or "stage"
     finally:
         conn.close()
 
@@ -1849,6 +1880,7 @@ def buildings_view():
         active_planet_name=str(planet.get("name") or ""),
         rows_by_tab=rows_by_tab,
         active_tab=active_tab,
+        buildings_ui_mode=buildings_ui_mode,
         build_queue=ctx["build_queue"],
         prod_per_hour=ctx["prod_per_hour"],
         energy_total=ctx["energy_total"],
@@ -8996,6 +9028,24 @@ def api_options_spy_probes():
     return _options_api_response(True, err, data)
 
 
+@app.route("/api/options/buildings-ui", methods=["POST"])
+@require_login_api
+def api_options_buildings_ui():
+    pid = session.get("user_id")
+    if not pid:
+        return _options_api_response(False, "not_logged_in", None, 401)
+    payload = request.get_json(silent=True) or {}
+    mark_done = bool(payload.get("mark_choice_done"))
+    ok, err, data = options_logic.update_buildings_ui_settings(
+        int(pid),
+        buildings_ui_mode=payload.get("buildings_ui_mode"),
+        mark_choice_done=mark_done,
+    )
+    if not ok:
+        return _options_api_response(False, err, data, 400)
+    return _options_api_response(True, err, data)
+
+
 @app.route("/api/options/locale", methods=["POST"])
 @require_login_api
 def api_options_locale():
@@ -9599,19 +9649,17 @@ def _payload_from_live_context(
         from game.planet_evolution.ux_copy import planet_class_label_key
 
         from game.planet_visuals import (
-            get_landscape_for_position,
             get_planet_identity_for_position,
-            herocard_static_relpath,
             herocard_webp_srcset_for_position,
+            landscape_static_relpath,
             OVERVIEW_HEROCARD_SIZES,
             raster_webp_relpath,
         )
 
         coords = get_planet_coordinates(planet)
         position = int(coords.get("position") or 0)
-        landscape_fn = get_landscape_for_position(position)
-        landscape_rel = f"img/landscapes/{landscape_fn}"
-        herocard_rel = herocard_static_relpath(position)
+        landscape_rel = landscape_static_relpath(position)
+        herocard_rel = landscape_rel
         planet_class = effective_planet_class(planet)
         theme = get_planet_identity_for_position(position)
         from game.planet_visuals import climate_economy_display_for_position, temperature_range_for_position
@@ -9654,7 +9702,6 @@ def _payload_from_live_context(
     except Exception:
         from game.planet_visuals import (
             DEFAULT_HEROCARD,
-            DEFAULT_LANDSCAPE,
             climate_economy_display_for_position,
             get_planet_identity_for_position,
             herocard_webp_srcset_for_position,
@@ -9663,8 +9710,8 @@ def _payload_from_live_context(
             temperature_range_for_position,
         )
 
-        fallback_rel = f"img/landscapes/{DEFAULT_LANDSCAPE}"
-        fallback_herocard_rel = f"img/herocards/{DEFAULT_HEROCARD}"
+        fallback_rel = f"img/herocards/{DEFAULT_HEROCARD}"
+        fallback_herocard_rel = fallback_rel
         fallback_theme = get_planet_identity_for_position(0)
         fallback_temp = temperature_range_for_position(0)
         fallback_climate = climate_economy_display_for_position(0)
@@ -12463,6 +12510,62 @@ def api_research_technical_data(tech_key: str):
     return jsonify({"ok": True, "data": data})
 
 
+@app.route("/api/buildings/stage-layout", methods=["POST"])
+@require_login
+def api_buildings_stage_layout():
+    """GC-BST-10: save/reset per-planet building stage prop positions (display-only)."""
+    from game.buildings import save_stage_layout
+    from game.planet_evolution.repository import get_context_planet
+
+    data = request.get_json(silent=True) or {}
+    user_id = int(session.get("user_id") or 0)
+    if user_id <= 0:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    # Display-only layout: do not finish queues or rebuild panels (avoids prop thrash mid-arrange).
+    planet = get_context_planet(user_id)
+    if not planet:
+        state, _ = _build_game_state_payload(include_panel=False, action_slim=True)
+        return jsonify({"ok": False, "reason": "no_planet", "state": state}), 400
+
+    reset = bool(data.get("reset"))
+    positions = data.get("positions") if isinstance(data.get("positions"), list) else []
+    ok, reason, extra = save_stage_layout(
+        int(planet["id"]),
+        user_id,
+        positions,
+        reset=reset,
+    )
+    if not ok:
+        state, _ = _build_game_state_payload(include_panel=False, action_slim=True)
+        status = 403 if reason == "forbidden" else 400
+        return jsonify({"ok": False, "reason": reason, "state": state}), status
+
+    resp = _action_json_response(
+        True,
+        "ok",
+        payload=extra,
+        finish_source="api_buildings_stage_layout",
+        include_panel=False,
+    )
+    response_obj = resp.get_json()
+    if isinstance(response_obj, dict) and extra:
+        response_obj["stage_layout"] = (extra or {}).get("layout")
+        state = response_obj.get("state")
+        if isinstance(state, dict):
+            state["building_stage_layout"] = (extra or {}).get("layout")
+    if request_id and isinstance(response_obj, dict):
+        save_idempotent_action(user_id, request_id, response_obj)
+        return jsonify(response_obj)
+    return resp
+
+
 @app.route("/api/buildings/upgrade", methods=["POST"])
 @require_login
 def api_buildings_upgrade():
@@ -12697,6 +12800,14 @@ def api_planets_set_active():
         finish_source="api_planets_active",
         action_slim=True,
     )
+    # GC-BST-22: stage positions immediately on soft buildings switch (display-only).
+    if ok and isinstance(state, dict):
+        try:
+            from game.buildings import resolve_stage_layout
+
+            state["building_stage_layout"] = resolve_stage_layout(planet_id)
+        except Exception:
+            pass
     planets = None
     if ok:
         from game.galaxy import sync_galaxy_view_session_for_planet

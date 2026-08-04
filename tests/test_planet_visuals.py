@@ -1,4 +1,4 @@
-"""Planet landscape mapping by galaxy slot."""
+"""Planet surface art mapping by galaxy slot (canonical herocard)."""
 
 from __future__ import annotations
 
@@ -7,32 +7,15 @@ import pytest
 from game.planet_visuals import (
     DEFAULT_LANDSCAPE,
     get_landscape_for_position,
+    herocard_static_relpath,
     landscape_filename_for_planet,
     landscape_static_relpath,
 )
 
 
-@pytest.mark.parametrize(
-    ("position", "expected"),
-    [
-        (1, "trockenplanet01-h.jpg"),
-        (2, "trockenplanet04-h.jpg"),
-        (3, "trockenplanet06-h.jpg"),
-        (4, "trockenplanet08-h.jpg"),
-        (5, "normaltempplanet04-h.jpg"),
-        (6, "normaltempplanet03-h.jpg"),
-        (7, "normaltempplanet01-h.jpg"),
-        (8, "wasserplanet07-h.jpg"),
-        (9, "wasserplanet08-h.jpg"),
-        (10, "dschungelplanet08-h.jpg"),
-        (11, "dschungelplanet07-h.jpg"),
-        (12, "gasplanet05-h.jpg"),
-        (13, "eisplanet04-h.jpg"),
-        (14, "eisplanet06-h.jpg"),
-        (15, "eisplanet09-h.jpg"),
-    ],
-)
-def test_get_landscape_for_position_mapping(position: int, expected: str) -> None:
+@pytest.mark.parametrize("position", list(range(1, 16)))
+def test_get_landscape_for_position_is_herocard_alias(position: int) -> None:
+    expected = f"herocard_{position:02d}.png"
     assert get_landscape_for_position(position) == expected
 
 
@@ -41,12 +24,18 @@ def test_get_landscape_for_position_fallback(invalid) -> None:
     assert get_landscape_for_position(invalid) == DEFAULT_LANDSCAPE
 
 
-def test_landscape_static_relpath() -> None:
-    assert landscape_static_relpath(8) == "img/landscapes/wasserplanet07-h.jpg"
+def test_landscape_static_relpath_matches_herocard() -> None:
+    assert landscape_static_relpath(8) == "img/herocards/herocard_08.png"
+    assert landscape_static_relpath(8) == herocard_static_relpath(8)
+
+
+def test_landscape_and_herocard_paths_identical_for_all_slots() -> None:
+    for pos in range(1, 16):
+        assert landscape_static_relpath(pos) == herocard_static_relpath(pos)
 
 
 def test_landscape_filename_for_planet() -> None:
-    assert landscape_filename_for_planet({"position": 13}) == "eisplanet04-h.jpg"
+    assert landscape_filename_for_planet({"position": 13}) == "herocard_13.png"
     assert landscape_filename_for_planet({}) == DEFAULT_LANDSCAPE
     assert landscape_filename_for_planet(None) == DEFAULT_LANDSCAPE
 
@@ -55,7 +44,7 @@ def test_planet_identity_ice_world_accent() -> None:
     from game.planet_visuals import get_planet_identity_for_position, herocard_static_relpath
 
     ident = get_planet_identity_for_position(15)
-    assert ident["landscape"] == "eisplanet09-h.jpg"
+    assert ident["landscape"] == "herocard_15.png"
     assert ident["herocard"] == "herocard_15.png"
     assert herocard_static_relpath(15) == "img/herocards/herocard_15.png"
     assert ident["accent_color"] == "#3ff8ff"
@@ -70,6 +59,7 @@ def test_planet_theme_matches_landscape_position() -> None:
     for pos in range(1, 16):
         ident = get_planet_identity_for_position(pos)
         assert ident["landscape"] == get_landscape_for_position(pos)
+        assert ident["landscape"] == ident["herocard"]
         assert ident["herocard"] == f"herocard_{pos:02d}.png"
         assert ident["label_key"] == f"planet_slot_{pos:02d}"
         assert ident["accent_color"].startswith("#")
@@ -120,7 +110,8 @@ def test_planet_theme_keys_by_position() -> None:
         assert theme["theme_key"] == theme_key
         assert theme["theme_group"] == theme_group
         assert theme["glow_color"] == theme["accent_color"]
-        assert theme["landscape_relpath"].startswith("img/landscapes/")
+        assert theme["landscape_relpath"].startswith("img/herocards/")
+        assert theme["landscape_relpath"] == theme["herocard_relpath"]
 
 
 def test_temperature_range_invalid_position_uses_temperate_default() -> None:
@@ -138,6 +129,7 @@ def test_planet_theme_default_keys() -> None:
     assert theme["theme_key"] == DEFAULT_THEME_KEY
     assert theme["theme_group"] == DEFAULT_THEME_GROUP
     assert theme["climate"]["solar_bonus_pct"] == 0
+    assert theme["landscape_relpath"] == theme["herocard_relpath"]
 
 
 def test_climate_economy_monotonic_solar() -> None:

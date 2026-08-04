@@ -1,0 +1,43 @@
+<div class="gc-bld-ui-chooser hidden"
+     id="gc-bld-ui-chooser"
+     role="dialog"
+     aria-modal="true"
+     aria-labelledby="gc-bld-ui-chooser-title"
+     hidden>
+  <div class="gc-bld-ui-chooser-backdrop" aria-hidden="true"></div>
+  <div class="gc-bld-ui-chooser-panel gc-panel">
+    <header class="gc-bld-ui-chooser-head">
+      <div>
+        <p class="gc-bld-ui-chooser-kicker">{{ T("buildings_ui_chooser_kicker", "Gebäude-Menü") }}</p>
+        <h2 class="gc-bld-ui-chooser-title" id="gc-bld-ui-chooser-title">
+          {{ T("buildings_ui_chooser_title", "Welches Gebäude-Menü möchtest du?") }}
+        </h2>
+      </div>
+    </header>
+    <p class="gc-bld-ui-chooser-lead">
+      {{ T("buildings_ui_chooser_lead", "Neu: Kolonie-Stage mit Landschaft und Props. Retro: klassische Gebäude-Karten. Später jederzeit unter Optionen änderbar.") }}
+    </p>
+    <div class="gc-bld-ui-chooser-tiles" role="radiogroup" aria-label="{{ T('buildings_ui_chooser_title', 'Welches Gebäude-Menü möchtest du?') }}">
+      <button type="button"
+              class="gc-bld-ui-chooser-tile is-selected"
+              data-bld-ui-choice="stage"
+              aria-pressed="true">
+        <span class="gc-bld-ui-chooser-tile-badge">{{ T("buildings_ui_chooser_recommended", "Empfohlen") }}</span>
+        <strong class="gc-bld-ui-chooser-tile-title">{{ T("buildings_ui_mode_stage", "Kolonie-Stage") }}</strong>
+        <span class="gc-bld-ui-chooser-tile-desc">{{ T("buildings_ui_mode_stage_help", "Neues Build-UI: Landschaft, Props, +1/MAX auf der Stage.") }}</span>
+      </button>
+      <button type="button"
+              class="gc-bld-ui-chooser-tile"
+              data-bld-ui-choice="cards"
+              aria-pressed="false">
+        <strong class="gc-bld-ui-chooser-tile-title">{{ T("buildings_ui_mode_cards", "Retro-Karten") }}</strong>
+        <span class="gc-bld-ui-chooser-tile-desc">{{ T("buildings_ui_mode_cards_help", "Klassische Gebäude-Kartenliste wie zuvor.") }}</span>
+      </button>
+    </div>
+    <footer class="gc-bld-ui-chooser-foot">
+      <button type="button" class="gc-btn gc-btn-primary" data-bld-ui-chooser-confirm>
+        {{ T("buildings_ui_chooser_confirm", "Auswahl speichern") }}
+      </button>
+    </footer>
+  </div>
+</div>

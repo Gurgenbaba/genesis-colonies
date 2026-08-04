@@ -436,6 +436,59 @@
     }
   }
 
+  function bindBuildingsUiControls() {
+    const block = document.getElementById("options-buildings-ui");
+    const page = document.getElementById("options-page");
+    const hint = document.getElementById("options-buildings-ui-hint");
+    if (!block || !page || block.dataset.gcBound === "1") return;
+    block.dataset.gcBound = "1";
+
+    const saveBtn = block.querySelector("[data-buildings-ui-save]");
+    if (!saveBtn || saveBtn.dataset.gcBound === "1") return;
+    saveBtn.dataset.gcBound = "1";
+
+    saveBtn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      const selected = block.querySelector("[data-buildings-ui-mode-input]:checked");
+      const mode = selected && selected.value === "cards" ? "cards" : "stage";
+      saveBtn.disabled = true;
+      if (hint) {
+        hint.hidden = true;
+        hint.textContent = "";
+        hint.classList.remove("gc-options-hint-error", "gc-options-hint-success");
+      }
+      try {
+        const data = await postOptionsJson("/api/options/buildings-ui", {
+          buildings_ui_mode: mode,
+          mark_choice_done: false,
+        });
+        if (!data || data.ok !== true) {
+          if (hint) {
+            hint.textContent = msgKey(data && data.error);
+            hint.hidden = false;
+            hint.classList.add("gc-options-hint-error");
+          }
+          return;
+        }
+        const saved = (data.data && data.data.buildings_ui_mode) || mode;
+        block.setAttribute("data-buildings-ui-mode", saved);
+        page.setAttribute("data-buildings-ui-mode", saved);
+        if (window.GC_CLIENT_CONFIG && typeof window.GC_CLIENT_CONFIG === "object") {
+          window.GC_CLIENT_CONFIG.buildings_ui_mode = saved;
+        }
+        if (hint) {
+          hint.textContent = msgKey("options_saved");
+          hint.hidden = false;
+          hint.classList.add("gc-options-hint-success");
+        }
+      } catch (err) {
+        if (err && err.name === "AuthError") return;
+      } finally {
+        saveBtn.disabled = false;
+      }
+    });
+  }
+
   async function handleOptionsFormSubmit(form, ev) {
     if (typeof GC.runOptionsFormSave === "function") {
       return GC.runOptionsFormSave(form, ev);
@@ -591,6 +644,13 @@
       if (saveBtn) delete saveBtn.dataset.gcBound;
     }
     bindSpyProbeControls();
+    const buildingsUiBlock = document.getElementById("options-buildings-ui");
+    if (buildingsUiBlock) {
+      delete buildingsUiBlock.dataset.gcBound;
+      const saveBtn = buildingsUiBlock.querySelector("[data-buildings-ui-save]");
+      if (saveBtn) delete saveBtn.dataset.gcBound;
+    }
+    bindBuildingsUiControls();
     if (page) {
       setNotifySoundToggleUi("attack", readNotifySoundMode(page, "attack"));
       setNotifySoundToggleUi("message", readNotifySoundMode(page, "message"));

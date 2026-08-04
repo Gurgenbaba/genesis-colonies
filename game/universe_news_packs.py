@@ -471,17 +471,18 @@ RELEASE_PACK_I18N: Dict[str, Dict[str, Any]] = {
     },
     "v0.9.2": {
         "version_tag": "v0.9.2",
-        "release_date": "2026-08-03",
+        "release_date": "2026-08-04",
         "badge": "ALPHA",
         "locales": {
             "de": {
-                "version_label": "Knowledge & LiveOps Catch-up",
+                "version_label": "Knowledge, LiveOps & Kolonie-Stage",
                 "intro": (
-                    "Die LiveOps-Systeme sind da — dieser Catch-up zeigt Commander, was es zu entdecken gibt: "
-                    "World Boss & Titanen, Commander-Klassen, Allianz, Story Ops, Login & Season Pass, "
-                    "Shop & Identity, Inventar & Sammler, Asteroiden, Relikt-Arena, Logistik und den erweiterten Codex."
+                    "Catch-up für LiveOps-Entdeckung plus die neue Kolonie-Stage auf Gebäude: "
+                    "Planet-Landschaft, runde Props, +1/MAX direkt auf der Stage — und die Buttons "
+                    "folgen deiner PlayerCard Identity-Farbe."
                 ),
                 "added": [
+                    "Kolonie-Stage (Gebäude) — Planet-Landschaft mit runden Props und Inline-+1/MAX",
                     "World Boss & Titanen — serverweite Events, Angriff/Zähmen und Titan-Missionen auf der Übersicht",
                     "Commander-Klassen — Command Staff wählen, Skill-Trunk freischalten (dauerhaft)",
                     "Allianz-Hub — Spenden, Projekte, Tech und gemeinsame Boni",
@@ -494,21 +495,25 @@ RELEASE_PACK_I18N: Dict[str, Dict[str, Any]] = {
                     "Codex-Wissen erweitert — Quick Help und Guides zu den LiveOps-Systemen",
                 ],
                 "changed": [
+                    "Gebäude-Stage: kein schwarzes Deck/Blur; Detail-Popup ohne doppelte Build-Buttons",
+                    "Stage-Buttons folgen der PlayerCard Identity-Farbe; Defaults pro Tab ohne Überlappung",
                     "Wissenslandkarte und Context-Help an den aktuellen Catalog angepasst",
                     "Spieler-Entdeckbarkeit: Hinweise und Codex-Routen für LiveOps nachgezogen",
                 ],
                 "fixed": [
+                    "Technische Daten aus dem Stage-Popup: Card schließt zuerst (kein Modal-Stack)",
                     "Stale „Coming soon“-Hinweise zur Allianz in internen Patchnotes bereinigt",
                 ],
             },
             "en": {
-                "version_label": "Knowledge & LiveOps Catch-up",
+                "version_label": "Knowledge, LiveOps & Colony Stage",
                 "intro": (
-                    "LiveOps systems are live — this catch-up helps commanders discover what's new: "
-                    "World Boss & Titans, Commander Classes, Alliance, Story Ops, Login & Season Pass, "
-                    "Shop & Identity, Inventory & Collector, Asteroids, Relic Arena, Logistics, and the expanded Codex."
+                    "LiveOps discoverability catch-up plus the new Buildings colony stage: "
+                    "planet landscape, round props, +1/MAX on the stage — and buttons follow "
+                    "your PlayerCard identity color."
                 ),
                 "added": [
+                    "Colony Stage (Buildings) — planet landscape with round props and inline +1/MAX",
                     "World Boss & Titans — server-wide events, attack/tame, and Titan missions on Overview",
                     "Commander Classes — pick Command Staff, unlock the skill trunk (permanent)",
                     "Alliance Hub — donations, projects, tech and shared bonuses",
@@ -521,21 +526,25 @@ RELEASE_PACK_I18N: Dict[str, Dict[str, Any]] = {
                     "Codex knowledge expanded — quick help and guides for LiveOps systems",
                 ],
                 "changed": [
+                    "Buildings stage: no black deck/blur; detail popup without duplicate build buttons",
+                    "Stage buttons follow PlayerCard identity color; per-tab defaults without overlap",
                     "Knowledge map and context help aligned with the current catalog",
                     "Player discoverability: page hints and Codex routes for LiveOps updated",
                 ],
                 "fixed": [
+                    "Technical data from stage popup: card closes first (no modal stack)",
                     "Stale “coming soon” Alliance notes cleaned up in internal patch notes",
                 ],
             },
             "es": {
-                "version_label": "Knowledge y LiveOps catch-up",
+                "version_label": "Knowledge, LiveOps y Colony Stage",
                 "intro": (
-                    "Los sistemas LiveOps ya están — este catch-up ayuda a descubrir: "
-                    "World Boss y Titanes, clases de Commander, Alianza, Story Ops, Login y Season Pass, "
-                    "Tienda e Identity, Inventario y Coleccionista, Asteroides, Relic Arena, Logística y el Codex ampliado."
+                    "Catch-up de LiveOps más la nueva Colony Stage en Edificios: "
+                    "paisaje del planeta, props redondos, +1/MAX en la stage — y los botones "
+                    "siguen el color Identity de tu PlayerCard."
                 ),
                 "added": [
+                    "Colony Stage (Edificios) — paisaje planetario con props redondos y +1/MAX inline",
                     "World Boss y Titanes — eventos de servidor, ataque/domesticar y misiones de Titán en Overview",
                     "Clases de Commander — elige Command Staff, desbloquea el skill trunk (permanente)",
                     "Hub de alianza — donaciones, proyectos, tech y bonos compartidos",
@@ -548,21 +557,25 @@ RELEASE_PACK_I18N: Dict[str, Dict[str, Any]] = {
                     "Codex ampliado — ayuda rápida y guías de sistemas LiveOps",
                 ],
                 "changed": [
+                    "Stage de edificios: sin deck/blur negro; popup de detalle sin botones de build duplicados",
+                    "Botones de stage siguen el color Identity de PlayerCard; defaults por pestaña sin solapes",
                     "Mapa de conocimiento y ayuda contextual alineados con el catálogo actual",
                     "Descubribilidad: pistas de página y rutas Codex de LiveOps actualizadas",
                 ],
                 "fixed": [
+                    "Datos técnicos desde el popup de stage: la card se cierra primero (sin stack de modales)",
                     "Notas internas obsoletas de “próximamente” sobre Alianza limpiadas",
                 ],
             },
             "fr": {
-                "version_label": "Knowledge & LiveOps catch-up",
+                "version_label": "Knowledge, LiveOps & Colony Stage",
                 "intro": (
-                    "Les systèmes LiveOps sont là — ce catch-up aide à découvrir : "
-                    "World Boss & Titans, classes Commander, Alliance, Story Ops, Login & Season Pass, "
-                    "Boutique & Identity, Inventaire & Collectionneur, Astéroïdes, Relic Arena, Logistique et le Codex élargi."
+                    "Catch-up LiveOps plus la nouvelle Colony Stage des Bâtiments : "
+                    "paysage planétaire, props ronds, +1/MAX sur la stage — et les boutons "
+                    "suivent la couleur Identity de votre PlayerCard."
                 ),
                 "added": [
+                    "Colony Stage (Bâtiments) — paysage planétaire avec props ronds et +1/MAX inline",
                     "World Boss & Titans — événements serveur, attaque/apprivoiser et missions Titan sur Overview",
                     "Classes Commander — choisissez le Command Staff, débloquez le skill trunk (permanent)",
                     "Hub d'alliance — dons, projets, tech et bonus partagés",
@@ -575,21 +588,25 @@ RELEASE_PACK_I18N: Dict[str, Dict[str, Any]] = {
                     "Codex élargi — aide rapide et guides des systèmes LiveOps",
                 ],
                 "changed": [
+                    "Stage bâtiments : plus de deck/blur noir ; popup détail sans boutons build en double",
+                    "Boutons de stage suivent la couleur Identity PlayerCard ; defaults par onglet sans chevauchement",
                     "Carte du savoir et aide contextuelle alignées sur le catalogue actuel",
                     "Découvrabilité : indices de page et routes Codex LiveOps mises à jour",
                 ],
                 "fixed": [
+                    "Données techniques depuis le popup stage : la card se ferme d'abord (pas de stack modal)",
                     "Notes internes « bientôt » obsolètes sur l'Alliance nettoyées",
                 ],
             },
             "pl": {
-                "version_label": "Knowledge i LiveOps catch-up",
+                "version_label": "Knowledge, LiveOps i Colony Stage",
                 "intro": (
-                    "Systemy LiveOps są dostępne — ten catch-up pomaga odkryć: "
-                    "World Boss i Tytanów, klasy Commander, Sojusz, Story Ops, Login i Season Pass, "
-                    "Sklep i Identity, Ekwipunek i Kolekcjoner, Asteroidy, Relic Arena, Logistykę oraz rozszerzony Codex."
+                    "Catch-up LiveOps oraz nowa Colony Stage na Budynkach: "
+                    "krajobraz planety, okrągłe propsy, +1/MAX na stage — a przyciski "
+                    "podążają za kolorem Identity Twojej PlayerCard."
                 ),
                 "added": [
+                    "Colony Stage (Budynki) — krajobraz planety z okrągłymi propsami i inline +1/MAX",
                     "World Boss i Tytani — wydarzenia serwerowe, atak/oswajanie i misje Tytana na Overview",
                     "Klasy Commander — wybierz Command Staff, odblokuj skill trunk (trwale)",
                     "Hub sojuszu — darowizny, projekty, tech i wspólne bonusy",
@@ -602,21 +619,25 @@ RELEASE_PACK_I18N: Dict[str, Dict[str, Any]] = {
                     "Rozszerzony Codex — szybka pomoc i przewodniki systemów LiveOps",
                 ],
                 "changed": [
+                    "Stage budynków: bez czarnego deck/blur; popup szczegółów bez podwójnych przycisków budowy",
+                    "Przyciski stage podążają za kolorem Identity PlayerCard; domyślne układy per zakładka bez nakładania",
                     "Mapa wiedzy i pomoc kontekstowa dopasowane do aktualnego katalogu",
                     "Odkrywalność: wskazówki stron i trasy Codex LiveOps zaktualizowane",
                 ],
                 "fixed": [
+                    "Dane techniczne z popup stage: karta zamyka się najpierw (bez stosu modali)",
                     "Przestarzałe wewnętrzne notatki „wkrótce” o Sojuszu wyczyszczone",
                 ],
             },
             "pt": {
-                "version_label": "Knowledge e LiveOps catch-up",
+                "version_label": "Knowledge, LiveOps e Colony Stage",
                 "intro": (
-                    "Os sistemas LiveOps estão ativos — este catch-up ajuda a descobrir: "
-                    "World Boss e Titãs, classes Commander, Aliança, Story Ops, Login e Season Pass, "
-                    "Loja e Identity, Inventário e Colecionador, Asteroides, Relic Arena, Logística e o Codex expandido."
+                    "Catch-up LiveOps mais a nova Colony Stage em Edifícios: "
+                    "paisagem do planeta, props redondos, +1/MAX no stage — e os botões "
+                    "seguem a cor Identity do teu PlayerCard."
                 ),
                 "added": [
+                    "Colony Stage (Edifícios) — paisagem planetária com props redondos e +1/MAX inline",
                     "World Boss e Titãs — eventos de servidor, ataque/domar e missões de Titã no Overview",
                     "Classes Commander — escolha o Command Staff, desbloqueie o skill trunk (permanente)",
                     "Hub de aliança — doações, projetos, tech e bônus partilhados",
@@ -629,21 +650,25 @@ RELEASE_PACK_I18N: Dict[str, Dict[str, Any]] = {
                     "Codex expandido — ajuda rápida e guias dos sistemas LiveOps",
                 ],
                 "changed": [
+                    "Stage de edifícios: sem deck/blur preto; popup de detalhe sem botões de build duplicados",
+                    "Botões do stage seguem a cor Identity do PlayerCard; defaults por separador sem sobreposição",
                     "Mapa de conhecimento e ajuda contextual alinhados com o catálogo atual",
                     "Descoberta: dicas de página e rotas Codex LiveOps atualizadas",
                 ],
                 "fixed": [
+                    "Dados técnicos a partir do popup do stage: a card fecha primeiro (sem stack de modais)",
                     "Notas internas obsoletas de “em breve” sobre Aliança limpas",
                 ],
             },
             "ru": {
-                "version_label": "Knowledge и LiveOps catch-up",
+                "version_label": "Knowledge, LiveOps и Colony Stage",
                 "intro": (
-                    "Системы LiveOps уже в игре — этот catch-up поможет открыть: "
-                    "World Boss и Титанов, классы Commander, Альянс, Story Ops, Login и Season Pass, "
-                    "Магазин и Identity, Инвентарь и Коллекционер, Астероиды, Relic Arena, Логистику и расширенный Codex."
+                    "Catch-up LiveOps плюс новая Colony Stage на Зданиях: "
+                    "пейзаж планеты, круглые props, +1/MAX на stage — и кнопки "
+                    "следуют цвету Identity вашей PlayerCard."
                 ),
                 "added": [
+                    "Colony Stage (Здания) — пейзаж планеты с круглыми props и inline +1/MAX",
                     "World Boss и Титаны — серверные события, атака/приручение и миссии Титана на Overview",
                     "Классы Commander — выберите Command Staff, откройте skill trunk (навсегда)",
                     "Хаб альянса — пожертвования, проекты, tech и общие бонусы",
@@ -656,21 +681,25 @@ RELEASE_PACK_I18N: Dict[str, Dict[str, Any]] = {
                     "Расширенный Codex — быстрая помощь и гайды по LiveOps",
                 ],
                 "changed": [
+                    "Stage зданий: без чёрного deck/blur; detail popup без дублирующих кнопок постройки",
+                    "Кнопки stage следуют цвету Identity PlayerCard; defaults по вкладкам без наложений",
                     "Карта знаний и контекстная помощь приведены к актуальному каталогу",
                     "Открываемость: подсказки страниц и маршруты Codex LiveOps обновлены",
                 ],
                 "fixed": [
+                    "Техданные из stage popup: карточка закрывается первой (без стека модалок)",
                     "Устаревшие внутренние заметки «скоро» про Альянс очищены",
                 ],
             },
             "tr": {
-                "version_label": "Knowledge ve LiveOps catch-up",
+                "version_label": "Knowledge, LiveOps ve Colony Stage",
                 "intro": (
-                    "LiveOps sistemleri canlı — bu catch-up keşfetmenize yardımcı olur: "
-                    "World Boss ve Titanlar, Commander sınıfları, İttifak, Story Ops, Login ve Season Pass, "
-                    "Mağaza ve Identity, Envanter ve Koleksiyoncu, Asteroitler, Relic Arena, Lojistik ve genişletilmiş Codex."
+                    "LiveOps catch-up artı Binalar’daki yeni Colony Stage: "
+                    "gezegen manzarası, yuvarlak props, stage üzerinde +1/MAX — ve düğmeler "
+                    "PlayerCard Identity renginizi takip eder."
                 ),
                 "added": [
+                    "Colony Stage (Binalar) — yuvarlak props ve inline +1/MAX ile gezegen manzarası",
                     "World Boss ve Titanlar — sunucu etkinlikleri, saldırı/evcilleştirme ve Overview'da Titan görevleri",
                     "Commander sınıfları — Command Staff seçin, skill trunk açın (kalıcı)",
                     "İttifak Hub — bağışlar, projeler, tech ve ortak bonuslar",
@@ -683,10 +712,13 @@ RELEASE_PACK_I18N: Dict[str, Dict[str, Any]] = {
                     "Genişletilmiş Codex — LiveOps sistemleri için hızlı yardım ve rehberler",
                 ],
                 "changed": [
+                    "Bina stage: siyah deck/blur yok; ayrıntı popup’ta çift build düğmesi yok",
+                    "Stage düğmeleri PlayerCard Identity rengini takip eder; sekme başına çakışmasız varsayılanlar",
                     "Bilgi haritası ve bağlamsal yardım güncel katalogla hizalandı",
                     "Keşfedilebilirlik: LiveOps sayfa ipuçları ve Codex rotaları güncellendi",
                 ],
                 "fixed": [
+                    "Stage popup’tan teknik veriler: card önce kapanır (modal yığını yok)",
                     "İttifak hakkında eski “yakında” iç yama notları temizlendi",
                 ],
             },

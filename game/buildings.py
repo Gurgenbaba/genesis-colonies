@@ -206,27 +206,35 @@ BUILDING_TAB: Dict[str, str] = {
     "planet_core_nexus": "infrastructure",
 }
 
-# Display-only colony stage slots (percent of stage box). Not used for economy/queue math.
+# Display-only colony stage slots (percent of stage box).
+# Spread per building-tab across the full stage so active-tab views never crowd.
+# Not used for economy/queue math. Min ≈18% Euclidean gap between any two slots.
 BUILDING_STAGE_LAYOUT: Dict[str, Dict[str, float]] = {
-    "metal_mine": {"left_pct": 14.0, "top_pct": 64.0, "z": 3, "scale": 1.05},
-    "crystal_mine": {"left_pct": 28.0, "top_pct": 58.0, "z": 3, "scale": 1.0},
-    "solar_plant": {"left_pct": 44.0, "top_pct": 52.0, "z": 2, "scale": 1.05},
-    "fuel_cell_plant": {"left_pct": 58.0, "top_pct": 60.0, "z": 3, "scale": 1.0},
-    "metal_storage": {"left_pct": 18.0, "top_pct": 78.0, "z": 4, "scale": 0.95},
-    "crystal_storage": {"left_pct": 34.0, "top_pct": 76.0, "z": 4, "scale": 0.95},
-    "fuel_storage": {"left_pct": 50.0, "top_pct": 80.0, "z": 4, "scale": 0.95},
-    "research_lab": {"left_pct": 68.0, "top_pct": 48.0, "z": 3, "scale": 1.05},
-    "academy": {"left_pct": 82.0, "top_pct": 54.0, "z": 3, "scale": 1.0},
-    "orbital_shipyard": {"left_pct": 78.0, "top_pct": 28.0, "z": 5, "scale": 1.15},
-    "defense_factory": {"left_pct": 62.0, "top_pct": 36.0, "z": 3, "scale": 1.0},
-    "barracks": {"left_pct": 48.0, "top_pct": 40.0, "z": 3, "scale": 1.0},
-    "radar_array": {"left_pct": 88.0, "top_pct": 34.0, "z": 4, "scale": 0.95},
-    "command_center": {"left_pct": 50.0, "top_pct": 66.0, "z": 5, "scale": 1.2},
-    "shield_generator": {"left_pct": 36.0, "top_pct": 42.0, "z": 2, "scale": 1.0},
-    "terraformer": {"left_pct": 22.0, "top_pct": 46.0, "z": 2, "scale": 1.0},
-    "nanofactory": {"left_pct": 72.0, "top_pct": 70.0, "z": 3, "scale": 1.0},
-    "geothermal_nexus": {"left_pct": 10.0, "top_pct": 50.0, "z": 2, "scale": 1.05},
-    "planet_core_nexus": {"left_pct": 50.0, "top_pct": 88.0, "z": 1, "scale": 1.1},
+    # Resources — player-tuned 2-3-2 (hex): Crystal Mine top-center,
+    # Metal/Solar upper wings, Metal Storage center, Fuel Plant / Crystal Storage
+    # lower wings, Fuel Storage bottom-center.
+    "crystal_mine": {"left_pct": 49.1, "top_pct": 18.9, "z": 3, "scale": 1.0},
+    "metal_mine": {"left_pct": 15.5, "top_pct": 29.0, "z": 3, "scale": 1.0},
+    "solar_plant": {"left_pct": 80.3, "top_pct": 28.3, "z": 2, "scale": 1.0},
+    "metal_storage": {"left_pct": 49.6, "top_pct": 50.0, "z": 4, "scale": 0.98},
+    "fuel_cell_plant": {"left_pct": 15.2, "top_pct": 73.8, "z": 3, "scale": 1.0},
+    "crystal_storage": {"left_pct": 79.2, "top_pct": 75.6, "z": 4, "scale": 0.98},
+    "fuel_storage": {"left_pct": 49.7, "top_pct": 80.7, "z": 4, "scale": 0.98},
+    # Research — wide mid split
+    "research_lab": {"left_pct": 26.0, "top_pct": 48.0, "z": 3, "scale": 1.05},
+    "academy": {"left_pct": 74.0, "top_pct": 48.0, "z": 3, "scale": 1.02},
+    # Military — lower diamond
+    "orbital_shipyard": {"left_pct": 18.0, "top_pct": 40.0, "z": 5, "scale": 1.05},
+    "radar_array": {"left_pct": 50.0, "top_pct": 34.0, "z": 4, "scale": 0.98},
+    "barracks": {"left_pct": 82.0, "top_pct": 40.0, "z": 3, "scale": 1.0},
+    "defense_factory": {"left_pct": 50.0, "top_pct": 66.0, "z": 3, "scale": 1.02},
+    # Infrastructure — lower hex
+    "command_center": {"left_pct": 50.0, "top_pct": 38.0, "z": 6, "scale": 1.08},
+    "shield_generator": {"left_pct": 16.0, "top_pct": 52.0, "z": 2, "scale": 0.98},
+    "terraformer": {"left_pct": 84.0, "top_pct": 52.0, "z": 2, "scale": 1.0},
+    "nanofactory": {"left_pct": 16.0, "top_pct": 74.0, "z": 3, "scale": 1.0},
+    "geothermal_nexus": {"left_pct": 84.0, "top_pct": 74.0, "z": 2, "scale": 1.0},
+    "planet_core_nexus": {"left_pct": 50.0, "top_pct": 86.0, "z": 1, "scale": 1.05},
 }
 
 _BUILDING_ICON_OVERRIDES: Dict[str, str] = {
@@ -381,8 +389,154 @@ def get_building_icon(building_type: str) -> str:
     return BUILDING_ICON.get(building_type, "img/buildings/default.png")
 
 
+def get_building_stage_icon(building_type: str) -> str:
+    """Prefer stage cutout under img/buildings/stage/; fall back to card icon."""
+    key = str(building_type or "").strip()
+    if not key:
+        return get_building_icon(building_type)
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    for ext in (".webp", ".png"):
+        candidate = root / "static" / "img" / "buildings" / "stage" / f"{key}{ext}"
+        if candidate.is_file() and candidate.stat().st_size > 0:
+            return f"img/buildings/stage/{key}{ext}"
+    return get_building_icon(building_type)
+
+
 def get_building_tab(building_type: str) -> str:
     return BUILDING_TAB.get(building_type, "infrastructure")
+
+
+def _clamp_stage_pct(value: Any, default: float = 50.0) -> float:
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        v = float(default)
+    if v < 0.0:
+        return 0.0
+    if v > 100.0:
+        return 100.0
+    return v
+
+
+def resolve_stage_layout(planet_id: int, *, conn=None) -> Dict[str, Dict[str, float]]:
+    """Merge BUILDING_STAGE_LAYOUT defaults with per-planet DB overrides (display-only)."""
+    layout: Dict[str, Dict[str, float]] = {}
+    for key, slot in BUILDING_STAGE_LAYOUT.items():
+        layout[key] = {
+            "left_pct": float(slot.get("left_pct") or 50.0),
+            "top_pct": float(slot.get("top_pct") or 50.0),
+            "z": float(slot.get("z") or 1),
+            "scale": float(slot.get("scale") or 1.0),
+        }
+
+    pid = int(planet_id or 0)
+    if pid <= 0:
+        return layout
+
+    own_conn = conn is None
+    if own_conn:
+        from .db import db as _db
+
+        conn = _db()
+    try:
+        try:
+            rows = conn.execute(
+                "SELECT building_key, left_pct, top_pct FROM planet_building_stage_layout WHERE planet_id = ?",
+                (pid,),
+            ).fetchall()
+        except Exception:
+            rows = []
+        for row in rows or []:
+            key = str(row["building_key"] if hasattr(row, "keys") else row[0] or "").strip()
+            if key not in layout:
+                continue
+            left = row["left_pct"] if hasattr(row, "keys") else row[1]
+            top = row["top_pct"] if hasattr(row, "keys") else row[2]
+            layout[key]["left_pct"] = _clamp_stage_pct(left, layout[key]["left_pct"])
+            layout[key]["top_pct"] = _clamp_stage_pct(top, layout[key]["top_pct"])
+    finally:
+        if own_conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    return layout
+
+
+def save_stage_layout(
+    planet_id: int,
+    player_id: int,
+    positions: Sequence[Dict[str, Any]] | None = None,
+    *,
+    reset: bool = False,
+    conn=None,
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """Persist stage prop positions for a planet. Ownership-checked. Display-only."""
+    import time as _time
+
+    from .db import db as _db
+
+    pid = int(planet_id or 0)
+    uid = int(player_id or 0)
+    if pid <= 0 or uid <= 0:
+        return False, "invalid_planet", None
+
+    own_conn = conn is None
+    if own_conn:
+        conn = _db()
+    try:
+        planet = conn.execute(
+            "SELECT id, player_id FROM planets WHERE id = ?",
+            (pid,),
+        ).fetchone()
+        if not planet:
+            return False, "planet_not_found", None
+        owner = int(planet["player_id"] if hasattr(planet, "keys") else planet[1] or 0)
+        if owner != uid:
+            return False, "forbidden", None
+
+        now = float(_time.time())
+        if reset:
+            conn.execute(
+                "DELETE FROM planet_building_stage_layout WHERE planet_id = ?",
+                (pid,),
+            )
+            if own_conn:
+                conn.commit()
+            return True, "ok", {"reset": True, "layout": resolve_stage_layout(pid, conn=conn)}
+
+        saved = 0
+        for item in positions or []:
+            if not isinstance(item, dict):
+                continue
+            key = str(item.get("building_key") or item.get("key") or "").strip()
+            if key not in BUILDING_STAGE_LAYOUT:
+                continue
+            left = _clamp_stage_pct(item.get("left_pct"), BUILDING_STAGE_LAYOUT[key]["left_pct"])
+            top = _clamp_stage_pct(item.get("top_pct"), BUILDING_STAGE_LAYOUT[key]["top_pct"])
+            conn.execute(
+                """
+                INSERT INTO planet_building_stage_layout (planet_id, building_key, left_pct, top_pct, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(planet_id, building_key) DO UPDATE SET
+                    left_pct = excluded.left_pct,
+                    top_pct = excluded.top_pct,
+                    updated_at = excluded.updated_at
+                """,
+                (pid, key, left, top, now),
+            )
+            saved += 1
+        if own_conn:
+            conn.commit()
+        return True, "ok", {"saved": saved, "layout": resolve_stage_layout(pid, conn=conn)}
+    finally:
+        if own_conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def get_building_label_key(building_type: str) -> str:
@@ -1411,6 +1565,7 @@ def _make_panel_row(
     queue_free_slots: int = 0,
     *,
     panel_ctx: Optional[BuildingsPanelContext] = None,
+    stage_layout: Optional[Dict[str, Dict[str, float]]] = None,
 ) -> Dict[str, Any]:
     from .live_state import current_ssr_perf
 
@@ -1479,12 +1634,17 @@ def _make_panel_row(
         "max_queueable": int(max_queue_preview.get("jobs") or 0),
         "max_queue_preview": max_queue_preview,
     }
-    stage = BUILDING_STAGE_LAYOUT.get(building_type)
+    stage = None
+    if stage_layout and building_type in stage_layout:
+        stage = stage_layout.get(building_type)
+    if stage is None:
+        stage = BUILDING_STAGE_LAYOUT.get(building_type)
     if stage:
         row["stage_left_pct"] = float(stage.get("left_pct") or 50.0)
         row["stage_top_pct"] = float(stage.get("top_pct") or 50.0)
         row["stage_z"] = int(stage.get("z") or 1)
         row["stage_scale"] = float(stage.get("scale") or 1.0)
+        row["stage_icon"] = get_building_stage_icon(building_type)
     row.update(
         _panel_upgrade_effect_fields(
             building_type, buildings, target_level, ratio, research_levels, panel_ctx=panel_ctx
@@ -1611,6 +1771,12 @@ def get_buildings_panel_rows(
         }
         building_keys = BUILDING_ORDER
 
+    try:
+        planet_id = int(planet.get("id") or 0)
+    except (TypeError, ValueError):
+        planet_id = 0
+    stage_layout = resolve_stage_layout(planet_id) if planet_id > 0 else None
+
     for key in building_keys:
         if ssr is not None and cards_t0 is None:
             cards_t0 = time.perf_counter()
@@ -1623,6 +1789,7 @@ def get_buildings_panel_rows(
             ratio=ratio,
             queue_free_slots=queue_free_slots,
             panel_ctx=panel_ctx,
+            stage_layout=stage_layout,
         )
         rows_by_tab.setdefault(row["tab"], []).append(row)
 
@@ -1675,6 +1842,12 @@ def get_buildings_panel_delta(
         bq_limit = _resolve_build_queue_limit()
     queue_free_slots = max(0, bq_limit - bq_count)
 
+    try:
+        planet_id = int(planet.get("id") or 0)
+    except (TypeError, ValueError):
+        planet_id = 0
+    stage_layout = resolve_stage_layout(planet_id) if planet_id > 0 else None
+
     rows_by_tab: Dict[str, List[Dict[str, Any]]] = {}
     for key in keys:
         row = _make_panel_row(
@@ -1686,6 +1859,7 @@ def get_buildings_panel_delta(
             ratio=ratio,
             queue_free_slots=queue_free_slots,
             panel_ctx=panel_ctx,
+            stage_layout=stage_layout,
         )
         rows_by_tab.setdefault(row["tab"], []).append(row)
 
