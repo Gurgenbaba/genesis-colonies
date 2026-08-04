@@ -3215,6 +3215,9 @@ def test_story_ops_template_center_focus_contracts():
     assert 'data-story-speaker' in html
     assert "story-speaker--commander" in html
     assert "data-story-speaker-portrait" in html
+    assert "earned.get('items'" in html or 'earned.get("items"' in html
+    assert "earned.items|" not in html
+    assert "story_narrator_provisional" in html
     assert "story-holo" in html
     assert "story-tx__atmos" in html
     assert "story-tts--console" in html

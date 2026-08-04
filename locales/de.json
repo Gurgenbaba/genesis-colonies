@@ -8314,5 +8314,6 @@
   "fleet_error_not_enough_troop_berths": "Nicht genug Besatzungsplätze für die gewählten Truppen.",
   "fleet_troops_berths": "Besatzung",
   "fleet_troops_berths_hint": "Mitnahme begrenzt durch Schiffs-Besatzung (crew). Schwere Truppen brauchen mehr Plätze.",
-  "fleet_troops_slot_cost": "%(n)s Platz"
+  "fleet_troops_slot_cost": "%(n)s Platz",
+  "story_narrator_provisional": "Ark-Verbindung"
 }

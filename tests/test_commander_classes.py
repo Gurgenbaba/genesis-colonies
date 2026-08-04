@@ -653,22 +653,50 @@ def test_envoy_scan_chip_marked_prepared(commander_db):
 
 
 def test_story_narrator_slice_read_only_portrait(commander_db):
-    """Story Ops hero uses catalog portrait — no write/ensure side effects."""
-    from game.commander_classes import story_narrator_slice
+    """Story Ops hero uses catalog portrait — provisional Archivist until class pick."""
+    from game.commander_classes import STORY_DEFAULT_NARRATOR_CLASS, story_narrator_slice
 
     conn = db()
     try:
         uid = _player(conn=conn)
-        assert story_narrator_slice(uid, conn=conn) is None
+        provisional = story_narrator_slice(uid, conn=conn)
+        assert provisional is not None
+        assert provisional["is_provisional"] is True
+        assert provisional["class_key"] == STORY_DEFAULT_NARRATOR_CLASS
+        assert provisional["portrait"] == "img/classes/Archivist.webp"
         begin_write_transaction(conn)
         ok, reason, _ = pick_class(uid, "void_admiral", conn=conn)
         assert ok and reason == "ok"
         commit(conn)
         slice_ = story_narrator_slice(uid, conn=conn)
         assert slice_ is not None
+        assert slice_["is_provisional"] is False
         assert slice_["class_key"] == "void_admiral"
         assert slice_["theme"] == "admiral"
         assert slice_["portrait"] == "img/classes/Void_Admiral.webp"
         assert "officer_key" in slice_
     finally:
         conn.close()
+
+
+def test_story_page_renders_without_commander_class(commander_db):
+    """/story must not 500 when the player has not picked a class (Jinja earned.items trap)."""
+    import app as app_mod
+
+    conn = db()
+    try:
+        uid = _player(conn=conn)
+    finally:
+        conn.close()
+
+    app_mod.app.config["TESTING"] = True
+    app_mod.app.config["WTF_CSRF_ENABLED"] = False
+    client = app_mod.app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+    resp = client.get("/story")
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert "story-ops-page" in html
+    assert "story-speaker--commander" in html
+    assert "Ark-Verbindung" in html or "story_narrator_provisional" in html or "Archivist" in html

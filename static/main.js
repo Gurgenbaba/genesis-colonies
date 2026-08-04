@@ -22289,10 +22289,14 @@
         }
       }
       if (roleEl) {
-        const titleKey = String(narrator.title_key || "").trim();
-        const title = titleKey ? t(titleKey, "") : "";
-        const base = t("story_narrator_commander", "Dein Commander");
-        roleEl.textContent = title ? `${base} · ${title}` : base;
+        if (narrator && narrator.is_provisional) {
+          roleEl.textContent = t("story_narrator_provisional", "Ark-Verbindung");
+        } else {
+          const titleKey = String(narrator.title_key || "").trim();
+          const title = titleKey ? t(titleKey, "") : "";
+          const base = t("story_narrator_commander", "Dein Commander");
+          roleEl.textContent = title ? `${base} · ${title}` : base;
+        }
         roleEl.hidden = false;
       }
     } else if (roleEl) {

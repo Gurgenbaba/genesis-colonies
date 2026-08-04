@@ -93,8 +93,12 @@
           </span>
           {% if has_commander %}
           <span class="story-tx__commander-role gc-mono" data-story-commander-role>
-            {{ T("story_narrator_commander", "Dein Commander") }}
-            {% if narrator.title_key %} · {{ T(narrator.title_key, "") }}{% endif %}
+            {% if narrator.is_provisional %}
+              {{ T("story_narrator_provisional", "Ark-Verbindung") }}
+            {% else %}
+              {{ T("story_narrator_commander", "Dein Commander") }}
+              {% if narrator.title_key %} · {{ T(narrator.title_key, "") }}{% endif %}
+            {% endif %}
           </span>
           {% endif %}
           <span class="story-tx__meta-rule" aria-hidden="true"></span>
@@ -284,8 +288,10 @@
   </div>
 
   {% set earned = st.earned_rewards if st.earned_rewards is defined and st.earned_rewards else {'ark_tokens': 0, 'items': []} %}
+  {# Jinja: earned.items is dict.items — use key access #}
+  {% set earned_items = earned.get('items', []) if earned else [] %}
   {% set frag_count = (st.lore_fragments|length) if st.lore_fragments else 0 %}
-  {% set has_lore = frag_count > 0 or (earned.ark_tokens|default(0))|int > 0 or (earned.items|default([]))|length > 0 %}
+  {% set has_lore = frag_count > 0 or (earned.ark_tokens|default(0))|int > 0 or (earned_items|length) > 0 %}
   <details class="story-lore gc-panel" data-story-lore {% if not has_lore %}hidden{% endif %}>
     <summary class="story-lore__summary">
       <span class="story-lore__title">{{ T("story_lore_title", "Freigeschaltete Fragmente") }}</span>

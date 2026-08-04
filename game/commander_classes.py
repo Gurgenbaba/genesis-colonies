@@ -603,19 +603,11 @@ def get_skilltree_page_context(player_id: int, *, conn) -> Dict[str, Any]:
     return {"commander": serialize_for_client(int(player_id), conn=conn)}
 
 
-def story_narrator_slice(player_id: int, *, conn) -> Optional[Dict[str, Any]]:
-    """Read-only Story Ops hero payload — catalog portrait only, no ensure/write."""
-    if not schema_ready(conn):
-        return None
-    row = conn.execute(
-        "SELECT class_key FROM player_commander WHERE player_id = ? LIMIT 1;",
-        (int(player_id),),
-    ).fetchone()
-    if not row:
-        return None
-    class_key = str(row["class_key"] or "").strip()
-    if not class_key or not is_valid_class(class_key):
-        return None
+# Story Ops stand-in when the player has not picked a Living Commander yet.
+STORY_DEFAULT_NARRATOR_CLASS = "archivist"
+
+
+def _story_narrator_payload(class_key: str, *, provisional: bool) -> Optional[Dict[str, Any]]:
     meta = get_class(class_key) or {}
     portrait = str(meta.get("portrait") or "").strip()
     if not portrait:
@@ -628,4 +620,19 @@ def story_narrator_slice(player_id: int, *, conn) -> Optional[Dict[str, Any]]:
         "officer_key": str(meta.get("officer_key") or ""),
         "title_key": str(meta.get("title_key") or ""),
         "epithet_key": str(meta.get("epithet_key") or ""),
+        "is_provisional": bool(provisional),
     }
+
+
+def story_narrator_slice(player_id: int, *, conn) -> Optional[Dict[str, Any]]:
+    """Read-only Story Ops hero — chosen class, else provisional Archivist stand-in."""
+    if not schema_ready(conn):
+        return _story_narrator_payload(STORY_DEFAULT_NARRATOR_CLASS, provisional=True)
+    row = conn.execute(
+        "SELECT class_key FROM player_commander WHERE player_id = ? LIMIT 1;",
+        (int(player_id),),
+    ).fetchone()
+    class_key = str(row["class_key"] or "").strip() if row else ""
+    if class_key and is_valid_class(class_key):
+        return _story_narrator_payload(class_key, provisional=False)
+    return _story_narrator_payload(STORY_DEFAULT_NARRATOR_CLASS, provisional=True)

@@ -8314,5 +8314,6 @@
   "fleet_troops_berths_hint": "Embarkation is limited by ship crew. Heavier troops take more berths.",
   "fleet_troops_slot_cost": "%(n)s berth",
   "records_group_troops": "Birlik rekorları",
-  "records_tab_troops": "Birlikler"
+  "records_tab_troops": "Birlikler",
+  "story_narrator_provisional": "Ark bağlantısı"
 }

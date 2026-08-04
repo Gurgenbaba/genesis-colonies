@@ -8314,5 +8314,6 @@
   "fleet_error_not_enough_troop_berths": "Not enough crew berths for the selected troops.",
   "fleet_troops_berths": "Crew berths",
   "fleet_troops_berths_hint": "Embarkation is limited by ship crew. Heavier troops take more berths.",
-  "fleet_troops_slot_cost": "%(n)s berth"
+  "fleet_troops_slot_cost": "%(n)s berth",
+  "story_narrator_provisional": "Ark link"
 }

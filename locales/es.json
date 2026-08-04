@@ -8314,5 +8314,6 @@
   "fleet_troops_berths_hint": "Embarkation is limited by ship crew. Heavier troops take more berths.",
   "fleet_troops_slot_cost": "%(n)s berth",
   "records_group_troops": "Récords de tropas",
-  "records_tab_troops": "Tropas"
+  "records_tab_troops": "Tropas",
+  "story_narrator_provisional": "Enlace del Arca"
 }
