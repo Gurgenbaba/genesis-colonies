@@ -272,6 +272,22 @@ def test_stage_surface_uses_planet_landscape_token():
     assert "backdrop-filter: none" in popup_chunk
 
 
+def test_stage_build_fx_driven_from_mini_queue():
+    """Stage construction FX must not depend only on hidden card queues."""
+    js = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+    assert "function setBuildingStagePropBuildFx" in js
+    assert "function updateBuildingStageBuildFxFromMiniQueue" in js
+    assert "updateBuildingStageBuildFxFromMiniQueue(" in js
+    assert "dataset.ownerKey = ownerKey" in js
+    css = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+    assert "@keyframes bld-stage-build-pulse" in css
+    assert "@keyframes bld-stage-art-pulse" in css
+    assert "@keyframes bld-stage-scan" in css
+    assert ".bld-stage-prop--queue .bld-stage-prop-build{" in css
+    tpl = (ROOT / "templates" / "partials" / "page_mini_queue_strip.html").read_text(encoding="utf-8")
+    assert "data-owner-key" in tpl
+
+
 def test_stage_popup_strips_upgrade_actions_in_js():
     js = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
     fn = js.split("function openBuildingCardPopup")[1].split("function setBuildingCardsExpanded")[0]

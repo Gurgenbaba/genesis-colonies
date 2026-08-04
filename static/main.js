@@ -5382,6 +5382,7 @@
       _hasVisibleOverviewResearchTimer() ||
       !!document.querySelector(".planet-evolution-page .gc-card-queue-block[data-gc-card-queue='1']") ||
       !!document.querySelector(".gc-mini-queue-card--active[data-finish-at]") ||
+      !!document.querySelector("[data-gc-card-queue][data-queue-active='1'][data-finish-at]") ||
       _hasLiveCountdownAt() ||
       _hasStaleActiveCardQueue()
     );
@@ -6159,6 +6160,25 @@
     }
     return ok;
   }
+
+  function setBuildingStagePropBuildFx(buildingKey, progressPct) {
+    const key = String(buildingKey || "").trim();
+    if (!key) return;
+    const prop = document.querySelector(`[data-bld-stage-prop="${key}"]`);
+    if (!prop) return;
+    prop.classList.remove(
+      "bld-stage-prop--ready",
+      "bld-stage-prop--warn",
+      "bld-stage-prop--locked",
+      "bld-stage-prop--max"
+    );
+    prop.classList.add("bld-stage-prop--queue");
+    prop.dataset.propState = "queue";
+    const rounded = Math.max(0, Math.min(100, Math.round(Number(progressPct) || 0)));
+    prop.style.setProperty("--bld-stage-progress", String(rounded));
+    prop.dataset.bldStageProgress = String(rounded);
+  }
+  GC.setBuildingStagePropBuildFx = setBuildingStagePropBuildFx;
 
   function syncBuildingStageProps(rowsByTab, bqSummary, bqQueueFull) {
     const stage = document.querySelector("[data-bld-planet-stage]");
@@ -9640,6 +9660,7 @@
       card.dataset.jobId = String(jobId);
       card.dataset.queueActive = isActive ? "1" : "0";
       card.dataset.timerDomain = domain;
+      if (ownerKey) card.dataset.ownerKey = ownerKey;
       card.title = amount > 0 ? `${label} ×${fmtNumber(amount)}` : label;
       if (startAt > 0) card.dataset.startAt = String(startAt);
       if (finishAt > 0) card.dataset.finishAt = String(finishAt);
@@ -10892,20 +10913,13 @@
           _setIfChanged(timerEl, eta);
           block.title = eta;
         }
-        // Stage prop construction ring (display-only; same remaining as card queue).
+        // Stage prop construction FX (display-only; same remaining as card queue).
         if (domain === "building" && cardEl) {
           const bKey =
             cardEl.getAttribute("data-building-row") ||
             cardEl.getAttribute("data-building") ||
             "";
-          const stageProp = bKey
-            ? document.querySelector(`[data-bld-stage-prop="${bKey}"]`)
-            : null;
-          if (stageProp) {
-            stageProp.classList.add("bld-stage-prop--queue");
-            stageProp.style.setProperty("--bld-stage-progress", String(rounded));
-            stageProp.dataset.bldStageProgress = String(rounded);
-          }
+          setBuildingStagePropBuildFx(bKey, rounded);
         }
       } else {
         if (timerEl) {
@@ -10919,15 +10933,8 @@
             cardEl.getAttribute("data-building-row") ||
             cardEl.getAttribute("data-building") ||
             "";
-          const stageProp = bKey
-            ? document.querySelector(`[data-bld-stage-prop="${bKey}"]`)
-            : null;
-          if (stageProp) {
-            const rounded = Math.max(0, Math.min(100, Math.round(pct)));
-            stageProp.classList.add("bld-stage-prop--queue");
-            stageProp.style.setProperty("--bld-stage-progress", String(rounded));
-            stageProp.dataset.bldStageProgress = String(rounded);
-          }
+          const rounded = Math.max(0, Math.min(100, Math.round(pct)));
+          setBuildingStagePropBuildFx(bKey, rounded);
         }
       }
       if (isQueueTimerComplete(remaining, finish, serverNowTs)) {
@@ -11206,6 +11213,33 @@
       const fill = card.querySelector(".gc-mini-queue-card__progress-fill");
       if (bar) bar.setAttribute("aria-valuenow", String(Math.round(pct)));
       _applyProgressFill(fill, pct);
+    });
+    // Stage build FX: drive from mini-queue (always present on /buildings), not only hidden cards.
+    updateBuildingStageBuildFxFromMiniQueue(serverNowTs);
+  }
+
+  function updateBuildingStageBuildFxFromMiniQueue(serverNowTs) {
+    if (!document.querySelector("[data-bld-planet-stage]")) return;
+    document.querySelectorAll("#build-mini-queue [data-mini-queue-card]").forEach((card) => {
+      const key = String(card.dataset.ownerKey || "").trim();
+      if (!key) return;
+      let progressPct = 0;
+      const isActive =
+        card.dataset.queueActive === "1" || card.classList.contains("gc-mini-queue-card--active");
+      if (isActive) {
+        const finish = parseTimerTarget(card.dataset.finishAt || 0);
+        const total = Math.max(1, Number(card.dataset.totalSeconds || 1));
+        if (finish > 0) {
+          const srvRemRaw = card.dataset.serverRemaining;
+          const remaining = queueJobRemainingSeconds(
+            finish,
+            serverNowTs,
+            srvRemRaw === undefined || srvRemRaw === "" ? NaN : Number(srvRemRaw)
+          );
+          progressPct = Math.max(0, Math.min(100, 100 * (1 - remaining / total)));
+        }
+      }
+      setBuildingStagePropBuildFx(key, progressPct);
     });
   }
 

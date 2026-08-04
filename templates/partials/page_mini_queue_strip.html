@@ -38,6 +38,7 @@
            data-job-id="{{ job.job_id|int }}"
            data-queue-active="{{ '1' if job.is_active else '0' }}"
            data-timer-domain="{{ domain }}"
+           {% if job.owner_key %}data-owner-key="{{ job.owner_key|e }}"{% endif %}
            aria-label="{{ T('queue_position_label', 'Position %(n)s', n=job.position|int) }} · {{ _mini_queue_job_label(domain, job) }}"{{ render_card_queue_data_attrs(job) }}>
     <img class="gc-mini-queue-card__image"
          src="{{ job.image_url }}"
