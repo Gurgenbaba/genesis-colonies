@@ -799,6 +799,7 @@ def notification_summary_for_client(user_id: int, *, conn) -> Dict[str, Any]:
         "has_incoming_attack": False,
         "alert_key": "",
         "incoming_attacks": [],
+        "incoming_hostile_attack_count": 0,
     }
     try:
         from game.fleet import (

@@ -3990,6 +3990,8 @@ def test_incoming_attack_alert_counts_enemy_attack(fleet_db):
     alerts = build_fleet_incoming_attack_alerts(defender_id, conn=conn)
     assert alerts['has_incoming_attack'] is True
     assert alerts['incoming_attack_count'] == 1
+    assert alerts['incoming_hostile_attack_count'] == 1
+    assert alerts['incoming_attacks'][0]['mission_type'] == 'attack'
     assert alerts['alert_key'].startswith('m:')
     assert int(alerts['next_attack_arrival']) > int(time.time())
     conn.close()
@@ -4004,14 +4006,33 @@ def test_incoming_attack_alert_attacker_no_alarm(fleet_db):
     assert alerts['incoming_attack_count'] == 0
     conn.close()
 
-def test_incoming_attack_alert_spy_no_alarm(fleet_db):
+def test_incoming_attack_alert_spy_alarms(fleet_db):
     attacker_id = _player()
     defender_id, def_pid, _coords = _foreign_planet_standalone()
     conn = db()
     _insert_inbound_movement(conn, attacker_id=attacker_id, target_planet_id=def_pid, mission_type='spy')
     alerts = build_fleet_incoming_attack_alerts(defender_id, conn=conn)
-    assert alerts['has_incoming_attack'] is False
+    assert alerts['has_incoming_attack'] is True
+    assert alerts['incoming_attack_count'] == 1
+    assert alerts['incoming_hostile_attack_count'] == 0
+    assert alerts['incoming_attacks'][0]['mission_type'] == 'spy'
+    assert alerts['incoming_attacks'][0]['threat_class'] == 'intel'
     conn.close()
+
+
+def test_incoming_alert_deploy_and_transport(fleet_db):
+    attacker_id = _player()
+    defender_id, def_pid, _coords = _foreign_planet_standalone()
+    conn = db()
+    _insert_inbound_movement(conn, attacker_id=attacker_id, target_planet_id=def_pid, mission_type='deploy')
+    _insert_inbound_movement(conn, attacker_id=attacker_id, target_planet_id=def_pid, mission_type='transport')
+    alerts = build_fleet_incoming_attack_alerts(defender_id, conn=conn)
+    assert alerts['incoming_attack_count'] == 2
+    missions = {row['mission_type'] for row in alerts['incoming_attacks']}
+    assert missions == {'deploy', 'transport'}
+    assert alerts['incoming_hostile_attack_count'] == 0
+    conn.close()
+
 
 def test_incoming_attack_alert_returning_no_alarm(fleet_db):
     attacker_id = _player()

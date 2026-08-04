@@ -13244,13 +13244,64 @@
     return row;
   }
 
+  function _fleetIncomingMissionTypes(alerts) {
+    const data = alerts && typeof alerts === "object" ? alerts : {};
+    const attacks = Array.isArray(data.incoming_attacks) ? data.incoming_attacks : [];
+    const types = [];
+    for (const entry of attacks) {
+      const m = String(entry?.mission_type || "attack").trim().toLowerCase() || "attack";
+      if (!types.includes(m)) types.push(m);
+    }
+    return types;
+  }
+
+  function _fleetHasHostileAttackInbound(alerts) {
+    const data = alerts && typeof alerts === "object" ? alerts : {};
+    const hostile = Math.max(0, Math.floor(Number(data.incoming_hostile_attack_count) || 0));
+    if (hostile > 0) return true;
+    const attacks = Array.isArray(data.incoming_attacks) ? data.incoming_attacks : [];
+    if (attacks.length === 0) {
+      return _fleetIncomingAttackActive(data);
+    }
+    return attacks.some((entry) => String(entry?.mission_type || "attack").toLowerCase() === "attack");
+  }
+
+  function _fleetIncomingMissionLabel(missionType) {
+    const m = String(missionType || "attack").toLowerCase();
+    if (m === "spy") return t("fleet_mission_spy", "Spionage");
+    if (m === "deploy") return t("fleet_mission_deploy", "Stationierung");
+    if (m === "transport") return t("fleet_mission_transport", "Transport");
+    return t("fleet_mission_attack", "Angriff");
+  }
+
   function _fleetAttackAlertLabel(alerts) {
     const count = Math.max(0, Math.floor(Number(alerts?.incoming_attack_count) || 0));
     if (count <= 0) return "";
-    if (count === 1) {
-      return t("fleet_alert_incoming_attack", "Angriff im Anflug");
+    const types = _fleetIncomingMissionTypes(alerts);
+    if (types.length === 1) {
+      const m = types[0];
+      if (m === "spy") {
+        return count === 1
+          ? t("fleet_alert_incoming_spy", "Spionage im Anflug")
+          : tf("fleet_alert_incoming_spies", { count }, `${count} Spionagen im Anflug`);
+      }
+      if (m === "deploy") {
+        return count === 1
+          ? t("fleet_alert_incoming_deploy", "Stationierung im Anflug")
+          : tf("fleet_alert_incoming_deploys", { count }, `${count} Stationierungen im Anflug`);
+      }
+      if (m === "transport") {
+        return count === 1
+          ? t("fleet_alert_incoming_transport", "Transport im Anflug")
+          : tf("fleet_alert_incoming_transports", { count }, `${count} Transporte im Anflug`);
+      }
+      return count === 1
+        ? t("fleet_alert_incoming_attack", "Angriff im Anflug")
+        : tf("fleet_alert_incoming_attacks", { count }, `${count} Angriffe im Anflug`);
     }
-    return tf("fleet_alert_incoming_attacks", { count }, `${count} Angriffe im Anflug`);
+    return count === 1
+      ? t("fleet_alert_incoming_fleet", "Flotte im Anflug")
+      : tf("fleet_alert_incoming_fleets", { count }, `${count} Flotten im Anflug`);
   }
 
   function updateFleetAttackAlertCountdown(serverNow) {
@@ -13290,8 +13341,8 @@
 
   function _maybePlayIncomingAttackNotify(alerts) {
     const data = alerts && typeof alerts === "object" ? alerts : {};
-    const attackCount = Math.max(0, Math.floor(Number(data.incoming_attack_count) || 0));
-    const active = _fleetIncomingAttackActive(data);
+    const attackCount = Math.max(0, Math.floor(Number(data.incoming_hostile_attack_count) || 0));
+    const active = _fleetHasHostileAttackInbound(data);
     const alertKey = resolveAttackAlertSoundKey(data);
 
     if (active && alertKey) {
@@ -13338,8 +13389,25 @@
     const count = Math.max(0, Math.floor(Number(data.incoming_attack_count) || 0));
     const summaryEl = alertRow.querySelector("[data-fleet-alert-summary]");
     const shipsEl = alertRow.querySelector("[data-fleet-alert-count]");
+    const missionEl = alertRow.querySelector(".gc-fleet-hud-mission");
     if (summaryEl) {
       _setIfChanged(summaryEl, _fleetAttackAlertLabel(data));
+    }
+    if (missionEl) {
+      const types = _fleetIncomingMissionTypes(data);
+      const label =
+        types.length === 1
+          ? _fleetIncomingMissionLabel(types[0])
+          : t("fleet_mission_inbound", "Eingehend");
+      _setIfChanged(missionEl, label);
+      missionEl.classList.toggle(
+        "gc-fleet-hud-mission--attack",
+        types.length !== 1 || types[0] === "attack"
+      );
+      missionEl.classList.toggle(
+        "gc-fleet-hud-mission--spy",
+        types.length === 1 && types[0] === "spy"
+      );
     }
     if (shipsEl) {
       shipsEl.textContent = count > 1 ? fmtNumber(count) : "";
@@ -13456,10 +13524,15 @@
     if (hintEl) {
       const top = contacts[0] || {};
       const threat = String(top.threat_class || "");
+      const mission = String(top.mission_type || "").toLowerCase();
+      const missionLabel = mission
+        ? _fleetIncomingMissionLabel(mission)
+        : "";
       const threatLabel = threat
         ? t(`fleet_radar_threat_${threat}`, threat)
         : "";
-      _setIfChanged(hintEl, threatLabel);
+      const bits = [missionLabel, threatLabel].filter(Boolean);
+      _setIfChanged(hintEl, bits.join(" · "));
     }
 
     if (listEl) {

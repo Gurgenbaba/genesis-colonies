@@ -2611,19 +2611,34 @@ def check_attack_limit(
     return info["remaining"] > 0, info
 
 
+INCOMING_ALERT_MISSIONS = frozenset({"attack", "spy", "deploy", "transport"})
+_INCOMING_MISSION_THREAT = {
+    "attack": "hostile",
+    "spy": "intel",
+    "deploy": "force",
+    "transport": "force",
+}
+
+
 def build_fleet_incoming_attack_alerts(
     player_id: int,
     *,
     conn,
     now: Optional[float] = None,
 ) -> Dict[str, Any]:
-    """Inbound enemy attack slice for /api/game-state fleet_alerts (GC-FLEET-ALERT)."""
+    """Inbound foreign fleets targeting the player's planets (GC-FLEET-ALERT).
+
+    Includes attack/spy/deploy/transport outbound movements aimed at owned
+    planets so the HUD always shows what is flying at the player — Threat Net
+    remains the separate radar-bubble early-warning layer.
+    """
     empty: Dict[str, Any] = {
         "incoming_attack_count": 0,
         "next_attack_arrival": None,
         "has_incoming_attack": False,
         "alert_key": "",
         "incoming_attacks": [],
+        "incoming_hostile_attack_count": 0,
     }
     if not fleet_schema_ready(conn):
         return dict(empty)
@@ -2633,23 +2648,25 @@ def build_fleet_incoming_attack_alerts(
         return dict(empty)
 
     ts = float(now if now is not None else _now())
+    placeholders = ",".join("?" for _ in sorted(INCOMING_ALERT_MISSIONS))
     cur = conn.cursor()
     cur.execute(
-        """
+        f"""
         SELECT fm.id AS movement_id,
                fm.player_id AS attacker_id,
                fm.target_planet_id,
-               fm.arrival_at
+               fm.arrival_at,
+               fm.mission_type
         FROM fleet_movements fm
         INNER JOIN planets tp ON tp.id = fm.target_planet_id
         WHERE tp.player_id = ?
           AND fm.player_id != ?
-          AND fm.mission_type = 'attack'
+          AND fm.mission_type IN ({placeholders})
           AND fm.status = 'outbound'
           AND fm.arrival_at > ?
         ORDER BY fm.arrival_at ASC, fm.id ASC;
         """,
-        (pid, pid, ts),
+        (pid, pid, *sorted(INCOMING_ALERT_MISSIONS), ts),
     )
     rows = cur.fetchall()
     if not rows:
@@ -2669,17 +2686,25 @@ def build_fleet_incoming_attack_alerts(
         next_attack_arrival = None
 
     incoming_attacks: List[Dict[str, Any]] = []
+    hostile_attack_count = 0
     for row in rows:
         try:
             arrival_at = int(float(row["arrival_at"]))
         except (TypeError, ValueError):
             arrival_at = None
+        mission = str(row["mission_type"] or "attack").strip().lower()
+        if mission not in INCOMING_ALERT_MISSIONS:
+            mission = "attack"
+        if mission == "attack":
+            hostile_attack_count += 1
         incoming_attacks.append(
             {
                 "movement_id": int(row["movement_id"]),
                 "attacker_id": int(row["attacker_id"]),
                 "target_planet_id": int(row["target_planet_id"]),
                 "arrival_at": arrival_at,
+                "mission_type": mission,
+                "threat_class": _INCOMING_MISSION_THREAT.get(mission, "force"),
             }
         )
 
@@ -2689,6 +2714,7 @@ def build_fleet_incoming_attack_alerts(
         "has_incoming_attack": True,
         "alert_key": alert_key,
         "incoming_attacks": incoming_attacks,
+        "incoming_hostile_attack_count": hostile_attack_count,
     }
 
 

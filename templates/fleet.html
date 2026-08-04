@@ -299,6 +299,12 @@
             <span class="gc-panel-title" id="fleet-troops-panel-title">{{ T("fleet_troops_title", "Bodentruppen (Vault-Raid)") }}</span>
           </div>
           <p class="section-hint hint">{{ T("fleet_troops_hint", "Nur bei Angriff: Truppen an Bord starten nach orbitalem Sieg die Bunker-Phase.") }}</p>
+          <p class="section-hint hint" data-fleet-troops-caps>
+            {{ T("fleet_troops_caps_hint", "Vault-Loot bei Bodensieg: bis 6h Timekeeper und bis 5 Meta-Container vom Verteidiger-Konto.") }}
+          </p>
+          <p class="section-hint hint" data-fleet-troops-empty-cta>
+            <a href="{{ url_for('defense_view') }}" data-pjax="1">{{ T("fleet_troops_train_cta", "Bodentruppen in der Kaserne ausbilden →") }}</a>
+          </p>
           <div class="fleet-troops-grid" data-fleet-troops-grid>
             {% for troop in fleet_ctx.troop_defs|default([]) %}
             {% set have = troop.have|default(0)|int %}

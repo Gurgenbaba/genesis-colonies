@@ -13,6 +13,15 @@ After a successful **orbital** `attack` battle, a optional **ground phase** reso
 
 Whitelist: catalog `item_type=container` keys in `CONTAINER_KEYS` except event exclusives blocked for raid (`container_event_special`).
 
+## Incoming fleets vs Threat Net
+
+| Layer | Owner | What the player sees |
+|-------|--------|----------------------|
+| **Incoming HUD** | `build_fleet_incoming_attack_alerts` | Every foreign `outbound` with target = owned planet: `attack`, `spy`, `deploy`, `transport` — always, no radar required |
+| **Threat Net** | `build_radar_contacts` | Foreign `attack`/`spy`/`deploy` inside a radar bubble (early warning + intel tier) |
+
+Spy aimed at your world is therefore visible in the Incoming HUD even without a Radar Array.
+
 ## Barracks troop capacity
 
 Owner: `barracks_troop_capacity` in `game/troop_defs.py` (server-only; UI displays server value).

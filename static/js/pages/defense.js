@@ -84,6 +84,47 @@
       var stock = panel.querySelector('[data-troop-stock="' + u.key + '"]');
       if (stock) stock.textContent = "×" + String(u.amount || 0);
     });
+    renderTroopsQueue(panel, troops.queue || []);
+  }
+
+  function renderTroopsQueue(panel, queue) {
+    var wrap = panel.querySelector("[data-barracks-troops-queue]");
+    if (!wrap) return;
+    var rows = Array.isArray(queue) ? queue : [];
+    if (!rows.length) {
+      wrap.innerHTML =
+        '<p class="hint" data-barracks-troops-queue-empty>' +
+        esc(t("barracks_troops_queue_idle", "Keine Ausbildung aktiv")) +
+        "</p>";
+      return;
+    }
+    var html = '<ul class="barracks-troops-queue-list">';
+    rows.forEach(function (job) {
+      var key = String(job.troop_key || "");
+      var amount = Math.max(0, parseIntNumber(job.amount) || 0);
+      var jobId = Math.max(0, parseIntNumber(job.id) || 0);
+      var label = t("troop_" + key, key) + " ×" + String(amount);
+      html +=
+        '<li class="barracks-troops-queue-item" data-troop-job-id="' +
+        jobId +
+        '"><span>' +
+        esc(label) +
+        '</span><button type="button" class="gc-btn gc-btn-sm gc-btn-ghost" data-troop-cancel="' +
+        jobId +
+        '">' +
+        esc(t("action_cancel", "Abbrechen")) +
+        "</button></li>";
+    });
+    html += "</ul>";
+    wrap.innerHTML = html;
+  }
+
+  function esc(s) {
+    return String(s || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
   }
 
   function bindDefenseTabs(page) {

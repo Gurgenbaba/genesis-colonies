@@ -40,7 +40,7 @@ _ROUTE_PRIMARY: Dict[str, str] = {
     "galaxy_view": "galaxy",
     "fleet_view": "fleet",
     "shipyard_view": "fleet",
-    "defense_view": "defense",
+    "defense_view": "vault_raid",
     "trader_hub_view": "trader",
     "logistics_view": "logistics",
     "world_boss_view": "world_boss",
