@@ -301,6 +301,22 @@
         {% endfor %}
       </div>
     </section>
+
+    {# Hidden card sources: stage popup clones [data-building-row]; live patches need .buildings-prog-list.
+       Not the Retro panel (no data-bld-cards-panel) — exclusive Stage UI stays stage-only. #}
+    <div class="bld-stage-card-source"
+         data-bld-stage-card-source
+         hidden
+         aria-hidden="true">
+      <div class="buildings-tab-panels" data-buildings-tab-panels>
+        <div class="tab-content active"
+             data-tab="{{ active_tab }}"
+             role="tabpanel"
+             id="panel-{{ active_tab }}">
+          {{ render_building_table(rows_by_tab.get(active_tab, []), active_tab, bq_summary, bq_queue_full) }}
+        </div>
+      </div>
+    </div>
     {% endif %}
 
     {% set bq_jobs = (bq.queue if bq and bq.queue is defined and bq.queue else []) %}

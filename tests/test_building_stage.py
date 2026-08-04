@@ -211,10 +211,14 @@ def test_buildings_page_has_stage_markers(stage_db, monkeypatch):
     assert "btn-upgrade" in html
     assert "data-bld-stage-prop=" in html
     assert "data-bld-stage-arrange" in html
-    # Default mode is Colony Stage — exclusive (no Retro cards panel).
+    # Default mode is Colony Stage — exclusive visible UI (no Retro cards panel).
     assert 'data-buildings-ui-mode="stage"' in html
     assert "data-bld-cards-panel" not in html
     assert "data-bld-card-popup" in html
+    # Hidden card sources for detail popup + live patches (not Retro chrome).
+    assert "data-bld-stage-card-source" in html
+    assert 'data-building-row="metal_mine"' in html
+    assert "buildings-prog-list" in html
     # SSR is tab-scoped — only active-tab props are rendered (no cross-tab hidden class needed).
     assert "data-bld-stage-prop=\"research_lab\"" not in html
 
@@ -271,6 +275,7 @@ def test_stage_surface_uses_planet_landscape_token():
 def test_stage_popup_strips_upgrade_actions_in_js():
     js = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
     fn = js.split("function openBuildingCardPopup")[1].split("function setBuildingCardsExpanded")[0]
+    assert 'data-building-row="${key}"' in fn or "data-building-row=\"${key}\"" in fn
     assert "gc-bld-card-hero-action-slot" in fn
     assert "btn-upgrade-max" in fn
     assert ".forEach((el) => el.remove())" in fn

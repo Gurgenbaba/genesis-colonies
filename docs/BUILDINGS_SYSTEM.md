@@ -237,16 +237,15 @@ Die Buildings-Seite zeigt oben eine **Kolonie-Stage** (Diorama-Foundation).
 
 - Display-only: keine Kosten-/Zeit-Formeln im Frontend
 - Surface: `--planet-landscape` = kanonisches Slot-Herocard (`planet_visuals.landscape_static_relpath` → `img/herocards/`), gleiches Bild wie Overview / Planetenmenü; scharf (kein Blur, kein schwarzes Deck); leichte Vignette
-- **UI-Modus (Account):** `users.buildings_ui_mode` via Options-Owner — `stage` (Default, Kolonie-Stage) oder `cards` (Retro-Karten). Exklusiv: nur eine Oberfläche. Einmaliger Chooser (`buildings_ui_choice_done`) beim nächsten Besuch; jederzeit unter Optionen → Galaxie änderbar.
+- **UI-Modus (Account):** `users.buildings_ui_mode` via Options-Owner — `stage` (Default, Kolonie-Stage) oder `cards` (Retro-Karten). Exklusiv sichtbar: nur eine Oberfläche. Stage hält versteckte Card-Quellen (`[data-bld-stage-card-source]` / `[data-building-row]`) für Detail-Popup + Live-Patches — kein Retro-Panel (`data-bld-cards-panel`).
 - Defaults: `BUILDING_STAGE_LAYOUT` — **pro Tab über die volle Stage gespreizt** (min. ≈18% Abstand innerhalb des Tabs)
-- Stage zeigt nur Gebäude des **aktiven Gebäude-Tabs** (Ressourcen/Forschung/Militär/Infrastruktur) — verhindert Überlappungen
-- Alle Gebäude bleiben im DOM (Arrange speichert Positionen weiter); nicht-aktive Tabs sind `hidden`
+- Stage zeigt nur Gebäude des **aktiven Gebäude-Tabs** (Ressourcen/Forschung/Militär/Infrastruktur) — verhindert Überlappungen; SSR ist tab-scoped
 - Overrides: Tabelle `planet_building_stage_layout` (pro Planet), API `POST /api/buildings/stage-layout`
 - Planetwechsel: `POST /api/planets/active` liefert `state.building_stage_layout` → Client patched Positionen sofort
 - Anordnen-Modus: Pointer-Drag mit Grab-Offset; Poll überschreibt Positionen im Arrange-Modus **nicht**
-- Prop-Klick (außer Anordnen / außer Action-Buttons): Detail-Popup **ohne** +1/MAX (Actions nur auf der Stage)
+- Prop-Klick (außer Anordnen / außer Action-Buttons): Detail-Popup clont die versteckte Card (Name → Technical Data); **ohne** +1/MAX im Popup (Actions nur auf der Stage)
 - Stage-Actions: gleiche `btn-upgrade` / `btn-upgrade-max` Owner wie Karten (`render_building_head_action` / `syncBuildingHeadAction`)
-- Karten-Liste: standard **zugeklappt**; Preference nur UI (`localStorage gc_bld_cards_expanded`)
+- Retro-Karten: eigene SSR-Oberfläche (`data-bld-cards-mode="retro"`), immer expanded
 - Props: rund (`border-radius: 50%` Clip) mit Level-Badge; Art `static/img/buildings/stage/{key}.webp`
 - Stage-Actions / Prop-Chrome: Identity-Tint via `--gc-id-rgb` (PlayerCard Theme), kein festes Cyan
 - Bau-Progress: Progress-Ring am Prop (`--bld-stage-progress`, display-only)

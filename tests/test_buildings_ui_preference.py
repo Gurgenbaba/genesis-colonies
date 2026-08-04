@@ -144,6 +144,8 @@ def test_api_buildings_ui_and_ssr_modes(bui_db, monkeypatch):
     assert 'data-buildings-ui-mode="stage"' in stage_html
     assert "data-bld-planet-stage" in stage_html
     assert "data-bld-cards-panel" not in stage_html
+    assert "data-bld-stage-card-source" in stage_html
+    assert "data-building-row=" in stage_html
 
 
 def test_options_snapshot_includes_buildings_ui(bui_db):
