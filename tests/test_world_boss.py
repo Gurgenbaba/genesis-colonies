@@ -280,7 +280,7 @@ def test_world_boss_galaxy_ui_contracts():
     assert "wbEnsureBossVideoBoot" in main_js
     assert "wbSeedBossVideoRatios" in main_js
     assert "softBoot" in main_js
-    assert 'sfxVolumeForKind("ui", 0.35)' in main_js or "sfxVolumeForKind" in main_js
+    assert 'sfxVolumeForKind("ui", 0.1)' in main_js or "sfxVolumeForKind" in main_js
     assert "data-wb-boss-video" in main_js
     assert "wbk3" in page or "video/bosses/" in page
     assert "preload=\"auto\"" in page
@@ -288,6 +288,13 @@ def test_world_boss_galaxy_ui_contracts():
     assert "--gc-id-rgb" in css
     assert "var(--wb-ui-border)" in css
     assert "var(--wb-ui-rgb)" in css
+    assert "GC.playFightSalvoSound" in main_js
+    assert "wbPlayAttackFx" in main_js
+    attack_fx = main_js.split("const wbPlayAttackFx = (card, attack, boss) => {")[1].split(
+        "GC.playWorldBossAttackFx = wbPlayAttackFx"
+    )[0]
+    assert "playFightSalvoSound" in attack_fx
+    assert "GC_NOTIFY_SOUND_BASE_VOLUME = 0.1" in main_js
     assert "gc-world-boss-shadow" in page
     assert "gc-world-boss-progress" in page
     assert "gc-world-boss-layout" in page

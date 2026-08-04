@@ -1253,10 +1253,10 @@ def test_main_js_apply_planet_hero_theme_border_fx():
     assert "rogue_ai_nexus" in src.split("GC_TITAN_CLICK_SOUNDS_BY_BOSS")[1].split(
         "function playTitanClickSound"
     )[0]
-    assert 'sfxVolumeForKind("ui", 0.35)' in src.split("function playTitanClickSound(bossKey)")[1].split(
+    assert 'sfxVolumeForKind("ui", 0.1)' in src.split("function playTitanClickSound(bossKey)")[1].split(
         "GC.playTitanClickSound"
     )[0]
-    assert 'sfxVolumeForKind("ui", 0.2)' in src.split("function playLootboxOpenSound()")[1].split(
+    assert 'sfxVolumeForKind("ui", 0.1)' in src.split("function playLootboxOpenSound()")[1].split(
         "GC_TITAN_CLICK_SOUNDS_BY_BOSS"
     )[0]
     assert "function sfxVolumeForKind(kind, baseVolume)" in src
@@ -1839,6 +1839,10 @@ def test_notify_sound_assets_and_main_js_wiring():
     )[0]
     assert "function playFightSalvoSound()" in theater
     assert "COMBAT_FIGHT_SOUNDS" in theater
+    assert "COMBAT_FIGHT_BASE_VOLUME = 0.1" in theater
+    assert "COMBAT_PIRATE_DOWN_BASE_VOLUME = 0.1" in theater
+    assert "GC.playFightSalvoSound = playFightSalvoSound" in theater
+    assert "playFightSalvoSound," in theater.split("GC.combatTheater = {")[1].split("};")[0]
     assert "function playPirateDownSound()" in theater
     assert "piratedown_theater.mp3" in theater
     assert "countWipedClasses" in theater
@@ -1874,8 +1878,8 @@ def test_notify_sound_assets_and_main_js_wiring():
     assert "latest_message_id" in unread_fn
     assert "_processUnreadMessagesPoll(data, reason" in src
     attack_fn = src.split("function _maybePlayIncomingAttackNotify(alerts)")[1].split("function syncFleetAttackAlert(alerts)")[0]
-    assert "incoming_attack_count" in attack_fn
-    assert "has_incoming_attack" in attack_fn
+    assert "incoming_hostile_attack_count" in attack_fn
+    assert "_fleetHasHostileAttackInbound" in attack_fn
     assert "resolveAttackAlertSoundKey" in attack_fn
     assert "shouldPlayNotifySoundForKey" in attack_fn
     assert "playIncomingAttackNotifySound();" in attack_fn

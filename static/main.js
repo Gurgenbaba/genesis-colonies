@@ -1918,7 +1918,7 @@
 
   const GC_NOTIFY_SOUND_LS_ATTACK = "gc_last_attack_alert_sound_key";
   const GC_NOTIFY_SOUND_LS_MESSAGE = "gc_last_message_sound_key";
-  const GC_NOTIFY_SOUND_BASE_VOLUME = 0.65;
+  const GC_NOTIFY_SOUND_BASE_VOLUME = 0.1;
   const GC_DEFAULT_SOUND_VOLUME = 0.1;
 
   function normalizeSoundVolume(value, defaultVolume) {
@@ -17672,7 +17672,7 @@
 
   function playLootboxOpenSound() {
     try {
-      const volume = sfxVolumeForKind("ui", 0.2);
+      const volume = sfxVolumeForKind("ui", 0.1);
       if (!(volume > 0)) return;
       const audio = new Audio("/static/sounds/lootboxes/lootbox_sound.mp3");
       audio.volume = volume;
@@ -17717,7 +17717,7 @@
 
   function playTitanClickSound(bossKey) {
     try {
-      const volume = sfxVolumeForKind("ui", 0.35);
+      const volume = sfxVolumeForKind("ui", 0.1);
       if (!(volume > 0)) return;
       const key = String(bossKey || "").trim();
       const pool = GC_TITAN_CLICK_SOUNDS_BY_BOSS[key] || [];
@@ -38353,7 +38353,7 @@
           : typeof sfxVolumeForKind === "function"
             ? sfxVolumeForKind
             : null;
-      return volFn ? volFn("ui", 0.35) : 0;
+      return volFn ? volFn("ui", 0.1) : 0;
     };
     const wbSetCardReelActive = (video, on) => {
       const card = video && video.closest ? video.closest(".gc-world-boss-card") : null;
@@ -38700,6 +38700,12 @@
       }, 120);
 
       later(() => {
+        /* Same Theater salvo pool — one shot per attack wave (not per bolt). */
+        if (typeof GC.playFightSalvoSound === "function") {
+          GC.playFightSalvoSound();
+        } else if (GC.combatTheater && typeof GC.combatTheater.playFightSalvoSound === "function") {
+          GC.combatTheater.playFightSalvoSound();
+        }
         if (!projMount || !motionScale) return;
         projMount.innerHTML = "";
         const slots = formation

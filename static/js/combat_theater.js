@@ -91,9 +91,9 @@
     "/static/sounds/combat/theater_fight_sound_2.mp3",
     "/static/sounds/combat/theater_fight_sound_3.mp3",
   ];
-  const COMBAT_FIGHT_BASE_VOLUME = 0.45;
+  const COMBAT_FIGHT_BASE_VOLUME = 0.1;
   const COMBAT_PIRATE_DOWN_SOUND = "/static/sounds/combat/piratedown_theater.mp3";
-  const COMBAT_PIRATE_DOWN_BASE_VOLUME = 0.55;
+  const COMBAT_PIRATE_DOWN_BASE_VOLUME = 0.1;
 
   function stopFightSounds() {
     (_fightAudios || []).forEach((audio) => {
@@ -137,6 +137,8 @@
     playCombatTheaterOneShot(COMBAT_FIGHT_SOUNDS[0], COMBAT_FIGHT_BASE_VOLUME);
   }
   GC.playCombatSoundPreview = playCombatSoundPreview;
+  /* Shared owner for Theater salvos + World Boss attack projectiles. */
+  GC.playFightSalvoSound = playFightSalvoSound;
 
   /** Explosion SFX — stop overlapping salvo clips so the wipe is audible. */
   function playPirateDownSound() {
@@ -909,6 +911,7 @@
     profileForShip,
     profileForDefense,
     projectileSignature,
+    playFightSalvoSound,
     mountAndPlay,
     playOn,
     stop,

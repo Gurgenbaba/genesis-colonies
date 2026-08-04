@@ -19,7 +19,7 @@ Cinematic face-off playback for combat reports. Server resolves battles as today
 | Timeline contract (pytest mirror) | `game/combat_theater.py` | Must stay in sync with JS `buildTimeline` |
 | Cutout paths | `fleet_defs.ship_battle_icon_path`, `defense_defs.defense_battle_icon_path` | Fallback to normal icons |
 | Combat report modal | `templates/partials/combat_report_modal.html` + `messages.js` | Opens theater first for combat kind |
-| World Boss stage | `GC.modules.world_boss` | Separate owner; may reuse cutout URLs / projectile tokens |
+| World Boss stage | `GC.modules.world_boss` | Separate owner; may reuse cutout URLs / projectile tokens; attack salvo SFX via `GC.playFightSalvoSound` |
 
 **Forbidden:** frontend combat math; second combat engine; mid-fight player choices that alter outcomes; parallel report metadata builders; global CSS changes that break queue/cards.
 
