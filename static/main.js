@@ -2545,6 +2545,7 @@
     if (path.endsWith("/login-rewards")) return "login_rewards";
     if (path.endsWith("/banned-players")) return "banned_players";
     if (path.endsWith("/imperial-directives")) return "imperial_directives";
+    if (path.endsWith("/initiation") || path.includes("/initiation?")) return "initiation";
     if (path.endsWith("/story")) return "story";
     if (path.endsWith("/galactic-politics")) return "galactic_politics";
     if (path.endsWith("/skilltree")) return "skilltree";
@@ -6677,16 +6678,64 @@
     initBuildingTechnicalData();
     const initialTab = pageRoot.dataset.activeBuildingTab || "resources";
     activateBuildingTabByName(initialTab, null);
+    applyInitiationBuildingHighlight();
     GC.startProgressTicker();
     if (typeof GC.registerCleanup === "function") {
       GC.registerCleanup(() => {
         closeBuildingCardPopup();
         setBuildingStageArrangeMode(false);
         GC._bldStageDragging = false;
-        document.querySelectorAll(".bld-stage-prop.is-focused").forEach((el) => {
-          el.classList.remove("is-focused");
+        document.querySelectorAll(".bld-stage-prop.is-focused, .bld-stage-prop.is-initiation-target").forEach((el) => {
+          el.classList.remove("is-focused", "is-initiation-target");
+        });
+        document.querySelectorAll(".gc-building-card--initiation-target").forEach((el) => {
+          el.classList.remove("gc-building-card--initiation-target");
         });
       });
+    }
+  }
+
+  function _cssEscapeIdent(value) {
+    const raw = String(value || "");
+    if (typeof CSS !== "undefined" && typeof CSS.escape === "function") return CSS.escape(raw);
+    return raw.replace(/[^a-zA-Z0-9_-]/g, "\\$&");
+  }
+
+  function applyInitiationBuildingHighlight() {
+    let key = "";
+    try {
+      key = String(new URL(window.location.href).searchParams.get("highlight") || "").trim();
+    } catch (_) {
+      key = "";
+    }
+    if (!key) return;
+    const esc = _cssEscapeIdent(key);
+    const prop = document.querySelector(`[data-bld-stage-prop="${esc}"]`);
+    const card = document.querySelector(`[data-building-row="${esc}"]`);
+    document.querySelectorAll(".bld-stage-prop.is-initiation-target").forEach((el) => {
+      el.classList.remove("is-initiation-target", "is-focused");
+    });
+    document.querySelectorAll(".gc-building-card--initiation-target").forEach((el) => {
+      el.classList.remove("gc-building-card--initiation-target");
+    });
+    if (prop) {
+      prop.classList.add("is-initiation-target", "is-focused");
+      try {
+        prop.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+      } catch (_) {
+        try { prop.scrollIntoView(true); } catch (__) {}
+      }
+      try { prop.focus({ preventScroll: true }); } catch (_) {}
+    }
+    if (card) {
+      card.classList.add("gc-building-card--initiation-target");
+      if (!prop) {
+        try {
+          card.scrollIntoView({ behavior: "smooth", block: "center" });
+        } catch (_) {
+          try { card.scrollIntoView(true); } catch (__) {}
+        }
+      }
     }
   }
 
@@ -12127,6 +12176,8 @@
             ? "nav_badge_referrals_aria"
             : key === "imperial_directives"
               ? "nav_badge_imperial_directives_aria"
+              : key === "initiation"
+                ? "nav_badge_initiation_aria"
               : key === "world_boss"
                 ? "nav_badge_world_boss_aria"
               : key === "alliance"
@@ -12147,6 +12198,8 @@
               ? "Referral-Belohnung verfügbar"
               : key === "imperial_directives"
                 ? "Imperial Directive abholbereit"
+                : key === "initiation"
+                  ? "Command Initiation active"
                 : key === "world_boss"
                   ? "World Boss aktiv"
                 : key === "alliance"
@@ -15750,6 +15803,10 @@
         && reason !== "page_hydrate"
       ) {
         _patchImperialDirectivesFromGameStateSummary(data.imperial_directives, reason);
+      }
+
+      if (data.initiation && typeof GC.patchInitiationHud === "function") {
+        GC.patchInitiationHud(data.initiation);
       }
 
       if (typeof syncLiveOpsFromGameState === "function") {
@@ -22180,6 +22237,38 @@
         }
       }
     });
+  }
+
+  function patchInitiationHud(summary) {
+    const root = document.getElementById("gc-initiation-hud");
+    if (!root) return;
+    const active = !!(summary && summary.ready && summary.active);
+    root.classList.toggle("is-hidden", !active);
+    root.hidden = !active;
+    if (!active) return;
+    const title = t(String(summary.title_key || ""), String(summary.step_id || ""));
+    const p = Number(summary.progress || 0);
+    const tg = Math.max(1, Number(summary.target || 1));
+    const progress = `${fmtNumber(p)} / ${fmtNumber(tg)}`;
+    const progressEl = root.querySelector("[data-ini-hud-progress]");
+    const titleEl = root.querySelector("[data-ini-hud-title]");
+    if (progressEl) {
+      progressEl.textContent = progress;
+      progressEl.hidden = false;
+    }
+    if (titleEl) titleEl.textContent = title;
+    root.setAttribute("title", `${title} — ${progress}`);
+    root.setAttribute(
+      "aria-label",
+      `${t("initiation_hud_aria", "Open Command Initiation")}: ${title} ${progress}`
+    );
+  }
+  GC.patchInitiationHud = patchInitiationHud;
+
+  function initInitiation() {
+    const page = document.getElementById("initiation-page");
+    if (!page) return;
+    // SSR checklist is authoritative; live progress comes from game-state HUD patch.
   }
 
   function initImperialDirectives() {
@@ -37920,6 +38009,7 @@
   bindAllianceOnce();
   GC.modules.imperial_directives = initImperialDirectives;
   GC.modules.story = initStoryOps;
+  GC.modules.initiation = initInitiation;
   GC.modules.galactic_politics = initGalacticPolitics;
   GC.modules.trader_hub = initTraderHub;
   GC.modules.fleet = initFleet;

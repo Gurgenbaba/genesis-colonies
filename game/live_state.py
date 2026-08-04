@@ -478,6 +478,14 @@ def nav_badges_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
     except Exception:
         story_attention = 0
 
+    initiation_attention = 0
+    try:
+        from game.initiation.service import count_initiation_attention
+
+        initiation_attention = count_initiation_attention(uid, conn=conn)
+    except Exception:
+        initiation_attention = 0
+
     alliance_count = 0
     try:
         from game.alliance import count_alliance_nav_attention
@@ -528,6 +536,11 @@ def nav_badges_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
             count=story_attention,
             label=str(story_attention) if story_attention > 0 else "",
         ),
+        "initiation": _nav_badge_entry(
+            active=initiation_attention > 0,
+            count=initiation_attention,
+            label="!" if initiation_attention > 0 else "",
+        ),
         "world_boss": _nav_badge_entry(
             active=wb_active,
             count=wb_count,
@@ -566,6 +579,13 @@ def imperial_directives_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
     from game.directives.service import get_imperial_directives_summary
 
     return get_imperial_directives_summary(int(user_id), conn=conn)
+
+
+def initiation_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
+    """Compact Command Initiation HUD slice (diet-safe)."""
+    from game.initiation.service import get_initiation_summary
+
+    return get_initiation_summary(int(user_id), conn=conn, ensure=True)
 
 
 def fleet_hud_for_game_state(user_id: int, *, conn) -> Optional[Dict[str, Any]]:

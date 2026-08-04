@@ -1,0 +1,19 @@
+{# Command Initiation — compact header quest icon (opens /initiation) #}
+{% set _ini = initiation_hud if initiation_hud is defined else none %}
+{% set _ini_active = _ini and _ini.active %}
+{% set _ini_title = T(_ini.title_key, _ini.step_id or '') if _ini_active and _ini.title_key else T('initiation_title', 'Command Initiation') %}
+{% set _ini_progress = ((_ini.progress or 0)|fmt_int ~ ' / ' ~ (_ini.target or 1)|fmt_int) if _ini_active else '' %}
+<a id="gc-initiation-hud"
+   class="gc-initiation-hud{% if not _ini_active %} is-hidden{% endif %}"
+   href="{{ url_for('initiation_view') }}"
+   data-pjax
+   data-initiation-hud
+   title="{{ _ini_title }}{% if _ini_progress %} — {{ _ini_progress }}{% endif %}"
+   aria-label="{{ T('initiation_hud_aria', 'Open Command Initiation') }}{% if _ini_progress %}: {{ _ini_title }} {{ _ini_progress }}{% endif %}"
+   {% if not _ini_active %}hidden{% endif %}>
+  <span class="gc-initiation-hud__icon" aria-hidden="true">◆</span>
+  <span class="gc-initiation-hud__badge gc-mono"
+        data-ini-hud-progress
+        {% if not _ini_progress %}hidden{% endif %}>{{ _ini_progress }}</span>
+  <span class="gc-sr-only" data-ini-hud-title>{{ _ini_title }}</span>
+</a>

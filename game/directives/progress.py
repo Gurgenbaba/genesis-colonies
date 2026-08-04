@@ -109,14 +109,24 @@ def _fanout_story_events(
     conn: sqlite3.Connection,
     now: float | None = None,
 ) -> None:
-    """GC-2501: Story Ops shares the directive gameplay event bus (Regel 19)."""
+    """GC-2501 / GC-Initiation: Story + Initiation share the directive event bus (Regel 19)."""
     try:
-        from ..story.progress import apply_gameplay_events
+        from ..story.progress import apply_gameplay_events as story_apply
 
-        apply_gameplay_events(int(player_id), events, conn=conn, now=now)
+        story_apply(int(player_id), events, conn=conn, now=now)
     except Exception:
         logger.exception(
             "story fan-out failed player=%s events=%s",
+            player_id,
+            len(events or []),
+        )
+    try:
+        from ..initiation.progress import apply_gameplay_events as initiation_apply
+
+        initiation_apply(int(player_id), events, conn=conn, now=now)
+    except Exception:
+        logger.exception(
+            "initiation fan-out failed player=%s events=%s",
             player_id,
             len(events or []),
         )
@@ -215,7 +225,13 @@ def _event_applies(definition: Mapping[str, Any], event: Mapping[str, Any]) -> b
         filters = {}
 
     if key == "upgrade_buildings":
-        return kind == "build_complete"
+        if kind != "build_complete":
+            return False
+        # Optional filters.building_types (Command Initiation / specific ops).
+        allowed = filters.get("building_types") or []
+        if allowed:
+            return str(event.get("building_type") or "") in {str(x) for x in allowed}
+        return True
     if key in ("upgrade_storages", "upgrade_solar_plants", "upgrade_fuel_plants"):
         if kind != "build_complete":
             return False

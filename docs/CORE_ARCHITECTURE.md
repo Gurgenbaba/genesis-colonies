@@ -294,6 +294,7 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | Planet Evolution | `game/planet_evolution/` | [PLANET_EVOLUTION.md](PLANET_EVOLUTION.md) |
 | Galactic Directives | `game/galactic_directives/` | [GALACTIC_DIRECTIVES.md](GALACTIC_DIRECTIVES.md) |
 | Imperial Directives (player High Command) | `game/directives/` | [IMPERIAL_DIRECTIVES.md](IMPERIAL_DIRECTIVES.md) |
+| Command Initiation (do-first once-through) | `game/initiation/` | [COMMAND_INITIATION.md](COMMAND_INITIATION.md) |
 | Genesis Story Ops (lore arcs / side ops) | `game/story/` | [GENESIS_STORY_OPS.md](GENESIS_STORY_OPS.md) |
 | Galactic Diplomacy | `game/galactic_diplomacy/` | [GALACTIC_DIPLOMACY.md](GALACTIC_DIPLOMACY.md) |
 | Referrals | `game/referrals.py` | GC-703 |

@@ -36,7 +36,7 @@ STANDALONE_NAV_MODULES = frozenset({"messages"})
 MOBILE_ALWAYS_BOTTOM: Tuple[str, ...] = ()
 
 NAV_SECTION_MODULES: Dict[str, Tuple[str, ...]] = {
-    "command": ("overview", "galaxy", "planet_evolution", "login_rewards", "premium"),
+    "command": ("overview", "galaxy", "planet_evolution"),
     "messages": ("messages",),
     "infrastructure": ("buildings", "research"),
     "military": ("shipyard", "fleet", "defense", "logistics"),

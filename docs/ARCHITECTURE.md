@@ -83,7 +83,7 @@ Technische Architektur-Dokumentation (Stand: **v1.5.9.2**, Reality-Sync **2026-0
                              │
 ┌────────────────────────────▼─────────────────────────────────────┐
 │ SQLite (WAL) — game/game.db                                       │
-│  migration_history + migrations/*.sql (006–124)                   │
+│  migration_history + migrations/*.sql (006–142)                   │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -324,7 +324,7 @@ Balance-Editor: `game/admin_balance.py` → `/api/admin/balance`.
 | `migrate.py` | Runner, `migration_history` |
 | `game/migrations_util.py` | Pending-Check für Bootstrap + Health |
 
-**Aktuelle Migrationen:** `006`–`123` — siehe `migrations/` und `migration_history`.
+**Aktuelle Migrationen:** `006`–`142` — siehe `migrations/` und `migration_history`.
 
 Neue Schema-Änderungen **immer** als `migrations/NNN_name.sql` + Test in `test_persistence.py`.
 
@@ -428,7 +428,7 @@ Audit: [GC_PERF_DB_001_POSTGRES_AUDIT.md](GC_PERF_DB_001_POSTGRES_AUDIT.md) · E
 
 ## Test-Suite
 
-**4219 pytest-Tests** (Stand v0.5.9.90 — `python -m pytest --collect-only -q`), u. a.:
+**4437 pytest-Tests** (Stand v0.5.9.101 — `python -m pytest --collect-only -q`), u. a.:
 
 - `test_persistence.py`, `test_race_conditions.py` — DB/Queues
 - `test_game_state_live.py`, `test_effects.py`, `test_queue_engine.py` — Live pipeline

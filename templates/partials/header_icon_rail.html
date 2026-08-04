@@ -1,0 +1,30 @@
+{# Compact header LiveOps / Initiation icon rail — mirrors fleets-toggle size #}
+<div class="gc-header-icon-rail" aria-label="{{ T('header_icon_rail_aria', 'LiveOps') }}">
+  {% include "partials/initiation_hud.html" %}
+
+  <a class="gc-header-icon-btn"
+     href="{{ url_for('login_rewards_view') }}"
+     data-pjax
+     data-nav-key="login_rewards"
+     title="{{ T('nav_login_rewards', 'Login Rewards') }}"
+     aria-label="{{ T('nav_login_rewards', 'Login Rewards') }}">
+    <span class="gc-header-icon-btn__glyph" aria-hidden="true">📅</span>
+    <span class="gc-nav-badge gc-nav-badge--alert gc-header-icon-btn__badge hidden"
+          data-nav-badge="login_rewards"
+          hidden
+          aria-hidden="true"></span>
+  </a>
+
+  <a class="gc-header-icon-btn"
+     href="{{ url_for('premium_view') }}"
+     data-pjax
+     data-nav-key="premium"
+     title="{{ T('nav_premium', 'Season Pass') }}"
+     aria-label="{{ T('nav_premium', 'Season Pass') }}">
+    <span class="gc-header-icon-btn__glyph" aria-hidden="true">🎖</span>
+    <span class="gc-nav-badge gc-nav-badge--alert gc-header-icon-btn__badge hidden"
+          data-nav-badge="premium"
+          hidden
+          aria-hidden="true"></span>
+  </a>
+</div>

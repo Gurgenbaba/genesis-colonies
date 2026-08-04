@@ -1,6 +1,6 @@
 # Genesis Colonies — Roadmap
 
-Geplante Entwicklungsphasen und Meilensteine. Stand: **v0.9 Alpha** / Build `0.5.9.90` (Reality-Sync 2026-08-01).
+Geplante Entwicklungsphasen und Meilensteine. Stand: **v0.9 Alpha** / Build `0.5.9.101` (Reality-Sync 2026-08-01).
 
 Status-Legende:
 
@@ -24,12 +24,12 @@ Status-Legende:
 | Flask + SQLite + Jinja2 | ✅ |
 | Installer (`scripts/install.py`) | ✅ |
 | Environment & Config Guards | ✅ |
-| SQL-Migrationen (`006`–`124`) | ✅ |
+| SQL-Migrationen (`006`–`142`) | ✅ |
 | Health Endpoint (`/health`) | ✅ |
 | Docker + Gunicorn Deployment | ✅ |
 | DB-Abstraction (`game/db.py`) | ✅ |
 | Bootstrap & Migration Guard | ✅ |
-| pytest-Suite (**4219** Tests) | ✅ |
+| pytest-Suite (**4437** Tests) | ✅ |
 
 ---
 
@@ -192,7 +192,7 @@ Master-Doc: **[GC_PERF_CORE.md](GC_PERF_CORE.md)** (EPIC Performance Core).
 | Item | Status |
 |------|--------|
 | Balancing-Tooling (Admin) | 🔄 teilweise |
-| Tutorial / Onboarding | 💡 |
+| Tutorial / Onboarding | 🔧 Command Initiation Phase 1 (`/initiation`) — see [COMMAND_INITIATION.md](COMMAND_INITIATION.md) |
 | Season / Universe-Reset | 💡 |
 | **World Boss Events (EPIC-20)** | 🔄 | GC-W01…W08 + GC-WB-TAME — [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) |
 | **Pirate Ecosystem (EPIC-21)** | ✅ | GC-P00…P18 ship-gate — [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md) |

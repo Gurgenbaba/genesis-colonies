@@ -776,6 +776,20 @@ def inject_globals():
 
     header_active_boosters: dict[str, Any] = {"ready": False, "active": [], "active_effects": []}
     header_timekeeper: dict[str, Any] = {"ready": False, "balance_sec": 0, "label": "0min"}
+    initiation_hud: dict[str, Any] = {
+        "ready": False,
+        "active": False,
+        "completed": False,
+        "step_index": 0,
+        "step_count": 0,
+        "progress": 0,
+        "target": 0,
+        "route": "",
+        "title_key": "",
+        "hint_key": "",
+        "step_id": "",
+        "phase_id": "",
+    }
     # GC-INSTANT-UX-001A — slim shell HUD for first paint (fleet + unread); avoids deferred poll gap.
     header_hud_boot: dict[str, Any] = {
         "ok": True,
@@ -808,6 +822,12 @@ def inject_globals():
                     locale=active_locale,
                 )
                 header_timekeeper = serialize_for_client(uid, conn=_boost_conn)
+                try:
+                    from game.initiation.service import get_initiation_summary
+
+                    initiation_hud = get_initiation_summary(uid, conn=_boost_conn, ensure=True)
+                except Exception:
+                    pass
                 try:
                     header_hud_boot["unread_messages_count"] = int(
                         messages_logic.unread_count(uid, conn=_boost_conn, prepare=False) or 0
@@ -940,6 +960,7 @@ def inject_globals():
         HEADER_ACTIVE_BOOSTERS=header_active_boosters,
         HEADER_HUD_BOOT=header_hud_boot,
         TIMEKEEPER=header_timekeeper,
+        initiation_hud=initiation_hud,
         SIDEBAR_NAV=sidebar_nav,
         SIDEBAR_NAV_CLIENT=client_sidebar_nav_config(),
         ADMINISTRATION_MODULES=sorted(ADMINISTRATION_MODULES),
@@ -6354,6 +6375,46 @@ def imperial_directives_view():
     )
 
 
+@app.route("/api/initiation/state")
+@require_login
+def api_initiation_state():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+    from game.initiation.service import get_initiation_state
+
+    conn = db()
+    try:
+        initiation = get_initiation_state(user_id, conn=conn)
+    finally:
+        conn.close()
+    return jsonify({"ok": True, "initiation": initiation})
+
+
+@app.route("/initiation")
+@require_login
+def initiation_view():
+    ctx = _load_page_live_context(finish_source="initiation")
+    if ctx is None:
+        return redirect(url_for("login"))
+
+    from game.initiation.service import get_initiation_state
+
+    initiation = {"ready": False, "steps": [], "phases": [], "current": None}
+    conn = db()
+    try:
+        initiation = get_initiation_state(int(session["user_id"]), conn=conn)
+    finally:
+        conn.close()
+
+    return render_template(
+        "initiation.html",
+        player=ctx["player_view"],
+        storage_caps=ctx["storage_caps"],
+        initiation=initiation,
+    )
+
+
 @app.route("/api/story/state")
 @require_login
 def api_story_state():
@@ -9848,6 +9909,27 @@ def _payload_from_live_context(
                 "daily_reset_at": 0,
                 "weekly_reset_at": 0,
             }
+
+    try:
+        from game.live_state import initiation_for_game_state
+
+        # Diet-safe: keep on lightweight polls so HUD chip stays live.
+        payload["initiation"] = initiation_for_game_state(user_id, conn=conn)
+    except Exception:
+        payload["initiation"] = {
+            "ready": False,
+            "active": False,
+            "completed": False,
+            "step_index": 0,
+            "step_count": 0,
+            "progress": 0,
+            "target": 0,
+            "route": "",
+            "title_key": "",
+            "hint_key": "",
+            "step_id": "",
+            "phase_id": "",
+        }
 
     try:
         from game.server_events import serialize_active_events

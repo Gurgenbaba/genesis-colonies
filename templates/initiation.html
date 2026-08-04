@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% from "partials/card_hero_img_macros.html" import render_card_hero_img with context %}
+
+{% set ini = initiation if initiation is defined and initiation else {'ready': false, 'phases': [], 'steps': [], 'current': none} %}
+{% set ini_phases = ini.phases if ini.phases is defined else [] %}
+{% set ini_current = ini.current if ini.current is defined else none %}
+{% set _ini_fallback = url_for('static', filename='img/buildings/command_center.png') %}
+
+{% macro ini_step_card(step) %}
+{% set _pct = ((step.progress / step.target * 100) if step.target else 0)|int %}
+{% set _img = url_for('static', filename=step.image) if step.image else _ini_fallback %}
+<article class="ini-card inventory-loot-card ini-card--{{ step.status }}{% if step.active %} is-active{% endif %}"
+         data-ini-step="{{ step.id }}"
+         data-ini-status="{{ step.status }}"
+         role="listitem">
+  <div class="ini-card__tag-row">
+    {% if step.active %}
+    <span class="ini-card__badge">{{ T('initiation_status_active', 'ACTIVE') }}</span>
+    {% elif step.done %}
+    <span class="ini-card__badge ini-card__badge--done">{{ T('initiation_status_done', 'DONE') }}</span>
+    {% else %}
+    <span class="ini-card__badge ini-card__badge--locked">{{ T('initiation_status_locked', 'LOCKED') }}</span>
+    {% endif %}
+    <span class="ini-card__pct gc-mono">{{ _pct }}%</span>
+  </div>
+  <div class="inventory-loot-card-hero ini-card__hero">
+    <div class="inventory-loot-card-glow inventory-loot-card-glow--{% if step.active %}rare{% elif step.done %}uncommon{% else %}common{% endif %}" aria-hidden="true"></div>
+    {{ render_card_hero_img(_img, T(step.title_key, step.id), 'inventory-loot-card-img', 'lazy', false, 120, 120, "this.onerror=null;this.src='" ~ _ini_fallback ~ "';") }}
+  </div>
+  <div class="inventory-loot-card-body ini-card__body">
+    <h3 class="inventory-loot-card-name ini-card__title">{{ T(step.title_key, step.id) }}</h3>
+    {% if step.active %}
+    <p class="inventory-loot-card-hint ini-card__hint">{{ T(step.hint_key, '') }}</p>
+    {% endif %}
+    <div class="ini-card__progress" role="progressbar"
+         aria-valuemin="0"
+         aria-valuemax="{{ step.target|int }}"
+         aria-valuenow="{{ step.progress|int }}">
+      <div class="ini-card__progress-fill" style="width: {{ _pct }}%;"></div>
+    </div>
+    <div class="ini-card__meta">
+      <span class="gc-mono">{{ step.progress|fmt_int }} / {{ step.target|fmt_int }}</span>
+      {% if step.active %}
+      <a class="gc-btn gc-btn-primary gc-btn-sm" href="{{ step.route }}" data-pjax>{{ T('initiation_go_btn', 'Go') }}</a>
+      {% elif step.done %}
+      <span class="ini-card__check" aria-hidden="true">✓</span>
+      {% endif %}
+    </div>
+  </div>
+</article>
+{% endmacro %}
+
+{% block content %}
+<div class="gc-page ini-page inventory-page" id="initiation-page"
+     data-initiation
+     data-ready="{{ '1' if ini.ready else '0' }}">
+
+  {% if ini.ready %}
+  <script type="application/json" id="initiation-page-state">{{ ini | tojson }}</script>
+  {% endif %}
+
+  <header class="gc-page-header section-header ini-header inventory-headline">
+    <p class="ini-eyebrow">{{ T('initiation_eyebrow', 'COMMAND INITIATION') }}</p>
+    <h1 class="section-title">{{ T('initiation_title', 'Command Initiation') }}</h1>
+    <p class="section-hint hint ini-hint">
+      {{ T('initiation_hint', 'Learn by doing. Open the target page, complete the objective, and move to the next system.') }}
+    </p>
+  </header>
+
+  {% if not ini.ready %}
+  <section class="gc-panel ini-panel">
+    <p class="ini-empty">{{ T('initiation_unavailable', 'Command Initiation is currently unavailable.') }}</p>
+  </section>
+  {% else %}
+
+  <section class="gc-panel ini-panel ini-status-strip">
+    <div class="ini-status-strip__inner">
+      <div class="ini-stat">
+        <span class="ini-stat__label">{{ T('initiation_progress_label', 'Progress') }}</span>
+        <span class="ini-stat__value gc-mono" data-ini-progress-total>
+          {{ (ini.step_index + 1 if not ini.completed else ini.step_count)|fmt_int }} / {{ ini.step_count|fmt_int }}
+        </span>
+      </div>
+      {% if ini_current %}
+      <div class="ini-stat ini-stat--current">
+        <span class="ini-stat__label">{{ T('initiation_current_label', 'Current') }}</span>
+        <span class="ini-stat__value" data-ini-current-title>{{ T(ini_current.title_key, ini_current.id) }}</span>
+      </div>
+      <a class="gc-btn gc-btn-primary gc-btn-sm"
+         href="{{ ini_current.route }}"
+         data-ini-go
+         data-pjax>{{ T('initiation_go_btn', 'Go') }}</a>
+      {% elif ini.completed %}
+      <div class="ini-stat">
+        <span class="ini-stat__value">{{ T('initiation_complete_title', 'Lattice surveyed') }}</span>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+
+  {% for phase in ini_phases %}
+  <section class="gc-panel ini-panel ini-phase" data-ini-phase="{{ phase.id }}">
+    <header class="ini-phase__head">
+      <h2 class="ini-phase__title">{{ T(phase.title_key, phase.id) }}</h2>
+      <span class="ini-phase__count gc-mono">{{ phase.done|fmt_int }} / {{ phase.total|fmt_int }}</span>
+    </header>
+    <div class="ini-card-grid" role="list">
+      {% for step in phase.steps %}
+        {{ ini_step_card(step) }}
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+
+  {% endif %}
+</div>
+{% endblock %}

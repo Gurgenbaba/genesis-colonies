@@ -29,6 +29,7 @@ Epics beschreiben nur das Ziel. **Niemals direkt implementieren.**
 | EPIC-23 | Payment / Shop (Cash Grab MVP) | [PAYMENT_SHOP.md](PAYMENT_SHOP.md) |
 | EPIC-24 | Admin Control Center UX | [ADMIN_CONTROL_CENTER.md](ADMIN_CONTROL_CENTER.md) |
 | EPIC-25 | Genesis Story Ops (Lore / Side Ops) | [GENESIS_STORY_OPS.md](GENESIS_STORY_OPS.md) |
+| — | Command Initiation (do-first once-through) | [COMMAND_INITIATION.md](COMMAND_INITIATION.md) |
 | EPIC-27 | Commander Classes & Skill Trees | [COMMANDER_CLASSES.md](COMMANDER_CLASSES.md) |
 
 Epic → in **3–5 Tickets** zerlegen (große Epics: Phasen in Master-Doc). Siehe [EPICS.md](EPICS.md).
@@ -142,7 +143,7 @@ Kurz. Keine Projektzusammenfassung.
 ## Tests
 
 ```bash
-python -m pytest tests/ -v          # gesamt (4219 Tests)
+python -m pytest tests/ -v          # gesamt (4437 Tests)
 python -m pytest tests/test_fleet.py -v   # domänenspezifisch
 ```
 

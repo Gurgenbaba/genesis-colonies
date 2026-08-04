@@ -1,0 +1,82 @@
+{
+  "id": "command_initiation",
+  "version": 1,
+  "phases": [
+    {
+      "id": "colony_core",
+      "title_key": "initiation_phase_colony_core",
+      "steps": [
+        {
+          "id": "build_metal_mines",
+          "route": "/buildings",
+          "title_key": "initiation_step_metal_mines",
+          "hint_key": "initiation_step_metal_mines_hint",
+          "objective_key": "upgrade_buildings",
+          "objective_kind": "count",
+          "target": 3,
+          "filters": { "building_types": ["metal_mine"] }
+        },
+        {
+          "id": "build_crystal_mine",
+          "route": "/buildings",
+          "title_key": "initiation_step_crystal_mine",
+          "hint_key": "initiation_step_crystal_mine_hint",
+          "objective_key": "upgrade_buildings",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "building_types": ["crystal_mine"] }
+        },
+        {
+          "id": "build_solar_plant",
+          "route": "/buildings",
+          "title_key": "initiation_step_solar_plant",
+          "hint_key": "initiation_step_solar_plant_hint",
+          "objective_key": "upgrade_buildings",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "building_types": ["solar_plant"] }
+        },
+        {
+          "id": "complete_research",
+          "route": "/research",
+          "title_key": "initiation_step_research",
+          "hint_key": "initiation_step_research_hint",
+          "objective_key": "complete_research",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": {}
+        },
+        {
+          "id": "build_ship",
+          "route": "/shipyard",
+          "title_key": "initiation_step_shipyard",
+          "hint_key": "initiation_step_shipyard_hint",
+          "objective_key": "build_ships",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": {}
+        },
+        {
+          "id": "build_defense",
+          "route": "/defense",
+          "title_key": "initiation_step_defense",
+          "hint_key": "initiation_step_defense_hint",
+          "objective_key": "build_defense",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": {}
+        },
+        {
+          "id": "send_fleet",
+          "route": "/fleet",
+          "title_key": "initiation_step_fleet",
+          "hint_key": "initiation_step_fleet_hint",
+          "objective_key": "send_fleet_missions",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": {}
+        }
+      ]
+    }
+  ]
+}
