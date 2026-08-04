@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .engine import ensure_player_initiation, initiation_schema_ready
-from .progress import apply_gameplay_events
+from .progress import apply_gameplay_events, maybe_record_page_visit_from_request, record_page_visit
 from .service import (
     count_initiation_attention,
     get_initiation_state,
@@ -17,4 +17,6 @@ __all__ = [
     "get_initiation_state",
     "get_initiation_summary",
     "initiation_schema_ready",
+    "maybe_record_page_visit_from_request",
+    "record_page_visit",
 ]

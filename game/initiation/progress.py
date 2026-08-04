@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+import uuid
 from typing import Any, Dict, Mapping, Sequence
 
 from ..db import is_integrity_error, table_exists
@@ -11,14 +12,92 @@ from .engine import (
     advance_if_complete,
     ensure_player_initiation,
     initiation_schema_ready,
+    load_row,
 )
 from .packs import step_at
+from .pages import resolve_page_key, should_record_page_visit
 
 PROGRESS_TABLE = "player_initiation_progress"
 
 
 def progress_schema_ready(conn) -> bool:
     return table_exists(conn, PROGRESS_TABLE)
+
+
+def record_page_visit(
+    player_id: int,
+    page_key: str,
+    *,
+    conn,
+    now: float | None = None,
+    source_event_id: str | None = None,
+) -> Dict[str, Any]:
+    """Complete a visit_page step when the player opens the matching surface."""
+    pid = int(player_id)
+    page = str(page_key or "").strip()
+    if pid <= 0 or not page:
+        return {"updated": 0, "completed": 0}
+
+    if not initiation_schema_ready(conn) or not progress_schema_ready(conn):
+        return {"updated": 0, "completed": 0}
+
+    ts = float(now if now is not None else time.time())
+    ensure_player_initiation(pid, conn=conn, now=ts)
+    row = load_row(pid, conn=conn)
+    if not row or str(row.get("status") or "") != STATUS_ACTIVE:
+        return {"updated": 0, "completed": 0}
+
+    step = step_at(int(row.get("step_index") or 0))
+    if not step or str(step.get("objective_key") or "") != "visit_page":
+        return {"updated": 0, "completed": 0}
+
+    filters = step.get("filters") if isinstance(step.get("filters"), dict) else {}
+    allowed = {str(x) for x in (filters.get("pages") or [])}
+    if page not in allowed:
+        return {"updated": 0, "completed": 0}
+
+    eid = str(source_event_id or "").strip() or f"page_visit:{page}:{pid}:{uuid.uuid4().hex}"
+    return apply_gameplay_events(
+        pid,
+        [
+            {
+                "kind": "page_visit",
+                "page": page,
+                "amount": 1,
+                "source_event_id": eid,
+            }
+        ],
+        conn=conn,
+        now=ts,
+    )
+
+
+def maybe_record_page_visit_from_request(
+    player_id: int,
+    *,
+    conn,
+    finish_source: str | None = None,
+    path: str | None = None,
+    now: float | None = None,
+) -> Dict[str, Any]:
+    """Hook for page live-context: map path/finish_source → visit event if relevant."""
+    if not should_record_page_visit(finish_source):
+        return {"updated": 0, "completed": 0}
+
+    req_path = path
+    if req_path is None:
+        try:
+            from flask import has_request_context, request as flask_request
+
+            if has_request_context():
+                req_path = str(flask_request.path or "")
+        except Exception:
+            req_path = None
+
+    page = resolve_page_key(path=req_path, finish_source=finish_source)
+    if not page:
+        return {"updated": 0, "completed": 0}
+    return record_page_visit(player_id, page, conn=conn, now=now)
 
 
 def apply_gameplay_events(

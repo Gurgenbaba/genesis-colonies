@@ -192,7 +192,7 @@ Master-Doc: **[GC_PERF_CORE.md](GC_PERF_CORE.md)** (EPIC Performance Core).
 | Item | Status |
 |------|--------|
 | Balancing-Tooling (Admin) | 🔄 teilweise |
-| Tutorial / Onboarding | 🔧 Command Initiation Phase 1 (`/initiation`) — see [COMMAND_INITIATION.md](COMMAND_INITIATION.md) |
+| Tutorial / Onboarding | ✅ Command Initiation full-game tour (Colony Core + Empire + LiveOps visits) — see [COMMAND_INITIATION.md](COMMAND_INITIATION.md) |
 | Season / Universe-Reset | 💡 |
 | **World Boss Events (EPIC-20)** | 🔄 | GC-W01…W08 + GC-WB-TAME — [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) |
 | **Pirate Ecosystem (EPIC-21)** | ✅ | GC-P00…P18 ship-gate — [PIRATE_ECOSYSTEM.md](PIRATE_ECOSYSTEM.md) |

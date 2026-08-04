@@ -1,4 +1,4 @@
-"""Command Initiation Phase 1 — engine + event-bus fan-out."""
+"""Command Initiation — full-game do-first tour (engine + visit + pack)."""
 
 from __future__ import annotations
 
@@ -16,6 +16,8 @@ from game.db import db
 from game.directives.progress import apply_directive_events, gameplay_event_delta
 from game.initiation.engine import ensure_player_initiation
 from game.initiation.packs import flatten_steps, load_pack
+from game.initiation.pages import page_key_from_path, resolve_page_key
+from game.initiation.progress import record_page_visit
 from game.initiation.service import get_initiation_state, get_initiation_summary
 from game.models import create_user
 
@@ -49,8 +51,9 @@ def _create_player() -> int:
     return int(user["id"])
 
 
-def test_pack_phase1_has_metal_mine_step():
+def test_pack_covers_three_phases_and_core_actions():
     pack = load_pack()
+    assert int(pack.get("version") or 0) >= 2
     steps = flatten_steps(pack)
     assert steps
     first = steps[0]
@@ -58,6 +61,16 @@ def test_pack_phase1_has_metal_mine_step():
     assert first["target"] == 3
     assert first["filters"]["building_types"] == ["metal_mine"]
     assert first["route"] == "/buildings"
+
+    phase_ids = [p["id"] for p in pack.get("phases") or []]
+    assert phase_ids == ["colony_core", "empire_expansion", "liveops_meta"]
+
+    by_id = {s["id"]: s for s in steps}
+    assert by_id["visit_galaxy"]["objective_key"] == "visit_page"
+    assert by_id["visit_galaxy"]["filters"]["pages"] == ["galaxy"]
+    assert by_id["visit_empire"]["route"] == "/empire"
+    assert by_id["visit_referrals"]["filters"]["pages"] == ["referrals"]
+    assert len(steps) >= 25
 
 
 def test_resolve_step_route_highlights_ferronite_mine():
@@ -70,6 +83,15 @@ def test_resolve_step_route_highlights_ferronite_mine():
     assert "highlight=metal_mine" in href
     assert "tab=resources" in href
     assert step_image_path(step) == "img/buildings/metal_mine.png"
+
+
+def test_page_key_mapping():
+    assert page_key_from_path("/galaxy") == "galaxy"
+    assert page_key_from_path("/galaxy?view=system") == "galaxy"
+    assert page_key_from_path("/combat-simulator") == "combat_simulator"
+    assert resolve_page_key(path="/empire", finish_source="page_load") == "empire"
+    assert resolve_page_key(path="/buildings", finish_source="game_state") == ""
+    assert resolve_page_key(path="/inventory", finish_source="inventory") == "inventory"
 
 
 def test_upgrade_buildings_respects_building_type_filter():
@@ -97,6 +119,25 @@ def test_upgrade_buildings_respects_building_type_filter():
             filters={},
         )
         == 1
+    )
+
+
+def test_visit_page_objective_delta():
+    assert (
+        gameplay_event_delta(
+            "visit_page",
+            {"kind": "page_visit", "page": "galaxy", "amount": 1},
+            filters={"pages": ["galaxy"]},
+        )
+        == 1
+    )
+    assert (
+        gameplay_event_delta(
+            "visit_page",
+            {"kind": "page_visit", "page": "messages", "amount": 1},
+            filters={"pages": ["galaxy"]},
+        )
+        == 0
     )
 
 
@@ -128,7 +169,6 @@ def test_initiation_metal_mines_progress_and_advance(initiation_db):
         assert state["current"]["id"] == "build_crystal_mine"
         assert state["current"]["progress"] == 0
 
-        # Crystal event should not have counted toward metal step (already advanced).
         summary = get_initiation_summary(pid, conn=conn, ensure=False)
         assert summary["active"]
         assert summary["step_id"] == "build_crystal_mine"
@@ -161,5 +201,43 @@ def test_initiation_idempotent_source_event(initiation_db):
         state = get_initiation_state(pid, conn=conn)
         assert state["current"]["id"] == "build_metal_mines"
         assert state["current"]["progress"] == 1
+    finally:
+        conn.close()
+
+
+def test_visit_page_ignored_until_step_active(initiation_db):
+    conn = db()
+    try:
+        pid = _create_player()
+        ensure_player_initiation(pid, conn=conn)
+        out = record_page_visit(pid, "galaxy", conn=conn)
+        assert out["updated"] == 0
+        state = get_initiation_state(pid, conn=conn)
+        assert state["current"]["id"] == "build_metal_mines"
+    finally:
+        conn.close()
+
+
+def test_visit_page_completes_when_active(initiation_db):
+    conn = db()
+    try:
+        pid = _create_player()
+        ensure_player_initiation(pid, conn=conn)
+        conn.execute(
+            """
+            UPDATE player_initiation
+            SET step_index = 7, progress_value = 0, target_value = 1
+            WHERE player_id = ?;
+            """,
+            (pid,),
+        )
+        state = get_initiation_state(pid, conn=conn)
+        assert state["current"]["id"] == "visit_galaxy"
+
+        out = record_page_visit(pid, "galaxy", conn=conn)
+        assert out["updated"] == 1
+        assert out["completed"] == 1
+        state = get_initiation_state(pid, conn=conn)
+        assert state["current"]["id"] == "visit_messages"
     finally:
         conn.close()

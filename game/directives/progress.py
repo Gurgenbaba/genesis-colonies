@@ -288,6 +288,14 @@ def _event_applies(definition: Mapping[str, Any], event: Mapping[str, Any]) -> b
         return kind == "expedition_event" and str(event.get("event_type") or "") == "ancient_tech"
     if key == "salvage_ancient_ships":
         return kind == "ships_salvaged"
+    if key == "visit_page":
+        # Command Initiation (and future visit objectives). Not used by daily Directives packs.
+        if kind != "page_visit":
+            return False
+        allowed = filters.get("pages") or []
+        if not allowed:
+            return False
+        return str(event.get("page") or "") in {str(x) for x in allowed}
     return False
 
 

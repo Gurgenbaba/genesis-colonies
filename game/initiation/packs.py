@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlencode
 
 PACKS_DIR = Path(__file__).resolve().parent / "packs"
-PACK_FILENAME = "phase1_colony_core.json"
+PACK_FILENAME = "command_initiation.json"
 
 
 @lru_cache(maxsize=1)
@@ -107,6 +107,36 @@ def step_image_path(step: Dict[str, Any] | None) -> str:
         from ..fleet_defs import ship_icon_filename
 
         return f"img/ships/{ship_icon_filename('light_fighter')}"
+    if objective == "visit_page":
+        filters = step.get("filters") if isinstance(step.get("filters"), dict) else {}
+        pages = filters.get("pages") or []
+        page = str(pages[0] or "").strip() if pages else ""
+        visit_icons = {
+            "galaxy": "img/buildings/command_center.png",
+            "messages": "img/buildings/command_center.png",
+            "combat_simulator": "img/defense/sentinel_turret.webp",
+            "planet_evolution": "img/evo/planet_research_institute.webp",
+            "empire": "img/buildings/command_center.png",
+            "techtree": get_building_icon("research_lab"),
+            "skilltree": "img/classes/icons/research.webp",
+            "ranking": "img/badges/commander.png",
+            "hall_of_fame": "img/badges/galactic_legend.png",
+            "imperial_directives": "img/politics/directives/expansion.webp",
+            "story": "img/buildings/command_center.png",
+            "login_rewards": "img/pass/credits.png",
+            "premium": "img/pass/epic_container.webp",
+            "shop": "img/shop/rare.jpg",
+            "inventory": "img/lootboxes/Rare_Container.webp",
+            "trader_hub": get_building_icon("metal_mine"),
+            "auction_house": "img/pass/myth_container.webp",
+            "world_boss": "img/bosses/_placeholder.webp",
+            "alliance": "img/politics/blocs/scientific_bloc.webp",
+            "galactic_politics": "img/politics/chamber/tab_politics.webp",
+            "vote_center": "img/politics/chamber/resolution_mark.webp",
+            "referrals": "img/badges/architect.webp",
+        }
+        if page in visit_icons:
+            return visit_icons[page]
     if highlight:
         return get_building_icon(highlight)
     return "img/buildings/command_center.png"

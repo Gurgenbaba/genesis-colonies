@@ -1,0 +1,314 @@
+{
+  "id": "command_initiation",
+  "version": 2,
+  "phases": [
+    {
+      "id": "colony_core",
+      "title_key": "initiation_phase_colony_core",
+      "steps": [
+        {
+          "id": "build_metal_mines",
+          "route": "/buildings",
+          "title_key": "initiation_step_metal_mines",
+          "hint_key": "initiation_step_metal_mines_hint",
+          "objective_key": "upgrade_buildings",
+          "objective_kind": "count",
+          "target": 3,
+          "filters": { "building_types": ["metal_mine"] }
+        },
+        {
+          "id": "build_crystal_mine",
+          "route": "/buildings",
+          "title_key": "initiation_step_crystal_mine",
+          "hint_key": "initiation_step_crystal_mine_hint",
+          "objective_key": "upgrade_buildings",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "building_types": ["crystal_mine"] }
+        },
+        {
+          "id": "build_solar_plant",
+          "route": "/buildings",
+          "title_key": "initiation_step_solar_plant",
+          "hint_key": "initiation_step_solar_plant_hint",
+          "objective_key": "upgrade_buildings",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "building_types": ["solar_plant"] }
+        },
+        {
+          "id": "complete_research",
+          "route": "/research",
+          "title_key": "initiation_step_research",
+          "hint_key": "initiation_step_research_hint",
+          "objective_key": "complete_research",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": {}
+        },
+        {
+          "id": "build_ship",
+          "route": "/shipyard",
+          "title_key": "initiation_step_shipyard",
+          "hint_key": "initiation_step_shipyard_hint",
+          "objective_key": "build_ships",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": {}
+        },
+        {
+          "id": "build_defense",
+          "route": "/defense",
+          "title_key": "initiation_step_defense",
+          "hint_key": "initiation_step_defense_hint",
+          "objective_key": "build_defense",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": {}
+        },
+        {
+          "id": "send_fleet",
+          "route": "/fleet",
+          "title_key": "initiation_step_fleet",
+          "hint_key": "initiation_step_fleet_hint",
+          "objective_key": "send_fleet_missions",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": {}
+        },
+        {
+          "id": "visit_galaxy",
+          "route": "/galaxy",
+          "title_key": "initiation_step_galaxy",
+          "hint_key": "initiation_step_galaxy_hint",
+          "objective_key": "visit_page",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "pages": ["galaxy"] }
+        },
+        {
+          "id": "visit_messages",
+          "route": "/messages",
+          "title_key": "initiation_step_messages",
+          "hint_key": "initiation_step_messages_hint",
+          "objective_key": "visit_page",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "pages": ["messages"] }
+        },
+        {
+          "id": "visit_combat_simulator",
+          "route": "/combat-simulator",
+          "title_key": "initiation_step_combat_simulator",
+          "hint_key": "initiation_step_combat_simulator_hint",
+          "objective_key": "visit_page",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "pages": ["combat_simulator"] }
+        },
+        {
+          "id": "visit_planet_evolution",
+          "route": "/planet-evolution",
+          "title_key": "initiation_step_planet_evolution",
+          "hint_key": "initiation_step_planet_evolution_hint",
+          "objective_key": "visit_page",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "pages": ["planet_evolution"] }
+        }
+      ]
+    },
+    {
+      "id": "empire_expansion",
+      "title_key": "initiation_phase_empire_expansion",
+      "steps": [
+        {
+          "id": "visit_empire",
+          "route": "/empire",
+          "title_key": "initiation_step_empire",
+          "hint_key": "initiation_step_empire_hint",
+          "objective_key": "visit_page",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "pages": ["empire"] }
+        },
+        {
+          "id": "visit_techtree",
+          "route": "/techtree",
+          "title_key": "initiation_step_techtree",
+          "hint_key": "initiation_step_techtree_hint",
+          "objective_key": "visit_page",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "pages": ["techtree"] }
+        },
+        {
+          "id": "visit_skilltree",
+          "route": "/skilltree",
+          "title_key": "initiation_step_skilltree",
+          "hint_key": "initiation_step_skilltree_hint",
+          "objective_key": "visit_page",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "pages": ["skilltree"] }
+        },
+        {
+          "id": "visit_ranking",
+          "route": "/ranking",
+          "title_key": "initiation_step_ranking",
+          "hint_key": "initiation_step_ranking_hint",
+          "objective_key": "visit_page",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "pages": ["ranking"] }
+        },
+        {
+          "id": "visit_hall_of_fame",
+          "route": "/hall-of-fame",
+          "title_key": "initiation_step_hall_of_fame",
+          "hint_key": "initiation_step_hall_of_fame_hint",
+          "objective_key": "visit_page",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "pages": ["hall_of_fame"] }
+        }
+      ]
+    },
+    {
+      "id": "liveops_meta",
+      "title_key": "initiation_phase_liveops_meta",
+      "steps": [
+        {
+          "id": "visit_imperial_directives",
+          "route": "/imperial-directives",
+          "title_key": "initiation_step_imperial_directives",
+          "hint_key": "initiation_step_imperial_directives_hint",
+          "objective_key": "visit_page",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "pages": ["imperial_directives"] }
+        },
+        {
+          "id": "visit_story",
+          "route": "/story",
+          "title_key": "initiation_step_story",
+          "hint_key": "initiation_step_story_hint",
+          "objective_key": "visit_page",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "pages": ["story"] }
+        },
+        {
+          "id": "visit_login_rewards",
+          "route": "/login-rewards",
+          "title_key": "initiation_step_login_rewards",
+          "hint_key": "initiation_step_login_rewards_hint",
+          "objective_key": "visit_page",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "pages": ["login_rewards"] }
+        },
+        {
+          "id": "visit_premium",
+          "route": "/premium",
+          "title_key": "initiation_step_premium",
+          "hint_key": "initiation_step_premium_hint",
+          "objective_key": "visit_page",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "pages": ["premium"] }
+        },
+        {
+          "id": "visit_shop",
+          "route": "/shop",
+          "title_key": "initiation_step_shop",
+          "hint_key": "initiation_step_shop_hint",
+          "objective_key": "visit_page",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "pages": ["shop"] }
+        },
+        {
+          "id": "visit_inventory",
+          "route": "/inventory",
+          "title_key": "initiation_step_inventory",
+          "hint_key": "initiation_step_inventory_hint",
+          "objective_key": "visit_page",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "pages": ["inventory"] }
+        },
+        {
+          "id": "visit_trader_hub",
+          "route": "/trader-hub",
+          "title_key": "initiation_step_trader_hub",
+          "hint_key": "initiation_step_trader_hub_hint",
+          "objective_key": "visit_page",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "pages": ["trader_hub"] }
+        },
+        {
+          "id": "visit_auction_house",
+          "route": "/auction-house",
+          "title_key": "initiation_step_auction_house",
+          "hint_key": "initiation_step_auction_house_hint",
+          "objective_key": "visit_page",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "pages": ["auction_house"] }
+        },
+        {
+          "id": "visit_world_boss",
+          "route": "/world-boss",
+          "title_key": "initiation_step_world_boss",
+          "hint_key": "initiation_step_world_boss_hint",
+          "objective_key": "visit_page",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "pages": ["world_boss"] }
+        },
+        {
+          "id": "visit_alliance",
+          "route": "/alliance",
+          "title_key": "initiation_step_alliance",
+          "hint_key": "initiation_step_alliance_hint",
+          "objective_key": "visit_page",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "pages": ["alliance"] }
+        },
+        {
+          "id": "visit_galactic_politics",
+          "route": "/galactic-politics",
+          "title_key": "initiation_step_galactic_politics",
+          "hint_key": "initiation_step_galactic_politics_hint",
+          "objective_key": "visit_page",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "pages": ["galactic_politics"] }
+        },
+        {
+          "id": "visit_vote_center",
+          "route": "/vote-center",
+          "title_key": "initiation_step_vote_center",
+          "hint_key": "initiation_step_vote_center_hint",
+          "objective_key": "visit_page",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "pages": ["vote_center"] }
+        },
+        {
+          "id": "visit_referrals",
+          "route": "/referrals",
+          "title_key": "initiation_step_referrals",
+          "hint_key": "initiation_step_referrals_hint",
+          "objective_key": "visit_page",
+          "objective_kind": "count",
+          "target": 1,
+          "filters": { "pages": ["referrals"] }
+        }
+      ]
+    }
+  ]
+}

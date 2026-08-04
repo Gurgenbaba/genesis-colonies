@@ -1232,6 +1232,20 @@ def _load_page_live_context(
                     conn=conn,
                     finish_source=src,
                 )
+                try:
+                    from game.initiation.progress import maybe_record_page_visit_from_request
+
+                    maybe_record_page_visit_from_request(
+                        user_id,
+                        conn=conn,
+                        finish_source=src,
+                    )
+                except Exception:
+                    logger.exception(
+                        "initiation page visit failed user_id=%s source=%s",
+                        user_id,
+                        src,
+                    )
                 commit(conn)
             from game.live_state import get_request_context_planet
             from game.buildings import get_build_queue_status_for_planet
@@ -1796,8 +1810,21 @@ def empire_view():
         return redirect(url_for("login"))
 
     from game.empire_page import build_empire_context
+    from game.initiation.progress import record_page_visit
 
-    empire = build_empire_context(int(user_id))
+    uid = int(user_id)
+    conn = db()
+    try:
+        try:
+            record_page_visit(uid, "empire", conn=conn)
+            commit(conn)
+        except Exception:
+            rollback(conn)
+            logger.exception("initiation empire visit failed user_id=%s", uid)
+    finally:
+        conn.close()
+
+    empire = build_empire_context(uid)
     return render_template("empire.html", empire=empire)
 
 
