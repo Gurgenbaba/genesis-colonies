@@ -122,9 +122,11 @@ def build_defense_page_context(
     _attach_queue_jobs_to_defense_rows(locked, by_owner)
 
     troops_state = None
+    vault_state = None
     try:
         from .models import get_planet_buildings
         from .troops import build_troops_state, troop_queue_table_ready, troops_schema_ready
+        from .vault_raid import build_vault_panel_state
 
         if troops_schema_ready(conn) and troop_queue_table_ready(conn):
             bld = get_planet_buildings(pid, conn=conn) or {}
@@ -133,8 +135,10 @@ def build_defense_page_context(
                 barracks_level=int(bld.get("barracks") or 0),
                 conn=conn,
             )
+        vault_state = build_vault_panel_state(int(player_id), conn=conn)
     except Exception:
         troops_state = None
+        vault_state = None
 
     return {
         "ready": True,
@@ -143,4 +147,5 @@ def build_defense_page_context(
         "locked_defense": locked,
         "defense_defs": {row["key"]: row for row in defense_defs_for_client()},
         "troops": troops_state,
+        "vault": vault_state,
     }

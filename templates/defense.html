@@ -222,6 +222,7 @@
   </div>
 
   <div class="defense-shell gc-panel" data-defense-tab-panel="troops"{% if defense_tab != 'troops' %} hidden{% endif %}>
+    {% include "partials/secret_vault_panel.html" %}
     {% include "partials/barracks_troops_panel.html" %}
   </div>
 

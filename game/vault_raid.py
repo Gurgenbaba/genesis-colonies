@@ -87,6 +87,47 @@ def vault_snapshot(defender_id: int, *, conn) -> Dict[str, Any]:
     }
 
 
+def build_vault_panel_state(player_id: int, *, conn) -> Dict[str, Any]:
+    """Player-facing Secret Vault exposure (what a successful ground raid can steal)."""
+    from .inventory_catalog import ITEM_CATALOG, item_catalog_entry
+    from .timekeeper import format_balance_label, get_balance
+
+    pid = int(player_id)
+    tk_balance = max(0, int(get_balance(pid, conn=conn) or 0))
+    snap = vault_snapshot(pid, conn=conn)
+    exposed_tk = max(0, int(snap.get("timekeeper_sec") or 0))
+    boxes_out: List[Dict[str, Any]] = []
+    for box in snap.get("boxes") or []:
+        key = str(box.get("item_key") or "")
+        rarity = str(box.get("rarity") or "common")
+        spec = ITEM_CATALOG.get(key) or item_catalog_entry(key) or {}
+        name_key = str(spec.get("name_key") or f"item_{key}")
+        boxes_out.append(
+            {
+                "item_key": key,
+                "rarity": rarity,
+                "name_key": name_key,
+            }
+        )
+    protected_tk = max(0, tk_balance - exposed_tk)
+    return {
+        "ready": True,
+        "tk_cap_sec": int(VAULT_TK_CAP_SEC),
+        "tk_cap_label": format_balance_label(VAULT_TK_CAP_SEC),
+        "box_cap": int(VAULT_BOX_CAP),
+        "tk_balance_sec": tk_balance,
+        "tk_balance_label": format_balance_label(tk_balance),
+        "tk_exposed_sec": exposed_tk,
+        "tk_exposed_label": format_balance_label(exposed_tk),
+        "tk_protected_sec": protected_tk,
+        "tk_protected_label": format_balance_label(protected_tk),
+        "boxes_exposed": boxes_out,
+        "box_count": len(boxes_out),
+        "empty": exposed_tk <= 0 and not boxes_out,
+        "account_scope": True,
+    }
+
+
 def apply_vault_steal(
     *,
     attacker_id: int,

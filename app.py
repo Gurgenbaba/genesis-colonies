@@ -11800,6 +11800,24 @@ def api_combat_simulator_import_spy_report():
         conn.close()
 
 
+@app.route("/api/vault/state", methods=["GET"])
+@require_login_api
+def api_vault_state():
+    """Player Secret Vault exposure (account meta steal caps + current loot)."""
+    from game.fleet_api import fleet_err, fleet_ok
+    from game.vault_raid import build_vault_panel_state
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify(fleet_err("not_logged_in")), 401
+    conn = db()
+    try:
+        payload = build_vault_panel_state(user_id, conn=conn)
+        return jsonify(fleet_ok({"vault": payload}, message_key="secret_vault_state_ok"))
+    finally:
+        conn.close()
+
+
 @app.route("/api/troops/state", methods=["GET"])
 @require_login_api
 def api_troops_state():

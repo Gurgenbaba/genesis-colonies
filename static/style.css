@@ -48984,6 +48984,59 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
   margin-top: 8px;
 }
 
+.secret-vault-panel {
+  margin-bottom: var(--gc-space-3, 12px);
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.secret-vault-caps {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+  margin: 0 0 12px;
+}
+.secret-vault-caps-row {
+  border: 1px solid var(--gc-border, #2a3340);
+  padding: 6px 8px;
+  background: var(--gc-panel-bg, rgba(0, 0, 0, 0.2));
+}
+.secret-vault-caps-row dt {
+  font-size: 0.75rem;
+  opacity: 0.8;
+  margin: 0 0 2px;
+}
+.secret-vault-caps-row dd {
+  margin: 0;
+}
+.secret-vault-subtitle {
+  font-size: 0.9rem;
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+.secret-vault-loot-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+}
+.secret-vault-loot-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--gc-border, #2a3340);
+}
+.secret-vault-rarity {
+  font-size: 0.75rem;
+  opacity: 0.75;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.secret-vault-protected,
+.secret-vault-balance,
+.secret-vault-defense-cta {
+  margin-top: 6px;
+}
+
 .fleet-troop-card-art {
   margin-bottom: 6px;
 }

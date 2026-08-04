@@ -25,6 +25,7 @@ from game.vault_raid import (
     VAULT_BOX_CAP,
     VAULT_TK_CAP_SEC,
     apply_vault_steal,
+    build_vault_panel_state,
     vault_snapshot,
 )
 
@@ -76,6 +77,27 @@ def test_vault_snapshot_caps_with_mocks():
         snap = vault_snapshot(1, conn=object())
     assert snap["timekeeper_sec"] == VAULT_TK_CAP_SEC
     assert snap["box_count"] == VAULT_BOX_CAP
+
+
+def test_build_vault_panel_state_shows_exposure_and_caps():
+    with patch("game.timekeeper.get_balance", return_value=50_000), patch(
+        "game.vault_raid.list_vault_boxes",
+        return_value=[
+            {"item_key": "container_basic", "rarity": "common", "rarity_rank": 1, "row_id": 1},
+            {"item_key": "container_rare", "rarity": "rare", "rarity_rank": 3, "row_id": 2},
+        ],
+    ), patch("game.vault_raid.table_ready_inventory", return_value=True):
+        panel = build_vault_panel_state(42, conn=object())
+    assert panel["ready"] is True
+    assert panel["tk_cap_sec"] == VAULT_TK_CAP_SEC
+    assert panel["box_cap"] == VAULT_BOX_CAP
+    assert panel["tk_exposed_sec"] == VAULT_TK_CAP_SEC
+    assert panel["tk_protected_sec"] == 50_000 - VAULT_TK_CAP_SEC
+    assert panel["box_count"] == 2
+    assert panel["empty"] is False
+    assert panel["account_scope"] is True
+    assert len(panel["boxes_exposed"]) == 2
+    assert "name_key" in panel["boxes_exposed"][0]
 
 
 def test_apply_vault_steal_empty_same_player():

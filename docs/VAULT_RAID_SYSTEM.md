@@ -68,7 +68,17 @@ Progressive delivery mid-order (same batch helpers as defense). No frontend form
 | `POST /api/troops/train` | `{ troop_key, amount }` → `{ ok, state }` |
 | `POST /api/troops/cancel` | Cancel queue head/job |
 | `GET /api/troop-units/<troop_key>` | Technical detail modal (HTML partial) |
+| `GET /api/vault/state` | Own Secret Vault exposure (caps + currently lootable TK/boxes) |
 | Fleet send | optional `troops` map on attack |
+
+## Player Vault UI
+
+Defense → **Bodentruppen** shows `partials/secret_vault_panel.html` (owner: `build_vault_panel_state` in `game/vault_raid.py`):
+
+- Caps: max 6h Timekeeper, max 5 meta containers
+- **Currently lootable** = `vault_snapshot` slice (exposed TK + boxes)
+- Full TK balance + amount protected above the cap
+- Account-wide (not per planet); ground troops on the active planet defend the vault
 
 ## Architecture
 
