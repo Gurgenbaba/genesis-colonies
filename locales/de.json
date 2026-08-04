@@ -3089,7 +3089,7 @@
   "desc_geothermal_nexus": "+3 % Aetherion der Solarkollektoren pro Stufe. +2 Max-Stufe für Minen, Solar, Brennzellenfabrik und Lager je Geothermie-Stufe.",
   "desc_metal_mine": "Ferronit-Förderung skaliert mit Stufe^1,4. Verbrauch: 10×Stufe^1,25 Aetherion — bei Energiemangel läuft die Produktion gedrosselt.",
   "desc_metal_storage": "Erhöht die Lagerkapazität progressiv. Lagertechnik und Terraformer erhöhen die finale Kapazität.",
-  "desc_mining_tech": "Erhöht die Ferronit-Produktion im Imperium um 10 % und die Crytite-Produktion um 4 % pro Stufe. Stapelt mit Drohnenoptimierung.",
+  "desc_mining_tech": "Erhöht die Ferronit-Produktion im Imperium um 3 % pro Stufe. Stapelt mit Drohnenoptimierung.",
   "desc_nanofactory": "Verkürzt Bauzeiten aller Gebäude mit abnehmendem Grenznutzen (nicht linear pro Stufe). Teure Investition — Kosten verdoppeln sich pro Stufe. Stapelt mit Bauoptimierung.",
   "desc_navigation_tech": "Erweitert parallele Flotten und verkürzt Sprünge. Stufe 3/5/8/10 schaltet Slots frei; danach alle 3 Stufen ein weiterer Slot. Benötigt Labor 3 und Drohnen 2.",
   "desc_orbital_shipyard": "Produktionsmotor für Schiffe und Orbital-Abwehr. Schaltet Schiffsbau frei, erhöht die parallele Werftkapazität pro Bauzyklus und verkürzt die Zykluszeit pro Schiff um 2,5 % pro Stufe.",
@@ -8315,5 +8315,9 @@
   "fleet_troops_berths": "Besatzung",
   "fleet_troops_berths_hint": "Mitnahme begrenzt durch Schiffs-Besatzung (crew). Schwere Truppen brauchen mehr Plätze.",
   "fleet_troops_slot_cost": "%(n)s Platz",
-  "story_narrator_provisional": "Ark-Verbindung"
+  "story_narrator_provisional": "Ark-Verbindung",
+  "crystal_tech": "Crytite-Synthese",
+  "desc_crystal_tech": "Erhöht die Crytite-Produktion im Imperium um 3 % pro Stufe.",
+  "techtree_section_troops": "Truppen",
+  "techtree_troops_hint": "Bodentruppen für Vault-Raids — Ausbildung in der Orbital-Kaserne."
 }

@@ -195,3 +195,21 @@ def test_queue_full_short_label_keys_exist():
     en = json.loads((ROOT / "locales" / "en.json").read_text(encoding="utf-8"))
     assert "research_status_queue_full_short" in de
     assert "research_status_queue_full_short" in en
+
+
+def test_crystal_tech_and_techtree_troops_locale_keys():
+    """Raw-key regressions: crystal_tech queue/modal + Techtree Troops section."""
+    required = (
+        "crystal_tech",
+        "desc_crystal_tech",
+        "techtree_section_troops",
+        "techtree_troops_hint",
+    )
+    for loc in ("de", "en", "es", "fr", "pl", "pt", "ru", "tr"):
+        data = json.loads((ROOT / "locales" / f"{loc}.json").read_text(encoding="utf-8"))
+        for key in required:
+            assert key in data, f"missing {loc} {key}"
+            assert str(data[key]).strip() and str(data[key]) != key
+    de = json.loads((ROOT / "locales" / "de.json").read_text(encoding="utf-8"))
+    assert de["crystal_tech"] == "Crytite-Synthese"
+    assert "3 %" in de["desc_crystal_tech"]

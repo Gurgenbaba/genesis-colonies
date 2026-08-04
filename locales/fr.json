@@ -3089,7 +3089,7 @@
   "desc_geothermal_nexus": "+3% de production solaire par niveau. +2 niveau maximum pour les mines, l'énergie solaire, les usines de piles à combustible et le stockage par niveau géothermique.",
   "desc_metal_mine": "Extrait Ferronite de la croûte de votre planète. Des niveaux plus élevés augmentent considérablement la production.",
   "desc_metal_storage": "Augmente progressivement la capacité de stockage. La tech stockage et le terraformeur élèvent la capacité finale.",
-  "desc_mining_tech": "Augmente la production Ferronite à l'échelle de l'empire de 10 % et la production Crytite de 4 % par niveau. Se cumule avec l'optimisation des drones.",
+  "desc_mining_tech": "Augmente la production de Ferronite de l'empire de 3 % par niveau. Se cumule avec l'optimisation des drones.",
   "desc_nanofactory": "Réduit les temps de construction avec rendements décroissants (non linéaire par niveau). Investissement coûteux — les coûts doublent par niveau. Cumule avec Optimisation de construction.",
   "desc_navigation_tech": "Élargit les flottes parallèles et raccourcit les sauts. Les niveaux 3/5/8/10 débloquent des emplacements ; tous les 3 niveaux après 10 ajoute un autre emplacement. Nécessite Research Lab 3 et Drone Optimization 2.",
   "desc_orbital_shipyard": "Moteur de production pour navires et défense orbitale. Débloque la construction de navires, augmente la capacité globale du chantier (3^niveaux par cycle), réduit les temps de cycle de 10 % par niveau et adapte la production parallèle efficace par unité : les coques rapides utilisent plus de capacité que les transporteurs lourds.",
@@ -8315,5 +8315,9 @@
   "fleet_troops_slot_cost": "%(n)s berth",
   "records_group_troops": "Records de troupes",
   "records_tab_troops": "Troupes",
-  "story_narrator_provisional": "Lien de l'Arche"
+  "story_narrator_provisional": "Lien de l'Arche",
+  "crystal_tech": "Synthèse de Crytite",
+  "desc_crystal_tech": "Augmente la production de Crytite de l'empire de 3 % par niveau.",
+  "techtree_section_troops": "Troupes",
+  "techtree_troops_hint": "Troupes au sol pour les raids de vault — entraînées dans la Caserne orbitale."
 }

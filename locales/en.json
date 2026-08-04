@@ -3089,7 +3089,7 @@
   "desc_geothermal_nexus": "+3% solar output per level. +2 max level for mines, solar, fuel cell plant and storage per geothermal level.",
   "desc_metal_mine": "Extracts Ferronite from your planet’s crust. Higher levels significantly increase production output.",
   "desc_metal_storage": "Increases storage capacity progressively. Storage tech and terraformer raise the final capacity.",
-  "desc_mining_tech": "Increases empire-wide Ferronite production by 10% and Crytite production by 4% per level. Stacks with Drone Optimization.",
+  "desc_mining_tech": "Increases empire-wide Ferronite production by 3% per level. Stacks with Drone Optimization.",
   "desc_nanofactory": "Reduces all building build times with diminishing returns (not linear per level). Expensive investment — costs double each level. Stacks with Construction Optimization.",
   "desc_navigation_tech": "Expands parallel fleets and shortens jumps. Levels 3/5/8/10 unlock slots; every 3 levels after 10 adds another slot. Requires Research Lab 3 and Drone Optimization 2.",
   "desc_orbital_shipyard": "Production engine for ships and orbital defense. Unlocks ship construction, raises parallel yard capacity per build cycle, and reduces per-ship cycle time by 2.5% per level.",
@@ -8315,5 +8315,9 @@
   "fleet_troops_berths": "Crew berths",
   "fleet_troops_berths_hint": "Embarkation is limited by ship crew. Heavier troops take more berths.",
   "fleet_troops_slot_cost": "%(n)s berth",
-  "story_narrator_provisional": "Ark link"
+  "story_narrator_provisional": "Ark link",
+  "crystal_tech": "Crytite Synthesis",
+  "desc_crystal_tech": "Increases empire-wide Crytite production by 3% per level.",
+  "techtree_section_troops": "Troops",
+  "techtree_troops_hint": "Ground troops for vault raids — trained in the Orbital Barracks."
 }

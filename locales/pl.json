@@ -3089,7 +3089,7 @@
   "desc_geothermal_nexus": "+3% mocy słonecznej na poziom. +2 maksymalny poziom dla kopalń, elektrowni słonecznych, ogniw paliwowych i magazynów na każdy poziom geotermalny.",
   "desc_metal_mine": "Wydobywa Ferronite ze skorupy twojej planety. Wyższe poziomy znacznie zwiększają wydajność produkcji.",
   "desc_metal_storage": "Zwiększa pojemność magazynu progresywnie. Tech magazynowania i terraformer podnoszą końcową pojemność.",
-  "desc_mining_tech": "Zwiększa produkcję Ferronite w całym imperium o 10% i produkcję Crytite o 4% na poziom. Stosy z optymalizacją dronów.",
+  "desc_mining_tech": "Zwiększa produkcję Ferronitu w imperium o 3% na poziom. Kumuluje się z Optymalizacją dronów.",
   "desc_nanofactory": "Skraca czasy budowy z malejącymi zyskami (nie liniowo na poziom). Droga inwestycja — koszty podwajają się co poziom. Łączy się z Optymalizacją budowy.",
   "desc_navigation_tech": "Rozbudowuje równoległe floty i skraca skoki. Poziomy 3/5/8/10 odblokowują miejsca; co 3 poziomy po 10 dodaje kolejne miejsce. Wymaga Research Lab 3 i Optymalizacji dronów 2.",
   "desc_orbital_shipyard": "Silnik produkcyjny dla statków i obrony orbitalnej. Odblokowuje budowę statków, zwiększa globalną pojemność stoczni (3^poziom na cykl), skraca czas cykli o 10% na poziom i skaluje efektywną produkcję równoległą na jednostkę — szybkie kadłuby zużywają więcej pojemności niż ciężkie transportery.",
@@ -8315,5 +8315,9 @@
   "fleet_troops_slot_cost": "%(n)s berth",
   "records_group_troops": "Rekordy wojsk",
   "records_tab_troops": "Wojska",
-  "story_narrator_provisional": "Łącze Arki"
+  "story_narrator_provisional": "Łącze Arki",
+  "crystal_tech": "Synteza Crytite",
+  "desc_crystal_tech": "Zwiększa produkcję Crytite w imperium o 3% na poziom.",
+  "techtree_section_troops": "Wojska",
+  "techtree_troops_hint": "Wojska lądowe do rajdów na skarbiec — szkolenie w Koszarach orbitalnych."
 }

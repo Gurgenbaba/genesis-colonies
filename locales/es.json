@@ -3089,7 +3089,7 @@
   "desc_geothermal_nexus": "+3% de producción solar por nivel. +2 nivel máximo para minas, energía solar, plantas de celdas de combustible y almacenamiento por nivel geotérmico.",
   "desc_metal_mine": "Extrae Ferronite de la corteza de tu planeta. Los niveles más altos aumentan significativamente la producción.",
   "desc_metal_storage": "Aumenta la capacidad de almacenamiento de forma progresiva. La tecnología de almacenamiento y el terraformador elevan la capacidad final.",
-  "desc_mining_tech": "Aumenta la producción de Ferronite en todo el imperio en un 10% y la producción de Crytite en un 4% por nivel. Se acumula con optimización de drones.",
+  "desc_mining_tech": "Aumenta la producción de Ferronite del imperio un 3% por nivel. Se acumula con Optimización de Drones.",
   "desc_nanofactory": "Reduce los tiempos de construcción con rendimientos decrecientes (no lineal por nivel). Inversión costosa — los costes se duplican por nivel. Se acumula con Optimización de construcción.",
   "desc_navigation_tech": "Amplía flotas paralelas y acorta los saltos. Los niveles 3/5/8/10 desbloquean espacios; cada 3 niveles después del 10 se agrega otro espacio. Requiere Research Lab 3 y Optimización de drones 2.",
   "desc_orbital_shipyard": "Motor de producción para barcos y defensa orbital. Libera la construcción de barcos, aumenta la capacidad global del astillero (3^niveles por ciclo), reduce los tiempos de ciclo en un 10% por nivel y escala la producción paralela efectiva por unidad: los cascos rápidos utilizan más capacidad que los transportes pesados.",
@@ -8315,5 +8315,9 @@
   "fleet_troops_slot_cost": "%(n)s berth",
   "records_group_troops": "Récords de tropas",
   "records_tab_troops": "Tropas",
-  "story_narrator_provisional": "Enlace del Arca"
+  "story_narrator_provisional": "Enlace del Arca",
+  "crystal_tech": "Síntesis de Crytite",
+  "desc_crystal_tech": "Aumenta la producción de Crytite del imperio un 3% por nivel.",
+  "techtree_section_troops": "Tropas",
+  "techtree_troops_hint": "Tropas terrestres para asaltos al vault — entrenamiento en el Cuartel Orbital."
 }

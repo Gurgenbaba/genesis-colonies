@@ -3089,7 +3089,7 @@
   "desc_geothermal_nexus": "+3% de produção solar por nível. +2 nível máximo para minas, energia solar, usina de células de combustível e armazenamento por nível geotérmico.",
   "desc_metal_mine": "Extrai Ferronite da crosta do seu planeta. Níveis mais altos aumentam significativamente a produção.",
   "desc_metal_storage": "Aumenta a capacidade de armazenamento de forma progressiva. Tech de armazenamento e terraformador elevam a capacidade final.",
-  "desc_mining_tech": "Aumenta a produção de Ferronite em todo o império em 10% e a produção de Crytite em 4% por nível. Pilhas com otimização de drones.",
+  "desc_mining_tech": "Aumenta a produção de Ferronite do império em 3% por nível. Empilha com Otimização de Drones.",
   "desc_nanofactory": "Reduz tempos de construção com retornos decrescentes (não linear por nível). Investimento caro — custos dobram por nível. Acumula com Otimização de construção.",
   "desc_navigation_tech": "Expande frotas paralelas e encurta saltos. Os níveis 3/5/8/10 desbloqueiam slots; a cada 3 níveis após 10 adiciona outro slot. Requer Research Lab 3 e Otimização de Drone 2.",
   "desc_orbital_shipyard": "Motor de produção para navios e defesa orbital. Desbloqueia a construção de navios, aumenta a capacidade global do pátio (3^nível por ciclo), reduz os tempos de ciclo em 10% por nível e dimensiona a produção paralela efetiva por unidade — cascos rápidos usam mais capacidade do que caminhões pesados.",
@@ -8315,5 +8315,9 @@
   "fleet_troops_slot_cost": "%(n)s berth",
   "records_group_troops": "Recordes de tropas",
   "records_tab_troops": "Tropas",
-  "story_narrator_provisional": "Ligação da Arca"
+  "story_narrator_provisional": "Ligação da Arca",
+  "crystal_tech": "Síntese de Crytite",
+  "desc_crystal_tech": "Aumenta a produção de Crytite do império em 3% por nível.",
+  "techtree_section_troops": "Tropas",
+  "techtree_troops_hint": "Tropas terrestres para raids ao vault — treinadas no Quartel Orbital."
 }

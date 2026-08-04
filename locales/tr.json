@@ -3089,7 +3089,7 @@
   "desc_geothermal_nexus": "Seviye başına +%3 güneş enerjisi çıkışı. Jeotermal seviye başına madenler, güneş enerjisi, yakıt hücresi tesisi ve depolama için +2 maksimum seviye.",
   "desc_metal_mine": "Gezegeninizin kabuğundan Ferronite'yi çıkarır. Daha yüksek seviyeler üretim çıktısını önemli ölçüde artırır.",
   "desc_metal_storage": "Depo kapasitesini kademeli olarak artırır. Depolama tech ve terraform son kapasiteyi yükseltir.",
-  "desc_mining_tech": "İmparatorluk çapında Ferronite üretimini %10 ve Crytite üretimini seviye başına %4 artırır. Drone Optimizasyonu ile Yığınlar.",
+  "desc_mining_tech": "İmparatorluk genelinde Ferronite üretimini seviye başına %3 artırır. Drone Optimizasyonu ile birikir.",
   "desc_nanofactory": "Azalan getiriyle inşa sürelerini kısaltır (seviye başına doğrusal değil). Pahalı yatırım — maliyetler her seviyede ikiye katlanır. İnşaat Optimizasyonu ile birleşir.",
   "desc_navigation_tech": "Paralel filoları genişletir ve sıçramaları kısaltır. 3/5/8/10. Seviyeler yuvaların kilidini açar; 10'dan sonraki her 3 seviyede bir başka yuva eklenir. Research Lab 3 ve Drone Optimizasyonu 2 gerektirir.",
   "desc_orbital_shipyard": "Gemiler ve yörünge savunması için üretim motoru. Gemi inşasının kilidini açar, küresel tersane kapasitesini artırır (döngü başına 3^seviye), döngü sürelerini seviye başına %10 azaltır ve birim başına etkili paralel çıktıyı ölçeklendirir; hızlı tekneler, ağır nakliyecilerden daha fazla kapasite kullanır.",
@@ -8315,5 +8315,9 @@
   "fleet_troops_slot_cost": "%(n)s berth",
   "records_group_troops": "Birlik rekorları",
   "records_tab_troops": "Birlikler",
-  "story_narrator_provisional": "Ark bağlantısı"
+  "story_narrator_provisional": "Ark bağlantısı",
+  "crystal_tech": "Crytite Sentezi",
+  "desc_crystal_tech": "İmparatorluk genelinde Crytite üretimini seviye başına %3 artırır.",
+  "techtree_section_troops": "Birlikler",
+  "techtree_troops_hint": "Vault baskınları için yer birlikleri — Yörünge Kışlasında eğitilir."
 }
