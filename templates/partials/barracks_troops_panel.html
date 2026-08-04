@@ -1,6 +1,14 @@
 {# Bodentruppen — Defense page tab (Secret Vault Raid). #}
+{% from "partials/progression_cards.html" import render_card_costs_block, render_unit_build_time_footer with context %}
+{% from "partials/info_popover.html" import render_info_popover_trigger with context %}
+{% from "partials/page_mini_queue_strip.html" import render_page_mini_queue_strip with context %}
+{% from "partials/card_hero_img_macros.html" import render_hero_img_stack with context %}
+
 {% set ts = (df.troops if df is defined and df.troops is defined else (troops_state if troops_state is defined else none)) %}
 {% set barracks_lvl = (ts.barracks_level if ts else 0)|int %}
+{% set ts_mini = (ts.mini_queue_jobs if ts and ts.mini_queue_jobs is defined else []) %}
+{% set ts_q_limit = (ts.queue_limit if ts and ts.queue_limit is defined else 3)|int %}
+{% set ts_q_count = (ts.queue_count if ts and ts.queue_count is defined else (ts_mini|length))|int %}
 
 <section class="defense-troops-panel" data-barracks-troops-panel
          data-planet-id="{{ df.planet_id if df is defined else (active_planet_id|default(0)) }}"
@@ -21,28 +29,25 @@
   <p class="hint">{{ T("barracks_troops_need_barracks", "Errichte eine Orbital-Kaserne, um Bodentruppen auszubilden.") }}</p>
   {% else %}
 
-  <div class="barracks-troops-queue" data-barracks-troops-queue aria-live="polite">
-    {% set qrows = ts.queue if ts and ts.queue is defined else [] %}
-    {% if qrows %}
-      <ul class="barracks-troops-queue-list">
-        {% for job in qrows %}
-        <li class="barracks-troops-queue-item" data-troop-job-id="{{ job.id }}">
-          <span>{{ T('troop_' ~ job.troop_key, job.troop_key) }} ×{{ job.amount|fmt_int }}</span>
-          <button type="button" class="gc-btn gc-btn-sm gc-btn-ghost" data-troop-cancel="{{ job.id }}">{{ T("action_cancel", "Abbrechen") }}</button>
-        </li>
-        {% endfor %}
-      </ul>
-    {% else %}
-      <p class="hint" data-barracks-troops-queue-empty>{{ T("barracks_troops_queue_idle", "Keine Ausbildung aktiv") }}</p>
-    {% endif %}
-  </div>
+  {{ render_page_mini_queue_strip(
+    'troops-mini-queue',
+    'troops',
+    ts_mini,
+    T('barracks_troops_queue_idle', 'Keine Ausbildung aktiv'),
+    ts_q_count,
+    ts_q_limit,
+    'data-troop-cancel'
+  ) }}
 
   <div class="gc-building-grid shipyard-ship-grid barracks-troops-grid" data-barracks-troops-grid role="list">
     {% for unit in (ts.units if ts and ts.units is defined else []) %}
     {% set _troop_png = url_for('static', filename='img/troops/' ~ unit.key ~ '.png') %}
     {% set _troop_webp = _troop_png|webp_static %}
-    <article class="gc-ship-card gc-prog-card{% if not unit.unlocked %} gc-prog-locked is-locked{% else %} gc-prog-affordable{% endif %}"
+    {% set unit_desc = T(unit.description_key, "") if unit.description_key else "" %}
+    {% set row_class = 'gc-prog-locked is-locked' if not unit.unlocked else ('gc-prog-unaffordable' if not unit.can_train and unit.block_reason != 'queue_full' else ('shipyard-ship-card--blocked' if not unit.can_train else 'gc-prog-affordable')) %}
+    <article class="gc-ship-card gc-prog-card {{ row_class }}"
              data-troop-key="{{ unit.key }}"
+             data-troop-card="{{ unit.key }}"
              data-troop-unlocked="{{ 1 if unit.unlocked else 0 }}"
              role="listitem">
       <div class="gc-bld-card-hero">
@@ -57,21 +62,37 @@
                       data-troop-detail="{{ unit.key }}"
                       aria-label="{{ T('troop_detail_open', 'Eigenschaften anzeigen') }}">{{ T(unit.name_key, unit.key) }}</button>
             </h3>
+            {% if unit_desc %}{{ render_info_popover_trigger(unit_desc) }}{% endif %}
           </div>
         </div>
       </div>
-      <p class="hint barracks-troop-card-desc">{{ T(unit.description_key, "") }}</p>
       {% if unit.unlocked %}
-      <div class="gc-bld-card-meta gc-bld-card-meta--costs-only">
-        {{ render_card_costs_block(unit.train_cost.metal|default(0), unit.train_cost.crystal|default(0), none) }}
+      <div class="gc-bld-card-meta gc-bld-card-meta--costs-only" data-troop-cost
+           data-unit-cost-metal="{{ unit.cost_metal|default(unit.train_cost.metal|default(0)) }}"
+           data-unit-cost-crystal="{{ unit.cost_crystal|default(unit.train_cost.crystal|default(0)) }}">
+        {{ render_card_costs_block(unit.cost_metal|default(unit.train_cost.metal|default(0)), unit.cost_crystal|default(unit.train_cost.crystal|default(0)), none) }}
       </div>
       {{ render_unit_build_time_footer(unit.train_seconds) }}
       <footer class="gc-ship-card-action shipyard-ship-actions barracks-troop-card-actions">
         <input type="text" inputmode="numeric" value="1" maxlength="20"
                class="gc-input shipyard-qty-input gc-num-input" data-troop-amount="{{ unit.key }}"
+               {% if unit.max_train %}data-input-max="{{ unit.max_train }}"{% endif %}
                aria-label="{{ T('barracks_troops_amount', 'Anzahl') }}">
-        <button type="button" class="gc-btn gc-btn-primary gc-btn-xs" data-troop-train="{{ unit.key }}">
-          {{ T("barracks_troops_train", "Ausbilden") }}
+        <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs"
+                data-troop-max="{{ unit.key }}"
+                data-max-qty="{{ unit.max_train|default(0) }}">
+          {{ T("shipyard_btn_max") }}
+        </button>
+        <button type="button" class="gc-btn gc-btn-primary gc-btn-xs"
+                data-troop-train="{{ unit.key }}"
+                data-can-train="{{ '1' if unit.can_train else '0' }}"
+                {% if not unit.can_train %}disabled aria-disabled="true"{% endif %}
+                {% if unit.block_reason == 'queue_full' %}title="{{ T('barracks_troops_queue_full', 'Warteschlange voll') }}"{% endif %}>
+          {% if unit.block_reason == 'queue_full' %}
+            {{ T("barracks_troops_queue_full", "Warteschlange voll") }}
+          {% else %}
+            {{ T("barracks_troops_train", "Ausbilden") }}
+          {% endif %}
         </button>
       </footer>
       {% else %}

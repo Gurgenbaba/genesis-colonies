@@ -84,7 +84,9 @@ def test_build_vault_panel_state_shows_exposure_and_caps():
         "game.vault_raid.list_vault_boxes",
         return_value=[
             {"item_key": "container_basic", "rarity": "common", "rarity_rank": 1, "row_id": 1},
-            {"item_key": "container_rare", "rarity": "rare", "rarity_rank": 3, "row_id": 2},
+            {"item_key": "container_epic", "rarity": "epic", "rarity_rank": 4, "row_id": 2},
+            {"item_key": "container_epic", "rarity": "epic", "rarity_rank": 4, "row_id": 3},
+            {"item_key": "container_rare", "rarity": "rare", "rarity_rank": 3, "row_id": 4},
         ],
     ), patch("game.vault_raid.table_ready_inventory", return_value=True):
         panel = build_vault_panel_state(42, conn=object())
@@ -93,11 +95,18 @@ def test_build_vault_panel_state_shows_exposure_and_caps():
     assert panel["box_cap"] == VAULT_BOX_CAP
     assert panel["tk_exposed_sec"] == VAULT_TK_CAP_SEC
     assert panel["tk_protected_sec"] == 50_000 - VAULT_TK_CAP_SEC
-    assert panel["box_count"] == 2
+    assert panel["tk_fill_pct"] == 100
+    assert panel["box_count"] == 4
+    assert panel["box_fill_pct"] == 80
     assert panel["empty"] is False
     assert panel["account_scope"] is True
-    assert len(panel["boxes_exposed"]) == 2
+    # Grouped by item_key (3 unique), sorted rarity-desc
+    assert len(panel["boxes_exposed"]) == 3
+    by_key = {b["item_key"]: b for b in panel["boxes_exposed"]}
+    assert by_key["container_epic"]["amount"] == 2
+    assert by_key["container_epic"]["image"]
     assert "name_key" in panel["boxes_exposed"][0]
+    assert panel["boxes_exposed"][0]["item_key"] == "container_epic"
 
 
 def test_apply_vault_steal_empty_same_player():

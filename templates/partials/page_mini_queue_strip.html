@@ -6,6 +6,8 @@
     {{ T(job.label, T('fleet_ship_' ~ job.owner_key, job.owner_key)) }}
   {% elif domain == 'defense' %}
     {{ T(job.label, T('defense_' ~ job.owner_key, job.owner_key)) }}
+  {% elif domain == 'troops' %}
+    {{ T(job.label, T('troop_' ~ job.owner_key, job.owner_key)) }}
   {% elif domain in ('building', 'build') %}
     {{ T(job.label, T('building_' ~ job.owner_key, job.owner_key)) }}
   {% elif domain == 'research' %}

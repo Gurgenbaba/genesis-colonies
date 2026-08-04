@@ -1368,6 +1368,16 @@ def test_main_js_gc802_fleet_timer_and_url_prefill():
     galaxy_tpl = _read("templates/partials/galaxy_fleet_actions.html")
     assert "slot.coordinates.galaxy" in galaxy_tpl
     assert "target_position=" in galaxy_tpl
+    # Deep-links must be PJAX-eligible (no full reload).
+    assert 'class="gc-nav-link galaxy-fleet-action galaxy-fleet-action--transport"' in galaxy_tpl
+    assert 'class="gc-nav-link galaxy-fleet-action galaxy-fleet-action--deploy"' in galaxy_tpl
+    assert "gc-nav-link galaxy-fleet-action galaxy-fleet-action--attack" in galaxy_tpl
+    css = _read("static/style.css")
+    card_actions = css.split(".galaxy-ring-inspector--card .galaxy-fleet-action-label")[1].split(
+        ".galaxy-ring-inspector-head"
+    )[0]
+    assert "display: none" not in card_actions
+    assert "position: static" in card_actions
 
 
 def test_main_js_gc801_action_state_and_stale_poll_guards():
@@ -2149,7 +2159,7 @@ def test_main_js_gc546d_production_completion_poll_storm_guards():
     assert "requestQueueTimerZeroRefresh" in finish
     assert 'type === "research" || type === "planet_evolution"' not in finish
 
-    defense_timers = src.split("function startDefenseTimers()")[1].split("function bindDefenseOnce")[0]
+    defense_timers = src.split("function startDefenseTimers()")[1].split("function initDefense()")[0]
     assert "setInterval" not in defense_timers
     assert "GC.startProgressTicker()" in defense_timers
 
@@ -3392,7 +3402,10 @@ def test_gc_perf_js_002_page_scoped_binders():
     assert "GC.ensureGalaxyQuickAction = function ensureGalaxyQuickAction" in main
     galaxy_init = main.split("function initGalaxy()")[1].split("GC.modules.galaxy")[0]
     assert "ensureGalaxyQuickAction" in galaxy_init
-    assert "bootGalaxyRingAfterQuickAction" in galaxy_init
+    assert "bootGalaxyRingView" in galaxy_init
+    assert "bindGalaxyRingQuickActionsWhenReady" in galaxy_init
+    # Slot inspector must not wait on ensure().then before booting.
+    assert "bootGalaxyRingView()" in galaxy_init.split("GC.ensureGalaxyQuickAction()")[0]
 
 
 def test_gc_perf_overview_ttfb_shell_stash_contract():

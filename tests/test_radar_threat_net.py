@@ -134,6 +134,125 @@ def test_radar_detects_attack_in_bubble():
     payload = build_radar_contacts(def_id, conn=conn, now=now)
     conn.close()
     assert payload["radar_contact_count"] >= 1
+    assert payload["has_radar_sensor"] is True
+    assert len(payload["radar_sensors"]) >= 1
+    assert int(payload["radar_sensors"][0]["scan_range"]) == 10  # 2 * L5
     contact = payload["radar_contacts"][0]
     assert contact["threat_class"] == "hostile"
     assert contact["tier"] >= 1
+    # Sensorphalanx: mission + ETA + coords from tier 1
+    assert contact["mission_type"] == "attack"
+    assert int(contact["arrival_at"] or 0) > int(now)
+    assert contact["origin"] == {"galaxy": 1, "system": 12}
+    assert contact["target"] == {"galaxy": 1, "system": 10, "position": 8}
+    assert contact.get("eta_band") is None
+    # Owner / ships still tier-gated (radar L5 → scan 10, dist 2 → eff 8 → tier 4)
+    if int(contact["tier"]) >= 3:
+        assert contact.get("owner_name")
+    if int(contact["tier"]) < 4:
+        assert contact.get("ships_by_role") is None
+        assert contact.get("ships") is None
+
+
+def test_radar_tier1_exposes_mission_eta_coords_not_owner():
+    """Minimal effective range (tier 1) still shows phalanx-style basics."""
+    ok, _, defender = create_user("def_radar_t1", "pw")
+    assert ok
+    ok, _, attacker = create_user("atk_radar_t1", "pw")
+    assert ok
+    def_id = int(defender["id"])
+    atk_id = int(attacker["id"])
+
+    hw = get_homeworld(player_id=def_id)
+    # scan_range = 2*1 = 2; place fleet at dist 1 → effective 1 → tier 1
+    save_planet_buildings(int(hw["id"]), {"radar_array": 1, "command_center": 1})
+
+    conn = db()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE planets SET galaxy = 1, system = 20, position = 5 WHERE player_id = ?;",
+        (def_id,),
+    )
+    cur.execute(
+        "UPDATE planets SET galaxy = 1, system = 21, position = 3 WHERE player_id = ?;",
+        (atk_id,),
+    )
+    atk_hw = get_homeworld(player_id=atk_id)
+    now = time.time()
+    cur.execute(
+        """
+        INSERT INTO fleet_movements (
+            player_id, origin_planet_id, target_planet_id,
+            target_galaxy, target_system, target_position,
+            mission_type, status, ships_json, resources_json,
+            departure_at, arrival_at, return_at, holding_until,
+            distance, flight_seconds, speed_percent, fuel_cost,
+            created_at, updated_at
+        ) VALUES (?, ?, ?, 1, 20, 5, 'spy', 'outbound', ?, '{}',
+                  ?, ?, NULL, NULL, 50, 30, 100, 5, ?, ?);
+        """,
+        (
+            atk_id,
+            int(atk_hw["id"]),
+            int(hw["id"]),
+            json.dumps({"probe": 1}),
+            now - 5,
+            now + 90,
+            now,
+            now,
+        ),
+    )
+    conn.commit()
+
+    payload = build_radar_contacts(def_id, conn=conn, now=now)
+    conn.close()
+    assert payload["radar_contact_count"] == 1
+    contact = payload["radar_contacts"][0]
+    assert contact["tier"] == 1
+    assert contact["mission_type"] == "spy"
+    assert contact["threat_class"] == "intel"
+    assert int(contact["arrival_at"]) == int(now + 90)
+    assert contact["origin"]["system"] == 21
+    assert contact["target"]["system"] == 20
+    assert contact["owner_id"] is None
+    assert contact["owner_name"] is None
+    assert contact["ships"] is None
+    assert contact["ships_by_role"] is None
+    assert contact["eta_band"] is None
+
+
+def test_radar_sensors_without_contacts():
+    ok, _, defender = create_user("def_radar_sensors", "pw")
+    assert ok
+    def_id = int(defender["id"])
+    hw = get_homeworld(player_id=def_id)
+    save_planet_buildings(int(hw["id"]), {"radar_array": 3, "command_center": 1})
+    conn = db()
+    payload = build_radar_contacts(def_id, conn=conn, now=time.time())
+    conn.close()
+    assert payload["has_radar_sensor"] is True
+    assert payload["radar_contact_count"] == 0
+    assert payload["radar_contacts"] == []
+    assert len(payload["radar_sensors"]) == 1
+    sensor = payload["radar_sensors"][0]
+    assert int(sensor["planet_id"]) == int(hw["id"])
+    assert int(sensor["scan_range"]) == 6
+    assert "galaxy" in sensor and "system" in sensor
+
+
+def test_galaxy_radar_panel_client_row_nav_contract():
+    """Radar rows navigate via data-galaxy-radar-nav (no second poller / no scan API)."""
+    main = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+    css = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+    assert "function _radarContactNavPoint(contact)" in main
+    assert "function _navigateRadarHref(href)" in main
+    assert "data-galaxy-radar-nav=" in main
+    assert "onRadarNavClick" in main
+    assert "GC.navigateTo" in main.split("function _navigateRadarHref")[1].split("function _radarCoordLinkHtml")[0]
+    assert "/api/radar" not in main.split("function syncGalaxyRadarPanel")[1].split("GC.syncGalaxyRadarPanel")[0]
+    assert ".galaxy-radar-sensor-item.is-interactive" in css
+    assert ".galaxy-radar-contact-item.is-interactive" in css
+    for loc in ("de", "en", "es", "fr", "pl", "pt", "ru", "tr"):
+        data = (ROOT / "locales" / f"{loc}.json").read_text(encoding="utf-8")
+        assert "galaxy_radar_nav_sensor" in data
+        assert "galaxy_radar_nav_contact" in data

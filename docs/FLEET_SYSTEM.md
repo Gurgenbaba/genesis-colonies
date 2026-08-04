@@ -21,7 +21,7 @@ Kanonische Module: `game/fleet.py`, `game/fleet_calc.py`, `game/fleet_defs.py`, 
 
 **Missions:** `transport`, `collect`, `deploy`, `spy`, `attack`, `hold`, `expedition`, `colonize`, `recycle`
 
-**Incoming HUD vs Threat Net:** `build_fleet_incoming_attack_alerts` lists every foreign outbound aimed at owned planets (`attack`/`spy`/`deploy`/`transport`) in `fleet_alerts` — always. `build_radar_contacts` adds bubble early-warning for `attack`/`spy`/`deploy` inside radar range. Details: [VAULT_RAID_SYSTEM.md](VAULT_RAID_SYSTEM.md).
+**Incoming HUD vs Threat Net:** `build_fleet_incoming_attack_alerts` lists every foreign outbound aimed at owned planets (`attack`/`spy`/`deploy`/`transport`) in `fleet_alerts` — always. `build_radar_contacts` adds bubble early-warning for `attack`/`spy`/`deploy` inside radar range as **individual Fleet-HUD contact rows** (mission/route/ETA from tier 1). Details: [VAULT_RAID_SYSTEM.md](VAULT_RAID_SYSTEM.md).
 
 Gate: `fleet_schema_ready()` — Features degradieren gracefully ohne Migration.
 

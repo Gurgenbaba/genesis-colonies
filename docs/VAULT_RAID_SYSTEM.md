@@ -18,7 +18,7 @@ Whitelist: catalog `item_type=container` keys in `CONTAINER_KEYS` except event e
 | Layer | Owner | What the player sees |
 |-------|--------|----------------------|
 | **Incoming HUD** | `build_fleet_incoming_attack_alerts` | Every foreign `outbound` with target = owned planet: `attack`, `spy`, `deploy`, `transport` — always, no radar required |
-| **Threat Net** | `build_radar_contacts` | Foreign `attack`/`spy`/`deploy` inside a radar bubble (early warning + intel tier) |
+| **Threat Net** | `build_radar_contacts` | Foreign `attack`/`spy`/`deploy` inside a radar bubble — Fleet-HUD rows + **Galaxy → Radar tab** list (mission, route, ETA from tier 1; owner/ships at higher tiers) |
 
 Spy aimed at your world is therefore visible in the Incoming HUD even without a Radar Array.
 
@@ -34,6 +34,25 @@ Approximate breakpoints: L1 ≈ 236 · L10 ≈ 162k · L25 ≈ 6.3M · L50 ≈ 1
 
 Ground combat power and vault steal caps are independent of this curve.
 
+## Training costs (locked Phase 1)
+
+| Troop | Metal | Crystal | Base train time |
+|-------|-------|---------|-----------------|
+| Militia | 5 000 | 2 000 | 180 s |
+| Breach-Team | 18 000 | 12 000 | 420 s |
+| Vault-Wache | 35 000 | 28 000 | 720 s |
+
+## Fleet embarkation (crew berths)
+
+Owner: `fleet_troop_berth_capacity` / `troop_cargo_slots` in `game/troop_defs.py`.
+
+```text
+berths = Σ ship.crew × ship_count
+need   = Σ troop.cargo_slots × troop_count
+need ≤ berths   (enforced on attack send)
+```
+
+Militia = 1 slot · Breach/Vault Guard = 2 slots. Ships without crew (e.g. spy probes) carry no troops.
 ## Training cycles (Werft/Defense pattern)
 
 Owner: `game/troops.py` — reuses `orbital_production_batch_capacity` + `production_job_duration_seconds` from `game/shipyard.py`.
@@ -75,8 +94,8 @@ Progressive delivery mid-order (same batch helpers as defense). No frontend form
 
 Defense → **Bodentruppen** shows `partials/secret_vault_panel.html` (owner: `build_vault_panel_state` in `game/vault_raid.py`):
 
-- Caps: max 6h Timekeeper, max 5 meta containers
-- **Currently lootable** = `vault_snapshot` slice (exposed TK + boxes)
+- Cap meters: max 6h Timekeeper, max 5 meta containers (fill bars)
+- **Currently lootable** = grouped loot cards (TK + box stacks with catalog images / rarity borders)
 - Full TK balance + amount protected above the cap
 - Account-wide (not per planet); ground troops on the active planet defend the vault
 

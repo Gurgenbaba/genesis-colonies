@@ -109,9 +109,17 @@ def test_main_js_wires_galaxy_quick_action():
     assert "GC.prefetchGalaxyQuickActionScript" in main_js
     assert "GC.ensureGalaxyQuickAction()" in main_js
     assert "/static/js/galaxy-quick-action.js" in main_js
+    assert "bootGalaxyRingView" in main_js
     assert "bootGalaxyRingAfterQuickAction" in main_js
+    assert "bindGalaxyRingQuickActionsWhenReady" in main_js
     assert "onQuickSpyClick" not in main_js
     assert "onDebrisRecycleClick" not in main_js
+    galaxy_init = main_js.split("function initGalaxy()")[1].split("// =========================")[0]
+    # Ring must boot synchronously — not gated behind ensure().then(...)
+    assert "bootGalaxyRingView()" in galaxy_init
+    ensure_then = galaxy_init.split("GC.ensureGalaxyQuickAction()")[1].split(".catch")[0]
+    assert "bootGalaxyRingView()" not in ensure_then
+    assert "bindGalaxyRingQuickActionsWhenReady()" in ensure_then
 
 
 def test_galaxy_quick_action_bind_ring_covers_all_missions():
@@ -129,6 +137,7 @@ def test_galaxy_quick_action_bind_ring_covers_all_missions():
     main_js = Path("static/main.js").read_text(encoding="utf-8")
     galaxy_init = main_js.split("function initGalaxy()")[1].split("GC.modules.galaxy")[0]
     assert "ensureGalaxyQuickAction" in galaxy_init
+    assert "bootGalaxyRingView" in galaxy_init
     assert "prefetchGalaxyQuickActionScript" in main_js
     # Warm module before/during PJAX to galaxy so quick missions bind without F5.
     assert 'pathOnly === "/galaxy"' in main_js

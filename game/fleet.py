@@ -2862,6 +2862,26 @@ def _best_radar_effective(
     return best_eff, best_bubble
 
 
+def _radar_sensors_payload(bubbles: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
+    """Public sensor meta for Galaxy Radar tab / HUD (no second bubble engine)."""
+    out: List[Dict[str, Any]] = []
+    for bubble in bubbles or []:
+        try:
+            out.append(
+                {
+                    "planet_id": int(bubble["planet_id"]),
+                    "name": str(bubble.get("name") or ""),
+                    "galaxy": int(bubble.get("galaxy") or 0),
+                    "system": int(bubble.get("system") or 0),
+                    "position": int(bubble.get("position") or 0),
+                    "scan_range": int(bubble.get("scan_range") or 0),
+                }
+            )
+        except (TypeError, ValueError, KeyError):
+            continue
+    return out
+
+
 def build_radar_contacts(
     player_id: int,
     *,
@@ -2873,6 +2893,8 @@ def build_radar_contacts(
         "radar_contact_count": 0,
         "radar_contacts": [],
         "radar_alert_key": "",
+        "radar_sensors": [],
+        "has_radar_sensor": False,
     }
     if not fleet_schema_ready(conn):
         return dict(empty)
@@ -2882,8 +2904,16 @@ def build_radar_contacts(
         return dict(empty)
 
     bubbles = _load_radar_bubbles(pid, conn=conn)
+    sensors = _radar_sensors_payload(bubbles)
+    base: Dict[str, Any] = {
+        "radar_contact_count": 0,
+        "radar_contacts": [],
+        "radar_alert_key": "",
+        "radar_sensors": sensors,
+        "has_radar_sensor": bool(sensors),
+    }
     if not bubbles:
-        return dict(empty)
+        return dict(base)
 
     ts = float(now if now is not None else _now())
     cur = conn.cursor()
@@ -2917,7 +2947,7 @@ def build_radar_contacts(
     )
     rows = cur.fetchall() or []
     if not rows:
-        return dict(empty)
+        return dict(base)
 
     contacts: List[Dict[str, Any]] = []
     for row in rows:
@@ -2959,26 +2989,21 @@ def build_radar_contacts(
         except (TypeError, ValueError):
             continue
 
-        remaining = max(0.0, float(arrival_at) - ts)
-        band_pad = remaining * 0.15
         threat = _RADAR_MISSION_THREAT.get(mission, "force")
 
+        # Sensorphalanx-style: mission, exact ETA, and coords from tier 1.
+        # Owner / ship composition stay gated by higher intel tiers.
         contact: Dict[str, Any] = {
             "movement_id": int(row["movement_id"]),
             "tier": tier,
             "threat_class": threat,
-            "mission_type": mission if tier >= 2 else None,
+            "mission_type": mission,
             "match_edge": match_edge,
             "sensor_planet_id": int(sensor["planet_id"]) if sensor else None,
-            "arrival_at": arrival_at if tier >= 2 else None,
-            "eta_band": {
-                "earliest": int(arrival_at - band_pad),
-                "latest": int(arrival_at + band_pad),
-            }
-            if tier == 1
-            else None,
-            "origin": {"galaxy": og, "system": osys} if tier >= 2 else None,
-            "target": {"galaxy": tg, "system": tsys, "position": tpos} if tier >= 2 else None,
+            "arrival_at": arrival_at,
+            "eta_band": None,
+            "origin": {"galaxy": og, "system": osys},
+            "target": {"galaxy": tg, "system": tsys, "position": tpos},
             "owner_id": int(row["owner_id"]) if tier >= 3 else None,
             "owner_name": str(row["owner_name"] or "") if tier >= 3 else None,
             "ships_by_role": None,
@@ -3002,13 +3027,15 @@ def build_radar_contacts(
         contacts.append(contact)
 
     if not contacts:
-        return dict(empty)
+        return dict(base)
 
     ids = sorted(int(c["movement_id"]) for c in contacts)
     return {
         "radar_contact_count": len(contacts),
         "radar_contacts": contacts,
         "radar_alert_key": "r:" + ",".join(str(i) for i in ids),
+        "radar_sensors": sensors,
+        "has_radar_sensor": bool(sensors),
     }
 
 
@@ -3024,6 +3051,8 @@ def enrich_fleet_alerts_with_radar(
     radar = build_radar_contacts(player_id, conn=conn, now=now)
     out["radar_contact_count"] = int(radar.get("radar_contact_count") or 0)
     out["radar_contacts"] = list(radar.get("radar_contacts") or [])
+    out["radar_sensors"] = list(radar.get("radar_sensors") or [])
+    out["has_radar_sensor"] = bool(radar.get("has_radar_sensor"))
     radar_key = str(radar.get("radar_alert_key") or "")
     base_key = str(out.get("alert_key") or "")
     if radar_key:
@@ -3331,7 +3360,11 @@ def send_fleet(
         return False, "invalid_mission", None
 
     from .fleet_mission_locks import is_fleet_mission_locked
-    from .troop_defs import normalize_troops
+    from .troop_defs import (
+        fleet_troop_berth_capacity,
+        normalize_troops,
+        troop_cargo_slots,
+    )
 
     locked, lock_info = is_fleet_mission_locked(mission, conn=conn)
     if locked:
@@ -3350,6 +3383,14 @@ def send_fleet(
         return False, "invalid_speed_percent", None
     if troops_n and mission != "attack":
         return False, "troops_attack_only", None
+    if troops_n:
+        need_slots = troop_cargo_slots(troops_n)
+        berths = fleet_troop_berth_capacity(ships_n)
+        if need_slots > berths:
+            return False, "not_enough_troop_berths", {
+                "troop_slots_needed": need_slots,
+                "troop_berths": berths,
+            }
 
     own = conn is None
     if own:
@@ -8003,6 +8044,7 @@ def build_fleet_page_context(
                     "have": int(troop_stock.get(tk, 0) or 0),
                     "required_barracks_level": int(spec.get("required_barracks_level") or 1),
                     "unlocked": barracks_level >= int(spec.get("required_barracks_level") or 1),
+                    "cargo_slots": max(1, int(spec.get("cargo_slots") or 1)),
                 }
             )
         troops_ctx = build_troops_state(

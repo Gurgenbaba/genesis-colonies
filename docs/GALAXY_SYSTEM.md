@@ -112,8 +112,10 @@ Navigation: GET `/galaxy?galaxy=N&system=M` (PJAX shell swap).
 
 - Each colony with radar projects a bubble of `scan_range` **system steps** (same galaxy; cross-galaxy when range ≥ 8).
 - Detects foreign `outbound` missions `attack` / `spy` / `deploy` whose origin **or** target lies in a bubble.
-- Progressive intel tiers (ETA band → coords → owner → fuzzy roles → full ships).
-- Live payload: `fleet_alerts.radar_contacts` via `/api/game-state` (no module poll).
+- Progressive intel tiers: **tier 1+** mission + exact ETA + coords (Sensorphalanx-style); owner at tier 3+; fuzzy roles / full ships at 4–5.
+- Live payload: `fleet_alerts.radar_contacts` + `radar_sensors` via `/api/game-state`.
+- **Fleet HUD:** one row per contact (UI cap + overflow hint).
+- **Galaxy → Radar tab:** same payload as contact list + sensor overview (no second poller). Sensor and contact rows navigate to the system view (`GC.navigateTo`); active phalanx scan remains deferred. Ring fleet markers remain deferred.
 
 Spy probes remain a separate grounded-intel channel.
 

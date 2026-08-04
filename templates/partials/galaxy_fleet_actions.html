@@ -8,17 +8,18 @@
 {% set base = url_for('fleet_view') ~ '?target_galaxy=' ~ g ~ '&target_system=' ~ s ~ '&target_position=' ~ p %}
 {% set hold_ok = hold_mission_enabled if hold_mission_enabled is defined else false %}
 
+{# gc-nav-link: PJAX soft-nav to /fleet (spy keeps data-galaxy-quick-spy + preventDefault). #}
 <div class="galaxy-fleet-actions" role="group" aria-label="{{ T('galaxy_fleet_actions_label') }}">
   {% if slot.has_debris %}
   <a href="{{ base }}&mission=recycle"
-     class="galaxy-fleet-action galaxy-fleet-action--recycle"
+     class="gc-nav-link galaxy-fleet-action galaxy-fleet-action--recycle"
      title="{{ T('fleet_mission_recycle') }}">
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
     <span class="galaxy-fleet-action-label">{{ T('fleet_mission_recycle') }}</span>
   </a>
   {% elif slot.has_asteroid %}
   <a href="{{ base }}&mission=recycle"
-     class="galaxy-fleet-action galaxy-fleet-action--recycle galaxy-fleet-action--asteroid"
+     class="gc-nav-link galaxy-fleet-action galaxy-fleet-action--recycle galaxy-fleet-action--asteroid"
      title="{{ T('galaxy_asteroid_harvest', 'Abbauen') }}">
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
     <span class="galaxy-fleet-action-label">{{ T('galaxy_asteroid_harvest', 'Abbauen') }}</span>
@@ -26,7 +27,7 @@
   {% endif %}
   {% if slot.has_world_boss %}
   <a href="{{ base }}&mission=attack"
-     class="galaxy-fleet-action galaxy-fleet-action--attack galaxy-fleet-action--world-boss"
+     class="gc-nav-link galaxy-fleet-action galaxy-fleet-action--attack galaxy-fleet-action--world-boss"
      title="{{ T('galaxy_wb_attack_title', 'World Boss angreifen') }}">
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M2 20 22 4l-2 16-8-4-8 4z"/></svg>
     <span class="galaxy-fleet-action-label">{{ T('wb_attack', 'Angreifen') }}</span>
@@ -34,7 +35,7 @@
   {% endif %}
   {% if slot.is_expedition_slot is defined and slot.is_expedition_slot %}
   <a href="{{ base }}&mission=expedition"
-     class="galaxy-fleet-action galaxy-fleet-action--expedition"
+     class="gc-nav-link galaxy-fleet-action galaxy-fleet-action--expedition"
      title="{{ T('fleet_mission_expedition') }}">
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z"/></svg>
     <span class="galaxy-fleet-action-label">{{ T('fleet_mission_expedition') }}</span>
@@ -42,27 +43,27 @@
   {% elif slot.occupied %}
     {% if slot.is_own_planet %}
   <a href="{{ base }}&mission=transport"
-     class="galaxy-fleet-action galaxy-fleet-action--transport"
+     class="gc-nav-link galaxy-fleet-action galaxy-fleet-action--transport"
      title="{{ T('fleet_mission_transport') }}">
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M3 11h12v2H3v-2zm2-6 1.4 1.4L4.8 9H16v2H4.8l1.6 1.6L5 14 1 10l4-4zm14 4 4 4-1.4 1.4L19.2 13H8v-2h11.2l-1.6-1.6L17 8l4 4z"/></svg>
     <span class="galaxy-fleet-action-label">{{ T('fleet_mission_transport') }}</span>
   </a>
   <a href="{{ base }}&mission=deploy"
-     class="galaxy-fleet-action galaxy-fleet-action--deploy"
+     class="gc-nav-link galaxy-fleet-action galaxy-fleet-action--deploy"
      title="{{ T('fleet_mission_deploy') }}">
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 3 4 8v8l8 5 8-5V8l-8-5zm0 2.5 5.8 3.6v5.8L12 16.5 6.2 15.9v-5.8L12 5.5z"/></svg>
     <span class="galaxy-fleet-action-label">{{ T('fleet_mission_deploy') }}</span>
   </a>
     {% elif slot.is_ally_planet is defined and slot.is_ally_planet %}
   <a href="{{ base }}&mission=transport"
-     class="galaxy-fleet-action galaxy-fleet-action--transport"
+     class="gc-nav-link galaxy-fleet-action galaxy-fleet-action--transport"
      title="{{ T('fleet_mission_transport') }}">
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M3 11h12v2H3v-2zm2-6 1.4 1.4L4.8 9H16v2H4.8l1.6 1.6L5 14 1 10l4-4zm14 4 4 4-1.4 1.4L19.2 13H8v-2h11.2l-1.6-1.6L17 8l4 4z"/></svg>
     <span class="galaxy-fleet-action-label">{{ T('fleet_mission_transport') }}</span>
   </a>
       {% if hold_ok %}
   <a href="{{ base }}&mission=hold"
-     class="galaxy-fleet-action galaxy-fleet-action--hold"
+     class="gc-nav-link galaxy-fleet-action galaxy-fleet-action--hold"
      title="{{ T('fleet_mission_hold') }}">
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M6 4h12v16l-6-3-6 3V4z"/></svg>
     <span class="galaxy-fleet-action-label">{{ T('fleet_mission_hold') }}</span>
@@ -70,7 +71,7 @@
       {% endif %}
     {% else %}
   <a href="{{ base }}&mission=spy"
-     class="galaxy-fleet-action galaxy-fleet-action--spy"
+     class="gc-nav-link galaxy-fleet-action galaxy-fleet-action--spy"
      data-galaxy-quick-spy
      data-target-galaxy="{{ g }}"
      data-target-system="{{ s }}"
@@ -80,7 +81,7 @@
     <span class="galaxy-fleet-action-label">{{ T('fleet_mission_spy') }}</span>
   </a>
   <a href="{{ base }}&mission=attack"
-     class="galaxy-fleet-action galaxy-fleet-action--attack"
+     class="gc-nav-link galaxy-fleet-action galaxy-fleet-action--attack"
      title="{{ T('fleet_mission_attack') }}">
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M2 20 22 4l-2 16-8-4-8 4z"/></svg>
     <span class="galaxy-fleet-action-label">{{ T('fleet_mission_attack') }}</span>
@@ -103,7 +104,7 @@
   {% set reloc = planet_relocation if planet_relocation is defined else {} %}
   {% if has_seed_ark is defined and has_seed_ark %}
   <a href="{{ base }}&mission=colonize"
-     class="galaxy-fleet-action galaxy-fleet-action--colonize"
+     class="gc-nav-link galaxy-fleet-action galaxy-fleet-action--colonize"
      title="{{ T('fleet_mission_colonize') }}">
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 2C8.1 2 5 5.1 5 9c0 4.5 5.1 10.7 6.3 12.1.4.5 1 0 1.4 0C13.9 19.7 19 13.5 19 9c0-3.9-3.1-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5zM4 20h16v2H4v-2z"/></svg>
     <span class="galaxy-fleet-action-label">{{ T('fleet_mission_colonize') }}</span>

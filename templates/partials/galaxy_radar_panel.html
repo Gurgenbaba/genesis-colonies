@@ -1,0 +1,26 @@
+{# Galaxy Radar tab — Threat Net contact list (filled by syncGalaxyRadarPanel). #}
+<section class="gc-panel galaxy-radar-panel" data-galaxy-radar-panel aria-labelledby="galaxy-radar-title">
+  <div class="gc-panel-header galaxy-radar-header">
+    <span class="gc-panel-title" id="galaxy-radar-title">{{ T("galaxy_radar_title", "Threat Net") }}</span>
+    <span class="galaxy-radar-scope-chip">{{ T("galaxy_radar_scope", "Konto-weit") }}</span>
+  </div>
+  <p class="section-hint hint galaxy-radar-hint">
+    {{ T("galaxy_radar_hint", "Fremde Flotten in Reichweite deiner Radar-Arrays (Angriff, Spionage, Stationierung). Live aus dem Threat Net — gleiche Quelle wie das Fleet-HUD.") }}
+  </p>
+
+  <div class="galaxy-radar-sensors" data-galaxy-radar-sensors hidden>
+    <h3 class="galaxy-radar-subtitle">{{ T("galaxy_radar_sensors_heading", "Sensoren") }}</h3>
+    <ul class="galaxy-radar-sensor-list" data-galaxy-radar-sensor-list role="list"></ul>
+  </div>
+
+  <div class="galaxy-radar-contacts-wrap" data-galaxy-radar-contacts-wrap>
+    <h3 class="galaxy-radar-subtitle">{{ T("galaxy_radar_contacts_heading", "Kontakte") }}</h3>
+    <div class="galaxy-radar-empty" data-galaxy-radar-empty-no-sensor hidden>
+      <p class="hint">{{ T("galaxy_radar_no_sensor", "Kein Radar-Array aktiv. Baue ein Deep-Space-Radar-Array, um das Threat Net zu speisen.") }}</p>
+    </div>
+    <div class="galaxy-radar-empty" data-galaxy-radar-empty-no-contacts hidden>
+      <p class="hint">{{ T("galaxy_radar_empty", "Keine fremden Flotten in Reichweite.") }}</p>
+    </div>
+    <ul class="galaxy-radar-contact-list" data-galaxy-radar-contact-list role="list"></ul>
+  </div>
+</section>

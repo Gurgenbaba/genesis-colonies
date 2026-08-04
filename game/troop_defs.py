@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, FrozenSet, List, Optional
+from typing import Any, Dict, FrozenSet, List, Mapping, Optional
 
 TROOP_ORDER: List[str] = [
     "militia",
@@ -17,8 +17,9 @@ TROOPS: Dict[str, Dict[str, Any]] = {
         "name_key": "troop_militia",
         "description_key": "troop_militia_desc",
         "required_barracks_level": 1,
-        "train_cost": {"metal": 400, "crystal": 100},
-        "train_seconds": 45,
+        # ~cost of a light combat craft component; not disposable spam.
+        "train_cost": {"metal": 5000, "crystal": 2000, "fuel_cells": 0},
+        "train_seconds": 180,
         "attack": 8,
         "defense": 6,
         "hull": 40,
@@ -29,8 +30,8 @@ TROOPS: Dict[str, Dict[str, Any]] = {
         "name_key": "troop_breach_team",
         "description_key": "troop_breach_team_desc",
         "required_barracks_level": 3,
-        "train_cost": {"metal": 1200, "crystal": 800},
-        "train_seconds": 120,
+        "train_cost": {"metal": 18000, "crystal": 12000, "fuel_cells": 0},
+        "train_seconds": 420,
         "attack": 22,
         "defense": 12,
         "hull": 90,
@@ -41,8 +42,8 @@ TROOPS: Dict[str, Dict[str, Any]] = {
         "name_key": "troop_vault_guard",
         "description_key": "troop_vault_guard_desc",
         "required_barracks_level": 5,
-        "train_cost": {"metal": 2500, "crystal": 1800},
-        "train_seconds": 240,
+        "train_cost": {"metal": 35000, "crystal": 28000, "fuel_cells": 0},
+        "train_seconds": 720,
         "attack": 18,
         "defense": 35,
         "hull": 160,
@@ -125,6 +126,33 @@ def troop_cargo_slots(troops: Dict[str, int]) -> int:
             continue
         slots += max(0, int(amount or 0)) * max(1, int(spec.get("cargo_slots") or 1))
     return int(slots)
+
+
+def fleet_troop_berth_capacity(ships: Mapping[str, int] | None) -> int:
+    """Max troop cargo slots a fleet can embark — sum of ship `crew` × count."""
+    from .fleet_defs import get_ship
+
+    total = 0
+    for key, raw in (ships or {}).items():
+        try:
+            qty = int(raw or 0)
+        except (TypeError, ValueError):
+            continue
+        if qty <= 0:
+            continue
+        spec = get_ship(str(key)) or {}
+        total += qty * max(0, int(spec.get("crew") or 0))
+    return int(total)
+
+
+def troops_fit_fleet_berths(
+    ships: Mapping[str, int] | None,
+    troops: Mapping[str, int] | None,
+) -> bool:
+    need = troop_cargo_slots(normalize_troops(troops))
+    if need <= 0:
+        return True
+    return need <= fleet_troop_berth_capacity(ships)
 
 
 def troop_train_cost(troop_key: str) -> Dict[str, int]:

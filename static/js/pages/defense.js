@@ -74,23 +74,103 @@
     return t("defense_error_" + r, t("troops_error_" + r, t("fleet_error_" + r, r || "Error")));
   }
 
-  function applyTroopsPayload(panel, troops) {
+  function fmtTroopNum(n) {
+    if (typeof GC.fmtNumber === "function") return GC.fmtNumber(n);
+    return String(Math.max(0, Math.floor(Number(n) || 0)));
+  }
+
+  function applyTroopsPayload(panel, troops, resourcesOpt) {
     if (!panel || !troops) return;
     var totalEl = panel.querySelector("[data-barracks-troops-total]");
     var capEl = panel.querySelector("[data-barracks-troops-capacity]");
-    if (totalEl) totalEl.textContent = String(troops.total || 0);
-    if (capEl) capEl.textContent = String(troops.capacity || 0);
+    if (totalEl) totalEl.textContent = fmtTroopNum(troops.total || 0);
+    if (capEl) capEl.textContent = fmtTroopNum(troops.capacity || 0);
+    var page = panel.closest("#defense-page") || panel;
+    var resources =
+      resourcesOpt && typeof resourcesOpt === "object"
+        ? resourcesOpt
+        : militaryPageResources(page);
     (troops.units || []).forEach(function (u) {
       var stock = panel.querySelector('[data-troop-stock="' + u.key + '"]');
-      if (stock) stock.textContent = "×" + String(u.amount || 0);
+      if (stock) stock.textContent = "×" + fmtTroopNum(u.amount || 0);
+      var maxBtn = panel.querySelector('[data-troop-max="' + u.key + '"]');
+      if (maxBtn) {
+        var maxQty = Math.max(0, parseIntNumber(u.max_train) || 0);
+        maxBtn.setAttribute("data-max-qty", String(maxQty));
+        maxBtn.dataset.maxQty = String(maxQty);
+      }
+      var amountInp = panel.querySelector('[data-troop-amount="' + u.key + '"]');
+      if (amountInp && u.max_train != null) {
+        amountInp.dataset.inputMax = String(Math.max(0, parseIntNumber(u.max_train) || 0));
+      }
+      var trainBtn = panel.querySelector('[data-troop-train="' + u.key + '"]');
+      if (trainBtn) {
+        var can = u.can_train === true || u.can_train === 1 || u.can_train === "1";
+        trainBtn.disabled = !can;
+        trainBtn.setAttribute("aria-disabled", can ? "false" : "true");
+        trainBtn.setAttribute("data-can-train", can ? "1" : "0");
+      }
+      var card = panel.querySelector('[data-troop-card="' + u.key + '"]');
+      if (card) {
+        var costWrap = card.querySelector("[data-troop-cost]");
+        if (costWrap) {
+          var cm = Math.max(0, parseIntNumber(u.cost_metal != null ? u.cost_metal : (u.train_cost && u.train_cost.metal)) || 0);
+          var cc = Math.max(0, parseIntNumber(u.cost_crystal != null ? u.cost_crystal : (u.train_cost && u.train_cost.crystal)) || 0);
+          costWrap.dataset.unitCostMetal = String(cm);
+          costWrap.dataset.unitCostCrystal = String(cc);
+          costWrap.setAttribute("data-unit-cost-metal", String(cm));
+          costWrap.setAttribute("data-unit-cost-crystal", String(cc));
+        }
+        syncUnitCardCostPreview(card, resources);
+      }
     });
-    renderTroopsQueue(panel, troops.queue || []);
+    renderTroopsQueue(panel, troops);
   }
 
-  function renderTroopsQueue(panel, queue) {
+  GC.applyTroopsPayload = applyTroopsPayload;
+
+  function renderTroopsQueue(panel, troopsOrQueue) {
+    var host = panel.querySelector("#troops-mini-queue") || panel.querySelector("[data-mini-queue-host='troops']");
+    if (host && typeof GC.renderMiniQueueStrip === "function") {
+      var troops =
+        troopsOrQueue && !Array.isArray(troopsOrQueue) && typeof troopsOrQueue === "object"
+          ? troopsOrQueue
+          : { queue: troopsOrQueue, mini_queue_jobs: (troopsOrQueue && troopsOrQueue.mini_queue_jobs) || [] };
+      var jobs = Array.isArray(troops.mini_queue_jobs) ? troops.mini_queue_jobs : [];
+      if (!jobs.length && Array.isArray(troops.queue) && typeof GC._collectMiniQueueJobs !== "function") {
+        // Fallback: pass through queue shaped as mini jobs if server omitted mini_queue_jobs.
+        jobs = (troops.queue || []).map(function (job, idx) {
+          return {
+            job_id: Math.max(0, parseIntNumber(job.id) || 0),
+            domain: "troops",
+            owner_key: String(job.troop_key || ""),
+            label: "troop_" + String(job.troop_key || ""),
+            amount: Math.max(0, parseIntNumber(job.amount) || 0),
+            position: idx + 1,
+            is_active: idx === 0,
+            remaining_seconds: Math.max(0, parseIntNumber(job.remaining_seconds) || 0),
+            finish_at: Math.max(0, parseIntNumber(job.finish_at) || 0),
+            start_at: Math.max(0, parseIntNumber(job.started_at) || 0),
+            progress_pct: 0,
+            duration_seconds: Math.max(1, parseIntNumber(job.order_total_seconds) || 1),
+            image_url: "/static/img/troops/" + String(job.troop_key || "") + ".png",
+            cancelable: true,
+          };
+        });
+      }
+      GC.renderMiniQueueStrip(host, jobs, {
+        domain: "troops",
+        idleText: t("barracks_troops_queue_idle", "Keine Ausbildung aktiv"),
+        limit: Math.max(0, parseIntNumber(troops.queue_limit || (troops.summary && troops.summary.limit)) || 0),
+      });
+      return;
+    }
+    // Legacy fallback (should not render if mini-queue host exists).
     var wrap = panel.querySelector("[data-barracks-troops-queue]");
     if (!wrap) return;
-    var rows = Array.isArray(queue) ? queue : [];
+    var rows = Array.isArray(troopsOrQueue)
+      ? troopsOrQueue
+      : (troopsOrQueue && troopsOrQueue.queue) || [];
     if (!rows.length) {
       wrap.innerHTML =
         '<p class="hint" data-barracks-troops-queue-empty>' +
@@ -154,6 +234,23 @@
     var errEl = panel.querySelector("[data-barracks-troops-error]");
 
     panel.addEventListener("click", function (e) {
+      var maxBtn = e.target.closest("[data-troop-max]");
+      if (maxBtn && panel.contains(maxBtn)) {
+        e.preventDefault();
+        var maxKey = maxBtn.getAttribute("data-troop-max");
+        var qtyInp = panel.querySelector('[data-troop-amount="' + maxKey + '"]');
+        var maxQty = parseIntNumber(
+          maxBtn.dataset.maxQty || maxBtn.getAttribute("data-max-qty") || "0"
+        );
+        if (qtyInp && maxQty > 0) {
+          qtyInp.dataset.inputMax = String(maxQty);
+          setNumberInputValue(qtyInp, maxQty);
+          var card = maxBtn.closest("[data-troop-card], [data-troop-key]");
+          if (card) syncUnitCardCostPreview(card, militaryPageResources(page));
+        }
+        return;
+      }
+
       var trainBtn = e.target.closest("[data-troop-train]");
       var cancelBtn = e.target.closest("[data-troop-cancel]");
       if (!trainBtn && !cancelBtn) return;
@@ -219,8 +316,6 @@
             if (res && res.ok) {
               if (res.state) applyActionState(res, "troops_cancel");
               applyTroopsPayload(panel, (res.data && res.data.troops) || res.troops);
-              var row = cancelBtn.closest("[data-troop-job-id]");
-              if (row) row.remove();
             } else if (errEl) {
               errEl.textContent = reasonText((res && (res.error || res.reason)) || "generic");
               errEl.hidden = false;

@@ -249,6 +249,7 @@
               <article class="fleet-ship-card fleet-ship-card--pick fleet-ship-row{% if have <= 0 %} is-empty{% endif %}"
                        data-ship-key="{{ ship.key }}"
                        data-ship-have="{{ have }}"
+                       data-ship-crew="{{ (ship.crew|default(0))|int }}"
                        data-ship-role="{{ ship.role }}"
                        data-ship-tooltip-name="{{ T(ship.name_key) }}"
                        data-ship-tooltip-role="{{ T('shipyard_role_' ~ ship.role) }}"
@@ -297,22 +298,29 @@
                  aria-labelledby="fleet-troops-panel-title">
           <div class="gc-panel-header">
             <span class="gc-panel-title" id="fleet-troops-panel-title">{{ T("fleet_troops_title", "Bodentruppen (Vault-Raid)") }}</span>
+            <span class="gc-panel-subtitle gc-mono" data-fleet-troop-berths>
+              {{ T("fleet_troops_berths", "Besatzung") }}:
+              <span data-fleet-troop-berths-used>0</span>/<span data-fleet-troop-berths-cap>0</span>
+            </span>
           </div>
           <p class="section-hint hint">{{ T("fleet_troops_hint", "Nur bei Angriff: Truppen an Bord starten nach orbitalem Sieg die Bunker-Phase.") }}</p>
           <p class="section-hint hint" data-fleet-troops-caps>
             {{ T("fleet_troops_caps_hint", "Vault-Loot bei Bodensieg: bis 6h Timekeeper und bis 5 Meta-Container vom Verteidiger-Konto.") }}
           </p>
+          <p class="section-hint hint">{{ T("fleet_troops_berths_hint", "Mitnahme begrenzt durch Schiffs-Besatzung (crew). Schwere Truppen brauchen mehr Plätze.") }}</p>
           <p class="section-hint hint" data-fleet-troops-empty-cta>
             <a href="{{ url_for('defense_view') }}" data-pjax="1">{{ T("fleet_troops_train_cta", "Bodentruppen in der Kaserne ausbilden →") }}</a>
           </p>
           <div class="fleet-troops-grid" data-fleet-troops-grid>
             {% for troop in fleet_ctx.troop_defs|default([]) %}
             {% set have = troop.have|default(0)|int %}
+            {% set slots = (troop.cargo_slots|default(1))|int %}
             {% set _troop_png = url_for('static', filename='img/troops/' ~ troop.key ~ '.png') %}
             {% set _troop_webp = _troop_png|webp_static %}
             <article class="fleet-troop-card{% if have <= 0 or not troop.unlocked %} is-empty{% endif %}"
                      data-troop-key="{{ troop.key }}"
-                     data-troop-have="{{ have }}">
+                     data-troop-have="{{ have }}"
+                     data-troop-cargo-slots="{{ slots }}">
               <div class="fleet-troop-card-art">
                 <picture>
                   <source srcset="{{ _troop_webp }}" type="image/webp">
@@ -323,8 +331,10 @@
                 <strong>{{ T(troop.name_key, troop.key) }}</strong>
                 <span class="gc-mono">×{{ have|fmt_int }}</span>
               </div>
+              <p class="hint fleet-troop-slots-hint gc-mono">{{ T("fleet_troops_slot_cost", "%(n)s Platz", n=slots) }}</p>
               <input type="text" min="0" max="{{ have }}" value="0" inputmode="numeric"
                      class="fleet-ship-input gc-mono gc-num-input" data-troop-input="{{ troop.key }}"
+                     data-troop-cargo-slots="{{ slots }}"
                      {% if have <= 0 or not troop.unlocked %}disabled{% endif %}
                      aria-label="{{ T(troop.name_key, troop.key) }}">
             </article>

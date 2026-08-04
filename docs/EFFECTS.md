@@ -165,8 +165,8 @@ Owner: `game/technical_data.py` → `build_effective_stat`, `resolve_unit_effect
 
 ### `radar_array` (Deep-Space Threat Net)
 
-- **Effect:** `scan_range += 2 × level` — passive hostile/inbound fleet contacts for the active world.
-- **Owner:** `EffectResolver` → `build_radar_contacts` / HUD alerts. Galaxy map markers remain deferred.
+- **Effect:** `scan_range += 2 × level` — passive Threat Net contacts (Sensorphalanx-style Fleet-HUD rows + Galaxy Radar tab list: mission/route/ETA from tier 1).
+- **Owner:** `EffectResolver` → `build_radar_contacts` / HUD + Galaxy Radar tab. Galaxy **ring** fleet markers remain deferred.
 
 ### `barracks` (shipyard speed + ground troops)
 

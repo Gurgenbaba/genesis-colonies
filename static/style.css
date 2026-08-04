@@ -5854,12 +5854,13 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   justify-content: center;
   width: 2rem;
   height: 2rem;
-  border-radius: 6px;
+  border-radius: var(--gc-radius-sm, 2px);
   border: 1px solid rgba(0, 212, 255, 0.22);
   color: var(--gc-primary-2);
   background: rgba(0, 24, 48, 0.55);
   transition: border-color 0.15s, background 0.15s, color 0.15s;
   position: relative;
+  text-decoration: none;
 }
 .galaxy-fleet-action:hover,
 .galaxy-fleet-action:focus-visible{
@@ -14547,6 +14548,160 @@ body.gc-techtree-media-zoom-open{
   font-size: 0.82rem;
 }
 
+/* Galaxy System | Radar tabs (Threat Net panel) */
+.galaxy-mode-tabs{
+  margin: 0 0 12px;
+}
+.galaxy-tab-panel[hidden]{
+  display: none !important;
+}
+.galaxy-radar-panel{
+  padding: 10px 12px 14px;
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.galaxy-radar-header{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.galaxy-radar-scope-chip{
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gc-text-muted, #9aa3ad);
+  border: 1px solid var(--gc-border, #3a4554);
+  padding: 2px 6px;
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(0, 0, 0, 0.25);
+}
+.galaxy-radar-hint{
+  margin: 0 0 12px;
+  max-width: 70ch;
+}
+.galaxy-radar-subtitle{
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--gc-text-muted, #9aa3ad);
+}
+.galaxy-radar-sensors{
+  margin: 0 0 14px;
+}
+.galaxy-radar-sensor-list,
+.galaxy-radar-contact-list{
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.galaxy-radar-sensor-item{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 12px;
+  padding: 6px 8px;
+  border: 1px solid var(--gc-border, #3a4554);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(0, 0, 0, 0.22);
+}
+.galaxy-radar-sensor-item.is-interactive,
+.galaxy-radar-contact-item.is-interactive{
+  cursor: pointer;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+.galaxy-radar-sensor-item.is-interactive:hover,
+.galaxy-radar-sensor-item.is-interactive:focus-visible,
+.galaxy-radar-contact-item.is-interactive:hover,
+.galaxy-radar-contact-item.is-interactive:focus-visible{
+  border-color: rgba(212, 175, 55, 0.55);
+  background: rgba(212, 175, 55, 0.08);
+  outline: none;
+}
+.galaxy-radar-sensor-item.is-interactive:focus-visible,
+.galaxy-radar-contact-item.is-interactive:focus-visible{
+  box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.45);
+}
+.galaxy-radar-sensor-name{
+  font-weight: 600;
+  color: var(--gc-text, #e8edf2);
+}
+.galaxy-radar-sensor-range{
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: rgba(147, 197, 253, 0.9);
+}
+.galaxy-radar-empty{
+  border: 1px dashed var(--gc-border, #3a4554);
+  padding: 12px;
+  margin-bottom: 8px;
+}
+.galaxy-radar-contact-item{
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--gc-border, #3a4554);
+  border-left: 2px solid rgba(120, 190, 255, 0.45);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: linear-gradient(90deg, rgba(40, 90, 140, 0.12), transparent 48%);
+}
+.galaxy-radar-contact-item.is-radar-hostile{
+  border-left-color: rgba(252, 165, 165, 0.65);
+  background: linear-gradient(90deg, rgba(140, 40, 40, 0.14), transparent 48%);
+}
+.galaxy-radar-contact-item.is-radar-intel{
+  border-left-color: rgba(167, 139, 250, 0.55);
+  background: linear-gradient(90deg, rgba(80, 50, 140, 0.12), transparent 48%);
+}
+.galaxy-radar-contact-item.is-radar-force{
+  border-left-color: rgba(250, 204, 21, 0.5);
+  background: linear-gradient(90deg, rgba(120, 100, 20, 0.1), transparent 48%);
+}
+.galaxy-radar-contact-main,
+.galaxy-radar-contact-meta{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  min-width: 0;
+}
+.galaxy-radar-contact-mission{
+  font-weight: 600;
+  color: rgba(147, 197, 253, 0.95);
+}
+.galaxy-radar-contact-item.is-radar-hostile .galaxy-radar-contact-mission{
+  color: #fca5a5;
+}
+.galaxy-radar-contact-threat{
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gc-text-muted, #9aa3ad);
+}
+.galaxy-radar-contact-route{
+  color: rgba(186, 230, 253, 0.88);
+  min-width: 0;
+}
+.galaxy-radar-contact-owner{
+  font-size: 0.78rem;
+  color: var(--gc-text-muted, #9aa3ad);
+}
+.galaxy-radar-contact-ships{
+  font-size: 0.78rem;
+}
+.galaxy-radar-contact-eta{
+  margin-left: auto;
+  color: rgba(147, 197, 253, 0.95);
+}
+.galaxy-radar-contact-item.is-urgent .galaxy-radar-contact-eta{
+  color: #fca5a5;
+}
+
 /* GC-594D ? Galaxy HUD ring module */
 .galaxy-ring-view{
   width: 100%;
@@ -15574,10 +15729,33 @@ body.gc-techtree-media-zoom-open{
   overflow-y: auto;
 }
 .galaxy-ring-inspector--card .galaxy-fleet-action-label{
-  display: none;
+  position: static;
+  left: auto;
+  bottom: auto;
+  transform: none;
+  display: inline;
+  opacity: 1;
+  pointer-events: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: inherit;
+  z-index: auto;
 }
 .galaxy-ring-inspector--card .galaxy-fleet-actions{
   gap: 0.4rem;
+  margin-top: 0.55rem;
+}
+.galaxy-ring-inspector--card .galaxy-fleet-action{
+  width: auto;
+  height: auto;
+  min-height: 2rem;
+  padding: 0.35rem 0.55rem;
+  gap: 0.35rem;
 }
 .galaxy-ring-inspector--card .galaxy-ring-inspector-actions .gc-btn{
   width: 100%;
@@ -23147,8 +23325,8 @@ a.gc-ranking-alliance:hover{
 }
 
 @media (hover: none), (pointer: coarse){
-  .gc-fleet-drawer-row[data-movement-id]:not([data-fleet-alert]),
-  .gc-fleet-hud-row[data-movement-id]:not([data-fleet-alert]){
+  .gc-fleet-drawer-row[data-movement-id]:not([data-fleet-alert]):not([data-fleet-radar-contact]),
+  .gc-fleet-hud-row[data-movement-id]:not([data-fleet-alert]):not([data-fleet-radar-contact]){
     cursor: pointer;
   }
 }
@@ -23207,8 +23385,8 @@ a.gc-ranking-alliance:hover{
     cursor: default;
   }
 
-  .gc-fleet-drawer-row[data-movement-id]:not([data-fleet-alert]),
-  .gc-fleet-hud-row[data-movement-id]:not([data-fleet-alert]){
+  .gc-fleet-drawer-row[data-movement-id]:not([data-fleet-alert]):not([data-fleet-radar-contact]),
+  .gc-fleet-hud-row[data-movement-id]:not([data-fleet-alert]):not([data-fleet-radar-contact]){
     cursor: pointer;
   }
 }
@@ -23242,6 +23420,62 @@ a.gc-ranking-alliance:hover{
 
 .gc-fleet-hud-row--incoming-alert.is-urgent .gc-fleet-hud-time{
   animation: gc-fleet-drawer-timer-pulse 1s ease-in-out infinite;
+}
+
+/* Deep-Space Threat Net — Sensorphalanx-style contact rows */
+.gc-fleet-hud-row--radar-contact,
+.gc-fleet-hud-row--radar-more{
+  cursor: default;
+}
+.gc-fleet-hud-row--radar-contact{
+  border-left: 2px solid rgba(120, 190, 255, 0.45);
+  background: linear-gradient(90deg, rgba(40, 90, 140, 0.14), transparent 42%);
+}
+.gc-fleet-hud-row--radar-contact.is-radar-hostile{
+  border-left-color: rgba(252, 165, 165, 0.65);
+  background: linear-gradient(90deg, rgba(140, 40, 40, 0.16), transparent 42%);
+}
+.gc-fleet-hud-row--radar-contact.is-radar-intel{
+  border-left-color: rgba(167, 139, 250, 0.55);
+  background: linear-gradient(90deg, rgba(80, 50, 140, 0.14), transparent 42%);
+}
+.gc-fleet-hud-row--radar-contact.is-radar-force{
+  border-left-color: rgba(250, 204, 21, 0.5);
+  background: linear-gradient(90deg, rgba(120, 100, 20, 0.12), transparent 42%);
+}
+.gc-fleet-hud-row--radar-contact .gc-fleet-hud-mission--radar{
+  color: rgba(147, 197, 253, 0.95);
+}
+.gc-fleet-hud-row--radar-contact.is-radar-hostile .gc-fleet-hud-mission--radar,
+.gc-fleet-hud-row--radar-contact .gc-fleet-hud-mission--attack{
+  color: #fca5a5;
+}
+.gc-fleet-hud-row--radar-contact .gc-fleet-hud-route{
+  color: rgba(186, 230, 253, 0.88);
+}
+.gc-fleet-hud-row--radar-contact .gc-fleet-hud-time{
+  color: rgba(147, 197, 253, 0.95);
+}
+.gc-fleet-hud-row--radar-contact.is-urgent .gc-fleet-hud-time{
+  color: #fca5a5;
+  animation: gc-fleet-drawer-timer-pulse 1s ease-in-out infinite;
+}
+.gc-fleet-hud-radar-owner{
+  font-size: 0.75rem;
+  color: var(--gc-text-muted, #9aa3ad);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 10rem;
+}
+.gc-fleet-hud-row--radar-more{
+  opacity: 0.78;
+}
+.gc-fleet-hud-row--radar-more .gc-fleet-hud-route{
+  font-size: 0.78rem;
+  color: var(--gc-text-muted, #9aa3ad);
+  letter-spacing: 0.02em;
 }
 
 /* GC-640A ? legacy fleet HUD chip styles (fleet page / badges) */
@@ -48966,18 +49200,8 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
   width: 72px;
   border-radius: var(--gc-radius-sm, 2px);
 }
-.barracks-troops-queue-list {
-  list-style: none;
-  margin: 0 0 10px;
-  padding: 0;
-}
-.barracks-troops-queue-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 0;
-  border-bottom: 1px solid var(--gc-border, #2a3340);
+#troops-mini-queue {
+  margin: 8px 0 12px;
 }
 .barracks-troops-error {
   color: var(--gc-danger, #f66);
@@ -48987,54 +49211,184 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
 .secret-vault-panel {
   margin-bottom: var(--gc-space-3, 12px);
   border-radius: var(--gc-radius-sm, 2px);
+  padding: 10px 12px 12px;
 }
-.secret-vault-caps {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 8px;
-  margin: 0 0 12px;
+.secret-vault-header {
+  margin-bottom: 4px;
 }
-.secret-vault-caps-row {
-  border: 1px solid var(--gc-border, #2a3340);
-  padding: 6px 8px;
-  background: var(--gc-panel-bg, rgba(0, 0, 0, 0.2));
-}
-.secret-vault-caps-row dt {
-  font-size: 0.75rem;
-  opacity: 0.8;
-  margin: 0 0 2px;
-}
-.secret-vault-caps-row dd {
-  margin: 0;
-}
-.secret-vault-subtitle {
-  font-size: 0.9rem;
-  margin: 0 0 8px;
-  font-weight: 600;
-}
-.secret-vault-loot-list {
-  list-style: none;
-  margin: 0 0 8px;
-  padding: 0;
-}
-.secret-vault-loot-item {
+.secret-vault-header-main {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   flex-wrap: wrap;
+}
+.secret-vault-scope-chip {
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gc-text-muted, #9aa3ad);
+  border: 1px solid var(--gc-border, #3a4554);
+  padding: 2px 6px;
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(0, 0, 0, 0.25);
+}
+.secret-vault-hint {
+  margin: 0 0 12px;
+  max-width: 62ch;
+}
+.secret-vault-meters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 14px;
+}
+@media (max-width: 720px) {
+  .secret-vault-meters {
+    grid-template-columns: 1fr;
+  }
+}
+.secret-vault-meter {
+  border: 1px solid var(--gc-border, #3a4554);
+  background: linear-gradient(180deg, rgba(255, 196, 72, 0.04), rgba(0, 0, 0, 0.22));
+  padding: 8px 10px;
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.secret-vault-meter-top {
+  display: flex;
+  justify-content: space-between;
   align-items: baseline;
   gap: 8px;
-  padding: 4px 0;
-  border-bottom: 1px solid var(--gc-border, #2a3340);
+  margin-bottom: 6px;
+}
+.secret-vault-meter-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gc-text-muted, #9aa3ad);
+}
+.secret-vault-meter-value {
+  font-size: 0.95rem;
+  color: var(--gc-accent, #f0c14b);
+}
+.secret-vault-meter-sep {
+  opacity: 0.45;
+  margin: 0 2px;
+}
+.secret-vault-meter-track {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 196, 72, 0.18);
+  overflow: hidden;
+}
+.secret-vault-meter-fill {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  background: linear-gradient(90deg, rgba(240, 193, 75, 0.35), rgba(240, 193, 75, 0.9));
+}
+.secret-vault-meter-fill--boxes {
+  background: linear-gradient(90deg, rgba(199, 125, 255, 0.35), rgba(199, 125, 255, 0.85));
+}
+.secret-vault-meter-foot {
+  margin: 6px 0 0;
+  font-size: 0.75rem;
+}
+.secret-vault-exposure-head {
+  margin: 0 0 8px;
+}
+.secret-vault-subtitle {
+  font-size: 0.8rem;
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--gc-text-muted, #9aa3ad);
+}
+.secret-vault-empty {
+  border: 1px dashed var(--gc-border, #3a4554);
+  padding: 12px;
+  margin-bottom: 8px;
+}
+.secret-vault-loot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 8px;
+  margin: 0 0 10px;
+}
+.secret-vault-loot-card {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  border: 1px solid var(--gc-border, #3a4554);
+  background: rgba(0, 0, 0, 0.28);
+  border-radius: var(--gc-radius-sm, 2px);
+  min-height: 120px;
+  overflow: hidden;
+}
+.secret-vault-loot-card--tk {
+  border-color: rgba(240, 193, 75, 0.35);
+}
+.secret-vault-loot-card.rarity-uncommon { border-color: rgba(110, 207, 143, 0.4); }
+.secret-vault-loot-card.rarity-rare { border-color: rgba(94, 176, 255, 0.45); }
+.secret-vault-loot-card.rarity-epic { border-color: rgba(199, 125, 255, 0.5); }
+.secret-vault-loot-card.rarity-legendary { border-color: rgba(255, 184, 77, 0.55); }
+.secret-vault-loot-card.rarity-mythic { border-color: rgba(255, 120, 200, 0.55); }
+.secret-vault-loot-art {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 72px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent),
+    rgba(10, 12, 16, 0.55);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.secret-vault-loot-art img {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  display: block;
+}
+.secret-vault-loot-qty-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  font-size: 0.7rem;
+  padding: 1px 5px;
+  border: 1px solid var(--gc-border, #3a4554);
+  background: rgba(0, 0, 0, 0.72);
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.secret-vault-loot-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px 8px;
+}
+.secret-vault-loot-name {
+  font-size: 0.82rem;
+  line-height: 1.2;
+  color: var(--gc-text, #e8edf2);
+}
+.secret-vault-loot-qty {
+  color: var(--gc-accent, #f0c14b);
+  font-size: 0.85rem;
 }
 .secret-vault-rarity {
-  font-size: 0.75rem;
-  opacity: 0.75;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  opacity: 0.85;
 }
-.secret-vault-protected,
-.secret-vault-balance,
+.secret-vault-rarity.rarity-epic { color: #c77dff; }
+.secret-vault-rarity.rarity-legendary { color: #ffb84d; }
+.secret-vault-rarity.rarity-rare { color: #5eb0ff; }
+.secret-vault-rarity.rarity-uncommon { color: #6ecf8f; }
+.secret-vault-rarity.rarity-mythic { color: #ff78c8; }
 .secret-vault-defense-cta {
-  margin-top: 6px;
+  margin: 8px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .fleet-troop-card-art {
@@ -49050,8 +49404,4 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
 }
 .defense-mode-tabs {
   margin-bottom: 10px;
-}
-.barracks-troop-card-desc {
-  min-height: 2.4em;
-  padding: 0 6px;
 }

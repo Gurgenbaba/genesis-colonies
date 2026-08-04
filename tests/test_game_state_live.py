@@ -764,6 +764,47 @@ def test_api_notifications_summary_unread_after_message(game_client):
     assert int(body.get("unread_messages_count") or 0) >= 1
 
 
+def test_api_include_panel_finishes_due_troop_delivery(game_client):
+    from game.models import save_planet_buildings
+    from game.troops import enqueue_troop_train, get_planet_troops
+
+    client, pid = game_client
+    planet = get_homeworld(player_id=pid)
+    planet_id = int(planet["id"])
+    conn = db()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE planets SET metal = ?, crystal = ? WHERE id = ?;",
+        (100_000, 100_000, planet_id),
+    )
+    conn.commit()
+    bld = get_planet_buildings(planet_id, conn=conn) or {}
+    bld["barracks"] = 5
+    save_planet_buildings(planet_id, bld, conn=conn)
+    ok, reason, _ = enqueue_troop_train(
+        player_id=pid,
+        planet_id=planet_id,
+        troop_key="militia",
+        amount=2,
+        conn=conn,
+    )
+    assert ok, reason
+    cur.execute(
+        "UPDATE troop_queue SET finish_at = ? WHERE planet_id = ?;",
+        (time.time() - 1, planet_id),
+    )
+    conn.commit()
+    before = int(get_planet_troops(planet_id, conn=conn).get("militia") or 0)
+    conn.close()
+
+    body = client.get("/api/game-state?include_panel=1").get_json()
+    assert body.get("ok") is True
+    troops = (body.get("defense") or {}).get("troops") or {}
+    assert isinstance(troops, dict)
+    assert len(troops.get("queue") or []) == 0
+    units = {u["key"]: u for u in (troops.get("units") or [])}
+    assert int(units.get("militia", {}).get("amount") or 0) >= before + 2
+
 def test_main_js_gc541_server_time_fallback_chain():
     src = open("static/main.js", encoding="utf-8").read()
     timer_now = src.split("function getTimerServerNow()")[1].split("function queryTimerElements")[0]

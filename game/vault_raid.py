@@ -96,20 +96,30 @@ def build_vault_panel_state(player_id: int, *, conn) -> Dict[str, Any]:
     tk_balance = max(0, int(get_balance(pid, conn=conn) or 0))
     snap = vault_snapshot(pid, conn=conn)
     exposed_tk = max(0, int(snap.get("timekeeper_sec") or 0))
-    boxes_out: List[Dict[str, Any]] = []
+
+    grouped: Dict[str, Dict[str, Any]] = {}
     for box in snap.get("boxes") or []:
         key = str(box.get("item_key") or "")
+        if not key:
+            continue
         rarity = str(box.get("rarity") or "common")
-        spec = ITEM_CATALOG.get(key) or item_catalog_entry(key) or {}
-        name_key = str(spec.get("name_key") or f"item_{key}")
-        boxes_out.append(
-            {
+        if key not in grouped:
+            spec = ITEM_CATALOG.get(key) or item_catalog_entry(key) or {}
+            grouped[key] = {
                 "item_key": key,
                 "rarity": rarity,
-                "name_key": name_key,
+                "name_key": str(spec.get("name_key") or f"item_{key}"),
+                "image": str(spec.get("image") or ""),
+                "amount": 0,
             }
-        )
+        grouped[key]["amount"] = int(grouped[key]["amount"]) + 1
+
+    boxes_out = sorted(
+        grouped.values(),
+        key=lambda b: (-int(RARITY_RANK.get(str(b.get("rarity") or ""), 0)), str(b.get("item_key") or "")),
+    )
     protected_tk = max(0, tk_balance - exposed_tk)
+    box_count = sum(int(b.get("amount") or 0) for b in boxes_out)
     return {
         "ready": True,
         "tk_cap_sec": int(VAULT_TK_CAP_SEC),
@@ -121,9 +131,11 @@ def build_vault_panel_state(player_id: int, *, conn) -> Dict[str, Any]:
         "tk_exposed_label": format_balance_label(exposed_tk),
         "tk_protected_sec": protected_tk,
         "tk_protected_label": format_balance_label(protected_tk),
+        "tk_fill_pct": int(round(100.0 * exposed_tk / max(1, VAULT_TK_CAP_SEC))),
+        "box_fill_pct": int(round(100.0 * box_count / max(1, VAULT_BOX_CAP))),
         "boxes_exposed": boxes_out,
-        "box_count": len(boxes_out),
-        "empty": exposed_tk <= 0 and not boxes_out,
+        "box_count": box_count,
+        "empty": exposed_tk <= 0 and box_count <= 0,
         "account_scope": True,
     }
 

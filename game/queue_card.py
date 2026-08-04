@@ -14,6 +14,7 @@ OWNER_BUILDING = "building"
 OWNER_RESEARCH = "research"
 OWNER_SHIPYARD = "shipyard"
 OWNER_DEFENSE = "defense"
+OWNER_TROOPS = "troops"
 OWNER_PLANET_RESEARCH = "planet_research"
 OWNER_ASCENSION = "ascension"
 
@@ -415,6 +416,57 @@ def map_defense_queue_to_card_jobs(
     return reconcile_card_queue_jobs(out, now=ts)
 
 
+def map_troop_queue_to_card_jobs(
+    troops_state: Optional[Mapping[str, Any]],
+    *,
+    now: Optional[float] = None,
+) -> List[Dict[str, Any]]:
+    """Adapt build_troops_state queue → card jobs for mini-queue strip."""
+    if not troops_state or not isinstance(troops_state, Mapping):
+        return []
+    raw_jobs = troops_state.get("queue")
+    if not isinstance(raw_jobs, list) or not raw_jobs:
+        return []
+
+    ts = float(now if now is not None else time.time())
+    out: List[Dict[str, Any]] = []
+    for idx, raw in enumerate(raw_jobs):
+        if not isinstance(raw, Mapping):
+            continue
+        owner_key = str(raw.get("troop_key") or "")
+        if not owner_key:
+            continue
+        label = str(raw.get("label") or raw.get("name_key") or f"troop_{owner_key}")
+        amount = _safe_int(raw.get("amount"), 0) or None
+        finish = _safe_float(raw.get("finish_at") or raw.get("finish_time"))
+        start = _safe_float(raw.get("started_at") or raw.get("start_at"))
+        order_total = _safe_int(raw.get("order_total_seconds") or raw.get("total_seconds"), 0)
+        if order_total <= 0 and finish > 0 and start > 0:
+            order_total = max(1, int(finish - start))
+        remaining = _safe_int(raw.get("remaining_seconds"), 0)
+        if remaining <= 0 and finish > ts:
+            remaining = max(0, int(finish - ts))
+        job = normalize_card_queue_job(
+            owner_type=OWNER_TROOPS,
+            owner_key=owner_key,
+            job_id=_safe_int(raw.get("id"), 0),
+            queue_position=idx + 1,
+            start_at=start,
+            finish_at=finish,
+            now=ts,
+            label=label,
+            target_amount=amount,
+            remaining_seconds=remaining or None,
+            duration_seconds=order_total or None,
+        )
+        job["troop_label_key"] = f"troop_{owner_key}"
+        if amount is not None:
+            job["target_amount"] = int(amount)
+        _apply_queued_wait_remaining(job, finish_at=finish, now=ts)
+        out.append(job)
+    return reconcile_card_queue_jobs(out, now=ts)
+
+
 def map_shipyard_queue_to_card_jobs(
     shipyard_queue: Optional[Mapping[str, Any]],
     *,
@@ -590,6 +642,9 @@ def _mini_queue_image_url(domain: str, owner_key: str) -> str:
         from .defense_defs import defense_icon_static_path
 
         return defense_icon_static_path(key)
+    if dom in (OWNER_TROOPS, "troops"):
+        path = f"img/troops/{key}.png"
+        return f"/static/{path}"
     if dom in (OWNER_BUILDING, "building", "build"):
         from .buildings import BUILDING_ICON
 
@@ -652,6 +707,7 @@ def map_card_jobs_to_mini_queue_jobs(
         label = str(
             job.get("ship_label_key")
             or job.get("defense_label_key")
+            or job.get("troop_label_key")
             or job.get("label_key")
             or job.get("label")
             or owner_key

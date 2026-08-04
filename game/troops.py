@@ -581,37 +581,125 @@ def cancel_troop_job(player_id: int, job_id: int, *, conn) -> Tuple[bool, str]:
         raise
 
 
+def max_train_amount_for_planet(
+    metal_have: float,
+    crystal_have: float,
+    troop_key: str,
+    barracks_level: int,
+    *,
+    capacity_left: int,
+) -> int:
+    """Affordable train qty capped by planet resources and barracks stock capacity."""
+    key = str(troop_key or "").strip()
+    spec = get_troop(key)
+    if not spec:
+        return 0
+    bar_lvl = max(0, int(barracks_level or 0))
+    req = int(spec.get("required_barracks_level") or 1)
+    if bar_lvl < req:
+        return 0
+    cost = spec.get("train_cost") or {}
+    cost_m = int(cost.get("metal") or 0)
+    cost_c = int(cost.get("crystal") or 0)
+    limits: List[int] = [max(0, int(capacity_left))]
+    if cost_m > 0:
+        limits.append(int(metal_have) // cost_m)
+    if cost_c > 0:
+        limits.append(int(crystal_have) // cost_c)
+    if not limits:
+        return 0
+    return max(0, min(limits))
+
+
 def build_troops_state(planet_id: int, *, barracks_level: int, conn) -> Dict[str, Any]:
+    import time as _time
+
+    from .queue_card import map_card_jobs_to_mini_queue_jobs, map_troop_queue_to_card_jobs
+
     stock = get_planet_troops(planet_id, conn=conn)
     bar_lvl = max(0, int(barracks_level or 0))
     prod_lvl = max(1, bar_lvl) if bar_lvl > 0 else 1
     batch_cap = barracks_batch_capacity(prod_lvl) if bar_lvl > 0 else 0
+    now = _time.time()
     queue = []
     for row in list_troop_queue_rows(planet_id, conn=conn):
+        finish = int(float(row["finish_at"] or 0))
+        started = int(float(row["started_at"] or 0))
+        remaining = max(0, finish - int(now)) if finish > 0 else 0
+        total_sec = max(1, finish - started) if finish > started else remaining or 1
         queue.append(
             {
                 "id": int(row["id"]),
                 "troop_key": str(row["troop_key"]),
                 "amount": int(row["amount"] or 0),
-                "started_at": int(float(row["started_at"] or 0)),
-                "finish_at": int(float(row["finish_at"] or 0)),
+                "started_at": started,
+                "finish_at": finish,
                 "queue_position": int(row["queue_position"] or 0),
+                "remaining_seconds": remaining,
+                "order_total_seconds": total_sec,
+                "name_key": f"troop_{row['troop_key']}",
             }
         )
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT metal, crystal FROM planets WHERE id = ? LIMIT 1;",
+        (int(planet_id),),
+    )
+    prow = cur.fetchone()
+    try:
+        metal_have = float((prow["metal"] if prow is not None else 0) or 0)
+        crystal_have = float((prow["crystal"] if prow is not None else 0) or 0)
+    except (TypeError, ValueError, KeyError, IndexError):
+        metal_have = 0.0
+        crystal_have = 0.0
+
+    total = sum(stock.values())
+    cap = barracks_troop_capacity(barracks_level)
+    queued_amt = sum(max(0, int(j.get("amount") or 0)) for j in queue)
+    capacity_left = max(0, int(cap) - int(total) - int(queued_amt))
+    q_limit = get_troop_queue_limit(conn=conn)
+    queue_full = len(queue) >= q_limit
+
     units = []
     for key in TROOP_ORDER:
         spec = get_troop(key) or {}
         cycle_sec = unit_train_seconds(key, prod_lvl) if bar_lvl > 0 else base_unit_seconds_for_troop(key)
+        unlocked = bar_lvl >= int(spec.get("required_barracks_level") or 1)
+        max_train = (
+            max_train_amount_for_planet(
+                metal_have,
+                crystal_have,
+                key,
+                bar_lvl,
+                capacity_left=capacity_left,
+            )
+            if unlocked and not queue_full
+            else 0
+        )
+        train_cost = dict(spec.get("train_cost") or {})
+        can_train = unlocked and max_train > 0 and not queue_full
+        block_reason = ""
+        if not unlocked:
+            block_reason = "locked"
+        elif queue_full:
+            block_reason = "queue_full"
+        elif max_train <= 0:
+            block_reason = "not_enough_resources"
         units.append(
             {
                 "key": key,
                 "amount": int(stock.get(key, 0) or 0),
                 "required_barracks_level": int(spec.get("required_barracks_level") or 1),
-                "unlocked": bar_lvl >= int(spec.get("required_barracks_level") or 1),
-                "train_cost": dict(spec.get("train_cost") or {}),
+                "unlocked": unlocked,
+                "train_cost": train_cost,
+                "cost_metal": int(train_cost.get("metal") or 0),
+                "cost_crystal": int(train_cost.get("crystal") or 0),
                 "train_seconds": cycle_sec,
                 "base_train_seconds": base_unit_seconds_for_troop(key),
                 "batch_capacity": batch_cap,
+                "max_train": int(max_train),
+                "can_train": bool(can_train),
+                "block_reason": block_reason,
                 "name_key": spec.get("name_key"),
                 "description_key": spec.get("description_key"),
                 "icon": spec.get("icon") or f"img/troops/{key}.png",
@@ -620,15 +708,22 @@ def build_troops_state(planet_id: int, *, barracks_level: int, conn) -> Dict[str
                 "hull": int(spec.get("hull") or 0),
             }
         )
-    total = sum(stock.values())
-    cap = barracks_troop_capacity(barracks_level)
-    return {
+    state: Dict[str, Any] = {
         "stock": stock,
         "units": units,
         "queue": queue,
         "total": total,
         "capacity": cap,
+        "capacity_left": capacity_left,
         "barracks_level": bar_lvl,
         "batch_capacity": batch_cap,
-        "queue_limit": get_troop_queue_limit(conn=conn),
+        "queue_limit": q_limit,
+        "queue_count": len(queue),
+        "summary": {"count": len(queue), "limit": q_limit},
     }
+    card_jobs = map_troop_queue_to_card_jobs(state, now=now)
+    state["mini_queue_jobs"] = map_card_jobs_to_mini_queue_jobs(
+        card_jobs, domain="troops", now=now
+    )
+    return state
+

@@ -301,6 +301,16 @@ def test_records_page_renders(records_db):
     assert 'data-records-tabs' in html
     assert 'data-records-tab="buildings"' in html
     assert 'data-records-tab="research"' in html
+    assert 'data-records-tab="troops"' in html
     assert 'data-records-panel="buildings"' in html
+    assert 'data-records-panel="troops"' in html
     assert "gc-records-tab" in html
     assert "Gebäude-Rekorde" in html or "Building records" in html
+
+
+def test_main_js_records_tab_keys_include_troops():
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parents[1] / "static" / "main.js"
+    text = src.read_text(encoding="utf-8")
+    assert 'RECORDS_TAB_KEYS = ["buildings", "research", "empire", "fleet", "defense", "troops", "titans"]' in text

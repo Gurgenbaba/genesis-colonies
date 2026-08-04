@@ -2865,6 +2865,7 @@
         syncFleetAttackAlert(data.fleet_alerts);
         syncRadarContactAlert(data.fleet_alerts);
       }
+      syncGalaxyRadarPanel(data.fleet_alerts);
     }
   }
 
@@ -4532,7 +4533,13 @@
     if (!shouldRunGameLoop() || _authLoopAborted) return;
     // Soft-Nav: never arm game-state storms while PJAX HTML is in flight.
     if (GC.pjaxInFlight) return;
-    if (type === "shipyard" || type === "defense" || type === "buildings" || type === "research") {
+    if (
+      type === "shipyard"
+      || type === "defense"
+      || type === "troops"
+      || type === "buildings"
+      || type === "research"
+    ) {
       requestQueueTimerZeroRefresh({ domain: type, jobId: 0, finishAt: 0 });
       return;
     }
@@ -9254,6 +9261,10 @@
     if (preset) return preset;
     if (dom === "defense") return defenseIconUrl(ownerKey);
     if (dom === "shipyard") return shipyardIconUrl(ownerKey);
+    if (dom === "troops") {
+      if (!ownerKey) return "";
+      return GC.preferWebpStaticUrl(`/static/img/troops/${ownerKey}.png`);
+    }
     if (dom === "building" || dom === "build") return buildingIconUrl(ownerKey);
     if (dom === "research") return researchIconUrl(ownerKey, job.icon);
     return "";
@@ -9277,7 +9288,7 @@
       domain: dom,
       owner_key: String(job.owner_key || ""),
       label: String(
-        job.ship_label_key || job.defense_label_key || job.label_key || job.label || job.owner_key || ""
+        job.ship_label_key || job.defense_label_key || job.troop_label_key || job.label_key || job.label || job.owner_key || ""
       ),
       amount: isLevelQueue
         ? 0
@@ -9612,20 +9623,27 @@
         ? "defenseQueueCancel"
         : domain === "shipyard"
           ? "shipyardQueueCancel"
-          : domain === "research"
-            ? "researchCancelId"
-            : domain === "building" || domain === "build"
-              ? "buildCancelId"
-              : "";
+          : domain === "troops"
+            ? "troopCancel"
+            : domain === "research"
+              ? "researchCancelId"
+              : domain === "building" || domain === "build"
+                ? "buildCancelId"
+                : "";
     const isLevelQueue = domain === "building" || domain === "build" || domain === "research";
     const strip = rootEl.querySelector("[data-mini-queue-strip]") || rootEl;
     const now = getTimerServerNow();
     const visibleJobs = (Array.isArray(jobs) ? jobs : [])
       .filter((job) => {
         if (!job || typeof job !== "object") return false;
-        const rem = Math.max(0, Math.floor(Number(job.remaining_seconds || 0)));
         const finish = Math.floor(Number(job.finish_at || 0));
-        if (rem <= 0 && finish > 0 && finish <= now) return false;
+        const remFromServer = Math.max(0, Math.floor(Number(job.remaining_seconds || 0)));
+        const rem =
+          finish > 0
+            ? queueJobRemainingSeconds(finish, now, remFromServer)
+            : remFromServer;
+        if (finish > 0 && finish <= now) return false;
+        if (rem <= 0 && finish > 0) return false;
         return Math.floor(Number(job.job_id || 0)) > 0;
       })
       .slice()
@@ -9660,7 +9678,7 @@
             now,
             Math.max(0, Math.floor(Number(job.remaining_seconds || 0)))
           );
-          applyQueueJobTimerAttrs(timerEl, finishAt, domain, "game-state", displayRemaining);
+          applyQueueJobTimerAttrs(timerEl, finishAt, domain, miniQueueRefreshOnZero(domain), displayRemaining);
           timerEl.textContent = formatEta(queueTimerDisplaySeconds(displayRemaining));
         }
         if (isActive) {
@@ -9765,7 +9783,7 @@
           now,
           Math.max(0, Math.floor(Number(job.remaining_seconds || 0)))
         );
-        applyQueueJobTimerAttrs(timerEl, finishAt, domain, "game-state", displayRemaining);
+        applyQueueJobTimerAttrs(timerEl, finishAt, domain, miniQueueRefreshOnZero(domain), displayRemaining);
         timerEl.textContent = formatEta(queueTimerDisplaySeconds(displayRemaining));
       } else {
         timerEl.textContent = formatEta(Math.max(0, Math.floor(Number(job.remaining_seconds || 0))));
@@ -9828,6 +9846,9 @@
     }
     if (domain === "defense") {
       return t(job.defense_label_key || `defense_${ownerKey}`, defenseDisplayName(ownerKey));
+    }
+    if (domain === "troops") {
+      return t(job.troop_label_key || job.label || `troop_${ownerKey}`, ownerKey);
     }
     const candidates = [];
     if (job?.label_key) candidates.push(job.label_key);
@@ -10525,8 +10546,16 @@
     if (!shouldRunGameLoop() || _authLoopAborted) return;
     const o = opts && typeof opts === "object" ? opts : {};
     if (o.gameState !== false) {
-      requestQueueTimerZeroRefresh({ domain: o.shipyard ? "shipyard" : o.defense ? "defense" : "production" });
+      requestQueueTimerZeroRefresh({
+        domain: o.shipyard ? "shipyard" : o.defense ? "defense" : o.troops ? "troops" : "production",
+      });
     }
+  }
+
+  function miniQueueRefreshOnZero(domain) {
+    const dom = String(domain || "").toLowerCase();
+    if (dom === "shipyard" || dom === "defense" || dom === "troops") return dom;
+    return "game-state";
   }
 
   function requestQueueTimerZeroRefresh(meta) {
@@ -10584,7 +10613,7 @@
       }
       return;
     }
-    if (kind === "shipyard" || kind === "defense") {
+    if (kind === "shipyard" || kind === "defense" || kind === "troops") {
       if (o.jobId != null || o.finishAt != null || o.domain) {
         requestQueueTimerZeroRefresh({
           domain: o.domain || kind,
@@ -10771,8 +10800,18 @@
       const remaining = timerRemainingSeconds(el, now);
       const cardBlock = el.closest("[data-gc-card-queue]");
       const cardDomain = cardBlock ? String(cardBlock.dataset.timerDomain || "") : "";
+      const miniCard = el.closest("[data-mini-queue-card]");
+      const miniDomain = miniCard ? String(miniCard.dataset.timerDomain || "") : "";
       const isProductionCardTimer =
-        cardBlock && (kind === "shipyard" || kind === "defense" || cardDomain === "shipyard" || cardDomain === "defense");
+        (cardBlock && (
+          kind === "shipyard"
+          || kind === "defense"
+          || kind === "troops"
+          || cardDomain === "shipyard"
+          || cardDomain === "defense"
+          || cardDomain === "troops"
+        ))
+        || (miniCard && (miniDomain === "shipyard" || miniDomain === "defense" || miniDomain === "troops"));
       if (isProductionCardTimer) {
         _setIfChanged(el, formatEta(queueTimerDisplaySeconds(remaining)));
       } else {
@@ -10782,7 +10821,11 @@
       const key = _movementCountdownKey(el);
       const isFleetTimer = scope === "fleet" || kind === "fleet";
       const isOverviewFleet = scope === "overview" && kind === "fleet";
-      const cardFinish = cardBlock ? parseTimerTarget(cardBlock.dataset.finishAt || target) : 0;
+      const productionBlock = cardBlock || miniCard;
+      const productionDomain = cardDomain || miniDomain;
+      const cardFinish = productionBlock
+        ? parseTimerTarget(productionBlock.dataset.finishAt || target)
+        : 0;
       const refreshKind = el.dataset.refreshOnZero || inferRefreshOnZero(el, kind);
       const queueTimerDone =
         isProductionCardTimer && isQueueTimerComplete(remaining, cardFinish, now);
@@ -10803,12 +10846,12 @@
             else if (actKey === "build") requestFinishRefresh("buildings");
             else if (typeof GC.refreshGameState === "function") GC.refreshGameState("timer_done");
           }
-        } else if (queueTimerDone && cardBlock) {
-          const jobId = Math.floor(Number(cardBlock.dataset.jobId || 0));
+        } else if (queueTimerDone && productionBlock) {
+          const jobId = Math.floor(Number(productionBlock.dataset.jobId || 0));
           const finishAt = cardFinish || target;
-          if (markCardQueueZeroRefresh(cardBlock, jobId, finishAt)) {
+          if (markCardQueueZeroRefresh(productionBlock, jobId, finishAt)) {
             requestQueueTimerZeroRefresh({
-              domain: cardDomain || refreshKind || kind,
+              domain: productionDomain || refreshKind || kind,
               jobId,
               finishAt,
             });
@@ -11261,7 +11304,7 @@
       assignMonotonicServerRemaining(card, remaining, finish);
       const timerEl = card.querySelector(".gc-mini-queue-card__timer");
       if (timerEl) {
-        applyQueueJobTimerAttrs(timerEl, finish, domain, "game-state", remaining);
+        applyQueueJobTimerAttrs(timerEl, finish, domain, miniQueueRefreshOnZero(domain), remaining);
         _setIfChanged(timerEl, formatEta(queueTimerDisplaySeconds(remaining)));
       }
       const pct = Math.max(0, Math.min(100, 100 * (1 - remaining / total)));
@@ -11276,6 +11319,12 @@
           optimisticPatchStagePropLevel(ownerKey, targetLevel);
           const levelEl = document.getElementById(`level-${ownerKey}`);
           if (levelEl) _setIfChanged(levelEl, fmtNumber(targetLevel));
+        }
+        if (domain === "shipyard" || domain === "defense" || domain === "troops") {
+          const jobId = Math.floor(Number(card.dataset.jobId || 0));
+          if (markCardQueueZeroRefresh(card, jobId, finish)) {
+            requestQueueTimerZeroRefresh({ domain, jobId, finishAt: finish });
+          }
         }
       }
     });
@@ -12562,8 +12611,12 @@
   function updateFleetDrawerRowTimers(serverNow) {
     const now = Number.isFinite(serverNow) ? serverNow : getTimerServerNow();
     updateFleetAttackAlertCountdown(now);
+    updateFleetRadarContactCountdowns(now);
+    updateGalaxyRadarCountdowns(now);
     document.querySelectorAll("[data-fleet-drawer-row]").forEach((row) => {
       if (row.hasAttribute("data-fleet-alert")) return;
+      if (row.hasAttribute("data-fleet-radar-contact")) return;
+      if (row.hasAttribute("data-fleet-radar-more")) return;
       const movementId = Number(row.dataset.movementId || 0);
       const mv = movementId ? _fleetDrawerMovementById.get(movementId) : null;
       const cdEl = row.querySelector("[data-fleet-drawer-countdown]");
@@ -13441,23 +13494,65 @@
   }
   GC.syncFleetAttackAlert = syncFleetAttackAlert;
 
-  function createFleetRadarAlertRow() {
+  const RADAR_CONTACT_UI_CAP = 8;
+
+  function _formatRadarCoordPoint(point, withPosition) {
+    if (!point || typeof point !== "object") return "";
+    const g = Math.floor(Number(point.galaxy));
+    const s = Math.floor(Number(point.system));
+    if (!Number.isFinite(g) || !Number.isFinite(s)) return "";
+    if (withPosition && point.position != null && point.position !== "") {
+      const p = Math.floor(Number(point.position));
+      if (Number.isFinite(p)) return `[${g}:${s}:${p}]`;
+    }
+    return `[${g}:${s}]`;
+  }
+
+  function formatRadarContactRoute(contact) {
+    const c = contact && typeof contact === "object" ? contact : {};
+    const from = _formatRadarCoordPoint(c.origin, false);
+    const to = _formatRadarCoordPoint(c.target, true);
+    if (from && to) return `${from} → ${to}`;
+    return from || to || "–";
+  }
+
+  function _radarContactMissionLabel(contact) {
+    const mission = String(contact?.mission_type || "").trim().toLowerCase();
+    if (!mission) return t("fleet_radar_unknown_mission", "Unbekannt");
+    return _fleetIncomingMissionLabel(mission);
+  }
+
+  function _radarContactShipsLabel(contact) {
+    const c = contact && typeof contact === "object" ? contact : {};
+    if (c.ships && typeof c.ships === "object") {
+      let total = 0;
+      for (const v of Object.values(c.ships)) total += Math.max(0, Math.floor(Number(v) || 0));
+      return total > 0 ? fmtNumber(total) : "";
+    }
+    if (c.ships_by_role && typeof c.ships_by_role === "object") {
+      let total = 0;
+      for (const v of Object.values(c.ships_by_role)) total += Math.max(0, Math.floor(Number(v) || 0));
+      return total > 0 ? `~${fmtNumber(total)}` : "";
+    }
+    return "";
+  }
+
+  function createFleetRadarContactRow() {
     const row = document.createElement("article");
-    row.className = "gc-fleet-hud-row gc-fleet-drawer-row gc-fleet-hud-row--radar gc-fleet-hud-row--radar-alert";
-    row.setAttribute("data-fleet-radar-alert", "");
+    row.className = "gc-fleet-hud-row gc-fleet-drawer-row gc-fleet-hud-row--radar gc-fleet-hud-row--radar-contact";
+    row.setAttribute("data-fleet-radar-contact", "");
     row.setAttribute("role", "status");
-    row.setAttribute("aria-live", "polite");
 
     const main = document.createElement("div");
     main.className = "gc-fleet-hud-main";
 
     const missionEl = document.createElement("span");
     missionEl.className = "gc-fleet-hud-mission gc-fleet-hud-mission--radar";
-    missionEl.textContent = t("fleet_radar_mission", "Threat Net");
+    missionEl.dataset.fleetRadarMission = "1";
 
     const routeEl = document.createElement("span");
     routeEl.className = "gc-fleet-hud-route gc-fleet-drawer-row-route";
-    routeEl.dataset.fleetRadarSummary = "1";
+    routeEl.dataset.fleetRadarRoute = "1";
 
     main.append(missionEl, routeEl);
 
@@ -13468,26 +13563,126 @@
     legEl.className = "gc-fleet-hud-leg";
     legEl.textContent = t("fleet_radar_leg", "Radar");
 
+    const ownerEl = document.createElement("span");
+    ownerEl.className = "gc-fleet-hud-radar-owner";
+    ownerEl.dataset.fleetRadarOwner = "1";
+    ownerEl.hidden = true;
+
     const shipsEl = document.createElement("span");
     shipsEl.className = "gc-fleet-hud-ships gc-mono";
-    shipsEl.dataset.fleetRadarCount = "1";
+    shipsEl.dataset.fleetRadarShips = "1";
+    shipsEl.hidden = true;
 
     const timeEl = document.createElement("span");
     timeEl.className = "gc-fleet-hud-time gc-mono";
-    timeEl.dataset.fleetRadarHint = "1";
+    timeEl.dataset.fleetDrawerCountdown = "1";
+    timeEl.dataset.fleetRadarCountdown = "1";
 
-    meta.append(legEl, shipsEl, timeEl);
+    meta.append(legEl, ownerEl, shipsEl, timeEl);
     row.append(main, meta);
     return row;
   }
 
-  function _fleetRadarAlertLabel(alerts) {
-    const count = Math.max(0, Math.floor(Number(alerts?.radar_contact_count) || 0));
-    if (count <= 0) return "";
-    if (count === 1) {
-      return t("fleet_alert_radar_contact", "Radar-Kontakt");
+  function createFleetRadarMoreRow() {
+    const row = document.createElement("article");
+    row.className = "gc-fleet-hud-row gc-fleet-drawer-row gc-fleet-hud-row--radar gc-fleet-hud-row--radar-more";
+    row.setAttribute("data-fleet-radar-more", "");
+    row.setAttribute("role", "status");
+
+    const main = document.createElement("div");
+    main.className = "gc-fleet-hud-main";
+
+    const routeEl = document.createElement("span");
+    routeEl.className = "gc-fleet-hud-route gc-fleet-drawer-row-route";
+    routeEl.dataset.fleetRadarMoreLabel = "1";
+
+    main.append(routeEl);
+    row.append(main);
+    return row;
+  }
+
+  function patchFleetRadarContactRow(row, contact) {
+    if (!row || !contact) return;
+    const mid = Math.floor(Number(contact.movement_id) || 0);
+    if (mid > 0) row.dataset.movementId = String(mid);
+    else row.removeAttribute("data-movement-id");
+
+    const threat = String(contact.threat_class || "").trim().toLowerCase();
+    row.dataset.threatClass = threat || "";
+    row.classList.toggle("is-radar-hostile", threat === "hostile");
+    row.classList.toggle("is-radar-intel", threat === "intel");
+    row.classList.toggle("is-radar-force", threat === "force");
+
+    const missionEl = row.querySelector("[data-fleet-radar-mission]");
+    if (missionEl) {
+      const label = _radarContactMissionLabel(contact);
+      _setIfChanged(missionEl, label);
+      const mission = String(contact.mission_type || "").toLowerCase();
+      missionEl.classList.toggle("gc-fleet-hud-mission--attack", mission === "attack");
+      missionEl.classList.toggle("gc-fleet-hud-mission--spy", mission === "spy");
+      missionEl.classList.toggle("gc-fleet-hud-mission--deploy", mission === "deploy");
+      missionEl.classList.toggle("gc-fleet-hud-mission--radar", true);
     }
-    return tf("fleet_alert_radar_contacts", { count }, `${count} Radar-Kontakte`);
+
+    const routeEl = row.querySelector("[data-fleet-radar-route]");
+    if (routeEl) {
+      _setIfChanged(routeEl, formatRadarContactRoute(contact));
+    }
+
+    const ownerEl = row.querySelector("[data-fleet-radar-owner]");
+    if (ownerEl) {
+      const owner = String(contact.owner_name || "").trim();
+      _setIfChanged(ownerEl, owner);
+      ownerEl.hidden = !owner;
+    }
+
+    const shipsEl = row.querySelector("[data-fleet-radar-ships]");
+    if (shipsEl) {
+      const shipsLabel = _radarContactShipsLabel(contact);
+      _setIfChanged(shipsEl, shipsLabel);
+      shipsEl.hidden = !shipsLabel;
+    }
+
+    const arrivalAt = Math.floor(Number(contact.arrival_at) || 0);
+    const cdEl = row.querySelector("[data-fleet-radar-countdown]");
+    if (arrivalAt > 0) {
+      row.dataset.arrivalAt = String(arrivalAt);
+      if (cdEl) {
+        cdEl.dataset.timerTarget = String(arrivalAt);
+        const remaining = Math.max(0, Math.floor(arrivalAt - getTimerServerNow()));
+        _setIfChanged(cdEl, formatCountdownRemain(remaining));
+        row.classList.toggle("is-urgent", remaining > 0 && remaining < 10);
+        cdEl.classList.toggle("is-urgent", remaining > 0 && remaining < 10);
+      }
+    } else {
+      row.removeAttribute("data-arrival-at");
+      if (cdEl) {
+        cdEl.removeAttribute("data-timer-target");
+        _setIfChanged(cdEl, "");
+        row.classList.remove("is-urgent");
+        cdEl.classList.remove("is-urgent");
+      }
+    }
+  }
+
+  function updateFleetRadarContactCountdowns(serverNow) {
+    const now = Number.isFinite(serverNow) ? serverNow : getTimerServerNow();
+    document.querySelectorAll("[data-fleet-radar-contact]").forEach((row) => {
+      const cdEl = row.querySelector("[data-fleet-radar-countdown]");
+      if (!cdEl) return;
+      const arrivalAt = Math.floor(Number(row.dataset.arrivalAt || cdEl.dataset.timerTarget || 0));
+      if (arrivalAt <= 0) return;
+      const remaining = Math.max(0, Math.floor(arrivalAt - now));
+      _setIfChanged(cdEl, remaining > 0 ? formatCountdownRemain(remaining) : "0s");
+      row.classList.toggle("is-urgent", remaining > 0 && remaining < 10);
+      cdEl.classList.toggle("is-urgent", remaining > 0 && remaining < 10);
+    });
+  }
+
+  function _radarContactInsertAnchor(listEl) {
+    if (!listEl) return null;
+    const attackRow = listEl.querySelector("[data-fleet-alert].gc-fleet-drawer-row");
+    return attackRow ? attackRow.nextSibling : listEl.firstChild;
   }
 
   function syncRadarContactAlert(alerts) {
@@ -13496,62 +13691,268 @@
     const active = _fleetRadarActive(data);
     if (!root) return;
     const listEl = root.querySelector("[data-fleet-drawer-list]");
-    let alertRow = root.querySelector("[data-fleet-radar-alert].gc-fleet-drawer-row");
+
+    // Remove legacy summary row if present.
+    root.querySelectorAll("[data-fleet-radar-alert]").forEach((el) => el.remove());
+
+    const existing = Array.from(root.querySelectorAll("[data-fleet-radar-contact]"));
+    const moreRowExisting = root.querySelector("[data-fleet-radar-more]");
 
     if (!active) {
-      if (alertRow) alertRow.remove();
+      existing.forEach((el) => el.remove());
+      if (moreRowExisting) moreRowExisting.remove();
       const shellMeta = resolveFleetHudShellVisibilityMeta();
       _syncFleetHudShellVisibility(root, shellMeta.fleetCount, data, { explicitEmpty: shellMeta.explicitEmpty });
       return;
     }
 
-    if (!alertRow) {
-      alertRow = createFleetRadarAlertRow();
+    const contacts = Array.isArray(data.radar_contacts) ? data.radar_contacts.slice() : [];
+    contacts.sort((a, b) => {
+      const aa = Math.floor(Number(a?.arrival_at) || 0);
+      const bb = Math.floor(Number(b?.arrival_at) || 0);
+      if (aa !== bb) return aa - bb;
+      return Math.floor(Number(a?.movement_id) || 0) - Math.floor(Number(b?.movement_id) || 0);
+    });
+
+    const visible = contacts.slice(0, RADAR_CONTACT_UI_CAP);
+    const overflow = Math.max(0, contacts.length - visible.length);
+    const byId = new Map();
+    for (const row of existing) {
+      const id = Math.floor(Number(row.dataset.movementId) || 0);
+      if (id > 0) byId.set(id, row);
+      else row.remove();
     }
 
-    const count = Math.max(0, Math.floor(Number(data.radar_contact_count) || 0));
-    const contacts = Array.isArray(data.radar_contacts) ? data.radar_contacts : [];
-    const summaryEl = alertRow.querySelector("[data-fleet-radar-summary]");
-    const shipsEl = alertRow.querySelector("[data-fleet-radar-count]");
-    const hintEl = alertRow.querySelector("[data-fleet-radar-hint]");
-    if (summaryEl) {
-      _setIfChanged(summaryEl, _fleetRadarAlertLabel(data));
-    }
-    if (shipsEl) {
-      shipsEl.textContent = count > 0 ? fmtNumber(count) : "";
-      shipsEl.hidden = count <= 0;
-    }
-    if (hintEl) {
-      const top = contacts[0] || {};
-      const threat = String(top.threat_class || "");
-      const mission = String(top.mission_type || "").toLowerCase();
-      const missionLabel = mission
-        ? _fleetIncomingMissionLabel(mission)
-        : "";
-      const threatLabel = threat
-        ? t(`fleet_radar_threat_${threat}`, threat)
-        : "";
-      const bits = [missionLabel, threatLabel].filter(Boolean);
-      _setIfChanged(hintEl, bits.join(" · "));
-    }
+    const keepIds = new Set();
+    let insertBefore = _radarContactInsertAnchor(listEl);
+    // After attack row: keep inserting radar rows in order. Track last inserted.
+    let lastInserted = null;
 
-    if (listEl) {
-      const attackRow = listEl.querySelector("[data-fleet-alert].gc-fleet-drawer-row");
-      if (attackRow && attackRow.nextSibling) {
-        listEl.insertBefore(alertRow, attackRow.nextSibling);
-      } else if (attackRow) {
-        listEl.appendChild(alertRow);
+    for (const contact of visible) {
+      const mid = Math.floor(Number(contact.movement_id) || 0);
+      if (mid <= 0) continue;
+      keepIds.add(mid);
+      let row = byId.get(mid);
+      if (!row) {
+        row = createFleetRadarContactRow();
       } else {
-        listEl.prepend(alertRow);
+        byId.delete(mid);
       }
-    } else {
-      root.prepend(alertRow);
+      patchFleetRadarContactRow(row, contact);
+
+      if (listEl) {
+        if (lastInserted && lastInserted.parentNode === listEl) {
+          if (lastInserted.nextSibling !== row) {
+            listEl.insertBefore(row, lastInserted.nextSibling);
+          }
+        } else if (insertBefore && insertBefore.parentNode === listEl) {
+          if (insertBefore !== row) listEl.insertBefore(row, insertBefore);
+        } else if (!row.parentNode) {
+          listEl.prepend(row);
+        }
+      } else if (!row.parentNode) {
+        root.prepend(row);
+      }
+      lastInserted = row;
+    }
+
+    for (const stale of byId.values()) stale.remove();
+
+    let moreRow = moreRowExisting;
+    if (overflow > 0) {
+      if (!moreRow) moreRow = createFleetRadarMoreRow();
+      const labelEl = moreRow.querySelector("[data-fleet-radar-more-label]");
+      if (labelEl) {
+        _setIfChanged(
+          labelEl,
+          tf("fleet_radar_more", { count: overflow }, `+${overflow} weitere Kontakte`)
+        );
+      }
+      if (listEl) {
+        if (lastInserted && lastInserted.parentNode === listEl) {
+          if (lastInserted.nextSibling !== moreRow) {
+            listEl.insertBefore(moreRow, lastInserted.nextSibling);
+          }
+        } else if (!moreRow.parentNode) {
+          listEl.appendChild(moreRow);
+        }
+      } else if (!moreRow.parentNode) {
+        root.appendChild(moreRow);
+      }
+    } else if (moreRow) {
+      moreRow.remove();
     }
 
     const shellMeta = resolveFleetHudShellVisibilityMeta();
     _syncFleetHudShellVisibility(root, shellMeta.fleetCount, data, { explicitEmpty: shellMeta.explicitEmpty });
+    updateFleetRadarContactCountdowns(getTimerServerNow());
   }
   GC.syncRadarContactAlert = syncRadarContactAlert;
+  GC.formatRadarContactRoute = formatRadarContactRoute;
+
+  function _radarGalaxyHref(point) {
+    if (!point || typeof point !== "object") return "";
+    const g = Math.floor(Number(point.galaxy) || 0);
+    const s = Math.floor(Number(point.system) || 0);
+    if (g <= 0 || s <= 0) return "";
+    return `/galaxy?view=system&galaxy=${g}&system=${s}&tab=system`;
+  }
+
+  function _radarContactNavPoint(contact) {
+    const c = contact && typeof contact === "object" ? contact : {};
+    const edge = String(c.match_edge || "").trim().toLowerCase();
+    const target = c.target && typeof c.target === "object" ? c.target : null;
+    const origin = c.origin && typeof c.origin === "object" ? c.origin : null;
+    if (edge === "origin" && origin && _radarGalaxyHref(origin)) return origin;
+    if (target && _radarGalaxyHref(target)) return target;
+    if (origin && _radarGalaxyHref(origin)) return origin;
+    return target || origin || null;
+  }
+
+  function _navigateRadarHref(href) {
+    const url = String(href || "").trim();
+    if (!url) return;
+    if (typeof GC.navigateTo === "function") {
+      GC.navigateTo(url, { push: true });
+      return;
+    }
+    window.location.href = url;
+  }
+
+  function _radarCoordLinkHtml(point, withPosition) {
+    const label = _formatRadarCoordPoint(point, withPosition);
+    if (!label) return gcEscHtml("—");
+    const href = _radarGalaxyHref(point);
+    if (!href) return gcEscHtml(label);
+    return `<a href="${gcEscHtml(href)}" class="gc-galaxy-coord-link gc-mono gc-nav-link">${gcEscHtml(label)}</a>`;
+  }
+
+  function formatRadarContactRouteHtml(contact) {
+    const c = contact && typeof contact === "object" ? contact : {};
+    const from = _radarCoordLinkHtml(c.origin, false);
+    const to = _radarCoordLinkHtml(c.target, true);
+    const fromRaw = _formatRadarCoordPoint(c.origin, false);
+    const toRaw = _formatRadarCoordPoint(c.target, true);
+    if (fromRaw && toRaw) return `${from} → ${to}`;
+    if (fromRaw) return from;
+    if (toRaw) return to;
+    return gcEscHtml("—");
+  }
+
+  function syncGalaxyRadarPanel(alerts) {
+    const panel = document.querySelector("[data-galaxy-radar-panel]");
+    if (!panel) return;
+    const data = alerts && typeof alerts === "object"
+      ? alerts
+      : (GC.lastState?.fleet_alerts || {});
+
+    const hasSensor = data.has_radar_sensor === true
+      || (Array.isArray(data.radar_sensors) && data.radar_sensors.length > 0);
+    const sensors = Array.isArray(data.radar_sensors) ? data.radar_sensors : [];
+    const contacts = Array.isArray(data.radar_contacts) ? data.radar_contacts.slice() : [];
+    contacts.sort((a, b) => {
+      const aa = Math.floor(Number(a?.arrival_at) || 0);
+      const bb = Math.floor(Number(b?.arrival_at) || 0);
+      if (aa !== bb) return aa - bb;
+      return Math.floor(Number(a?.movement_id) || 0) - Math.floor(Number(b?.movement_id) || 0);
+    });
+
+    const sensorsWrap = panel.querySelector("[data-galaxy-radar-sensors]");
+    const sensorList = panel.querySelector("[data-galaxy-radar-sensor-list]");
+    const emptyNoSensor = panel.querySelector("[data-galaxy-radar-empty-no-sensor]");
+    const emptyNoContacts = panel.querySelector("[data-galaxy-radar-empty-no-contacts]");
+    const contactList = panel.querySelector("[data-galaxy-radar-contact-list]");
+
+    if (sensorsWrap && sensorList) {
+      sensorsWrap.hidden = !hasSensor;
+      if (hasSensor) {
+        const html = sensors.map((s) => {
+          const name = gcEscHtml(String(s.name || t("galaxy_radar_sensor_unnamed", "Sensor")));
+          const coords = gcEscHtml(
+            `[${Math.floor(Number(s.galaxy) || 0)}:${Math.floor(Number(s.system) || 0)}:${Math.floor(Number(s.position) || 0)}]`
+          );
+          const range = Math.floor(Number(s.scan_range) || 0);
+          const href = _radarGalaxyHref(s);
+          const coordHtml = href
+            ? `<a href="${gcEscHtml(href)}" class="gc-galaxy-coord-link gc-mono gc-nav-link">${coords}</a>`
+            : `<span class="gc-mono">${coords}</span>`;
+          const aria = t("galaxy_radar_nav_sensor", "Zum System dieses Sensors");
+          const navAttrs = href
+            ? ` data-galaxy-radar-nav="${gcEscHtml(href)}" role="link" tabindex="0" aria-label="${gcEscHtml(aria)}"`
+            : "";
+          return `<li class="galaxy-radar-sensor-item${href ? " is-interactive" : ""}" role="listitem"${navAttrs} data-planet-id="${Math.floor(Number(s.planet_id) || 0)}">
+            <span class="galaxy-radar-sensor-name">${name}</span>
+            ${coordHtml}
+            <span class="galaxy-radar-sensor-range gc-mono">${tf("galaxy_radar_scan_range", { range }, `Reichweite ${range}`)}</span>
+          </li>`;
+        }).join("");
+        if (sensorList.innerHTML !== html) sensorList.innerHTML = html;
+      } else {
+        sensorList.innerHTML = "";
+      }
+    }
+
+    if (emptyNoSensor) emptyNoSensor.hidden = hasSensor;
+    if (emptyNoContacts) emptyNoContacts.hidden = !hasSensor || contacts.length > 0;
+
+    if (contactList) {
+      if (!hasSensor || contacts.length === 0) {
+        contactList.innerHTML = "";
+      } else {
+        const now = getTimerServerNow();
+        const html = contacts.map((c) => {
+          const mid = Math.floor(Number(c.movement_id) || 0);
+          const mission = _radarContactMissionLabel(c);
+          const threat = String(c.threat_class || "").trim().toLowerCase();
+          const threatLabel = threat
+            ? t(`fleet_radar_threat_${threat}`, threat)
+            : "";
+          const owner = String(c.owner_name || "").trim();
+          const shipsLabel = _radarContactShipsLabel(c);
+          const arrivalAt = Math.floor(Number(c.arrival_at) || 0);
+          const remaining = arrivalAt > 0 ? Math.max(0, Math.floor(arrivalAt - now)) : 0;
+          const urgent = remaining > 0 && remaining < 10 ? " is-urgent" : "";
+          const threatClass = threat ? ` is-radar-${threat}` : "";
+          const navPoint = _radarContactNavPoint(c);
+          const href = _radarGalaxyHref(navPoint);
+          const aria = t("galaxy_radar_nav_contact", "Zum System dieses Kontakts");
+          const navAttrs = href
+            ? ` data-galaxy-radar-nav="${gcEscHtml(href)}" role="link" tabindex="0" aria-label="${gcEscHtml(aria)}"`
+            : "";
+          return `<li class="galaxy-radar-contact-item${threatClass}${urgent}${href ? " is-interactive" : ""}" role="listitem"${navAttrs} data-galaxy-radar-contact="${mid}" data-arrival-at="${arrivalAt}">
+            <div class="galaxy-radar-contact-main">
+              <span class="galaxy-radar-contact-mission">${gcEscHtml(mission)}</span>
+              ${threatLabel ? `<span class="galaxy-radar-contact-threat">${gcEscHtml(threatLabel)}</span>` : ""}
+              <span class="galaxy-radar-contact-route">${formatRadarContactRouteHtml(c)}</span>
+            </div>
+            <div class="galaxy-radar-contact-meta">
+              ${owner ? `<span class="galaxy-radar-contact-owner">${gcEscHtml(owner)}</span>` : ""}
+              ${shipsLabel ? `<span class="galaxy-radar-contact-ships gc-mono">${gcEscHtml(shipsLabel)}</span>` : ""}
+              <span class="galaxy-radar-contact-eta gc-mono" data-galaxy-radar-eta data-timer-target="${arrivalAt}">${gcEscHtml(formatCountdownRemain(remaining))}</span>
+            </div>
+          </li>`;
+        }).join("");
+        if (contactList.innerHTML !== html) contactList.innerHTML = html;
+      }
+    }
+  }
+  GC.syncGalaxyRadarPanel = syncGalaxyRadarPanel;
+
+  function updateGalaxyRadarCountdowns(serverNow) {
+    const panel = document.querySelector("[data-galaxy-radar-panel]");
+    if (!panel) return;
+    const now = Number.isFinite(serverNow) ? serverNow : getTimerServerNow();
+    panel.querySelectorAll("[data-galaxy-radar-contact]").forEach((row) => {
+      const etaEl = row.querySelector("[data-galaxy-radar-eta]");
+      if (!etaEl) return;
+      const arrivalAt = Math.floor(Number(row.dataset.arrivalAt || etaEl.dataset.timerTarget || 0));
+      if (arrivalAt <= 0) return;
+      const remaining = Math.max(0, Math.floor(arrivalAt - now));
+      _setIfChanged(etaEl, remaining > 0 ? formatCountdownRemain(remaining) : "0s");
+      row.classList.toggle("is-urgent", remaining > 0 && remaining < 10);
+    });
+  }
+
 
   function renderGlobalFleetHud(fleetsRaw, opts) {
     const root = document.getElementById("global-fleet-drawer-root") || document.querySelector("[data-global-fleet-drawer]");
@@ -14555,6 +14956,7 @@
         syncFleetAttackAlert(data.fleet_alerts);
         syncRadarContactAlert(data.fleet_alerts);
       }
+      syncGalaxyRadarPanel(data.fleet_alerts);
     }
 
     if (data.account_safety !== undefined) {
@@ -14683,12 +15085,24 @@
       applyDefenseState(page, {
         ...inner,
         defense_queue: slice.queue || inner.defense_queue,
+        troops: slice.troops || inner.troops,
       });
       return;
     }
     // GC-PERF-TK-004: queue-only slim slice (no stock catalog)
     if (slice.queue) {
       renderDefenseQueue(page, slice.queue);
+    }
+    const troops = slice.troops || (inner && inner.troops);
+    if (troops && typeof GC.applyTroopsPayload === "function") {
+      const panel = page.querySelector("[data-barracks-troops-panel]");
+      if (panel) {
+        const res =
+          (data.resources && typeof data.resources === "object" && data.resources)
+          || (slice.defenses && slice.defenses.resources)
+          || militaryPageResources(page);
+        GC.applyTroopsPayload(panel, troops, res);
+      }
     }
   }
 
@@ -14705,6 +15119,8 @@
       || reasonStr === "shipyard_cancel"
       || reasonStr === "defense_build"
       || reasonStr === "defense_cancel"
+      || reasonStr === "troops_train"
+      || reasonStr === "troops_cancel"
       || reasonStr === "timekeeper_apply";
     // GC-TK-PANEL-REFRESH-001 / TK-004: queue-only slim slices must not skip
     // catalog refresh when a job finished (locks / stock / afford).
@@ -14713,6 +15129,10 @@
     );
     const defHasCatalog = Boolean(
       data?.defense?.defenses && typeof data.defense.defenses === "object"
+    );
+    const troopsHasPayload = Boolean(
+      data?.defense?.troops
+      || data?.defense?.defenses?.troops
     );
     if (onShipyard && completionReason) {
       let needSyCatalog = !syHasCatalog;
@@ -14731,6 +15151,10 @@
       if (reasonStr === "timekeeper_apply") {
         // Same as shipyard: partial TK can deliver units while the job stays active.
         needDefCatalog = !defHasCatalog;
+      }
+      // Troop finish often arrives with defense catalog but still needs troop stock/queue.
+      if (!troopsHasPayload && document.querySelector("[data-barracks-troops-panel]")) {
+        needDefCatalog = true;
       }
       if (needDefCatalog) {
         const defPage = document.getElementById("defense-page");
@@ -24021,6 +24445,69 @@
       return troops;
     };
 
+    const fleetTroopBerthCapacity = (page) => {
+      let cap = 0;
+      page.querySelectorAll("[data-ship-key][data-ship-input], [data-ship-key]").forEach((row) => {
+        const inp = row.querySelector("[data-ship-input]");
+        if (!inp) return;
+        const qty = Math.max(0, readNumberInput(inp) || 0);
+        if (qty <= 0) return;
+        const crew = Math.max(0, parseIntNumber(row.getAttribute("data-ship-crew") || "0"));
+        cap += qty * crew;
+      });
+      return cap;
+    };
+
+    const fleetTroopSlotsUsed = (page) => {
+      let used = 0;
+      page.querySelectorAll("[data-troop-input]").forEach((inp) => {
+        if (inp.disabled) return;
+        const qty = Math.max(0, parseInt(String(inp.value || "0").replace(/[^\d]/g, ""), 10) || 0);
+        if (qty <= 0) return;
+        const slots = Math.max(
+          1,
+          parseIntNumber(
+            inp.getAttribute("data-troop-cargo-slots")
+              || inp.closest("[data-troop-cargo-slots]")?.getAttribute("data-troop-cargo-slots")
+              || "1"
+          )
+        );
+        used += qty * slots;
+      });
+      return used;
+    };
+
+    const syncFleetTroopBerths = (page) => {
+      const panel = page?.querySelector("[data-fleet-troops-panel]");
+      if (!panel || panel.hidden) return;
+      const cap = fleetTroopBerthCapacity(page);
+      let used = fleetTroopSlotsUsed(page);
+      if (used > cap && cap >= 0) {
+        // Clamp from heaviest slot cost first until fit.
+        const inputs = Array.from(panel.querySelectorAll("[data-troop-input]:not([disabled])")).sort((a, b) => {
+          const sa = Math.max(1, parseIntNumber(a.getAttribute("data-troop-cargo-slots") || "1"));
+          const sb = Math.max(1, parseIntNumber(b.getAttribute("data-troop-cargo-slots") || "1"));
+          return sb - sa;
+        });
+        for (const inp of inputs) {
+          if (used <= cap) break;
+          const slots = Math.max(1, parseIntNumber(inp.getAttribute("data-troop-cargo-slots") || "1"));
+          let qty = Math.max(0, parseInt(String(inp.value || "0").replace(/[^\d]/g, ""), 10) || 0);
+          while (qty > 0 && used > cap) {
+            qty -= 1;
+            used -= slots;
+          }
+          setNumberInputValue(inp, Math.max(0, qty));
+        }
+        used = fleetTroopSlotsUsed(page);
+      }
+      const usedEl = panel.querySelector("[data-fleet-troop-berths-used]");
+      const capEl = panel.querySelector("[data-fleet-troop-berths-cap]");
+      if (usedEl) usedEl.textContent = fmtNumber(used);
+      if (capEl) capEl.textContent = fmtNumber(cap);
+      panel.classList.toggle("is-over-berths", used > cap);
+    };
+
     const syncFleetTroopsPanel = (page) => {
       const panel = page?.querySelector("[data-fleet-troops-panel]");
       if (!panel) return;
@@ -24029,6 +24516,7 @@
       if (mission !== "attack") {
         panel.querySelectorAll("[data-troop-input]").forEach((inp) => { inp.value = "0"; });
       }
+      syncFleetTroopBerths(page);
     };
 
     const getShipsSelection = (page) => {
@@ -26276,6 +26764,10 @@
         if (e.target.matches("[data-ship-input]")) {
           syncFleetShipPickQtyMarks(page);
           scrollFleetShipInputEnd(e.target);
+          syncFleetTroopBerths(page);
+        }
+        if (e.target.matches("[data-troop-input]")) {
+          syncFleetTroopBerths(page);
         }
         schedulePreview(page);
         scheduleMassExpoSplitPreview(page);
@@ -26309,6 +26801,10 @@
         if (e.target.matches("[data-ship-input]")) {
           syncFleetShipPickQtyMarks(page);
           scrollFleetShipInputEnd(e.target);
+          syncFleetTroopBerths(page);
+        }
+        if (e.target.matches("[data-troop-input]")) {
+          syncFleetTroopBerths(page);
         }
         schedulePreview(page);
         scheduleMassExpoSplitPreview(page);
@@ -27752,16 +28248,45 @@
   }
 
   function militaryPageResources(_page) {
-    return GC.lastState?.resources || {};
+    const fromState = GC.lastState?.resources;
+    if (fromState && typeof fromState === "object") {
+      const metal = Number(fromState.metal);
+      const crystal = Number(fromState.crystal);
+      if (Number.isFinite(metal) || Number.isFinite(crystal)) {
+        return {
+          metal: Math.max(0, Math.floor(Number.isFinite(metal) ? metal : 0)),
+          crystal: Math.max(0, Math.floor(Number.isFinite(crystal) ? crystal : 0)),
+          fuel_cells: Math.max(0, Math.floor(Number(fromState.fuel_cells) || 0)),
+        };
+      }
+    }
+    // Hard-reload: page init runs before the first /api/game-state poll.
+    // Prefer the already-rendered HUD over treating missing state as 0 (all costs red).
+    if (_resourceDisplay.metal != null || _resourceDisplay.crystal != null) {
+      return {
+        metal: Math.max(0, Math.floor(Number(_resourceDisplay.metal) || 0)),
+        crystal: Math.max(0, Math.floor(Number(_resourceDisplay.crystal) || 0)),
+        fuel_cells: Math.max(0, Math.floor(Number(_resourceDisplay.fuelCells) || 0)),
+      };
+    }
+    const readHud = (cls) => {
+      const el = document.querySelector(`#resource-bar .res-value.${cls}`);
+      return el ? parseIntNumber(el.textContent) : 0;
+    };
+    return {
+      metal: readHud("metal"),
+      crystal: readHud("crystal"),
+      fuel_cells: readHud("fuel_cells"),
+    };
   }
 
   function syncUnitCardCostPreview(card, resources) {
     if (!card) return;
-    const costWrap = card.querySelector("[data-shipyard-cost],[data-defense-cost]");
+    const costWrap = card.querySelector("[data-shipyard-cost],[data-defense-cost],[data-troop-cost]");
     const stack = costWrap?.querySelector(".gc-cost-stack");
     if (!costWrap || !stack) return;
     const unitCosts = readUnitCardUnitCosts(costWrap);
-    const qtyInp = card.querySelector("[data-shipyard-qty],[data-defense-qty]");
+    const qtyInp = card.querySelector("[data-shipyard-qty],[data-defense-qty],[data-troop-amount]");
     const amount = resolveUnitCardPreviewQty(qtyInp);
     const html = renderUnitCostStackHtml(unitCosts, resources || {}, amount);
     if (html && stack.innerHTML.trim() !== html.trim()) stack.innerHTML = html;
@@ -27772,8 +28297,8 @@
     _militaryCostPreviewBound = true;
     document.addEventListener("input", (e) => {
       const inp = e.target;
-      if (!inp?.matches?.("[data-shipyard-qty],[data-defense-qty]")) return;
-      const card = inp.closest("[data-ship-card],[data-defense-card]");
+      if (!inp?.matches?.("[data-shipyard-qty],[data-defense-qty],[data-troop-amount]")) return;
+      const card = inp.closest("[data-ship-card],[data-defense-card],[data-troop-card]");
       if (!card) return;
       const page = card.closest("#shipyard-page,#defense-page");
       syncUnitCardCostPreview(card, militaryPageResources(page));
@@ -28304,6 +28829,18 @@
     (data.locked_defense || []).forEach((unit) => {
       applyDefenseUnitCard(page, unit, data.resources || {}, tt, { locked: true });
     });
+    if (data.troops && typeof GC.applyTroopsPayload === "function") {
+      const panel = page.querySelector("[data-barracks-troops-panel]");
+      if (panel) {
+        GC.applyTroopsPayload(
+          panel,
+          data.troops,
+          data.resources && typeof data.resources === "object"
+            ? data.resources
+            : militaryPageResources(page)
+        );
+      }
+    }
   }
 
   function applyDefenseUnitCard(page, unit, resources, tt, opts = {}) {
@@ -36143,12 +36680,19 @@
       openInspector(key, btn);
     }
 
-    const galaxyQuickAction =
-      typeof GC !== "undefined" && GC.GalaxyQuickAction ? GC.GalaxyQuickAction : null;
     let unbindGalaxyQuickActions = null;
-    if (galaxyQuickAction) {
-      unbindGalaxyQuickActions = galaxyQuickAction.bindRingView(root);
+    function attachGalaxyRingQuickActions() {
+      if (typeof unbindGalaxyQuickActions === "function") {
+        unbindGalaxyQuickActions();
+        unbindGalaxyQuickActions = null;
+      }
+      if (typeof GC !== "undefined" && GC.GalaxyQuickAction) {
+        unbindGalaxyQuickActions = GC.GalaxyQuickAction.bindRingView(root);
+      }
     }
+    // Bind immediately if script already loaded; otherwise initGalaxy binds after ensure.
+    attachGalaxyRingQuickActions();
+    root._gcAttachGalaxyRingQuickActions = attachGalaxyRingQuickActions;
 
     async function onOpenPlanetClick(ev) {
       const btn = ev.target.closest("[data-galaxy-ring-open]");
@@ -36181,8 +36725,8 @@
     }
 
     function onKeyDown(ev) {
-      if (ev.key === "Escape" && galaxyQuickAction?._attackMenu) {
-        galaxyQuickAction.handleEscape();
+      if (ev.key === "Escape" && GC.GalaxyQuickAction?._attackMenu) {
+        GC.GalaxyQuickAction.handleEscape();
         return;
       }
       if (ev.key === "Escape" && inspector && !inspector.hidden) {
@@ -36205,6 +36749,12 @@
     GC.registerCleanup(() => {
       root.removeEventListener("click", onSlotClick);
       if (typeof unbindGalaxyQuickActions === "function") unbindGalaxyQuickActions();
+      unbindGalaxyQuickActions = null;
+      try {
+        delete root._gcAttachGalaxyRingQuickActions;
+      } catch (_) {
+        root._gcAttachGalaxyRingQuickActions = null;
+      }
       root.removeEventListener("click", onOpenPlanetClick);
       root.removeEventListener("click", onCloseClick);
       document.removeEventListener("keydown", onKeyDown);
@@ -36217,6 +36767,23 @@
       }
       closeInspector();
     });
+  }
+
+  function bootGalaxyRingView() {
+    if (!document.querySelector(".galaxy-page")) return;
+    initGalaxyDebrisUx();
+    initGalaxyRingView();
+  }
+
+  /** @deprecated Alias — ring no longer waits on quick-action script. */
+  function bootGalaxyRingAfterQuickAction() {
+    bootGalaxyRingView();
+  }
+
+  function bindGalaxyRingQuickActionsWhenReady() {
+    const root = document.querySelector("[data-galaxy-ring-view]");
+    if (!root || typeof root._gcAttachGalaxyRingQuickActions !== "function") return;
+    root._gcAttachGalaxyRingQuickActions();
   }
 
   function initGalaxyDebrisUx() {
@@ -36264,16 +36831,79 @@
     });
   }
 
-  function bootGalaxyRingAfterQuickAction() {
-    if (!document.querySelector(".galaxy-page")) return;
-    initGalaxyDebrisUx();
-    initGalaxyRingView();
+  function initGalaxyTabs(root) {
+    const page = root || document.getElementById("galaxy-page-root");
+    if (!page || page.dataset.galaxyView === "command_map") return;
+    if (page.getAttribute("data-galaxy-tabs-bound") === "1") return;
+    page.setAttribute("data-galaxy-tabs-bound", "1");
+
+    const onTabClick = (e) => {
+      const tabBtn = e.target.closest("[data-galaxy-tab]");
+      if (!tabBtn || !page.contains(tabBtn)) return;
+      if (tabBtn.tagName === "A") return;
+      e.preventDefault();
+      const tab = tabBtn.getAttribute("data-galaxy-tab") || "system";
+      page.dataset.galaxyTab = tab;
+      page.querySelectorAll("button[data-galaxy-tab]").forEach((btn) => {
+        const on = btn.getAttribute("data-galaxy-tab") === tab;
+        btn.classList.toggle("active", on);
+        btn.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      page.querySelectorAll("[data-galaxy-tab-panel]").forEach((panel) => {
+        panel.hidden = panel.getAttribute("data-galaxy-tab-panel") !== tab;
+      });
+      if (tab === "radar") {
+        syncGalaxyRadarPanel(GC.lastState?.fleet_alerts);
+      }
+      try {
+        const url = new URL(window.location.href);
+        if (tab === "system") url.searchParams.delete("tab");
+        else url.searchParams.set("tab", tab);
+        window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+      } catch (_) {}
+    };
+
+    const onRadarNavClick = (e) => {
+      const row = e.target.closest("[data-galaxy-radar-nav]");
+      if (!row || !page.contains(row)) return;
+      if (e.target.closest("a,button,input,textarea,select,label")) return;
+      const href = row.getAttribute("data-galaxy-radar-nav");
+      if (!href) return;
+      e.preventDefault();
+      _navigateRadarHref(href);
+    };
+
+    const onRadarNavKey = (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const row = e.target.closest("[data-galaxy-radar-nav]");
+      if (!row || !page.contains(row) || e.target !== row) return;
+      const href = row.getAttribute("data-galaxy-radar-nav");
+      if (!href) return;
+      e.preventDefault();
+      _navigateRadarHref(href);
+    };
+
+    page.addEventListener("click", onTabClick);
+    page.addEventListener("click", onRadarNavClick);
+    page.addEventListener("keydown", onRadarNavKey);
+    if (typeof GC.registerCleanup === "function") {
+      GC.registerCleanup(() => {
+        page.removeEventListener("click", onTabClick);
+        page.removeEventListener("click", onRadarNavClick);
+        page.removeEventListener("keydown", onRadarNavKey);
+        page.removeAttribute("data-galaxy-tabs-bound");
+      });
+    }
+    if (page.dataset.galaxyTab === "radar") {
+      syncGalaxyRadarPanel(GC.lastState?.fleet_alerts);
+    }
   }
 
   function initGalaxy() {
     if (!document.querySelector(".galaxy-page")) return;
     persistGalaxyViewFromPage();
     const galaxyRoot = document.getElementById("galaxy-page-root");
+    initGalaxyTabs(galaxyRoot);
     if (galaxyRoot?.dataset?.galaxyView === "command_map") {
       logCommandMapTelemetry("map_open");
     }
@@ -36286,24 +36916,24 @@
     initFirstDiscoveryMoment();
     initCommandMapSiteInspector();
     initCommandMapColonizeMode();
-    // PJAX swaps only #main-content — galaxy-quick-action.js lives in extra_scripts.
-    // Must be present before bindRingView (spy/attack/recycle/asteroid/relocation).
-    const bootRing = () => {
-      if (!document.querySelector(".galaxy-page")) return;
-      if (!GC.GalaxyQuickAction) {
-        console.error("[GC] GalaxyQuickAction missing after ensure — quick missions unbound");
-      }
-      bootGalaxyRingAfterQuickAction();
-    };
+    // Ring inspector must boot immediately — never gate slot clicks behind QA script load.
+    // Spy/quick-attack bind after ensureGalaxyQuickAction (PJAX extra_scripts).
+    bootGalaxyRingView();
     if (typeof GC.ensureGalaxyQuickAction === "function") {
       GC.ensureGalaxyQuickAction()
-        .then(bootRing)
+        .then(() => {
+          if (!document.querySelector(".galaxy-page")) return;
+          if (!GC.GalaxyQuickAction) {
+            console.error("[GC] GalaxyQuickAction missing after ensure — quick missions unbound");
+            return;
+          }
+          bindGalaxyRingQuickActionsWhenReady();
+        })
         .catch((err) => {
           console.error("[GC] galaxy-quick-action load failed", err);
-          bootRing();
         });
     } else {
-      bootRing();
+      bindGalaxyRingQuickActionsWhenReady();
     }
     prefetchGalaxyAdjacent();
     bindWorldBossAttackCooldownUnlock(document.getElementById("galaxy-page-root") || document);
@@ -38199,7 +38829,7 @@
       bindReportBtn(btn, category, "data-chronicles-report");
     });
   };
-  const RECORDS_TAB_KEYS = ["buildings", "research", "empire", "fleet", "defense", "titans"];
+  const RECORDS_TAB_KEYS = ["buildings", "research", "empire", "fleet", "defense", "troops", "titans"];
 
   function _recordsSelectTab(page, tabKey) {
     if (!page) return;

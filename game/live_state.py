@@ -375,7 +375,7 @@ def defense_finish_source(action: str) -> str:
 def defense_panel_for_game_state(user_id: int, *, conn) -> Optional[Dict[str, Any]]:
     """Defense queue + stock slice for /api/game-state include_panel."""
     from game.defense import build_defense_api_payload, defense_queue_table_ready
-    from game.models import defense_schema_ready
+    from game.models import defense_schema_ready, get_planet_buildings
     from game.planet_evolution.repository import get_context_planet
 
     if not defense_schema_ready(conn) or not defense_queue_table_ready(conn):
@@ -388,10 +388,31 @@ def defense_panel_for_game_state(user_id: int, *, conn) -> Optional[Dict[str, An
     pid = int(planet["id"])
     payload = build_defense_api_payload(int(user_id), pid, conn=conn)
     queue = payload.pop("defense_queue", {"queue": [], "summary": {}})
-    return {
+    troops_state = None
+    try:
+        from game.troops import build_troops_state, troop_queue_table_ready, troops_schema_ready
+
+        if troops_schema_ready(conn) and troop_queue_table_ready(conn):
+            bld = get_planet_buildings(pid, conn=conn) or {}
+            troops_state = build_troops_state(
+                pid,
+                barracks_level=int(bld.get("barracks") or 0),
+                conn=conn,
+            )
+    except Exception:
+        troops_state = None
+    defenses: Dict[str, Any] = {"ready": True, **payload}
+    if troops_state is not None:
+        # Nest under defenses so applyDefenseState sees troops after panel patch;
+        # keep top-level for slim / explicit client reads.
+        defenses["troops"] = troops_state
+    out: Dict[str, Any] = {
         "queue": queue,
-        "defenses": {"ready": True, **payload},
+        "defenses": defenses,
     }
+    if troops_state is not None:
+        out["troops"] = troops_state
+    return out
 
 
 def _inactive_nav_badge() -> Dict[str, Any]:
@@ -633,7 +654,20 @@ def attach_timekeeper_domain_queue_slices(
             panel = None
         if panel and isinstance(panel.get("queue"), dict):
             # Queue only — mirror shipyard slim shape for patchDefensePanelFromGameState
-            payload["defense"] = {"queue": panel["queue"]}
+            slim: Dict[str, Any] = {"queue": panel["queue"]}
+            if isinstance(panel.get("troops"), dict):
+                slim["troops"] = panel["troops"]
+            payload["defense"] = slim
+    elif dom == "troops":
+        try:
+            panel = defense_panel_for_game_state(int(user_id), conn=conn)
+        except Exception:
+            panel = None
+        if panel and isinstance(panel.get("troops"), dict):
+            payload["defense"] = {
+                "queue": panel.get("queue") if isinstance(panel.get("queue"), dict) else {"queue": []},
+                "troops": panel["troops"],
+            }
     return payload
 
 
