@@ -1249,6 +1249,40 @@ def resolve_building_impact(
             kind="capacity",
         )
 
+    if btype == "barracks":
+        from .troop_defs import barracks_troop_capacity
+
+        return impact_from_capacity(
+            blurb_key=blurb,
+            current_cap=barracks_troop_capacity(cur),
+            next_cap=barracks_troop_capacity(cur + 1),
+            affects=[
+                {"label_key": "barracks_troops_title"},
+                {"label_key": "nav_defense"},
+                {"label_key": "nav_shipyard"},
+            ],
+        )
+
+    if btype == "shield_generator":
+        return impact_from_rate(
+            blurb_key=blurb,
+            current_rate=int(cur * 2),
+            next_rate=int((cur + 1) * 2),
+            unit="%",
+            affects=[{"label_key": "building_shield_generator"}, {"label_key": "nav_defense"}],
+            kind="rate",
+        )
+
+    if btype == "radar_array":
+        return impact_from_rate(
+            blurb_key=blurb,
+            current_rate=int(cur * 2),
+            next_rate=int((cur + 1) * 2),
+            unit="",
+            affects=[{"label_key": "building_radar_array"}, {"label_key": "nav_fleet"}],
+            kind="capacity",
+        )
+
     return None
 
 
@@ -1395,6 +1429,28 @@ def resolve_research_impact(
             next_rate=prod_nxt,
             unit="/h",
             affects=[{"label_key": "building_metal_mine"}, {"label_key": "nav_overview"}],
+        )
+
+    if key == "crystal_tech":
+        mine_lvl = max(1, int(bld.get("crystal_mine", 0) or 0))
+        r_cur = EffectResolver(bld, {**research, key: cur})
+        r_nxt = EffectResolver(bld, {**research, key: nxt})
+        prod_cur = int(r_cur.get_building_production_per_hour(1.0).get("crystal_mine", 0) or 0)
+        prod_nxt = int(r_nxt.get_building_production_per_hour(1.0).get("crystal_mine", 0) or 0)
+        if prod_cur <= 0 and mine_lvl <= 0:
+            return impact_from_rate(
+                blurb_key=blurb,
+                current_rate=int(effect.get("effect_current") or 0),
+                next_rate=int(effect.get("effect_next") or 0),
+                unit="%",
+                affects=[{"label_key": "building_crystal_mine"}],
+            )
+        return impact_from_rate(
+            blurb_key=blurb,
+            current_rate=prod_cur,
+            next_rate=prod_nxt,
+            unit="/h",
+            affects=[{"label_key": "building_crystal_mine"}, {"label_key": "nav_overview"}],
         )
 
     if key == "storage_tech":

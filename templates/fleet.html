@@ -293,6 +293,39 @@
           </div>
         </section>
 
+        <section class="gc-panel fleet-panel fleet-troops-panel" data-fleet-troops-panel hidden
+                 aria-labelledby="fleet-troops-panel-title">
+          <div class="gc-panel-header">
+            <span class="gc-panel-title" id="fleet-troops-panel-title">{{ T("fleet_troops_title", "Bodentruppen (Vault-Raid)") }}</span>
+          </div>
+          <p class="section-hint hint">{{ T("fleet_troops_hint", "Nur bei Angriff: Truppen an Bord starten nach orbitalem Sieg die Bunker-Phase.") }}</p>
+          <div class="fleet-troops-grid" data-fleet-troops-grid>
+            {% for troop in fleet_ctx.troop_defs|default([]) %}
+            {% set have = troop.have|default(0)|int %}
+            {% set _troop_png = url_for('static', filename='img/troops/' ~ troop.key ~ '.png') %}
+            {% set _troop_webp = _troop_png|webp_static %}
+            <article class="fleet-troop-card{% if have <= 0 or not troop.unlocked %} is-empty{% endif %}"
+                     data-troop-key="{{ troop.key }}"
+                     data-troop-have="{{ have }}">
+              <div class="fleet-troop-card-art">
+                <picture>
+                  <source srcset="{{ _troop_webp }}" type="image/webp">
+                  <img src="{{ _troop_png }}" alt="" width="64" height="64" loading="lazy">
+                </picture>
+              </div>
+              <div class="fleet-troop-card-head">
+                <strong>{{ T(troop.name_key, troop.key) }}</strong>
+                <span class="gc-mono">×{{ have|fmt_int }}</span>
+              </div>
+              <input type="text" min="0" max="{{ have }}" value="0" inputmode="numeric"
+                     class="fleet-ship-input gc-mono gc-num-input" data-troop-input="{{ troop.key }}"
+                     {% if have <= 0 or not troop.unlocked %}disabled{% endif %}
+                     aria-label="{{ T(troop.name_key, troop.key) }}">
+            </article>
+            {% endfor %}
+          </div>
+        </section>
+
         <section class="gc-panel fleet-panel fleet-mass-expo-split-panel" aria-labelledby="fleet-mass-expo-split-title" data-fleet-mass-expo-split-panel>
           <div class="gc-panel-header">
             <span class="gc-panel-title" id="fleet-mass-expo-split-title">{{ T("fleet_mass_expo_split_title") }}</span>

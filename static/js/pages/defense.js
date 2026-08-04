@@ -71,7 +71,125 @@
 
   function reasonText(reason) {
     var r = String(reason || "generic");
-    return t("defense_error_" + r, t("fleet_error_" + r, r || "Error"));
+    return t("defense_error_" + r, t("troops_error_" + r, t("fleet_error_" + r, r || "Error")));
+  }
+
+  function applyTroopsPayload(panel, troops) {
+    if (!panel || !troops) return;
+    var totalEl = panel.querySelector("[data-barracks-troops-total]");
+    var capEl = panel.querySelector("[data-barracks-troops-capacity]");
+    if (totalEl) totalEl.textContent = String(troops.total || 0);
+    if (capEl) capEl.textContent = String(troops.capacity || 0);
+    (troops.units || []).forEach(function (u) {
+      var stock = panel.querySelector('[data-troop-stock="' + u.key + '"]');
+      if (stock) stock.textContent = "×" + String(u.amount || 0);
+    });
+  }
+
+  function bindDefenseTabs(page) {
+    if (!page || page.getAttribute("data-defense-tabs-bound") === "1") return;
+    page.setAttribute("data-defense-tabs-bound", "1");
+    page.addEventListener("click", function (e) {
+      var tabBtn = e.target.closest("[data-defense-tab]");
+      if (!tabBtn || !page.contains(tabBtn)) return;
+      e.preventDefault();
+      var tab = tabBtn.getAttribute("data-defense-tab") || "structures";
+      page.querySelectorAll("[data-defense-tab]").forEach(function (btn) {
+        var on = btn.getAttribute("data-defense-tab") === tab;
+        btn.classList.toggle("active", on);
+        btn.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      page.querySelectorAll("[data-defense-tab-panel]").forEach(function (panel) {
+        panel.hidden = panel.getAttribute("data-defense-tab-panel") !== tab;
+      });
+    });
+  }
+
+  function bindBarracksTroops(page) {
+    var panel = page && page.querySelector("[data-barracks-troops-panel]");
+    if (!panel || panel.getAttribute("data-bound") === "1") return;
+    panel.setAttribute("data-bound", "1");
+    var planetId = panel.getAttribute("data-planet-id") || page.getAttribute("data-planet-id") || "";
+    var errEl = panel.querySelector("[data-barracks-troops-error]");
+
+    panel.addEventListener("click", function (e) {
+      var trainBtn = e.target.closest("[data-troop-train]");
+      var cancelBtn = e.target.closest("[data-troop-cancel]");
+      if (!trainBtn && !cancelBtn) return;
+      e.preventDefault();
+
+      if (trainBtn) {
+        var key = trainBtn.getAttribute("data-troop-train");
+        var amountInp = panel.querySelector('[data-troop-amount="' + key + '"]');
+        var amount = Math.max(1, parseIntNumber(amountInp && amountInp.value) || 1);
+        trainBtn.disabled = true;
+        if (errEl) {
+          errEl.hidden = true;
+          errEl.textContent = "";
+        }
+        GC.fetchGameAction("/api/troops/train", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            planet_id: planetId ? Number(planetId) : undefined,
+            troop_key: key,
+            amount: amount,
+          }),
+        })
+          .then(function (res) {
+            if (res && res.ok) {
+              if (res.state) applyActionState(res, "troops_train");
+              applyTroopsPayload(panel, (res.data && res.data.troops) || res.troops);
+              showNotify(t("troops_train_ok", "Ausbildung gestartet."), "success");
+            } else {
+              var msg = reasonText((res && (res.error || res.reason)) || "generic");
+              if (errEl) {
+                errEl.textContent = msg;
+                errEl.hidden = false;
+              }
+              if (res) applyActionState(res, "troops_train_error");
+            }
+          })
+          .catch(function () {
+            if (errEl) {
+              errEl.textContent = reasonText("generic");
+              errEl.hidden = false;
+            }
+          })
+          .finally(function () {
+            trainBtn.disabled = false;
+          });
+        return;
+      }
+
+      if (cancelBtn) {
+        var jobId = Number(cancelBtn.getAttribute("data-troop-cancel") || 0);
+        if (!jobId) return;
+        cancelBtn.disabled = true;
+        GC.fetchGameAction("/api/troops/cancel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            planet_id: planetId ? Number(planetId) : undefined,
+            job_id: jobId,
+          }),
+        })
+          .then(function (res) {
+            if (res && res.ok) {
+              if (res.state) applyActionState(res, "troops_cancel");
+              applyTroopsPayload(panel, (res.data && res.data.troops) || res.troops);
+              var row = cancelBtn.closest("[data-troop-job-id]");
+              if (row) row.remove();
+            } else if (errEl) {
+              errEl.textContent = reasonText((res && (res.error || res.reason)) || "generic");
+              errEl.hidden = false;
+            }
+          })
+          .finally(function () {
+            cancelBtn.disabled = false;
+          });
+      }
+    });
   }
 
   function bindDefenseOnce() {
@@ -178,6 +296,8 @@
     bindDefenseOnce();
     var page = document.getElementById("defense-page");
     if (!page || page.dataset.ready !== "1") return;
+    bindDefenseTabs(page);
+    bindBarracksTroops(page);
     var data =
       typeof GC.parseDefensePageData === "function" ? GC.parseDefensePageData(page) : null;
     if (!data) return;

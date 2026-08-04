@@ -1295,9 +1295,13 @@ def build_combat_report(
     locale: str | None = None,
     combat_kind: str | None = None,
     defender_research_override: Mapping[str, Any] | None = None,
+    attacking_troops: Mapping[str, int] | None = None,
+    defending_troops: Mapping[str, int] | None = None,
+    vault_raid: Mapping[str, Any] | None = None,
 ) -> Tuple[str, Dict[str, Any]]:
     """Genesis-style combat report body + structured metadata for ``player_messages``."""
     from .i18n import fmt_int, tr
+    from .troop_defs import normalize_troops
 
     loc = locale
     kind = str(combat_kind or "").strip().lower()
@@ -1310,6 +1314,9 @@ def build_combat_report(
         return tr(key, default, locale=loc, **kw)
 
     def_def = dict(defending_defense or {})
+    atk_troops = normalize_troops(attacking_troops)
+    def_troops_in = normalize_troops(defending_troops)
+    vault_meta = dict(vault_raid) if isinstance(vault_raid, Mapping) else None
     winner = getattr(combat_result, "winner", None) if combat_result is not None else None
     result_label = combat_result_label(winner)
     atk_loss = dict(attacker_losses or getattr(combat_result, "attacker_losses", None) or {})
@@ -1388,6 +1395,21 @@ def build_combat_report(
                     empty_default="No attacking ships",
                     locale=loc,
                 ),
+                *(
+                    [
+                        _t("combat_report_section_attacking_troops", "Embarked ground troops"),
+                        *_format_stock_lines(
+                            atk_troops,
+                            tr_fn=_t,
+                            fmt_int=fmt_int,
+                            empty_key="combat_report_troops_empty",
+                            empty_default="No troops",
+                            locale=loc,
+                        ),
+                    ]
+                    if atk_troops
+                    else []
+                ),
             ],
         ),
         "",
@@ -1426,6 +1448,21 @@ def build_combat_report(
                     empty_key="combat_report_defense_structures_empty",
                     empty_default="No defensive structures",
                     locale=loc,
+                ),
+                *(
+                    [
+                        _t("combat_report_section_defending_troops", "Bunker ground troops"),
+                        *_format_stock_lines(
+                            def_troops_in,
+                            tr_fn=_t,
+                            fmt_int=fmt_int,
+                            empty_key="combat_report_troops_empty",
+                            empty_default="No troops",
+                            locale=loc,
+                        ),
+                    ]
+                    if def_troops_in
+                    else []
                 ),
             ],
         ),
@@ -1574,6 +1611,61 @@ def build_combat_report(
             )
         )
 
+    if vault_meta and vault_meta.get("outcome") in ("breached", "held"):
+        ground = vault_meta.get("ground") or {}
+        steal = vault_meta.get("steal") or {}
+        outcome = str(vault_meta.get("outcome"))
+        vault_lines: list[str] = []
+        if outcome == "breached":
+            vault_lines.append(
+                _t("combat_report_vault_breached", "Vault breached — bunker opened.")
+            )
+            tk_s = int(steal.get("timekeeper_stolen") or 0)
+            boxes = steal.get("boxes_stolen") or []
+            vault_lines.append(
+                _t(
+                    "combat_report_vault_steal",
+                    "Timekeeper stolen: %(tk)ss · Containers: %(boxes)s",
+                    tk=fmt_int(tk_s),
+                    boxes=", ".join(str(b) for b in boxes) if boxes else "—",
+                )
+            )
+        else:
+            vault_lines.append(
+                _t("combat_report_vault_held", "Vault held — raid failed.")
+            )
+        if ground.get("attacker_survivors") or ground.get("attacker_losses"):
+            vault_lines.append(_t("combat_report_vault_atk_survivors", "Attacker troop survivors"))
+            vault_lines.extend(
+                _format_stock_lines(
+                    ground.get("attacker_survivors") or {},
+                    tr_fn=_t,
+                    fmt_int=fmt_int,
+                    empty_key="combat_report_troops_empty",
+                    empty_default="None",
+                    locale=loc,
+                )
+            )
+        if ground.get("defender_survivors") is not None:
+            vault_lines.append(_t("combat_report_vault_def_survivors", "Defender troop survivors"))
+            vault_lines.extend(
+                _format_stock_lines(
+                    ground.get("defender_survivors") or {},
+                    tr_fn=_t,
+                    fmt_int=fmt_int,
+                    empty_key="combat_report_troops_empty",
+                    empty_default="None",
+                    locale=loc,
+                )
+            )
+        body_lines.append("")
+        body_lines.append(
+            _format_kv_section(
+                _t("combat_report_section_vault", "Secret Vault Raid"),
+                vault_lines,
+            )
+        )
+
     metadata: Dict[str, Any] = {
         "report_version": COMBAT_REPORT_VERSION,
         "target_coords": target_coord_txt if target_coord_txt != "—" else "",
@@ -1587,6 +1679,9 @@ def build_combat_report(
         "attacking_ships": dict(attacking_ships),
         "defending_ships": dict(defending_ships),
         "defending_defense": dict(def_def),
+        "attacking_troops": dict(atk_troops),
+        "defending_troops": dict(def_troops_in),
+        "vault_raid": vault_meta,
         "result": result_label,
         "winner": result_label,
         "attacker_losses": atk_loss,
@@ -1630,6 +1725,9 @@ def publish_attack_combat_report(
     combat_kind: str | None = None,
     defender_research_override: Mapping[str, Any] | None = None,
     extra_metadata: Mapping[str, Any] | None = None,
+    attacking_troops: Mapping[str, int] | None = None,
+    defending_troops: Mapping[str, int] | None = None,
+    vault_raid: Mapping[str, Any] | None = None,
 ) -> Dict[str, Any]:
     """Build report and deliver permanent inbox messages to attacker and defender."""
     body, metadata = build_combat_report(
@@ -1653,6 +1751,9 @@ def publish_attack_combat_report(
         locale=attacker_locale,
         combat_kind=combat_kind,
         defender_research_override=defender_research_override,
+        attacking_troops=attacking_troops,
+        defending_troops=defending_troops,
+        vault_raid=vault_raid,
     )
     if fleet_id is not None:
         metadata["fleet_id"] = int(fleet_id)
@@ -1868,3 +1969,99 @@ def simulate_combat_preview_from_spy(
     finally:
         if own_conn:
             conn.close()
+
+
+def simulate_ground_raid(
+    attacker_troops: Mapping[str, int],
+    defender_troops: Mapping[str, int],
+    *,
+    barracks_level: int = 0,
+    rng: Optional[random.Random] = None,
+) -> Dict[str, Any]:
+    """
+    Secret Vault Raid ground phase — second combat phase after orbital win.
+    Server-authoritative; fail fantasy ≈5–10% attacker survivors.
+    """
+    from .troop_defs import normalize_troops, troop_power
+
+    rng = rng or random.Random()
+    atk = normalize_troops(attacker_troops)
+    dfn = normalize_troops(defender_troops)
+    if not atk:
+        return {
+            "winner": WINNER_DEFENDER,
+            "attacker_survivors": {},
+            "defender_survivors": dict(dfn),
+            "attacker_losses": {},
+            "defender_losses": {},
+            "reason": "no_troops",
+        }
+
+    atk_power = float(troop_power(atk, role="attack"))
+    def_power = float(troop_power(dfn, role="defense"))
+    def_power *= 1.0 + 0.03 * max(0, int(barracks_level or 0))
+
+    atk_roll = atk_power * (0.9 + 0.2 * rng.random())
+    def_roll = def_power * (0.9 + 0.2 * rng.random()) if def_power > 0 else 0.0
+
+    if def_power <= 0 or atk_roll > def_roll:
+        def_survivors: Dict[str, int] = {}
+        def_losses: Dict[str, int] = {}
+        for k, v in dfn.items():
+            keep = max(0, int(round(v * 0.05)))
+            def_survivors[k] = keep
+            if v - keep > 0:
+                def_losses[k] = v - keep
+        atk_survivors: Dict[str, int] = {}
+        atk_losses: Dict[str, int] = {}
+        for k, v in atk.items():
+            keep = max(1 if v > 0 else 0, int(round(v * (0.55 + 0.2 * rng.random()))))
+            keep = min(v, keep)
+            atk_survivors[k] = keep
+            if v - keep > 0:
+                atk_losses[k] = v - keep
+        return {
+            "winner": WINNER_ATTACKER,
+            "attacker_survivors": {k: v for k, v in atk_survivors.items() if v > 0},
+            "defender_survivors": {k: v for k, v in def_survivors.items() if v > 0},
+            "attacker_losses": atk_losses,
+            "defender_losses": def_losses,
+            "reason": "vault_breached",
+        }
+
+    survivor_frac = 0.05 + 0.05 * rng.random()
+    atk_survivors = {}
+    atk_losses = {}
+    for k, v in atk.items():
+        keep = max(0, int(round(v * survivor_frac)))
+        if v > 0 and keep <= 0 and survivor_frac > 0:
+            keep = 1 if rng.random() < 0.35 else 0
+        keep = min(v, keep)
+        atk_survivors[k] = keep
+        if v - keep > 0:
+            atk_losses[k] = v - keep
+    def_survivors = {}
+    def_losses = {}
+    for k, v in dfn.items():
+        keep = max(0, int(round(v * (0.75 + 0.15 * rng.random()))))
+        keep = min(v, keep)
+        def_survivors[k] = keep
+        if v - keep > 0:
+            def_losses[k] = v - keep
+    return {
+        "winner": WINNER_DEFENDER,
+        "attacker_survivors": {k: v for k, v in atk_survivors.items() if v > 0},
+        "defender_survivors": {k: v for k, v in def_survivors.items() if v > 0},
+        "attacker_losses": atk_losses,
+        "defender_losses": def_losses,
+        "reason": "vault_held",
+    }
+
+
+# Steal / snapshot owners remain in vault_raid; re-exported for combat-facing callers.
+from .vault_raid import (  # noqa: E402
+    VAULT_BOX_CAP,
+    VAULT_TK_CAP_SEC,
+    apply_vault_steal,
+    vault_snapshot,
+)

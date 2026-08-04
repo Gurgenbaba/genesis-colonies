@@ -28,6 +28,14 @@ Kanonischer Gebäude-Key für Werft: **`orbital_shipyard`** (Legacy-Alias `shipy
 
 `terraformer`: +5 % Lagerkapazität/Stufe — **kein** Gebäude-Level-Cap. Owner: `EffectResolver.get_max_building_level()`.
 
+Zusätzliche skalierende Gebäude-Effekte (EffectResolver):
+
+| Gebäude | Effekt |
+|---------|--------|
+| `barracks` | `shipyard_time_speed` × `(1 + 0.02 × level)` — Schiffbau schneller |
+| `shield_generator` | `shield_bonus` += `0.02 × level` — Combat-Schilde |
+| `radar_array` | `scan_range` = `2 × level` — Deep-Space Threat Net ([GALAXY_SYSTEM.md](GALAXY_SYSTEM.md)) |
+
 Queue-Cancel-Refunds: [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md) (GC-831).
 
 ---

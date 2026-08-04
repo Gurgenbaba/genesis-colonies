@@ -57,9 +57,7 @@ COMBAT_MODIFIER_KEYS = frozenset({
 })
 
 # Modifier keys computed but not consumed by any live gameplay engine yet.
-PREPARED_MODIFIER_KEYS = frozenset({
-    "scan_range",
-})
+PREPARED_MODIFIER_KEYS = frozenset()
 
 ACTIVE_MODIFIER_KEYS = frozenset({
     "mine_energy_factor",
@@ -75,6 +73,7 @@ ACTIVE_MODIFIER_KEYS = frozenset({
     "cargo_multiplier",
     "shipyard_time_speed",
     "defense_time_speed",
+    "scan_range",
 }) | COMBAT_MODIFIER_KEYS
 
 
@@ -200,9 +199,9 @@ class EffectResolver:
 
     @staticmethod
     def crystal_prod_bonus_pct(level: int) -> int:
-        from ..production_formula import DRONE_TECH_PER_LEVEL
+        from ..production_formula import CRYSTAL_TECH_PER_LEVEL
 
-        return int(round(DRONE_TECH_PER_LEVEL * max(0, int(level or 0)) * 100))
+        return int(round(CRYSTAL_TECH_PER_LEVEL * max(0, int(level or 0)) * 100))
 
     @staticmethod
     def drone_prod_bonus_pct(level: int) -> int:
@@ -586,7 +585,7 @@ class EffectResolver:
                     label,
                     float(amount),
                     0,
-                    prepared=(mod_key == "scan_range"),
+                    prepared=False,
                 )
             )
         return out
@@ -738,6 +737,14 @@ class EffectResolver:
             metal_prod_factor *= 1.0 + MINING_TECH_PER_LEVEL * lm
             sources.append(self._source_entry("metal_prod_factor", "mining_tech", metal_prod_factor, lm))
 
+        # --- Research: crystal_tech (+3% Crytite per level) ---
+        lc = _lvl(r, "crystal_tech")
+        if lc > 0:
+            from ..production_formula import CRYSTAL_TECH_PER_LEVEL
+
+            crystal_prod_factor *= 1.0 + CRYSTAL_TECH_PER_LEVEL * lc
+            sources.append(self._source_entry("crystal_prod_factor", "crystal_tech", crystal_prod_factor, lc))
+
         # --- Research: drone_tech (+2% Ferronit + Crytite per level — GC-820) ---
         ld = _lvl(r, "drone_tech")
         if ld > 0:
@@ -826,11 +833,27 @@ class EffectResolver:
             solar_output_factor *= 1.0 + 0.03 * geo
             sources.append(self._source_entry("solar_output_factor", "geothermal_nexus", solar_output_factor, geo))
 
-        # --- Prepared: radar scan (no galaxy/scan engine yet) ---
+        # --- Buildings: barracks (+2% shipyard speed per level) ---
+        barracks = _bld(b, "barracks")
+        if barracks > 0:
+            shipyard_time_speed *= 1.0 + 0.02 * barracks
+            sources.append(
+                self._source_entry("shipyard_time_speed", "barracks", shipyard_time_speed, barracks)
+            )
+
+        # --- Buildings: shield_generator (+2% combat shield per level) ---
+        shield_gen = _bld(b, "shield_generator")
+        if shield_gen > 0:
+            shield_bonus += 0.02 * shield_gen
+            sources.append(
+                self._source_entry("shield_bonus", "shield_generator", shield_bonus, shield_gen)
+            )
+
+        # --- Radar: scan_range (Deep-Space Threat Net) ---
         radar = _bld(b, "radar_array")
         if radar > 0:
             scan_range += 2 * radar
-            sources.append(self._source_entry("scan_range", "radar_array", scan_range, radar, prepared=True))
+            sources.append(self._source_entry("scan_range", "radar_array", scan_range, radar))
 
         climate_state = self._apply_climate_modifiers(
             {

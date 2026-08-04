@@ -10,7 +10,10 @@ from typing import Any, Dict, FrozenSet, List, Mapping, Optional
 
 COMBAT_UNIT_SHIP = "ship"
 COMBAT_UNIT_DEFENSE = "defense"
-COMBAT_UNIT_TYPES: FrozenSet[str] = frozenset({COMBAT_UNIT_SHIP, COMBAT_UNIT_DEFENSE})
+COMBAT_UNIT_TROOP = "troop"
+COMBAT_UNIT_TYPES: FrozenSet[str] = frozenset(
+    {COMBAT_UNIT_SHIP, COMBAT_UNIT_DEFENSE, COMBAT_UNIT_TROOP}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -232,6 +235,10 @@ def _unit_icon_path(unit_key: str, unit_type: str) -> str:
         from .fleet_defs import ship_icon_static_path
 
         return ship_icon_static_path(unit_key)
+    if unit_type == COMBAT_UNIT_TROOP:
+        from .troop_defs import troop_icon_static_path
+
+        return troop_icon_static_path(unit_key)
     from .defense_defs import defense_icon_static_path
 
     return defense_icon_static_path(unit_key)
@@ -367,13 +374,16 @@ def validate_combat_registry() -> List[str]:
 
 
 def unit_display_name(unit_key: str, *, locale: str | None = None) -> str:
-    """Player-facing ship or defense label — auto-detect kind, same source as fleet/defense UI."""
+    """Player-facing ship, defense, or troop label — same source as fleet/defense/barracks UI."""
     from .defense_defs import defense_display_name, is_known_defense_key
     from .fleet_defs import ship_display_name
+    from .troop_defs import is_known_troop_key, troop_display_name
 
     key = str(unit_key or "").strip()
     if not key:
         return ""
+    if is_known_troop_key(key):
+        return troop_display_name(key, locale=locale)
     if is_known_defense_key(key):
         return defense_display_name(key, locale=locale)
     return ship_display_name(key, locale=locale)

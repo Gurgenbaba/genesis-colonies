@@ -552,6 +552,7 @@ def fleet_hud_for_game_state(user_id: int, *, conn) -> Optional[Dict[str, Any]]:
     from game.fleet import (
         build_active_fleets_payload,
         build_fleet_incoming_attack_alerts,
+        enrich_fleet_alerts_with_radar,
         fleet_schema_ready,
         get_fleet_slot_status,
         process_fleet_tick,
@@ -565,10 +566,12 @@ def fleet_hud_for_game_state(user_id: int, *, conn) -> Optional[Dict[str, Any]]:
     if player_fleet_is_dirty(uid, conn=conn):
         process_fleet_tick(player_id=uid, conn=conn)
 
+    alerts = build_fleet_incoming_attack_alerts(uid, conn=conn)
+    alerts = enrich_fleet_alerts_with_radar(alerts, uid, conn=conn)
     return {
         "active_fleets": build_active_fleets_payload(uid, conn=conn),
         "fleet_slots": get_fleet_slot_status(uid, conn=conn),
-        "fleet_alerts": build_fleet_incoming_attack_alerts(uid, conn=conn),
+        "fleet_alerts": alerts,
     }
 
 
@@ -798,10 +801,17 @@ def notification_summary_for_client(user_id: int, *, conn) -> Dict[str, Any]:
         "incoming_attacks": [],
     }
     try:
-        from game.fleet import build_fleet_incoming_attack_alerts, fleet_schema_ready
+        from game.fleet import (
+            build_fleet_incoming_attack_alerts,
+            enrich_fleet_alerts_with_radar,
+            fleet_schema_ready,
+        )
 
         if fleet_schema_ready(conn):
             fleet_alerts = build_fleet_incoming_attack_alerts(uid, conn=conn) or fleet_alerts
+            fleet_alerts = enrich_fleet_alerts_with_radar(
+                fleet_alerts, uid, conn=conn
+            )
     except Exception:
         pass
 

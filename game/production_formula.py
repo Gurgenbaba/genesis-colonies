@@ -41,6 +41,7 @@ LEVEL_GROWTH: Dict[str, Dict[str, float]] = {
 }
 
 MINING_TECH_PER_LEVEL = 0.03
+CRYSTAL_TECH_PER_LEVEL = 0.03
 DRONE_TECH_PER_LEVEL = 0.02
 
 SLOT_METAL_RANGE = (4, 9)
@@ -186,11 +187,12 @@ def temperature_modifier_for(resource_type: str, temperature_mid_c: Optional[flo
 def research_modifier_for(resource_type: str, research: Optional[Mapping[str, Any]]) -> float:
     key = _normalize_resource_type(resource_type)
     mining = _lvl(research, "mining_tech")
+    crystal = _lvl(research, "crystal_tech")
     drone = _lvl(research, "drone_tech")
     if key == "metal":
         return (1.0 + MINING_TECH_PER_LEVEL * mining) * (1.0 + DRONE_TECH_PER_LEVEL * drone)
     if key == "crystal":
-        return 1.0 + DRONE_TECH_PER_LEVEL * drone
+        return (1.0 + CRYSTAL_TECH_PER_LEVEL * crystal) * (1.0 + DRONE_TECH_PER_LEVEL * drone)
     return 1.0
 
 

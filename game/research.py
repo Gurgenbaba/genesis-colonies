@@ -67,6 +67,19 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
         "cost_factor": 1.6,
         "requirements": {"buildings": {"research_lab": 1}},
     },
+    "crystal_tech": {
+        "label": "Crytite-Synthese",
+        "label_key": "crystal_tech",
+        "description": "Steigert die Reinheit und damit die Produktion von Crytite.",
+        "description_key": "desc_crystal_tech",
+        "category": "crystal",
+        "icon": "crytite-synthese.png",
+        "base_cost_m": 1000,
+        "base_cost_c": 500,
+        "base_time": 910,
+        "cost_factor": 1.6,
+        "requirements": {"buildings": {"research_lab": 1}},
+    },
     "buildtime_tech": {
         "label": "Bauoptimierung",
         "label_key": "buildtime_tech",
@@ -261,7 +274,7 @@ def next_navigation_fleet_slot_unlock(level: int) -> Optional[Dict[str, Any]]:
 # Tab groups for research UI (category keys from RESEARCH_TECHS)
 RESEARCH_TAB_GROUPS: Dict[str, List[str]] = {
     "energy": ["energy"],
-    "production": ["metal", "drones"],
+    "production": ["metal", "crystal", "drones"],
     "construction": ["construction", "storage"],
     "fleet": ["navigation", "engine", "propulsion", "expansion"],
     "military": ["weapon", "armor", "shield"],
@@ -366,6 +379,14 @@ def get_research_effect_preview(tech_key: str, current_level: int, next_level: i
             effect_next=_metal_prod_bonus_pct(nxt),
             effect_resource="metal",
             effect_metric_key="research_effect_metal_prod",
+        )
+    if tech_key == "crystal_tech":
+        return _research_effect_snapshot(
+            effect_kind="bonus_percent",
+            effect_current=_crystal_prod_bonus_pct(cur),
+            effect_next=_crystal_prod_bonus_pct(nxt),
+            effect_resource="crystal",
+            effect_metric_key="research_effect_crystal_prod",
         )
     if tech_key == "buildtime_tech":
         return _research_effect_snapshot(

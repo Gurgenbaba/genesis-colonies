@@ -121,10 +121,26 @@ def build_defense_page_context(
     by_owner = (payload.get("defense_queue") or {}).get("card_jobs_by_owner") or {}
     _attach_queue_jobs_to_defense_rows(locked, by_owner)
 
+    troops_state = None
+    try:
+        from .models import get_planet_buildings
+        from .troops import build_troops_state, troop_queue_table_ready, troops_schema_ready
+
+        if troops_schema_ready(conn) and troop_queue_table_ready(conn):
+            bld = get_planet_buildings(pid, conn=conn) or {}
+            troops_state = build_troops_state(
+                pid,
+                barracks_level=int(bld.get("barracks") or 0),
+                conn=conn,
+            )
+    except Exception:
+        troops_state = None
+
     return {
         "ready": True,
         **payload,
         **meta,
         "locked_defense": locked,
         "defense_defs": {row["key"]: row for row in defense_defs_for_client()},
+        "troops": troops_state,
     }

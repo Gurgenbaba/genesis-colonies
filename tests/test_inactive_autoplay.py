@@ -142,7 +142,7 @@ def test_inactive_autoplay_wake_touches_presence_and_enqueues(autoplay_db):
 
 
 def test_inactive_autoplay_sticky_roster_keeps_building(autoplay_db, monkeypatch):
-    """Once woken, a second tick still enqueues without needing another wake."""
+    """Once woken, a later economy-interval tick still enqueues without a new wake."""
     from game.inactive_autoplay import (
         run_inactive_autoplay_tick,
         set_inactive_autoplay_enabled,
@@ -150,6 +150,7 @@ def test_inactive_autoplay_sticky_roster_keeps_building(autoplay_db, monkeypatch
 
     monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_BATCH", "1")
     monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_INTERVAL_SEC", "3600")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_ECONOMY_INTERVAL_SEC", "60")
     uid = _register_user()
     conn = db()
     try:
@@ -162,17 +163,181 @@ def test_inactive_autoplay_sticky_roster_keeps_building(autoplay_db, monkeypatch
         assert int(first.get("roster_size") or 0) >= 1
         pid = int(first["woke"][0]["player_id"])
 
-        # Second tick within wake interval: no new wake, but sticky roster still builds.
-        second = run_inactive_autoplay_tick(
+        # Within both intervals: early skip (no standing economy).
+        skipped = run_inactive_autoplay_tick(
             conn, now=t0 + 30, force=False, source="test"
+        )
+        assert skipped.get("ok")
+        assert skipped.get("skipped_interval") is True
+        assert int(skipped.get("session_ticks") or 0) == 0
+
+        # Past economy interval, still inside wake interval: sticky roster builds.
+        second = run_inactive_autoplay_tick(
+            conn, now=t0 + 61, force=False, source="test"
         )
         assert second.get("ok")
         assert int(second.get("woke_count") or 0) == 0
         assert int(second.get("roster_size") or 0) >= 1
+        assert second.get("economy_ran") is True
         assert int(second.get("session_ticks") or 0) >= 1
         # Presence stays fresh.
-        assert not is_player_id_inactive(pid, conn=conn, now=int(t0 + 30))
+        assert not is_player_id_inactive(pid, conn=conn, now=int(t0 + 61))
         commit(conn)
+    finally:
+        conn.close()
+
+
+def test_inactive_autoplay_standing_economy_skipped_when_interval_fresh(
+    autoplay_db, monkeypatch
+):
+    """GC-PERF-AUTOPLAY-003: fresh economy stamp skips standing RR (wake stamp irrelevant)."""
+    from game.inactive_autoplay import (
+        ECONOMY_LAST_KEY,
+        ROSTER_KEY,
+        WORKER_LAST_KEY,
+        run_inactive_autoplay_tick,
+        set_inactive_autoplay_enabled,
+    )
+    from game.runtime_state import set_runtime_value
+
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_ECONOMY_INTERVAL_SEC", "300")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_INTERVAL_SEC", "60")
+    uid = _register_user()
+    now = time.time()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        set_inactive_autoplay_enabled(True, conn=conn)
+        _seed_dormant(conn, uid, days_inactive=5.0)
+        set_runtime_value(
+            ROSTER_KEY, json.dumps([_seed_roster_item(uid)]), conn=conn
+        )
+        # Wake due (stale wake stamp), economy not due (fresh economy stamp).
+        set_runtime_value(
+            WORKER_LAST_KEY,
+            json.dumps({"ok": True, "at": now - 120, "source": "test"}),
+            conn=conn,
+        )
+        set_runtime_value(
+            ECONOMY_LAST_KEY,
+            json.dumps({"ok": True, "at": now, "source": "test"}),
+            conn=conn,
+        )
+        commit(conn)
+    finally:
+        conn.close()
+
+    conn = db()
+    try:
+        # Wake due → enters tick for wake wave; standing RR must stay off.
+        result = run_inactive_autoplay_tick(
+            conn, now=now + 1.0, force=False, source="test_economy_skip"
+        )
+        assert result.get("ok") is True
+        assert result.get("economy_ran") is False
+        # Only wake-path session results (none if roster already full).
+        assert int(result.get("session_ticks") or 0) == int(result.get("woke_count") or 0)
+    finally:
+        conn.close()
+
+
+def test_inactive_autoplay_standing_economy_runs_after_interval(
+    autoplay_db, monkeypatch
+):
+    """GC-PERF-AUTOPLAY-003: after economy interval, standing RR runs again."""
+    from game.inactive_autoplay import (
+        ECONOMY_LAST_KEY,
+        ROSTER_KEY,
+        WORKER_LAST_KEY,
+        run_inactive_autoplay_tick,
+        set_inactive_autoplay_enabled,
+    )
+    from game.runtime_state import set_runtime_value
+
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_ECONOMY_INTERVAL_SEC", "60")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_INTERVAL_SEC", "3600")
+    uid = _register_user()
+    now = time.time()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        set_inactive_autoplay_enabled(True, conn=conn)
+        _seed_dormant(conn, uid, days_inactive=5.0)
+        set_runtime_value(
+            ROSTER_KEY, json.dumps([_seed_roster_item(uid)]), conn=conn
+        )
+        set_runtime_value(
+            WORKER_LAST_KEY,
+            json.dumps({"ok": True, "at": now, "source": "test"}),
+            conn=conn,
+        )
+        set_runtime_value(
+            ECONOMY_LAST_KEY,
+            json.dumps({"ok": True, "at": now - 61, "source": "test"}),
+            conn=conn,
+        )
+        commit(conn)
+    finally:
+        conn.close()
+
+    conn = db()
+    try:
+        result = run_inactive_autoplay_tick(
+            conn, now=now, force=False, source="test_economy_due"
+        )
+        assert result.get("ok") is True
+        assert result.get("economy_ran") is True
+        assert int(result.get("woke_count") or 0) == 0
+        assert int(result.get("session_ticks") or 0) >= 1
+    finally:
+        conn.close()
+
+
+def test_inactive_autoplay_force_bypasses_economy_gate(autoplay_db, monkeypatch):
+    """GC-PERF-AUTOPLAY-003: force=True runs standing economy despite fresh stamps."""
+    from game.inactive_autoplay import (
+        ECONOMY_LAST_KEY,
+        ROSTER_KEY,
+        WORKER_LAST_KEY,
+        run_inactive_autoplay_tick,
+        set_inactive_autoplay_enabled,
+    )
+    from game.runtime_state import set_runtime_value
+
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_ECONOMY_INTERVAL_SEC", "3600")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_INTERVAL_SEC", "3600")
+    uid = _register_user()
+    now = time.time()
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        set_inactive_autoplay_enabled(True, conn=conn)
+        _seed_dormant(conn, uid, days_inactive=5.0)
+        set_runtime_value(
+            ROSTER_KEY, json.dumps([_seed_roster_item(uid)]), conn=conn
+        )
+        set_runtime_value(
+            WORKER_LAST_KEY,
+            json.dumps({"ok": True, "at": now, "source": "test"}),
+            conn=conn,
+        )
+        set_runtime_value(
+            ECONOMY_LAST_KEY,
+            json.dumps({"ok": True, "at": now, "source": "test"}),
+            conn=conn,
+        )
+        commit(conn)
+    finally:
+        conn.close()
+
+    conn = db()
+    try:
+        result = run_inactive_autoplay_tick(
+            conn, now=now + 1.0, force=True, source="admin"
+        )
+        assert result.get("ok") is True
+        assert result.get("economy_ran") is True
+        assert int(result.get("session_ticks") or 0) >= 1
     finally:
         conn.close()
 
@@ -565,11 +730,16 @@ def test_inactive_autoplay_bulk_presence_keeps_whole_roster_online(autoplay_db, 
 
 def test_inactive_autoplay_eviction_sends_activity_report(autoplay_db, monkeypatch):
     """GC-2615 / SHIFT-001: tenure eviction sends one inbox activity report."""
-    from game.inactive_autoplay import run_inactive_autoplay_tick, set_inactive_autoplay_enabled
+    from game.inactive_autoplay import (
+        INACTIVE_BUILD_DURATION_CAP,
+        run_inactive_autoplay_tick,
+        set_inactive_autoplay_enabled,
+    )
 
     monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_MAX_SESSIONS", "3")
     monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_BATCH", "3")
     monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_SESSION_SEC", "3600")
+    monkeypatch.setenv("GC_INACTIVE_AUTOPLAY_ECONOMY_INTERVAL_SEC", "60")
     monkeypatch.setattr("game.inactive_autoplay.day_target", lambda now=None: 3)
 
     uids = [_register_user() for _ in range(6)]
@@ -589,6 +759,16 @@ def test_inactive_autoplay_eviction_sends_activity_report(autoplay_db, monkeypat
         assert int(first.get("woke_count") or 0) == 3
         first_ids = {int(w["player_id"]) for w in first["woke"]}
         assert first_ids.issubset(set(uids))
+        # GC-PERF-AUTOPLAY-003: chain_limit=1 does not force-complete same-tick —
+        # advance past duration cap so standing economies finish wake jobs and
+        # accumulate builds_done before tenure eviction (report requires activity).
+        for step in range(3):
+            run_inactive_autoplay_tick(
+                conn,
+                now=now0 + INACTIVE_BUILD_DURATION_CAP + 60 + step * 60,
+                force=True,
+                source="test",
+            )
         commit(conn)
     finally:
         conn.close()
@@ -1552,10 +1732,12 @@ def test_inactive_autoplay_handback_still_works_after_short_tx(autoplay_db):
 
 
 def test_inactive_autoplay_default_tick_per_cron_is_one(monkeypatch):
-    """GC-PERF-AUTOPLAY-002: default cadence is one economy per cron."""
+    """GC-PERF-AUTOPLAY-002/003: default cadence + chain 1 + economy interval 300."""
     from game.inactive_autoplay import (
+        DEFAULT_ECONOMY_INTERVAL_SEC,
         DEFAULT_TICK_PER_CRON,
         INACTIVE_CHAIN_LIMIT,
+        economy_interval_sec,
         tick_budget_ms,
         tick_per_cron,
         yield_ms,
@@ -1564,9 +1746,12 @@ def test_inactive_autoplay_default_tick_per_cron_is_one(monkeypatch):
     monkeypatch.delenv("GC_INACTIVE_AUTOPLAY_TICK_PER_CRON", raising=False)
     monkeypatch.delenv("GC_INACTIVE_AUTOPLAY_YIELD_MS", raising=False)
     monkeypatch.delenv("GC_INACTIVE_AUTOPLAY_TICK_BUDGET_MS", raising=False)
+    monkeypatch.delenv("GC_INACTIVE_AUTOPLAY_ECONOMY_INTERVAL_SEC", raising=False)
     assert DEFAULT_TICK_PER_CRON == 1
     assert tick_per_cron() == 1
-    assert INACTIVE_CHAIN_LIMIT == 2
+    assert INACTIVE_CHAIN_LIMIT == 1
+    assert DEFAULT_ECONOMY_INTERVAL_SEC == 300
+    assert economy_interval_sec() == 300
     assert yield_ms() == 50
     assert tick_budget_ms() == 800
 

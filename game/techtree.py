@@ -30,6 +30,7 @@ from .planet_evolution.constants import SPECIALIZATION_UNLOCK_LEVEL
 from .planet_evolution.repository import get_context_planet, get_planet_row
 from .research import RESEARCH_TECHS, resolve_buildings_for_research
 from .ship_requirements import check_ship_requirements
+from .troop_defs import ACTIVE_TROOP_KEYS, TROOP_ORDER, TROOPS, barracks_troop_capacity
 
 # ---------------------------------------------------------------------------
 # Öffentliche Config-Objekte (werden über logic.py re-exportiert)
@@ -52,11 +53,14 @@ TECHTREE_RESEARCH: Dict[str, Dict[str, Any]] = RESEARCH_TECHS
 RESEARCH_PREPARED_EFFECT_KEYS = frozenset()
 
 # Buildings whose primary effect is prepared until scan engine consumes it.
-BUILDING_PREPARED_EFFECT_KEYS = frozenset({"radar_array"})
+BUILDING_PREPARED_EFFECT_KEYS = frozenset()
 
 # Build-time nodes — effect preview from EffectResolver (GC-731D).
 BUILD_TIME_TECHTREE_BUILDINGS = frozenset({"command_center", "nanofactory"})
 BUILD_TIME_TECHTREE_RESEARCH = frozenset({"buildtime_tech"})
+BUILDING_EFFECT_PREVIEW_KEYS = frozenset(
+    {"command_center", "nanofactory", "barracks", "shield_generator", "radar_array"}
+)
 
 SHIP_ROLE_LABEL_KEYS: Dict[str, str] = {
     "scout": "techtree_role_scout",
@@ -275,7 +279,49 @@ def _techtree_build_time_effect_preview(
             "effect_level": display_level,
         }
 
-    if kind != "building" or key not in BUILD_TIME_TECHTREE_BUILDINGS:
+    if kind == "building" and key == "barracks":
+        lvl = max(0, int(level or 0))
+        display_level = lvl if lvl > 0 else 1
+        scope_key = "techtree_effect_current_total" if lvl > 0 else "techtree_effect_per_level_example"
+        return {
+            "effect_kind": "capacity",
+            "effect_value": barracks_troop_capacity(display_level),
+            "effect_unit": "",
+            "effect_resource": "troops",
+            "effect_metric_key": "buildings_effect_troop_capacity",
+            "effect_scope_key": scope_key,
+            "effect_level": display_level,
+        }
+
+    if kind == "building" and key == "shield_generator":
+        lvl = max(0, int(level or 0))
+        display_level = lvl if lvl > 0 else 1
+        scope_key = "techtree_effect_current_total" if lvl > 0 else "techtree_effect_per_level_example"
+        return {
+            "effect_kind": "bonus_percent",
+            "effect_value": int(display_level * 2),
+            "effect_unit": "%",
+            "effect_resource": "shield",
+            "effect_metric_key": "buildings_effect_shield_bonus",
+            "effect_scope_key": scope_key,
+            "effect_level": display_level,
+        }
+
+    if kind == "building" and key == "radar_array":
+        lvl = max(0, int(level or 0))
+        display_level = lvl if lvl > 0 else 1
+        scope_key = "techtree_effect_current_total" if lvl > 0 else "techtree_effect_per_level_example"
+        return {
+            "effect_kind": "capacity",
+            "effect_value": int(display_level * 2),
+            "effect_unit": "",
+            "effect_resource": "scan",
+            "effect_metric_key": "buildings_effect_scan_range",
+            "effect_scope_key": scope_key,
+            "effect_level": display_level,
+        }
+
+    if kind != "building" or key not in BUILDING_EFFECT_PREVIEW_KEYS:
         return None
 
     return None
@@ -371,7 +417,7 @@ def _build_building_items(buildings: Dict[str, int], research: Dict[str, int]) -
                     research=research,
                     level=level,
                 )
-                if key in BUILD_TIME_TECHTREE_BUILDINGS
+                if key in BUILDING_EFFECT_PREVIEW_KEYS
                 else None,
             }
         )
@@ -534,6 +580,64 @@ def _build_defense_items(
     return items
 
 
+def _build_troop_items(
+    buildings: Dict[str, int],
+    *,
+    troop_stock: Optional[Dict[str, int]] = None,
+    troops_ready: bool = True,
+) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+    stock = troop_stock or {}
+    barracks_lvl = int(buildings.get("barracks") or 0)
+
+    for key in TROOP_ORDER:
+        if key not in ACTIVE_TROOP_KEYS:
+            continue
+        spec = TROOPS.get(key) or {}
+        req_lvl = int(spec.get("required_barracks_level") or 0)
+        reqs_met = barracks_lvl >= req_lvl
+        count = int(stock.get(key, 0) or 0)
+        cost = spec.get("train_cost") or {}
+        planned = not troops_ready
+        req_list = [
+            {
+                "kind": "building",
+                "key": "barracks",
+                "label_key": "building_barracks",
+                "required_level": req_lvl,
+                "current_level": barracks_lvl,
+                "met": reqs_met,
+            }
+        ]
+
+        items.append(
+            {
+                "key": key,
+                "kind": "troop",
+                "label_key": str(spec.get("name_key") or f"troop_{key}"),
+                "description_key": spec.get("description_key"),
+                "role": "ground",
+                "role_label_key": "troop_role_ground",
+                "level": count,
+                "icon": f"img/troops/{key}.png",
+                "requirements": req_list,
+                "requirements_met": reqs_met,
+                "status": _progressive_status(
+                    count=count,
+                    requirements_met=reqs_met,
+                    planned=planned,
+                ),
+                "effect_status": "prepared" if planned else "active",
+                "build_cost": {
+                    "metal": int(cost.get("metal") or 0),
+                    "crystal": int(cost.get("crystal") or 0),
+                    "fuel_cells": int(cost.get("fuel_cells") or 0),
+                },
+            }
+        )
+    return items
+
+
 def _build_pe_items(planet_id: Optional[int]) -> List[Dict[str, Any]]:
     planet_level = 1
     dna_tier = 0
@@ -630,7 +734,9 @@ def get_techtree_page_context(
 
     ship_stock: Dict[str, int] = {}
     defense_stock: Dict[str, int] = {}
+    troop_stock: Dict[str, int] = {}
     defense_ready = True
+    troops_ready = True
 
     if planet_id is not None:
         try:
@@ -641,6 +747,20 @@ def get_techtree_page_context(
             defense_stock = get_planet_defense(int(planet_id)) or {}
         except Exception:
             defense_stock = {}
+        try:
+            from .troops import get_planet_troops, troops_schema_ready
+            from .db import db as _db
+
+            conn = _db()
+            try:
+                troops_ready = bool(troops_schema_ready(conn))
+                if troops_ready:
+                    troop_stock = get_planet_troops(int(planet_id), conn=conn) or {}
+            finally:
+                conn.close()
+        except Exception:
+            troop_stock = {}
+            troops_ready = True
         try:
             from .models import defense_schema_ready
             from .defense import defense_queue_table_ready
@@ -657,6 +777,11 @@ def get_techtree_page_context(
         research,
         defense_ready=defense_ready,
         defense_stock=defense_stock,
+    )
+    troop_items = _build_troop_items(
+        buildings,
+        troop_stock=troop_stock,
+        troops_ready=troops_ready,
     )
     pe_items = _build_pe_items(planet_id)
 
@@ -691,6 +816,14 @@ def get_techtree_page_context(
             "techtree_defense_hint",
             "defense",
             defense_items,
+            default_collapsed=True,
+        ),
+        _wrap_section(
+            "troops",
+            "techtree_section_troops",
+            "techtree_troops_hint",
+            "defense",
+            troop_items,
             default_collapsed=True,
         ),
         _wrap_section(

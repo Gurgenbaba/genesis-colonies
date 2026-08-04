@@ -43,7 +43,7 @@ def _fund_planet(cur, planet_id: int, *, metal: int, crystal: int, fuel_cells: f
 def _grant_ship_test_prereqs(cur, planet_id: int, user_id: int) -> None:
     """Buildings + research so hull requirement gates do not block shipyard tests."""
     cur.execute('\n        UPDATE planet_buildings\n        SET research_lab = 10, command_center = 10, barracks = 10\n        WHERE planet_id = ?;\n        ', (int(planet_id),))
-    for tech in ('energy_tech', 'mining_tech', 'drone_tech', 'engine_tech', 'navigation_tech', 'weapon_tech', 'armor_tech', 'storage_tech', 'fuel_efficiency', 'shield_tech'):
+    for tech in ('energy_tech', 'mining_tech', 'crystal_tech', 'drone_tech', 'engine_tech', 'navigation_tech', 'weapon_tech', 'armor_tech', 'storage_tech', 'fuel_efficiency', 'shield_tech'):
         cur.execute('\n            INSERT INTO research_levels (user_id, tech_key, level)\n            VALUES (?, ?, ?)\n            ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;\n            ', (int(user_id), tech, 10))
 
 def test_all_active_ship_types_exist():

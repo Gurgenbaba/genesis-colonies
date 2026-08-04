@@ -104,13 +104,20 @@ Navigation: GET `/galaxy?galaxy=N&system=M` (PJAX shell swap).
 
 ---
 
-## Radar / Scan (Prepared)
+## Radar / Scan (Deep-Space Threat Net)
 
-`radar_array` Gebäude + `EffectResolver` → `scan_range` modifier.
+`radar_array` → EffectResolver `scan_range` (`2 × level`, plus Envoy class bonus).
 
-**Kein Scan-Engine** — Modifier nur in Admin debug / prepared state.
+**Passive Threat Net** ([`game/fleet.py`](../game/fleet.py) `build_radar_contacts`):
 
-Siehe [EFFECTS.md](EFFECTS.md).
+- Each colony with radar projects a bubble of `scan_range` **system steps** (same galaxy; cross-galaxy when range ≥ 8).
+- Detects foreign `outbound` missions `attack` / `spy` / `deploy` whose origin **or** target lies in a bubble.
+- Progressive intel tiers (ETA band → coords → owner → fuzzy roles → full ships).
+- Live payload: `fleet_alerts.radar_contacts` via `/api/game-state` (no module poll).
+
+Spy probes remain a separate grounded-intel channel.
+
+Siehe [EFFECTS.md](EFFECTS.md), [FLEET_SYSTEM.md](FLEET_SYSTEM.md).
 
 ---
 

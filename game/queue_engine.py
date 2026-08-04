@@ -137,6 +137,7 @@ def _empty_result(source: str) -> Dict[str, Any]:
             "ascension": 0,
             "shipyard": 0,
             "defense": 0,
+            "troops": 0,
             "fleet_arrivals": 0,
             "fleet_returns": 0,
             "planet_relocations": 0,
@@ -571,6 +572,13 @@ def finish_planet_defense_jobs(
     )
 
 
+def finish_planet_troop_jobs(conn, planet_id: int, now: float) -> int:
+    """Deliver due Barracks troop training jobs for one planet."""
+    from .troops import finish_planet_troop_jobs as _finish
+
+    return int(_finish(int(planet_id), conn=conn, now=float(now)) or 0)
+
+
 def finish_player_research_jobs(
     conn: sqlite3.Connection,
     user_id: int,
@@ -825,6 +833,21 @@ def finish_due_work(
                 msg = f"defense planet={pid_planet}: {exc}"
                 result["errors"].append(msg)
                 logger.exception("queue_engine defense finish failed: %s", msg)
+
+            try:
+                def _tr():
+                    return finish_planet_troop_jobs(conn, pid_planet, float(now))
+
+                n_tr = _run_finish_step(conn, f"troops:{pid_planet}", _tr)
+                if n_tr > 0:
+                    result["finished"]["troops"] += n_tr
+                    affected_players.add(pid_player)
+                    affected_planets.add(pid_planet)
+            except Exception as exc:
+                result["ok"] = False
+                msg = f"troops planet={pid_planet}: {exc}"
+                result["errors"].append(msg)
+                logger.exception("queue_engine troops finish failed: %s", msg)
 
         for uid in research_targets:
             if vacation_freezes_account_progress(uid, conn=conn):

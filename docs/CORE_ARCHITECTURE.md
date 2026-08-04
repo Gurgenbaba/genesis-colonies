@@ -311,6 +311,7 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | Collector Prestige (Lifetime badges) | `game/playercard.py` (badge seeds + `_sync_badge_unlocks`; stats from `collector_lifetime_stats`) | [COLLECTOR_EXCHANGE.md](COLLECTOR_EXCHANGE.md) |
 | Alliance Hub (identity, pool, projects, diplomacy) | `game/alliance.py`, `game/alliance_catalog.py` | [ALLIANCE_SYSTEM.md](ALLIANCE_SYSTEM.md) |
 | Imperium Timekeeper (Zeitkonto, manuelles Einsetzen) | `game/timekeeper.py` | [TIMEKEEPER_SYSTEM.md](TIMEKEEPER_SYSTEM.md) |
+| Secret Vault Raid (Barracks troops, bunker steal after orbital win) | `game/troops.py`, `game/troop_defs.py`, `game/vault_raid.py` (+ ground phase in `game/combat.py`) | [VAULT_RAID_SYSTEM.md](VAULT_RAID_SYSTEM.md) |
 | Commander Classes / Skill Trees (account class + linear trunk) | `game/commander_classes.py` (+ `commander_class_catalog.py`) | [COMMANDER_CLASSES.md](COMMANDER_CLASSES.md) |
 | Human duration labels (y/mo/w/d/h/min/s) | `game/time_format.py` → Jinja `fmt_duration`, `GC.formatDurationHuman` | Adaptive ladders; never `mo`+`w`; season-scale uses days |
 | World Boss Events (shared HP PvE, contribution, LiveOps, tame/companions) | `game/world_boss.py` (+ `game/world_boss_companions.py`) | [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) |

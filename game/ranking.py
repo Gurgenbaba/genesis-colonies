@@ -117,10 +117,12 @@ def _compute_fleet_score(player_id: int, conn) -> int:
 
 
 def _compute_defense_score(player_id: int, conn) -> int:
-    """Defense wealth score from unit build costs (canonical resource_score)."""
+    """Defense + ground-troop wealth score from unit costs (canonical resource_score)."""
     from .defense_defs import unit_build_cost
     from .models import get_player_defense_counts
     from .resource_score import score_from_cost_dict
+    from .troop_defs import troop_score_value
+    from .troops import get_player_troop_counts
 
     total = 0
     for defense_key, qty in get_player_defense_counts(int(player_id), conn=conn).items():
@@ -128,6 +130,14 @@ def _compute_defense_score(player_id: int, conn) -> int:
         if count <= 0:
             continue
         unit = score_from_cost_dict(unit_build_cost(str(defense_key)))
+        if unit <= 0:
+            continue
+        total += unit * count
+    for troop_key, qty in get_player_troop_counts(int(player_id), conn=conn).items():
+        count = int(qty or 0)
+        if count <= 0:
+            continue
+        unit = troop_score_value(str(troop_key))
         if unit <= 0:
             continue
         total += unit * count

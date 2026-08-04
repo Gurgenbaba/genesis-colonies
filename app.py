@@ -360,6 +360,8 @@ _FLEET_TICK_SKIP_ENDPOINTS = frozenset(
         # GC-PERF-FLEET-SEND: mutation RTT must not wait on global fleet tick
         "api_fleet_send",
         "api_fleet_recall",
+        "api_fleet_mass_expedition",
+        "api_fleet_mass_expedition_preview",
         # GC-PERF-PLANET-SWITCH-003: switch RTT must not wait on global fleet tick
         "api_planets_set_active",
     }
@@ -10229,12 +10231,16 @@ def _uses_action_state_diet(finish_source: str) -> bool:
 
 def _fleet_mutation_game_state(finish_source: str) -> dict:
     """Slim post-mutation state for fleet send/recall (GC-PERF-FLEET-SEND)."""
-    state, _ = _build_game_state_payload(
-        include_panel=False,
-        finish_source=finish_source,
-        action_slim=True,
-    )
-    return state
+    try:
+        state, _ = _build_game_state_payload(
+            include_panel=False,
+            finish_source=finish_source,
+            action_slim=True,
+        )
+        return state if isinstance(state, dict) else {}
+    except Exception:
+        logger.exception("fleet mutation game-state failed source=%s", finish_source)
+        return {}
 
 
 def _timekeeper_apply_game_state(domain: str | None = None) -> dict:
@@ -10661,7 +10667,7 @@ def api_fuel_exchange_buy():
 
 
 @app.route("/api/fleet/preview", methods=["POST"])
-@require_login
+@require_login_api
 def api_fleet_preview():
     from game.fleet import build_fleet_send_preview, fleet_schema_ready
     from game.fleet_api import fleet_err, fleet_ok
@@ -10731,7 +10737,7 @@ def api_fleet_preview():
 
 
 @app.route("/api/fleet/resolve-target", methods=["GET", "POST"])
-@require_login
+@require_login_api
 def api_fleet_resolve_target():
     from game.fleet import (
         evaluate_fleet_mission_target,
@@ -10830,7 +10836,7 @@ def api_fleet_resolve_target():
 
 
 @app.route("/api/fleet/state", methods=["GET"])
-@require_login
+@require_login_api
 def api_fleet_state():
     from game.fleet import fleet_schema_ready, get_fleet_live_state
     from game.fleet_api import fleet_err, fleet_ok
@@ -10870,7 +10876,7 @@ def api_fleet_state():
 
 
 @app.route("/api/fleet/send", methods=["POST"])
-@require_login
+@require_login_api
 def api_fleet_send():
     from game.fleet import fleet_schema_ready, send_fleet
     from game.fleet_api import fleet_err, fleet_ok
@@ -10966,6 +10972,9 @@ def api_fleet_send():
                 return False, wb_reason, wb_ctx
             send_ships = wb_ctx.get("ships") or {}
             wb_auto_meta = wb_ctx
+        send_troops = data.get("troops") or {}
+        if galaxy_quick_attack or galaxy_quick_spy or world_boss_auto_attack:
+            send_troops = {}
         ok, reason, result = send_fleet(
             player_id=user_id,
             origin_planet_id=origin_id,
@@ -10985,6 +10994,7 @@ def api_fleet_send():
             target_world_x=target_req.get("target_world_x"),
             target_world_y=target_req.get("target_world_y"),
             expedition_hours=int(data["expedition_hours"]) if data.get("expedition_hours") not in (None, "") else None,
+            troops=send_troops,
             conn=conn,
         )
         if ok and result and quick_spy_meta:
@@ -11030,7 +11040,7 @@ def api_fleet_send():
 
 
 @app.route("/api/fleet/recall", methods=["POST"])
-@require_login
+@require_login_api
 def api_fleet_recall():
     from game.fleet import fleet_schema_ready
     from game.fleet_api import fleet_err, fleet_ok, fleet_recall_movement
@@ -11068,7 +11078,7 @@ def api_fleet_recall():
 
 
 @app.route("/api/fleet/presets", methods=["GET"])
-@require_login
+@require_login_api
 def api_fleet_presets_list():
     from game.fleet import filter_galaxy_attack_presets, fleet_schema_ready, list_presets
     from game.fleet_api import fleet_err, fleet_ok
@@ -11085,7 +11095,7 @@ def api_fleet_presets_list():
 
 
 @app.route("/api/fleet/presets", methods=["POST"])
-@require_login
+@require_login_api
 def api_fleet_presets_create():
     from game.fleet import create_preset, fleet_schema_ready
     from game.fleet_api import fleet_err, fleet_ok
@@ -11115,7 +11125,7 @@ def api_fleet_presets_create():
 
 
 @app.route("/api/fleet/presets/<int:preset_id>", methods=["PUT", "PATCH"])
-@require_login
+@require_login_api
 def api_fleet_presets_update(preset_id: int):
     from game.fleet import fleet_schema_ready, update_preset
     from game.fleet_api import fleet_err, fleet_ok
@@ -11140,7 +11150,7 @@ def api_fleet_presets_update(preset_id: int):
 
 
 @app.route("/api/fleet/presets/<int:preset_id>", methods=["DELETE"])
-@require_login
+@require_login_api
 def api_fleet_presets_delete(preset_id: int):
     from game.fleet import delete_preset, fleet_schema_ready
     from game.fleet_api import fleet_err, fleet_ok
@@ -11158,7 +11168,7 @@ def api_fleet_presets_delete(preset_id: int):
 
 
 @app.route("/api/fleet/dev/seed-ships", methods=["POST"])
-@require_login
+@require_login_api
 def api_fleet_dev_seed_ships():
     """Dev/admin only: stack test ships on active planet (no shipyard required)."""
     from game.config import is_debug_enabled
@@ -11338,6 +11348,36 @@ def api_defense_detail(defense_key: str):
             404,
         )
     return render_template("partials/defense_detail_view.html", card=card)
+
+
+@app.route("/api/troop-units/<troop_key>")
+@require_login
+def api_troop_detail(troop_key: str):
+    from game.models import get_planet_buildings
+    from game.planet_evolution.repository import get_context_planet
+    from game.troop_detail import build_troop_detail_card
+
+    buildings = None
+    user_id = int(session.get("user_id") or 0)
+    if user_id:
+        conn = db()
+        try:
+            planet = get_context_planet(user_id, conn=conn)
+            buildings = get_planet_buildings(int(planet["id"]), conn=conn)
+            card, err = build_troop_detail_card(troop_key, buildings=buildings)
+        finally:
+            conn.close()
+    else:
+        card, err = build_troop_detail_card(troop_key, buildings=buildings)
+    if err:
+        return (
+            render_template(
+                "partials/ship_detail_error.html",
+                error_key=err,
+            ),
+            404,
+        )
+    return render_template("partials/troop_detail_view.html", card=card)
 
 
 @app.route("/api/shipyard", methods=["GET"])
@@ -11758,6 +11798,166 @@ def api_combat_simulator_import_spy_report():
         return jsonify({"ok": True, "import": imported})
     finally:
         conn.close()
+
+
+@app.route("/api/troops/state", methods=["GET"])
+@require_login_api
+def api_troops_state():
+    from game.fleet_api import fleet_err, fleet_ok
+    from game.models import get_planet_buildings
+    from game.shipyard import resolve_owned_planet_id
+    from game.troops import build_troops_state, troop_queue_table_ready, troops_schema_ready
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify(fleet_err("not_logged_in")), 401
+
+    raw_pid = request.args.get("planet_id")
+    req_pid = int(raw_pid) if raw_pid not in (None, "") else None
+    conn = db()
+    try:
+        if not troops_schema_ready(conn) or not troop_queue_table_ready(conn):
+            return jsonify(fleet_err("troops_unavailable")), 503
+        planet_id, err = resolve_owned_planet_id(user_id, req_pid, conn=conn)
+        if err:
+            return jsonify(fleet_err(err)), 404
+        from game.troops import finish_planet_troop_jobs
+
+        finish_planet_troop_jobs(int(planet_id), conn=conn)
+        bld = get_planet_buildings(int(planet_id), conn=conn) or {}
+        payload = build_troops_state(
+            int(planet_id),
+            barracks_level=int(bld.get("barracks") or 0),
+            conn=conn,
+        )
+        return jsonify(fleet_ok({"troops": payload}, message_key="troops_state_ok"))
+    finally:
+        conn.close()
+
+
+@app.route("/api/troops/train", methods=["POST"])
+@require_login_api
+def api_troops_train():
+    from game.fleet_api import fleet_err, fleet_ok
+    from game.models import get_planet_buildings
+    from game.number_format import parse_int_number
+    from game.shipyard import resolve_owned_planet_id
+    from game.troops import (
+        build_troops_state,
+        enqueue_troop_train,
+        troop_queue_table_ready,
+        troops_schema_ready,
+    )
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify(fleet_err("not_logged_in")), 401
+
+    data = request.get_json(silent=True) or {}
+    troop_key = str(data.get("troop_key") or "").strip()
+    amount = parse_int_number(data.get("amount") or 1, default=0)
+    if amount <= 0:
+        return jsonify(fleet_err("invalid_amount")), 400
+
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    conn = db()
+    try:
+        if not troops_schema_ready(conn) or not troop_queue_table_ready(conn):
+            return jsonify(fleet_err("troops_unavailable")), 503
+        raw_pid = data.get("planet_id")
+        req_pid = int(raw_pid) if raw_pid not in (None, "") else None
+        planet_id, err = resolve_owned_planet_id(user_id, req_pid, conn=conn)
+        if err:
+            return jsonify(fleet_err(err)), 404
+        ok, reason, result = enqueue_troop_train(
+            player_id=user_id,
+            planet_id=int(planet_id),
+            troop_key=troop_key,
+            amount=amount,
+            conn=conn,
+        )
+        if not ok:
+            return jsonify(fleet_err(reason or "generic")), 400
+        bld = get_planet_buildings(int(planet_id), conn=conn) or {}
+        troops = build_troops_state(
+            int(planet_id),
+            barracks_level=int(bld.get("barracks") or 0),
+            conn=conn,
+        )
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(include_panel=True, finish_source="api_troops_train")
+    body = fleet_ok({"result": result, "troops": troops}, message_key="troops_train_ok")
+    body["state"] = state
+    if request_id:
+        save_idempotent_action(user_id, request_id, body)
+    return jsonify(body)
+
+
+@app.route("/api/troops/cancel", methods=["POST"])
+@require_login_api
+def api_troops_cancel():
+    from game.fleet_api import fleet_err, fleet_ok
+    from game.models import get_planet_buildings
+    from game.shipyard import resolve_owned_planet_id
+    from game.troops import (
+        build_troops_state,
+        cancel_troop_job,
+        troop_queue_table_ready,
+        troops_schema_ready,
+    )
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify(fleet_err("not_logged_in")), 401
+
+    data = request.get_json(silent=True) or {}
+    try:
+        job_id = int(data.get("job_id") or 0)
+    except (TypeError, ValueError):
+        job_id = 0
+    if job_id <= 0:
+        return jsonify(fleet_err("invalid_job")), 400
+
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    conn = db()
+    try:
+        if not troops_schema_ready(conn) or not troop_queue_table_ready(conn):
+            return jsonify(fleet_err("troops_unavailable")), 503
+        raw_pid = data.get("planet_id")
+        req_pid = int(raw_pid) if raw_pid not in (None, "") else None
+        planet_id, err = resolve_owned_planet_id(user_id, req_pid, conn=conn)
+        if err:
+            return jsonify(fleet_err(err)), 404
+        ok, reason = cancel_troop_job(user_id, job_id, conn=conn)
+        if not ok:
+            return jsonify(fleet_err(reason or "generic")), 400
+        bld = get_planet_buildings(int(planet_id), conn=conn) or {}
+        troops = build_troops_state(
+            int(planet_id),
+            barracks_level=int(bld.get("barracks") or 0),
+            conn=conn,
+        )
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(include_panel=True, finish_source="api_troops_cancel")
+    body = fleet_ok({"troops": troops}, message_key="troops_cancel_ok")
+    body["state"] = state
+    if request_id:
+        save_idempotent_action(user_id, request_id, body)
+    return jsonify(body)
 
 
 @app.route("/api/shipyard/build", methods=["POST"])
@@ -12186,7 +12386,7 @@ def _build_logistics_preview(
 
 
 @app.route("/api/fleet/logistics/preview", methods=["POST"])
-@require_login
+@require_login_api
 def api_fleet_logistics_preview():
     from game.fleet import fleet_schema_ready
     from game.fleet_api import fleet_err, fleet_ok
@@ -12207,7 +12407,7 @@ def api_fleet_logistics_preview():
 
 
 @app.route("/api/fleet/logistics/collect", methods=["POST"])
-@require_login
+@require_login_api
 def api_fleet_logistics_collect():
     from game.fleet import collect_resources, fleet_schema_ready
     from game.fleet_calc import normalize_ships
@@ -12274,7 +12474,7 @@ def api_fleet_logistics_collect():
 
 
 @app.route("/api/fleet/logistics/distribute", methods=["POST"])
-@require_login
+@require_login_api
 def api_fleet_logistics_distribute():
     from game.fleet import distribute_resources, fleet_schema_ready
     from game.fleet_calc import normalize_ships
@@ -12346,7 +12546,7 @@ def api_fleet_logistics_distribute():
 
 
 @app.route("/api/fleet/mass-expedition/preview", methods=["POST"])
-@require_login
+@require_login_api
 def api_fleet_mass_expedition_preview():
     from game.fleet import fleet_schema_ready, preview_mass_expedition_slot_split
     from game.fleet_api import fleet_err, fleet_ok
@@ -12381,7 +12581,7 @@ def api_fleet_mass_expedition_preview():
 
 
 @app.route("/api/fleet/mass-expedition", methods=["POST"])
-@require_login
+@require_login_api
 def api_fleet_mass_expedition():
     from game.fleet import fleet_schema_ready, mass_expedition, mass_expedition_from_ships
     from game.fleet_api import fleet_err, fleet_ok
@@ -12428,7 +12628,11 @@ def api_fleet_mass_expedition():
             conn=conn,
         )
 
-    ok, reason, result = _fleet_write_transaction(_mass_expo)
+    try:
+        ok, reason, result = _fleet_write_transaction(_mass_expo)
+    except Exception:
+        logger.exception("mass expedition failed user=%s", user_id)
+        return jsonify(fleet_err("server_error")), 500
 
     if ok and result:
         state = _fleet_mutation_game_state("api_fleet_mass_expedition")

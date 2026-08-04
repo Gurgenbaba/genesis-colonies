@@ -12,7 +12,9 @@ Consumers (`resources`, `buildings`, `research`) delegate to these modules; the 
 | Building caps (core nexus, geothermal) | **Fixed** | Max levels for mines/solar/fuel/storage; terraform = storage bonus only |
 | Combat (`weapon_tech`, `armor_tech`, `shield_tech`) | **Fixed** | Applied in `simulate_battle()` via `EffectResolver.get_combat_modifiers()` — [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) |
 | Fleet (`navigation_tech`, `engine_tech`, `fuel_efficiency`) | **Fixed** | `fleet_speed_multiplier`, `fuel_efficiency_factor`, `cargo_multiplier` — consumed in `fleet.py` / `fleet_calc.py` (incl. Commander Class) |
-| Radar (`radar_array` → `scan_range`) | **Not wired** | **No scan/galaxy engine** |
+| Radar (`radar_array` → `scan_range`) | **Active** | Deep-Space Threat Net — passive fleet contacts via `build_radar_contacts` / `fleet_alerts` |
+| Barracks (`barracks` → `shipyard_time_speed` + troop capacity) | **Active** | +2% shipyard speed/level; troop stock slots via `barracks_troop_capacity` — [VAULT_RAID_SYSTEM.md](VAULT_RAID_SYSTEM.md) |
+| Shield generator (`shield_generator` → `shield_bonus`) | **Active** | +2% combat shield per level in `EffectResolver.get_combat_modifiers()` |
 | Multi-universe | **Not supported** | Single SQLite DB; `universe_name` is display config only — **no `universe_id` in schema** |
 
 ## Developer note — prepared modifiers
@@ -22,7 +24,7 @@ Prepared modifiers may appear in:
 - Admin debug: `GET /api/admin/player/<id>/effects` (`modifiers_prepared`, `sources_prepared`)
 - Future UI tooltips / tech tree “planned” hints
 
-Combat and fleet modifiers are **active** where documented in [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) and [FLEET_SYSTEM.md](FLEET_SYSTEM.md). Only `scan_range` remains prepared until a scan engine consumes it.
+Combat and fleet modifiers are **active** where documented in [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) and [FLEET_SYSTEM.md](FLEET_SYSTEM.md). `scan_range` drives the Deep-Space Threat Net (`game/fleet.py` → `build_radar_contacts`). Barracks contributes to `shipyard_time_speed` (+2%/level) and planetary troop capacity; shield generator adds to `shield_bonus` (+2%/level).
 
 Build time: `get_build_time_seconds()` delegates to `economy_balance.power_build_seconds()` before player/admin speed modifiers (GC-850A).
 
@@ -103,7 +105,7 @@ Global timed bonuses from `game/server_events.py` (Admin LiveOps → Events).
 
 **Expedition hold:** `fleet.expedition_stay_seconds` multiplies base stay by active `expedition_hold_mult` (e.g. `0.75` = −25%). `fleet_calc` uses the same helper for home-ETA.
 
-Use labels like **“prepared / not active”** in admin copy when showing `scan_range` and other deferred flags.
+Use labels like **“prepared / not active”** in admin copy only for modifiers still in `PREPARED_MODIFIER_KEYS` (currently empty — `scan_range` is live).
 
 ## Offline queue finish → derived state
 
@@ -160,6 +162,20 @@ Owner: `game/technical_data.py` → `build_effective_stat`, `resolve_unit_effect
 - **Role:** shortens **only** the build time of the **nanofactory** building (`duration × 0.75^cc_level`).
 - **Never** applied to mines, labs, yards, or other normal buildings — Command Center must not appear in their nano preview.
 - UI flat “×15 %” on the CC card is a separate display helper; runtime for nano upgrades is `0.75^level`.
+
+### `radar_array` (Deep-Space Threat Net)
+
+- **Effect:** `scan_range += 2 × level` — passive hostile/inbound fleet contacts for the active world.
+- **Owner:** `EffectResolver` → `build_radar_contacts` / HUD alerts. Galaxy map markers remain deferred.
+
+### `barracks` (shipyard speed + ground troops)
+
+- **Shipyard:** `shipyard_time_speed *= 1 + 0.02 × level`.
+- **Troops:** stock capacity `barracks_troop_capacity(level)` — see [VAULT_RAID_SYSTEM.md](VAULT_RAID_SYSTEM.md). Training UI: Defense page tab Bodentruppen.
+
+### `shield_generator` (combat shield)
+
+- **Effect:** `shield_bonus += 0.02 × level` in combat modifiers (same additive stack as `shield_tech` / directives).
 
 ### `storage_tech` and depot capacity
 

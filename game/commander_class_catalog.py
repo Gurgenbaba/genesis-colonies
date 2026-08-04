@@ -610,7 +610,7 @@ PREVIEW_CHIP_META: Dict[str, Dict[str, str]] = {
     "fuel_efficiency_factor": {"label_key": "commander_chip_fuel_eff", "kind": "fuel_eff"},
     "shipyard_time_speed": {"label_key": "commander_chip_shipyard", "kind": "mult"},
     "defense_time_speed": {"label_key": "commander_chip_defense", "kind": "mult"},
-    "scan_range": {"label_key": "commander_chip_scan", "kind": "additive", "prepared": True},
+    "scan_range": {"label_key": "commander_chip_scan", "kind": "additive", "prepared": False},
 }
 
 # Signature keys first per class so pick cards show real identity bonuses.

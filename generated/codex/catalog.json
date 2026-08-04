@@ -1190,6 +1190,65 @@
       "source_doc": "WORLD_BOSS_SYSTEM.md",
       "faq_count": 3,
       "tip_count": 3
+    },
+    "vault_raid": {
+      "codex_id": "vault_raid",
+      "band": "III",
+      "difficulty": "intermediate",
+      "estimated_read": "3 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq"
+      ],
+      "routes": [
+        "defense_view",
+        "fleet_view"
+      ],
+      "related_codex": [
+        "defense",
+        "combat",
+        "fleet",
+        "buildings"
+      ],
+      "unlock": {
+        "type": "building",
+        "building": "barracks"
+      },
+      "teaser_key": "codex_unlock_vault_raid_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "VAULT_RAID_SYSTEM.md",
+      "faq_count": 2,
+      "tip_count": 2
+    },
+    "threat_net": {
+      "codex_id": "threat_net",
+      "band": "III",
+      "difficulty": "intermediate",
+      "estimated_read": "2 min",
+      "surfaces": [
+        "quick_help",
+        "codex",
+        "faq"
+      ],
+      "routes": [
+        "buildings_view",
+        "fleet_view"
+      ],
+      "related_codex": [
+        "fleet",
+        "buildings",
+        "combat"
+      ],
+      "unlock": {
+        "type": "building",
+        "building": "radar_array"
+      },
+      "teaser_key": "codex_unlock_threat_net_teaser",
+      "terminology": "GENESIS_TERMINOLOGY",
+      "source_doc": "EFFECTS.md",
+      "faq_count": 1,
+      "tip_count": 2
     }
   },
   "routes": {
@@ -1214,7 +1273,9 @@
       "expeditions",
       "salvage",
       "logistics",
-      "planet_scope"
+      "planet_scope",
+      "vault_raid",
+      "threat_net"
     ],
     "auction_house_view": [
       "auction"
@@ -1222,7 +1283,8 @@
     "buildings_view": [
       "buildings",
       "resources",
-      "planet_scope"
+      "planet_scope",
+      "threat_net"
     ],
     "inventory_view": [
       "case_battles",
@@ -1236,7 +1298,8 @@
       "commander_classes"
     ],
     "defense_view": [
-      "defense"
+      "defense",
+      "vault_raid"
     ],
     "overview": [
       "resources",
@@ -1320,7 +1383,9 @@
       "shop_identity",
       "titans",
       "trader",
-      "world_boss"
+      "world_boss",
+      "vault_raid",
+      "threat_net"
     ],
     "I": [
       "buildings",

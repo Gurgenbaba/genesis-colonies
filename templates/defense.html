@@ -54,9 +54,25 @@
   </section>
   {% else %}
 
+  {% set defense_tab = (request.args.get('tab', 'structures')|lower) %}
+  {% if defense_tab not in ('structures', 'troops') %}{% set defense_tab = 'structures' %}{% endif %}
+
+  <nav class="gc-page-tabs gc-page-tabs--cols-2 defense-mode-tabs" role="tablist" aria-label="{{ T('defense_title') }}">
+    <button type="button"
+            class="gc-page-tab defense-mode-tab{% if defense_tab == 'structures' %} active{% endif %}"
+            data-defense-tab="structures"
+            role="tab"
+            aria-selected="{{ 'true' if defense_tab == 'structures' else 'false' }}">{{ T("defense_tab_structures", "Orbitale Verteidigung") }}</button>
+    <button type="button"
+            class="gc-page-tab defense-mode-tab{% if defense_tab == 'troops' %} active{% endif %}"
+            data-defense-tab="troops"
+            role="tab"
+            aria-selected="{{ 'true' if defense_tab == 'troops' else 'false' }}">{{ T("defense_tab_troops", "Bodentruppen") }}</button>
+  </nav>
+
   {% set planet_defense = df.current_defense if df.current_defense is defined else {} %}
 
-  <div class="defense-shell gc-panel">
+  <div class="defense-shell gc-panel" data-defense-tab-panel="structures"{% if defense_tab != 'structures' %} hidden{% endif %}>
   <section class="defense-status-panel">
     <div class="gc-panel-header">
       <span class="gc-panel-title">{{ T("defense_factory_title") }}</span>
@@ -202,8 +218,12 @@
       {% endfor %}
     </div>
   </section>
-  </div>
   {% endif %}
+  </div>
+
+  <div class="defense-shell gc-panel" data-defense-tab-panel="troops"{% if defense_tab != 'troops' %} hidden{% endif %}>
+    {% include "partials/barracks_troops_panel.html" %}
+  </div>
 
   {% endif %}
 </div>

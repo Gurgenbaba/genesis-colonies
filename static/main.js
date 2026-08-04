@@ -1085,24 +1085,40 @@
     throw err;
   }
 
+  function isLoginShellHtml(html) {
+    const s = String(html || "").slice(0, 8000).toLowerCase();
+    if (!s) return false;
+    // Prefer hard login markers — avoid matching Werkzeug 500 pages that mention paths.
+    if (s.includes('name="password"') || s.includes("type=\"password\"")) return true;
+    if (s.includes('id="login-form"') || s.includes('action="/login"')) return true;
+    return false;
+  }
+
   function isAuthRedirectResponse(res) {
     if (!res) return false;
     if (res.type === "opaqueredirect") return true;
     const status = Number(res.status || 0);
-    if (status >= 300 && status < 400) return true;
+    if (status >= 300 && status < 400) {
+      const loc = String(res.headers.get("Location") || res.url || "");
+      // Only login/register redirects — trailing-slash / CDN hops must not kill the session.
+      return /\/login\b|\/register\b/i.test(loc);
+    }
     if (res.redirected && /\/login|\/register/i.test(String(res.url || ""))) return true;
     return false;
   }
 
-  function inspectFetchResponseForAuth(res, contentType) {
+  function inspectFetchResponseForAuth(res, contentType, bodyText) {
     if (isAuthRedirectResponse(res)) {
       handleAuthFailure("redirect");
       throwAuthError();
     }
     const ct = (contentType || res.headers.get("content-type") || "").toLowerCase();
     if (ct.includes("text/html") && /\/api\//i.test(String(res.url || ""))) {
-      handleAuthFailure("html-on-api");
-      throwAuthError();
+      // Server 500 HTML must not look like a lost session (mass-expo / fleet mutations).
+      if (isLoginShellHtml(bodyText) || /\/login\b/i.test(String(res.url || ""))) {
+        handleAuthFailure("html-on-api");
+        throwAuthError();
+      }
     }
   }
 
@@ -2399,19 +2415,28 @@
       redirect: fetchOpts.redirect || "manual",
     });
     const ct = (res.headers.get("content-type") || "").toLowerCase();
-    inspectFetchResponseForAuth(res, ct);
     let data = {};
     let rawText = "";
+    try {
+      rawText = await res.text();
+    } catch (_) {
+      rawText = "";
+    }
+    // Redirects first; HTML login shells only (not Werkzeug/500 pages on /api/*).
+    inspectFetchResponseForAuth(res, ct, rawText);
     if (ct.includes("application/json")) {
       try {
-        rawText = await res.text();
         data = rawText ? JSON.parse(rawText) : {};
-      } catch (_) {}
+      } catch (_) {
+        data = { ok: false, error: "invalid_json_response" };
+      }
+    } else if (rawText) {
+      data = { ok: false, error: "server_error", status: res.status || 0 };
     }
     if (perfActive) {
       markActionPerfFetchEnd(rawText.length || Number(res.headers.get("content-length") || 0), data._action_perf);
     }
-    if (data.error === "not_logged_in" || res.status === 401) {
+    if (data.error === "not_logged_in" || (res.status === 401 && data.error !== "server_error")) {
       handleAuthFailure(`action-http-${res.status || 401}`);
       throwAuthError();
     }
@@ -2448,10 +2473,16 @@
         credentials: fetchOpts.credentials || "same-origin",
         redirect: fetchOpts.redirect || "manual",
       });
-      const status = res.status;
+      const status = Number(res.status || 0);
       const ct = (res.headers.get("content-type") || "").toLowerCase();
+      let rawText = "";
+      try {
+        rawText = await res.text();
+      } catch (_) {
+        rawText = "";
+      }
 
-      inspectFetchResponseForAuth(res, ct);
+      inspectFetchResponseForAuth(res, ct, rawText);
 
       if (!res.ok) {
         if (status === 401) {
@@ -2459,9 +2490,9 @@
           throwAuthError();
         }
         let denied = null;
-        if (status === 403 && ct.includes("application/json")) {
+        if (status === 403 && ct.includes("application/json") && rawText) {
           try {
-            denied = await res.json();
+            denied = JSON.parse(rawText);
           } catch (_) {
             denied = null;
           }
@@ -2476,7 +2507,7 @@
         throw err;
       }
       if (!ct.includes("application/json")) {
-        if (/login|register/i.test(String(res.url || ""))) {
+        if (/login|register/i.test(String(res.url || "")) || isLoginShellHtml(rawText)) {
           handleAuthFailure("non-json-login-url");
           throwAuthError();
         }
@@ -2486,7 +2517,7 @@
         throw err;
       }
       try {
-        return await res.json();
+        return rawText ? JSON.parse(rawText) : {};
       } catch (parseErr) {
         const err = new Error("invalid_json_response");
         err.status = status;
@@ -2796,6 +2827,8 @@
       alerts.has_incoming_attack ? 1 : 0,
       alerts.next_attack_arrival,
       alerts.alert_key,
+      alerts.radar_contact_count,
+      alerts.has_radar_contact ? 1 : 0,
     ].join("|");
   }
 
@@ -2830,6 +2863,7 @@
         _lastFleetAlertsHudSig = alertSig;
         _maybePlayIncomingAttackNotify(data.fleet_alerts);
         syncFleetAttackAlert(data.fleet_alerts);
+        syncRadarContactAlert(data.fleet_alerts);
       }
     }
   }
@@ -13114,6 +13148,13 @@
     return data.has_incoming_attack === true || count > 0 || attacks.length > 0;
   }
 
+  function _fleetRadarActive(alerts) {
+    const data = alerts && typeof alerts === "object" ? alerts : (GC.lastState?.fleet_alerts || {});
+    const count = Math.max(0, Math.floor(Number(data.radar_contact_count) || 0));
+    const contacts = Array.isArray(data.radar_contacts) ? data.radar_contacts : [];
+    return data.has_radar_contact === true || count > 0 || contacts.length > 0;
+  }
+
   function resolveFleetHudShellVisibilityMeta() {
     const sticky = _fleetHudStickyPayload;
     const stickyCount = Number(sticky?.count || 0);
@@ -13139,7 +13180,7 @@
 
   function _syncFleetHudShellVisibility(root, fleetCount, alerts, opts) {
     if (!root) return;
-    const hasAlert = _fleetIncomingAttackActive(alerts);
+    const hasAlert = _fleetIncomingAttackActive(alerts) || _fleetRadarActive(alerts);
     const listEl = root.querySelector("[data-fleet-drawer-list]");
     const hasExistingRows = listEl
       && !!listEl.querySelector("[data-fleet-drawer-row][data-movement-id]");
@@ -13331,6 +13372,113 @@
     GC.startProgressTicker();
   }
   GC.syncFleetAttackAlert = syncFleetAttackAlert;
+
+  function createFleetRadarAlertRow() {
+    const row = document.createElement("article");
+    row.className = "gc-fleet-hud-row gc-fleet-drawer-row gc-fleet-hud-row--radar gc-fleet-hud-row--radar-alert";
+    row.setAttribute("data-fleet-radar-alert", "");
+    row.setAttribute("role", "status");
+    row.setAttribute("aria-live", "polite");
+
+    const main = document.createElement("div");
+    main.className = "gc-fleet-hud-main";
+
+    const missionEl = document.createElement("span");
+    missionEl.className = "gc-fleet-hud-mission gc-fleet-hud-mission--radar";
+    missionEl.textContent = t("fleet_radar_mission", "Threat Net");
+
+    const routeEl = document.createElement("span");
+    routeEl.className = "gc-fleet-hud-route gc-fleet-drawer-row-route";
+    routeEl.dataset.fleetRadarSummary = "1";
+
+    main.append(missionEl, routeEl);
+
+    const meta = document.createElement("div");
+    meta.className = "gc-fleet-hud-meta";
+
+    const legEl = document.createElement("span");
+    legEl.className = "gc-fleet-hud-leg";
+    legEl.textContent = t("fleet_radar_leg", "Radar");
+
+    const shipsEl = document.createElement("span");
+    shipsEl.className = "gc-fleet-hud-ships gc-mono";
+    shipsEl.dataset.fleetRadarCount = "1";
+
+    const timeEl = document.createElement("span");
+    timeEl.className = "gc-fleet-hud-time gc-mono";
+    timeEl.dataset.fleetRadarHint = "1";
+
+    meta.append(legEl, shipsEl, timeEl);
+    row.append(main, meta);
+    return row;
+  }
+
+  function _fleetRadarAlertLabel(alerts) {
+    const count = Math.max(0, Math.floor(Number(alerts?.radar_contact_count) || 0));
+    if (count <= 0) return "";
+    if (count === 1) {
+      return t("fleet_alert_radar_contact", "Radar-Kontakt");
+    }
+    return tf("fleet_alert_radar_contacts", { count }, `${count} Radar-Kontakte`);
+  }
+
+  function syncRadarContactAlert(alerts) {
+    const root = document.getElementById("global-fleet-drawer-root") || document.querySelector("[data-global-fleet-drawer]");
+    const data = alerts && typeof alerts === "object" ? alerts : {};
+    const active = _fleetRadarActive(data);
+    if (!root) return;
+    const listEl = root.querySelector("[data-fleet-drawer-list]");
+    let alertRow = root.querySelector("[data-fleet-radar-alert].gc-fleet-drawer-row");
+
+    if (!active) {
+      if (alertRow) alertRow.remove();
+      const shellMeta = resolveFleetHudShellVisibilityMeta();
+      _syncFleetHudShellVisibility(root, shellMeta.fleetCount, data, { explicitEmpty: shellMeta.explicitEmpty });
+      return;
+    }
+
+    if (!alertRow) {
+      alertRow = createFleetRadarAlertRow();
+    }
+
+    const count = Math.max(0, Math.floor(Number(data.radar_contact_count) || 0));
+    const contacts = Array.isArray(data.radar_contacts) ? data.radar_contacts : [];
+    const summaryEl = alertRow.querySelector("[data-fleet-radar-summary]");
+    const shipsEl = alertRow.querySelector("[data-fleet-radar-count]");
+    const hintEl = alertRow.querySelector("[data-fleet-radar-hint]");
+    if (summaryEl) {
+      _setIfChanged(summaryEl, _fleetRadarAlertLabel(data));
+    }
+    if (shipsEl) {
+      shipsEl.textContent = count > 0 ? fmtNumber(count) : "";
+      shipsEl.hidden = count <= 0;
+    }
+    if (hintEl) {
+      const top = contacts[0] || {};
+      const threat = String(top.threat_class || "");
+      const threatLabel = threat
+        ? t(`fleet_radar_threat_${threat}`, threat)
+        : "";
+      _setIfChanged(hintEl, threatLabel);
+    }
+
+    if (listEl) {
+      const attackRow = listEl.querySelector("[data-fleet-alert].gc-fleet-drawer-row");
+      if (attackRow && attackRow.nextSibling) {
+        listEl.insertBefore(alertRow, attackRow.nextSibling);
+      } else if (attackRow) {
+        listEl.appendChild(alertRow);
+      } else {
+        listEl.prepend(alertRow);
+      }
+    } else {
+      root.prepend(alertRow);
+    }
+
+    const shellMeta = resolveFleetHudShellVisibilityMeta();
+    _syncFleetHudShellVisibility(root, shellMeta.fleetCount, data, { explicitEmpty: shellMeta.explicitEmpty });
+  }
+  GC.syncRadarContactAlert = syncRadarContactAlert;
 
   function renderGlobalFleetHud(fleetsRaw, opts) {
     const root = document.getElementById("global-fleet-drawer-root") || document.querySelector("[data-global-fleet-drawer]");
@@ -14332,6 +14480,7 @@
         _lastFleetAlertsHudSig = alertSig;
         _maybePlayIncomingAttackNotify(data.fleet_alerts);
         syncFleetAttackAlert(data.fleet_alerts);
+        syncRadarContactAlert(data.fleet_alerts);
       }
     }
 
@@ -23787,6 +23936,28 @@
 
     const getForm = (page) => page.querySelector("#fleet-send-form");
 
+    const getTroopsSelection = (page) => {
+      const troops = {};
+      page.querySelectorAll("[data-troop-input]").forEach((inp) => {
+        if (inp.disabled) return;
+        const key = inp.getAttribute("data-troop-input");
+        if (!key) return;
+        const n = parseInt(String(inp.value || "0").replace(/[^\d]/g, ""), 10) || 0;
+        if (n > 0) troops[key] = n;
+      });
+      return troops;
+    };
+
+    const syncFleetTroopsPanel = (page) => {
+      const panel = page?.querySelector("[data-fleet-troops-panel]");
+      if (!panel) return;
+      const mission = getForm(page)?.querySelector("[data-fleet-mission]")?.value || "";
+      panel.hidden = mission !== "attack";
+      if (mission !== "attack") {
+        panel.querySelectorAll("[data-troop-input]").forEach((inp) => { inp.value = "0"; });
+      }
+    };
+
     const getShipsSelection = (page) => {
       const ships = {};
       page.querySelectorAll("[data-ship-input]").forEach((inp) => {
@@ -25742,11 +25913,14 @@
               "fleet_mass_expo_split_too_small",
               "Select enough expedition ships for at least one expedition per slot."
             );
+          } else if (reason === "server_error") {
+            msg = tt("fleet_error_server_error", tt("fleet_error_generic", "Fleet action failed."));
           }
           showNotify(msg, "error");
           scheduleMassExpoSplitPreview(page);
         }
-      } catch (_) {
+      } catch (err) {
+        if (err?.authRedirect) return;
         showNotify(reasonText("generic"), "error");
       } finally {
         delete panel.dataset.submitting;
@@ -25999,6 +26173,7 @@
         if (e.target.value === "expedition" && !getFleetWorldKey(page)) applyExpeditionTarget(page);
         syncExpeditionMissionTarget(page);
         updateFleetFormMode(page);
+        syncFleetTroopsPanel(page);
         const wk = getFleetWorldKey(page);
         if (wk) loadFleetWorldTargetPreview(page, wk);
         scheduleTargetResolve(page);
@@ -26112,6 +26287,7 @@
             body: JSON.stringify({
               origin_planet_id: originId,
               ships: getShipsSelection(page),
+              troops: getTroopsSelection(page),
               resources: getResourcesSelection(page),
               speed_percent: parseInt(form.querySelector("[data-fleet-speed]")?.value || "100", 10),
               mission_type: form.querySelector("[data-fleet-mission]")?.value,
@@ -26142,6 +26318,7 @@
             }
             // GC-PERF-FLEET-SEND: live payload + slim state are enough; deferred fleet-state via syncFleetUiAfterMutation
             page.querySelectorAll("[data-ship-input]").forEach((inp) => { inp.value = "0"; });
+            page.querySelectorAll("[data-troop-input]").forEach((inp) => { inp.value = "0"; });
             const mInp = page.querySelector("[data-fleet-res-metal]");
             const cInp = page.querySelector("[data-fleet-res-crystal]");
             const fInp = page.querySelector("[data-fleet-res-fuel-cells]");
@@ -27064,6 +27241,13 @@
 
     if (typeof GC.initHudSelects === "function") GC.initHudSelects(page);
     applyFleetUrlPrefill(page);
+    {
+      const troopsPanel = page.querySelector("[data-fleet-troops-panel]");
+      if (troopsPanel) {
+        const mission = page.querySelector("[data-fleet-mission]")?.value || "";
+        troopsPanel.hidden = mission !== "attack";
+      }
+    }
     if (typeof GC.pickDefaultFleetTargetIfNeeded === "function") {
       GC.pickDefaultFleetTargetIfNeeded(page);
     }
@@ -42466,6 +42650,66 @@
     }
   }
 
+  async function fetchTroopDetailHtml(troopKey, reqToken) {
+    sdAbortFetch();
+    const ctrl = new AbortController();
+    SHIP_DETAIL.abort = ctrl;
+    const key = encodeURIComponent(String(troopKey || "").trim());
+    try {
+      const res = await fetch(`/api/troop-units/${key}`, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+          Accept: "text/html",
+        },
+        signal: ctrl.signal,
+      });
+      if (reqToken !== SHIP_DETAIL.reqId) {
+        return { ok: false, aborted: true };
+      }
+      const html = await res.text();
+      if (reqToken !== SHIP_DETAIL.reqId) {
+        return { ok: false, aborted: true };
+      }
+      if (!res.ok) {
+        return { ok: false, html, status: res.status };
+      }
+      return { ok: true, html, status: res.status };
+    } catch (e) {
+      if (e && e.name === "AbortError") {
+        return { ok: false, aborted: true };
+      }
+      throw e;
+    } finally {
+      if (SHIP_DETAIL.abort === ctrl) SHIP_DETAIL.abort = null;
+    }
+  }
+
+  async function loadTroopDetail(troopKey) {
+    if (!sdPrepareOpen(troopKey)) return;
+    if (SHIP_DETAIL.titleEl) {
+      SHIP_DETAIL.titleEl.textContent = t("troop_detail_title", "Troop specifications");
+    }
+    const reqToken = SHIP_DETAIL.reqId;
+    try {
+      const result = await fetchTroopDetailHtml(troopKey, reqToken);
+      if (result.aborted || reqToken !== SHIP_DETAIL.reqId) return;
+      if (!result.ok) {
+        if (result.html && result.html.includes("gc-ship-detail-shell")) {
+          mountShipDetailHtml(result.html);
+        } else {
+          sdSetError(t("troop_detail_not_found", t("troop_detail_load_error", "Could not load troop data.")));
+        }
+        return;
+      }
+      mountShipDetailHtml(result.html);
+    } catch (_) {
+      if (reqToken !== SHIP_DETAIL.reqId) return;
+      sdSetError(t("troop_detail_load_error", "Could not load troop data."));
+    }
+  }
+
   async function loadShipDetail(shipKey) {
     if (!sdPrepareOpen(shipKey)) return;
     const reqToken = SHIP_DETAIL.reqId;
@@ -42512,6 +42756,16 @@
         return;
       }
 
+      const troopTrigger = e.target.closest("[data-troop-detail]");
+      if (troopTrigger) {
+        const troopKey = troopTrigger.getAttribute("data-troop-detail");
+        if (!troopKey) return;
+        e.preventDefault();
+        e.stopPropagation();
+        loadTroopDetail(troopKey);
+        return;
+      }
+
       const trigger = e.target.closest("[data-ship-detail]");
       if (!trigger) return;
       const shipKey = trigger.getAttribute("data-ship-detail");
@@ -42529,6 +42783,12 @@
         loadDefenseDetail(defTrigger.getAttribute("data-defense-detail"));
         return;
       }
+      const troopTrigger = e.target.closest("[data-troop-detail]");
+      if (troopTrigger && document.activeElement === troopTrigger) {
+        e.preventDefault();
+        loadTroopDetail(troopTrigger.getAttribute("data-troop-detail"));
+        return;
+      }
       const trigger = e.target.closest("[data-ship-detail]");
       if (!trigger || document.activeElement !== trigger) return;
       e.preventDefault();
@@ -42538,6 +42798,7 @@
 
   GC.openShipDetail = loadShipDetail;
   GC.openDefenseDetail = loadDefenseDetail;
+  GC.openTroopDetail = loadTroopDetail;
   GC.closeShipDetail = closeShipDetailModal;
 
   function initPlayerCardOnce() {

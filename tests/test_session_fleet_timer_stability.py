@@ -36,6 +36,22 @@ def test_auth_failure_requires_streak_except_hard_cases():
     assert "clearAuthFailureStreak()" in refresh
 
 
+def test_auth_html_on_api_requires_login_shell():
+    """Werkzeug/500 HTML on /api/* must not trigger session-expired recovery."""
+    src = _read("static/main.js")
+    inspect = src.split("function inspectFetchResponseForAuth(res, contentType, bodyText)")[1].split(
+        "let _authFailureStreak"
+    )[0]
+    assert "isLoginShellHtml(bodyText)" in inspect
+    assert "html-on-api" in inspect
+    redirect = src.split("function isAuthRedirectResponse(res)")[1].split(
+        "function inspectFetchResponseForAuth"
+    )[0]
+    assert "Only login/register redirects" in redirect
+    assert "status >= 300 && status < 400) return true;" not in redirect.replace(" ", "")
+    assert "/login" in redirect and "/register" in redirect
+
+
 def test_timer_clock_does_not_pull_backward_each_tick():
     src = _read("static/main.js")
     timer_now = src.split("function getTimerServerNow()")[1].split(
@@ -78,6 +94,24 @@ def test_permanent_session_configured():
     assert "SESSION_REFRESH_EACH_REQUEST" in app
     auth = _read("game/auth.py")
     assert "session.permanent = True" in auth
+
+
+def test_fleet_json_apis_use_require_login_api():
+    """HTML redirects from require_login look like session expiry under redirect:manual."""
+    app = _read("app.py")
+    for route in (
+        '/api/fleet/send',
+        '/api/fleet/mass-expedition',
+        '/api/fleet/mass-expedition/preview',
+        '/api/fleet/preview',
+        '/api/fleet/state',
+        '/api/fleet/recall',
+    ):
+        block = app.split(f'@app.route("{route}"')[1].split("def ")[0]
+        assert "@require_login_api" in block, route
+        assert block.count("@require_login\n") == 0 or "@require_login_api" in block
+        # Ensure the decorator immediately above the handler is the API guard.
+        assert "@require_login_api\n" in block
 
 
 def test_game_state_uses_require_login_api():

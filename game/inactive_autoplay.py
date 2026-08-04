@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 ENABLED_RUNTIME_KEY = "inactive_autoplay_enabled"
 WORKER_LAST_KEY = "inactive_autoplay_worker_last"
+ECONOMY_LAST_KEY = "inactive_autoplay_economy_last"
 ROSTER_KEY = "inactive_autoplay_roster"
 SESSIONS_KEY = "inactive_autoplay_sessions"  # legacy merge
 CURSOR_KEY = "inactive_autoplay_cursor"
@@ -39,8 +40,8 @@ BUSY_STALE_SEC = 900.0
 # Soft caps so queues turn over on fleet-cron cadence (still slower than pirate 90s).
 INACTIVE_BUILD_DURATION_CAP = 900  # 15 min
 INACTIVE_RESEARCH_DURATION_CAP = 1200  # 20 min
-# GC-PERF-AUTOPLAY-002: shorter same-tick chains → fewer writes per account.
-INACTIVE_CHAIN_LIMIT = 2
+# GC-PERF-AUTOPLAY-003: no same-tick force-complete chains (was 2).
+INACTIVE_CHAIN_LIMIT = 1
 
 # Soft floor so empty dormant empires can enqueue (far below pirate seed).
 INACTIVE_RESOURCE_FLOOR = {
@@ -52,6 +53,8 @@ INACTIVE_RESOURCE_FLOOR = {
 # Revisit: cooldown after shift eviction before re-eligible (queue "back").
 DEFAULT_REVISIT_SEC = 12 * 3600  # GC-INACTIVE-SHIFT-001: 12h (was 36h)
 DEFAULT_WAKE_INTERVAL_SEC = 15 * 60  # GC-INACTIVE-SHIFT-001: 15 min
+# GC-PERF-AUTOPLAY-003: standing RR economy gated off fleet-due storms.
+DEFAULT_ECONOMY_INTERVAL_SEC = 5 * 60  # 5 min between standing economies
 # GC-INACTIVE-SHIFT-001: shift crew = visible online (2–3), not mass sticky builders.
 DEFAULT_BATCH = 1
 DEFAULT_MAX_ROSTER = 3
@@ -79,6 +82,7 @@ MAX_ONLINE_VISIBLE = 4
 ENABLED_ENV = "GC_INACTIVE_AUTOPLAY_ENABLED"
 BATCH_ENV = "GC_INACTIVE_AUTOPLAY_BATCH"
 INTERVAL_ENV = "GC_INACTIVE_AUTOPLAY_INTERVAL_SEC"
+ECONOMY_INTERVAL_ENV = "GC_INACTIVE_AUTOPLAY_ECONOMY_INTERVAL_SEC"
 REVISIT_ENV = "GC_INACTIVE_AUTOPLAY_REVISIT_SEC"
 MAX_ROSTER_ENV = "GC_INACTIVE_AUTOPLAY_MAX_SESSIONS"  # keep env name for ops
 TICK_ENV = "GC_INACTIVE_AUTOPLAY_TICK_PER_CRON"
@@ -108,6 +112,13 @@ def wake_batch_size() -> int:
 
 def wake_interval_sec() -> float:
     return float(max(60, _env_int(INTERVAL_ENV, DEFAULT_WAKE_INTERVAL_SEC)))
+
+
+def economy_interval_sec() -> float:
+    """GC-PERF-AUTOPLAY-003: min seconds between standing RR economies."""
+    return float(
+        max(60, min(3600, _env_int(ECONOMY_INTERVAL_ENV, DEFAULT_ECONOMY_INTERVAL_SEC)))
+    )
 
 
 def session_tenure_sec() -> float:
@@ -812,6 +823,23 @@ def seconds_until_wake_allowed(*, now: Optional[float] = None, conn=None) -> flo
     return max(0.0, (last_at + wake_interval_sec()) - ts)
 
 
+def seconds_until_economy_allowed(*, now: Optional[float] = None, conn=None) -> float:
+    """GC-PERF-AUTOPLAY-003: standing RR gate (independent of wake + fleet due)."""
+    data = _load_json(ECONOMY_LAST_KEY, conn=conn)
+    if not isinstance(data, dict):
+        return 0.0
+    if not data.get("ok"):
+        return 0.0
+    try:
+        last_at = float(data.get("at") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    if last_at <= 0:
+        return 0.0
+    ts = float(now if now is not None else _now())
+    return max(0.0, (last_at + economy_interval_sec()) - ts)
+
+
 def run_inactive_autoplay_tick(
     conn,
     *,
@@ -828,7 +856,8 @@ def run_inactive_autoplay_tick(
        parks evicted accounts at the back of the dormant queue.
     3. Standing RR economy (``tick_per_cron=1``) + presence = full shift roster.
 
-    GC-PERF-AUTOPLAY-001/002: short write TXs, busy lease, yield, budget.
+    GC-PERF-AUTOPLAY-001/002/003: short write TXs, busy lease, yield, budget;
+    standing economy gated by ``economy_interval_sec`` (not every fleet tick).
     """
     ts = float(now if now is not None else _now())
     tick_t0 = time.perf_counter()
@@ -843,6 +872,32 @@ def run_inactive_autoplay_tick(
             "hold_ms": 0,
             "write_commits": 0,
             "budget_stopped": False,
+        }
+
+    wait_wake = 0.0 if force else seconds_until_wake_allowed(now=ts, conn=conn)
+    wait_economy = 0.0 if force else seconds_until_economy_allowed(now=ts, conn=conn)
+    wake_due = force or wait_wake <= 0.0
+    economy_due = force or wait_economy <= 0.0
+    if not wake_due and not economy_due:
+        return {
+            "ok": True,
+            "source": source,
+            "skipped_interval": True,
+            "woke": [],
+            "woke_count": 0,
+            "evicted_count": 0,
+            "expired_count": 0,
+            "sessions": [],
+            "session_ticks": 0,
+            "enqueued": 0,
+            "hold_ms": int((time.perf_counter() - tick_t0) * 1000),
+            "write_commits": 0,
+            "budget_stopped": False,
+            "wait_sec": wait_wake,
+            "wait_economy_sec": wait_economy,
+            "economy_interval_sec": economy_interval_sec(),
+            "economy_ran": False,
+            "chain_limit": INACTIVE_CHAIN_LIMIT,
         }
 
     short_tx = not in_transaction(conn)
@@ -902,9 +957,9 @@ def run_inactive_autoplay_tick(
         woke: List[Dict[str, Any]] = []
         evicted_count = int(trimmed_count)
         expired_count = 0
-        wait = 0.0 if force else seconds_until_wake_allowed(now=ts, conn=conn)
+        wait = wait_wake
 
-        if wait <= 0:
+        if wake_due:
             batch = wake_batch_size()
             # Tenure-evict at most `batch` oldest-expired members (default 1).
             expired = [
@@ -988,39 +1043,54 @@ def run_inactive_autoplay_tick(
                 )
             )
 
-        # Always tick a RR slice of the shift roster (autonomous building).
-        tick_n = min(tick_per_cron(), len(roster))
-
-        def _pick_tick():
-            return _round_robin_pick(
-                conn, roster, count=tick_n, cursor_key=TICK_CURSOR_KEY
-            )
-
-        to_tick = _step(_pick_tick) if tick_n > 0 else []
+        # GC-PERF-AUTOPLAY-003: standing RR only on economy interval (or force).
         woke_ids = {int(w["player_id"]) for w in woke}
         session_results: List[Dict[str, Any]] = list(woke)
         ticked_ids: Set[int] = set(woke_ids)
-        for item in to_tick:
-            pid = int(item["player_id"])
-            if pid in woke_ids:
-                continue
-            if _budget_exceeded():
-                _mark_budget_stop(phase="standing", ticks=len(session_results))
-                break
+        economy_ran = False
+        if economy_due:
+            tick_n = min(tick_per_cron(), len(roster))
 
-            def _tick_one(player_id=pid, roster_item=item):
-                res = _run_player_economy(conn, player_id, now=ts)
-                _apply_economy_result_to_roster_item(roster_item, res)
-                return res
-
-            try:
-                session_results.append(_step(_tick_one))
-                ticked_ids.add(pid)
-                _yield_writer()
-            except Exception:
-                logger.exception(
-                    "inactive autoplay roster tick failed player=%s", pid
+            def _pick_tick():
+                return _round_robin_pick(
+                    conn, roster, count=tick_n, cursor_key=TICK_CURSOR_KEY
                 )
+
+            to_tick = _step(_pick_tick) if tick_n > 0 else []
+            for item in to_tick:
+                pid = int(item["player_id"])
+                if pid in woke_ids:
+                    continue
+                if _budget_exceeded():
+                    _mark_budget_stop(phase="standing", ticks=len(session_results))
+                    break
+
+                def _tick_one(player_id=pid, roster_item=item):
+                    res = _run_player_economy(conn, player_id, now=ts)
+                    _apply_economy_result_to_roster_item(roster_item, res)
+                    return res
+
+                try:
+                    session_results.append(_step(_tick_one))
+                    ticked_ids.add(pid)
+                    _yield_writer()
+                except Exception:
+                    logger.exception(
+                        "inactive autoplay roster tick failed player=%s", pid
+                    )
+            economy_ran = True
+            _step(
+                lambda: _save_json(
+                    ECONOMY_LAST_KEY,
+                    {
+                        "ok": True,
+                        "at": ts,
+                        "source": source,
+                        "ticks": len(session_results) - len(woke),
+                    },
+                    conn=conn,
+                )
+            )
 
         if ticked_ids:
             for item in roster:
@@ -1054,6 +1124,9 @@ def run_inactive_autoplay_tick(
             "shift_cap": live_cap,
             "tenure_sec": tenure_sec,
             "wait_sec": wait,
+            "wait_economy_sec": wait_economy,
+            "economy_interval_sec": economy_interval_sec(),
+            "economy_ran": economy_ran,
             "revisit_sec": revisit_sec(),
             "tick_per_cron": tick_per_cron(),
             "inactive_threshold_sec": float(RANKING_INACTIVE_AFTER_SEC),

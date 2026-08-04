@@ -22,6 +22,7 @@ from game.records import (
     RECORD_DEFENSE_KEYS,
     RECORD_FLEET_KEYS,
     RECORD_TITAN_KEYS,
+    RECORD_TROOP_KEYS,
     build_records_payload,
     _top_building_record,
 )
@@ -66,9 +67,17 @@ def test_build_records_payload_structure(records_db):
     try:
         payload = build_records_payload(conn=conn)
         assert payload["ok"] is True
-        assert payload["group_count"] == 6
+        assert payload["group_count"] == 7
         keys = [g["key"] for g in payload["groups"]]
-        assert keys == ["buildings", "research", "empire", "fleet", "defense", "titans"]
+        assert keys == [
+            "buildings",
+            "research",
+            "empire",
+            "fleet",
+            "defense",
+            "troops",
+            "titans",
+        ]
         building_group = payload["groups"][0]
         assert len(building_group["records"]) == len(RECORD_BUILDING_KEYS)
         research_group = payload["groups"][1]
@@ -77,6 +86,8 @@ def test_build_records_payload_structure(records_db):
         assert len(fleet_group["records"]) == len(RECORD_FLEET_KEYS)
         defense_group = next(g for g in payload["groups"] if g["key"] == "defense")
         assert len(defense_group["records"]) == len(RECORD_DEFENSE_KEYS)
+        troop_group = next(g for g in payload["groups"] if g["key"] == "troops")
+        assert len(troop_group["records"]) == len(RECORD_TROOP_KEYS)
         titan_group = next(g for g in payload["groups"] if g["key"] == "titans")
         assert len(titan_group["records"]) == len(RECORD_TITAN_KEYS) + 1
     finally:

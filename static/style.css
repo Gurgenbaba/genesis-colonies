@@ -48924,3 +48924,81 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
 .creator-stat span { display: block; font-size: 0.7rem; opacity: 0.7; text-transform: uppercase; }
 .creator-stat strong { font-size: 1rem; }
 .creator-terms { padding: 0.75rem; margin-bottom: 1rem; }
+
+/* Secret Vault Raid — Barracks troops + fleet troop loadout */
+.barracks-troops-panel,
+.fleet-troops-panel {
+  margin-top: var(--gc-space-3, 12px);
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.barracks-troops-grid,
+.fleet-troops-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+}
+.barracks-troop-card,
+.fleet-troop-card {
+  border: 1px solid var(--gc-border, #2a3340);
+  background: var(--gc-panel-bg, rgba(0,0,0,0.25));
+  padding: 8px;
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.barracks-troop-card.is-locked,
+.fleet-troop-card.is-empty {
+  opacity: 0.55;
+}
+.barracks-troop-card-head,
+.fleet-troop-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.barracks-troop-card-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 6px;
+}
+.barracks-troop-card-actions input,
+.fleet-troop-card input {
+  width: 72px;
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.barracks-troops-queue-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+}
+.barracks-troops-queue-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--gc-border, #2a3340);
+}
+.barracks-troops-error {
+  color: var(--gc-danger, #f66);
+  margin-top: 8px;
+}
+
+.fleet-troop-card-art {
+  margin-bottom: 6px;
+}
+.fleet-troop-card-art img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  display: block;
+  border: 1px solid var(--gc-border, #2a3340);
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.defense-mode-tabs {
+  margin-bottom: 10px;
+}
+.barracks-troop-card-desc {
+  min-height: 2.4em;
+  padding: 0 6px;
+}

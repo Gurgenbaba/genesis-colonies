@@ -16,6 +16,7 @@ from .db import (
     is_sqlite_lock_error,
     lock_planet_for_update,
     rollback,
+    table_columns,
     table_exists,
 )
 from .fleet_calc import (
@@ -385,6 +386,12 @@ def fleet_schema_ready(conn) -> bool:
     )
 
 
+def fleet_troops_column_ready(conn) -> bool:
+    if not table_exists(conn, "fleet_movements"):
+        return False
+    return "troops_json" in table_columns(conn, "fleet_movements")
+
+
 def _json_dumps(obj: Any) -> str:
     return json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
 
@@ -419,6 +426,12 @@ def _row_to_movement(row: Any) -> Dict[str, Any]:
         target_coords = f"[{tg}:{ts}:{EXPEDITION_POSITION}]"
     else:
         target_coords = format_coordinates(tg, ts, tp)
+    troops = {}
+    try:
+        if "troops_json" in row.keys():
+            troops = _json_loads(row["troops_json"], {}) or {}
+    except Exception:
+        troops = {}
     return {
         "id": _safe_int(row["id"]),
         "player_id": _safe_int(row["player_id"]),
@@ -435,6 +448,7 @@ def _row_to_movement(row: Any) -> Dict[str, Any]:
         "return_at": _safe_int(row["return_at"]) if row["return_at"] else None,
         "holding_until": _safe_int(row["holding_until"]) if row["holding_until"] else None,
         "ships": ships,
+        "troops": troops if isinstance(troops, dict) else {},
         "resources": resources,
         "fuel_cost": _safe_int(row["fuel_cost"]),
         "speed_percent": _safe_int(row["speed_percent"], 100),
@@ -2678,6 +2692,320 @@ def build_fleet_incoming_attack_alerts(
     }
 
 
+# ---------------------------------------------------------------------------
+# Deep-Space Threat Net (radar_array → scan_range)
+# ---------------------------------------------------------------------------
+
+RADAR_DETECT_MISSIONS = frozenset({"attack", "spy", "deploy"})
+RADAR_CROSS_GALAXY_MIN_RANGE = 8
+_RADAR_MISSION_THREAT = {
+    "attack": "hostile",
+    "spy": "intel",
+    "deploy": "force",
+}
+
+
+def radar_system_distance(
+    origin_g: int,
+    origin_s: int,
+    target_g: int,
+    target_s: int,
+) -> Optional[int]:
+    """System-step distance for Threat Net bubbles. Cross-galaxy costs +8."""
+    dg = abs(int(origin_g) - int(target_g))
+    ds = abs(int(origin_s) - int(target_s))
+    if dg == 0:
+        return ds
+    if dg == 1:
+        return int(RADAR_CROSS_GALAXY_MIN_RANGE + ds)
+    return None
+
+
+def radar_intel_tier(effective: int) -> int:
+    eff = max(0, int(effective or 0))
+    if eff >= 9:
+        return 5
+    if eff >= 7:
+        return 4
+    if eff >= 5:
+        return 3
+    if eff >= 3:
+        return 2
+    if eff >= 1:
+        return 1
+    return 0
+
+
+def _radar_fuzzy_ship_roles(ships: Mapping[str, Any]) -> Dict[str, int]:
+    """Role totals with ±20% noise (server-side; UI displays as-is)."""
+    from .fleet_defs import get_ship
+
+    roles: Dict[str, int] = {}
+    for key, raw in (ships or {}).items():
+        try:
+            qty = int(raw or 0)
+        except (TypeError, ValueError):
+            continue
+        if qty <= 0:
+            continue
+        spec = get_ship(str(key)) or {}
+        role = str(spec.get("role") or "utility")
+        roles[role] = roles.get(role, 0) + qty
+    out: Dict[str, int] = {}
+    for role, qty in roles.items():
+        spread = max(1, int(round(qty * 0.20)))
+        # Deterministic mid-band display (not RNG) — show rounded band center.
+        out[role] = max(1, int(round(qty / max(1, 5)) * 5)) if qty >= 5 else qty
+        # Keep within ±20% of true count after rounding.
+        out[role] = max(qty - spread, min(qty + spread, out[role]))
+    return out
+
+
+def _load_radar_bubbles(player_id: int, *, conn) -> List[Dict[str, Any]]:
+    """Per-colony radar bubbles: coords + scan_range (building + Envoy bonus)."""
+    from .commander_classes import get_commander_effect_modifiers
+    from .models import get_planet_buildings
+
+    pid = int(player_id)
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT id, galaxy, system, position, name
+        FROM planets
+        WHERE player_id = ?
+        ORDER BY id ASC;
+        """,
+        (pid,),
+    )
+    rows = cur.fetchall() or []
+    try:
+        class_mods = get_commander_effect_modifiers(pid, conn=conn) or {}
+        envoy_scan = int(class_mods.get("scan_range") or 0)
+    except Exception:
+        envoy_scan = 0
+
+    bubbles: List[Dict[str, Any]] = []
+    for row in rows:
+        planet_id = int(row["id"])
+        buildings = get_planet_buildings(planet_id, conn=conn) or {}
+        radar_lvl = max(0, int(buildings.get("radar_array") or 0))
+        if radar_lvl <= 0 and envoy_scan <= 0:
+            continue
+        scan_range = int(2 * radar_lvl + max(0, envoy_scan))
+        if scan_range <= 0:
+            continue
+        bubbles.append(
+            {
+                "planet_id": planet_id,
+                "galaxy": int(row["galaxy"] or 0),
+                "system": int(row["system"] or 0),
+                "position": int(row["position"] or 0),
+                "name": str(row["name"] or ""),
+                "scan_range": scan_range,
+            }
+        )
+    return bubbles
+
+
+def _best_radar_effective(
+    bubbles: Sequence[Mapping[str, Any]],
+    point_g: int,
+    point_s: int,
+) -> Tuple[int, Optional[Dict[str, Any]]]:
+    best_eff = 0
+    best_bubble: Optional[Dict[str, Any]] = None
+    for bubble in bubbles:
+        dist = radar_system_distance(
+            int(bubble["galaxy"]),
+            int(bubble["system"]),
+            int(point_g),
+            int(point_s),
+        )
+        if dist is None:
+            continue
+        scan = int(bubble["scan_range"])
+        if dist > scan:
+            continue
+        # Cross-galaxy requires scan_range ≥ 8
+        if abs(int(bubble["galaxy"]) - int(point_g)) == 1 and scan < RADAR_CROSS_GALAXY_MIN_RANGE:
+            continue
+        eff = scan - dist
+        if eff > best_eff:
+            best_eff = eff
+            best_bubble = dict(bubble)
+    return best_eff, best_bubble
+
+
+def build_radar_contacts(
+    player_id: int,
+    *,
+    conn,
+    now: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Threat Net contacts for /api/game-state fleet_alerts.radar_contacts."""
+    empty: Dict[str, Any] = {
+        "radar_contact_count": 0,
+        "radar_contacts": [],
+        "radar_alert_key": "",
+    }
+    if not fleet_schema_ready(conn):
+        return dict(empty)
+
+    pid = int(player_id)
+    if pid <= 0:
+        return dict(empty)
+
+    bubbles = _load_radar_bubbles(pid, conn=conn)
+    if not bubbles:
+        return dict(empty)
+
+    ts = float(now if now is not None else _now())
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT fm.id AS movement_id,
+               fm.player_id AS owner_id,
+               fm.mission_type,
+               fm.status,
+               fm.arrival_at,
+               fm.ships_json,
+               fm.origin_planet_id,
+               fm.target_planet_id,
+               fm.target_galaxy,
+               fm.target_system,
+               fm.target_position,
+               op.galaxy AS origin_galaxy,
+               op.system AS origin_system,
+               op.position AS origin_position,
+               u.username AS owner_name
+        FROM fleet_movements fm
+        LEFT JOIN planets op ON op.id = fm.origin_planet_id
+        LEFT JOIN users u ON u.id = fm.player_id
+        WHERE fm.player_id != ?
+          AND fm.status = 'outbound'
+          AND fm.arrival_at > ?
+          AND fm.mission_type IN ('attack', 'spy', 'deploy')
+        ORDER BY fm.arrival_at ASC, fm.id ASC;
+        """,
+        (pid, ts),
+    )
+    rows = cur.fetchall() or []
+    if not rows:
+        return dict(empty)
+
+    contacts: List[Dict[str, Any]] = []
+    for row in rows:
+        mission = str(row["mission_type"] or "").strip().lower()
+        if mission not in RADAR_DETECT_MISSIONS:
+            continue
+
+        try:
+            og = int(row["origin_galaxy"] if row["origin_galaxy"] is not None else 0)
+            osys = int(row["origin_system"] if row["origin_system"] is not None else 0)
+        except (TypeError, ValueError):
+            og, osys = 0, 0
+        try:
+            tg = int(row["target_galaxy"] if row["target_galaxy"] is not None else 0)
+            tsys = int(row["target_system"] if row["target_system"] is not None else 0)
+            tpos = int(row["target_position"] if row["target_position"] is not None else 0)
+        except (TypeError, ValueError):
+            tg, tsys, tpos = 0, 0, 0
+
+        eff_origin, bub_o = _best_radar_effective(bubbles, og, osys)
+        eff_target, bub_t = _best_radar_effective(bubbles, tg, tsys)
+        if eff_origin <= 0 and eff_target <= 0:
+            continue
+        if eff_origin >= eff_target:
+            effective = eff_origin
+            sensor = bub_o
+            match_edge = "origin"
+        else:
+            effective = eff_target
+            sensor = bub_t
+            match_edge = "target"
+
+        tier = radar_intel_tier(effective)
+        if tier <= 0:
+            continue
+
+        try:
+            arrival_at = int(float(row["arrival_at"]))
+        except (TypeError, ValueError):
+            continue
+
+        remaining = max(0.0, float(arrival_at) - ts)
+        band_pad = remaining * 0.15
+        threat = _RADAR_MISSION_THREAT.get(mission, "force")
+
+        contact: Dict[str, Any] = {
+            "movement_id": int(row["movement_id"]),
+            "tier": tier,
+            "threat_class": threat,
+            "mission_type": mission if tier >= 2 else None,
+            "match_edge": match_edge,
+            "sensor_planet_id": int(sensor["planet_id"]) if sensor else None,
+            "arrival_at": arrival_at if tier >= 2 else None,
+            "eta_band": {
+                "earliest": int(arrival_at - band_pad),
+                "latest": int(arrival_at + band_pad),
+            }
+            if tier == 1
+            else None,
+            "origin": {"galaxy": og, "system": osys} if tier >= 2 else None,
+            "target": {"galaxy": tg, "system": tsys, "position": tpos} if tier >= 2 else None,
+            "owner_id": int(row["owner_id"]) if tier >= 3 else None,
+            "owner_name": str(row["owner_name"] or "") if tier >= 3 else None,
+            "ships_by_role": None,
+            "ships": None,
+        }
+
+        ships_raw: Dict[str, int] = {}
+        try:
+            parsed = json.loads(row["ships_json"] or "{}")
+            if isinstance(parsed, dict):
+                ships_raw = {str(k): int(v or 0) for k, v in parsed.items() if int(v or 0) > 0}
+        except (TypeError, ValueError, json.JSONDecodeError):
+            ships_raw = {}
+
+        if tier >= 5:
+            contact["ships"] = ships_raw
+            contact["ships_by_role"] = _radar_fuzzy_ship_roles(ships_raw)
+        elif tier >= 4:
+            contact["ships_by_role"] = _radar_fuzzy_ship_roles(ships_raw)
+
+        contacts.append(contact)
+
+    if not contacts:
+        return dict(empty)
+
+    ids = sorted(int(c["movement_id"]) for c in contacts)
+    return {
+        "radar_contact_count": len(contacts),
+        "radar_contacts": contacts,
+        "radar_alert_key": "r:" + ",".join(str(i) for i in ids),
+    }
+
+
+def enrich_fleet_alerts_with_radar(
+    alerts: Dict[str, Any],
+    player_id: int,
+    *,
+    conn,
+    now: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Merge Threat Net contacts into the fleet_alerts payload."""
+    out = dict(alerts or {})
+    radar = build_radar_contacts(player_id, conn=conn, now=now)
+    out["radar_contact_count"] = int(radar.get("radar_contact_count") or 0)
+    out["radar_contacts"] = list(radar.get("radar_contacts") or [])
+    radar_key = str(radar.get("radar_alert_key") or "")
+    base_key = str(out.get("alert_key") or "")
+    if radar_key:
+        out["alert_key"] = f"{base_key}|{radar_key}" if base_key else radar_key
+    out["has_radar_contact"] = bool(out["radar_contact_count"] > 0)
+    return out
+
+
 def recall_fleet_movement(
     player_id: int,
     movement_id: int,
@@ -2958,6 +3286,7 @@ def send_fleet(
     mission_type: str,
     ships: Mapping[str, int],
     resources: Mapping[str, Any] | None = None,
+    troops: Mapping[str, int] | None = None,
     speed_percent: int = 100,
     preset_id: int | None = None,
     batch_id: int | None = None,
@@ -2976,6 +3305,7 @@ def send_fleet(
         return False, "invalid_mission", None
 
     from .fleet_mission_locks import is_fleet_mission_locked
+    from .troop_defs import normalize_troops
 
     locked, lock_info = is_fleet_mission_locked(mission, conn=conn)
     if locked:
@@ -2986,11 +3316,14 @@ def send_fleet(
             return False, "unknown_ship", None
     ships_n = normalize_ships(ships)
     resources_n = calculate_loaded_resources(resources)
+    troops_n = normalize_troops(troops) if mission == "attack" else {}
     pct = int(speed_percent)
     if not ships_n:
         return False, "no_ships", None
     if pct < 10 or pct > 100:
         return False, "invalid_speed_percent", None
+    if troops_n and mission != "attack":
+        return False, "troops_attack_only", None
 
     own = conn is None
     if own:
@@ -3098,6 +3431,18 @@ def send_fleet(
                 rollback(conn)
             return False, d_reason, None
 
+        if troops_n:
+            if not fleet_troops_column_ready(conn):
+                if own:
+                    rollback(conn)
+                return False, "troops_unavailable", None
+            from .troops import deduct_planet_troops
+
+            if not deduct_planet_troops(int(origin_planet_id), troops_n, conn=conn):
+                if own:
+                    rollback(conn)
+                return False, "not_enough_troops", None
+
         metal_have = float(origin_planet.get("metal") or 0)
         crystal_have = float(origin_planet.get("crystal") or 0)
         fuel_cells_have = float(origin_planet.get("fuel_cells") or 0)
@@ -3159,38 +3504,74 @@ def send_fleet(
         outbound = build_outbound_timing(departure_at=dep_ts, duration_seconds=flight_seconds)
         arrival_at = outbound["arrival_at"]
 
-        cur.execute(
-            """
-            INSERT INTO fleet_movements (
-                player_id, origin_planet_id, target_planet_id,
-                target_galaxy, target_system, target_position,
-                mission_type, status, departure_at, arrival_at, return_at, holding_until,
-                ships_json, resources_json, fuel_cost, speed_percent, distance, flight_seconds,
-                preset_id, parent_batch_id, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'outbound', ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-            """,
-            (
-                int(player_id),
-                int(origin_planet_id),
-                target_planet_id,
-                target[0],
-                target[1],
-                target[2],
-                mission,
-                outbound["departure_at"],
-                arrival_at,
-                _json_dumps(ships_n),
-                _json_dumps(resources_store),
-                fuel_cost,
-                pct,
-                int(preview["distance"]),
-                flight_seconds,
-                preset_id,
-                batch_id,
-                now,
-                now,
-            ),
-        )
+        has_troops_col = fleet_troops_column_ready(conn)
+        if has_troops_col:
+            cur.execute(
+                """
+                INSERT INTO fleet_movements (
+                    player_id, origin_planet_id, target_planet_id,
+                    target_galaxy, target_system, target_position,
+                    mission_type, status, departure_at, arrival_at, return_at, holding_until,
+                    ships_json, resources_json, troops_json, fuel_cost, speed_percent, distance, flight_seconds,
+                    preset_id, parent_batch_id, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'outbound', ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    int(player_id),
+                    int(origin_planet_id),
+                    target_planet_id,
+                    target[0],
+                    target[1],
+                    target[2],
+                    mission,
+                    outbound["departure_at"],
+                    arrival_at,
+                    _json_dumps(ships_n),
+                    _json_dumps(resources_store),
+                    _json_dumps(troops_n),
+                    fuel_cost,
+                    pct,
+                    int(preview["distance"]),
+                    flight_seconds,
+                    preset_id,
+                    batch_id,
+                    now,
+                    now,
+                ),
+            )
+        else:
+            cur.execute(
+                """
+                INSERT INTO fleet_movements (
+                    player_id, origin_planet_id, target_planet_id,
+                    target_galaxy, target_system, target_position,
+                    mission_type, status, departure_at, arrival_at, return_at, holding_until,
+                    ships_json, resources_json, fuel_cost, speed_percent, distance, flight_seconds,
+                    preset_id, parent_batch_id, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'outbound', ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    int(player_id),
+                    int(origin_planet_id),
+                    target_planet_id,
+                    target[0],
+                    target[1],
+                    target[2],
+                    mission,
+                    outbound["departure_at"],
+                    arrival_at,
+                    _json_dumps(ships_n),
+                    _json_dumps(resources_store),
+                    fuel_cost,
+                    pct,
+                    int(preview["distance"]),
+                    flight_seconds,
+                    preset_id,
+                    batch_id,
+                    now,
+                    now,
+                ),
+            )
         fleet_id = int(cur.lastrowid)
 
         if str(target_info.get("target_type") or "") == "world_boss" and mission == "attack":
@@ -3747,6 +4128,107 @@ def _handle_attack_arrival(movement: Dict[str, Any], *, conn, now: float) -> boo
 
         resources = dict(movement.get("resources") or {})
         loot_taken: Dict[str, int] = {}
+        vault_raid: Optional[Dict[str, Any]] = None
+        return_troops: Dict[str, int] = {}
+        outbound_troops = dict(movement.get("troops") or {}) if isinstance(movement.get("troops"), dict) else {}
+
+        if (
+            target_id
+            and combat_result is not None
+            and str(combat_result.winner or "") == "attacker"
+            and outbound_troops
+            and defender_id > 0
+        ):
+            try:
+                from .combat import battle_rng_for_movement, simulate_ground_raid
+                from .models import get_planet_buildings
+                from .troops import get_planet_troops, set_planet_troops
+                from .vault_raid import apply_vault_steal
+
+                def_troops = get_planet_troops(int(target_id), conn=conn)
+                defending_troops_snapshot = dict(def_troops)
+                bld = get_planet_buildings(int(target_id), conn=conn) or {}
+                barracks_lvl = int(bld.get("barracks") or 0)
+                ground = simulate_ground_raid(
+                    outbound_troops,
+                    def_troops,
+                    barracks_level=barracks_lvl,
+                    rng=battle_rng_for_movement(movement_id),
+                )
+                set_planet_troops(int(target_id), ground.get("defender_survivors") or {}, conn=conn)
+                return_troops = dict(ground.get("attacker_survivors") or {})
+                if not bot_fight:
+                    try:
+                        from .scoring import record_combat_outcome
+                        from .score_events import apply_score_updates_for_players
+
+                        record_combat_outcome(
+                            attacker_id=int(player_id),
+                            defender_id=int(defender_id),
+                            attacker_losses=ground.get("attacker_losses") or {},
+                            defender_losses=ground.get("defender_losses") or {},
+                            conn=conn,
+                        )
+                        score_players = {int(player_id)}
+                        if defender_id > 0:
+                            score_players.add(int(defender_id))
+                        apply_score_updates_for_players(
+                            score_players,
+                            conn=conn,
+                            reason="vault_ground_raid",
+                        )
+                    except Exception:
+                        logger.exception(
+                            "vault raid destruction score failed movement_id=%s",
+                            movement_id,
+                        )
+                if str(ground.get("winner") or "") == "attacker":
+                    steal = apply_vault_steal(
+                        attacker_id=int(player_id),
+                        defender_id=int(defender_id),
+                        conn=conn,
+                    )
+                    vault_raid = {
+                        "outcome": "breached",
+                        "ground": ground,
+                        "steal": steal,
+                        "attacking_troops": dict(outbound_troops),
+                        "defending_troops": defending_troops_snapshot,
+                    }
+                else:
+                    vault_raid = {
+                        "outcome": "held",
+                        "ground": ground,
+                        "steal": None,
+                        "attacking_troops": dict(outbound_troops),
+                        "defending_troops": defending_troops_snapshot,
+                    }
+            except Exception:
+                logger.exception("vault raid ground phase failed movement_id=%s", movement_id)
+                vault_raid = {"outcome": "error", "ground": None, "steal": None}
+                return_troops = {}
+        elif outbound_troops and (
+            combat_result is None or str(getattr(combat_result, "winner", "") or "") != "attacker"
+        ):
+            # Orbital defeat — embarked troops are lost with the beachhead.
+            return_troops = {}
+            if not bot_fight and defender_id > 0:
+                try:
+                    from .scoring import record_combat_outcome
+
+                    record_combat_outcome(
+                        attacker_id=int(player_id),
+                        defender_id=int(defender_id),
+                        attacker_losses=dict(outbound_troops),
+                        defender_losses={},
+                        conn=conn,
+                    )
+                except Exception:
+                    logger.exception(
+                        "embarked troop loss score failed movement_id=%s",
+                        movement_id,
+                    )
+
         if target_id and combat_result is not None:
             from .combat import apply_combat_loot
 
@@ -3761,15 +4243,31 @@ def _handle_attack_arrival(movement: Dict[str, Any], *, conn, now: float) -> boo
         timing = _return_timing_from_now(movement, now=now)
         return_at = timing["return_at"]
         return_ships = {k: v for k, v in return_ships.items() if int(v or 0) > 0}
-        claimed = _claim_movement_status(
-            conn,
-            movement_id,
-            ("outbound",),
-            "returning",
-            now,
-            extra_sql=", return_at = ?, ships_json = ?, resources_json = ?",
-            extra_params=(return_at, _json_dumps(return_ships), _json_dumps(resources)),
-        )
+        if fleet_troops_column_ready(conn):
+            claimed = _claim_movement_status(
+                conn,
+                movement_id,
+                ("outbound",),
+                "returning",
+                now,
+                extra_sql=", return_at = ?, ships_json = ?, resources_json = ?, troops_json = ?",
+                extra_params=(
+                    return_at,
+                    _json_dumps(return_ships),
+                    _json_dumps(resources),
+                    _json_dumps(return_troops),
+                ),
+            )
+        else:
+            claimed = _claim_movement_status(
+                conn,
+                movement_id,
+                ("outbound",),
+                "returning",
+                now,
+                extra_sql=", return_at = ?, ships_json = ?, resources_json = ?",
+                extra_params=(return_at, _json_dumps(return_ships), _json_dumps(resources)),
+            )
         if not claimed:
             return False
         from .combat import publish_attack_combat_report
@@ -3801,6 +4299,9 @@ def _handle_attack_arrival(movement: Dict[str, Any], *, conn, now: float) -> boo
             conn=conn,
             attacker_locale=sender_locale,
             defender_locale=defender_locale,
+            attacking_troops=(vault_raid or {}).get("attacking_troops") or outbound_troops,
+            defending_troops=(vault_raid or {}).get("defending_troops") or {},
+            vault_raid=vault_raid,
         )
         if combat_result is not None:
             if not bot_fight:
@@ -5712,6 +6213,14 @@ def _handle_return(movement: Dict[str, Any], *, conn, now: float) -> bool:
     if not _complete_movement(movement_id, conn=conn, now=now, from_status="returning"):
         return False
     add_planet_ships(origin_id, player_id, ships, conn=conn)
+    return_troops = movement.get("troops") or {}
+    if isinstance(return_troops, dict) and any(int(v or 0) > 0 for v in return_troops.values()):
+        try:
+            from .troops import add_planet_troops
+
+            add_planet_troops(origin_id, return_troops, conn=conn)
+        except Exception:
+            logger.exception("troop return credit failed movement_id=%s", movement_id)
     if loaded_resource_total(resources) > 0:
         _credit_planet_resources(origin_id, resources, conn=conn)
     return True
@@ -7448,12 +7957,31 @@ def build_fleet_page_context(
             build_mobility_effective_stats,
             resolve_unit_effect_context,
         )
+        from .troop_defs import TROOP_ORDER, get_troop
+        from .troops import build_troops_state, get_planet_troops
 
         sy_level = get_shipyard_level(player_id, planet_id, conn=conn)
         buildable = list_buildable_ships(player_id, planet_id, conn=conn)
         has_ships = sum(int(v) for v in ships.values()) > 0
 
         buildings = get_planet_buildings(int(planet_id), conn=conn)
+        barracks_level = int(buildings.get("barracks") or 0)
+        troop_stock = get_planet_troops(int(planet_id), conn=conn)
+        troop_defs = []
+        for tk in TROOP_ORDER:
+            spec = get_troop(tk) or {}
+            troop_defs.append(
+                {
+                    "key": tk,
+                    "name_key": spec.get("name_key") or f"troop_{tk}",
+                    "have": int(troop_stock.get(tk, 0) or 0),
+                    "required_barracks_level": int(spec.get("required_barracks_level") or 1),
+                    "unlocked": barracks_level >= int(spec.get("required_barracks_level") or 1),
+                }
+            )
+        troops_ctx = build_troops_state(
+            int(planet_id), barracks_level=barracks_level, conn=conn
+        )
         research = get_research_levels(user_id=int(player_id), conn=conn)
         effect_ctx = resolve_unit_effect_context(
             buildings=buildings,
@@ -7510,6 +8038,10 @@ def build_fleet_page_context(
             "ships": ships,
             "has_ships": has_ships,
             "ship_defs": ship_defs,
+            "troops": troop_stock,
+            "troop_defs": troop_defs,
+            "troops_state": troops_ctx,
+            "barracks_level": barracks_level,
             "fleet_stat_bonuses": {
                 "speed_bonus_pct": speed_bonus_pct,
                 "cargo_bonus_pct": cargo_bonus_pct,

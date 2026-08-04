@@ -95,18 +95,14 @@ Legacy-Exponential (`base_time × cost_factor^(level-1)`) nur noch als Audit-Hel
 | Tech | Effekt |
 |------|--------|
 | `energy_tech` | `mine_energy_factor` |
-| `mining_tech`, `drone_tech` | Prod-Faktoren |
+| `mining_tech`, `crystal_tech`, `drone_tech` | Prod-Faktoren (metal / crystal / both) |
 | `storage_tech` | `storage_factor` (+15 %/Lvl, additiv) |
 | `buildtime_tech` | Build + research speed |
 | `weapon_tech`, `armor_tech`, `shield_tech` | Combat modifiers → `simulate_battle()` |
 | `navigation_tech`, `engine_tech` | `fleet_speed_multiplier` → `fleet.py` / `fleet_calc.py` |
 | `fuel_efficiency` | `fuel_efficiency_factor` → `fleet_calc.calculate_fuel_cost()` |
 
-**Not wired:**
-
-| Key | Effekt |
-|-----|--------|
-| `scan_range` (via `radar_array`) | Kein Scan/Galaxy-Engine |
+Radar `scan_range` (via `radar_array`) is consumed by the Deep-Space Threat Net — see [GALAXY_SYSTEM.md](GALAXY_SYSTEM.md) / [EFFECTS.md](EFFECTS.md).
 
 Details: [EFFECTS.md](EFFECTS.md), [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md), [FLEET_SYSTEM.md](FLEET_SYSTEM.md).
 

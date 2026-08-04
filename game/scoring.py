@@ -20,6 +20,7 @@ def compute_destroyed_raw_from_losses(losses: Mapping[str, int]) -> int:
     from .defense_defs import is_known_defense_key, unit_build_cost
     from .fleet_defs import canonical_ship_key, get_ship
     from .resource_score import normalize_cost_dict, score_from_resources
+    from .troop_defs import is_known_troop_key, troop_train_cost
 
     total_metal = 0
     total_crystal = 0
@@ -31,6 +32,8 @@ def compute_destroyed_raw_from_losses(losses: Mapping[str, int]) -> int:
         key = str(raw_key)
         if is_known_defense_key(key):
             cost = unit_build_cost(key)
+        elif is_known_troop_key(key):
+            cost = troop_train_cost(key)
         else:
             spec = get_ship(canonical_ship_key(key)) or {}
             cost = spec.get("build_cost") or {}

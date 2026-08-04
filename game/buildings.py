@@ -1118,6 +1118,30 @@ def _panel_upgrade_effect_fields(
             effect_unit="",
         )
 
+    if building_type == "barracks":
+        bar_cur = int(buildings.get("barracks", 0) or 0)
+        bar_nxt = int(target_level)
+        return _panel_effect_snapshot(
+            effect_kind="bonus_percent",
+            effect_current=int(2 * bar_cur),
+            effect_next=int(2 * bar_nxt),
+            effect_resource="shipyard",
+            effect_unit="%",
+            effect_metric_key="buildings_effect_barracks_shipyard",
+        )
+
+    if building_type == "shield_generator":
+        sg_cur = int(buildings.get("shield_generator", 0) or 0)
+        sg_nxt = int(target_level)
+        return _panel_effect_snapshot(
+            effect_kind="bonus_percent",
+            effect_current=int(2 * sg_cur),
+            effect_next=int(2 * sg_nxt),
+            effect_resource="shield",
+            effect_unit="%",
+            effect_metric_key="buildings_effect_shield_generator",
+        )
+
     if building_type == "orbital_shipyard":
         from .shipyard import BUILD_TIME_LEVEL_FACTOR, orbital_production_batch_capacity
 
@@ -1345,6 +1369,28 @@ def _technical_effects_at_level(
 
     if building_type == "radar_array":
         out.update(effect_kind="scan", effect_value=int(2 * int(level)), effect_resource="")
+        return out
+
+    if building_type == "barracks":
+        pct = int(2 * int(level))
+        out.update(
+            effect_kind="bonus_percent",
+            effect_value=pct,
+            effect_unit="%",
+            effect_resource="shipyard",
+            effect_metric_key="buildings_effect_barracks_shipyard",
+        )
+        return out
+
+    if building_type == "shield_generator":
+        pct = int(2 * int(level))
+        out.update(
+            effect_kind="bonus_percent",
+            effect_value=pct,
+            effect_unit="%",
+            effect_resource="shield",
+            effect_metric_key="buildings_effect_shield_generator",
+        )
         return out
 
     if building_type in BUILDING_ENERGY_CONSUMERS:

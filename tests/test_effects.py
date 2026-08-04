@@ -328,13 +328,38 @@ class TestBuildingEffects:
         assert EffectResolver(b, {}).get_max_building_level("fuel_cell_plant") == 57
         assert EffectResolver(b, {}).get_max_building_level("metal_storage") == 54
 
-    def test_radar_scan_range_prepared_only(self):
+    def test_radar_scan_range_active(self):
         pid = _create_player("radar")
         b = _set_buildings(pid, {"radar_array": 3, "metal_mine": 2})
         mods = get_research_modifiers(pid)
         assert mods["scan_range"] == 6
         snap = EffectResolver(b, get_research_levels(pid), player_id=pid).debug_snapshot()
-        assert any(s["key"] == "scan_range" and s["status"] == "prepared" for s in snap["sources_prepared"])
+        assert any(s["key"] == "scan_range" and s.get("status") != "prepared" for s in snap["sources"])
+        assert not any(s["key"] == "scan_range" for s in snap.get("sources_prepared") or [])
+
+    def test_crystal_tech_boosts_crystal_only(self):
+        pid = _create_player("crystal_tech")
+        b = _set_buildings(pid, {"metal_mine": 10, "crystal_mine": 10, "solar_plant": 12})
+        base_m, base_c = production_rates_per_sec(b, {}, mods={"metal_prod_factor": 1.0, "crystal_prod_factor": 1.0})
+        r = _set_research(pid, {"crystal_tech": 3})
+        mods = EffectResolver(b, r, player_id=pid).get_modifiers()
+        assert mods["crystal_prod_factor"] == pytest.approx(1.09)
+        assert mods["metal_prod_factor"] == pytest.approx(1.0)
+        m2, c2 = production_rates_per_sec(b, r, mods=mods)
+        assert c2 > base_c
+        assert m2 == pytest.approx(base_m)
+
+    def test_barracks_raises_shipyard_time_speed(self):
+        pid = _create_player("barracks")
+        b = _set_buildings(pid, {"barracks": 5, "orbital_shipyard": 2})
+        mods = EffectResolver(b, {}, player_id=pid).get_modifiers()
+        assert mods["shipyard_time_speed"] == pytest.approx(1.10)
+
+    def test_shield_generator_raises_shield_bonus(self):
+        pid = _create_player("shield_gen")
+        b = _set_buildings(pid, {"shield_generator": 4})
+        combat = EffectResolver(b, {}, player_id=pid).get_combat_modifiers()
+        assert combat["shield_bonus"] == pytest.approx(0.08)
 
 
 class TestRecursionSafeSync:
