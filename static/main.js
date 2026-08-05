@@ -30751,7 +30751,13 @@
     if (!select || !select._gcHudSelect) return;
     const { menu, valueEl, trigger } = select._gcHudSelect;
     const opt = select.options[select.selectedIndex];
-    if (valueEl) valueEl.textContent = opt ? opt.textContent.trim() : "";
+    if (valueEl) {
+      if (select.hasAttribute("data-gc-language-select")) {
+        syncLanguageSelectTrigger(select);
+      } else {
+        valueEl.textContent = opt ? opt.textContent.trim() : "";
+      }
+    }
     if (trigger) trigger.disabled = !!select.disabled;
     if (menu) {
       menu.querySelectorAll(".gc-hud-select-item").forEach((item) => {
@@ -31777,6 +31783,37 @@
     });
   };
 
+  function renderLanguageFlagImg(src, label) {
+    const img = document.createElement("img");
+    img.className = "gc-lang-flag";
+    img.src = String(src || "");
+    img.alt = String(label || "");
+    img.width = 20;
+    img.height = 15;
+    img.decoding = "async";
+    img.draggable = false;
+    return img;
+  }
+
+  function syncLanguageSelectTrigger(select) {
+    if (!select || !select._gcHudSelect) return;
+    const { valueEl } = select._gcHudSelect;
+    if (!valueEl) return;
+    const opt = select.options[select.selectedIndex];
+    const label = opt
+      ? String(opt.dataset.langLabel || opt.textContent || "").trim()
+      : "";
+    const src = opt ? String(opt.dataset.langFlagSrc || "").trim() : "";
+    valueEl.replaceChildren();
+    if (src) {
+      valueEl.appendChild(renderLanguageFlagImg(src, label));
+      return;
+    }
+    valueEl.textContent = opt
+      ? String(opt.dataset.langFlag || opt.textContent || "").trim()
+      : "";
+  }
+
   function rebuildLanguageSelectMenu(select) {
     if (!select || !select._gcHudSelect) return;
     const { menu } = select._gcHudSelect;
@@ -31790,9 +31827,14 @@
       btn.setAttribute("role", "option");
       const label = opt.dataset.langLabel || opt.textContent.trim();
       const flag = opt.dataset.langFlag || opt.textContent.trim();
+      const src = String(opt.dataset.langFlagSrc || "").trim();
       btn.setAttribute("aria-label", label);
       btn.title = label;
-      btn.textContent = flag;
+      if (src) {
+        btn.appendChild(renderLanguageFlagImg(src, label));
+      } else {
+        btn.textContent = flag;
+      }
       if (opt.disabled) btn.disabled = true;
       menu.appendChild(btn);
     });

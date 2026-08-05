@@ -649,18 +649,36 @@ body.gc-has-open-popover .admin-card:has(.gc-hud-select.is-open){
 }
 
 .gc-language-switcher .gc-hud-select-trigger{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: auto;
   min-width: 42px;
-  max-width: 48px;
-  padding: 4px 6px;
+  max-width: 56px;
+  height: var(--gc-topnav-control-h, 32px);
+  min-height: var(--gc-topnav-control-h, 32px);
+  padding: 0 6px;
   gap: 2px;
+  box-sizing: border-box;
 }
 
 .gc-language-switcher .gc-hud-select-value{
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 15px;
   font-weight: 400;
   line-height: 1;
+}
+
+.gc-lang-flag{
+  display: block;
+  width: 20px;
+  height: 15px;
+  object-fit: cover;
+  border-radius: 1px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
 }
 
 .gc-language-switcher .gc-hud-select-chevron{
@@ -672,7 +690,7 @@ body.gc-has-open-popover .admin-card:has(.gc-hud-select.is-open){
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 2px;
-  min-width: 72px;
+  min-width: 88px;
   width: auto;
   padding: 4px;
 }
@@ -683,6 +701,7 @@ body.gc-has-open-popover .admin-card:has(.gc-hud-select.is-open){
   justify-content: center;
   padding: 6px 8px;
   min-width: 0;
+  min-height: 28px;
   font-size: 17px;
   line-height: 1;
   text-align: center;
@@ -22465,6 +22484,38 @@ a.gc-ranking-alliance:hover{
 .gc-header-cmd{
   z-index: 80;
   overflow: visible;
+  --gc-topnav-control-h: 32px;
+}
+
+/* Top-nav controls share one control height (width may vary). */
+.gc-header-cmd .gc-header-icon-btn,
+.gc-header-cmd .gc-initiation-hud,
+.gc-header-cmd .gc-language-switcher .gc-hud-select-trigger,
+.gc-header-cmd .logout-btn,
+.gc-header-cmd .gc-admin-badge,
+.gc-header-cmd .gc-header-fleets-toggle,
+.gc-header-cmd .gc-header-planets-toggle{
+  height: var(--gc-topnav-control-h);
+  min-height: var(--gc-topnav-control-h);
+  box-sizing: border-box;
+}
+
+.gc-header-cmd .logout-btn{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  line-height: 1;
+}
+
+.gc-header-cmd .gc-admin-badge{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: 1;
 }
 
 .gc-header-cmd .gc-header-inner{
@@ -23720,9 +23771,10 @@ a.gc-ranking-alliance:hover{
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  min-width: 36px;
-  min-height: 36px;
+  width: 32px;
+  min-width: 32px;
+  height: var(--gc-topnav-control-h, 32px);
+  min-height: var(--gc-topnav-control-h, 32px);
   margin: 0;
   padding: 0;
   border: 1px solid rgba(120, 190, 255, 0.28);
@@ -23734,6 +23786,7 @@ a.gc-ranking-alliance:hover{
     0 6px 14px rgba(0, 0, 0, 0.28);
   cursor: pointer;
   line-height: 1;
+  box-sizing: border-box;
 }
 
 .gc-header-fleets-toggle-icon{
@@ -23966,7 +24019,8 @@ body.gc-planet-sheet-open{
 
 .gc-header-cmd .gc-admin-badge{
   border-radius: var(--gc-radius-sm);
-  padding: 2px 6px;
+  padding-left: 8px;
+  padding-right: 8px;
   font-size: 0.68rem;
 }
 
@@ -24627,7 +24681,12 @@ body.gc-planet-sheet-open{
   }
 
   .gc-hud-user .logout-btn{
-    padding: 6px 10px !important;
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    height: var(--gc-topnav-control-h, 32px);
+    min-height: var(--gc-topnav-control-h, 32px);
     font-size: 0.72rem;
   }
 
@@ -49748,7 +49807,8 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
   justify-content: center;
   width: 32px;
   min-width: 32px;
-  min-height: 32px;
+  height: var(--gc-topnav-control-h, 32px);
+  min-height: var(--gc-topnav-control-h, 32px);
   margin: 0;
   padding: 0;
   border: 1px solid rgba(70, 229, 255, 0.4);
@@ -49761,6 +49821,7 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
   text-decoration: none;
   line-height: 1;
   cursor: pointer;
+  box-sizing: border-box;
 }
 .gc-initiation-hud.is-hidden,
 .gc-initiation-hud[hidden] {

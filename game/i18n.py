@@ -19,14 +19,14 @@ DEFAULT_LOCALE = "de"
 FALLBACK_LOCALE = "en"
 
 SUPPORTED_LANGUAGES: dict[str, dict[str, str]] = {
-    "de": {"label": "Deutsch", "flag": "🇩🇪"},
-    "en": {"label": "English", "flag": "🇬🇧"},
-    "fr": {"label": "Français", "flag": "🇫🇷"},
-    "es": {"label": "Español", "flag": "🇪🇸"},
-    "pl": {"label": "Polski", "flag": "🇵🇱"},
-    "tr": {"label": "Türkçe", "flag": "🇹🇷"},
-    "ru": {"label": "Русский", "flag": "🇷🇺"},
-    "pt": {"label": "Português", "flag": "🇵🇹"},
+    "de": {"label": "Deutsch", "flag": "🇩🇪", "flag_code": "de"},
+    "en": {"label": "English", "flag": "🇬🇧", "flag_code": "gb"},
+    "fr": {"label": "Français", "flag": "🇫🇷", "flag_code": "fr"},
+    "es": {"label": "Español", "flag": "🇪🇸", "flag_code": "es"},
+    "pl": {"label": "Polski", "flag": "🇵🇱", "flag_code": "pl"},
+    "tr": {"label": "Türkçe", "flag": "🇹🇷", "flag_code": "tr"},
+    "ru": {"label": "Русский", "flag": "🇷🇺", "flag_code": "ru"},
+    "pt": {"label": "Português", "flag": "🇵🇹", "flag_code": "pt"},
 }
 
 SUPPORTED_LOCALES = frozenset(SUPPORTED_LANGUAGES)

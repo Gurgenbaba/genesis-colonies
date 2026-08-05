@@ -10,6 +10,7 @@
     {% for code, meta in SUPPORTED_LANGUAGES.items() %}
     <option value="{{ code }}"
             data-lang-flag="{{ meta.flag }}"
+            data-lang-flag-src="{{ url_for('static', filename='img/flags/' ~ meta.flag_code ~ '.gif') }}"
             data-lang-label="{{ T('language_name_' ~ code, meta.label) }}"
             {% if GC_LOCALE == code %}selected{% endif %}>{{ meta.flag }}</option>
     {% endfor %}

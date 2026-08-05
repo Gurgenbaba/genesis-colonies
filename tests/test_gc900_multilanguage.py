@@ -135,9 +135,30 @@ def test_gc900c_language_switcher_renders_flags(app_client):
     assert 'data-gc-hud-select' in html
     assert 'id="gc-language-select"' in html
     assert "🇩🇪" in html
+    assert 'data-lang-flag-src="' in html
+    assert "/static/img/flags/de.gif" in html
+    assert "/static/img/flags/gb.gif" in html
     assert ">DE</button>" not in html
     assert ">EN</button>" not in html
     assert 'class="gc-hud-select-trigger"' in html or 'data-gc-hud-select' in html
+
+    from pathlib import Path
+
+    flags_dir = Path(__file__).resolve().parents[1] / "static" / "img" / "flags"
+    for meta in SUPPORTED_LANGUAGES.values():
+        path = flags_dir / f"{meta['flag_code']}.gif"
+        assert path.is_file() and path.stat().st_size > 0, path
+
+    main = (Path(__file__).resolve().parents[1] / "static" / "main.js").read_text(
+        encoding="utf-8"
+    )
+    assert "function syncLanguageSelectTrigger" in main
+    assert "gc-lang-flag" in main
+    css = (Path(__file__).resolve().parents[1] / "static" / "style.css").read_text(
+        encoding="utf-8"
+    )
+    assert "--gc-topnav-control-h" in css
+    assert ".gc-lang-flag" in css
 
 
 def test_gc900c_language_switcher_has_aria_labels(app_client):
