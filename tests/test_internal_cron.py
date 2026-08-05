@@ -60,8 +60,18 @@ def _auth_headers(token: str | None = TOKEN) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
+def _unique_cron_username() -> str:
+    """Letter-only unique name — digit stamps can hit name_policy (e.g. substring 1488)."""
+    n = time.time_ns()
+    letters = []
+    while n:
+        letters.append("abcdefghij"[n % 10])
+        n //= 10
+    return "cron" + "".join(reversed(letters) or "a")
+
+
 def _create_player_with_building() -> int:
-    ok, err, user = create_user(f"cron_{time.time_ns()}", "test-pass-123")
+    ok, err, user = create_user(_unique_cron_username(), "test-pass-123")
     assert ok and user, err
     pid = int(user["id"])
     hw = get_homeworld(pid)
