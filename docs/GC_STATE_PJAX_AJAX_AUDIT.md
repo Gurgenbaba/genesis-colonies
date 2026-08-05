@@ -156,15 +156,15 @@ GC.navigateTo(url, opts)
 |-----------|-------|-------|
 | `GC.navigateTo` | ~58 | **kanonisch** |
 | `GC.reloadCurrentPage` | ~30 | **kanonisch** (wraps navigateTo) |
-| `location.reload()` | `main.js:2012, 2024, 23479` | **erlaubt** (fullDocument, fallback, locale) |
-| `location.href =` | login redirect, messages fallback, options fallback | **erlaubt** |
-| `window.location.assign` | auth routes in `navigateTo` | **erlaubt** |
+| `location.reload()` | `main.js:2581, 2611, 31649` | **erlaubt** (fullDocument, fallback, locale) |
+| `location.href =` | login redirect, messages fallback, options fallback, radar/galaxy navigateTo-missing | **erlaubt** |
+| `window.location.assign` | auth routes in `navigateTo`, PJAX fail, shop checkout, logout | **erlaubt** |
 
-**Enforcement drift:** `tests/test_core_architecture_enforcement.py` allowlists point to **stale line numbers** (1168 vs actual 2012+) — tests may not catch new violations.
+**Enforcement:** `tests/test_core_architecture_enforcement.py` + `tests/test_gc592f_pjax_regression.py` allowlists synced to current line numbers (2026-08 Soft-Reload migration Wave 0).
 
 ### 4.4 Page module registry (`GC.modules`)
 
-25 modules in `main.js:29689–29967`: overview, inventory, auction_house, vote_center, referrals, alliance, imperial_directives, galactic_politics, trader_hub, fleet, logistics, shipyard, defense, buildings, research, **planet_evolution**, empire, galaxy, ranking, hall_of_fame, chronicles, records, techtree, combat_simulator, options.
+25+ modules in `main.js` — overview, inventory, auction_house, vote_center, referrals, alliance, imperial_directives, galactic_politics, trader_hub, fleet, logistics, shipyard, defense, buildings, research, **planet_evolution**, empire, galaxy, ranking, hall_of_fame, chronicles, records, techtree, combat_simulator, options, login_rewards, premium, shop, creator, world_boss, skilltree, …
 
 **External:** `messages.js` → `GC.modules.messages`; `admin.js` → `GC.modules.admin`.
 
@@ -172,14 +172,43 @@ GC.navigateTo(url, opts)
 |-------|--------|------|---------|-------------|------------|-----------|-----------------|
 | `/buildings` | buildings | `GC.modules.buildings` | `registerCleanup` | mini-queue + hero SSR | `renderBuildQueue`, `patchCardQueuesFromOwnerMap` | Yes (light tab) | Low |
 | `/research` | research | same pattern | yes | yes | yes | Yes | Low |
-| `/shipyard` | shipyard | same | yes | mini-queue SSR; cards JS-only | `patchShipyardCardQueues` | Partial | Medium |
-| `/defense` | defense | same | yes | same | same | Partial | Medium |
-| `/planet_evolution` | planet_evolution | `bindPlanetEvolutionOnce` | yes | PE card SSR | **`refreshPlanetEvolutionState`** (separate API) | **No** — reload on action | **High** |
-| `/fleet` | fleet | module init | yes | partial | fleet state fetch | Partial | Medium |
-| `/galaxy` | galaxy | module init | yes | full SSR system | minimal JS patch | Partial | Medium |
+| `/shipyard` | shipyard | same | yes | mini-queue SSR; cards JS-only | `patchShipyardCardQueues` | Yes | Medium |
+| `/defense` | defense | same | yes | same | same | Yes | Medium |
+| `/planet_evolution` | planet_evolution | `bindPlanetEvolutionOnce` | yes | PE card SSR | `applyActionState` + queue patch; soft PJAX only for policy/event structural SSR | **Yes** (GC-CLEAN-002) | Medium |
+| `/fleet` | fleet | module init | yes | partial | fleet state fetch | Yes | Medium |
+| `/galaxy` | galaxy | module init | yes | full SSR system | minimal JS patch; soft on debris/relocate | Partial | Medium |
 | `/messages` | messages (special) | `runMessagesPageModule` | `registerPageCleanup` | inbox SSR | messages.js local | Partial | Medium |
+| `/login-rewards` | login_rewards | yes | yes | calendar SSR | `patchLoginRewardsDom` (incl. days) | Yes | Low |
+| `/premium` | premium | yes | yes | tracks/ops SSR | `patchBattlePassDom`; soft only on daily period rollover | Yes | Low |
+| `/shop` | shop | yes | yes | catalog SSR | `_markShopSkuOwned` / free-shop render | Yes | Low |
 
 **Lifecycle owner:** `GC.registerCleanup` (~60 registrations), cleared in `GC.cleanupPage`.
+
+---
+
+### 4.5 Soft-PJAX inventory (migrate / keep / defer)
+
+Updated 2026-08 Soft-Reload migration. Soft = `GC.reloadCurrentPage` (HTML swap), not `location.reload`.
+
+| Domain | Classification | Notes |
+|--------|----------------|-------|
+| Login Rewards claim | **migrated** | `patchLoginRewardsDom` updates day cards |
+| Battle Pass claim / claim-op | **migrated** | `patchBattlePassDom`; soft only `bp_daily_period_rollover` |
+| Shop fulfill (shop page) | **migrated** | `_markShopSkuOwned` |
+| Shop fulfill (premium embed) | **keep soft** | Premium unlock needs track SSR |
+| Creator terms ack | **keep soft** | Dashboard behind `terms_required` SSR |
+| PE research choose / spec pick / upgrade | **migrated** (DOM patch + soft false) | Policy/event still soft |
+| PE policy / event resolve | **keep soft** | Structural SSR panels |
+| World Boss claim | **migrated** | Replace claim panel in-place |
+| World Boss defeated / catch success | **keep soft** | Claim strip / companion SSR |
+| Skilltree unlock / SP claim | **migrated** | `patchMapFromState` |
+| Skilltree class pick/swap (no skill map yet) | **keep soft** | Class-grid ↔ map SSR |
+| Auction new lots | **keep soft** | Lot cards not in DOM |
+| Galaxy QA relocate / debris live | **defer** | Slot SSR |
+| Planet switch / scope mismatch | **keep** | Canonical scope contract |
+| Locale / auth / admin / payment | **hard load** | Documented exceptions |
+| Legacy `/upgrade`, `/research_start` | **defer** | JS-intercepted; No-JS redirect fallback |
+| Admin PJAX | **defer** | ROADMAP intentional |
 
 ---
 
@@ -378,6 +407,7 @@ Wave 7              CSS/template duplication cleanup
 ### GC-CLEAN-002 — PE action state + timekeeper patch (P0 hotfix)
 
 **Status:** ✅ (2026-07-22) — `finalizePeMutationSuccess` + soft content PJAX for structural PE; research start stays patch-only.  
+**Follow-up 2026-08:** research choose / spec pick / upgrade → DOM patch + `softContent: false`; policy/event remain soft.  
 **Scope:** `static/main.js` only (+ tests).  
 **Do:**
 - Extend `patchQueuePanelsImmediate` + `_syncTimekeeperButtonsFromState` for `planet_evolution` / `planet_research` when `.planet-evolution-page` active.
@@ -485,7 +515,7 @@ Wave 7              CSS/template duplication cleanup
 | HUD refresh | `applyHudOnlyGameState` vs `refreshHudFromGameState` vs `GC.applyHudFromGameState` |
 | Booster display | SSR JSON vs `GC.lastState.active_boosters` vs `_boostHudState` |
 | Unread badges | game-state poll vs `/api/notifications/summary` |
-| PE mutation UX | `applyActionState` (canonical) vs `reloadCurrentPage` + `refreshGameState` (live) |
+| PE mutation UX | `applyActionState` (canonical) + soft PJAX only for policy/event structural SSR |
 | Queue UI | mini-queue SSR/JS + hero overlay + card block + retired compact |
 | Fetch | `fetchGameAction` vs `fetchJSON` vs raw `fetch` |
 
@@ -510,4 +540,4 @@ Wave 7              CSS/template duplication cleanup
 - [x] Executable follow-up tickets GC-CLEAN-002 … GC-CLEAN-010
 - [x] No risky Big-Bang implementation in this ticket
 
-**Next recommended action:** **GC-CLEAN-002** (PE boost/timekeeper immediate update) — directly addresses reported PE bug with minimal scope.
+**Next recommended action:** Soft-Reload Wave complete for meta claims (login/BP/shop/WB claim/PE choose+spec). Remaining: Galaxy slot-live, Admin PJAX, legacy `/upgrade` — only with explicit Go (see §4.5 defer).

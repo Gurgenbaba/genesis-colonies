@@ -3279,6 +3279,31 @@ def test_login_rewards_hover_tip_clears_inline_display():
     assert "display: none !important" in css
 
 
+def test_liveops_claims_are_state_first_without_soft_reload():
+    """Login rewards + battle pass claims patch DOM; no soft PJAX on success."""
+    src = _read("static/main.js")
+    lr_claim = src.split("function bindLoginRewardsOnce()")[1].split(
+        "function initLoginRewards()"
+    )[0]
+    assert "patchLoginRewardsDom(res.login_rewards)" in lr_claim
+    assert "reloadCurrentPage" not in lr_claim
+    assert "login-rewards-day--" in src.split("function patchLoginRewardsDom")[1].split(
+        "function syncLiveOpsFromGameState"
+    )[0]
+
+    bp_bind = src.split("function bindBattlePassOnce()")[1].split(
+        "function initBattlePassTrackboard"
+    )[0]
+    assert "patchBattlePassDom(res.battle_pass)" in bp_bind
+    assert "reloadCurrentPage" not in bp_bind
+    assert "function patchBattlePassDom" in src
+    assert 'reason: "bp_daily_period_rollover"' in src
+
+    shop = src.split("function bindShopBuyOnce()")[1].split("function initShop()")[0]
+    assert "_markShopSkuOwned(sku)" in shop
+    assert 'reason: "shop_fulfilled"' not in shop
+
+
 def test_production_build_skips_queue_repaint_when_state_present():
     """Shipyard/Defense must not wipe TK ⚡ by re-rendering from unenriched data after state."""
     shipyard = _read("static/js/pages/shipyard.js")

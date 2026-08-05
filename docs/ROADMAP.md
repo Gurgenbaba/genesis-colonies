@@ -379,6 +379,8 @@ Vor neuen Features: **vorhandene Kernsysteme auf 100 %** — messbar via [GC-6
 | **GC-900E** — Distribute UI / polish | ✅ |
 | **GC-526–531** — Logistics bulk, routes, UI, inbox reports, QA docs | ✅ |
 | Admin Control Center auf PJAX/State (statt `reload`) | 💡 deferred — Hard-Load intentional; see [ADMIN_CONTROL_CENTER.md](ADMIN_CONTROL_CENTER.md) |
+| Galaxy Slot-Live ohne Soft-PJAX | 💡 deferred — Slot-SSR; see [GC_STATE_PJAX_AJAX_AUDIT.md](GC_STATE_PJAX_AJAX_AUDIT.md) §4.5 |
+| Legacy GET `/upgrade` + `/research_start` retire | 💡 deferred — JS intercepts; No-JS redirect fallback remains |
 | Admin UX Epic (grouped nav + tab contract GC-A01–A07) | ✅ |
 | GC-000 v2 — Regeln 15–17 (Parallel Systems, Duplicate Math, Owners) | ✅ |
 | **GC-536** — [Queue Card UX](GC-536_QUEUE_CARD_UX.md) (536A–F ✅) | ✅ |

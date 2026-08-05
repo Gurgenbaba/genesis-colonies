@@ -10,7 +10,7 @@ Verbindlicher Client-Server-Vertrag für Navigation und Aktionen. Siehe [STATE_A
 |---------|-----------|
 | `templates/base.html` | Bleibt im DOM (Nav, Resource Bar, Planet Switcher) |
 | `#main-content` | Wird bei Navigation ersetzt |
-| Link-Klasse | `.gc-nav-link` ohne `data-no-pjax` |
+| Link-Klasse | `.gc-nav-link` / `data-gc-nav` / `data-pjax` / Header (`.gc-topbar a`) ohne `data-no-pjax` |
 
 ### Navigation flow
 

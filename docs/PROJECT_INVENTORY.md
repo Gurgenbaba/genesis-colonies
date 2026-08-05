@@ -23,7 +23,7 @@ Audit-Methode: Module in `game/`, Routen in `app.py`, UI in `templates/` + `stat
 | **Messages** | `messages.py` | `/messages`, `messages.js` | `/api/messages/*` | `test_messages.py` | ✅ | ⚠️ `href`-Fallback (GC-512C) |
 | **Chat** | `chat.py` | Shell + `chat.js` | `/api/chat/*` (eigenes Poll) | `test_chat.py`, `test_chat_init` | ✅ | Ausnahme GC-000 dokumentiert |
 | **Alliance** | `alliance.py`, `alliance_catalog.py` | `/alliance`, `GC.modules.alliance` | `/api/alliance/*` + `state` | `test_alliance.py` (66+) | ✅ MVP complete | Deep-Hooks post-Beta — [CAPABILITY_STATUS.md](CAPABILITY_STATUS.md) P2 |
-| **Planet Evolution** | `planet_evolution/` | `/planet-evolution` | `/api/planets/<id>/*` + `state` | `test_planet_evolution*.py` | ✅ | ⚠️ Client `reloadCurrentPage` (GC-512A) |
+| **Planet Evolution** | `planet_evolution/` | `/planet-evolution` | `/api/planets/<id>/*` + `state` | `test_planet_evolution*.py` | ✅ | Soft PJAX only policy/event; choose/spec/upgrade patch-first |
 | **Ranking** | `ranking.py`, `scoring.py` | `/ranking` | `GET /api/ranking` | `test_ranking.py` | ✅ | — |
 | **Admin** | `admin.py`, `admin_api.py` | `/admin`, `admin.js` | `/api/admin/*` | `test_admin_*` | ✅ | ⚠️ Legacy Forms parallel |
 | **Support** | `support.py` | Options/Support UI | `/api/support/*`, admin support | — | ✅ | Mehr pytest optional |

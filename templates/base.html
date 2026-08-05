@@ -93,7 +93,10 @@
       <div class="gc-header-row gc-header-row-top">
 
         <div class="gc-hslot gc-hslot-brand">
-          <a href="{{ url_for('landing') }}" class="gc-logo" aria-label="Genesis Colonies Startseite">
+          <a href="{% if AUTH_USER %}{{ url_for('overview') }}{% else %}{{ url_for('landing') }}{% endif %}"
+             class="gc-logo"
+             {% if AUTH_USER %}data-gc-nav{% endif %}
+             aria-label="Genesis Colonies Startseite">
             <span class="gc-logo-icon" aria-hidden="true">🛰️</span>
             <span class="gc-title">Genesis Colonies</span>
           </a>

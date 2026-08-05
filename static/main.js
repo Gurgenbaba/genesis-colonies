@@ -20199,13 +20199,107 @@
     }
   }
 
+  function _loginRewardsStatusLabel(status) {
+    if (status === "claimable") return t("login_rewards_today_badge", "Heute");
+    if (status === "claimed") return t("login_rewards_claimed", "Abgeholt");
+    return t("login_rewards_locked", "Gesperrt");
+  }
+
   function patchLoginRewardsDom(state) {
     const page = document.getElementById("login-rewards-page");
     if (!page || !state) return;
+    const curDay = Number(state.current_day || 0);
     const cur = page.querySelector("[data-lr-current-day]");
-    if (cur) cur.textContent = `${Number(state.current_day || 0)}/30`;
+    if (cur) cur.textContent = `${curDay}/30`;
     const next = page.querySelector("[data-lr-next-day]");
     if (next) next.textContent = state.available ? String(state.next_day || "—") : "—";
+    const fill = page.querySelector(".login-rewards-progress-fill");
+    if (fill) fill.style.width = `${Math.max(0, Math.min(100, (curDay / 30) * 100))}%`;
+    const mainClaim = page.querySelector(".login-rewards-claim-main");
+    if (mainClaim) {
+      mainClaim.classList.toggle("login-rewards-claim-main--ready", !!state.available);
+    }
+
+    if (Array.isArray(state.days)) {
+      state.days.forEach((day) => {
+        const dayNum = Number(day.day || 0);
+        if (!dayNum) return;
+        const el = page.querySelector(`[data-lr-day="${dayNum}"]`);
+        if (!el) return;
+        const status = String(day.status || "locked");
+        el.setAttribute("data-lr-status", status);
+        el.classList.remove(
+          "login-rewards-day--claimable",
+          "login-rewards-day--claimed",
+          "login-rewards-day--locked"
+        );
+        el.classList.add(`login-rewards-day--${status}`);
+        if (status === "claimable") {
+          el.setAttribute("data-lr-claim", "");
+          el.disabled = false;
+          el.setAttribute("aria-disabled", "false");
+        } else {
+          el.removeAttribute("data-lr-claim");
+          el.disabled = true;
+          el.setAttribute("aria-disabled", "true");
+        }
+        const marks = el.querySelector(".login-rewards-day-marks");
+        let todayMark = el.querySelector(".login-rewards-day-mark--today");
+        if (status === "claimable") {
+          if (!todayMark && marks) {
+            todayMark = document.createElement("span");
+            todayMark.className = "login-rewards-day-mark login-rewards-day-mark--today";
+            marks.prepend(todayMark);
+          }
+        } else if (todayMark) {
+          todayMark.remove();
+        }
+        let check = el.querySelector(".login-rewards-day-check");
+        let lock = el.querySelector(".login-rewards-day-lock");
+        if (status === "claimed") {
+          if (lock) lock.remove();
+          if (!check) {
+            check = document.createElement("span");
+            check.className = "login-rewards-day-check";
+            check.setAttribute("aria-hidden", "true");
+            check.textContent = "✓";
+            el.appendChild(check);
+          }
+        } else if (status === "locked") {
+          if (check) check.remove();
+          if (!lock) {
+            lock = document.createElement("span");
+            lock.className = "login-rewards-day-lock";
+            lock.setAttribute("aria-hidden", "true");
+            el.appendChild(lock);
+          }
+        } else {
+          if (check) check.remove();
+          if (lock) lock.remove();
+        }
+        const tipTpl = el.querySelector("template[data-lr-tip]");
+        const tipRoot = tipTpl && tipTpl.content ? tipTpl.content : null;
+        const tipStatus = tipRoot ? tipRoot.querySelector(".login-rewards-tip-status") : null;
+        if (tipStatus) {
+          tipStatus.className = `login-rewards-tip-status login-rewards-tip-status--${status}`;
+          tipStatus.textContent = _loginRewardsStatusLabel(status);
+        }
+        let tipCta = tipRoot ? tipRoot.querySelector(".login-rewards-tip-cta") : null;
+        if (tipCta) tipCta.hidden = status !== "claimable";
+        else if (status === "claimable" && tipRoot) {
+          const tip = tipRoot.querySelector(".login-rewards-tip");
+          if (tip) {
+            tipCta = document.createElement("p");
+            tipCta.className = "login-rewards-tip-cta";
+            tipCta.textContent = t("login_rewards_claim_short", "Claim");
+            tip.appendChild(tipCta);
+          }
+        }
+        const dayLabel = t("login_rewards_day_n", "Tag {n}").replace("{n}", String(dayNum));
+        el.setAttribute("aria-label", `${dayLabel} — ${_loginRewardsStatusLabel(status)}`);
+      });
+    }
+
     page.querySelectorAll("[data-lr-claim]").forEach((btn) => {
       const disabled = !state.available;
       btn.disabled = disabled;
@@ -20243,13 +20337,21 @@
       patchLoginRewardsDom(data.login_rewards);
     }
     if (reasonStr === "page_hydrate") return;
-    const opsPanel = document.querySelector("[data-bp-ops][data-bp-daily-period]");
-    if (!opsPanel || !document.getElementById("premium-page")) return;
-    const serverKey = String(data.battle_pass?.ops?.daily_period_key || "").trim();
-    const domKey = String(opsPanel.getAttribute("data-bp-daily-period") || "").trim();
-    if (serverKey && domKey && serverKey !== domKey) {
-      if (typeof GC.reloadCurrentPage === "function") {
-        GC.reloadCurrentPage({ skipPolling: true, reason: "bp_daily_period_rollover" });
+    if (data.battle_pass && document.getElementById("premium-page")) {
+      const opsPanel = document.querySelector("[data-bp-ops][data-bp-daily-period]");
+      const serverKey = String(data.battle_pass?.ops?.daily_period_key || "").trim();
+      const domKey = opsPanel
+        ? String(opsPanel.getAttribute("data-bp-daily-period") || "").trim()
+        : "";
+      // Period rollover changes op card set — soft PJAX only when structure must change.
+      if (serverKey && domKey && serverKey !== domKey) {
+        if (typeof GC.reloadCurrentPage === "function") {
+          GC.reloadCurrentPage({ skipPolling: true, reason: "bp_daily_period_rollover" });
+        }
+        return;
+      }
+      if (data.battle_pass.levels || data.battle_pass.ops) {
+        patchBattlePassDom(data.battle_pass);
       }
     }
   }
@@ -20269,13 +20371,7 @@
         body: JSON.stringify({ request_id: newRequestId() }),
       });
       if (res?.state) applyActionState(res, "login_reward_claim");
-      if (res?.login_rewards) {
-        if (res.login_rewards.days) {
-          GC.reloadCurrentPage({ skipPolling: true });
-          return;
-        }
-        patchLoginRewardsDom(res.login_rewards);
-      }
+      if (res?.login_rewards) patchLoginRewardsDom(res.login_rewards);
       if (res?.ok) {
         showNotify(t("login_rewards_claim_ok", "Login-Belohnung gutgeschrieben."), "success");
       } else {
@@ -20386,6 +20482,166 @@
     }
   }
 
+  function _bpCardStateLabel(track, bundle) {
+    if (bundle?.claimable) return t("bp_claimable", "Bereit");
+    if (bundle?.claimed) return t("bp_claimed", "Abgeholt");
+    if (track === "premium" && bundle?.locked) return t("bp_premium_locked", "Premium nötig");
+    return t("bp_locked", "Gesperrt");
+  }
+
+  function _patchBattlePassCardFooter(card, track, level, bundle) {
+    const footer = card.querySelector(".battle-pass-preview-actions");
+    if (!footer) return;
+    if (bundle?.claimed) {
+      footer.innerHTML = `<span class="battle-pass-claimed">${escapeHtml(t("bp_claimed", "Abgeholt"))}</span>`;
+    } else if (bundle?.claimable) {
+      footer.innerHTML =
+        `<button type="button" class="gc-btn gc-btn-sm gc-btn-primary" data-bp-claim="${escapeHtml(track)}" data-bp-level="${Number(level) || 0}">` +
+        `${escapeHtml(t("bp_claim", "Claim"))}</button>`;
+    } else if (track === "premium" && bundle?.locked) {
+      footer.innerHTML = `<span class="battle-pass-locked">${escapeHtml(t("bp_premium_locked", "Premium nötig"))}</span>`;
+    } else {
+      footer.innerHTML = `<span class="battle-pass-locked">${escapeHtml(t("bp_locked", "Gesperrt"))}</span>`;
+    }
+  }
+
+  function _patchBattlePassOpCard(card, op) {
+    if (!card || !op) return;
+    card.classList.toggle("is-claimable", !!op.claimable);
+    card.classList.toggle("is-claimed", !!op.claimed);
+    card.classList.toggle("is-complete", !op.claimable && !op.claimed && !!op.complete);
+    if (op.period_key) card.setAttribute("data-bp-op-period", String(op.period_key));
+    const fill = card.querySelector(".battle-pass-op-fill");
+    const target = Math.max(1, Number(op.target) || 1);
+    const progress = Math.max(0, Number(op.progress) || 0);
+    if (fill) fill.style.width = `${Math.min(100, (progress / target) * 100)}%`;
+    const bar = card.querySelector(".battle-pass-op-bar");
+    if (bar) {
+      bar.setAttribute("aria-valuenow", String(progress));
+      bar.setAttribute("aria-valuemax", String(target));
+    }
+    const progEl = card.querySelector(".battle-pass-op-progress");
+    if (progEl) progEl.textContent = `${progress}/${Number(op.target) || 0}`;
+    const action = card.querySelector(".battle-pass-op-card-action");
+    if (!action) return;
+    if (op.claimable) {
+      action.innerHTML =
+        `<button type="button" class="gc-btn gc-btn-sm gc-btn-primary" data-bp-claim-op="${escapeHtml(op.op_key || "")}" data-bp-op-period="${escapeHtml(op.period_key || "")}">` +
+        `${escapeHtml(t("bp_op_claim", "XP holen"))}</button>`;
+    } else if (op.claimed) {
+      action.innerHTML = `<span class="battle-pass-claimed">${escapeHtml(t("bp_claimed", "Abgeholt"))}</span>`;
+    } else {
+      action.innerHTML = `<span class="battle-pass-locked">${escapeHtml(t("bp_op_in_progress", "In Arbeit"))}</span>`;
+    }
+  }
+
+  function patchBattlePassDom(bp) {
+    const page = document.getElementById("premium-page");
+    if (!page || !bp || !bp.ready) return;
+
+    const maxLevel = Number(bp.season?.max_level) || 50;
+    const levelEl = page.querySelector("[data-bp-level]");
+    if (levelEl && bp.level != null) levelEl.textContent = `${bp.level}/${maxLevel}`;
+
+    const xpPer = Math.max(1, Number(bp.xp_per_level) || 1);
+    const xpInto = Number(bp.xp_into_level);
+    const xpText = page.querySelector("[data-bp-xp-text]");
+    if (xpText && Number.isFinite(xpInto)) {
+      xpText.textContent = `${Math.floor(xpInto)} / ${xpPer}`;
+    }
+    const xpFill = page.querySelector("[data-bp-xp-fill]");
+    if (xpFill && Number.isFinite(xpInto)) {
+      xpFill.style.width = `${Math.min(100, (xpInto / xpPer) * 100)}%`;
+    }
+    const premLabel = page.querySelector("[data-bp-premium-label]");
+    if (premLabel) {
+      premLabel.textContent = bp.premium_unlocked
+        ? t("bp_track_premium", "Premium")
+        : t("bp_track_free", "Free");
+    }
+    const trackTile = page.querySelector(".battle-pass-hud-tile--track");
+    if (trackTile) trackTile.classList.toggle("is-premium", !!bp.premium_unlocked);
+
+    if (Array.isArray(bp.levels)) {
+      bp.levels.forEach((lv) => {
+        const level = Number(lv.level) || 0;
+        if (!level) return;
+        ["free", "premium"].forEach((track) => {
+          const bundle = lv[track];
+          if (!bundle) return;
+          const card = page.querySelector(
+            `[data-bp-card][data-bp-track="${track}"][data-bp-level="${level}"]`
+          );
+          if (!card) return;
+          const claimable = !!bundle.claimable;
+          const claimed = !!bundle.claimed;
+          const locked = !!bundle.locked && !claimable && !claimed;
+          card.classList.toggle("is-reached", !!lv.reached);
+          card.classList.toggle("is-claimable", claimable);
+          card.classList.toggle("is-claimed", claimed);
+          card.classList.toggle("is-locked", locked);
+          card.setAttribute("data-bp-claimable", claimable ? "1" : "0");
+          card.setAttribute("data-bp-claimed", claimed ? "1" : "0");
+          card.setAttribute("data-bp-locked", locked ? "1" : "0");
+          const stateEl = card.querySelector(".battle-pass-card-state");
+          if (stateEl) stateEl.textContent = _bpCardStateLabel(track, bundle);
+          let check = card.querySelector(".battle-pass-card-check");
+          let lockIcon = card.querySelector(".battle-pass-card-lock");
+          if (claimed) {
+            if (lockIcon) lockIcon.remove();
+            if (!check) {
+              check = document.createElement("span");
+              check.className = "battle-pass-card-check";
+              check.setAttribute("aria-hidden", "true");
+              check.textContent = "✓";
+              card.appendChild(check);
+            }
+          } else if (locked) {
+            if (check) check.remove();
+            if (!lockIcon) {
+              lockIcon = document.createElement("span");
+              lockIcon.className = "battle-pass-card-lock";
+              lockIcon.setAttribute("aria-hidden", "true");
+              lockIcon.textContent = "⌁";
+              card.appendChild(lockIcon);
+            }
+          } else {
+            if (check) check.remove();
+            if (lockIcon) lockIcon.remove();
+          }
+          _patchBattlePassCardFooter(card, track, level, bundle);
+        });
+      });
+    }
+
+    if (bp.ops) {
+      const opsPanel = page.querySelector("[data-bp-ops]");
+      if (opsPanel && bp.ops.daily_period_key) {
+        opsPanel.setAttribute("data-bp-daily-period", String(bp.ops.daily_period_key));
+      }
+      const dripVal = page.querySelector(".battle-pass-ops-drip-val");
+      if (dripVal && (bp.ops.drip_today != null || bp.ops.drip_cap != null)) {
+        dripVal.textContent = `${bp.ops.drip_today || 0}/${bp.ops.drip_cap || 40}`;
+      }
+      const dripFill = page.querySelector(".battle-pass-ops-drip-bar .battle-pass-op-fill");
+      const dripCap = Math.max(1, Number(bp.ops.drip_cap) || 40);
+      const dripToday = Math.max(0, Number(bp.ops.drip_today) || 0);
+      if (dripFill) dripFill.style.width = `${Math.min(100, (dripToday / dripCap) * 100)}%`;
+      [...(bp.ops.daily || []), ...(bp.ops.weekly || [])].forEach((op) => {
+        if (!op || !op.op_key) return;
+        const card = page.querySelector(`[data-bp-op="${String(op.op_key).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"]`);
+        _patchBattlePassOpCard(card, op);
+      });
+    }
+
+    const script = document.getElementById("battle-pass-page-state");
+    if (script) {
+      try {
+        script.textContent = JSON.stringify(bp);
+      } catch (_) { /* ignore */ }
+    }
+  }
+
   function bindBattlePassOnce() {
     if (_battlePassBound) return;
     _battlePassBound = true;
@@ -20406,9 +20662,9 @@
           }),
         });
         if (res?.state) applyActionState(res, "battle_pass_claim_op");
+        if (res?.battle_pass) patchBattlePassDom(res.battle_pass);
         if (res?.ok) {
           showNotify(t("bp_op_claim_ok", "Season-Op XP gutgeschrieben."), "success");
-          GC.reloadCurrentPage({ skipPolling: true });
         } else {
           const reason = String(res?.reason || "");
           const msg =
@@ -20439,9 +20695,9 @@
         }),
       });
       if (res?.state) applyActionState(res, "battle_pass_claim");
+      if (res?.battle_pass) patchBattlePassDom(res.battle_pass);
       if (res?.ok) {
         showNotify(t("bp_claim_ok", "Pass-Belohnung gutgeschrieben."), "success");
-        GC.reloadCurrentPage({ skipPolling: true });
       } else {
         const reason = String(res?.reason || "");
         const msg =
@@ -20795,6 +21051,18 @@
     }).join("");
   }
 
+  function _markShopSkuOwned(sku) {
+    const page = document.getElementById("shop-page") || document.getElementById("premium-page");
+    if (!page || !sku) return;
+    const card = page.querySelector(`[data-shop-sku="${String(sku).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"]`);
+    if (!card) return;
+    card.classList.add("is-owned");
+    const actions = card.querySelector(".shop-card-actions");
+    if (actions) {
+      actions.innerHTML = `<span class="shop-owned">${escapeHtml(t("shop_owned", "Bereits freigeschaltet"))}</span>`;
+    }
+  }
+
   function bindShopBuyOnce() {
     if (_shopBuyBound) return;
     _shopBuyBound = true;
@@ -20908,8 +21176,12 @@
               "info"
             );
           }
-          if (typeof GC.reloadCurrentPage === "function") {
-            GC.reloadCurrentPage({ reason: "shop_fulfilled" });
+          _markShopSkuOwned(sku);
+          // Premium page embeds shop CTAs — unlock changes track SSR; soft PJAX there only.
+          if (document.getElementById("premium-page") && !document.getElementById("shop-page")) {
+            if (typeof GC.reloadCurrentPage === "function") {
+              GC.reloadCurrentPage({ skipPolling: true, reason: "shop_fulfilled_premium" });
+            }
           }
           return;
         }
@@ -20982,7 +21254,10 @@
           });
           if (res && res.ok) {
             showNotify(t("creator_terms_ok", "Bedingungen akzeptiert."), "success");
-            if (typeof GC.reloadCurrentPage === "function") GC.reloadCurrentPage();
+            // Dashboard SSR is behind terms_required — soft PJAX required.
+            if (typeof GC.reloadCurrentPage === "function") {
+              GC.reloadCurrentPage({ reason: "creator_terms_ack" });
+            }
           } else {
             showNotify(t("creator_terms_fail", "Bestätigung fehlgeschlagen."), "error");
           }
@@ -31943,7 +32218,9 @@
         });
         if (res?.ok) {
           closePeChoiceConfirmModal();
-          await finalizePeMutationSuccess(res, "pe_research_choose", { softContent: true });
+          const choiceActions = choiceBtn.closest(".pe-research-actions--choice");
+          if (choiceActions) choiceActions.remove();
+          await finalizePeMutationSuccess(res, "pe_research_choose", { softContent: false });
         } else {
           peMutationFailed(choiceBtn, res);
         }
@@ -32150,8 +32427,16 @@
         specBtn.disabled = true;
         const planetId = parseInt(picker.dataset.planetId || "0", 10);
         const res = await postAction(`/api/planets/${planetId}/specialization/pick`, { spec_key: specBtn.dataset.specKey });
-        if (res?.ok) await finalizePeMutationSuccess(res, "pe_spec_pick", { softContent: true });
-        else peMutationFailed(specBtn, res);
+        if (res?.ok) {
+          const picker = root.querySelector("#pe-spec-picker");
+          if (picker) {
+            const span = document.createElement("span");
+            span.className = "pe-hero-spec gc-mono";
+            span.textContent = String(specBtn.textContent || "").trim();
+            picker.replaceWith(span);
+          }
+          await finalizePeMutationSuccess(res, "pe_spec_pick", { softContent: false });
+        } else peMutationFailed(specBtn, res);
         return;
       }
 
@@ -32160,7 +32445,7 @@
         specUpgradeBtn.disabled = true;
         const planetId = parseInt(specUpgradeBtn.dataset.planetId || "0", 10);
         const res = await postAction(`/api/planets/${planetId}/specialization/upgrade`, {});
-        if (res?.ok) await finalizePeMutationSuccess(res, "pe_spec_upgrade", { softContent: true });
+        if (res?.ok) await finalizePeMutationSuccess(res, "pe_spec_upgrade", { softContent: false });
         else peMutationFailed(specUpgradeBtn, res);
         return;
       }
@@ -38315,8 +38600,21 @@
           if (res && res.state && typeof GC.applyActionState === "function") {
             GC.applyActionState(res, "world_boss_claim");
           }
-          if (typeof GC.reloadCurrentPage === "function") {
-            GC.reloadCurrentPage();
+          if (res && res.ok) {
+            const panel = claimBtn.closest("[data-wb-claim-panel]");
+            if (panel) {
+              const claimed = document.createElement("p");
+              claimed.className = "hint gc-world-boss-claim-done";
+              claimed.textContent = t("wb_claimed_rewards", "Abgeholt");
+              panel.replaceWith(claimed);
+            } else {
+              claimBtn.disabled = true;
+              claimBtn.textContent = t("wb_claimed_rewards", "Abgeholt");
+            }
+            showNotify(t("wb_claimed_rewards", "Abgeholt"), "success");
+          } else {
+            claimBtn.disabled = false;
+            showNotify(t("msg_action_failed", "Aktion fehlgeschlagen."), "error");
           }
         } catch (_err) {
           claimBtn.disabled = false;
@@ -39209,11 +39507,15 @@
                 ),
                 "success"
               );
+              // Catch success replaces boss card with companion SSR — soft PJAX.
+              if (typeof GC.reloadCurrentPage === "function") {
+                GC.reloadCurrentPage({ reason: "world_boss_catch_success" });
+              }
             } else {
               showNotify(t("wb_catch_fail", "Zähmen fehlgeschlagen — Versuch verbraucht. Cooldown aktiv."), "warning");
+              catchBtn.disabled = false;
+              delete catchBtn.dataset.submitting;
             }
-            if (typeof GC.reloadCurrentPage === "function") GC.reloadCurrentPage();
-          } else {
             const err = String(res?.error || "world_boss_catch_failed");
             const map = {
               phase_locked: t("wb_catch_phase_locked", "Zähmen erst ab Phase 3 (≤25 % HP)."),
@@ -39957,9 +40259,19 @@
         });
         if (res && res.ok) {
           if (typeof GC.applyActionState === "function") GC.applyActionState(res, "commander");
-          if (keepSelection && res.commander && mapRoot) {
+          if (res.commander) {
             pageState = Object.assign({}, pageState, res.commander);
-            patchMapFromState();
+            if (mapRoot && Array.isArray(pageState.skills)) {
+              patchMapFromState();
+              if (!keepSelection) {
+                closeFocus();
+                selectedKey = firstAvailableKey() || selectedKey;
+                if (selectedKey) fillDock(selectedKey);
+              }
+            } else {
+              // Class pick/swap swaps class-grid ↔ skill-map SSR.
+              reloadPage();
+            }
           } else {
             reloadPage();
           }
@@ -40193,7 +40505,9 @@
     "a.gc-nav-link, a.gc-nav-sub-link, a.gc-bottom-nav-item, a.gc-nav-drawer-link, a.gc-hud-panel-messages, " +
     "a.gc-hud-panel-score, a.galaxy-view-tab, a.galaxy-nav-step, a.galaxy-range-item, " +
     "a.gc-command-center-action-btn, a.gc-command-center-fleet-link, a.gc-command-center-news-link, a.gc-command-center-activity-link, " +
-    "a.fleet-mode-tab, a[data-gc-nav], a[data-command-action], " +
+    "a.fleet-mode-tab, a[data-gc-nav], a[data-pjax], a[data-pjax-link], a[data-command-action], " +
+    "a.gc-header-icon-btn, a.gc-initiation-hud, a.gc-logo, " +
+    "header.gc-header a[href], .gc-topbar a[href], " +
     "#gc-sidebar-nav a[href], #gc-sidebar-nav-right a[href], " +
     "#gc-mnav-sidebar-nav a[href], #gc-mnav-sidebar-nav-right a[href], " +
     "#gc-nav-drawer-panel-meta [data-nav-section='system'] a[href], " +

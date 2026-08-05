@@ -166,7 +166,11 @@ def test_gc_clean_002_pe_immediate_patch_and_action_state():
     assert 'await finalizePeMutationSuccess(res, "pe_spec_upgrade"' in src
     assert 'await finalizePeMutationSuccess(res, "pe_policy_activate"' in src
     assert 'await finalizePeMutationSuccess(res, "pe_event_resolve"' in src
-    assert 'await finalizePeMutationSuccess(res, "pe_research_choose"' in src
+    assert 'await finalizePeMutationSuccess(res, "pe_research_choose", { softContent: false })' in src
+    assert 'await finalizePeMutationSuccess(res, "pe_spec_pick", { softContent: false })' in src
+    assert 'await finalizePeMutationSuccess(res, "pe_spec_upgrade", { softContent: false })' in src
+    assert 'await finalizePeMutationSuccess(res, "pe_policy_activate", { softContent: true })' in src
+    assert 'await finalizePeMutationSuccess(res, "pe_event_resolve", { softContent: true })' in src
 
     pe_bind = src.split("const researchBtn = e.target.closest(\".pe-research-btn\")")[1].split(
         "const choiceBtn = e.target.closest(\".pe-choice-btn\")"

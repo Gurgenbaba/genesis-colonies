@@ -20,6 +20,28 @@ def test_pjax_nav_link_covers_sidebar_and_command_center():
     assert "a.gc-command-center-fleet-link" in src
     assert "a.galaxy-view-tab" in src
     assert "a[data-gc-nav]" in src
+    assert "a[data-pjax]" in src
+    assert "a[data-pjax-link]" in src
+    assert "a.gc-header-icon-btn" in src
+    assert "header.gc-header a[href]" in src
+    assert ".gc-topbar a[href]" in src
+
+
+def test_header_topbar_links_are_pjax_marked():
+    """Top bar LiveOps icons + logo must be PJAX-eligible (outside #main-content)."""
+    rail = _read("templates/partials/header_icon_rail.html")
+    assert 'data-gc-nav' in rail
+    assert 'class="gc-header-icon-btn"' in rail
+    assert "login_rewards_view" in rail
+    assert "premium_view" in rail
+    ini = _read("templates/partials/initiation_hud.html")
+    assert "data-gc-nav" in ini
+    base = _read("templates/base.html")
+    logo = base.split("gc-hslot-brand")[1].split("gc-hslot")[0]
+    assert "gc-logo" in logo
+    assert "url_for('overview')" in logo
+    assert "data-gc-nav" in logo
+    assert "gc-hud-panel-score" in base
 
 
 def test_command_center_js_links_use_gc_nav_link():
@@ -47,7 +69,7 @@ def test_command_center_primary_and_colony_open_use_navigate_to():
 
 def test_galaxy_view_tabs_marked_for_pjax():
     tpl = _read("templates/galaxy.html")
-    assert 'class="gc-nav-link galaxy-view-tab galaxy-view-tab--classic' in tpl
+    assert "gc-nav-link galaxy-view-tab galaxy-view-tab--classic" in tpl
     assert "galaxy-view-tab--world is-active" in tpl
     assert "galaxy_view_classic" not in tpl
 
@@ -98,11 +120,13 @@ ALLOWLIST_HREF_ASSIGN = {
     # window.location.assign("/login") is the primary path; this is only a
     # fallback if assign() throws — a genuine full-page exit from the SPA on
     # auth loss, not an in-game PJAX navigation.
-    (939, 'window.location.href = "/login";'),
+    (1048, 'window.location.href = "/login";'),
+    # Radar / deep-link nav: only if GC.navigateTo is missing.
+    (13935, "window.location.href = url;"),
     # Galaxy/system quick-nav input: only reached if GC.navigateTo is somehow
     # undefined (defensive fallback), mirroring the reloadCurrentPage /
     # locale-switch reload() fallbacks below.
-    (31088, 'else window.location.href = href;'),
+    (37013, "else window.location.href = href;"),
 }
 
 
@@ -127,9 +151,9 @@ def test_reload_fallback_is_allowlisted_only():
         if re.search(r"\b(?:window\.)?location\.reload\s*\(", line)
     ]
     allowed = {
-        (2203, "window.location.reload();"),  # reloadCurrentPage fullDocument
-        (2233, "window.location.reload();"),  # reloadCurrentPage navigateTo fallback
-        (25854, "window.location.reload();"),  # locale switch fallback
+        (2581, "window.location.reload();"),  # reloadCurrentPage fullDocument
+        (2611, "window.location.reload();"),  # reloadCurrentPage navigateTo fallback
+        (31649, "window.location.reload();"),  # locale switch fallback
     }
     assert reload_lines, "expected allowlisted location.reload() sites"
     assert set(reload_lines) == allowed, (

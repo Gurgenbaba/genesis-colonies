@@ -6,6 +6,7 @@
 <a id="gc-initiation-hud"
    class="gc-initiation-hud{% if not _ini_active %} is-hidden{% endif %}"
    href="{{ url_for('initiation_view') }}"
+   data-gc-nav
    data-pjax
    data-initiation-hud
    title="{{ _ini_title }}{% if _ini_progress %} — {{ _ini_progress }}{% endif %}"

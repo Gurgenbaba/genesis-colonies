@@ -11,14 +11,20 @@ ROOT = Path(__file__).resolve().parents[1]
 # static/admin.js is out of scope here (see _iter_js_lines skip below); its
 # admin-shell reload sites live under the separate admin contract.
 ALLOWLIST_RELOAD = {
-    ("static/main.js", 2243),  # GC.reloadCurrentPage fullDocument branch
-    ("static/main.js", 2273),  # GC.reloadCurrentPage navigateTo-undefined fallback
-    ("static/main.js", 26048),  # locale switch: GC.reloadCurrentPage-undefined fallback
+    ("static/main.js", 2581),  # GC.reloadCurrentPage fullDocument branch
+    ("static/main.js", 2611),  # GC.reloadCurrentPage navigateTo-undefined fallback
+    ("static/main.js", 31649),  # locale switch: GC.reloadCurrentPage-undefined fallback
 }
 
 ALLOWLIST_LOCATION_HREF_ASSIGN = {
-    ("static/js/messages.js", 187),
-    ("static/js/messages.js", 1692),
+    ("static/main.js", 1048),  # auth recovery fallback if assign() throws
+    ("static/main.js", 13935),  # radar nav fallback if GC.navigateTo missing
+    ("static/main.js", 37013),  # galaxy coord commit fallback if GC.navigateTo missing
+    ("static/js/messages.js", 351),  # navigateTo-missing fallback
+    ("static/js/messages.js", 2622),  # fleet attack nav fallback
+    ("static/js/messages.js", 2657),  # recycle nav fallback
+    ("static/js/messages.js", 2670),  # spy simulate nav fallback
+    ("static/js/options.js", 542),  # Discord unlink fallback if navigateTo missing
 }
 
 RELOAD_PATTERN = re.compile(r"\b(?:window\.)?location\.reload\s*\(")
