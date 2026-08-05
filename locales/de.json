@@ -8336,7 +8336,7 @@
   "initiation_step_defense": "Verteidigung bauen",
   "initiation_step_defense_hint": "Öffne Verteidigung und baue eine Einheit.",
   "initiation_step_fleet": "Flotte senden",
-  "initiation_step_fleet_hint": "Öffne Fleet und sende einmal eine Mission — der Loop, den deine Economy trägt.",
+  "initiation_step_fleet_hint": "Sende einmal eine Mission von Fleet aus. Bereits gestartete Flotten zählen automatisch.",
   "initiation_step_metal_mines": "Ferronit-Mine 3× upgraden",
   "initiation_step_metal_mines_hint": "Öffne Gebäude und schließe drei Ferronit-Mine-Upgrades ab.",
   "initiation_step_research": "Forschung abschließen",

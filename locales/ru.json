@@ -8336,7 +8336,7 @@
   "initiation_step_defense": "Build defense",
   "initiation_step_defense_hint": "Open Defense and queue one defensive unit.",
   "initiation_step_fleet": "Send a fleet",
-  "initiation_step_fleet_hint": "Open Fleet and send any mission once — practice the loop your economy supports.",
+  "initiation_step_fleet_hint": "Send any mission once from Fleet. Fleets you already launched count automatically.",
   "initiation_step_metal_mines": "Upgrade Ferronite Mine 3 times",
   "initiation_step_metal_mines_hint": "Open Buildings and complete three Ferronite Mine upgrades.",
   "initiation_step_research": "Complete research",

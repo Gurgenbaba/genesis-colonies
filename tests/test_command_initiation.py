@@ -77,7 +77,23 @@ def test_resolve_step_route_highlights_solar_first():
 def test_page_key_mapping():
     assert page_key_from_path("/galaxy") == "galaxy"
     assert resolve_page_key(path="/buildings", finish_source="game_state") == ""
+    assert resolve_page_key(path="/galaxy", finish_source="page_load") == "galaxy"
+    assert resolve_page_key(path="/ranking", finish_source="ranking") == "ranking"
+    assert resolve_page_key(path="/messages", finish_source="messages") == "messages"
+    assert resolve_page_key(path="/hall-of-fame", finish_source="hall_of_fame") == "hall_of_fame"
+    assert resolve_page_key(path="/world-boss", finish_source="world_boss") == "world_boss"
 
+
+def test_all_visit_page_pack_routes_resolve():
+    """Every visit_page step must resolve its route → page key in filters."""
+    for step in flatten_steps():
+        if str(step.get("objective_key") or "") != "visit_page":
+            continue
+        filters = step.get("filters") if isinstance(step.get("filters"), dict) else {}
+        pages = {str(x) for x in (filters.get("pages") or [])}
+        assert pages, step.get("id")
+        route = str(step.get("route") or "")
+        assert page_key_from_path(route) in pages, (step.get("id"), route, pages)
 
 def test_upgrade_buildings_respects_building_type_filter():
     assert (
@@ -265,5 +281,129 @@ def test_visit_page_completes_when_active(initiation_db):
         assert out["updated"] == 1
         state = get_initiation_state(pid, conn=conn)
         assert state["current"]["id"] == "visit_planet_evolution"
+    finally:
+        conn.close()
+
+
+def test_existing_fleet_movements_credit_send_step(initiation_db):
+    """Veterans with prior fleet launches skip send_fleet without sending again."""
+    conn = db()
+    try:
+        pid = _create_player()
+        ensure_player_initiation(pid, conn=conn, credit=False)
+        steps = flatten_steps()
+        send_idx = next(i for i, s in enumerate(steps) if s["id"] == "send_fleet")
+        planet = get_homeworld(player_id=pid)
+        now = 1_700_000_000
+        conn.execute(
+            """
+            INSERT INTO fleet_movements (
+                player_id, origin_planet_id, target_galaxy, target_system, target_position,
+                mission_type, ships_json, resources_json,
+                departure_at, arrival_at, return_at, status, created_at, updated_at
+            ) VALUES (?, ?, 1, 1, 1, 'transport', '{}', '{}', ?, ?, ?, 'outbound', ?, ?);
+            """,
+            (pid, int(planet["id"]), now, now + 60, now + 120, now, now),
+        )
+        conn.execute(
+            """
+            UPDATE player_initiation
+            SET step_index = ?, progress_value = 0, target_value = 1, status = 'active'
+            WHERE player_id = ?;
+            """,
+            (send_idx, pid),
+        )
+        commit(conn)
+        out = credit_existing_progress(pid, conn=conn)
+        assert out.get("completed") or out.get("credited")
+        state = get_initiation_state(pid, conn=conn)
+        assert state["current"]["id"] == "visit_galaxy"
+    finally:
+        conn.close()
+
+
+def test_pjax_galaxy_visit_advances_initiation(initiation_db, monkeypatch):
+    """Soft nav (X-PJAX) must credit visit_page — previously poll path skipped it."""
+    import importlib
+
+    monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
+    monkeypatch.setenv("SECRET_KEY", "test-secret-key-not-default-value-32chars")
+    monkeypatch.setenv("APP_ENV", "development")
+
+    conn = db()
+    try:
+        pid = _create_player()
+        ensure_player_initiation(pid, conn=conn, credit=False)
+        steps = flatten_steps()
+        galaxy_idx = next(i for i, s in enumerate(steps) if s["id"] == "visit_galaxy")
+        conn.execute(
+            """
+            UPDATE player_initiation
+            SET step_index = ?, progress_value = 0, target_value = 1, status = 'active'
+            WHERE player_id = ?;
+            """,
+            (galaxy_idx, pid),
+        )
+        commit(conn)
+    finally:
+        conn.close()
+
+    import app as app_module
+
+    importlib.reload(app_module)
+    client = app_module.app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = pid
+
+    resp = client.get("/galaxy", headers={"X-PJAX": "true"})
+    assert resp.status_code == 200
+
+    conn = db()
+    try:
+        state = get_initiation_state(pid, conn=conn)
+        assert state["current"]["id"] == "visit_planet_evolution"
+    finally:
+        conn.close()
+
+
+def test_pjax_messages_visit_advances_initiation(initiation_db, monkeypatch):
+    import importlib
+
+    monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
+    monkeypatch.setenv("SECRET_KEY", "test-secret-key-not-default-value-32chars")
+    monkeypatch.setenv("APP_ENV", "development")
+
+    conn = db()
+    try:
+        pid = _create_player()
+        ensure_player_initiation(pid, conn=conn, credit=False)
+        steps = flatten_steps()
+        msg_idx = next(i for i, s in enumerate(steps) if s["id"] == "visit_messages")
+        conn.execute(
+            """
+            UPDATE player_initiation
+            SET step_index = ?, progress_value = 0, target_value = 1, status = 'active'
+            WHERE player_id = ?;
+            """,
+            (msg_idx, pid),
+        )
+        commit(conn)
+    finally:
+        conn.close()
+
+    import app as app_module
+
+    importlib.reload(app_module)
+    client = app_module.app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = pid
+
+    resp = client.get("/messages", headers={"X-PJAX": "true"})
+    assert resp.status_code == 200
+
+    conn = db()
+    try:
+        state = get_initiation_state(pid, conn=conn)
+        assert state["current"]["id"] == "visit_combat_simulator"
     finally:
         conn.close()

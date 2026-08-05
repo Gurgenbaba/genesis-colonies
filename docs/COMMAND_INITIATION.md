@@ -41,7 +41,7 @@ Targets are **level thresholds** (have Solar ≥ 3), not “build N more upgrade
 12. Build a ship → send a fleet
 13. Visit Galaxy + Planet Evolution
 
-**Existing progress credit:** on ensure/state load, building/tech/hangar levels already met auto-advance (veterans with Solar 12 skip the Solar ≤3/4/5 steps). Owner: `credit_existing_progress` / `world_progress_for_step`.
+**Existing progress credit:** on ensure/state load, building/tech/hangar levels already met auto-advance (veterans with Solar 12 skip the Solar ≤3/4/5 steps). Prior `fleet_movements` credit the send-fleet step. Owner: `credit_existing_progress` / `world_progress_for_step`.
 
 `upgrade_buildings` / `complete_research` accept optional `building_types` / `research_keys` filters.
 
@@ -63,8 +63,9 @@ Visit: Directives, Story, Login, Season Pass, Shop, Inventory, Trader, Auction, 
 
 - Server-authoritative; idempotent `source_event_id`
 - Auto-start once; no daily reset
-- **Credit existing levels** on ensure/state (buildings, research, hangar/defense ownership)
-- Page visits only when the active step is `visit_page` for that page
+- **Credit existing levels** on ensure/state (buildings, research, hangar/defense ownership, prior fleet sends)
+- Page visits via `_load_page_live_context` on **full loads and PJAX** (poll path no longer drops visit credit)
+- Named `finish_source` for visit surfaces (galaxy, messages, ranking, …) plus path fallback
 - Pack version bump on restructure; mid-track players keep `step_index` (targets refresh on advance)
 
 ## Related

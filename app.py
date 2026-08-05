@@ -1158,12 +1158,16 @@ def api_internal_cron_galactic_directives():
 # HELPER: Spieler-View + Ressourcen laden (conn-safe)
 # --------------------------------------------------------------------------
 
-def _load_player_view_with_resources() -> Tuple[Any, Dict[str, int], float, int, int, Dict[str, int]]:
+def _load_player_view_with_resources(
+    finish_source: str = "page_load",
+) -> Tuple[Any, Dict[str, int], float, int, int, Dict[str, int]]:
     """
     Return:
       (player_view | None, buildings, ratio, energy_total, energy_used, storage_caps)
+
+    Pass a named finish_source for Command Initiation visit_page credit (works on PJAX).
     """
-    ctx = _load_page_live_context(finish_source="page_load")
+    ctx = _load_page_live_context(finish_source=str(finish_source or "page_load"))
     if ctx is None:
         return None, {}, 1.0, 0, 0, {"metal": 0, "crystal": 0}
     return (
@@ -1213,6 +1217,7 @@ def _load_page_live_context(
     use_planet_switch_live_path = src == "api_planets_active"
     try:
         try:
+            wrote_live = False
             if use_planet_switch_live_path:
                 # GC-PERF-PLANET-SWITCH-003: no empire finish / write TX on switch.
                 from game.logic import read_player_live_state_for_planet_switch
@@ -1232,9 +1237,17 @@ def _load_page_live_context(
                     conn=conn,
                     finish_source=src,
                 )
-                try:
-                    from game.initiation.progress import maybe_record_page_visit_from_request
+                wrote_live = True
 
+            # Command Initiation visit_page must run on full loads AND PJAX HTML
+            # navigations. Poll path skips finish_due_work for perf, but visit
+            # credit is a small write and was previously dropped on every soft nav.
+            from game.initiation.pages import should_record_page_visit
+            from game.initiation.progress import maybe_record_page_visit_from_request
+
+            try_visit = (not use_planet_switch_live_path) and should_record_page_visit(src)
+            if try_visit:
+                try:
                     maybe_record_page_visit_from_request(
                         user_id,
                         conn=conn,
@@ -1246,6 +1259,9 @@ def _load_page_live_context(
                         user_id,
                         src,
                     )
+                    try_visit = False
+
+            if wrote_live or try_visit:
                 commit(conn)
             from game.live_state import get_request_context_planet
             from game.buildings import get_build_queue_status_for_planet
@@ -2094,7 +2110,9 @@ def techtree_view():
 @require_login
 def galaxy_view():
     user_id = int(session["user_id"])
-    player_view, _, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
+    player_view, _, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources(
+        "galaxy"
+    )
     if player_view is None:
         return redirect(url_for("login"))
 
@@ -6737,7 +6755,9 @@ def story_view():
 @app.route("/ranking")
 @require_login
 def ranking_view():
-    player_view, buildings, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
+    player_view, buildings, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources(
+        "ranking"
+    )
     if player_view is None:
         return redirect(url_for("login"))
 
@@ -6771,7 +6791,9 @@ def api_ranking():
 @app.route("/records")
 @require_login
 def records_view():
-    player_view, buildings, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
+    player_view, buildings, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources(
+        "records"
+    )
     if player_view is None:
         return redirect(url_for("login"))
 
@@ -6888,7 +6910,9 @@ def api_records():
 @app.route("/hall-of-fame")
 @require_login
 def hall_of_fame_view():
-    player_view, buildings, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
+    player_view, buildings, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources(
+        "hall_of_fame"
+    )
     if player_view is None:
         return redirect(url_for("login"))
 
@@ -6937,7 +6961,9 @@ def api_hall_of_fame():
 @app.route("/world-boss")
 @require_login
 def world_boss_view():
-    player_view, buildings, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
+    player_view, buildings, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources(
+        "world_boss"
+    )
     if player_view is None:
         return redirect(url_for("login"))
 
@@ -9335,7 +9361,9 @@ def api_account_unlink_discord():
 @app.route("/messages")
 @require_login
 def messages_view():
-    player_view, buildings, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
+    player_view, buildings, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources(
+        "messages"
+    )
     if player_view is None:
         return redirect(url_for("login"))
     return render_template(

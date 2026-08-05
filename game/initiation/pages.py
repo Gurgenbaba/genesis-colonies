@@ -38,6 +38,7 @@ _PATH_PREFIXES: tuple[tuple[str, str], ...] = (
 )
 
 # Named page loads that already pass a specific finish_source.
+# Keep in sync with visit_page filters in command_initiation.json.
 _FINISH_SOURCE_PAGES: dict[str, str] = {
     "overview": "overview",
     "buildings": "buildings",
@@ -45,6 +46,7 @@ _FINISH_SOURCE_PAGES: dict[str, str] = {
     "techtree": "techtree",
     "skilltree": "skilltree",
     "fleet": "fleet",
+    "galaxy": "galaxy",
     "combat_simulator": "combat_simulator",
     "planet_evolution": "planet_evolution",
     "trader_hub": "trader_hub",
@@ -61,6 +63,12 @@ _FINISH_SOURCE_PAGES: dict[str, str] = {
     "galactic_politics": "galactic_politics",
     "vote_center": "vote_center",
     "referrals": "referrals",
+    "ranking": "ranking",
+    "hall_of_fame": "hall_of_fame",
+    "messages": "messages",
+    "world_boss": "world_boss",
+    "records": "records",
+    "empire": "empire",
 }
 
 # Poll / mutation sources — never count as page visits.

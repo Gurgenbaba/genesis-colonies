@@ -14,8 +14,9 @@ def world_progress_for_step(
     """
     Absolute progress from live colony/account state for credit-capable steps.
 
-    Returns None when the step is event-only (visits / fleet sends without history gate).
+    Returns None when the step is event-only (page visits without history).
     Building/research targets are **level thresholds** (have Solar ≥ 3), not "build N more".
+    Fleet send is credited when any `fleet_movements` row exists for the player.
     """
     if not step:
         return None
@@ -66,5 +67,22 @@ def world_progress_for_step(
         counts = get_player_defense_counts(pid, conn=conn) or {}
         total = sum(int(v or 0) for v in counts.values())
         return min(target, 1 if total > 0 else 0)
+
+    if objective == "send_fleet_missions":
+        # Veterans who already launched fleets should not re-send just for the tour.
+        from ..db import table_exists
+
+        if not table_exists(conn, "fleet_movements"):
+            return None
+        row = conn.execute(
+            """
+            SELECT 1 AS ok
+            FROM fleet_movements
+            WHERE player_id = ?
+            LIMIT 1;
+            """,
+            (pid,),
+        ).fetchone()
+        return min(target, 1 if row else 0)
 
     return None
