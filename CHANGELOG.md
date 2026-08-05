@@ -2,11 +2,31 @@
 
 Vollständige Entwicklungshistorie von Projektstart bis heute.  
 Clustered by milestone versions (not every commit).  
-Stand: **2026-08-04** · Spieler-Meilenstein **v0.9.2 Alpha** · Build-Zähler [`VERSION`](VERSION) (intern / Cache-Bust, derzeit `0.5.9.x`)
+Stand: **2026-08-05** · Spieler-Meilenstein **v0.9.3 Alpha** · Build-Zähler [`VERSION`](VERSION) (intern / Cache-Bust, derzeit `0.5.9.x`)
 
 > **Versionsregel:** Alpha bleibt **`v0.9.x`**. **`v1.0` / `v1.0.0-beta`** ist der Beta-Gate ([docs/BETA_GATE.md](docs/BETA_GATE.md)) — nicht für Alpha-Patches verwenden.  
 > Spieler: Patchnotes live unter **News** (`/news`) und im NEWS-Banner.  
 > Admins: Release-Publisher im Admin-Panel → Server → Universums-News (nicht Git-Commits).
+
+---
+
+## v0.9.3 — Command Initiation, World Boss & Vault *(Alpha · 2026-08-05)*
+
+### Added
+- **Spieler-News Pack** `v0.9.3` — 8 Locales: Command Initiation, WB Cinematics, Secret Vault & Troops
+- **Command Initiation** — Do-first Tour, LiveOps-Icons in der Topbar, volle Spiel-Tour; bestehende Gebäude-/Tech-Level zählen mit
+- **World Boss Cinematics** — Hero-Video-Reels, Identity-Farben, Theater-Kampf-SFX
+- **Secret Vault & Bodentruppen** — Exposition auf Defense, Vault-Raid/Troops HUD, Records-Tab
+
+### Changed
+- Gebäude-Stage: Bau-FX, Detail-Popup, Level-Sync, schnelleres First Paint
+- Login Rewards / Battle Pass / Shop Claims state-first (ohne Soft-Reload)
+- Topbar-Navigation (Logo, Score, LiveOps-Icons) PJAX-fähig
+- Radar / Threat Net: weniger Poll-Last; Story Ops TTS gehärtet
+
+### Fixed
+- Planetwechsel graue Panels; Story Ops ohne Klasse; Stage-Queue-Darstellung
+- Locale-Lücken (Crystal Tech, Tech-Tree Troops); diverse PJAX/State-Sync-Themen
 
 ---
 

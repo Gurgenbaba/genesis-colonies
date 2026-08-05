@@ -21,6 +21,7 @@ from game.universe_news import (
     ensure_v09_release_seeded,
     ensure_v091_release_seeded,
     ensure_v092_release_seeded,
+    ensure_v093_release_seeded,
     get_banner_entry,
     get_news_entry,
     list_news,
@@ -258,14 +259,50 @@ def test_v092_seed_idempotent_and_timeline_top(news_db):
     for year in payload.get("timeline") or []:
         versions.extend(year.get("versions") or [])
     assert versions
-    assert str(versions[0].get("version_tag") or "") == "v0.9.2"
+    # Newest major first — v0.9.3 seeds after v0.9.2 on fresh DBs via ensure_player_news_seeded.
+    tags_order = [str(v.get("version_tag") or "") for v in versions]
+    assert "v0.9.2" in tags_order
+    v092 = next(v for v in versions if str(v.get("version_tag") or "") == "v0.9.2")
+    assert v092.get("intro") == de_pack["intro"]
+    bullets = [
+        e.get("display_title") or e.get("title")
+        for sec in v092.get("sections") or []
+        for e in sec.get("entries") or []
+    ]
+    assert any("Kolonie-Stage" in str(b) for b in bullets)
+
+
+def test_v093_seed_idempotent_and_timeline_top(news_db):
+    first = ensure_v093_release_seeded()
+    assert first["ok"] is True
+    again = ensure_v093_release_seeded()
+    assert again["ok"] is True
+    assert again.get("seeded") is False
+    assert again.get("reason") == "v0.9.3_exists"
+    rows = list_news(audience="player", include_drafts=False)
+    tags = {str(r.get("version_tag") or "") for r in rows}
+    assert "v0.9.3" in tags
+
+    from game.universe_news import news_page_payload
+    from game.universe_news_packs import get_pack_locale
+
+    de_pack = get_pack_locale("v0.9.3", "de")
+    assert de_pack
+    assert "Command Initiation" in de_pack["version_label"]
+    payload = news_page_payload(locale="de")
+    versions = []
+    for year in payload.get("timeline") or []:
+        versions.extend(year.get("versions") or [])
+    assert versions
+    assert str(versions[0].get("version_tag") or "") == "v0.9.3"
     assert versions[0].get("intro") == de_pack["intro"]
     bullets = [
         e.get("display_title") or e.get("title")
         for sec in versions[0].get("sections") or []
         for e in sec.get("entries") or []
     ]
-    assert any("Kolonie-Stage" in str(b) for b in bullets)
+    assert any("Command Initiation" in str(b) for b in bullets)
+    assert any("Secret Vault" in str(b) for b in bullets)
 
 
 def test_release_pack_localized_for_game_locale(news_db):

@@ -724,6 +724,277 @@ RELEASE_PACK_I18N: Dict[str, Dict[str, Any]] = {
             },
         },
     },
+    "v0.9.3": {
+        "version_tag": "v0.9.3",
+        "release_date": "2026-08-05",
+        "badge": "ALPHA",
+        "locales": {
+            "de": {
+                "version_label": "Command Initiation, World Boss & Vault",
+                "intro": (
+                    "Nachtrag seit v0.9.2: Command Initiation für neue Commander, "
+                    "World-Boss-Cinematics, Secret Vault & Bodentruppen — plus weichere "
+                    "Navigation ohne Reload-Feeling."
+                ),
+                "added": [
+                    "Command Initiation — Do-first Tour mit LiveOps-Icons in der Topbar",
+                    "Volle Spiel-Tour: Overview → Gebäude → Forschung → Militär → Galaxy",
+                    "Bestehende Gebäude-/Tech-Level zählen für den Initiation-Fortschritt",
+                    "Tipps zur effizienten Kolonie-Build-Order",
+                    "World Boss Hero-Video-Reels — Farben folgen der Commander-Identity",
+                    "Theater-Kampf-SFX bei World-Boss-Angriffen",
+                    "Secret Vault auf der Verteidigung mit aktueller Loot-Exposition",
+                    "Vault-Raid & Bodentruppen spielerreif (Inbound-Flotten, HUD, Records-Tab)",
+                ],
+                "changed": [
+                    "Gebäude-Stage: Bau-FX, Detail-Popup und Level-Sync nach Queue-Finish",
+                    "Schnelleres First Paint der Kolonie-Stage",
+                    "Login Rewards, Battle Pass und Shop Claims ohne Soft-Reload",
+                    "Topbar (Logo, Score, LiveOps-Icons) navigiert per PJAX in der Shell",
+                    "Radar / Threat Net: weniger Last auf Probe- und Notification-Polls",
+                    "Story Ops TTS gehärtet (Killian-Stimme, keine Smiley-Fehllektüre)",
+                ],
+                "fixed": [
+                    "Planetwechsel: keine grauen Panels mehr",
+                    "Story Ops 500 ohne gewählte Commander-Klasse",
+                    "Stage-Queue- und Construction-Darstellung",
+                    "Locale-Lücken (Crystal Tech, Tech-Tree Troops)",
+                    "Diverse PJAX-/State-Sync-Themen auf Meta-Seiten und in der Topbar",
+                ],
+            },
+            "en": {
+                "version_label": "Command Initiation, World Boss & Vault",
+                "intro": (
+                    "Addendum since v0.9.2: Command Initiation for new commanders, "
+                    "World Boss cinematics, Secret Vault & troops — plus smoother "
+                    "navigation without reload feel."
+                ),
+                "added": [
+                    "Command Initiation — do-first tour with LiveOps icons in the top bar",
+                    "Full game tour: Overview → Buildings → Research → Military → Galaxy",
+                    "Existing building/tech levels count toward Initiation progress",
+                    "Tips for an efficient colony build order",
+                    "World Boss hero video reels — colors follow Commander identity",
+                    "Theater fight SFX on World Boss attacks",
+                    "Secret Vault on Defense with current loot exposure",
+                    "Vault raid & ground troops player-ready (inbound fleets, HUD, Records tab)",
+                ],
+                "changed": [
+                    "Buildings stage: construction FX, detail popup, level sync after queue finish",
+                    "Faster first paint for the colony stage",
+                    "Login Rewards, Battle Pass and Shop claims without soft reload",
+                    "Top bar (logo, score, LiveOps icons) navigates via PJAX in the shell",
+                    "Radar / Threat Net: less load on probe and notification polls",
+                    "Story Ops TTS hardened (Killian voice, no smiley misreads)",
+                ],
+                "fixed": [
+                    "Planet switch: no more grey panels",
+                    "Story Ops 500 without a chosen Commander class",
+                    "Stage queue and construction presentation",
+                    "Locale gaps (Crystal Tech, Tech-Tree troops)",
+                    "Assorted PJAX/state sync issues on meta pages and the top bar",
+                ],
+            },
+            "es": {
+                "version_label": "Command Initiation, World Boss y Vault",
+                "intro": (
+                    "Addendum desde v0.9.2: Command Initiation para nuevos commanders, "
+                    "cinemáticas de World Boss, Secret Vault y tropas — más navegación "
+                    "suave sin sensación de recarga."
+                ),
+                "added": [
+                    "Command Initiation — tour do-first con iconos LiveOps en la barra superior",
+                    "Tour completo: Overview → Edificios → Investigación → Militar → Galaxia",
+                    "Los niveles de edificios/tech existentes cuentan para el progreso de Initiation",
+                    "Consejos para un orden de construcción eficiente de la colonia",
+                    "Reels de vídeo hero de World Boss — colores según Identity del Commander",
+                    "SFX de combate Theater en ataques al World Boss",
+                    "Secret Vault en Defensa con exposición actual del botín",
+                    "Asalto al Vault y tropas terrestres listos (flotas entrantes, HUD, pestaña Records)",
+                ],
+                "changed": [
+                    "Stage de edificios: FX de construcción, popup de detalle, sync de nivel tras la cola",
+                    "First paint más rápido de la Colony Stage",
+                    "Login Rewards, Battle Pass y reclamaciones de Tienda sin soft reload",
+                    "Barra superior (logo, score, iconos LiveOps) navega con PJAX en el shell",
+                    "Radar / Threat Net: menos carga en polls de sonda y notificaciones",
+                    "TTS de Story Ops reforzado (voz Killian, sin lectura errónea de smileys)",
+                ],
+                "fixed": [
+                    "Cambio de planeta: sin paneles grises",
+                    "Story Ops 500 sin clase de Commander elegida",
+                    "Presentación de cola y construcción en la stage",
+                    "Huecos de locale (Crystal Tech, tropas del Tech-Tree)",
+                    "Varios temas de sync PJAX/estado en páginas meta y la barra superior",
+                ],
+            },
+            "fr": {
+                "version_label": "Command Initiation, World Boss & Vault",
+                "intro": (
+                    "Addendum depuis v0.9.2 : Command Initiation pour les nouveaux commanders, "
+                    "cinématiques World Boss, Secret Vault & troupes — plus une navigation "
+                    "plus fluide sans sensation de rechargement."
+                ),
+                "added": [
+                    "Command Initiation — tour do-first avec icônes LiveOps dans la barre du haut",
+                    "Tour complet : Overview → Bâtiments → Recherche → Militaire → Galaxie",
+                    "Les niveaux bâtiments/tech existants comptent pour la progression Initiation",
+                    "Conseils pour un ordre de construction de colonie efficace",
+                    "Reels vidéo hero World Boss — couleurs selon l'Identity Commander",
+                    "SFX de combat Theater sur les attaques World Boss",
+                    "Secret Vault en Défense avec exposition actuelle du butin",
+                    "Raid Vault & troupes terrestres prêts (flottes entrantes, HUD, onglet Records)",
+                ],
+                "changed": [
+                    "Stage bâtiments : FX de construction, popup détail, sync niveau après fin de file",
+                    "First paint plus rapide de la Colony Stage",
+                    "Login Rewards, Battle Pass et claims Boutique sans soft reload",
+                    "Barre du haut (logo, score, icônes LiveOps) navigue en PJAX dans le shell",
+                    "Radar / Threat Net : moins de charge sur les polls sonde et notifications",
+                    "TTS Story Ops renforcé (voix Killian, pas de lecture erronée des smileys)",
+                ],
+                "fixed": [
+                    "Changement de planète : plus de panneaux gris",
+                    "Story Ops 500 sans classe Commander choisie",
+                    "Présentation file/construction sur la stage",
+                    "Lacunes de locale (Crystal Tech, troupes Tech-Tree)",
+                    "Divers sujets de sync PJAX/état sur pages méta et barre du haut",
+                ],
+            },
+            "pl": {
+                "version_label": "Command Initiation, World Boss i Vault",
+                "intro": (
+                    "Dodatek od v0.9.2: Command Initiation dla nowych commanderów, "
+                    "cinematic World Boss, Secret Vault i oddziały — plus płynniejsza "
+                    "nawigacja bez uczucia przeładowania."
+                ),
+                "added": [
+                    "Command Initiation — tour do-first z ikonami LiveOps na górnym pasku",
+                    "Pełna wycieczka: Overview → Budynki → Badania → Wojsko → Galaktyka",
+                    "Istniejące poziomy budynków/tech liczą się do postępu Initiation",
+                    "Wskazówki do efektywnej kolejności budowy kolonii",
+                    "Reele wideo hero World Boss — kolory według Identity Commandera",
+                    "SFX walki Theater przy atakach World Boss",
+                    "Secret Vault w Obronie z aktualną ekspozycją łupu",
+                    "Rajd Vault i wojska lądowe gotowe (floty przychodzące, HUD, zakładka Records)",
+                ],
+                "changed": [
+                    "Stage budynków: FX budowy, popup szczegółów, sync poziomu po kolejce",
+                    "Szybszy first paint Colony Stage",
+                    "Login Rewards, Battle Pass i claimy Sklepu bez soft reload",
+                    "Górny pasek (logo, score, ikony LiveOps) nawiguje PJAX w shellu",
+                    "Radar / Threat Net: mniejsze obciążenie polli sondy i powiadomień",
+                    "Wzmocnione TTS Story Ops (głos Killian, bez błędnego odczytu smile)",
+                ],
+                "fixed": [
+                    "Zmiana planety: bez szarych paneli",
+                    "Story Ops 500 bez wybranej klasy Commandera",
+                    "Prezentacja kolejki i budowy na stage",
+                    "Luki locale (Crystal Tech, oddziały Tech-Tree)",
+                    "Różne tematy sync PJAX/stanu na stronach meta i górnym pasku",
+                ],
+            },
+            "pt": {
+                "version_label": "Command Initiation, World Boss e Vault",
+                "intro": (
+                    "Adenda desde v0.9.2: Command Initiation para novos commanders, "
+                    "cinemáticas de World Boss, Secret Vault e tropas — mais navegação "
+                    "suave sem sensação de reload."
+                ),
+                "added": [
+                    "Command Initiation — tour do-first com ícones LiveOps na barra superior",
+                    "Tour completo: Overview → Edifícios → Pesquisa → Militar → Galáxia",
+                    "Níveis de edifícios/tech existentes contam para o progresso da Initiation",
+                    "Dicas para uma ordem de construção eficiente da colónia",
+                    "Reels de vídeo hero do World Boss — cores seguem a Identity do Commander",
+                    "SFX de combate Theater em ataques ao World Boss",
+                    "Secret Vault na Defesa com exposição atual do saque",
+                    "Raid ao Vault e tropas terrestres prontos (frotas a chegar, HUD, separador Records)",
+                ],
+                "changed": [
+                    "Stage de edifícios: FX de construção, popup de detalhe, sync de nível após a fila",
+                    "First paint mais rápido da Colony Stage",
+                    "Login Rewards, Battle Pass e claims da Loja sem soft reload",
+                    "Barra superior (logo, score, ícones LiveOps) navega via PJAX no shell",
+                    "Radar / Threat Net: menos carga nos polls de sonda e notificações",
+                    "TTS Story Ops reforçado (voz Killian, sem leitura errada de smileys)",
+                ],
+                "fixed": [
+                    "Troca de planeta: sem painéis cinzentos",
+                    "Story Ops 500 sem classe Commander escolhida",
+                    "Apresentação de fila e construção no stage",
+                    "Falhas de locale (Crystal Tech, tropas Tech-Tree)",
+                    "Vários temas de sync PJAX/estado em páginas meta e na barra superior",
+                ],
+            },
+            "ru": {
+                "version_label": "Command Initiation, World Boss и Vault",
+                "intro": (
+                    "Дополнение с v0.9.2: Command Initiation для новых commanders, "
+                    "кинематограф World Boss, Secret Vault и войска — плюс более плавная "
+                    "навигация без ощущения перезагрузки."
+                ),
+                "added": [
+                    "Command Initiation — do-first тур с иконками LiveOps в верхней панели",
+                    "Полный тур: Overview → Здания → Исследования → Военные → Галактика",
+                    "Существующие уровни зданий/tech учитываются в прогрессе Initiation",
+                    "Советы по эффективному порядку строительства колонии",
+                    "Hero-видео рилы World Boss — цвета по Identity командира",
+                    "Theater combat SFX при атаках World Boss",
+                    "Secret Vault в Обороне с текущей экспозицией добычи",
+                    "Рейд Vault и наземные войска готовы (входящие флоты, HUD, вкладка Records)",
+                ],
+                "changed": [
+                    "Stage зданий: FX строительства, detail popup, sync уровня после очереди",
+                    "Более быстрый first paint Colony Stage",
+                    "Login Rewards, Battle Pass и claims Магазина без soft reload",
+                    "Верхняя панель (лого, score, иконки LiveOps) навигирует PJAX в shell",
+                    "Radar / Threat Net: меньше нагрузки на опросы зонда и уведомлений",
+                    "Усилен TTS Story Ops (голос Killian, без ошибочного чтения смайлов)",
+                ],
+                "fixed": [
+                    "Смена планеты: без серых панелей",
+                    "Story Ops 500 без выбранного класса Commander",
+                    "Отображение очереди и строительства на stage",
+                    "Пробелы locale (Crystal Tech, войска Tech-Tree)",
+                    "Разные темы sync PJAX/состояния на meta-страницах и верхней панели",
+                ],
+            },
+            "tr": {
+                "version_label": "Command Initiation, World Boss ve Vault",
+                "intro": (
+                    "v0.9.2’den beri ek: yeni commanderlar için Command Initiation, "
+                    "World Boss sinematikleri, Secret Vault ve birlikler — artı reload "
+                    "hissi olmadan daha akıcı gezinme."
+                ),
+                "added": [
+                    "Command Initiation — üst çubukta LiveOps ikonlarıyla do-first tur",
+                    "Tam oyun turu: Overview → Binalar → Araştırma → Askeri → Galaksi",
+                    "Mevcut bina/tech seviyeleri Initiation ilerlemesine sayılır",
+                    "Verimli koloni inşa sırası için ipuçları",
+                    "World Boss hero video reels — renkler Commander Identity’yi izler",
+                    "World Boss saldırılarında Theater savaş SFX",
+                    "Savunmada Secret Vault — güncel ganimet maruziyeti",
+                    "Vault baskını ve kara birlikleri hazır (gelen filolar, HUD, Records sekmesi)",
+                ],
+                "changed": [
+                    "Bina stage: inşa FX, ayrıntı popup, kuyruk bitince seviye sync",
+                    "Colony Stage için daha hızlı first paint",
+                    "Login Rewards, Battle Pass ve Mağaza claim’leri soft reload olmadan",
+                    "Üst çubuk (logo, score, LiveOps ikonları) shell içinde PJAX ile gezinir",
+                    "Radar / Threat Net: sonda ve bildirim poll yükü azaltıldı",
+                    "Story Ops TTS güçlendirildi (Killian sesi, smiley yanlış okuma yok)",
+                ],
+                "fixed": [
+                    "Gezegen değişimi: gri paneller yok",
+                    "Seçili Commander sınıfı olmadan Story Ops 500",
+                    "Stage kuyruk ve inşa sunumu",
+                    "Locale boşlukları (Crystal Tech, Tech-Tree birlikleri)",
+                    "Meta sayfalarında ve üst çubukta çeşitli PJAX/state sync konuları",
+                ],
+            },
+        },
+    },
 }
 
 
