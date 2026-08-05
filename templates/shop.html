@@ -7,9 +7,15 @@
 {% set providers = shop_state.providers if shop_state.providers is defined else [] %}
 {% set featured = products | selectattr('sku', 'equalto', 'season_pass_current') | list %}
 {% set identity = products | selectattr('kind', 'equalto', 'cosmetic_unlock') | list %}
+{% set impulse_starter = products | selectattr('sku', 'equalto', 'booster_pack_starter') | list %}
+{% set impulse_accel = products | selectattr('sku', 'equalto', 'genesis_accelerator_pack') | list %}
+{% set impulse_hyper = products | selectattr('sku', 'equalto', 'hyperdrive_protocol_pack') | list %}
 {% set packs = products
      | rejectattr('sku', 'equalto', 'season_pass_current')
      | rejectattr('kind', 'equalto', 'cosmetic_unlock')
+     | rejectattr('sku', 'equalto', 'booster_pack_starter')
+     | rejectattr('sku', 'equalto', 'genesis_accelerator_pack')
+     | rejectattr('sku', 'equalto', 'hyperdrive_protocol_pack')
      | list %}
 {% set preview_name = (AUTH_USER.player_name if AUTH_USER and AUTH_USER.player_name else none)
      or (AUTH_USER.name if AUTH_USER and AUTH_USER.name else none)
@@ -37,11 +43,36 @@
   {%- endif -%}
 {%- endmacro %}
 
-{% macro shop_card(p, featured=false) %}
-<article class="shop-card{% if featured %} shop-card--featured{% endif %}{% if p.owned %} is-owned{% endif %}{% if p.kind == 'cosmetic_unlock' %} shop-card--identity{% endif %}"
+{% macro shop_ui_badges(p) -%}
+  {%- set badges = (p.display.ui_badges if p.display and p.display.ui_badges else []) -%}
+  {%- for b in badges -%}
+    {%- if b == 'new' -%}
+    <span class="shop-card-new-tag">{{ T("shop_new_tag", "NEU") }}</span>
+    {%- elif b == 'best_value' -%}
+    <span class="shop-card-best-value-tag">{{ T("shop_best_value_tag", "BESTE WAHL") }}</span>
+    {%- elif b == 'crazy' -%}
+    <span class="shop-card-crazy-tag">{{ T("shop_crazy_tag", "CRAZY") }}</span>
+    {%- endif -%}
+  {%- endfor -%}
+{%- endmacro %}
+
+{% macro shop_card(p, featured=false, impulse_role=none) %}
+{% set badges = (p.display.ui_badges if p.display and p.display.ui_badges else []) %}
+{% set is_best = 'best_value' in badges %}
+{% set is_crazy = 'crazy' in badges %}
+<article class="shop-card{% if featured %} shop-card--featured{% endif %}{% if is_best %} shop-card--best-value{% endif %}{% if is_crazy %} shop-card--crazy{% endif %}{% if impulse_role %} shop-card--impulse shop-card--impulse-{{ impulse_role }}{% endif %}{% if p.owned %} is-owned{% endif %}{% if p.kind == 'cosmetic_unlock' %} shop-card--identity{% endif %}"
          data-shop-sku="{{ p.sku }}"
-         data-shop-kind="{{ p.kind }}">
+         data-shop-kind="{{ p.kind }}"
+         {% if impulse_role %}data-shop-impulse-role="{{ impulse_role }}"{% endif %}>
   <div class="shop-card-frame" aria-hidden="true"></div>
+  {% if impulse_role %}
+  <span class="shop-impulse-role">
+    {%- if impulse_role == 'entry' -%}{{ T("shop_impulse_role_entry", "Einstieg") }}
+    {%- elif impulse_role == 'best' -%}{{ T("shop_impulse_role_best", "Beliebteste Wahl") }}
+    {%- elif impulse_role == 'max' -%}{{ T("shop_impulse_role_max", "Max Push") }}
+    {%- endif -%}
+  </span>
+  {% endif %}
   {% if p.kind == 'cosmetic_unlock' and p.display and p.display.preview_style %}
   <figure class="shop-card-art shop-card-art--identity">
     <span class="shop-card-kind">{{ shop_kind_label(p.kind) }}</span>
@@ -67,20 +98,24 @@
   <figure class="shop-card-art">
     <img src="{{ url_for('static', filename=p.image, v=GC_ASSET_VERSION) }}"
          alt=""
-         width="{% if featured %}960{% else %}640{% endif %}"
-         height="{% if featured %}540{% else %}400{% endif %}"
-         {% if featured %}fetchpriority="high"{% else %}loading="lazy"{% endif %}
+         width="{% if featured or is_best %}960{% else %}640{% endif %}"
+         height="{% if featured or is_best %}540{% else %}400{% endif %}"
+         {% if featured or is_best %}fetchpriority="high"{% else %}loading="lazy"{% endif %}
          decoding="async">
     <span class="shop-card-kind">{{ shop_kind_label(p.kind) }}</span>
     {% if featured %}
     <span class="shop-card-featured-tag">{{ T("shop_featured_tag", "FEATURED") }}</span>
     {% endif %}
+    {{ shop_ui_badges(p) }}
   </figure>
   {% endif %}
   <div class="shop-card-body">
     <div class="shop-card-main">
       <h2 class="shop-card-title">{{ T(p.title_key, p.sku) }}</h2>
       <p class="hint shop-card-hint">{{ T(p.hint_key, "") }}</p>
+      {% if is_best %}
+      <p class="shop-best-value-sub">{{ T("shop_best_value_sub", "Beliebteste Wahl · spart gegenüber Einzelkäufen") }}</p>
+      {% endif %}
       {% if p.kind == 'cosmetic_unlock' and p.display and p.display.unlocks %}
       <div class="shop-unlock-list" aria-label="{{ T('shop_unlock_contains', 'Enthält') }}">
         <span class="shop-unlock-list-label">{{ T("shop_unlock_contains", "Enthält") }}</span>
@@ -255,6 +290,18 @@
         {% if featured %}
         <div class="shop-featured">
           {{ shop_card(featured[0], featured=true) }}
+        </div>
+        {% endif %}
+
+        {% if impulse_starter and impulse_accel and impulse_hyper %}
+        <div class="shop-packs-head" data-shop-impulse-head>
+          <span class="shop-packs-title">{{ T("shop_impulse_title", "Commander Favorites") }}</span>
+          <span class="shop-packs-rail" aria-hidden="true"></span>
+        </div>
+        <div class="shop-impulse-trio" data-shop-impulse-trio>
+          {{ shop_card(impulse_starter[0], impulse_role='entry') }}
+          {{ shop_card(impulse_accel[0], impulse_role='best') }}
+          {{ shop_card(impulse_hyper[0], impulse_role='max') }}
         </div>
         {% endif %}
 

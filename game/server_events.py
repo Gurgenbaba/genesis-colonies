@@ -386,6 +386,52 @@ def serialize_active_events(*, now: Optional[float] = None, conn=None) -> Dict[s
     }
 
 
+def effect_summary_short(effects: Any) -> List[str]:
+    """Compact labels for banners/calendar (+100% Prod, −25% Hold)."""
+    out: List[str] = []
+    if not isinstance(effects, list):
+        return out
+    for eff in effects:
+        if not isinstance(eff, Mapping):
+            continue
+        kind = str(eff.get("kind") or "").strip()
+        try:
+            mult = float(eff.get("mult") or 1.0)
+        except (TypeError, ValueError):
+            continue
+        if kind == KIND_PRODUCTION_MULT and mult > 0:
+            pct = int(round((mult - 1.0) * 100))
+            if pct != 0:
+                out.append(f"+{pct}% Prod" if pct > 0 else f"{pct}% Prod")
+        elif kind == KIND_EXPEDITION_HOLD_MULT and mult > 0:
+            pct = int(round((1.0 - mult) * 100))
+            if pct != 0:
+                out.append(f"−{pct}% Hold" if pct > 0 else f"+{abs(pct)}% Hold")
+    return out
+
+
+def active_events_banner(*, now: Optional[float] = None, conn=None) -> List[Dict[str, Any]]:
+    """UI teaser rows for Overview / Login Rewards (active server events only)."""
+    ts = float(now if now is not None else time.time())
+    out: List[Dict[str, Any]] = []
+    for ev in list_active_events(now=ts, conn=conn):
+        ends = int(ev.get("ends_at") or 0)
+        out.append(
+            {
+                "kind": "server_event",
+                "id": int(ev.get("id") or 0),
+                "slug": str(ev.get("slug") or ""),
+                "title": str(ev.get("title") or ""),
+                "title_key": "",
+                "effects_summary": effect_summary_short(ev.get("effects")),
+                "ends_at": ends,
+                "remaining_sec": max(0, ends - int(ts)) if ends else 0,
+                "href": "login_rewards_view",
+            }
+        )
+    return out
+
+
 def _combine_factors(events: Sequence[Mapping[str, Any]]) -> Dict[str, float]:
     prod = 1.0
     hold = 1.0

@@ -8425,5 +8425,22 @@
   "initiation_step_command_center": "Reach Command Center level 2",
   "initiation_step_command_center_hint": "CC 2 unlocks Orbital Shipyard. Already at 2+? Credited.",
   "initiation_step_orbital_shipyard_bldg": "Build Orbital Shipyard (level 1)",
-  "initiation_step_orbital_shipyard_bldg_hint": "Shipyard building level 1 lets you queue ships. Existing yards count."
+  "initiation_step_orbital_shipyard_bldg_hint": "Shipyard building level 1 lets you queue ships. Existing yards count.",
+  "shop_impulse_title": "Commander Favorites",
+  "shop_impulse_role_entry": "Starter",
+  "shop_impulse_role_best": "Most Popular",
+  "shop_impulse_role_max": "Max Push",
+  "shop_new_tag": "NEW",
+  "shop_best_value_tag": "BEST VALUE",
+  "shop_best_value_sub": "Most popular · saves vs buying separately",
+  "shop_crazy_tag": "CRAZY",
+  "shop_sku_genesis_accelerator": "Genesis Accelerator Bundle",
+  "shop_sku_genesis_accelerator_hint": "48h Timekeeper + 8x build/research 24h + 12x speed 6h + Epic/Mythic — over 2x more punch than the Starter Pack.",
+  "shop_sku_hyperdrive_protocol": "Hyperdrive Protocol",
+  "shop_sku_hyperdrive_protocol_hint": "72h Timekeeper + 10x build/research 24h + 16x speed 6h + Epic/Mythic/Ancient — for +1 EUR over Timekeeper L, a full weekend ahead.",
+  "overview_live_events_label": "Live Events",
+  "overview_live_events_world_boss": "World Boss active — attack & claim rewards",
+  "overview_live_events_ends": "Left",
+  "overview_live_events_goto_boss": "Open World Boss",
+  "overview_live_events_goto_calendar": "Calendar"
 }

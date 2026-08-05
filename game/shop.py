@@ -33,9 +33,25 @@ STATUS_FAILED = "failed"
 STATUS_REFUNDED = "refunded"
 
 # Bump when reseeding prices/payloads into existing DBs (upsert).
-CATALOG_VERSION = 6
+CATALOG_VERSION = 7
 
 SKU_TITAN_SLOT_PLUS = "titan_slot_plus"
+SKU_BOOSTER_STARTER = "booster_pack_starter"
+SKU_GENESIS_ACCELERATOR = "genesis_accelerator_pack"
+SKU_HYPERDRIVE_PROTOCOL = "hyperdrive_protocol_pack"
+
+# Impulse Trio (Goldilocks): Starter decoy → Accelerator BEST VALUE → Hyperdrive upper anchor.
+IMPULSE_TRIO_SKUS: Tuple[str, ...] = (
+    SKU_BOOSTER_STARTER,
+    SKU_GENESIS_ACCELERATOR,
+    SKU_HYPERDRIVE_PROTOCOL,
+)
+
+# UI ribbons for shop cards (not Season FEATURED). Values: new | best_value | crazy
+SHOP_SKU_UI_BADGES: Dict[str, Tuple[str, ...]] = {
+    SKU_GENESIS_ACCELERATOR: ("new", "best_value"),
+    SKU_HYPERDRIVE_PROTOCOL: ("new", "crazy"),
+}
 
 # Free-Baseline Value Balance (GC-2310…2313):
 # Paid sells scarce flexible TK + dense high-tier packs; domain boosters must beat ~2× login-month skip.
@@ -45,7 +61,9 @@ SHOP_SKU_IMAGES: Dict[str, str] = {
     "tk_pack_s": "img/pass/timekeeper.webp",
     "tk_pack_m": "img/pass/timekeeper.webp",
     "tk_pack_l": "img/pass/timekeeper.webp",
-    "booster_pack_starter": "img/pass/build_boost.webp",
+    SKU_BOOSTER_STARTER: "img/pass/build_boost.webp",
+    SKU_GENESIS_ACCELERATOR: "img/pass/genesis_accelerator.webp",
+    SKU_HYPERDRIVE_PROTOCOL: "img/pass/hyperdrive_protocol.webp",
     "container_pack_rare": "img/pass/rare_container.webp",
     "commander_supply_pack": "img/pass/relic_container.webp",
     SKU_TITAN_SLOT_PLUS: "img/pass/premium.webp",
@@ -101,7 +119,7 @@ DEFAULT_CATALOG: Tuple[Dict[str, Any], ...] = (
         "payload": {"timekeeper_sec": 72 * 3600},
     },
     {
-        "sku": "booster_pack_starter",
+        "sku": SKU_BOOSTER_STARTER,
         "kind": KIND_INVENTORY_BUNDLE,
         "title_key": "shop_sku_booster_starter",
         "hint_key": "shop_sku_booster_starter_hint",
@@ -116,6 +134,47 @@ DEFAULT_CATALOG: Tuple[Dict[str, Any], ...] = (
                 {"item_key": "booster_research_6h", "amount": 8},
                 {"item_key": "booster_production_50", "amount": 4},
             ]
+        },
+    },
+    {
+        "sku": SKU_GENESIS_ACCELERATOR,
+        "kind": KIND_INVENTORY_BUNDLE,
+        "title_key": "shop_sku_genesis_accelerator",
+        "hint_key": "shop_sku_genesis_accelerator_hint",
+        "price_cents": 499,
+        "currency": "eur",
+        "sort_order": 52,
+        "payload": {
+            "timekeeper_sec": 48 * 3600,
+            "items": [
+                {"item_key": "booster_build_24h", "amount": 8},
+                {"item_key": "booster_research_24h", "amount": 8},
+                {"item_key": "booster_build_6h", "amount": 6},
+                {"item_key": "booster_research_6h", "amount": 6},
+                {"item_key": "container_epic", "amount": 2},
+                {"item_key": "container_mythic", "amount": 1},
+            ],
+        },
+    },
+    {
+        "sku": SKU_HYPERDRIVE_PROTOCOL,
+        "kind": KIND_INVENTORY_BUNDLE,
+        "title_key": "shop_sku_hyperdrive_protocol",
+        "hint_key": "shop_sku_hyperdrive_protocol_hint",
+        "price_cents": 699,
+        "currency": "eur",
+        "sort_order": 58,
+        "payload": {
+            "timekeeper_sec": 72 * 3600,
+            "items": [
+                {"item_key": "booster_build_24h", "amount": 10},
+                {"item_key": "booster_research_24h", "amount": 10},
+                {"item_key": "booster_build_6h", "amount": 8},
+                {"item_key": "booster_research_6h", "amount": 8},
+                {"item_key": "container_epic", "amount": 3},
+                {"item_key": "container_mythic", "amount": 2},
+                {"item_key": "container_ancient_relic", "amount": 1},
+            ],
         },
     },
     {
@@ -1326,6 +1385,11 @@ def serialize_catalog_for_client(*, conn, player_id: Optional[int] = None) -> Di
                 if not ukind or not ukey:
                     continue
                 unlocks_display.append({"kind": ukind, "key": ukey})
+        ui_badges = [
+            str(b).strip().lower()
+            for b in (SHOP_SKU_UI_BADGES.get(str(p["sku"])) or ())
+            if str(b).strip()
+        ]
         entry["display"] = {
             "timekeeper_sec": int(payload.get("timekeeper_sec") or 0),
             "item_count": len(payload.get("items") or [])
@@ -1336,6 +1400,7 @@ def serialize_catalog_for_client(*, conn, player_id: Optional[int] = None) -> Di
             "unlock_count": len(unlocks_display),
             "unlocks": unlocks_display,
             "companion_slots": int(payload.get("companion_slots") or 0),
+            "ui_badges": ui_badges,
         }
         entry.pop("payload", None)
         out.append(entry)

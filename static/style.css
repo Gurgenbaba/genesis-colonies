@@ -30256,8 +30256,8 @@ button.pe-hero-planet-hint:focus-visible {
   color: var(--gc-text-soft);
 }
 
-/* EPIC-20 World Boss — spawn ETA + help (scoped)
-   UI chrome follows PlayerCard identity via body[data-identity-theme] → --gc-id-rgb. */
+/* EPIC-20 World Boss ? spawn ETA + help (scoped)
+   UI chrome follows PlayerCard identity via body[data-identity-theme] ? --gc-id-rgb. */
 .gc-world-boss-page {
   --wb-ui-rgb: var(--gc-id-rgb, 70, 229, 255);
   --wb-ui: rgb(var(--wb-ui-rgb));
@@ -45703,6 +45703,93 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
   font-weight: 700;
   color: #7fffd4;
 }
+@keyframes lr-event-badge {
+  0%, 100% { opacity: 1; box-shadow: 0 0 10px rgba(61, 255, 194, 0.8); }
+  50% { opacity: 0.55; box-shadow: 0 0 18px rgba(61, 255, 194, 1); }
+}
+
+/* Overview ? live events teaser (server events + world boss) */
+.overview-live-events {
+  position: relative;
+  overflow: hidden;
+  margin: 0 0 0.85rem;
+  border-color: rgba(61, 255, 194, 0.42);
+  background:
+    linear-gradient(90deg, rgba(61, 255, 194, 0.12), transparent 42%),
+    linear-gradient(180deg, rgba(10, 24, 22, 0.94), rgba(6, 12, 14, 0.9));
+  box-shadow: inset 0 0 0 1px rgba(61, 255, 194, 0.1), 0 0 20px rgba(61, 255, 194, 0.08);
+}
+.overview-live-events-head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.5rem;
+}
+.overview-live-events-pulse {
+  width: 0.55rem;
+  height: 0.55rem;
+  border: 1px solid #3dffc2;
+  background: #3dffc2;
+  border-radius: 0;
+  box-shadow: 0 0 10px rgba(61, 255, 194, 0.8);
+  animation: lr-event-badge 1.6s ease-in-out infinite;
+}
+.overview-live-events-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #3dffc2;
+  text-shadow: 0 0 12px rgba(61, 255, 194, 0.35);
+}
+.overview-live-events-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.overview-live-events-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem 0.85rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid rgba(70, 229, 255, 0.18);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(4, 10, 16, 0.55);
+}
+.overview-live-events-item--world_boss {
+  border-color: rgba(255, 140, 80, 0.35);
+  background: rgba(28, 12, 8, 0.45);
+}
+.overview-live-events-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1 1 12rem;
+}
+.overview-live-events-title {
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  color: rgba(230, 245, 255, 0.95);
+}
+.overview-live-events-effects {
+  font-size: 0.78rem;
+  color: rgba(180, 255, 220, 0.85);
+}
+.overview-live-events-item--world_boss .overview-live-events-effects {
+  color: rgba(255, 190, 150, 0.88);
+}
+.overview-live-events-eta {
+  font-size: 0.72rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  .overview-live-events-pulse { animation: none; }
+}
 .battle-pass-command-panel { margin-bottom: 0.75rem; }
 .battle-pass-command {
   display: grid;
@@ -46320,6 +46407,12 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
 
 /* EPIC-23 Shop ? premium command-supply bay (scoped) */
 .shop-page { width: 100%; }
+/* Impulse role chips sit on card top edges ? panel must not clip them */
+.shop-page .shop-workspace.gc-panel,
+.shop-page .shop-catalog-body,
+.shop-page .shop-bay {
+  overflow: visible;
+}
 .shop-eyebrow {
   margin: 0 0 0.35rem;
   font-size: 0.72rem;
@@ -46616,7 +46709,10 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
 }
 
 .shop-card-kind,
-.shop-card-featured-tag {
+.shop-card-featured-tag,
+.shop-card-new-tag,
+.shop-card-best-value-tag,
+.shop-card-crazy-tag {
   position: absolute;
   z-index: 2;
   top: 0.55rem;
@@ -46637,6 +46733,151 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
   border-color: rgba(212, 175, 55, 0.5);
   color: #e8c45a;
   background: rgba(18, 14, 6, 0.82);
+}
+.shop-card-new-tag {
+  left: 0.55rem;
+  top: 2.15rem;
+  border-color: rgba(70, 229, 255, 0.55);
+  color: #7ef0ff;
+  background: rgba(6, 28, 36, 0.88);
+  box-shadow: 0 0 12px rgba(70, 229, 255, 0.18);
+}
+.shop-card-best-value-tag {
+  right: 0.55rem;
+  left: auto;
+  border-color: rgba(90, 220, 160, 0.55);
+  color: #8dffc2;
+  background: rgba(6, 28, 18, 0.88);
+  box-shadow: 0 0 14px rgba(90, 220, 160, 0.16);
+}
+.shop-card-crazy-tag {
+  right: 0.55rem;
+  left: auto;
+  border-color: rgba(255, 120, 80, 0.55);
+  color: #ffb08a;
+  background: rgba(36, 14, 8, 0.88);
+  box-shadow: 0 0 14px rgba(255, 100, 60, 0.18);
+}
+
+/* GC-2314 ? Impulse Trio (Goldilocks funnel) */
+.shop-impulse-trio {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+  align-items: stretch;
+  margin: 0 0 1.35rem;
+  padding-top: 0.7rem; /* room for role chips that sit on the top edge */
+  overflow: visible;
+}
+.shop-card--impulse {
+  position: relative;
+  overflow: visible; /* role badges sit above the border ? must not clip */
+}
+.shop-card--impulse .shop-card-art {
+  overflow: hidden; /* keep art crop / hover zoom inside the media */
+  border-radius: var(--gc-radius-sm, 2px) var(--gc-radius-sm, 2px) 0 0;
+}
+.shop-impulse-role {
+  position: absolute;
+  z-index: 5;
+  top: -0.55rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.18rem 0.6rem;
+  border: 1px solid rgba(70, 229, 255, 0.28);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(8, 14, 24, 0.97);
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(170, 210, 230, 0.88);
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+.shop-card--impulse .shop-card-kind,
+.shop-card--impulse .shop-card-new-tag,
+.shop-card--impulse .shop-card-best-value-tag,
+.shop-card--impulse .shop-card-crazy-tag {
+  top: 0.65rem; /* keep in-art ribbons clear of the top border */
+  z-index: 4;
+}
+.shop-card--impulse .shop-card-new-tag {
+  top: 2.25rem;
+}
+.shop-card--impulse-entry {
+  opacity: 0.92;
+  border-color: rgba(90, 120, 150, 0.28);
+}
+.shop-card--impulse-best,
+.shop-card--best-value {
+  border-color: rgba(90, 220, 160, 0.42);
+  background:
+    linear-gradient(160deg, rgba(10, 28, 24, 0.96) 0%, rgba(6, 12, 20, 0.98) 55%, rgba(10, 18, 28, 0.95) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(120, 255, 190, 0.12),
+    0 0 0 1px rgba(90, 220, 160, 0.14),
+    0 14px 36px rgba(0, 0, 0, 0.36),
+    0 0 32px rgba(70, 200, 140, 0.1);
+  transform: translateY(-2px);
+  z-index: 1;
+}
+.shop-card--impulse-best:hover,
+.shop-card--impulse-best:focus-within,
+.shop-card--best-value:hover,
+.shop-card--best-value:focus-within {
+  border-color: rgba(120, 255, 190, 0.58);
+  box-shadow:
+    inset 0 1px 0 rgba(140, 255, 200, 0.18),
+    0 0 0 1px rgba(90, 220, 160, 0.22),
+    0 18px 44px rgba(0, 12, 10, 0.48),
+    0 0 40px rgba(70, 200, 140, 0.16);
+}
+.shop-card--impulse-best .shop-impulse-role {
+  border-color: rgba(90, 220, 160, 0.5);
+  color: #8dffc2;
+  background: rgba(6, 28, 18, 0.97);
+}
+.shop-card--impulse-best .shop-card-price,
+.shop-card--best-value .shop-card-price {
+  color: #8dffc2;
+  text-shadow: 0 0 16px rgba(90, 220, 160, 0.22);
+  font-size: 1.22rem;
+}
+.shop-best-value-sub {
+  margin: 0.35rem 0 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: rgba(140, 230, 190, 0.82);
+}
+.shop-card--impulse-max,
+.shop-card--crazy {
+  border-color: rgba(255, 120, 80, 0.36);
+  background:
+    linear-gradient(160deg, rgba(32, 14, 12, 0.96) 0%, rgba(8, 10, 18, 0.98) 55%, rgba(22, 12, 18, 0.95) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 140, 90, 0.1),
+    0 0 0 1px rgba(255, 100, 60, 0.1),
+    0 12px 32px rgba(0, 0, 0, 0.34);
+}
+.shop-card--impulse-max .shop-impulse-role {
+  border-color: rgba(255, 120, 80, 0.45);
+  color: #ffb08a;
+  background: rgba(36, 14, 8, 0.97);
+}
+.shop-card--impulse-max .shop-card-price,
+.shop-card--crazy .shop-card-price {
+  color: #ffb08a;
+}
+@media (max-width: 960px) {
+  .shop-impulse-trio {
+    grid-template-columns: 1fr;
+    gap: 1.15rem;
+    padding-top: 0.55rem;
+  }
+  .shop-card--impulse-best {
+    order: -1;
+    transform: none;
+  }
 }
 
 .shop-card-body {

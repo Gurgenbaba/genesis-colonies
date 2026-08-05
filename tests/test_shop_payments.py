@@ -19,6 +19,10 @@ from game.shop import (
     ALLOWED_KINDS,
     CATALOG_VERSION,
     DEFAULT_CATALOG,
+    IMPULSE_TRIO_SKUS,
+    SHOP_SKU_UI_BADGES,
+    SKU_GENESIS_ACCELERATOR,
+    SKU_HYPERDRIVE_PROTOCOL,
     SKU_SEASON_PASS,
     SKU_TITAN_SLOT_PLUS,
     create_pending_order,
@@ -73,11 +77,13 @@ def _player():
 def test_catalog_kinds_policy_only(shop_db):
     conn = db()
     assert schema_ready(conn)
-    assert CATALOG_VERSION >= 5
+    assert CATALOG_VERSION >= 7
     products = list_catalog(conn=conn)
     assert products
     skus = {p["sku"] for p in products}
     assert SKU_SEASON_PASS in skus
+    assert SKU_GENESIS_ACCELERATOR in skus
+    assert SKU_HYPERDRIVE_PROTOCOL in skus
     for p in products:
         assert p["kind"] in ALLOWED_KINDS
         assert "ship_" not in p["sku"]
@@ -91,8 +97,71 @@ def test_catalog_kinds_policy_only(shop_db):
     assert {e["sku"] for e in DEFAULT_CATALOG} <= skus
     by_sku = {e["sku"]: e for e in DEFAULT_CATALOG}
     assert by_sku[SKU_SEASON_PASS]["price_cents"] == 499
+    assert by_sku[SKU_GENESIS_ACCELERATOR]["price_cents"] == 499
+    assert by_sku[SKU_HYPERDRIVE_PROTOCOL]["price_cents"] == 699
     assert by_sku["commander_supply_pack"]["price_cents"] == 999
     conn.close()
+
+
+def test_impulse_trio_catalog_and_ui_badges(shop_db):
+    """Goldilocks ladder: Starter decoy → Accelerator BEST VALUE → Hyperdrive anchor."""
+    by_sku = {e["sku"]: e for e in DEFAULT_CATALOG}
+    assert IMPULSE_TRIO_SKUS == (
+        "booster_pack_starter",
+        SKU_GENESIS_ACCELERATOR,
+        SKU_HYPERDRIVE_PROTOCOL,
+    )
+    assert by_sku[SKU_GENESIS_ACCELERATOR]["sort_order"] == 52
+    assert by_sku[SKU_HYPERDRIVE_PROTOCOL]["sort_order"] == 58
+    assert SHOP_SKU_UI_BADGES[SKU_GENESIS_ACCELERATOR] == ("new", "best_value")
+    assert SHOP_SKU_UI_BADGES[SKU_HYPERDRIVE_PROTOCOL] == ("new", "crazy")
+
+    accel = by_sku[SKU_GENESIS_ACCELERATOR]
+    assert int(accel["payload"]["timekeeper_sec"]) >= 48 * 3600
+    accel_items = {
+        str(i["item_key"]): int(i["amount"]) for i in accel["payload"]["items"]
+    }
+    assert accel_items.get("booster_build_24h", 0) >= 8
+    assert accel_items.get("booster_research_24h", 0) >= 8
+    assert accel_items.get("booster_build_6h", 0) + accel_items.get(
+        "booster_research_6h", 0
+    ) >= 12
+    assert accel_items.get("container_epic", 0) >= 2
+    assert accel_items.get("container_mythic", 0) >= 1
+
+    hyper = by_sku[SKU_HYPERDRIVE_PROTOCOL]
+    assert int(hyper["payload"]["timekeeper_sec"]) >= 72 * 3600
+    hyper_items = {
+        str(i["item_key"]): int(i["amount"]) for i in hyper["payload"]["items"]
+    }
+    assert hyper_items.get("booster_build_24h", 0) >= 10
+    assert hyper_items.get("container_ancient_relic", 0) >= 1
+    assert hyper_items.get("container_mythic", 0) >= 2
+
+    conn = db()
+    client = serialize_catalog_for_client(conn=conn)
+    by_client = {p["sku"]: p for p in client["products"]}
+    assert "best_value" in by_client[SKU_GENESIS_ACCELERATOR]["display"]["ui_badges"]
+    assert "crazy" in by_client[SKU_HYPERDRIVE_PROTOCOL]["display"]["ui_badges"]
+    assert "new" in by_client[SKU_GENESIS_ACCELERATOR]["display"]["ui_badges"]
+    conn.close()
+
+
+def test_impulse_trio_template_contract():
+    """Shop template must render Commander Favorites trio and exclude them from flat grid."""
+    from pathlib import Path
+
+    tpl = (Path(__file__).resolve().parents[1] / "templates" / "shop.html").read_text(
+        encoding="utf-8"
+    )
+    assert 'data-shop-impulse-trio' in tpl
+    assert "shop_impulse_title" in tpl
+    assert "genesis_accelerator_pack" in tpl
+    assert "hyperdrive_protocol_pack" in tpl
+    assert "shop-card--best-value" in tpl or "best_value" in tpl
+    assert "rejectattr('sku', 'equalto', 'genesis_accelerator_pack')" in tpl
+    assert "rejectattr('sku', 'equalto', 'hyperdrive_protocol_pack')" in tpl
+    assert "rejectattr('sku', 'equalto', 'booster_pack_starter')" in tpl
 
 
 def test_catalog_v3_beats_free_baseline(shop_db):
@@ -143,6 +212,24 @@ def test_catalog_v3_beats_free_baseline(shop_db):
     assert cmd_items.get("container_ancient_relic", 0) >= 2
     assert cmd_items.get("booster_build_24h", 0) >= 6
 
+    # Impulse packs must beat free-month domain skip and Starter density.
+    for sku in (SKU_GENESIS_ACCELERATOR, SKU_HYPERDRIVE_PROTOCOL):
+        items = {
+            str(i["item_key"]): int(i["amount"])
+            for i in by_sku[sku]["payload"]["items"]
+        }
+        build_h = (
+            items.get("booster_build_24h", 0) * 24
+            + items.get("booster_build_6h", 0) * 6
+        )
+        research_h = (
+            items.get("booster_research_24h", 0) * 24
+            + items.get("booster_research_6h", 0) * 6
+        )
+        assert build_h > FREE_LOGIN_MONTH_BUILD_SKIP_H
+        assert research_h > FREE_LOGIN_MONTH_BUILD_SKIP_H
+        assert build_h >= build_skip_h
+        assert research_h >= research_skip_h
 
 def test_shop_disabled_blocks_checkout(shop_db, monkeypatch):
     monkeypatch.setenv("SHOP_ENABLED", "0")
@@ -297,6 +384,36 @@ def test_fulfill_tk_and_inventory_packs(shop_db):
     assert get_balance(uid, conn=conn) >= before_cmd + 48 * 3600
     assert inventory_amount(uid, "container_ancient_relic", conn=conn) >= 2
     assert inventory_amount(uid, "container_mythic", conn=conn) >= 5  # 2 from rare pack + 3
+
+    before_accel = get_balance(uid, conn=conn)
+    ok, reason, _ = start_checkout(
+        uid,
+        SKU_GENESIS_ACCELERATOR,
+        "test",
+        conn=conn,
+        success_url="http://localhost/shop/return",
+        cancel_url="http://localhost/shop?cancelled=1",
+        legal_ack=True,
+    )
+    assert ok, reason
+    assert get_balance(uid, conn=conn) >= before_accel + 48 * 3600
+    assert inventory_amount(uid, "booster_build_24h", conn=conn) >= 6 + 8
+    assert inventory_amount(uid, "container_epic", conn=conn) >= 4 + 2
+
+    before_hyper = get_balance(uid, conn=conn)
+    ok, reason, _ = start_checkout(
+        uid,
+        SKU_HYPERDRIVE_PROTOCOL,
+        "test",
+        conn=conn,
+        success_url="http://localhost/shop/return",
+        cancel_url="http://localhost/shop?cancelled=1",
+        legal_ack=True,
+    )
+    assert ok, reason
+    assert get_balance(uid, conn=conn) >= before_hyper + 72 * 3600
+    assert inventory_amount(uid, "container_ancient_relic", conn=conn) >= 2 + 1
+    assert inventory_amount(uid, "booster_research_24h", conn=conn) >= 6 + 8 + 10
     conn.commit()
     conn.close()
 

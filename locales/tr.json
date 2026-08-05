@@ -8425,5 +8425,22 @@
   "initiation_step_command_center": "Reach Command Center level 2",
   "initiation_step_command_center_hint": "CC 2 unlocks Orbital Shipyard. Already at 2+? Credited.",
   "initiation_step_orbital_shipyard_bldg": "Build Orbital Shipyard (level 1)",
-  "initiation_step_orbital_shipyard_bldg_hint": "Shipyard building level 1 lets you queue ships. Existing yards count."
+  "initiation_step_orbital_shipyard_bldg_hint": "Shipyard building level 1 lets you queue ships. Existing yards count.",
+  "shop_impulse_title": "Komutan Favorileri",
+  "shop_impulse_role_entry": "Giris",
+  "shop_impulse_role_best": "En populer",
+  "shop_impulse_role_max": "Max Push",
+  "shop_new_tag": "YENI",
+  "shop_best_value_tag": "EN IYI DEGER",
+  "shop_best_value_sub": "En populer · ayri alimlara gore tasarruf",
+  "shop_crazy_tag": "CRAZY",
+  "shop_sku_genesis_accelerator": "Genesis Accelerator Bundle",
+  "shop_sku_genesis_accelerator_hint": "48s Timekeeper + 8x insa/arastirma 24s + 12x speed 6s + Epic/Mythic — Starter Packten 2x fazla guc.",
+  "shop_sku_hyperdrive_protocol": "Hyperdrive Protocol",
+  "shop_sku_hyperdrive_protocol_hint": "72s Timekeeper + 10x insa/arastirma 24s + 16x speed 6s + Epic/Mythic/Ancient — Timekeeper L den +1 EUR ile tam bir hafta sonu avantaji.",
+  "overview_live_events_label": "Aktif Etkinlikler",
+  "overview_live_events_world_boss": "World Boss aktif — saldir ve odul al",
+  "overview_live_events_ends": "Kalan",
+  "overview_live_events_goto_boss": "World Boss ac",
+  "overview_live_events_goto_calendar": "Takvim"
 }

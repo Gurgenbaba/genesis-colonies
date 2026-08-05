@@ -62,10 +62,11 @@ Free ist reich an domain-locked Boosters, arm an flexiblem TK.
 
 1. Free-Monat = Benchmark „Geduld“, nicht „Armut“.
 2. Impulse (€0,99–2,99) ≥ **1–2 Wochen Free-TK** *oder* klarer High-Tier-Vorsprung.
-3. **Season Pass = bestes €/Value** (Anker **4,99 €**).
-4. Commander (~10 €) ≥ viel TK + High-Tier-Mix — nicht „teurer Login-Monat“.
-5. Domain-Booster-Pack nur wenn Yield **≥ ~2× Login-Monats-Skip** (~140 h Build).
-6. Paid verkauft, was Free **nicht** drip’t (TK, Season-FOMO, High-Tier-Sofortmacht).
+3. **Season Pass = bestes Season-/Long-term-€/Value** (Anker **4,99 €**, FEATURED-Lane).
+4. **Impulse Trio (GC-2314 Goldilocks):** Starter (€2,99) = Decoy · **Genesis Accelerator (€4,99) = BEST VALUE / Primary Conversion** · Hyperdrive Protocol (€6,99) = CRAZY Upper-Anchor + TK-L-Killer. Shop rendert sie als `Commander Favorites`-Bucht (nicht flaches Grid).
+5. Commander (~10 €) ≥ viel TK + High-Tier-Mix — nicht „teurer Login-Monat“.
+6. Domain-Booster-Pack nur wenn Yield **≥ ~2× Login-Monats-Skip** (~140 h Build).
+7. Paid verkauft, was Free **nicht** drip’t (TK, Season-FOMO, High-Tier-Sofortmacht).
 
 ## Owners (CORE_ARCHITECTURE §17)
 
@@ -79,7 +80,7 @@ Free ist reich an domain-locked Boosters, arm an flexiblem TK.
 
 **Grant path (canonical):** `unlock_premium` / `grant_inventory_item` / `timekeeper.credit` / `grant_companion_slot` — keine zweite Loot-Engine.
 
-## Catalog (`CATALOG_VERSION = 6`)
+## Catalog (`CATALOG_VERSION = 7`)
 
 | SKU | Kind | Price (EUR) | Fulfill |
 |-----|------|-------------|---------|
@@ -87,13 +88,16 @@ Free ist reich an domain-locked Boosters, arm an flexiblem TK.
 | `tk_pack_s` | timekeeper | 0,99 | **6 h** TK |
 | `tk_pack_m` | timekeeper | 2,99 | **24 h** TK |
 | `tk_pack_l` | timekeeper | 5,99 | **72 h** TK |
-| `booster_pack_starter` | inventory_bundle | 2,99 | Build/Research **24h ×6** + **6h ×8** + prod_50 ×4 (≥ ~176 h/Domain) |
+| `booster_pack_starter` | inventory_bundle | 2,99 | Build/Research **24h ×6** + **6h ×8** + prod_50 ×4 (≥ ~176 h/Domain) — Impulse-Trio Decoy |
+| `genesis_accelerator_pack` | inventory_bundle | 4,99 | **48 h** TK + Build/Research 24h ×8 + 6h ×6 + epic×2 + mythic×1 — Impulse BEST VALUE |
+| `hyperdrive_protocol_pack` | inventory_bundle | 6,99 | **72 h** TK + Build/Research 24h ×10 + 6h ×8 + epic×3 + mythic×2 + ancient×1 — Impulse CRAZY / TK-L-Alternative |
 | `container_pack_rare` | inventory_bundle | 2,99 | rare×8 + epic×4 + mythic×2 + relic×1 |
 | `commander_supply_pack` | inventory_bundle | 9,99 | **48 h** TK + Build/Research 24h ×6 + prod_100 ×3 + epic×4 + mythic×3 + ancient×2 + relic×2 |
 | `titan_slot_plus` | inventory_bundle | 2,99 | `grant_companion_slot` (+1 capacity, max 4); checkout blocked at max |
 
 `ensure_catalog_seeded` **upsertet** Preise/Payloads aus Code (Server-Truth). Companion capacity owner: `game/world_boss_companions.py`.
 
+UI-Badges (`SHOP_SKU_UI_BADGES` → `display.ui_badges`): Accelerator = `new` + `best_value`; Hyperdrive = `new` + `crazy`. Season Pass bleibt `FEATURED` (eigene Lane).
 ## Schema
 
 - `shop_products` — sku, kind, price_cents, currency, active, payload_json, sort_order

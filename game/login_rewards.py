@@ -430,27 +430,10 @@ def claim_login_reward(
 
 
 def _effect_summary_short(effects: Any) -> List[str]:
-    """Compact labels for calendar chips (+100% Prod, −25% Hold)."""
-    out: List[str] = []
-    if not isinstance(effects, list):
-        return out
-    for eff in effects:
-        if not isinstance(eff, Mapping):
-            continue
-        kind = str(eff.get("kind") or "").strip()
-        try:
-            mult = float(eff.get("mult") or 1.0)
-        except (TypeError, ValueError):
-            continue
-        if kind == "production_mult" and mult > 0:
-            pct = int(round((mult - 1.0) * 100))
-            if pct != 0:
-                out.append(f"+{pct}% Prod" if pct > 0 else f"{pct}% Prod")
-        elif kind == "expedition_hold_mult" and mult > 0:
-            pct = int(round((1.0 - mult) * 100))
-            if pct != 0:
-                out.append(f"−{pct}% Hold" if pct > 0 else f"+{abs(pct)}% Hold")
-    return out
+    """Compact labels for calendar chips — owner: server_events.effect_summary_short."""
+    from game.server_events import effect_summary_short
+
+    return effect_summary_short(effects)
 
 
 def _calendar_events_for_window(
@@ -552,17 +535,12 @@ def serialize_for_client(
             calendar_events = []
 
         active_banner: List[Dict[str, Any]] = []
-        for ev in calendar_events:
-            if str(ev.get("status") or "") != "active":
-                continue
-            active_banner.append(
-                {
-                    "slug": str(ev.get("slug") or ""),
-                    "title": str(ev.get("title") or ""),
-                    "effects_summary": _effect_summary_short(ev.get("effects")),
-                    "ends_at": int(ev.get("ends_at") or 0),
-                }
-            )
+        try:
+            from game.server_events import active_events_banner
+
+            active_banner = active_events_banner(now=ts, conn=conn)
+        except Exception:
+            active_banner = []
         out["active_server_events"] = active_banner
 
         days: List[Dict[str, Any]] = []

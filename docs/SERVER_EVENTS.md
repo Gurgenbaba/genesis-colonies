@@ -30,13 +30,15 @@ LiveOps tab **events** on `/admin`:
 
 `/api/game-state` includes `server_events: { events, production_mult, expedition_hold_mult }`.
 
+**Overview (`/overview`)** shows a **Laufende Events** panel when any server event is active (and active World Boss windows). Built via `server_events.active_events_banner` + `overview_page.build_overview_live_events`.
+
 Resource bar: active `production_mult` is merged into `active_boosters.active_effects` (same chips as inventory +25/+50/+75%). Example: `+50 % · Event +100 % · 1h 59m`. Technical Data shows `technical_bonus_event` when production mult ≠ 1.
 
 Universe News announcements stay separate (manual EVENT posts).
 
 **Login calendar overlay**
 
-`/login-rewards` projects attendance streak days 1–30 onto UTC buckets and flags days whose window overlaps active/scheduled server events (`event`, `events[]` with effect summary). Claim rules are unchanged — events are visual/context only.
+`/login-rewards` projects attendance streak days 1–30 onto UTC buckets and flags days whose window overlaps active/scheduled server events (`event`, `events[]` with effect summary). Claim rules are unchanged — events are visual/context only. Active banner uses the same `active_events_banner` helper as Overview.
 
 ## Not in v1
 

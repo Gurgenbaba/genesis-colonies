@@ -302,3 +302,43 @@ def test_login_calendar_marks_event_days(events_db):
     assert days[10]["event"] is False
     assert isinstance(payload.get("active_server_events"), list)
     assert any(e.get("slug") == "cal-weekend" for e in payload["active_server_events"])
+    banner = payload["active_server_events"][0]
+    assert "effects_summary" in banner
+    assert banner.get("kind") == "server_event"
+
+
+def test_active_events_banner_and_overview_live_events(events_db):
+    """Overview status must surface active server events via live_events."""
+    from game.overview_page import build_overview_live_events
+    from game.server_events import active_events_banner, effect_summary_short
+
+    now = float(int(time.time()))
+    create_event(
+        slug="ov-boost",
+        title="Overview Boost",
+        starts_at=int(now) - 60,
+        ends_at=int(now) + 3600,
+        effects=[{"kind": KIND_PRODUCTION_MULT, "mult": 2.0}],
+    )
+    clear_factor_cache()
+    conn = db()
+    banner = active_events_banner(now=now, conn=conn)
+    assert len(banner) >= 1
+    assert banner[0]["slug"] == "ov-boost"
+    assert banner[0]["href"] == "login_rewards_view"
+    assert effect_summary_short([{"kind": KIND_PRODUCTION_MULT, "mult": 2.0}]) == ["+100% Prod"]
+
+    live = build_overview_live_events(conn=conn, now=now)
+    assert any(e.get("slug") == "ov-boost" and e.get("kind") == "server_event" for e in live)
+    conn.close()
+
+
+def test_overview_live_events_template_contract():
+    from pathlib import Path
+
+    tpl = (Path(__file__).resolve().parents[1] / "templates" / "overview.html").read_text(
+        encoding="utf-8"
+    )
+    assert "data-overview-live-events" in tpl
+    assert "overview_live_events_label" in tpl
+    assert "live_events" in tpl
