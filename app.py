@@ -13911,9 +13911,16 @@ if __name__ == "__main__":
     if is_production() and is_debug_enabled():
         print("[GC] ERROR: Refusing to run production with FLASK_DEBUG=1", file=sys.stderr)
         raise SystemExit(1)
-    threaded_raw = os.environ.get("GC_FLASK_THREADED", "1" if not is_production() else "0").strip().lower()
+    # Local SQLite: serialize Werkzeug requests (threaded=0). Concurrent threads
+    # contend on the single writer → busy_timeout waits → PJAX timeouts →
+    # hard-load cascades (CloseWait pileup). Override with GC_FLASK_THREADED=1.
+    db_backend = os.environ.get("GC_DB_BACKEND", "sqlite").strip().lower()
+    threaded_default = "0" if (not is_production() and db_backend == "sqlite") else ("1" if not is_production() else "0")
+    threaded_raw = os.environ.get("GC_FLASK_THREADED", threaded_default).strip().lower()
     threaded = threaded_raw in ("1", "true", "yes", "on")
     reloader_default = "0" if sys.platform == "win32" else ("1" if is_debug_enabled() else "0")
     reloader_raw = os.environ.get("GC_FLASK_RELOADER", reloader_default).strip().lower()
     use_reloader = reloader_raw in ("1", "true", "yes", "on")
+    if not threaded and not is_production() and db_backend == "sqlite":
+        print("[GC] Flask threaded=0 (SQLite local default — set GC_FLASK_THREADED=1 to override)")
     app.run(host=host, port=port, debug=is_debug_enabled(), threaded=threaded, use_reloader=use_reloader)

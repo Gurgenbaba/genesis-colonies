@@ -74,14 +74,16 @@ def test_gc747b_buildings_ssr_slimdown():
     nav = src.split("GC.navigateTo = async function navigateTo(url, opts = {})")[1].split("function initPjax()", 1)[0]
     assert "preserveGameLoop: true" in nav
     assert "skipGameState: true" in nav
-    assert "skipPolling: true" in nav
     assert "skipLcpPreload: true" in nav
+    # Diet polls always stop before HTML fetch (local SQLite); buildings tab no
+    # longer sets skipPolling so initPage restarts the schedule after apply.
+    buildings_opts = nav.split("PJAX light buildings tab")[0]
+    assert "skipPolling: true" not in buildings_opts.split("isBuildingsTabOnlyNavigation")[-1]
+    assert "GC.stopPolling()" in nav.split("const leavingAdmin")[1].split("beginPjaxNavigation")[0]
     cleanup = src.split("GC.cleanupPage = function cleanupPage(opts = {})")[1].split("GC.registerCleanup", 1)[0]
     assert "preserveGameLoop" in cleanup
-    # stopPolling() now shares its preserveGameLoop guard block with
-    # stopResourceTicker()/_resetQueueLiveStates() (GC-PERF-PJAX-TICKER-001)
-    # instead of being a standalone single-line guard — same invariant
-    # (never stop polling when preserving the game loop).
+    # stopPolling() in cleanupPage still shares its preserveGameLoop guard with
+    # stopResourceTicker()/_resetQueueLiveStates() (GC-PERF-PJAX-TICKER-001).
     guarded_block = cleanup.split("if (!preserveGameLoop) {")[1].split("}", 1)[0]
     assert "GC.stopPolling();" in guarded_block
     buildings_html = (ROOT / "templates" / "buildings.html").read_text(encoding="utf-8")

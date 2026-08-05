@@ -94,11 +94,17 @@ def test_sidebar_module_links_are_pjax_eligible_markup():
 
 
 def test_gc804_leftmenu_state_restored_after_pjax_init():
-    """GC-804: sidebar accordion persists via localStorage + restoreLeftmenuState after PJAX."""
+    """GC-804: sidebar accordion persists via localStorage + restoreLeftmenuState after PJAX.
+
+    Optimistic `_syncNavActive` on PJAX coalesce (latest-wins queue) is allowed so
+    the rail highlights the destination while the single in-flight HTML fetch
+    finishes — full accordion restore still runs via initPage after apply.
+    """
     src = _read("static/main.js")
     navigate = src.split("GC.navigateTo = async function navigateTo", 1)[1].split("function initPjax", 1)[0]
-    assert "_syncNavActive(url)" not in navigate
+    # Coalesce may call _syncNavActive; must not call restoreLeftmenuState directly.
     assert "GC.restoreLeftmenuState(url)" not in navigate
+    assert "[GC] PJAX coalesce" in navigate
     # The initPage() call was factored out of navigateTo into the shared
     # applyPjaxPayload() helper (used by both the cached-galaxy-payload fast
     # path and the network-fetch path), so assert the call chain instead of
@@ -122,11 +128,11 @@ ALLOWLIST_HREF_ASSIGN = {
     # auth loss, not an in-game PJAX navigation.
     (1048, 'window.location.href = "/login";'),
     # Radar / deep-link nav: only if GC.navigateTo is missing.
-    (13935, "window.location.href = url;"),
+    (13944, "window.location.href = url;"),
     # Galaxy/system quick-nav input: only reached if GC.navigateTo is somehow
     # undefined (defensive fallback), mirroring the reloadCurrentPage /
     # locale-switch reload() fallbacks below.
-    (37013, "else window.location.href = href;"),
+    (37257, "else window.location.href = href;"),
 }
 
 
@@ -152,8 +158,8 @@ def test_reload_fallback_is_allowlisted_only():
     ]
     allowed = {
         (2581, "window.location.reload();"),  # reloadCurrentPage fullDocument
-        (2611, "window.location.reload();"),  # reloadCurrentPage navigateTo fallback
-        (31649, "window.location.reload();"),  # locale switch fallback
+        (2616, "window.location.reload();"),  # reloadCurrentPage navigateTo fallback
+        (31893, "window.location.reload();"),  # locale switch fallback
     }
     assert reload_lines, "expected allowlisted location.reload() sites"
     assert set(reload_lines) == allowed, (
@@ -163,16 +169,9 @@ def test_reload_fallback_is_allowlisted_only():
 
 
 def test_gc_stabilize_002_same_url_pjax_timeout_recovers_instead_of_freezing():
-    """GC-STABILIZE-002: a same-URL PJAX reload (GC.reloadCurrentPage) that
-    times out (e.g. the single SQLite worker starved after a long idle
-    period) must not fail silently. shouldPjaxHardLoad() intentionally
-    refuses to hard-navigate when target === current URL (avoids an
-    assign()-to-self reload loop), but the abort/timeout catch branch used
-    to just `return` in that case with no toast and no released nav
-    blockers — the shell looked frozen ("click nothing works, must reload")
-    until the user hard-refreshed manually. Assert the same-URL timeout
-    branch now surfaces the standard failure toast and releases the shell
-    navigation blockers, mirroring the generic-failure recovery path.
+    """GC-STABILIZE-002 / local SQLite: PJAX fetch timeout must toast + release
+    blockers and must NOT hard-load (location.assign while Werkzeug still
+    finishes the aborted handler causes CloseWait lock cascades).
     """
     src = _read("static/main.js")
     navigate_fn = src.split("GC.navigateTo = async function navigateTo", 1)[1].split(
@@ -181,11 +180,13 @@ def test_gc_stabilize_002_same_url_pjax_timeout_recovers_instead_of_freezing():
     abort_branch = navigate_fn.split('if (err?.name === "AbortError") {', 1)[1].split(
         "if (_activePjaxNavigation?.id !== navId) return;", 1
     )[0]
-    assert "shouldPjaxHardLoad(nav, fetchTimedOut, userAborted)" in abort_branch
     assert "fetchTimedOut && !userAborted" in abort_branch
     assert 'showNotify(' in abort_branch
     assert 't("msg_status_refresh_failed"' in abort_branch
-    assert 'GC.releaseShellNavigationBlockers("pjax_timeout_same_url")' in abort_branch
+    assert 'GC.releaseShellNavigationBlockers("pjax_timeout")' in abort_branch
+    assert "[GC] PJAX timeout (no hard-load)" in abort_branch
+    assert "window.location.assign" not in abort_branch
+    assert "GC.startPolling" in abort_branch
 
 
 def test_gc_stabilize_002_pjax_aborts_chat_before_html_fetch():
@@ -201,6 +202,67 @@ def test_gc_stabilize_002_pjax_aborts_chat_before_html_fetch():
     navigate_fn = main.split("GC.navigateTo = async function navigateTo", 1)[1].split(
         "\n  function initPjax", 1
     )[0]
-    pre_nav = navigate_fn.split("beginPjaxNavigation")[0]
-    assert 'GC.abortInFlightChatFetches("pjax_nav")' in pre_nav
-    assert "abortInFlightGameStateFetches()" in pre_nav
+    # Coalesce returns before beginPjaxNavigation; abort must still run on the
+    # path that actually starts an HTML fetch.
+    start_fetch = navigate_fn.split("const nav = beginPjaxNavigation", 1)[0]
+    assert 'GC.abortInFlightChatFetches("pjax_nav")' in start_fetch
+    assert "abortInFlightGameStateFetches()" in start_fetch
+    # Diet poll schedule must pause for the whole HTML fetch (not only abort
+    # the in-flight request) — preserveGameLoop no longer keeps polls alive.
+    assert "GC.stopPolling()" in start_fetch.split("const leavingAdmin", 1)[1]
+    assert "if (!opts.preserveGameLoop)" not in start_fetch.split("const leavingAdmin", 1)[1].split(
+        "const nav = beginPjaxNavigation", 1
+    )[0]
+    # Coalesce itself must not abort the in-flight HTML request.
+    coalesce_branch = navigate_fn.split("[GC] PJAX coalesce", 1)[1].split(
+        "const leavingAdmin", 1
+    )[0]
+    assert "abortInFlightChatFetches" not in coalesce_branch
+    assert "abortInFlightGameStateFetches" not in coalesce_branch
+
+
+def test_gc_pjax_fetch_timeout_above_sqlite_busy_timeout():
+    """PJAX client timeout must exceed SQLite busy_timeout (20s) so a single
+    lock wait is not misclassified as a dead navigation. Timeout recovery
+    must not hard-load (CloseWait cascade).
+    """
+    src = _read("static/main.js")
+    assert "const PJAX_FETCH_TIMEOUT_MS = 25000;" in src
+    assert "shouldPjaxHardLoad" not in src
+    navigate_fn = src.split("GC.navigateTo = async function navigateTo", 1)[1].split(
+        "\n  function initPjax", 1
+    )[0]
+    abort_branch = navigate_fn.split('if (err?.name === "AbortError") {', 1)[1].split(
+        "if (_activePjaxNavigation?.id !== navId) return;", 1
+    )[0]
+    assert "window.location.assign" not in abort_branch
+    assert "[GC] PJAX timeout (no hard-load)" in abort_branch
+
+
+def test_gc_local_sqlite_flask_threaded_default_off():
+    """Local SQLite Werkzeug must default to threaded=0 (serialized requests)."""
+    app_py = _read("app.py")
+    run_block = app_py.split('if __name__ == "__main__":', 1)[1]
+    assert 'threaded_default = "0" if (not is_production() and db_backend == "sqlite")' in run_block
+    assert 'os.environ.get("GC_FLASK_THREADED", threaded_default)' in run_block
+
+def test_gc_pjax_coalesce_keeps_inflight_html_fetch():
+    """Local SQLite freezes when rapid nav aborts+restarts HTML PJAX — each
+    aborted Werkzeug handler still runs. Latest destination must queue
+    (`_pjaxPendingNav`) without aborting the in-flight fetch; stale HTML is
+    discarded, then the pending URL is fetched (at most one HTML render).
+    """
+    src = _read("static/main.js")
+    navigate_fn = src.split("GC.navigateTo = async function navigateTo", 1)[1].split(
+        "\n  function initPjax", 1
+    )[0]
+    assert "let _pjaxPendingNav = null" in src
+    assert "function flushPjaxPendingAfterActive" in src
+    assert "[GC] PJAX coalesce" in navigate_fn
+    assert "[GC] PJAX discard stale" in navigate_fn
+    # Coalesce path must not call beginPjaxNavigation (which aborts).
+    coalesce_branch = navigate_fn.split("[GC] PJAX coalesce", 1)[1].split(
+        "const leavingAdmin", 1
+    )[0]
+    assert "beginPjaxNavigation" not in coalesce_branch
+    assert "_pjaxCoalesceTail" in coalesce_branch

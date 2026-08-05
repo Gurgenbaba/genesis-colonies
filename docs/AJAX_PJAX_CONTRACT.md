@@ -29,7 +29,10 @@ Light-PJAX und SSR-Skip (Owner: `static/main.js`, Details in [STATE_AJAX.md](STA
 |------|-----------|
 | `pageHasSsrLiveBoot()` / `shouldSkipInitGameStateAfterSsr` | Kein sofortiger Full-`/api/game-state` nach frischem SSR (GC-742) |
 | Ingame-Shell / Buildings-Tab Light-PJAX | `skipGameState` (+ ggf. `preserveGameLoop` / `skipPolling`) |
-| Hung diet-poll before PJAX | Always `abortInFlightGameStateFetches()` even on light-nav — avoids SQLite worker starvation after long idle |
+| Hung diet-poll before PJAX | Always `abortInFlightGameStateFetches()` + `GC.stopPolling()` even on light-nav — polls must not run during HTML render (local SQLite starvation / PJAX timeout) |
+| Rapid nav coalesce | Latest destination wins; **do not** abort+restart in-flight HTML PJAX (`_pjaxPendingNav`) — abort pileups freeze local SQLite/Werkzeug |
+| PJAX HTML timeout | 25s (> SQLite `busy_timeout` 20s) → **toast + release blockers + restart polling**, **no** `location.assign` (hard-load cascades CloseWaits locally) |
+| Local SQLite Flask | Dev default `GC_FLASK_THREADED=0` ([`app.py`](../app.py)) — serialize requests; override with `GC_FLASK_THREADED=1` |
 | Soft-Nav tickers (**GC-PERF-PJAX-TICKER-001**) | Progress-Ticker pausiert während Apply (`cleanupPage` → `initPage`); Resource-Ticker bleibt; `requestFinishRefresh` / queue-timer-zero no-op solange `GC.pjaxInFlight` |
 | PJAX fetch failure | Hard-load fallback (`location.assign`) so the shell does not stay toast-only |
 | Shell-HUD nach Login | `#gc-hud-boot-state` → `bootstrapHudFromDom()` vor Fleet-Drawer (GC-INSTANT-UX-001A) |

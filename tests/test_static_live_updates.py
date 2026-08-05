@@ -533,7 +533,8 @@ def test_admin_pjax_exit_hard_load_entry():
     cleanup_fn = src.split("GC.cleanupPage = function cleanupPage")[1][:2500]
     assert "releaseShellNavigationBlockers" in cleanup_fn
     assert "beginPjaxNavigation" in nav
-    assert "shouldPjaxHardLoad" in nav
+    assert "shouldPjaxHardLoad" not in nav
+    assert "[GC] PJAX timeout (no hard-load)" in nav
     # Admin must tear down body-portaled HUD menus (not wrap.querySelector close).
     sync_fn = admin_src.split("function syncAdminHudSelects")[1].split("function adminLeaveShellCleanup")[0]
     assert "teardownHudSelectPortals" in sync_fn
@@ -548,16 +549,22 @@ def test_pjax_navigation_owner_clears_stale_timeouts():
     src = _read("static/main.js")
     assert "let _pjaxNavigationSeq = 0" in src
     assert "let _activePjaxNavigation = null" in src
+    assert "let _pjaxPendingNav = null" in src
     assert "function clearPjaxNavigation(nav" in src
     assert "function supersedePjaxNavigation(reason)" in src
     assert "function beginPjaxNavigation(url, target)" in src
-    assert "function shouldPjaxHardLoad(nav, fetchTimedOut, userAborted)" in src
+    assert "function flushPjaxPendingAfterActive" in src
+    assert "shouldPjaxHardLoad" not in src
     dedupe = src.split("GC.navigateTo = async function navigateTo")[1].split("function initPjax")[0]
+    assert "[GC] PJAX coalesce" in dedupe
+    assert "[GC] PJAX discard stale" in dedupe
     assert "_activePjaxNavigation.normalizedUrl === target" in dedupe
     assert "nav.fetchTimeoutId" in dedupe
-    hard_load_fn = src.split("function shouldPjaxHardLoad")[1].split("GC.navigateTo = async function navigateTo")[0]
-    assert "_activePjaxNavigation.id !== nav.id" in hard_load_fn
-    assert "normalizePjaxUrl(window.location.href) === nav.normalizedUrl" in hard_load_fn
+    abort_branch = dedupe.split('if (err?.name === "AbortError") {', 1)[1].split(
+        "if (_activePjaxNavigation?.id !== navId) return;", 1
+    )[0]
+    assert "window.location.assign" not in abort_branch
+    assert "[GC] PJAX timeout (no hard-load)" in abort_branch
     blockers = src.split("function releaseShellNavigationBlockers(reason)")[1].split("function syncHudSelectLabelsInRoot")[0]
     assert "GC.pjaxInFlight = null" not in blockers
     assert "GC._pjaxAbort" not in blockers
@@ -567,9 +574,10 @@ def test_pjax_navigation_owner_clears_stale_timeouts():
     assert "normalizeLcpPreloadHref" in preload
     assert "removeLcpHeroPreloadLinks" in preload
     version = _read("VERSION").strip()
-    assert version == "0.5.9.37"
+    assert version == "0.5.9.104"
     assert "GAME_STATE_FETCH_TIMEOUT_MS" in src
     assert "NOTIFICATION_POLL_TIMEOUT_MS" in src
+    assert "const PJAX_FETCH_TIMEOUT_MS = 25000;" in src
 
 
 def test_main_js_gc802_planet_switch_state_sync():

@@ -2589,11 +2589,16 @@
     try {
       const active = typeof _activePjaxNavigation !== "undefined" ? _activePjaxNavigation : null;
       const activeTarget = active && active.normalizedUrl ? String(active.normalizedUrl) : "";
+      const pendingTarget =
+        typeof _pjaxPendingNav !== "undefined" && _pjaxPendingNav && _pjaxPendingNav.target
+          ? String(_pjaxPendingNav.target)
+          : "";
       const here = typeof normalizePjaxUrl === "function" ? normalizePjaxUrl(target) : target;
-      if (activeTarget && activeTarget !== here) {
+      const awayTarget = pendingTarget || activeTarget;
+      if (awayTarget && awayTarget !== here) {
         console.debug(
           "[GC] skip reloadCurrentPage; active PJAX away",
-          activeTarget,
+          awayTarget,
           "from",
           here
         );
@@ -41157,6 +41162,10 @@
   const PJAX_FETCH_TIMEOUT_MS = 25000;
   let _pjaxNavigationSeq = 0;
   let _activePjaxNavigation = null;
+  // Latest-wins queue: rapid sidebar clicks must not abort+restart HTML fetches.
+  // Werkzeug/SQLite still finishes aborted work → CloseWait pileup + local freezes.
+  let _pjaxPendingNav = null; // { url, target, opts }
+  let _pjaxCoalesceTail = null;
 
   function mergeAbortSignals(signals) {
     const ctrl = new AbortController();
@@ -41197,6 +41206,26 @@
     clearPjaxNavigation(prev);
   }
 
+  function takePjaxPendingNav() {
+    const pending = _pjaxPendingNav;
+    _pjaxPendingNav = null;
+    return pending;
+  }
+
+  async function flushPjaxPendingAfterActive() {
+    // Drain latest-wins destinations after the in-flight HTML fetch settles.
+    for (let i = 0; i < 32; i++) {
+      if (_activePjaxNavigation?.promise) {
+        await _activePjaxNavigation.promise;
+        continue;
+      }
+      if (!_pjaxPendingNav) return;
+      const next = takePjaxPendingNav();
+      if (!next) return;
+      await GC.navigateTo(next.url, next.opts);
+    }
+  }
+
   function beginPjaxNavigation(url, target) {
     supersedePjaxNavigation("new_navigation");
     const id = ++_pjaxNavigationSeq;
@@ -41219,14 +41248,6 @@
   function finishPjaxNavigation(nav) {
     if (!nav) return;
     clearPjaxNavigation(nav, { skipControllerAbort: true });
-  }
-
-  function shouldPjaxHardLoad(nav, fetchTimedOut, userAborted) {
-    if (!nav || userAborted) return false;
-    if (!_activePjaxNavigation || _activePjaxNavigation.id !== nav.id) return false;
-    if (!fetchTimedOut) return false;
-    if (normalizePjaxUrl(window.location.href) === nav.normalizedUrl) return false;
-    return true;
   }
 
   let _navPerfSession = null;
@@ -41321,7 +41342,7 @@
 
   GC.navigateTo = async function navigateTo(url, opts = {}) {
     if (isBuildingsTabOnlyNavigation(url)) {
-      opts = { skipGameState: true, skipPolling: true, preserveGameLoop: true, skipLcpPreload: true, ...opts };
+      opts = { skipGameState: true, preserveGameLoop: true, skipLcpPreload: true, ...opts };
       console.debug("[GC] PJAX light buildings tab");
     } else if (isIngameShellPjaxNavigation(url, opts)) {
       opts = { skipGameState: true, preserveGameLoop: true, ...opts };
@@ -41335,11 +41356,6 @@
       if (pathOnly === "/galaxy") GC.prefetchGalaxyQuickActionScript?.();
     } catch (_) {}
 
-    if (_activePjaxNavigation && _activePjaxNavigation.normalizedUrl === target && _activePjaxNavigation.promise) {
-      console.debug("[GC] PJAX dedupe", target);
-      return _activePjaxNavigation.promise;
-    }
-
     const current = normalizePjaxUrl(window.location.href);
     if (!push && target === current && !opts.force) {
       console.debug("[GC] PJAX skip same URL", target);
@@ -41352,9 +41368,38 @@
     } catch (_) {}
     if (destUrl && AUTH_ROUTE_RE.test(destUrl.pathname.replace(/\/$/, "") || "/")) {
       console.debug("[GC] hard navigate (auth)", destUrl.pathname);
+      _pjaxPendingNav = null;
       quiesceLiveClientFetches("auth-nav");
       window.location.assign(destUrl.href);
       return Promise.resolve();
+    }
+
+    // Rapid clicks: keep the in-flight HTML request (do not abort). SQLite still
+    // completes aborted Werkzeug handlers; abort+restart freezes local nav.
+    // force:true (reloadCurrentPage) still supersedes via beginPjaxNavigation.
+    if (_activePjaxNavigation && _activePjaxNavigation.promise && !opts.force) {
+      if (_activePjaxNavigation.normalizedUrl === target) {
+        console.debug("[GC] PJAX dedupe", target);
+        return _activePjaxNavigation.promise;
+      }
+      _pjaxPendingNav = { url, target, opts: { ...opts } };
+      GC._pjaxTarget = target;
+      try { _syncNavActive(url); } catch (_) {}
+      console.debug(
+        "[GC] PJAX coalesce",
+        _activePjaxNavigation.normalizedUrl,
+        "→",
+        target
+      );
+      if (!_pjaxCoalesceTail) {
+        const head = _activePjaxNavigation.promise;
+        _pjaxCoalesceTail = head
+          .then(() => flushPjaxPendingAfterActive())
+          .finally(() => {
+            _pjaxCoalesceTail = null;
+          });
+      }
+      return _pjaxCoalesceTail;
     }
 
     const leavingAdmin =
@@ -41362,6 +41407,7 @@
       && GC.detectPage() === "admin"
       && !isAdminRoutePath(new URL(target, window.location.origin).pathname);
     if (leavingAdmin) {
+      _pjaxPendingNav = null;
       if (typeof GC.teardownHudSelectPortals === "function") GC.teardownHudSelectPortals();
       if (typeof GC.quiesceLiveClientFetches === "function") GC.quiesceLiveClientFetches("leave_admin");
       else if (typeof GC.abortInFlightGameStateFetches === "function") GC.abortInFlightGameStateFetches();
@@ -41370,23 +41416,25 @@
         GC.releaseShellNavigationBlockers("leave_admin");
       }
     } else {
-      // Always abort hung /api/game-state polls before HTML PJAX. Light-nav used to
-      // keep in-flight diet polls (preserveGameLoop), which can starve the single
-      // SQLite worker after long idle — clicks appear dead until hard refresh.
+      // Always abort hung /api/game-state + chat polls before HTML PJAX.
+      // Light-nav used to keep the poll *schedule* (preserveGameLoop) so diet
+      // polls restarted mid-render and starved local SQLite → PJAX timeout /
+      // hard-load freezes. preserveGameLoop still keeps resource ticker on
+      // cleanupPage; polls resume via initPage after apply.
       if (typeof GC.abortInFlightGameStateFetches === "function") {
         GC.abortInFlightGameStateFetches();
       }
-      // Same starvation class as game-state: chat message polls keep hitting
-      // SQLite during idle. Abort the in-flight request only (schedule stays).
       if (typeof GC.abortInFlightChatFetches === "function") {
         GC.abortInFlightChatFetches("pjax_nav");
       }
-      if (!opts.preserveGameLoop) {
-        GC.stopPolling();
-      }
+      GC.stopPolling();
       if (typeof GC.releaseShellNavigationBlockers === "function") {
         GC.releaseShellNavigationBlockers("pjax_nav");
       }
+    }
+
+    if (opts.force) {
+      _pjaxPendingNav = null;
     }
 
     const nav = beginPjaxNavigation(url, target);
@@ -41446,6 +41494,17 @@
         const html = await res.text();
         if (_navPerfSession) _navPerfSession.parseEndAt = performance.now();
         if (_activePjaxNavigation?.id !== navId) return;
+        // Latest-wins coalesce: a newer destination is queued — skip applying this
+        // HTML so we do not flash the wrong page, then flush starts the pending URL.
+        if (_pjaxPendingNav && _pjaxPendingNav.target !== nav.normalizedUrl) {
+          console.debug(
+            "[GC] PJAX discard stale",
+            nav.normalizedUrl,
+            "→",
+            _pjaxPendingNav.target
+          );
+          return;
+        }
         const doc = new DOMParser().parseFromString(html, "text/html");
         const payload = pjaxPayloadFromDoc(doc);
         if (!payload) throw new Error("main-content missing");
@@ -41458,31 +41517,23 @@
         if (err?.name === "AbortError") {
           const fetchTimedOut = !!(fetchTimeout?.signal?.aborted);
           const userAborted = !!ctrl.signal.aborted;
-          if (shouldPjaxHardLoad(nav, fetchTimedOut, userAborted)) {
-            console.warn("[GC] PJAX timeout, hard-loading", target);
-            finishPjaxNavigation(nav);
-            window.location.assign(url);
-            return;
-          }
-          // shouldPjaxHardLoad() intentionally refuses to hard-load when the
-          // target equals the current URL (avoids an assign()-to-self reload
-          // loop). But a same-URL PJAX reload (GC.reloadCurrentPage) can
-          // still time out on its own — e.g. the single SQLite worker
-          // starved after a long idle period. Previously this fell through
-          // to a bare `return`: no toast, no released nav blockers, nothing
-          // — the shell looked frozen ("click nothing works, must reload")
-          // until the user hard-refreshed manually. Surface the same
-          // recovery UX as the generic failure path below, minus the
-          // self-redirect.
+          // Timeout: never hard-load (cascade). Supersede/coalesce aborts: silent.
           if (fetchTimedOut && !userAborted && _activePjaxNavigation?.id === nav.id) {
-            console.warn("[GC] PJAX same-URL reload timed out", target);
+            console.warn("[GC] PJAX timeout (no hard-load)", target);
             finishPjaxNavigation(nav);
             showNotify(
               t("msg_status_refresh_failed", "Seite konnte nicht geladen werden. Bitte erneut versuchen."),
               "error"
             );
             if (typeof GC.releaseShellNavigationBlockers === "function") {
-              GC.releaseShellNavigationBlockers("pjax_timeout_same_url");
+              GC.releaseShellNavigationBlockers("pjax_timeout");
+            }
+            if (typeof GC.startPolling === "function") {
+              try {
+                GC.startPolling(
+                  typeof hasBusyLiveActivity === "function" && hasBusyLiveActivity()
+                );
+              } catch (_) {}
             }
           }
           return;
