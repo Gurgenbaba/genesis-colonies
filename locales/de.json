@@ -8442,5 +8442,8 @@
   "overview_live_events_world_boss": "World Boss aktiv — angreifen & belohnen",
   "overview_live_events_ends": "Noch",
   "overview_live_events_goto_boss": "Zum World Boss",
-  "overview_live_events_goto_calendar": "Kalender"
+  "overview_live_events_goto_calendar": "Kalender",
+  "nav_live_events": "Laufende Events",
+  "nav_live_events_empty": "Keine Events aktiv.",
+  "nav_badge_live_events_aria": "Laufende Events aktiv"
 }

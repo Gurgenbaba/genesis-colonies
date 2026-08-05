@@ -12198,6 +12198,8 @@
                 ? "nav_badge_inventory_aria"
               : key === "community"
               ? "nav_badge_community_aria"
+              : key === "live_events"
+                ? "nav_badge_live_events_aria"
               : "";
       if (ariaKey) {
         el.setAttribute(
@@ -12218,6 +12220,8 @@
                   ? "Auktionshaus-Aktivität"
                 : key === "inventory"
                   ? "Offene Relikt-Arena Battles"
+                : key === "live_events"
+                  ? "Laufende Events aktiv"
                 : "Abstimmung offen")
         );
       }
@@ -14633,6 +14637,9 @@
       fleet_alerts: parsed.fleet_alerts,
       fleet_slots: parsed.fleet_slots,
     };
+    if (Array.isArray(parsed.live_events)) {
+      boot.live_events = parsed.live_events;
+    }
     if (typeof GC.mergeLastState === "function") {
       GC.mergeLastState(boot, "ssr_hud_boot");
     } else {
@@ -14647,6 +14654,9 @@
       if (boot.active_fleets !== undefined && typeof renderGlobalFleetHud === "function") {
         renderGlobalFleetHud(boot.active_fleets, { reason: "ssr_hud_boot" });
       }
+    }
+    if (typeof syncLiveOpsFromGameState === "function") {
+      syncLiveOpsFromGameState(boot, "ssr_hud_boot");
     }
     return true;
   }
@@ -15503,6 +15513,16 @@
       syncMountedQueuePagesFromState(data, reason);
       GC.startProgressTicker();
     }
+    if (data.initiation && typeof GC.patchInitiationHud === "function") {
+      GC.patchInitiationHud(data.initiation);
+    }
+
+    // Diet / page_init / pjax polls are hud-only — LiveOps header must still sync
+    // (otherwise live_events stay at empty SSR forever while resource-bar Event chips update).
+    if (typeof syncLiveOpsFromGameState === "function") {
+      syncLiveOpsFromGameState(data, reason);
+    }
+
     patchHudLastState(data, reason);
     markGameStateFetchApplied(opts);
     syncPerfBodyClasses();
@@ -20330,8 +20350,44 @@
     if (script) script.textContent = JSON.stringify(state);
   }
 
+  function _liveEventsFromServerEventsPayload(serverEvents) {
+    const rows = serverEvents && Array.isArray(serverEvents.events) ? serverEvents.events : null;
+    if (!rows) return null;
+    const nowSec = Math.floor(
+      typeof getApproxServerNow === "function" ? Number(getApproxServerNow()) : Date.now() / 1000
+    );
+    // Display-only fallback when live_events omitted — titles from server, no effect math.
+    return rows.map((ev) => {
+      const ends = Math.max(0, Math.floor(Number(ev && ev.ends_at) || 0));
+      return {
+        kind: "server_event",
+        id: Number(ev && ev.id) || 0,
+        slug: String((ev && ev.slug) || ""),
+        title: String((ev && ev.title) || ""),
+        title_key: "",
+        effects_summary: [],
+        ends_at: ends,
+        remaining_sec: ends > 0 ? Math.max(0, ends - nowSec) : 0,
+        href: "login_rewards_view",
+      };
+    });
+  }
+
+  function resolveLiveEventsFromGameState(data) {
+    if (!data || typeof data !== "object") return null;
+    if (Array.isArray(data.live_events)) return data.live_events;
+    // Action/diet payloads may omit live_events — never wipe a good panel with undefined.
+    const fromServer = _liveEventsFromServerEventsPayload(data.server_events);
+    if (fromServer) return fromServer;
+    return null;
+  }
+
   function syncLiveOpsFromGameState(data, reason) {
     if (!data) return;
+    if (typeof patchHeaderLiveEvents === "function") {
+      const events = resolveLiveEventsFromGameState(data);
+      if (events !== null) patchHeaderLiveEvents(events);
+    }
     const reasonStr = String(reason || "");
     if (data.login_rewards && document.getElementById("login-rewards-page")) {
       patchLoginRewardsDom(data.login_rewards);
@@ -20354,6 +20410,147 @@
         patchBattlePassDom(data.battle_pass);
       }
     }
+  }
+
+  function _formatLiveEventEta(sec) {
+    const s = Math.max(0, Math.floor(Number(sec) || 0));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    return `${h}h ${String(m).padStart(2, "0")}m`;
+  }
+
+  function patchHeaderLiveEvents(events) {
+    const root = document.querySelector("[data-header-live-events]");
+    if (!root) return;
+    const list = root.querySelector("[data-header-live-events-list]");
+    const empty = root.querySelector("[data-header-live-events-empty]");
+    const countEl = root.querySelector("[data-header-live-events-count]");
+    const items = Array.isArray(events) ? events : [];
+    if (countEl) countEl.textContent = String(items.length);
+    const badge = root.querySelector('[data-nav-badge="live_events"]');
+    if (badge) {
+      if (items.length > 0) {
+        const label = items.length > 99 ? "99+" : String(items.length);
+        badge.textContent = label;
+        badge.hidden = false;
+        badge.classList.remove("hidden");
+        badge.setAttribute("aria-hidden", "false");
+        badge.setAttribute(
+          "aria-label",
+          t("nav_badge_live_events_aria", "Laufende Events aktiv")
+        );
+      } else {
+        badge.textContent = "";
+        badge.hidden = true;
+        badge.classList.add("hidden");
+        badge.setAttribute("aria-hidden", "true");
+        badge.removeAttribute("aria-label");
+      }
+    }
+    if (!list) return;
+    list.innerHTML = "";
+    if (!items.length) {
+      if (empty) empty.hidden = false;
+      return;
+    }
+    if (empty) empty.hidden = true;
+    const frag = document.createDocumentFragment();
+    items.forEach((ev) => {
+      if (!ev || typeof ev !== "object") return;
+      const kind = String(ev.kind || "server_event");
+      const li = document.createElement("li");
+      li.className = `gc-header-live-events-item gc-header-live-events-item--${kind}`;
+      if (ev.ends_at) li.setAttribute("data-ends-at", String(ev.ends_at));
+
+      const main = document.createElement("div");
+      main.className = "gc-header-live-events-main";
+
+      const title = document.createElement("strong");
+      title.className = "gc-header-live-events-title";
+      const titleKey = String(ev.title_key || "").trim();
+      title.textContent = titleKey
+        ? t(titleKey, ev.title || ev.slug || ev.boss_key || "")
+        : String(ev.title || ev.slug || "");
+      main.appendChild(title);
+
+      const effects = Array.isArray(ev.effects_summary) ? ev.effects_summary.filter(Boolean) : [];
+      const effectsEl = document.createElement("span");
+      effectsEl.className = "gc-header-live-events-effects gc-mono";
+      if (effects.length) {
+        effectsEl.textContent = effects.join(" · ");
+      } else if (kind === "world_boss") {
+        effectsEl.textContent = t(
+          "overview_live_events_world_boss",
+          "World Boss aktiv — angreifen & belohnen"
+        );
+      }
+      if (effectsEl.textContent) main.appendChild(effectsEl);
+
+      const rem = Math.max(0, Number(ev.remaining_sec) || 0);
+      if (rem > 0) {
+        const eta = document.createElement("span");
+        eta.className = "gc-header-live-events-eta hint gc-mono";
+        eta.textContent = `${t("overview_live_events_ends", "Noch")} ${_formatLiveEventEta(rem)}`;
+        main.appendChild(eta);
+      }
+      li.appendChild(main);
+
+      let href = "";
+      let linkLabel = "";
+      if (ev.href === "world_boss_view") {
+        href = "/world-boss";
+        linkLabel = t("overview_live_events_goto_boss", "Zum World Boss");
+      } else if (ev.href === "login_rewards_view") {
+        href = "/login-rewards";
+        linkLabel = t("overview_live_events_goto_calendar", "Kalender");
+      }
+      if (href) {
+        const a = document.createElement("a");
+        a.className = "gc-btn gc-btn-sm gc-btn-ghost";
+        a.href = href;
+        a.setAttribute("data-pjax-link", "");
+        a.textContent = linkLabel;
+        li.appendChild(a);
+      }
+      frag.appendChild(li);
+    });
+    list.appendChild(frag);
+  }
+  GC.patchHeaderLiveEvents = patchHeaderLiveEvents;
+
+  let _headerLiveEventsBound = false;
+  function bindHeaderLiveEventsOnce() {
+    if (_headerLiveEventsBound) return;
+    _headerLiveEventsBound = true;
+
+    const setOpen = (root, open) => {
+      const btn = root.querySelector("[data-header-live-events-toggle]");
+      const panel = root.querySelector("[data-header-live-events-panel]");
+      if (!btn || !panel) return;
+      panel.hidden = !open;
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+    };
+
+    document.addEventListener("click", (ev) => {
+      const toggle = ev.target.closest("[data-header-live-events-toggle]");
+      const root = document.querySelector("[data-header-live-events]");
+      if (!root) return;
+      if (toggle && root.contains(toggle)) {
+        ev.preventDefault();
+        const panel = root.querySelector("[data-header-live-events-panel]");
+        setOpen(root, !!(panel && panel.hidden));
+        return;
+      }
+      if (!root.contains(ev.target)) {
+        setOpen(root, false);
+      }
+    });
+
+    document.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Escape") return;
+      const root = document.querySelector("[data-header-live-events]");
+      if (root) setOpen(root, false);
+    });
   }
 
   function bindLoginRewardsOnce() {
@@ -44521,6 +44718,9 @@
     initCodex();
     initCommunityHub();
     initSupportModule();
+    if (typeof bindHeaderLiveEventsOnce === "function") {
+      bindHeaderLiveEventsOnce();
+    }
 
     if (!document.documentElement.dataset.gcSpecialOpenBound) {
       document.documentElement.dataset.gcSpecialOpenBound = "1";

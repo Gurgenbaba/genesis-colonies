@@ -8442,5 +8442,8 @@
   "overview_live_events_world_boss": "World Boss активен — атакуй и забери награду",
   "overview_live_events_ends": "Ещё",
   "overview_live_events_goto_boss": "К World Boss",
-  "overview_live_events_goto_calendar": "Календарь"
+  "overview_live_events_goto_calendar": "Календарь",
+  "nav_live_events": "Текущие события",
+  "nav_live_events_empty": "Нет активных событий.",
+  "nav_badge_live_events_aria": "Активные события"
 }

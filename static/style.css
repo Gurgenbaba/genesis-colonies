@@ -45708,88 +45708,7 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
   50% { opacity: 0.55; box-shadow: 0 0 18px rgba(61, 255, 194, 1); }
 }
 
-/* Overview ? live events teaser (server events + world boss) */
-.overview-live-events {
-  position: relative;
-  overflow: hidden;
-  margin: 0 0 0.85rem;
-  border-color: rgba(61, 255, 194, 0.42);
-  background:
-    linear-gradient(90deg, rgba(61, 255, 194, 0.12), transparent 42%),
-    linear-gradient(180deg, rgba(10, 24, 22, 0.94), rgba(6, 12, 14, 0.9));
-  box-shadow: inset 0 0 0 1px rgba(61, 255, 194, 0.1), 0 0 20px rgba(61, 255, 194, 0.08);
-}
-.overview-live-events-head {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  margin-bottom: 0.5rem;
-}
-.overview-live-events-pulse {
-  width: 0.55rem;
-  height: 0.55rem;
-  border: 1px solid #3dffc2;
-  background: #3dffc2;
-  border-radius: 0;
-  box-shadow: 0 0 10px rgba(61, 255, 194, 0.8);
-  animation: lr-event-badge 1.6s ease-in-out infinite;
-}
-.overview-live-events-label {
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: #3dffc2;
-  text-shadow: 0 0 12px rgba(61, 255, 194, 0.35);
-}
-.overview-live-events-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-}
-.overview-live-events-item {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.55rem 0.85rem;
-  padding: 0.45rem 0.55rem;
-  border: 1px solid rgba(70, 229, 255, 0.18);
-  border-radius: var(--gc-radius-sm, 2px);
-  background: rgba(4, 10, 16, 0.55);
-}
-.overview-live-events-item--world_boss {
-  border-color: rgba(255, 140, 80, 0.35);
-  background: rgba(28, 12, 8, 0.45);
-}
-.overview-live-events-main {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  min-width: 0;
-  flex: 1 1 12rem;
-}
-.overview-live-events-title {
-  font-size: 0.95rem;
-  letter-spacing: 0.02em;
-  color: rgba(230, 245, 255, 0.95);
-}
-.overview-live-events-effects {
-  font-size: 0.78rem;
-  color: rgba(180, 255, 220, 0.85);
-}
-.overview-live-events-item--world_boss .overview-live-events-effects {
-  color: rgba(255, 190, 150, 0.88);
-}
-.overview-live-events-eta {
-  font-size: 0.72rem;
-}
-@media (prefers-reduced-motion: reduce) {
-  .overview-live-events-pulse { animation: none; }
-}
+/* Overview live-events panel removed ? events live in header icon rail. */
 .battle-pass-command-panel { margin-bottom: 0.75rem; }
 .battle-pass-command {
   display: grid;
@@ -49882,6 +49801,118 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
   border-color: rgba(255, 140, 60, 0.7);
   background: rgba(120, 40, 10, 0.95);
   color: #fff;
+}
+
+/* Header Live Events popover (next to Daily / Season Pass) */
+.gc-header-live-events {
+  position: relative;
+  flex: 0 0 auto;
+}
+.gc-header-live-events-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: var(--gc-z-dropdown, 1200);
+  width: min(22rem, calc(100vw - 1.5rem));
+  padding: 0.65rem 0.7rem;
+  border: 1px solid rgba(61, 255, 194, 0.4);
+  border-radius: var(--gc-radius-sm, 2px);
+  background:
+    linear-gradient(180deg, rgba(10, 24, 22, 0.98), rgba(6, 12, 16, 0.97));
+  box-shadow:
+    inset 0 0 0 1px rgba(61, 255, 194, 0.08),
+    0 12px 28px rgba(0, 0, 0, 0.55);
+}
+.gc-header-live-events-panel[hidden] {
+  display: none !important;
+}
+.gc-header-live-events-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+.gc-header-live-events-pulse {
+  width: 0.45rem;
+  height: 0.45rem;
+  border: 1px solid #3dffc2;
+  background: #3dffc2;
+  box-shadow: 0 0 8px rgba(61, 255, 194, 0.75);
+  animation: lr-event-badge 1.6s ease-in-out infinite;
+}
+.gc-header-live-events-panel-title {
+  flex: 1 1 auto;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #3dffc2;
+}
+.gc-header-live-events-count {
+  min-width: 1.25rem;
+  padding: 0.1rem 0.35rem;
+  border: 1px solid rgba(61, 255, 194, 0.4);
+  border-radius: var(--gc-radius-sm, 2px);
+  font-size: 0.65rem;
+  text-align: center;
+  color: #8dffc2;
+  background: rgba(6, 28, 18, 0.85);
+}
+.gc-header-live-events-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 16rem;
+  overflow-y: auto;
+}
+.gc-header-live-events-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.4rem 0.65rem;
+  padding: 0.4rem 0.45rem;
+  border: 1px solid rgba(70, 229, 255, 0.18);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(4, 10, 16, 0.55);
+}
+.gc-header-live-events-item--world_boss {
+  border-color: rgba(255, 140, 80, 0.35);
+  background: rgba(28, 12, 8, 0.45);
+}
+.gc-header-live-events-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  min-width: 0;
+  flex: 1 1 10rem;
+}
+.gc-header-live-events-title {
+  font-size: 0.82rem;
+  color: rgba(230, 245, 255, 0.95);
+}
+.gc-header-live-events-effects {
+  font-size: 0.7rem;
+  color: rgba(180, 255, 220, 0.85);
+}
+.gc-header-live-events-item--world_boss .gc-header-live-events-effects {
+  color: rgba(255, 190, 150, 0.88);
+}
+.gc-header-live-events-eta {
+  font-size: 0.65rem;
+}
+.gc-header-live-events-empty {
+  margin: 0.15rem 0 0;
+  font-size: 0.75rem;
+}
+.gc-header-live-events-empty[hidden] {
+  display: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gc-header-live-events-pulse { animation: none; }
 }
 
 .ini-page .ini-eyebrow {

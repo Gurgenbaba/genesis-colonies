@@ -463,42 +463,51 @@ def _load_overview_queue_fleet(
 
 
 def build_overview_live_events(*, conn=None, now: Optional[float] = None) -> List[Dict[str, Any]]:
-    """Active LiveOps teasers for Overview (server events + world boss windows)."""
+    """Active LiveOps teasers for header rail (server events + world boss windows)."""
     ts = float(now if now is not None else time.time())
     items: List[Dict[str, Any]] = []
-    try:
-        from .server_events import active_events_banner, schema_ready as events_ready
+    owns = conn is None
+    if owns:
+        from .db import db as _db
 
-        if conn is not None and events_ready(conn):
-            items.extend(active_events_banner(now=ts, conn=conn))
-    except Exception:
-        pass
+        conn = _db()
     try:
-        from .world_boss import list_active_events as list_wb_events
-        from .world_boss import world_boss_schema_ready
+        try:
+            from .server_events import active_events_banner, schema_ready as events_ready
 
-        if conn is not None and world_boss_schema_ready(conn):
-            for wb in list_wb_events(conn=conn, now=ts, limit=5):
-                ends = int(wb.get("ends_at") or 0)
-                name_key = str(wb.get("name_key") or "")
-                boss_key = str(wb.get("boss_key") or "")
-                items.append(
-                    {
-                        "kind": "world_boss",
-                        "id": int(wb.get("id") or 0),
-                        "slug": boss_key,
-                        "title": "",
-                        "title_key": name_key,
-                        "effects_summary": [],
-                        "ends_at": ends,
-                        "remaining_sec": max(0, ends - int(ts)) if ends else 0,
-                        "href": "world_boss_view",
-                        "boss_key": boss_key,
-                    }
-                )
-    except Exception:
-        pass
-    return items
+            if events_ready(conn):
+                items.extend(active_events_banner(now=ts, conn=conn))
+        except Exception:
+            pass
+        try:
+            from .world_boss import list_active_events as list_wb_events
+            from .world_boss import world_boss_schema_ready
+
+            if world_boss_schema_ready(conn):
+                for wb in list_wb_events(conn=conn, now=ts, limit=5):
+                    ends = int(wb.get("ends_at") or 0)
+                    name_key = str(wb.get("name_key") or "")
+                    boss_key = str(wb.get("boss_key") or "")
+                    items.append(
+                        {
+                            "kind": "world_boss",
+                            "id": int(wb.get("id") or 0),
+                            "slug": boss_key,
+                            "title": "",
+                            "title_key": name_key,
+                            "effects_summary": [],
+                            "ends_at": ends,
+                            "remaining_sec": max(0, ends - int(ts)) if ends else 0,
+                            "href": "world_boss_view",
+                            "boss_key": boss_key,
+                        }
+                    )
+        except Exception:
+            pass
+        return items
+    finally:
+        if owns and conn is not None:
+            conn.close()
 
 
 def build_overview_status(
@@ -606,12 +615,8 @@ def build_overview_status(
     except Exception:
         status["companions"] = {"ready": False, "slots": [], "owned_count": 0}
 
-    # LiveOps: active server events + world boss windows on the command stand.
-    try:
-        status["live_events"] = build_overview_live_events(conn=conn)
-    except Exception:
-        status["live_events"] = []
-
+    # LiveOps: active server events + world boss windows (header rail / game-state).
+    # Overview no longer renders this panel — kept helper for game-state + nav.
     return status
 
 

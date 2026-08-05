@@ -30,7 +30,7 @@ LiveOps tab **events** on `/admin`:
 
 `/api/game-state` includes `server_events: { events, production_mult, expedition_hold_mult }`.
 
-**Overview (`/overview`)** shows a **Laufende Events** panel when any server event is active (and active World Boss windows). Built via `server_events.active_events_banner` + `overview_page.build_overview_live_events`.
+**Overview (`/overview`)** no longer hosts a dedicated events panel. Active events appear in the **header LiveOps icon rail** (next to Login Rewards / Season Pass) with a count badge and expandable popover (`live_events` in `/api/game-state` + `nav_badges.live_events`). Diet / `page_init` polls apply via `applyHudOnlyGameState` → `syncLiveOpsFromGameState` (never clear the panel when `live_events` is omitted). SSR `HEADER_HUD_BOOT.live_events` hydrates the rail before the first poll.
 
 Resource bar: active `production_mult` is merged into `active_boosters.active_effects` (same chips as inventory +25/+50/+75%). Example: `+50 % · Event +100 % · 1h 59m`. Technical Data shows `technical_bonus_event` when production mult ≠ 1.
 

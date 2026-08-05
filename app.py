@@ -839,6 +839,12 @@ def inject_globals():
                 except Exception:
                     pass
                 try:
+                    from game.overview_page import build_overview_live_events
+
+                    header_hud_boot["live_events"] = build_overview_live_events(conn=_boost_conn)
+                except Exception:
+                    header_hud_boot["live_events"] = []
+                try:
                     # GC-PERF-OVERVIEW-TTFB-001: fleet HUD stashed on live_context conn.
                     from flask import g as _flask_g
 
@@ -9996,6 +10002,13 @@ def _payload_from_live_context(
             "production_mult": 1.0,
             "expedition_hold_mult": 1.0,
         }
+
+    try:
+        from game.overview_page import build_overview_live_events
+
+        payload["live_events"] = build_overview_live_events(conn=conn)
+    except Exception:
+        payload["live_events"] = []
 
     try:
         from game.live_state import fleet_hud_for_game_state

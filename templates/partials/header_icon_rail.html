@@ -2,6 +2,38 @@
 <div class="gc-header-icon-rail" aria-label="{{ T('header_icon_rail_aria', 'LiveOps') }}">
   {% include "partials/initiation_hud.html" %}
 
+  <div class="gc-header-live-events" data-header-live-events>
+    <button type="button"
+            class="gc-header-icon-btn"
+            data-header-live-events-toggle
+            aria-expanded="false"
+            aria-controls="gc-header-live-events-panel"
+            title="{{ T('nav_live_events', 'Laufende Events') }}"
+            aria-label="{{ T('nav_live_events', 'Laufende Events') }}">
+      <span class="gc-header-icon-btn__glyph" aria-hidden="true">⚡</span>
+      <span class="gc-nav-badge gc-nav-badge--alert gc-header-icon-btn__badge hidden"
+            data-nav-badge="live_events"
+            hidden
+            aria-hidden="true"></span>
+    </button>
+    <div id="gc-header-live-events-panel"
+         class="gc-header-live-events-panel"
+         data-header-live-events-panel
+         role="dialog"
+         aria-label="{{ T('nav_live_events', 'Laufende Events') }}"
+         hidden>
+      <div class="gc-header-live-events-panel-head">
+        <span class="gc-header-live-events-pulse" aria-hidden="true"></span>
+        <span class="gc-header-live-events-panel-title">{{ T("nav_live_events", "Laufende Events") }}</span>
+        <span class="gc-header-live-events-count gc-mono" data-header-live-events-count>0</span>
+      </div>
+      <ul class="gc-header-live-events-list" data-header-live-events-list></ul>
+      <p class="hint gc-header-live-events-empty" data-header-live-events-empty>
+        {{ T("nav_live_events_empty", "Keine Events aktiv.") }}
+      </p>
+    </div>
+  </div>
+
   <a class="gc-header-icon-btn"
      href="{{ url_for('login_rewards_view') }}"
      data-gc-nav

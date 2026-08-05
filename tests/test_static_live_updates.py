@@ -2966,6 +2966,7 @@ def test_main_js_queue_page_sync_bridge():
         "function applyGameStateData"
     )[0]
     assert "syncMountedQueuePagesFromState(data, reason)" in hud
+    assert "syncLiveOpsFromGameState(data, reason)" in hud
     pe = src.split("function _shouldRefreshPlanetEvolutionAfterAction(reasonStr)")[1].split(
         "async function _softReloadPlanetEvolutionContent"
     )[0]
@@ -3461,3 +3462,5 @@ def test_gc_perf_overview_ttfb_shell_stash_contract():
     assert "gc_world_boss_count" in inject_wb
     hud = app.split("header_hud_boot: dict[str, Any]")[1].split("identity_theme =")[0]
     assert "gc_fleet_hud" in hud
+    assert "build_overview_live_events" in hud
+    assert 'header_hud_boot["live_events"]' in hud

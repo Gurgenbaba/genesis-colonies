@@ -8442,5 +8442,8 @@
   "overview_live_events_world_boss": "World Boss active — attack & claim rewards",
   "overview_live_events_ends": "Left",
   "overview_live_events_goto_boss": "Open World Boss",
-  "overview_live_events_goto_calendar": "Calendar"
+  "overview_live_events_goto_calendar": "Calendar",
+  "nav_live_events": "Live Events",
+  "nav_live_events_empty": "No events active.",
+  "nav_badge_live_events_aria": "Live events active"
 }

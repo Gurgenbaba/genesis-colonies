@@ -8442,5 +8442,8 @@
   "overview_live_events_world_boss": "World Boss ativo — ataque e resgate",
   "overview_live_events_ends": "Restam",
   "overview_live_events_goto_boss": "Abrir World Boss",
-  "overview_live_events_goto_calendar": "Calendario"
+  "overview_live_events_goto_calendar": "Calendario",
+  "nav_live_events": "Eventos ativos",
+  "nav_live_events_empty": "Nenhum evento ativo.",
+  "nav_badge_live_events_aria": "Eventos ativos"
 }

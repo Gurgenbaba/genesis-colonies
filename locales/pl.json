@@ -8442,5 +8442,8 @@
   "overview_live_events_world_boss": "World Boss aktywny — atakuj i odbierz",
   "overview_live_events_ends": "Pozostalo",
   "overview_live_events_goto_boss": "Do World Bossa",
-  "overview_live_events_goto_calendar": "Kalendarz"
+  "overview_live_events_goto_calendar": "Kalendarz",
+  "nav_live_events": "Trwajace wydarzenia",
+  "nav_live_events_empty": "Brak aktywnych wydarzen.",
+  "nav_badge_live_events_aria": "Aktywne wydarzenia"
 }

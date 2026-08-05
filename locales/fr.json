@@ -8442,5 +8442,8 @@
   "overview_live_events_world_boss": "World Boss actif — attaquer et reclamer",
   "overview_live_events_ends": "Reste",
   "overview_live_events_goto_boss": "Ouvrir World Boss",
-  "overview_live_events_goto_calendar": "Calendrier"
+  "overview_live_events_goto_calendar": "Calendrier",
+  "nav_live_events": "Evenements en cours",
+  "nav_live_events_empty": "Aucun evenement actif.",
+  "nav_badge_live_events_aria": "Evenements en cours"
 }

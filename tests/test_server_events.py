@@ -336,9 +336,47 @@ def test_active_events_banner_and_overview_live_events(events_db):
 def test_overview_live_events_template_contract():
     from pathlib import Path
 
-    tpl = (Path(__file__).resolve().parents[1] / "templates" / "overview.html").read_text(
+    root = Path(__file__).resolve().parents[1]
+    overview = (root / "templates" / "overview.html").read_text(encoding="utf-8")
+    rail = (root / "templates" / "partials" / "header_icon_rail.html").read_text(
         encoding="utf-8"
     )
-    assert "data-overview-live-events" in tpl
-    assert "overview_live_events_label" in tpl
-    assert "live_events" in tpl
+    main = (root / "static" / "main.js").read_text(encoding="utf-8")
+    assert "data-overview-live-events" not in overview
+    assert "data-header-live-events" in rail
+    assert 'data-nav-badge="live_events"' in rail
+    assert "bindHeaderLiveEventsOnce" in main
+    assert "patchHeaderLiveEvents" in main
+    assert "resolveLiveEventsFromGameState" in main
+    hud = main.split("function applyHudOnlyGameState(data, reason, opts)")[1].split(
+        "function applyGameStateData"
+    )[0]
+    assert "syncLiveOpsFromGameState(data, reason)" in hud
+    sync = main.split("function syncLiveOpsFromGameState(data, reason)")[1].split(
+        "function _formatLiveEventEta"
+    )[0]
+    assert "resolveLiveEventsFromGameState(data)" in sync
+    assert "events !== null" in sync
+    boot = main.split("function bootstrapHudFromDom()")[1].split(
+        "GC.bootstrapHudFromDom = bootstrapHudFromDom"
+    )[0]
+    assert "syncLiveOpsFromGameState(boot, \"ssr_hud_boot\")" in boot or (
+        "syncLiveOpsFromGameState(boot, 'ssr_hud_boot')" in boot
+    )
+
+
+def test_build_overview_live_events_opens_own_conn(events_db):
+    """Owner must work without an injected conn (SSR / boot paths)."""
+    from game.overview_page import build_overview_live_events
+
+    now = float(int(time.time()))
+    create_event(
+        slug="own-conn-boost",
+        title="Own Conn Boost",
+        starts_at=int(now) - 60,
+        ends_at=int(now) + 3600,
+        effects=[{"kind": KIND_PRODUCTION_MULT, "mult": 2.0}],
+    )
+    clear_factor_cache()
+    live = build_overview_live_events(now=now)
+    assert any(e.get("slug") == "own-conn-boost" for e in live)

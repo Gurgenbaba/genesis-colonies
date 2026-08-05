@@ -70,49 +70,6 @@
   </div>
   {% endif %}
 
-  {% set live_events = os.live_events if os.live_events is defined and os.live_events else [] %}
-  {% if live_events %}
-  <section class="gc-panel overview-live-events" data-overview-live-events aria-label="{{ T('overview_live_events_label', 'Laufende Events') }}">
-    <div class="overview-live-events-head">
-      <span class="overview-live-events-pulse" aria-hidden="true"></span>
-      <span class="overview-live-events-label">{{ T("overview_live_events_label", "Laufende Events") }}</span>
-    </div>
-    <ul class="overview-live-events-list">
-      {% for ev in live_events %}
-      <li class="overview-live-events-item overview-live-events-item--{{ ev.kind or 'server_event' }}"
-          data-live-event-kind="{{ ev.kind or 'server_event' }}"
-          {% if ev.ends_at %}data-ends-at="{{ ev.ends_at }}"{% endif %}>
-        <div class="overview-live-events-main">
-          <strong class="overview-live-events-title">
-            {% if ev.title_key %}{{ T(ev.title_key, ev.title or ev.slug or ev.boss_key) }}
-            {% else %}{{ ev.title or ev.slug }}{% endif %}
-          </strong>
-          {% if ev.effects_summary %}
-          <span class="overview-live-events-effects gc-mono">{{ ev.effects_summary | join(" · ") }}</span>
-          {% elif ev.kind == 'world_boss' %}
-          <span class="overview-live-events-effects">{{ T("overview_live_events_world_boss", "World Boss aktiv — angreifen &amp; belohnen") }}</span>
-          {% endif %}
-          {% if ev.remaining_sec and ev.remaining_sec > 0 %}
-          <span class="overview-live-events-eta hint gc-mono" data-live-event-remaining="{{ ev.remaining_sec }}">
-            {{ T("overview_live_events_ends", "Noch") }} {{ (ev.remaining_sec // 3600) }}h {{ ((ev.remaining_sec % 3600) // 60) }}m
-          </span>
-          {% endif %}
-        </div>
-        {% if ev.href == 'world_boss_view' %}
-        <a href="{{ url_for('world_boss_view') }}" class="gc-btn gc-btn-sm gc-btn-ghost" data-pjax-link>
-          {{ T("overview_live_events_goto_boss", "Zum World Boss") }}
-        </a>
-        {% elif ev.href == 'login_rewards_view' %}
-        <a href="{{ url_for('login_rewards_view') }}" class="gc-btn gc-btn-sm gc-btn-ghost" data-pjax-link>
-          {{ T("overview_live_events_goto_calendar", "Kalender") }}
-        </a>
-        {% endif %}
-      </li>
-      {% endfor %}
-    </ul>
-  </section>
-  {% endif %}
-
   <section class="gc-panel overview-hero overview-hero--themed gc-planet-hero gc-planet-theme--{{ hero_theme_key }} gc-planet-theme-group--{{ hero_theme_group }} overview-hero--effect-{{ hero_effect }}"
            id="overview-planet-hero"
            aria-label="{{ T('overview_label_planet', 'Kolonie') }}"

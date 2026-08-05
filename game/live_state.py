@@ -457,6 +457,15 @@ def nav_badges_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
     login_available = False
     bp_claimable = 0
     story_attention = 0
+    server_event_count = 0
+    try:
+        from game.server_events import list_active_events as list_server_events
+        from game.server_events import schema_ready as server_events_ready
+
+        if server_events_ready(conn):
+            server_event_count = len(list_server_events(now=None, conn=conn))
+    except Exception:
+        server_event_count = 0
     try:
         from game.login_rewards import serialize_for_client as lr_serialize
 
@@ -545,6 +554,13 @@ def nav_badges_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
             active=wb_active,
             count=wb_count,
             label=str(wb_count) if wb_count > 1 else ("LIVE" if wb_active else ""),
+        ),
+        "live_events": _nav_badge_entry(
+            active=(server_event_count + wb_count) > 0,
+            count=server_event_count + wb_count,
+            label=str(server_event_count + wb_count)
+            if (server_event_count + wb_count) > 0
+            else "",
         ),
         "login_rewards": _nav_badge_entry(
             active=login_available,

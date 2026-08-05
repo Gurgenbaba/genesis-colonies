@@ -8442,5 +8442,8 @@
   "overview_live_events_world_boss": "World Boss aktif — saldir ve odul al",
   "overview_live_events_ends": "Kalan",
   "overview_live_events_goto_boss": "World Boss ac",
-  "overview_live_events_goto_calendar": "Takvim"
+  "overview_live_events_goto_calendar": "Takvim",
+  "nav_live_events": "Aktif Etkinlikler",
+  "nav_live_events_empty": "Aktif etkinlik yok.",
+  "nav_badge_live_events_aria": "Aktif etkinlikler"
 }
