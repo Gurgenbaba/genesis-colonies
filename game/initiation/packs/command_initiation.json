@@ -1,6 +1,6 @@
 {
   "id": "command_initiation",
-  "version": 3,
+  "version": 4,
   "phases": [
     {
       "id": "colony_core",
@@ -13,7 +13,7 @@
           "hint_key": "initiation_step_solar_first_hint",
           "objective_key": "upgrade_buildings",
           "objective_kind": "count",
-          "target": 1,
+          "target": 3,
           "filters": { "building_types": ["solar_plant"] }
         },
         {
@@ -43,7 +43,7 @@
           "hint_key": "initiation_step_solar_balance_hint",
           "objective_key": "upgrade_buildings",
           "objective_kind": "count",
-          "target": 1,
+          "target": 4,
           "filters": { "building_types": ["solar_plant"] }
         },
         {
@@ -53,7 +53,7 @@
           "hint_key": "initiation_step_metal_lab_gate_hint",
           "objective_key": "upgrade_buildings",
           "objective_kind": "count",
-          "target": 1,
+          "target": 3,
           "filters": { "building_types": ["metal_mine"] }
         },
         {
@@ -93,7 +93,7 @@
           "hint_key": "initiation_step_metal_grow_hint",
           "objective_key": "upgrade_buildings",
           "objective_kind": "count",
-          "target": 2,
+          "target": 5,
           "filters": { "building_types": ["metal_mine"] }
         },
         {
@@ -103,7 +103,7 @@
           "hint_key": "initiation_step_crystal_grow_hint",
           "objective_key": "upgrade_buildings",
           "objective_kind": "count",
-          "target": 1,
+          "target": 3,
           "filters": { "building_types": ["crystal_mine"] }
         },
         {
@@ -113,7 +113,7 @@
           "hint_key": "initiation_step_solar_keep_ahead_hint",
           "objective_key": "upgrade_buildings",
           "objective_kind": "count",
-          "target": 1,
+          "target": 5,
           "filters": { "building_types": ["solar_plant"] }
         },
         {

@@ -116,7 +116,7 @@ def apply_gameplay_events(
         return {"updated": 0, "completed": 0}
 
     ts = float(now if now is not None else time.time())
-    ensure_player_initiation(pid, conn=conn, now=ts)
+    ensure_player_initiation(pid, conn=conn, now=ts, credit=True)
 
     row = conn.execute(
         """
@@ -134,6 +134,8 @@ def apply_gameplay_events(
         return {"updated": 0, "completed": 0}
 
     from ..directives.progress import gameplay_event_delta
+    from .credit import world_progress_for_step
+    from .engine import credit_existing_progress
 
     objective_key = str(step.get("objective_key") or "")
     filters = step.get("filters") if isinstance(step.get("filters"), dict) else {}
@@ -166,7 +168,12 @@ def apply_gameplay_events(
             now=now_i,
         ):
             continue
-        progress = min(target, progress + delta)
+        # Prefer absolute world level (have Solar ≥ N) over raw event counts.
+        world = world_progress_for_step(pid, step, conn=conn)
+        if world is not None:
+            progress = max(progress, min(target, int(world)))
+        else:
+            progress = min(target, progress + delta)
         conn.execute(
             """
             UPDATE player_initiation
@@ -180,6 +187,9 @@ def apply_gameplay_events(
             adv = advance_if_complete(pid, conn=conn, now=ts)
             if adv.get("advanced"):
                 completed += 1
+            # Veterans may already satisfy the next threshold(s).
+            cred = credit_existing_progress(pid, conn=conn, now=ts)
+            completed += 1 if cred.get("completed") else 0
             row2 = conn.execute(
                 """
                 SELECT status, step_index, progress_value, target_value
