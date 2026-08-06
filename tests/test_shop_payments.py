@@ -607,6 +607,112 @@ def test_shop_checkout_client_surfaces_paypal_and_promo_errors():
     assert 'reason.startsWith("promo_")' in buy
 
 
+def test_multi_sku_cart_order_and_fulfill(shop_db):
+    """One order can hold multiple SKUs; one promo discounts the sum once."""
+    from game.db import begin_write_transaction, commit
+    from game.shop import create_pending_order, fulfill_order, get_order, mark_paid
+    from game.shop_promos import create_campaign_code
+    from game.timekeeper import get_balance
+
+    uid = _player()
+    conn = db()
+    begin_write_transaction(conn)
+    ok, reason, promo = create_campaign_code(
+        conn=conn, code="CART10", discount_bps=1000, max_redemptions=None
+    )
+    assert ok, reason
+    ok, reason, created = create_pending_order(
+        uid,
+        "",
+        "test",
+        conn=conn,
+        promo_code="CART10",
+        lines=[
+            {"sku": "tk_pack_s", "qty": 2},
+            {"sku": "tk_pack_m", "qty": 1},
+        ],
+    )
+    assert ok, reason
+    order = created["order"]
+    assert order["sku"] == "tk_pack_s"
+    items = order.get("items") or []
+    assert len(items) == 2
+    list_cents = 99 * 2 + 299
+    assert int(order["list_amount_cents"]) == list_cents
+    assert int(order["discount_cents"]) == list_cents // 10
+    assert int(order["amount_cents"]) == list_cents - list_cents // 10
+    mark_paid(int(order["id"]), conn=conn, provider_payment_id="pay_cart_1")
+    ok_f, reason_f, fulfilled = fulfill_order(int(order["id"]), conn=conn)
+    assert ok_f, reason_f
+    bal = get_balance(uid, conn=conn)
+    # 2×6h + 1×24h
+    assert int(bal) >= (2 * 6 + 24) * 3600
+    again = get_order(int(order["id"]), conn=conn)
+    assert again["status"] == "fulfilled"
+    commit(conn)
+    conn.close()
+
+
+def test_http_cart_add_and_checkout(shop_db, monkeypatch):
+    monkeypatch.setenv("SHOP_ENABLED", "1")
+    monkeypatch.setenv("SHOP_TEST_PROVIDER", "1")
+    from app import app
+
+    app.config["TESTING"] = True
+    client = app.test_client()
+    uid = _player()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+
+    add = client.post(
+        "/api/shop/cart/add",
+        json={"sku": "tk_pack_s", "qty": 1},
+        headers={"Content-Type": "application/json"},
+    )
+    assert add.status_code == 200, add.get_data(as_text=True)
+    assert add.get_json()["cart"]["item_count"] >= 1
+
+    add2 = client.post(
+        "/api/shop/cart/add",
+        json={"sku": "tk_pack_m", "qty": 1},
+        headers={"Content-Type": "application/json"},
+    )
+    assert add2.status_code == 200
+    assert len(add2.get_json()["cart"]["items"]) == 2
+
+    checkout = client.post(
+        "/api/shop/checkout",
+        json={"from_cart": True, "provider": "test", "legal_ack": True},
+        headers={"Content-Type": "application/json"},
+    )
+    assert checkout.status_code == 200, checkout.get_data(as_text=True)
+    data = checkout.get_json()
+    assert data["ok"] is True
+    assert data["fulfilled"] is True
+
+    cart = client.get("/api/shop/cart")
+    assert cart.status_code == 200
+    assert cart.get_json()["cart"]["item_count"] == 0
+
+
+def test_shop_cart_ui_contract():
+    tpl = (
+        Path(__file__).resolve().parent.parent / "templates" / "shop.html"
+    ).read_text(encoding="utf-8")
+    assert "data-shop-cart-add" in tpl
+    assert "data-shop-cart-panel" in tpl
+    assert "data-shop-cart-checkout" in tpl
+    assert "data-shop-cart-discount-row" in tpl
+    js = (
+        Path(__file__).resolve().parent.parent / "static" / "main.js"
+    ).read_text(encoding="utf-8")
+    assert "_shopRefreshCart" in js
+    assert 'from_cart: true' in js
+    assert "/api/shop/cart/add" in js
+    assert "discount_cents" in js
+    assert "shop_cart_discount" in js
+
+
 def test_stripe_webhook_rejects_bad_signature(shop_db, monkeypatch):
     monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test_secret")
     from app import app

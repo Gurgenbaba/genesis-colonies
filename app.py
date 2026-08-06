@@ -5726,6 +5726,124 @@ def api_shop_catalog():
     return jsonify({"ok": True, "reason": "ok", "shop": shop})
 
 
+@app.route("/api/shop/cart", methods=["GET"])
+@require_login_api
+def api_shop_cart_get():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in", "error": "not_logged_in"}), 401
+    from game.shop import get_session_cart, serialize_cart_for_client
+
+    promo_code = str(request.args.get("promo_code") or "").strip()
+    if not promo_code:
+        sticky = session.get("shop_promo_code") or {}
+        if isinstance(sticky, dict):
+            code_s = str(sticky.get("code") or "").strip()
+            exp = float(sticky.get("expires_at") or 0)
+            if code_s and exp >= time.time():
+                promo_code = code_s
+    conn = db()
+    try:
+        cart = get_session_cart(session)
+        payload = serialize_cart_for_client(
+            user_id, cart, conn=conn, promo_code=promo_code or None
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({"ok": True, "reason": "ok", "cart": payload})
+
+
+@app.route("/api/shop/cart/add", methods=["POST"])
+@require_login_api
+def api_shop_cart_add():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in", "error": "not_logged_in"}), 401
+    data = request.get_json(silent=True) or {}
+    sku = str(data.get("sku") or "").strip()
+    try:
+        qty = int(data.get("qty") or 1)
+    except (TypeError, ValueError):
+        qty = 1
+    if not sku:
+        return jsonify({"ok": False, "reason": "unknown_sku"}), 400
+    from game.shop import (
+        MAX_CART_DISTINCT_SKUS,
+        add_to_session_cart,
+        get_product,
+        get_session_cart,
+        normalize_cart_lines,
+        serialize_cart_for_client,
+    )
+
+    conn = db()
+    try:
+        product = get_product(sku, conn=conn)
+        if not product:
+            return jsonify({"ok": False, "reason": "unknown_sku"}), 400
+        before = get_session_cart(session)
+        if (
+            not any(r["sku"] == sku for r in before)
+            and len(before) >= MAX_CART_DISTINCT_SKUS
+        ):
+            return jsonify({"ok": False, "reason": "cart_too_large"}), 400
+        add_to_session_cart(session, sku, qty)
+        # Validate ownership / caps after merge
+        ok_n, reason_n, _ = normalize_cart_lines(
+            get_session_cart(session),
+            conn=conn,
+            player_id=user_id,
+            allow_owned=False,
+        )
+        if not ok_n:
+            # Roll back add for this sku
+            from game.shop import set_session_cart
+
+            set_session_cart(session, before)
+            return jsonify({"ok": False, "reason": reason_n}), 400
+        promo_code = str(data.get("promo_code") or "").strip() or None
+        payload = serialize_cart_for_client(
+            user_id, get_session_cart(session), conn=conn, promo_code=promo_code
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({"ok": True, "reason": "ok", "cart": payload})
+
+
+@app.route("/api/shop/cart/update", methods=["POST"])
+@require_login_api
+def api_shop_cart_update():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in", "error": "not_logged_in"}), 401
+    data = request.get_json(silent=True) or {}
+    sku = str(data.get("sku") or "").strip()
+    try:
+        qty = int(data.get("qty") or 0)
+    except (TypeError, ValueError):
+        qty = 0
+    if not sku:
+        return jsonify({"ok": False, "reason": "unknown_sku"}), 400
+    from game.shop import (
+        get_session_cart,
+        serialize_cart_for_client,
+        update_session_cart,
+    )
+
+    update_session_cart(session, sku, qty)
+    conn = db()
+    try:
+        payload = serialize_cart_for_client(
+            user_id, get_session_cart(session), conn=conn
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({"ok": True, "reason": "ok", "cart": payload})
+
+
 @app.route("/api/shop/checkout", methods=["POST"])
 @require_login_api
 def api_shop_checkout():
@@ -5745,6 +5863,8 @@ def api_shop_checkout():
     legal_ack = bool(data.get("legal_ack"))
     legal_text_version = str(data.get("legal_text_version") or "").strip() or None
     promo_code = str(data.get("promo_code") or "").strip()
+    raw_lines = data.get("lines") if isinstance(data.get("lines"), list) else None
+    use_cart = bool(data.get("from_cart")) or (not sku and not raw_lines)
     if not promo_code:
         sticky = session.get("shop_promo_code") or {}
         if isinstance(sticky, dict):
@@ -5754,10 +5874,20 @@ def api_shop_checkout():
                 promo_code = code_s
             elif code_s:
                 session.pop("shop_promo_code", None)
-    from game.shop import start_checkout
+    from game.shop import clear_session_cart, get_session_cart, start_checkout
     from urllib.parse import urlparse
     from game.config import get_public_base_url
     from game.payment_providers import paypal_mode
+
+    checkout_lines = None
+    if raw_lines:
+        checkout_lines = raw_lines
+    elif use_cart:
+        checkout_lines = get_session_cart(session)
+        if not checkout_lines:
+            return jsonify({"ok": False, "reason": "empty_cart"}), 400
+    elif not sku:
+        return jsonify({"ok": False, "reason": "unknown_sku"}), 400
 
     # Block local→live PayPal: PUBLIC_BASE_URL host must match this request host.
     if provider == "paypal" and paypal_mode() == "live":
@@ -5775,15 +5905,13 @@ def api_shop_checkout():
 
     success_url = _shop_absolute_url("success")
     cancel_url = _shop_absolute_url("cancel")
-    # Attach order_id placeholder after create — Stripe uses {CHECKOUT_SESSION_ID};
-    # for PayPal we append order_id after we know it (below).
 
     def _checkout_once(promo: Optional[str]):
         begin_write_transaction(conn)
         try:
             ok_i, reason_i, result_i = start_checkout(
                 user_id,
-                sku,
+                sku if not checkout_lines else "",
                 provider,
                 conn=conn,
                 success_url=success_url,
@@ -5791,6 +5919,7 @@ def api_shop_checkout():
                 legal_ack=legal_ack,
                 legal_text_version=legal_text_version,
                 promo_code=promo or None,
+                lines=checkout_lines,
             )
             if ok_i:
                 if result_i and result_i.get("order_id") and provider != "stripe":
@@ -5809,14 +5938,13 @@ def api_shop_checkout():
     conn = db()
     try:
         ok, reason, result = _checkout_once(promo_code or None)
-        # Stale/invalid promo in the input or sticky session must never block PayPal.
         if (not ok) and str(reason or "").startswith("promo_"):
             promo_dropped = str(reason)
             session.pop("shop_promo_code", None)
             logger.warning(
                 "shop checkout dropping invalid promo user_id=%s sku=%s reason=%s",
                 user_id,
-                sku,
+                sku or "cart",
                 promo_dropped,
             )
             ok, reason, result = _checkout_once(None)
@@ -5824,16 +5952,16 @@ def api_shop_checkout():
         logger.exception(
             "shop checkout failed user_id=%s sku=%s provider=%s",
             user_id,
-            sku,
+            sku or "cart",
             provider,
         )
         return jsonify({"ok": False, "reason": "checkout_failed"}), 500
     finally:
         conn.close()
 
-    # External provider redirect must never wait on heavy game-state (BP tracks etc.).
-    # Regression window: after include_tracks=True in game-state, checkout could time out
-    # after PayPal order create — client never received checkout_url.
+    if ok and (use_cart or raw_lines):
+        clear_session_cart(session)
+
     checkout_url = (result or {}).get("checkout_url") if result else None
     fulfilled = bool((result or {}).get("fulfilled")) if result else False
     if ok and checkout_url and not fulfilled:
@@ -5847,7 +5975,7 @@ def api_shop_checkout():
             logger.exception(
                 "shop checkout state build failed user_id=%s sku=%s (checkout ok=%s)",
                 user_id,
-                sku,
+                sku or "cart",
                 ok,
             )
             state = {}

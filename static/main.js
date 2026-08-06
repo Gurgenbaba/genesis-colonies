@@ -21268,12 +21268,105 @@
 
   let _shopBuyBound = false;
   let _shopActivePromo = "";
+  let _shopCartState = null;
 
   function _shopActivePromoCode() {
     const page = document.getElementById("shop-page");
     const input = page && page.querySelector("[data-shop-promo-input]");
     const fromInput = input ? String(input.value || "").trim().toUpperCase() : "";
     return fromInput || _shopActivePromo || "";
+  }
+
+  function _shopRenderCart(cart) {
+    const page = document.getElementById("shop-page");
+    if (!page) return;
+    _shopCartState = cart && typeof cart === "object" ? cart : null;
+    const list = page.querySelector("[data-shop-cart-list]");
+    const empty = page.querySelector("[data-shop-cart-empty]");
+    const countEl = page.querySelector("[data-shop-cart-count]");
+    const listCents = page.querySelector("[data-shop-cart-list-cents]");
+    const paidCents = page.querySelector("[data-shop-cart-paid-cents]");
+    const discountRow = page.querySelector("[data-shop-cart-discount-row]");
+    const discountCentsEl = page.querySelector("[data-shop-cart-discount-cents]");
+    const discountLabel = page.querySelector("[data-shop-cart-discount-label]");
+    const items = Array.isArray(cart?.items) ? cart.items : [];
+    const count = Number(cart?.item_count || items.reduce((n, it) => n + Number(it.qty || 0), 0) || 0);
+    if (countEl) {
+      countEl.textContent = String(count);
+      countEl.hidden = count <= 0;
+    }
+    if (list) {
+      list.innerHTML = items
+        .map((it) => {
+          const sku = escapeHtml(String(it.sku || ""));
+          const qty = Number(it.qty || 1);
+          const line = _formatShopEuro(it.list_cents || 0);
+          const title = escapeHtml(
+            t(String(it.title_key || `shop_sku_${it.sku || ""}`), String(it.sku || ""))
+          );
+          return (
+            `<li class="shop-cart-item" data-sku="${sku}">` +
+            `<span class="shop-cart-item-title">${title}</span>` +
+            `<span class="shop-cart-item-qty gc-mono">×${qty}</span>` +
+            `<span class="shop-cart-item-price gc-mono">${escapeHtml(line)}</span>` +
+            `<button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-shop-cart-remove data-sku="${sku}">×</button>` +
+            `</li>`
+          );
+        })
+        .join("");
+    }
+    if (empty) empty.hidden = items.length > 0;
+    if (listCents) listCents.textContent = _formatShopEuro(cart?.list_cents || 0);
+    const discount = Math.max(0, Number(cart?.discount_cents || 0));
+    if (discountRow && discountCentsEl) {
+      if (discount > 0) {
+        discountRow.hidden = false;
+        const code =
+          cart?.promo && cart.promo.code
+            ? String(cart.promo.code)
+            : "";
+        if (discountLabel) {
+          discountLabel.textContent = code
+            ? t("shop_cart_discount_code", "Rabatt (%(code)s)").replace("%(code)s", code)
+            : t("shop_cart_discount", "Rabatt");
+        }
+        discountCentsEl.textContent = `−${_formatShopEuro(discount)}`;
+      } else {
+        discountRow.hidden = true;
+        discountCentsEl.textContent = "—";
+      }
+    }
+    if (paidCents) paidCents.textContent = _formatShopEuro(cart?.paid_cents || cart?.list_cents || 0);
+    page.querySelectorAll("[data-shop-cart-checkout]").forEach((btn) => {
+      btn.disabled = items.length <= 0;
+    });
+  }
+
+  async function _shopRefreshCart() {
+    const page = document.getElementById("shop-page");
+    if (!page) return null;
+    try {
+      const q = _shopActivePromoCode();
+      const url = q
+        ? `/api/shop/cart?promo_code=${encodeURIComponent(q)}`
+        : "/api/shop/cart";
+      const res = await GC.fetchGameAction(url);
+      if (res?.ok && res.cart) {
+        _shopRenderCart(res.cart);
+        return res.cart;
+      }
+    } catch (_) { /* ignore */ }
+    _shopRenderCart({ items: [], item_count: 0, list_cents: 0, paid_cents: 0 });
+    return null;
+  }
+
+  function _shopSetCartOpen(open) {
+    const page = document.getElementById("shop-page");
+    if (!page) return;
+    const panel = page.querySelector("[data-shop-cart-panel]");
+    const toggle = page.querySelector("[data-shop-cart-toggle]");
+    if (panel) panel.hidden = !open;
+    if (toggle) toggle.setAttribute("aria-expanded", open ? "true" : "false");
   }
 
   function _formatShopEuro(cents) {
@@ -21335,6 +21428,7 @@
         }
         _applyShopPromoPrices(res.priced || []);
         showNotify(t("shop_promo_applied", "Promo-Code angewendet."), "success");
+        _shopRefreshCart();
       } else {
         _shopActivePromo = "";
         const input = page && page.querySelector("[data-shop-promo-input]");
@@ -21342,12 +21436,14 @@
         if (status) status.textContent = t("shop_promo_invalid", "Code ungültig");
         _applyShopPromoPrices([]);
         showNotify(t("shop_promo_invalid", "Code ungültig"), "error");
+        _shopRefreshCart();
       }
     } catch (_) {
       _shopActivePromo = "";
       const input = page && page.querySelector("[data-shop-promo-input]");
       if (input) input.value = "";
       showNotify(t("shop_promo_invalid", "Code ungültig"), "error");
+      _shopRefreshCart();
     }
   }
 
@@ -21472,6 +21568,132 @@
           showNotify(t("free_shop_fail", "Einlösen fehlgeschlagen."), "error");
         } finally {
           redeemBtn.disabled = false;
+        }
+        return;
+      }
+
+      const cartAdd = ev.target && ev.target.closest ? ev.target.closest("[data-shop-cart-add]") : null;
+      if (cartAdd && document.getElementById("shop-page")) {
+        ev.preventDefault();
+        const sku = String(cartAdd.getAttribute("data-sku") || "").trim();
+        if (!sku) return;
+        cartAdd.disabled = true;
+        try {
+          const res = await GC.fetchGameAction("/api/shop/cart/add", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sku, qty: 1, promo_code: _shopActivePromoCode() }),
+          });
+          if (res?.ok && res.cart) {
+            _shopRenderCart(res.cart);
+            _shopSetCartOpen(true);
+            showNotify(t("shop_cart_added", "Zum Warenkorb hinzugefügt."), "success");
+          } else {
+            const reason = String(res?.reason || "");
+            let msg = t("shop_cart_add_fail", "Konnte nicht in den Warenkorb.");
+            if (reason === "already_owned") msg = t("shop_owned", "Bereits freigeschaltet");
+            else if (reason === "cart_too_large") msg = t("shop_cart_too_large", "Warenkorb ist voll.");
+            showNotify(msg, "error");
+          }
+        } catch (_) {
+          showNotify(t("shop_cart_add_fail", "Konnte nicht in den Warenkorb."), "error");
+        } finally {
+          cartAdd.disabled = false;
+        }
+        return;
+      }
+
+      const cartToggle = ev.target && ev.target.closest ? ev.target.closest("[data-shop-cart-toggle]") : null;
+      if (cartToggle && document.getElementById("shop-page")) {
+        ev.preventDefault();
+        const panel = document.querySelector("[data-shop-cart-panel]");
+        _shopSetCartOpen(!!(panel && panel.hidden));
+        if (panel && !panel.hidden) _shopRefreshCart();
+        return;
+      }
+      const cartClose = ev.target && ev.target.closest ? ev.target.closest("[data-shop-cart-close]") : null;
+      if (cartClose && document.getElementById("shop-page")) {
+        ev.preventDefault();
+        _shopSetCartOpen(false);
+        return;
+      }
+      const cartRemove = ev.target && ev.target.closest ? ev.target.closest("[data-shop-cart-remove]") : null;
+      if (cartRemove && document.getElementById("shop-page")) {
+        ev.preventDefault();
+        const sku = String(cartRemove.getAttribute("data-sku") || "").trim();
+        if (!sku) return;
+        try {
+          const res = await GC.fetchGameAction("/api/shop/cart/update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sku, qty: 0 }),
+          });
+          if (res?.ok && res.cart) _shopRenderCart(res.cart);
+          else _shopRefreshCart();
+        } catch (_) {
+          _shopRefreshCart();
+        }
+        return;
+      }
+      const cartCheckout = ev.target && ev.target.closest ? ev.target.closest("[data-shop-cart-checkout]") : null;
+      if (cartCheckout && document.getElementById("shop-page")) {
+        ev.preventDefault();
+        if (cartCheckout.disabled) return;
+        const provider = String(cartCheckout.getAttribute("data-provider") || "").trim();
+        if (!provider) return;
+        const page = document.getElementById("shop-page");
+        const ackRoot = page && page.querySelector("[data-legal-ack-root]");
+        const ackAgb = ackRoot && ackRoot.querySelector("[data-legal-ack-agb]");
+        const ackDigital = ackRoot && ackRoot.querySelector("[data-legal-ack-digital]");
+        if (!ackAgb || !ackDigital || !ackAgb.checked || !ackDigital.checked) {
+          showNotify(
+            t("legal_ack_required", "Bitte die rechtlichen Hinweise vor dem Kauf bestätigen."),
+            "error"
+          );
+          return;
+        }
+        cartCheckout.disabled = true;
+        try {
+          const res = await GC.fetchGameAction("/api/shop/checkout", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              from_cart: true,
+              provider,
+              legal_ack: true,
+              legal_text_version: "v1",
+              promo_code: _shopActivePromoCode(),
+            }),
+          });
+          if (res?.state && typeof GC.applyActionState === "function") {
+            GC.applyActionState(res, "shop_checkout_cart");
+          }
+          if (res?.ok && res.fulfilled) {
+            showNotify(t("shop_fulfill_ok", "Kauf gutgeschrieben."), "success");
+            _shopRefreshCart();
+            _shopSetCartOpen(false);
+            return;
+          }
+          if (res?.ok && res.checkout_url) {
+            window.location.assign(String(res.checkout_url));
+            return;
+          }
+          const reason = String(res?.reason || "");
+          let msg = t("shop_checkout_fail", "Kauf konnte nicht gestartet werden.");
+          if (reason === "empty_cart") msg = t("shop_cart_empty", "Warenkorb ist leer.");
+          else if (reason === "shop_disabled") msg = t("shop_disabled", "Shop ist derzeit deaktiviert.");
+          else if (reason === "already_owned") msg = t("shop_owned", "Bereits freigeschaltet");
+          else if (reason === "paypal_auth_failed" || reason === "paypal_session_failed") {
+            msg = t(
+              "shop_paypal_unavailable",
+              "PayPal ist gerade nicht erreichbar. Bitte gleich nochmal versuchen."
+            );
+          }
+          showNotify(msg, "error");
+        } catch (_) {
+          showNotify(t("shop_checkout_fail", "Kauf konnte nicht gestartet werden."), "error");
+        } finally {
+          cartCheckout.disabled = false;
         }
         return;
       }
@@ -21629,6 +21851,7 @@
     if (initial) {
       _shopApplyPromo(initial);
     }
+    _shopRefreshCart();
   }
 
   function initCreator() {

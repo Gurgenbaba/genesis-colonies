@@ -139,6 +139,12 @@
         <span class="shop-locked">{{ T("shop_unavailable_short", "Nicht verfügbar") }}</span>
         {% else %}
         <div class="shop-provider-row" data-shop-providers>
+          <button type="button"
+                  class="gc-btn gc-btn-sm gc-btn-ghost shop-cart-add-btn"
+                  data-shop-cart-add
+                  data-sku="{{ p.sku }}">
+            {{ T("shop_cart_add", "In den Warenkorb") }}
+          </button>
           {% for prov in providers %}
           <button type="button"
                   class="gc-btn gc-btn-sm shop-buy-btn {% if loop.first %}gc-btn-primary{% else %}gc-btn-ghost{% endif %}"
@@ -271,7 +277,60 @@
         {{ T("shop_promo_apply", "Anwenden") }}
       </button>
       <span class="shop-promo-status" data-shop-promo-status aria-live="polite"></span>
+      <button type="button"
+              class="gc-btn gc-btn-sm gc-btn-outline shop-cart-toggle"
+              data-shop-cart-toggle
+              aria-expanded="false"
+              aria-controls="shop-cart-panel">
+        {{ T("shop_cart_title", "Warenkorb") }}
+        <span class="shop-cart-badge gc-mono" data-shop-cart-count hidden>0</span>
+      </button>
     </section>
+
+    <aside class="shop-cart-panel gc-panel" id="shop-cart-panel" data-shop-cart-panel hidden>
+      <div class="gc-panel-header shop-cart-panel-head">
+        <span class="gc-panel-title">{{ T("shop_cart_title", "Warenkorb") }}</span>
+        <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-shop-cart-close aria-label="{{ T('shop_cart_close', 'Schließen') }}">×</button>
+      </div>
+      <div class="gc-panel-body">
+        <ul class="shop-cart-list" data-shop-cart-list></ul>
+        <p class="hint shop-cart-empty" data-shop-cart-empty>{{ T("shop_cart_empty", "Warenkorb ist leer.") }}</p>
+        <div class="shop-cart-totals">
+          <div class="shop-cart-total-row">
+            <span>{{ T("shop_cart_list_total", "Summe") }}</span>
+            <span class="gc-mono" data-shop-cart-list-cents>—</span>
+          </div>
+          <div class="shop-cart-total-row shop-cart-total-row--discount" data-shop-cart-discount-row hidden>
+            <span data-shop-cart-discount-label>{{ T("shop_cart_discount", "Rabatt") }}</span>
+            <span class="gc-mono" data-shop-cart-discount-cents>—</span>
+          </div>
+          <div class="shop-cart-total-row shop-cart-total-row--paid">
+            <span>{{ T("shop_cart_paid_total", "Zu zahlen") }}</span>
+            <span class="gc-mono" data-shop-cart-paid-cents>—</span>
+          </div>
+        </div>
+        <div class="shop-cart-checkout-row" data-shop-cart-checkout-row>
+          {% if shop_state.enabled and providers %}
+          {% for prov in providers %}
+          <button type="button"
+                  class="gc-btn gc-btn-sm {% if loop.first %}gc-btn-primary{% else %}gc-btn-ghost{% endif %}"
+                  data-shop-cart-checkout
+                  data-provider="{{ prov }}"
+                  disabled>
+            {% if prov == 'paypal' %}
+              {{ T("shop_cart_checkout_paypal", "Warenkorb mit PayPal bezahlen") }}
+            {% elif prov == 'stripe' %}
+              {{ T("shop_cart_checkout_stripe", "Warenkorb mit Stripe") }}
+            {% else %}
+              {{ T("shop_cart_checkout_test", "Warenkorb testen") }}
+            {% endif %}
+          </button>
+          {% endfor %}
+          {% endif %}
+        </div>
+        <p class="hint shop-cart-ack-hint">{{ T("shop_cart_ack_hint", "Häkchen oben bestätigen, dann Warenkorb bezahlen — ein Promo gilt für die gesamte Bestellung.") }}</p>
+      </div>
+    </aside>
     {% if not shop_state.enabled %}
     <section class="shop-banner shop-banner--inset">
       <p>{{ T("shop_disabled", "Shop ist derzeit deaktiviert.") }}</p>

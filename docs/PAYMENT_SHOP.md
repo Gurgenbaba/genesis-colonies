@@ -194,6 +194,21 @@ Webhook: `…/api/webhooks/stripe` Event `checkout.session.completed`.
 - Avatar-Frames / Fleet-Skins (später).
 - Free Login/Directives nerfen (Paid wird wertiger, Free bleibt stark).
 
+## Shopping Cart (Multi-SKU)
+
+Session cart (`session["shop_cart"]`) — no parallel checkout owner.
+
+| Surface | Contract |
+|---------|----------|
+| `GET /api/shop/cart` | `{ ok, cart: { items, list_cents, paid_cents, promo? } }` |
+| `POST /api/shop/cart/add` | `{ sku, qty? }` → merge into session |
+| `POST /api/shop/cart/update` | `{ sku, qty }` (`qty=0` removes) |
+| `POST /api/shop/checkout` | Instant: `{ sku, provider, … }` · Cart: `{ from_cart: true, provider, … }` |
+
+- One PayPal/Stripe payment per cart order; `shop_orders.items_json` holds lines; `sku` = first line (legacy).
+- One promo applies to **sum(list_cents)** once (`max_redemptions` counts orders, not lines).
+- UI: „In den Warenkorb“ + cart panel; legal ack above catalog still required.
+
 ## Legal surfaces (digital goods)
 
 Owner: `game/legal_panel.py` — Imprint, Privacy, Terms, Withdrawal.

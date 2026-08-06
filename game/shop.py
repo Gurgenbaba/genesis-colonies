@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import os
 import time
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, MutableMapping, Optional, Sequence, Tuple
 
 from .db import table_exists
 
@@ -31,6 +31,10 @@ STATUS_PAID = "paid"
 STATUS_FULFILLED = "fulfilled"
 STATUS_FAILED = "failed"
 STATUS_REFUNDED = "refunded"
+
+CART_SESSION_KEY = "shop_cart"
+MAX_CART_DISTINCT_SKUS = 12
+MAX_LINE_QTY = 10
 
 # Bump when reseeding prices/payloads into existing DBs (upsert).
 CATALOG_VERSION = 7
@@ -414,8 +418,8 @@ def is_shop_enabled() -> bool:
     return val in ("1", "true", "yes", "on")
 
 
-def _json_dumps(payload: Mapping[str, Any]) -> str:
-    return json.dumps(dict(payload), ensure_ascii=False, separators=(",", ":"))
+def _json_dumps(payload: Any) -> str:
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
 
 
 def _json_loads(raw: Any) -> Dict[str, Any]:
@@ -428,6 +432,306 @@ def _json_loads(raw: Any) -> Dict[str, Any]:
     except Exception:
         return {}
     return dict(data) if isinstance(data, dict) else {}
+
+
+def _json_loads_list(raw: Any) -> List[Any]:
+    if isinstance(raw, list):
+        return list(raw)
+    if not raw:
+        return []
+    try:
+        data = json.loads(str(raw))
+    except Exception:
+        return []
+    return list(data) if isinstance(data, list) else []
+
+
+def _product_unique_qty_one(product: Mapping[str, Any]) -> bool:
+    sku = str(product.get("sku") or "")
+    kind = str(product.get("kind") or "")
+    if kind in (KIND_ENTITLEMENT, KIND_COSMETIC_UNLOCK):
+        return True
+    if sku == SKU_TITAN_SLOT_PLUS:
+        return True
+    return False
+
+
+def _reject_if_owned(
+    player_id: int,
+    product: Mapping[str, Any],
+    *,
+    conn,
+    allow_owned: bool,
+) -> Optional[str]:
+    """Return error reason if product cannot be purchased, else None."""
+    if allow_owned:
+        return None
+    pid = int(player_id)
+    if product["sku"] == SKU_SEASON_PASS:
+        owned, own_reason = _season_pass_owned(pid, conn=conn)
+        if owned:
+            return "already_owned"
+        if own_reason == "no_season":
+            return "no_season"
+    if (
+        str(product.get("kind")) == KIND_COSMETIC_UNLOCK
+        and _cosmetic_payload_owned(pid, product.get("payload") or {}, conn=conn)
+    ):
+        return "already_owned"
+    if product["sku"] == SKU_TITAN_SLOT_PLUS:
+        from .world_boss_companions import (
+            MAX_COMPANION_CAPACITY,
+            get_companion_capacity,
+        )
+
+        if get_companion_capacity(pid, conn=conn) >= int(MAX_COMPANION_CAPACITY):
+            return "already_owned"
+    return None
+
+
+def normalize_cart_lines(
+    raw_lines: Sequence[Mapping[str, Any]] | None,
+    *,
+    conn,
+    player_id: Optional[int] = None,
+    allow_owned: bool = False,
+    single_sku: Optional[str] = None,
+    single_qty: int = 1,
+) -> Tuple[bool, str, List[Dict[str, Any]]]:
+    """
+    Validate cart lines against catalog. Returns lines with sku, qty, list_cents, kind, currency.
+    Merges duplicate SKUs by summing qty (then re-capping).
+    """
+    merged: Dict[str, int] = {}
+    if raw_lines:
+        for entry in raw_lines:
+            if not isinstance(entry, Mapping):
+                continue
+            sku = str(entry.get("sku") or "").strip()
+            if not sku:
+                continue
+            try:
+                qty = int(entry.get("qty") or 1)
+            except (TypeError, ValueError):
+                qty = 1
+            merged[sku] = int(merged.get(sku) or 0) + max(0, qty)
+    elif single_sku:
+        merged[str(single_sku).strip()] = max(1, int(single_qty or 1))
+
+    if not merged:
+        return False, "empty_cart", []
+    if len(merged) > MAX_CART_DISTINCT_SKUS:
+        return False, "cart_too_large", []
+
+    lines: List[Dict[str, Any]] = []
+    currency = "eur"
+    for sku, qty_raw in merged.items():
+        if qty_raw <= 0:
+            continue
+        product = get_product(sku, conn=conn)
+        if not product:
+            return False, "unknown_sku", []
+        if product["kind"] not in ALLOWED_KINDS:
+            return False, "forbidden_sku", []
+        if player_id is not None:
+            owned_err = _reject_if_owned(
+                int(player_id), product, conn=conn, allow_owned=allow_owned
+            )
+            if owned_err:
+                return False, owned_err, []
+        qty = int(qty_raw)
+        if _product_unique_qty_one(product):
+            qty = 1
+        else:
+            qty = max(1, min(qty, MAX_LINE_QTY))
+        unit = int(product["price_cents"])
+        currency = str(product.get("currency") or currency or "eur")
+        lines.append(
+            {
+                "sku": str(product["sku"]),
+                "qty": qty,
+                "unit_cents": unit,
+                "list_cents": unit * qty,
+                "kind": str(product["kind"]),
+                "currency": currency,
+                "title_key": str(product.get("title_key") or ""),
+            }
+        )
+    if not lines:
+        return False, "empty_cart", []
+    return True, "ok", lines
+
+
+def order_lines_from_order(order: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    """Lines for fulfill/display; legacy orders → single sku qty 1."""
+    raw = order.get("items")
+    if raw is None and "items_json" in order:
+        raw = _json_loads_list(order.get("items_json"))
+    if isinstance(raw, list) and raw:
+        out: List[Dict[str, Any]] = []
+        for entry in raw:
+            if not isinstance(entry, Mapping):
+                continue
+            sku = str(entry.get("sku") or "").strip()
+            if not sku:
+                continue
+            try:
+                qty = max(1, int(entry.get("qty") or 1))
+            except (TypeError, ValueError):
+                qty = 1
+            unit = int(entry.get("unit_cents") or entry.get("list_cents") or 0)
+            if unit <= 0 and entry.get("list_cents") and qty:
+                unit = int(entry["list_cents"]) // qty
+            out.append(
+                {
+                    "sku": sku,
+                    "qty": qty,
+                    "unit_cents": unit,
+                    "list_cents": int(entry.get("list_cents") or unit * qty),
+                    "kind": str(entry.get("kind") or ""),
+                    "currency": str(entry.get("currency") or order.get("currency") or "eur"),
+                    "title_key": str(entry.get("title_key") or ""),
+                }
+            )
+        if out:
+            return out
+    sku = str(order.get("sku") or "").strip()
+    if not sku:
+        return []
+    list_cents = int(order.get("list_amount_cents") or order.get("amount_cents") or 0)
+    return [
+        {
+            "sku": sku,
+            "qty": 1,
+            "unit_cents": list_cents,
+            "list_cents": list_cents,
+            "kind": "",
+            "currency": str(order.get("currency") or "eur"),
+            "title_key": "",
+        }
+    ]
+
+
+def get_session_cart(session_obj: Mapping[str, Any] | None) -> List[Dict[str, int]]:
+    raw = (session_obj or {}).get(CART_SESSION_KEY)
+    if not isinstance(raw, list):
+        return []
+    out: List[Dict[str, int]] = []
+    for entry in raw:
+        if not isinstance(entry, Mapping):
+            continue
+        sku = str(entry.get("sku") or "").strip()
+        if not sku:
+            continue
+        try:
+            qty = max(0, int(entry.get("qty") or 0))
+        except (TypeError, ValueError):
+            qty = 0
+        if qty <= 0:
+            continue
+        out.append({"sku": sku, "qty": qty})
+    return out
+
+
+def set_session_cart(
+    session_obj: MutableMapping[str, Any], items: Sequence[Mapping[str, Any]]
+) -> List[Dict[str, int]]:
+    cleaned = get_session_cart({"shop_cart": list(items)})
+    session_obj[CART_SESSION_KEY] = cleaned
+    return cleaned
+
+
+def clear_session_cart(session_obj: MutableMapping[str, Any]) -> None:
+    session_obj.pop(CART_SESSION_KEY, None)
+
+
+def add_to_session_cart(
+    session_obj: MutableMapping[str, Any],
+    sku: str,
+    qty: int = 1,
+) -> List[Dict[str, int]]:
+    cart = get_session_cart(session_obj)
+    sku_n = str(sku or "").strip()
+    try:
+        add_q = max(1, int(qty or 1))
+    except (TypeError, ValueError):
+        add_q = 1
+    found = False
+    for row in cart:
+        if row["sku"] == sku_n:
+            row["qty"] = min(MAX_LINE_QTY, int(row["qty"]) + add_q)
+            found = True
+            break
+    if not found:
+        if len(cart) >= MAX_CART_DISTINCT_SKUS:
+            return cart
+        cart.append({"sku": sku_n, "qty": min(MAX_LINE_QTY, add_q)})
+    return set_session_cart(session_obj, cart)
+
+
+def update_session_cart(
+    session_obj: MutableMapping[str, Any],
+    sku: str,
+    qty: int,
+) -> List[Dict[str, int]]:
+    sku_n = str(sku or "").strip()
+    try:
+        q = int(qty)
+    except (TypeError, ValueError):
+        q = 0
+    cart = [row for row in get_session_cart(session_obj) if row["sku"] != sku_n]
+    if q > 0 and sku_n:
+        cart.append({"sku": sku_n, "qty": min(MAX_LINE_QTY, max(1, q))})
+    return set_session_cart(session_obj, cart)
+
+
+def serialize_cart_for_client(
+    player_id: Optional[int],
+    cart_items: Sequence[Mapping[str, Any]],
+    *,
+    conn,
+    promo_code: Optional[str] = None,
+) -> Dict[str, Any]:
+    ok, reason, lines = normalize_cart_lines(
+        cart_items,
+        conn=conn,
+        player_id=int(player_id) if player_id else None,
+        allow_owned=False,
+    )
+    list_cents = sum(int(l["list_cents"]) for l in lines) if ok else 0
+    paid_cents = list_cents
+    discount_cents = 0
+    promo_meta: Dict[str, Any] = {}
+    if ok and promo_code and player_id:
+        from . import shop_promos as promos
+
+        ok_p, reason_p, promo = promos.validate_promo_for_buyer(
+            str(promo_code), int(player_id), conn=conn
+        )
+        if ok_p and promo:
+            br = promos.price_breakdown(
+                list_cents,
+                int(promo["discount_bps"]),
+                int(promo["commission_bps"]),
+            )
+            paid_cents = int(br["paid_cents"])
+            discount_cents = int(br["discount_cents"])
+            promo_meta = {
+                "code": promo["code"],
+                "discount_bps": int(promo["discount_bps"]),
+            }
+        else:
+            promo_meta = {"invalid": True, "reason": reason_p}
+    return {
+        "ok": bool(ok),
+        "reason": reason if not ok else "ok",
+        "items": lines if ok else [],
+        "list_cents": int(list_cents),
+        "paid_cents": int(paid_cents),
+        "discount_cents": int(discount_cents),
+        "promo": promo_meta or None,
+        "item_count": sum(int(l["qty"]) for l in lines) if ok else 0,
+    }
 
 
 def ensure_catalog_seeded(conn, *, now: Optional[float] = None) -> int:
@@ -560,7 +864,7 @@ def _format_price(cents: int, currency: str) -> str:
 def get_order(order_id: int, *, conn) -> Optional[Dict[str, Any]]:
     if not schema_ready(conn) or int(order_id) <= 0:
         return None
-    cols = _order_select_cols()
+    cols = _order_select_cols(conn=conn)
     try:
         row = conn.execute(
             f"SELECT {cols} FROM shop_orders WHERE id = ? LIMIT 1;",
@@ -586,7 +890,7 @@ def find_order_by_session(
 ) -> Optional[Dict[str, Any]]:
     if not schema_ready(conn):
         return None
-    cols = _order_select_cols()
+    cols = _order_select_cols(conn=conn)
     try:
         row = conn.execute(
             f"""
@@ -616,7 +920,7 @@ def find_order_by_payment(
 ) -> Optional[Dict[str, Any]]:
     if not schema_ready(conn) or not str(payment_id or "").strip():
         return None
-    cols = _order_select_cols()
+    cols = _order_select_cols(conn=conn)
     try:
         row = conn.execute(
             f"""
@@ -744,16 +1048,25 @@ def recover_paypal_return_for_player(
     )
 
 
-def _order_select_cols() -> str:
+def _order_select_cols(*, conn=None) -> str:
     base = (
         "id, player_id, sku, provider, provider_session_id, provider_payment_id, "
         "amount_cents, currency, status, fulfill_reason, created_at, paid_at, "
         "fulfilled_at, metadata_json"
     )
-    return (
+    cols = (
         base
         + ", promo_code_id, list_amount_cents, discount_cents, commission_cents"
     )
+    if conn is not None:
+        try:
+            from .db import column_exists
+
+            if column_exists(conn, "shop_orders", "items_json"):
+                return cols + ", items_json"
+        except Exception:
+            pass
+    return cols
 
 
 def _order_from_row(row) -> Dict[str, Any]:
@@ -777,6 +1090,7 @@ def _order_from_row(row) -> Dict[str, Any]:
         "list_amount_cents": int(row["amount_cents"]),
         "discount_cents": 0,
         "commission_cents": 0,
+        "items": [],
     }
     if "promo_code_id" in keys:
         out["promo_code_id"] = (
@@ -788,6 +1102,12 @@ def _order_from_row(row) -> Dict[str, Any]:
         out["discount_cents"] = int(row["discount_cents"] or 0)
     if "commission_cents" in keys:
         out["commission_cents"] = int(row["commission_cents"] or 0)
+    if "items_json" in keys:
+        out["items"] = _json_loads_list(row["items_json"])
+    else:
+        out["items"] = []
+    if not out["items"]:
+        out["items"] = order_lines_from_order(out)
     return out
 
 
@@ -801,6 +1121,7 @@ def create_pending_order(
     metadata: Optional[Mapping[str, Any]] = None,
     allow_owned: bool = False,
     promo_code: Optional[str] = None,
+    lines: Optional[Sequence[Mapping[str, Any]]] = None,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     if not schema_ready(conn):
         return False, "shop_unavailable", None
@@ -812,36 +1133,23 @@ def create_pending_order(
         return False, "invalid_player", None
     if prov not in PROVIDERS:
         return False, "invalid_provider", None
-    product = get_product(sku, conn=conn)
+
+    ok_lines, reason_lines, norm_lines = normalize_cart_lines(
+        lines,
+        conn=conn,
+        player_id=pid,
+        allow_owned=allow_owned,
+        single_sku=str(sku or "").strip() or None,
+    )
+    if not ok_lines or not norm_lines:
+        return False, reason_lines or "empty_cart", None
+
+    primary = norm_lines[0]
+    product = get_product(str(primary["sku"]), conn=conn)
     if not product:
         return False, "unknown_sku", None
-    if product["kind"] not in ALLOWED_KINDS:
-        return False, "forbidden_sku", None
 
-    if product["sku"] == SKU_SEASON_PASS and not allow_owned:
-        owned, own_reason = _season_pass_owned(pid, conn=conn)
-        if owned:
-            return False, "already_owned", None
-        if own_reason == "no_season":
-            return False, "no_season", None
-
-    if (
-        str(product.get("kind")) == KIND_COSMETIC_UNLOCK
-        and not allow_owned
-        and _cosmetic_payload_owned(pid, product.get("payload") or {}, conn=conn)
-    ):
-        return False, "already_owned", None
-
-    if product["sku"] == SKU_TITAN_SLOT_PLUS and not allow_owned:
-        from .world_boss_companions import (
-            MAX_COMPANION_CAPACITY,
-            get_companion_capacity,
-        )
-
-        if get_companion_capacity(pid, conn=conn) >= int(MAX_COMPANION_CAPACITY):
-            return False, "already_owned", None
-
-    list_cents = int(product["price_cents"])
+    list_cents = sum(int(l["list_cents"]) for l in norm_lines)
     paid_cents = list_cents
     discount_cents = 0
     commission_cents = 0
@@ -869,14 +1177,56 @@ def create_pending_order(
 
     ts = float(now if now is not None else time.time())
     has_promo_cols = False
+    has_items_col = False
     try:
         from .db import column_exists
 
         has_promo_cols = column_exists(conn, "shop_orders", "promo_code_id")
+        has_items_col = column_exists(conn, "shop_orders", "items_json")
     except Exception:
         has_promo_cols = False
+        has_items_col = False
 
-    if has_promo_cols:
+    items_payload = [
+        {
+            "sku": l["sku"],
+            "qty": int(l["qty"]),
+            "unit_cents": int(l["unit_cents"]),
+            "list_cents": int(l["list_cents"]),
+            "kind": l.get("kind") or "",
+            "currency": l.get("currency") or product["currency"],
+            "title_key": l.get("title_key") or "",
+        }
+        for l in norm_lines
+    ]
+    primary_sku = str(primary["sku"])
+
+    if has_promo_cols and has_items_col:
+        cur = conn.execute(
+            """
+            INSERT INTO shop_orders (
+                player_id, sku, provider, amount_cents, currency, status,
+                created_at, metadata_json, promo_code_id, list_amount_cents,
+                discount_cents, commission_cents, items_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """,
+            (
+                pid,
+                primary_sku,
+                prov,
+                int(paid_cents),
+                str(product["currency"]),
+                STATUS_PENDING,
+                ts,
+                _json_dumps(meta),
+                promo_code_id,
+                int(list_cents),
+                int(discount_cents),
+                int(commission_cents),
+                _json_dumps(items_payload),
+            ),
+        )
+    elif has_promo_cols:
         cur = conn.execute(
             """
             INSERT INTO shop_orders (
@@ -887,7 +1237,7 @@ def create_pending_order(
             """,
             (
                 pid,
-                product["sku"],
+                primary_sku,
                 prov,
                 int(paid_cents),
                 str(product["currency"]),
@@ -910,7 +1260,7 @@ def create_pending_order(
             """,
             (
                 pid,
-                product["sku"],
+                primary_sku,
                 prov,
                 int(paid_cents),
                 str(product["currency"]),
@@ -921,7 +1271,13 @@ def create_pending_order(
         )
     order_id = int(cur.lastrowid)
     order = get_order(order_id, conn=conn)
-    return True, "ok", {"order": order, "product": product}
+    if order is not None and not order.get("items"):
+        order["items"] = items_payload
+    return True, "ok", {
+        "order": order,
+        "product": product,
+        "lines": items_payload,
+    }
 
 
 def attach_provider_session(
@@ -974,73 +1330,48 @@ def mark_paid(
     return True, "ok", get_order(int(order_id), conn=conn)
 
 
-def fulfill_order(
-    order_id: int,
+def _grant_product_once(
     *,
+    pid: int,
+    product: Mapping[str, Any],
+    order_id: int,
+    source: str,
+    provider: str,
+    ts: float,
     conn,
-    now: Optional[float] = None,
-) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
-    """Idempotent fulfill: grants rewards once, then status=fulfilled."""
-    order = get_order(int(order_id), conn=conn)
-    if not order:
-        return False, "order_not_found", None
-    if order["status"] == STATUS_FULFILLED:
-        return True, "already_fulfilled", order
-    if order["status"] not in (STATUS_PAID, STATUS_PENDING):
-        return False, "not_paid", order
-
-    # Ensure paid timestamp even if called directly after mark_paid in same txn.
-    if order["status"] == STATUS_PENDING:
-        ok_paid, reason_paid, order = mark_paid(int(order_id), conn=conn, now=now)
-        if not ok_paid:
-            return False, reason_paid, order
-
-    product = get_product(order["sku"], conn=conn, active_only=False)
-    if not product:
-        return False, "unknown_sku", order
-
-    ts = float(now if now is not None else time.time())
+) -> Tuple[bool, str, Dict[str, Any]]:
+    """Grant one unit of a catalog product. Returns (ok, reason, granted)."""
     grant_reason = "ok"
     granted: Dict[str, Any] = {}
-
     kind = str(product["kind"])
     payload = product.get("payload") or {}
-    pid = int(order["player_id"])
-    source = f"shop:{order['provider']}:{order['id']}"
 
     if kind == KIND_ENTITLEMENT:
         from .battle_pass import unlock_premium
 
         owned, _ = _season_pass_owned(pid, conn=conn)
         if owned:
-            grant_reason = "already_owned"
-            granted = {"premium_unlocked": True, "skipped": True}
-        else:
-            ok, reason, result = unlock_premium(
-                pid,
-                conn=conn,
-                source=str(order["provider"]),
-                now=ts,
-            )
-            if not ok:
-                conn.execute(
-                    """
-                    UPDATE shop_orders SET status = ?, fulfill_reason = ? WHERE id = ?;
-                    """,
-                    (STATUS_FAILED, str(reason), int(order_id)),
-                )
-                return False, reason, get_order(int(order_id), conn=conn)
-            grant_reason = "ok"
-            granted = result or {"premium_unlocked": True}
-    elif kind == KIND_TIMEKEEPER:
-        from .timekeeper import credit, get_balance
+            return True, "already_owned", {"premium_unlocked": True, "skipped": True}
+        ok, reason, result = unlock_premium(
+            pid,
+            conn=conn,
+            source=str(provider),
+            now=ts,
+        )
+        if not ok:
+            return False, str(reason), {}
+        return True, "ok", result or {"premium_unlocked": True}
+
+    if kind == KIND_TIMEKEEPER:
+        from .timekeeper import credit
 
         sec = max(0, int(payload.get("timekeeper_sec") or 0))
         if sec <= 0:
-            return False, "invalid_payload", order
+            return False, "invalid_payload", {}
         bal = credit(pid, sec, source, conn=conn)
-        granted = {"timekeeper_sec": sec, "balance_sec": bal}
-    elif kind == KIND_INVENTORY_BUNDLE:
+        return True, "ok", {"timekeeper_sec": sec, "balance_sec": bal}
+
+    if kind == KIND_INVENTORY_BUNDLE:
         from .inventory import grant_inventory_item
         from .timekeeper import credit
 
@@ -1052,7 +1383,7 @@ def fulfill_order(
             and tk_sec <= 0
             and companion_slots <= 0
         ):
-            return False, "invalid_payload", order
+            return False, "invalid_payload", {}
         granted_items = []
         for entry in items if isinstance(items, list) else []:
             if not isinstance(entry, Mapping):
@@ -1061,20 +1392,13 @@ def fulfill_order(
             amt = max(0, int(entry.get("amount") or 0))
             if not key or amt <= 0:
                 continue
-            # Policy: never grant ships/defense/resources via shop payload.
             if key.startswith(("ship_", "defense_", "metal", "crystal", "fuel")):
-                return False, "forbidden_grant", order
+                return False, "forbidden_grant", {}
             ok_grant = grant_inventory_item(
                 pid, key, amt, conn=conn, metadata={"source": source}
             )
             if not ok_grant:
-                conn.execute(
-                    """
-                    UPDATE shop_orders SET status = ?, fulfill_reason = ? WHERE id = ?;
-                    """,
-                    (STATUS_FAILED, "grant_failed", int(order_id)),
-                )
-                return False, "grant_failed", get_order(int(order_id), conn=conn)
+                return False, "grant_failed", {}
             granted_items.append({"item_key": key, "amount": amt})
         granted = {"items": granted_items}
         if tk_sec > 0:
@@ -1086,25 +1410,15 @@ def fulfill_order(
 
             slot_res = grant_companion_slot(pid, conn=conn, source=source, now=ts)
             if not slot_res.get("ok"):
-                # At max capacity: still fulfill as already_owned (no double charge loop).
                 if str(slot_res.get("error") or "") == "already_owned":
-                    grant_reason = "already_owned"
-                    granted["companion_slots"] = slot_res
-                else:
-                    conn.execute(
-                        """
-                        UPDATE shop_orders SET status = ?, fulfill_reason = ? WHERE id = ?;
-                        """,
-                        (STATUS_FAILED, str(slot_res.get("error") or "grant_failed"), int(order_id)),
-                    )
-                    return False, str(slot_res.get("error") or "grant_failed"), get_order(
-                        int(order_id), conn=conn
-                    )
-            else:
-                granted["companion_slots"] = slot_res
-                if int(slot_res.get("granted") or 0) <= 0:
-                    grant_reason = "already_owned"
-    elif kind == KIND_COSMETIC_UNLOCK:
+                    return True, "already_owned", {**granted, "companion_slots": slot_res}
+                return False, str(slot_res.get("error") or "grant_failed"), {}
+            granted["companion_slots"] = slot_res
+            if int(slot_res.get("granted") or 0) <= 0:
+                grant_reason = "already_owned"
+        return True, grant_reason, granted
+
+    if kind == KIND_COSMETIC_UNLOCK:
         from .playercard import (
             COSMETIC_KIND_NAME_STYLE,
             COSMETIC_KIND_TITLE_FLAIR,
@@ -1116,7 +1430,7 @@ def fulfill_order(
 
         unlocks = payload.get("unlocks") or []
         if not isinstance(unlocks, list) or not unlocks:
-            return False, "invalid_payload", order
+            return False, "invalid_payload", {}
         granted_unlocks: List[str] = []
         all_already = True
         for entry in unlocks:
@@ -1135,13 +1449,7 @@ def fulfill_order(
                     pid, ukey, conn=conn, source=source, now=int(ts)
                 )
                 if not ok_u:
-                    conn.execute(
-                        """
-                        UPDATE shop_orders SET status = ?, fulfill_reason = ? WHERE id = ?;
-                        """,
-                        (STATUS_FAILED, str(reason_u), int(order_id)),
-                    )
-                    return False, reason_u, get_order(int(order_id), conn=conn)
+                    return False, str(reason_u), {}
                 granted_unlocks.append(f"name_style:{ukey}")
             elif ukind == COSMETIC_KIND_TITLE_FLAIR:
                 if player_has_title_flair(pid, ukey, conn=conn):
@@ -1152,22 +1460,84 @@ def fulfill_order(
                     pid, ukey, conn=conn, source=source, now=int(ts)
                 )
                 if not ok_u:
-                    conn.execute(
-                        """
-                        UPDATE shop_orders SET status = ?, fulfill_reason = ? WHERE id = ?;
-                        """,
-                        (STATUS_FAILED, str(reason_u), int(order_id)),
-                    )
-                    return False, reason_u, get_order(int(order_id), conn=conn)
+                    return False, str(reason_u), {}
                 granted_unlocks.append(f"title_flair:{ukey}")
             else:
-                return False, "forbidden_grant", order
+                return False, "forbidden_grant", {}
         if not granted_unlocks:
-            return False, "invalid_payload", order
-        grant_reason = "already_owned" if all_already else "ok"
-        granted = {"unlocks": granted_unlocks}
-    else:
-        return False, "forbidden_sku", order
+            return False, "invalid_payload", {}
+        return True, ("already_owned" if all_already else "ok"), {"unlocks": granted_unlocks}
+
+    return False, "forbidden_sku", {}
+
+
+def fulfill_order(
+    order_id: int,
+    *,
+    conn,
+    now: Optional[float] = None,
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """Idempotent fulfill: grants rewards once, then status=fulfilled."""
+    order = get_order(int(order_id), conn=conn)
+    if not order:
+        return False, "order_not_found", None
+    if order["status"] == STATUS_FULFILLED:
+        return True, "already_fulfilled", order
+    if order["status"] not in (STATUS_PAID, STATUS_PENDING):
+        return False, "not_paid", order
+
+    if order["status"] == STATUS_PENDING:
+        ok_paid, reason_paid, order = mark_paid(int(order_id), conn=conn, now=now)
+        if not ok_paid:
+            return False, reason_paid, order
+
+    ts = float(now if now is not None else time.time())
+    pid = int(order["player_id"])
+    source = f"shop:{order['provider']}:{order['id']}"
+    lines = order_lines_from_order(order)
+    if not lines:
+        return False, "unknown_sku", order
+
+    granted_all: List[Dict[str, Any]] = []
+    grant_reason = "ok"
+    any_ok_grant = False
+    for line in lines:
+        product = get_product(str(line["sku"]), conn=conn, active_only=False)
+        if not product:
+            conn.execute(
+                """
+                UPDATE shop_orders SET status = ?, fulfill_reason = ? WHERE id = ?;
+                """,
+                (STATUS_FAILED, "unknown_sku", int(order_id)),
+            )
+            return False, "unknown_sku", get_order(int(order_id), conn=conn)
+        qty = max(1, int(line.get("qty") or 1))
+        for unit_i in range(qty):
+            unit_source = f"{source}:{line['sku']}:{unit_i}"
+            ok_g, reason_g, granted = _grant_product_once(
+                pid=pid,
+                product=product,
+                order_id=int(order_id),
+                source=unit_source,
+                provider=str(order["provider"]),
+                ts=ts,
+                conn=conn,
+            )
+            if not ok_g:
+                conn.execute(
+                    """
+                    UPDATE shop_orders SET status = ?, fulfill_reason = ? WHERE id = ?;
+                    """,
+                    (STATUS_FAILED, str(reason_g), int(order_id)),
+                )
+                return False, reason_g, get_order(int(order_id), conn=conn)
+            any_ok_grant = True
+            if reason_g != "already_owned":
+                grant_reason = reason_g
+            granted_all.append({"sku": line["sku"], "unit": unit_i, "granted": granted, "reason": reason_g})
+
+    if any_ok_grant and all(g.get("reason") == "already_owned" for g in granted_all):
+        grant_reason = "already_owned"
 
     conn.execute(
         """
@@ -1180,7 +1550,7 @@ def fulfill_order(
     )
     out = get_order(int(order_id), conn=conn)
     if out is not None:
-        out["granted"] = granted
+        out["granted"] = {"lines": granted_all}
         out["fulfill_reason"] = grant_reason
         try:
             from . import shop_promos as promos
@@ -1449,8 +1819,9 @@ def start_checkout(
     legal_ack: bool = False,
     legal_text_version: Optional[str] = None,
     promo_code: Optional[str] = None,
+    lines: Optional[Sequence[Mapping[str, Any]]] = None,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
-    """Create pending order + provider checkout session."""
+    """Create pending order + provider checkout session (single SKU or multi-line cart)."""
     from . import payment_providers as pp
 
     if not legal_ack:
@@ -1467,12 +1838,13 @@ def start_checkout(
 
     ok, reason, created = create_pending_order(
         int(player_id),
-        sku,
+        sku or "",
         provider,
         conn=conn,
         now=now,
         metadata=legal_meta,
         promo_code=promo_code,
+        lines=lines,
     )
     if not ok or not created:
         return False, reason, None
@@ -1490,7 +1862,6 @@ def start_checkout(
             return False, "provider_unconfigured", None
         session_id = f"test_sess_{order['id']}"
         attach_provider_session(int(order["id"]), session_id, conn=conn)
-        # Immediate fulfill path for automated tests / local sandbox.
         mark_paid(
             int(order["id"]),
             conn=conn,
@@ -1504,6 +1875,7 @@ def start_checkout(
             "fulfilled": True,
             "order": fulfilled,
             "product": product,
+            "lines": created.get("lines") or order_lines_from_order(order),
         }
 
     if prov == "stripe":
@@ -1526,6 +1898,7 @@ def start_checkout(
             "checkout_url": session["checkout_url"],
             "fulfilled": False,
             "product": product,
+            "lines": created.get("lines") or order_lines_from_order(order),
         }
 
     if prov == "paypal":
@@ -1548,6 +1921,7 @@ def start_checkout(
             "checkout_url": session["checkout_url"],
             "fulfilled": False,
             "product": product,
+            "lines": created.get("lines") or order_lines_from_order(order),
         }
 
     return False, "invalid_provider", None

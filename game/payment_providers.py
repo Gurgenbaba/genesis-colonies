@@ -84,6 +84,15 @@ def stripe_create_checkout_session(
     title_key = str(product.get("title_key") or "").strip()
     if title_key:
         display_name = title_key.replace("shop_sku_", "").replace("_", " ").title()
+    items = order.get("items") if isinstance(order.get("items"), list) else []
+    if len(items) > 1:
+        skus = [str(i.get("sku") or "") for i in items if isinstance(i, dict)]
+        skus = [s for s in skus if s][:6]
+        display_name = f"Cart ({len(items)} items)"
+        if skus:
+            display_name = f"Cart: {', '.join(skus)}"
+            if len(display_name) > 120:
+                display_name = display_name[:117] + "..."
 
     try:
         session = stripe.checkout.Session.create(
@@ -95,6 +104,7 @@ def stripe_create_checkout_session(
                 "order_id": str(order["id"]),
                 "player_id": str(order["player_id"]),
                 "sku": str(order["sku"]),
+                "line_count": str(len(items) if items else 1),
             },
             line_items=[
                 {
@@ -104,7 +114,7 @@ def stripe_create_checkout_session(
                         "unit_amount": amount,
                         "product_data": {
                             "name": f"Genesis Colonies — {display_name}",
-                            "metadata": {"sku": str(product.get("sku") or "")},
+                            "metadata": {"sku": str(order.get("sku") or product.get("sku") or "")},
                         },
                     },
                 }
@@ -200,6 +210,15 @@ def paypal_create_checkout_order(
     ).upper()
     amount = max(0, int(order.get("amount_cents") or product.get("price_cents") or 0)) / 100.0
     value = f"{amount:.2f}"
+    desc = str(product.get("sku") or "Genesis Colonies")
+    items = order.get("items") if isinstance(order.get("items"), list) else []
+    if len(items) > 1:
+        skus = [str(i.get("sku") or "") for i in items if isinstance(i, dict)]
+        skus = [s for s in skus if s]
+        if skus:
+            desc = f"cart:{'+'.join(skus[:8])}"
+            if len(desc) > 127:
+                desc = desc[:124] + "..."
     body = {
         "intent": "CAPTURE",
         "purchase_units": [
@@ -210,7 +229,7 @@ def paypal_create_checkout_order(
                     "currency_code": currency,
                     "value": value,
                 },
-                "description": str(product.get("sku") or "Genesis Colonies"),
+                "description": desc,
             }
         ],
         "application_context": {
