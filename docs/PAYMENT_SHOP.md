@@ -203,7 +203,8 @@ Owner: `game/legal_panel.py` — Imprint, Privacy, Terms, Withdrawal.
 | `GET /legal` (+ `/legal/<doc>`) | Public, no login — provider block always visible |
 | Ingame special window `imprint` | Same docs + contact-form CTA (Support) |
 | Auth/Landing footers | Links to `/legal` |
-| Checkout | Client Doppel-Ack; API `legal_ack` + `legal_text_version` stored on `shop_orders.metadata_json` |
+| Checkout | Client Doppel-Ack **über dem Katalog** (vor PayPal-CTAs); API `legal_ack` + `legal_text_version` stored on `shop_orders.metadata_json`. Ungültiger Promo-Code blockiert den Kauf nicht — Checkout droppt ihn und startet zum Listenpreis (`promo_dropped`). Bei externem Provider-Redirect (`checkout_url`) wird **kein** heavy `_build_game_state_payload` gebaut — sonst kann PayPal nach Order-Create an State/Timeout scheitern.
+ |
 
 **Policy:** Virtual goods credit immediately after payment. After § 356 Abs. 5 acknowledgement + fulfillment: no voluntary refund. Exception: technical non-delivery → re-grant or provider refund (`billing` support category).
 

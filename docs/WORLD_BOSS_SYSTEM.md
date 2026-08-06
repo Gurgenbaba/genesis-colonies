@@ -166,7 +166,7 @@ Default window: **48 h**; inter-spawn gap: **4 h**.
 | `GET /api/world-boss` | JSON payload |
 | `POST /api/world-boss/attack` | Instant strike `{ ok, attack, boss, player, state }` (idempotent via `request_id`) |
 | `POST /api/world-boss/auto-attack` | Toggle server auto-attack `{ ok, auto_attack, attack?, boss?, player?, state }` — enable fires immediately when CD free; follow-ups via `fleet_worker` (also on idle-skip) + opportunistic flush on WB page/API load |
-| `POST /api/world-boss/claim` | Claim rewards `{ ok, state }` |
+| `POST /api/world-boss/claim` | Claim rewards `{ ok, claim, state }` — ended events leave `events[]` once claimed; UI removes the card live (no soft reload) |
 | `POST /api/world-boss/catch` | Phase-3 tame attempt `{ ok, catch, state }` |
 | `POST /api/world-boss/companion/mission` | Start/claim companion mission `{ ok, mission, state }` |
 | `POST /api/admin/world-boss/spawn` | Admin force spawn |

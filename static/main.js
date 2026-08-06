@@ -21337,11 +21337,16 @@
         showNotify(t("shop_promo_applied", "Promo-Code angewendet."), "success");
       } else {
         _shopActivePromo = "";
+        const input = page && page.querySelector("[data-shop-promo-input]");
+        if (input) input.value = "";
         if (status) status.textContent = t("shop_promo_invalid", "Code ungültig");
         _applyShopPromoPrices([]);
         showNotify(t("shop_promo_invalid", "Code ungültig"), "error");
       }
     } catch (_) {
+      _shopActivePromo = "";
+      const input = page && page.querySelector("[data-shop-promo-input]");
+      if (input) input.value = "";
       showNotify(t("shop_promo_invalid", "Code ungültig"), "error");
     }
   }
@@ -21544,6 +21549,14 @@
         }
         if (res?.ok && res.checkout_url) {
           // External provider checkout — allowed navigation exception.
+          if (res.promo_dropped) {
+            _shopActivePromo = "";
+            const promoInput = page && page.querySelector("[data-shop-promo-input]");
+            if (promoInput) promoInput.value = "";
+            const promoStatus = page && page.querySelector("[data-shop-promo-status]");
+            if (promoStatus) promoStatus.textContent = "";
+            _applyShopPromoPrices([]);
+          }
           window.location.assign(String(res.checkout_url));
           return;
         }
@@ -21553,6 +21566,28 @@
         else if (reason === "already_owned") msg = t("shop_owned", "Bereits freigeschaltet");
         else if (reason === "provider_unconfigured") {
           msg = t("shop_no_providers", "Zahlungsanbieter sind noch nicht konfiguriert.");
+        } else if (reason === "public_host_mismatch") {
+          msg = t(
+            "shop_host_mismatch",
+            "Kauf nur über die offizielle Shop-URL möglich."
+          );
+        } else if (reason === "paypal_auth_failed" || reason === "paypal_session_failed") {
+          msg = t(
+            "shop_paypal_unavailable",
+            "PayPal ist gerade nicht erreichbar. Bitte gleich nochmal versuchen."
+          );
+        } else if (reason === "legal_ack_required") {
+          msg = t("legal_ack_required", "Bitte die rechtlichen Hinweise vor dem Kauf bestätigen.");
+        } else if (reason.startsWith("promo_")) {
+          _shopActivePromo = "";
+          const promoInput = page && page.querySelector("[data-shop-promo-input]");
+          if (promoInput) promoInput.value = "";
+          msg = t(
+            "shop_promo_blocked_checkout",
+            "Promo-Code ungültig — bitte ohne Code erneut kaufen."
+          );
+        } else if (reason === "invalid_return_url") {
+          msg = t("shop_checkout_fail", "Kauf konnte nicht gestartet werden.");
         }
         showNotify(msg, "error");
       } catch (_) {
@@ -39008,6 +39043,54 @@
       }
     }
 
+    /** Ended bosses stay in the list only while can_claim — match server payload after claim. */
+    const wbEnsureEmptyBossList = () => {
+      const wrap = root.querySelector(".gc-world-boss-cards");
+      if (!wrap) return;
+      if (wrap.querySelector(".gc-world-boss-card")) return;
+      const panelBody = wrap.closest(".gc-panel-body") || wrap.parentElement;
+      wrap.remove();
+      if (panelBody && !panelBody.querySelector(".gc-world-boss-idle")) {
+        const idle = document.createElement("div");
+        idle.className = "gc-world-boss-idle";
+        const hint = document.createElement("p");
+        hint.className = "hint";
+        hint.textContent = t(
+          "wb_no_event",
+          "Kein World Boss aktiv. Das nächste Ereignis erscheint automatisch."
+        );
+        idle.appendChild(hint);
+        panelBody.appendChild(idle);
+      }
+    };
+    const wbRemoveBossCard = (cardOrBtn) => {
+      const card =
+        cardOrBtn && cardOrBtn.closest
+          ? cardOrBtn.closest(".gc-world-boss-card")
+          : null;
+      if (!card) return;
+      card.remove();
+      wbEnsureEmptyBossList();
+    };
+    const wbPruneEndedBossCardsMissingFromPayload = (payload) => {
+      if (!payload || !payload.ok) return;
+      const events = Array.isArray(payload.events) ? payload.events : [];
+      const present = new Set(
+        events
+          .map((row) => Number(row?.event?.id || row?.id || 0))
+          .filter((id) => id > 0)
+      );
+      root.querySelectorAll(".gc-world-boss-card").forEach((card) => {
+        const eid = Number(card.getAttribute("data-wb-event-id") || 0);
+        if (eid <= 0 || present.has(eid)) return;
+        const status = String(card.getAttribute("data-wb-status") || "");
+        if (status === "defeated" || status === "expired" || status === "tamed") {
+          card.remove();
+        }
+      });
+      wbEnsureEmptyBossList();
+    };
+
     root.querySelectorAll(".wb-claim-btn").forEach((claimBtn) => {
       if (claimBtn.dataset.wbBound === "1") return;
       claimBtn.dataset.wbBound = "1";
@@ -39025,16 +39108,8 @@
             GC.applyActionState(res, "world_boss_claim");
           }
           if (res && res.ok) {
-            const panel = claimBtn.closest("[data-wb-claim-panel]");
-            if (panel) {
-              const claimed = document.createElement("p");
-              claimed.className = "hint gc-world-boss-claim-done";
-              claimed.textContent = t("wb_claimed_rewards", "Abgeholt");
-              panel.replaceWith(claimed);
-            } else {
-              claimBtn.disabled = true;
-              claimBtn.textContent = t("wb_claimed_rewards", "Abgeholt");
-            }
+            // Server drops ended events from events[] once claimed — remove card live.
+            wbRemoveBossCard(claimBtn);
             showNotify(t("wb_claimed_rewards", "Abgeholt"), "success");
           } else {
             claimBtn.disabled = false;
@@ -39727,8 +39802,9 @@
         .then((r) => (r && r.ok ? r.json() : null))
         .then((payload) => {
           if (!payload) return;
+          wbPruneEndedBossCardsMissingFromPayload(payload);
           const events = Array.isArray(payload.events) ? payload.events : [];
-          cards.forEach((card) => {
+          root.querySelectorAll(".gc-world-boss-card").forEach((card) => {
             if (!card.isConnected) return;
             const eventId = Number(card.getAttribute("data-wb-event-id") || 0);
             let evCard = null;

@@ -7,7 +7,9 @@ Run: python -m pytest tests/test_shop_payments.py -v
 from __future__ import annotations
 
 import json
+import time
 import uuid
+from pathlib import Path
 
 import pytest
 
@@ -455,6 +457,53 @@ def test_process_paid_event_duplicate(shop_db):
     conn.close()
 
 
+def test_http_checkout_drops_invalid_promo_and_continues(shop_db, monkeypatch):
+    """Stale promo in the request must not block PayPal/test checkout."""
+    monkeypatch.setenv("SHOP_ENABLED", "1")
+    monkeypatch.setenv("SHOP_TEST_PROVIDER", "1")
+    from app import app
+
+    app.config["TESTING"] = True
+    client = app.test_client()
+    uid = _player()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+        sess["shop_promo_code"] = {
+            "code": "DEADCODE",
+            "expires_at": time.time() + 3600,
+        }
+
+    checkout = client.post(
+        "/api/shop/checkout",
+        json={
+            "sku": "tk_pack_s",
+            "provider": "test",
+            "legal_ack": True,
+            "promo_code": "DEADCODE",
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    assert checkout.status_code == 200, checkout.get_data(as_text=True)
+    data = checkout.get_json()
+    assert data["ok"] is True
+    assert data["fulfilled"] is True
+    assert data.get("promo_dropped") == "promo_not_found"
+    with client.session_transaction() as sess:
+        assert "shop_promo_code" not in sess
+
+
+def test_shop_legal_ack_is_above_buy_buttons():
+    """Checkout acknowledgements must appear before product PayPal CTAs."""
+    tpl = (
+        Path(__file__).resolve().parent.parent / "templates" / "shop.html"
+    ).read_text(encoding="utf-8")
+    include_at = tpl.index('{% include "partials/legal_ack.html" %}')
+    catalog_at = tpl.index("shop-catalog-body")
+    assert include_at < catalog_at
+    assert tpl.count('{% include "partials/legal_ack.html" %}') == 1
+    assert "shop-policy-panel--checkout" in tpl
+
+
 def test_http_shop_and_checkout_auth(shop_db, monkeypatch):
     monkeypatch.setenv("SHOP_ENABLED", "1")
     monkeypatch.setenv("SHOP_TEST_PROVIDER", "1")
@@ -496,6 +545,66 @@ def test_http_shop_and_checkout_auth(shop_db, monkeypatch):
     data = checkout.get_json()
     assert data["ok"] is True
     assert data["fulfilled"] is True
+
+
+def test_http_checkout_skips_game_state_for_external_redirect(shop_db, monkeypatch):
+    """PayPal redirect must not depend on heavy _build_game_state_payload."""
+    monkeypatch.setenv("SHOP_ENABLED", "1")
+    monkeypatch.setenv("SHOP_TEST_PROVIDER", "0")
+    monkeypatch.setenv("PAYPAL_CLIENT_ID", "test_client")
+    monkeypatch.setenv("PAYPAL_CLIENT_SECRET", "test_secret")
+    monkeypatch.setenv("PAYPAL_MODE", "sandbox")
+
+    import game.payment_providers as pp
+    from app import app
+
+    def fake_paypal_create(**kwargs):
+        return True, "ok", {
+            "session_id": "PAYPAL_ORDER_TEST",
+            "checkout_url": "https://www.sandbox.paypal.com/checkoutnow?token=PAYPAL_ORDER_TEST",
+        }
+
+    monkeypatch.setattr(pp, "paypal_create_checkout_order", fake_paypal_create)
+    monkeypatch.setattr(pp, "paypal_configured", lambda: True)
+
+    calls = {"n": 0}
+
+    def boom(*_a, **_k):
+        calls["n"] += 1
+        raise RuntimeError("game_state_must_not_run_for_redirect")
+
+    monkeypatch.setattr("app._build_game_state_payload", boom)
+
+    app.config["TESTING"] = True
+    client = app.test_client()
+    uid = _player()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+
+    checkout = client.post(
+        "/api/shop/checkout",
+        json={"sku": "tk_pack_s", "provider": "paypal", "legal_ack": True},
+        headers={"Content-Type": "application/json"},
+    )
+    assert checkout.status_code == 200, checkout.get_data(as_text=True)
+    data = checkout.get_json()
+    assert data["ok"] is True
+    assert data["checkout_url"]
+    assert data.get("state") == {}
+    assert calls["n"] == 0
+
+
+def test_shop_checkout_client_surfaces_paypal_and_promo_errors():
+    """Shop buy path must map provider/promo failures instead of a blind generic toast."""
+    src = (
+        Path(__file__).resolve().parent.parent / "static" / "main.js"
+    ).read_text(encoding="utf-8")
+    buy = src.split("function bindShopBuyOnce()")[1].split("function initShop()")[0]
+    assert "shop_paypal_unavailable" in buy
+    assert "shop_host_mismatch" in buy
+    assert "shop_promo_blocked_checkout" in buy
+    assert "promo_dropped" in buy
+    assert 'reason.startsWith("promo_")' in buy
 
 
 def test_stripe_webhook_rejects_bad_signature(shop_db, monkeypatch):

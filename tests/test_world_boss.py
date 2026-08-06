@@ -640,6 +640,13 @@ def test_claim_rewards_after_defeat(wb_db):
         again = claim_world_boss_rewards(uid, event_id, conn=conn, now=now)
         assert not again["ok"]
         assert again["error"] == "already_claimed"
+        # Ended claimable cards leave the list after claim (UI removes the card live).
+        payload = build_world_boss_payload(uid, conn=conn, now=now, flush_auto=False)
+        ids = [
+            int((c.get("event") or {}).get("id") or 0)
+            for c in (payload.get("events") or [])
+        ]
+        assert event_id not in ids
         commit(conn)
     finally:
         conn.close()

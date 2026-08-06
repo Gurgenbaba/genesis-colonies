@@ -5577,7 +5577,14 @@ def shop_view():
     if promo_q:
         _set_shop_promo_sticky(promo_q)
     sticky = session.get("shop_promo_code") if isinstance(session.get("shop_promo_code"), dict) else {}
-    active_promo = str(sticky.get("code") or "") if sticky else ""
+    active_promo = ""
+    if sticky:
+        code_s = str(sticky.get("code") or "").strip()
+        exp = float(sticky.get("expires_at") or 0)
+        if code_s and exp >= time.time():
+            active_promo = code_s
+        elif code_s:
+            session.pop("shop_promo_code", None)
 
     return render_template(
         "shop.html",
@@ -5720,11 +5727,11 @@ def api_shop_catalog():
 
 
 @app.route("/api/shop/checkout", methods=["POST"])
-@require_login
+@require_login_api
 def api_shop_checkout():
     user_id = int(session.get("user_id") or 0)
     if not user_id:
-        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+        return jsonify({"ok": False, "reason": "not_logged_in", "error": "not_logged_in"}), 401
 
     data = request.get_json(silent=True) or {}
     request_id = _extract_request_id(data)
@@ -5745,6 +5752,8 @@ def api_shop_checkout():
             exp = float(sticky.get("expires_at") or 0)
             if code_s and exp >= time.time():
                 promo_code = code_s
+            elif code_s:
+                session.pop("shop_promo_code", None)
     from game.shop import start_checkout
     from urllib.parse import urlparse
     from game.config import get_public_base_url
@@ -5769,32 +5778,49 @@ def api_shop_checkout():
     # Attach order_id placeholder after create — Stripe uses {CHECKOUT_SESSION_ID};
     # for PayPal we append order_id after we know it (below).
 
+    def _checkout_once(promo: Optional[str]):
+        begin_write_transaction(conn)
+        try:
+            ok_i, reason_i, result_i = start_checkout(
+                user_id,
+                sku,
+                provider,
+                conn=conn,
+                success_url=success_url,
+                cancel_url=cancel_url,
+                legal_ack=legal_ack,
+                legal_text_version=legal_text_version,
+                promo_code=promo or None,
+            )
+            if ok_i:
+                if result_i and result_i.get("order_id") and provider != "stripe":
+                    oid = int(result_i["order_id"])
+                    result_i = dict(result_i)
+                    result_i["return_hint"] = f"/shop/return?order_id={oid}"
+                commit(conn)
+            else:
+                rollback(conn)
+            return ok_i, reason_i, result_i
+        except Exception:
+            rollback(conn)
+            raise
+
+    promo_dropped = None
     conn = db()
     try:
-        begin_write_transaction(conn)
-        ok, reason, result = start_checkout(
-            user_id,
-            sku,
-            provider,
-            conn=conn,
-            success_url=success_url,
-            cancel_url=cancel_url,
-            legal_ack=legal_ack,
-            legal_text_version=legal_text_version,
-            promo_code=promo_code or None,
-        )
-        if ok:
-            # Rewrite success URL with concrete order_id for non-Stripe flows.
-            if result and result.get("order_id") and provider != "stripe":
-                oid = int(result["order_id"])
-                # PayPal already created with generic success; return page resolves session.
-                result = dict(result)
-                result["return_hint"] = f"/shop/return?order_id={oid}"
-            commit(conn)
-        else:
-            rollback(conn)
+        ok, reason, result = _checkout_once(promo_code or None)
+        # Stale/invalid promo in the input or sticky session must never block PayPal.
+        if (not ok) and str(reason or "").startswith("promo_"):
+            promo_dropped = str(reason)
+            session.pop("shop_promo_code", None)
+            logger.warning(
+                "shop checkout dropping invalid promo user_id=%s sku=%s reason=%s",
+                user_id,
+                sku,
+                promo_dropped,
+            )
+            ok, reason, result = _checkout_once(None)
     except Exception:
-        rollback(conn)
         logger.exception(
             "shop checkout failed user_id=%s sku=%s provider=%s",
             user_id,
@@ -5805,17 +5831,36 @@ def api_shop_checkout():
     finally:
         conn.close()
 
-    state, _ = _build_game_state_payload(
-        include_panel=True, finish_source="api_shop_checkout"
-    )
+    # External provider redirect must never wait on heavy game-state (BP tracks etc.).
+    # Regression window: after include_tracks=True in game-state, checkout could time out
+    # after PayPal order create — client never received checkout_url.
+    checkout_url = (result or {}).get("checkout_url") if result else None
+    fulfilled = bool((result or {}).get("fulfilled")) if result else False
+    if ok and checkout_url and not fulfilled:
+        state = {}
+    else:
+        try:
+            state, _ = _build_game_state_payload(
+                include_panel=True, finish_source="api_shop_checkout"
+            )
+        except Exception:
+            logger.exception(
+                "shop checkout state build failed user_id=%s sku=%s (checkout ok=%s)",
+                user_id,
+                sku,
+                ok,
+            )
+            state = {}
     resp = {
         "ok": bool(ok),
         "reason": reason,
         "state": state,
         "order_id": (result or {}).get("order_id") if result else None,
-        "checkout_url": (result or {}).get("checkout_url") if result else None,
-        "fulfilled": bool((result or {}).get("fulfilled")) if result else False,
+        "checkout_url": checkout_url,
+        "fulfilled": fulfilled,
     }
+    if promo_dropped:
+        resp["promo_dropped"] = promo_dropped
     if request_id and ok:
         save_idempotent_action(user_id, request_id, resp)
     status = 200 if ok else 400

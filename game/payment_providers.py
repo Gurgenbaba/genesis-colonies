@@ -11,11 +11,14 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any, Dict, Mapping, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 
 def _env(name: str) -> str:
@@ -224,7 +227,21 @@ def paypal_create_checkout_order(
             token=token,
             body=body,
         )
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = (exc.read() or b"").decode("utf-8", errors="replace")[:800]
+        except Exception:
+            detail = ""
+        logger.warning(
+            "paypal create order HTTP %s order_id=%s detail=%s",
+            getattr(exc, "code", "?"),
+            order.get("id"),
+            detail,
+        )
+        return False, "paypal_session_failed", None
     except Exception:
+        logger.exception("paypal create order failed order_id=%s", order.get("id"))
         return False, "paypal_session_failed", None
 
     order_id = str(data.get("id") or "")
@@ -234,6 +251,11 @@ def paypal_create_checkout_order(
             approve = link.get("href")
             break
     if not order_id or not approve:
+        logger.warning(
+            "paypal create order missing approve link order_id=%s keys=%s",
+            order_id or order.get("id"),
+            list(data.keys()) if isinstance(data, dict) else type(data),
+        )
         return False, "paypal_session_failed", None
     return True, "ok", {
         "session_id": order_id,
@@ -458,7 +480,16 @@ def _paypal_access_token() -> Optional[str]:
     try:
         with urllib.request.urlopen(req, timeout=20) as resp:
             payload = json.loads(resp.read().decode("utf-8"))
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, ValueError):
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = (exc.read() or b"").decode("utf-8", errors="replace")[:400]
+        except Exception:
+            detail = ""
+        logger.warning("paypal oauth HTTP %s detail=%s", getattr(exc, "code", "?"), detail)
+        return None
+    except (urllib.error.URLError, TimeoutError, ValueError):
+        logger.exception("paypal oauth failed")
         return None
     token = str(payload.get("access_token") or "").strip()
     return token or None

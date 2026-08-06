@@ -3332,6 +3332,14 @@ def test_liveops_claims_are_state_first_without_soft_reload():
     assert 't("wb_catch_fail"' in wb
     assert "phase_locked" in wb
     assert "insufficient_timekeeper" in wb
+    # Claimed ended bosses leave the list live (server drops them from events[]).
+    assert "wbRemoveBossCard" in wb
+    assert "wbPruneEndedBossCardsMissingFromPayload" in wb
+    claim = wb.split('root.querySelectorAll(".wb-claim-btn")')[1].split(
+        "const wbReducedMotion"
+    )[0]
+    assert "wbRemoveBossCard(claimBtn)" in claim
+    assert "panel.replaceWith" not in claim
 
     shop = src.split("function bindShopBuyOnce()")[1].split("function initShop()")[0]
     assert "_markShopSkuOwned(sku)" in shop

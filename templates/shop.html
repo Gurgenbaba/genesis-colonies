@@ -282,6 +282,18 @@
     </section>
     {% endif %}
 
+    {# Legal ack above buy buttons — players must see it before PayPal CTAs #}
+    <section class="shop-policy-panel shop-policy-panel--checkout">
+      {% include "partials/legal_ack.html" %}
+      <p class="hint shop-legal-footer">
+        {{ T("legal_shop_footer", "Digitale Inhalte · nach Gutschrift kein Widerruf") }}
+        ·
+        <a href="{{ url_for('legal_view', doc='terms') }}" data-pjax-link>{{ T("legal_tab_terms", "AGB") }}</a>
+        ·
+        <a href="{{ url_for('legal_view', doc='withdrawal') }}" data-pjax-link>{{ T("legal_tab_withdrawal", "Widerruf") }}</a>
+      </p>
+    </section>
+
     <div class="shop-catalog-body">
       {% if not products %}
       <p class="hint">{{ T("shop_empty", "Keine Produkte verfügbar.") }}</p>
@@ -335,22 +347,14 @@
       {% endif %}
     </div>
 
-    <section class="shop-policy-panel">
-      {% include "partials/legal_ack.html" %}
-      <p class="hint shop-legal-footer">
-        {{ T("legal_shop_footer", "Digitale Inhalte · nach Gutschrift kein Widerruf") }}
-        ·
-        <a href="{{ url_for('legal_view', doc='terms') }}" data-pjax-link>{{ T("legal_tab_terms", "AGB") }}</a>
-        ·
-        <a href="{{ url_for('legal_view', doc='withdrawal') }}" data-pjax-link>{{ T("legal_tab_withdrawal", "Widerruf") }}</a>
-        ·
-        <a href="{{ url_for('legal_view') }}" data-pjax-link>{{ T("legal_tab_imprint", "Impressum") }}</a>
-      </p>
+    <section class="shop-policy-panel shop-policy-panel--footer">
       <p class="hint">
         {{ T("shop_policy", "Offizieller Shop: Timekeeper, Boosters, Container (meta), Season Pass und Name-Styles. Kampf-Power und Rohstoff-Stacks werden nicht verkauft.") }}
         <a href="{{ url_for('premium_view') }}" class="gc-btn gc-btn-ghost gc-btn-sm" data-pjax-link>
           {{ T("shop_goto_premium", "Season Pass öffnen") }}
         </a>
+        ·
+        <a href="{{ url_for('legal_view') }}" data-pjax-link>{{ T("legal_tab_imprint", "Impressum") }}</a>
       </p>
     </section>
   </div>
