@@ -599,12 +599,100 @@ def test_shop_checkout_client_surfaces_paypal_and_promo_errors():
     src = (
         Path(__file__).resolve().parent.parent / "static" / "main.js"
     ).read_text(encoding="utf-8")
+    assert "function _shopCheckoutFailMessage(" in src
+    assert "function _shopHandleCheckoutResponse(" in src
     buy = src.split("function bindShopBuyOnce()")[1].split("function initShop()")[0]
-    assert "shop_paypal_unavailable" in buy
-    assert "shop_host_mismatch" in buy
-    assert "shop_promo_blocked_checkout" in buy
-    assert "promo_dropped" in buy
-    assert 'reason.startsWith("promo_")' in buy
+    assert "_shopHandleCheckoutResponse" in buy
+    assert "shop_paypal_unavailable" in src
+    assert "shop_host_mismatch" in src
+    assert "shop_promo_blocked_checkout" in src
+    # External checkout must redirect before any HUD apply on empty state:{}.
+    handler = src.split("function _shopHandleCheckoutResponse(")[1].split(
+        "function _shopActivePromoCode("
+    )[0]
+    assert "window.location.assign" in handler
+    assert "_shopMaybeApplyCheckoutState" in handler
+    assert handler.index("checkout_url") < handler.index("_shopMaybeApplyCheckoutState")
+    maybe = src.split("function _shopMaybeApplyCheckoutState(")[1].split(
+        "function _shopHandleCheckoutResponse("
+    )[0]
+    assert "res.checkout_url" in maybe or "checkout_url" in maybe
+    assert "server_time" in maybe
+
+
+def test_live_paypal_accepts_www_apex_alias(shop_db, monkeypatch):
+    """www and apex of PUBLIC_BASE_URL must both be allowed for live PayPal."""
+    monkeypatch.setenv("SHOP_ENABLED", "1")
+    monkeypatch.setenv("SHOP_TEST_PROVIDER", "0")
+    monkeypatch.setenv("PAYPAL_CLIENT_ID", "test_client")
+    monkeypatch.setenv("PAYPAL_CLIENT_SECRET", "test_secret")
+    monkeypatch.setenv("PAYPAL_MODE", "live")
+    # Test client host is localhost — PUBLIC_BASE_URL with www. must still match.
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://www.localhost")
+
+    import game.payment_providers as pp
+    from app import app
+
+    monkeypatch.setattr(
+        pp,
+        "paypal_create_checkout_order",
+        lambda **kwargs: (
+            True,
+            "ok",
+            {
+                "session_id": "PAYPAL_ORDER_TEST",
+                "checkout_url": "https://www.paypal.com/checkoutnow?token=PAYPAL_ORDER_TEST",
+            },
+        ),
+    )
+    monkeypatch.setattr(pp, "paypal_configured", lambda: True)
+    monkeypatch.setattr("app._build_game_state_payload", lambda **_k: ({}, None))
+
+    app.config["TESTING"] = True
+    client = app.test_client()
+    uid = _player()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+
+    checkout = client.post(
+        "/api/shop/checkout",
+        json={"sku": "tk_pack_s", "provider": "paypal", "legal_ack": True},
+        headers={"Content-Type": "application/json"},
+    )
+    assert checkout.status_code == 200, checkout.get_data(as_text=True)
+    data = checkout.get_json()
+    assert data["ok"] is True
+    assert data["checkout_url"]
+
+
+def test_live_paypal_rejects_foreign_host(shop_db, monkeypatch):
+    monkeypatch.setenv("SHOP_ENABLED", "1")
+    monkeypatch.setenv("SHOP_TEST_PROVIDER", "0")
+    monkeypatch.setenv("PAYPAL_CLIENT_ID", "test_client")
+    monkeypatch.setenv("PAYPAL_CLIENT_SECRET", "test_secret")
+    monkeypatch.setenv("PAYPAL_MODE", "live")
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://www.genesis-colonies.de")
+
+    import game.payment_providers as pp
+    from app import app
+
+    monkeypatch.setattr(pp, "paypal_configured", lambda: True)
+
+    app.config["TESTING"] = True
+    client = app.test_client()
+    uid = _player()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+
+    checkout = client.post(
+        "/api/shop/checkout",
+        json={"sku": "tk_pack_s", "provider": "paypal", "legal_ack": True},
+        headers={"Content-Type": "application/json"},
+    )
+    assert checkout.status_code == 400
+    data = checkout.get_json()
+    assert data["ok"] is False
+    assert data["reason"] == "public_host_mismatch"
 
 
 def test_multi_sku_cart_order_and_fulfill(shop_db):

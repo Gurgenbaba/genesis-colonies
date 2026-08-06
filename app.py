@@ -5890,12 +5890,18 @@ def api_shop_checkout():
     elif not sku:
         return jsonify({"ok": False, "reason": "unknown_sku"}), 400
 
-    # Block local→live PayPal: PUBLIC_BASE_URL host must match this request host.
+    # Block local→live PayPal: PUBLIC_BASE_URL host must match this request host
+    # (www and apex are treated as the same site).
     if provider == "paypal" and paypal_mode() == "live":
         pub = urlparse((get_public_base_url() or "").strip()).netloc.lower()
         req_host = (request.host or "").split(":")[0].lower()
         pub_host = pub.split(":")[0] if pub else ""
-        if pub_host and req_host and pub_host != req_host:
+
+        def _canon_host(h: str) -> str:
+            h = (h or "").strip().lower()
+            return h[4:] if h.startswith("www.") else h
+
+        if pub_host and req_host and _canon_host(pub_host) != _canon_host(req_host):
             return jsonify(
                 {
                     "ok": False,

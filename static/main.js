@@ -21271,6 +21271,111 @@
   let _shopActivePromo = "";
   let _shopCartState = null;
 
+  function _shopCheckoutFailMessage(reason) {
+    const r = String(reason || "");
+    if (r === "empty_cart") return t("shop_cart_empty", "Warenkorb ist leer.");
+    if (r === "shop_disabled") return t("shop_disabled", "Shop ist derzeit deaktiviert.");
+    if (r === "already_owned") return t("shop_owned", "Bereits freigeschaltet");
+    if (r === "provider_unconfigured") {
+      return t("shop_no_providers", "Zahlungsanbieter sind noch nicht konfiguriert.");
+    }
+    if (r === "public_host_mismatch") {
+      return t(
+        "shop_host_mismatch",
+        "Kauf nur über die offizielle Shop-URL möglich."
+      );
+    }
+    if (r === "paypal_auth_failed" || r === "paypal_session_failed") {
+      return t(
+        "shop_paypal_unavailable",
+        "PayPal ist gerade nicht erreichbar. Bitte gleich nochmal versuchen."
+      );
+    }
+    if (r === "legal_ack_required") {
+      return t("legal_ack_required", "Bitte die rechtlichen Hinweise vor dem Kauf bestätigen.");
+    }
+    if (r.startsWith("promo_")) {
+      return t(
+        "shop_promo_blocked_checkout",
+        "Promo-Code ungültig — bitte ohne Code erneut kaufen."
+      );
+    }
+    return t("shop_checkout_fail", "Kauf konnte nicht gestartet werden.");
+  }
+
+  function _shopMaybeApplyCheckoutState(res, reason) {
+    // External PayPal/Stripe redirects intentionally return state:{} — never patch HUD with that.
+    if (!res || res.checkout_url) return;
+    const state = res.state;
+    if (!state || typeof state !== "object" || !Number(state.server_time || 0)) return;
+    if (typeof GC.applyActionState !== "function") return;
+    try {
+      GC.applyActionState(res, reason);
+    } catch (err) {
+      console.warn("[GC] shop checkout applyActionState skipped", err);
+    }
+  }
+
+  function _shopHandleCheckoutResponse(res, opts) {
+    const page = opts && opts.page;
+    const btn = opts && opts.btn;
+    const fromCart = !!(opts && opts.fromCart);
+    if (res?.ok && res.checkout_url) {
+      if (res.promo_dropped) {
+        _shopActivePromo = "";
+        const promoInput = page && page.querySelector("[data-shop-promo-input]");
+        if (promoInput) promoInput.value = "";
+        const promoStatus = page && page.querySelector("[data-shop-promo-status]");
+        if (promoStatus) promoStatus.textContent = "";
+        _applyShopPromoPrices([]);
+      }
+      // External provider checkout — allowed navigation exception. Do not apply empty state.
+      window.location.assign(String(res.checkout_url));
+      return true;
+    }
+    if (res?.ok && res.fulfilled) {
+      _shopMaybeApplyCheckoutState(res, fromCart ? "shop_checkout_cart" : "shop_checkout");
+      const kindHost = btn && btn.closest ? btn.closest("[data-shop-kind]") : null;
+      const shopKind = kindHost ? kindHost.getAttribute("data-shop-kind") || "" : "";
+      showNotify(t("shop_fulfill_ok", "Kauf gutgeschrieben."), "success");
+      if (shopKind === "cosmetic_unlock") {
+        try {
+          sessionStorage.setItem("gc_shop_equip_hint", "1");
+        } catch (_) { /* ignore */ }
+        showNotify(
+          t(
+            "shop_cosmetic_equip_hint",
+            "Equip in Player Card — pick a name style and save."
+          ),
+          "info"
+        );
+      }
+      if (fromCart) {
+        _shopRefreshCart();
+        _shopSetCartOpen(false);
+      } else if (btn) {
+        const sku = String(btn.getAttribute("data-sku") || "").trim();
+        if (sku) _markShopSkuOwned(sku);
+        if (document.getElementById("premium-page") && !document.getElementById("shop-page")) {
+          if (typeof GC.reloadCurrentPage === "function") {
+            GC.reloadCurrentPage({ skipPolling: true, reason: "shop_fulfilled_premium" });
+          }
+        }
+      }
+      return true;
+    }
+    _shopMaybeApplyCheckoutState(res, fromCart ? "shop_checkout_cart" : "shop_checkout");
+    const reason = String(res?.reason || "");
+    if (reason.startsWith("promo_")) {
+      _shopActivePromo = "";
+      const promoInput = page && page.querySelector("[data-shop-promo-input]");
+      if (promoInput) promoInput.value = "";
+    }
+    if (reason) console.warn("[GC] shop checkout failed", reason, res);
+    showNotify(_shopCheckoutFailMessage(reason), "error");
+    return false;
+  }
+
   function _shopActivePromoCode() {
     const page = document.getElementById("shop-page");
     const input = page && page.querySelector("[data-shop-promo-input]");
@@ -21697,31 +21802,11 @@
               promo_code: _shopActivePromoCode(),
             }),
           });
-          if (res?.state && typeof GC.applyActionState === "function") {
-            GC.applyActionState(res, "shop_checkout_cart");
-          }
-          if (res?.ok && res.fulfilled) {
-            showNotify(t("shop_fulfill_ok", "Kauf gutgeschrieben."), "success");
-            _shopRefreshCart();
-            _shopSetCartOpen(false);
-            return;
-          }
-          if (res?.ok && res.checkout_url) {
-            window.location.assign(String(res.checkout_url));
-            return;
-          }
-          const reason = String(res?.reason || "");
-          let msg = t("shop_checkout_fail", "Kauf konnte nicht gestartet werden.");
-          if (reason === "empty_cart") msg = t("shop_cart_empty", "Warenkorb ist leer.");
-          else if (reason === "shop_disabled") msg = t("shop_disabled", "Shop ist derzeit deaktiviert.");
-          else if (reason === "already_owned") msg = t("shop_owned", "Bereits freigeschaltet");
-          else if (reason === "paypal_auth_failed" || reason === "paypal_session_failed") {
-            msg = t(
-              "shop_paypal_unavailable",
-              "PayPal ist gerade nicht erreichbar. Bitte gleich nochmal versuchen."
-            );
-          }
-          showNotify(msg, "error");
+          _shopHandleCheckoutResponse(res, {
+            page: document.getElementById("shop-page"),
+            btn: cartCheckout,
+            fromCart: true,
+          });
         } catch (_) {
           showNotify(t("shop_checkout_fail", "Kauf konnte nicht gestartet werden."), "error");
         } finally {
@@ -21773,77 +21858,11 @@
             promo_code: _shopActivePromoCode(),
           }),
         });
-        if (res?.state && typeof GC.applyActionState === "function") {
-          GC.applyActionState(res, "shop_checkout");
-        }
-        if (res?.ok && res.fulfilled) {
-          const kindHost = btn.closest("[data-shop-kind]");
-          const shopKind = kindHost ? kindHost.getAttribute("data-shop-kind") || "" : "";
-          showNotify(t("shop_fulfill_ok", "Kauf gutgeschrieben."), "success");
-          if (shopKind === "cosmetic_unlock") {
-            try {
-              sessionStorage.setItem("gc_shop_equip_hint", "1");
-            } catch (_) { /* ignore */ }
-            showNotify(
-              t(
-                "shop_cosmetic_equip_hint",
-                "Equip in Player Card — pick a name style and save."
-              ),
-              "info"
-            );
-          }
-          _markShopSkuOwned(sku);
-          // Premium page embeds shop CTAs — unlock changes track SSR; soft PJAX there only.
-          if (document.getElementById("premium-page") && !document.getElementById("shop-page")) {
-            if (typeof GC.reloadCurrentPage === "function") {
-              GC.reloadCurrentPage({ skipPolling: true, reason: "shop_fulfilled_premium" });
-            }
-          }
-          return;
-        }
-        if (res?.ok && res.checkout_url) {
-          // External provider checkout — allowed navigation exception.
-          if (res.promo_dropped) {
-            _shopActivePromo = "";
-            const promoInput = page && page.querySelector("[data-shop-promo-input]");
-            if (promoInput) promoInput.value = "";
-            const promoStatus = page && page.querySelector("[data-shop-promo-status]");
-            if (promoStatus) promoStatus.textContent = "";
-            _applyShopPromoPrices([]);
-          }
-          window.location.assign(String(res.checkout_url));
-          return;
-        }
-        const reason = String(res?.reason || "");
-        let msg = t("shop_checkout_fail", "Kauf konnte nicht gestartet werden.");
-        if (reason === "shop_disabled") msg = t("shop_disabled", "Shop ist derzeit deaktiviert.");
-        else if (reason === "already_owned") msg = t("shop_owned", "Bereits freigeschaltet");
-        else if (reason === "provider_unconfigured") {
-          msg = t("shop_no_providers", "Zahlungsanbieter sind noch nicht konfiguriert.");
-        } else if (reason === "public_host_mismatch") {
-          msg = t(
-            "shop_host_mismatch",
-            "Kauf nur über die offizielle Shop-URL möglich."
-          );
-        } else if (reason === "paypal_auth_failed" || reason === "paypal_session_failed") {
-          msg = t(
-            "shop_paypal_unavailable",
-            "PayPal ist gerade nicht erreichbar. Bitte gleich nochmal versuchen."
-          );
-        } else if (reason === "legal_ack_required") {
-          msg = t("legal_ack_required", "Bitte die rechtlichen Hinweise vor dem Kauf bestätigen.");
-        } else if (reason.startsWith("promo_")) {
-          _shopActivePromo = "";
-          const promoInput = page && page.querySelector("[data-shop-promo-input]");
-          if (promoInput) promoInput.value = "";
-          msg = t(
-            "shop_promo_blocked_checkout",
-            "Promo-Code ungültig — bitte ohne Code erneut kaufen."
-          );
-        } else if (reason === "invalid_return_url") {
-          msg = t("shop_checkout_fail", "Kauf konnte nicht gestartet werden.");
-        }
-        showNotify(msg, "error");
+        _shopHandleCheckoutResponse(res, {
+          page,
+          btn,
+          fromCart: false,
+        });
       } catch (_) {
         showNotify(t("shop_checkout_fail", "Kauf konnte nicht gestartet werden."), "error");
       } finally {
