@@ -35,7 +35,9 @@ Banned players (`banned_until` in the future) are excluded from player/planet re
 }
 ```
 
-Guards: login required · min query length 2 (except pure coords) · limit 25 · read-only.
+Guards: login required · min query length 1 (except pure coords) · limit 25 · read-only.
+
+**Live UX:** Client debounces input (~250ms) and calls `/api/search` while typing; results render as industrial hit-rows under the form (player name → PlayerCard, coords → Galaxy). No separate suggest API.
 
 ## Alliance roster
 

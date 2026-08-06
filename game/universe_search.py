@@ -16,7 +16,7 @@ from .db import db, table_exists
 from .galaxy import format_coordinates, galaxy_view_href, parse_coordinate_query
 
 SEARCH_TYPES = frozenset({"player", "planet", "alliance"})
-MIN_QUERY_LEN = 2
+MIN_QUERY_LEN = 1
 RESULT_LIMIT = 25
 
 

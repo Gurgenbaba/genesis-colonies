@@ -38962,92 +38962,118 @@
     return `<a href="/alliance/${id}" class="gc-search-alliance-link" data-pjax-link>${searchEsc(label)}</a>`;
   }
 
+  function searchHitLegend(cols) {
+    return (
+      `<div class="gc-search-list-legend" aria-hidden="true">` +
+      cols.map((c) => `<span class="gc-search-legend-col">${searchEsc(c)}</span>`).join("") +
+      `</div>`
+    );
+  }
+
   function renderSearchPlayers(results) {
     if (!results.length) {
-      return `<div class="search-state">${searchEsc(t("search_empty", "Keine Treffer."))}</div>`;
+      return `<div class="search-state search-state-empty">${searchEsc(t("search_empty", "Keine Treffer."))}</div>`;
     }
-    const rows = results
+    const hits = results
       .map((row) => {
         const ally =
           row.alliance_tag && row.alliance_id
             ? searchAllianceLink(row.alliance_id, row.alliance_tag)
-            : "—";
+            : `<span class="gc-search-hit-muted">—</span>`;
         return (
-          `<tr>` +
-          `<td>${searchPlayerBtn(row.player_id, row.name)}</td>` +
-          `<td>${ally}</td>` +
-          `<td class="gc-mono">${searchCoordsHtml(row.homeworld)}</td>` +
-          `</tr>`
+          `<article class="gc-search-hit" role="listitem">` +
+          `<div class="gc-search-hit-rail" aria-hidden="true"></div>` +
+          `<div class="gc-search-hit-body">` +
+          `<div class="gc-search-hit-primary">${searchPlayerBtn(row.player_id, row.name)}</div>` +
+          `<div class="gc-search-hit-ally">${ally}</div>` +
+          `<div class="gc-search-hit-coords">${searchCoordsHtml(row.homeworld)}</div>` +
+          `</div>` +
+          `</article>`
         );
       })
       .join("");
     return (
-      `<table class="gc-search-table">` +
-      `<thead><tr>` +
-      `<th>${searchEsc(t("search_col_player", "Spieler"))}</th>` +
-      `<th>${searchEsc(t("search_col_alliance", "Allianz"))}</th>` +
-      `<th>${searchEsc(t("search_col_homeworld", "Homeworld"))}</th>` +
-      `</tr></thead><tbody>${rows}</tbody></table>`
+      `<div class="gc-search-list">` +
+      searchHitLegend([
+        t("search_col_player", "Spieler"),
+        t("search_col_alliance", "Allianz"),
+        t("search_col_homeworld", "Homeworld"),
+      ]) +
+      `<div class="gc-search-hits" role="list">${hits}</div>` +
+      `</div>`
     );
   }
 
   function renderSearchPlanets(results) {
     if (!results.length) {
-      return `<div class="search-state">${searchEsc(t("search_empty", "Keine Treffer."))}</div>`;
+      return `<div class="search-state search-state-empty">${searchEsc(t("search_empty", "Keine Treffer."))}</div>`;
     }
-    const rows = results
+    const hits = results
       .map((row) => {
         return (
-          `<tr>` +
-          `<td>${searchEsc(row.planet_name || "—")}</td>` +
-          `<td>${searchPlayerBtn(row.owner_id, row.owner_name)}</td>` +
-          `<td class="gc-mono">${searchCoordsHtml(row.coords)}</td>` +
-          `</tr>`
+          `<article class="gc-search-hit" role="listitem">` +
+          `<div class="gc-search-hit-rail" aria-hidden="true"></div>` +
+          `<div class="gc-search-hit-body">` +
+          `<div class="gc-search-hit-primary"><span class="gc-search-hit-planet">${searchEsc(row.planet_name || "—")}</span></div>` +
+          `<div class="gc-search-hit-ally">${searchPlayerBtn(row.owner_id, row.owner_name)}</div>` +
+          `<div class="gc-search-hit-coords">${searchCoordsHtml(row.coords)}</div>` +
+          `</div>` +
+          `</article>`
         );
       })
       .join("");
     return (
-      `<table class="gc-search-table">` +
-      `<thead><tr>` +
-      `<th>${searchEsc(t("search_col_planet", "Planet"))}</th>` +
-      `<th>${searchEsc(t("search_col_owner", "Besitzer"))}</th>` +
-      `<th>${searchEsc(t("search_col_coords", "Koordinaten"))}</th>` +
-      `</tr></thead><tbody>${rows}</tbody></table>`
+      `<div class="gc-search-list">` +
+      searchHitLegend([
+        t("search_col_planet", "Planet"),
+        t("search_col_owner", "Besitzer"),
+        t("search_col_coords", "Koordinaten"),
+      ]) +
+      `<div class="gc-search-hits" role="list">${hits}</div>` +
+      `</div>`
     );
   }
 
   function renderSearchAlliances(results) {
     if (!results.length) {
-      return `<div class="search-state">${searchEsc(t("search_empty", "Keine Treffer."))}</div>`;
+      return `<div class="search-state search-state-empty">${searchEsc(t("search_empty", "Keine Treffer."))}</div>`;
     }
     return results
       .map((row) => {
         const members = Array.isArray(row.members) ? row.members : [];
-        const memberRows = members
+        const memberHits = members
           .map((m) => {
             return (
-              `<tr>` +
-              `<td>${searchPlayerBtn(m.player_id, m.player_name)}</td>` +
-              `<td>${searchEsc(m.role || "member")}</td>` +
-              `<td class="gc-mono">${searchCoordsHtml(m.homeworld)}</td>` +
-              `</tr>`
+              `<article class="gc-search-hit gc-search-hit--member" role="listitem">` +
+              `<div class="gc-search-hit-rail" aria-hidden="true"></div>` +
+              `<div class="gc-search-hit-body">` +
+              `<div class="gc-search-hit-primary">${searchPlayerBtn(m.player_id, m.player_name)}</div>` +
+              `<div class="gc-search-hit-ally"><span class="gc-search-role">${searchEsc(m.role || "member")}</span></div>` +
+              `<div class="gc-search-hit-coords">${searchCoordsHtml(m.homeworld)}</div>` +
+              `</div>` +
+              `</article>`
             );
           })
           .join("");
         return (
-          `<article class="gc-search-alliance-card gc-panel">` +
+          `<article class="gc-search-alliance-card">` +
           `<header class="gc-search-alliance-head">` +
           `<a href="/alliance/${Number(row.alliance_id) || 0}" class="gc-search-alliance-title" data-pjax-link>` +
           searchEsc(`[${row.tag || ""}] ${row.name || ""}`) +
           `</a>` +
-          `<span class="gc-mono">${Number(row.member_count) || members.length} ${searchEsc(t("search_col_members", "Mitglieder"))}</span>` +
+          `<span class="gc-search-alliance-count gc-mono">` +
+          `${Number(row.member_count) || members.length} ${searchEsc(t("search_col_members", "Mitglieder"))}` +
+          `</span>` +
           `</header>` +
-          `<table class="gc-search-table">` +
-          `<thead><tr>` +
-          `<th>${searchEsc(t("search_col_player", "Spieler"))}</th>` +
-          `<th>${searchEsc(t("search_col_role", "Rang"))}</th>` +
-          `<th>${searchEsc(t("search_col_homeworld", "Homeworld"))}</th>` +
-          `</tr></thead><tbody>${memberRows || `<tr><td colspan="3">—</td></tr>`}</tbody></table>` +
+          searchHitLegend([
+            t("search_col_player", "Spieler"),
+            t("search_col_role", "Rang"),
+            t("search_col_homeworld", "Homeworld"),
+          ]) +
+          `<div class="gc-search-hits" role="list">` +
+          (memberHits ||
+            `<div class="search-state search-state-empty">—</div>`) +
+          `</div>` +
           `</article>`
         );
       })
@@ -39078,11 +39104,12 @@
   function renderSearchPayload(payload, searchType) {
     const root = document.getElementById("search-results");
     if (!root) return;
+    root.removeAttribute("aria-busy");
     if (!payload || payload.ok === false) {
       const err = payload?.error || "search_unavailable";
       let msg = t("search_error", "Suche fehlgeschlagen.");
       if (err === "query_too_short") {
-        msg = t("search_query_too_short", "Mindestens 2 Zeichen eingeben.");
+        msg = t("search_query_too_short", "Mindestens 1 Zeichen eingeben.");
       }
       root.innerHTML = `<div class="search-state search-state-error">${searchEsc(msg)}</div>`;
       renderSearchCoordJump(payload?.meta?.coord_jump || null);
@@ -39103,27 +39130,102 @@
     }
   }
 
-  async function runUniverseSearch(query, searchType) {
+  let _searchDebounceTimer = null;
+  let _searchAbort = null;
+  let _searchReqSeq = 0;
+
+  function clearSearchDebounce() {
+    if (_searchDebounceTimer != null) {
+      clearTimeout(_searchDebounceTimer);
+      _searchDebounceTimer = null;
+    }
+  }
+
+  function abortSearchRequest() {
+    if (_searchAbort) {
+      try {
+        _searchAbort.abort();
+      } catch (_) {}
+      _searchAbort = null;
+    }
+  }
+
+  function currentSearchType() {
+    const page = document.getElementById("search-page");
+    return (
+      document.getElementById("search-type-input")?.value ||
+      page?.getAttribute("data-search-type") ||
+      "player"
+    );
+  }
+
+  function showSearchIdle() {
     const root = document.getElementById("search-results");
     if (root) {
-      root.innerHTML = `<div class="search-state search-state-loading">${searchEsc(t("search_loading", "Suche…"))}</div>`;
+      root.removeAttribute("aria-busy");
+      root.innerHTML =
+        `<div class="search-state search-state-idle">` +
+        searchEsc(
+          t(
+            "search_idle",
+            "Tippen zum Suchen — oder Koordinaten wie 1:42:7."
+          )
+        ) +
+        `</div>`;
     }
+    renderSearchCoordJump(null);
+    if (typeof history !== "undefined" && history.replaceState) {
+      const stype = currentSearchType();
+      history.replaceState(history.state || {}, "", `/search?type=${encodeURIComponent(stype)}`);
+    }
+  }
+
+  async function runUniverseSearch(query, searchType) {
+    const root = document.getElementById("search-results");
     const q = String(query || "").trim();
     const stype = String(searchType || "player");
+    if (!q) {
+      abortSearchRequest();
+      _searchReqSeq += 1;
+      showSearchIdle();
+      return;
+    }
+    abortSearchRequest();
+    const ctrl = new AbortController();
+    _searchAbort = ctrl;
+    const seq = ++_searchReqSeq;
+    if (root) {
+      root.setAttribute("aria-busy", "true");
+      root.innerHTML = `<div class="search-state search-state-loading">${searchEsc(t("search_loading", "Suche…"))}</div>`;
+    }
     try {
       const url = `/api/search?type=${encodeURIComponent(stype)}&q=${encodeURIComponent(q)}`;
-      const payload = await GC.fetchJSON(url, { cache: "no-store" });
+      const payload = await GC.fetchJSON(url, { cache: "no-store", signal: ctrl.signal });
+      if (seq !== _searchReqSeq) return;
       renderSearchPayload(payload, stype);
       if (typeof history !== "undefined" && history.replaceState) {
         const next = `/search?type=${encodeURIComponent(stype)}&q=${encodeURIComponent(q)}`;
         history.replaceState(history.state || {}, "", next);
       }
     } catch (err) {
+      if (seq !== _searchReqSeq) return;
+      if (err && (err.name === "AbortError" || ctrl.signal.aborted)) return;
       console.error("[GC] search failed", err);
       if (root) {
+        root.removeAttribute("aria-busy");
         root.innerHTML = `<div class="search-state search-state-error">${searchEsc(t("search_error", "Suche fehlgeschlagen."))}</div>`;
       }
+    } finally {
+      if (_searchAbort === ctrl) _searchAbort = null;
     }
+  }
+
+  function scheduleUniverseSearch(query, searchType) {
+    clearSearchDebounce();
+    _searchDebounceTimer = setTimeout(() => {
+      _searchDebounceTimer = null;
+      runUniverseSearch(query, searchType);
+    }, 250);
   }
 
   function bindSearchPageOnce() {
@@ -39148,19 +39250,33 @@
       if (input) {
         input.placeholder = (SEARCH_PLACEHOLDERS[stype] || SEARCH_PLACEHOLDERS.player)();
       }
+      clearSearchDebounce();
       const q = String(input?.value || "").trim();
       if (q) runUniverseSearch(q, stype);
+      else showSearchIdle();
+    });
+
+    document.addEventListener("input", (e) => {
+      const input = e.target.closest("[data-search-input]");
+      if (!input || !document.getElementById("search-page")) return;
+      const stype = currentSearchType();
+      const q = String(input.value || "").trim();
+      if (!q) {
+        clearSearchDebounce();
+        abortSearchRequest();
+        _searchReqSeq += 1;
+        showSearchIdle();
+        return;
+      }
+      scheduleUniverseSearch(q, stype);
     });
 
     document.addEventListener("submit", (e) => {
       const form = e.target.closest("[data-search-form]");
       if (!form || !document.getElementById("search-page")) return;
       e.preventDefault();
-      const page = document.getElementById("search-page");
-      const stype =
-        document.getElementById("search-type-input")?.value ||
-        page?.getAttribute("data-search-type") ||
-        "player";
+      clearSearchDebounce();
+      const stype = currentSearchType();
       const q = document.getElementById("search-query-input")?.value || "";
       runUniverseSearch(q, stype);
     });
@@ -39169,6 +39285,12 @@
   GC.initSearch = function initSearch() {
     if (!document.getElementById("search-page")) return;
     bindSearchPageOnce();
+    if (typeof GC.registerCleanup === "function") {
+      GC.registerCleanup(() => {
+        clearSearchDebounce();
+        abortSearchRequest();
+      });
+    }
     const page = document.getElementById("search-page");
     const stype = page?.getAttribute("data-search-type") || "player";
     const input = document.getElementById("search-query-input");
@@ -39185,6 +39307,7 @@
     }
     const q = String(page?.getAttribute("data-search-query") || input?.value || "").trim();
     if (q) runUniverseSearch(q, stype);
+    else showSearchIdle();
   };
 
   const EMPIRE_MATRIX_STORAGE_KEY = "gc_empire_matrix_collapsed";

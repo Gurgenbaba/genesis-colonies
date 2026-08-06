@@ -154,11 +154,19 @@ def test_coord_query_returns_jump_meta(search_db):
     assert "/galaxy" in jump["href"]
 
 
-def test_query_too_short(search_db):
+def test_single_char_prefix_search(search_db):
+    assert MIN_QUERY_LEN == 1
+    uid = _player(name="HansSolo")
     payload = search_universe("H", "player")
-    assert payload["ok"] is False
-    assert payload["error"] == "query_too_short"
-    assert len(str(payload["meta"]["query"])) < MIN_QUERY_LEN
+    assert payload["ok"] is True
+    assert payload["error"] is None
+    assert any(r["player_id"] == uid for r in payload["results"])
+
+
+def test_empty_query_ok_no_results(search_db):
+    payload = search_universe("", "player")
+    assert payload["ok"] is True
+    assert payload["results"] == []
 
 
 def test_banned_player_excluded(search_db):

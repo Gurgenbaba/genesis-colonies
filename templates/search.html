@@ -8,11 +8,11 @@
 
   <header class="section-header search-header">
     <h1 class="section-title">{{ T("search_title", "Universums-Suche") }}</h1>
-    <p class="section-hint hint">{{ T("search_subtitle", "Spieler, Planeten und Allianzen finden — Homeworld-Koordinaten für Flottenziele.") }}</p>
+    <p class="section-hint hint">{{ T("search_subtitle", "Tippen zum Suchen — Spieler, Planeten und Allianzen. Homeworld-Koordinaten für Flottenziele.") }}</p>
   </header>
 
   <section class="gc-panel search-panel" aria-labelledby="search-panel-title">
-    <div class="gc-panel-header">
+    <div class="gc-panel-header search-panel-header">
       <span class="gc-panel-title" id="search-panel-title">{{ T("search_title", "Universums-Suche") }}</span>
       <span class="gc-panel-subtitle">{{ T("search_hint_tabs", "Spieler zeigen nur den Hauptplaneten; Kolonien über Planet-Suche.") }}</span>
     </div>
@@ -38,26 +38,29 @@
 
       <form class="search-form" id="search-form" action="{{ url_for('search_view') }}" method="get" data-search-form>
         <input type="hidden" name="type" id="search-type-input" value="{{ search_type|default('player') }}">
-        <label class="search-form-label" for="search-query-input">
-          <span class="sr-only">{{ T("search_query_label", "Suchbegriff") }}</span>
-          <input type="search"
-                 class="gc-input search-query-input"
-                 id="search-query-input"
-                 name="q"
-                 value="{{ search_query|default('') }}"
-                 maxlength="64"
-                 autocomplete="off"
-                 placeholder="{{ T('search_placeholder_player', 'Spielername…') }}"
-                 data-search-input>
-        </label>
-        <button type="submit" class="gc-btn gc-btn-primary" data-search-submit>
-          {{ T("search_btn", "Suchen") }}
-        </button>
+        <div class="search-form-shell">
+          <span class="search-form-shell-accent" aria-hidden="true"></span>
+          <label class="search-form-label" for="search-query-input">
+            <span class="sr-only">{{ T("search_query_label", "Suchbegriff") }}</span>
+            <input type="search"
+                   class="gc-input search-query-input"
+                   id="search-query-input"
+                   name="q"
+                   value="{{ search_query|default('') }}"
+                   maxlength="64"
+                   autocomplete="off"
+                   placeholder="{{ T('search_placeholder_player', 'Spielername…') }}"
+                   data-search-input>
+          </label>
+          <button type="submit" class="gc-btn gc-btn-primary search-form-submit" data-search-submit>
+            {{ T("search_btn", "Suchen") }}
+          </button>
+        </div>
       </form>
 
       <div id="search-coord-jump" class="search-coord-jump" hidden aria-live="polite"></div>
       <div id="search-results" class="search-results" aria-live="polite">
-        <div class="search-state search-state-idle">{{ T("search_idle", "Mindestens 2 Zeichen eingeben oder Koordinaten wie 1:42:7.") }}</div>
+        <div class="search-state search-state-idle">{{ T("search_idle", "Tippen zum Suchen — oder Koordinaten wie 1:42:7.") }}</div>
       </div>
     </div>
   </section>
