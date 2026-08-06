@@ -427,11 +427,14 @@ def test_battle_pass_ops_claim_and_no_double(liveops_db):
     uid = _player()
     conn = db()
     build_target = int(OPS_CATALOG[OP_BUILD]["target"])
-    apply_op_progress(uid, SOURCE_BUILDING_FINISH, conn=conn, amount=build_target)
+    result = apply_op_progress(uid, SOURCE_BUILDING_FINISH, conn=conn, amount=build_target)
+    assert result.get("updated") is True
+    assert OP_BUILD in (result.get("completed") or [])
     state = bp_serialize(uid, conn=conn)
     build = next(o for o in state["ops"]["daily"] if o["op_key"] == OP_BUILD)
     assert build["claimable"] is True
     assert int(state["claimable_count"]) >= 1  # completed op counts toward badge
+    assert int(state.get("ops_claimable_count") or 0) >= 1
     before_xp = int(state["xp"])
     ok, reason, result = claim_op(uid, OP_BUILD, conn=conn)
     assert ok, reason
@@ -440,6 +443,21 @@ def test_battle_pass_ops_claim_and_no_double(liveops_db):
     ok2, reason2, _ = claim_op(uid, OP_BUILD, conn=conn)
     assert not ok2
     assert reason2 == "already_claimed"
+    conn.commit()
+    conn.close()
+
+
+def test_battle_pass_apply_op_progress_reports_completed_once(liveops_db):
+    """Crossing the target reports completed once; further ticks do not re-fire."""
+    uid = _player()
+    conn = db()
+    target = int(OPS_CATALOG[OP_BUILD]["target"])
+    mid = apply_op_progress(uid, SOURCE_BUILDING_FINISH, conn=conn, amount=max(1, target - 1))
+    assert OP_BUILD not in (mid.get("completed") or [])
+    done = apply_op_progress(uid, SOURCE_BUILDING_FINISH, conn=conn, amount=1)
+    assert OP_BUILD in (done.get("completed") or [])
+    again = apply_op_progress(uid, SOURCE_BUILDING_FINISH, conn=conn, amount=5)
+    assert OP_BUILD not in (again.get("completed") or [])
     conn.commit()
     conn.close()
 

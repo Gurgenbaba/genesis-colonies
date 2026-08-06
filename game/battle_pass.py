@@ -679,24 +679,28 @@ def apply_op_progress(
     amount: int = 1,
     now: Optional[float] = None,
 ) -> Dict[str, Any]:
-    """Increment Season Ops counters that match the activity source."""
+    """Increment Season Ops counters that match the activity source.
+
+    Returns ``completed`` op_keys that newly reached their target (claimable XP).
+    """
     if not schema_ready(conn):
-        return {"updated": False, "reason": "unavailable"}
+        return {"updated": False, "reason": "unavailable", "ops": [], "completed": []}
     src = str(source_key or "").strip()
     delta = max(0, int(amount or 0))
     if not src or delta <= 0:
-        return {"updated": False, "reason": "noop"}
+        return {"updated": False, "reason": "noop", "ops": [], "completed": []}
 
     ts = float(now if now is not None else time.time())
     season = get_active_season(conn, now=ts)
     if not season:
-        return {"updated": False, "reason": "no_season"}
+        return {"updated": False, "reason": "no_season", "ops": [], "completed": []}
     sid = int(season["id"])
     pid = int(player_id)
     _ensure_player_row(pid, sid, conn=conn, now=ts)
     ensure_ops_for_period(pid, sid, conn=conn, now=ts)
 
     touched: List[str] = []
+    completed: List[str] = []
     for op_key, meta in OPS_CATALOG.items():
         sources = meta.get("sources") or frozenset()
         if src not in sources:
@@ -708,8 +712,9 @@ def apply_op_progress(
         if row.get("claimed_at"):
             continue
         target = int(row["target"] or meta["target"])
-        new_prog = min(target, int(row["progress"] or 0) + delta)
-        if new_prog == int(row["progress"] or 0):
+        prev = int(row["progress"] or 0)
+        new_prog = min(target, prev + delta)
+        if new_prog == prev:
             continue
         conn.execute(
             """
@@ -720,8 +725,15 @@ def apply_op_progress(
             (new_prog, ts, pid, sid, period, op_key),
         )
         touched.append(op_key)
+        if prev < target <= new_prog:
+            completed.append(op_key)
 
-    return {"updated": bool(touched), "ops": touched, "reason": "ok" if touched else "none"}
+    return {
+        "updated": bool(touched),
+        "ops": touched,
+        "completed": completed,
+        "reason": "ok" if touched else "none",
+    }
 
 
 def claim_op(
@@ -1177,8 +1189,10 @@ def serialize_for_client(
             claimable += 1
 
     ops = serialize_ops(int(player_id), int(season["id"]), conn=conn, now=ts)
+    ops_claimable = 0
     for op in list(ops.get("daily") or []) + list(ops.get("weekly") or []):
         if op.get("claimable"):
+            ops_claimable += 1
             claimable += 1
 
     out: Dict[str, Any] = {
@@ -1190,6 +1204,7 @@ def serialize_for_client(
         "xp_per_level": xp_per,
         "premium_unlocked": bool(progress["premium_unlocked"]),
         "claimable_count": claimable,
+        "ops_claimable_count": ops_claimable,
         "ops": ops,
     }
 

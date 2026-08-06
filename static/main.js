@@ -20403,6 +20403,68 @@
     return null;
   }
 
+  /** Seen claimable Season Ops (`period:op_key`) — seed first, toast only on new completions. */
+  let _bpClaimableOpSeen = null;
+
+  function _battlePassClaimableOpEntries(bp) {
+    const ops = bp && bp.ops;
+    if (!ops || typeof ops !== "object") return [];
+    const out = [];
+    ["daily", "weekly"].forEach((bucket) => {
+      const list = ops[bucket];
+      if (!Array.isArray(list)) return;
+      list.forEach((op) => {
+        if (!op || !op.claimable) return;
+        const opKey = String(op.op_key || "").trim();
+        if (!opKey) return;
+        const period = String(op.period_key || "").trim();
+        out.push({
+          id: `${period}:${opKey}`,
+          op_key: opKey,
+          title_key: String(op.title_key || ""),
+          xp_reward: Math.max(0, Math.floor(Number(op.xp_reward) || 0)),
+        });
+      });
+    });
+    return out;
+  }
+
+  function notifyBattlePassOpsReady(bp, reason) {
+    if (!bp || bp.ready === false) return;
+    const entries = _battlePassClaimableOpEntries(bp);
+    const ids = entries.map((e) => e.id);
+    const reasonStr = String(reason || "");
+    const seedOnly =
+      _bpClaimableOpSeen === null
+      || reasonStr === "ssr_hud_boot"
+      || reasonStr === "page_hydrate"
+      || reasonStr === "page_init";
+    if (seedOnly) {
+      _bpClaimableOpSeen = new Set(ids);
+      return;
+    }
+    const seen = _bpClaimableOpSeen;
+    const fresh = entries.filter((e) => !seen.has(e.id));
+    const idSet = new Set(ids);
+    for (const old of [...seen]) {
+      if (!idSet.has(old)) seen.delete(old);
+    }
+    fresh.forEach((e) => seen.add(e.id));
+    if (!fresh.length || typeof showNotify !== "function") return;
+    fresh.forEach((e) => {
+      const title = e.title_key
+        ? t(e.title_key, e.op_key)
+        : t("bp_ops_title", "Season Ops");
+      const xp = e.xp_reward > 0 ? ` (+${e.xp_reward} XP)` : "";
+      showNotify(
+        t("bp_op_ready_notify", "Season-Op abgeschlossen — XP abholen: {title}{xp}")
+          .replace("{title}", title)
+          .replace("{xp}", xp),
+        "success"
+      );
+    });
+  }
+
   function syncLiveOpsFromGameState(data, reason) {
     if (!data) return;
     if (typeof patchHeaderLiveEvents === "function") {
@@ -20412,6 +20474,10 @@
     const reasonStr = String(reason || "");
     if (data.login_rewards && document.getElementById("login-rewards-page")) {
       patchLoginRewardsDom(data.login_rewards);
+    }
+    // Toast when Season Ops become claimable — even off /premium (nav badge alone is easy to miss).
+    if (data.battle_pass) {
+      notifyBattlePassOpsReady(data.battle_pass, reasonStr);
     }
     if (reasonStr === "page_hydrate") return;
     if (data.battle_pass && document.getElementById("premium-page")) {
@@ -20798,6 +20864,27 @@
     }
   }
 
+  function _refreshBattlePassSelectedPreview(page) {
+    if (!page) return;
+    const selected = page.querySelector("[data-bp-card].is-selected");
+    const previewBody = page.querySelector("[data-bp-preview-body]");
+    const previewEmpty = page.querySelector("[data-bp-preview-empty]");
+    if (!previewBody) return;
+    if (!selected) {
+      previewBody.innerHTML = "";
+      previewBody.hidden = true;
+      if (previewEmpty) previewEmpty.hidden = false;
+      return;
+    }
+    const detail = selected.querySelector("[data-bp-card-detail]");
+    if (!detail) return;
+    // Preview is a clone of the card detail — must re-sync after claim/state patches
+    // or the Claim CTA stays stale until the player re-clicks the same card.
+    previewBody.innerHTML = detail.innerHTML;
+    previewBody.hidden = false;
+    if (previewEmpty) previewEmpty.hidden = true;
+  }
+
   function patchBattlePassDom(bp) {
     const page = document.getElementById("premium-page");
     if (!page || !bp || !bp.ready) return;
@@ -20824,6 +20911,11 @@
     }
     const trackTile = page.querySelector(".battle-pass-hud-tile--track");
     if (trackTile) trackTile.classList.toggle("is-premium", !!bp.premium_unlocked);
+
+    const board = page.querySelector("[data-bp-trackboard]");
+    if (board && bp.level != null) {
+      board.setAttribute("data-player-level", String(Math.max(0, Number(bp.level) || 0)));
+    }
 
     if (Array.isArray(bp.levels)) {
       bp.levels.forEach((lv) => {
@@ -20896,6 +20988,8 @@
         _patchBattlePassOpCard(card, op);
       });
     }
+
+    _refreshBattlePassSelectedPreview(page);
 
     const script = document.getElementById("battle-pass-page-state");
     if (script) {
@@ -39618,10 +39712,13 @@
 
     // Live HP + auto FX while on the World Boss page (own strikes and other players).
     const wbLivePollTick = () => {
-      const card = root.querySelector(".gc-world-boss-card");
-      if (!card || !card.isConnected) return;
-      if (card.dataset.wbAutoPollBusy === "1") return;
-      card.dataset.wbAutoPollBusy = "1";
+      const cards = root.querySelectorAll(".gc-world-boss-card");
+      if (!cards.length) return;
+      const busyCard = root.querySelector(".gc-world-boss-card[data-wb-auto-poll-busy='1']");
+      if (busyCard) return;
+      cards.forEach((card) => {
+        card.dataset.wbAutoPollBusy = "1";
+      });
       fetch("/api/world-boss", {
         method: "GET",
         credentials: "same-origin",
@@ -39629,15 +39726,41 @@
       })
         .then((r) => (r && r.ok ? r.json() : null))
         .then((payload) => {
-          if (!payload || !card.isConnected) return;
-          wbConsumeAutoPresentation(card, payload);
-          const evCard = Array.isArray(payload.events) ? payload.events[0] : null;
-          const eventRow = payload.event || (evCard && evCard.event) || null;
-          wbSyncSharedBossHp(card, eventRow);
+          if (!payload) return;
+          const events = Array.isArray(payload.events) ? payload.events : [];
+          cards.forEach((card) => {
+            if (!card.isConnected) return;
+            const eventId = Number(card.getAttribute("data-wb-event-id") || 0);
+            let evCard = null;
+            if (eventId > 0 && events.length) {
+              evCard =
+                events.find((row) => Number(row?.event?.id || row?.id || 0) === eventId) || null;
+            }
+            if (!evCard && events.length === 1) evCard = events[0];
+            const eventRow =
+              (evCard && evCard.event) ||
+              (events.length === 1 ? payload.event : null) ||
+              payload.event ||
+              null;
+            // Prefer per-card strike flush when event matches.
+            const cardPayload =
+              evCard || eventRow
+                ? {
+                    ...payload,
+                    event: eventRow,
+                    events: evCard ? [evCard] : payload.events,
+                    player: (evCard && evCard.player) || payload.player,
+                  }
+                : payload;
+            wbConsumeAutoPresentation(card, cardPayload);
+            wbSyncSharedBossHp(card, eventRow);
+          });
         })
         .catch(() => null)
         .finally(() => {
-          delete card.dataset.wbAutoPollBusy;
+          cards.forEach((card) => {
+            delete card.dataset.wbAutoPollBusy;
+          });
         });
     };
     const wbAutoPollId =
@@ -39716,6 +39839,13 @@
             }
           }
           delete btn.dataset.submitting;
+          // Cooldown UI locks the button; without cooldown_until keep it usable.
+          if (!(res.player && res.player.cooldown_until > 0)) {
+            btn.disabled = false;
+          }
+          if (typeof GC.startProgressTicker === "function") {
+            GC.startProgressTicker();
+          }
         } else {
           const reason = String(res?.error || res?.reason || "generic");
           showNotify(wbMapAttackError(reason, res), "error");
@@ -39846,7 +39976,8 @@
               catchBtn.disabled = false;
               delete catchBtn.dataset.submitting;
             }
-            const err = String(res?.error || "world_boss_catch_failed");
+          } else {
+            const err = String(res?.error || res?.reason || "world_boss_catch_failed");
             const map = {
               phase_locked: t("wb_catch_phase_locked", "Zähmen erst ab Phase 3 (≤25 % HP)."),
               catch_cooldown: t("wb_catch_cooldown", "Nächster Zähmversuch in") + "…",

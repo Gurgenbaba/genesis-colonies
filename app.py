@@ -10095,7 +10095,11 @@ def _payload_from_live_context(
     try:
         from game.battle_pass import serialize_for_client as bp_serialize
 
-        payload["battle_pass"] = bp_serialize(int(user_id), conn=conn)
+        # Tracks required so /premium claimable cards update on diet polls / actions
+        # without forcing the player to re-click the selected preview card.
+        payload["battle_pass"] = bp_serialize(
+            int(user_id), conn=conn, include_tracks=True
+        )
     except Exception:
         payload["battle_pass"] = {"ready": False}
 

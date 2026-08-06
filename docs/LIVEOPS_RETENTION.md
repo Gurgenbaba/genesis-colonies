@@ -122,7 +122,7 @@ Belohnungs-Tracks on `/premium` use a Fortnite-style horizontal board in Genesis
 
 Daily Ops render as a **3-card grid** (icons, XP chip, claim CTA); Weekly as a wide card; drip as a compact progress strip. Markers: `battle-pass-op-card`, `data-bp-ops-drip`.
 
-Ops panel carries `data-bp-daily-period`; game-state polls soft-reload `/premium` when the UTC `daily_period_key` changes. Login Rewards live-patch claim availability + cooldown from the same poll. `claim_op` always uses the server period (client `period_key` ignored). `claimable_count` includes completed unclaimed ops (nav badge).
+Ops panel carries `data-bp-daily-period`; game-state polls soft-reload `/premium` when the UTC `daily_period_key` changes. Login Rewards live-patch claim availability + cooldown from the same poll. `claim_op` always uses the server period (client `period_key` ignored). `claimable_count` includes completed unclaimed ops (nav badge). When an op newly becomes claimable, the client shows a success toast (`bp_op_ready_notify`) from `syncLiveOpsFromGameState` — same path as diet polls / queue finishes — so players notice XP-ready Ops even off `/premium` (track loot already surfaces via the premium nav badge). `/api/game-state` serializes battle pass with `include_tracks=True` so track claimable/claimed cards update on diet polls; `patchBattlePassDom` re-syncs the selected preview clone (Claim CTA) so players do not need to re-click the same card.
 
 ## Phase 3 — EPIC-23 Payment / Shop
 

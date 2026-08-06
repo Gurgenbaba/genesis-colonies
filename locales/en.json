@@ -8464,5 +8464,6 @@
   "overview_live_events_group_events": "Events",
   "overview_live_events_group_world_boss": "World Boss",
   "overview_live_events_group_boosters": "Boosters",
-  "overview_live_events_resources_prod": "Resource production"
+  "overview_live_events_resources_prod": "Resource production",
+  "bp_op_ready_notify": "Season Op complete — claim XP: {title}{xp}"
 }

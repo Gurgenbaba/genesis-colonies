@@ -3317,6 +3317,21 @@ def test_liveops_claims_are_state_first_without_soft_reload():
     assert "reloadCurrentPage" not in bp_bind
     assert "function patchBattlePassDom" in src
     assert 'reason: "bp_daily_period_rollover"' in src
+    assert "function notifyBattlePassOpsReady" in src
+    assert "bp_op_ready_notify" in src
+    assert "_refreshBattlePassSelectedPreview" in src
+    assert "previewBody.innerHTML = detail.innerHTML" in src
+    sync = src.split("function syncLiveOpsFromGameState(data, reason)")[1].split(
+        "function _formatLiveEventEta"
+    )[0]
+    assert "notifyBattlePassOpsReady(data.battle_pass, reasonStr)" in sync
+    wb = src.split("GC.modules.world_boss = function initWorldBossPage()")[1].split(
+        "GC.modules.news = function initNewsPage()"
+    )[0]
+    assert "world_boss_catch_success" in wb
+    assert 't("wb_catch_fail"' in wb
+    assert "phase_locked" in wb
+    assert "insufficient_timekeeper" in wb
 
     shop = src.split("function bindShopBuyOnce()")[1].split("function initShop()")[0]
     assert "_markShopSkuOwned(sku)" in shop

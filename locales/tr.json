@@ -8464,5 +8464,6 @@
   "overview_live_events_group_events": "Etkinlikler",
   "overview_live_events_group_world_boss": "World Boss",
   "overview_live_events_group_boosters": "Güçlendiriciler",
-  "overview_live_events_resources_prod": "Kaynak üretimi"
+  "overview_live_events_resources_prod": "Kaynak üretimi",
+  "bp_op_ready_notify": "Season Op tamamlandı — XP al: {title}{xp}"
 }
