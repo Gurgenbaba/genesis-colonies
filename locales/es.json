@@ -7178,6 +7178,7 @@
   "shop_cart_add": "Añadir al carrito",
   "shop_cart_added": "Añadido al carrito.",
   "shop_cart_add_fail": "No se pudo añadir al carrito.",
+  "shop_cart_card_qty": "En el carrito: ×%(qty)s",
   "shop_cart_empty": "El carrito está vacío.",
   "shop_cart_close": "Cerrar",
   "shop_cart_list_total": "Suma",

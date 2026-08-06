@@ -7180,6 +7180,7 @@
   "shop_cart_add": "In den Warenkorb",
   "shop_cart_added": "Zum Warenkorb hinzugefügt.",
   "shop_cart_add_fail": "Konnte nicht in den Warenkorb.",
+  "shop_cart_card_qty": "Im Warenkorb: ×%(qty)s",
   "shop_cart_empty": "Warenkorb ist leer.",
   "shop_cart_close": "Schließen",
   "shop_cart_list_total": "Summe",

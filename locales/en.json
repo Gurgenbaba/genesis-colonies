@@ -7180,6 +7180,7 @@
   "shop_cart_add": "Add to cart",
   "shop_cart_added": "Added to cart.",
   "shop_cart_add_fail": "Could not add to cart.",
+  "shop_cart_card_qty": "In cart: ×%(qty)s",
   "shop_cart_empty": "Cart is empty.",
   "shop_cart_close": "Close",
   "shop_cart_list_total": "Subtotal",

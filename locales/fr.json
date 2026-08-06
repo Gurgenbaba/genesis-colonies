@@ -7178,6 +7178,7 @@
   "shop_cart_add": "Ajouter au panier",
   "shop_cart_added": "Ajouté au panier.",
   "shop_cart_add_fail": "Impossible d'ajouter au panier.",
+  "shop_cart_card_qty": "Dans le panier : ×%(qty)s",
   "shop_cart_empty": "Le panier est vide.",
   "shop_cart_close": "Fermer",
   "shop_cart_list_total": "Total",

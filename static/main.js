@@ -21340,6 +21340,37 @@
     page.querySelectorAll("[data-shop-cart-checkout]").forEach((btn) => {
       btn.disabled = items.length <= 0;
     });
+    _shopSyncCardCartQtys(cart);
+  }
+
+  function _shopSyncCardCartQtys(cart) {
+    const page = document.getElementById("shop-page");
+    if (!page) return;
+    const qtyBySku = Object.create(null);
+    const items = Array.isArray(cart?.items) ? cart.items : [];
+    for (const it of items) {
+      const sku = String(it.sku || "");
+      if (!sku) continue;
+      qtyBySku[sku] = Math.max(0, Number(it.qty || 0));
+    }
+    page.querySelectorAll("[data-shop-sku]").forEach((card) => {
+      const sku = String(card.getAttribute("data-shop-sku") || "");
+      const badge = card.querySelector("[data-shop-card-cart-qty]");
+      if (!badge) return;
+      const qty = Number(qtyBySku[sku] || 0);
+      if (qty > 0) {
+        badge.hidden = false;
+        badge.textContent = t("shop_cart_card_qty", "Im Warenkorb: ×%(qty)s").replace(
+          "%(qty)s",
+          String(qty)
+        );
+        card.classList.add("shop-card--in-cart");
+      } else {
+        badge.hidden = true;
+        badge.textContent = "";
+        card.classList.remove("shop-card--in-cart");
+      }
+    });
   }
 
   async function _shopRefreshCart() {

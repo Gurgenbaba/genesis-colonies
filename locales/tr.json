@@ -7178,6 +7178,7 @@
   "shop_cart_add": "Sepete ekle",
   "shop_cart_added": "Sepete eklendi.",
   "shop_cart_add_fail": "Sepete eklenemedi.",
+  "shop_cart_card_qty": "Sepette: ×%(qty)s",
   "shop_cart_empty": "Sepet boş.",
   "shop_cart_close": "Kapat",
   "shop_cart_list_total": "Toplam",

@@ -7178,6 +7178,7 @@
   "shop_cart_add": "В корзину",
   "shop_cart_added": "Добавлено в корзину.",
   "shop_cart_add_fail": "Не удалось добавить в корзину.",
+  "shop_cart_card_qty": "В корзине: ×%(qty)s",
   "shop_cart_empty": "Корзина пуста.",
   "shop_cart_close": "Закрыть",
   "shop_cart_list_total": "Сумма",

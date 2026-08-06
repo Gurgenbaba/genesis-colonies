@@ -128,10 +128,16 @@
       {% endif %}
     </div>
     <div class="shop-card-footer">
-      <p class="shop-card-price gc-mono"
-         data-shop-price
-         data-sku="{{ p.sku }}"
-         data-list-cents="{{ p.price_cents }}">{{ p.price_label }}</p>
+      <div class="shop-card-price-row">
+        <p class="shop-card-price gc-mono"
+           data-shop-price
+           data-sku="{{ p.sku }}"
+           data-list-cents="{{ p.price_cents }}">{{ p.price_label }}</p>
+        <span class="shop-card-cart-qty gc-mono"
+              data-shop-card-cart-qty
+              hidden
+              aria-live="polite"></span>
+      </div>
       <div class="shop-card-actions">
         {% if p.owned %}
         <span class="shop-owned">{{ T("shop_owned", "Bereits freigeschaltet") }}</span>

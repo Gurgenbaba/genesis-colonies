@@ -703,6 +703,7 @@ def test_shop_cart_ui_contract():
     assert "data-shop-cart-panel" in tpl
     assert "data-shop-cart-checkout" in tpl
     assert "data-shop-cart-discount-row" in tpl
+    assert "data-shop-card-cart-qty" in tpl
     js = (
         Path(__file__).resolve().parent.parent / "static" / "main.js"
     ).read_text(encoding="utf-8")
@@ -711,6 +712,8 @@ def test_shop_cart_ui_contract():
     assert "/api/shop/cart/add" in js
     assert "discount_cents" in js
     assert "shop_cart_discount" in js
+    assert "_shopSyncCardCartQtys" in js
+    assert "shop_cart_card_qty" in js
 
 
 def test_stripe_webhook_rejects_bad_signature(shop_db, monkeypatch):
