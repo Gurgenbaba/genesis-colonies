@@ -5607,10 +5607,12 @@ def shop_return_view():
     token = str(request.args.get("token") or "").strip()
     user_id = int(session.get("user_id") or 0)
     order = None
+    receipt = None
     conn = db()
     try:
         from game.payment_providers import paypal_capture_order, paypal_order_capture_summary
         from game.shop import (
+            build_shop_return_payload,
             find_order_by_session,
             get_order,
             process_paid_event,
@@ -5695,8 +5697,14 @@ def shop_return_view():
                     "paypal return fulfill failed order_id=%s", order.get("id")
                 )
             order = get_order(int(order["id"]), conn=conn)
+        receipt = build_shop_return_payload(order, conn=conn)
     finally:
         conn.close()
+
+    if receipt is None:
+        from game.shop import build_shop_return_payload
+
+        receipt = build_shop_return_payload(None, conn=None)
 
     ctx = _load_page_live_context(finish_source="shop_return")
     if ctx is None:
@@ -5707,6 +5715,7 @@ def shop_return_view():
         player=ctx["player_view"],
         storage_caps=ctx["storage_caps"],
         order=order,
+        receipt=receipt,
     )
 
 

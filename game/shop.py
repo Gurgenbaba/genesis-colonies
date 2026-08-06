@@ -1925,3 +1925,109 @@ def start_checkout(
         }
 
     return False, "invalid_provider", None
+
+
+def _catalog_fallback_product(sku: str) -> Dict[str, Any]:
+    sku_n = str(sku or "").strip()
+    for entry in DEFAULT_CATALOG:
+        if str(entry.get("sku") or "") == sku_n:
+            return dict(entry)
+    return {}
+
+
+def build_shop_return_payload(
+    order: Optional[Mapping[str, Any]],
+    *,
+    conn,
+) -> Dict[str, Any]:
+    """Presentation payload for /shop/return (titles/images — no client math)."""
+    if not order:
+        return {
+            "ok": False,
+            "status": "unknown",
+            "status_key": "unknown",
+            "headline_key": "shop_return_unknown_title",
+            "body_key": "shop_return_unknown",
+            "order_id": None,
+            "amount_label": "",
+            "list_label": "",
+            "discount_label": "",
+            "lines": [],
+            "is_cosmetic": False,
+            "is_season_pass": False,
+        }
+
+    status = str(order.get("status") or "pending").strip().lower()
+    if status == STATUS_FULFILLED:
+        status_key = "fulfilled"
+        headline_key = "shop_return_fulfilled_title"
+        body_key = "shop_return_fulfilled"
+    elif status == STATUS_PAID:
+        status_key = "paid"
+        headline_key = "shop_return_paid_title"
+        body_key = "shop_return_paid"
+    else:
+        status_key = "pending"
+        headline_key = "shop_return_pending_title"
+        body_key = "shop_return_pending"
+
+    currency = str(order.get("currency") or "eur")
+    amount_cents = int(order.get("amount_cents") or 0)
+    list_cents = int(order.get("list_amount_cents") or amount_cents)
+    discount_cents = int(order.get("discount_cents") or 0)
+
+    raw_lines = order_lines_from_order(order)
+    lines_out: List[Dict[str, Any]] = []
+    is_cosmetic = False
+    is_season_pass = False
+    for entry in raw_lines:
+        sku = str(entry.get("sku") or "").strip()
+        if not sku:
+            continue
+        product = get_product(sku, conn=conn, active_only=False) or _catalog_fallback_product(sku)
+        kind = str(product.get("kind") or entry.get("kind") or "")
+        if (
+            kind == KIND_COSMETIC_UNLOCK
+            or sku.startswith("name_style")
+            or sku.startswith("title_flair")
+            or "name_style" in sku
+        ):
+            is_cosmetic = True
+        if sku == SKU_SEASON_PASS or (
+            kind == KIND_ENTITLEMENT and "season_pass" in sku
+        ):
+            is_season_pass = True
+        qty = max(1, int(entry.get("qty") or 1))
+        unit = int(entry.get("unit_cents") or entry.get("list_cents") or product.get("price_cents") or 0)
+        title_key = str(
+            entry.get("title_key") or product.get("title_key") or f"shop_sku_{sku}"
+        )
+        hint_key = str(product.get("hint_key") or "")
+        lines_out.append(
+            {
+                "sku": sku,
+                "qty": qty,
+                "title_key": title_key,
+                "hint_key": hint_key,
+                "kind": kind,
+                "image": shop_image_for_sku(sku),
+                "unit_label": _format_price(unit, currency),
+                "line_label": _format_price(unit * qty, currency),
+            }
+        )
+
+    return {
+        "ok": True,
+        "status": status,
+        "status_key": status_key,
+        "headline_key": headline_key,
+        "body_key": body_key,
+        "order_id": int(order["id"]),
+        "provider": str(order.get("provider") or ""),
+        "amount_label": _format_price(amount_cents, currency),
+        "list_label": _format_price(list_cents, currency) if list_cents > amount_cents else "",
+        "discount_label": _format_price(discount_cents, currency) if discount_cents > 0 else "",
+        "lines": lines_out,
+        "is_cosmetic": is_cosmetic,
+        "is_season_pass": is_season_pass,
+    }

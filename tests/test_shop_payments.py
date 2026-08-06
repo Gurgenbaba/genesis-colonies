@@ -313,6 +313,48 @@ def test_fulfill_order_idempotent(shop_db):
     conn.close()
 
 
+def test_build_shop_return_payload_enriched(shop_db):
+    from game.shop import (
+        SKU_BOOSTER_STARTER,
+        build_shop_return_payload,
+        ensure_catalog_seeded,
+        fulfill_order,
+        get_order,
+        mark_paid,
+    )
+
+    uid = _player()
+    conn = db()
+    ensure_catalog_seeded(conn)
+    empty = build_shop_return_payload(None, conn=conn)
+    assert empty["ok"] is False
+    assert empty["status_key"] == "unknown"
+    assert empty["headline_key"] == "shop_return_unknown_title"
+
+    ok, reason, created = create_pending_order(
+        uid, SKU_BOOSTER_STARTER, "test", conn=conn
+    )
+    assert ok, reason
+    oid = int(created["order"]["id"])
+    mark_paid(oid, conn=conn, provider_payment_id="pay_return_test")
+    ok_f, reason_f, _ = fulfill_order(oid, conn=conn)
+    assert ok_f, reason_f
+    order = get_order(oid, conn=conn)
+    receipt = build_shop_return_payload(order, conn=conn)
+    assert receipt["ok"] is True
+    assert receipt["status_key"] == "fulfilled"
+    assert receipt["headline_key"] == "shop_return_fulfilled_title"
+    assert receipt["order_id"] == oid
+    assert receipt["amount_label"]
+    assert len(receipt["lines"]) >= 1
+    line = receipt["lines"][0]
+    assert line["sku"] == SKU_BOOSTER_STARTER
+    assert line["title_key"] == "shop_sku_booster_starter"
+    assert line["qty"] == 1
+    assert line.get("image")
+    conn.close()
+
+
 def test_fulfill_tk_and_inventory_packs(shop_db):
     uid = _player()
     conn = db()

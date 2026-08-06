@@ -113,7 +113,7 @@ Statuses: `pending` → `paid` → `fulfilled` | `failed` | `refunded`
 | `GET /shop` | login | Shop page |
 | `GET /api/shop/catalog` | login | Active products |
 | `POST /api/shop/checkout` | login | `{ sku, provider }` → `checkout_url` |
-| `GET /shop/return` | login | Post-checkout return (no client trust) |
+| `GET /shop/return` | login | Post-checkout receipt (`build_shop_return_payload`: lines/titles/status; no client trust) |
 | `POST /api/webhooks/stripe` | signature | Fulfill |
 | `POST /api/webhooks/paypal` | signature | Fulfill |
 

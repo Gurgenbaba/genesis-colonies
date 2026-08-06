@@ -1,34 +1,103 @@
 {% extends "base.html" %}
 
 {% block content %}
+{% set r = receipt or {} %}
+{% set status_key = r.status_key or 'unknown' %}
 <div class="gc-page shop-page shop-return-page" id="shop-return-page">
-  <header class="gc-page-header section-header">
+  <header class="gc-page-header section-header shop-return-header">
     <h1 class="section-title">{{ T("shop_return_title", "Kaufstatus") }}</h1>
     <p class="section-hint hint">
-      {{ T("shop_return_hint", "Freischaltungen erfolgen nach Zahlungsbestätigung (Webhook). Kurz warten, dann Shop oder Season Pass prüfen.") }}
+      {{ T("shop_return_hint", "Freischaltungen erfolgen nach Zahlungsbestätigung. Kurz prüfen, dann weiter im Shop oder Season Pass.") }}
     </p>
   </header>
 
-  <section class="gc-panel">
-    {% if order %}
-      <p class="gc-mono">
-        {{ T("shop_return_order", "Bestellung") }} #{{ order.id }}
-        · {{ order.sku }}
-        · {{ order.status }}
-      </p>
-      {% if order.status == 'fulfilled' %}
-        <p class="shop-banner shop-banner--ok">{{ T("shop_return_fulfilled", "Kauf gutgeschrieben.") }}</p>
-        {% set _sku = (order.sku or '')|string %}
-        {% if _sku.startswith('name_style') or _sku.startswith('title_flair') or 'name_style' in _sku %}
-        <p class="hint shop-cosmetic-equip-hint">{{ T("shop_cosmetic_equip_hint", "Im PlayerCard anlegen — Name-Style auswählen und speichern.") }}</p>
+  <section class="gc-panel shop-return-receipt shop-return-receipt--{{ status_key }}" aria-live="polite">
+    <div class="shop-return-hero">
+      <div class="shop-return-status shop-return-status--{{ status_key }}">
+        {% if status_key == 'fulfilled' %}
+          {{ T("shop_return_status_fulfilled", "Gutgeschrieben") }}
+        {% elif status_key == 'paid' %}
+          {{ T("shop_return_status_paid", "Wird freigeschaltet") }}
+        {% elif status_key == 'pending' %}
+          {{ T("shop_return_status_pending", "Ausstehend") }}
+        {% else %}
+          {{ T("shop_return_status_unknown", "Unbekannt") }}
         {% endif %}
-      {% elif order.status == 'paid' %}
-        <p>{{ T("shop_return_paid", "Zahlung erkannt — Freischaltung läuft.") }}</p>
-      {% else %}
-        <p>{{ T("shop_return_pending", "Noch ausstehend. Wenn du bezahlt hast, aktualisiere in Kürze.") }}</p>
+      </div>
+      <h2 class="shop-return-headline">
+        {{ T(r.headline_key or "shop_return_unknown_title", "Keine Bestellung") }}
+      </h2>
+      <p class="shop-return-body">
+        {{ T(r.body_key or "shop_return_unknown", "Keine Bestellung gefunden. Prüfe den Shop oder Support.") }}
+      </p>
+      {% if r.order_id %}
+      <p class="shop-return-meta gc-mono">
+        <span>{{ T("shop_return_order", "Bestellung") }} #{{ r.order_id }}</span>
+        {% if r.amount_label %}
+          <span class="shop-return-meta-sep" aria-hidden="true">·</span>
+          <span>{{ r.amount_label }}</span>
+        {% endif %}
+        {% if r.provider %}
+          <span class="shop-return-meta-sep" aria-hidden="true">·</span>
+          <span class="shop-return-provider">{{ r.provider }}</span>
+        {% endif %}
+      </p>
       {% endif %}
-    {% else %}
-      <p>{{ T("shop_return_unknown", "Keine Bestellung gefunden. Prüfe den Shop oder Support.") }}</p>
+    </div>
+
+    {% if r.lines %}
+    <div class="shop-return-lines" role="list">
+      <h3 class="shop-return-lines-title">{{ T("shop_return_summary", "Zusammenfassung") }}</h3>
+      {% for line in r.lines %}
+      <article class="shop-return-line" role="listitem">
+        <div class="shop-return-line-art{% if not line.image %} shop-return-line-art--empty{% endif %}">
+          {% if line.image %}
+          <img src="{{ url_for('static', filename=line.image) }}" alt="" loading="lazy" width="72" height="72">
+          {% endif %}
+        </div>
+        <div class="shop-return-line-body">
+          <p class="shop-return-line-title">{{ T(line.title_key, line.sku) }}</p>
+          {% if line.hint_key %}
+          <p class="shop-return-line-hint hint">{{ T(line.hint_key, "") }}</p>
+          {% endif %}
+          <p class="shop-return-line-meta gc-mono">
+            {{ T("shop_return_qty", "Menge") }} ×{{ line.qty }}
+            {% if line.line_label %}
+              <span class="shop-return-meta-sep" aria-hidden="true">·</span>
+              <span>{{ line.line_label }}</span>
+            {% endif %}
+          </p>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if r.amount_label and r.ok %}
+    <div class="shop-return-totals">
+      {% if r.list_label %}
+      <div class="shop-return-total-row">
+        <span>{{ T("shop_return_list", "Zwischensumme") }}</span>
+        <span class="gc-mono">{{ r.list_label }}</span>
+      </div>
+      {% endif %}
+      {% if r.discount_label %}
+      <div class="shop-return-total-row shop-return-total-row--discount">
+        <span>{{ T("shop_return_discount", "Rabatt") }}</span>
+        <span class="gc-mono">−{{ r.discount_label }}</span>
+      </div>
+      {% endif %}
+      <div class="shop-return-total-row shop-return-total-row--paid">
+        <span>{{ T("shop_return_total", "Gesamt") }}</span>
+        <span class="gc-mono">{{ r.amount_label }}</span>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if r.is_cosmetic and status_key == 'fulfilled' %}
+    <p class="hint shop-cosmetic-equip-hint">
+      {{ T("shop_cosmetic_equip_hint", "Im PlayerCard anlegen — Name-Style auswählen und speichern.") }}
+    </p>
     {% endif %}
 
     <div class="shop-return-actions">
@@ -38,6 +107,11 @@
       <a href="{{ url_for('premium_view') }}" class="gc-btn gc-btn-ghost" data-pjax-link>
         {{ T("shop_goto_premium", "Season Pass öffnen") }}
       </a>
+      {% if not r.is_season_pass %}
+      <a href="{{ url_for('overview') }}" class="gc-btn gc-btn-ghost" data-pjax-link>
+        {{ T("shop_return_overview", "Zur Übersicht") }}
+      </a>
+      {% endif %}
     </div>
   </section>
 </div>
