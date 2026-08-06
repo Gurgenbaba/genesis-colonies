@@ -8445,5 +8445,18 @@
   "overview_live_events_goto_calendar": "Calendrier",
   "nav_live_events": "Evenements en cours",
   "nav_live_events_empty": "Aucun evenement actif.",
-  "nav_badge_live_events_aria": "Evenements en cours"
+  "nav_badge_live_events_aria": "Evenements en cours",
+  "initiation_tabs_label": "Sections d'initiation",
+  "initiation_tab_doctrine": "Doctrine",
+  "initiation_tab_build_order": "Ordre de construction",
+  "initiation_bo_title": "Ordre Best-in-Slot",
+  "initiation_bo_hint": "Parcours serveur pour monter mines, solaire et carburant au niveau 100 — vitesse de construction et plafond inclus.",
+  "initiation_bo_complete": "Tous les objectifs de production sont atteints sur cette planète.",
+  "initiation_bo_truncated": "Prochaines étapes — rafraîchir après les upgrades pour la suite.",
+  "initiation_bo_empty": "Aucune étape supplémentaire disponible.",
+  "initiation_bo_unavailable": "Le guide d'ordre de construction est indisponible.",
+  "ini_bo_reason_energy": "Énergie",
+  "ini_bo_reason_speed": "Vitesse de construction",
+  "ini_bo_reason_cap": "Plafond de niveau",
+  "ini_bo_reason_mine": "Économie"
 }

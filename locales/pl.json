@@ -8445,5 +8445,18 @@
   "overview_live_events_goto_calendar": "Kalendarz",
   "nav_live_events": "Trwajace wydarzenia",
   "nav_live_events_empty": "Brak aktywnych wydarzen.",
-  "nav_badge_live_events_aria": "Aktywne wydarzenia"
+  "nav_badge_live_events_aria": "Aktywne wydarzenia",
+  "initiation_tabs_label": "Sekcje inicjacji",
+  "initiation_tab_doctrine": "Doktryna",
+  "initiation_tab_build_order": "Kolejność budowy",
+  "initiation_bo_title": "Build Order Best-in-Slot",
+  "initiation_bo_hint": "Ścieżka z serwera: kopalnie, solar i paliwo do poziomu 100 — wraz z przyspieszeniem budowy i limitami poziomu.",
+  "initiation_bo_complete": "Wszystkie cele produkcji osiągnięte na tej planecie.",
+  "initiation_bo_truncated": "Kolejne kroki — odśwież po ulepszeniach, by zobaczyć resztę.",
+  "initiation_bo_empty": "Brak kolejnych kroków build order.",
+  "initiation_bo_unavailable": "Przewodnik build order jest niedostępny.",
+  "ini_bo_reason_energy": "Energia",
+  "ini_bo_reason_speed": "Szybkość budowy",
+  "ini_bo_reason_cap": "Limit poziomu",
+  "ini_bo_reason_mine": "Ekonomia"
 }

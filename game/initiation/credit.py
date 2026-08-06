@@ -14,9 +14,10 @@ def world_progress_for_step(
     """
     Absolute progress from live colony/account state for credit-capable steps.
 
-    Returns None when the step is event-only (page visits without history).
+    Returns None when the step cannot be credited from world/history.
     Building/research targets are **level thresholds** (have Solar ≥ 3), not "build N more".
     Fleet send is credited when any `fleet_movements` row exists for the player.
+    Page visits credit from ``ini_page_seen:*`` logs and durable proxies (e.g. alliance membership).
     """
     if not step:
         return None
@@ -27,6 +28,26 @@ def world_progress_for_step(
     objective = str(step.get("objective_key") or "")
     filters = step.get("filters") if isinstance(step.get("filters"), dict) else {}
     target = max(1, int(step.get("target") or 1))
+
+    if objective == "visit_page":
+        pages = [str(x) for x in (filters.get("pages") or []) if str(x).strip()]
+        if not pages:
+            return 0
+        from .progress import has_page_seen
+
+        for page in pages:
+            if has_page_seen(pid, page, conn=conn):
+                return min(target, 1)
+        # Durable proxy: membership proves Alliance was opened / used.
+        if "alliance" in pages:
+            try:
+                from ..alliance import get_player_alliance
+
+                if get_player_alliance(pid, conn=conn):
+                    return min(target, 1)
+            except Exception:
+                pass
+        return 0
 
     if objective == "upgrade_buildings":
         types = [str(x) for x in (filters.get("building_types") or []) if str(x).strip()]

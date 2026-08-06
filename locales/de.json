@@ -8445,5 +8445,18 @@
   "overview_live_events_goto_calendar": "Kalender",
   "nav_live_events": "Laufende Events",
   "nav_live_events_empty": "Keine Events aktiv.",
-  "nav_badge_live_events_aria": "Laufende Events aktiv"
+  "nav_badge_live_events_aria": "Laufende Events aktiv",
+  "initiation_tabs_label": "Initiation-Bereiche",
+  "initiation_tab_doctrine": "Doktrin",
+  "initiation_tab_build_order": "Build Order",
+  "initiation_bo_title": "Best-in-Slot Build Order",
+  "initiation_bo_hint": "Server-geplante Reihenfolge, um alle Minen sowie Solar und Brennstoff auf Stufe 100 zu bringen — inklusive Bauzeit- und Cap-Infrastruktur.",
+  "initiation_bo_complete": "Alle Produzenten-Ziele auf diesem Planeten erreicht.",
+  "initiation_bo_truncated": "Nächste Schritte — nach Upgrades aktualisieren für den restlichen Pfad.",
+  "initiation_bo_empty": "Keine weiteren Build-Order-Schritte verfügbar.",
+  "initiation_bo_unavailable": "Build-Order-Guide ist derzeit nicht verfügbar.",
+  "ini_bo_reason_energy": "Energie",
+  "ini_bo_reason_speed": "Bauzeit",
+  "ini_bo_reason_cap": "Stufen-Cap",
+  "ini_bo_reason_mine": "Wirtschaft"
 }

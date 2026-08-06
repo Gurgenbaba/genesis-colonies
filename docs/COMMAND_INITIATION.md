@@ -12,6 +12,7 @@ Once-through **do-first** guidance that teaches the **efficient colony build ord
 | Routes | `GET /initiation`, `GET /api/initiation/state` |
 | Event bus | Fan-out from `game/directives/progress.py` (`_fanout_story_events`) |
 | Page visits | `record_page_visit` / `maybe_record_page_visit_from_request` |
+| BiS guide | `game/initiation/build_order.py` (`plan_build_order`) — advice only, not enqueue |
 
 ## Design goal
 
@@ -20,6 +21,8 @@ Phase 1 is the **way to go** for early economy — aligned with the fresh-accoun
 > Solar → Mines → Energy balance → Lab → Energy Tech → Fuel → grow mines → Mining Tech → Command Center → Shipyard → first fleet
 
 Hints explain *why* (energy before mines, Crytite unlocks Lab/Fuel, Energy Tech keeps production efficient).
+
+The **Build Order** tab is a separate personalized guide to producer **level 100** (mines + solar + fuel), including nanofactory / Bauoptimierung and geothermal / planet-core for the level cap.
 
 ## Phases
 
@@ -53,17 +56,38 @@ Visit: Empire, Messages, Combat Simulator, Tech Tree, Skill Tree, Ranking, Hall 
 
 Visit: Directives, Story, Login, Season Pass, Shop, Inventory, Trader, Auction, World Boss, Alliance, Politics, Vote, Referrals.
 
+## Page-visit credit
+
+- Every qualifying page open logs an idempotent `ini_page_seen:{page}:{player_id}` row (even before that visit step is active).
+- When the cursor reaches a `visit_page` step, `credit_existing_progress` completes it from the seen log.
+- Durable proxy: Alliance membership credits `visit_alliance` without a re-open.
+- Progress strip uses **completed** count (`step_index` while active, `step_count` when done) — not `step_index + 1`.
+
+## BiS Build Order (guide)
+
+Greedy server planner on the active planet (`get_context_planet`):
+
+1. Energy gate (keep `energy_ratio` healthy via Solar)
+2. Cap gate (raise `geothermal_nexus` / `planet_core_nexus` when producers hit `get_max_building_level`)
+3. Early nanofactory unlock + ROI on nano / `buildtime_tech` / Command Center
+4. Economy push toward metal / crystal / solar / fuel **100**
+
+Uses `EffectResolver` + `BUILDING_REQUIREMENTS` / research requirements. Does **not** enqueue — AI enqueue stays in `auto_empire`.
+
 ## UX
 
 - Header icon rail: Initiation + Login Rewards + Season Pass
+- Page tabs: **Doctrine** (mission cards) | **Build Order** (sequence list)
 - Mission cards with Go deep-links (`highlight=` for buildings/research)
 - `initiation` on `/api/game-state` patches the HUD
+- `get_initiation_state` includes `build_order` + `completed_steps`
 
 ## Rules
 
 - Server-authoritative; idempotent `source_event_id`
 - Auto-start once; no daily reset
 - **Credit existing levels** on ensure/state (buildings, research, hangar/defense ownership, prior fleet sends)
+- **Credit prior page visits** via `ini_page_seen` + alliance membership proxy
 - Page visits via `_load_page_live_context` on **full loads and PJAX** (poll path no longer drops visit credit)
 - Named `finish_source` for visit surfaces (galaxy, messages, ranking, …) plus path fallback
 - Pack version bump on restructure; mid-track players keep `step_index` (targets refresh on advance)
@@ -72,5 +96,6 @@ Visit: Directives, Story, Login, Season Pass, Shop, Inventory, Trader, Auction, 
 
 - [GC-829_FRESH_ACCOUNT_PROGRESSION.md](GC-829_FRESH_ACCOUNT_PROGRESSION.md) — sim strategy
 - [BUILDINGS_SYSTEM.md](BUILDINGS_SYSTEM.md) — requirement gates
+- [EFFECTS.md](EFFECTS.md) — build time / max level
 - [IMPERIAL_DIRECTIVES.md](IMPERIAL_DIRECTIVES.md) — shared event bus
 - [GENESIS_STORY_OPS.md](GENESIS_STORY_OPS.md) — lore (not tutorial)

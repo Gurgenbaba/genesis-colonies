@@ -50163,3 +50163,124 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+.ini-page .ini-tabs {
+  margin: 0 0 10px;
+}
+.ini-panel-tab[hidden] {
+  display: none !important;
+}
+.ini-bo-head {
+  margin-bottom: 10px;
+}
+.ini-bo-title {
+  margin: 0 0 4px;
+  font-size: 0.9rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.ini-bo-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  opacity: 0.75;
+  line-height: 1.35;
+}
+.ini-bo-goals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.ini-bo-goal {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid rgba(70, 229, 255, 0.2);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: rgba(8, 12, 20, 0.85);
+  font-size: 0.72rem;
+}
+.ini-bo-goal.is-done {
+  border-color: rgba(120, 200, 140, 0.4);
+}
+.ini-bo-goal__key {
+  opacity: 0.8;
+}
+.ini-bo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: min(70vh, 720px);
+  overflow-y: auto;
+}
+.ini-bo-step {
+  display: grid;
+  grid-template-columns: 28px 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid rgba(70, 229, 255, 0.18);
+  border-radius: var(--gc-radius-sm, 2px);
+  background: linear-gradient(180deg, rgba(12, 18, 30, 0.96) 0%, rgba(6, 10, 18, 0.98) 100%);
+}
+.ini-bo-step.is-next {
+  border-color: rgba(70, 229, 255, 0.55);
+  box-shadow: 0 0 12px rgba(70, 229, 255, 0.12);
+}
+.ini-bo-step__idx {
+  font-size: 0.7rem;
+  opacity: 0.7;
+  text-align: center;
+}
+.ini-bo-step__art img {
+  display: block;
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+.ini-bo-step__title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+.ini-bo-step__title {
+  font-size: 0.8rem;
+  line-height: 1.2;
+}
+.ini-bo-step__lvl {
+  font-size: 0.72rem;
+  color: rgba(70, 229, 255, 0.9);
+}
+.ini-bo-step__reason {
+  display: inline-block;
+  margin-top: 2px;
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.7;
+  border: 1px solid rgba(160, 170, 190, 0.28);
+  border-radius: var(--gc-radius-sm, 2px);
+  padding: 1px 4px;
+}
+.ini-bo-more,
+.ini-bo-complete,
+.ini-bo-empty {
+  margin: 10px 0 0;
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+@media (max-width: 640px) {
+  .ini-bo-step {
+    grid-template-columns: 24px 36px minmax(0, 1fr);
+  }
+  .ini-bo-step__go {
+    grid-column: 2 / -1;
+    justify-self: start;
+  }
+}

@@ -8445,5 +8445,18 @@
   "overview_live_events_goto_calendar": "Calendar",
   "nav_live_events": "Live Events",
   "nav_live_events_empty": "No events active.",
-  "nav_badge_live_events_aria": "Live events active"
+  "nav_badge_live_events_aria": "Live events active",
+  "initiation_tabs_label": "Initiation sections",
+  "initiation_tab_doctrine": "Doctrine",
+  "initiation_tab_build_order": "Build Order",
+  "initiation_bo_title": "Best-in-Slot Build Order",
+  "initiation_bo_hint": "Server-planned path to raise all mines and solar / fuel to level 100 — including build-speed and level-cap infrastructure.",
+  "initiation_bo_complete": "All producer goals reached on this planet.",
+  "initiation_bo_truncated": "Showing next steps — refresh after upgrades for the full remaining path.",
+  "initiation_bo_empty": "No further build-order steps available.",
+  "initiation_bo_unavailable": "Build order guide is currently unavailable.",
+  "ini_bo_reason_energy": "Energy",
+  "ini_bo_reason_speed": "Build speed",
+  "ini_bo_reason_cap": "Level cap",
+  "ini_bo_reason_mine": "Economy"
 }

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-import uuid
 from typing import Any, Dict, Mapping, Sequence
 
 from ..db import is_integrity_error, table_exists
@@ -24,6 +23,55 @@ def progress_schema_ready(conn) -> bool:
     return table_exists(conn, PROGRESS_TABLE)
 
 
+def page_seen_event_id(page_key: str, player_id: int) -> str:
+    """Stable idempotent id for early / late page-visit credit."""
+    return f"ini_page_seen:{str(page_key or '').strip()}:{int(player_id)}"
+
+
+def has_page_seen(player_id: int, page_key: str, *, conn) -> bool:
+    """True when the player has opened this initiation visit surface at least once."""
+    pid = int(player_id)
+    page = str(page_key or "").strip()
+    if pid <= 0 or not page or not progress_schema_ready(conn):
+        return False
+    row = conn.execute(
+        """
+        SELECT 1 AS ok
+        FROM player_initiation_progress
+        WHERE player_id = ? AND source_event_id = ?
+        LIMIT 1;
+        """,
+        (pid, page_seen_event_id(page, pid)),
+    ).fetchone()
+    return bool(row)
+
+
+def mark_page_seen(
+    player_id: int,
+    page_key: str,
+    *,
+    conn,
+    now: float | None = None,
+) -> bool:
+    """
+    Persist that the player opened a visit surface (even before that step is active).
+
+    Returns True when a new row was inserted.
+    """
+    pid = int(player_id)
+    page = str(page_key or "").strip()
+    if pid <= 0 or not page or not progress_schema_ready(conn):
+        return False
+    now_i = int(now if now is not None else time.time())
+    return _record_progress_delta(
+        pid,
+        source_event_id=page_seen_event_id(page, pid),
+        delta=1,
+        conn=conn,
+        now=now_i,
+    )
+
+
 def record_page_visit(
     player_id: int,
     page_key: str,
@@ -32,7 +80,12 @@ def record_page_visit(
     now: float | None = None,
     source_event_id: str | None = None,
 ) -> Dict[str, Any]:
-    """Complete a visit_page step when the player opens the matching surface."""
+    """
+    Log a page visit and complete the matching visit_page step when it is (or becomes) active.
+
+    Early visits are stored as ``ini_page_seen:{page}:{player}`` so
+    ``credit_existing_progress`` can complete the step later without a re-open.
+    """
     pid = int(player_id)
     page = str(page_key or "").strip()
     if pid <= 0 or not page:
@@ -43,10 +96,23 @@ def record_page_visit(
 
     ts = float(now if now is not None else time.time())
     ensure_player_initiation(pid, conn=conn, now=ts)
+    mark_page_seen(pid, page, conn=conn, now=ts)
+
     row = load_row(pid, conn=conn)
     if not row or str(row.get("status") or "") != STATUS_ACTIVE:
         return {"updated": 0, "completed": 0}
 
+    from .engine import credit_existing_progress
+
+    # Prefer world/seen credit (also advances when this visit matches the cursor).
+    cred = credit_existing_progress(pid, conn=conn, now=ts)
+    if cred.get("credited") or cred.get("advanced") or cred.get("completed"):
+        return {
+            "updated": int(cred.get("credited") or 0) + int(cred.get("advanced") or 0),
+            "completed": 1 if cred.get("completed") or int(cred.get("advanced") or 0) > 0 else 0,
+        }
+
+    # Fallback: direct event when cursor already matches (seen row may already exist).
     step = step_at(int(row.get("step_index") or 0))
     if not step or str(step.get("objective_key") or "") != "visit_page":
         return {"updated": 0, "completed": 0}
@@ -56,7 +122,7 @@ def record_page_visit(
     if page not in allowed:
         return {"updated": 0, "completed": 0}
 
-    eid = str(source_event_id or "").strip() or f"page_visit:{page}:{pid}:{uuid.uuid4().hex}"
+    eid = str(source_event_id or "").strip() or page_seen_event_id(page, pid)
     return apply_gameplay_events(
         pid,
         [

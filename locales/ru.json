@@ -8445,5 +8445,18 @@
   "overview_live_events_goto_calendar": "Календарь",
   "nav_live_events": "Текущие события",
   "nav_live_events_empty": "Нет активных событий.",
-  "nav_badge_live_events_aria": "Активные события"
+  "nav_badge_live_events_aria": "Активные события",
+  "initiation_tabs_label": "Разделы инициации",
+  "initiation_tab_doctrine": "Доктрина",
+  "initiation_tab_build_order": "Порядок строительства",
+  "initiation_bo_title": "Best-in-Slot порядок",
+  "initiation_bo_hint": "Серверный путь: шахты, солнечная и топливо до 100 — ускорение строительства и расширение капа.",
+  "initiation_bo_complete": "Все цели по производителям на этой планете достигнуты.",
+  "initiation_bo_truncated": "Следующие шаги — обновите после апгрейдов, чтобы увидеть остаток.",
+  "initiation_bo_empty": "Дальнейших шагов порядка строительства нет.",
+  "initiation_bo_unavailable": "Гид по порядку строительства недоступен.",
+  "ini_bo_reason_energy": "Энергия",
+  "ini_bo_reason_speed": "Скорость строительства",
+  "ini_bo_reason_cap": "Кап уровня",
+  "ini_bo_reason_mine": "Экономика"
 }

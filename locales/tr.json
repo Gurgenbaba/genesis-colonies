@@ -8445,5 +8445,18 @@
   "overview_live_events_goto_calendar": "Takvim",
   "nav_live_events": "Aktif Etkinlikler",
   "nav_live_events_empty": "Aktif etkinlik yok.",
-  "nav_badge_live_events_aria": "Aktif etkinlikler"
+  "nav_badge_live_events_aria": "Aktif etkinlikler",
+  "initiation_tabs_label": "İnisyasyon bölümleri",
+  "initiation_tab_doctrine": "Doktrin",
+  "initiation_tab_build_order": "İnşa sırası",
+  "initiation_bo_title": "Best-in-Slot inşa sırası",
+  "initiation_bo_hint": "Sunucu planlı yol: madenler, güneş ve yakıt 100. seviyeye — inşa hızı ve seviye tavanı dahil.",
+  "initiation_bo_complete": "Bu gezegende tüm üretici hedeflerine ulaşıldı.",
+  "initiation_bo_truncated": "Sonraki adımlar — yükseltmelerden sonra yenileyin.",
+  "initiation_bo_empty": "Daha fazla inşa sırası adımı yok.",
+  "initiation_bo_unavailable": "İnşa sırası rehberi şu an kullanılamıyor.",
+  "ini_bo_reason_energy": "Enerji",
+  "ini_bo_reason_speed": "İnşa hızı",
+  "ini_bo_reason_cap": "Seviye tavanı",
+  "ini_bo_reason_mine": "Ekonomi"
 }

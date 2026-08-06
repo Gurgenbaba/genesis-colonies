@@ -42,11 +42,13 @@ def _empty_state() -> Dict[str, Any]:
         "completed": False,
         "step_index": 0,
         "step_count": 0,
+        "completed_steps": 0,
         "progress": 0,
         "target": 0,
         "current": None,
         "steps": [],
         "phases": [],
+        "build_order": None,
     }
 
 
@@ -207,17 +209,34 @@ def get_initiation_state(
     if status == STATUS_ACTIVE and 0 <= step_index < len(serialized):
         current = serialized[step_index]
 
+    completed_steps = len(serialized) if completed else step_index
+
+    build_order = None
+    try:
+        from .build_order import plan_build_order
+
+        build_order = plan_build_order(pid, conn=conn)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception(
+            "initiation build_order plan failed player_id=%s", pid
+        )
+        build_order = {"ready": False, "steps": [], "goals": {}, "next": None, "complete": False}
+
     return {
         "ready": True,
         "status": status,
         "completed": completed,
         "step_index": step_index,
         "step_count": len(serialized),
+        "completed_steps": completed_steps,
         "progress": progress,
         "target": target,
         "current": current,
         "steps": serialized,
         "phases": phases,
+        "build_order": build_order,
     }
 
 

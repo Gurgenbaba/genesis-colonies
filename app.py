@@ -13897,6 +13897,7 @@ def api_admin_audit_log():
 
 if __name__ == "__main__":
     from game.config import init_config
+    from game.dev_singleton import ensure_dev_port_available
 
     init_config()
     host = os.environ.get("HOST", "127.0.0.1")
@@ -13923,4 +13924,8 @@ if __name__ == "__main__":
     use_reloader = reloader_raw in ("1", "true", "yes", "on")
     if not threaded and not is_production() and db_backend == "sqlite":
         print("[GC] Flask threaded=0 (SQLite local default — set GC_FLASK_THREADED=1 to override)")
+    # One local server only: free PORT before bind (skip in production / GC_SINGLE_INSTANCE=0).
+    # With Werkzeug reloader, only the child process binds — free there.
+    if (not use_reloader) or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        ensure_dev_port_available(port)
     app.run(host=host, port=port, debug=is_debug_enabled(), threaded=threaded, use_reloader=use_reloader)

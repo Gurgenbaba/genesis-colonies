@@ -4,6 +4,7 @@
 {% set ini = initiation if initiation is defined and initiation else {'ready': false, 'phases': [], 'steps': [], 'current': none} %}
 {% set ini_phases = ini.phases if ini.phases is defined else [] %}
 {% set ini_current = ini.current if ini.current is defined else none %}
+{% set bo = ini.build_order if ini.build_order is defined and ini.build_order else {'ready': false, 'steps': [], 'current': {}, 'goals': {}, 'complete': false} %}
 {% set _ini_fallback = url_for('static', filename='img/buildings/command_center.png') %}
 
 {% macro ini_step_card(step) %}
@@ -73,12 +74,38 @@
   </section>
   {% else %}
 
+  <nav class="gc-page-tabs gc-page-tabs--cols-2 gc-page-tabs--inline ini-tabs"
+       data-ini-tabs
+       role="tablist"
+       aria-label="{{ T('initiation_tabs_label', 'Initiation sections') }}">
+    <button type="button"
+            class="gc-page-tab ini-tab is-active"
+            role="tab"
+            aria-selected="true"
+            data-ini-tab="doctrine"
+            id="ini-tab-doctrine"
+            aria-controls="ini-panel-doctrine">{{ T('initiation_tab_doctrine', 'Doctrine') }}</button>
+    <button type="button"
+            class="gc-page-tab ini-tab"
+            role="tab"
+            aria-selected="false"
+            data-ini-tab="build_order"
+            id="ini-tab-build-order"
+            aria-controls="ini-panel-build-order">{{ T('initiation_tab_build_order', 'Build Order') }}</button>
+  </nav>
+
+  <div class="ini-panel-tab is-active"
+       data-ini-panel="doctrine"
+       id="ini-panel-doctrine"
+       role="tabpanel"
+       aria-labelledby="ini-tab-doctrine">
+
   <section class="gc-panel ini-panel ini-status-strip">
     <div class="ini-status-strip__inner">
       <div class="ini-stat">
         <span class="ini-stat__label">{{ T('initiation_progress_label', 'Progress') }}</span>
         <span class="ini-stat__value gc-mono" data-ini-progress-total>
-          {{ (ini.step_index + 1 if not ini.completed else ini.step_count)|fmt_int }} / {{ ini.step_count|fmt_int }}
+          {{ (ini.completed_steps if ini.completed_steps is defined else (ini.step_count if ini.completed else ini.step_index))|fmt_int }} / {{ ini.step_count|fmt_int }}
         </span>
       </div>
       {% if ini_current %}
@@ -111,6 +138,74 @@
     </div>
   </section>
   {% endfor %}
+
+  </div>{# /ini-panel-doctrine #}
+
+  <div class="ini-panel-tab"
+       data-ini-panel="build_order"
+       id="ini-panel-build-order"
+       role="tabpanel"
+       aria-labelledby="ini-tab-build-order"
+       hidden>
+
+  <section class="gc-panel ini-panel ini-bo-panel" data-ini-build-order>
+    <header class="ini-bo-head">
+      <h2 class="ini-bo-title">{{ T('initiation_bo_title', 'Best-in-Slot Build Order') }}</h2>
+      <p class="ini-bo-hint">{{ T('initiation_bo_hint', 'Server-planned path to raise all mines (and solar / fuel) to level 100 — including build-speed and level-cap infrastructure.') }}</p>
+    </header>
+
+    {% if bo.ready %}
+    <div class="ini-bo-goals" data-ini-bo-goals>
+      {% for key in ['metal_mine', 'crystal_mine', 'solar_plant', 'fuel_cell_plant'] %}
+      {% set cur = (bo.current.get(key, 0) if bo.current else 0)|int %}
+      {% set goal = (bo.goals.get(key, 100) if bo.goals else 100)|int %}
+      <div class="ini-bo-goal gc-mono{% if cur >= goal %} is-done{% endif %}">
+        <span class="ini-bo-goal__key">{{ T(key, key) }}</span>
+        <span class="ini-bo-goal__val">{{ cur|fmt_int }} / {{ goal|fmt_int }}</span>
+      </div>
+      {% endfor %}
+    </div>
+
+    {% if bo.complete %}
+    <p class="ini-bo-complete">{{ T('initiation_bo_complete', 'All producer goals reached on this planet.') }}</p>
+    {% elif bo.steps %}
+    <ol class="ini-bo-list" role="list" data-ini-bo-list>
+      {% for step in bo.steps %}
+      {% set _img = url_for('static', filename=step.image) if step.image else _ini_fallback %}
+      <li class="ini-bo-step{% if step.is_next %} is-next{% endif %}"
+          data-ini-bo-step
+          data-ini-bo-kind="{{ step.kind }}"
+          data-ini-bo-key="{{ step.key }}">
+        <span class="ini-bo-step__idx gc-mono">{{ (step.index + 1)|fmt_int }}</span>
+        <div class="ini-bo-step__art" aria-hidden="true">
+          <img src="{{ _img }}" alt="" width="40" height="40" loading="lazy"
+               onerror="this.onerror=null;this.src='{{ _ini_fallback }}';">
+        </div>
+        <div class="ini-bo-step__body">
+          <div class="ini-bo-step__title-row">
+            <span class="ini-bo-step__title">{{ T(step.title_key, step.label_fallback or step.key) }}</span>
+            <span class="ini-bo-step__lvl gc-mono">→ {{ step.target_level|fmt_int }}</span>
+          </div>
+          <span class="ini-bo-step__reason">{{ T(step.reason_key, step.reason_key) }}</span>
+        </div>
+        <a class="gc-btn gc-btn-primary gc-btn-sm ini-bo-step__go"
+           href="{{ step.route }}"
+           data-pjax>{{ T('initiation_go_btn', 'Go') }}</a>
+      </li>
+      {% endfor %}
+    </ol>
+    {% if bo.truncated %}
+    <p class="ini-bo-more gc-mono">{{ T('initiation_bo_truncated', 'Showing next steps — refresh after upgrades for the full remaining path.') }}</p>
+    {% endif %}
+    {% else %}
+    <p class="ini-bo-empty">{{ T('initiation_bo_empty', 'No further build-order steps available.') }}</p>
+    {% endif %}
+    {% else %}
+    <p class="ini-bo-empty">{{ T('initiation_bo_unavailable', 'Build order guide is currently unavailable.') }}</p>
+    {% endif %}
+  </section>
+
+  </div>{# /ini-panel-build-order #}
 
   {% endif %}
 </div>

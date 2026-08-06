@@ -249,7 +249,8 @@ def test_initiation_idempotent_source_event(initiation_db):
         conn.close()
 
 
-def test_visit_page_ignored_until_step_active(initiation_db):
+def test_visit_page_logged_early_and_credited_when_active(initiation_db):
+    """Case 2 product rule: early visits persist; credit when the visit step activates."""
     conn = db()
     try:
         pid = _create_player()
@@ -258,6 +259,23 @@ def test_visit_page_ignored_until_step_active(initiation_db):
         assert out["updated"] == 0
         state = get_initiation_state(pid, conn=conn)
         assert state["current"]["id"] == "solar_first"
+
+        steps = flatten_steps()
+        galaxy_idx = next(i for i, s in enumerate(steps) if s["id"] == "visit_galaxy")
+        conn.execute(
+            """
+            UPDATE player_initiation
+            SET step_index = ?, progress_value = 0, target_value = 1
+            WHERE player_id = ?;
+            """,
+            (galaxy_idx, pid),
+        )
+        commit(conn)
+        cred = credit_existing_progress(pid, conn=conn)
+        assert cred.get("credited") or cred.get("advanced")
+        state = get_initiation_state(pid, conn=conn)
+        assert state["current"]["id"] == "visit_planet_evolution"
+        assert state["completed_steps"] == galaxy_idx + 1
     finally:
         conn.close()
 
@@ -278,9 +296,51 @@ def test_visit_page_completes_when_active(initiation_db):
             (galaxy_idx, pid),
         )
         out = record_page_visit(pid, "galaxy", conn=conn)
-        assert out["updated"] == 1
+        assert out["updated"] >= 1 or out["completed"] >= 1
         state = get_initiation_state(pid, conn=conn)
         assert state["current"]["id"] == "visit_planet_evolution"
+    finally:
+        conn.close()
+
+
+def test_alliance_membership_credits_visit_alliance(initiation_db):
+    from game.alliance import create_alliance
+
+    conn = db()
+    try:
+        pid = _create_player()
+        ensure_player_initiation(pid, conn=conn, credit=False)
+        create_alliance("INI", "Initiation Ally", pid, conn=conn)
+        steps = flatten_steps()
+        ally_idx = next(i for i, s in enumerate(steps) if s["id"] == "visit_alliance")
+        conn.execute(
+            """
+            UPDATE player_initiation
+            SET step_index = ?, progress_value = 0, target_value = 1, status = 'active'
+            WHERE player_id = ?;
+            """,
+            (ally_idx, pid),
+        )
+        commit(conn)
+        out = credit_existing_progress(pid, conn=conn)
+        assert out.get("credited") or out.get("advanced")
+        state = get_initiation_state(pid, conn=conn)
+        assert state["current"]["id"] == "visit_galactic_politics"
+    finally:
+        conn.close()
+
+
+def test_completed_steps_strip_semantics(initiation_db):
+    conn = db()
+    try:
+        pid = _create_player()
+        ensure_player_initiation(pid, conn=conn, credit=False)
+        state = get_initiation_state(pid, conn=conn)
+        assert state["completed_steps"] == 0
+        assert state["step_count"] >= 1
+        summary = get_initiation_summary(pid, conn=conn, ensure=False)
+        assert summary["active"] is True
+        assert summary["step_index"] == 0
     finally:
         conn.close()
 
@@ -407,3 +467,91 @@ def test_pjax_messages_visit_advances_initiation(initiation_db, monkeypatch):
         assert state["current"]["id"] == "visit_combat_simulator"
     finally:
         conn.close()
+
+
+def test_build_order_empty_planet_starts_solar(initiation_db):
+    from game.initiation.build_order import plan_build_order
+
+    conn = db()
+    try:
+        pid = _create_player()
+        plan = plan_build_order(pid, conn=conn)
+        assert plan["ready"] is True
+        assert plan["complete"] is False
+        assert plan["steps"]
+        first = plan["steps"][0]
+        assert first["kind"] == "build"
+        assert first["key"] == "solar_plant"
+        assert first["is_next"] is True
+    finally:
+        conn.close()
+
+
+def test_build_order_near_cap_emits_nexus_path(initiation_db):
+    from game.initiation.build_order import plan_build_order
+
+    conn = db()
+    try:
+        pid = _create_player()
+        planet = get_homeworld(player_id=pid)
+        save_planet_buildings(
+            int(planet["id"]),
+            {
+                "solar_plant": 50,
+                "metal_mine": 50,
+                "crystal_mine": 50,
+                "fuel_cell_plant": 50,
+                "command_center": 6,
+                "metal_storage": 4,
+                "crystal_storage": 4,
+                "research_lab": 4,
+                "nanofactory": 2,
+            },
+            conn=conn,
+        )
+        for tech, lvl in {
+            "energy_tech": 4,
+            "storage_tech": 3,
+            "drone_tech": 3,
+            "engine_tech": 2,
+            "buildtime_tech": 5,
+        }.items():
+            conn.execute(
+                """
+                INSERT INTO research_levels (user_id, tech_key, level)
+                VALUES (?, ?, ?)
+                ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;
+                """,
+                (pid, tech, lvl),
+            )
+        commit(conn)
+        plan = plan_build_order(pid, conn=conn, max_steps=20)
+        assert plan["ready"] is True
+        keys = [s["key"] for s in plan["steps"][:12]]
+        assert "geothermal_nexus" in keys or "planet_core_nexus" in keys or any(
+            s.get("reason_key") == "ini_bo_reason_cap" for s in plan["steps"][:12]
+        )
+    finally:
+        conn.close()
+
+
+def test_initiation_state_includes_build_order(initiation_db):
+    conn = db()
+    try:
+        pid = _create_player()
+        state = get_initiation_state(pid, conn=conn)
+        assert state["ready"]
+        assert state.get("build_order")
+        assert state["build_order"]["ready"] is True
+        assert isinstance(state["build_order"]["steps"], list)
+    finally:
+        conn.close()
+
+
+def test_initiation_template_has_doctrine_and_build_order_tabs():
+    html = (ROOT / "templates" / "initiation.html").read_text(encoding="utf-8")
+    assert 'data-ini-tab="doctrine"' in html
+    assert 'data-ini-tab="build_order"' in html
+    assert "data-ini-build-order" in html
+    assert "ini-bo-list" in html
+    assert "completed_steps" in html

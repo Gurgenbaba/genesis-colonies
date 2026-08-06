@@ -8445,5 +8445,18 @@
   "overview_live_events_goto_calendar": "Calendario",
   "nav_live_events": "Eventos activos",
   "nav_live_events_empty": "Ningun evento activo.",
-  "nav_badge_live_events_aria": "Eventos activos"
+  "nav_badge_live_events_aria": "Eventos activos",
+  "initiation_tabs_label": "Secciones de iniciación",
+  "initiation_tab_doctrine": "Doctrina",
+  "initiation_tab_build_order": "Orden de construcción",
+  "initiation_bo_title": "Orden Best-in-Slot",
+  "initiation_bo_hint": "Ruta del servidor para subir minas, solar y combustible al nivel 100, con velocidad de construcción y tope de nivel.",
+  "initiation_bo_complete": "Todos los objetivos de producción alcanzados en este planeta.",
+  "initiation_bo_truncated": "Mostrando siguientes pasos — actualiza tras mejoras para el resto.",
+  "initiation_bo_empty": "No hay más pasos de orden de construcción.",
+  "initiation_bo_unavailable": "La guía de orden de construcción no está disponible.",
+  "ini_bo_reason_energy": "Energía",
+  "ini_bo_reason_speed": "Velocidad de construcción",
+  "ini_bo_reason_cap": "Tope de nivel",
+  "ini_bo_reason_mine": "Economía"
 }

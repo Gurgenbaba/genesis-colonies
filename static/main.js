@@ -22807,6 +22807,31 @@
     const page = document.getElementById("initiation-page");
     if (!page) return;
     // SSR checklist is authoritative; live progress comes from game-state HUD patch.
+    const tabs = page.querySelector("[data-ini-tabs]");
+    if (!tabs || tabs.dataset.bound === "1") return;
+    tabs.dataset.bound = "1";
+    const onTabClick = (ev) => {
+      const btn = ev.target.closest("[data-ini-tab]");
+      if (!btn || !tabs.contains(btn)) return;
+      const id = String(btn.getAttribute("data-ini-tab") || "").trim();
+      if (!id) return;
+      tabs.querySelectorAll("[data-ini-tab]").forEach((el) => {
+        const on = el === btn;
+        el.classList.toggle("is-active", on);
+        el.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      page.querySelectorAll("[data-ini-panel]").forEach((panel) => {
+        const on = panel.getAttribute("data-ini-panel") === id;
+        panel.classList.toggle("is-active", on);
+        if (on) panel.removeAttribute("hidden");
+        else panel.setAttribute("hidden", "");
+      });
+    };
+    tabs.addEventListener("click", onTabClick);
+    GC.registerCleanup(() => {
+      tabs.removeEventListener("click", onTabClick);
+      delete tabs.dataset.bound;
+    });
   }
 
   function initImperialDirectives() {
