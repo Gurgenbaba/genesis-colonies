@@ -363,6 +363,30 @@ def _unix_date_label(ts: int) -> str:
     return datetime.fromtimestamp(value, tz=timezone.utc).strftime("%Y-%m-%d")
 
 
+def _member_homeworld_payload(row: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+    """Build homeworld coord payload from joined planet columns (GC-880)."""
+    galaxy = row.get("homeworld_galaxy")
+    system = row.get("homeworld_system")
+    position = row.get("homeworld_position")
+    if galaxy is None or system is None or position is None:
+        return None
+    try:
+        from .galaxy import format_coordinates
+
+        g, s, p = int(galaxy), int(system), int(position)
+        coords = format_coordinates(g, s, p)
+    except Exception:
+        return None
+    return {
+        "id": int(row["homeworld_id"]) if row.get("homeworld_id") is not None else None,
+        "name": str(row.get("homeworld_name") or ""),
+        "galaxy": g,
+        "system": s,
+        "position": p,
+        "coords": coords,
+    }
+
+
 def get_alliance_members(alliance_id: int, conn=None) -> List[Dict[str, Any]]:
     own = conn is None
     if own:
@@ -375,14 +399,22 @@ def get_alliance_members(alliance_id: int, conn=None) -> List[Dict[str, Any]]:
                    COALESCE(p.last_seen, 0) AS last_seen,
                    COALESCE(SUM(d.amount), 0) AS donation_points,
                    COALESCE(SUM(d.xp_granted), 0) AS xp_contribution,
-                   COALESCE(ps.score_total, 0) AS total_score
+                   COALESCE(ps.score_total, 0) AS total_score,
+                   hw.id AS homeworld_id,
+                   hw.name AS homeworld_name,
+                   hw.galaxy AS homeworld_galaxy,
+                   hw.system AS homeworld_system,
+                   hw.position AS homeworld_position
             FROM alliance_members am
             JOIN players p ON p.id = am.player_id
             LEFT JOIN alliance_donations d
               ON d.alliance_id = am.alliance_id AND d.player_id = am.player_id
             LEFT JOIN player_scores ps ON ps.player_id = am.player_id
+            LEFT JOIN planets hw
+              ON hw.player_id = am.player_id AND COALESCE(hw.is_homeworld, 0) = 1
             WHERE am.alliance_id = ?
-            GROUP BY am.player_id, am.role, am.joined_at, p.name, p.last_seen, ps.score_total
+            GROUP BY am.player_id, am.role, am.joined_at, p.name, p.last_seen, ps.score_total,
+                     hw.id, hw.name, hw.galaxy, hw.system, hw.position
             ORDER BY
                 CASE am.role
                     WHEN 'leader' THEN 0
@@ -403,6 +435,17 @@ def get_alliance_members(alliance_id: int, conn=None) -> List[Dict[str, Any]]:
             d["total_score"] = int(d.get("total_score") or 0)
             d["joined_label"] = _unix_date_label(int(d.get("joined_at") or 0))
             d["last_seen_label"] = _unix_date_label(int(d.get("last_seen") or 0))
+            homeworld = _member_homeworld_payload(d)
+            d["homeworld"] = homeworld
+            d["homeworld_coords"] = str(homeworld["coords"]) if homeworld else ""
+            for key in (
+                "homeworld_id",
+                "homeworld_name",
+                "homeworld_galaxy",
+                "homeworld_system",
+                "homeworld_position",
+            ):
+                d.pop(key, None)
             rows.append(d)
         return rows
     finally:

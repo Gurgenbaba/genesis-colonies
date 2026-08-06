@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="gc-page gc-search search-page" id="search-page"
+     data-search-type="{{ search_type|default('player') }}"
+     data-search-query="{{ search_query|default('') }}">
+
+  <header class="section-header search-header">
+    <h1 class="section-title">{{ T("search_title", "Universums-Suche") }}</h1>
+    <p class="section-hint hint">{{ T("search_subtitle", "Spieler, Planeten und Allianzen finden — Homeworld-Koordinaten für Flottenziele.") }}</p>
+  </header>
+
+  <section class="gc-panel search-panel" aria-labelledby="search-panel-title">
+    <div class="gc-panel-header">
+      <span class="gc-panel-title" id="search-panel-title">{{ T("search_title", "Universums-Suche") }}</span>
+      <span class="gc-panel-subtitle">{{ T("search_hint_tabs", "Spieler zeigen nur den Hauptplaneten; Kolonien über Planet-Suche.") }}</span>
+    </div>
+
+    <div class="search-panel-body">
+      <div id="search-tabs" class="gc-page-tabs gc-page-tabs--auto search-tabs" role="tablist" aria-label="{{ T('search_title', 'Universums-Suche') }}">
+        <button type="button" class="gc-page-tab{% if (search_type|default('player')) == 'player' %} is-active{% endif %}"
+                role="tab" data-search-tab="player"
+                aria-selected="{{ 'true' if (search_type|default('player')) == 'player' else 'false' }}">
+          {{ T("search_tab_player", "Spieler") }}
+        </button>
+        <button type="button" class="gc-page-tab{% if search_type == 'planet' %} is-active{% endif %}"
+                role="tab" data-search-tab="planet"
+                aria-selected="{{ 'true' if search_type == 'planet' else 'false' }}">
+          {{ T("search_tab_planet", "Planet") }}
+        </button>
+        <button type="button" class="gc-page-tab{% if search_type == 'alliance' %} is-active{% endif %}"
+                role="tab" data-search-tab="alliance"
+                aria-selected="{{ 'true' if search_type == 'alliance' else 'false' }}">
+          {{ T("search_tab_alliance", "Allianz") }}
+        </button>
+      </div>
+
+      <form class="search-form" id="search-form" action="{{ url_for('search_view') }}" method="get" data-search-form>
+        <input type="hidden" name="type" id="search-type-input" value="{{ search_type|default('player') }}">
+        <label class="search-form-label" for="search-query-input">
+          <span class="sr-only">{{ T("search_query_label", "Suchbegriff") }}</span>
+          <input type="search"
+                 class="gc-input search-query-input"
+                 id="search-query-input"
+                 name="q"
+                 value="{{ search_query|default('') }}"
+                 maxlength="64"
+                 autocomplete="off"
+                 placeholder="{{ T('search_placeholder_player', 'Spielername…') }}"
+                 data-search-input>
+        </label>
+        <button type="submit" class="gc-btn gc-btn-primary" data-search-submit>
+          {{ T("search_btn", "Suchen") }}
+        </button>
+      </form>
+
+      <div id="search-coord-jump" class="search-coord-jump" hidden aria-live="polite"></div>
+      <div id="search-results" class="search-results" aria-live="polite">
+        <div class="search-state search-state-idle">{{ T("search_idle", "Mindestens 2 Zeichen eingeben oder Koordinaten wie 1:42:7.") }}</div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+{% if search_payload is defined and search_payload %}
+<script id="search-initial-data" type="application/json">{{ search_payload | tojson }}</script>
+{% endif %}
+
+{% endblock %}

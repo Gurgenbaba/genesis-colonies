@@ -6,6 +6,8 @@
 **UI:** `/alliance` (Hub) · `/alliance/<id>` (öffentliche Besucherseite) · `GC.modules.alliance` · `templates/alliance.html`  
 **API:** `POST /api/alliance/*` → `{ ok, state, alliance }` (errors via `_alliance_error_json` with `state` + `alliance`)
 
+Mitglieder-Roster (Hub + Visitor) zeigt **Homeworld-Koordinaten** via `get_alliance_members()` → `homeworld_coords` + `galaxy_coord_link` (GC-880). Universums-weite Namenssuche: [SEARCH_SYSTEM.md](SEARCH_SYSTEM.md).
+
 ## Scope (GC-AL-001 … GC-AL-009 + GC-AL-MVP)
 
 | Ticket | Feature | Status |

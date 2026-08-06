@@ -81,6 +81,7 @@ from game.ranking import (
     invalidate_player_score_cache,
     recalculate_all_rankings,
 )
+from game.universe_search import SEARCH_TYPES, search_universe
 
 from game import playercard as playercard_logic
 from game import chat as chat_logic
@@ -6969,6 +6970,62 @@ def api_ranking():
         return jsonify(payload)
     except Exception:
         return jsonify({"ok": False, "error": "ranking_unavailable"}), 500
+
+
+# --------------------------------------------------------------------------
+# UNIVERSE SEARCH (GC-880)
+# --------------------------------------------------------------------------
+
+@app.route("/search")
+@require_login
+def search_view():
+    player_view, buildings, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources(
+        "search"
+    )
+    if player_view is None:
+        return redirect(url_for("login"))
+
+    q = str(request.args.get("q") or "").strip()
+    stype = str(request.args.get("type") or "player").strip().lower()
+    if stype not in SEARCH_TYPES:
+        stype = "player"
+    initial = None
+    if q:
+        initial = search_universe(q, stype)
+
+    return render_template(
+        "search.html",
+        player=player_view,
+        buildings=buildings,
+        energy_total=energy_total,
+        energy_used=energy_used,
+        storage_caps=storage_caps,
+        search_query=q,
+        search_type=stype,
+        search_payload=initial,
+    )
+
+
+@app.route("/api/search")
+@require_login
+def api_search():
+    player_id = _current_player_id()
+    if player_id is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "results": [], "meta": {}}), 401
+    q = str(request.args.get("q") or "").strip()
+    stype = str(request.args.get("type") or "player").strip().lower()
+    try:
+        payload = search_universe(q, stype)
+        return jsonify(payload)
+    except Exception:
+        return jsonify(
+            {
+                "ok": False,
+                "error": "search_unavailable",
+                "results": [],
+                "meta": {"query": q, "type": stype, "coord_jump": None},
+            }
+        ), 500
 
 
 @app.route("/records")

@@ -50416,3 +50416,107 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
     justify-self: start;
   }
 }
+
+
+/* ==========================================================================
+   GC-880 Universe Search
+   ========================================================================== */
+.search-page .search-panel-body{
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 14px 16px;
+}
+.search-form{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.search-form-label{
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.search-query-input{
+  width: 100%;
+}
+.search-results{
+  min-height: 3rem;
+}
+.search-state{
+  color: var(--gc-text-soft);
+  font-size: 0.9rem;
+  padding: 8px 0;
+}
+.search-state-error{
+  color: var(--gc-danger, #e35);
+}
+.gc-search-table{
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.gc-search-table th,
+.gc-search-table td{
+  border-bottom: 1px solid var(--gc-border, rgba(255,255,255,0.08));
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: middle;
+}
+.gc-search-table th{
+  color: var(--gc-text-dim);
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.gc-search-player-trigger{
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--gc-link, var(--gc-accent, #6cf));
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.gc-search-player-trigger:hover{
+  text-decoration: underline;
+}
+.gc-search-alliance-card{
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: var(--gc-radius-sm, 2px);
+}
+.gc-search-alliance-head{
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.gc-search-alliance-title{
+  font-weight: 600;
+  color: var(--gc-text);
+  text-decoration: none;
+}
+.gc-search-alliance-title:hover{
+  text-decoration: underline;
+}
+.search-coord-jump{
+  margin-bottom: 4px;
+}
+.search-page .sr-only{
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
+}
+.alliance-hub-detail-member-coords{
+  margin-left: 6px;
+  opacity: 0.9;
+}

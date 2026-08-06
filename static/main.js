@@ -2558,6 +2558,7 @@
     if (path.endsWith("/empire")) return "empire";
     if (path.endsWith("/overview") || path === "/") return "overview";
     if (path.endsWith("/ranking")) return "ranking";
+    if (path.endsWith("/search")) return "search";
     if (path.endsWith("/hall-of-fame")) return "hall_of_fame";
     if (path.endsWith("/world-boss")) return "world_boss";
     if (path.endsWith("/chronicles")) return "chronicles";
@@ -22147,13 +22148,13 @@
       state.members.forEach((m) => {
         const row = page.querySelector(`[data-member-id="${m.player_id}"]`);
         if (!row) return;
-        const cells = row.querySelectorAll("td.gc-mono");
-        if (cells.length >= 2 && m.donation_points != null) {
+        const donCell = row.querySelector("[data-member-donations]");
+        if (donCell && m.donation_points != null) {
           const compact =
             typeof GC.fmtIntCompact === "function"
               ? GC.fmtIntCompact(Number(m.donation_points || 0))
               : fmt(Number(m.donation_points || 0));
-          cells[1].textContent = compact;
+          donCell.textContent = compact;
         }
       });
     }
@@ -38903,6 +38904,270 @@
     loadRankingData();
   };
 
+  // --------------------------------------------------------------------------
+  // Universe Search (GC-880)
+  // --------------------------------------------------------------------------
+
+  const SEARCH_PLACEHOLDERS = {
+    player: () => t("search_placeholder_player", "Spielername…"),
+    planet: () => t("search_placeholder_planet", "Planetname…"),
+    alliance: () => t("search_placeholder_alliance", "Allianz-Tag oder Name…"),
+  };
+
+  function searchEsc(s) {
+    return typeof gcEscHtml === "function" ? gcEscHtml(String(s ?? "")) : String(s ?? "");
+  }
+
+  function searchPlayerBtn(playerId, name) {
+    const pid = Number(playerId) || 0;
+    const display = searchEsc(name || "—");
+    if (pid <= 0) return `<span>${display}</span>`;
+    const openLabel = searchEsc(t("ranking_open_playercard", "Open player card"));
+    return (
+      `<button type="button" class="gc-search-player-trigger" ` +
+      `data-player-id="${pid}" data-player-card="1" aria-label="${openLabel}: ${display}">` +
+      display +
+      `</button>`
+    );
+  }
+
+  function searchCoordsHtml(coordsObj) {
+    if (!coordsObj || !coordsObj.coords) return "—";
+    return GC.coordLinkHtml(coordsObj.coords, { label: coordsObj.coords });
+  }
+
+  function searchAllianceLink(allianceId, tag) {
+    const id = Number(allianceId) || 0;
+    const label = tag ? `[${tag}]` : "—";
+    if (id <= 0) return searchEsc(label);
+    return `<a href="/alliance/${id}" class="gc-search-alliance-link" data-pjax-link>${searchEsc(label)}</a>`;
+  }
+
+  function renderSearchPlayers(results) {
+    if (!results.length) {
+      return `<div class="search-state">${searchEsc(t("search_empty", "Keine Treffer."))}</div>`;
+    }
+    const rows = results
+      .map((row) => {
+        const ally =
+          row.alliance_tag && row.alliance_id
+            ? searchAllianceLink(row.alliance_id, row.alliance_tag)
+            : "—";
+        return (
+          `<tr>` +
+          `<td>${searchPlayerBtn(row.player_id, row.name)}</td>` +
+          `<td>${ally}</td>` +
+          `<td class="gc-mono">${searchCoordsHtml(row.homeworld)}</td>` +
+          `</tr>`
+        );
+      })
+      .join("");
+    return (
+      `<table class="gc-search-table">` +
+      `<thead><tr>` +
+      `<th>${searchEsc(t("search_col_player", "Spieler"))}</th>` +
+      `<th>${searchEsc(t("search_col_alliance", "Allianz"))}</th>` +
+      `<th>${searchEsc(t("search_col_homeworld", "Homeworld"))}</th>` +
+      `</tr></thead><tbody>${rows}</tbody></table>`
+    );
+  }
+
+  function renderSearchPlanets(results) {
+    if (!results.length) {
+      return `<div class="search-state">${searchEsc(t("search_empty", "Keine Treffer."))}</div>`;
+    }
+    const rows = results
+      .map((row) => {
+        return (
+          `<tr>` +
+          `<td>${searchEsc(row.planet_name || "—")}</td>` +
+          `<td>${searchPlayerBtn(row.owner_id, row.owner_name)}</td>` +
+          `<td class="gc-mono">${searchCoordsHtml(row.coords)}</td>` +
+          `</tr>`
+        );
+      })
+      .join("");
+    return (
+      `<table class="gc-search-table">` +
+      `<thead><tr>` +
+      `<th>${searchEsc(t("search_col_planet", "Planet"))}</th>` +
+      `<th>${searchEsc(t("search_col_owner", "Besitzer"))}</th>` +
+      `<th>${searchEsc(t("search_col_coords", "Koordinaten"))}</th>` +
+      `</tr></thead><tbody>${rows}</tbody></table>`
+    );
+  }
+
+  function renderSearchAlliances(results) {
+    if (!results.length) {
+      return `<div class="search-state">${searchEsc(t("search_empty", "Keine Treffer."))}</div>`;
+    }
+    return results
+      .map((row) => {
+        const members = Array.isArray(row.members) ? row.members : [];
+        const memberRows = members
+          .map((m) => {
+            return (
+              `<tr>` +
+              `<td>${searchPlayerBtn(m.player_id, m.player_name)}</td>` +
+              `<td>${searchEsc(m.role || "member")}</td>` +
+              `<td class="gc-mono">${searchCoordsHtml(m.homeworld)}</td>` +
+              `</tr>`
+            );
+          })
+          .join("");
+        return (
+          `<article class="gc-search-alliance-card gc-panel">` +
+          `<header class="gc-search-alliance-head">` +
+          `<a href="/alliance/${Number(row.alliance_id) || 0}" class="gc-search-alliance-title" data-pjax-link>` +
+          searchEsc(`[${row.tag || ""}] ${row.name || ""}`) +
+          `</a>` +
+          `<span class="gc-mono">${Number(row.member_count) || members.length} ${searchEsc(t("search_col_members", "Mitglieder"))}</span>` +
+          `</header>` +
+          `<table class="gc-search-table">` +
+          `<thead><tr>` +
+          `<th>${searchEsc(t("search_col_player", "Spieler"))}</th>` +
+          `<th>${searchEsc(t("search_col_role", "Rang"))}</th>` +
+          `<th>${searchEsc(t("search_col_homeworld", "Homeworld"))}</th>` +
+          `</tr></thead><tbody>${memberRows || `<tr><td colspan="3">—</td></tr>`}</tbody></table>` +
+          `</article>`
+        );
+      })
+      .join("");
+  }
+
+  function renderSearchCoordJump(jump) {
+    const el = document.getElementById("search-coord-jump");
+    if (!el) return;
+    if (!jump || !jump.href) {
+      el.hidden = true;
+      el.innerHTML = "";
+      return;
+    }
+    const label = searchEsc(
+      t("search_coord_jump", "Zu Koordinaten springen: %(coords)s").replace(
+        "%(coords)s",
+        jump.coords || ""
+      )
+    );
+    el.hidden = false;
+    el.innerHTML =
+      `<a href="${searchEsc(jump.href)}" class="gc-btn gc-btn-secondary gc-galaxy-coord-link" data-pjax-link>` +
+      label +
+      `</a>`;
+  }
+
+  function renderSearchPayload(payload, searchType) {
+    const root = document.getElementById("search-results");
+    if (!root) return;
+    if (!payload || payload.ok === false) {
+      const err = payload?.error || "search_unavailable";
+      let msg = t("search_error", "Suche fehlgeschlagen.");
+      if (err === "query_too_short") {
+        msg = t("search_query_too_short", "Mindestens 2 Zeichen eingeben.");
+      }
+      root.innerHTML = `<div class="search-state search-state-error">${searchEsc(msg)}</div>`;
+      renderSearchCoordJump(payload?.meta?.coord_jump || null);
+      return;
+    }
+    renderSearchCoordJump(payload.meta?.coord_jump || null);
+    if (payload.meta?.coord_jump && !(payload.results || []).length) {
+      root.innerHTML = `<div class="search-state">${searchEsc(t("search_coord_only", "Koordinaten erkannt — Galaxy öffnen."))}</div>`;
+      return;
+    }
+    const results = Array.isArray(payload.results) ? payload.results : [];
+    if (searchType === "planet") {
+      root.innerHTML = renderSearchPlanets(results);
+    } else if (searchType === "alliance") {
+      root.innerHTML = renderSearchAlliances(results);
+    } else {
+      root.innerHTML = renderSearchPlayers(results);
+    }
+  }
+
+  async function runUniverseSearch(query, searchType) {
+    const root = document.getElementById("search-results");
+    if (root) {
+      root.innerHTML = `<div class="search-state search-state-loading">${searchEsc(t("search_loading", "Suche…"))}</div>`;
+    }
+    const q = String(query || "").trim();
+    const stype = String(searchType || "player");
+    try {
+      const url = `/api/search?type=${encodeURIComponent(stype)}&q=${encodeURIComponent(q)}`;
+      const payload = await GC.fetchJSON(url, { cache: "no-store" });
+      renderSearchPayload(payload, stype);
+      if (typeof history !== "undefined" && history.replaceState) {
+        const next = `/search?type=${encodeURIComponent(stype)}&q=${encodeURIComponent(q)}`;
+        history.replaceState(history.state || {}, "", next);
+      }
+    } catch (err) {
+      console.error("[GC] search failed", err);
+      if (root) {
+        root.innerHTML = `<div class="search-state search-state-error">${searchEsc(t("search_error", "Suche fehlgeschlagen."))}</div>`;
+      }
+    }
+  }
+
+  function bindSearchPageOnce() {
+    if (GC._searchPageBound) return;
+    GC._searchPageBound = true;
+
+    document.addEventListener("click", (e) => {
+      const tab = e.target.closest("[data-search-tab]");
+      if (!tab || !document.getElementById("search-page")) return;
+      e.preventDefault();
+      const stype = tab.getAttribute("data-search-tab") || "player";
+      const page = document.getElementById("search-page");
+      page?.setAttribute("data-search-type", stype);
+      const typeInput = document.getElementById("search-type-input");
+      if (typeInput) typeInput.value = stype;
+      document.querySelectorAll("[data-search-tab]").forEach((btn) => {
+        const on = btn.getAttribute("data-search-tab") === stype;
+        btn.classList.toggle("is-active", on);
+        btn.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      const input = document.getElementById("search-query-input");
+      if (input) {
+        input.placeholder = (SEARCH_PLACEHOLDERS[stype] || SEARCH_PLACEHOLDERS.player)();
+      }
+      const q = String(input?.value || "").trim();
+      if (q) runUniverseSearch(q, stype);
+    });
+
+    document.addEventListener("submit", (e) => {
+      const form = e.target.closest("[data-search-form]");
+      if (!form || !document.getElementById("search-page")) return;
+      e.preventDefault();
+      const page = document.getElementById("search-page");
+      const stype =
+        document.getElementById("search-type-input")?.value ||
+        page?.getAttribute("data-search-type") ||
+        "player";
+      const q = document.getElementById("search-query-input")?.value || "";
+      runUniverseSearch(q, stype);
+    });
+  }
+
+  GC.initSearch = function initSearch() {
+    if (!document.getElementById("search-page")) return;
+    bindSearchPageOnce();
+    const page = document.getElementById("search-page");
+    const stype = page?.getAttribute("data-search-type") || "player";
+    const input = document.getElementById("search-query-input");
+    if (input) {
+      input.placeholder = (SEARCH_PLACEHOLDERS[stype] || SEARCH_PLACEHOLDERS.player)();
+    }
+    const initialEl = document.getElementById("search-initial-data");
+    if (initialEl) {
+      try {
+        const payload = JSON.parse(initialEl.textContent || "{}");
+        renderSearchPayload(payload, stype);
+        return;
+      } catch (_) {}
+    }
+    const q = String(page?.getAttribute("data-search-query") || input?.value || "").trim();
+    if (q) runUniverseSearch(q, stype);
+  };
+
   const EMPIRE_MATRIX_STORAGE_KEY = "gc_empire_matrix_collapsed";
 
   function loadEmpireMatrixCollapsed() {
@@ -39085,6 +39350,9 @@
   GC.modules.galaxy = initGalaxy;
   GC.modules.ranking = function initRankingPage() {
     GC.initRanking();
+  };
+  GC.modules.search = function initSearchPage() {
+    GC.initSearch();
   };
   GC.modules.hall_of_fame = function initHallOfFamePage() {
     const root = document.getElementById("hall-of-fame-page");

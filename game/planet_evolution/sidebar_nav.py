@@ -19,6 +19,7 @@ ALL_NAV_MODULES: List[str] = [
     "logistics",
     "trading",
     "alliance",
+    "search",
     "galaxy",
     "ranking",
     "hall_of_fame",
@@ -41,7 +42,7 @@ NAV_SECTION_MODULES: Dict[str, Tuple[str, ...]] = {
     "infrastructure": ("buildings", "research"),
     "military": ("shipyard", "fleet", "defense", "logistics"),
     "economy": ("trading", "empire", "techtree", "skilltree"),
-    "administration": ("alliance", "ranking", "chronicles", "hall_of_fame", "referrals", "records", "story", "support"),
+    "administration": ("alliance", "search", "ranking", "chronicles", "hall_of_fame", "referrals", "records", "story", "support"),
 }
 
 UTILITY_MODULES = frozenset(NAV_SECTION_MODULES["administration"])

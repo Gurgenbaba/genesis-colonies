@@ -239,6 +239,7 @@ Galaxie ist nicht nur Koordinatenbrowser — sie verbindet **Entdeckung, Expansi
 - fleet
 - planet_evolution
 - planet_scope
+- [SEARCH_SYSTEM.md](SEARCH_SYSTEM.md) — name → homeworld / planet coords
 
 ## Commander Tips
 

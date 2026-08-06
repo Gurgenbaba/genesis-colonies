@@ -64,6 +64,7 @@ Vor jeder Änderung die relevanten Docs lesen:
 | [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) | Kampf-Resolver, Loot, Debris, Reports |
 | [GAME_RULES.md](GAME_RULES.md) | Spielregeln, Fair Play, PvP-Policy, Support (Appendix = Code-Ist-Stand) |
 | [GALAXY_SYSTEM.md](GALAXY_SYSTEM.md) | Koordinaten, Systemansicht |
+| [SEARCH_SYSTEM.md](SEARCH_SYSTEM.md) | Universums-Suche (Spieler / Planet / Allianz) |
 | [PLANET_EVOLUTION.md](PLANET_EVOLUTION.md) | DNA, Planet-Tech, Events |
 | [IMPERIUM_VISION.md](IMPERIUM_VISION.md) | Genesis 2.0 — Empire Screen, Command Map, EPIC-15 |
 | [EFFECTS.md](EFFECTS.md) | EffectResolver, Formeln |
@@ -143,7 +144,7 @@ Kurz. Keine Projektzusammenfassung.
 ## Tests
 
 ```bash
-python -m pytest tests/ -v          # gesamt (4437 Tests)
+python -m pytest tests/ -v          # gesamt (4487 Tests)
 python -m pytest tests/test_fleet.py -v   # domänenspezifisch
 ```
 

@@ -18,6 +18,10 @@
          class="gc-bottom-util-link{% if request.endpoint == 'ranking_view' %} is-active{% endif %}"
          data-pjax-link>{{ T("nav_ranking_short", "Ranking") }}</a>
       <span class="gc-bottom-util-sep" aria-hidden="true">|</span>
+      <a href="{{ url_for('search_view') }}"
+         class="gc-bottom-util-link{% if request.endpoint == 'search_view' %} is-active{% endif %}"
+         data-pjax-link>{{ T("nav_search_short", "Suche") }}</a>
+      <span class="gc-bottom-util-sep" aria-hidden="true">|</span>
       <a href="{{ url_for('chronicles_view') }}"
          class="gc-bottom-util-link{% if request.endpoint == 'chronicles_view' %} is-active{% endif %}"
          data-pjax-link>{{ T("nav_chronicles_short", "Chroniken") }}</a>

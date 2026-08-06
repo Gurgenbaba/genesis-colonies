@@ -19,7 +19,7 @@
   'trader_hub_view', 'inventory_view', 'auction_house_view', 'empire_view', 'techtree_view', 'skilltree_view'
 ) %}
 {% set _comm_open = request.endpoint in (
-  'alliance_view', 'hall_of_fame_view',
+  'alliance_view', 'search_view', 'hall_of_fame_view',
   'referrals_view', 'vote_center_view', 'imperial_directives_view', 'galactic_politics_view',
   'world_boss_view', 'story_view'
 ) %}
@@ -176,6 +176,12 @@
            {% if not module_in_section(_sn, 'alliance', 'administration') %}hidden{% endif %}>
           <span class="gc-nav-link-label">{{ T("nav_alliance") }}</span>
           <span class="gc-nav-badge hidden" data-nav-badge="alliance" hidden aria-hidden="true"></span>
+        </a>
+        <a href="{{ url_for('search_view') }}"
+           data-nav-module="search"
+           class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'search') }} {% if request.endpoint == 'search_view' %}active{% endif %}"
+           {% if not module_in_section(_sn, 'search', 'administration') %}hidden{% endif %}>
+          <span class="gc-nav-link-label">{{ T("nav_search", "Suche") }}</span>
         </a>
       </div>
     </div>

@@ -291,6 +291,9 @@
         <li class="alliance-hub-detail-member-row">
           <span class="alliance-hub-detail-member-name">{{ player_name_link(m.player_id, m.player_name) }}</span>
           <span class="alliance-hub-role-badge alliance-hub-role-badge--{{ m.role|default('member') }}">{{ T("alliance_role_" ~ (m.role|default('member')), m.role|default('member')) }}</span>
+          <span class="alliance-hub-detail-member-coords gc-mono">
+            {% if m.homeworld_coords %}{{ galaxy_coord_link(m.homeworld_coords) }}{% else %}—{% endif %}
+          </span>
           <span class="alliance-hub-detail-member-pts gc-mono" title="{{ T('alliance_member_donations', 'Spenden') }}">{{ (m.donation_points|default(0))|fmt_int_compact }}</span>
         </li>
         {% else %}
@@ -596,6 +599,7 @@
               <tr>
                 <th scope="col">{{ T("alliance_member_col_player", "Spieler") }}</th>
                 <th scope="col">{{ T("alliance_member_col_role", "Rang") }}</th>
+                <th scope="col" class="gc-mono">{{ T("alliance_member_col_homeworld", "Homeworld") }}</th>
                 <th scope="col" class="gc-mono">{{ T("alliance_member_score", "Punkte") }}</th>
                 <th scope="col" class="gc-mono">{{ T("alliance_member_donations", "Spenden") }}</th>
                 <th scope="col" class="gc-mono">{{ T("alliance_member_xp_contrib", "XP-Beitrag") }}</th>
@@ -616,8 +620,11 @@
                   </div>
                 </td>
                 <td><span class="alliance-hub-role-badge alliance-hub-role-badge--{{ m.role }}">{{ T("alliance_role_" ~ m.role, m.role) }}</span></td>
+                <td class="gc-mono">
+                  {% if m.homeworld_coords %}{{ galaxy_coord_link(m.homeworld_coords) }}{% else %}—{% endif %}
+                </td>
                 <td class="gc-mono">{{ m.total_score|fmt_int_compact }}</td>
-                <td class="gc-mono">{{ m.donation_points|fmt_int_compact }}</td>
+                <td class="gc-mono" data-member-donations>{{ m.donation_points|fmt_int_compact }}</td>
                 <td class="gc-mono">+{{ m.xp_contribution|fmt_int }}</td>
                 <td class="alliance-hub-member-meta">{{ m.last_seen_label or '–' }}</td>
                 <td class="alliance-hub-member-meta">{{ m.joined_label or '–' }}</td>
