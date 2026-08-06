@@ -159,8 +159,9 @@
       {% for key in ['metal_mine', 'crystal_mine', 'solar_plant', 'fuel_cell_plant'] %}
       {% set cur = (bo.current.get(key, 0) if bo.current else 0)|int %}
       {% set goal = (bo.goals.get(key, 100) if bo.goals else 100)|int %}
+      {% set label_key = (bo.goal_label_keys.get(key) if bo.goal_label_keys is defined and bo.goal_label_keys else 'building_' ~ key) %}
       <div class="ini-bo-goal gc-mono{% if cur >= goal %} is-done{% endif %}">
-        <span class="ini-bo-goal__key">{{ T(key, key) }}</span>
+        <span class="ini-bo-goal__key">{{ T(label_key, key) }}</span>
         <span class="ini-bo-goal__val">{{ cur|fmt_int }} / {{ goal|fmt_int }}</span>
       </div>
       {% endfor %}
@@ -186,7 +187,7 @@
             <span class="ini-bo-step__title">{{ T(step.title_key, step.label_fallback or step.key) }}</span>
             <span class="ini-bo-step__lvl gc-mono">→ {{ step.target_level|fmt_int }}</span>
           </div>
-          <span class="ini-bo-step__reason">{{ T(step.reason_key, step.reason_key) }}</span>
+          <span class="ini-bo-step__reason">{{ T(step.reason_key, '') }}</span>
         </div>
         <a class="gc-btn gc-btn-primary gc-btn-sm ini-bo-step__go"
            href="{{ step.route }}"

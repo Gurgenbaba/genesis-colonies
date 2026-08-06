@@ -482,7 +482,9 @@ def test_build_order_empty_planet_starts_solar(initiation_db):
         first = plan["steps"][0]
         assert first["kind"] == "build"
         assert first["key"] == "solar_plant"
+        assert first["title_key"] == "building_solar_plant"
         assert first["is_next"] is True
+        assert plan["goal_label_keys"]["fuel_cell_plant"] == "building_fuel_cell_plant"
     finally:
         conn.close()
 

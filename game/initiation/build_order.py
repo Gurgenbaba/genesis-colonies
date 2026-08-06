@@ -11,6 +11,7 @@ from urllib.parse import urlencode
 
 from ..buildings import (
     get_building_icon,
+    get_building_label_key,
     get_building_requirements_items,
     has_building_requirements,
 )
@@ -108,6 +109,7 @@ def plan_build_order(
 
     goals = {b: GOAL_LEVEL for b in GOAL_BUILDINGS}
     current = {b: int(buildings.get(b) or 0) for b in GOAL_BUILDINGS}
+    goal_labels = {b: get_building_label_key(b) for b in GOAL_BUILDINGS}
     # Truncated when goals not met and we filled the display window.
     truncated = (not complete) and (len(steps) >= limit) and not _goals_met(sim_b)
 
@@ -116,6 +118,7 @@ def plan_build_order(
         "goal_level": GOAL_LEVEL,
         "goals": goals,
         "current": current,
+        "goal_label_keys": goal_labels,
         "steps": steps,
         "next": steps[0] if steps else None,
         "complete": complete,
@@ -660,10 +663,12 @@ def _serialize_step(
         image = f"img/research/{icon}" if not icon.startswith("img/") else icon
         route = "/research?" + urlencode({"highlight": key})
         title_key = str(cfg.get("label_key") or key)
+        label_fallback = str(cfg.get("label") or title_key)
     else:
         image = get_building_icon(key)
         route = "/buildings?" + urlencode({"highlight": key})
-        title_key = key
+        title_key = get_building_label_key(key)
+        label_fallback = title_key
 
     return {
         "kind": kind,
@@ -674,5 +679,5 @@ def _serialize_step(
         "route": route,
         "image": image.lstrip("/"),
         "title_key": title_key,
-        "label_fallback": key,
+        "label_fallback": label_fallback,
     }
