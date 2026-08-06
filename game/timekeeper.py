@@ -22,6 +22,7 @@ TIMEKEEPER_DOMAINS = frozenset(
         "research",
         "shipyard",
         "defense",
+        "troops",
         "planet_research",
         "ascension",
     }
@@ -355,6 +356,7 @@ def _apply_domain_shift(
         "research": ("research_queue", "id", "start_at", "finish_at", "research"),
         "shipyard": ("shipyard_queue", "id", "started_at", "finish_at", "shipyard"),
         "defense": ("defense_queue", "id", "started_at", "finish_at", "defense"),
+        "troops": ("troop_queue", "id", "started_at", "finish_at", "troops"),
         "planet_research": ("planet_research_queue", "id", "start_at", "finish_at", "planet_research"),
         "ascension": ("planet_ascension_queue", "id", "start_at", "finish_at", "ascension"),
     }
@@ -372,6 +374,11 @@ def _apply_domain_shift(
         from .defense import defense_queue_table_ready
 
         if not defense_queue_table_ready(conn):
+            return None
+    if dom == "troops":
+        from .troops import troop_queue_table_ready
+
+        if not troop_queue_table_ready(conn):
             return None
     if dom in ("planet_research", "ascension"):
         _finish_inventory_due_work(conn, uid, planet_id=pid, source="timekeeper_apply")
@@ -433,6 +440,17 @@ def _load_domain_rows(domain: str, user_id: int, planet_id: int, *, conn, now: f
             return [], "finish_at"
         sync_defense_queue_finish_times(pid, conn=conn, now=float(now))
         return list(list_defense_queue_rows(pid, conn=conn)), "finish_at"
+    if dom == "troops":
+        from .troops import (
+            list_troop_queue_rows,
+            sync_troop_queue_finish_times,
+            troop_queue_table_ready,
+        )
+
+        if not troop_queue_table_ready(conn):
+            return [], "finish_at"
+        sync_troop_queue_finish_times(pid, conn=conn, now=float(now))
+        return list(list_troop_queue_rows(pid, conn=conn)), "finish_at"
     if dom == "planet_research":
         from .planet_evolution.repository import get_planet_research_queue
 
@@ -463,7 +481,7 @@ def apply_timekeeper(
         return False, "invalid_domain", {}
 
     uid = int(player_id)
-    if dom in ("build", "shipyard", "defense", "planet_research", "ascension"):
+    if dom in ("build", "shipyard", "defense", "troops", "planet_research", "ascension"):
         if planet_id is None:
             return False, "planet_required", {}
         pid = int(planet_id)

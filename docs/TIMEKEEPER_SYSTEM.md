@@ -16,10 +16,10 @@ Single **Imperium time account** — empire-wide, manual apply only, separate fr
 
 - Never auto-debit on poll or page load **for a human-driven request** (HUD/⚡ flow below).
 - Exception — autoplay accounts (EPIC-26, GC-2616): `game/auto_empire.py::_auto_boost_timekeeper` auto-credits + auto-applies for **inactive sticky-roster** accounts (`game/inactive_autoplay.py`) and **pirate AI bots** (`game/pirates/economy.py`) only, never for a human player mid-session. Both share the one `plan_passive_planet_tick` owner — no parallel speed mechanic per faction (Rule 16).
-- Apply only via **⚡** on the **active mini-queue strip** (Build/Research/Shipyard/Defense) or PE queue list → `/api/timekeeper/apply` with `mode: max` (server clamps to `min(balance, active_job_remaining)`).
+- Apply only via **⚡** on the **active mini-queue strip** (Build/Research/Shipyard/Defense/Troops) or PE queue list → `/api/timekeeper/apply` with `mode: max` (server clamps to `min(balance, active_job_remaining)`).
 - **One ⚡ per job** — no second Apply on building/research hero slots or PE tech cards.
-- Domains: `build`, `research`, `shipyard`, `defense`, `planet_research`, `ascension`.
-- Shipyard/Defense: vor Debit `sync_*_queue_finish_times` (Batch-Restzeit); Kosten = Head-`finish_at − now`, nie `amount × unit_seconds`.
+- Domains: `build`, `research`, `shipyard`, `defense`, `troops`, `planet_research`, `ascension`.
+- Shipyard/Defense/Troops: vor Debit `sync_*_queue_finish_times` (Batch-Restzeit); Kosten = Head-`finish_at − now`, nie `amount × unit_seconds`.
 - Production boosters (`inventory_boosters`) unchanged; Shell boost chips only update when `state.active_boosters` is present (no stale cache on omit).
 
 ## Schema
@@ -46,7 +46,7 @@ Response: `{ ok, reason, state, timekeeper, seconds_applied, jobs_finished }`
 
 **GC-PERF-TK-003:** Apply response uses slim action state (`include_panel=False`, `action_slim=True`) — HUD + queue slices only, no full `buildings_panel` / codex / shipyard catalog. Same diet pattern as GC-840 buildings upgrades. Logs `apply_ms` / `state_ms` on success.
 
-**GC-PERF-TK-004:** For `domain=shipyard|defense`, the slim apply response re-attaches a **queue-only** slice (`state.shipyard.queue` / `state.defense.queue`, no ship/defense catalogs) so the client can patch timers immediately. Without this, TK balance dropped but the mini-queue looked unchanged (false “click does nothing”). Client also refreshes `/api/shipyard` or `/api/defense` when on-page and the slice is missing, and merges prior production queues into `GC.lastState` on `timekeeper_apply`. Mini-queue `amount` / `target_amount` use **`amount_remaining`** (units still in the job), not original `amount_total`, so progressive TK delivery shrinks ×N immediately.
+**GC-PERF-TK-004:** For `domain=shipyard|defense|troops`, the slim apply response re-attaches a **queue-only** slice (`state.shipyard.queue` / `state.defense.queue` / `state.defense.troops`, no ship/defense catalogs) so the client can patch timers immediately. Without this, TK balance dropped but the mini-queue looked unchanged (false “click does nothing”). Client also refreshes `/api/shipyard` or `/api/defense` when on-page and the slice is missing, and merges prior production queues into `GC.lastState` on `timekeeper_apply`. Mini-queue `amount` / `target_amount` use **`amount_remaining`** (units still in the job), not original `amount_total`, so progressive TK delivery shrinks ×N immediately.
 
 **GC-TK-SKIP-QUEUE-001:** After shipyard/defense **enqueue/cancel**, page `apply*State` must use `skipQueue: true` when `res.state` already patched the mini strip. A second paint from unenriched `data.queue` wiped ⚡ until reload. Empty `mini_queue_jobs: []` falls back to `queue[]`. Queue renders finalize TK buttons; silent rem/bal early-returns toast `timekeeper_apply_unavailable`.
 

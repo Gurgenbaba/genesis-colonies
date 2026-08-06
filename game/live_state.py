@@ -671,9 +671,9 @@ def attach_timekeeper_domain_queue_slices(
     """
     GC-PERF-TK-004: slim TK apply must still return the boosted production queue.
 
-    ``build_queue`` / ``research`` already live on the base payload. Shipyard and
-    defense panels are include_panel-only and were diet-stripped — without a
-    queue slice the client cannot patch timers (looks like a no-op click).
+    ``build_queue`` / ``research`` already live on the base payload. Shipyard,
+    defense, and troops panels are include_panel-only and were diet-stripped —
+    without a queue slice the client cannot patch timers (looks like a no-op click).
     Catalog (ships/defenses stock) stays omitted.
     """
     if not isinstance(payload, dict):

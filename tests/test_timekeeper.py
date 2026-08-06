@@ -916,3 +916,70 @@ def test_api_timekeeper_apply_shipyard_returns_queue_slice(timekeeper_db, monkey
     assert isinstance(jobs, list) and jobs
     head_finish = float(jobs[0].get("finish_at") or jobs[0].get("finish_time") or 0)
     assert head_finish <= finish_before - 50
+
+
+def test_timekeeper_troops_domain_applies_batch_remaining(timekeeper_db):
+    """Barracks ⚡ must accept domain=troops (was invalid_domain → Ungültige Warteschlange)."""
+    from game.models import get_planet_buildings, save_planet_buildings
+    from game.shipyard import production_job_duration_seconds
+    from game.troops import (
+        barracks_batch_capacity,
+        enqueue_troop_train,
+        unit_train_seconds,
+    )
+
+    conn = db()
+    try:
+        uid = _player(conn=conn)
+        planet = get_context_planet(uid, conn=conn)
+        pid = int(planet["id"])
+        bld = get_planet_buildings(pid, conn=conn) or {}
+        bld["barracks"] = 5
+        save_planet_buildings(pid, bld, conn=conn)
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE planets SET metal = ?, crystal = ?, fuel_cells = ? WHERE id = ?;",
+            (5_000_000, 5_000_000, 500_000, pid),
+        )
+        conn.commit()
+
+        qty = 20
+        ok, reason, _ = enqueue_troop_train(
+            player_id=uid,
+            planet_id=pid,
+            troop_key="militia",
+            amount=qty,
+            conn=conn,
+        )
+        assert ok, reason
+
+        begin_write_transaction(conn)
+        ok_bad, reason_bad, _ = apply_timekeeper(
+            uid, "not_a_queue", planet_id=pid, mode="max", conn=conn
+        )
+        assert ok_bad is False
+        assert reason_bad == "invalid_domain"
+        rollback(conn)
+
+        unit = unit_train_seconds("militia", 5)
+        cap = barracks_batch_capacity(5)
+        batch_remaining = production_job_duration_seconds(
+            unit_seconds=unit, amount=qty, batch_capacity=cap
+        )
+        serial_remaining = qty * unit
+        assert batch_remaining < serial_remaining
+
+        begin_write_transaction(conn)
+        credit(uid, serial_remaining + 10_000, "test", conn=conn)
+        ok, reason, result = apply_timekeeper(
+            uid, "troops", planet_id=pid, mode="finish", conn=conn
+        )
+        assert ok, reason
+        commit(conn)
+
+        applied = int(result.get("seconds_applied") or 0)
+        assert applied <= batch_remaining + 2
+        assert applied < serial_remaining
+        assert applied > 0
+    finally:
+        conn.close()

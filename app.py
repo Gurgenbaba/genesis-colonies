@@ -10587,7 +10587,7 @@ def _timekeeper_apply_game_state(domain: str | None = None) -> dict:
         action_slim=True,
     )
     dom = str(domain or "").strip().lower()
-    if dom in ("shipyard", "defense"):
+    if dom in ("shipyard", "defense", "troops"):
         try:
             from game.live_state import attach_timekeeper_domain_queue_slices
 
