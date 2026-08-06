@@ -348,6 +348,13 @@ def test_overview_live_events_template_contract():
     assert "bindHeaderLiveEventsOnce" in main
     assert "patchHeaderLiveEvents" in main
     assert "resolveLiveEventsFromGameState" in main
+    assert 'inventory_view' in main
+    assert "overview_live_events_goto_inventory" in main
+    assert "overview_live_events_group_resources" in main
+    assert "gc-header-live-events-group" in main
+    assert "_normalize_live_event_groups" in (
+        root / "game" / "overview_page.py"
+    ).read_text(encoding="utf-8")
     hud = main.split("function applyHudOnlyGameState(data, reason, opts)")[1].split(
         "function applyGameStateData"
     )[0]
@@ -380,3 +387,81 @@ def test_build_overview_live_events_opens_own_conn(events_db):
     clear_factor_cache()
     live = build_overview_live_events(now=now)
     assert any(e.get("slug") == "own-conn-boost" for e in live)
+
+
+def test_overview_live_events_include_player_boosters(events_db):
+    """Timed inventory boosters appear in the Live Events rail with remaining time."""
+    from game.db import commit
+    from game.inventory import grant_inventory_item
+    from game.inventory_boosters import activate_inventory_booster, boosters_schema_ready
+    from game.models import create_user
+    from game.overview_page import build_overview_live_events
+
+    ok, _reason, user = create_user(f"le_boost_{uuid.uuid4().hex[:8]}", "secret123")
+    assert ok and user
+    uid = int(user["id"])
+    now = float(int(time.time()))
+    conn = db()
+    try:
+        assert boosters_schema_ready(conn)
+        grant_inventory_item(uid, "booster_production_25", 1, conn=conn)
+        effect = activate_inventory_booster(uid, "booster_production_25", conn=conn, now=now)
+        assert effect is not None
+        commit(conn)
+        live = build_overview_live_events(conn=conn, now=now, user_id=uid, locale="de")
+        boosters = [e for e in live if e.get("kind") == "booster"]
+        assert boosters, live
+        row = boosters[0]
+        assert row.get("href") == "inventory_view"
+        assert int(row.get("remaining_sec") or 0) > 0
+        assert int(row.get("ends_at") or 0) > int(now)
+        assert row.get("effects_summary")
+        assert row.get("title") or row.get("title_key")
+        assert row.get("group") == "resources"
+        assert row.get("affected_domain") == "production"
+        assert row.get("title_key") == "overview_live_events_resources_prod"
+        # One summarized production card — not N flat tier rows.
+        assert len([b for b in boosters if b.get("affected_domain") == "production"]) == 1
+    finally:
+        conn.close()
+
+
+def test_overview_live_events_group_order_resources_first(events_db):
+    """Resource boosts sort under Ressourcen before world/other appends."""
+    from game.db import commit
+    from game.inventory import grant_inventory_item
+    from game.inventory_boosters import activate_inventory_booster
+    from game.models import create_user
+    from game.overview_page import build_overview_live_events
+
+    ok, _reason, user = create_user(f"le_grp_{uuid.uuid4().hex[:8]}", "secret123")
+    assert ok and user
+    uid = int(user["id"])
+    now = float(int(time.time()))
+    conn = db()
+    try:
+        create_event(
+            slug=f"expo_{uuid.uuid4().hex[:6]}",
+            title="Expo Hold",
+            starts_at=int(now) - 60,
+            ends_at=int(now) + 3600,
+            effects=[{"kind": "expedition_hold_mult", "mult": 0.75}],
+            enabled=True,
+            conn=conn,
+        )
+        grant_inventory_item(uid, "booster_production_25", 1, conn=conn)
+        assert activate_inventory_booster(uid, "booster_production_25", conn=conn, now=now)
+        commit(conn)
+        live = build_overview_live_events(conn=conn, now=now, user_id=uid, locale="de")
+        assert live
+        groups = [str(e.get("group") or "") for e in live]
+        assert "resources" in groups
+        assert "events" in groups
+        first_res = next(i for i, g in enumerate(groups) if g == "resources")
+        first_events = next(i for i, g in enumerate(groups) if g == "events")
+        assert first_res < first_events, groups
+        prod = [e for e in live if e.get("kind") == "booster" and e.get("affected_domain") == "production"]
+        assert len(prod) == 1
+        assert prod[0].get("group") == "resources"
+    finally:
+        conn.close()

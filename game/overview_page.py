@@ -462,8 +462,23 @@ def _load_overview_queue_fleet(
     return shipyard_queue, defense_queue, fleet_movements
 
 
-def build_overview_live_events(*, conn=None, now: Optional[float] = None) -> List[Dict[str, Any]]:
-    """Active LiveOps teasers for header rail (server events + world boss windows)."""
+_LIVE_EVENT_GROUP_ORDER = {
+    "resources": 0,
+    "events": 1,
+    "world_boss": 2,
+    "boosters": 3,
+}
+_RESOURCE_BOOST_DOMAINS = frozenset({"production", "energy"})
+
+
+def build_overview_live_events(
+    *,
+    conn=None,
+    now: Optional[float] = None,
+    user_id: Optional[int] = None,
+    locale: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Active LiveOps teasers for header rail (server events + world boss + player boosters)."""
     ts = float(now if now is not None else time.time())
     items: List[Dict[str, Any]] = []
     owns = conn is None
@@ -500,14 +515,190 @@ def build_overview_live_events(*, conn=None, now: Optional[float] = None) -> Lis
                             "remaining_sec": max(0, ends - int(ts)) if ends else 0,
                             "href": "world_boss_view",
                             "boss_key": boss_key,
+                            "group": "world_boss",
                         }
                     )
         except Exception:
             pass
-        return items
+        uid = int(user_id or 0)
+        if uid > 0:
+            try:
+                items.extend(
+                    _player_booster_live_events(
+                        uid,
+                        conn=conn,
+                        now=ts,
+                        locale=locale,
+                    )
+                )
+            except Exception:
+                pass
+        return _normalize_live_event_groups(items)
     finally:
         if owns and conn is not None:
             conn.close()
+
+
+def _normalize_live_event_groups(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Ensure every row has a group and sort: resources → events → world boss → boosters."""
+    out: List[Dict[str, Any]] = []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        row = dict(it)
+        group = str(row.get("group") or "").strip()
+        if not group:
+            kind = str(row.get("kind") or "")
+            domain = str(row.get("affected_domain") or "")
+            if kind == "world_boss":
+                group = "world_boss"
+            elif kind == "booster" and domain in _RESOURCE_BOOST_DOMAINS:
+                group = "resources"
+            elif kind == "booster":
+                group = "boosters"
+            else:
+                group = "events"
+        row["group"] = group
+        out.append(row)
+    out.sort(
+        key=lambda r: (
+            int(_LIVE_EVENT_GROUP_ORDER.get(str(r.get("group") or ""), 99)),
+            -int(r.get("remaining_sec") or 0),
+            str(r.get("slug") or ""),
+        )
+    )
+    return out
+
+
+def _booster_live_event_row(
+    fx: Dict[str, Any],
+    *,
+    group: str,
+    now: float,
+    slug: Optional[str] = None,
+    title: Optional[str] = None,
+    title_key: Optional[str] = None,
+    effects_summary: Optional[List[str]] = None,
+) -> Optional[Dict[str, Any]]:
+    rem = max(0, int(fx.get("remaining_seconds") or 0))
+    ends = int(float(fx.get("expires_at") or 0))
+    if rem <= 0 or ends <= int(now):
+        return None
+    summary = str(fx.get("effect_summary") or "").strip()
+    note = str(fx.get("note") or "").strip()
+    lines = list(effects_summary) if effects_summary is not None else [s for s in (summary, note) if s]
+    return {
+        "kind": "booster",
+        "id": 0,
+        "slug": str(slug or fx.get("key") or fx.get("effect_key") or "booster"),
+        "title": str(title if title is not None else (fx.get("label") or "")),
+        "title_key": str(title_key if title_key is not None else (fx.get("label_key") or "")),
+        "effects_summary": lines,
+        "ends_at": ends,
+        "remaining_sec": rem,
+        "href": "inventory_view",
+        "effect_key": str(fx.get("effect_key") or ""),
+        "affected_domain": str(fx.get("affected_domain") or ""),
+        "source_item_key": str(fx.get("source_item_key") or ""),
+        "group": group,
+    }
+
+
+def _player_booster_live_events(
+    user_id: int,
+    *,
+    conn,
+    now: float,
+    locale: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Map inventory HUD boosters into live-events rows (no second expiry engine).
+
+    Production/energy stay under group ``resources`` as a summarized card — not flat
+    appends after world events. Aggregate chip rows still drive the resource bar only.
+    """
+    from .inventory_boosters import build_active_effects_for_hud
+
+    out: List[Dict[str, Any]] = []
+    effects = build_active_effects_for_hud(
+        int(user_id),
+        conn=conn,
+        locale=locale,
+        now=now,
+    )
+    prod_agg: Optional[Dict[str, Any]] = None
+    prod_tiers: List[Dict[str, Any]] = []
+    energy_rows: List[Dict[str, Any]] = []
+    other_rows: List[Dict[str, Any]] = []
+
+    for fx in effects:
+        if not isinstance(fx, dict):
+            continue
+        # Server-event folds already appear as server_event rows / res-bar chip text.
+        if fx.get("server_event"):
+            continue
+        domain = str(fx.get("affected_domain") or "")
+        if fx.get("hud_chip_only") or fx.get("stack_aggregate"):
+            if domain == "production":
+                prod_agg = fx
+            continue
+        rem = max(0, int(fx.get("remaining_seconds") or 0))
+        ends = int(float(fx.get("expires_at") or 0))
+        if rem <= 0 or ends <= int(now):
+            continue
+        if domain == "production":
+            prod_tiers.append(fx)
+        elif domain == "energy":
+            energy_rows.append(fx)
+        else:
+            other_rows.append(fx)
+
+    if prod_agg or prod_tiers:
+        base = prod_agg or prod_tiers[0]
+        lines: List[str] = []
+        agg_summary = str((prod_agg or {}).get("effect_summary") or "").strip()
+        if agg_summary:
+            lines.append(agg_summary)
+        for tier in prod_tiers:
+            label = str(tier.get("label") or "").strip()
+            summary = str(tier.get("effect_summary") or "").strip()
+            note = str(tier.get("note") or "").strip()
+            # Single matching tier: aggregate line is enough.
+            if len(prod_tiers) == 1 and agg_summary and summary and summary in agg_summary:
+                if note and note not in lines:
+                    lines.append(note)
+                continue
+            bit = " · ".join(p for p in (label, summary) if p)
+            if bit and bit not in lines:
+                lines.append(bit)
+            if note and note not in lines:
+                lines.append(note)
+        if not lines:
+            lines = [s for s in (str(base.get("effect_summary") or "").strip(),) if s]
+        row = _booster_live_event_row(
+            base,
+            group="resources",
+            now=now,
+            slug="production",
+            title="",
+            title_key="overview_live_events_resources_prod",
+            effects_summary=lines,
+        )
+        if row:
+            row["effect_key"] = "production"
+            row["affected_domain"] = "production"
+            out.append(row)
+
+    for fx in energy_rows:
+        row = _booster_live_event_row(fx, group="resources", now=now)
+        if row:
+            out.append(row)
+
+    for fx in other_rows:
+        row = _booster_live_event_row(fx, group="boosters", now=now)
+        if row:
+            out.append(row)
+
+    return out
 
 
 def build_overview_status(

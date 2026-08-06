@@ -8458,5 +8458,11 @@
   "ini_bo_reason_energy": "Энергия",
   "ini_bo_reason_speed": "Скорость строительства",
   "ini_bo_reason_cap": "Кап уровня",
-  "ini_bo_reason_mine": "Экономика"
+  "ini_bo_reason_mine": "Экономика",
+  "overview_live_events_goto_inventory": "Инвентарь",
+  "overview_live_events_group_resources": "Ресурсы",
+  "overview_live_events_group_events": "События",
+  "overview_live_events_group_world_boss": "World Boss",
+  "overview_live_events_group_boosters": "Бустеры",
+  "overview_live_events_resources_prod": "Добыча ресурсов"
 }

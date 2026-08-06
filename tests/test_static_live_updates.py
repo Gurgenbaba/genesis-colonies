@@ -2983,6 +2983,16 @@ def test_main_js_queue_page_sync_bridge():
         "function bootstrapHeaderBoostersFromDom"
     )[0]
     assert 'hasOwnProperty.call(data, "active_boosters")' in boost
+    assert "hud_chip_only: Boolean(e.hud_chip_only)" in src.split("function _normalizeBoostEffects")[1].split(
+        "function _resolveBoostEffectsFromState"
+    )[0]
+    assert "ready !== false" in boost
+    live_patch = src.split("function patchHeaderLiveEvents(events)")[1].split(
+        "GC.patchHeaderLiveEvents = patchHeaderLiveEvents"
+    )[0]
+    assert "_LIVE_EVENT_GROUP_ORDER" in src
+    assert "gc-header-live-events-group" in live_patch
+    assert "overview_live_events_group_resources" in src
 
 
 def test_main_js_timekeeper_buttons_sync_immediately_after_action_state():

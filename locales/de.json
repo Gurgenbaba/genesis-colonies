@@ -8458,5 +8458,11 @@
   "ini_bo_reason_energy": "Energie",
   "ini_bo_reason_speed": "Bauzeit",
   "ini_bo_reason_cap": "Stufen-Cap",
-  "ini_bo_reason_mine": "Wirtschaft"
+  "ini_bo_reason_mine": "Wirtschaft",
+  "overview_live_events_goto_inventory": "Inventar",
+  "overview_live_events_group_resources": "Ressourcen",
+  "overview_live_events_group_events": "Events",
+  "overview_live_events_group_world_boss": "World Boss",
+  "overview_live_events_group_boosters": "Booster",
+  "overview_live_events_resources_prod": "Ressourcen-Produktion"
 }

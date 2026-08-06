@@ -495,6 +495,14 @@ def nav_badges_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
     except Exception:
         initiation_attention = 0
 
+    live_events_count = 0
+    try:
+        from game.overview_page import build_overview_live_events
+
+        live_events_count = len(build_overview_live_events(user_id=uid, conn=conn))
+    except Exception:
+        live_events_count = server_event_count + wb_count
+
     alliance_count = 0
     try:
         from game.alliance import count_alliance_nav_attention
@@ -556,11 +564,9 @@ def nav_badges_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
             label=str(wb_count) if wb_count > 1 else ("LIVE" if wb_active else ""),
         ),
         "live_events": _nav_badge_entry(
-            active=(server_event_count + wb_count) > 0,
-            count=server_event_count + wb_count,
-            label=str(server_event_count + wb_count)
-            if (server_event_count + wb_count) > 0
-            else "",
+            active=live_events_count > 0,
+            count=live_events_count,
+            label=str(live_events_count) if live_events_count > 0 else "",
         ),
         "login_rewards": _nav_badge_entry(
             active=login_available,

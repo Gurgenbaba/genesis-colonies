@@ -8458,5 +8458,11 @@
   "ini_bo_reason_energy": "Energia",
   "ini_bo_reason_speed": "Velocidade de construção",
   "ini_bo_reason_cap": "Teto de nível",
-  "ini_bo_reason_mine": "Economia"
+  "ini_bo_reason_mine": "Economia",
+  "overview_live_events_goto_inventory": "Inventário",
+  "overview_live_events_group_resources": "Recursos",
+  "overview_live_events_group_events": "Eventos",
+  "overview_live_events_group_world_boss": "World Boss",
+  "overview_live_events_group_boosters": "Boosters",
+  "overview_live_events_resources_prod": "Produção de recursos"
 }

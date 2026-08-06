@@ -14489,12 +14489,25 @@
     if (!Array.isArray(rawEffects)) return [];
     return rawEffects.map((e) => ({
       key: String(e.key || e.effect_key || ""),
+      effect_key: String(e.effect_key || e.key || ""),
       affected_domain: String(e.affected_domain || "general"),
       effect_summary: String(e.effect_summary || ""),
+      effect_summary_params:
+        e.effect_summary_params && typeof e.effect_summary_params === "object"
+          ? e.effect_summary_params
+          : {},
       remaining_seconds: Math.max(0, Math.floor(Number(e.remaining_seconds) || 0)),
+      expires_at: Math.max(0, Math.floor(Number(e.expires_at) || 0)),
       resource_impacts: (e.resource_impacts && typeof e.resource_impacts === "object")
         ? e.resource_impacts
         : {},
+      // Preserve chip vs list roles across PJAX / local countdown ticks.
+      hud_chip_only: Boolean(e.hud_chip_only),
+      stack_aggregate: Boolean(e.stack_aggregate),
+      hud_list_only: Boolean(e.hud_list_only),
+      tier_standby: Boolean(e.tier_standby),
+      label: String(e.label || ""),
+      server_event: Boolean(e.server_event),
     }));
   }
 
@@ -14582,7 +14595,10 @@
         _boostHudState.syncedAt = getApproxServerNow();
       }
     } else if (Array.isArray(serverEffects) && serverEffects.length === 0) {
-      _boostHudState.effects = [];
+      // ready:false is an error/schema stub — never wipe chips after leaving inventory.
+      if (data?.active_boosters?.ready !== false) {
+        _boostHudState.effects = [];
+      }
     } else if (incoming.length) {
       _boostHudState.effects = incoming;
     }
@@ -20424,6 +20440,90 @@
     return `${h}h ${String(m).padStart(2, "0")}m`;
   }
 
+  const _LIVE_EVENT_GROUP_ORDER = ["resources", "events", "world_boss", "boosters"];
+  const _LIVE_EVENT_GROUP_LABELS = {
+    resources: ["overview_live_events_group_resources", "Ressourcen"],
+    events: ["overview_live_events_group_events", "Events"],
+    world_boss: ["overview_live_events_group_world_boss", "World Boss"],
+    boosters: ["overview_live_events_group_boosters", "Booster"],
+  };
+
+  function _liveEventGroupKey(ev) {
+    const raw = String((ev && ev.group) || "").trim();
+    if (raw && _LIVE_EVENT_GROUP_LABELS[raw]) return raw;
+    const kind = String((ev && ev.kind) || "");
+    const domain = String((ev && ev.affected_domain) || "");
+    if (kind === "world_boss") return "world_boss";
+    if (kind === "booster" && (domain === "production" || domain === "energy")) return "resources";
+    if (kind === "booster") return "boosters";
+    return "events";
+  }
+
+  function _appendLiveEventItem(frag, ev) {
+    if (!ev || typeof ev !== "object") return;
+    const kind = String(ev.kind || "server_event");
+    const group = _liveEventGroupKey(ev);
+    const li = document.createElement("li");
+    li.className = `gc-header-live-events-item gc-header-live-events-item--${kind} gc-header-live-events-item--group-${group}`;
+    if (ev.ends_at) li.setAttribute("data-ends-at", String(ev.ends_at));
+    li.setAttribute("data-live-event-group", group);
+
+    const main = document.createElement("div");
+    main.className = "gc-header-live-events-main";
+
+    const title = document.createElement("strong");
+    title.className = "gc-header-live-events-title";
+    const titleKey = String(ev.title_key || "").trim();
+    title.textContent = titleKey
+      ? t(titleKey, ev.title || ev.slug || ev.boss_key || "")
+      : String(ev.title || ev.slug || "");
+    main.appendChild(title);
+
+    const effects = Array.isArray(ev.effects_summary) ? ev.effects_summary.filter(Boolean) : [];
+    const effectsEl = document.createElement("span");
+    effectsEl.className = "gc-header-live-events-effects gc-mono";
+    if (effects.length) {
+      effectsEl.textContent = effects.join(" · ");
+    } else if (kind === "world_boss") {
+      effectsEl.textContent = t(
+        "overview_live_events_world_boss",
+        "World Boss aktiv — angreifen & belohnen"
+      );
+    }
+    if (effectsEl.textContent) main.appendChild(effectsEl);
+
+    const rem = Math.max(0, Number(ev.remaining_sec) || 0);
+    if (rem > 0) {
+      const eta = document.createElement("span");
+      eta.className = "gc-header-live-events-eta hint gc-mono";
+      eta.textContent = `${t("overview_live_events_ends", "Noch")} ${_formatLiveEventEta(rem)}`;
+      main.appendChild(eta);
+    }
+    li.appendChild(main);
+
+    let href = "";
+    let linkLabel = "";
+    if (ev.href === "world_boss_view") {
+      href = "/world-boss";
+      linkLabel = t("overview_live_events_goto_boss", "Zum World Boss");
+    } else if (ev.href === "login_rewards_view") {
+      href = "/login-rewards";
+      linkLabel = t("overview_live_events_goto_calendar", "Kalender");
+    } else if (ev.href === "inventory_view") {
+      href = "/inventory";
+      linkLabel = t("overview_live_events_goto_inventory", "Inventar");
+    }
+    if (href) {
+      const a = document.createElement("a");
+      a.className = "gc-btn gc-btn-sm gc-btn-ghost";
+      a.href = href;
+      a.setAttribute("data-pjax-link", "");
+      a.textContent = linkLabel;
+      li.appendChild(a);
+    }
+    frag.appendChild(li);
+  }
+
   function patchHeaderLiveEvents(events) {
     const root = document.querySelector("[data-header-live-events]");
     if (!root) return;
@@ -20459,65 +20559,26 @@
       return;
     }
     if (empty) empty.hidden = true;
-    const frag = document.createDocumentFragment();
+    const byGroup = {};
     items.forEach((ev) => {
       if (!ev || typeof ev !== "object") return;
-      const kind = String(ev.kind || "server_event");
-      const li = document.createElement("li");
-      li.className = `gc-header-live-events-item gc-header-live-events-item--${kind}`;
-      if (ev.ends_at) li.setAttribute("data-ends-at", String(ev.ends_at));
-
-      const main = document.createElement("div");
-      main.className = "gc-header-live-events-main";
-
-      const title = document.createElement("strong");
-      title.className = "gc-header-live-events-title";
-      const titleKey = String(ev.title_key || "").trim();
-      title.textContent = titleKey
-        ? t(titleKey, ev.title || ev.slug || ev.boss_key || "")
-        : String(ev.title || ev.slug || "");
-      main.appendChild(title);
-
-      const effects = Array.isArray(ev.effects_summary) ? ev.effects_summary.filter(Boolean) : [];
-      const effectsEl = document.createElement("span");
-      effectsEl.className = "gc-header-live-events-effects gc-mono";
-      if (effects.length) {
-        effectsEl.textContent = effects.join(" · ");
-      } else if (kind === "world_boss") {
-        effectsEl.textContent = t(
-          "overview_live_events_world_boss",
-          "World Boss aktiv — angreifen & belohnen"
-        );
+      const g = _liveEventGroupKey(ev);
+      if (!byGroup[g]) byGroup[g] = [];
+      byGroup[g].push(ev);
+    });
+    const frag = document.createDocumentFragment();
+    const usedGroups = _LIVE_EVENT_GROUP_ORDER.filter((g) => (byGroup[g] || []).length);
+    usedGroups.forEach((g) => {
+      const rows = byGroup[g] || [];
+      if (usedGroups.length > 1) {
+        const head = document.createElement("li");
+        head.className = "gc-header-live-events-group";
+        head.setAttribute("role", "presentation");
+        const lab = _LIVE_EVENT_GROUP_LABELS[g] || [g, g];
+        head.textContent = t(lab[0], lab[1]);
+        frag.appendChild(head);
       }
-      if (effectsEl.textContent) main.appendChild(effectsEl);
-
-      const rem = Math.max(0, Number(ev.remaining_sec) || 0);
-      if (rem > 0) {
-        const eta = document.createElement("span");
-        eta.className = "gc-header-live-events-eta hint gc-mono";
-        eta.textContent = `${t("overview_live_events_ends", "Noch")} ${_formatLiveEventEta(rem)}`;
-        main.appendChild(eta);
-      }
-      li.appendChild(main);
-
-      let href = "";
-      let linkLabel = "";
-      if (ev.href === "world_boss_view") {
-        href = "/world-boss";
-        linkLabel = t("overview_live_events_goto_boss", "Zum World Boss");
-      } else if (ev.href === "login_rewards_view") {
-        href = "/login-rewards";
-        linkLabel = t("overview_live_events_goto_calendar", "Kalender");
-      }
-      if (href) {
-        const a = document.createElement("a");
-        a.className = "gc-btn gc-btn-sm gc-btn-ghost";
-        a.href = href;
-        a.setAttribute("data-pjax-link", "");
-        a.textContent = linkLabel;
-        li.appendChild(a);
-      }
-      frag.appendChild(li);
+      rows.forEach((ev) => _appendLiveEventItem(frag, ev));
     });
     list.appendChild(frag);
   }

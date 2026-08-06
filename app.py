@@ -841,7 +841,11 @@ def inject_globals():
                 try:
                     from game.overview_page import build_overview_live_events
 
-                    header_hud_boot["live_events"] = build_overview_live_events(conn=_boost_conn)
+                    header_hud_boot["live_events"] = build_overview_live_events(
+                        conn=_boost_conn,
+                        user_id=uid,
+                        locale=active_locale,
+                    )
                 except Exception:
                     header_hud_boot["live_events"] = []
                 try:
@@ -10005,8 +10009,13 @@ def _payload_from_live_context(
 
     try:
         from game.overview_page import build_overview_live_events
+        from game.i18n import current_locale
 
-        payload["live_events"] = build_overview_live_events(conn=conn)
+        payload["live_events"] = build_overview_live_events(
+            conn=conn,
+            user_id=user_id,
+            locale=current_locale(),
+        )
     except Exception:
         payload["live_events"] = []
 

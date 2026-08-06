@@ -8458,5 +8458,11 @@
   "ini_bo_reason_energy": "Energy",
   "ini_bo_reason_speed": "Build speed",
   "ini_bo_reason_cap": "Level cap",
-  "ini_bo_reason_mine": "Economy"
+  "ini_bo_reason_mine": "Economy",
+  "overview_live_events_goto_inventory": "Inventory",
+  "overview_live_events_group_resources": "Resources",
+  "overview_live_events_group_events": "Events",
+  "overview_live_events_group_world_boss": "World Boss",
+  "overview_live_events_group_boosters": "Boosters",
+  "overview_live_events_resources_prod": "Resource production"
 }

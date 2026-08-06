@@ -8458,5 +8458,11 @@
   "ini_bo_reason_energy": "Enerji",
   "ini_bo_reason_speed": "İnşa hızı",
   "ini_bo_reason_cap": "Seviye tavanı",
-  "ini_bo_reason_mine": "Ekonomi"
+  "ini_bo_reason_mine": "Ekonomi",
+  "overview_live_events_goto_inventory": "Envanter",
+  "overview_live_events_group_resources": "Kaynaklar",
+  "overview_live_events_group_events": "Etkinlikler",
+  "overview_live_events_group_world_boss": "World Boss",
+  "overview_live_events_group_boosters": "Güçlendiriciler",
+  "overview_live_events_resources_prod": "Kaynak üretimi"
 }

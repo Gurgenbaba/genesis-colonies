@@ -49936,6 +49936,20 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
   max-height: none;
   overflow-y: auto;
 }
+.gc-header-live-events-group {
+  list-style: none;
+  margin: 0.35rem 0 0.05rem;
+  padding: 0.15rem 0.2rem 0.05rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(120, 200, 230, 0.78);
+  border-bottom: 1px solid rgba(70, 229, 255, 0.14);
+}
+.gc-header-live-events-group:first-child {
+  margin-top: 0;
+}
 .gc-header-live-events-item {
   display: flex;
   flex-direction: row;
@@ -49954,6 +49968,18 @@ body > #login-rewards-hover-tip.login-rewards-hover-tip[hidden] {
 .gc-header-live-events-item--world_boss {
   border-color: rgba(255, 140, 80, 0.35);
   background: rgba(28, 12, 8, 0.45);
+}
+.gc-header-live-events-item--booster {
+  border-color: rgba(120, 220, 160, 0.32);
+  background: rgba(8, 22, 14, 0.5);
+}
+.gc-header-live-events-item--group-resources.gc-header-live-events-item--booster,
+.gc-header-live-events-item--group-resources.gc-header-live-events-item--server_event {
+  border-color: rgba(92, 255, 168, 0.34);
+  background: rgba(6, 24, 14, 0.55);
+}
+.gc-header-live-events-item--booster .gc-header-live-events-effects {
+  color: rgba(160, 255, 200, 0.9);
 }
 .gc-header-live-events-main {
   display: flex;

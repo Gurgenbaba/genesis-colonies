@@ -416,6 +416,13 @@ def active_events_banner(*, now: Optional[float] = None, conn=None) -> List[Dict
     out: List[Dict[str, Any]] = []
     for ev in list_active_events(now=ts, conn=conn):
         ends = int(ev.get("ends_at") or 0)
+        effects = ev.get("effects") or []
+        has_prod = any(
+            str(eff.get("kind") or "") == KIND_PRODUCTION_MULT
+            and float(eff.get("mult") or 1.0) > 1.0
+            for eff in effects
+            if isinstance(eff, Mapping)
+        )
         out.append(
             {
                 "kind": "server_event",
@@ -423,10 +430,12 @@ def active_events_banner(*, now: Optional[float] = None, conn=None) -> List[Dict
                 "slug": str(ev.get("slug") or ""),
                 "title": str(ev.get("title") or ""),
                 "title_key": "",
-                "effects_summary": effect_summary_short(ev.get("effects")),
+                "effects_summary": effect_summary_short(effects),
                 "ends_at": ends,
                 "remaining_sec": max(0, ends - int(ts)) if ends else 0,
                 "href": "login_rewards_view",
+                # Production events stay under Ressourcen with res-bar chips.
+                "group": "resources" if has_prod else "events",
             }
         )
     return out

@@ -30,9 +30,9 @@ LiveOps tab **events** on `/admin`:
 
 `/api/game-state` includes `server_events: { events, production_mult, expedition_hold_mult }`.
 
-**Overview (`/overview`)** no longer hosts a dedicated events panel. Active events appear in the **header LiveOps icon rail** (next to Login Rewards / Season Pass) with a count badge and expandable popover (`live_events` in `/api/game-state` + `nav_badges.live_events`). Diet / `page_init` polls apply via `applyHudOnlyGameState` → `syncLiveOpsFromGameState` (never clear the panel when `live_events` is omitted). SSR `HEADER_HUD_BOOT.live_events` hydrates the rail before the first poll.
+**Overview (`/overview`)** no longer hosts a dedicated events panel. Active events appear in the **header LiveOps icon rail** (next to Login Rewards / Season Pass) with a count badge and expandable popover (`live_events` in `/api/game-state` + `nav_badges.live_events`). Rows include global **server events**, **World Boss** windows, and the player's timed **inventory boosters** (production / research / energy / fleet / … remaining duration via `inventory_boosters.build_active_effects_for_hud`). The popover groups rows as **Ressourcen → Events → World Boss → Booster**; production/energy boosters are one summarized card under Ressourcen (not flat-appended after world events). Diet / `page_init` polls apply via `applyHudOnlyGameState` → `syncLiveOpsFromGameState` (never clear the panel when `live_events` is omitted). SSR `HEADER_HUD_BOOT.live_events` hydrates the rail before the first poll.
 
-Resource bar: active `production_mult` is merged into `active_boosters.active_effects` (same chips as inventory +25/+50/+75%). Example: `+50 % · Event +100 % · 1h 59m`. Technical Data shows `technical_bonus_event` when production mult ≠ 1.
+Resource bar: active `production_mult` is merged into `active_boosters.active_effects` (same chips as inventory +25/+50/+75%). Example: `+50 % · Event +100 % · 1h 59m`. Chips persist across PJAX (including leaving `/inventory`); `ready:false` stubs must not wipe them. Technical Data shows `technical_bonus_event` when production mult ≠ 1.
 
 Universe News announcements stay separate (manual EVENT posts).
 
