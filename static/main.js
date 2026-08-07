@@ -22575,8 +22575,6 @@
         const key = view.getAttribute("data-sl-view");
         view.hidden = key !== mode;
       });
-      const bar = root.querySelector("[data-sl-tombola-bar]");
-      if (bar) bar.hidden = mode !== "tombola";
       const tabs = root.querySelector("[data-sl-modes]");
       if (tabs) tabs.hidden = !(enabled.mines || enabled.crash);
       if (mode === "crash") renderCrashGraph(crashRaf ? Math.min(1, (performance.now() - crashStart) / Math.max(1, crashBustMs)) : 0);
