@@ -65,6 +65,7 @@ from game.buildings import get_buildings_panel_rows
 from game.auth import (
     login_user,
     logout_user,
+    expire_browser_session_cookies,
     get_current_user,
     require_login,
     require_login_api,
@@ -1480,7 +1481,8 @@ def login():
 def logout():
     logout_user()
     flash(T("msg_logout_success") or "Erfolgreich abgemeldet.", "success")
-    return redirect(url_for("landing"))
+    resp = redirect(url_for("landing"))
+    return expire_browser_session_cookies(resp)
 
 
 @app.route("/auth/discord")

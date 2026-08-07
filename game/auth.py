@@ -22,7 +22,7 @@ import time
 from functools import wraps
 from typing import Any, Callable, Dict, Optional
 
-from flask import flash, g, jsonify, redirect, request, session, url_for
+from flask import Response, current_app, flash, g, jsonify, redirect, request, session, url_for
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +122,66 @@ def login_user(user: Any) -> None:
 def logout_user() -> None:
     """Leert die Session."""
     session.clear()
+
+
+def expire_browser_session_cookies(response: Response) -> Response:
+    """
+    Drop all plausible session cookie variants.
+
+    Flipping SESSION_COOKIE_DOMAIN (host-only ↔ .apex) leaves duplicate cookies;
+    session.clear() only rewrites the currently configured one, so logout appears
+    broken until every variant is deleted.
+    """
+    name = str(current_app.config.get("SESSION_COOKIE_NAME") or "session")
+    path = str(current_app.config.get("SESSION_COOKIE_PATH") or "/")
+    secure = bool(current_app.config.get("SESSION_COOKIE_SECURE"))
+    samesite = current_app.config.get("SESSION_COOKIE_SAMESITE") or "Lax"
+
+    domains: list[Optional[str]] = [None]
+    cfg = current_app.config.get("SESSION_COOKIE_DOMAIN")
+    if cfg:
+        raw = str(cfg).strip()
+        if raw:
+            domains.append(raw)
+            domains.append(raw.lstrip("."))
+            if not raw.startswith("."):
+                domains.append(f".{raw}")
+
+    try:
+        from game.config import public_shop_host
+
+        host = public_shop_host()
+    except Exception:
+        host = ""
+    if host:
+        domains.extend(
+            [
+                host,
+                f".{host}",
+                f"www.{host}",
+                f".www.{host}",
+            ]
+        )
+
+    seen: set[str] = set()
+    for domain in domains:
+        key = domain or ""
+        if key in seen:
+            continue
+        seen.add(key)
+        kwargs: Dict[str, Any] = {
+            "path": path,
+            "secure": secure,
+            "httponly": True,
+            "samesite": samesite,
+        }
+        if domain:
+            kwargs["domain"] = domain
+        try:
+            response.delete_cookie(name, **kwargs)
+        except Exception:
+            logger.debug("session cookie delete skipped domain=%r", domain, exc_info=True)
+    return response
 
 
 def get_current_user() -> Optional[Dict[str, Any]]:

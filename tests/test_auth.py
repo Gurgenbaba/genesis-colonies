@@ -531,3 +531,26 @@ def test_link_callback_redirects_to_options(app_client, monkeypatch):
     assert resp.status_code == 302
     assert "/options" in resp.headers.get("Location", "")
     assert get_user_by_discord_id("callback_link_001") is not None
+
+
+def test_logout_expires_host_and_apex_session_cookies(app_client, monkeypatch):
+    """Duplicate session cookies after Domain flips must all be cleared on logout."""
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://www.genesis-colonies.de")
+    uname = f"logout_{uuid.uuid4().hex[:6]}"
+    ok, _, user = create_user(uname, "pass-123")
+    assert ok
+    _session_login(app_client, int(user["id"]), uname)
+
+    resp = app_client.get("/logout", follow_redirects=False)
+    assert resp.status_code in (302, 303)
+    set_cookies = resp.headers.getlist("Set-Cookie")
+    joined = "\n".join(set_cookies).lower()
+    assert "session=" in joined
+    # Host-only clear + domain clear for apex/www family
+    assert "max-age=0" in joined or "expires=" in joined
+    assert (
+        "domain=.genesis-colonies.de" in joined
+        or "domain=genesis-colonies.de" in joined
+    )
+    with app_client.session_transaction() as sess:
+        assert not sess.get("user_id")
