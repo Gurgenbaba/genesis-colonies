@@ -685,6 +685,85 @@ def update_session_cart(
     return set_session_cart(session_obj, cart)
 
 
+def _resolve_cart_discount(
+    list_cents: int,
+    *,
+    player_id: Optional[int],
+    promo_code: Optional[str],
+    conn,
+) -> Tuple[int, int, int, Optional[Dict[str, Any]], Optional[int], Optional[str]]:
+    """
+    Apply LiveOps shop_discount_bps and optional promo code.
+
+    Stacking: effective_discount_bps = max(event_bps, promo_bps) — no double-dip.
+    When promo provides the winning bps, commission + promo_code_id apply; else event only.
+    Returns paid_cents, discount_cents, commission_cents, promo_meta, promo_code_id, error.
+    """
+    from . import shop_promos as promos
+    from .server_events import active_shop_discount_bps
+
+    event_bps = int(active_shop_discount_bps(conn=conn) or 0)
+    promo = None
+    promo_meta: Dict[str, Any] = {}
+    code_raw = str(promo_code or "").strip()
+    if code_raw and player_id:
+        ok_p, reason_p, promo = promos.validate_promo_for_buyer(
+            code_raw, int(player_id), conn=conn
+        )
+        if not ok_p or not promo:
+            return list_cents, 0, 0, {"invalid": True, "reason": reason_p}, None, reason_p
+        promo_meta = {
+            "code": promo["code"],
+            "discount_bps": int(promo["discount_bps"]),
+        }
+
+    promo_bps = int(promo["discount_bps"]) if promo else 0
+    promo_commission = int(promo["commission_bps"]) if promo else 0
+    promo_code_id: Optional[int] = None
+    if promo_bps >= event_bps and promo is not None:
+        use_bps = promo_bps
+        use_commission = promo_commission
+        source = "promo"
+        promo_code_id = int(promo["id"])
+    elif event_bps > 0:
+        use_bps = event_bps
+        use_commission = 0
+        source = "server_event"
+        if promo_meta:
+            promo_meta["superseded_by_event"] = True
+    else:
+        use_bps = 0
+        use_commission = 0
+        source = "none"
+
+    if use_bps <= 0:
+        return list_cents, 0, 0, (promo_meta or None), None, None
+
+    br = promos.price_breakdown(list_cents, use_bps, use_commission)
+    if source == "server_event":
+        promo_meta = {
+            **promo_meta,
+            "server_event_discount_bps": event_bps,
+            "effective_discount_bps": use_bps,
+            "source": "server_event",
+        }
+    elif source == "promo" and event_bps > 0:
+        promo_meta = {
+            **promo_meta,
+            "server_event_discount_bps": event_bps,
+            "effective_discount_bps": use_bps,
+            "source": "promo",
+        }
+    return (
+        int(br["paid_cents"]),
+        int(br["discount_cents"]),
+        int(br["commission_cents"]),
+        promo_meta or None,
+        promo_code_id,
+        None,
+    )
+
+
 def serialize_cart_for_client(
     player_id: Optional[int],
     cart_items: Sequence[Mapping[str, Any]],
@@ -702,26 +781,16 @@ def serialize_cart_for_client(
     paid_cents = list_cents
     discount_cents = 0
     promo_meta: Dict[str, Any] = {}
-    if ok and promo_code and player_id:
-        from . import shop_promos as promos
-
-        ok_p, reason_p, promo = promos.validate_promo_for_buyer(
-            str(promo_code), int(player_id), conn=conn
+    if ok and list_cents > 0:
+        paid_cents, discount_cents, _comm, promo_meta, _pid, _err = _resolve_cart_discount(
+            list_cents,
+            player_id=int(player_id) if player_id else None,
+            promo_code=promo_code,
+            conn=conn,
         )
-        if ok_p and promo:
-            br = promos.price_breakdown(
-                list_cents,
-                int(promo["discount_bps"]),
-                int(promo["commission_bps"]),
-            )
-            paid_cents = int(br["paid_cents"])
-            discount_cents = int(br["discount_cents"])
-            promo_meta = {
-                "code": promo["code"],
-                "discount_bps": int(promo["discount_bps"]),
-            }
-        else:
-            promo_meta = {"invalid": True, "reason": reason_p}
+        # Invalid promo code with no event: surface invalid meta (cart still ok).
+        if promo_meta and promo_meta.get("invalid") and not discount_cents:
+            paid_cents = list_cents
     return {
         "ok": bool(ok),
         "reason": reason if not ok else "ok",
@@ -1156,24 +1225,26 @@ def create_pending_order(
     promo_code_id = None
     meta = dict(metadata or {})
     code_raw = str(promo_code or "").strip()
-    if code_raw:
-        from . import shop_promos as promos
-
-        ok_p, reason_p, promo = promos.validate_promo_for_buyer(
-            code_raw, pid, conn=conn
-        )
-        if not ok_p or not promo:
-            return False, reason_p, None
-        br = promos.price_breakdown(
+    paid_cents, discount_cents, commission_cents, promo_meta, promo_code_id, promo_err = (
+        _resolve_cart_discount(
             list_cents,
-            int(promo["discount_bps"]),
-            int(promo["commission_bps"]),
+            player_id=pid,
+            promo_code=code_raw or None,
+            conn=conn,
         )
-        paid_cents = int(br["paid_cents"])
-        discount_cents = int(br["discount_cents"])
-        commission_cents = int(br["commission_cents"])
-        promo_code_id = int(promo["id"])
-        meta["promo_code"] = str(promo["code"])
+    )
+    if code_raw and promo_err:
+        # Explicit invalid promo still fails checkout (same as before).
+        return False, promo_err, None
+    if isinstance(promo_meta, dict):
+        if promo_meta.get("code") and promo_code_id is not None:
+            meta["promo_code"] = str(promo_meta["code"])
+        if promo_meta.get("source") == "server_event":
+            meta["server_event_discount_bps"] = int(
+                promo_meta.get("server_event_discount_bps") or 0
+            )
+        if promo_meta.get("effective_discount_bps"):
+            meta["effective_discount_bps"] = int(promo_meta["effective_discount_bps"])
 
     ts = float(now if now is not None else time.time())
     has_promo_cols = False

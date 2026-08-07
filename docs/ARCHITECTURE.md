@@ -83,7 +83,7 @@ Technische Architektur-Dokumentation (Stand: **v1.5.9.2**, Reality-Sync **2026-0
                              │
 ┌────────────────────────────▼─────────────────────────────────────┐
 │ SQLite (WAL) — game/game.db                                       │
-│  migration_history + migrations/*.sql (006–143)                   │
+│  migration_history + migrations/*.sql (006–144)                   │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -324,7 +324,7 @@ Balance-Editor: `game/admin_balance.py` → `/api/admin/balance`.
 | `migrate.py` | Runner, `migration_history` |
 | `game/migrations_util.py` | Pending-Check für Bootstrap + Health |
 
-**Aktuelle Migrationen:** `006`–`143` — siehe `migrations/` und `migration_history`.
+**Aktuelle Migrationen:** `006`–`144` — siehe `migrations/` und `migration_history`.
 
 Neue Schema-Änderungen **immer** als `migrations/NNN_name.sql` + Test in `test_persistence.py`.
 

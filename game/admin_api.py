@@ -2477,12 +2477,20 @@ def api_set_galactic_diplomacy_emergency(
 
 
 def api_get_server_events() -> Dict[str, Any]:
-    from game.server_events import effect_kind_catalog, list_events, serialize_active_events
+    from game.server_events import (
+        effect_kind_catalog,
+        list_events,
+        list_presets,
+        list_schedules,
+        serialize_active_events,
+    )
 
     return _ok(
         events=list_events(limit=200),
         active=serialize_active_events(),
         kinds=effect_kind_catalog(),
+        presets=list_presets(),
+        schedules=list_schedules(),
     )
 
 
@@ -2590,6 +2598,122 @@ def api_delete_server_event(admin_id: int, event_id: int) -> Dict[str, Any]:
         payload={"event_id": int(event_id)},
     )
     return _ok(deleted=True, event_id=int(event_id))
+
+
+def api_list_event_presets() -> Dict[str, Any]:
+    from game.server_events import list_presets
+
+    return _ok(presets=list_presets())
+
+
+def api_apply_event_preset(admin_id: int, preset_id: str, body: Dict[str, Any]) -> Dict[str, Any]:
+    from game.server_events import apply_preset, get_preset
+
+    if not get_preset(preset_id):
+        return _err("unknown_preset", f"Unknown preset: {preset_id}")
+    if not isinstance(body, dict):
+        body = {}
+    starts_raw = body.get("starts_at")
+    ends_raw = body.get("ends_at")
+    try:
+        starts_at = int(float(starts_raw)) if starts_raw is not None else None
+    except (TypeError, ValueError):
+        starts_at = None
+    try:
+        ends_at = int(float(ends_raw)) if ends_raw is not None else None
+    except (TypeError, ValueError):
+        ends_at = None
+    try:
+        tz_offset = int(body.get("tz_offset_minutes") or 0)
+    except (TypeError, ValueError):
+        tz_offset = 0
+    force_wb = body.get("force_world_boss") in (True, 1, "1", "true", "on", "yes")
+    result, err = apply_preset(
+        str(preset_id),
+        created_by=int(admin_id),
+        starts_at=starts_at,
+        ends_at=ends_at,
+        tz_offset_minutes=tz_offset,
+        force_world_boss=force_wb,
+    )
+    if err or not result:
+        return _err(str(err or "apply_failed"), str(err or "apply_failed"))
+    audit(
+        int(admin_id),
+        "server_event_preset_apply",
+        target_type="system",
+        payload={
+            "preset_id": str(preset_id),
+            "event_id": (result.get("event") or {}).get("id"),
+            "actions": [
+                {"type": a.get("type"), "ok": a.get("ok"), "error": a.get("error")}
+                for a in (result.get("actions") or [])
+            ],
+        },
+    )
+    return _ok(**result)
+
+
+def api_list_event_schedules() -> Dict[str, Any]:
+    from game.server_events import list_schedules
+
+    return _ok(schedules=list_schedules())
+
+
+def api_set_event_schedule_enabled(
+    admin_id: int, schedule_id: int, body: Dict[str, Any]
+) -> Dict[str, Any]:
+    from game.server_events import set_schedule_enabled
+
+    if not isinstance(body, dict):
+        body = {}
+    enabled = body.get("enabled")
+    if enabled is None:
+        return _err("enabled_required", "enabled bool required")
+    flag = enabled in (True, 1, "1", "true", "on", "yes")
+    entry, err = set_schedule_enabled(int(schedule_id), flag)
+    if err == "not_found":
+        return _err("not_found", "Schedule not found")
+    if err or not entry:
+        return _err(str(err or "update_failed"), str(err or "update_failed"))
+    audit(
+        int(admin_id),
+        "server_event_schedule_toggle",
+        target_type="system",
+        payload={"schedule_id": int(schedule_id), "enabled": flag},
+    )
+    return _ok(schedule=entry)
+
+
+def api_materialize_event_schedule(
+    admin_id: int, schedule_id: int, body: Dict[str, Any]
+) -> Dict[str, Any]:
+    from game.server_events import materialize_schedule
+
+    if not isinstance(body, dict):
+        body = {}
+    force = body.get("force") in (True, 1, "1", "true", "on", "yes")
+    force_wb = body.get("force_world_boss") in (True, 1, "1", "true", "on", "yes")
+    result, err = materialize_schedule(
+        int(schedule_id),
+        force=force,
+        force_world_boss=force_wb,
+    )
+    if err or not result:
+        return _err(str(err or "materialize_failed"), str(err or "materialize_failed"))
+    audit(
+        int(admin_id),
+        "server_event_schedule_materialize",
+        target_type="system",
+        payload={
+            "schedule_id": int(schedule_id),
+            "skipped": bool(result.get("skipped")),
+            "event_id": (result.get("event") or {}).get("id"),
+            "materialize_key": result.get("materialize_key"),
+        },
+    )
+    return _ok(**result)
+
 
 def promos_admin_state() -> Dict[str, Any]:
     from game.shop_promos import (

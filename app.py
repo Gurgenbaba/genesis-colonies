@@ -8584,6 +8584,46 @@ def api_admin_events_delete_post(event_id: int):
     return _admin_json(admin_api_logic.api_delete_server_event(_admin_actor_id(), event_id))
 
 
+@app.route("/api/admin/events/presets", methods=["GET"])
+@require_admin_api
+def api_admin_events_presets_list():
+    return _admin_json(admin_api_logic.api_list_event_presets())
+
+
+@app.route("/api/admin/events/presets/<preset_id>/apply", methods=["POST"])
+@require_admin_api
+def api_admin_events_preset_apply(preset_id: str):
+    return _admin_json(
+        admin_api_logic.api_apply_event_preset(_admin_actor_id(), preset_id, _admin_body())
+    )
+
+
+@app.route("/api/admin/events/schedules", methods=["GET"])
+@require_admin_api
+def api_admin_events_schedules_list():
+    return _admin_json(admin_api_logic.api_list_event_schedules())
+
+
+@app.route("/api/admin/events/schedules/<int:schedule_id>", methods=["PATCH"])
+@require_admin_api
+def api_admin_events_schedule_patch(schedule_id: int):
+    return _admin_json(
+        admin_api_logic.api_set_event_schedule_enabled(
+            _admin_actor_id(), schedule_id, _admin_body()
+        )
+    )
+
+
+@app.route("/api/admin/events/schedules/<int:schedule_id>/materialize", methods=["POST"])
+@require_admin_api
+def api_admin_events_schedule_materialize(schedule_id: int):
+    return _admin_json(
+        admin_api_logic.api_materialize_event_schedule(
+            _admin_actor_id(), schedule_id, _admin_body()
+        )
+    )
+
+
 @app.route("/api/admin/resources", methods=["POST"])
 @require_admin_api
 def api_admin_resources_apply():
@@ -10303,6 +10343,12 @@ def _payload_from_live_context(
             "events": [],
             "production_mult": 1.0,
             "expedition_hold_mult": 1.0,
+            "shop_discount_bps": 0,
+            "build_time_speed": 1.0,
+            "research_time_speed": 1.0,
+            "asteroid_spawn_mult": 1.0,
+            "world_boss_spawn_mult": 1.0,
+            "inactive_farm_mult": 1.0,
         }
 
     try:

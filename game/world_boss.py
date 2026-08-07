@@ -2659,14 +2659,27 @@ def build_schedule_info(*, conn, now: Optional[float] = None) -> Dict[str, Any]:
             else:
                 last_ended = val
     anchor = last_spawn if last_spawn is not None and last_spawn > 0 else last_ended
+    spawn_mult = 1.0
+    try:
+        from .server_events import active_world_boss_spawn_mult
+
+        spawn_mult = max(0.1, float(active_world_boss_spawn_mult(now=ts, conn=conn) or 1.0))
+    except Exception:
+        spawn_mult = 1.0
+    cooldown_sec = max(
+        float(30 * 60),
+        float(INTER_EVENT_COOLDOWN_SEC) / spawn_mult,
+    )
     if anchor is not None and anchor > 0:
-        next_eligible_at = float(anchor) + float(INTER_EVENT_COOLDOWN_SEC)
+        next_eligible_at = float(anchor) + float(cooldown_sec)
     else:
         next_eligible_at = ts
     under_cap = len(active) < int(MAX_CONCURRENT_EVENTS)
     spawn_ready = bool(under_cap and ts >= next_eligible_at)
     return {
-        "inter_event_cooldown_sec": int(INTER_EVENT_COOLDOWN_SEC),
+        "inter_event_cooldown_sec": int(cooldown_sec),
+        "base_inter_event_cooldown_sec": int(INTER_EVENT_COOLDOWN_SEC),
+        "spawn_mult": float(spawn_mult),
         "max_concurrent": int(MAX_CONCURRENT_EVENTS),
         "active_count": len(active),
         "last_ended_at": last_ended,

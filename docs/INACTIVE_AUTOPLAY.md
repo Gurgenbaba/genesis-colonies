@@ -24,7 +24,7 @@ Dormante Menschen-Konten rotieren auf eine kleine **Day-Shift** (2–3 online). 
 | Cron | Fleet post-maint via **maintenance sidecar** (`scripts/run_maintenance_worker.py`, GC-PERF-PROD-002) or legacy in-process `embedded_cron` if `GC_MAINTENANCE_WORKER=0` |
 | Scores | Finish markiert Score-Dirty (`update_scores=True` → GC-SCORE-PERF-001); Snapshot/Ränge via `ranking_worker` (~10 min) |
 | Write-TX | GC-PERF-AUTOPLAY-001: Stage ohne Outer-IMMEDIATE; kurze Write-TX pro Economy/Presence; Overlap-Guard `inactive_autoplay_busy` |
-| Resource Floor | Soft-Floor am Home (75k/50k/15k) wenn Lager leer — kein Pirate-Seed |
+| Resource Floor | Soft-Floor am Home (75k/50k/15k) wenn Lager leer — kein Pirate-Seed; LiveOps `inactive_farm_mult` skaliert den Floor (siehe [SERVER_EVENTS.md](SERVER_EVENTS.md)) |
 | Admin | Tab "Inactive Autoplay" (mirror Pirate-Tab): KPIs, Roster-Tabelle, Soft-On/Off — `GET/POST /api/admin/inactive-autoplay[/toggle]` |
 | Budget-Fairness | Post-Maint Stage-Reihenfolge: `inactive_autoplay` **vor** `pirates` (teuerste Stage darf Inactive nicht verhungern lassen); Budget-Skip zählt `runtime_state.post_maint_skip_streak_<stage>` hoch, Erfolg setzt zurück auf 0 — sichtbar im Admin-Panel als KPI |
 | Control Handback | Ein echter Login/Request (`models.touch_player_online`, ausgelöst von `require_login`/`require_admin`/`require_login_api`) entfernt den Account **sofort** vom Sticky Roster (`release_active_player_from_roster`) — kein Warten auf LRU-Eviction. Der Spieler behält volle Kontrolle, bis er erneut über die normale Dormant-Auswahl (`list_dormant_candidates`) inaktiv wird (GC-2619) |

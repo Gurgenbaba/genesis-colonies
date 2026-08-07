@@ -465,3 +465,450 @@ def test_overview_live_events_group_order_resources_first(events_db):
         assert prod[0].get("group") == "resources"
     finally:
         conn.close()
+
+
+def test_shop_discount_bps_and_max_with_promo(events_db, monkeypatch):
+    monkeypatch.setenv("SHOP_ENABLED", "1")
+    monkeypatch.setenv("SHOP_TEST_PROVIDER", "1")
+    from game.server_events import (
+        KIND_SHOP_DISCOUNT_BPS,
+        active_shop_discount_bps,
+        create_event,
+        clear_factor_cache,
+        effect_summary_short,
+    )
+    from game.shop import ensure_catalog_seeded, serialize_cart_for_client
+    from game.shop_promos import create_campaign_code
+
+    uid = _player()
+    now = int(time.time())
+    create_event(
+        slug="shop-sale",
+        title="Shop Sale",
+        starts_at=now - 10,
+        ends_at=now + 3600,
+        effects=[{"kind": KIND_SHOP_DISCOUNT_BPS, "bps": 2000}],
+    )
+    clear_factor_cache()
+    assert active_shop_discount_bps(now=float(now)) == 2000
+    assert "Shop −20%" in effect_summary_short(
+        [{"kind": KIND_SHOP_DISCOUNT_BPS, "bps": 2000}]
+    )
+
+    conn = db()
+    ensure_catalog_seeded(conn)
+    conn.commit()
+    # Pick any catalog sku with price
+    row = conn.execute(
+        "SELECT sku, price_cents FROM shop_products WHERE active = 1 AND price_cents > 100 LIMIT 1;"
+    ).fetchone()
+    assert row is not None
+    sku = str(row["sku"])
+    list_cents = int(row["price_cents"])
+
+    cart_event = serialize_cart_for_client(
+        uid, [{"sku": sku, "qty": 1}], conn=conn
+    )
+    assert cart_event["ok"] is True
+    assert cart_event["list_cents"] == list_cents
+    assert cart_event["discount_cents"] == list_cents * 2000 // 10000
+    assert cart_event["promo"] and cart_event["promo"].get("source") == "server_event"
+
+    ok, reason, promo = create_campaign_code(
+        conn=conn, code=f"SALE{uuid.uuid4().hex[:6].upper()}", discount_bps=1000
+    )
+    assert ok, reason
+    conn.commit()
+    # Event 20% > promo 10% → event wins
+    cart_max = serialize_cart_for_client(
+        uid, [{"sku": sku, "qty": 1}], conn=conn, promo_code=promo["code"]
+    )
+    assert cart_max["discount_cents"] == list_cents * 2000 // 10000
+    assert cart_max["promo"].get("source") == "server_event"
+
+    # Stronger promo wins
+    ok2, reason2, promo2 = create_campaign_code(
+        conn=conn, code=f"BIG{uuid.uuid4().hex[:6].upper()}", discount_bps=3000
+    )
+    assert ok2, reason2
+    conn.commit()
+    cart_promo = serialize_cart_for_client(
+        uid, [{"sku": sku, "qty": 1}], conn=conn, promo_code=promo2["code"]
+    )
+    assert cart_promo["discount_cents"] == list_cents * 3000 // 10000
+    assert cart_promo["promo"].get("source") == "promo"
+    conn.close()
+
+
+def test_build_research_time_speed_in_effect_resolver(events_db):
+    from game.effects.effect_resolver import clear_effect_resolver_cache, get_effect_resolver
+    from game.server_events import (
+        KIND_BUILD_TIME_SPEED,
+        KIND_RESEARCH_TIME_SPEED,
+        clear_factor_cache,
+        create_event,
+    )
+
+    uid = _player()
+    conn = db()
+    planet = get_context_planet(uid, conn=conn)
+    clear_effect_resolver_cache()
+    clear_factor_cache()
+    base = get_effect_resolver(uid, conn=conn, planet=planet, force_refresh=True)
+    base_build = float(base.get_modifiers()["build_time_speed"])
+    base_research = float(base.get_modifiers()["research_time_speed"])
+
+    now = int(time.time())
+    create_event(
+        slug="build-rush",
+        title="Build Rush",
+        starts_at=now - 10,
+        ends_at=now + 3600,
+        effects=[
+            {"kind": KIND_BUILD_TIME_SPEED, "mult": 1.25},
+            {"kind": KIND_RESEARCH_TIME_SPEED, "mult": 1.25},
+        ],
+        conn=conn,
+    )
+    clear_factor_cache()
+    clear_effect_resolver_cache()
+    boosted = get_effect_resolver(uid, conn=conn, planet=planet, force_refresh=True)
+    mods = boosted.get_modifiers()
+    assert float(mods["build_time_speed"]) == pytest.approx(base_build * 1.25, rel=1e-6)
+    assert float(mods["research_time_speed"]) == pytest.approx(base_research * 1.25, rel=1e-6)
+    conn.close()
+
+
+def test_apply_preset_weekend_and_list(events_db):
+    from game.server_events import apply_preset, list_presets, serialize_active_events
+
+    presets = list_presets()
+    ids = {p["id"] for p in presets}
+    assert "weekend_prod_expo" in ids
+    assert "shop_sale_20_48h" in ids
+    assert "mega_weekend" in ids
+
+    now = time.time()
+    result, err = apply_preset(
+        "weekend_prod_expo",
+        created_by=1,
+        tz_offset_minutes=120,
+        now=now,
+    )
+    assert err is None, err
+    assert result and result["event"]
+    assert result["event"]["slug"].startswith("weekend-prod-expo")
+    clear_factor_cache()
+    active = serialize_active_events(now=now)
+    assert float(active["production_mult"]) == pytest.approx(2.0)
+    assert float(active["expedition_hold_mult"]) == pytest.approx(0.75)
+
+
+def test_apply_preset_world_boss_dispatch(events_db):
+    from game.server_events import apply_preset
+    from game.world_boss import list_active_events as list_wb, world_boss_schema_ready
+
+    conn = db()
+    assert world_boss_schema_ready(conn)
+    result, err = apply_preset(
+        "world_boss_leviathan",
+        created_by=1,
+        force_world_boss=True,
+        conn=conn,
+    )
+    assert err is None, err
+    assert result is not None
+    assert result["event"] is None
+    assert result["actions"]
+    assert result["actions"][0]["ok"] is True
+    assert result["actions"][0]["type"] == "spawn_world_boss"
+    active = list_wb(conn=conn)
+    assert any(str(e.get("boss_key")) == "ancient_leviathan" for e in active)
+    conn.close()
+
+
+def test_admin_preset_apply_api(events_db, monkeypatch):
+    monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
+    from game.bootstrap import bootstrap_application
+
+    bootstrap_application(skip_migration_check=True)
+    import app as app_module
+
+    importlib.reload(app_module)
+    client = app_module.app.test_client()
+
+    ok_a, _, admin_info = create_user(f"adm_pre_{uuid.uuid4().hex[:6]}", "adminpass123", is_admin=1)
+    assert ok_a
+    admin_id = int(admin_info["id"])
+    ensure_player_and_homeworld(admin_id)
+
+    with client.session_transaction() as sess:
+        sess["user_id"] = admin_id
+
+    listed = client.get("/api/admin/events/presets")
+    assert listed.status_code == 200
+    body = listed.get_json()
+    assert body["ok"] is True
+    assert any(p["id"] == "double_production_24h" for p in body["presets"])
+
+    applied = client.post(
+        "/api/admin/events/presets/double_production_24h/apply",
+        json={"tz_offset_minutes": 0},
+        content_type="application/json",
+    )
+    assert applied.status_code == 200
+    ab = applied.get_json()
+    assert ab["ok"] is True
+    assert ab["event"]["slug"].startswith("double-production")
+    assert float(ab.get("event", {}).get("effects", [{}])[0].get("mult") or 0) == pytest.approx(2.0)
+
+    events = client.get("/api/admin/events")
+    eb = events.get_json()
+    assert eb["ok"] is True
+    assert "presets" in eb
+    assert float(eb["active"]["production_mult"]) == pytest.approx(2.0)
+
+
+def test_admin_panel_has_preset_gallery(events_db, monkeypatch):
+    from pathlib import Path
+
+    monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
+    from game.bootstrap import bootstrap_application
+
+    bootstrap_application(skip_migration_check=True)
+    import app as app_module
+
+    importlib.reload(app_module)
+    client = app_module.app.test_client()
+    ok_a, _, admin_info = create_user(f"adm_gal_{uuid.uuid4().hex[:6]}", "adminpass123", is_admin=1)
+    assert ok_a
+    with client.session_transaction() as sess:
+        sess["user_id"] = int(admin_info["id"])
+    res = client.get("/admin")
+    assert res.status_code == 200
+    html = res.get_data(as_text=True)
+    assert 'id="admin-events-preset-gallery"' in html
+    assert 'id="admin-events-live-cards"' in html
+    assert 'id="admin-events-compose-wrap"' in html
+    assert "admin-events-preset-grid" in html
+    assert "admin-events-block" in html
+    assert "admin-event-shop-bps" in html
+    admin_js = (Path(__file__).resolve().parents[1] / "static" / "admin.js").read_text(
+        encoding="utf-8"
+    )
+    assert "events-preset-apply" in admin_js
+    assert "applyAdminEventPreset" in admin_js
+    assert "admin-events-live-cards" in admin_js
+    assert "next_window" in admin_js
+    assert "openEventsCompose" in admin_js
+    assert "admin-events-preset-tile" in admin_js
+    assert "col-st" in admin_js
+    assert "<table>" in admin_js or "<table>`" in admin_js or "tbody>" in admin_js
+
+
+def test_schedule_schema_and_seed(events_db):
+    from game.server_events import list_schedules, schedule_schema_ready
+
+    conn = db()
+    assert schedule_schema_ready(conn)
+    schedules = list_schedules(conn=conn)
+    assert len(schedules) >= 5
+    ids = {s["preset_id"] for s in schedules}
+    assert "weekend_prod_expo" in ids
+    assert "asteroid_storm_48h" in ids
+    # Live-safe: seeds must not auto-fire until an admin enables them.
+    assert all(s["enabled"] is False for s in schedules if s["id"] <= 5)
+    conn.close()
+
+
+def test_materialize_does_not_touch_active_events(events_db):
+    from game.server_events import (
+        KIND_PRODUCTION_MULT,
+        clear_factor_cache,
+        create_event,
+        list_events,
+        list_schedules,
+        materialize_schedule,
+        tick_schedules,
+    )
+
+    now = int(time.time())
+    existing, err = create_event(
+        slug="keep-alive-prod",
+        title="Keep Alive",
+        starts_at=now - 60,
+        ends_at=now + 7200,
+        effects=[{"kind": KIND_PRODUCTION_MULT, "mult": 2.0}],
+    )
+    assert err is None and existing
+    keep_id = int(existing["id"])
+
+    schedules = list_schedules()
+    shop = next(s for s in schedules if s["preset_id"] == "shop_sale_20_48h")
+    # Force a window around now by materializing with force after tweaking via
+    # direct materialize (compute uses Sunday noon — may be outside window).
+    # Use asteroid storm daily-style by calling materialize_schedule with force
+    # after temporarily ensuring window: create via tick with a custom once rule.
+    result, err = materialize_schedule(int(shop["id"]), force=True, now=float(now))
+    # May return no_window if not near Sunday — that's ok; still assert keep-alive
+    before = {e["id"]: e for e in list_events()}
+    assert keep_id in before
+    assert before[keep_id]["enabled"] is True
+    assert before[keep_id]["slug"] == "keep-alive-prod"
+
+    # Double tick must not disable keep-alive
+    tick_schedules(conn=db(), now=float(now))
+    clear_factor_cache()
+    after = {e["id"]: e for e in list_events()}
+    assert keep_id in after
+    assert after[keep_id]["enabled"] is True
+    assert after[keep_id]["starts_at"] == before[keep_id]["starts_at"]
+    assert after[keep_id]["ends_at"] == before[keep_id]["ends_at"]
+    if err is None and result and not result.get("skipped") and result.get("event"):
+        assert int(result["event"]["id"]) != keep_id
+
+
+def test_materialize_idempotent(events_db):
+    from game.server_events import materialize_schedule
+    from game.db import db as gdb
+
+    # Build a once-rule window by inserting a temporary schedule row for "now"
+    conn = gdb()
+    now = int(time.time())
+    hh = f"{time.gmtime(now).tm_hour:02d}:00"
+    cur = conn.execute(
+        """
+        INSERT INTO server_event_schedules (
+            name, preset_id, effects_json, rrule_kind, weekdays_json,
+            local_start_hhmm, duration_sec, tz_offset_minutes, priority, enabled,
+            last_materialized_key, created_at, updated_at
+        ) VALUES (?, ?, ?, 'daily', '[]', ?, 3600, 0, 50, 1, '', ?, ?);
+        """,
+        (
+            "Test Daily Asteroid",
+            "asteroid_storm_48h",
+            "[]",
+            hh,
+            now,
+            now,
+        ),
+    )
+    sid = int(cur.lastrowid)
+    conn.commit()
+
+    r1, err1 = materialize_schedule(sid, conn=conn, now=float(now), force=True)
+    assert err1 is None, err1
+    assert r1 and not r1.get("skipped")
+    assert r1.get("event")
+    key = r1["materialize_key"]
+    event_id = int(r1["event"]["id"])
+
+    r2, err2 = materialize_schedule(sid, conn=conn, now=float(now), force=False)
+    assert err2 is None, err2
+    assert r2 and r2.get("skipped") is True
+    assert r2.get("materialize_key") == key
+
+    # Existing event row still present exactly once for that materialization
+    rows = conn.execute(
+        "SELECT COUNT(*) AS c FROM server_events WHERE id = ?;", (event_id,)
+    ).fetchone()
+    assert int(rows["c"]) == 1
+    conn.close()
+
+
+def test_world_modifiers_affect_domain_schedules(events_db):
+    from game.asteroids import INTER_WAVE_COOLDOWN_SEC, build_schedule_info as ast_info
+    from game.server_events import (
+        KIND_ASTEROID_SPAWN_MULT,
+        KIND_INACTIVE_FARM_MULT,
+        KIND_WORLD_BOSS_SPAWN_MULT,
+        clear_factor_cache,
+        create_event,
+    )
+    from game.world_boss import INTER_EVENT_COOLDOWN_SEC, build_schedule_info as wb_info
+
+    now = int(time.time())
+    create_event(
+        slug="chaos-mods",
+        title="Chaos Mods",
+        starts_at=now - 10,
+        ends_at=now + 3600,
+        effects=[
+            {"kind": KIND_ASTEROID_SPAWN_MULT, "mult": 2.0},
+            {"kind": KIND_WORLD_BOSS_SPAWN_MULT, "mult": 2.0},
+            {"kind": KIND_INACTIVE_FARM_MULT, "mult": 3.0},
+        ],
+    )
+    clear_factor_cache()
+    conn = db()
+    a = ast_info(conn=conn, now=float(now))
+    assert float(a["spawn_mult"]) == pytest.approx(2.0)
+    assert int(a["inter_wave_cooldown_sec"]) == int(INTER_WAVE_COOLDOWN_SEC / 2)
+    assert int(a["max_concurrent"]) >= 15
+
+    w = wb_info(conn=conn, now=float(now))
+    assert float(w["spawn_mult"]) == pytest.approx(2.0)
+    assert int(w["inter_event_cooldown_sec"]) == int(INTER_EVENT_COOLDOWN_SEC / 2)
+    assert int(w["max_concurrent"]) == 3
+
+    from game.inactive_autoplay import INACTIVE_RESOURCE_FLOOR, _ensure_resource_floor
+
+    uid = _player()
+    planet = get_context_planet(uid, conn=conn)
+    conn.execute(
+        "UPDATE planets SET metal = 0, crystal = 0, fuel_cells = 0 WHERE id = ?;",
+        (int(planet["id"]),),
+    )
+    conn.commit()
+    floor = _ensure_resource_floor(conn, int(planet["id"]))
+    assert floor["metal"] == int(INACTIVE_RESOURCE_FLOOR["metal"] * 3)
+    assert floor["crystal"] == int(INACTIVE_RESOURCE_FLOOR["crystal"] * 3)
+    assert float(floor["farm_mult"]) == pytest.approx(3.0)
+    conn.close()
+
+
+def test_admin_schedule_api(events_db, monkeypatch):
+    monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
+    from game.bootstrap import bootstrap_application
+
+    bootstrap_application(skip_migration_check=True)
+    import app as app_module
+
+    importlib.reload(app_module)
+    client = app_module.app.test_client()
+    ok_a, _, admin_info = create_user(f"adm_sch_{uuid.uuid4().hex[:6]}", "adminpass123", is_admin=1)
+    assert ok_a
+    admin_id = int(admin_info["id"])
+    ensure_player_and_homeworld(admin_id)
+    with client.session_transaction() as sess:
+        sess["user_id"] = admin_id
+
+    listed = client.get("/api/admin/events")
+    body = listed.get_json()
+    assert body["ok"] is True
+    assert "schedules" in body
+    assert len(body["schedules"]) >= 1
+    assert "next_window" in body["schedules"][0]
+    sid = int(body["schedules"][0]["id"])
+
+    toggled = client.patch(
+        f"/api/admin/events/schedules/{sid}",
+        json={"enabled": False},
+        content_type="application/json",
+    )
+    assert toggled.status_code == 200
+    assert toggled.get_json()["schedule"]["enabled"] is False
+
+    client.patch(
+        f"/api/admin/events/schedules/{sid}",
+        json={"enabled": True},
+        content_type="application/json",
+    )
+
+    html = client.get("/admin").get_data(as_text=True)
+    assert 'id="admin-events-schedule-list"' in html
+    assert 'id="admin-events-live"' in html
+    assert "admin-events-block" in html
+    assert "admin-events-schedule-table" in html
+    assert "admin-events-preset-grid" in html
+    assert "gc-overflow-visible" not in html.split('id="admin-tab-events"')[1].split("</section>")[0]

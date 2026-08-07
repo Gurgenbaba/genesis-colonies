@@ -28,7 +28,7 @@ Temporary asteroid belts in densely settled classic galaxy systems. Harvest with
 |------|-------|
 | TTL | 2 h (`TTL_SECONDS`) |
 | Cap | 15 concurrent `active` fields |
-| Wave cooldown | 45 min between belt spawns |
+| Wave cooldown | 45 min between belt spawns (`INTER_WAVE_COOLDOWN_SEC`); LiveOps `asteroid_spawn_mult` divides cooldown and may raise cap (see [SERVER_EVENTS.md](SERVER_EVENTS.md)) |
 | Belt size | 3–6 asteroids per dense system (1–2 systems / wave) |
 | Spawn bias | densest `[G:S]` with free classic slots (search up to 64 systems) |
 | Anti-pop | claimed/expired coords stay blocked until original `expires_at` |

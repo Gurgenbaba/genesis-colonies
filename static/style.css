@@ -3256,6 +3256,310 @@ body.gc-body-simple .gc-toast-stack{
   border: 1px solid transparent;
 }
 
+/* LiveOps / Server Events admin — contained dense layout (scoped) */
+.admin-events-panel{
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: visible;
+  box-sizing: border-box;
+  padding-bottom: 0.35rem;
+}
+.admin-events-panel .admin-section-title{
+  margin: 0;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.admin-events-block{
+  margin-top: 6px;
+  padding: 5px 7px;
+  border: 1px solid rgba(70, 229, 255, 0.12);
+  border-radius: var(--gc-radius-sm);
+  background: rgba(2, 8, 18, 0.55);
+  min-width: 0;
+  max-width: 100%;
+  overflow: visible;
+}
+.admin-events-sec-head{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.admin-events-live-factors{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+}
+.admin-events-chip{
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border: 1px solid rgba(80, 220, 140, 0.45);
+  border-radius: var(--gc-radius-sm);
+  background: rgba(20, 60, 40, 0.35);
+  font-size: 0.72rem;
+  color: #b8ffd0;
+  white-space: nowrap;
+}
+.admin-events-chip b{ font-weight: 700; color: #e8fff0; }
+.admin-events-quiet{
+  color: var(--gc-muted, #8aa0b8);
+  font-size: 0.75rem;
+}
+.admin-events-live-cards{
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.admin-events-live-row{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(7rem, auto) auto;
+  gap: 6px;
+  align-items: center;
+  padding: 3px 6px;
+  border: 1px solid rgba(80, 220, 140, 0.28);
+  border-radius: var(--gc-radius-sm);
+  background: rgba(16, 48, 32, 0.35);
+  font-size: 0.76rem;
+  min-width: 0;
+}
+.admin-events-live-row > strong,
+.admin-events-live-row > span{
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-events-live-row .admin-events-row-actions{
+  overflow: visible;
+  justify-self: end;
+}
+.admin-events-schedule-table{
+  width: 100%;
+  overflow-x: auto;
+}
+.admin-events-schedule-table table{
+  width: 100%;
+  min-width: 540px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 0.74rem;
+}
+.admin-events-schedule-table th,
+.admin-events-schedule-table td{
+  padding: 3px 5px;
+  border-bottom: 1px solid rgba(70, 229, 255, 0.08);
+  text-align: left;
+  vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-events-schedule-table th{
+  color: var(--gc-muted, #8aa0b8);
+  font-weight: 600;
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.admin-events-schedule-table col.col-st{ width: 4rem; }
+.admin-events-schedule-table col.col-name{ width: 26%; }
+.admin-events-schedule-table col.col-when{ width: 34%; }
+.admin-events-schedule-table col.col-rule{ width: 5.2rem; }
+.admin-events-schedule-table col.col-act{ width: 9.75rem; }
+.admin-events-schedule-table td:last-child{
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+.admin-events-schedule-table tr.is-off{ opacity: 0.55; }
+.admin-events-schedule-table tr.is-live{
+  background: rgba(16, 48, 32, 0.28);
+}
+.admin-events-schedule-table tr.is-due{
+  background: rgba(120, 80, 20, 0.18);
+}
+.admin-events-preset-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 3px;
+  width: 100%;
+}
+.admin-events-preset-tile{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 6px;
+  align-items: center;
+  padding: 3px 5px;
+  border: 1px solid rgba(70, 229, 255, 0.14);
+  border-radius: var(--gc-radius-sm);
+  background: rgba(2, 8, 18, 0.55);
+  min-width: 0;
+}
+.admin-events-preset-title{
+  margin: 0;
+  grid-column: 1;
+  grid-row: 1;
+  font-size: 0.72rem;
+  font-weight: 650;
+  line-height: 1.2;
+  color: var(--gc-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.admin-events-preset-effects{
+  margin: 0;
+  grid-column: 1;
+  grid-row: 2;
+  font-size: 0.62rem;
+  line-height: 1.2;
+  color: #9ec0d4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.admin-events-preset-tile .admin-events-row-actions{
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  margin-top: 0;
+}
+.admin-events-list{
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.admin-events-item{
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+  padding: 3px 6px;
+  border: 1px solid rgba(70, 229, 255, 0.12);
+  border-radius: var(--gc-radius-sm);
+  background: rgba(2, 8, 18, 0.5);
+}
+.admin-events-item-title{
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.admin-events-item-meta{
+  margin: 0;
+  font-size: 0.68rem;
+  color: #9ec0d4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.admin-events-item.status-ended,
+.admin-events-item.status-disabled{ opacity: 0.65; }
+.admin-events-row-actions{
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.admin-events-pill{
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: var(--gc-radius-sm);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid rgba(70, 229, 255, 0.25);
+  color: #9ec9e0;
+  white-space: nowrap;
+  line-height: 1.35;
+}
+.admin-events-pill.status-active,
+.admin-events-schedule-table tr.is-live .admin-events-pill{
+  border-color: rgba(80, 220, 140, 0.55);
+  color: #b8ffd0;
+  background: rgba(40, 120, 70, 0.2);
+}
+.admin-events-pill.status-scheduled,
+.admin-events-schedule-table tr.is-queued .admin-events-pill{
+  border-color: rgba(90, 160, 255, 0.5);
+  color: #b8d4ff;
+  background: rgba(40, 70, 140, 0.25);
+}
+.admin-events-schedule-table tr.is-due .admin-events-pill{
+  border-color: rgba(255, 180, 60, 0.6);
+  color: #ffd48a;
+  background: rgba(120, 80, 20, 0.3);
+}
+.admin-events-schedule-table tr.is-ready .admin-events-pill{
+  border-color: rgba(160, 200, 120, 0.45);
+  color: #d4e8b0;
+}
+.admin-events-pill.status-ended,
+.admin-events-pill.status-disabled{
+  border-color: rgba(140, 150, 160, 0.35);
+  color: #9aa6b2;
+}
+.admin-events-fold{
+  margin-top: 6px;
+  padding: 4px 8px 6px;
+  border: 1px solid rgba(70, 229, 255, 0.12);
+  border-radius: var(--gc-radius-sm);
+  background: rgba(2, 8, 18, 0.45);
+  max-width: 100%;
+  overflow: visible;
+}
+.admin-events-fold-sum{
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.45rem;
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 2px 0;
+}
+.admin-events-fold-sum::-webkit-details-marker{ display: none; }
+.admin-events-compose{ padding-top: 6px; }
+.admin-events-chips{
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0 0 0.4rem;
+}
+.admin-events-form-grid{
+  gap: 0.4rem 0.55rem !important;
+  margin-bottom: 0.35rem;
+}
+.admin-events-form-grid .admin-field span{ font-size: 0.7rem; }
+.admin-events-form-grid .gc-input{
+  padding: 0.25rem 0.4rem;
+  min-height: 0;
+  font-size: 0.8rem;
+}
+.admin-events-old{
+  margin-top: 4px;
+}
+.admin-events-old > summary{
+  cursor: pointer;
+  font-size: 0.7rem;
+  color: var(--gc-muted, #8aa0b8);
+  margin-bottom: 3px;
+}
+
 .admin-news-status--banner{
   border-color: rgba(255, 196, 0, 0.65);
   color: #ffe58a;

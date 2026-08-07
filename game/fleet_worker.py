@@ -156,6 +156,17 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
                     f"fleet={bot_result.get('fleet_movement_id')}"
                 )
 
+        def _liveops_schedules() -> None:
+            from .server_events import maybe_tick_schedules
+
+            sev = maybe_tick_schedules(conn=conn)
+            mats = sev.get("materialized") or []
+            if mats or sev.get("errors"):
+                _worker_log(
+                    f"liveops_schedules materialized={len(mats)} "
+                    f"skipped={sev.get('skipped')} errors={len(sev.get('errors') or [])}"
+                )
+
         def _world_boss() -> None:
             from .world_boss import maybe_tick_world_boss_schedule
             from .world_boss_companions import tick_companion_missions
@@ -242,6 +253,8 @@ def _maybe_run_post_fleet_maintenance(conn, *, source: str) -> None:
 
         _run_stage("hof", _hof)
         _run_stage("combat_bots", _combat_bots)
+        # Materialize scheduled LiveOps windows before WB/asteroid ticks read factors.
+        _run_stage("liveops_schedules", _liveops_schedules)
         _run_stage("world_boss", _world_boss)
         _run_stage("asteroids", _asteroids)
         # GC-2610: inactive_autoplay before pirates — pirate economy-for-all-bots is

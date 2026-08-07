@@ -1031,6 +1031,28 @@ class EffectResolver:
             shipyard_time_speed = class_state.get("shipyard_time_speed", shipyard_time_speed)
             defense_time_speed = class_state.get("defense_time_speed", defense_time_speed)
 
+        # LiveOps server events (global timed bonuses) — after personal boosters/classes.
+        try:
+            from ..server_events import active_build_time_speed, active_research_time_speed
+
+            sev_build = float(active_build_time_speed(conn=self._conn) or 1.0)
+            sev_research = float(active_research_time_speed(conn=self._conn) or 1.0)
+            if sev_build > 0 and abs(sev_build - 1.0) > 1e-12:
+                build_time_speed *= sev_build
+                sources.append(
+                    self._source_entry("build_time_speed", "server_event:build_time", sev_build, 0)
+                )
+            if sev_research > 0 and abs(sev_research - 1.0) > 1e-12:
+                research_time_speed *= sev_research
+                sources.append(
+                    self._source_entry(
+                        "research_time_speed", "server_event:research_time", sev_research, 0
+                    )
+                )
+        except Exception as exc:
+            if EFFECT_DEBUG:
+                logger.warning("server_event_time_speed_failed err=%s", exc)
+
         self._mods = {
             "mine_energy_factor": float(mine_energy_factor),
             "metal_prod_factor": float(metal_prod_factor),

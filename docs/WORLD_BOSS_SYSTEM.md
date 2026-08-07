@@ -139,7 +139,7 @@ Overview: landscape hotspots on `#overview-planet-hero` (locked silhouettes + ow
 
 - Up to **3** concurrent `active` events (distinct `boss_key`).
 - Active bosses never share the same `[G:S:P]` — auto-pick skips occupied boss slots; explicit coords return `coords_occupied`.
-- Cron (`fleet_worker`): expire due events; if `active < 3` and ≥ **4 h** since last spawn, weighted spawn (`spawn_weight`).
+- Cron (`fleet_worker`): expire due events; if `active < 3` and ≥ **4 h** since last spawn (÷ LiveOps `world_boss_spawn_mult`, floor 30m — see [SERVER_EVENTS.md](SERVER_EVENTS.md)), weighted spawn (`spawn_weight`).
 - Rare **expedition discovery** (~3%) may spawn when under cap.
 - Admin: `POST /api/admin/world-boss/spawn` (`force` may exceed cap / replace same key).
 

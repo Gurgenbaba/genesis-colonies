@@ -2281,15 +2281,17 @@
     return Math.floor(ms / 1000);
   }
 
-  function formatLocalRange(startUnix, endUnix) {
-    const opts = { dateStyle: "short", timeStyle: "short" };
+  function formatLocalShort(unix) {
+    const opts = { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" };
     try {
-      const a = new Date(Number(startUnix) * 1000).toLocaleString(undefined, opts);
-      const b = new Date(Number(endUnix) * 1000).toLocaleString(undefined, opts);
-      return `${a} → ${b}`;
+      return new Date(Number(unix) * 1000).toLocaleString(undefined, opts);
     } catch (_err) {
-      return `${startUnix} → ${endUnix}`;
+      return String(unix || "");
     }
+  }
+
+  function formatLocalRange(startUnix, endUnix) {
+    return `${formatLocalShort(startUnix)}→${formatLocalShort(endUnix)}`;
   }
 
   function slugifyEventTitle(title) {
@@ -2350,15 +2352,39 @@
   function applyEventEffects(kind) {
     const prod = qs("#admin-event-prod-mult");
     const hold = qs("#admin-event-hold-mult");
+    const shop = qs("#admin-event-shop-bps");
+    const build = qs("#admin-event-build-mult");
+    const research = qs("#admin-event-research-mult");
     if (kind === "combo") {
       if (prod) prod.value = "2";
       if (hold) hold.value = "0.75";
+      if (shop) shop.value = "";
+      if (build) build.value = "";
+      if (research) research.value = "";
     } else if (kind === "prod") {
       if (prod) prod.value = "2";
       if (hold) hold.value = "";
+      if (shop) shop.value = "";
+      if (build) build.value = "";
+      if (research) research.value = "";
     } else if (kind === "hold") {
       if (prod) prod.value = "";
       if (hold) hold.value = "0.75";
+      if (shop) shop.value = "";
+      if (build) build.value = "";
+      if (research) research.value = "";
+    } else if (kind === "shop") {
+      if (prod) prod.value = "";
+      if (hold) hold.value = "";
+      if (shop) shop.value = "2000";
+      if (build) build.value = "";
+      if (research) research.value = "";
+    } else if (kind === "build") {
+      if (prod) prod.value = "";
+      if (hold) hold.value = "";
+      if (shop) shop.value = "";
+      if (build) build.value = "1.25";
+      if (research) research.value = "1.25";
     }
   }
 
@@ -2383,41 +2409,45 @@
     setEventWindow(start, end);
   }
 
-  function applyWeekendBoostPreset() {
-    if (qs("#admin-event-id")) qs("#admin-event-id").value = "";
-    _adminEventSlugTouched = false;
-    if (qs("#admin-event-title")) {
-      qs("#admin-event-title").value = t(
-        "admin_events_weekend_title",
-        "Res-Prod / Expo Event",
-      );
-    }
-    if (qs("#admin-event-slug")) {
-      qs("#admin-event-slug").value = slugifyEventTitle("weekend-prod-expo");
-    }
-    if (qs("#admin-event-enabled")) qs("#admin-event-enabled").checked = true;
-    applyEventEffects("combo");
-    applyEventDuration("sunday");
+  function openEventsCompose() {
+    const wrap = qs("#admin-events-compose-wrap");
+    if (wrap) wrap.open = true;
     qs("#admin-events-compose")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function formatEtaSeconds(sec) {
+    const s = Math.max(0, Math.floor(Number(sec) || 0));
+    if (s < 60) return `<1m`;
+    if (s < 3600) return `${Math.floor(s / 60)}m`;
+    if (s < 86400) return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+    return `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h`;
+  }
+
+  function eventStatusBadge(status) {
+    const st = String(status || "");
+    const map = {
+      active: t("admin_events_status_active", "LIVE"),
+      scheduled: t("admin_events_status_scheduled", "GEPLANT"),
+      ended: t("admin_events_status_ended", "ENDE"),
+      disabled: t("admin_events_status_disabled", "AUS"),
+    };
+    return map[st] || st;
   }
 
   function resetAdminEventForm() {
     if (qs("#admin-event-id")) qs("#admin-event-id").value = "";
     _adminEventSlugTouched = false;
-    if (qs("#admin-event-title")) {
-      qs("#admin-event-title").value = t(
-        "admin_events_weekend_title",
-        "Res-Prod / Expo Event",
-      );
-    }
-    if (qs("#admin-event-slug")) {
-      qs("#admin-event-slug").value = slugifyEventTitle(
-        qs("#admin-event-title")?.value || "boost",
-      );
-    }
+    if (qs("#admin-event-title")) qs("#admin-event-title").value = "";
+    if (qs("#admin-event-slug")) qs("#admin-event-slug").value = "";
     if (qs("#admin-event-enabled")) qs("#admin-event-enabled").checked = true;
-    applyEventEffects("combo");
-    applyEventDuration("48h");
+    if (qs("#admin-event-prod-mult")) qs("#admin-event-prod-mult").value = "";
+    if (qs("#admin-event-hold-mult")) qs("#admin-event-hold-mult").value = "";
+    if (qs("#admin-event-shop-bps")) qs("#admin-event-shop-bps").value = "";
+    if (qs("#admin-event-build-mult")) qs("#admin-event-build-mult").value = "";
+    if (qs("#admin-event-research-mult")) qs("#admin-event-research-mult").value = "";
+    if (qs("#admin-event-starts")) qs("#admin-event-starts").value = "";
+    if (qs("#admin-event-ends")) qs("#admin-event-ends").value = "";
+    updateAdminEventWindowHint();
   }
 
   function fillAdminEventForm(entry) {
@@ -2435,25 +2465,46 @@
     if (qs("#admin-event-enabled")) qs("#admin-event-enabled").checked = !!entry.enabled;
     let prod = "";
     let hold = "";
+    let shop = "";
+    let build = "";
+    let research = "";
     (entry.effects || []).forEach((eff) => {
       if (eff.kind === "production_mult") prod = String(eff.mult);
       if (eff.kind === "expedition_hold_mult") hold = String(eff.mult);
+      if (eff.kind === "shop_discount_bps") shop = String(eff.bps);
+      if (eff.kind === "build_time_speed") build = String(eff.mult);
+      if (eff.kind === "research_time_speed") research = String(eff.mult);
     });
     if (qs("#admin-event-prod-mult")) qs("#admin-event-prod-mult").value = prod;
     if (qs("#admin-event-hold-mult")) qs("#admin-event-hold-mult").value = hold;
+    if (qs("#admin-event-shop-bps")) qs("#admin-event-shop-bps").value = shop;
+    if (qs("#admin-event-build-mult")) qs("#admin-event-build-mult").value = build;
+    if (qs("#admin-event-research-mult")) qs("#admin-event-research-mult").value = research;
     updateAdminEventWindowHint();
-    qs("#admin-events-compose")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    openEventsCompose();
   }
 
   function collectAdminEventPayload() {
     const effects = [];
     const prodRaw = (qs("#admin-event-prod-mult")?.value || "").trim();
     const holdRaw = (qs("#admin-event-hold-mult")?.value || "").trim();
+    const shopRaw = (qs("#admin-event-shop-bps")?.value || "").trim();
+    const buildRaw = (qs("#admin-event-build-mult")?.value || "").trim();
+    const researchRaw = (qs("#admin-event-research-mult")?.value || "").trim();
     if (prodRaw !== "") {
       effects.push({ kind: "production_mult", mult: Number(prodRaw) });
     }
     if (holdRaw !== "") {
       effects.push({ kind: "expedition_hold_mult", mult: Number(holdRaw) });
+    }
+    if (shopRaw !== "") {
+      effects.push({ kind: "shop_discount_bps", bps: Number(shopRaw) });
+    }
+    if (buildRaw !== "") {
+      effects.push({ kind: "build_time_speed", mult: Number(buildRaw) });
+    }
+    if (researchRaw !== "") {
+      effects.push({ kind: "research_time_speed", mult: Number(researchRaw) });
     }
     let slug = (qs("#admin-event-slug")?.value || "").trim();
     const title = (qs("#admin-event-title")?.value || "").trim();
@@ -2466,6 +2517,292 @@
       enabled: !!qs("#admin-event-enabled")?.checked,
       effects,
     };
+  }
+
+  function formatPresetEffectSummary(effects) {
+    return (effects || [])
+      .map((e) => {
+        if (e.kind === "production_mult") {
+          const pct = Math.round((Number(e.mult) - 1) * 100);
+          return pct >= 0 ? `Prod +${pct}%` : `Prod ${pct}%`;
+        }
+        if (e.kind === "expedition_hold_mult") {
+          const pct = Math.round((1 - Number(e.mult)) * 100);
+          return `Hold −${pct}%`;
+        }
+        if (e.kind === "shop_discount_bps") {
+          return `Shop −${Math.round(Number(e.bps) / 100)}%`;
+        }
+        if (e.kind === "build_time_speed") {
+          const pct = Math.round((Number(e.mult) - 1) * 100);
+          return `Build +${pct}%`;
+        }
+        if (e.kind === "research_time_speed") {
+          const pct = Math.round((Number(e.mult) - 1) * 100);
+          return `Research +${pct}%`;
+        }
+        if (e.kind === "asteroid_spawn_mult") return `Asteroid ×${e.mult}`;
+        if (e.kind === "world_boss_spawn_mult") return `Boss Hunt ×${e.mult}`;
+        if (e.kind === "inactive_farm_mult") return `Inactive Farms ×${e.mult}`;
+        return e.kind;
+      })
+      .join(" · ");
+  }
+
+  function renderAdminEventPresets(presets) {
+    const host = qs("#admin-events-preset-gallery");
+    if (!host) return;
+    const list = Array.isArray(presets) ? presets : [];
+    if (!list.length) {
+      host.innerHTML = `<p class="admin-small-hint">${esc(
+        t("admin_events_presets_empty", "Keine Presets geladen."),
+      )}</p>`;
+      return;
+    }
+    host.innerHTML = list
+      .map((p) => {
+        const bits = [];
+        if (p.has_effects) bits.push(formatPresetEffectSummary(p.effects) || "");
+        if (p.has_world_boss) bits.push(t("admin_events_preset_wb", "World Boss"));
+        const dur = p.duration
+          ? String(p.duration).replace(/_/g, " ")
+          : t("admin_events_preset_now", "sofort");
+        return (
+          `<div class="admin-events-preset-tile" data-preset-id="${esc(p.id)}">` +
+          `<div class="admin-events-preset-title" title="${esc(p.title || p.id)}">${esc(p.title || p.id)}</div>` +
+          `<div class="admin-events-preset-effects" title="${esc((bits.join(" · ") || "—") + " · " + dur)}">${esc(bits.join(" · ") || "—")} · ${esc(dur)}</div>` +
+          `<div class="admin-events-row-actions">` +
+          `<button type="button" class="gc-btn gc-btn-primary gc-btn-xs" data-admin-action="events-preset-apply" data-preset-id="${esc(p.id)}">` +
+          `${esc(t("admin_events_preset_apply", "Start"))}</button>` +
+          `<button type="button" class="gc-btn gc-btn-outline gc-btn-xs" data-admin-action="events-preset-prefill" data-preset-id="${esc(p.id)}">` +
+          `${esc(t("admin_events_preset_prefill_short", "Form"))}</button>` +
+          `</div></div>`
+        );
+      })
+      .join("");
+  }
+
+  async function applyAdminEventPreset(presetId, forceWorldBoss) {
+    const status = qs("#admin-events-preset-status");
+    if (status) {
+      status.textContent = t("admin_events_preset_applying", "Preset wird angewendet…");
+    }
+    const payload = {
+      tz_offset_minutes: -new Date().getTimezoneOffset(),
+      force_world_boss: !!forceWorldBoss,
+    };
+    const res = await adminPost(
+      `/api/admin/events/presets/${encodeURIComponent(presetId)}/apply`,
+      payload,
+    );
+    if (!res.ok) {
+      showAlert(res.message || res.error || t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+      if (status) status.textContent = res.message || res.error || "";
+      return res;
+    }
+    const actions = res.actions || [];
+    const failedWb = actions.find((a) => a.type === "spawn_world_boss" && !a.ok);
+    if (failedWb) {
+      const err = failedWb.error || "spawn_failed";
+      if (err === "boss_key_already_active" || err === "concurrent_cap") {
+        const retry = window.confirm(
+          t(
+            "admin_events_preset_wb_force",
+            "World Boss konnte nicht gespawnt werden ({err}). Mit force erneut versuchen?",
+          ).replace("{err}", err),
+        );
+        if (retry) {
+          return applyAdminEventPreset(presetId, true);
+        }
+      }
+      notify(
+        t("admin_events_preset_partial", "Event angelegt, World Boss fehlgeschlagen:") +
+          " " +
+          err,
+        "warn",
+      );
+    } else {
+      notify(t("admin_events_preset_ok", "Preset angewendet."), "success");
+    }
+    if (status) {
+      const eid = res.event && res.event.id ? `#${res.event.id}` : "";
+      status.textContent = `${t("admin_events_preset_ok", "Preset angewendet.")} ${eid}`.trim();
+    }
+    await loadAdminEvents();
+    return res;
+  }
+
+  function prefillAdminEventPreset(presetId, presets) {
+    const list = Array.isArray(presets) ? presets : _adminEventPresetsCache || [];
+    const preset = list.find((p) => p.id === presetId);
+    if (!preset) return;
+    if (!preset.has_effects) {
+      notify(
+        t("admin_events_preset_no_effects", "Dieses Preset hat nur Actions (z. B. World Boss) — bitte Anwenden nutzen."),
+        "info",
+      );
+      return;
+    }
+    if (qs("#admin-event-id")) qs("#admin-event-id").value = "";
+    _adminEventSlugTouched = false;
+    if (qs("#admin-event-title")) qs("#admin-event-title").value = preset.title || preset.id;
+    if (qs("#admin-event-slug")) {
+      qs("#admin-event-slug").value = slugifyEventTitle(preset.slug_prefix || preset.id);
+    }
+    if (qs("#admin-event-enabled")) qs("#admin-event-enabled").checked = true;
+    if (qs("#admin-event-prod-mult")) qs("#admin-event-prod-mult").value = "";
+    if (qs("#admin-event-hold-mult")) qs("#admin-event-hold-mult").value = "";
+    if (qs("#admin-event-shop-bps")) qs("#admin-event-shop-bps").value = "";
+    if (qs("#admin-event-build-mult")) qs("#admin-event-build-mult").value = "";
+    if (qs("#admin-event-research-mult")) qs("#admin-event-research-mult").value = "";
+    (preset.effects || []).forEach((eff) => {
+      if (eff.kind === "production_mult" && qs("#admin-event-prod-mult")) {
+        qs("#admin-event-prod-mult").value = String(eff.mult);
+      }
+      if (eff.kind === "expedition_hold_mult" && qs("#admin-event-hold-mult")) {
+        qs("#admin-event-hold-mult").value = String(eff.mult);
+      }
+      if (eff.kind === "shop_discount_bps" && qs("#admin-event-shop-bps")) {
+        qs("#admin-event-shop-bps").value = String(eff.bps);
+      }
+      if (eff.kind === "build_time_speed" && qs("#admin-event-build-mult")) {
+        qs("#admin-event-build-mult").value = String(eff.mult);
+      }
+      if (eff.kind === "research_time_speed" && qs("#admin-event-research-mult")) {
+        qs("#admin-event-research-mult").value = String(eff.mult);
+      }
+    });
+    const dur = String(preset.duration || "24h");
+    if (dur === "until_sunday_2000") applyEventDuration("sunday");
+    else if (dur === "48h") applyEventDuration("48h");
+    else applyEventDuration("24h");
+    openEventsCompose();
+  }
+
+  let _adminEventPresetsCache = [];
+  let _adminEventSchedulesCache = [];
+
+  function weekdayLabel(day) {
+    const labels = [
+      t("admin_events_weekday_mon", "Mo"),
+      t("admin_events_weekday_tue", "Di"),
+      t("admin_events_weekday_wed", "Mi"),
+      t("admin_events_weekday_thu", "Do"),
+      t("admin_events_weekday_fri", "Fr"),
+      t("admin_events_weekday_sat", "Sa"),
+      t("admin_events_weekday_sun", "So"),
+    ];
+    return labels[Number(day)] || String(day);
+  }
+
+  function renderAdminEventSchedules(schedules) {
+    const host = qs("#admin-events-schedule-list");
+    if (!host) return;
+    const list = Array.isArray(schedules) ? schedules : [];
+    _adminEventSchedulesCache = list;
+    if (!list.length) {
+      host.innerHTML = `<p class="admin-small-hint">${esc(
+        t("admin_events_schedules_empty", "Keine Schedule-Rules (Migration 144?)."),
+      )}</p>`;
+      return;
+    }
+    const rows = list
+      .map((s) => {
+        const days = (s.weekdays || []).map(weekdayLabel).join("");
+        const en = !!s.enabled;
+        const nw = s.next_window || null;
+        let stateClass = "is-off";
+        let stateLabel = t("admin_events_schedule_off", "AUS");
+        let whenLine = "—";
+        if (en && nw) {
+          if (nw.already_materialized && nw.in_progress) {
+            stateClass = "is-live";
+            stateLabel = t("admin_events_schedule_slot_live", "LIVE");
+            whenLine = `→${formatLocalShort(nw.ends_at)}`;
+          } else if (nw.already_materialized) {
+            stateClass = "is-ready";
+            stateLabel = t("admin_events_schedule_ready", "OK");
+            whenLine = formatLocalRange(nw.starts_at, nw.ends_at);
+          } else if (nw.in_progress) {
+            stateClass = "is-due";
+            stateLabel = t("admin_events_schedule_due", "DUE");
+            whenLine = formatLocalRange(nw.starts_at, nw.ends_at);
+          } else {
+            stateClass = "is-queued";
+            stateLabel = t("admin_events_schedule_queued", "NÄCHST");
+            whenLine = `in ${formatEtaSeconds(nw.seconds_until_start)} · ${formatLocalShort(nw.starts_at)}`;
+          }
+        } else if (en) {
+          stateClass = "is-queued";
+          stateLabel = t("admin_events_schedule_on", "AN");
+        }
+        return (
+          `<tr class="${stateClass}" data-schedule-id="${Number(s.id)}">` +
+          `<td><span class="admin-events-pill">${esc(stateLabel)}</span></td>` +
+          `<td title="${esc(s.name || s.preset_id)}">${esc(s.name || s.preset_id)}</td>` +
+          `<td title="${esc(whenLine)}">${esc(whenLine)}</td>` +
+          `<td class="gc-mono">${esc(days)} ${esc(s.local_start_hhmm || "")}</td>` +
+          `<td><div class="admin-events-row-actions">` +
+          `<button type="button" class="gc-btn gc-btn-outline gc-btn-xs" data-admin-action="events-schedule-toggle" data-schedule-id="${Number(s.id)}" data-enabled="${en ? "0" : "1"}">` +
+          `${esc(en ? t("admin_events_schedule_disable", "Pause") : t("admin_events_schedule_enable", "An"))}</button>` +
+          `<button type="button" class="gc-btn gc-btn-primary gc-btn-xs" data-admin-action="events-schedule-materialize" data-schedule-id="${Number(s.id)}">` +
+          `${esc(t("admin_events_schedule_materialize", "Anlegen"))}</button>` +
+          `</div></td></tr>`
+        );
+      })
+      .join("");
+    host.innerHTML =
+      `<table>` +
+      `<colgroup><col class="col-st"><col class="col-name"><col class="col-when"><col class="col-rule"><col class="col-act"></colgroup>` +
+      `<thead><tr>` +
+      `<th>${esc(t("admin_events_col_status", "Status"))}</th>` +
+      `<th>${esc(t("admin_events_col_name", "Rule"))}</th>` +
+      `<th>${esc(t("admin_events_col_when", "Nächster Slot"))}</th>` +
+      `<th>${esc(t("admin_events_col_rule", "Zeit"))}</th>` +
+      `<th></th>` +
+      `</tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  async function toggleAdminEventSchedule(scheduleId, enabled) {
+    const status = qs("#admin-events-schedule-status");
+    const res = await adminPatch(`/api/admin/events/schedules/${Number(scheduleId)}`, {
+      enabled: !!enabled,
+    });
+    if (!res.ok) {
+      showAlert(res.message || res.error || t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+      if (status) status.textContent = res.message || res.error || "";
+      return res;
+    }
+    notify(t("admin_events_schedule_saved", "Schedule aktualisiert."), "success");
+    await loadAdminEvents();
+    return res;
+  }
+
+  async function materializeAdminEventSchedule(scheduleId) {
+    const status = qs("#admin-events-schedule-status");
+    if (status) {
+      status.textContent = t("admin_events_schedule_running", "Materialisiere…");
+    }
+    const res = await adminPost(
+      `/api/admin/events/schedules/${Number(scheduleId)}/materialize`,
+      { force: true },
+    );
+    if (!res.ok) {
+      showAlert(res.message || res.error || t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+      if (status) status.textContent = res.message || res.error || "";
+      return res;
+    }
+    if (res.skipped) {
+      notify(t("admin_events_schedule_skipped", "Bereits materialisiert für diesen Slot."), "info");
+    } else {
+      notify(t("admin_events_schedule_ok", "Schedule materialisiert."), "success");
+    }
+    if (status) {
+      const eid = res.event && res.event.id ? `#${res.event.id}` : "";
+      status.textContent = `${t("admin_events_schedule_ok", "Schedule materialisiert.")} ${eid}`.trim();
+    }
+    await loadAdminEvents();
+    return res;
   }
 
   function bindAdminEventFormHelpers() {
@@ -2497,77 +2834,148 @@
   function renderAdminEvents(data) {
     bindAdminEventFormHelpers();
     const activeHost = qs("#admin-events-active");
+    const liveCards = qs("#admin-events-live-cards");
     const listHost = qs("#admin-events-list");
     const active = data.active || {};
+    _adminEventPresetsCache = Array.isArray(data.presets) ? data.presets : [];
+    renderAdminEventPresets(_adminEventPresetsCache);
+    renderAdminEventSchedules(Array.isArray(data.schedules) ? data.schedules : []);
+
+    const shopBps = Number(active.shop_discount_bps || 0);
+    const factorRows = [
+      {
+        label: t("admin_events_kpi_prod", "Prod"),
+        value: `×${Number(active.production_mult || 1).toFixed(2)}`,
+        hot: Number(active.production_mult || 1) > 1.001,
+      },
+      {
+        label: t("admin_events_kpi_hold", "Hold"),
+        value: `×${Number(active.expedition_hold_mult || 1).toFixed(2)}`,
+        hot: Math.abs(Number(active.expedition_hold_mult || 1) - 1) > 0.001,
+      },
+      {
+        label: t("admin_events_kpi_shop", "Shop"),
+        value: shopBps > 0 ? `−${Math.round(shopBps / 100)}%` : "—",
+        hot: shopBps > 0,
+      },
+      {
+        label: t("admin_events_kpi_build", "Build"),
+        value: `×${Number(active.build_time_speed || 1).toFixed(2)}`,
+        hot: Number(active.build_time_speed || 1) > 1.001,
+      },
+      {
+        label: t("admin_events_kpi_research", "Research"),
+        value: `×${Number(active.research_time_speed || 1).toFixed(2)}`,
+        hot: Number(active.research_time_speed || 1) > 1.001,
+      },
+      {
+        label: t("admin_events_kpi_asteroid", "Asteroid"),
+        value: `×${Number(active.asteroid_spawn_mult || 1).toFixed(2)}`,
+        hot: Number(active.asteroid_spawn_mult || 1) > 1.001,
+      },
+      {
+        label: t("admin_events_kpi_boss", "Boss"),
+        value: `×${Number(active.world_boss_spawn_mult || 1).toFixed(2)}`,
+        hot: Number(active.world_boss_spawn_mult || 1) > 1.001,
+      },
+      {
+        label: t("admin_events_kpi_farm", "Farm"),
+        value: `×${Number(active.inactive_farm_mult || 1).toFixed(2)}`,
+        hot: Number(active.inactive_farm_mult || 1) > 1.001,
+      },
+    ].filter((m) => m.hot);
+
     if (activeHost) {
-      activeHost.innerHTML = [
-        {
-          label: t("admin_events_kpi_active", "Aktive Events"),
-          value: String((active.events || []).length),
-        },
-        {
-          label: t("admin_events_kpi_prod", "Prod ×"),
-          value: Number(active.production_mult || 1).toFixed(2),
-        },
-        {
-          label: t("admin_events_kpi_hold", "Hold ×"),
-          value: Number(active.expedition_hold_mult || 1).toFixed(2),
-        },
-      ]
-        .map(
-          (m) =>
-            `<div class="admin-metric-card"><div class="admin-metric-label">${esc(m.label)}</div>` +
-            `<div class="admin-metric-value gc-mono">${esc(m.value)}</div></div>`,
-        )
-        .join("");
+      if (!factorRows.length) {
+        activeHost.innerHTML = `<span class="admin-events-quiet">${esc(
+          t("admin_events_live_none", "Keine Extra-Boni — Basiswerte."),
+        )}</span>`;
+      } else {
+        activeHost.innerHTML = factorRows
+          .map(
+            (m) =>
+              `<span class="admin-events-chip is-hot"><b>${esc(m.label)}</b> ${esc(m.value)}</span>`,
+          )
+          .join("");
+      }
     }
+
     _adminEventsCache = Array.isArray(data.events) ? data.events : [];
+    const liveEvents = Array.isArray(active.events) ? active.events : [];
+    if (liveCards) {
+      if (!liveEvents.length) {
+        liveCards.innerHTML = "";
+      } else {
+        liveCards.innerHTML = liveEvents
+          .map((ev) => {
+            const effects = formatPresetEffectSummary(ev.effects);
+            const eid = Number(ev.id);
+            return (
+              `<div class="admin-events-live-row" data-event-id="${eid}">` +
+              `<strong title="${esc(ev.title || ev.slug)}">${esc(ev.title || ev.slug)}</strong>` +
+              `<span title="${esc(effects || "")}">${esc(effects || "—")}</span>` +
+              `<span class="admin-small-hint" title="${esc(formatLocalRange(ev.starts_at, ev.ends_at))}">${esc(formatLocalRange(ev.starts_at, ev.ends_at))}</span>` +
+              `<div class="admin-events-row-actions">` +
+              `<button type="button" class="gc-btn gc-btn-outline gc-btn-xs" data-admin-action="events-edit" data-event-id="${eid}">${esc(
+                t("admin_events_edit_short", "Edit"),
+              )}</button>` +
+              `<button type="button" class="gc-btn gc-btn-danger gc-btn-xs" data-admin-action="events-delete" data-event-id="${eid}">${esc(
+                t("admin_events_delete_short", "Del"),
+              )}</button>` +
+              `</div></div>`
+            );
+          })
+          .join("");
+      }
+    }
+
+    const countEl = qs("#admin-events-list-count");
+    const scheduled = _adminEventsCache.filter((e) => e.status === "scheduled");
+    const closedEv = _adminEventsCache.filter((e) => e.status === "ended" || e.status === "disabled");
+    if (countEl) {
+      const parts = [];
+      if (scheduled.length) parts.push(`${scheduled.length} ${t("admin_events_status_scheduled", "GEPLANT")}`);
+      if (closedEv.length) parts.push(`${closedEv.length} ${t("admin_events_list_closed", "alt")}`);
+      countEl.textContent = parts.length ? parts.join(" · ") : t("admin_events_list_none_extra", "keine");
+    }
     if (!listHost) return;
-    if (!_adminEventsCache.length) {
+    if (!scheduled.length && !closedEv.length) {
       listHost.innerHTML = `<p class="admin-small-hint">${esc(
-        t("admin_events_empty", "Noch keine Events."),
+        t("admin_events_list_empty_extra", "Keine geplanten oder alten Events."),
       )}</p>`;
       return;
     }
-    listHost.innerHTML = _adminEventsCache
-      .map((ev) => {
-        const effects = (ev.effects || [])
-          .map((e) => {
-            if (e.kind === "production_mult") {
-              const pct = Math.round((Number(e.mult) - 1) * 100);
-              return pct >= 0 ? `Prod +${pct}%` : `Prod ${pct}%`;
-            }
-            if (e.kind === "expedition_hold_mult") {
-              const pct = Math.round((1 - Number(e.mult)) * 100);
-              return `Hold −${pct}%`;
-            }
-            return `${e.kind}×${e.mult}`;
-          })
-          .join(" · ");
-        return (
-          `<article class="admin-news-card" data-event-id="${Number(ev.id)}">` +
-          `<div class="admin-news-card-main">` +
-          `<div class="admin-news-card-head">` +
-          `<h4 class="admin-news-card-title">${esc(ev.title || ev.slug)}</h4>` +
-          `<span class="admin-news-status">${esc(ev.status || "")}</span>` +
-          `</div>` +
-          `<div class="admin-news-card-meta">` +
-          `<span class="gc-mono">${esc(ev.slug)}</span>` +
-          `<span>${esc(formatLocalRange(ev.starts_at, ev.ends_at))}</span>` +
-          `</div>` +
-          `<p class="admin-news-card-preview">${esc(effects || "—")}</p>` +
-          `</div>` +
-          `<div class="admin-news-card-actions">` +
-          `<button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="events-edit" data-event-id="${Number(ev.id)}">${esc(
-            t("admin_events_edit", "Bearbeiten"),
-          )}</button>` +
-          `<button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="events-delete" data-event-id="${Number(ev.id)}">${esc(
-            t("admin_events_delete", "Löschen"),
-          )}</button>` +
-          `</div></article>`
-        );
-      })
-      .join("");
+
+    function rowHtml(ev) {
+      const effects = formatPresetEffectSummary(ev.effects);
+      const st = String(ev.status || "");
+      return (
+        `<div class="admin-events-item status-${esc(st)}" data-event-id="${Number(ev.id)}">` +
+        `<span class="admin-events-pill status-${esc(st)}">${esc(eventStatusBadge(st))}</span>` +
+        `<div class="admin-events-item-main">` +
+        `<div class="admin-events-item-title">${esc(ev.title || ev.slug)}</div>` +
+        `<div class="admin-events-item-meta">${esc(effects || "—")} · ${esc(formatLocalRange(ev.starts_at, ev.ends_at))}</div>` +
+        `</div>` +
+        `<div class="admin-events-row-actions">` +
+        `<button type="button" class="gc-btn gc-btn-outline gc-btn-xs" data-admin-action="events-edit" data-event-id="${Number(ev.id)}">${esc(
+          t("admin_events_edit_short", "Edit"),
+        )}</button>` +
+        `<button type="button" class="gc-btn gc-btn-danger gc-btn-xs" data-admin-action="events-delete" data-event-id="${Number(ev.id)}">${esc(
+          t("admin_events_delete_short", "Del"),
+        )}</button>` +
+        `</div></div>`
+      );
+    }
+
+    let html = scheduled.map(rowHtml).join("");
+    if (closedEv.length) {
+      html +=
+        `<details class="admin-events-old">` +
+        `<summary>${esc(t("admin_events_list_show_old", "Alte / beendete anzeigen"))} (${closedEv.length})</summary>` +
+        closedEv.map(rowHtml).join("") +
+        `</details>`;
+    }
+    listHost.innerHTML = html;
   }
 
   async function loadAdminEvents() {
@@ -4642,12 +5050,41 @@
     if (act === "inactive-autoplay-off") return setInactiveAutoplayAdmin(false);
     if (act === "inactive-autoplay-force-tick") return forceTickInactiveAutoplayAdmin();
     if (act === "events-refresh") return loadAdminEvents();
-    if (act === "events-preset-weekend") {
-      applyWeekendBoostPreset();
+    if (act === "events-preset-apply") {
+      const pid = String(btn.getAttribute("data-preset-id") || "").trim();
+      if (pid) return applyAdminEventPreset(pid, false);
+      return null;
+    }
+    if (act === "events-preset-prefill") {
+      const pid = String(btn.getAttribute("data-preset-id") || "").trim();
+      if (pid) prefillAdminEventPreset(pid);
+      return null;
+    }
+    if (act === "events-schedule-toggle") {
+      const sid = parseInt(btn.getAttribute("data-schedule-id") || "", 10);
+      const en = btn.getAttribute("data-enabled") === "1";
+      if (Number.isFinite(sid)) return toggleAdminEventSchedule(sid, en);
+      return null;
+    }
+    if (act === "events-schedule-materialize") {
+      const sid = parseInt(btn.getAttribute("data-schedule-id") || "", 10);
+      if (Number.isFinite(sid)) return materializeAdminEventSchedule(sid);
       return null;
     }
     if (act === "events-new") {
       resetAdminEventForm();
+      applyEventEffects("combo");
+      applyEventDuration("48h");
+      if (qs("#admin-event-title")) {
+        qs("#admin-event-title").value = t(
+          "admin_events_weekend_title",
+          "Res-Prod / Expo Event",
+        );
+      }
+      if (qs("#admin-event-slug") && qs("#admin-event-title")) {
+        qs("#admin-event-slug").value = slugifyEventTitle(qs("#admin-event-title").value);
+      }
+      openEventsCompose();
       return null;
     }
     if (act === "events-reset") {
@@ -4664,6 +5101,14 @@
     }
     if (act === "events-effect-hold") {
       applyEventEffects("hold");
+      return null;
+    }
+    if (act === "events-effect-shop") {
+      applyEventEffects("shop");
+      return null;
+    }
+    if (act === "events-effect-build") {
+      applyEventEffects("build");
       return null;
     }
     if (act === "events-dur-24h") {

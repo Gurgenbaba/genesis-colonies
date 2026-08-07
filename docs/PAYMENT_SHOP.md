@@ -39,6 +39,10 @@ Owner: `game/shop_promos.py` — Vanity-Code für Shop-Rabatt/Kommission **und**
 
 Gleicher Owner (`shop_promos`, `kind=campaign`): Admin legt Discount-Codes an (z. B. Verlosung). Einlösen im Premium-Shop → Rabatt, **keine** Creator-Kommission, **kein** Referral-Bridge. Optional `max_redemptions`; sonst unbegrenzt bis `active=0`.
 
+## LiveOps Shop Sale (Server Events)
+
+Separater Pfad — Owner `game/server_events.py`, Kind `shop_discount_bps`. Timed globaler EUR-Shop-Rabatt **ohne** Promo-Code. Cart/Checkout liest `active_shop_discount_bps()` und wendet `max(event_bps, promo_bps)` an (kein Double-Dip). Free Shop (Ark-Token) ist nicht betroffen. Details: [SERVER_EVENTS.md](SERVER_EVENTS.md).
+
 ## Philosophy
 
 - **F2P first:** Free Track / Login bleiben wertvoll; Shop verkauft Convenience.

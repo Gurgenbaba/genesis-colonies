@@ -105,6 +105,12 @@ Global timed bonuses from `game/server_events.py` (Admin LiveOps → Events).
 
 **Expedition hold:** `fleet.expedition_stay_seconds` multiplies base stay by active `expedition_hold_mult` (e.g. `0.75` = −25%). `fleet_calc` uses the same helper for home-ETA.
 
+**Build / research time:** `EffectResolver.get_modifiers` multiplies `build_time_speed` / `research_time_speed` by active server-event factors **after** inventory boosters, alliance, and commander class (single duration math owner).
+
+**Shop discount:** `shop_discount_bps` is applied in `shop._resolve_cart_discount` (EUR premium shop). See [PAYMENT_SHOP.md](PAYMENT_SHOP.md) / [SERVER_EVENTS.md](SERVER_EVENTS.md).
+
+**World cadence:** `asteroid_spawn_mult` / `world_boss_spawn_mult` / `inactive_farm_mult` are read by their domain owners (`asteroids`, `world_boss`, `inactive_autoplay`) — no parallel spawn formulas.
+
 Use labels like **“prepared / not active”** in admin copy only for modifiers still in `PREPARED_MODIFIER_KEYS` (currently empty — `scan_range` is live).
 
 ## Offline queue finish → derived state

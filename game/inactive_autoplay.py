@@ -530,9 +530,19 @@ def _ensure_resource_floor(conn, planet_id: int) -> Dict[str, int]:
     ).fetchone()
     if not row:
         return {}
-    metal = max(float(row["metal"] or 0), float(INACTIVE_RESOURCE_FLOOR["metal"]))
-    crystal = max(float(row["crystal"] or 0), float(INACTIVE_RESOURCE_FLOOR["crystal"]))
-    fuel = max(float(row["fuel_cells"] or 0), float(INACTIVE_RESOURCE_FLOOR["fuel_cells"]))
+    farm_mult = 1.0
+    try:
+        from .server_events import active_inactive_farm_mult
+
+        farm_mult = max(1.0, float(active_inactive_farm_mult(conn=conn) or 1.0))
+    except Exception:
+        farm_mult = 1.0
+    floor_metal = float(INACTIVE_RESOURCE_FLOOR["metal"]) * farm_mult
+    floor_crystal = float(INACTIVE_RESOURCE_FLOOR["crystal"]) * farm_mult
+    floor_fuel = float(INACTIVE_RESOURCE_FLOOR["fuel_cells"]) * farm_mult
+    metal = max(float(row["metal"] or 0), floor_metal)
+    crystal = max(float(row["crystal"] or 0), floor_crystal)
+    fuel = max(float(row["fuel_cells"] or 0), floor_fuel)
     raised = (
         metal > float(row["metal"] or 0)
         or crystal > float(row["crystal"] or 0)
@@ -552,6 +562,7 @@ def _ensure_resource_floor(conn, planet_id: int) -> Dict[str, int]:
         "crystal": int(crystal),
         "fuel_cells": int(fuel),
         "raised": int(raised),
+        "farm_mult": float(farm_mult),
     }
 
 

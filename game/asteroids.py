@@ -7,6 +7,7 @@ Owner for spawn, TTL, claim, and loot rolls. Fleet send/arrival stays in ``fleet
 from __future__ import annotations
 
 import logging
+import math
 import random
 import time
 from typing import Any, Dict, List, Mapping, Optional, Set, Tuple
@@ -759,14 +760,19 @@ def spawn_asteroid_belt(
 
     ts = float(now if now is not None else _now())
     roll = rng or random
-    active = list_active_asteroids(conn=conn, now=ts, limit=MAX_ACTIVE_ASTEROIDS + 20)
-    room = int(MAX_ACTIVE_ASTEROIDS) - len(active)
+    schedule = build_schedule_info(conn=conn, now=ts)
+    max_concurrent = int(schedule.get("max_concurrent") or MAX_ACTIVE_ASTEROIDS)
+    systems_limit_eff = int(systems_limit)
+    if int(systems_limit) == int(BELT_SYSTEMS_PER_WAVE):
+        systems_limit_eff = int(schedule.get("systems_limit") or BELT_SYSTEMS_PER_WAVE)
+    active = list_active_asteroids(conn=conn, now=ts, limit=max_concurrent + 20)
+    room = int(max_concurrent) - len(active)
     if room <= 0 and not force:
         return {
             "ok": False,
             "error": "concurrent_cap",
             "active_count": len(active),
-            "max_concurrent": int(MAX_ACTIVE_ASTEROIDS),
+            "max_concurrent": int(max_concurrent),
             "spawned": [],
         }
 
@@ -777,7 +783,7 @@ def spawn_asteroid_belt(
     spawned: List[Dict[str, Any]] = []
     systems_used = 0
     for g, s, _n in dense:
-        if systems_used >= int(systems_limit):
+        if systems_used >= int(systems_limit_eff):
             break
         if room <= 0 and not force:
             break
@@ -840,16 +846,32 @@ def build_schedule_info(*, conn, now: Optional[float] = None) -> Dict[str, Any]:
                 last_spawn = float(raw)
             except (TypeError, ValueError):
                 last_spawn = None
+    spawn_mult = 1.0
+    try:
+        from .server_events import active_asteroid_spawn_mult
+
+        spawn_mult = max(0.1, float(active_asteroid_spawn_mult(now=ts, conn=conn) or 1.0))
+    except Exception:
+        spawn_mult = 1.0
+    cooldown_sec = max(60.0, float(INTER_WAVE_COOLDOWN_SEC) / spawn_mult)
+    max_concurrent = max(
+        int(MAX_ACTIVE_ASTEROIDS),
+        int(math.ceil(float(MAX_ACTIVE_ASTEROIDS) * min(spawn_mult, 2.0))),
+    )
+    systems_limit = int(BELT_SYSTEMS_PER_WAVE) + (1 if spawn_mult >= 1.5 else 0)
     if last_spawn is not None and last_spawn > 0:
-        next_eligible_at = float(last_spawn) + float(INTER_WAVE_COOLDOWN_SEC)
+        next_eligible_at = float(last_spawn) + float(cooldown_sec)
     else:
         next_eligible_at = ts
-    under_cap = len(active) < int(MAX_ACTIVE_ASTEROIDS)
+    under_cap = len(active) < int(max_concurrent)
     spawn_ready = bool(under_cap and ts >= next_eligible_at)
     seconds_until_next = max(0, int(next_eligible_at - ts)) if not spawn_ready else 0
     return {
-        "inter_wave_cooldown_sec": int(INTER_WAVE_COOLDOWN_SEC),
-        "max_concurrent": int(MAX_ACTIVE_ASTEROIDS),
+        "inter_wave_cooldown_sec": int(cooldown_sec),
+        "base_inter_wave_cooldown_sec": int(INTER_WAVE_COOLDOWN_SEC),
+        "spawn_mult": float(spawn_mult),
+        "systems_limit": int(systems_limit),
+        "max_concurrent": int(max_concurrent),
         "ttl_seconds": int(TTL_SECONDS),
         "active_count": len(active),
         "last_spawn_at": last_spawn,
