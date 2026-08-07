@@ -1,0 +1,495 @@
+{% extends "base.html" %}
+{% set sl = space_lottery if space_lottery is defined and space_lottery else {'ready': false} %}
+{% set tombola = sl.tombola if sl.tombola is defined else {} %}
+{% set caps = sl.caps if sl.caps is defined else {} %}
+{% set tk = sl.timekeeper if sl.timekeeper is defined else {} %}
+{% set winners = tombola.recent_winners if tombola.recent_winners is defined else [] %}
+{% set daily_by = caps.by_game if caps.by_game is defined else {} %}
+{% set daily_t = daily_by.tombola if daily_by.tombola is defined else {} %}
+{% set daily_m = daily_by.mines if daily_by.mines is defined else {} %}
+{% set daily_c = daily_by.crash if daily_by.crash is defined else {} %}
+{% set daily_w = daily_t.wagered_sec if daily_t.wagered_sec is defined else (caps.daily_wagered_sec or 0) %}
+{% set daily_cap = daily_t.cap_sec if daily_t.cap_sec is defined else (caps.daily_wager_cap_sec or 18000) %}
+{% set daily_mw = daily_m.wagered_sec or 0 %}
+{% set daily_mc = daily_m.cap_sec or 36000 %}
+{% set daily_cw = daily_c.wagered_sec or 0 %}
+{% set daily_cc = daily_c.cap_sec or 36000 %}
+{% if daily_cap > 0 %}
+  {% set daily_pct = (daily_w * 100 // daily_cap) %}
+  {% if daily_pct > 100 %}{% set daily_pct = 100 %}{% endif %}
+{% else %}
+  {% set daily_pct = 0 %}
+{% endif %}
+{% if daily_mc > 0 %}
+  {% set daily_mpct = (daily_mw * 100 // daily_mc) %}
+  {% if daily_mpct > 100 %}{% set daily_mpct = 100 %}{% endif %}
+{% else %}
+  {% set daily_mpct = 0 %}
+{% endif %}
+{% if daily_cc > 0 %}
+  {% set daily_cpct = (daily_cw * 100 // daily_cc) %}
+  {% if daily_cpct > 100 %}{% set daily_cpct = 100 %}{% endif %}
+{% else %}
+  {% set daily_cpct = 0 %}
+{% endif %}
+{% set _v = GC_ASSET_VERSION %}
+
+{% block content %}
+<div class="gc-page space-lottery-page sl-chamber"
+     id="space-lottery-page"
+     data-space-lottery-root
+     data-sl-ready="{{ 1 if sl.ready else 0 }}"
+     data-sl-server-now="{{ sl.server_now or 0 }}"
+     data-sl-ends-at="{{ tombola.ends_at or 0 }}">
+  <script type="application/json" id="space-lottery-page-state">{{ sl | tojson }}</script>
+
+  <header class="gc-page-header section-header sl-chamber-head">
+    <div class="sl-chamber-titles">
+      <p class="sl-chamber-kicker gc-mono">{{ T("sl_kicker", "IMPERIUM · CHRONO CHAMBER") }}</p>
+      <h2 class="sl-chamber-title">{{ T("sl_title", "Space Lottery") }}</h2>
+      <p class="sl-chamber-sub">{{ T("sl_subtitle", "Wochen-Tombola mit Imperiumszeit — serverseitig fair, nachprüfbar.") }}</p>
+    </div>
+    <div class="sl-chamber-meta">
+      <div class="sl-tk-pill gc-mono" data-sl-tk-balance>
+        <img class="sl-tk-pill-icon" src="{{ url_for('static', filename='img/lottery/sl-ticket.png', v=_v)|webp_static }}" alt="" width="28" height="28" decoding="async">
+        <span data-sl-tk-label>{{ tk.label if tk.label is defined else '0min' }}</span>
+      </div>
+    </div>
+  </header>
+
+  {% set modes = sl.modes if sl.modes is defined else {'tombola': true, 'mines': false, 'crash': false} %}
+  {% set tombola_only = (not modes.mines) and (not modes.crash) %}
+  <div class="sl-mode-bar{% if tombola_only %} is-tombola-only{% endif %}">
+    {% if not tombola_only %}
+    <nav class="sl-mode-tabs" data-sl-modes role="tablist" aria-label="{{ T('sl_modes_label', 'Spiele') }}">
+      <button type="button" class="sl-mode-tab is-active" data-sl-mode="tombola" role="tab" aria-selected="true">
+        {{ T("sl_mode_tombola", "Wochen-Tombola") }}
+      </button>
+      {% if modes.mines %}
+      <button type="button" class="sl-mode-tab" data-sl-mode="mines" role="tab" aria-selected="false">
+        {{ T("sl_mode_mines", "Void Mines") }}
+      </button>
+      {% endif %}
+      {% if modes.crash %}
+      <button type="button" class="sl-mode-tab" data-sl-mode="crash" role="tab" aria-selected="false">
+        {{ T("sl_mode_crash", "Orbit Crash") }}
+      </button>
+      {% endif %}
+    </nav>
+    {% endif %}
+    <div class="sl-mode-bar-meta gc-mono" data-sl-tombola-bar>
+      <span>{{ T("sl_my_tickets", "Meine Tickets") }}: <strong data-sl-my-tickets>{{ tombola.my_tickets or 0 }}</strong></span>
+    </div>
+  </div>
+
+  {# ---- Wochen-Tombola (mockup layout) ---- #}
+  <div class="sl-tombola-layout" data-sl-view="tombola">
+    <aside class="sl-panel sl-panel--rail gc-panel">
+      <div class="sl-countdown-block">
+        <p class="sl-countdown-label gc-mono">{{ T("sl_countdown_label", "Ziehung in") }}</p>
+        <p class="sl-countdown-value gc-mono" data-sl-countdown>—</p>
+        <p class="sl-countdown-hint gc-mono">{{ T("sl_draw_hint", "Jeden Sonntag 20:00 UTC") }}</p>
+      </div>
+
+      <div class="sl-stat-rows gc-mono">
+        <div class="sl-stat-row">
+          <span>{{ T("sl_week", "Woche") }}</span>
+          <strong data-sl-week>{{ tombola.week_id or '—' }}</strong>
+        </div>
+        <div class="sl-stat-row">
+          <span>{{ T("sl_my_tickets", "Meine Tickets") }}</span>
+          <strong data-sl-my-tickets-rail>{{ tombola.my_tickets or 0 }}</strong>
+        </div>
+        <div class="sl-stat-row">
+          <span>{{ T("sl_daily_tombola", "Tagesvolumen Tombola") }}</span>
+          <strong><span data-sl-daily-wagered>{{ daily_w|fmt_duration(2) }}</span> / <span data-sl-daily-cap>{{ daily_cap|fmt_duration(2) }}</span></strong>
+        </div>
+      </div>
+
+      <div class="sl-winners" data-sl-winners>
+        <h3 class="sl-panel-subtitle">{{ T("sl_recent_winners", "Letzte Gewinner") }}</h3>
+        <ul class="sl-winners-list" data-sl-winners-list>
+          {% for w in winners[:5] %}
+          <li class="sl-winner-row">
+            <span class="sl-winner-name">{{ w.winner_name }}</span>
+            <span class="sl-winner-pool gc-mono">{{ w.pool_label or (w.pool_sec|fmt_duration(2)) }}</span>
+            <span class="sl-winner-week gc-mono">{{ w.week_id }}</span>
+          </li>
+          {% else %}
+          <li class="sl-winner-empty gc-mono">{{ T("sl_no_winners", "Noch keine Ziehung.") }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </aside>
+
+    <section class="sl-panel sl-panel--hero gc-panel">
+      <p class="sl-hero-kicker gc-mono">{{ T("sl_grand_prize", "Hauptpreis") }}</p>
+      <div class="sl-holo-stage sl-holo-stage--tombola" data-sl-holo>
+        {# Chronosphäre bringt eigenen Sockel mit — kein zweites Pedestal darunter #}
+        <img class="sl-hero-img"
+             data-sl-hero
+             src="{{ url_for('static', filename='img/lottery/sl-chronosphere.png', v=_v)|webp_static }}"
+             alt="" width="420" height="420" decoding="async">
+      </div>
+      <h3 class="sl-hero-title">{{ T("sl_pool_title", "Wochen-Pool") }}</h3>
+      <p class="sl-pool-value gc-mono" data-sl-pool>{{ tombola.pool_label or ((tombola.pool_sec or 0)|fmt_duration(2)) }}</p>
+      <p class="sl-hero-note">{{ T("sl_pool_note", "100% der Ticket-Einsätze — der Gewinner erhält den gesamten Timekeeper-Pool.") }}</p>
+      <p class="sl-stage-status gc-mono" data-sl-status>{{ T("sl_status_idle", "Bereit.") }}</p>
+    </section>
+
+    <aside class="sl-panel sl-panel--buy gc-panel" id="sl-buy-panel" data-sl-controls>
+      <div class="sl-control-block" data-sl-block="tombola">
+        <h3 class="sl-panel-title">{{ T("sl_buy_tickets", "Tickets kaufen") }}</h3>
+        <p class="sl-panel-meta gc-mono">
+          {{ T("sl_ticket_price", "Preis") }}:
+          <span data-sl-ticket-unit>{{ (tombola.ticket_price_label if tombola.ticket_price_label is defined else none) or ((tombola.ticket_price_sec or 300)|fmt_duration(2)) }}</span>
+          <span class="sl-price-sep">·</span>
+          {{ T("sl_ticket_total", "Gesamt") }}:
+          <strong data-sl-ticket-price>{{ (tombola.ticket_price_label if tombola.ticket_price_label is defined else none) or ((tombola.ticket_price_sec or 300)|fmt_duration(2)) }}</strong>
+        </p>
+        <div class="sl-stepper" data-sl-ticket-stepper>
+          <button type="button" class="gc-btn gc-btn-sm" data-sl-ticket-dec aria-label="−">−</button>
+          <input type="number" class="gc-input sl-stepper-input" min="1" max="50" value="1" data-sl-ticket-count>
+          <button type="button" class="gc-btn gc-btn-sm" data-sl-ticket-inc aria-label="+">+</button>
+        </div>
+        <div class="sl-quick-select" data-sl-ticket-quick>
+          <button type="button" class="sl-quick-btn is-active" data-sl-ticket-preset="1">1</button>
+          <button type="button" class="sl-quick-btn" data-sl-ticket-preset="5">5</button>
+          <button type="button" class="sl-quick-btn" data-sl-ticket-preset="10">10</button>
+          <button type="button" class="sl-quick-btn" data-sl-ticket-preset="25">25</button>
+        </div>
+        <button type="button" class="gc-btn gc-btn-primary sl-buy-main" data-sl-tombola-buy>
+          {{ T("sl_buy_cta", "Ticket kaufen") }}
+          <span class="sl-buy-total gc-mono" data-sl-buy-total></span>
+        </button>
+        <button type="button" class="gc-btn gc-btn-sm sl-verify-btn" data-sl-verify-week disabled>
+          {{ T("sl_verify", "Seed prüfen") }}
+        </button>
+      </div>
+
+      <div class="sl-howto">
+        <h4 class="sl-panel-subtitle">{{ T("sl_howto_title", "Wie es funktioniert") }}</h4>
+        <ol class="sl-howto-list">
+          <li>{{ T("sl_howto_1", "Tickets mit Imperiumszeit kaufen.") }}</li>
+          <li>{{ T("sl_howto_2", "Jedes Ticket erhöht den Wochen-Pool.") }}</li>
+          <li>{{ T("sl_howto_3", "Ziehung Sonntag 20:00 UTC — Gewinnchance proportional.") }}</li>
+          <li>{{ T("sl_howto_4", "Gewinner erhält 100% des Timekeeper-Pools.") }}</li>
+        </ol>
+      </div>
+
+      <div class="sl-fairness-block">
+        <p class="sl-fairness-title gc-mono">{{ T("sl_fairness_title", "Fairness") }}</p>
+        <p class="sl-fairness-body">{{ T("sl_fairness_body", "HMAC-Seed commit vor der Ziehung. Nach dem Draw: Seed + Verify.") }}</p>
+        <p class="sl-fairness-hint gc-mono" data-sl-seed-hash>
+          {{ T("sl_hash_label", "HASH") }} · <span data-sl-hash-value>{{ tombola.seed_hash or '—' }}</span>
+        </p>
+      </div>
+    </aside>
+
+    <footer class="sl-daily-bar gc-panel" data-sl-daily-bar>
+      <img class="sl-daily-chip" src="{{ url_for('static', filename='img/lottery/sl-ticket.png', v=_v)|webp_static }}" alt="" width="36" height="36" decoding="async">
+      <div class="sl-daily-meta gc-mono">
+        <span data-sl-daily-label>{{ T("sl_daily_tombola", "Tagesvolumen Tombola") }}</span>
+        <strong><span data-sl-daily-wagered-bar>{{ daily_w|fmt_duration(2) }}</span> / <span data-sl-daily-cap-bar>{{ daily_cap|fmt_duration(2) }}</span></strong>
+      </div>
+      <div class="sl-daily-track">
+        <div class="sl-daily-fill" data-sl-daily-fill style="width: {{ daily_pct }}%;"></div>
+      </div>
+      <img class="sl-daily-chip sl-daily-chip--end" src="{{ url_for('static', filename='img/lottery/sl-chronosphere.png', v=_v)|webp_static }}" alt="" width="36" height="36" decoding="async">
+      <p class="sl-daily-foot gc-mono" data-sl-daily-foot>
+        {{ T("sl_tombola_footer", "Die Wochen-Tombola endet Sonntag 20:00 UTC.") }}
+      </p>
+    </footer>
+  </div>
+
+  {# ---- Void Mines (off live until product/legal OK) ---- #}
+  {% if modes.mines %}
+  {% set md = sl.mines_defaults if sl.mines_defaults is defined else {} %}
+  {% set mt = sl.mines_today if sl.mines_today is defined else {} %}
+  {% set mh = sl.mines_history if sl.mines_history is defined else [] %}
+  <div class="sl-mines-layout" data-sl-view="mines" hidden
+       data-sl-min-bet="{{ caps.min_bet_sec or 60 }}"
+       data-sl-max-bet="{{ caps.max_bet_sec or 3600 }}">
+    <img class="sl-asset-ref" hidden
+         data-sl-asset-ref
+         src="{{ url_for('static', filename='img/lottery/sl-tile-hidden.png', v=_v)|webp_static }}"
+         alt="" width="1" height="1">
+
+    <aside class="sl-panel sl-panel--mines-rail gc-panel">
+      <div class="sl-mines-history" data-sl-mines-history>
+        <h3 class="sl-panel-subtitle">{{ T("sl_mines_history", "Rundenverlauf") }}</h3>
+        <ul class="sl-mines-hist-list gc-mono" data-sl-mines-hist-list>
+          {% for h in mh[:10] %}
+          <li class="sl-mines-hist-row {% if h.status == 'cashed' %}is-win{% else %}is-bust{% endif %}" data-round-id="{{ h.id }}">
+            <span class="sl-mines-hist-dot" aria-hidden="true"></span>
+            <span class="sl-mines-hist-main">{% if h.status == 'cashed' %}{{ T("sl_hist_cashout", "cashout") }} · ×{{ '%.2f'|format(h.multiplier or 0) }}{% else %}{{ T("sl_hist_bust", "mine · bust") }}{% endif %}</span>
+            <span class="sl-mines-hist-ago" data-ago-sec="{{ h.ago_sec or 0 }}"></span>
+          </li>
+          {% else %}
+          <li class="sl-mines-hist-empty">{{ T("sl_mines_no_history", "Noch keine Mines-Runden.") }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div class="sl-mines-today" data-sl-mines-today>
+        <h3 class="sl-panel-subtitle">{{ T("sl_mines_today", "Heutige Statistik") }}</h3>
+        <div class="sl-stat-rows gc-mono">
+          <div class="sl-stat-row">
+            <span>{{ T("sl_mines_won_today", "Gewonnen heute") }}</span>
+            <strong data-sl-mines-won>{{ mt.won_label or (mt.won_sec|default(0)|fmt_duration(2)) }}</strong>
+          </div>
+          <div class="sl-stat-row">
+            <span>{{ T("sl_mines_best_mult", "Beste Serie") }}</span>
+            <strong data-sl-mines-best>×{% if mt.best_mult %}{{ '%.2f'|format(mt.best_mult) }}{% else %}—{% endif %}</strong>
+          </div>
+          <div class="sl-stat-row">
+            <span>{{ T("sl_mines_last_high", "Letzter Höchstfaktor") }}</span>
+            <strong data-sl-mines-last-high>×{% if mt.last_high_mult %}{{ '%.2f'|format(mt.last_high_mult) }}{% else %}—{% endif %}</strong>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <section class="sl-panel sl-panel--mines-stage gc-panel" data-sl-stage>
+      <header class="sl-mines-stage-head">
+        <h3 class="sl-mines-title">{{ T("sl_mines_title", "VOID MINES") }}</h3>
+        <p class="sl-mines-sub">{{ T("sl_mines_subtitle", "Finde sichere Felder und vermeide die Leerenminen.") }}</p>
+      </header>
+      <div class="sl-holo-stage sl-holo-stage--mines">
+        <img class="sl-pedestal-img"
+             src="{{ url_for('static', filename='img/lottery/sl-pedestal.png', v=_v)|webp_static }}"
+             alt="" width="512" height="512" decoding="async">
+        <div class="sl-mines-board" data-sl-mines-board aria-label="{{ T('sl_mines_board', 'Minenfeld') }}"></div>
+      </div>
+      <div class="sl-mines-progress" data-sl-mines-progress aria-hidden="true"></div>
+      <div class="sl-mines-hud" data-sl-mines-hud>
+        <div class="sl-mines-hud-card">
+          <span class="sl-mines-hud-label">{{ T("sl_mines_cur_mult", "Aktueller Multiplikator") }}</span>
+          <strong class="sl-mines-hud-val is-cyan gc-mono" data-sl-mines-cur-mult>×1.00</strong>
+        </div>
+        <div class="sl-mines-hud-card">
+          <span class="sl-mines-hud-label">{{ T("sl_mines_next_mult", "Nächster Fund") }}</span>
+          <strong class="sl-mines-hud-val gc-mono" data-sl-mines-next-mult>×—</strong>
+        </div>
+        <div class="sl-mines-hud-card">
+          <span class="sl-mines-hud-label">{{ T("sl_mines_pot_mult", "Gewinnpotenzial") }}</span>
+          <strong class="sl-mines-hud-val is-amber gc-mono" data-sl-mines-pot-mult>×—</strong>
+        </div>
+      </div>
+      <p class="sl-mines-hint">{{ T("sl_mines_hint", "Jedes weitere sichere Feld erhöht deinen Multiplikator.") }}</p>
+      <p class="sl-stage-status gc-mono" data-sl-status-mines>{{ T("sl_status_idle", "Bereit.") }}</p>
+    </section>
+
+    <aside class="sl-panel sl-panel--mines-ctrl gc-panel" data-sl-controls>
+      <div class="sl-control-block" data-sl-block="mines">
+        <h3 class="sl-panel-title sl-mines-ctrl-title">{{ T("sl_mode_mines", "Void Mines") }}</h3>
+
+        <label class="sl-field">
+          <span>{{ T("sl_bet", "Einsatz") }}</span>
+          <div class="sl-mines-bet-row">
+            <input type="number" class="gc-input sl-mines-bet-input"
+                   min="{{ caps.min_bet_sec or 60 }}"
+                   max="{{ caps.max_bet_sec or 3600 }}"
+                   step="60"
+                   value="{{ caps.min_bet_sec or 60 }}"
+                   data-sl-mines-bet>
+            <strong class="sl-mines-bet-preview gc-mono" data-sl-mines-bet-preview>—</strong>
+          </div>
+          <div class="sl-quick-select" data-sl-mines-bet-quick>
+            <button type="button" class="sl-quick-btn is-active" data-sl-mines-bet-preset="60">1min</button>
+            <button type="button" class="sl-quick-btn" data-sl-mines-bet-preset="300">5min</button>
+            <button type="button" class="sl-quick-btn" data-sl-mines-bet-preset="900">15min</button>
+            <button type="button" class="sl-quick-btn" data-sl-mines-bet-preset="1800">30min</button>
+            <button type="button" class="sl-quick-btn" data-sl-mines-bet-preset="3600">1h</button>
+          </div>
+        </label>
+
+        <label class="sl-field">
+          <span>{{ T("sl_mine_count", "Minen") }}</span>
+          <div class="sl-stepper" data-sl-mines-stepper>
+            <button type="button" class="gc-btn gc-btn-sm" data-sl-mines-dec aria-label="−">−</button>
+            <input type="number" class="gc-input sl-stepper-input" min="{{ md.min_mines or 1 }}" max="{{ md.max_mines or 10 }}" value="{{ md.mine_count or 3 }}" data-sl-mines-count>
+            <button type="button" class="gc-btn gc-btn-sm" data-sl-mines-inc aria-label="+">+</button>
+          </div>
+          <input type="range" class="sl-mines-range" min="{{ md.min_mines or 1 }}" max="{{ md.max_mines or 10 }}" value="{{ md.mine_count or 3 }}" data-sl-mines-range>
+        </label>
+
+        <div class="sl-mines-live gc-mono" data-sl-mines-live>
+          <div class="sl-stat-row">
+            <span>{{ T("sl_mines_hits", "Treffer (sichere Felder)") }}</span>
+            <strong data-sl-mines-hits>0 / {{ md.max_safe or 22 }}</strong>
+          </div>
+          <div class="sl-stat-row">
+            <span>{{ T("sl_mines_cur_mult", "Aktueller Multiplikator") }}</span>
+            <strong class="is-cyan" data-sl-mines-live-mult>×1.00</strong>
+          </div>
+          <div class="sl-stat-row">
+            <span>{{ T("sl_mines_cashout_val", "Möglicher Cashout") }}</span>
+            <strong class="is-amber" data-sl-mines-live-payout>—</strong>
+          </div>
+        </div>
+
+        <div class="sl-btn-row sl-mines-actions">
+          <button type="button" class="gc-btn gc-btn-primary sl-mines-start-btn" data-sl-mines-start>{{ T("sl_start", "Start") }}</button>
+          <button type="button" class="gc-btn sl-mines-cashout-btn" data-sl-mines-cashout disabled>{{ T("sl_cashout", "Cashout") }}</button>
+        </div>
+        <button type="button" class="gc-btn gc-btn-sm sl-verify-btn" data-sl-verify disabled>{{ T("sl_verify", "Seed prüfen") }}</button>
+
+        <div class="sl-fairness-block">
+          <p class="sl-fairness-title gc-mono">{{ T("sl_fairness_title", "Fairness") }}</p>
+          <p class="sl-fairness-body">{{ T("sl_mines_fairness", "HMAC-Seed commit vor dem Start. Nach Cashout/Bust: Seed + Verify.") }}</p>
+        </div>
+
+        <div class="sl-module-daily" data-sl-daily-mines>
+          <div class="sl-module-daily-meta gc-mono">
+            <span>{{ T("sl_daily_mines", "Tagesvolumen Mines") }}</span>
+            <strong><span data-sl-daily-mines-wagered>{{ daily_mw|fmt_duration(2) }}</span> / <span data-sl-daily-mines-cap>{{ daily_mc|fmt_duration(2) }}</span></strong>
+          </div>
+          <div class="sl-daily-track sl-module-daily-track">
+            <div class="sl-daily-fill" data-sl-daily-mines-fill style="width: {{ daily_mpct }}%;"></div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+  {% endif %}
+
+  {# ---- Orbit Crash (off live until product/legal OK) ---- #}
+  {% if modes.crash %}
+  {% set ct = sl.crash_today if sl.crash_today is defined else {} %}
+  {% set ch = sl.crash_history if sl.crash_history is defined else [] %}
+  <div class="sl-crash-layout" data-sl-view="crash" hidden
+       data-sl-min-bet="{{ caps.min_bet_sec or 60 }}"
+       data-sl-max-bet="{{ caps.max_bet_sec or 3600 }}">
+    <aside class="sl-panel sl-panel--crash-rail gc-panel">
+      <div class="sl-crash-history" data-sl-crash-history>
+        <h3 class="sl-panel-subtitle">{{ T("sl_crash_history", "Rundenverlauf") }}</h3>
+        <ul class="sl-crash-hist-list gc-mono" data-sl-crash-hist-list>
+          {% for h in ch[:25] %}
+          <li class="sl-crash-hist-row {% if h.status == 'cashed' %}is-win{% else %}is-bust{% endif %}" data-round-id="{{ h.id }}">
+            <span class="sl-crash-hist-dot" aria-hidden="true"></span>
+            <span class="sl-crash-hist-main">{% if h.status == 'cashed' %}{{ T("sl_hist_cashout", "cashout") }} · ×{{ '%.2f'|format(h.cashout_mult or h.multiplier or 0) }}{% if h.crash_point and (h.cashout_mult or h.multiplier) and (h.crash_point|float) > ((h.cashout_mult or h.multiplier)|float) + 0.009 %} → {{ T("sl_crash_at", "crash") }} ×{{ '%.2f'|format(h.crash_point) }}{% endif %}{% else %}{{ T("sl_hist_crash_bust", "crash · bust") }}{% if h.crash_point or h.multiplier %} · ×{{ '%.2f'|format(h.crash_point or h.multiplier) }}{% endif %}{% endif %}</span>
+            <span class="sl-crash-hist-ago" data-ago-sec="{{ h.ago_sec or 0 }}"></span>
+          </li>
+          {% else %}
+          <li class="sl-crash-hist-empty">{{ T("sl_crash_no_history", "Noch keine Crash-Runden.") }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div class="sl-crash-today" data-sl-crash-today>
+        <h3 class="sl-panel-subtitle">{{ T("sl_crash_today", "Heutige Statistik") }}</h3>
+        <div class="sl-stat-rows gc-mono">
+          <div class="sl-stat-row">
+            <span>{{ T("sl_crash_won_today", "Gewonnen heute") }}</span>
+            <strong data-sl-crash-won>{{ ct.won_label or (ct.won_sec|default(0)|fmt_duration(2)) }}</strong>
+          </div>
+          <div class="sl-stat-row">
+            <span>{{ T("sl_crash_best_mult", "Bester Cashout") }}</span>
+            <strong data-sl-crash-best>×{% if ct.best_mult %}{{ '%.2f'|format(ct.best_mult) }}{% else %}—{% endif %}</strong>
+          </div>
+          <div class="sl-stat-row">
+            <span>{{ T("sl_crash_last_high", "Letzter Höchstfaktor") }}</span>
+            <strong data-sl-crash-last-high>×{% if ct.last_high_mult %}{{ '%.2f'|format(ct.last_high_mult) }}{% else %}—{% endif %}</strong>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <section class="sl-panel sl-panel--crash-stage gc-panel" data-sl-crash-stage>
+      <div class="sl-crash-flight-zone" data-sl-crash-arena>
+        <svg class="sl-crash-graph" viewBox="0 0 1000 560" preserveAspectRatio="none" aria-hidden="true">
+          <path class="sl-crash-graph-ghost" data-sl-crash-ghost d="" fill="none"></path>
+          <path class="sl-crash-graph-fill" data-sl-crash-fill d=""></path>
+          <path class="sl-crash-graph-line" data-sl-crash-curve d="" fill="none"></path>
+        </svg>
+        <img class="sl-crash-ship"
+             data-sl-crash-probe
+             src="{{ url_for('static', filename='img/lottery/sl-crash-ship.png', v=_v)|webp_static }}"
+             alt="" width="120" height="120" decoding="async">
+        <div class="sl-crash-flash" data-sl-crash-flash aria-hidden="true"></div>
+        <div class="sl-crash-overlay">
+          <p class="sl-crash-title-inline">{{ T("sl_crash_title", "ORBIT CRASH") }}</p>
+          <p class="sl-crash-mult-display gc-mono" data-sl-crash-mult>×1.00</p>
+          <div class="sl-crash-payout-chip">
+            <span class="sl-crash-payout-label">{{ T("sl_crash_live_payout", "Möglicher Cashout") }}</span>
+            <strong class="sl-crash-payout-val gc-mono" data-sl-crash-hud-payout>—</strong>
+          </div>
+          <p class="sl-crash-reveal gc-mono" data-sl-crash-reveal hidden></p>
+        </div>
+        <p class="sl-crash-status-inline gc-mono" data-sl-status-crash>{{ T("sl_status_idle", "Bereit.") }}</p>
+      </div>
+    </section>
+
+    <aside class="sl-panel sl-panel--crash-ctrl gc-panel">
+      <div class="sl-control-block" data-sl-block="crash">
+        <h3 class="sl-panel-title sl-crash-ctrl-title">{{ T("sl_mode_crash", "Orbit Crash") }}</h3>
+
+        <label class="sl-field">
+          <span>{{ T("sl_bet", "Einsatz") }}</span>
+          <div class="sl-mines-bet-row">
+            <input type="number" class="gc-input sl-mines-bet-input"
+                   min="{{ caps.min_bet_sec or 60 }}"
+                   max="{{ caps.max_bet_sec or 3600 }}"
+                   step="60"
+                   value="{{ caps.min_bet_sec or 60 }}"
+                   data-sl-crash-bet>
+            <strong class="sl-mines-bet-preview gc-mono" data-sl-crash-bet-preview>—</strong>
+          </div>
+          <div class="sl-crash-bet-tools">
+            <button type="button" class="sl-quick-btn" data-sl-crash-bet-half>{{ T("sl_crash_bet_half", "½") }}</button>
+            <button type="button" class="sl-quick-btn" data-sl-crash-bet-double>{{ T("sl_crash_bet_double", "2×") }}</button>
+          </div>
+          <div class="sl-quick-select" data-sl-crash-bet-quick>
+            <button type="button" class="sl-quick-btn is-active" data-sl-crash-bet-preset="60">1min</button>
+            <button type="button" class="sl-quick-btn" data-sl-crash-bet-preset="300">5min</button>
+            <button type="button" class="sl-quick-btn" data-sl-crash-bet-preset="900">15min</button>
+            <button type="button" class="sl-quick-btn" data-sl-crash-bet-preset="1800">30min</button>
+            <button type="button" class="sl-quick-btn" data-sl-crash-bet-preset="3600">1h</button>
+          </div>
+        </label>
+
+        <label class="sl-field sl-crash-auto-field">
+          <span>{{ T("sl_crash_auto", "Auto-Cashout") }}</span>
+          <div class="sl-crash-auto-row">
+            <input type="number" class="gc-input sl-crash-auto-input"
+                   min="1.01" max="1000" step="0.01" value=""
+                   placeholder="×"
+                   data-sl-crash-auto>
+            <button type="button" class="sl-quick-btn is-active" data-sl-crash-auto-preset="0">{{ T("sl_crash_auto_off", "Aus") }}</button>
+          </div>
+          <div class="sl-quick-select" data-sl-crash-auto-quick>
+            <button type="button" class="sl-quick-btn" data-sl-crash-auto-preset="1.5">×1.5</button>
+            <button type="button" class="sl-quick-btn" data-sl-crash-auto-preset="2">×2</button>
+            <button type="button" class="sl-quick-btn" data-sl-crash-auto-preset="3">×3</button>
+            <button type="button" class="sl-quick-btn" data-sl-crash-auto-preset="5">×5</button>
+            <button type="button" class="sl-quick-btn" data-sl-crash-auto-preset="10">×10</button>
+          </div>
+          <p class="sl-crash-auto-hint">{{ T("sl_crash_auto_hint", "Cashout automatisch beim Ziel-Multiplikator.") }}</p>
+        </label>
+
+        <div class="sl-crash-actions">
+          <button type="button" class="gc-btn gc-btn-primary sl-crash-start-btn" data-sl-crash-start>{{ T("sl_start", "Start") }}</button>
+          <button type="button" class="gc-btn sl-crash-cashout-btn" data-sl-crash-cashout disabled>{{ T("sl_cashout", "Cashout") }}</button>
+          <p class="sl-crash-hotkey gc-mono">{{ T("sl_crash_hotkey", "Leertaste = Cashout") }}</p>
+        </div>
+        <button type="button" class="gc-btn gc-btn-sm sl-verify-btn" data-sl-verify-crash disabled>{{ T("sl_verify", "Seed prüfen") }}</button>
+
+        <div class="sl-fairness-block">
+          <p class="sl-fairness-title gc-mono">{{ T("sl_fairness_title", "Fairness") }}</p>
+          <p class="sl-fairness-body">{{ T("sl_crash_fairness", "HMAC-Seed commit vor dem Start. Nach Cashout/Crash: Seed + Verify.") }}</p>
+        </div>
+
+        <div class="sl-module-daily" data-sl-daily-crash>
+          <div class="sl-module-daily-meta gc-mono">
+            <span>{{ T("sl_daily_crash", "Tagesvolumen Crash") }}</span>
+            <strong><span data-sl-daily-crash-wagered>{{ daily_cw|fmt_duration(2) }}</span> / <span data-sl-daily-crash-cap>{{ daily_cc|fmt_duration(2) }}</span></strong>
+          </div>
+          <div class="sl-daily-track sl-module-daily-track">
+            <div class="sl-daily-fill" data-sl-daily-crash-fill style="width: {{ daily_cpct }}%;"></div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

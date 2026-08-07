@@ -2551,6 +2551,7 @@
     if (path.endsWith("/skilltree")) return "skilltree";
     if (path.endsWith("/premium")) return "premium";
     if (path.endsWith("/shop") || path.endsWith("/shop/return")) return "shop";
+    if (path.endsWith("/space-lottery")) return "space_lottery";
     if (path.endsWith("/creator")) return "creator";
     if (path === "/alliance" || /^\/alliance\/\d+$/.test(path)) return "alliance";
     if (path.endsWith("/shipyard")) return "shipyard";
@@ -21993,6 +21994,1092 @@
     _shopRefreshCart();
   }
 
+  /* EPIC-28 / GC-2807 — Space Lottery / Chrono Chamber */
+  function initSpaceLottery() {
+    const root = document.querySelector("[data-space-lottery-root]");
+    if (!root) return;
+    let state = {};
+    try {
+      const el = document.getElementById("space-lottery-page-state");
+      state = el ? JSON.parse(el.textContent || "{}") : {};
+    } catch (_) {
+      state = {};
+    }
+
+    let mode = "tombola";
+    let crashRaf = 0;
+    let crashRevealRaf = 0;
+    let crashStart = 0;
+    let crashBustMs = 0;
+    let crashMult = 1;
+    let crashAutoTarget = 0;
+    let crashCashoutPending = false;
+    let lastCrashRevealId = 0;
+    let lastSettledId = 0;
+    let countdownTimer = 0;
+    let endsAt = Number(root.getAttribute("data-sl-ends-at") || 0);
+    let serverSkew = 0;
+    const serverNowAttr = Number(root.getAttribute("data-sl-server-now") || 0);
+    if (serverNowAttr > 0) serverSkew = serverNowAttr - Date.now() / 1000;
+
+    function imgUrl(name) {
+      const ref = root.querySelector("[data-sl-asset-ref]") || root.querySelector(".sl-pedestal-img");
+      const src = ref ? ref.getAttribute("src") || "" : "";
+      if (/sl-[a-z0-9_-]+\.(webp|png)/i.test(src)) {
+        return src.replace(/sl-[a-z0-9_-]+\.(webp|png)/i, name);
+      }
+      return `/static/img/lottery/${name}`;
+    }
+
+    function fmtMult(v) {
+      const n = Number(v);
+      if (!Number.isFinite(n) || n <= 0) return "—";
+      return `×${n.toFixed(2)}`;
+    }
+
+    function fmtAgo(sec) {
+      const s = Math.max(0, Math.floor(Number(sec) || 0));
+      if (s < 60) return t("sl_ago_sec", "Gerade eben");
+      if (s < 3600) {
+        const m = Math.floor(s / 60);
+        return t("sl_ago_min", "Vor {n} Min").replace("{n}", String(m));
+      }
+      const h = Math.floor(s / 3600);
+      return t("sl_ago_hour", "Vor {n} Std").replace("{n}", String(h));
+    }
+
+    function nowSec() {
+      return Date.now() / 1000 + serverSkew;
+    }
+
+    function formatCountdown(sec) {
+      const s = Math.max(0, Math.floor(sec));
+      const d = Math.floor(s / 86400);
+      const h = Math.floor((s % 86400) / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const r = s % 60;
+      return `${d}T ${String(h).padStart(2, "0")}H ${String(m).padStart(2, "0")}M ${String(r).padStart(2, "0")}S`;
+    }
+
+    function tickCountdown() {
+      const el = root.querySelector("[data-sl-countdown]");
+      if (!el) return;
+      const rem = endsAt > 0 ? endsAt - nowSec() : 0;
+      el.textContent = formatCountdown(rem);
+    }
+
+    function setStatus(msg) {
+      root.querySelectorAll("[data-sl-status], [data-sl-status-mines], [data-sl-status-crash]").forEach((el) => {
+        if (mode === "tombola" && el.hasAttribute("data-sl-status")) el.textContent = msg || "";
+        if (mode === "mines" && el.hasAttribute("data-sl-status-mines")) el.textContent = msg || "";
+        if (mode === "crash" && el.hasAttribute("data-sl-status-crash")) el.textContent = msg || "";
+      });
+    }
+
+    function setTicketCount(n) {
+      const input = root.querySelector("[data-sl-ticket-count]");
+      if (!input) return;
+      const v = Math.max(1, Math.min(50, Number(n) || 1));
+      input.value = String(v);
+      root.querySelectorAll("[data-sl-ticket-preset]").forEach((btn) => {
+        btn.classList.toggle("is-active", Number(btn.getAttribute("data-sl-ticket-preset")) === v);
+      });
+      updateTicketTotal();
+    }
+
+    function ticketUnitSec() {
+      const tombola = (state && state.tombola) || {};
+      return Math.max(0, Number(tombola.ticket_price_sec || 300));
+    }
+
+    function updateTicketTotal() {
+      const n = Math.max(1, Math.min(50, parseInt(root.querySelector("[data-sl-ticket-count]")?.value || "1", 10) || 1));
+      const unit = ticketUnitSec();
+      const total = unit * n;
+      const totalLabel = fmtTk(total);
+      const unitLabel = fmtTk(unit);
+      const unitEl = root.querySelector("[data-sl-ticket-unit]");
+      if (unitEl) unitEl.textContent = unitLabel;
+      const totalEl = root.querySelector("[data-sl-ticket-price]");
+      if (totalEl) totalEl.textContent = totalLabel;
+      const buyTotal = root.querySelector("[data-sl-buy-total]");
+      if (buyTotal) {
+        buyTotal.textContent = n > 1 ? `· ${totalLabel}` : "";
+      }
+    }
+
+    function minesBetBounds() {
+      const layout = root.querySelector(".sl-mines-layout");
+      const minB = Number(layout?.getAttribute("data-sl-min-bet") || 60);
+      const maxB = Number(layout?.getAttribute("data-sl-max-bet") || 3600);
+      return { min: minB, max: maxB };
+    }
+
+    function setMinesBet(sec) {
+      const { min, max } = minesBetBounds();
+      const v = Math.max(min, Math.min(max, Math.round(Number(sec) || min)));
+      const input = root.querySelector("[data-sl-mines-bet]");
+      if (input) input.value = String(v);
+      const preview = root.querySelector("[data-sl-mines-bet-preview]");
+      if (preview) preview.textContent = fmtTk(v);
+      root.querySelectorAll("[data-sl-mines-bet-preset]").forEach((btn) => {
+        btn.classList.toggle("is-active", Number(btn.getAttribute("data-sl-mines-bet-preset")) === v);
+      });
+    }
+
+    function setMineCount(n) {
+      const defs = (state && state.mines_defaults) || {};
+      const minM = Number(defs.min_mines || 1);
+      const maxM = Number(defs.max_mines || 10);
+      const v = Math.max(minM, Math.min(maxM, Number(n) || minM));
+      const input = root.querySelector("[data-sl-mines-count]");
+      if (input) input.value = String(v);
+      const range = root.querySelector("[data-sl-mines-range]");
+      if (range) range.value = String(v);
+      updateIdleMinesHud();
+    }
+
+    function renderWinners(list) {
+      const ul = root.querySelector("[data-sl-winners-list]");
+      if (!ul) return;
+      const rows = Array.isArray(list) ? list : [];
+      if (!rows.length) {
+        ul.innerHTML = `<li class="sl-winner-empty gc-mono">${t("sl_no_winners", "Noch keine Ziehung.")}</li>`;
+        return;
+      }
+      ul.innerHTML = rows
+        .slice(0, 5)
+        .map((w) => {
+          const name = String(w.winner_name || "—");
+          const pool = String(w.pool_label || fmtTk(w.pool_sec));
+          const week = String(w.week_id || "");
+          return `<li class="sl-winner-row"><span class="sl-winner-name">${name}</span><span class="sl-winner-pool gc-mono">${pool}</span><span class="sl-winner-week gc-mono">${week}</span></li>`;
+        })
+        .join("");
+    }
+
+    function fmtTk(sec) {
+      if (typeof formatDurationHuman === "function") return formatDurationHuman(sec, 2);
+      if (typeof GC.formatDurationHuman === "function") return GC.formatDurationHuman(sec, 2);
+      return `${Math.max(0, Math.floor(Number(sec) || 0))}s`;
+    }
+
+    function renderHistory(hist) {
+      // Legacy crash list removed — use renderCrashHistory.
+      void hist;
+    }
+
+    function crashMultBand(mult) {
+      const m = Number(mult) || 0;
+      if (m >= 100) return "band-gold";
+      if (m >= 20) return "band-purple";
+      if (m >= 5) return "band-green";
+      if (m >= 2) return "band-yellow";
+      if (m >= 1.5) return "band-orange";
+      return "";
+    }
+
+    function renderCrashHistory(list) {
+      const ul = root.querySelector("[data-sl-crash-hist-list]");
+      if (!ul) return;
+      const rows = Array.isArray(list) ? list : [];
+      if (!rows.length) {
+        ul.innerHTML = `<li class="sl-crash-hist-empty">${t("sl_crash_no_history", "Noch keine Crash-Runden.")}</li>`;
+        return;
+      }
+      ul.innerHTML = rows
+        .slice(0, 25)
+        .map((h) => {
+          const win = h.status === "cashed";
+          const cashMult = Number(h.cashout_mult != null ? h.cashout_mult : h.multiplier) || 0;
+          const crashAt = Number(h.crash_point) || 0;
+          const band = crashMultBand(win ? cashMult : crashAt || h.multiplier);
+          let main;
+          if (win) {
+            main = `${t("sl_hist_cashout", "cashout")} · ${fmtMult(cashMult)}`;
+            if (crashAt > cashMult + 0.009) {
+              main += ` → ${t("sl_crash_at", "crash")} ${fmtMult(crashAt)}`;
+            }
+          } else {
+            main = `${t("sl_hist_crash_bust", "crash · bust")}${crashAt || h.multiplier ? ` · ${fmtMult(crashAt || h.multiplier)}` : ""}`;
+          }
+          return `<li class="sl-crash-hist-row ${win ? "is-win" : "is-bust"} ${band}" data-round-id="${h.id}">
+            <span class="sl-crash-hist-dot" aria-hidden="true"></span>
+            <span class="sl-crash-hist-main">${main}</span>
+            <span class="sl-crash-hist-ago">${fmtAgo(h.ago_sec)}</span>
+          </li>`;
+        })
+        .join("");
+    }
+
+    function renderCrashToday(today) {
+      const d = today || {};
+      const won = root.querySelector("[data-sl-crash-won]");
+      if (won) won.textContent = d.won_label || fmtTk(d.won_sec || 0);
+      const best = root.querySelector("[data-sl-crash-best]");
+      if (best) best.textContent = d.best_mult ? fmtMult(d.best_mult) : "—";
+      const last = root.querySelector("[data-sl-crash-last-high]");
+      if (last) last.textContent = d.last_high_mult ? fmtMult(d.last_high_mult) : "—";
+    }
+
+    function crashBetBounds() {
+      const layout = root.querySelector(".sl-crash-layout");
+      const minB = Number(layout?.getAttribute("data-sl-min-bet") || 60);
+      const maxB = Number(layout?.getAttribute("data-sl-max-bet") || 3600);
+      return { min: minB, max: maxB };
+    }
+
+    function setCrashBet(sec) {
+      const { min, max } = crashBetBounds();
+      const v = Math.max(min, Math.min(max, Math.round(Number(sec) || min)));
+      const input = root.querySelector("[data-sl-crash-bet]");
+      if (input) input.value = String(v);
+      const preview = root.querySelector("[data-sl-crash-bet-preview]");
+      if (preview) preview.textContent = fmtTk(v);
+      root.querySelectorAll("[data-sl-crash-bet-preset]").forEach((btn) => {
+        btn.classList.toggle("is-active", Number(btn.getAttribute("data-sl-crash-bet-preset")) === v);
+      });
+    }
+
+    function setCrashAuto(raw) {
+      const n = Number(raw);
+      if (!Number.isFinite(n) || n <= 0) {
+        crashAutoTarget = 0;
+      } else {
+        crashAutoTarget = Math.max(1.01, Math.min(1000, Math.floor(n * 100) / 100));
+      }
+      const input = root.querySelector("[data-sl-crash-auto]");
+      if (input) input.value = crashAutoTarget > 0 ? String(crashAutoTarget) : "";
+      root.querySelectorAll("[data-sl-crash-auto-preset]").forEach((btn) => {
+        const p = Number(btn.getAttribute("data-sl-crash-auto-preset"));
+        const on = crashAutoTarget <= 0 ? p === 0 : Math.abs(p - crashAutoTarget) < 0.001;
+        btn.classList.toggle("is-active", on);
+      });
+    }
+
+    function requestCrashCashout() {
+      if (crashCashoutPending || !crashRaf) return false;
+      const cash = root.querySelector("[data-sl-crash-cashout]");
+      if (cash && cash.disabled) return false;
+      crashCashoutPending = true;
+      stopCrash();
+      if (cash) cash.disabled = true;
+      playCrashSfx("cashout");
+      const mult = Number(crashMult.toFixed(2));
+      void postAction("/api/space-lottery/crash/cashout", { multiplier: mult }).finally(() => {
+        crashCashoutPending = false;
+      });
+      return true;
+    }
+
+    function playCrashSfx(kind) {
+      try {
+        const volFn = typeof GC.sfxVolumeForKind === "function" ? GC.sfxVolumeForKind : null;
+        const base = kind === "bust" ? 0.24 : kind === "tick" ? 0.1 : 0.18;
+        const volume = volFn ? volFn("ui", base) : base;
+        if (!(volume > 0)) return;
+        const map = {
+          start: "/static/sounds/lottery/crash_start.wav",
+          tick: "/static/sounds/lottery/crash_tick.wav",
+          cashout: "/static/sounds/lottery/crash_cashout.wav",
+          bust: "/static/sounds/lottery/crash_bust.wav",
+        };
+        const src = map[kind];
+        if (!src) return;
+        const audio = new Audio(src);
+        audio.volume = Math.min(1, volume);
+        audio.play().catch(() => {});
+      } catch (_) {}
+    }
+
+    function renderMinesHistory(list) {
+      const ul = root.querySelector("[data-sl-mines-hist-list]");
+      if (!ul) return;
+      const rows = Array.isArray(list) ? list : [];
+      if (!rows.length) {
+        ul.innerHTML = `<li class="sl-mines-hist-empty">${t("sl_mines_no_history", "Noch keine Mines-Runden.")}</li>`;
+        return;
+      }
+      ul.innerHTML = rows
+        .slice(0, 10)
+        .map((h) => {
+          const win = h.status === "cashed";
+          const main = win
+            ? `${t("sl_hist_cashout", "cashout")} · ${fmtMult(h.multiplier)}`
+            : t("sl_hist_bust", "mine · bust");
+          return `<li class="sl-mines-hist-row ${win ? "is-win" : "is-bust"}" data-round-id="${h.id}">
+            <span class="sl-mines-hist-dot" aria-hidden="true"></span>
+            <span class="sl-mines-hist-main">${main}</span>
+            <span class="sl-mines-hist-ago">${fmtAgo(h.ago_sec)}</span>
+          </li>`;
+        })
+        .join("");
+    }
+
+    function renderMinesToday(today) {
+      const d = today || {};
+      const won = root.querySelector("[data-sl-mines-won]");
+      if (won) won.textContent = d.won_label || fmtTk(d.won_sec || 0);
+      const best = root.querySelector("[data-sl-mines-best]");
+      if (best) best.textContent = d.best_mult ? fmtMult(d.best_mult) : "—";
+      const last = root.querySelector("[data-sl-mines-last-high]");
+      if (last) last.textContent = d.last_high_mult ? fmtMult(d.last_high_mult) : "—";
+    }
+
+    function applyDailyBar(caps) {
+      const byGame = (caps && caps.by_game) || {};
+      const defaults = { tombola: 18000, mines: 36000, crash: 36000 };
+      const applySlice = (game, slice, wageredSels, capSels, fillSel) => {
+        const s = slice && typeof slice === "object" ? slice : {};
+        const wagered = Math.max(0, Number(s.wagered_sec || 0));
+        const capRaw = Number(s.cap_sec || 0);
+        const cap = capRaw > 0 ? capRaw : Number(defaults[game] || 0);
+        const pct = cap > 0 ? Math.min(100, Math.floor((wagered * 100) / cap)) : 0;
+        const wageredLabel = s.wagered_label || fmtTk(wagered);
+        const capLabel = (capRaw > 0 && s.cap_label) ? s.cap_label : fmtTk(cap);
+        root.querySelectorAll(wageredSels).forEach((el) => {
+          el.textContent = wageredLabel;
+        });
+        root.querySelectorAll(capSels).forEach((el) => {
+          el.textContent = capLabel;
+        });
+        const fill = root.querySelector(fillSel);
+        if (fill) fill.style.width = `${pct}%`;
+      };
+      const tombola = byGame.tombola || {
+        wagered_sec: caps.daily_wagered_sec,
+        cap_sec: caps.daily_wager_cap_sec,
+        wagered_label: caps.daily_wagered_label,
+        cap_label: caps.daily_wager_cap_label,
+      };
+      applySlice(
+        "tombola",
+        tombola,
+        "[data-sl-daily-wagered], [data-sl-daily-wagered-bar]",
+        "[data-sl-daily-cap], [data-sl-daily-cap-bar]",
+        "[data-sl-daily-fill]"
+      );
+      applySlice(
+        "mines",
+        byGame.mines || {},
+        "[data-sl-daily-mines-wagered]",
+        "[data-sl-daily-mines-cap]",
+        "[data-sl-daily-mines-fill]"
+      );
+      applySlice(
+        "crash",
+        byGame.crash || {},
+        "[data-sl-daily-crash-wagered]",
+        "[data-sl-daily-crash-cap]",
+        "[data-sl-daily-crash-fill]"
+      );
+    }
+
+    function playMinesSfx(kind) {
+      try {
+        const volFn = typeof GC.sfxVolumeForKind === "function" ? GC.sfxVolumeForKind : null;
+        const volume = volFn ? volFn("ui", kind === "bust" ? 0.22 : 0.16) : 0.12;
+        if (!(volume > 0)) return;
+        const src =
+          kind === "bust"
+            ? "/static/sounds/lottery/mines_bust.wav"
+            : "/static/sounds/lottery/mines_safe.wav";
+        const audio = new Audio(src);
+        audio.volume = Math.min(1, volume);
+        audio.play().catch(() => {});
+      } catch (_) {}
+    }
+
+    function safeTileName(roundId, cell) {
+      const variants = ["sl-tile-safe-a.webp", "sl-tile-safe-b.webp", "sl-tile-safe-c.webp"];
+      const idx = Math.abs((Number(roundId) || 0) * 31 + Number(cell) * 17) % 3;
+      return variants[idx];
+    }
+
+    function updateMinesHud(m, betSec, opts) {
+      const options = opts || {};
+      const hits = Number(m.hits || 0);
+      const maxSafe = Number(m.max_safe || 0);
+      const cur = Number(m.multiplier || 1);
+      const next = Number(m.next_multiplier || 0);
+      const pot = Number(m.potential_multiplier || 0);
+      const payoutLabel = m.payout_label || fmtTk(m.payout_sec || Math.round((betSec || 0) * cur));
+      const setTxt = (sel, txt) => {
+        const el = root.querySelector(sel);
+        if (el) el.textContent = txt;
+      };
+      setTxt("[data-sl-mines-cur-mult]", fmtMult(cur));
+      setTxt(
+        "[data-sl-mines-next-mult]",
+        next > 0 && !(hits >= maxSafe && maxSafe > 0) ? fmtMult(next) : "—"
+      );
+      setTxt("[data-sl-mines-pot-mult]", pot > 0 ? fmtMult(pot) : "—");
+      setTxt("[data-sl-mines-hits]", `${hits} / ${maxSafe || "—"}`);
+      setTxt("[data-sl-mines-live-mult]", fmtMult(cur));
+      setTxt("[data-sl-mines-live-payout]", hits > 0 ? (payoutLabel || "—") : "—");
+
+      const prog = root.querySelector("[data-sl-mines-progress]");
+      if (prog) {
+        if (options.showProgress === false || maxSafe <= 0) {
+          prog.innerHTML = "";
+          prog.hidden = true;
+        } else {
+          prog.hidden = false;
+          // Cap visual dots so the stage stays clean (mockup ~10).
+          const maxDots = Math.min(12, maxSafe);
+          const filledDots = maxSafe > 0 ? Math.round((hits / maxSafe) * maxDots) : 0;
+          let html = "";
+          for (let i = 0; i < maxDots; i += 1) {
+            html += `<span class="sl-mines-dot${i < filledDots ? " is-filled" : ""}"></span>`;
+          }
+          prog.innerHTML = html;
+        }
+      }
+    }
+
+    function updateIdleMinesHud() {
+      const ar = state && state.active_round;
+      if (ar && ar.game === "mines" && ar.status === "active") return;
+      const defs = (state && state.mines_defaults) || {};
+      const mineCount = parseInt(root.querySelector("[data-sl-mines-count]")?.value || String(defs.mine_count || 3), 10) || 3;
+      const grid = Number(defs.grid || 25);
+      const maxSafe = Math.max(0, grid - mineCount);
+      const byMines = defs.potential_by_mines || {};
+      const nextBy = defs.next_by_mines || {};
+      const pot = Number(byMines[String(mineCount)] || defs.potential_multiplier || 0);
+      const next = Number(nextBy[String(mineCount)] || 0);
+      updateMinesHud(
+        {
+          hits: 0,
+          max_safe: maxSafe,
+          multiplier: 1,
+          next_multiplier: next,
+          potential_multiplier: pot,
+          payout_sec: 0,
+          payout_label: "—",
+        },
+        0,
+        { showProgress: false }
+      );
+    }
+
+    function applyState(next) {
+      if (!next || typeof next !== "object") return;
+      state = next;
+      if (next.server_now) serverSkew = Number(next.server_now) - Date.now() / 1000;
+      const tk = next.timekeeper || {};
+      const lab = root.querySelector("[data-sl-tk-label]");
+      if (lab) lab.textContent = tk.label || "0min";
+      const tombola = next.tombola || {};
+      if (tombola.ends_at) endsAt = Number(tombola.ends_at);
+      tickCountdown();
+      const pool = root.querySelector("[data-sl-pool]");
+      if (pool) pool.textContent = tombola.pool_label || fmtTk(tombola.pool_sec);
+      const week = root.querySelector("[data-sl-week]");
+      if (week) week.textContent = tombola.week_id || "—";
+      root.querySelectorAll("[data-sl-my-tickets], [data-sl-my-tickets-rail]").forEach((el) => {
+        el.textContent = String(tombola.my_tickets || 0);
+      });
+      const price = root.querySelector("[data-sl-ticket-unit]");
+      if (price) price.textContent = tombola.ticket_price_label || fmtTk(tombola.ticket_price_sec || 300);
+      updateTicketTotal();
+      applyDailyBar(next.caps || {});
+      renderWinners(tombola.recent_winners);
+      const hashEl = root.querySelector("[data-sl-hash-value]");
+      if (hashEl) {
+        const ar0 = next.active_round;
+        hashEl.textContent = (ar0 && ar0.seed_hash) || tombola.seed_hash || "—";
+      }
+      const verifyWeek = root.querySelector("[data-sl-verify-week]");
+      if (verifyWeek) verifyWeek.disabled = !tombola.seed;
+      const hist = Array.isArray(next.history) ? next.history : [];
+      const minesHist = Array.isArray(next.mines_history) ? next.mines_history : [];
+      const crashHist = Array.isArray(next.crash_history) ? next.crash_history : [];
+      if (mode === "crash" && crashHist[0] && crashHist[0].id) lastSettledId = crashHist[0].id;
+      else if (mode === "mines" && minesHist[0] && minesHist[0].id) lastSettledId = minesHist[0].id;
+      else if (minesHist[0] && minesHist[0].id) lastSettledId = minesHist[0].id;
+      else if (crashHist[0] && crashHist[0].id) lastSettledId = crashHist[0].id;
+      else if (hist[0] && hist[0].id) lastSettledId = hist[0].id;
+      root.querySelectorAll("[data-sl-verify], [data-sl-verify-crash]").forEach((btn) => {
+        btn.disabled = !lastSettledId;
+      });
+      renderHistory(hist);
+      renderMinesHistory(minesHist);
+      renderMinesToday(next.mines_today);
+      renderCrashHistory(crashHist);
+      renderCrashToday(next.crash_today);
+      renderModeUi();
+      const ar = next.active_round;
+      if (ar && ar.game === "mines") {
+        renderMinesBoard(ar);
+      } else {
+        renderMinesBoard(null);
+        updateIdleMinesHud();
+        const cashM = root.querySelector("[data-sl-mines-cashout]");
+        if (cashM) cashM.disabled = true;
+      }
+      if (ar && ar.game === "crash" && ar.status === "active") {
+        ensureCrashRunning(ar);
+        const startC = root.querySelector("[data-sl-crash-start]");
+        if (startC) startC.disabled = true;
+        root.querySelectorAll("[data-sl-crash-bet], [data-sl-crash-bet-preset], [data-sl-crash-bet-half], [data-sl-crash-bet-double]").forEach((el) => {
+          el.disabled = true;
+        });
+      } else {
+        const startC = root.querySelector("[data-sl-crash-start]");
+        if (startC) startC.disabled = false;
+        root.querySelectorAll("[data-sl-crash-bet], [data-sl-crash-bet-preset], [data-sl-crash-bet-half], [data-sl-crash-bet-double]").forEach((el) => {
+          el.disabled = false;
+        });
+        if (!ar || ar.game !== "crash") {
+          const arena = root.querySelector("[data-sl-crash-arena]");
+          if (arena && !crashRaf && !crashRevealRaf) {
+            // Keep is-crashed / reveal so the ship stays at apex until next Start.
+            arena.classList.remove("is-warn", "is-running");
+          }
+        }
+      }
+      if (!ar) {
+        stopCrash();
+        const cashC = root.querySelector("[data-sl-crash-cashout]");
+        if (cashC) cashC.disabled = true;
+      }
+    }
+
+    function enabledModes() {
+      const m = (state && state.modes) || {};
+      return {
+        tombola: m.tombola !== false,
+        mines: !!m.mines,
+        crash: !!m.crash,
+      };
+    }
+
+    function renderModeUi() {
+      const enabled = enabledModes();
+      if (mode === "mines" && !enabled.mines) mode = "tombola";
+      if (mode === "crash" && !enabled.crash) mode = "tombola";
+      root.setAttribute("data-sl-mode-active", mode);
+      root.querySelectorAll("[data-sl-mode]").forEach((btn) => {
+        const key = btn.getAttribute("data-sl-mode") || "";
+        if ((key === "mines" && !enabled.mines) || (key === "crash" && !enabled.crash)) {
+          btn.hidden = true;
+          return;
+        }
+        btn.hidden = false;
+        const on = key === mode;
+        btn.classList.toggle("is-active", on);
+        btn.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      root.querySelectorAll("[data-sl-view]").forEach((view) => {
+        const key = view.getAttribute("data-sl-view");
+        view.hidden = key !== mode;
+      });
+      const bar = root.querySelector("[data-sl-tombola-bar]");
+      if (bar) bar.hidden = mode !== "tombola";
+      const tabs = root.querySelector("[data-sl-modes]");
+      if (tabs) tabs.hidden = !(enabled.mines || enabled.crash);
+      if (mode === "crash") renderCrashGraph(crashRaf ? Math.min(1, (performance.now() - crashStart) / Math.max(1, crashBustMs)) : 0);
+    }
+
+    function renderMinesBoard(ar) {
+      const board = root.querySelector("[data-sl-mines-board]");
+      if (!board) return;
+      const defs = (state && state.mines_defaults) || {};
+      const active = ar && ar.game === "mines";
+      const m = (active && ar.mines) || {};
+      const grid = Number(m.grid || defs.grid || 25);
+      const revealed = new Set(((m.revealed) || []).map(Number));
+      const mines = new Set(((m.mine_positions) || []).map(Number));
+      const hit = m.hit != null ? Number(m.hit) : null;
+      const settled = !active || ar.status !== "active";
+      const roundId = active ? ar.id : 0;
+      board.innerHTML = "";
+      board.style.setProperty("--sl-grid-n", String(Math.round(Math.sqrt(grid))));
+      for (let i = 0; i < grid; i += 1) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "sl-mine-cell";
+        btn.dataset.cell = String(i);
+        if (revealed.has(i)) {
+          btn.classList.add("is-revealed");
+          if (mines.has(i) || hit === i) {
+            btn.classList.add("is-mine");
+            btn.innerHTML = `<img src="${imgUrl("sl-tile-mine.webp")}" alt="" width="40" height="40">`;
+          } else {
+            btn.classList.add("is-safe");
+            btn.innerHTML = `<img src="${imgUrl(safeTileName(roundId, i))}" alt="" width="40" height="40">`;
+          }
+        } else if (settled && active && mines.has(i)) {
+          btn.classList.add("is-mine");
+          btn.innerHTML = `<img src="${imgUrl("sl-tile-mine.webp")}" alt="" width="40" height="40">`;
+        } else {
+          btn.classList.add("is-hidden");
+          btn.innerHTML = `<img src="${imgUrl("sl-tile-hidden.webp")}" alt="" width="40" height="40">`;
+        }
+        if (!active || ar.status !== "active" || revealed.has(i)) btn.disabled = true;
+        board.appendChild(btn);
+      }
+      const cash = root.querySelector("[data-sl-mines-cashout]");
+      const startBtn = root.querySelector("[data-sl-mines-start]");
+      if (active && ar.status === "active") {
+        if (cash) cash.disabled = !(Number(m.hits || revealed.size) > 0);
+        if (startBtn) startBtn.disabled = true;
+        updateMinesHud(m, ar.bet_sec, { showProgress: true });
+      } else {
+        if (cash) cash.disabled = true;
+        if (startBtn) startBtn.disabled = false;
+      }
+      const lock = !!(active && ar.status === "active");
+      root.querySelectorAll("[data-sl-mines-bet], [data-sl-mines-count], [data-sl-mines-range], [data-sl-mines-dec], [data-sl-mines-inc], [data-sl-mines-bet-preset]").forEach((el) => {
+        el.disabled = lock;
+      });
+    }
+
+    function stopCrash() {
+      if (crashRaf) {
+        try { cancelAnimationFrame(crashRaf); } catch (_) {}
+        crashRaf = 0;
+      }
+    }
+
+    function stopCrashReveal() {
+      if (crashRevealRaf) {
+        try { cancelAnimationFrame(crashRevealRaf); } catch (_) {}
+        crashRevealRaf = 0;
+      }
+    }
+
+    function setCrashRevealText(text) {
+      const el = root.querySelector("[data-sl-crash-reveal]");
+      if (!el) return;
+      const msg = String(text || "").trim();
+      el.hidden = !msg;
+      el.textContent = msg;
+    }
+
+    function crashProgressFromMult(crashPoint, mult) {
+      const cp = Math.max(1.01, Number(crashPoint) || 1.01);
+      const m = Math.max(1, Math.min(Number(mult) || 1, cp));
+      if (cp <= 1.01) return 0;
+      const ratio = Math.max(0, Math.min(0.999, (m - 1) / (cp - 1)));
+      return Math.pow(ratio, 1 / 1.15);
+    }
+
+    function playCrashReveal(round) {
+      if (!round || !round.id) return;
+      const crashPoint = Number(round.crash_point) || 0;
+      if (!(crashPoint >= 1.01)) return;
+      if (lastCrashRevealId === round.id && crashRevealRaf) return;
+      lastCrashRevealId = Number(round.id);
+      stopCrash();
+      stopCrashReveal();
+      const cashMult = Number(round.cashout_mult != null ? round.cashout_mult : round.multiplier) || 1;
+      const fromT = Math.max(0, Math.min(0.98, crashProgressFromMult(crashPoint, cashMult)));
+      const arena = root.querySelector("[data-sl-crash-arena]");
+      const betSec = Number(round.bet_sec || 0);
+      if (arena) {
+        arena.classList.remove("is-warn", "is-running");
+        arena.classList.add("is-cashed");
+      }
+      const labelCash = fmtMult(cashMult);
+      const labelCrash = fmtMult(crashPoint);
+      setCrashRevealText(`${t("sl_crash_cashed_at", "Cashout")} ${labelCash} · ${t("sl_crash_would_at", "wäre gecrasht bei")} ${labelCrash}`);
+      setStatus(`${t("sl_crash_cashed_at", "Cashout")} ${labelCash} → ${t("sl_crash_at", "crash")} ${labelCrash}`);
+      const dur = Math.max(550, Math.min(1400, (1 - fromT) * 1600));
+      const t0 = performance.now();
+      const tick = (now) => {
+        const u = Math.min(1, (now - t0) / dur);
+        const t = fromT + (1 - fromT) * u;
+        renderCrashGraph(t);
+        // Keep cashout mult on HUD until the tip; then show crash point.
+        updateCrashHud(u < 1 ? cashMult : crashPoint, betSec);
+        if (u >= 1) {
+          crashRevealRaf = 0;
+          renderCrashGraph(1);
+          updateCrashHud(crashPoint, betSec);
+          if (arena) {
+            arena.classList.remove("is-cashed");
+            arena.classList.add("is-crashed");
+          }
+          return;
+        }
+        crashRevealRaf = requestAnimationFrame(tick);
+      };
+      crashRevealRaf = requestAnimationFrame(tick);
+    }
+
+    function updateCrashHud(mult, betSec) {
+      const m = Math.max(1, Number(mult) || 1);
+      const multLabel = `×${m.toFixed(2)}`;
+      const payout = Math.round((Number(betSec) || 0) * m);
+      root.querySelectorAll("[data-sl-crash-mult]").forEach((el) => {
+        el.textContent = multLabel;
+      });
+      const payEl = root.querySelector("[data-sl-crash-hud-payout]");
+      if (payEl) payEl.textContent = payout > 0 ? fmtTk(payout) : "—";
+    }
+
+    /** Invert server bust_after_ms → crash target for synced display (same formula as server). */
+    function crashPointFromBustMs(bustMs) {
+      const ms = Math.max(2201, Number(bustMs) || 4000);
+      return Math.max(1.01, Math.exp((ms - 2200) / 3200));
+    }
+
+    function crashMultAtProgress(crashPoint, t) {
+      const cp = Math.max(1.01, Number(crashPoint) || 1.01);
+      const prog = Math.max(0, Math.min(0.999, Number(t) || 0));
+      const eased = Math.pow(prog, 1.15);
+      return Math.floor((1 + (cp - 1) * eased) * 100) / 100;
+    }
+
+    function crashGraphPoint(t) {
+      const tt = Math.max(0, Math.min(1, Number(t) || 0));
+      const x = 48 + tt * 900;
+      const rise = Math.pow(tt, 1.15);
+      const y = 500 - rise * 430;
+      return { x, y };
+    }
+
+    function crashGraphPath(tEnd) {
+      const tipT = Math.max(0, Math.min(1, Number(tEnd) || 0));
+      const steps = Math.max(2, Math.ceil(Math.max(tipT, 0.02) * 64) + 1);
+      const pts = [];
+      for (let i = 0; i < steps; i += 1) {
+        pts.push(crashGraphPoint((i / (steps - 1)) * tipT));
+      }
+      pts[pts.length - 1] = crashGraphPoint(tipT);
+      let line = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+      for (let i = 1; i < pts.length; i += 1) {
+        line += ` L ${pts[i].x.toFixed(1)} ${pts[i].y.toFixed(1)}`;
+      }
+      const tip = pts[pts.length - 1];
+      const fill = `${line} L ${tip.x.toFixed(1)} 548 L ${pts[0].x.toFixed(1)} 548 Z`;
+      return { line, fill, tip, pts };
+    }
+
+    function renderCrashGraph(t) {
+      const tipT = Math.max(0, Math.min(1, Number(t) || 0));
+      const ghost = root.querySelector("[data-sl-crash-ghost]");
+      const curve = root.querySelector("[data-sl-crash-curve]");
+      const fill = root.querySelector("[data-sl-crash-fill]");
+      const probe = root.querySelector("[data-sl-crash-probe]");
+      if (ghost && !ghost.getAttribute("d")) {
+        ghost.setAttribute("d", crashGraphPath(1).line);
+      }
+      const drawnT = Math.max(tipT, 0.001);
+      const path = crashGraphPath(drawnT);
+      if (curve) curve.setAttribute("d", tipT > 0.001 ? path.line : "");
+      if (fill) fill.setAttribute("d", tipT > 0.001 ? path.fill : "");
+      if (probe) {
+        const tip = crashGraphPoint(tipT);
+        const look = crashGraphPoint(Math.min(1, tipT + 0.03));
+        const leftPct = (tip.x / 1000) * 100;
+        const topPct = (tip.y / 560) * 100;
+        const ang = (Math.atan2(look.y - tip.y, look.x - tip.x) * 180) / Math.PI;
+        probe.style.left = `${leftPct}%`;
+        probe.style.top = `${topPct}%`;
+        probe.style.transform = `rotate(${ang}deg)`;
+      }
+    }
+
+    function ensureCrashRunning(ar) {
+      const bustMs = Number((ar.crash && ar.crash.bust_after_ms) || 4000);
+      if (crashRaf && crashBustMs === bustMs) return;
+      stopCrash();
+      stopCrashReveal();
+      setCrashRevealText("");
+      crashCashoutPending = false;
+      crashStart = performance.now();
+      crashBustMs = bustMs;
+      crashMult = 1;
+      const crashTarget = crashPointFromBustMs(bustMs);
+      let lastTickAt = 0;
+      const arena = root.querySelector("[data-sl-crash-arena]");
+      const cash = root.querySelector("[data-sl-crash-cashout]");
+      const betSec = Number(ar.bet_sec || 0);
+      if (arena) {
+        arena.classList.remove("is-warn", "is-crashed", "is-cashed");
+        arena.classList.add("is-running");
+      }
+      renderCrashGraph(0);
+      if (cash) cash.disabled = false;
+      playCrashSfx("start");
+      const tick = (now) => {
+        const t = Math.min(1, (now - crashStart) / crashBustMs);
+        // Synced to crash target — display never overshoots the real bust point.
+        crashMult = t >= 1 ? crashTarget : crashMultAtProgress(crashTarget, t);
+        updateCrashHud(crashMult, betSec);
+        renderCrashGraph(Math.min(1, t));
+        if (arena) {
+          arena.classList.toggle("is-warn", t >= 0.82);
+        }
+        if (crashAutoTarget >= 1.01 && crashMult + 1e-9 >= crashAutoTarget && t < 1) {
+          requestCrashCashout();
+          return;
+        }
+        if (t - lastTickAt >= 0.12 && t < 0.98) {
+          lastTickAt = t;
+          if (t > 0.15) playCrashSfx("tick");
+        }
+        if (t >= 1) {
+          stopCrash();
+          renderCrashGraph(1);
+          updateCrashHud(crashTarget, betSec);
+          if (cash) cash.disabled = true;
+          if (arena) {
+            arena.classList.remove("is-warn", "is-running");
+            arena.classList.add("is-crashed");
+          }
+          playCrashSfx("bust");
+          void postAction("/api/space-lottery/crash/bust", {});
+          return;
+        }
+        crashRaf = requestAnimationFrame(tick);
+      };
+      crashRaf = requestAnimationFrame(tick);
+    }
+
+    async function postAction(url, body) {
+      try {
+        const res = await GC.fetchGameAction(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body || {}),
+        });
+        if (res && (res.timekeeper || res.state) && typeof GC.applyActionState === "function") {
+          GC.applyActionState(res, "space_lottery");
+        }
+        if (res && res.space_lottery) applyState(res.space_lottery);
+        if (String(url || "").includes("/mines/reveal") && res && res.ok) {
+          if (res.reason === "bust") playMinesSfx("bust");
+          else playMinesSfx("safe");
+        } else if (String(url || "").includes("/mines/cashout") && res && res.ok) {
+          playMinesSfx("safe");
+        } else if (String(url || "").includes("/crash/cashout") && res && res.ok) {
+          const settled = res.space_lottery && Array.isArray(res.space_lottery.crash_history)
+            ? res.space_lottery.crash_history[0]
+            : null;
+          if (settled && settled.crash_point) playCrashReveal(settled);
+        } else if (String(url || "").includes("/crash/bust") && res && res.ok) {
+          const settled = res.space_lottery && Array.isArray(res.space_lottery.crash_history)
+            ? res.space_lottery.crash_history[0]
+            : null;
+          if (settled && settled.crash_point) {
+            lastCrashRevealId = Number(settled.id) || lastCrashRevealId;
+            setCrashRevealText(`${t("sl_crash_at", "crash")} ${fmtMult(settled.crash_point)}`);
+            renderCrashGraph(1);
+            updateCrashHud(settled.crash_point, settled.bet_sec || 0);
+          }
+        }
+        if (!res || !res.ok) {
+          const reason = res && res.reason;
+          let msg = (res && (res.message || res.reason)) || t("sl_action_fail", "Aktion fehlgeschlagen.");
+          if (reason === "daily_wager_cap") {
+            msg = t("sl_daily_cap_hit", "Tagesvolumen für dieses Spiel erreicht.");
+          }
+          showNotify(msg, "error");
+          setStatus((res && res.message) || msg);
+        } else if (res.reason === "bust") {
+          setStatus(t("sl_bust", "Bust."));
+          // Expected outcome — not an action failure ("FEHLER").
+          showNotify(t("sl_bust", "Bust."), "warn");
+        } else if (!(String(url || "").includes("/crash/cashout"))) {
+          setStatus(t("sl_status_ok", "Aktualisiert."));
+        }
+        return res;
+      } catch (err) {
+        showNotify(t("sl_action_fail", "Aktion fehlgeschlagen."), "error");
+        return null;
+      }
+    }
+
+    root.addEventListener("click", (ev) => {
+      const modeBtn = ev.target.closest("[data-sl-mode]");
+      if (modeBtn) {
+        mode = modeBtn.getAttribute("data-sl-mode") || "tombola";
+        renderModeUi();
+        return;
+      }
+      if (ev.target.closest("[data-sl-ticket-dec]")) {
+        const cur = parseInt(root.querySelector("[data-sl-ticket-count]")?.value || "1", 10) || 1;
+        setTicketCount(cur - 1);
+        return;
+      }
+      if (ev.target.closest("[data-sl-ticket-inc]")) {
+        const cur = parseInt(root.querySelector("[data-sl-ticket-count]")?.value || "1", 10) || 1;
+        setTicketCount(cur + 1);
+        return;
+      }
+      const preset = ev.target.closest("[data-sl-ticket-preset]");
+      if (preset) {
+        setTicketCount(preset.getAttribute("data-sl-ticket-preset"));
+        return;
+      }
+      if (ev.target.closest("[data-sl-tombola-buy]")) {
+        const n = parseInt(root.querySelector("[data-sl-ticket-count]")?.value || "1", 10) || 1;
+        void postAction("/api/space-lottery/tombola/buy", { count: n, request_id: `sl-t-${Date.now()}` });
+        return;
+      }
+      if (ev.target.closest("[data-sl-mines-start]")) {
+        const bet = parseInt(root.querySelector("[data-sl-mines-bet]")?.value || "60", 10) || 60;
+        const mc = parseInt(root.querySelector("[data-sl-mines-count]")?.value || "3", 10) || 3;
+        void postAction("/api/space-lottery/mines/start", {
+          bet_sec: bet,
+          mine_count: mc,
+          request_id: `sl-m-${Date.now()}`,
+        }).then((res) => {
+          if (res && res.ok) {
+            mode = "mines";
+            renderModeUi();
+            root.classList.add("is-bet-lock");
+            setTimeout(() => root.classList.remove("is-bet-lock"), 420);
+          }
+        });
+        return;
+      }
+      if (ev.target.closest("[data-sl-mines-dec]")) {
+        const cur = parseInt(root.querySelector("[data-sl-mines-count]")?.value || "3", 10) || 3;
+        setMineCount(cur - 1);
+        return;
+      }
+      if (ev.target.closest("[data-sl-mines-inc]")) {
+        const cur = parseInt(root.querySelector("[data-sl-mines-count]")?.value || "3", 10) || 3;
+        setMineCount(cur + 1);
+        return;
+      }
+      const minesBetPreset = ev.target.closest("[data-sl-mines-bet-preset]");
+      if (minesBetPreset) {
+        setMinesBet(minesBetPreset.getAttribute("data-sl-mines-bet-preset"));
+        return;
+      }
+      if (ev.target.closest("[data-sl-mines-cashout]")) {
+        void postAction("/api/space-lottery/mines/cashout", {});
+        return;
+      }
+      const cellBtn = ev.target.closest(".sl-mine-cell");
+      if (cellBtn && !cellBtn.disabled) {
+        const cell = parseInt(cellBtn.dataset.cell || "-1", 10);
+        void postAction("/api/space-lottery/mines/reveal", { cell });
+        return;
+      }
+      if (ev.target.closest("[data-sl-crash-start]")) {
+        const bet = parseInt(root.querySelector("[data-sl-crash-bet]")?.value || "60", 10) || 60;
+        mode = "crash";
+        renderModeUi();
+        void postAction("/api/space-lottery/crash/bet", {
+          bet_sec: bet,
+          request_id: `sl-c-${Date.now()}`,
+        });
+        return;
+      }
+      const crashBetPreset = ev.target.closest("[data-sl-crash-bet-preset]");
+      if (crashBetPreset) {
+        setCrashBet(crashBetPreset.getAttribute("data-sl-crash-bet-preset"));
+        return;
+      }
+      if (ev.target.closest("[data-sl-crash-bet-half]")) {
+        const cur = parseInt(root.querySelector("[data-sl-crash-bet]")?.value || "60", 10) || 60;
+        setCrashBet(Math.floor(cur / 2));
+        return;
+      }
+      if (ev.target.closest("[data-sl-crash-bet-double]")) {
+        const cur = parseInt(root.querySelector("[data-sl-crash-bet]")?.value || "60", 10) || 60;
+        setCrashBet(cur * 2);
+        return;
+      }
+      const crashAutoPreset = ev.target.closest("[data-sl-crash-auto-preset]");
+      if (crashAutoPreset) {
+        setCrashAuto(crashAutoPreset.getAttribute("data-sl-crash-auto-preset"));
+        return;
+      }
+      if (ev.target.closest("[data-sl-crash-cashout]")) {
+        requestCrashCashout();
+        return;
+      }
+      if ((ev.target.closest("[data-sl-verify]") || ev.target.closest("[data-sl-verify-crash]")) && lastSettledId) {
+        void GC.fetchGameAction("/api/space-lottery/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ round_id: lastSettledId }),
+        }).then((res) => {
+          if (res && res.ok) showNotify(t("sl_verify_ok", "Seed verifiziert."), "success");
+          else showNotify((res && res.message) || t("sl_verify_fail", "Verify fehlgeschlagen."), "error");
+        });
+        return;
+      }
+      if (ev.target.closest("[data-sl-verify-week]")) {
+        const seed = state?.tombola?.seed;
+        if (seed) showNotify(t("sl_verify_ok", "Seed verifiziert.") + ` ${String(seed).slice(0, 12)}…`, "success");
+        else showNotify(t("sl_verify_week_pending", "Seed erst nach der Ziehung verfügbar."), "info");
+      }
+    });
+
+    applyState(state);
+    tickCountdown();
+    updateTicketTotal();
+    setMinesBet(root.querySelector("[data-sl-mines-bet]")?.value || 60);
+    setMineCount(root.querySelector("[data-sl-mines-count]")?.value || 3);
+    setCrashBet(root.querySelector("[data-sl-crash-bet]")?.value || 60);
+    setCrashAuto(0);
+    renderCrashGraph(0);
+    const ticketInput = root.querySelector("[data-sl-ticket-count]");
+    if (ticketInput) {
+      ticketInput.addEventListener("input", () => {
+        setTicketCount(ticketInput.value);
+      });
+      ticketInput.addEventListener("change", () => {
+        setTicketCount(ticketInput.value);
+      });
+    }
+    const minesBetInput = root.querySelector("[data-sl-mines-bet]");
+    if (minesBetInput) {
+      minesBetInput.addEventListener("input", () => setMinesBet(minesBetInput.value));
+      minesBetInput.addEventListener("change", () => setMinesBet(minesBetInput.value));
+    }
+    const minesCountInput = root.querySelector("[data-sl-mines-count]");
+    if (minesCountInput) {
+      minesCountInput.addEventListener("input", () => setMineCount(minesCountInput.value));
+      minesCountInput.addEventListener("change", () => setMineCount(minesCountInput.value));
+    }
+    const minesRange = root.querySelector("[data-sl-mines-range]");
+    if (minesRange) {
+      minesRange.addEventListener("input", () => setMineCount(minesRange.value));
+    }
+    const crashBetInput = root.querySelector("[data-sl-crash-bet]");
+    if (crashBetInput) {
+      crashBetInput.addEventListener("input", () => setCrashBet(crashBetInput.value));
+      crashBetInput.addEventListener("change", () => setCrashBet(crashBetInput.value));
+    }
+    const crashAutoInput = root.querySelector("[data-sl-crash-auto]");
+    if (crashAutoInput) {
+      crashAutoInput.addEventListener("input", () => setCrashAuto(crashAutoInput.value));
+      crashAutoInput.addEventListener("change", () => setCrashAuto(crashAutoInput.value));
+    }
+    const onCrashKeydown = (ev) => {
+      if (mode !== "crash") return;
+      if (ev.code !== "Space" && ev.key !== " ") return;
+      const tag = String((ev.target && ev.target.tagName) || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select" || (ev.target && ev.target.isContentEditable)) return;
+      if (!crashRaf) return;
+      ev.preventDefault();
+      requestCrashCashout();
+    };
+    document.addEventListener("keydown", onCrashKeydown);
+    countdownTimer = window.setInterval(tickCountdown, 1000);
+    if (typeof GC.registerCleanup === "function") {
+      GC.registerCleanup(() => {
+        stopCrash();
+        stopCrashReveal();
+        document.removeEventListener("keydown", onCrashKeydown);
+        if (countdownTimer) {
+          try { clearInterval(countdownTimer); } catch (_) {}
+          countdownTimer = 0;
+        }
+      });
+    }
+  }
+
   function initCreator() {
     const page = document.getElementById("creator-page");
     if (!page) return;
@@ -39617,6 +40704,7 @@
   GC.modules.login_rewards = initLoginRewards;
   GC.modules.premium = initBattlePass;
   GC.modules.shop = initShop;
+  GC.modules.space_lottery = initSpaceLottery;
   GC.modules.creator = initCreator;
   GC.modules.alliance = initAlliance;
   bindAllianceOnce();

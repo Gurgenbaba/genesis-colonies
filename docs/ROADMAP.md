@@ -384,6 +384,7 @@ Vor neuen Features: **vorhandene Kernsysteme auf 100 %** — messbar via [GC-6
 | Admin UX Epic (grouped nav + tab contract GC-A01–A07) | ✅ |
 | GC-000 v2 — Regeln 15–17 (Parallel Systems, Duplicate Math, Owners) | ✅ |
 | **GC-536** — [Queue Card UX](GC-536_QUEUE_CARD_UX.md) (536A–F ✅) | ✅ |
+| **EPIC-28** — [Space Lottery / Chrono Chamber](SPACE_LOTTERY.md) (GC-2800…2806) | 🔄 |
 | **GC-557** — [Megabunker UX Feedback Polish](GC-557_MEGABUNKER_UX_FEEDBACK_POLISH.md) (557A–F) | 📋 |
 | **GC-622** — [Integer Overflow Audit](GC-622_INTEGER_OVERFLOW_AUDIT.md) (INT32-Risiko geschlossen) | ✅ |
 | **GC-622B** — [Resource INTEGER Migration](GC-622B_RESOURCE_INTEGER_MIGRATION.md) | 💡 |

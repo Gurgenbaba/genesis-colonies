@@ -7,8 +7,6 @@ Reuses inventory_loot + inventory grant/consume — no parallel loot engine.
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import json
 import secrets
 import string
@@ -27,6 +25,7 @@ from game.inventory import (
 )
 from game.inventory_catalog import CONTAINER_KEYS, ITEM_CATALOG, item_catalog_entry
 from game.inventory_loot import LOOT_POOLS, sanitize_loot_pool
+from game.provably_fair import gen_server_seed, hash_seed, seeded_rng
 
 # --- Constants -----------------------------------------------------------------
 
@@ -211,19 +210,15 @@ def _gen_join_code() -> str:
 
 
 def _gen_server_seed() -> str:
-    return secrets.token_hex(32)
+    return gen_server_seed()
 
 
 def _hash_seed(server_seed: str) -> str:
-    return hashlib.sha256(str(server_seed).encode("utf-8")).hexdigest()
+    return hash_seed(server_seed)
 
 
 def _roll_rng(server_seed: str, battle_id: int, round_index: int, slot: int, nonce: str) -> Any:
-    import random
-
-    msg = f"{int(battle_id)}|{int(round_index)}|{int(slot)}|{nonce}".encode("utf-8")
-    digest = hmac.new(str(server_seed).encode("utf-8"), msg, hashlib.sha256).hexdigest()
-    return random.Random(int(digest[:16], 16))
+    return seeded_rng(server_seed, int(battle_id), int(round_index), int(slot), nonce)
 
 
 def _case_counts(cases: Sequence[str]) -> Dict[str, int]:

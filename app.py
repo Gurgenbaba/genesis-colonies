@@ -4171,6 +4171,365 @@ def api_case_battles_verify():
     return jsonify({"ok": True, "reason": reason, "verification": result})
 
 
+# --- EPIC-28 Space Lottery / Chrono Chamber ---------------------------------
+
+_LOTTERY_REASON_MESSAGES = {
+    "lottery_unavailable": "Chrono Chamber ist derzeit nicht verfügbar.",
+    "insufficient_timekeeper": "Nicht genug Imperiumszeit.",
+    "timekeeper_unavailable": "Timekeeper nicht verfügbar.",
+    "bet_too_low": "Einsatz zu niedrig.",
+    "bet_too_high": "Einsatz zu hoch.",
+    "daily_wager_cap": "Tages-Einsatzlimit erreicht.",
+    "round_active": "Es läuft bereits eine Runde.",
+    "no_active_round": "Keine aktive Runde.",
+    "invalid_ticket_count": "Ungültige Ticket-Anzahl.",
+    "week_closed": "Diese Tombola-Woche ist geschlossen.",
+    "invalid_mine_count": "Ungültige Minen-Anzahl.",
+    "invalid_cell": "Ungültige Zelle.",
+    "already_revealed": "Zelle bereits aufgedeckt.",
+    "nothing_to_cashout": "Noch nichts zum Auszahlen.",
+    "invalid_multiplier": "Ungültiger Multiplikator.",
+    "multiplier_too_low": "Multiplikator zu niedrig.",
+    "round_not_found": "Runde nicht gefunden.",
+    "round_not_settled": "Runde noch nicht abgeschlossen.",
+    "seed_mismatch": "Seed stimmt nicht.",
+    "mode_disabled": "Dieses Spiel ist derzeit nicht verfügbar.",
+}
+
+
+def _lottery_message(reason: str) -> str:
+    return _LOTTERY_REASON_MESSAGES.get(str(reason or ""), str(reason or "error"))
+
+
+def _lottery_action_response(
+    user_id: int,
+    *,
+    ok: bool,
+    reason: str,
+    lottery_state: Optional[Dict[str, Any]] = None,
+    finish_source: str = "space_lottery",
+    status: int = 200,
+    extra: Optional[Dict[str, Any]] = None,
+):
+    from game.timekeeper import serialize_for_client as tk_serialize
+
+    state, _ = _build_game_state_payload(
+        include_panel=False,
+        finish_source=finish_source,
+        action_slim=True,
+    )
+    tk = None
+    conn = db()
+    try:
+        tk = tk_serialize(user_id, conn=conn)
+        if lottery_state is None:
+            from game.space_lottery import serialize_state
+
+            lottery_state = serialize_state(user_id, conn=conn)
+    finally:
+        conn.close()
+    # Prefer lottery state's timekeeper if present (post-mutation balance).
+    if isinstance(lottery_state, dict) and isinstance(lottery_state.get("timekeeper"), dict):
+        tk = lottery_state["timekeeper"]
+    if isinstance(state, dict) and tk:
+        state = {**state, "timekeeper": tk}
+    payload: Dict[str, Any] = {
+        "ok": bool(ok),
+        "reason": str(reason or ""),
+        "message": _lottery_message(reason) if not ok else "",
+        "state": state,
+        "timekeeper": tk,
+        "space_lottery": lottery_state,
+    }
+    if extra:
+        payload.update(extra)
+    return jsonify(payload), (status if not ok else 200)
+
+
+def _run_lottery_mutation(user_id: int, mut_fn, *, finish_source: str):
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ok, reason, lottery_state = mut_fn(conn)
+        if ok:
+            commit(conn)
+        else:
+            rollback(conn)
+    except Exception:
+        try:
+            rollback(conn)
+        except Exception:
+            pass
+        raise
+    finally:
+        conn.close()
+    return _lottery_action_response(
+        user_id,
+        ok=ok,
+        reason=reason,
+        lottery_state=lottery_state,
+        finish_source=finish_source,
+        status=400 if not ok else 200,
+    )
+
+
+@app.route("/space-lottery")
+@require_login
+def space_lottery_view():
+    ctx = _load_page_live_context(finish_source="space_lottery")
+    if ctx is None:
+        return redirect(url_for("login"))
+    from game.space_lottery import serialize_state
+
+    user_id = int(session["user_id"])
+    lottery = {"ready": False}
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        lottery = serialize_state(user_id, conn=conn)
+        commit(conn)
+    except Exception:
+        try:
+            rollback(conn)
+        except Exception:
+            pass
+        lottery = {"ready": False}
+    finally:
+        conn.close()
+    return render_template(
+        "space_lottery.html",
+        player=ctx["player_view"],
+        storage_caps=ctx["storage_caps"],
+        space_lottery=lottery,
+    )
+
+
+@app.route("/api/space-lottery/state", methods=["GET"])
+@require_login_api
+def api_space_lottery_state():
+    user_id = int(session.get("user_id") or 0)
+    from game.space_lottery import serialize_state
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        state = serialize_state(user_id, conn=conn)
+        commit(conn)
+    except Exception:
+        try:
+            rollback(conn)
+        except Exception:
+            pass
+        state = {"ready": False}
+    finally:
+        conn.close()
+    return jsonify({"ok": True, "space_lottery": state})
+
+
+@app.route("/api/space-lottery/tombola/buy", methods=["POST"])
+@require_login_api
+def api_space_lottery_tombola_buy():
+    user_id = int(session.get("user_id") or 0)
+    data = request.get_json(silent=True) or {}
+    request_id = _extract_request_id(data)
+    try:
+        count = int(data.get("count") or 1)
+    except (TypeError, ValueError):
+        count = 1
+
+    def _mut(conn):
+        from game.space_lottery import buy_tombola_tickets
+
+        return buy_tombola_tickets(user_id, count, conn=conn, request_id=request_id)
+
+    try:
+        return _run_lottery_mutation(user_id, _mut, finish_source="space_lottery_tombola")
+    except Exception:
+        return _lottery_action_response(
+            user_id, ok=False, reason="lottery_unavailable", finish_source="space_lottery", status=500
+        )
+
+
+@app.route("/api/space-lottery/mines/start", methods=["POST"])
+@require_login_api
+def api_space_lottery_mines_start():
+    user_id = int(session.get("user_id") or 0)
+    data = request.get_json(silent=True) or {}
+    request_id = _extract_request_id(data)
+    try:
+        bet_sec = int(data.get("bet_sec") or 0)
+    except (TypeError, ValueError):
+        bet_sec = 0
+    try:
+        mine_count = int(data.get("mine_count") or 3)
+    except (TypeError, ValueError):
+        mine_count = 3
+
+    def _mut(conn):
+        from game.space_lottery import start_mines
+
+        return start_mines(
+            user_id, bet_sec, mine_count=mine_count, conn=conn, request_id=request_id
+        )
+
+    try:
+        return _run_lottery_mutation(user_id, _mut, finish_source="space_lottery_mines")
+    except Exception:
+        return _lottery_action_response(
+            user_id, ok=False, reason="lottery_unavailable", finish_source="space_lottery", status=500
+        )
+
+
+@app.route("/api/space-lottery/mines/reveal", methods=["POST"])
+@require_login_api
+def api_space_lottery_mines_reveal():
+    user_id = int(session.get("user_id") or 0)
+    data = request.get_json(silent=True) or {}
+    try:
+        cell = int(data.get("cell"))
+    except (TypeError, ValueError):
+        cell = -1
+
+    def _mut(conn):
+        from game.space_lottery import reveal_mines_cell
+
+        return reveal_mines_cell(user_id, cell, conn=conn)
+
+    try:
+        return _run_lottery_mutation(user_id, _mut, finish_source="space_lottery_mines")
+    except Exception:
+        return _lottery_action_response(
+            user_id, ok=False, reason="lottery_unavailable", finish_source="space_lottery", status=500
+        )
+
+
+@app.route("/api/space-lottery/mines/cashout", methods=["POST"])
+@require_login_api
+def api_space_lottery_mines_cashout():
+    user_id = int(session.get("user_id") or 0)
+
+    def _mut(conn):
+        from game.space_lottery import cashout_mines
+
+        return cashout_mines(user_id, conn=conn)
+
+    try:
+        return _run_lottery_mutation(user_id, _mut, finish_source="space_lottery_mines")
+    except Exception:
+        return _lottery_action_response(
+            user_id, ok=False, reason="lottery_unavailable", finish_source="space_lottery", status=500
+        )
+
+
+@app.route("/api/space-lottery/crash/bet", methods=["POST"])
+@require_login_api
+def api_space_lottery_crash_bet():
+    user_id = int(session.get("user_id") or 0)
+    data = request.get_json(silent=True) or {}
+    request_id = _extract_request_id(data)
+    try:
+        bet_sec = int(data.get("bet_sec") or 0)
+    except (TypeError, ValueError):
+        bet_sec = 0
+
+    def _mut(conn):
+        from game.space_lottery import start_crash
+
+        return start_crash(user_id, bet_sec, conn=conn, request_id=request_id)
+
+    try:
+        return _run_lottery_mutation(user_id, _mut, finish_source="space_lottery_crash")
+    except Exception:
+        return _lottery_action_response(
+            user_id, ok=False, reason="lottery_unavailable", finish_source="space_lottery", status=500
+        )
+
+
+@app.route("/api/space-lottery/crash/cashout", methods=["POST"])
+@require_login_api
+def api_space_lottery_crash_cashout():
+    user_id = int(session.get("user_id") or 0)
+    data = request.get_json(silent=True) or {}
+    try:
+        multiplier = float(data.get("multiplier") or 0)
+    except (TypeError, ValueError):
+        multiplier = 0.0
+
+    def _mut(conn):
+        from game.space_lottery import cashout_crash
+
+        return cashout_crash(user_id, multiplier, conn=conn)
+
+    try:
+        return _run_lottery_mutation(user_id, _mut, finish_source="space_lottery_crash")
+    except Exception:
+        return _lottery_action_response(
+            user_id, ok=False, reason="lottery_unavailable", finish_source="space_lottery", status=500
+        )
+
+
+@app.route("/api/space-lottery/crash/bust", methods=["POST"])
+@require_login_api
+def api_space_lottery_crash_bust():
+    user_id = int(session.get("user_id") or 0)
+
+    def _mut(conn):
+        from game.space_lottery import bust_crash
+
+        return bust_crash(user_id, conn=conn)
+
+    try:
+        return _run_lottery_mutation(user_id, _mut, finish_source="space_lottery_crash")
+    except Exception:
+        return _lottery_action_response(
+            user_id, ok=False, reason="lottery_unavailable", finish_source="space_lottery", status=500
+        )
+
+
+@app.route("/api/space-lottery/verify", methods=["POST"])
+@require_login_api
+def api_space_lottery_verify():
+    data = request.get_json(silent=True) or {}
+    try:
+        round_id = int(data.get("round_id") or 0)
+    except (TypeError, ValueError):
+        round_id = 0
+    from game.space_lottery import verify_round
+
+    conn = db()
+    try:
+        ok, reason, result = verify_round(round_id, conn=conn)
+    finally:
+        conn.close()
+    if not ok:
+        return jsonify({"ok": False, "reason": reason, "message": _lottery_message(reason), "verification": result}), 400
+    return jsonify({"ok": True, "reason": reason, "verification": result})
+
+
+@app.route("/api/internal/cron/space-lottery-draw", methods=["POST"])
+def api_internal_cron_space_lottery_draw():
+    from game.internal_cron import verify_internal_cron_request
+    from game.space_lottery import maybe_settle_due_weeks
+
+    authorized, auth_err = verify_internal_cron_request(request)
+    if not authorized:
+        return jsonify({"ok": False, "error": auth_err or "unauthorized"}), 401
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        n = maybe_settle_due_weeks(conn=conn)
+        commit(conn)
+    except Exception as exc:
+        try:
+            rollback(conn)
+        except Exception:
+            pass
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    finally:
+        conn.close()
+    return jsonify({"ok": True, "weeks_settled": int(n)})
+
+
 @app.route("/auction-house")
 @require_login
 def auction_house_view():

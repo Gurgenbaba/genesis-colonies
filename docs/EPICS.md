@@ -33,6 +33,7 @@ Status: v1.5.9.2 (2026-06-24)
 | EPIC-25 | Genesis Story Ops (Lore / Side Ops) | 🔄 | [GENESIS_STORY_OPS.md](GENESIS_STORY_OPS.md) · [GENESIS_LORE_BIBLE.md](GENESIS_LORE_BIBLE.md) · GC-2500…2518 (Jahres-Lore + Free Shop / Ark-Token) |
 | EPIC-26 | Living Inactives + AI Expeditions | 🔄 | [INACTIVE_AUTOPLAY.md](INACTIVE_AUTOPLAY.md) · GC-2600…2620 |
 | EPIC-27 | Commander Classes & Skill Trees | 🔄 | [COMMANDER_CLASSES.md](COMMANDER_CLASSES.md) · GC-CLASS-000…007 |
+| EPIC-28 | Space Lottery (Chrono Chamber) | 🔄 | [SPACE_LOTTERY.md](SPACE_LOTTERY.md) · GC-2800…2806 |
 
 ---
 

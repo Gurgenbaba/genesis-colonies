@@ -12,7 +12,7 @@
   {% set _nav_shell_class = 'gc-sidebar-desktop' %}
 {% endif %}
 {% set _cmd_open = request.endpoint in (
-  'overview', 'galaxy_view', 'planet_evolution_view', 'shop_view'
+  'overview', 'galaxy_view', 'planet_evolution_view', 'shop_view', 'space_lottery_view'
 ) %}
 {% set _infra_open = request.endpoint in ('buildings_view', 'research_view') %}
 {% set _mil_open = request.endpoint in ('shipyard_view', 'defense_view', 'fleet_view', 'combat_simulator_view') %}
@@ -60,6 +60,12 @@
          class="gc-nav-sub-link gc-nav-module--secondary {% if request.endpoint in ('shop_view', 'shop_return_view') %}active{% endif %}">
         <span class="gc-nav-link-label">{{ T("nav_shop", "Shop") }}</span>
         <span class="gc-nav-badge gc-nav-badge--alert hidden" data-nav-badge="shop" hidden aria-hidden="true"></span>
+      </a>
+      <a href="{{ url_for('space_lottery_view') }}"
+         data-nav-module="space_lottery"
+         data-nav-key="space_lottery"
+         class="gc-nav-sub-link gc-nav-module--secondary {% if request.endpoint == 'space_lottery_view' %}active{% endif %}">
+        <span class="gc-nav-link-label">{{ T("nav_space_lottery", "Chrono Chamber") }}</span>
       </a>
     </div>
   </div>

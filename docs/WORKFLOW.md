@@ -31,6 +31,7 @@ Epics beschreiben nur das Ziel. **Niemals direkt implementieren.**
 | EPIC-25 | Genesis Story Ops (Lore / Side Ops) | [GENESIS_STORY_OPS.md](GENESIS_STORY_OPS.md) |
 | — | Command Initiation (do-first once-through) | [COMMAND_INITIATION.md](COMMAND_INITIATION.md) |
 | EPIC-27 | Commander Classes & Skill Trees | [COMMANDER_CLASSES.md](COMMANDER_CLASSES.md) |
+| EPIC-28 | Space Lottery (Chrono Chamber) | [SPACE_LOTTERY.md](SPACE_LOTTERY.md) |
 
 Epic → in **3–5 Tickets** zerlegen (große Epics: Phasen in Master-Doc). Siehe [EPICS.md](EPICS.md).
 

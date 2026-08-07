@@ -49,6 +49,8 @@ Auto-Settle: laufende Battles ≥ 120 s nach `started_at` werden bei State-Read 
 
 ## Fairness
 
+**Owner helpers:** HMAC-SHA256 via shared `game/provably_fair.py` (`seeded_rng` / `hash_seed`).
+
 ```text
 HMAC-SHA256(server_seed, "{battle_id}|{round}|{slot}|{nonce}") → RNG
 ```
