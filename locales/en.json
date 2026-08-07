@@ -8527,5 +8527,6 @@
   "shop_return_list": "Subtotal",
   "shop_return_discount": "Discount",
   "shop_return_qty": "Qty",
-  "shop_return_overview": "To overview"
+  "shop_return_overview": "To overview",
+  "shop_invalid_return_url": "Checkout return URL is invalid. Please contact support."
 }

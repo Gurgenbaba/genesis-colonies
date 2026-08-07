@@ -265,25 +265,92 @@ def get_public_base_url() -> str:
     return base.rstrip("/")
 
 
+def canon_shop_host(host: str) -> str:
+    """Normalize shop host: lowercase, strip port, treat www as apex."""
+    h = (host or "").strip().lower().split(":")[0]
+    if h.startswith("www."):
+        return h[4:]
+    return h
+
+
+def public_shop_host() -> str:
+    """Host part of PUBLIC_BASE_URL (empty if unset)."""
+    from urllib.parse import urlparse
+
+    return canon_shop_host(urlparse(get_public_base_url() or "").netloc)
+
+
+def get_canonical_shop_url() -> str:
+    """Official /shop URL for live PayPal host redirects."""
+    base = get_public_base_url()
+    if base:
+        return f"{base.rstrip('/')}/shop"
+    return "/shop"
+
+
+def resolve_shop_checkout_base_url(
+    *,
+    request_url_root: str,
+    paypal_live: bool,
+) -> str:
+    """
+    Absolute site base for PayPal/Stripe return + cancel URLs.
+
+    Live: always PUBLIC_BASE_URL when set (provider must return to prod).
+    Sandbox/dev: prefer the request host when PUBLIC_BASE_URL points elsewhere
+    (local .env often still has production PUBLIC_BASE_URL).
+    """
+    from urllib.parse import urlparse
+
+    req = (request_url_root or "").strip().rstrip("/")
+    pub = get_public_base_url()
+    if paypal_live:
+        return pub or req
+    if not pub:
+        return req
+    pub_host = canon_shop_host(urlparse(pub).netloc)
+    req_host = canon_shop_host(urlparse(req).netloc)
+    if pub_host and req_host and pub_host != req_host:
+        return req
+    return pub
+
+
+def session_cookie_domain() -> str | None:
+    """
+    Shared cookie domain so apex ↔ www keep the session after PayPal return.
+
+    Production only (or explicit GC_SESSION_COOKIE_DOMAIN). Local stays host-only.
+    """
+    explicit = _env_str("GC_SESSION_COOKIE_DOMAIN") or _env_str("SESSION_COOKIE_DOMAIN")
+    if explicit:
+        return explicit if explicit.startswith(".") or explicit == "localhost" else f".{explicit.lstrip('.')}"
+    if not is_production():
+        return None
+    host = public_shop_host()
+    if not host or host in ("localhost", "127.0.0.1") or "." not in host:
+        return None
+    return f".{host}"
+
+
 def is_shop_enabled() -> bool:
     """EPIC-23 kill-switch for real-money shop checkout."""
     val = os.environ.get("SHOP_ENABLED", "0")
     return str(val).strip().lower() in ("1", "true", "yes", "on")
 
 
-def shop_success_url() -> str:
+def shop_success_url(*, checkout_base: str | None = None) -> str:
     explicit = _env_str("SHOP_SUCCESS_URL")
     if explicit:
         return explicit
-    base = get_public_base_url()
+    base = (checkout_base or get_public_base_url() or "").rstrip("/")
     return f"{base}/shop/return" if base else "/shop/return"
 
 
-def shop_cancel_url() -> str:
+def shop_cancel_url(*, checkout_base: str | None = None) -> str:
     explicit = _env_str("SHOP_CANCEL_URL")
     if explicit:
         return explicit
-    base = get_public_base_url()
+    base = (checkout_base or get_public_base_url() or "").rstrip("/")
     return f"{base}/shop?cancelled=1" if base else "/shop?cancelled=1"
 
 

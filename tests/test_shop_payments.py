@@ -647,7 +647,9 @@ def test_shop_checkout_client_surfaces_paypal_and_promo_errors():
     assert "_shopHandleCheckoutResponse" in buy
     assert "shop_paypal_unavailable" in src
     assert "shop_host_mismatch" in src
+    assert "shop_invalid_return_url" in src
     assert "shop_promo_blocked_checkout" in src
+    assert "canonical_shop_url" in src
     # External checkout must redirect before any HUD apply on empty state:{}.
     handler = src.split("function _shopHandleCheckoutResponse(")[1].split(
         "function _shopActivePromoCode("
@@ -655,6 +657,8 @@ def test_shop_checkout_client_surfaces_paypal_and_promo_errors():
     assert "window.location.assign" in handler
     assert "_shopMaybeApplyCheckoutState" in handler
     assert handler.index("checkout_url") < handler.index("_shopMaybeApplyCheckoutState")
+    assert "public_host_mismatch" in handler
+    assert "canonical_shop_url" in handler
     maybe = src.split("function _shopMaybeApplyCheckoutState(")[1].split(
         "function _shopHandleCheckoutResponse("
     )[0]
@@ -735,6 +739,134 @@ def test_live_paypal_rejects_foreign_host(shop_db, monkeypatch):
     data = checkout.get_json()
     assert data["ok"] is False
     assert data["reason"] == "public_host_mismatch"
+    assert data.get("canonical_shop_url") == "https://www.genesis-colonies.de/shop"
+
+
+def test_sandbox_paypal_allows_foreign_host_despite_prod_public_url(shop_db, monkeypatch):
+    """Local sandbox must not hit public_host_mismatch (Instant-Buy baseline)."""
+    monkeypatch.setenv("SHOP_ENABLED", "1")
+    monkeypatch.setenv("SHOP_TEST_PROVIDER", "0")
+    monkeypatch.setenv("PAYPAL_CLIENT_ID", "test_client")
+    monkeypatch.setenv("PAYPAL_CLIENT_SECRET", "test_secret")
+    monkeypatch.setenv("PAYPAL_MODE", "sandbox")
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://www.genesis-colonies.de")
+
+    import game.payment_providers as pp
+    from app import app
+
+    captured = {}
+
+    def _create(**kwargs):
+        captured["success_url"] = kwargs.get("success_url")
+        captured["cancel_url"] = kwargs.get("cancel_url")
+        return (
+            True,
+            "ok",
+            {
+                "session_id": "PAYPAL_SB_TEST",
+                "checkout_url": "https://www.sandbox.paypal.com/checkoutnow?token=PAYPAL_SB_TEST",
+            },
+        )
+
+    monkeypatch.setattr(pp, "paypal_create_checkout_order", _create)
+    monkeypatch.setattr(pp, "paypal_configured", lambda: True)
+    monkeypatch.setattr("app._build_game_state_payload", lambda **_k: ({}, None))
+
+    app.config["TESTING"] = True
+    client = app.test_client()
+    uid = _player()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+
+    checkout = client.post(
+        "/api/shop/checkout",
+        json={"sku": "tk_pack_s", "provider": "paypal", "legal_ack": True},
+        headers={"Content-Type": "application/json"},
+    )
+    assert checkout.status_code == 200, checkout.get_data(as_text=True)
+    data = checkout.get_json()
+    assert data["ok"] is True
+    assert data["checkout_url"]
+    # Return URLs must stay on the request host (not prod PUBLIC_BASE_URL).
+    assert "genesis-colonies.de" not in str(captured.get("success_url") or "")
+    assert "/shop/return" in str(captured.get("success_url") or "")
+
+
+def test_instant_buy_impulse_sku_same_checkout_shape(shop_db, monkeypatch):
+    """Impulse Trio uses the same Instant-Buy checkout contract as classic SKUs."""
+    monkeypatch.setenv("SHOP_ENABLED", "1")
+    monkeypatch.setenv("SHOP_TEST_PROVIDER", "0")
+    monkeypatch.setenv("PAYPAL_CLIENT_ID", "test_client")
+    monkeypatch.setenv("PAYPAL_CLIENT_SECRET", "test_secret")
+    monkeypatch.setenv("PAYPAL_MODE", "sandbox")
+
+    import game.payment_providers as pp
+    from app import app
+
+    monkeypatch.setattr(
+        pp,
+        "paypal_create_checkout_order",
+        lambda **kwargs: (
+            True,
+            "ok",
+            {
+                "session_id": "PAYPAL_IMPULSE",
+                "checkout_url": "https://www.sandbox.paypal.com/checkoutnow?token=PAYPAL_IMPULSE",
+            },
+        ),
+    )
+    monkeypatch.setattr(pp, "paypal_configured", lambda: True)
+    monkeypatch.setattr("app._build_game_state_payload", lambda **_k: ({}, None))
+
+    app.config["TESTING"] = True
+    client = app.test_client()
+    uid = _player()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+
+    checkout = client.post(
+        "/api/shop/checkout",
+        json={
+            "sku": "genesis_accelerator_pack",
+            "provider": "paypal",
+            "legal_ack": True,
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    assert checkout.status_code == 200, checkout.get_data(as_text=True)
+    data = checkout.get_json()
+    assert data["ok"] is True
+    assert data["checkout_url"]
+    assert data.get("state") == {}
+    assert data.get("fulfilled") is False
+
+
+def test_resolve_shop_checkout_base_url_local_vs_live(monkeypatch):
+    from game.config import resolve_shop_checkout_base_url
+
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://www.genesis-colonies.de")
+    local = resolve_shop_checkout_base_url(
+        request_url_root="http://127.0.0.1:5000/",
+        paypal_live=False,
+    )
+    assert local == "http://127.0.0.1:5000"
+    live = resolve_shop_checkout_base_url(
+        request_url_root="http://127.0.0.1:5000/",
+        paypal_live=True,
+    )
+    assert live == "https://www.genesis-colonies.de"
+
+
+def test_session_cookie_domain_production_only(monkeypatch):
+    from game.config import session_cookie_domain
+
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://www.genesis-colonies.de")
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.delenv("GC_SESSION_COOKIE_DOMAIN", raising=False)
+    monkeypatch.delenv("SESSION_COOKIE_DOMAIN", raising=False)
+    assert session_cookie_domain() is None
+    monkeypatch.setenv("APP_ENV", "production")
+    assert session_cookie_domain() == ".genesis-colonies.de"
 
 
 def test_multi_sku_cart_order_and_fulfill(shop_db):

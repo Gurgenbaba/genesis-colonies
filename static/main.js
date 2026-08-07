@@ -21291,6 +21291,12 @@
         "PayPal ist gerade nicht erreichbar. Bitte gleich nochmal versuchen."
       );
     }
+    if (r === "invalid_return_url") {
+      return t(
+        "shop_invalid_return_url",
+        "Checkout-Rückkehr-URL ist ungültig. Bitte Support kontaktieren."
+      );
+    }
     if (r === "legal_ack_required") {
       return t("legal_ack_required", "Bitte die rechtlichen Hinweise vor dem Kauf bestätigen.");
     }
@@ -21373,6 +21379,21 @@
     }
     if (reason) console.warn("[GC] shop checkout failed", reason, res);
     showNotify(_shopCheckoutFailMessage(reason), "error");
+    // Live PayPal on wrong host → send player to official shop (session may need re-login there).
+    if (reason === "public_host_mismatch") {
+      const dest = String(res?.canonical_shop_url || "").trim();
+      if (dest) {
+        try {
+          if (typeof GC.navigateTo === "function" && dest.startsWith("/")) {
+            GC.navigateTo(dest);
+          } else {
+            window.location.assign(dest);
+          }
+        } catch (_) {
+          window.location.assign(dest);
+        }
+      }
+    }
     return false;
   }
 

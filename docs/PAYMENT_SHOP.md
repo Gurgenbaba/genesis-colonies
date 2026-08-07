@@ -132,6 +132,23 @@ Kill-switch: `SHOP_ENABLED=0` → checkout `shop_disabled`.
 - `SHOP_ENABLED`, `SHOP_SUCCESS_URL`, `SHOP_CANCEL_URL`
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PUBLISHABLE_KEY`
 - `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID`, `PAYPAL_MODE`
+- `PUBLIC_BASE_URL` — Railway live return host; local sandbox may ignore host mismatch and prefers request host for return URLs when it differs
+- `GC_SESSION_COOKIE_DOMAIN` (optional) — Production default `.genesis-colonies.de` from `PUBLIC_BASE_URL` so apex↔www keep the session after PayPal
+
+### Env matrix (Local vs Railway)
+
+| | **Local** | **Railway** |
+|--|-----------|-------------|
+| Goal | Instant-Buy works (baseline vor Impulse Trio) | Instant-Buy works for customers |
+| `PAYPAL_MODE` | `sandbox` (default) | `live` |
+| Host-Gate | **off** | **on** — www/apex of `PUBLIC_BASE_URL` only |
+| Return URL | Request host if `PUBLIC_BASE_URL` points elsewhere | Always `PUBLIC_BASE_URL` |
+| Fast path | `SHOP_TEST_PROVIDER=1` → immediate fulfill | off |
+| Session cookie | host-only | `.genesis-colonies.de` (prod) |
+
+**Kanonischer Kaufpfad:** `[data-shop-buy]` → `/api/shop/checkout` `{ sku, provider }` → PayPal → `/shop/return` → `fulfilled`. Cart is additive; Impulse Trio SKUs use the same Instant-Buy path.
+
+Live PayPal on a wrong host returns `public_host_mismatch` + `canonical_shop_url`; client navigates there.
 
 ## Ops — Payment live schalten (PayPal-first)
 
@@ -181,12 +198,21 @@ Webhook: `…/api/webhooks/stripe` Event `checkout.session.completed`.
 
 ### Checkliste Go-Live
 
-1. Migration `113` applied (`python migrate.py`)
+1. Migration `113` (+ cart `143` if multi-SKU) applied (`python migrate.py`)
 2. PayPal-Keys + Webhook auf Railway
-3. `SHOP_ENABLED=1`, Redeploy
-5. `/shop` zeigt PayPal-Button (nur über `PUBLIC_BASE_URL`-Host bei `PAYPAL_MODE=live`)
-6. Kauf → Order `fulfilled`
+3. `SHOP_ENABLED=1`, `PAYPAL_MODE=live`, Redeploy
+4. Session: Production setzt Cookie-Domain aus `PUBLIC_BASE_URL` (apex↔www); Override `GC_SESSION_COOKIE_DOMAIN`
+5. `/shop` Instant-Buy (klassisch + Impulse) → PayPal nur über `PUBLIC_BASE_URL`-Host
+6. Kauf → Order `fulfilled` (Return oder Webhook)
 7. Orphan-Recovery: `/shop/return?token=<PAYPAL_ORDER_ID>` gutschreibt COMPLETED-Zahlungen auch ohne lokale Order-Zeile
+8. Local smoke: `SHOP_TEST_PROVIDER=1` Sofortkauf; optional Sandbox Roundtrip mit `PAYPAL_MODE=sandbox`
+
+### Checkliste Local
+
+1. `SHOP_ENABLED=1`, `PAYPAL_MODE=sandbox` (oder `SHOP_TEST_PROVIDER=1`)
+2. Kein Host-Toast auf localhost
+3. Return-URLs bleiben auf dem Local-Host auch wenn `.env` noch Prod-`PUBLIC_BASE_URL` hat
+4. Instant-Buy `{ sku, provider }` wie vor Impulse Trio
 
 ## Non-goals (MVP+)
 

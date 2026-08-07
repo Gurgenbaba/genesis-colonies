@@ -92,7 +92,7 @@ from game import account_email as account_email_logic
 from game import discord_auth as discord_auth_logic
 
 from game.bootstrap import bootstrap_application
-from game.config import get_secret_key, is_debug_enabled, is_production
+from game.config import get_secret_key, is_debug_enabled, is_production, session_cookie_domain
 from game.security import (
     apply_security_headers,
     check_login_rate_limit,
@@ -1041,6 +1041,8 @@ _cookie_secure = session_cookie_secure_override()
 if _cookie_secure is None:
     _cookie_secure = is_production()
 
+_cookie_domain = session_cookie_domain()
+
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
@@ -1048,6 +1050,8 @@ app.config.update(
     PERMANENT_SESSION_LIFETIME=timedelta(days=31),
     SESSION_REFRESH_EACH_REQUEST=True,
 )
+if _cookie_domain:
+    app.config["SESSION_COOKIE_DOMAIN"] = _cookie_domain
 
 
 @app.template_global()
@@ -5530,18 +5534,31 @@ def api_admin_battle_pass_unlock_premium():
 # --------------------------------------------------------------------------
 
 def _shop_absolute_url(path: str) -> str:
-    """Stripe/PayPal require absolute https/http return URLs."""
-    from game.config import get_public_base_url, shop_cancel_url, shop_success_url
+    """Stripe/PayPal require absolute https/http return URLs.
 
+    Live PayPal: PUBLIC_BASE_URL. Sandbox/local: request host when PUBLIC_BASE_URL
+    points at another host (common local .env with prod PUBLIC_BASE_URL).
+    """
+    from game.config import (
+        resolve_shop_checkout_base_url,
+        shop_cancel_url,
+        shop_success_url,
+    )
+    from game.payment_providers import paypal_mode
+
+    checkout_base = resolve_shop_checkout_base_url(
+        request_url_root=request.url_root.rstrip("/"),
+        paypal_live=(paypal_mode() == "live"),
+    )
     if path == "success":
-        configured = shop_success_url()
+        configured = shop_success_url(checkout_base=checkout_base)
     elif path == "cancel":
-        configured = shop_cancel_url()
+        configured = shop_cancel_url(checkout_base=checkout_base)
     else:
         configured = path
     if configured.startswith("http://") or configured.startswith("https://"):
         return configured
-    base = (get_public_base_url() or request.url_root.rstrip("/")).rstrip("/")
+    base = (checkout_base or request.url_root.rstrip("/")).rstrip("/")
     if not base.startswith("http://") and not base.startswith("https://"):
         base = request.url_root.rstrip("/")
     suffix = configured if configured.startswith("/") else f"/{configured}"
@@ -5885,8 +5902,12 @@ def api_shop_checkout():
             elif code_s:
                 session.pop("shop_promo_code", None)
     from game.shop import clear_session_cart, get_session_cart, start_checkout
-    from urllib.parse import urlparse
-    from game.config import get_public_base_url
+    from game.config import (
+        canon_shop_host,
+        get_canonical_shop_url,
+        public_shop_host,
+        resolve_shop_checkout_base_url,
+    )
     from game.payment_providers import paypal_mode
 
     checkout_lines = None
@@ -5899,28 +5920,45 @@ def api_shop_checkout():
     elif not sku:
         return jsonify({"ok": False, "reason": "unknown_sku"}), 400
 
+    paypal_live = provider == "paypal" and paypal_mode() == "live"
+    req_host = canon_shop_host(request.host or "")
+    pub_host = public_shop_host()
+    return_base = resolve_shop_checkout_base_url(
+        request_url_root=request.url_root.rstrip("/"),
+        paypal_live=paypal_live,
+    )
+
     # Block local→live PayPal: PUBLIC_BASE_URL host must match this request host
-    # (www and apex are treated as the same site).
-    if provider == "paypal" and paypal_mode() == "live":
-        pub = urlparse((get_public_base_url() or "").strip()).netloc.lower()
-        req_host = (request.host or "").split(":")[0].lower()
-        pub_host = pub.split(":")[0] if pub else ""
-
-        def _canon_host(h: str) -> str:
-            h = (h or "").strip().lower()
-            return h[4:] if h.startswith("www.") else h
-
-        if pub_host and req_host and _canon_host(pub_host) != _canon_host(req_host):
-            return jsonify(
-                {
-                    "ok": False,
-                    "reason": "public_host_mismatch",
-                    "detail": "Live PayPal nur über die Produktions-URL.",
-                }
-            ), 400
+    # (www and apex are treated as the same site). Sandbox never hits this gate.
+    if paypal_live and pub_host and req_host and pub_host != req_host:
+        canonical = get_canonical_shop_url()
+        logger.warning(
+            "shop checkout host mismatch user_id=%s req_host=%s pub_host=%s mode=live",
+            user_id,
+            req_host,
+            pub_host,
+        )
+        return jsonify(
+            {
+                "ok": False,
+                "reason": "public_host_mismatch",
+                "detail": "Live PayPal nur über die Produktions-URL.",
+                "canonical_shop_url": canonical,
+            }
+        ), 400
 
     success_url = _shop_absolute_url("success")
     cancel_url = _shop_absolute_url("cancel")
+    logger.info(
+        "shop checkout start user_id=%s sku=%s provider=%s mode=%s req_host=%s return_base=%s cart=%s",
+        user_id,
+        sku or "cart",
+        provider,
+        paypal_mode() if provider == "paypal" else provider,
+        req_host,
+        return_base,
+        bool(use_cart or raw_lines),
+    )
 
     def _checkout_once(promo: Optional[str]):
         begin_write_transaction(conn)

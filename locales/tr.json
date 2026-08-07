@@ -8527,5 +8527,6 @@
   "shop_return_list": "Ara toplam",
   "shop_return_discount": "İndirim",
   "shop_return_qty": "Adet",
-  "shop_return_overview": "Genel bakışa"
+  "shop_return_overview": "Genel bakışa",
+  "shop_invalid_return_url": "Ödeme dönüş URL’si geçersiz. Lütfen destek ile iletişime geçin."
 }

@@ -8527,5 +8527,6 @@
   "shop_return_list": "Zwischensumme",
   "shop_return_discount": "Rabatt",
   "shop_return_qty": "Menge",
-  "shop_return_overview": "Zur Übersicht"
+  "shop_return_overview": "Zur Übersicht",
+  "shop_invalid_return_url": "Checkout-Rückkehr-URL ist ungültig. Bitte Support kontaktieren."
 }

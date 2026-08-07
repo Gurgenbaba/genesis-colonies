@@ -8527,5 +8527,6 @@
   "shop_return_list": "Suma częściowa",
   "shop_return_discount": "Rabat",
   "shop_return_qty": "Ilość",
-  "shop_return_overview": "Do przeglądu"
+  "shop_return_overview": "Do przeglądu",
+  "shop_invalid_return_url": "Nieprawidłowy URL powrotu z kasy. Skontaktuj się z pomocą."
 }

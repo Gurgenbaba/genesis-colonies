@@ -8527,5 +8527,6 @@
   "shop_return_list": "Sous-total",
   "shop_return_discount": "Réduction",
   "shop_return_qty": "Qté",
-  "shop_return_overview": "Vers l’aperçu"
+  "shop_return_overview": "Vers l’aperçu",
+  "shop_invalid_return_url": "URL de retour du paiement invalide. Veuillez contacter le support."
 }

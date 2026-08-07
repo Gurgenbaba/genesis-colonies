@@ -8527,5 +8527,6 @@
   "shop_return_list": "Промежуточный итог",
   "shop_return_discount": "Скидка",
   "shop_return_qty": "Кол-во",
-  "shop_return_overview": "К обзору"
+  "shop_return_overview": "К обзору",
+  "shop_invalid_return_url": "Некорректный URL возврата из оплаты. Обратитесь в поддержку."
 }
