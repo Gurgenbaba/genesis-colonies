@@ -59,8 +59,8 @@
 
   {% set modes = sl.modes if sl.modes is defined else {'tombola': true, 'mines': false, 'crash': false} %}
   {% set tombola_only = (not modes.mines) and (not modes.crash) %}
-  <div class="sl-mode-bar{% if tombola_only %} is-tombola-only{% endif %}">
-    {% if not tombola_only %}
+  {% if not tombola_only %}
+  <div class="sl-mode-bar">
     <nav class="sl-mode-tabs" data-sl-modes role="tablist" aria-label="{{ T('sl_modes_label', 'Spiele') }}">
       <button type="button" class="sl-mode-tab is-active" data-sl-mode="tombola" role="tab" aria-selected="true">
         {{ T("sl_mode_tombola", "Wochen-Tombola") }}
@@ -76,11 +76,8 @@
       </button>
       {% endif %}
     </nav>
-    {% endif %}
-    <div class="sl-mode-bar-meta gc-mono" data-sl-tombola-bar>
-      <span>{{ T("sl_my_tickets", "Meine Tickets") }}: <strong data-sl-my-tickets>{{ tombola.my_tickets or 0 }}</strong></span>
-    </div>
   </div>
+  {% endif %}
 
   {# ---- Wochen-Tombola (mockup layout) ---- #}
   <div class="sl-tombola-layout" data-sl-view="tombola">
@@ -98,7 +95,7 @@
         </div>
         <div class="sl-stat-row">
           <span>{{ T("sl_my_tickets", "Meine Tickets") }}</span>
-          <strong data-sl-my-tickets-rail>{{ tombola.my_tickets or 0 }}</strong>
+          <strong data-sl-my-tickets>{{ tombola.my_tickets or 0 }}</strong>
         </div>
         <div class="sl-stat-row">
           <span>{{ T("sl_daily_tombola", "Tagesvolumen Tombola") }}</span>

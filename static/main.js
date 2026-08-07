@@ -22477,7 +22477,7 @@
       if (pool) pool.textContent = tombola.pool_label || fmtTk(tombola.pool_sec);
       const week = root.querySelector("[data-sl-week]");
       if (week) week.textContent = tombola.week_id || "—";
-      root.querySelectorAll("[data-sl-my-tickets], [data-sl-my-tickets-rail]").forEach((el) => {
+      root.querySelectorAll("[data-sl-my-tickets]").forEach((el) => {
         el.textContent = String(tombola.my_tickets || 0);
       });
       const price = root.querySelector("[data-sl-ticket-unit]");
