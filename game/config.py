@@ -317,19 +317,18 @@ def resolve_shop_checkout_base_url(
 
 def session_cookie_domain() -> str | None:
     """
-    Shared cookie domain so apex ↔ www keep the session after PayPal return.
+    Optional shared cookie domain (apex ↔ www after PayPal return).
 
-    Production only (or explicit GC_SESSION_COOKIE_DOMAIN). Local stays host-only.
+    Only when explicitly set via GC_SESSION_COOKIE_DOMAIN / SESSION_COOKIE_DOMAIN.
+    Never auto-derive from PUBLIC_BASE_URL — flipping Domain mid-flight creates
+    duplicate session cookies and empty carts (Flask #5462).
     """
     explicit = _env_str("GC_SESSION_COOKIE_DOMAIN") or _env_str("SESSION_COOKIE_DOMAIN")
-    if explicit:
-        return explicit if explicit.startswith(".") or explicit == "localhost" else f".{explicit.lstrip('.')}"
-    if not is_production():
+    if not explicit:
         return None
-    host = public_shop_host()
-    if not host or host in ("localhost", "127.0.0.1") or "." not in host:
-        return None
-    return f".{host}"
+    if explicit.startswith(".") or explicit == "localhost":
+        return explicit
+    return f".{explicit.lstrip('.')}"
 
 
 def is_shop_enabled() -> bool:

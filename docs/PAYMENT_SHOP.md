@@ -144,7 +144,7 @@ Kill-switch: `SHOP_ENABLED=0` → checkout `shop_disabled`.
 | Host-Gate | **off** | **on** — www/apex of `PUBLIC_BASE_URL` only |
 | Return URL | Request host if `PUBLIC_BASE_URL` points elsewhere | Always `PUBLIC_BASE_URL` |
 | Fast path | `SHOP_TEST_PROVIDER=1` → immediate fulfill | off |
-| Session cookie | host-only | `.genesis-colonies.de` (prod) |
+| Session cookie | host-only | host-only by default; optional `GC_SESSION_COOKIE_DOMAIN=.genesis-colonies.de` (do not flip casually — duplicate cookies empty the cart) |
 
 **Kanonischer Kaufpfad:** `[data-shop-buy]` → `/api/shop/checkout` `{ sku, provider }` → PayPal → `/shop/return` → `fulfilled`. Cart is additive; Impulse Trio SKUs use the same Instant-Buy path.
 
@@ -201,7 +201,7 @@ Webhook: `…/api/webhooks/stripe` Event `checkout.session.completed`.
 1. Migration `113` (+ cart `143` if multi-SKU) applied (`python migrate.py`)
 2. PayPal-Keys + Webhook auf Railway
 3. `SHOP_ENABLED=1`, `PAYPAL_MODE=live`, Redeploy
-4. Session: Production setzt Cookie-Domain aus `PUBLIC_BASE_URL` (apex↔www); Override `GC_SESSION_COOKIE_DOMAIN`
+4. Session: host-only cookies by default; only set `GC_SESSION_COOKIE_DOMAIN` intentionally (apex↔www). Cart clears after fulfill/return, not at PayPal redirect start.
 5. `/shop` Instant-Buy (klassisch + Impulse) → PayPal nur über `PUBLIC_BASE_URL`-Host
 6. Kauf → Order `fulfilled` (Return oder Webhook)
 7. Orphan-Recovery: `/shop/return?token=<PAYPAL_ORDER_ID>` gutschreibt COMPLETED-Zahlungen auch ohne lokale Order-Zeile

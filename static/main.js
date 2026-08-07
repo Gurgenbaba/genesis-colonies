@@ -21812,6 +21812,13 @@
         }
         cartCheckout.disabled = true;
         try {
+          const cartItems = Array.isArray(_shopCartState?.items) ? _shopCartState.items : [];
+          const lines = cartItems
+            .map((it) => ({
+              sku: String(it.sku || "").trim(),
+              qty: Math.max(1, Number(it.qty) || 1),
+            }))
+            .filter((it) => it.sku);
           const res = await GC.fetchGameAction("/api/shop/checkout", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -21821,8 +21828,13 @@
               legal_ack: true,
               legal_text_version: "v1",
               promo_code: _shopActivePromoCode(),
+              // Server still validates prices/ownership; lines recover empty session carts.
+              lines,
             }),
           });
+          if (String(res?.reason || "") === "empty_cart") {
+            _shopRefreshCart();
+          }
           _shopHandleCheckoutResponse(res, {
             page: document.getElementById("shop-page"),
             btn: cartCheckout,

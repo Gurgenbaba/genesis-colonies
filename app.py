@@ -5723,6 +5723,12 @@ def shop_return_view():
 
         receipt = build_shop_return_payload(None, conn=None)
 
+    # Drop session cart after a successful paid/fulfilled return (PayPal path).
+    if order and str(order.get("status") or "") in ("paid", "fulfilled"):
+        from game.shop import clear_session_cart
+
+        clear_session_cart(session)
+
     ctx = _load_page_live_context(finish_source="shop_return")
     if ctx is None:
         return redirect(url_for("login"))
@@ -6013,11 +6019,14 @@ def api_shop_checkout():
     finally:
         conn.close()
 
-    if ok and (use_cart or raw_lines):
-        clear_session_cart(session)
-
     checkout_url = (result or {}).get("checkout_url") if result else None
     fulfilled = bool((result or {}).get("fulfilled")) if result else False
+    if ok and fulfilled and (use_cart or raw_lines):
+        # Only clear after immediate fulfill (test provider). PayPal redirect must
+        # keep the cart until paid — otherwise a failed/aborted redirect leaves a
+        # stale client cart and the next click returns empty_cart.
+        clear_session_cart(session)
+
     if ok and checkout_url and not fulfilled:
         state = {}
     else:

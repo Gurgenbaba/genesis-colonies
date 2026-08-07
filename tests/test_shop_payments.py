@@ -857,16 +857,95 @@ def test_resolve_shop_checkout_base_url_local_vs_live(monkeypatch):
     assert live == "https://www.genesis-colonies.de"
 
 
-def test_session_cookie_domain_production_only(monkeypatch):
+def test_session_cookie_domain_explicit_only(monkeypatch):
     from game.config import session_cookie_domain
 
     monkeypatch.setenv("PUBLIC_BASE_URL", "https://www.genesis-colonies.de")
-    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.delenv("GC_SESSION_COOKIE_DOMAIN", raising=False)
     monkeypatch.delenv("SESSION_COOKIE_DOMAIN", raising=False)
     assert session_cookie_domain() is None
-    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("GC_SESSION_COOKIE_DOMAIN", ".genesis-colonies.de")
     assert session_cookie_domain() == ".genesis-colonies.de"
+
+
+def test_paypal_cart_checkout_keeps_session_cart_until_paid(shop_db, monkeypatch):
+    """Cart must survive PayPal redirect start (empty_cart regression)."""
+    monkeypatch.setenv("SHOP_ENABLED", "1")
+    monkeypatch.setenv("SHOP_TEST_PROVIDER", "0")
+    monkeypatch.setenv("PAYPAL_CLIENT_ID", "test_client")
+    monkeypatch.setenv("PAYPAL_CLIENT_SECRET", "test_secret")
+    monkeypatch.setenv("PAYPAL_MODE", "sandbox")
+
+    import game.payment_providers as pp
+    from app import app
+
+    monkeypatch.setattr(
+        pp,
+        "paypal_create_checkout_order",
+        lambda **kwargs: (
+            True,
+            "ok",
+            {
+                "session_id": "PAYPAL_CART_KEEP",
+                "checkout_url": "https://www.sandbox.paypal.com/checkoutnow?token=PAYPAL_CART_KEEP",
+            },
+        ),
+    )
+    monkeypatch.setattr(pp, "paypal_configured", lambda: True)
+    monkeypatch.setattr("app._build_game_state_payload", lambda **_k: ({}, None))
+
+    app.config["TESTING"] = True
+    client = app.test_client()
+    uid = _player()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+
+    add = client.post(
+        "/api/shop/cart/add",
+        json={"sku": "tk_pack_s", "qty": 1},
+        headers={"Content-Type": "application/json"},
+    )
+    assert add.status_code == 200
+    checkout = client.post(
+        "/api/shop/checkout",
+        json={"from_cart": True, "provider": "paypal", "legal_ack": True},
+        headers={"Content-Type": "application/json"},
+    )
+    assert checkout.status_code == 200, checkout.get_data(as_text=True)
+    assert checkout.get_json()["checkout_url"]
+    cart = client.get("/api/shop/cart")
+    assert cart.status_code == 200
+    assert cart.get_json()["cart"]["item_count"] >= 1
+
+
+def test_cart_checkout_accepts_client_lines_when_session_empty(shop_db, monkeypatch):
+    """UI cart snapshot can recover checkout if session cart was lost."""
+    monkeypatch.setenv("SHOP_ENABLED", "1")
+    monkeypatch.setenv("SHOP_TEST_PROVIDER", "1")
+    from app import app
+
+    app.config["TESTING"] = True
+    client = app.test_client()
+    uid = _player()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+        sess.pop("shop_cart", None)
+
+    checkout = client.post(
+        "/api/shop/checkout",
+        json={
+            "from_cart": True,
+            "provider": "test",
+            "legal_ack": True,
+            "lines": [{"sku": "tk_pack_s", "qty": 1}],
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    assert checkout.status_code == 200, checkout.get_data(as_text=True)
+    data = checkout.get_json()
+    assert data["ok"] is True
+    assert data["fulfilled"] is True
 
 
 def test_multi_sku_cart_order_and_fulfill(shop_db):
@@ -976,6 +1055,12 @@ def test_shop_cart_ui_contract():
     assert "shop_cart_discount" in js
     assert "_shopSyncCardCartQtys" in js
     assert "shop_cart_card_qty" in js
+    cart_checkout = js.split("closest(\"[data-shop-cart-checkout]\")")[1].split(
+        "closest(\"[data-shop-buy]\")"
+    )[0]
+    assert "lines" in cart_checkout
+    assert "empty_cart" in cart_checkout
+    assert "from_cart: true" in cart_checkout
 
 
 def test_stripe_webhook_rejects_bad_signature(shop_db, monkeypatch):
