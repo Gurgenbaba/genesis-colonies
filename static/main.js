@@ -10233,6 +10233,16 @@
     if (r.startsWith("planet_research")) return true;
     if (r === "pe_spec_pick" || r === "pe_spec_upgrade") return true;
     if (r === "pe_policy_activate" || r === "pe_event_resolve" || r === "pe_research_choose") return true;
+    if (r.startsWith("pe_")) return true;
+    return false;
+  }
+
+  function _peActionNeedsSoftReload(reasonStr) {
+    const r = String(reasonStr || "");
+    // PE POST mutations soft-reload via finalizePeMutationSuccess({ softContent: true }).
+    // Here: queue completion / timekeeper while PE page is open.
+    if (r === "queue_timer_zero" || r === "timer_done" || r.endsWith("_finished")) return true;
+    if (r === "timekeeper_apply") return true;
     return false;
   }
 
@@ -10258,6 +10268,15 @@
     if (!_shouldRefreshPlanetEvolutionAfterAction(reasonStr)) return;
     const pid = _resolveActivePePlanetId();
     if (!pid) return;
+    if (_peActionNeedsSoftReload(reasonStr)) {
+      void _softReloadPlanetEvolutionContent().then(() => {
+        if (GC.lastState && GC.lastState.ok !== false) {
+          _finalizeTimekeeperQueueButtons(GC.lastState);
+        }
+        GC.startProgressTicker();
+      });
+      return;
+    }
     void refreshPlanetEvolutionState(pid).then(() => {
       if (GC.lastState && GC.lastState.ok !== false) {
         _finalizeTimekeeperQueueButtons(GC.lastState);
@@ -23313,25 +23332,48 @@
   function patchInitiationHud(summary) {
     const root = document.getElementById("gc-initiation-hud");
     if (!root) return;
-    const active = !!(summary && summary.ready && summary.active);
-    root.classList.toggle("is-hidden", !active);
-    root.hidden = !active;
-    if (!active) return;
-    const title = t(String(summary.title_key || ""), String(summary.step_id || ""));
-    const p = Number(summary.progress || 0);
-    const tg = Math.max(1, Number(summary.target || 1));
-    const progress = `${fmtNumber(p)} / ${fmtNumber(tg)}`;
+    const ready = !!(summary && summary.ready);
+    const active = !!(ready && summary.active);
+    const completed = !!(ready && summary.completed);
+    const visible = active || completed;
+    root.classList.toggle("is-hidden", !visible);
+    root.classList.toggle("is-bis", completed && !active);
+    root.hidden = !visible;
+    if (!visible) return;
     const progressEl = root.querySelector("[data-ini-hud-progress]");
     const titleEl = root.querySelector("[data-ini-hud-title]");
+    if (active) {
+      const title = t(String(summary.title_key || ""), String(summary.step_id || ""));
+      const p = Number(summary.progress || 0);
+      const tg = Math.max(1, Number(summary.target || 1));
+      const progress = `${fmtNumber(p)} / ${fmtNumber(tg)}`;
+      if (progressEl) {
+        progressEl.textContent = progress;
+        progressEl.hidden = false;
+      }
+      if (titleEl) titleEl.textContent = title;
+      root.dataset.iniMode = "active";
+      root.setAttribute("href", "/initiation");
+      root.setAttribute("title", `${title} — ${progress}`);
+      root.setAttribute(
+        "aria-label",
+        `${t("initiation_hud_aria", "Open Command Initiation")}: ${title} ${progress}`
+      );
+      return;
+    }
+    const bisTitle = t("initiation_hud_bis_title", "Progression / Best-in-Slot Build");
+    const bisTag = t("initiation_hud_bis_tag", "BiS");
     if (progressEl) {
-      progressEl.textContent = progress;
+      progressEl.textContent = bisTag;
       progressEl.hidden = false;
     }
-    if (titleEl) titleEl.textContent = title;
-    root.setAttribute("title", `${title} — ${progress}`);
+    if (titleEl) titleEl.textContent = bisTitle;
+    root.dataset.iniMode = "bis";
+    root.setAttribute("href", "/initiation?tab=build_order");
+    root.setAttribute("title", bisTitle);
     root.setAttribute(
       "aria-label",
-      `${t("initiation_hud_aria", "Open Command Initiation")}: ${title} ${progress}`
+      t("initiation_hud_bis_aria", "Open Progression / Best-in-Slot Build")
     );
   }
   GC.patchInitiationHud = patchInitiationHud;
@@ -23343,24 +23385,33 @@
     const tabs = page.querySelector("[data-ini-tabs]");
     if (!tabs || tabs.dataset.bound === "1") return;
     tabs.dataset.bound = "1";
-    const onTabClick = (ev) => {
-      const btn = ev.target.closest("[data-ini-tab]");
-      if (!btn || !tabs.contains(btn)) return;
-      const id = String(btn.getAttribute("data-ini-tab") || "").trim();
-      if (!id) return;
+    const activateIniTab = (id) => {
+      const key = String(id || "").trim();
+      if (!key) return;
+      const btn = tabs.querySelector(`[data-ini-tab="${key}"]`);
+      if (!btn) return;
       tabs.querySelectorAll("[data-ini-tab]").forEach((el) => {
         const on = el === btn;
         el.classList.toggle("is-active", on);
         el.setAttribute("aria-selected", on ? "true" : "false");
       });
       page.querySelectorAll("[data-ini-panel]").forEach((panel) => {
-        const on = panel.getAttribute("data-ini-panel") === id;
+        const on = panel.getAttribute("data-ini-panel") === key;
         panel.classList.toggle("is-active", on);
         if (on) panel.removeAttribute("hidden");
         else panel.setAttribute("hidden", "");
       });
     };
+    const onTabClick = (ev) => {
+      const btn = ev.target.closest("[data-ini-tab]");
+      if (!btn || !tabs.contains(btn)) return;
+      activateIniTab(btn.getAttribute("data-ini-tab"));
+    };
     tabs.addEventListener("click", onTabClick);
+    try {
+      const tab = new URLSearchParams(window.location.search || "").get("tab") || "";
+      if (tab === "build_order" || tab === "doctrine") activateIniTab(tab);
+    } catch (_) {}
     GC.registerCleanup(() => {
       tabs.removeEventListener("click", onTabClick);
       delete tabs.dataset.bound;
@@ -31508,7 +31559,16 @@
         copy.className = "gc-planet-registry-card-copy";
         const nameSpan = document.createElement("span");
         nameSpan.className = "gc-planet-registry-card-name";
-        nameSpan.textContent = p.name || "";
+        nameSpan.appendChild(document.createTextNode(p.name || ""));
+        const peLevel = p.planet_level != null ? Number(p.planet_level) : NaN;
+        if (Number.isFinite(peLevel)) {
+          nameSpan.appendChild(document.createTextNode(" "));
+          const levelSpan = document.createElement("span");
+          levelSpan.className = "gc-planet-registry-card-level gc-mono";
+          levelSpan.title = t("pe_development_stage", "Entwicklungsstufe");
+          levelSpan.textContent = "L" + String(Math.trunc(peLevel));
+          nameSpan.appendChild(levelSpan);
+        }
         copy.appendChild(nameSpan);
 
         const identityKey = empireIdentityLabelKey(p);
@@ -32580,7 +32640,6 @@
             "shipyard",
             "defense",
             "overview",
-            "planet_evolution",
             "trader_hub",
             "logistics",
           ]);
@@ -32727,6 +32786,8 @@
       traits: "pe-section-traits",
       policies: "pe-section-policies",
       action: "pe-section-action",
+      expansion: "pe-section-expansion-gate",
+      mandates: "pe-section-mandates",
     };
 
     const tabPanels = { events: "events", research: "research", policies: "policies", history: "history" };
@@ -33022,7 +33083,7 @@
           closePeChoiceConfirmModal();
           const choiceActions = choiceBtn.closest(".pe-research-actions--choice");
           if (choiceActions) choiceActions.remove();
-          await finalizePeMutationSuccess(res, "pe_research_choose", { softContent: false });
+          await finalizePeMutationSuccess(res, "pe_research_choose", { softContent: true });
         } else {
           peMutationFailed(choiceBtn, res);
         }
@@ -33039,7 +33100,11 @@
       }
       const section = document.getElementById(sectionId);
       if (section && section.tagName === "DETAILS") section.open = true;
-      if (sectionId === "pe-section-expansion-gate" || sectionId === "pe-section-establishment") {
+      if (
+        sectionId === "pe-section-expansion-gate" ||
+        sectionId === "pe-section-establishment" ||
+        sectionId === "pe-section-mandates"
+      ) {
         openPeExpansionDrawer(true);
       }
     };
@@ -33065,6 +33130,17 @@
         }
       }
       const sectionId = scrollTargets[target] || `pe-section-${target}`;
+      const highlightId = highlight || sectionId;
+      // Expansion / Mandates live in a hidden drawer — open before scroll.
+      if (
+        highlightId === "pe-section-expansion-gate" ||
+        highlightId === "pe-section-establishment" ||
+        highlightId === "pe-section-mandates" ||
+        sectionId === "pe-section-expansion-gate" ||
+        sectionId === "pe-section-mandates"
+      ) {
+        openPeExpansionDrawer(true);
+      }
       const needsTab = actionType === "focus_tab" || Boolean(tabPanels[target]);
       if (needsTab && tabPanels[target]) {
         const tab = root.querySelector(`.pe-sec-tab[data-panel="${tabPanels[target]}"]`);
@@ -33075,7 +33151,6 @@
       }
 
       let el = null;
-      const highlightId = highlight || sectionId;
       if (highlightId) el = document.getElementById(highlightId);
       if (!el && techKey) {
         el = root.querySelector(`#pe-research-card-${techKey}, [data-tech-key="${techKey}"]`);
@@ -33206,7 +33281,7 @@
         let res;
         try {
           res = await postAction(`/api/planets/${planetId}/research/start`, { tech_key: techKey, request_id: requestId });
-          if (res?.ok) await finalizePeMutationSuccess(res, "planet_research_start", { softContent: false });
+          if (res?.ok) await finalizePeMutationSuccess(res, "planet_research_start", { softContent: true });
           else peMutationFailed(researchBtn, res);
         } finally {
           if (!res?.ok) researchBtn.disabled = false;
@@ -33237,7 +33312,7 @@
             span.textContent = String(specBtn.textContent || "").trim();
             picker.replaceWith(span);
           }
-          await finalizePeMutationSuccess(res, "pe_spec_pick", { softContent: false });
+          await finalizePeMutationSuccess(res, "pe_spec_pick", { softContent: true });
         } else peMutationFailed(specBtn, res);
         return;
       }
@@ -33247,7 +33322,7 @@
         specUpgradeBtn.disabled = true;
         const planetId = parseInt(specUpgradeBtn.dataset.planetId || "0", 10);
         const res = await postAction(`/api/planets/${planetId}/specialization/upgrade`, {});
-        if (res?.ok) await finalizePeMutationSuccess(res, "pe_spec_upgrade", { softContent: false });
+        if (res?.ok) await finalizePeMutationSuccess(res, "pe_spec_upgrade", { softContent: true });
         else peMutationFailed(specUpgradeBtn, res);
         return;
       }

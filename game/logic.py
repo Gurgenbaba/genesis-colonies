@@ -741,7 +741,7 @@ def get_building_tree_status(
 
 MAX_PLANETS_PER_PLAYER_MIN = 1
 MAX_PLANETS_PER_PLAYER_MAX = 50
-DEFAULT_MAX_COLONIES_PER_PLAYER = 9
+DEFAULT_MAX_COLONIES_PER_PLAYER = 11
 
 
 def get_max_planets_per_player(*, conn=None) -> int:

@@ -18,7 +18,7 @@ Epics beschreiben nur das Ziel. **Niemals direkt implementieren.**
 | EPIC-05 | Planet Evolution | [PLANET_EVOLUTION.md](PLANET_EVOLUTION.md) |
 | EPIC-06 | Buildings | [BUILDINGS_SYSTEM.md](BUILDINGS_SYSTEM.md) |
 | EPIC-07 | Research (Account-Tech) | [RESEARCH_SYSTEM.md](RESEARCH_SYSTEM.md) |
-| EPIC-15 | Imperium & Expansion (Genesis 2.0) | [IMPERIUM_VISION.md](IMPERIUM_VISION.md) |
+| EPIC-15 | Imperium & Expansion (Genesis 2.0) | [IMPERIUM_VISION.md](IMPERIUM_VISION.md) · Late-Cap: [IMPERIAL_MANDATES.md](IMPERIAL_MANDATES.md) |
 | EPIC-17 | Imperial Directives (High Command) | [IMPERIAL_DIRECTIVES.md](IMPERIAL_DIRECTIVES.md) |
 | EPIC-19 | Performance Core (Maximum Speed Stack) | [GC_PERF_CORE.md](GC_PERF_CORE.md) |
 | EPIC-20 | World Boss Events (serverweite PvE-Bosse, Catch/Companions) | [WORLD_BOSS_SYSTEM.md](WORLD_BOSS_SYSTEM.md) |
@@ -144,7 +144,7 @@ Kurz. Keine Projektzusammenfassung.
 ## Tests
 
 ```bash
-python -m pytest tests/ -v          # gesamt (4498 Tests)
+python -m pytest tests/ -v          # gesamt (4519 Tests)
 python -m pytest tests/test_fleet.py -v   # domänenspezifisch
 ```
 

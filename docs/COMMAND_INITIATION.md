@@ -76,10 +76,11 @@ Uses `EffectResolver` + `BUILDING_REQUIREMENTS` / research requirements. Does **
 
 ## UX
 
-- Header icon rail: Initiation + Login Rewards + Season Pass
-- Page tabs: **Doctrine** (mission cards) | **Build Order** (sequence list)
+- Header icon rail: **Initiation** (while active) **or BiS/Progression** (after complete — always visible) + Login Rewards + Season Pass
+- Completed track keeps the HUD icon (`is-bis`) linking to `/initiation?tab=build_order`
+- Page tabs: **Doctrine** (mission cards) | **Build Order** (sequence list); `?tab=build_order` opens BiS tab
 - Mission cards with Go deep-links (`highlight=` for buildings/research)
-- `initiation` on `/api/game-state` patches the HUD
+- `initiation` on `/api/game-state` patches the HUD (`patchInitiationHud` keeps BiS visible when completed)
 - `get_initiation_state` includes `build_order` + `completed_steps`
 
 ## Rules

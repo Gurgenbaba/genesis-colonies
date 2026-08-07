@@ -602,7 +602,27 @@ def _next_action(
                 title_key="pe_action_expansion_progress_title",
                 body_key="pe_action_expansion_progress_body",
                 cta_label_key="pe_action_expansion_progress_cta",
-                cta_target="progression",
+                cta_target="expansion",
+                cta_action="focus_section",
+                cta_highlight="pe-section-expansion-gate",
+            )
+        if items.get("imperial_mandate") and not items["imperial_mandate"].get("met"):
+            return _cta(
+                priority="imperial_mandate",
+                title_key="pe_action_mandate_title",
+                body_key="pe_action_mandate_body",
+                cta_label_key="pe_action_mandate_cta",
+                cta_target="mandates",
+                cta_action="focus_section",
+                cta_highlight="pe-section-mandates",
+            )
+        if items.get("colony_maturity") and not items["colony_maturity"].get("met"):
+            return _cta(
+                priority="colony_maturity",
+                title_key="pe_action_maturity_title",
+                body_key="pe_action_maturity_body",
+                cta_label_key="pe_action_maturity_cta",
+                cta_target="expansion",
                 cta_action="focus_section",
                 cta_highlight="pe-section-expansion-gate",
             )

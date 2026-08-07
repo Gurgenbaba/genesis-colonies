@@ -1,17 +1,32 @@
-{# Command Initiation — compact header quest icon (opens /initiation) #}
+{# Command Initiation + BiS Build Order — always in top rail when track is ready #}
 {% set _ini = initiation_hud if initiation_hud is defined else none %}
-{% set _ini_active = _ini and _ini.active %}
-{% set _ini_title = T(_ini.title_key, _ini.step_id or '') if _ini_active and _ini.title_key else T('initiation_title', 'Command Initiation') %}
-{% set _ini_progress = ((_ini.progress or 0)|fmt_int ~ ' / ' ~ (_ini.target or 1)|fmt_int) if _ini_active else '' %}
+{% set _ini_ready = _ini and _ini.ready %}
+{% set _ini_active = _ini_ready and _ini.active %}
+{% set _ini_done = _ini_ready and _ini.completed %}
+{% set _ini_visible = _ini_ready and (_ini_active or _ini_done) %}
+{% if _ini_active %}
+  {% set _ini_title = T(_ini.title_key, _ini.step_id or '') if _ini.title_key else T('initiation_title', 'Command Initiation') %}
+  {% set _ini_progress = ((_ini.progress or 0)|fmt_int ~ ' / ' ~ (_ini.target or 1)|fmt_int) %}
+  {% set _ini_href = url_for('initiation_view') %}
+{% elif _ini_done %}
+  {% set _ini_title = T('initiation_hud_bis_title', 'Progression / Best-in-Slot Build') %}
+  {% set _ini_progress = T('initiation_hud_bis_tag', 'BiS') %}
+  {% set _ini_href = url_for('initiation_view', tab='build_order') %}
+{% else %}
+  {% set _ini_title = T('initiation_title', 'Command Initiation') %}
+  {% set _ini_progress = '' %}
+  {% set _ini_href = url_for('initiation_view') %}
+{% endif %}
 <a id="gc-initiation-hud"
-   class="gc-initiation-hud{% if not _ini_active %} is-hidden{% endif %}"
-   href="{{ url_for('initiation_view') }}"
+   class="gc-initiation-hud{% if _ini_done %} is-bis{% endif %}{% if not _ini_visible %} is-hidden{% endif %}"
+   href="{{ _ini_href }}"
    data-gc-nav
    data-pjax
    data-initiation-hud
-   title="{{ _ini_title }}{% if _ini_progress %} — {{ _ini_progress }}{% endif %}"
-   aria-label="{{ T('initiation_hud_aria', 'Open Command Initiation') }}{% if _ini_progress %}: {{ _ini_title }} {{ _ini_progress }}{% endif %}"
-   {% if not _ini_active %}hidden{% endif %}>
+   data-ini-mode="{{ 'active' if _ini_active else ('bis' if _ini_done else 'idle') }}"
+   title="{{ _ini_title }}{% if _ini_active and _ini_progress %} — {{ _ini_progress }}{% endif %}"
+   aria-label="{{ T('initiation_hud_aria', 'Open Command Initiation') if _ini_active else T('initiation_hud_bis_aria', 'Open Progression / Best-in-Slot Build') }}{% if _ini_active and _ini_progress %}: {{ _ini_title }} {{ _ini_progress }}{% endif %}"
+   {% if not _ini_visible %}hidden{% endif %}>
   <span class="gc-initiation-hud__icon" aria-hidden="true">◆</span>
   <span class="gc-initiation-hud__badge gc-mono"
         data-ini-hud-progress

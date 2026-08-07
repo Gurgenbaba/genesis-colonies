@@ -231,6 +231,9 @@ def build_expansion_unlock_block(
     )
     target_count = count_reachable_colonize_targets(int(player_id), conn=conn)
     can_launch = bool(checklist.get("can_launch"))
+    from .imperial_mandates import ensure_player_mandate_state
+
+    mandates = ensure_player_mandate_state(int(player_id), conn=conn)
     return {
         "visible": True,
         "homeworld_level": level,
@@ -242,6 +245,7 @@ def build_expansion_unlock_block(
         "sites": sites,
         "expansion_limit": limit,
         "launch_checklist": checklist,
+        "mandates": mandates,
         "colonize_cta": {
             "visible": bool(viewing_homeworld),
             "enabled": can_launch,

@@ -63,7 +63,7 @@
               style="--gr-planet-image: url('{{ hc_url }}');{% if hc_webp %} --gr-planet-image-webp: url('{{ hc_webp }}');{% endif %}"></span>
         {% endif %}
         <span class="gc-planet-registry-card-copy">
-          <span class="gc-planet-registry-card-name">{{ p.name }}</span>
+          <span class="gc-planet-registry-card-name">{{ p.name }}{% if p.planet_level is defined and p.planet_level is not none %} <span class="gc-planet-registry-card-level gc-mono" title="{{ T('pe_development_stage', 'Entwicklungsstufe') }}">L{{ p.planet_level|int }}</span>{% endif %}</span>
           {% if p_identity_key %}
           <span class="gc-planet-registry-card-role">{{ T(p_identity_key) }}</span>
           {% endif %}

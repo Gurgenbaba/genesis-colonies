@@ -227,6 +227,8 @@ def test_admin_cap_blocks_new_colonies_not_existing(expansion_protocol_db):
         )
         conn.commit()
         _set_cap(3)
+        from tests.conftest import mature_owned_colonies
+
         for i in range(2):
             ok, reason, _ = colonize_planet(
                 uid,
@@ -239,6 +241,7 @@ def test_admin_cap_blocks_new_colonies_not_existing(expansion_protocol_db):
                 source='test',
             )
             assert ok, reason
+            mature_owned_colonies(conn, uid)
         assert len(get_planets_by_player(uid, conn=conn)) == 3
         ok_cap, reason_cap = check_planet_cap_available(uid, conn=conn)
         assert not ok_cap

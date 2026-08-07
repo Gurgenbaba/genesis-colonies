@@ -88,7 +88,7 @@ PRESET_B_BALANCE: Dict[str, Union[int, float, bool]] = {
     "research_speed": 0.85,
     "queue_limit": 5,
     "research_queue_limit": 2,
-    "max_colonies_per_player": 9,
+    "max_colonies_per_player": 11,
     "shipyard_speed": 1.0,
     "shipyard_queue_limit": 3,
     "score_weight_buildings": 1.0,

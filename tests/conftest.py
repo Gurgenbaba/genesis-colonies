@@ -51,12 +51,43 @@ def unlock_colony_slots(conn, homeworld_id: int, slots: int = 1) -> None:
     founding a colony) must not have its homeworld's level *lowered* back
     down to the 1-slot threshold, which would re-lock the slot it already
     used.
+
+    Also matures existing non-homeworld colonies to
+    `COLONY_MATURITY_REQUIRED_LEVEL` so the PE maturity gate allows the next
+    founding (breadth-follows-depth rule).
     """
-    from game.planet_evolution.expansion_protocol import next_expansion_slot_homeworld_level
+    from game.planet_evolution.expansion_protocol import (
+        next_expansion_slot_homeworld_level,
+    )
 
     required_level = next_expansion_slot_homeworld_level(int(slots) - 1)
+    if required_level is None:
+        # Late empire: Ark table maxed — keep HW at least at last table gate.
+        required_level = 30
     conn.execute(
         "UPDATE planets SET planet_level = MAX(planet_level, ?) WHERE id = ?;",
         (int(required_level), int(homeworld_id)),
+    )
+    row = conn.execute(
+        "SELECT player_id FROM planets WHERE id = ? LIMIT 1;",
+        (int(homeworld_id),),
+    ).fetchone()
+    if row is not None:
+        mature_owned_colonies(conn, int(row["player_id"] if hasattr(row, "keys") else row[0]))
+    conn.commit()
+
+
+def mature_owned_colonies(conn, player_id: int, level: int | None = None) -> None:
+    """Raise all non-homeworld colonies to at least the PE maturity gate level."""
+    from game.planet_evolution.expansion_protocol import COLONY_MATURITY_REQUIRED_LEVEL
+
+    target = int(level if level is not None else COLONY_MATURITY_REQUIRED_LEVEL)
+    conn.execute(
+        """
+        UPDATE planets
+        SET planet_level = MAX(COALESCE(planet_level, 0), ?)
+        WHERE player_id = ? AND COALESCE(is_homeworld, 0) = 0;
+        """,
+        (target, int(player_id)),
     )
     conn.commit()

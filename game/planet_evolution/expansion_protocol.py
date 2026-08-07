@@ -18,6 +18,9 @@ from .world_colonization import parse_world_key
 INTERSTELLAR_EXPANSION_TECH = "interstellar_expansion"
 INTERSTELLAR_EXPANSION_MAX_LEVEL = 6
 
+# Non-homeworld colonies must reach this PE level before another colony may be founded.
+COLONY_MATURITY_REQUIRED_LEVEL = 30
+
 # Nth expansion world (1 = first colony after homeworld).
 EXPANSION_SLOT_GATES: Tuple[Dict[str, int], ...] = (
     {"expansion_index": 1, "homeworld_level": 5, "expansion_tech": 1},
@@ -120,49 +123,91 @@ def count_expansion_worlds(player_id: int, *, conn: sqlite3.Connection) -> int:
     return sum(1 for p in planets if not bool(p.get("is_homeworld")))
 
 
-def expansion_slots_unlocked(homeworld_level: int) -> int:
-    """Colony slots (excluding homeworld) unlocked at this Genesis Ark level (GC-976A).
+def colony_maturity_gate(
+    player_id: int,
+    *,
+    conn: sqlite3.Connection,
+) -> Tuple[bool, str, Dict[str, Any]]:
+    """Require all existing non-homeworld colonies at PE ≥ COLONY_MATURITY_REQUIRED_LEVEL.
 
-    Beyond the last hardcoded `EXPANSION_SLOT_GATES` entry, slots keep
-    unlocking every +5 homeworld levels — the same linear extrapolation
-    `_slot_gate_for_next_expansion`/`next_expansion_slot_homeworld_level`
-    already use to compute the *next* required level. Without this, players
-    who kept leveling their homeworld past the table's top entry would be
-    permanently stuck at that many colonies even though the "next unlock
-    level" shown in the UI (`get_expansion_limit_block`) implies more are
-    still coming (GC-STABILIZE-002).
+    First colony (no non-HW worlds yet) always passes. Homeworld is excluded.
+    """
+    uid = int(player_id)
+    required = int(COLONY_MATURITY_REQUIRED_LEVEL)
+    planets = get_planets_by_player(uid, conn=conn) or []
+    colonies = [p for p in planets if not bool(p.get("is_homeworld"))]
+    if not colonies:
+        return True, "", {
+            "required_level": required,
+            "colony_count": 0,
+            "mature_count": 0,
+            "underleveled": [],
+        }
+
+    under: List[Dict[str, Any]] = []
+    mature = 0
+    for p in colonies:
+        level = int(p.get("planet_level") or 0)
+        if level >= required:
+            mature += 1
+        else:
+            under.append(
+                {
+                    "planet_id": int(p.get("id") or 0),
+                    "name": str(p.get("name") or ""),
+                    "planet_level": level,
+                }
+            )
+
+    meta = {
+        "required_level": required,
+        "colony_count": len(colonies),
+        "mature_count": mature,
+        "underleveled": under,
+    }
+    if under:
+        return False, "colony_maturity_required", meta
+    return True, "", meta
+
+
+def expansion_slots_unlocked(homeworld_level: int) -> int:
+    """Colony slots (excluding homeworld) from Genesis Ark table only (max 6).
+
+    Late slots 7–10 come from Imperial Mandates / legacy credit — see
+    docs/IMPERIAL_MANDATES.md. No +5 HW extrapolation (removed GC-M2).
     """
     hw = max(0, int(homeworld_level or 0))
     unlocked = 0
     for gate in EXPANSION_SLOT_GATES:
         if hw >= int(gate["homeworld_level"]):
             unlocked = int(gate["expansion_index"])
-    last = EXPANSION_SLOT_GATES[-1]
-    if hw >= int(last["homeworld_level"]):
-        extra = (hw - int(last["homeworld_level"])) // 5
-        unlocked = int(last["expansion_index"]) + extra
-    return unlocked
+    return min(INTERSTELLAR_EXPANSION_MAX_LEVEL, int(unlocked))
 
 
 def effective_max_worlds_for_homeworld_level(homeworld_level: int) -> int:
-    """Total owned worlds allowed (homeworld + colonies) from HW progression."""
+    """Total owned worlds from Ark progression only (no mandates / directives)."""
     return 1 + expansion_slots_unlocked(homeworld_level)
 
 
-def next_expansion_slot_homeworld_level(expansion_colonies: int) -> int:
-    """HW level required to unlock the next colony after expansion_colonies."""
+def next_expansion_slot_homeworld_level(expansion_colonies: int) -> Optional[int]:
+    """HW level for next Ark-table colony, or None when Spätreich (mandates) applies."""
     next_index = max(1, int(expansion_colonies) + 1)
+    if next_index > INTERSTELLAR_EXPANSION_MAX_LEVEL:
+        return None
     return int(_slot_gate_for_next_expansion(next_index)["homeworld_level"])
 
 
-def expansion_gameplay_cap(player_id: int, *, conn: sqlite3.Connection) -> Dict[str, int]:
-    """HW-derived colony cap merged with admin safety ceiling (GC-976A)."""
+def expansion_gameplay_cap(player_id: int, *, conn: sqlite3.Connection) -> Dict[str, Any]:
+    """Ark slots + late mandates + directive bonus, capped by admin ceiling."""
     from game.logic import get_max_planets_per_player
+    from .imperial_mandates import ARK_SLOT_MAX, ensure_player_mandate_state
 
     uid = int(player_id)
     hw_level = get_homeworld_level(uid, conn=conn)
     slots = expansion_slots_unlocked(hw_level)
-    effective = effective_max_worlds_for_homeworld_level(hw_level)
+    mandate_state = ensure_player_mandate_state(uid, conn=conn)
+    late_slots = int(mandate_state.get("late_slots") or 0)
+    effective = 1 + int(slots) + late_slots
     # GC-720J: expansion directive may grant extra colony slots (galaxy of homeworld).
     try:
         from game.galactic_directives.mechanics import get_directive_flags_for_galaxy
@@ -178,6 +223,10 @@ def expansion_gameplay_cap(player_id: int, *, conn: sqlite3.Connection) -> Dict[
     return {
         "homeworld_level": int(hw_level),
         "expansion_slots_unlocked": int(slots),
+        "ark_slot_max": int(ARK_SLOT_MAX),
+        "late_slots": int(late_slots),
+        "legacy_slots": int(mandate_state.get("legacy_slots") or 0),
+        "mandate_slots": int(mandate_state.get("mandate_slots") or 0),
         "effective_max_worlds": int(effective),
         "admin_ceiling": admin,
         "gameplay_cap": min(effective, admin),
@@ -198,12 +247,12 @@ def _slot_gate_for_next_expansion(next_index: int) -> Dict[str, int]:
     for gate in EXPANSION_SLOT_GATES:
         if int(gate["expansion_index"]) == idx:
             return dict(gate)
+    # Beyond Ark table: keep last gate HW/tech — capacity is mandate/late-slot owned.
     last = EXPANSION_SLOT_GATES[-1]
-    extra = idx - int(last["expansion_index"])
     return {
         "expansion_index": idx,
-        "homeworld_level": int(last["homeworld_level"]) + extra * 5,
-        "expansion_tech": min(INTERSTELLAR_EXPANSION_MAX_LEVEL, int(last["expansion_tech"]) + extra),
+        "homeworld_level": int(last["homeworld_level"]),
+        "expansion_tech": min(INTERSTELLAR_EXPANSION_MAX_LEVEL, int(last["expansion_tech"])),
     }
 
 
@@ -308,8 +357,9 @@ def can_found_colony(
     *,
     conn: sqlite3.Connection,
 ) -> Tuple[bool, str]:
-    """Galaxy colonize cap — min(admin ceiling, HW evolution slots). No world-map/outpost gates."""
+    """Galaxy colonize cap — min(admin ceiling, Ark + late slots). No world-map gates."""
     from game.logic import get_max_planets_per_player
+    from .imperial_mandates import ARK_SLOT_MAX
     from .repository import evolution_schema_ready
 
     uid = int(player_id)
@@ -323,11 +373,21 @@ def can_found_colony(
     if evolution_schema_ready(conn):
         cap = expansion_gameplay_cap(uid, conn=conn)
         evolution_max = int(cap["effective_max_worlds"])
+        ark_slots = int(cap.get("expansion_slots_unlocked") or 0)
+        late_slots = int(cap.get("late_slots") or 0)
     else:
         evolution_max = 1
+        ark_slots = 0
+        late_slots = 0
 
     if total >= evolution_max:
+        if ark_slots >= ARK_SLOT_MAX and late_slots < 4:
+            return False, "imperial_mandate_required"
         return False, "planet_evolution_colony_slot_required"
+
+    ok_mat, mat_reason, _meta = colony_maturity_gate(uid, conn=conn)
+    if not ok_mat:
+        return False, mat_reason
 
     return True, ""
 
@@ -340,13 +400,18 @@ def can_found_expansion_world(
     world_type: str | None = None,
     site_key: str | None = None,
 ) -> Tuple[bool, str]:
-    """Gate matrix + HW progression cap + admin safety ceiling (grandfathering)."""
+    """Gate matrix + gameplay cap + admin safety ceiling (grandfathering)."""
     uid = int(player_id)
     cap = expansion_gameplay_cap(uid, conn=conn)
-    expansion_count = count_expansion_worlds(uid, conn=conn)
-    slots_unlocked = int(cap["expansion_slots_unlocked"])
-    if _expansion_slot_cap_reached(expansion_count, slots_unlocked):
-        return False, "expansion_slot_cap_reached"
+    total = len(get_planets_by_player(uid, conn=conn) or [])
+    gameplay_cap = int(cap["gameplay_cap"])
+    if total >= gameplay_cap:
+        expansion_count = count_expansion_worlds(uid, conn=conn)
+        if _expansion_slot_cap_reached(expansion_count, int(cap["expansion_slots_unlocked"]) + int(cap.get("late_slots") or 0)):
+            if int(cap.get("expansion_slots_unlocked") or 0) >= INTERSTELLAR_EXPANSION_MAX_LEVEL and int(cap.get("late_slots") or 0) < 4:
+                return False, "imperial_mandate_required"
+            return False, "expansion_slot_cap_reached"
+        return False, "expansion_admin_ceiling_reached"
 
     ok, reason, _meta = evaluate_expansion_gates(
         uid,
@@ -358,9 +423,12 @@ def can_found_expansion_world(
     if not ok:
         return False, reason
 
-    total = len(get_planets_by_player(uid, conn=conn) or [])
     if total >= int(cap["admin_ceiling"]):
         return False, "expansion_admin_ceiling_reached"
+
+    ok_mat, mat_reason, _mat = colony_maturity_gate(uid, conn=conn)
+    if not ok_mat:
+        return False, mat_reason
     return True, ""
 
 
@@ -370,6 +438,8 @@ def get_expansion_limit_block(
     conn: sqlite3.Connection,
 ) -> Dict[str, Any]:
     """Expansion-focused limit block for game-state / empire."""
+    from .imperial_mandates import ARK_SLOT_MAX, ensure_player_mandate_state
+
     uid = int(player_id)
     planets = get_planets_by_player(uid, conn=conn) or []
     expansion_count = sum(1 for p in planets if not bool(p.get("is_homeworld")))
@@ -377,6 +447,7 @@ def get_expansion_limit_block(
     cap = expansion_gameplay_cap(uid, conn=conn)
     hw_level = int(cap["homeworld_level"])
     slots_unlocked = int(cap["expansion_slots_unlocked"])
+    late_slots = int(cap.get("late_slots") or 0)
     effective = int(cap["effective_max_worlds"])
     admin = int(cap["admin_ceiling"])
     gameplay_cap = int(cap["gameplay_cap"])
@@ -387,9 +458,22 @@ def get_expansion_limit_block(
     under_cap = total < gameplay_cap
     next_unlock_level = (
         next_expansion_slot_homeworld_level(expansion_count)
-        if expansion_count >= slots_unlocked
+        if expansion_count >= slots_unlocked and slots_unlocked < ARK_SLOT_MAX
         else None
     )
+    mandate_state = ensure_player_mandate_state(uid, conn=conn)
+    next_mandate = mandate_state.get("next_mandate")
+    mat_ok, mat_reason, mat_meta = colony_maturity_gate(uid, conn=conn)
+    gate_reason = str(reason or "")
+    if not under_cap and not gate_reason:
+        if total >= admin:
+            gate_reason = "colony_limit_reached"
+        elif slots_unlocked >= ARK_SLOT_MAX and late_slots < 4:
+            gate_reason = "imperial_mandate_required"
+        else:
+            gate_reason = "planet_evolution_colony_slot_required"
+    elif under_cap and not mat_ok:
+        gate_reason = mat_reason or "colony_maturity_required"
 
     return {
         "current": int(expansion_count),
@@ -397,14 +481,26 @@ def get_expansion_limit_block(
         "admin_ceiling": admin,
         "at_admin_ceiling": bool(total >= admin),
         "expansion_slots_unlocked": slots_unlocked,
+        "late_slots": late_slots,
+        "legacy_slots": int(cap.get("legacy_slots") or 0),
+        "mandate_slots": int(cap.get("mandate_slots") or 0),
         "effective_max_worlds": effective,
         "homeworld_level": hw_level,
         "expansion_tech_level": int(tech_level),
         "required_homeworld_level": int(req["homeworld_level"]),
         "required_expansion_tech": int(req["expansion_tech"]),
         "next_unlock_homeworld_level": next_unlock_level,
-        "can_expand": bool(ok and under_cap),
-        "gate_reason": str(reason or ""),
+        "next_mandate": next_mandate,
+        "earned_mandates": list(mandate_state.get("earned_mandates") or []),
+        "colony_maturity": {
+            "ok": bool(mat_ok),
+            "required_level": int(mat_meta.get("required_level") or COLONY_MATURITY_REQUIRED_LEVEL),
+            "colony_count": int(mat_meta.get("colony_count") or 0),
+            "mature_count": int(mat_meta.get("mature_count") or 0),
+            "underleveled": list(mat_meta.get("underleveled") or []),
+        },
+        "can_expand": bool(ok and under_cap and mat_ok),
+        "gate_reason": gate_reason,
         "max": int(gameplay_cap),
     }
 
@@ -427,7 +523,9 @@ def build_expansion_launch_checklist(
     world_type: str | None = None,
     site_key: str | None = None,
 ) -> Dict[str, Any]:
-    """Command Map site inspector checklist (GC-926)."""
+    """Command Map / PE expansion checklist (GC-926 + Imperial Mandates)."""
+    from .imperial_mandates import ARK_SLOT_MAX, next_mandate_checklist_item
+
     uid = int(player_id)
     ok_gates, gate_reason, meta = evaluate_expansion_gates(
         uid,
@@ -464,21 +562,50 @@ def build_expansion_launch_checklist(
         },
     ]
 
-    from game.logic import check_planet_cap_available
-
     total = len(get_planets_by_player(uid, conn=conn) or [])
     cap = expansion_gameplay_cap(uid, conn=conn)
     gameplay_cap = int(cap["gameplay_cap"])
     under_cap = total < gameplay_cap
-    can_launch = bool(ok_gates and seed_ready and under_cap)
+    ark_slots = int(cap.get("expansion_slots_unlocked") or 0)
+    late_slots = int(cap.get("late_slots") or 0)
+    expansion_count = count_expansion_worlds(uid, conn=conn)
+
+    mat_ok, mat_reason, mat_meta = colony_maturity_gate(uid, conn=conn)
+    colony_count = int(mat_meta.get("colony_count") or 0)
+    if colony_count > 0:
+        under = list(mat_meta.get("underleveled") or [])
+        items.append(
+            {
+                "key": "colony_maturity",
+                "label_key": "expansion_checklist_colony_maturity",
+                "met": bool(mat_ok),
+                "current": int(mat_meta.get("mature_count") or 0),
+                "required": colony_count,
+                "required_level": int(mat_meta.get("required_level") or COLONY_MATURITY_REQUIRED_LEVEL),
+                "underleveled": under,
+                "detail_key": "expansion_checklist_colony_maturity_detail" if under else "",
+                "detail_names": ", ".join(
+                    f"{u.get('name') or '?'} (L{int(u.get('planet_level') or 0)})" for u in under[:8]
+                ),
+            }
+        )
+
+    # Spätreich: show active mandate when Ark table is maxed and still need capacity.
+    if ark_slots >= ARK_SLOT_MAX and (not under_cap or expansion_count >= ark_slots):
+        mandate_item = next_mandate_checklist_item(uid, conn=conn)
+        if mandate_item:
+            items.append(mandate_item)
+
+    can_launch = bool(ok_gates and seed_ready and under_cap and mat_ok)
     if not under_cap:
-        if _expansion_slot_cap_reached(
-            count_expansion_worlds(uid, conn=conn),
-            int(cap["expansion_slots_unlocked"]),
-        ):
-            gate_reason = gate_reason or "expansion_slot_cap_reached"
-        else:
-            gate_reason = gate_reason or "expansion_admin_ceiling_reached"
+        if total >= int(cap["admin_ceiling"]):
+            gate_reason = "expansion_admin_ceiling_reached"
+        elif ark_slots >= ARK_SLOT_MAX and late_slots < 4:
+            gate_reason = "imperial_mandate_required"
+        elif not gate_reason:
+            gate_reason = "expansion_slot_cap_reached"
+    elif not mat_ok:
+        gate_reason = mat_reason or "colony_maturity_required"
 
     items.append(
         {

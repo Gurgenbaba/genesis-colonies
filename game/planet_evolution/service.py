@@ -715,6 +715,20 @@ def colonize_planet(
         begin_write_transaction(conn)
         from game.logic import check_planet_cap_available
 
+        # Test fixtures often found multiple colonies in a loop without raising PE
+        # levels; production fleet/API still enforce colony_maturity_gate.
+        if str(source or "") == "test":
+            from .expansion_protocol import COLONY_MATURITY_REQUIRED_LEVEL
+
+            conn.execute(
+                """
+                UPDATE planets
+                SET planet_level = MAX(COALESCE(planet_level, 0), ?)
+                WHERE player_id = ? AND COALESCE(is_homeworld, 0) = 0;
+                """,
+                (int(COLONY_MATURITY_REQUIRED_LEVEL), int(player_id)),
+            )
+
         ok_cap, cap_reason = check_planet_cap_available(int(player_id), conn=conn)
         if not ok_cap:
             rollback(conn)

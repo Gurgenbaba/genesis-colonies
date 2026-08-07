@@ -954,6 +954,7 @@ _PLANET_SWITCHER_POLL_KEYS = (
     "name",
     "is_homeworld",
     "is_active",
+    "planet_level",
     "planet_class",
     "planet_class_label_key",
     "coordinates_formatted",

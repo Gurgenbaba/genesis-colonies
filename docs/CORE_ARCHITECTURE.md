@@ -290,6 +290,7 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | `expansion_phase` / Establishment | `game/planet_evolution/expansion_phase.py` | [EXPANSION_PROTOCOL.md](EXPANSION_PROTOCOL.md) |
 | Expansion Sites / Gates | `game/planet_evolution/expansion_gates.py` | [EXPANSION_PROTOCOL.md](EXPANSION_PROTOCOL.md) |
 | Expansion Protocol (dual-gate, outpost, establishment) | `game/planet_evolution/expansion_protocol.py` | [EXPANSION_PROTOCOL.md](EXPANSION_PROTOCOL.md) — `can_found_colony()` für Galaxy; Gates/Outpost **Legacy** (Regel 18) |
+| Imperial Mandates (late colony capacity 7–10) | `game/planet_evolution/imperial_mandates.py` → merge in `expansion_gameplay_cap` | [IMPERIAL_MANDATES.md](IMPERIAL_MANDATES.md) |
 | Expansion Phase (derived) | `game/planet_evolution/expansion_phase.py` | [EXPANSION_PROTOCOL.md](EXPANSION_PROTOCOL.md) |
 | Planet Evolution | `game/planet_evolution/` | [PLANET_EVOLUTION.md](PLANET_EVOLUTION.md) |
 | Galactic Directives | `game/galactic_directives/` | [GALACTIC_DIRECTIVES.md](GALACTIC_DIRECTIVES.md) |

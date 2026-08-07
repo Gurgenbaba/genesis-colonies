@@ -195,7 +195,9 @@ can_expand(site, world_type) =
 | **Welttyp-Matrix** | *Welche Bedingungen gelten hier?* | `strategic_worlds.py` |
 | **Etablierungs-Meilensteine** | *Habe ich die Welt etabliert?* | Establishment-Modul + `mechanics.py` |
 
-Account-Forschung = Reichweite. Planet Evolution (Ark) = Reife. Kein drittes System.
+Account-Forschung = Reichweite (Welttypen). Planet Evolution (Ark) = Kernreich-Reife (Kolonien 1–6). Spätreich-Kapazität (7–10) = [Imperial Mandates](IMPERIAL_MANDATES.md) — Merge nur in `expansion_gameplay_cap`, kein paralleler Colonize-Pfad.
+
+**Colony Maturity:** Vor jeder weiteren Koloniegründung müssen alle bestehenden Nicht-Heimwelt-Kolonien Entwicklungsstufe ≥ 30 haben (`colony_maturity_gate` in `expansion_protocol.py`). Die erste Kolonie ist ausgenommen. Bestehende Welten bleiben immer spielbar.
 
 Expansions-Gates lesen **immer** die Entwicklungsstufe der **Genesis Ark** (`is_homeworld`).
 
