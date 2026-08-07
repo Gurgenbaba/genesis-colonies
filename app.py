@@ -6073,9 +6073,11 @@ def _set_shop_promo_sticky(code: str) -> None:
 
 
 @app.route("/api/shop/promo/preview", methods=["POST"])
-@require_login
+@require_login_api
 def api_shop_promo_preview():
     user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in", "error": "not_logged_in"}), 401
     data = request.get_json(silent=True) or {}
     code = str(data.get("code") or data.get("promo_code") or "").strip()
     sku = str(data.get("sku") or "").strip() or None
@@ -6091,6 +6093,8 @@ def api_shop_promo_preview():
         )
         if ok and sticky and payload:
             _set_shop_promo_sticky(str(payload.get("code") or code))
+            # Keep cart: sticky must not replace the session payload.
+            session.modified = True
             conn.commit()
         return jsonify({"ok": ok, "reason": reason, **(payload or {})}), (200 if ok else 400)
     finally:

@@ -21503,6 +21503,8 @@
   async function _shopRefreshCart() {
     const page = document.getElementById("shop-page");
     if (!page) return null;
+    const prev = _shopCartState;
+    const prevItems = Array.isArray(prev?.items) ? prev.items : [];
     try {
       const q = _shopActivePromoCode();
       const url = q
@@ -21510,12 +21512,46 @@
         : "/api/shop/cart";
       const res = await GC.fetchGameAction(url);
       if (res?.ok && res.cart) {
+        const nextItems = Array.isArray(res.cart.items) ? res.cart.items : [];
+        // Promo sticky / cookie races can briefly return an empty session cart while
+        // the UI still holds items — never wipe; restore lines to the session.
+        if (nextItems.length === 0 && prevItems.length > 0) {
+          await _shopRestoreSessionCart(prevItems);
+          const again = await GC.fetchGameAction(url);
+          if (again?.ok && again.cart && Array.isArray(again.cart.items) && again.cart.items.length) {
+            _shopRenderCart(again.cart);
+            return again.cart;
+          }
+          _shopRenderCart({
+            ...prev,
+            promo: (res.cart && res.cart.promo) || prev.promo || null,
+          });
+          return _shopCartState;
+        }
         _shopRenderCart(res.cart);
         return res.cart;
       }
     } catch (_) { /* ignore */ }
+    // Network/auth blip: keep the last known cart; do not flash empty.
+    if (prevItems.length > 0) return prev;
     _shopRenderCart({ items: [], item_count: 0, list_cents: 0, paid_cents: 0 });
     return null;
+  }
+
+  async function _shopRestoreSessionCart(items) {
+    const rows = Array.isArray(items) ? items : [];
+    for (const it of rows) {
+      const sku = String(it.sku || "").trim();
+      const qty = Math.max(1, Number(it.qty) || 1);
+      if (!sku) continue;
+      try {
+        await GC.fetchGameAction("/api/shop/cart/add", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sku, qty, promo_code: _shopActivePromoCode() }),
+        });
+      } catch (_) { /* best-effort restore */ }
+    }
   }
 
   function _shopSetCartOpen(open) {
@@ -21586,7 +21622,7 @@
         }
         _applyShopPromoPrices(res.priced || []);
         showNotify(t("shop_promo_applied", "Promo-Code angewendet."), "success");
-        _shopRefreshCart();
+        await _shopRefreshCart();
       } else {
         _shopActivePromo = "";
         const input = page && page.querySelector("[data-shop-promo-input]");
@@ -21594,14 +21630,14 @@
         if (status) status.textContent = t("shop_promo_invalid", "Code ungültig");
         _applyShopPromoPrices([]);
         showNotify(t("shop_promo_invalid", "Code ungültig"), "error");
-        _shopRefreshCart();
+        await _shopRefreshCart();
       }
     } catch (_) {
       _shopActivePromo = "";
       const input = page && page.querySelector("[data-shop-promo-input]");
       if (input) input.value = "";
       showNotify(t("shop_promo_invalid", "Code ungültig"), "error");
-      _shopRefreshCart();
+      await _shopRefreshCart();
     }
   }
 

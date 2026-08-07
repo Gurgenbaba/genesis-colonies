@@ -1049,7 +1049,14 @@ def test_shop_cart_ui_contract():
         Path(__file__).resolve().parent.parent / "static" / "main.js"
     ).read_text(encoding="utf-8")
     assert "_shopRefreshCart" in js
+    assert "_shopRestoreSessionCart" in js
     assert 'from_cart: true' in js
+    refresh = js.split("async function _shopRefreshCart()")[1].split(
+        "async function _shopRestoreSessionCart"
+    )[0]
+    assert "prevItems" in refresh
+    assert "_shopRestoreSessionCart" in refresh
+    assert "prevItems.length > 0" in refresh
     assert "/api/shop/cart/add" in js
     assert "discount_cents" in js
     assert "shop_cart_discount" in js
